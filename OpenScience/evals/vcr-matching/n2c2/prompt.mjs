@@ -13,8 +13,9 @@
  * different prompt, and the freeze digest of the skill file changes, which the run refuses to ignore.
  *
  * What is the harness's own is small and is only form: that there are no tools in this evaluation so the answer is one JSON
- * object, the shape of that object, the guide's two rules about "now" and carrying a status forward, and the fact that the note
- * is hard-wrapped. Tuning is allowed to change these (the form of the prompt) and nothing else.
+ * object, the shape of that object, the guide's two rules about "now" and carrying a status forward, and how a quotation survives
+ * the file's hard wrapping. The rules about units and dates are the skill's (a second measurement, with the skill that teaches them
+ * in its own words). Tuning is allowed to change the form of the prompt and nothing else.
  *
  * @module n2c2/prompt
  */
@@ -55,7 +56,8 @@ const ANSWER_SHAPE = `{
   "facts": [
     { "variable": "<one of the fact variables>", "polarity": "affirmed | negated | hypothetical | family",
       "value": <a number printed in the quotation, only for a numeric fact>, "unit": "<as the note prints it>",
-      "occurredAt": "YYYY-MM-DD, only when the quotation itself prints that calendar date", "dateSurface": "<the date as printed>",
+      "occurredAt": "YYYY-MM-DD, only when a date printed whole, with its year, is in the quotation or in dateQuote", "dateSurface": "<the date as printed>",
+      "dateQuote": "<a second verbatim line of the file that prints that date, when the quotation does not>",
       "surface": "<the words you read, inside the quotation>", "quote": "<verbatim from the note>" }
   ],
   "language_judgments": [
@@ -82,7 +84,7 @@ export function systemPrompt(skill) {
     `Language criteria (answer with a state and, for satisfied or not_satisfied, a quotation that supports it):\n${language}`,
     'The file holds several dated records of one patient, oldest first, each opening with a "Record date:" line. The most recent record is "now", whatever its calendar date; the earlier records are read as of that moment. Assume the patient\'s status does not change between records until a later record indicates it.',
     'The file is hard-wrapped at about seventy characters, so a sentence often continues on the next line. Write a fact for each place the file supports one; do not write a fact for a variable the file does not mention.',
-    'How a fact is written so that the platform can re-read it. The quotation is copied exactly from the file, character for character, from within one line: do not run it across a line break (and in JSON a line break inside a string is written \\n, never typed). The surface is a stretch of the quotation itself, copied exactly, with the same letters and case. A unit is written only when the quotation prints the unit beside the number; otherwise leave unit out. occurredAt is written only when the quotation itself prints the whole date with its year, and dateSurface is that date as printed; a date printed as 3/14 or 3/14/65 is not enough, so leave occurredAt out and the fact stands undated.',
+    'How a fact is written so that the platform can re-read it. The quotation (and dateQuote) is copied exactly from the file, character for character, from within one line: do not run it across a line break (and in JSON a line break inside a string is written \\n, never typed). The surface is a stretch of the quotation itself, copied exactly, with the same letters and case.',
     `Answer with one JSON object and nothing else, in this shape (an empty list where there is nothing to write):\n${ANSWER_SHAPE}`,
   ].join('\n\n');
 }

@@ -228,3 +228,42 @@ export function labelsFor(states, reading) {
   }
   return labels;
 }
+
+/** The statistics a paired comparison reports a difference for: the overall ones and the accuracy of each criterion. */
+const PAIRED_NAMES = Object.freeze([
+  'ALL.accuracyA', 'ALL.accuracyB', 'ALL.accuracyC', 'ALL.unknownShare', 'ALL.f1MicroB', 'ALL.f1MicroC', 'ALL.f1MacroB', 'ALL.f1MacroC',
+  ...TAGS.flatMap((tag) => [`${tag}.accuracyA`, `${tag}.unknownShare`]),
+]);
+
+/**
+ * What changed between two predictions of the same patients: each statistic of `after` minus the same statistic of `before`, with a
+ * 95% interval from one resample of patients applied to both, so the interval is about the change and not about the patients.
+ * @param {ReadonlyArray<Record<string, Record<string, number>>>} after each patient's counts under the new pipeline
+ * @param {ReadonlyArray<Record<string, Record<string, number>>>} before the same patients, in the same order, under the old one
+ * @param {{ resamples?: number, seed?: number }} [options]
+ * @returns {Record<string, { value: number | null, low: number | null, high: number | null }>}
+ */
+export function summarizePaired(after, before, { resamples = BOOTSTRAP.resamples, seed = BOOTSTRAP.seed } = {}) {
+  if (after.length !== before.length) throw new Error('A paired comparison needs the same patients on both sides.');
+  const pointAfter = statistics(sumCounts(after));
+  const pointBefore = statistics(sumCounts(before));
+  const next = randomStream(seed);
+  /** @type {Record<string, number[]>} */
+  const draws = {};
+  for (let r = 0; r < resamples; r += 1) {
+    const picks = Array.from({ length: after.length }, () => Math.floor(next() * after.length));
+    const a = statistics(sumCounts(picks.map((i) => after[i])));
+    const b = statistics(sumCounts(picks.map((i) => before[i])));
+    for (const name of PAIRED_NAMES) (draws[name] ??= []).push(a[name] - b[name]);
+  }
+  /** @type {Record<string, { value: number | null, low: number | null, high: number | null }>} */
+  const out = {};
+  for (const name of PAIRED_NAMES) {
+    const value = pointAfter[name] - pointBefore[name];
+    const sample = (draws[name] ?? []).filter((x) => Number.isFinite(x)).sort((x, y) => x - y);
+    const enough = Number.isFinite(value) && sample.length >= 0.95 * resamples;
+    out[name] = { value: Number.isFinite(value) ? round(value) : null, low: enough ? round(quantile(sample, 0.025)) : null, high: enough ? round(quantile(sample, 0.975)) : null };
+  }
+  return out;
+}
+

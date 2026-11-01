@@ -14,9 +14,9 @@ import { assessPatient } from './assess.mjs';
 import { ABSENT_MEANS_MET, CRITERIA, LANGUAGE_CRITERIA, TAGS, VARIABLES, criteriaIssues, languageKeysOf, variablesOf } from './criteria.mjs';
 import { dataAvailable, dataPaths, dataRoot, developmentIds, evaluationDate, idsDigest, parsePatientXml, patientIds, readPatient, recordDates } from './data.mjs';
 import { BudgetExceeded, createDeepSeek, priceOf, redact } from './deepseek.mjs';
-import { labelsFor, majorityStates, patientCounts, randomStream, statistics, sumCounts, summarize } from './metrics.mjs';
+import { labelsFor, majorityStates, patientCounts, randomStream, statistics, sumCounts, summarize, summarizePaired } from './metrics.mjs';
 import { readSkill, skillExcerpts, systemPrompt, userMessage } from './prompt.mjs';
-import { parseScorerOutput, scoreTest } from './run_n2c2.mjs';
+import { parseScorerOutput, scoreHeldout, scoreTest } from './run_n2c2.mjs';
 
 const here = import.meta.dirname;
 const root = dataRoot();
@@ -26,7 +26,7 @@ const RULE = '*'.repeat(100);
 /** A made-up two-record file. Nothing in it is, or comes from, a patient. */
 const NOTE = [
   '', 'Record date: 2100-01-10', '', 'Mr. Example is seen for review of type 2 diabetes.', 'Last hemoglobin A1c 7.2 %.',
-  'He drinks no alcohol. Denies illicit drug use.', 'Takes aspirin 81 mg daily to prevent heart attack.', '', RULE,
+  'He drinks no alcohol. Denies illicit drug use.', 'Takes aspirin 81 mg daily to prevent heart attack.', 'Takes a multivitamin every morning.', '', RULE,
   'Record date: 2100-03-01', '', 'Admitted with myocardial infarction on 2100-02-20 and chest pain on exertion.',
   'Speaks English fluently and decides about his care himself.', 'Serum creatinine 2.1 (0.6-1.2) H.', RULE, '',
 ].join('\n');
@@ -57,6 +57,7 @@ test('the prompt quotes the shipping skill unchanged, and a skill that lost a qu
     assert.ok(skill.text.includes(excerpt.text), `${excerpt.name} is a stretch of the skill file, byte for byte`);
     assert.ok(prompt.includes(excerpt.text), `${excerpt.name} is in the prompt, byte for byte`);
   }
+  assert.ok(prompt.includes('dateQuote'), 'the skill and the answer shape both name the second quotation');
   for (const key of Object.keys(LANGUAGE_CRITERIA)) assert.ok(prompt.includes(key));
   for (const variable of Object.keys(VARIABLES)) assert.ok(prompt.includes(variable));
   assert.throws(() => skillExcerpts(skill.text.replace('Keep three questions separate for every criterion', 'Keep the questions')), /no longer holds the "evidence-decisions" stretch/);
@@ -131,19 +132,45 @@ test('a window is counted back from the most recent record, and an event with no
   assert.equal(claimed.states['MI-6MOS'], 'unknown');
 });
 
-test('a value is compared with its range only when the unit is printed beside it', () => {
+test('a value is compared with its range in the unit printed beside it, or in the one conventional unit the domain gives its variable', () => {
   const quote = 'Last hemoglobin A1c 7.2 %.';
   const printed = assessPatient(PATIENT, answer([fact({ variable: 'hba1c', value: 7.2, unit: '%', surface: '7.2 %', quote })]));
   assert.equal(printed.states.HBA1C, 'satisfied');
+  assert.equal(printed.facts.unitByConvention, 0, 'a printed unit is not a read one');
   const high = assessPatient({ ...PATIENT, text: NOTE.replace('7.2 %', '11.0 %') }, answer([fact({ variable: 'hba1c', value: 11, unit: '%', surface: '11.0 %', quote: quote.replace('7.2', '11.0') })]));
   assert.equal(high.states.HBA1C, 'not_satisfied');
   const invented = assessPatient(PATIENT, answer([fact({ variable: 'hba1c', value: 6.9, unit: '%', surface: '6.9', quote })]));
   assert.equal(invented.states.HBA1C, 'unknown', 'a number that is not in the quotation never counts');
-  const bare = assessPatient({ ...PATIENT, text: NOTE.replace('7.2 %', '7.2') }, answer([fact({ variable: 'hba1c', value: 7.2, surface: '7.2', quote: 'Last hemoglobin A1c 7.2.' })]));
-  assert.equal(bare.states.HBA1C, 'unknown');
-  assert.equal(bare.reasons.HBA1C, 'unit_missing');
-  const claimedUnit = assessPatient({ ...PATIENT, text: NOTE.replace('7.2 %', '7.2') }, answer([fact({ variable: 'hba1c', value: 7.2, unit: '%', surface: '7.2', quote: 'Last hemoglobin A1c 7.2.' })]));
-  assert.equal(claimedUnit.facts.dropped.unit_not_in_span, 1, 'a unit the note does not print is not written');
+  // A bare number: the unit the model claims is not in the note, so it is dropped and the fact kept; HbA1c has one conventional unit, so it is read in it.
+  const bareNote = { ...PATIENT, text: NOTE.replace('7.2 %', '7.2') };
+  const bare = assessPatient(bareNote, answer([fact({ variable: 'hba1c', value: 7.2, surface: '7.2', quote: 'Last hemoglobin A1c 7.2.' })]));
+  assert.equal(bare.states.HBA1C, 'satisfied');
+  assert.deepEqual([bare.facts.kept, bare.facts.unitByConvention], [1, 1]);
+  const claimed = assessPatient(bareNote, answer([fact({ variable: 'hba1c', value: 7.2, unit: '%', surface: '7.2', quote: 'Last hemoglobin A1c 7.2.' })]));
+  assert.equal(claimed.states.HBA1C, 'satisfied', 'the claimed unit was dropped, not the fact');
+  assert.deepEqual([claimed.facts.unitDropped, claimed.facts.unitByConvention, claimed.facts.dropped.unit_not_in_span ?? 0], [1, 1, 0]);
+  // Outside the range the table prints it is not read in percent: no unit, so the criterion that names one stays unknown.
+  const outside = assessPatient({ ...PATIENT, text: NOTE.replace('7.2 %', '53') }, answer([fact({ variable: 'hba1c', value: 53, surface: '53', quote: 'Last hemoglobin A1c 53.' })]));
+  assert.equal(outside.states.HBA1C, 'unknown');
+  assert.equal(outside.reasons.HBA1C, 'unit_missing');
+});
+
+test('a current state takes its record\'s stated date from a second quotation, and no date nobody printed is accepted', () => {
+  const supplement = { variable: 'dietary_supplement', surface: 'multivitamin', quote: 'Takes a multivitamin every morning.' };
+  const first = assessPatient(PATIENT, answer([fact({ ...supplement, occurredAt: '2100-01-10', dateSurface: '2100-01-10', dateQuote: 'Record date: 2100-01-10' })]));
+  assert.equal(first.states['DIETSUPP-2MOS'], 'satisfied', 'two months back from the latest record reaches the first record\'s date');
+  assert.deepEqual([first.facts.kept, first.facts.datedByQuote], [1, 1]);
+  const old = assessPatient({ ...PATIENT, asOf: '2100-09-01' }, answer([fact({ ...supplement, occurredAt: '2100-01-10', dateQuote: 'Record date: 2100-01-10' })]));
+  assert.equal(old.states['DIETSUPP-2MOS'], 'not_satisfied', 'dated outside the window, it is a known no and not an unknown');
+  const without = assessPatient(PATIENT, answer([fact({ ...supplement, occurredAt: '2100-01-10' })]));
+  assert.equal(without.facts.dropped.date_not_in_span, 1, 'the date alone, printed nowhere the fact points to, is refused');
+  const absent = assessPatient(PATIENT, answer([fact({ ...supplement, occurredAt: '2100-02-01', dateQuote: 'Record date: 2100-02-01' })]));
+  assert.equal(absent.facts.dropped.date_quote_not_found, 1, 'a second quotation the file does not hold is refused like the first');
+  const other = assessPatient(PATIENT, answer([fact({ ...supplement, occurredAt: '2100-02-01', dateQuote: 'Record date: 2100-01-10' })]));
+  assert.equal(other.facts.dropped.date_not_in_span, 1, 'a second quotation that prints another date supplies nothing');
+  const short = assessPatient({ ...PATIENT, text: `${NOTE}\nSeen 3/14 for review.` }, answer([fact({ ...supplement, occurredAt: '2100-03-14', dateQuote: 'Seen 3/14 for review.' })]));
+  assert.equal(short.facts.dropped.date_not_in_span, 1, 'a date with no year is no date');
+  assert.equal(assessPatient(PATIENT, answer([fact({ ...supplement })])).states['DIETSUPP-2MOS'], 'unknown', 'undated stays unknown');
 });
 
 test('two of four parts make advanced CAD, and one part with the rest unknown does not', () => {
@@ -231,6 +258,20 @@ test('the bootstrap resamples whole patients, is repeatable, and brackets the po
   assert.notDeepEqual(summarize(patients, { resamples: 200, seed: 12 })['ALL.accuracyA'], one['ALL.accuracyA']);
 });
 
+test('a paired comparison resamples the same patients on both sides: no change reads as zero, a real one has an interval that excludes it', () => {
+  const next = randomStream(5);
+  const gold = Array.from({ length: 60 }, () => Object.fromEntries(TAGS.map((tag) => [tag, next() < 0.4 ? 'met' : 'not met'])));
+  const before = gold.map((label) => patientCounts(Object.fromEntries(TAGS.map((tag) => [tag, 'unknown'])), label));
+  const same = summarizePaired(before, before, { resamples: 200, seed: 1 });
+  assert.deepEqual([same['ALL.accuracyA'].value, same['ALL.accuracyA'].low, same['ALL.accuracyA'].high], [0, 0, 0]);
+  const after = gold.map((label) => patientCounts(Object.fromEntries(TAGS.map((tag) => [tag, label[tag] === 'met' ? 'satisfied' : 'not_satisfied'])), label));
+  const better = summarizePaired(after, before, { resamples: 200, seed: 1 });
+  assert.equal(better['ALL.accuracyA'].value, 1);
+  assert.equal(better['ALL.unknownShare'].value, -1);
+  assert.ok((better['ALL.accuracyA'].low ?? 0) > 0.9);
+  assert.throws(() => summarizePaired(after, before.slice(1)), /same patients/);
+});
+
 test('the majority baseline predicts the class most training patients have, and ignores the note', () => {
   const train = [allGold('met'), allGold('met'), allGold('not met')];
   assert.deepEqual(majorityStates(train), allStates('satisfied'));
@@ -310,6 +351,19 @@ test('only gold.mjs knows where the sealed gold is, and the runner imports it no
   assert.ok(scoring.includes("import('./gold.mjs')"), 'and it is inside scoreTest');
 });
 
+test('score-heldout refuses a run that was never predicted, and never reaches for the sealed gold', async () => {
+  const scratch = await mkdtemp(path.join(os.tmpdir(), 'n2c2-test-'));
+  try {
+    await assert.rejects(scoreHeldout({ root: scratch, run: 'never-predicted' }), /FROZEN-2|Frozen files|No predictions/);
+    assert.equal(existsSync(path.join(scratch, 'sealed')), false);
+  } finally {
+    await rm(scratch, { recursive: true, force: true });
+  }
+  const runner = await readFile(path.join(here, 'run_n2c2.mjs'), 'utf8');
+  const held = runner.slice(runner.indexOf('export async function scoreHeldout'), runner.indexOf('async function main'));
+  assert.doesNotMatch(held, /gold\.mjs|openSealedGold|sealedDigest/, 'the held-out patients are unsealed training patients and the sealed archive is not their business');
+});
+
 test('score-test refuses a run that was never predicted, before it looks at any gold', async () => {
   const scratch = await mkdtemp(path.join(os.tmpdir(), 'n2c2-test-'));
   try {
@@ -335,6 +389,10 @@ test('the training and test files are the 202 and 86 the task says, every file h
   const dev = developmentIds(train);
   assert.equal(dev.length, 40);
   assert.ok(dev.every((id) => train.includes(id)));
+  // The second measurement's patients are the other 162: none of them was used to tune, and together with the 40 they are the training set.
+  const heldout = train.filter((id) => !dev.includes(id));
+  assert.equal(heldout.length, 162);
+  assert.deepEqual([...heldout, ...dev].sort(), [...train].sort());
 });
 
 test('my F1 equals the official scorer\'s on made-up predictions against real gold files', { skip: (!haveData || !existsSync(dataPaths(root).scorer)) && 'the n2c2 data or scorer are not here' }, async () => {

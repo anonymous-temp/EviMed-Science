@@ -7,8 +7,11 @@
  *   polarity outside the list, a quotation that is missing or does not hold its own surface words.
  * - A quotation must be in the file word for word. Like the batch reading, the position is the first place it occurs. A quotation
  *   that is not in the file is dropped and counted; its fact never reaches the evaluator.
- * - `verifyFactEvidence` (the evaluator's own check of a fact against the bytes it claims) is run at write time, as the fact writer
- *   runs it, and `assessSubject` runs it again before it reasons, as the evaluation of a stored fact does.
+ * - `settleFactEvidence` (the evaluator's own check of a fact against the bytes it claims, with what the fact writer settles around
+ *   it) is run at write time, as the fact writer runs it, and `assessSubject` runs the check again before it reasons, as the
+ *   evaluation of a stored fact does. A date the quotation does not print may rest on a second quotation (`dateQuote`) that the
+ *   document holds word for word; a unit the quotation does not print is dropped and the fact kept; a bare number of a variable the
+ *   domain's table gives one conventional unit is read in it and says so.
  * - A language answer of `satisfied` or `not_satisfied` keeps only the quotations that are in the file; with none left, it is
  *   `unknown`, which is what the evaluator does with an unanchored answer.
  * - The verdicts are `assessSubject`'s: Kleene's strong three-valued logic over the facts, the windows counted back from "now",
@@ -18,7 +21,7 @@
  * @module n2c2/assess
  */
 import { acceptExtractedFacts } from '@evimed/domain';
-import { assessSubject, verifyFactEvidence } from '../../../apps/server/src/vcrMatching.mjs';
+import { assessSubject, settleFactEvidence } from '../../../apps/server/src/vcrMatching.mjs';
 import { CRITERIA, languageKeysOf, variablesOf } from './criteria.mjs';
 
 const DOCUMENT = 'note';
@@ -44,19 +47,32 @@ export function assessPatient(patient, answer, criteria = CRITERIA) {
   const proposed = accepted.facts.length;
   /** @type {any[]} */
   const facts = [];
+  let unitDropped = 0;
+  let unitByConvention = 0;
+  let datedByQuote = 0;
   for (const item of accepted.facts) {
     const start = text.indexOf(item.quote);
     if (start < 0) { bump(dropped, 'quote_not_found'); continue; }
+    /** @type {{ start: number, end: number, quote: string } | null} */
+    let dateQuote = null;
+    if (item.dateQuote) {
+      const at = text.indexOf(item.dateQuote);
+      if (at < 0) { bump(dropped, 'date_quote_not_found'); continue; }
+      dateQuote = { start: at, end: at + item.dateQuote.length, quote: item.dateQuote };
+    }
     const fact = {
       id: `f${facts.length + 1}`, subjectKey: patient.id, variable: item.variable, polarity: item.polarity,
       value: item.value ?? null, unit: item.unit ?? null, occurredAt: item.occurredAt ?? null, recordedAt: null,
       surface: item.surface, dateSurface: item.dateSurface ?? null,
-      source: { documentId: DOCUMENT, start, end: start + item.quote.length, quote: item.quote },
+      source: { documentId: DOCUMENT, start, end: start + item.quote.length, quote: item.quote, ...(dateQuote ? { dateQuote } : {}) },
       extractedBy: 'model', provenance: { schema: 1, status: 'batch_extraction', factSchema: 2 },
     };
-    const checked = verifyFactEvidence(fact, { documents, anyPolarity: true });
+    const checked = settleFactEvidence(fact, { documents, anyPolarity: true });
     if (!checked.ok) { bump(dropped, String(checked.reason)); continue; }
-    facts.push(fact);
+    if (checked.notes.includes('unit_dropped')) unitDropped += 1;
+    if (checked.notes.includes('unit_read_by_convention')) unitByConvention += 1;
+    if (dateQuote && checked.fact.occurredAt) datedByQuote += 1;
+    facts.push(checked.fact);
   }
 
   /** @type {Record<string, any>} */
@@ -100,7 +116,7 @@ export function assessPatient(patient, answer, criteria = CRITERIA) {
   }
   return {
     states, decidedBy, reasons,
-    facts: { proposed, kept: facts.length, voidedByEvaluator: assessment.voidedFacts.length, dropped },
+    facts: { proposed, kept: facts.length, voidedByEvaluator: assessment.voidedFacts.length, dropped, unitDropped, unitByConvention, datedByQuote },
     language: { proposed: languageProposed, kept: Object.keys(modelJudgments).length },
   };
 }
