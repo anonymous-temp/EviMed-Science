@@ -1456,6 +1456,38 @@ test("a diagnosis measures the engines its saved contract names, even when the p
   assert.equal((await reload(project.id)).steps.diagnosis.status, "running");
 });
 
+test("a diagnosis never spends on an engine the person removed from the project since the contract was saved (2026-11-01)", options, async () => {
+  const world = harness();
+  const { project, userId } = await newProject();
+  for (const step of ["evidence", "journey", "questions", "diagnosis"]) await store.setStep(project.id, step, { requested: true });
+  await insightRunWrites(project);
+  for (const step of ["evidence", "journey"]) await store.setStep(project.id, step, { status: "done" });
+  // The contract was saved over all three engines; the project has since been narrowed to two of them (PATCH engines).
+  const agreement = { samplingMode: "recurring", engines: ["doubao", "deepseek", "kimi"], repeats: 2, metricIds: ["M-01"], reportPresentation: "summary", sourceBasis: "answers" };
+  await q(`UPDATE evimed_geo.question_sets SET contract=$2::jsonb WHERE geo_project_id=$1`, [project.id, JSON.stringify(agreement)]);
+  await store.updateProject(userId, project.id, { engines: ["deepseek", "kimi"] });
+  await world.orchestrator.advance(project.id);
+  const rounds = world.enqueued.filter(row => row.geoProjectId === project.id);
+  assert.deepEqual(rounds.map(row => row.kind), ["baseline"]);
+  assert.deepEqual(rounds[0].engines, ["deepseek", "kimi"], "the removed engine is not measured");
+});
+
+test("a diagnosis whose saved contract names no engine the project still selects is skipped by name, not measured on a removed engine (2026-11-01)", options, async () => {
+  const world = harness();
+  const { project, userId } = await newProject();
+  for (const step of ["evidence", "journey", "questions", "diagnosis"]) await store.setStep(project.id, step, { requested: true });
+  await insightRunWrites(project);
+  for (const step of ["evidence", "journey"]) await store.setStep(project.id, step, { status: "done" });
+  const agreement = { samplingMode: "recurring", engines: ["doubao"], repeats: 1, metricIds: ["M-01"], reportPresentation: "summary", sourceBasis: "answers" };
+  await q(`UPDATE evimed_geo.question_sets SET contract=$2::jsonb WHERE geo_project_id=$1`, [project.id, JSON.stringify(agreement)]);
+  await store.updateProject(userId, project.id, { engines: ["kimi"] });
+  await world.orchestrator.advance(project.id);
+  assert.deepEqual(world.enqueued.filter(row => row.geoProjectId === project.id), [], "nothing is measured");
+  const marks = await q(`SELECT key, state, detail FROM evimed_geo.schedule_marks WHERE geo_project_id = $1 AND key LIKE 'round:diagnosis:%'`, [project.id]);
+  assert.deepEqual(marks.map(mark => [mark.state, mark.detail?.reason]), [["skipped", "geo_monitoring_scope_changed"]]);
+  assert.equal((await reload(project.id)).steps.diagnosis.status, "failed", "the step says so instead of waiting on a key that will not change");
+});
+
 test("a recurring round outside its saved contract's engines is skipped by name, never silently retried forever (2026-11-01)", options, async () => {
   const { world, project } = await lockedProgram();
   await finishRound(world.enqueued[0].id, { finishedAt: "2026-09-20T12:00:00Z" });
