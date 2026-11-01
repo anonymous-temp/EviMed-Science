@@ -5,8 +5,8 @@
     "inv":        {"kind": "claude_cli", "model": "claude-sonnet-5-5", "effort": "high", "timeout": 2400, "max_budget_usd": 5},
     "dom":        {"kind": "claude_cli", "provider": "deepseek", "model": "deepseek-v4-pro[1m]", "effort": "high", "timeout": 2400, "max_budget_usd": 12},
     "agg":        {"kind": "claude_cli", "model": "claude-opus-5-5", "effort": "high", "timeout": 3000, "max_budget_usd": 10},
-    "select":     {"kind": "claude_cli", "model": "claude-opus-5-5", "effort": "high", "timeout": 2400, "max_budget_usd": 8},
-    "experience": {"kind": "claude_cli", "model": "claude-opus-5-5", "effort": "high", "timeout": 2400, "max_budget_usd": 8}
+    "select":     {"kind": "claude_cli", "model": "claude-sonnet-5-5", "effort": "high", "timeout": 2400, "max_budget_usd": 5},
+    "experience": {"kind": "claude_cli", "model": "claude-sonnet-5-5", "effort": "high", "timeout": 2400, "max_budget_usd": 5}
   },
   "providers": {
     "deepseek": {

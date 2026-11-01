@@ -88,6 +88,9 @@ class Task:
         }
         if self.settle_seconds:
             line["settleSeconds"] = self.settle_seconds
+        # The product's own deadline field (phase 1.1): the model is told the time, every arm alike. MedCalc ends in seconds and has none.
+        if self.domain != "medcalc":
+            line["timeBudgetMinutes"] = self.timeout_min
         return line
 
     def default_group(self) -> str:
