@@ -82,7 +82,7 @@ export function GeoSettingsDrawer({
             ))}
           </div>
           {can("edit") && enginesChanged && (
-            <div className="mt-2">
+            <div className="mt-2 flex flex-wrap items-center gap-2">
               {geoAutomationEnabled(project) && <span className="text-caption text-text-2">保存后自动监测会停止，需要重新开启。</span>}<Button size="sm" actionKind="set" loading={busy === "engines"} disabled={engines.length === 0} onClick={() => save("engines")}>保存</Button>
             </div>
           )}
@@ -100,7 +100,7 @@ export function GeoSettingsDrawer({
             <div className="mt-2 flex flex-wrap items-center gap-2">{geoAutomationEnabled(project) && <span className="text-caption text-text-2">保存后自动监测会停止，需要重新开启。</span>}<Button size="sm" actionKind="set" loading={busy === "days"} onClick={() => save("days")}>保存</Button></div>
           )}
         </Row>
-        <Row label="投放预算" action={can("manage_money") && marketConnected(project) ? <Button variant="text" size="sm" onClick={open("budget")}>{project.budget && project.budget.totalCny > 0 ? "修改" : "设置"}</Button> : undefined}>
+        <Row label="投放预算" action={can("manage_money") && marketConnected(project) ? <Button variant="text" size="sm" actionKind="external" onClick={open("budget")}>{project.budget && project.budget.totalCny > 0 ? "修改" : "设置"}</Button> : undefined}>
           <p className="text-ui text-text">{budget}</p>
         </Row>
         <Row label="出品方" action={can("edit") ? <Button variant="text" size="sm" onClick={open("producer")}>修改</Button> : undefined}>

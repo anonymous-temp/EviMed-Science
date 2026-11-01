@@ -1,5 +1,5 @@
 import { Note } from "@/components/ui/Note";
-import { geoWorkflowState } from "@evimed/domain";
+import { geoWorkflowState, workStateLabel } from "@evimed/domain";
 import { Button } from "@/components/ui/Button";
 import { geoActionPermission, geoJourney } from "../geoJourney";
 import { GeoStepRunButton } from "../GeoStepRunButton";
@@ -8,7 +8,8 @@ import { GEO_STEP_NAMES } from "../geoText";
 import { PendingFeedback } from "@/components/ui/PendingFeedback";
 import { useGeoDestinationPath } from "../useGeoPath";
 import { useState, type ReactNode } from "react";
-import { Link, useLocation, useNavigate } from "react-router";
+import { PenLine } from "lucide-react";
+import { Link, useLocation } from "react-router";
 import { webErrorMessage } from "@/lib/apiClient";
 import { stepAllowanceWait } from "@/lib/allowanceWait";
 import { runGeoStep, type GeoCell, type GeoProject, type GeoStepKey } from "@/lib/geoClient";
@@ -84,11 +85,10 @@ export function stepWaiting(project: GeoProject, step: GeoStepKey): boolean {
  * was kept when it did not finish, and where the allowance is put right.
  *
  * The button starts the work and keeps the person where they are: the step moves to 「进行中」, the band's sentence says so, and
- * the page reads itself again when it finishes. The conversation is the header's 「对话」.
+ * the page reads itself again when it finishes. The conversation is the bar under every view (「打开对话」).
  */
 export function StepPending({ geoId, project, step }: { geoId: string; project: GeoProject; step: GeoStepKey }) {
   const geoDestinationPath = useGeoDestinationPath();
-  const navigate = useNavigate();
   const frame = useGeoFrame();
   const [busy, setBusy] = useState(false);
   const open = useOpenGeoConversation();
@@ -101,10 +101,6 @@ export function StepPending({ geoId, project, step }: { geoId: string; project: 
   const allowanceWait = stepAllowanceWait(state);
   const start = () => {
     if (!permission.allowed || busy) return;
-    if (step === "monitoring") {
-      navigate(geoDestinationPath(geoId, { tab: "visibility", section: "geo-automation" }));
-      return;
-    }
     setBusy(true);
     void runGeoStep(geoId, step)
       .then(answer => {
@@ -122,13 +118,14 @@ export function StepPending({ geoId, project, step }: { geoId: string; project: 
   else if (project.status !== "active") body = <StepState phase="empty" step={recipe.verb} noun={recipe.noun} reason={permission.reason} />;
   else if (allowanceWait) body = <StepState phase="credits" step={recipe.verb} waiting={allowanceWait} topUp={permission.allowed ? <AllowanceTopUp waiting={allowanceWait} /> : undefined} />;
   else if (state?.status === "running") body = <StepState phase="running" step={recipe.verb} startedAt={state?.updatedAt ?? null} />;
-  else if (state?.status === "queued" || stepWaiting(project, step)) body = <StepState phase="queued" step={recipe.verb} after={(projected.waitingFor as GeoStepKey[]).map(key => GEO_STEP_NAMES[key]).join("、") || undefined} />;
+  // A step the work needs and nobody has started is 待开始, as the rail says; 排队中 is a step the programme has accepted.
+  else if (state?.status === "queued" || stepWaiting(project, step)) body = <StepState phase="queued" step={recipe.verb} stateWord={state?.status === "queued" ? undefined : workStateLabel("todo")} after={(projected.waitingFor as GeoStepKey[]).map(key => GEO_STEP_NAMES[key]).join("、") || undefined} />;
 
   else if (!journey.product || project.product.identityStatus === "ambiguous") body = <div className="flex flex-col items-start gap-3 py-6">
     <h2 className="text-section font-semibold">先确认产品与资料</h2>
-    <Note action={journey.canConverse ? <Button variant="secondary" onClick={() => void open({geoId,projectId:project.projectId,sessionId:frame?.conversation,primarySessionId:project.sessionId},journey.next.draft)}>在对话中补充产品与资料</Button> : undefined}>请在现有对话中说明产品名称、适用场景、目标受众和本次要做的工作，附上说明书、证据或稿件。已有资料会优先用于确认产品。</Note>
+    <Note action={journey.canConverse ? <Button variant="secondary" actionKind="draft" onClick={() => void open({geoId,projectId:project.projectId,sessionId:frame?.conversation,primarySessionId:project.sessionId},journey.next.draft)}><PenLine size={16} aria-hidden="true" />让 AI 补充产品与资料</Button> : undefined}>请在现有对话中说明产品名称、适用场景、目标受众和本次要做的工作，附上说明书、证据或稿件。已有资料会优先用于确认产品。</Note>
   </div>;
-  else body = <StepState phase="empty" step={step === "monitoring" ? "设置自动监测" : `开始任务：${recipe.verb}`} noun={recipe.noun} uses={inputs} gives={recipe.gives} onStart={permission.allowed ? start : undefined} starting={busy} reason={permission.reason} />;
+  else body = <StepState phase="empty" step={`开始任务：${recipe.verb}`} startKind="start" noun={recipe.noun} uses={inputs} gives={recipe.gives} onStart={permission.allowed ? start : undefined} starting={busy} reason={permission.reason} />;
   return <div>{body}{record && <div className="flex justify-center">{record}</div>}{!permission.allowed && state?.status === "failed" && <p className="text-center text-caption text-text-3">{permission.reason}</p>}</div>;
 
 }

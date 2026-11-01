@@ -3,7 +3,7 @@ import { useGeoDestinationPath } from "../useGeoPath";
 import { Link } from "react-router";
 import { clusterName } from "./clusterModel";
 import { useMemo, useState } from "react";
-import { Check, X } from "lucide-react";
+import { Check, PenLine, X } from "lucide-react";
 import { getGeoArticles, type GeoAction, type GeoArticle, type GeoProject } from "@/lib/geoClient";
 import { Button } from "@/components/ui/Button";
 import { Drawer } from "@/components/ui/Drawer";
@@ -85,7 +85,7 @@ export function ErrorDrawer({
         </span>
       )}
       onClose={onClose}
-      footer={canRun ? <Button data-geo-error-handoff="" loading={busy} onClick={correct}>{corrections.length > 0 ? "再写一篇纠错稿" : "写纠错稿"}</Button> : undefined}
+      footer={canRun ? <Button data-geo-error-handoff="" actionKind="draft" loading={busy} onClick={correct}>{!busy && <PenLine size={16} aria-hidden="true" />}{corrections.length > 0 ? "让 AI 再写一篇纠错稿" : "让 AI 写纠错稿"}</Button> : undefined}
     >
       <div data-geo-error-drawer={claim.key} className="flex flex-col gap-6">
         <Section title="这句话" level="sub">
@@ -158,7 +158,7 @@ export function ErrorCorrections({
   inline?: boolean;
 }) {
   const none = (
-    <Note action={canRun ? <Button variant="secondary" size="sm" onClick={onAsk}>写纠错稿</Button> : undefined}>
+    <Note action={canRun ? <Button variant="secondary" size="sm" actionKind="draft" onClick={onAsk}><PenLine size={16} aria-hidden="true" />让 AI 写纠错稿</Button> : undefined}>
       这条说法还没有纠错稿。
     </Note>
   );

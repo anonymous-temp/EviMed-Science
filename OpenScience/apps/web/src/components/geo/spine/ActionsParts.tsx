@@ -1,4 +1,5 @@
 import { Fragment, useMemo } from "react";
+import { PenLine } from "lucide-react";
 import { agendaLocalDate, DISPLAY_TIME_ZONE } from "@evimed/domain";
 import type { GeoActionsView, GeoArticle, GeoClusterRow, GeoDistribution, GeoMonitoring } from "@/lib/geoClient";
 import { NetEffectBand, type NetEffectInput } from "@/components/charts/NetEffectBand";
@@ -182,7 +183,7 @@ export function ReviewBlock({
                 </span>
               )}
               trailing={<Tag tone="safety">安全待复核</Tag>}
-              actions={canReview ? <Button variant="text" size="sm" loading={busy === article.id} onClick={() => onRelease(article)}>放行</Button> : undefined}
+              actions={canReview ? <Button variant="text" size="sm" actionKind="external" loading={busy === article.id} onClick={() => onRelease(article)}>放行</Button> : undefined}
             />
           );
         })}
@@ -221,12 +222,12 @@ export function BudgetLine({
           <span className="tabular-nums text-text-2">{`已预留 ${yuan(reserved)}`}</span>
           <span className="tabular-nums text-text-2">{`每天最多 ${yuan(budget.dailyCny)}`}</span>
           <span className="flex-1" />
-          {connected && canManage && <Button variant="text" size="sm" onClick={onEdit}>修改</Button>}
+          {connected && canManage && <Button variant="text" size="sm" actionKind="external" onClick={onEdit}>修改</Button>}
         </div>
       ) : (
         <Note
           tone="warn"
-          action={canManage ? <Button size="sm" onClick={onEdit}>设置投放预算</Button> : undefined}
+          action={canManage ? <Button size="sm" actionKind="external" onClick={onEdit}>设置投放预算</Button> : undefined}
         >
           {typeof distribution.suggestedBudgetCny === "number" && distribution.suggestedBudgetCny > 0
             ? `还没有设投放预算，建议 ${yuan(distribution.suggestedBudgetCny)}。`
@@ -309,9 +310,9 @@ export function OtherArticles({
                 )}
                 trailing={article.groupIsControl ? <Tag tone="warn">对照群</Tag> : undefined}
                 actions={canEdit ? <>
-                  {article.currentResultVersionId && onContinue && <Button variant="text" size="sm" onClick={() => onContinue(article)}>在对话中修改</Button>}
-                  {article.currentResultVersionId && onHumanize && <Button variant="text" size="sm" onClick={() => onHumanize(article)}>在对话中润色语言</Button>}
-                  {article.status !== "withdrawn" && <Button variant="text" size="sm" onClick={() => onWithdraw(article)}>撤回</Button>}
+                  {article.currentResultVersionId && onContinue && <Button variant="text" size="sm" actionKind="draft" onClick={() => onContinue(article)}><PenLine size={14} aria-hidden="true" />让 AI 修改</Button>}
+                  {article.currentResultVersionId && onHumanize && <Button variant="text" size="sm" actionKind="draft" onClick={() => onHumanize(article)}><PenLine size={14} aria-hidden="true" />让 AI 润色语言</Button>}
+                  {article.status !== "withdrawn" && <Button variant="text" size="sm" actionKind="external" onClick={() => onWithdraw(article)}>撤回</Button>}
                 </> : undefined}
               />
             );

@@ -27,7 +27,7 @@ beforeEach(() => {
 it('stages only selected exact versions in the existing unsent native composer', async () => {
   draw();
   expect(await screen.findByText(/原稿中的限定结论/)).toBeTruthy();
-  fireEvent.click(screen.getByRole('button', { name: '核查所选版本' }));
+  fireEvent.click(screen.getByRole('button', { name: '让 AI 核查所选版本' }));
   await waitFor(() => expect(api.stage).toHaveBeenCalledWith('geo', expect.objectContaining({ mode: 'signal', signalId: 'gs_exact', expectedSignalRevision: 2, sessionId: 'fresh-session', focusRefs: ['exact-old'], intent: 'review' })));
   expect(api.open).toHaveBeenCalledWith(expect.objectContaining({ projectId: 'control', sessionId: 'fresh-session', exactSession: true, geoPlanContext: { referenceId: 'gpc_exact' } }), 'Review selected preserved versions.');
 });
@@ -44,12 +44,12 @@ it('shows each exact source review result and the unhandled remainder beside the
   expect(screen.getByText(/已关联更新版本：仅本次所选稿件已更新/)).toBeTruthy();
   expect(screen.getByRole('link', { name: '查看已关联的稿件版本' })).toHaveAttribute('href', '/app/runs/exact-run/files/revised.md?version=rv_after&geoProject=geo&signal=gs_exact');
   expect(screen.getByRole('link', { name: '查看这项核查的原始结果' })).toHaveAttribute('href', '/app/runs/exact-run/files/deliverables/review/geo-value.json?version=rv_review&geoProject=geo&signal=gs_exact');
-  expect(screen.getByRole('button', { name: '核查所选版本' })).toBeTruthy();
+  expect(screen.getByRole('button', { name: '让 AI 核查所选版本' })).toBeTruthy();
 });
 
 it('a bound click recovers its conversation without another draft or context submission', async () => {
   api.stage.mockResolvedValue({ referenceId: 'gpc_exact', sessionId: 'original-session', state: 'bound', requestId: 'accepted', draft: 'Do not resend' });
-  draw(); fireEvent.click(await screen.findByRole('button', { name: '核查所选版本' }));
+  draw(); fireEvent.click(await screen.findByRole('button', { name: '让 AI 核查所选版本' }));
   await waitFor(() => expect(api.open).toHaveBeenCalledWith(expect.objectContaining({ sessionId: 'original-session', exactSession: true }), undefined));
   expect(api.open.mock.calls[0][0].geoPlanContext).toBeUndefined();
 });
@@ -58,7 +58,7 @@ it('ignored running work remains visible and restore never starts or cancels it'
   api.detail.mockResolvedValue(signal({ state: 'ignored', disposition: 'ignored', executionState: 'processing', currentAttempt: attempt, attempts: [attempt] }));
   api.disposition.mockResolvedValue(signal({ state: 'processing', currentAttempt: attempt, attempts: [attempt] }));
   draw(); expect(await screen.findByText('已忽略 · AI 仍在处理')).toBeTruthy();
-  expect(screen.queryByRole('button', { name: '核查所选版本' })).toBeNull();
+  expect(screen.queryByRole('button', { name: '让 AI 核查所选版本' })).toBeNull();
   fireEvent.click(screen.getByRole('button', { name: '恢复提醒' }));
   await waitFor(() => expect(api.disposition).toHaveBeenCalledWith('geo', 'gs_exact', expect.objectContaining({ expectedRevision: 2, disposition: 'active' })));
   expect(api.stage).not.toHaveBeenCalled(); expect(api.open).not.toHaveBeenCalled();
@@ -88,7 +88,7 @@ it('order anomalies open the existing order operation and do not offer AI resubm
 it('late staging after leaving the page does not move the conversation', async () => {
   let resolve!: (value: unknown) => void;
   api.stage.mockReturnValue(new Promise(done => { resolve = done; }));
-  const view = draw(); fireEvent.click(await screen.findByRole('button', { name: '核查所选版本' }));
+  const view = draw(); fireEvent.click(await screen.findByRole('button', { name: '让 AI 核查所选版本' }));
   await waitFor(() => expect(api.stage).toHaveBeenCalledTimes(1)); view.unmount();
   await act(async () => { resolve({ referenceId: 'gpc_exact', sessionId: 'fresh-session', draft: 'Old draft' }); });
   expect(api.open).not.toHaveBeenCalled();
@@ -97,7 +97,7 @@ it('late staging after leaving the page does not move the conversation', async (
 it('viewer keeps original evidence and run links but cannot stage or change disposition', async () => {
   draw('/app/geo/geo?signal=gs_exact', { ...project, access: { abilities: ['read'] } });
   expect(await screen.findByText(/原稿中的限定结论/)).toBeTruthy();
-  expect(screen.queryByRole('button', { name: '核查所选版本' })).toBeNull(); expect(screen.queryByRole('button', { name: '忽略这条提醒' })).toBeNull();
+  expect(screen.queryByRole('button', { name: '让 AI 核查所选版本' })).toBeNull(); expect(screen.queryByRole('button', { name: '忽略这条提醒' })).toBeNull();
 });
 
 it('overview preview reads full actionable scope and history opens through the same page', async () => {
@@ -130,7 +130,7 @@ it('keeps ignored history as a compact summary until explicitly expanded and fil
 it('resolves the first exact module primary before staging a signal in a same-id personal collision',async()=>{
  api.project.mockResolvedValue({projectId:'control',sessionId:null});
  draw('/app/geo/geo?signal=gs_exact',{...project,sessionId:null} as never);
- fireEvent.click(await screen.findByRole('button',{name:'核查所选版本'}));
+ fireEvent.click(await screen.findByRole('button',{name:'让 AI 核查所选版本'}));
  await waitFor(()=>expect(api.stage).toHaveBeenCalledWith('geo',expect.objectContaining({sessionId:'primary-session',mode:'signal'})));
  expect(api.moduleSession).toHaveBeenCalledWith('geo',{kind:'primary'});
  expect(api.moduleSession.mock.invocationCallOrder[0]).toBeLessThan(api.stage.mock.invocationCallOrder[0]);
@@ -139,7 +139,7 @@ it('resolves the first exact module primary before staging a signal in a same-id
 });
 it('does not stage or replace an unavailable exact signal conversation',async()=>{
  api.moduleSession.mockRejectedValueOnce(new Error('Exact session unavailable'));
- draw();fireEvent.click(await screen.findByRole('button',{name:'核查所选版本'}));
+ draw();fireEvent.click(await screen.findByRole('button',{name:'让 AI 核查所选版本'}));
  await screen.findByText('暂时无法打开处理对话，已保留本次选择。');expect(api.stage).not.toHaveBeenCalled();expect(api.open).not.toHaveBeenCalled();
 });
 
@@ -165,7 +165,7 @@ it('shows immutable group values, denominators, exact side analysis and uncertai
   expect(screen.getByText(/噪声未实测，不能据此判断由内容调整造成/)).toBeTruthy();
   expect(screen.getByRole('link', { name: '查看前轮共同样本' })).toHaveAttribute('href', '/app/geo/geo/visibility?selectionRef=gsel_before&session=held#geo-trend');
   expect(await screen.findByText('Frozen old answer')).toBeTruthy();
-  fireEvent.click(screen.getByRole('button', { name: '在对话中分析' }));
+  fireEvent.click(screen.getByRole('button', { name: '让 AI 分析' }));
   await waitFor(() => expect(api.stage).toHaveBeenCalledWith('geo', expect.objectContaining({ mode: 'signal', intent: 'analyse', focusRefs: [] })));
   expect(api.open).toHaveBeenCalledWith(expect.objectContaining({ geoPlanContext: { referenceId: 'gpc_exact' } }), 'Review selected preserved versions.');
 });

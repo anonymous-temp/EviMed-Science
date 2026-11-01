@@ -1,5 +1,6 @@
 import { useGeoDestinationPath } from "../useGeoPath";
 import { useMemo, useState } from "react";
+import { PenLine } from "lucide-react";
 import { Link } from "react-router";
 import { pythonRound } from "@evimed/domain";
 import { webErrorMessage } from "@/lib/apiClient";
@@ -102,7 +103,7 @@ export function ClusterDrawer({
       description={group ? <ClusterHead group={group} /> : undefined}
       widthClassName="max-w-2xl"
       onClose={onClose}
-      footer={geoMayConverse(project) ? <Button data-geo-cluster-handoff="" loading={busy} onClick={handoff}>在对话中处理</Button> : undefined}
+      footer={geoMayConverse(project) ? <Button data-geo-cluster-handoff="" actionKind="draft" loading={busy} onClick={handoff}>{!busy && <PenLine size={16} aria-hidden="true" />}让 AI 处理这个问题群</Button> : undefined}
     >
       <div data-geo-cluster-drawer={groupId} className="flex flex-col gap-6">
         {detail.state.kind === "loading" && <p role="status" className="text-ui text-text-3">正在读取这个问题群</p>}

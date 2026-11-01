@@ -25,7 +25,7 @@ import { useOpenGeoConversation } from "./useOpenGeoConversation";
  * 「需要你」: what the project really asks of its person, from the server's `needsYou` (R19, audit C A.3 / §2.3). It replaces the
  * 「下一步」 card, which restated the rail and listed what was **done**: a to-do list is never a log.
  *
- * Each row is one verb and the object it opens — 设置投放预算 opens the budget, 去放行 the articles, 写纠错稿 the correction with
+ * Each row is one verb and the object it opens — 设置投放预算 opens the budget, 去放行 the articles, 让 AI 写纠错稿 the correction with
  * the wrong sentence in it — and the row itself goes where its object is read. A person is asked only for a thing that is theirs to do
  * (money, releasing an article with an open safety finding, an act outside the platform) or that went wrong; everything else goes on by
  * itself. A project with nothing to ask draws nothing: no sentence says so.
@@ -110,6 +110,7 @@ function NeedsYouRow({ geoId, project, item, pause }: { geoId: string; project: 
           <Button
             variant="secondary"
             size="sm"
+            actionKind="draft"
             loading={busy}
             onClick={() => {
               setBusy(true);
@@ -117,7 +118,7 @@ function NeedsYouRow({ geoId, project, item, pause }: { geoId: string; project: 
             }}
           >
             {!busy && <PenLine size={16} aria-hidden="true" />}
-            在对话中写纠错稿
+            让 AI 写纠错稿
           </Button>
         ) : undefined}
       />
@@ -134,6 +135,7 @@ function NeedsYouRow({ geoId, project, item, pause }: { geoId: string; project: 
           <Button
             variant="text"
             size="sm"
+            actionKind="set"
             loading={busy}
             onClick={() => {
               setBusy(true);
@@ -175,6 +177,7 @@ function NeedsYouRow({ geoId, project, item, pause }: { geoId: string; project: 
           <Button
             variant="secondary"
             size="sm"
+            actionKind="start"
             loading={busy}
             onClick={() => {
               setBusy(true);

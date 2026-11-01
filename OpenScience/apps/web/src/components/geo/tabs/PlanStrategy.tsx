@@ -1,7 +1,7 @@
 import { useGeoDestinationPath } from "../useGeoPath";
 import { Fragment, useState } from "react";
 import { Link } from "react-router";
-import { Check } from "lucide-react";
+import { Check, PenLine } from "lucide-react";
 import { webErrorMessage } from "@/lib/apiClient";
 import {
   setGeoTier,
@@ -134,7 +134,7 @@ export function Targets({ geoId, plan, onChosen }: { geoId: string; plan: GeoStr
                       这一档
                     </span>
                   ) : mayChoose ? (
-                    <Button variant="secondary" size="sm" className="shrink-0" loading={busy === tier.tier} onClick={() => choose(tier.tier)}>
+                    <Button variant="secondary" size="sm" className="shrink-0" actionKind="set" loading={busy === tier.tier} onClick={() => choose(tier.tier)}>
                       选这一档
                     </Button>
                   ) : null}
@@ -421,7 +421,7 @@ export function ClientToDos({ geoId, plan, onChanged }: { geoId: string; plan: G
               muted={item.done}
               trailing={item.done ? <Tag>已经做了</Tag> : undefined}
               actions={mayChange ? (
-                <Button variant="text" size="sm" loading={busy === item.key} onClick={() => mark(item.key, !item.done)}>
+                <Button variant="text" size="sm" actionKind="set" loading={busy === item.key} onClick={() => mark(item.key, !item.done)}>
                   {item.done ? "还没做" : "已经做了"}
                 </Button>
               ) : undefined}
@@ -465,9 +465,11 @@ export function Assumptions({ project, plan }: { project: GeoProject; plan: GeoS
                   <Button
                     variant="text"
                     size="sm"
+                    actionKind="draft"
                     onClick={() => { void open({ projectId: project.projectId }, `方案里有一条假设：“${line}”。我想改成：`); }}
                   >
-                    修改
+                    <PenLine size={14} aria-hidden="true" />
+                    让 AI 修改
                   </Button>
                 ) : undefined}
               />

@@ -97,7 +97,7 @@ export function OwnedLinkForm({
             onChange={(event) => setUrl(event.target.value)}
             className="min-w-0 flex-1"
           />
-          <Button type="submit" size="sm" loading={busy === "send"} disabled={!url.trim()}>登记</Button>
+          <Button type="submit" size="sm" actionKind="set" loading={busy === "send"} disabled={!url.trim()}>登记</Button>
           <Button type="button" variant="text" size="sm" onClick={() => { setAsking(false); setUrl(""); }}>取消</Button>
         </form>
       )}

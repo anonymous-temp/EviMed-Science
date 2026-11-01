@@ -250,7 +250,7 @@ describe("a project with no value analysis", () => {
     client.getGeoValue.mockResolvedValue(empty());
     // The profile beside it proves the read finished: it is the one part where an empty analysis draws something, the recipe.
     const view = render(<MemoryRouter><ValueSection geoId="geo_1" project={geoProject()} mode={mode} /><ValueSection geoId="geo_1" project={geoProject()} mode="profile" /></MemoryRouter>);
-    await screen.findByRole("button", { name: "开始药品价值分析" });
+    await screen.findByRole("button", { name: "让 AI 开始药品价值分析" });
     await settle();
     expect(view.container.querySelectorAll("[data-step-state]")).toHaveLength(1);
     expect(view.container.querySelectorAll("section")).toHaveLength(0);
@@ -269,7 +269,7 @@ describe("a project with no value analysis", () => {
     expect(await screen.findByText("还没有药品价值分析")).toBeInTheDocument();
     expect(screen.getByText("得到 这个药的获益、风险、适用性、费用与可及性")).toBeInTheDocument();
     const start = screen.getAllByRole("button");
-    expect(start.map((button) => button.textContent)).toEqual(["开始药品价值分析"]);
+    expect(start.map((button) => button.textContent)).toEqual(["让 AI 开始药品价值分析"]);
     await userEvent.click(start[0]);
     expect(open).toHaveBeenCalledTimes(1);
     // No conversation named: the hook opens the one the page holds (`useOpenGeoConversation`).
@@ -292,7 +292,7 @@ describe("a project that has an analysis", () => {
     expect(view.container).toBeEmptyDOMElement();
   });
 
-  it("draws no 问 AI button on any row or section, whichever tab it is on", async () => {
+  it("draws no 让 AI 解读 button on any row or section, whichever tab it is on", async () => {
     client.getGeoValue.mockResolvedValue(valueFilled);
     const modes: ValueMode[] = ["profile", "decisions", "actions", "sources", "coverage"];
     const view = render(<MemoryRouter>{modes.map((mode) => <ValueSection key={mode} geoId="geo_1" project={geoProject()} mode={mode} />)}</MemoryRouter>);
@@ -300,7 +300,7 @@ describe("a project that has an analysis", () => {
     for (const title of VALUE_TITLES) expect(await screen.findByRole("heading", { name: title })).toBeInTheDocument();
     await userEvent.click(screen.getByText("查看相关研究"));
     expect(view.container.querySelectorAll("[data-geo-ask-ai]")).toHaveLength(0);
-    for (const name of [/继续分析/, /推进这个问题/, /分析表达效果/, /问 AI/, /开始药品价值分析/]) expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
+    for (const name of [/继续分析/, /推进这个问题/, /分析表达效果/, /让 AI 解读/, /开始药品价值分析/]) expect(screen.queryByRole("button", { name })).not.toBeInTheDocument();
   });
 });
 

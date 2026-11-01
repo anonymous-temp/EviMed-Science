@@ -1,7 +1,7 @@
 import { geoAnalysisSearch } from "../geoAnalysisMode";
 import { useLocation, useNavigate } from "react-router";
 import { useEffect, useRef, useState } from "react";
-import { ArrowUpRight, Check, X } from "lucide-react";
+import { ArrowUpRight, Check, PenLine, X } from "lucide-react";
 import { getGeoSource, type GeoProject, type GeoSourceAnswer, type GeoSourceDetail, type GeoSourcePage, type GeoSourceRow } from "@/lib/geoClient";
 import { webErrorMessage, WebApiError } from "@/lib/apiClient";
 import { geoReadScopeQuery } from "@/lib/geoReadScope";
@@ -424,7 +424,7 @@ function Footer({ project, source, detail }: { project: GeoProject; source: Pick
   if (!geoMayConverse(project)) return null;
   return (
     <footer className="sticky -bottom-6 z-sticky -mx-6 -mb-6 mt-6 border-t border-border bg-surface px-6 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
-      <Button data-geo-source-handoff="" loading={busy} onClick={handoff}>在对话中处理</Button>
+      <Button data-geo-source-handoff="" actionKind="draft" loading={busy} onClick={handoff}>{!busy && <PenLine size={16} aria-hidden="true" />}让 AI 处理这个信源</Button>
     </footer>
   );
 }

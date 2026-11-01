@@ -126,7 +126,7 @@ function OrderDetail({ geoId, project, orderId, onClose }: { geoId: string; proj
       <div className="flex flex-wrap gap-2">
         {href && <a href={href} target="_blank" rel="noreferrer" className="text-link hover:underline">打开线上页面</a>}
         {!newerVersion && versionButton}
-        {order.cancellable && canManage && <Button variant="secondary" size="sm" loading={busy} onClick={() => setConfirm(true)}>撤单</Button>}
+        {order.cancellable && canManage && <Button variant="secondary" size="sm" actionKind="external" loading={busy} onClick={() => setConfirm(true)}>撤单</Button>}
       </div>
       <List label="订单时间线" divided>
         {state.data.events.items.map(event => <ListRow key={event.id} title={event.phase ? phaseNames[event.phase] || '状态更新' : event.toState ? orderStateWord(event.toState) : '状态更新'}
@@ -189,7 +189,7 @@ function OwnedDetail({ geoId, project, linkId, onClose }: { geoId: string; proje
       {link.articleResultVersionId && link.articleDigest && <Button variant="text" size="sm" onClick={() => void openPublication(link.articleResultVersionId!, link.articleDigest!)}>查看已登记稿件</Button>}
       {canEdit && link.currentResultVersionId && link.currentDigest && <div className="flex flex-col gap-2">
         <Input type="datetime-local" label="实际更新时间（北京时间）" value={publishedAt} onChange={event => setPublishedAt(event.target.value)} disabled={busy} />
-        <Button size="sm" onClick={prepare} disabled={busy}>登记线上已更新为当前稿件</Button>
+        <Button size="sm" actionKind="external" onClick={prepare} disabled={busy}>登记线上已更新为当前稿件</Button>
       </div>}
       {error && <Note tone="warn" action={<Button size="sm" variant="text" onClick={reload}>刷新记录</Button>}>{error}</Note>}
       <List label="发布版本记录" divided>

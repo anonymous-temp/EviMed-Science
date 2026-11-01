@@ -283,7 +283,7 @@ describe("方案: 假设", () => {
     expect(rows[0]).toHaveTextContent("没有指定档位，三档都给出，默认按档二执行");
     expect(rows[0]).not.toHaveTextContent("tier");
     expect(rows[1]).toHaveTextContent("豆包没有有效回答，本周期只写“未测”");
-    await userEvent.click(within(rows[1]).getByRole("button", { name: "修改" }));
+    await userEvent.click(within(rows[1]).getByRole("button", { name: "让 AI 修改" }));
     // No conversation named: the hook opens the one the page holds (`useOpenGeoConversation`).
     expect(open).toHaveBeenCalledWith({ projectId: "prj_geo_1" }, expect.stringContaining("豆包没有有效回答"));
   });
@@ -296,7 +296,7 @@ describe("方案: before there is a plan, and when it cannot be read", () => {
       tiers: [], battlefield: null, noGo: [], engines: [], layout: { layers: null, constraints: [], clientActions: [] }, assumptions: [],
     });
     renderPlan();
-    expect(await screen.findByRole("button", { name: "生成方案" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "让 AI 生成方案" })).toBeInTheDocument();
     expect(screen.getByText(/尚无引用信源也可以制定方案/)).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/档[一二三]/);
   });
@@ -322,10 +322,10 @@ it("stages a versioned action as an unsent draft in the current native conversat
   const action = {key:"fill_gap:g1:missing_evidence",kind:"fill_gap",group:{id:"g1",name:"Selected group"},need:{judgment:"Explain the finding"},what:{title:"Selected content"},sources:[],work:{mode:"new",outputs:["article.md"]}};
   client.getGeoStrategy.mockResolvedValue({...strategyFilled,version:7,implementation:{actions:[action]},freshness:{status:"unknown",reasons:["basis_unavailable"]}});
   renderPlan();
-  const use = await screen.findByRole("button",{name:"用于内容"});
+  const use = await screen.findByRole("button",{name:"让 AI 按此写稿"});
   // A module tab's body holds no primary action (DESIGN.md T3: the page's is the header's): the plan's actions are its section's, and
   // 刷新方案 is the text action of its sentence (the fixture walk of b559d4b7e found 53 primaries under the header's row on 方案).
-  for (const button of [use, screen.getByRole("button",{name:"调整方案"}), screen.getByRole("button",{name:"刷新方案"})]) expect(button).not.toHaveClass("bg-accent");
+  for (const button of [use, screen.getByRole("button",{name:"让 AI 调整方案"}), screen.getByRole("button",{name:"刷新方案"})]) expect(button).not.toHaveClass("bg-accent");
   expect(screen.getByRole("button",{name:"刷新方案"}).closest("[data-note]")).not.toBeNull();
   await userEvent.click(use);
   await waitFor(()=>expect(client.stageGeoPlanContext).toHaveBeenCalled());
@@ -351,7 +351,7 @@ it("reads the plan's actions a page at a time, each a heading over its facts, it
   expect(screen.getByText(/site-1\.example\.com · 可选渠道 · 官网常被引用/).closest("dd")!.previousElementSibling).toHaveTextContent("渠道");
   await userEvent.click(screen.getByRole("button",{name:"显示更多 · 还有 3 项行动"}));
   expect(screen.getAllByRole("heading",{level:3}).filter(h=>/^\d+\. 行动/.test(h.textContent ?? ""))).toHaveLength(8);
-  expect(screen.getAllByRole("button",{name:"用于内容"})).toHaveLength(8);
+  expect(screen.getAllByRole("button",{name:"让 AI 按此写稿"})).toHaveLength(8);
 });
 
 it("shows supported time, workload, audience and price basis as estimates",async()=>{
@@ -382,7 +382,7 @@ it("resolves the first module primary before staging a plan draft",async()=>{
 
   client.stageGeoPlanContext.mockImplementation(async(_geo,input)=>({referenceId:"gpc_first_plan",sessionId:input.sessionId,draft:"Selected unsent plan"}));
   render(<MemoryRouter><GeoFrameHarness project={{...project,sessionId:null}} tab="plan"><PlanTab geoId="geo_1" project={{...project,sessionId:null}}/></GeoFrameHarness></MemoryRouter>);
-  await userEvent.click(await screen.findByRole("button",{name:"调整方案"}));
+  await userEvent.click(await screen.findByRole("button",{name:"让 AI 调整方案"}));
   await waitFor(()=>expect(client.stageGeoPlanContext).toHaveBeenCalledWith("geo_1",expect.objectContaining({sessionId:"created-plan-session",mode:"strategy"})));
   expect(moduleSession).toHaveBeenCalledWith("geo_1",{kind:"primary"});
   expect(open).toHaveBeenCalledTimes(1);
@@ -430,7 +430,7 @@ it("keeps non-head metric notes and multiline plain text visible without interpr
 it("opens the exact source-plan primary before staging and keeps the draft unsent",async()=>{
   client.getGeoProject.mockResolvedValue({...project,sessionId:null});
   render(<MemoryRouter><GeoFrameHarness project={{...project,sessionId:null}} tab="plan"><PlanTab geoId="geo_1" project={{...project,sessionId:null}} sourceId={`src_${"a".repeat(32)}`} sourceUrl="https://example.org/exact-source" selectionRef="gsel_source"/></GeoFrameHarness></MemoryRouter>);
-  await userEvent.click(await screen.findByRole("button",{name:"调整方案"}));
+  await userEvent.click(await screen.findByRole("button",{name:"让 AI 调整方案"}));
   await waitFor(()=>expect(client.stageGeoPlanContext).toHaveBeenCalledWith("geo_1",expect.objectContaining({sessionId:"created-plan-session",sourceId:`src_${"a".repeat(32)}`,url:"https://example.org/exact-source"})));
   expect(moduleSession).toHaveBeenCalledWith("geo_1",{kind:"primary"});
   expect(moduleSession.mock.invocationCallOrder[0]).toBeLessThan(client.stageGeoPlanContext.mock.invocationCallOrder[0]);
@@ -439,7 +439,7 @@ it("opens the exact source-plan primary before staging and keeps the draft unsen
 });
 it("retains the source plan when an exact conversation is unavailable",async()=>{
   moduleSession.mockRejectedValue(new Error("Selected conversation unavailable"));
-  renderPlan();await userEvent.click(await screen.findByRole("button",{name:"调整方案"}));
+  renderPlan();await userEvent.click(await screen.findByRole("button",{name:"让 AI 调整方案"}));
   await screen.findByText("方案暂时无法打开，请刷新后重试。");
   expect(client.stageGeoPlanContext).not.toHaveBeenCalled();expect(open).not.toHaveBeenCalled();
 });
@@ -447,7 +447,7 @@ it("retains the source plan when an exact conversation is unavailable",async()=>
 it("keeps source-embedded generation subordinate while preserving its source context", async () => {
   client.getGeoStrategy.mockResolvedValue({ ...strategyFilled, version: null });
   render(<MemoryRouter><GeoFrameHarness project={project} tab="sources"><PlanTab {...props} embedded sourceUrl="https://example.org/selected-page" /></GeoFrameHarness></MemoryRouter>);
-  const generate = await screen.findByRole("button", { name: "生成方案" });
+  const generate = await screen.findByRole("button", { name: "让 AI 生成方案" });
   expect(generate).toHaveClass("bg-surface-2");
   expect(generate).not.toHaveClass("bg-accent");
   expect(screen.getByRole("link", { name: "方案目标与实测分析" })).toHaveAttribute("href", expect.stringContaining("analysis=V26"));

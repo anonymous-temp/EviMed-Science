@@ -293,7 +293,7 @@ function QuestionPage({
                     match={match}
                     selected={drawer.group === group.id}
                     onOpen={() => drawer.open({ group: group.id })}
-                    supplement={<AskAi project={{ geoId, projectId: project.projectId, sessionId: project.sessionId }} label="补充真实问法" draft={`/geo-insight 请为第 ${current ?? "当前"} 版的问题群 ${group.id}（${group.name}）补充真实问法。保留本版原题和客户分类。真实问法必须列出来源链接、采集日期和原文；外部采集不可用时请明确说明，模型生成的问句仅标为典型建议。输出可导入表格，采用后另存新版本，不自动采样。`} />}
+                    supplement={<AskAi project={{ geoId, projectId: project.projectId, sessionId: project.sessionId }} label="让 AI 补充真实问法" draft={`/geo-insight 请为第 ${current ?? "当前"} 版的问题群 ${group.id}（${group.name}）补充真实问法。保留本版原题和客户分类。真实问法必须列出来源链接、采集日期和原文；外部采集不可用时请明确说明，模型生成的问句仅标为典型建议。输出可导入表格，采用后另存新版本，不自动采样。`} />}
                     onActions={go(geoDestinationPath(geoId, { tab: "actions" }, { [GEO_CLUSTER_FILTER_PARAM]: group.id }))}
                     onErrors={go(geoDestinationPath(geoId, { tab: "accuracy" }, { [GEO_CLUSTER_FILTER_PARAM]: group.id }))}
                   />

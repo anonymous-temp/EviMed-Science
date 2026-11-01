@@ -37,7 +37,7 @@ export function RenameDialog({ geoId, initial, onSaved, onCancel }: { geoId: str
         {error && <p role="alert" className="text-ui text-danger">{error}</p>}
         <div className="flex justify-end gap-2">
           <Button variant="secondary" disabled={saving} onClick={requestClose}>取消</Button>
-          <Button type="submit" loading={saving}>保存</Button>
+          <Button type="submit" actionKind="set" loading={saving}>保存</Button>
         </div>
       </form>}
     </FormDialog>
