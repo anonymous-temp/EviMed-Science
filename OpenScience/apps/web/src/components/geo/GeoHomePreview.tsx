@@ -28,11 +28,14 @@ export function alertText(project: GeoProjectSummary): string | null {
   const { severe, wrongOurs, safety } = project.alert;
   if (severe > 0) return `${severe} 条严重讲错待处理`;
   if (wrongOurs > 0) return `${wrongOurs} 条讲错待处理`;
-  if (safety > 0) return `${safety} 篇稿件的安全问题待确认`;
+  if (safety > 0) return `${safety} 篇稿件等你放行`;
   return null;
 }
 
-/** “10月1日～12月31日 · 第 3 周”, or what a project that has done one step only did, or “还没开始”. */
+/**
+ * “10月1日～12月31日 · 第 3 周”, or what a project that has done one step only did. A project nothing was asked of says nothing: 「还没开始」
+ * was one more word for the state that has no word, and the list row shows its name alone.
+ */
 export function progressLine(project: GeoProjectSummary): string {
   const journey = geoJourney(project);
   const asked = journey.workflow.requested as typeof GEO_STEP_KEYS[number][];
@@ -42,10 +45,10 @@ export function progressLine(project: GeoProjectSummary): string {
     const names = asked.map((key) => GEO_STEP_WORK[key]).join("、");
     // A step that ended without finishing is not under way: it says so, and the project's page says what to do about it.
     const failed = asked.filter((key) => project.steps[key]?.status === "failed");
-    if (failed.length > 0) return `${failed.map((key) => GEO_STEP_WORK[key]).join("、")}没有做完`;
+    if (failed.length > 0) return `${failed.map((key) => GEO_STEP_WORK[key]).join("、")}未完成`;
     return asked.every((key) => project.steps[key]?.status === "done") ? `只做了${names}` : `正在做${names}`;
   }
-  if (touched.length === 0) return "还没开始";
+  if (touched.length === 0) return "";
   const start = project.startedAt ?? project.createdAt ?? null;
   const week = weekOf(start);
   return [coverageText(project.coverageDays, start), ...(week ? [`第 ${week} 周`] : [])].join(" · ");
@@ -106,7 +109,7 @@ export function GeoProjectPreview({ project, label, heading, resuming, onResume,
         {heading && (
           <div className="min-w-0 flex-1 basis-48">
             <h2 className="line-clamp-2 text-section font-semibold text-text">{label}</h2>
-            <p data-geo-subline="" className="mt-1 text-caption text-text-3">{paused ? "已暂停" : progressLine(project)}</p>
+            {(paused || progressLine(project)) && <p data-geo-subline="" className="mt-1 text-caption text-text-3">{paused ? "已暂停" : progressLine(project)}</p>}
           </div>
         )}
         {/* The preview's own way on is secondary: the page's one solid button is 新建项目, in the list's header. */}
@@ -117,7 +120,7 @@ export function GeoProjectPreview({ project, label, heading, resuming, onResume,
       </div>
 
       {paused && (
-        <Note tone="warn" action={geoActionPermission(project, "edit").allowed ? <Button variant="text" size="sm" loading={resuming} onClick={onResume} aria-label={`继续“${label}”`}>恢复项目</Button> : undefined}>
+        <Note tone="warn" action={geoActionPermission(project, "edit").allowed ? <Button variant="text" size="sm" actionKind="set" loading={resuming} onClick={onResume} aria-label={`继续“${label}”`}>恢复项目</Button> : undefined}>
           项目已暂停。
         </Note>
       )}

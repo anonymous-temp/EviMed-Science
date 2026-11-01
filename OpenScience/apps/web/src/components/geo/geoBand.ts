@@ -41,7 +41,9 @@ export function geoStepView(project: Pick<GeoProject, "steps"> & Partial<Pick<Ge
   // Placing is the reader's money only once placing was asked for or is moving: a step nobody asked for owes neither budget nor market.
   const placing = key === "distribution" && status !== "done" && status !== "minimal" && (asked || working || status === "failed");
   const owesBudget = placing && "budget" in project && marketConnected(project as GeoProject) && !(project.budget && project.budget.totalCny > 0);
-  const owesConsent = key === "monitoring" && asked && status === "none" && "engines" in project && !geoAutomationEnabled(project);
+  // A person who said no (「暂不启动」) has answered: waiting on them for it would ask the same question for ever.
+  const declined = key === "monitoring" && step?.automation?.state === "declined";
+  const owesConsent = key === "monitoring" && asked && status === "none" && !declined && "engines" in project && !geoAutomationEnabled(project);
   const legacy = status === "none" && step?.requested === true && step.requestOrigin === "legacy";
   const waitingFor = owesBudget ? "设预算" : stepAllowanceWait(step) ? "补额度" : owesConsent ? "开启自动监测" : legacy ? "确认范围" : null;
   // Without a market a placing that was asked for cannot move, whatever its record says.
@@ -53,7 +55,8 @@ export function geoStepView(project: Pick<GeoProject, "steps"> & Partial<Pick<Ge
           : heldByMarket ? "todo"
             : status === "running" ? "running"
               : status === "queued" ? "queued"
-                : workflow.steps[key]?.required ? "todo" : null;
+                : declined && status === "none" ? null
+                  : workflow.steps[key]?.required ? "todo" : null;
   const state: RailState = work === "waiting" ? "waiting" : work === "failed" ? "attention" : work === "done" ? "done" : work === "minimal" ? "partial" : work === "running" || work === "queued" ? "active" : "todo";
   return { work, state, word: workStateLabel(work, waitingFor), waitingFor };
 }

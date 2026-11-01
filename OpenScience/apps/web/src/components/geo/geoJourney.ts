@@ -65,17 +65,18 @@ export function geoJourney(project: JourneyProject) {
   if (current) {
     next = {kind:'step',step:current,label:'继续当前工作'};
     const state = workflow.steps[current];
-    if (blocked) {stage='blocked';title=`${GEO_STEP_NAMES[current]}等待额度`;detail='打开当前工作查看额度状态和已保留的结果。';}
-    else if (active) {stage=state.status === 'running' ? 'running' : 'queued';title=`${state.status === 'running' ? '正在' : '已排队：'}${GEO_STEP_WORK[current]}`;detail=waitingFor.length ? `等待${names(waitingFor)}。` : '查看这次任务的对话记录与已有结果。';}
-    else if (failed) {stage='failed';title=`${GEO_STEP_NAMES[current]}没有完成`;detail='查看失败原因与这次运行；已保留的结果仍可打开。';}
-    else {stage='queued';title=`待继续：${GEO_STEP_WORK[current]}`;detail=waitingFor.length ? `还需要${names(waitingFor)}。` : '该项工作已请求，尚未观察到开始运行。';}
+    if (blocked) {stage='blocked';title=`${GEO_STEP_NAMES[current]}等你补额度`;detail='打开当前工作查看额度状态和已保留的结果。';}
+    else if (active) {stage=state.status === 'running' ? 'running' : 'queued';title=`${state.status === 'running' ? '正在' : '排队中：'}${GEO_STEP_WORK[current]}`;detail=waitingFor.length ? `等待${names(waitingFor)}。` : '查看这次任务的对话记录与已有结果。';}
+    else if (failed) {stage='failed';title=`${GEO_STEP_NAMES[current]}未完成`;detail='查看未完成的原因与这次运行；已保留的结果仍可打开。';}
+    else {stage='queued';title=`待开始：${GEO_STEP_WORK[current]}`;detail=waitingFor.length ? `还需要${names(waitingFor)}。` : '该项工作已请求，尚未观察到开始运行。';}
     if (!active && !failed && !blocked && waitingFor.length) next = {kind:'step',step:waitingFor[0],label:`查看${GEO_STEP_NAMES[waitingFor[0]]}`};
   }
   if (legacy.length && !active && !workflow.requested.length) {
     stage='ready';title='历史步骤范围待确认，选择需要继续的任务';detail='历史结果和已受理的任务都保留。选择本次需要继续的一项工作；不会按旧标记自动启动完整方案。';
   }
   if (workflow.requested.includes('monitoring') && !active && !failed) {
-    stage=geoAutomationEnabled(project)?'ready':'blocked';title=geoAutomationEnabled(project)?'自动监测已开启，等待下一轮':'尚未开启自动监测';detail='已有测量任务和结果保留。查看当前引擎与覆盖周期和后续复测安排。';
+    const declined=steps.monitoring?.automation?.state==='declined';
+    stage=geoAutomationEnabled(project)||declined?'ready':'blocked';title=geoAutomationEnabled(project)?'自动监测已开启，等待下一轮':declined?'自动监测已关闭':'等你开启自动监测';detail='已有测量任务和结果保留。查看当前引擎与覆盖周期和后续复测安排。';
     next={kind:'step',step:'monitoring',label:'查看范围与自动监测设置'};
   }
   if (['paused','archived'].includes(project.status)) {
