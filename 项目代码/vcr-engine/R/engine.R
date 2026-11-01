@@ -662,6 +662,8 @@ vcr_job_generate_population <- function(job, output_dir = NULL, ...) {
        counts = pop$counts,
        diagnostics = list(kind = pop$kind, parameterDraws = pop$parameterDraws,
                           parameterSpread = spread,
+                          # no matrix: the variables were drawn independently, which is an assumption and is said as one
+                          correlationVerification = if (is.null(sc$population[["correlation"]])) "independence_assumed" else "assumed",
                           copulaRepaired = pop$copulaRepaired,
                           constraintViolations = pop$constraintViolations,
                           constraintEnforcement = pop$constraintEnforcement,
@@ -684,7 +686,7 @@ vcr_job_population_literature <- function(job, output_dir = NULL, ...) {
   list(status = "succeeded",
        measures = list(vcr_measure("generated_records", pop$n, source = "synthetic")),
        counts = pop$counts,
-       diagnostics = list(kind = pop$kind, applicability = pop$applicability,
+       diagnostics = list(kind = pop$kind, applicability = pop$applicability, parameterDraws = pop$parameterDraws,
                           correlationSource = pop$correlationSource, correlationVerification = pop$correlationVerification, modelTier = pop$modelTier,
                           valueSource = "synthetic", columnSources = as.list(pop$columnSources),
                           correlationSensitivity = pop$correlationSensitivity,
@@ -949,20 +951,35 @@ vcr_job_pool_evidence <- function(job, output_dir = NULL, ...) {
 #' One reconstruction arm from a scenario fragment: the digitized curve as rows
 #' `{ time, surv }` and the risk table as rows `{ time, atRisk }`.
 .vcr_reconstruct_arm <- function(a, field) {
-  curve <- vcr_rows_df(a$curve); risk <- vcr_rows_df(a$riskTable)
+  curve <- vcr_rows_df(a$curve)
   if (!all(c("time", "surv") %in% names(curve)) || nrow(curve) < 3L) {
     vcr_abort("scenario_field_missing", paste0(field, ".curve"), "Reconstruction needs the digitized curve as rows of time and surv.")
   }
-  if (!all(c("time", "atRisk") %in% names(risk)) || nrow(risk) < 1L) {
-    vcr_abort("scenario_field_missing", paste0(field, ".riskTable"), "Reconstruction needs the published numbers at risk; without them censoring is not identified and no reconstruction is run.")
+  # The published numbers at risk are the best information a reconstruction can have, and many papers print none. Without them the
+  # arm's size at the start (`initialAtRisk`, the randomized N) still anchors the reconstruction; without that no one is counted.
+  risk <- if (is.null(a$riskTable)) NULL else vcr_rows_df(a$riskTable)
+  has_table <- !is.null(risk) && all(c("time", "atRisk") %in% names(risk)) && nrow(risk) >= 2L
+  if (!is.null(a$riskTable) && !has_table) {
+    vcr_abort("scenario_value_invalid", paste0(field, ".riskTable"), "The numbers at risk are rows of time and atRisk, at least two; with none printed, give initialAtRisk, the arm's size at the start.")
   }
-  ct <- as.numeric(curve$time); cs <- as.numeric(curve$surv); rt <- as.numeric(risk$time); rn <- as.numeric(risk$atRisk)
+  start <- vcr_scalar(a$initialAtRisk, NA_real_)
+  if (!has_table && is.na(start)) {
+    vcr_abort("scenario_field_missing", paste0(field, ".initialAtRisk"), "Without a published risk table the reconstruction needs the arm's size at the start (initialAtRisk): a curve alone does not say how many patients it describes.")
+  }
+  ct <- as.numeric(curve$time); cs <- as.numeric(curve$surv)
+  rt <- if (has_table) as.numeric(risk$time) else ct[1]
+  rn <- if (has_table) as.numeric(risk$atRisk) else start
   if (anyNA(c(ct, cs, rt, rn))) vcr_abort("scenario_value_invalid", field, "The curve and the risk table are numeric.")
   te <- vcr_scalar(a$totalEvents, NA_real_)
   recon <- vcr_guyot(ct, cs, rt, rn, total_events = te)
+  has_events <- !is.na(te)
+  level <- if (has_table && has_events) 1L else if (has_table) 2L else if (has_events) 3L else 4L
   list(recon = recon, riskTime = rt, atRisk = rn, totalEvents = te, reportedMedian = vcr_scalar(a$reportedMedian, NA_real_),
-       name = as.character(a$name %||% ""))
+       name = as.character(a$name %||% ""), hasTable = has_table, hasEvents = has_events, level = level)
 }
+
+#' The four information levels of a reconstruction, by name (see the header of reconstruct.R).
+.VCR_RECONSTRUCTION_LEVELS <- c("risk_table_and_events", "risk_table", "events_only", "curve_only")
 
 #' Curve coordinates must come from a digitizer or a person clicking, and the
 #' scenario names the tool: a curve "read" off a picture by a language model is
@@ -980,7 +997,7 @@ vcr_job_reconstruct_km <- function(job, output_dir = NULL, ...) {
   .vcr_check_provenance(sc$provenance)
   # The scenario's own curve and risk table are the (control) arm; a second arm
   # is the `treatmentArm`, and only two arms can check a reported hazard ratio.
-  arms <- list(list(name = "control", curve = sc$curve, riskTable = sc$riskTable, totalEvents = sc$totalEvents, reportedMedian = sc$reportedMedian))
+  arms <- list(list(name = "control", curve = sc$curve, riskTable = sc$riskTable, initialAtRisk = sc[["initialAtRisk"]], totalEvents = sc$totalEvents, reportedMedian = sc$reportedMedian))
   if (!is.null(sc$treatmentArm)) arms[[2]] <- c(list(name = "treatment"), sc$treatmentArm)
   hr_reported <- vcr_scalar(sc$reportedLogHazardRatio, NA_real_)
   if (!is.na(hr_reported) && length(arms) < 2L) {
@@ -993,12 +1010,23 @@ vcr_job_reconstruct_km <- function(job, output_dir = NULL, ...) {
   if (is.list(dom)) tol <- utils::modifyList(tol, dom)
   ipd_all <- do.call(rbind, lapply(seq_along(rec), function(i) cbind(rec[[i]]$recon$ipd, arm = i - 1L)))
   log_hr <- if (length(rec) == 2L) vcr_cox_loghr(ipd_all$time, ipd_all$status, ipd_all$arm) else NA_real_
+  # A hazard ratio from arms that were reconstructed without a risk table and without total events is not recoverable: not estimable,
+  # and said so, while the curves, medians and event counts stay.
+  hr_estimable <- all(vapply(rec, function(r) r$hasTable || r$hasEvents, logical(1)))
+  if (!hr_estimable) log_hr <- NA_real_
+  levels <- vapply(rec, function(r) r$level, integer(1))
+  information <- list(level = max(levels), key = .VCR_RECONSTRUCTION_LEVELS[max(levels)],
+                      arms = lapply(seq_along(rec), function(i) list(name = rec[[i]]$name, level = rec[[i]]$level,
+                                                                      key = .VCR_RECONSTRUCTION_LEVELS[rec[[i]]$level],
+                                                                      riskTable = rec[[i]]$hasTable, totalEvents = rec[[i]]$hasEvents)))
+  hazard_ratio <- if (length(rec) == 2L && !hr_estimable) list(status = "not_estimable", reason = "risk_table_and_total_events_missing") else NULL
   qc <- lapply(seq_along(rec), function(i) {
     r <- rec[[i]]
     vcr_reconstruction_qc(r$recon, r$riskTime, r$atRisk, total_events_reported = r$totalEvents,
                           median_reported = r$reportedMedian,
                           log_hr_reported = if (i == 2L) hr_reported else NA_real_,
-                          log_hr_recon = if (i == 2L) log_hr else NA_real_, tolerance = tol)
+                          log_hr_recon = if (i == 2L) log_hr else NA_real_, tolerance = tol,
+                          risk_table_reported = r$hasTable)
   })
   n_pseudo <- nrow(ipd_all)
   pass <- all(vapply(qc, function(q) isTRUE(q$pass), logical(1)))
@@ -1006,7 +1034,7 @@ vcr_job_reconstruct_km <- function(job, output_dir = NULL, ...) {
     return(list(status = "not_estimable", notEstimableRule = "reconstruction_failed_qc",
                 measures = list(),
                 counts = vcr_counts(realPatients = 0, reconstructedPseudoPatients = n_pseudo),
-                diagnostics = list(qualityControl = if (length(qc) == 1L) qc[[1]] else qc, tolerances = tol)))
+                diagnostics = list(qualityControl = if (length(qc) == 1L) qc[[1]] else qc, tolerances = tol, informationLevel = information)))
   }
   measures <- list(); events_total <- 0
   for (i in seq_along(rec)) {
@@ -1034,8 +1062,11 @@ vcr_job_reconstruct_km <- function(job, output_dir = NULL, ...) {
                                                     paste0(nm, "（重建的伪个体）"), "reconstructed", ours = i == 2L)
   }
   list(status = "succeeded", measures = measures,
+       # Without a risk table (levels 3 and 4) the survival probabilities and the median are delivered and say they are limited.
+       conclusion = if (any(levels >= 3L)) "limited" else "estimable",
        counts = vcr_counts(realPatients = 0, events = events_total, reconstructedPseudoPatients = n_pseudo),
        diagnostics = list(curves = curves, qualityControl = if (length(qc) == 1L) qc[[1]] else qc, tolerances = tol, valueSource = "reconstructed",
+                          informationLevel = information, hazardRatio = hazard_ratio,
                           provenance = sc$provenance,
                           medianNotReached = as.list(not_reached),
                           logHazardRatioReconstructed = if (is.finite(log_hr)) log_hr else NULL,
@@ -1518,10 +1549,14 @@ vcr_job_map_prior <- function(job, output_dir = NULL, ...) {
     # beside it.
     conflict <- list(mapOnly = vcr_map_conflict(mix, cy, cse, bound), robust = vcr_map_conflict(robust, cy, cse, bound))
   }
-  oc <- NULL
+  oc <- NULL; oc_plan <- NULL
   spec <- sc$operatingCharacteristics
   if (!is.null(spec)) {
-    reps <- as.integer(job$replicates %||% 5000L)
+    # The control plane asks for the borrowing floor (100,000 under the null, `vcrReplicatesForJob`); a table the engine's own
+    # ceiling holds below it is run at the ceiling and the result says it is limited.
+    asked <- as.integer(job$replicates %||% 5000L)
+    reps <- as.integer(min(asked, vcr_max_replicates()))
+    oc_plan <- list(replicates = reps, asked = asked, capped = asked > reps)
     oc <- vcr_hybrid_operating_characteristics(
       mix, unit_var, vcr_scalar(spec$nControl), vcr_scalar(spec$nTreatment), vcr_num(spec$drifts), vcr_scalar(spec$effect, 0),
       robust_weights = { rw <- vcr_num(spec$robustWeights); if (length(rw)) rw else c(0.2, 0.5) },
@@ -1534,6 +1569,7 @@ vcr_job_map_prior <- function(job, output_dir = NULL, ...) {
                 diagnostics = list(conflict = conflict, tau = map$tauPosteriorMedian, thresholds = list(conflictBound = bound))))
   }
   list(status = "succeeded",
+       conclusion = if (isTRUE(oc_plan$capped)) "limited" else "estimable",
        measures = list(
          vcr_measure("map_mean", map$mean, source = "aggregate"),
          vcr_measure("map_sd", map$sd, source = "aggregate"),
@@ -1549,6 +1585,10 @@ vcr_job_map_prior <- function(job, output_dir = NULL, ...) {
                                                           note = if (!map$finitePredictiveVariance) "With two studies the posterior of tau under a half-Cauchy prior has no finite second moment: map_sd depends on how far the quadrature reaches (reach); three studies, or a half-normal prior, make it finite." else NULL)),
                           essMapMoment = ess_map, essMapElir = elir_map, conflict = conflict, k = map$k,
                           thresholds = list(conflictBound = bound),
+                          # The table the page draws: the file keeps every row, and this is the same rows in the result (a table file is
+                          # not read back by a page). The null rows (effect 0) are the type I error at each drift, each with its error.
+                          operatingCharacteristics = if (is.null(oc)) NULL else c(oc_plan, list(
+                            rows = lapply(seq_len(nrow(oc)), function(i) as.list(oc[i, , drop = FALSE])))),
                           note = "Under strict type-I control, borrowing does not buy power (Kopp-Schneider 2020)."),
        tables = .vcr_tables_of(list(if (!is.null(oc)) vcr_write_table(oc, "operating-characteristics", output_dir))))
 }

@@ -17,11 +17,16 @@
 #   `last` index must only advance when an event actually occurred, otherwise
 #   a run of flat clicks slowly deflates the curve. This is the part of the
 #   published appendix that looks like a typo and is not.
-# - **No risk table means a low-confidence reconstruction.** With only the
-#   curve, censoring is unidentified; Guyot's own validation shows the hazard
-#   ratio is only recovered well when at-risk numbers or the total event count
-#   are available. We still reconstruct, we label it, and the QC cannot pass
-#   the at-risk check it has no numbers for.
+# - **No risk table means a low-confidence reconstruction, in four levels.**
+#   With only the curve, censoring is unidentified; Guyot's own validation shows
+#   the hazard ratio is only recovered well when at-risk numbers or the total
+#   event count are available. The information a paper gave is a level, and the
+#   result says which: 1 risk table and total events, 2 risk table only, 3 total
+#   events only, 4 the curve alone (and the arm's size at the start, which no
+#   reconstruction can do without). Levels 3 and 4 have no at-risk check to pass
+#   and are `limited`; level 4 gives no hazard ratio (`not_estimable`), because
+#   the reconstructed hazard ratio at that level is not recoverable (Guyot 2012:
+#   0.017 to 0.198 off, a true 1.5 reconstructed anywhere from 0.32 to 7.11).
 # - **The output is `reconstructed`, never `observed`.** The count goes into
 #   `reconstructedPseudoPatients`, never into `realPatients`, and nothing
 #   downstream may draw it as a measured curve (AC-27, N17). That is enforced
@@ -201,27 +206,37 @@ vcr_guyot <- function(t, S, t_risk, n_risk, total_events = NA_real_) {
 #' Tolerances: numbers at risk within max(2, 5%), total events within 5%,
 #' median within 5%, |log HR - reported log HR| <= 0.05. A reconstruction that
 #' fails is `reconstruction_failed_qc` and may not enter an analysis (AC-27).
+#' A check the paper reported nothing for (`risk_table_reported = FALSE`, no total
+#' events) is `not_reported`: it is listed, it does not pass and it does not fail.
 vcr_reconstruction_qc <- function(recon, t_risk, n_risk_reported,
                                   total_events_reported = NA_real_,
                                   median_reported = NA_real_,
                                   log_hr_reported = NA_real_, log_hr_recon = NA_real_,
-                                  tolerance = list()) {
+                                  tolerance = list(), risk_table_reported = TRUE) {
   tol <- utils::modifyList(list(atRiskAbsolute = 2, atRiskRelative = 0.05,
                                 events = 0.05, median = 0.05, logHazardRatio = 0.05), tolerance)
   ipd <- recon$ipd
-  at_risk <- vapply(t_risk, function(tt) sum(ipd$time >= tt), numeric(1))
-  at_risk_diff <- abs(at_risk - n_risk_reported)
-  at_risk_allow <- pmax(tol$atRiskAbsolute, tol$atRiskRelative * n_risk_reported)
+  # A check the paper gave nothing to check against is listed as not reported and is not passed: a pass that silently skipped the
+  # at-risk or the event check read the same as one that held them, and the information level says which it was.
   checks <- list()
-  checks$atRisk <- list(name = "numbers at risk", reported = as.numeric(n_risk_reported),
-                        reconstructed = at_risk, allowed = at_risk_allow,
-                        pass = all(at_risk_diff <= at_risk_allow + 1e-9))
+  if (isTRUE(risk_table_reported)) {
+    at_risk <- vapply(t_risk, function(tt) sum(ipd$time >= tt), numeric(1))
+    at_risk_diff <- abs(at_risk - n_risk_reported)
+    at_risk_allow <- pmax(tol$atRiskAbsolute, tol$atRiskRelative * n_risk_reported)
+    checks$atRisk <- list(name = "numbers at risk", reported = as.numeric(n_risk_reported),
+                          reconstructed = at_risk, allowed = at_risk_allow,
+                          pass = all(at_risk_diff <= at_risk_allow + 1e-9))
+  } else {
+    checks$atRisk <- list(name = "numbers at risk", status = "not_reported", pass = NA)
+  }
   events <- sum(ipd$status)
   if (!is.na(total_events_reported)) {
     checks$events <- list(name = "total events", reported = total_events_reported,
                           reconstructed = events,
                           pass = abs(events - total_events_reported) <=
                             tol$events * max(total_events_reported, 1))
+  } else {
+    checks$events <- list(name = "total events", status = "not_reported", pass = NA)
   }
   km <- vcr_km(ipd$time, ipd$status)
   med <- vcr_km_median(km)
@@ -235,8 +250,12 @@ vcr_reconstruction_qc <- function(recon, t_risk, n_risk_reported,
     checks$logHazardRatio <- list(name = "log hazard ratio", reported = log_hr_reported,
                                   reconstructed = log_hr_recon,
                                   pass = abs(log_hr_recon - log_hr_reported) <= tol$logHazardRatio)
+  } else if (!is.na(log_hr_reported)) {
+    # A reported hazard ratio with no recoverable one beside it (information level 4): said, not skipped.
+    checks$logHazardRatio <- list(name = "log hazard ratio", reported = log_hr_reported, status = "not_checked", pass = NA)
   }
-  passed <- all(vapply(checks, function(c) isTRUE(c$pass), logical(1)))
+  held <- checks[!vapply(checks, function(c) isTRUE(c$status %in% c("not_reported", "not_checked")), logical(1))]
+  passed <- all(vapply(held, function(c) isTRUE(c$pass), logical(1)))
   list(
     pass = passed,
     checks = checks,
@@ -245,7 +264,7 @@ vcr_reconstruction_qc <- function(recon, t_risk, n_risk_reported,
     reconstructedPseudoPatients = nrow(ipd),
     rule = if (passed) NULL else "reconstruction_failed_qc",
     detail = if (passed) NULL else paste(
-      vapply(checks[!vapply(checks, function(c) isTRUE(c$pass), logical(1))],
+      vapply(held[!vapply(held, function(c) isTRUE(c$pass), logical(1))],
              function(c) c$name, character(1)), collapse = "; ")
   )
 }

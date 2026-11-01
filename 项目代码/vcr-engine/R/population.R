@@ -372,11 +372,16 @@ vcr_population_literature <- function(table, n, correlation = NULL,
   for (nm in names(labels)) if (!is.null(labels[[nm]])) out$data[[nm]] <- labels[[nm]][out$data[[nm]]]
   out$kind <- "literature"
   out$modelTier <- "literature"
+  # No matrix means the variables are drawn independently: that is a stated assumption, with a source row of its own, and never
+  # a citation (there is nothing to cite). A matrix the author states is theirs until the source is checked (`cited` is
+  # the author's word, not the engine's).
+  if (is.null(correlation)) correlation_source <- "assumed"
   out$correlationSource <- correlation_source
-  out$correlationVerification <- if (identical(correlation_source, "cited")) "declared_citation_not_verified_by_engine" else "assumed"
+  out$correlationVerification <- if (is.null(correlation)) "independence_assumed"
+                                 else if (identical(correlation_source, "cited")) "declared_citation_not_verified_by_engine" else "assumed"
   out$applicability <- "source_trial_population"
   out$columnSources <- stats::setNames(rep("aggregate", length(vars)), vapply(vars, function(v) v$name, character(1)))
-  if (!is.null(correlation)) out$columnSources[["(correlation)"]] <- if (identical(correlation_source, "assumed")) "assumed" else "aggregate"
+  out$columnSources[["(correlation)"]] <- if (is.null(correlation) || identical(correlation_source, "assumed")) "assumed" else "aggregate"
   if (identical(correlation_source, "assumed") && !is.null(correlation) && n >= 20L) {
     out$correlationSensitivity <- .vcr_correlation_sensitivity(spec, out$data, min(n, 2000L), seed)
   }

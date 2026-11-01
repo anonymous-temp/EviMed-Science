@@ -44,18 +44,24 @@
       ]
     },
     "population.scenario": {
-      "version": "1.0.0",
+      "version": "1.1.0",
       "endpoints": [],
       "crossChecks": [
         "simstudy semantics"
       ],
-      "modelTier": "scenario"
+      "modelTier": "scenario",
+      "compatibleVersions": [
+        "1.0.0"
+      ]
     },
     "population.literature": {
-      "version": "1.0.0",
+      "version": "1.1.0",
       "endpoints": [],
       "crossChecks": [],
-      "modelTier": "literature"
+      "modelTier": "literature",
+      "compatibleVersions": [
+        "1.0.0"
+      ]
     },
     "population.synthpop": {
       "version": "1.0.0",
@@ -116,14 +122,17 @@
       "modelTier": "literature"
     },
     "evidence.reconstruct_km": {
-      "version": "1.0.0",
+      "version": "1.1.0",
       "endpoints": [
         "time_to_event"
       ],
       "crossChecks": [
         "IPDfromKM"
       ],
-      "modelTier": "literature"
+      "modelTier": "literature",
+      "compatibleVersions": [
+        "1.0.0"
+      ]
     },
     "comparator.entropy_balance": {
       "version": "1.1.0",
@@ -193,7 +202,7 @@
       "modelTier": "scenario"
     },
     "comparator.map_prior": {
-      "version": "1.0.0",
+      "version": "1.1.0",
       "endpoints": [
         "binary",
         "continuous"
@@ -201,7 +210,10 @@
       "crossChecks": [
         "RBesT"
       ],
-      "modelTier": "literature"
+      "modelTier": "literature",
+      "compatibleVersions": [
+        "1.0.0"
+      ]
     },
     "design.analytic": {
       "version": "1.2.0",
@@ -3554,8 +3566,12 @@
             }
           },
           "min": 2,
-          "max": 200,
-          "req": true
+          "max": 200
+        },
+        "initialAtRisk": {
+          "t": "integer",
+          "min": 1,
+          "max": 1000000
         },
         "totalEvents": {
           "t": "number",
@@ -3635,8 +3651,12 @@
                 }
               },
               "min": 2,
-              "max": 200,
-              "req": true
+              "max": 200
+            },
+            "initialAtRisk": {
+              "t": "integer",
+              "min": 1,
+              "max": 1000000
             },
             "totalEvents": {
               "t": "number",
@@ -3646,9 +3666,21 @@
               "t": "number",
               "gt": 0
             }
-          }
+          },
+          "atLeastOne": [
+            [
+              "riskTable",
+              "initialAtRisk"
+            ]
+          ]
         }
-      }
+      },
+      "atLeastOne": [
+        [
+          "riskTable",
+          "initialAtRisk"
+        ]
+      ]
     },
     "comparator.entropy_balance": {
       "t": "object",

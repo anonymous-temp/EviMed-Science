@@ -561,13 +561,15 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
     scale: string({ values: ['identity', 'log', 'logit'], default: 'identity' }),
   }),
 
-  // Without the published numbers at risk censoring is not identified, so the
-  // risk table is required; and the coordinates say where they came from — a
-  // curve "read" off a picture by a language model is several times less
-  // accurate than a digitizer's (EB-6).
+  // The published numbers at risk are the best information a reconstruction can have, not a condition of having one: a paper that
+  // prints none still gives the arm's size at the start (`initialAtRisk`), and the reconstruction runs on that, labelled by what
+  // the paper gave (four information levels) and limited when there is no table (Guyot 2012). With neither, nobody is counted and
+  // the job is refused by name. The coordinates say where they came from — a curve "read" off a picture by a language model is
+  // several times less accurate than a digitizer's (EB-6).
   'evidence.reconstruct_km': object({
     curve: req(KM_CURVE),
-    riskTable: req(KM_RISK_TABLE),
+    riskTable: KM_RISK_TABLE,
+    initialAtRisk: integer({ min: 1, max: 1_000_000 }),
     totalEvents: number({ min: 0 }),
     reportedMedian: number({ gt: 0 }),
     reportedLogHazardRatio: number(),
@@ -578,11 +580,12 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
     })),
     treatmentArm: object({
       curve: req(KM_CURVE),
-      riskTable: req(KM_RISK_TABLE),
+      riskTable: KM_RISK_TABLE,
+      initialAtRisk: integer({ min: 1, max: 1_000_000 }),
       totalEvents: number({ min: 0 }),
       reportedMedian: number({ gt: 0 }),
-    }),
-  }),
+    }, { atLeastOne: [['riskTable', 'initialAtRisk']] }),
+  }, { atLeastOne: [['riskTable', 'initialAtRisk']] }),
 
   // The weighted comparators dispatch on the endpoint: a time-to-event outcome
   // is a weighted Kaplan-Meier curve and an RMST at `tau` (EB-2), so `tau` is
@@ -1010,6 +1013,83 @@ export function vcrIsNullScenario(scenario) {
   }
   return false
 }
+
+/**
+ * The same scenario with no true effect: the zero-effect case of a two-arm design, stated by the one key of its endpoint that
+ * says "no difference" (an effect of 0, a hazard ratio of 1, a risk difference of 0 — the last because a binary control rate
+ * may be the card's and not the object's, and 0 needs no copy of it). Everything else the truth says (the control level, the
+ * standard deviation, the distribution) stays. `null` is the label the null predicate derives, so it is left out rather than
+ * written: a stated label that contradicts the law is refused by validation. Returns null for a scenario this cannot be made for
+ * (a single-arm trial states its effect over a benchmark in other keys).
+ * @param {any} scenario
+ * @returns {Record<string, any> | null} the truth of the null case
+ */
+export function vcrNullTruth(scenario) {
+  // A truth the object leaves out entirely (every number is a card's) is an empty one: the null case adds its one key.
+  const truth = scenario?.truth === undefined ? {} : scenario?.truth
+  const kind = scenario?.design?.kind
+  if (!isObject(truth) || !['two_arm_fixed', 'group_sequential'].includes(kind)) return null
+  const { null: _label, effect: _effect, hazardRatio: _hazardRatio, treatmentRate: _treatmentRate, riskDifference: _riskDifference, oddsRatio: _oddsRatio, ...rest } = truth
+  switch (scenario?.endpoint?.type) {
+    case 'continuous': return { ...rest, effect: 0 }
+    case 'time_to_event': return { ...rest, hazardRatio: 1 }
+    case 'binary': return { ...rest, riskDifference: 0 }
+    default: return null
+  }
+}
+
+/**
+ * The fields of a scenario the engine filled in because the scenario stated none, in the order the schema lists them: a dropout of
+ * 0, an alpha of 0.025, one-sided, a uniform accrual. The schema's own defaults are the engine's (case N26 holds the two
+ * together), so this reads them rather than keeping a list beside them. A container that is absent but whose default is applied
+ * whole (`analysis`, `accrual`) is read as empty, because that is what the engine does with it; any other absent container is
+ * not entered, since its defaults only apply to a thing that exists. The analysis method is the one default the schema cannot
+ * state (it follows the endpoint), so it is named here from the same table the coupled check reads.
+ * @param {string} method @param {unknown} scenario
+ * @returns {Array<{ path: string, value: string | number | boolean, unit: string | null }>}
+ */
+export function vcrAppliedDefaults(method, scenario) {
+  const schema = /** @type {any} */ (VCR_SCENARIO_SCHEMAS)[method]
+  if (!schema || !isObject(scenario)) return []
+  /** @type {Array<{ path: string, value: string | number | boolean, unit: string | null }>} */
+  const out = []
+  /** @param {any} node @param {unknown} value @param {string} path */
+  const walk = (node, value, path) => {
+    const fields = node.t === 'variant'
+      ? (() => {
+        const chosen = isObject(value) && typeof value[node.on] === 'string' ? value[node.on] : node.default
+        return typeof chosen === 'string' && Object.hasOwn(node.variants, chosen)
+          ? { [node.on]: string({ values: Object.keys(node.variants), default: node.default }), ...node.variants[chosen] } : {}
+      })()
+      : node.fields
+    for (const [key, field] of Object.entries(fields ?? {})) {
+      const f = /** @type {any} */ (field)
+      if (!whenHolds(f.when, scenario)) continue
+      const here = path ? `${path}.${key}` : key
+      const stated = isObject(value) && Object.hasOwn(value, key) && value[key] !== null && value[key] !== undefined
+      if (f.t === 'object' || f.t === 'variant') {
+        if (stated) walk(f, value[key], here)
+        else if (ALWAYS_APPLIED.has(here) && !f.req) walk(f, {}, here)
+        continue
+      }
+      if (!stated && f.default !== undefined && ['number', 'integer', 'string', 'boolean'].includes(f.t)) {
+        out.push({ path: here, value: f.default, unit: typeof f.unit === 'string' ? f.unit : null })
+      }
+    }
+  }
+  walk(schema, scenario, '')
+  const analysis = isObject(scenario.analysis) ? scenario.analysis : {}
+  const kind = /** @type {any} */ (scenario.design)?.kind ?? 'two_arm_fixed'
+  const twoArm = ['two_arm_fixed', 'group_sequential'].includes(kind)
+  if (['design.simulate', 'design.grid'].includes(method) && twoArm && analysis.method === undefined) {
+    const first = /** @type {Record<string, readonly string[]>} */ (VCR_TWO_ARM_ANALYSIS_METHODS)[/** @type {string} */ (/** @type {any} */ (scenario.endpoint)?.type)]?.[0]
+    if (first) out.push({ path: 'analysis.method', value: first, unit: null })
+  }
+  return out
+}
+
+/** The blocks the engine reads as a whole when the scenario leaves them out (the control's time distribution is exponential). */
+const ALWAYS_APPLIED = new Set(['analysis', 'accrual', 'truth.controlDistribution'])
 
 // ---------------------------------------------------------------------------
 // The walker

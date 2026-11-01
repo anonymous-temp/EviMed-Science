@@ -48,8 +48,8 @@
 
 import {
   VCR_ANALYSIS_TABLES, VCR_COLUMN_SOURCES, VCR_CONCLUSIONS, VCR_ENDPOINT_TYPES, VCR_INTERVAL_KINDS, VCR_JOB_KINDS, VCR_MODEL_RISKS,
-  VCR_MODEL_TIERS, VCR_NOT_ESTIMABLE_RULES, VCR_REPLICATES_ALT_MIN, VCR_REPLICATES_NULL_MIN, VCR_TRIAL_DESIGNS,
-  VCR_REAL_PATIENT_SOURCES, VCR_VALUE_SOURCES,
+  VCR_MODEL_TIERS, VCR_NOT_ESTIMABLE_RULES, VCR_REPLICATES_ALT_MIN, VCR_TRIAL_DESIGNS,
+  VCR_REAL_PATIENT_SOURCES, VCR_VALUE_SOURCES, vcrNullReplicateFloor,
 } from './vcrVocabulary.mjs'
 import { VCR_DESIGN_SUPPORT, validateScenario, vcrIsNullScenario } from './vcrScenarioSchemas.mjs'
 import { VCR_TIME_UNITS } from './vcrTimeUnits.mjs'
@@ -102,21 +102,21 @@ export const VCR_ENGINE_METHODS = Object.freeze({
   'model.prognostic_apply': { version: '1.0.0', endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['closed-form published equation evaluation']), modelTier: 'literature' },
   'profile.snapshot': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen([]), crossChecks: frozen(['profile_dataset.py']), modelTier: null },
   'cohort.build': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen([]), crossChecks: frozen([]), modelTier: null },
-  'population.scenario': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['simstudy semantics']), modelTier: 'scenario' },
-  'population.literature': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen([]), modelTier: 'literature' },
+  'population.scenario': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen([]), crossChecks: frozen(['simstudy semantics']), modelTier: 'scenario' },
+  'population.literature': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen([]), crossChecks: frozen([]), modelTier: 'literature' },
   'population.synthpop': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['synthpop']), modelTier: 'data' },
   'population.quality': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen([]), modelTier: 'data' },
   'patients.continuous': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['continuous']), crossChecks: frozen([]), modelTier: 'scenario' },
   'patients.binary': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['binary']), crossChecks: frozen([]), modelTier: 'scenario' },
   'patients.time_to_event': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['time_to_event']), crossChecks: frozen(['simsurv']), modelTier: 'scenario' },
   'evidence.pool': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['metafor', 'meta engine']), modelTier: 'literature' },
-  'evidence.reconstruct_km': { version: '1.0.0', endpoints: frozen(['time_to_event']), crossChecks: frozen(['IPDfromKM']), modelTier: 'literature' },
+  'evidence.reconstruct_km': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['time_to_event']), crossChecks: frozen(['IPDfromKM']), modelTier: 'literature' },
   'comparator.entropy_balance': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['WeightIt', 'cobalt']), modelTier: 'data' },
   'comparator.propensity_weight': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['WeightIt']), modelTier: 'data' },
   'comparator.rmst': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['time_to_event']), crossChecks: frozen(['survRM2']), modelTier: 'data' },
   'comparator.maic': { version: '1.0.0', endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['NICE DSU TSD 18']), modelTier: 'data' },
   'comparator.evalue': { version: '1.0.0', endpoints: frozen(['binary', 'time_to_event']), crossChecks: frozen(['EValue']), modelTier: 'scenario' },
-  'comparator.map_prior': { version: '1.0.0', endpoints: frozen(['binary', 'continuous']), crossChecks: frozen(['RBesT']), modelTier: 'literature' },
+  'comparator.map_prior': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['binary', 'continuous']), crossChecks: frozen(['RBesT']), modelTier: 'literature' },
   'design.analytic': { version: '1.2.0', legacyVersion: '1.0.0', legacyDesigns: frozen(['two_arm_fixed', 'group_sequential', 'simon_two_stage']), legacyReleases: ANALYTIC_RELEASES, endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['rpact', 'gsDesign', 'stats::binom.test', 'Simon 1989']), modelTier: 'scenario' },
   'design.simulate': { version: '1.2.0', legacyVersion: '1.0.0', legacyDesigns: frozen(['two_arm_fixed', 'group_sequential']), legacyReleases: SIMULATE_RELEASES, endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['design.analytic', 'independent beta-binomial variance', 'exact non-central t power of the one-sample test', 'independent normal approximation of the one-sample log-rank score']), modelTier: 'scenario' },
   'design.grid': { version: '1.2.0', legacyVersion: '1.0.0', legacyDesigns: frozen(['two_arm_fixed', 'group_sequential']), legacyReleases: SIMULATE_RELEASES, endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen([]), modelTier: 'scenario' },
@@ -425,27 +425,64 @@ export function mcseOf({ measure, replicates, p = 0.5, sd = 1 }) {
  * scenario measures: alpha under the null (20,000 replicates is what alpha =
  * 0.025 needs for a standard error of 0.0011), the worst case 0.5 under an
  * alternative. Passing `p` overrides it.
- * @param {{ isNull: boolean, targetMcse?: number | null, alpha?: number, p?: number }} input
+ *
+ * The null floor also rises with the intended use and for a borrowing design
+ * (`vcrNullReplicateFloor`): 100,000 for a specified analysis, a submission and any
+ * design that borrows. Neither is known to the scenario; the caller states them.
+ * @param {{ isNull: boolean, targetMcse?: number | null, alpha?: number, p?: number, intendedUse?: string | null, borrowing?: boolean }} input
  */
-export function replicateFloor({ isNull, targetMcse = null, alpha = 0.025, p }) {
-  const base = isNull ? VCR_REPLICATES_NULL_MIN : VCR_REPLICATES_ALT_MIN
-  if (!targetMcse) return base
-  const proportion = p ?? (isNull ? alpha : 0.5)
-  return Math.max(base, replicatesForMcse({ measure: 'proportion', target: targetMcse, p: proportion }))
+export function replicateFloor({ isNull, targetMcse = null, alpha = 0.025, p, intendedUse = null, borrowing = false }) {
+  return replicatePlan({ isNull, targetMcse, alpha, p, intendedUse, borrowing }).floor
 }
 
 /**
- * The floor of a whole scenario, with its null predicate and alpha read from
- * the scenario itself — what the control plane uses when it enqueues.
+ * The floor and what set it, for the page that says why a run took as many replicates as it did: the default of the case, the
+ * intended use, a borrowing design, or the precision the scenario asked for.
+ * @param {{ isNull: boolean, targetMcse?: number | null, alpha?: number, p?: number, intendedUse?: string | null, borrowing?: boolean }} input
+ * @returns {{ floor: number, basis: 'default' | 'intended_use' | 'borrowing' | 'target_mcse', isNull: boolean, targetMcse: number | null }}
+ */
+export function replicatePlan({ isNull, targetMcse = null, alpha = 0.025, p, intendedUse = null, borrowing = false }) {
+  const set = isNull ? vcrNullReplicateFloor({ intendedUse, borrowing }) : { floor: VCR_REPLICATES_ALT_MIN, basis: /** @type {const} */ ('default') }
+  const target = targetMcse && targetMcse > 0 ? targetMcse : null
+  if (!target) return { floor: set.floor, basis: set.basis, isNull, targetMcse: null }
+  const proportion = p ?? (isNull ? alpha : 0.5)
+  const needed = replicatesForMcse({ measure: 'proportion', target, p: proportion })
+  return needed > set.floor ? { floor: needed, basis: 'target_mcse', isNull, targetMcse: target } : { floor: set.floor, basis: set.basis, isNull, targetMcse: target }
+}
+
+/**
+ * Whether the design borrows from outside the trial: a stratified external control. (A MAP prior is a borrowing *method*; its job
+ * states that itself.)
  * @param {any} scenario
  */
-export function vcrReplicateFloorFor(scenario) {
+export function vcrBorrowsExternally(scenario) {
+  const kind = scenario?.design?.kind
+  return kind === 'single_arm_external' || (Array.isArray(scenario?.designs) && scenario.designs.some((/** @type {any} */ design) => design?.kind === 'single_arm_external'))
+}
+
+/**
+ * The floor of a whole scenario, with its null predicate and alpha read
+ * from the scenario itself — what the control plane uses when it enqueues.
+ * `intendedUse` is the study's; a design that borrows from an external control takes the borrowing floor.
+ * @param {any} scenario @param {{ intendedUse?: string | null, borrowing?: boolean }} [options]
+ */
+export function vcrReplicateFloorFor(scenario, options = {}) {
+  return vcrReplicatePlanFor(scenario, options).floor
+}
+
+/**
+ * `vcrReplicateFloorFor`, with what set the floor.
+ * @param {any} scenario @param {{ intendedUse?: string | null, borrowing?: boolean }} [options]
+ */
+export function vcrReplicatePlanFor(scenario, { intendedUse = null, borrowing } = {}) {
   const target = Number(scenario?.targetMcse)
   const alpha = Number(scenario?.analysis?.alpha)
-  return replicateFloor({
+  return replicatePlan({
     isNull: vcrIsNullScenario(scenario),
     targetMcse: Number.isFinite(target) && target > 0 ? target : null,
     alpha: Number.isFinite(alpha) && alpha > 0 && alpha < 1 ? alpha : 0.025,
+    intendedUse,
+    borrowing: borrowing ?? vcrBorrowsExternally(scenario),
   })
 }
 

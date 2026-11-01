@@ -50,6 +50,16 @@ export const VCR_VALUE_SOURCE_LABELS_ZH = Object.freeze({
   observed: '观察', extracted: '抽取', calculated: '计算', imputed: '插补', aggregate: '汇总',
   reconstructed: '重建', predicted: '预测', assumed: '假设', synthetic: '合成',
 })
+/**
+ * Where a premise of a result comes from (remediation plan 5.2): the literature (a value an extraction and a pooling stand behind),
+ * an assumption (a value somebody stated, a model or the researcher, with no evidence under it), a default (a value the platform
+ * filled in because the scenario stated none) or the researcher's own data. The page's one block 「这个结论的前提」 names each premise
+ * by it; the four are all it says about where a number came from.
+ */
+export const VCR_PREMISE_SOURCES = frozen(['literature', 'assumed', 'default', 'given'])
+export const VCR_PREMISE_SOURCE_LABELS_ZH = Object.freeze({ literature: '文献', assumed: '假设', default: '默认', given: '你给的数据' })
+/** At most this many premises stand open in the block; the rest are folded into one disclosure. */
+export const VCR_PREMISES_DECISIVE_MAX = 5
 /** Sources that are a record of a real person: they may enter `realPatients`. */
 export const VCR_REAL_PATIENT_SOURCES = frozen(['observed', 'extracted', 'calculated', 'imputed'])
 /** Sources a real external-control route refuses outright (plan §5.1, §5.3). */
@@ -990,6 +1000,38 @@ export const VCR_BOOTSTRAP_MIN = 2_000
 /** Default replicate floors (§5.4); the job's own target precision may raise them. */
 export const VCR_REPLICATES_NULL_MIN = 20_000
 export const VCR_REPLICATES_ALT_MIN = 5_000
+/**
+ * The null-case floor by intended use (owner decision 2026-11-01, remediation plan §7 decision 3): a number reported as a type I error
+ * on a specified analysis or in a submission is held to the convention of 100,000 replicates (half-width 0.00097 at p = 0.025,
+ * against 0.0022 at 20,000); an exploratory or design-support run keeps the 20,000 floor and shows its error. A borrowing design (a
+ * MAP prior, an external control) takes the larger floor whatever the use, because its type I error is the thing the design is
+ * judged on. The alternative-case floor (`VCR_REPLICATES_ALT_MIN`) does not move, and the engine's own cap
+ * (`VCR_ENGINE_MAX_REPLICATES`) stays what holds a run below its floor and makes it `limited`.
+ */
+export const VCR_REPLICATES_NULL_MIN_BY_USE = Object.freeze({
+  exploratory: VCR_REPLICATES_NULL_MIN,
+  design_support: VCR_REPLICATES_NULL_MIN,
+  specified_analysis: 100_000,
+  submission_preparation: 100_000,
+})
+/**
+ * The stages that check a result and are not part of it: the zero-effect simulation of a design whose power the alternative stage
+ * has already delivered. The result is shown when its own stages have landed; a check that lands late is added beside it, and one
+ * that fails or is cancelled leaves it as it was — it can limit the conclusion but never void it (remediation plan A1).
+ */
+export const VCR_CHECK_STAGES = Object.freeze(['simulation_null'])
+/** The floor of a borrowing design's null case, whatever the intended use. */
+export const VCR_REPLICATES_NULL_MIN_BORROWING = 100_000
+/**
+ * The null-case floor for an intended use, and what set it.
+ * @param {{ intendedUse?: string | null, borrowing?: boolean }} [input]
+ * @returns {{ floor: number, basis: 'default' | 'intended_use' | 'borrowing' }}
+ */
+export function vcrNullReplicateFloor({ intendedUse = null, borrowing = false } = {}) {
+  const byUse = /** @type {Record<string, number>} */ (VCR_REPLICATES_NULL_MIN_BY_USE)[String(intendedUse)] ?? VCR_REPLICATES_NULL_MIN
+  if (borrowing === true && VCR_REPLICATES_NULL_MIN_BORROWING >= byUse) return { floor: VCR_REPLICATES_NULL_MIN_BORROWING, basis: 'borrowing' }
+  return { floor: byUse, basis: byUse > VCR_REPLICATES_NULL_MIN ? 'intended_use' : 'default' }
+}
 /** A weighted covariate above this standardized difference is not balanced (§5.3). */
 export const VCR_SMD_FLOOR = 0.1
 /**
