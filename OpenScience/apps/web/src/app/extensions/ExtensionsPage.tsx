@@ -12,12 +12,10 @@ import { Menu } from "@/components/ui/Menu";
 import { Note } from "@/components/ui/Note";
 import { Switch } from "@/components/ui/Switch";
 import { Tooltip } from "@/components/ui/Tooltip";
-import { extensionCatalogue, extensionInstallations, installExtension, inventory as loadInventoryOf, projectExtensions, projectBuiltinPlugins, saveProjectBuiltinPlugins, saveProjectExtensions, type BuiltinPluginPolicy, type CatalogueExtension, type Inventory } from "@/lib/extensionsClient";
+import { extensionCatalogue, extensionInstallations, installExtension, inventory as loadInventoryOf, projectExtensions, projectBuiltinPlugins, sameExtensionCoordinate, saveProjectBuiltinPlugins, saveProjectExtensions, type BuiltinPluginPolicy, type CatalogueExtension, type Inventory } from "@/lib/extensionsClient";
 import { listWebResearchAgents } from "@/lib/apiClient";
-import { bindConversationCapability } from "@/lib/dispatch";
 import { productErrorMessage } from "@/lib/productClient";
 import { researchAgentUi, type CapabilityUi } from "@/lib/researchAgentUi";
-import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { useProjectStore } from "@/lib/projects";
 import { subscribeSessionBoundary } from "@/lib/sessionLifecycle";
 import { useNarrow } from "@/lib/useMediaQuery";
@@ -25,7 +23,7 @@ import { useModeFocus } from "@/lib/useModeFocus";
 import { toast } from "@/lib/toast";
 import { createPersonalSkill, listPersonalSkills, listPlatformSkills, projectPlatformSkills, projectSkills, saveProjectPlatformSkills, saveProjectSkills, type PendingSkillTransfer, type PersonalSkill, type PlatformSkill, type SkillWrite } from "@/lib/skillLibraryClient";
 import { CatalogueView, type CatalogueEntry } from "./CatalogueView";
-import { SHARED_PROJECT_TEXT, allInstalledExtensions, catalogueOrigins, extensionAvailability, nextDisabled, platformSkillReadOnly, projectChoicesNotApplicable, skillActivationText, skillDisplayName, skillAdapted, skillOrigin, skillPublisher, skillRepositoryUrl } from "./catalogueModel";
+import { ACTIVATION_GAVE_UP_TEXT, SHARED_PROJECT_TEXT, allInstalledExtensions, catalogueOrigins, extensionAvailability, nextDisabled, platformSkillReadOnly, projectChoicesNotApplicable, skillActivationText, skillDisplayName, skillAdapted, skillOrigin, skillPublisher, skillRepositoryUrl } from "./catalogueModel";
 import { SKILL_LOOPX_ICON, SKILL_PACK_ICON } from "./extensionCopy";
 import { inventoryIcon } from "./inventoryIcons";
 import { ExtensionDrawer } from "./ExtensionDrawer";
@@ -38,6 +36,7 @@ import { useCitationPlugin } from "./useCitationPlugin";
 import { useActivationPoll } from "./useActivationPoll";
 import { useOrdinaryImportIntent, type OrdinaryImportIntent } from "./useOrdinaryImportIntent";
 import { useLoad } from "./useLoad";
+import { useOpenTool } from "./useOpenTool";
 
 type View = "discover" | "installed";
 type Kind = "all" | "skills" | "plugins";
@@ -166,17 +165,9 @@ function Extensions({ tab, itemId, projectId, projectSwitched }: { tab: string; 
     if (alive.current) { installed.reload(true); navigate(`/app/extensions/plugins/${encodeURIComponent(result.installation.id)}`); }
   });
   const openSkill = (id: string) => { flushSync(() => setPanel(null)); navigate(`/app/extensions/skills/${encodeURIComponent(id)}`); };
-  // A tool is chosen by opening the conversation that runs it, bound before the conversation exists — what its 科研工具 card does.
-  const [opening, setOpening] = useState<string | null>(null);
-  const openTool = (agent: CapabilityUi) => {
-    if (opening) return;
-    setOpening(agent.id);
-    void bindConversationCapability(null, { agentId: agent.id, agentVersion: agent.version })
-      .then(bound => navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent(undefined, bound.sessionId), capabilityId: agent.id } }))
-      // A binding the control plane refused must not strand the reader: the conversation opens, and the router decides as it did before there were tools.
-      .catch(() => navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent() } }))
-      .finally(() => { if (alive.current) setOpening(null); });
-  };
+  // A tool is chosen by opening the conversation that runs it, bound before the conversation exists — what its 科研工具 card does, through
+  // the same hook: a binding that was refused is said, and no unbound conversation opens.
+  const { opening, open: openTool } = useOpenTool();
   const openExtension = (id: string) => { setPanel(null); navigate(`/app/extensions/plugins/${encodeURIComponent(id)}`); };
   const entries: CatalogueEntry[] = [];
   // Every skill the runtime carries is listed under its group (owner ruling 2026-10-14): one a project may switch has its
@@ -216,12 +207,23 @@ function Extensions({ tab, itemId, projectId, projectSwitched }: { tab: string; 
       const result = await saveProjectExtensions(projectId, currentPlugins.revision, currentPlugins.selections.map(item => item.installationId === selected.installationId ? { ...item, enabled } : item));
       if (alive.current) projectPlugins.replace(result);
     });
+    // An installed plugin the project does not use yet is switched on in one press, with the settings its descriptor defaults and no
+    // account connection (a plugin that needs one then says so on its row, and the drawer is where one is given). It was three steps: add,
+    // open the drawer, 用于当前项目. A copy that is not the catalogue's current one is updated in the drawer first.
+    const exact = !!installation && installation.integrity === entry.integrity && sameExtensionCoordinate(installation.coordinate, entry.coordinate);
+    const useHere = () => act(entry.id, async () => {
+      if (!installation || !currentPlugins || !exact) return;
+      const defaults = Object.fromEntries(Object.entries(entry.settingsSchema).filter(([, field]) => field.default !== undefined).map(([key, field]) => [key, field.default!]));
+      const result = await saveProjectExtensions(projectId, currentPlugins.revision, [...currentPlugins.selections.filter(item => item.installationId !== installation.id), { installationId: installation.id, enabled: true, settings: defaults, connectionRefs: [] }]);
+      if (alive.current) projectPlugins.replace(result);
+    });
     entries.push({ id: entry.id, title: entry.title, description: "查看插件提供的能力、来源与所需账户连接。", publisher, type: "plugins", group: "插件", added: !!installation,
       origin: "third-party", repository: entry.coordinate.kind === "github" ? skillRepositoryUrl(entry.coordinate.repository) : null,
       state: installation ? shared && selected ? SHARED_PROJECT_TEXT : currentPlugins ? extensionAvailability(installation, selected) : "生效状态待确认" : undefined,
       open: () => { if (installed.state.status === "ready") openExtension(installation?.id ?? entry.id); else setActionError("请先重试读取已添加插件，再查看此项。"); },
       action: !installation ? <Button size="sm" variant="secondary" loading={busy === entry.id} disabled={!!busy || installed.state.status !== "ready"} onClick={() => void install(entry)}>添加</Button>
-        : view === "installed" && selected && !shared ? <Switch label={`在“${projectName}”里使用${entry.title}`} checked={selected.enabled} disabled={!!busy} onChange={checked => void switchPlugin(checked)} /> : undefined });
+        : view === "installed" && selected && !shared ? <Switch label={`在“${projectName}”里使用${entry.title}`} checked={selected.enabled} disabled={!!busy} onChange={checked => void switchPlugin(checked)} />
+          : !selected && exact && !shared && currentPlugins ? <Button size="sm" variant="secondary" actionKind="set" loading={busy === entry.id} disabled={!!busy} onClick={() => void useHere()}>用于当前项目</Button> : undefined });
   }
   // An installation remains manageable after its catalogue descriptor is withdrawn.
   for (const item of installedRows.filter(item => !(catalogueData?.items ?? []).some(entry => entry.id === item.catalogueId))) {
@@ -292,7 +294,7 @@ function Extensions({ tab, itemId, projectId, projectSwitched }: { tab: string; 
   const refreshPending = useCallback(() => { refreshPolicy(true); refreshPersonalSelection(true); refreshPlugins(true); refreshBuiltin(true); },
     [refreshPolicy, refreshPersonalSelection, refreshPlugins, refreshBuiltin]);
   const observedActivation = useMemo(() => [currentPolicy, currentPersonal, currentPlugins, currentBuiltin], [currentPolicy, currentPersonal, currentPlugins, currentBuiltin]);
-  useActivationPoll(pending, refreshPending, observedActivation,
+  const activationPoll = useActivationPoll(pending, refreshPending, observedActivation,
     `${currentPolicy?.revision ?? 0}:${currentPersonal?.revision ?? 0}:${currentPlugins?.revision ?? 0}:${currentBuiltin?.revision ?? 0}`);
   const loading = platform.state.status === "loading" && catalogue.state.status === "loading" && installed.state.status === "loading";
   const failures = [
@@ -319,6 +321,7 @@ function Extensions({ tab, itemId, projectId, projectSwitched }: { tab: string; 
     {!authoring && <>
     {actionError && <LoadError message={actionError} onRetry={() => { setActionError(null); reloadSelections(); projectPlugins.reload(); }} />}
     {citation.error && controlled.some(item => item.control.kind === "switch" && item.control.setting === "dsh-cite") && <Note tone="warn" action={<Button size="sm" variant="text" disabled={citation.busy} onClick={() => void citation.reload()}>刷新引用设置</Button>}>{citation.error}</Note>}
+    {activationPoll.gaveUp && <Note tone="warn" action={<Button size="sm" variant="secondary" onClick={activationPoll.again}>刷新</Button>}>{ACTIVATION_GAVE_UP_TEXT}</Note>}
     {failures.map(({ load, label }) => load.state.status === "error" && <Note key={label} tone="warn" action={<Button size="sm" variant="text" onClick={() => load.reload()}>{label}</Button>}>{load.state.message}</Note>)}
     {unavailable && type !== "skills" && <Note action={<Button size="sm" variant="text" onClick={() => catalogue.reload()}>刷新插件目录</Button>}>暂未提供可添加的插件，已有功能仍可使用。</Note>}
     {type !== "plugins" && ordinaryImport.ready?.intent && <Note action={<Button variant="text" onClick={() => setOpen({ kind: "import", ordinaryRecovery: ordinaryImport.ready!.intent! })}>继续核查普通导入</Button>}>待核查的普通导入：{ordinaryImport.ready.intent.title}。确认结果可能已保存；继续时核查同一次导入。</Note>}
