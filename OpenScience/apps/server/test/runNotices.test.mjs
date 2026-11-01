@@ -179,3 +179,10 @@ test("a pharmacist-authored caution reaches the reader titled by its rule, as a 
   const [english] = describedQualityNotices(["SAFETY — The practical section tells a chest-pain patient to wait at home."]);
   assert.equal(english.detail, undefined);
 });
+
+test("concurrent artifact ambiguity is plainly titled for the reader", () => {
+  const sentence = "同一项目中有其他任务与本次运行同时进行。未明确记录归属的文件可能混入或遗漏，请核对项目文件及来源。";
+  const [notice] = describedQualityNotices([runNotice("run_concurrent_attribution_uncertain", sentence, { detail: sentence })]);
+  assert.equal(notice.title, "并发任务的文件归属待核对");
+  assert.equal(notice.detail, sentence);
+});
