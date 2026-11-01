@@ -5,11 +5,27 @@ import { HttpError } from './security.mjs'
 /** How long a job for a project with no runtime waits before it asks again. */
 export const NO_RUNTIME_RECHECK_SECONDS = 60
 
+/** How long to wait before asking again, one wait per extra ask. A probe that follows a kernel's readiness by a second can
+ * find a plugin still composing, and the answer to a failed proof is a restart the person sits through: asked again first. */
+export const PROOF_RETRY_WAITS_MS = [2000, 5000]
+
+/** Whether a generation asks the runtime for anything an ordinary start would not do: a personal skill, a platform skill or
+ * integration switched off. A runtime with no such choice has nothing a proof could find wrong (nothing to prove) and nothing a
+ * restart could improve; its generation hash still moves with every image, which alone must not cost anyone a restart.
+ * @param {any} generation */
+export function carriesNoChoice(generation) {
+  return !(generation?.pins ?? []).length && !(generation?.platformSkills?.disabled ?? []).length && !(generation?.platformSkills?.disabledPlugins ?? []).length
+}
+
+/** The stable code of a failed proof, never its message. @param {any} error @returns {string} */
+const proofFailureCode = error => String(error?.code ?? error?.name ?? 'unknown').slice(0, 80)
+
 /** Applies personal text/resources at the same exclusive project boundary as plugins.
  * No package manager, live edit, skill injection or second registry exists here. */
 export class PersonalSkillGenerationWorker {
-  /** @param {{service:any,runtime:any,resolveProject:(job:any)=>Promise<any>,ledgerBusy:(project:any)=>Promise<boolean>,pollMs?:number,leaseMs?:number}} options */
-  constructor({ service, runtime, resolveProject, ledgerBusy, pollMs = 1000, leaseMs = 300000 }) {
+  /** @param {{service:any,runtime:any,resolveProject:(job:any)=>Promise<any>,ledgerBusy:(project:any)=>Promise<boolean>,pollMs?:number,leaseMs?:number,proofRetryWaitsMs?:number[]}} options */
+  constructor({ service, runtime, resolveProject, ledgerBusy, pollMs = 1000, leaseMs = 300000, proofRetryWaitsMs = PROOF_RETRY_WAITS_MS }) {
+    this.proofRetryWaitsMs = proofRetryWaitsMs
     this.service = service; this.jobs = service.jobs; this.database = service.database; this.runtime = runtime
     this.resolveProject = resolveProject; this.ledgerBusy = ledgerBusy; this.pollMs = pollMs; this.leaseMs = leaseMs
     this.workerId = `personal-skill-apply-${randomUUID()}`; this.kinds = ['personal-skill-apply']
@@ -27,6 +43,20 @@ export class PersonalSkillGenerationWorker {
   defer(job, seconds = 5) {
     return this.jobs.withLease(job.userId, job.id, job.leaseToken, client => client.query(`UPDATE evimed_product.jobs SET status='queued',
       attempts=GREATEST(0,attempts-1),lease_token=NULL,lease_expires_at=NULL,run_after=clock_timestamp()+($2::integer*interval '1 second') WHERE id=$1`, [job.id, seconds]))
+  }
+  /** The proof, asked again after a short wait before its failure can cost a restart.
+   * @param {any} project @param {any} candidate @param {()=>Promise<void>} guard */
+  async proveWithRetry(project, candidate, guard) {
+    for (const wait of this.proofRetryWaitsMs) {
+      try { return await this.runtime.probePersonalSkillGeneration(project, candidate) }
+      catch { await new Promise(resolve => setTimeout(resolve, wait)); await guard() }
+    }
+    return this.runtime.probePersonalSkillGeneration(project, candidate)
+  }
+  /** A failed proof says why, here and on the job: 43 failures in a fortnight left nothing but the generic code behind them.
+   * @param {any} job @param {any} error */
+  reportProofFailure(job, error) {
+    process.stderr.write(`personal skill proof failed: project=${job.projectId} code=${proofFailureCode(error)}\n`)
   }
   async run() {
     await migrateProductStore(this.database)
@@ -95,6 +125,19 @@ export class PersonalSkillGenerationWorker {
             }
             return this.jobs.finish(job.userId, job.id, job.leaseToken, { superseded: true, generationHash: prepared.reference.generationHash })
           }
+          // Nothing chosen and nothing mounted: no restart and no proof (12 days of production to 2026-10-31: every proof of an
+          // account with no choice failed and restarted the runtime the person was waiting for, 7–11 s on the first open after a release).
+          // A plugin composite on this runtime is still its own proof, which never decides this.
+          if (carriesNoChoice(candidate) && carriesNoChoice(this.runtime.runtimePersonalSkillGeneration(project))) {
+            const generation = this.runtime.runtimeGeneration(project)
+            const composite = await this.runtime.provePersonalComposite?.(project).catch((/** @type {any} */ error) => { this.reportProofFailure(job, error); return null })
+            await guard()
+            return this.jobs.finishWithLease(job.userId, job.id, job.leaseToken, { phase: 'effective', generationHash: candidate.reference.generationHash, nothingToProve: true },
+              async c => {
+                await this.service.markEffective(project, candidate, generation, c)
+                if (composite) await this.runtime.markPersonalCompositeEffective(project, composite.candidate, composite.proof, c)
+              })
+          }
           const captured = this.runtime.runtimePersonalSkillGeneration(project) ?? current.payload.effective ?? current.payload.lastGood ?? null
           const previous = captured && (captured.pins ?? []).every(pin => candidate.pins.some(wanted =>
             wanted.skillId === pin.skillId && wanted.revision === pin.revision && wanted.digest === pin.digest)) ? captured : null
@@ -103,7 +146,7 @@ export class PersonalSkillGenerationWorker {
               await this.runtime.replacePersonalSkillRuntime(project, candidate)
             }
             await guard()
-            const proof = await this.runtime.probePersonalSkillGeneration(project, candidate)
+            const proof = await this.proveWithRetry(project, candidate, guard)
             if (proof.pendingSession) return this.defer(job)
             await guard()
             return this.jobs.finishWithLease(job.userId, job.id, job.leaseToken, { phase: 'effective', generationHash: candidate.reference.generationHash },
@@ -112,6 +155,7 @@ export class PersonalSkillGenerationWorker {
                 if (proof.composite) await this.runtime.markPersonalCompositeEffective(project, proof.composite.candidate, proof.composite.proof, c)
               })
           } catch (error) {
+            this.reportProofFailure(job, error)
             await guard()
             // Restore the exact prior immutable bytes, or the ordinary built-in
             // baseline. A failure of optional personal methods never stops it,
@@ -142,7 +186,7 @@ export class PersonalSkillGenerationWorker {
             await this.service.documents.put(job.userId, 'extension-generation', latest.id, { ...latest.payload,
               effective: restored, runtimeGeneration: restoredProof?.generation ?? null, phase: restored ? 'rolled-back' : 'failed', error: 'personal_skill_apply_failed' },
             { expectedRevision: latest.revision, projectId: project.id, transactionClient: client })
-            return this.jobs.finish(job.userId, job.id, job.leaseToken, { phase: restored ? 'rolled-back' : 'failed', error: 'personal_skill_apply_failed' })
+            return this.jobs.finish(job.userId, job.id, job.leaseToken, { phase: restored ? 'rolled-back' : 'failed', error: 'personal_skill_apply_failed', cause: proofFailureCode(error) })
           }
         } finally {
           clearInterval(renewal)

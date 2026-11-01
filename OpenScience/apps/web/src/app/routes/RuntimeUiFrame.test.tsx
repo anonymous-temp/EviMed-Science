@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef } from "react";
-import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation, useNavigate, useParams } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -708,6 +708,24 @@ describe("native frame identity and readiness", () => {
       emit(frame, { type: "evimed.runtime-ui.ready" });
       await act(async () => { await vi.advanceTimersByTimeAsync(0); });
       expect(post.mock.calls[0][0]).toMatchObject({ type: "evimed.runtime-ui.navigate", requestId: "request-draft", intent: { sessionId: "session-new", draft: intent.draft } });
+    });
+
+    it("重试 keeps what was typed on the new conversation's cover and hands it over when it opens", async () => {
+      vi.useFakeTimers();
+      const intent = { kind: "create", sessionId: "session-new", requestId: "request-typed", projectId: "default" };
+      mocks.start.mockRejectedValue(cleaning());
+      const { container } = mount({ runtimeUiIntent: intent }, "/app/chat");
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      act(() => { fireEvent.change(screen.getByRole("textbox", { name: "输入你想做的事" }), { target: { value: "帮我写一份提纲" } }); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(130_000); });
+      mocks.start.mockReset(); mocks.start.mockResolvedValue(undefined);
+      await act(async () => { screen.getByRole("button", { name: "重试" }).click(); await vi.advanceTimersByTimeAsync(0); });
+      expect(screen.getByRole("textbox", { name: "输入你想做的事" })).toHaveValue("帮我写一份提纲");
+      const frame = container.querySelector("iframe")!;
+      const post = vi.spyOn(frame.contentWindow!, "postMessage");
+      emit(frame, { type: "evimed.runtime-ui.ready" });
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      expect(post.mock.calls[0][0]).toMatchObject({ requestId: "request-typed", intent: { draft: "帮我写一份提纲" } });
     });
 
     it("重试 after the give-up waits again for a fresh two minutes if the cleanup is still not done", async () => {
@@ -1930,6 +1948,48 @@ describe("which research tool a conversation runs", () => {
     await act(async () => { await Promise.resolve(); });
     expect(mocks.putSession).not.toHaveBeenCalled();
     view.unmount();
+  });
+});
+
+describe("the cover of a new conversation", () => {
+  const typed = () => screen.queryByRole("textbox", { name: "输入你想做的事" });
+  const open = async (state: unknown, path = "/app/chat") => {
+    const { container } = mount(state, path);
+    await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull());
+    return container.querySelector("iframe")!;
+  };
+  const created = { runtimeUiIntent: { kind: "create", sessionId: "session-new", requestId: "request-cover", projectId: "default" } };
+
+  it("takes text while the conversation opens, sends nothing, and hands it to the composer as a draft", async () => {
+    const frame = await open(created);
+    fireEvent.change(typed()!, { target: { value: "  总结这份数据" } });
+    const post = vi.spyOn(frame.contentWindow!, "postMessage");
+    emit(frame, { type: "evimed.runtime-ui.ready" });
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    expect(post.mock.calls[0][0]).toMatchObject({ type: "evimed.runtime-ui.navigate", intent: { kind: "create", draft: "  总结这份数据" } });
+    await waitFor(() => expect(typed()).toHaveAttribute("readonly"));
+    emit(frame, { type: "evimed.runtime-ui.ack", seq: 2, requestId: "request-cover", ok: true, sessionId: "session-new" });
+    await waitFor(() => expect(typed()).toBeNull());
+  });
+
+  it("hands over nothing when nothing was typed", async () => {
+    const frame = await open(created);
+    fireEvent.change(typed()!, { target: { value: "   " } });
+    const post = vi.spyOn(frame.contentWindow!, "postMessage");
+    emit(frame, { type: "evimed.runtime-ui.ready" });
+    await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+    expect(post.mock.calls[0][0].intent).not.toHaveProperty("draft");
+  });
+
+  it("is not there for a conversation that already exists, or a brief that came with its own text", async () => {
+    await open(null, "/app/chat/session-a");
+    expect(typed()).toBeNull();
+    expect(screen.getByRole("status")).toHaveTextContent("正在打开");
+  });
+
+  it("is not there for a brief that came with its own text", async () => {
+    await open({ runtimeUiIntent: { ...created.runtimeUiIntent, draft: "已有内容" } });
+    expect(typed()).toBeNull();
   });
 });
 

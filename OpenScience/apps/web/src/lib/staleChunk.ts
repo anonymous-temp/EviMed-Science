@@ -72,6 +72,22 @@ export function reloadingForNewRelease(): boolean {
   return reloading;
 }
 
+let staleChunkHolds = 0;
+
+/**
+ * For the length of a chunk fetched ahead of need (`shellPreload.ts`), a failure to load is no reason to reload this tab.
+ *
+ * @returns the function that ends the hold
+ */
+export function holdStaleChunkReload(): () => void {
+  staleChunkHolds += 1;
+  let held = true;
+  return () => {
+    if (held) staleChunkHolds -= 1;
+    held = false;
+  };
+}
+
 /**
  * Vite's own signal that a chunk failed to load (`vite:preloadError`, see
  * https://vite.dev/guide/build.html#load-error-handling), answered with the
@@ -83,6 +99,8 @@ export function reloadingForNewRelease(): boolean {
  */
 export function installStaleChunkReload(target: Window = window, reload: () => void = reloadPage): () => void {
   const onPreloadError = (event: Event) => {
+    // A chunk fetched ahead of need failed: nobody is waiting for it, and the page they asked for will say so if it is theirs.
+    if (staleChunkHolds > 0) { event.preventDefault(); return; }
     if (reloadForNewRelease(reload)) event.preventDefault();
   };
   target.addEventListener("vite:preloadError", onPreloadError);

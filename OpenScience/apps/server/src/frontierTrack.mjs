@@ -473,6 +473,16 @@ export class FrontierTrack {
     return this.#cached("congresses", () => this.#readCongresses());
   }
 
+  /**
+   * The list, then the hub of each listed congress that has something in it, one at a time: a hub's first read scans its window's words
+   * (p95 9.5 s over the fortnight to 2026-10-31, against 0.8 s at the median), and it should not be a reader who waits.
+   */
+  async warmCongresses() {
+    for (const congress of await this.congresses()) {
+      if (congress.itemCount > 0) await this.congress(congress.id);
+    }
+  }
+
   async #readCongresses() {
     const today = frontierDayIn(this.now(), this.timeZone);
     const order = { ongoing: 0, upcoming: 1, recent: 2 };

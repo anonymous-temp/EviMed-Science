@@ -109,7 +109,7 @@ test('a failed proof of an optional preference restores the baseline and never s
     replacePersonalSkillRuntime: async (_project, value) => { replaced.push(value) },
     probePersonalSkillGeneration: async (_project, expected) => { if (expected.reference) throw new Error('native proof failed'); return { generation: 'baseline-runtime', pendingSession: false } },
     stop: async value => { stopped.push(value) } }
-  const worker = new PersonalSkillGenerationWorker({ service, runtime, resolveProject: async () => project, ledgerBusy: async () => false })
+  const worker = new PersonalSkillGenerationWorker({ service, runtime, resolveProject: async () => project, ledgerBusy: async () => false, proofRetryWaitsMs: [] })
   await worker.run()
   assert.deepEqual(stopped, [], 'a serving runtime is never stopped because an optional preference could not be proven')
   assert.equal(replaced.length, 2)
@@ -120,6 +120,73 @@ test('a failed proof of an optional preference restores the baseline and never s
   const state = (await service.current()).payload
   assert.equal(state.phase, 'failed')
   assert.equal(state.runtimeGeneration, 'baseline-runtime')
+})
+
+/** One queued apply over the in-memory store: what the worker finished with, and what it asked of the runtime. */
+async function applyFixture(candidate, runtimeOverrides) {
+  const project = { userId: 'owner', id: 'paper' }, documents = memoryDocuments()
+  await documents.put('owner', 'extension-generation', 'personal-skills:project:paper', { phase: 'waiting', runtimeGeneration: null, desired: candidate, effective: null, lastGood: null }, { expectedRevision: 0 })
+  const finished = []
+  const client = { query: async text => ({ rows: /pg_try_advisory_xact_lock/.test(text) ? [{ acquired: true }] : [], rowCount: 0 }) }
+  const database = { transaction: async work => work(client), withTransactionClient: async (_client, work) => work() }
+  const job = { id: 'job', userId: 'owner', projectId: 'paper', leaseToken: 'lease', payload: { generationHash: candidate.reference.generationHash, selectionRevision: candidate.selectionRevision, accountCreatedAt: 'a', projectCreatedAt: 'p' } }
+  const jobs = { claim: async () => job, renew: async () => true, finish: async (_user, _id, _lease, result) => { finished.push(result); return result },
+    fail: async () => assert.fail('the apply is answered, never failed'),
+    finishWithLease: async (_user, _id, _lease, result, write) => { finished.push(result); await write(client); return result } }
+  const service = { jobs, database, documents, current: async () => documents.get('owner', 'extension-generation', 'personal-skills:project:paper'),
+    resolveUser: async () => ({ id: 'owner' }), skills: { projectSelections: async () => ({ revision: candidate.selectionRevision }) },
+    markEffective: async (_project, _candidate, generation) => { finished.at(-1).markedGeneration = generation },
+    plugins: { scope: async () => ({ accountCreatedAt: 'a', projectCreatedAt: 'p' }), hasPendingPrompts: async () => false } }
+  const replaced = []
+  const runtime = { runtimeGeneration: () => 'live', pluginRuntimeBusy: async () => false, replacePersonalSkillRuntime: async (_project, value) => { replaced.push(value) },
+    runtimePersonalSkillGeneration: () => null, ...runtimeOverrides }
+  const worker = new PersonalSkillGenerationWorker({ service, runtime, resolveProject: async () => project, ledgerBusy: async () => false, proofRetryWaitsMs: [0, 0] })
+  await worker.run()
+  return { finished, replaced }
+}
+
+test('a project with nothing chosen is marked in effect with no restart and no proof, whatever its generation hash', async () => {
+  const candidate = { reference: { generationHash: 'c'.repeat(64) }, pins: [], selectionRevision: 1, platformSkills: { disabled: [], disabledPlugins: [] } }
+  const { finished, replaced } = await applyFixture(candidate, {
+    runtimePersonalSkillGeneration: () => ({ reference: { generationHash: 'd'.repeat(64) }, pins: [], platformSkills: { disabled: [], disabledPlugins: [] } }),
+    probePersonalSkillGeneration: async () => assert.fail('nothing was chosen, so nothing is proved') })
+  assert.deepEqual(replaced, [])
+  assert.equal(finished.at(-1).phase, 'effective')
+  assert.equal(finished.at(-1).markedGeneration, 'live')
+})
+
+test('a failed composite proof never costs a project with nothing chosen its runtime', async () => {
+  const candidate = { reference: { generationHash: 'c'.repeat(64) }, pins: [], selectionRevision: 1, platformSkills: { disabled: [], disabledPlugins: [] } }
+  const { finished, replaced } = await applyFixture(candidate, { provePersonalComposite: async () => { throw Object.assign(new Error('x'), { code: 'plugin_apply_failed' }) },
+    markPersonalCompositeEffective: async () => assert.fail('an unproven composite is not marked') })
+  assert.deepEqual(replaced, [])
+  assert.equal(finished.at(-1).phase, 'effective')
+})
+
+test('removing the last choice still replaces the runtime that mounted it', async () => {
+  const candidate = { reference: { generationHash: 'c'.repeat(64) }, pins: [], selectionRevision: 2, platformSkills: { disabled: [], disabledPlugins: [] } }
+  const { finished, replaced } = await applyFixture(candidate, {
+    runtimePersonalSkillGeneration: () => ({ reference: { generationHash: 'd'.repeat(64) }, pins: [], platformSkills: { disabled: ['office:docx'], disabledPlugins: [] } }),
+    probePersonalSkillGeneration: async () => ({ generation: 'next', pendingSession: false }) })
+  assert.equal(replaced.length, 1)
+  assert.equal(finished.at(-1).phase, 'effective')
+})
+
+test('a proof that fails once is asked again before it can cost a restart', async () => {
+  const candidate = { reference: { generationHash: 'e'.repeat(64) }, pins: [], selectionRevision: 3, platformSkills: { disabled: ['office:docx'], disabledPlugins: [] } }
+  let asked = 0
+  const { finished, replaced } = await applyFixture(candidate, { runtimePersonalSkillGeneration: () => candidate,
+    probePersonalSkillGeneration: async () => { asked += 1; if (asked === 1) throw new Error('still composing'); return { generation: 'live', pendingSession: false } } })
+  assert.equal(asked, 2)
+  assert.deepEqual(replaced, [])
+  assert.equal(finished.at(-1).phase, 'effective')
+})
+
+test('a proof that keeps failing names its cause on the job', async () => {
+  const candidate = { reference: { generationHash: 'e'.repeat(64) }, pins: [], selectionRevision: 3, platformSkills: { disabled: ['office:docx'], disabledPlugins: [] } }
+  const { finished } = await applyFixture(candidate, { runtimePersonalSkillGeneration: () => candidate,
+    probePersonalSkillGeneration: async (_project, expected) => { if (expected.reference) throw Object.assign(new Error('x'), { code: 'extension_contract_invalid' }); return { generation: 'baseline', pendingSession: false } } })
+  assert.equal(finished.at(-1).cause, 'extension_contract_invalid')
 })
 
 test('a refused composite rebase releases every temporary override before the next authoritative startup', async () => {
