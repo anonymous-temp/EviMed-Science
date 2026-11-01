@@ -3042,17 +3042,16 @@ export class FrontierPipeline {
     }
     /** @type {string[]} */
     const parts = [];
-    let refused = 0;
     let parsedAny = false;
     for (const id of ids) {
       const known = this.pictureWords.get(id);
       if (known !== undefined) { parsedAny = true; if (known) parts.push(known); continue; }
       // A picture the fetch above did not reach (it stopped at a failure) is read in a later round, or by this one when it is the last.
-      if (!pictures.has(id)) { if (service && !tolerant) break; refused += 1; continue; }
+      if (!pictures.has(id)) { if (service && !tolerant) break; continue; }
       const picture = pictures.get(id);
       const extension = picture ? /** @type {Record<string, string>} */ ({ "image/jpeg": "jpg", "image/png": "png", "image/gif": "gif" })[picture.contentType] : undefined;
       // The parser reads jpg, png, bmp and gif; a stored picture in another type has no words to be had from it here.
-      if (!picture || !extension) { refused += 1; continue; }
+      if (!picture || !extension) continue;
       try {
         const parsed = await this.parser.parseBytes({ bytes: picture.bytes, filename: `${id.slice(0, 16)}.${extension}`, mediaType: picture.contentType,
           signal: AbortSignal.timeout(POST_PICTURE_TIMEOUT_MS) });
@@ -3064,7 +3063,6 @@ export class FrontierPipeline {
       } catch (error) {
         const code = codeOf(error);
         if (POST_PICTURE_DELAY_CODES.has(code)) return outage;
-        refused += 1;
         if (POST_PICTURE_OWN_CODES.has(code)) continue;
         // The parser's timeout, a cancelled call, its internal or upstream error: this picture's, or the service's. The first one ends the
         // post's reading for the round (and, when the post is not decided by it, puts the post off).
