@@ -454,7 +454,7 @@ describe("what waits for the lead's word", () => {
     await userEvent.click(screen.getByRole("button", { name: "确认预算" }));
     const dialog = await screen.findByRole("dialog", { name: "计算预算" });
     expect(within(dialog).getByText("4 分钟")).toBeInTheDocument();
-    expect(within(dialog).getByText("运行中预留").nextElementSibling).toHaveTextContent("0 秒");
+    expect(within(dialog).getByText("进行中预留").nextElementSibling).toHaveTextContent("0 秒");
     expect(within(dialog).getByText("2 小时")).toBeInTheDocument();
     expect(dialog.textContent).not.toMatch(/¥|元/);
     const reads = server.calls.filter((call) => call.method === "GET" && call.path === "/vcr/studies/std_1").length;
