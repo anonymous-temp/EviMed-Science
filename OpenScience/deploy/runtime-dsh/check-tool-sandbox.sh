@@ -37,6 +37,11 @@ check "matplotlib keeps its config in /tmp" "$(sandboxed_out python -c 'import m
 printf 'import numba\n@numba.njit(cache=True)\ndef f(x):\n    return x + 1\nprint(f(1), end="")\n' > /tmp/numba_probe.py
 check "numba caches in /tmp" "$(sandboxed_out python /tmp/numba_probe.py)" 2
 
+echo "== known upstream limits (measured and printed, never a failure; deps-version.json dsh.upstreamDefects)"
+shm="$(sandboxed bash -c 'touch /dev/shm/.evimed-probe 2> /dev/null && rm -f /dev/shm/.evimed-probe && echo writable || echo not-writable' 2> /dev/null)"
+pool="$(sandboxed python3 -c 'import multiprocessing as mp; p = mp.Pool(2); print(p.map(abs, [-1, 2]), end=""); p.close(); p.join()' 2> /dev/null || echo "fails")"
+echo "info  /dev/shm is ${shm:-unknown} for a command; multiprocessing.Pool -> ${pool:-unknown}"
+
 echo "== the analysis libraries"
 check "DESeq2, edgeR, limma and org.Hs.eg.db load" "$(sandboxed_out Rscript -e 'suppressMessages({library(DESeq2); library(edgeR); library(limma); library(org.Hs.eg.db)}); cat("ok")' | tail -n 1)" ok
 check "pydeseq2, shap, xgboost and lightgbm import" "$(sandboxed_out python -c 'import pydeseq2, shap, xgboost, lightgbm; print("ok", end="")' | tail -n 1)" ok
