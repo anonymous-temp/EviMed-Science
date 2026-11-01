@@ -1035,6 +1035,20 @@ export function vcrNullReplicateFloor({ intendedUse = null, borrowing = false } 
   return { floor: byUse, basis: byUse > VCR_REPLICATES_NULL_MIN ? 'intended_use' : 'default' }
 }
 /**
+ * The published gap between the effect a trial is planned for and the effect it measures (C6), for the one endpoint the plan has a
+ * figure for: an event-time endpoint, hazard ratio 0.66 planned and 0.72 observed. The engine reads it as the share of the log hazard
+ * ratio that survives (`log(observed) / log(planned)`) and says what power the design still has at the effect so reduced.
+ *
+ * What the figure is, and is not: it comes from a secondary source (a summary bulletin of a review of phase 3 oncology trials, the
+ * primary paper not read), one pair of numbers, for oncology survival endpoints. It shows that planned effects are commonly larger than
+ * measured ones; it does not predict this design's trial, and there is no such figure for a binary or a continuous endpoint, for which
+ * the row does not exist.
+ */
+export const VCR_EFFECT_DISCOUNT = Object.freeze({ time_to_event: Object.freeze({ planned: 0.66, observed: 0.72 }) })
+/** What the page says of that figure where it is listed (the premise's folded detail): the source and its limits, no more. */
+export const VCR_EFFECT_DISCOUNT_LABEL_ZH = '效应按已发表的计划—实测差距折减后的把握度'
+export const VCR_EFFECT_DISCOUNT_LIMITS_ZH = '来自一份对肿瘤三期试验生存终点的综述简报（预期风险比 0.66、实测 0.72，原文未核对）：说明计划的效应常被高估，不预测这项试验；二分类和连续终点没有这样的数。'
+/**
  * A weighted covariate above this standardized difference is not balanced (§5.3). It is no longer a rule that stops a comparison
  * (owner decision 2026-11-01, remediation plan §7 item 2: 0.1 is a convention, and a comparison whose balance is shown beside it is
  * still an estimate a reader can weigh): the estimate is delivered with the balance, `limited` above this and, above

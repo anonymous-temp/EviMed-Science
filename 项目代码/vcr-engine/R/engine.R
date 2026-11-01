@@ -1672,7 +1672,10 @@ vcr_job_design_analytic <- function(job, ...) {
   }
   measures <- list(); diag <- list()
   # 1.0/1.1 replay the historical totals and aliases unchanged. Version 1.2 sizes each integer arm first.
-  integer_allocation <- identical(job$methodVersion, "1.2.0")
+  integer_allocation <- job$methodVersion %in% c("1.2.0", "1.3.0")
+  # 1.3.0 adds what the sample size rests on: the fixed-sample baseline of a sequential design, the sweep of one input at a time and
+  # the effect discounted by the published gap (C5, C6). A job labelled 1.2.0 replays without them.
+  extras <- identical(job$methodVersion, "1.3.0")
   allocated <- NULL
   add <- function(name, value, ...) measures[[length(measures) + 1L]] <<- vcr_measure(name, value, source = "calculated", ...)
   gs <- NULL; inflation <- 1
@@ -1783,6 +1786,13 @@ vcr_job_design_analytic <- function(job, ...) {
         as.integer(vcr_scalar(d$maxN, 100L))))
     }
     diag$simon <- s
+    if (extras) {
+      # The fixed-sample design the two-stage one is held against, at the same rates, alpha and power; no simulation (C5).
+      fixed <- vcr_single_stage_exact(p_null, p_alt, alpha = alpha, beta = 1 - power, n_max = max(500L, as.integer(vcr_scalar(d$maxN, 100L))))
+      diag$baselineDesign <- list(kind = "fixed_sample", of = "simon_two_stage", endpoint = "binary", targetPower = power, alpha = alpha,
+        fixed = if (is.null(fixed)) NULL else fixed,
+        design = list(optimal = s$optimal, minimax = s$minimax))
+    }
     if (!is.null(s$optimal)) {
       add("simon_optimal_n", s$optimal$n); add("simon_optimal_n1", s$optimal$n1)
       add("simon_optimal_r1", s$optimal$r1); add("simon_optimal_r", s$optimal$r)
@@ -1812,7 +1822,18 @@ vcr_job_design_analytic <- function(job, ...) {
       }
       if (is.null(sc2$design$nTreat)) NULL else vcr_power_curve_summary(sc2, alpha, sided)
     }, error = function(err) NULL)
-    diag$sensitivity <- tryCatch(vcr_analytic_sensitivity(e, tr, alpha, power, alloc, sided, measures, integer_allocation), error = function(err) NULL)
+    diag$sensitivity <- if (extras) tryCatch(vcr_analytic_sweep(sc, e, alpha, power, alloc, sided, 1, integer_allocation), error = function(err) NULL)
+                        else tryCatch(vcr_analytic_sensitivity(e, tr, alpha, power, alloc, sided, measures, integer_allocation), error = function(err) NULL)
+  }
+  if (extras && identical(kind, "group_sequential")) {
+    base_of <- function(name) { m <- Filter(function(x) identical(x$name, name), measures); if (length(m)) m[[1]]$value else NA_real_ }
+    # The fixed-sample design at the same effect, alpha, power and allocation: the numbers `required_*` already hold, marked as the
+    # baseline beside the sequential design's own maximum and expected sizes (C5). No simulation.
+    diag$baselineDesign <- list(kind = "fixed_sample", of = "group_sequential", endpoint = e, targetPower = power, alpha = alpha,
+      fixed = list(events = base_of("required_events"), patients = if (is.na(base_of("required_patients"))) NULL else base_of("required_patients")),
+      design = list(maxEvents = base_of("max_events"), maxPatients = if (is.na(base_of("max_patients"))) NULL else base_of("max_patients"),
+                    expectedEventsH0 = base_of("expected_events_h0"), expectedEventsH1 = base_of("expected_events_h1"), inflation = inflation))
+    diag$sensitivity <- tryCatch(vcr_analytic_sweep(sc, e, alpha, power, alloc, sided, inflation, integer_allocation, gs = gs), error = function(err) NULL)
   }
   list(status = "succeeded", measures = vcr_analytic_finite_or_refuse(measures), counts = vcr_counts(), diagnostics = diag)
 }

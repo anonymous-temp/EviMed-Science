@@ -115,6 +115,8 @@ const snapshot = {
     supportCeiling: vocab.VCR_SUPPORT_CEILING,
     conflictBound: vocab.VCR_MAP_CONFLICT_BOUND,
     tolerance: { ...vocab.VCR_RECONSTRUCTION_TOLERANCE },
+    // the published gap between a planned and a measured effect (design.analytic 1.3.0, C6)
+    effectDiscount: JSON.parse(JSON.stringify(vocab.VCR_EFFECT_DISCOUNT)),
   },
 }
 

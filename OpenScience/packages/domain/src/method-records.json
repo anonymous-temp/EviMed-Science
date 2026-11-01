@@ -494,7 +494,7 @@
   },
   "design.analytic": {
    "id": "design.analytic",
-   "version": "1.2.0",
+   "version": "1.3.0",
    "engine": "vcr-engine",
    "title": "Closed-form trial design calculation: sample size, events, power, group-sequential boundaries, exact single-arm and Simon designs",
    "estimand": "The sample size or event count a stated design needs, or the power it has, under the scenario's assumed truth; not a forecast of the trial.",
