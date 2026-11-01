@@ -1,4 +1,4 @@
-import { HttpError, readJson, sendJson } from "./security.mjs";
+import { assertSameSiteBrowserRequest, HttpError, readJsonWithSize, readJson, sendJson } from "./security.mjs";
 import { EVIMED_LOGOUT_PATH, EVIMED_SESSION_PATH } from "./evimedAuthService.mjs";
 import { EVIMED_ACCOUNT_PATHS, evimedAccountFailureDetail, isEvimedAccountPath } from "./evimedAccountService.mjs";
 
@@ -82,8 +82,15 @@ export function createEvimedAuthRoutes({ store, service, accountService, maxJson
       // A body is optional — an empty one reads as `{}` — because the
       // credential may be the platform's session cookie, which the browser
       // attached instead.
-      const body = await readJson(req, maxJsonBytes);
       try {
+        // The route is reached before there is a session, so a page on another site could post here with its own credential and sign the
+        // visitor in as someone else (a login CSRF): the browser's origin is checked, and a body must be JSON (a cross-site form can only
+        // send text, urlencoded or multipart without a preflight).
+        assertSameSiteBrowserRequest(req, service.config);
+        const { body, bytes } = await readJsonWithSize(req, maxJsonBytes);
+        if (bytes > 0 && !/^application\/json(?:\s*;|$)/i.test(String(req.headers["content-type"] ?? ""))) {
+          throw new HttpError(400, "invalid_json", "Session requests require a JSON object.");
+        }
         const session = await service.createSession(req, res, body);
         await record("auth.evimed.session", "completed", { userId: session.user.id });
         sendJson(res, 200, { data: session });

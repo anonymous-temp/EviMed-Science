@@ -1,5 +1,5 @@
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
-import { appendSetCookie, HttpError, parseCookies, shouldUseSecureCookies } from "./security.mjs";
+import { appendSetCookie, assertSameSiteBrowserRequest, HttpError, parseCookies, shouldUseSecureCookies } from "./security.mjs";
 import { validateEvimedAuthSettings } from "./evimedAuthService.mjs";
 
 /** The team owns credentials, SMS, captcha and recovery; these routes only adapt its wire. */
@@ -182,19 +182,9 @@ export class EvimedAccountService {
     return { account: EVIMED_ACCOUNT_PATHS };
   }
 
-  /** Anonymous JSON calls cannot use a session CSRF token; browser origin checks protect their flow cookie. @param {any} req */
+  /** Anonymous JSON calls cannot use a session CSRF token; browser origin checks (`assertSameSiteBrowserRequest`) protect their flow cookie. @param {any} req */
   assertOrigin(req) {
-    if (req.headers["sec-fetch-site"] === "cross-site") throw new HttpError(403, "csrf_required", "A same-origin account request is required.");
-    const origin = req.headers.origin;
-    if (origin) {
-      let originUrl;
-      try { originUrl = new URL(origin); } catch { throw new HttpError(403, "csrf_required", "A same-origin account request is required."); }
-      const requestOrigin = `${shouldUseSecureCookies(req, this.config) ? "https" : "http"}://${req.headers.host}`;
-      let publicOrigin = "";
-      try { publicOrigin = new URL(this.config.publicUrl).origin; } catch { /* An unconfigured local deployment uses its request origin. */ }
-      const local = !this.config.production && ["localhost", "127.0.0.1", "[::1]"].includes(originUrl.hostname) && ["http:", "https:"].includes(originUrl.protocol);
-      if (originUrl.origin !== (publicOrigin || requestOrigin) && !local) throw new HttpError(403, "csrf_required", "A same-origin account request is required.");
-    }
+    assertSameSiteBrowserRequest(req, this.config);
     if (req.method !== "GET" && !/^application\/json(?:\s*;|$)/i.test(String(req.headers["content-type"] ?? ""))) {
       throw new HttpError(400, "invalid_json", "Account requests require a JSON object.");
     }

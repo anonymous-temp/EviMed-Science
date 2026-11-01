@@ -512,6 +512,7 @@ import {
   assertNoSymlinkPath,
   assertObject,
   assertProjectCapacity,
+  assertSameSiteBrowserRequest,
   assertString,
   clearSessionCookie,
   directorySize,
@@ -7320,6 +7321,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         }
         let username = "";
         try {
+          // Before there is a session there is no CSRF token to ask for: a page on another site must not be able to sign a visitor in as
+          // someone else (a login CSRF). A script that posts with no browser headers is unaffected.
+          assertSameSiteBrowserRequest(req, config);
           const body = await readJson(req, config.maxJsonBytes);
           username = assertString(body.username, "username", { max: 64 });
           const password = assertString(body.password, "password", { max: 4096 });
@@ -7349,6 +7353,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         }
         let username = "";
         try {
+          // Registration signs the new account in, so it is the same login CSRF as `/api/auth/login`.
+          assertSameSiteBrowserRequest(req, config);
           const body = await readJson(req, config.maxJsonBytes);
           username = assertString(body.username, "username", { max: 64 });
           const password = assertString(body.password, "password", { max: 4096 });
