@@ -28,6 +28,7 @@ jobs:
       labFrom: ${{ steps.cfg.outputs.labFrom }}
       idleExitMin: ${{ steps.cfg.outputs.idleExitMin }}
       sandboxCheck: ${{ steps.cfg.outputs.sandboxCheck }}
+      promptMarkers: ${{ steps.cfg.outputs.promptMarkers }}
     steps:
       - uses: actions/checkout@v4
       - id: cfg
@@ -54,6 +55,7 @@ jobs:
               fh.write(f"labFrom={cfg.get('labFrom', 'branch')}\n")
               fh.write(f"idleExitMin={int(cfg.get('idleExitMin', 30))}\n")
               fh.write(f"sandboxCheck={'true' if cfg.get('sandboxCheck') else 'false'}\n")
+              fh.write("promptMarkers=" + ",".join(cfg.get('promptMarkers', [])) + "\n")
           print(f"mode {mode}: {len(include)} lane job(s)")
           PY
 
@@ -112,6 +114,7 @@ jobs:
       LANES: ${{ matrix.workers }}
       IMAGE_KEY: ${{ matrix.key }}
       IDLE_EXIT_MIN: ${{ needs.plan.outputs.idleExitMin }}
+      PROMPT_MARKERS: ${{ needs.plan.outputs.promptMarkers }}
       COMPOSE_PARALLEL_LIMIT: "1"
     steps:
       - name: Prepare the disposable Docker host operator shell

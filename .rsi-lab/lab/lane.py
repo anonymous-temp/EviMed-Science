@@ -132,6 +132,8 @@ class Sampler(threading.Thread):
     def sample(self):
         try:
             out = subprocess.run(["docker", "stats", "--no-stream", "--format", "{{.Name}}\t{{.MemUsage}}"], capture_output=True, timeout=60).stdout.decode()
+            runtimes = set(subprocess.run(["docker", "ps", "--filter", "label=open-science.web.runtime=true", "--format", "{{.Names}}"],
+                                          capture_output=True, timeout=30).stdout.decode().split())
         except (subprocess.TimeoutExpired, OSError):
             return
         total = 0.0
@@ -142,8 +144,11 @@ class Sampler(threading.Thread):
                     continue
                 megabytes = self.to_mb(usage.split("/")[0])
                 total += megabytes
-                if "runtime" in name and "controller" not in name:
+                # Runtime containers are named after their project (and so after the item); the numbers carry no name.
+                if name in runtimes:
                     label = self.runtime_names.setdefault(name, f"runtime{len(self.runtime_names) + 1}")
+                elif name.startswith("rsi-driver"):
+                    label = "driver"
                 else:
                     label = re.sub(r"^web-|-\d+$", "", name)
                 self.peaks[label] = max(self.peaks.get(label, 0), round(megabytes))
@@ -151,7 +156,48 @@ class Sampler(threading.Thread):
 
     def snapshot(self):
         with self.lock:
-            return {"peakMemMiB": dict(self.peaks), "containersPeakSumMiB": self.host_peak_mb}
+            runtime_peaks = [value for label, value in self.peaks.items() if label.startswith("runtime")]
+            return {"peakMemMiB": dict(self.peaks), "containersPeakSumMiB": self.host_peak_mb,
+                    "runtimePeakMaxMiB": max(runtime_peaks) if runtime_peaks else 0, "runtimesSeen": len(runtime_peaks)}
+
+
+# ------------------------------------------------------------------------------------------------------------------ prompt tap
+class PromptTap:
+    """Reads back what a live session really sends: the runtime reaches the model gateway over plain HTTP on the internal Docker network, so
+    a packet capture of that bridge holds every request a session makes, system prompt included. Only the number of times each marker
+    appears is kept (the capture itself stays on the runner and is deleted); PROMPT_MARKERS is a comma-separated list. It is for batches that
+    check a changed guidance text reached a live session, and it is off otherwise."""
+
+    def __init__(self, markers):
+        self.markers = [m for m in markers if m]
+        self.pcap = WORK / "gateway.pcap"
+        self.process = None
+
+    def start(self):
+        if not self.markers:
+            return
+        subprocess.run(["apt-get", "install", "-y", "-qq", "tcpdump"], capture_output=True, timeout=300)
+        network = subprocess.run(["docker", "network", "inspect", "-f", "{{.Id}}", "open-science-runtime-internal"], capture_output=True, text=True).stdout.strip()
+        if not network:
+            say("prompt tap: the runtime network was not found")
+            return
+        self.process = subprocess.Popen(["tcpdump", "-i", f"br-{network[:12]}", "-s", "0", "-U", "-w", str(self.pcap), "tcp", "port", "8787"],
+                                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        say(f"prompt tap on bridge br-{network[:6]}..: {len(self.markers)} marker(s)")
+
+    def stop(self):
+        if self.process is None:
+            return {}
+        self.process.terminate()
+        try:
+            self.process.wait(timeout=20)
+        except subprocess.TimeoutExpired:
+            self.process.kill()
+        data = self.pcap.read_bytes() if self.pcap.exists() else b""
+        counts = {marker: data.count(marker.encode("utf-8")) for marker in self.markers}
+        say(f"prompt tap: capture {len(data) // 1024} KiB; marker occurrences {json.dumps(counts, ensure_ascii=False)}")
+        self.pcap.unlink(missing_ok=True)
+        return counts
 
 
 # ------------------------------------------------------------------------------------------------------------------ data
@@ -349,6 +395,7 @@ class Lane:
         self.started = time.time()
         self.stop = threading.Event()
         self.keyless = None
+        self.tap = PromptTap([m.strip() for m in os.environ.get("PROMPT_MARKERS", "").split(",")])
 
     # -- the provider keys stay out of the runtime containers (checked once, on the first runtime that runs)
     def audit_keyless(self):
@@ -436,6 +483,7 @@ class Lane:
                 reason = "stack_unhealthy"
             if reason is None:
                 transcript = out_dir / item_folder(item["key"]) / "transcript.json"
+                self.sampler.sample()
                 meta = {"rid": rid, "lane": LANE_ID, "worker": worker, "imageKey": IMAGE_KEY, "attempt": request.get("attempt"),
                         "driverExit": code, "status": status, "wallS": round(time.time() - began), "claimLost": lost.is_set(),
                         "contamination": contamination(transcript), "runtimeKeyless": self.keyless, **self.sampler.snapshot(),
@@ -523,6 +571,7 @@ class Lane:
     def main(self):
         BENCH.mkdir(parents=True, exist_ok=True)
         (BENCH / "data").mkdir(exist_ok=True)
+        self.tap.start()
         self.sampler.start()
         threading.Thread(target=self.report_loop, daemon=True).start()
         threading.Thread(target=self.audit_keyless, daemon=True).start()
@@ -538,9 +587,11 @@ class Lane:
         self.stop.set()
         self.sampler.stop_flag.set()
         self.sampler.sample()
+        markers = self.tap.stop()
         snapshot = self.sampler.snapshot()
         say(f"lane ended: claimed={self.stats['claimed']} done={self.stats['done']} infraFailed={self.stats['infraFailed']} "
-            f"peakMemMiB={json.dumps(snapshot['peakMemMiB'], sort_keys=True)} containersPeakSumMiB={snapshot['containersPeakSumMiB']}")
+            f"peakMemMiB={json.dumps(snapshot['peakMemMiB'], sort_keys=True)} containersPeakSumMiB={snapshot['containersPeakSumMiB']} "
+            f"runtimePeakMaxMiB={snapshot['runtimePeakMaxMiB']} runtimesSeen={snapshot['runtimesSeen']}")
         try:
             self.broker.call("lane-status", LANE_ID, json.dumps({"lane": LANE_ID, "stage": "ended", **self.stats}, separators=(",", ":")), tries=1, timeout=45)
         except (BrokerUnreachable, BrokerRefused):
