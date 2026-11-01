@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><title>模块工作台布局示意</title>
+<style>
+:root{--bg:#f7f5ef;--s:#fffdf8;--s1:#f2efe7;--s2:#ebe7de;--line:#e3ded3;--ctl:#8c8173;--t:#24211e;--t2:#494239;--t3:#686157;--a:#a34427;--as:#f7e9e3;--ok:#3f7a4f;--warn:#9a6a12;--warnbg:#fbf1dc}
+*{box-sizing:border-box}body{margin:0;padding:32px;background:#d9d5cc;font:14px/22px -apple-system,"PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif;color:var(--t)}
+h1{font-size:20px;margin:0 0 4px}.lead{color:var(--t2);margin:0 0 24px}
+.cap{font-weight:600;margin:28px 0 8px;font-size:15px}.cap small{font-weight:400;color:var(--t2);font-size:13px;margin-left:8px}
+.win{width:1296px;height:700px;background:var(--bg);border-radius:12px;display:flex;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.14);position:relative}
+.side{width:216px;background:var(--s1);padding:16px 12px;flex:none;color:var(--t2);font-size:13px}.side b{display:block;color:var(--t);font-size:14px;margin-bottom:14px}.side div{padding:6px 8px;border-radius:8px}.side .on{background:var(--as);color:var(--t)}
+.main{flex:1;min-width:0;display:flex;flex-direction:column}
+.band{padding:12px 24px 0;border-bottom:1px solid var(--line);background:var(--bg)}
+.top{display:flex;align-items:center;gap:12px}.top .back{color:var(--a);font-size:13px}.top h2{font-size:20px;line-height:28px;margin:0}.sp{flex:1}
+.btn{border:1px solid var(--ctl);background:var(--s);border-radius:8px;padding:6px 12px;font-size:14px;line-height:22px;white-space:nowrap}.btn.p{background:var(--a);border-color:var(--a);color:#fff}.btn.q{border:0;background:none;color:var(--t2);padding:6px 8px}.btn.sm{padding:2px 10px;font-size:13px}
+.rail{display:flex;gap:22px;margin-top:8px;font-size:14px}.st{padding:6px 0 8px;color:var(--t3);display:flex;align-items:center;gap:6px;border-bottom:2px solid transparent;white-space:nowrap}.st i{width:9px;height:9px;border-radius:50%;border:1.5px solid var(--ctl);display:inline-block}.st em{font-style:normal;font-size:12px}
+.st.scope{color:var(--t)}.st.done i{background:var(--ok);border-color:var(--ok)}.st.run i{border-color:var(--a);border-right-color:transparent}.st.wait i{background:var(--warn);border-color:var(--warn)}.st.cur{border-color:var(--a);color:var(--t)}.st.wait em{color:var(--warn)}.st.run em{color:var(--a)}
+.strip{display:flex;gap:12px;align-items:center;padding:6px 24px;background:var(--s1);border-bottom:1px solid var(--line);font-size:13px;color:var(--t2)}
+.body{flex:1;min-height:0;display:flex}
+.work{flex:1;min-width:0;padding:20px 24px;overflow:hidden}.chat{width:432px;flex:none;border-left:1px solid var(--line);display:flex;flex-direction:column;background:var(--s)}
+.chat .h{display:flex;align-items:center;padding:8px 12px;font-size:13px;color:var(--t2);border-bottom:1px solid var(--line)}.msgs{flex:1;padding:14px 16px;overflow:hidden;font-size:14px}.m{margin-bottom:12px}.u{background:var(--s1);padding:6px 10px;border-radius:10px;margin-left:48px}
+.composer{margin:0 12px 12px;border:1px solid var(--line);border-radius:18px;background:var(--bg);padding:10px 12px}.composer .ph{color:var(--t3);min-height:44px}.composer .r{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--t2)}.chip{background:var(--s2);border-radius:999px;padding:0 8px;font-size:12px}.send{width:28px;height:28px;border-radius:50%;background:var(--a);color:#fff;text-align:center;line-height:28px;font-size:15px}
+.now{font-size:16px;font-weight:600;margin:0 0 4px}.sub{color:var(--t2);margin:0 0 14px}
+.need{background:var(--s);border-radius:10px;padding:2px 14px;margin-bottom:14px}.nr{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line)}.nr:first-child{border-top:0}.nr .o{width:14px;height:14px;border-radius:50%;border:1.5px solid var(--ctl);flex:none}.nr .o.y{background:var(--ok);border-color:var(--ok)}.nr .v{color:var(--t3);font-size:13px}.seg{display:flex;gap:6px}.seg span{border:1px solid var(--line);border-radius:8px;padding:1px 10px;font-size:13px}
+.tag{font-size:12px;color:var(--t3)}.warn{background:var(--warnbg);border-radius:10px;padding:10px 14px;display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.tb{display:flex;gap:6px;margin-bottom:12px;font-size:13px;align-items:center}.tb span{padding:2px 10px;border-radius:999px;background:var(--s2)}.tb span.off{background:none;color:var(--t2)}
+table{width:100%;border-collapse:collapse;background:var(--s);border-radius:10px;overflow:hidden;font-size:13px}td,th{padding:7px 10px;text-align:left;border-top:1px solid var(--line)}th{background:var(--s1);border-top:0;font-weight:500;color:var(--t2)}.new{background:var(--as)}
+.dock{border-top:1px solid var(--line);background:var(--s);padding:8px 24px;display:flex;align-items:center;gap:10px}.dock .in{flex:1;border:1px solid var(--line);border-radius:18px;background:var(--bg);padding:8px 14px;color:var(--t3);display:flex;align-items:center;gap:8px}
+.row{display:flex;gap:28px;align-items:flex-start}.phone{width:320px;height:600px;background:var(--bg);border-radius:18px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.14);display:flex;flex-direction:column}.phone .band{padding:10px 14px}.phone .work{padding:14px}.ann{max-width:620px;color:var(--t2);font-size:13px}.ann li{margin-bottom:6px}
+.note{font-size:12px;color:#5b554c;margin-top:6px}
+</style></head><body>
+<h1>模块工作台：同一个页面的四种状态</h1>
+<p class="lead">示意图，只表达布局和联动。颜色取自 token 3.0.0，实现时读 token，不照抄这里的数值。内容用循证 GEO 举例。</p>
+
+<div class="cap">① 首次进入（对应截图那一页）<small>一件事、一个输入框；只有一个「现在」，缺什么就列什么，AI 写入后自动打勾</small></div>
+<div class="win"><div class="side"><b>EviMed Science</b><div>新对话</div><div>科研工具</div><div class="on">循证 GEO</div><div>知识库</div><div>记忆胶囊</div><div>定时任务</div><div>…</div></div>
+<div class="main"><div class="band"><div class="top"><span class="back">循证 GEO</span><h2>新循证 GEO 项目</h2><span class="sp"></span><span class="btn q">更多操作</span></div>
+<div class="rail"><span class="st">证据</span><span class="st">旅程</span><span class="st">问题</span><span class="st">诊断</span><span class="st">信源</span><span class="st">内容</span><span class="st">投放</span><span class="st">监测</span></div></div>
+<div class="body"><div class="work"><p class="now">还差 3 项就能开始</p><p class="sub">在右边直接说或发文件，AI 读到后这里会自动打勾。</p>
+<div class="need"><div class="nr"><span class="o"></span><span>产品名称与适用场景</span><span class="sp"></span><span class="v">可发说明书</span></div><div class="nr"><span class="o"></span><span>目标受众</span><span class="sp"></span><span class="v">患者、医生或其他</span></div><div class="nr"><span class="o"></span><span>这次要做什么</span><span class="sp"></span><span class="seg"><span>诊断 AI 回答</span><span>修改已有稿件</span><span>制定策略</span></span></div></div>
+<p class="tag">选一项只会把这句话填进输入框，你按发送才开始。发送前不产生费用。</p></div>
+<div class="chat"><div class="h">对话<span class="sp"></span>收起到底部</div><div class="msgs"><p class="tag" style="margin-top:220px;text-align:center">这个项目的对话从这里开始</p></div>
+<div class="composer"><div class="ph">描述产品和这次要做的事，或直接拖入说明书…</div><div class="r"><span>＋</span><span>📎</span><span class="sp"></span><span>思考强度：关闭</span><span class="send">↑</span></div></div></div></div></div></div>
+
+<div class="cap">② 工作中，结果和对话并排<small>切步骤时对话不动；「让 AI 改」就地填入输入框，不跳页；AI 写入后结果高亮新版本</small></div>
+<div class="win"><div class="side"><b>EviMed Science</b><div>新对话</div><div>科研工具</div><div class="on">循证 GEO</div><div>知识库</div><div>记忆胶囊</div><div>定时任务</div><div>…</div></div>
+<div class="main"><div class="band"><div class="top"><span class="back">循证 GEO</span><h2>达格列净 · 慢性肾病</h2><span class="sp"></span><span class="btn p">下一步：开始诊断</span><span class="btn q">更多操作</span></div>
+<div class="rail"><span class="st scope done">证据 <em>86 条</em></span><span class="st scope done">旅程</span><span class="st scope done cur">问题 <em>42 问</em></span><span class="st scope run">诊断 <em>待开始</em></span><span class="st">信源</span><span class="st">内容</span><span class="st">投放</span><span class="st">监测</span></div></div>
+<div class="strip"><b style="font-weight:500">AI 正在整理第 2 版问题</b><span>12 / 42</span><span class="sp"></span><span>完成后可开始诊断</span><span class="btn sm">停止这一项</span></div>
+<div class="body"><div class="work"><div class="tb"><span>问题</span><span class="off">回答</span><span class="off">版本</span><span class="sp" style="flex:1;background:none"></span><span class="off">✎ 让 AI 补充问题</span></div>
+<table><tr><th>问题</th><th>受众</th><th>场景</th><th>来源</th></tr><tr class="new"><td>eGFR 低于 25 能否开始用药</td><td>医生</td><td>起始治疗</td><td>新增 · 第 2 版</td></tr><tr class="new"><td>合并 2 型糖尿病的剂量怎么定</td><td>医生</td><td>起始治疗</td><td>新增 · 第 2 版</td></tr><tr><td>透析患者还要继续吃吗</td><td>患者</td><td>长期管理</td><td>第 1 版</td></tr><tr><td>会不会加重肾损伤</td><td>患者</td><td>疑虑</td><td>第 1 版</td></tr><tr><td>和恩格列净有什么区别</td><td>医生</td><td>选择</td><td>第 1 版</td></tr><tr><td>多久复查一次肾功能</td><td>患者</td><td>长期管理</td><td>第 1 版</td></tr></table></div>
+<div class="chat"><div class="h">对话<span class="sp"></span>收起到底部</div><div class="msgs"><div class="m u">再补几个 eGFR 低的问题</div><div class="m">好的，先看现有问句池里没覆盖到的情形，再补进第 2 版。</div><div class="m tag">✓ 已写入 2 个问题 · <span style="color:var(--a)">在左边查看</span></div></div>
+<div class="composer"><div class="r" style="margin-bottom:6px"><span class="chip">正在看：问题 · 第 2 版 ×</span></div><div class="ph">继续说…</div><div class="r"><span>＋</span><span>📎</span><span class="sp"></span><span>思考强度：关闭</span><span class="send">■</span></div></div></div></div></div></div>
+
+<div class="cap">③ 看数据时，对话收成底部常驻条<small>这是你提的「对话框放底部」。宽表和图表占满主区，一打字或点开就展开回右栏</small></div>
+<div class="win"><div class="side"><b>EviMed Science</b><div>新对话</div><div>科研工具</div><div class="on">循证 GEO</div><div>知识库</div><div>记忆胶囊</div><div>定时任务</div><div>…</div></div>
+<div class="main"><div class="band"><div class="top"><span class="back">循证 GEO</span><h2>达格列净 · 慢性肾病</h2><span class="sp"></span><span class="btn p">设投放预算</span><span class="btn q">更多操作</span></div>
+<div class="rail"><span class="st scope done">证据</span><span class="st scope done">旅程</span><span class="st scope done">问题</span><span class="st scope done cur">诊断 <em>第 3 轮</em></span><span class="st scope done">信源</span><span class="st scope done">内容</span><span class="st scope wait">投放 <em>等你设预算</em></span><span class="st scope">监测 <em>周一自动复测</em></span></div></div>
+<div class="body" style="display:block;flex:1"><div class="work"><div class="warn"><b style="font-weight:600">等你</b><span>投放要动用预算，设好后稿件在预算内自动投放。</span><span class="sp" style="flex:1"></span><span class="btn sm">设预算</span></div>
+<div class="tb"><span>可见度</span><span class="off">准确与安全</span><span class="sp" style="flex:1;background:none"></span><span class="off">全部引擎 ▾</span><span class="off">深入分析</span></div>
+<table><tr><th>问题群</th><th>DeepSeek</th><th>豆包</th><th>Kimi</th><th>文心</th><th>元宝</th><th>讲错</th><th>上周</th></tr><tr><td>起始治疗</td><td>62%</td><td>41%</td><td>55%</td><td>30%</td><td>47%</td><td>3</td><td>+4</td></tr><tr><td>长期管理</td><td>48%</td><td>36%</td><td>44%</td><td>22%</td><td>39%</td><td>1</td><td>+2</td></tr><tr><td>安全性疑虑</td><td>71%</td><td>53%</td><td>60%</td><td>41%</td><td>58%</td><td>5</td><td>−1</td></tr><tr><td>药物比较</td><td>33%</td><td>28%</td><td>30%</td><td>18%</td><td>25%</td><td>0</td><td>+6</td></tr></table></div></div>
+<div class="dock"><span class="tag">对话</span><div class="in"><span>问这张表，或让 AI 接着做…</span><span class="sp" style="flex:1"></span><span class="chip">正在看：诊断 · 可见度</span></div><span class="btn q">展开</span></div></div></div>
+
+<div class="cap">④ 手机<small>一次只显示一屏：看状态、回答、读结果；对话是底部弹层</small></div>
+<div class="row"><div class="phone"><div class="band"><div class="top"><span class="back">‹</span><h2 style="font-size:16px">达格列净 · 慢性肾病</h2></div><div class="rail" style="gap:8px;margin-top:4px"><span class="st scope wait">投放 <em>等你设预算</em></span><span class="st">第 7 / 8 步 ▾</span></div></div><div class="work" style="flex:1"><div class="warn" style="flex-wrap:wrap"><b style="font-weight:600">等你</b><span>设投放预算</span><span class="btn sm">设预算</span></div><p class="now" style="font-size:14px">本周</p><p class="sub">可见度 +4，讲错 3 处。周一自动复测。</p></div><div class="dock" style="padding:8px 12px"><div class="in"><span>问 AI…</span></div></div></div>
+<ul class="ann"><li><b>四个区域</b>：顶带（是谁、走到哪、下一步）→ 活动条（AI 正在做什么，可停）→ 结果区 → 对话。</li><li><b>发送入口只有一个</b>，始终是内核原生输入框。收起时显示的是封面，不启动容器；一点击才启动，先打的字作为草稿交给原生输入框。</li><li><b>进度轨只说有用的话</b>：不在本次工作里的步骤只留名字，不再写八遍「未请求」。</li><li><b>「现在」只有一处</b>：顶部主按钮永远是下一步，不再是「对话」。</li></ul></div>
+<p class="note">图中数据是虚构的，只用来表达版式。</p>
+</body></html>
