@@ -5907,7 +5907,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       const project = await sourceProject(identity);
       return verifyVcrInvocation({ header, operation, body, project, runtimeManager,
         resolveSession: (ownedProject, sessionId) => runtimeEventPump.sessionOwner(ownedProject, sessionId),
-        runs: (await agentRuns.list(project)).filter(run=>run.status==="running"),readBenchmark:readVcrBenchmarkFile,authenticatedUserId:String(identity.userId) });
+        runs: async () => (await agentRuns.list(project)).filter(run=>run.status==="running"),adoptionWaitMs:config.vcrRunAdoptionWaitMs,readBenchmark:readVcrBenchmarkFile,authenticatedUserId:String(identity.userId) });
     },
     // What the person said first in a conversation, from the run ledger: the words a conversation's study is named by (`vcrOpeningName`).
     // The ledger keeps a bounded preview of each request and not the platform's own turns, so this is the person's sentence.

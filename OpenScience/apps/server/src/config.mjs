@@ -1136,6 +1136,9 @@ function vcrSettings(overrides) {
     // than window after window: past about two windows (20,000 characters each) a chart is more than a run reads in order, and the part of it
     // a criterion asks about is a small part. Unset = 40,000. A shorter record is read as it always was.
     vcrPassagesMinChars: integer("vcrPassagesMinChars", "OPEN_SCIENCE_VCR_PASSAGES_MIN_CHARS", 40_000, 2_000, 1_000_000),
+    // How long a research tool's first call waits for its turn to reach the run ledger. A turn typed in the kernel's composer is adopted
+    // after the routing decision, whose own limit is 20 s; a call refused meanwhile told the run to go on without the study. The tool waits 30 s for its answer. Unset = 20 s.
+    vcrRunAdoptionWaitMs: integer("vcrRunAdoptionWaitMs", "OPEN_SCIENCE_VCR_RUN_ADOPTION_WAIT_MS", 20_000, 0, 120_000),
     // Batch matching (remediation plan D4, vcrMatchBatch): the most people one batch reads the records of (a roster larger than this is read
     // in batches, each start taking the next people not yet read), how many records are read at once, and how long one record's model call
     // may take. A start states the cost of its batch before it begins; a batch is bounded so that stated cost is a bounded one.

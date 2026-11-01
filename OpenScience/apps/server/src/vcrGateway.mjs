@@ -2466,7 +2466,7 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
       let proofTimer;
       const origin = nativeHeader ? await Promise.race([
         resolveInvocation(identity,nativeHeader,operation,body),
-        new Promise((_,reject)=>{proofTimer=setTimeout(()=>reject(gatewayError(504,'vcr_gateway_timeout','The native call proof timed out.')),budgetMs);proofTimer.unref?.();}),
+        new Promise((_,reject)=>{proofTimer=setTimeout(()=>reject(gatewayError(504,'vcr_gateway_timeout','The native call proof timed out.')),Math.max(budgetMs, Number(config?.vcrRunAdoptionWaitMs ?? 0) + budgetMs));proofTimer.unref?.();}),
       ]).finally(()=>clearTimeout(proofTimer)) : null;
       if(origin && (origin.userId!==String(identity.userId) || origin.projectId!==String(identity.projectId))) throw gatewayError(403,'vcr_invocation_unavailable','The native research scope changed.');
       const boundedScope = origin ? null : runtimeManager.boundedRuntimeScope?.({userId:String(identity.userId),id:String(identity.projectId)});

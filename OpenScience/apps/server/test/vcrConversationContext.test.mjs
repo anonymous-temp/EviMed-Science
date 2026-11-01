@@ -32,6 +32,20 @@ test('a validate call is proved by the scenario it carries, as a start is', asyn
   assert.equal(result.runId, 'run');
   await assert.rejects(verifyVcrInvocation({ ...f, header: header('root'), operation: 'simulate', body: { ...input, kind: 'design_simulation' } }), { code: 'vcr_invocation_unavailable' });
 });
+test('a first call waits for its turn to reach the ledger, and a turn that never does is refused', async () => {
+  // Found on a real kernel: the first vcr_read went out 2.6 s into a composer turn, whose run was written at 8.6 s.
+  let asked = 0;
+  const late = await verifyVcrInvocation({ ...fixture(), header: header('root'), operation: 'read', body: { what: 'study' }, adoptionWaitMs: 5000,
+    runs: async () => (++asked < 3 ? [] : [{ id: 'run', sessionId: 'root' }]) });
+  assert.equal(late.runId, 'run'); assert.equal(asked, 3);
+  await assert.rejects(verifyVcrInvocation({ ...fixture(), header: header('root'), operation: 'read', body: { what: 'study' }, adoptionWaitMs: 50, runs: async () => [] }),
+    { code: 'vcr_invocation_unavailable' });
+  // Arguments that do not match the pending call are refused at once, without waiting for anything.
+  let waited = 0;
+  await assert.rejects(verifyVcrInvocation({ ...fixture(), header: header('root'), operation: 'read', body: { what: 'matching' }, adoptionWaitMs: 5000, runs: async () => { waited += 1; return []; } }),
+    { code: 'vcr_invocation_unavailable' });
+  assert.equal(waited, 0);
+});
 test('native trial-benchmark file expansion is verified against exact control-plane bytes',async()=>{
  const actual={what:'trial_benchmark',data:{predictionsFile:'predictions.json'}};
  const f=fixture({input:actual});f.runtimeManager.sessionTranscript=async(_p,sessionId)=>({sessionId,truncated:false,turns:[{startSeq:1,end:null}],messages:[{turnStartSeq:1,parts:[{type:'tool',callId:'call',status:'pending',tool:'mcp__evimed__vcr_write',input:actual}]}]});
