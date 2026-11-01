@@ -57,3 +57,40 @@ test('a fresh native child is bound by its real catalogue id before event tracki
   assert.deepEqual(await resolve({ userId: 'u', projectId: 'p' }, ctx('child-1', 'off')),
     { runId: 'run-root', sessionId: 'child-1', reasoningEffort: 'off' });
 });
+
+test('a just-submitted native turn waits for its exact run to be adopted without accepting another session', async () => {
+  const project = { id: 'p', userId: 'u' };
+  let reads = 0;
+  let selections = 0;
+  const resolve = createEngineExecutionContextResolver({
+    config: { deepseekModel: 'deepseek-flash' },
+    store: { userById: async () => ({ id: 'u' }), requireProject: async () => project },
+    agentRuns: {
+      activeRuns: async () => (++reads < 4 ? [{ id: 'other-run', sessionId: 'other' }] : [{ id: 'own-run', sessionId: 'mine' }]),
+      runIdForSession: (id, list) => list.find((run) => run.sessionId === id)?.id ?? null,
+    },
+    runtimeManager: { sessionModelSelection: async (_project, id) => {
+      selections++;
+      assert.equal(id, 'mine');
+      return { lastUsed: { provider: 'deepseek-official', model: 'deepseek-flash', reasoningEffort: 'high' } };
+    } },
+    adoptionPollAttempts: 4, adoptionPollDelayMs: 1, wait: async () => {},
+  });
+  assert.deepEqual(await resolve({ userId: 'u', projectId: 'p' }, ctx('mine', 'high')),
+    { runId: 'own-run', sessionId: 'mine', reasoningEffort: 'high' });
+  assert.equal(selections, 1, 'model policy is read only after the exact session is owned');
+});
+
+test('waiting never turns an unowned session into the only active run', async () => {
+  const project = { id: 'p', userId: 'u' };
+  let reads = 0;
+  const resolve = createEngineExecutionContextResolver({
+    config: { deepseekModel: 'deepseek-flash' },
+    store: { userById: async () => ({ id: 'u' }), requireProject: async () => project },
+    agentRuns: { activeRuns: async () => { reads++; return [{ id: 'other-run', sessionId: 'other' }]; }, runIdForSession: () => null },
+    runtimeManager: { sessionModelSelection: async () => { throw new Error('must not read'); } },
+    adoptionPollAttempts: 2, adoptionPollDelayMs: 1, wait: async () => {},
+  });
+  await assert.rejects(resolve({ userId: 'u', projectId: 'p' }, ctx('foreign', 'high')), { code: 'engine_model_session_unowned' });
+  assert.equal(reads, 3, 'one initial check and two bounded retries');
+});
