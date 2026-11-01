@@ -117,6 +117,8 @@ const snapshot = {
     tolerance: { ...vocab.VCR_RECONSTRUCTION_TOLERANCE },
     // the published gap between a planned and a measured effect (design.analytic 1.3.0, C6)
     effectDiscount: JSON.parse(JSON.stringify(vocab.VCR_EFFECT_DISCOUNT)),
+    // what a local calibration of an applied published model needs before it reports a slope (model.prognostic_apply 1.1.0, D3)
+    localCalibration: JSON.parse(JSON.stringify(vocab.VCR_LOCAL_CALIBRATION_MIN)),
   },
 }
 

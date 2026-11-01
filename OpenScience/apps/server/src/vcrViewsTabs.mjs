@@ -54,6 +54,7 @@ import { phaseLabel, registryStatusLabel } from "./vcrPatientTrials.mjs";
 import { reportSchedule } from "./vcrScheduleView.mjs";
 import { vcrPremises } from "./vcrPremises.mjs";
 import { presentPopulationCheck } from "./vcrPopulationCheck.mjs";
+import { localCalibrationView } from "./vcrLocalCalibration.mjs";
 import {
   abilitiesOf, assumptionSummary, assumptionValue, designsSentence, nodeLabel, notEstimableDesign, presentDesigns, reviewContextOf,
   presentModelCard, registryDesignWords, resultNode, scenarioName, valueString,
@@ -761,6 +762,8 @@ export function presentComparatorTab(bundle) {
       relativeScore: measureOf("mean_relative_score") ? value(measureOf("mean_relative_score")) : null,
       absoluteRiskAvailable: diagnostics.absoluteRiskAvailable === true, causalEffectIdentified: false,
       limits: list(diagnostics.limits).map(vcrPredictionLimit),
+      // Held against the outcome the table itself has (D3): the calibration intercept and slope, or why the slope is not there.
+      calibration: localCalibrationView(diagnostics.localCalibration),
     } : null,
     headline: shown && conclusion && conclusion !== "not_estimable"
       ? sensitivityOnly

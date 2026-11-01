@@ -480,6 +480,13 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
       horizon: req(number({ gt: 0 })), timeUnit: req(string({ values: [...VCR_TIME_UNITS] })) })),
     inputUnits: req({ t: 'map', values: string({ maxLength: 80 }), min: 1, max: 100 }),
     model: req(PROGNOSTIC_MODEL),
+    // Local calibration (remediation plan D3): the outcome the table itself holds, so the applied equation is held against what happened.
+    // A binary or continuous outcome is one column; a time-to-event outcome is a time and a status (1 = event) column.
+    calibration: object({
+      outcomeColumn: req(gated(COLUMN, is('model.family', 'linear', 'logistic'))),
+      timeColumn: req(gated(COLUMN, is('model.family', 'cox'))),
+      statusColumn: req(gated(COLUMN, is('model.family', 'cox'))),
+    }),
   }),
 
   'profile.snapshot': object({}),

@@ -1,6 +1,6 @@
 /** Source-bound numeric parameters for existing reference simulators, never an inferred fitted model. */
 import { createHash } from "node:crypto";
-import { validateScenario, canonicalScenarioJson, vcrTimeUnitOf } from "@evimed/domain";
+import { validateScenario, canonicalScenarioJson, vcrModelTripod, vcrTimeUnitOf } from "@evimed/domain";
 import { HttpError } from "./security.mjs";
 import { projectSourceManifestRecord } from "./sourceService.mjs";
 import { literatureUnitIsInQuote } from "./vcrEvidenceSources.mjs";
@@ -225,6 +225,8 @@ export function preparePublishedEquation(read, card, text, projectId) {
       scenarioHash: digest(canonicalScenarioJson(frozen)), sourceParameters: bindings.map(binding => ({ field: binding.field, value: binding.mappedValue })) },
     specificationMissing: missing, registrationState: missing.length ? "incomplete_specification" : "source_bound_equation",
     type: "published_prognostic_equation", inputs: terms.map((/** @type {any} */ term) => `${term.column} (${term.unit})`),
+    // TRIPOD+AI-style words the author gave (who it was developed on, how it was validated, the outcome and time, what it is for): optional, as written
+    ...Object.fromEntries(vcrModelTripod(card).map((field) => [field.key, field.text])),
     outputs: "Prognostic values under the declared source condition; no identified treatment effect.",
     knownLimits: ["Source quotations and numbers are verified; clinical interpretation and target-population transportability are not automatically validated.",
       "Coefficient uncertainty is not estimated. Cox without baseline survival yields relative scores only."],

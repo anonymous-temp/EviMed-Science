@@ -84,6 +84,35 @@ export const VCR_EVENT_HISTORY_CARD_FIELDS = Object.freeze([
   { path: 'version', zh: '版本' },
 ])
 
+/**
+ * The optional TRIPOD+AI-style fields a model card may carry beside its inputs and limits (remediation plan D3): who the model was
+ * developed on, what has been done to validate it, the outcome and the time it is for, and what it is meant for. They are words a
+ * reader needs to judge a model, never required, never a gate: a card with none of them is a card, and a card that has them shows them.
+ */
+export const VCR_MODEL_TRIPOD_FIELDS = Object.freeze([
+  { key: 'developmentPopulation', zh: '开发人群' },
+  { key: 'validationStudy', zh: '验证情况' },
+  { key: 'outcomeHorizon', zh: '结局和时间范围' },
+  { key: 'intendedUse', zh: '预期用途' },
+])
+
+/** The longest any one of those fields may be: a card describes, it does not hold the paper. */
+export const VCR_MODEL_TRIPOD_MAX_CHARS = 600
+
+/**
+ * The TRIPOD-style fields a card holds, in their order, each as the reader's label and the card's words; none when it holds none.
+ * @param {unknown} card
+ * @returns {Array<{ key: string, label: string, text: string }>}
+ */
+export function vcrModelTripod(card) {
+  const source = object(card)
+  return VCR_MODEL_TRIPOD_FIELDS.flatMap((field) => {
+    const raw = source[field.key]
+    const text = typeof raw === 'string' ? raw.trim().slice(0, VCR_MODEL_TRIPOD_MAX_CHARS) : ''
+    return text ? [{ key: field.key, label: field.zh, text }] : []
+  })
+}
+
 /** @param {unknown} value */
 const object = (value) => (value && typeof value === 'object' && !Array.isArray(value) ? /** @type {Record<string, any>} */ (value) : {})
 /** @param {unknown} value */

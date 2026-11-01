@@ -1210,9 +1210,13 @@ export function vcrBuildStages(item, context) {
     if (issues.length) return { ok: false, refused: { code: "vcr_model_not_applicable", paths: issues.map(issue => issue.field), message: "所选模型未覆盖目标队列的终点或变量范围。" } };
     const definedRules = population?.kind === "real" ? population.definition?.rules : null;
     if (definedRules && request.cohortRules && !isDeepStrictEqual(definedRules, request.cohortRules)) return { ok: false, refused: { code: "vcr_model_not_applicable", message: "请求筛选条件与选定队列版本不同；先保存对应队列版本。" } };
+    // A local calibration needs the outcome the table itself holds: a generated population has none to hold the equation against.
+    if (request.calibration && population && population.kind !== "real") return { ok: false, refused: {
+      code: "vcr_model_not_applicable", message: "合成人群没有观察到的结局，不能用它校准已发表的方程；用有真实结局的队列。" } };
     /** @type {Record<string, any>} */
     const target = { ...object(expected), ...(request.inputId ? { inputId: request.inputId } : {}),
       idColumn: request.idColumn ?? "USUBJID", inputUnits: request.inputUnits ?? {},
+      ...(request.calibration ? { calibration: request.calibration } : {}),
       ...((definedRules ?? request.cohortRules) ? { cohortRules: definedRules ?? request.cohortRules } : {}) };
     /** @type {VcrStage["derived"]} */ const derived = [];
     if (population && population.kind !== "real") {

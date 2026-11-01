@@ -42,7 +42,7 @@ import {
   VCR_MODEL_INTERFACE_LABELS_ZH, VCR_REGISTRY_ALLOCATION_LABELS_ZH, VCR_REGISTRY_MASKING_LABELS_ZH, VCR_REGISTRY_PHASE_LABELS_ZH, VCR_REVIEW_KIND_LABELS_ZH, VCR_ROLE_ABILITIES, VCR_STALE_REASON_LABELS_ZH,
   VCR_CONVERSATION_STUDY_NAME, VCR_DRAFT_STUDY_NAME, VCR_RESULT_KIND_TABS, VCR_STEP_LABELS_ZH, VCR_STEPS, VCR_TABS, VCR_TWIN_LABELS_ZH, VCR_TWIN_EVIDENCE, VCR_VALUE_SOURCE_LABELS_ZH,
   VCR_TRIAL_DESIGN_LABELS_ZH, VCR_EFFECT_ROLE_LABELS_ZH, VCR_BENCHMARK_ONLY_BASES, VCR_BENCHMARK_ONLY_USE_CEILING,
-  allowanceWaitingSentence, workStateLabel, intendedUseCeiling, lineageNode, parseLineageNode, twinLabel, useWithin, vcrModelCardIssues, vcrModelInterfaceOf,
+  allowanceWaitingSentence, workStateLabel, intendedUseCeiling, lineageNode, parseLineageNode, twinLabel, useWithin, vcrModelCardIssues, vcrModelInterfaceOf, vcrModelTripod,
 } from "@evimed/domain";
 
 import { VCR_ENGINE_RETRYABLE_CODES } from "./vcrEngineClient.mjs";
@@ -1388,6 +1388,8 @@ export function presentModelCard(model, usedBy) {
     shape,
     shapeLabel: (/** @type {Record<string, string>} */ (VCR_MODEL_INTERFACE_LABELS_ZH))[shape],
     shapeMissing: vcrModelCardIssues(model).map((issue) => issue.text),
+    // the TRIPOD-style words the card holds, in their order; none when it holds none (a card is complete without them)
+    tripod: vcrModelTripod(card),
     ...(shape === "event_history_to_trajectories" ? {
       events: list(object(card.history).eventTypes).map(String),
       horizon: object(applicability.horizon).max ? `${object(applicability.horizon).max} ${object(applicability.horizon).unit}` : null,

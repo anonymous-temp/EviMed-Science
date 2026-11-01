@@ -1061,6 +1061,8 @@ vcr_validate_job <- function(job) {
   if (job$methodVersion %in% unlist(spec$compatibleVersions)) {
     # a design is never labelled with a version that did not have it: 1.3.0 added the hazard ratio that changes over time and MaxCombo
     if (job[["method"]] %in% c("design.simulate","design.grid") && .vcrp_uses_nph(job$scenario)) return(FALSE)
+    # and model.prognostic_apply 1.1.0 added the local calibration against the outcome the table holds
+    if (identical(job[["method"]],"model.prognostic_apply") && !is.null(.vcrp_get(job$scenario,"calibration"))) return(FALSE)
     return(!startsWith(job[["method"]], "patients.") || (is.null(job$scenario$pairing) && is.null(job$scenario$cohortRules)))
   }
   sc<-.vcrp_get(job,"scenario");base<-.vcrp_get(.vcrp_get(sc,"design"),"kind")

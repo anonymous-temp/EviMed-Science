@@ -12,7 +12,7 @@
       "modelTier": "literature"
     },
     "model.prognostic_apply": {
-      "version": "1.0.0",
+      "version": "1.1.0",
       "endpoints": [
         "continuous",
         "binary",
@@ -21,7 +21,10 @@
       "crossChecks": [
         "closed-form published equation evaluation"
       ],
-      "modelTier": "literature"
+      "modelTier": "literature",
+      "compatibleVersions": [
+        "1.0.0"
+      ]
     },
     "profile.snapshot": {
       "version": "1.1.0",
@@ -1208,6 +1211,48 @@
             }
           },
           "req": true
+        },
+        "calibration": {
+          "t": "object",
+          "fields": {
+            "outcomeColumn": {
+              "t": "string",
+              "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+              "maxLength": 64,
+              "when": {
+                "path": "model.family",
+                "in": [
+                  "linear",
+                  "logistic"
+                ]
+              },
+              "req": true
+            },
+            "timeColumn": {
+              "t": "string",
+              "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+              "maxLength": 64,
+              "when": {
+                "path": "model.family",
+                "in": [
+                  "cox"
+                ]
+              },
+              "req": true
+            },
+            "statusColumn": {
+              "t": "string",
+              "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+              "maxLength": 64,
+              "when": {
+                "path": "model.family",
+                "in": [
+                  "cox"
+                ]
+              },
+              "req": true
+            }
+          }
         }
       }
     },
@@ -9141,6 +9186,11 @@
         "planned": 0.66,
         "observed": 0.72
       }
+    },
+    "localCalibration": {
+      "slopeEvents": 10,
+      "slopeNonEvents": 10,
+      "slopePairs": 10
     }
   }
 }

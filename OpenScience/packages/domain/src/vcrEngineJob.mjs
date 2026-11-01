@@ -99,7 +99,7 @@ const SIMULATE_RELEASES = Object.freeze([Object.freeze({
  */
 export const VCR_ENGINE_METHODS = Object.freeze({
   'model.survival_fit': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['independent base-R likelihood optimization', 'flexsurv distribution and delta-method output oracle', 'closed-form censored exponential likelihood']), modelTier: 'literature' },
-  'model.prognostic_apply': { version: '1.0.0', endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['closed-form published equation evaluation']), modelTier: 'literature' },
+  'model.prognostic_apply': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['closed-form published equation evaluation']), modelTier: 'literature' },
   'profile.snapshot': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen([]), crossChecks: frozen(['profile_dataset.py']), modelTier: null },
   'cohort.build': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen([]), crossChecks: frozen([]), modelTier: null },
   'population.scenario': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen([]), crossChecks: frozen(['simstudy semantics']), modelTier: 'scenario' },
@@ -746,6 +746,8 @@ function legacyDesignVersionMatches(job) {
   if ((spec.compatibleVersions ?? []).includes(job.methodVersion)) {
     // a design is never labelled with a version that did not have it: 1.3.0 added the hazard ratio that changes over time and MaxCombo
     if ((job.method === 'design.simulate' || job.method === 'design.grid') && usesNonProportionalHazards(job.scenario)) return false
+    // and model.prognostic_apply 1.1.0 added the local calibration against the outcome the table holds
+    if (job.method === 'model.prognostic_apply' && job.scenario?.calibration !== undefined) return false
     return !job.method.startsWith('patients.') || (!job.scenario?.pairing && !job.scenario?.cohortRules)
   }
   const base = job.scenario?.design?.kind

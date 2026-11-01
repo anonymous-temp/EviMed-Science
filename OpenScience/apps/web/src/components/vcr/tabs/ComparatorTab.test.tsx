@@ -465,6 +465,39 @@ it("shows a scoped prognostic benchmark in its original scale and keeps its caus
   expect(section).toHaveTextContent("不增加独立样本量");
 });
 
+it("holds the applied equation against the table's own outcome: the calibration intercept and slope with their ideals, or what the slope needed (D3)", async () => {
+  const raw = fixture("ev201/comparator.json");
+  raw.routes = [{ route: "model_comparator", state: "limited", selected: true }];
+  const benchmark = { sourceCondition: "standard_care", endpoint: { type: "binary", horizon: 12, timeUnit: "months" }, mean: { value: 0.37, source: "predicted" }, outcomeSd: null, relativeScore: null,
+    absoluteRiskAvailable: true, causalEffectIdentified: false, limits: ["Calibration was measured on the observed outcomes of this table; transportability to any other population has not been established."] };
+  raw.predictionBenchmark = { ...benchmark, calibration: { n: 2000, events: 593, nonEvents: 1407, observedRisk: 0.2965, predictedRisk: 0.3691, calibrationInLarge: 0.0726,
+    intercept: { value: -0.33474, low: -0.43, high: -0.24 }, slope: { value: 1.24177, low: 0.93, high: 1.56 }, notes: [] } };
+  installVcrServer(network.productRequest, { [tab("comparator")]: raw });
+  draw();
+  const section = (await screen.findByRole("heading", { name: "模型预测基准" })).closest("section")!;
+  expect(section).toHaveTextContent("本地校准截距");
+  expect(section).toHaveTextContent("-0.33（-0.43–-0.24），理想值 0");
+  expect(section).toHaveTextContent("本地校准斜率");
+  expect(section).toHaveTextContent("1.24（0.93–1.56），理想值 1");
+  expect(section).toHaveTextContent("0.3 / 0.37，2000 人");
+  expect(section).toHaveTextContent("校准是用这张表里观察到的结局算的");
+});
+
+it("says what a missing calibration slope needed, and shows no slope row for it (D3)", async () => {
+  const raw = fixture("ev201/comparator.json");
+  raw.routes = [{ route: "model_comparator", state: "limited", selected: true }];
+  const benchmark = { sourceCondition: "standard_care", endpoint: { type: "binary", horizon: 12, timeUnit: "months" }, mean: { value: 0.37, source: "predicted" }, outcomeSd: null, relativeScore: null,
+    absoluteRiskAvailable: true, causalEffectIdentified: false, limits: [] };
+  raw.predictionBenchmark = { ...benchmark, calibration: { n: 600, events: 6, nonEvents: 594, observedRisk: 0.01, predictedRisk: 0.37, calibrationInLarge: 0.36,
+    intercept: { value: -4.1, low: -4.9, high: -3.3 }, slope: null, notes: ["斜率没有算：事件或非事件太少（各至少要 10 个，这里 6 个事件、594 个非事件）"] } };
+  installVcrServer(network.productRequest, { [tab("comparator")]: raw });
+  draw();
+  const few = (await screen.findByRole("heading", { name: "模型预测基准" })).closest("section")!;
+  expect(few).toHaveTextContent("本地校准截距");
+  expect(within(few).queryByText("本地校准斜率")).toBeNull();
+  expect(few).toHaveTextContent("斜率没有算：事件或非事件太少");
+});
+
 it("keeps an unavailable absolute risk absent rather than treating a relative score as a zero outcome", async () => {
   const raw = fixture("empty/comparator.json");
   raw.routes = [{ route: "model_comparator", state: "limited", selected: true }];

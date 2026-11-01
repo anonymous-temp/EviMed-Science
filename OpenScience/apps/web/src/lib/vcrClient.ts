@@ -773,6 +773,16 @@ export interface VcrPopulationCheck {
   resultId: string;
 }
 
+/** The local calibration of an applied published model, as the server words it: the ideal is an intercept of 0 and a slope of 1. */
+export interface VcrLocalCalibration {
+  n: number | null; events: number | null; nonEvents: number | null;
+  observedRisk: number | null; predictedRisk: number | null; calibrationInLarge: number | null;
+  intercept: { value: number; low: number | null; high: number | null } | null;
+  slope: { value: number; low: number | null; high: number | null } | null;
+  /** What was not computed and what it needed. */
+  notes: string[];
+}
+
 export interface VcrPopulationTab {
   /** 「这个结论的前提」: at most five decisive, the rest folded by the page. */
   premises?: VcrPremise[];
@@ -868,6 +878,8 @@ export interface VcrModelCard {
   twinReason?: string | null;
   validation?: Array<{ label: string; state: "passed" | "none" | "partial"; detail?: string | null }>;
   limits?: string[];
+  /** The TRIPOD-style words the card holds (development population, validation, outcome and time, intended use); none when it holds none. */
+  tripod?: Array<{ key: string; label: string; text: string }>;
   /** The evidence its declared risk still lacks. */
   missingEvidence?: string[];
   usedBy?: Array<{ id: string; label: string }>;
@@ -1076,6 +1088,8 @@ export interface VcrComparatorTab {
     endpoint: { type: string; horizon: number | null; timeUnit: string | null } | null;
     mean: VcrValue | null; outcomeSd: VcrValue | null; relativeScore: VcrValue | null;
     absoluteRiskAvailable: boolean; causalEffectIdentified: false; limits: Array<{ code: string; source?: string }>;
+    /** The equation held against the outcome the table itself has (D3); absent when the run named no outcome. */
+    calibration?: VcrLocalCalibration | null;
   } | null;
   headline?: string | null;
   routes: VcrRoute[];
@@ -2054,6 +2068,7 @@ export function readVcrModelCard(raw: unknown): VcrModelCard {
     inputs: strings(value.inputs),
     validation: arr(value.validation) as unknown as VcrModelCard["validation"],
     limits: strings(value.limits),
+    tripod: arr(value.tripod).filter((row) => typeof row.key === "string" && typeof row.text === "string" && row.text).map((row) => ({ key: String(row.key), label: text(row.label) ?? String(row.key), text: String(row.text) })),
     missingEvidence: strings(value.missingEvidence),
     shapeMissing: strings(value.shapeMissing),
     events: strings(value.events),
@@ -2148,6 +2163,20 @@ export function readVcrPopulation(raw: unknown): VcrPopulationTab {
     stale: readStale(value.stale),
     partial: readPartial(value.partial),
     knowledge: readVcrKnowledge(value.knowledge),
+  };
+}
+
+function readLocalCalibration(raw: unknown): VcrLocalCalibration | null {
+  const value = obj(raw);
+  if (!Object.keys(value).length) return null;
+  const estimate = (item: unknown) => {
+    const e = obj(item);
+    return finite(e.value) === null ? null : { value: Number(e.value), low: finite(e.low), high: finite(e.high) };
+  };
+  return {
+    n: finite(value.n), events: finite(value.events), nonEvents: finite(value.nonEvents),
+    observedRisk: finite(value.observedRisk), predictedRisk: finite(value.predictedRisk), calibrationInLarge: finite(value.calibrationInLarge),
+    intercept: estimate(value.intercept), slope: estimate(value.slope), notes: (Array.isArray(value.notes) ? value.notes : []).filter((note): note is string => typeof note === "string" && note.length > 0),
   };
 }
 
@@ -2277,6 +2306,7 @@ export function readVcrComparator(raw: unknown): VcrComparatorTab {
       mean: benchmark.mean ? readVcrValue(benchmark.mean) : null,
       outcomeSd: benchmark.outcomeSd ? readVcrValue(benchmark.outcomeSd) : null,
       relativeScore: benchmark.relativeScore ? readVcrValue(benchmark.relativeScore) : null,
+      calibration: readLocalCalibration(benchmark.calibration),
       absoluteRiskAvailable: benchmark.absoluteRiskAvailable === true, causalEffectIdentified: false, limits: (Array.isArray(benchmark.limits) ? benchmark.limits : []).map(row => typeof row === "string" ? vcrPredictionLimit(row) : { code: text(obj(row).code) ?? "unknown", ...(text(obj(row).source) ? { source: String(obj(row).source) } : {}) }),
     } : null,
     routes: arr(value.routes) as unknown as VcrRoute[],

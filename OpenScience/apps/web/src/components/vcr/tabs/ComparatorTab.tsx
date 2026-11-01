@@ -26,7 +26,7 @@ import { BalancePlot } from "../comparator/BalancePlot";
 import { DimensionBand } from "../comparator/DimensionBand";
 import { useStudyFrame } from "../studyFrameContext";
 import { pairRows, useVcrLoad, VcrTabError } from "../vcrTabKit";
-import { conclusionLabel, intervalText } from "../vcrText";
+import { conclusionLabel, intervalText, numberText } from "../vcrText";
 import { COMPARE_DRAFT_LABEL, INTAKE_LABEL } from "../vcrActionWords";
 
 const ROUTE_LABELS = VCR_COMPARATOR_ROUTE_LABELS_ZH as Record<string, string>;
@@ -295,6 +295,19 @@ function UsedRoute({ data }: { data: ComparatorData }) {
   );
 }
 
+/** The local calibration rows of the prediction benchmark: the ideal is beside each number and a missing one says what it needed. */
+function calibrationRows(calibration: NonNullable<ComparatorData["predictionBenchmark"]>["calibration"]): Fact[] {
+  if (!calibration) return [];
+  const range = (e: { low: number | null; high: number | null }) => (e.low !== null && e.high !== null ? `（${numberText(e.low)}–${numberText(e.high)}）` : "");
+  return [
+    ...(calibration.intercept ? [{ label: "本地校准截距", value: `${numberText(calibration.intercept.value)}${range(calibration.intercept)}，理想值 0` }] : []),
+    ...(calibration.slope ? [{ label: "本地校准斜率", value: `${numberText(calibration.slope.value)}${range(calibration.slope)}，理想值 1` }] : []),
+    ...(calibration.observedRisk !== null && calibration.predictedRisk !== null
+      ? [{ label: "观察到 / 预测", value: `${numberText(calibration.observedRisk)} / ${numberText(calibration.predictedRisk)}${calibration.n !== null ? `，${calibration.n} 人` : ""}` }] : []),
+    ...calibration.notes.map((note) => ({ label: "校准", value: note })),
+  ];
+}
+
 function PredictionBenchmark({ data }: { data: NonNullable<ComparatorData["predictionBenchmark"]> }) {
   const condition = ({ control: "对照条件", natural_history: "自然病程", standard_care: "标准治疗" } as Record<string, string>)[data.sourceCondition ?? ""] ?? data.sourceCondition;
   const endpoint = data.endpoint;
@@ -308,6 +321,7 @@ function PredictionBenchmark({ data }: { data: NonNullable<ComparatorData["predi
       ...(data.outcomeSd ? [{ label: "预测结局标准差", value: <VcrNumber label="预测结局标准差" value={data.outcomeSd} /> }] : []),
       ...(data.relativeScore ? [{ label: "平均相对预后评分", value: <VcrNumber label="平均相对预后评分" value={data.relativeScore} /> }] : []),
       ...(!data.absoluteRiskAvailable ? [{ label: "绝对风险", value: "未提供适用的基线风险；只报告可支持的相对预测量。" }] : []),
+      ...calibrationRows(data.calibration),
       { label: "解释范围", value: "模型条件下的预测基准，不识别治疗效果。" },
       ...data.limits.map(limit => ({ label: "局限", value: <>{(VCR_PREDICTION_LIMIT_LABELS_ZH as Record<string, string>)[limit.code] ?? VCR_PREDICTION_LIMIT_LABELS_ZH.unknown}{limit.source && <Disclosure summary="查看来源说明"><span data-prose="">{limit.source}</span></Disclosure>}</> })),
     ]} />

@@ -1902,6 +1902,7 @@ export {
   VCR_POPULATION_KIND_LABELS_ZH,
   VCR_PREMISES_DECISIVE_MAX,
   VCR_EFFECT_DISCOUNT,
+  VCR_LOCAL_CALIBRATION_MIN,
   VCR_EFFECT_DISCOUNT_LABEL_ZH,
   VCR_EFFECT_DISCOUNT_LIMITS_ZH,
   VCR_PREMISE_SOURCES,
@@ -2064,9 +2065,12 @@ export {
   VCR_HOSTED_MODEL_INTERFACES,
   VCR_MODEL_INTERFACES,
   VCR_MODEL_INTERFACE_LABELS_ZH,
+  VCR_MODEL_TRIPOD_FIELDS,
+  VCR_MODEL_TRIPOD_MAX_CHARS,
   vcrEventHistoryScopeIssues,
   vcrModelCardIssues,
   vcrModelInterfaceOf,
+  vcrModelTripod,
 } from './src/vcrModelInterfaces.mjs'
 
 // vcrTimeUnits — the one closed table of time units (the model cards' horizon table), the spellings a source writes them in, and

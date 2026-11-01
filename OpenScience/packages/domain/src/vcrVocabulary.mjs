@@ -1053,6 +1053,14 @@ export function vcrNullReplicateFloor({ intendedUse = null, borrowing = false } 
  * the row does not exist.
  */
 export const VCR_EFFECT_DISCOUNT = Object.freeze({ time_to_event: Object.freeze({ planned: 0.66, observed: 0.72 }) })
+
+/**
+ * What a local calibration of an applied published model needs before it reports a slope (remediation plan D3). The calibration
+ * intercept needs both kinds of outcome (a logistic model: at least one event and one non-event); the slope is the less stable of the two
+ * and is reported only with at least this many of each (events and non-events), or, for a continuous outcome, this many patients with
+ * a prediction and an observed value. Below them the result reports the intercept only and says why.
+ */
+export const VCR_LOCAL_CALIBRATION_MIN = Object.freeze({ slopeEvents: 10, slopeNonEvents: 10, slopePairs: 10 })
 /** What the page says of that figure where it is listed (the premise's folded detail): the source and its limits, no more. */
 export const VCR_EFFECT_DISCOUNT_LABEL_ZH = '效应按已发表的计划—实测差距折减后的把握度'
 export const VCR_EFFECT_DISCOUNT_LIMITS_ZH = '来自一份对肿瘤三期试验生存终点的综述简报（预期风险比 0.66、实测 0.72，原文未核对）：说明计划的效应常被高估，不预测这项试验；二分类和连续终点没有这样的数。'

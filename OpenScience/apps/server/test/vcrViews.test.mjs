@@ -987,6 +987,18 @@ test("the quality report reports numbers and never a verdict", () => {
   assert.equal(several.groups.find((group) => group.key === "utility").rows.find((row) => row.key === "violations").value.value, 192, "the violations are the release's count");
 });
 
+test("D3: a model card shows the TRIPOD-style words it holds, in their order, and is complete without them", () => {
+  const model = (/** @type {Record<string, any>} */ card) => presentModelCard({ id: "m2", name: "x", version: "1", tier: "literature", risk: "low", endpointType: "binary", card: { title: "T", type: "published_prognostic_equation", ...card },
+    applicability: {}, validation: {}, evidence: [], missingEvidence: [] }, []);
+  assert.deepEqual(model({}).tripod, [], "none of them is required");
+  const full = model({ intendedUse: "  辅助分层，不用于单个病人的决定  ", developmentPopulation: "2008-2014 年三家医院的 1,204 名患者", outcomeHorizon: "12 个月死亡", validationStudy: "外部验证 2 项（欧洲，亚洲）", unrelated: "不显示" });
+  assert.deepEqual(full.tripod.map((field) => field.label), ["开发人群", "验证情况", "结局和时间范围", "预期用途"], "in the order of the fields, not of the card");
+  assert.equal(full.tripod[3].text, "辅助分层，不用于单个病人的决定");
+  assert.doesNotMatch(JSON.stringify(full.tripod), /不显示/);
+  assert.equal(model({ intendedUse: 7, developmentPopulation: "  " }).tripod.length, 0, "a non-string and an empty string are not words");
+  assert.equal(model({ intendedUse: "字".repeat(900) }).tripod[0].text.length, 600);
+});
+
 test("a patient set's model card says what the model is, where it may be used, and what label it has earned", () => {
   const card = presentModelCard({
     id: "m1", name: "x", version: "1.2", tier: "literature", risk: "low", endpointType: "time_to_event", useCeiling: "design_support",

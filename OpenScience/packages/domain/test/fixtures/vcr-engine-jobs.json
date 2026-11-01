@@ -3045,6 +3045,59 @@
         },
         "inputs": []
       }
+    },
+    {
+      "name": "prognostic equation held against the outcome the table holds (local calibration)",
+      "job": {
+        "jobId": "job_cal",
+        "studyId": "std_1",
+        "kind": "apply_prognostic_model",
+        "method": "model.prognostic_apply",
+        "methodVersion": "1.1.0",
+        "protocolVersion": 1,
+        "seed": 1,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "inputId": "snp_1:subject",
+          "idColumn": "USUBJID",
+          "sourceCondition": "control",
+          "endpoint": {
+            "type": "binary",
+            "horizon": 12,
+            "timeUnit": "months"
+          },
+          "inputUnits": {
+            "age": "years"
+          },
+          "model": {
+            "family": "logistic",
+            "intercept": -1,
+            "terms": [
+              {
+                "column": "age",
+                "unit": "years",
+                "coefficient": 0.04,
+                "transform": "identity",
+                "center": 60,
+                "scale": 1
+              }
+            ]
+          },
+          "calibration": {
+            "outcomeColumn": "response"
+          }
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      }
     }
   ],
   "invalid": [
@@ -17133,6 +17186,120 @@
           }
         },
         "inputs": []
+      },
+      "expected": [
+        "method_version_mismatch@methodVersion"
+      ]
+    },
+    {
+      "name": "local calibration: a logistic equation names its outcome column, not a time and a status",
+      "job": {
+        "jobId": "job_cal_bad",
+        "studyId": "std_1",
+        "kind": "apply_prognostic_model",
+        "method": "model.prognostic_apply",
+        "methodVersion": "1.1.0",
+        "protocolVersion": 1,
+        "seed": 1,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "inputId": "snp_1:subject",
+          "idColumn": "USUBJID",
+          "sourceCondition": "control",
+          "endpoint": {
+            "type": "binary",
+            "horizon": 12,
+            "timeUnit": "months"
+          },
+          "inputUnits": {
+            "age": "years"
+          },
+          "model": {
+            "family": "logistic",
+            "intercept": -1,
+            "terms": [
+              {
+                "column": "age",
+                "unit": "years",
+                "coefficient": 0.04,
+                "transform": "identity",
+                "center": 60,
+                "scale": 1
+              }
+            ]
+          },
+          "calibration": {
+            "timeColumn": "t",
+            "statusColumn": "s"
+          }
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_missing@scenario.calibration.outcomeColumn",
+        "scenario_field_unknown@scenario.calibration.timeColumn"
+      ]
+    },
+    {
+      "name": "local calibration at 1.0.0: a version never labelled with what it did not have",
+      "job": {
+        "jobId": "job_cal_old",
+        "studyId": "std_1",
+        "kind": "apply_prognostic_model",
+        "method": "model.prognostic_apply",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 1,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "inputId": "snp_1:subject",
+          "idColumn": "USUBJID",
+          "sourceCondition": "control",
+          "endpoint": {
+            "type": "binary",
+            "horizon": 12,
+            "timeUnit": "months"
+          },
+          "inputUnits": {
+            "age": "years"
+          },
+          "model": {
+            "family": "logistic",
+            "intercept": -1,
+            "terms": [
+              {
+                "column": "age",
+                "unit": "years",
+                "coefficient": 0.04,
+                "transform": "identity",
+                "center": 60,
+                "scale": 1
+              }
+            ]
+          },
+          "calibration": {
+            "outcomeColumn": "response"
+          }
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
       },
       "expected": [
         "method_version_mismatch@methodVersion"
