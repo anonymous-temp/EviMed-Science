@@ -991,7 +991,7 @@
       "origin": "capability",
       "version": "1.4.0",
       "source": {"kind":"release"},
-      "digest": "sha256:1c71a84935df8ff443210deed0c8ed47d5ba789e871a63d88245c1ac26ab7011",
+      "digest": "sha256:5cdca74f966663c3179b1e1ffbe7606bc7b38a2b23595780df09c3b538eaaea0",
       "digestAlgorithm": "release-directory-v1",
       "scripts": [
         {"path":"scripts/evidence_floor.py","sha256":"ddc4d2e25ddd51e69aeae1c0443cb103cb8488d2e40d331234d00334ff1f07d0"},
