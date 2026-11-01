@@ -59,6 +59,9 @@
     {
       "view": "chat@desktop",
       "contains": "the runtime was already up, so a start refused for cleanup could not be shown",
+      "profiles": [
+        "owner"
+      ],
       "owner": "controller",
       "until": "2026-12-01",
       "why": "the owner's runtime was running when the production walk reached the conversation, so the refused start is not shown there (the fixture walk shows it); data, not a defect"
