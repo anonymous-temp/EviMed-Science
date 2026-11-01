@@ -1,0 +1,91 @@
+name: rsi-lane
+
+# The RSI lab's lanes. Only this file and .rsi-lab/ live on the orphan branch rsi-lab/lanes, so a push here starts nothing else.
+# A batch is one commit that edits .rsi-lab/config.json.
+on:
+  push:
+    branches: ["rsi-lab/lanes"]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: rsi-lane-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      mode: ${{ steps.cfg.outputs.mode }}
+      matrix: ${{ steps.cfg.outputs.matrix }}
+      imageRunId: ${{ steps.cfg.outputs.imageRunId }}
+      imageArtifact: ${{ steps.cfg.outputs.imageArtifact }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: cfg
+        run: |
+          python3 - <<'PY'
+          import json, os
+          cfg = json.load(open('.rsi-lab/config.json'))
+          mode = cfg['mode']
+          assert mode in ('reupload', 'probe', 'lanes', 'bringup', 'idle'), mode
+          lanes = int(cfg.get('lanes', 1))
+          assert 1 <= lanes <= 8, lanes
+          out = os.environ['GITHUB_OUTPUT']
+          with open(out, 'a') as fh:
+              fh.write(f"mode={mode}\n")
+              fh.write("matrix=" + json.dumps({'lane': list(range(1, lanes + 1))}) + "\n")
+              fh.write(f"imageRunId={int(cfg['imageRunId'])}\n")
+              fh.write(f"imageArtifact={cfg['imageArtifact']}\n")
+          PY
+
+  # One-off: the CI artifact expires on 2026-11-04; this copy lives 30 days.
+  reupload:
+    needs: plan
+    if: needs.plan.outputs.mode == 'reupload'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.plan.outputs.imageArtifact }}
+          run-id: ${{ needs.plan.outputs.imageRunId }}
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          path: ${{ runner.temp }}/img
+      - name: Inspect the copy (names, sizes, hashes only)
+        run: |
+          ls -l "$RUNNER_TEMP/img"
+          (cd "$RUNNER_TEMP/img" && sha256sum images.tar.gz)
+          python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print(d['sourceRevision'], d['releaseId']); [print(r, v['reference']) for r, v in d['roles'].items()]" "$RUNNER_TEMP/img/prepared-export.json"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rsi-lab-images-5c740327bb8c
+          path: ${{ runner.temp }}/img/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
+
+  probe:
+    needs: plan
+    if: needs.plan.outputs.mode == 'probe'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Reach the broker host
+        env:
+          RSI_LAB_BUNDLE: ${{ secrets.RSI_LAB_BUNDLE }}
+        run: |
+          set +x
+          mkdir -p "$RUNNER_TEMP/b" && printf '%s' "$RSI_LAB_BUNDLE" | base64 -d | tar -xz -C "$RUNNER_TEMP/b"
+          host="$(cat "$RUNNER_TEMP/b/broker/host")"
+          echo "::add-mask::$host"
+          for port in 22; do
+            if timeout 10 bash -c "exec 3<>/dev/tcp/$host/$port" 2>/dev/null; then echo "tcp $port: open"; else echo "tcp $port: closed or filtered"; fi
+          done
+          uname -r
+          cat /sys/kernel/security/lsm; echo
+          nproc; free -m | sed -n 2p; df -h / /mnt | cat

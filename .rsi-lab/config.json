@@ -1,0 +1,10 @@
+{
+  "mode": "reupload",
+  "batch": "b000",
+  "lanes": 1,
+  "imageKey": "base",
+  "sourceRef": "main",
+  "labFrom": "branch",
+  "imageRunId": 41281811139,
+  "imageArtifact": "evimed-core-release-5c740327bb8c0dfa515d01badf927618ed5ceebe"
+}
