@@ -333,10 +333,7 @@ export function VcrHomePage() {
 function TaskEntry({ ask }: { ask: ReturnType<typeof useGeneralResearchDraft> }) {
   return (
     <section aria-label="新研究" className="flex flex-col items-start gap-5">
-      <div className="flex flex-col gap-1">
-        <h2 className="text-section font-semibold text-text">新研究</h2>
-        <p className="max-w-measure text-ui text-text-2">说清要研究什么就能开始，不用先建研究。</p>
-      </div>
+      <h2 className="text-section font-semibold text-text">新研究</h2>
       <ul aria-label="研究示例" className="flex w-full flex-col gap-4">
         {VCR_TASKS.map((task) => (
           <li key={task.id} data-vcr-task={task.id} className="flex flex-col items-start gap-1.5">

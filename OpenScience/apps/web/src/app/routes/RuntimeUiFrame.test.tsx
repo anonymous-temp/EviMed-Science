@@ -2247,7 +2247,7 @@ describe("虚拟临床研究 in the conversation", () => {
     expect(options.startOptions).toEqual([]);
     expect(options.useOptions.map((choice: { label: string }) => choice.label)).toEqual(["探索", "研究设计支持", "指定研究分析", "申报准备"]);
     expect(options.starters.map((starter: { label: string }) => starter.label))
-      .toEqual(["匹配", "人群与患者", "对照", "试验"]);
+      .toEqual(["匹配", "人群与患者", "对照研究", "试验"]);
     view.unmount();
   });
 
@@ -2326,7 +2326,7 @@ describe("虚拟临床研究 in the conversation", () => {
     expect(vcr.getVcrHome).not.toHaveBeenCalled();
     expect(vcrPosts()[0]).toMatchObject({ sessionId: "session-a", controls: true, canSetUse: true, start: "auto", intendedUse: "exploratory" });
     expect(vcrPosts()[0].starters.map((starter: { label: string }) => starter.label))
-      .toEqual(["匹配", "人群与患者", "对照", "试验"]);
+      .toEqual(["匹配", "人群与患者", "对照研究", "试验"]);
     view.unmount();
   });
 
