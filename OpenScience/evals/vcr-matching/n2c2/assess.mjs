@@ -10,7 +10,7 @@
  * - `settleFactEvidence` (the evaluator's own check of a fact against the bytes it claims, with what the fact writer settles around
  *   it) is run at write time, as the fact writer runs it, and `assessSubject` runs the check again before it reasons, as the
  *   evaluation of a stored fact does. A date the quotation does not print may rest on a second quotation (`dateQuote`) that the
- *   document holds word for word; a unit the quotation does not print is dropped and the fact kept; a bare number of a variable the
+ *   document holds word for word, and a date that nothing prints is dropped, the fact kept undated; a unit the quotation does not print is dropped and the fact kept; a bare number of a variable the
  *   domain's table gives one conventional unit is read in it and says so.
  * - A language answer of `satisfied` or `not_satisfied` keeps only the quotations that are in the file; with none left, it is
  *   `unknown`, which is what the evaluator does with an unanchored answer.
@@ -50,15 +50,18 @@ export function assessPatient(patient, answer, criteria = CRITERIA) {
   let unitDropped = 0;
   let unitByConvention = 0;
   let datedByQuote = 0;
+  let dateDropped = 0;
+  let dateQuoteUnfound = 0;
   for (const item of accepted.facts) {
     const start = text.indexOf(item.quote);
     if (start < 0) { bump(dropped, 'quote_not_found'); continue; }
     /** @type {{ start: number, end: number, quote: string } | null} */
     let dateQuote = null;
     if (item.dateQuote) {
+      // A second quotation the file does not hold is not used; the fact is not refused for it.
       const at = text.indexOf(item.dateQuote);
-      if (at < 0) { bump(dropped, 'date_quote_not_found'); continue; }
-      dateQuote = { start: at, end: at + item.dateQuote.length, quote: item.dateQuote };
+      if (at < 0) dateQuoteUnfound += 1;
+      else dateQuote = { start: at, end: at + item.dateQuote.length, quote: item.dateQuote };
     }
     const fact = {
       id: `f${facts.length + 1}`, subjectKey: patient.id, variable: item.variable, polarity: item.polarity,
@@ -71,7 +74,8 @@ export function assessPatient(patient, answer, criteria = CRITERIA) {
     if (!checked.ok) { bump(dropped, String(checked.reason)); continue; }
     if (checked.notes.includes('unit_dropped')) unitDropped += 1;
     if (checked.notes.includes('unit_read_by_convention')) unitByConvention += 1;
-    if (dateQuote && checked.fact.occurredAt) datedByQuote += 1;
+    if (checked.notes.includes('date_dropped')) dateDropped += 1;
+    if (checked.fact.source.dateQuote && checked.fact.occurredAt) datedByQuote += 1;
     facts.push(checked.fact);
   }
 
@@ -116,7 +120,7 @@ export function assessPatient(patient, answer, criteria = CRITERIA) {
   }
   return {
     states, decidedBy, reasons,
-    facts: { proposed, kept: facts.length, voidedByEvaluator: assessment.voidedFacts.length, dropped, unitDropped, unitByConvention, datedByQuote },
+    facts: { proposed, kept: facts.length, voidedByEvaluator: assessment.voidedFacts.length, dropped, unitDropped, unitByConvention, datedByQuote, dateDropped, dateQuoteUnfound },
     language: { proposed: languageProposed, kept: Object.keys(modelJudgments).length },
   };
 }
