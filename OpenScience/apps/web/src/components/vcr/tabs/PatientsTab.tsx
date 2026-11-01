@@ -29,6 +29,7 @@ import { useStudyFrame, useVcrToolbar } from "../studyFrameContext";
 import { useVcrLoad, VcrTabError } from "../vcrTabKit";
 import { VcrToolbarActions, type VcrToolbarAction } from "../VcrToolbarActions";
 import { COMPARE_DRAFT_LABEL, DRAFT_PREFIX } from "../vcrActionWords";
+import { scrollBlockToTop } from "../vcrScroll";
 import { VcrLongitudinalPanel, useLongitudinal } from "../VcrLongitudinalPanel";
 import { CalibrationStrip } from "../patients/CalibrationStrip";
 import { DistributionGrid } from "../patients/DistributionGrid";
@@ -260,7 +261,7 @@ function PatientsView({ studyId, study, data, switcher, reload, onStudyChanged }
     onAll: clearAll,
     onArm: setArm,
     onEvents: () => setColumn("status", "1"),
-    onCalibration: () => document.getElementById(CALIBRATION_ID)?.scrollIntoView({ block: "nearest", behavior: "smooth" }),
+    onCalibration: () => scrollBlockToTop(document.getElementById(CALIBRATION_ID)),
   });
 
   const gridRows: ChartGridCell[][] = [];

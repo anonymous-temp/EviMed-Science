@@ -41,13 +41,14 @@ import { useVcrToolbar } from "../studyFrameContext";
 import { useVcrLoad, VcrTabError } from "../vcrTabKit";
 import { intervalText, reviewKindLabel, valueText } from "../vcrText";
 import { vcrTabPath } from "../vcrTabs";
+import { scrollBlockToTop } from "../vcrScroll";
 
 type Filter = "all" | "key";
 
 // Who set a card and whether a person has signed it are not ways to sort the list (owner ruling 2026-10-10): the one filter is the cards that matter most.
 const CARDS = "[data-vcr-assumptions]";
 const PRECEDENTS = "[data-vcr-precedents]";
-const scrollTo = (selector: string) => () => document.querySelector(selector)?.scrollIntoView({ block: "start", behavior: "smooth" });
+const scrollTo = (selector: string) => () => scrollBlockToTop(document.querySelector<HTMLElement>(selector));
 
 function matches(assumption: VcrAssumption, filter: Filter): boolean {
   switch (filter) {

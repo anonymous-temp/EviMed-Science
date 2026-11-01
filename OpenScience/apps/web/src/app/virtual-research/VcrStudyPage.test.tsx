@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WebApiError } from "@/lib/apiClient";
-import { forgetStudies } from "@/components/vcr/useStudy";
+import { announceVcrStudyRefresh, forgetStudies } from "@/components/vcr/useStudy";
 import { fixture, installVcrServer, STUDY_ID } from "@/components/vcr/__fixtures__/serverFixtures";
 import { VcrStudyPage } from "./VcrStudyPage";
 
@@ -627,6 +627,51 @@ describe("the 「⋯」 menu", () => {
       draw();
       await heading();
       expect(screen.queryByText(/等你补充研究信息/)).toBeNull();
+    });
+  });
+
+  // A page that silently keeps an old answer looks current, and an error card in place of numbers that were true loses them for a failure of
+  // the next request. Both keep what was shown and say so once, with 重试.
+  describe("when an update fails after the page has answered", () => {
+    it("keeps the study and says the update failed when its own read fails, and takes the sentence away when a read succeeds", async () => {
+      let fail = false;
+      server = installVcrServer(network.productRequest, {
+        [`GET /vcr/studies/${STUDY_ID}`]: () => { if (fail) throw new WebApiError("down", { status: 503, code: "vcr_unavailable" }); return fixture("ev201/study.json"); },
+      });
+      draw();
+      await heading();
+      expect(document.querySelector("[data-vcr-refresh-failed]")).toBeNull();
+      fail = true;
+      act(() => announceVcrStudyRefresh(STUDY_ID));
+      expect(await screen.findByText(/更新暂时失败，仍显示上次结果。/)).toBeInTheDocument();
+      // The study that was on screen is still on screen.
+      expect(screen.getByRole("heading", { level: 1, name: STUDY_NAME })).toBeInTheDocument();
+      fail = false;
+      await userEvent.click(screen.getByRole("button", { name: "重试" }));
+      await waitFor(() => expect(document.querySelector("[data-vcr-refresh-failed]")).toBeNull());
+    });
+
+    it("keeps the tab's results and says so when the tab is read again and fails, and 重试 reads it again", async () => {
+      let failTab = false;
+      let moved = 0;
+      server = installVcrServer(network.productRequest, {
+        // The study moves (a step's update time), which is what makes the tab read again.
+        [`GET /vcr/studies/${STUDY_ID}`]: () => { const raw = fixture("ev201/study.json"); raw.updatedAt = `刚刚 ${moved}`; return raw; },
+        [`GET /vcr/studies/${STUDY_ID}/population`]: () => { if (failTab) throw new WebApiError("down", { status: 503, code: "vcr_unavailable" }); return fixture("ev201/population.json"); },
+      });
+      draw(`/app/virtual-research/${STUDY_ID}/population`);
+      await waitFor(() => expect(document.querySelector("[data-headline]")).not.toBeNull());
+      const headline = document.querySelector("[data-headline]")!.textContent;
+      failTab = true; moved = 1;
+      act(() => announceVcrStudyRefresh(STUDY_ID));
+      expect(await screen.findByText(/更新暂时失败，仍显示上次结果。/)).toBeInTheDocument();
+      // The numbers that were true when they were read are still there, and no error card stands in their place.
+      expect(document.querySelector("[data-headline]")?.textContent).toBe(headline);
+      expect(document.querySelector("[data-vcr-tab-error]")).toBeNull();
+      failTab = false;
+      await userEvent.click(screen.getByRole("button", { name: "重试" }));
+      await waitFor(() => expect(document.querySelector("[data-vcr-refresh-failed]")).toBeNull());
+      expect(document.querySelector("[data-headline]")?.textContent).toBe(headline);
     });
   });
 

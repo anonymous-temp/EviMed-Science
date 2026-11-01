@@ -108,9 +108,20 @@ describe("when the study is read again", () => {
     await settle();
     const first = result.current.loaded;
     expect(first.kind).toBe("ready");
+    expect(result.current.refreshError).toBeNull();
     fail = true;
     await tick(ACTIVITY_POLL_MS);
     expect(result.current.loaded).toBe(first);
+    // It keeps the old answer and says the update failed, so a page that looks current is not mistaken for one that is.
+    expect(result.current.refreshError).toEqual(expect.any(String));
+    expect(result.current.refreshError).not.toBe("");
+    // The next read that succeeds takes the sentence away.
+    fail = false;
+    await tick(ACTIVITY_POLL_MS);
+    expect(result.current.refreshError).toBeNull();
+    fail = true;
+    await tick(ACTIVITY_POLL_MS);
+    expect(result.current.refreshError).not.toBeNull();
     // The study is gone, though: that replaces it.
     installVcrServer(network.productRequest, {
       [`GET /vcr/studies/${STUDY_ID}`]: () => { throw new WebApiError("gone", { status: 404, code: "vcr_study_not_found" }); },

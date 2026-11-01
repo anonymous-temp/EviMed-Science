@@ -40,7 +40,7 @@ import { StudyPane } from "@/components/vcr/StudyPane";
 import { useStudy } from "@/components/vcr/useStudy";
 import { useVcrRun } from "@/components/vcr/useVcrRun";
 import { announceVcrStudiesChanged } from "@/components/vcr/useVcrProjectIds";
-import { VcrTabBoundary } from "@/components/vcr/vcrTabKit";
+import { VcrRefreshContext, VcrRefreshNote, VcrTabBoundary, type VcrRefreshReporter } from "@/components/vcr/vcrTabKit";
 import { OverviewTab } from "@/components/vcr/tabs/OverviewTab";
 import { PopulationPatientsTab } from "@/components/vcr/tabs/PopulationPatientsTab";
 import { PatientsTab } from "@/components/vcr/tabs/PatientsTab";
@@ -101,7 +101,7 @@ export function VcrStudyPage() {
   const chat = tabParam === "chat";
   const { tab, moved } = chat ? { tab: "overview" as VcrTabKey, moved: false } : resolveVcrTab(tabParam);
   const view: StudyView = chat ? "chat" : tab;
-  const { loaded, reload } = useStudy(studyId, feature !== "loading" && feature !== "off", view);
+  const { loaded, reload, refreshError } = useStudy(studyId, feature !== "loading" && feature !== "off", view);
 
   useEffect(() => {
     // An address that named a step is rewritten to the tab that holds it, in
@@ -139,7 +139,7 @@ export function VcrStudyPage() {
     if (!chat && location.pathname.startsWith(VCR_HOME_PATH)) return <CalculationRedirect to={`${vcrCalculationViewPath(studyId, tab)}${location.search}`} />;
   }
   // Keyed by the study: the menu's dialogs and the run guard never outlive it.
-  return <StudyView key={studyId} studyId={studyId} study={loaded.study} view={view} tab={tab} reload={reload} />;
+  return <StudyView key={studyId} studyId={studyId} study={loaded.study} view={view} tab={tab} reload={reload} refreshError={refreshError} />;
 }
 
 function CalculationRedirect({ to }: { to: string }) {
@@ -151,13 +151,21 @@ function CalculationRedirect({ to }: { to: string }) {
 /** Which of the page's panels is open over it. */
 type Panel = "rename" | "export" | "members" | "budget" | "changes" | "runs" | "intake" | "delete" | null;
 
-function StudyView({ studyId, study, view, tab, reload }: { studyId: string; study: VcrStudy; view: StudyView; tab: VcrTabKey; reload: () => void }) {
+function StudyView({ studyId, study, view, tab, reload, refreshError }: { studyId: string; study: VcrStudy; view: StudyView; tab: VcrTabKey; reload: () => void; refreshError: string | null }) {
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const { run, busy: running } = useVcrRun(study, { refresh: reload });
   const [panel, setPanel] = useState<Panel>(() => params.get("intake") === "1" ? "intake" : null);
   const [deleting, setDeleting] = useState(false);
   const [changingStatus, setChangingStatus] = useState(false);
+  // A read of this page that failed after it had answered (the study's own, or a tab's) keeps what it showed and says so once, here.
+  const [failures, setFailures] = useState<Record<string, { message: string; retry: () => void }>>({});
+  const reportFailure = useCallback<VcrRefreshReporter>((id, failure) => setFailures((current) => {
+    if (!failure) { if (!(id in current)) return current; const rest = { ...current }; delete rest[id]; return rest; }
+    return { ...current, [id]: failure };
+  }), []);
+  const refreshFailed = refreshError ?? Object.values(failures)[0]?.message ?? null;
+  const retryFailed = () => { reload(); for (const failure of Object.values(failures)) failure.retry(); };
   const packageId = params.get("package");
   const Tab = TABS[tab];
   // What this reader may do here, from the roles the server says they hold:
@@ -312,6 +320,8 @@ function StudyView({ studyId, study, view, tab, reload }: { studyId: string; stu
 
   return (
     <StudyFrame studyId={studyId} study={study} view={view} reload={reload} menu={menu} onChat={openChat} onPanel={setPanel} onView={openView}>
+      <VcrRefreshContext.Provider value={reportFailure}>
+      {(refreshError !== null || Object.keys(failures).length > 0) && view !== "chat" && <VcrRefreshNote message={refreshFailed} onRetry={retryFailed} />}
       {waitingDraft && !sessionId && <Note action={<Button size="sm" variant="text" onClick={reload}>重试连接研究对话</Button>}>请求已保留。研究对话连接后会恢复到输入框，由你发送。</Note>}
       {view === "chat" ? (
         <StudyPane study={study} unreachable={unreachable} onRetry={reload} onStop={can("run") ? stop : undefined} />
@@ -357,6 +367,7 @@ function StudyView({ studyId, study, view, tab, reload }: { studyId: string; stu
           onCancel={() => setPanel(null)}
         />
       )}
+      </VcrRefreshContext.Provider>
     </StudyFrame>
   );
 }

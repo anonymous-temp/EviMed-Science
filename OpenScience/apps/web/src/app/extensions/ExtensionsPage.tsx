@@ -211,7 +211,7 @@ function Extensions({ tab, itemId, projectId, projectSwitched }: { tab: string; 
     // account connection (a plugin that needs one then says so on its row, and the drawer is where one is given). It was three steps: add,
     // open the drawer, 用于当前项目. A copy that is not the catalogue's current one is updated in the drawer first.
     const exact = !!installation && installation.integrity === entry.integrity && sameExtensionCoordinate(installation.coordinate, entry.coordinate);
-    const useHere = () => act(entry.id, async () => {
+    const enableHere = () => act(entry.id, async () => {
       if (!installation || !currentPlugins || !exact) return;
       const defaults = Object.fromEntries(Object.entries(entry.settingsSchema).filter(([, field]) => field.default !== undefined).map(([key, field]) => [key, field.default!]));
       const result = await saveProjectExtensions(projectId, currentPlugins.revision, [...currentPlugins.selections.filter(item => item.installationId !== installation.id), { installationId: installation.id, enabled: true, settings: defaults, connectionRefs: [] }]);
@@ -221,9 +221,9 @@ function Extensions({ tab, itemId, projectId, projectSwitched }: { tab: string; 
       origin: "third-party", repository: entry.coordinate.kind === "github" ? skillRepositoryUrl(entry.coordinate.repository) : null,
       state: installation ? shared && selected ? SHARED_PROJECT_TEXT : currentPlugins ? extensionAvailability(installation, selected) : "生效状态待确认" : undefined,
       open: () => { if (installed.state.status === "ready") openExtension(installation?.id ?? entry.id); else setActionError("请先重试读取已添加插件，再查看此项。"); },
-      action: !installation ? <Button size="sm" variant="secondary" loading={busy === entry.id} disabled={!!busy || installed.state.status !== "ready"} onClick={() => void install(entry)}>添加</Button>
+      action: !installation ? <Button actionKind="set" size="sm" variant="secondary" loading={busy === entry.id} disabled={!!busy || installed.state.status !== "ready"} onClick={() => void install(entry)}>添加</Button>
         : view === "installed" && selected && !shared ? <Switch label={`在“${projectName}”里使用${entry.title}`} checked={selected.enabled} disabled={!!busy} onChange={checked => void switchPlugin(checked)} />
-          : !selected && exact && !shared && currentPlugins ? <Button size="sm" variant="secondary" actionKind="set" loading={busy === entry.id} disabled={!!busy} onClick={() => void useHere()}>用于当前项目</Button> : undefined });
+          : !selected && exact && !shared && currentPlugins ? <Button size="sm" variant="secondary" actionKind="set" loading={busy === entry.id} disabled={!!busy} onClick={() => void enableHere()}>用于当前项目</Button> : undefined });
   }
   // An installation remains manageable after its catalogue descriptor is withdrawn.
   for (const item of installedRows.filter(item => !(catalogueData?.items ?? []).some(entry => entry.id === item.catalogueId))) {
@@ -245,7 +245,7 @@ function Extensions({ tab, itemId, projectId, projectSwitched }: { tab: string; 
     entries.push({ id: `retained:${selected.installationId}`, title: name, description: "已从个人库移除，当前项目仍保留所选版本。", publisher: "项目保留版本", type: "plugins", group: "插件", added: true,
       origin: "third-party", repository: selected.coordinate?.kind === "github" ? skillRepositoryUrl(selected.coordinate.repository) : null,
       state: selected.effective ? "已启用" : selected.enabled ? "生效状态待确认" : "已关闭", open: () => setActionError("这个版本已从个人库移除，可用行末操作将它移出当前项目。"),
-      action: <Button size="sm" variant="text" disabled={!!busy} onClick={() => void remove()}>移出当前项目</Button> });
+      action: <Button actionKind="set" size="sm" variant="text" disabled={!!busy} onClick={() => void remove()}>移出当前项目</Button> });
   }
   // What the platform carries that is not switched per project (the long task, memory, the kernel's basics, web reading, the
   // research tool set): listed like any plugin, in the platform's own words, with no control. Memory is its own page.

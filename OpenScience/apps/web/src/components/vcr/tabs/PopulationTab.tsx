@@ -31,6 +31,7 @@ import { useStudyFrame, useVcrToolbar } from "../studyFrameContext";
 import { useVcrLoad, VcrTabError } from "../vcrTabKit";
 import { countText, numberText } from "../vcrText";
 import { COMPARE_DRAFT_LABEL, DRAFT_PREFIX, INTAKE_LABEL } from "../vcrActionWords";
+import { scrollBlockToTop } from "../vcrScroll";
 
 /** The id the records table has on the page, so the headline's count can take the reader to it. */
 const RECORDS_ID = "vcr-population-records";
@@ -162,7 +163,7 @@ function PopulationView({ studyId, study, data, reload, onStudyChanged }: {
 /* ------------------------------------------------------------------------- a generated population */
 
 /** Where a count in the headline takes the reader: down to the thing it counts. */
-const scrollTo = (id: string) => () => document.getElementById(id)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+const scrollTo = (id: string) => () => scrollBlockToTop(document.getElementById(id));
 
 /**
  * The generated population: the sentence that says what it is and whether any record broke a limit, the variables (set → came out →

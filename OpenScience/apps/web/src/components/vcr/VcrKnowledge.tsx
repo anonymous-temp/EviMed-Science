@@ -39,6 +39,7 @@ import { VCR_OFF_SENTENCE, VcrTabSkeleton } from "./VcrStates";
 import { useVcrLoad, VcrTabError } from "./vcrTabKit";
 import { numberText } from "./vcrText";
 import { COMPARE_START_LABEL } from "./vcrActionWords";
+import { scrollBlockToTop } from "./vcrScroll";
 
 /**
  * 病种定义包与人群定义库: which disease pack a study works from and which library
@@ -280,7 +281,7 @@ export function VcrDefinitionsSection({ studyId, knowledge, canWrite, canRun, on
     if (template && hasUsable) {
       const details = definitionSection.current?.querySelector<HTMLDetailsElement>('[data-vcr-definition-manager] details');
       if (details) details.open = true;
-      definitionSection.current?.scrollIntoView?.({ block: "start" });
+      scrollBlockToTop(definitionSection.current);
     }
   }, [template, templateVersion, hasUsable]);
   if (library.kind === "loading" && !knowledge) return <VcrTabSkeleton rows={1} />;

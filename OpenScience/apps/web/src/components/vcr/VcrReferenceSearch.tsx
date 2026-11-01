@@ -11,6 +11,7 @@ import { Note } from "@/components/ui/Note";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { useVcrLoad, VcrTabError } from "./vcrTabKit";
 import { VcrTabSkeleton } from "./VcrStates";
+import { scrollBlockToTop } from "./vcrScroll";
 
 function registryFailure(reason: string | null | undefined): string {
   if (/timeout/i.test(reason ?? "")) return "查询超时，可重试";
@@ -26,7 +27,7 @@ export function VcrReferenceSearch({ query, onApplied, studyId }: { query: strin
   const resultsId = useId();
   return <Section title="检索登记试验">
     {state.kind === "loading" ? <VcrTabSkeleton /> : state.kind === "error" ? <VcrTabError message={state.message} onRetry={reload} /> : <>
-      <div role="status"><Note result={["本次显示 ", { n: state.data.candidates.length, onOpen: () => document.getElementById(resultsId)?.scrollIntoView({ block: "nearest" }), label: "查看本次检索结果" }, " 项；各来源检索命中数见下方。"]} /></div>
+      <div role="status"><Note result={["本次显示 ", { n: state.data.candidates.length, onOpen: () => scrollBlockToTop(document.getElementById(resultsId)), label: "查看本次检索结果" }, " 项；各来源检索命中数见下方。"]} /></div>
       <div id={resultsId}>
       <DataTable label="登记试验检索结果" columns={[
         { key: "registryId", header: "登记号", cell: row => row.registryId },
