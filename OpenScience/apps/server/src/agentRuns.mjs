@@ -6143,8 +6143,8 @@ export class AgentRunStore {
       const end = terminal.finishedAt ?? this.now().toISOString();
       if (current && overlappingRuns({ ...current, finishedAt: end }, runs).length) {
         const text = "同一项目中有其他任务与本次运行同时进行。未明确记录归属的文件可能混入，请核对文件来源。";
-        normalized.qualityNotices = normalizeQualityNotices([...normalized.qualityNotices,
-          runNotice("run_concurrent_attribution_uncertain", text, { detail: text })]);
+        normalized.qualityNotices = normalizeQualityNotices([runNotice("run_concurrent_attribution_uncertain", text, { detail: text }),
+          ...normalized.qualityNotices]);
       }
     }
     // A run that was stopped hands over its main document. It kept its files above; this says which of them is the
