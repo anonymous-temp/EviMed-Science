@@ -53,6 +53,10 @@ with P(2) as e: print(list(e.map(abs, [-3, 4])), end="")')" "[3, 4]"
 check "joblib starts worker processes and says nothing about serial mode" "$(sandboxed_out python3 -c 'from joblib import Parallel, delayed; print(Parallel(n_jobs=2)(delayed(abs)(x) for x in [-5, 6]), end="")')" "[5, 6]"
 check "the kernel's own runner still denies /dev/shm (the reason the runner exists)" "$(kernel_runner bash -c 'touch /dev/shm/.evimed-probe 2> /dev/null && rm -f /dev/shm/.evimed-probe && echo writable || echo denied' 2> /dev/null)" denied
 check "a write outside the grants is still refused" "$(sandboxed bash -c 'touch /usr/local/evimed-probe 2> /dev/null; echo $?' 2> /dev/null)" 1
+# The root of this container is read-only, so the refusal above would come with or without Landlock. /runtime is a writable tmpfs here (the
+# launch plan's TMPDIR lives in it): a command is kept out of it by the sandbox alone, and a write the same shell makes outside the sandbox shows it was open.
+check "/runtime is writable without the sandbox (the control for the next check)" "$(touch /runtime/.evimed-probe 2> /dev/null && rm -f /runtime/.evimed-probe && echo writable || echo denied)" writable
+check "a write to /runtime, writable in this container, is refused by Landlock and not by the read-only root" "$(sandboxed bash -c 'touch /runtime/.evimed-probe 2> /dev/null; echo $?' 2> /dev/null)" 1
 check "a write to /proc is still refused" "$(sandboxed bash -c 'echo 1 > /proc/self/oom_score_adj 2> /dev/null; echo $?' 2> /dev/null)" 1
 out="$(sandboxed bash -c 'echo to-stderr >&2; exit 7' 2>&1)"; status=$?
 check "a command's exit status passes through unchanged" "${status}" 7
