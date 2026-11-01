@@ -1,6 +1,6 @@
 {
-  "mode": "reupload",
-  "batch": "b000",
+  "mode": "probe",
+  "batch": "b001",
   "lanes": 1,
   "imageKey": "base",
   "sourceRef": "main",

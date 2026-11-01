@@ -86,6 +86,16 @@ jobs:
           for port in 22; do
             if timeout 10 bash -c "exec 3<>/dev/tcp/$host/$port" 2>/dev/null; then echo "tcp $port: open"; else echo "tcp $port: closed or filtered"; fi
           done
+          chmod 600 "$RUNNER_TEMP/b/broker/id_ed25519"
+          start=$SECONDS
+          out="$(timeout 40 ssh -o BatchMode=yes -o ConnectTimeout=20 -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/b/broker/known_hosts" -i "$RUNNER_TEMP/b/broker/id_ed25519" "rsi-broker@$host" 'lane-status probe {}' 2>&1 | sed -E 's/[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/<ip>/g' | head -c 300)" || true
+          echo "ssh answer after $((SECONDS - start)) s: $out"
+      - name: Runner facts
+        run: |
           uname -r
           cat /sys/kernel/security/lsm; echo
           nproc; free -m | sed -n 2p; df -h / /mnt | cat
+          docker --version; docker compose version
+          for url in https://api.deepseek.com https://huggingface.co https://pubmed.ncbi.nlm.nih.gov https://duckduckgo.com https://www.bing.com https://www.google.com; do
+            code="$(curl -s -o /dev/null -m 15 -w '%{http_code}' "$url" || true)"; echo "$url -> $code"
+          done
