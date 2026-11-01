@@ -456,7 +456,7 @@ test("AC-02 AC-35 the T0 chain runs on the real engine: population, patients, co
     assert.equal(skipped.detail.reason, "design_not_supported");
 
     // The numbers the simulation used are the cards' numbers: the frozen scenario says so, and so does the row.
-    const simulationRow = await store.one("SELECT scenario, checkpoint FROM evimed_vcr.jobs WHERE study_id = $1 AND kind = 'design_simulation' AND checkpoint ->> 'subjectId' = $2", [study.id, seed.scenarioA.id]);
+    const simulationRow = await store.one("SELECT scenario, checkpoint FROM evimed_vcr.jobs WHERE study_id = $1 AND kind = 'design_simulation' AND checkpoint ->> 'stage' = 'simulation' AND checkpoint ->> 'subjectId' = $2", [study.id, seed.scenarioA.id]);
     assert.equal(simulationRow.scenario.truth.hazardRatio, 0.7);
     assert.equal(simulationRow.scenario.truth.controlMedian, 6);
     assert.equal(simulationRow.scenario.accrual.dropoutAnnual, 0.1);

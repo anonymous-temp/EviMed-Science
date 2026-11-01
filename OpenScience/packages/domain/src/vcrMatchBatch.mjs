@@ -170,7 +170,7 @@ export function matchBatchStatement(plan) {
     if (plan.noDocuments.length) parts.push(`${plan.noDocuments.length} 位没有病历文档`)
     return `这一批没有要读的病历${parts.length ? `：${parts.join('；')}` : ''}。可以直接做逐条评估。`
   }
-  const cost = e.cost == null ? '费用按当前价格表算不出' : `最多约 ¥${e.cost.toFixed(2)}`
+  const cost = e.cost == null ? '费用按当前价格表算不出' : `最多约 ${e.cost.toFixed(2)} 元`
   const lines = [
     `这一批要读 ${e.people} 位病人的 ${e.records} 份病历，预计最多 ${wan(e.inputTokens)} 个输入词元、${wan(e.outputTokens)} 个输出词元，${cost}`
       + `（输入按每个字一个词元、外加每份病历的指令估，是上限，实际通常更低；做完会写出实际读了多少）。`,

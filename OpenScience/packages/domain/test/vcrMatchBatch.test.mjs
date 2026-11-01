@@ -74,7 +74,7 @@ test('D4: the statement says the cost before the work, that nothing needs confir
   const plan = planMatchExtraction({ roster, done: new Set([matchBatchUnitKey('P-004', 'd4')]), limit: 10 })
   const text = matchBatchStatement(plan)
   assert.match(text, /这一批要读 2 位病人的 3 份病历/)
-  assert.match(text, /最多约 ¥\d+\.\d\d/)
+  assert.match(text, /最多约 \d+\.\d\d 元/)
   assert.match(text, /1 位读过的不会重读/)
   assert.match(text, /1 位按表格里已知的信息已确定不符合，病历不读（仍会评估）/)
   assert.match(text, /1 位没有病历文档/)
