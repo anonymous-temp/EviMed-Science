@@ -26,7 +26,7 @@ an institution-specific row into a universal criterion or score. Verify it
 against current official sources and the approved local policy before it enters
 an assessment or committee-facing output.
 
-Deduplicate records and preserve the exact query, jurisdiction, source identifier, URL, retrieval time, version/date, and retrieved fields. Bibliographic metadata does not establish study design, outcomes, effect size, certainty, or comparative value. Read the abstract or full text needed for each material conclusion. A failed or empty search is an evidence gap, not a zero score and not evidence against a candidate.
+Deduplicate records and preserve the exact query, jurisdiction, source identifier, URL, retrieval time, version/date, and retrieved fields. Bibliographic metadata does not establish study design, outcomes, effect size, certainty, or comparative value. Read the abstract or full text needed for each material conclusion. A failed or empty search is an evidence gap, not a zero score and not evidence against a candidate. A label's publication date alone does not establish that it is current. For material approval, withdrawal or availability claims, check the relevant regulator's later decisions and the exact product's current label for the decision jurisdiction and date. Keep an older label as historical evidence when current status cannot be established; do not infer present availability or a cross-drug difference from asymmetric label wording.
 
 Freeze the retrieval and provenance package in `evidence-snapshot.json` before assessment; the compiler input SHA-256 binds the structured assessment to the supplied inventory. Uploaded files must be marked as user-provided evidence.
 
