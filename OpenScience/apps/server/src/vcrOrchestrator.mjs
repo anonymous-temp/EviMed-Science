@@ -1639,6 +1639,8 @@ export function vcrGapsForRule(rule) {
     entropy_balance_infeasible: { title: "试验人群与外部对照不重叠", detail: "试验人群的协变量均值落在外部对照的范围之外，加权无解。", answers: "换一个与试验人群更接近的外部数据源，或放宽入排标准后再比。" },
     outside_common_support: { title: "共同支持域外的人太多", detail: "试验人群里有相当比例在外部对照的倾向得分范围之外。", answers: "补充覆盖这部分人群的外部数据，或收窄目标人群。" },
     effective_sample_size_below_floor: { title: "加权后有效样本量太低", detail: "加权后外部对照的有效样本量低于下限，估计不稳。", answers: "补充更多可比的外部患者。" },
+    // No job fires this one any more (owner decision 2026-11-01: a weighted imbalance is delivered limited, with the balance beside it);
+    // a result written before still names it, and its gap list reads as it did.
     standardized_difference_above_floor: { title: "加权后关键协变量仍不平衡", detail: "至少一个关键协变量加权后的标准化差异不低于 0.1。", answers: "换协变量集、补充数据，或承认这两群人不可比。" },
     tau_beyond_followup: { title: "限制平均生存时间的时点超过了随访", detail: "所选时点比某一组最长的随访还长。", answers: "把时点缩到报告里给出的最大可用时点以内，或补充随访更长的数据。" },
     too_few_events: { title: "某一组没有事件，风险比不存在", detail: "有一组一个事件都没有，或 Cox 模型没有收敛，风险比无法估计。", answers: "延长随访或补充事件更多的数据；也可以改看不依赖事件数的指标，如限制平均生存时间的差。" },

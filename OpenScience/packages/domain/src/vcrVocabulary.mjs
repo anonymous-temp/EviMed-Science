@@ -692,6 +692,8 @@ export const VCR_DEFAULT_ESTIMAND = 'ATT'
 /** The deterministic rules that make a comparison `not_estimable` (§5.3). */
 export const VCR_NOT_ESTIMABLE_RULES = frozen([
   'entropy_balance_infeasible', 'outside_common_support', 'effective_sample_size_below_floor',
+  // 'standardized_difference_above_floor' no longer fires (owner decision 2026-11-01): a weighted imbalance is delivered `limited` with the
+  // balance beside the estimate. It stays in the list so a result written before it still validates, reads and replays.
   'standardized_difference_above_floor', 'tau_beyond_followup', 'reconstruction_failed_qc', 'map_prior_conflict',
   // A Cox model has no estimate when an arm has no event (the hazard ratio is infinite or zero) or the fit
   // does not converge; fewer events than `VCR_COX_FEW_EVENTS` is a notice, never a refusal.
