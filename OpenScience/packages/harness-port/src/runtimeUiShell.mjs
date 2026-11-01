@@ -63,8 +63,12 @@ export const inject = ['slots'];
  * (2026-10-19, the Mermaid toolbars, the goal bar and the `/` menu's skill rows): the
  * markup they name is in the pinned bundles, ui-skill (`skill` source, option ids
  * `dsh-slash-option-skill-<n>`) and ui-input-trigger (`_itemDescription`) of this pin.
+ * Re-read at 0.2.1-rc.5 (2026-11-01): the eight client packages whose bundles changed since rc.2 carry the same
+ * hashed name for every suffix the rules below name (compared package by package, none added or removed; ui-layout,
+ * the owner of `_sidebarCol`, `_centerCol`, `_rightbarCol`, `_overlayLayer` and `_handle`, is byte-identical), and
+ * `data-composer-stat`, `data-composer-dock`, `data-conversation-scroll` and `data-turn-tail` are in the new bundles.
  */
-export const GEOMETRY_KERNEL_PIN = '0.2.1-rc.2';
+export const GEOMETRY_KERNEL_PIN = '0.2.1-rc.5';
 
 /* >>> generated brand identity — run `pnpm tokens:css` <<< */
 /** @returns {{ path: string, light: string, dark: string }} */

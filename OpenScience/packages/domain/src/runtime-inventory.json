@@ -3,7 +3,7 @@
   "schemaVersion": 1,
   "composition": {
     "source": "deploy/runtime-dsh/dump-config.baseline.json",
-    "sha256": "b58ec61cf232613a7dca410fca99676ca76d33a929e9d91a075ffbd6a0a96fd1",
+    "sha256": "f8074ffb1235e39e69155350d502b7e0fde7c61147e7536fd78de0b3f316b535",
     "bundles": [
       "@deepseek-ai/dsh-base",
       "@changfenhuang/dsh-annotation",
@@ -1360,6 +1360,13 @@
       {
         "id": "ui-agent-preset",
         "name": "@deepseek-ai/dsh-client-ui-agent-preset",
+        "bundle": "@deepseek-ai/dsh-web-app",
+        "patchedBy": [],
+        "state": "enabled"
+      },
+      {
+        "id": "entry-customization",
+        "name": "@deepseek-ai/dsh-client-ui-entry-customization",
         "bundle": "@deepseek-ai/dsh-web-app",
         "patchedBy": [],
         "state": "enabled"

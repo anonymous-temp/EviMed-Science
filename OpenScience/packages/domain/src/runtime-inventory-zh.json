@@ -439,6 +439,7 @@
       {
         "reason": "The kernel's conversation page — composer, message list, side panels, theme, locale, shortcuts and settings panels — drawn inside the frame the web app hosts. Nothing separate to switch; the product's own pages are the web app's.",
         "ids": [
+          "entry-customization",
           "file-upload",
           "locale",
           "shortcuts",
