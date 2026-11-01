@@ -8,7 +8,7 @@ import { DEVICE_REQUEST } from "./channels/deviceTokens.mjs";
 import { isEvimedAccountPath } from "./evimedAccountService.mjs";
 import { evimedSessionEncryptionAvailable, openEvimedSessionCredential, sealEvimedSessionCredential } from "./evimedSessionCredentials.mjs";
 import { assertClientProject } from "./internalProjects.mjs";
-import { externalDisplayName, isPlatformAccount, isReservedAccountIdentity, platformAccountProtected, platformAccountReserved } from "./platformAccount.mjs";
+import { accountNameReserved, externalDisplayName, isEvimedDerivedAccountId, isPlatformAccount, isReservedAccountIdentity, platformAccountProtected, platformAccountReserved } from "./platformAccount.mjs";
 import {
   assertNoSymlinkPath,
   HttpError,
@@ -568,6 +568,7 @@ export class InMemoryStore {
   async createUser(username, password, name = username) {
     const id = safeId(username, "username");
     if (isReservedAccountIdentity(id, name)) throw platformAccountReserved();
+    if (isEvimedDerivedAccountId(id)) throw accountNameReserved();
     if (!meetsPasswordMinimum(password)) {
       throw new HttpError(400, "weak_password", `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
     }
@@ -1314,6 +1315,7 @@ export class PostgresStore extends InMemoryStore {
   async createUser(username, password, name = username) {
     const id = safeId(username, "username");
     if (isReservedAccountIdentity(id, name)) throw platformAccountReserved();
+    if (isEvimedDerivedAccountId(id)) throw accountNameReserved();
     if (!meetsPasswordMinimum(password)) {
       throw new HttpError(400, "weak_password", `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
     }

@@ -6,7 +6,7 @@ import path from "node:path";
 import test from "node:test";
 
 import { createWebApiApp } from "../src/server.mjs";
-import { evimedAccountFailureDetail, validateEvimedAccountSettings } from "../src/evimedAccountService.mjs";
+import { EvimedAccountService, evimedAccountFailureDetail, validateEvimedAccountSettings } from "../src/evimedAccountService.mjs";
 
 // Public route names are a browser contract, independent of the service's exports.
 const accountPaths = {
@@ -107,6 +107,11 @@ function post(base, pathname, body, headers = {}) {
   });
 }
 
+/** The captcha is a POST with the phone number in the body: a URL is kept by proxies and access logs. */
+function captchaFor(base, number, headers = {}) {
+  return post(base, accountPaths.captchaUrl, { phone: number }, headers);
+}
+
 async function writtenText(dataDir) {
   const parts = [];
   const walk = async (dir) => {
@@ -167,7 +172,7 @@ test("captcha, SMS, registration and recovery use the team's exact payloads", as
     : { body: { code: 200, data: { token, unexpected: "discarded" } } });
   try {
     await withApp(accountOverrides(upstream), async ({ base }) => {
-      const challenge = await fetch(`${base}${accountPaths.captchaUrl}?phoneNumber=${phone}`);
+      const challenge = await captchaFor(base, phone);
       assert.equal(challenge.status, 200);
       assert.deepEqual(await challenge.json(), { data: captcha });
       const flowCookie = cookieValue(challenge, "os_evimed_account");
@@ -385,7 +390,7 @@ test("captcha cookies are sealed per browser and login SMS binds the challenge t
     await withApp(accountOverrides(upstream), async ({ base }) => {
       const browsers = [];
       for (const number of [phone, otherPhone]) {
-        const response = await fetch(`${base}${accountPaths.captchaUrl}?phoneNumber=${number}`);
+        const response = await captchaFor(base, number);
         assert.equal(response.status, 200);
         const header = response.headers.getSetCookie().join("\n");
         assert.match(header, /HttpOnly/);
@@ -427,9 +432,7 @@ test("same-origin captcha images become data URIs using only this browser's chal
   try {
     await withApp(accountOverrides(upstream), async ({ base }) => {
       for (const number of [phone, otherPhone]) {
-        const response = await fetch(`${base}${accountPaths.captchaUrl}?phoneNumber=${number}`, {
-          headers: { Cookie: "name1=synthetic-browser-credential; os_session=synthetic-browser-session; unrelated=private" },
-        });
+        const response = await captchaFor(base, number, { Cookie: "name1=synthetic-browser-credential; os_session=synthetic-browser-session; unrelated=private" });
         assert.equal(response.status, 200);
         assert.deepEqual((await response.json()).data, {
           ...captcha, canvasSrc: `data:image/png;base64,${pngBase64}`, blockSrc: `data:image/png;base64,${pngBase64}`,
@@ -466,7 +469,7 @@ test("captcha image normalization rejects cross-origin URLs and never follows im
         [`${upstream.base}/captcha-images/redirect.png`, 503, "evimed_account_unreachable"],
       ]) {
         imageUrl = candidate;
-        const response = await fetch(`${base}${accountPaths.captchaUrl}?phoneNumber=${phone}`);
+        const response = await captchaFor(base, phone);
         assert.equal(response.status, status);
         assert.equal((await response.json()).code, code);
       }
@@ -513,7 +516,7 @@ test("captcha, account operations and the existing session exchange share the au
   upstream.answerWith((request) => ({ body: { code: 200, data: request.pathname === "/system/captcha/get" ? captcha : true } }));
   try {
     await withApp(accountOverrides(upstream, { authRateLimitMaxRequests: 2, authRateLimitWindowMs: 60_000 }), async ({ base }) => {
-      assert.equal((await fetch(`${base}${accountPaths.captchaUrl}?phoneNumber=${phone}`)).status, 200);
+      assert.equal((await captchaFor(base, phone)).status, 200);
       assert.equal((await post(base, accountPaths.sendCodeUrl, { purpose: "register", phone })).status, 200);
       const limited = await post(base, "/api/auth/evimed/session", { token });
       assert.equal(limited.status, 429);
@@ -571,7 +574,7 @@ test("invalid client fields and unsafe captcha content are rejected without forw
         assert.equal((await response.json()).code, "evimed_account_invalid_input");
       }
       assert.equal(upstream.requests.length, 0);
-      const invalidCaptcha = await fetch(`${base}${accountPaths.captchaUrl}?phoneNumber=${phone}`);
+      const invalidCaptcha = await captchaFor(base, phone);
       assert.equal(invalidCaptcha.status, 502);
       assert.equal((await invalidCaptcha.json()).code, "evimed_account_failed");
     });
@@ -603,4 +606,84 @@ test("upstream business failures, malformed JSON and redirects expose bounded ad
       assert.equal(upstream.requests.length, 6, "an upstream redirect is never followed");
     });
   } finally { await upstream.close(); }
+});
+
+// ───────────────────────── rev-1101 ─────────────────────────
+
+test("the captcha is a POST with the number in the body: a GET, a query and a body with other fields are refused, and the team's service still gets its GET", async () => {
+  const upstream = await startTeamEndpoint();
+  upstream.answerWith(() => ({ body: { code: 200, data: captcha } }));
+  try {
+    await withApp(accountOverrides(upstream), async ({ base }) => {
+      // The old form: the number in a URL that a proxy or an access log would keep.
+      const get = await fetch(`${base}${accountPaths.captchaUrl}?phoneNumber=${phone}`);
+      assert.equal(get.status, 405);
+      assert.equal((await captchaFor(base, phone).then(async (response) => ({ status: response.status, body: await response.json() }))).status, 200);
+      const queried = await post(base, `${accountPaths.captchaUrl}?phoneNumber=${phone}`, { phone });
+      assert.equal(queried.status, 400);
+      for (const body of [{}, { phone: "123" }, { phone, extra: "x" }, { phoneNumber: phone }]) {
+        const refused = await post(base, accountPaths.captchaUrl, body);
+        assert.equal(refused.status, 400, JSON.stringify(body));
+        assert.equal((await refused.json()).code, "evimed_account_invalid_input");
+      }
+      assert.equal(upstream.requests.length, 1, "only the one good request reached the team's service");
+      assert.equal(upstream.requests[0].method, "GET");
+      assert.deepEqual(upstream.requests[0].query, { phoneNumber: phone });
+    });
+  } finally { await upstream.close(); }
+});
+
+test("verification codes are limited per phone number across purposes and clients, not logged, and counted only for a well-formed request", async () => {
+  const upstream = await startTeamEndpoint();
+  upstream.answerWith((request) => ({ body: { code: 200, data: request.pathname === "/system/captcha/get" ? captcha : true } }));
+  try {
+    await withApp(accountOverrides(upstream, { evimedSmsPerPhoneMax: 3, evimedSmsPerPhoneWindowMs: 60_000, authRateLimitMaxRequests: 1000 }), async ({ base, dataDir }) => {
+      const sent = () => upstream.requests.filter((request) => request.pathname === "/system/verifycode/send").length;
+      const send = (body, headers = {}) => post(base, accountPaths.sendCodeUrl, body, headers);
+      // A malformed request costs the number nothing and the team's service nothing.
+      assert.equal((await send({ purpose: "register", phone, extra: "x" })).status, 400);
+      assert.equal((await send({ purpose: "bogus", phone })).status, 400);
+      assert.equal(sent(), 0);
+      // Three codes of any purpose, from one address or from many (a header the proxy sets is not a different phone).
+      assert.equal((await send({ purpose: "register", phone })).status, 200);
+      assert.equal((await send({ purpose: "reset", phone })).status, 200);
+      const challenge = await captchaFor(base, phone);
+      assert.equal((await send({ purpose: "login", phone, xcode: "12" }, { Cookie: cookieValue(challenge, "os_evimed_account") })).status, 200);
+      const limited = await send({ purpose: "register", phone });
+      assert.equal(limited.status, 429);
+      assert.equal((await limited.json()).code, "evimed_sms_rate_limited");
+      assert.ok(Number(limited.headers.get("retry-after")) >= 1);
+      assert.equal(sent(), 3, "the fourth never reached the team's service");
+      // Another number is its own count.
+      assert.equal((await send({ purpose: "register", phone: otherPhone })).status, 200);
+      // The number is nowhere on our side: not in a ledger.
+      assert.equal((await writtenText(dataDir)).includes(phone), false);
+    });
+  } finally { await upstream.close(); }
+});
+
+test("a limit of 0 turns the per-phone limit off", async () => {
+  const upstream = await startTeamEndpoint();
+  upstream.answerWith(() => ({ body: { code: 200, data: true } }));
+  try {
+    await withApp(accountOverrides(upstream, { evimedSmsPerPhoneMax: 0, authRateLimitMaxRequests: 1000 }), async ({ base }) => {
+      for (let index = 0; index < 8; index += 1) assert.equal((await post(base, accountPaths.sendCodeUrl, { purpose: "reset", phone })).status, 200);
+    });
+  } finally { await upstream.close(); }
+});
+
+test("the limiter keeps a keyed hash of the number, a window expires, and only a counted request moves the count", () => {
+  const service = new EvimedAccountService({ evimedSmsPerPhoneMax: 2, evimedSmsPerPhoneWindowMs: 1_000 }, {});
+  service.allowSms(phone);
+  service.allowSms(phone);
+  assert.throws(() => service.allowSms(phone), { status: 429, code: "evimed_sms_rate_limited" });
+  assert.equal(service.smsWindows.size, 1);
+  for (const key of service.smsWindows.keys()) assert.equal(key.includes(phone) || key.includes(phone.slice(3)), false);
+  // The same number under another process's key is another key: the key is not derivable from the number.
+  const other = new EvimedAccountService({ evimedSmsPerPhoneMax: 2, evimedSmsPerPhoneWindowMs: 1_000 }, {});
+  other.allowSms(phone);
+  assert.notDeepEqual([...other.smsWindows.keys()], [...service.smsWindows.keys()]);
+  // The window passes.
+  for (const window of service.smsWindows.values()) window.resetAt = Date.now() - 1;
+  service.allowSms(phone);
 });

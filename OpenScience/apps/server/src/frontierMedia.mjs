@@ -13,6 +13,8 @@
  * - **Only images.** The plugin is trusted, but a body that does not say it is an image, or is larger than the plugin's own cap
  *   allows, is refused (`frontier_media_invalid`) rather than handed to a browser; `X-Content-Type-Options: nosniff` goes with
  *   every answer.
+ * - An image whose body cannot be read to its end (the plugin or the network gave out, or the deadline passed) is `frontier_media_unreadable`,
+ *   a service failure and not a missing picture: the picture step tries the post again later.
  * - An evicted image (the plugin's store keeps the least recently served under its cap) is the plugin's 404, and so the reader's:
  *   the item keeps its media entry and its original link (contract 1.4.0), and the reader omits the picture.
  *
@@ -79,10 +81,17 @@ export async function fetchFrontierMedia(client, id) {
   /** @type {Buffer[]} */
   const chunks = [];
   let length = 0;
-  for await (const chunk of /** @type {any} */ (response.body ?? [])) {
-    length += chunk.length;
-    if (length > FRONTIER_MEDIA_MAX_BYTES) throw new HttpError(502, "frontier_media_invalid", "The knowledge plugin's image is larger than its own cap.");
-    chunks.push(Buffer.from(chunk));
+  try {
+    for await (const chunk of /** @type {any} */ (response.body ?? [])) {
+      length += chunk.length;
+      if (length > FRONTIER_MEDIA_MAX_BYTES) throw new HttpError(502, "frontier_media_invalid", "The knowledge plugin's image is larger than its own cap.");
+      chunks.push(Buffer.from(chunk));
+    }
+  } catch (error) {
+    // The body stopping halfway, or the deadline passing while it was read, is the plugin's or the network's and not the picture's: it has
+    // its own code, so a caller that retries a service failure (the picture step) does not read it as an evicted picture.
+    if (error instanceof HttpError) throw error;
+    throw new HttpError(503, "frontier_media_unreadable", "The knowledge plugin's image could not be read to its end.");
   }
   return { bytes: Buffer.concat(chunks), contentType };
 }

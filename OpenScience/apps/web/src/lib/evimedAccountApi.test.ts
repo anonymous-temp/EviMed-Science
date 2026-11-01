@@ -17,8 +17,10 @@ describe("EviMed account client", () => {
     const fetcher = vi.spyOn(globalThis, "fetch").mockResolvedValue(response({ canvasSrc: "data:image/png;base64,fixture" }));
     const api = await client();
     expect(await api.fetchEvimedCaptcha("13800000000")).toEqual({ canvasSrc: "data:image/png;base64,fixture" });
-    expect(fetcher).toHaveBeenCalledWith("/api/auth/evimed/captcha?phoneNumber=13800000000", {
-      method: "GET", credentials: "include", cache: "no-store",
+    // The phone number is in the body: a URL is kept by proxies and access logs.
+    expect(fetcher).toHaveBeenCalledWith("/api/auth/evimed/captcha", {
+      method: "POST", credentials: "include", cache: "no-store",
+      headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone: "13800000000" }),
     });
   });
 

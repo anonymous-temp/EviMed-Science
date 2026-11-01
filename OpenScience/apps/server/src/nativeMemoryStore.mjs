@@ -2,9 +2,9 @@ import { createHash, randomUUID } from "node:crypto";
 import { zipSync } from 'fflate';
 import { carriesPlatformContext, identifierShapesIn, maskIdentifiers, platformIdentifiersIn, projectContextLine } from "@evimed/domain";
 import { actOf, duplicatesOf, withoutJudged } from "./nativeMemoryForgetEverywhere.mjs";
-import { recordForgetDuplicates } from "./nativeMemoryMetrics.mjs";
+import { recordForgetDuplicates, recordMapReplaced } from "./nativeMemoryMetrics.mjs";
 import { freshnessOf } from "./memoryMapSources/common.mjs";
-import { replacedStatements } from "./memoryMapSources/replacedStatements.mjs";
+import { replacedStatements, statementForgotten } from "./memoryMapSources/replacedStatements.mjs";
 import { contentHash, lineFingerprint, memoryLines, nativeMemoryRejectionType } from "./nativeMemoryOverlay.mjs";
 import { OPENVIKING_MEMORY_TYPES, OPENVIKING_PROJECT_MEMORY_TYPES } from "./openVikingLayout.mjs";
 import { MEMORY_SEGMENT_OF_TYPE, OBSERVATIONS_SEGMENT, PROJECT_MEMORY_TYPES, nativeMemoryFile, parseArchiveUri, platformSessionOf, unfinishedArchives } from "./openVikingSessions.mjs";
@@ -76,6 +76,12 @@ export const SOURCE_LABEL_PREFIX = "> 来源变更：";
 const AS_OF = /\s*[(（]as of (\d{4}-\d{2}-\d{2})[)）]\s*$/i;
 /** The old statements the map draws at most for one account, newest first: what was replaced is the first the map folds, so this only bounds the read. */
 const MAP_REPLACED_MARKS = 60;
+/**
+ * How long the map waits for the grey marks (the revisions behind them are read per file, and the rejection lists per type) before it draws
+ * without them. The map's source answers inside `MAP_SOURCE_TIMEOUT_MS` or not at all, so a slow read of old words must not take the memories
+ * the map draws from now with it: it costs the marks, and the counter says so.
+ */
+const MAP_REPLACED_DEADLINE_MS = 2_500;
 const sha256 = (/** @type {string} */ text) => createHash("sha256").update(text).digest("hex");
 
 /** @param {string} uri */
@@ -127,6 +133,21 @@ const isLabelLine = (line) => line.trim().startsWith(SOURCE_LABEL_PREFIX.trim())
 /** The statements of a body, without the platform's label lines. @param {string} body */
 function statements(body) {
   return memoryLines(String(body ?? "").split("\n").filter((line) => !isLabelLine(line)).join("\n"));
+}
+
+/** The reasons of a revision that is itself a forget or a delete (`#write`, `forgetFile`): the version it took a line out of is what its undo goes back to. */
+const FORGET_REASON = /^(?:forgotten|deleted)/iu;
+
+/**
+ * A text without the statements the person forgot or deleted, the other lines as they were. Whether a statement is one of them is
+ * `statementForgotten`'s: the fingerprint of its words, or a rejection's words contained in it.
+ * @param {string} text @param {readonly { fingerprint: string, text: string | null }[]} forgotten
+ */
+function withoutForgottenLines(text, forgotten) {
+  return text.split("\n").filter((line) => {
+    const statement = line.trim().replace(/^(?:[-*+]|\d+[.)])\s+/, "");
+    return !statement || isLabelLine(line) || /^#{1,6}\s/.test(line.trim()) || !statementForgotten(statement, forgotten);
+  }).join("\n");
 }
 
 /** What a file is called on the page: the card's title for a project, else the topic or entity name in its file name. */
@@ -358,15 +379,17 @@ export class NativeMemoryStore {
    *   memoryContexts?: import('./geoNativeMemoryContext.mjs').GeoNativeMemoryContext | null,
    *   now?: () => Date, conversationTitles?: ConversationTitles | null,
    *   rejectionJudge?: { same: (request: any) => Promise<{ same: Map<number, string>, stated: Set<number> }> } | null,
-   *   report?: (line: string) => void, settleExtractionsMs?: number }} dependencies
+   *   report?: (line: string) => void, settleExtractionsMs?: number, replacedDeadlineMs?: number }} dependencies
    *   `conversationTitles` names the conversations a memory came out of (the run ledger knows them; this store does not). `rejectionJudge` is the
    *   rejection list's own judge (`nativeMemoryRejections.mjs`), asked which other lines say what a forgotten one said
    *   (`nativeMemoryForgetEverywhere.mjs`); absent, only the lines that contain a forgotten line's words go with it. `memoryContexts` names
    *   the registered namespaces (the account's own and each shared GEO project's, `geoNativeMemoryContext.mjs`).
    */
   constructor({ sessions, overlay, memoryContexts = null, now = () => new Date(), conversationTitles = null, rejectionJudge = null, report = () => {},
-    settleExtractionsMs = 20_000 }) {
+    settleExtractionsMs = 20_000, replacedDeadlineMs = MAP_REPLACED_DEADLINE_MS }) {
     this.sessions = sessions;
+    /** How long the map waits for its grey marks before drawing without them (`MAP_REPLACED_DEADLINE_MS`). */
+    this.replacedDeadlineMs = replacedDeadlineMs;
     /** How long an account deletion waits for the account's running extractions before it is refused as in progress. */
     this.settleExtractionsMs = settleExtractionsMs;
     this.overlay = overlay;
@@ -504,13 +527,15 @@ export class NativeMemoryStore {
     const origins = await Promise.resolve().then(() => this.overlay.originsOf(userId, held.filter((file) => file.type === "profile").map((file) => file.uri))).catch(() => new Map());
     // The conversations the engine wrote these files in: its revisions name the engine session, the ledger names the project.
     const sessionProjects = await this.#sessionProjects(userId, revisions);
+    // The lines the person forgot or deleted, which no earlier version of any file in their namespace may show.
+    const forgotten = await this.#forgottenLines(userId, held.filter((file) => revisions.get(file.uri)?.length));
     const originProjects = await Promise.resolve().then(() => this.overlay.sessionProjects(userId, [...new Set([...origins.values()].flatMap((lines) => [...lines.values()].map((origin) => origin.engineSession).filter((name) => typeof name === "string" && platformSessionOf(name))))].map(String))).catch(() => new Map());
     /** @type {any[]} */
     const records = [];
     for (const file of held) {
       const history = (revisions.get(file.uri) ?? []).slice().reverse();
       const changed = sources.filter((source) => source.uri === file.uri && ["retracted", "changed", "expired", "removed"].includes(source.state));
-      const base = this.#fileRecord(file, history, changed, conversationEvidence(history, sessionProjects));
+      const base = this.#fileRecord(file, history, changed, conversationEvidence(history, sessionProjects), forgotten.get(file.namespaceId ?? null) ?? []);
       if (file.type !== "profile") { records.push(base); continue; }
       // The profile is one document; its lines are the items the page lists.
       for (const line of statements(file.body)) {
@@ -635,8 +660,28 @@ export class NativeMemoryStore {
     return out;
   }
 
-  /** @param {any} file @param {any[]} history oldest first @param {any[]} changed sources in a changed state @param {any[]} [evidence] the conversations that wrote it */
-  #fileRecord(file, history, changed, evidence = []) {
+  /**
+   * The lines the person forgot or deleted, by namespace, for the files that have a history to show (`overlay.forgottenLines`). A read that fails
+   * leaves the versions as they are: the page does not go down for it.
+   * @param {string} userId @param {any[]} files
+   * @returns {Promise<Map<string | null, { fingerprint: string, text: string | null }[]>>}
+   */
+  async #forgottenLines(userId, files) {
+    /** @type {Map<string | null, { fingerprint: string, text: string | null }[]>} */
+    const out = new Map();
+    for (const namespace of new Set(files.map((file) => file.namespaceId ?? null))) {
+      const types = (namespace === null ? OPENVIKING_MEMORY_TYPES : OPENVIKING_PROJECT_MEMORY_TYPES).map((type) => nativeMemoryRejectionType(type, namespace));
+      out.set(namespace, await this.overlay.forgottenLines(userId, types).catch(() => []));
+    }
+    return out;
+  }
+
+  /**
+   * @param {any} file @param {any[]} history oldest first @param {any[]} changed sources in a changed state @param {any[]} [evidence] the conversations that wrote it
+   * @param {{ fingerprint: string, text: string | null }[]} [forgotten] lines the person forgot or deleted: an earlier version of this file does not show them,
+   *   except the version a forget itself took them out of (the one its undo goes back to)
+   */
+  #fileRecord(file, history, changed, evidence = [], forgotten = []) {
     const first = history[0] ?? null;
     const last = history.at(-1) ?? null;
     const updatedAt = last?.changedAt ?? file.modTime ?? null;
@@ -667,7 +712,8 @@ export class NativeMemoryStore {
       evidence,
       // What the file said before each change, oldest first, as the page's 「以前的版本」 reads them.
       revisions: history.filter((revision) => revision.before !== null).map((revision, index) => ({
-        version: index + 1, value: String(revision.before ?? ""), summary: "", status: "active", changedAt: revision.changedAt,
+        version: index + 1, value: forgotten.length && !FORGET_REASON.test(String(revision.reason ?? "")) ? withoutForgottenLines(String(revision.before ?? ""), forgotten) : String(revision.before ?? ""),
+        summary: "", status: "active", changedAt: revision.changedAt,
         reason: revision.reason, by: revision.actor === "engine" ? "extraction" : revision.actor === "platform" ? "system" : "user",
       })),
       ...(changed.length ? { relations: { validity: { from: null, until: null }, caveats: [], conflicts: [],
@@ -860,11 +906,19 @@ export class NativeMemoryStore {
    * @param {string} userId @param {any[]} files
    */
   async #replacedStatements(userId, files) {
+    /** @type {ReturnType<typeof setTimeout> | undefined} */
+    let timer;
+    const late = new Promise((resolve) => { timer = setTimeout(() => resolve(null), this.replacedDeadlineMs); });
     try {
-      const found = await this.#replacedOf(userId, files.filter((file) => !file.sensitive));
-      return found.sort((left, right) => String(right.until ?? "").localeCompare(String(left.until ?? ""))).slice(0, MAP_REPLACED_MARKS);
+      const found = await Promise.race([this.#replacedOf(userId, files.filter((file) => !file.sensitive)), late]);
+      if (found === null) { recordMapReplaced("timeout"); return []; }
+      recordMapReplaced("read");
+      return /** @type {any[]} */ (found).sort((left, right) => String(right.until ?? "").localeCompare(String(left.until ?? ""))).slice(0, MAP_REPLACED_MARKS);
     } catch {
+      recordMapReplaced("failed");
       return [];
+    } finally {
+      clearTimeout(timer);
     }
   }
 
@@ -1022,7 +1076,7 @@ export class NativeMemoryStore {
       } else {
         next = text;
       }
-      await this.#write(userId, file, next, { actor: "user", reason: "edited on the memory page" });
+      await this.#write(userId, file, next, { actor: "user", reason: "edited on the memory page", origin: "edit" });
     }
     return this.getRecord(userId, line ? `${nativeFileId(file.uri)}_${lineFingerprint(String(value ?? "").trim().replace(AS_OF, "")).slice(0, 12)}` : id)
       .catch(() => this.getRecord(userId, nativeFileId(file.uri)));
@@ -1031,9 +1085,10 @@ export class NativeMemoryStore {
   /**
    * Replace a file's text as `actor`, keep what it said before as a revision, and keep the rejection list in step: lines the
    * person removed are rejected (the engine writing them back verbatim removes them again), lines the person wrote are theirs.
-   * @param {string} userId @param {any} file @param {string} next @param {{ actor: string, reason: string, change?: string }} how
+   * `origin` is how the lines taken out are rejected (`overlay.reject`): `edit` for the person's own edit of the file, `forget` for the rest.
+   * @param {string} userId @param {any} file @param {string} next @param {{ actor: string, reason: string, change?: string, origin?: "edit" | "forget" }} how
    */
-  async #write(userId, file, next, { actor, reason, change = "updated" }) {
+  async #write(userId, file, next, { actor, reason, change = "updated", origin = "forget" }) {
     const context = await this.#fileContext(userId, file.uri);
     const rejectionType = this.#rejectionType(context, file.type);
     this.#touch(userId);
@@ -1042,7 +1097,7 @@ export class NativeMemoryStore {
     const after = statements(next);
     const kept = new Set(after.map(lineFingerprint));
     if (actor === "user") {
-      await this.overlay.reject(userId, rejectionType, file.uri, before.filter((text) => !kept.has(lineFingerprint(text))));
+      await this.overlay.reject(userId, rejectionType, file.uri, before.filter((text) => !kept.has(lineFingerprint(text))), { origin });
       await this.overlay.unreject(userId, rejectionType, after);
     }
     await this.overlay.addRevision({ userId, uri: file.uri, memoryType: file.type, change, actor, reason, before: file.body, after: next, projectId: file.projectId });

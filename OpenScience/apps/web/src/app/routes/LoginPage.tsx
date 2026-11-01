@@ -49,6 +49,10 @@ export function LoginPage() {
   const [submitted, setSubmitted] = useState(false);
   const [registering, setRegistering] = useState(false);
   const [revealed, setRevealed] = useState(false);
+  // In a deployment that signs local accounts in (`mode: local`) beside the team's phone form, the phone form is the default and a quiet
+  // switch opens the account-and-password one, so an account made here before the team form existed still has its way in (and a signed-in
+  // local account asked to sign in again with EviMed has the way back).
+  const [localForm, setLocalForm] = useState(false);
   const usernameInput = useRef<HTMLInputElement>(null);
   const passwordInput = useRef<HTMLInputElement>(null);
   const pending = useRef(false);
@@ -143,7 +147,9 @@ export function LoginPage() {
     usernameInput.current?.focus();
   };
 
-  const showAccountForm = offersEvimedAccountForm(methods);
+  const teamFormOffered = offersEvimedAccountForm(methods);
+  const localSwitch = teamFormOffered && methods?.mode === "local";
+  const showAccountForm = teamFormOffered && !(localSwitch && localForm);
   useEffect(() => {
     if (!checking && methods?.mode === "local" && !showAccountForm) usernameInput.current?.focus();
   }, [checking, methods?.mode, showAccountForm]);
@@ -182,7 +188,10 @@ export function LoginPage() {
             <Button variant="secondary" size="lg" className="w-full" onClick={() => setAttempt((value) => value + 1)}>重试</Button>
           </div>
         ) : showAccountForm ? (
-          <EvimedAccountForm onSignedIn={() => navigate(returnTo, { replace: true })} />
+          <>
+            <EvimedAccountForm onSignedIn={() => navigate(returnTo, { replace: true })} />
+            {localSwitch && <Button variant="text" className="mt-3 w-full" onClick={() => setLocalForm(true)}>账号密码登录</Button>}
+          </>
         ) : methods.mode === "oidc" ? (
           <a href={getWebOidcStartUrl(returnTo)} className={buttonClasses({ size: "lg", className: "w-full" })}>
             {methods.oidc?.label ?? "统一身份登录"}
@@ -244,10 +253,13 @@ export function LoginPage() {
               <Button type="submit" size="lg" loading={submitting} className="w-full">
                 {registering ? "注册并进入" : "登录"}
               </Button>
-              {methods.selfRegistration && (
+              {methods.selfRegistration && !localSwitch && (
                 <Button variant="text" className="w-full" onClick={switchMode}>
                   {registering ? "已有账号？返回登录" : "还没有账号？注册一个"}
                 </Button>
+              )}
+              {localSwitch && (
+                <Button variant="text" className="w-full" onClick={() => { setLocalForm(false); setError(null); }}>返回 EviMed 账号登录</Button>
               )}
             </fieldset>
           </form>

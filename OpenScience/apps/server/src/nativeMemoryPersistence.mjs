@@ -208,6 +208,11 @@ CREATE TABLE IF NOT EXISTS evimed_memory.native_rejections (
   PRIMARY KEY (user_id, memory_type, fingerprint)
 );
 ALTER TABLE evimed_memory.native_rejections ADD COLUMN IF NOT EXISTS text text CHECK (text IS NULL OR char_length(text) <= 400);
+-- rev-1101: why the line was rejected. 'edit' — the person's own edit took it out of a file and put another line there (its old words stay in
+-- the file's history, and the map may draw them as what the memory used to say); 'forget' — the person forgot or deleted it, or the engine
+-- wrote it back and the platform took it out again (nothing may draw it anywhere). Null — a row older than this column: unknown, and read as
+-- 'forget', so a line that was forgotten is never shown again for want of a record of how it was removed.
+ALTER TABLE evimed_memory.native_rejections ADD COLUMN IF NOT EXISTS origin text CHECK (origin IS NULL OR origin IN ('edit', 'forget'));
 -- When a memory search or read through the gateway last returned a file, and how many times (2026-10-25). No behaviour reads it.
 ALTER TABLE evimed_memory.native_files ADD COLUMN IF NOT EXISTS last_recalled_at timestamptz(3);
 ALTER TABLE evimed_memory.native_files ADD COLUMN IF NOT EXISTS recall_count integer NOT NULL DEFAULT 0 CHECK (recall_count >= 0);

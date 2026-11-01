@@ -365,6 +365,11 @@ ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS oa_pdf_tried_at 
 -- what the model writes the post's 导读 from and never the reader's text.
 ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS picture_text text CHECK (char_length(picture_text) <= 12000);
 ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS picture_tried_at timestamptz(3);
+-- rev-1101: a parser that failed in a way that may be the service's and not the picture's (a timeout, a gateway error) delays a post and
+-- does not decide it: picture_attempts counts those delays and picture_retry_at is when the post may be looked at again. Past the cap the
+-- post is decided by what its pictures gave, so one poison post never holds the queue.
+ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS picture_attempts integer NOT NULL DEFAULT 0;
+ALTER TABLE evimed_frontier.item_texts ADD COLUMN IF NOT EXISTS picture_retry_at timestamptz(3);
 -- rt2 2026-10-22: a full text read from an open-access PDF is the paper to its references, up to 100,000 characters, and its
 -- translation with it — the lengths the two columns were first declared with (40,000 and 60,000, contract 1.5.0) are widened on a
 -- database that already has them (ADD COLUMN IF NOT EXISTS changes nothing there); a constraint already as declared is left.

@@ -58,10 +58,25 @@ function partnerOf(line, added) {
   return best && best.score >= PAIRED ? best.candidate : null;
 }
 
-/** @param {string} line @param {readonly { fingerprint: string, text: string | null }[]} rejected whether the person removed this line */
-function forgotten(line, rejected) {
+/**
+ * Whether the person removed this line for good. An engine's rewrite is hidden by any rejection of the line, whoever made it. The person's own
+ * edit (`byPerson`) is hidden only by a rejection that was not that kind of edit: a rejection from an `edit` leaves the old words drawn, as
+ * they stay in the drawer's versions, but a forget or a delete of the same words anywhere in the namespace (`origin: "forget"`, and a row
+ * with no origin, which is read as one) hides them from this file's history too.
+ * @param {string} line @param {readonly { fingerprint: string, text: string | null, origin?: string | null }[]} rejected @param {boolean} byPerson
+ */
+function forgotten(line, rejected, byPerson) {
   const print = lineFingerprint(line);
-  return rejected.some((entry) => entry.fingerprint === print || (entry.text && containsRemoved(line, entry.text)));
+  return rejected.some((entry) => (!byPerson || entry.origin !== "edit") && (entry.fingerprint === print || (entry.text && containsRemoved(line, entry.text))));
+}
+
+/**
+ * Whether the person's forget or delete took this line out, wherever: a rejection that was not the replacing of an edit (`origin` other than
+ * `edit`; a row with none counts) — for the old words a file's history still holds, which no reader may show.
+ * @param {string} line @param {readonly { fingerprint: string, text: string | null, origin?: string | null }[]} rejected
+ */
+export function statementForgotten(line, rejected) {
+  return forgotten(line, rejected, true);
 }
 
 /**
@@ -83,7 +98,7 @@ function forgotten(line, rejected) {
  * @param {boolean} input.perLine whether each line is a record of its own (the profile)
  * @param {(body: unknown) => string[]} input.statementsOf a text's statements, as the store reads them
  * @param {(line: string) => string} input.recordIdOfLine the record of a line in force (when `perLine`)
- * @param {readonly { fingerprint: string, text: string | null }[]} [input.rejected]
+ * @param {readonly { fingerprint: string, text: string | null, origin?: string | null }[]} [input.rejected]
  * @param {(line: string) => boolean} [input.refused] what the platform's checks would take out of a memory today
  * @returns {ReplacedStatement[]} oldest first
  */
@@ -118,7 +133,7 @@ export function replacedStatements({ fileId, body, history, perLine, statementsO
           // One line for one line is that line changing; more than that, a person's edit replaced only what has a partner, and the rest they took out.
           const onePerOne = removed.length === 1 && added.length === 1;
           const lines = removed.filter((line) => !current.has(normalisedStatement(line)) && !refused(line)
-            && (byPerson ? onePerOne || partnerOf(line, added) !== null : !forgotten(line, rejected)));
+            && (!forgotten(line, rejected, byPerson) && (!byPerson || onePerOne || partnerOf(line, added) !== null)));
           if (lines.length) steps.push({ text: lines.join(" "), lines, key: `r${revision.id}`, next: null, until: at, byPerson });
         }
       }
@@ -137,7 +152,7 @@ export function replacedStatements({ fileId, body, history, perLine, statementsO
       const step = lastOf.get(key);
       return step?.next && !trail.has(key) ? headOf(step.next, trail.add(key)) : null;
     };
-    const old = [...lastOf.values()].filter((step) => !current.has(step.key) && (step.byPerson || !forgotten(step.text, rejected)));
+    const old = [...lastOf.values()].filter((step) => !current.has(step.key) && !forgotten(step.text, rejected, step.byPerson));
     const kept = new Set(old.map((step) => step.key));
     /** @type {ReplacedStatement[]} */
     const out = [];

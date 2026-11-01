@@ -68,10 +68,33 @@ test("what the person forgot is not drawn, however old the revision that said it
 
 test("the person's own edit puts the old line on the rejection list and it stays drawn, as it stays in the drawer's versions", () => {
   const old = "目标期刊：Kidney International";
-  const rejected = [{ fingerprint: lineFingerprint(old), text: null }];
+  const rejected = [{ fingerprint: lineFingerprint(old), text: null, origin: "edit" }];
   const history = [revision(1, `- ${old}`, "- 目标期刊：JASN", { actor: "user", reason: "edited on the memory page" })];
   assert.equal(profile("- 目标期刊：JASN", history, rejected).length, 1);
   assert.equal(topic("目标期刊：JASN", history, rejected).length, 1);
+});
+
+test("an edit's old line is hidden once the person forgot or deleted the same words anywhere, and a rejection with no origin is read as a forget", () => {
+  const old = "目标期刊：Kidney International";
+  const history = [revision(1, `- ${old}`, "- 目标期刊：JASN", { actor: "user", reason: "edited on the memory page" })];
+  const first = { fingerprint: lineFingerprint(old), text: null };
+  for (const origin of ["forget", undefined, null]) {
+    const rejected = [{ ...first, origin }];
+    assert.deepEqual(profile("- 目标期刊：JASN", history, rejected), [], `origin ${origin}`);
+    assert.deepEqual(topic("目标期刊：JASN", history, rejected), [], `origin ${origin}`);
+  }
+  // The words kept with the rejection meet a reworded copy too, as for the engine's rewrite.
+  assert.deepEqual(topic("目标期刊：JASN", history, [{ fingerprint: "x", text: "目标期刊kidneyinternational", origin: "forget" }]), []);
+  // The rejection of another line, however it was made, hides nothing here.
+  assert.equal(topic("目标期刊：JASN", history, [{ fingerprint: lineFingerprint("别的话"), text: null, origin: "forget" }]).length, 1);
+  // The same line forgotten once and edited away another time: the forget wins (the list says `forget` for good, `overlay.reject`).
+  assert.equal(topic("目标期刊：JASN", history, [{ ...first, origin: "edit" }, { ...first, origin: "forget" }]).length, 0);
+});
+
+test("an engine rewrite is hidden by any rejection of its old line, an edit's included", () => {
+  const old = "目标期刊：Kidney International";
+  const history = [revision(1, `- ${old}`, "- 目标期刊：JASN")];
+  assert.deepEqual(profile("- 目标期刊：JASN", history, [{ fingerprint: lineFingerprint(old), text: null, origin: "edit" }]), []);
 });
 
 test("a forget of the whole file closes its history: what is written there later does not bring the old words back", () => {

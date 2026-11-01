@@ -512,6 +512,7 @@ import {
   assertNoSymlinkPath,
   assertObject,
   assertProjectCapacity,
+  assertSameSiteBrowserRequest,
   assertString,
   clearSessionCookie,
   directorySize,
@@ -7320,6 +7321,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         }
         let username = "";
         try {
+          // Before there is a session there is no CSRF token to ask for: a page on another site must not be able to sign a visitor in as
+          // someone else (a login CSRF). A script that posts with no browser headers is unaffected.
+          assertSameSiteBrowserRequest(req, config);
           const body = await readJson(req, config.maxJsonBytes);
           username = assertString(body.username, "username", { max: 64 });
           const password = assertString(body.password, "password", { max: 4096 });
@@ -7349,6 +7353,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         }
         let username = "";
         try {
+          // Registration signs the new account in, so it is the same login CSRF as `/api/auth/login`.
+          assertSameSiteBrowserRequest(req, config);
           const body = await readJson(req, config.maxJsonBytes);
           username = assertString(body.username, "username", { max: 64 });
           const password = assertString(body.password, "password", { max: 4096 });
@@ -8923,7 +8929,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // is not here — that one already needs a session and its CSRF token.
       (pathname === "/api/auth/evimed/session" && req.method === "POST") ||
       // Captcha, SMS and recovery are anonymous upstream operations too. They
-      // share the same auth budget, including captcha's GET request.
+      // share the same auth budget, captcha's request included.
       isEvimedAccountPath(pathname) ||
       (pathname.startsWith("/api/auth/oidc/") && req.method === "GET")
     ) {

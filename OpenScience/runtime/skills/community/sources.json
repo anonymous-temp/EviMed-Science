@@ -31,7 +31,7 @@
       "fetch": "github-tree",
       "requiresTools": [],
       "reviewedOn": "2026-10-22",
-      "why": "Creates self-contained animated HTML flowcharts and explanatory diagrams from CSS and SVG. The compact skill has no runtime package dependency and covers visual teaching, concept maps and process explanations that editable Mermaid diagrams do not animate. Vendored sparsely because the upstream repository also carries hundreds of megabytes of unrelated motion-library assets."
+      "why": "Creates animated HTML flowcharts and explanatory diagrams from CSS and SVG, with no package to install. The page it writes is one file but not an offline one: SKILL.md allows Google Fonts from its CDN (不依赖外部框架（可用 Google Fonts CDN）) and its two sample pages load Font Awesome from cdnjs, so a reader's browser needs the internet for those and shows the diagram without the icons or the typeface when it has none. It covers visual teaching, concept maps and process explanations that editable Mermaid diagrams do not animate. Vendored sparsely because the upstream repository also carries hundreds of megabytes of unrelated motion-library assets."
     },
     {
       "name": "card-theater",
@@ -42,7 +42,7 @@
       "fetch": "github-tree",
       "requiresTools": [],
       "reviewedOn": "2026-10-22",
-      "why": "Creates a self-contained HTML narrative with a sidebar and interactive 3D cards. It gives product, protocol and step-by-step explanations a clear clickable presentation form without adding a browser bundle or external runtime dependency."
+      "why": "Creates an HTML narrative with a sidebar and interactive 3D cards. It gives product, protocol and step-by-step explanations a clear clickable presentation form with nothing to install on our side, but the page it writes is not self-contained: its templates and SKILL.md (依赖：Tailwind CSS CDN + Font Awesome CDN + Swiper CDN) load Tailwind CSS, Font Awesome and Swiper (the coverflow templates) and Google Fonts from public CDNs, so a reader's browser needs the internet and the cards lose their styling and icons without it. The runtime itself never fetches them."
     },
     {
       "name": "stacked-data-cards",

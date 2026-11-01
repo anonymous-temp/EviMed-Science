@@ -2105,6 +2105,11 @@ export function loadConfig(overrides = {}) {
     evimedAccountApiBaseUrl: String(
       overrides.evimedAccountApiBaseUrl ?? process.env.OPEN_SCIENCE_EVIMED_ACCOUNT_API_BASE_URL ?? "",
     ).trim(),
+    // Verification codes the team's SMS sends for one phone number in a window (register, reset and login all count), so that the
+    // number of someone else's phone cannot be flooded through this adapter: the per-IP auth limit is shared with every other sign-in and
+    // does not follow a number. Fixed window, in memory (a restart forgets it); 0 turns it off.
+    evimedSmsPerPhoneMax: Number(overrides.evimedSmsPerPhoneMax ?? process.env.OPEN_SCIENCE_EVIMED_SMS_PER_PHONE_MAX ?? 5),
+    evimedSmsPerPhoneWindowMs: Number(overrides.evimedSmsPerPhoneWindowMs ?? process.env.OPEN_SCIENCE_EVIMED_SMS_PER_PHONE_WINDOW_MS ?? 3_600_000),
     // One introspection, start to finish. It sits between the shell's page load
     // and the first thing a researcher sees, so it is seconds, not the minute a
     // gateway gets.

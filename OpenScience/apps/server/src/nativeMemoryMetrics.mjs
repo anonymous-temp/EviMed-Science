@@ -74,6 +74,8 @@ export const NATIVE_FORGET_DUPLICATE_OUTCOMES = Object.freeze(["removed", "judge
 export const NATIVE_RECALL_NOTE_OUTCOMES = Object.freeze(["noted", "failed"]);
 /** What the page's import did: offered a list, saved it, was refused for the rate, or had no usable answer from the model. */
 export const NATIVE_IMPORT_OUTCOMES = Object.freeze(["offered", "saved", "rate_limited", "model_failed"]);
+/** The map's read of what the memories used to say: read, failed, or not finished inside its own deadline (the map is drawn without those marks and nothing else is lost). */
+export const NATIVE_MAP_REPLACED_OUTCOMES = Object.freeze(["read", "failed", "timeout"]);
 /** What the worker wrote besides revisions. */
 export const NATIVE_WORKER_WRITES = Object.freeze(["project_tag", "source_label_added", "source_label_removed", "registration"]);
 
@@ -111,6 +113,7 @@ const policySyncs = table(NATIVE_POLICY_SYNC_OUTCOMES);
 const forgetDuplicates = table(NATIVE_FORGET_DUPLICATE_OUTCOMES);
 const recallNotes = table(NATIVE_RECALL_NOTE_OUTCOMES);
 const imports = table(NATIVE_IMPORT_OUTCOMES);
+const mapReplaced = table(NATIVE_MAP_REPLACED_OUTCOMES);
 
 /** One gateway request. @param {string} route @param {string} outcome */
 export function recordGatewayRequest(route, outcome) {
@@ -187,10 +190,12 @@ export function recordForgetDuplicates(outcome, count = 1) { bump(forgetDuplicat
 export function recordRecallNote(outcome) { bump(recallNotes, outcome); }
 /** One step of the page's import. @param {string} outcome */
 export function recordImport(outcome) { bump(imports, outcome); }
+/** One read of the map's grey marks. @param {string} outcome */
+export function recordMapReplaced(outcome) { bump(mapReplaced, outcome); }
 
 /** The test hook: counters are process state. */
 export function resetNativeMemoryMetrics() {
-  for (const map of [requests, messages, masked, commits, withheld, refusals, upstreamFailures, ledgerFailures, turnCommits, workerCommits, workerOperations, extractionOutcomes, skippedOperations, rejectionJudge, rejectionLines, consolidations, consolidatedFiles, checkActions, workerWrites, workerPasses, observationOutcomes, resetSweeps, resetSweptFiles, extractionFailures, privacyDeletes, policySyncs, forgetDuplicates, recallNotes, imports]) {
+  for (const map of [requests, messages, masked, commits, withheld, refusals, upstreamFailures, ledgerFailures, turnCommits, workerCommits, workerOperations, extractionOutcomes, skippedOperations, rejectionJudge, rejectionLines, consolidations, consolidatedFiles, checkActions, workerWrites, workerPasses, observationOutcomes, resetSweeps, resetSweptFiles, extractionFailures, privacyDeletes, policySyncs, forgetDuplicates, recallNotes, imports, mapReplaced]) {
     for (const key of map.keys()) map.set(key, 0);
   }
 }
@@ -205,7 +210,7 @@ export function nativeMemoryCounters() {
     workerOperations: plain(workerOperations), extractionOutcomes: plain(extractionOutcomes), skippedOperations: plain(skippedOperations),
     rejectionJudge: plain(rejectionJudge), rejectionLines: plain(rejectionLines), consolidations: plain(consolidations), consolidatedFiles: plain(consolidatedFiles), checkActions: plain(checkActions), workerWrites: plain(workerWrites), workerPasses: plain(workerPasses),
     observationOutcomes: plain(observationOutcomes), resetSweeps: plain(resetSweeps), resetSweptFiles: plain(resetSweptFiles), extractionFailures: plain(extractionFailures),
-    privacyDeletes: plain(privacyDeletes), policySyncs: plain(policySyncs), forgetDuplicates: plain(forgetDuplicates), recallNotes: plain(recallNotes), imports: plain(imports),
+    privacyDeletes: plain(privacyDeletes), policySyncs: plain(policySyncs), forgetDuplicates: plain(forgetDuplicates), recallNotes: plain(recallNotes), imports: plain(imports), mapReplaced: plain(mapReplaced),
   };
 }
 
@@ -276,5 +281,7 @@ export function nativeMemoryMetricFamilies() {
       help: "Writes of a memory file's last-recalled time and recall count after a search or read through the gateway returned it: noted, or failed (never a reason for the recall to fail)." },
     { name: "open_science_native_memory_imports_total", type: "counter", series: series(imports, "outcome"),
       help: "The page's import of what another assistant remembered: a list offered to the person, a list saved, refused for the account's rate, or the model gave no usable answer." },
+    { name: "open_science_native_memory_map_replaced_total", type: "counter", series: series(mapReplaced, "outcome"),
+      help: "The memory map's read of what the memories used to say (the revisions behind its grey marks): read, failed, or not finished inside its own deadline. A miss costs those marks and nothing else." },
   ];
 }

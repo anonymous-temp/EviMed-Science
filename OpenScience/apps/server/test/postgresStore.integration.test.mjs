@@ -510,6 +510,9 @@ test("an EviMed account keeps EviMed's own id on its row, filled in and replaced
     assert.equal(JSON.stringify(await store.userById(id)).includes("98212"), false);
     // Only an EviMed account has one.
     assert.equal(await store.evimedUserIdOf("alice"), null);
+    // The id the sign-in derived is only the sign-in's to make: a registration by hand cannot take it before the person arrives.
+    await assert.rejects(store.createUser(`evimed_${"ab".repeat(20)}`, "abc123", "Squatter"), { code: "account_name_reserved" });
+    assert.equal((await admin.query("SELECT count(*)::integer AS count FROM evimed_control.users WHERE id LIKE 'evimed\\_ab%'")).rows[0].count, 0);
     const versions = await admin.query("SELECT max(version)::integer AS version FROM evimed_control.schema_migrations");
     assert.equal(versions.rows[0].version, CONTROL_PLANE_SCHEMA_VERSION);
   } finally {

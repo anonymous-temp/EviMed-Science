@@ -341,13 +341,30 @@ const POST_SWEEP_THIN_CHARS = 300;
 const POST_PICTURE_TIMEOUT_MS = 90_000;
 /**
  * The parser's and the plugin's codes that mean "not now" for the whole service and not "this picture": a post whose pictures met one is
- * tried again in a later round and is not counted as tried (an outage, a spent quota, a credential or the plugin only delays). A refusal
- * spent nothing. Every other failure of a picture — the parser's internal or upstream error, its timeout, a cancelled call, a type or a
- * size it refuses, a picture the plugin evicted — is that picture's own: the words of the others are kept and the post counts as tried
- * (rd-fix 2026-10-31: one picture that always failed held a post and the older posts behind it for the whole window).
+ * tried again in a later round and is not counted as tried (an outage, a spent quota, a credential or the plugin only delays), and the step
+ * stops for the round. A refusal spent nothing.
  */
-const POST_PICTURE_DELAY_CODES = new Set(["source_parser_unavailable", "source_parser_unconfigured", "source_parser_rate_limited",
+const POST_PICTURE_DELAY_CODES = new Set(["source_parser_unavailable", "source_parser_draining", "source_parser_unconfigured", "source_parser_rate_limited",
   "source_parser_quota_exhausted", "source_parser_auth_failed", "knowledge_plugin_unreachable", "knowledge_plugin_unconfigured", "knowledge_plugin_failed"]);
+/**
+ * The codes that are one picture's own: an evicted or refused picture, a type or a size the parser will not take, an answer it could not
+ * give for this file. Every other failure of a picture — the parser's timeout, a cancelled call (the 90 s abort), its internal or upstream
+ * error, a body that stopped halfway, a failure with no code of its own — may be the service's, and cannot be told from a poison picture on
+ * one try: it delays the post (`POST_PICTURE_ATTEMPTS`) and stops the step for the round. Before rev-1101 these were read as that picture's
+ * own, so a parser gateway's 502 for an hour tried every thin post once, withdrew the published ones and failed the queued ones, and a
+ * hanging parser cost 90 s a picture ahead of the round's edits and publishing.
+ */
+const POST_PICTURE_OWN_CODES = new Set(["frontier_media_not_found", "frontier_media_invalid", "source_parser_payload_too_large", "source_format_unsupported",
+  "source_parser_input_too_large", "source_parser_response_too_large", "source_parser_checksum_failed", "source_parser_rejected", "source_parser_response_invalid"]);
+/** The failures that cost a deadline: after one the step reads no further picture of the post, whatever the attempt (a round pays one timeout, not four). */
+const POST_PICTURE_SLOW_CODES = new Set(["source_parser_timeout", "source_parser_canceled", "frontier_media_unreadable"]);
+/**
+ * How many times a post may be put off for a failure that may be the service's, and how long the first put-off lasts (each is that long again
+ * as many times as it has been put off: 15, 30, 45 and 60 minutes). At the last the post is decided by the pictures that were read, and the
+ * pictures that failed count as their own failures (a poison picture cannot hold a post or the queue behind it for longer than that).
+ */
+const POST_PICTURE_ATTEMPTS = 4;
+const POST_PICTURE_RETRY_MS = 15 * 60_000;
 /** How many pictures' recognised words a worker keeps in memory between rounds, so a service outage that cuts a post short never parses a good picture twice. */
 const POST_PICTURE_CACHE = 64;
 /** `items.withdrawn_reason` of a crawl post taken out for having no text of its own (rd-server 2026-10-31); an operator's reason is never this. */
@@ -1637,7 +1654,7 @@ export class FrontierPipeline {
           return FRONTIER_MEDIA_ID.test(id) && !had.has(id);
         });
         if (brought) {
-          await client.query(`UPDATE evimed_frontier.item_texts SET picture_tried_at = NULL
+          await client.query(`UPDATE evimed_frontier.item_texts SET picture_tried_at = NULL, picture_attempts = 0, picture_retry_at = NULL
             WHERE item_id = $1 AND picture_tried_at IS NOT NULL AND btrim(coalesce(picture_text, '')) = ''`, [item.id]);
         }
       }
@@ -2879,17 +2896,20 @@ export class FrontierPipeline {
    * nothing to read); a withdrawn one is shown again (`#reinstatePost`); a failed one is queued again; one with no other text stores them as
    * its reader summary, so the 导读 and the questions are asked for it (`frontierPostPictureReader`). When they do not, a shown post is
    * withdrawn and the others stay out, and none is asked again. A parser or plugin outage is not a try: the post is put back as it was
-   * (the 12-hour wait it sat in too) and the step stops for the round; a picture the parser refuses for its own reason — its timeout, its
-   * internal error, a type it cannot read, an evicted picture — is a picture without words, and the post's other pictures count. A post
-   * not reached this round keeps its wait. `OPEN_SCIENCE_FRONTIER_POST_PICTURES_ENABLED`, and a configured parser.
+   * (the 12-hour wait it sat in too) and the step stops for the round; a picture the parser refuses for its own reason — a type it cannot
+   * read, a size, an evicted picture — is a picture without words, and the post's other pictures count. A failure that may be the service's
+   * (the parser's timeout or cancelled call, its internal or upstream error, a body that stopped halfway) also stops the step for the round,
+   * and when the pictures read so far do not make the post readable the post is put off (`picture_attempts`, `picture_retry_at`: 15, 30, 45
+   * and 60 minutes) and not tried — it is not withdrawn and not failed for an hour of gateway errors — until the fifth time, when it is
+   * decided by what its pictures gave. A post not reached this round keeps its wait. `OPEN_SCIENCE_FRONTIER_POST_PICTURES_ENABLED`, and a configured parser.
    * @param {any} context
    */
   async #postPictures(context) {
     const { now, summary } = context;
     if (this.config.frontierPostPicturesEnabled === false || !this.parser || !this.media) return;
     const claimed = (await this.database.query(`WITH picked AS (
-        SELECT i.id, i.lease_until AS waiting_until FROM evimed_frontier.items i JOIN evimed_frontier.item_texts t ON t.item_id = i.id
-        WHERE i.platform = ANY($2::text[]) AND t.picture_tried_at IS NULL
+        SELECT i.id, i.lease_until AS waiting_until, t.picture_attempts FROM evimed_frontier.items i JOIN evimed_frontier.item_texts t ON t.item_id = i.id
+        WHERE i.platform = ANY($2::text[]) AND t.picture_tried_at IS NULL AND (t.picture_retry_at IS NULL OR t.picture_retry_at <= $1)
           AND (i.state IN ('screened', 'scored', 'published') OR (i.state = 'withdrawn' AND i.withdrawn_reason = $7)
             OR (i.state = 'failed' AND i.editor_diagnostics->>'giveUp' = 'no-text'))
           AND jsonb_typeof(i.media) = 'array' AND jsonb_array_length(i.media) > 0 AND coalesce(i.visible_at, i.first_seen_at) > $3
@@ -2898,7 +2918,7 @@ export class FrontierPipeline {
         LIMIT $4
         FOR UPDATE OF i SKIP LOCKED)
       UPDATE evimed_frontier.items i SET lease_owner = $5, lease_until = $6 FROM picked WHERE i.id = picked.id
-      RETURNING i.id, i.title_raw, i.platform, i.state, i.media, i.lease_until, picked.waiting_until`,
+      RETURNING i.id, i.title_raw, i.platform, i.state, i.media, i.lease_until, picked.waiting_until, picked.picture_attempts`,
     [now, [...FRONTIER_CRAWL_PLATFORMS], new Date(now.getTime() - FRONTIER_LEAD_WINDOW_MS), POST_PICTURE_SCAN, this.workerId,
       new Date(now.getTime() + this.leaseMs), POST_WITHDRAWN])).rows;
     let read = 0;
@@ -2914,8 +2934,20 @@ export class FrontierPipeline {
         let words = null;
         if (!reading.says) {
           if (stopped || read >= FRONTIER_POST_LIMITS.postsPerRound) return false;
-          const found = await this.#readPostPictures(item);
-          if (found.delayed) { stopped = true; this.counters.postPicturesDeferred += 1; return false; }
+          const found = await this.#readPostPictures(item, Number(item.picture_attempts ?? 0));
+          // A failure that may be the service's stops the step for the round, whatever becomes of the post.
+          if (found.service) stopped = true;
+          if (found.delayed) { this.counters.postPicturesDeferred += 1; return false; }
+          if (found.putOff) {
+            // Not a try: the post is looked at again after a wait that grows with the times it was put off, up to `POST_PICTURE_ATTEMPTS`.
+            const attempts = Number(item.picture_attempts ?? 0) + 1;
+            this.counters.postPicturesDeferred += 1;
+            return this.#writeUnderLease(item, async (client) => {
+              await client.query("UPDATE evimed_frontier.item_texts SET picture_attempts = $2, picture_retry_at = $3 WHERE item_id = $1",
+                [item.id, attempts, new Date(now.getTime() + attempts * POST_PICTURE_RETRY_MS)]);
+              await client.query("UPDATE evimed_frontier.items SET lease_owner = NULL, lease_until = $2 WHERE id = $1", [item.id, waiting]);
+            });
+          }
           read += 1;
           words = found.text;
           if (found.failed) this.counters.postPicturesFailed += 1;
@@ -2968,16 +3000,29 @@ export class FrontierPipeline {
    * One post's pictures through the parser: the first `FRONTIER_POST_LIMITS.maxPictures`, in order, each fetched from the plugin and
    * parsed with a deadline. All of them are fetched before any is parsed, so a plugin that cannot be reached costs no parse; the words
    * of a picture already parsed are kept in memory (`pictureWords`), so an outage that cuts a post short never parses it twice.
-   * `delayed` — the plugin or the parser could not be reached (or refused for its quota or credential): nothing is decided; `failed` —
-   * every picture was refused for its own reason; otherwise `text` is the words found, '' when there were none.
-   * @param {{ media: unknown }} item
-   * @returns {Promise<{ text: string, delayed: boolean, failed: boolean }>}
+   *
+   * - `delayed` — the plugin or the parser could not be reached (or refused for its quota or credential): nothing is decided, the post
+   *   keeps its wait and is looked at in the next round (no count, an outage is not the post's);
+   * - `putOff` — a picture failed in a way that may be the service's (`POST_PICTURE_OWN_CODES` are the pictures' own) and the pictures
+   *   read so far do not make the post readable: the caller records one more put-off, and the post is not tried. The first such failure
+   *   ends the post's reading for the round. Once the post has been put off `POST_PICTURE_ATTEMPTS` times (`attempts`) it is decided by
+   *   what its pictures give, and a failed picture is that picture's own: the pictures after it are read, but never after a failure that
+   *   cost a deadline (`POST_PICTURE_SLOW_CODES`), so a round pays one timeout and not four;
+   * - `service` — a failure that may be the service's happened in this call: the step reads no further post this round;
+   * - `failed` — no picture of the post could be read; otherwise `text` is the words found, '' when there were none.
+   * @param {{ media: unknown }} item @param {number} [attempts] the times the post was put off
+   * @returns {Promise<{ text: string, delayed: boolean, putOff: boolean, service: boolean, failed: boolean }>}
    */
-  async #readPostPictures(item) {
+  async #readPostPictures(item, attempts = 0) {
     const ids = (Array.isArray(item.media) ? item.media : []).map((/** @type {any} */ entry) => String(entry?.id ?? "")).filter((id) => FRONTIER_MEDIA_ID.test(id))
       .slice(0, FRONTIER_POST_LIMITS.maxPictures);
     const fetchPicture = this.media;
-    if (!fetchPicture) return { text: "", delayed: true, failed: false };
+    const outage = { text: "", delayed: true, putOff: false, service: true, failed: false };
+    if (!fetchPicture) return outage;
+    const tolerant = attempts >= POST_PICTURE_ATTEMPTS;
+    let service = false;
+    /** Whether the post is to be put off: a failure that may be the service's, and not yet enough read to decide by. @param {string[]} parts */
+    const deferred = (parts) => service && !tolerant && frontierPostWeight(parts.join("\n")) < FRONTIER_POST_LIMITS.picture;
     /** @type {Map<string, { bytes: Buffer, contentType: string } | null>} */
     const pictures = new Map();
     for (const id of ids) {
@@ -2985,36 +3030,49 @@ export class FrontierPipeline {
       try {
         pictures.set(id, await fetchPicture(id));
       } catch (error) {
-        if (POST_PICTURE_DELAY_CODES.has(codeOf(error))) return { text: "", delayed: true, failed: false };
-        // An evicted picture (the plugin's 404) or one the plugin will not serve: a picture without words.
+        const code = codeOf(error);
+        if (POST_PICTURE_DELAY_CODES.has(code)) return outage;
         pictures.set(id, null);
+        // An evicted picture (the plugin's 404) or one the plugin will not serve is a picture without words; any other failure may be the plugin's.
+        if (!POST_PICTURE_OWN_CODES.has(code)) {
+          service = true;
+          if (!tolerant || POST_PICTURE_SLOW_CODES.has(code)) break;
+        }
       }
     }
     /** @type {string[]} */
     const parts = [];
-    let refused = 0;
+    let parsedAny = false;
     for (const id of ids) {
       const known = this.pictureWords.get(id);
-      if (known !== undefined) { if (known) parts.push(known); continue; }
+      if (known !== undefined) { parsedAny = true; if (known) parts.push(known); continue; }
+      // A picture the fetch above did not reach (it stopped at a failure) is read in a later round, or by this one when it is the last.
+      if (!pictures.has(id)) { if (service && !tolerant) break; continue; }
       const picture = pictures.get(id);
       const extension = picture ? /** @type {Record<string, string>} */ ({ "image/jpeg": "jpg", "image/png": "png", "image/gif": "gif" })[picture.contentType] : undefined;
       // The parser reads jpg, png, bmp and gif; a stored picture in another type has no words to be had from it here.
-      if (!picture || !extension) { refused += 1; continue; }
+      if (!picture || !extension) continue;
       try {
         const parsed = await this.parser.parseBytes({ bytes: picture.bytes, filename: `${id.slice(0, 16)}.${extension}`, mediaType: picture.contentType,
           signal: AbortSignal.timeout(POST_PICTURE_TIMEOUT_MS) });
         const words = frontierPostClean(parsed?.text ?? "");
         if (this.pictureWords.size >= POST_PICTURE_CACHE) this.pictureWords.delete(this.pictureWords.keys().next().value ?? "");
         this.pictureWords.set(id, words);
+        parsedAny = true;
         if (words) parts.push(words);
       } catch (error) {
-        if (POST_PICTURE_DELAY_CODES.has(codeOf(error))) return { text: "", delayed: true, failed: false };
-        // The parser's own failure on this picture (its timeout, its internal or upstream error, a cancelled call, a type or size it refuses).
-        refused += 1;
+        const code = codeOf(error);
+        if (POST_PICTURE_DELAY_CODES.has(code)) return outage;
+        if (POST_PICTURE_OWN_CODES.has(code)) continue;
+        // The parser's timeout, a cancelled call, its internal or upstream error: this picture's, or the service's. The first one ends the
+        // post's reading for the round (and, when the post is not decided by it, puts the post off).
+        service = true;
+        if (!tolerant || POST_PICTURE_SLOW_CODES.has(code)) break;
       }
     }
     const text = parts.join("\n").slice(0, FRONTIER_POST_LIMITS.pictureChars).trim();
-    return { text, delayed: false, failed: !text && ids.length > 0 && refused === ids.length };
+    if (deferred(parts)) return { text: "", delayed: false, putOff: true, service: true, failed: false };
+    return { text, delayed: false, putOff: false, service, failed: !text && ids.length > 0 && !parsedAny };
   }
 
   /**
