@@ -56,7 +56,7 @@ export function geoJourney(project: JourneyProject) {
     next = {kind:'step',step:current,label:'继续当前工作'};
     const state = workflow.steps[current];
     if (blocked) {stage='blocked';title=`${GEO_STEP_NAMES[current]}等待额度`;detail='打开当前工作查看额度状态和已保留的结果。';}
-    else if (active) {stage=state.status === 'running' ? 'running' : 'queued';title=`${state.status === 'running' ? '正在' : '已排队：'}${GEO_STEP_WORK[current]}`;detail=waitingFor.length ? `等待${names(waitingFor)}。` : '查看这次任务的运行记录与已有结果。';}
+    else if (active) {stage=state.status === 'running' ? 'running' : 'queued';title=`${state.status === 'running' ? '正在' : '已排队：'}${GEO_STEP_WORK[current]}`;detail=waitingFor.length ? `等待${names(waitingFor)}。` : '查看这次任务的对话记录与已有结果。';}
     else if (failed) {stage='failed';title=`${GEO_STEP_NAMES[current]}没有完成`;detail='查看失败原因与这次运行；已保留的结果仍可打开。';}
     else {stage='queued';title=`待继续：${GEO_STEP_WORK[current]}`;detail=waitingFor.length ? `还需要${names(waitingFor)}。` : '该项工作已请求，尚未观察到开始运行。';}
     if (!active && !failed && !blocked && waitingFor.length) next = {kind:'step',step:waitingFor[0],label:`查看${GEO_STEP_NAMES[waitingFor[0]]}`};
@@ -69,7 +69,7 @@ export function geoJourney(project: JourneyProject) {
     next={kind:'step',step:'monitoring',label:'查看范围与自动监测设置'};
   }
   if (['paused','archived'].includes(project.status)) {
-    stage='paused';title=project.status === 'paused' ? '项目已暂停' : '项目已归档'; detail='已有结果和运行记录仍可查看。'; next={kind:'view',step:current ?? undefined,label:'查看项目与保留结果'};
+    stage='paused';title=project.status === 'paused' ? '项目已暂停' : '项目已归档'; detail='已有结果和对话记录仍可查看。'; next={kind:'view',step:current ?? undefined,label:'查看项目与保留结果'};
   }
   const intents = ['answers', 'optimize', 'strategy'].map(key => {
     const starter = GEO_STARTERS.find(item => item.key === key)!;

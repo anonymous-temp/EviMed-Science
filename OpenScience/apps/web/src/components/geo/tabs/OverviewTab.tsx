@@ -83,7 +83,7 @@ export function OverviewTab({ geoId, project }: { geoId: string; project: GeoPro
   if (geoOverviewNeedsMeasurement(project, diagnosis.state, monitoring.state)) return <div data-geo-tab="overview" data-geo-first-use="" className="flex flex-col gap-6">
     <GeoJourneySummary project={project} />
     <Section title="已有资料与结果">
-      <p className="mb-3 text-ui text-text-2">还没有采样记录。产品依据、问题和方案的已有结果都可继续查看。</p>
+      <p className="mb-3 text-ui text-text-2">还没有采样记录。</p>
       <div className="flex flex-wrap gap-2"><Link className={buttonClasses({variant:"secondary"})} to={path(geoTabPath(geoId,"evidence"))}>查看产品依据</Link><Link className={buttonClasses({variant:"secondary"})} to={path(geoTabPath(geoId,"questions"))}>整理问题</Link></div>
     </Section>
     {strategy.state.kind === "error" && <LoadError message={strategy.state.message} onRetry={strategy.reload} />}
@@ -268,7 +268,7 @@ function TrendCard({
   }), [watch, next, metric?.target, project.name]);
 
   if (monitoring.state.kind === "ready" && points.length === 0) return <section aria-label="监测趋势" className={className}>
-    <p className="text-ui text-text-2">还没有持续监测趋势。已有测量和其他结果仍可查看。</p>
+    <p className="text-ui text-text-2">还没有持续监测趋势。</p>
     <Link className="mt-2 inline-block rounded text-ui text-link hover:underline" to={geoTabPath(project.id,"visibility")}>查看测量与监测</Link>
   </section>;
 

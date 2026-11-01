@@ -169,7 +169,7 @@ function NeedsYouRow({ geoId, project, item, pause }: { geoId: string; project: 
     return (
       <ListRow
         title={`${GEO_STEP_NAMES[step]}没有做完`}
-        meta={held ? "测量服务暂时不可用，已有结果仍可查看" : project.steps[step]?.summary?.text ? `已保留：${project.steps[step]?.summary?.text}` : project.steps[step]?.error || project.steps[step]?.note || "打开这一步查看运行记录和保留结果"}
+        meta={held ? "测量服务暂时不可用，已有结果仍可查看" : project.steps[step]?.summary?.text ? `已保留：${project.steps[step]?.summary?.text}` : project.steps[step]?.error || project.steps[step]?.note || "打开这一步查看对话记录和保留结果"}
         to={geoDestinationPath(geoId, GEO_STEP_HOME[step])}
         actions={held || !geoActionPermission(project,"run").allowed ? undefined : (
           <Button

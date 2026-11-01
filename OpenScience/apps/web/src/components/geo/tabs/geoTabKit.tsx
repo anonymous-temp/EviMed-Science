@@ -1,3 +1,4 @@
+import { Note } from "@/components/ui/Note";
 import { geoWorkflowState } from "@evimed/domain";
 import { Button } from "@/components/ui/Button";
 import { geoActionPermission, geoJourney } from "../geoJourney";
@@ -107,7 +108,7 @@ export function StepPending({ geoId, project, step }: { geoId: string; project: 
     setBusy(true);
     void runGeoStep(geoId, step)
       .then(answer => {
-        toast.success(answer.accepted === false ? "没有新增任务，请查看当前工作状态。" : answer.runId ? `已开始${recipe.verb}。` : `已提交${recipe.verb}，等待开始。`, {action: frame ? {label:"查看运行记录",onClick:() => frame.openPanel("runs")} : undefined});
+        toast.success(answer.accepted === false ? "没有新增任务，请查看当前工作状态。" : answer.runId ? `已开始${recipe.verb}。` : `已提交${recipe.verb}，等待开始。`, {action: frame ? {label:"查看对话记录",onClick:() => frame.openPanel("runs")} : undefined});
         frame?.reload();
       })
       .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "这一步无法开始，请稍后重试。" })))
@@ -125,8 +126,7 @@ export function StepPending({ geoId, project, step }: { geoId: string; project: 
 
   else if (!journey.product || project.product.identityStatus === "ambiguous") body = <div className="flex flex-col items-start gap-3 py-6">
     <h2 className="text-section font-semibold">先确认产品与资料</h2>
-    <p className="max-w-measure text-ui text-text-2">请在现有对话中说明产品名称、适用场景、目标受众和本次要做的工作，附上说明书、证据或稿件。已有资料会优先用于确认产品。</p>
-    {journey.canConverse && <Button variant="secondary" onClick={() => void open({geoId,projectId:project.projectId,sessionId:frame?.conversation,primarySessionId:project.sessionId},journey.next.draft)}>在对话中补充产品与资料</Button>}
+    <Note action={journey.canConverse ? <Button variant="secondary" onClick={() => void open({geoId,projectId:project.projectId,sessionId:frame?.conversation,primarySessionId:project.sessionId},journey.next.draft)}>在对话中补充产品与资料</Button> : undefined}>请在现有对话中说明产品名称、适用场景、目标受众和本次要做的工作，附上说明书、证据或稿件。已有资料会优先用于确认产品。</Note>
   </div>;
   else body = <StepState phase="empty" step={step === "monitoring" ? "设置自动监测" : `开始任务：${recipe.verb}`} noun={recipe.noun} uses={inputs} gives={recipe.gives} onStart={permission.allowed ? start : undefined} starting={busy} reason={permission.reason} />;
   return <div>{body}{record && <div className="flex justify-center">{record}</div>}{!permission.allowed && state?.status === "failed" && <p className="text-center text-caption text-text-3">{permission.reason}</p>}</div>;
