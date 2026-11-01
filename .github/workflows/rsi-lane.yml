@@ -1,7 +1,8 @@
 name: rsi-lane
 
 # The RSI lab's lanes. Only this file and .rsi-lab/ live on the orphan branch rsi-lab/lanes, so a push here starts nothing else.
-# A batch is one commit that edits .rsi-lab/config.json.
+# A batch is one commit that edits .rsi-lab/config.json (see .rsi-lab/README.txt). The logs of this repository are public: every step
+# prints counters, request ids and bounded codes, never a prompt, an answer or a model output.
 on:
   push:
     branches: ["rsi-lab/lanes"]
@@ -23,6 +24,9 @@ jobs:
       matrix: ${{ steps.cfg.outputs.matrix }}
       imageRunId: ${{ steps.cfg.outputs.imageRunId }}
       imageArtifact: ${{ steps.cfg.outputs.imageArtifact }}
+      sourceRef: ${{ steps.cfg.outputs.sourceRef }}
+      labFrom: ${{ steps.cfg.outputs.labFrom }}
+      idleExitMin: ${{ steps.cfg.outputs.idleExitMin }}
     steps:
       - uses: actions/checkout@v4
       - id: cfg
@@ -31,18 +35,27 @@ jobs:
           import json, os
           cfg = json.load(open('.rsi-lab/config.json'))
           mode = cfg['mode']
-          assert mode in ('reupload', 'probe', 'lanes', 'bringup', 'idle'), mode
-          lanes = int(cfg.get('lanes', 1))
-          assert 1 <= lanes <= 8, lanes
-          out = os.environ['GITHUB_OUTPUT']
-          with open(out, 'a') as fh:
+          assert mode in ('reupload', 'probe', 'lanes', 'idle'), mode
+          include = []
+          for arm in cfg.get('arms', []):
+              for job in range(1, int(arm.get('jobs', 1)) + 1):
+                  include.append({'key': arm['key'], 'patch': arm.get('patch') or '', 'workers': int(arm.get('workers', 3)), 'job': job,
+                                  'lane': f"{cfg['batch']}-{arm['key']}-{job}"})
+          assert len(include) <= 8, 'at most 8 lane jobs'
+          if mode == 'lanes':
+              assert include, 'no arms'
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as fh:
               fh.write(f"mode={mode}\n")
-              fh.write("matrix=" + json.dumps({'lane': list(range(1, lanes + 1))}) + "\n")
+              fh.write("matrix=" + json.dumps({'include': include or [{'key': 'none', 'patch': '', 'workers': 0, 'job': 0, 'lane': 'none'}]}) + "\n")
               fh.write(f"imageRunId={int(cfg['imageRunId'])}\n")
               fh.write(f"imageArtifact={cfg['imageArtifact']}\n")
+              fh.write(f"sourceRef={cfg.get('sourceRef', 'main')}\n")
+              fh.write(f"labFrom={cfg.get('labFrom', 'branch')}\n")
+              fh.write(f"idleExitMin={int(cfg.get('idleExitMin', 30))}\n")
+          print(f"mode {mode}: {len(include)} lane job(s)")
           PY
 
-  # One-off: the CI artifact expires on 2026-11-04; this copy lives 30 days.
+  # One-off: the CI artifact expires on 2026-11-04; the copy lives 30 days.
   reupload:
     needs: plan
     if: needs.plan.outputs.mode == 'reupload'
@@ -56,11 +69,6 @@ jobs:
           github-token: ${{ github.token }}
           repository: ${{ github.repository }}
           path: ${{ runner.temp }}/img
-      - name: Inspect the copy (names, sizes, hashes only)
-        run: |
-          ls -l "$RUNNER_TEMP/img"
-          (cd "$RUNNER_TEMP/img" && sha256sum images.tar.gz)
-          python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print(d['sourceRevision'], d['releaseId']); [print(r, v['reference']) for r, v in d['roles'].items()]" "$RUNNER_TEMP/img/prepared-export.json"
       - uses: actions/upload-artifact@v4
         with:
           name: rsi-lab-images-5c740327bb8c
@@ -75,27 +83,118 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - name: Reach the broker host
+      - name: Runner facts
+        run: |
+          uname -r; cat /sys/kernel/security/lsm; echo
+          nproc; free -m | sed -n 2p; df -h / | cat
+          docker --version; docker compose version
+
+  lane:
+    needs: plan
+    if: needs.plan.outputs.mode == 'lanes'
+    name: lane ${{ matrix.lane }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      max-parallel: 8
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    defaults:
+      run:
+        shell: /usr/local/bin/evimed-ci-root-shell {0}
+    env:
+      LAB_WORK: /opt/rsi-lab
+      LAB_BUNDLE: /opt/rsi-lab/bundle
+      LAB_SRC: ${{ github.workspace }}/src/OpenScience
+      LANE_ID: ${{ matrix.lane }}
+      LANES: ${{ matrix.workers }}
+      IMAGE_KEY: ${{ matrix.key }}
+      IDLE_EXIT_MIN: ${{ needs.plan.outputs.idleExitMin }}
+      COMPOSE_PARALLEL_LIMIT: "1"
+    steps:
+      - name: Prepare the disposable Docker host operator shell
+        shell: bash
+        run: |
+          test "$RUNNER_ENVIRONMENT" = "github-hosted"
+          cat > "$RUNNER_TEMP/evimed-ci-root-shell" <<'SH'
+          #!/usr/bin/env bash
+          exec sudo -E env "PATH=$PATH" bash --noprofile --norc -eo pipefail "$1"
+          SH
+          sudo install -o 0 -g 0 -m 0755 "$RUNNER_TEMP/evimed-ci-root-shell" /usr/local/bin/evimed-ci-root-shell
+          echo "DEADLINE_EPOCH=$(( $(date +%s) + 338 * 60 ))" >> "$GITHUB_ENV"
+
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.plan.outputs.sourceRef }}
+          path: src
+          fetch-depth: 1
+      - uses: actions/checkout@v4
+        if: matrix.patch != ''
+        with:
+          ref: ${{ matrix.patch }}
+          path: patch
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.0
+
+      - name: Place the lab files and the secret bundle
         env:
           RSI_LAB_BUNDLE: ${{ secrets.RSI_LAB_BUNDLE }}
         run: |
           set +x
-          mkdir -p "$RUNNER_TEMP/b" && printf '%s' "$RSI_LAB_BUNDLE" | base64 -d | tar -xz -C "$RUNNER_TEMP/b"
-          host="$(cat "$RUNNER_TEMP/b/broker/host")"
-          echo "::add-mask::$host"
-          for port in 22; do
-            if timeout 10 bash -c "exec 3<>/dev/tcp/$host/$port" 2>/dev/null; then echo "tcp $port: open"; else echo "tcp $port: closed or filtered"; fi
+          git config --global --add safe.directory '*'
+          install -d -m 0700 "$LAB_WORK" "$LAB_BUNDLE"
+          printf '%s' "$RSI_LAB_BUNDLE" | base64 -d | tar -xz -C "$LAB_BUNDLE"
+          for f in "$LAB_BUNDLE"/secrets/* "$LAB_BUNDLE"/broker/host; do
+            v="$(tr -d '\r\n' < "$f")"
+            if [ -n "$v" ]; then echo "::add-mask::$v"; fi
           done
-          chmod 600 "$RUNNER_TEMP/b/broker/id_ed25519"
-          start=$SECONDS
-          out="$(timeout 40 ssh -o BatchMode=yes -o ConnectTimeout=20 -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/b/broker/known_hosts" -i "$RUNNER_TEMP/b/broker/id_ed25519" "rsi-broker@$host" 'lane-status probe {}' 2>&1 | sed -E 's/[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+/<ip>/g' | head -c 300)" || true
-          echo "ssh answer after $((SECONDS - start)) s: $out"
-      - name: Runner facts
+          if [ "${{ needs.plan.outputs.labFrom }}" = "source" ]; then
+            echo "LAB=$GITHUB_WORKSPACE/src/OpenScience/evals/harness-adaptation/lab" >> "$GITHUB_ENV"
+          else
+            echo "LAB=$GITHUB_WORKSPACE/.rsi-lab/lab" >> "$GITHUB_ENV"
+          fi
+          echo "secrets placed: $(ls "$LAB_BUNDLE"/secrets | wc -l) files"
+
+      - name: Fetch the release images from this repository's artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.plan.outputs.imageArtifact }}
+          run-id: ${{ needs.plan.outputs.imageRunId }}
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          path: ${{ runner.temp }}/img
+
+      - name: Verify and load the images
         run: |
-          uname -r
-          cat /sys/kernel/security/lsm; echo
-          nproc; free -m | sed -n 2p; df -h / /mnt | cat
-          docker --version; docker compose version
-          for url in https://api.deepseek.com https://huggingface.co https://pubmed.ncbi.nlm.nih.gov https://duckduckgo.com https://www.bing.com https://www.google.com; do
-            code="$(curl -s -o /dev/null -m 15 -w '%{http_code}' "$url" || true)"; echo "$url -> $code"
-          done
+          started=$SECONDS
+          python3 -B "$LAB/stack.py" images --archive "$RUNNER_TEMP/img"
+          rm -f "$RUNNER_TEMP/img/images.tar.gz"
+          df -h / | tail -1
+          echo "images ready after $((SECONDS - started)) s"
+
+      - name: Build the candidate runtime image
+        if: matrix.patch != ''
+        run: python3 -B "$LAB/stack.py" build-delta --patch-src "$GITHUB_WORKSPACE/patch/OpenScience" --key "${{ matrix.key }}"
+
+      - name: Write the environment and the secret files
+        run: python3 -B "$LAB/stack.py" env --lanes "${{ matrix.workers }}" ${{ matrix.patch != '' && '--delta' || '' }}
+
+      - name: Start the stack
+        run: python3 -B "$LAB/stack.py" up
+
+      - name: Lab checks
+        run: python3 -B "$LAB/stack.py" verify
+
+      - name: Take requests
+        run: python3 -B "$LAB/lane.py"
+
+      - name: Container state on failure
+        if: failure()
+        run: python3 -B "$LAB/stack.py" diagnose || true
+
+      - name: Stop the stack
+        if: always()
+        run: python3 -B "$LAB/stack.py" down || true

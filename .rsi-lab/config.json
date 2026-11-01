@@ -1,10 +1,12 @@
 {
-  "mode": "probe",
-  "batch": "b001",
-  "lanes": 1,
-  "imageKey": "base",
+  "mode": "lanes",
+  "batch": "b002",
   "sourceRef": "main",
   "labFrom": "branch",
-  "imageRunId": 41281811139,
-  "imageArtifact": "evimed-core-release-5c740327bb8c0dfa515d01badf927618ed5ceebe"
+  "imageRunId": 41307417699,
+  "imageArtifact": "rsi-lab-images-5c740327bb8c",
+  "idleExitMin": 3,
+  "arms": [
+    {"key": "base", "jobs": 1, "workers": 2}
+  ]
 }
