@@ -97,6 +97,20 @@ describe("患者匹配 — choosing a person", () => {
     expect(screen.getByRole("button", { name: "给试验找患者" })).toHaveAttribute("aria-pressed", "true");
   });
 
+  it("a study with a patient and no protocol opens on that patient's trials, once", async () => {
+    const reads: URLSearchParams[] = [];
+    server = installVcrServer(network.productRequest, { [`GET ${MATCHING}`]: ({ query }: { query: URLSearchParams }) => {
+      reads.push(query);
+      return Object.assign(fixture("ev201/matching.json"), { protocols: [], candidateRoster: ["P-0201"], opensOnPatient: "P-0201" });
+    } });
+    drawTab(<MatchingTab studyId={STUDY_ID} study={study()} />);
+    await waitFor(() => expect(reads.some((query) => query.get("direction") === "patient_to_trial" && query.get("candidate") === "P-0201")).toBe(true));
+    await userEvent.click(await screen.findByRole("button", { name: "给试验找患者" }));
+    await waitFor(() => expect(reads.at(-1)?.get("direction")).toBe("trial_to_patient"));
+    await new Promise((done) => setTimeout(done, 50));
+    expect(reads.at(-1)?.get("direction")).toBe("trial_to_patient");
+  });
+
   // The ranking hint orders a coordinator's work; it is never a probability.
   it("carries the clinical priority under its own label, with no number that reads as a probability", async () => {
     drawTab(<MatchingTab studyId={STUDY_ID} study={study()} />);

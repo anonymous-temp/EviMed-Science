@@ -1656,6 +1656,9 @@ export function presentMatchingTab(bundle, query = {}) {
     // adds `patientTrials`: one patient's trials, ranked.
     direction: match.patientTrials ? "patient_to_trial" : "trial_to_patient",
     directions: ["trial_to_patient", "patient_to_trial"],
+    // A conversation's "这位患者能入哪些试验" leaves a patient and their trials and no protocol: its result is on the patient's side, and
+    // the other side would open on an empty page asking for a research question.
+    ...(!list(match.protocols).length && list(match.candidateRoster).length ? { opensOnPatient: String(list(match.candidateRoster)[0]) } : {}),
     ...(match.patientTrials ? { patientTrials: presentPatientTrials(bundle, match.patientTrials) } : {}),
     funnel,
     candidates,

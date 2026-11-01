@@ -1352,6 +1352,8 @@ export interface VcrMatchingTab {
   direction?: "trial_to_patient" | "patient_to_trial";
   /** The directions this server answers. */
   directions?: Array<"trial_to_patient" | "patient_to_trial">;
+  /** The patient the tab opens on: the study holds this person and no protocol, so its result is on the patient's side. */
+  opensOnPatient?: string;
   /** Present when the direction asked for is 给患者找试验. */
   patientTrials?: VcrPatientTrials | null;
   funnel: Array<{ key: string; label: string; count: number | null; note?: string | null; tone?: "attention" | "accent" | "neutral" }>;

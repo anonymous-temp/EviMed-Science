@@ -1,7 +1,7 @@
 import { useStudyFrame } from "../studyFrameContext";
 import { ClinicalTimeline, CriterionTable, useMatchingControls } from "../ClinicalMatchingDetails";
 import { VcrCorrectionCasesActions } from "../VcrCorrectionCasesActions";
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { CircleCheck, PenLine, TriangleAlert } from "lucide-react";
 import {
   getVcrMatching,
@@ -92,6 +92,16 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
   };
 
   const switchDirection = (next: Direction) => { setDirection(next); setCandidate(null); setTrial(null); };
+
+  // Once per visit: a study with a patient and no protocol opens on that patient. A later click on the other direction stays there.
+  const opened = useRef(false);
+  const opensOn = state.kind === "ready" ? state.data.opensOnPatient : undefined;
+  useEffect(() => {
+    if (opened.current || !opensOn) return;
+    opened.current = true;
+    setDirection("patient_to_trial");
+    setCandidate(opensOn);
+  }, [opensOn]);
 
   // The controls are the reader's own instrument: the chip they just used, the patient they are filling in. They are drawn from this
   // key's page once it has arrived and from the newest one before that — also when this one could not be read — so a change of
