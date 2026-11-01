@@ -66,7 +66,10 @@ test("every rule geo/metrics.json declares is read by code under its name, or th
   const read = names.filter((name) => readsByName(text, name) || (through.has(name) && readsThroughKey(text, /** @type {string} */ (through.get(name)))));
   const listed = new Set([...Object.keys(documentationOnly), ...Object.keys(heldByCopy)]);
 
-  assert.ok(read.length >= 16, `the scan finds the rules the code reads (${read.length})`);
+  // Exercise both lookup forms; the exhaustive assertions below account for every rule without a stale rule-count quota.
+  assert.ok(readsByName(text, "SINGLE_STEP_MIN_QUESTIONS"), "the scan recognizes literal rule reads");
+  assert.equal(through.get("ROLLING_WINDOW_WEEKS"), "window_weeks");
+  assert.ok(readsThroughKey(text, "window_weeks"), "the scan recognizes indirect table-key reads");
   assert.deepEqual(names.filter((name) => !read.includes(name) && !listed.has(name)), [],
     "a rule nothing reads must say why in `_provenance.documentation_only` or `_provenance.held_by_copy`, or the code must read it");
   assert.deepEqual([...listed].filter((name) => read.includes(name)), [],

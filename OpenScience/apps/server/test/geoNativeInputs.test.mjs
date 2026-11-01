@@ -53,14 +53,25 @@ test('older snapshots cannot erase contributors or hide unresolved canonical que
 });
 
 test('an owned project\'s input passes through its frame unjournaled, for its owner and its frame\'s session only, and settles its admission', async () => {
-  const owner = { id: 'owner' }, project = { userId: 'owner', id: 'control' }, claims = { frameId: 'frame', delegation: { rootSessionId: 'root' } };
+  const owner = { id: 'owner' }, project = { userId: 'owner', id: 'control' }, claims = { frameId: 'frame', delegation: { rootSessionId: 'root', geoProjectId: 'geo' } };
   const journal = new GeoNativeInputs({ database: {}, documents: { get: async () => assert.fail('an owned input writes no receipt') },
-    authority: {}, policies: { forProject: async () => ({ kind: 'owned', ownerId: 'owner', controlProjectId: 'control' }) } });
+    authority: {
+      resolve: async (user, scope, options) => {
+        assert.equal(user, owner);
+        assert.deepEqual(scope, { kind: 'geo', geoProjectId: 'geo', sessionId: 'root' });
+        assert.equal(options.claims, claims.delegation);
+        return { project, geo: { id: 'geo', product: {} } };
+      },
+      primary: async identity => { assert.equal(identity.project, project); return 'root'; },
+    }, policies: { forProject: async () => ({ kind: 'owned', ownerId: 'owner', controlProjectId: 'control' }) } });
   const request = () => ({ requestId: 'r', sessionId: 'root', content: [{ type: 'text', text: 'Hi' }] });
   const authority = operation => operation();
   const accepted = request();
   assert.deepEqual(await journal.prepare({ user: owner, project, claims, request: accepted }), { referenceId: null, state: 'owned', replay: false });
   assert.equal(journal.journals(accepted), false);
+  assert.deepEqual(await journal.routingScopeForRequest(project, accepted),
+    { scope: { version: 1, geoProjectId: 'geo', rootSessionId: 'root' }, suppliedInputs: {} });
+  assert.equal(await journal.routingScopeForRequest(project, structuredClone(accepted)), null);
   assert.equal(journal.disposition(accepted), 'pending');
   await journal.beforeForward(accepted);
   assert.deepEqual(await journal.execute(accepted, authority, async () => 'sent'), { value: 'sent', error: null, disposition: 'accepted' });

@@ -45,6 +45,7 @@
       "PROBE_CIRCUIT_BREAK_CONSECUTIVE": "catalogue.yaml PROBE_CIRCUIT_BREAK_CONSECUTIVE: suspect or failed answers in a row that pause an engine (probe_client.py ask_batch)"
     },
     "documentation_only": {
+      "ACCURACY_HARD_LINE": "Historical reference only. Diagnosis compares the explicitly saved project target, not a global accuracy default; a historical selection without a bound target remains unknown rather than borrowing this reference.",
       "PROBE_BASELINE_QUESTION_TARGET": "The plan's target for the measured questions of a baseline. The size of a question set is the researcher's and the run's to choose: the lock refuses an empty set only and advises a range, so nothing reads the target.",
       "PROBE_PROVIDER_COUNT": "Engines per round in the baseline plan. A project asks the engines it chose that the probe host has a tab for, so nothing reads the count.",
       "STD_MIN_ENGINES": "T/CAACCHINA sampling disclosure (engines per round). No report states its sampling yet, and the collection city is not recorded (surface.city is always null), so there is nothing to hold the disclosure to.",

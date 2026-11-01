@@ -1,3 +1,4 @@
+import { Note } from '@/components/ui/Note';
 import { GeoStepRunButton } from './GeoStepRunButton';
 import { Link } from 'react-router';
 import type { GeoProject } from '@/lib/geoClient';
@@ -26,8 +27,7 @@ export function GeoJourneySummary({project, compact = false}: {project: GeoProje
       {journey.runId && <GeoStepRunButton project={project} runId={journey.runId} />}
     </div>
     {!compact && journey.canConverse && !['running','queued','paused'].includes(journey.stage) && <div className="flex flex-col gap-2">
-      <p className="text-caption text-text-3">在同一对话中交代任务和附上资料，发送后开始。</p>
-      <div className="flex flex-wrap gap-2">{journey.intents.map(intent => <Button key={intent.key} variant="text" size="sm" onClick={() => void open(target,intent.draft)}>{`在对话中${intent.label}`}</Button>)}</div>
+      <Note action={<div className="flex flex-wrap gap-2">{journey.intents.map(intent => <Button key={intent.key} variant="text" size="sm" onClick={() => void open(target,intent.draft)}>{`在对话中${intent.label}`}</Button>)}</div>}>在同一对话中交代任务和附上资料，发送后开始。</Note>
     </div>}
   </section>;
 }
