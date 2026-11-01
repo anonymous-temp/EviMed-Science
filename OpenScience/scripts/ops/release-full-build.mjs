@@ -172,7 +172,10 @@ export const WEB_DOCKERFILE = "deploy/web/Dockerfile";
 // 2026-10-29 (release layer cache): one added instruction — `ARG BASE_REFRESH=unset` above the final stage's apk layer, the monthly refresh key
 // CI passes so a cached image renews its packages (.github/ci/docker-compose.build-cache.yml); the default changes nothing for a build that passes none.
 // No other instruction changed.
-export const WEB_DOCKERFILE_SHA256 = "sha256:2ac24b91703ac8b4e0ef226ea8c7b5fa671524646c6e422548ffdcc6710516cc";
+// 2026-10-31 (merge of the Gitee main e9c9f96f6): two added COPY lines in the build stage's manifest layer — packages/design-tokens/package.json
+// and packages/search-topics/package.json, so the frozen-lockfile install sees every workspace package the lockfile names (the server and the web app
+// link the first, only the server the second). Stages, commands, secrets and build arguments are unchanged.
+export const WEB_DOCKERFILE_SHA256 = "sha256:5eab4a2b33860a0dd8cc9248a3d026f6d555200afa85babd07c3e20b31c81a20";
 export const WEB_INPUTS = Object.freeze([
   "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "deps-version.json",
   "apps/web/package.json", "apps/server/package.json", "packages/shared/package.json",

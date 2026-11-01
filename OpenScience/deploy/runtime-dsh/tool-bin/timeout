@@ -1,0 +1,28 @@
+#!/bin/bash
+# timeout(1), kept reachable from the kernel's signal to the command's process group.
+#
+# The kernel stops a bash command by signalling its process group: SIGTERM, then SIGKILL after the
+# grace period if the group still has a member (dsh-subprocess-local, `fallbackOwner.signal`, which
+# uses kill(-pgid)). GNU timeout moves itself into a new process group of its own (setpgid(0, 0), so
+# that its own expiry can signal the whole tree), which puts the command it runs outside the group
+# the kernel signals: `job_kill` answered "requested cancellation", the group was empty a moment
+# later, and `timeout 3000 python train.py` kept running until the model ran `kill -9` on it.
+#
+# This wrapper stays in the caller's group, so it receives that signal, and passes it on to the real
+# timeout, which (not running with --foreground) signals the command and its group in turn. Nothing
+# else changes: arguments, standard input, the exit status, the expiry behaviour and the signals the
+# command gets on expiry are the real timeout's own.
+real=/usr/bin/timeout
+[ -x "${real}" ] || { echo "timeout: ${real} is missing" >&2; exit 127; }
+# An asynchronous command would get /dev/null for standard input; `<&0` hands it ours.
+"${real}" "$@" <&0 &
+child=$!
+trap 'kill -TERM "${child}" 2>/dev/null' TERM INT HUP
+status=0
+while :; do
+  wait "${child}"
+  status=$?
+  # A signal that arrived while waiting ends `wait` early with 128+n; the child is then still running and is waited for again.
+  kill -0 "${child}" 2>/dev/null || break
+done
+exit "${status}"

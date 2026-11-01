@@ -13,6 +13,9 @@ has one — Beijing does not reach it —, everything else direct), **re-encoded
 - The files live under ``KNOWLEDGE_PLUGIN_MEDIA_DIR`` (a volume: the plugin's root filesystem is read-only), named
   ``<id[0:2]>/<id>``, written to a temporary name and renamed, so a reader never sees half a file. Unset, there is no
   store: posts are delivered without media.
+- A picture of the six Chinese platforms' posts is read from the post's raw crawler answer (``crawl.pictures_of``) and stored here
+  like an X photo; one the host refuses (a platform's expiring or signed address) is a ``media_failures`` row and the post goes
+  without it.
 - The store has a cap (``KNOWLEDGE_PLUGIN_MEDIA_CAP_MB``, 3 GB). Past it the least recently served files go first
   (an image never served counts from when it was stored). Eviction removes the file and keeps the row, so an entry that
   names the image keeps naming it — with its original address — and ``/v1/media/{id}`` answers 404 for it.
@@ -40,6 +43,10 @@ MAX_PIXELS = 40_000_000
 FAILURE_RETRY = timedelta(days=1)
 EVICT_BATCH = 200
 RELAY_HOSTS = ("pbs.twimg.com", "video.twimg.com", "abs.twimg.com")
+# A host that serves its pictures only to a page of its own site (answers 403 to a bare request): the request names that site as
+# its referrer, as a browser showing the post would. Weibo's picture host is the one among the six platforms' known to check it;
+# not measured from this deployment (2026-10-31): the first live read of a Weibo picture post confirms it or deletes the row.
+REFERERS = {"sinaimg.cn": "https://weibo.com/"}
 _ID = re.compile(r"^[a-f0-9]{64}$")
 _FORMATS = {"JPEG": "image/jpeg", "PNG": "image/png", "WEBP": "image/webp", "GIF": "image/gif"}
 
@@ -100,6 +107,12 @@ def reencode(data: bytes) -> tuple[bytes, str, int, int]:
     raise MediaRefused("too_large_after_reencode")
 
 
+def media_referer(url: str) -> str | None:
+    """The site a picture host wants named as the referrer (``REFERERS``), or ``None``."""
+    host = (urlsplit(url).hostname or "").lower()
+    return next((referer for domain, referer in REFERERS.items() if host == domain or host.endswith("." + domain)), None)
+
+
 def media_egress(url: str, relay_configured: bool) -> str:
     """X's image hosts go through the Tokyo relay when the deployment has one; everything else, and they without one, direct."""
     host = (urlsplit(url).hostname or "").lower()
@@ -145,8 +158,10 @@ class MediaStore:
             return None
         egress = media_egress(url, self._fetcher.egress_configured("relay"))
         try:
-            result = await self._fetcher.fetch(RequestSpec(url=url, conditional=False, api=True,
-                                                           headers={"Accept": "image/avif,image/webp,image/*;q=0.9"}),
+            headers = {"Accept": "image/avif,image/webp,image/*;q=0.9"}
+            if media_referer(url):
+                headers["Referer"] = media_referer(url)
+            result = await self._fetcher.fetch(RequestSpec(url=url, conditional=False, api=True, headers=headers),
                                                source_id="media", egress=egress, allowed_hosts=[parts.hostname])
             content, content_type, stored_width, stored_height = reencode(result.body)
         except MediaRefused as error:

@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { MCP_TOOL_CALL_TIMEOUT_MS, SOCKET_PLUGIN_SWITCHES } from "./dshProfilePatch.mjs";
 import { readReleaseManifestFile, validateReleaseManifest } from "./releaseManifest.mjs";
-import { EVIDENCE_PUBLIC_BASE_PATHS, GENE_EXPRESSION_LIMITS, GEO_DEFAULT_ENGINES, GEO_ENGINES, GEO_SOCIAL_PLATFORMS, METHOD_UNUSED_RETIRE_LOADS, SIMULATED_START_CREDITS, VCR_MIN_CELL_SIZE } from "@evimed/domain";
+import { EVIDENCE_PUBLIC_BASE_PATHS, GENE_EXPRESSION_LIMITS, GEO_DEFAULT_ENGINES, GEO_ENGINES, GEO_SOCIAL_PLATFORMS, METHOD_UNUSED_RETIRE_LOADS, RUN_TIME_BUDGET_MINUTES, SIMULATED_START_CREDITS, VCR_MIN_CELL_SIZE } from "@evimed/domain";
 import { MAX_MOUNTED_CAPSULE_METHOD_BYTES } from "./capsuleMethods.mjs";
 import { researchBillingSettings } from "./researchBillingConfig.mjs";
 import { researchDbSettings } from "./researchDbConfig.mjs";
@@ -471,6 +471,10 @@ function frontierSettings(overrides) {
     // c3-primary 2026-10-25: a top journal's research paper with no text is read through the published reports of it
     // (frontierPrimaryReports.mjs), and its dropped entries are asked of the plugin again for twenty-one days.
     frontierPrimaryReportsEnabled: overrides.frontierPrimaryReportsEnabled ?? boolEnv("OPEN_SCIENCE_FRONTIER_PRIMARY_REPORTS_ENABLED", true),
+    // rd-server 2026-10-31 (frontierPostText.mjs): a crawl post that says nothing in its text but has pictures is read through the document
+    // parser once (the words in its first pictures, at most FRONTIER_POST_LIMITS.postsPerRound posts a round) and written up from them. On
+    // where the parser is configured; false leaves such a post out (it has nothing to show).
+    frontierPostPicturesEnabled: overrides.frontierPostPicturesEnabled ?? boolEnv("OPEN_SCIENCE_FRONTIER_POST_PICTURES_ENABLED", true),
     frontierLeadsDailyQueries: integer("frontierLeadsDailyQueries", "OPEN_SCIENCE_FRONTIER_LEADS_DAILY_QUERIES", 120, 0, 1000),
     // c2-leads 2026-10-25 (frontierTopics.mjs): the outside-event trigger — the public hot lists the knowledge plugin reads, a
     // grouping call and a topic call on deepseek-flash under purpose `frontier` and the module's budget, topics with their
@@ -2094,6 +2098,11 @@ export function loadConfig(overrides = {}) {
     evimedUserIntrospectUrl: String(
       overrides.evimedUserIntrospectUrl ?? process.env.OPEN_SCIENCE_EVIMED_USER_INTROSPECT_URL ?? "",
     ).trim(),
+    // Empty leaves the team's account forms unavailable. The adapter only calls
+    // fixed paths under this base, on the same origin as identity introspection.
+    evimedAccountApiBaseUrl: String(
+      overrides.evimedAccountApiBaseUrl ?? process.env.OPEN_SCIENCE_EVIMED_ACCOUNT_API_BASE_URL ?? "",
+    ).trim(),
     // One introspection, start to finish. It sits between the shell's page load
     // and the first thing a researcher sees, so it is seconds, not the minute a
     // gateway gets.
@@ -2370,6 +2379,10 @@ export function loadConfig(overrides = {}) {
     ),
     runMaxSteps: Number(overrides.runMaxSteps ?? process.env.OPEN_SCIENCE_RUN_MAX_STEPS ?? 0),
     runMaxTokens: Number(overrides.runMaxTokens ?? process.env.OPEN_SCIENCE_RUN_MAX_TOKENS ?? 0),
+    // The wall-clock budget a turn nobody attends is told it has (minutes, 0 = none). Context only: the run policy says the
+    // clock to the model at the first step and at 50%, 75% and 90%, and nothing stops at it. A dispatch states its own
+    // (`timeBudgetMinutes`) and a person's ordinary turn gets none from here.
+    runTimeBudgetMinutes: boundedInteger(overrides.runTimeBudgetMinutes ?? process.env.OPEN_SCIENCE_RUN_TIME_BUDGET_MINUTES, 0, 0, RUN_TIME_BUDGET_MINUTES.max, "OPEN_SCIENCE_RUN_TIME_BUDGET_MINUTES"),
     evidenceStaleMinutes: Number(
       overrides.evidenceStaleMinutes ?? process.env.OPEN_SCIENCE_EVIDENCE_STALE_MINUTES ?? 10,
     ),
@@ -2389,6 +2402,7 @@ export function loadConfig(overrides = {}) {
       overrides.runtimeSandboxEnforcement ?? process.env.OPEN_SCIENCE_RUNTIME_SANDBOX_ENFORCEMENT ?? (production ? "full" : "partial"),
     ).trim().toLowerCase(),
     loopxEnabled: overrides.loopxEnabled ?? boolEnv("OPEN_SCIENCE_LOOPX_ENABLED", true),
+    searchTopicsEnabled: overrides.searchTopicsEnabled ?? boolEnv("OPEN_SCIENCE_SEARCH_TOPICS_ENABLED", false),
     // The kernel's ask-user tool, for every runtime of the deployment. On unless the deployment says otherwise
     // (2026-10-12): a person is in the conversation, and 「分析一下我的数据」 with nothing uploaded should be asked about,
     // not assumed about. It was off on the premise that a hosted run is unattended. Which turns are — a scheduled task,

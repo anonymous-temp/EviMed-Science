@@ -54,6 +54,13 @@ describe("which run a conversation shows", () => {
     expect(runStateFromRecord(run({ artifacts: ["a.docx", "b.md"], presentedFiles: ["a.docx"] })).presentedFiles).toEqual(["a.docx"]);
     expect(runStateFromRecord(run({ artifacts: ["a.docx"] })).presentedFiles).toBeUndefined();
   });
+
+  it("does not take a stopped run's chosen main document for a card the kernel drew, so the run card still lists it", () => {
+    const stopped = run({ status: "canceled", unverifiedArtifacts: ["r/report.docx", "r/report.md", "r/parts/p1.md"], presentedFiles: ["r/report.docx", "r/report.md"] });
+    expect(runStateFromRecord(stopped).presentedFiles).toBeUndefined();
+    expect(runStateFromRecord(stopped).unverifiedArtifacts).toEqual(["r/report.docx", "r/report.md", "r/parts/p1.md"]);
+    expect(runStateFromRecord({ ...stopped, status: "failed" }).presentedFiles).toBeUndefined();
+  });
 });
 
 describe("folding the run's stream", () => {

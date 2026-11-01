@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -9,9 +9,11 @@ import { LoginPage } from "./LoginPage";
 const mocks = vi.hoisted(() => {
   class FakeWebApiError extends Error {
     code: string;
-    constructor(code: string) {
+    status: number;
+    constructor(code: string, status = 400) {
       super(code);
       this.code = code;
+      this.status = status;
     }
   }
   return {
@@ -19,6 +21,8 @@ const mocks = vi.hoisted(() => {
     fetchWebAuthMethods: vi.fn(),
     loginWeb: vi.fn(),
     loginDevelopmentWeb: vi.fn(),
+    loginEvimedWeb: vi.fn(),
+    logoutWeb: vi.fn(),
     registerWeb: vi.fn(),
     FakeWebApiError,
   };
@@ -29,9 +33,20 @@ vi.mock("@/lib/apiClient", () => ({
   fetchWebAuthMethods: mocks.fetchWebAuthMethods,
   loginWeb: mocks.loginWeb,
   loginDevelopmentWeb: mocks.loginDevelopmentWeb,
+  loginEvimedWeb: mocks.loginEvimedWeb,
+  logoutWeb: mocks.logoutWeb,
   registerWeb: mocks.registerWeb,
   WebApiError: mocks.FakeWebApiError,
+  webErrorMessage: (error: unknown, options: { fallback?: string } = {}) => {
+    if (error instanceof mocks.FakeWebApiError && error.code === "auth_rate_limited") return "尝试太频繁，请稍后再试。";
+    if (error instanceof mocks.FakeWebApiError && error.status === 503) return "服务暂时不可用，请稍后重试。";
+    return options.fallback ?? "操作未完成，请重试。";
+  },
   getWebOidcStartUrl: (returnTo: string) => `/api/auth/oidc/start?returnTo=${encodeURIComponent(returnTo)}`,
+}));
+
+vi.mock("@/components/auth/EvimedAccountForm", () => ({
+  EvimedAccountForm: ({ onSignedIn }: { onSignedIn: () => void }) => <button onClick={onSignedIn}>EviMed 账号表单</button>,
 }));
 
 function LocationProbe() {
@@ -40,15 +55,23 @@ function LocationProbe() {
 }
 
 function renderLogin(search = "") {
-  return render(
+  const view = (visible: boolean) => (
     <MemoryRouter initialEntries={[`/login${search}`]}>
       <Routes>
-        <Route path="/login" element={<LoginPage />} />
+        <Route path="/login" element={visible ? <LoginPage /> : <LocationProbe />} />
         <Route path="/app/*" element={<LocationProbe />} />
         <Route path="*" element={<LocationProbe />} />
       </Routes>
-    </MemoryRouter>,
+    </MemoryRouter>
   );
+  const result = render(view(true));
+  return { ...result, hideLogin: () => result.rerender(view(false)) };
+}
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((done) => { resolve = done; });
+  return { promise, resolve };
 }
 
 describe("LoginPage", () => {
@@ -57,6 +80,8 @@ describe("LoginPage", () => {
     mocks.fetchWebMe.mockResolvedValue(null);
     mocks.fetchWebAuthMethods.mockResolvedValue({ mode: "local", selfRegistration: false });
     mocks.loginWeb.mockResolvedValue(undefined);
+    mocks.loginDevelopmentWeb.mockResolvedValue(undefined);
+    mocks.loginEvimedWeb.mockResolvedValue(undefined);
     mocks.registerWeb.mockResolvedValue(undefined);
   });
 
@@ -126,7 +151,7 @@ describe("LoginPage", () => {
       await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/app/memory?tab=methods&q=%E8%83%8C#CLM-001"));
     });
 
-    it("goes back to it after a registration too, and after a development sign-in", async () => {
+    it("goes back to it after a registration too", async () => {
       mocks.fetchWebAuthMethods.mockResolvedValue({ mode: "local", selfRegistration: true });
       renderLogin(`?next=${encodeURIComponent("/app/files?tab=sources")}`);
       await userEvent.click(await screen.findByRole("button", { name: "还没有账号？注册一个" }));
@@ -193,6 +218,230 @@ describe("LoginPage", () => {
     renderLogin();
 
     expect(await screen.findByTestId("location")).toHaveTextContent("/app/home");
+  });
+
+  it.each(["local", "evimed"])("allows an explicit EviMed reauthentication in %s mode without signing out the current account", async mode => {
+    mocks.fetchWebMe.mockResolvedValue({ user: { id: "reader", name: "Reader", authType: "evimed" } });
+    mocks.fetchWebAuthMethods.mockResolvedValue({ mode, evimed: { account: {} } });
+    renderLogin(`?reauth=evimed&next=${encodeURIComponent("/app/search?category=paper&q=aspirin#results")}`);
+    const form = await screen.findByRole("button", { name: "EviMed 账号表单" });
+    expect(screen.queryByTestId("location")).not.toBeInTheDocument();
+    expect(mocks.logoutWeb).not.toHaveBeenCalled();
+    expect(mocks.loginEvimedWeb).not.toHaveBeenCalled();
+    await userEvent.click(form);
+    expect(await screen.findByTestId("location")).toHaveTextContent("/app/search?category=paper&q=aspirin#results");
+    expect(mocks.logoutWeb).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { mode: "local" },
+    { mode: "evimed", evimed: { sessionUrl: "/fixture/session" } },
+    { mode: "oidc", evimed: { account: {} } },
+    { mode: "development", evimed: { account: {} } },
+  ])("does not hold an existing session on the login page when EviMed reauthentication is unavailable: $mode", async methods => {
+    mocks.fetchWebMe.mockResolvedValue({ user: { id: "reader", name: "Reader" } });
+    mocks.fetchWebAuthMethods.mockResolvedValue(methods);
+    renderLogin(`?reauth=evimed&next=${encodeURIComponent("/app/search?q=aspirin")}`);
+    expect(await screen.findByTestId("location")).toHaveTextContent("/app/search?q=aspirin");
+    expect(screen.queryByRole("button", { name: "EviMed 账号表单" })).not.toBeInTheDocument();
+    expect(mocks.logoutWeb).not.toHaveBeenCalled();
+  });
+
+  it("keeps the normal existing-session redirect for an unrecognized reauthentication value", async () => {
+    mocks.fetchWebMe.mockResolvedValue({ user: { id: "reader", name: "Reader" } });
+    mocks.fetchWebAuthMethods.mockResolvedValue({ mode: "evimed", evimed: { account: {} } });
+    renderLogin("?reauth=local");
+    expect(await screen.findByTestId("location")).toHaveTextContent("/app/home");
+    expect(mocks.logoutWeb).not.toHaveBeenCalled();
+  });
+
+  it.each(["https://evil.example/app/search", "/app/%2e%2e/login", "//evil.example/app/search"])("validates the return address after explicit EviMed reauthentication: %s", async next => {
+    mocks.fetchWebMe.mockResolvedValue({ user: { id: "reader", name: "Reader" } });
+    mocks.fetchWebAuthMethods.mockResolvedValue({ mode: "local", evimed: { account: {} } });
+    renderLogin(`?reauth=evimed&next=${encodeURIComponent(next)}`);
+    await userEvent.click(await screen.findByRole("button", { name: "EviMed 账号表单" }));
+    expect(await screen.findByTestId("location")).toHaveTextContent(/^\/app\/home$/);
+    expect(mocks.logoutWeb).not.toHaveBeenCalled();
+  });
+
+  it("enters an existing session even when sign-in method discovery fails", async () => {
+    mocks.fetchWebMe.mockResolvedValue({ user: { id: "alice", name: "Alice" } });
+    mocks.fetchWebAuthMethods.mockRejectedValue(new Error("Discovery unavailable"));
+    renderLogin(`?next=${encodeURIComponent("/app/memory?tab=methods")}`);
+    expect(await screen.findByTestId("location")).toHaveTextContent("/app/memory?tab=methods");
+    expect(mocks.loginWeb).not.toHaveBeenCalled();
+    expect(mocks.loginEvimedWeb).not.toHaveBeenCalled();
+  });
+
+  it("offers a discovery retry without guessing a local sign-in method", async () => {
+    mocks.fetchWebAuthMethods.mockRejectedValueOnce(new Error("Discovery unavailable"));
+    renderLogin();
+    const feedback = await screen.findByRole("alert");
+    expect(feedback).toHaveTextContent("登录服务暂时不可用");
+    expect(screen.getAllByRole("alert")).toHaveLength(1);
+    expect(feedback.closest(".auth-form-fields")).toBeNull();
+    expect(feedback.compareDocumentPosition(screen.getByRole("button", { name: "重试" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByLabelText("账号")).not.toBeInTheDocument();
+    expect(screen.queryByRole("form")).not.toBeInTheDocument();
+    expect(mocks.loginWeb).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: "重试" }));
+    expect(await screen.findByLabelText("账号")).toBeInTheDocument();
+    expect(mocks.fetchWebMe).toHaveBeenCalledTimes(2);
+    expect(mocks.fetchWebAuthMethods).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows no credential form for an unknown authentication mode", async () => {
+    mocks.fetchWebAuthMethods.mockResolvedValue({ mode: "unsupported" });
+    renderLogin();
+    expect(await screen.findByRole("alert")).toHaveTextContent("登录服务暂时不可用");
+    expect(screen.getByRole("button", { name: "重试" })).toBeInTheDocument();
+    expect(screen.queryByRole("form")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("密码")).not.toBeInTheDocument();
+    expect(mocks.loginWeb).not.toHaveBeenCalled();
+    expect(mocks.loginDevelopmentWeb).not.toHaveBeenCalled();
+  });
+
+  it("enters development mode with one action and no invented credentials, preserving the return address", async () => {
+    mocks.fetchWebAuthMethods.mockResolvedValue({ mode: "development" });
+    renderLogin(`?next=${encodeURIComponent("/app/files?tab=sources")}`);
+    const enter = await screen.findByRole("button", { name: "进入工作台" });
+    expect(screen.queryByLabelText("账号")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("密码")).not.toBeInTheDocument();
+    await userEvent.click(enter);
+    expect(mocks.loginDevelopmentWeb).toHaveBeenCalledTimes(1);
+    expect(mocks.loginDevelopmentWeb).toHaveBeenCalledWith();
+    expect(mocks.loginWeb).not.toHaveBeenCalled();
+    expect(mocks.registerWeb).not.toHaveBeenCalled();
+    expect(await screen.findByTestId("location")).toHaveTextContent("/app/files?tab=sources");
+  });
+
+  it.each(["local", "evimed"])("keeps %s account-form deployments on the team flow without a local fallback", async mode => {
+    mocks.fetchWebAuthMethods.mockResolvedValue({ mode, selfRegistration: true, evimed: { account: {} } });
+    renderLogin(`?next=${encodeURIComponent("/app/memory#methods")}`);
+    const accountForm = await screen.findByRole("button", { name: "EviMed 账号表单" });
+    expect(screen.queryByRole("button", { name: "使用本机账号登录" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "返回 EviMed 账号登录" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("账号")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "还没有账号？注册一个" })).not.toBeInTheDocument();
+    await userEvent.click(accountForm);
+    expect(await screen.findByTestId("location")).toHaveTextContent("/app/memory#methods");
+    expect(mocks.loginWeb).not.toHaveBeenCalled();
+    expect(mocks.registerWeb).not.toHaveBeenCalled();
+    expect(mocks.loginEvimedWeb).not.toHaveBeenCalled();
+  });
+
+  it("uses the EviMed session action when the deployment only advertises cookie sign-in", async () => {
+    mocks.fetchWebAuthMethods.mockResolvedValue({ mode: "evimed", evimed: { sessionUrl: "/api/auth/evimed/session", logoutUrl: "/api/auth/evimed/logout" } });
+    renderLogin(`?next=${encodeURIComponent("/app/memory#methods")}`);
+    const enter = await screen.findByRole("button", { name: "使用 EviMed 账号继续" });
+    expect(screen.queryByLabelText("账号")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("密码")).not.toBeInTheDocument();
+    await userEvent.click(enter);
+    expect(mocks.loginEvimedWeb).toHaveBeenCalledTimes(1);
+    expect(mocks.loginEvimedWeb).toHaveBeenCalledWith();
+    expect(mocks.loginWeb).not.toHaveBeenCalled();
+    expect(mocks.loginDevelopmentWeb).not.toHaveBeenCalled();
+    expect(await screen.findByTestId("location")).toHaveTextContent("/app/memory#methods");
+  });
+
+  it("distinguishes an expired EviMed session from a network failure", async () => {
+    mocks.fetchWebAuthMethods.mockResolvedValue({ mode: "evimed" });
+    mocks.loginEvimedWeb.mockRejectedValueOnce(new mocks.FakeWebApiError("unauthorized", 401));
+    mocks.loginEvimedWeb.mockRejectedValueOnce(new Error("Network unavailable"));
+    renderLogin();
+    await userEvent.click(await screen.findByRole("button", { name: "使用 EviMed 账号继续" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("EviMed 登录状态已失效");
+    await userEvent.click(screen.getByRole("button", { name: "使用 EviMed 账号继续" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("登录没有完成，请检查网络后重试。");
+  });
+
+  it("validates missing local fields on submit and focuses the first missing field", async () => {
+    renderLogin();
+    const account = await screen.findByLabelText("账号");
+    const password = screen.getByLabelText("密码");
+    expect(screen.getByRole("form", { name: "登录" })).toHaveAttribute("novalidate");
+    expect(account).not.toHaveAttribute("aria-invalid");
+    expect(password).not.toHaveAttribute("aria-invalid");
+    await userEvent.click(screen.getByRole("button", { name: "登录" }));
+    expect(account).toHaveAccessibleErrorMessage("请输入账号。");
+    expect(account).toHaveFocus();
+    expect(screen.getAllByRole("alert")).toHaveLength(2);
+    expect(document.getElementById(account.getAttribute("aria-errormessage") ?? "")?.querySelector('[role="alert"]')).toBeNull();
+    await userEvent.type(account, "alice");
+    expect(account).not.toHaveAttribute("aria-invalid");
+    await userEvent.click(screen.getByRole("button", { name: "登录" }));
+    expect(password).toHaveAccessibleErrorMessage("请输入密码。");
+    expect(password).toHaveFocus();
+    expect(mocks.loginWeb).not.toHaveBeenCalled();
+  });
+
+  it("keeps credential, server, and network sign-in failures distinct and retryable", async () => {
+    mocks.loginWeb.mockRejectedValueOnce(new mocks.FakeWebApiError("unauthorized", 401));
+    mocks.loginWeb.mockRejectedValueOnce(new mocks.FakeWebApiError("unavailable", 503));
+    mocks.loginWeb.mockRejectedValueOnce(new Error("Network unavailable"));
+    renderLogin();
+    await userEvent.type(await screen.findByLabelText("账号"), "alice");
+    await userEvent.type(screen.getByLabelText("密码"), "secret");
+    for (const message of ["账号或密码不正确", "服务暂时不可用", "登录没有完成，请检查网络后重试"]) {
+      await userEvent.click(screen.getByRole("button", { name: "登录" }));
+      const feedback = await screen.findByRole("alert");
+      expect(feedback).toHaveTextContent(message);
+      expect(screen.getAllByRole("alert")).toHaveLength(1);
+      expect(feedback.closest(".auth-form-fields")).toBeNull();
+      expect(feedback.compareDocumentPosition(screen.getByRole("button", { name: "登录" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(screen.getByLabelText("账号")).toHaveValue("alice");
+      expect(screen.getByLabelText("密码")).toHaveValue("secret");
+      expect(screen.getByRole("button", { name: "登录" })).toBeEnabled();
+    }
+    await userEvent.type(screen.getByLabelText("密码"), "x");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("账号")).toHaveValue("alice");
+    expect(screen.getByLabelText("密码")).toHaveValue("secretx");
+    await userEvent.click(screen.getByRole("button", { name: "登录" }));
+    expect(await screen.findByTestId("location")).toHaveTextContent("/app/home");
+  });
+
+  it("clears the local service failure when switching to registration", async () => {
+    mocks.fetchWebAuthMethods.mockResolvedValue({ mode: "local", selfRegistration: true });
+    mocks.loginWeb.mockRejectedValueOnce(new mocks.FakeWebApiError("unauthorized", 401));
+    renderLogin();
+    await userEvent.type(await screen.findByLabelText("账号"), "alice");
+    await userEvent.type(screen.getByLabelText("密码"), "secret");
+    await userEvent.click(screen.getByRole("button", { name: "登录" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("账号或密码不正确");
+    await userEvent.click(screen.getByRole("button", { name: "还没有账号？注册一个" }));
+    expect(screen.getByRole("heading", { name: "注册" })).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("账号")).toHaveValue("alice");
+    expect(screen.getByLabelText("密码")).toHaveValue("");
+    expect(mocks.registerWeb).not.toHaveBeenCalled();
+  });
+
+  it("submits once when a second submit arrives before rendering the busy state", async () => {
+    const response = deferred<void>();
+    mocks.loginWeb.mockReturnValue(response.promise);
+    renderLogin();
+    await userEvent.type(await screen.findByLabelText("账号"), "alice");
+    await userEvent.type(screen.getByLabelText("密码"), "secret");
+    const form = screen.getByRole("form", { name: "登录" });
+    act(() => { fireEvent.submit(form); fireEvent.submit(form); });
+    expect(mocks.loginWeb).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "登录" })).toBeDisabled();
+    await act(async () => { response.resolve(undefined); await response.promise; });
+    expect(screen.getByTestId("location")).toHaveTextContent("/app/home");
+  });
+
+  it("ignores a successful response after the login page unmounts", async () => {
+    const response = deferred<void>();
+    mocks.loginWeb.mockReturnValue(response.promise);
+    const view = renderLogin();
+    await userEvent.type(await screen.findByLabelText("账号"), "alice");
+    await userEvent.type(screen.getByLabelText("密码"), "secret");
+    await userEvent.click(screen.getByRole("button", { name: "登录" }));
+    view.hideLogin();
+    expect(screen.getByTestId("location")).toHaveTextContent(/^\/login$/);
+    await act(async () => { response.resolve(undefined); await response.promise; });
+    expect(screen.getByTestId("location")).toHaveTextContent(/^\/login$/);
   });
 
   // The server decides whether this deployment takes new accounts. Offering
@@ -268,5 +517,26 @@ describe("LoginPage", () => {
     await userEvent.click(await screen.findByRole("button", { name: "还没有账号？注册一个" }));
     await userEvent.click(screen.getByRole("button", { name: "已有账号？返回登录" }));
     expect(screen.getByRole("heading", { name: "登录" })).toBeInTheDocument();
+  });
+
+  it("clears and conceals the secret when switching between local login and registration", async () => {
+    mocks.fetchWebAuthMethods.mockResolvedValue({ mode: "local", selfRegistration: true });
+    renderLogin();
+    await userEvent.type(await screen.findByLabelText("账号"), "alice");
+    await userEvent.type(screen.getByLabelText("密码"), "login-secret");
+    await userEvent.click(screen.getByRole("button", { name: "显示密码" }));
+    expect(screen.getByLabelText("密码")).toHaveAttribute("type", "text");
+    await userEvent.click(screen.getByRole("button", { name: "还没有账号？注册一个" }));
+    expect(screen.getByLabelText("账号")).toHaveValue("alice");
+    expect(screen.getByLabelText("账号")).toHaveFocus();
+    expect(screen.getByLabelText("密码")).toHaveValue("");
+    expect(screen.getByLabelText("密码")).toHaveAttribute("type", "password");
+    expect(screen.getByLabelText("密码")).toHaveAttribute("autocomplete", "new-password");
+    await userEvent.type(screen.getByLabelText("密码"), "new-secret");
+    await userEvent.click(screen.getByRole("button", { name: "已有账号？返回登录" }));
+    expect(screen.getByLabelText("密码")).toHaveValue("");
+    expect(screen.getByLabelText("密码")).toHaveAttribute("autocomplete", "current-password");
+    expect(mocks.loginWeb).not.toHaveBeenCalled();
+    expect(mocks.registerWeb).not.toHaveBeenCalled();
   });
 });

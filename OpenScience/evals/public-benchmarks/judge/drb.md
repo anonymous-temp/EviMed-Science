@@ -15,3 +15,6 @@ For each packet assigned to you:
     "dims": {"comprehensiveness": [t, r], "insight": [t, r], "instruction_following": [t, r], "readability": [t, r]},
     "criteria_scored": <int>, "notes": "<= 2 sentences on the target's main strengths/weaknesses"}
 Do not use the network. Do not read other packets than yours. Report the lines you wrote.
+If meta.json has "delivery" (and, for a repeat, "pass"), copy both fields into your verdict line unchanged. "delivery": "at-cap" means the run was
+cancelled at its time limit and the report is what existed then (a draft): judge it as it stands, neither more nor less strictly.
+The operator names your output file when it is not the one above (repeat passes write judge/<bench>.p<k>... files).

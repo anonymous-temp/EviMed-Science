@@ -133,6 +133,7 @@ function inspectRuntimeImage(config) {
     '{{index .Config.Labels "io.open-science.runtime.version"}}',
     '{{index .Config.Labels "io.open-science.runtime.kernel"}}',
     '{{index .Config.Labels "io.open-science.uv.version"}}',
+    ...(config.searchTopicsEnabled === true ? ['{{index .Config.Labels "io.open-science.search-topics.version"}}'] : []),
   ].join("|");
   const result = spawnSync(
     config.runtimeContainerBin,
@@ -142,11 +143,12 @@ function inspectRuntimeImage(config) {
   if (result.status !== 0) {
     throw controllerFailure(503, "runtime_image_unavailable", "Runtime image is unavailable to the runtime controller.");
   }
-  const [imageId, kernelVersion, kernel, uvVersion] = result.stdout.trim().split("|");
+  const [imageId, kernelVersion, kernel, uvVersion, searchTopicsVersion] = result.stdout.trim().split("|");
   if (!imageId || !kernelVersion || !uvVersion) {
     throw controllerFailure(503, "runtime_image_metadata_missing", "Runtime image metadata is incomplete.");
   }
-  return { imageId, kernel: kernel || "", kernelVersion, uvVersion };
+  return { imageId, kernel: kernel || "", kernelVersion, uvVersion,
+    ...(config.searchTopicsEnabled === true ? { searchTopicsVersion: /^\d+\.\d+\.\d+(?:-[a-zA-Z0-9.-]+)?$/.test(searchTopicsVersion ?? '') ? searchTopicsVersion : '' } : {}) };
 }
 
 function runtimeCapacityLimits(config) {

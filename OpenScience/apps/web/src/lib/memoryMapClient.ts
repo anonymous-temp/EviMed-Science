@@ -25,6 +25,12 @@ export interface MapNode {
   label: string;
   weight?: number;
   at?: string | null;
+  /** For what was replaced: when it stopped being said. */
+  until?: string | null;
+  /** How bright a memory is drawn, 0 to 1: how long since it was written or used. It decides nothing: a dim memory is recalled as a bright one is. */
+  freshness?: number;
+  /** When a conversation was last handed this memory. */
+  recalledAt?: string | null;
   state?: MapState;
   reason?: MapReason | null;
   projectId?: string | null;

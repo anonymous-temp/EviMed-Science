@@ -6,8 +6,8 @@ import { parseFrontierItemDetail } from "@/lib/frontierClient";
 import { rawBriefedPaper, rawIndustryShort, rawNewsLong, rawPolicy, rawSafetyAlert, rawWechatCommentary } from "@/components/frontier/__fixtures__/frontierItems";
 import { FrontierArticlePage } from "./FrontierArticlePage";
 
-// The reader by genre (ct-write W6, 2026-10-24; the text a view of its own, 2026-10-26): what the item is in its byline, then the AI view —
-// 导读 → 要点 — and behind 「查看正文」 (摘要, 全文) the text once, whole, as its genre is read. A post keeps its text on the AI view.
+// The reader by genre (ct-write W6, 2026-10-24; the text a view of its own, 2026-10-26): what the item is in its byline, then the 速读 view —
+// 速读 → 要点 → 「阅读原文」 — and behind 「正文」 (摘要, 全文) the text once, whole, as its genre is read. A post keeps its text on the 速读 view.
 const client = vi.hoisted(() => ({
   useFrontierFeature: vi.fn(), fetchFrontierItem: vi.fn(), fetchFrontierAbstractZh: vi.fn(), markFrontierItemRead: vi.fn(),
 }));
@@ -28,8 +28,8 @@ function wide() {
     addListener() {}, removeListener() {}, addEventListener() {}, removeEventListener() {}, dispatchEvent: () => false,
   }) as unknown as MediaQueryList);
 }
-/** The page's toolbar row (2026-10-27): the switch at its left, the actions at its right. */
-const toolbar = () => screen.getByRole("group", { name: "阅读视图与操作" });
+/** The band's one row (2026-10-31): the switch 「速读 | 正文」 alone; the actions are the title row's. */
+const toolbar = () => screen.getByRole("group", { name: "阅读视图" });
 function show(raw: Record<string, unknown>) {
   client.fetchFrontierItem.mockResolvedValue(detail(raw));
   return render(
@@ -41,10 +41,10 @@ function show(raw: Record<string, unknown>) {
 const before = (a: Element, b: Element) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
 
 describe("a paper", () => {
-  it("names itself in the byline, then 导读 and 要点 with the authors' own words; its abstract is behind 查看摘要, whole", async () => {
+  it("names itself in the byline, then 速读 and 要点 with the authors' own words; its abstract is behind 摘要, whole", async () => {
     wide();
     show(rawBriefedPaper());
-    const lead = await screen.findByRole("region", { name: "AI 导读" });
+    const lead = await screen.findByRole("region", { name: "速读" });
     const brief = screen.getByRole("region", { name: "AI 要点" });
     expect(before(lead, brief)).toBe(true);
     // The byline over the title: what the item is, and its design.
@@ -63,18 +63,18 @@ describe("a paper", () => {
     expect(screen.queryByText(/^口服 PCSK9 抑制可降低/)).not.toBeInTheDocument();
     expect(screen.getByRole("article", { name: "正文" })).toHaveAttribute("data-frontier-reader", "briefed-paper-1");
 
-    await userEvent.click(within(toolbar()).getByRole("tab", { name: "查看摘要" }));
+    await userEvent.click(within(toolbar()).getByRole("tab", { name: "摘要" }));
     const text = await screen.findByRole("region", { name: "摘要 · AI 翻译" });
     expect(within(text).getByText(/^口服 PCSK9 抑制可降低/)).toBeInTheDocument();
     expect(within(text).getByText(/^在一项双盲试验中/)).toBeInTheDocument();
     expect(within(text).queryByRole("button", { name: "展开全文" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("region", { name: "AI 导读" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "速读" })).not.toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "AI 要点" })).not.toBeInTheDocument();
   });
 });
 
 describe("a 公众号 reading", () => {
-  it("opens the report it reads; the article is behind 查看正文, whole, and the way to it is the toolbar's 打开原文", async () => {
+  it("opens the report it reads; the article is behind 正文, whole, and the way to the original is the link at its foot, in both views", async () => {
     wide();
     show(rawWechatCommentary());
     const brief = await screen.findByRole("region", { name: "AI 要点" });
@@ -84,27 +84,32 @@ describe("a 公众号 reading", () => {
     expect(brief.querySelector("dd")).toHaveTextContent("NEJM 同日发表的 ORIGIN 3 与 VISIONARY 两项 3 期试验。");
     expect(screen.queryByRole("region", { name: "正文" })).not.toBeInTheDocument();
     expect(screen.getByText("解读评论")).toHaveAttribute("data-tag");
-    const original = within(toolbar()).getByRole("link", { name: "打开原文" });
+    const original = screen.getByRole("link", { name: "阅读原文" });
     expect(original).toHaveAttribute("href", "https://mp.weixin.qq.com/s/example");
     expect(original).toHaveAttribute("target", "_blank");
-    expect(screen.queryByRole("link", { name: "阅读原文" })).not.toBeInTheDocument();
+    expect(within(toolbar()).queryByRole("link")).not.toBeInTheDocument();
+    // After the lead and the 要点, the foot of what the page says.
+    expect(before(brief, original)).toBe(true);
 
-    await userEvent.click(within(toolbar()).getByRole("tab", { name: "查看正文" }));
+    await userEvent.click(within(toolbar()).getByRole("tab", { name: "正文" }));
     const text = await screen.findByRole("region", { name: "正文" });
     expect(within(text).getByText(/^第 1 段/)).toBeInTheDocument();
     expect(within(text).getByText(/^第 6 段/)).toBeInTheDocument();
     expect(within(text).queryByRole("button", { name: "展开全文" })).not.toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "AI 要点" })).not.toBeInTheDocument();
+    // The same one link, after the text.
+    expect(screen.getAllByRole("link", { name: "阅读原文" })).toHaveLength(1);
+    expect(before(text, screen.getByRole("link", { name: "阅读原文" }))).toBe(true);
   });
 });
 
 describe("a policy, an industry report, a news report", () => {
-  it("keeps a policy's 要点 on the AI view and its whole text behind 查看正文", async () => {
+  it("keeps a policy's 要点 on the AI view and its whole text behind 正文", async () => {
     wide();
     show(rawPolicy());
     expect(within(await screen.findByRole("region", { name: "AI 要点" })).getByText("国家医疗保障局，医保发〔2026〕23号。")).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "正文" })).not.toBeInTheDocument();
-    await userEvent.click(within(toolbar()).getByRole("tab", { name: "查看正文" }));
+    await userEvent.click(within(toolbar()).getByRole("tab", { name: "正文" }));
     const text = await screen.findByRole("region", { name: "正文" });
     expect(within(text).getByText("为支持医疗技术创新，……")).toBeInTheDocument();
     expect(within(text).getByText("只需 1 家三级医院牵头直接向省级医保部门申报。")).toBeInTheDocument();
@@ -118,7 +123,7 @@ describe("a policy, an industry report, a news report", () => {
     expect([...brief.querySelectorAll("dt")].map((term) => term.textContent)).toEqual(["事件", "交易条款"]);
     expect(screen.getByText("行业动态")).toHaveAttribute("data-tag");
     expect(screen.queryByText(/^交易预计/)).not.toBeInTheDocument();
-    await userEvent.click(within(toolbar()).getByRole("tab", { name: "查看正文" }));
+    await userEvent.click(within(toolbar()).getByRole("tab", { name: "正文" }));
     const text = await screen.findByRole("region", { name: "正文" });
     expect(within(text).getByText(/^吉利德科学宣布/)).toBeInTheDocument();
     expect(within(text).getByText(/^交易预计/)).toBeInTheDocument();
@@ -129,9 +134,9 @@ describe("a policy, an industry report, a news report", () => {
   it("shows a long news report whole on its text view: the last paragraph is there, and nothing is folded", async () => {
     wide();
     show(rawNewsLong());
-    await screen.findByRole("region", { name: "AI 导读" });
+    await screen.findByRole("region", { name: "速读" });
     expect(screen.queryByRole("region", { name: "正文" })).not.toBeInTheDocument();
-    await userEvent.click(within(toolbar()).getByRole("tab", { name: "查看正文" }));
+    await userEvent.click(within(toolbar()).getByRole("tab", { name: "正文" }));
     const text = await screen.findByRole("region", { name: "正文" });
     expect(within(text).getByText(/^第 1 段/)).toBeInTheDocument();
     expect(within(text).getByText(/^第 8 段/)).toBeInTheDocument();

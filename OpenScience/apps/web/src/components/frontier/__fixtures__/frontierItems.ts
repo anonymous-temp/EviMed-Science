@@ -126,7 +126,7 @@ export function rawChineseNews(overrides: Record<string, unknown> = {}): Record<
 }
 
 /**
- * An open-access paper whose whole text the plugin kept (rt-contract): the 导读 as one paragraph and a full text with `## ` section
+ * An open-access paper whose whole text the plugin kept (rt-contract): the 速读 as one paragraph and a full text with `## ` section
  * headings in both languages.
  */
 export function rawOpenAccessPaper(overrides: Record<string, unknown> = {}): Record<string, unknown> {
@@ -159,7 +159,7 @@ export function rawStructuredAbstract(overrides: Record<string, unknown> = {}): 
 
 /**
  * Items of each genre as their reader reads them (ct-write 2026-10-24): what the server sends for a paper, a 公众号 reading, a policy,
- * a short industry report, a long news report and a safety alert — each with its genre, its 导读 and its 「AI 要点」.
+ * a short industry report, a long news report and a safety alert — each with its genre, its 速读 and its 「AI 要点」.
  */
 export function rawBriefedPaper(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return rawStructuredAbstract({

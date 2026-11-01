@@ -212,7 +212,7 @@ describe("AI 一分钟 opens the issue, and a day's safety lane shows three rows
 });
 
 describe("先看三件事", () => {
-  const scored = (id: string, score: number | null, summary = `${id} 的导读`) => frontierItem({ id, title: `${id} 标题`, summary, score });
+  const scored = (id: string, score: number | null, summary = `${id} 的速读`) => frontierItem({ id, title: `${id} 标题`, summary, score });
   const lanes = (...lists: Array<[string, ReturnType<typeof scored>[]]>) => lists.map(([key, list]) => ({ lane: key, laneLabel: key, items: list }));
   const three = (over: Partial<FrontierDaily> = {}) => issue({
     lead: lead({ event: { id: "ev9", title: "同一事件" } }),
@@ -222,11 +222,11 @@ describe("先看三件事", () => {
   });
   const things = () => within(screen.getByRole("list", { name: "先看三件事" })).getAllByRole("listitem");
 
-  it("is the lead and the two items the lanes score highest, each a title and its 导读 and no more, in a list of its own at the head of the issue", () => {
+  it("is the lead and the two items the lanes score highest, each a title and its 速读 and no more, in a list of its own at the head of the issue", () => {
     show(three());
     expect(screen.getByRole("heading", { level: 3, name: "先看三件事" })).toBeInTheDocument();
     expect(things().map((row) => row.querySelector("[data-row-title]")?.textContent)).toEqual(["FDA 发布新方法学专题", "e2 标题", "g1 标题"]);
-    expect(things().map((row) => row.querySelector("[data-prose]:not([data-row-title])")?.textContent)).toEqual(["FDA 发布直接最终规则。事件页 ›", "e2 的导读", "g1 的导读"]);
+    expect(things().map((row) => row.querySelector("[data-prose]:not([data-row-title])")?.textContent)).toEqual(["FDA 发布直接最终规则。事件页 ›", "e2 的速读", "g1 的速读"]);
     expect(things().map((row) => row.firstElementChild?.textContent)).toEqual(["01", "02", "03"]);
     // not a row of a lane: no source line and no 详情, the title opens the reader
     for (const row of things()) {

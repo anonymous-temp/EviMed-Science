@@ -1,0 +1,6 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": null,
+  "source": { "kind": "curated", "label": "Editorial topics", "isExample": false },
+  "categories": { "literature": [], "guidelines": [], "drugs": [], "trials": [] }
+}

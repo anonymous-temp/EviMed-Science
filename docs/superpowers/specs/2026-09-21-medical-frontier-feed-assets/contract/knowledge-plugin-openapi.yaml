@@ -48,8 +48,10 @@ info:
        delivered from 1.5.0 on), `platform`, `author`, `media`, `quoted`, `metrics`, and in `/text`
        its full `body_text`. Each is absent when unknown, never guessed. Images are served by the
        plugin itself (`GET /v1/media/{mediaId}`), re-encoded, so a reader never hot-links a platform;
-       a post from the six Chinese platforms carries an excerpt and the platform's counts, never its
-       author (a member of the public).
+       a post from the six Chinese platforms carries the post's own text whole in `/text` (`body_text`,
+       at most 20,000 characters, the title not repeated in it; a post that says nothing beyond its
+       title has none), its pictures or a video's poster (`media`, at most 8), a 300-character excerpt
+       as its `summary` and the platform's counts, never its author (a member of the public).
     10. **Leads (1.6.0).** The platform may hand the plugin addresses it found (`POST /v1/leads`):
        pages its lead triggers searched for. This is the one write the platform makes, and it
        changes nothing of rule 6: the plugin answers, it never calls back. The plugin reads each

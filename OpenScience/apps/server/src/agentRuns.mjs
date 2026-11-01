@@ -41,6 +41,7 @@ import {
 } from "./runNotices.mjs";
 import { describeRunArtifacts, describeRunArtifactRoles, isOrdinaryConversation } from "./runArtifacts.mjs";
 import { workspaceChangedFiles } from "./runWorkspaceChanges.mjs";
+import { pickMainDocuments } from "./terminalPresentation.mjs";
 import { normalizeRunEstimate } from "./runRoute.mjs";
 import {
   assembleRunProgress,
@@ -4026,6 +4027,34 @@ async function writtenDeliverableFiles(project, since = null, until = null) {
 const UNVERIFIED_DELIVERY_NOTICE = "已生成的文件已保留，可以查看和下载。"
   + "这些文件标记为「未经核验」，其中的内容仍需核对。";
 
+/**
+ * A run that ended because something stopped it, not because its turn finished: cancelled by anyone (the researcher, the
+ * platform, a monitor reading an aborted turn), or a runtime that went away under it. Its turn never handed anything over.
+ * @param {{ status: string, errorCode?: string | null }} terminal
+ */
+function stoppedWithoutHandOver(terminal) {
+  return terminal.status === "canceled" || (terminal.status === "failed" && terminal.errorCode === "runtime_stopped");
+}
+
+/**
+ * The size and last write of each of a run's files, for choosing among them. A path that is missing, escapes the workspace
+ * or is a link is left out, like every other artifact read here.
+ * @param {any} project @param {readonly string[]} candidates
+ * @returns {Promise<{ path: string, size: number, mtimeMs: number }[]>}
+ */
+async function fileSizes(project, candidates) {
+  const found = [];
+  for (const relative of [...new Set(candidates)].slice(0, maxArtifacts)) {
+    let opened;
+    try {
+      opened = await openScopedFileNoFollow(project.workspaceDir, path.join(project.workspaceDir, relative));
+      if (opened.stat.isFile()) found.push({ path: relative, size: opened.stat.size, mtimeMs: opened.stat.mtimeMs });
+    } catch { /* missing, escaped or linked: not a candidate */ }
+    finally { await opened?.handle.close().catch(() => {}); }
+  }
+  return found;
+}
+
 
 export async function readRunStateProjection(project, workspaceRoot, run = null) {
   let text;
@@ -5728,7 +5757,17 @@ export class AgentRunStore {
       ];
       // Files on disk are a delivery, marked: the runtime stopping is why they
       // were not graded, not a reason to say the run produced nothing.
-      const written = await writtenDeliverableFiles(project, since).catch(() => []);
+      //
+      // Unless the run's turn was still going when the runtime went. Then the
+      // files are what a run that never finished had written so far, and
+      // calling that a success is the defect (BixBench bix-6, 2026-10-29: a
+      // tool process took the container's memory cgroup and the kernel with
+      // it at minute 12, 68 calls in; the run read `succeeded/degraded` and its
+      // last text was a minute-2 progress sentence). Such a run falls through to
+      // the stop verdicts below and keeps its files the way every run that does
+      // not succeed does (`finishInternal`: the written deliverables as
+      // unverified, an ordinary conversation's changed files as its outputs).
+      const written = this.turnOpenAtStop(run) ? [] : await writtenDeliverableFiles(project, since).catch(() => []);
       if (written.length > 0) {
         return this.finishInternal(project, run.id, {
           status: "succeeded",
@@ -5759,10 +5798,10 @@ export class AgentRunStore {
           qualityNotices: labels.slice(0, 20),
         });
       }
-      // Nothing on disk and no finished answer on record: the turn had not
-      // finished. When the user stopped the runtime it ran in, that stop is
-      // what ended it (`noteRuntimeStop`); otherwise the runtime stopping is
-      // the truthful reason.
+      // No finished answer on record, and either nothing on disk or a turn the
+      // runtime cut off: the turn had not finished. When the user stopped the
+      // runtime it ran in, that stop is what ended it (`noteRuntimeStop`);
+      // otherwise the runtime stopping is the truthful reason.
       const stoppedAt = this.runtimeStopRequests.get(run.id);
       if (stoppedAt !== undefined && this.now().getTime() - stoppedAt <= this.stopRequestWindowMs) {
         return this.finishInternal(project, run.id, {
@@ -5857,6 +5896,37 @@ export class AgentRunStore {
   turnFinishedBeforeStop(run) {
     const turn = this.progressTrackers.get(run.id)?.rootTurn;
     return Boolean(turn) && turn.endKind === "completed" && turn.replied === true;
+  }
+
+  /**
+   * Whether the run's own latest turn was still going when its runtime went
+   * away: the kernel's event stream carried the turn's activity (a step, a
+   * message, a tool call) and nothing after it said the turn ended.
+   *
+   * The signal is the kernel's `turn/end` event, the same record the session
+   * page shows as `turnEnd` / `turns[].end` (bix-6's capture reads `end: null`
+   * for its one turn). It is the stream's last word on the root session, kept by
+   * `noteRunEvent`, and it is read here by three states that do not overlap:
+   * `endKind === null` is a turn open, a string is a turn that ended (in
+   * whatever way), and no record at all is not known. Only the first is a runtime
+   * that died inside a turn; a turn that ended is left to its own verdict
+   * (`turnFinishedBeforeStop`, or the files it wrote) and a run the stream never
+   * spoke of — a control plane restarted since, whose replayed events say nothing
+   * about how a turn ended — is not called anything the record cannot show.
+   *
+   * It cannot read a finished turn as open unless the end event never reached
+   * this process: a turn's end is its last event, a later `turn/start` or tool
+   * call is what reopens the record, and the monitor (which reads the same
+   * `turn/end` from the session history every poll and finishes the run on it)
+   * has normally closed the run before a runtime can die after a turn. The one
+   * window is a runtime that dies in the instants between emitting its end and the
+   * pump delivering it, and its cost is bounded: the run reads `failed` with
+   * its files kept, not lost.
+   * @param {Record<string, any>} run @returns {boolean}
+   */
+  turnOpenAtStop(run) {
+    const turn = this.progressTrackers.get(run.id)?.rootTurn;
+    return Boolean(turn) && turn.endKind === null;
   }
 
   /**
@@ -6055,6 +6125,16 @@ export class AgentRunStore {
           }
         }
       } catch { /* isolated: the files stay in the workspace; the record just does not list the ones only the workspace saw */ }
+    }
+    // A run that was stopped hands over its main document. It kept its files above; this says which of them is the
+    // document, so a reader of the record is not left to tell a report from the scripts and the pieces it was built from
+    // (`terminalPresentation.mjs`). The status stays what it is — a cancel stays a cancel, a runtime that died stays
+    // `runtime_stopped` — and a caller that already named what was presented is not second-guessed.
+    if (stoppedWithoutHandOver(normalized) && !normalized.presentedFiles?.length) {
+      try {
+        const picked = pickMainDocuments(await fileSizes(project, [...normalized.artifacts, ...normalized.unverifiedArtifacts, ...(normalized.outputFiles ?? [])]));
+        if (picked.length > 0) normalized.presentedFiles = normalizeArtifacts(picked);
+      } catch { /* isolated: the files stay in the record's lists; only the choice among them is not recorded */ }
     }
     // The plan as the run ends it, what its claims came to, and its last
     // progress picture — computed before the terminal write and published

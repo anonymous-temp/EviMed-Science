@@ -5,6 +5,7 @@ import * as frontierEventReading from './frontierEventReading.mjs';
 import { frontierEventChanges } from './frontierEventReading.mjs';
 import { FRONTIER_EDITOR_VERSION, frontierEditorDiagnostics, frontierParagraphs, isChineseProse } from "./frontierEditor.mjs";
 import { FRONTIER_MEDIA_ID, fetchFrontierMedia, frontierMediaList } from "./frontierMedia.mjs";
+import { frontierCrawlPost, frontierPostBody, frontierPostOf } from "./frontierPostText.mjs";
 import { createModuleEvolutionPolicies } from "./moduleEvolutionPolicies.mjs";
 import { frontierWeeklyMarkdown } from "./frontierWeekly.mjs";
 import { frontierMonthlyMarkdown } from "./frontierMonthly.mjs";
@@ -18,7 +19,7 @@ import { frontierDailyMarkdown, frontierReadingMinutes } from "./frontierDaily.m
 import { FRONTIER_HOT_PERIODS } from "./frontierEvents.mjs";
 import { FRONTIER_FALLBACKS } from "./frontierIngest.mjs";
 import { FRONTIER_META_KEYS, bumpFrontierVersion, metaNumber, migrateFrontier } from "./frontierPersistence.mjs";
-import { frontierItemGenre, frontierReaderText, frontierReaderWorthy, frontierSelectThreshold } from "./frontierPipeline.mjs";
+import { POST_WITHDRAWN, frontierItemGenre, frontierReaderText, frontierReaderWorthy, frontierSelectThreshold } from "./frontierPipeline.mjs";
 import { servedAsk } from "./frontierAsk.mjs";
 import { frontierBriefView } from "./frontierBrief.mjs";
 import { FRONTIER_PROJECT_ID } from "./internalProjects.mjs";
@@ -1141,10 +1142,16 @@ export class FrontierService {
    * @param {any} client @param {Record<string, any>} row
    */
   async #reader(client, row) {
-    const post = row.platform === "x";
-    const translated = row.body_zh_kind === "translation" && typeof row.body_zh === "string" && row.body_zh.trim() ? row.body_zh : null;
+    const crawl = frontierCrawlPost(row.platform);
+    const post = row.platform === "x" || crawl;
+    // A crawl post's body is what it says (`frontierPostText.mjs`): its words without the title copy, the platforms' markers and its
+    // trailing tags — nothing when it says nothing beyond its title and tags, and never the words of its pictures.
+    const crawled = crawl ? frontierPostOf(row, row.title_raw) : null;
+    const crawlBody = crawl ? frontierPostBody(crawled) : null;
+    const translated = (!crawl || crawlBody) && row.body_zh_kind === "translation" && typeof row.body_zh === "string" && row.body_zh.trim() ? row.body_zh : null;
     // The 原文 a translation was made from, or the best text there is (frontierReaderText), as the paragraphs the translation has.
-    const text = (translated ? frontierReaderText(row, row.body_zh_source ?? null) : null) ?? frontierReaderText(row);
+    const text = crawl ? (crawlBody && crawled ? { source: crawled.layout === "own" ? "body" : "excerpt", text: crawlBody } : null)
+      : (translated ? frontierReaderText(row, row.body_zh_source ?? null) : null) ?? frontierReaderText(row);
     const original = text ? (post ? text.text.trim() : frontierParagraphs(text.text).join("\n\n")) : null;
     const chinese = Boolean(original) && !translated && (row.body_zh_kind === "original-zh" || isChineseProse(String(original).slice(0, 3_000)));
     const quoted = row.quoted && typeof row.quoted === "object" && typeof row.quoted.text === "string" && row.quoted.text.trim() ? row.quoted : null;
@@ -2255,7 +2262,7 @@ export class FrontierService {
     if (reason != null && !note) throw failure(400, "frontier_operation_invalid", "The reason must be one line of at most 500 characters.");
     if (action === "withdraw" && !note) throw failure(400, "frontier_operation_invalid", "A withdrawal needs its reason.");
     const item = await this.#transaction(async (client) => {
-      const row = (await client.query(`SELECT id, state, selected, selected_rule FROM evimed_frontier.items WHERE public_id=$1 FOR UPDATE`, [publicId])).rows[0];
+      const row = (await client.query(`SELECT id, state, selected, selected_rule, withdrawn_reason FROM evimed_frontier.items WHERE public_id=$1 FOR UPDATE`, [publicId])).rows[0];
       if (!row || !["published", "withdrawn"].includes(row.state)) throw failure(404, "frontier_item_not_found", "No such item.");
       if (action === "withdraw") {
         if (row.state !== "withdrawn") {
@@ -2263,6 +2270,10 @@ export class FrontierService {
             updated_at=clock_timestamp() WHERE id=$1`, [row.id, note]);
           await client.query(`INSERT INTO evimed_frontier.item_changes(item_id, op, reason) VALUES ($1, 'remove', 'withdrawn')`, [row.id]);
           await bumpFrontierVersion(client);
+        } else if (row.withdrawn_reason === POST_WITHDRAWN) {
+          // The pipeline took this post out for having no text of its own, and a revision that brings words puts back what it took out and
+          // nothing an operator took: the operator's withdrawal replaces the reason, so no revision undoes it. The item is out already, so no reader sees a change.
+          await client.query(`UPDATE evimed_frontier.items SET withdrawn_at=clock_timestamp(), withdrawn_reason=$2, updated_at=clock_timestamp() WHERE id=$1`, [row.id, note]);
         }
       } else if (row.state !== "published") {
         throw failure(409, "frontier_item_withdrawn", "A withdrawn item cannot be pinned.");

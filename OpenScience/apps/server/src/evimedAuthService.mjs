@@ -13,12 +13,12 @@ import { HttpError, clearSessionCookie, parseCookies } from "./security.mjs";
  *
  * Hidden knowledge:
  *
- * - **The EviMed credential is never stored and never travels downstream.** It
- *   exists for the length of one introspection call. It is not written to a
- *   user row, a session row, the security ledger or the error ledger, and no
- *   runtime container ever receives it; what the runtime gets is a session of
- *   ours, as always. The cache below is keyed by a hash of the credential, not
- *   by the credential.
+ * - **The EviMed credential never travels downstream or enters a public record.**
+ *   After introspection, an independently keyed ciphertext may belong to this
+ *   session for the four fixed browser search APIs. It expires and is revoked
+ *   with that session, is never returned to JavaScript or a runtime, and is
+ *   unavailable without the deployment's existing stable signing secret.
+ *   The introspection cache is keyed by a hash, never the credential.
  * - **The shell can hand it over two ways, and both are accepted.** In the
  *   request body (`token`), when the shell holds the credential itself; or as
  *   the platform's own session cookie, which the browser attaches to this
@@ -371,15 +371,16 @@ export class EvimedAuthService {
 
   /**
    * The whole exchange: introspect, provision on first sight, mint our session.
-   * Nothing of the credential outlives this call.
+   * Only a session-bound ciphertext may outlive this call for browser search.
    * @param {any} req @param {any} res @param {unknown} body
    * @returns {Promise<{ user: { id: string, name: string, tenantId: string }, csrfToken: string }>}
    */
   async createSession(req, res, body) {
     const settings = this.settings();
-    const identity = await this.introspect(evimedCredentialFrom(req, body));
+    const credential = evimedCredentialFrom(req, body);
+    const identity = await this.introspect(credential);
     const user = await this.store.upsertEvimedUser(evimedUserId(settings, identity.userId), identity.name, identity.userId);
-    const session = await this.store.createSession(user, req, res);
+    const session = await this.store.createSession(user, req, res, { evimedCredential: credential });
     return { user: this.store.publicUser(user), csrfToken: session.csrfToken };
   }
 

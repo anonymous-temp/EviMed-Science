@@ -350,7 +350,7 @@ export interface FrontierBriefPoint {
 }
 
 /**
- * 「AI 要点」 (contract B `brief`): the item's facts as the fields its genre is read by, under the one-paragraph 导读. `quote` is a
+ * 「AI 要点」 (contract B `brief`): the item's facts as the fields its genre is read by, under the one-paragraph 速读. `quote` is a
  * run of the source's own words (the authors' conclusion, a recommendation with its grade, the label's warning) with its Chinese
  * where the source is not Chinese; `about` is the report a commentary reads, opening as its own article.
  */
@@ -401,7 +401,7 @@ export interface FrontierFollowups {
 export interface FrontierItemDetail extends FrontierItem {
   abstract: string | null;
   abstractZh: string | null;
-  /** 「AI 导读」: one paragraph of three to five sentences, answer first. The list's `summary` where the server sends no `lead`. */
+  /** 「速读」: one paragraph of three to five sentences, answer first. The list's `summary` where the server sends no `lead`. */
   lead: string | null;
   /** 「AI 要点」, for a selected, near-line or safety item whose source supported its fields; null otherwise. */
   brief: FrontierBrief | null;

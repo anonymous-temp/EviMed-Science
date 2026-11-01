@@ -142,6 +142,8 @@ export interface PageTabs<V extends string = string> {
 
 export interface PageShellProps<V extends string = string> {
   title: string;
+  /** Keep a landing page's heading accessible when its body already introduces the task. */
+  headerVisibility?: "visible" | "sr-only";
   /** @deprecated Pages carry no subtitle; ignored. */
   description?: ReactNode;
   /** A grey count or update time after the title. */
@@ -152,6 +154,8 @@ export interface PageShellProps<V extends string = string> {
   actionPlan?: PageActionPlan;
   /** The way back, over the title (「‹ 前沿动态」): a page that is one step down from another. */
   back?: ReactNode;
+  /** Readers may place the return link at the page gutter, outside the centered reading column. */
+  backPlacement?: "column" | "edge";
   /** The browser tab's name, when it should differ from the heading. */
   documentTitle?: string;
   width?: PageWidth;
@@ -203,10 +207,12 @@ const TOOLBAR_ROW = "min-h-11";
  */
 export function PageShell<V extends string = string>({
   title,
+  headerVisibility = "visible",
   meta,
   actions,
   actionPlan,
   back,
+  backPlacement = "column",
   documentTitle,
   width = "page",
   className,
@@ -270,10 +276,11 @@ export function PageShell<V extends string = string>({
 
   const page = (
     <>
-      {back && <div className="mb-2">{back}</div>}
+      {back && backPlacement === "column" && <div className="mb-2">{back}</div>}
       {eyebrow && <div className="mb-2">{eyebrow}</div>}
       <PageHeader
         title={title}
+        className={headerVisibility === "sr-only" ? "sr-only" : undefined}
         meta={meta}
         actions={actions}
         actionPlan={actionPlan}
@@ -316,9 +323,10 @@ export function PageShell<V extends string = string>({
   return (
     // `scroll-pt`: an anchor, a `scrollIntoView` and the browser's scroll to a focused control all stop below the band, not under it.
     <div ref={scroller} className={cn("h-full min-h-0 overflow-y-auto bg-bg scroll-pt-[var(--page-chrome-h,0px)]", className)}>
+      {back && backPlacement === "edge" && <div className="px-4 pt-6 md:px-6">{back}</div>}
       {/* One box: the page gutter (16 px, 24 from `md`) and the one column, so
           the header and the body cannot disagree about where the left edge is. */}
-      <div className={cn("mx-auto w-full px-4 py-6 md:px-6", COLUMN[width], aside != null && "lg:grid lg:grid-cols-[minmax(0,1fr)_15.5rem] lg:gap-x-12")}>
+      <div className={cn("mx-auto w-full px-4 pb-6 md:px-6", back && backPlacement === "edge" ? "pt-2" : "pt-6", COLUMN[width], aside != null && "lg:grid lg:grid-cols-[minmax(0,1fr)_15.5rem] lg:gap-x-12")}>
         {aside != null ? (
           <>
             <div className="min-w-0">{page}</div>

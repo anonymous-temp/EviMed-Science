@@ -65,6 +65,34 @@ export function recencyWeight(at, now) {
   return Math.max(0.2, Math.min(1, 1 - days / 150));
 }
 
+/** The kinds of memory the memory page files under a project (`PROJECT_KINDS` of the web's `memoryGroups.ts`); every other kind is about the person. */
+export const PROJECT_MEMORY_KINDS = new Set(["project_fact", "analysis", "decision", "follow_up", "run_summary"]);
+/** How long a mark takes to lose half its brightness when nothing has used it since it was written, in days. */
+export const FRESHNESS_HALF_LIFE_DAYS = 30;
+/** The furthest use stretches that half-life. */
+export const FRESHNESS_MAX_STRETCH = 4;
+/** How bright what the person said about themselves stays: it has no 「新不新」. */
+export const FRESHNESS_DURABLE = 0.9;
+
+/**
+ * How bright a memory's mark is drawn, 0 to 1: it halves every `FRESHNESS_HALF_LIFE_DAYS` from the last time it was written or returned to a
+ * conversation, and each use stretches that half-life, as a retrieval does a memory's stability in a spaced-repetition model (ACT-R's
+ * base-level activation and FSRS both have frequency and recency as its two terms). What is about the person, in no project, does not fade.
+ *
+ * **It draws, and it decides nothing.** A dim memory is recalled exactly as a bright one is and is never deleted: the engine's retrieval reads
+ * nothing of this, and moving it there needs a measured gain first (principle 11). A word for a number's meaning is in the page's hands.
+ *
+ * @param {{ kind?: string | null, projectId?: string | null, writtenAt?: string | null, recalledAt?: string | null, recalls?: number }} memory @param {Date} now
+ */
+export function freshnessOf({ kind = null, projectId = null, writtenAt = null, recalledAt = null, recalls = 0 }, now) {
+  if (!projectId && !PROJECT_MEMORY_KINDS.has(String(kind))) return FRESHNESS_DURABLE;
+  const anchor = Math.max(...[writtenAt, recalledAt].map((value) => Date.parse(value ?? "")).filter(Number.isFinite), -Infinity);
+  if (!Number.isFinite(anchor)) return FRESHNESS_DURABLE;
+  const days = Math.max(0, (now.getTime() - anchor) / 86_400_000);
+  const stretch = Math.min(FRESHNESS_MAX_STRETCH, 1 + Math.log1p(Math.max(0, Number(recalls) || 0)));
+  return Math.round(2 ** (-days / (FRESHNESS_HALF_LIFE_DAYS * stretch)) * 1000) / 1000;
+}
+
 /** @param {number} value */
 export function unit(value) {
   return Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0;
@@ -99,6 +127,9 @@ export function requestMemo() {
  * @property {string} [group] what a folded cluster of marks like this one is called (a kind of memory, a type of document)
  * @property {number} [weight] 0..1: how much the mark is used and how much it matters; what a mark's size says
  * @property {string | null} [at] when it began (ISO)
+ * @property {string | null} [until] when it stopped being said (ISO), for what was replaced
+ * @property {number} [freshness] 0..1, how bright a memory is drawn (`freshnessOf`); it decides nothing
+ * @property {string | null} [recalledAt] when a conversation was last handed this memory (ISO)
  * @property {"current" | "check" | "replaced"} [state]
  * @property {string | null} [reason] one of `MAP_REASONS`, when `state` is `check`
  * @property {string | null} [projectId]

@@ -21,8 +21,8 @@ import { HttpError, sendJson } from './security.mjs';
  * the release that ships this): a tab opened before the release still has the old page's code, and the old fields are what
  * that page reads.
  *
- * @param {{store:any,pluginService:any,config:Record<string,any>,builtinSettings?:any}} dependencies */
-export function createInventoryRoutes({ store, pluginService, config, builtinSettings = null }) {
+ * @param {{store:any,pluginService:any,config:Record<string,any>,builtinSettings?:any,searchTopicsAvailable?:any}} dependencies */
+export function createInventoryRoutes({ store, pluginService, config, builtinSettings = null, searchTopicsAvailable = null }) {
   // Only these constructor-owned booleans can enter the public projection.
   const flag = (/** @type {unknown} */ value) => typeof value === 'boolean' ? value : null;
   const deployment = Object.freeze({
@@ -58,6 +58,11 @@ export function createInventoryRoutes({ store, pluginService, config, builtinSet
     }
     const annotation = builtin?.items.find(item => item.id === 'annotation')?.enabled ?? deployment.runtimeAnnotationEnabled !== false;
     const mermaid = builtin?.items.find(item => item.id === 'mermaid')?.enabled ?? deployment.runtimeMermaidEnabled !== false;
+    let topicsAvailable = false;
+    if (searchTopicsAvailable) {
+      try { topicsAvailable = await searchTopicsAvailable(user, project) === true; }
+      catch (error) { if ([401, 403, 404].includes(/** @type {any} */ (error)?.status)) throw error; }
+    }
     // What this account's runtime is not given, and the tools of a module the account is outside of whether or not the launch
     // names each of them (the visibility probe is served by the probe host and is on no declined list).
     const declined = [
@@ -68,7 +73,7 @@ export function createInventoryRoutes({ store, pluginService, config, builtinSet
     /** @type {Record<string, unknown>} */
     const data = {
       projectId: project.id,
-      groups: listInventory({ config: deployment, projectSettings: { 'dsh-cite': citationEnabled, annotation, mermaid }, declinedTools: declined }),
+      groups: listInventory({ config: { ...deployment, searchTopicsAvailable: topicsAvailable }, projectSettings: { 'dsh-cite': citationEnabled, annotation, mermaid }, declinedTools: declined }),
       researchTools: listResearchTools(declined),
     };
     if (match[2] === 'plugin-inventory') {

@@ -600,7 +600,12 @@ export class SkillLibraryService {
    * - `waiting` — a runtime runs and the saved choices are applied once its current work ends.
    * - `deferred` — the saved choices could not be prepared (no runtime image identity, a composition that could not be
    *   published or verified); the project runs on the ordinary baseline and a later start tries again.
-   * - `failed` / `rolled-back` — the apply was tried and its proof failed.
+   * - `failed` / `rolled-back` — the apply was tried and its proof failed, and the live runtime does not carry the saved choices.
+   *   A failed proof is a record about the proof, not about the runtime: a failed apply restores the runtime to the
+   *   generation it was serving, and when that is the saved generation itself (a runtime launched with it) the record says
+   *   `failed` while the saved choices are mounted. The live runtime's own generation settles it: when it is the saved
+   *   generation the phase is `effective` (and `error` keeps the proof's code, so the failed proof is not lost); when it is
+   *   anything else, or no runtime runs, the failure reads as before.
    * - `not-applicable` — a 循证 GEO project whose runtime mounts the shared context generation, which carries none of the
    *   project's own skill and integration choices; they are kept, and apply if the project becomes its owner's again.
    * @param {any} user @param {any} project @param {any} selection
@@ -613,19 +618,25 @@ export class SkillLibraryService {
     const provenLive = live && observation.runtimeGeneration === state?.payload.runtimeGeneration
       && observation.captured?.reference?.generationHash === historical?.reference?.generationHash ? historical : null;
     const provenLast = !live && historical && ['effective', 'rolled-back'].includes(state?.payload.phase) ? historical : null;
-    const effective = provenLive ?? provenLast;
-    const effectiveRevision = effective?.selectionRevision ?? null;
     const desiredHere = state?.payload.desired?.selectionRevision === selection.revision;
+    const failedApply = ['failed', 'rolled-back'].includes(state?.payload.phase);
+    // What the live runtime was launched with is a fact of its own, and a failed apply's record can disagree with it.
+    const mountedHash = live ? observation.captured?.reference?.generationHash : null;
+    const mountedSaved = desiredHere && failedApply && typeof mountedHash === 'string'
+      && mountedHash === state.payload.desired.reference?.generationHash ? state.payload.desired : null;
+    const effective = provenLive ?? mountedSaved ?? provenLast;
+    const effectiveRevision = effective?.selectionRevision ?? null;
     const phase = observation?.sharedContext === true ? 'not-applicable'
       : effectiveRevision === selection.revision && state?.payload.phase === 'effective' ? (live ? 'effective' : 'ready')
-      : desiredHere && ['failed', 'rolled-back'].includes(state.payload.phase) ? state.payload.phase
+      : mountedSaved ? 'effective'
+      : desiredHere && failedApply ? state.payload.phase
       : desiredHere && UNPREPARED_ERRORS.has(state.payload.error) ? 'deferred'
       : !state && !selection.revision ? 'ready'
       : live ? 'waiting' : 'pending';
     return { phase, live, savedRevision: selection.revision, effectiveRevision, error: state?.payload.error ?? null,
       lastEffectiveRevision: historical?.selectionRevision ?? null,
       effectiveDisabled: effective ? effective.platformSkills?.disabled ?? [] : null,
-      effectiveBuiltins: effective ? (provenLive ? observation.builtins : null) ?? Object.fromEntries(['annotation', 'mermaid'].map(id => [id, this.builtinAvailability[id] !== false && !(effective.platformSkills?.disabledPlugins ?? []).includes(id)])) : null };
+      effectiveBuiltins: effective ? (provenLive || mountedSaved ? observation.builtins : null) ?? Object.fromEntries(['annotation', 'mermaid'].map(id => [id, this.builtinAvailability[id] !== false && !(effective.platformSkills?.disabledPlugins ?? []).includes(id)])) : null };
   }
   /** The ids of the platform skills this account is offered now, or null when the list cannot be read. @param {any} user */
   async platformSkillIds(user) {

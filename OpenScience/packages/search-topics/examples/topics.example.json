@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "updatedAt": null,
+  "source": { "kind": "curated", "label": "Example search prompts", "isExample": true },
+  "categories": {
+    "literature": [
+      { "id": "hypertension", "query": "高血压", "description": "血压管理与心血管风险" },
+      { "id": "aspirin", "query": "阿司匹林", "description": "抗血小板治疗与用药证据" },
+      { "id": "diabetes", "query": "糖尿病", "description": "血糖控制与并发症管理" }
+    ],
+    "guidelines": [
+      { "id": "hypertension-guidelines", "query": "高血压诊疗", "description": "诊断标准与治疗建议" },
+      { "id": "diabetes-guidelines", "query": "糖尿病管理", "description": "血糖控制与综合管理" },
+      { "id": "heart-failure", "query": "心力衰竭", "description": "分型诊疗与长期管理" }
+    ],
+    "drugs": [
+      { "id": "aspirin", "query": "阿司匹林", "description": "适应证与用药信息" },
+      { "id": "metformin", "query": "二甲双胍", "description": "降糖治疗与安全性信息" },
+      { "id": "atorvastatin", "query": "阿托伐他汀", "description": "调脂治疗与用药信息" }
+    ],
+    "trials": [
+      { "id": "lung-cancer", "query": "肺癌", "description": "治疗方案与在研试验" },
+      { "id": "diabetes-trials", "query": "糖尿病", "description": "新治疗方案的临床研究" },
+      { "id": "immunotherapy", "query": "免疫治疗", "description": "免疫相关干预的临床研究" }
+    ]
+  }
+}

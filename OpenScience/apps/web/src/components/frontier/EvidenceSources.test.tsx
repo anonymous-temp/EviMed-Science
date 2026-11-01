@@ -33,7 +33,7 @@ describe("the sources of a card", () => {
     mount(card);
     await userEvent.click(within(rows()[0]).getByRole("button", { name: "试验 A" }));
     const drawer = screen.getByRole("dialog", { name: "来源 1" });
-    expect(within(drawer).getByRole("link", { name: /打开原文/ })).toHaveAttribute("href", "https://example.org/a");
+    expect(within(drawer).getByRole("link", { name: /阅读原文/ })).toHaveAttribute("href", "https://example.org/a");
     expect(within(drawer).getByText("Among 100 adults on the drug, 7 had a stroke")).toBeInTheDocument();
     const cited = within(drawer).getByRole("region", { name: "依据这个来源的结论" });
     expect(within(cited).getAllByRole("button").map((button) => button.textContent)).toEqual(["试验中卒中更少。", "出血减半。"]);

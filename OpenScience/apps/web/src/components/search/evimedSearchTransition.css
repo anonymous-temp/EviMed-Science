@@ -1,0 +1,61 @@
+/* A full-column optical scene, kept separate from measured request progress. */
+.discovery-transition {
+  display: flex;
+  min-height: calc(100svh - var(--page-chrome-h, 3rem) - 6.5rem);
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem 0 1.5rem;
+}
+.discovery-field {
+  --discovery-cycle: calc(var(--dur-slow) * 16);
+  width: 100%;
+  height: clamp(17rem, 42svh, 28rem);
+  margin: .5rem 0 1.5rem;
+  overflow: hidden;
+  pointer-events: none;
+}
+.discovery-field > svg { width: 100%; height: 100%; }
+.discovery-orbit { transform-box: fill-box; transform-origin: center; }
+.discovery-lens { transform-box: view-box; transform-origin: 594px 224px; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .discovery-paper { animation: discovery-float var(--discovery-cycle) var(--ease-standard) infinite; }
+  .discovery-paper-1 { animation-delay: calc(var(--discovery-cycle) * -.5); }
+  .discovery-signal { animation: discovery-transfer var(--discovery-cycle) linear infinite; }
+  .discovery-signal-1 { animation-delay: calc(var(--discovery-cycle) * -.5); }
+  .discovery-orbit { animation: discovery-turn var(--discovery-cycle) linear infinite; }
+  .discovery-lens { animation: discovery-lens-sway calc(var(--dur-slow) * 9) var(--ease-standard) infinite; }
+  .discovery-running { animation: discovery-breathe calc(var(--dur-slow) * 6) var(--ease-standard) infinite; }
+}
+
+@keyframes discovery-float {
+  0%, 100% { transform: translateY(5px); }
+  50% { transform: translateY(-5px); }
+}
+@keyframes discovery-transfer {
+  from { stroke-dashoffset: 100; opacity: 0; }
+  20%, 65% { opacity: 1; }
+  to { stroke-dashoffset: 0; opacity: 0; }
+}
+@keyframes discovery-turn { to { transform: rotate(360deg); } }
+@keyframes discovery-lens-sway {
+  0%, 100% { transform: translate(-8px, 3px) rotate(-5deg); }
+  50% { transform: translate(8px, -3px) rotate(5deg); }
+}
+@keyframes discovery-breathe {
+  0%, 100% { opacity: .4; }
+  50% { opacity: 1; }
+}
+
+@media (max-width: 767px) {
+  .discovery-transition { min-height: calc(100svh - var(--page-chrome-h, 5.5rem) - 9.5rem); }
+  .discovery-field { height: 15rem; margin: .25rem 0 1rem; }
+  /* Crop the peripheral pages, keeping the document and lens large on phones. */
+  .discovery-field > svg { width: 200%; max-width: none; margin-left: -50%; }
+}
+@media (forced-colors: active) {
+  .discovery-field { display: none; }
+  .discovery-transition { gap: 2rem; }
+  .discovery-running { background: CanvasText; }
+}

@@ -1,4 +1,4 @@
-"""``python -m knowledge_plugin retext [--kinds wechat,page,crossref,journal] [--since 2026-09-01] [--before <iso>]
+"""``python -m knowledge_plugin retext [--kinds wechat,page,crossref,journal,unread-page] [--since 2026-09-01] [--before <iso>]
 [--limit N] [--apply]``: the texts stored before the 2026-10-22 reader-text fixes, read again through them.
 
 The audit of the 23,948 published texts (2026-10-22) found three stored kinds the fixes cannot repair in place, because
@@ -15,6 +15,13 @@ what was lost is not in the stored text any more:
   the paper text chain was built for (OpenAlex, the journal's feeds, the landing page, Europe PMC's full text). The
   whole chain runs again, the landing page read as on a first attempt; an entry it finds a text for is stored and
   delivered again, one it finds nothing for stays as it was and is a candidate of the next run.
+
+- ``unread-page`` (2026-10-31; only when named): page entries (not a journal's) the platform asked a text for that were answered
+  ``unavailable`` with no text for a reason a fixed reader may now pass: ``page_no_main_text`` (the extractor found no article —
+  643 News-Medical pages in 30 days, from before trafilatura replaced the container reading on 2026-10-22; the same source reads
+  now) and ``page_http-error`` (the host answered an error or nothing, as sciencenet's 54 did). The page is read again as a first
+  attempt; one that still fails stays as it was and is a candidate of the next run, and a page that is robots-denied, a challenge,
+  a PDF or a 4xx the host gives is not among them.
 
 Only entries the platform asked a text for (``text_requested_at``) are read, newest first, those whose text was fetched
 before ``--before`` (default: now) and that were first seen after ``--since`` (default: 60 days ago).
@@ -41,10 +48,11 @@ from .social import wechat as wechat_mod
 from .social.providers import ARTICLE_DETAIL_CNY
 from .store import ENTRY_COLUMNS, redeliver, save_text_result
 
-KINDS = ("wechat", "page", "crossref", "journal")
+KINDS = ("wechat", "page", "crossref", "journal", "unread-page")
 DEFAULT_KINDS = ("wechat", "page", "crossref")
 DEFAULT_SINCE_DAYS = 60
 DEFAULT_LIMIT = 20_000
+JOURNAL_ACCESSES = ("crossref-issn", "eutils-query", "europepmc")
 CONCURRENCY = 6          # texts read at once; each host's own pace is the fetcher's budget, as for the text worker
 
 _WHERE = {
@@ -55,15 +63,25 @@ _WHERE = {
     "crossref": r"t.fetched_from = 'crossref' AND t.abstract ~ '&(lt|gt|amp|quot|apos|#[0-9]+|#x[0-9a-fA-F]+);'",
     "journal": "t.abstract IS NULL AND t.body_text IS NULL AND t.body_excerpt IS NULL "
                "AND (s.access IN ('crossref-issn', 'eutils-query', 'europepmc') OR e.doi IS NOT NULL OR e.pmid IS NOT NULL)",
+    # The notes of ``enrich.page`` (``page_no_main_text``; ``page_http-error:<detail>`` from ``Attempt.note``) in ``last_error``'s
+    # comma-joined list. Not a journal's entry (that is the ``journal`` kind), not a WeChat article (bought, never read), not a crawled post
+    # (its own text is all there is of it: the page reader never sees one).
+    "unread-page": r"t.abstract IS NULL AND t.body_text IS NULL AND t.body_excerpt IS NULL "
+                   r"AND t.last_error ~ '(^|,)page_(no_main_text|http-error)' "
+                   r"AND NOT (s.access IN ('crossref-issn', 'eutils-query', 'europepmc') OR e.doi IS NOT NULL OR e.pmid IS NOT NULL) "
+                   r"AND s.access <> 'social-crawl' "
+                   r"AND e.url !~* '^https?://mp\.weixin\.qq\.com/'",
 }
 # Which stored states a kind reads: a text that is there (the fixes' kinds), or a journal entry answered without one.
 _STATUS = {"wechat": "('available')", "page": "('available')", "crossref": "('available')",
-           "journal": "('available', 'unavailable')"}
+           "journal": "('available', 'unavailable')", "unread-page": "('unavailable')"}
 
 
 def kind_of_row(row: dict) -> str:
     if not (row.get("stored_body") or row.get("stored_excerpt") or row.get("stored_abstract")):
-        return "journal"            # the only kind read without a stored text
+        # The kinds read without a stored text: a journal entry (a journal read method, a DOI or a PMID), else a page that failed.
+        journal = row.get("source_access") in JOURNAL_ACCESSES or row.get("doi") or row.get("pmid")
+        return "journal" if journal else "unread-page"
     return "wechat" if row["fetched_from"] == "wechat" else "crossref" if row["fetched_from"] == "crossref" else "page"
 
 

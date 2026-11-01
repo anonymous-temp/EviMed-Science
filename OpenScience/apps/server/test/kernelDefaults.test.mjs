@@ -94,7 +94,9 @@ test("every setting the runtime depends on still holds in the composition the im
   // 208 on 2026-10-17 (0.2.1-rc.2): nine in (remote-access, working-directory and its tool, the DeepSeek search/fetch API
   // provider, the schedule service and its page back in the web app, the harness developers' context, the secret mask
   // and the 1017 model label), two out (skill-badge, tool-ralph).
-  assert.equal(report.counts.baselineRows, 208, "the recorded composition includes the native client, citation bundle, plugin probe, community clients, engine context, scoped skill catalogue, LoopX and the OpenViking memory plugin with its bridge");
+  // 209 on 2026-10-31 (merge of the Gitee main e9c9f96f6): `evimed-search-topics`, the row of the independent search-topics host bundle
+  // (disabled unless EVIMED_SEARCH_TOPICS_ENABLED), written by hand into the baseline with BASELINE_PROVENANCE.sha256 moved in the same edit.
+  assert.equal(report.counts.baselineRows, 209, "the recorded composition includes the native client, citation bundle, plugin probe, community clients, engine context, scoped skill catalogue, LoopX and the OpenViking memory plugin with its bridge");
   assert.equal(parseCordisDocument(await readFile(source("baseline"), "utf8")).rows.filter((row) => ["dsh-annotation", "ui-mermaid"].includes(row.id)).length, 2);
   const baseline = parseCordisDocument(await readFile(source("baseline"), "utf8"));
   assert.equal(baseline.byId.get("evimed-engine-context").name, "@evimed/dsh-socket/plugins/engine-context");

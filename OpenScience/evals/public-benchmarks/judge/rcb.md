@@ -7,3 +7,6 @@ evidence and logic (Mode B); 50 means matching the target study, 70+ means surpa
 empty report scores 0. Task score = weighted mean of item scores. No network. Append ONE JSON line per packet to
 /home/coder/evimed-wt/bench/judge/rcb.parts/<your-batch>.jsonl: {"key": ..., "score": <0-100>, "items": [{"id": ..., "weight": ...,
 "score": ..., "why": "<= 1 sentence"}], "notes": "<= 2 sentences"}.
+If meta.json has "delivery" (and, for a repeat, "pass"), copy both fields into your verdict line unchanged. "delivery": "at-cap" means the run was
+cancelled at its time limit and the report is what existed then (a draft): judge it as it stands, neither more nor less strictly.
+The operator names your output file when it is not the one above (repeat passes write judge/<bench>.p<k>... files).

@@ -46,10 +46,10 @@ test("the migration makes the publisher account, twice, and it is nobody's: no p
   // A second process starting against the same database changes nothing, and the schema version readiness requires is recorded.
   const second = new ControlPlaneDatabase(databaseConfig(isolated.url));
   try { await second.migrate(); await second.migrate(); assert.equal((await second.health()).schemaVersion, CONTROL_PLANE_SCHEMA_VERSION); } finally { await second.close(); }
-  assert.equal(CONTROL_PLANE_SCHEMA_VERSION, 5);
+  assert.ok(CONTROL_PLANE_SCHEMA_VERSION >= 5);
   assert.equal((await row()).length, 1);
   assert.equal(Number((await store.database.query("SELECT count(*) AS n FROM evimed_control.users WHERE auth_type='platform'")).rows[0].n), 1);
-  assert.deepEqual(await store.readiness(), { mode: "postgres", shared: true, schemaVersion: 5 });
+  assert.deepEqual(await store.readiness(), { mode: "postgres", shared: true, schemaVersion: CONTROL_PLANE_SCHEMA_VERSION });
 });
 
 test("the database itself refuses a second platform account, a person holding its id, and a password on it", options, async () => {
@@ -83,7 +83,7 @@ test("it migrates on a database that already holds release data, and names a per
       await upgraded.migrate();
       assert.deepEqual((await upgraded.query("SELECT id,auth_type FROM evimed_control.users ORDER BY id")).rows,
         [{ id: "alice", auth_type: "local" }, { id: "bob", auth_type: "oidc" }, { id: PLATFORM_PUBLISHER_USER_ID, auth_type: "platform" }]);
-      assert.equal((await upgraded.health()).schemaVersion, 5);
+      assert.equal((await upgraded.health()).schemaVersion, CONTROL_PLANE_SCHEMA_VERSION);
     } finally { await upgraded.close(); }
     // A person registered the id before the account existed: the migration stops, naming it, and does not touch them.
     await first.query("ALTER TABLE evimed_control.users DROP CONSTRAINT users_platform_account_check");

@@ -3,7 +3,7 @@
   "schemaVersion": 1,
   "composition": {
     "source": "deploy/runtime-dsh/dump-config.baseline.json",
-    "sha256": "b22050c5bf73dce4d225820c785d678cad2d7b21f5d37bbc1e86f19bc55a0b35",
+    "sha256": "b58ec61cf232613a7dca410fca99676ca76d33a929e9d91a075ffbd6a0a96fd1",
     "bundles": [
       "@deepseek-ai/dsh-base",
       "@changfenhuang/dsh-annotation",
@@ -12,7 +12,8 @@
       "@openviking/dsh-memory-plugin",
       "@evimed/dsh-socket",
       "dsh-cite",
-      "dsh-mermaid"
+      "dsh-mermaid",
+      "@evimed/dsh-search-topics"
     ],
     "rows": [
       {
@@ -1597,6 +1598,13 @@
         "bundle": "dsh-mermaid",
         "patchedBy": [],
         "state": "enabled"
+      },
+      {
+        "id": "evimed-search-topics",
+        "name": "@evimed/dsh-search-topics",
+        "bundle": "@evimed/dsh-search-topics",
+        "patchedBy": [],
+        "state": "conditional"
       }
     ]
   },

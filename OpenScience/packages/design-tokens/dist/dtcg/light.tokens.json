@@ -1,5 +1,5 @@
 {
-  "$description": "EviMed 3.0.0 — the light theme: every role resolved to a value. One Figma mode.",
+  "$description": "EviMed 3.1.0 — the light theme: every role resolved to a value. One Figma mode.",
   "role": {
     "bg": {
       "$type": "color",

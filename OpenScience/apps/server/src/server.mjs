@@ -78,6 +78,8 @@ import { PluginService } from "./pluginService.mjs";
 import { PluginApplyWorker } from "./pluginApplyWorker.mjs";
 import { createPluginRoutes } from "./pluginRoutes.mjs";
 import { createInventoryRoutes } from "./inventoryRoutes.mjs";
+import { createSearchTopicsRoutes } from './searchTopicsRoutes.mjs';
+import { SearchTopicsRecommendations } from './searchTopicsRecommendations.mjs';
 import { ExtensionAccess } from "./extensionAccess.mjs";
 import { ExtensionService } from "./extensionService.mjs";
 import { createExtensionRoutes } from "./extensionRoutes.mjs";
@@ -158,7 +160,7 @@ import { OfficialPacks, officialPackMetricFamilies } from "./officialPacks.mjs";
 import { OFFICIAL_PACKS_DIR } from "./officialPackSources.mjs";
 import { createMethodAppliedOutcomes } from "./methodAppliedOutcomes.mjs";
 import { persistExecutedToolEdges, persistToolTraces } from "./toolExecutionEdges.mjs";
-import { PLATFORM_PUBLISHER_USER_ID, CONNECTOR_CREDENTIAL_IDS, MIN_PASSWORD_LENGTH, accountMonthStart, autopilotEpisodeCapability, conversationTurnRouteReason, deliverableDir, deliverableIdOfPath, geoCardProducer, geoDisclosurePerson, geoMetricDefinition, geoPublishableText, geoVisibleQuestionOfReason, isChargeableResearchRun, isConversationTurnRun, isResearcherOwnedWork, isVerificationRun, meetsPasswordMinimum, mountedMethodDigest, runRoleOf, usagePurposeOfRun, VCR_STEP_CAPABILITIES } from "@evimed/domain";
+import { PLATFORM_PUBLISHER_USER_ID, CONNECTOR_CREDENTIAL_IDS, MIN_PASSWORD_LENGTH, accountMonthStart, autopilotEpisodeCapability, conversationTurnRouteReason, deliverableDir, deliverableIdOfPath, geoCardProducer, geoDisclosurePerson, geoMetricDefinition, geoPublishableText, geoVisibleQuestionOfReason, isChargeableResearchRun, isConversationTurnRun, isResearcherOwnedWork, isVerificationRun, meetsPasswordMinimum, mountedMethodDigest, runRoleOf, RUN_TIME_BUDGET_MINUTES, runTimeBudgetMinutes, usagePurposeOfRun, VCR_STEP_CAPABILITIES } from "@evimed/domain";
 import { requestedSourceScope, ResearchSessionStore } from "./researchSessions.mjs";
 import { boundConversationNote, prepareResearchContext } from "./researchContext.mjs";
 import { preservedConversationHistory } from "./conversationHistory.mjs";
@@ -276,6 +278,7 @@ import { KB_SEARCH_GATEWAY_PATH, createKbSearchGatewayHandler } from "./kbSearch
 import { KB_BROWSE_GATEWAY_PATH, createKbBrowseGatewayHandler } from "./kbBrowseGateway.mjs";
 // 「前沿动态」 search for the runtime's `frontier_search` tool (2026-09-22).
 import { FRONTIER_GATEWAY_PATH, createFrontierGatewayHandler } from "./frontierGateway.mjs";
+import { fetchFrontierMedia } from "./frontierMedia.mjs";
 // The independent reviewer (plan 2026-09-22, tiered review): the gateway a
 // run's submission asks, the module that reviews, and its reply-check worker.
 import { REVIEW_GATEWAY_PREFIX, createReviewGatewayHandler } from "./reviewGateway.mjs";
@@ -478,7 +481,10 @@ import { OidcService, validateOidcSettings } from "./oidc.mjs";
 // The `evimed` login mode (fusion plan 2026-09-26 §9.2): the EviMed shell's
 // signed-in user becomes a Science session without signing in twice.
 import { EvimedAuthService, evimedAuthReadiness } from "./evimedAuthService.mjs";
+import { EvimedAccountService, isEvimedAccountPath, validateEvimedAccountSettings } from "./evimedAccountService.mjs";
 import { createEvimedAuthRoutes, evimedAuthRoutePattern } from "./evimedAuthRoutes.mjs";
+import { EvimedSearchService } from "./evimedSearchService.mjs";
+import { createEvimedSearchRoutes, EVIMED_SEARCH_PATH } from "./evimedSearchRoutes.mjs";
 import { runtimeReleasePolicyError } from "./releaseManifest.mjs";
 import {
   RUNTIME_CAPABILITY_SKILLS_DIR,
@@ -809,6 +815,7 @@ function routePattern(pathname) {
   if (pathname === "/api/availability" || pathname === "/api/ops/availability") return pathname;
   if (pathname.startsWith("/api/auth/oidc/")) return "/api/auth/oidc/:action";
   if (pathname.startsWith("/api/auth/evimed")) return evimedAuthRoutePattern(pathname);
+  if (pathname === EVIMED_SEARCH_PATH || pathname.startsWith(`${EVIMED_SEARCH_PATH}/`)) return `${EVIMED_SEARCH_PATH}/:category/:action`;
   if (
     pathname === "/api/auth/login" ||
     pathname === "/api/auth/logout" ||
@@ -1262,7 +1269,15 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const independentProductWork = work => productDatabase ? productDatabase.withoutTransactionClient(work) : work();
   const pluginService = productDatabase ? new PluginService(productDatabase, { jobs: productJobs, maxTimeoutMs: config.publicSourceGatewayTimeoutMs }) : null;
   const pluginRoutes = createPluginRoutes({ store, service: pluginService, maxJsonBytes: config.maxJsonBytes });
-  const inventoryRoutes = createInventoryRoutes({ store, pluginService, config, builtinSettings: (user, project) => skillLibraryService?.projectBuiltins(user, project) ?? null });
+  const inventoryRoutes = createInventoryRoutes({ store, pluginService, config, builtinSettings: (user, project) => skillLibraryService?.projectBuiltins(user, project) ?? null,
+    searchTopicsAvailable: (_user, project) => runtimeManager.searchTopicsAvailable(project) });
+  /** @type {SearchTopicsRecommendations | null} */
+  let searchTopicsRecommendations = null;
+  const searchTopicsRoutes = createSearchTopicsRoutes({ store, runtimeManager: { searchTopicsFor: (project, query) => runtimeManager.searchTopicsFor(project, query) },
+    ensureCurrent: async () => {
+      if (!searchTopicsRecommendations) throw new HttpError(503, 'evimed_search_topics_unavailable', 'Search topic recommendations are temporarily unavailable.');
+      return searchTopicsRecommendations.ensureCurrent();
+    } });
   const extensionAccess = new ExtensionAccess({ store, studyAccess: async (user, projectId, { client }) => {
     if (!vcr) return null;
     const study = await vcr.store.studyByControlProject(user.id, projectId, client);
@@ -2453,7 +2468,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     const pipeline = new FrontierPipeline({ database: productDatabase, editor, plugin: client, embedder, config, sourceChanges, tags: tagStore, policies:evolutionModulePolicies, evolution:{observe:async event=>evolution?.observe(event)},
       glossary: entityVocabulary.glossaryStore, workerId: randomId("frontier-"),
       // An open-access PDF the plugin could not read (2026-10-22): read through the platform's own web reader, when it runs.
-      webReader: { read: (/** @type {string} */ url, /** @type {any} */ options) => webReader.read(url, options) } });
+      webReader: { read: (/** @type {string} */ url, /** @type {any} */ options) => webReader.read(url, options) },
+      // The words in the pictures of a crawl post that says nothing in its text (rd-server 2026-10-31): read through the same document parser.
+      parser: documentParser, media: (/** @type {string} */ id) => fetchFrontierMedia(client, id) });
     // One implementation of "today's spend": the pipeline's, which it gates on.
     const budget = typeof pipeline.budget === "function" ? () => pipeline.budget(new Date()) : null;
     const tagUpkeep = new FrontierTagUpkeep({ database: productDatabase, editor, tags: tagStore, ...(budget ? { budget } : {}) });
@@ -2582,6 +2599,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   }
   const evidenceZoneRoutes = createEvidenceZoneRoutes({store,service:frontier?.evidenceZones??null,
     frontier:frontier?.service??null,config,maxJsonBytes:config.maxJsonBytes,reads:evidenceZoneReads,writes:zoneWrites});
+  if (config.searchTopicsEnabled && frontier && productDatabase) searchTopicsRecommendations = new SearchTopicsRecommendations({ database: productDatabase, config, tags: frontier.service.tags });
   // What the platform's own evidence offers the frontier (flywheel F09): a public feed the knowledge-source plugin reads like
   // any other publisher's. It reads cards, so it exists only where the evidence tables do; off, its two paths answer by name.
   const evidenceFeed = frontier && config.evidencePublicWebEnabled ? createEvidenceFeed({ database: productDatabase, config }) : null;
@@ -3571,9 +3589,14 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const researchHandoffRoutes = createResearchHandoffRoutes({ config, store, researchSessions, agentRegistry, context, audit });
   const oidcService = new OidcService(config, store);
   const evimedAuth = new EvimedAuthService(config, store, { fetchImpl: overrides.evimedIntrospectFetch });
+  const evimedAccount = new EvimedAccountService(config, evimedAuth, { fetchImpl: overrides.evimedAccountFetch });
+  const evimedSearch = new EvimedSearchService(config, store, { fetchImpl: overrides.evimedSearchFetch });
+  const evimedSearchRoutes = createEvimedSearchRoutes({ store, service: evimedSearch, maxJsonBytes: config.maxJsonBytes,
+    audit: (action, status, details) => securityAudit(config, action, status, details) });
   const evimedAuthRoutes = createEvimedAuthRoutes({
     store,
     service: evimedAuth,
+    accountService: evimedAccount,
     maxJsonBytes: config.maxJsonBytes,
     audit: (event, status, details) => securityAudit(config, event, status, details),
     onSignIn: (userId) => warmAfterSignIn(userId),
@@ -7072,6 +7095,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         releaseMutation = await maintenanceService.admitMutation();
       }
       if (await evimedAuthRoutes(req, res)) return;
+      if (await evimedSearchRoutes(req, res)) return;
+      if (await searchTopicsRoutes(req, res)) return;
       if (await personalSkillTransferRoutes(req, res)) return;
       if (await skillLibraryRoutes(req, res)) return;
       if (await pluginRoutes(req, res)) return;
@@ -7257,7 +7282,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         // password while the shell's researchers arrive through EviMed. With the
         // EviMed mode off this answers exactly what it answered before.
         const mode = config.authMode === "evimed" ? { mode: "evimed" } : oidcService.methods();
-        sendJson(res, 200, { data: { ...mode, ...evimedAuth.loginMethod() } });
+        const evimed = evimedAuth.enabled ? { ...evimedAuth.loginMethod().evimed, ...evimedAccount.loginMethod() } : null;
+        sendJson(res, 200, { data: { ...mode, ...(evimed ? { evimed } : {}) } });
         return;
       }
 
@@ -7408,7 +7434,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         });
         sendJson(res, 200, {
           data: {
-            user: store.publicUser(user),
+            user: { ...store.publicUser(user),
+              ...(["local", "evimed", "oidc", "development"].includes(user.authType) ? { authType: user.authType } : {}) },
             tenant: { id: user.tenantId ?? user.id, model: "individual-account", role: "owner" },
             project: { id: project.id, name: project.name },
             projects: (await store.listProjects(user)).filter((item) => !internalFor(user.id, item.id)),
@@ -7430,6 +7457,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             // readiness uses. The last known answer is served at once and
             // refreshed behind it; an OpenList that cannot say is `false`.
             features: { frontier: Boolean(frontier) && frontierAudienceAllows(config, user), review: Boolean(review),
+              evimedSearch: evimedSearch.enabled,
               // 「知识页」: the compile is on for this deployment (the pages that exist are readable either way).
               knowledgePages: Boolean(knowledgePages?.enabled),
               // Sharing a capsule with other accounts, and subscribing a project to an evidence zone: each its own switch, and the
@@ -7816,10 +7844,15 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // A question, dispatched as a run.
       //
       //   POST /api/agent-runs/dispatch
-      //     { sessionId, dispatchId?, text, automated?: boolean, line?: "answer" | "<capability id>" }
+      //     { sessionId, dispatchId?, text, automated?: boolean, line?: "answer" | "<capability id>", timeBudgetMinutes?: integer }
       //   202 { data: run }   run.estimatedMinutes says how long it usually takes (C3); where it went is the ledger's machine reason
       //   400 invalid_agent_run — an unknown field; a `line` that is neither `answer` nor a public
-      //       capability id; a `line` on a conversation already bound to a capability
+      //       capability id; a `line` on a conversation already bound to a capability; a `timeBudgetMinutes`
+      //       that is not a whole number of minutes from 1 to 1440
+      //
+      // `timeBudgetMinutes` is an optional wall-clock budget for the run's turn (`RUN_TIME_BUDGET_MINUTES`). The run policy
+      // tells the model the clock — at its first step and at 50%, 75% and 90% of the budget — and stops nothing. A dispatch
+      // that states none gets none, except an unattended one under the deployment's `OPEN_SCIENCE_RUN_TIME_BUDGET_MINUTES`.
       //
       // `line` is the researcher's own choice and replaces the router and the
       // classifier: `answer` pins the answer line (「改为普通问答」), an id pins
@@ -7827,7 +7860,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       if (pathname === "/api/agent-runs/dispatch" && req.method === "POST") {
         const ctx = await context(req, res);
         const body = assertObject(await readJson(req, config.maxJsonBytes), "agent run dispatch");
-        const unknown = Object.keys(body).filter((field) => !["sessionId", "dispatchId", "text", "automated", "line"].includes(field));
+        const unknown = Object.keys(body).filter((field) => !["sessionId", "dispatchId", "text", "automated", "line", "timeBudgetMinutes"].includes(field));
         if (unknown.length > 0) {
           throw new HttpError(400, "invalid_agent_run", `Unknown agent run field(s): ${unknown.sort().join(", ")}.`);
         }
@@ -7836,6 +7869,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         // 31 unread items the 2026-09-17 walk found were eval cells.
         if (body.automated != null && typeof body.automated !== "boolean") {
           throw new HttpError(400, "invalid_agent_run", "automated must be a boolean.");
+        }
+        // Context for the run's clock, never a limit: refused for this request when it is not minutes in range.
+        if (body.timeBudgetMinutes != null && !runTimeBudgetMinutes(body.timeBudgetMinutes)) {
+          throw new HttpError(400, "invalid_agent_run", `timeBudgetMinutes must be a whole number of minutes from ${RUN_TIME_BUDGET_MINUTES.min} to ${RUN_TIME_BUDGET_MINUTES.max}.`);
         }
         // The same statement as a request header (`AUTOMATED_REQUEST_HEADER`),
         // for a probe, audit or acceptance driver that sets it once for every
@@ -8029,6 +8066,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             // The same decision the context got (`attended: !automated`): a person's dispatch is attended, a probe's, an audit's
             // or an evaluation harness's is not, and the signed attendance says so.
             unattended: automated,
+            // The clock the dispatch asked to be told, if any; an unattended one with none gets the deployment's, in the index.
+            ...(body.timeBudgetMinutes != null ? { timeBudgetMinutes: body.timeBudgetMinutes } : {}),
           });
           // The profile is the conversation's from here: the next dispatch finds it there (`ResidentProfiles`).
           await resident.delivered();
@@ -8873,6 +8912,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // can create a user, so it is bounded like the other two. Its sign-out
       // is not here — that one already needs a session and its CSRF token.
       (pathname === "/api/auth/evimed/session" && req.method === "POST") ||
+      // Captcha, SMS and recovery are anonymous upstream operations too. They
+      // share the same auth budget, including captcha's GET request.
+      isEvimedAccountPath(pathname) ||
       (pathname.startsWith("/api/auth/oidc/") && req.method === "GET")
     ) {
       authRateLimiter.check(`auth:${ip}`, {
@@ -11513,6 +11555,10 @@ async function readinessAuth(config, store) {
   if (config.evimedAuthEnabled) {
     try {
       evimed = evimedAuthReadiness(config);
+      if (config.evimedAccountApiBaseUrl) {
+        const account = validateEvimedAccountSettings(config);
+        evimed.account = { host: account.baseUrl.host };
+      }
     } catch (error) {
       throw readinessFailure(error?.code ?? "evimed_auth_configuration_invalid");
     }

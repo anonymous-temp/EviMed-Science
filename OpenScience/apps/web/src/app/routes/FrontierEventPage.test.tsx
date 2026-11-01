@@ -145,10 +145,10 @@ describe("an event", () => {
     expect(screen.getByRole("heading", { level: 2, name: "一手材料" }).parentElement).toHaveTextContent("一手材料1");
     expect(first[0].querySelector(".bg-accent")).not.toBeNull();
     expect(others[0].querySelector(".bg-accent")).toBeNull();
-    expect(first[0]).toHaveTextContent("自然-生物医学工程·期刊·5 小时前·原文");
+    expect(first[0]).toHaveTextContent("自然-生物医学工程·期刊·5 小时前·阅读原文");
     // On the timeline the day is the heading above a row, so a row says the clock (Beijing time) and not how long ago.
-    expect(others[0]).toHaveTextContent(/^缓释脂质体注射剂在大鼠中实现持续神经阻滞Medical Xpress·媒体·\d{2}:\d{2}·原文 ↗$/);
-    expect(within(first[0]).getByRole("link", { name: "原文" })).toHaveAttribute("href", "https://www.nature.com/x");
+    expect(others[0]).toHaveTextContent(/^缓释脂质体注射剂在大鼠中实现持续神经阻滞Medical Xpress·媒体·\d{2}:\d{2}·阅读原文 ↗$/);
+    expect(within(first[0]).getByRole("link", { name: "阅读原文" })).toHaveAttribute("href", "https://www.nature.com/x");
     expect(screen.queryByRole("button", { name: "全部来源" })).not.toBeInTheDocument();
     expect(screen.queryByRole("radio")).not.toBeInTheDocument();
     expect(screen.queryByRole("tab")).not.toBeInTheDocument();
@@ -443,9 +443,9 @@ describe("the timeline by Beijing day", () => {
     renderEvent();
     await screen.findByRole("heading", { level: 2, name: "报道时间线" });
     const row = (title: string) => timelineRows().find((entry) => entry.querySelector("p")?.textContent === title)!;
-    expect(row("凌晨的报道")).toHaveTextContent("来源 a·媒体·01:30·原文");
-    expect(row("夜里的报道")).toHaveTextContent("来源 d·媒体·00:30·原文");
-    expect(row("只有日期的报道")).toHaveTextContent(/^只有日期的报道来源 e·媒体·原文 ↗$/);
+    expect(row("凌晨的报道")).toHaveTextContent("来源 a·媒体·01:30·阅读原文");
+    expect(row("夜里的报道")).toHaveTextContent("来源 d·媒体·00:30·阅读原文");
+    expect(row("只有日期的报道")).toHaveTextContent(/^只有日期的报道来源 e·媒体·阅读原文 ↗$/);
     expect(days().find((entry) => entry.heading === "3月14日 周六")?.rows).toContain("只有日期的报道");
   });
 

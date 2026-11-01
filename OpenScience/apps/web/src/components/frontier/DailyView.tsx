@@ -305,7 +305,7 @@ function IssueBody({ issue, state, weekly, laneLimit, expansion, onDay }: { issu
   const origin = useFrontierOrigin();
   const { previous, next } = neighbours(issue, state.index ?? []);
   const leadText = issue.lead ? issue.lead.text ?? issue.lead.item.summary : null;
-  // 先看三件事: the issue's lead and the two items its lanes score highest, each as a title and its 导读; the lanes below skip them. A week keeps
+  // 先看三件事: the issue's lead and the two items its lanes score highest, each as a title and its 速读; the lanes below skip them. A week keeps
   // its headline and its lanes, and a day with fewer than three to show keeps its lead as it was.
   const { things, sections } = issueParts(issue, weekly);
   // 「AI 一分钟」 opens the issue (owner, 2026-10-27: the day in one paragraph first, then its three things); what follows it stands a
@@ -398,7 +398,7 @@ function DailyArchive({ index, current, onDay, more }: { index: FrontierDailySum
 }
 
 /**
- * 先看三件事: the three things an issue is read for first, each a title (which opens the addressed reader) and its 导读 sentence and
+ * 先看三件事: the three things an issue is read for first, each a title (which opens the addressed reader) and its 速读 sentence and
  * nothing more — not a lane row, whose source and 详情 would be the same item drawn twice: the lanes below skip these three — and, for
  * the lead, the way to its event after its sentence. Numbered like the lanes' rows, since the order is the issue's.
  */
@@ -489,7 +489,7 @@ function DailySection({ id, title, items, safety = false, limit, expansion, expa
 }
 
 /**
- * A digest row keeps its source and opens the shared article reader. `summary` is the sentence under the title (the item's 导读 unless
+ * A digest row keeps its source and opens the shared article reader. `summary` is the sentence under the title (the item's 速读 unless
  * the issue wrote another), `clamp` how many lines of it show, and `event` the lead's way to its event page.
  */
 function DailyRow({ item, number, safety, summary = item.summary, clamp = "line-clamp-3", event = null }: {

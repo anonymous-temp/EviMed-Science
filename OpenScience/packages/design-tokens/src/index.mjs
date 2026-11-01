@@ -48,7 +48,7 @@
  * steps and the version still read 2.0.0, so "both sides pin one version"
  * could not see the drift).
  */
-export const DESIGN_TOKENS_VERSION = '3.0.0'
+export const DESIGN_TOKENS_VERSION = '3.1.0'
 
 /* ------------------------------------------------------------------ ramps -- */
 
@@ -372,6 +372,31 @@ export const CHART_COLORS = Object.freeze({
    * its legend.
    */
   missing: '#bac2ca',
+  /**
+   * 记忆星图 (`/app/memory/overview`, DESIGN.md 「记忆星图」): the page's one brand moment, a night window in either scheme, the one place a mark's
+   * kind has a hue of its own. Every value is read against `ground`; a dim mark is the same hue at a lower brightness and never a second colour.
+   */
+  star: Object.freeze({
+    ground: '#03050b',
+    /** The legend's and the controls' glass over the sky. */
+    panel: '#0c101cc7',
+    you: '#ffd27a',
+    hub: '#8fd0ff',
+    about: '#ffc04d',
+    preference: '#ff8a4c',
+    correction: '#ff4d6a',
+    fact: '#4fb3ff',
+    decision: '#a47bff',
+    method: '#a6f05a',
+    document: '#2fe0b8',
+    entity: '#8796ff',
+    replaced: '#8a90a0',
+    'line-replaces': '#ffb35c',
+    'line-conflicts': '#ff4d6a',
+    'line-rests': '#2fe0b8',
+    'line-relates': '#7d8cff',
+    spark: '#fff0c8',
+  }),
 })
 
 /**
@@ -608,11 +633,11 @@ export const TYPE_SCALE = Object.freeze(
     // is the deliberate one; this alias keeps unmigrated pages rendering at `ui`.
     'ui-sm': { size: 14, lineHeight: '22px', use: 'retired alias of `ui`' },
     body: { size: 16, lineHeight: '1.75', use: 'report prose and the reading column' },
-    // An article's own text in the frontier reader (2026-10-23): 16 below 1280 px and 18 from there, its AI 导读 a step above (18 / 20),
+    // An article's own text in the frontier reader (2026-10-23): 16 below 1280 px and 18 from there, its 速读 a step above (18 / 20),
     // all at 1.8 — the sizes of the scale, read at the line height of a long text.
     reading: { size: 16, lineHeight: '1.8', use: "an article's text in the reader, below 1280 px" },
-    'reading-lg': { size: 18, lineHeight: '1.8', use: "an article's text from 1280 px; its AI 导读 below 1280 px" },
-    'reading-xl': { size: 20, lineHeight: '1.8', use: "an article's AI 导读 from 1280 px" },
+    'reading-lg': { size: 18, lineHeight: '1.8', use: "an article's text from 1280 px; its 速读 below 1280 px" },
+    'reading-xl': { size: 20, lineHeight: '1.8', use: "an article's 速读 from 1280 px" },
     wordmark: { size: 16, lineHeight: '1.3', use: 'the EviMed lockup in the sidebar', family: 'serif' },
     section: { size: 18, lineHeight: '26px', use: 'a section heading inside an answer or a report' },
     heading: { size: 20, lineHeight: '28px', use: 'a card heading on a data page, a document title in a preview pane' },

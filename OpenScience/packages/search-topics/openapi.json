@@ -1,0 +1,634 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "EviMed DSH Search Topics",
+    "version": "0.2.0",
+    "description": "Server-to-server topic cards from an operator-published snapshot. Source-backed recommendations preserve corpus facts and citations; curated examples remain explicitly labelled. The plugin never infers personal interests or search popularity."
+  },
+  "security": [
+    {
+      "serviceToken": []
+    }
+  ],
+  "paths": {
+    "/api/evimed-search/topics": {
+      "get": {
+        "operationId": "listSearchTopics",
+        "summary": "Read homepage topics for one medical-search category",
+        "parameters": [
+          {
+            "name": "category",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "literature",
+                "guidelines",
+                "drugs",
+                "trials"
+              ]
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 3,
+              "minimum": 1,
+              "maximum": 12
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current category snapshot, including an explicit empty collection.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TopicsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request parameters.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid service token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Only GET is supported.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Authentication or topic source unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "serviceToken": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Plugin service credential kept in the control plane; never a browser login credential."
+      }
+    },
+    "schemas": {
+      "Topic": {
+        "type": "object",
+        "required": [
+          "id",
+          "query",
+          "description"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
+          },
+          "query": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 240
+          },
+          "basis": {
+            "$ref": "#/components/schemas/TopicBasis"
+          }
+        }
+      },
+      "TopicSource": {
+        "type": "object",
+        "required": [
+          "kind",
+          "label",
+          "isExample"
+        ],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "curated",
+              "provider"
+            ]
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "isExample": {
+            "type": "boolean"
+          }
+        }
+      },
+      "TopicFeed": {
+        "type": "object",
+        "required": [
+          "schemaVersion",
+          "updatedAt",
+          "source",
+          "categories"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "updatedAt": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/UtcTimestamp"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Actual publisher UTC timestamp, or null for a curated snapshot with an unknown publication time. For source-backed recommendations it equals generatedAt."
+          },
+          "source": {
+            "$ref": "#/components/schemas/TopicSource"
+          },
+          "categories": {
+            "type": "object",
+            "required": [
+              "literature",
+              "guidelines",
+              "drugs",
+              "trials"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "literature": {
+                "type": "array",
+                "maxItems": 100,
+                "items": {
+                  "$ref": "#/components/schemas/Topic"
+                }
+              },
+              "guidelines": {
+                "type": "array",
+                "maxItems": 100,
+                "items": {
+                  "$ref": "#/components/schemas/Topic"
+                }
+              },
+              "drugs": {
+                "type": "array",
+                "maxItems": 100,
+                "items": {
+                  "$ref": "#/components/schemas/Topic"
+                }
+              },
+              "trials": {
+                "type": "array",
+                "maxItems": 100,
+                "items": {
+                  "$ref": "#/components/schemas/Topic"
+                }
+              }
+            }
+          },
+          "recommendation": {
+            "$ref": "#/components/schemas/Recommendation"
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "required": [
+                "recommendation"
+              ]
+            },
+            "then": {
+              "properties": {
+                "updatedAt": {
+                  "$ref": "#/components/schemas/UtcTimestamp"
+                },
+                "source": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/TopicSource"
+                    },
+                    {
+                      "properties": {
+                        "kind": {
+                          "const": "provider"
+                        },
+                        "isExample": {
+                          "const": false
+                        }
+                      }
+                    }
+                  ]
+                },
+                "categories": {
+                  "properties": {
+                    "literature": {
+                      "items": {
+                        "allOf": [
+                          {
+                            "$ref": "#/components/schemas/Topic"
+                          },
+                          {
+                            "required": [
+                              "basis"
+                            ]
+                          }
+                        ]
+                      }
+                    },
+                    "guidelines": {
+                      "items": {
+                        "allOf": [
+                          {
+                            "$ref": "#/components/schemas/Topic"
+                          },
+                          {
+                            "required": [
+                              "basis"
+                            ]
+                          }
+                        ]
+                      }
+                    },
+                    "drugs": {
+                      "items": {
+                        "allOf": [
+                          {
+                            "$ref": "#/components/schemas/Topic"
+                          },
+                          {
+                            "required": [
+                              "basis"
+                            ]
+                          }
+                        ]
+                      }
+                    },
+                    "trials": {
+                      "items": {
+                        "allOf": [
+                          {
+                            "$ref": "#/components/schemas/Topic"
+                          },
+                          {
+                            "required": [
+                              "basis"
+                            ]
+                          }
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "TopicsResponse": {
+        "type": "object",
+        "required": [
+          "schemaVersion",
+          "category",
+          "topics",
+          "count",
+          "total",
+          "updatedAt",
+          "revision",
+          "source"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": 1
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "literature",
+              "guidelines",
+              "drugs",
+              "trials"
+            ]
+          },
+          "topics": {
+            "type": "array",
+            "maxItems": 12,
+            "items": {
+              "$ref": "#/components/schemas/Topic"
+            }
+          },
+          "count": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 12
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "updatedAt": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/UtcTimestamp"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Actual publisher UTC timestamp, or null for a curated snapshot with an unknown publication time. For source-backed recommendations it equals generatedAt."
+          },
+          "revision": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "source": {
+            "$ref": "#/components/schemas/TopicSource"
+          },
+          "recommendation": {
+            "$ref": "#/components/schemas/Recommendation"
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "required": [
+                "recommendation"
+              ]
+            },
+            "then": {
+              "properties": {
+                "updatedAt": {
+                  "$ref": "#/components/schemas/UtcTimestamp"
+                },
+                "source": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/TopicSource"
+                    },
+                    {
+                      "properties": {
+                        "kind": {
+                          "const": "provider"
+                        },
+                        "isExample": {
+                          "const": false
+                        }
+                      }
+                    }
+                  ]
+                },
+                "topics": {
+                  "items": {
+                    "allOf": [
+                      {
+                        "$ref": "#/components/schemas/Topic"
+                      },
+                      {
+                        "required": [
+                          "basis"
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "Error": {
+        "type": "object",
+        "required": [
+          "code",
+          "error"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "invalid_request",
+              "unauthorized",
+              "method_not_allowed",
+              "topics_auth_unavailable",
+              "topics_unavailable"
+            ]
+          },
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "UtcTimestamp": {
+        "type": "string",
+        "format": "date-time",
+        "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$",
+        "description": "A valid calendar instant in UTC, with seconds or exactly three millisecond digits; never inferred from the request time."
+      },
+      "TopicReference": {
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "url",
+          "source",
+          "publishedAt",
+          "timelineAt",
+          "dateBasis"
+        ],
+        "description": "One preserved source sampled from the collected corpus. Source URLs are HTTP(S) public domain-name links with no credentials, whitespace, backslashes, IP literals, single-label hosts or local/internal/test domains. Published dates remain null when only an observation or source update date is known. An updated basis preserves the registry update time in timelineAt, with source dates normalized to their UTC day; it is neither publication nor our observation time. Sources are references, not an exhaustive list of institutions.",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "pattern": "^https?://",
+            "maxLength": 2048
+          },
+          "source": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "publishedAt": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/UtcTimestamp"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "timelineAt": {
+            "$ref": "#/components/schemas/UtcTimestamp"
+          },
+          "dateBasis": {
+            "type": "string",
+            "enum": [
+              "published",
+              "observed",
+              "updated"
+            ]
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "dateBasis": {
+                  "const": "published"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "publishedAt": {
+                  "$ref": "#/components/schemas/UtcTimestamp"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "dateBasis": {
+                  "enum": [
+                    "observed",
+                    "updated"
+                  ]
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "publishedAt": {
+                  "type": "null"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "TopicBasis": {
+        "type": "object",
+        "required": [
+          "eventCount",
+          "sourceCount",
+          "latestAt",
+          "sources"
+        ],
+        "description": "Facts in the publisher collected corpus during the stated window. Event count deduplicates reports of one event; source count counts independent institutions and may exceed event count. These are never total medical-search result counts. Reference ids are unique, every reference is no newer than latestAt, and latestAt is no newer than dataThrough or generatedAt.",
+        "properties": {
+          "eventCount": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100000
+          },
+          "sourceCount": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100000
+          },
+          "latestAt": {
+            "$ref": "#/components/schemas/UtcTimestamp"
+          },
+          "sources": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 3,
+            "items": {
+              "$ref": "#/components/schemas/TopicReference"
+            }
+          }
+        }
+      },
+      "Recommendation": {
+        "type": "object",
+        "required": [
+          "algorithm",
+          "windowDays",
+          "generatedAt",
+          "dataThrough",
+          "stale",
+          "corpusVersion"
+        ],
+        "description": "A global source-backed ranking; no personal history or search-popularity claim. generatedAt is the original snapshot publication instant and equals updatedAt; dataThrough is the latest qualifying collected item time, no newer than generatedAt, and is non-null for a nonempty recommendation. stale reports a refresh failure without changing generatedAt. Every cited timelineAt is within the 30 days ending at generatedAt. Text fields throughout are trimmed and contain no ASCII control characters.",
+        "properties": {
+          "algorithm": {
+            "const": "recent-medical-topics-v1"
+          },
+          "windowDays": {
+            "const": 30
+          },
+          "generatedAt": {
+            "$ref": "#/components/schemas/UtcTimestamp"
+          },
+          "dataThrough": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/UtcTimestamp"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "stale": {
+            "type": "boolean"
+          },
+          "corpusVersion": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          }
+        }
+      }
+    }
+  }
+}

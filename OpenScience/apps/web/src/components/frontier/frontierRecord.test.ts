@@ -45,14 +45,14 @@ describe("the archive by month", () => {
 });
 
 describe("先看三件事", () => {
-  const item = (id: string, score: number | null) => frontierItem({ id, title: `${id} 标题`, summary: `${id} 导读`, score });
+  const item = (id: string, score: number | null) => frontierItem({ id, title: `${id} 标题`, summary: `${id} 速读`, score });
   const lane = (key: string, items: ReturnType<typeof item>[]) => ({ lane: key, laneLabel: key, items });
   const lead = { item: item("lead", 10), text: "头条的话", event: { id: "ev", title: "事件" } };
 
   it("is the lead, then the items the lanes score highest, with the issue's own sentences", () => {
     const things = topThings({ lead, sections: [lane("a", [item("a1", 40), item("a2", 91)]), lane("b", [item("b1", 77)])] })!;
     expect(things.map((thing) => thing.item.id)).toEqual(["lead", "a2", "b1"]);
-    expect(things.map((thing) => thing.text)).toEqual(["头条的话", "a2 导读", "b1 导读"]);
+    expect(things.map((thing) => thing.text)).toEqual(["头条的话", "a2 速读", "b1 速读"]);
     expect(things[0].event).toEqual({ id: "ev", title: "事件" });
     expect(things[1].event).toBeNull();
     expect(things).toHaveLength(TOP_THINGS);
@@ -60,7 +60,7 @@ describe("先看三件事", () => {
 
   it("falls back to the lead item's own summary when the issue wrote no text for it", () => {
     const things = topThings({ lead: { ...lead, text: null }, sections: [lane("a", [item("a1", 1), item("a2", 2)])] })!;
-    expect(things[0].text).toBe("lead 导读");
+    expect(things[0].text).toBe("lead 速读");
   });
 
   it("keeps the issue's order for items that score alike, unscored ones last, and counts the lead once", () => {

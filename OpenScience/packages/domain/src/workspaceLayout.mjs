@@ -123,6 +123,23 @@ export const workspaceLayout = Object.freeze({
 export const RUN_CONTEXT_PROTOCOL = 2
 
 /**
+ * The wall-clock budget a dispatch may state for its turn, in whole minutes: `timeBudgetMinutes` on the dispatch request and,
+ * when there is one, in the session's index (optional and additive, so the protocol above does not move — an image that does
+ * not know the field ignores it, a control plane that does not write it states no budget). Context only: the run policy
+ * tells the model the clock and stops nothing. The control plane refuses a dispatch whose value is outside the range and
+ * the run policy reads an index whose value is, as no budget.
+ */
+export const RUN_TIME_BUDGET_MINUTES = Object.freeze({ min: 1, max: 1440 })
+
+/**
+ * The budget a value states, or 0 when it states none: a whole number of minutes inside `RUN_TIME_BUDGET_MINUTES`.
+ * @param {unknown} value @returns {number}
+ */
+export function runTimeBudgetMinutes(value) {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= RUN_TIME_BUDGET_MINUTES.min && value <= RUN_TIME_BUDGET_MINUTES.max ? value : 0
+}
+
+/**
  * How a runtime image's line about a hand-off it cannot read begins. The control plane names such a line by this opening
  * (`runSideDegradedNotice`), so the runtime's words and the control plane's table cannot drift apart.
  */

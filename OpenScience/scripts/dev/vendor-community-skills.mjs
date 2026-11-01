@@ -130,6 +130,59 @@ function intakeFailures(dir, source, taken) {
   return failures;
 }
 
+const githubTrees = new Map();
+const githubBlobs = new Map();
+
+/** @param {string} url @returns {Buffer} */
+function fetchGithub(url) {
+  const result = spawnSync("curl", [
+    "-sSL", "--retry", "3", "--retry-all-errors", "--connect-timeout", "15", "--max-time", "120",
+    "-H", "Accept: application/vnd.github+json", url,
+  ], { encoding: null, maxBuffer: 32 * 1024 * 1024 });
+  if (result.status !== 0) throw new Error(`GitHub fetch failed — ${result.stderr.toString("utf8").trim()}`);
+  return result.stdout;
+}
+
+/** @param {any} source @param {string} staging */
+function fetchSparseSkill(source, staging) {
+  const key = `${source.repo}@${source.commit}`;
+  let tree = githubTrees.get(key);
+  if (!tree) {
+    const payload = JSON.parse(fetchGithub(`https://api.github.com/repos/${source.repo}/git/trees/${source.commit}?recursive=1`).toString("utf8"));
+    if (payload.truncated) throw new Error(`${source.name}: GitHub returned a truncated tree`);
+    tree = payload.tree;
+    githubTrees.set(key, tree);
+  }
+
+  const prefix = `${source.subpath}/`;
+  const files = tree.filter((entry) => entry.type === "blob" && entry.path.startsWith(prefix));
+  if (!files.length) throw new Error(`${source.name}: ${source.subpath} is not in that commit`);
+  for (const entry of files) {
+    let bytes = githubBlobs.get(entry.sha);
+    if (!bytes) {
+      const payload = JSON.parse(fetchGithub(`https://api.github.com/repos/${source.repo}/git/blobs/${entry.sha}`).toString("utf8"));
+      if (payload.encoding !== "base64") throw new Error(`${source.name}: unsupported blob encoding ${payload.encoding}`);
+      bytes = Buffer.from(payload.content.replace(/\s/g, ""), "base64");
+      githubBlobs.set(entry.sha, bytes);
+    }
+    const relative = entry.path.slice(prefix.length);
+    const target = path.join(staging, source.subpath, relative);
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(target, bytes);
+  }
+
+  const licenceEntry = tree.find((entry) => entry.type === "blob" && ["LICENSE", "LICENSE.md", "LICENSE.txt"].includes(entry.path));
+  if (licenceEntry) {
+    let bytes = githubBlobs.get(licenceEntry.sha);
+    if (!bytes) {
+      const payload = JSON.parse(fetchGithub(`https://api.github.com/repos/${source.repo}/git/blobs/${licenceEntry.sha}`).toString("utf8"));
+      bytes = Buffer.from(payload.content.replace(/\s/g, ""), "base64");
+      githubBlobs.set(licenceEntry.sha, bytes);
+    }
+    fs.writeFileSync(path.join(staging, licenceEntry.path), bytes);
+  }
+}
+
 /** @param {any} source */
 function fetchSkill(source) {
   if (!/^[0-9a-f]{40}$/.test(source.commit)) {
@@ -137,17 +190,23 @@ function fetchSkill(source) {
   }
   const staging = fs.mkdtempSync(path.join(root, ".vendor-"));
   try {
-    const url = `https://codeload.github.com/${source.repo}/tar.gz/${source.commit}`;
-    const curl = spawnSync("curl", ["-sSL", "--max-time", "120", url, "-o", path.join(staging, "src.tar.gz")], { encoding: "utf8" });
-    if (curl.status !== 0) throw new Error(`${source.name}: fetch failed — ${curl.stderr.trim()}`);
-    const tar = spawnSync("tar", ["-xzf", path.join(staging, "src.tar.gz"), "-C", staging, "--strip-components=1"], { encoding: "utf8" });
-    if (tar.status !== 0) throw new Error(`${source.name}: extract failed — ${tar.stderr.trim()}`);
+    if (source.fetch === "github-tree") {
+      fetchSparseSkill(source, staging);
+    } else {
+      const url = `https://codeload.github.com/${source.repo}/tar.gz/${source.commit}`;
+      const curl = spawnSync("curl", ["-sSL", "--max-time", "120", url, "-o", path.join(staging, "src.tar.gz")], { encoding: "utf8" });
+      if (curl.status !== 0) throw new Error(`${source.name}: fetch failed — ${curl.stderr.trim()}`);
+      const tar = spawnSync("tar", ["-xzf", path.join(staging, "src.tar.gz"), "-C", staging, "--strip-components=1"], { encoding: "utf8" });
+      if (tar.status !== 0) throw new Error(`${source.name}: extract failed — ${tar.stderr.trim()}`);
+    }
     const from = path.join(staging, source.subpath);
     if (!fs.existsSync(from)) throw new Error(`${source.name}: ${source.subpath} is not in that commit`);
     const to = path.join(communityDir, source.name);
     fs.rmSync(to, { recursive: true, force: true });
     fs.cpSync(from, to, { recursive: true });
-    const licence = ["LICENSE", "LICENSE.md", "LICENSE.txt"].map((f) => path.join(staging, f)).find((f) => fs.existsSync(f));
+    const licence = ["LICENSE", "LICENSE.md", "LICENSE.txt"]
+      .flatMap((file) => [path.join(staging, file), path.join(from, file)])
+      .find((file) => fs.existsSync(file));
     if (licence) fs.cpSync(licence, path.join(to, `LICENSE.${source.name}`));
     fs.writeFileSync(path.join(to, "PROVENANCE.md"), [
       `# ${source.name}`,

@@ -54,6 +54,12 @@ guideline index records)
     The structured record already is the text; nothing is fetched (``unavailable``). An EviMed
     record's link is a page the source may not read (ChiCTR answers 405 to programs; WHO ICTRP and
     guideline publishers are outside the row's ``allowed_hosts``).
+``post`` (a social-crawl entry — a post of the six Chinese platforms)
+    The crawler's answer is all there is of it: the post's own text arrived with the entry, and a post that came with
+    none (a title alone) has no text to be had. Its address is a page the source must not read (the platforms refuse
+    programs, and a page can carry the uploader's name and the comments, which contract rule 4 keeps out), so nothing
+    is fetched: ``unavailable``, note ``post_is_the_text``, and the platform decides what a post with no text of its
+    own is worth (its pictures, or nothing).
 
 **EviMed extras** (``evimed.py``, when the deployment configured ``evimed_api_key_file``), on an
 entry's final answer only (``available`` / ``unavailable``, never on a pending retry): impact factor
@@ -166,7 +172,9 @@ def _family(row: dict) -> str | None:
 
 
 def kind_of(row: dict) -> str:
-    """``article`` | ``trial`` | ``page`` | ``record`` (see module docstring)."""
+    """``article`` | ``trial`` | ``page`` | ``record`` | ``post`` (see module docstring)."""
+    if row.get("source_access") == "social-crawl":
+        return "post"
     family = _family(row)
     if family == "ctgov":
         return "trial"
@@ -581,6 +589,8 @@ async def enrich_batch(entry_rows: list[dict], fetcher: Any, settings: Any, *,
                 return await _trial(row, fetcher, endpoints)
             if kind == "record":
                 return EntryTextResult(status="unavailable", notes=["record_is_the_text"])
+            if kind == "post":
+                return EntryTextResult(status="unavailable", notes=["post_is_the_text"])
             return await _page(row, fetcher, endpoints)
 
     results = await asyncio.gather(*(one(row, kind) for row, kind in zip(entry_rows, kinds, strict=True)))

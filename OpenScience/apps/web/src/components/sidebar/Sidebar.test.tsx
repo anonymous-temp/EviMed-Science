@@ -146,6 +146,21 @@ describe("Sidebar landmark and collapse", () => {
 });
 
 describe("Sidebar navigation", () => {
+  it("opens medical search only when the deployment offers it", async () => {
+    mocks.fetchWebMe.mockResolvedValue({ user: { id: "u", name: "u" }, features: { evimedSearch: true }, projects: [] });
+    renderSidebar("/app/search/literature");
+    const entry = await screen.findByRole("link", { name: "医学检索" });
+    expect(entry).toHaveAttribute("href", "/app/search");
+    await userEvent.click(entry);
+    expect(screen.getByTestId("location")).toHaveTextContent("/app/search");
+  });
+
+  it("does not offer medical search on deployments without its account service", async () => {
+    renderSidebar();
+    await screen.findByRole("link", { name: "设置" });
+    expect(screen.queryByRole("link", { name: "医学检索" })).not.toBeInTheDocument();
+  });
+
   it("uses the global entry for New Conversation and the brand", async () => {
     renderSidebar();
     expect(screen.getByRole("link", { name: "新对话" })).toHaveAttribute("href", "/app/home");

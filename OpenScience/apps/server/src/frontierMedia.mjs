@@ -19,11 +19,12 @@
  * @module frontierMedia
  */
 
+import { FRONTIER_MEDIA_ID } from "@evimed/domain";
 import { readKnowledgePluginToken } from "./knowledgePluginClient.mjs";
 import { HttpError } from "./security.mjs";
 
-/** A media id: the SHA-256 of the stored bytes. */
-export const FRONTIER_MEDIA_ID = /^[a-f0-9]{64}$/;
+/** A media id: the SHA-256 of the stored bytes (`@evimed/domain`'s, which the pipeline reads without this module's plugin client). */
+export { FRONTIER_MEDIA_ID };
 /** The plugin re-encodes to at most 1.5 MB; a little room for its headers' rounding, never a video. */
 export const FRONTIER_MEDIA_MAX_BYTES = 2 * 1024 * 1024;
 /** The image types a reader is handed. */

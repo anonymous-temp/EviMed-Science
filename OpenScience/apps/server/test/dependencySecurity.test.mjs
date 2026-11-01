@@ -20,14 +20,18 @@ test("document preview dependencies resolve to audited ECharts and UUID fixes", 
   assert.equal(dependencyVersion("exceljs", "uuid"), "11.1.1");
 });
 
-test("no production advisory is accepted, because the last one is now fixable", async () => {
+test("the only production advisory accepted is the one with no fix in the lines the tree uses, and its reason is on record", async () => {
   const pkg = JSON.parse(
     await readFile(path.join(repoRoot, "package.json"), "utf8"),
   );
   // The brace-expansion chain under exceljs was accepted while the only patched
   // line was 5, which glob 7 cannot consume. Upstream backported the fix within
   // each major line, so it is pinned rather than excused, and the list is empty.
-  assert.deepEqual(pkg.pnpm?.auditConfig?.ignoreCves ?? [], []);
+  // CVE-2026-118764 (minimatch, 2026-10-30) has no fix in 3.x or 5.x, and 11 breaks glob 7 at run time, so it is accepted with a recorded reason.
+  assert.deepEqual(pkg.pnpm?.auditConfig?.ignoreCves ?? [], ["CVE-2026-118764"]);
+  const deps = JSON.parse(await readFile(path.join(repoRoot, "deps-version.json"), "utf8"));
+  const recorded = deps.auditExceptions?.find((entry) => entry.cve === "CVE-2026-118764");
+  assert.ok(recorded?.why && recorded?.dropWhen, "an accepted advisory carries its reason and when it is dropped");
 
   // Assert the property rather than one resolution path: no brace-expansion
   // below its line's patched release may resolve anywhere in the tree.

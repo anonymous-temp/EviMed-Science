@@ -1552,3 +1552,10 @@
 # == dsh-mermaid
 - id: ui-mermaid
   name: dsh-mermaid
+# == @evimed/dsh-search-topics
+- id: evimed-search-topics
+  name: '@evimed/dsh-search-topics'
+  disabled: !!js process.env.EVIMED_SEARCH_TOPICS_ENABLED !== '1'
+  config:
+    topicsFile: !!js process.env.EVIMED_SEARCH_TOPICS_FILE || ''
+    tokenFile: !!js process.env.EVIMED_SEARCH_TOPICS_TOKEN_FILE || ''

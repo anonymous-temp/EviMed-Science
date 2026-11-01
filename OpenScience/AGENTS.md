@@ -250,6 +250,9 @@ per-project workspace + JSONL provenance.
   drafts are preserved with local recovery. Switches are reversible preferences; a setting that takes effect
   in a later runtime is a labelled switch for the saved choice with its effective-time status beside it. An
   `aria-disabled` busy button needs a real duplicate-activation guard.
+- **Routine UI state changes keep surrounding layout stable** (owner, 2026-10-30): conditional
+  controls, status/error messages, selection, counts and loading must not unexpectedly move the page
+  vertically or horizontally. Apply the shared-slot and overlay rules in `DESIGN.md`, “Layout stability”.
 - Each touched public component adopts the nine-field JSDoc header in `DESIGN.md` (anatomy, variants,
   states, hit area, keyboard, long content, theme, responsive, verification), written from its real
   behaviour with pending gaps linked, not described as present. DS/AT ids identify owner and proof

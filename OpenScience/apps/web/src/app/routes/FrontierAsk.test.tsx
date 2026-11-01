@@ -133,17 +133,21 @@ describe("继续追问 on the reading page (c3-ask; chips at the article's end s
     expect(pendingFrontierEvents().filter((event) => event.type === "ask").map((event) => event.detail)).toEqual(["own"]);
   });
 
-  it("with no questions written it is the reader's own question alone", async () => {
+  it("with no questions written there is no block: the lone 「自己提问…」 said what 深入研究 says (owner, 2026-10-31)", async () => {
     client.fetchFrontierItem.mockResolvedValue({ ...frontierItemDetail({ id: ID }), abstract: "Original abstract", abstractZh: null });
     show();
-    const block = await screen.findByRole("region", { name: "继续追问" });
-    expect(within(block).getAllByRole("button").map((button) => button.textContent)).toEqual(["自己提问…"]);
+    await screen.findByRole("article", { name: "正文" });
+    expect(screen.queryByRole("region", { name: "继续追问" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "自己提问…" })).not.toBeInTheDocument();
+    // The way to ask stays: 深入研究 opens the same conversation with the item's line and a question to rewrite.
+    await userEvent.click(screen.getByRole("button", { name: "深入研究" }));
+    expect(intentOf().draft).toContain(`frontier:${ID}`);
   });
 
   it("深入研究 is the same way in, from the title row: the question that fits the item, the item's line, the item as origin", async () => {
     wide();
     show();
-    await screen.findByRole("group", { name: "阅读视图与操作" });
+    await screen.findByRole("group", { name: "阅读视图" });
     await userEvent.click(within(document.querySelector("[data-page-header]") as HTMLElement).getByRole("button", { name: "深入研究" }));
     const intent = intentOf();
     expect(intent.draft.startsWith("这项研究可靠吗？")).toBe(true);

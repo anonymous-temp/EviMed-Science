@@ -1,4 +1,4 @@
-"""``python -m knowledge_plugin [serve|migrate|check-registry|lifecycle|discover|hot-lists|wechat-bodies|retext]``.
+"""``python -m knowledge_plugin [serve|migrate|check-registry|lifecycle|discover|hot-lists|wechat-bodies|social-bodies|retext]``.
 
 ``serve`` (the default and the image's command) opens the pool, applies the schema, syncs the
 registry file into ``sources``, and — unless ``KNOWLEDGE_PLUGIN_CRAWL=0`` — starts the crawler in
@@ -18,10 +18,15 @@ what each board gave or why it failed.
 ``wechat-bodies --apply`` buys them through Dajiala within the day's cap and delivers each recovered entry again
 (``social.lost_bodies``).
 
+``social-bodies`` prints, one JSON line per platform, the posts of the six Chinese platforms whose entry holds a cut text or none
+and whose whole text is in the crawler's retained jobs, and a last line with the counts; it writes nothing and starts no crawl.
+``social-bodies --apply`` stores each whole text and delivers the entry again (``social.cut_posts``).
+
 ``retext`` prints, by kind and source, the stored texts the 2026-10-22 reader-text fixes would read again (WeChat bodies,
 page texts, Crossref abstracts with an entity escaped twice) and what the WeChat part costs; ``retext --apply`` reads them
 again and delivers each entry whose text changed as its next revision (``retext``). ``--kinds journal`` (named only) reads
-the journal entries the platform asked for that have no text at all through the paper text chain again.
+the journal entries the platform asked for that have no text at all through the paper text chain again; ``--kinds
+unread-page`` (named only) reads again the page entries answered ``unavailable`` for a reason a fixed reader may pass.
 """
 
 from __future__ import annotations
@@ -220,6 +225,33 @@ async def _wechat_bodies(settings: Settings, days: int, apply: bool) -> int:
         await pool.close()
 
 
+async def _social_bodies(settings: Settings, apply: bool) -> int:
+    import json
+    from datetime import datetime, timezone
+
+    from .db import create_pool
+    from .social import cut_posts
+    from .social.providers import CrawlClient
+    from .social.spend import ProviderLedger
+
+    def clock():
+        return datetime.now(timezone.utc)
+
+    pool = await create_pool(settings)
+    try:
+        crawler = CrawlClient(ProviderLedger(pool, clock), settings, clock)
+        if not crawler.configured:
+            print("the crawler is not configured (KNOWLEDGE_PLUGIN_SOCIAL_CRAWL_URL and its key file)", file=sys.stderr)
+            return 2
+        outcome = await (cut_posts.apply(crawler, pool, clock) if apply else cut_posts.report(crawler, pool, clock()))
+        for line in outcome["entries"]:
+            print(json.dumps(line, ensure_ascii=False, default=str))
+        print(json.dumps(outcome["summary"], ensure_ascii=False, default=str), flush=True)
+        return 0
+    finally:
+        await pool.close()
+
+
 async def _retext(settings: Settings, args: list[str], apply: bool) -> int:
     import json
     from datetime import datetime, timezone
@@ -330,9 +362,11 @@ def main(argv: list[str] | None = None) -> int:
                     return 2
                 days = int(value)
         return asyncio.run(_wechat_bodies(settings, days, apply="--apply" in argv[1:]))
+    if command == "social-bodies":
+        return asyncio.run(_social_bodies(settings, apply="--apply" in argv[1:]))
     if command == "retext":
         return asyncio.run(_retext(settings, argv[1:], apply="--apply" in argv[1:]))
-    print(f"unknown command {command!r}; use serve, migrate, check-registry, lifecycle, discover, hot-lists, wechat-bodies or retext",
+    print(f"unknown command {command!r}; use serve, migrate, check-registry, lifecycle, discover, hot-lists, wechat-bodies, social-bodies or retext",
           file=sys.stderr)
     return 2
 

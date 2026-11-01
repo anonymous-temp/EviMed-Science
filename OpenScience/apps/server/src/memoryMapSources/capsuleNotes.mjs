@@ -23,7 +23,7 @@
 
 import { MEMORY_KIND_LABELS_ZH } from "../memoryKinds.mjs";
 import { entryProject } from "../capsuleEntryProject.mjs";
-import { excerpt, instant, nodeId, recencyWeight } from "./common.mjs";
+import { excerpt, instant, nodeId, freshnessOf, recencyWeight } from "./common.mjs";
 import { MAP_LABEL_CHARS } from "./records.mjs";
 
 /** The notes one read draws at most (the newest). */
@@ -56,7 +56,7 @@ export function capsuleNotesContribution(entries, { now, projectId }) {
     const at = instant(entry.createdAt);
     nodes.push({
       id, type: "memory", subtype: kind, group: /** @type {Record<string, string>} */ (MEMORY_KIND_LABELS_ZH)[kind] ?? /** @type {Record<string, string>} */ (NOTE_KIND_WORDS)[kind] ?? kind, label: excerpt(entry.payload.content, MAP_LABEL_CHARS), weight: recencyWeight(at, now),
-      at, state: "current", reason: null, projectId: label, open: { kind: "entry", id: String(entry.id) },
+      at, freshness: freshnessOf({ kind, projectId: label, writtenAt: at }, now), recalledAt: null, state: "current", reason: null, projectId: label, open: { kind: "entry", id: String(entry.id) },
     });
     edges.push({ from: id, to: home, type: "belongs-to" });
     if (at) {

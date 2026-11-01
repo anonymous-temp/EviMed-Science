@@ -6,6 +6,7 @@ import {
   FRONTIER_ACCESSES,
   FRONTIER_ACCESS_LABELS_ZH,
   FRONTIER_CHANNELS,
+  FRONTIER_CRAWL_PLATFORMS,
   FRONTIER_PLATFORMS,
   FRONTIER_BROAD_SAFETY_FLAGS,
   FRONTIER_DATE_PRECISIONS,
@@ -352,4 +353,10 @@ test("an update_to relation is classified by its type: four notice kinds of thei
   // Nothing that is not on the table can be a notice, whatever it is called.
   for (const odd of ["constructor", "__proto__", "toString", "hasOwnProperty"]) assert.equal(frontierUpdateKind(odd), "update", odd);
   assert.ok(Object.values(kinds).every((kind) => kind === "update" || kind === "new-version" || FRONTIER_NOTICE_KINDS.includes(kind)));
+});
+
+test("the crawl platforms are platforms of the contract, none of them X, WeChat or the web", () => {
+  assert.deepEqual([...FRONTIER_CRAWL_PLATFORMS], ["xiaohongshu", "douyin", "zhihu", "weibo", "bilibili", "channels"]);
+  for (const platform of FRONTIER_CRAWL_PLATFORMS) assert.ok(FRONTIER_PLATFORMS.includes(platform), platform);
+  for (const platform of ["x", "wechat", "web"]) assert.ok(!FRONTIER_CRAWL_PLATFORMS.includes(platform), platform);
 });

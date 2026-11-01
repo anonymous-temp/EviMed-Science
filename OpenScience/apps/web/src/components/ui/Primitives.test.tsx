@@ -207,6 +207,24 @@ describe("ListRow", () => {
     expect(screen.getByRole("listitem").className).not.toMatch(BORDER);
   });
 
+  it("can limit opening to the title while keeping metadata and secondary actions independent", async () => {
+    const onOpen = vi.fn(); const onEdit = vi.fn();
+    render(<MemoryRouter><List label="资料">
+      <ListRow title="研究标题" to="/app/search/literature?detail=one" onOpen={onOpen} openArea="title" chevron={false}
+        meta="可以选中阅读的摘要" actions={<IconButton icon={Pencil} label="编辑" onClick={onEdit} />} />
+    </List></MemoryRouter>);
+    const link = screen.getByRole("link", { name: "研究标题" });
+    expect(link.className).not.toMatch(/after:absolute/);
+    expect(screen.getByText("可以选中阅读的摘要").className).not.toContain("pointer-events-none");
+    await userEvent.click(screen.getByText("可以选中阅读的摘要"));
+    await userEvent.click(screen.getByRole("button", { name: "编辑" }));
+    expect(onEdit).toHaveBeenCalledOnce();
+    expect(onOpen).not.toHaveBeenCalled();
+    link.focus();
+    await userEvent.keyboard("{Enter}");
+    expect(onOpen).toHaveBeenCalledOnce();
+  });
+
   it("says a row can be pressed: hover on surface-2, a mark from what the row does, and nothing on a row that does nothing", () => {
     const mark = (row: HTMLElement) => row.querySelector("svg.lucide")?.getAttribute("class") ?? "";
     render(

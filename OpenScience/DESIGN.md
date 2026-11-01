@@ -213,6 +213,16 @@ colour for use on it. The retired names `border`, `border-strong` and `muted` ar
   (the radar's angle and area read worst of all, NN/g) are gone: the chart and the table say what happened. 总览 is the memory page's one picture; its
   four lists (关于你, 项目, 做法, 收到的) are lists and nothing else; no peer's memory page has a chart, so a chart on a list page needs an argument of this
   size. The relation graph and the topics draw in the accent, the warn amber and one grey, tell a mark's kind by shape and words; the knowledge base's graph follows the same grammar.
+  **The one exception to that grammar is 记忆星图 (owner, 2026-10-31: 「展示效果尽量炫酷一些」), the page's one brand moment**, and the owner's reversal of the plan of 2026-10-23 that no
+  global graph leads the page: a night window in either scheme (`data-theme="dark"` on the card, so its controls are the page's own) above the tiles, drawn in three.js where a real GPU
+  and a wide screen can hold it. Its eight hues are the `--star-*` tokens, one a kind of mark, and nowhere else does a kind have a colour. It is spent on what the page's other pictures
+  cannot say, and each thing that moves or glows says something: brightness is how long since the memory was written or used (it decides nothing: a dim memory is recalled as a bright one is),
+  a spark along a line is a memory a conversation was handed in the last three days, grey with an amber line is what was replaced, and 回放成长 grows the sky from its first mark to today. What
+  the usual 3D graph gets wrong it does not do: no force layout, because a mark's place depends only on its own id and weight and its hub, so nothing moves when a mark is added and the sky is the
+  same at the next visit; no line that only says “belongs” is the picture's point, and the lines that say something are drawn above them; a press is taken on the screen within 14 px and not along a ray, and the
+  turning stops under a mark and on a button (WCAG 2.2.2); the wheel stays the page's and zooms only with Ctrl or ⌘ or full-screen; every mark opens its own drawer; and a listbox over the same marks is
+  the picture's one tab stop. No real GPU, a phone's width, a wish for less motion or a lost context all get the relation graph or the topics, as before: 3D has no claim on reading (Munzner, “no
+  unjustified 3D”; 2D beats it on spatial memory), and this one is there because the owner wants the memory to be felt, so reading stays with the table and the two flat pictures beside it.
 - **Every status is said three times** — colour, shape, words. Red and green mean opposite things
   in a Chinese market chart, and one reader in twelve cannot tell them apart at all.
 - **No colour outside the table.** `designTokens.test.ts` fails on a hex literal or a colour
@@ -324,7 +334,7 @@ ones was a sixth pair. The release walk holds both (`typePairs` in the `data` an
 | `compact` | 13 / 20px | held in reserve for a dense grid whose 12 px cells would be too small; nothing sets it since R19.2 — a control is `ui`, a table head and a heat cell `caption` |
 | `ui` | **14 / 22px** | interface text, chat, list rows, controls — the default |
 | `body` | 16 / 1.75 | report prose and the reading column |
-| `reading` · `reading-lg` · `reading-xl` | 16 · 18 · 20 / 1.8 | the frontier reader (2026-10-23): an article's text is `reading` below 1280 px and `reading-lg` from there (`text-reading xl:text-reading-lg`), its AI 导读 one step above (`reading-lg` → `reading-xl`), on the reading measure (`max-w-measure-body xl:max-w-read`, 40 CJK a line) — the scale's own sizes at a long text's line height, a responsive pair rather than a tenth size |
+| `reading` · `reading-lg` · `reading-xl` | 16 · 18 · 20 / 1.8 | the frontier reader (2026-10-23): an article's text is `reading` below 1280 px and `reading-lg` from there (`text-reading xl:text-reading-lg`), its 速读 one step above (`reading-lg` → `reading-xl`), on the reading measure (`max-w-measure-body xl:max-w-read`, 40 CJK a line) — the scale's own sizes at a long text's line height, a responsive pair rather than a tenth size |
 | `wordmark` | 16 / 1.3 · serif | standalone brand lockups; the sidebar uses the compact sans `ui` rung |
 | `section` | 18 / 26px | a section heading inside an answer or a report |
 | `heading` | 20 / 28px | a card heading on a data page, a document title in a preview pane |
@@ -519,7 +529,7 @@ pages after every release.
    `<section>`, a list of rows, a table, a chart) and fails a page that stacks more kinds than its
    budget (`shapes` in `scripts/ops/page-templates.json`, the one table of the pages the walk visits, their template and budgets); groups of one shape — a group per use, a group per day — are
    one kind. **The one exception is a data page** — the 记忆总览 (`/app/memory/overview`: the capsule as one data page — a toolbar of the range, only what needs a look and the search; a
-   sentence whose numbers each open the list they count; four tiles (关于你 — the memories that carry a project included —, 做法, 收到的, 知识) that are each a door to a list; 「变化」, what it gained and lost over time; 「关系与主题」 when there is
+   sentence whose numbers each open the list they count; 记忆星图 at its head where it can be drawn, with one memory or more, the switch to 关系 and 主题 at its corner; four tiles (关于你 — the memories that carry a project included —, 做法, 收到的, 知识) that are each a door to a list; 「变化」, what it gained and lost over time; 「关系与主题」 under it when there is no sky and there is
    enough to see; and the table behind the charts, 「最近变化」, whose rows open the same drawers the marks do — held to two kinds of section and five size × weight pairs) and the knowledge base's graph
    view, the owner's formal requirement of 2026-10-12 that memory and knowledge be shown and not only listed: one
    shared selection narrowing the chart, the panel and the table together, and every mark and row opening the record's own drawer or the document's own page — so its shapes
@@ -612,7 +622,7 @@ fills them. `compositionFixtures.tsx` holds a sample of each, `pageComposition.t
 | T1 列表页 | 前沿动态, 收件箱, 科研工具, 插件与技能, the study home's library views | header · `toolbar` (views at the left; filters, search, count at the right) · `List` / `DataTable` · `ShowMore` | a list or a table | a drawer (a record), a page (a document), the main area (a conversation) |
 | T2 主从页 | 定时任务, 知识库, 记忆胶囊 (a navigation column beside its sections), the 循证 GEO and 虚拟临床研究 homes, 方法库, 假设卡 | `MasterDetail`: the list column carries the page's header (title, the one primary button) and at most one toolbar; the record, preview or form beside it; below the room for both, a `Drawer`, or the page swaps for a conversation or a form | a list and one record | the right-hand column |
 | T3 模块页 | 循证 GEO (including its addressed answer); VCR uses the conversation/result variant below | header (the primary action is 「下一步：…」; while working, a chip) · `steps` on every GEO tab · `activity` while working · `tabs` · `toolbar` · one tab's body | one kind per tab: a T1 list, a T2 split, a T4 chart grid, a settings panel | as T1 |
-| T4 数据页 | 记忆总览, GEO 总览 / 可见度, 研究的对照 / 试验, 知识图谱 | header · `toolbar` · `headline` · `StatBand` (only the numbers that exist) · `ChartGrid` (full rows) · the table behind the charts | charts and one table | a drawer; a mark is a row |
+| T4 数据页 | 记忆总览, GEO 总览 / 可见度, 研究的对照 / 试验, 知识图谱 | header · `toolbar` · `headline` · 记忆总览 only: 记忆星图 · `StatBand` (only the numbers that exist) · `ChartGrid` (full rows) · the table behind the charts | charts and one table | a drawer; a mark is a row |
 | T5 阅读页 | a knowledge-base document, a report, an evidence card, an event | back · document title · the primary action · `Outline` (from four sections) · the text · one 「来源与核对」 fold | a document; a long list is a table with a toolbar | — |
 | T6 设置页 | account, appearance, notifications, allowance, data sources, projects | header · a left rail of **settings sections only** · `Panel` groups | `Panel` | — |
 
@@ -711,9 +721,10 @@ the title's link stretches over it, the ground lightens under the pointer and th
 is three lines (two on a phone) and never expands; the meta row ends in the 「AI 评分」 pill and the footer holds three tags that
 narrow the feed, 「另有 N 家报道」, ☆ and ⋯ (深入研究 first). A day-grouped list has its clock in a column and a heading per day that
 stays under the band; any other list says the date after the source. The reader is two columns from 1024 px: the article on one
-edge (back, byline, title, 导读, text) and a sticky column whose top is the back row's — 「打开原文 ↗」 with ☆ and ⋯, 「深入研究」,
+edge (back, byline, title with ☆, ⋯ and 「深入研究」 at its right, the switch 「速读 | 正文」 where the item has both, the content, and at the
+content's foot one plain 「阅读原文 ↗」 — owner, 2026-10-31: as a WeChat article has it) and a sticky column whose top is the back row's —
 推荐理由 with the score's parts, 专科 and 标签 (one chip, every one a link) and 本文目录 at three sections; below 1024 px the notes
-follow the text and the actions are a bar at the window's bottom.
+follow the text and the switch, ☆, ⋯ and 深入研究 are a bar at the window's bottom.
 
 **The event page's record and timeline (c5-reader, 2026-10-26).** An event is the list column (1040) from 1024 px with 「事件记录」 in the right column — its heat and 72-hour trend, then 最早报道 and 最近更新 (Beijing time, said once in the heading), how many reports and from how many sources, and whether first-hand material is among them — and the reading column (720) below it, where the record is the strip above the summary. The reports are 「一手材料」 (the parties' own texts) and 「报道时间线」, the rest cut into Beijing days, the newest day first (最早 reverses it), each row saying the clock it stands at; the page holds the same four size × weight pairs as before.
 
@@ -758,6 +769,15 @@ to-do. A busy control keeps its focus, label and width: `aria-disabled` and `ari
 activation guard against a second effect, and native `disabled` stays for a genuinely unavailable
 prerequisite, which the control explains nearby (a missing permission, a missing configuration and
 no selection are different reasons).
+
+**Layout stability** (owner, 2026-10-30). Across the frontend, routine changes in conditional
+controls, status/error visibility, selection, counts and loading must not unexpectedly move
+surrounding content vertically or horizontally. Prefer stable shared slots, reserved geometry or
+replacement within the same footprint; keep control rows and neighbouring actions in place.
+Menus and popovers remain anchored overlays, and dialogs overlay the page without reflowing it.
+Explicit content expansion may intentionally change the layout with a controlled transition that
+respects reduced motion. Never hide or clip actionable information, errors or recovery controls to
+keep a footprint fixed.
 
 **Motion**: three durations — `duration-fast` 120 ms for a state change, `duration-base` 200 ms
 for a container, `duration-slow` 320 ms for a page-sized change — one easing in
@@ -852,7 +872,7 @@ The table records implemented behaviour and the acceptance each still needs. The
 
 | Component / helper | Observed baseline and adopted change | Required acceptance |
 |---|---|---|
-| Button / buttonClasses | Implemented loading-only behavior uses guarded aria-disabled/busy, retain focus/name, draw the spinner's room only while it spins (a resting button has no empty slot) or preserve measured width; retain disabled for genuine prerequisites. CSS must cover aria-disabled and events must suppress mouse/keyboard/form activation. Focus loss is a browser risk to verify, not universal proof from the attribute. | T double click/Enter/form submit; G all sizes/long labels; W actual focus and width. AT35 |
+| Button / buttonClasses | Implemented loading-only behavior uses guarded aria-disabled/busy and retains focus/name. Button keeps its content span in flow in both states, applies opacity zero while loading to preserve its footprint and accessible name, and overlays an absolutely positioned centered spinner that adds no flow width or gap; retain disabled for genuine prerequisites. CSS must cover aria-disabled and events must suppress mouse/keyboard/form activation. Focus loss is a browser risk to verify, not universal proof from the attribute. | T double click/Enter/form submit; G all sizes/long labels; W actual focus and width. AT35 |
 | Switch | Implemented controlled pending and AsyncSwitch producer adapter support a single optimistic transition; keep requested position while pending, inline confirmed-failure rollback, and unknown-outcome reconciliation. An invariant label names the setting. A setting that takes effect later (插件与技能) is still a labelled switch for what was saved, with the effective-time status line beside it; an action button is for a one-off apply, not for a standing preference. `onChange` of an AsyncSwitch resolves with the write's confirmed state and nothing is read back; the readback is the recovery for an unknown outcome only, and a refusal is said once, in the switch's own line. | T out-of-order response, rejection, timeout, scope change; G pending/error; W persistence. AT36 |
 | Input / Select / Textarea | FieldShell unifies Input/Select/Textarea label/hint/error IDs and slots. Distinguish decorative prefix/suffix/unit from a trailing actionable control and preserve text space/accessible description. | T descriptions/error precedence/IDs; G prefix/suffix/error/narrow; M AT. AT37 |
 | NumberField | Central quantity adapter (`lib/quantity.ts`; see below). Raw text stays separate from the interpreted value. Do not replace it with a bare native number input that silently guesses scale. | T parsing/conversion/round-trip/domain mapping; G; W form/result. AT08/37 |
@@ -1063,7 +1083,7 @@ metric.
 
 The owner requires usable workflows and visible memory charts, not compliance with the older drawer/tree shape at their expense. The memory landing opens its map when available, with explicit list and record links preserved. One real node or topic is enough to visualize; sparse dimensions use honest bars rather than a misleading radar or a missing chart. No-data and failed-read states remain distinct, and no placeholder records are fabricated.
 
-Frontier evidence zones belong to the peer navigation. The whole card opens one addressed reader (owner, 2026-10-23: 展开摘要 and 详情 retired); the publisher link is separate (the reader's 「打开原文」) and Back restores the prior feed. GEO projects and conversations share a workspace identity and canonical progress. Sidebar module groups and a duplicated eight-step/eight-tab navigation are superseded; existing destinations and native DSH controls remain reachable. Non-VCR method libraries retain configuration, versioned jobs and results; VCR methods are AI tools and its historical calculations are read-only (2026-10-25/26 reset). Refer to `../docs/superpowers/plans/2026-10-19-workflow-rectification.md` for coverage and acceptance.
+Frontier evidence zones belong to the peer navigation. The whole card opens one addressed reader (owner, 2026-10-23: 展开摘要 and 详情 retired); the publisher link is separate (the reader's 「阅读原文」, at the foot of the content) and Back restores the prior feed. GEO projects and conversations share a workspace identity and canonical progress. Sidebar module groups and a duplicated eight-step/eight-tab navigation are superseded; existing destinations and native DSH controls remain reachable. Non-VCR method libraries retain configuration, versioned jobs and results; VCR methods are AI tools and its historical calculations are read-only (2026-10-25/26 reset). Refer to `../docs/superpowers/plans/2026-10-19-workflow-rectification.md` for coverage and acceptance.
 
 
 ## Workflow correction adopted 2026-10-20

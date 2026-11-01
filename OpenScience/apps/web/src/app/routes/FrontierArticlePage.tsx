@@ -23,11 +23,11 @@ import {
   ReaderLead,
   ReaderMedia,
   ReaderNotes,
+  ReaderOriginal,
   ReaderOutline,
   ReaderQuote,
   ReaderResearch,
   ReaderSameEvent,
-  ReaderSourceAction,
   ReaderText,
   abstractOffered,
   isPost,
@@ -46,21 +46,25 @@ type ArticleState = { kind: "loading" } | { kind: "ready"; item: FrontierItemDet
 
 /**
  * A frontier item's addressed reading page, read like AIHOT's detail page (owner, 2026-10-22; its layout 2026-10-23; the text a view of its
- * own and the type set again 2026-10-26).
+ * own and the type set again 2026-10-26) and, since 2026-10-31, like a WeChat article: the title, the content, and the way to the original at
+ * the foot of it (owner: 「查看正文和打开原文是重复了……打开原文应该是列在 AI 导读里」).
  *
  * Two columns from 1024 px. The left one is the article, every line on one edge: the way back, who said it and when (with what it
- * is — its genre), the title, the original title, then ONE toolbar row in the page's band (owner, 2026-10-27) — at the left the switch
- * 「AI 导读 | 查看正文」, at the right 「打开原文 ↗」, ☆, ⋯ and 「深入研究」, the one primary — and one of two views under it. The AI view
- * (the default): AI 导读, AI 要点 (the genre's typed fields, ct-write 2026-10-24), 事件后续 (no more 「AI 解读」: deleted 2026-10-27). The text view
- * (`?view=text`, the switch's second option): the text whole — the article, a paper's abstract or its open-access full text, in Chinese
- * or the original — its pictures and the quoted post. A post shows its text in the AI view, whole, because the post is the item; an item
- * with nothing written about it shows its text alone; an item with no text has no switch. The article ends with 「继续追问」, the item's
- * questions as chips. The right column sticks beside it, its top on the back row: 推荐理由, 出处, 专科, 标签 and, while the text is open,
- * 本文目录. Narrower, there is no toolbar: the notes follow the article and the actions, with the switch, are a bar at the window's
- * bottom that steps aside while reading down; a long text's contents fold above it.
+ * is — its genre), the title with ☆, ⋯ and 「深入研究」, the one primary, at the right of its row, the original title, then — only for an item
+ * that has both a text and something written about it — ONE toolbar row in the page's band, the switch 「速读 | 正文」 and nothing else
+ * (an item with no switch has no band at all), and one of two views under it. The 速读 view (the default): 速读, AI 要点 (the genre's typed
+ * fields, ct-write 2026-10-24), then 「阅读原文 ↗」 and 事件后续. The text view (`?view=text`, the switch's second option, named by what the
+ * text is: 正文, 摘要 or 全文): the text whole — the article, a paper's abstract or its open-access full text, in Chinese or the original —
+ * its pictures and the quoted post, then 「阅读原文 ↗」. The link is one component in one place (`ReaderOriginal`) in both views, before 事件后续
+ * and 继续追问, and the page has no other way out. A post (a 小红书 note, a 微博, an X post) has no switch: its 速读, its 正文 where it has words
+ * beyond its title and tags, its pictures — which stand even with no words — the quoted post and 「在小红书查看原帖 ↗」; an item with nothing
+ * written and no text is its title and the link. The article ends with 「继续追问」, the item's questions as chips, drawn only where
+ * there are questions (the lone 「自己提问…」 said what 「深入研究」 says). The right column sticks beside it, its top on the back row: 推荐理由,
+ * 出处, 专科, 标签 and, while the text is open, 本文目录. Narrower, there is no toolbar: the notes follow the article and the actions, with the
+ * switch, are a bar at the window's bottom that steps aside while reading down; a long text's contents fold above it.
  *
  * The view is in the address and replaces the entry rather than pushing one, so 「‹ 前沿动态」 — the history entry the card left — still
- * returns to the list, as it was, in one press. Opening the page is reading the item.
+ * returns to the list, as it was, in one press; an address with `?view=text` opens the text. Opening the page is reading the item.
  */
 export function FrontierArticlePage() {
   const feature = useFrontierFeature();
@@ -118,10 +122,13 @@ function ArticleBody({ item, back, onItem }: { item: FrontierItemDetail; back: R
   const textView = switchable && params.get("view") === "text";
   const showWritten = written && !textView;
   const showText = textKind !== null && (post || !written || textView);
+  // The pictures and the quoted post stand wherever the page is not the written view of a switchable item — a picture post with no words
+  // reads as its title and its pictures, and an item with nothing to switch to loses none of them.
+  const showPictures = !switchable || textView;
   useFrontierReadTracking(item.id, { language, expanded: textView, url: item.url, state: item.state, arrival: frontierArrival(location.search) });
   const article = useRef<HTMLElement>(null);
   const view: ReaderViewSwitch | null = switchable ? {
-    label: `查看${textKind}`,
+    label: textKind,
     text: textView,
     onToggle: () => {
       setParams((current) => withParam(current, "view", textView ? null : "text"), { replace: true, state: location.state });
@@ -177,19 +184,20 @@ function ArticleBody({ item, back, onItem }: { item: FrontierItemDetail; back: R
   const chooser = (anchorClassName: string) => (reasons > 0
     ? <FrontierHideReasonMenu key={reasons} item={item} anchorClassName={anchorClassName} onChoose={(reason) => void hide(reason)} /> : null);
   const actions = { item, more, onStar: () => void toggleStar(), onResearch: research };
-  // The one toolbar row, from 1024 px (the bar at the window's bottom has the same controls below it): the switch at the left, the
-  // actions at the right. The reasons of 「不感兴趣」 open under the actions.
-  const toolbar: ToolbarProps | undefined = wide ? {
-    label: "阅读视图与操作",
-    views: view ? {
-      label: "阅读视图",
-      items: [{ value: "ai", label: "AI 导读" }, { value: "text", label: view.label }],
+  // The band's one row, from 1024 px, is the switch alone and only for an item that has one (the bar at the window's bottom has it below
+  // that); the body is the tab panel it names.
+  const toolbar: ToolbarProps | undefined = wide && view ? {
+    label: "阅读视图",
+    views: {
+      label: "切换阅读视图",
+      items: [{ value: "ai", label: "速读" }, { value: "text", label: view.label }],
       value: textView ? "text" : "ai",
       onChange: (next) => { if ((next === "text") !== textView) view.onToggle(); },
-    } : undefined,
-    actions: <div className="relative"><ReaderActions {...actions} />{chooser("absolute right-0 top-full")}</div>,
+      panelId: `reader-view-${prefix}`,
+    },
   } : undefined;
-  // The page's one primary action stands in the title's row, where every page has it (the walk's primary-action rule).
+  // The title's row, from 1024 px (the walk's primary-action rule): ☆, ⋯ and the page's one primary action, 「深入研究」. The reasons of
+  // 「不感兴趣」 open under ⋯.
   return (
     <PageShell
       className="[&_h1]:line-clamp-none [&_h1]:text-balance"
@@ -199,24 +207,31 @@ function ArticleBody({ item, back, onItem }: { item: FrontierItemDetail; back: R
       eyebrow={<ReaderByline item={item} />}
       underTitle={originalTitle && <p lang={item.lang !== "und" ? item.lang : undefined} className="max-w-measure-body text-ui text-text-3">{originalTitle}</p>}
       toolbar={toolbar}
-      actions={wide ? <ReaderResearch onResearch={research} /> : undefined}
+      actions={wide ? (
+        <div className="relative flex items-center gap-2">
+          <ReaderActions {...actions} />
+          <ReaderResearch onResearch={research} />
+          {chooser("absolute right-0 top-full")}
+        </div>
+      ) : undefined}
       asideLabel="文章操作与推荐"
       aside={wide ? <ReaderNotes item={item} reports={reports} outline={outline.length > 0 ? <ReaderOutline entries={outline} layout="inline" /> : undefined} /> : undefined}
     >
       {/* The first block stands where the band ends: its own top margin is the article's start, not a gap under it. */}
       <article ref={article} aria-label="正文" data-frontier-reader={item.id} data-genre={item.genre}
         data-reader-view={textView ? "text" : "written"} className={cn("min-w-0 [&>:first-child]:mt-0", !wide && "pb-20")}>
-        <ReaderSourceAction item={item} className="mt-3" />
         <ReaderSameEvent item={item} className="mt-3" />
         {showWritten && item.lead && <ReaderLead text={item.lead} named={Boolean(toolbar?.views)} className="mt-6" />}
         {showWritten && item.brief && <ReaderBrief brief={item.brief} item={item} className="mt-8" />}
         {showText && !wide && outline.length > 0 && <div className="mt-6"><ReaderOutline entries={outline} layout="folded" /></div>}
         {showText && (item.body && textKind
           ? <ReaderText kind={textKind} text={item.body} lang={item.lang} language={language} onLanguage={setLanguage}
-            ownUrl={item.url} idPrefix={prefix} className={written ? "mt-8" : "mt-6"} />
-          : <ReaderAbstract item={item} language={language} onLanguage={setLanguage} onEmpty={abstractMissing} className={written ? "mt-8" : "mt-6"} />)}
-        {showText && <ReaderMedia media={item.media} className="mt-6" />}
-        {showText && item.quoted && <ReaderQuote quoted={item.quoted} platform={item.platform} language={language} className="mt-6" />}
+            ownUrl={item.url} idPrefix={prefix} named={Boolean(toolbar?.views)} className={written ? "mt-8" : "mt-6"} />
+          : <ReaderAbstract item={item} language={language} onLanguage={setLanguage} onEmpty={abstractMissing} named={Boolean(toolbar?.views)}
+            className={written ? "mt-8" : "mt-6"} />)}
+        {showPictures && <ReaderMedia media={item.media} className="mt-6" />}
+        {showPictures && item.quoted && <ReaderQuote quoted={item.quoted} platform={item.platform} language={language} className="mt-6" />}
+        <ReaderOriginal item={item} className="mt-8" />
         {!textView && <ReaderFollowups item={item} className="mt-10" />}
         <ReaderAsk questions={item.ask ?? []} onAsk={ask} className="mt-10" />
         {!wide && <div className="mt-10"><ReaderNotes item={item} reports={reports} /></div>}

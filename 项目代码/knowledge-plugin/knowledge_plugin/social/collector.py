@@ -30,6 +30,7 @@ from ..normalize import Rejected, key_sha256, prepare
 from ..registry import source_from_row
 from ..store import StoreResult, insert_fetch, reliability_24h, store_entries
 from . import crawl as crawl_mod
+from . import cut_posts
 from . import wechat as wechat_mod
 from . import x as x_mod
 from .media import MediaStore
@@ -552,10 +553,20 @@ class SocialCollector:
             log.warning("social crawl %s parked until %s: %s", platform, until.isoformat(), error.detail)
             return {"failed": error.detail, "platform": platform, "parked_until": until.isoformat()}
         posts = answer.get("posts") if isinstance(answer.get("posts"), list) else []
-        candidates = [crawl_mod.build_entry(post, platform, now=now) for post in posts]
-        candidates = [entry for entry in candidates if entry is not None]
+        candidates, pictures = [], {}
+        for post in posts:
+            entry = crawl_mod.build_entry(post, platform, now=now)
+            if entry is not None:
+                candidates.append(entry)
+                pictures[entry.external_key] = crawl_mod.pictures_of(post, platform)
+            if isinstance(post, dict):
+                post.pop("raw_response", None)      # read for the addresses above, and dropped: it holds the author (crawl module)
         known = await self._known(row["id"], [entry.external_key for entry in candidates])
-        result = await self._store(row, [entry for entry in candidates if entry.external_key not in known], now)
+        fresh = [entry for entry in candidates if entry.external_key not in known]
+        for entry in fresh:
+            entry.media = await self._post_media(pictures[entry.external_key])
+        result = await self._store(row, fresh, now)
+        filled = await self._fill_known(row, [entry for entry in candidates if entry.external_key in known], pictures, now)
         last = dict(state.get("last") or {})
         last[f"{term}|{platform}"] = now.isoformat()
         parked.pop(platform, None)
@@ -574,7 +585,29 @@ class SocialCollector:
             self.counters["crawl_partial"] += 1
         await self._finish(row, now, outcome="ok" if candidates else "empty", result=result, host=None,
                            detail=f"{'partial ' if partial else ''}term={term[:40]} status={status[:20]}", next_at=now + pace)
-        return {"term": term, "platform": platform, "posts": len(candidates), "new": result.new}
+        return {"term": term, "platform": platform, "posts": len(candidates), "new": result.new, **({"filled": filled} if filled else {})}
+
+    async def _post_media(self, pictures: list[dict]) -> list[dict]:
+        """A post's pictures (``crawl.pictures_of``) through the media store, in order; one that cannot be stored is left out."""
+        return [item for item in [await self.media.ensure(picture["url"], kind=picture["kind"]) for picture in pictures] if item]
+
+    async def _fill_known(self, row: dict, entries: list, pictures: dict, now: datetime) -> int:
+        """Posts already stored that this read answers with more than the entry holds (``cut_posts`` module docstring): the whole
+        text where the entry holds none, the pictures where it holds none. How many entries were delivered again."""
+        if not entries:
+            return 0
+        held = await cut_posts.stored(self._pool, row["id"], [entry.external_key for entry in entries])
+        filled = 0
+        for entry in entries:
+            current = held.get(entry.external_key)
+            if current is None:
+                continue                         # remembered, no longer in the stream: not this loop's to bring back
+            if not current["media"] and pictures.get(entry.external_key):
+                entry.media = await self._post_media(pictures[entry.external_key])
+            if await cut_posts.fill(self._pool, current, entry, now):
+                filled += 1
+                self.counters["crawl_filled"] += 1
+        return filled
 
     async def _save_crawl_state(self, state: dict) -> None:
         async with self._pool.connection() as conn:

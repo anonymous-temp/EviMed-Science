@@ -28,7 +28,7 @@ import { relativeTime } from "@/lib/runPresentation";
 
 /**
  * The feed's one small action — 「另有 3 家报道 ›」, a #tag, 「完整热榜 ›」,
- * 「全部 ›」, 「原文 ↗」: 28 px high (`h-sm`), the small control height a row's
+ * 「全部 ›」, 「阅读原文 ↗」: 28 px high (`h-sm`), the small control height a row's
  * icon buttons have (spec §8.3, §17.2) — it stood at 24 beside the card's
  * 28 px ☆ and ⋯, a height of its own — 8 px round, no ground until hovered.
  * The control is set in the interface size; words that read at the metadata
@@ -128,9 +128,9 @@ export function isSocialItem(item: Pick<FrontierItem, "platform">): boolean {
   return item.platform !== null && item.platform !== "web";
 }
 
-/** The way to the original: a post is 「在 X 查看原帖」, an article (a page, a paper, a WeChat article) 「打开原文」. */
+/** The way to the original: a post is 「在 X 查看原帖」, an article (a page, a paper, a WeChat article) 「阅读原文」 (「打开原文」 until 2026-10-31). */
 export function originalLinkLabel(item: Pick<FrontierItem, "platform">): string {
-  if (!item.platform || item.platform === "web" || item.platform === "wechat") return "打开原文";
+  if (!item.platform || item.platform === "web" || item.platform === "wechat") return "阅读原文";
   const platform = PLATFORM_LABELS[item.platform];
   return /^[A-Za-z]/.test(platform ?? "") ? `在 ${platform} 查看原帖` : `在${platform}查看原帖`;
 }
@@ -303,7 +303,7 @@ export function dayOnlyClock(item: Pick<FrontierItem, "datePrecision">): { text:
 /**
  * A safety alert with nothing written about it (owner, 2026-10-27): the PMDA and PRAC notices come as a title and nothing else, and the
  * day's mix always takes them (`safety-bypass`), so 精选 opened on four rows of 「日本PMDA 修订…的注意事项」. The card reads `summary`
- * alone (the 导读 and the 要点 belong to the reader), so an alert whose summary is empty is title-only. 精选 leaves such an alert to the
+ * alone (the 速读 and the 要点 belong to the reader), so an alert whose summary is empty is title-only. 精选 leaves such an alert to the
  * safety strip at its top (`foldedIntoStrip`); 全部 draws it as it always did.
  */
 export function titleOnlyAlert(item: Pick<FrontierItem, "safetyAlert" | "summary">): boolean {
@@ -614,7 +614,7 @@ export interface AskItem {
 
 /**
  * The compact line a conversation opened from an item starts with (c3-ask): the title, the source and the day, and `frontier:<id>`,
- * the name the assistant's feed tool reads the item by — its text, 导读 and 要点 — then the original's address, which the answer
+ * the name the assistant's feed tool reads the item by — its text, 速读 and 要点 — then the original's address, which the answer
  * cites and which stands in if the feed no longer holds the item.
  */
 export function itemLine(item: AskItem): string {

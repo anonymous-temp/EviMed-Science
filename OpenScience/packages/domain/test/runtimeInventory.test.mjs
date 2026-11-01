@@ -107,7 +107,7 @@ test('every item has its words, a row fits one line, and the controls and links 
     assert.ok(item.control.kind === 'none' || (item.control.kind === 'switch' && ['dsh-cite', 'annotation', 'mermaid'].includes(item.control.setting)), `${id}.control`)
     assert.ok(item.opens.kind === 'drawer' || (item.opens.kind === 'page' && /^\/app\/[a-z-]+$/.test(item.opens.to)), `${id}.opens`)
     if (item.control.kind === 'switch') assert.equal(item.gate?.project, item.control.setting, `${id}: a switch is the project setting that gates it`)
-    assert.ok(item.gate === null || Object.keys(item.gate).length === 1 || ['annotation', 'diagrams'].includes(id) && Object.keys(item.gate).length === 2, `${id}.gate`)
+    assert.ok(item.gate === null || Object.keys(item.gate).length === 1 || ['annotation', 'diagrams', 'search-topics'].includes(id) && Object.keys(item.gate).length === 2, `${id}.gate`)
     for (const part of item.parts ?? []) assert.ok(part.title && part.does, `${id} has a part without words`)
   }
   for (const group of WORDS.groups) assert.ok(Object.values(WORDS.items).some((item) => item.group === group.id), `group ${group.id} has no item`)
@@ -124,6 +124,16 @@ test('every reason is a sentence, every skill root says how it is listed or why 
   for (const [root, entry] of Object.entries(WORDS.skillRoots)) {
     assert.ok(entry.listed ? String(entry.how ?? '').length >= 20 : String(entry.reason ?? '').length >= 20, `skill root ${root}`)
   }
+})
+
+test('the optional search topics plugin is listed only after the deployment confirms it is available', () => {
+  const find = (/** @type {Record<string, boolean | null | undefined>} */ config) => listInventory({ config }).flatMap(group => group.items).find(item => item.id === 'search-topics')
+  for (const availability of [undefined, null, false]) assert.equal(find({ searchTopicsAvailable: availability }), undefined)
+  const installed = find({ searchTopicsAvailable: true })
+  assert.ok(installed)
+  assert.equal(installed.title, '检索主题推荐')
+  assert.equal(installed.kind, 'platform')
+  assert.deepEqual(installed.opens, { kind: 'page', to: '/app/search' })
 })
 
 test('the listed inventory: an item the deployment switched off or the account is not given is not a row; a project setting says on or off', () => {

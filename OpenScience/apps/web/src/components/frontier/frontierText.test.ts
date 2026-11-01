@@ -209,9 +209,9 @@ describe("what a card carries", () => {
     expect(scoreBreakdown(frontierItem({ score: 86 }))).toEqual([]);
   });
 
-  it("opens an article as 「打开原文」 and a post on its platform", () => {
-    expect(originalLinkLabel({ platform: null })).toBe("打开原文");
-    expect(originalLinkLabel({ platform: "wechat" })).toBe("打开原文");
+  it("reads an article as 「阅读原文」 and a post on its platform", () => {
+    expect(originalLinkLabel({ platform: null })).toBe("阅读原文");
+    expect(originalLinkLabel({ platform: "wechat" })).toBe("阅读原文");
     expect(originalLinkLabel({ platform: "x" })).toBe("在 X 查看原帖");
   });
 

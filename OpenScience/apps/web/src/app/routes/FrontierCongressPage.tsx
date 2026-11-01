@@ -61,7 +61,7 @@ const STATUS_WORDS: Record<string, string> = { ongoing: "进行中", upcoming: "
 /**
  * One congress's hub (c3-track 2026-10-25): an addressed reading page in the frontier's frame. Its days, newest first, each with a
  * 「AI 速递」 — three to six sentences written only from that day's best items, every fact marked with the item it came from — and
- * then the day's items, the selected ones first, as the feed's own cards, a conference result with the design caveat its 导读 gives.
+ * then the day's items, the selected ones first, as the feed's own cards, a conference result with the design caveat its 速读 gives.
  * A congress that has not opened says when and what will appear; one with nothing says so with a way on.
  */
 export function FrontierCongressPage() {

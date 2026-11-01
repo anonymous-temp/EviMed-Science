@@ -200,7 +200,7 @@ const WALK_TABLES = {
       {"view":"frontier-zone-cards","discovered":true,"pattern":"/app/frontier/zones/:zoneId","family":"frontier-zone","template":"T1","budgetNote":"the zone's 证据卡片 tab (?tab=cards): present only for a zone whose team interface holds cards (none until the interface exists), so a walk of an account without any skips it; takes `budget: frontier` when the walk opens it","rows":false},
       {"view":"frontier-evidence","discovered":true,"pattern":"/app/frontier/zones/:zoneId/evidence/:cardId","family":"frontier-evidence","template":"T5","budget":"frontier","budgetOverride":{"controls":14,"borders":4},"budgetNote":"the reading card: list rows, two chips, search, 显示更多, the contents rail and 回到顶部, the disclosures and the tally button are 12 kinds of control without the shell's own, about 14 with them, and four kinds of border: the shell's rule, the fold's faint row rule, the list's row hairline and the question box's frame (r19-pagesb, measured in a harness; to be set from a live walk)","rows":false},
       {"view":"frontier-author","discovered":true,"pattern":"/app/frontier/authors/:authorId","family":"frontier-author","template":"T1","budget":"frontier","budgetOverride":{"borders":4},"budgetNote":"the shell's rule, the tab row's hairline, the selected tab's underline and a divided list's row hairline: four kinds of border, as the zones' home (r19-pagesb, measured)","rows":false},
-      {"view":"frontier-item","discovered":true,"pattern":"/app/frontier/items/:itemId","family":"frontier-item","template":"T5","budget":"frontier","budgetOverride":{"typePairs":6,"controls":10},"budgetNote":"controls: a bare address in the text is a link now (owner 2026-10-23), one look more beside the 解读's citations, 中文/原文, the pictures and the shell — 10 on the live walk of evimed-e22de8a9736e-1; type pairs: the 导读 and a full text's section headings at 18/400 (owner 2026-10-22: the lead a size above the text, as AIHOT sets it) — 5 pairs; a structured abstract's run-in headings at 16/600 — 6 (rt-web, measured in the harness)","rows":false},
+      {"view":"frontier-item","discovered":true,"pattern":"/app/frontier/items/:itemId","family":"frontier-item","template":"T5","budget":"frontier","budgetOverride":{"typePairs":6,"controls":10},"budgetNote":"controls: a bare address in the text is a link now (owner 2026-10-23), one look more beside the 解读's citations, 中文/原文, the pictures and the shell — 10 on the live walk of evimed-e22de8a9736e-1; type pairs: the 速读 (「AI 导读」 until 2026-10-31) and a full text's section headings at 18/400 (owner 2026-10-22: the lead a size above the text, as AIHOT sets it) — 5 pairs; a structured abstract's run-in headings at 16/600 — 6 (rt-web, measured in the harness); 2026-10-31 (rd-web): the toolbar's 「打开原文」 secondary button became one plain link at the article's foot in the look of 免费全文 and 查看事件全部 (a look the page already counts), and ☆ ⋯ moved to the title row, so the numbers stand as measured and are not lowered until the walk re-measures (an item with no switch has no band at all)","rows":false},
       {"view":"frontier-event","discovered":true,"pattern":"/app/frontier/events/:eventId","family":"frontier-event","template":"T5","budget":"frontier","rows":false},
       {"view":"frontier-congress","discovered":true,"pattern":"/app/frontier/congress/:congressId","family":"frontier-congress","template":"T5","budget":"frontier","budgetOverride":{"typePairs":6},"budgetNote":"a congress hub (c3-track), as the topic page: 12/400 meta, 14/400 the dates and caveats, 16/400 the day's 「AI 速递」, 16/600 the items' titles, 18/600 the days' headings, 24/600 the title — 6 pairs (fixture walk 2026-10-25)","rows":false},
       {"view":"frontier-topic","discovered":true,"pattern":"/app/frontier/topics/:topicId","family":"frontier-topic","template":"T5","budget":"frontier","budgetOverride":{"typePairs":6},"budgetNote":"a hot-event topic's reading page: 12/400 meta, 14/400 the question and the peg, 16/400 the cited overview, 16/600 the items' titles, 18/600 the three section headings, 24/600 the title — 6 pairs (c2-leads 2026-10-25, measured with the walk's functions at both sizes)","rows":false},
@@ -263,7 +263,8 @@ const WALK_TABLES = {
       {"pattern":"/app/memory/map","template":"screen","why":"a redirect to 总览 (2026-10-27: the map's relation graph and topics are a panel of it): it carries over what it can and is decided by the address, and the router test holds each case"},
       {"pattern":"/app/memory/delivered/:deliveryId","template":"screen","why":"the same page as a share link (`memory-shared-missing` walks that component with an address that is not there)"},
       {"pattern":"/app/frontier/zones/s/:slug","template":"T5","why":"the same page as /app/frontier/zones/:zoneId, reached by the zone's readable name; the id's route is walked as frontier-zone"},
-      {"pattern":"/app/account/simulated/:page","template":"T1","why":"the simulated wallet's two commerce pages exist only where the deployment's wallet is simulated; elsewhere the page is one sentence, which `not-found` and the router tests hold"}
+      {"pattern":"/app/account/simulated/:page","template":"T1","why":"the simulated wallet's two commerce pages exist only where the deployment's wallet is simulated; elsewhere the page is one sentence, which `not-found` and the router tests hold"},
+      {"pattern":"/app/search/:category?","template":"T1","why":"the medical search (医学检索) is offered only where /api/me says features.evimedSearch: an Evimed account login and the Evimed account API configured, and the sidebar draws its entry on the same answer; the walk's throwaway account and fixture have neither, so every request the page makes would fail by design, and its states are held by EvimedSearchPage.test.tsx"}
     ]
   },
   "baseline": {
@@ -2291,6 +2292,13 @@ export function pageProbe([kind, arg]) {
       tabs: all("nav[aria-label='记忆'] a").filter(visible).map(words),
       canvases: all("[data-chart]").filter(visible).length,
       figures: all("[data-chart]").filter(visible).map((el) => ({ kind: el.getAttribute("data-chart"), named: Boolean(el.querySelector("[role='img'][aria-label]")) })),
+      // The star map, where this browser draws it (a browser with no real GPU gets the relation graph, and then there is nothing to read here).
+      star: (() => {
+        const card = all("[data-chart='stars']").filter(visible)[0];
+        if (!card) return null;
+        const canvas = card.querySelector("canvas")?.getBoundingClientRect();
+        return { width: canvas ? Math.round(canvas.width) : 0, height: canvas ? Math.round(canvas.height) : 0, named: Boolean(card.querySelector("[role='img'][aria-label]")), legend: Boolean(card.querySelector("[role='group'][aria-label^='图例']")), walkable: Boolean(card.querySelector("[role='listbox'][tabindex='0']")) };
+      })(),
       tiles,
       rows: rowList ? [...rowList.querySelectorAll(":scope > li [data-overview-row]")].filter(visible).length : 0,
       recipe: all("[data-empty]").filter(visible).length,
@@ -2452,14 +2460,14 @@ export const MEMORY_TABS = Object.freeze(["总览", "关于你", "做法", "收�
 /**
  * The overview, judged: its four tiles in order, each a number that was read; the sentence over them is the tiles' numbers; the navigation links
  * are the four, with no 地图 or 项目 among them, and a link that carries a number carries the tile's; the page draws at most two canvases (the
- * change chart and the relation graph); behind a sentence there is a table of changes, and an account with nothing has one recipe with one button instead.
+ * change chart and the star map or the relation graph), and a star map that is there has a picture in it, words for a screen reader and a list for a keyboard; behind a sentence there is a table of changes, and an account with nothing has one recipe with one button instead.
  * A page that has nothing to compare is **not observable**, never a pass.
  *
  * The sentence is 「记住了 N 条关于你的事，学会了 K 种做法；最近一次在…」: each clause is the tile of its name (关于你 counts a project's memories too, as its
  * list draws them), and a clause the sentence leaves out is a tile that holds nothing (or was not read). A tile whose read failed has no number
  * and is named, because a failed read is not a zero.
  * @param {string} current the report's `name@viewport`
- * @param {{ headline: string | null, tabs?: string[], canvases?: number, tiles: Array<{ label: string, value: number | null, note?: string, href?: string | null, loading?: boolean }>, rows?: number, recipe?: number, recipeButtons?: number }} read
+ * @param {{ headline: string | null, tabs?: string[], canvases?: number, star?: { width: number, height: number, named: boolean, walkable: boolean } | null, tiles: Array<{ label: string, value: number | null, note?: string, href?: string | null, loading?: boolean }>, rows?: number, recipe?: number, recipeButtons?: number }} read
  * @returns {{ failures: string[], notices: string[] }}
  */
 export function memoryOverviewFindings(current, read) {
@@ -2468,7 +2476,12 @@ export function memoryOverviewFindings(current, read) {
   const order = read.tiles.map((tile) => tile.label).join(",");
   if (order !== MEMORY_OVERVIEW_TILES.join(",")) failures.push(`${current}: the tiles read “${read.tiles.map((tile) => tile.label).join("、")}” (${MEMORY_OVERVIEW_TILES.join("、")})`);
   if (read.tabs && read.tabs.length > 0 && read.tabs.map((tab) => tab.replace(/\s*\d+$/, "")).join(",") !== MEMORY_TABS.join(",")) failures.push(`${current}: the navigation reads “${read.tabs.join("、")}” (${MEMORY_TABS.join("、")})`);
-  if ((read.canvases ?? 0) > 2) failures.push(`${current}: ${read.canvases} canvases on the page (two: the change chart and the relation graph)`);
+  if ((read.canvases ?? 0) > 2) failures.push(`${current}: ${read.canvases} canvases on the page (two: the change chart and one of the star map, the relation graph)`);
+  if (read.star) {
+    if (read.star.width < 320 || read.star.height < 240) failures.push(`${current}: the star map draws ${read.star.width}×${read.star.height} (a card with no picture in it)`);
+    if (!read.star.named) failures.push(`${current}: the star map has no words for a screen reader`);
+    if (!read.star.walkable) failures.push(`${current}: the star map has no list for a keyboard to walk`);
+  }
   for (const tile of read.tiles) {
     if (tile.loading) failures.push(`${current}: the ${tile.label} tile is still loading`);
     else if (tile.value === null) failures.push(`${current}: the ${tile.label} tile could not be read`);

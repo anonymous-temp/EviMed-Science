@@ -819,6 +819,80 @@
           "value": "#939ca6",
           "type": "color"
         }
+      },
+      "star": {
+        "ground": {
+          "value": "#03050b",
+          "type": "color"
+        },
+        "panel": {
+          "value": "#0c101cc7",
+          "type": "color"
+        },
+        "you": {
+          "value": "#ffd27a",
+          "type": "color"
+        },
+        "hub": {
+          "value": "#8fd0ff",
+          "type": "color"
+        },
+        "about": {
+          "value": "#ffc04d",
+          "type": "color"
+        },
+        "preference": {
+          "value": "#ff8a4c",
+          "type": "color"
+        },
+        "correction": {
+          "value": "#ff4d6a",
+          "type": "color"
+        },
+        "fact": {
+          "value": "#4fb3ff",
+          "type": "color"
+        },
+        "decision": {
+          "value": "#a47bff",
+          "type": "color"
+        },
+        "method": {
+          "value": "#a6f05a",
+          "type": "color"
+        },
+        "document": {
+          "value": "#2fe0b8",
+          "type": "color"
+        },
+        "entity": {
+          "value": "#8796ff",
+          "type": "color"
+        },
+        "replaced": {
+          "value": "#8a90a0",
+          "type": "color"
+        },
+        "line-replaces": {
+          "value": "#ffb35c",
+          "type": "color"
+        },
+        "line-conflicts": {
+          "value": "#ff4d6a",
+          "type": "color"
+        },
+        "line-rests": {
+          "value": "#2fe0b8",
+          "type": "color"
+        },
+        "line-relates": {
+          "value": "#7d8cff",
+          "type": "color"
+        },
+        "spark": {
+          "value": "#fff0c8",
+          "type": "color"
+        }
       }
     },
     "study": {

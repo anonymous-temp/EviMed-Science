@@ -44,7 +44,7 @@ import { researchToolGroups } from './researchToolDisplay.mjs'
  *
  * @typedef {{ kind: 'none' } | { kind: 'switch', setting: string }} ItemControl
  * @typedef {{ kind: 'drawer' } | { kind: 'page', to: string }} ItemOpens
- * @typedef {{ config?: string, tool?: string, project?: string } | null} ItemGate
+ * @typedef {{ config?: string, tool?: string, project?: string, requireConfigured?: boolean } | null} ItemGate
  * @typedef {object} InventoryWord one thing a person is shown
  * @property {string} group
  * @property {string} title
@@ -204,7 +204,7 @@ export function listInventory(facts = {}, words = RUNTIME_INVENTORY_WORDS) {
       items: Object.entries(words.items).flatMap(([id, item]) => {
         if (item.group !== group.id) return []
         const gate = item.gate
-        if (gate?.config && config[gate.config] === false) return []
+        if (gate?.config && (gate.requireConfigured ? config[gate.config] !== true : config[gate.config] === false)) return []
         if (gate?.tool && declined.has(gate.tool)) return []
         const state = gate?.project ? (settings[gate.project] === true ? 'on' : 'off') : 'on'
         /** @type {ListedItem} */

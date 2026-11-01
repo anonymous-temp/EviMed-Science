@@ -5,6 +5,8 @@ import fs from "node:fs/promises";
 import { MIN_PASSWORD_LENGTH, meetsPasswordMinimum } from "@evimed/domain";
 import { ControlPlaneDatabase, CONTROL_PLANE_SCHEMA, CONTROL_PLANE_SCHEMA_VERSION } from "./controlPlaneDatabase.mjs";
 import { DEVICE_REQUEST } from "./channels/deviceTokens.mjs";
+import { isEvimedAccountPath } from "./evimedAccountService.mjs";
+import { evimedSessionEncryptionAvailable, openEvimedSessionCredential, sealEvimedSessionCredential } from "./evimedSessionCredentials.mjs";
 import { assertClientProject } from "./internalProjects.mjs";
 import { externalDisplayName, isPlatformAccount, isReservedAccountIdentity, platformAccountProtected, platformAccountReserved } from "./platformAccount.mjs";
 import {
@@ -46,6 +48,8 @@ export const EXTERNAL_AUTH_TYPES = Object.freeze(["oidc", "evimed"]);
  * is the weakest case of the four — the only account it can produce is the
  * visitor's own, because the identity comes from EviMed's answer about the
  * credential the browser already had (fusion plan §9.2).
+ * The optional team-account paths are also pre-session, share that limiter,
+ * and check browser origin and JSON content type in their own adapter.
  */
 const SESSIONLESS_AUTH_PATHS = Object.freeze([
   "/api/auth/login",
@@ -350,7 +354,7 @@ export class InMemoryStore {
     }
   }
 
-  async createSession(user, req, res) {
+  async createSession(user, req, res, { evimedCredential = /** @type {any} */ (undefined) } = {}) {
     if (isPlatformAccount(user)) throw platformAccountProtected();
     await this.loadSessions();
     const newSession = randomId("sess_");
@@ -361,7 +365,10 @@ export class InMemoryStore {
       createdAt: Date.now(),
       expiresAt: Date.now() + ttlMs,
     };
-    this.sessions.set(sessionKey(newSession), session);
+    const binding = sessionKey(newSession);
+    const encrypted = sealEvimedSessionCredential(this.config, binding, user.id, session.expiresAt, evimedCredential);
+    if (encrypted) Object.defineProperty(session, "evimedCredential", { value: encrypted, writable: true, enumerable: false });
+    this.sessions.set(binding, session);
     await this.saveSessions();
     setSessionCookie(
       res,
@@ -373,12 +380,30 @@ export class InMemoryStore {
     return session;
   }
 
+  /** A web session's private search credential, never part of its public user or session response. */
+  async evimedSearchSession(req, res) {
+    const { user } = await this.ensureSessionUser(req, res, { allowDevAuth: false });
+    const binding = sessionKey(parseCookies(req.headers.cookie ?? "").get(this.config.sessionCookieName) ?? "");
+    const session = this.sessions.get(binding);
+    const expiresAt = session?.expiresAt ?? 0;
+    return { userId: user.id, binding, expiresAt, available: evimedSessionEncryptionAvailable(this.config),
+      credential: session?.userId === user.id ? openEvimedSessionCredential(this.config, binding, user.id, expiresAt, session.evimedCredential) : null };
+  }
+
+  /** Clearing one session cannot revoke another session's upstream access. */
+  async clearEvimedSearchCredential(req) {
+    await this.loadSessions();
+    const binding = sessionKey(parseCookies(req.headers.cookie ?? "").get(this.config.sessionCookieName) ?? "");
+    const session = this.sessions.get(binding);
+    if (session) { session.evimedCredential = undefined; await this.saveSessions(); }
+  }
+
   async assertCsrf(req, pathname) {
     if (this.config.devAuth) return;
     if (deviceSessionOf(req)) return;
     const method = (req.method ?? "GET").toUpperCase();
     if (["GET", "HEAD", "OPTIONS"].includes(method)) return;
-    if (SESSIONLESS_AUTH_PATHS.includes(pathname)) return;
+    if (SESSIONLESS_AUTH_PATHS.includes(pathname) || isEvimedAccountPath(pathname)) return;
 
     await this.loadSessions();
     const cookies = parseCookies(req.headers.cookie ?? "");
@@ -415,12 +440,16 @@ export class InMemoryStore {
         pruned = true;
         continue;
       }
-      this.sessions.set(record.idHash, {
+      const session = {
         userId: record.userId,
         csrfToken: record.csrfToken,
         createdAt: record.createdAt,
         expiresAt: record.expiresAt,
-      });
+      };
+      if (typeof record.evimedCredential === "string" && record.evimedCredential.length <= 6000) {
+        Object.defineProperty(session, "evimedCredential", { value: record.evimedCredential, writable: true, enumerable: false });
+      }
+      this.sessions.set(record.idHash, session);
     }
     if (pruned) await this.saveSessions();
     this.sessionsLoaded = true;
@@ -440,6 +469,7 @@ export class InMemoryStore {
         csrfToken: session.csrfToken,
         createdAt: session.createdAt,
         expiresAt: session.expiresAt,
+        ...(typeof session.evimedCredential === "string" ? { evimedCredential: session.evimedCredential } : {}),
       });
     }
     sessions.sort((a, b) => b.createdAt - a.createdAt);
@@ -1196,7 +1226,7 @@ export class PostgresStore extends InMemoryStore {
     }
   }
 
-  async createSession(user, req, res) {
+  async createSession(user, req, res, { evimedCredential = /** @type {any} */ (undefined) } = {}) {
     if (isPlatformAccount(user)) throw platformAccountProtected();
     const newSession = randomId("sess_");
     const ttlMs = sessionTtlMs(this.config);
@@ -1206,11 +1236,13 @@ export class PostgresStore extends InMemoryStore {
       createdAt: Date.now(),
       expiresAt: Date.now() + ttlMs,
     };
+    const binding = sessionKey(newSession);
+    const encrypted = sealEvimedSessionCredential(this.config, binding, user.id, session.expiresAt, evimedCredential);
     await this.database.query(
       `INSERT INTO ${CONTROL_PLANE_SCHEMA}.auth_sessions
-         (id_hash, user_id, csrf_token, created_at, expires_at)
-       VALUES ($1, $2, $3, to_timestamp($4 / 1000.0), to_timestamp($5 / 1000.0))`,
-      [sessionKey(newSession), user.id, session.csrfToken, session.createdAt, session.expiresAt],
+         (id_hash, user_id, csrf_token, created_at, expires_at, evimed_search_credential)
+       VALUES ($1, $2, $3, to_timestamp($4 / 1000.0), to_timestamp($5 / 1000.0), $6)`,
+      [binding, user.id, session.csrfToken, session.createdAt, session.expiresAt, encrypted],
     );
     setSessionCookie(
       res,
@@ -1222,12 +1254,30 @@ export class PostgresStore extends InMemoryStore {
     return session;
   }
 
+  async evimedSearchSession(req, res) {
+    const { user } = await this.ensureSessionUser(req, res, { allowDevAuth: false });
+    const binding = sessionKey(parseCookies(req.headers.cookie ?? "").get(this.config.sessionCookieName) ?? "");
+    const result = await this.database.query(
+      `SELECT evimed_search_credential, expires_at FROM ${CONTROL_PLANE_SCHEMA}.auth_sessions WHERE id_hash = $1 AND user_id = $2 AND expires_at > now()`,
+      [binding, user.id],
+    );
+    const row = result.rows[0];
+    const expiresAt = row ? new Date(row.expires_at).getTime() : 0;
+    return { userId: user.id, binding, expiresAt, available: evimedSessionEncryptionAvailable(this.config),
+      credential: openEvimedSessionCredential(this.config, binding, user.id, expiresAt, row?.evimed_search_credential) };
+  }
+
+  async clearEvimedSearchCredential(req) {
+    const binding = sessionKey(parseCookies(req.headers.cookie ?? "").get(this.config.sessionCookieName) ?? "");
+    await this.database.query(`UPDATE ${CONTROL_PLANE_SCHEMA}.auth_sessions SET evimed_search_credential = NULL WHERE id_hash = $1`, [binding]);
+  }
+
   async assertCsrf(req, pathname) {
     if (this.config.devAuth) return;
     if (deviceSessionOf(req)) return;
     const method = (req.method ?? "GET").toUpperCase();
     if (["GET", "HEAD", "OPTIONS"].includes(method)) return;
-    if (SESSIONLESS_AUTH_PATHS.includes(pathname)) return;
+    if (SESSIONLESS_AUTH_PATHS.includes(pathname) || isEvimedAccountPath(pathname)) return;
     const cookies = parseCookies(req.headers.cookie ?? "");
     const sessionId = cookies.get(this.config.sessionCookieName);
     const key = sessionId ? sessionKey(sessionId) : null;

@@ -30,8 +30,10 @@ import {
   toTurnEnd,
   toUsage,
 } from './src/convert.mjs'
+import { HOOK_SOFT_WAIT_MS, waitOnHook } from './src/hookWait.mjs'
 
 export { SEAMS }
+export { HOOK_SOFT_WAIT_MS, waitOnHook }
 export {
   KNOWN_TURN_END_KINDS,
   toArgs,
@@ -631,15 +633,42 @@ export function stepUserInputs(payload) {
 }
 
 /**
+ * What a step that waited on a hook leaves behind: a line in the runtime's log for any long wait, and, when a step gave up
+ * waiting, the same sentence among the run's degradations (the diagnostics the socket publishes, where an operator looks).
+ * @param {any} ctx @param {any} agent
+ * @returns {(event: import('./src/hookWait.mjs').HookWaitEvent) => void}
+ */
+export function hookWaitReporter(ctx, agent) {
+  return (event) => {
+    const seconds = Math.round(event.ms / 1000)
+    const line = event.kind === 'slow'
+      ? `a step has waited ${seconds} s on ${event.name}`
+      : event.kind === 'deadline'
+        ? `a step stopped waiting on ${event.name} after ${seconds} s and went on without it`
+        : `a cancelled step stopped waiting on ${event.name} after ${seconds} s`
+    console.error(`evimed: ${line}`)
+    if (event.kind !== 'deadline') return
+    try {
+      const diagnostics = ctx.get?.('evimedDiagnostics')
+      ;(diagnostics?.forSession?.(String(agent?.session?.id ?? '')) ?? diagnostics)?.degrade?.(line)
+    } catch { /* a line that cannot be recorded costs the line, never the step */ }
+  }
+}
+
+/**
  * Per-step admission (`agent/pre-step`). Rejecting stops the step; the caller
  * is expected to have injected an explanation first, or the model learns
  * nothing from the refusal.
+ *
+ * The wait on `fn` is the port's (`hookWait.mjs`): the turn's abort ends it, a long one leaves a line, and a caller
+ * that names `hardMs` has its step released at that deadline to go on without what `fn` would have added.
  * @param {any} ctx
  * @param {(step: import('./src/types.mjs').StepInfo, payload: any) => Promise<import('./src/types.mjs').StepDecision> | import('./src/types.mjs').StepDecision} fn
  * @param {(payload: any) => { first: boolean, root: boolean, usageSoFar?: any }} classify
+ * @param {{ label?: string, hardMs?: number }} [options] `label` names the plugin in the line a long wait leaves
  * @returns {() => void}
  */
-export function onPreStep(ctx, fn, classify) {
+export function onPreStep(ctx, fn, classify, options = {}) {
   return ctx.on(SEAMS.events.preStep, async (/** @type {any} */ payload, /** @type {any} */ next) => {
     const agent = payload.agent
     const previous = enteringStepContext.get(agent)
@@ -647,7 +676,17 @@ export function onPreStep(ctx, fn, classify) {
     const messages = []
     enteringStepContext.set(agent, messages)
     try {
-      const admission = await fn(toStepInfo(payload, classify(payload)), payload)
+      const waited = await waitOnHook({
+        name: `agent/pre-step${options.label ? ` (${options.label})` : ''}`,
+        work: () => fn(toStepInfo(payload, classify(payload)), payload),
+        // Released by the deadline: the step goes on, not admitted by this hook and not refused by it. Released by a
+        // cancel: refused below, and the kernel ends the turn at once.
+        fallback: /** @type {any} */ ({ allow: true }),
+        signal: payload.signal,
+        hardMs: options.hardMs,
+        report: hookWaitReporter(ctx, agent),
+      })
+      const admission = waited.outcome === 'aborted' ? { allow: false } : waited.value
       const decision = admission.allow ? await next() : { kind: 'reject' }
       if (decision?.kind === 'enter') {
         const entered = messages.length ? { ...decision, messages: [...(decision.messages ?? []), ...messages] } : decision
@@ -703,10 +742,12 @@ export function onPromptAssemble(ctx, fn) {
  * sent: what the kernel composed from the registry at the moment is replaced by what this agent should be told. Only what a plugin owns
  * should be changed there, and what is changed is changed on every assembly of the agent, not only the one that claimed.
  * @param {any} ctx
+ * Waited on as `onPreStep` waits (`hookWait.mjs`): a cancel ends the wait, a long one leaves a line, `hardMs` releases it.
  * @param {(agent:any, claimed:{inputs:{requestId:string,text:string}[],turn:number,signal?:AbortSignal}, assembly?:any)=>Promise<boolean>} fn
+ * @param {{ label?: string, hardMs?: number }} [options]
  * @returns {()=>void}
  */
-export function onClaimedPromptAssemble(ctx, fn) {
+export function onClaimedPromptAssemble(ctx, fn, options = {}) {
   /** @type {Map<any,{messages:any[],turn:number}>} */ const batches = new Map()
   const claimed = ctx.on(SEAMS.events.inputClaimed, (/** @type {any} */ payload) => {
     if (!payload?.agent || !payload.message) return
@@ -725,7 +766,15 @@ export function onClaimedPromptAssemble(ctx, fn) {
     if (agent) {
       const batch = batches.get(agent)
       batches.delete(agent)
-      if (!context?.signal?.aborted && await fn(agent, { inputs: stepUserInputs(batch), turn: batch?.turn ?? 0, signal: context?.signal }, assembly)) {
+      const changed = context?.signal?.aborted ? false : (await waitOnHook({
+        name: `system-prompt/assemble${options.label ? ` (${options.label})` : ''}`,
+        work: () => fn(agent, { inputs: stepUserInputs(batch), turn: batch?.turn ?? 0, signal: context?.signal }, assembly),
+        fallback: false,
+        signal: context?.signal,
+        hardMs: options.hardMs,
+        report: hookWaitReporter(ctx, agent),
+      })).value
+      if (changed) {
         const registry = ctx?.get?.('tools') ?? ctx?.tools
         // Remove only schemas owned by this registry; provider-generated tools
         // remain intact. run_code carries a different schema surface.

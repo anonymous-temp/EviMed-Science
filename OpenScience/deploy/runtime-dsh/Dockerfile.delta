@@ -29,7 +29,10 @@
 #     passed once on an image whose bundle could not be imported at all.
 #
 # NOT ADMISSIBLE HERE: a changed `pnpm-lock.yaml`, a new dependency, a kernel
-# pin move, or anything under `runtime/` other than the curated and office
+# pin move, a change to an `install-runtime.sh` phase that installs something
+# (the `analysis` phase's R packages and Python wheels, 2026-10-31: the first
+# release that carries them is a full runtime build, in CI or with
+# EVIMED_RUNTIME_BUILD=full on the host), or anything under `runtime/` other than the curated and office
 # skills' prose, the general (`core`) and community skill trees short of a
 # moved bundle pin, the research MCP server's own Python sources and the
 # private GEO method pack (see those steps). The release switch reads every
@@ -53,12 +56,13 @@ FROM ${RUNTIME_BASE_IMAGE}
 
 ARG DSH_HOME_SEED=/opt/evimed/dsh-home-seed
 ARG SOCKET_VERSION=0.1.0
+ARG SEARCH_TOPICS_VERSION=0.2.0
 
 USER root
 
 # The sealed trees this delta rewrites, removed rather than written over.
 RUN set -eux; \
-  rm -rf /opt/evimed/socket /opt/evimed/capabilities /opt/evimed/capability-skills
+  rm -rf /opt/evimed/socket /opt/evimed/capabilities /opt/evimed/capability-skills /opt/evimed/search-topics
 
 # The baseline this delta must match is the one in the source being built, not
 # the one the base image was built against. A delta that changes the
@@ -77,6 +81,9 @@ COPY packages/design-tokens /opt/evimed/socket/node_modules/@evimed/design-token
 # tree: every delta since dropped it, and the control plane's isolated skill validation (skillValidationController.mjs runs
 # this file in a disposable container of this image) failed until a hand hotfix put it back (2026-10-28).
 COPY scripts/runtime/validate-personal-skill.mjs /opt/evimed/socket/scripts/validate-personal-skill.mjs
+COPY packages/search-topics /opt/evimed/search-topics
+RUN test "${SEARCH_TOPICS_VERSION}" = "$(node -p 'require("/opt/evimed/search-topics/package.json").version')" && \
+  install -d -m 0755 /opt/evimed/search-topics-data && chmod -R a+rX,a-w /opt/evimed/search-topics
 
 RUN set -eux; \
   node /opt/evimed/socket/scripts/build-client.mjs; \
@@ -307,6 +314,9 @@ RUN set -eux; \
   mkdir -p "${installed}"; \
   cp -a /opt/evimed/socket/. "${installed}/"; \
   test -s "${installed}/dist/client.js"; \
+  recorded_store="$(node -p 'JSON.parse(require("node:fs").readFileSync(process.env.DSH_HOME_SEED+"/profiles/evimed-runtime/node_modules/.modules.yaml","utf8")).storeDir')"; \
+  test -n "${recorded_store}"; \
+  env -u XDG_CONFIG_HOME -u XDG_DATA_HOME -u XDG_CACHE_HOME -u XDG_STATE_HOME HOME=/root DSH_HOME="${DSH_HOME_SEED}" dsh plugin --profile evimed-runtime add --offline --ignore-scripts --store-dir "${recorded_store}" --save-prod --save-exact file:/opt/evimed/search-topics; \
   test -f "${DSH_HOME_SEED}/profiles/evimed-runtime/node_modules/@openviking/dsh-memory-plugin/package.json" \
     || { echo "this base image predates the OpenViking memory plugin the socket configures (deps-version.json openviking.plugin); build the full runtime image" >&2; exit 1; }; \
   DSH_HOME="${DSH_HOME_SEED}" dsh --profile evimed-runtime --dump-config > /opt/evimed/dump-config.baseline.json 2> /opt/evimed/dump-config.stderr; \
@@ -315,8 +325,26 @@ RUN set -eux; \
   rm -f /opt/evimed/dump-config.stderr; \
   test -s /opt/evimed/dump-config.baseline.json; \
   diff -u /opt/evimed/committed-dump-config.baseline.json /opt/evimed/dump-config.baseline.json; \
+  skill_source=/opt/evimed/socket/presets/evimed-universal/skills; \
+  detached_skills="$(mktemp -d /opt/evimed/socket/presets/evimed-universal/.skills-detached.XXXXXX)"; \
+  cp -a --no-preserve=links "${skill_source}/." "${detached_skills}/"; \
+  chmod -R a+rX,a-w "${detached_skills}"; \
+  rm -rf "${skill_source}"; mv "${detached_skills}" "${skill_source}"; \
   node /usr/local/bin/evimed-profile-seed.mjs seal "${DSH_HOME_SEED}" evimed-runtime; \
   chmod -R a-w "${DSH_HOME_SEED}"
+
+# The launcher and the files the model's shell commands run with (the `serve` phase of the full build; the
+# serve script says why each exists). Plain files with no dependency, so an edit to any of them is a delta:
+# without these lines a delta kept the base's copy, as it did the personal-skill validator above until
+# 2026-10-28. A base built before 2026-10-31 has none of the three small files and gains them here; the
+# launcher exports BASH_ENV only for a file that exists.
+COPY deploy/runtime-dsh/open-science-dsh-serve.sh /usr/local/bin/open-science-dsh-serve
+COPY deploy/runtime-dsh/evimed-oom-guard.sh /usr/local/bin/evimed-oom-guard
+COPY deploy/runtime-dsh/evimed-tool-env.sh /usr/local/lib/evimed/evimed-tool-env.sh
+COPY deploy/runtime-dsh/tool-bin/timeout /usr/local/lib/evimed/tool-bin/timeout
+RUN set -eux; \
+  chmod 0755 /usr/local/bin/open-science-dsh-serve /usr/local/bin/evimed-oom-guard /usr/local/lib/evimed/tool-bin/timeout; \
+  chmod 0644 /usr/local/lib/evimed/evimed-tool-env.sh
 
 COPY deploy/runtime-dsh/build-smoke.sh /usr/local/bin/evimed-build-smoke
 COPY deploy/runtime-dsh/build-smoke-patch.yml /usr/local/share/evimed/build-smoke-patch.yml
@@ -330,5 +358,6 @@ ARG BUILD_CREATED=1970-01-01T00:00:00.000Z
 LABEL org.opencontainers.image.version="${RELEASE_ID}"
 LABEL org.opencontainers.image.revision="${SOURCE_REVISION}"
 LABEL org.opencontainers.image.created="${BUILD_CREATED}"
+LABEL io.open-science.search-topics.version="${SEARCH_TOPICS_VERSION}"
 
 WORKDIR /workspace

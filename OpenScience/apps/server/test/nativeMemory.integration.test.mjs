@@ -116,6 +116,53 @@ test("an edit is a compare-and-swap on the text last read, and it is revisioned 
   assert.equal(await sessions.read(userId, uri), "Answers as short paragraphs.");
 });
 
+test("what a memory used to say comes back from its revisions for the map; an undo, a forget and a delete leave nothing to draw", options, async (t) => {
+  const { userId, store, seed } = await fixture(t);
+  const uri = seed("preferences/format.md", "Answers as short paragraphs.", { type: "preferences" });
+  const profile = seed("profile.md", "# Profile\n- Target journal: Kidney International\n- Works in a hospital pharmacy", { type: "profile" });
+  const edit = async (test_, value) => { const record = (await store.records(userId)).find(test_); return store.update(userId, record.id, { value, expectedVersion: record.version }); };
+
+  await edit((entry) => entry.uri === uri, "Tables for comparisons.");
+  await edit((entry) => entry.value?.startsWith("Target journal"), "Target journal: JASN");
+  let map = await store.mapMemories(userId);
+  const topic = map.replaced.find((statement) => statement.text === "Answers as short paragraphs.");
+  assert.equal(topic.head, nativeFileId(uri));
+  assert.equal(topic.successor, nativeFileId(uri));
+  const line = map.replaced.find((statement) => statement.text.startsWith("Target journal: Kidney"));
+  const now = map.records.find((entry) => entry.value?.startsWith("Target journal: JASN"));
+  assert.equal(line.successor, now.id, "the old line points at the line that replaced it");
+  assert.ok(map.records.some((entry) => entry.id === line.head));
+
+  // The person may have the old words gone and keep what it says now; another memory's statement cannot be named through this one.
+  await assert.rejects(store.forgetReplaced(userId, nativeFileId(uri), line.id), (error) => error.status === 404);
+  await store.forgetReplaced(userId, line.head, line.id);
+  map = await store.mapMemories(userId);
+  assert.ok(!map.replaced.some((statement) => statement.id === line.id));
+  assert.ok(map.records.some((entry) => entry.value?.startsWith("Target journal: JASN")));
+  assert.ok(!(await store.overlay.revisionsOf(userId, profile)).some((revision) => /Kidney/.test(`${revision.before ?? ""}${revision.after ?? ""}`)), "no revision keeps it");
+  assert.ok((await store.overlay.rejectedFingerprints(userId, "profile")).has(lineFingerprint("Target journal: Kidney International")));
+
+  // An undo takes the change back, so nothing was replaced.
+  const edited = (await store.records(userId)).find((entry) => entry.uri === uri);
+  await store.undo(userId, edited.id, { expectedVersion: edited.version });
+  map = await store.mapMemories(userId);
+  assert.ok(!map.replaced.some((statement) => statement.text === "Answers as short paragraphs."));
+  assert.ok(!map.replaced.some((statement) => statement.text === "Tables for comparisons."));
+
+  // A forget is no replacement, and what is forgotten is not drawn from an older revision.
+  const pharmacy = (await store.records(userId)).find((entry) => entry.value?.startsWith("Works in"));
+  await store.update(userId, pharmacy.id, { status: "archived", expectedVersion: pharmacy.version });
+  map = await store.mapMemories(userId);
+  assert.ok(!map.replaced.some((statement) => statement.text.startsWith("Works in")));
+
+  // A delete scrubs the history and rejects the line: what it replaced has nothing left to point at, and the line is not drawn.
+  const journal = (await store.records(userId)).find((entry) => entry.value?.startsWith("Target journal: JASN"));
+  await store.remove(userId, journal.id, { keepText: false });
+  map = await store.mapMemories(userId);
+  assert.ok(!map.replaced.some((statement) => statement.text.includes("JASN")));
+  assert.ok(profile);
+});
+
 test("a line of the profile is edited and removed as a line of its document; a delete scrubs the history, a forget keeps it for the undo", options, async (t) => {
   const { userId, store, seed, sessions, overlay } = await fixture(t);
   const uri = seed("profile.md", "# Profile\n- Works in a hospital pharmacy (as of 2026-09-01)\n- Allergic to penicillin", { type: "profile" });

@@ -57,7 +57,7 @@ function Reader({ item, language = "zh", expanded = false, starred = false }: { 
   useFrontierReadTracking(item, { language, expanded, url: "https://www.nejm.org/doi/full/10.1056/x", state: { starred, hidden: false } });
   return (
     <article data-frontier-reader="" aria-label="正文">
-      <a href="https://www.nejm.org/doi/full/10.1056/x" target="_blank" rel="noreferrer">打开原文</a>
+      <a href="https://www.nejm.org/doi/full/10.1056/x" target="_blank" rel="noreferrer">阅读原文</a>
       <a href="/app/frontier/items/bbbbbbbbbbbb">another report</a>
     </article>
   );
@@ -176,7 +176,7 @@ describe("opens join the list and hand their view to the reading page", () => {
   it("the original and another report followed from the reading page; an action from elsewhere names the reading page open", () => {
     const reader = render(<Reader item="eeeeeeeeeeee" />);
     const view = ofType("open")[0].view;
-    fireEvent.click(reader.getByText("打开原文"));
+    fireEvent.click(reader.getByText("阅读原文"));
     fireEvent.click(reader.getByText("another report"));
     expect(ofType("open-original").map((event) => event.view)).toEqual([view]);
     expect(ofType("related-open").map((event) => event.detail)).toEqual(["item"]);
