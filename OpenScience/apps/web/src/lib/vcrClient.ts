@@ -1240,6 +1240,8 @@ export interface VcrCriterionJudgement {
   evidenceItems?: VcrCriterionCitation[];
   /** What to ask for: 「申请近 4 周头颅 MRI」. */
   request?: string | null;
+  /** Why it is not decided, in the assessment's words (「缺登记原文」); null for a decided criterion. */
+  reason?: string | null;
   requestNote?: string | null;
   decidedBy?: string | null;
   overridden?: boolean;
@@ -1264,6 +1266,10 @@ export interface VcrPatientTrial {
   /** In the reader's words (「II 期」, 「招募中」); empty when the registry did not say. */
   phase: string;
   status: string;
+  /** The day the registry's record, and so its status, was read; null for the study's own protocol. */
+  statusAsOf?: string | null;
+  /** 已判 n/m: criteria found satisfied or not satisfied over every one that applies (unknown and waiting are in the m); null before a verdict. */
+  decided?: { decided: number; applicable: number; percent: number } | null;
   conditions: string[];
   sites: { total: number | null; countries: string[] } | null;
   eligibility: VcrEligibility | null;

@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { ctgovPrecedent } from "../src/trialRegistryClient.mjs";
+import { decidedShare } from "../src/vcrMatching.mjs";
 import {
   CANDIDATE_TRIAL_LOCATIONS_MAX, candidateTrialFromRecord, candidateTrialUrl, createPatientTrials, locateSourceText, OTHER_TRIAL_MIN_SOURCE_CHARS, phaseLabel, rankPatientTrials,
   registryStatusLabel, registryStatusRank, sourceTextLength,
@@ -137,6 +138,31 @@ test("an unknown and a date to wait for are both a criterion still to settle: th
     entry("one-unknown", "insufficient_evidence", { unknown: 1 }),
   ]);
   assert.deepEqual(ranked.map((row) => row.id), ["one-unknown", "one-unknown-one-pending", "two-pending"]);
+});
+
+test("within the trials the patient is not excluded from, the share of criteria decided comes first: few parsed criteria do not rise above a well-decided trial (M5)", () => {
+  const ranked = rankPatientTrials([
+    // Two parsed criteria and neither answered: only two open, which used to put it above a trial with seven of ten answered.
+    entry("thin", "insufficient_evidence", { unknown: 2 }),
+    entry("well-decided", "insufficient_evidence", { satisfied: 7, unknown: 3 }),
+    entry("half", "insufficient_evidence", { satisfied: 1, unknown: 1 }),
+    entry("half-more", "insufficient_evidence", { satisfied: 5, unknown: 5 }),
+    entry("waiting", "pending", { satisfied: 4, pending_recheck: 1 }),
+    entry("met-few", "eligible", { satisfied: 1 }),
+    entry("met-many", "eligible", { satisfied: 9 }),
+    entry("excluded-sure", "ineligible", { not_satisfied: 2, satisfied: 8 }),
+    entry("excluded-thin", "ineligible", { not_satisfied: 1, unknown: 4 }),
+    entry("none", null),
+  ]);
+  assert.deepEqual(ranked.map((row) => row.id), ["met-many", "met-few", "waiting", "well-decided", "half-more", "half", "thin", "excluded-sure", "excluded-thin", "none"]);
+});
+
+test("the decided share counts unknown and waiting criteria in its denominator and a criterion that does not apply in neither part", () => {
+  assert.deepEqual(decidedShare({ satisfied: 7, not_satisfied: 1, unknown: 1, pending_recheck: 1, notApplicable: 4, total: 14 }), { decided: 8, applicable: 10, percent: 80 });
+  assert.deepEqual(decidedShare({ unknown: 2 }), { decided: 0, applicable: 2, percent: 0 });
+  assert.deepEqual(decidedShare({ satisfied: 1 }), { decided: 1, applicable: 1, percent: 100 });
+  assert.deepEqual(decidedShare(null), { decided: 0, applicable: 0, percent: 0 });
+  assert.deepEqual(decidedShare({ satisfied: "x", unknown: -3 }), { decided: 0, applicable: 0, percent: 0 }, "what is not a count is not counted");
 });
 
 test("ties go to the registry's status (recruiting first), then the title, then the id", () => {

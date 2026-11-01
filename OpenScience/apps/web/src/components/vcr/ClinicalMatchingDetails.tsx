@@ -137,10 +137,11 @@ export function CriterionTable({ label, rows, facts, extraColumns = [] }: {
     {
       key: 'request',
       header: '补证建议',
-      isEmpty: (row) => !row.request,
-      cell: (row) => row.request ? (
+      isEmpty: (row) => !row.request && !row.reason,
+      cell: (row) => row.request || row.reason ? (
         <span className="block">
-          <span className="block text-text">{row.request}</span>
+          {row.request && <span className="block text-text">{row.request}</span>}
+          {row.reason && <span className={row.request ? 'block text-caption text-text-3' : 'block text-text'}>{row.reason}</span>}
           {row.requestNote && <span className="block text-caption text-text-3">{row.requestNote}</span>}
         </span>
       ) : <span className="text-text-3">—</span>,

@@ -1185,6 +1185,12 @@ const WRITERS = {
       // Where the wording stands is the platform's to say: the platform's locator replaces whatever the run typed.
       return { ...criterion, sourceLocator: found ? { recordHash: trial.recordHash, ...found } : { recordHash: trial.recordHash, located: false } };
     }) : null;
+    // A record with no original wording (ChiCTR through the evidence API is a listing) gives no criterion anything to rest on: the criteria
+    // are saved as written and every one of them is unknown for 缺登记原文 — never satisfied, never not satisfied (M6).
+    if (checked && !String(trial.eligibilityText ?? "").trim()) {
+      warnings.push({ field: "criteria", code: "registry_text_missing",
+        message: "这条登记记录没有入排条件原文（ChiCTR 经证据接口只有清单）：条件照写保存，但没有原文可对，评估时一律按未知算，原因是缺登记原文。不要补写原文，也不要从别处的记录里拿。" });
+    }
     /** The patients to evaluate: the ones the study holds. */
     const roster = new Set(typeof matchStore?.candidateSubjects === "function" ? await matchStore.candidateSubjects({ studyId: study.id }).catch(() => []) : []);
     /** @type {string[]} */

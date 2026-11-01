@@ -932,6 +932,22 @@ export function eligibilityCounts(judgments) {
 }
 
 /**
+ * How much of what applies to a person has been settled: `decided` is the criteria found satisfied or not satisfied, `applicable` is
+ * every criterion that applies to them. An unknown and a deferral stay in the denominator — they are the undecided part, and a share that
+ * left them out would read a trial with three parsed criteria and no answer as well settled as one with thirty answered. A criterion
+ * proven not applicable is out of both (it asks nobody for anything). Arithmetic over `eligibilityCounts`' keys and nothing a model said;
+ * it is what the patient→trial list ranks by after the verdict (M5) and what the page and the read-back print as 已判 n/m.
+ * @param {Record<string, unknown> | null | undefined} counts
+ * @returns {{ decided: number, applicable: number, percent: number }}
+ */
+export function decidedShare(counts) {
+  const n = (/** @type {string} */ key) => { const value = Number(counts?.[key] ?? 0); return Number.isFinite(value) && value > 0 ? Math.floor(value) : 0; };
+  const decided = n("satisfied") + n("not_satisfied");
+  const applicable = decided + n("unknown") + n("pending_recheck");
+  return { decided, applicable, percent: applicable ? Math.round((decided / applicable) * 100) : 0 };
+}
+
+/**
  * The overall summary, from the criterion states alone.
  *
  * Order matters and is the rule AC-14 tests:

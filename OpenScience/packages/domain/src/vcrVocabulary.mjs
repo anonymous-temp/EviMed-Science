@@ -152,6 +152,19 @@ export const VCR_MISSING_REASON_LABELS_ZH = Object.freeze({
   out_of_window: '在观察窗外', pending_result: '待出结果', not_applicable: '不适用',
 })
 
+/**
+ * Why a criterion of a matching verdict stays unknown, in the reader's words: the missing reasons above and the reasons the evaluator
+ * itself finds (`VCR_EVALUATOR_UNKNOWN_REASONS` in the server's `vcrMatching.mjs`). `criterion_source_unavailable` is the registry having
+ * no original wording to judge a criterion against: ChiCTR comes through the evidence API as a listing with no eligibility text, and a
+ * criterion written for such a record is unknown with this reason, never satisfied or not satisfied (M6).
+ */
+export const VCR_MATCHING_GAP_REASON_LABELS_ZH = Object.freeze({
+  ...VCR_MISSING_REASON_LABELS_ZH,
+  criterion_malformed: '条件写法不合文法', coding_unmapped: '编码对不上', coding_version_unavailable: '编码版本不可用',
+  unit_missing: '缺单位', unit_mismatch: '单位对不上', undated: '事实没有日期', evaluation_error: '这一条没能评估',
+  conflicting_evidence: '证据互相矛盾', unresolved_exposure: '没写明是否给过药', criterion_source_unavailable: '缺登记原文',
+})
+
 /** The three clocks every fact carries (§8.1). */
 export const VCR_TIME_KINDS = frozen(['occurred_at', 'recorded_at', 'visible_at'])
 export const VCR_TIME_KIND_LABELS_ZH = Object.freeze({ occurred_at: '发生时间', recorded_at: '记录时间', visible_at: '平台可见时间' })

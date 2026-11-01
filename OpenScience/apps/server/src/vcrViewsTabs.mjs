@@ -49,6 +49,7 @@ import {
 import { vcrObjectNode } from "./vcrStore.mjs";
 import { VCR_UNSUPPORTED_COMPARATOR_ROUTES } from "./vcrService.mjs";
 import { constraintRows, generatedProfileRows } from "./vcrPopulationProfileView.mjs";
+import { decidedShare } from "./vcrMatching.mjs";
 import { phaseLabel, registryStatusLabel } from "./vcrPatientTrials.mjs";
 import { reportSchedule } from "./vcrScheduleView.mjs";
 import { vcrPremises } from "./vcrPremises.mjs";
@@ -1414,6 +1415,8 @@ function judgementView(criterion, code, judgment, now, documentNames = new Map()
     evidence: cited[0] ?? null,
     evidenceItems: cited,
     request: state === "unknown" || state === "pending_recheck" ? (needed[0] ?? null) : null,
+    // Why it is not decided, in the assessment's own words (缺登记原文, 单位对不上, …): the first reason the criterion's gaps give.
+    reason: state === "unknown" || state === "pending_recheck" ? (text(object(list(judgment?.missing)[0]).label) ?? null) : null,
     requestNote: state === "pending_recheck" && judgment?.recheckAt ? `${zhDate(judgment.recheckAt, now)} 起可复评` : null,
     decidedBy: judgment?.decidedBy ?? null,
     overridden: Boolean(judgment?.overrideState),
@@ -1450,10 +1453,15 @@ function presentPatientTrials(bundle, held) {
       satisfied: count(entry.counts, "satisfied"), unknown: count(entry.counts, "unknown"),
       notSatisfied: count(entry.counts, "not_satisfied"), pending: count(entry.counts, "pending_recheck"),
     };
+    const decided = entry.counts ? decidedShare(entry.counts) : null;
     return {
       id: String(entry.id), kind: entry.kind, rank: entry.rank,
       registry: entry.registry ?? null, registryId: entry.registryId ?? null, url: entry.url ? String(entry.url) : null,
+      // The registry's status is as of the day its record was read (the study's own protocol has none).
       title: String(entry.title), phase: phaseLabel(entry.phase), status: registryStatusLabel(entry.status),
+      statusAsOf: entry.kind === "registry" && entry.retrievedAt ? zhDate(entry.retrievedAt, now) : null,
+      // 已判 n/m: the criteria found satisfied or not satisfied over every one that applies; unknowns are in the m.
+      decided,
       conditions: list(entry.conditions).map(String),
       sites: entry.locations ? { total: numeric(entry.locations.total), countries: list(entry.locations.countries).map(String) } : null,
       eligibility: entry.summary,

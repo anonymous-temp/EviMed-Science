@@ -674,6 +674,7 @@ def read(arguments: dict) -> dict:
             next_actions.append("Read one returned subjectKey to obtain its saved assessment and quoted evidence; use filter.id for one criterion if needed.")
     if what == "candidate_trials" and data.get("subjectKey") and data.get("ranking"):
         next_actions.append("ranking holds this patient's saved verdict for each trial, in the platform's order. A delivered per-trial table copies registryId, eligibility, criteriaCounts and evidenceGaps from it; a criterion belongs to the trial it was saved under, so never move one between trials.")
+        next_actions.append("Say how much is decided with each trial (decided of applicable: unknown and waiting criteria stay in the total) and, from undecided, which criteria are open and why. status is the registry's word as of statusAsOf, not a place at a centre. The order puts trials the patient is not excluded from first and the better-decided first; 符合 says the stated criteria are met, it is not a recommendation.")
     if what == 'report_model':
         next_actions.append('For longitudinal report numbers, append the exact field inside a record summary to its numberPath, without another .summary segment. For example: longitudinal.byId.<id>.groups[0].requested. Use vcr_read longitudinal filter.id for one full record when this report model is large; only fields actually returned are bindable.')
     if what == 'longitudinal':
