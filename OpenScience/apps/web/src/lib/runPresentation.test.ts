@@ -1,6 +1,8 @@
 import { formatRelativeTime } from "./format";
 import { describe, expect, it } from "vitest";
+import { WORK_STATE_LABEL } from "@evimed/domain";
 import type { WebAgentRun } from "@/lib/apiClient";
+import * as presentation from "./runPresentation";
 import { columnTime, compactTime, relativeTime, runDidNotDeliver, runMetaLine, runQuestion, runState, runTitle, undeliveredFiles, webRunOutcome } from "./runPresentation";
 
 // The run ledger's presentation had no direct test (2026-09-16 review, D5):
@@ -149,5 +151,20 @@ describe("what happened to a run", () => {
     expect(undeliveredFiles(run())).toBeNull();
     expect(undeliveredFiles(run({ unverifiedArtifacts: [] } as Partial<WebAgentRun>))).toEqual([]);
     expect(undeliveredFiles(run({ unverifiedArtifacts: ["deliverables/report.md", "", 3] } as unknown as Partial<WebAgentRun>))).toEqual(["deliverables/report.md"]);
+  });
+});
+
+describe("one vocabulary for a run's state (module workspace audit, D9)", () => {
+  it("says running, done, failed and stopped with the domain's words and keeps 待核对 for one meaning only", () => {
+    expect(presentation.RUN_STATE_LABEL).toEqual({
+      running: WORK_STATE_LABEL.running, done: WORK_STATE_LABEL.done, failed: WORK_STATE_LABEL.failed, canceled: WORK_STATE_LABEL.stopped,
+      review: "待核对",
+    });
+    expect(runState(run({ status: "canceled" })).label).toBe("已停止");
+    expect(runState(run({ status: "succeeded", phase: "degraded" })).label).toBe("待核对");
+  });
+
+  it("has no second map of the same enum: the dead WEB_RUN_STATUS_LABEL (执行中 / 成功 / 失败 / 已取消) is gone", () => {
+    expect(Object.keys(presentation)).not.toContain("WEB_RUN_STATUS_LABEL");
   });
 });

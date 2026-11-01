@@ -1,4 +1,4 @@
-import { AGENDA_MIN_EPISODE_BUDGET_CNY, AUTOPILOT_BUDGET_ERROR_CODES, BALANCE_REFUSAL_CODES, knownErrorCodeMessage } from "@evimed/domain";
+import { AGENDA_MIN_EPISODE_BUDGET_CNY, AUTOPILOT_BUDGET_ERROR_CODES, BALANCE_REFUSAL_CODES, knownErrorCodeMessage, workStateLabel } from "@evimed/domain";
 import type { AgendaRecord, AgendaSchedule, EpisodePayload, EpisodeRecord, ResearchState } from "@/lib/autopilotClient";
 export const WEEKDAYS = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
 export const TASK_TYPES = [
@@ -71,10 +71,15 @@ export function dayOf(value: string | undefined | null, timeZone: string): strin
 }
 
 /**
- * What an execution is called by its status. 「核对」 is the word for checking a quotation against its source (appendix B), and the
- * independent re-check that follows a run is background work of the same research: that stage reads as the research it is.
+ * What an execution is called by its status, in the words every module page uses for the state of work (`workStateLabel`). 「核对」 is
+ * the word for checking a quotation against its source (appendix B), and the independent re-check that follows a run is background
+ * work of the same research: that stage reads as 进行中, as the research it is. A run that merged its findings is 已完成, and 已停止 is a
+ * run the person (or the task's pause) stopped.
  */
-export const RUN_STATES: Record<string, string> = { queued: "排队中", verifying: "研究进行中", running: "研究进行中", failed: "未完成", canceled: "已取消", merged: "研究结果" };
+export const RUN_STATES: Record<string, string> = {
+  queued: workStateLabel("queued"), verifying: workStateLabel("running"), running: workStateLabel("running"),
+  failed: workStateLabel("failed"), canceled: workStateLabel("stopped"), merged: workStateLabel("done"),
+};
 /** A run held back because the allowance cannot pay for it. A simulated wallet refuses under its own code, and its run waits, and reads, the same way. */
 const waitsForBalance = (code: string) => BALANCE_REFUSAL_CODES.includes(code);
 /** The runs still on their way: nothing of theirs is a result yet. */
@@ -86,11 +91,6 @@ export const RUN_IN_FLIGHT = ["queued", "running", "retry_pending", "verifying"]
 export function runState(payload: EpisodePayload | undefined): string {
   if (payload?.status === "retry_pending") return "等待自动重试";
   if (payload?.status === "merged" && payload.resultKind === "no-new-evidence") return "没有新证据";
-  // An ordinary job is not research: its execution is "进行中" and, when it ends, "已完成".
-  if (payload?.taskType === "routine") {
-    if (payload.status === "merged") return "已完成";
-    if (payload.status === "running" || payload.status === "verifying") return "进行中";
-  }
   const deferrals = Object.values(payload?.resourceDeferrals ?? {}).filter(Boolean);
   const waiting = deferrals.find(value => value?.status === "waiting");
   const exhausted = deferrals.find(value => value?.status === "exhausted");
@@ -107,8 +107,8 @@ export function latestRun(agendaId: string, episodes: readonly EpisodeRecord[]):
   return newest;
 }
 /**
- * The line under a task: what its last run came to — 「上次 10月7日 · 研究结果」, 「上次 10月7日 · 未完成」 — or that it is on its way
- * (「研究进行中」) or has not run. `withTime` adds the clock for the drawer.
+ * The line under a task: what its last run came to — 「上次 10月7日 · 已完成」, 「上次 10月7日 · 未完成」 — or that it is on its way
+ * (「进行中」) or has not run. `withTime` adds the clock for the drawer.
  */
 export function lastRunLine(agenda: AgendaRecord, episodes: readonly EpisodeRecord[], { withTime = false } = {}): string {
   const run = latestRun(agenda.id, episodes);
@@ -133,10 +133,12 @@ export function scheduleStatus(agenda: AgendaRecord): string {
   return agenda.payload.nextRunAt ? `下次 ${instant(agenda.payload.nextRunAt, scheduleOf(agenda).timeZone)}` : "暂无下次运行";
 }
 /** What the researcher should know about a task that is not simply running: the planner's stop, and any task type paused after failures. */
+/** What a task that waits for its researcher's material says first: 「等你补充：…」, the work-state word and what it waits for. */
+export const WAITS_FOR_MATERIAL = `${workStateLabel("waiting", "补充")}：`;
 export function pauseNotes(agenda: AgendaRecord): string[] {
   const notes: string[] = [];
   const stop = agenda.payload.plannerStop;
-  if (stop && !activeAgenda(agenda)) notes.push(`${stop.kind === "needs_input" ? "需要你补充：" : "已暂停："}${stop.reason}`);
+  if (stop && !activeAgenda(agenda)) notes.push(`${stop.kind === "needs_input" ? WAITS_FOR_MATERIAL : "已暂停："}${stop.reason}`);
   // A pause the server put on a task whose cap cannot fund a run: the registry's sentence, the one the edit form's refusal reads.
   const cause = !activeAgenda(agenda) && !stop && agenda.payload.pauseCode ? knownErrorCodeMessage(agenda.payload.pauseCode) : null;
   if (cause) notes.push(`已暂停：${inLingdou(cause)}`);
@@ -238,7 +240,7 @@ export function foreignZone(timeZone: string): string {
 
 /**
  * The line under a task's name in the list, and nothing else: when it runs next and how often (「下次 周五 09:00 · 每周」), that it is
- * running (「进行中 · 每周一 08:00」), why it is stopped (「需要你补充：…」), or that it is done. Said in the task's own zone, which is
+ * running (「进行中 · 每周一 08:00」), why it is stopped (「等你补充：…」), or that it is done. Said in the task's own zone, which is
  * named when it is not the reader's.
  */
 export function rowLine(agenda: AgendaRecord, running: boolean, now = new Date()): string {

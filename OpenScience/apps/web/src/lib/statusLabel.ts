@@ -1,3 +1,5 @@
+import { workStateLabel } from "@evimed/domain";
+
 /**
  * A server code in the reader's words, or a Chinese sentence saying it has no
  * words yet — never the code itself.
@@ -38,16 +40,18 @@ export const LEDGER_STATUS_LABEL: Readonly<Record<string, string>> = Object.free
   unavailable: "不可用",
   unmounted: "未挂载",
   unreadable: "读不出来",
-  completed: "已完成",
+  completed: workStateLabel("done"),
   succeeded: "成功",
   failed: "失败",
   denied: "已拒绝",
   allowed: "已允许",
   noop: "无变化",
-  queued: "排队中",
-  running: "运行中",
-  canceled: "已取消",
-  cancelled: "已取消",
+  // The three that are the state of work say it as every page does (`workStateLabel`); an audit outcome (失败, 已拒绝, 已阻止) is a
+  // verdict on an operation and keeps its own word.
+  queued: workStateLabel("queued"),
+  running: workStateLabel("running"),
+  canceled: workStateLabel("stopped"),
+  cancelled: workStateLabel("stopped"),
   timed_out: "已超时",
   blocked: "已阻止",
 });

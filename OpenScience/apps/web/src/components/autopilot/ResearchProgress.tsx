@@ -1,4 +1,5 @@
 import { FileText, X } from "lucide-react";
+import { workStateLabel } from "@evimed/domain";
 import type { AgendaRecord, ResearchState } from "@/lib/autopilotClient";
 import { Button } from "@/components/ui/Button";
 import { IconButton } from "@/components/ui/IconButton";
@@ -28,7 +29,7 @@ export function ResearchProgress({ agenda, state, error, busy, lastRun, onAdd, o
     <ul className="space-y-1 text-ui text-text">{items.map(item => <li key={item} className="leading-relaxed"><ClampedText text={item} lines={3} /></li>)}</ul>
   </section>;
   return <div className="space-y-4">
-    {lastRun && <p className="text-caption text-text-3">{lastRun}{waiting && " · 需要你补充"}</p>}
+    {lastRun && <p className="text-caption text-text-3">{lastRun}{waiting && ` · ${workStateLabel("waiting", "补充")}`}</p>}
     {section("已发现", state.found.map(item => `${FOUND_PREFIX[item.check]}${item.statement}`))}
     {section("尚未解决", state.unresolved.map(unresolvedText))}
     <section aria-label="补充材料" className="space-y-2">

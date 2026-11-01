@@ -549,7 +549,7 @@ describe("scheduled tasks", () => {
       expect(rowOf("心衰证据追踪")).toHaveTextContent("下次 周六 07:30 · 每周");
       expect(rowOf("每天的任务")).toHaveTextContent("下次 明天 07:00 · 每天");
       expect(rowOf("正在跑的任务")).toHaveTextContent("进行中 · 每周一 08:00");
-      expect(rowOf("等你补充的任务")).toHaveTextContent("需要你补充：要监测的药品名单");
+      expect(rowOf("等你补充的任务")).toHaveTextContent("等你补充：要监测的药品名单");
       expect(rowOf("你停了的任务")).toHaveTextContent("已暂停");
       expect(rowOf("做完的任务")).toHaveTextContent("已完成 · 9月29日");
       // Internal engine state stays out of the row; the second line keeps the last outcome.
@@ -847,7 +847,7 @@ describe("scheduled tasks", () => {
       render();
       await waitFor(() => expect(screen.getByTestId("pane")).toHaveTextContent("ses-live"));
       await userEvent.click(within(bar()).getByRole("button", { name: "切换执行" }));
-      expect(await screen.findByRole("menuitemradio", { name: /研究进行中/ })).toBeInTheDocument();
+      expect(await screen.findByRole("menuitemradio", { name: /进行中/ })).toBeInTheDocument();
       expect(document.body).not.toHaveTextContent("核验");
     });
     it("lets the researcher choose which execution's conversation the frame shows, newest first, and keeps the choice in the address", async () => {
@@ -857,7 +857,7 @@ describe("scheduled tasks", () => {
       await waitFor(() => expect(screen.getByTestId("pane")).toHaveTextContent("ses-one"));
       await userEvent.click(within(bar()).getByRole("button", { name: "切换执行" }));
       const options = await screen.findAllByRole("menuitemradio");
-      expect(options.map(option => option.textContent)).toEqual(["2026年9月29日 08:00:00 · 研究结果", "2026年9月22日 08:00:00 · 研究结果"]);
+      expect(options.map(option => option.textContent)).toEqual(["2026年9月29日 08:00:00 · 已完成", "2026年9月22日 08:00:00 · 已完成"]);
       expect(options[0]).toHaveAttribute("aria-checked", "true");
       await userEvent.click(options[1]);
       await waitFor(() => expect(screen.getByTestId("pane")).toHaveTextContent("project-one:ses-old")); expect(here()).toBe("/app/autopilot/agenda-one?execution=ep-old");
@@ -925,7 +925,7 @@ describe("scheduled tasks", () => {
       const stopped = paused({ pauseReason: "问题已经回答", plannerStop: { kind: "needs_input", reason: "请补充原始数据表", at: "2026-10-01T00:00:00Z" },
         taskTypeState: { "evidence-update": { consecutiveFailures: 2, pausedAt: "2026-10-01T00:00:00Z" }, "literature-sentinel": { consecutiveFailures: 1 } } });
       mocks.listAgendas.mockResolvedValue({ items: [stopped] });
-      render(); expect(await within(await barElement()).findByText("需要你补充：请补充原始数据表", { exact: false })).toBeInTheDocument();
+      render(); expect(await within(await barElement()).findByText("等你补充：请补充原始数据表", { exact: false })).toBeInTheDocument();
       expect(bar()).toHaveTextContent("证据更新连续未能运行，已暂停"); expect(bar()).not.toHaveTextContent("文献追踪连续未能运行");
       expect(within(bar()).getByRole("button", { name: "补充材料并继续" })).toBeEnabled();
       // The planner's other stops are said without the button: nothing is asked of the researcher.
@@ -1047,7 +1047,7 @@ describe("scheduled tasks", () => {
       mocks.getResearchState.mockResolvedValue(state({ found: [{ statement: "获益一致", check: "stands", sources: 2, date: "2026-09-28" }] }));
       render(); await choose(await within(await barElement()).findByRole("button", { name: "更多" }), "研究进展");
       const drawer = await screen.findByRole("dialog", { name: "研究进展" });
-      expect(await within(drawer).findByText(/上次 9月29日 \d{2}:\d{2} · 研究结果 · 需要你补充/)).toBeInTheDocument();
+      expect(await within(drawer).findByText(/上次 9月29日 \d{2}:\d{2} · 已完成 · 等你补充/)).toBeInTheDocument();
     });
     it("holds a long unresolved conclusion to three lines with 展开", async () => {
       const long = "这是一条很长的待复核结论。".repeat(40);

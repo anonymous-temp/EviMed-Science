@@ -1,16 +1,12 @@
 import { useLayoutEffect, useRef } from "react";
+import { workStateLabel } from "@evimed/domain";
 import type { ReactNode } from "react";
 import type { AgendaRecord, EpisodeRecord } from "@/lib/autopilotClient";
-import type { WebAgentRun, WebRunDeliverableStatus } from "@/lib/apiClient";
-import { currentPhaseLabel, childrenLine, progressCountsLine, runDeliverables, runProgressOf } from "@/lib/runProgress";
+import type { WebAgentRun } from "@/lib/apiClient";
+import { currentPhaseLabel, childrenLine, DELIVERABLE_STATUS_LABEL, progressCountsLine, runDeliverables, runProgressOf } from "@/lib/runProgress";
 import { registerTaskPane } from "@/lib/taskPane";
 import { RunStatusDot } from "@/components/runs/RunStatusDot";
 import { activeAgenda, cancellationPending, inFlight, instant, runState, scheduleOf, zoneName } from "./taskPresentation";
-
-/** The state words of a plan item, in the product's own (appendix B): the ledger's gate words are not the researcher's. */
-const ITEM_STATE: Record<WebRunDeliverableStatus, string> = {
-  planned: "待开始", delegated: "进行中", submitted: "进行中", rejected: "进行中", accepted: "已完成", delivered: "已完成", failed: "未完成",
-};
 
 /**
  * Whether the kernel's conversation can be shown for an execution. One that has run its course has its conversation in the project's
@@ -85,7 +81,7 @@ export function TaskPane({ agenda, execution, lock, ledgerRun, projectId }: {
     return box("progress", <>
       <p className="flex items-center gap-2 text-ui font-semibold text-text"><RunStatusDot state="running" labelled />{own ? runState(lock.payload) : "这个项目里另一项任务正在执行"}</p>
       {lines.length > 0 && <ul className="space-y-1 text-ui text-text-2">{lines.map(line => <li key={line}>{line}</li>)}</ul>}
-      {items.length > 0 && <ul aria-label="研究计划" className="space-y-1 text-ui text-text">{items.map(item => <li key={item.id} className="flex items-baseline justify-between gap-3"><span className="min-w-0 break-words">{item.title}</span><span className="shrink-0 text-caption text-text-3">{ITEM_STATE[item.status] ?? "待开始"}</span></li>)}</ul>}
+      {items.length > 0 && <ul aria-label="研究计划" className="space-y-1 text-ui text-text">{items.map(item => <li key={item.id} className="flex items-baseline justify-between gap-3"><span className="min-w-0 break-words">{item.title}</span><span className="shrink-0 text-caption text-text-3">{DELIVERABLE_STATUS_LABEL[item.status] ?? workStateLabel("todo")}</span></li>)}</ul>}
       <p className="text-caption text-text-3">执行结束后可以在这里继续</p>
     </>);
   }

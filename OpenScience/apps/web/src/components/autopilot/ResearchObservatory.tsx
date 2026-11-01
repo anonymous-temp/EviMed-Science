@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { workStateLabel } from "@evimed/domain";
 import "./ResearchObservatory.css";
 import { EVIMED_MARK_PATH } from "@/components/brand/EviMedMark";
 import { listWebAgentRuns, type WebAgentRun } from "@/lib/apiClient";
@@ -7,8 +8,13 @@ import { formatApproxCount, formatClock, formatDuration, formatLingdou } from "@
 import { DELIVERABLE_STATUS_LABEL } from "@/lib/runProgress";
 import { emptyObservation, ROOT_AGENT, rootStage, STAGES, stageCounts, useResearchObservation, type ObservedAgent, type ObservedCall, type Observation, type StageKey } from "@/lib/researchObservation";
 
-const RUN_WORD: Record<string, string> = { running: "进行中", succeeded: "已完成", failed: "未完成", canceled: "已停止", cancelled: "已停止" };
-const AGENT_WORD: Record<ObservedAgent["state"], string> = { running: "工作中", idle: "待命", done: "已完成", failed: "未完成", canceled: "已停止", unknown: "待命" };
+const RUN_WORD: Record<string, string> = {
+  running: workStateLabel("running"), succeeded: workStateLabel("done"), failed: workStateLabel("failed"), canceled: workStateLabel("stopped"), cancelled: workStateLabel("stopped"),
+};
+/** 「待命」 is a member waiting for its next call, not a state of work; the rest are the work-state words. */
+const AGENT_WORD: Record<ObservedAgent["state"], string> = {
+  running: workStateLabel("running"), idle: "待命", done: workStateLabel("done"), failed: workStateLabel("failed"), canceled: workStateLabel("stopped"), unknown: "待命",
+};
 const SAFE_RUN = /^[A-Za-z0-9_-]{1,160}$/;
 const number = (value: unknown): number | null => (typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null);
 const obj = (value: unknown): Record<string, unknown> | null => (value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null);
@@ -117,7 +123,7 @@ function ObservatoryRun({ runId, title, onOpenFile }: { runId: string; title?: s
   const claims = progress && progress.claims.total > 0 ? progress.claims : null;
   const live = state === "running";
   const status = live ? (connected ? "实时" : "重新连接") : state ? RUN_WORD[state] ?? "已结束" : recordRead === "loading" || !connected ? "连接中" : "等待开始";
-  const heading = title || run?.title || run?.question || "研究进行中";
+  const heading = title || run?.title || run?.question || "这次研究";
 
   return <section aria-label="研究观测" className="obs" data-observatory={live ? "live" : ended ? "ended" : "waiting"}>
     <header className="obs-head">
@@ -267,7 +273,7 @@ function Inspector({ call, who }: { call: ObservedCall | null; who: string }) {
   return <section aria-label="操作详情" className="obs-panel obs-inspector">
     <p className="obs-section-label">操作详情</p>
     <p className="obs-inspect-title">{call.label}</p>
-    <p className="obs-inspect-meta">{who} · {call.state === "running" ? "进行中" : call.state === "error" ? "未成功" : "已完成"}{call.durationMs !== undefined ? ` · ${formatDuration(call.durationMs)}` : ""}</p>
+    <p className="obs-inspect-meta">{who} · {call.state === "running" ? workStateLabel("running") : call.state === "error" ? workStateLabel("failed") : workStateLabel("done")}{call.durationMs !== undefined ? ` · ${formatDuration(call.durationMs)}` : ""}</p>
     <Payload title="输入" text={input} pending="—" />
     <Payload title="结果" text={output} pending={call.state === "running" ? "等待结果" : "—"} />
   </section>;

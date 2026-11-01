@@ -6,7 +6,7 @@ import { Button, buttonClasses } from "@/components/ui/Button";
 import { Note } from "@/components/ui/Note";
 import { Menu, type MenuEntry } from "@/components/ui/Menu";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { activeAgenda, cancellationPending, cancellationRetryLabel, executionLabel, instant, needsMaterial, pauseNotes, runState, scheduleLine, scheduleOf, zoneName } from "./taskPresentation";
+import { activeAgenda, cancellationPending, cancellationRetryLabel, executionLabel, instant, needsMaterial, pauseNotes, runState, scheduleLine, scheduleOf, WAITS_FOR_MATERIAL, zoneName } from "./taskPresentation";
 
 /** What the bar's buttons do; the page decides how (a request, a confirmation, a dialog, a drawer). */
 export interface TaskBarActions {
@@ -95,7 +95,7 @@ export function TaskBar({ agenda, available = true, executions, selected, runnin
 
     {notes.map(note => <p key={note} className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 whitespace-pre-wrap break-words text-ui text-text-2">
       {note}
-      {waiting && note.startsWith("需要你补充：") && <Button variant="secondary" size="sm" disabled={busy} onClick={actions.supply}>{canSchedule ? "补充材料并继续" : "补充材料"}</Button>}
+      {waiting && note.startsWith(WAITS_FOR_MATERIAL) && <Button variant="secondary" size="sm" disabled={busy} onClick={actions.supply}>{canSchedule ? "补充材料并继续" : "补充材料"}</Button>}
     </p>)}
     {error && <div role="alert" className="mt-2 text-ui text-error">{error.message}{error.retry && <Button variant="text" disabled={busy} onClick={error.retry}>重试操作</Button>}</div>}
   </>;

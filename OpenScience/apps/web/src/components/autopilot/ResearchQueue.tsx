@@ -1,3 +1,4 @@
+import { workStateLabel } from "@evimed/domain";
 import "./ResearchObservatory.css";
 
 export type QueueMode = "running" | "queued" | "done" | "failed" | "paused" | "waiting" | "ended";
@@ -10,7 +11,10 @@ export interface QueueEntry {
   meta: string;
 }
 /** The words of a state, for the queue's cards and for the same state wherever else the page names it. */
-export const QUEUE_MODE_WORD: Record<QueueMode, string> = { running: "进行中", queued: "排队中", done: "已完成", failed: "未完成", paused: "已暂停", waiting: "待执行", ended: "已结束" };
+export const QUEUE_MODE_WORD: Record<QueueMode, string> = {
+  running: workStateLabel("running"), queued: workStateLabel("queued"), done: workStateLabel("done"), failed: workStateLabel("failed"),
+  paused: workStateLabel("paused"), waiting: workStateLabel("todo"), ended: workStateLabel("stopped"),
+};
 
 /**
  * Anatomy: the research queue over the observatory — every research of the project as a card: its state (a dot, a

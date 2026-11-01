@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { workStateLabel } from "@evimed/domain";
 import type { AgendaRecord, EpisodeRecord } from "@/lib/autopilotClient";
 import { budgetBlocks, executionLabel, executionsOf, firstTaskOf, inLingdou, lingdou, recommendationById, RECOMMENDATIONS, RUN_STATES, rowLine, runState, scheduleLine, sortGroup, TASK_TYPES, taskGroupOf, whenText } from "./taskPresentation";
 
@@ -39,7 +40,7 @@ describe("how a task says when", () => {
     expect(rowLine(agenda({ schedule: { kind: "weekly", timeZone: "Asia/Shanghai", time: "08:00", weekdays: [1] } }), true, NOW)).toBe("进行中 · 每周一 08:00");
     expect(rowLine(agenda({ nextRunAt: null }), false, NOW)).toBe("暂无下次运行 · 每周");
     expect(rowLine(agenda({ enabled: false, status: "paused", scheduleState: "paused", nextRunAt: null }), false, NOW)).toBe("已暂停");
-    expect(rowLine(agenda({ enabled: false, status: "paused", scheduleState: "paused", nextRunAt: null, plannerStop: { kind: "needs_input", reason: "要监测的药品名单", at: "2026-10-01T00:00:00Z" } }), false, NOW)).toBe("需要你补充：要监测的药品名单");
+    expect(rowLine(agenda({ enabled: false, status: "paused", scheduleState: "paused", nextRunAt: null, plannerStop: { kind: "needs_input", reason: "要监测的药品名单", at: "2026-10-01T00:00:00Z" } }), false, NOW)).toBe("等你补充：要监测的药品名单");
     expect(rowLine(agenda({ scheduleState: "completed", nextRunAt: null, schedule: { kind: "once", timeZone: "Asia/Shanghai", time: "09:00", date: "2026-09-29" } }), false, NOW)).toBe("已完成 · 9月29日");
   });
 
@@ -88,8 +89,8 @@ describe("how a task says when", () => {
 
 describe("what an execution is called", () => {
   it("calls the stage after a run the research it is, and never 核验", () => {
-    expect(RUN_STATES.verifying).toBe("研究进行中");
-    expect(runState(episode("v", { status: "verifying" }).payload)).toBe("研究进行中");
+    expect(RUN_STATES.verifying).toBe("进行中");
+    expect(runState(episode("v", { status: "verifying" }).payload)).toBe("进行中");
     expect(Object.values(RUN_STATES).join("")).not.toContain("核验");
     expect(runState(episode("q", { status: "queued" }).payload)).toBe("排队中");
   });
@@ -143,5 +144,18 @@ describe("an ordinary job is not research", () => {
     expect(new Set(RECOMMENDATIONS.map(item => item.id)).size).toBe(RECOMMENDATIONS.length);
     for (const item of RECOMMENDATIONS) { expect(item.id).toMatch(/^[a-z-]+$/); expect(recommendationById(item.id)).toBe(item); }
     expect(recommendationById("nope")).toBeUndefined(); expect(recommendationById(null)).toBeUndefined();
+  });
+});
+
+describe("the state words of a run are the platform's work-state words", () => {
+  it("says every status with the domain's word, and never one of the retired ways to say running or stopped", () => {
+    const words = { queued: workStateLabel("queued"), running: workStateLabel("running"), verifying: workStateLabel("running"), failed: workStateLabel("failed"), canceled: workStateLabel("stopped"), merged: workStateLabel("done") };
+    for (const [status, word] of Object.entries(words)) expect(runState(episode("w", { status }).payload), status).toBe(word);
+    expect(Object.values(RUN_STATES).join("")).not.toMatch(/研究进行中|执行中|运行中|工作中|已取消|研究结果/);
+  });
+
+  it("reads an ordinary job's finished run as 已完成 and an unfinished one as 进行中, with no branch of its own", () => {
+    expect(runState(episode("r", { status: "merged", taskType: "routine" }).payload)).toBe("已完成");
+    expect(runState(episode("r2", { status: "running", taskType: "routine" }).payload)).toBe("进行中");
   });
 });

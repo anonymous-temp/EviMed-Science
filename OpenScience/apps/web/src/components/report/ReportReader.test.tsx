@@ -110,7 +110,7 @@ describe("ReportReader", () => {
     renderReader();
     const toc = await screen.findByRole("navigation", { name: "目录" });
     expect(within(toc).getAllByRole("button").map((button) => button.textContent)).toEqual(["摘要", "结果", "出血", "局限性"]);
-    expect(await screen.findByRole("note")).toHaveTextContent("⚠ 1 条待核对");
+    expect(await screen.findByRole("note")).toHaveTextContent("⚠ 1 条未核对");
   });
 
   // One table of contents at a time: a column beside a wide page, folded

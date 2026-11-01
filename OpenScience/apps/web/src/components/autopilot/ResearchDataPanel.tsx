@@ -5,14 +5,10 @@ import { Button } from "@/components/ui/Button";
 import { IconButton } from "@/components/ui/IconButton";
 import { Tag, type TagTone } from "@/components/ui/Tag";
 import type { ResearchState } from "@/lib/autopilotClient";
+import { MATERIAL_STATE } from "./taskPresentation";
 
-/** Only a material that is not ready says so; a ready one needs no label. */
-const MATERIAL_STATUS: Record<ResearchState["materials"][number]["state"], { label: string; tone: TagTone } | null> = {
-  ready: null,
-  reading: { label: "正在读取", tone: "neutral" },
-  attention: { label: "需要处理", tone: "warn" },
-  unavailable: { label: "无法使用", tone: "safety" },
-};
+/** Only a material that is not ready says so; a ready one needs no label. The words are the task drawer's (`MATERIAL_STATE`), one map for the enum. */
+const MATERIAL_TONE: Record<ResearchState["materials"][number]["state"], TagTone> = { ready: "neutral", reading: "neutral", attention: "warn", unavailable: "safety" };
 
 /**
  * Anatomy: the research's own materials — datasets and documents from the knowledge base — and the three ways in.
@@ -53,11 +49,11 @@ export function ResearchDataPanel({ materials, loading, error, busy, databaseAva
     {materials.length === 0 && !loading && !error
       ? <p className="text-ui text-text">还没有资料。上传数据集或文献，研究会优先使用它们。</p>
       : materials.length > 0 ? <ul className="space-y-1" aria-label="已加入的资料">{materials.map((item) => {
-        const status = MATERIAL_STATUS[item.state];
+        const label = MATERIAL_STATE[item.state];
         return <li key={item.sourceId} className="flex min-w-0 items-center gap-2 py-1">
           <FileText size={16} className="shrink-0 text-text-3" aria-hidden="true" />
           <Link to={`/app/files/${encodeURIComponent(item.sourceId)}`} className="min-w-0 flex-1 truncate text-ui text-accent underline">{item.name}</Link>
-          {status && <Tag tone={status.tone}>{status.label}</Tag>}
+          {label && <Tag tone={MATERIAL_TONE[item.state]}>{label}</Tag>}
           {item.import?.partial && <Tag tone="warn">部分导入</Tag>}
           <IconButton icon={X} label={`移除 ${item.name}`} size="sm" disabled={busy} onClick={() => onRemove(item.sourceId)} />
         </li>;
