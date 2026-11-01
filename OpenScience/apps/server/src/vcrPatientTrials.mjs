@@ -199,7 +199,9 @@ export function locateSourceText(sourceText, eligibilityText) {
  * kept as the registry wrote it and ranked after what is open and before what is closed — it is not read as closed.
  */
 const STATUS_TABLE = Object.freeze([
-  { rank: 0, label: "招募中", words: ["recruiting", "authorisedrecruiting", "ongoingrecruiting"] },
+  // `zh` is a status the evidence API sends for ChiCTR as ChiCTR writes it: only the word its documented example shows. Any other Chinese
+  // status is unknown to this table and is shown as it was written.
+  { rank: 0, label: "招募中", words: ["recruiting", "authorisedrecruiting", "ongoingrecruiting"], zh: ["招募中"] },
   { rank: 1, label: "尚未开始招募", words: ["notyetrecruiting", "authorisedrecruitmentpending", "recruitmentpending"] },
   { rank: 2, label: "邀请入组", words: ["enrollingbyinvitation"] },
   { rank: 3, label: "进行中，不再招募", words: ["activenotrecruiting", "ongoingrecruitmentended", "ongoingnotrecruiting"] },
@@ -214,13 +216,26 @@ const STATUS_OTHER_RANK = 4;
 
 /** @param {unknown} status */
 const statusEntry = (status) => {
-  const word = text(status).toLowerCase().replace(/[^a-z]/g, "");
-  return word ? STATUS_TABLE.find((entry) => entry.words.includes(word)) ?? null : null;
+  const given = text(status);
+  const word = given.toLowerCase().replace(/[^a-z]/g, "");
+  return STATUS_TABLE.find((entry) => (word && entry.words.includes(word)) || (/** @type {{ zh?: string[] }} */ (entry).zh ?? []).includes(given)) ?? null;
 };
 
 /** How soon a patient could join a trial in this status: lower is sooner. @param {unknown} status */
 export function registryStatusRank(status) {
   return statusEntry(status)?.rank ?? STATUS_OTHER_RANK;
+}
+
+/**
+ * Whether a registry status is one of a trial that is open or about to be (recruiting, not yet recruiting, by invitation): `true`, `false`
+ * for the closed ones the table knows (not recruiting any more, suspended, completed, terminated, withdrawn), and `null` for a word it does
+ * not know or an unstated status — which is unknown, not closed.
+ * @param {unknown} status @returns {boolean | null}
+ */
+export function registryStatusOpen(status) {
+  const entry = statusEntry(status);
+  if (!entry || entry.label === "状态未知") return null;
+  return entry.rank <= 2;
 }
 
 /** The reader's word for a registry status; a word the table does not know is shown as the registry wrote it. @param {unknown} status */

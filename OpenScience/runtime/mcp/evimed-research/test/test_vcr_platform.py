@@ -533,6 +533,27 @@ class VcrReadWriteTests(_GatewayCase):
         listed = self.server.call_tool("vcr_read", {"what": "candidate_trials"})
         self.assertFalse(any("ranking" in action for action in listed["next_actions"]), "the list of trials is not a patient's table")
 
+    def test_a_registry_search_for_a_patient_is_a_read_that_says_where_it_looked(self):
+        # M1: `candidates` is one more `what`, not a new root tool, and what the root conversation carries every request does not grow.
+        self.assertIn("candidates", vcr_platform.READ_WHATS)
+        definitions = {tool["name"]: tool for tool in vcr_platform.tool_definitions()}
+        self.assertIn("candidates", definitions["vcr_read"]["inputSchema"]["properties"]["what"]["enum"])
+        self.assertNotIn("candidates", definitions["vcr_read"]["description"].replace("candidate_trials", ""), "found in the schema and the skill, not in the description")
+        answer = {"what": "candidates", "available": True, "status": "ok", "asOf": "2026-11-01T08:00:00.000Z",
+                  "coverage": "已查（2026-11-01）：ClinicalTrials.gov；没有覆盖：CDE、ICTRP。", "candidates": [{"registry": "chictr", "registryId": "ChiCTR2400000031", "unknown": ["age"]}]}
+        _Gateway.answers["read"] = (200, {"data": answer})
+        found = self.server.call_tool("vcr_read", {"what": "candidates", "filter": {"condition": "lung cancer", "terms": ["NSCLC"], "age": 63, "sex": "female", "region": "China"}})
+        self.assertEqual(found["status"], "success")
+        self.assertEqual(_Gateway.seen[-1]["body"], {"what": "candidates", "filter": {"condition": "lung cancer", "terms": ["NSCLC"], "age": 63, "sex": "female", "region": "China"}})
+        said = " ".join(found["next_actions"])
+        for fragment in ("data.coverage", "CDE and ICTRP", "not a ranking", "unknown", "trial_registry_record", "parsedBefore"):
+            self.assertIn(fragment, said)
+        # An unavailable registry search is a warning the run reads and moves on from, with no registry-specific advice.
+        _Gateway.answers["read"] = (200, {"data": {"what": "candidates", "available": False, "code": "registry_unavailable", "message": "试验登记检索未接入"}})
+        off = self.server.call_tool("vcr_read", {"what": "candidates", "filter": {"condition": "x"}})
+        self.assertEqual(off["status"], "warning")
+        self.assertFalse(any("CDE and ICTRP" in action for action in off["next_actions"]))
+
     def test_the_trials_found_for_a_patient_are_a_write_and_a_read_of_their_own(self):
         # 「给患者找试验」: a run writes the registry trial and its structured criteria, and reads them back.
         self.assertIn("candidate_trial", vcr_platform.WRITE_WHATS)

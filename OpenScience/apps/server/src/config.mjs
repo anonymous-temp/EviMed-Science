@@ -1128,6 +1128,14 @@ function vcrSettings(overrides) {
     // study judges against it, so the count is bounded; a trial the study already holds can always be updated. Counter:
     // `open_science_vcr_patient_trials_total{kind="capReached"}`.
     vcrCandidateTrialsMax: integer("vcrCandidateTrialsMax", "OPEN_SCIENCE_VCR_CANDIDATE_TRIALS_MAX", 60, 1, 500),
+    // The most trials one `vcr_read what: candidates` list returns (vcrCandidateSearch, M1). Each one is a record the run may read and
+    // structure, so the list is cut to what a reader can go through; the registries are asked for twice as many because some are left out by
+    // what their records state. Unset = 20.
+    vcrCandidateSearchMax: integer("vcrCandidateSearchMax", "OPEN_SCIENCE_VCR_CANDIDATE_SEARCH_MAX", 20, 5, 50),
+    // A patient's record longer than this many characters is read through the passages that bear on a criterion (vcrPassages, M4) rather
+    // than window after window: past about two windows (20,000 characters each) a chart is more than a run reads in order, and the part of it
+    // a criterion asks about is a small part. Unset = 40,000. A shorter record is read as it always was.
+    vcrPassagesMinChars: integer("vcrPassagesMinChars", "OPEN_SCIENCE_VCR_PASSAGES_MIN_CHARS", 40_000, 2_000, 1_000_000),
     // The smallest cell a model is shown (vcrService.minCell): a deployment may raise the domain's floor, never lower it.
     vcrMinCellSize: integer("vcrMinCellSize", "OPEN_SCIENCE_VCR_MIN_CELL_SIZE", VCR_MIN_CELL_SIZE, VCR_MIN_CELL_SIZE, 1_000),
     // The largest derived table — reconstructed pseudo-patients, a forecast's probabilities — the control plane stores from an engine job (vcrJobs).

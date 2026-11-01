@@ -1336,6 +1336,19 @@ export const CTGOV_SEARCH_FIELDS = Object.freeze([
 ]);
 
 /**
+ * What a list for one patient needs besides the page above (`search({ forPatient: true })`): who the trial takes (sex and age bounds) and the
+ * other registrations the record states. Small fields. The sites are separate (`withLocations`) because a record can list hundreds.
+ */
+export const CTGOV_PATIENT_FIELDS = Object.freeze([
+  "protocolSection.eligibilityModule.sex",
+  "protocolSection.eligibilityModule.minimumAge",
+  "protocolSection.eligibilityModule.maximumAge",
+  "protocolSection.identificationModule.secondaryIdInfos",
+]);
+/** The sites of a record, for the countries a trial runs in. */
+export const CTGOV_LOCATION_FIELDS = Object.freeze(["protocolSection.contactsLocationsModule.locations"]);
+
+/**
  * @param {{ baseUrl?: string, timeoutMs?: number, maxAttempts?: number, fetchImpl?: typeof fetch,
  *   now?: () => Date, sleep?: (ms: number) => Promise<unknown>,
  *   chictrAdapter?: ((request: { query: string, limit: number, userId?: string }) => Promise<any>) | null,
@@ -1483,12 +1496,15 @@ export function createTrialRegistryClient({
      * Candidate precedents. Similarity and eligibility for pooling are decided
      * later and elsewhere (plan §6.4: 「相似度只用来找候选」) — this is a query,
      * not a judgment.
+     * `forPatient` adds what a list for one patient is filtered on — the trial's sex and age bounds and the other registrations it states
+     * (`CTGOV_PATIENT_FIELDS`) — and `withLocations` the countries its sites are in; both only on request, so the list a precedent search
+     * gets is the same bytes it always was. A field the record does not state is absent on the item (`null`), never a guess.
      * @param {{ condition?: string, intervention?: string, term?: string, phases?: string[],
      *   status?: string[], studyType?: string, hasResults?: boolean | null, limit?: number,
-     *   pageToken?: string | null }} request
+     *   pageToken?: string | null, forPatient?: boolean, withLocations?: boolean }} request
      */
     async search({ condition = "", intervention = "", term = "", phases = [], status = [], studyType = "",
-      hasResults = null, limit = 20, pageToken = null } = {}) {
+      hasResults = null, limit = 20, pageToken = null, forPatient = false, withLocations = false } = {}) {
       if (!origin || typeof fetchImpl !== "function") return unavailable("registry_not_configured");
       counters.searches += 1;
       const parameters = new URLSearchParams();
@@ -1503,7 +1519,7 @@ export function createTrialRegistryClient({
       parameters.set("pageSize", String(Math.max(1, Math.min(100, Math.floor(limit)))));
       parameters.set("countTotal", "true");
       parameters.set("format", "json");
-      parameters.set("fields", CTGOV_SEARCH_FIELDS.join("|"));
+      parameters.set("fields", [...CTGOV_SEARCH_FIELDS, ...(forPatient ? CTGOV_PATIENT_FIELDS : []), ...(withLocations ? CTGOV_LOCATION_FIELDS : [])].join("|"));
       if (text(pageToken)) parameters.set("pageToken", text(pageToken));
 
       const answer = await getJson(`${origin}/studies?${parameters.toString()}`, Date.now() + timeoutMs);
@@ -1540,6 +1556,16 @@ export function createTrialRegistryClient({
               .map((/** @type {any} */ item) => text(item?.name)).filter(Boolean),
             hasResults: Boolean(study?.hasResults),
             url: registryId ? `${CTGOV_STUDY_URL}${encodeURIComponent(registryId)}` : "",
+            ...(forPatient ? {
+              sex: text(protocol.eligibilityModule?.sex) || null,
+              minimumAge: text(protocol.eligibilityModule?.minimumAge) || null,
+              maximumAge: text(protocol.eligibilityModule?.maximumAge) || null,
+              secondaryIds: (Array.isArray(protocol.identificationModule?.secondaryIdInfos) ? protocol.identificationModule.secondaryIdInfos : [])
+                .map((/** @type {any} */ entry) => text(entry?.id)).filter(Boolean),
+            } : {}),
+            // `null` is a record that lists no site; a search that did not ask for sites has no key.
+            ...(withLocations ? { countries: Array.isArray(protocol.contactsLocationsModule?.locations)
+              ? [...new Set(protocol.contactsLocationsModule.locations.map((/** @type {any} */ site) => text(site?.country)).filter(Boolean))].sort() : null } : {}),
           };
         }).filter((/** @type {{registryId: string}} */ item) => item.registryId),
       };

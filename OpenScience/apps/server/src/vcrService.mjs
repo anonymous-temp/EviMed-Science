@@ -77,6 +77,7 @@ export const VCR_READ_WHATS = Object.freeze([
   "study", "definition", "criteria", "assumptions", "evidence", "population", "patients", "comparator", "trial",
   "precedents", "matching", "subject_document", "followup_history", "model_source", "generated_records", "results", "report_model", "snapshot_profile", "models", "jobs",
   "trial_registry_record", "patient_context", "pack", "library", "model_assessments", "longitudinal", "candidate_trials", "soa", "regulatory_contacts",
+  "candidates",
 ]);
 
 /**
@@ -127,7 +128,7 @@ export function stripPlaneAddresses(value, ancestors = new Set()) {
  * recognised by shape: a shape rule is the thing that let the first boundary
  * pass what nothing produced.
  */
-export const VCR_PUBLISHED_FIGURE_READS = Object.freeze(["evidence", "precedents", "trial_registry_record"]);
+export const VCR_PUBLISHED_FIGURE_READS = Object.freeze(["evidence", "precedents", "trial_registry_record", "candidates"]);
 
 export const VCR_WRITE_WHATS = Object.freeze([
   "data_intake",
@@ -1679,7 +1680,7 @@ export class VcrService {
     this.counters.reads += 1;
     if (what === 'contracts') return vcrContractsRead(filter.kind ?? null);
     if (what === 'data_intake') return { available: false, code: 'vcr_invocation_unavailable', message: 'Original upload intake requires the verified current conversation.' };
-    if (!study.id && !['trial_registry_record','models','library'].includes(what)
+    if (!study.id && !['trial_registry_record','models','library','candidates'].includes(what)
       && !(what === 'matching' && ['contract', 'terminology'].includes(filter.kind))) return { available:true,empty:true,study:null,scope:'conversation' };
     const payload = await this.#runtimeRead(study, what, filter);
     // This one projection has already verified the entire generated lineage; synthetic counts are not patient disclosure cells.
@@ -1842,6 +1843,23 @@ export class VcrService {
           return { available: false, code: "vcr_evidence_unavailable", message: "参考试验库未接入：这一步暂不可用，其余步骤照常。" };
         }
         return evidence.runtimeRead(study, { ...filter, what: "precedents" });
+      }
+      case "candidates": {
+        // `candidates` (M1): the registry trials that might take one patient — merged from the three registries, de-duplicated, held to the
+        // filters by what each record states, with what was searched, what failed and what is not covered. A registry search needs no study.
+        const evidence = this.packages.evidence;
+        if (!evidence?.candidatesFor) {
+          return { available: false, code: "registry_unavailable", message: "试验登记检索未接入：这一步暂不可用，其余步骤照常。" };
+        }
+        const max = Number(this.config?.vcrCandidateSearchMax) > 0 ? Number(this.config.vcrCandidateSearchMax) : 20;
+        const answer = await evidence.candidatesFor(study, filter, max);
+        const trials = this.packages.patientTrials;
+        if (answer?.available && answer.candidates?.length && trials?.parsedHeld && study.userId) {
+          // A trial the account has structured before can be written again without its criteria while its record is unchanged (M2).
+          const held = await trials.parsedHeld(study, answer.candidates);
+          answer.candidates = answer.candidates.map((/** @type {any} */ candidate) => (held.has(`${candidate.registry}\u0000${candidate.registryId}`) ? { ...candidate, parsedBefore: true } : candidate));
+        }
+        return answer;
       }
       case "trial_registry_record": {
         // `trial_registry_record`: a registry id in, a structured record out.

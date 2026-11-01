@@ -100,6 +100,10 @@ import {
 import { quoteIsPresent } from "@evimed/domain/clinical-evidence";
 
 import { REGISTRY_NOT_FOUND, REGISTRY_UNAVAILABLE, REGISTRY_UNAVAILABLE_PARAMETERS, confidenceLevelOf } from "./trialRegistryClient.mjs";
+import {
+  CANDIDATES_NOT_COVERED, CANDIDATE_REGISTRIES, CTGOV_OPEN_STATUSES, CTIS_OPEN_STATUSES, candidateQueries, candidateRequest, chictrCandidate,
+  coverageSentence, ctgovCandidate, ctisCandidate, filterCandidates, interleave, mergeCandidates, presentCandidate, registryOutcome,
+} from "./vcrCandidateSearch.mjs";
 import { EVIDENCE_ARM_ROLES } from "./vcrEvidenceStore.mjs";
 import { candidateTrialFromRecord } from "./vcrPatientTrials.mjs";
 import { verifyLiteratureBaseline } from "./vcrEvidenceSources.mjs";
@@ -1352,6 +1356,82 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
     },
 
     /**
+     * `vcr_read what: "candidates"` (M1): the registry trials that might take one patient. The run writes the search — a condition and a
+     * few phrases, English and Chinese — and says what it knows of the patient (age, sex, country); this asks the three registries together,
+     * merges and de-duplicates what they answer, leaves out what a record's own stated fields rule out, cuts the list, and says per
+     * registry what was asked, what failed and what is not covered at all. A registry that failed costs its own results and no one else's.
+     * Nothing here judges the patient against a trial (`vcrCandidateSearch.mjs`).
+     * @param {{ userId?: string, filter?: Record<string, any>, limitMax?: number }} input
+     */
+    async patientCandidates({ userId = "", filter = {}, limitMax = 20 }) {
+      const asked = candidateRequest(filter, { limitMax });
+      const asOf = now().toISOString();
+      if (asked.ok === false) return { available: false, code: "vcr_read_filter_invalid", message: asked.message };
+      const { request } = asked;
+      if (!registry) return { available: false, code: "registry_unavailable", message: "试验登记检索未接入：这一步暂不可用，其余步骤照常。" };
+      const queries = candidateQueries(request);
+      // The registries' own filters narrow what they send where a status is always stated (ClinicalTrials.gov, CTIS); everything else is held
+      // to the filters here, from the fields the record states. More than the list's size is asked for because some of it is left out.
+      const per = Math.min(request.region ? 30 : 50, Math.max(10, request.limit * 2));
+      const open = request.scope === "open";
+      /** @param {() => Promise<any>} ask */
+      const settle = async (ask) => { try { return await ask(); } catch (error) { return { status: REGISTRY_UNAVAILABLE, reason: String(/** @type {any} */ (error)?.code ?? "request_failed"), items: [] }; } };
+      const ask = {
+        "clinicaltrials.gov": (/** @type {{ kind: string, text: string }} */ query) => settle(() => registry.search({
+          ...(query.kind === "condition" ? { condition: query.text } : { term: query.text }), status: open ? [...CTGOV_OPEN_STATUSES] : [], limit: per,
+          forPatient: true, withLocations: Boolean(request.region) })),
+        ctis: (/** @type {{ kind: string, text: string }} */ query) => settle(async () => (typeof registry.searchCtis === "function"
+          ? registry.searchCtis({ ...(query.kind === "condition" ? { condition: query.text } : { term: query.text }), statuses: open ? [...CTIS_OPEN_STATUSES] : [], limit: per })
+          : { status: REGISTRY_UNAVAILABLE, reason: "registry_not_configured", items: [] })),
+        chictr: (/** @type {{ kind: string, text: string }} */ query) => settle(() => registry.searchChictr({ query: query.text, limit: per, userId })),
+      };
+      const shape = { "clinicaltrials.gov": ctgovCandidate, ctis: ctisCandidate, chictr: chictrCandidate };
+      // Every (registry, phrase) is asked at once: one that does not answer waits out its own deadline and holds nobody else.
+      const answers = await Promise.all(CANDIDATE_REGISTRIES.map(async (entry) => Promise.all(queries.map(async (query) => ({
+        query: query.text, answer: await ask[/** @type {keyof typeof ask} */ (entry.id)](query) })))));
+      /** @type {ReturnType<typeof ctgovCandidate>[]} */
+      const found = [];
+      let retrievedAt = null;
+      const registries = CANDIDATE_REGISTRIES.map((entry, at) => {
+        const rows = answers[at];
+        /** @type {ReturnType<typeof ctgovCandidate>[]} */
+        const own = [];
+        for (const { answer } of rows) {
+          if (answer.status === "ok" && answer.retrievedAt && (!retrievedAt || answer.retrievedAt > retrievedAt)) retrievedAt = answer.retrievedAt;
+          for (const item of answer.status === "ok" ? answer.items ?? [] : []) own.push(/** @type {any} */ (shape)[entry.id](item));
+        }
+        found.push(...own);
+        const outcome = registryOutcome(rows.map(({ query, answer }) => ({
+          query, status: String(answer.status), reason: answer.status === "ok" ? null : String(answer.reason ?? answer.status),
+          total: answer.total ?? null, found: answer.status === "ok" ? (answer.items ?? []).length : 0 })));
+        return { registry: entry.id, name: entry.name, ...outcome,
+          ...(entry.id === "chictr" ? { limits: "只有清单：没有入排条件原文，也没有年龄、性别、中心；写入候选试验时条件按未知算（缺登记原文）。" } : {}) };
+      });
+      const merged = mergeCandidates(found);
+      const { kept, dropped } = filterCandidates(merged, request);
+      const { list, more } = interleave(kept, request.limit);
+      note("vcr.evidence.candidates_for_patient", { userId, found: found.length, merged: merged.length, kept: kept.length, returned: list.length });
+      const reachable = registries.some((entry) => entry.state === "searched" || entry.state === "partial");
+      return {
+        available: true,
+        status: reachable ? "ok" : REGISTRY_UNAVAILABLE,
+        asOf,
+        registryReadAt: retrievedAt,
+        request: { condition: request.condition, terms: request.terms, age: request.age, sex: request.sex, region: request.region, status: request.scope },
+        registries,
+        notCovered: CANDIDATES_NOT_COVERED.map((entry) => ({ registry: entry.id, name: entry.name, reason: entry.reason })),
+        // What the run says in its reply about where it looked, as the platform words it.
+        coverage: coverageSentence(registries, asOf),
+        found: merged.length,
+        // Left out for what the record itself states, by the first filter that did; the unstated ones stayed in, marked `unknown`.
+        leftOut: dropped,
+        more,
+        order: "按各登记库自己的相关性顺序轮流排列，不是适合程度的排序。",
+        candidates: list.map(presentCandidate),
+      };
+    },
+
+    /**
      * The runtime's `trial_registry_record`, served from the control plane.
      *
      * The runtime never reaches a registry itself — it names the record it
@@ -1826,6 +1906,11 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
         counts: view.counts,
         unavailable: view.unavailable,
       };
+    },
+
+    /** @param {any} study @param {Record<string, any>} [filter] @param {number} [limitMax] */
+    async candidatesFor(study, filter = {}, limitMax = 20) {
+      return pipeline.patientCandidates({ userId: String(study?.userId ?? ""), filter, limitMax });
     },
 
     /** @param {any} study @param {Record<string, any>} [filter] */

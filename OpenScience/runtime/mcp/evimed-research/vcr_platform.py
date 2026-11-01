@@ -83,6 +83,7 @@ READ_WHATS = (
     "study", "definition", "criteria", "assumptions", "evidence", "population", "patients", "comparator", "trial",
     "precedents", "matching", "subject_document", "followup_history", "model_source", "generated_records", "results", "report_model", "snapshot_profile", "models", "jobs",
     "trial_registry_record", "patient_context", "pack", "library", "model_assessments", "longitudinal", "candidate_trials", "soa", "regulatory_contacts",
+    "candidates",
 )
 WRITE_WHATS = ("data_intake", "task_context", "patient_context",
     "definition", "protocol", "criteria", "assumption", "evidence_item", "precedent", "population", "patient_set",
@@ -201,7 +202,9 @@ def _detailed_tool_definitions():
                 "judgments with approved projected quotes and sourced facts; factContract gives the exact clinical metadata schema, and the language criteria still "
                 "waiting for the run's answer. what: candidate_trials lists the registry trials found for patients "
                 "(filter.id or filter.registryId reads one with its criteria; filter.subjectKey returns that patient's trials in order "
-                "with the verdict about each and the language answers still owed)."
+                "with the verdict about each and the language answers still owed). what: candidates searches the three registries for "
+                "trials that might take one patient (filter.condition, terms, age, sex, region, status) and says which were searched, "
+                "which failed and what is not covered."
             ),
             "inputSchema": {
                 "type": "object",
@@ -225,6 +228,13 @@ def _detailed_tool_definitions():
                             "limit": {"type": "integer", "minimum": 1, "maximum": READ_MAX_LIMIT, "default": 20},
                             "beforeSeq": {"type": "integer", "minimum": 0},
                             "offset": {"type": "integer", "minimum": 0, "maximum": 1048576},
+                            # what: candidates -- the registry search a run writes and what it knows of the patient.
+                            "condition": {"type": "string", "minLength": 1, "maxLength": 200},
+                            "terms": {"type": "array", "items": {"type": "string", "minLength": 1, "maxLength": 200}, "maxItems": 3},
+                            "age": {"type": "number", "minimum": 0, "maximum": 130},
+                            "sex": {"type": "string", "enum": ["male", "female"]},
+                            "region": {"type": "string", "minLength": 1, "maxLength": 80},
+                            "status": {"type": "string", "enum": ["open", "any"]},
                         },
                         "additionalProperties": False,
                     },
@@ -675,6 +685,13 @@ def read(arguments: dict) -> dict:
     if what == "candidate_trials" and data.get("subjectKey") and data.get("ranking"):
         next_actions.append("ranking holds this patient's saved verdict for each trial, in the platform's order. A delivered per-trial table copies registryId, eligibility, criteriaCounts and evidenceGaps from it; a criterion belongs to the trial it was saved under, so never move one between trials.")
         next_actions.append("Say how much is decided with each trial (decided of applicable: unknown and waiting criteria stay in the total) and, from undecided, which criteria are open and why. status is the registry's word as of statusAsOf, not a place at a centre. The order puts trials the patient is not excluded from first and the better-decided first; 符合 says the stated criteria are met, it is not a recommendation.")
+    if what == "candidates" and data.get("available") is not False:
+        next_actions.append("Say in the reply what data.coverage says: the registries searched and the day (asOf), any that failed and why, and that CDE and ICTRP are not covered. "
+                            "These are listings found by the search you wrote, merged and de-duplicated; their order is not a ranking and none is a judgement about the patient.")
+        next_actions.append("A field listed in a candidate's unknown is one the registry did not state, so the candidate was kept, not cleared: ChiCTR gives no sex, age or "
+                            "country and no eligibility text. leftOut counts what a record's own stated status, age, sex or country ruled out.")
+        next_actions.append("To judge the patient against a candidate, read its record with trial_registry_record, then write candidate_trial with the registry, its id and the "
+                            "criteria in the record's own words; a candidate marked parsedBefore can be written with only registry, id and subjectKeys while its record is unchanged.")
     if what == 'report_model':
         next_actions.append('For longitudinal report numbers, append the exact field inside a record summary to its numberPath, without another .summary segment. For example: longitudinal.byId.<id>.groups[0].requested. Use vcr_read longitudinal filter.id for one full record when this report model is large; only fields actually returned are bindable.')
     if what == 'longitudinal':

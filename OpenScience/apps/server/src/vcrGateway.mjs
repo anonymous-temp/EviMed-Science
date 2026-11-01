@@ -83,6 +83,7 @@ import { renderVcrNumbers } from "./vcrRender.mjs";
 import { checkRegulatoryContact, resolveVisitsRef, visitKey } from "./vcrScheduleView.mjs";
 import { EVIDENCE_ARM_ROLES } from "./vcrEvidenceStore.mjs";
 import { VCR_MATCHING_VOCABULARY_VERSION, storedExclusion } from "./vcrMatching.mjs";
+import { candidateRequest } from "./vcrCandidateSearch.mjs";
 import { VCR_RECONSTRUCTION_REFERENCE, vcrReconstructionReferenceFor, vcrResultKindFor } from "./vcrJobs.mjs";
 import { resolveJobSubject, prepareVcrSubjectPopulation } from "./vcrSubjects.mjs";
 import { prepareVcrModelDesign } from "./vcrModelDesign.mjs";
@@ -106,7 +107,11 @@ const answerBudgetMs = 10_000;
 const REGISTRY_MARGIN_MS = 3_000;
 /** The registry client's default deadline (its own default), when the deployment names none: `OPEN_SCIENCE_VCR_REGISTRY_TIMEOUT_MS`. */
 const REGISTRY_DEADLINE_MS = 20_000;
-const readFilterFields = Object.freeze(["id", "parentId", "kind", "limit", "offset", "registryId", "registry", "snapshotId", "sourceId", "subjectKey", "documentId", "protocolVersionId", "beforeSeq", "query", "cursor"]);
+const readFilterFields = Object.freeze(["id", "parentId", "kind", "limit", "offset", "registryId", "registry", "snapshotId", "sourceId", "subjectKey", "documentId", "protocolVersionId", "beforeSeq", "query", "cursor",
+  // `what: candidates` (M1): the search a run writes and what it knows of the patient. Their shape is `candidateRequest`'s, in `vcrCandidateSearch.mjs`.
+  "condition", "terms", "age", "sex", "region", "status"]);
+/** The filter keys only `what: candidates` takes. */
+const CANDIDATE_FILTER_FIELDS = Object.freeze(["condition", "terms", "age", "sex", "region", "status"]);
 const WRITE_MAX_ITEMS = 200;
 
 /**
@@ -237,6 +242,13 @@ function readRequest(body) {
     if (raw[key] == null) continue;
     if (!ID.test(String(raw[key]))) throw gatewayError(400, "vcr_read_filter_invalid", `filter.${key} is not an id.`);
     filter[key] = String(raw[key]);
+  }
+  if (CANDIDATE_FILTER_FIELDS.some((key) => raw[key] != null)) {
+    if (body.what !== "candidates") throw gatewayError(400, "vcr_read_filter_invalid", `filter.${CANDIDATE_FILTER_FIELDS.find((key) => raw[key] != null)} belongs to what: candidates.`);
+    // The request's own checks answer in words (`candidateRequest`); this only carries the keys through, bounded.
+    const asked = candidateRequest(raw);
+    if (asked.ok === false) throw gatewayError(400, "vcr_read_filter_invalid", asked.message);
+    for (const key of CANDIDATE_FILTER_FIELDS) if (raw[key] != null) filter[key] = raw[key];
   }
   if (raw.query != null) {
     const query = String(raw.query).replace(/\s+/g, " ").trim();
@@ -2434,7 +2446,7 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
         const request = readRequest(body);
         // A registry read waits on a registry: its budget is its client's deadline
         // and a margin, so the gateway never gives up before the client does.
-        if (request.what === "trial_registry_record") budget = Math.max(budgetMs, registryDeadline + REGISTRY_MARGIN_MS);
+        if (request.what === "trial_registry_record" || request.what === "candidates") budget = Math.max(budgetMs, registryDeadline + REGISTRY_MARGIN_MS);
         work = async () => ({ what: request.what, ...(request.what === 'data_intake'
           ? await vcr.dataIntake?.read(study, request.filter, origin) ?? { available: false, code: 'vcr_gateway_unavailable' }
           : request.what==='patient_context'

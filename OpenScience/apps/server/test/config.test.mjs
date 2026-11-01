@@ -151,6 +151,14 @@ test("the deployment's provider agreements are on unless the deployment says oth
 
 test("the number of candidate trials a study holds has a key, a default and bounds", () => {
   // 「给患者找试验」: each candidate costs an evaluation for every patient the study judges against it.
+  // The registry search for a patient (M1) and the length past which a record is read through the passages that bear on a criterion (M4).
+  assert.deepEqual([loadConfig({ rootDir: repoRoot }).vcrCandidateSearchMax, loadConfig({ rootDir: repoRoot }).vcrPassagesMinChars], [20, 40_000]);
+  assert.deepEqual([loadConfig({ rootDir: repoRoot, vcrCandidateSearchMax: "30", vcrPassagesMinChars: "60000" }).vcrCandidateSearchMax,
+    loadConfig({ rootDir: repoRoot, vcrCandidateSearchMax: "30", vcrPassagesMinChars: "60000" }).vcrPassagesMinChars], [30, 60_000]);
+  for (const [key, value, name] of [["vcrCandidateSearchMax", "4", "OPEN_SCIENCE_VCR_CANDIDATE_SEARCH_MAX"], ["vcrCandidateSearchMax", "51", "OPEN_SCIENCE_VCR_CANDIDATE_SEARCH_MAX"],
+    ["vcrPassagesMinChars", "1000", "OPEN_SCIENCE_VCR_PASSAGES_MIN_CHARS"], ["vcrPassagesMinChars", "2000000", "OPEN_SCIENCE_VCR_PASSAGES_MIN_CHARS"]]) {
+    assert.throws(() => loadConfig({ rootDir: repoRoot, [key]: value }), new RegExp(name));
+  }
   assert.equal(loadConfig({ rootDir: repoRoot }).vcrCandidateTrialsMax, 60);
   assert.equal(loadConfig({ rootDir: repoRoot, vcrCandidateTrialsMax: "120" }).vcrCandidateTrialsMax, 120);
   for (const value of ["0", "501", "many"]) {

@@ -192,6 +192,27 @@ test("read and write vocabularies are closed, and the filter fields are too", as
   }
 });
 
+test("the registry search keys belong to what: candidates, are checked in words, and reach the service bounded (M1)", async () => {
+  const { calls, handler } = fixture();
+  const ask = async (body) => { const res = response(); await handler(request("/internal/vcr/v1/read", body), res); return res; };
+  const filter = { condition: "non-small cell lung cancer", terms: ["NSCLC", "非小细胞肺癌"], age: 63, sex: "female", region: "China", status: "open", limit: 10 };
+  const ok = await ask({ what: "candidates", filter });
+  assert.equal(ok.status, 200);
+  assert.deepEqual(calls.at(-1), ["read", "candidates", filter]);
+  // The keys are another read's to refuse.
+  const stray = await ask({ what: "criteria", filter: { condition: "x" } });
+  assert.deepEqual([stray.status, stray.json().code], [400, "vcr_read_filter_invalid"]);
+  assert.match(stray.json().error, /candidates/);
+  // And the request's own findings answer in words, before the service is reached.
+  const before = calls.length;
+  for (const bad of [{ condition: "x", age: 400 }, { condition: "x", sex: "unknown" }, { condition: "x", terms: ["a", "b", "c", "d"] }, { age: 50 }, { condition: "x", status: "closed" }]) {
+    const res = await ask({ what: "candidates", filter: bad });
+    assert.deepEqual([res.status, res.json().code], [400, "vcr_read_filter_invalid"], JSON.stringify(bad));
+    assert.match(res.json().error, /filter\./);
+  }
+  assert.equal(calls.length, before, "nothing was read for a request that was refused");
+});
+
 test("a runtime write may not write a number, a count or an execution record", async () => {
   const { calls, handler } = fixture();
   const res = response();
