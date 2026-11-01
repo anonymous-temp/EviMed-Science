@@ -10,7 +10,7 @@ import { loadConfig } from "../src/config.mjs";
 import { buildLeadInput, frontierLeadInstructions } from "../src/frontierLead.mjs";
 import { frontierItemReadable, frontierReaderText, frontierTextDecision } from "../src/frontierPipeline.mjs";
 import {
-  FRONTIER_POST_LIMITS, frontierCrawlPost, frontierPostBody, frontierPostClean, frontierPostMaterial, frontierPostOf, frontierPostReading, frontierPostSaysSomething,
+  FRONTIER_POST_LIMITS, frontierCrawlPost, frontierPostBody, frontierPostCaption, frontierPostClean, frontierPostMaterial, frontierPostOf, frontierPostReading, frontierPostSaysSomething,
   frontierPostPictureReader, frontierPostText, frontierPostWeight,
 } from "../src/frontierPostText.mjs";
 
@@ -160,9 +160,11 @@ test("a post whose only words are in its pictures has them as its reader summary
   assert.match(withTitleSummary?.text ?? "", /图片中的文字：\n服药方法/);
 });
 
-test("what a post says of its own is counted in the unit of frontierLeadLimit and not by its links, mentions, tags or punctuation", () => {
-  assert.equal(frontierPostWeight("abc！？。 #tag"), 0.3 * 6);
+test("what a post says of its own is counted in Han characters and words, and not by its links, mentions, tags or punctuation", () => {
+  assert.equal(frontierPostWeight("abc！？。 #tag"), 2.5 * 2, "two words; the marks and the # say nothing");
   assert.equal(frontierPostWeight("三个字"), 3);
+  assert.equal(frontierPostWeight("三个字 and two 词"), 3 + 2.5 * 2 + 1, "a Han character is one wherever it stands, a word of letters is two and a half");
+  assert.equal(frontierPostWeight("😀 ... ??"), 0);
   const read = frontierPostText({ title: "标题", text: "标题 @某账号 http://t.cn/AXj80QC3 #话题 ！！！", layout: "titled" });
   assert.equal(read.own, 0);
   // The measure's constant: the thinnest post that says something in the day's 45 real posts counted 38, the ones that say nothing 0 to 0.9.
@@ -300,4 +302,26 @@ test("a long caption is information and a short headline is not: the post whose 
   assert.deepEqual(Object.values((({ readable, waiting }) => ({ readable, waiting }))(frontierPostReading({ title: headline, texts: { body_excerpt: `${headline} ${headline}` } }))), [false, false]);
   const tagged = "这2种降压药被查出致癌，快看看家里的药箱！ #降压药 #高血压 #神经内科 #抖出健康知识宝藏 #降压药的副作用";
   assert.equal(frontierPostReading({ title: tagged, texts: { body_excerpt: tagged } }).readable, false, "its tags do not count towards a caption");
+});
+
+test("a post in a script of words is measured in words: a medical headline at the plugin's title length is a caption, a clause of six words is a text, a stray two words are not", () => {
+  // The plugin keeps at most 100 characters of a title (`TITLE_MAX`). Three letters in ten, the older measure, put the longest of them at 29.7 under
+  // the caption line of 30, and a body needed forty letters: no non-Chinese post could be shown for what it said.
+  const headline = "Pembrolizumab plus chemotherapy versus placebo plus chemotherapy for metastatic triple-negative breast cancer".slice(0, 100);
+  assert.equal(headline.length, 100);
+  assert.ok(frontierPostWeight(headline) >= FRONTIER_POST_LIMITS.caption, `${frontierPostWeight(headline)}`);
+  assert.equal(frontierPostCaption(headline), true);
+  const keynote = "ASCO 2026 KEYNOTE-789: pembrolizumab plus chemotherapy in EGFR-mutated metastatic non-small cell lung cancer after progression";
+  assert.equal(frontierPostCaption(keynote.slice(0, 97)), true, "a 97-character title is shown for what it says");
+  // A post whose whole content is one English clause is a text; two stray words after a title are not.
+  const clause = frontierPostText({ title: "FDA approval", text: "FDA approval FDA approves lecanemab for early AD", layout: "titled" });
+  assert.equal(frontierPostSaysSomething(clause), true, `${clause.own}`);
+  const stray = frontierPostText({ title: "FDA approval", text: "FDA approval see below", layout: "titled" });
+  assert.equal(frontierPostSaysSomething(stray), false, `${stray.own}`);
+  // A bare name or a short headline is not a caption in either script.
+  assert.equal(frontierPostCaption("FDA approves lecanemab"), false);
+  assert.equal(frontierPostCaption("慢性阻塞性肺疾病诊治指南2026"), false);
+  // And the title a post is shown for: a crawl post with such a title and nothing else is readable and not waiting.
+  const reading = frontierPostReading({ title: headline, texts: { body_excerpt: headline }, media: [] });
+  assert.deepEqual([reading.readable, reading.waiting], [true, false]);
 });
