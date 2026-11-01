@@ -6,6 +6,7 @@ import { listWebAgentRuns, type WebAgentRun } from "@/lib/apiClient";
 import { safeWorkspacePath } from "@/lib/claimCitations";
 import { formatApproxCount, formatClock, formatDuration, formatLingdou } from "@/lib/format";
 import { DELIVERABLE_STATUS_LABEL } from "@/lib/runProgress";
+import type { ObservedRun } from "./researchRunState";
 import { emptyObservation, ROOT_AGENT, rootStage, STAGES, stageCounts, useResearchObservation, type ObservedAgent, type ObservedCall, type Observation, type StageKey } from "@/lib/researchObservation";
 
 const RUN_WORD: Record<string, string> = {
@@ -64,9 +65,16 @@ async function readRun(runId: string): Promise<WebAgentRun | null> {
  * Responsive: the picture scales with its width, and under 760 px it keeps its size and scrolls sideways (the scene is a tab stop then); the feed and the inspector stack under 1024 px.
  * Verification: ResearchObservatory.test.tsx, researchObservation.test.ts.
  */
-export function ResearchObservatory({ runId, title, onOpenFile }: { runId: string | null; title?: string; onOpenFile?: (path: string, runId: string) => void }) {
+export function ResearchObservatory({ runId, title, onOpenFile, onObserved }: {
+  runId: string | null; title?: string; onOpenFile?: (path: string, runId: string) => void;
+  /**
+   * What the run's stream says about it, whenever that changes, and null once the stream is gone (the run on screen changed, or the
+   * observatory left): the page's one account of whether the run is going is the stream's while it is open (`runLive`).
+   */
+  onObserved?: (observed: ObservedRun | null) => void;
+}) {
   if (!runId) return <StandbyObservatory />;
-  return <ObservatoryRun key={runId} runId={runId} title={title} onOpenFile={onOpenFile} />;
+  return <ObservatoryRun key={runId} runId={runId} title={title} onOpenFile={onOpenFile} onObserved={onObserved} />;
 }
 
 /** No run to watch: the console stands by with its research line dark, so the page still shows what will happen here. */
@@ -80,10 +88,14 @@ function StandbyObservatory() {
   </section>;
 }
 
-function ObservatoryRun({ runId, title, onOpenFile }: { runId: string; title?: string; onOpenFile?: (path: string, runId: string) => void }) {
+function ObservatoryRun({ runId, title, onOpenFile, onObserved }: { runId: string; title?: string; onOpenFile?: (path: string, runId: string) => void; onObserved?: (observed: ObservedRun | null) => void }) {
   const [run, setRun] = useState<WebAgentRun | null>(null);
   const [recordRead, setRecordRead] = useState<"loading" | "loaded" | "unavailable">("loading");
   const { model, connected } = useResearchObservation(runId, run?.progress ?? null);
+  // The callback is read at call time, so a page that passes a fresh function each render does not restart the report.
+  const report = useRef(onObserved); report.current = onObserved;
+  useEffect(() => { report.current?.({ runId, state: model.state ?? null, connected }); }, [runId, model.state, connected]);
+  useEffect(() => () => report.current?.(null), [runId]);
   const state = model.state ?? run?.status ?? null;
   const ended = !!state && state !== "running";
   // Only the latest read lands: an initial read that answers after the terminal refresh must not put back a running record.
