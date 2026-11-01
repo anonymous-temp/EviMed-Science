@@ -30,7 +30,7 @@ export function GeoJourneySummary({project, compact = false}: {project: GeoProje
   return <section aria-label="当前工作" data-geo-journey={journey.stage} className="flex flex-col gap-3">
     <div>{journey.requested && <p className="text-caption text-text-3">{journey.requested}</p>}<h2 className="mt-1 text-section font-semibold text-text">{journey.title}</h2></div>
     {journey.stage === 'inputs' ? <>
-      <Note>{journey.detail}</Note>
+      <Note action={journey.canConverse && next.kind === 'conversation' ? <Button variant="secondary" actionKind="draft" onClick={() => void open(target,next.draft)}><PenLine size={14} aria-hidden="true" />{next.label}</Button> : <Link className={buttonClasses({variant:'secondary'})} to={href}>查看项目依据</Link>}>{journey.detail}</Note>
       <List divided label="还缺什么">
         {journey.inputs.map(input => <ListRow key={input.key} data-work-input={input.key} data-work-input-done={input.done ? '' : undefined} title={<span className="flex items-center gap-2"><RailMark state={input.done ? 'done' : 'todo'} />{input.label}</span>} chevron={false} actions={input.key === 'task' && !input.done ? draftChoices : undefined} />)}
       </List>
