@@ -324,7 +324,8 @@ def cmd_env(args):
     (postgres_backup / "status").mkdir(parents=True, exist_ok=True)
     os.chmod(postgres_backup, 0o700)
     os.chmod(postgres_backup / "status", 0o755)
-    unpaywall = (bundle / "unpaywall.email").read_text().strip()
+    # Optional: a bundle made without it (make-bundle.sh with OMIT_UNPAYWALL=1) sends no contact address anywhere.
+    unpaywall = (bundle / "unpaywall.email").read_text().strip() if (bundle / "unpaywall.email").exists() else ""
     gid = os.stat("/var/run/docker.sock").st_gid
     roles = images["roles"]
     runtime_image = images.get("runtimeDelta") if args.delta else roles["runtime"]
