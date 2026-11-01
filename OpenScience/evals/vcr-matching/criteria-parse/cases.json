@@ -1,0 +1,388 @@
+{
+ "schemaVersion": "1.0.0",
+ "label": "vcr-matching criteria-parse check set",
+ "synthetic": true,
+ "note": "Authored, realistic eligibility texts in the style of ClinicalTrials.gov and ChiCTR registrations, with the structure a careful reader would give each line (an exclusion is written as the registry states it, the condition that excludes). Not records taken from the registries, and written and labelled by one author: this checks the comparator and keeps the examples stable. It does not measure how well a model parses.",
+ "cases": [
+ {"id": "en-nsclc-egfr-second-line", "language": "en", "setting": "oncology",
+  "text": "Patients must meet all of the following criteria.\nInclusion Criteria:\n* Age >= 18 years\n* Histologically or cytologically confirmed stage IIIB or IV non-small cell lung cancer\n* Documented EGFR exon 19 deletion or L858R mutation\n* Disease progression on or after a first-line EGFR tyrosine kinase inhibitor\n* ECOG performance status of 0 or 1\n\nExclusion Criteria:\n* Symptomatic or untreated brain metastases\n* Prior treatment with docetaxel for advanced disease",
+  "expected": [
+  {"kind":"inclusion","criterionType":"demographic","sourceText":"Age >= 18 years","requirement":{"op":"compare","variable":"age","comparator":"gte","value":18,"unit":"year"}},
+  {"kind":"inclusion","criterionType":"diagnosis","sourceText":"Histologically or cytologically confirmed stage IIIB or IV non-small cell lung cancer","requirement":{"op":"all","operands":[{"op":"present","variable":"nsclc"},{"op":"compare","variable":"stage","comparator":"in","value":["IIIB","IV"]}]}},
+  {"kind":"inclusion","criterionType":"biomarker","sourceText":"Documented EGFR exon 19 deletion or L858R mutation","requirement":{"op":"any","operands":[{"op":"present","variable":"egfr_exon19_deletion"},{"op":"present","variable":"egfr_l858r"}]}},
+  {"kind":"inclusion","criterionType":"prior_treatment","sourceText":"Disease progression on or after a first-line EGFR tyrosine kinase inhibitor","requirement":{"op":"present","variable":"progression_on_egfr_tki"}},
+  {"kind":"inclusion","criterionType":"performance_status","sourceText":"ECOG performance status of 0 or 1","requirement":{"op":"compare","variable":"ecog","comparator":"lte","value":1}},
+  {"kind":"exclusion","criterionType":"comorbidity","sourceText":"Symptomatic or untreated brain metastases","requirement":{"op":"present","variable":"symptomatic_brain_metastasis"}},
+  {"kind":"exclusion","criterionType":"prior_treatment","sourceText":"Prior treatment with docetaxel for advanced disease","requirement":{"op":"present","variable":"prior_docetaxel"}}
+ ]},
+ {"id": "en-t2dm-hba1c-metformin", "language": "en", "setting": "endocrinology",
+  "text": "Inclusion Criteria:\n* Adults aged 18 to 75 years\n* Diagnosis of type 2 diabetes mellitus for at least 6 months\n* HbA1c between 7.0% and 10.5% at screening\n* Stable dose of metformin of at least 1500 mg/day for 12 weeks\n\nExclusion Criteria:\n* Type 1 diabetes mellitus\n* History of diabetic ketoacidosis\n* Estimated glomerular filtration rate below 45 mL/min/1.73 m2",
+  "expected": [
+  {"kind":"inclusion","criterionType":"demographic","sourceText":"Adults aged 18 to 75 years","requirement":{"op":"compare","variable":"age","comparator":"between","value":18,"highValue":75,"unit":"year"}},
+  {"kind":"inclusion","criterionType":"diagnosis","sourceText":"Diagnosis of type 2 diabetes mellitus for at least 6 months","requirement":{"op":"present","variable":"type_2_diabetes","window":{"months":6}}},
+  {"kind":"inclusion","criterionType":"lab","sourceText":"HbA1c between 7.0% and 10.5% at screening","requirement":{"op":"compare","variable":"hba1c","comparator":"between","value":7,"unit":"%","highValue":10.5}},
+  {"kind":"inclusion","criterionType":"concomitant_medication","sourceText":"Stable dose of metformin of at least 1500 mg/day for 12 weeks","requirement":{"op":"compare","variable":"metformin_dose","comparator":"gte","value":1500,"unit":"mg/day","window":{"days":84}}},
+  {"kind":"exclusion","criterionType":"diagnosis","sourceText":"Type 1 diabetes mellitus","requirement":{"op":"present","variable":"type_1_diabetes"}},
+  {"kind":"exclusion","criterionType":"comorbidity","sourceText":"History of diabetic ketoacidosis","requirement":{"op":"present","variable":"diabetic_ketoacidosis"}},
+  {"kind":"exclusion","criterionType":"lab","sourceText":"Estimated glomerular filtration rate below 45 mL/min/1.73 m2","requirement":{"op":"compare","variable":"egfr","comparator":"lt","value":45,"unit":"mL/min/1.73 m2"}}
+ ]},
+ {"id": "en-hfref-lvef", "language": "en", "setting": "cardiology",
+  "text": "Inclusion Criteria:\n* Age 18 years or older\n* Chronic heart failure with reduced ejection fraction\n* Left ventricular ejection fraction of 40% or less\n* NYHA functional class II to IV\n* NT-proBNP of at least 600 pg/mL\n\nExclusion Criteria:\n* Myocardial infarction within the past 3 months\n* Systolic blood pressure below 100 mmHg\n* Symptomatic hypotension",
+  "expected": [
+  {"kind":"inclusion","criterionType":"demographic","sourceText":"Age 18 years or older","requirement":{"op":"compare","variable":"age","comparator":"gte","value":18,"unit":"year"}},
+  {"kind":"inclusion","criterionType":"diagnosis","sourceText":"Chronic heart failure with reduced ejection fraction","requirement":{"op":"present","variable":"heart_failure_reduced_ef"}},
+  {"kind":"inclusion","criterionType":"lab","sourceText":"Left ventricular ejection fraction of 40% or less","requirement":{"op":"compare","variable":"lvef","comparator":"lte","value":40,"unit":"%"}},
+  {"kind":"inclusion","criterionType":"other","sourceText":"NYHA functional class II to IV","requirement":{"op":"compare","variable":"nyha_class","comparator":"in","value":["II","III","IV"]}},
+  {"kind":"inclusion","criterionType":"lab","sourceText":"NT-proBNP of at least 600 pg/mL","requirement":{"op":"compare","variable":"nt_probnp","comparator":"gte","value":600,"unit":"pg/mL"}},
+  {"kind":"exclusion","criterionType":"comorbidity","sourceText":"Myocardial infarction within the past 3 months","requirement":{"op":"present","variable":"myocardial_infarction","window":{"months":3}}},
+  {"kind":"exclusion","criterionType":"lab","sourceText":"Systolic blood pressure below 100 mmHg","requirement":{"op":"compare","variable":"systolic_bp","comparator":"lt","value":100,"unit":"mmHg"}},
+  {"kind":"exclusion","criterionType":"comorbidity","sourceText":"Symptomatic hypotension","requirement":{"op":"present","variable":"symptomatic_hypotension"}}
+ ]},
+ {"id": "en-ckd-anemia", "language": "en", "setting": "nephrology",
+  "text": "Inclusion Criteria:\n* Age >= 18 years\n* Chronic kidney disease stage 3 to 5 not on dialysis\n* Hemoglobin below 10.0 g/dL on two consecutive measurements\n\nExclusion Criteria:\n* Received an erythropoiesis-stimulating agent within 8 weeks before screening\n* Uncontrolled hypertension\n* Ferritin below 100 ng/mL",
+  "expected": [
+  {"kind":"inclusion","criterionType":"demographic","sourceText":"Age >= 18 years","requirement":{"op":"compare","variable":"age","comparator":"gte","value":18,"unit":"year"}},
+  {"kind":"inclusion","criterionType":"diagnosis","sourceText":"Chronic kidney disease stage 3 to 5 not on dialysis","requirement":{"op":"all","operands":[{"op":"present","variable":"chronic_kidney_disease"},{"op":"absent","variable":"dialysis"},{"op":"compare","variable":"ckd_stage","comparator":"between","value":3,"highValue":5}]}},
+  {"kind":"inclusion","criterionType":"lab","sourceText":"Hemoglobin below 10.0 g/dL on two consecutive measurements","requirement":{"op":"compare","variable":"hemoglobin","comparator":"lt","value":10,"unit":"g/dL","aggregate":"all"}},
+  {"kind":"exclusion","criterionType":"prior_treatment","sourceText":"Received an erythropoiesis-stimulating agent within 8 weeks before screening","requirement":{"op":"present","variable":"erythropoiesis_stimulating_agent","window":{"days":56}}},
+  {"kind":"exclusion","criterionType":"comorbidity","sourceText":"Uncontrolled hypertension","requirement":{"op":"present","variable":"uncontrolled_hypertension"}},
+  {"kind":"exclusion","criterionType":"lab","sourceText":"Ferritin below 100 ng/mL","requirement":{"op":"compare","variable":"ferritin","comparator":"lt","value":100,"unit":"ng/mL"}}
+ ]},
+ {"id": "en-breast-her2", "language": "en", "setting": "oncology",
+  "text": "Inclusion Criteria:\n* Women aged 18 years or older\n* Histologically confirmed invasive breast cancer\n* HER2-positive disease (IHC 3+ or ISH amplified)\n* Left ventricular ejection fraction of at least 50%\n\nExclusion Criteria:\n* Prior anthracycline with a cumulative doxorubicin-equivalent dose above 360 mg/m2\n* Pregnant or breastfeeding",
+  "expected": [
+  {"kind":"inclusion","criterionType":"demographic","sourceText":"Women aged 18 years or older","requirement":{"op":"all","operands":[{"op":"compare","variable":"age","comparator":"gte","value":18,"unit":"year"},{"op":"compare","variable":"sex","comparator":"eq","value":"female"}]}},
+  {"kind":"inclusion","criterionType":"diagnosis","sourceText":"Histologically confirmed invasive breast cancer","requirement":{"op":"present","variable":"invasive_breast_cancer"}},
+  {"kind":"inclusion","criterionType":"biomarker","sourceText":"HER2-positive disease (IHC 3+ or ISH amplified)","requirement":{"op":"any","operands":[{"op":"compare","variable":"her2_ihc","comparator":"eq","value":"3+"},{"op":"present","variable":"her2_ish_amplified"}]}},
+  {"kind":"inclusion","criterionType":"lab","sourceText":"Left ventricular ejection fraction of at least 50%","requirement":{"op":"compare","variable":"lvef","comparator":"gte","value":50,"unit":"%"}},
+  {"kind":"exclusion","criterionType":"prior_treatment","sourceText":"Prior anthracycline with a cumulative doxorubicin-equivalent dose above 360 mg/m2","requirement":{"op":"compare","variable":"anthracycline_cumulative_dose","comparator":"gt","value":360,"unit":"mg/m2"}},
+  {"kind":"exclusion","criterionType":"pregnancy","sourceText":"Pregnant or breastfeeding","requirement":{"op":"any","operands":[{"op":"present","variable":"pregnancy"},{"op":"present","variable":"breastfeeding"}]}}
+ ]},
+ {"id": "en-hypertension-bp", "language": "en", "setting": "cardiology",
+  "text": "Inclusion Criteria:\n* Age 30 to 70 years\n* Essential hypertension\n* Mean seated systolic blood pressure of 140 to 179 mmHg\n\nExclusion Criteria:\n* Secondary hypertension\n* Stroke or transient ischemic attack within 6 months\n* Use of more than three antihypertensive drugs",
+  "expected": [
+  {"kind":"inclusion","criterionType":"demographic","sourceText":"Age 30 to 70 years","requirement":{"op":"compare","variable":"age","comparator":"between","value":30,"highValue":70,"unit":"year"}},
+  {"kind":"inclusion","criterionType":"diagnosis","sourceText":"Essential hypertension","requirement":{"op":"present","variable":"essential_hypertension"}},
+  {"kind":"inclusion","criterionType":"lab","sourceText":"Mean seated systolic blood pressure of 140 to 179 mmHg","requirement":{"op":"compare","variable":"systolic_bp","comparator":"between","value":140,"unit":"mmHg","highValue":179}},
+  {"kind":"exclusion","criterionType":"comorbidity","sourceText":"Secondary hypertension","requirement":{"op":"present","variable":"secondary_hypertension"}},
+  {"kind":"exclusion","criterionType":"comorbidity","sourceText":"Stroke or transient ischemic attack within 6 months","requirement":{"op":"any","operands":[{"op":"present","variable":"stroke","window":{"months":6}},{"op":"present","variable":"transient_ischemic_attack","window":{"months":6}}]}},
+  {"kind":"exclusion","criterionType":"concomitant_medication","sourceText":"Use of more than three antihypertensive drugs","requirement":{"op":"compare","variable":"antihypertensive_count","comparator":"gt","value":3}}
+ ]},
+ {"id": "en-asthma-eosinophilic", "language": "en", "setting": "respiratory",
+  "text": "Inclusion Criteria:\n* Age 12 years or older\n* Physician-diagnosed asthma for at least 12 months\n* Blood eosinophil count of at least 300 cells/uL\n* At least two asthma exacerbations requiring systemic corticosteroids in the past year\n\nExclusion Criteria:\n* Current smoker or former smoker with more than 10 pack-years\n* Diagnosis of chronic obstructive pulmonary disease",
+  "expected": [
+  {"kind":"inclusion","criterionType":"demographic","sourceText":"Age 12 years or older","requirement":{"op":"compare","variable":"age","comparator":"gte","value":12,"unit":"year"}},
+  {"kind":"inclusion","criterionType":"diagnosis","sourceText":"Physician-diagnosed asthma for at least 12 months","requirement":{"op":"present","variable":"asthma","window":{"months":12}}},
+  {"kind":"inclusion","criterionType":"lab","sourceText":"Blood eosinophil count of at least 300 cells/uL","requirement":{"op":"compare","variable":"blood_eosinophils","comparator":"gte","value":300,"unit":"cells/uL"}},
+  {"kind":"inclusion","criterionType":"other","sourceText":"At least two asthma exacerbations requiring systemic corticosteroids in the past year","requirement":{"op":"compare","variable":"asthma_exacerbations","comparator":"gte","value":2,"window":{"years":1}}},
+  {"kind":"exclusion","criterionType":"comorbidity","sourceText":"Current smoker or former smoker with more than 10 pack-years","requirement":{"op":"any","operands":[{"op":"present","variable":"current_smoker"},{"op":"compare","variable":"pack_years","comparator":"gt","value":10}]}},
+  {"kind":"exclusion","criterionType":"comorbidity","sourceText":"Diagnosis of chronic obstructive pulmonary disease","requirement":{"op":"present","variable":"copd"}}
+ ]},
+ {"id": "en-copd-lama", "language": "en", "setting": "respiratory",
+  "text": "Inclusion Criteria:\n* Age >= 40 years\n* Diagnosis of COPD according to GOLD criteria\n* Post-bronchodilator FEV1/FVC ratio below 0.70\n* Post-bronchodilator FEV1 between 30% and 80% of predicted\n\nExclusion Criteria:\n* COPD exacerbation requiring hospitalization in the 4 weeks before screening\n* Current diagnosis of asthma",
+  "expected": [
+  {"kind":"inclusion","criterionType":"demographic","sourceText":"Age >= 40 years","requirement":{"op":"compare","variable":"age","comparator":"gte","value":40,"unit":"year"}},
+  {"kind":"inclusion","criterionType":"diagnosis","sourceText":"Diagnosis of COPD according to GOLD criteria","requirement":{"op":"present","variable":"copd"}},
+  {"kind":"inclusion","criterionType":"lab","sourceText":"Post-bronchodilator FEV1/FVC ratio below 0.70","requirement":{"op":"compare","variable":"fev1_fvc_ratio","comparator":"lt","value":0.7}},
+  {"kind":"inclusion","criterionType":"lab","sourceText":"Post-bronchodilator FEV1 between 30% and 80% of predicted","requirement":{"op":"compare","variable":"fev1_percent_predicted","comparator":"between","value":30,"unit":"%","highValue":80}},
+  {"kind":"exclusion","criterionType":"comorbidity","sourceText":"COPD exacerbation requiring hospitalization in the 4 weeks before screening","requirement":{"op":"present","variable":"copd_exacerbation_hospitalized","window":{"days":28}}},
+  {"kind":"exclusion","criterionType":"comorbidity","sourceText":"Current diagnosis of asthma","requirement":{"op":"present","variable":"asthma"}}
+ ]},
+ {"id": "en-ra-biologic", "language": "en", "setting": "rheumatology",
+  "text": "Inclusion Criteria:\n* Age >= 18 years\n* Diagnosis of rheumatoid arthritis according to the 2010 ACR/EULAR criteria\n* At least 6 swollen joints and 6 tender joints\n* Inadequate response to methotrexate\n\nExclusion Criteria:\n* Previous treatment with any biologic DMARD\n* Active tuberculosis or latent tuberculosis without treatment",
+  "expected": [
+  {"kind":"inclusion","criterionType":"demographic","sourceText":"Age >= 18 years","requirement":{"op":"compare","variable":"age","comparator":"gte","value":18,"unit":"year"}},
+  {"kind":"inclusion","criterionType":"diagnosis","sourceText":"Diagnosis of rheumatoid arthritis according to the 2010 ACR/EULAR criteria","requirement":{"op":"present","variable":"rheumatoid_arthritis"}},
+  {"kind":"inclusion","criterionType":"other","sourceText":"At least 6 swollen joints and 6 tender joints","requirement":{"op":"all","operands":[{"op":"compare","variable":"swollen_joint_count","comparator":"gte","value":6},{"op":"compare","variable":"tender_joint_count","comparator":"gte","value":6}]}},
+  {"kind":"inclusion","criterionType":"prior_treatment","sourceText":"Inadequate response to methotrexate","requirement":{"op":"present","variable":"methotrexate_inadequate_response"}},
+  {"kind":"exclusion","criterionType":"prior_treatment","sourceText":"Previous treatment with any biologic DMARD","requirement":{"op":"present","variable":"prior_biologic_dmard"}},
+  {"kind":"exclusion","criterionType":"comorbidity","sourceText":"Active tuberculosis or latent tuberculosis without treatment","requirement":{"op":"any","operands":[{"op":"present","variable":"active_tuberculosis"},{"op":"all","operands":[{"op":"present","variable":"latent_tuberculosis"},{"op":"absent","variable":"latent_tuberculosis_treatment"}]}]}}
+ ]},
+ {"id": "en-mdd-ssri", "language": "en", "setting": "psychiatry",
+  "text": "Inclusion Criteria:\n* Age 18 to 65 years\n* Diagnosis of major depressive disorder according to DSM-5\n* Montgomery-Asberg Depression Rating Scale total score of at least 22\n* Able to understand the study and provide written informed consent\n\nExclusion Criteria:\n* Bipolar disorder or psychotic disorder\n* Suicidal ideation with intent in the past 6 months\n* Electroconvulsive therapy in the current episode",
+  "expected": [
+  {"kind":"inclusion","criterionType":"demographic","sourceText":"Age 18 to 65 years","requirement":{"op":"compare","variable":"age","comparator":"between","value":18,"highValue":65,"unit":"year"}},
+  {"kind":"inclusion","criterionType":"diagnosis","sourceText":"Diagnosis of major depressive disorder according to DSM-5","requirement":{"op":"present","variable":"major_depressive_disorder"}},
+  {"kind":"inclusion","criterionType":"other","sourceText":"Montgomery-Asberg Depression Rating Scale total score of at least 22","requirement":{"op":"compare","variable":"madrs_total","comparator":"gte","value":22}},
+  {"kind":"exclusion","criterionType":"comorbidity","sourceText":"Bipolar disorder or psychotic disorder","requirement":{"op":"any","operands":[{"op":"present","variable":"bipolar_disorder"},{"op":"present","variable":"psychotic_disorder"}]}},
+  {"kind":"exclusion","criterionType":"comorbidity","sourceText":"Suicidal ideation with intent in the past 6 months","requirement":{"op":"present","variable":"suicidal_ideation_with_intent","window":{"months":6}}},
+  {"kind":"exclusion","criterionType":"prior_treatment","sourceText":"Electroconvulsive therapy in the current episode","requirement":{"op":"present","variable":"electroconvulsive_therapy_current_episode"}},
+  {"kind":"inclusion","criterionType":"consent_capacity","sourceText":"Able to understand the study and provide written informed consent","requirement":{"op":"language","key":"consent_capacity","text":"Able to understand the study and provide written informed consent"}}
+ ]},
+ {"id": "en-alzheimer-amyloid", "language": "en", "setting": "neurology",
+  "text": "Inclusion Criteria:\n* Age 50 to 85 years\n* Mild cognitive impairment or mild dementia due to Alzheimer's disease\n* Mini-Mental State Examination score of 20 to 28\n* Positive amyloid PET scan or cerebrospinal fluid biomarker\n\nExclusion Criteria:\n* Other neurological disorder that could explain the dementia\n* Stroke within the previous 12 months\n* Contraindication to magnetic resonance imaging",
+  "expected": [
+  {"kind":"inclusion","criterionType":"demographic","sourceText":"Age 50 to 85 years","requirement":{"op":"compare","variable":"age","comparator":"between","value":50,"highValue":85,"unit":"year"}},
+  {"kind":"inclusion","criterionType":"diagnosis","sourceText":"Mild cognitive impairment or mild dementia due to Alzheimer's disease","requirement":{"op":"any","operands":[{"op":"present","variable":"mild_cognitive_impairment_alzheimer"},{"op":"present","variable":"mild_dementia_alzheimer"}]}},
+  {"kind":"inclusion","criterionType":"lab","sourceText":"Mini-Mental State Examination score of 20 to 28","requirement":{"op":"compare","variable":"mmse","comparator":"between","value":20,"highValue":28}},
+  {"kind":"inclusion","criterionType":"biomarker","sourceText":"Positive amyloid PET scan or cerebrospinal fluid biomarker","requirement":{"op":"any","operands":[{"op":"present","variable":"amyloid_pet_positive"},{"op":"present","variable":"csf_amyloid_positive"}]}},
+  {"kind":"exclusion","criterionType":"comorbidity","sourceText":"Other neurological disorder that could explain the dementia","requirement":{"op":"present","variable":"other_neurological_cause_of_dementia"}},
+  {"kind":"exclusion","criterionType":"comorbidity","sourceText":"Stroke within the previous 12 months","requirement":{"op":"present","variable":"stroke","window":{"months":12}}},
+  {"kind":"exclusion","criterionType":"other","sourceText":"Contraindication to magnetic resonance imaging","requirement":{"op":"present","variable":"mri_contraindication"}}
+ ]},
+ {"id": "en-parkinson-levodopa", "language": "en", "setting": "neurology",
+  "text": "Inclusion Criteria:\n* Age >= 30 years\n* Idiopathic Parkinson's disease according to UK Brain Bank criteria\n* Hoehn and Yahr stage 2 to 4 in the ON state\n* Stable levodopa dose for at least 4 weeks\n\nExclusion Criteria:\n* Atypical parkinsonism\n* Deep brain stimulation",
+  "expected": [
+  {"kind":"inclusion","criterionType":"demographic","sourceText":"Age >= 30 years","requirement":{"op":"compare","variable":"age","comparator":"gte","value":30,"unit":"year"}},
+  {"kind":"inclusion","criterionType":"diagnosis","sourceText":"Idiopathic Parkinson's disease according to UK Brain Bank criteria","requirement":{"op":"present","variable":"idiopathic_parkinson_disease"}},
+  {"kind":"inclusion","criterionType":"other","sourceText":"Hoehn and Yahr stage 2 to 4 in the ON state","requirement":{"op":"compare","variable":"hoehn_yahr_stage","comparator":"between","value":2,"highValue":4}},
+  {"kind":"inclusion","criterionType":"prior_treatment","sourceText":"Stable levodopa dose for at least 4 weeks","requirement":{"op":"compare","variable":"levodopa_stable_weeks","comparator":"gte","value":4}},
+  {"kind":"exclusion","criterionType":"comorbidity","sourceText":"Atypical parkinsonism","requirement":{"op":"present","variable":"atypical_parkinsonism"}},
+  {"kind":"exclusion","criterionType":"prior_treatment","sourceText":"Deep brain stimulation","requirement":{"op":"present","variable":"deep_brain_stimulation"}}
+ ]},
+ {"id": "en-crc-msi", "language": "en", "setting": "oncology",
+  "text": "Inclusion Criteria:\n* Age >= 18 years\n* Histologically confirmed metastatic colorectal adenocarcinoma\n* Microsatellite instability-high or deficient mismatch repair\n* ECOG performance status 0-1\n\nExclusion Criteria:\n* Previous treatment with an anti-PD-1 or anti-PD-L1 antibody\n* Active autoimmune disease requiring systemic treatment in the past 2 years\n* Systemic corticosteroids above 10 mg/day prednisone equivalent",
+  "expected": [
+  {"kind":"inclusion","criterionType":"demographic","sourceText":"Age >= 18 years","requirement":{"op":"compare","variable":"age","comparator":"gte","value":18,"unit":"year"}},
+  {"kind":"inclusion","criterionType":"diagnosis","sourceText":"Histologically confirmed metastatic colorectal adenocarcinoma","requirement":{"op":"all","operands":[{"op":"present","variable":"colorectal_adenocarcinoma"},{"op":"present","variable":"metastatic_disease"}]}},
+  {"kind":"inclusion","criterionType":"biomarker","sourceText":"Microsatellite instability-high or deficient mismatch repair","requirement":{"op":"any","operands":[{"op":"present","variable":"msi_high"},{"op":"present","variable":"mismatch_repair_deficient"}]}},
+  {"kind":"inclusion","criterionType":"performance_status","sourceText":"ECOG performance status 0-1","requirement":{"op":"compare","variable":"ecog","comparator":"lte","value":1}},
+  {"kind":"exclusion","criterionType":"prior_treatment","sourceText":"Previous treatment with an anti-PD-1 or anti-PD-L1 antibody","requirement":{"op":"any","operands":[{"op":"present","variable":"prior_anti_pd1"},{"op":"present","variable":"prior_anti_pdl1"}]}},
+  {"kind":"exclusion","criterionType":"comorbidity","sourceText":"Active autoimmune disease requiring systemic treatment in the past 2 years","requirement":{"op":"present","variable":"active_autoimmune_disease_systemic_treatment","window":{"years":2}}},
+  {"kind":"exclusion","criterionType":"concomitant_medication","sourceText":"Systemic corticosteroids above 10 mg/day prednisone equivalent","requirement":{"op":"compare","variable":"prednisone_equivalent_dose","comparator":"gt","value":10,"unit":"mg/day"}}
+ ]},
+ {"id": "en-prostate-castration", "language": "en", "setting": "oncology",
+  "text": "Inclusion Criteria:\n* Male participants aged 18 years or older\n* Metastatic castration-resistant prostate cancer\n* Serum testosterone below 50 ng/dL\n* Progression after docetaxel\n* At least 4 weeks since the last dose of any anti-cancer therapy\n\nExclusion Criteria:\n* Known brain metastases\n* Radiotherapy within 4 weeks before the first dose",
+  "expected": [
+  {"kind":"inclusion","criterionType":"demographic","sourceText":"Male participants aged 18 years or older","requirement":{"op":"all","operands":[{"op":"compare","variable":"age","comparator":"gte","value":18,"unit":"year"},{"op":"compare","variable":"sex","comparator":"eq","value":"male"}]}},
+  {"kind":"inclusion","criterionType":"diagnosis","sourceText":"Metastatic castration-resistant prostate cancer","requirement":{"op":"present","variable":"metastatic_castration_resistant_prostate_cancer"}},
+  {"kind":"inclusion","criterionType":"lab","sourceText":"Serum testosterone below 50 ng/dL","requirement":{"op":"compare","variable":"testosterone","comparator":"lt","value":50,"unit":"ng/dL"}},
+  {"kind":"inclusion","criterionType":"prior_treatment","sourceText":"Progression after docetaxel","requirement":{"op":"present","variable":"progression_after_docetaxel"}},
+  {"kind":"inclusion","criterionType":"prior_treatment","sourceText":"At least 4 weeks since the last dose of any anti-cancer therapy","requirement":{"op":"elapsed_since","variable":"anticancer_therapy","days":28,"comparator":"gte"}},
+  {"kind":"exclusion","criterionType":"comorbidity","sourceText":"Known brain metastases","requirement":{"op":"present","variable":"brain_metastasis"}},
+  {"kind":"exclusion","criterionType":"prior_treatment","sourceText":"Radiotherapy within 4 weeks before the first dose","requirement":{"op":"present","variable":"radiotherapy","window":{"days":28}}}
+ ]},
+ {"id": "en-hcc-tace", "language": "en", "setting": "oncology",
+  "text": "Inclusion Criteria:\n* Age 18-80 years\n* Hepatocellular carcinoma confirmed by histology or by imaging criteria\n* Child-Pugh class A\n* ECOG performance status of 0 to 1\n\nExclusion Criteria:\n* Main portal vein tumor thrombus\n* Hepatic encephalopathy\n* Total bilirubin above 3 mg/dL",
+  "expected": [
+  {"kind":"inclusion","criterionType":"demographic","sourceText":"Age 18-80 years","requirement":{"op":"compare","variable":"age","comparator":"between","value":18,"highValue":80,"unit":"year"}},
+  {"kind":"inclusion","criterionType":"diagnosis","sourceText":"Hepatocellular carcinoma confirmed by histology or by imaging criteria","requirement":{"op":"present","variable":"hepatocellular_carcinoma"}},
+  {"kind":"inclusion","criterionType":"other","sourceText":"Child-Pugh class A","requirement":{"op":"compare","variable":"child_pugh_class","comparator":"eq","value":"A"}},
+  {"kind":"inclusion","criterionType":"performance_status","sourceText":"ECOG performance status of 0 to 1","requirement":{"op":"compare","variable":"ecog","comparator":"lte","value":1}},
+  {"kind":"exclusion","criterionType":"comorbidity","sourceText":"Main portal vein tumor thrombus","requirement":{"op":"present","variable":"main_portal_vein_tumor_thrombus"}},
+  {"kind":"exclusion","criterionType":"comorbidity","sourceText":"Hepatic encephalopathy","requirement":{"op":"present","variable":"hepatic_encephalopathy"}},
+  {"kind":"exclusion","criterionType":"lab","sourceText":"Total bilirubin above 3 mg/dL","requirement":{"op":"compare","variable":"total_bilirubin","comparator":"gt","value":3,"unit":"mg/dL"}}
+ ]},
+ {"id": "en-psoriasis-pasi", "language": "en", "setting": "dermatology",
+  "text": "Inclusion Criteria:\n* Age 18 years or older\n* Chronic plaque psoriasis for at least 6 months\n* PASI score of at least 12 and body surface area involvement of at least 10%\n\nExclusion Criteria:\n* Other active skin disease that may confound the assessment\n* Phototherapy within 4 weeks before randomization\n* Any biologic treatment for psoriasis within 12 weeks",
+  "expected": [
+  {"kind":"inclusion","criterionType":"demographic","sourceText":"Age 18 years or older","requirement":{"op":"compare","variable":"age","comparator":"gte","value":18,"unit":"year"}},
+  {"kind":"inclusion","criterionType":"diagnosis","sourceText":"Chronic plaque psoriasis for at least 6 months","requirement":{"op":"present","variable":"plaque_psoriasis","window":{"months":6}}},
+  {"kind":"inclusion","criterionType":"other","sourceText":"PASI score of at least 12 and body surface area involvement of at least 10%","requirement":{"op":"all","operands":[{"op":"compare","variable":"pasi","comparator":"gte","value":12},{"op":"compare","variable":"body_surface_area_involvement","comparator":"gte","value":10,"unit":"%"}]}},
+  {"kind":"exclusion","criterionType":"comorbidity","sourceText":"Other active skin disease that may confound the assessment","requirement":{"op":"present","variable":"confounding_skin_disease"}},
+  {"kind":"exclusion","criterionType":"prior_treatment","sourceText":"Phototherapy within 4 weeks before randomization","requirement":{"op":"present","variable":"phototherapy","window":{"days":28}}},
+  {"kind":"exclusion","criterionType":"prior_treatment","sourceText":"Any biologic treatment for psoriasis within 12 weeks","requirement":{"op":"present","variable":"biologic_for_psoriasis","window":{"days":84}}}
+ ]},
+ {"id": "en-crohn-biologic", "language": "en", "setting": "gastroenterology",
+  "text": "Inclusion Criteria:\n* Age >= 16 years\n* Crohn's disease confirmed by endoscopy or histology\n* Crohn's Disease Activity Index score of 220 to 450\n* Inadequate response or intolerance to conventional therapy\n\nExclusion Criteria:\n* Ostomy or ileoanal pouch\n* Short bowel syndrome",
+  "expected": [
+  {"kind":"inclusion","criterionType":"demographic","sourceText":"Age >= 16 years","requirement":{"op":"compare","variable":"age","comparator":"gte","value":16,"unit":"year"}},
+  {"kind":"inclusion","criterionType":"diagnosis","sourceText":"Crohn's disease confirmed by endoscopy or histology","requirement":{"op":"present","variable":"crohns_disease"}},
+  {"kind":"inclusion","criterionType":"other","sourceText":"Crohn's Disease Activity Index score of 220 to 450","requirement":{"op":"compare","variable":"cdai","comparator":"between","value":220,"highValue":450}},
+  {"kind":"inclusion","criterionType":"prior_treatment","sourceText":"Inadequate response or intolerance to conventional therapy","requirement":{"op":"any","operands":[{"op":"present","variable":"conventional_therapy_inadequate_response"},{"op":"present","variable":"conventional_therapy_intolerance"}]}},
+  {"kind":"exclusion","criterionType":"comorbidity","sourceText":"Ostomy or ileoanal pouch","requirement":{"op":"any","operands":[{"op":"present","variable":"ostomy"},{"op":"present","variable":"ileoanal_pouch"}]}},
+  {"kind":"exclusion","criterionType":"comorbidity","sourceText":"Short bowel syndrome","requirement":{"op":"present","variable":"short_bowel_syndrome"}}
+ ]},
+ {"id": "en-hiv-art-switch", "language": "en", "setting": "infectious disease",
+  "text": "Inclusion Criteria:\n* Age >= 18 years\n* Documented HIV-1 infection\n* HIV-1 RNA below 50 copies/mL for at least 6 months\n* On a stable antiretroviral regimen for at least 6 months\n\nExclusion Criteria:\n* Chronic hepatitis B virus infection\n* History of virologic failure with resistance to integrase inhibitors",
+  "expected": [
+  {"kind":"inclusion","criterionType":"demographic","sourceText":"Age >= 18 years","requirement":{"op":"compare","variable":"age","comparator":"gte","value":18,"unit":"year"}},
+  {"kind":"inclusion","criterionType":"diagnosis","sourceText":"Documented HIV-1 infection","requirement":{"op":"present","variable":"hiv_1_infection"}},
+  {"kind":"inclusion","criterionType":"lab","sourceText":"HIV-1 RNA below 50 copies/mL for at least 6 months","requirement":{"op":"compare","variable":"hiv_rna","comparator":"lt","value":50,"unit":"copies/mL","window":{"months":6},"aggregate":"all"}},
+  {"kind":"inclusion","criterionType":"prior_treatment","sourceText":"On a stable antiretroviral regimen for at least 6 months","requirement":{"op":"compare","variable":"stable_art_months","comparator":"gte","value":6}},
+  {"kind":"exclusion","criterionType":"comorbidity","sourceText":"Chronic hepatitis B virus infection","requirement":{"op":"present","variable":"chronic_hepatitis_b"}},
+  {"kind":"exclusion","criterionType":"lab","sourceText":"History of virologic failure with resistance to integrase inhibitors","requirement":{"op":"present","variable":"integrase_inhibitor_resistance"}}
+ ]},
+ {"id": "en-hbv-antiviral", "language": "en", "setting": "infectious disease",
+  "text": "Inclusion Criteria:\n* Age 18 to 70 years\n* Chronic hepatitis B, HBsAg positive for more than 6 months\n* HBV DNA of at least 2000 IU/mL\n* Alanine aminotransferase 1 to 5 times the upper limit of normal\n\nExclusion Criteria:\n* Decompensated cirrhosis\n* Co-infection with hepatitis C virus or HIV\n* Nucleoside analogue therapy in the previous 6 months",
+  "expected": [
+  {"kind":"inclusion","criterionType":"demographic","sourceText":"Age 18 to 70 years","requirement":{"op":"compare","variable":"age","comparator":"between","value":18,"highValue":70,"unit":"year"}},
+  {"kind":"inclusion","criterionType":"diagnosis","sourceText":"Chronic hepatitis B, HBsAg positive for more than 6 months","requirement":{"op":"present","variable":"hbsag_positive","window":{"months":6}}},
+  {"kind":"inclusion","criterionType":"lab","sourceText":"HBV DNA of at least 2000 IU/mL","requirement":{"op":"compare","variable":"hbv_dna","comparator":"gte","value":2000,"unit":"IU/mL"}},
+  {"kind":"inclusion","criterionType":"lab","sourceText":"Alanine aminotransferase 1 to 5 times the upper limit of normal","requirement":{"op":"compare","variable":"alt_uln_multiple","comparator":"between","value":1,"unit":"x ULN","highValue":5}},
+  {"kind":"exclusion","criterionType":"comorbidity","sourceText":"Decompensated cirrhosis","requirement":{"op":"present","variable":"decompensated_cirrhosis"}},
+  {"kind":"exclusion","criterionType":"comorbidity","sourceText":"Co-infection with hepatitis C virus or HIV","requirement":{"op":"any","operands":[{"op":"present","variable":"hcv_infection"},{"op":"present","variable":"hiv_infection"}]}},
+  {"kind":"exclusion","criterionType":"prior_treatment","sourceText":"Nucleoside analogue therapy in the previous 6 months","requirement":{"op":"present","variable":"nucleoside_analogue","window":{"months":6}}}
+ ]},
+ {"id": "en-covid-outpatient", "language": "en", "setting": "infectious disease",
+  "text": "Inclusion Criteria:\n* Age >= 18 years\n* Laboratory-confirmed SARS-CoV-2 infection\n* Onset of symptoms within the previous 5 days\n* At least one risk factor for progression to severe disease\n\nExclusion Criteria:\n* Hospitalized or requiring supplemental oxygen at screening\n* Estimated glomerular filtration rate below 30 mL/min\n* Use of strong CYP3A inducers",
+  "expected": [
+  {"kind":"inclusion","criterionType":"demographic","sourceText":"Age >= 18 years","requirement":{"op":"compare","variable":"age","comparator":"gte","value":18,"unit":"year"}},
+  {"kind":"inclusion","criterionType":"diagnosis","sourceText":"Laboratory-confirmed SARS-CoV-2 infection","requirement":{"op":"present","variable":"sars_cov_2_infection"}},
+  {"kind":"inclusion","criterionType":"other","sourceText":"Onset of symptoms within the previous 5 days","requirement":{"op":"compare","variable":"days_since_symptom_onset","comparator":"lte","value":5,"unit":"day"}},
+  {"kind":"inclusion","criterionType":"other","sourceText":"At least one risk factor for progression to severe disease","requirement":{"op":"language","key":"risk_factor","text":"At least one risk factor for progression to severe disease"}},
+  {"kind":"exclusion","criterionType":"other","sourceText":"Hospitalized or requiring supplemental oxygen at screening","requirement":{"op":"any","operands":[{"op":"present","variable":"hospitalized"},{"op":"present","variable":"supplemental_oxygen"}]}},
+  {"kind":"exclusion","criterionType":"lab","sourceText":"Estimated glomerular filtration rate below 30 mL/min","requirement":{"op":"compare","variable":"egfr","comparator":"lt","value":30,"unit":"mL/min"}},
+  {"kind":"exclusion","criterionType":"concomitant_medication","sourceText":"Use of strong CYP3A inducers","requirement":{"op":"present","variable":"strong_cyp3a_inducer"}}
+ ]},
+ {"id": "en-af-anticoagulation", "language": "en", "setting": "cardiology",
+  "text": "Inclusion Criteria:\n* Age >= 65 years\n* Non-valvular atrial fibrillation documented by electrocardiogram\n* CHA2DS2-VASc score of at least 2\n\nExclusion Criteria:\n* Mechanical heart valve or moderate to severe mitral stenosis\n* Active bleeding or high bleeding risk\n* Creatinine clearance below 25 mL/min\n* Platelet count below 100 x 10^9/L",
+  "expected": [
+  {"kind":"inclusion","criterionType":"demographic","sourceText":"Age >= 65 years","requirement":{"op":"compare","variable":"age","comparator":"gte","value":65,"unit":"year"}},
+  {"kind":"inclusion","criterionType":"diagnosis","sourceText":"Non-valvular atrial fibrillation documented by electrocardiogram","requirement":{"op":"present","variable":"nonvalvular_atrial_fibrillation"}},
+  {"kind":"inclusion","criterionType":"other","sourceText":"CHA2DS2-VASc score of at least 2","requirement":{"op":"compare","variable":"cha2ds2_vasc","comparator":"gte","value":2}},
+  {"kind":"exclusion","criterionType":"comorbidity","sourceText":"Mechanical heart valve or moderate to severe mitral stenosis","requirement":{"op":"any","operands":[{"op":"present","variable":"mechanical_heart_valve"},{"op":"present","variable":"moderate_severe_mitral_stenosis"}]}},
+  {"kind":"exclusion","criterionType":"comorbidity","sourceText":"Active bleeding or high bleeding risk","requirement":{"op":"any","operands":[{"op":"present","variable":"active_bleeding"},{"op":"present","variable":"high_bleeding_risk"}]}},
+  {"kind":"exclusion","criterionType":"lab","sourceText":"Creatinine clearance below 25 mL/min","requirement":{"op":"compare","variable":"creatinine_clearance","comparator":"lt","value":25,"unit":"mL/min"}},
+  {"kind":"exclusion","criterionType":"comorbidity","sourceText":"Platelet count below 100 x 10^9/L","requirement":{"op":"compare","variable":"platelet_count","comparator":"lt","value":100,"unit":"10^9/L"}}
+ ]},
+ {"id": "en-stroke-thrombolysis", "language": "en", "setting": "neurology",
+  "text": "Inclusion Criteria:\n* Age >= 18 years\n* Acute ischemic stroke\n* Treatment can be started within 4.5 hours of symptom onset\n* National Institutes of Health Stroke Scale score of 4 to 25\n\nExclusion Criteria:\n* Intracranial hemorrhage on baseline imaging\n* Major surgery within the previous 14 days\n* Therapeutic anticoagulation with INR above 1.7",
+  "expected": [
+  {"kind":"inclusion","criterionType":"demographic","sourceText":"Age >= 18 years","requirement":{"op":"compare","variable":"age","comparator":"gte","value":18,"unit":"year"}},
+  {"kind":"inclusion","criterionType":"diagnosis","sourceText":"Acute ischemic stroke","requirement":{"op":"present","variable":"acute_ischemic_stroke"}},
+  {"kind":"inclusion","criterionType":"time_window","sourceText":"Treatment can be started within 4.5 hours of symptom onset","requirement":{"op":"compare","variable":"hours_from_onset_to_treatment","comparator":"lte","value":4.5,"unit":"hour"}},
+  {"kind":"inclusion","criterionType":"other","sourceText":"National Institutes of Health Stroke Scale score of 4 to 25","requirement":{"op":"compare","variable":"nihss","comparator":"between","value":4,"highValue":25}},
+  {"kind":"exclusion","criterionType":"comorbidity","sourceText":"Intracranial hemorrhage on baseline imaging","requirement":{"op":"present","variable":"intracranial_hemorrhage"}},
+  {"kind":"exclusion","criterionType":"prior_treatment","sourceText":"Major surgery within the previous 14 days","requirement":{"op":"present","variable":"major_surgery","window":{"days":14}}},
+  {"kind":"exclusion","criterionType":"concomitant_medication","sourceText":"Therapeutic anticoagulation with INR above 1.7","requirement":{"op":"compare","variable":"inr","comparator":"gt","value":1.7}}
+ ]},
+ {"id": "en-adhd-children", "language": "en", "setting": "pediatrics",
+  "text": "Inclusion Criteria:\n* Children aged 6 to 12 years\n* Diagnosis of attention-deficit/hyperactivity disorder according to DSM-5\n* ADHD Rating Scale total score of at least 28\n* Parent or legal guardian able to provide written informed consent\n\nExclusion Criteria:\n* Seizure disorder\n* Current use of stimulant or non-stimulant ADHD medication",
+  "expected": [
+  {"kind":"inclusion","criterionType":"demographic","sourceText":"Children aged 6 to 12 years","requirement":{"op":"compare","variable":"age","comparator":"between","value":6,"highValue":12,"unit":"year"}},
+  {"kind":"inclusion","criterionType":"diagnosis","sourceText":"Diagnosis of attention-deficit/hyperactivity disorder according to DSM-5","requirement":{"op":"present","variable":"adhd"}},
+  {"kind":"inclusion","criterionType":"other","sourceText":"ADHD Rating Scale total score of at least 28","requirement":{"op":"compare","variable":"adhd_rs_total","comparator":"gte","value":28}},
+  {"kind":"inclusion","criterionType":"consent_capacity","sourceText":"Parent or legal guardian able to provide written informed consent","requirement":{"op":"language","key":"guardian_consent","text":"Parent or legal guardian able to provide written informed consent"}},
+  {"kind":"exclusion","criterionType":"comorbidity","sourceText":"Seizure disorder","requirement":{"op":"present","variable":"seizure_disorder"}},
+  {"kind":"exclusion","criterionType":"concomitant_medication","sourceText":"Current use of stimulant or non-stimulant ADHD medication","requirement":{"op":"present","variable":"adhd_medication"}}
+ ]},
+ {"id": "en-contraception-reproductive", "language": "en", "setting": "women's health",
+  "text": "Inclusion Criteria:\n* Female participants aged 18 to 45 years\n* Negative serum pregnancy test at screening\n* Regular menstrual cycles of 24 to 35 days\n* Agrees to use a highly effective method of contraception\n\nExclusion Criteria:\n* Pregnant, breastfeeding, or planning pregnancy during the study\n* Hormonal contraceptive use within 1 month before enrollment",
+  "expected": [
+  {"kind":"inclusion","criterionType":"demographic","sourceText":"Female participants aged 18 to 45 years","requirement":{"op":"all","operands":[{"op":"compare","variable":"sex","comparator":"eq","value":"female"},{"op":"compare","variable":"age","comparator":"between","value":18,"highValue":45,"unit":"year"}]}},
+  {"kind":"inclusion","criterionType":"pregnancy","sourceText":"Negative serum pregnancy test at screening","requirement":{"op":"compare","variable":"pregnancy_test","comparator":"eq","value":"negative"}},
+  {"kind":"inclusion","criterionType":"other","sourceText":"Regular menstrual cycles of 24 to 35 days","requirement":{"op":"compare","variable":"menstrual_cycle_days","comparator":"between","value":24,"unit":"day","highValue":35}},
+  {"kind":"inclusion","criterionType":"pregnancy","sourceText":"Agrees to use a highly effective method of contraception","requirement":{"op":"language","key":"contraception_agreement","text":"Agrees to use a highly effective method of contraception"}},
+  {"kind":"exclusion","criterionType":"pregnancy","sourceText":"Pregnant, breastfeeding, or planning pregnancy during the study","requirement":{"op":"any","operands":[{"op":"present","variable":"pregnancy"},{"op":"present","variable":"breastfeeding"},{"op":"present","variable":"planning_pregnancy"}]}},
+  {"kind":"exclusion","criterionType":"prior_treatment","sourceText":"Hormonal contraceptive use within 1 month before enrollment","requirement":{"op":"present","variable":"hormonal_contraceptive","window":{"months":1}}}
+ ]},
+ {"id": "zh-t2dm-metformin", "language": "zh", "setting": "endocrinology",
+  "text": "纳入标准：\n1. 年龄18～70岁\n2. 符合2型糖尿病诊断标准\n3. 糖化血红蛋白（HbA1c）7.0%～10.0%\n4. 自愿参加并签署知情同意书\n\n排除标准：\n1. 1型糖尿病或继发性糖尿病\n2. 近6个月内发生过急性心肌梗死或脑卒中\n3. 估算肾小球滤过率<45 mL/min/1.73m2",
+  "expected": [
+  {"kind":"inclusion","criterionType":"demographic","sourceText":"年龄18～70岁","requirement":{"op":"compare","variable":"age","comparator":"between","value":18,"highValue":70,"unit":"year"}},
+  {"kind":"inclusion","criterionType":"diagnosis","sourceText":"符合2型糖尿病诊断标准","requirement":{"op":"present","variable":"type_2_diabetes"}},
+  {"kind":"inclusion","criterionType":"lab","sourceText":"糖化血红蛋白（HbA1c）7.0%～10.0%","requirement":{"op":"compare","variable":"hba1c","comparator":"between","value":7,"unit":"%","highValue":10}},
+  {"kind":"inclusion","criterionType":"consent_capacity","sourceText":"自愿参加并签署知情同意书","requirement":{"op":"language","key":"consent","text":"自愿参加并签署知情同意书"}},
+  {"kind":"exclusion","criterionType":"diagnosis","sourceText":"1型糖尿病或继发性糖尿病","requirement":{"op":"any","operands":[{"op":"present","variable":"type_1_diabetes"},{"op":"present","variable":"secondary_diabetes"}]}},
+  {"kind":"exclusion","criterionType":"comorbidity","sourceText":"近6个月内发生过急性心肌梗死或脑卒中","requirement":{"op":"any","operands":[{"op":"present","variable":"acute_myocardial_infarction","window":{"months":6}},{"op":"present","variable":"stroke","window":{"months":6}}]}},
+  {"kind":"exclusion","criterionType":"lab","sourceText":"估算肾小球滤过率<45 mL/min/1.73m2","requirement":{"op":"compare","variable":"egfr","comparator":"lt","value":45,"unit":"mL/min/1.73m2"}}
+ ]},
+ {"id": "zh-nsclc-egfr", "language": "zh", "setting": "oncology",
+  "text": "纳入标准：\n1. 年龄≥18岁\n2. 经组织学或细胞学确诊的IIIB期或IV期非小细胞肺癌\n3. EGFR 19号外显子缺失或21号外显子L858R突变阳性\n4. ECOG体力状况评分0～1分\n5. 预计生存期≥3个月\n6. 距末次化疗至少4周\n\n排除标准：\n1. 有症状的脑转移\n2. 4周内接受过化疗或放疗\n3. 妊娠期或哺乳期女性",
+  "expected": [
+  {"kind":"inclusion","criterionType":"demographic","sourceText":"年龄≥18岁","requirement":{"op":"compare","variable":"age","comparator":"gte","value":18,"unit":"year"}},
+  {"kind":"inclusion","criterionType":"diagnosis","sourceText":"经组织学或细胞学确诊的IIIB期或IV期非小细胞肺癌","requirement":{"op":"all","operands":[{"op":"present","variable":"nsclc"},{"op":"compare","variable":"stage","comparator":"in","value":["IIIB","IV"]}]}},
+  {"kind":"inclusion","criterionType":"biomarker","sourceText":"EGFR 19号外显子缺失或21号外显子L858R突变阳性","requirement":{"op":"any","operands":[{"op":"present","variable":"egfr_exon19_deletion"},{"op":"present","variable":"egfr_l858r"}]}},
+  {"kind":"inclusion","criterionType":"performance_status","sourceText":"ECOG体力状况评分0～1分","requirement":{"op":"compare","variable":"ecog","comparator":"lte","value":1}},
+  {"kind":"inclusion","criterionType":"other","sourceText":"预计生存期≥3个月","requirement":{"op":"compare","variable":"expected_survival_months","comparator":"gte","value":3,"unit":"month"}},
+  {"kind":"inclusion","criterionType":"prior_treatment","sourceText":"距末次化疗至少4周","requirement":{"op":"elapsed_since","variable":"chemotherapy","days":28,"comparator":"gte"}},
+  {"kind":"exclusion","criterionType":"comorbidity","sourceText":"有症状的脑转移","requirement":{"op":"present","variable":"symptomatic_brain_metastasis"}},
+  {"kind":"exclusion","criterionType":"prior_treatment","sourceText":"4周内接受过化疗或放疗","requirement":{"op":"any","operands":[{"op":"present","variable":"chemotherapy","window":{"days":28}},{"op":"present","variable":"radiotherapy","window":{"days":28}}]}},
+  {"kind":"exclusion","criterionType":"pregnancy","sourceText":"妊娠期或哺乳期女性","requirement":{"op":"any","operands":[{"op":"present","variable":"pregnancy"},{"op":"present","variable":"breastfeeding"}]}}
+ ]},
+ {"id": "zh-hypertension-herbal", "language": "zh", "setting": "cardiology",
+  "text": "纳入标准：\n1. 年龄35～75岁\n2. 符合原发性高血压诊断标准\n3. 坐位收缩压140～179 mmHg\n\n排除标准：\n1. 继发性高血压\n2. 严重肝肾功能不全\n3. 3个月内发生过心脑血管事件",
+  "expected": [
+  {"kind":"inclusion","criterionType":"demographic","sourceText":"年龄35～75岁","requirement":{"op":"compare","variable":"age","comparator":"between","value":35,"highValue":75,"unit":"year"}},
+  {"kind":"inclusion","criterionType":"diagnosis","sourceText":"符合原发性高血压诊断标准","requirement":{"op":"present","variable":"essential_hypertension"}},
+  {"kind":"inclusion","criterionType":"lab","sourceText":"坐位收缩压140～179 mmHg","requirement":{"op":"compare","variable":"systolic_bp","comparator":"between","value":140,"unit":"mmHg","highValue":179}},
+  {"kind":"exclusion","criterionType":"comorbidity","sourceText":"继发性高血压","requirement":{"op":"present","variable":"secondary_hypertension"}},
+  {"kind":"exclusion","criterionType":"comorbidity","sourceText":"严重肝肾功能不全","requirement":{"op":"present","variable":"severe_hepatic_or_renal_insufficiency"}},
+  {"kind":"exclusion","criterionType":"comorbidity","sourceText":"3个月内发生过心脑血管事件","requirement":{"op":"any","operands":[{"op":"present","variable":"cardiovascular_event","window":{"months":3}},{"op":"present","variable":"cerebrovascular_event","window":{"months":3}}]}}
+ ]},
+ {"id": "zh-acute-stroke", "language": "zh", "setting": "neurology",
+  "text": "纳入标准：\n1. 年龄≥18岁\n2. 急性脑梗死，发病时间在72小时以内\n3. NIHSS评分4～20分\n4. 患者本人或法定代理人签署知情同意书\n\n排除标准：\n1. 颅内出血或出血倾向\n2. 既往有严重残疾（mRS评分≥3分）",
+  "expected": [
+  {"kind":"inclusion","criterionType":"demographic","sourceText":"年龄≥18岁","requirement":{"op":"compare","variable":"age","comparator":"gte","value":18,"unit":"year"}},
+  {"kind":"inclusion","criterionType":"diagnosis","sourceText":"急性脑梗死，发病时间在72小时以内","requirement":{"op":"all","operands":[{"op":"present","variable":"acute_cerebral_infarction"},{"op":"compare","variable":"hours_from_onset","comparator":"lte","value":72,"unit":"hour"}]}},
+  {"kind":"inclusion","criterionType":"other","sourceText":"NIHSS评分4～20分","requirement":{"op":"compare","variable":"nihss","comparator":"between","value":4,"highValue":20}},
+  {"kind":"exclusion","criterionType":"comorbidity","sourceText":"颅内出血或出血倾向","requirement":{"op":"any","operands":[{"op":"present","variable":"intracranial_hemorrhage"},{"op":"present","variable":"bleeding_tendency"}]}},
+  {"kind":"exclusion","criterionType":"comorbidity","sourceText":"既往有严重残疾（mRS评分≥3分）","requirement":{"op":"compare","variable":"mrs_prestroke","comparator":"gte","value":3}},
+  {"kind":"inclusion","criterionType":"consent_capacity","sourceText":"患者本人或法定代理人签署知情同意书","requirement":{"op":"language","key":"consent","text":"患者本人或法定代理人签署知情同意书"}}
+ ]},
+ {"id": "zh-hcc-tace", "language": "zh", "setting": "oncology",
+  "text": "纳入标准：\n1. 年龄18～75岁\n2. 符合原发性肝癌诊断标准的肝细胞癌\n3. Child-Pugh分级A级或B级7分\n4. ECOG评分0～1分\n\n排除标准：\n1. 门静脉主干癌栓\n2. 肝性脑病\n3. 既往接受过肝移植",
+  "expected": [
+  {"kind":"inclusion","criterionType":"demographic","sourceText":"年龄18～75岁","requirement":{"op":"compare","variable":"age","comparator":"between","value":18,"highValue":75,"unit":"year"}},
+  {"kind":"inclusion","criterionType":"diagnosis","sourceText":"符合原发性肝癌诊断标准的肝细胞癌","requirement":{"op":"present","variable":"hepatocellular_carcinoma"}},
+  {"kind":"inclusion","criterionType":"other","sourceText":"Child-Pugh分级A级或B级7分","requirement":{"op":"any","operands":[{"op":"compare","variable":"child_pugh_class","comparator":"eq","value":"A"},{"op":"all","operands":[{"op":"compare","variable":"child_pugh_class","comparator":"eq","value":"B"},{"op":"compare","variable":"child_pugh_score","comparator":"eq","value":7}]}]}},
+  {"kind":"inclusion","criterionType":"performance_status","sourceText":"ECOG评分0～1分","requirement":{"op":"compare","variable":"ecog","comparator":"lte","value":1}},
+  {"kind":"exclusion","criterionType":"comorbidity","sourceText":"门静脉主干癌栓","requirement":{"op":"present","variable":"main_portal_vein_tumor_thrombus"}},
+  {"kind":"exclusion","criterionType":"comorbidity","sourceText":"肝性脑病","requirement":{"op":"present","variable":"hepatic_encephalopathy"}},
+  {"kind":"exclusion","criterionType":"prior_treatment","sourceText":"既往接受过肝移植","requirement":{"op":"present","variable":"liver_transplant"}}
+ ]},
+ {"id": "zh-chb-antiviral", "language": "zh", "setting": "infectious disease",
+  "text": "纳入标准：\n1. 年龄18～65岁\n2. 慢性乙型肝炎，HBsAg阳性超过6个月\n3. HBV DNA≥2000 IU/mL\n\n排除标准：\n1. 合并丙型肝炎病毒或人类免疫缺陷病毒感染\n2. 失代偿期肝硬化\n3. 6个月内使用过核苷（酸）类似物或干扰素",
+  "expected": [
+  {"kind":"inclusion","criterionType":"demographic","sourceText":"年龄18～65岁","requirement":{"op":"compare","variable":"age","comparator":"between","value":18,"highValue":65,"unit":"year"}},
+  {"kind":"inclusion","criterionType":"diagnosis","sourceText":"慢性乙型肝炎，HBsAg阳性超过6个月","requirement":{"op":"present","variable":"hbsag_positive","window":{"months":6}}},
+  {"kind":"inclusion","criterionType":"lab","sourceText":"HBV DNA≥2000 IU/mL","requirement":{"op":"compare","variable":"hbv_dna","comparator":"gte","value":2000,"unit":"IU/mL"}},
+  {"kind":"exclusion","criterionType":"comorbidity","sourceText":"合并丙型肝炎病毒或人类免疫缺陷病毒感染","requirement":{"op":"any","operands":[{"op":"present","variable":"hcv_infection"},{"op":"present","variable":"hiv_infection"}]}},
+  {"kind":"exclusion","criterionType":"comorbidity","sourceText":"失代偿期肝硬化","requirement":{"op":"present","variable":"decompensated_cirrhosis"}},
+  {"kind":"exclusion","criterionType":"prior_treatment","sourceText":"6个月内使用过核苷（酸）类似物或干扰素","requirement":{"op":"any","operands":[{"op":"present","variable":"nucleoside_analogue","window":{"months":6}},{"op":"present","variable":"interferon","window":{"months":6}}]}}
+ ]},
+ {"id": "zh-cad-pci", "language": "zh", "setting": "cardiology",
+  "text": "纳入标准：\n1. 年龄40～80岁\n2. 冠状动脉造影确诊的冠心病，拟行经皮冠状动脉介入治疗\n3. 左心室射血分数≥40%\n\n排除标准：\n1. 急性心肌梗死发病72小时以内\n2. 对阿司匹林或氯吡格雷过敏\n3. 血小板计数<100×10^9/L\n4. 预期寿命小于1年",
+  "expected": [
+  {"kind":"inclusion","criterionType":"demographic","sourceText":"年龄40～80岁","requirement":{"op":"compare","variable":"age","comparator":"between","value":40,"highValue":80,"unit":"year"}},
+  {"kind":"inclusion","criterionType":"diagnosis","sourceText":"冠状动脉造影确诊的冠心病，拟行经皮冠状动脉介入治疗","requirement":{"op":"all","operands":[{"op":"present","variable":"coronary_artery_disease"},{"op":"present","variable":"planned_pci"}]}},
+  {"kind":"inclusion","criterionType":"lab","sourceText":"左心室射血分数≥40%","requirement":{"op":"compare","variable":"lvef","comparator":"gte","value":40,"unit":"%"}},
+  {"kind":"exclusion","criterionType":"comorbidity","sourceText":"急性心肌梗死发病72小时以内","requirement":{"op":"present","variable":"acute_myocardial_infarction","window":{"days":3}}},
+  {"kind":"exclusion","criterionType":"comorbidity","sourceText":"对阿司匹林或氯吡格雷过敏","requirement":{"op":"any","operands":[{"op":"present","variable":"aspirin_allergy"},{"op":"present","variable":"clopidogrel_allergy"}]}},
+  {"kind":"exclusion","criterionType":"lab","sourceText":"血小板计数<100×10^9/L","requirement":{"op":"compare","variable":"platelet_count","comparator":"lt","value":100,"unit":"10^9/L"}},
+  {"kind":"exclusion","criterionType":"comorbidity","sourceText":"预期寿命小于1年","requirement":{"op":"compare","variable":"expected_survival_months","comparator":"lt","value":12,"unit":"month"}}
+ ]},
+ {"id": "zh-ckd-progression", "language": "zh", "setting": "nephrology",
+  "text": "纳入标准：\n1. 年龄18～75岁\n2. 慢性肾脏病3～4期\n3. 24小时尿蛋白定量0.5～3.5 g\n\n排除标准：\n1. 正在接受透析治疗\n2. 3个月内使用过糖皮质激素或免疫抑制剂\n3. 急性肾损伤",
+  "expected": [
+  {"kind":"inclusion","criterionType":"demographic","sourceText":"年龄18～75岁","requirement":{"op":"compare","variable":"age","comparator":"between","value":18,"highValue":75,"unit":"year"}},
+  {"kind":"inclusion","criterionType":"diagnosis","sourceText":"慢性肾脏病3～4期","requirement":{"op":"compare","variable":"ckd_stage","comparator":"between","value":3,"highValue":4}},
+  {"kind":"inclusion","criterionType":"lab","sourceText":"24小时尿蛋白定量0.5～3.5 g","requirement":{"op":"compare","variable":"urine_protein_24h","comparator":"between","value":0.5,"unit":"g","highValue":3.5}},
+  {"kind":"exclusion","criterionType":"prior_treatment","sourceText":"正在接受透析治疗","requirement":{"op":"present","variable":"dialysis"}},
+  {"kind":"exclusion","criterionType":"prior_treatment","sourceText":"3个月内使用过糖皮质激素或免疫抑制剂","requirement":{"op":"any","operands":[{"op":"present","variable":"glucocorticoid","window":{"months":3}},{"op":"present","variable":"immunosuppressant","window":{"months":3}}]}},
+  {"kind":"exclusion","criterionType":"comorbidity","sourceText":"急性肾损伤","requirement":{"op":"present","variable":"acute_kidney_injury"}}
+ ]},
+ {"id": "zh-ra-tcm", "language": "zh", "setting": "rheumatology",
+  "text": "纳入标准：\n1. 年龄18～65岁\n2. 符合2010年ACR/EULAR类风湿关节炎分类标准\n3. DAS28评分＞3.2\n\n排除标准：\n1. 合并其他自身免疫性疾病\n2. 近3个月内使用过生物制剂\n3. 妊娠、哺乳期或近期有生育计划的女性",
+  "expected": [
+  {"kind":"inclusion","criterionType":"demographic","sourceText":"年龄18～65岁","requirement":{"op":"compare","variable":"age","comparator":"between","value":18,"highValue":65,"unit":"year"}},
+  {"kind":"inclusion","criterionType":"diagnosis","sourceText":"符合2010年ACR/EULAR类风湿关节炎分类标准","requirement":{"op":"present","variable":"rheumatoid_arthritis"}},
+  {"kind":"inclusion","criterionType":"other","sourceText":"DAS28评分＞3.2","requirement":{"op":"compare","variable":"das28","comparator":"gt","value":3.2}},
+  {"kind":"exclusion","criterionType":"comorbidity","sourceText":"合并其他自身免疫性疾病","requirement":{"op":"present","variable":"other_autoimmune_disease"}},
+  {"kind":"exclusion","criterionType":"prior_treatment","sourceText":"近3个月内使用过生物制剂","requirement":{"op":"present","variable":"biologic","window":{"months":3}}},
+  {"kind":"exclusion","criterionType":"pregnancy","sourceText":"妊娠、哺乳期或近期有生育计划的女性","requirement":{"op":"any","operands":[{"op":"present","variable":"pregnancy"},{"op":"present","variable":"breastfeeding"},{"op":"present","variable":"planning_pregnancy"}]}}
+ ]},
+ {"id": "zh-depression-rtms", "language": "zh", "setting": "psychiatry",
+  "text": "纳入标准：\n1. 年龄18～60岁\n2. 符合DSM-5抑郁症诊断标准\n3. 汉密尔顿抑郁量表（HAMD-17）总分≥17分\n4. 能理解并配合研究，自愿签署知情同意书\n\n排除标准：\n1. 双相情感障碍或精神分裂症\n2. 有严重自杀倾向\n3. 颅内有金属植入物或心脏起搏器",
+  "expected": [
+  {"kind":"inclusion","criterionType":"demographic","sourceText":"年龄18～60岁","requirement":{"op":"compare","variable":"age","comparator":"between","value":18,"highValue":60,"unit":"year"}},
+  {"kind":"inclusion","criterionType":"diagnosis","sourceText":"符合DSM-5抑郁症诊断标准","requirement":{"op":"present","variable":"major_depressive_disorder"}},
+  {"kind":"inclusion","criterionType":"other","sourceText":"汉密尔顿抑郁量表（HAMD-17）总分≥17分","requirement":{"op":"compare","variable":"hamd17_total","comparator":"gte","value":17}},
+  {"kind":"exclusion","criterionType":"comorbidity","sourceText":"双相情感障碍或精神分裂症","requirement":{"op":"any","operands":[{"op":"present","variable":"bipolar_disorder"},{"op":"present","variable":"schizophrenia"}]}},
+  {"kind":"exclusion","criterionType":"comorbidity","sourceText":"有严重自杀倾向","requirement":{"op":"present","variable":"severe_suicidal_ideation"}},
+  {"kind":"exclusion","criterionType":"other","sourceText":"颅内有金属植入物或心脏起搏器","requirement":{"op":"any","operands":[{"op":"present","variable":"intracranial_metal_implant"},{"op":"present","variable":"cardiac_pacemaker"}]}},
+  {"kind":"inclusion","criterionType":"consent_capacity","sourceText":"能理解并配合研究，自愿签署知情同意书","requirement":{"op":"language","key":"consent","text":"能理解并配合研究，自愿签署知情同意书"}}
+ ]},
+ {"id": "zh-osteoporosis", "language": "zh", "setting": "endocrinology",
+  "text": "纳入标准：\n1. 绝经后女性，年龄55～80岁\n2. 腰椎或髋部骨密度T值≤-2.5\n\n排除标准：\n1. 6个月内使用过双膦酸盐类药物\n2. 高钙血症\n3. 继发性骨质疏松",
+  "expected": [
+  {"kind":"inclusion","criterionType":"demographic","sourceText":"绝经后女性，年龄55～80岁","requirement":{"op":"all","operands":[{"op":"compare","variable":"sex","comparator":"eq","value":"female"},{"op":"present","variable":"postmenopausal"},{"op":"compare","variable":"age","comparator":"between","value":55,"highValue":80,"unit":"year"}]}},
+  {"kind":"inclusion","criterionType":"lab","sourceText":"腰椎或髋部骨密度T值≤-2.5","requirement":{"op":"compare","variable":"bmd_t_score","comparator":"lte","value":-2.5}},
+  {"kind":"exclusion","criterionType":"prior_treatment","sourceText":"6个月内使用过双膦酸盐类药物","requirement":{"op":"present","variable":"bisphosphonate","window":{"months":6}}},
+  {"kind":"exclusion","criterionType":"lab","sourceText":"高钙血症","requirement":{"op":"present","variable":"hypercalcemia"}},
+  {"kind":"exclusion","criterionType":"comorbidity","sourceText":"继发性骨质疏松","requirement":{"op":"present","variable":"secondary_osteoporosis"}}
+ ]},
+ {"id": "zh-gastric-adjuvant", "language": "zh", "setting": "oncology",
+  "text": "纳入标准：\n1. 年龄18～75岁\n2. 胃腺癌根治术后，病理分期为II期或III期\n3. 术后6周内开始辅助化疗\n4. ECOG评分0～1分\n\n排除标准：\n1. 术前接受过化疗或放疗\n2. 中性粒细胞绝对值<1.5×10^9/L\n3. 合并其他恶性肿瘤",
+  "expected": [
+  {"kind":"inclusion","criterionType":"demographic","sourceText":"年龄18～75岁","requirement":{"op":"compare","variable":"age","comparator":"between","value":18,"highValue":75,"unit":"year"}},
+  {"kind":"inclusion","criterionType":"diagnosis","sourceText":"胃腺癌根治术后，病理分期为II期或III期","requirement":{"op":"all","operands":[{"op":"present","variable":"gastric_adenocarcinoma"},{"op":"present","variable":"curative_gastrectomy"},{"op":"compare","variable":"pathologic_stage","comparator":"in","value":["II","III"]}]}},
+  {"kind":"inclusion","criterionType":"time_window","sourceText":"术后6周内开始辅助化疗","requirement":{"op":"compare","variable":"weeks_from_surgery_to_chemotherapy","comparator":"lte","value":6,"unit":"week"}},
+  {"kind":"inclusion","criterionType":"performance_status","sourceText":"ECOG评分0～1分","requirement":{"op":"compare","variable":"ecog","comparator":"lte","value":1}},
+  {"kind":"exclusion","criterionType":"prior_treatment","sourceText":"术前接受过化疗或放疗","requirement":{"op":"any","operands":[{"op":"present","variable":"neoadjuvant_chemotherapy"},{"op":"present","variable":"neoadjuvant_radiotherapy"}]}},
+  {"kind":"exclusion","criterionType":"lab","sourceText":"中性粒细胞绝对值<1.5×10^9/L","requirement":{"op":"compare","variable":"neutrophil_count","comparator":"lt","value":1.5,"unit":"10^9/L"}},
+  {"kind":"exclusion","criterionType":"comorbidity","sourceText":"合并其他恶性肿瘤","requirement":{"op":"present","variable":"other_malignancy"}}
+ ]}
+ ]
+}
