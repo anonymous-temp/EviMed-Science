@@ -16,7 +16,7 @@ export const CLINICAL_FACT_CONTRACT = Object.freeze({
   evidenceRule: FACT_EVIDENCE_RULE,
   appliesTo: 'The optional clinical property inside one vcr_write fact item; never put schema/assertion/experiencer at the item root.',
   factRequired: ['subjectKey', 'documentId', 'variable', 'surface', 'quote'],
-  factValue: 'value (number or text), unit and occurredAt belong at the fact item root, alongside variable and quote. Preserve every recorded measurement in value; surface and quote alone do not store a usable measurement.',
+  factValue: 'value (number or text), unit and occurredAt belong at the fact item root, alongside variable and quote. Preserve every recorded measurement in value; surface and quote alone do not store a usable measurement. Write unit only when the quote prints it beside the number; otherwise leave it out and the fact keeps the number. occurredAt and recordedAt are dates the quote prints whole, with the year, or that dateQuote prints: a second verbatim quote of the same document (a current state takes the stated date of its own record; a past event with no date of its own stays undated).',
   factExample: {subjectKey:'<from tool>',documentId:'<from tool>',variable:'age',value:44,unit:'year',surface:'44',quote:'年龄44岁',
     clinical:{schema:1,assertion:'affirmed',experiencer:'patient'}},
   schema: CLINICAL_FACT_SCHEMA,

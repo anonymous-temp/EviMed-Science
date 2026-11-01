@@ -1437,6 +1437,18 @@ const SUMMARY_ORDER = Object.freeze(["eligible", "insufficient_evidence", "pendi
 const EVIDENCE_SHOWN = 3;
 
 /**
+ * The words under a citation for what it did not print: a unit read by the domain's table (`unitBasis`), a date taken from another
+ * line of the same record (`dateLocator`). Neither is ever shown as if the quotation said it.
+ * @param {Record<string, any>} evidence @returns {string | null}
+ */
+function evidenceNote(evidence) {
+  const parts = [];
+  if (evidence.unitBasis === "conventional" && text(evidence.unit)) parts.push(`单位 ${evidence.unit} 是按惯例读出的，原文没有印`);
+  if (evidence.dateLocator) parts.push("日期取自同一份病历的另一处，不是这句话里印的");
+  return parts.length ? parts.join("；") : null;
+}
+
+/**
  * The criterion the way a coordinator reads it: the protocol's own words, the
  * patient's own sentence, and what to ask for.
  * @param {Record<string, any>} criterion @param {string} code @param {Record<string, any> | null} judgment @param {Date} now
@@ -1450,6 +1462,8 @@ function judgementView(criterion, code, judgment, now, documentNames = new Map()
     source: evidence.quoteKind === "snapshot_cell" ? `数据快照字段「${object(evidence.locator).field ?? evidence.variable}」`
       : evidence.quoteKind === "verbatim" ? (documentNames.get(String(object(evidence.locator).documentId)) ?? "病历原文") : (vcrLocatorText(evidence.locator) ?? text(evidence.source)),
     at: zhDate(evidence.at ?? evidence.occurredAt ?? object(evidence.locator).at, now),
+    // What the quotation does not itself say, said beside it: a unit the domain's table supplied, a date taken from another line.
+    note: evidenceNote(evidence),
   }));
   const state = judgment?.overrideState ?? judgment?.state ?? "unknown";
   const needed = list(criterion.evidenceNeeded).map((item) => (typeof item === "string" ? item : text(object(item).description) ?? text(object(item).text) ?? text(object(item).variable))).filter(Boolean);

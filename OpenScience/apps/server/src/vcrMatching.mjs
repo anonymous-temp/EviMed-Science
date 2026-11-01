@@ -48,8 +48,8 @@
  * @module vcrMatching
  */
 
-import { clinicalDateInQuote, clinicalIntervalInQuote } from './vcrClinicalDateEvidence.mjs';
-import { CLINICAL_ASSERTIVE_POLARITIES, clinicalFactPolarity, clinicalFactView, clinicalUnitToken, clinicalUnitInQuote, convertClinicalUnit, vcrConvertTime, vcrTimeUnitOf } from "@evimed/domain";
+import { clinicalDateInEvidence, clinicalIntervalInQuote } from './vcrClinicalDateEvidence.mjs';
+import { CLINICAL_ASSERTIVE_POLARITIES, clinicalConventionalUnit, clinicalFactPolarity, clinicalFactView, clinicalUnitToken, clinicalUnitInQuote, clinicalUnitPrintedBesideValue, convertClinicalUnit, vcrConvertTime, vcrTimeUnitOf } from "@evimed/domain";
 import { createHash } from 'node:crypto';
 import {
   canonicalScenarioJson, VCR_CRITERION_STATES, VCR_CRITERION_TYPES, VCR_ELIGIBILITY_SUMMARIES, VCR_MISSING_REASONS, validateRequirement,
@@ -95,7 +95,7 @@ export const VCR_MATCHING_STATES = Object.freeze([SATISFIED, NOT_SATISFIED, UNKN
  */
 export const VCR_FACT_VOID_REASONS = Object.freeze([
   "locator_missing", "document_unavailable", "span_out_of_range", "quote_mismatch",
-  "surface_missing", "value_not_in_span", "date_not_in_span", "not_yet_visible", "polarity_not_assertive",
+  "surface_missing", "value_not_in_span", "date_not_in_span", "date_quote_mismatch", "unit_basis_unsupported", "not_yet_visible", "polarity_not_assertive",
   // The words it was read from were erased on a withdrawal: the fact is still the record it was, and no verdict rests on it.
   "source_withdrawn",
 ]);
@@ -287,6 +287,17 @@ export function verifyFactEvidence(fact, context = {}) {
   }
   const span = text.slice(source.start, source.end);
   if (typeof source.quote === "string" && source.quote !== span) return { ok: false, reason: "quote_mismatch" };
+  // A date the quotation does not print may rest on a second quotation of the same document that prints it whole (`dateQuote`): found
+  // in the document's own bytes like the first, never anywhere else.
+  /** @type {string | null} */
+  let dateText = null;
+  const dateQuote = source.dateQuote;
+  if (dateQuote !== undefined && dateQuote !== null) {
+    if (typeof dateQuote !== "object" || !Number.isInteger(dateQuote.start) || !Number.isInteger(dateQuote.end)
+      || dateQuote.start < 0 || dateQuote.end > text.length || dateQuote.start >= dateQuote.end) return { ok: false, reason: "date_quote_mismatch" };
+    dateText = text.slice(dateQuote.start, dateQuote.end);
+    if (typeof dateQuote.quote === "string" && dateQuote.quote !== dateText) return { ok: false, reason: "date_quote_mismatch" };
+  }
 
   const surfaces = [fact?.surface, ...(Array.isArray(fact?.surfaceForms) ? fact.surfaceForms : [])]
     .filter((item) => typeof item === "string" && item.trim());
@@ -298,22 +309,63 @@ export function verifyFactEvidence(fact, context = {}) {
       return { ok: false, reason: "value_not_in_span" };
     }
   }
-  if (typeof fact?.dateSurface === "string" && fact.dateSurface.trim() && !span.includes(fact.dateSurface)) {
+  if (typeof fact?.dateSurface === "string" && fact.dateSurface.trim() && !span.includes(fact.dateSurface) && !(dateText ?? "").includes(fact.dateSurface)) {
     return { ok: false, reason: "date_not_in_span" };
   }
   // New source extractions bind dates as literally as numeric values. Legacy records retain their original evidence schema.
-  if (fact?.provenance?.factSchema >= 2 && ([fact.occurredAt, fact.recordedAt].some(date => date != null && !clinicalDateInQuote(date, span))
+  if (fact?.provenance?.factSchema >= 2 && ([fact.occurredAt, fact.recordedAt].some(date => date != null && !clinicalDateInEvidence(date, span, dateText))
       || fact.clinical?.occurredInterval && !clinicalIntervalInQuote(fact.clinical.occurredInterval, span, fact.dateSurface))) {
     return { ok: false, reason: "date_not_in_span" };
   }
   // A unit supports a number only where the quote prints it beside that number: a quote with two units supports each for its own
   // value, not for every value of the fact (E-10). A fact whose value is not a number is held to the older question, unit anywhere.
   const printedValue = (/** @type {unknown} */ value) => (typeof value === 'number' && Number.isFinite(value) ? value : null);
-  if (clinicalUnitInQuote(fact.unit,span,Boolean(fact.clinical?.laboratory),printedValue(fact.value)) === false) return {ok:false,reason:'unit_not_in_span'};
+  if (source.unitBasis === 'conventional') {
+    // Read, not printed: allowed for the one unit the domain's closed table gives this variable, for a bare number inside the range it
+    // gives, and never beside a number that has a unit of its own printed next to it.
+    const conventional = clinicalConventionalUnit(fact.variable, fact.value);
+    if (!conventional || conventional.unit !== fact.unit || clinicalUnitPrintedBesideValue(span, /** @type {number} */ (fact.value))) return { ok: false, reason: 'unit_basis_unsupported' };
+  } else if (clinicalUnitInQuote(fact.unit,span,Boolean(fact.clinical?.laboratory),printedValue(fact.value)) === false) return {ok:false,reason:'unit_not_in_span'};
   const original = fact.clinical?.laboratory;
   if (original?.originalValue != null && !numeralsIn(span).some(number => Math.abs(number-original.originalValue)<1e-9)) return {ok:false,reason:'value_not_in_span'};
   if (original?.originalUnit && clinicalUnitInQuote(original.originalUnit,span,true,printedValue(original.originalValue)) === false) return {ok:false,reason:'unit_not_in_span'};
   return { ok: true, reason: null };
+}
+
+/**
+ * A fact as it is being written: checked like any other, and settled so that one defect in a unit does not cost the whole fact.
+ *
+ * - A unit the quotation does not print beside the number is dropped, and the fact is kept with the number it printed (`unit_dropped`).
+ *   A criterion that names a unit then reads it as missing; a model that supplies a unit from its own knowledge loses no evidence.
+ * - A bare number of a variable the domain's closed table gives exactly one conventional unit (HbA1c, in percent, inside the range the
+ *   table prints) is read in that unit, and the fact records `source.unitBasis: conventional` (`unit_read_by_convention`). It is
+ *   never presented as printed, and a number with another unit beside it is not read this way.
+ *
+ * Everything else the check refuses stays refused: a number, a date or a quotation the document does not hold.
+ *
+ * @param {any} fact a fact with its `source` located (`{ documentId, start, end, quote, dateQuote? }`)
+ * @param {{ documents?: Map<string, any> | Record<string, any>, asOf?: number|string|Date, anyPolarity?: boolean }} [context]
+ * @returns {{ ok: true, fact: any, notes: Array<'unit_dropped' | 'unit_read_by_convention'> } | { ok: false, reason: string }}
+ */
+export function settleFactEvidence(fact, context = {}) {
+  /** @type {Array<'unit_dropped' | 'unit_read_by_convention'>} */
+  const notes = [];
+  let settled = fact;
+  let verdict = verifyFactEvidence(settled, context);
+  if (!verdict.ok && verdict.reason === "unit_not_in_span" && settled.unit) {
+    const without = { ...settled, unit: null };
+    const again = verifyFactEvidence(without, context);
+    if (again.ok) { settled = without; verdict = again; notes.push("unit_dropped"); }
+  }
+  if (!verdict.ok) return { ok: false, reason: String(verdict.reason) };
+  if (typeof settled.value === "number" && !settled.unit && settled.source) {
+    const conventional = clinicalConventionalUnit(settled.variable, settled.value);
+    if (conventional && !clinicalUnitPrintedBesideValue(String(settled.source.quote ?? ""), settled.value)) {
+      settled = { ...settled, unit: conventional.unit, source: { ...settled.source, unitBasis: "conventional" } };
+      notes.push("unit_read_by_convention");
+    }
+  }
+  return { ok: true, fact: settled, notes };
 }
 
 /**
@@ -402,6 +454,10 @@ const citation = (fact) => {
     occurredAt: fact?.occurredAt ?? null,
     visibleAt: fact?.visibleAt ?? null,
     polarity: String(fact?.polarity ?? "affirmed"),
+    // What the quotation does not itself say, said apart so that no reader takes it for printed: a unit read by the domain's table, a
+    // date taken from another line of the same document (where, never its words).
+    ...(fact?.source?.unitBasis === "conventional" && fact.unit ? { unitBasis: "conventional", unit: String(fact.unit) } : {}),
+    ...(fact?.source?.dateQuote && Number.isInteger(fact.source.dateQuote.start) ? { dateLocator: { start: fact.source.dateQuote.start, end: fact.source.dateQuote.end } } : {}),
   };
 };
 

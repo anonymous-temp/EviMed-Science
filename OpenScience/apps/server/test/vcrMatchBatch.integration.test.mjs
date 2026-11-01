@@ -135,3 +135,36 @@ test("a cancel stops the reading between records, keeps what was read, and the n
   const all = await studies.rows("SELECT document_id FROM evimed_vcr.matching_extractions WHERE study_id=$1 ORDER BY document_id", [g.study.id]);
   assert.deepEqual(all.map((entry) => entry.document_id), ["d1", "d2", "d3"]);
 });
+
+test("a fact written with a second quotation for its date and a unit read by convention is stored, read back and judged from the stored row", options, async () => {
+  const { vcrRuntimeWrite } = await import("../src/vcrGateway.mjs");
+  const { assessSubject } = await import("../src/vcrMatching.mjs");
+  const study = await studies.createStudy({ userId: "u_dq", projectId: "p_dq", name: "Date quotation", question: "q", dataTier: "T0" });
+  const text = "Record date: 2100-03-01\n\nHgbA1c 7.4 last month.\nTakes a multivitamin daily.\n";
+  const documents = { async runtimeRead(_study, { subjectKey, documentId }) { return documentId === "d1" ? { id: "d1", text, subjectKey, visibleAt: "2100-03-02T00:00:00.000Z" } : null; } };
+  const caller = { provenance: { schema: 1, status: "batch_extraction", runId: "job_dq", association: "matching.extract", skillDigest: null, requests: [] }, runtimeRunId: "job_dq" };
+  const write = (items) => vcrRuntimeWrite({ store: {}, service: null, orchestrator: null, study, what: "fact", items, data: null, matchStore, documents, report: () => {}, caller });
+  const head = { subjectKey: "P-001", documentId: "d1" };
+  const done = await write([
+    { ...head, variable: "hba1c", value: 7.4, unit: "%", surface: "7.4", quote: "HgbA1c 7.4 last month.", occurredAt: "2100-03-01", dateSurface: "2100-03-01", dateQuote: "Record date: 2100-03-01" },
+    { ...head, variable: "dietary_supplement", surface: "multivitamin", quote: "Takes a multivitamin daily.", occurredAt: "2100-03-01", dateQuote: "Record date: 2100-03-01" },
+    { ...head, variable: "dietary_supplement", surface: "multivitamin", quote: "Takes a multivitamin daily.", occurredAt: "2100-03-02", dateQuote: "Record date: 2100-03-01" },
+  ]);
+  assert.equal(done.issues.length, 1, "the date nobody printed is refused whole; the others are kept");
+  assert.equal(done.ids.length, 2);
+
+  const stored = await matchStore.listFacts({ studyId: study.id, subjectKey: "P-001" });
+  const a1c = stored.find((fact) => fact.variable === "hba1c");
+  assert.deepEqual([a1c.unit, a1c.value, a1c.source.unitBasis, a1c.source.dateQuote.quote, a1c.occurredAt], ["%", 7.4, "conventional", "Record date: 2100-03-01", "2100-03-01T00:00:00.000Z"]);
+  assert.equal(text.slice(a1c.source.dateQuote.start, a1c.source.dateQuote.end), "Record date: 2100-03-01", "the row holds where the date was read, in the document's own bytes");
+
+  const criteria = [
+    { id: "c1", kind: "inclusion", criterionType: "lab", sourceText: "HbA1c 6.5-9.5%", requirement: { op: "compare", variable: "hba1c", comparator: "between", value: 6.5, highValue: 9.5, unit: "%", aggregate: "any" } },
+    { id: "c2", kind: "inclusion", criterionType: "concomitant_medication", sourceText: "Supplement in the past 2 months", requirement: { op: "present", variable: "dietary_supplement", window: { months: 2 } } },
+  ];
+  const assessment = assessSubject({ subjectKey: "P-001", criteria, facts: stored, documents: { d1: { text } }, asOf: "2100-03-05" });
+  assert.deepEqual(assessment.judgments.map((judgment) => judgment.state), ["satisfied", "satisfied"], "re-read from the stored rows, the unit and the date stand");
+  assert.deepEqual(assessment.voidedFacts, []);
+  // Without the document the quotations cannot be re-read: the stored date does not stand on its own.
+  assert.equal(assessSubject({ subjectKey: "P-001", criteria, facts: stored, documents: { d1: { text: "other" } }, asOf: "2100-03-05" }).judgments[1].state, "unknown");
+});

@@ -207,6 +207,7 @@ export const VCR_WRITE_FIELDS = Object.freeze({
     "visibleAt",
     "surface",
     "dateSurface",
+    "dateQuote",
     "documentId",
     "start",
     "end",

@@ -129,6 +129,7 @@ export function CriterionTable({ label, rows, facts, extraColumns = [] }: {
             <span key={`${item.quote}-${index}`} className="block">
               <span className="block text-text">{`“${item.quote}”`}</span>
               <span className="block text-caption text-text-3">{[item.source, item.at].filter(Boolean).join(' · ')}</span>
+              {item.note && <span className="block text-caption text-text-3">{item.note}</span>}
             </span>
           ))}
         </span>

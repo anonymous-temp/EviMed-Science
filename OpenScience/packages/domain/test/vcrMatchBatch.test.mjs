@@ -115,3 +115,17 @@ test('D4: what the extractor proposes is held to the criteria\'s own variables b
   assert.deepEqual(dropped, { variable_not_asked: 1, polarity_invalid: 1, quote_missing: 2 })
   assert.deepEqual(acceptExtractedFacts('not json', variables), { facts: [], dropped: {} })
 })
+
+test('D4: a second quotation for a fact\'s date is kept as the model wrote it, and only when it is a line', () => {
+  const variables = new Set(['aspirin'])
+  const base = { variable: 'aspirin', surface: 'aspirin', quote: 'Takes aspirin daily.' }
+  const { facts } = acceptExtractedFacts({ facts: [
+    { ...base, occurredAt: '2100-03-01', dateSurface: '2100-03-01', dateQuote: 'Record date: 2100-03-01' },
+    { ...base, dateQuote: '   ' },
+    { ...base, dateQuote: 'x'.repeat(201) },
+    { ...base, dateQuote: 42 },
+  ] }, variables)
+  assert.equal(facts.length, 4, 'a bad date quotation costs the date, never the fact')
+  assert.equal(facts[0].dateQuote, 'Record date: 2100-03-01')
+  assert.deepEqual(facts.slice(1).map((fact) => 'dateQuote' in fact), [false, false, false])
+})

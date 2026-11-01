@@ -478,6 +478,27 @@ describe("患者匹配 — every citation a verdict rests on (E-06)", () => {
   });
 });
 
+describe("患者匹配 — what a citation does not itself print", () => {
+  it("says beside the quotation that a unit was read by convention, and that a date came from another line of the record", async () => {
+    const payload = addressed(fixture("ev201/matching-p0192.json"));
+    const row = payload.selected.criteria.find((entry: any) => entry.code === "E1");
+    const read = { quote: "HgbA1c 7.4 last month.", source: "document-aaaa1111.txt", at: "9 月 26 日", locator: { documentId: "prj_x", start: 0, end: 8 },
+      note: "单位 % 是按惯例读出的，原文没有印；日期取自同一份病历的另一处，不是这句话里印的" };
+    row.evidence = read;
+    row.evidenceItems = [read, { quote: "2026-06-01 给予多西他赛", source: "document-bbbb2222.txt", at: "6 月 1 日", locator: { documentId: "prj_x", start: 40, end: 48 } }];
+    server = installVcrServer(network.productRequest, { [P0192]: payload });
+    drawTab(<MatchingTab studyId={STUDY_ID} study={study()} />);
+    await screen.findByRole("heading", { name: "P-0201" });
+    await userEvent.click(screen.getByRole("button", { name: /^P-0192/ }));
+    await screen.findByRole("heading", { name: "P-0192" });
+    const cell = criterionRow("E1");
+    expect(cell).toHaveTextContent("“HgbA1c 7.4 last month.”");
+    expect(cell).toHaveTextContent("单位 % 是按惯例读出的，原文没有印");
+    expect(cell).toHaveTextContent("日期取自同一份病历的另一处，不是这句话里印的");
+    expect(cell.textContent?.match(/按惯例读出/g)).toHaveLength(1);
+  });
+});
+
 describe("患者匹配 — what the evidence of a rule has been through", () => {
   // Review V-M8: negation, a correction and a conflict were told only in the folded timeline at the foot of the tab, so a 满足 or 不满足
   // on a rule's own row said nothing of its evidence having been denied, corrected or contradicted, nor whose records the fold held.

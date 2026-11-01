@@ -216,6 +216,8 @@ export function acceptExtractedFacts(answer, variables) {
     if (typeof row.unit === 'string' && row.unit.trim() && row.unit.length <= 40) item.unit = row.unit.trim()
     if (typeof row.occurredAt === 'string' && /^\d{4}-\d{2}-\d{2}/.test(row.occurredAt)) item.occurredAt = row.occurredAt
     if (typeof row.dateSurface === 'string' && row.dateSurface.trim() && row.dateSurface.length <= 80) item.dateSurface = row.dateSurface.trim()
+    // A second quotation of the same record that prints the date whole: kept as written, because the writer finds it word for word.
+    if (typeof row.dateQuote === 'string' && row.dateQuote.trim() && row.dateQuote.length <= 200) item.dateQuote = row.dateQuote
     facts.push(item)
   }
   return { facts, dropped }

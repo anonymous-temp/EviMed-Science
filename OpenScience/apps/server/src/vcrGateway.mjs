@@ -83,7 +83,8 @@ import { vcrResultEntry, withJobEntry, withWriteEntry } from "./vcrResultEntry.m
 import { renderVcrNumbers } from "./vcrRender.mjs";
 import { checkRegulatoryContact, resolveVisitsRef, visitKey } from "./vcrScheduleView.mjs";
 import { EVIDENCE_ARM_ROLES } from "./vcrEvidenceStore.mjs";
-import { VCR_MATCHING_VOCABULARY_VERSION, storedExclusion } from "./vcrMatching.mjs";
+import { VCR_MATCHING_VOCABULARY_VERSION, settleFactEvidence, storedExclusion } from "./vcrMatching.mjs";
+import { DATE_QUOTE_MAX } from "./vcrClinicalDateEvidence.mjs";
 import { candidateRequest } from "./vcrCandidateSearch.mjs";
 import { VCR_RECONSTRUCTION_REFERENCE, vcrReconstructionReferenceFor, vcrResultKindFor } from "./vcrJobs.mjs";
 import { resolveJobSubject, prepareVcrSubjectPopulation } from "./vcrSubjects.mjs";
@@ -1779,6 +1780,7 @@ const WRITERS = {
     for (const code of clinicalFactIssues(clinical)) item.bad('clinical', code);
     const surface = item.str("surface", { max: 400, required: true });
     const dateSurface = item.str("dateSurface", { max: 80 });
+    const dateQuote = item.str("dateQuote", { max: DATE_QUOTE_MAX });
     const documentId = item.token("documentId", ID, "vcr_read what:subject_document 给出的文档 id", { required: true });
     const start = item.num("start", { min: 0, integer: true });
     const end = item.num("end", { min: 1, integer: true });
@@ -1787,8 +1789,16 @@ const WRITERS = {
     if (!item.ok) return null;
     const verified = await verifySourceSpan({ item, documents, study, subjectKey: String(subjectKey), documentId: String(documentId),
       span: { start: start ?? null, end: end ?? null, quote: String(quote) },
-      fact: { surface, dateSurface, occurredAt, recordedAt, value: typeof value === "number" ? value : undefined, clinical, unit } });
+      fact: { variable: String(variable), surface, dateSurface, dateQuote, occurredAt, recordedAt, value: typeof value === "number" ? value : undefined, clinical, unit } });
     if (!verified) return null;
+    // What was settled without losing the fact: a unit the quotation does not print is dropped, a bare number of a variable with one
+    // conventional unit is read in it. The run is told, and the page says which it was.
+    if (verified.notes.includes("unit_dropped") && !verified.notes.includes("unit_read_by_convention")) {
+      warnings.push({ field: "unit", code: "unit_not_in_quote", message: "unit 没有印在这句引文里，已去掉 unit；事实和数值已保存。条件要求单位而病历没印时，该条件仍是“单位缺失”的未知。" });
+    }
+    if (verified.notes.includes("unit_read_by_convention")) {
+      warnings.push({ field: "unit", code: "unit_read_by_convention", message: `数值旁没有印单位；${String(variable)} 按领域表里的惯例单位 ${String(verified.unit)} 读，已记为“按惯例读出”，不是病历印出的。` });
+    }
     if (clinical) {
       const referenced = [...new Set([clinical.copiedFrom, clinical.correctionOf,
         ...(clinical.relations ?? []).filter(r => r.state === 'supported').map(r => r.targetFactId)].filter(Boolean))];
@@ -1841,9 +1851,10 @@ const WRITERS = {
     const mine = { variable: String(variable), polarity: effective, basis: surfaceBasis({ surface, source: { documentId, start: verified.span.start, quote: verified.span.quote } }) };
     const sharing = mine.basis ? factsOnSameWords(mine, await factBasisOfSubject({ matchStore, study, subjectKey: String(subjectKey), seen: extra })) : [];
     const saved = await matchStore.saveFact({ studyId: study.id, userId: study.userId, fact: {
-      subjectKey, variable, value: value ?? null, unit: unit ?? null, polarity: effective, clinical, occurredAt: occurredAt ?? null, recordedAt: recordedAt ?? null,
+      subjectKey, variable, value: value ?? null, unit: verified.unit ?? null, polarity: effective, clinical, occurredAt: occurredAt ?? null, recordedAt: recordedAt ?? null,
       visibleAt: visibleAt ?? verified.document.visibleAt ?? new Date().toISOString(), surface, dateSurface: dateSurface ?? null,
-      source: { documentId, start: verified.span.start, end: verified.span.end, quote: verified.span.quote, vocabularyVersion, projectionHash: verified.document.projectionHash ?? null, sourceHash: verified.document.sourceHash ?? null }, extractedBy: "model",
+      source: { documentId, start: verified.span.start, end: verified.span.end, quote: verified.span.quote, vocabularyVersion, projectionHash: verified.document.projectionHash ?? null, sourceHash: verified.document.sourceHash ?? null,
+        ...(verified.dateQuote ? { dateQuote: verified.dateQuote } : {}), ...(verified.unitBasis ? { unitBasis: verified.unitBasis } : {}) }, extractedBy: "model",
       provenance: { ...(caller?.provenance ?? { schema: 1, status: 'unknown', runId: caller?.runtimeRunId ?? null }),
         inputProjectionHash: verified.document.projectionHash ?? null, terminologyVersion: vocabularyVersion, factSchema: 2 },
     } });
@@ -2148,7 +2159,7 @@ async function loadPoolJob(store, study, jobId, parameter) {
  *
  * @param {{ item: Item, documents: any, study: any, subjectKey: string, documentId: string,
  *   span: { start: number | null, end: number | null, quote: string },
- *   fact: { surface?: string, dateSurface?: string, occurredAt?:string|null, recordedAt?:string|null, value?: number, clinical?:any, unit?:string|null }, field?: string }} input
+ *   fact: { variable?: string, surface?: string, dateSurface?: string, dateQuote?: string, occurredAt?:string|null, recordedAt?:string|null, value?: number, clinical?:any, unit?:string|null }, field?: string }} input
  * @returns {Promise<{ document: { id: string, text: string, visibleAt: string | null, projectionHash?:string, sourceHash?:string }, span: { start: number, end: number, quote: string } } | null>}
  */
 /**
@@ -2292,17 +2303,31 @@ async function verifySourceSpan({ item, documents, study, subjectKey, documentId
     start = at[0];
     end = at[0] + span.quote.length;
   }
-  const { verifyFactEvidence } = await import("./vcrMatching.mjs");
-  const verdict = verifyFactEvidence({
-    id: "check", polarity: "affirmed", extractedBy: "model", surface: fact.surface ?? span.quote, value: fact.value, dateSurface: fact.dateSurface,
+  // A date the quotation does not print may be taken from a second quotation of the same document that prints it whole: it is found
+  // in the document's own text like the first, and a quotation the document does not hold is refused the same way.
+  /** @type {{ start: number, end: number, quote: string } | null} */
+  let dateQuote = null;
+  if (fact.dateQuote) {
+    const at = document.text.indexOf(fact.dateQuote);
+    if (at < 0) {
+      item.bad("dateQuote", "原文里找不到这句日期引文：dateQuote 要逐字出现在同一份文档里。", "vcr_evidence_unverified");
+      return null;
+    }
+    dateQuote = { start: at, end: at + fact.dateQuote.length, quote: fact.dateQuote };
+  }
+  const settled = settleFactEvidence({
+    id: "check", variable: fact.variable, polarity: "affirmed", extractedBy: "model", surface: fact.surface ?? span.quote, value: fact.value, dateSurface: fact.dateSurface,
     clinical: fact.clinical, unit: fact.unit, occurredAt: fact.occurredAt, recordedAt: fact.recordedAt, provenance: { factSchema: 2 },
-    source: { documentId, start, end, quote: span.quote },
+    source: { documentId, start, end, quote: span.quote, ...(dateQuote ? { dateQuote } : {}) },
   }, { documents: new Map([[documentId, { text: document.text }]]) });
-  if (!verdict.ok) {
-    item.bad(field, `原文里核对不上（${verdict.reason}）：start 到 end 之间的字要和 quote 逐字一致，quote 要包含 surface、数值，以及紧挨着数值写出的单位。`, "vcr_evidence_unverified");
+  if (!settled.ok) {
+    const { reason } = /** @type {{ ok: false, reason: string }} */ (settled);
+    const dated = reason === "date_not_in_span" ? "日期要整个印在 quote 里，或用 dateQuote 逐字引同一份文档里印着这个完整日期（含年份）的一句话；没有就不写 occurredAt / recordedAt。" : "";
+    item.bad(field, `原文里核对不上（${reason}）：start 到 end 之间的字要和 quote 逐字一致，quote 要包含 surface、数值，以及紧挨着数值写出的单位。${dated}`, "vcr_evidence_unverified");
     return null;
   }
-  return { document, span: { start: /** @type {number} */ (start), end: /** @type {number} */ (end), quote: span.quote } };
+  return { document, span: { start: /** @type {number} */ (start), end: /** @type {number} */ (end), quote: span.quote }, dateQuote,
+    unit: settled.fact.unit ?? null, unitBasis: settled.fact.source.unitBasis ?? null, notes: settled.notes };
 }
 
 /**

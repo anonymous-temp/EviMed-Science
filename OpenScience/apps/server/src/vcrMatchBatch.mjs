@@ -43,7 +43,7 @@ import { matchingVariablesOf, subjectTableFacts } from './vcrMatchingTable.mjs';
 import { locatePassages, passageTerms } from './vcrPassages.mjs';
 
 /** Bumped when the instructions change enough that a record read under the old ones should be read again. */
-export const MATCH_EXTRACT_PROMPT_VERSION = 'match-extract-1';
+export const MATCH_EXTRACT_PROMPT_VERSION = 'match-extract-2';
 
 const LOCK_HASH = createHash('sha256').update(`evimed-control-plane:matching.extract:${VCR_MATCH_BATCH_METHODS['matching.extract'].version}`).digest('hex');
 
@@ -84,12 +84,12 @@ export function extractSelection(raw = {}) {
 // ---------------------------------------------------------------------------
 
 const INSTRUCTIONS = [
-  '你从一份病历里为入排条件找事实。只输出 JSON：{"facts":[{"variable","polarity","value","unit","occurredAt","dateSurface","surface","quote"}]}。',
+  '你从一份病历里为入排条件找事实。只输出 JSON：{"facts":[{"variable","polarity","value","unit","occurredAt","dateSurface","dateQuote","surface","quote"}]}。',
   '规则：',
   '1. variable 只能是下面列出的变量名，原样使用；病历没提到的变量不要写，不要猜。',
-  '2. quote 是病历里的一句原话，逐字照抄，不改写、不换算、不合并两句；surface 是 quote 里你读到的词；有数值时 value 是 quote 里印着的数，unit 照病历写。',
+  '2. quote 是病历里的一句原话，逐字照抄，不改写、不换算、不合并两句；surface 是 quote 里你读到的词；有数值时 value 是 quote 里印着的数。unit 只在 quote 里紧挨着数值印着单位时才写，没印就不写（事实仍保存，数值保留）。',
   '3. polarity：affirmed（确有）、negated（quote 本身明确否认，如“否认妊娠”）、hypothetical（拟行、可能、不除外）、family（家族史）。病历没提到的是未知，不是 negated。',
-  '4. occurredAt 只在 quote 本身写了日历日期时填（YYYY-MM-DD），日期原文放进 dateSurface。',
+  '4. occurredAt（YYYY-MM-DD）只在日期完整印在 quote 里，或印在 dateQuote 里时填，日期原文放进 dateSurface。dateQuote 是同一份病历里印着这个完整日期（含年份）的另一句原话，逐字照抄，例如记录抬头的日期行；只有“此刻的状态”（正在用的药、本次就诊的事）才取它所在那条记录的日期，既往的事件自己没有日期就不填。缺年份的写法（如 3/14）不算日期，不要补全。',
   '5. 年龄、性别、诊断推不出绝经、妊娠、操作史或阴性结果，这类不要写。',
   '6. 没有可写的事实就返回 {"facts":[]}。',
 ].join('\n');
@@ -363,8 +363,9 @@ export function createMatchExtractExecutor({ store, matchStore, documents, extra
         const accepted = acceptExtractedFacts(read.answer, variableSet);
         const items = accepted.facts.flatMap((fact) => {
           const start = String(record.text).indexOf(fact.quote);
-          // A quotation the record does not hold is not written (the writer would refuse it); it is counted as refused below.
-          if (start < 0) return [];
+          // A quotation the record does not hold is not written (the writer would refuse it); it is counted as refused below. So is a
+          // date quotation it does not hold: the writer finds both word for word.
+          if (start < 0 || (fact.dateQuote && !String(record.text).includes(fact.dateQuote))) return [];
           return [{ ...fact, subjectKey, documentId, start, end: start + fact.quote.length }];
         });
         const written = items.length

@@ -894,6 +894,12 @@ test("a criterion's evidence shows every citation the verdict rests on, each wit
   assert.deepEqual(row.evidenceItems.map((item) => item.locator.documentId), ["prj_new", "sfl_old"], "and where to open each");
   assert.ok(row.evidenceItems.every((item) => typeof item.at === "string" && item.at.length > 0), "each with the date of what it records");
   assert.deepEqual(row.evidence, row.evidenceItems[0], "the first stays the criterion's evidence, as before");
+  // What the quotation does not print is said beside it, and a citation that printed everything has no note.
+  assert.equal(row.evidenceItems.every((item) => item.note === null), true);
+  const read = { ...citation("HgbA1c 7.4 last month.", "prj_new", "2100-03-01T00:00:00.000Z"), unitBasis: "conventional", unit: "%", dateLocator: { start: 0, end: 23 } };
+  assert.equal(judged([read], names).evidence.note, "单位 % 是按惯例读出的，原文没有印；日期取自同一份病历的另一处，不是这句话里印的");
+  assert.equal(judged([{ ...read, dateLocator: undefined }], names).evidence.note, "单位 % 是按惯例读出的，原文没有印");
+  assert.equal(judged([{ ...read, unitBasis: undefined, unit: undefined }], names).evidence.note, "日期取自同一份病历的另一处，不是这句话里印的");
   // No name resolved (a document the viewer cannot name, or an evidence kind with none): the older label, and nothing invented.
   assert.equal(judged([later]).evidence.source, "病历原文");
   // Only what is quoted is shown, and no more than three citations.

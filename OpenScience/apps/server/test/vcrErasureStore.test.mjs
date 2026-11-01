@@ -40,3 +40,13 @@ test('the quotes of the evidence that came out of erased text become the hash of
   assert.deepEqual(twice.evidence, once.evidence);
   assert.deepEqual(redactedEvidence(null, () => true), { evidence: [], changed: false });
 });
+
+test('the second quotation a fact\'s date was read from goes with the first: its place stays, its words become a hash', () => {
+  const row = { value: 7.4, surface: 'HgbA1c 7.4', date_surface: '2100-03-01', clinical: null,
+    source: { documentId: 'sfl_1', start: 30, end: 52, quote: 'HgbA1c 7.4 last month.', unitBasis: 'conventional', dateQuote: { start: 0, end: 23, quote: 'Record date: 2100-03-01' } } };
+  const words = redactedFactColumns(row);
+  assert.deepEqual(words.source.dateQuote, { start: 0, end: 23, quoteHash: sha('Record date: 2100-03-01') });
+  assert.equal(words.source.unitBasis, 'conventional', 'how the unit was read describes the record and stays');
+  assert.ok(!JSON.stringify(words).includes('Record date') && !JSON.stringify(words).includes('HgbA1c'));
+});
+

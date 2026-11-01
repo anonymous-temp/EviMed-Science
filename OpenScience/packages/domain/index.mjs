@@ -2693,6 +2693,8 @@ export {
   CLINICAL_UNIT_VERSION,
   clinicalUnitToken,
   clinicalUnitInQuote,
+  clinicalUnitPrintedBesideValue,
+  clinicalConventionalUnit,
   convertClinicalUnit,
 } from './src/clinicalUnits.mjs'
 

@@ -1248,6 +1248,8 @@ export interface VcrCriterionCitation {
   quote: string;
   source?: string | null;
   at?: string | null;
+  /** What the quotation does not itself print (a unit read by convention, a date taken from another line of the record). */
+  note?: string | null;
   locator?: { documentId?: string; start?: number | null; end?: number | null; snapshotId?: string; field?: string } | null;
 }
 

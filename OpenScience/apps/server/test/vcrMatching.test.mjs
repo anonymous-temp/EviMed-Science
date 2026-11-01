@@ -19,7 +19,7 @@ import {
   evaluateRequirement, evidenceGaps, factsVisibleAt, frozenAsOf, interRaterAgreement, kleeneAnd, kleeneNot, kleeneOr,
   labelClinicalPriority, matchingAssessmentDocument, matchingEvaluationReport, matchingReportDiff, patientMatchingMetrics,
   pendingReviewExclusions, requiresLanguageJudgment, runMatchingEvaluation,
-  summarizeEligibility, verifyFactEvidence, windowStart, withinWindow, VCR_FACT_VOID_REASONS,
+  summarizeEligibility, verifyFactEvidence, settleFactEvidence, windowStart, withinWindow, VCR_FACT_VOID_REASONS,
 } from "../src/vcrMatching.mjs";
 import { clinicalFactView, validateCapabilityManifest, vcrMatchingFindings } from "@evimed/domain";
 
@@ -1100,4 +1100,38 @@ test('a unit the quote prints beside another number does not support this fact\'
     facts: [guessed], documents: source.documents, asOf: AS_OF });
   assert.equal(assessed.summary, 'insufficient_evidence');
   assert.deepEqual(assessed.voidedFacts, [{ factId: 'g', variable: 'glucose', reason: 'unit_not_in_span' }]);
+});
+
+// ---------------------------------------------------------------------------
+// A unit the quotation does not print drops the unit, not the fact; a bare number of a one-unit variable is read in it (settleFactEvidence)
+// ---------------------------------------------------------------------------
+
+test("settleFactEvidence keeps the fact and drops a unit the quotation does not print, and reads a bare HbA1c in percent as a read unit", () => {
+  const text = "Creatinine 1.1 today. HgbA1c 7.4 last month. HbA1c 53 mmol/mol. HbA1c 53 in March.";
+  const documents = { d: { text } };
+  /** @param {string} quote @param {Record<string, any>} over */
+  const fact = (quote, over) => ({ id: "f", polarity: "affirmed", extractedBy: "model", provenance: { factSchema: 2 }, surface: String(over.value),
+    source: { documentId: "d", start: text.indexOf(quote), end: text.indexOf(quote) + quote.length, quote }, ...over });
+
+  // The strict check stays strict: a claimed unit that is not beside the number is refused by it.
+  assert.deepEqual(verifyFactEvidence(fact("Creatinine 1.1 today.", { variable: "creatinine", value: 1.1, unit: "mg/dL" }), { documents }), { ok: false, reason: "unit_not_in_span" });
+  const dropped = settleFactEvidence(fact("Creatinine 1.1 today.", { variable: "creatinine", value: 1.1, unit: "mg/dL" }), { documents });
+  assert.equal(dropped.ok, true);
+  assert.deepEqual(dropped.ok && [dropped.fact.value, dropped.fact.unit, dropped.notes], [1.1, null, ["unit_dropped"]]);
+
+  const read = settleFactEvidence(fact("HgbA1c 7.4 last month.", { variable: "hba1c", value: 7.4, unit: "%" }), { documents });
+  assert.deepEqual(read.ok && [read.fact.unit, read.fact.source.unitBasis, read.notes], ["%", "conventional", ["unit_dropped", "unit_read_by_convention"]]);
+  // The evaluator checks the basis again whenever it re-reads the fact: the table must give this variable that unit, the number must be bare.
+  assert.deepEqual(verifyFactEvidence(read.ok ? read.fact : null, { documents }), { ok: true, reason: null });
+  const forged = (/** @type {Record<string, any>} */ over) => verifyFactEvidence({ ...(read.ok ? read.fact : {}), ...over }, { documents });
+  assert.deepEqual(forged({ variable: "creatinine" }), { ok: false, reason: "unit_basis_unsupported" }, "a variable the table does not list");
+  assert.deepEqual(forged({ unit: "mmol/mol" }), { ok: false, reason: "unit_basis_unsupported" }, "a unit the table does not give");
+  assert.deepEqual(forged({ value: 53, surface: "53", source: { ...fact("HbA1c 53 in March.", {}).source, unitBasis: "conventional" } }), { ok: false, reason: "unit_basis_unsupported" }, "a number outside the printed range");
+  assert.deepEqual(forged({ value: 53, unit: "%", surface: "53", source: { ...fact("HbA1c 53 mmol/mol.", {}).source, unitBasis: "conventional" } }), { ok: false, reason: "unit_basis_unsupported" }, "a number with its own unit printed beside it");
+
+  assert.deepEqual(settleFactEvidence(fact("HbA1c 53 mmol/mol.", { variable: "hba1c", value: 53, unit: "mmol/mol" }), { documents }).ok, true);
+  const outside = settleFactEvidence(fact("HbA1c 53 in March.", { variable: "hba1c", value: 53 }), { documents });
+  assert.deepEqual(outside.ok && [outside.fact.unit ?? null, outside.fact.source.unitBasis ?? null, outside.notes], [null, null, []]);
+  // What was never printed is still refused: a number the quotation does not hold.
+  assert.deepEqual(settleFactEvidence(fact("HgbA1c 7.4 last month.", { variable: "hba1c", value: 7.9, unit: "%" }), { documents }), { ok: false, reason: "value_not_in_span" });
 });
