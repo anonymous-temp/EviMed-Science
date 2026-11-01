@@ -35,8 +35,9 @@ export interface FrameVcrOptions {
 
 /**
  * The five starting points, in the plan's order (§9.3), by the words the pill uses. A starting point is a step, and is named as the
- * step is everywhere (`VCR_STEP_LABELS_ZH`): the pill said 队列 for what the page calls 人群, and the home said 合成对照 for what the tab
- * is called 对照 (module workspace audit, 2026-11-01, unranked note on task names).
+ * step is everywhere (`VCR_STEP_LABELS_ZH`): the pill said 队列 for what the page calls 人群, and the home gave the comparison task a name
+ * of its own for what the tab is called 对照 (module workspace audit, 2026-11-01, unranked note on task names). The comparison task is
+ * called 对照研究 (owner decision of 2026-11-01): the tab and the step stay 对照, and the old name still finds it in a search.
  */
 export const VCR_START_OPTIONS: ReadonlyArray<{ id: VcrStart; label: string }> = Object.freeze([
   { id: "auto", label: "自动" },
@@ -45,6 +46,9 @@ export const VCR_START_OPTIONS: ReadonlyArray<{ id: VcrStart; label: string }> =
   { minimumFields: "效果分析需治疗组别、结局定义、观察时间、混杂协变量与可比对照；无结局数据可先开展可行性设计。", indicators: [{ key: "comparator", label: "纵向结局与对照资料" }] as const, id: "comparator", label: VCR_STEP_LABELS_ZH.comparator },
   { minimumFields: "设计需终点类型、效应与变异度、显著性水平、目标把握度、入组和随访假设，并保留参数来源。", indicators: [{ key: "trial", label: "文献／设计假设" }] as const, id: "trial", label: VCR_STEP_LABELS_ZH.trial },
 ]);
+
+/** What the task whose tab is called 对照 is called as a task (decision 6 of the remediation plan, 2026-11-01). */
+const COMPARATOR_TASK_NAME = "对照研究";
 
 /**
  * The examples a new study begins from (plan §9.3, R10 mockup v02; the home's four examples, VCR remediation F5): the name of the tab where the work lands,
@@ -55,7 +59,7 @@ export const VCR_START_OPTIONS: ReadonlyArray<{ id: VcrStart; label: string }> =
 export const VCR_TASKS = Object.freeze([
   { id: "matching", label: VCR_TAB_LABELS_ZH.matching, example: "让 AI 匹配患者和试验", summary: "查找适合患者的试验，核对入排条件。", draft: "帮我匹配患者和临床试验。资料是：", requirement: "给一份病例就能开始。批量匹配需要患者数据表。" },
   { id: "population", label: VCR_TAB_LABELS_ZH.population, example: "让 AI 研究人群或个体患者", summary: "建立研究队列，查看个体的模拟结果。", draft: "帮我研究人群或个体患者。需求是：", requirement: "说清目标人群就能开始，AI 从文献取基线。用真实队列需要患者数据表。" },
-  { id: "comparator", label: VCR_TAB_LABELS_ZH.comparator, example: "让 AI 构建对照并比较结局", summary: "构建对照人群，比较两组结局。", draft: "帮我构建对照并比较结局。研究是：", requirement: "说清研究就能先做可行性判断。估计治疗效果需要两组的结局数据。" },
+  { id: "comparator", label: COMPARATOR_TASK_NAME, example: "让 AI 做对照研究", summary: "构建对照人群，比较两组结局。", draft: "帮我做对照研究。研究是：", requirement: "说清研究就能先做可行性判断。估计治疗效果需要两组的结局数据。" },
   { id: "trial", label: VCR_TAB_LABELS_ZH.trial, example: "让 AI 比较试验设计", summary: "比较不同试验方案的样本量、把握度和周期。", draft: "帮我比较临床试验设计。研究是：", requirement: "说清研究问题和终点就能开始，参数 AI 先从文献找，你可以随时改。" },
 ]);
 

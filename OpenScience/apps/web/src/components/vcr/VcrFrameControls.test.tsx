@@ -62,7 +62,7 @@ describe("the 虚拟临床研究 chip", () => {
     const Hero = f.components.get("conversation.hero.agentPreset") as (props: Record<string, unknown>) => React.ReactElement;
     const view = render(<Hero />);
     act(() => f.kit.hub.deliver("capability", { capabilityId: "vcr-protocol", sessionId: "session-a" }));
-    const labels = ["匹配", "人群与患者", "对照", "试验"];
+    const labels = ["匹配", "人群与患者", "对照研究", "试验"];
     act(() => f.kit.hub.deliver("vcr", frameVcrOptions("session-a", null)));
     expect(labels.every(label => view.queryByRole("button", { name: label }))).toBe(true);
     expect(view.container.querySelector("[aria-haspopup]")).toBeNull();

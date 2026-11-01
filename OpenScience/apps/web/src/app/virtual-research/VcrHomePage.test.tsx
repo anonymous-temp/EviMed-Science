@@ -34,7 +34,7 @@ const where = () => screen.getByTestId("where").textContent;
 const EXAMPLES: Array<[string, string, string]> = [
   ["匹配", "让 AI 匹配患者和试验", "帮我匹配患者和临床试验。资料是："],
   ["人群与患者", "让 AI 研究人群或个体患者", "帮我研究人群或个体患者。需求是："],
-  ["对照", "让 AI 构建对照并比较结局", "帮我构建对照并比较结局。研究是："],
+  ["对照研究", "让 AI 做对照研究", "帮我做对照研究。研究是："],
   ["试验", "让 AI 比较试验设计", "帮我比较临床试验设计。研究是："],
 ];
 it.each(EXAMPLES)("opens %s as an unsent native conversation draft without creating a study", async (_label, example, draft) => {
@@ -253,7 +253,7 @@ describe("the 研究 view beside its preview", () => {
   it("starts a task from the pane: an unsent draft in the native conversation", async () => {
     drawHome();
     await screen.findByRole("list", { name: "研究" });
-    await userEvent.click(within(screen.getByRole("region", { name: "研究预览" })).getByRole("button", { name: "让 AI 构建对照并比较结局" }));
+    await userEvent.click(within(screen.getByRole("region", { name: "研究预览" })).getByRole("button", { name: "让 AI 做对照研究" }));
     expect(where()).toBe("/app/chat?project=default");
     expect(server.calls.filter(call => call.method === "POST")).toEqual([]);
   });
