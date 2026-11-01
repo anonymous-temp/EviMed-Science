@@ -658,3 +658,99 @@ it("keeps mean study duration separate from the retained accrual estimate and it
   expect(table).toHaveTextContent("16.4"); expect(table).not.toHaveTextContent("22.4");
   expect(screen.getByText("截至该月完成入组的概率")).toBeInTheDocument();
 });
+
+describe("试验 · the premises, and the type I error that follows the result", () => {
+  const PREMISES = [
+    { key: "effect", label: "真实效应（风险比）", value: "0.7", source: "assumed", decisive: true },
+    { key: "control", label: "对照组中位时间", value: "12 个月", source: "assumed", decisive: true },
+    { key: "dropout", label: "每年脱落率", value: "0%", source: "default", decisive: true },
+    { key: "accrual", label: "入组与随访", value: "入组 18 个月，随访 12 个月", source: "assumed", decisive: true },
+    { key: "alpha", label: "显著性水平", value: "单侧2.5%", source: "default", decisive: true },
+    { key: "method", label: "分析方法", value: "log-rank 检验", source: "default", decisive: false },
+  ];
+  const withPremises = (change: (raw: any) => void = () => {}) => {
+    const raw = fixture("ev201/trial.json");
+    raw.premises = PREMISES;
+    change(raw);
+    installVcrServer(network.productRequest, { [tab("trial")]: raw });
+  };
+
+  it("opens with the conclusion's premises, under the sentence and above the table: the dropout nobody wrote is there, marked as a default", async () => {
+    withPremises();
+    const { container } = draw();
+    const table = await trialDrawn();
+    const block = await found(container, "[data-vcr-premises]");
+    const order = [container.querySelector("[data-headline]") as HTMLElement, block, table];
+    order.forEach((node, index) => {
+      expect(node, `item ${index}`).not.toBeNull();
+      if (index > 0) expect(order[index - 1].compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING, `item ${index}`).toBeTruthy();
+    });
+    const dropout = block.querySelector("[data-vcr-premise='dropout']") as HTMLElement;
+    expect(dropout).toHaveTextContent("每年脱落率");
+    expect(dropout).toHaveTextContent("0%");
+    expect(dropout).toHaveTextContent("默认");
+    expect(block.querySelectorAll("[data-vcr-premises-open] [data-vcr-premise]")).toHaveLength(5);
+    expect(block).toHaveTextContent("其余 1 条前提");
+  });
+
+  it("changes a premise by a draft named for it in the conversation's composer, and sends nothing", async () => {
+    withPremises();
+    const { spies } = draw();
+    await trialDrawn();
+    await userEvent.click(await screen.findByRole("button", { name: "让 AI 调整：每年脱落率" }));
+    expect(spies.openChat).toHaveBeenCalledTimes(1);
+    const [draft, reference] = spies.openChat.mock.calls[0];
+    expect(draft).toContain("改“每年脱落率”（现在是 0%）为：");
+    expect(reference).toMatchObject({ kind: "step", studyId: STUDY_ID, objectId: "trial" });
+    expect(network.productRequest.mock.calls.filter(([, method]) => method && method !== "GET")).toHaveLength(0);
+  });
+
+  it("offers no change to a reader who cannot write, and draws nothing when the server listed no premise", async () => {
+    withPremises();
+    const { container, unmount } = draw(readerOf());
+    await trialDrawn();
+    expect(container.querySelector("[data-vcr-premises]")).not.toBeNull();
+    expect(screen.queryByRole("button", { name: /^让 AI 调整：/ })).toBeNull();
+    unmount();
+    withPremises((raw) => { raw.premises = []; });
+    const second = draw();
+    await trialDrawn();
+    expect(second.container.querySelector("[data-vcr-premises]")).toBeNull();
+  });
+
+  it("says where the zero-effect check stands while its figure is not there, and shows the figure with its error and its check when it lands", async () => {
+    withPremises((raw) => {
+      for (const design of raw.designs) { delete design.measures.type_one_error; design.nullState = "queued"; }
+      raw.columns = [...raw.columns.filter((column: any) => column.key !== "type_one_error"), { key: "type_one_error", label: "I 类错误", unit: "%" }];
+    });
+    const { container, unmount } = draw();
+    await trialDrawn();
+    const waiting = [...container.querySelectorAll("tr[data-vcr-design]:not([data-vcr-dominated]) [data-vcr-null-state='queued']")];
+    expect(waiting.length).toBeGreaterThan(0);
+    expect(waiting[0]).toHaveTextContent("排队中");
+    expect(container.querySelectorAll("[data-vcr-measure='power']").length, "the result is not held back for it").toBeGreaterThan(0);
+    unmount();
+    withPremises((raw) => {
+      for (const design of raw.designs) {
+        design.nullState = "done";
+        design.measures.type_one_error = { ...design.measures.power, value: 2.46, unit: "%", mcse: 0.11, source: "synthetic", interval: null, precision: 2 };
+        design.nullCheck = { name: "type_one_error", analytic: 2.5, simulated: 2.46, differencePoints: 0.04, agrees: true };
+      }
+      raw.columns = [...raw.columns.filter((column: any) => column.key !== "type_one_error"), { key: "type_one_error", label: "I 类错误", unit: "%" }];
+    });
+    const landed = draw();
+    await trialDrawn();
+    const cell = (await found(landed.container, "tr[data-vcr-design='A'] [data-vcr-measure='type_one_error']"));
+    expect(cell).toHaveTextContent("2.46");
+    expect(cell.querySelector("[data-vcr-mcse]")).toHaveTextContent("0.11");
+    expect(cell.querySelector("[data-vcr-null-check='agrees']")).toHaveTextContent("复核");
+    landed.unmount();
+    withPremises((raw) => {
+      for (const design of raw.designs) { delete design.measures.type_one_error; design.nullState = "canceled"; }
+      raw.columns = [...raw.columns.filter((column: any) => column.key !== "type_one_error"), { key: "type_one_error", label: "I 类错误", unit: "%" }];
+    });
+    const stopped = draw();
+    await trialDrawn();
+    expect((await found(stopped.container, "[data-vcr-null-state='canceled']"))).toHaveTextContent("已取消");
+  });
+});

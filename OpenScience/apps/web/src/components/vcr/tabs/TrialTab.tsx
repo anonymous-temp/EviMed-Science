@@ -3,7 +3,7 @@ import { VcrScientificBasis } from "../VcrScientificBasis";
 import { VcrVersionComparison } from "../VcrVersionComparison";
 import { useRef, useState } from "react";
 import { CircleCheck, PenLine, TriangleAlert } from "lucide-react";
-import { getVcrTrial, recordVcrDecision, type VcrDesign, type VcrStudy, type VcrTrialTab as TrialData } from "@/lib/vcrClient";
+import { getVcrTrial, recordVcrDecision, type VcrDesign, type VcrPremise, type VcrStudy, type VcrTrialTab as TrialData } from "@/lib/vcrClient";
 import { webErrorMessage } from "@/lib/apiClient";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/cn";
@@ -28,6 +28,7 @@ import { VcrPredictionsDrawer } from "../VcrPredictionsDrawer";
 import { RegulatoryContactForm, VcrRegulatoryLog } from "../VcrRegulatoryLog";
 import { VcrScheduleCard } from "../VcrSchedule";
 import { VcrNumber } from "../VcrNumber";
+import { VcrPremises, premiseDraft } from "../VcrPremises";
 import { VcrToolbarActions, type VcrToolbarAction } from "../VcrToolbarActions";
 import { COMPARE_DRAFT_LABEL, DRAFT_PREFIX } from "../vcrActionWords";
 import { PartialResultNote, Stale, VcrStepFailed, VcrStepPending, VcrTabSkeleton } from "../VcrStates";
@@ -48,6 +49,10 @@ const hasRun = (design: VcrDesign): boolean => Boolean(design.record || design.r
 
 /** What a design that has not been computed says where its numbers would be. */
 const NOT_RUN = "还没算";
+
+/** Where the zero-effect check of a design stands while its figure is not there: waiting in the queue, running, or ended without one. */
+const NULL_STATE_WORDS = { queued: "排队中", running: "计算中", failed: "没算完", canceled: "已取消", done: "—" } as const;
+const waitsForNull = (key: string, design: VcrDesign): boolean => key === "type_one_error" && Boolean(design.nullState) && design.nullState !== "done";
 
 /**
  * What 「加一个方案」 and 「改假设」 put in the conversation's composer — never sent. A design is described and a hypothesis argued
@@ -127,6 +132,8 @@ function TrialView({ studyId, study, data, reload }: { studyId: string; study: V
   // 「加一个方案」 and 「改假设」 say it in the conversation: the draft waits in the composer, and the reader sends it.
   const [comparing, setComparing] = useState(false);
   const draft = (text: string) => () => frame?.openChat(`${text} 请先检查当前研究的已保存方案，保留原计算结果。`, { kind: "step", studyId, objectId: "trial" });
+  // A premise is changed in the same place a design is: the conversation, with the premise's name already in the composer.
+  const changePremise = (premise: VcrPremise) => frame?.openChat(`${premiseDraft(premise)} 请先检查当前研究的已保存方案，保留原计算结果。`, { kind: "step", studyId, objectId: "trial" });
   const editDesign = (design: VcrDesign) => frame?.openChat(`调整试验方案“${designContext(design)}”。先读取该版本及其证据参数，建立新版本并比较把握度、周期和假设变化。`, design.version ? { kind: "trial_scenario", studyId, objectId: design.id, version: design.version, ...(design.resultId ? { resultId: design.resultId, resultVersion: design.resultVersion } : {}) } : { kind: "step", studyId, objectId: "trial" });
 
   const actions: VcrToolbarAction[] = [];
@@ -190,6 +197,7 @@ function TrialView({ studyId, study, data, reload }: { studyId: string; study: V
             failed={failed}
             onOpen={setOpened}
             onEdit={canWrite && frame ? editDesign : null}
+            onChangePremise={canWrite && frame ? changePremise : null}
           />
         </Stale>
       )}
@@ -245,7 +253,7 @@ function TrialView({ studyId, study, data, reload }: { studyId: string; study: V
 
 /* ------------------------------------------------------------------------- the designs */
 
-function DesignsView({ studyId, study, data, headline, noneRan, failed, onOpen, onEdit }: {
+function DesignsView({ studyId, study, data, headline, noneRan, failed, onOpen, onEdit, onChangePremise }: {
   studyId: string;
   study: VcrStudy;
   data: TrialData;
@@ -254,6 +262,7 @@ function DesignsView({ studyId, study, data, headline, noneRan, failed, onOpen, 
   failed: boolean;
   onOpen: (design: VcrDesign) => void;
   onEdit: ((design: VcrDesign) => void) | null;
+  onChangePremise: ((premise: VcrPremise) => void) | null;
 }) {
   const chosenCodes = data.designs.filter((design) => design.chosen).map((design) => design.code);
   // The trade-off is drawn only when there is something to place: two designs with a duration and an assurance. A card whose chart
@@ -332,6 +341,9 @@ function DesignsView({ studyId, study, data, headline, noneRan, failed, onOpen, 
   return (
     <div className="flex flex-col gap-6">
       {headline.length > 0 && <Headline parts={headline} />}
+
+      {/* What the conclusion stands on, once: the numbers behind the table, where each came from, the defaults among them. */}
+      {!noneRan && <VcrPremises premises={data.premises} onChange={onChangePremise} />}
 
       {noneRan
         ? <NotComputedDesigns designs={data.designs} studyId={studyId} study={study} failed={failed} />
@@ -435,11 +447,13 @@ function designColumns(data: TrialData, onEdit: ((design: VcrDesign) => void) | 
       key: column.key,
       header: column.unit ? `${column.label}（${column.unit}）` : column.label,
       align: "right",
-      isEmpty: (design) => design.measures[column.key]?.value == null && !design.measures[column.key]?.text,
+      isEmpty: (design) => design.measures[column.key]?.value == null && !design.measures[column.key]?.text && !waitsForNull(column.key, design),
       cell: (design) => {
         // A dominated design gives no numbers at all; what it was beaten by is said in its first cell.
         if (design.dominated) return null;
         const value = design.measures[column.key];
+        // The type I error is measured after the result (the zero-effect run follows on the queue): until it lands the cell says where it is.
+        if (!value && waitsForNull(column.key, design)) return <span data-vcr-null-state={design.nullState ?? undefined} className="text-text-3">{NULL_STATE_WORDS[design.nullState as keyof typeof NULL_STATE_WORDS]}</span>;
         if (!value) return <span data-vcr-not-run={designRan(design) ? undefined : ""} className="text-text-3">{designRan(design) ? "—" : NOT_RUN}</span>;
         const mcse = mcseText(value.mcse);
         // A Monte-Carlo interval is the standard error said again (±1.96 of it); a predicted one — when the last patient comes in — is a
@@ -464,6 +478,12 @@ function designColumns(data: TrialData, onEdit: ((design: VcrDesign) => void) | 
               </span>
             )}
             {interval && <span data-vcr-interval="" className="text-meta font-normal text-text-3">{interval}</span>}
+            {/* Where the closed form can answer the same question (the nominal alpha for a fixed design), the simulation is a check on it. */}
+            {column.key === "type_one_error" && design.nullCheck && (
+              <Tag tone={design.nullCheck.agrees === false ? "warn" : "neutral"} title={`与解析值核对：解析 ${numberText(design.nullCheck.analytic)}% · 仿真 ${numberText(design.nullCheck.simulated)}%`}>
+                <span data-vcr-null-check={design.nullCheck.agrees === false ? "differs" : "agrees"}>复核</span>
+              </Tag>
+            )}
           </span>
         );
       },
@@ -508,6 +528,21 @@ function DesignRecordDrawer({ design, onClose, onEdit }: { design: VcrDesign; on
   const replicates = record?.replicates ?? design.replicates;
   if (replicates != null) rows.push({ label: "模拟次数", value: numberText(replicates, 0) });
   if (record?.seed != null) rows.push({ label: "随机种子", value: String(record.seed) });
+  for (const reason of record?.replicateReasons ?? []) rows.push({ label: "模拟次数的依据", value: reason });
+  const nullCheck = design.nullCheck;
+  if (nullCheck) {
+    rows.push({
+      label: "I 类错误与解析值核对",
+      value: (
+        <span data-vcr-check={nullCheck.agrees === null ? "unknown" : nullCheck.agrees ? "agrees" : "differs"} className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="tabular-nums">{`解析 ${numberText(nullCheck.analytic)}% · 仿真 ${numberText(nullCheck.simulated)}%`}</span>
+          <span className="tabular-nums text-text-2">{`相差 ${numberText(nullCheck.differencePoints)} 个百分点`}</span>
+          {nullCheck.agrees === true && <span role="img" aria-label="一致" className="inline-flex text-ok"><CircleCheck size={16} aria-hidden="true" /></span>}
+          {nullCheck.agrees === false && <span role="img" aria-label="不一致" className="inline-flex text-warn-strong"><TriangleAlert size={16} aria-hidden="true" /></span>}
+        </span>
+      ),
+    });
+  }
   if (check && check.analytic != null && check.simulated != null) {
     const ok = check.agrees;
     rows.push({

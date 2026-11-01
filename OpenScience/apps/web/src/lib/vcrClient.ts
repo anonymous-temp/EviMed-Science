@@ -380,6 +380,21 @@ export interface VcrChange {
   state?: "stale" | null;
 }
 
+/**
+ * One premise of a result (「这个结论的前提」): a number the conclusion stands on, where it came from, and whether the conclusion turns on
+ * it. The server computes the list (`vcrPremises`); the page shows the decisive ones and folds the rest.
+ */
+export interface VcrPremise {
+  key: string;
+  label: string;
+  value: string;
+  /** 文献 / 假设 / 默认 / 你给的数据. */
+  source: "literature" | "assumed" | "default" | "given";
+  decisive: boolean;
+  /** One short line of why, where the premise is a reason and not a number (「成功把握」 not computed). */
+  reason?: string | null;
+}
+
 /** A design on the trade-off scatter and in the grid. */
 export interface VcrDesign {
   computationBasis?: VcrScientificComputationBasis | null;
@@ -402,11 +417,20 @@ export interface VcrDesign {
   method?: string | null;
   /** How many replicates the simulation ran. */
   replicates?: number | null;
+  /**
+   * Where the zero-effect check of the design stands (the type I error, measured after the result): landed, waiting in the queue,
+   * running, failed or cancelled; null when the design has none to wait for.
+   */
+  nullState?: "done" | "queued" | "running" | "failed" | "canceled" | null;
+  /** The type I error held against its closed form where one exists (a check, in percentage points); null where there is none. */
+  nullCheck?: { name: string; analytic: number; simulated: number; differencePoints: number; agrees: boolean | null } | null;
   measures: Record<string, VcrValue>;
   /** The run behind the row, as numbers: what the row's record drawer reads (`vcrViews.mjs`); null before the design ran. */
   record?: {
     method: string | null;
     replicates: number | null;
+    /** Why each simulated stage ran as many replicates as it did, one sentence each. */
+    replicateReasons?: string[];
     seed: number | null;
     check: { analytic: number | null; simulated: number | null; differencePoints: number | null; allowedPoints: number | null; approximate: boolean; agrees: boolean | null } | null;
   } | null;
@@ -714,6 +738,8 @@ export interface VcrQualityReport {
 }
 
 export interface VcrPopulationTab {
+  /** 「这个结论的前提」: at most five decisive, the rest folded by the page. */
+  premises?: VcrPremise[];
   selection?: { objectId: string; version: number; resultId?: string; resultVersion?: number } | null;
   /** 「人群 v3（方案 v2）」. */
   version: string | null;
@@ -979,7 +1005,26 @@ export interface VcrDimension {
   reason?: string | null;
 }
 
+/**
+ * A MAP prior's operating characteristics (a borrowing design): the rejection probability over a grid of drifts of the true control
+ * rate away from history, under each prior, with the effect absent (the type I error) and present (the power), each with its
+ * Monte-Carlo error and the replicates behind it.
+ */
+export interface VcrOperatingCharacteristics {
+  /** What a row ran (the replicates), what was asked for, and whether the engine's ceiling held it below the request. */
+  replicates: number | null;
+  asked: number | null;
+  capped: boolean;
+  /** Why it ran that many, one sentence. */
+  reason: string | null;
+  rows: Array<{ drift: number; prior: string; priorLabel: string; scenario: "null" | "alternative"; rejection: number; mcse: number | null; replicates: number | null }>;
+}
+
 export interface VcrComparatorTab {
+  /** 「这个结论的前提」: at most five decisive, the rest folded by the page. */
+  premises?: VcrPremise[];
+  /** A MAP prior's table of operating characteristics (the rejection probability over the drifts), where the route computed one. */
+  operatingCharacteristics?: VcrOperatingCharacteristics | null;
   versions?: Array<{ objectId: string; version: number; label: string; resultId?: string; resultVersion?: number }>;
   selection?: { id: string; version: number | null; resultId: string | null; resultVersion: number | null; route: string } | null;
   predictionBenchmark?: {
@@ -995,7 +1040,9 @@ export interface VcrComparatorTab {
   rmst: { value: VcrValue; tau?: number | null; label?: string | null } | null;
   median?: VcrValue | null;
   /** The reconstruction's own quality control. */
-  qc: Array<{ key: string; label: string; value: string; threshold?: string | null; passed: boolean }>;
+  qc: Array<{ key: string; label: string; value: string; threshold?: string | null; passed: boolean; /** The paper gave nothing to check against: listed, neither passed nor failed. */ notChecked?: boolean }>;
+  /** What the paper gave a reconstruction (its information level); levels 3 and 4 have no risk table and are limited. */
+  reconstruction?: { level: number | null; key: string; label: string; arms: Array<{ name: string; label: string }>; hazardRatio: string | null; limited: boolean } | null;
   methods?: Array<{ label: string; version?: string | null; note?: string | null; passed?: boolean }>;
   /** ICH E10's four conditions. */
   e10?: Array<{ key: string; label: string; state: "met" | "partial" | "doubtful"; note?: string | null }>;
@@ -1065,6 +1112,8 @@ export interface VcrRegulatoryContact {
 }
 
 export interface VcrTrialTab {
+  /** 「这个结论的前提」 of the headline design: at most five decisive, the rest folded by the page. */
+  premises?: VcrPremise[];
   accrualForecasts?: Array<{ id: string; version: number; scenarioId: string | null; scenarioVersion: number | null; design: string | null; name: string; lastPatientIn: VcrValue | null; targetEvents: VcrValue | null; probabilityByMonth: Array<{ month: number; probability: number }> }>;
   headline?: string | null;
   /** ADEMP, one line each. */
@@ -1641,9 +1690,37 @@ function readDesign(raw: unknown): VcrDesign {
     note: text(value.note),
     method: text(value.method),
     replicates: finite(value.replicates),
+    nullState: (["done", "queued", "running", "failed", "canceled"] as const).find((state) => state === value.nullState) ?? null,
+    nullCheck: readNullCheck(value.nullCheck),
     measures: Object.fromEntries(Object.entries(measures).map(([key, cell]) => [key, readVcrValue(cell)])),
     record: readDesignRecord(value.record),
   };
+}
+
+function readNullCheck(raw: unknown): VcrDesign["nullCheck"] {
+  const value = obj(raw);
+  const analytic = finite(value.analytic), simulated = finite(value.simulated), difference = finite(value.differencePoints);
+  if (analytic === null || simulated === null || difference === null) return null;
+  return { name: text(value.name) ?? "type_one_error", analytic, simulated, differencePoints: difference, agrees: typeof value.agrees === "boolean" ? value.agrees : null };
+}
+
+function readOperatingCharacteristics(raw: unknown): VcrOperatingCharacteristics | null {
+  const value = obj(raw);
+  const rows = arr(value.rows).flatMap((row) => {
+    const drift = finite(row.drift), rejection = finite(row.rejection), scenario = (["null", "alternative"] as const).find((entry) => entry === row.scenario);
+    return drift !== null && rejection !== null && scenario ? [{ drift, prior: text(row.prior) ?? "", priorLabel: text(row.priorLabel) ?? text(row.prior) ?? "", scenario, rejection, mcse: finite(row.mcse), replicates: finite(row.replicates) }] : [];
+  });
+  return rows.length ? { replicates: finite(value.replicates), asked: finite(value.asked), capped: value.capped === true, reason: text(value.reason), rows } : null;
+}
+
+/** 「这个结论的前提」: only well-formed rows, with a source the page has a word for; nothing is made up for a row that lacks one. */
+export function readPremises(raw: unknown): VcrPremise[] {
+  const sources = ["literature", "assumed", "default", "given"] as const;
+  return arr(raw).flatMap((row) => {
+    const key = text(row.key), label = text(row.label), value = text(row.value);
+    const source = sources.find((entry) => entry === row.source);
+    return key && label && value && source ? [{ key, label, value, source, decisive: row.decisive === true, reason: text(row.reason) }] : [];
+  });
 }
 
 function readDesignRecord(raw: unknown): NonNullable<VcrDesign["record"]> | null {
@@ -1654,6 +1731,7 @@ function readDesignRecord(raw: unknown): NonNullable<VcrDesign["record"]> | null
     method: text(value.method),
     replicates: finite(value.replicates),
     seed: finite(value.seed),
+    replicateReasons: strings(value.replicateReasons),
     check: Object.keys(check).length
       ? {
         analytic: finite(check.analytic), simulated: finite(check.simulated), differencePoints: finite(check.differencePoints),
@@ -1944,6 +2022,7 @@ export function readVcrPopulation(raw: unknown): VcrPopulationTab {
   const records = obj(value.records);
   return {
     ...(value as unknown as VcrPopulationTab),
+    premises: readPremises(value.premises),
     versions: arr(value.versions).map((item) => ({ ...(item as unknown as VcrPopulationTab["versions"][number]), counts: readVcrCounts(item.counts) })),
     criteria: arr(value.criteria) as unknown as VcrCriterion[],
     attrition: arr(value.attrition) as unknown as VcrAttritionStep[],
@@ -2074,6 +2153,8 @@ export function readVcrComparator(raw: unknown): VcrComparatorTab {
   const endpoint = obj(benchmark.endpoint);
   return {
     ...(value as unknown as VcrComparatorTab),
+    premises: readPremises(value.premises),
+    operatingCharacteristics: readOperatingCharacteristics(value.operatingCharacteristics),
     selection: typeof selection.id === "string" ? { id: selection.id, version: finite(selection.version), resultId: text(selection.resultId), resultVersion: finite(selection.resultVersion), route: text(selection.route) ?? "" } : null,
     predictionBenchmark: Object.keys(benchmark).length ? {
       sourceCondition: text(benchmark.sourceCondition),
@@ -2088,6 +2169,8 @@ export function readVcrComparator(raw: unknown): VcrComparatorTab {
     rmst: Object.keys(rmst).length ? { value: readVcrValue(rmst.value), tau: finite(rmst.tau), label: text(rmst.label) } : null,
     median: value.median ? readVcrValue(value.median) : null,
     qc: arr(value.qc) as unknown as VcrComparatorTab["qc"],
+    reconstruction: value.reconstruction && typeof value.reconstruction === "object" && typeof obj(value.reconstruction).label === "string"
+      ? { ...(value.reconstruction as Loose), arms: arr(obj(value.reconstruction).arms) } as VcrComparatorTab["reconstruction"] : null,
     methods: arr(value.methods) as unknown as VcrComparatorTab["methods"],
     e10: arr(value.e10) as unknown as VcrComparatorTab["e10"],
     estimand: value.estimand && typeof value.estimand === "object"
@@ -2111,6 +2194,7 @@ export function readVcrTrial(raw: unknown): VcrTrialTab {
   const decision = obj(value.decision);
   return {
     ...(value as unknown as VcrTrialTab),
+    premises: readPremises(value.premises),
     ademp: arr(value.ademp) as unknown as VcrTrialTab["ademp"],
     accrualForecasts: arr(value.accrualForecasts).map(row => ({ id: text(row.id) ?? "", version: finite(row.version) ?? 1, scenarioId: text(row.scenarioId), scenarioVersion: finite(row.scenarioVersion), design: text(row.design), name: text(row.name) ?? "入组假设模拟", lastPatientIn: row.lastPatientIn ? readVcrValue(row.lastPatientIn) : null, targetEvents: row.targetEvents ? readVcrValue(row.targetEvents) : null, probabilityByMonth: arr(row.probabilityByMonth).filter(point => finite(point.month) !== null && Number(point.month) >= 0 && finite(point.probability) !== null && Number(point.probability) >= 0 && Number(point.probability) <= 1).map(point => ({ month: Number(point.month), probability: Number(point.probability) })) })),
     designs: arr(value.designs).map(readDesign),

@@ -270,6 +270,57 @@ describe("对照 · comparability and the prior", () => {
     expect(weights.closest("section")).not.toBe(section);
   });
 
+  it("draws a borrowing route's operating characteristics — each row with its error and its replicates, the floor it ran at said once", async () => {
+    const raw = fixture("ev201/comparator.json");
+    raw.operatingCharacteristics = {
+      replicates: 100000, asked: 100000, capped: false, reason: "借用历史数据的设计，零效应的各行至少 100,000 次",
+      rows: [
+        { drift: 0, prior: "none", priorLabel: "不借用（只用本研究对照）", scenario: "null", rejection: 2.39, mcse: 0.11, replicates: 100000 },
+        { drift: 0, prior: "robust_0.2", priorLabel: "借用（稳健权重 0.2）", scenario: "null", rejection: 1.39, mcse: 0.08, replicates: 100000 },
+        { drift: 0.5, prior: "robust_0.2", priorLabel: "借用（稳健权重 0.2）", scenario: "alternative", rejection: 58.21, mcse: 0.16, replicates: 100000 },
+      ],
+    };
+    installVcrServer(network.productRequest, { [tab("comparator")]: raw });
+    const { container } = draw();
+    const oc = await found(container, "[data-vcr-oc]");
+    expect(oc).toHaveTextContent("借用历史数据的设计，零效应的各行至少 100,000 次");
+    expect(oc.querySelector("[data-vcr-oc-capped]")).toBeNull();
+    const zero = oc.querySelector("[data-vcr-oc-row='0:none:null']") as HTMLElement;
+    expect(zero).toHaveTextContent("2.39%");
+    expect(zero).toHaveTextContent("±0.11");
+    expect(oc).toHaveTextContent("无效应（I 类错误）");
+    expect(oc).toHaveTextContent("有效应（功效）");
+    expect(oc.querySelectorAll("tbody tr")).toHaveLength(3);
+    expect(oc).toHaveTextContent("100,000");
+    expect(container.querySelector("[data-vcr-oc-capped]")).toBeNull();
+  });
+
+  it("says a table the engine's ceiling held below the request is smaller than asked, in the section and nowhere else", async () => {
+    const raw = fixture("ev201/comparator.json");
+    raw.operatingCharacteristics = { replicates: 600, asked: 5000, capped: true, reason: null,
+      rows: [{ drift: 0, prior: "none", priorLabel: "不借用（只用本研究对照）", scenario: "null", rejection: 2.5, mcse: 0.64, replicates: 600 }] };
+    installVcrServer(network.productRequest, { [tab("comparator")]: raw });
+    const { container } = draw();
+    expect(await found(container, "[data-vcr-oc-capped]")).toHaveTextContent("600 次（要求 5,000 次）");
+  });
+
+  it("lists what a reconstruction was given and the checks it could not hold, beside the ones it did — without counting them as passed", async () => {
+    const raw = fixture("ev201/comparator.json");
+    raw.reconstruction = { level: 3, key: "events_only", label: "论文只给了总事件数（没有风险人数表）", arms: [], hazardRatio: null, limited: true };
+    raw.qc = [
+      { key: "atRisk", label: "各时点风险人数", value: "论文没有给，没有核对", passed: false, notChecked: true },
+      { key: "events", label: "总事件数", value: "0.8%", passed: true },
+      { key: "median", label: "中位数", value: "1.2%", passed: true },
+    ];
+    installVcrServer(network.productRequest, { [tab("comparator")]: raw });
+    const { container } = draw();
+    const folded = (await screen.findByText(/重建质控 2 \/ 2 通过（1 项没有核对）/)).closest("details") as HTMLElement;
+    expect(folded).not.toHaveAttribute("open");
+    expect(folded.querySelector("[data-vcr-reconstruction-level='events_only']")).toHaveTextContent("论文只给了总事件数（没有风险人数表）");
+    expect(folded).toHaveTextContent("论文没有给，没有核对");
+    expect(container.querySelector("[data-vcr-premises]")).toBeNull();
+  });
+
   it("draws no prior section when no route borrowed one", async () => {
     const { container } = draw();
     await found(container, "[data-vcr-diagnostics]");
