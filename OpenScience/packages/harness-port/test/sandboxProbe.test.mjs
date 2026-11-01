@@ -10,10 +10,10 @@ import test from "node:test";
 import { probeSandbox } from "../index.mjs";
 
 /** @param {{ enforcement?: string, stderr?: string, sandbox?: Record<string, unknown> }} outcome */
-function shellThatReports({ enforcement = "full", stderr = "", sandbox = {} }) {
+function shellThatReports({ enforcement = "full", stderr = "", sandbox = {}, exitCode = 0, signal = null }) {
   return {
     resolve: (/** @type {any} */ request) => request,
-    execute: async () => ({ result: async () => ({ exitCode: 0, stderr: { text: stderr, truncated: false }, sandbox: { mode: "workspace-write", denied: false, enforcement, ...sandbox } }) }),
+    execute: async () => ({ result: async () => ({ exitCode, signal, stderr: { text: stderr, truncated: false }, sandbox: { mode: "workspace-write", denied: false, enforcement, ...sandbox } }) }),
   };
 }
 const ctxOf = (/** @type {any} */ shell) => ({ get: (/** @type {string} */ key) => (key === "shell" ? shell : undefined) });
@@ -47,4 +47,19 @@ test("a runner that could not launch is reported as that, whether the kernel mar
   const refused = await probeSandbox(ctxOf(refusing), "full");
   assert.match(String(refused.error), /sandbox probe failed: .*Runner failure: evimed-landlock-run/);
   assert.equal(refused.enforcement, "none");
+});
+
+test("a no-op command that did not exit 0 never ran: the probe fails even though the kernel asserts full and nothing was printed", async () => {
+  // A shell that cannot exec the launcher (dash) exits 127 with no failure signature on stderr, and the kernel still records `full`.
+  const missing = await probeSandbox(ctxOf(shellThatReports({ exitCode: 127 })), "full");
+  assert.match(String(missing.error), /could not run a no-op command \(exit 127\)/);
+  assert.equal(missing.enforcement, "full");
+  // The same for a profile that accepts partial enforcement: whether the command ran is not a matter of the level.
+  assert.match(String((await probeSandbox(ctxOf(shellThatReports({ exitCode: 1, enforcement: "partial" })), "partial")).error), /exit 1/);
+  const killed = await probeSandbox(ctxOf(shellThatReports({ exitCode: null, signal: "SIGKILL" })), "full");
+  assert.match(String(killed.error), /signal SIGKILL/);
+  // A result that carries no status is unknown, not a failure, and exit 0 still passes.
+  const bare = { resolve: (/** @type {any} */ request) => request, execute: async () => ({ result: async () => ({ stderr: { text: "" }, sandbox: { denied: false, enforcement: "full" } }) }) };
+  assert.deepEqual(await probeSandbox(ctxOf(bare), "full"), { error: null, enforcement: "full" });
+  assert.deepEqual(await probeSandbox(ctxOf(shellThatReports({ exitCode: 0 })), "full"), { error: null, enforcement: "full" });
 });

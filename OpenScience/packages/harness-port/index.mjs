@@ -1575,6 +1575,15 @@ export async function probeSandbox(ctx, required) {
     if (sandbox.denied === true) {
       return { error: 'the sandbox denied a no-op command; its policy does not match this workspace', enforcement }
     }
+    // `true` cannot fail by itself: a command that did not exit 0 never ran. A custom runner is asserted `full` by the kernel whatever
+    // happened, and a shell that cannot exec the launcher (dash exits 127) prints nothing the failure signatures could match, so the
+    // exit status is the only thing that tells such a deployment from a working one. An absent status is unknown and is not read as a failure.
+    const exitCode = result?.exitCode
+    const signal = result?.signal
+    if ((typeof exitCode === 'number' && exitCode !== 0) || (exitCode === null && signal)) {
+      const how = typeof exitCode === 'number' ? `exit ${exitCode}` : `signal ${String(signal)}`
+      return { error: `the sandbox could not run a no-op command (${how}); the bash tool will not work (enforcement "${enforcement}")`, enforcement }
+    }
     if (required === 'full' && enforcement !== 'full') {
       return { error: `sandbox enforcement is "${enforcement}", this profile requires "full"`, enforcement }
     }
