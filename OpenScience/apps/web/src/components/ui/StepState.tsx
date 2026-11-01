@@ -1,10 +1,10 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router";
-import { CircleDashed, TriangleAlert } from "lucide-react";
+import { CircleDashed, TriangleAlert, type LucideIcon } from "lucide-react";
 import { allowanceWaitingSentence } from "@evimed/domain";
 import { useElapsed } from "@/lib/useElapsed";
 import { EmptyState } from "@/components/cards/EmptyState";
-import { Button } from "@/components/ui/Button";
+import { Button, type ButtonProps } from "@/components/ui/Button";
 import type { ActivityCounts } from "@/components/ui/ActivityStrip";
 
 /**
@@ -51,6 +51,17 @@ export interface StepStateProps {
   /** `empty`: starts the step. Absent where the person may not, with `reason` saying so. */
   onStart?: () => void;
   starting?: boolean;
+  /**
+   * `empty`: what the button says when it is not `step` as it stands. A button that only fills the composer is a draft and says so
+   * (「让 AI 生成虚拟患者」, with `startKind="draft"`); one that starts the work now keeps `step` and says what it starts.
+   */
+  startLabel?: string;
+  /** `empty`: what pressing the button does (`WORK_ACTION_KINDS`), for the walk to hold the button to. */
+  startKind?: ButtonProps["actionKind"];
+  /** `empty`: the mark before the button's words (the pencil on a draft). */
+  startIcon?: LucideIcon;
+  /** `queued` and `running`: what the stop button says when stopping reaches further than this step (「停止整个研究」). */
+  stopLabel?: string;
   /** `empty` without a button: why there is none. */
   reason?: string;
 
@@ -92,7 +103,7 @@ const SHELL = "flex flex-col items-center gap-3 px-6 py-12 text-center";
  * Verification: StepState.test.tsx; /__gallery is visual evidence; real AT/touch and browser reflow require manual checks.
  */
 export function StepState(props: StepStateProps) {
-  const { phase, step, noun, to, uses = [], gives, onStart, starting, reason, after, phaseName, counts, startedAt, onStop, stopping,
+  const { phase, step, noun, to, uses = [], gives, onStart, starting, startLabel, startKind, startIcon: StartIcon, stopLabel, reason, after, phaseName, counts, startedAt, onStop, stopping,
     kept, failure, onResume, resuming, waiting, topUp } = props;
   const elapsed = useElapsed(startedAt, phase === "running");
   const conversation = to ? <Link to={to} className="rounded text-ui text-link hover:underline">查看对话</Link> : null;
@@ -125,7 +136,7 @@ export function StepState(props: StepStateProps) {
           title={noun ? `还没有${noun}` : step}
           description={recipe}
           reason={onStart ? undefined : reason}
-          action={onStart ? <Button onClick={onStart} loading={starting}>{step}</Button> : undefined}
+          action={onStart ? <Button onClick={onStart} loading={starting} actionKind={startKind}>{StartIcon && <StartIcon size={16} aria-hidden="true" />}{startLabel ?? step}</Button> : undefined}
         />
       </div>
     );
@@ -138,7 +149,7 @@ export function StepState(props: StepStateProps) {
         <p className="text-caption text-text-3">{after ? `“${after}”做完后自动开始。` : "轮到它时会自动开始。"}</p>
         <div className="flex flex-wrap items-center justify-center gap-3">
           {conversation}
-          {onStop && <Button size="sm" variant="secondary" loading={stopping} onClick={onStop}>取消</Button>}
+          {onStop && <Button size="sm" variant="secondary" actionKind="set" loading={stopping} onClick={onStop}>{stopLabel ?? "取消"}</Button>}
         </div>
       </div>
     );
@@ -157,7 +168,7 @@ export function StepState(props: StepStateProps) {
         )}
         <div className="flex flex-wrap items-center justify-center gap-3">
           {conversation}
-          {onStop && <Button size="sm" variant="secondary" loading={stopping} onClick={onStop}>停止</Button>}
+          {onStop && <Button size="sm" variant="secondary" actionKind="set" loading={stopping} onClick={onStop}>{stopLabel ?? "停止"}</Button>}
         </div>
       </div>
     );

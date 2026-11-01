@@ -44,6 +44,8 @@ export interface ActivityStripProps {
   to?: string;
   onCancel?: () => void;
   cancelling?: boolean;
+  /** What the stop says when it reaches further than the work shown (「停止整个研究」). Absent, 「取消」. */
+  cancelLabel?: string;
   variant?: "strip" | "chip";
   className?: string;
 }
@@ -60,7 +62,7 @@ export interface ActivityStripProps {
  * Responsive: Strip wraps; chip is max-width constrained.
  * Verification: StepBarParts.test.tsx and Composition.test.tsx; /__gallery is visual evidence; real AT/touch and browser reflow require manual checks.
  */
-export function ActivityStrip({ label, phase, counts, startedAt, queued, waiting, to, onCancel, cancelling, variant = "strip", className }: ActivityStripProps) {
+export function ActivityStrip({ label, phase, counts, startedAt, queued, waiting, to, onCancel, cancelling, cancelLabel, variant = "strip", className }: ActivityStripProps) {
   const elapsed = useElapsed(waiting ? null : startedAt);
   const dot = waiting
     ? <span aria-hidden="true" data-forced-colors="preserve" className="h-2 w-2 shrink-0 rounded-full bg-surface ring-2 ring-info" />
@@ -89,7 +91,7 @@ export function ActivityStrip({ label, phase, counts, startedAt, queued, waiting
       {queued !== undefined && queued > 0 && <span className="text-caption text-text-2">{`另有 ${queued} 项排队`}</span>}
       <span className="flex-1" />
       {to && <Link to={to} className="rounded text-link hover:underline">查看进度</Link>}
-      {onCancel && <Button size="sm" variant="text" loading={cancelling} disabled={cancelling} onClick={onCancel}>取消</Button>}
+      {onCancel && <Button size="sm" variant="text" actionKind="set" loading={cancelling} disabled={cancelling} onClick={onCancel}>{cancelLabel ?? "取消"}</Button>}
     </div>
   );
 }
