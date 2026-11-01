@@ -1792,6 +1792,8 @@ const ACTION_WORDS = { draft: /^(让 AI|打开对话|放进对话|在对话中|�
 export function workspaceFindings(view, facts) {
   /** @type {string[]} */
   const found = [];
+  // A page that gave no answer has said nothing against these: the page's own failure is reported where it loads.
+  if (!Array.isArray(facts?.railWords)) return found;
   for (const word of RETIRED_STATE_WORDS) if (facts.railWords.includes(word)) found.push(`${view}: the rail says “${word}”: work outside the request says only its name (DS23.2)`);
   const counts = new Map();
   for (const word of facts.railWords) counts.set(word, (counts.get(word) ?? 0) + 1);
