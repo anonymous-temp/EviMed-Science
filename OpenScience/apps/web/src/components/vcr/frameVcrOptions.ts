@@ -53,14 +53,15 @@ const COMPARATOR_TASK_NAME = "对照研究";
 /**
  * The examples a new study begins from (plan §9.3, R10 mockup v02; the home's four examples, VCR remediation F5): the name of the tab where the work lands,
  * what the example button says, the sentence it puts in the composer — never sent — and the one sentence of what is enough to begin
- * (`requirement`; a field name or a statistic is never in it). Each draft ends where the reader continues. They only fill the box:
+ * (`requirement`; a field name or a statistic is never in it). A draft names the module because a live run showed the model reaches
+ * the module when it is named and otherwise often computes in a script of its own (acceptance of 2026-11-01). Each draft ends where the reader continues. They only fill the box:
  * pressing one is not a request, and no study exists until the first result is saved.
  */
 export const VCR_TASKS = Object.freeze([
-  { id: "matching", label: VCR_TAB_LABELS_ZH.matching, example: "让 AI 匹配患者和试验", summary: "查找适合患者的试验，核对入排条件。", draft: "帮我匹配患者和临床试验。资料是：", requirement: "给一份病例就能开始。批量匹配需要患者数据表。" },
-  { id: "population", label: VCR_TAB_LABELS_ZH.population, example: "让 AI 研究人群或个体患者", summary: "建立研究队列，查看个体的模拟结果。", draft: "帮我研究人群或个体患者。需求是：", requirement: "说清目标人群就能开始，AI 从文献取基线。用真实队列需要患者数据表。" },
-  { id: "comparator", label: COMPARATOR_TASK_NAME, example: "让 AI 做对照研究", summary: "构建对照人群，比较两组结局。", draft: "帮我做对照研究。研究是：", requirement: "说清研究就能先做可行性判断。估计治疗效果需要两组的结局数据。" },
-  { id: "trial", label: VCR_TAB_LABELS_ZH.trial, example: "让 AI 比较试验设计", summary: "比较不同试验方案的样本量、把握度和周期。", draft: "帮我比较临床试验设计。研究是：", requirement: "说清研究问题和终点就能开始，参数 AI 先从文献找，你可以随时改。" },
+  { id: "matching", label: VCR_TAB_LABELS_ZH.matching, example: "让 AI 匹配患者和试验", summary: "查找适合患者的试验，核对入排条件。", draft: "用虚拟临床研究匹配患者和临床试验。资料是：", requirement: "给一份病例就能开始。批量匹配需要患者数据表。" },
+  { id: "population", label: VCR_TAB_LABELS_ZH.population, example: "让 AI 研究人群或个体患者", summary: "建立研究队列，查看个体的模拟结果。", draft: "用虚拟临床研究建立人群或个体患者。需求是：", requirement: "说清目标人群就能开始，AI 从文献取基线。用真实队列需要患者数据表。" },
+  { id: "comparator", label: COMPARATOR_TASK_NAME, example: "让 AI 做对照研究", summary: "构建对照人群，比较两组结局。", draft: "用虚拟临床研究做对照研究。研究是：", requirement: "说清研究就能先做可行性判断。估计治疗效果需要两组的结局数据。" },
+  { id: "trial", label: VCR_TAB_LABELS_ZH.trial, example: "让 AI 比较试验设计", summary: "比较不同试验方案的样本量、把握度和周期。", draft: "用虚拟临床研究比较临床试验设计。研究是：", requirement: "说清研究问题和终点就能开始，参数 AI 先从文献找，你可以随时改。" },
 ]);
 
 /** Task starters fill the native composer without submitting or creating a study. */

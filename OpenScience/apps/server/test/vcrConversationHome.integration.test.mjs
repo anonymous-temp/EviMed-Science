@@ -38,7 +38,7 @@ const origin = (/** @type {string} */ session, userId = 'owner') => ({ userId, p
 const saying = (/** @type {string} */ text) => async () => text;
 
 test('the first sentence said in a conversation is its study\'s name, cut as a name is and never reworded', () => {
-  assert.equal(vcrOpeningName('帮我匹配患者和临床试验。资料是：62 岁男性，肺腺癌 IV 期'), '帮我匹配患者和临床试验');
+  assert.equal(vcrOpeningName('用虚拟临床研究匹配患者和临床试验。资料是：62 岁男性，肺腺癌 IV 期'), '帮我匹配患者和临床试验');
   assert.equal(vcrOpeningName('  我想比较两种试验设计的把握度！先看第一种  '), '我想比较两种试验设计的把握度');
   assert.equal(vcrOpeningName('Plan a two-arm survival trial with 80% power and a hazard ratio of 0.7'), 'Plan a two-arm survival');
   assert.equal(vcrOpeningName('第一行\n第二行'), '第一行');
@@ -47,7 +47,7 @@ test('the first sentence said in a conversation is its study\'s name, cut as a n
 });
 
 test('a conversation\'s study is named by its first sentence; a second one of the same words is told apart by the day', options, async () => {
-  const first = await vcr.store.taskContext(origin('named_a'), { opening: saying('帮我匹配患者和临床试验。资料是：略') });
+  const first = await vcr.store.taskContext(origin('named_a'), { opening: saying('用虚拟临床研究匹配患者和临床试验。资料是：略') });
   assert.equal(first.name, '帮我匹配患者和临床试验');
   assert.equal(first.nameBasis, 'opening');
   assert.equal(first.scope, 'conversation');
@@ -55,7 +55,7 @@ test('a conversation\'s study is named by its first sentence; a second one of th
   assert.equal(again.id, first.id);
   assert.equal(again.name, first.name, 'a study is named once; the second look finds it named and does not read the ledger');
   let read = 0;
-  const same = await vcr.store.taskContext(origin('named_b'), { opening: async () => { read += 1; return '帮我匹配患者和临床试验。资料是：另一位'; } });
+  const same = await vcr.store.taskContext(origin('named_b'), { opening: async () => { read += 1; return '用虚拟临床研究匹配患者和临床试验。资料是：另一位'; } });
   assert.equal(read, 1);
   assert.notEqual(same.name, first.name);
   assert.match(same.name, /^帮我匹配患者和临床试验 \d+月\d+日$/);

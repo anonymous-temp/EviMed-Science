@@ -32,10 +32,10 @@ function drawHome(path = "/app/virtual-research") { return render(<MemoryRouter 
 const where = () => screen.getByTestId("where").textContent;
 // The four examples, by what each button says; pressing one fills the composer of a new conversation and sends nothing.
 const EXAMPLES: Array<[string, string, string]> = [
-  ["匹配", "让 AI 匹配患者和试验", "帮我匹配患者和临床试验。资料是："],
-  ["人群与患者", "让 AI 研究人群或个体患者", "帮我研究人群或个体患者。需求是："],
-  ["对照研究", "让 AI 做对照研究", "帮我做对照研究。研究是："],
-  ["试验", "让 AI 比较试验设计", "帮我比较临床试验设计。研究是："],
+  ["匹配", "让 AI 匹配患者和试验", "用虚拟临床研究匹配患者和临床试验。资料是："],
+  ["人群与患者", "让 AI 研究人群或个体患者", "用虚拟临床研究建立人群或个体患者。需求是："],
+  ["对照研究", "让 AI 做对照研究", "用虚拟临床研究做对照研究。研究是："],
+  ["试验", "让 AI 比较试验设计", "用虚拟临床研究比较临床试验设计。研究是："],
 ];
 it.each(EXAMPLES)("opens %s as an unsent native conversation draft without creating a study", async (_label, example, draft) => {
   draw("/app/virtual-research?new=1");
