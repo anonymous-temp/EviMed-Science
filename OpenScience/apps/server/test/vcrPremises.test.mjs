@@ -161,6 +161,26 @@ function designBundle({ withNull = false, jobs = /** @type {any[]} */ ([]) } = {
 const job = (/** @type {string} */ stage, /** @type {string} */ state, /** @type {Record<string, any>} */ over = {}) => ({
   id: `job_${stage}`, state, checkpoint: { subjectId: "scn_a", stage, plannedStages: ["analytic", "simulation", "simulation_null"], bound: [], ...over } });
 
+test("the trial page: an event-time design says how many patients it needs, and a sequential design its own maximum", () => {
+  // Found on a real kernel: the engine names an event-time sizing's patients required_patients, the table read required_total, and a
+  // change of dropout (patients, not events) moved nothing on the page.
+  const withMeasures = (/** @type {any[]} */ measures) => {
+    const bundle = designBundle();
+    bundle.allResults[0].diagnostics.stageResults.analytic.measures = measures;
+    delete bundle.allResults[0].diagnostics.stageResults.simulation;
+    bundle.allResults[0].measures = measures;
+    return presentTrialTab(bundle);
+  };
+  const calculated = (/** @type {string} */ name, /** @type {number} */ value) => ({ name, value, source: "calculated" });
+  const fixed = withMeasures([calculated("required_events", 508), calculated("required_patients", 830)]);
+  assert.equal(fixed.designs[0].measures.sample_size.value, 830);
+  assert.deepEqual(fixed.columns.map((column) => column.key), ["required_events", "sample_size"]);
+  assert.match(fixed.headline, /508 例事件、830 名患者/);
+  const sequential = withMeasures([calculated("required_events", 508), calculated("max_events", 510), calculated("required_patients", 830), calculated("max_patients", 832)]);
+  assert.equal(sequential.designs[0].measures.required_events.value, 510);
+  assert.equal(sequential.designs[0].measures.sample_size.value, 832);
+});
+
 test("the trial page: the premises of the design a person is looking at, the dropout among them with its default marked", () => {
   const tab = presentTrialTab(designBundle());
   assert.deepEqual(tab.premises.filter((row) => row.decisive).map((row) => row.key), ["effect", "control", "dropout", "accrual", "alpha"]);

@@ -907,7 +907,10 @@ export function presentDeliverable(row, index, all, now) {
 // --- designs (shared by the overview and the trial tab) ------------------------------------------------------------------
 
 /** The measure names a design's table reads, whichever stage computed them. */
-const DESIGN_MEASURES = Object.freeze(["power", "type_one_error", "bias", "coverage", "assurance", "expected_sample_size", "expected_events", "required_total", "required_events", "duration_months", "cost"]);
+const DESIGN_MEASURES = Object.freeze(["power", "type_one_error", "bias", "coverage", "assurance", "expected_sample_size", "expected_events", "required_total", "required_patients", "max_patients", "required_events", "max_events", "duration_months", "cost"]);
+/** A design's table shows one size. An event-time sizing names its patients `required_patients`, not `required_total`, and a sequential
+ * design's own size is its maximum (its `required_*` are the fixed-sample baseline's, which has a row of its own). Last in the result wins. */
+const DESIGN_MEASURE_COLUMN = Object.freeze(/** @type {Record<string, string>} */ ({ required_total: "sample_size", required_patients: "sample_size", max_patients: "sample_size", max_events: "required_events" }));
 
 /**
  * What a design has been computed with, by stage: the analytic size, the simulated operating characteristics and the success
@@ -1155,7 +1158,7 @@ export function presentDesigns(bundle) {
         if (!DESIGN_MEASURES.includes(measureName) || (measureName === "duration_months" && name !== "simulation")) continue;
         // Only the figure the check is for: the rest of what the null run measured is its stage's, not the design's.
         if (name === "simulation_null" && (measureName !== "type_one_error" || measures.type_one_error)) continue;
-        measures[measureName === "required_total" ? "sample_size" : measureName] = measureValue(measure, {
+        measures[DESIGN_MEASURE_COLUMN[measureName] ?? measureName] = measureValue(measure, {
           kind: "trial_scenario", result: stage.result, execution: executionOfStage(name) ?? execution, staleMark, tab: "trial" });
       }
     }

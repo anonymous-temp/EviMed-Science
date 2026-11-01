@@ -361,6 +361,8 @@ export const MEASURE_META = Object.freeze({
   required_control: { label: "对照组所需样本量", unit: "例" },
   required_patients: { label: "所需患者数", unit: "例" },
   required_events: { label: "所需事件数", unit: "个" },
+  max_patients: { label: "最多患者数", unit: "例" },
+  max_events: { label: "最多事件数", unit: "个" },
   event_probability: { label: "事件发生概率", unit: "%", percent: true },
   last_patient_in_months: { label: "末例入组", unit: "个月" },
   target_events_months: { label: "达到目标事件数", unit: "个月" },
