@@ -100,7 +100,7 @@ export const JOB_KIND_LABELS = Object.freeze(/** @type {Record<string, string>} 
   aipw_comparator: "双重稳健估计（AIPW）", covariate_set_comparator: "协变量集敏感性分析",
   evalue: "E 值", rmst: "RMST 比较", design_analytic: "方案的解析计算", design_simulation: "方案的模拟运行",
   design_grid: "设计网格", assurance: "成功把握", procova: "预后协变量调整", accrual_forecast: "入组预测",
-  map_prior: "MAP 先验", match_criteria: "逐条匹配",
+  map_prior: "MAP 先验", match_criteria: "逐条匹配", match_extract: "读病历",
   negative_control_comparator: "阴性对照结局", tipping_point: "缺失数据的临界点分析", prognostic_adjustment_comparator: "预后评分校正（二分类/事件时间）",
 }));
 

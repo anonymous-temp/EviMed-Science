@@ -123,6 +123,7 @@ const RELEASE_FITTING_SQL = `UPDATE ${VCR_SCHEMA}.jobs j SET state = 'queued', r
 
 import { createHash } from "node:crypto";
 import { VCR_LONGITUDINAL_METHODS, VCR_LONGITUDINAL_JOBS, validateLongitudinalScenario } from '@evimed/domain';
+import { VCR_MATCH_BATCH_METHODS, VCR_MATCH_BATCH_JOBS, VCR_SLOW_LOCAL_METHODS, validateMatchBatchScenario } from '@evimed/domain';
 import fs from "node:fs/promises";
 import path from "node:path";
 
@@ -352,7 +353,7 @@ const SIZED_KINDS = new Set(["design_simulation", "design_grid", "map_prior"]);
  * that is validated: a literature population (its baseline bindings are verified and removed), a reconstruction (its curve receipt),
  * a matched time-to-event comparison (its reconstruction), a model's equation, and the pooled and matched scenarios the platform builds.
  */
-const PLATFORM_BOUND_KINDS = new Set(["literature_population", "population_check", "reconstruct_km", "maic_time_to_event_comparator", "apply_prognostic_model", "pool_evidence", "match_criteria"]);
+const PLATFORM_BOUND_KINDS = new Set(["literature_population", "population_check", "reconstruct_km", "maic_time_to_event_comparator", "apply_prognostic_model", "pool_evidence", "match_criteria", "match_extract"]);
 
 /**
  * What set a simulation's replicate count, in a sentence a run can repeat: the floor of its case, the study's intended use, a
@@ -516,6 +517,8 @@ export function vcrResultKindFor(kind) {
   if (["design_analytic", "design_simulation", "assurance"].includes(kind)) return "trial_scenario";
   if (kind === "design_grid") return "design_grid";
   if (kind === "match_criteria") return "matching";
+  // The batch reading of patient records leaves a record of what was read, not a matching: its own kind, read by nothing that lists matchings.
+  if (kind === "match_extract") return "match_extract";
   if (kind === "accrual_forecast") return "accrual_forecast";
   if (["pool_evidence", "reconstruct_km"].includes(kind)) return "evidence_pool";
   return "snapshot_profile";
@@ -848,7 +851,7 @@ export class VcrJobs {
     const kind = String(input.kind);
     if (!VCR_JOB_KINDS.includes(kind)) throw new HttpError(400, "vcr_job_kind_invalid", `kind must be one of: ${VCR_JOB_KINDS.join(", ")}.`);
     const method = /** @type {Record<string, string>} */ (VCR_JOB_METHODS)[kind];
-    if (PLATFORM_BOUND_KINDS.has(kind) || Object.hasOwn(VCR_LONGITUDINAL_JOBS, kind)) {
+    if (PLATFORM_BOUND_KINDS.has(kind) || Object.hasOwn(VCR_LONGITUDINAL_JOBS, kind) || Object.hasOwn(VCR_MATCH_BATCH_JOBS, kind)) {
       return { action: "validate", kind, queued: false, checked: false,
         message: "这类计算的场景由平台在启动时补全（来源绑定、曲线回执、模型方程或已保存的记录），这里不检查；直接 start，被拒的字段会按路径回来。" };
     }
@@ -905,9 +908,12 @@ export class VcrJobs {
     }
     const studyId = String(input.studyId);
     const method = /** @type {Record<string, string>} */ ({...VCR_JOB_METHODS,...VCR_LONGITUDINAL_JOBS})[kind];
-    const methodVersion = /** @type {Record<string, any>} */ ({...VCR_ENGINE_METHODS,...VCR_LONGITUDINAL_METHODS})[method]?.version ?? "";
+    const methodVersion = /** @type {Record<string, any>} */ ({...VCR_ENGINE_METHODS,...VCR_LONGITUDINAL_METHODS,...VCR_MATCH_BATCH_METHODS})[method]?.version ?? "";
     const longitudinal = Object.hasOwn(VCR_LONGITUDINAL_JOBS,kind);
     if (longitudinal && input.internal !== true) throw new HttpError(400,'vcr_job_scenario_invalid','Longitudinal jobs freeze owned input references before enqueue.');
+    // The batch reading of records (D4) is frozen by the platform from the roster, like the longitudinal jobs are from their artifacts.
+    const batch = Object.hasOwn(VCR_MATCH_BATCH_JOBS,kind);
+    if (batch && input.internal !== true) throw new HttpError(400,'vcr_job_scenario_invalid','A batch reading freezes its roster from the study before enqueue.');
     let scenario = { ...object(input.scenario) };
     const unitBound = vcrCanonicalScenarioTimeUnit(method, scenario);
     if (unitBound.issue) throw this.#invalid("vcr_job_scenario_invalid", [unitBound.issue]);
@@ -977,7 +983,7 @@ export class VcrJobs {
     // patient-level ones: its input is a frozen as-of, a protocol id and a token of the facts.
     const runsLocally = typeof this.localExecutors[method] === "function";
     const hasBoundReconstruction = list(input.derived).some(entry => isReconstructionReference(kind, object(entry)));
-    const callerIssues = longitudinal && input.internal === true ? []
+    const callerIssues = (longitudinal || batch) && input.internal === true ? []
       : [...validateCallerInputs(asked, { kind: (input.internal === true && list(input.derived).length) || hasBoundReconstruction || runsLocally ? undefined : kind })];
     const derivedEntries = list(input.derived).map(object);
     // A caller other than the orchestrator may only point at a reconstruction result for the job that reads one.
@@ -1057,6 +1063,7 @@ export class VcrJobs {
 
     // 3. what the engine will check (a locally computed method has no engine to read a table)
     const issues = longitudinal ? validateLongitudinalScenario(method,scenario)
+      : batch ? validateMatchBatchScenario(method,scenario)
       : validateEngineJob(job).filter((issue) => !(runsLocally && issue.code === "patient_input_required"));
     if (issues.length) throw this.#invalid("vcr_job_scenario_invalid", issues);
 
@@ -1337,9 +1344,15 @@ export class VcrJobs {
    * @param {{ workerId?: string, leaseMs?: number, limit?: number, lane?: string }} [options]
    */
   async claim({ workerId = this.owner, leaseMs = this.leaseMs, limit = 1, lane = 'all' } = {}) {
-    if (lane === 'all') return [...await this.claim({workerId,leaseMs,limit,lane:'local'}), ...await this.claim({workerId,leaseMs,limit,lane:'engine'})];
-    const localMethods = Object.keys(this.localExecutors).filter(method => typeof this.localExecutors[method] === 'function');
-    if (lane === 'local' && !localMethods.length) return [];
+    if (lane === 'all') return [...await this.claim({workerId,leaseMs,limit,lane:'local'}), ...await this.claim({workerId,leaseMs,limit,lane:'slow'}), ...await this.claim({workerId,leaseMs,limit,lane:'engine'})];
+    // Three lanes. The engine's takes what is not a local method; the local one takes the short local methods (a verdict, a forecast);
+    // the slow one takes the local methods that call a model per record (`VCR_SLOW_LOCAL_METHODS`), so that one long job does not hold
+    // the short ones behind it on the same worker loop.
+    const allLocal = Object.keys(this.localExecutors).filter(method => typeof this.localExecutors[method] === 'function');
+    const localMethods = lane === 'slow' ? allLocal.filter(method => VCR_SLOW_LOCAL_METHODS.includes(method))
+      : lane === 'local' ? allLocal.filter(method => !VCR_SLOW_LOCAL_METHODS.includes(method)) : allLocal;
+    const takesListed = lane !== 'engine';
+    if (takesListed && !localMethods.length) return [];
     if (lane === 'engine') await this.reconcileStoppedEngineWork();
     const rows = await this.store.transaction(async (client) => {
       const interrupted = (await client.query(`SELECT id FROM ${VCR_SCHEMA}.jobs WHERE state='queued'
@@ -1364,8 +1377,8 @@ export class VcrJobs {
       await this.#releaseFitting(client);
       const running = Number((await client.query(`SELECT count(*)::integer AS n FROM ${VCR_SCHEMA}.jobs
         WHERE state = 'running' AND (lease_until IS NULL OR lease_until > now())
-          AND (method=ANY($1::text[]))=$2`, [localMethods,lane==='local'])).rows[0]?.n ?? 0);
-      const capacity = lane === 'local' ? Math.max(1,Math.min(4,Number(this.config.vcrLocalConcurrency ?? 2))) : this.maxConcurrent;
+          AND (method=ANY($1::text[]))=$2`, [localMethods,takesListed])).rows[0]?.n ?? 0);
+      const capacity = takesListed ? Math.max(1,Math.min(4,Number(this.config.vcrLocalConcurrency ?? 2))) : this.maxConcurrent;
       const free = Math.max(0, capacity - running);
       if (!free) return [];
       const take = Math.min(free, Math.max(1, limit));
@@ -1379,7 +1392,7 @@ export class VcrJobs {
             AND (r.lease_until IS NULL OR r.lease_until>now()) AND (r.method=ANY($3::text[]))=$4)<$5)
         SELECT j.id FROM ${VCR_SCHEMA}.jobs j JOIN eligible e ON e.id=j.id WHERE e.account_order<=$5
         ORDER BY e.account_order, CASE WHEN e.state='running' OR e.checkpoint ? 'engineJobId' THEN 0 ELSE 1 END,e.run_after,e.created_at
-        LIMIT $1 FOR UPDATE OF j SKIP LOCKED`, [take,resumingId,localMethods,lane==='local',lane==='local' ? 1 : capacity]);
+        LIMIT $1 FOR UPDATE OF j SKIP LOCKED`, [take,resumingId,localMethods,takesListed,takesListed ? 1 : capacity]);
       if (!picked.rows.length) return [];
       const ids = picked.rows.map((/** @type {any} */ row) => String(row.id));
       const claimed = await client.query(`UPDATE ${VCR_SCHEMA}.jobs
@@ -1389,7 +1402,7 @@ export class VcrJobs {
       return claimed.rows;
     });
     this.counters.claimed += rows.length;
-    if (lane === 'local') this.counters.localClaimed += rows.length;
+    if (takesListed) this.counters.localClaimed += rows.length;
     this.counters.exhausted += this.reaped.length;
     return rows.map((row) => ({ ...jobSummaryFromRow(row), leaseOwner: String(row.lease_owner) }));
   }

@@ -2696,6 +2696,20 @@ export {
   convertClinicalUnit,
 } from './src/clinicalUnits.mjs'
 
+export {
+  VCR_MATCH_BATCH_SCHEMA,
+  VCR_MATCH_BATCH_METHODS,
+  VCR_MATCH_BATCH_JOBS,
+  VCR_SLOW_LOCAL_METHODS,
+  VCR_MATCH_BATCH_LIMITS,
+  VCR_MATCH_BATCH_DEFAULT_MODEL,
+  validateMatchBatchScenario,
+  matchBatchUnitKey,
+  planMatchExtraction,
+  matchBatchStatement,
+  acceptExtractedFacts,
+} from './src/vcrMatchBatch.mjs'
+
 export { VCR_LONGITUDINAL_SCHEMA, VCR_LONGITUDINAL_ERROR_CODES, VCR_LONGITUDINAL_SCHEMAS, VCR_LONGITUDINAL_METHODS, VCR_LONGITUDINAL_JOBS, VCR_PREDICTION_TYPES,
   VCR_FORECAST_UNCERTAINTY, VCR_LONGITUDINAL_LIMITS, longitudinalNumber, longitudinalInstant, longitudinalMean,
   longitudinalVariance, longitudinalQuantile, eventsFromMappedTable, replayClinicalEvents, longitudinalReadiness,

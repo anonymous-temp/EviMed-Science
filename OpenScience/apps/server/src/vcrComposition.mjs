@@ -105,6 +105,8 @@ import {
   VCR_MATCHING_VOCABULARY_VERSION, matchingInputDigest, assessSubject, eligibilityCounts, frozenAsOf, languageKeysOf, requiresLanguageJudgment,
 } from "./vcrMatching.mjs";
 import { VCR_JOB_PURPOSE } from "./vcrJobs.mjs";
+import { createFactExtractor, createMatchBatch, createMatchBatchCounters, createMatchExtractExecutor } from "./vcrMatchBatch.mjs";
+import { vcrRuntimeWrite } from "./vcrGateway.mjs";
 import { MATCHING_SNAPSHOT_PREFIX, freezeMatchingInputs, hydrateMatchingInputs, matchingSelection, verifyMatchingSnapshot } from "./vcrMatchingSnapshot.mjs";
 
 /**
@@ -433,6 +435,18 @@ export function vcrDocumentsSeam({ dataPlane, passagesMinChars = 40_000 }) {
       if (!document || String(document.subjectKey ?? "") !== String(subjectKey)) return null;
       return { id: document.id, text: String(document.text), visibleAt: document.visibleAt ?? null, subjectKey: String(document.subjectKey),
         sourceHash: document.sourceHash ?? null, projectionHash: document.projectionHash ?? null };
+    },
+    /**
+     * Every record of the study with its owner and length, no text: what the batch reading plans from (D4). A record whose person
+     * the plane did not note is not a record of anyone and is left out.
+     * @param {any} study
+     * @returns {Promise<Array<{ id: string, subjectKey: string, chars: number | null }>>}
+     */
+    async roster(study) {
+      if (!dataPlane) return [];
+      const listed = await dataPlane.listDocuments({ studyId: study.id, principal: study.userId });
+      return listed.filter((/** @type {any} */ entry) => entry.subjectKey)
+        .map((/** @type {any} */ entry) => ({ id: String(entry.id), subjectKey: String(entry.subjectKey), chars: Number.isFinite(Number(entry.chars)) ? Number(entry.chars) : null }));
     },
     /** The only document reader used by a cloud run. @param {any} study @param {any} input */
     async runtimeRead(study, { subjectKey, documentId }) {
@@ -1048,9 +1062,10 @@ export function createVcrEngineJobRemover({ config, fetchImpl, engine = null }) 
  *   sourceChanges?: { getMany?: (identifiers: unknown[]) => Promise<Map<string, any>> } | null,
  *   officialZoneForKeys?: ((keys: string[]) => Promise<string | null>) | null,
  *   predictionRegistry?: { register: (prediction: Record<string, any>) => Promise<any> } | null,
+ *   usageLedger?: any,
  * }} input
  */
-export function composeVcr({ config, productDatabase, projectStore = null, audit = async () => {}, fetchImpl, report = () => {}, connectorCredentials = null, intakeController = null, entityVocabulary = null, sourceChanges = null, officialZoneForKeys = null, predictionRegistry = null }) {
+export function composeVcr({ config, productDatabase, projectStore = null, audit = async () => {}, fetchImpl, report = () => {}, connectorCredentials = null, intakeController = null, entityVocabulary = null, sourceChanges = null, officialZoneForKeys = null, predictionRegistry = null, usageLedger = null }) {
   if (!config?.vcrEnabled || !productDatabase) return null;
 
   // The shared entity vocabulary tags a study with what it is about (`entityVocabulary.mjs`).
@@ -1155,6 +1170,17 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
     service.attach({longitudinal});
   }
 
+  // Batch matching (D4): the patient records of a roster read for the criteria's facts, a record at a time, in a job on the slow local
+  // lane. The model is the control plane's own client (purpose `vcr` in the usage ledger); a fact it proposes is written by the same
+  // writer a conversation's facts go through.
+  const matchBatchCounters = createMatchBatchCounters();
+  jobs.localExecutors["matching.extract"] = createMatchExtractExecutor({
+    store, matchStore, documents, config, report, counters: matchBatchCounters,
+    extractor: createFactExtractor({ config, usageLedger, fetchImpl: call }),
+    writeFacts: ({ study, items, documents: held, caller }) => vcrRuntimeWrite({ store, service: null, orchestrator: null, study, what: "fact", items, data: null, matchStore, documents: held, report, caller }),
+  });
+  const matchBatch = createMatchBatch({ jobs, matchStore, documents, subjectTable, config, counters: matchBatchCounters });
+
   const corrections = createVcrCorrectionCases({ store, matchStore, dataPlane, access });
   // The disease packs and the account's library of population definitions: read and written by the study's pages,
   // by the runtime's `pack` and `library` and by the population writer; the job queue is the comparison's.
@@ -1197,7 +1223,7 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   service.attach({ records });
   composed = {
     publications, simulations, frontierEvents, predictions, records,
-    store, dataStore, matchStore, erasure, candidateStore, patientTrials, evidenceStore, corrections, knowledge, knowledgeStore, longitudinal,
+    store, dataStore, matchStore, erasure, candidateStore, patientTrials, evidenceStore, corrections, knowledge, knowledgeStore, longitudinal, matchBatch, matchBatchCounters,
     access, members, dataPlane, dataPlaneSeam, documents, engine, engineProbe, engineStatus, removeEngineJob, jobs, seal, evidence, matching, registry, service,
     intake: { counters: intakeCounters, extractor, importer, digitizer },
     // Composed later, beside the other modules' workers (server.mjs).
@@ -1317,6 +1343,7 @@ export async function vcrMetricsSnapshot(vcr) {
     publications: vcr.publications ? { ...vcr.publications.counters, reads: Number(vcr.simulations?.counters?.reads ?? 0) } : null,
     predictions: vcr.predictions ? { ...vcr.predictions.counters } : null,
     patientTrials: vcr.patientTrials?.counters ? { ...vcr.patientTrials.counters } : null,
+    matchBatch: vcr.matchBatchCounters ? { ...vcr.matchBatchCounters } : null,
     frontierEvents: vcr.frontierEvents ? { ...vcr.frontierEvents.counters } : null,
     platformPacks: vcr.knowledge?.platform?.enabled
       ? Object.fromEntries(Object.entries(vcr.knowledge.counters).filter(([kind]) => kind.startsWith("platform"))) : null,
@@ -1407,6 +1434,10 @@ export function vcrMetricFamilies(enabled, snapshot) {
   if (snapshot.patientTrials) {
     add("patient_trials_total", "What 「给患者找试验」 did since this process started: candidate trials written and updated, writes refused, and writes refused because the study already holds the most it may (OPEN_SCIENCE_VCR_CANDIDATE_TRIALS_MAX); patients evaluated against a trial, evaluations that could not be made, the searches the page asked for, and the parses kept for an account (parsedKept) and read again by a later study (parsedReused).", "counter",
       Object.entries(snapshot.patientTrials).map(([kind, value]) => ({ labels: { kind }, value: Number(value) })));
+  }
+  if (snapshot.matchBatch) {
+    add("match_batch_total", "What the batch reading of patient records did since this process started: batches started, records read, facts kept and facts the writer or the closed vocabulary refused, records that failed or could not be read (and are read again by the next start), and batches canceled.", "counter",
+      Object.entries(snapshot.matchBatch).map(([kind, value]) => ({ labels: { kind }, value: Number(value) })));
   }
   if (snapshot.platformPacks) {
     add("platform_packs_total", "What the platform knowledge packs did since this process started (flywheel F26): packs that passed the re-check and were copied, requests that failed it, authors who took their name off, and platform packs labelled 来源有变更.", "counter",

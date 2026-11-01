@@ -104,10 +104,12 @@ JOB_KINDS = ("fit_survival_model", "apply_prognostic_model",
     "weighted_cox_comparator", "maic_time_to_event_comparator", "aipw_comparator", "covariate_set_comparator",
     # robustness methods (2026-10-04)
     "negative_control_comparator", "tipping_point", "prognostic_adjustment_comparator",
-    # a generated population against a second baseline table (2026-11-01)
-    "population_check",
     # longitudinal virtual patients (2026-10-07)
     "generate_patients_longitudinal",
+    # a generated population against a second baseline table (2026-11-01)
+    "population_check",
+    # the batch reading of patient records for the criteria's facts (2026-11-01)
+    "match_extract",
     "forecast_trajectories", "evaluate_forecast", "compare_forecasts", "benchmark_trial_effect",
 )
 POOLING_METHODS = ("single_study", "random_effects_dl", "random_effects_reml", "random_effects_hksj", "fixed_effect")
@@ -306,6 +308,9 @@ def _detailed_tool_definitions():
                 "How to read the results is in the vcr-analysis skill."
                 "For matching, selection names one protocolVersionId or up to ten protocolVersionIds, subjectKeys "
                 "and direction; continue a frozen batch with snapshotId and offset. "
+                "match_extract reads the study's patient records for the facts the criteria ask about, one record at a time, in a "
+                "job of its own: selection takes protocolVersionId, subjectKeys, asOf and prefilter, and no scenario. The answer "
+                "states what will be read and its cost before the work begins; a canceled or repeated start does not read a record twice. "
             ),
             "inputSchema": {
                 "type": "object",
@@ -325,7 +330,7 @@ def _detailed_tool_definitions():
                         "protocolVersionIds": {"type": "array", "minItems": 1, "maxItems": 10, "items": ID},
                         "subjectKeys": {"type": "array", "minItems": 1, "maxItems": 5000, "items": ID},
                         "direction": {"type": "string", "enum": ["trial_to_patient", "patient_to_trial"]},
-                        "asOf": {"type": "string"}, "offset": {"type": "integer", "minimum": 0},
+                        "asOf": {"type": "string"}, "offset": {"type": "integer", "minimum": 0}, "prefilter": {"type": "boolean"},
                         "snapshotId": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
                     }, "additionalProperties": False},
                     "reconstructionResultId": ID,
@@ -1027,6 +1032,18 @@ def shape(arguments: dict) -> dict:
     control = _control_plane_shape(kind)
     if control is not None:
         return control
+    if kind == "match_extract":
+        # Not an engine method and not a stored-record scenario: the platform plans the reading from the study and takes a selection only.
+        return {
+            "status": "success",
+            "summary": "match_extract is built by the platform from the study; you state nothing in a scenario, only a selection.",
+            "data": {"kind": kind, "method": "matching.extract", "builtByPlatform": True, "runStates": [], "keys": [],
+                     "notes": ["selection takes protocolVersionId, subjectKeys, asOf and prefilter (false reads people whose table values already decide the protocol against them). "
+                               "The answer states how many records will be read and the most they can cost before the work begins. "
+                               "It is read once: a canceled or repeated start reads only what was not read. When it finishes, start match_criteria for the same people."]},
+            "warnings": [],
+            "next_actions": ["Start it with vcr_simulate action start, kind match_extract and no scenario."],
+        }
     entry, method_id, method = _method_of(kind)
     if method is None:
         raise VcrPlatformError("vcr_scenario_help_unavailable", "This build's scenario help has no entry for %s." % kind)

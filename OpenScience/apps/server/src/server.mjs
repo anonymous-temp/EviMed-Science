@@ -2824,6 +2824,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     intakeController,
     entityVocabulary,
     sourceChanges,
+    // The batch reading of patient records calls the model through the same usage ledger every control-plane call goes through (purpose vcr).
+    usageLedger,
     officialZoneForKeys: productDatabase ? createOfficialZoneLookup({ database: productDatabase }) : null,
     // The learning package's prediction registry (flywheel F25) is given here when it exists; without one the filing route is absent.
     // The prediction registry is composed with the evolution module, after this: the filing route asks for it when a prediction is filed.

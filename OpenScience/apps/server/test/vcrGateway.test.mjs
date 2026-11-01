@@ -621,6 +621,36 @@ test("a pooling start tells the run every study it left out, not the first twent
   assert.deepEqual(data.refused[44], { id: "evd_44", reasons: ["quote_not_verified"] });
 });
 
+test("D4: a batch reading starts with a selection and no scenario, and the answer is the platform's statement of what it will read and cost", async () => {
+  /** @type {any[]} */
+  const started = [];
+  const matchBatch = { async start(/** @type {any} */ _study, /** @type {any} */ selection) {
+    started.push(selection);
+    return { action: "start", kind: "match_extract", state: "queued", jobId: "job_5", statement: "这一批要读 3 位病人的 3 份病历，预计最多 1 万个输入词元。", estimate: { basis: "ceiling" } };
+  } };
+  const { handler } = fixture({ matchBatch });
+  const start = async (/** @type {Record<string, any>} */ body) => { const res = response(); await handler(request("/internal/vcr/v1/simulate", { action: "start", kind: "match_extract", ...body }), res); return res; };
+  const ok = await start({ selection: { protocolVersionId: "pv_1", prefilter: false } });
+  assert.equal(ok.status, 200, ok.body);
+  assert.equal(ok.json().data.jobId, "job_5");
+  assert.match(ok.json().data.statement, /这一批要读 3 位病人/);
+  assert.deepEqual(started, [{ protocolVersionId: "pv_1", prefilter: false }]);
+  // with no selection the platform takes the newest protocol and everyone
+  await start({});
+  assert.deepEqual(started.at(-1), {});
+  // a scenario, rows or a selection of the evaluation's kind are refused by name
+  for (const body of [{ scenario: { subjects: ["P-001"] } }, { inputs: [{ kind: "snapshot", id: "snp_1" }] }, { selection: { snapshotId: "a".repeat(64) } }, { selection: { direction: "patient_to_trial" } }]) {
+    const refused = await start(body);
+    assert.equal(refused.status, 400, JSON.stringify(body));
+  }
+  assert.equal(started.length, 2, "nothing refused reached the reading");
+  // a deployment without the module's reader says so, and the other steps carry on
+  const none = fixture({ matchBatch: null });
+  const res = response();
+  await none.handler(request("/internal/vcr/v1/simulate", { action: "start", kind: "match_extract" }), res);
+  assert.equal(res.status, 503);
+});
+
 test("the comparator-effect kinds start through the gateway; a time-to-event MAIC names its comparator by a reconstruction result, never by rows", async () => {
   /** @type {any[]} */
   const queued = [];

@@ -54,6 +54,7 @@ import {
 import { VCR_DESIGN_SUPPORT, validateScenario, vcrIsNullScenario } from './vcrScenarioSchemas.mjs'
 import { VCR_TIME_UNITS } from './vcrTimeUnits.mjs'
 import { VCR_LONGITUDINAL_JOBS } from './vcrLongitudinal.mjs'
+import { VCR_MATCH_BATCH_JOBS } from './vcrMatchBatch.mjs'
 
 // The schemas live in their own module (they are the file most likely to be
 // edited); the protocol's callers find them here, beside the validators.
@@ -187,6 +188,8 @@ export const VCR_JOB_METHODS = Object.freeze({
   // --- end robustness methods ---
   generate_patients_longitudinal: 'patients.longitudinal',
   population_check: 'population.check',
+  // The batch reading of patient records (D4): run by the control plane on its slow local lane, never by the R engine.
+  ...VCR_MATCH_BATCH_JOBS,
   // The longitudinal forecast kinds, last, in VCR_JOB_KINDS' order (the scenario help lists kinds in this object's order).
   ...VCR_LONGITUDINAL_JOBS,
 })

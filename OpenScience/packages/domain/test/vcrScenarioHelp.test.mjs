@@ -269,7 +269,7 @@ test("the keys read inside a node answer a refusal, and a gate that does not hol
 });
 
 test("the kinds the platform builds name the keys a run states, and the gateway's refusal uses the same list", () => {
-  assert.deepEqual(Object.keys(VCR_RUN_SCENARIO_FIELDS).sort(), ["match_criteria", "pool_evidence"]);
+  assert.deepEqual(Object.keys(VCR_RUN_SCENARIO_FIELDS).sort(), ["match_criteria", "match_extract", "pool_evidence"]);
   for (const [kind, fields] of Object.entries(VCR_RUN_SCENARIO_FIELDS)) {
     assert.deepEqual(help.kinds[kind].platformBuilt, [...fields], kind);
   }

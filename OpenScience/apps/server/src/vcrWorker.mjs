@@ -46,6 +46,8 @@
  * @module vcrWorker
  */
 
+import { VCR_SLOW_LOCAL_METHODS } from "@evimed/domain";
+
 const MINUTE = 60_000;
 
 /**
@@ -55,6 +57,9 @@ const MINUTE = 60_000;
 export const VCR_WORKER_LOOPS = Object.freeze([
   Object.freeze({ name: "jobs", package: "jobs", every: 0 }),
   Object.freeze({ name: "localJobs", package: "jobs", every: 0, optional: true }),
+  // The local methods that call a model per record (the batch reading of patient records) have a loop of their own: a long job here holds
+  // no short local job behind it.
+  Object.freeze({ name: "slowJobs", package: "jobs", every: 0, optional: true }),
   Object.freeze({ name: "completions", package: "completions", every: 0, optional: true }),
   Object.freeze({ name: "orchestrator", package: "orchestrator", every: MINUTE, leased: true }),
   Object.freeze({ name: "recompute", package: "orchestrator", every: MINUTE, leased: true }),
@@ -260,10 +265,11 @@ export class VcrWorker {
  */
 export function createVcrWorkerLoops({ jobs, orchestrator, store, matching = null, frontierEvents = null, knowledge = null, drafts = null, completions = null }) {
   const jobLoop = lane => jobs ? async () => {
-    const claimed = await jobs.claim({ limit: lane === "local" ? Number(jobs.config?.vcrLocalConcurrency ?? 2) : Math.max(1,Number(jobs.maxConcurrent ?? 1)), lane });
+    const claimed = await jobs.claim({ limit: lane !== "engine" ? Number(jobs.config?.vcrLocalConcurrency ?? 2) : Math.max(1,Number(jobs.maxConcurrent ?? 1)), lane });
     const methods = Object.keys(jobs.localExecutors ?? {});
+    const laneOf = (/** @type {string} */ method) => (VCR_SLOW_LOCAL_METHODS.includes(method) && methods.includes(method) ? "slow" : methods.includes(method) ? "local" : "engine");
     const running = await store.rows("SELECT id,method,kind FROM evimed_vcr.jobs WHERE state='running' AND lease_owner=$1 LIMIT 20",[jobs.owner]);
-    const selected = [...claimed,...running.filter(row => !claimed.some(job => job.id===String(row.id)) && methods.includes(row.method)===(lane==="local"))];
+    const selected = [...claimed,...running.filter(row => !claimed.some(job => job.id===String(row.id)) && laneOf(String(row.method))===lane)];
     const settled = await Promise.allSettled(selected.map(job => jobs.advance(job)));
     let finished = 0;
     for (const result of settled) {
@@ -284,6 +290,7 @@ export function createVcrWorkerLoops({ jobs, orchestrator, store, matching = nul
   } : null;
   return {
     localJobs: jobLoop("local"),
+    slowJobs: jobLoop("slow"),
     completions: completions ? () => completions.tick() : null,
     /**
      * Claim what is queued, then push everything this process holds one step.

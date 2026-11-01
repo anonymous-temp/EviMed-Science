@@ -54,6 +54,8 @@ export const VCR_SCENARIO_HELP_VERSION = 1
 export const VCR_RUN_SCENARIO_FIELDS = Object.freeze({
   pool_evidence: Object.freeze(['parameter', 'endpointKey', 'calibres', 'armRole', 'target', 'method']),
   match_criteria: Object.freeze([]),
+  // The batch reading of records takes a selection and no scenario: the platform freezes the roster, the questions and the estimate.
+  match_extract: Object.freeze([]),
 })
 
 /**

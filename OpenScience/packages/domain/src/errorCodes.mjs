@@ -1641,6 +1641,8 @@ export const VCR_MODULE_ERROR_CODES = Object.freeze([
   'vcr_asof_invalid', 'vcr_assessment_not_found', 'vcr_criteria_missing', 'vcr_pool_endpoint_key_required',
   'vcr_precedent_not_in_study', 'vcr_protocol_version_not_found',
   'vcr_assessment_save_failed', 'vcr_evaluation_failed', 'vcr_recheck_failed', 'vcr_parsed_criteria_unreadable', 'vcr_parsed_criteria_unsaved',
+  // the batch reading of patient records (vcrMatchBatch.mjs) and the short record of a result (vcrResultRecord.mjs)
+  'vcr_extract_failed', 'vcr_extract_incomplete', 'vcr_extract_timeout', 'vcr_extract_unreadable', 'vcr_result_not_found',
   // jobs, derived tables and the orchestrator's step notes
   'vcr_derived_table_missing', 'vcr_population_profile_missing', 'vcr_derived_table_unsupported', 'vcr_engine_table_invalid', 'vcr_job_attempts_exhausted',
   'vcr_object_unknown', 'vcr_scenario_endpoint_missing', 'vcr_scenario_grid_empty', 'vcr_scenario_unknown_fields',
@@ -2558,6 +2560,11 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_assessment_save_failed: '匹配评估没有保存成功，下一轮会重试。',
   vcr_evaluation_failed: '匹配判定在这位受试者上出错，其余照常。',
   vcr_recheck_failed: '到期复评没有完成，下一轮会重试。',
+  vcr_extract_failed: '这份病历没有读成；已读完的保留，没读成的会在下一次启动时再读。',
+  vcr_extract_incomplete: '模型的回答被截断了，这份病历没有读成；下一次启动时会再读它。',
+  vcr_extract_timeout: '读这份病历超时了，没有读成；下一次启动时会再读它。',
+  vcr_extract_unreadable: '模型的回答不是能读的格式，这份病历没有读成；下一次启动时会再读它。',
+  vcr_result_not_found: '这条结果不在这个研究里。',
   vcr_parsed_criteria_unreadable: '本账户以前对这份登记记录的解析现在读不出来；这次需要重新写入选排除条件，其余照常。',
   vcr_parsed_criteria_unsaved: '这次写的条件没能记到账户里供下一个研究沿用；这个试验本身已保存，下一个研究需要重新写条件。',
   vcr_derived_table_missing: '这项计算需要的派生数据表不存在。',

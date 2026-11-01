@@ -85,7 +85,7 @@ export const VCR_TABLES = Object.freeze([
   "knowledge_packs", "study_packs", "definitions", "definition_versions", "definition_uses",
   "models", "methods",
   "jobs", "conversation_completions", "executions", "results", "forecasts", "longitudinal_artifacts",
-  "matching_assessments", "criterion_judgments", "matching_facts", "language_judgments", "matching_inputs", "document_projections", "cloud_reads", "subject_withdrawals", "retired_recruitment_subjects", "retirement_erased_accounts", "derived_marks", "matching_candidates", "matching_producers",
+  "matching_assessments", "criterion_judgments", "matching_facts", "language_judgments", "matching_inputs", "document_projections", "cloud_reads", "subject_withdrawals", "retired_recruitment_subjects", "retirement_erased_accounts", "derived_marks", "matching_candidates", "matching_producers", "matching_extractions",
   "candidate_trials", "candidate_trial_criteria", "candidate_trial_assessments", "candidate_trial_judgments", "parsed_trial_criteria",
   "followup_episodes",
   "dependencies", "stale_marks", "reviews", "decisions", "regulatory_contacts", "exports", "audit", "schedule_marks",
@@ -1124,6 +1124,24 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.matching_producers (
   provenance jsonb NOT NULL,
   created_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY(study_id,target_id,producer_hash)
+);
+-- The ledger of the batch reading of patient records (remediation plan D4): one row per record read for one set of questions. It holds
+-- no patient text and no fact -- the facts are matching_facts' -- only that this record was read, so a resumed, restarted or repeated
+-- batch does not read, or pay for, the same record twice. A record that failed is not a row: it is read again by the next start.
+CREATE TABLE IF NOT EXISTS evimed_vcr.matching_extractions (
+  study_id text NOT NULL REFERENCES evimed_vcr.studies(id) ON DELETE CASCADE,
+  subject_key text NOT NULL,
+  document_id text NOT NULL,
+  variables_digest text NOT NULL,
+  document_hash text,
+  facts integer NOT NULL DEFAULT 0,
+  rejected integer NOT NULL DEFAULT 0,
+  input_tokens integer,
+  output_tokens integer,
+  model text,
+  job_id text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY(study_id,subject_key,document_id,variables_digest)
 );
 ALTER TABLE evimed_vcr.sources ADD COLUMN IF NOT EXISTS cloud_permission jsonb;
 CREATE TABLE IF NOT EXISTS evimed_vcr.document_projections (

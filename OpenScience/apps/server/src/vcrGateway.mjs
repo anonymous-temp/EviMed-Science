@@ -58,6 +58,7 @@
 
 import { VCR_WRITE_FIELDS, vcrContractsRead } from "./vcrWriteContracts.mjs";
 import { matchingSelection } from "./vcrMatchingSnapshot.mjs";
+import { extractSelection } from "./vcrMatchBatch.mjs";
 import { locateSourceText, OTHER_TRIAL_MIN_SOURCE_CHARS, sourceTextLength } from "./vcrPatientTrials.mjs";
 import { factsOnSameWords, surfaceBasis } from "./vcrFactBasis.mjs";
 import { dataIntakeShapeValid } from "./vcrDataIntake.mjs";
@@ -363,8 +364,8 @@ function simulateRequest(body) {
       throw gatewayError(400,'vcr_simulate_payload_invalid','modelId requires its immutable modelVersion.');
     }
     if (body.modelVersion != null && body.modelId == null) throw gatewayError(400,'vcr_simulate_payload_invalid','modelVersion requires modelId.');
-    if (body.selection != null && body.kind !== 'match_criteria') throw gatewayError(400, 'vcr_simulate_payload_invalid', 'selection is for matching only.');
-    return { action, kind: body.kind, modelId: body.modelId ?? null, modelVersion: body.modelVersion ?? null, selection: body.selection == null ? null : matchingSelection(body.selection), scenario: object(body.scenario), inputs: list(body.inputs),
+    if (body.selection != null && !['match_criteria', 'match_extract'].includes(body.kind)) throw gatewayError(400, 'vcr_simulate_payload_invalid', 'selection is for matching only.');
+    return { action, kind: body.kind, modelId: body.modelId ?? null, modelVersion: body.modelVersion ?? null, selection: body.selection == null ? null : body.kind === 'match_extract' ? extractSelection(body.selection) : matchingSelection(body.selection), scenario: object(body.scenario), inputs: list(body.inputs),
       reconstructionResultId: body.reconstructionResultId == null ? null : body.reconstructionResultId,
       seed: Number.isInteger(body.seed) ? body.seed : null,
       replicates: Number.isInteger(body.replicates) ? body.replicates : null,
@@ -2629,6 +2630,15 @@ async function startJob(vcr, study, request) {
     if (!vcr.longitudinal) throw gatewayError(503,'vcr_gateway_unavailable','纵向数据尚未接入；其他分析可以继续。');
     const {job} = await vcr.longitudinal.prepare(study,request,study.userId,{ detail: study.completionOrigin ? { conversationOrigin:study.completionOrigin } : {} });
     return {action:'start',jobId:job.id,state:job.state,progress:job.progress};
+  }
+  // The batch reading of patient records: the platform plans it from the study (who has records, who need not be read, who was read
+  // before), states what it will cost, and queues it on its own lane. The run gives it a selection and nothing else.
+  if (request.kind === "match_extract") {
+    if (!vcr.matchBatch) throw gatewayError(503, "vcr_gateway_unavailable", "批量读病历未接入本部署：这一步暂不可用，其余步骤照常。");
+    if (Object.keys(request.scenario).length || request.inputs.length) {
+      throw gatewayError(400, "vcr_simulate_payload_invalid", "读病历不接受场景：平台按方案版本的入排条件和研究里的病历自己冻结它；只写 selection。");
+    }
+    return vcr.matchBatch.start(study, request.selection ?? {});
   }
   if (request.kind === "pool_evidence") {
     if (!vcr.evidence?.poolParameter) throw gatewayError(503, "vcr_gateway_unavailable", "证据参数化未接入本部署：这一步暂不可用。");

@@ -1136,6 +1136,12 @@ function vcrSettings(overrides) {
     // than window after window: past about two windows (20,000 characters each) a chart is more than a run reads in order, and the part of it
     // a criterion asks about is a small part. Unset = 40,000. A shorter record is read as it always was.
     vcrPassagesMinChars: integer("vcrPassagesMinChars", "OPEN_SCIENCE_VCR_PASSAGES_MIN_CHARS", 40_000, 2_000, 1_000_000),
+    // Batch matching (remediation plan D4, vcrMatchBatch): the most people one batch reads the records of (a roster larger than this is read
+    // in batches, each start taking the next people not yet read), how many records are read at once, and how long one record's model call
+    // may take. A start states the cost of its batch before it begins; a batch is bounded so that stated cost is a bounded one.
+    vcrMatchBatchMaxSubjects: integer("vcrMatchBatchMaxSubjects", "OPEN_SCIENCE_VCR_MATCH_BATCH_MAX_SUBJECTS", 300, 1, 5_000),
+    vcrMatchExtractConcurrency: integer("vcrMatchExtractConcurrency", "OPEN_SCIENCE_VCR_MATCH_EXTRACT_CONCURRENCY", 3, 1, 8),
+    vcrMatchExtractTimeoutMs: integer("vcrMatchExtractTimeoutMs", "OPEN_SCIENCE_VCR_MATCH_EXTRACT_TIMEOUT_MS", 90_000, 10_000, 300_000),
     // The smallest cell a model is shown (vcrService.minCell): a deployment may raise the domain's floor, never lower it.
     vcrMinCellSize: integer("vcrMinCellSize", "OPEN_SCIENCE_VCR_MIN_CELL_SIZE", VCR_MIN_CELL_SIZE, VCR_MIN_CELL_SIZE, 1_000),
     // The largest derived table — reconstructed pseudo-patients, a forecast's probabilities — the control plane stores from an engine job (vcrJobs).

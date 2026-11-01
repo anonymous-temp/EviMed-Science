@@ -166,6 +166,17 @@ test("the number of candidate trials a study holds has a key, a default and boun
   }
 });
 
+test("batch matching has a bound on its size, on its concurrency and on one record's call", () => {
+  const config = loadConfig({ rootDir: repoRoot });
+  assert.deepEqual([config.vcrMatchBatchMaxSubjects, config.vcrMatchExtractConcurrency, config.vcrMatchExtractTimeoutMs], [300, 3, 90_000]);
+  const set = loadConfig({ rootDir: repoRoot, vcrMatchBatchMaxSubjects: "50", vcrMatchExtractConcurrency: "1", vcrMatchExtractTimeoutMs: "20000" });
+  assert.deepEqual([set.vcrMatchBatchMaxSubjects, set.vcrMatchExtractConcurrency, set.vcrMatchExtractTimeoutMs], [50, 1, 20_000]);
+  for (const [key, value, name] of [["vcrMatchBatchMaxSubjects", "0", "OPEN_SCIENCE_VCR_MATCH_BATCH_MAX_SUBJECTS"], ["vcrMatchBatchMaxSubjects", "5001", "OPEN_SCIENCE_VCR_MATCH_BATCH_MAX_SUBJECTS"],
+    ["vcrMatchExtractConcurrency", "9", "OPEN_SCIENCE_VCR_MATCH_EXTRACT_CONCURRENCY"], ["vcrMatchExtractTimeoutMs", "5000", "OPEN_SCIENCE_VCR_MATCH_EXTRACT_TIMEOUT_MS"]]) {
+    assert.throws(() => loadConfig({ rootDir: repoRoot, [key]: value }), new RegExp(name));
+  }
+});
+
 test("memory extraction is given longer than one extraction actually takes", () => {
   // Measured against deepseek-v4-pro, one extraction request takes 40-46s. At
   // the previous 30s budget every request aborted, so the store only ever held
