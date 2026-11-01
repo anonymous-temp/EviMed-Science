@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "vcr-matching",
-  "version": "sha256:5c422e2be076e23317bef5c462f1c4e32a2266b2eeb9f09548996a9a787df63b",
+  "version": "sha256:8c3921d79d285cb72a3bf77f5602f3d21d33f8cbdbca32c68daa45278e434085",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 31,
@@ -1649,7 +1649,7 @@
     {
       "name": "mcp__evimed__vcr_simulate",
       "source": "mcp",
-      "description": "Run, read or cancel research calculations. action=shape with kind returns exact fields and examples before start; do not guess keys. Long jobs resume here only when they outlive this turn. Failures, cancellations and partials remain explicit. modelId requires modelVersion. Narrow aggregate methods also use research_calculate without a study.",
+      "description": "Trial sample size, comparing designs, a synthetic population from a paper's baseline, comparators: calculate here. No study needed; the first start opens its page. action=shape with kind gives exact fields and examples; do not guess keys. Long jobs resume here if they outlive this turn. Failures stay explicit. modelId requires modelVersion.",
       "inputSchema": {
         "type": "object",
         "properties": {
