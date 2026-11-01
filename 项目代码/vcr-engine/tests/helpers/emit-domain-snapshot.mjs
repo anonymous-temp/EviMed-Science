@@ -105,6 +105,7 @@ const snapshot = {
     replicatesNullMin: vocab.VCR_REPLICATES_NULL_MIN,
     replicatesAltMin: vocab.VCR_REPLICATES_ALT_MIN,
     smdFloor: vocab.VCR_SMD_FLOOR,
+    smdSevere: vocab.VCR_SMD_SEVERE,
     // Deployment presets for the deterministic 「不可估计」 rules. A scenario
     // cannot loosen them: the engine reads them here, never from a job.
     essFloor: vocab.VCR_ESS_FLOOR,

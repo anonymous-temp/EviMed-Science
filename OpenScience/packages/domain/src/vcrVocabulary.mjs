@@ -1032,8 +1032,29 @@ export function vcrNullReplicateFloor({ intendedUse = null, borrowing = false } 
   if (borrowing === true && VCR_REPLICATES_NULL_MIN_BORROWING >= byUse) return { floor: VCR_REPLICATES_NULL_MIN_BORROWING, basis: 'borrowing' }
   return { floor: byUse, basis: byUse > VCR_REPLICATES_NULL_MIN ? 'intended_use' : 'default' }
 }
-/** A weighted covariate above this standardized difference is not balanced (§5.3). */
+/**
+ * A weighted covariate above this standardized difference is not balanced (§5.3). It is no longer a rule that stops a comparison
+ * (owner decision 2026-11-01, remediation plan §7 item 2: 0.1 is a convention, and a comparison whose balance is shown beside it is
+ * still an estimate a reader can weigh): the estimate is delivered with the balance, `limited` above this and, above
+ * `VCR_SMD_SEVERE`, `limited` for a severe imbalance.
+ */
 export const VCR_SMD_FLOOR = 0.1
+/** Above this the weighted imbalance is severe: the estimate is delivered, `limited`, and says so (owner decision 2026-11-01). */
+export const VCR_SMD_SEVERE = 0.25
+/** The bands of the worst weighted standardized difference, weakest first. */
+export const VCR_BALANCE_BANDS = frozen(['balanced', 'moderate', 'severe'])
+export const VCR_BALANCE_BAND_LABELS_ZH = Object.freeze({ balanced: '平衡', moderate: '仍有差异', severe: '严重失衡' })
+/**
+ * The band of a worst absolute standardized difference. At most the floor is balanced; above it and at most the severe bound is a
+ * moderate difference; above that, severe. Pure: the engine reads the same two numbers from its snapshot.
+ * @param {number} worst
+ * @returns {'balanced' | 'moderate' | 'severe' | null} null for a value that is not a number
+ */
+export function vcrBalanceBand(worst) {
+  const value = Math.abs(Number(worst))
+  if (!Number.isFinite(value)) return null
+  return value > VCR_SMD_SEVERE ? 'severe' : value > VCR_SMD_FLOOR ? 'moderate' : 'balanced'
+}
 /**
  * The other deterministic 「不可估计」 presets (§5.3: 「越过预设界限」). They are
  * deployment presets the engine reads from its snapshot, never scenario keys: a

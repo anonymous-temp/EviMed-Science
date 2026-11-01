@@ -134,10 +134,10 @@ vcr_job_weighted_cox <- function(job, output_dir = NULL, cancel_file = NULL, ...
   ps <- vcr_propensity_weights(X, treat, "ATT")$propensity
   support <- vcr_common_support(ps, treat)
   ess <- vcr_ess(w[treat == 0L])
-  rule <- vcr_not_estimable_weighting(balance = balance, ess = ess, support = support,
+  rule <- vcr_not_estimable_weighting(ess = ess, support = support,
                                       ebal = if (identical(weighting, "entropy_balance")) fit else NULL)
   limits_used <- list(essFloor = vcr_limit("essFloor", 10), supportCeiling = vcr_limit("supportCeiling", 0.1),
-                      smdFloor = vcr_limit("smdFloor", 0.1), bootstrapMin = vcr_limit("bootstrapMin", 2000),
+                      smdFloor = vcr_limit("smdFloor", 0.1), smdSevere = vcr_limit("smdSevere", 0.25), bootstrapMin = vcr_limit("bootstrapMin", 2000),
                       coxFewEvents = vcr_limit("coxFewEvents", 10))
   wdiag <- vcr_weight_diagnostics(w, treat)
   if (!is.null(rule)) {
@@ -213,6 +213,12 @@ vcr_job_weighted_cox <- function(job, output_dir = NULL, cancel_file = NULL, ...
     list(vcr_measure("effective_sample_size", ess, source = est_src),
          vcr_measure("worst_standardized_difference", max(abs(balance$smdAdjusted)), source = est_src)))
 
+  # the E-value of the hazard ratio and of the limit of its interval nearer the null, after the estimate and beside it (A5); a hazard
+  # ratio stands for a risk ratio only when the outcome is rare (under 15 percent), and the approximation for a common one is the
+  # method's own
+  hr_iv <- if (is.null(bs$interval)) c(hr_robust$low, hr_robust$high) else bs$interval
+  evalue <- vcr_evalue_after(exp(beta), hr_iv[1], hr_iv[2], "hazard_ratio", mean(status) < 0.15, est_src)
+  if (!is.null(evalue)) measures <- c(measures, evalue$measures)
   # weight truncation as a sensitivity analysis only, as in the weighting job (plan 5.3)
   cap <- stats::quantile(w[treat == 0L], 0.99, names = FALSE)
   wt <- w; wt[treat == 0L] <- pmin(wt[treat == 0L], cap)
@@ -223,9 +229,11 @@ vcr_job_weighted_cox <- function(job, output_dir = NULL, cancel_file = NULL, ...
   changed <- !identical(estimand, "ATT")
   ph_rejected <- !is.null(gph) && isTRUE(gph$p < ph_alpha)
   few <- unname(events_by_arm[events_by_arm < vcr_limit("coxFewEvents", 10)])
+  verdict <- vcr_balance_verdict(balance)
   limited_by <- c(if (bs$failureShare > 0.01) "bootstrap_failure_share",
                   if (changed) "estimand_changed_from_att",
                   if (length(tt_limits)) "target_trial_item_cannot_be_emulated",
+                  vcr_balance_limit(verdict),
                   if (ph_rejected) "proportional_hazards_rejected",
                   if (!with_rmst) "rmst_companion_unavailable",
                   if (length(few)) "few_events")
@@ -253,7 +261,8 @@ vcr_job_weighted_cox <- function(job, output_dir = NULL, cancel_file = NULL, ...
          rmstCompanion = if (with_rmst) list(available = TRUE, tau = tau, source = "calculated")
                          else c(list(available = FALSE), tau_rule),
          curves = vcr_arm_curves(time, status, treat, weights = w, source = data_src, tau = if (with_rmst) tau else NULL),
-         estimandChanged = changed, balance = balance, support = support, weights = wdiag, thresholds = limits_used,
+         eValue = if (!is.null(evalue)) evalue$diagnostics else .vcr_evalue_absent("no_hazard_ratio"),
+         estimandChanged = changed, balance = balance, balanceVerdict = verdict, support = support, weights = wdiag, thresholds = limits_used,
          sensitivity = list(truncatedWeights = list(quantile = 0.99, hazardRatio = if (is.finite(trunc_beta)) exp(trunc_beta) else NULL)),
          limitedBy = as.list(limited_by), targetTrialCannot = as.list(tt_limits), cohort = cohort$info,
          valueSourcesUsed = sources_used, comparabilityDimensions = vcr_domain()$comparabilityDimensions),

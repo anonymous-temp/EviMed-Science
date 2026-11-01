@@ -135,7 +135,7 @@
       ]
     },
     "comparator.entropy_balance": {
-      "version": "1.1.0",
+      "version": "1.2.0",
       "endpoints": [
         "continuous",
         "binary",
@@ -147,11 +147,12 @@
       ],
       "modelTier": "data",
       "compatibleVersions": [
-        "1.0.0"
+        "1.0.0",
+        "1.1.0"
       ]
     },
     "comparator.propensity_weight": {
-      "version": "1.1.0",
+      "version": "1.2.0",
       "endpoints": [
         "continuous",
         "binary",
@@ -162,7 +163,8 @@
       ],
       "modelTier": "data",
       "compatibleVersions": [
-        "1.0.0"
+        "1.0.0",
+        "1.1.0"
       ]
     },
     "comparator.rmst": {
@@ -384,7 +386,7 @@
       "modelTier": null
     },
     "comparator.weighted_cox": {
-      "version": "1.1.0",
+      "version": "1.2.0",
       "endpoints": [
         "time_to_event"
       ],
@@ -394,7 +396,8 @@
       ],
       "modelTier": "data",
       "compatibleVersions": [
-        "1.0.0"
+        "1.0.0",
+        "1.1.0"
       ]
     },
     "comparator.maic_time_to_event": {
@@ -413,7 +416,7 @@
       ]
     },
     "comparator.aipw": {
-      "version": "1.0.0",
+      "version": "1.1.0",
       "endpoints": [
         "continuous",
         "binary"
@@ -422,10 +425,13 @@
         "closed-form AIPW (Bang & Robins 2005) on WeightIt weights",
         "simulation with a known ATT: double robustness"
       ],
-      "modelTier": "data"
+      "modelTier": "data",
+      "compatibleVersions": [
+        "1.0.0"
+      ]
     },
     "comparator.covariate_sets": {
-      "version": "1.1.0",
+      "version": "1.2.0",
       "endpoints": [
         "continuous",
         "binary",
@@ -438,11 +444,12 @@
       ],
       "modelTier": "data",
       "compatibleVersions": [
-        "1.0.0"
+        "1.0.0",
+        "1.1.0"
       ]
     },
     "comparator.negative_control": {
-      "version": "1.0.0",
+      "version": "1.1.0",
       "endpoints": [
         "binary",
         "time_to_event"
@@ -452,7 +459,10 @@
         "Lipsitch 2010",
         "Schuemie 2014"
       ],
-      "modelTier": "data"
+      "modelTier": "data",
+      "compatibleVersions": [
+        "1.0.0"
+      ]
     },
     "comparator.tipping_point": {
       "version": "1.0.0",
@@ -8748,6 +8758,7 @@
     "replicatesNullMin": 20000,
     "replicatesAltMin": 5000,
     "smdFloor": 0.1,
+    "smdSevere": 0.25,
     "essFloor": 10,
     "coxFewEvents": 10,
     "negativeControlCalibrationMin": 30,

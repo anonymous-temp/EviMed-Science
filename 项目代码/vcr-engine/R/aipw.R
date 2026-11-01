@@ -124,9 +124,9 @@ vcr_job_aipw <- function(job, output_dir = NULL, cancel_file = NULL, ...) {
   balance <- vcr_balance_table(Xall, treat, w_scaled, "ATT")
   support <- vcr_common_support(core$e, treat)
   ess <- vcr_ess(w_ctl)
-  rule <- vcr_not_estimable_weighting(balance = NULL, ess = ess, support = support)
+  rule <- vcr_not_estimable_weighting(ess = ess, support = support)
   limits_used <- list(essFloor = vcr_limit("essFloor", 10), supportCeiling = vcr_limit("supportCeiling", 0.1),
-                      smdFloor = vcr_limit("smdFloor", 0.1), bootstrapMin = vcr_limit("bootstrapMin", 2000))
+                      smdFloor = vcr_limit("smdFloor", 0.1), smdSevere = vcr_limit("smdSevere", 0.25), bootstrapMin = vcr_limit("bootstrapMin", 2000))
   wdiag <- vcr_weight_diagnostics(w_scaled, treat)
   counts <- vcr_counts(realPatients = n, effectiveSampleSize = ess)
   if (!is.null(rule)) {
@@ -181,11 +181,18 @@ vcr_job_aipw <- function(job, output_dir = NULL, cancel_file = NULL, ...) {
   # weight truncation as a sensitivity analysis only, as in the weighting jobs (plan 5.3)
   cap <- stats::quantile(w_ctl, 0.99, names = FALSE)
   trunc <- vcr_aipw_att(y, treat, Xps, Xout, binary, with_if = FALSE, cap = cap)
+  # the E-value of the risk ratio of a binary outcome, after the estimate and beside it (A5); a continuous outcome has no ratio
+  rr_measure <- Filter(function(m) identical(m$name, "aipw_risk_ratio"), measures)
+  evalue <- if (binary && length(rr_measure)) {
+    m <- rr_measure[[1]]
+    vcr_evalue_after(m$value, m$interval$low, m$interval$high, "risk_ratio", FALSE, est_src)
+  } else NULL
+  if (!is.null(evalue)) measures <- c(measures, evalue$measures)
   tt_limits <- .vcr_target_trial_limits(sc)
-  smd_notice <- is.finite(max(abs(balance$smdAdjusted))) && max(abs(balance$smdAdjusted)) >= limits_used$smdFloor
+  verdict <- vcr_balance_verdict(balance)
   limited_by <- c(if (bs$failureShare > 0.01) "bootstrap_failure_share",
                   if (length(tt_limits)) "target_trial_item_cannot_be_emulated",
-                  if (smd_notice) "standardized_difference_above_floor",
+                  vcr_balance_limit(verdict),
                   if (isTRUE(core$separation)) "outcome_model_separation",
                   if (binary && (core$mu0 < 0 || core$mu0 > 1)) "adjusted_control_mean_outside_unit_interval",
                   if (!core$psConverged || !core$outConverged) "nuisance_model_not_converged")
@@ -206,7 +213,8 @@ vcr_job_aipw <- function(job, output_dir = NULL, cancel_file = NULL, ...) {
                                           se_scale = if (binary) "risk difference" else "mean difference", interval_scale = if (binary) "risk difference" else "mean difference"),
          varianceComparison = list(influenceSe = se_if, bootstrapSe = bs$se, ratioInfluenceToBootstrap = se_if / bs$se,
                                    note = "a metric, never a gate: the influence-function standard error ignores the estimation of the two models"),
-         balance = balance, support = support, weights = wdiag, thresholds = limits_used,
+         eValue = if (!is.null(evalue)) evalue$diagnostics else .vcr_evalue_absent(if (binary) "no_risk_ratio" else "continuous_outcome"),
+         balance = balance, balanceVerdict = verdict, support = support, weights = wdiag, thresholds = limits_used,
          sensitivity = list(truncatedWeights = list(quantile = 0.99, primaryEstimate = if (isTRUE(trunc$ok)) trunc$tau else NULL)),
          limitedBy = as.list(limited_by), targetTrialCannot = as.list(tt_limits), cohort = cohort$info,
          valueSourcesUsed = sources_used, comparabilityDimensions = vcr_domain()$comparabilityDimensions),

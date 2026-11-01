@@ -331,9 +331,12 @@ vcr_bootstrap_pipeline <- function(n_rows, estimate_fn, replicates = 2000L,
 #' Returns the first rule that fires, or NULL. Order matters: the reason a
 #' reader is given should be the earliest thing that went wrong, not the last
 #' check that happened to run.
-vcr_not_estimable_weighting <- function(balance = NULL, ess = NULL, ess_floor = NULL,
-                                        support = NULL, support_ceiling = NULL,
-                                        smd_floor = NULL, ebal = NULL) {
+#'
+#' Covariate balance is not among them since 2026-11-01 (owner decision, remediation
+#' plan section 7 item 2): 0.1 is a convention, not a law, and a comparison that is
+#' unbalanced is still an estimate a reader can weigh when the balance is shown
+#' beside it. `vcr_balance_verdict` reads it and the job says `limited`.
+vcr_not_estimable_weighting <- function(ess = NULL, ess_floor = NULL, support = NULL, support_ceiling = NULL, ebal = NULL) {
   # Every threshold is the domain's; a caller may only pass a *stricter* one.
   ess_floor <- max(ess_floor %||% 0, vcr_limit("essFloor", 10))
   support_ceiling <- min(support_ceiling %||% Inf, vcr_limit("supportCeiling", 0.1))
@@ -347,17 +350,33 @@ vcr_not_estimable_weighting <- function(balance = NULL, ess = NULL, ess_floor = 
     return(list(rule = "effective_sample_size_below_floor",
                 detail = sprintf("weighted effective sample size %.1f is below the floor %.1f", ess, ess_floor)))
   }
-  floor_ <- min(smd_floor %||% Inf, vcr_limit("smdFloor", 0.1))
-  if (!is.null(balance)) {
-    worst <- max(abs(balance$smdAdjusted))
-    if (is.finite(worst) && worst >= floor_) {
-      j <- which.max(abs(balance$smdAdjusted))
-      return(list(rule = "standardized_difference_above_floor",
-                  detail = sprintf("%s still differs by %.3f after weighting (floor %.2f)",
-                                   balance$covariate[j], balance$smdAdjusted[j], floor_)))
-    }
-  }
   NULL
+}
+
+#' What the weighted balance says about the comparison (owner decision 2026-11-01, remediation plan
+#' section 7 item 2). The estimate is delivered in every band and the balance rides beside it:
+#'
+#'   - `balanced`: the worst weighted standardized difference is at most `smdFloor` (0.10);
+#'   - `moderate`: above 0.10 and at most `smdSevere` (0.25) - the estimate is `limited`, and the
+#'     value and the worst variable are said;
+#'   - `severe`: above 0.25 - `limited` as well, and the reason is a severe imbalance.
+#'
+#' Both thresholds are the domain's (`vcr_limit`), never a scenario key. Returns NULL for no table.
+vcr_balance_verdict <- function(balance) {
+  if (is.null(balance) || !nrow(balance)) return(NULL)
+  a <- abs(balance$smdAdjusted)
+  if (!any(is.finite(a))) return(NULL)
+  j <- which.max(replace(a, !is.finite(a), -Inf))
+  floor_ <- vcr_limit("smdFloor", 0.1); severe <- vcr_limit("smdSevere", 0.25)
+  worst <- a[j]
+  list(band = if (worst > severe) "severe" else if (worst > floor_) "moderate" else "balanced",
+       worst = worst, variable = balance$covariate[j], smd = balance$smdAdjusted[j], floor = floor_, severeFloor = severe)
+}
+
+#' The `limitedBy` code a balance verdict adds, or NULL when the covariates are balanced.
+vcr_balance_limit <- function(verdict) {
+  if (is.null(verdict)) return(NULL)
+  switch(verdict$band, severe = "standardized_difference_severe", moderate = "standardized_difference_above_floor", NULL)
 }
 
 `%||%` <- function(a, b) if (is.null(a)) b else a

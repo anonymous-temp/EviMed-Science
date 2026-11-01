@@ -54,7 +54,9 @@ test("the robustness parity jobs: every valid one is clean, every invalid one na
 
 test("each robustness method is registered once: a method, a kind, a schema, and the sources it reads", () => {
   for (const [method, kind] of METHODS) {
-    assert.equal(/** @type {any} */ (VCR_ENGINE_METHODS)[method].version, "1.0.0", method);
+    // negative controls are at 1.1.0 since the weighted balance became a reading and no longer a refusal (2026-11-01); 1.0.0 replays
+    assert.equal(/** @type {any} */ (VCR_ENGINE_METHODS)[method].version, method === "comparator.negative_control" ? "1.1.0" : "1.0.0", method);
+    if (method === "comparator.negative_control") assert.deepEqual([.../** @type {any} */ (VCR_ENGINE_METHODS)[method].compatibleVersions], ["1.0.0"]);
     assert.equal(/** @type {any} */ (VCR_ENGINE_METHODS)[method].modelTier, "data", method);
     assert.ok(/** @type {any} */ (VCR_ENGINE_METHODS)[method].crossChecks.length > 0, `${method} names what its numeric cases are held against`);
     assert.equal(/** @type {Record<string, string>} */ (VCR_JOB_METHODS)[kind], method, kind);

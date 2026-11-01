@@ -1222,10 +1222,10 @@ vcr_job_weight_comparator <- function(job, output_dir = NULL, cancel_file = NULL
   ess <- vcr_ess(w[treat == 0L])
   # Every threshold that decides "not estimable" is the domain's: a scenario is
   # written by the run and may not loosen (or set) them (EB-5).
-  rule <- vcr_not_estimable_weighting(balance = balance, ess = ess, support = support,
+  rule <- vcr_not_estimable_weighting(ess = ess, support = support,
                                       ebal = if (identical(method, "entropy_balance")) fit else NULL)
   limits_used <- list(essFloor = vcr_limit("essFloor", 10), supportCeiling = vcr_limit("supportCeiling", 0.1),
-                      smdFloor = vcr_limit("smdFloor", 0.1), bootstrapMin = vcr_limit("bootstrapMin", 2000))
+                      smdFloor = vcr_limit("smdFloor", 0.1), smdSevere = vcr_limit("smdSevere", 0.25), bootstrapMin = vcr_limit("bootstrapMin", 2000))
   wdiag <- vcr_weight_diagnostics(w, treat)
   if (!is.null(rule)) {
     return(list(status = "not_estimable", notEstimableRule = rule$rule, measures = list(),
@@ -1288,6 +1288,12 @@ vcr_job_weight_comparator <- function(job, output_dir = NULL, cancel_file = NULL
   measures <- c(measures, list(
     vcr_measure("effective_sample_size", ess, source = est_src),
     vcr_measure("worst_standardized_difference", max(abs(balance$smdAdjusted)), source = est_src)))
+  # the E-value of the risk ratio, after the estimate and beside it (A5): only a binary outcome has a ratio here
+  evalue <- if (identical(endpoint, "binary") && is.finite(est[2])) {
+    iv <- boot$intervals[2, ]
+    vcr_evalue_after(exp(est[2]), if (anyNA(iv)) NULL else exp(iv[1]), if (anyNA(iv)) NULL else exp(iv[2]), "risk_ratio", FALSE, est_src)
+  } else NULL
+  if (!is.null(evalue)) measures <- c(measures, evalue$measures)
   # weight truncation as a sensitivity analysis only (plan 5.3)
   cap <- stats::quantile(w[treat == 0L], 0.99, names = FALSE)
   wt <- w; wt[treat == 0L] <- pmin(wt[treat == 0L], cap)
@@ -1295,7 +1301,10 @@ vcr_job_weight_comparator <- function(job, output_dir = NULL, cancel_file = NULL
   trunc_est <- tryCatch(est_of(wt, all_idx)[1], error = function(e) NA_real_)
   tt_limits <- .vcr_target_trial_limits(sc)
   changed <- !identical(estimand, "ATT")
-  limited <- boot$failureShare > 0.01 || changed || length(tt_limits) > 0L
+  # the balance is read, not judged: a weighted covariate still apart limits the estimate and rides beside it (2026-11-01)
+  verdict <- vcr_balance_verdict(balance)
+  imbalance <- vcr_balance_limit(verdict)
+  limited <- boot$failureShare > 0.01 || changed || length(tt_limits) > 0L || !is.null(imbalance)
   list(status = "succeeded", measures = measures,
        conclusion = if (limited) "limited" else "estimable",
        counts = vcr_counts(realPatients = nrow(subj), effectiveSampleSize = ess,
@@ -1311,9 +1320,13 @@ vcr_job_weight_comparator <- function(job, output_dir = NULL, cancel_file = NULL
                           thresholds = limits_used,
                           bootstrapReplicates = boot$replicates, bootstrapFailureShare = boot$failureShare,
                           sensitivity = list(truncatedWeights = list(quantile = 0.99, primaryEstimate = trunc_est)),
+                          balanceVerdict = verdict,
+                          eValue = if (!is.null(evalue)) evalue$diagnostics else .vcr_evalue_absent(
+                            if (identical(endpoint, "binary")) "no_risk_ratio" else if (identical(endpoint, "time_to_event")) "rmst_difference_has_no_ratio" else "continuous_outcome"),
                           limitedBy = as.list(c(if (boot$failureShare > 0.01) "bootstrap_failure_share",
                                                 if (changed) "estimand_changed_from_att",
-                                                if (length(tt_limits)) "target_trial_item_cannot_be_emulated")),
+                                                if (length(tt_limits)) "target_trial_item_cannot_be_emulated",
+                                                imbalance)),
                           targetTrialCannot = as.list(tt_limits), cohort = cohort$info,
                           comparabilityDimensions = vcr_domain()$comparabilityDimensions),
        tables = .vcr_tables_of(list(
@@ -1504,6 +1517,42 @@ vcr_job_evalue <- function(job, ...) {
        diagnostics = list(scale = scale, rare = rare, approximateRiskRatio = rr_app,
                           note = "An E-value is what an unmeasured confounder would have to be, not evidence that none exists."))
 }
+
+#' The E-value of a ratio the job has just estimated, and of the confidence limit nearer the null, as the extra step after the
+#' estimate (remediation plan A5; VanderWeele & Ding 2017). It is computed from the estimate and its interval exactly as the
+#' `comparator.evalue` job computes it, and it can only add: a failure of any kind - a ratio that is not positive, an interval
+#' that is not there - returns NULL and the estimate stands as it was, never withheld, never limited by it.
+#'
+#' What an E-value says is how strongly an unmeasured confounder would have to be associated with both the treatment and the
+#' outcome to explain the estimate away. It is not evidence that no such confounder exists: the result states it that way.
+#'
+#' @param ratio the estimated risk ratio, odds ratio or hazard ratio
+#' @param low,high the interval of the ratio (NA or NULL when the job has none)
+#' @param scale `risk_ratio`, `odds_ratio` or `hazard_ratio`
+#' @param rare whether the outcome is rare enough for an odds or hazard ratio to stand for a risk ratio (under 15 percent)
+#' @param source the estimate's own source word, which the E-value shares
+#' @return list(measures, diagnostics) or NULL
+vcr_evalue_after <- function(ratio, low = NULL, high = NULL, scale = "risk_ratio", rare = FALSE, source = "calculated") {
+  tryCatch({
+    if (length(ratio) != 1L || !is.finite(ratio) || ratio <= 0) return(NULL)
+    # the limit that matters is the one nearer the null; one on the far side of the estimate is not a limit of it
+    cl <- if (ratio >= 1) low else high
+    if (length(cl) != 1L || !is.finite(cl) || cl <= 0 || (ratio > 1 && cl > ratio) || (ratio < 1 && cl < ratio)) cl <- NULL
+    rr <- .vcr_rr_from_scale(ratio, scale, isTRUE(rare))
+    point <- .vcr_evalue_rr(rr)
+    bound <- if (is.null(cl)) NULL else if ((ratio > 1 && cl <= 1) || (ratio < 1 && cl >= 1)) 1 else .vcr_evalue_rr(.vcr_rr_from_scale(cl, scale, isTRUE(rare)))
+    if (!is.finite(point) || (!is.null(bound) && !is.finite(bound))) return(NULL)
+    list(measures = c(list(vcr_measure("e_value", point, source = source)),
+                      if (!is.null(bound)) list(vcr_measure("e_value_confidence_limit", bound, source = source))),
+         diagnostics = list(available = TRUE, scale = scale, rare = isTRUE(rare), estimate = ratio, confidenceLimit = cl, approximateRiskRatio = rr,
+                            basis = "computed from the estimate and the confidence limit nearer the null, after the estimate",
+                            note = "An E-value is how strong an unmeasured confounder would have to be, not evidence that none exists."))
+  }, error = function(e) NULL)
+}
+
+#' Why a job's estimate has no E-value, in the words the result carries (a continuous outcome and an RMST difference have no
+#' ratio to take it of).
+.vcr_evalue_absent <- function(reason) list(available = FALSE, reason = reason)
 
 # --- MAP prior ------------------------------------------------------------------
 
