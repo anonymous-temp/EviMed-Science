@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "vcr-analysis",
-  "version": "sha256:0656a1bfaa671c72d26ef0ad67c4885c44b1703c1ba47c5ed56e22d0c34aa932",
+  "version": "sha256:f4aeb7ae2549617ac133999937ff4d5da9b5943f1f46bbb0738790b7a346dd44",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 34,
@@ -579,7 +579,7 @@
     {
       "name": "mcp__evimed__curve_digitize",
       "source": "mcp",
-      "description": "Read a published Kaplan-Meier figure into curve points, deterministically, so a survival curve can be reconstructed. The figure must already be a PNG or JPEG in this study's workspace (imageArtifactId, a workspace-relative path; imageSha256 pins it by hash). You state the calibration as the axis labels read: x.min and x.max are the values of the FIRST and LAST tick on the time axis (x.unit names the unit), y.min and y.max those on the survival axis, y.scale is 'fraction' (0 to 1) or 'percent' (0 to 100); if the axes have no tick marks, plotArea (pixels) gives the box whose edges carry those values. Each arm names its curve by color ('#rrggbb' as you see it, matched to the nearest curve color in the figure; a black curve is '#000000') or by legendOrder (1 = the first legend entry from the top), and states the published numbers at risk (riskTable [{time, atRisk}], at least two rows; totalEvents and reportedMedian when printed). One arm is the control, two arms are control then treatment. You never state a coordinate: points are measured from the pixels and come back recorded with the algorithm version, the calibration as you stated it, the parameters used and quality indicators (xCoverage, bridgedColumns = stretches hidden under another curve and held, monotonicityRepairs, startSurvival). The answer is a receiptId: pass it to vcr_simulate as kind reconstruct_km with scenario {provenance:{receiptId}}, or write it as a literature comparator's configuration.provenance.receiptId. Measured against figures drawn from known curves: survival within 0.02 (typically 0.002; 0.017 at JPEG quality 60) and time within 0.6% of the x range (typically 0.1%), with gridlines, censoring marks, dashes and a legend. Not reliable: curves of one colour drawn over each other, shaded bands over a curve, 3D figures, a black curve along the frame, text touching the curve. It refuses rather than guesses (plot_area_ambiguous lists candidate boxes, colour_required lists the colors found, legend_not_found, curve_rising for a cumulative-incidence plot) and records nothing then: read what it asks for and call again. An impossible calibration is refused with the reason.",
+      "description": "Read a published Kaplan-Meier figure into curve points, deterministically, so a survival curve can be reconstructed. The figure must already be a PNG or JPEG in this study's workspace (imageArtifactId, a workspace-relative path; imageSha256 pins it by hash). You state the calibration as the axis labels read: x.min and x.max are the values of the FIRST and LAST tick on the time axis (x.unit names the unit), y.min and y.max those on the survival axis, y.scale is 'fraction' (0 to 1) or 'percent' (0 to 100); if the axes have no tick marks, plotArea (pixels) gives the box whose edges carry those values. Each arm names its curve by color ('#rrggbb' as you see it, matched to the nearest curve color in the figure; a black curve is '#000000') or by legendOrder (1 = the first legend entry from the top), and states the published numbers at risk (riskTable [{time, atRisk}], at least two rows; none printed: initialAtRisk, the arm's size; totalEvents and reportedMedian when printed). One arm is the control, two arms are control then treatment. You never state a coordinate: points are measured from the pixels and come back recorded with the algorithm version, the calibration as you stated it, the parameters used and quality indicators (xCoverage, bridgedColumns = stretches hidden under another curve and held, monotonicityRepairs, startSurvival). The answer is a receiptId: pass it to vcr_simulate as kind reconstruct_km with scenario {provenance:{receiptId}}, or write it as a literature comparator's configuration.provenance.receiptId. Measured on figures drawn from known curves: survival within 0.02 and time within 0.6% of the x range. Not reliable: curves of one colour drawn over each other, shaded bands over a curve, 3D figures, a black curve along the frame, text touching the curve. It refuses rather than guesses (plot_area_ambiguous lists candidate boxes, colour_required lists the colors found, legend_not_found, curve_rising for a cumulative-incidence plot) and records nothing then: read what it asks for and call again. An impossible calibration is refused with the reason.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -730,6 +730,10 @@
                     "additionalProperties": false
                   }
                 },
+                "initialAtRisk": {
+                  "type": "integer",
+                  "minimum": 1
+                },
                 "totalEvents": {
                   "type": "number",
                   "minimum": 0
@@ -739,8 +743,17 @@
                   "exclusiveMinimum": 0
                 }
               },
-              "required": [
-                "riskTable"
+              "anyOf": [
+                {
+                  "required": [
+                    "riskTable"
+                  ]
+                },
+                {
+                  "required": [
+                    "initialAtRisk"
+                  ]
+                }
               ],
               "additionalProperties": false
             }
