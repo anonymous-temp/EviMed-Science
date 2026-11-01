@@ -31,3 +31,12 @@ test('ordinary workspace scanning excludes known foreign directories before its 
     assert.deepEqual(files, ['deliverables/z-own/result.csv']);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
+
+test('overlap depends on the run intervals, not an old directory or an unknown start', async () => {
+  const { overlappingRuns } = await import('../src/runArtifactAttribution.mjs');
+  const current = run('r1', 's1', 'statistics');
+  const old = run('r2', 's2', 'old', { startedAt: '2026-11-01T09:00:00Z', finishedAt: '2026-11-01T09:30:00Z' });
+  const future = run('r3', 's3', 'later', { startedAt: '2026-11-01T10:11:00Z', finishedAt: null });
+  const overlap = run('r4', 's4', 'peer', { startedAt: '2026-11-01T10:05:00Z', finishedAt: null });
+  assert.deepEqual(overlappingRuns(current, [current, old, future, overlap]).map((item) => item.id), ['r4']);
+});

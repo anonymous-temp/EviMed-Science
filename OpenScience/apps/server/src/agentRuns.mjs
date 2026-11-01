@@ -41,7 +41,7 @@ import {
 } from "./runNotices.mjs";
 import { describeRunArtifacts, describeRunArtifactRoles, isOrdinaryConversation } from "./runArtifacts.mjs";
 import { workspaceChangedFiles } from "./runWorkspaceChanges.mjs";
-import { foreignDeliverableIds } from "./runArtifactAttribution.mjs";
+import { foreignDeliverableIds, overlappingRuns } from "./runArtifactAttribution.mjs";
 import { pickMainDocuments } from "./terminalPresentation.mjs";
 import { normalizeRunEstimate } from "./runRoute.mjs";
 import {
@@ -6136,6 +6136,16 @@ export class AgentRunStore {
           }
         }
       } catch { /* isolated: the files stay in the workspace; the record just does not list the ones only the workspace saw */ }
+    }
+    if (normalized.artifacts.length || normalized.unverifiedArtifacts.length) {
+      const runs = await this.list(project);
+      const current = runs.find((item) => item.id === runId);
+      const end = terminal.finishedAt ?? this.now().toISOString();
+      if (current && overlappingRuns({ ...current, finishedAt: end }, runs).length) {
+        const text = "同一项目中有其他任务与本次运行同时进行。未明确记录归属的文件可能混入，请核对文件来源。";
+        normalized.qualityNotices = normalizeQualityNotices([...normalized.qualityNotices,
+          runNotice("run_concurrent_attribution_uncertain", text, { detail: text })]);
+      }
     }
     // A run that was stopped hands over its main document. It kept its files above; this says which of them is the
     // document, so a reader of the record is not left to tell a report from the scripts and the pieces it was built from
