@@ -281,6 +281,22 @@ export async function furnishGeo(app, user, { log }) {
   ] }).catch((error) => log(`geo: owned links — ${String(error.message).slice(0, 300)}`));
   log(`geo: strategy, ${actions.length} actions, ${written?.ids?.length ?? 0} articles, owned links written`);
 
+  // ---- what the person asked for, and what each request came to. The module no longer treats an unrequested step as work to do (the
+  // connected journey, 2026-11-01): a step is the person's explicit request, a project with measured rounds, a strategy and articles
+  // has the requests behind them, and recurring measurement is a separate consent tied to the engines and the window. Without the
+  // requests every step read 未请求 and the rail, the band's next retest and the journey card showed a project nobody had worked on.
+  // All of it is written as the browser's request would have left it: no step is queued or running, so nothing here wakes the
+  // orchestrator, and the one round it could schedule is a week away.
+  const asked = { requested: true, requestOrigin: "browser", requestedBy: user.id };
+  for (const [step, fields] of /** @type {Array<[string, any]>} */ ([
+    ["evidence", { status: "done" }], ["journey", { status: "done" }], ["questions", { status: "done" }],
+    ["diagnosis", { status: "done", roundId: "gr_walk_4" }], ["sources", { status: "done" }], ["content", { status: "done" }],
+    // Two pieces published by the brand and none by the platform: the minimal tier, which the rail draws as a partial mark.
+    ["distribution", { status: "minimal" }],
+    ["monitoring", { status: "done", automation: { state: "confirmed", actorId: user.id, at: new Date().toISOString(), engines: ENGINES, coverageDays: 90 } }],
+  ])) await geoStore.setStep(project.id, step, { ...asked, ...fields });
+  log("geo: the eight steps requested; recurring measurement confirmed for the five engines and 90 days");
+
   // Two more projects of the account, started and left (paused), as the owner's list has them: the list's row then carries 「已暂停」 and a
   // text button 「继续」 beside the first project's grade and its trend, which is the row the home page's type pairs are measured on.
   for (const [slug, name] of [["geo-second", "示例复方制剂 · 9月29日"], ["geo-third", "示例复方制剂 · 9月28日"]]) {
