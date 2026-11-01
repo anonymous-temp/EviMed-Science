@@ -218,7 +218,9 @@ class DshAdapter:
             if self.balance is not None:
                 self.balance.ensure(f"rollout {rid}")
             self._prepare_marker(rid)
-            self.inbox.client.submit(request)
+            # A task with input files carries where the lane fetches them from (public data, never through this box).
+            manifests = [config.PPC_FETCH_FILE] if request["item"].get("files") and config.PPC_FETCH_FILE.exists() else None
+            self.inbox.client.submit(request, manifests)
         state = self.inbox.wait_for(rid, max_wait_s=float(self.max_wait_s))
         if state == "infra":
             marker = json.loads(self.inbox.marker(rid).read_text(encoding="utf-8"))

@@ -46,7 +46,7 @@ DRB_QUERY_URL = "https://raw.githubusercontent.com/Ayanami0730/deep_research_ben
 # Tasks the baseline builder already ruled out as not feasible in the hosted runtime (build_rcb.py), plus a data-size ceiling.
 RCB_INFEASIBLE = {"Life_003", "Life_004", "Neuroscience_001"}
 RCB_MAX_BYTES = 300 * 1024 * 1024
-BIX_MAX_BYTES = 250 * 1024 * 1024
+BIX_MAX_BYTES = 250 * 1024 * 1024  # the 380 MB capsules hold files over the product's 50 MB upload limit
 
 CALC_FINAL = "End with a final line: Final answer: <value>"
 ARB_DEEP_LINE = "End with a final line: Final answer: <paper title> (arXiv:<id>), or None if no paper satisfies the conditions"
@@ -295,7 +295,7 @@ def feasible(task: Task) -> bool:
     """The same eligibility the baseline builders used, so a probe never asks the lab for something the hosted runtime cannot do."""
     if task.domain == "bixbench":
         f = task.facts
-        return (f.get("n_questions", 0) >= 3 and (f.get("data_bytes") or 0) <= BIX_MAX_BYTES and (f.get("zip_bytes") or 0) <= BIX_MAX_BYTES
+        return (f.get("n_questions", 0) >= 1 and (f.get("data_bytes") or 0) <= BIX_MAX_BYTES and (f.get("zip_bytes") or 0) <= BIX_MAX_BYTES
                 and f.get("n_files", 0) > 0)
     if task.domain == "rcb":
         return task.id not in RCB_INFEASIBLE and (task.facts.get("data_bytes", 0) + task.facts.get("related_bytes", 0)) <= RCB_MAX_BYTES
@@ -340,6 +340,10 @@ class Family:
         if missing:
             built = BUILDERS[self.domain](self.root, missing, self.fetcher)
             lost = [i for i in missing if i not in built]
+            # Asked for the whole pool: a row with no raw data is simply not a task. Asked for it by id: that is an error.
+            if ids is None:
+                wanted = [i for i in wanted if i not in lost]
+                lost = []
             if lost:
                 raise DataUnavailable(f"{self.domain}: no raw data for {lost[:5]}")
             self._tasks.update(built)

@@ -44,12 +44,20 @@ class BrokerctlClient(BrokerClient):
         self.timeout = timeout
 
     def _run(self, *words: str, timeout: int | None = None) -> subprocess.CompletedProcess:
-        try:
-            return subprocess.run([*self.argv, *words], capture_output=True, text=True, timeout=timeout or self.timeout, env=self.env)
-        except subprocess.TimeoutExpired:
-            raise InfrastructureFailure("broker", f"brokerctl {words[0]} timed out") from None
-        except OSError as exc:
-            raise InfrastructureFailure("broker", f"brokerctl could not start ({type(exc).__name__})") from None
+        # The lab host's sshd drops new connections at random under load (MaxStartups 10:30:100, 18 lanes polling): that is a
+        # refused connection, not a broker answer, so it is asked again and only a persistent refusal stops the domain.
+        for wait in (20, 60, 180, 0):
+            try:
+                done = subprocess.run([*self.argv, *words], capture_output=True, text=True, timeout=timeout or self.timeout, env=self.env)
+            except subprocess.TimeoutExpired:
+                raise InfrastructureFailure("broker", f"brokerctl {words[0]} timed out") from None
+            except OSError as exc:
+                raise InfrastructureFailure("broker", f"brokerctl could not start ({type(exc).__name__})") from None
+            transient = done.returncode != 0 and re.search(r"banner exchange|Connection (timed out|reset|closed)|\(255\)|port 22", done.stderr or "")
+            if not transient or not wait:
+                return done
+            time.sleep(wait)
+        return done
 
     def submit(self, request: dict, fetch_manifests=None) -> str:
         with tempfile.TemporaryDirectory(prefix="h2-submit-") as scratch:

@@ -41,8 +41,20 @@ def main():
         used = set(ppc.get(domain, []))
         ids = sorted((i for i in family.development_ids() if i not in used),
                      key=lambda i: hashlib.sha256(f"rsi1-screen|{i}".encode()).hexdigest())
-        tasks = family.tasks(ids[: count * 2])
-        chosen = [i for i in ids[: count * 2] if i in tasks and families.feasible(tasks[i])][:count]
+        tasks, chosen, unavailable = {}, [], []
+        for task_id in ids:
+            if len(chosen) == count:
+                break
+            try:
+                task = family.tasks([task_id])[task_id]
+            except families.DataUnavailable:
+                unavailable.append(task_id)
+                continue
+            tasks[task_id] = task
+            if families.feasible(task):
+                chosen.append(task_id)
+        if unavailable:
+            print(f"{domain}: no raw data, skipped {unavailable}", file=sys.stderr)
         rows[domain] = chosen
         fetches += families.fetch_entries(domain, chosen)
         for task_id in chosen:
