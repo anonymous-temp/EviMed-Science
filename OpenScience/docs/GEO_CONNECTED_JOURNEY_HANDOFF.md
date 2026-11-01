@@ -26,6 +26,8 @@ node scripts/build/vendor-geo-skills.mjs --version 3.1.0
 node deploy/runtime-dsh/check-geo-method-pack.mjs runtime/skills/geo-private
 ```
 
+**State at the 2026-11-01 release:** `geo-skills-3.1.0.zip` was not on the build machine or the serving host, so the receipt binds what actually ships, 3.0.1 (`a2654221…` / tree `e3ef7ebc…`, same 51 names); the running methods are unchanged from the release before. To adopt 3.1.0 once the archive is delivered, set the receipt back to version `3.1.0`, archive `1908c955…f23f22e`, tree `6c1d3806001444cbc84b7aba9cc8b2be874e63ddd0e2ffc53e59d4ab8908a707`, and run the two commands above.
+
 A fresh public checkout may explicitly build without the private pack. A delta image carrying an older private pack fails the release check and requires the matching archive. Code push does not update online skills.
 
 ## Verification and limits
