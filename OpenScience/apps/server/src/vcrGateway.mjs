@@ -74,11 +74,12 @@ import {
 
 import { HttpError } from "./security.mjs";
 import { VCR_READ_WHATS, VCR_READ_MAX_ITEMS, VCR_WRITE_WHATS, vcrRouteOptions } from "./vcrService.mjs";
+import { withJobEntry, withWriteEntry } from "./vcrResultEntry.mjs";
 import { renderVcrNumbers } from "./vcrRender.mjs";
 import { checkRegulatoryContact, resolveVisitsRef, visitKey } from "./vcrScheduleView.mjs";
 import { EVIDENCE_ARM_ROLES } from "./vcrEvidenceStore.mjs";
 import { VCR_MATCHING_VOCABULARY_VERSION, storedExclusion } from "./vcrMatching.mjs";
-import { VCR_RECONSTRUCTION_REFERENCE, vcrReconstructionReferenceFor } from "./vcrJobs.mjs";
+import { VCR_RECONSTRUCTION_REFERENCE, vcrReconstructionReferenceFor, vcrResultKindFor } from "./vcrJobs.mjs";
 import { resolveJobSubject, prepareVcrSubjectPopulation } from "./vcrSubjects.mjs";
 import { prepareVcrModelDesign } from "./vcrModelDesign.mjs";
 import { VCR_COVERAGE_POPULATION_NAME, vcrCohortRulesFromCriteria } from "./vcrCoverage.mjs";
@@ -2293,7 +2294,7 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
             scope: study.scope, conversationSessionId: study.conversationSessionId };
           if (request.what === 'patient_context') {
             if (!origin || !vcr.patientContext) throw gatewayError(403, 'vcr_invocation_unavailable', 'A native patient message or owned attachment is required.');
-            return { what: request.what, ...await vcr.patientContext(study, request.data, origin) };
+            return withWriteEntry(request.what, { what: request.what, ...await vcr.patientContext(study, request.data, origin) }, { study, publicUrl: config?.publicUrl });
           }
           const clinicalWrite = ["fact", "language_judgment"].includes(request.what);
           const runReceipt = clinicalWrite && runtimeRunId && readProducerRun ? await readProducerRun(study, runtimeRunId).catch(() => null) : null;
@@ -2309,7 +2310,8 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
           });
           vcr.service.counters.writes += 1;
           vcr.service.counters.writeIssues += result.issues.length;
-          return { what: request.what, ...result };
+          // A matching is judged at its write, so the answer to a matching write is where the person goes to read it.
+          return withWriteEntry(request.what, { what: request.what, ...result }, { study, publicUrl: config?.publicUrl });
         };
         // A write that fetches a registry record waits on the registry too.
         if (request.what === "precedent") budget = Math.max(budgetMs, registryDeadline + REGISTRY_MARGIN_MS);
@@ -2331,7 +2333,9 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
           if (!vcr.jobs) {
             throw gatewayError(503, "vcr_gateway_unavailable", "作业队列在本部署尚未接入：这一步暂不可用。");
           }
-          if (request.action === "start") return startJob(vcr, study, /** @type {any} */ (request));
+          if (request.action === "start") {
+            return withJobEntry(await startJob(vcr, study, /** @type {any} */ (request)), { study, resultKind: vcrResultKindFor(String(/** @type {any} */ (request).kind)), publicUrl: config?.publicUrl });
+          }
           if (request.action === "cancel") {
             const result = await vcr.jobs.cancel(study.id, request.jobId, { actor: "runtime",rootSessionId:origin?.rootSessionId ?? null });
             return { action: "cancel", jobId: request.jobId, state: result.job?.state ?? "canceled", canceled: result.canceled };
@@ -2359,7 +2363,8 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
           const answer = { action: "status", jobId: job.id, state: job.state, progress: job.progress,
             cpuSeconds: job.cpuSecondsUsed, error: job.error, result, ...(pooling ? { pooling } : {}),
             ...(job.state === "awaiting_budget" ? { awaitingBudget: true, message: AWAITING_BUDGET_MESSAGE } : {}) };
-          const safe = await vcr.service.forModel(answer, { projection: "job_result" });
+          const safe = withJobEntry(await vcr.service.forModel(answer, { projection: "job_result" }),
+            { study, resultKind: String(result?.kind ?? vcrResultKindFor(String(job.kind))), publicUrl: config?.publicUrl });
           if (origin && ["succeeded","failed","canceled"].includes(job.state)) await vcr.store.query(`UPDATE evimed_vcr.jobs
             SET checkpoint=checkpoint || jsonb_build_object('originTerminalObservation',$4::jsonb) WHERE id=$1
             AND checkpoint->'conversationOrigin'->>'runId'=$2 AND checkpoint->'conversationOrigin'->>'rootSessionId'=$3`,[job.id,origin.runId,origin.rootSessionId,JSON.stringify({runId:origin.runId,rootSessionId:origin.rootSessionId,callId:origin.callId,state:job.state,resultKey:result ? `${result.id}:${result.version}` : 'none'})]);

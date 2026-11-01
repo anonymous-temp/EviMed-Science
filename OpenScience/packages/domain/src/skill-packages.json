@@ -1277,13 +1277,13 @@
       "id": "capability/vcr-protocol",
       "name": "vcr-protocol",
       "origin": "capability",
-      "version": "1.4.1",
+      "version": "1.4.2",
       "source": {"kind":"release"},
-      "digest": "sha256:85a3207a1c5b3ddcc389e6460bb838c7861d97fbe87f1ff1ed7a38a3a3d5a2f8",
+      "digest": "sha256:0e0e750084c03c1ac12053945bffeabea978d153a7b3043e6c4eb5008c9025f1",
       "digestAlgorithm": "release-directory-v1",
       "references": [
-        {"path":"capability.yaml","sha256":"b8abe78bdc9001fd56c6024fd14d82546e05010a61a0fdcf84de6c904390aee3"},
-        {"path":"references/operating-contract.md","sha256":"d9306548fb550d7a3a47e0637dd5826905d19d3d1fb504cbcf59e93f356957b4"}
+        {"path":"capability.yaml","sha256":"7767c3c506f4aa5fb97447231f4217368ccc83b1dbd1f1e2d696412034843d71"},
+        {"path":"references/operating-contract.md","sha256":"4502573176148d3692c90762e85b03123294d21cd1aadf2772162c3b067e0850"}
       ],
       "dependencies": [
         {"kind":"platform-tool","name":"clinical_trial_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},

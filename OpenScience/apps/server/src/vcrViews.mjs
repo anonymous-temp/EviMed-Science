@@ -40,7 +40,7 @@ import {
   VCR_COMPARATOR_ROUTE_LABELS_ZH, VCR_ENDPOINT_TYPE_LABELS_ZH, VCR_ESTIMAND_LABELS_ZH, VCR_EXPORT_KIND_LABELS_ZH, VCR_INTENDED_USE_LABELS_ZH, VCR_MODEL_RISKS,
   VCR_MODEL_RISK_EVIDENCE, VCR_MODEL_RISK_LABELS_ZH, VCR_MODEL_TIER_LABELS_ZH, VCR_POOLING_METHOD_LABELS_ZH, VCR_MODEL_TIER_USE_CEILING, VCR_MODEL_TIERS,
   VCR_MODEL_INTERFACE_LABELS_ZH, VCR_REGISTRY_ALLOCATION_LABELS_ZH, VCR_REGISTRY_MASKING_LABELS_ZH, VCR_REGISTRY_PHASE_LABELS_ZH, VCR_REVIEW_KIND_LABELS_ZH, VCR_ROLE_ABILITIES, VCR_STALE_REASON_LABELS_ZH,
-  VCR_CONVERSATION_STUDY_NAME, VCR_DRAFT_STUDY_NAME, VCR_STEP_LABELS_ZH, VCR_STEPS, VCR_TABS, VCR_TWIN_LABELS_ZH, VCR_TWIN_EVIDENCE, VCR_VALUE_SOURCE_LABELS_ZH,
+  VCR_CONVERSATION_STUDY_NAME, VCR_DRAFT_STUDY_NAME, VCR_RESULT_KIND_TABS, VCR_STEP_LABELS_ZH, VCR_STEPS, VCR_TABS, VCR_TWIN_LABELS_ZH, VCR_TWIN_EVIDENCE, VCR_VALUE_SOURCE_LABELS_ZH,
   VCR_TRIAL_DESIGN_LABELS_ZH,
   allowanceWaitingSentence, workStateLabel, intendedUseCeiling, lineageNode, parseLineageNode, twinLabel, useWithin, vcrModelCardIssues, vcrModelInterfaceOf,
 } from "@evimed/domain";
@@ -613,10 +613,7 @@ const NODE_KIND_TABS = Object.freeze(/** @type {Record<string, string>} */ ({
   assumption: "data", study_definition: "data", protocol_version: "data", snapshot: "data", population: "population", patient_set: "patients",
   comparator_design: "comparator", trial_scenario: "trial", design_grid: "trial", matching_assessment: "matching",
 }));
-const RESULT_KIND_TABS = Object.freeze(/** @type {Record<string, string>} */ ({
-  population: "population", patient_set: "patients", comparator: "comparator", trial_scenario: "trial", design_grid: "trial",
-  matching: "matching", accrual_forecast: "trial", evidence_pool: "data", snapshot_profile: "data",
-}));
+const RESULT_KIND_TABS = /** @type {Record<string, string>} */ (VCR_RESULT_KIND_TABS);
 
 /** The cards' own names, by key. @param {Record<string, any>} bundle @returns {Map<string, string>} */
 export function assumptionNames(bundle) {

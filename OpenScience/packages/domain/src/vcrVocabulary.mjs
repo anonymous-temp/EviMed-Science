@@ -494,6 +494,20 @@ export const VCR_TAB_LABELS_ZH = Object.freeze({
 })
 
 /**
+ * The tab each kind of result is read on, one table for the review findings that point at a result, the notice that says a computation
+ * is done and the entry a tool's answer carries. A kind not named here is read on the overview.
+ */
+export const VCR_RESULT_KIND_TABS = Object.freeze({
+  population: 'population', patient_set: 'patients', comparator: 'comparator', trial_scenario: 'trial', design_grid: 'trial',
+  accrual_forecast: 'trial', matching: 'matching', evidence_pool: 'data', snapshot_profile: 'data',
+})
+/**
+ * The writes that put a patient's matching on the matching tab. A matching is judged at the write -- there is no job to finish -- so
+ * the answer to each carries the entry to the tab (a job's answer carries the tab of its result's kind).
+ */
+export const VCR_MATCHING_WRITE_WHATS = frozen(['patient_context', 'protocol', 'criteria', 'fact', 'language_judgment', 'candidate_trial'])
+
+/**
  * What each step's run is called to a person: one verb and one object. The button that starts the step says it, the run's own
  * question in the conversation list and in the AI-run record says it, and the study's own "next" says it — one table, so the three
  * cannot drift. The instruction a run is briefed with (`vcrDefaultBrief`: the tools, the data tier, the steps by key) is the model's

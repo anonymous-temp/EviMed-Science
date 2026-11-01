@@ -445,6 +445,18 @@ class VcrReadWriteTests(_GatewayCase):
         self.assertEqual(caught.exception.code, "vcr_write_payload_invalid")
         self.assertEqual(len(_Gateway.seen), 1)
 
+    def test_a_matching_write_hands_over_the_link_to_the_matching_page(self):
+        entry = {"studyId": "std_conv", "tab": "matching", "label": "在“匹配”页查看", "url": "https://evimed.example/app/virtual-research/std_conv/matching"}
+        _Gateway.answers["write"] = (200, {"data": {"what": "fact", "ok": True, "ids": ["f1"], "issues": [], "resultEntry": entry}})
+        result = self.server.call_tool("vcr_write", {"what": "fact", "items": [{"subjectKey": "P-1"}]})
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["data"]["resultEntry"], entry)
+        self.assertTrue(any("[在“匹配”页查看](https://evimed.example/app/virtual-research/std_conv/matching)" in action for action in result["next_actions"]), result["next_actions"])
+        # A write that wrote nothing has nowhere to send the reader.
+        _Gateway.answers["write"] = (200, {"data": {"what": "fact", "ok": False, "ids": [], "issues": [{"index": 0, "message": "no"}]}})
+        refused = self.server.call_tool("vcr_write", {"what": "fact", "items": [{"subjectKey": "P-1"}]})
+        self.assertFalse(any("resultEntry" in action for action in refused["next_actions"]))
+
     def test_a_delivered_verdict_is_told_to_come_from_the_saved_read_back(self):
         # 8 of 46 mixed-up patient tasks delivered a result that disagreed with the platform's own saved judgments.
         _Gateway.answers["read"] = (200, {"data": {"what": "matching", "subjectKey": "P-0192", "assessment": {"summary": "eligible", "judgments": []}}})
@@ -617,6 +629,35 @@ class VcrSimulateTests(_GatewayCase):
         self.assertEqual(result["status"], "warning")
         self.assertIn("kept its completed batches", result["summary"])
         self.assertTrue(any("never write a zero" in action for action in result["next_actions"]))
+
+    ENTRY = {"studyId": "std_conv", "tab": "trial", "label": "在“试验”页查看", "url": "https://evimed.example/app/virtual-research/std_conv/trial"}
+
+    def test_a_job_s_answer_hands_over_the_platform_s_own_link_to_give_once_and_never_an_address_of_the_model_s_own(self):
+        # F3: the control plane builds the entry; the model copies it. Terminal or not, the state of the answer does not change.
+        for state, expected in (("succeeded", "success"), ("failed", "warning"), ("canceled", "warning"), ("running", "success")):
+            _Gateway.answers["simulate"] = (200, {"data": {"action": "status", "jobId": "job_9", "state": state, "resultEntry": self.ENTRY}})
+            result = self.server.call_tool("vcr_simulate", {"action": "status", "jobId": "job_9"})
+            self.assertEqual(result["status"], expected, state)
+            lines = [action for action in result["next_actions"] if "resultEntry" in action]
+            self.assertEqual(len(lines), 1, state)
+            self.assertIn("[在“试验”页查看](https://evimed.example/app/virtual-research/std_conv/trial)", lines[0])
+            self.assertIn("Once, at the end of your reply", lines[0])
+            self.assertIn("Never write an address yourself", lines[0])
+            self.assertEqual(result["data"]["resultEntry"], self.ENTRY)
+
+    def test_an_answer_without_an_entry_is_exactly_what_it_was(self):
+        _Gateway.answers["simulate"] = (200, {"data": {"action": "status", "jobId": "job_9", "state": "succeeded"}})
+        result = self.server.call_tool("vcr_simulate", {"action": "status", "jobId": "job_9"})
+        self.assertFalse(any("resultEntry" in action for action in result["next_actions"]))
+
+    def test_a_deployment_that_cannot_give_an_address_still_names_the_page_and_the_model_writes_none(self):
+        entry = {key: value for key, value in self.ENTRY.items() if key != "url"}
+        _Gateway.answers["simulate"] = (200, {"data": {"action": "status", "jobId": "job_9", "state": "succeeded", "resultEntry": entry}})
+        result = self.server.call_tool("vcr_simulate", {"action": "status", "jobId": "job_9"})
+        line = [action for action in result["next_actions"] if "resultEntry" in action][0]
+        self.assertIn("在“试验”页查看", line)
+        self.assertNotIn("http", line)
+        self.assertIn("Never write an address yourself", line)
 
     def test_status_and_cancel_need_the_job_id_the_start_answered_with(self):
         with self.assertRaises(vcr_platform.VcrPlatformError) as caught:

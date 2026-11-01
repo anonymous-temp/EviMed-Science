@@ -736,13 +736,13 @@ def write(arguments: dict) -> dict:
             "warnings": [_issue_line(issue) for issue in issues[:20]],
             "next_actions": ["Correct the named items and write them again; nothing else changed."],
         }
-    return {
+    return _with_entry({
         "status": "warning" if issues else "success",
         "summary": "Wrote %s: %d written%s." % (what, len(ids), ", %d refused" % len(issues) if issues else ""),
         "data": data,
         "warnings": [_issue_line(issue) for issue in issues[:20]],
         "next_actions": ["Correct the refused items and write only those again."] if issues else [],
-    }
+    }, data)
 
 
 def _issue_line(issue: dict) -> str:
@@ -1092,7 +1092,7 @@ def simulate(arguments: dict) -> dict:
         raise
     if action in ("start", "status"):
         data = _wait_for_job(data)
-    return _job_answer(data, action)
+    return _with_entry(_job_answer(data, action), data)
 
 
 def _status_wait_seconds() -> float:
@@ -1136,6 +1136,26 @@ def _wait_for_job(first: dict) -> dict:
         answer = {**first, **{key: value for key, value in fresh.items() if key != "action"}}
         if not _is_computing(answer):
             return answer
+
+
+def _with_entry(answer: dict, data: dict) -> dict:
+    """The answer with the one action a result entry adds: give the researcher the platform's own link, once, at the end of the reply.
+
+    The entry (`data.resultEntry`: study, tab, label, and the absolute address when the deployment has one) is built by the control
+    plane. Nothing is added to the answer when it carries none, and the model never writes an address of its own: a relative one
+    would resolve to the conversation, not to the application.
+    """
+    entry = data.get("resultEntry") if isinstance(data, dict) else None
+    if not isinstance(entry, dict) or not isinstance(entry.get("label"), str) or not entry["label"]:
+        return answer
+    url = entry.get("url")
+    if isinstance(url, str) and url:
+        line = ("data.resultEntry is where the researcher reads this. Once, at the end of your reply, give it as this link, "
+                "copied as it is: [%s](%s). Never write an address yourself." % (entry["label"], url))
+    else:
+        line = ("data.resultEntry names the page where the researcher reads this (%s). Once, at the end of your reply, say that page by "
+                "name. Never write an address yourself." % entry["label"])
+    return {**answer, "next_actions": [*answer.get("next_actions", []), line]}
 
 
 def _job_answer(data: dict, action: str) -> dict:

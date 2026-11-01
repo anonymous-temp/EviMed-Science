@@ -274,21 +274,18 @@ export function shellStylesheet(pin, operator = false) {
 }
 
 /**
- * The address a click on a link in an answer should open in the reader's own browser tab, or null when the click is the
- * kernel's to handle.
+ * The address a click on a link in an answer points at, or null when the click is not on one of the answer's own prose links.
  *
  * It is the answer's prose and nothing else: an anchor inside an `assistant-step` flow item (the chat's own data attribute, the
  * one the stylesheet above already names), outside every block of ours that the step also holds (each carries a `data-evimed-*`
  * attribute: the source cards, the reply check, the delivered files, the notices), and outside a button, a dialog or a menu.
  * Tool rows, the user's turn, the composer, the right pane and the sidebar are not flow items of that kind, so none of their
- * links is reached. A plain primary click only -- a modified one keeps whatever the kernel does with it -- and only an external
- * http(s) address: an address on this page's own origin is a route of the application (a file, an anchor) and stays the kernel's.
+ * links is reached. A plain primary click only -- a modified one keeps whatever the kernel does with it -- and only an http(s) address.
  *
  * @param {any} event A click.
- * @param {string} [origin] This page's origin.
  * @returns {string | null}
  */
-export function answerLinkToOpen(event, origin) {
+export function answerLinkClicked(event) {
   if (!event || event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return null;
   const start = event.target && typeof event.target.closest === 'function' ? event.target : event.target?.parentElement;
   const anchor = start && typeof start.closest === 'function' ? start.closest('a[href]') : null;
@@ -302,8 +299,41 @@ export function answerLinkToOpen(event, origin) {
   let url;
   try { url = new URL(anchor.href); } catch { return null; }
   if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
-  if (origin && url.origin === origin) return null;
   return url.href;
+}
+
+/**
+ * The address a click on a link in an answer should open in the reader's own browser tab, or null when the click is the
+ * kernel's to handle: only an external http(s) address -- an address on this page's own origin is a route of the application (a
+ * file, an anchor) and stays the kernel's.
+ *
+ * @param {any} event A click.
+ * @param {string} [origin] This page's origin.
+ * @returns {string | null}
+ */
+export function answerLinkToOpen(event, origin) {
+  const href = answerLinkClicked(event);
+  if (!href) return null;
+  if (origin && new URL(href).origin === origin) return null;
+  return href;
+}
+
+/**
+ * The 虚拟临床研究 result an answer's link names, or null: the application's own address for one tab of one study, and nothing
+ * else. The origin must be the shell's (the one this frame is embedded by: what the control plane built the link from), the path
+ * exactly `/app/virtual-research/:studyId/:tab` with the study id of the shape the application puts in an address and a tab of the
+ * study page, and no query or fragment rides along. A link that is not exactly that is an ordinary external link.
+ *
+ * @param {string} href @param {string | undefined} shellOrigin
+ * @returns {{ studyId: string, tab: string } | null}
+ */
+export function vcrResultOfLink(href, shellOrigin) {
+  if (!shellOrigin) return null;
+  let url;
+  try { url = new URL(href); } catch { return null; }
+  if (url.origin !== shellOrigin || url.search || url.hash || url.username || url.password) return null;
+  const match = /^\/app\/virtual-research\/([A-Za-z0-9_-]{1,160})\/(overview|population|patients|comparator|trial|matching|data)$/.exec(url.pathname);
+  return match ? { studyId: match[1], tab: match[2] } : null;
 }
 
 /**
@@ -420,6 +450,16 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
   if (doc && typeof doc.addEventListener === 'function' && typeof target.open === 'function') {
     /** @param {any} event */
     const openAnswerLink = (event) => {
+      const clicked = answerLinkClicked(event);
+      if (!clicked) return;
+      // A link to a result page of the application itself (the entry a research tool's answer carries) is the shell's to open, in
+      // place, through the bridge's closed `open-vcr-result`; with no bridge to carry it the link opens in the reader's own tab as any other.
+      const result = vcrResultOfLink(clicked, target.__EVIMED_FRAME__?.shellOrigin);
+      if (result && kit.hub?.send('open-vcr-result', result)) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        return;
+      }
       const href = answerLinkToOpen(event, target.location?.origin);
       if (!href) return;
       event.preventDefault();
@@ -432,4 +472,4 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
 }
 
 /** The body as the socket's build composes it: its helpers, then `apply`. */
-export const BODY = Object.freeze({ name: 'shell', inject, parts: Object.freeze([evimedBrand, evimedFavicon, shellStylesheet, answerLinkToOpen, apply]) });
+export const BODY = Object.freeze({ name: 'shell', inject, parts: Object.freeze([evimedBrand, evimedFavicon, shellStylesheet, answerLinkClicked, answerLinkToOpen, vcrResultOfLink, apply]) });

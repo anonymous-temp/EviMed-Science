@@ -30,7 +30,7 @@
  */
 
 import {
-  VCR_CONVERSATION_STUDY_NAME, VCR_NOTIFICATION_KINDS, VCR_NOT_ESTIMABLE_RULE_LABELS_ZH, VCR_TAB_LABELS_ZH, errorCodeMessage,
+  VCR_CONVERSATION_STUDY_NAME, VCR_NOTIFICATION_KINDS, VCR_NOT_ESTIMABLE_RULE_LABELS_ZH, VCR_RESULT_KIND_TABS, VCR_TAB_LABELS_ZH, errorCodeMessage,
 } from "@evimed/domain";
 
 /** The seven kinds, by the key each notice is counted under. */
@@ -88,10 +88,7 @@ const count = (value) => Math.round(value).toLocaleString("en-US");
  * @returns {{ title: string, body: string, tab: string } | null} null for a computation that has nothing to say (a not-estimable comparator has its own notice)
  */
 export function vcrJobNoticeText({ resultKind, stage = null, label = null, state, result = null, error = null }) {
-  const tab = /** @type {Record<string, string>} */ ({
-    population: "population", patient_set: "patients", comparator: "comparator", trial_scenario: "trial", design_grid: "trial",
-    accrual_forecast: "trial", matching: "matching",
-  })[resultKind] ?? "overview";
+  const tab = /** @type {Record<string, string>} */ (VCR_RESULT_KIND_TABS)[resultKind] ?? "overview";
   const what = resultKind === "trial_scenario"
     ? (/** @type {Record<string, string>} */ ({ analytic: "方案计算", simulation: "方案模拟", assurance: "成功把握计算" })[String(stage)] ?? "方案模拟")
     : (/** @type {Record<string, string>} */ ({ population: "人群生成", patient_set: "虚拟患者生成", comparator: "对照分析", design_grid: "设计网格",

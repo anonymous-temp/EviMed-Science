@@ -1319,3 +1319,55 @@ test("a write that will be refused on its shape alone opens no scope; one that c
   assert.equal(probe.scopes.length, 1, "a batch with one writable item is written, so it has its scope");
   assert.ok(mixed.json().data.issues.some((/** @type {any} */ found) => found.index === 0 && found.code === "vcr_write_field_forbidden"), "and the refused item is still named");
 });
+
+// ---------------------------------------------------------------------------
+// F3 (VCR remediation 2026-11-01): the answer to a call made in a conversation carries the entry to the page that holds what it
+// produced, built by the server; the programme's quiet runs get none.
+// ---------------------------------------------------------------------------
+
+/** A native call from a conversation, on a deployment with (or without) a public address. @param {string} [publicUrl] */
+function conversationCalls(publicUrl) {
+  const made = fixture();
+  made.vcr.store.taskContext = async (/** @type {any} */ origin) => ({ id: "std_task", userId: "u1", projectId: "prj_1", scope: "conversation", purpose: "task", conversationSessionId: origin.rootSessionId });
+  made.vcr.patientContext = async () => ({ ok: true, subjectKey: "P-1", documentId: "doc_1" });
+  made.vcr.jobs.get = async (/** @type {string} */ _studyId, /** @type {string} */ id) => id === "job_1"
+    ? { id: "job_1", kind: "design_simulation", state: "running", progress: { done: 3, total: 10 }, cpuSecondsUsed: 4, error: null } : null;
+  const handler = createVcrGatewayHandler({ ...config, ...(publicUrl === undefined ? {} : { publicUrl }) }, runtimeManager, { vcr: made.vcr,
+    resolveInvocation: async () => ({ userId: "u1", projectId: "prj_1", runId: "run_1", rootSessionId: "sess_1", callId: "call_1" }) });
+  /** @param {string} operation @param {Record<string, any>} body */
+  const call = async (operation, body) => {
+    const res = response();
+    await handler(request(`/internal/vcr/v1/${operation}`, body, { authorization: "Bearer token", "x-evimed-execution-context": "{}" }), res);
+    return res;
+  };
+  return { call, made };
+}
+
+test("a conversation's matching write and a job's status carry the entry to the page that holds them; the address is the server's", async () => {
+  const { call } = conversationCalls("https://evimed.example");
+  const write = await call("write", { what: "patient_context", data: { messageSeq: 1 } });
+  assert.equal(write.status, 200);
+  assert.deepEqual(write.json().data.resultEntry, { studyId: "std_task", tab: "matching", label: "在“匹配”页查看", url: "https://evimed.example/app/virtual-research/std_task/matching" });
+  const status = await call("simulate", { action: "status", jobId: "job_1" });
+  assert.equal(status.status, 200);
+  assert.equal(status.json().data.state, "running");
+  assert.deepEqual(status.json().data.resultEntry, { studyId: "std_task", tab: "trial", label: "在“试验”页查看", url: "https://evimed.example/app/virtual-research/std_task/trial" });
+});
+
+test("a deployment with no public address still names the page; and a write that wrote nothing has no entry", async () => {
+  const { call, made } = conversationCalls();
+  const write = await call("write", { what: "patient_context", data: { messageSeq: 1 } });
+  assert.deepEqual(write.json().data.resultEntry, { studyId: "std_task", tab: "matching", label: "在“匹配”页查看" });
+  made.vcr.patientContext = async () => ({ ok: false, issues: [{ code: "vcr_patient_context_invalid" }] });
+  const refused = await call("write", { what: "patient_context", data: { messageSeq: 2 } });
+  assert.equal(refused.json().data.resultEntry, undefined);
+});
+
+test("the programme's quiet run is given no entry: nobody reads its reply", async () => {
+  const { handler } = fixture();
+  const status = response();
+  await handler(request("/internal/vcr/v1/simulate", { action: "status", jobId: "job_1" }), status);
+  assert.equal(status.status, 200);
+  assert.equal(status.json().data.jobId, "job_1");
+  assert.equal(status.json().data.resultEntry, undefined);
+});

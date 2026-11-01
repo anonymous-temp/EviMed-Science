@@ -591,6 +591,16 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     'open-item'(fields) {
       return /^[a-z0-9]{12,32}$/.test(fields?.itemId ?? '') ? { itemId: fields.itemId } : null;
     },
+    /**
+     * A 虚拟临床研究 result a reply linked to: which study and which of its seven tabs, both from the closed shapes (a study id the
+     * application puts in an address, a tab of the study page). The shell opens that page; the address is the shell's to spell, and
+     * nothing else this frame could name reaches it.
+     * @param {any} fields
+     */
+    'open-vcr-result'(fields) {
+      const tabs = ['overview', 'population', 'patients', 'comparator', 'trial', 'matching', 'data'];
+      return validId(fields?.studyId) && typeof fields?.tab === 'string' && tabs.includes(fields.tab) ? { studyId: fields.studyId, tab: fields.tab } : null;
+    },
     /** @param {any} fields */
     'open-source'(fields) {
       if (!/^src_[a-f0-9]{32}$/.test(fields.sourceId)) return null;
@@ -673,7 +683,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
   };
   const detachHub = hub?.attach((/** @type {string} */ type, /** @type {any} */ fields) => {
     if (!Object.hasOwn(OUTBOUND, type)) return;
-    const payload = OUTBOUND[/** @type {'open-artifact' | 'save-to-knowledge-base' | 'kb-query' | 'bind-capability' | 'geo-options' | 'vcr-options'} */ (type)](fields ?? {});
+    const payload = OUTBOUND[/** @type {'open-artifact' | 'open-vcr-result' | 'save-to-knowledge-base' | 'kb-query' | 'bind-capability' | 'geo-options' | 'vcr-options'} */ (type)](fields ?? {});
     if (payload) post(type, payload);
   });
 

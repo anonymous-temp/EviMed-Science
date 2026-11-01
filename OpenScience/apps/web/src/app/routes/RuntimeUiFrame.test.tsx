@@ -1485,6 +1485,23 @@ describe("the run behind the task, in the frame", () => {
     await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/app/frontier/items/k7q2m9x4t1b8"));
   });
 
+  // VCR remediation F3: a link in a reply to a result page is clicked in the frame, which names the study and the tab; the shell spells the address.
+  it("opens the 虚拟临床研究 result a reply linked to by a study id and one of the seven tabs, and nothing else the frame could spell", async () => {
+    const { frame } = await openTask();
+    for (const [seq, fields] of [
+      [3, { studyId: "../../account", tab: "matching" }], [4, { studyId: "std_1", tab: "chat" }], [5, { studyId: "std_1", tab: "../matching" }],
+      [6, { studyId: "std 1", tab: "matching" }], [7, { studyId: "std_1" }], [8, { tab: "matching" }], [9, { studyId: "x".repeat(161), tab: "matching" }],
+      [10, { studyId: "std_1", tab: "models" }], [11, { studyId: 7, tab: "matching" }], [12, { studyId: "std_1", tab: ["matching"] }],
+    ] as const) emit(frame, { type: "evimed.runtime-ui.open-vcr-result", seq, ...fields });
+    expect(screen.getByTestId("path")).toHaveTextContent("/app/chat/session-a");
+    emit(frame, { type: "evimed.runtime-ui.open-vcr-result", seq: 13, studyId: "std_1", tab: "matching", path: "/app/files", url: "https://evil.example" });
+    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/app/virtual-research/std_1/matching"));
+    emit(frame, { type: "evimed.runtime-ui.open-vcr-result", seq: 14, studyId: "std_1", tab: "overview" });
+    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent(/^\/app\/virtual-research\/std_1$/));
+    emit(frame, { type: "evimed.runtime-ui.open-vcr-result", seq: 15, studyId: "std_2", tab: "patients" });
+    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/app/virtual-research/std_2/patients"));
+  });
+
   it("opens a file the frame names in the shell's reader, and nothing it could spell as an escape", async () => {
     const { frame } = await openTask();
     emit(frame, { type: "evimed.runtime-ui.open-artifact", seq: 3, runId: "run-1", path: "../../etc/passwd" });
