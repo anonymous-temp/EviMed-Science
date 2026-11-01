@@ -581,3 +581,27 @@ test("an id the EviMed sign-in derives cannot be registered by hand, and the Evi
     await endpoint.close();
   }
 });
+
+test("a frontend on a configured CORS origin signs in even though the browser calls it cross-site, and no other site does", async () => {
+  const operator = { authMode: "local", runtimeMode: "mock", bootstrapUser: "operator", bootstrapPassword: "operator-account-password", selfRegistrationEnabled: true,
+    publicUrl: "https://www.evimed.com", corsOrigins: ["https://app.example.com"] };
+  await withApp(operator, async ({ base }) => {
+    const send = (/** @type {string} */ route, /** @type {Record<string, string>} */ headers, /** @type {Record<string, string>} */ body) =>
+      fetch(`${base}${route}`, { method: "POST", headers: { "Content-Type": "application/json", ...headers }, body: JSON.stringify(body) });
+    const login = { username: "operator", password: "operator-account-password" };
+    // The configured frontend: another site, so the browser says cross-site; its Origin is on the list the CORS answers are given to.
+    const accepted = await send("/api/auth/login", { Origin: "https://app.example.com", "Sec-Fetch-Site": "cross-site" }, login);
+    assert.equal(accepted.status, 200);
+    assert.match(cookieValue(accepted, "os_session"), /^os_session=.+/);
+    const registered = await send("/api/auth/register", { Origin: "https://app.example.com", "Sec-Fetch-Site": "cross-site" }, { username: "visitor-cors", password: "visitor-password-1" });
+    assert.equal(registered.status, 201);
+    // A page of any other site, an origin that only starts like the configured one, and a cross-site request with no origin are still refused.
+    for (const headers of [{ Origin: "https://attacker.example", "Sec-Fetch-Site": "cross-site" }, { Origin: "https://app.example.com.attacker.example" },
+      { Origin: "http://app.example.com" }, { "Sec-Fetch-Site": "cross-site" }, { Origin: "null", "Sec-Fetch-Site": "cross-site" }]) {
+      const refused = await send("/api/auth/login", headers, login);
+      assert.equal(refused.status, 403, JSON.stringify(headers));
+      assert.equal((await refused.json()).code, "csrf_required");
+      assert.equal(cookieValue(refused, "os_session"), "");
+    }
+  });
+});

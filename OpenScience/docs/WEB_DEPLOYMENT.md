@@ -1639,7 +1639,9 @@ installation, the restore and its drill are in `docs/WEB_OPERATIONS_RUNBOOK.md` 
   do not use a wildcard with cookie sessions. In production, each entry must be
   an exact HTTPS origin such as `https://app.example.com`; entries with paths,
   trailing slashes, `http://`, `localhost`, `null`, or `*` are readiness
-  failures.
+  failures. The same list is the set of frontends that may sign a visitor in
+  (`/api/auth/login`, `/api/auth/register`, the EviMed session exchange): a page
+  on any other site is refused with `csrf_required`.
 - The built-in metrics endpoint is request/response only. For production
   operations, scrape `/api/ops/metrics` with a deployment-owned bearer token and
   connect it to monitoring retention, alerts, and dashboards that do not ingest
