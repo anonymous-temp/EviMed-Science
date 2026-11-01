@@ -304,6 +304,22 @@ test("a long caption is information and a short headline is not: the post whose 
   assert.equal(frontierPostReading({ title: tagged, texts: { body_excerpt: tagged } }).readable, false, "its tags do not count towards a caption");
 });
 
+test("numbers are not words: a timestamp or a chart's axis is no text, and a headline with a year or a trial number is still a caption", () => {
+  // A word is a segment with a letter in it; the digits of a number keep the older measure, three-tenths each.
+  assert.ok(frontierPostWeight("2024-10-31 12:30") < FRONTIER_POST_LIMITS.own, `${frontierPostWeight("2024-10-31 12:30")}`);
+  const axis = "0 10 20 30 40 50 60 70 80 90 100";
+  assert.ok(frontierPostWeight(axis) < FRONTIER_POST_LIMITS.picture, `${frontierPostWeight(axis)}`);
+  assert.equal(frontierPostWeight("2026"), 1.2);
+  assert.equal(frontierPostWeight("KEYNOTE-789"), 2.5 + 0.3 * 3, "a number beside a word is still only digits");
+  assert.equal(frontierPostWeight("4o T2DM"), 5, "a code with a letter in it is a word");
+  // A post that adds a date to its title has said nothing of its own; the pictures of a post that read as an axis did not read.
+  const dated = frontierPostText({ title: "FDA approval", text: "FDA approval 2024-10-31 12:30", layout: "titled" });
+  assert.equal(frontierPostSaysSomething(dated), false, `${dated.own}`);
+  const reading = frontierPostReading({ title: "FDA approval", texts: { body_excerpt: "FDA approval", picture_tried_at: new Date(), picture_text: axis }, media: [{ id: "a".repeat(64), kind: "image" }] });
+  assert.equal(reading.readable, false);
+  assert.equal(reading.pictures, "none");
+});
+
 test("a post in a script of words is measured in words: a medical headline at the plugin's title length is a caption, a clause of six words is a text, a stray two words are not", () => {
   // The plugin keeps at most 100 characters of a title (`TITLE_MAX`). Three letters in ten, the older measure, put the longest of them at 29.7 under
   // the caption line of 30, and a body needed forty letters: no non-Chinese post could be shown for what it said.

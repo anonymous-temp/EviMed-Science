@@ -17,7 +17,7 @@
  * - **Words and tags.** The tags a post ends with are its topic marks, not its words; the tags inside a sentence stay where they are.
  *   `words` is the text without the title copy at its head and without the trailing tags, `tags` the trailing run.
  * - **What a post says of its own** (`own`): the letters and digits of the words that are not the title again, not a tag, not a link and
- *   not an `@` mention, a Han character one and any other word two and a half (`WORD_WEIGHT`).
+ *   not an `@` mention, a Han character one, any other word two and a half (`WORD_WEIGHT`) and a digit three-tenths.
  *   `FRONTIER_POST_LIMITS.own` is the least a post must say to be shown as text: measured on the 90 real items of
  *   `rd/lead-samples.jsonl` (see the constant).
  *
@@ -147,20 +147,25 @@ function withoutTitleCopy(text, rawTitle, head) {
 }
 
 /**
- * What a non-Han word weighs in a Han character's unit. A text in a script of words (English, and the digits and codes in any text) is read
- * in words, not letters: a clinical title renders in Chinese at about two and a half characters a word (「Pembrolizumab plus chemotherapy
+ * What a non-Han word weighs in a Han character's unit. A text in a script of words (English, and the codes in any text) is read in words,
+ * not letters: a clinical title renders in Chinese at about two and a half characters a word (「Pembrolizumab plus chemotherapy
  * versus placebo plus chemotherapy for metastatic triple-negative breast cancer」: thirteen words, 108 characters; 「帕博利珠单抗联合化疗对比
  * 安慰剂联合化疗治疗转移性三阴性乳腺癌」: thirty characters). The older measure, three-tenths of one for every letter, made the 100
  * characters the plugin keeps of a title at most 29.7, under the caption line of 30, and a clause of seven words under the 12 of a text:
  * no non-Chinese post could be shown for its title or its few words, and the sweep withdrew those that were.
+ *
+ * Only a segment with a letter in it is a word. A number says little for its length, and a run of them is what a timestamp, a page of
+ * figures or the axis of a chart read by the parser is made of (「2024-10-31 12:30」 was 12.5, an axis 「0 10 … 100」 27.5, both over the
+ * line of a text): a segment of digits keeps the older measure, three-tenths of one a digit.
  */
 const WORD_WEIGHT = 2.5;
+const DIGIT_TENTHS = 3;
 const WORDS = new Intl.Segmenter("en", { granularity: "word" });
 
 /**
- * What a text says, in the unit of `FRONTIER_POST_LIMITS`: a Han character is one and any other word (a run of letters or digits between
- * the breaks of Unicode's word rule; punctuation, symbols and emoji are no word) `WORD_WEIGHT`. Counting characters by script is measurement,
- * not language. @param {string} text
+ * What a text says, in the unit of `FRONTIER_POST_LIMITS`: a Han character is one, any other word (a run between the breaks of Unicode's word
+ * rule that holds a letter; punctuation, symbols and emoji are no word) `WORD_WEIGHT`, and the digits of a number three-tenths each. Counting
+ * characters by script is measurement, not language. @param {string} text
  */
 export function frontierPostWeight(text) {
   let han = 0;
@@ -169,8 +174,13 @@ export function frontierPostWeight(text) {
     if (HAN.test(char)) { han += 1; rest += " "; } else rest += char;
   }
   let words = 0;
-  for (const part of WORDS.segment(rest)) if (part.isWordLike) words += 1;
-  return han + WORD_WEIGHT * words;
+  let digits = 0;
+  for (const part of WORDS.segment(rest)) {
+    if (!part.isWordLike) continue;
+    if (/\p{L}/u.test(part.segment)) words += 1;
+    else for (const char of part.segment) if (/\p{N}/u.test(char)) digits += 1;
+  }
+  return han + WORD_WEIGHT * words + (DIGIT_TENTHS * digits) / 10;
 }
 
 /** The trailing tags of a text and the text without them. @param {string} text @returns {{ words: string, tags: string[] }} */
