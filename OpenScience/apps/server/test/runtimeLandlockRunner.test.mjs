@@ -327,7 +327,8 @@ test("network access is the same as under the kernel's runner: a loopback connec
   const { direct, through } = await new Promise((resolve) => {
     // Asynchronous: the server above lives in this process, which a synchronous spawn would block.
     const results = /** @type {any[]} */ ([]);
-    const finish = () => { if (results.length === 2) resolve({ direct: results[0], through: results[1] }); };
+    let done = 0;
+    const finish = () => { done += 1; if (done === 2) resolve({ direct: results[0], through: results[1] }); };
     const command = ["bash", "-c", `exec 3<>/dev/tcp/127.0.0.1/${port} && cat <&3`];
     const env = { PATH: process.env.PATH ?? "" };
     for (const [slot, [file, args]] of /** @type {[string, string[]][]} */ ([[realLauncher, [...builtinArgs(workspace), "--", ...command]], [runner, [...kernelProfile(workspace), "--", ...command]]]).entries()) {
