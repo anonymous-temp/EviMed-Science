@@ -319,6 +319,29 @@ PROBE
   echo "build smoke (${label}): profile ${profile} booted with every entry applied, and mounted a ${profile_preset} session (${session_output})"
 }
 
+# The sandbox row of the sealed profile names a runner (packages/socket/cordis.patch.yml): the kernel's Landlock launcher with
+# /dev/shm added, so that Python's process pools work in a command. The boots below run one command through it (the start-up
+# seam check, which fails the build when the runner cannot launch). This is the runner itself, as the kernel calls it for a workspace-write command, where
+# the builder's kernel can enforce Landlock: /dev/shm is writable, a pool starts, and a write outside the grants is refused.
+# deploy/runtime-dsh/check-tool-sandbox.sh asserts the same, and more, on the built image under the control plane's container flags.
+runner=/usr/local/lib/evimed/evimed-landlock-run
+launcher="$(ls /usr/local/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/node-addon-system-*/bin/landlock-run 2>/dev/null | head -n 1)"
+[ -x "${runner}" ] || { echo "build smoke: the sandbox runner ${runner} is not in the image; the sealed profile's sandbox row names it" >&2; exit 1; }
+if [ -n "${launcher}" ] && "${launcher}" --probe >/dev/null 2>&1; then
+  runner_workspace="$(mktemp -d)"
+  sandboxed() { "${runner}" --ro-bind / / --dev /dev --unshare-pid --proc /proc --die-with-parent --tmpfs /tmp --bind "${runner_workspace}" "${runner_workspace}" -- "$@"; }
+  [ "$(sandboxed bash -c 'touch /dev/shm/.evimed-smoke 2>/dev/null && rm -f /dev/shm/.evimed-smoke && echo writable || echo denied' 2>/dev/null)" = writable ] \
+    || { echo "build smoke: /dev/shm is not writable to a command through the sandbox runner" >&2; exit 1; }
+  [ "$(sandboxed python3 -c 'import multiprocessing as mp; p = mp.Pool(2); print(p.map(abs, [-1, 2]), end=""); p.close(); p.join()' 2>/dev/null)" = "[1, 2]" ] \
+    || { echo "build smoke: multiprocessing.Pool does not start through the sandbox runner" >&2; exit 1; }
+  [ "$(sandboxed bash -c 'touch /usr/local/evimed-smoke 2>/dev/null; echo $?' 2>/dev/null)" = 1 ] \
+    || { echo "build smoke: a write outside the grants is not refused through the sandbox runner" >&2; exit 1; }
+  rm -rf "${runner_workspace}"
+  echo "build smoke: the sandbox runner makes /dev/shm writable, starts a process pool and still refuses a write outside the grants"
+else
+  echo "build smoke: this builder's kernel does not enforce Landlock (the launcher's probe failed); the runner checks are left to check-tool-sandbox.sh on the built image"
+fi
+
 boot_and_probe "ordinary account"
 
 # The same proof for an account on the native memory engine: the launch plan
