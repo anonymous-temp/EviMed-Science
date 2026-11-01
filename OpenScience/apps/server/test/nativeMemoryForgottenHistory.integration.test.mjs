@@ -97,3 +97,24 @@ test("a read of the old words that does not finish costs the grey marks and noth
     f.overlay.rejectedLines = answered;
   }
 });
+
+test("a rejection is an edit's only while every rejection of the words was one: a forget wins for good, and a row with no origin stays closed", options, async (t) => {
+  const f = await fixture(t);
+  const line = "Prefers the Vancouver reference style.";
+  const originOf = async () => (await f.overlay.rejectedLines(f.userId, "preferences")).find((row) => row.fingerprint === lineFingerprint(line))?.origin;
+  await f.overlay.reject(f.userId, "preferences", "uri:a", [line], { origin: "edit" });
+  assert.equal(await originOf(), "edit");
+  await f.overlay.reject(f.userId, "preferences", "uri:a", [line], { origin: "edit" });
+  assert.equal(await originOf(), "edit", "edited away twice is still an edit");
+  await f.overlay.reject(f.userId, "preferences", "uri:b", [line]);
+  assert.equal(await originOf(), "forget", "forgotten once, anywhere");
+  await f.overlay.reject(f.userId, "preferences", "uri:a", [line], { origin: "edit" });
+  assert.equal(await originOf(), "forget", "an edit afterwards does not reopen it");
+  // A row from before the column, edited away again: unknown stays closed.
+  await f.database.query("UPDATE evimed_memory.native_rejections SET origin = NULL WHERE user_id = $1", [f.userId]);
+  await f.overlay.reject(f.userId, "preferences", "uri:a", [line], { origin: "edit" });
+  assert.equal(await originOf(), "forget");
+  // And the person writing the words themselves lifts the rejection altogether.
+  await f.overlay.unreject(f.userId, "preferences", [line]);
+  assert.equal(await originOf(), undefined);
+});
