@@ -481,7 +481,7 @@ async function exportAs(label: string) {
   await openMenu("导出…");
   const dialog = await screen.findByRole("dialog", { name: "导出" });
   await userEvent.click(within(dialog).getByRole("radio", { name: label }));
-  await userEvent.click(within(dialog).getByRole("button", { name: "导出" }));
+  await userEvent.click(within(dialog).getByRole("button", { name: "开始导出" }));
 }
 
 describe("the 「⋯」 menu", () => {

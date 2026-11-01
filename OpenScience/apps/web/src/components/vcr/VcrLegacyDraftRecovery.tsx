@@ -42,6 +42,6 @@ export function VcrLegacyDraftRecovery() {
     <p className="text-ui font-semibold text-text">{draft.name || "未发送的研究问题"}</p>
     {draft.state === "uncertain" && <Note action={null}>之前的提交状态尚未确认，请先核对是否已经开始过研究。恢复文字不会发送或重新提交。</Note>}
     <p className="whitespace-pre-wrap break-words text-ui text-text-2">{draft.text}</p>
-    <div className="flex flex-wrap gap-3"><Button variant="secondary" actionKind="draft" loading={busy === draft.key} disabled={busy !== null} onClick={() => restore(draft)}>恢复到对话输入框</Button><Button variant="text" actionKind="set" disabled={busy !== null} onClick={() => { if (discardLegacyVcrDraft(draft, account.userId, account.tenantId)) setDrafts(previous => previous.filter(item => item.key !== draft.key)); }}>丢弃这份旧草稿</Button></div>
+    <div className="flex flex-wrap gap-3"><Button variant="secondary" actionKind="draft" loading={busy === draft.key} disabled={busy !== null} onClick={() => restore(draft)}>放进对话输入框</Button><Button variant="text" actionKind="set" disabled={busy !== null} onClick={() => { if (discardLegacyVcrDraft(draft, account.userId, account.tenantId)) setDrafts(previous => previous.filter(item => item.key !== draft.key)); }}>丢弃这份旧草稿</Button></div>
   </li>)}</List></Disclosure>;
 }

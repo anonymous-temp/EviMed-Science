@@ -151,7 +151,7 @@ describe("an export is a start too", () => {
     await userEvent.click(await screen.findByRole("button", { name: "更多操作" }));
     await userEvent.click(await screen.findByRole("menuitem", { name: "导出…" }));
     const dialog = await screen.findByRole("dialog", { name: "导出" });
-    await userEvent.click(within(dialog).getByRole("button", { name: "导出" }));
+    await userEvent.click(within(dialog).getByRole("button", { name: "开始导出" }));
     await waitFor(() => expect(posts(server, "/export")).toHaveLength(1));
     await waitFor(() => expect(document.querySelector("[data-activity='strip']")).not.toBeNull());
     expect(screen.getByTestId("where")).toHaveTextContent(`/app/virtual-research/${STUDY_ID}/trial`);

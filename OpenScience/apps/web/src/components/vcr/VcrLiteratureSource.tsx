@@ -79,7 +79,7 @@ export function VcrLiteratureSource({ studyId, projectId, onChange }: { studyId:
     {loaded && !sources.length ? <Note action={intakeActions}>此研究还没有文献，可加入链接或上传文件。</Note> : intakeActions}
     <div><label htmlFor={selectionId} className="mb-2 block text-ui text-text">已有文献</label><select id={selectionId} className={inputClasses()} value={sourceId} disabled={busy} onChange={event => { request.current += 1; setSourceId(event.target.value); setPreview(null); setProfile(""); setBindings({}); change.current(null); }}><option value="">选择文献</option>{sources.map(source => <option key={source.id} value={source.id}>{source.display.title}</option>)}</select></div>
     {!loaded && !error && <p role="status" className="text-caption text-text-2">正在读取文献</p>}
-    <Button actionKind="start" type="button" variant="secondary" disabled={busy || !sourceId} loading={busy} onClick={() => void load()}>读取文献参数</Button>
+    <Button type="button" variant="secondary" disabled={busy || !sourceId} loading={busy} onClick={() => void load()}>读取文献参数</Button>
     {error && <p role="alert" className="text-caption text-error">{error}</p>}
     {preview && <div className="space-y-3 text-caption text-text-2"><p>{preview.title}</p>{!preview.textSha256 && <p>文献仍在解析或尚无可读正文，请稍后刷新重试。</p>}
       <Input label="筛选文献参数" value={parameterQuery} onChange={event => setParameterQuery(event.target.value)} />

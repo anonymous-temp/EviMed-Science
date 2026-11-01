@@ -17,7 +17,7 @@ it("restores exact text as a guarded unsent intent while retaining its local cop
   render(<MemoryRouter initialEntries={["/"]}><Routes><Route path="/" element={<VcrLegacyDraftRecovery />} /><Route path="*" element={<Probe />} /></Routes></MemoryRouter>);
   await userEvent.click(await screen.findByText("旧版未发送草稿 · 1"));
   expect(screen.queryByText("Another account")).toBeNull();
-  await userEvent.click(screen.getByRole("button", { name: "恢复到对话输入框" }));
+  await userEvent.click(screen.getByRole("button", { name: "放进对话输入框" }));
   const state = JSON.parse(screen.getByTestId("intent").textContent!);
   expect(state.runtimeUiIntent.draft).toBe("  Exact question\n\n\n材料文件：source.csv（上传未完成）");
   expect(state.runtimeUiIntent.restoreDraft).toBe(true);
