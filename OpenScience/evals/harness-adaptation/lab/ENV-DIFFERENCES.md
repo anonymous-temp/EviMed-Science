@@ -2,7 +2,7 @@
 
 What a benchmark item meets in a lane (a GitHub Actions job running the CI release images) and how that differs from production, as read on
 2026-11-01. The levers are the lab's `stack.py` (`PARITY`, `lab_overrides`) against production's non-secret levers
-(`prod-levers-20261101.txt`, read from production's `.env`: names without KEY, TOKEN, SECRET, PASSWORD, CREDENTIAL, URL or HOST); `python3 -I
+(`<production levers snapshot, operator only, never in this tree>`, read from production's `.env`: names without KEY, TOKEN, SECRET, PASSWORD, CREDENTIAL, URL or HOST); `python3 -I
 env_diff.py` prints the comparison this document summarises. Anything production sets that is not listed here is a build-time pin, a
 module the lab leaves off, or a lever the code does not forward to any container (`OPEN_SCIENCE_ENABLE_KERNEL` and the other `KERNEL_*`
 levers, `TZ`: nothing reads them, in production either).
@@ -67,3 +67,5 @@ levers, `TZ`: nothing reads them, in production either).
 - That a web search from a US runner returns what a search from Beijing returns. It does not, and nothing here tries to make it.
 - BioXArena inputs: the items name files that `bioxarena_prepare.py` carves from the raw public tasks; a lane fetches public files only, so a
   BioXArena request needs that step added (or the prepared inputs placed on the broker host).
+
+- Rate limits (added during round 1): auth 100000 per 5 minutes (production 20), command 12000/min (120), general 60000/min (600). A lane registers one throwaway account per request from one address; at 20 per 5 minutes, `429 auth_rate_limited` left no result, an infrastructure failure, never a score.
