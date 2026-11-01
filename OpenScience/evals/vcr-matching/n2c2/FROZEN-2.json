@@ -1,0 +1,101 @@
+{
+  "schema": 1,
+  "frozenAt": "2026-11-01T21:48:52.953Z",
+  "treeAtFreeze": "93238b0318320abdcc8164f78165eeb804ff49af",
+  "devRun": "dev-r6",
+  "developmentRounds": 6,
+  "model": {
+    "model": "deepseek-v4-flash",
+    "temperature": 0,
+    "thinking": "disabled",
+    "responseFormat": "json_object",
+    "maxTokens": 4000,
+    "retries": 2,
+    "concurrency": 3
+  },
+  "prompt": {
+    "sha256": "8a2348716064cedf612c5165a0723ab752a510e17c8338416e92289ea9a087eb",
+    "skillSha256": "ef84ffa4860181a30db812ce2b0c31000e55ff47b9917caa93c8d487cf9e106a",
+    "excerptsSha256": "987568d3be9368983b3b6bc84df124a7823c26ea7221131a8d8bdbb426f5f77a"
+  },
+  "predictFiles": {
+    "evals/vcr-matching/n2c2/criteria.mjs": "0223227b911b386781c9c166512df7d0e0e61af497b56ac927e8bbfd95ff8876",
+    "evals/vcr-matching/n2c2/data.mjs": "06c7b3289c56e45654b8dbfcb0959b5a2b65c4bc36ab33d96a0a5936c75e9bca",
+    "evals/vcr-matching/n2c2/prompt.mjs": "3f34af037e582c3a2f0b4aa058e698b4101164e12d73cf4e2b6eae125d0f601e",
+    "evals/vcr-matching/n2c2/deepseek.mjs": "95e7db1922bad1f05201c42afb2a7a8fe7f68316a1843fa876bc0ac2a5fb228b",
+    "evals/vcr-matching/n2c2/assess.mjs": "72b51fb13013d960f0c416cb38e16865ce2c917126ff11abf3fa35e836d6a1cf",
+    "evals/vcr-matching/n2c2/run_n2c2.mjs": "e7f92d07bee6616861a4424fbf600d72a905f42edb20dbf7958ceb84b40a9046",
+    "capabilities/vcr-matching/SKILL.md": "ef84ffa4860181a30db812ce2b0c31000e55ff47b9917caa93c8d487cf9e106a",
+    "apps/server/src/vcrMatching.mjs": "2d1402dd1a0b34ae84a8314292b25ad2922a0a2e535218b7b900b6740327c781",
+    "apps/server/src/vcrClinicalDateEvidence.mjs": "ea1fa5f684e42e84214c892d0ade65a53f0386d422f57df014c6f9e16fbb09ae",
+    "packages/domain/src/vcrMatchBatch.mjs": "fb112ef914eee9d24ee3da2b63963fd1b5d8511285018694da8096719c3f1dac",
+    "packages/domain/src/metering.mjs": "e08b99df8848c02816e125ecc1170c103543ce0cb5d63af67eb16b6f92eac41e",
+    "packages/domain/src/clinicalUnits.mjs": "b76cfd8b201024518a9be196daa8731aa0bb046a52bb7f98b2178bd00262f01f",
+    "packages/domain/src/clinical-units.json": "c2c72c3a85674315e03f6511a5a5b9a01a10eaddb8aa2e5b06ce776a0b612360"
+  },
+  "scoreFiles": {
+    "evals/vcr-matching/n2c2/criteria.mjs": "0223227b911b386781c9c166512df7d0e0e61af497b56ac927e8bbfd95ff8876",
+    "evals/vcr-matching/n2c2/data.mjs": "06c7b3289c56e45654b8dbfcb0959b5a2b65c4bc36ab33d96a0a5936c75e9bca",
+    "evals/vcr-matching/n2c2/metrics.mjs": "1ecb79c2fd57cdfc626b8ba813bad25370e7ab7b8e351fb7ed115852dca925af",
+    "evals/vcr-matching/n2c2/gold.mjs": "d22533ca9b820296b5e195e2ebdef20250496f79a9938c47947eb5415849befa",
+    "evals/vcr-matching/n2c2/run_n2c2.mjs": "e7f92d07bee6616861a4424fbf600d72a905f42edb20dbf7958ceb84b40a9046",
+    "evals/vcr-matching/n2c2/run_official_scorer.py": "98d15c71edb873045f6de712170ff4cd90963c08dc42d0c3696df23385bcd805"
+  },
+  "readings": {
+    "a": "unknown is wrong and stays in the denominator",
+    "b": "unknown is not met",
+    "c": "unknown is not met, except ENGLISH and MAKES-DECISIONS where it is met"
+  },
+  "bootstrap": {
+    "resamples": 2000,
+    "seed": 20261101
+  },
+  "dataset": {
+    "trainZipSha256": "5c89a73b38c8155b9d337ed07b7e437f82d0f06a758abfc143dfc37501f4f953",
+    "testZipSha256": "eebaa71f32ff628e218cfda787b43e0e4d34352babf4edd6c6a1edf68c90d0e4",
+    "scorerZipSha256": "5bb5882f9182b277894223cfe6e22ba9a3951296210c0e1316f929391d92d665",
+    "guideSha256": "85c02963e76f7e8796187325b477236ab7611e38d0db9b01164d45763b437b9e",
+    "sealedGoldZipSha256": "f0cd49d80228f29373f02c673becad3242916fb0bd378c9da705b67d00c47045",
+    "trainPatients": 202,
+    "testPatients": 86,
+    "testIdsSha256": "1e5e99f95f97475f5a43b0296bab9c551dbb9023974ab01b12132bbd679ab040",
+    "developmentSplit": {
+      "salt": "n2c2-dev-v1",
+      "size": 40,
+      "idsSha256": "abf3d52129f817e06fec1cfb54554133a579681a4c76270f869e5fb74963652c"
+    },
+    "heldout": {
+      "description": "the training patients outside the development split: never used to tune, scored here once",
+      "patients": 162
+    },
+    "heldoutIdsSha256": "966c56cf8596a1291afdf38b2b2b78785eaf49e01143d605a8148ce4fcdb5905"
+  },
+  "measurement": "heldout-train",
+  "baseline": "the class most of the forty development patients have for each criterion; the held-out patients' labels are not used for it",
+  "follows": {
+    "manifest": "FROZEN.json",
+    "digest": "c74479646fa57aa51351e95c17101d360cf334a1586bfbb60976da04315a0939",
+    "treeAtFreeze": "50d9e0a2e5dd1d1035353f193050580256b2c4ca",
+    "result": "evals/vcr-matching/n2c2/results/test-2026-11-01.json",
+    "resultSha256": "c285a7f4017eed779df122979a4ddf7e9dd6b5ce142e10f6e400c7b1e4c983af"
+  },
+  "control": {
+    "arm": "the first measurement's pipeline, unchanged",
+    "treeCommit": "50d9e0a2e5dd1d1035353f193050580256b2c4ca",
+    "predictFiles": {
+      "evals/vcr-matching/n2c2/criteria.mjs": "0223227b911b386781c9c166512df7d0e0e61af497b56ac927e8bbfd95ff8876",
+      "evals/vcr-matching/n2c2/data.mjs": "06c7b3289c56e45654b8dbfcb0959b5a2b65c4bc36ab33d96a0a5936c75e9bca",
+      "evals/vcr-matching/n2c2/prompt.mjs": "c207ae48774bfb94ac7b3d7bd386daf6c7fb853cdf026ace06e39b65e37eb036",
+      "evals/vcr-matching/n2c2/deepseek.mjs": "95e7db1922bad1f05201c42afb2a7a8fe7f68316a1843fa876bc0ac2a5fb228b",
+      "evals/vcr-matching/n2c2/assess.mjs": "cc087b0d1850bbbc17b9cc9ba9fef1caa70adf308a31630d96dd760d4060f97b",
+      "evals/vcr-matching/n2c2/run_n2c2.mjs": "035a47a64767029395dfd479500c4d8018c2cf8251ed0790b92f6afa34a99933",
+      "capabilities/vcr-matching/SKILL.md": "549964567a66e0054b5a1da99c66bd3022c96e5e4154b8d314c153415ea149ca",
+      "apps/server/src/vcrMatching.mjs": "0baa38931f02d1a492f84ed6f9b4814a62ce27b36dfc47b23e1ee37c80804ea1",
+      "apps/server/src/vcrClinicalDateEvidence.mjs": "b82fc1b6725821bdc1f77d0f0dccef5768b551876d966c45e341848211870ae3",
+      "packages/domain/src/vcrMatchBatch.mjs": "e449bc9f15f90462d46f560b008f693f5fdd0af3bbcd1e9ab5879053eb04642b",
+      "packages/domain/src/metering.mjs": "e08b99df8848c02816e125ecc1170c103543ce0cb5d63af67eb16b6f92eac41e"
+    }
+  },
+  "budgetCny": 200,
+  "digest": "9e79838c3d5428a0a1a47740c0febaaeec03555bae26706eefc0ea76a29fafb9"
+}
