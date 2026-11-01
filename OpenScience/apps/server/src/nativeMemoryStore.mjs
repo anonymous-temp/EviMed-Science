@@ -535,7 +535,7 @@ export class NativeMemoryStore {
     for (const file of held) {
       const history = (revisions.get(file.uri) ?? []).slice().reverse();
       const changed = sources.filter((source) => source.uri === file.uri && ["retracted", "changed", "expired", "removed"].includes(source.state));
-      const base = this.#fileRecord(file, history, changed, conversationEvidence(history, sessionProjects), forgotten.get(file.namespaceId ?? null) ?? []);
+      const base = this.#fileRecord(file, history, changed, conversationEvidence(history, sessionProjects), forgotten.has(file.namespaceId ?? null) ? forgotten.get(file.namespaceId ?? null) : []);
       if (file.type !== "profile") { records.push(base); continue; }
       // The profile is one document; its lines are the items the page lists.
       for (const line of statements(file.body)) {
@@ -662,24 +662,25 @@ export class NativeMemoryStore {
 
   /**
    * The lines the person forgot or deleted, by namespace, for the files that have a history to show (`overlay.forgottenLines`). A read that fails
-   * leaves the versions as they are: the page does not go down for it.
+   * answers `null` for its namespace: the page does not go down for it, but it does not list that namespace's earlier versions either, because
+   * a version could show the words the person forgot and nothing here can tell which.
    * @param {string} userId @param {any[]} files
-   * @returns {Promise<Map<string | null, { fingerprint: string, text: string | null }[]>>}
+   * @returns {Promise<Map<string | null, { fingerprint: string, text: string | null }[] | null>>}
    */
   async #forgottenLines(userId, files) {
-    /** @type {Map<string | null, { fingerprint: string, text: string | null }[]>} */
+    /** @type {Map<string | null, { fingerprint: string, text: string | null }[] | null>} */
     const out = new Map();
     for (const namespace of new Set(files.map((file) => file.namespaceId ?? null))) {
       const types = (namespace === null ? OPENVIKING_MEMORY_TYPES : OPENVIKING_PROJECT_MEMORY_TYPES).map((type) => nativeMemoryRejectionType(type, namespace));
-      out.set(namespace, await this.overlay.forgottenLines(userId, types).catch(() => []));
+      out.set(namespace, await Promise.resolve().then(() => this.overlay.forgottenLines(userId, types)).catch(() => null));
     }
     return out;
   }
 
   /**
    * @param {any} file @param {any[]} history oldest first @param {any[]} changed sources in a changed state @param {any[]} [evidence] the conversations that wrote it
-   * @param {{ fingerprint: string, text: string | null }[]} [forgotten] lines the person forgot or deleted: an earlier version of this file does not show them,
-   *   except the version a forget itself took them out of (the one its undo goes back to)
+   * @param {{ fingerprint: string, text: string | null }[] | null} [forgotten] lines the person forgot or deleted: an earlier version of this file does not show them,
+   *   except the version a forget itself took them out of (the one its undo goes back to); `null` when they could not be read, and then no earlier version is listed
    */
   #fileRecord(file, history, changed, evidence = [], forgotten = []) {
     const first = history[0] ?? null;
@@ -711,7 +712,7 @@ export class NativeMemoryStore {
       validFrom: null,
       evidence,
       // What the file said before each change, oldest first, as the page's 「以前的版本」 reads them.
-      revisions: history.filter((revision) => revision.before !== null).map((revision, index) => ({
+      revisions: forgotten === null ? [] : history.filter((revision) => revision.before !== null).map((revision, index) => ({
         version: index + 1, value: forgotten.length && !FORGET_REASON.test(String(revision.reason ?? "")) ? withoutForgottenLines(String(revision.before ?? ""), forgotten) : String(revision.before ?? ""),
         summary: "", status: "active", changedAt: revision.changedAt,
         reason: revision.reason, by: revision.actor === "engine" ? "extraction" : revision.actor === "platform" ? "system" : "user",

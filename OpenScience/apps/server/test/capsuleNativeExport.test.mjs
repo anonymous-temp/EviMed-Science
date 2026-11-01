@@ -28,7 +28,9 @@ function fixture({ unavailable = false, foreign = false, many = false, extra = [
     read: async (_user, uri) => held.find(([name]) => `${root}/${name}` === uri)?.[1],
   };
   const overlay = { configured: true, files: async () => new Map([[`${root}/project_facts/sensitive.md`, { sensitive: true }]]),
-    revisionsOfMany: async () => new Map([[`${root}/preferences/writing.md`, [{ actor: "user", change: "updated", changedAt: "2026-10-21", before: "Old preference", after: "Keep result tables concise." }]]]), sources: async () => [] };
+    revisionsOfMany: async () => new Map([[`${root}/preferences/writing.md`, [{ actor: "user", change: "updated", changedAt: "2026-10-21", before: "Old preference", after: "Keep result tables concise." }]]]), sources: async () => [],
+    // The lines the person forgot or deleted, which no earlier version shows (the real overlay's read; this account has forgotten none).
+    forgottenLines: async () => [] };
   const nativeMemory = new NativeMemoryStore({ sessions, overlay });
   const reads = [];
   const client = { query: async (sql) => {
