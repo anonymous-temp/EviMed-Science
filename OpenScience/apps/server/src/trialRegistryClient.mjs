@@ -1560,7 +1560,10 @@ export function createTrialRegistryClient({
               sex: text(protocol.eligibilityModule?.sex) || null,
               minimumAge: text(protocol.eligibilityModule?.minimumAge) || null,
               maximumAge: text(protocol.eligibilityModule?.maximumAge) || null,
+              // Another registry's number for the same trial: the entries typed as a registry's (a sponsor's protocol number or a grant is not
+              // one, and two trials can share it).
               secondaryIds: (Array.isArray(protocol.identificationModule?.secondaryIdInfos) ? protocol.identificationModule.secondaryIdInfos : [])
+                .filter((/** @type {any} */ entry) => ["REGISTRY", "CTIS"].includes(text(entry?.type).toUpperCase()))
                 .map((/** @type {any} */ entry) => text(entry?.id)).filter(Boolean),
             } : {}),
             // `null` is a record that lists no site; a search that did not ask for sites has no key.
