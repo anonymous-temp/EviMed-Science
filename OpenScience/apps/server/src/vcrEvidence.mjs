@@ -1903,7 +1903,8 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
           sampleSize: row.sample_size, events: row.events, valueSource: row.value_source,
           verification: row.locator?.verification ?? "no_quote", historicalBaseline: row.historical_baseline,
           // What the pool needs of this parameter that the row does not carry (or, for a paper that does not report it, that it says so).
-          ...(row.locator?.verification === "not_reported" ? { notReported: true } : { missing: evidenceItemGaps(String(row.parameter), row) }),
+          ...(row.locator?.verification === "not_reported" ? { notReported: true }
+            : row.locator?.verification === "verified" ? { missing: evidenceItemGaps(String(row.parameter), row) } : {}),
           enrollmentKind: row.enrollment_kind, quote: row.quote, sourceRef: row.source_ref,
           locator: row.locator, evidenceKind: row.detail?.evidenceKind ?? null, sourceStanding: row.detail?.sourceStanding ?? null,
           verificationScope: row.detail?.verificationScope ?? null,
