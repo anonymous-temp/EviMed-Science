@@ -6,7 +6,12 @@
  * `notificationService.create`); every sentence is invented.
  */
 
+import path from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+
 const DAY = 86_400_000;
+const server = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "apps", "server", "src");
+const load = (/** @type {string} */ file) => import(pathToFileURL(path.join(server, file)).href);
 
 /** [scope, kind, key, value, origin, importance, days ago it began to hold] */
 const MEMORIES = [
@@ -96,6 +101,35 @@ async function furnishMemory(app, user, engine, memories) {
 }
 
 /**
+ * The topics the 记忆地图 groups the memories into, written the way a grouping is kept (`evimed_memory.topic_sets`, marked with the digest of
+ * the memories it was made from, so the map reads it as ready). The grouping is one model call in production and no model is here; the
+ * members are real records of the account, one topic to a kind of memory. Without it 总览 drew neither the topics nor the relation graph
+ * (a graph is offered with twelve memories and three relations or a grouping), so the page where the sky cannot be drawn — a phone, a
+ * browser without a GPU — was never read by the walk with its picture.
+ * @param {any} app @param {any} user
+ * @returns {Promise<number>} how many topics
+ */
+async function furnishTopics(app, user) {
+  const { groupable, topicMark, topicIdFor } = await load("memoryTopics.mjs");
+  const { migrateMemorySettings } = await load("memorySettingsPersistence.mjs");
+  const database = app.memorySettings.database;
+  await migrateMemorySettings(database);
+  const eligible = groupable((await app.nativeMemory.mapMemories(user.id)).records);
+  const labels = /** @type {Record<string, string>} */ ({
+    preference: "回答与引用的偏好", behavior: "文献整理的习惯", correction: "用户纠正过的写法", project_fact: "研究的设计与数据", decision: "已定的分析方案", follow_up: "待办与补充材料",
+  });
+  /** @type {Map<string, string[]>} */ const byKind = new Map();
+  for (const record of eligible) byKind.set(record.kind, [...(byKind.get(record.kind) ?? []), record.id]);
+  const topics = [...byKind].filter(([kind, members]) => labels[kind] && members.length >= 2)
+    .map(([kind, members]) => ({ id: topicIdFor(labels[kind]), label: labels[kind], members }));
+  await database.query(`INSERT INTO evimed_memory.topic_sets (user_id, topics, overrides, memory_mark, computed_at, attempts_day, attempts)
+    VALUES ($1, $2::jsonb, '{}'::jsonb, $3, now(), '', 0)
+    ON CONFLICT (user_id) DO UPDATE SET topics = EXCLUDED.topics, memory_mark = EXCLUDED.memory_mark, computed_at = EXCLUDED.computed_at`,
+  [user.id, JSON.stringify(topics), topicMark(eligible)]);
+  return topics.length;
+}
+
+/**
  * @param {any} app @param {any} user @param {{ geoProjectId: string, studies: { finished: string, mixed: string, empty: string }, projects: { geo: string, finished: string, mixed: string } }} ids
  * @param {{ log: (line: string) => void, engine: any }} context `engine` is the memory engine's stand-in
  */
@@ -117,6 +151,7 @@ export async function furnishAccount(app, user, ids, { log, engine }) {
   });
   const memories = await furnishMemory(app, user, engine, [...MEMORIES, ...more]);
   log(`account: ${memories} memory files`);
+  log(`account: ${await furnishTopics(app, user)} memory topics`);
 
   // ---- what the platform learned from the work (做法)
   const { METHOD_SKILL_SCHEMA } = await import("@evimed/domain");
