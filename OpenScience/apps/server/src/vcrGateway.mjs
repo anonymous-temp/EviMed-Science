@@ -866,8 +866,10 @@ export function comparatorReminders({ route, targetTrial, configuration }) {
     const record = vcrTargetTrial(targetTrial, configuration.targetTrial);
     if (record.missing.length) {
       const labels = /** @type {Record<string, string>} */ (VCR_TARGET_TRIAL_COMPONENT_LABELS_ZH);
+      // A component the run wrote a sentence for and did not give a status is said apart from one it did not write at all.
+      const said = (/** @type {string} */ key) => `${labels[key]}${record.components.some((entry) => entry.key === key) ? "（没标 status）" : ""}`;
       reminders.push({ field: "targetTrial", code: "vcr_comparator_record_incomplete",
-        message: `目标试验记录还缺：${record.missing.map((key) => labels[key]).join("、")}。每项写 { status, text }（status 取 ${VCR_TARGET_TRIAL_STATUSES.join(" / ")}）；这一版已保存、照常计算，补上后把对照再写一个版本。` });
+        message: `目标试验记录还缺：${record.missing.map(said).join("、")}。每项写 { status, text }（status 取 ${VCR_TARGET_TRIAL_STATUSES.join(" / ")}）；这一版已保存、照常计算，补上后把对照再写一个版本。` });
     }
   }
   // A single published curve is a benchmark and has no comparison to be suitable for; a MAIC or two curves compared do.

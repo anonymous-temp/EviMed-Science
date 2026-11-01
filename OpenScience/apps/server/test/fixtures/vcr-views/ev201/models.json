@@ -997,12 +997,6 @@
   "engineMismatch": null,
   "unsupported": [
     {
-      "key": "model_comparator",
-      "label": "模型预测比较器",
-      "group": "对照",
-      "note": "暂不支持"
-    },
-    {
       "key": "digital_twin",
       "label": "数字孪生与基线条件化预测模型",
       "group": "虚拟患者",

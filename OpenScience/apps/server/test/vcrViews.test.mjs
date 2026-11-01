@@ -511,12 +511,12 @@ test("a cohort the engine built is read from its result: the waterfall, the thre
   assert.deepEqual(covered.profile, [], "a coverage cohort has no profile of its own rows");
 });
 
-test("a comparator somebody wrote for the unsupported route is still shown as what it found; the library lists what this version does not do, as 暂不支持", () => {
+test("a model comparator that found nothing it can compute is still shown as what it found; the library lists what this version does not do, as 暂不支持", () => {
   const bundle = { ...emptyBundle(), comparators: [{ id: "cmp_m", version: 1, route: "model_comparator", conclusion: "not_estimable", gapList: [], resultId: null, reviewState: "ai_set" }] };
   const routes = presentComparatorTab(bundle).routes.map((route) => [route.route, route.state]);
   assert.ok(routes.some(([route, state]) => route === "model_comparator" && state === "not_estimable"));
   const library = presentModels({ models: [], methods: [], usedBy: new Map(), engineAvailable: true, engineMismatch: null });
-  assert.deepEqual(library.unsupported.map((entry) => entry.label), ["模型预测比较器", "数字孪生与基线条件化预测模型", "机制模型（QSP、PBPK）", "非劣效设计", "适应性设计", "平台试验设计"]);
+  assert.deepEqual(library.unsupported.map((entry) => entry.label), ["数字孪生与基线条件化预测模型", "机制模型（QSP、PBPK）", "非劣效设计", "适应性设计", "平台试验设计"]);
   assert.ok(library.unsupported.every((entry) => entry.note === "暂不支持"));
 });
 

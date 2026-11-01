@@ -47,6 +47,9 @@ export const VCR_BENCHMARK_ONLY_USE_CEILING = 'design_support'
  * @returns {'literature_curve' | 'unanchored_maic' | 'model_prediction' | null}
  */
 export function vcrBenchmarkBasis({ method = null, route = null, diagnostics = null, measures = null } = {}) {
+  // What the result says it is itself (`recordResult` writes it when it files a benchmark): a reader that does not know the method reads this.
+  const stored = object(diagnostics).benchmarkBasis
+  if (/** @type {readonly string[]} */ (VCR_BENCHMARK_ONLY_BASES).includes(stored)) return /** @type {'literature_curve' | 'unanchored_maic' | 'model_prediction'} */ (stored)
   if (method === 'model.prognostic_apply' || route === 'model_comparator') return 'model_prediction'
   if ((method === 'comparator.maic' || method === 'comparator.maic_time_to_event') && object(diagnostics).anchored === false) return 'unanchored_maic'
   if (method === 'evidence.reconstruct_km' && (route === null || route === 'literature_control')

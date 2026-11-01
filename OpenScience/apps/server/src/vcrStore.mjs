@@ -1377,7 +1377,9 @@ export class VcrStore extends VcrStoreBase {
     // reported by name, whichever of the three set the limit.
     // A benchmark (a curve reconstructed from the literature, an unanchored MAIC, a model's prediction; A8) informs a design and is not an
     // analysis of an effect: whatever the method's tier would allow, its use is no higher than design support.
-    const benchmark = vcrBenchmarkBasis({ method: input.method ?? null, diagnostics: input.diagnostics ?? null, measures: /** @type {any} */ (input.measures ?? null) });
+    // (A stage folded into an earlier one carries that one's word in its diagnostics; this result is judged on its own method and numbers.)
+    const { benchmarkBasis: _earlier, ...ownDiagnostics } = object(input.diagnostics);
+    const benchmark = vcrBenchmarkBasis({ method: input.method ?? null, diagnostics: ownDiagnostics, measures: /** @type {any} */ (input.measures ?? null) });
     const tierCeiling = detail.ceiling;
     const ceiling = benchmark && !useWithin(tierCeiling, VCR_BENCHMARK_ONLY_USE_CEILING) ? VCR_BENCHMARK_ONLY_USE_CEILING : tierCeiling;
     const intendedUse = useWithin(requested, ceiling) ? requested : ceiling;
@@ -1404,7 +1406,7 @@ export class VcrStore extends VcrStoreBase {
         // The models a result used travel with it whether or not they lowered
         // its use: a page that read the tiers only off a downgrade would read
         // a result that needed no downgrade as having used no model at all.
-        JSON.stringify({ ...object(input.diagnostics), ...(tiers.length ? { modelsUsed: [
+        JSON.stringify({ ...ownDiagnostics, ...(benchmark ? { benchmarkBasis: benchmark } : {}), ...(tiers.length ? { modelsUsed: [
           ...list(input.tiers).map((tier) => ({ name: "method", tier: String(tier), risk: "none" })), ...models] } : {}) }),
         JSON.stringify(input.tables ?? []),
         intendedUse, downgrade == null ? null : JSON.stringify(downgrade)])).rows[0];

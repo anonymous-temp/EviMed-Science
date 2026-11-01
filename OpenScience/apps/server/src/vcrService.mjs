@@ -43,7 +43,7 @@ import { loadMethodValidation, validatedMethods } from './vcrMethodValidation.mj
 import {
   clinicalFactView, VCR_COMPARATOR_ROUTES, VCR_COUNT_KEYS, VCR_DATA_TIERS, VCR_DATA_TIER_LABELS_ZH, VCR_ENGINE_METHODS, VCR_MIN_CELL_SIZE, VCR_MODEL_INTERFACES, VCR_ROUTE_MIN_TIER,
   VCR_JOB_METHODS, VCR_SCENARIO_SCHEMAS, VCR_STEPS, VCR_STEP_CAPABILITIES, VCR_TABS, reviewStateFor, roleAllows, suppressForModel, twinLabel, vcrAssessmentIssues,
-  vcrModelCardIssues, vcrModelInterfaceOf, vcrTierIsSupported, vcrTierNeedsSupport, vcrTierOffer, whenHolds,
+  vcrModelCardIssues, vcrModelInterfaceOf, vcrResultClass, vcrTierIsSupported, vcrTierNeedsSupport, vcrTierOffer, whenHolds,
 } from "@evimed/domain";
 
 import { vcrScenarioHash } from "./vcrJobs.mjs";
@@ -916,6 +916,8 @@ export class VcrService {
     return {
       id: result.id, kind: result.kind, subjectId: result.subjectId, version: result.version,
       conclusion: result.conclusion, notEstimableRule: result.notEstimableRule,
+      // What a reader is told: the conclusion, or 仅基准 for a result that is a benchmark (a literature curve, an unanchored MAIC, a model's prediction).
+      resultClass: vcrResultClass({ conclusion: result.conclusion, diagnostics: result.diagnostics, measures: result.measures }),
       counts: vcrCountBand(result.counts), measures: result.measures, diagnostics: result.diagnostics,
       tables: result.tables, intendedUse: result.intendedUse, useDowngrade: result.useDowngrade,
       reviewState: result.reviewState,

@@ -1272,7 +1272,8 @@ export function presentModels({ models, methods, usedBy, engineAvailable, engine
 
 /** The methods the module's plan names and this version does not compute (R10, plan §8.2): listed in the method library as 暂不支持. */
 export const VCR_UNSUPPORTED = Object.freeze([
-  { key: "model_comparator", label: "模型预测比较器", group: "对照" },
+  // (The model-prediction comparator left this list when it began to run: a saved prognostic equation applied to the chosen population,
+  // filed as a benchmark. `vcrOrchestrator` plans it as `apply_prognostic_model`.)
   { key: "digital_twin", label: "数字孪生与基线条件化预测模型", group: "虚拟患者" },
   { key: "mechanistic", label: "机制模型（QSP、PBPK）", group: "虚拟患者" },
   { key: "non_inferiority", label: "非劣效设计", group: "试验设计" },
