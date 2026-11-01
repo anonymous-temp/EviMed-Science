@@ -1,6 +1,6 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useLongitudinal, VcrLongitudinalPanel } from './VcrLongitudinalPanel';
 import { renderTab } from './__fixtures__/tabFrame';
 import type { VcrLongitudinalData } from '@/lib/vcrLongitudinalClient';
@@ -16,12 +16,12 @@ const empty: VcrLongitudinalData = { available: true, records: [], providers: []
 const history = { id: 'history-1', kind: 'history', createdAt: '2026-01-01', hash: 'hash', summary: { origin: '2026-01-01', subjects: 40, events: 80 } };
 beforeEach(() => { network.productRequest.mockReset(); });
 
-function Harness({ canRun = true }: { canRun?: boolean }) {
+function Harness({ canRun = true, canManage = false }: { canRun?: boolean; canManage?: boolean }) {
   const { state, reload } = useLongitudinal('one');
   if (state.kind !== 'ready') return null;
-  return <VcrLongitudinalPanel studyId="one" canRun={canRun} data={state.data} onReload={reload} />;
+  return <VcrLongitudinalPanel studyId="one" canRun={canRun} canManage={canManage} data={state.data} onReload={reload} />;
 }
-const draw = (canRun = true, options: { version?: string } = {}) => renderTab(<Harness canRun={canRun} />, { studyId: 'one', ...options });
+const draw = (canRun = true, options: { version?: string; canManage?: boolean } = {}) => renderTab(<Harness canRun={canRun} canManage={options.canManage} />, { studyId: 'one', version: options.version });
 /** The band's 「⋯」, opened. */
 const openMenu = async (user: ReturnType<typeof userEvent.setup>) => {
   await user.click(await screen.findByRole('button', { name: '模板与导入' }));
@@ -174,4 +174,57 @@ it('compares forecasts from updated histories and automatically displays the com
   expect(await screen.findByText('比较已完成。')).toBeInTheDocument();
   expect(network.productRequest).toHaveBeenCalledWith('/vcr/studies/one/jobs', 'POST', { kind: 'compare_forecasts', scenario: { predictionId: 'first', otherPredictionId: 'second', mode: 'update' } });
   expect(await screen.findByRole('table', { name: '同一日期、相同受试者的预测差异' })).toHaveTextContent('-1');
+});
+
+// A job past the study's compute budget waits for the lead; it did not fail, and pressing again would queue a second job behind it.
+describe('a comparison that waits for the compute budget', () => {
+  const endpoint = { code: 'HbA1c', type: 'continuous', unit: '%' };
+  const first = { id: 'first', kind: 'prediction', createdAt: '2026-03-01', hash: 'p', summary: { historyId: history.id, origin: '2026-01-31', endpoint } };
+  const second = { id: 'second', kind: 'prediction', createdAt: '2026-02-01', hash: 'q', summary: { historyId: 'older', origin: '2026-01-01', endpoint } };
+  const serve = () => network.productRequest.mockImplementation(async (url: string, method?: string) => {
+    if (method === 'POST') return { id: 'job', state: 'queued' };
+    if (url.endsWith('/jobs/job')) return { id: 'job', state: 'awaiting_budget' };
+    return { ...empty, records: [history, first, second] };
+  });
+  const compare = async (user: ReturnType<typeof userEvent.setup>) => {
+    await user.click(await screen.findByText('预测之间的比较', { exact: true }));
+    await user.click(screen.getByRole('button', { name: '开始比较' }));
+  };
+
+  it('says it waits for the lead, offers the budget and no retry, and does not queue a second job', async () => {
+    serve();
+    const user = userEvent.setup();
+    const view = draw(true, { canManage: true });
+    await compare(user);
+    expect(await screen.findByText(/等你确认预算：这次比较超出了研究的计算预算/)).toBeInTheDocument();
+    // Not a failure: no alert, and the old sentence that invited a retry is gone.
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.queryByText(/本次比较未完成/)).toBeNull();
+    expect(screen.getByRole('button', { name: '开始比较' })).toBeDisabled();
+    await user.click(screen.getByRole('button', { name: '确认预算' }));
+    expect(view.spies.openPanel).toHaveBeenCalledWith('budget');
+    expect(network.productRequest.mock.calls.filter(([, method]) => method === 'POST')).toHaveLength(1);
+  });
+
+  it('gives a reader who cannot confirm the budget the sentence and not the button', async () => {
+    serve();
+    const user = userEvent.setup();
+    draw(true, { canManage: false });
+    await compare(user);
+    expect(await screen.findByText(/等你确认预算/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '确认预算' })).toBeNull();
+  });
+});
+
+it('declares the engine comparison as a start and the history import as a draft, each worded for what it does', async () => {
+  const endpoint = { code: 'HbA1c', type: 'continuous', unit: '%' };
+  const first = { id: 'first', kind: 'prediction', createdAt: '2026-03-01', hash: 'p', summary: { historyId: history.id, origin: '2026-01-31', endpoint } };
+  const second = { id: 'second', kind: 'prediction', createdAt: '2026-02-01', hash: 'q', summary: { historyId: 'older', origin: '2026-01-01', endpoint } };
+  network.productRequest.mockResolvedValue({ ...empty, records: [history, first, second] });
+  const user = userEvent.setup();
+  draw();
+  await user.click(await screen.findByText('预测之间的比较', { exact: true }));
+  expect(screen.getByRole('button', { name: '开始比较' })).toHaveAttribute('data-action-kind', 'start');
+  const menu = await openMenu(user);
+  expect(within(menu).getByRole('menuitem', { name: '让 AI 接入纵向资料' })).toBeInTheDocument();
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { VCR_STEPS } from "@evimed/domain";
+import { VCR_STEPS, VCR_STEP_LABELS_ZH, VCR_TAB_LABELS_ZH } from "@evimed/domain";
 import type { VcrStudy } from "@/lib/vcrClient";
 import { frameVcrOptions, isIntendedUse, isStart, startOf, VCR_STARTERS, VCR_START_OPTIONS } from "./frameVcrOptions";
 
@@ -28,6 +28,18 @@ describe("where a study starts, read from what it asks for", () => {
   it("is 自动 for a single step no action starts from, and for several", () => {
     expect(startOf(study([], requested("matching")))).toBe("auto");
     expect(startOf(study([], requested("population", "trial")))).toBe("auto");
+  });
+});
+
+// One task, one name: the home's task, the chip's starting point and the page's tab are named from the domain's tables, so a rename
+// there is a rename everywhere and the three cannot drift (the audit found 患者匹配 / 匹配 / 创建虚拟队列 for what is one thing).
+describe("the names of the tasks", () => {
+  it("are the tab's name on the home and the step's name on the chip", () => {
+    const tabLabel = VCR_TAB_LABELS_ZH as Record<string, string>;
+    const stepLabel = VCR_STEP_LABELS_ZH as Record<string, string>;
+    for (const task of VCR_STARTERS) expect(task.label, task.id).toBe(tabLabel[task.id]);
+    const startStep: Record<string, string> = { cohort: "population", patients: "patients", comparator: "comparator", trial: "trial" };
+    for (const [id, step] of Object.entries(startStep)) expect(VCR_START_OPTIONS.find((option) => option.id === id)?.label, id).toBe(stepLabel[step]);
   });
 });
 

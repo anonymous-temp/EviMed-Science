@@ -185,6 +185,8 @@ describe("给患者找试验 — a patient the study has found no trial for", ()
     expect(document.querySelector("[data-vcr-trial]")).toBeNull();
     const button = screen.getByRole("button", { name: "开始为该患者找试验" });
     expect(button).toBeEnabled();
+    // It runs on the server now, and its name and its declared kind say so; a draft would be worded 让 AI … instead.
+    expect(button).toHaveAttribute("data-action-kind", "start");
     await userEvent.click(button);
     await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith(SEARCH, "POST", { subjectKey: "P-0201" }));
     // The run is the study's, and the strip under the tabs says what it is doing: nobody is taken to a conversation.
