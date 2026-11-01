@@ -93,6 +93,25 @@ test("cancel waits for preparation's parent lock then prevents its later launch"
   assert.equal(f.starts, 0);
 });
 
+test("a calculation holding its project lease lets a capture of the same project finish", options, async t => {
+  // The engine's start waits for the project's storage mutation under this lease; a capture holding that mutation writes rows
+  // that name the project. If the lease refused those writes the two would wait for each other, and PostgreSQL cannot see it.
+  const fixture = await replayFixture(t);
+  await fixture.calculate();
+  const job = await fixture.claim();
+  await writeFile(path.join(fixture.project.workspaceDir, "second.json"), '{"studies":[1]}');
+  const entered = deferred(); const release = deferred();
+  const held = fixture.service.withProjectLease(job, async () => { entered.resolve(); await release.promise; return true; });
+  await entered.promise;
+  // Started here and not inside the lease, whose transaction it would otherwise borrow: the worker and a request are strangers.
+  const capture = fixture.results.captureFile({ userId: fixture.user.id, project: fixture.project, relativePath: "second.json",
+    producer: { kind: "tool", sessionId: "native-session", callId: "second", eventId: "input:second" } });
+  const outcome = await Promise.race([capture.then(() => "finished"), new Promise(done => setTimeout(() => done("waiting"), 3000))]);
+  release.resolve();
+  await held; await capture;
+  assert.equal(outcome, "finished");
+});
+
 test("cancel during admission reloads the persisted execution and joins before changing durable state", options, async t => {
   const f = await replayFixture(t); const initial = await f.calculate(); const job = await f.claim();
   const prepared = await f.service.prepare(job); const entered = deferred(); const release = deferred();

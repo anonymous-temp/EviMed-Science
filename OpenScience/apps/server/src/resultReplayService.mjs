@@ -113,13 +113,18 @@ export class ResultReplayService {
   }
 
   /** Project-before-job lock ordering also fences project deletion. Nested
-   * product operations borrow this transaction rather than opening a new one. */
+   * product operations borrow this transaction rather than opening a new one.
+   * The project row is held FOR SHARE: that is what stops a deletion (FOR UPDATE), and the job row serializes this job's own
+   * steps (`withLease`). FOR UPDATE stopped the whole platform on 2026-11-01. The engine's start waits for the project's
+   * storage mutation under this lock, while a capture holding that mutation writes a row whose foreign key names the project,
+   * which FOR UPDATE refuses. PostgreSQL cannot see a wait in this process, so nothing ever ended it, and every other request
+   * then queued on the same row until the pool was empty. */
   async projectTransaction(ownerId, projectId, operation) {
     const database = this.jobs.database ?? this.documents.database;
     if (!database) return operation(null); // explicit in-memory test stores
     await migrateProductStore(database);
     return database.transaction(async client => {
-      const locked = await client.query(`SELECT id FROM ${CONTROL_PLANE_SCHEMA}.projects WHERE user_id=$1 AND id=$2 FOR UPDATE`, [ownerId, projectId]);
+      const locked = await client.query(`SELECT id FROM ${CONTROL_PLANE_SCHEMA}.projects WHERE user_id=$1 AND id=$2 FOR SHARE`, [ownerId, projectId]);
       if (!locked.rows[0]) throw new HttpError(404, "project_not_found", "The project is unavailable.");
       return database.withTransactionClient(client, () => operation(client));
     });
