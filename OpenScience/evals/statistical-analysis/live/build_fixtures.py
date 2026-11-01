@@ -29,6 +29,9 @@ def write(name, rows):
 
 
 write('cohort.csv', [row(i) for i in range(1, 81)])
+# Independent synthetic groups with equal sample spreads; equality of sample spreads does not prove population equality.
+write('diagnostic.csv', [{'subject': f'{group}{i}', 'group': group, 'measurement': value + offset}
+                         for group, offset in [('A', 0), ('B', 3)] for i, value in enumerate([1, 2, 3, 4, 5], 1)])
 extra = [row(i) for i in range(81, 101)] + [row(1)]
 for r in extra:
     r['marker_cm'] = '' if r['patient_id'] in ('S083', 'S094') else round(r.pop('marker_mm') / 10, 7)
@@ -52,7 +55,7 @@ breast_cancer_yn: 0 = malignant; 1 = benign. Malignancy is the event of interest
 Unnamed: 0 is a serialized row index, not a predictor. One record per tumor; this extract has no longitudinal patient identifier.
 The features are measurements computed from digitized FNA images; this is exploratory public-data reanalysis, not clinical deployment validation.
 ''')
-manifest = {'synthetic': ['cohort.csv', 'supplement.csv', 'coding-correction.csv'], 'public': ['breast-cancer.csv']}
+manifest = {'synthetic': ['cohort.csv', 'supplement.csv', 'coding-correction.csv', 'diagnostic.csv'], 'public': ['breast-cancer.csv']}
 manifest['derived'] = sorted(file.name for file in OUT.glob('prior-*') if file.is_file())
 manifest['sha256'] = {file.name: hashlib.sha256(file.read_bytes()).hexdigest() for file in sorted(OUT.iterdir()) if file.is_file()}
 (HERE / 'fixture-sources.json').write_text(json.dumps(manifest, indent=2) + '\n')
