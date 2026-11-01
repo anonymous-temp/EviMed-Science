@@ -315,11 +315,11 @@ describe("LoginPage", () => {
     expect(await screen.findByTestId("location")).toHaveTextContent("/app/files?tab=sources");
   });
 
-  it.each(["local", "evimed"])("keeps %s account-form deployments on the team flow without a local fallback", async mode => {
-    mocks.fetchWebAuthMethods.mockResolvedValue({ mode, selfRegistration: true, evimed: { account: {} } });
+  it("keeps an evimed-mode deployment on the team flow, with no local account to fall back to", async () => {
+    mocks.fetchWebAuthMethods.mockResolvedValue({ mode: "evimed", selfRegistration: true, evimed: { account: {} } });
     renderLogin(`?next=${encodeURIComponent("/app/memory#methods")}`);
     const accountForm = await screen.findByRole("button", { name: "EviMed 账号表单" });
-    expect(screen.queryByRole("button", { name: "使用本机账号登录" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "账号密码登录" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "返回 EviMed 账号登录" })).not.toBeInTheDocument();
     expect(screen.queryByLabelText("账号")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "还没有账号？注册一个" })).not.toBeInTheDocument();
@@ -328,6 +328,45 @@ describe("LoginPage", () => {
     expect(mocks.loginWeb).not.toHaveBeenCalled();
     expect(mocks.registerWeb).not.toHaveBeenCalled();
     expect(mocks.loginEvimedWeb).not.toHaveBeenCalled();
+  });
+
+  it("local mode with the team form: the phone form is the default, and one quiet switch opens the account-and-password form and back", async () => {
+    mocks.fetchWebAuthMethods.mockResolvedValue({ mode: "local", selfRegistration: true, evimed: { account: {} } });
+    renderLogin(`?next=${encodeURIComponent("/app/memory#methods")}`);
+    // The default is the team's form, with the switch beside it and no password field.
+    await screen.findByRole("button", { name: "EviMed 账号表单" });
+    expect(screen.queryByLabelText("账号")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("密码")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "还没有账号？注册一个" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "账号密码登录" }));
+    // An account made here signs in with its own credential.
+    await userEvent.type(await screen.findByLabelText("账号"), "local-pharmacist");
+    await userEvent.type(screen.getByLabelText("密码"), "correct horse battery");
+    expect(screen.queryByRole("button", { name: "EviMed 账号表单" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "还没有账号？注册一个" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "登录" }));
+    expect(mocks.loginWeb).toHaveBeenCalledWith("local-pharmacist", "correct horse battery");
+    expect(await screen.findByTestId("location")).toHaveTextContent("/app/memory#methods");
+    expect(mocks.registerWeb).not.toHaveBeenCalled();
+    expect(mocks.loginEvimedWeb).not.toHaveBeenCalled();
+  });
+
+  it("local mode with the team form: the way back to the phone form is one button", async () => {
+    mocks.fetchWebAuthMethods.mockResolvedValue({ mode: "local", evimed: { account: {} } });
+    renderLogin();
+    await userEvent.click(await screen.findByRole("button", { name: "账号密码登录" }));
+    await userEvent.click(await screen.findByRole("button", { name: "返回 EviMed 账号登录" }));
+    expect(await screen.findByRole("button", { name: "EviMed 账号表单" })).toBeInTheDocument();
+    expect(screen.queryByLabelText("账号")).not.toBeInTheDocument();
+  });
+
+  it("a local account asked to sign in again with EviMed (the search's 重新登录) can still go back to its own form", async () => {
+    mocks.fetchWebMe.mockResolvedValue({ user: { id: "local-pharmacist" } });
+    mocks.fetchWebAuthMethods.mockResolvedValue({ mode: "local", evimed: { account: {} } });
+    renderLogin("?reauth=evimed&next=%2Fapp%2Fsearch");
+    await screen.findByRole("button", { name: "EviMed 账号表单" });
+    await userEvent.click(screen.getByRole("button", { name: "账号密码登录" }));
+    expect(await screen.findByLabelText("账号")).toBeInTheDocument();
   });
 
   it("uses the EviMed session action when the deployment only advertises cookie sign-in", async () => {
