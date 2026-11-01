@@ -165,6 +165,21 @@ const tool = (title: string) => screen.getByRole("button", { name: title });
 const card = (title: string) => tool(title).closest("li")!;
 
 describe("CapabilitiesPage", () => {
+  it("lays out research tools as responsive cards within each category", async () => {
+    renderPage();
+    const button = await screen.findByRole("button", { name: "药品安全性分析" });
+    const list = button.closest("ul");
+    expect(list).toHaveClass("grid", "grid-cols-1", "md:grid-cols-2", "xl:grid-cols-3");
+    expect(button.closest("li")?.querySelector("section")).toHaveClass("rounded-card");
+  });
+
+  it("finds the review workflow when a researcher searches for 综述", async () => {
+    mocks.listWebResearchAgents.mockResolvedValue([...agents, { ...agents[0], id: "clinical-evidence-synthesis" }]);
+    renderPage();
+    await screen.findByRole("button", { name: "药品安全性分析" });
+    await userEvent.type(screen.getByLabelText("搜索工具"), "综述");
+    expect(screen.getByRole("button", { name: "文献综述" })).toBeInTheDocument();
+  });
   beforeEach(() => {
     mocks.getVcrModels.mockReset();
     mocks.getVcrModels.mockResolvedValue({ methods: [], models: [] });
