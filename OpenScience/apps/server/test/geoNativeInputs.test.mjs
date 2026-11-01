@@ -54,22 +54,32 @@ test('older snapshots cannot erase contributors or hide unresolved canonical que
 
 test('an owned project\'s input passes through its frame unjournaled, for its owner and its frame\'s session only, and settles its admission', async () => {
   const owner = { id: 'owner' }, project = { userId: 'owner', id: 'control' }, claims = { frameId: 'frame', delegation: { rootSessionId: 'root' } };
+  // After the receipt step the module-routing scope is read from the same authority the project's frame was issued by: it proves the
+  // frame's session is the project's primary one (the real authority does this for an owned project and a shared one alike).
+  const resolved = [];
+  const authority = { resolve: async (user, scope, options) => { resolved.push({ user, scope, options }); return { geo: { id: 'geo-1', product: { brandName: ' Acme ' } } }; },
+    primary: async () => 'root' };
   const journal = new GeoNativeInputs({ database: {}, documents: { get: async () => assert.fail('an owned input writes no receipt') },
-    authority: {}, policies: { forProject: async () => ({ kind: 'owned', ownerId: 'owner', controlProjectId: 'control' }) } });
+    authority, policies: { forProject: async () => ({ kind: 'owned', ownerId: 'owner', controlProjectId: 'control' }) } });
   const request = () => ({ requestId: 'r', sessionId: 'root', content: [{ type: 'text', text: 'Hi' }] });
-  const authority = operation => operation();
+  const admission = operation => operation();
   const accepted = request();
   assert.deepEqual(await journal.prepare({ user: owner, project, claims, request: accepted }), { referenceId: null, state: 'owned', replay: false });
   assert.equal(journal.journals(accepted), false);
   assert.equal(journal.disposition(accepted), 'pending');
+  // The owned input is also the original verified primary request of its project: the module-local route may be qualified from it.
+  assert.deepEqual(await journal.routingScopeForRequest(project, accepted),
+    { scope: { version: 1, geoProjectId: 'geo-1', rootSessionId: 'root' }, suppliedInputs: { brandEntity: 'Acme' } });
+  assert.equal(resolved.length, 2, 'prepare and the scope each asked the authority');
+  assert.equal(await journal.routingScopeForRequest(project, request()), null, 'a request that was never prepared has no scope');
   await journal.beforeForward(accepted);
-  assert.deepEqual(await journal.execute(accepted, authority, async () => 'sent'), { value: 'sent', error: null, disposition: 'accepted' });
+  assert.deepEqual(await journal.execute(accepted, admission, async () => 'sent'), { value: 'sent', error: null, disposition: 'accepted' });
   // A definitive refusal releases the admission; a failure whose outcome is unknown keeps its fence, as the plugin admission's own rule does.
   for (const [error, disposition] of [[Object.assign(new Error('refused'), { status: 503, definitivelyRejected: true }), 'refused'],
     [Object.assign(new Error('bad'), { status: 400 }), 'refused'], [new Error('socket lost'), 'unknown']]) {
     const failing = request();
     await journal.prepare({ user: owner, project, claims, request: failing });
-    const result = await journal.execute(failing, authority, async () => { throw error; });
+    const result = await journal.execute(failing, admission, async () => { throw error; });
     assert.equal(result.error, error); assert.equal(result.disposition, disposition); assert.equal(journal.disposition(failing), disposition);
   }
   const unadmitted = request();
