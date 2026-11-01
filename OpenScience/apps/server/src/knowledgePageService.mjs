@@ -129,6 +129,9 @@ export function thresholdSentence(readable, minSources) {
   return `资料还不够：再加 ${Math.max(1, minSources - readable)} 份就会开始整理`;
 }
 
+/** How often a queued round looks again while its project's automatic compiling is paused. */
+const AUTO_PAUSED_RECHECK_MS = 60 * 60 * 1000;
+
 /**
  * The instruction one compile is submitted with: the output language, the quotation in each source link's title, and
  * every passage a person wrote into the pages, verbatim, so the engine keeps them.
@@ -403,6 +406,8 @@ export class KnowledgePageService {
     if (projectId === LIBRARY_PROJECT_ID) return null;
     if (!this.enabled) return null;
     const { value } = await this.#state(userId, projectId);
+    // Paused, a change waits in `pending` for the person; only their own 「重新整理」 asks for a round.
+    if (value.autoPaused && !immediate) return null;
     const wait = immediate ? 0 : this.config.knowledgePagesDebounceMs;
     const idempotencyKey = `wiki-compile:${projectId}:${value.round}`;
     const job = await this.jobs.enqueue(userId, "wiki-compile", { projectId, round: value.round }, {
@@ -430,6 +435,21 @@ export class KnowledgePageService {
   }
 
   /**
+   * The project's pause of automatic compiling, which spends the account's `knowledge` allowance with nobody asking. It is one fact on the
+   * project's state: what changes meanwhile is kept in `pending`, 「重新整理」 still works, and a round already queued waits (`runJob`) under
+   * its own key, so that going on brings the same job forward and two keys for one round never exist.
+   * @param {string} userId @param {string} projectId @param {boolean} enabled
+   */
+  async setAutoCompile(userId, projectId, enabled) {
+    if (projectId === LIBRARY_PROJECT_ID) throw new HttpError(400, "knowledge_storage_project", "Personal storage cannot be compiled.");
+    await this.#updateState(userId, projectId, (value) => { value.autoPaused = !enabled; return value; });
+    if (enabled) {
+      const { value } = await this.#state(userId, projectId);
+      if (Object.keys(value.pending ?? {}).length > 0) await this.schedule(userId, projectId, { immediate: true });
+    }
+  }
+
+  /**
    * A project whose documents are readable and that has never produced a page gets its first round without anything having to
    * change. A round is otherwise asked for by a document turning readable or changing (`noteSourceReady`,
    * `noteSourcesChanged`) or by a person; a document that was already there when the compile was switched on, one whose round
@@ -445,6 +465,7 @@ export class KnowledgePageService {
     if (projectId === LIBRARY_PROJECT_ID) return "skipped";
     if (!this.enabled) return "skipped";
     const { value } = await this.#state(userId, projectId);
+    if (value.autoPaused) return "skipped";
     const context = await this.#knowledgeContext(userId, projectId);
     if (context?.kind === "geo-project") {
       if (value.run) return "waiting";
@@ -891,6 +912,8 @@ export class KnowledgePageService {
     if (!this.enabled) return { result: { skipped: "disabled" } };
     const { value: state } = await this.#state(userId, projectId);
     if (Number(job.payload?.round) !== state.round) return { result: { skipped: "round_superseded" } };
+    // A round queued before the pause waits without running. One the person asked for, or one already under way, goes on.
+    if (state.autoPaused && !state.run && !state.pending?.manual) { this.counters.deferred += 1; return { defer: { code: "knowledge_auto_paused", delayMs: AUTO_PAUSED_RECHECK_MS } }; }
     const user = await this.store.userById(userId);
     if (!user) return { result: { skipped: "account_gone" } };
     let project;
@@ -1821,6 +1844,7 @@ export class KnowledgePageService {
     const state = !this.enabled ? "disabled"
       : run ? "compiling"
         : ready && !ready.ok ? "engine_unavailable"
+          : value.autoPaused ? "paused"
           : pending ? (readable < this.config.knowledgePagesMinSources && !pages.length ? "below_threshold" : "queued")
             : value.lastError ? "failed" : wiki.length ? "compiled" : readable < this.config.knowledgePagesMinSources ? "below_threshold" : "idle";
     if (context?.kind === "geo-project") await context.current();
@@ -1834,7 +1858,7 @@ export class KnowledgePageService {
       userEdited: pages.filter((row) => row.payload.userEdits?.blocks?.length).length,
       quotations: wiki.reduce((sum, row) => ({ present: sum.present + (row.payload.quotations?.counts?.present ?? 0), absent: sum.absent + (row.payload.quotations?.counts?.absent ?? 0),
         none: sum.none + (row.payload.quotations?.counts?.noQuotation ?? 0) }), { present: 0, absent: 0, none: 0 }),
-      held: 0, pending, readable, minSources: this.config.knowledgePagesMinSources, round: value.round, language: value.language ?? null,
+      autoPaused: value.autoPaused === true, held: 0, pending, readable, minSources: this.config.knowledgePagesMinSources, round: value.round, language: value.language ?? null,
       // When the next round starts by itself: the quiet period after the last change, while documents wait for it. Null when nothing waits, a
       // round runs, or the threshold is not met — those have no time to give. A time already past means the round is about to be claimed.
       nextAt: state === "queued" && value.lastChangeAt ? new Date(Date.parse(value.lastChangeAt) + this.config.knowledgePagesDebounceMs).toISOString() : null,

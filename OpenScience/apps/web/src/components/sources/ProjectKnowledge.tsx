@@ -5,7 +5,8 @@ import { hasWebApi, fetchWebMe } from "@/lib/apiClient";
 import { downloadKnowledgeVault, getSourceComposition, listProjectOutputs, vaultErrorMessage, type LibraryComposition as Composition, type ProjectOutput } from "@/lib/knowledgeBaseClient";
 import { listPath, type KnowledgeListState, type KnowledgeView } from "@/lib/knowledgeNav";
 import { productErrorMessage } from "@/lib/productClient";
-import { knowledgePagesOffered, requestKnowledgeCompile } from "@/lib/sourceClient";
+import { knowledgePagesOffered, requestKnowledgeCompile, setKnowledgeAutoCompile } from "@/lib/sourceClient";
+import { webErrorMessage } from "@/lib/apiClient";
 import { toast } from "@/lib/toast";
 import { buttonClasses } from "@/components/ui/Button";
 import { ActivityStrip } from "@/components/ui/ActivityStrip";
@@ -172,6 +173,13 @@ export function ProjectKnowledge({ projectId, label, view, listState, update, pa
     <KnowledgeTreeMissing onRetry={retryTree} />
   ) : !tree || (compiling && tree.pages.length === 0) ? <FilesSkeleton /> : <KnowledgeTree rows={tree.pages} query={search} listState={listState} empty={recipe} />;
 
+  const toggleAuto = async (enabled: boolean) => {
+    try {
+      setKnowledge(await setKnowledgeAutoCompile(projectId, enabled));
+      toast.success(enabled ? "已恢复自动整理。" : "已暂停自动整理。有更新的资料会等到恢复后，也可以随时手动重新整理。");
+    } catch (error) { toast.error(webErrorMessage(error, { fallback: "暂时无法修改，请稍后重试。" })); }
+  };
+
   const backToProjects = useMemo(() => listPath({ ...listState, scope: null, focus: null, depth: null }), [listState]);
   return (
     <div data-project-knowledge={projectId} className="min-h-0 flex-1 overflow-y-auto">
@@ -192,6 +200,8 @@ export function ProjectKnowledge({ projectId, label, view, listState, update, pa
             <Menu label="更多" items={[
               { label: "在记忆总览中查看", onSelect: () => navigate("/app/memory/overview") },
               ...(pagesOffered && line?.canCompile ? [{ label: asking ? "正在重新整理" : "重新整理知识页", icon: RefreshCw, disabled: asking, onSelect: () => void compileNow() }] : []),
+              // The rounds nobody asked for spend the account's allowance: they can be stopped, and 重新整理 stays the person's own.
+              ...(pagesOffered && knowledge?.enabled && knowledge.state !== "disabled" ? [{ label: knowledge.autoPaused ? "恢复自动整理" : "暂停自动整理", onSelect: () => void toggleAuto(!knowledge.autoPaused) }] : []),
               { label: exporting ? "正在导出" : "导出到 Obsidian", icon: Download, disabled: exporting || !hasWebApi, onSelect: () => void exportVault() },
             ]} />
           </div>

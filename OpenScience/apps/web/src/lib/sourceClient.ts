@@ -515,7 +515,7 @@ export function getProjectLibraryLoss(projectId: string) {
  * (`/api/knowledge-pages/*`). The shapes are the routes' own; the words they are shown in are the page's.
  */
 export type KnowledgeTreeName = "wiki" | "kg";
-export type KnowledgeState = "disabled" | "idle" | "below_threshold" | "queued" | "compiling" | "compiled" | "engine_unavailable" | "failed";
+export type KnowledgeState = "disabled" | "idle" | "below_threshold" | "queued" | "compiling" | "compiled" | "engine_unavailable" | "failed" | "paused";
 export type KnowledgeStaleReason = "changed" | "retracted" | "removed";
 export interface KnowledgeQuotationCounts { present: number; absent: number; none: number; sourceMissing?: number }
 export interface KnowledgeRoundTree { status: string; seconds: number; tokens: number; cost: number; files: number; typed: number; created: number; updated: number; unchanged: number; retired: number; restored: number }
@@ -546,6 +546,8 @@ export interface KnowledgeStatus {
   message?: string | null;
   /** When the next round starts by itself (ISO), while documents wait for the quiet period to pass; null otherwise. Absent from an older control plane. */
   nextAt?: string | null;
+  /** The person paused automatic compiling for this project; 「重新整理」 still works. */
+  autoPaused?: boolean;
 }
 /** What a compiled file carries beside its text, for a row of the tree and a page's head. */
 export interface KnowledgeLabels {
@@ -680,6 +682,11 @@ export function knowledgePagesOffered(me: WebMe | null): boolean {
 /** 「重新整理」: ask for a round now. The page language is the browser's, which the control plane has already recorded. */
 export function requestKnowledgeCompile(projectId: string) {
   return productRequest<KnowledgeStatus>("/knowledge-pages/compile", "POST", { projectId });
+}
+
+/** Pauses or resumes the rounds nobody asked for; what changes meanwhile waits for the next one. */
+export function setKnowledgeAutoCompile(projectId: string, enabled: boolean) {
+  return productRequest<KnowledgeStatus>("/knowledge-pages/auto", "PUT", { projectId, enabled });
 }
 
 export function getOpenListStatus() {

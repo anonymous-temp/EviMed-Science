@@ -50,6 +50,10 @@ export function statusLine(status: KnowledgeStatus | null, now: Date = new Date(
       const when = Number.isFinite(at) ? (at > now.getTime() ? ` · 约 ${formatClock(status.nextAt)} 开始` : " · 即将开始") : "";
       return { text: `资料有更新，稍后会自动整理${when}${counts ? ` · 已有 ${counts}` : ""}`, busy: true, canCompile: false, attention: false };
     }
+    case "paused": {
+      const when = status.compiledAt ? ` · 上次整理于 ${formatDay(status.compiledAt, now)}` : "";
+      return { text: `自动整理已暂停${status.pending > 0 ? " · 有更新的资料在等" : ""}${when}`, busy: false, canCompile: true, attention: false };
+    }
     case "compiled": {
       const when = status.compiledAt ? ` · 上次整理于 ${formatDay(status.compiledAt, now)}` : "";
       return { text: `已整理${when}${counts ? ` · ${counts}` : ""}`, busy: false, canCompile: true, attention: false };

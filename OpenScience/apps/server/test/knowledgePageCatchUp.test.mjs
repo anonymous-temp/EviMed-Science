@@ -134,3 +134,24 @@ test("the status says when the next automatic round starts: the quiet period aft
   assert.equal(compiling.state, "compiling");
   assert.equal(compiling.nextAt, null, "a round that runs has no next one to name");
 });
+
+test("automatic compiling can be paused: nothing is queued or run for it, and a person's own round and going on both still work", async () => {
+  const { service, rows, jobs } = fixture({ readable: ["src_a"], state: { round: 1, pending: { "src_a": "added" }, lastChangeAt: null, compiledAt: null, run: null } });
+  await service.setAutoCompile("u1", "p1", false);
+  assert.equal(rows.get("wiki:state:p1").payload.autoPaused, true);
+  assert.equal(await service.catchUp("u1", "p1"), "skipped");
+  assert.equal(await service.schedule("u1", "p1"), null);
+  assert.equal(jobs.length, 0);
+  // A round queued before the pause waits, and is not closed: its key is the one going on will use.
+  const waiting = await service.runJob({ userId: "u1", payload: { projectId: "p1", round: 1 } });
+  assert.equal(waiting.defer.code, "knowledge_auto_paused");
+  await service.setAutoCompile("u1", "p1", true);
+  assert.equal(rows.get("wiki:state:p1").payload.autoPaused, false);
+  assert.equal(jobs.length, 1, "going on asks for the round that waited");
+});
+
+test("while paused, the person's own 重新整理 still asks for a round", async () => {
+  const { service, jobs } = fixture({ readable: ["src_a"], state: { round: 1, pending: {}, lastChangeAt: null, compiledAt: null, run: null, autoPaused: true } });
+  await service.requestRound("u1", "p1");
+  assert.equal(jobs.length, 1);
+});

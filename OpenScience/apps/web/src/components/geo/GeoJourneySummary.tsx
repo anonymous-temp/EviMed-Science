@@ -30,11 +30,11 @@ export function GeoJourneySummary({project, compact = false}: {project: GeoProje
   return <section aria-label="当前工作" data-geo-journey={journey.stage} className="flex flex-col gap-3">
     <div>{journey.requested && <p className="text-caption text-text-3">{journey.requested}</p>}<h2 className="mt-1 text-section font-semibold text-text">{journey.title}</h2></div>
     {journey.stage === 'inputs' ? <>
-      <p className="text-ui text-text-2">{journey.detail}</p>
+      <Note>{journey.detail}</Note>
       <List divided label="还缺什么">
         {journey.inputs.map(input => <ListRow key={input.key} data-work-input={input.key} data-work-input-done={input.done ? '' : undefined} title={<span className="flex items-center gap-2"><RailMark state={input.done ? 'done' : 'todo'} />{input.label}</span>} chevron={false} actions={input.key === 'task' && !input.done ? draftChoices : undefined} />)}
       </List>
-      <p className="text-caption text-text-3">选一项只会把这句话填进输入框，你按发送才开始。</p>
+      {/* 这次要做什么's choices say what they do on their own: each is a draft, with the pencil, and the composer holds what it wrote. */}
     </> : <>
       {/* The sentence and its one way on are a note; what is kept is a fact, not a second grey line. */}
       <Note action={<span className="flex flex-wrap gap-2">
@@ -43,8 +43,7 @@ export function GeoJourneySummary({project, compact = false}: {project: GeoProje
       </span>}>{journey.detail}</Note>
       {journey.retained.length > 0 && <FactList ruled={false} rows={[{label:'已保留',value:journey.retained.join('、')}]} />}
       {!compact && intents.length > 0 && <div className="flex flex-col gap-2">
-        <p className="text-caption text-text-3">也可以直接交代一项任务，选了只会填进输入框。</p>
-        {draftChoices}
+        <Note action={draftChoices}>也可以直接交代一项任务，选了只会填进输入框。</Note>
       </div>}
     </>}
   </section>;

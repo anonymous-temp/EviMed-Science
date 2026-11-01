@@ -14,6 +14,7 @@ import { HttpError, readJson, sendJson } from "./security.mjs";
  *   PUT  /api/knowledge-pages/page                  { sourceId, markdown, baseSha256? } — a person's edit
  *   GET  /api/knowledge-pages/graph?projectId=&kind=wiki|kg   { nodes, links }
  *   POST /api/knowledge-pages/compile               { projectId, language? } — 「重新整理」
+ *   PUT  /api/knowledge-pages/auto                  { projectId, enabled } — pause or resume automatic compiling
  *
  * A compiled file is also a document of the knowledge base, listed and opened through `/api/sources` like a note. Every
  * read here answers without the switch (`OPEN_SCIENCE_OV_KNOWLEDGE_ENABLED`) and without the engine: what was compiled
@@ -114,6 +115,14 @@ export function createKnowledgePageRoutes({ store, service, sources, maxJsonByte
       if (stated) await service.noteLanguage(user.id, project.id, stated, { replace: true });
       await service.requestRound(user.id, project.id, { language });
       return reply(await service.summary(user.id, project.id), 202);
+    }
+    if (url.pathname === "/api/knowledge-pages/auto" && method === "PUT") {
+      const input = body(await readJson(req, maxJsonBytes), ["projectId", "enabled"]);
+      if (typeof input.enabled !== "boolean") throw new HttpError(400, "knowledge_payload_invalid", "enabled must be true or false.");
+      if (!service.enabled) throw new HttpError(404, "knowledge_pages_disabled", "Knowledge pages are not enabled.");
+      const project = await ownedProject(typeof input.projectId === "string" ? input.projectId : null);
+      await service.setAutoCompile(user.id, project.id, input.enabled);
+      return reply(await service.summary(user.id, project.id));
     }
     throw new HttpError(404, "not_found", "Knowledge page route not found.");
   };

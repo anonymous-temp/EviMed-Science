@@ -2,6 +2,7 @@ import { useState, type ReactNode } from "react";
 import { webErrorMessage } from "@/lib/apiClient";
 import { patchGeoProject, type GeoEngine, type GeoProject } from "@/lib/geoClient";
 import { toast } from "@/lib/toast";
+import { Note } from "@/components/ui/Note";
 import { geoAutomationEnabled } from "@evimed/domain";
 import { GEO_AUTOMATION_STOPPED } from "./geoText";
 import { Button } from "@/components/ui/Button";
@@ -83,7 +84,7 @@ export function GeoSettingsDrawer({
           </div>
           {can("edit") && enginesChanged && (
             <div className="mt-2 flex flex-wrap items-center gap-2">
-              {geoAutomationEnabled(project) && <span className="text-caption text-text-2">保存后自动监测会停止，需要重新开启。</span>}<Button size="sm" actionKind="set" loading={busy === "engines"} disabled={engines.length === 0} onClick={() => save("engines")}>保存</Button>
+              {geoAutomationEnabled(project) && <Note tone="warn">保存后自动监测会停止，需要重新开启。</Note>}<Button size="sm" actionKind="set" loading={busy === "engines"} disabled={engines.length === 0} onClick={() => save("engines")}>保存</Button>
             </div>
           )}
         </Row>
@@ -97,7 +98,7 @@ export function GeoSettingsDrawer({
             </div>
           )}
           {can("edit") && days !== project.coverageDays && (
-            <div className="mt-2 flex flex-wrap items-center gap-2">{geoAutomationEnabled(project) && <span className="text-caption text-text-2">保存后自动监测会停止，需要重新开启。</span>}<Button size="sm" actionKind="set" loading={busy === "days"} onClick={() => save("days")}>保存</Button></div>
+            <div className="mt-2 flex flex-wrap items-center gap-2">{geoAutomationEnabled(project) && <Note tone="warn">保存后自动监测会停止，需要重新开启。</Note>}<Button size="sm" actionKind="set" loading={busy === "days"} onClick={() => save("days")}>保存</Button></div>
           )}
         </Row>
         <Row label="投放预算" action={can("manage_money") && marketConnected(project) ? <Button variant="text" size="sm" actionKind="external" onClick={open("budget")}>{project.budget && project.budget.totalCny > 0 ? "修改" : "设置"}</Button> : undefined}>
