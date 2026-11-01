@@ -6142,7 +6142,7 @@ export class AgentRunStore {
       const current = runs.find((item) => item.id === runId);
       const end = terminal.finishedAt ?? this.now().toISOString();
       if (current && overlappingRuns({ ...current, finishedAt: end }, runs).length) {
-        const text = "同一项目中有其他任务与本次运行同时进行。未明确记录归属的文件可能混入，请核对文件来源。";
+        const text = "同一项目中有其他任务与本次运行同时进行。未明确记录归属的文件可能混入或遗漏，请核对项目文件及来源。";
         normalized.qualityNotices = normalizeQualityNotices([runNotice("run_concurrent_attribution_uncertain", text, { detail: text }),
           ...normalized.qualityNotices]);
       }
