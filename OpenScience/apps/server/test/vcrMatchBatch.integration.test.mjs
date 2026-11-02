@@ -200,6 +200,8 @@ test("P2-9 the slow lane's tick does not wait for a batch: two accounts' batches
     await gate;
     return { answer: { facts: [] }, inputTokens: 5, outputTokens: 1 };
   } };
+  // what earlier cases left out is not this lane's to count
+  await studies.query("UPDATE evimed_vcr.jobs SET state='canceled', lease_owner=NULL, lease_until=NULL, finished_at=now() WHERE kind='match_extract' AND state IN ('queued','running')");
   const x = await fixture(blocking);
   const y = await fixture(blocking);
   // the executors are the first fixture's: the roster and the records are the same doubles for both studies
