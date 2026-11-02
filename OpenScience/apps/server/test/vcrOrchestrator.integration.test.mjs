@@ -1097,7 +1097,7 @@ test("A1 the platform adds no check to a conversation's design that is already t
     "a scenario that already states no effect needs no second one");
 });
 
-test("P1-4 a conversation's study is named by the title the model gives its research question, with the identifiers taken out, or for the kind of work and the day; a patient's words are never its name", async () => {
+test("P1-4 a conversation's study is named by the title the model gives its research question, with the identifiers taken out, or for the kind of work and the day; a patient's words are never its name", options, async () => {
   const module = compose({ resultFor: nullAware });
   const day = (/** @type {any} */ row) => `${new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", month: "numeric", day: "numeric" }).format(new Date(row.createdAt)).replace("/", "月")}日`;
 
