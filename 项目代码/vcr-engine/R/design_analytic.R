@@ -231,6 +231,14 @@ vcr_events_schoenfeld <- function(hazard_ratio, alpha = 0.025, power = 0.9,
   (za + zb)^2 / (allocation * (1 - allocation) * log(hazard_ratio)^2)
 }
 
+#' Power of the event-driven log-rank test at a number of events: the same formula as `vcr_events_schoenfeld`, solved for power.
+#' A two-sided test spends `alpha / 2` per tail and both tails count.
+vcr_power_schoenfeld <- function(events, hazard_ratio, alpha = 0.025, allocation = 0.5, sided = 1) {
+  ncp <- sqrt(events * allocation * (1 - allocation)) * abs(log(hazard_ratio))
+  z <- qnorm(1 - if (sided == 1) alpha else alpha / 2)
+  pnorm(ncp - z) + if (sided == 2) pnorm(-ncp - z) else 0
+}
+
 #' Probability that a subject contributes an event, under exponential event
 #' and dropout hazards, uniform accrual over [0, A] and analysis at A + F
 #' (Lachin & Foulkes 1986).
@@ -395,6 +403,22 @@ vcr_simon_two_stage <- function(p0, p1, alpha = 0.05, beta = 0.2, n_max = 100) {
   list(optimal = best_opt, minimax = best_min)
 }
 
+#' The fixed-sample design that answers the question Simon's two-stage design answers (C5): the smallest single-stage exact binomial
+#' design that rejects when the number of responses exceeds `r`, with a type I error at or below `alpha` at `p0` and a power of at least
+#' `1 - beta` at `p1`. For each size the critical value is the smallest one that holds the type I error (the largest rejection region
+#' that does), and power is not monotone in the size (the binomial's saw-tooth), so the answer is the first size that reaches it, not
+#' a size from which every larger one does. NULL when no size up to `n_max` reaches it.
+vcr_single_stage_exact <- function(p0, p1, alpha = 0.05, beta = 0.2, n_max = 500L) {
+  for (n in seq_len(n_max)) {
+    r <- stats::qbinom(1 - alpha, n, p0)
+    typ1 <- stats::pbinom(r, n, p0, lower.tail = FALSE)
+    if (typ1 > alpha + 1e-12) next
+    pow <- stats::pbinom(r, n, p1, lower.tail = FALSE)
+    if (pow >= 1 - beta - 1e-12) return(list(n = n, r = r, typeOneError = typ1, power = pow))
+  }
+  NULL
+}
+
 .vcr_simon_prob <- function(p, n1, n, r1, r) {
   total <- 0
   for (x1 in (r1 + 1):n1) {
@@ -547,4 +571,119 @@ vcr_dist_survival <- function(dist, t) {
 vcr_dist_median <- function(dist) {
   f <- function(t) vcr_dist_survival(dist, t) - 0.5
   stats::uniroot(f, c(1e-9, 1e6), tol = 1e-10)$root
+}
+
+# --- what the sample size rests on (C5, C6) --------------------------------
+
+#' The same distribution with its time axis stretched by `k`: its median becomes `k` times as long. A longer control median is a lower
+#' hazard everywhere, so the control rate of an event-time endpoint is swept by this and not by a rate that has no meaning for a Weibull
+#' or a piecewise distribution.
+vcr_scale_dist <- function(dist, k) {
+  kind <- dist$kind %||% "exponential"
+  if (identical(kind, "exponential")) return(list(kind = "exponential", rate = dist$rate / k))
+  if (identical(kind, "weibull")) return(list(kind = "weibull", shape = dist$shape, scale = dist$scale * k))
+  if (identical(kind, "piecewise")) return(list(kind = "piecewise", breaks = dist$breaks * k, rates = dist$rates / k))
+  stop("vcr_scale_dist: unknown distribution kind ", kind)
+}
+
+#' Patients an event-time design needs when the events are fixed by the effect (Schoenfeld) and the patients by how many of them have
+#' an event before the analysis: the quantity the analytic stage reports as `required_patients` (and, inflated by the group-sequential
+#' factor, `max_patients`), computed in one place so that a sweep of one input at a time moves the same number.
+vcr_tte_patients <- function(hr, dist, accrual_duration, followup, dropout_hazard, alpha, power, alloc, sided, inflation = 1, integer_allocation = TRUE) {
+  ev <- vcr_events_schoenfeld(hr, alpha, power, alloc, sided) * inflation
+  if (identical(dist$kind %||% "exponential", "exponential")) {
+    p0 <- vcr_event_probability(dist$rate, accrual_duration, followup, dropout_hazard)
+    p1 <- vcr_event_probability(dist$rate * hr, accrual_duration, followup, dropout_hazard)
+  } else {
+    p0 <- vcr_event_probability_dist(dist, 1, accrual_duration, followup, dropout_hazard)
+    p1 <- vcr_event_probability_dist(dist, hr, accrual_duration, followup, dropout_hazard)
+  }
+  p_ev <- (1 - alloc) * p0 + alloc * p1
+  if (integer_allocation) vcr_integer_allocation(list(treat = ev / p_ev * alloc, control = ev / p_ev * (1 - alloc), total = ev / p_ev))$total
+  else ceiling(ev / p_ev)
+}
+
+#' One input at a time (C6): how far the required sample size moves when each input the formula reads is off by a fifth (the effect,
+#' the control level, the standard deviation) or, for the two inputs that are a rate or a length of time, by what a trial can plausibly
+#' miss them by (the annual dropout by five points, the accrual by a fifth). Every row is the closed form at a changed input and
+#' nothing else changes; no simulation is run. Rows are sorted by how much the size moves, the largest first.
+#'
+#' Returns NULL for a design with nothing to sweep. `discount` is the published gap between the effect a trial is planned for and the
+#' one it measures (`limits$effectDiscount`, an event-time endpoint only): the power the design still has when its effect is
+#' reduced by that gap, from the same formula that sized it. There is no such figure for a binary or a continuous endpoint, and the
+#' row is then absent, not zero.
+vcr_analytic_sweep <- function(sc, e, alpha, power, alloc, sided, inflation = 1, integer_allocation = TRUE, gs = NULL) {
+  tr <- sc$truth
+  wiggle <- c(0.8, 1.2)
+  rows <- list()
+  push <- function(parameter, label, range, values) {
+    values <- as.numeric(values)
+    rows[[length(rows) + 1L]] <<- list(parameter = parameter, label = label, range = range, low = min(values), high = max(values), moved = max(values) - min(values))
+  }
+  total_of <- function(n) if (integer_allocation) vcr_integer_allocation(n)$total else n$total
+  clip <- function(p) pmin(pmax(p, 0.001), 0.999)
+  discount <- NULL
+  if (identical(e, "time_to_event")) {
+    hr <- vcr_scalar(tr$hazardRatio, NULL); if (is.null(hr)) return(NULL)
+    dist <- vcr_control_distribution(tr)
+    has_accrual <- !is.null(sc$accrual) && !is.na(vcr_scalar(sc$accrual$followup, NA_real_))
+    base_events <- ceiling(vcr_events_schoenfeld(hr, alpha, power, alloc, sided) * inflation)
+    if (has_accrual) {
+      perYear <- vcr_time_unit(sc)$perYear
+      annual <- vcr_scalar(sc$accrual$dropoutAnnual, 0)
+      A <- vcr_scalar(sc$accrual$duration, 0); Fu <- vcr_scalar(sc$accrual$followup)
+      eta <- vcr_dropout_hazard(annual, perYear)
+      patients <- function(hr_ = hr, dist_ = dist, A_ = A, eta_ = eta) vcr_tte_patients(hr_, dist_, A_, Fu, eta_, alpha, power, alloc, sided, inflation, integer_allocation)
+      base <- patients()
+      push("effect", "效应（log 风险比）", sprintf("HR %.3g–%.3g", min(exp(c(0.8, 1.2) * log(hr))), max(exp(c(0.8, 1.2) * log(hr)))), vapply(wiggle, function(k) patients(hr_ = exp(k * log(hr))), numeric(1)))
+      push("control", "对照组中位时间", sprintf("%.3g–%.3g", vcr_dist_median(dist) * 0.8, vcr_dist_median(dist) * 1.2), vapply(wiggle, function(k) patients(dist_ = vcr_scale_dist(dist, k)), numeric(1)))
+      low <- max(0, annual - 0.05); high <- min(0.95, annual + 0.05)
+      push("dropout", "每年脱落率", sprintf("%.0f%%–%.0f%%", low * 100, high * 100), vapply(c(low, high), function(d) patients(eta_ = vcr_dropout_hazard(d, perYear)), numeric(1)))
+      if (A > 0) push("accrual", "入组时长", sprintf("%.3g–%.3g", A * 0.8, A * 1.2), vapply(wiggle, function(k) patients(A_ = A * k), numeric(1)))
+      measure <- "所需总样本量"
+    } else {
+      base <- base_events
+      push("effect", "效应（log 风险比）", sprintf("HR %.3g–%.3g", min(exp(c(0.8, 1.2) * log(hr))), max(exp(c(0.8, 1.2) * log(hr)))),
+           vapply(wiggle, function(k) ceiling(vcr_events_schoenfeld(exp(k * log(hr)), alpha, power, alloc, sided) * inflation), numeric(1)))
+      measure <- "所需事件数"
+    }
+    # The published gap, applied to the effect of the design: the retained share of the log hazard ratio is what the trials measured
+    # divided by what they planned for. It applies to an effect in favour of the treatment only.
+    gap <- vcr_limit("effectDiscount", NULL)
+    gap <- if (is.null(gap)) NULL else gap[["time_to_event"]]
+    if (!is.null(gap) && hr > 0 && hr < 1) {
+      retained <- log(gap$observed) / log(gap$planned)
+      hr_discounted <- exp(retained * log(hr))
+      # The events the design was sized to (a group-sequential design: its maximum), and the power they give at the reduced effect by the
+      # same formula that sized them; a sequential design takes it through its own boundaries.
+      n_events <- base_events
+      power_discounted <- if (!is.null(gs)) {
+        vcr_group_sequential_power(gs, sqrt(n_events * alloc * (1 - alloc)) * abs(log(hr_discounted)))$power
+      } else vcr_power_schoenfeld(n_events, hr_discounted, alpha, alloc, sided)
+      discount <- list(planned = gap$planned, observed = gap$observed, retained = retained, hazardRatio = hr_discounted,
+                       events = n_events, power = power_discounted, targetPower = power)
+    }
+  } else if (identical(e, "continuous")) {
+    eff <- vcr_scalar(tr$effect, NULL); if (is.null(eff)) return(NULL)
+    sd <- vcr_scalar(tr$sd, 1)
+    base <- total_of(vcr_n_means(eff, sd, alpha, power, alloc, sided))
+    push("effect", "效应", sprintf("%.3g–%.3g", eff * 0.8, eff * 1.2), vapply(wiggle, function(k) total_of(vcr_n_means(eff * k, sd, alpha, power, alloc, sided)), numeric(1)))
+    push("sd", "标准差", sprintf("%.3g–%.3g", sd * 0.8, sd * 1.2), vapply(wiggle, function(k) total_of(vcr_n_means(eff, sd * k, alpha, power, alloc, sided)), numeric(1)))
+    measure <- "所需总样本量"
+  } else {
+    p0 <- vcr_scalar(tr[["controlRate"]], NULL)
+    p1 <- vcr_binary_treatment_rate(p0, vcr_scalar(tr[["treatmentRate"]], NULL), vcr_scalar(tr$riskDifference, NULL), vcr_scalar(tr$oddsRatio, NULL))
+    d <- p1 - p0
+    base <- total_of(vcr_n_proportions(p0, p1, alpha, power, alloc, sided))
+    push("effect", "两组事件率之差", sprintf("%.3g–%.3g", 0.8 * d, 1.2 * d),
+         vapply(wiggle, function(k) total_of(vcr_n_proportions(p0, clip(p0 + k * d), alpha, power, alloc, sided)), numeric(1)))
+    # The control level moves and the difference the treatment makes stays the size it was stated at.
+    push("control", "对照组事件率", sprintf("%.3g–%.3g", 0.8 * p0, 1.2 * p0),
+         vapply(wiggle, function(k) { p0k <- clip(p0 * k); total_of(vcr_n_proportions(p0k, clip(p0k + d), alpha, power, alloc, sided)) }, numeric(1)))
+    measure <- "所需总样本量"
+  }
+  ordered <- rows[order(-vapply(rows, function(row) row$moved, numeric(1)))]
+  list(measure = measure, base = list(value = base),
+       rows = lapply(ordered, function(row) list(parameter = row$parameter, label = row$label, range = row$range, low = ceiling(row$low), high = ceiling(row$high))),
+       discount = discount)
 }

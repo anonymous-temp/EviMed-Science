@@ -1128,6 +1128,23 @@ function vcrSettings(overrides) {
     // study judges against it, so the count is bounded; a trial the study already holds can always be updated. Counter:
     // `open_science_vcr_patient_trials_total{kind="capReached"}`.
     vcrCandidateTrialsMax: integer("vcrCandidateTrialsMax", "OPEN_SCIENCE_VCR_CANDIDATE_TRIALS_MAX", 60, 1, 500),
+    // The most trials one `vcr_read what: candidates` list returns (vcrCandidateSearch, M1). Each one is a record the run may read and
+    // structure, so the list is cut to what a reader can go through; the registries are asked for twice as many because some are left out by
+    // what their records state. Unset = 20.
+    vcrCandidateSearchMax: integer("vcrCandidateSearchMax", "OPEN_SCIENCE_VCR_CANDIDATE_SEARCH_MAX", 20, 5, 50),
+    // A patient's record longer than this many characters is read through the passages that bear on a criterion (vcrPassages, M4) rather
+    // than window after window: past about two windows (20,000 characters each) a chart is more than a run reads in order, and the part of it
+    // a criterion asks about is a small part. Unset = 40,000. A shorter record is read as it always was.
+    vcrPassagesMinChars: integer("vcrPassagesMinChars", "OPEN_SCIENCE_VCR_PASSAGES_MIN_CHARS", 40_000, 2_000, 1_000_000),
+    // How long a research tool's first call waits for its turn to reach the run ledger. A turn typed in the kernel's composer is adopted
+    // after the routing decision, whose own limit is 20 s; a call refused meanwhile told the run to go on without the study. The tool waits 30 s for its answer. Unset = 20 s.
+    vcrRunAdoptionWaitMs: integer("vcrRunAdoptionWaitMs", "OPEN_SCIENCE_VCR_RUN_ADOPTION_WAIT_MS", 20_000, 0, 120_000),
+    // Batch matching (remediation plan D4, vcrMatchBatch): the most people one batch reads the records of (a roster larger than this is read
+    // in batches, each start taking the next people not yet read), how many records are read at once, and how long one record's model call
+    // may take. A start states the cost of its batch before it begins; a batch is bounded so that stated cost is a bounded one.
+    vcrMatchBatchMaxSubjects: integer("vcrMatchBatchMaxSubjects", "OPEN_SCIENCE_VCR_MATCH_BATCH_MAX_SUBJECTS", 300, 1, 5_000),
+    vcrMatchExtractConcurrency: integer("vcrMatchExtractConcurrency", "OPEN_SCIENCE_VCR_MATCH_EXTRACT_CONCURRENCY", 3, 1, 8),
+    vcrMatchExtractTimeoutMs: integer("vcrMatchExtractTimeoutMs", "OPEN_SCIENCE_VCR_MATCH_EXTRACT_TIMEOUT_MS", 90_000, 10_000, 300_000),
     // The smallest cell a model is shown (vcrService.minCell): a deployment may raise the domain's floor, never lower it.
     vcrMinCellSize: integer("vcrMinCellSize", "OPEN_SCIENCE_VCR_MIN_CELL_SIZE", VCR_MIN_CELL_SIZE, VCR_MIN_CELL_SIZE, 1_000),
     // The largest derived table — reconstructed pseudo-patients, a forecast's probabilities — the control plane stores from an engine job (vcrJobs).

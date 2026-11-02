@@ -3,7 +3,7 @@ import { VcrScientificBasis } from "../VcrScientificBasis";
 import { VcrVersionComparison } from "../VcrVersionComparison";
 import { useRef, useState } from "react";
 import { CircleCheck, PenLine, TriangleAlert } from "lucide-react";
-import { getVcrTrial, recordVcrDecision, type VcrDesign, type VcrStudy, type VcrTrialTab as TrialData } from "@/lib/vcrClient";
+import { getVcrTrial, recordVcrDecision, type VcrDesign, type VcrPremise, type VcrStudy, type VcrTrialTab as TrialData } from "@/lib/vcrClient";
 import { webErrorMessage } from "@/lib/apiClient";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/cn";
@@ -23,11 +23,12 @@ import { Tooltip } from "@/components/ui/Tooltip";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { HeatGrid } from "@/components/charts/HeatGrid";
 import { VcrSeriesLegend, VcrTrajectoryChart } from "../VcrCharts";
-import { VcrMilestoneTimeline, VcrTradeoffScatter, canDrawTradeoff } from "../VcrDiagrams";
+import { VcrMilestoneTimeline, VcrTornadoChart, VcrTradeoffScatter, canDrawTradeoff } from "../VcrDiagrams";
 import { VcrPredictionsDrawer } from "../VcrPredictionsDrawer";
 import { RegulatoryContactForm, VcrRegulatoryLog } from "../VcrRegulatoryLog";
 import { VcrScheduleCard } from "../VcrSchedule";
 import { VcrNumber } from "../VcrNumber";
+import { VcrPremises, premiseDraft } from "../VcrPremises";
 import { VcrToolbarActions, type VcrToolbarAction } from "../VcrToolbarActions";
 import { COMPARE_DRAFT_LABEL, DRAFT_PREFIX } from "../vcrActionWords";
 import { PartialResultNote, Stale, VcrStepFailed, VcrStepPending, VcrTabSkeleton } from "../VcrStates";
@@ -48,6 +49,10 @@ const hasRun = (design: VcrDesign): boolean => Boolean(design.record || design.r
 
 /** What a design that has not been computed says where its numbers would be. */
 const NOT_RUN = "还没算";
+
+/** Where the zero-effect check of a design stands while its figure is not there: waiting in the queue, running, or ended without one. */
+const NULL_STATE_WORDS = { queued: "排队中", running: "计算中", failed: "没算完", canceled: "已取消", done: "—" } as const;
+const waitsForNull = (key: string, design: VcrDesign): boolean => key === "type_one_error" && Boolean(design.nullState) && design.nullState !== "done";
 
 /**
  * What 「加一个方案」 and 「改假设」 put in the conversation's composer — never sent. A design is described and a hypothesis argued
@@ -127,6 +132,8 @@ function TrialView({ studyId, study, data, reload }: { studyId: string; study: V
   // 「加一个方案」 and 「改假设」 say it in the conversation: the draft waits in the composer, and the reader sends it.
   const [comparing, setComparing] = useState(false);
   const draft = (text: string) => () => frame?.openChat(`${text} 请先检查当前研究的已保存方案，保留原计算结果。`, { kind: "step", studyId, objectId: "trial" });
+  // A premise is changed in the same place a design is: the conversation, with the premise's name already in the composer.
+  const changePremise = (premise: VcrPremise) => frame?.openChat(`${premiseDraft(premise)} 请先检查当前研究的已保存方案，保留原计算结果。`, { kind: "step", studyId, objectId: "trial" });
   const editDesign = (design: VcrDesign) => frame?.openChat(`调整试验方案“${designContext(design)}”。先读取该版本及其证据参数，建立新版本并比较把握度、周期和假设变化。`, design.version ? { kind: "trial_scenario", studyId, objectId: design.id, version: design.version, ...(design.resultId ? { resultId: design.resultId, resultVersion: design.resultVersion } : {}) } : { kind: "step", studyId, objectId: "trial" });
 
   const actions: VcrToolbarAction[] = [];
@@ -190,6 +197,7 @@ function TrialView({ studyId, study, data, reload }: { studyId: string; study: V
             failed={failed}
             onOpen={setOpened}
             onEdit={canWrite && frame ? editDesign : null}
+            onChangePremise={canWrite && frame ? changePremise : null}
           />
         </Stale>
       )}
@@ -245,7 +253,7 @@ function TrialView({ studyId, study, data, reload }: { studyId: string; study: V
 
 /* ------------------------------------------------------------------------- the designs */
 
-function DesignsView({ studyId, study, data, headline, noneRan, failed, onOpen, onEdit }: {
+function DesignsView({ studyId, study, data, headline, noneRan, failed, onOpen, onEdit, onChangePremise }: {
   studyId: string;
   study: VcrStudy;
   data: TrialData;
@@ -254,11 +262,17 @@ function DesignsView({ studyId, study, data, headline, noneRan, failed, onOpen, 
   failed: boolean;
   onOpen: (design: VcrDesign) => void;
   onEdit: ((design: VcrDesign) => void) | null;
+  onChangePremise: ((premise: VcrPremise) => void) | null;
 }) {
   const chosenCodes = data.designs.filter((design) => design.chosen).map((design) => design.code);
   // The trade-off is drawn only when there is something to place: two designs with a duration and an assurance. A card whose chart
   // draws nothing is a title over an empty box.
   const tradeoff = data.designs.length > 1 && canDrawTradeoff(data.designs, "duration_months", "assurance");
+  // With no duration and no success probability the trade-off is the one the objective is written in: how many people against the
+  // power it buys, with the target power drawn as the line to clear (C7). Nothing is greyed out and nothing is picked by drawing it.
+  const sizeKey = data.designs.some((design) => design.measures.expected_sample_size?.value != null) ? "expected_sample_size" : "sample_size";
+  const sizeTradeoff = !tradeoff && data.designs.filter((design) => !design.dominated).length > 1 && canDrawTradeoff(data.designs, sizeKey, "power");
+  const sensitivity = data.sensitivity && data.sensitivity.rows.length > 0 ? data.sensitivity : null;
   const powerCurve = data.powerCurve && data.powerCurve.series.length > 0 ? data.powerCurve : null;
   const cells: ChartGridCell[] = [];
   if (powerCurve) {
@@ -306,6 +320,26 @@ function DesignsView({ studyId, study, data, headline, noneRan, failed, onOpen, 
       ),
     });
   }
+  if (sizeTradeoff) {
+    cells.push({
+      key: "tradeoff",
+      node: (
+        <ChartCard title="样本量与功效的取舍">
+          <VcrTradeoffScatter
+            designs={data.designs}
+            xKey={sizeKey}
+            yKey="power"
+            sizeKey="cost"
+            xLabel={sizeKey === "expected_sample_size" ? "期望样本量（例）" : "样本量（例）"}
+            yLabel="功效"
+            sizeLabel="气泡面积 = 成本"
+            reference={data.objective?.power != null ? { value: data.objective.power, label: `目标功效 ${data.objective.power}%` } : null}
+          />
+          {data.objective && <p data-vcr-objective={data.objective.source} className="mt-2 text-caption text-text-3">{data.objective.text}</p>}
+        </ChartCard>
+      ),
+    });
+  }
   if (data.grid && data.grid.rows.length > 0) {
     cells.push({
       key: "grid",
@@ -333,6 +367,9 @@ function DesignsView({ studyId, study, data, headline, noneRan, failed, onOpen, 
     <div className="flex flex-col gap-6">
       {headline.length > 0 && <Headline parts={headline} />}
 
+      {/* What the conclusion stands on, once: the numbers behind the table, where each came from, the defaults among them. */}
+      {!noneRan && <VcrPremises premises={data.premises} onChange={onChangePremise} />}
+
       {noneRan
         ? <NotComputedDesigns designs={data.designs} studyId={studyId} study={study} failed={failed} />
         : (
@@ -340,15 +377,16 @@ function DesignsView({ studyId, study, data, headline, noneRan, failed, onOpen, 
             <DataTable
               label="方案的对比"
               columns={designColumns(data, onEdit, onOpen)}
-              rows={data.designs}
+              rows={data.designs.flatMap((design) => (design.baseline ? [design, baselineRow(design)] : [design]))}
               rowKey={(design) => design.id}
               highlight={(design) => Boolean(design.chosen)}
               rowAttrs={(design) => ({
                 "data-vcr-design": design.code,
+                ...(design.isBaseline ? { "data-vcr-baseline": "" } : {}),
                 ...(design.dominated ? { "data-vcr-dominated": "" } : {}),
                 ...(design.chosen ? { "data-vcr-chosen": "" } : {}),
               })}
-              onRowOpen={(design) => { if (hasRun(design)) onOpen(design); }}
+              onRowOpen={(design) => { if (!design.isBaseline && hasRun(design)) onOpen(design); }}
             />
             {data.footnotes?.map((note, index) => (
               <p key={note} className="mt-1.5 text-caption text-text-3">
@@ -364,6 +402,26 @@ function DesignsView({ studyId, study, data, headline, noneRan, failed, onOpen, 
       {setup.length > 0 && (
         <Disclosure summary="模拟设定">
           <div data-vcr-setup=""><FactList rows={setup} max={setup.length} /></div>
+        </Disclosure>
+      )}
+
+      {/* What the sample size rests on, one input at a time, the biggest mover first; folded, as the other explanations are. */}
+      {sensitivity && (
+        <Disclosure summary={`哪些假设影响最大 · ${data.designs.length > 1 ? `方案 ${sensitivity.design} · ` : ""}${sensitivity.measure ?? "样本量"}`}>
+          <div data-vcr-sensitivity="" className="flex flex-col gap-3">
+            <VcrTornadoChart
+              rows={sensitivity.rows}
+              centre={sensitivity.base?.value ?? null}
+              centreLabel={sensitivity.base ? <VcrNumber value={sensitivity.base} label="基准" /> : undefined}
+            />
+            {sensitivity.discount && (
+              <p data-vcr-effect-discount="" className="text-caption text-text-2">
+                <span>{sensitivity.discount.label}：</span>
+                <span className="tabular-nums text-text">{`${numberText(sensitivity.discount.power)}%`}</span>
+                {sensitivity.discount.hazardRatio != null && <span className="text-text-3">{`（效应 HR ${numberText(sensitivity.discount.hazardRatio, 2)}${sensitivity.discount.targetPower != null ? `；按计划的效应设计的把握度是 ${numberText(sensitivity.discount.targetPower)}%` : ""}）`}</span>}
+              </p>
+            )}
+          </div>
         </Disclosure>
       )}
 
@@ -399,6 +457,29 @@ function NotComputedDesigns({ designs, studyId, study, failed }: { designs: read
 }
 
 /**
+ * The row the fixed-sample baseline makes under its design (C5): the same measures in the same columns, marked 基准, with the one
+ * sentence that sets the sequential design's own sizes beside it. It is not a design: it has no letter, cannot be chosen, edited or
+ * opened, and carries no replicates (it is a closed-form calculation, no simulation).
+ */
+function baselineRow(design: VcrDesign): VcrDesign {
+  const baseline = design.baseline as NonNullable<VcrDesign["baseline"]>;
+  return {
+    id: `${design.id}#baseline`, code: "基准", name: baseline.name, note: baseline.note, measures: baseline.measures,
+    method: "解析", replicates: null, nullState: null, nullCheck: null, record: null, isBaseline: true,
+  };
+}
+
+/** A bound the design's own number does not meet, said on the number: nothing is said of one that is met. */
+function BoundTag({ state }: { state: NonNullable<VcrDesign["meets"]>["power"] }) {
+  if (state !== "no" && state !== "borderline") return null;
+  return (
+    <Tag tone={state === "no" ? "warn" : "neutral"} title={state === "no" ? "没有达到这条要求" : "在蒙特卡洛误差的两倍之内，分不清是否达到"}>
+      <span data-vcr-bound={state}>{state === "no" ? "未达标" : "接近"}</span>
+    </Tag>
+  );
+}
+
+/**
  * The grid's columns, from the payload's own list. A dominated design says what beat it under its name and draws no numbers;
  * power is a bar and its number.
  */
@@ -411,13 +492,17 @@ function designColumns(data: TrialData, onEdit: ((design: VcrDesign) => void) | 
       cell: (design) => (
         <span className="flex flex-col gap-0.5">
           <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span className={cn("inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-tag text-meta",
-              design.dominated ? "bg-surface-2 text-text-3" : design.chosen ? "bg-accent text-accent-fg" : "bg-surface-2 text-text-2")}
-            >
-              {design.code}
-            </span>
+            {design.isBaseline
+              ? <Tag>{design.code}</Tag>
+              : (
+                <span className={cn("inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-tag text-meta",
+                  design.dominated ? "bg-surface-2 text-text-3" : design.chosen ? "bg-accent text-accent-fg" : "bg-surface-2 text-text-2")}
+                >
+                  {design.code}
+                </span>
+              )}
             {/* The keyboard's way into the run behind the row; a press anywhere else on the row does the same for a pointer. */}
-            {onOpen && hasRun(design)
+            {onOpen && hasRun(design) && !design.isBaseline
               ? (
                 <button type="button" aria-label={`打开方案 ${design.code} 的计算详情`} onClick={() => onOpen(design)} className={cn("rounded text-left font-normal hover:underline", design.dominated ? "text-text-3" : "text-text")}>
                   {design.name}
@@ -435,11 +520,13 @@ function designColumns(data: TrialData, onEdit: ((design: VcrDesign) => void) | 
       key: column.key,
       header: column.unit ? `${column.label}（${column.unit}）` : column.label,
       align: "right",
-      isEmpty: (design) => design.measures[column.key]?.value == null && !design.measures[column.key]?.text,
+      isEmpty: (design) => design.measures[column.key]?.value == null && !design.measures[column.key]?.text && !waitsForNull(column.key, design),
       cell: (design) => {
         // A dominated design gives no numbers at all; what it was beaten by is said in its first cell.
         if (design.dominated) return null;
         const value = design.measures[column.key];
+        // The type I error is measured after the result (the zero-effect run follows on the queue): until it lands the cell says where it is.
+        if (!value && waitsForNull(column.key, design)) return <span data-vcr-null-state={design.nullState ?? undefined} className="text-text-3">{NULL_STATE_WORDS[design.nullState as keyof typeof NULL_STATE_WORDS]}</span>;
         if (!value) return <span data-vcr-not-run={designRan(design) ? undefined : ""} className="text-text-3">{designRan(design) ? "—" : NOT_RUN}</span>;
         const mcse = mcseText(value.mcse);
         // A Monte-Carlo interval is the standard error said again (±1.96 of it); a predicted one — when the last patient comes in — is a
@@ -464,6 +551,13 @@ function designColumns(data: TrialData, onEdit: ((design: VcrDesign) => void) | 
               </span>
             )}
             {interval && <span data-vcr-interval="" className="text-meta font-normal text-text-3">{interval}</span>}
+            {(column.key === "power" || column.key === "type_one_error") && !design.isBaseline && <BoundTag state={design.meets?.[column.key === "power" ? "power" : "typeOneError"] ?? null} />}
+            {/* Where the closed form can answer the same question (the nominal alpha for a fixed design), the simulation is a check on it. */}
+            {column.key === "type_one_error" && design.nullCheck && (
+              <Tag tone={design.nullCheck.agrees === false ? "warn" : "neutral"} title={`与解析值核对：解析 ${numberText(design.nullCheck.analytic)}% · 仿真 ${numberText(design.nullCheck.simulated)}%`}>
+                <span data-vcr-null-check={design.nullCheck.agrees === false ? "differs" : "agrees"}>复核</span>
+              </Tag>
+            )}
           </span>
         );
       },
@@ -487,9 +581,9 @@ function designColumns(data: TrialData, onEdit: ((design: VcrDesign) => void) | 
       key: "edit",
       header: <span className="sr-only">操作</span>,
       align: "right" as const,
-      cell: (design: VcrDesign) => (
+      cell: (design: VcrDesign) => (design.isBaseline ? null : (
         <Button size="sm" variant="text" actionKind="draft" data-vcr-edit={design.code} onClick={() => onEdit(design)} aria-label={`${DRAFT_PREFIX}调整：方案 ${design.code}`}><PenLine size={16} aria-hidden="true" />{`${DRAFT_PREFIX}调整`}</Button>
-      ),
+      )),
     }] : []),
   ];
 }
@@ -508,6 +602,21 @@ function DesignRecordDrawer({ design, onClose, onEdit }: { design: VcrDesign; on
   const replicates = record?.replicates ?? design.replicates;
   if (replicates != null) rows.push({ label: "模拟次数", value: numberText(replicates, 0) });
   if (record?.seed != null) rows.push({ label: "随机种子", value: String(record.seed) });
+  for (const reason of record?.replicateReasons ?? []) rows.push({ label: "模拟次数的依据", value: reason });
+  const nullCheck = design.nullCheck;
+  if (nullCheck) {
+    rows.push({
+      label: "I 类错误与解析值核对",
+      value: (
+        <span data-vcr-check={nullCheck.agrees === null ? "unknown" : nullCheck.agrees ? "agrees" : "differs"} className="flex flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="tabular-nums">{`解析 ${numberText(nullCheck.analytic)}% · 仿真 ${numberText(nullCheck.simulated)}%`}</span>
+          <span className="tabular-nums text-text-2">{`相差 ${numberText(nullCheck.differencePoints)} 个百分点`}</span>
+          {nullCheck.agrees === true && <span role="img" aria-label="一致" className="inline-flex text-ok"><CircleCheck size={16} aria-hidden="true" /></span>}
+          {nullCheck.agrees === false && <span role="img" aria-label="不一致" className="inline-flex text-warn-strong"><TriangleAlert size={16} aria-hidden="true" /></span>}
+        </span>
+      ),
+    });
+  }
   if (check && check.analytic != null && check.simulated != null) {
     const ok = check.agrees;
     rows.push({

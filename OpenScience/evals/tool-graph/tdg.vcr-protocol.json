@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "vcr-protocol",
-  "version": "sha256:2ae7c48938e6a1bccc9510955dd8c460a8f4ca5eeedd4ca07965490e1c26467f",
+  "version": "sha256:09ee246d5235a489748ae67d45f3810bb3507dc6ac59acd67c01cc2cda56d271",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 34,
@@ -1246,7 +1246,8 @@
               "longitudinal",
               "candidate_trials",
               "soa",
-              "regulatory_contacts"
+              "regulatory_contacts",
+              "candidates"
             ]
           },
           "filter": {
@@ -1272,7 +1273,7 @@
     {
       "name": "mcp__evimed__vcr_simulate",
       "source": "mcp",
-      "description": "Run, read or cancel research calculations. action=shape with kind returns exact fields and examples before start; do not guess keys. Long jobs resume here only when they outlive this turn. Failures, cancellations and partials remain explicit. modelId requires modelVersion. Narrow aggregate methods also use research_calculate without a study.",
+      "description": "Trial sample size, comparing designs, a synthetic population from a paper's baseline, comparators: calculate here. No study needed; the first start opens its page. action=shape with kind gives exact fields and examples; do not guess keys. Long jobs resume here if they outlive this turn. Failures stay explicit. modelId requires modelVersion.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1282,7 +1283,8 @@
               "start",
               "status",
               "cancel",
-              "shape"
+              "shape",
+              "validate"
             ],
             "default": "start"
           },
@@ -1323,6 +1325,8 @@
               "tipping_point",
               "prognostic_adjustment_comparator",
               "generate_patients_longitudinal",
+              "population_check",
+              "match_extract",
               "forecast_trajectories",
               "evaluate_forecast",
               "compare_forecasts",
@@ -1443,7 +1447,8 @@
               "trial_benchmark",
               "candidate_trial",
               "soa",
-              "regulatory_contact"
+              "regulatory_contact",
+              "result_record"
             ]
           },
           "items": {

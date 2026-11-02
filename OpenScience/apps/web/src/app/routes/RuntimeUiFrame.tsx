@@ -23,6 +23,7 @@ import { useUiStore } from "@/lib/store";
 import { isGeoTab } from "@/components/geo/geoTabs";
 import { geoProjectPath, useFrameGeoOptions } from "@/components/geo/useFrameGeoOptions";
 import { useFrameVcrOptions } from "@/components/vcr/useFrameVcrOptions";
+import { isVcrTab, vcrTabPath } from "@/components/vcr/vcrTabs";
 import { locateSourceQuote } from "@/lib/sourceClient";
 import { PreservedConversation } from "@/components/chat/PreservedConversation";
 import { cancelWebAgentRun } from "@/lib/apiClient";
@@ -952,6 +953,13 @@ export function RuntimeUiFrame({ projectId, origin, scope: scopeInput, scopeOwne
       } else if (message.type === "evimed.runtime-ui.open-item" && typeof message.itemId === "string" && /^[a-z0-9]{12,32}$/.test(message.itemId)) {
         incoming.current = message.seq;
         navigate(`/app/frontier/items/${encodeURIComponent(message.itemId)}`);
+      } else if (message.type === "evimed.runtime-ui.open-vcr-result"
+        && typeof message.studyId === "string" && /^[A-Za-z0-9_-]{1,160}$/.test(message.studyId) && typeof message.tab === "string" && isVcrTab(message.tab)) {
+        // A 虚拟临床研究 result a reply linked to (the entry a research tool's answer carries): one of the seven tabs of a study. The
+        // frame names the study and the tab from the closed shapes; the address is spelled here, and the page reads the study for the
+        // account itself (a study that is not theirs is not found).
+        incoming.current = message.seq;
+        navigate(vcrTabPath(message.studyId, message.tab));
       } else if (message.type === "evimed.runtime-ui.open-source"
         && typeof message.sourceId === "string" && /^src_[a-f0-9]{32}$/.test(message.sourceId)) {
         incoming.current = message.seq;

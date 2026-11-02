@@ -432,6 +432,7 @@ export function VcrTradeoffScatter({
   xLabel,
   yLabel,
   sizeLabel,
+  reference,
   height = 300,
   className,
 }: {
@@ -442,6 +443,8 @@ export function VcrTradeoffScatter({
   xLabel?: string;
   yLabel?: string;
   sizeLabel?: string;
+  /** A bound the vertical axis is read against (the target power): a dashed line at its value, named. */
+  reference?: { value: number; label: string } | null;
   height?: number;
   className?: string;
 }) {
@@ -449,7 +452,7 @@ export function VcrTradeoffScatter({
   const points = designs.filter((design) => at(design, xKey) != null && at(design, yKey) != null);
   const unplaced = designs.filter((design) => design.dominated && !points.includes(design));
   const x = scaleOf(points.map((design) => at(design, xKey)));
-  const y = scaleOf(points.map((design) => at(design, yKey)));
+  const y = scaleOf([...points.map((design) => at(design, yKey)), ...(reference ? [reference.value] : [])]);
   if (!x || !y || points.length === 0) return null;
   const formatX = tickFormat(points[0].measures[xKey]?.unit);
   const formatY = tickFormat(points[0].measures[yKey]?.unit);
@@ -475,7 +478,13 @@ export function VcrTradeoffScatter({
           {y.ticks.map((tick) => (
             <line key={tick} x1={0} x2={100} y1={100 - posX(tick, y)} y2={100 - posX(tick, y)} className="text-chart-grid" stroke="currentColor" strokeWidth={1} vectorEffect="non-scaling-stroke" />
           ))}
+          {reference && (
+            <line data-vcr-scatter-reference="" x1={0} x2={100} y1={100 - posX(reference.value, y)} y2={100 - posX(reference.value, y)} className="text-text-3" stroke="currentColor" strokeWidth={1} strokeDasharray="4 3" vectorEffect="non-scaling-stroke" />
+          )}
         </svg>
+        {reference && (
+          <span className="absolute right-0 -translate-y-full text-meta text-text-3" style={{ top: `${100 - posX(reference.value, y)}%` }}>{reference.label}</span>
+        )}
         {points.map((design, index) => {
           const left = posX(at(design, xKey) as number, x);
           const top = 100 - posX(at(design, yKey) as number, y);

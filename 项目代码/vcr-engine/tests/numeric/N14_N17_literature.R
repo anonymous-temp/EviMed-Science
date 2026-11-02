@@ -177,6 +177,61 @@ vcr_case("N17b", c("AC-03", "AC-27"), function() {
                         no_prov$status, paste(vcr_test_issue_codes(no_prov), collapse = ",")))
 })
 
+vcr_case("N17d", c("AC-03", "AC-27"), function() {
+  # A10 (remediation plan): what the paper printed is a level, and the result says which. Four arms of information, each run
+  # through the job on the same two simulated trials: 1 risk table and total events, 2 the risk table only, 3 total events only (the
+  # arm's size stands in for the table), 4 the curve and the arm's size alone. A missing table is no longer a refusal; the at-risk
+  # and the event checks a paper gave nothing for are listed as not reported (the events check used to be skipped without a word, and
+  # a pass read the same); the survival curves and medians are delivered at every level, `limited` without a table; and the hazard
+  # ratio is not estimable only when both the table and the total events are missing. A curve with no size at all is refused by name.
+  set.seed(1719L, kind = VCR_RNG_KIND)
+  dist <- vcr_dist_exponential_from_median(12)
+  dc <- vcr_sim_tte(0L, 300L, dist, 1, list(kind = "uniform", duration = 12), 24)
+  dt <- vcr_sim_tte(300L, 0L, dist, 0.65, list(kind = "uniform", duration = 12), 24)
+  t_risk <- seq(0, 30, by = 6)
+  ac <- .n17_arm(dc, t_risk, 36, noise = 0.004); at <- .n17_arm(dt, t_risk, 36, noise = 0.004)
+  lhr_true <- vcr_cox_loghr(c(dc$time, dt$time), c(dc$status, dt$status), c(rep(0L, nrow(dc)), rep(1L, nrow(dt))))
+  # the same arm as a paper that printed less
+  arm_at <- function(a, n, table, events) {
+    out <- a[c("curve", "reportedMedian")]
+    if (table) out$riskTable <- a$riskTable else out$initialAtRisk <- n
+    if (events) out$totalEvents <- a$totalEvents
+    out
+  }
+  level <- function(table, events) {
+    sc <- c(arm_at(ac, 300L, table, events), list(treatmentArm = arm_at(at, 300L, table, events), provenance = .n17_prov))
+    vcr_test_run(vcr_test_job("evidence.reconstruct_km", sc, list(list(kind = "evidence", id = "ev_km@1")), seed = 1L, job_id = "job_n17d"))
+  }
+  runs <- list(level(TRUE, TRUE), level(TRUE, FALSE), level(FALSE, TRUE), level(FALSE, FALSE))
+  keys <- vapply(runs, function(r) as.character(r$diagnostics$informationLevel$key), character(1))
+  levels <- vapply(runs, function(r) as.integer(r$diagnostics$informationLevel$level), integer(1))
+  conclusions <- vapply(runs, function(r) as.character(r$conclusion), character(1))
+  has_hr <- vapply(runs, function(r) !is.null(vcr_get_measure(r, "log_hazard_ratio")), logical(1))
+  has_median <- vapply(runs, function(r) !is.null(vcr_get_measure(r, "median_survival_control")) && !is.null(vcr_get_measure(r, "median_survival_treatment")), logical(1))
+  status_of <- function(r, check) as.character(r$diagnostics$qualityControl[[1]]$checks[[check]]$status %||% "checked")
+  lhr_1 <- vcr_measure_value(runs[[1]], "log_hazard_ratio")
+  none <- vcr_test_run(vcr_test_job("evidence.reconstruct_km", c(ac[c("curve", "reportedMedian")], list(provenance = .n17_prov)),
+                                    list(list(kind = "evidence", id = "ev_km@1")), seed = 1L, job_id = "job_n17d_none"))
+  ok <- all(vapply(runs, function(r) identical(r$status, "succeeded"), logical(1))) &&
+    identical(keys, c("risk_table_and_events", "risk_table", "events_only", "curve_only")) && identical(levels, 1:4) &&
+    identical(conclusions, c("estimable", "estimable", "limited", "limited")) &&
+    identical(has_hr, c(TRUE, TRUE, TRUE, FALSE)) && all(has_median) &&
+    identical(runs[[4]]$diagnostics$hazardRatio$status, "not_estimable") && is.null(runs[[1]]$diagnostics$hazardRatio) &&
+    abs(lhr_1 - lhr_true) <= 0.05 &&
+    identical(status_of(runs[[1]], "events"), "checked") && identical(status_of(runs[[1]], "atRisk"), "checked") &&
+    identical(status_of(runs[[2]], "events"), "not_reported") && identical(status_of(runs[[2]], "atRisk"), "checked") &&
+    identical(status_of(runs[[3]], "atRisk"), "not_reported") && identical(status_of(runs[[3]], "events"), "checked") &&
+    identical(status_of(runs[[4]], "atRisk"), "not_reported") && identical(status_of(runs[[4]], "events"), "not_reported") &&
+    all(vapply(runs, function(r) r$counts$reconstructedPseudoPatients == 600 && identical(r$counts$realPatients, 0), logical(1))) &&
+    identical(none$status, "failed") && "scenario_field_missing" %in% vcr_test_issue_codes(none)
+  list(pass = ok,
+       detail = sprintf("levels %s -> conclusions %s; log HR %s (level 1 %.4f vs Cox on the original rows %.4f); medians delivered at every level: %s; QC events %s/%s/%s/%s, at-risk %s/%s/%s/%s; HR at level 4: %s; a curve with no table and no size -> %s (%s)",
+                        paste(keys, collapse = " / "), paste(conclusions, collapse = " / "), paste(ifelse(has_hr, "yes", "no"), collapse = "/"), lhr_1, lhr_true,
+                        all(has_median), status_of(runs[[1]], "events"), status_of(runs[[2]], "events"), status_of(runs[[3]], "events"), status_of(runs[[4]], "events"),
+                        status_of(runs[[1]], "atRisk"), status_of(runs[[2]], "atRisk"), status_of(runs[[3]], "atRisk"), status_of(runs[[4]], "atRisk"),
+                        runs[[4]]$diagnostics$hazardRatio$status %||% "NULL", none$status, paste(vcr_test_issue_codes(none), collapse = ",")))
+})
+
 vcr_case("N17c", c("AC-30"), function() {
   # The engine's own Cox log hazard ratio (used by the reconstruction's HR
   # check, so `survival` is not needed at run time) equals coxph with Breslow

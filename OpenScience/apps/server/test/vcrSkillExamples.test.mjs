@@ -19,7 +19,7 @@
 // to make impossible: it looks like nothing having happened — the run follows
 // its instructions and is refused, item by item, for something the skill said.
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import { dirname, join, normalize } from "node:path";
@@ -32,13 +32,25 @@ import {
 } from "@evimed/domain";
 
 import { vcrRuntimeWrite } from "../src/vcrGateway.mjs";
+import { vcrBuildStages } from "../src/vcrOrchestrator.mjs";
+import { presentComparatorTab } from "../src/vcrViewsTabs.mjs";
 import { VCR_READ_WHATS, VCR_WRITE_WHATS } from "../src/vcrService.mjs";
 import { VcrAccess } from "../src/vcrAccess.mjs";
 import { createVcrCurveEvidence } from "../src/vcrCurveEvidence.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const SKILLS = ["vcr-protocol", "vcr-analysis", "vcr-evidence", "vcr-matching", "vcr-package"];
-const read = (/** @type {string} */ path) => readFileSync(join(root, path), "utf8");
+/**
+ * A file of the repository; for a skill's SKILL.md, the whole skill — the entry and the references it sends the model to
+ * (`references/*.md` beside it), because a skill split by task (C3) teaches its examples and its rules in all of them.
+ * @param {string} path
+ */
+const read = (path) => {
+  const text = readFileSync(join(root, path), "utf8");
+  if (!path.endsWith("/SKILL.md")) return text;
+  const references = join(root, dirname(path), "references");
+  return [text, ...(existsSync(references) ? readdirSync(references).filter((name) => name.endsWith(".md")).sort().map((name) => readFileSync(join(references, name), "utf8")) : [])].join("\n");
+};
 
 test("every VCR skill resolves one mirrored shared operating contract", () => {
   const shared = read("capabilities/vcr-protocol/references/operating-contract.md");
@@ -221,6 +233,51 @@ test("the analysis skill's curve example uses a recorded receipt and passes the 
   await writeFile(join(workspaceDir, "figure.png"), Buffer.concat([image, Buffer.from("changed")]));
   await assert.rejects(curves.curveVerifier({ studyId: study.id, principal: study.userId, scenario: example.data.configuration, inputs: [] }),
     { code: "vcr_curve_source_changed" });
+});
+
+test("the analysis skill's external-control example is written whole, read by the engine in its own words and shown on the page (A6, A7)", async () => {
+  const blocks = taggedBlocks(read("capabilities/vcr-analysis/SKILL.md")).filter((block) => block.tag === "vcr:object:comparator");
+  const example = JSON.parse(blocks.find((block) => JSON.parse(block.text).route === "external_control")?.text ?? "null");
+  assert.ok(example, "the skill has an external-control example");
+  assert.equal(Array.isArray(example.targetTrial), false, "the record is the closed seven components, on the object, not the engine's list in the configuration");
+  assert.deepEqual(Object.keys(example.targetTrial), ["eligibility", "strategies", "assignment", "timeZero", "outcome", "contrast", "analysis"]);
+
+  // 1. the real write path takes it whole: no refusal and, the records being complete, no reminder
+  /** @type {any} */
+  let saved;
+  const study = { id: "std_example", userId: "u_example", projectId: "p_example", dataTier: "T2" };
+  const outcome = await vcrRuntimeWrite({
+    store: { async saveComparatorDesign(/** @type {any} */ row) { saved = row; return { id: "cmp_example" }; }, async one() { return { found: 1 }; } },
+    service: unreachable(), orchestrator: null, study, what: "comparator", data: example, items: null,
+  });
+  assert.deepEqual(outcome.issues, [], "the example is complete: nothing is refused and nothing is left to remind");
+  assert.equal(saved.targetTrial.timeZero.status, "approximate");
+  assert.equal(saved.configuration.applicability.claim, "superiority");
+
+  // 2. the orchestrator hands the engine its own list, and the records the engine does not read are not refused as unknown fields
+  const row = { ...saved, id: "cmp_example", version: 1, route: saved.route, estimand: saved.estimand };
+  const plan = /** @type {any} */ (vcrBuildStages({ kind: "comparator", row }, { study: { dataTier: "T2" }, definition: { endpointType: "time_to_event" }, assumptions: [] }));
+  assert.equal(plan.ok, true, JSON.stringify(plan.refused));
+  assert.deepEqual(plan.stages[0].scenario.targetTrial, [
+    { item: "eligibility", emulation: "approximate" }, { item: "strategies", emulation: "exact" }, { item: "assignment", emulation: "approximate" },
+    { item: "timeZero", emulation: "approximate" }, { item: "outcome", emulation: "exact" }, { item: "contrast", emulation: "exact" }, { item: "analysis", emulation: "exact" },
+  ]);
+  assert.equal("applicability" in plan.stages[0].scenario, false, "the applicability record is read by the page and the control plane, not by the engine");
+
+  // 3. the page shows it: every component beside its status, the weak ones as a premise, the applicability first
+  const now = new Date("2026-11-01T12:00:00.000Z");
+  const result = { id: "res_1", version: 1, kind: "comparator", conclusion: "limited", counts: {}, measures: [], diagnostics: {}, createdAt: now.toISOString() };
+  const comparator = { ...row, resultId: "res_1", conclusion: "limited", gapList: [], createdAt: now.toISOString() };
+  const tab = presentComparatorTab({ now, study: { id: "std_example", intendedUse: "exploratory", dataTier: "T2", steps: {}, abilities: [] }, definition: null, results: [result], allResults: [result],
+    stale: [], reviews: [], jobs: [], budget: null, assumptions: [], members: [], exports: [], decisions: [], roles: [], scenarios: [], comparators: [comparator], comparator,
+    populations: [], patientSets: [], grid: null, forecasts: [], models: [], executions: new Map(), protocol: null, criteria: [], jobMarks: [], currentNodes: new Set() });
+  const rows = Object.fromEntries(tab.estimand.rows.map((entry) => [entry.label, entry.value]));
+  assert.equal(rows["随访起点（时间零点）"], "只能近似：两组都从开始治疗之日起算");
+  assert.equal(rows["结局"], "可精确复现：总生存期，同一定义");
+  assert.equal(tab.estimand.rows.length, 8, "the estimand and the seven components");
+  assert.equal(tab.premises[0].key, "applicability");
+  assert.match(tab.premises[0].value, /部分适用，要支持优效结论：外部对照来自另一年代的登记库/);
+  assert.match(tab.premises.find((entry) => entry.key === "targetTrial").value, /入选标准：只能近似；分配方式：只能近似；随访起点（时间零点）：只能近似/);
 });
 
 test("the analysis skill's example scenario is a job the domain accepts, and its objects are the ones the writer takes", () => {

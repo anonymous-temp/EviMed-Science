@@ -33,3 +33,17 @@ export function clinicalIntervalInQuote(interval, quote, dateSurface) {
   else anchor.setUTCDate(anchor.getUTCDate()+direction*value*(/^(?:weeks?|周)$/u.test(unit)?7:1));
   return Number.isFinite(anchor.getTime()) && anchor.getTime() === Date.parse(endKnown ? interval.start : interval.end);
 }
+
+/** The longest second quotation a date may rest on: a header line, not a paragraph. */
+export const DATE_QUOTE_MAX = 200;
+
+/**
+ * A date the fact's own quotation does not print may rest on a second verbatim quotation from the same document that prints it whole,
+ * with its year: the stated date of the record the fact was read in (`dateQuote`). The date is still found in text the document holds
+ * word for word; nothing outside the document (an upload time, a dataset year, a file's date) and no short form (`3/14`) supplies it.
+ * @param {string} value the claimed date @param {...(string|null|undefined)} quotes the fact's quotation, then its date quotation
+ */
+export function clinicalDateInEvidence(value, ...quotes) {
+  return quotes.some((quote) => typeof quote === 'string' && quote !== '' && clinicalDateInQuote(value, quote));
+}
+

@@ -12,7 +12,7 @@
       "modelTier": "literature"
     },
     "model.prognostic_apply": {
-      "version": "1.0.0",
+      "version": "1.1.0",
       "endpoints": [
         "continuous",
         "binary",
@@ -21,7 +21,10 @@
       "crossChecks": [
         "closed-form published equation evaluation"
       ],
-      "modelTier": "literature"
+      "modelTier": "literature",
+      "compatibleVersions": [
+        "1.0.0"
+      ]
     },
     "profile.snapshot": {
       "version": "1.1.0",
@@ -44,18 +47,24 @@
       ]
     },
     "population.scenario": {
-      "version": "1.0.0",
+      "version": "1.1.0",
       "endpoints": [],
       "crossChecks": [
         "simstudy semantics"
       ],
-      "modelTier": "scenario"
+      "modelTier": "scenario",
+      "compatibleVersions": [
+        "1.0.0"
+      ]
     },
     "population.literature": {
-      "version": "1.0.0",
+      "version": "1.1.0",
       "endpoints": [],
       "crossChecks": [],
-      "modelTier": "literature"
+      "modelTier": "literature",
+      "compatibleVersions": [
+        "1.0.0"
+      ]
     },
     "population.synthpop": {
       "version": "1.0.0",
@@ -70,6 +79,14 @@
       "endpoints": [],
       "crossChecks": [],
       "modelTier": "data"
+    },
+    "population.check": {
+      "version": "1.0.0",
+      "endpoints": [],
+      "crossChecks": [
+        "base-R recomputation of the standardized differences"
+      ],
+      "modelTier": null
     },
     "patients.continuous": {
       "version": "1.1.0",
@@ -116,17 +133,20 @@
       "modelTier": "literature"
     },
     "evidence.reconstruct_km": {
-      "version": "1.0.0",
+      "version": "1.1.0",
       "endpoints": [
         "time_to_event"
       ],
       "crossChecks": [
         "IPDfromKM"
       ],
-      "modelTier": "literature"
+      "modelTier": "literature",
+      "compatibleVersions": [
+        "1.0.0"
+      ]
     },
     "comparator.entropy_balance": {
-      "version": "1.1.0",
+      "version": "1.3.0",
       "endpoints": [
         "continuous",
         "binary",
@@ -138,11 +158,13 @@
       ],
       "modelTier": "data",
       "compatibleVersions": [
-        "1.0.0"
+        "1.0.0",
+        "1.1.0",
+        "1.2.0"
       ]
     },
     "comparator.propensity_weight": {
-      "version": "1.1.0",
+      "version": "1.3.0",
       "endpoints": [
         "continuous",
         "binary",
@@ -153,7 +175,9 @@
       ],
       "modelTier": "data",
       "compatibleVersions": [
-        "1.0.0"
+        "1.0.0",
+        "1.1.0",
+        "1.2.0"
       ]
     },
     "comparator.rmst": {
@@ -193,7 +217,7 @@
       "modelTier": "scenario"
     },
     "comparator.map_prior": {
-      "version": "1.0.0",
+      "version": "1.1.0",
       "endpoints": [
         "binary",
         "continuous"
@@ -201,10 +225,13 @@
       "crossChecks": [
         "RBesT"
       ],
-      "modelTier": "literature"
+      "modelTier": "literature",
+      "compatibleVersions": [
+        "1.0.0"
+      ]
     },
     "design.analytic": {
-      "version": "1.2.0",
+      "version": "1.3.0",
       "endpoints": [
         "continuous",
         "binary",
@@ -217,6 +244,9 @@
         "Simon 1989"
       ],
       "modelTier": "scenario",
+      "compatibleVersions": [
+        "1.2.0"
+      ],
       "legacyVersion": "1.0.0",
       "legacyDesigns": [
         "two_arm_fixed",
@@ -246,7 +276,7 @@
       ]
     },
     "design.simulate": {
-      "version": "1.2.0",
+      "version": "1.3.0",
       "endpoints": [
         "continuous",
         "binary",
@@ -259,6 +289,9 @@
         "independent normal approximation of the one-sample log-rank score"
       ],
       "modelTier": "scenario",
+      "compatibleVersions": [
+        "1.2.0"
+      ],
       "legacyVersion": "1.0.0",
       "legacyDesigns": [
         "two_arm_fixed",
@@ -290,7 +323,7 @@
       ]
     },
     "design.grid": {
-      "version": "1.2.0",
+      "version": "1.3.0",
       "endpoints": [
         "continuous",
         "binary",
@@ -298,6 +331,9 @@
       ],
       "crossChecks": [],
       "modelTier": "scenario",
+      "compatibleVersions": [
+        "1.2.0"
+      ],
       "legacyVersion": "1.0.0",
       "legacyDesigns": [
         "two_arm_fixed",
@@ -372,7 +408,7 @@
       "modelTier": null
     },
     "comparator.weighted_cox": {
-      "version": "1.1.0",
+      "version": "1.3.0",
       "endpoints": [
         "time_to_event"
       ],
@@ -382,7 +418,9 @@
       ],
       "modelTier": "data",
       "compatibleVersions": [
-        "1.0.0"
+        "1.0.0",
+        "1.1.0",
+        "1.2.0"
       ]
     },
     "comparator.maic_time_to_event": {
@@ -401,7 +439,7 @@
       ]
     },
     "comparator.aipw": {
-      "version": "1.0.0",
+      "version": "1.2.0",
       "endpoints": [
         "continuous",
         "binary"
@@ -410,10 +448,14 @@
         "closed-form AIPW (Bang & Robins 2005) on WeightIt weights",
         "simulation with a known ATT: double robustness"
       ],
-      "modelTier": "data"
+      "modelTier": "data",
+      "compatibleVersions": [
+        "1.0.0",
+        "1.1.0"
+      ]
     },
     "comparator.covariate_sets": {
-      "version": "1.1.0",
+      "version": "1.2.0",
       "endpoints": [
         "continuous",
         "binary",
@@ -426,11 +468,12 @@
       ],
       "modelTier": "data",
       "compatibleVersions": [
-        "1.0.0"
+        "1.0.0",
+        "1.1.0"
       ]
     },
     "comparator.negative_control": {
-      "version": "1.0.0",
+      "version": "1.1.0",
       "endpoints": [
         "binary",
         "time_to_event"
@@ -440,7 +483,10 @@
         "Lipsitch 2010",
         "Schuemie 2014"
       ],
-      "modelTier": "data"
+      "modelTier": "data",
+      "compatibleVersions": [
+        "1.0.0"
+      ]
     },
     "comparator.tipping_point": {
       "version": "1.0.0",
@@ -517,7 +563,8 @@
     "negative_control_comparator": "comparator.negative_control",
     "tipping_point": "comparator.tipping_point",
     "prognostic_adjustment_comparator": "comparator.prognostic_adjustment",
-    "generate_patients_longitudinal": "patients.longitudinal"
+    "generate_patients_longitudinal": "patients.longitudinal",
+    "population_check": "population.check"
   },
   "patientLevelJobKinds": [
     "fit_survival_model",
@@ -1164,6 +1211,48 @@
             }
           },
           "req": true
+        },
+        "calibration": {
+          "t": "object",
+          "fields": {
+            "outcomeColumn": {
+              "t": "string",
+              "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+              "maxLength": 64,
+              "when": {
+                "path": "model.family",
+                "in": [
+                  "linear",
+                  "logistic"
+                ]
+              },
+              "req": true
+            },
+            "timeColumn": {
+              "t": "string",
+              "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+              "maxLength": 64,
+              "when": {
+                "path": "model.family",
+                "in": [
+                  "cox"
+                ]
+              },
+              "req": true
+            },
+            "statusColumn": {
+              "t": "string",
+              "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+              "maxLength": 64,
+              "when": {
+                "path": "model.family",
+                "in": [
+                  "cox"
+                ]
+              },
+              "req": true
+            }
+          }
         }
       }
     },
@@ -1813,6 +1902,162 @@
           "min": 1,
           "max": 1000,
           "default": 1
+        }
+      }
+    },
+    "population.check": {
+      "t": "object",
+      "fields": {
+        "baselineTable": {
+          "t": "array",
+          "items": {
+            "t": "object",
+            "fields": {
+              "variable": {
+                "t": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                "maxLength": 64,
+                "req": true
+              },
+              "label": {
+                "t": "string",
+                "maxLength": 80
+              },
+              "mean": {
+                "t": "number"
+              },
+              "sd": {
+                "t": "number",
+                "gt": 0
+              },
+              "proportion": {
+                "t": "number",
+                "min": 0,
+                "max": 1
+              },
+              "proportions": {
+                "t": "array",
+                "items": {
+                  "t": "number",
+                  "min": 0,
+                  "max": 1
+                },
+                "min": 2,
+                "max": 50
+              },
+              "levels": {
+                "t": "array",
+                "items": {
+                  "t": "string",
+                  "maxLength": 64
+                },
+                "min": 2,
+                "max": 50
+              },
+              "min": {
+                "t": "number",
+                "nullable": true
+              },
+              "max": {
+                "t": "number",
+                "nullable": true
+              },
+              "distribution": {
+                "t": "string",
+                "values": [
+                  "normal",
+                  "lognormal"
+                ],
+                "default": "normal"
+              }
+            },
+            "exactlyOne": [
+              [
+                "proportion",
+                "mean",
+                "proportions"
+              ]
+            ],
+            "requires": {
+              "mean": [
+                "sd"
+              ],
+              "levels": [
+                "proportions"
+              ]
+            }
+          },
+          "min": 1,
+          "max": 100,
+          "req": true
+        },
+        "generated": {
+          "t": "array",
+          "items": {
+            "t": "object",
+            "fields": {
+              "variable": {
+                "t": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                "maxLength": 64,
+                "req": true
+              },
+              "label": {
+                "t": "string",
+                "maxLength": 80
+              },
+              "kind": {
+                "t": "string",
+                "values": [
+                  "continuous",
+                  "binary",
+                  "categorical"
+                ],
+                "req": true
+              },
+              "n": {
+                "t": "integer",
+                "min": 0
+              },
+              "mean": {
+                "t": "number",
+                "nullable": true
+              },
+              "sd": {
+                "t": "number",
+                "min": 0,
+                "nullable": true
+              },
+              "levels": {
+                "t": "array",
+                "items": {
+                  "t": "object",
+                  "fields": {
+                    "level": {
+                      "t": "string",
+                      "maxLength": 64,
+                      "req": true
+                    },
+                    "p": {
+                      "t": "number",
+                      "min": 0,
+                      "max": 1,
+                      "nullable": true
+                    }
+                  }
+                },
+                "min": 1,
+                "max": 100
+              }
+            }
+          },
+          "min": 1,
+          "max": 200
+        },
+        "referenceN": {
+          "t": "integer",
+          "min": 2,
+          "max": 100000000
         }
       }
     },
@@ -3554,8 +3799,12 @@
             }
           },
           "min": 2,
-          "max": 200,
-          "req": true
+          "max": 200
+        },
+        "initialAtRisk": {
+          "t": "integer",
+          "min": 1,
+          "max": 1000000
         },
         "totalEvents": {
           "t": "number",
@@ -3635,8 +3884,12 @@
                 }
               },
               "min": 2,
-              "max": 200,
-              "req": true
+              "max": 200
+            },
+            "initialAtRisk": {
+              "t": "integer",
+              "min": 1,
+              "max": 1000000
             },
             "totalEvents": {
               "t": "number",
@@ -3646,9 +3899,21 @@
               "t": "number",
               "gt": 0
             }
-          }
+          },
+          "atLeastOne": [
+            [
+              "riskTable",
+              "initialAtRisk"
+            ]
+          ]
         }
-      }
+      },
+      "atLeastOne": [
+        [
+          "riskTable",
+          "initialAtRisk"
+        ]
+      ]
     },
     "comparator.entropy_balance": {
       "t": "object",
@@ -5662,7 +5927,61 @@
                   "time_to_event"
                 ]
               },
-              "req": true
+              "reqWhen": {
+                "path": "design.kind",
+                "in": [
+                  "single_arm"
+                ]
+              }
+            },
+            "treatmentHazardRatios": {
+              "t": "object",
+              "fields": {
+                "breaks": {
+                  "t": "array",
+                  "items": {
+                    "t": "number",
+                    "gt": 0,
+                    "unit": "time units"
+                  },
+                  "min": 1,
+                  "max": 20,
+                  "increasing": true,
+                  "req": true
+                },
+                "ratios": {
+                  "t": "array",
+                  "items": {
+                    "t": "number",
+                    "gt": 0
+                  },
+                  "min": 2,
+                  "max": 21,
+                  "req": true
+                }
+              },
+              "lengthRules": [
+                {
+                  "key": "ratios",
+                  "of": "breaks",
+                  "plus": 1
+                }
+              ],
+              "when": [
+                {
+                  "path": "endpoint.type",
+                  "in": [
+                    "time_to_event"
+                  ]
+                },
+                {
+                  "path": "design.kind",
+                  "in": [
+                    "two_arm_fixed",
+                    "group_sequential"
+                  ]
+                }
+              ]
             },
             "controlMedian": {
               "t": "number",
@@ -5886,6 +6205,27 @@
                   "time_to_event"
                 ]
               }
+            },
+            {
+              "keys": [
+                "hazardRatio",
+                "treatmentHazardRatios"
+              ],
+              "when": [
+                {
+                  "path": "endpoint.type",
+                  "in": [
+                    "time_to_event"
+                  ]
+                },
+                {
+                  "path": "design.kind",
+                  "in": [
+                    "two_arm_fixed",
+                    "group_sequential"
+                  ]
+                }
+              ]
             }
           ],
           "req": true
@@ -5902,6 +6242,7 @@
                 "logistic",
                 "logrank",
                 "rmst",
+                "maxcombo",
                 "exact_binomial",
                 "simon_boundary",
                 "stratified_risk_difference",
@@ -6518,7 +6859,61 @@
                   "time_to_event"
                 ]
               },
-              "req": true
+              "reqWhen": {
+                "path": "design.kind",
+                "in": [
+                  "single_arm"
+                ]
+              }
+            },
+            "treatmentHazardRatios": {
+              "t": "object",
+              "fields": {
+                "breaks": {
+                  "t": "array",
+                  "items": {
+                    "t": "number",
+                    "gt": 0,
+                    "unit": "time units"
+                  },
+                  "min": 1,
+                  "max": 20,
+                  "increasing": true,
+                  "req": true
+                },
+                "ratios": {
+                  "t": "array",
+                  "items": {
+                    "t": "number",
+                    "gt": 0
+                  },
+                  "min": 2,
+                  "max": 21,
+                  "req": true
+                }
+              },
+              "lengthRules": [
+                {
+                  "key": "ratios",
+                  "of": "breaks",
+                  "plus": 1
+                }
+              ],
+              "when": [
+                {
+                  "path": "endpoint.type",
+                  "in": [
+                    "time_to_event"
+                  ]
+                },
+                {
+                  "path": "design.kind",
+                  "in": [
+                    "two_arm_fixed",
+                    "group_sequential"
+                  ]
+                }
+              ]
             },
             "controlMedian": {
               "t": "number",
@@ -6742,6 +7137,27 @@
                   "time_to_event"
                 ]
               }
+            },
+            {
+              "keys": [
+                "hazardRatio",
+                "treatmentHazardRatios"
+              ],
+              "when": [
+                {
+                  "path": "endpoint.type",
+                  "in": [
+                    "time_to_event"
+                  ]
+                },
+                {
+                  "path": "design.kind",
+                  "in": [
+                    "two_arm_fixed",
+                    "group_sequential"
+                  ]
+                }
+              ]
             }
           ],
           "req": true
@@ -6758,6 +7174,7 @@
                 "logistic",
                 "logrank",
                 "rmst",
+                "maxcombo",
                 "exact_binomial",
                 "simon_boundary",
                 "stratified_risk_difference",
@@ -7216,6 +7633,40 @@
               "hazardRatio": {
                 "t": "number",
                 "gt": 0
+              },
+              "treatmentHazardRatios": {
+                "t": "object",
+                "fields": {
+                  "breaks": {
+                    "t": "array",
+                    "items": {
+                      "t": "number",
+                      "gt": 0,
+                      "unit": "time units"
+                    },
+                    "min": 1,
+                    "max": 20,
+                    "increasing": true,
+                    "req": true
+                  },
+                  "ratios": {
+                    "t": "array",
+                    "items": {
+                      "t": "number",
+                      "gt": 0
+                    },
+                    "min": 2,
+                    "max": 21,
+                    "req": true
+                  }
+                },
+                "lengthRules": [
+                  {
+                    "key": "ratios",
+                    "of": "breaks",
+                    "plus": 1
+                  }
+                ]
               },
               "controlMedian": {
                 "t": "number",
@@ -8517,7 +8968,8 @@
     "negative_control_comparator",
     "tipping_point",
     "prognostic_adjustment_comparator",
-    "generate_patients_longitudinal"
+    "generate_patients_longitudinal",
+    "population_check"
   ],
   "endpointTypes": [
     "continuous",
@@ -8716,6 +9168,7 @@
     "replicatesNullMin": 20000,
     "replicatesAltMin": 5000,
     "smdFloor": 0.1,
+    "smdSevere": 0.25,
     "essFloor": 10,
     "coxFewEvents": 10,
     "negativeControlCalibrationMin": 30,
@@ -8727,6 +9180,17 @@
       "events": 0.05,
       "median": 0.05,
       "logHazardRatio": 0.05
+    },
+    "effectDiscount": {
+      "time_to_event": {
+        "planned": 0.66,
+        "observed": 0.72
+      }
+    },
+    "localCalibration": {
+      "slopeEvents": 10,
+      "slopeNonEvents": 10,
+      "slopePairs": 10
     }
   }
 }

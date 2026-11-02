@@ -361,6 +361,8 @@ export const MEASURE_META = Object.freeze({
   required_control: { label: "对照组所需样本量", unit: "例" },
   required_patients: { label: "所需患者数", unit: "例" },
   required_events: { label: "所需事件数", unit: "个" },
+  max_patients: { label: "最多患者数", unit: "例" },
+  max_events: { label: "最多事件数", unit: "个" },
   event_probability: { label: "事件发生概率", unit: "%", percent: true },
   last_patient_in_months: { label: "末例入组", unit: "个月" },
   target_events_months: { label: "达到目标事件数", unit: "个月" },
@@ -756,13 +758,31 @@ export function plainText(name, value) {
  * true now」; this answers 「what did this object produce」.
  * @param {Record<string, any>} bundle @returns {readonly Record<string, any>[]}
  */
+/**
+ * A treatment-arm hazard ratio that changes over time, in words (D1): "0–6 个月 1；6 个月后 0.6". Null when the truth states none.
+ * @param {unknown} raw `truth.treatmentHazardRatios` @param {string} [unit] the unit word after a number ("个月")
+ * @returns {string | null}
+ */
+export function hazardLawWords(raw, unit = "个月") {
+  const law = object(raw);
+  const breaks = list(law.breaks).map(Number);
+  const ratios = list(law.ratios).map(Number);
+  if (!breaks.length || ratios.length !== breaks.length + 1 || [...breaks, ...ratios].some((value) => !Number.isFinite(value))) return null;
+  const parts = ratios.map((ratio, index) => {
+    if (index === 0) return `0–${breaks[0]} ${unit} ${ratio}`;
+    if (index === breaks.length) return `${breaks[index - 1]} ${unit}后 ${ratio}`;
+    return `${breaks[index - 1]}–${breaks[index]} ${unit} ${ratio}`;
+  });
+  return parts.join("；");
+}
+
 export const allResultsOf = (bundle) => bundle.allResults ?? bundle.results ?? [];
 
 /** How an engine method is named on the model library's method rows. */
 export const METHOD_LABELS = Object.freeze(/** @type {Record<string, string>} */ ({
   "model.survival_fit": "拟合人群生存模型", "model.prognostic_apply": "应用已发表的预后模型",
   "profile.snapshot": "数据快照画像", "cohort.build": "构建队列", "population.scenario": "情景人群生成", "population.literature": "文献人群",
-  "population.synthpop": "经验合成人群", "population.quality": "人群质量报告", "patients.continuous": "虚拟患者（连续终点）",
+  "population.synthpop": "经验合成人群", "population.quality": "人群质量报告", "population.check": "与第二份基线表对照", "patients.continuous": "虚拟患者（连续终点）",
   "patients.binary": "虚拟患者（二分类终点）", "patients.time_to_event": "虚拟患者（事件时间终点）", "patients.longitudinal": "虚拟患者（纵向轨迹）", "evidence.pool": "证据合并",
   "evidence.reconstruct_km": "生存曲线重建（Guyot）", "comparator.entropy_balance": "熵平衡加权", "comparator.propensity_weight": "倾向评分加权",
   "comparator.rmst": "RMST 比较", "comparator.maic": "匹配调整间接比较", "comparator.evalue": "E 值", "comparator.map_prior": "MAP 先验",

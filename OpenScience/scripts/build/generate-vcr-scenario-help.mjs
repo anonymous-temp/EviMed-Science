@@ -24,7 +24,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { VCR_SCENARIO_EXAMPLES, validateScenario, vcrScenarioHelp } from "@evimed/domain";
+import { VCR_MINIMAL_TEMPLATES, VCR_SCENARIO_EXAMPLES, validateScenario, vcrScenarioHelp } from "@evimed/domain";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 
@@ -56,6 +56,14 @@ export function renderVcrScenarioHelp() {
       const issues = validateScenario(method, example.scenario);
       if (issues.length) {
         throw new Error(`the example "${example.label}" of ${method} is refused by the validator: ${issues.map((issue) => `${issue.code}@${issue.field}`).join(", ")}`);
+      }
+    }
+  }
+  for (const [method, templates] of Object.entries(VCR_MINIMAL_TEMPLATES)) {
+    for (const template of templates) {
+      const issues = validateScenario(method, template.scenario);
+      if (issues.length) {
+        throw new Error(`the template "${template.name}" of ${method} is refused by the validator: ${issues.map((issue) => `${issue.code}@${issue.field}`).join(", ")}`);
       }
     }
   }

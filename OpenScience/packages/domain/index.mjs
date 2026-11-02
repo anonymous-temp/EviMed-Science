@@ -1806,7 +1806,7 @@ export { shareNoticeHref } from './src/shareNotice.mjs';
 
 export { validAgendaDate, validateAgendaSchedule, normalizeAgendaSchedule, agendaLocalDate, DISPLAY_TIME_ZONE, agendaDueOccurrence, agendaNextOccurrence, AGENDA_WEEKDAY_WORDS, describeAgendaSchedule, agendaZoneName, agendaInstantText } from "./src/agendaSchedule.mjs";
 
-// vcrVocabulary — 135 exports: 「虚拟临床研究」's closed vocabularies (nine value sources, three scientific
+// vcrVocabulary — 138 exports: 「虚拟临床研究」's closed vocabularies (nine value sources, three scientific
 // conclusions, review states, missing reasons, intended uses, model risk and
 // the study's seven steps and tabs)
 export {
@@ -1851,6 +1851,7 @@ export {
   VCR_ESTIMANDS,
   VCR_ESTIMAND_LABELS_ZH,
   VCR_EXPORT_KINDS,
+  VCR_RUN_EXPORT_KINDS,
   VCR_FIELD_ROLES,
   VCR_EXPORT_KIND_LABELS_ZH,
   VCR_FOLLOWUP_KINDS,
@@ -1873,6 +1874,7 @@ export {
   VCR_MIN_CELL_SIZE,
   VCR_MISSING_REASONS,
   VCR_MISSING_REASON_LABELS_ZH,
+  VCR_MATCHING_GAP_REASON_LABELS_ZH,
   VCR_MODEL_RISKS,
   VCR_MODEL_RISK_EVIDENCE,
   VCR_MODEL_RISK_LABELS_ZH,
@@ -1889,16 +1891,27 @@ export {
   VCR_NOT_ESTIMABLE_RULES,
   VCR_NOT_ESTIMABLE_RULE_LABELS_ZH,
   VCR_OPTIONAL_COUNT_KEYS,
+  VCR_PEOPLE_COUNT_BLOCK_FIELDS,
   VCR_PEOPLE_COUNT_FIELDS,
+  VCR_PEOPLE_COUNT_LINKS,
   VCR_PEOPLE_COUNT_MAP_KEYS,
   VCR_PEOPLE_COUNT_MEASURES,
   VCR_PEOPLE_COUNT_SCALAR_FIELDS,
+  VCR_PEOPLE_COUNT_WITHHELD_BLOCKS,
+  VCR_PEOPLE_DERIVED_MEASURES,
   VCR_PERFORMANCE_MEASURES,
   VCR_PERFORMANCE_MEASURE_LABELS_ZH,
   VCR_POOLING_METHODS,
   VCR_POOLING_METHOD_LABELS_ZH,
   VCR_POPULATION_KINDS,
   VCR_POPULATION_KIND_LABELS_ZH,
+  VCR_PREMISES_DECISIVE_MAX,
+  VCR_EFFECT_DISCOUNT,
+  VCR_LOCAL_CALIBRATION_MIN,
+  VCR_EFFECT_DISCOUNT_LABEL_ZH,
+  VCR_EFFECT_DISCOUNT_LIMITS_ZH,
+  VCR_PREMISE_SOURCES,
+  VCR_PREMISE_SOURCE_LABELS_ZH,
   VCR_PROGNOSTIC_QUALIFICATION,
   VCR_PROGNOSTIC_QUALIFICATION_LABEL_ZH,
   VCR_QUALITY_CATEGORIES,
@@ -1908,8 +1921,11 @@ export {
   VCR_REGISTRY_ALLOCATION_LABELS_ZH,
   VCR_REGISTRY_MASKING_LABELS_ZH,
   VCR_REGISTRY_PHASE_LABELS_ZH,
+  VCR_CHECK_STAGES,
   VCR_REPLICATES_ALT_MIN,
   VCR_REPLICATES_NULL_MIN,
+  VCR_REPLICATES_NULL_MIN_BORROWING,
+  VCR_REPLICATES_NULL_MIN_BY_USE,
   VCR_REVIEW_KINDS,
   VCR_REVIEWER_KINDS,
   VCR_REVIEW_LIFECYCLE,
@@ -1921,6 +1937,10 @@ export {
   VCR_ROLE_ABILITIES,
   VCR_ROUTE_MIN_TIER,
   VCR_SMD_FLOOR,
+  VCR_SMD_SEVERE,
+  VCR_BALANCE_BANDS,
+  VCR_BALANCE_BAND_LABELS_ZH,
+  vcrBalanceBand,
   VCR_SOURCE_FORMATS,
   VCR_SPENDING_FUNCTIONS,
   VCR_SPENDING_FUNCTION_LABELS_ZH,
@@ -1939,14 +1959,19 @@ export {
   VCR_STUDY_STATUSES,
   VCR_STUDY_STATUS_LABELS_ZH,
   VCR_USER_STUDY_STATUSES,
+  VCR_CONVERSATION_STUDY_NAME,
+  VCR_CONVERSATION_TASK_NAMES_ZH,
   VCR_DRAFT_STUDY_NAME,
   VCR_LEGACY_DEFAULT_STUDY_NAME,
   VCR_STUDY_NAME_FROM_QUESTION_MAX,
   VCR_SUPPORT_CEILING,
+  vcrNullReplicateFloor,
   VCR_SYNTHETIC_USES,
   VCR_SYNTHETIC_USE_LABELS_ZH,
   VCR_TABS,
   VCR_TAB_LABELS_ZH,
+  VCR_RESULT_KIND_TABS,
+  VCR_MATCHING_WRITE_WHATS,
   VCR_TIME_KINDS,
   VCR_TIME_KIND_LABELS_ZH,
   VCR_TRIAL_DESIGNS,
@@ -1969,15 +1994,44 @@ export {
   vcrKnown,
   vcrWeakestSource,
   VCR_STEP_ACTION_LABELS_ZH,
-  VCR_NEXT_REASONS,
-  VCR_NEXT_REASON_LABELS_ZH,
   VCR_WAITING_FOR_KINDS,
   VCR_RUN_PLACEMENTS,
   VCR_JOB_KIND_STEPS,
   vcrVisibleQuestion,
 } from './src/vcrVocabulary.mjs'
-// vcrNext — which step of a study is the next one: one pure function for the page, the route and every sentence that names "next"
-export { vcrNext } from './src/vcrNext.mjs'
+export {
+  VCR_APPLICABILITY_LIMITS,
+  VCR_APPLICABILITY_LIMIT_LABELS_ZH,
+  VCR_APPLICABILITY_NOTE_MAX,
+  VCR_APPLICABILITY_STATES,
+  VCR_APPLICABILITY_STATE_LABELS_ZH,
+  VCR_BENCHMARK_ONLY_BASES,
+  VCR_BENCHMARK_ONLY_BASIS_LABELS_ZH,
+  VCR_BENCHMARK_ONLY_USE_CEILING,
+  VCR_COMPARISON_CLAIMS,
+  VCR_COMPARISON_CLAIM_LABELS_ZH,
+  VCR_EFFECT_CARD_KEY_PATTERNS,
+  VCR_EFFECT_ROLES,
+  VCR_EFFECT_ROLE_LABELS_ZH,
+  VCR_RESULT_CLASSES,
+  VCR_RESULT_CLASS_LABELS_ZH,
+  VCR_TARGET_TRIAL_COMPONENTS,
+  VCR_TARGET_TRIAL_COMPONENT_LABELS_ZH,
+  VCR_TARGET_TRIAL_STATUSES,
+  VCR_TARGET_TRIAL_STATUS_LABELS_ZH,
+  VCR_TARGET_TRIAL_TEXT_MAX,
+  vcrApplicability,
+  vcrApplicabilityLimits,
+  vcrBalanceSentence,
+  vcrBalanceVerdictOf,
+  vcrBenchmarkBasis,
+  vcrIsEffectCardKey,
+  vcrResultClass,
+  vcrResultLimits,
+  vcrTargetTrial,
+  vcrTargetTrialEngineItems,
+  vcrTargetTrialStored,
+} from './src/vcrComparability.mjs'
 
 // vcrModelAssessment — 「虚拟临床研究」's model assessment record (ICH M15 Appendix 1: question of interest, context
 // of use, model influence, consequence of a wrong decision, the model risk derived from the two, model impact,
@@ -2018,9 +2072,12 @@ export {
   VCR_HOSTED_MODEL_INTERFACES,
   VCR_MODEL_INTERFACES,
   VCR_MODEL_INTERFACE_LABELS_ZH,
+  VCR_MODEL_TRIPOD_FIELDS,
+  VCR_MODEL_TRIPOD_MAX_CHARS,
   vcrEventHistoryScopeIssues,
   vcrModelCardIssues,
   vcrModelInterfaceOf,
+  vcrModelTripod,
 } from './src/vcrModelInterfaces.mjs'
 
 // vcrTimeUnits — the one closed table of time units (the model cards' horizon table), the spellings a source writes them in, and
@@ -2068,13 +2125,14 @@ export {
   suppressForModel,
 } from './src/vcrSuppression.mjs'
 
-// vcrIdentifierSuggestions — 5 exports: the identifiers of closed formats in a patient record (resident identity number with its
+// vcrIdentifierSuggestions — 6 exports: the identifiers of closed formats in a patient record (resident identity number with its
 // checksum, mobile number, record number after its label, date) as spans a reviewer may accept; never applied, no date shifted
 export {
   VCR_IDENTIFIER_FORMATS,
   VCR_IDENTIFIER_KINDS,
   VCR_IDENTIFIER_SUGGESTION_LIMIT,
   isResidentIdNumber,
+  maskIdentifierSpans,
   suggestIdentifierSpans,
 } from './src/vcrIdentifierSuggestions.mjs'
 
@@ -2176,14 +2234,17 @@ export {
   canonicalScenarioJson,
   mcseOf,
   replicateFloor,
+  replicatePlan,
   replicatesForMcse,
   validateCallerInputs,
   validateCounts,
   validateEngineJob,
   validateEngineResult,
+  vcrBorrowsExternally,
   vcrIsNullScenario,
   vcrLocationIsValid,
   vcrReplicateFloorFor,
+  vcrReplicatePlanFor,
   vcrResultOutputPayload,
 } from './src/vcrEngineJob.mjs'
 
@@ -2193,18 +2254,23 @@ export {
   VCR_SINGLE_ARM_ANALYSIS_METHODS,
   VCR_TWO_ARM_ANALYSIS_METHODS,
   validateScenario,
+  vcrAppliedDefaults,
+  vcrNoClosedFormFields,
+  vcrNullTruth,
   whenHolds,
 } from './src/vcrScenarioSchemas.mjs'
 
-// vcrScenarioHelp — 7 exports: what a model is given to write a scenario from, rendered from the schemas above
+// vcrScenarioHelp — 9 exports: what a model is given to write a scenario from, rendered from the schemas above
 // (`runtime/mcp/evimed-research/vcr_scenario_help.json` is generated from it), and the keys read inside a node
 export {
   VCR_RUN_SCENARIO_FIELDS,
+  VCR_MINIMAL_TEMPLATES,
   VCR_SCENARIO_EXAMPLES,
   VCR_SCENARIO_HELP_VERSION,
   vcrScenarioChildKeys,
   vcrScenarioHelp,
   vcrScenarioParentOf,
+  vcrRowRole,
   vcrScenarioRows,
 } from './src/vcrScenarioHelp.mjs'
 
@@ -2635,8 +2701,25 @@ export {
   CLINICAL_UNIT_VERSION,
   clinicalUnitToken,
   clinicalUnitInQuote,
+  clinicalUnitPrintedBesideValue,
+  clinicalConventionalUnit,
+  clinicalNumericValue,
   convertClinicalUnit,
 } from './src/clinicalUnits.mjs'
+
+export {
+  VCR_MATCH_BATCH_SCHEMA,
+  VCR_MATCH_BATCH_METHODS,
+  VCR_MATCH_BATCH_JOBS,
+  VCR_SLOW_LOCAL_METHODS,
+  VCR_MATCH_BATCH_LIMITS,
+  VCR_MATCH_BATCH_DEFAULT_MODEL,
+  validateMatchBatchScenario,
+  matchBatchUnitKey,
+  planMatchExtraction,
+  matchBatchStatement,
+  acceptExtractedFacts,
+} from './src/vcrMatchBatch.mjs'
 
 export { VCR_LONGITUDINAL_SCHEMA, VCR_LONGITUDINAL_ERROR_CODES, VCR_LONGITUDINAL_SCHEMAS, VCR_LONGITUDINAL_METHODS, VCR_LONGITUDINAL_JOBS, VCR_PREDICTION_TYPES,
   VCR_FORECAST_UNCERTAINTY, VCR_LONGITUDINAL_LIMITS, longitudinalNumber, longitudinalInstant, longitudinalMean,

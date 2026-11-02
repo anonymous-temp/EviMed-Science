@@ -50,7 +50,7 @@ import { ComparatorTab } from "@/components/vcr/tabs/ComparatorTab";
 import { TrialTab } from "@/components/vcr/tabs/TrialTab";
 import { MatchingTab } from "@/components/vcr/tabs/MatchingTab";
 import { DataTab } from "@/components/vcr/tabs/DataTab";
-import { resolveVcrTab, VCR_HOME_PATH, vcrStepPath, vcrTabPath } from "@/components/vcr/vcrTabs";
+import { landingTab, resolveVcrTab, VCR_HOME_PATH, vcrStepPath, vcrTabPath } from "@/components/vcr/vcrTabs";
 
 /**
  * What a tab is given: the study, the id its routes are addressed by, and how to read the study again after a change that moves the
@@ -177,6 +177,22 @@ function StudyView({ studyId, study, view, tab, reload, refreshError }: { studyI
   const can = (ability: string) => study.abilities.includes(ability);
 
   // --- the shell moves to the study's project, once ------------------------------------------------------------------
+  // --- where a study opens: on what it holds, once -----------------------------------------------------------------------
+  // An address that names no tab opens the study's overview. A study that was never asked a question and defined nothing -- a matching
+  // done in a conversation -- has nothing to say there, so it opens on the first tab that holds its results instead. Once per visit:
+  // the reader who then presses 总览 is not sent back, and an address that names a tab, the conversation or a package is honoured.
+  const location = useLocation();
+  const landed = useRef(false);
+  useEffect(() => {
+    if (landed.current) return;
+    landed.current = true;
+    if (view !== "overview" || params.has("package")) return;
+    const to = landingTab(study);
+    if (to) navigate(`${vcrTabPath(studyId, to)}${location.search}`, { replace: true });
+    // One look, at the first paint: a study read later does not move the reader.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   const currentProjectId = useProjectStore((state) => state.currentId);
   const [unreachable, setUnreachable] = useState(false);
   const moving = useRef(false);

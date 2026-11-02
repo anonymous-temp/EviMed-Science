@@ -19,7 +19,7 @@ import {
   evaluateRequirement, evidenceGaps, factsVisibleAt, frozenAsOf, interRaterAgreement, kleeneAnd, kleeneNot, kleeneOr,
   labelClinicalPriority, matchingAssessmentDocument, matchingEvaluationReport, matchingReportDiff, patientMatchingMetrics,
   pendingReviewExclusions, requiresLanguageJudgment, runMatchingEvaluation,
-  summarizeEligibility, verifyFactEvidence, windowStart, withinWindow, VCR_FACT_VOID_REASONS,
+  summarizeEligibility, verifyFactEvidence, settleFactEvidence, windowStart, withinWindow, VCR_FACT_VOID_REASONS,
 } from "../src/vcrMatching.mjs";
 import { clinicalFactView, validateCapabilityManifest, vcrMatchingFindings } from "@evimed/domain";
 
@@ -1100,4 +1100,101 @@ test('a unit the quote prints beside another number does not support this fact\'
     facts: [guessed], documents: source.documents, asOf: AS_OF });
   assert.equal(assessed.summary, 'insufficient_evidence');
   assert.deepEqual(assessed.voidedFacts, [{ factId: 'g', variable: 'glucose', reason: 'unit_not_in_span' }]);
+});
+
+// ---------------------------------------------------------------------------
+// A unit the quotation does not print drops the unit, not the fact; a bare number of a one-unit variable is read in it (settleFactEvidence)
+// ---------------------------------------------------------------------------
+
+test("settleFactEvidence keeps the fact and drops a unit the quotation does not print, and reads a bare HbA1c in percent as a read unit", () => {
+  const text = "Creatinine 1.1 today. HgbA1c 7.4 last month. HbA1c 53 mmol/mol. HbA1c 53 in March.";
+  const documents = { d: { text } };
+  /** @param {string} quote @param {Record<string, any>} over */
+  const fact = (quote, over) => ({ id: "f", polarity: "affirmed", extractedBy: "model", provenance: { factSchema: 2 }, surface: String(over.value),
+    source: { documentId: "d", start: text.indexOf(quote), end: text.indexOf(quote) + quote.length, quote }, ...over });
+
+  // The strict check stays strict: a claimed unit that is not beside the number is refused by it.
+  assert.deepEqual(verifyFactEvidence(fact("Creatinine 1.1 today.", { variable: "creatinine", value: 1.1, unit: "mg/dL" }), { documents }), { ok: false, reason: "unit_not_in_span" });
+  const dropped = settleFactEvidence(fact("Creatinine 1.1 today.", { variable: "creatinine", value: 1.1, unit: "mg/dL" }), { documents });
+  assert.equal(dropped.ok, true);
+  assert.deepEqual(dropped.ok && [dropped.fact.value, dropped.fact.unit, dropped.notes], [1.1, null, ["unit_dropped"]]);
+
+  const read = settleFactEvidence(fact("HgbA1c 7.4 last month.", { variable: "hba1c", value: 7.4, unit: "%" }), { documents });
+  assert.deepEqual(read.ok && [read.fact.unit, read.fact.source.unitBasis, read.notes], ["%", "conventional", ["unit_dropped", "unit_read_by_convention"]]);
+  // The evaluator checks the basis again whenever it re-reads the fact: the table must give this variable that unit, the number must be bare.
+  assert.deepEqual(verifyFactEvidence(read.ok ? read.fact : null, { documents }), { ok: true, reason: null });
+  const forged = (/** @type {Record<string, any>} */ over) => verifyFactEvidence({ ...(read.ok ? read.fact : {}), ...over }, { documents });
+  assert.deepEqual(forged({ variable: "creatinine" }), { ok: false, reason: "unit_basis_unsupported" }, "a variable the table does not list");
+  assert.deepEqual(forged({ unit: "mmol/mol" }), { ok: false, reason: "unit_basis_unsupported" }, "a unit the table does not give");
+  assert.deepEqual(forged({ value: 53, surface: "53", source: { ...fact("HbA1c 53 in March.", {}).source, unitBasis: "conventional" } }), { ok: false, reason: "unit_basis_unsupported" }, "a number outside the printed range");
+  assert.deepEqual(forged({ value: 53, unit: "%", surface: "53", source: { ...fact("HbA1c 53 mmol/mol.", {}).source, unitBasis: "conventional" } }), { ok: false, reason: "unit_basis_unsupported" }, "a number with its own unit printed beside it");
+
+  assert.deepEqual(settleFactEvidence(fact("HbA1c 53 mmol/mol.", { variable: "hba1c", value: 53, unit: "mmol/mol" }), { documents }).ok, true);
+  const outside = settleFactEvidence(fact("HbA1c 53 in March.", { variable: "hba1c", value: 53 }), { documents });
+  assert.deepEqual(outside.ok && [outside.fact.unit ?? null, outside.fact.source.unitBasis ?? null, outside.notes], [null, null, []]);
+  // What was never printed is still refused: a number the quotation does not hold.
+  assert.deepEqual(settleFactEvidence(fact("HgbA1c 7.4 last month.", { variable: "hba1c", value: 7.9, unit: "%" }), { documents }), { ok: false, reason: "value_not_in_span" });
+});
+
+test("P1-3 a value that parses as a number is held to the quotation as one, in the verifier and the settler, and stored as the number", () => {
+  const text = "HbA1c 8.5% at admission. Creatinine 1.1 mg/dL.";
+  const documents = { d: { text } };
+  /** @param {string} quote @param {Record<string, any>} over */
+  const fact = (quote, over) => ({ id: "f", polarity: "affirmed", extractedBy: "model", provenance: { factSchema: 2 }, surface: "HbA1c",
+    source: { documentId: "d", start: text.indexOf(quote), end: text.indexOf(quote) + quote.length, quote }, variable: "hba1c", ...over });
+  // The probe of the review: the same fact with the number 9.9 was refused value_not_in_span, and with the string "9.9" it passed.
+  for (const value of ["9.9", " 9.9 ", 9.9]) {
+    assert.deepEqual(verifyFactEvidence(fact("HbA1c 8.5%", { value }), { documents }), { ok: false, reason: "value_not_in_span" }, JSON.stringify(value));
+    assert.deepEqual(settleFactEvidence(fact("HbA1c 8.5%", { value, unit: "%" }), { documents }), { ok: false, reason: "value_not_in_span" }, JSON.stringify(value));
+  }
+  for (const value of ["8.5", 8.5]) {
+    assert.deepEqual(verifyFactEvidence(fact("HbA1c 8.5%", { value, unit: "%" }), { documents }), { ok: true, reason: null }, JSON.stringify(value));
+    const settled = settleFactEvidence(fact("HbA1c 8.5%", { value, unit: "%" }), { documents });
+    assert.equal(settled.ok && settled.fact.value, 8.5);
+    assert.equal(typeof (settled.ok && settled.fact.value), "number", "what is kept is what was checked");
+  }
+  // The conventional unit is read for the numeric string the same way as for the number.
+  const bare = settleFactEvidence(fact("HbA1c 8.5%", { value: "8.5" }), { documents });
+  assert.deepEqual(bare.ok && [bare.fact.value, bare.fact.unit ?? null], [8.5, null], "a bare percent sign is the printed unit: nothing is read by convention");
+  // The evaluator's read and the verifier's are the same read: what compares as 9.9 is what is held to the quotation as 9.9.
+  const criterion = { id: "c", kind: "inclusion", criterionType: "lab", requirement: { op: "compare", variable: "hba1c", comparator: "lte", value: 9, unit: "%" } };
+  const as = (/** @type {unknown} */ value) => evaluateCriterion(criterion, { facts: [{ ...fact("HbA1c 8.5%", { value, unit: "%" }), id: "f", variable: "hba1c", occurredAt: "2026-01-01T00:00:00Z", visibleAt: "2026-01-01T00:00:00Z" }], asOf: Date.parse(AS_OF) }).state;
+  assert.equal(as("9.9"), as(9.9), "a numeric string compares as the number");
+  // A string with a unit, a separator or a word is text: nothing is held to the numerals, and the evaluator does not compare it as a number.
+  assert.deepEqual(verifyFactEvidence(fact("HbA1c 8.5%", { value: "8.5%", unit: "%" }), { documents }), { ok: true, reason: null });
+});
+
+test("settleFactEvidence keeps the fact and drops a date nothing printed, each date field on its own, and stores no date that was not shown", () => {
+  const text = "Record date: 2100-03-01\n\nTakes aspirin daily.\nPatient age 19; prior MI. Dataset 2100.";
+  const documents = { d: { text } };
+  const quote = "Takes aspirin daily.";
+  const at = text.indexOf(quote);
+  /** @param {Record<string, any>} over */
+  const fact = (over) => ({ id: "f", variable: "aspirin", polarity: "affirmed", extractedBy: "model", provenance: { factSchema: 2 }, surface: "aspirin",
+    source: { documentId: "d", start: at, end: at + quote.length, quote, dateQuote: { start: 0, end: 23, quote: "Record date: 2100-03-01" } }, ...over });
+
+  // The strict check is unchanged: it is what the evaluator asks again of a stored fact.
+  assert.deepEqual(verifyFactEvidence(fact({ occurredAt: "2100-04-01" }), { documents }), { ok: false, reason: "date_not_in_span" });
+  const dropped = settleFactEvidence(fact({ occurredAt: "2100-04-01", dateSurface: "2100-04-01" }), { documents });
+  assert.equal(dropped.ok, true);
+  assert.deepEqual(dropped.ok && [dropped.fact.occurredAt, dropped.fact.recordedAt ?? null, dropped.fact.dateSurface, dropped.fact.source.dateQuote, dropped.notes, dropped.droppedDates],
+    [null, null, null, undefined, ["date_dropped"], ["occurredAt", "dateSurface"]]);
+  assert.equal(dropped.ok && verifyFactEvidence(dropped.fact, { documents }).ok, true, "what is stored passes the strict check");
+
+  // A date the second quotation shows stays, beside one that nothing shows.
+  const mixed = settleFactEvidence(fact({ occurredAt: "2100-03-01", recordedAt: "2100-06-30", dateSurface: "2100-03-02" }), { documents });
+  assert.deepEqual(mixed.ok && [mixed.fact.occurredAt, mixed.fact.recordedAt, mixed.fact.dateSurface, mixed.fact.source.dateQuote?.quote, mixed.droppedDates],
+    ["2100-03-01", null, null, "Record date: 2100-03-01", ["recordedAt", "dateSurface"]]);
+  const kept = settleFactEvidence(fact({ occurredAt: "2100-03-01", dateSurface: "2100-03-01" }), { documents });
+  assert.deepEqual(kept.ok && [kept.fact.occurredAt, kept.notes], ["2100-03-01", []]);
+
+  // The 10-29 cases, one by one: the date is absent, the fact is there.
+  for (const date of ["2081-01-01", "2100-01-01", "2100-06-30", "2026-10-29"]) {
+    const result = settleFactEvidence(fact({ occurredAt: date, source: { ...fact({}).source, dateQuote: undefined } }), { documents });
+    assert.deepEqual(result.ok && [result.fact.occurredAt, result.fact.variable], [null, "aspirin"], date);
+  }
+  // A fact whose number or quotation the document does not hold is still refused, and so is an interval the quotation does not bound.
+  assert.deepEqual(settleFactEvidence(fact({ value: 5, occurredAt: "2100-03-01" }), { documents }), { ok: false, reason: "value_not_in_span" });
+  const interval = { schema: 1, assertion: "negated", experiencer: "patient", medication: { state: "unknown", absenceScope: "interval" }, occurredInterval: { start: "2100-02-01", end: "2100-03-01" } };
+  assert.deepEqual(settleFactEvidence(fact({ polarity: "negated", clinical: interval }), { documents, anyPolarity: true }), { ok: false, reason: "date_not_in_span" });
 });

@@ -8,6 +8,10 @@ import { intervalLabel } from "../vcrText";
 /**
  * What the study set, what the table holds and what the evidence allows — one line each (R19, plan §5.3; audit B §4.5 `CalibrationStrip`).
  *
+ * The strip is called 「与输入对照」, not a calibration and not a validation (remediation plan D2): the generated table is held against the
+ * numbers it was generated from, which says the generator did what it was told and nothing about whether the numbers describe any
+ * real people. The identifiers keep the older word because the server's payload (`calibration`) and its fixtures do.
+ *
  * Every number is the server's (`vcrCalibration.mjs`: Kaplan–Meier, Cox and means computed from the table by code, the interval
  * the card's own); the page does not work out a difference, an interval or a verdict. A row whose generated value is outside the
  * evidence's interval carries ⚠ — a mark for the reader, never a pass or a fail — and a row with no interval carries nothing:
@@ -19,12 +23,13 @@ import { intervalLabel } from "../vcrText";
 export function CalibrationStrip({ calibration, id }: { calibration: VcrCalibration; id?: string }) {
   const outside = calibration.rows.filter((row) => row.status === "outside").length;
   const intervals = calibration.rows.filter((row) => row.status !== "unknown").length;
-  const title = outside > 0
+  // What it found rides at the heading's end; the heading says what the strip is, which is a comparison with the inputs.
+  const found = outside > 0
     ? `${outside} 项生成值偏出证据区间`
-    : intervals > 0 && intervals === calibration.rows.length ? "生成值都在证据区间内" : "设定、生成值与证据区间";
+    : intervals > 0 && intervals === calibration.rows.length ? "生成值都在证据区间内" : null;
   return (
     <div id={id} data-vcr-calibration="" tabIndex={-1} className="outline-none">
-      <ChartCard title={title}>
+      <ChartCard title="与输入对照" meta={found}>
         <table className="w-full border-separate border-spacing-0 text-ui">
           <caption className="sr-only">设定的数、生成的数和证据区间</caption>
           <thead>

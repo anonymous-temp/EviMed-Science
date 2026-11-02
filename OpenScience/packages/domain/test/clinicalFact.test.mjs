@@ -1,6 +1,7 @@
+import { readFileSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { CLINICAL_FACT_CONTRACT, FACT_EVIDENCE_RULE, clinicalFactIssues, clinicalFactPolarity, clinicalFactView, clinicalSemanticFields, clinicalTerminologyContext, clinicalUnitToken, clinicalUnitInQuote, convertClinicalUnit } from '../index.mjs';
+import { CLINICAL_FACT_CONTRACT, FACT_EVIDENCE_RULE, clinicalFactIssues, clinicalFactPolarity, clinicalFactView, clinicalSemanticFields, clinicalTerminologyContext, clinicalUnitToken, clinicalUnitInQuote, clinicalUnitPrintedBesideValue, clinicalConventionalUnit, convertClinicalUnit } from '../index.mjs';
 const clinical = { schema: 1, assertion: 'affirmed', experiencer: 'patient' };
 /** @param {string} id @param {number} value @param {any} extra */
 const fact = (id, value, extra = {}) => ({ id, subjectKey: 'p1', variable: 'ecog', value, ...extra,
@@ -173,4 +174,36 @@ test('pack grounding follows exact nested criteria and exposes only versioned de
   const metadata=clinicalSemanticFields([fact('f1',7,{source:{sourceHash:'a'.repeat(64)},unit:'score'})]);
   assert.deepEqual(metadata[0].sourceVersions,['a'.repeat(64)]);
   assert.equal(metadata[0].basis,'model_inferred');assert.equal('value' in metadata[0],false);
+});
+
+test('a unit is judged as printed: a word right after it is another word, a space is not (7.2 % this week)', () => {
+  for (const quote of ['Last hemoglobin A1c 7.2 % this week.', 'Last hemoglobin A1c 7.2 %.', 'A1c 7.2% on 5/09', 'A1c 7.2 %, stable', 'A1c 7.2 (%)']) {
+    assert.equal(clinicalUnitInQuote('%', quote, false, 7.2), true, quote);
+  }
+  assert.equal(clinicalUnitInQuote('%', 'A1c 7.2', false, 7.2), false);
+  assert.equal(clinicalUnitInQuote('mg/dL', 'creatinine 1.2 mg/dL daily', false, 1.2), true);
+  assert.equal(clinicalUnitInQuote('mg/dL', 'creatinine 1.2 mg/dL\ndaily', false, 1.2), true);
+  assert.equal(clinicalUnitInQuote('mg/dL', 'creatinine 1.2 mg/dLx', false, 1.2), false, 'a letter right after the unit makes it another word');
+  assert.equal(clinicalUnitInQuote('mg/dL', 'creatinine 1.2 mg/dL daily'), true, 'asked without a value, the same boundary');
+  assert.equal(clinicalUnitInQuote('mg/dL', 'creatinine mg/dLx'), false);
+  assert.equal(clinicalUnitInQuote('umol/L', '肌酐 98 μmol / L 偏高', false, 98), true, 'whitespace inside the unit is still allowed');
+});
+
+test('a bare number reads in the one conventional unit of its variable, from a closed table, and only inside the range the table prints', () => {
+  assert.deepEqual(clinicalConventionalUnit('hba1c', 7.2)?.unit, '%');
+  assert.equal(clinicalConventionalUnit('hba1c', 53), null, 'above the range: the IFCC unit, not a percentage');
+  assert.equal(clinicalConventionalUnit('hba1c', 2), null);
+  assert.equal(clinicalConventionalUnit('hba1c', '7.2'), null, 'a number, not a string');
+  for (const variable of ['creatinine', 'glucose', 'hemoglobin', 'bilirubin', 'age', 'unknown_variable']) assert.equal(clinicalConventionalUnit(variable, 1.2), null, `${variable} has more than one unit or none in the table`);
+  assert.equal(clinicalUnitPrintedBesideValue('A1c 7.2 mmol/mol', 7.2), true);
+  assert.equal(clinicalUnitPrintedBesideValue('A1c 7.2 %', 7.2), true);
+  assert.equal(clinicalUnitPrintedBesideValue('A1c 7.2 (11/2086)', 7.2), false);
+  assert.equal(clinicalUnitPrintedBesideValue('HbA1c 7.2 last month', 7.2), false);
+  // The table's own rule: an analyte is listed only when no conversion row names it (such an analyte has two units).
+  const table = JSON.parse(readFileSync(new URL('../src/clinical-units.json', import.meta.url), 'utf8'));
+  const converted = new Set(table.conversions.map((/** @type {{ analyte: string }} */ row) => row.analyte));
+  for (const row of table.conventional) {
+    assert.equal(converted.has(row.analyte), false, row.analyte);
+    assert.ok(row.printed.min < row.printed.max && typeof row.unit === 'string' && row.basis.length > 20, row.analyte);
+  }
 });

@@ -15,14 +15,27 @@ function projected(tool, operation, actual, body) {
     : {action:actual.action,jobId:actual.jobId};
   if (tool !== `vcr_${operation}`) throw unavailable();
   const keys = operation === 'read' ? ['what', 'filter'] : operation === 'write' ? ['what', 'data', 'items']
-    : (actual.action ?? 'start') === 'start' ? ['action', 'kind', 'scenario', 'inputs', 'seed', 'replicates', 'cpuSecondsLimit', 'subjectId', 'reconstructionResultId', 'selection', 'modelId', 'modelVersion'] : ['action', 'jobId'];
+    : ['start', 'validate'].includes(actual.action ?? 'start') ? ['action', 'kind', 'scenario', 'inputs', 'seed', 'replicates', 'cpuSecondsLimit', 'subjectId', 'reconstructionResultId', 'selection', 'modelId', 'modelVersion'] : ['action', 'jobId'];
   const result = Object.fromEntries(keys.filter(key => operation === 'write' ? Object.hasOwn(actual,key) : actual[key] != null).map(key => [key, actual[key]]));
   if (operation === 'simulate') result.action ??= 'start';
   if (operation === 'read' && object(result.filter) && !Object.keys(result.filter).length && !body.filter) delete result.filter;
   return result;
 }
 
-export async function verifyVcrInvocation({ header, project, runtimeManager, resolveSession, runs, operation, body, readBenchmark = null, authenticatedUserId = null }) {
+/** A turn typed in the kernel's own composer reaches the ledger only when it is adopted, after the routing decision: about nine
+ * seconds on 2026-11-01, while a first tool call goes out in two or three. The call's proof is the transcript, which already
+ * holds it; only the run is late. So the run is waited for, up to `adoptionWaitMs`, and a turn that never comes is still refused. */
+async function currentRun(runs, matches, adoptionWaitMs) {
+  const list = async () => (await (typeof runs === 'function' ? runs() : runs)).find(matches);
+  const deadline = Date.now() + adoptionWaitMs;
+  for (;;) {
+    const run = await list();
+    if (run?.sessionId || typeof runs !== 'function' || Date.now() >= deadline) return run;
+    await new Promise(done => setTimeout(done, 400));
+  }
+}
+
+export async function verifyVcrInvocation({ header, project, runtimeManager, resolveSession, runs, operation, body, readBenchmark = null, authenticatedUserId = null, adoptionWaitMs = 0 }) {
   let context;
   try { context = JSON.parse(String(header ?? '')); } catch { throw unavailable(); }
   if (context?.v !== 1 || typeof context.sessionId !== 'string' || !/^[A-Za-z0-9_-]{1,160}$/.test(context.sessionId)
@@ -45,7 +58,7 @@ export async function verifyVcrInvocation({ header, project, runtimeManager, res
     expected={...expected,data:await readBenchmark(project,part.input.data.predictionsFile)};
   }
   if (canonicalJson(expected)!==canonicalJson(body)) throw unavailable();
-  const run = runs.find(row => row.id === owned?.runId || row.sessionId === context.sessionId);
+  const run = await currentRun(runs, row => row.id === owned?.runId || row.sessionId === context.sessionId, adoptionWaitMs);
   if (!run?.sessionId) throw unavailable();
   return { userId: authenticatedUserId ?? project.userId, projectId: project.id, sessionId: context.sessionId, rootSessionId: run.sessionId,
     runId: run.id, callId: context.callId, dispatchId:run.dispatchId ?? null, routeReason:run.effectiveRouteReason ?? null,

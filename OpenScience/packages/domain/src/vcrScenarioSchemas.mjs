@@ -220,12 +220,23 @@ const CONTROL_DISTRIBUTION = {
 }
 
 /**
+ * A treatment-arm hazard ratio that changes over time (remediation plan D1; simulation only): `ratios[j]` applies on the j-th interval
+ * of `breaks`, the last running on, so a delayed effect is ratios [1, 0.6] with one break and a crossing of the curves [1.4, 0.6].
+ * A formula cannot size it, so the analytic design refuses it by name and points to the simulation.
+ */
+const TREATMENT_HAZARD_RATIOS = object({
+  breaks: req(array(number({ gt: 0, unit: 'time units' }), { min: 1, max: 20, increasing: true })),
+  ratios: req(array(number({ gt: 0 }), { min: 2, max: 21 })),
+}, { lengthRules: [{ key: 'ratios', of: 'breaks', plus: 1 }] })
+
+/**
  * The data-generating truth of a two-arm trial, by endpoint family. `binaryWhen`
  * is the gate of the binary keys (the analytic path drops them for a Simon
  * design, which is single-arm).
- * @param {{ binaryWhen?: any, simulated?: boolean, generator?: boolean, extra?: Record<string, any> }} [options]
+ * `nph` lets a simulated two-arm time-to-event truth state a hazard ratio that changes over time instead of one ratio.
+ * @param {{ binaryWhen?: any, simulated?: boolean, generator?: boolean, nph?: boolean, extra?: Record<string, any> }} [options]
  */
-const truthFields = ({ binaryWhen = BINARY, simulated = true, generator = false, extra = {} } = {}) => ({
+const truthFields = ({ binaryWhen = BINARY, simulated = true, generator = false, nph = false, extra = {} } = {}) => ({
   ...(simulated && !generator ? { null: boolean() } : {}),
   effect: req(gated(number({ unit: 'outcome units' }), CONTINUOUS)),
   sd: gated(number({ gt: 0, default: 1, unit: 'outcome units' }), CONTINUOUS),
@@ -236,7 +247,10 @@ const truthFields = ({ binaryWhen = BINARY, simulated = true, generator = false,
   riskDifference: gated(number({ gt: -1, lt: 1 }), binaryWhen),
   oddsRatio: gated(number({ gt: 0 }), binaryWhen),
   ...(simulated ? { covariateLogit: gated(number({ default: 0 }), binaryWhen) } : {}),
-  hazardRatio: req(gated(number({ gt: 0 }), TIME_TO_EVENT)),
+  // a simulated two-arm trial states either one hazard ratio or one that changes over time (an exactlyOne group of the schema); a
+  // single-arm trial against its benchmark states the one ratio
+  hazardRatio: nph ? { ...gated(number({ gt: 0 }), TIME_TO_EVENT), reqWhen: is('design.kind', 'single_arm') } : req(gated(number({ gt: 0 }), TIME_TO_EVENT)),
+  ...(nph ? { treatmentHazardRatios: gated(TREATMENT_HAZARD_RATIOS, [TIME_TO_EVENT, is('design.kind', 'two_arm_fixed', 'group_sequential')]) } : {}),
   controlMedian: gated(number({ gt: 0, unit: 'time units' }), TIME_TO_EVENT),
   controlDistribution: gated(CONTROL_DISTRIBUTION, TIME_TO_EVENT),
   ...extra,
@@ -275,7 +289,7 @@ const SIMULATED_ACCRUAL = gated({
 }, TIME_TO_EVENT)
 
 const SIMULATED_ANALYSIS = object({
-  method: string({ values: ['ttest', 'ancova', 'risk_difference', 'logistic', 'logrank', 'rmst', 'exact_binomial', 'simon_boundary', 'stratified_risk_difference', 'one_sample_t', 'one_sample_z', 'one_sample_logrank'], reqWhen: is('design.kind', 'single_arm', 'single_arm_external', 'simon_two_stage') }),
+  method: string({ values: ['ttest', 'ancova', 'risk_difference', 'logistic', 'logrank', 'rmst', 'maxcombo', 'exact_binomial', 'simon_boundary', 'stratified_risk_difference', 'one_sample_t', 'one_sample_z', 'one_sample_logrank'], reqWhen: is('design.kind', 'single_arm', 'single_arm_external', 'simon_two_stage') }),
   // the standard deviation a one-sample z analysis takes as known (it need not be the generator's)
   sd: req(gated(number({ gt: 0, unit: 'outcome units' }), is('analysis.method', 'one_sample_z'))),
   alternative: req(gated(string({ values: ['greater', 'less', 'two.sided'] }), is('design.kind', 'single_arm'))),
@@ -300,7 +314,7 @@ const SIMULATED_DESIGN_FIELDS = {
 const SIMULATE_FIELDS = {
   design: req(object(SIMULATED_DESIGN_FIELDS)),
   endpoint: req(ENDPOINT()),
-  truth: req(object(truthFields({ binaryWhen: TWO_ARM_BINARY, extra: {
+  truth: req(object(truthFields({ binaryWhen: TWO_ARM_BINARY, nph: true, extra: {
     nullRate: req(gated(number(BINARY_RATE), SINGLE_BINARY_ENDPOINT)),
     responseRate: req(gated(number(BINARY_RATE), SINGLE_BINARY_ENDPOINT)),
     alternativeRate: req(gated(number(BINARY_RATE), is('design.kind', 'simon_two_stage'))),
@@ -308,7 +322,8 @@ const SIMULATE_FIELDS = {
     benchmark: gated(number({ default: 0, unit: 'outcome units' }), SINGLE_CONTINUOUS),
     controlRates: req(gated(array(number(BINARY_RATE), { min: 2, max: 2 }), SINGLE_EXTERNAL)),
     treatmentRates: req(gated(array(number(BINARY_RATE), { min: 2, max: 2 }), SINGLE_EXTERNAL)),
-  } }), { exactlyOne: truthGroups(TWO_ARM_BINARY) })),
+  } }), { exactlyOne: [...truthGroups(TWO_ARM_BINARY),
+    { keys: ['hazardRatio', 'treatmentHazardRatios'], when: [TIME_TO_EVENT, is('design.kind', 'two_arm_fixed', 'group_sequential')] }] })),
   analysis: { ...SIMULATED_ANALYSIS, reqWhen: is('design.kind', 'single_arm', 'single_arm_external', 'simon_two_stage') },
   external: req(gated(EXTERNAL_MODEL, SINGLE_EXTERNAL)),
   accrual: SIMULATED_ACCRUAL,
@@ -356,6 +371,22 @@ const POPULATION_VARIABLES = array({
   },
   variantGroups: { gamma: { exactlyOne: [['rate', 'mean']] } },
 }, { min: 1, max: 100 })
+
+/**
+ * A baseline table: one row per variable of a published population, a continuous variable's mean and SD, a binary variable's proportion
+ * or a categorical variable's proportions. `population.literature` generates from one; `population.check` holds a generated population
+ * against a second one.
+ */
+const BASELINE_TABLE = req(array(object({
+  variable: req(COLUMN),
+  label: VARIABLE_LABEL,
+  mean: number(), sd: number({ gt: 0 }), proportion: number({ min: 0, max: 1 }),
+  // A categorical row: its proportions (which sum to one — the handler checks), and optionally what each level is called.
+  proportions: array(number({ min: 0, max: 1 }), { min: 2, max: 50 }),
+  levels: array(string({ maxLength: 64 }), { min: 2, max: 50 }),
+  min: { ...number(), nullable: true }, max: { ...number(), nullable: true },
+  distribution: string({ values: ['normal', 'lognormal'], default: 'normal' }),
+}, { exactlyOne: [['proportion', 'mean', 'proportions']], requires: { mean: ['sd'], levels: ['proportions'] } }), { min: 1, max: 100 }))
 
 const MISSINGNESS = array({
   t: 'variant', on: 'kind', default: 'MCAR',
@@ -449,6 +480,13 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
       horizon: req(number({ gt: 0 })), timeUnit: req(string({ values: [...VCR_TIME_UNITS] })) })),
     inputUnits: req({ t: 'map', values: string({ maxLength: 80 }), min: 1, max: 100 }),
     model: req(PROGNOSTIC_MODEL),
+    // Local calibration (remediation plan D3): the outcome the table itself holds, so the applied equation is held against what happened.
+    // A binary or continuous outcome is one column; a time-to-event outcome is a time and a status (1 = event) column.
+    calibration: object({
+      outcomeColumn: req(gated(COLUMN, is('model.family', 'linear', 'logistic'))),
+      timeColumn: req(gated(COLUMN, is('model.family', 'cox'))),
+      statusColumn: req(gated(COLUMN, is('model.family', 'cox'))),
+    }),
   }),
 
   'profile.snapshot': object({}),
@@ -480,20 +518,28 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
   }),
 
   'population.literature': object({
-    baselineTable: req(array(object({
-      variable: req(COLUMN),
-      label: VARIABLE_LABEL,
-      mean: number(), sd: number({ gt: 0 }), proportion: number({ min: 0, max: 1 }),
-      // A categorical row: its proportions (which sum to one — the handler checks), and optionally what each level is called.
-      proportions: array(number({ min: 0, max: 1 }), { min: 2, max: 50 }),
-      levels: array(string({ maxLength: 64 }), { min: 2, max: 50 }),
-      min: { ...number(), nullable: true }, max: { ...number(), nullable: true },
-      distribution: string({ values: ['normal', 'lognormal'], default: 'normal' }),
-    }, { exactlyOne: [['proportion', 'mean', 'proportions']], requires: { mean: ['sd'], levels: ['proportions'] } }), { min: 1, max: 100 })),
+    baselineTable: BASELINE_TABLE,
     n: integer({ min: 1, max: 1_000_000, default: 1000 }),
     correlation: { t: 'matrix', min: -1, max: 1, size: 'baselineTable' },
     correlationSource: string({ values: ['assumed', 'cited'], default: 'assumed' }),
     parameterDraws: integer({ min: 1, max: 1000, default: 1 }),
+  }),
+
+  // A generated population held against a second baseline table (remediation plan D2). `generated` is the population job's own
+  // profile, copied in by the control plane from the population the check is about; a caller does not type it.
+  'population.check': object({
+    baselineTable: BASELINE_TABLE,
+    // not `req`: the platform writes it before the job is queued, and a row of the shape help marked required would be a field a caller thinks is theirs
+    generated: array(object({
+      variable: req(COLUMN),
+      label: VARIABLE_LABEL,
+      kind: req(string({ values: ['continuous', 'binary', 'categorical'] })),
+      n: integer({ min: 0 }),
+      mean: { ...number(), nullable: true }, sd: { ...number({ min: 0 }), nullable: true },
+      levels: array(object({ level: req(string({ maxLength: 64 })), p: { ...number({ min: 0, max: 1 }), nullable: true } }), { min: 1, max: 100 }),
+    }), { min: 1, max: 200 }),
+    // the second table's own sample size, when its source says it: with it a row carries the standard error of the difference
+    referenceN: integer({ min: 2, max: 100_000_000 }),
   }),
 
   'population.synthpop': object({
@@ -561,13 +607,15 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
     scale: string({ values: ['identity', 'log', 'logit'], default: 'identity' }),
   }),
 
-  // Without the published numbers at risk censoring is not identified, so the
-  // risk table is required; and the coordinates say where they came from — a
-  // curve "read" off a picture by a language model is several times less
-  // accurate than a digitizer's (EB-6).
+  // The published numbers at risk are the best information a reconstruction can have, not a condition of having one: a paper that
+  // prints none still gives the arm's size at the start (`initialAtRisk`), and the reconstruction runs on that, labelled by what
+  // the paper gave (four information levels) and limited when there is no table (Guyot 2012). With neither, nobody is counted and
+  // the job is refused by name. The coordinates say where they came from — a curve "read" off a picture by a language model is
+  // several times less accurate than a digitizer's (EB-6).
   'evidence.reconstruct_km': object({
     curve: req(KM_CURVE),
-    riskTable: req(KM_RISK_TABLE),
+    riskTable: KM_RISK_TABLE,
+    initialAtRisk: integer({ min: 1, max: 1_000_000 }),
     totalEvents: number({ min: 0 }),
     reportedMedian: number({ gt: 0 }),
     reportedLogHazardRatio: number(),
@@ -578,11 +626,12 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
     })),
     treatmentArm: object({
       curve: req(KM_CURVE),
-      riskTable: req(KM_RISK_TABLE),
+      riskTable: KM_RISK_TABLE,
+      initialAtRisk: integer({ min: 1, max: 1_000_000 }),
       totalEvents: number({ min: 0 }),
       reportedMedian: number({ gt: 0 }),
-    }),
-  }),
+    }, { atLeastOne: [['riskTable', 'initialAtRisk']] }),
+  }, { atLeastOne: [['riskTable', 'initialAtRisk']] }),
 
   // The weighted comparators dispatch on the endpoint: a time-to-event outcome
   // is a weighted Kaplan-Meier curve and an RMST at `tau` (EB-2), so `tau` is
@@ -796,7 +845,7 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
       effect: number(), sd: number({ gt: 0 }), baselineCorrelation: number({ gt: -1, lt: 1 }),
       controlRate: number({ ...PROBABILITY }), treatmentRate: number({ ...PROBABILITY }),
       riskDifference: number({ gt: -1, lt: 1 }), oddsRatio: number({ gt: 0 }), covariateLogit: number(),
-      hazardRatio: number({ gt: 0 }), controlMedian: number({ gt: 0 }), controlDistribution: CONTROL_DISTRIBUTION,
+      hazardRatio: number({ gt: 0 }), treatmentHazardRatios: TREATMENT_HAZARD_RATIOS, controlMedian: number({ gt: 0 }), controlDistribution: CONTROL_DISTRIBUTION,
     }), { min: 1, max: 50 })),
   }, { gridCells: 400 }),
 
@@ -997,7 +1046,12 @@ export function vcrIsNullScenario(scenario) {
   const tiny = (/** @type {number} */ x) => Math.abs(x) < 1e-12
   const finite = (/** @type {unknown} */ x) => typeof x === 'number' && Number.isFinite(x)
   if (type === 'continuous') return finite(truth.effect) && tiny(truth.effect)
-  if (type === 'time_to_event') return finite(truth.hazardRatio) && truth.hazardRatio > 0 && tiny(Math.log(truth.hazardRatio))
+  if (type === 'time_to_event') {
+    // a hazard ratio that changes over time is null only when every ratio is 1
+    const ratios = truth.treatmentHazardRatios?.ratios
+    if (Array.isArray(ratios)) return ratios.length > 0 && ratios.every((/** @type {unknown} */ r) => finite(r) && /** @type {number} */ (r) > 0 && tiny(Math.log(/** @type {number} */ (r))))
+    return finite(truth.hazardRatio) && truth.hazardRatio > 0 && tiny(Math.log(truth.hazardRatio))
+  }
   if (type === 'binary') {
     const p0 = truth.controlRate
     if (!finite(p0)) return false
@@ -1010,6 +1064,85 @@ export function vcrIsNullScenario(scenario) {
   }
   return false
 }
+
+/**
+ * The same scenario with no true effect: the zero-effect case of a two-arm design, stated by the one key of its endpoint that
+ * says "no difference" (an effect of 0, a hazard ratio of 1, a risk difference of 0 — the last because a binary control rate
+ * may be the card's and not the object's, and 0 needs no copy of it). Everything else the truth says (the control level, the
+ * standard deviation, the distribution) stays. `null` is the label the null predicate derives, so it is left out rather than
+ * written: a stated label that contradicts the law is refused by validation. Returns null for a scenario this cannot be made for
+ * (a single-arm trial states its effect over a benchmark in other keys).
+ * @param {any} scenario
+ * @returns {Record<string, any> | null} the truth of the null case
+ */
+export function vcrNullTruth(scenario) {
+  // A truth the object leaves out entirely (every number is a card's) is an empty one: the null case adds its one key.
+  const truth = scenario?.truth === undefined ? {} : scenario?.truth
+  const kind = scenario?.design?.kind
+  if (!isObject(truth) || !['two_arm_fixed', 'group_sequential'].includes(kind)) return null
+  // The hazard ratio that changes over time is the alternative's law too: the null case states one key for no effect, and two laws for one
+  // arm are refused (`Give only one of`).
+  const { null: _label, effect: _effect, hazardRatio: _hazardRatio, treatmentHazardRatios: _treatmentHazardRatios, treatmentRate: _treatmentRate, riskDifference: _riskDifference, oddsRatio: _oddsRatio, ...rest } = truth
+  switch (scenario?.endpoint?.type) {
+    case 'continuous': return { ...rest, effect: 0 }
+    case 'time_to_event': return { ...rest, hazardRatio: 1 }
+    case 'binary': return { ...rest, riskDifference: 0 }
+    default: return null
+  }
+}
+
+/**
+ * The fields of a scenario the engine filled in because the scenario stated none, in the order the schema lists them: a dropout of
+ * 0, an alpha of 0.025, one-sided, a uniform accrual. The schema's own defaults are the engine's (case N26 holds the two
+ * together), so this reads them rather than keeping a list beside them. A container that is absent but whose default is applied
+ * whole (`analysis`, `accrual`) is read as empty, because that is what the engine does with it; any other absent container is
+ * not entered, since its defaults only apply to a thing that exists. The analysis method is the one default the schema cannot
+ * state (it follows the endpoint), so it is named here from the same table the coupled check reads.
+ * @param {string} method @param {unknown} scenario
+ * @returns {Array<{ path: string, value: string | number | boolean, unit: string | null }>}
+ */
+export function vcrAppliedDefaults(method, scenario) {
+  const schema = /** @type {any} */ (VCR_SCENARIO_SCHEMAS)[method]
+  if (!schema || !isObject(scenario)) return []
+  /** @type {Array<{ path: string, value: string | number | boolean, unit: string | null }>} */
+  const out = []
+  /** @param {any} node @param {unknown} value @param {string} path */
+  const walk = (node, value, path) => {
+    const fields = node.t === 'variant'
+      ? (() => {
+        const chosen = isObject(value) && typeof value[node.on] === 'string' ? value[node.on] : node.default
+        return typeof chosen === 'string' && Object.hasOwn(node.variants, chosen)
+          ? { [node.on]: string({ values: Object.keys(node.variants), default: node.default }), ...node.variants[chosen] } : {}
+      })()
+      : node.fields
+    for (const [key, field] of Object.entries(fields ?? {})) {
+      const f = /** @type {any} */ (field)
+      if (!whenHolds(f.when, scenario)) continue
+      const here = path ? `${path}.${key}` : key
+      const stated = isObject(value) && Object.hasOwn(value, key) && value[key] !== null && value[key] !== undefined
+      if (f.t === 'object' || f.t === 'variant') {
+        if (stated) walk(f, value[key], here)
+        else if (ALWAYS_APPLIED.has(here) && !f.req) walk(f, {}, here)
+        continue
+      }
+      if (!stated && f.default !== undefined && ['number', 'integer', 'string', 'boolean'].includes(f.t)) {
+        out.push({ path: here, value: f.default, unit: typeof f.unit === 'string' ? f.unit : null })
+      }
+    }
+  }
+  walk(schema, scenario, '')
+  const analysis = isObject(scenario.analysis) ? scenario.analysis : {}
+  const kind = /** @type {any} */ (scenario.design)?.kind ?? 'two_arm_fixed'
+  const twoArm = ['two_arm_fixed', 'group_sequential'].includes(kind)
+  if (['design.simulate', 'design.grid'].includes(method) && twoArm && analysis.method === undefined) {
+    const first = /** @type {Record<string, readonly string[]>} */ (VCR_TWO_ARM_ANALYSIS_METHODS)[/** @type {string} */ (/** @type {any} */ (scenario.endpoint)?.type)]?.[0]
+    if (first) out.push({ path: 'analysis.method', value: first, unit: null })
+  }
+  return out
+}
+
+/** The blocks the engine reads as a whole when the scenario leaves them out (the control's time distribution is exponential). */
+const ALWAYS_APPLIED = new Set(['analysis', 'accrual', 'truth.controlDistribution'])
 
 // ---------------------------------------------------------------------------
 // The walker
@@ -1291,10 +1424,14 @@ function checkGrid(schema, scenario, ctx) {
   for (let d = 0; d < designs.length; d += 1) {
     for (let t = 0; t < truths.length; t += 1) {
       if (!isObject(designs[d]) || !isObject(truths[t])) return
+      // a truth that states its own hazard law replaces the base's, in either form: both would be two laws for one arm
+      const base = { ...(isObject(scenario.truth) ? scenario.truth : {}) }
+      if (truths[t].treatmentHazardRatios !== undefined) delete base.hazardRatio
+      if (truths[t].hazardRatio !== undefined) delete base.treatmentHazardRatios
       const cell = {
         ...scenario,
         design: { ...(isObject(scenario.design) ? scenario.design : {}), ...designs[d] },
-        truth: { ...(isObject(scenario.truth) ? scenario.truth : {}), ...truths[t] },
+        truth: { ...base, ...truths[t] },
       }
       delete cell.designs
       delete cell.truths
@@ -1317,7 +1454,7 @@ function checkGrid(schema, scenario, ctx) {
  * The analyses a two-arm simulation may run, by endpoint, and the one analysis each single-arm design runs. The coupled
  * check below reads them, and so does the help a model is given (`vcrScenarioHelp.mjs`): one table, not a sentence kept beside it.
  */
-export const VCR_TWO_ARM_ANALYSIS_METHODS = deepFreeze({ continuous: ['ttest', 'ancova'], binary: ['risk_difference', 'logistic'], time_to_event: ['logrank', 'rmst'] })
+export const VCR_TWO_ARM_ANALYSIS_METHODS = deepFreeze({ continuous: ['ttest', 'ancova'], binary: ['risk_difference', 'logistic'], time_to_event: ['logrank', 'rmst', 'maxcombo'] })
 export const VCR_SINGLE_ARM_ANALYSIS_METHODS = deepFreeze({
   single_arm: { binary: ['exact_binomial'], continuous: ['one_sample_t', 'one_sample_z'], time_to_event: ['one_sample_logrank'] },
   single_arm_external: { binary: ['stratified_risk_difference'] },
@@ -1332,6 +1469,7 @@ function checkDesignSemantics(scenario, path, ctx) {
   if (!['single_arm', 'single_arm_external', 'simon_two_stage'].includes(kind)) {
     const methods = /** @type {Record<string, readonly string[]>} */ (VCR_TWO_ARM_ANALYSIS_METHODS)
     if (method && !(methods[/** @type {string} */ (scenario.endpoint?.type)] ?? []).includes(method)) bad('analysis.method', 'The analysis must match the endpoint.')
+    if (method === 'maxcombo' && kind === 'group_sequential') bad('analysis.method', 'MaxCombo is a fixed-design analysis: a group-sequential design looks with the log-rank statistic.')
     return
   }
   // the analyses a single-arm design runs, by endpoint: the external-control and Simon designs are binary-endpoint designs only
@@ -1350,6 +1488,36 @@ function checkDesignSemantics(scenario, path, ctx) {
     if (Number.isFinite(scenario.truth?.alternativeRate) && Number.isFinite(scenario.truth?.nullRate) && scenario.truth.alternativeRate <= scenario.truth.nullRate) bad('truth.alternativeRate', 'The alternative response rate exceeds the null rate.')
   }
   if (typeof scenario.truth?.null === 'boolean' && scenario.truth.null !== vcrIsNullScenario(scenario)) bad('truth.null', 'The null label must agree with the generating estimand; it does not change the generating law.')
+}
+
+/**
+ * The fields of a design scenario that have no closed form: a hazard ratio that changes over time and the MaxCombo analysis. A design
+ * stating either is sized by simulation only; the analytic design and the assurance are not asked for it (the programme skips them) and
+ * refuse it by name when asked (`checkNoNonProportionalHazards`).
+ * @param {any} scenario
+ * @returns {string[]} the paths, empty for a design that has a closed form
+ */
+export function vcrNoClosedFormFields(scenario) {
+  return [
+    scenario?.truth && typeof scenario.truth === 'object' && Object.hasOwn(scenario.truth, 'treatmentHazardRatios') ? 'truth.treatmentHazardRatios' : null,
+    scenario?.analysis?.method === 'maxcombo' ? 'analysis.method' : null,
+  ].filter((field) => field !== null)
+}
+
+/**
+ * A hazard ratio that changes over time and the MaxCombo analysis exist in the simulation only (remediation plan D1): a formula sizes a
+ * proportional-hazards design. The analytic design and the assurance refuse them by name and say where to go, in place of the
+ * schema's "the engine does not read it".
+ * @param {any} scenario @param {string} path @param {WalkContext} ctx
+ */
+function checkNoNonProportionalHazards(scenario, path, ctx) {
+  const where = vcrNoClosedFormFields(scenario)
+  if (!where.length) return
+  ctx.issues = ctx.issues.filter((issue) => !(issue.code === 'scenario_field_unknown' && where.some((field) => issue.field === at(path, /** @type {string} */ (field)))))
+  for (const field of where) {
+    raise(ctx, 'scenario_value_invalid', at(path, /** @type {string} */ (field)),
+      'A hazard ratio that changes over time and the MaxCombo analysis are simulated, not sized by a formula: ask for design_simulation (design.simulate) with this truth and analysis.')
+  }
 }
 
 /**
@@ -1407,6 +1575,7 @@ export function validateScenario(method, scenario, { inputIds = null, path = 'sc
   }
   checkObject(schema, scenario, path, ctx)
   if (method === 'design.simulate' || method === 'design.grid' || method === 'design.analytic') checkDesignSemantics(scenario, path, ctx)
+  if (method === 'design.analytic' || method === 'design.assurance') checkNoNonProportionalHazards(scenario, path, ctx)
   if (method === 'comparator.maic') checkMaicSemantics(scenario, path, ctx)
   if (method === 'accrual.poisson_gamma') checkAccrualSemantics(scenario, path, ctx)
   if (schema.gridCells) checkGrid(schema, scenario, ctx)

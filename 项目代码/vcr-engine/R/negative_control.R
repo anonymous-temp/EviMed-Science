@@ -165,9 +165,12 @@ vcr_nc_verdict <- function(low, high, primary_estimate = NULL) {
   ps <- vcr_propensity_weights(w$X, w$treat, "ATT")$propensity
   support <- vcr_common_support(ps, w$treat)
   ess <- vcr_ess(wt[w$treat == 0L])
-  rule <- vcr_not_estimable_weighting(balance = balance, ess = ess, support = support,
+  # 1.1.0 reads the weighted balance as a verdict beside the analysis and never refuses on it; an older label gets the refusal (replay)
+  reads_balance <- vcr_job_at_least(job, "1.1.0")
+  rule <- vcr_not_estimable_weighting(balance = if (reads_balance) NULL else balance, ess = ess, support = support,
                                       ebal = if (identical(w$method, "entropy_balance")) w$fit else NULL)
   if (!is.null(rule)) return(c(base, list(refusal = rule, ess = ess)))
+  verdict <- if (reads_balance) vcr_balance_verdict(balance) else NULL
   effect <- function(wv, idx) {
     tb <- w$treat[idx]; Yb <- Y[idx, , drop = FALSE]
     i1 <- tb == 1L; i0 <- tb == 0L
@@ -194,7 +197,8 @@ vcr_nc_verdict <- function(low, high, primary_estimate = NULL) {
   se <- vapply(seq_along(point), function(j) { d <- m[is.finite(m[, j]), j]; if (length(d) >= 2L) stats::sd(d) else NA_real_ }, numeric(1))
   c(base, list(columns = columns, est = point, se = se, low = boot$intervals[, 1], high = boot$intervals[, 2],
                failureShare = boot$componentFailureShare, ess = ess, bootstrapReplicates = boot$replicates,
-               balance = balance, support = support, weights = vcr_weight_diagnostics(wt, w$treat)))
+               balance = balance, support = support, weights = vcr_weight_diagnostics(wt, w$treat)),
+               if (reads_balance) list(balanceVerdict = verdict))
 }
 
 vcr_job_negative_control <- function(job, output_dir = NULL, cancel_file = NULL, ...) {
@@ -275,7 +279,8 @@ vcr_job_negative_control <- function(job, output_dir = NULL, cancel_file = NULL,
     p_primary <- list(uncalibrated = 2 * stats::pnorm(-abs(primary$estimate / primary$se)),
                       calibrated = if (!is.null(null)) vcr_calibrated_p(null, primary$estimate, primary$se) else NULL)
   }
-  limited <- k < min_k || length(usable) < length(rows) || any(vapply(usable, function(r) r$failureShare > 0.01, logical(1)))
+  limited <- k < min_k || length(usable) < length(rows) || any(vapply(usable, function(r) r$failureShare > 0.01, logical(1))) ||
+    (!is.null(an) && !is.null(vcr_balance_limit(an$balanceVerdict)))
   # with no column analysed in the engine every estimate was typed by the caller: the measures are a summary of those numbers, and say so
   # (analysed here: a computed number is `calculated`, or `imputed` when it rests on an imputed column; see vcr_estimate_source)
   msrc <- if (is.null(an)) "aggregate" else vcr_estimate_source(an$used$source)
@@ -298,7 +303,7 @@ vcr_job_negative_control <- function(job, output_dir = NULL, cancel_file = NULL,
     bootstrapFailureShare = r$failureShare, stringsAsFactors = FALSE)))
   list(status = "succeeded", conclusion = if (limited) "limited" else "estimable", measures = measures,
        counts = if (is.null(an)) vcr_counts() else vcr_counts(realPatients = an$n, effectiveSampleSize = an$ess),
-       diagnostics = list(
+       diagnostics = c(list(
          effectScale = scale, intervalLevel = 0.95, controls = lapply(rows, function(r) r[c("name", "source", "estimate", "se", "low", "high", "verdict", "estimable", "reason", "failureShare", "intervalBasis")]),
          primary = if (is.null(primary)) NULL else c(primary[c("name", "estimate", "se", "low", "high", "estimable", "reason")], list(pValue = p_primary)),
          screen = list(analysed = k, excluded = length(rows) - k, signallingBias = flagged,
@@ -307,9 +312,13 @@ vcr_job_negative_control <- function(job, output_dir = NULL, cancel_file = NULL,
          calibration = calibration,
          valueSourcesUsed = if (is.null(an)) NULL else vcr_value_sources_used(an$used),
          weighting = if (is.null(an)) NULL else an$weighting, estimand = if (is.null(an)) NULL else an$estimand,
-         balance = if (is.null(an)) NULL else an$balance, support = if (is.null(an)) NULL else an$support,
+         balance = if (is.null(an)) NULL else an$balance),
+         # the verdict is a key of 1.1.0 and later; an older label has none
+         if (vcr_job_at_least(job, "1.1.0")) list(balanceVerdict = if (is.null(an)) NULL else an$balanceVerdict),
+         list(support = if (is.null(an)) NULL else an$support,
          bootstrapReplicates = if (is.null(an)) NULL else an$bootstrapReplicates, cohort = if (is.null(an)) NULL else an$cohort,
          limitedBy = as.list(c(if (k < min_k) "too_few_controls_to_calibrate", if (length(usable) < length(rows)) "control_not_estimable",
-                               if (any(vapply(usable, function(r) r$failureShare > 0.01, logical(1)))) "bootstrap_failure_share"))),
+                               if (any(vapply(usable, function(r) r$failureShare > 0.01, logical(1)))) "bootstrap_failure_share",
+                               if (!is.null(an)) vcr_balance_limit(an$balanceVerdict))))),
        tables = .vcr_tables_of(list(vcr_write_table(tab, "negative-controls", output_dir))))
 }

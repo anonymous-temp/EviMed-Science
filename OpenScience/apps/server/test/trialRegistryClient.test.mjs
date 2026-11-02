@@ -11,7 +11,7 @@ import { VCR_ENROLLMENT_KINDS } from "@evimed/domain";
 
 import { FLAURA } from "./vcrEvidenceFixtures.mjs";
 import {
-  CTGOV_SEARCH_FIELDS, REGISTRY_NOT_FOUND, REGISTRY_UNAVAILABLE, REGISTRY_UNAVAILABLE_PARAMETERS,
+  CTGOV_LOCATION_FIELDS, CTGOV_PATIENT_FIELDS, CTGOV_SEARCH_FIELDS, REGISTRY_NOT_FOUND, REGISTRY_UNAVAILABLE, REGISTRY_UNAVAILABLE_PARAMETERS,
   armRoleOf, chictrPrecedent, confidenceLevelOf, confidenceLevelOfDispersion, createChictrAdapter, createTrialRegistryClient, ctgovPrecedent,
   monthsBetween, reducedRegistryRecord, registryRecordHash, renderRegistryRecordText,
 } from "../src/trialRegistryClient.mjs";
@@ -368,6 +368,29 @@ test("a search asks for a projection and a total, and reads the page the live AP
   assert.equal(url.searchParams.get("aggFilters"), "results:with");
   assert.deepEqual(url.searchParams.get("fields").split("|"), [...CTGOV_SEARCH_FIELDS],
     "a candidate list asks for a page, not for 2 MB of record");
+});
+
+test("a list for one patient asks for who each trial takes and, when a country is wanted, where it runs; a plain list is the bytes it was (M1)", async () => {
+  const { fetchImpl, seen } = upstream(() => ({ body: { totalCount: 2, studies: [
+    { protocolSection: { identificationModule: { nctId: "NCT07400001", briefTitle: "A", secondaryIdInfos: [{ id: "2024-513070-26-00", type: "REGISTRY" }, { id: "X-1", type: "OTHER" }, { id: "U1111-1", type: "OTHER" }] },
+      statusModule: { overallStatus: "RECRUITING" }, eligibilityModule: { sex: "FEMALE", minimumAge: "18 Years", maximumAge: "N/A" },
+      contactsLocationsModule: { locations: [{ country: "China" }, { country: "Japan" }, { country: "China" }] } } },
+    { protocolSection: { identificationModule: { nctId: "NCT07400002", briefTitle: "B" }, statusModule: { overallStatus: "RECRUITING" } } },
+  ] } }));
+  const client = createTrialRegistryClient({ fetchImpl, sleep: noSleep });
+  const plain = await client.search({ condition: "lung cancer" });
+  assert.deepEqual(new URL(seen[0]).searchParams.get("fields").split("|"), [...CTGOV_SEARCH_FIELDS]);
+  assert.deepEqual(Object.keys(plain.items[0]).filter((key) => ["sex", "minimumAge", "maximumAge", "secondaryIds", "countries"].includes(key)), [], "the precedent list is unchanged");
+
+  const forPatient = await client.search({ condition: "lung cancer", forPatient: true, withLocations: true });
+  assert.deepEqual(new URL(seen[1]).searchParams.get("fields").split("|"), [...CTGOV_SEARCH_FIELDS, ...CTGOV_PATIENT_FIELDS, ...CTGOV_LOCATION_FIELDS]);
+  assert.deepEqual([forPatient.items[0].sex, forPatient.items[0].minimumAge, forPatient.items[0].maximumAge, forPatient.items[0].secondaryIds, forPatient.items[0].countries],
+    ["FEMALE", "18 Years", "N/A", ["2024-513070-26-00"], ["China", "Japan"]]);
+  // A sponsor's protocol number is not another registry's number for the trial: two trials can share it, and must not be merged by it.
+  // A record that states none of it states none of it: null, never an invented bound or country.
+  assert.deepEqual([forPatient.items[1].sex, forPatient.items[1].minimumAge, forPatient.items[1].secondaryIds, forPatient.items[1].countries], [null, null, [], null]);
+  const noSites = await client.search({ condition: "lung cancer", forPatient: true });
+  assert.equal(Object.hasOwn(noSites.items[0], "countries"), false, "sites are asked for only when a country is");
 });
 
 test("offline is a named answer, not an empty library", async () => {

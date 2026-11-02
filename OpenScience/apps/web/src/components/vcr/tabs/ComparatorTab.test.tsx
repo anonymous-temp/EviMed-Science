@@ -117,15 +117,47 @@ describe("对照 · the routes and the record in use", () => {
 });
 
 describe("对照 · the record of the route in use", () => {
-  it("says the method's conclusion in the sentence, and nothing of who set it or whether it was reviewed", async () => {
+  it("says the class of the result in the sentence, and nothing of who set it or whether it was reviewed", async () => {
     const { container } = draw();
     const verdict = await found(container, "[data-vcr-verdict]");
-    expect(verdict).toHaveTextContent("有限制地估计");
+    // The route in use is a reconstructed literature curve: a benchmark, not an estimate of an effect (A8).
+    expect(verdict).toHaveTextContent("仅基准");
     expect(verdict).not.toHaveTextContent(/AI 设定|未复核|已复核/);
-    expect(container.querySelector("[data-headline]")).toHaveTextContent("文献对照：有限制地估计，12 个月 RMST 5.900 个月。");
+    expect(container.querySelector("[data-headline]")).toHaveTextContent("文献对照：仅基准，12 个月 RMST 5.900 个月。");
+    expect(container.querySelector("[data-vcr-route='literature_control']")?.closest("li")).toHaveTextContent("仅基准");
     // What the page used to say last, 「本页结论」, is the chip beside its first sentence.
     expect(container.textContent).not.toContain("本页结论");
     expect((container.querySelector("[data-headline]") as HTMLElement).compareDocumentPosition(verdict) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("says the engine's own conclusion where the result is an estimate, and beside it the sentences that limit it: the balance, the records, a benchmark's basis", async () => {
+    const raw = fixture("ev201/comparator.json");
+    raw.verdict = { conclusion: "limited" };
+    raw.headline = "文献对照：有限制地估计，12 个月 RMST 5.900 个月。";
+    raw.routes = raw.routes.map((route: { route: string }) => (route.route === "literature_control" ? { ...route, state: "limited" } : route));
+    raw.limits = [
+      { key: "balance", text: "严重失衡：加权后“既往免疫治疗”的标准化差异为 0.31，超过 0.25。" },
+      { key: "no_time_zero_rule", text: "没有写明两组各从什么时刻开始随访（时间零点），起点不一致会带来偏倚。" },
+    ];
+    installVcrServer(network.productRequest, { [tab("comparator")]: raw });
+    const { container } = draw();
+    const verdict = await found(container, "[data-vcr-verdict]");
+    expect(verdict).toHaveTextContent("有限制地估计");
+    expect(verdict).not.toHaveTextContent("仅基准");
+    const limits = await found(container, "[data-vcr-limits]");
+    expect([...limits.querySelectorAll("[data-vcr-limit]")].map((node) => node.getAttribute("data-vcr-limit"))).toEqual(["balance", "no_time_zero_rule"]);
+    expect(limits).toHaveTextContent("严重失衡：加权后“既往免疫治疗”的标准化差异为 0.31，超过 0.25。");
+    // the estimate is on the page beside them
+    expect(container.querySelector("[data-vcr-rmst]")).toHaveTextContent("5.9");
+  });
+
+  it("draws no list of limits when the server has none to say", async () => {
+    const raw = fixture("ev201/comparator.json");
+    raw.limits = [];
+    installVcrServer(network.productRequest, { [tab("comparator")]: raw });
+    const { container } = draw();
+    await found(container, "[data-vcr-diagnostics]");
+    expect(container.querySelector("[data-vcr-limits]")).toBeNull();
   });
 
   it("draws a reconstructed curve dashed, always, says in the legend what the dash is, and draws a curve of any other source by its own rule", async () => {
@@ -203,6 +235,35 @@ describe("对照 · the record of the route in use", () => {
     expect(section).toHaveTextContent("对试验人群（ATT）");
   });
 
+  it("folds the target trial's components under the estimand, each beside how far the comparison can emulate it", async () => {
+    const raw = fixture("ev201/comparator.json");
+    raw.estimand = { source: "assumed", note: "按公开方案", rows: [
+      { label: "估计目标", value: "对试验人群（ATT）" },
+      { label: "入选标准", value: "只能近似：外部对照的入排条件更宽" },
+      { label: "随访起点（时间零点）", value: "无法复现：外部对照没有随机日期" },
+    ] };
+    installVcrServer(network.productRequest, { [tab("comparator")]: raw });
+    const { container } = draw();
+    await found(container, "[data-vcr-diagnostics]");
+    const section = screen.getByRole("heading", { name: "估计目标" }).closest("section") as HTMLElement;
+    expect(section).toHaveTextContent("对试验人群（ATT）");
+    const summary = within(section).getByText("目标试验的要素 · 3");
+    const record = section.querySelector("[data-vcr-target-trial]") as HTMLElement;
+    expect(record).not.toBeNull();
+    expect(summary.closest("details")).not.toBeNull();
+    expect(record).toHaveTextContent("无法复现：外部对照没有随机日期");
+    expect(record).toHaveTextContent("按公开方案");
+  });
+
+  it("has no folded record when the target trial was not written", async () => {
+    const raw = fixture("ev201/comparator.json");
+    raw.estimand = { source: "assumed", note: null, rows: [{ label: "估计目标", value: "对试验人群（ATT）" }] };
+    installVcrServer(network.productRequest, { [tab("comparator")]: raw });
+    const { container } = draw();
+    await found(container, "[data-vcr-diagnostics]");
+    expect(container.querySelector("[data-vcr-target-trial]")).toBeNull();
+  });
+
   it("has no counts band of its own: the four numbers are on 总览", async () => {
     const { container } = draw();
     await found(container, "[data-vcr-diagnostics]");
@@ -268,6 +329,57 @@ describe("对照 · comparability and the prior", () => {
     const weights = container.querySelector("[data-vcr-diagnostics]") as HTMLElement;
     expect(weights).not.toHaveTextContent("先验");
     expect(weights.closest("section")).not.toBe(section);
+  });
+
+  it("draws a borrowing route's operating characteristics — each row with its error and its replicates, the floor it ran at said once", async () => {
+    const raw = fixture("ev201/comparator.json");
+    raw.operatingCharacteristics = {
+      replicates: 100000, asked: 100000, capped: false, reason: "借用历史数据的设计，零效应的各行至少 100,000 次",
+      rows: [
+        { drift: 0, prior: "none", priorLabel: "不借用（只用本研究对照）", scenario: "null", rejection: 2.39, mcse: 0.11, replicates: 100000 },
+        { drift: 0, prior: "robust_0.2", priorLabel: "借用（稳健权重 0.2）", scenario: "null", rejection: 1.39, mcse: 0.08, replicates: 100000 },
+        { drift: 0.5, prior: "robust_0.2", priorLabel: "借用（稳健权重 0.2）", scenario: "alternative", rejection: 58.21, mcse: 0.16, replicates: 100000 },
+      ],
+    };
+    installVcrServer(network.productRequest, { [tab("comparator")]: raw });
+    const { container } = draw();
+    const oc = await found(container, "[data-vcr-oc]");
+    expect(oc).toHaveTextContent("借用历史数据的设计，零效应的各行至少 100,000 次");
+    expect(oc.querySelector("[data-vcr-oc-capped]")).toBeNull();
+    const zero = oc.querySelector("[data-vcr-oc-row='0:none:null']") as HTMLElement;
+    expect(zero).toHaveTextContent("2.39%");
+    expect(zero).toHaveTextContent("±0.11");
+    expect(oc).toHaveTextContent("无效应（I 类错误）");
+    expect(oc).toHaveTextContent("有效应（功效）");
+    expect(oc.querySelectorAll("tbody tr")).toHaveLength(3);
+    expect(oc).toHaveTextContent("100,000");
+    expect(container.querySelector("[data-vcr-oc-capped]")).toBeNull();
+  });
+
+  it("says a table the engine's ceiling held below the request is smaller than asked, in the section and nowhere else", async () => {
+    const raw = fixture("ev201/comparator.json");
+    raw.operatingCharacteristics = { replicates: 600, asked: 5000, capped: true, reason: null,
+      rows: [{ drift: 0, prior: "none", priorLabel: "不借用（只用本研究对照）", scenario: "null", rejection: 2.5, mcse: 0.64, replicates: 600 }] };
+    installVcrServer(network.productRequest, { [tab("comparator")]: raw });
+    const { container } = draw();
+    expect(await found(container, "[data-vcr-oc-capped]")).toHaveTextContent("600 次（要求 5,000 次）");
+  });
+
+  it("lists what a reconstruction was given and the checks it could not hold, beside the ones it did — without counting them as passed", async () => {
+    const raw = fixture("ev201/comparator.json");
+    raw.reconstruction = { level: 3, key: "events_only", label: "论文只给了总事件数（没有风险人数表）", arms: [], hazardRatio: null, limited: true };
+    raw.qc = [
+      { key: "atRisk", label: "各时点风险人数", value: "论文没有给，没有核对", passed: false, notChecked: true },
+      { key: "events", label: "总事件数", value: "0.8%", passed: true },
+      { key: "median", label: "中位数", value: "1.2%", passed: true },
+    ];
+    installVcrServer(network.productRequest, { [tab("comparator")]: raw });
+    const { container } = draw();
+    const folded = (await screen.findByText(/重建质控 2 \/ 2 通过（1 项没有核对）/)).closest("details") as HTMLElement;
+    expect(folded).not.toHaveAttribute("open");
+    expect(folded.querySelector("[data-vcr-reconstruction-level='events_only']")).toHaveTextContent("论文只给了总事件数（没有风险人数表）");
+    expect(folded).toHaveTextContent("论文没有给，没有核对");
+    expect(container.querySelector("[data-vcr-premises]")).toBeNull();
   });
 
   it("draws no prior section when no route borrowed one", async () => {
@@ -351,6 +463,39 @@ it("shows a scoped prognostic benchmark in its original scale and keeps its caus
   expect(section).not.toHaveTextContent("27%");
   expect(section).toHaveTextContent("不识别治疗效果");
   expect(section).toHaveTextContent("不增加独立样本量");
+});
+
+it("holds the applied equation against the table's own outcome: the calibration intercept and slope with their ideals, or what the slope needed (D3)", async () => {
+  const raw = fixture("ev201/comparator.json");
+  raw.routes = [{ route: "model_comparator", state: "limited", selected: true }];
+  const benchmark = { sourceCondition: "standard_care", endpoint: { type: "binary", horizon: 12, timeUnit: "months" }, mean: { value: 0.37, source: "predicted" }, outcomeSd: null, relativeScore: null,
+    absoluteRiskAvailable: true, causalEffectIdentified: false, limits: ["Calibration was measured on the observed outcomes of this table; transportability to any other population has not been established."] };
+  raw.predictionBenchmark = { ...benchmark, calibration: { n: 2000, events: 593, nonEvents: 1407, observedRisk: 0.2965, predictedRisk: 0.3691, calibrationInLarge: 0.0726,
+    intercept: { value: -0.33474, low: -0.43, high: -0.24 }, slope: { value: 1.24177, low: 0.93, high: 1.56 }, notes: [] } };
+  installVcrServer(network.productRequest, { [tab("comparator")]: raw });
+  draw();
+  const section = (await screen.findByRole("heading", { name: "模型预测基准" })).closest("section")!;
+  expect(section).toHaveTextContent("本地校准截距");
+  expect(section).toHaveTextContent("-0.33（-0.43–-0.24），理想值 0");
+  expect(section).toHaveTextContent("本地校准斜率");
+  expect(section).toHaveTextContent("1.24（0.93–1.56），理想值 1");
+  expect(section).toHaveTextContent("0.3 / 0.37，2000 人");
+  expect(section).toHaveTextContent("校准是用这张表里观察到的结局算的");
+});
+
+it("says what a missing calibration slope needed, and shows no slope row for it (D3)", async () => {
+  const raw = fixture("ev201/comparator.json");
+  raw.routes = [{ route: "model_comparator", state: "limited", selected: true }];
+  const benchmark = { sourceCondition: "standard_care", endpoint: { type: "binary", horizon: 12, timeUnit: "months" }, mean: { value: 0.37, source: "predicted" }, outcomeSd: null, relativeScore: null,
+    absoluteRiskAvailable: true, causalEffectIdentified: false, limits: [] };
+  raw.predictionBenchmark = { ...benchmark, calibration: { n: 600, events: 6, nonEvents: 594, observedRisk: 0.01, predictedRisk: 0.37, calibrationInLarge: 0.36,
+    intercept: { value: -4.1, low: -4.9, high: -3.3 }, slope: null, notes: ["斜率没有算：事件或非事件太少（各至少要 10 个，这里 6 个事件、594 个非事件）"] } };
+  installVcrServer(network.productRequest, { [tab("comparator")]: raw });
+  draw();
+  const few = (await screen.findByRole("heading", { name: "模型预测基准" })).closest("section")!;
+  expect(few).toHaveTextContent("本地校准截距");
+  expect(within(few).queryByText("本地校准斜率")).toBeNull();
+  expect(few).toHaveTextContent("斜率没有算：事件或非事件太少");
 });
 
 it("keeps an unavailable absolute risk absent rather than treating a relative score as a zero outcome", async () => {

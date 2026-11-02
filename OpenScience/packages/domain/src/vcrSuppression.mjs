@@ -42,13 +42,23 @@
  * - **Every walker refuses what it cannot finish.** A cyclic payload, or one
  *   nested past a depth no store produces, throws: a boundary that stops
  *   walking and lets the rest through is a boundary with a hole.
+ * - **Counts that make each other.** `n = events + nonEvents`, and the rate of the events is `events / n`: one hidden alone, with the
+ *   others printed, is a subtraction. When one of the pair is small the whole identity goes (the people, the events, the non-events)
+ *   and so does what is computed from it (`VCR_PEOPLE_COUNT_LINKS`); the measures that restate such a rate go with it
+ *   (`VCR_PEOPLE_DERIVED_MEASURES`).
+ * - **A count may be a count only where it sits.** `treated`, `control`, `people` and `records` are head counts inside the blocks that
+ *   say so (`VCR_PEOPLE_COUNT_BLOCK_FIELDS`: the enrolment-year cells, a batch reading's estimate) and a design's planned sample or a
+ *   covariate's mean anywhere else; the block names the keys, nothing is judged by a bare key. An arm's head count under the arm's name
+ *   (`{ treated: 3, control: 40 }`, `VCR_PEOPLE_COUNT_MAP_KEYS`) is a row of sibling cells like `levels`, and a block that summarises
+ *   one group of people is withheld whole when the group is too small to show (`VCR_PEOPLE_COUNT_WITHHELD_BLOCKS`).
  * - Pure: the input is never modified; the answer is a copy.
  *
  * @module @evimed/domain/vcrSuppression
  */
 
 import {
-  VCR_MIN_CELL_SIZE, VCR_PEOPLE_COUNT_FIELDS, VCR_PEOPLE_COUNT_MAP_KEYS, VCR_PEOPLE_COUNT_MEASURES, VCR_PEOPLE_COUNT_SCALAR_FIELDS,
+  VCR_MIN_CELL_SIZE, VCR_PEOPLE_COUNT_BLOCK_FIELDS, VCR_PEOPLE_COUNT_FIELDS, VCR_PEOPLE_COUNT_LINKS, VCR_PEOPLE_COUNT_MAP_KEYS,
+  VCR_PEOPLE_COUNT_MEASURES, VCR_PEOPLE_COUNT_SCALAR_FIELDS, VCR_PEOPLE_COUNT_WITHHELD_BLOCKS, VCR_PEOPLE_DERIVED_MEASURES,
 } from './vcrVocabulary.mjs'
 
 /** Complements an engine may have written; never passed on. */
@@ -59,7 +69,7 @@ const COMPLEMENT_KEYS = Object.freeze(['suppressedCount', 'suppressedLevels'])
  * list, because any other key may carry the very number that was hidden.
  */
 export const VCR_CELL_IDENTITY_KEYS = Object.freeze([
-  'key', 'label', 'name', 'group', 'stratum', 'arm', 'level', 'cell', 'step', 'rule', 'category', 'variable', 'criterion',
+  'key', 'label', 'name', 'group', 'stratum', 'arm', 'level', 'cell', 'step', 'rule', 'category', 'variable', 'criterion', 'year',
 ])
 
 /** How deep a payload may nest before it is refused. Real payloads nest a dozen levels. */
@@ -76,27 +86,34 @@ const isPlainObject = (value) => {
 const isCount = (value) => typeof value === 'number' && Number.isFinite(value)
 
 /**
+ * The count keys in force for one object: the contract's, and the ones the block it sits in adds.
+ * @param {readonly string[] | null | undefined} block
+ * @returns {readonly string[]}
+ */
+const fieldsOf = (block) => (block ? [...VCR_PEOPLE_COUNT_FIELDS, ...block] : VCR_PEOPLE_COUNT_FIELDS)
+
+/**
  * The people-count keys a cell carries: those holding a finite number, and
  * those holding `null` that the cell's own `suppressed` list names (a cell this
  * boundary already hid, which is as disclosive as a small one). A `null` nobody
  * hid is an unknown, and an unknown is not a person.
- * @param {Record<string, any>} cell
+ * @param {Record<string, any>} cell @param {readonly string[]} [fields]
  */
-function countKeys(cell) {
+function countKeys(cell, fields = VCR_PEOPLE_COUNT_FIELDS) {
   const named = Array.isArray(cell.suppressed) ? cell.suppressed : []
-  return VCR_PEOPLE_COUNT_FIELDS.filter((key) => Object.hasOwn(cell, key) && (isCount(cell[key]) || (cell[key] === null && named.includes(key))))
+  return fields.filter((key) => Object.hasOwn(cell, key) && (isCount(cell[key]) || (cell[key] === null && named.includes(key))))
 }
 
 /**
  * A cell's size: its smallest count. An unknown count reads as zero.
- * @param {Record<string, any>} cell
+ * @param {Record<string, any>} cell @param {readonly string[]} [fields]
  */
-function sizeOf(cell) {
-  return Math.min(...countKeys(cell).map((key) => cell[key] ?? 0))
+function sizeOf(cell, fields = VCR_PEOPLE_COUNT_FIELDS) {
+  return Math.min(...countKeys(cell, fields).map((key) => cell[key] ?? 0))
 }
 
-/** @param {unknown} value @returns {value is Record<string, any>} */
-const isCell = (value) => isPlainObject(value) && countKeys(value).length > 0
+/** @param {unknown} value @param {readonly string[]} [fields] @returns {value is Record<string, any>} */
+const isCell = (value, fields = VCR_PEOPLE_COUNT_FIELDS) => isPlainObject(value) && countKeys(value, fields).length > 0
 
 /**
  * Which of a list of sizes to hide, as indexes: everything under the floor,
@@ -119,15 +136,15 @@ function hiddenSet(sizes, minCell) {
 
 /**
  * A cell with its numbers taken away.
- * @param {Record<string, any>} cell
+ * @param {Record<string, any>} cell @param {readonly string[]} [fields]
  */
-function hiddenCell(cell) {
+function hiddenCell(cell, fields = VCR_PEOPLE_COUNT_FIELDS) {
   /** @type {Record<string, any>} */
   const out = {}
   for (const key of VCR_CELL_IDENTITY_KEYS) {
-    if (Object.hasOwn(cell, key) && !VCR_PEOPLE_COUNT_FIELDS.includes(key) && (typeof cell[key] === 'string' || isCount(cell[key]))) out[key] = cell[key]
+    if (Object.hasOwn(cell, key) && !fields.includes(key) && (typeof cell[key] === 'string' || isCount(cell[key]))) out[key] = cell[key]
   }
-  const keys = countKeys(cell)
+  const keys = countKeys(cell, fields)
   for (const key of keys) out[key] = null
   out.suppressed = keys
   return out
@@ -153,6 +170,64 @@ function hideStandaloneCounts(object, minCell, keys) {
     const already = Array.isArray(object.suppressed) ? object.suppressed.filter((/** @type {unknown} */ item) => typeof item === 'string') : []
     object.suppressed = [...new Set([...already, ...hidden])]
   }
+}
+
+/** @param {unknown} value @param {number} minCell */
+const isSmall = (value, minCell) => isCount(value) && /** @type {number} */ (value) >= 1 && /** @type {number} */ (value) < minCell
+
+/**
+ * Keys of an object, hidden: each becomes null and the object lists it as hidden.
+ * @param {Record<string, any>} object @param {readonly string[]} keys
+ */
+function hideKeys(object, keys) {
+  if (!keys.length) return
+  for (const key of keys) object[key] = null
+  const already = Array.isArray(object.suppressed) ? object.suppressed.filter((/** @type {unknown} */ item) => typeof item === 'string') : []
+  object.suppressed = [...new Set([...already, ...keys])]
+}
+
+/**
+ * The counts that make each other (`VCR_PEOPLE_COUNT_LINKS`): when one of a link's triggers is a small count, the whole identity goes
+ * with it when the object holds all of it, and so does everything computed from it. Runs before the standalone rule, which hides the
+ * small count itself.
+ * @param {Record<string, any>} object @param {number} minCell
+ */
+function hideLinkedCounts(object, minCell) {
+  for (const link of VCR_PEOPLE_COUNT_LINKS) {
+    if (!link.triggers.some((key) => isSmall(object[key], minCell))) continue
+    const whole = link.whole.every((key) => isCount(object[key])) ? link.whole : []
+    hideKeys(object, [...whole, ...link.derived].filter((key) => isCount(object[key])))
+  }
+}
+
+/**
+ * A block about one group of people, withheld when the group is too small to show (`VCR_PEOPLE_COUNT_WITHHELD_BLOCKS`): what it is
+ * stays, what it summarised does not. Judged on the block after its own counts were hidden, so a map that lost an entry gates it.
+ * @param {string | null} key @param {Record<string, any>} block
+ */
+function withheldBlock(key, block) {
+  const rule = key !== null && Object.hasOwn(VCR_PEOPLE_COUNT_WITHHELD_BLOCKS, key) ? /** @type {Record<string, any>} */ (VCR_PEOPLE_COUNT_WITHHELD_BLOCKS)[key] : null
+  if (!rule) return block
+  const gated = rule.gates.some((/** @type {string} */ gate) => isPlainObject(block[gate]) && Object.values(block[gate]).some((entry) => entry === null))
+  if (!gated) return block
+  /** @type {Record<string, any>} */
+  const kept = {}
+  for (const own of rule.keep) if (Object.hasOwn(block, own)) kept[own] = block[own]
+  kept.suppressed = Object.keys(block).filter((own) => !rule.keep.includes(own) && own !== 'suppressed')
+  return kept
+}
+
+/**
+ * The measures a local calibration restates (`VCR_PEOPLE_DERIVED_MEASURES`), hidden once the calibration block hid the field they
+ * restate.
+ * @param {Record<string, any>} object
+ */
+function hideDerivedMeasures(object) {
+  if (!Array.isArray(object.measures) || !isPlainObject(object.diagnostics) || !isPlainObject(object.diagnostics.localCalibration)) return
+  const hidden = Array.isArray(object.diagnostics.localCalibration.suppressed) ? object.diagnostics.localCalibration.suppressed : []
+  const names = /** @type {string[]} */ (Object.entries(VCR_PEOPLE_DERIVED_MEASURES).filter(([field]) => hidden.includes(field)).map(([, name]) => name))
+  if (!names.length) return
+  object.measures = object.measures.map((/** @type {unknown} */ measure) => (isPlainObject(measure) && names.includes(String(measure.name)) ? hiddenMeasure(measure) : measure))
 }
 
 /**
@@ -196,22 +271,27 @@ export function suppressForModel(payload, { minCell = VCR_MIN_CELL_SIZE } = {}) 
   /**
    * @param {any} value @param {string | null} key @param {number} depth
    * @param {boolean} [asCell] a list member the enclosing list judges as a cell, so its own counts are left for that judgement
+   * @param {readonly string[] | null} [inherited] the keys the block this object is a direct member of adds to the contract's
    * @returns {any}
    */
-  const walk = (value, key, depth, asCell = false) => {
+  const walk = (value, key, depth, asCell = false, inherited = null) => {
     if (value === null || typeof value !== 'object') return value
     if (depth > MAX_DEPTH) throw new TypeError(`suppressForModel: the payload nests deeper than ${MAX_DEPTH} levels`)
     if (ancestors.has(value)) throw new TypeError('suppressForModel: the payload refers to itself')
     if (!Array.isArray(value) && !isPlainObject(value)) return value
     ancestors.add(value)
     try {
+      // The count keys this block adds: the ones of the name it was found under, for itself (an object) or for its members (a list).
+      const block = key !== null && Object.hasOwn(VCR_PEOPLE_COUNT_BLOCK_FIELDS, key)
+        ? /** @type {Record<string, readonly string[]>} */ (VCR_PEOPLE_COUNT_BLOCK_FIELDS)[key] : null
       if (Array.isArray(value)) {
-        const items = value.map((item) => walk(item, null, depth + 1, isCell(item)))
-        const cellAt = items.map((item, at) => (isCell(item) ? at : -1)).filter((at) => at >= 0)
+        const fields = fieldsOf(block)
+        const items = value.map((item) => walk(item, null, depth + 1, isCell(item, fields), block))
+        const cellAt = items.map((item, at) => (isCell(item, fields) ? at : -1)).filter((at) => at >= 0)
         if (!cellAt.length) return items
-        const hidden = hiddenSet(cellAt.map((at) => sizeOf(items[at])), minCell)
+        const hidden = hiddenSet(cellAt.map((at) => sizeOf(items[at], fields)), minCell)
         const hiddenAt = new Set([...hidden].map((at) => cellAt[at]))
-        return items.map((item, at) => (hiddenAt.has(at) ? hiddenCell(item) : item))
+        return items.map((item, at) => (hiddenAt.has(at) ? hiddenCell(item, fields) : item))
       }
       if (key !== null && VCR_PEOPLE_COUNT_MAP_KEYS.includes(key)) {
         const names = Object.keys(value)
@@ -236,8 +316,12 @@ export function suppressForModel(payload, { minCell = VCR_MIN_CELL_SIZE } = {}) 
       // every other object answers to the standalone rule. The scalar keys are
       // never a list's cells, so they answer to it wherever they are.
       hideStandaloneCounts(out, minCell, VCR_PEOPLE_COUNT_SCALAR_FIELDS)
-      if (!asCell) hideStandaloneCounts(out, minCell, VCR_PEOPLE_COUNT_FIELDS)
-      return isSmallCountMeasure(out, minCell) ? hiddenMeasure(out) : out
+      if (!asCell) {
+        hideLinkedCounts(out, minCell)
+        hideStandaloneCounts(out, minCell, fieldsOf(block ?? inherited))
+      }
+      hideDerivedMeasures(out)
+      return isSmallCountMeasure(out, minCell) ? hiddenMeasure(out) : withheldBlock(key, out)
     } finally {
       ancestors.delete(value)
     }

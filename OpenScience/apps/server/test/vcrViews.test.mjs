@@ -511,12 +511,12 @@ test("a cohort the engine built is read from its result: the waterfall, the thre
   assert.deepEqual(covered.profile, [], "a coverage cohort has no profile of its own rows");
 });
 
-test("a comparator somebody wrote for the unsupported route is still shown as what it found; the library lists what this version does not do, as 暂不支持", () => {
+test("a model comparator that found nothing it can compute is still shown as what it found; the library lists what this version does not do, as 暂不支持", () => {
   const bundle = { ...emptyBundle(), comparators: [{ id: "cmp_m", version: 1, route: "model_comparator", conclusion: "not_estimable", gapList: [], resultId: null, reviewState: "ai_set" }] };
   const routes = presentComparatorTab(bundle).routes.map((route) => [route.route, route.state]);
   assert.ok(routes.some(([route, state]) => route === "model_comparator" && state === "not_estimable"));
   const library = presentModels({ models: [], methods: [], usedBy: new Map(), engineAvailable: true, engineMismatch: null });
-  assert.deepEqual(library.unsupported.map((entry) => entry.label), ["模型预测比较器", "数字孪生与基线条件化预测模型", "机制模型（QSP、PBPK）", "非劣效设计", "适应性设计", "平台试验设计"]);
+  assert.deepEqual(library.unsupported.map((entry) => entry.label), ["数字孪生与基线条件化预测模型", "机制模型（QSP、PBPK）", "非劣效设计", "适应性设计", "平台试验设计"]);
   assert.ok(library.unsupported.every((entry) => entry.note === "暂不支持"));
 });
 
@@ -669,6 +669,23 @@ test("the use ceiling says why in sentences a reader can act on, not vocabulary 
   const reviewed = useCeilingOf({ study, results: [], reviews: [{ id: "rvw_1" }] });
   assert.equal(reviewed.withinCeiling, true);
   assert.deepEqual(reviewed.reasons, []);
+});
+
+test("a benchmark in the study (an unanchored MAIC) lowers the ceiling of use to design support, and says so in a sentence", () => {
+  const study = { intendedUse: "specified_analysis" };
+  const data = { diagnostics: { modelsUsed: [{ name: "method", tier: "data", risk: "none" }], benchmarkBasis: "unanchored_maic" } };
+  const ceiling = useCeilingOf({ study, results: [data, { diagnostics: { modelsUsed: [{ tier: "data" }] } }], reviews: [] });
+  assert.equal(ceiling.ceiling, "design_support");
+  assert.equal(ceiling.withinCeiling, false);
+  assert.deepEqual(ceiling.reasons.map((reason) => reason.code), ["model_tier", "benchmark_only"], "the data tier alone would have allowed a specified analysis; the benchmark is the lower");
+  assert.match(ceiling.reasons[1].detail, /有一项结果只作基准.*研究设计支持/);
+  assert.ok(ceiling.reasons.every((reason) => !/[a-z]+_[a-z]+/.test(reason.detail)));
+  // a weaker model tier already says it; the benchmark adds nothing
+  const weaker = useCeilingOf({ study, results: [{ diagnostics: { modelsUsed: [{ tier: "scenario" }], benchmarkBasis: "model_prediction" } }], reviews: [] });
+  assert.equal(weaker.ceiling, "exploratory");
+  assert.deepEqual(weaker.reasons.map((reason) => reason.code), ["model_tier"]);
+  // no benchmark, no change
+  assert.equal(useCeilingOf({ study, results: [{ diagnostics: { modelsUsed: [{ tier: "data" }] } }], reviews: [] }).ceiling, "specified_analysis");
 });
 
 // --- budget and jobs -----------------------------------------------------------------------------------------
@@ -877,6 +894,12 @@ test("a criterion's evidence shows every citation the verdict rests on, each wit
   assert.deepEqual(row.evidenceItems.map((item) => item.locator.documentId), ["prj_new", "sfl_old"], "and where to open each");
   assert.ok(row.evidenceItems.every((item) => typeof item.at === "string" && item.at.length > 0), "each with the date of what it records");
   assert.deepEqual(row.evidence, row.evidenceItems[0], "the first stays the criterion's evidence, as before");
+  // What the quotation does not print is said beside it, and a citation that printed everything has no note.
+  assert.equal(row.evidenceItems.every((item) => item.note === null), true);
+  const read = { ...citation("HgbA1c 7.4 last month.", "prj_new", "2100-03-01T00:00:00.000Z"), unitBasis: "conventional", unit: "%", dateLocator: { start: 0, end: 23 } };
+  assert.equal(judged([read], names).evidence.note, "单位 % 是按惯例读出的，原文没有印；日期取自同一份病历的另一处，不是这句话里印的");
+  assert.equal(judged([{ ...read, dateLocator: undefined }], names).evidence.note, "单位 % 是按惯例读出的，原文没有印");
+  assert.equal(judged([{ ...read, unitBasis: undefined, unit: undefined }], names).evidence.note, "日期取自同一份病历的另一处，不是这句话里印的");
   // No name resolved (a document the viewer cannot name, or an evidence kind with none): the older label, and nothing invented.
   assert.equal(judged([later]).evidence.source, "病历原文");
   // Only what is quoted is shown, and no more than three citations.
@@ -968,6 +991,18 @@ test("the quality report reports numbers and never a verdict", () => {
   assert.match(String(several.scope), /第 1 份/);
   assert.doesNotMatch(JSON.stringify(several), /安全|匿名|合格|通过|风险低/);
   assert.equal(several.groups.find((group) => group.key === "utility").rows.find((row) => row.key === "violations").value.value, 192, "the violations are the release's count");
+});
+
+test("D3: a model card shows the TRIPOD-style words it holds, in their order, and is complete without them", () => {
+  const model = (/** @type {Record<string, any>} */ card) => presentModelCard({ id: "m2", name: "x", version: "1", tier: "literature", risk: "low", endpointType: "binary", card: { title: "T", type: "published_prognostic_equation", ...card },
+    applicability: {}, validation: {}, evidence: [], missingEvidence: [] }, []);
+  assert.deepEqual(model({}).tripod, [], "none of them is required");
+  const full = model({ intendedUse: "  辅助分层，不用于单个病人的决定  ", developmentPopulation: "2008-2014 年三家医院的 1,204 名患者", outcomeHorizon: "12 个月死亡", validationStudy: "外部验证 2 项（欧洲，亚洲）", unrelated: "不显示" });
+  assert.deepEqual(full.tripod.map((field) => field.label), ["开发人群", "验证情况", "结局和时间范围", "预期用途"], "in the order of the fields, not of the card");
+  assert.equal(full.tripod[3].text, "辅助分层，不用于单个病人的决定");
+  assert.doesNotMatch(JSON.stringify(full.tripod), /不显示/);
+  assert.equal(model({ intendedUse: 7, developmentPopulation: "  " }).tripod.length, 0, "a non-string and an empty string are not words");
+  assert.equal(model({ intendedUse: "字".repeat(900) }).tripod[0].text.length, 600);
 });
 
 test("a patient set's model card says what the model is, where it may be used, and what label it has earned", () => {
@@ -1071,6 +1106,15 @@ test("the data tab counts its cards and says nothing of who set them: no AI-set 
   assert.doesNotMatch(JSON.stringify(data.headline), /AI 设定|还没有复核/);
   // The countersignature itself is still offered by the card's state, which the page reads to show or hide the button.
   assert.deepEqual(data.assumptions.map((entry) => entry.value.review), ["ai_set", "ai_set", "reviewed"]);
+});
+
+test("a trial whose paper does not report a parameter says 未取到 beside it and does not list the parameter as used (C8)", () => {
+  const row = { id: "p1", registry_id: "NCT1", registry: "clinicaltrials.gov", title: "t", pico: {}, design: {}, enrollment: {}, sites: {} };
+  const item = (/** @type {string} */ parameter, /** @type {string} */ verification) => ({ id: `e_${parameter}`, precedent_id: "p1", parameter, locator: { verification } });
+  const data = presentDataTab({ ...emptyBundle(), evidence: { precedents: [row], items: [item("hazard_ratio", "verified"), item("outcome_sd", "not_reported"), item("median_survival_months", "not_reported")] } });
+  assert.equal(data.precedents[0].usedFor, "风险比", "a parameter the paper does not report is not one it was used for");
+  assert.deepEqual(data.precedents[0].notReported, ["outcome_sd", "中位生存时间"]);
+  assert.equal("notReported" in presentDataTab({ ...emptyBundle(), evidence: { precedents: [row], items: [item("hazard_ratio", "verified")] } }).precedents[0], false);
 });
 
 test("a precedent keeps planned and actual apart and shows a rate only when its three inputs exist", () => {

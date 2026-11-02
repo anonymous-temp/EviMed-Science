@@ -29,6 +29,9 @@ Six tools a 虚拟临床研究 capability's run uses; none is ever forced into a
   platform nothing: it renders, from ``vcr_scenario_help.json`` (generated from
   the domain's scenario schemas), every key a job kind's scenario reads, and a
   refused start carries the keys of the place it was refused from the same file.
+  ``validate`` takes what ``start`` takes and queues nothing and waits for nothing: it answers the scenario as it would be frozen, the
+  defaults the platform would fill in, the replicate count and what set it, the cost class, or the refusal by path -- so a run may
+  validate and start in the same turn.
 - ``trial_registry_record`` fetches one registry record as structured fields --
   eligibility text, arms, endpoints, planned and actual enrolment. The run
   never reaches a registry itself; the control plane does.
@@ -80,12 +83,13 @@ READ_WHATS = (
     "study", "definition", "criteria", "assumptions", "evidence", "population", "patients", "comparator", "trial",
     "precedents", "matching", "subject_document", "followup_history", "model_source", "generated_records", "results", "report_model", "snapshot_profile", "models", "jobs",
     "trial_registry_record", "patient_context", "pack", "library", "model_assessments", "longitudinal", "candidate_trials", "soa", "regulatory_contacts",
+    "candidates",
 )
 WRITE_WHATS = ("data_intake", "task_context", "patient_context",
     "definition", "protocol", "criteria", "assumption", "evidence_item", "precedent", "population", "patient_set",
     "comparator", "trial_scenario", "design_grid", "decision", "report", "model", "forecast", "step", "plan",
     "fact", "language_judgment", "field_map", "pack", "model_assessment", "history", "forecast_design", "trial_benchmark",
-    "candidate_trial", "soa", "regulatory_contact",
+    "candidate_trial", "soa", "regulatory_contact", "result_record",
 )
 # The engine's job kinds, in the domain's order (`VCR_JOB_KINDS` in
 # `packages/domain/src/vcrVocabulary.mjs`): the 24 of the first release, then the
@@ -102,11 +106,15 @@ JOB_KINDS = ("fit_survival_model", "apply_prognostic_model",
     "negative_control_comparator", "tipping_point", "prognostic_adjustment_comparator",
     # longitudinal virtual patients (2026-10-07)
     "generate_patients_longitudinal",
+    # a generated population against a second baseline table (2026-11-01)
+    "population_check",
+    # the batch reading of patient records for the criteria's facts (2026-11-01)
+    "match_extract",
     "forecast_trajectories", "evaluate_forecast", "compare_forecasts", "benchmark_trial_effect",
 )
 POOLING_METHODS = ("single_study", "random_effects_dl", "random_effects_reml", "random_effects_hksj", "fixed_effect")
 POOLING_CALIBRES = ("closest", "overall", "next_closest")
-SIMULATE_ACTIONS = ("start", "status", "cancel", "shape")
+SIMULATE_ACTIONS = ("start", "status", "cancel", "shape", "validate")
 # The objects `vcr_write` takes whose configuration, scenario or definition carries the keys of a job kind's scenario (the
 # platform projects the object onto that kind's schema and refuses what it does not read): where to look a shape up before
 # writing one. `test_vcr_platform.py` holds every name to the domain's job kinds.
@@ -159,10 +167,11 @@ AUTH_CODES = ("vcr_gateway_token_invalid", "vcr_gateway_token_missing", "vcr_unc
 
 
 class VcrPlatformError(Exception):
-    def __init__(self, code: str, message: str, retryable: bool = False, issues: list | None = None):
+    def __init__(self, code: str, message: str, retryable: bool = False, issues: list | None = None, status: int | None = None):
         super().__init__(message)
         self.code = code
         self.retryable = retryable
+        self.status = status
         # The gateway's per-field findings of a refused job ({code, field}), when it sent them.
         self.issues = issues or []
 
@@ -170,11 +179,14 @@ class VcrPlatformError(Exception):
         """What the run should do next: fix the call, retry, or go on without.
 
         A code ending ``_invalid`` names a field the run got wrong -- except the
-        credential's, which is the deployment's to fix (``unsupported``).
+        credential's, which is the deployment's to fix (``unsupported``). So does
+        any 400 from the gateway, whose sentence says what to send: a design that
+        names no trial scenario was told to "go on without the study" here, and
+        the run did, on 2026-11-01, one write short of the engine.
         """
         if self.code in AUTH_CODES:
             return "unsupported"
-        if self.code.endswith("_invalid"):
+        if self.code.endswith("_invalid") or self.status == 400:
             return "invalid_input"
         return "retry" if self.retryable else "unsupported"
 
@@ -198,7 +210,9 @@ def _detailed_tool_definitions():
                 "judgments with approved projected quotes and sourced facts; factContract gives the exact clinical metadata schema, and the language criteria still "
                 "waiting for the run's answer. what: candidate_trials lists the registry trials found for patients "
                 "(filter.id or filter.registryId reads one with its criteria; filter.subjectKey returns that patient's trials in order "
-                "with the verdict about each and the language answers still owed)."
+                "with the verdict about each and the language answers still owed). what: candidates searches the three registries for "
+                "trials that might take one patient (filter.condition, terms, age, sex, region, status) and says which were searched, "
+                "which failed and what is not covered."
             ),
             "inputSchema": {
                 "type": "object",
@@ -222,6 +236,13 @@ def _detailed_tool_definitions():
                             "limit": {"type": "integer", "minimum": 1, "maximum": READ_MAX_LIMIT, "default": 20},
                             "beforeSeq": {"type": "integer", "minimum": 0},
                             "offset": {"type": "integer", "minimum": 0, "maximum": 1048576},
+                            # what: candidates -- the registry search a run writes and what it knows of the patient.
+                            "condition": {"type": "string", "minLength": 1, "maxLength": 200},
+                            "terms": {"type": "array", "items": {"type": "string", "minLength": 1, "maxLength": 200}, "maxItems": 3},
+                            "age": {"type": "number", "minimum": 0, "maximum": 130},
+                            "sex": {"type": "string", "enum": ["male", "female"]},
+                            "region": {"type": "string", "minLength": 1, "maxLength": 80},
+                            "status": {"type": "string", "enum": ["open", "any"]},
                         },
                         "additionalProperties": False,
                     },
@@ -291,6 +312,9 @@ def _detailed_tool_definitions():
                 "How to read the results is in the vcr-analysis skill."
                 "For matching, selection names one protocolVersionId or up to ten protocolVersionIds, subjectKeys "
                 "and direction; continue a frozen batch with snapshotId and offset. "
+                "match_extract reads the study's patient records for the facts the criteria ask about, one record at a time, in a "
+                "job of its own: selection takes protocolVersionId, subjectKeys, asOf and prefilter, and no scenario. The answer "
+                "states what will be read and its cost before the work begins; a canceled or repeated start does not read a record twice. "
             ),
             "inputSchema": {
                 "type": "object",
@@ -310,7 +334,7 @@ def _detailed_tool_definitions():
                         "protocolVersionIds": {"type": "array", "minItems": 1, "maxItems": 10, "items": ID},
                         "subjectKeys": {"type": "array", "minItems": 1, "maxItems": 5000, "items": ID},
                         "direction": {"type": "string", "enum": ["trial_to_patient", "patient_to_trial"]},
-                        "asOf": {"type": "string"}, "offset": {"type": "integer", "minimum": 0},
+                        "asOf": {"type": "string"}, "offset": {"type": "integer", "minimum": 0}, "prefilter": {"type": "boolean"},
                         "snapshotId": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
                     }, "additionalProperties": False},
                     "reconstructionResultId": ID,
@@ -349,15 +373,14 @@ def _detailed_tool_definitions():
                 "if the axes have no tick marks, plotArea (pixels) gives the box whose edges carry those values. Each "
                 "arm names its curve by color ('#rrggbb' as you see it, matched to the nearest curve color in the figure; "
                 "a black curve is '#000000') or by legendOrder (1 = the first legend entry from the top), and states the "
-                "published numbers at risk (riskTable [{time, atRisk}], at least two rows; totalEvents and reportedMedian "
-                "when printed). One arm is the control, two arms are control then treatment. You never state a "
+                "published numbers at risk (riskTable [{time, atRisk}], at least two rows; none printed: initialAtRisk, the arm's "
+                "size; totalEvents and reportedMedian when printed). One arm is the control, two arms are control then treatment. You never state a "
                 "coordinate: points are measured from the pixels and come back recorded with the algorithm version, the "
                 "calibration as you stated it, the parameters used and quality indicators (xCoverage, bridgedColumns = "
                 "stretches hidden under another curve and held, monotonicityRepairs, startSurvival). The answer is a "
                 "receiptId: pass it to vcr_simulate as kind reconstruct_km with scenario {provenance:{receiptId}}, or write "
-                "it as a literature comparator's configuration.provenance.receiptId. Measured against figures drawn from "
-                "known curves: survival within 0.02 (typically 0.002; 0.017 at JPEG quality 60) and time within 0.6% of "
-                "the x range (typically 0.1%), with gridlines, censoring marks, dashes and a legend. Not reliable: curves "
+                "it as a literature comparator's configuration.provenance.receiptId. Measured on figures drawn from "
+                "known curves: survival within 0.02 and time within 0.6% of the x range. Not reliable: curves "
                 "of one colour drawn over each other, shaded bands over a curve, 3D figures, a black curve along the frame, "
                 "text touching the curve. It refuses rather than guesses (plot_area_ambiguous lists candidate boxes, "
                 "colour_required lists the colors found, legend_not_found, curve_rising for a cumulative-incidence plot) and "
@@ -433,10 +456,11 @@ def _detailed_tool_definitions():
                                         "additionalProperties": False,
                                     },
                                 },
+                                "initialAtRisk": {"type": "integer", "minimum": 1},
                                 "totalEvents": {"type": "number", "minimum": 0},
                                 "reportedMedian": {"type": "number", "exclusiveMinimum": 0},
                             },
-                            "required": ["riskTable"],
+                            "anyOf": [{"required": ["riskTable"]}, {"required": ["initialAtRisk"]}],
                             "additionalProperties": False,
                         },
                     },
@@ -486,7 +510,7 @@ def tool_definitions():
     descriptions = {
         "vcr_read": "Read this conversation's research. what=study opens compact context and enables specialist tools. patient_context lists authenticated human-message references (filter beforeSeq/limit); use messageSeq to preserve an earlier case. subject_document reads permitted original material. trial_registry_record reads one registry (filter registryId). contracts gives write syntax before any task exists; data_intake lists original upload handles; matching filter.kind=contract gives write syntax; candidate_trials reads patient trial matches. Any eligibility verdict you deliver (reply, table or file) is copied from the saved read-back (matching or candidate_trials with filter.subjectKey), never retyped.",
         "vcr_write": "Save a research object; data_intake imports an owned original upload then maps/freezes it (read contracts first). candidate_trial stores registry-linked eligibility. Never write calculated results. patient_context data={messageSeq} preserves a listed original human case, or {sourceId} an owned human upload; no model-written prose. task_context opens an independent hidden task. A fact states only what its quote says: what the text does not mention is unknown, never negated, and age, sex or a diagnosis do not imply pregnancy, menopause or a negative result. A candidate_trial's criteria are that one trial's own eligibility lines. Use the VCR workflow skill for object contracts (read %s/vcr-matching/SKILL.md before writing facts, criteria or trials; vcr-protocol, vcr-evidence, vcr-analysis and vcr-package sit beside it; none is in the skill catalogue) and vcr_simulate action=shape for numerical inputs." % root,
-        "vcr_simulate": "Run, read or cancel research calculations. action=shape with kind returns exact fields and examples before start; do not guess keys. Long jobs resume here only when they outlive this turn. Failures, cancellations and partials remain explicit. modelId requires modelVersion. Narrow aggregate methods also use research_calculate without a study.",
+        "vcr_simulate": "Trial sample size, comparing designs, a synthetic population from a paper's baseline, comparators: calculate here. No study needed; the first start opens its page. action=shape with kind gives exact fields and examples; do not guess keys. Long jobs resume here if they outlive this turn. Failures stay explicit. modelId requires modelVersion.",
     }
     tools = _detailed_tool_definitions()
     for tool in tools:
@@ -585,6 +609,7 @@ def _post(operation: str, payload: dict, timeout: int = TIMEOUT_SECONDS) -> dict
             # A module that is off, or a deployment with no digitizer, is not an outage that passes.
             retryable=error.code in (429, 502, 503, 504) and code not in ("vcr_disabled", "vcr_curve_digitizer_unavailable"),
             issues=issues,
+            status=error.code,
         ) from error
     except (urllib.error.URLError, TimeoutError, OSError) as error:
         raise VcrPlatformError("vcr_gateway_unreachable", "The 虚拟临床研究 gateway is unreachable.", retryable=True) from error
@@ -671,6 +696,20 @@ def read(arguments: dict) -> dict:
             next_actions.append("Read one returned subjectKey to obtain its saved assessment and quoted evidence; use filter.id for one criterion if needed.")
     if what == "candidate_trials" and data.get("subjectKey") and data.get("ranking"):
         next_actions.append("ranking holds this patient's saved verdict for each trial, in the platform's order. A delivered per-trial table copies registryId, eligibility, criteriaCounts and evidenceGaps from it; a criterion belongs to the trial it was saved under, so never move one between trials.")
+        next_actions.append("Say how much is decided with each trial (decided of applicable: unknown and waiting criteria stay in the total) and, from undecided, which criteria are open and why. status is the registry's word as of statusAsOf, not a place at a centre. The order puts trials the patient is not excluded from first and the better-decided first; 符合 says the stated criteria are met, it is not a recommendation.")
+    if what == "subject_document" and isinstance(data.get("passages"), list) and data.get("passageSearch") is not None:
+        next_actions.append("passages are sentences of the record found by the words they share with the criterion, each with its start and end (UTF-16 offsets): a hint, never a "
+                            "verdict. Read around one with offset=start-300. A fact still needs a verbatim quote that the platform checks at write. When no passage fits, write no fact: the "
+                            "criterion stays unknown -- do not write it negated, and do not take silence in a hint for silence in the record.")
+    if what == "subject_document" and isinstance(data.get("long"), dict):
+        next_actions.append("This record is long: ask for the part a criterion bears on by repeating the read with filter.id (a criterion id) or filter.query (a few words) instead of reading every window.")
+    if what == "candidates" and data.get("available") is not False:
+        next_actions.append("Say in the reply what data.coverage says: the registries searched and the day (asOf), any that failed and why, and that CDE and ICTRP are not covered. "
+                            "These are listings found by the search you wrote, merged and de-duplicated; their order is not a ranking and none is a judgement about the patient.")
+        next_actions.append("A field listed in a candidate's unknown is one the registry did not state, so the candidate was kept, not cleared: ChiCTR gives no sex, age or "
+                            "country and no eligibility text. leftOut counts what a record's own stated status, age, sex or country ruled out.")
+        next_actions.append("To judge the patient against a candidate, read its record with trial_registry_record, then write candidate_trial with the registry, its id and the "
+                            "criteria in the record's own words; a candidate marked parsedBefore can be written with only registry, id and subjectKeys while its record is unchanged.")
     if what == 'report_model':
         next_actions.append('For longitudinal report numbers, append the exact field inside a record summary to its numberPath, without another .summary segment. For example: longitudinal.byId.<id>.groups[0].requested. Use vcr_read longitudinal filter.id for one full record when this report model is large; only fields actually returned are bindable.')
     if what == 'longitudinal':
@@ -736,13 +775,32 @@ def write(arguments: dict) -> dict:
             "warnings": [_issue_line(issue) for issue in issues[:20]],
             "next_actions": ["Correct the named items and write them again; nothing else changed."],
         }
-    return {
+    # A reminder is not a refusal: the object it is about is saved and computed as it stands (a record not written yet, a role not
+    # stated), and the answer says what to add in a next version.
+    reminders = [issue for issue in issues if issue.get("code") in _REMINDER_CODES]
+    refused = [issue for issue in issues if issue.get("code") not in _REMINDER_CODES]
+    next_actions = []
+    if what == "task_context" and data.get("untitled") is True:
+        # A conversation's study is named by the model's words and by nothing a person said: asked for once, in the answer that makes it.
+        next_actions.append("This research has no title yet: write task_context again with data={\"title\": ...}, a short name for the research question "
+                            "(at most 40 characters; the question's name, never a person or an identifier).")
+    if refused:
+        next_actions.append("Correct the refused items and write only those again.")
+    if reminders:
+        next_actions.append("The warnings that name a record or a role are reminders: the object is saved and its result is delivered as it "
+                            "stands. Add what they name by writing the same object again (a new version), without waiting for anyone.")
+    return _with_entry({
         "status": "warning" if issues else "success",
-        "summary": "Wrote %s: %d written%s." % (what, len(ids), ", %d refused" % len(issues) if issues else ""),
+        "summary": "Wrote %s: %d written%s%s." % (what, len(ids), ", %d refused" % len(refused) if refused else "",
+                                                   ", %d reminder(s)" % len(reminders) if reminders else ""),
         "data": data,
         "warnings": [_issue_line(issue) for issue in issues[:20]],
-        "next_actions": ["Correct the refused items and write only those again."] if issues else [],
-    }
+        "next_actions": next_actions,
+    }, data)
+
+
+# The write issues that are reminders of a record the object has not got yet, not refusals (the object is saved).
+_REMINDER_CODES = frozenset({"vcr_comparator_record_incomplete", "vcr_assumption_role_missing", "vcr_evidence_item_incomplete"})
 
 
 def _issue_line(issue: dict) -> str:
@@ -880,6 +938,9 @@ def _row_line(row: dict, by_path: dict) -> str:
     text = "%s: %s; %s" % (row["path"], _type_text(row), need)
     if "default" in row:
         text += "; default %s" % _number(row["default"])
+    # What the key asks of a person, derived by the platform from the schema's structure (an object has no role: its keys do).
+    if row.get("fieldRole") in ("research_fact", "defaultable"):
+        text += "; role: %s" % row["fieldRole"]
     gates = _own_gates(row, parent)
     if gates:
         text += "; read only when %s" % " and ".join(gates)
@@ -980,6 +1041,18 @@ def shape(arguments: dict) -> dict:
     control = _control_plane_shape(kind)
     if control is not None:
         return control
+    if kind == "match_extract":
+        # Not an engine method and not a stored-record scenario: the platform plans the reading from the study and takes a selection only.
+        return {
+            "status": "success",
+            "summary": "match_extract is built by the platform from the study; you state nothing in a scenario, only a selection.",
+            "data": {"kind": kind, "method": "matching.extract", "builtByPlatform": True, "runStates": [], "keys": [],
+                     "notes": ["selection takes protocolVersionId, subjectKeys, asOf and prefilter (false reads people whose table values already decide the protocol against them). "
+                               "The answer states how many records will be read and the most they can cost before the work begins. "
+                               "It is read once: a canceled or repeated start reads only what was not read. When it finishes, start match_criteria for the same people."]},
+            "warnings": [],
+            "next_actions": ["Start it with vcr_simulate action start, kind match_extract and no scenario."],
+        }
     entry, method_id, method = _method_of(kind)
     if method is None:
         raise VcrPlatformError("vcr_scenario_help_unavailable", "This build's scenario help has no entry for %s." % kind)
@@ -1010,12 +1083,25 @@ def shape(arguments: dict) -> dict:
             data["rules"] = [_rule_line(rule) for rule in method["rules"]]
         if method.get("gridCells"):
             notes.append("A grid has at most %s cells (designs x truths), and every cell is a valid scenario of its own." % method["gridCells"])
+        if kind == "literature_population":
+            # On 2026-11-01 the run read this path's evidence bindings, saw no source to bind a pasted table to, and left for its own R.
+            notes.append("A baseline table the person pasted, with no paper preserved to bind its numbers to, goes through generate_population with the "
+                         "same numbers: the same engine and the same page, no bindings. Say the numbers are theirs and were not checked against a paper.")
         if notes:
             data["notes"] = notes
         data["examples"] = list(method.get("examples", []))
         summary = "The scenario of %s (method %s) reads %d keys." % (kind, method_id, len(rows))
+    templates = method.get("templates") if platform is None else None
+    if templates:
+        # The smallest valid scenario of each common path: the facts of the research and the choices the question makes, nothing the
+        # platform defaults. Its numbers are placeholders for the study's own.
+        data["templates"] = [{"name": template["name"], "label": template["label"], "scenario": template["scenario"]} for template in templates]
     data["legend"] = ("path: type; required or optional (required whenever the key is read); default; read only when <condition> (the key is refused "
-                      "when the condition does not hold). A path with [] is inside each item of a list. A key not listed is refused by its path.")
+                      "when the condition does not hold); role. A path with [] is inside each item of a list. A key not listed is refused by its path. "
+                      "role research_fact: only the research can give it; ask about it only if the answer would change the next computation, one "
+                      "question at a time, and otherwise go on with a stated assumption. role defaultable: settle it yourself (a default is filled "
+                      "and listed in applied, an optional key may be left out, a choice among words follows from the question) and say which "
+                      "value you took; do not ask. An object has no role: its keys do.")
     return {
         "status": "success",
         "summary": summary,
@@ -1023,6 +1109,8 @@ def shape(arguments: dict) -> dict:
         "warnings": [],
         "next_actions": [
             "Write exactly these keys and no others; a number the engine computes (a result, a count, a measure) is never a key.",
+            "Check a filled scenario without queueing it with vcr_simulate action validate (kind and scenario): it answers the defaults the platform "
+            "would fill, the replicate count and any refusal by path, and does not wait, so you may start in the same turn.",
             "Then queue it with vcr_simulate action start, or write it as the object's configuration with vcr_write.",
         ],
     }
@@ -1067,7 +1155,7 @@ def simulate(arguments: dict) -> dict:
     if action == "shape":
         return shape(arguments)
     payload = {"action": action}
-    if action == "start":
+    if action in ("start", "validate"):
         kind = arguments.get("kind")
         if kind not in JOB_KINDS:
             raise VcrPlatformError("vcr_simulate_payload_invalid", "kind must be one of: %s." % ", ".join(JOB_KINDS))
@@ -1086,13 +1174,56 @@ def simulate(arguments: dict) -> dict:
         if error.code in _absent_codes():
             return _module_absent(error, "computation", "queue")
         # A refused scenario names the keys of the place it was refused, read from the same help the shape action renders.
-        hint = refusal_hint(payload.get("kind"), error.issues) if action == "start" else ""
+        hint = refusal_hint(payload.get("kind"), error.issues) if action in ("start", "validate") else ""
         if hint:
             raise VcrPlatformError(error.code, "%s %s" % (error, hint), error.retryable, error.issues) from error
         raise
+    if action == "validate":
+        return _validate_answer(data, payload.get("kind"))
     if action in ("start", "status"):
         data = _wait_for_job(data)
-    return _job_answer(data, action)
+    return _with_entry(_with_applied(_job_answer(data, action), data), data)
+
+
+def _validate_answer(data: dict, kind) -> dict:
+    """The answer of ``action: validate``: what the platform would do with this scenario, said without queueing it and without waiting.
+
+    A valid scenario comes back with the defaults the platform would fill in (to be said in the reply with their values, as after a
+    start), the replicate count and what set it, and the job's cost class; a refused one comes back with its issues by path and the
+    keys of the place it was refused. Either way nothing was queued, and the run may go on to start in the same turn.
+    """
+    if data.get("checked") is False:
+        return {
+            "status": "success",
+            "summary": "validate does not check %s: the platform completes its scenario when it starts." % (kind or "this kind"),
+            "data": data,
+            "warnings": [str(data.get("message") or "The platform builds this scenario itself.")],
+            "next_actions": ["Start it with action start; a field that is refused comes back by its path."],
+        }
+    issues = data.get("issues") if isinstance(data.get("issues"), list) else []
+    if data.get("valid") is False:
+        hint = refusal_hint(kind, [issue for issue in issues if isinstance(issue.get("code"), str) and isinstance(issue.get("field"), str)])
+        return {
+            "status": "warning",
+            "summary": "The scenario is not valid as written (%d issue%s); nothing was queued." % (len(issues), "" if len(issues) == 1 else "s"),
+            "data": data,
+            "warnings": [_issue_line(issue) for issue in issues[:20]],
+            "next_actions": [line for line in (
+                "Fix exactly the fields named, then validate again or start; do not ask the researcher about a field the schema defaults.",
+                hint,
+            ) if line],
+        }
+    actions = ["Nothing was queued and nothing was waited on: start with the same scenario in this turn when it is what the study intends."]
+    if isinstance(data.get("applied"), list) and data["applied"]:
+        actions.append("data.applied lists what the platform will fill in because the scenario states none of it. Say each with its value in your reply; "
+                       "one that is not what the study intends is stated in the scenario before it is started.")
+    return {
+        "status": "success",
+        "summary": "The scenario is valid; nothing was queued.",
+        "data": data,
+        "warnings": [],
+        "next_actions": actions,
+    }
 
 
 def _status_wait_seconds() -> float:
@@ -1136,6 +1267,41 @@ def _wait_for_job(first: dict) -> dict:
         answer = {**first, **{key: value for key, value in fresh.items() if key != "action"}}
         if not _is_computing(answer):
             return answer
+
+
+def _with_applied(answer: dict, data: dict) -> dict:
+    """The answer with the one action a list of applied defaults adds: say them.
+
+    `data.applied` (field and value) is what the platform filled in because the scenario stated none -- a dropout of 0, an alpha of
+    0.025. They are premises of the result the researcher reads, so the reply names them with their values; one that is not what the
+    study intends is stated in the scenario and the job queued again.
+    """
+    applied = data.get("applied") if isinstance(data, dict) else None
+    if not isinstance(applied, list) or not applied:
+        return answer
+    line = ("data.applied lists what the platform filled in because the scenario did not state it. Say each with its value in your "
+            "reply; one that is not what the study intends is stated in the scenario and the job queued again.")
+    return {**answer, "next_actions": [*answer.get("next_actions", []), line]}
+
+
+def _with_entry(answer: dict, data: dict) -> dict:
+    """The answer with the one action a result entry adds: give the researcher the platform's own link, once, at the end of the reply.
+
+    The entry (`data.resultEntry`: study, tab, label, and the absolute address when the deployment has one) is built by the control
+    plane. Nothing is added to the answer when it carries none, and the model never writes an address of its own: a relative one
+    would resolve to the conversation, not to the application.
+    """
+    entry = data.get("resultEntry") if isinstance(data, dict) else None
+    if not isinstance(entry, dict) or not isinstance(entry.get("label"), str) or not entry["label"]:
+        return answer
+    url = entry.get("url")
+    if isinstance(url, str) and url:
+        line = ("data.resultEntry is where the researcher reads this. Once, at the end of your reply, give it as this link, "
+                "copied as it is: [%s](%s). Never write an address yourself." % (entry["label"], url))
+    else:
+        line = ("data.resultEntry names the page where the researcher reads this (%s). Once, at the end of your reply, say that page by "
+                "name. Never write an address yourself." % entry["label"])
+    return {**answer, "next_actions": [*answer.get("next_actions", []), line]}
 
 
 def _job_answer(data: dict, action: str) -> dict:
@@ -1202,12 +1368,18 @@ def _job_answer(data: dict, action: str) -> dict:
             "summary": "Job %s was cancelled; the completed batches are kept." % job_id,
             "data": data, "warnings": [], "next_actions": [],
         }
+    actions = ["Read the result with vcr_read (what: results) and cite the fields, never retyped numbers."]
+    result = data.get("result") if isinstance(data.get("result"), dict) else {}
+    if result.get("kind") in ("trial_scenario", "design_grid"):
+        # A design is chosen by the researcher: the reply recommends one in a sentence and says which bound decided it.
+        actions.append("When designs are compared, close with one sentence of recommendation that says which constraint decided it (the type I error "
+                       "bound, the target power, the sample size or the duration), from the numbers in the result; the platform does not pick the design.")
     return {
         "status": "success",
         "summary": "Job %s succeeded." % job_id if action != "cancel" else "Job %s is cancelled." % job_id,
         "data": data,
         "warnings": [],
-        "next_actions": ["Read the result with vcr_read (what: results) and cite the fields, never retyped numbers."],
+        "next_actions": actions,
     }
 
 

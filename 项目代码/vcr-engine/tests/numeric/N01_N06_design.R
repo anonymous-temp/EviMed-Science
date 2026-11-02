@@ -328,8 +328,19 @@ vcr_case("N06d", c("AC-28", "AC-31", "AC-04"), function() {
   tb <- vcr_test_table(r, "operating-characteristics", dir)
   cols <- c("designIndex", "truthIndex", "parameters", "measure", "value", "mcse", "simulated", "status")
   no_rds <- !any(grepl("^cell-.*\\.rds$", list.files(dir)))
-  # cell (2, 2): design 2, truth 2 -> k = 4
-  cell_seed <- as.integer((as.numeric(seed) + 4 * 7919) %% 2147483647)
+  # cell (2, 2): design 2, truth 2 -> k = 4. Since design.grid 1.3.0 the truth scenarios of a design share its seed (common random numbers,
+  # N59): cell (2, 2) runs at the seed of design 2. A grid recorded at 1.2.0 replays with a seed of its own per cell, (seed + k * 7919),
+  # bit for bit as it did before: the case below runs it too.
+  cell_seed <- as.integer((as.numeric(seed) + 2 * 7919) %% 2147483647)
+  recorded <- r$diagnostics$cells[[4]]$seed
+  old <- vcr_test_run(vcr_test_job("design.grid", sc, seed = seed, replicates = 1000L, cores = 1L, job_id = "job_n06d_old", extra = list(methodVersion = "1.2.0")))
+  old_seed <- as.integer((as.numeric(seed) + 4 * 7919) %% 2147483647)
+  old_sim <- vcr_test_run(vcr_test_job("design.simulate", utils::modifyList(base, list(design = list(nTreat = 80, nControl = 80), truth = list(effect = 0.5))),
+                                       seed = old_seed, replicates = 1000L, cores = 1L, job_id = "job_n06d_old_sim"))
+  old_cell <- old$diagnostics$cells[[4]]
+  old_ok <- identical(old$status, "succeeded") && identical(old_cell$seed, old_seed) && is.null(old_cell$pairedStream) &&
+    grepl("no_common_random_numbers_between_cells", old$diagnostics$seedPolicy, fixed = TRUE) &&
+    all(vapply(old_sim$measures, function(m) { x <- Filter(function(y) identical(y$name, m$name), old_cell$measures); length(x) == 1L && x[[1]]$value == m$value && x[[1]]$mcse == m$mcse }, logical(1)))
   sim_sc <- utils::modifyList(base, list(design = list(nTreat = 80, nControl = 80), truth = list(effect = 0.5)))
   sim <- vcr_test_run(vcr_test_job("design.simulate", sim_sc, seed = cell_seed, replicates = 5000L, cores = 1L, job_id = "job_n06d_sim"))
   cell4 <- tb[tb$designIndex == 2 & tb$truthIndex == 2, ]
@@ -337,15 +348,15 @@ vcr_case("N06d", c("AC-28", "AC-31", "AC-04"), function() {
   null_row <- tb[tb$designIndex == 1 & tb$truthIndex == 1 & tb$measure == "type_one_error", ]
   ok <- identical(r$status, "succeeded") && identical(names(tb), cols) && nrow(tb) > 0 && all(tb$status == "succeeded") &&
     all(tb$simulated) && all(is.finite(tb$mcse)) && length(unique(tb$parameters)) == 4L && no_rds && same && nrow(null_row) == 1L &&
-    abs(null_row$value - 0.025) <= 3 * null_row$mcse
+    abs(null_row$value - 0.025) <= 3 * null_row$mcse && identical(recorded, cell_seed) && old_ok
   # a tiny CPU budget stops the grid with what finished and says so
   tight <- vcr_test_run(vcr_test_job("design.grid", sc, seed = 1L, replicates = 20000L, cores = 1L, job_id = "job_n06d_cpu", extra = list(cpuSecondsLimit = 1)))
   ok_cpu <- identical(tight$status, "failed") && "cpu_budget_exhausted" %in% c(vcr_test_issue_codes(tight),
               unlist(lapply(tight$diagnostics$cells, function(c_) c_$refusal)))
   list(pass = ok && ok_cpu,
-       detail = sprintf("long table %s, %d rows, statuses %s, every measure simulated with a finite MCSE, %d distinct parameter sets, checkpoint files left: %s; cell (2,2) equals the design.simulate job at seed %d bit for bit: %s; null cell type-I %.4f (+-%.4f); CPU limit 1 s -> status %s",
+       detail = sprintf("long table %s, %d rows, statuses %s, every measure simulated with a finite MCSE, %d distinct parameter sets, checkpoint files left: %s; cell (2,2) equals the design.simulate job at seed %d bit for bit: %s; a grid replayed at 1.2.0 keeps (seed + k * 7919) and its old seed policy: %s; null cell type-I %.4f (+-%.4f); CPU limit 1 s -> status %s",
                         paste(names(tb) == cols, collapse = ""), nrow(tb), paste(unique(tb$status), collapse = "/"), length(unique(tb$parameters)),
-                        !no_rds, cell_seed, same, null_row$value, null_row$mcse, tight$status))
+                        !no_rds, cell_seed, same, old_ok, null_row$value, null_row$mcse, tight$status))
 })
 
 vcr_case("N06e", c("AC-04", "AC-28", "AC-31"), function() {

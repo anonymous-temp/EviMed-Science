@@ -38,12 +38,13 @@ import { resolveVcrReplyStudy } from './vcrReplyContext.mjs';
  */
 
 import { VCR_PRIVATE_MATCHING_PROVENANCE_KEYS, statedRequirement } from './vcrMatching.mjs';
+import { passageTerms } from './vcrPassages.mjs';
 import { presentLongitudinalRead } from './vcrLongitudinalPresentation.mjs';
 import { loadMethodValidation, validatedMethods } from './vcrMethodValidation.mjs';
 import {
   clinicalFactView, VCR_COMPARATOR_ROUTES, VCR_COUNT_KEYS, VCR_DATA_TIERS, VCR_DATA_TIER_LABELS_ZH, VCR_ENGINE_METHODS, VCR_MIN_CELL_SIZE, VCR_MODEL_INTERFACES, VCR_ROUTE_MIN_TIER,
   VCR_JOB_METHODS, VCR_SCENARIO_SCHEMAS, VCR_STEPS, VCR_STEP_CAPABILITIES, VCR_TABS, reviewStateFor, roleAllows, suppressForModel, twinLabel, vcrAssessmentIssues,
-  vcrModelCardIssues, vcrModelInterfaceOf, vcrTierIsSupported, vcrTierNeedsSupport, vcrTierOffer, whenHolds,
+  vcrModelCardIssues, vcrModelInterfaceOf, vcrResultClass, vcrTierIsSupported, vcrTierNeedsSupport, vcrTierOffer, whenHolds,
 } from "@evimed/domain";
 
 import { vcrScenarioHash } from "./vcrJobs.mjs";
@@ -52,7 +53,7 @@ import { VCR_DEFAULT_STUDY_NAME, vcrObjectNode, vcrStudyNameFrom } from "./vcrSt
 import { vcrSealState } from "./vcrSeal.mjs";
 import { VCR_SCHEMA } from "./vcrPersistence.mjs";
 import {
-  presentExport, presentModels, presentPrecedents, presentReviewNotes, presentStudy, presentSummary, resultNode, useCeilingOf, intakeNeedsOf,
+  presentConversationStudy, presentExport, presentModels, presentPrecedents, presentReviewNotes, presentStudy, presentSummary, resultNode, useCeilingOf, intakeNeedsOf,
   vcrCurrentNodes, vcrReviewIsCurrent,
 } from "./vcrViews.mjs";
 import {
@@ -77,6 +78,7 @@ export const VCR_READ_WHATS = Object.freeze([
   "study", "definition", "criteria", "assumptions", "evidence", "population", "patients", "comparator", "trial",
   "precedents", "matching", "subject_document", "followup_history", "model_source", "generated_records", "results", "report_model", "snapshot_profile", "models", "jobs",
   "trial_registry_record", "patient_context", "pack", "library", "model_assessments", "longitudinal", "candidate_trials", "soa", "regulatory_contacts",
+  "candidates",
 ]);
 
 /**
@@ -134,7 +136,7 @@ export const VCR_WRITE_WHATS = Object.freeze([
   "task_context", "patient_context", "definition", "protocol", "criteria", "assumption", "evidence_item", "precedent", "population", "patient_set",
   "comparator", "trial_scenario", "design_grid", "decision", "report", "model", "forecast", "step", "plan",
   "fact", "language_judgment", "field_map", "pack", "model_assessment", "history", "forecast_design", "trial_benchmark",
-  "candidate_trial", "soa", "regulatory_contact",
+  "candidate_trial", "soa", "regulatory_contact", "result_record",
 ]);
 
 /** @param {unknown} value */
@@ -571,7 +573,13 @@ export class VcrService {
       const summary = presentSummary({ study, results, allResults, stale, jobs, scenarios, comparators, grid, decisions, exports, roles, now });
       return { study, summary, reviews, roles };
     }));
-    const home = { studies: groups.map((group) => ({ ...group.summary,
+    // The studies the account's conversations made: their own light query, for the home alone. `studies` stays what it was -- the
+    // sidebar, the knowledge base and the pickers read it, and a conversation's study sits in the person's own project.
+    // A list that cannot be read is said so (`conversationStudiesUnreadable`), never drawn as an empty one, and never takes the rest of the home with it.
+    const conversation = await Promise.resolve().then(() => this.store.conversationStudies(String(user.id))).catch(() => null);
+    /** @type {Record<string, any>} */
+    const home = { ...(conversation ? { conversationStudies: conversation.map((study) => presentConversationStudy(study, now)) } : { conversationStudiesUnreadable: true }),
+      studies: groups.map((group) => ({ ...group.summary,
       originatingSessionId: group.study.conversationSessionId ?? null,
       ...(group.study.status === "draft" && String(group.study.question ?? "").trim() ? { draftText: group.study.question } : {}) })) };
     /** @type {Record<string, any>} */ const taskInputs = Object.fromEntries(["matching", "cohort", "patient", "comparator", "trial"].map(key => [key, { status: "missing", sources: [] }]));
@@ -769,16 +777,18 @@ export class VcrService {
   async studyView(user, id) {
     const study = await this.requireStudy(user, id);
     const bundle = await this.#bundle(study, user);
-    const [activity, conversation, intake] = await Promise.all([this.#activity(study, bundle.jobs), this.#conversation(study, user),
+    const [activity, conversation, intake, holds] = await Promise.all([this.#activity(study, bundle.jobs), this.#conversation(study, user),
       this.store.one(`SELECT run_id, session_id, detail FROM ${VCR_SCHEMA}.schedule_marks
-        WHERE study_id = $1 AND key = 'run:definition' AND detail->>'purpose' = 'intake'`, [study.id])]);
+        WHERE study_id = $1 AND key = 'run:definition' AND detail->>'purpose' = 'intake'`, [study.id]),
+      // Which tabs hold something: where a study opens when the address names none, and what its overview lists when it has nothing to say of its own.
+      Promise.resolve().then(() => this.store.heldTabs(study.id)).catch(() => /** @type {string[]} */ ([]))]);
     // Activity has a short display tail. An acknowledged intake remains a conversation when it needs more information, including on reload.
     const submitted = Boolean(conversation.sessionId && intake?.run_id && intake.session_id === conversation.sessionId
       && (intake.detail?.goalsApplied === true || intake.detail?.awaitingInput === true));
     // `activity`: what is going on now, `null` when nothing is; `conversation`: the study's own conversation, which is never one of the
     // programme's runs; `sessionId` is the same id for the readers that predate `conversation`; `engine` is what the page's one line at
     // the top says.
-    return { ...presentStudy(bundle), activity, conversation: { ...conversation, ...(submitted ? { submitted: true, ...(intake.detail?.awaitingInput === true ? { awaitingInput: true } : {}) } : {}) }, sessionId: conversation.sessionId, engine: this.engineState() };
+    return { ...presentStudy(bundle), holds, activity, conversation: { ...conversation, ...(submitted ? { submitted: true, ...(intake.detail?.awaitingInput === true ? { awaitingInput: true } : {}) } : {}) }, sessionId: conversation.sessionId, engine: this.engineState() };
   }
 
   /**
@@ -805,6 +815,16 @@ export class VcrService {
   async #conversation(study, user) {
     if (study.purpose === "calculation") return { sessionId: study.conversationSessionId ?? null, exists: Boolean(study.conversationSessionId) };
     const resolver = this.packages.conversations;
+    // A conversation's study is that conversation: the one it was made in, which is where 调整 and every other way back from its page
+    // goes. It sits in the person's own project, among all their other conversations, so no resolver gets to name another one for it
+    // (the "oldest conversation of the project" a project study falls back to would be someone else's work); the resolver is asked only
+    // whether the kernel still has this one.
+    if (study.scope === "conversation" && study.conversationSessionId) {
+      const recorded = String(study.conversationSessionId);
+      if (!resolver?.resolve) return { sessionId: recorded, exists: true };
+      const found = await resolver.resolve(study, { create: false }).catch(() => null);
+      return { sessionId: recorded, exists: found ? String(found.sessionId ?? "") === recorded && found.exists === true : true };
+    }
     if (resolver?.resolve) {
       const found = await resolver.resolve(study, { create: String(study.userId) === String(user.id) }).catch(() => null);
       if (found?.sessionId) return { sessionId: String(found.sessionId), exists: found.exists === true };
@@ -898,6 +918,8 @@ export class VcrService {
     return {
       id: result.id, kind: result.kind, subjectId: result.subjectId, version: result.version,
       conclusion: result.conclusion, notEstimableRule: result.notEstimableRule,
+      // What a reader is told: the conclusion, or 仅基准 for a result that is a benchmark (a literature curve, an unanchored MAIC, a model's prediction).
+      resultClass: vcrResultClass({ conclusion: result.conclusion, diagnostics: result.diagnostics, measures: result.measures }),
       counts: vcrCountBand(result.counts), measures: result.measures, diagnostics: result.diagnostics,
       tables: result.tables, intendedUse: result.intendedUse, useDowngrade: result.useDowngrade,
       reviewState: result.reviewState,
@@ -1659,7 +1681,7 @@ export class VcrService {
     this.counters.reads += 1;
     if (what === 'contracts') return vcrContractsRead(filter.kind ?? null);
     if (what === 'data_intake') return { available: false, code: 'vcr_invocation_unavailable', message: 'Original upload intake requires the verified current conversation.' };
-    if (!study.id && !['trial_registry_record','models','library'].includes(what)
+    if (!study.id && !['trial_registry_record','models','library','candidates'].includes(what)
       && !(what === 'matching' && ['contract', 'terminology'].includes(filter.kind))) return { available:true,empty:true,study:null,scope:'conversation' };
     const payload = await this.#runtimeRead(study, what, filter);
     // This one projection has already verified the entire generated lineage; synthetic counts are not patient disclosure cells.
@@ -1782,7 +1804,10 @@ export class VcrService {
         if (!documents?.subjectDocuments) {
           return { available: false, code: "vcr_data_plane_unavailable", message: "数据平面未接入病历文档：这一步暂不可用，其余步骤照常。" };
         }
-        return documents.subjectDocuments(study, { ...filter, limit });
+        // A read of one document that names a criterion (`id`) or some words (`query`) asks for the passages that bear on it (M4).
+        const passages = filter.documentId && (filter.id || filter.query) ? await this.#passageRequest(study, filter) : null;
+        if (passages && "refusal" in passages) return passages.refusal;
+        return documents.subjectDocuments(study, { ...filter, limit, ...(passages ? { passages } : {}) });
       }
       case "matching": {
         const matching = this.packages.matching;
@@ -1823,6 +1848,23 @@ export class VcrService {
         }
         return evidence.runtimeRead(study, { ...filter, what: "precedents" });
       }
+      case "candidates": {
+        // `candidates` (M1): the registry trials that might take one patient — merged from the three registries, de-duplicated, held to the
+        // filters by what each record states, with what was searched, what failed and what is not covered. A registry search needs no study.
+        const evidence = this.packages.evidence;
+        if (!evidence?.candidatesFor) {
+          return { available: false, code: "registry_unavailable", message: "试验登记检索未接入：这一步暂不可用，其余步骤照常。" };
+        }
+        const max = Number(this.config?.vcrCandidateSearchMax) > 0 ? Number(this.config.vcrCandidateSearchMax) : 20;
+        const answer = await evidence.candidatesFor(study, filter, max);
+        const trials = this.packages.patientTrials;
+        if (answer?.available && answer.candidates?.length && trials?.parsedHeld && study.userId) {
+          // A trial the account has structured before can be written again without its criteria while its record is unchanged (M2).
+          const held = await trials.parsedHeld(study, answer.candidates);
+          answer.candidates = answer.candidates.map((/** @type {any} */ candidate) => (held.has(`${candidate.registry}\u0000${candidate.registryId}`) ? { ...candidate, parsedBefore: true } : candidate));
+        }
+        return answer;
+      }
       case "trial_registry_record": {
         // `trial_registry_record`: a registry id in, a structured record out.
         // The control plane resolves it through package C's registry client,
@@ -1835,6 +1877,26 @@ export class VcrService {
       }
       default: throw failure(400, "vcr_read_what_invalid", "This read has no implementation.");
     }
+  }
+
+  /**
+   * The words a long record is searched with for one read: a criterion's own wording and variables and the terminology the pack holds for
+   * them (`vcrPassages.passageTerms`), with any words the run added. A criterion that is not this study's is a named refusal, not an empty
+   * answer — the passages of nothing would read as a record that says nothing.
+   * @param {any} study @param {Record<string, any>} filter
+   * @returns {Promise<{ terms: import('./vcrPassages.mjs').PassageTerms, criterionId: string | null } | { refusal: Record<string, any> }>}
+   */
+  async #passageRequest(study, filter) {
+    const query = filter.query ? String(filter.query) : null;
+    if (!filter.id) return { terms: passageTerms(null, null, query), criterionId: null };
+    const id = String(filter.id);
+    const criterion = await this.packages.matching?.criterionById?.(study, id).catch(() => null)
+      ?? await this.packages.patientTrials?.criterionById?.(study, id).catch(() => null) ?? null;
+    if (!criterion) {
+      return { refusal: { available: false, code: "vcr_read_filter_invalid", message: "本研究里没有这条条件：id 取自 vcr_read what:criteria（方案的条件）或 what:candidate_trials（候选试验的条件）。" } };
+    }
+    const terminology = await this.packages.matching?.passageTerminology?.(study, criterion).catch(() => null) ?? null;
+    return { terms: passageTerms(criterion, terminology, query), criterionId: id };
   }
 
   /** The counters the metric families read. */

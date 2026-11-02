@@ -2853,6 +2853,251 @@
           }
         ]
       }
+    },
+    {
+      "name": "population check: a generated profile against a second baseline table",
+      "job": {
+        "jobId": "job_check",
+        "studyId": "std_1",
+        "kind": "population_check",
+        "method": "population.check",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 1,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "baselineTable": [
+            {
+              "variable": "age",
+              "mean": 63,
+              "sd": 10
+            },
+            {
+              "variable": "male",
+              "proportion": 0.58
+            }
+          ],
+          "generated": [
+            {
+              "variable": "age",
+              "kind": "continuous",
+              "n": 1000,
+              "mean": 62.1,
+              "sd": 9.4
+            },
+            {
+              "variable": "male",
+              "kind": "binary",
+              "n": 1000,
+              "levels": [
+                {
+                  "level": "0",
+                  "p": 0.45
+                },
+                {
+                  "level": "1",
+                  "p": 0.55
+                }
+              ]
+            }
+          ],
+          "referenceN": 412
+        },
+        "inputs": []
+      }
+    },
+    {
+      "name": "simulate: a delayed treatment effect analysed by MaxCombo",
+      "job": {
+        "jobId": "job_nph",
+        "studyId": "std_1",
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.3.0",
+        "protocolVersion": 1,
+        "seed": 7,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "two_arm_fixed",
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "accrual": {
+            "duration": 12,
+            "followup": 18
+          },
+          "analysis": {
+            "method": "maxcombo",
+            "alpha": 0.025,
+            "sided": 1
+          },
+          "truth": {
+            "treatmentHazardRatios": {
+              "breaks": [
+                6
+              ],
+              "ratios": [
+                1,
+                0.6
+              ]
+            },
+            "controlMedian": 12
+          }
+        },
+        "inputs": []
+      }
+    },
+    {
+      "name": "grid: a truth that states a hazard ratio that changes over time replaces the base's hazardRatio",
+      "job": {
+        "jobId": "job_nphgrid",
+        "studyId": "std_1",
+        "kind": "design_grid",
+        "method": "design.grid",
+        "methodVersion": "1.3.0",
+        "protocolVersion": 1,
+        "seed": 7,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "two_arm_fixed",
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "accrual": {
+            "duration": 12,
+            "followup": 18
+          },
+          "analysis": {
+            "method": "logrank",
+            "alpha": 0.025,
+            "sided": 1
+          },
+          "truth": {
+            "hazardRatio": 0.7,
+            "controlMedian": 12
+          },
+          "designs": [
+            {
+              "nTreat": 100
+            }
+          ],
+          "truths": [
+            {
+              "treatmentHazardRatios": {
+                "breaks": [
+                  6
+                ],
+                "ratios": [
+                  1,
+                  0.6
+                ]
+              }
+            },
+            {
+              "hazardRatio": 0.8
+            }
+          ]
+        },
+        "inputs": []
+      }
+    },
+    {
+      "name": "simulate at 1.2.0: proportional hazards replay under the recorded version",
+      "job": {
+        "jobId": "job_old",
+        "studyId": "std_1",
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.2.0",
+        "protocolVersion": 1,
+        "seed": 7,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "two_arm_fixed",
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "accrual": {
+            "duration": 12,
+            "followup": 18
+          },
+          "analysis": {
+            "method": "logrank",
+            "alpha": 0.025,
+            "sided": 1
+          },
+          "truth": {
+            "hazardRatio": 0.7,
+            "controlMedian": 12
+          }
+        },
+        "inputs": []
+      }
+    },
+    {
+      "name": "prognostic equation held against the outcome the table holds (local calibration)",
+      "job": {
+        "jobId": "job_cal",
+        "studyId": "std_1",
+        "kind": "apply_prognostic_model",
+        "method": "model.prognostic_apply",
+        "methodVersion": "1.1.0",
+        "protocolVersion": 1,
+        "seed": 1,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "inputId": "snp_1:subject",
+          "idColumn": "USUBJID",
+          "sourceCondition": "control",
+          "endpoint": {
+            "type": "binary",
+            "horizon": 12,
+            "timeUnit": "months"
+          },
+          "inputUnits": {
+            "age": "years"
+          },
+          "model": {
+            "family": "logistic",
+            "intercept": -1,
+            "terms": [
+              {
+                "column": "age",
+                "unit": "years",
+                "coefficient": 0.04,
+                "transform": "identity",
+                "center": 60,
+                "scale": 1
+              }
+            ]
+          },
+          "calibration": {
+            "outcomeColumn": "response"
+          }
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      }
     }
   ],
   "invalid": [
@@ -16613,6 +16858,451 @@
       },
       "expected": [
         "input_source_not_individual@inputs[0].valueSource"
+      ]
+    },
+    {
+      "name": "population check: a profile kind the check does not read, and a key the schema does not list",
+      "job": {
+        "jobId": "job_check_bad",
+        "studyId": "std_1",
+        "kind": "population_check",
+        "method": "population.check",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 1,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "baselineTable": [
+            {
+              "variable": "age",
+              "mean": 63,
+              "sd": 10
+            },
+            {
+              "variable": "male",
+              "proportion": 0.58
+            }
+          ],
+          "generated": [
+            {
+              "variable": "age",
+              "kind": "ordinal",
+              "n": 1000,
+              "mean": 62.1,
+              "sd": 9.4
+            },
+            {
+              "variable": "male",
+              "kind": "binary",
+              "n": 1000,
+              "levels": [
+                {
+                  "level": "0",
+                  "p": 0.45
+                },
+                {
+                  "level": "1",
+                  "p": 0.55
+                }
+              ]
+            }
+          ],
+          "referenceN": 412,
+          "unexpected": 1
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.generated[0].kind",
+        "scenario_field_unknown@scenario.unexpected"
+      ]
+    },
+    {
+      "name": "analytic design: a hazard ratio that changes over time is simulated, not sized",
+      "job": {
+        "jobId": "job_a",
+        "studyId": "std_1",
+        "kind": "design_analytic",
+        "method": "design.analytic",
+        "methodVersion": "1.3.0",
+        "protocolVersion": 1,
+        "seed": 7,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "two_arm_fixed"
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "truth": {
+            "hazardRatio": 0.7,
+            "controlMedian": 12,
+            "treatmentHazardRatios": {
+              "breaks": [
+                6
+              ],
+              "ratios": [
+                1,
+                0.6
+              ]
+            }
+          },
+          "accrual": {
+            "duration": 12,
+            "followup": 18
+          },
+          "analysis": {
+            "alpha": 0.025,
+            "power": 0.9,
+            "sided": 1
+          }
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.truth.treatmentHazardRatios"
+      ]
+    },
+    {
+      "name": "simulate: MaxCombo is not a group-sequential analysis",
+      "job": {
+        "jobId": "job_gs",
+        "studyId": "std_1",
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.3.0",
+        "protocolVersion": 1,
+        "seed": 7,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "group_sequential",
+            "nTreat": 150,
+            "nControl": 150,
+            "informationRates": [
+              0.5,
+              1
+            ]
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "accrual": {
+            "duration": 12,
+            "followup": 18
+          },
+          "analysis": {
+            "method": "maxcombo",
+            "alpha": 0.025,
+            "sided": 1
+          },
+          "truth": {
+            "hazardRatio": 0.7,
+            "controlMedian": 12
+          }
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.analysis.method"
+      ]
+    },
+    {
+      "name": "simulate: both hazard laws",
+      "job": {
+        "jobId": "job_both",
+        "studyId": "std_1",
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.3.0",
+        "protocolVersion": 1,
+        "seed": 7,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "two_arm_fixed",
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "accrual": {
+            "duration": 12,
+            "followup": 18
+          },
+          "analysis": {
+            "method": "maxcombo",
+            "alpha": 0.025,
+            "sided": 1
+          },
+          "truth": {
+            "hazardRatio": 0.7,
+            "treatmentHazardRatios": {
+              "breaks": [
+                6
+              ],
+              "ratios": [
+                1,
+                0.6
+              ]
+            },
+            "controlMedian": 12
+          }
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.truth.treatmentHazardRatios"
+      ]
+    },
+    {
+      "name": "simulate: neither hazard law",
+      "job": {
+        "jobId": "job_none",
+        "studyId": "std_1",
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.3.0",
+        "protocolVersion": 1,
+        "seed": 7,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "two_arm_fixed",
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "accrual": {
+            "duration": 12,
+            "followup": 18
+          },
+          "analysis": {
+            "method": "maxcombo",
+            "alpha": 0.025,
+            "sided": 1
+          },
+          "truth": {
+            "controlMedian": 12
+          }
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_field_missing@scenario.truth.hazardRatio"
+      ]
+    },
+    {
+      "name": "simulate: one ratio too few for the breaks",
+      "job": {
+        "jobId": "job_short",
+        "studyId": "std_1",
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.3.0",
+        "protocolVersion": 1,
+        "seed": 7,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "two_arm_fixed",
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "accrual": {
+            "duration": 12,
+            "followup": 18
+          },
+          "analysis": {
+            "method": "maxcombo",
+            "alpha": 0.025,
+            "sided": 1
+          },
+          "truth": {
+            "treatmentHazardRatios": {
+              "breaks": [
+                6
+              ],
+              "ratios": [
+                1
+              ]
+            },
+            "controlMedian": 12
+          }
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.truth.treatmentHazardRatios.ratios"
+      ]
+    },
+    {
+      "name": "simulate at 1.2.0: a design is never labelled with a version that did not have it",
+      "job": {
+        "jobId": "job_old_nph",
+        "studyId": "std_1",
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.2.0",
+        "protocolVersion": 1,
+        "seed": 7,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "two_arm_fixed",
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "accrual": {
+            "duration": 12,
+            "followup": 18
+          },
+          "analysis": {
+            "method": "maxcombo",
+            "alpha": 0.025,
+            "sided": 1
+          },
+          "truth": {
+            "treatmentHazardRatios": {
+              "breaks": [
+                6
+              ],
+              "ratios": [
+                1,
+                0.6
+              ]
+            },
+            "controlMedian": 12
+          }
+        },
+        "inputs": []
+      },
+      "expected": [
+        "method_version_mismatch@methodVersion"
+      ]
+    },
+    {
+      "name": "local calibration: a logistic equation names its outcome column, not a time and a status",
+      "job": {
+        "jobId": "job_cal_bad",
+        "studyId": "std_1",
+        "kind": "apply_prognostic_model",
+        "method": "model.prognostic_apply",
+        "methodVersion": "1.1.0",
+        "protocolVersion": 1,
+        "seed": 1,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "inputId": "snp_1:subject",
+          "idColumn": "USUBJID",
+          "sourceCondition": "control",
+          "endpoint": {
+            "type": "binary",
+            "horizon": 12,
+            "timeUnit": "months"
+          },
+          "inputUnits": {
+            "age": "years"
+          },
+          "model": {
+            "family": "logistic",
+            "intercept": -1,
+            "terms": [
+              {
+                "column": "age",
+                "unit": "years",
+                "coefficient": 0.04,
+                "transform": "identity",
+                "center": 60,
+                "scale": 1
+              }
+            ]
+          },
+          "calibration": {
+            "timeColumn": "t",
+            "statusColumn": "s"
+          }
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_missing@scenario.calibration.outcomeColumn",
+        "scenario_field_unknown@scenario.calibration.timeColumn"
+      ]
+    },
+    {
+      "name": "local calibration at 1.0.0: a version never labelled with what it did not have",
+      "job": {
+        "jobId": "job_cal_old",
+        "studyId": "std_1",
+        "kind": "apply_prognostic_model",
+        "method": "model.prognostic_apply",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 1,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "inputId": "snp_1:subject",
+          "idColumn": "USUBJID",
+          "sourceCondition": "control",
+          "endpoint": {
+            "type": "binary",
+            "horizon": 12,
+            "timeUnit": "months"
+          },
+          "inputUnits": {
+            "age": "years"
+          },
+          "model": {
+            "family": "logistic",
+            "intercept": -1,
+            "terms": [
+              {
+                "column": "age",
+                "unit": "years",
+                "coefficient": 0.04,
+                "transform": "identity",
+                "center": 60,
+                "scale": 1
+              }
+            ]
+          },
+          "calibration": {
+            "outcomeColumn": "response"
+          }
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "method_version_mismatch@methodVersion"
       ]
     }
   ],

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {clinicalDateInQuote,clinicalIntervalInQuote} from '../src/vcrClinicalDateEvidence.mjs';
+import {clinicalDateInEvidence,clinicalDateInQuote,clinicalIntervalInQuote} from '../src/vcrClinicalDateEvidence.mjs';
 import {verifyFactEvidence,evaluateCriterion,UNKNOWN} from '../src/vcrMatching.mjs';
 
 test('dataset year and undated age cannot supply a manufactured birth/event date',()=>{
@@ -35,4 +35,23 @@ test('nested intervals require stated bounds or explicit source-anchored duratio
  const text='Currently no docetaxel recorded.';
  const fact={id:'f',variable:'docetaxel',polarity:'negated',extractedBy:'model',surface:'docetaxel',provenance:{factSchema:2},clinical:{schema:1,assertion:'negated',experiencer:'patient',medication:{state:'unknown',absenceScope:'interval'},occurredInterval:interval},source:{documentId:'d',start:0,end:text.length,quote:text}};
  assert.equal(verifyFactEvidence(fact,{documents:{d:{text}},anyPolarity:true}).reason,'date_not_in_span');
+});
+
+test('a date may rest on a second verbatim quotation of the same document, and on nothing outside it (dateQuote)',()=>{
+ assert.equal(clinicalDateInEvidence('2100-03-01','Takes aspirin daily.','Record date: 2100-03-01'),true);
+ assert.equal(clinicalDateInEvidence('2100-03-01','Takes aspirin daily.',null),false);
+ assert.equal(clinicalDateInEvidence('2100-03-01','Takes aspirin daily.','Seen 3/1 for review'),false,'a short form with no year supplies nothing');
+ assert.equal(clinicalDateInEvidence('2100-01-01','Takes aspirin daily.','Dataset year 2100'),false,'a year alone is not a date');
+ const text='Record date: 2100-03-01\n\nTakes aspirin daily.\nUploaded 2100-06-30.';
+ const fact={id:'f',variable:'aspirin',polarity:'affirmed',extractedBy:'model',surface:'aspirin',occurredAt:'2100-03-01',provenance:{factSchema:2},
+  source:{documentId:'d',start:25,end:45,quote:'Takes aspirin daily.',dateQuote:{start:0,end:23,quote:'Record date: 2100-03-01'}}};
+ assert.deepEqual(verifyFactEvidence(fact,{documents:{d:{text}}}),{ok:true,reason:null});
+ const refuse=(over,reason)=>assert.deepEqual(verifyFactEvidence({...fact,...over},{documents:{d:{text}}}),{ok:false,reason});
+ refuse({source:{...fact.source,dateQuote:{start:0,end:23,quote:'Record date: 2100-03-02'}}},'date_quote_mismatch');
+ refuse({source:{...fact.source,dateQuote:{start:0,end:999,quote:'x'}}},'date_quote_mismatch');
+ refuse({source:{...fact.source,dateQuote:'Record date: 2100-03-01'}},'date_quote_mismatch');
+ refuse({occurredAt:'2100-06-30'},'date_not_in_span');
+ refuse({source:{...fact.source,dateQuote:undefined},occurredAt:'2100-03-01'},'date_not_in_span');
+ refuse({recordedAt:'2100-05-01'},'date_not_in_span');
+ assert.equal(verifyFactEvidence({...fact,recordedAt:'2100-03-01'},{documents:{d:{text}}}).ok,true,'recordedAt reads the same evidence');
 });

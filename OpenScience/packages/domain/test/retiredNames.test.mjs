@@ -12,6 +12,12 @@ test("a retired module name is read as its current name while the alias lasts", 
   assert.deepEqual(searchNeedles("循证传播 GEO 提案", BEFORE), ["循证传播 geo 提案", "循证 geo geo 提案"]);
 });
 
+test("the old name of the comparison task still finds it, for the same three months", () => {
+  assert.deepEqual(searchNeedles("合成对照", BEFORE), ["合成对照", "对照研究"]);
+  assert.equal(searchMatches("合成对照", ["对照研究 · 构建对照并比较结局"], BEFORE), true);
+  assert.equal(searchMatches("合成对照", ["对照研究 · 构建对照并比较结局"], AFTER), false);
+});
+
 test("a query with no retired name is tried as typed, and an empty one matches everything", () => {
   assert.deepEqual(searchNeedles("meta 分析", BEFORE), ["meta 分析"]);
   assert.deepEqual(searchNeedles("   ", BEFORE), []);
@@ -34,6 +40,6 @@ test("three months after the rename the old name is a word like any other", () =
 });
 
 test("each retired name maps to a distinct current name the product really uses", () => {
-  assert.deepEqual(RETIRED_MODULE_NAMES.map((entry) => entry.now), ["循证 GEO", "虚拟临床研究"]);
+  assert.deepEqual(RETIRED_MODULE_NAMES.map((entry) => entry.now), ["循证 GEO", "虚拟临床研究", "对照研究"]);
   assert.equal(new Set(RETIRED_MODULE_NAMES.map((entry) => entry.retired)).size, RETIRED_MODULE_NAMES.length);
 });

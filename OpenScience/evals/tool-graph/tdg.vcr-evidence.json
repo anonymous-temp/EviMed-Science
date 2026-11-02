@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "vcr-evidence",
-  "version": "sha256:cb8b8909d50e72b28e1414fe4a080bab8822ff0223ed6115e37b722a9f30e62a",
+  "version": "sha256:2ae8740d763c6f347975f93f72486d62182006bb4469aa886ef1363d768e6475",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 37,
@@ -587,7 +587,7 @@
     {
       "name": "mcp__evimed__curve_digitize",
       "source": "mcp",
-      "description": "Read a published Kaplan-Meier figure into curve points, deterministically, so a survival curve can be reconstructed. The figure must already be a PNG or JPEG in this study's workspace (imageArtifactId, a workspace-relative path; imageSha256 pins it by hash). You state the calibration as the axis labels read: x.min and x.max are the values of the FIRST and LAST tick on the time axis (x.unit names the unit), y.min and y.max those on the survival axis, y.scale is 'fraction' (0 to 1) or 'percent' (0 to 100); if the axes have no tick marks, plotArea (pixels) gives the box whose edges carry those values. Each arm names its curve by color ('#rrggbb' as you see it, matched to the nearest curve color in the figure; a black curve is '#000000') or by legendOrder (1 = the first legend entry from the top), and states the published numbers at risk (riskTable [{time, atRisk}], at least two rows; totalEvents and reportedMedian when printed). One arm is the control, two arms are control then treatment. You never state a coordinate: points are measured from the pixels and come back recorded with the algorithm version, the calibration as you stated it, the parameters used and quality indicators (xCoverage, bridgedColumns = stretches hidden under another curve and held, monotonicityRepairs, startSurvival). The answer is a receiptId: pass it to vcr_simulate as kind reconstruct_km with scenario {provenance:{receiptId}}, or write it as a literature comparator's configuration.provenance.receiptId. Measured against figures drawn from known curves: survival within 0.02 (typically 0.002; 0.017 at JPEG quality 60) and time within 0.6% of the x range (typically 0.1%), with gridlines, censoring marks, dashes and a legend. Not reliable: curves of one colour drawn over each other, shaded bands over a curve, 3D figures, a black curve along the frame, text touching the curve. It refuses rather than guesses (plot_area_ambiguous lists candidate boxes, colour_required lists the colors found, legend_not_found, curve_rising for a cumulative-incidence plot) and records nothing then: read what it asks for and call again. An impossible calibration is refused with the reason.",
+      "description": "Read a published Kaplan-Meier figure into curve points, deterministically, so a survival curve can be reconstructed. The figure must already be a PNG or JPEG in this study's workspace (imageArtifactId, a workspace-relative path; imageSha256 pins it by hash). You state the calibration as the axis labels read: x.min and x.max are the values of the FIRST and LAST tick on the time axis (x.unit names the unit), y.min and y.max those on the survival axis, y.scale is 'fraction' (0 to 1) or 'percent' (0 to 100); if the axes have no tick marks, plotArea (pixels) gives the box whose edges carry those values. Each arm names its curve by color ('#rrggbb' as you see it, matched to the nearest curve color in the figure; a black curve is '#000000') or by legendOrder (1 = the first legend entry from the top), and states the published numbers at risk (riskTable [{time, atRisk}], at least two rows; none printed: initialAtRisk, the arm's size; totalEvents and reportedMedian when printed). One arm is the control, two arms are control then treatment. You never state a coordinate: points are measured from the pixels and come back recorded with the algorithm version, the calibration as you stated it, the parameters used and quality indicators (xCoverage, bridgedColumns = stretches hidden under another curve and held, monotonicityRepairs, startSurvival). The answer is a receiptId: pass it to vcr_simulate as kind reconstruct_km with scenario {provenance:{receiptId}}, or write it as a literature comparator's configuration.provenance.receiptId. Measured on figures drawn from known curves: survival within 0.02 and time within 0.6% of the x range. Not reliable: curves of one colour drawn over each other, shaded bands over a curve, 3D figures, a black curve along the frame, text touching the curve. It refuses rather than guesses (plot_area_ambiguous lists candidate boxes, colour_required lists the colors found, legend_not_found, curve_rising for a cumulative-incidence plot) and records nothing then: read what it asks for and call again. An impossible calibration is refused with the reason.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -738,6 +738,10 @@
                     "additionalProperties": false
                   }
                 },
+                "initialAtRisk": {
+                  "type": "integer",
+                  "minimum": 1
+                },
                 "totalEvents": {
                   "type": "number",
                   "minimum": 0
@@ -747,8 +751,17 @@
                   "exclusiveMinimum": 0
                 }
               },
-              "required": [
-                "riskTable"
+              "anyOf": [
+                {
+                  "required": [
+                    "riskTable"
+                  ]
+                },
+                {
+                  "required": [
+                    "initialAtRisk"
+                  ]
+                }
               ],
               "additionalProperties": false
             }
@@ -1642,7 +1655,8 @@
               "longitudinal",
               "candidate_trials",
               "soa",
-              "regulatory_contacts"
+              "regulatory_contacts",
+              "candidates"
             ]
           },
           "filter": {
@@ -1668,7 +1682,7 @@
     {
       "name": "mcp__evimed__vcr_simulate",
       "source": "mcp",
-      "description": "Run, read or cancel research calculations. action=shape with kind returns exact fields and examples before start; do not guess keys. Long jobs resume here only when they outlive this turn. Failures, cancellations and partials remain explicit. modelId requires modelVersion. Narrow aggregate methods also use research_calculate without a study.",
+      "description": "Trial sample size, comparing designs, a synthetic population from a paper's baseline, comparators: calculate here. No study needed; the first start opens its page. action=shape with kind gives exact fields and examples; do not guess keys. Long jobs resume here if they outlive this turn. Failures stay explicit. modelId requires modelVersion.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1678,7 +1692,8 @@
               "start",
               "status",
               "cancel",
-              "shape"
+              "shape",
+              "validate"
             ],
             "default": "start"
           },
@@ -1719,6 +1734,8 @@
               "tipping_point",
               "prognostic_adjustment_comparator",
               "generate_patients_longitudinal",
+              "population_check",
+              "match_extract",
               "forecast_trajectories",
               "evaluate_forecast",
               "compare_forecasts",
@@ -1839,7 +1856,8 @@
               "trial_benchmark",
               "candidate_trial",
               "soa",
-              "regulatory_contact"
+              "regulatory_contact",
+              "result_record"
             ]
           },
           "items": {

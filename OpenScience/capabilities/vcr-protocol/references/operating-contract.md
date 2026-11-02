@@ -14,7 +14,7 @@ clinical outcome. Trial simulation compares designs under stated assumptions;
 it is not remote trial operations and does not prove a drug works.
 
 Use available context first. For a new research object, `mcp__evimed__vcr_write` with
-`{"what":"task_context"}` obtains the authenticated conversation's scope. Never
+`{"what":"task_context"}` obtains the authenticated conversation's scope; add `data: {"title": ...}`, a short title for the research question (never a person or an identifier), and that is what the study is called. Never
 invent session/project/study identifiers or create a second conversation. A narrow
 aggregate sample-size/power question can use ordinary conversation calculation without a study.
 Read existing results before calculating again. Preserve exact object, model,
@@ -42,6 +42,8 @@ Highlight prerequisites per operation, not for the entire platform:
 - Individual prediction needs an executable model within its endpoint, population,
   units and horizon. Preserve partial results and state the specific missing input.
 
+Ask only what would change the next computation, one thing at a time, and otherwise go on with a stated assumption. The answer of `vcr_simulate` action shape marks each key `research_fact` (only the research can give it) or `defaultable` (settle it yourself and say which value you took); action validate shows, without queueing or waiting, what the platform would fill in and refuse, so validating and starting can be one turn.
+
 No contact, referral, site CRM, recruitment funnel, coordinator assignment,
 recruitment materials or follow-up operations are part of this workflow. Retain
 scientific visit schedules, longitudinal observations, criterion feasibility
@@ -57,6 +59,10 @@ they do not identify treatment effects or replace randomized controls.
 
 
 Explain research results in ordinary research terms. Internal IDs, field keys, engine endpoints and bookkeeping belong to saved provenance, not the reader-facing explanation. Preserve numerical method, uncertainty and source scope when they affect interpretation.
+
+## Where the result is read
+
+When a tool answer carries `resultEntry`, the platform has built the place where the researcher reads what the call produced. Give it once, at the end of your reply, as the link the answer names, copied as it is. Write no address of your own, and none for a result no answer named; a reply that says a result exists without the link leaves the researcher to find it.
 
 ## Data and result continuity
 

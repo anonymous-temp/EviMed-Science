@@ -39,11 +39,14 @@ test('exact binary boundary rates and analytic contract are accepted without fab
   assert.deepEqual(validateScenario('design.simulate', scenario), [])
 })
 
-test('single-arm and external-control null laws choose the same 20000/5000 precision floors', () => {
+test('single-arm and external-control null laws choose the 20000/5000 precision floors, and a design that borrows is held to 100000 (decision 3, 2026-11-01)', () => {
   const scenario = exact(); assert.equal(vcrIsNullScenario(scenario), false)
   scenario.truth.responseRate = 0.2; assert.equal(vcrIsNullScenario(scenario), true)
   assert.equal(vcrReplicateFloorFor(scenario), 20000)
-  assert.equal(vcrReplicateFloorFor(external()), 20000)
+  // The external control borrows from outside the trial, so its null case is the one that is judged: 100,000 whatever the use. (It was
+  // 20,000 with the single-arm one until the owner ruled the borrowing designs' type I error is held to the convention.)
+  assert.equal(vcrReplicateFloorFor(external()), 100000)
+  assert.equal(vcrReplicateFloorFor(external(), { borrowing: false }), 20000, 'the null law is the same; only the borrowing sets the floor')
   assert.equal(vcrReplicateFloorFor(exact()), 5000)
   assert.equal(vcrIsNullScenario(simon()), true)
   const cancelingEffects = external(); cancelingEffects.truth.treatmentRates = [0.3, 0.3]

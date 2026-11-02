@@ -22,17 +22,6 @@
 export type VcrBodyRole =
   | "lead" | "clinical_reviewer" | "statistical_reviewer" | "data_manager" | "viewer";
 
-export interface VcrCreateBody {
-  purpose?: "programme" | "calculation";
-  draft?: boolean;
-  name?: string;
-  question?: string;
-  dataTier?: "T0" | "T1" | "T2" | "T3";
-  intendedUse?: "exploratory" | "design_support" | "specified_analysis" | "submission_preparation";
-  /** One of the home page's four action cards. */
-  action?: "cohort" | "patients" | "comparator" | "trial";
-}
-
 /**
  * What a study's settings may change. The compute budget is not among them: it
  * moves only through the audited confirmation.
@@ -153,10 +142,6 @@ function said<T extends Record<string, unknown>>(entries: T): Partial<T> {
   const body: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(entries)) if (value !== undefined) body[key] = value;
   return body as Partial<T>;
-}
-
-export function studyCreateBody(input: VcrCreateBody = {}) {
-  return said({ name: input.name, question: input.question, dataTier: input.dataTier, intendedUse: input.intendedUse, action: input.action, purpose: input.purpose, draft: input.draft });
 }
 
 export function studyPatchBody(input: VcrPatchBody = {}) {

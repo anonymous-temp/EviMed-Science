@@ -2824,6 +2824,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     intakeController,
     entityVocabulary,
     sourceChanges,
+    // The batch reading of patient records calls the model through the same usage ledger every control-plane call goes through (purpose vcr).
+    usageLedger,
     officialZoneForKeys: productDatabase ? createOfficialZoneLookup({ database: productDatabase }) : null,
     // The learning package's prediction registry (flywheel F25) is given here when it exists; without one the filing route is absent.
     // The prediction registry is composed with the evolution module, after this: the filing route asks for it when a prediction is filed.
@@ -5905,7 +5907,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       const project = await sourceProject(identity);
       return verifyVcrInvocation({ header, operation, body, project, runtimeManager,
         resolveSession: (ownedProject, sessionId) => runtimeEventPump.sessionOwner(ownedProject, sessionId),
-        runs: (await agentRuns.list(project)).filter(run=>run.status==="running"),readBenchmark:readVcrBenchmarkFile,authenticatedUserId:String(identity.userId) });
+        runs: async () => (await agentRuns.list(project)).filter(run=>run.status==="running"),adoptionWaitMs:config.vcrRunAdoptionWaitMs,readBenchmark:readVcrBenchmarkFile,authenticatedUserId:String(identity.userId) });
     },
     report: (code) => process.stderr.write(`vcr gateway: ${code}\n`),
     readProducerRun: async (study, runId) => {
@@ -6154,7 +6156,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         const input=(transcript.messages ?? []).filter(message=>message.role==='user' && message.source==='user').at(-1);
         return input ? {requestId:input.sourceRequestId,turnStartSeq:input.turnStartSeq} : null;
       },
-      resolve:createVcrCompletionResolver({accounts:store,studies:vcr.store,sessions:researchSessions,allows:user=>vcr.service.allows(user)}),
+      resolve:createVcrCompletionResolver({accounts:store,studies:vcr.store,sessions:researchSessions,allows:user=>vcr.service.allows(user),
+        adoptSession:async (project,sessionId)=>(await agentRuns.list(project)).some(run=>run.sessionId===sessionId) ? researchSessions.put(project,sessionId,{mode:'open-domain'}) : null}),
       inbox: async (project,sessionId) => {
         // A stopped runtime cannot be busy. Only a dispatch that passed the spend
         // guards starts it; probing a blocked continuation never keeps it warm.

@@ -32,8 +32,9 @@ describe("the labels are the domain's, not a second copy", () => {
     }
   });
 
-  it("names the three conclusions from the vocabulary", () => {
-    expect(conclusionLabel("not_estimable")).toBe(VCR_CONCLUSION_LABELS_ZH.not_estimable);
+  it("names the three conclusions from the vocabulary, and the benchmark class beside them", () => {
+    for (const key of ["estimable", "limited", "not_estimable"] as const) expect(conclusionLabel(key)).toBe(VCR_CONCLUSION_LABELS_ZH[key]);
+    expect(conclusionLabel("benchmark_only")).toBe("仅基准");
     expect(countLabel("effectiveSampleSize")).toBe(VCR_COUNT_LABELS_ZH.effectiveSampleSize);
   });
 

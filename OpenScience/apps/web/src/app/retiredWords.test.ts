@@ -137,6 +137,9 @@ const RETIRED: ReadonlyArray<readonly [string, string]> = [
   // `retiredNames.mjs`, on lines marked retired-word-ok.
   ["循证传播", "renamed 2026-10-07 by the owner: the module is 「循证 GEO」; its measurement screens are still 「AI 回答监测」"],
   ["虚拟临研", "renamed 2026-10-07 by the owner: the module is 「虚拟临床研究」, in full"],
+  // The comparison task (owner decision of 2026-11-01, remediation plan 7.6): 「合成对照」 was read as Medidata's historical-data control
+  // arm, and what the task does is compare the study with a control from elsewhere. The module's name did not change; a search still reads the old word.
+  ["合成对照", "renamed 2026-11-01 by the owner: the task is 「对照研究」; 「合成」 is kept for records that are synthetic"],
 ];
 
 /**

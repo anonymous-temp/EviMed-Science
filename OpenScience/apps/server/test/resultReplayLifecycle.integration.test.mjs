@@ -93,6 +93,25 @@ test("cancel waits for preparation's parent lock then prevents its later launch"
   assert.equal(f.starts, 0);
 });
 
+test("a calculation holding its project lease lets a capture of the same project finish", options, async t => {
+  // The engine's start waits for the project's storage mutation under this lease; a capture holding that mutation writes rows
+  // that name the project. If the lease refused those writes the two would wait for each other, and PostgreSQL cannot see it.
+  const fixture = await replayFixture(t);
+  await fixture.calculate();
+  const job = await fixture.claim();
+  await writeFile(path.join(fixture.project.workspaceDir, "second.json"), '{"studies":[1]}');
+  const entered = deferred(); const release = deferred();
+  const held = fixture.service.withProjectLease(job, async () => { entered.resolve(); await release.promise; return true; });
+  await entered.promise;
+  // Started here and not inside the lease, whose transaction it would otherwise borrow: the worker and a request are strangers.
+  const capture = fixture.results.captureFile({ userId: fixture.user.id, project: fixture.project, relativePath: "second.json",
+    producer: { kind: "tool", sessionId: "native-session", callId: "second", eventId: "input:second" } });
+  const outcome = await Promise.race([capture.then(() => "finished"), new Promise(done => setTimeout(() => done("waiting"), 3000))]);
+  release.resolve();
+  await held; await capture;
+  assert.equal(outcome, "finished");
+});
+
 test("cancel during admission reloads the persisted execution and joins before changing durable state", options, async t => {
   const f = await replayFixture(t); const initial = await f.calculate(); const job = await f.claim();
   const prepared = await f.service.prepare(job); const entered = deferred(); const release = deferred();
@@ -134,6 +153,40 @@ test("project deletion joins its engine jobs before the parent is removed", opti
   await f.store.database.transaction(client => f.service.cancelProject(f.user.id, f.project.id, client));
   assert.equal(f.cancels, 1); assert.equal((await f.jobs.get(f.user.id, job.id)).status, "canceled");
   await assert.rejects(f.service.start(job, prepared), { code: "product_job_lease_lost" });
+});
+
+test("a project's deletion holds its row and never waits for the project's storage mutation, which a capture of the same project holds while it writes rows that name the project", options, async t => {
+  // The class of the 2026-11-01 stall: a transaction holding the project row FOR UPDATE that waits for something only a transaction needing a
+  // lock on that row can finish. PostgreSQL cannot see a wait on the storage mutation, so nothing ended it. The deletion's sweep stopped a
+  // calculation whose stop answered with a partial output and kept it, which is a capture; a project that is being deleted has no use for it.
+  const f = await replayFixture(t); await f.calculate(); const job = await f.claim();
+  const prepared = await f.service.prepare(job); await f.service.start(job, prepared);
+  await writeFile(path.join(f.project.workspaceDir, "second.json"), '{"studies":[1]}');
+  await writeFile(path.join(f.project.workspaceDir, "third.json"), '{"studies":[1,2]}');
+  f.engine.cancel = async scope => ({ jobId: scope.jobId, recipeDigest: scope.recipeDigest, state: "canceled", cleanup: "confirmed",
+    resultPath: `result-replays/${scope.jobId}/output/result.json`, artifacts: [{ path: `result-replays/${scope.jobId}/output/result.json`, sha256: "a".repeat(64), bytes: 2 }] });
+  // Keeping a partial output is a capture of a file of the project, as it is in production (the verification before it is not this case's concern).
+  f.service.preparedForRecord = async () => ({ project: f.project });
+  f.service.captureOutputOwned = async () => f.results.captureFile({ userId: f.user.id, project: f.project, relativePath: "third.json",
+    producer: { kind: "tool", sessionId: "native-session", callId: "third", eventId: "input:third" } });
+  // A capture of the same project that holds the mutation and is about to write a row that names the project.
+  const entered = deferred(); const gate = deferred(); let gated = false;
+  const put = f.documents.put.bind(f.documents);
+  f.documents.put = async (...args) => { if (args[1] === "result-version" && !gated) { gated = true; entered.resolve(); await gate.promise; } return put(...args); };
+  const capture = f.results.captureFile({ userId: f.user.id, project: f.project, relativePath: "second.json",
+    producer: { kind: "tool", sessionId: "native-session", callId: "second", eventId: "input:second" } });
+  await entered.promise;
+  const deletion = f.store.database.transaction(client => f.service.cancelProject(f.user.id, f.project.id, client));
+  await new Promise(resolve => setTimeout(resolve, 300));
+  gate.resolve();
+  const outcome = await Promise.race([Promise.allSettled([capture, deletion]).then(() => "finished"), new Promise(done => setTimeout(() => done("stuck"), 4000))]);
+  if (outcome === "stuck") {
+    // PostgreSQL will not end it: end the waiting backends so that the fixture can be torn down.
+    await f.store.database.query("SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname=current_database() AND pid<>pg_backend_pid() AND wait_event_type='Lock'").catch(() => {});
+    await Promise.allSettled([capture, deletion]);
+  }
+  assert.equal(outcome, "finished");
+  assert.equal((await f.jobs.get(f.user.id, job.id)).status, "canceled", "the calculation was stopped and its records settled, without keeping an output of a project that is going");
 });
 
 test("three exhausted leases cannot free uncertain physical capacity; reconciliation frees only a joined process", options, async t => {

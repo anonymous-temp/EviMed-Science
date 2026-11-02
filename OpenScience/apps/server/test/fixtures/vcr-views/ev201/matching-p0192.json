@@ -224,6 +224,7 @@
         "evidence": null,
         "evidenceItems": [],
         "request": null,
+        "reason": null,
         "requestNote": null,
         "decidedBy": "code",
         "overridden": false
@@ -238,6 +239,7 @@
         "evidence": null,
         "evidenceItems": [],
         "request": null,
+        "reason": null,
         "requestNote": null,
         "decidedBy": "code",
         "overridden": false
@@ -252,6 +254,7 @@
         "evidence": null,
         "evidenceItems": [],
         "request": null,
+        "reason": null,
         "requestNote": null,
         "decidedBy": "code",
         "overridden": false
@@ -266,6 +269,7 @@
         "evidence": null,
         "evidenceItems": [],
         "request": "申请近 4 周头颅 MRI",
+        "reason": null,
         "requestNote": null,
         "decidedBy": "code",
         "overridden": false
@@ -280,6 +284,7 @@
         "evidence": null,
         "evidenceItems": [],
         "request": "末次免疫治疗日期",
+        "reason": null,
         "requestNote": "10 月 18 日 起可复评",
         "decidedBy": "code",
         "overridden": false
@@ -294,6 +299,7 @@
         "evidence": null,
         "evidenceItems": [],
         "request": null,
+        "reason": null,
         "requestNote": null,
         "decidedBy": "code",
         "overridden": false

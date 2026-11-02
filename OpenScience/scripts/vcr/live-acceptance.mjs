@@ -6,7 +6,7 @@ import { constants } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createHash, randomUUID } from 'node:crypto';
-import { VCR_EXPORT_KINDS, VCR_STEPS } from '../../packages/domain/src/vcrVocabulary.mjs';
+import { VCR_RUN_EXPORT_KINDS, VCR_STEPS } from '../../packages/domain/src/vcrVocabulary.mjs';
 import { patientFetch } from '../ops/transient-refusal.mjs';
 
 const COMMANDS = ['intake', 'observe', 'run-step', 'engine-job', 'vcr-exports', 'artifact-export'];
@@ -236,7 +236,7 @@ export async function runAcceptance(config) {
       if (c.command === 'vcr-exports') {
         const delivered = [];
         receipt.reviewAcceptance = {};
-        for (const kind of VCR_EXPORT_KINDS) {
+        for (const kind of VCR_RUN_EXPORT_KINDS) {
           let vcrExportId = null;
           // One kind that fails is that kind's finding. The kinds after it are still asked for, and what
           // was delivered before it is still inspected below: the driver used to end at the first failure,

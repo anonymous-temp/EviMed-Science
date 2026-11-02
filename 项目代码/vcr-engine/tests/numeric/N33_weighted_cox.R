@@ -71,8 +71,8 @@ vcr_case("N33a", c("AC-08", "AC-12", "AC-30"), function() {
   r_ebal <- ref("ebal"); r_glm <- ref("glm")
   dir <- tempfile("n33a"); dir.create(dir); on.exit(unlink(dir, recursive = TRUE), add = TRUE)
   j_ebal <- vcr_test_run(.n33_job(d, "n33a_e"), output_dir = dir)
-  # the logistic route is judged on a milder selection: with the strong one the propensity weights leave x1 at a
-  # standardized difference of 0.15 and the engine refuses (standardized_difference_above_floor), exactly as the weighting job does
+  # the logistic route is judged on a milder selection so that it reaches the balance: with the strong one the propensity weights
+  # leave x1 at a standardized difference of 0.15 and the estimate is delivered `limited` (N33f), exactly as the weighting job does
   j_ps <- vcr_test_run(.n33_job(dm, "n33a_p", list(weighting = "propensity")))
   m <- function(r, name) vcr_measure_value(r, name)
   rel <- function(a, b) abs(a - b) / abs(b)
@@ -267,4 +267,25 @@ vcr_case("N33e", c("AC-12", "AC-30"), function() {
   list(pass = ok,
        detail = sprintf("weighted HR %.7f (vignette 0.2834780), CI [%.7f, %.7f] (0.2074664, 0.3873387), robust se %.4f (0.1593); Breslow gives the same %.7f; the bootstrap loop's fast fit agrees to %.1e; weights rescaled to n give %.7f (0.2806)",
                         exp(p$beta), ci[1], ci[2], p$seRobust, exp(pb$beta), abs(fast - p$beta), hr_n))
+})
+
+vcr_case("N33f", c("AC-12", "AC-30"), function() {
+  # A hazard ratio is delivered with the balance beside it (owner decision 2026-11-01): the strong selection that leaves x1 at a
+  # weighted standardized difference of 0.15 under the logistic route is `limited`, the value and the variable said, and the
+  # hazard ratio is the one coxph gives on those weights. Before the decision this was a refusal by rule name.
+  suppressMessages({library(WeightIt); library(survival)})
+  d <- .n33_data()
+  r <- vcr_test_run(.n33_job(d, "n33f_p", list(weighting = "propensity")))
+  wi <- WeightIt::weightit(arm ~ x1 + x2, data = d$subj, method = "glm", estimand = "ATT")
+  ww <- wi$weights; ctl <- d$subj$arm == 0L; ww[ctl] <- ww[ctl] * sum(d$subj$arm == 1L) / sum(ww[ctl])
+  f <- survival::coxph(survival::Surv(d$ev$AVAL, 1L - d$ev$CNSR) ~ d$subj$arm, weights = ww, robust = TRUE)
+  v <- r$diagnostics$balanceVerdict
+  ok <- identical(r$status, "succeeded") && identical(r$conclusion, "limited") && is.null(r$notEstimableRule) &&
+    v$band %in% c("moderate", "severe") && identical(v$variable, "x1") && v$worst > 0.10 &&
+    abs(vcr_measure_value(r, "hazard_ratio") - exp(unname(stats::coef(f)))) / exp(unname(stats::coef(f))) < 1e-6 &&
+    any(unlist(r$diagnostics$limitedBy) %in% c("standardized_difference_above_floor", "standardized_difference_severe")) &&
+    abs(vcr_measure_value(r, "worst_standardized_difference") - v$worst) < 1e-12 && length(vcr_validate_result(r)) == 0L
+  list(pass = ok, detail = sprintf("strong selection, logistic weights: %s/%s, %s %.3f on %s, HR %.5f vs coxph %.5f, limitedBy %s",
+                                   r$status, r$conclusion, v$band, v$worst, v$variable, vcr_measure_value(r, "hazard_ratio"),
+                                   exp(unname(stats::coef(f))), paste(unlist(r$diagnostics$limitedBy), collapse = ",")))
 })

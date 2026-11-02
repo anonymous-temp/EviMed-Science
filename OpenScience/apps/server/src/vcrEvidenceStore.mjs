@@ -219,7 +219,9 @@ export class VcrEvidenceStore extends VcrStoreBase {
         const id = vcrId("evidence");
         const verification = String(item?.locator?.verification ?? "no_quote");
         const accepted = verification === "verified";
-        if (!accepted) refused += 1;
+        // A paper that does not report a parameter (C8) is an answer, not a refusal: it keeps no number and is not counted against the run.
+        const notReported = verification === "not_reported";
+        if (!accepted && !notReported) refused += 1;
         await handle.query(
           `INSERT INTO ${VCR_SCHEMA}.evidence_items
              (id, user_id, study_id, precedent_id, parameter, arm, value, value_text, unit, ci_low, ci_high,
@@ -233,7 +235,7 @@ export class VcrEvidenceStore extends VcrStoreBase {
             // A refused value never reaches the numeric column: a number that
             // could not be found in its source must not be readable as one.
             accepted ? numeric(item?.value) : null,
-            accepted ? String(item?.valueText ?? "") : "unknown",
+            accepted ? String(item?.valueText ?? "") : notReported ? "not_reported" : "unknown",
             String(item?.unit ?? ""),
             accepted ? numeric(item?.ciLow) : null, accepted ? numeric(item?.ciHigh) : null,
             accepted ? whole(item?.sampleSize) : null, accepted ? whole(item?.events) : null,
@@ -253,9 +255,9 @@ export class VcrEvidenceStore extends VcrStoreBase {
       await this.audit({
         client: handle, studyId, userId, actor: "system", action: "vcr.evidence.extract",
         object: precedentId ?? "", outcome: refused ? "partial" : "ok",
-        detail: { written: rows.length, verified: rows.length - refused, refused },
+        detail: { written: rows.length, verified: verifiedIds.length, refused },
       });
-      return { written: rows.length, verified: rows.length - refused, refused, ids, verifiedIds };
+      return { written: rows.length, verified: verifiedIds.length, refused, ids, verifiedIds };
     };
     return client ? run(client) : this.transaction(run);
   }
@@ -348,7 +350,8 @@ export class VcrEvidenceStore extends VcrStoreBase {
       `SELECT parameter,
               COUNT(*)::int AS extracted,
               COUNT(*) FILTER (WHERE value IS NOT NULL AND locator->>'verification' = 'verified')::int AS verified,
-              COUNT(*) FILTER (WHERE locator->>'verification' <> 'verified')::int AS refused,
+              COUNT(*) FILTER (WHERE locator->>'verification' NOT IN ('verified', 'not_reported'))::int AS refused,
+              COUNT(*) FILTER (WHERE locator->>'verification' = 'not_reported')::int AS not_reported,
               COUNT(DISTINCT precedent_id)::int AS precedents
        FROM ${VCR_SCHEMA}.evidence_items
        WHERE user_id = $1 AND study_id = $2
@@ -376,8 +379,8 @@ export class VcrEvidenceStore extends VcrStoreBase {
       const result = await handle.query(
         `INSERT INTO ${VCR_SCHEMA}.assumptions
            (id, study_id, user_id, key, version, name, endpoint, unit, point_value, distribution, sensitivity,
-            source_kind, value_source, pooling_method, pooling, evidence_ids, applicability, review_state, note, after_freeze)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, $12, $13, $14, $15::jsonb, $16, $17::jsonb, $18, $19, $20)
+            source_kind, value_source, pooling_method, pooling, evidence_ids, applicability, review_state, note, after_freeze, effect_role)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, $12, $13, $14, $15::jsonb, $16, $17::jsonb, $18, $19, $20, $21)
          RETURNING *`,
         [
           vcrId("assumption"), studyId, userId, key, version,
@@ -386,7 +389,7 @@ export class VcrEvidenceStore extends VcrStoreBase {
           String(card?.sourceKind ?? "expert_set"), String(card?.valueSource ?? "assumed"),
           card?.poolingMethod ?? null, jsonb(card?.pooling),
           [...(card?.evidenceIds ?? [])].map(String), jsonb(card?.applicability),
-          String(card?.reviewState ?? "ai_set"), String(card?.note ?? ""), card?.afterFreeze === true,
+          String(card?.reviewState ?? "ai_set"), String(card?.note ?? ""), card?.afterFreeze === true, card?.effectRole ?? null,
         ],
       );
       await this.audit({

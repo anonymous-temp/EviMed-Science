@@ -100,6 +100,10 @@ import {
 import { quoteIsPresent } from "@evimed/domain/clinical-evidence";
 
 import { REGISTRY_NOT_FOUND, REGISTRY_UNAVAILABLE, REGISTRY_UNAVAILABLE_PARAMETERS, confidenceLevelOf } from "./trialRegistryClient.mjs";
+import {
+  CANDIDATES_NOT_COVERED, CANDIDATE_REGISTRIES, CTGOV_OPEN_STATUSES, CTIS_OPEN_STATUSES, candidateQueries, candidateRequest, chictrCandidate,
+  coverageSentence, ctgovCandidate, ctisCandidate, filterCandidates, interleave, mergeCandidates, presentCandidate, registryOutcome,
+} from "./vcrCandidateSearch.mjs";
 import { EVIDENCE_ARM_ROLES } from "./vcrEvidenceStore.mjs";
 import { candidateTrialFromRecord } from "./vcrPatientTrials.mjs";
 import { verifyLiteratureBaseline } from "./vcrEvidenceSources.mjs";
@@ -151,6 +155,48 @@ export const VCR_NOT_IN_REGISTRY = REGISTRY_UNAVAILABLE_PARAMETERS;
 /** @param {string} parameter */
 export function parameterKindOf(parameter) {
   return VCR_PARAMETER_KINDS[/** @type {keyof typeof VCR_PARAMETER_KINDS} */ (parameter)] ?? "continuous";
+}
+
+/**
+ * What a paper has to give for a value of one parameter to be usable, by the kind of the parameter and by what the pool reads
+ * (`analysisScaleInput`): the value, and with it the error that makes it a weight — an interval at both ends, or for a proportion the
+ * number of people it was measured on. The kind decides, never a list kept beside it (C8).
+ * @param {string} parameter @returns {{ value: true, interval: boolean, sampleSize: 'or_interval' | false }}
+ */
+export function evidenceRequiredItems(parameter) {
+  return parameterKindOf(parameter) === "proportion"
+    ? { value: true, interval: false, sampleSize: "or_interval" }
+    : { value: true, interval: true, sampleSize: false };
+}
+
+/** The words of the items an extraction can lack, as the answers say them. */
+export const EVIDENCE_ITEM_WORDS_ZH = Object.freeze({
+  value: "数值", ciLow: "置信区间下限", ciHigh: "置信区间上限", sampleSize: "样本量",
+});
+
+/**
+ * Which of the required items a stored or incoming extraction does not carry, by the field name (`ciLow`, `ciHigh`, `sampleSize`,
+ * `value`). Empty for a row that is complete, and for a row that says the paper does not report the parameter at all: that is an
+ * answer, not a gap.
+ * @param {string} parameter @param {Record<string, any>} row an incoming item (camelCase) or a stored row (snake_case)
+ * @returns {Array<keyof typeof EVIDENCE_ITEM_WORDS_ZH>}
+ */
+export function evidenceItemGaps(parameter, row) {
+  if (row?.notReported === true || row?.locator?.verification === "not_reported") return [];
+  const has = (/** @type {string} */ camel, /** @type {string} */ snake) => finite(row?.[camel] ?? row?.[snake]) !== null;
+  const need = evidenceRequiredItems(parameter);
+  /** @type {Array<keyof typeof EVIDENCE_ITEM_WORDS_ZH>} */
+  const gaps = [];
+  if (need.value && !has("value", "value")) gaps.push("value");
+  const low = has("ciLow", "ci_low");
+  const high = has("ciHigh", "ci_high");
+  if (need.sampleSize === "or_interval") {
+    if (!(low && high) && !has("sampleSize", "sample_size")) gaps.push("sampleSize");
+  } else if (need.interval) {
+    if (!low) gaps.push("ciLow");
+    if (!high) gaps.push("ciHigh");
+  }
+  return gaps;
 }
 
 /**
@@ -1310,6 +1356,82 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
     },
 
     /**
+     * `vcr_read what: "candidates"` (M1): the registry trials that might take one patient. The run writes the search — a condition and a
+     * few phrases, English and Chinese — and says what it knows of the patient (age, sex, country); this asks the three registries together,
+     * merges and de-duplicates what they answer, leaves out what a record's own stated fields rule out, cuts the list, and says per
+     * registry what was asked, what failed and what is not covered at all. A registry that failed costs its own results and no one else's.
+     * Nothing here judges the patient against a trial (`vcrCandidateSearch.mjs`).
+     * @param {{ userId?: string, filter?: Record<string, any>, limitMax?: number }} input
+     */
+    async patientCandidates({ userId = "", filter = {}, limitMax = 20 }) {
+      const asked = candidateRequest(filter, { limitMax });
+      const asOf = now().toISOString();
+      if (asked.ok === false) return { available: false, code: "vcr_read_filter_invalid", message: asked.message };
+      const { request } = asked;
+      if (!registry) return { available: false, code: "registry_unavailable", message: "试验登记检索未接入：这一步暂不可用，其余步骤照常。" };
+      const queries = candidateQueries(request);
+      // The registries' own filters narrow what they send where a status is always stated (ClinicalTrials.gov, CTIS); everything else is held
+      // to the filters here, from the fields the record states. More than the list's size is asked for because some of it is left out.
+      const per = Math.min(request.region ? 30 : 50, Math.max(10, request.limit * 2));
+      const open = request.scope === "open";
+      /** @param {() => Promise<any>} ask */
+      const settle = async (ask) => { try { return await ask(); } catch (error) { return { status: REGISTRY_UNAVAILABLE, reason: String(/** @type {any} */ (error)?.code ?? "request_failed"), items: [] }; } };
+      const ask = {
+        "clinicaltrials.gov": (/** @type {{ kind: string, text: string }} */ query) => settle(() => registry.search({
+          ...(query.kind === "condition" ? { condition: query.text } : { term: query.text }), status: open ? [...CTGOV_OPEN_STATUSES] : [], limit: per,
+          forPatient: true, withLocations: Boolean(request.region) })),
+        ctis: (/** @type {{ kind: string, text: string }} */ query) => settle(async () => (typeof registry.searchCtis === "function"
+          ? registry.searchCtis({ ...(query.kind === "condition" ? { condition: query.text } : { term: query.text }), statuses: open ? [...CTIS_OPEN_STATUSES] : [], limit: per })
+          : { status: REGISTRY_UNAVAILABLE, reason: "registry_not_configured", items: [] })),
+        chictr: (/** @type {{ kind: string, text: string }} */ query) => settle(() => registry.searchChictr({ query: query.text, limit: per, userId })),
+      };
+      const shape = { "clinicaltrials.gov": ctgovCandidate, ctis: ctisCandidate, chictr: chictrCandidate };
+      // Every (registry, phrase) is asked at once: one that does not answer waits out its own deadline and holds nobody else.
+      const answers = await Promise.all(CANDIDATE_REGISTRIES.map(async (entry) => Promise.all(queries.map(async (query) => ({
+        query: query.text, answer: await ask[/** @type {keyof typeof ask} */ (entry.id)](query) })))));
+      /** @type {ReturnType<typeof ctgovCandidate>[]} */
+      const found = [];
+      let retrievedAt = null;
+      const registries = CANDIDATE_REGISTRIES.map((entry, at) => {
+        const rows = answers[at];
+        /** @type {ReturnType<typeof ctgovCandidate>[]} */
+        const own = [];
+        for (const { answer } of rows) {
+          if (answer.status === "ok" && answer.retrievedAt && (!retrievedAt || answer.retrievedAt > retrievedAt)) retrievedAt = answer.retrievedAt;
+          for (const item of answer.status === "ok" ? answer.items ?? [] : []) own.push(/** @type {any} */ (shape)[entry.id](item));
+        }
+        found.push(...own);
+        const outcome = registryOutcome(rows.map(({ query, answer }) => ({
+          query, status: String(answer.status), reason: answer.status === "ok" ? null : String(answer.reason ?? answer.status),
+          total: answer.total ?? null, found: answer.status === "ok" ? (answer.items ?? []).length : 0 })));
+        return { registry: entry.id, name: entry.name, ...outcome,
+          ...(entry.id === "chictr" ? { limits: "只有清单：没有入排条件原文，也没有年龄、性别、中心；写入候选试验时条件按未知算（缺登记原文）。" } : {}) };
+      });
+      const merged = mergeCandidates(found);
+      const { kept, dropped } = filterCandidates(merged, request);
+      const { list, more } = interleave(kept, request.limit);
+      note("vcr.evidence.candidates_for_patient", { userId, found: found.length, merged: merged.length, kept: kept.length, returned: list.length });
+      const reachable = registries.some((entry) => entry.state === "searched" || entry.state === "partial");
+      return {
+        available: true,
+        status: reachable ? "ok" : REGISTRY_UNAVAILABLE,
+        asOf,
+        registryReadAt: retrievedAt,
+        request: { condition: request.condition, terms: request.terms, age: request.age, sex: request.sex, region: request.region, status: request.scope },
+        registries,
+        notCovered: CANDIDATES_NOT_COVERED.map((entry) => ({ registry: entry.id, name: entry.name, reason: entry.reason })),
+        // What the run says in its reply about where it looked, as the platform words it.
+        coverage: coverageSentence(registries, asOf),
+        found: merged.length,
+        // Left out for what the record itself states, by the first filter that did; the unstated ones stayed in, marked `unknown`.
+        leftOut: dropped,
+        more,
+        order: "按各登记库自己的相关性顺序轮流排列，不是适合程度的排序。",
+        candidates: list.map(presentCandidate),
+      };
+    },
+
+    /**
      * The runtime's `trial_registry_record`, served from the control plane.
      *
      * The runtime never reaches a registry itself — it names the record it
@@ -1489,7 +1611,7 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
       const registryName = String(item.registry ?? "clinicaltrials.gov");
       const registryId = String(item.registryId ?? "");
       const literature = item.literatureSource ? await literatureSources?.resolve({ userId, projectId,
-        source: item.literatureSource, quote: String(item.quote ?? ""), locator: item.locator, unit: String(item.unit ?? "") }) : null;
+        source: item.literatureSource, quote: String(item.quote ?? ""), locator: item.locator, unit: String(item.unit ?? ""), identityOnly: item.notReported === true }) : null;
       if (item.literatureSource && !literature) return { status: "refused", code: "vcr_evidence_unverified", message: "Preserved literature sources are unavailable." };
       const precedent = literature ? null : await store.precedentOfStudy({ userId, studyId, registry: registryName, registryId, recordHash: item.locator?.recordHash ?? null });
       if (!literature && !precedent) {
@@ -1511,7 +1633,22 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
       const targetVerified = checkedTarget?.verified === true && Number.isFinite(timepoint?.value) && timepoint.value > 0
         && timeUnit != null && quoteIsPresent(String(timepoint.quote),String(timepoint.unit))
         && !!item.arm && quoteIsPresent(String(timepoint.quote),String(item.arm));
-      const checked = verifyExtraction({
+      // 「论文未报告」 is a state of its own (C8): the source was read and the parameter is not in it. It carries no number and nothing
+      // to check one against, so it is stored as it was said, can never be pooled, and is read back as 未取到.
+      const checked = item.notReported === true ? {
+        state: "not_reported", verified: false,
+        item: {
+          parameter: String(item.parameter), arm: item.arm ?? null,
+          armRole: EVIDENCE_ARM_ROLES.includes(String(item.armRole)) ? item.armRole : "unknown",
+          value: null, valueText: "not_reported", unit: "", ciLow: null, ciHigh: null, sampleSize: null, events: null, valueSource: "extracted",
+          quote: String(item.quote ?? ""), sourceRef: literature?.sourceRef ?? `${registryName}:${registryId}`,
+          locator: { ...(literature?.locator ?? { kind: "registry_field", recordHash: precedent?.record_hash ?? null }), authoredBy: "run",
+            verification: "not_reported", checkedAt },
+          endpointKey: String(item.endpointKey ?? ""), enrollmentKind: item.enrollmentKind ?? null, historicalBaseline: false,
+          applicability: { line: item.line, biomarker: item.biomarker, endpointKey: String(item.endpointKey ?? "") },
+          detail: { notReported: true, note: item.note ?? null, trialIdentity, evidenceKind: ["baseline", "outcome", "design"].includes(item.evidenceKind) ? item.evidenceKind : "outcome" },
+        },
+      } : verifyExtraction({
         extraction: {
           parameter: String(item.parameter), arm: item.arm ?? null,
           armRole: EVIDENCE_ARM_ROLES.includes(String(item.armRole)) ? item.armRole : "unknown",
@@ -1543,7 +1680,7 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
         checkedAt,
       });
       const appended = await store.appendEvidenceItems({ userId, studyId, precedentId: precedent?.id ?? null, items: [checked.item] });
-      if (item.candidateFrom) {
+      if (item.candidateFrom && !item.notReported) {
         counters.cardCandidates += 1;
         if (checked.verified) counters.cardCandidatesVerified += 1;
       }
@@ -1673,16 +1810,16 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
      *
      * @param {{ userId: string, studyId: string, key: string, name: string, parameter: string,
      *   endpoint?: string, unit?: string, results: Record<string, any>,
-     *   evidenceIdsByCalibre: Record<string, string[]>, applicability?: any, note?: string, afterFreeze?: boolean }} input
+     *   evidenceIdsByCalibre: Record<string, string[]>, applicability?: any, note?: string, afterFreeze?: boolean, effectRole?: string | null }} input
      *   `afterFreeze` writes the version beside the one the study's plan froze with (flywheel F24).
      */
-    async saveAssumptionFromPooling({ userId, studyId, key, name, parameter, endpoint = "", unit = "", results, evidenceIdsByCalibre, applicability = {}, note: cardNote = "", afterFreeze = false }) {
+    async saveAssumptionFromPooling({ userId, studyId, key, name, parameter, endpoint = "", unit = "", results, evidenceIdsByCalibre, applicability = {}, note: cardNote = "", afterFreeze = false, effectRole = null }) {
       /** @type {Record<string, ReturnType<typeof readPoolResult>>} */
       const pools = {};
       for (const [calibre, result] of Object.entries(results ?? {})) pools[calibre] = readPoolResult(result);
       const built = assumptionFromPooling({ key, name, parameter, endpoint, unit, pools, evidenceIdsByCalibre, applicability, note: cardNote });
       if (built.ok) {
-        const row = await store.saveAssumption({ userId, studyId, card: { ...built.card, ...(afterFreeze ? { afterFreeze: true } : {}) } });
+        const row = await store.saveAssumption({ userId, studyId, card: { ...built.card, ...(afterFreeze ? { afterFreeze: true } : {}), ...(effectRole ? { effectRole } : {}) } });
         note("vcr.evidence.card", { userId, studyId, key, calibre: built.card?.pooling.calibre });
         return { status: "ok", assumption: row, card: built.card, pools };
       }
@@ -1698,7 +1835,7 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
           reason: `只有 ${pool.k ?? "少数"} 项研究，合并结果没有预测区间；取合并值并按置信区间加宽`,
           basedOn: { evidenceIds: evidenceIdsByCalibre?.[calibre] ?? [], calibre, k: pool.k ?? null },
         });
-        const row = await store.saveAssumption({ userId, studyId, card: { ...card, ...(afterFreeze ? { afterFreeze: true } : {}) } });
+        const row = await store.saveAssumption({ userId, studyId, card: { ...card, ...(afterFreeze ? { afterFreeze: true } : {}), ...(effectRole ? { effectRole } : {}) } });
         return { status: "expert_set", reason: built.reason, assumption: row, card, pools };
       }
       return { status: "not_written", reason: built.reason, pools };
@@ -1708,11 +1845,11 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
      * A parameter no evidence reached. Written as a card so a simulation can
      * run and the gap stays visible (plan §6.2).
      * @param {{ userId: string, studyId: string, key: string, name: string, parameter?: string,
-     *   unit?: string, nearest: any, reason: string, applicability?: any, afterFreeze?: boolean }} input
+     *   unit?: string, nearest: any, reason: string, applicability?: any, afterFreeze?: boolean, effectRole?: string | null }} input
      */
-    async saveExpertSet({ userId, studyId, key, name, parameter = "", unit = "", nearest, reason, applicability = {}, afterFreeze = false }) {
+    async saveExpertSet({ userId, studyId, key, name, parameter = "", unit = "", nearest, reason, applicability = {}, afterFreeze = false, effectRole = null }) {
       const card = expertSetCard({ key, name, parameter, unit, nearest, reason, applicability });
-      const row = await store.saveAssumption({ userId, studyId, card: { ...card, ...(afterFreeze ? { afterFreeze: true } : {}) } });
+      const row = await store.saveAssumption({ userId, studyId, card: { ...card, ...(afterFreeze ? { afterFreeze: true } : {}), ...(effectRole ? { effectRole } : {}) } });
       return { status: "ok", assumption: row, card };
     },
 
@@ -1769,6 +1906,11 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
         counts: view.counts,
         unavailable: view.unavailable,
       };
+    },
+
+    /** @param {any} study @param {Record<string, any>} [filter] @param {number} [limitMax] */
+    async candidatesFor(study, filter = {}, limitMax = 20) {
+      return pipeline.patientCandidates({ userId: String(study?.userId ?? ""), filter, limitMax });
     },
 
     /** @param {any} study @param {Record<string, any>} [filter] */
@@ -1845,6 +1987,9 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
           ciLow: row.ci_low === null ? null : Number(row.ci_low), ciHigh: row.ci_high === null ? null : Number(row.ci_high),
           sampleSize: row.sample_size, events: row.events, valueSource: row.value_source,
           verification: row.locator?.verification ?? "no_quote", historicalBaseline: row.historical_baseline,
+          // What the pool needs of this parameter that the row does not carry (or, for a paper that does not report it, that it says so).
+          ...(row.locator?.verification === "not_reported" ? { notReported: true }
+            : row.locator?.verification === "verified" ? { missing: evidenceItemGaps(String(row.parameter), row) } : {}),
           enrollmentKind: row.enrollment_kind, quote: row.quote, sourceRef: row.source_ref,
           locator: row.locator, evidenceKind: row.detail?.evidenceKind ?? null, sourceStanding: row.detail?.sourceStanding ?? null,
           verificationScope: row.detail?.verificationScope ?? null,

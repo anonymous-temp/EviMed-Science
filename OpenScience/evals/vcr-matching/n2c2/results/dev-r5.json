@@ -1,0 +1,1991 @@
+{
+  "schema": 1,
+  "kind": "development",
+  "round": 5,
+  "run": "dev-r5",
+  "promptSha256": "90e0a6648fd8f5f1f7448db224bcf1dabe88bc276c128c41bdaf9de4a2b5ac30",
+  "model": "deepseek-v4-flash",
+  "servedModels": [
+    "deepseek-flash"
+  ],
+  "usage": {
+    "patients": 40,
+    "promptTokens": 324527,
+    "completionTokens": 38176,
+    "cacheHitTokens": 108416,
+    "costCny": 0.742,
+    "patientsNeedingRetry": 2,
+    "unreadableAnswers": 2
+  },
+  "resamples": 2000,
+  "patients": 40,
+  "summary": {
+    "ABDOMINAL.n": {
+      "value": 40,
+      "low": null,
+      "high": null
+    },
+    "ABDOMINAL.goldMet": {
+      "value": 13,
+      "low": null,
+      "high": null
+    },
+    "ABDOMINAL.accuracyA": {
+      "value": 0.275,
+      "low": 0.15,
+      "high": 0.425
+    },
+    "ABDOMINAL.accuracyB": {
+      "value": 0.75,
+      "low": 0.625,
+      "high": 0.875
+    },
+    "ABDOMINAL.accuracyC": {
+      "value": 0.75,
+      "low": 0.625,
+      "high": 0.875
+    },
+    "ABDOMINAL.unknownShare": {
+      "value": 0.525,
+      "low": 0.375,
+      "high": 0.675
+    },
+    "ABDOMINAL.metToNotMetExplicit": {
+      "value": 0,
+      "low": 0,
+      "high": 0
+    },
+    "ABDOMINAL.metToNotMetB": {
+      "value": 0.1538,
+      "low": 0,
+      "high": 0.3636
+    },
+    "ABDOMINAL.notMetToMet": {
+      "value": 0.2963,
+      "low": 0.1379,
+      "high": 0.4783
+    },
+    "ABDOMINAL.notMetToMetC": {
+      "value": 0.2963,
+      "low": 0.1379,
+      "high": 0.4783
+    },
+    "ABDOMINAL.f1B": {
+      "value": 0.7396,
+      "low": 0.5908,
+      "high": 0.8683
+    },
+    "ABDOMINAL.f1C": {
+      "value": 0.7396,
+      "low": 0.5908,
+      "high": 0.8683
+    },
+    "ADVANCED-CAD.n": {
+      "value": 40,
+      "low": null,
+      "high": null
+    },
+    "ADVANCED-CAD.goldMet": {
+      "value": 24,
+      "low": null,
+      "high": null
+    },
+    "ADVANCED-CAD.accuracyA": {
+      "value": 0.5,
+      "low": 0.35,
+      "high": 0.65
+    },
+    "ADVANCED-CAD.accuracyB": {
+      "value": 0.825,
+      "low": 0.7,
+      "high": 0.925
+    },
+    "ADVANCED-CAD.accuracyC": {
+      "value": 0.825,
+      "low": 0.7,
+      "high": 0.925
+    },
+    "ADVANCED-CAD.unknownShare": {
+      "value": 0.45,
+      "low": 0.3,
+      "high": 0.6
+    },
+    "ADVANCED-CAD.metToNotMetExplicit": {
+      "value": 0.0417,
+      "low": 0,
+      "high": 0.1304
+    },
+    "ADVANCED-CAD.metToNotMetB": {
+      "value": 0.25,
+      "low": 0.0833,
+      "high": 0.4286
+    },
+    "ADVANCED-CAD.notMetToMet": {
+      "value": 0.0625,
+      "low": 0,
+      "high": 0.2143
+    },
+    "ADVANCED-CAD.notMetToMetC": {
+      "value": 0.0625,
+      "low": 0,
+      "high": 0.2143
+    },
+    "ADVANCED-CAD.f1B": {
+      "value": 0.824,
+      "low": 0.6931,
+      "high": 0.925
+    },
+    "ADVANCED-CAD.f1C": {
+      "value": 0.824,
+      "low": 0.6931,
+      "high": 0.925
+    },
+    "ALCOHOL-ABUSE.n": {
+      "value": 40,
+      "low": null,
+      "high": null
+    },
+    "ALCOHOL-ABUSE.goldMet": {
+      "value": 3,
+      "low": null,
+      "high": null
+    },
+    "ALCOHOL-ABUSE.accuracyA": {
+      "value": 0.6,
+      "low": 0.45,
+      "high": 0.75
+    },
+    "ALCOHOL-ABUSE.accuracyB": {
+      "value": 0.925,
+      "low": 0.825,
+      "high": 1
+    },
+    "ALCOHOL-ABUSE.accuracyC": {
+      "value": 0.925,
+      "low": 0.825,
+      "high": 1
+    },
+    "ALCOHOL-ABUSE.unknownShare": {
+      "value": 0.325,
+      "low": 0.175,
+      "high": 0.475
+    },
+    "ALCOHOL-ABUSE.metToNotMetExplicit": {
+      "value": 0,
+      "low": 0,
+      "high": 0
+    },
+    "ALCOHOL-ABUSE.metToNotMetB": {
+      "value": 0,
+      "low": 0,
+      "high": 0
+    },
+    "ALCOHOL-ABUSE.notMetToMet": {
+      "value": 0.0811,
+      "low": 0,
+      "high": 0.1795
+    },
+    "ALCOHOL-ABUSE.notMetToMetC": {
+      "value": 0.0811,
+      "low": 0,
+      "high": 0.1795
+    },
+    "ALCOHOL-ABUSE.f1B": {
+      "value": 0.8122,
+      "low": 0.4805,
+      "high": 1
+    },
+    "ALCOHOL-ABUSE.f1C": {
+      "value": 0.8122,
+      "low": 0.4805,
+      "high": 1
+    },
+    "ASP-FOR-MI.n": {
+      "value": 40,
+      "low": null,
+      "high": null
+    },
+    "ASP-FOR-MI.goldMet": {
+      "value": 27,
+      "low": null,
+      "high": null
+    },
+    "ASP-FOR-MI.accuracyA": {
+      "value": 0.625,
+      "low": 0.475,
+      "high": 0.775
+    },
+    "ASP-FOR-MI.accuracyB": {
+      "value": 0.825,
+      "low": 0.7,
+      "high": 0.925
+    },
+    "ASP-FOR-MI.accuracyC": {
+      "value": 0.825,
+      "low": 0.7,
+      "high": 0.925
+    },
+    "ASP-FOR-MI.unknownShare": {
+      "value": 0.275,
+      "low": 0.125,
+      "high": 0.425
+    },
+    "ASP-FOR-MI.metToNotMetExplicit": {
+      "value": 0,
+      "low": 0,
+      "high": 0
+    },
+    "ASP-FOR-MI.metToNotMetB": {
+      "value": 0.1111,
+      "low": 0,
+      "high": 0.24
+    },
+    "ASP-FOR-MI.notMetToMet": {
+      "value": 0.3077,
+      "low": 0.0769,
+      "high": 0.6
+    },
+    "ASP-FOR-MI.notMetToMetC": {
+      "value": 0.3077,
+      "low": 0.0769,
+      "high": 0.6
+    },
+    "ASP-FOR-MI.f1B": {
+      "value": 0.7964,
+      "low": 0.6354,
+      "high": 0.9161
+    },
+    "ASP-FOR-MI.f1C": {
+      "value": 0.7964,
+      "low": 0.6354,
+      "high": 0.9161
+    },
+    "CREATININE.n": {
+      "value": 40,
+      "low": null,
+      "high": null
+    },
+    "CREATININE.goldMet": {
+      "value": 12,
+      "low": null,
+      "high": null
+    },
+    "CREATININE.accuracyA": {
+      "value": 0.5,
+      "low": 0.35,
+      "high": 0.65
+    },
+    "CREATININE.accuracyB": {
+      "value": 0.95,
+      "low": 0.875,
+      "high": 1
+    },
+    "CREATININE.accuracyC": {
+      "value": 0.95,
+      "low": 0.875,
+      "high": 1
+    },
+    "CREATININE.unknownShare": {
+      "value": 0.5,
+      "low": 0.35,
+      "high": 0.65
+    },
+    "CREATININE.metToNotMetExplicit": {
+      "value": 0,
+      "low": 0,
+      "high": 0
+    },
+    "CREATININE.metToNotMetB": {
+      "value": 0.1667,
+      "low": 0,
+      "high": 0.4
+    },
+    "CREATININE.notMetToMet": {
+      "value": 0,
+      "low": 0,
+      "high": 0
+    },
+    "CREATININE.notMetToMetC": {
+      "value": 0,
+      "low": 0,
+      "high": 0
+    },
+    "CREATININE.f1B": {
+      "value": 0.9373,
+      "low": 0.8386,
+      "high": 1
+    },
+    "CREATININE.f1C": {
+      "value": 0.9373,
+      "low": 0.8386,
+      "high": 1
+    },
+    "DIETSUPP-2MOS.n": {
+      "value": 40,
+      "low": null,
+      "high": null
+    },
+    "DIETSUPP-2MOS.goldMet": {
+      "value": 21,
+      "low": null,
+      "high": null
+    },
+    "DIETSUPP-2MOS.accuracyA": {
+      "value": 0,
+      "low": 0,
+      "high": 0
+    },
+    "DIETSUPP-2MOS.accuracyB": {
+      "value": 0.475,
+      "low": 0.325,
+      "high": 0.625
+    },
+    "DIETSUPP-2MOS.accuracyC": {
+      "value": 0.475,
+      "low": 0.325,
+      "high": 0.625
+    },
+    "DIETSUPP-2MOS.unknownShare": {
+      "value": 1,
+      "low": 1,
+      "high": 1
+    },
+    "DIETSUPP-2MOS.metToNotMetExplicit": {
+      "value": 0,
+      "low": 0,
+      "high": 0
+    },
+    "DIETSUPP-2MOS.metToNotMetB": {
+      "value": 1,
+      "low": 1,
+      "high": 1
+    },
+    "DIETSUPP-2MOS.notMetToMet": {
+      "value": 0,
+      "low": 0,
+      "high": 0
+    },
+    "DIETSUPP-2MOS.notMetToMetC": {
+      "value": 0,
+      "low": 0,
+      "high": 0
+    },
+    "DIETSUPP-2MOS.f1B": {
+      "value": 0.322,
+      "low": 0.2453,
+      "high": 0.3846
+    },
+    "DIETSUPP-2MOS.f1C": {
+      "value": 0.322,
+      "low": 0.2453,
+      "high": 0.3846
+    },
+    "DRUG-ABUSE.n": {
+      "value": 40,
+      "low": null,
+      "high": null
+    },
+    "DRUG-ABUSE.goldMet": {
+      "value": 4,
+      "low": null,
+      "high": null
+    },
+    "DRUG-ABUSE.accuracyA": {
+      "value": 0.45,
+      "low": 0.3,
+      "high": 0.625
+    },
+    "DRUG-ABUSE.accuracyB": {
+      "value": 0.975,
+      "low": 0.925,
+      "high": 1
+    },
+    "DRUG-ABUSE.accuracyC": {
+      "value": 0.975,
+      "low": 0.925,
+      "high": 1
+    },
+    "DRUG-ABUSE.unknownShare": {
+      "value": 0.525,
+      "low": 0.375,
+      "high": 0.675
+    },
+    "DRUG-ABUSE.metToNotMetExplicit": {
+      "value": 0,
+      "low": 0,
+      "high": 0
+    },
+    "DRUG-ABUSE.metToNotMetB": {
+      "value": 0,
+      "low": 0,
+      "high": 0
+    },
+    "DRUG-ABUSE.notMetToMet": {
+      "value": 0.0278,
+      "low": 0,
+      "high": 0.0882
+    },
+    "DRUG-ABUSE.notMetToMetC": {
+      "value": 0.0278,
+      "low": 0,
+      "high": 0.0882
+    },
+    "DRUG-ABUSE.f1B": {
+      "value": 0.9374,
+      "low": 0.7368,
+      "high": 1
+    },
+    "DRUG-ABUSE.f1C": {
+      "value": 0.9374,
+      "low": 0.7368,
+      "high": 1
+    },
+    "ENGLISH.n": {
+      "value": 40,
+      "low": null,
+      "high": null
+    },
+    "ENGLISH.goldMet": {
+      "value": 39,
+      "low": null,
+      "high": null
+    },
+    "ENGLISH.accuracyA": {
+      "value": 0.1,
+      "low": 0.025,
+      "high": 0.2
+    },
+    "ENGLISH.accuracyB": {
+      "value": 0.1,
+      "low": 0.025,
+      "high": 0.2
+    },
+    "ENGLISH.accuracyC": {
+      "value": 1,
+      "low": 1,
+      "high": 1
+    },
+    "ENGLISH.unknownShare": {
+      "value": 0.9,
+      "low": 0.8,
+      "high": 0.975
+    },
+    "ENGLISH.metToNotMetExplicit": {
+      "value": 0,
+      "low": 0,
+      "high": 0
+    },
+    "ENGLISH.metToNotMetB": {
+      "value": 0.9231,
+      "low": 0.825,
+      "high": 1
+    },
+    "ENGLISH.notMetToMet": {
+      "value": 0,
+      "low": null,
+      "high": null
+    },
+    "ENGLISH.notMetToMetC": {
+      "value": 0,
+      "low": null,
+      "high": null
+    },
+    "ENGLISH.f1B": {
+      "value": 0.0977,
+      "low": 0.0244,
+      "high": 0.1919
+    },
+    "ENGLISH.f1C": {
+      "value": 1,
+      "low": 0.5,
+      "high": 1
+    },
+    "HBA1C.n": {
+      "value": 40,
+      "low": null,
+      "high": null
+    },
+    "HBA1C.goldMet": {
+      "value": 11,
+      "low": null,
+      "high": null
+    },
+    "HBA1C.accuracyA": {
+      "value": 0.4,
+      "low": 0.25,
+      "high": 0.55
+    },
+    "HBA1C.accuracyB": {
+      "value": 0.95,
+      "low": 0.875,
+      "high": 1
+    },
+    "HBA1C.accuracyC": {
+      "value": 0.95,
+      "low": 0.875,
+      "high": 1
+    },
+    "HBA1C.unknownShare": {
+      "value": 0.575,
+      "low": 0.425,
+      "high": 0.725
+    },
+    "HBA1C.metToNotMetExplicit": {
+      "value": 0,
+      "low": 0,
+      "high": 0
+    },
+    "HBA1C.metToNotMetB": {
+      "value": 0.0909,
+      "low": 0,
+      "high": 0.2861
+    },
+    "HBA1C.notMetToMet": {
+      "value": 0.0345,
+      "low": 0,
+      "high": 0.1072
+    },
+    "HBA1C.notMetToMetC": {
+      "value": 0.0345,
+      "low": 0,
+      "high": 0.1072
+    },
+    "HBA1C.f1B": {
+      "value": 0.9373,
+      "low": 0.8385,
+      "high": 1
+    },
+    "HBA1C.f1C": {
+      "value": 0.9373,
+      "low": 0.8385,
+      "high": 1
+    },
+    "KETO-1YR.n": {
+      "value": 40,
+      "low": null,
+      "high": null
+    },
+    "KETO-1YR.goldMet": {
+      "value": 0,
+      "low": null,
+      "high": null
+    },
+    "KETO-1YR.accuracyA": {
+      "value": 0.05,
+      "low": 0,
+      "high": 0.125
+    },
+    "KETO-1YR.accuracyB": {
+      "value": 1,
+      "low": 1,
+      "high": 1
+    },
+    "KETO-1YR.accuracyC": {
+      "value": 1,
+      "low": 1,
+      "high": 1
+    },
+    "KETO-1YR.unknownShare": {
+      "value": 0.95,
+      "low": 0.875,
+      "high": 1
+    },
+    "KETO-1YR.metToNotMetExplicit": {
+      "value": null,
+      "low": null,
+      "high": null
+    },
+    "KETO-1YR.metToNotMetB": {
+      "value": null,
+      "low": null,
+      "high": null
+    },
+    "KETO-1YR.notMetToMet": {
+      "value": 0,
+      "low": 0,
+      "high": 0
+    },
+    "KETO-1YR.notMetToMetC": {
+      "value": 0,
+      "low": 0,
+      "high": 0
+    },
+    "KETO-1YR.f1B": {
+      "value": 0.5,
+      "low": 0.5,
+      "high": 0.5
+    },
+    "KETO-1YR.f1C": {
+      "value": 0.5,
+      "low": 0.5,
+      "high": 0.5
+    },
+    "MAJOR-DIABETES.n": {
+      "value": 40,
+      "low": null,
+      "high": null
+    },
+    "MAJOR-DIABETES.goldMet": {
+      "value": 18,
+      "low": null,
+      "high": null
+    },
+    "MAJOR-DIABETES.accuracyA": {
+      "value": 0.375,
+      "low": 0.225,
+      "high": 0.525
+    },
+    "MAJOR-DIABETES.accuracyB": {
+      "value": 0.875,
+      "low": 0.775,
+      "high": 0.975
+    },
+    "MAJOR-DIABETES.accuracyC": {
+      "value": 0.875,
+      "low": 0.775,
+      "high": 0.975
+    },
+    "MAJOR-DIABETES.unknownShare": {
+      "value": 0.575,
+      "low": 0.425,
+      "high": 0.725
+    },
+    "MAJOR-DIABETES.metToNotMetExplicit": {
+      "value": 0,
+      "low": 0,
+      "high": 0
+    },
+    "MAJOR-DIABETES.metToNotMetB": {
+      "value": 0.1667,
+      "low": 0,
+      "high": 0.3529
+    },
+    "MAJOR-DIABETES.notMetToMet": {
+      "value": 0.0909,
+      "low": 0,
+      "high": 0.2273
+    },
+    "MAJOR-DIABETES.notMetToMetC": {
+      "value": 0.0909,
+      "low": 0,
+      "high": 0.2273
+    },
+    "MAJOR-DIABETES.f1B": {
+      "value": 0.873,
+      "low": 0.7566,
+      "high": 0.9737
+    },
+    "MAJOR-DIABETES.f1C": {
+      "value": 0.873,
+      "low": 0.7566,
+      "high": 0.9737
+    },
+    "MAKES-DECISIONS.n": {
+      "value": 40,
+      "low": null,
+      "high": null
+    },
+    "MAKES-DECISIONS.goldMet": {
+      "value": 38,
+      "low": null,
+      "high": null
+    },
+    "MAKES-DECISIONS.accuracyA": {
+      "value": 0.25,
+      "low": 0.125,
+      "high": 0.4
+    },
+    "MAKES-DECISIONS.accuracyB": {
+      "value": 0.25,
+      "low": 0.125,
+      "high": 0.4
+    },
+    "MAKES-DECISIONS.accuracyC": {
+      "value": 0.975,
+      "low": 0.925,
+      "high": 1
+    },
+    "MAKES-DECISIONS.unknownShare": {
+      "value": 0.725,
+      "low": 0.575,
+      "high": 0.85
+    },
+    "MAKES-DECISIONS.metToNotMetExplicit": {
+      "value": 0.0263,
+      "low": 0,
+      "high": 0.0833
+    },
+    "MAKES-DECISIONS.metToNotMetB": {
+      "value": 0.7895,
+      "low": 0.65,
+      "high": 0.9189
+    },
+    "MAKES-DECISIONS.notMetToMet": {
+      "value": 0,
+      "low": null,
+      "high": null
+    },
+    "MAKES-DECISIONS.notMetToMetC": {
+      "value": 0,
+      "low": null,
+      "high": null
+    },
+    "MAKES-DECISIONS.f1B": {
+      "value": 0.2327,
+      "low": 0.1198,
+      "high": 0.3553
+    },
+    "MAKES-DECISIONS.f1C": {
+      "value": 0.8933,
+      "low": 0.4872,
+      "high": 1
+    },
+    "MI-6MOS.n": {
+      "value": 40,
+      "low": null,
+      "high": null
+    },
+    "MI-6MOS.goldMet": {
+      "value": 5,
+      "low": null,
+      "high": null
+    },
+    "MI-6MOS.accuracyA": {
+      "value": 0.35,
+      "low": 0.2,
+      "high": 0.5
+    },
+    "MI-6MOS.accuracyB": {
+      "value": 0.875,
+      "low": 0.775,
+      "high": 0.975
+    },
+    "MI-6MOS.accuracyC": {
+      "value": 0.875,
+      "low": 0.775,
+      "high": 0.975
+    },
+    "MI-6MOS.unknownShare": {
+      "value": 0.65,
+      "low": 0.5,
+      "high": 0.8
+    },
+    "MI-6MOS.metToNotMetExplicit": {
+      "value": 0,
+      "low": 0,
+      "high": 0
+    },
+    "MI-6MOS.metToNotMetB": {
+      "value": 1,
+      "low": 1,
+      "high": 1
+    },
+    "MI-6MOS.notMetToMet": {
+      "value": 0,
+      "low": 0,
+      "high": 0
+    },
+    "MI-6MOS.notMetToMetC": {
+      "value": 0,
+      "low": 0,
+      "high": 0
+    },
+    "MI-6MOS.f1B": {
+      "value": 0.4667,
+      "low": 0.4366,
+      "high": 0.4937
+    },
+    "MI-6MOS.f1C": {
+      "value": 0.4667,
+      "low": 0.4366,
+      "high": 0.4937
+    },
+    "ALL.n": {
+      "value": 520,
+      "low": null,
+      "high": null
+    },
+    "ALL.accuracyA": {
+      "value": 0.3442,
+      "low": 0.2981,
+      "high": 0.3923
+    },
+    "ALL.accuracyB": {
+      "value": 0.7519,
+      "low": 0.7212,
+      "high": 0.7827
+    },
+    "ALL.accuracyC": {
+      "value": 0.8769,
+      "low": 0.85,
+      "high": 0.9039
+    },
+    "ALL.unknownShare": {
+      "value": 0.6135,
+      "low": 0.5596,
+      "high": 0.6635
+    },
+    "ALL.metToNotMetExplicit": {
+      "value": 0.0093,
+      "low": 0,
+      "high": 0.0228
+    },
+    "ALL.metToNotMetB": {
+      "value": 0.507,
+      "low": 0.4472,
+      "high": 0.5665
+    },
+    "ALL.notMetToMet": {
+      "value": 0.0656,
+      "low": 0.0396,
+      "high": 0.0948
+    },
+    "ALL.notMetToMetC": {
+      "value": 0.0656,
+      "low": 0.0396,
+      "high": 0.0948
+    },
+    "ALL.f1MicroB": {
+      "value": 0.7186,
+      "low": 0.6831,
+      "high": 0.7517
+    },
+    "ALL.f1MicroC": {
+      "value": 0.8707,
+      "low": 0.8419,
+      "high": 0.8997
+    },
+    "ALL.f1MacroB": {
+      "value": 0.652,
+      "low": 0.6098,
+      "high": 0.6808
+    },
+    "ALL.f1MacroC": {
+      "value": 0.7722,
+      "low": 0.6959,
+      "high": 0.7976
+    },
+    "MACRO.accuracyA": {
+      "value": 0.3442,
+      "low": 0.2981,
+      "high": 0.3923
+    },
+    "MACRO.accuracyB": {
+      "value": 0.7519,
+      "low": 0.7212,
+      "high": 0.7827
+    },
+    "MACRO.accuracyC": {
+      "value": 0.8769,
+      "low": 0.85,
+      "high": 0.9039
+    },
+    "MACRO.unknownShare": {
+      "value": 0.6135,
+      "low": 0.5596,
+      "high": 0.6635
+    },
+    "MACRO.metToNotMetExplicit": {
+      "value": 0.0057,
+      "low": 0,
+      "high": 0.0142
+    },
+    "MACRO.metToNotMetB": {
+      "value": 0.3876,
+      "low": 0.3411,
+      "high": 0.4478
+    },
+    "MACRO.notMetToMet": {
+      "value": 0.0693,
+      "low": 0.044,
+      "high": 0.1043
+    },
+    "MACRO.notMetToMetC": {
+      "value": 0.0693,
+      "low": 0.044,
+      "high": 0.1043
+    }
+  },
+  "baseline": {
+    "ABDOMINAL.n": {
+      "value": 40,
+      "low": null,
+      "high": null
+    },
+    "ABDOMINAL.goldMet": {
+      "value": 13,
+      "low": null,
+      "high": null
+    },
+    "ABDOMINAL.accuracyA": {
+      "value": 0.675,
+      "low": 0.525,
+      "high": 0.825
+    },
+    "ABDOMINAL.accuracyB": {
+      "value": 0.675,
+      "low": 0.525,
+      "high": 0.825
+    },
+    "ABDOMINAL.accuracyC": {
+      "value": 0.675,
+      "low": 0.525,
+      "high": 0.825
+    },
+    "ABDOMINAL.unknownShare": {
+      "value": 0,
+      "low": 0,
+      "high": 0
+    },
+    "ABDOMINAL.metToNotMetExplicit": {
+      "value": 1,
+      "low": 1,
+      "high": 1
+    },
+    "ABDOMINAL.metToNotMetB": {
+      "value": 1,
+      "low": 1,
+      "high": 1
+    },
+    "ABDOMINAL.notMetToMet": {
+      "value": 0,
+      "low": 0,
+      "high": 0
+    },
+    "ABDOMINAL.notMetToMetC": {
+      "value": 0,
+      "low": 0,
+      "high": 0
+    },
+    "ABDOMINAL.f1B": {
+      "value": 0.403,
+      "low": 0.3443,
+      "high": 0.4521
+    },
+    "ABDOMINAL.f1C": {
+      "value": 0.403,
+      "low": 0.3443,
+      "high": 0.4521
+    },
+    "ADVANCED-CAD.n": {
+      "value": 40,
+      "low": null,
+      "high": null
+    },
+    "ADVANCED-CAD.goldMet": {
+      "value": 24,
+      "low": null,
+      "high": null
+    },
+    "ADVANCED-CAD.accuracyA": {
+      "value": 0.6,
+      "low": 0.45,
+      "high": 0.75
+    },
+    "ADVANCED-CAD.accuracyB": {
+      "value": 0.6,
+      "low": 0.45,
+      "high": 0.75
+    },
+    "ADVANCED-CAD.accuracyC": {
+      "value": 0.6,
+      "low": 0.45,
+      "high": 0.75
+    },
+    "ADVANCED-CAD.unknownShare": {
+      "value": 0,
+      "low": 0,
+      "high": 0
+    },
+    "ADVANCED-CAD.metToNotMetExplicit": {
+      "value": 0,
+      "low": 0,
+      "high": 0
+    },
+    "ADVANCED-CAD.metToNotMetB": {
+      "value": 0,
+      "low": 0,
+      "high": 0
+    },
+    "ADVANCED-CAD.notMetToMet": {
+      "value": 1,
+      "low": 1,
+      "high": 1
+    },
+    "ADVANCED-CAD.notMetToMetC": {
+      "value": 1,
+      "low": 1,
+      "high": 1
+    },
+    "ADVANCED-CAD.f1B": {
+      "value": 0.375,
+      "low": 0.3103,
+      "high": 0.4286
+    },
+    "ADVANCED-CAD.f1C": {
+      "value": 0.375,
+      "low": 0.3103,
+      "high": 0.4286
+    },
+    "ALCOHOL-ABUSE.n": {
+      "value": 40,
+      "low": null,
+      "high": null
+    },
+    "ALCOHOL-ABUSE.goldMet": {
+      "value": 3,
+      "low": null,
+      "high": null
+    },
+    "ALCOHOL-ABUSE.accuracyA": {
+      "value": 0.925,
+      "low": 0.825,
+      "high": 1
+    },
+    "ALCOHOL-ABUSE.accuracyB": {
+      "value": 0.925,
+      "low": 0.825,
+      "high": 1
+    },
+    "ALCOHOL-ABUSE.accuracyC": {
+      "value": 0.925,
+      "low": 0.825,
+      "high": 1
+    },
+    "ALCOHOL-ABUSE.unknownShare": {
+      "value": 0,
+      "low": 0,
+      "high": 0
+    },
+    "ALCOHOL-ABUSE.metToNotMetExplicit": {
+      "value": 1,
+      "low": 1,
+      "high": 1
+    },
+    "ALCOHOL-ABUSE.metToNotMetB": {
+      "value": 1,
+      "low": 1,
+      "high": 1
+    },
+    "ALCOHOL-ABUSE.notMetToMet": {
+      "value": 0,
+      "low": 0,
+      "high": 0
+    },
+    "ALCOHOL-ABUSE.notMetToMetC": {
+      "value": 0,
+      "low": 0,
+      "high": 0
+    },
+    "ALCOHOL-ABUSE.f1B": {
+      "value": 0.4805,
+      "low": 0.4521,
+      "high": 0.5
+    },
+    "ALCOHOL-ABUSE.f1C": {
+      "value": 0.4805,
+      "low": 0.4521,
+      "high": 0.5
+    },
+    "ASP-FOR-MI.n": {
+      "value": 40,
+      "low": null,
+      "high": null
+    },
+    "ASP-FOR-MI.goldMet": {
+      "value": 27,
+      "low": null,
+      "high": null
+    },
+    "ASP-FOR-MI.accuracyA": {
+      "value": 0.675,
+      "low": 0.525,
+      "high": 0.825
+    },
+    "ASP-FOR-MI.accuracyB": {
+      "value": 0.675,
+      "low": 0.525,
+      "high": 0.825
+    },
+    "ASP-FOR-MI.accuracyC": {
+      "value": 0.675,
+      "low": 0.525,
+      "high": 0.825
+    },
+    "ASP-FOR-MI.unknownShare": {
+      "value": 0,
+      "low": 0,
+      "high": 0
+    },
+    "ASP-FOR-MI.metToNotMetExplicit": {
+      "value": 0,
+      "low": 0,
+      "high": 0
+    },
+    "ASP-FOR-MI.metToNotMetB": {
+      "value": 0,
+      "low": 0,
+      "high": 0
+    },
+    "ASP-FOR-MI.notMetToMet": {
+      "value": 1,
+      "low": 1,
+      "high": 1
+    },
+    "ASP-FOR-MI.notMetToMetC": {
+      "value": 1,
+      "low": 1,
+      "high": 1
+    },
+    "ASP-FOR-MI.f1B": {
+      "value": 0.403,
+      "low": 0.3443,
+      "high": 0.4521
+    },
+    "ASP-FOR-MI.f1C": {
+      "value": 0.403,
+      "low": 0.3443,
+      "high": 0.4521
+    },
+    "CREATININE.n": {
+      "value": 40,
+      "low": null,
+      "high": null
+    },
+    "CREATININE.goldMet": {
+      "value": 12,
+      "low": null,
+      "high": null
+    },
+    "CREATININE.accuracyA": {
+      "value": 0.7,
+      "low": 0.55,
+      "high": 0.825
+    },
+    "CREATININE.accuracyB": {
+      "value": 0.7,
+      "low": 0.55,
+      "high": 0.825
+    },
+    "CREATININE.accuracyC": {
+      "value": 0.7,
+      "low": 0.55,
+      "high": 0.825
+    },
+    "CREATININE.unknownShare": {
+      "value": 0,
+      "low": 0,
+      "high": 0
+    },
+    "CREATININE.metToNotMetExplicit": {
+      "value": 1,
+      "low": 1,
+      "high": 1
+    },
+    "CREATININE.metToNotMetB": {
+      "value": 1,
+      "low": 1,
+      "high": 1
+    },
+    "CREATININE.notMetToMet": {
+      "value": 0,
+      "low": 0,
+      "high": 0
+    },
+    "CREATININE.notMetToMetC": {
+      "value": 0,
+      "low": 0,
+      "high": 0
+    },
+    "CREATININE.f1B": {
+      "value": 0.4118,
+      "low": 0.3548,
+      "high": 0.4521
+    },
+    "CREATININE.f1C": {
+      "value": 0.4118,
+      "low": 0.3548,
+      "high": 0.4521
+    },
+    "DIETSUPP-2MOS.n": {
+      "value": 40,
+      "low": null,
+      "high": null
+    },
+    "DIETSUPP-2MOS.goldMet": {
+      "value": 21,
+      "low": null,
+      "high": null
+    },
+    "DIETSUPP-2MOS.accuracyA": {
+      "value": 0.525,
+      "low": 0.375,
+      "high": 0.675
+    },
+    "DIETSUPP-2MOS.accuracyB": {
+      "value": 0.525,
+      "low": 0.375,
+      "high": 0.675
+    },
+    "DIETSUPP-2MOS.accuracyC": {
+      "value": 0.525,
+      "low": 0.375,
+      "high": 0.675
+    },
+    "DIETSUPP-2MOS.unknownShare": {
+      "value": 0,
+      "low": 0,
+      "high": 0
+    },
+    "DIETSUPP-2MOS.metToNotMetExplicit": {
+      "value": 0,
+      "low": 0,
+      "high": 0
+    },
+    "DIETSUPP-2MOS.metToNotMetB": {
+      "value": 0,
+      "low": 0,
+      "high": 0
+    },
+    "DIETSUPP-2MOS.notMetToMet": {
+      "value": 1,
+      "low": 1,
+      "high": 1
+    },
+    "DIETSUPP-2MOS.notMetToMetC": {
+      "value": 1,
+      "low": 1,
+      "high": 1
+    },
+    "DIETSUPP-2MOS.f1B": {
+      "value": 0.3443,
+      "low": 0.2727,
+      "high": 0.403
+    },
+    "DIETSUPP-2MOS.f1C": {
+      "value": 0.3443,
+      "low": 0.2727,
+      "high": 0.403
+    },
+    "DRUG-ABUSE.n": {
+      "value": 40,
+      "low": null,
+      "high": null
+    },
+    "DRUG-ABUSE.goldMet": {
+      "value": 4,
+      "low": null,
+      "high": null
+    },
+    "DRUG-ABUSE.accuracyA": {
+      "value": 0.9,
+      "low": 0.8,
+      "high": 0.975
+    },
+    "DRUG-ABUSE.accuracyB": {
+      "value": 0.9,
+      "low": 0.8,
+      "high": 0.975
+    },
+    "DRUG-ABUSE.accuracyC": {
+      "value": 0.9,
+      "low": 0.8,
+      "high": 0.975
+    },
+    "DRUG-ABUSE.unknownShare": {
+      "value": 0,
+      "low": 0,
+      "high": 0
+    },
+    "DRUG-ABUSE.metToNotMetExplicit": {
+      "value": 1,
+      "low": 1,
+      "high": 1
+    },
+    "DRUG-ABUSE.metToNotMetB": {
+      "value": 1,
+      "low": 1,
+      "high": 1
+    },
+    "DRUG-ABUSE.notMetToMet": {
+      "value": 0,
+      "low": 0,
+      "high": 0
+    },
+    "DRUG-ABUSE.notMetToMetC": {
+      "value": 0,
+      "low": 0,
+      "high": 0
+    },
+    "DRUG-ABUSE.f1B": {
+      "value": 0.4737,
+      "low": 0.4444,
+      "high": 0.4937
+    },
+    "DRUG-ABUSE.f1C": {
+      "value": 0.4737,
+      "low": 0.4444,
+      "high": 0.4937
+    },
+    "ENGLISH.n": {
+      "value": 40,
+      "low": null,
+      "high": null
+    },
+    "ENGLISH.goldMet": {
+      "value": 39,
+      "low": null,
+      "high": null
+    },
+    "ENGLISH.accuracyA": {
+      "value": 0.975,
+      "low": 0.925,
+      "high": 1
+    },
+    "ENGLISH.accuracyB": {
+      "value": 0.975,
+      "low": 0.925,
+      "high": 1
+    },
+    "ENGLISH.accuracyC": {
+      "value": 0.975,
+      "low": 0.925,
+      "high": 1
+    },
+    "ENGLISH.unknownShare": {
+      "value": 0,
+      "low": 0,
+      "high": 0
+    },
+    "ENGLISH.metToNotMetExplicit": {
+      "value": 0,
+      "low": 0,
+      "high": 0
+    },
+    "ENGLISH.metToNotMetB": {
+      "value": 0,
+      "low": 0,
+      "high": 0
+    },
+    "ENGLISH.notMetToMet": {
+      "value": 1,
+      "low": null,
+      "high": null
+    },
+    "ENGLISH.notMetToMetC": {
+      "value": 1,
+      "low": null,
+      "high": null
+    },
+    "ENGLISH.f1B": {
+      "value": 0.4937,
+      "low": 0.4805,
+      "high": 0.5
+    },
+    "ENGLISH.f1C": {
+      "value": 0.4937,
+      "low": 0.4805,
+      "high": 0.5
+    },
+    "HBA1C.n": {
+      "value": 40,
+      "low": null,
+      "high": null
+    },
+    "HBA1C.goldMet": {
+      "value": 11,
+      "low": null,
+      "high": null
+    },
+    "HBA1C.accuracyA": {
+      "value": 0.725,
+      "low": 0.575,
+      "high": 0.85
+    },
+    "HBA1C.accuracyB": {
+      "value": 0.725,
+      "low": 0.575,
+      "high": 0.85
+    },
+    "HBA1C.accuracyC": {
+      "value": 0.725,
+      "low": 0.575,
+      "high": 0.85
+    },
+    "HBA1C.unknownShare": {
+      "value": 0,
+      "low": 0,
+      "high": 0
+    },
+    "HBA1C.metToNotMetExplicit": {
+      "value": 1,
+      "low": 1,
+      "high": 1
+    },
+    "HBA1C.metToNotMetB": {
+      "value": 1,
+      "low": 1,
+      "high": 1
+    },
+    "HBA1C.notMetToMet": {
+      "value": 0,
+      "low": 0,
+      "high": 0
+    },
+    "HBA1C.notMetToMetC": {
+      "value": 0,
+      "low": 0,
+      "high": 0
+    },
+    "HBA1C.f1B": {
+      "value": 0.4203,
+      "low": 0.3651,
+      "high": 0.4595
+    },
+    "HBA1C.f1C": {
+      "value": 0.4203,
+      "low": 0.3651,
+      "high": 0.4595
+    },
+    "KETO-1YR.n": {
+      "value": 40,
+      "low": null,
+      "high": null
+    },
+    "KETO-1YR.goldMet": {
+      "value": 0,
+      "low": null,
+      "high": null
+    },
+    "KETO-1YR.accuracyA": {
+      "value": 1,
+      "low": 1,
+      "high": 1
+    },
+    "KETO-1YR.accuracyB": {
+      "value": 1,
+      "low": 1,
+      "high": 1
+    },
+    "KETO-1YR.accuracyC": {
+      "value": 1,
+      "low": 1,
+      "high": 1
+    },
+    "KETO-1YR.unknownShare": {
+      "value": 0,
+      "low": 0,
+      "high": 0
+    },
+    "KETO-1YR.metToNotMetExplicit": {
+      "value": null,
+      "low": null,
+      "high": null
+    },
+    "KETO-1YR.metToNotMetB": {
+      "value": null,
+      "low": null,
+      "high": null
+    },
+    "KETO-1YR.notMetToMet": {
+      "value": 0,
+      "low": 0,
+      "high": 0
+    },
+    "KETO-1YR.notMetToMetC": {
+      "value": 0,
+      "low": 0,
+      "high": 0
+    },
+    "KETO-1YR.f1B": {
+      "value": 0.5,
+      "low": 0.5,
+      "high": 0.5
+    },
+    "KETO-1YR.f1C": {
+      "value": 0.5,
+      "low": 0.5,
+      "high": 0.5
+    },
+    "MAJOR-DIABETES.n": {
+      "value": 40,
+      "low": null,
+      "high": null
+    },
+    "MAJOR-DIABETES.goldMet": {
+      "value": 18,
+      "low": null,
+      "high": null
+    },
+    "MAJOR-DIABETES.accuracyA": {
+      "value": 0.45,
+      "low": 0.3,
+      "high": 0.6
+    },
+    "MAJOR-DIABETES.accuracyB": {
+      "value": 0.45,
+      "low": 0.3,
+      "high": 0.6
+    },
+    "MAJOR-DIABETES.accuracyC": {
+      "value": 0.45,
+      "low": 0.3,
+      "high": 0.6
+    },
+    "MAJOR-DIABETES.unknownShare": {
+      "value": 0,
+      "low": 0,
+      "high": 0
+    },
+    "MAJOR-DIABETES.metToNotMetExplicit": {
+      "value": 0,
+      "low": 0,
+      "high": 0
+    },
+    "MAJOR-DIABETES.metToNotMetB": {
+      "value": 0,
+      "low": 0,
+      "high": 0
+    },
+    "MAJOR-DIABETES.notMetToMet": {
+      "value": 1,
+      "low": 1,
+      "high": 1
+    },
+    "MAJOR-DIABETES.notMetToMetC": {
+      "value": 1,
+      "low": 1,
+      "high": 1
+    },
+    "MAJOR-DIABETES.f1B": {
+      "value": 0.3103,
+      "low": 0.2308,
+      "high": 0.375
+    },
+    "MAJOR-DIABETES.f1C": {
+      "value": 0.3103,
+      "low": 0.2308,
+      "high": 0.375
+    },
+    "MAKES-DECISIONS.n": {
+      "value": 40,
+      "low": null,
+      "high": null
+    },
+    "MAKES-DECISIONS.goldMet": {
+      "value": 38,
+      "low": null,
+      "high": null
+    },
+    "MAKES-DECISIONS.accuracyA": {
+      "value": 0.95,
+      "low": 0.875,
+      "high": 1
+    },
+    "MAKES-DECISIONS.accuracyB": {
+      "value": 0.95,
+      "low": 0.875,
+      "high": 1
+    },
+    "MAKES-DECISIONS.accuracyC": {
+      "value": 0.95,
+      "low": 0.875,
+      "high": 1
+    },
+    "MAKES-DECISIONS.unknownShare": {
+      "value": 0,
+      "low": 0,
+      "high": 0
+    },
+    "MAKES-DECISIONS.metToNotMetExplicit": {
+      "value": 0,
+      "low": 0,
+      "high": 0
+    },
+    "MAKES-DECISIONS.metToNotMetB": {
+      "value": 0,
+      "low": 0,
+      "high": 0
+    },
+    "MAKES-DECISIONS.notMetToMet": {
+      "value": 1,
+      "low": null,
+      "high": null
+    },
+    "MAKES-DECISIONS.notMetToMetC": {
+      "value": 1,
+      "low": null,
+      "high": null
+    },
+    "MAKES-DECISIONS.f1B": {
+      "value": 0.4872,
+      "low": 0.4667,
+      "high": 0.5
+    },
+    "MAKES-DECISIONS.f1C": {
+      "value": 0.4872,
+      "low": 0.4667,
+      "high": 0.5
+    },
+    "MI-6MOS.n": {
+      "value": 40,
+      "low": null,
+      "high": null
+    },
+    "MI-6MOS.goldMet": {
+      "value": 5,
+      "low": null,
+      "high": null
+    },
+    "MI-6MOS.accuracyA": {
+      "value": 0.875,
+      "low": 0.775,
+      "high": 0.975
+    },
+    "MI-6MOS.accuracyB": {
+      "value": 0.875,
+      "low": 0.775,
+      "high": 0.975
+    },
+    "MI-6MOS.accuracyC": {
+      "value": 0.875,
+      "low": 0.775,
+      "high": 0.975
+    },
+    "MI-6MOS.unknownShare": {
+      "value": 0,
+      "low": 0,
+      "high": 0
+    },
+    "MI-6MOS.metToNotMetExplicit": {
+      "value": 1,
+      "low": 1,
+      "high": 1
+    },
+    "MI-6MOS.metToNotMetB": {
+      "value": 1,
+      "low": 1,
+      "high": 1
+    },
+    "MI-6MOS.notMetToMet": {
+      "value": 0,
+      "low": 0,
+      "high": 0
+    },
+    "MI-6MOS.notMetToMetC": {
+      "value": 0,
+      "low": 0,
+      "high": 0
+    },
+    "MI-6MOS.f1B": {
+      "value": 0.4667,
+      "low": 0.4366,
+      "high": 0.4937
+    },
+    "MI-6MOS.f1C": {
+      "value": 0.4667,
+      "low": 0.4366,
+      "high": 0.4937
+    },
+    "ALL.n": {
+      "value": 520,
+      "low": null,
+      "high": null
+    },
+    "ALL.accuracyA": {
+      "value": 0.7673,
+      "low": 0.7308,
+      "high": 0.8
+    },
+    "ALL.accuracyB": {
+      "value": 0.7673,
+      "low": 0.7308,
+      "high": 0.8
+    },
+    "ALL.accuracyC": {
+      "value": 0.7673,
+      "low": 0.7308,
+      "high": 0.8
+    },
+    "ALL.unknownShare": {
+      "value": 0,
+      "low": 0,
+      "high": 0
+    },
+    "ALL.metToNotMetExplicit": {
+      "value": 0.2233,
+      "low": 0.1857,
+      "high": 0.2611
+    },
+    "ALL.metToNotMetB": {
+      "value": 0.2233,
+      "low": 0.1857,
+      "high": 0.2611
+    },
+    "ALL.notMetToMet": {
+      "value": 0.2393,
+      "low": 0.198,
+      "high": 0.2788
+    },
+    "ALL.notMetToMetC": {
+      "value": 0.2393,
+      "low": 0.198,
+      "high": 0.2788
+    },
+    "ALL.f1MicroB": {
+      "value": 0.7636,
+      "low": 0.7257,
+      "high": 0.798
+    },
+    "ALL.f1MicroC": {
+      "value": 0.7636,
+      "low": 0.7257,
+      "high": 0.798
+    },
+    "ALL.f1MacroB": {
+      "value": 0.4284,
+      "low": 0.4136,
+      "high": 0.4399
+    },
+    "ALL.f1MacroC": {
+      "value": 0.4284,
+      "low": 0.4136,
+      "high": 0.4399
+    },
+    "MACRO.accuracyA": {
+      "value": 0.7673,
+      "low": 0.7308,
+      "high": 0.8
+    },
+    "MACRO.accuracyB": {
+      "value": 0.7673,
+      "low": 0.7308,
+      "high": 0.8
+    },
+    "MACRO.accuracyC": {
+      "value": 0.7673,
+      "low": 0.7308,
+      "high": 0.8
+    },
+    "MACRO.unknownShare": {
+      "value": 0,
+      "low": 0,
+      "high": 0
+    },
+    "MACRO.metToNotMetExplicit": {
+      "value": 0.5,
+      "low": 0.4545,
+      "high": 0.5
+    },
+    "MACRO.metToNotMetB": {
+      "value": 0.5,
+      "low": 0.4545,
+      "high": 0.5
+    },
+    "MACRO.notMetToMet": {
+      "value": 0.4615,
+      "low": 0.3636,
+      "high": 0.4615
+    },
+    "MACRO.notMetToMetC": {
+      "value": 0.4615,
+      "low": 0.3636,
+      "high": 0.4615
+    }
+  },
+  "decidedBy": {
+    "ABDOMINAL": {
+      "code": 40,
+      "model": 0
+    },
+    "ADVANCED-CAD": {
+      "code": 0,
+      "model": 40
+    },
+    "ALCOHOL-ABUSE": {
+      "code": 40,
+      "model": 0
+    },
+    "ASP-FOR-MI": {
+      "code": 40,
+      "model": 0
+    },
+    "CREATININE": {
+      "code": 0,
+      "model": 40
+    },
+    "DIETSUPP-2MOS": {
+      "code": 40,
+      "model": 0
+    },
+    "DRUG-ABUSE": {
+      "code": 40,
+      "model": 0
+    },
+    "ENGLISH": {
+      "code": 0,
+      "model": 40
+    },
+    "HBA1C": {
+      "code": 40,
+      "model": 0
+    },
+    "KETO-1YR": {
+      "code": 40,
+      "model": 0
+    },
+    "MAJOR-DIABETES": {
+      "code": 40,
+      "model": 0
+    },
+    "MAKES-DECISIONS": {
+      "code": 0,
+      "model": 40
+    },
+    "MI-6MOS": {
+      "code": 40,
+      "model": 0
+    }
+  },
+  "unknownReasons": {
+    "ABDOMINAL": {
+      "not_recorded": 21
+    },
+    "DIETSUPP-2MOS": {
+      "undated": 20,
+      "not_recorded": 20
+    },
+    "ENGLISH": {
+      "not_recorded": 36
+    },
+    "HBA1C": {
+      "not_measured": 19,
+      "unit_missing": 4
+    },
+    "KETO-1YR": {
+      "not_recorded": 37,
+      "undated": 1
+    },
+    "MAKES-DECISIONS": {
+      "not_recorded": 29
+    },
+    "MI-6MOS": {
+      "not_recorded": 14,
+      "undated": 12
+    },
+    "DRUG-ABUSE": {
+      "not_recorded": 21
+    },
+    "ADVANCED-CAD": {
+      "not_recorded": 18
+    },
+    "ALCOHOL-ABUSE": {
+      "not_recorded": 13
+    },
+    "ASP-FOR-MI": {
+      "not_recorded": 11
+    },
+    "CREATININE": {
+      "not_recorded": 20
+    },
+    "MAJOR-DIABETES": {
+      "not_recorded": 23
+    }
+  },
+  "facts": {
+    "proposed": 423,
+    "kept": 405,
+    "voidedByEvaluator": 8,
+    "dropped": {
+      "date_not_in_span": 7,
+      "quote_missing": 18,
+      "quote_not_found": 11,
+      "language_quote_not_found": 4,
+      "language_answer_without_evidence": 4,
+      "polarity_invalid": 1
+    },
+    "unitDropped": 3,
+    "unitByConvention": 23,
+    "datedByQuote": 0
+  },
+  "official": {
+    "readingB": {
+      "files": 40,
+      "micro": {
+        "metPrecision": 0.8413,
+        "metRecall": 0.493,
+        "metF1": 0.6217,
+        "notMetF1": 0.8155,
+        "overallF1": 0.7186
+      },
+      "macro": {
+        "metPrecision": 0.6519,
+        "metRecall": 0.5652,
+        "metF1": 0.5476,
+        "notMetF1": 0.7564,
+        "overallF1": 0.652
+      },
+      "perCriterion": {
+        "ABDOMINAL": 0.7396,
+        "ADVANCED-CAD": 0.824,
+        "ALCOHOL-ABUSE": 0.8122,
+        "ASP-FOR-MI": 0.7964,
+        "CREATININE": 0.9373,
+        "DIETSUPP-2MOS": 0.322,
+        "DRUG-ABUSE": 0.9374,
+        "ENGLISH": 0.0977,
+        "HBA1C": 0.9373,
+        "KETO-1YR": 0.5,
+        "MAJOR-DIABETES": 0.873,
+        "MAKES-DECISIONS": 0.2327,
+        "MI-6MOS": 0.4667
+      }
+    },
+    "readingC": {
+      "files": 40,
+      "micro": {
+        "metPrecision": 0.8953,
+        "metRecall": 0.7953,
+        "metF1": 0.8424,
+        "notMetF1": 0.8991,
+        "overallF1": 0.8707
+      },
+      "macro": {
+        "metPrecision": 0.6519,
+        "metRecall": 0.695,
+        "metF1": 0.6627,
+        "notMetF1": 0.8818,
+        "overallF1": 0.7722
+      },
+      "perCriterion": {
+        "ABDOMINAL": 0.7396,
+        "ADVANCED-CAD": 0.824,
+        "ALCOHOL-ABUSE": 0.8122,
+        "ASP-FOR-MI": 0.7964,
+        "CREATININE": 0.9373,
+        "DIETSUPP-2MOS": 0.322,
+        "DRUG-ABUSE": 0.9374,
+        "ENGLISH": 1,
+        "HBA1C": 0.9373,
+        "KETO-1YR": 0.5,
+        "MAJOR-DIABETES": 0.873,
+        "MAKES-DECISIONS": 0.8933,
+        "MI-6MOS": 0.4667
+      }
+    }
+  },
+  "officialAgreement": {
+    "microB": {
+      "official": 0.7186,
+      "own": 0.7186
+    },
+    "microC": {
+      "official": 0.8707,
+      "own": 0.8707
+    },
+    "macroB": {
+      "official": 0.652,
+      "own": 0.652
+    }
+  }
+}

@@ -69,6 +69,7 @@ export function VcrModelRecord({ model, className }: { model: VcrModelCard; clas
     ...(model.missingData ? [{ label: "缺失数据", value: model.missingData }] : []),
     ...(model.uncertainty ? [{ label: "不确定性", value: model.uncertainty }] : []),
     ...(model.retirement ? [{ label: "退役规则", value: model.retirement }] : []),
+    ...(model.tripod ?? []).map((field) => ({ label: field.label, value: field.text })),
   ];
   return (
     <div data-vcr-model-card={model.id} className={cn("flex flex-col gap-6", className)}>

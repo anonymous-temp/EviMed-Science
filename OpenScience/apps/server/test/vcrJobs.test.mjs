@@ -6,11 +6,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  VCR_DERIVED_SOURCES, VCR_JOB_OPEN_STATES, VCR_JOB_TERMINAL_STATES, vcrIdempotencyKey, vcrMergeStageResult, vcrReplicatesForJob,
+  VcrJobs, VCR_DERIVED_SOURCES, VCR_JOB_OPEN_STATES, VCR_JOB_TERMINAL_STATES, vcrIdempotencyKey, vcrMergeStageResult, vcrReplicatePlanForJob, vcrReplicatesForJob,
   VCR_RECONSTRUCTION_REFERENCE, vcrBindReconstruction, vcrBindScientificInputUnits, vcrEngineStoppedError, vcrErrorFromIssues, vcrFailureReason, vcrResultKindFor, vcrScenarioColumns, vcrScenarioHash, vcrSeedFor,
 } from "../src/vcrJobs.mjs";
 import { VCR_RESULT_KINDS } from "../src/vcrStore.mjs";
-import { VCR_JOB_KINDS, VCR_JOB_METHODS, VCR_ENGINE_METHODS, VCR_REPLICATES_ALT_MIN, VCR_REPLICATES_NULL_MIN, canonicalScenarioJson, replicatesForMcse, vcrReplicateFloorFor } from "@evimed/domain";
+import { VCR_MINIMAL_TEMPLATES, VCR_JOB_KINDS, VCR_JOB_METHODS, VCR_ENGINE_METHODS, VCR_REPLICATES_ALT_MIN, VCR_REPLICATES_NULL_MIN, canonicalScenarioJson, replicatesForMcse, vcrReplicateFloorFor } from "@evimed/domain";
 
 const scenario = {
   design: { kind: "two_arm_fixed", nTreat: 150, nControl: 150 },
@@ -183,6 +183,69 @@ test("null and alternative stages retain their own operating characteristics, Mo
   assert.notEqual(phases.simulation_null.tables[0].sha256, phases.simulation.tables[0].sha256);
 });
 
+test("a zero-effect check that lands after the result adds its figure and never replaces the result's (A1)", () => {
+  const stage = (name) => ({ stage: name, jobId: `job_${name}`, method: "design.simulate", methodVersion: "1.2.0" });
+  const alternative = vcrMergeStageResult(null, { conclusion: "estimable", notEstimableRule: null, counts: { realPatients: 0, generatedRecords: 5000 },
+    measures: [{ name: "power", value: 0.81, mcse: 0.0055 }, { name: "expected_sample_size", value: 180, mcse: 0 }],
+    diagnostics: { isNullScenario: false, replicatesPlanned: 5000, powerCurve: { series: [] }, analyticCheck: { name: "power", value: 0.8, withinThreeMcse: true } },
+    tables: [{ name: "replicates", sha256: "a".repeat(64) }] }, stage("simulation"));
+  const filed = (/** @type {any} */ merged) => ({ id: "res_1", ...merged });
+  const check = (/** @type {Record<string, any>} */ over = {}) => ({ conclusion: "estimable", notEstimableRule: null, counts: { realPatients: 0, generatedRecords: 20000 },
+    measures: [{ name: "type_one_error", value: 0.0243, mcse: 0.0011 }, { name: "expected_sample_size", value: 175, mcse: 0 }],
+    diagnostics: { isNullScenario: true, replicatesPlanned: 20000, analyticCheck: { name: "type_one_error", value: 0.025, basis: "nominal_alpha", withinThreeMcse: true } },
+    tables: [{ name: "replicates", sha256: "b".repeat(64) }], ...over });
+  const merged = vcrMergeStageResult(/** @type {any} */ (filed(alternative)), check(), stage("simulation_null"));
+  // The figure the check is for is added; the result's own are not taken over by the null run's.
+  assert.deepEqual(merged.measures.map((measure) => measure.name).sort(), ["expected_sample_size", "power", "type_one_error"]);
+  assert.equal(merged.measures.find((measure) => measure.name === "expected_sample_size").value, 180, "the alternative's, not the null run's");
+  assert.equal(merged.diagnostics.isNullScenario, false, "the result's own summaries stand");
+  assert.equal(merged.diagnostics.replicatesPlanned, 5000);
+  assert.deepEqual(merged.counts, { realPatients: 0, generatedRecords: 5000 });
+  assert.equal(merged.conclusion, "estimable");
+  assert.ok(merged.diagnostics.powerCurve, "and so is the power curve");
+  // The check keeps its own record: its measures, its summaries, its closed-form check, its table.
+  const own = merged.diagnostics.stageResults.simulation_null;
+  assert.equal(own.measures.find((measure) => measure.name === "type_one_error").mcse, 0.0011);
+  assert.equal(own.diagnostics.analyticCheck.basis, "nominal_alpha");
+  assert.equal(own.measures.find((measure) => measure.name === "expected_sample_size").value, 175);
+  assert.equal(merged.diagnostics.stageResults.simulation.diagnostics.analyticCheck.name, "power", "the alternative's check is its own");
+  // A check that could not be estimated limits the result and does not void it; one that was limited does the same.
+  const broken = vcrMergeStageResult(/** @type {any} */ (filed(alternative)), check({ conclusion: "not_estimable", notEstimableRule: "design_effect_null", measures: [] }), stage("simulation_null"));
+  assert.equal(broken.conclusion, "limited");
+  assert.equal(broken.notEstimableRule, null, "the check's rule is not the result's");
+  assert.deepEqual(broken.measures.map((measure) => measure.name).sort(), ["expected_sample_size", "power"]);
+  // A cancelled check (a partial run) is a stage record like any other, flagged, and the result is the alternative's still.
+  const partial = vcrMergeStageResult(/** @type {any} */ (filed(alternative)), check({ conclusion: "limited", diagnostics: { partial: true, canceled: true, replicatesCompleted: 8000 } }), stage("simulation_null"));
+  assert.equal(partial.diagnostics.partial, undefined, "the result is not marked partial because its check was");
+  assert.equal(partial.diagnostics.stageResults.simulation_null.diagnostics.partial, true);
+  assert.equal(partial.conclusion, "limited");
+});
+
+test("the null floor rises with the intended use and for a borrowing design; the alternative's does not (decision 3)", () => {
+  const nullCase = { ...scenario, truth: { hazardRatio: 1, controlMedian: 6 } };
+  for (const use of ["exploratory", "design_support"]) assert.equal(vcrReplicatesForJob("design_simulation", nullCase, null, { intendedUse: use }), VCR_REPLICATES_NULL_MIN, use);
+  for (const use of ["specified_analysis", "submission_preparation"]) assert.equal(vcrReplicatesForJob("design_simulation", nullCase, null, { intendedUse: use }), 100_000, use);
+  assert.equal(vcrReplicatesForJob("design_simulation", nullCase, null), VCR_REPLICATES_NULL_MIN, "no use stated is an exploration");
+  // Only the null case is held to the larger number.
+  assert.equal(vcrReplicatesForJob("design_simulation", scenario, null, { intendedUse: "submission_preparation" }), VCR_REPLICATES_ALT_MIN);
+  // An external-control design borrows, whatever it is for; so does the MAP prior's table of operating characteristics.
+  const external = { design: { kind: "single_arm_external", n: 100 }, endpoint: { type: "binary" },
+    truth: { controlRates: [0.3, 0.4], treatmentRates: [0.3, 0.4] }, external: { targetPrevalence: 0.5 } };
+  assert.equal(vcrReplicatesForJob("design_simulation", external, null, { intendedUse: "exploratory" }), 100_000);
+  assert.equal(vcrReplicatesForJob("map_prior", { operatingCharacteristics: { nControl: 100, nTreatment: 100, drifts: [0, 0.5], effect: 0.8 } }, null, { intendedUse: "exploratory" }), 100_000);
+  assert.equal(vcrReplicatesForJob("map_prior", { operatingCharacteristics: {} }, 150_000, { intendedUse: "exploratory" }), 150_000, "what was asked can raise it");
+  assert.equal(vcrReplicatesForJob("map_prior", { historical: {} }, null), null, "a MAP prior with no table has no replicates");
+  // What set the number is kept with the job, and a precision the scenario asked for outranks the use when it needs more.
+  assert.deepEqual(vcrReplicatePlanForJob("design_simulation", nullCase, null, { intendedUse: "specified_analysis" }),
+    { replicates: 100_000, floor: 100_000, basis: "intended_use", intendedUse: "specified_analysis", targetMcse: null });
+  assert.equal(vcrReplicatePlanForJob("design_simulation", nullCase, null, { intendedUse: "exploratory" })?.basis, "default");
+  assert.equal(vcrReplicatePlanForJob("design_simulation", { ...nullCase, targetMcse: 0.0004 }, null, { intendedUse: "specified_analysis" })?.basis, "target_mcse");
+  assert.equal(vcrReplicatePlanForJob("map_prior", { operatingCharacteristics: {} }, null)?.basis, "borrowing");
+  // A grid is held to its worst cell, at the use's floor.
+  const grid = { ...scenario, truths: [{ hazardRatio: 0.7, controlMedian: 6 }, { hazardRatio: 1, controlMedian: 6 }] };
+  assert.equal(vcrReplicatesForJob("design_grid", grid, null, { intendedUse: "specified_analysis" }), 100_000);
+});
+
 // --- robustness methods ---
 
 test("a robustness stage that cannot be computed does not turn the comparison into one that could not be estimated", () => {
@@ -327,4 +390,88 @@ test('frozen observed-table units replace caller labels, while synthetic units s
   const missing=vcrBindScientificInputUnits('model.prognostic_apply',scenario,[{...input,columnUnits:{}}]);assert.equal(missing.scenario.inputUnits.age,'unknown');
   const synthetic=vcrBindScientificInputUnits('model.prognostic_apply',scenario,[{...input,valueSource:'synthetic'}]);assert.equal(synthetic.scenario.inputUnits.age,'years');assert.equal(synthetic.detail.basis,'declared_synthetic_scenario');
   assert.throws(()=>vcrBindScientificInputUnits('model.survival_fit',{inputId:'snp:1',timeColumn:'age',timeUnit:'years'},[input]),{code:'vcr_model_not_applicable'});
+});
+
+// --- the check that queues nothing (C1) ----------------------------------------------------------------------------------------
+
+/** A queue that cannot reach a database: `validate` must not need one beyond the study's intended use. @param {string | null} [intendedUse] */
+const queue = (intendedUse = null) => {
+  /** @type {string[]} */
+  const touched = [];
+  const store = new Proxy({}, { get: (_target, name) => async () => { touched.push(String(name)); if (name === "studyById") return { intendedUse }; throw new Error(`validate reached ${String(name)}`); } });
+  return Object.assign(new VcrJobs({ store, config: { vcrJobCpuSeconds: 600 } }), { touched });
+};
+
+test("validate answers a valid scenario with its defaults, its replicate count and what set it, its cost class, and reaches no store", async () => {
+  const jobs = queue();
+  const answer = await jobs.validate({ kind: "design_simulation", scenario });
+  assert.deepEqual([answer.action, answer.queued, answer.checked, answer.valid, answer.issues], ["validate", false, true, true, []]);
+  assert.deepEqual(answer.scenario, scenario, "a scenario with nothing to canonicalise is returned as stated");
+  assert.equal(answer.replicates.count, 5000);
+  assert.match(answer.replicates.reason, /the default floor for an alternative/);
+  assert.deepEqual(answer.cost, { class: "heavy", cpuSecondsLimit: 600 });
+  assert.equal(answer.seed, vcrSeedFor(vcrScenarioHash(scenario)));
+  // The same list a started job carries as `applied`: the dropout nobody wrote is there.
+  const applied = Object.fromEntries(answer.applied.map((entry) => [entry.field, entry.value]));
+  assert.equal(applied["accrual.dropoutAnnual"], 0);
+  assert.deepEqual(jobs.touched, [], "nothing was read or written");
+  // A zero-effect scenario carries the floor of its case; the study's intended use raises it; what the run asked for raises it again.
+  const nullCase = { ...scenario, truth: { hazardRatio: 1, controlMedian: 6 } };
+  assert.equal((await jobs.validate({ kind: "design_simulation", scenario: nullCase })).replicates.count, VCR_REPLICATES_NULL_MIN);
+  const specified = queue("specified_analysis");
+  const sized = await specified.validate({ kind: "design_simulation", scenario: nullCase, studyId: "std_1" });
+  assert.equal(sized.replicates.count, 100_000);
+  assert.match(sized.replicates.reason, /intended use \(specified_analysis\)/);
+  assert.match((await jobs.validate({ kind: "design_simulation", scenario, replicates: 20_000 })).replicates.reason, /the count you asked for/);
+  // A closed-form size has no replicates.
+  const analytic = await jobs.validate({ kind: "design_analytic", scenario: { design: { kind: "two_arm_fixed" }, endpoint: { type: "binary" }, truth: { controlRate: 0.3, treatmentRate: 0.45 } } });
+  assert.equal(analytic.valid, true);
+  assert.equal(analytic.replicates, undefined);
+  assert.deepEqual(analytic.cost, { class: "light", cpuSecondsLimit: 600 });
+});
+
+test("validate refuses by path what a start would refuse, and an unknown key or a missing fact is the same refusal in both", async () => {
+  const jobs = queue();
+  const refused = await jobs.validate({ kind: "design_simulation", scenario: { ...scenario, accrual: { kind: "uniform", duration: 12, followup: 12, months: 18 } } });
+  assert.equal(refused.valid, false);
+  assert.deepEqual(refused.queued, false);
+  assert.ok(refused.issues.some((issue) => issue.field === "scenario.accrual.months" && issue.code === "scenario_field_unknown"), JSON.stringify(refused.issues));
+  const missing = await jobs.validate({ kind: "design_simulation", scenario: { design: { kind: "two_arm_fixed", nTreat: 100, nControl: 100 }, endpoint: { type: "time_to_event" }, truth: { controlMedian: 12 } } });
+  assert.equal(missing.valid, false);
+  assert.ok(missing.issues.some((issue) => /hazardRatio/.test(issue.field)), JSON.stringify(missing.issues));
+  // The check an enqueue makes of the inputs a caller names is made here too.
+  const forged = await jobs.validate({ kind: "weight_comparator", scenario: { covariates: ["age"] }, inputs: [{ kind: "snapshot", id: "snp_1", location: "../x" }] });
+  assert.equal(forged.valid, false);
+  assert.ok(forged.issues.some((issue) => issue.code === "input_location_forbidden"));
+  assert.ok(forged.issues.length <= 20);
+  await assert.rejects(jobs.validate({ kind: "no_such_kind", scenario: {} }), { code: "vcr_job_kind_invalid" });
+});
+
+test("a kind the platform completes at start is not checked and says so rather than guessing", async () => {
+  const jobs = queue();
+  for (const kind of ["literature_population", "reconstruct_km", "maic_time_to_event_comparator", "apply_prognostic_model", "pool_evidence", "match_criteria", "forecast_trajectories"]) {
+    const answer = await jobs.validate({ kind, scenario: {} });
+    assert.deepEqual([answer.checked, answer.queued, answer.valid], [false, false, undefined], kind);
+    assert.match(answer.message, /启动时/, kind);
+  }
+});
+
+test("validate and enqueue agree on a scenario: what validate accepts, the engine's own validator accepts", async () => {
+  const jobs = queue();
+  for (const [kind, method] of [["design_simulation", "design.simulate"], ["design_analytic", "design.analytic"]]) {
+    for (const template of VCR_MINIMAL_TEMPLATES[method]) {
+      const answer = await jobs.validate({ kind, scenario: template.scenario });
+      assert.equal(answer.valid, true, `${kind} ${template.name}: ${JSON.stringify(answer.issues)}`);
+    }
+  }
+});
+
+test("validate leaves the names of a job's inputs to the start that resolves them, and judges everything else of the scenario", async () => {
+  const jobs = queue();
+  // `inputId` names the snapshot's table, which the platform resolves at start: the key being absent from an empty list is not a refusal.
+  const survival = await jobs.validate({ kind: "fit_survival_model", scenario: { inputId: "snp_1", idColumn: "USUBJID", timeColumn: "AVAL", statusColumn: "CNSR", statusEncoding: "censor", distribution: "weibull", timeUnit: "months", horizons: [6, 12] }, inputs: [{ kind: "snapshot", id: "snp_1" }] });
+  assert.deepEqual([survival.valid, survival.issues], [true, []]);
+  const bad = await jobs.validate({ kind: "fit_survival_model", scenario: { inputId: "snp_1", idColumn: "USUBJID", timeColumn: "AVAL", statusColumn: "CNSR", statusEncoding: "censor", distribution: "gamma", timeUnit: "months", horizons: [6, 12] }, inputs: [{ kind: "snapshot", id: "snp_1" }] });
+  assert.equal(bad.valid, false);
+  assert.ok(bad.issues.every((issue) => issue.field !== "scenario.inputId"));
 });

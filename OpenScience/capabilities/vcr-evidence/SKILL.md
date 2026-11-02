@@ -108,6 +108,8 @@ keep earlier useful outputs and show their specific limitation.
 ```
 
 `parameter` 用平台认识的名字，合并才认得：`median_time`、`hazard_ratio`、`odds_ratio`、`risk_ratio`、`control_event_rate`、`response_rate`、`survival_at_time`、`dropout_rate`、`mean_value`、`mean_difference`、`risk_difference`、`accrual_to_primary_completion_months`。核对不过的项会记下来但值被清空，返回的 `issues` 里有原因（`quote_not_found`、`quote_missing_number` 等），**不要为了通过核对改引文**。
+每个参数合并要用的项由参数的种类决定：比例要数值加样本量（或区间的两端），比值、时间和连续量要数值加区间的两端。缺哪项，这一条写入的答复会点名，条目照样保存；论文里有就补进同一条（数要在引文里），论文没有报告就**另写一条同一来源、同一参数、同一组的 `notReported: true`**，不带数值、文字和区间，引文可写可不写（写了就写表里报告了什么）。「论文未报告」是一个结果，不是缺漏：它永远不会有数值，不进合并和假设卡，页面写成「未取到」；不要为了凑齐而估一个值，也不要因此放弃这项研究。
+
 `historicalBaseline: true` 只在这个值确实是历史基线时写；`enrollmentKind` 用 `estimated` 或 `actual`。不写 `verification`：核对结果是平台的，你写不了。
 
 三条硬规矩：
@@ -117,11 +119,12 @@ keep earlier useful outputs and show their specific limitation.
   本身就是入组预测最有用的先验。
 - **登记平台没有的量写「不可得」，不要写 0。** 筛选失败率、每中心每月入组数、中心启动日期，
   四大登记平台都不记录，只能来自合作方或申办方。写 0 是编数据。
-- **只有登记记录里的数能进假设卡。** 平台目前只把值对着登记记录的保全文本核对；论文正文和图表里读到的数
-  核对不了，不进假设卡——可以在报告里作为背景写出来（带出处），但不参与合并。
+- **只有核对过的数能进假设卡。** 一种是登记记录里的数，对着登记记录的保全文本核对；另一种是本研究已保全的论文、
+  摘要或表格里的数，按上面 `literatureSource` 的逐字引文和位置核对。没有保全原文、或对不上原文字节的数核对不了，
+  不进假设卡——可以在报告里作为背景写出来（带出处），但不参与合并。图里读出来的数不算，见下一条。
 - **论文里的生存曲线图不用点，也不用猜。** 图已经保全成本研究工作区里的 PNG/JPEG 时，用
   `mcp__evimed__curve_digitize`：你只写读图得到的标定（横轴、纵轴第一个和最后一个刻度的值，时间单位，纵轴是比例还是百分比）、
-  每组是哪条曲线（颜色或图例顺序）和论文印出来的风险表，坐标由平台从像素量出来。它回一个 `receiptId`，
+  每组是哪条曲线（颜色或图例顺序）和论文印出来的风险表（论文没有印风险表时写每组的起始人数 `initialAtRisk`），坐标由平台从像素量出来。它回一个 `receiptId`，
   对照路线（`vcr-analysis`）用它重建；它不进假设卡。不要自己写曲线上的点，也不要写 `digitizer` 之类的来源字样。
 
 ### 4. 合并（交给引擎）

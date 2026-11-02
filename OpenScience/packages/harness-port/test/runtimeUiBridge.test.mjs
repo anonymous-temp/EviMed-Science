@@ -364,6 +364,7 @@ test('the shell shortcuts pressed inside the frame are forwarded, and only those
 // ---------------------------------------------------------------------------
 
 import { createHub } from '../src/runtimeUiKit.mjs';
+import { VCR_TABS } from '@evimed/domain';
 
 /** @param {ReturnType<typeof fixture>} f @param {Record<string, any>} data @param {Record<string, any>} [event] */
 function shellSends(f, data, event = {}) {
@@ -461,6 +462,24 @@ test('a conversation opened from an event or an item says so, and the chip opens
   const opened = f.sent.map((row) => row.message).filter((message) => /open-(item|event)$/.test(message.type));
   assert.deepEqual(opened.map((message) => [message.type.split('.').pop(), message.itemId ?? message.eventId]),
     [['open-item', 'k7q2m9x4t1b8'], ['open-event', 'e0123456789abcde']]);
+  f.ctx.dispose();
+});
+
+test('a 虚拟临床研究 result is opened by naming a study id and one of the seven tabs, and nothing else', async () => {
+  const f = fixture(); const hub = createHub(f.target);
+  apply(f.ctx, {}, f.target, undefined, { hub }); await settle();
+  // The seven tabs are the domain's: a tab added there and not here would be a result the frame could not open.
+  for (const tab of VCR_TABS) hub.send('open-vcr-result', { studyId: 'std_1', tab, path: '/elsewhere', url: 'https://evil.example', projectId: 'other' });
+  for (const fields of [
+    { studyId: 'std_1', tab: 'chat' }, { studyId: 'std_1', tab: 'models' }, { studyId: 'std_1', tab: '../matching' }, { studyId: 'std_1', tab: 'Matching' },
+    { studyId: 'std_1' }, { tab: 'matching' }, { studyId: '', tab: 'matching' }, { studyId: 'a/b', tab: 'matching' }, { studyId: '../x', tab: 'matching' },
+    { studyId: 'x'.repeat(161), tab: 'matching' }, { studyId: 5, tab: 'matching' }, { studyId: 'std_1', tab: ['matching'] },
+  ]) hub.send('open-vcr-result', fields);
+  const opened = f.sent.filter((row) => row.message.type === 'evimed.runtime-ui.open-vcr-result').map((row) => row.message);
+  assert.deepEqual(opened.map((message) => [message.studyId, message.tab]), VCR_TABS.map((tab) => ['std_1', tab]));
+  // Only the two fields travel: the frame names a place, never an address.
+  for (const message of opened) assert.deepEqual(Object.keys(message).sort(), ['frameId', 'projectId', 'seq', 'studyId', 'tab', 'type', 'version'].sort());
+  assert.equal(opened[0].projectId, f.sent[0].message.projectId, 'the frame\'s own project, not the one the body named');
   f.ctx.dispose();
 });
 

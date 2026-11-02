@@ -148,9 +148,10 @@ vcr_case("N09c", c("AC-08", "AC-30", "AC-07"), function() {
   # data: ATT and ESS to 1e-6 of WeightIt's tightest fit, the domain's thresholds
   # echoed, and at least the domain's 2,000 bootstrap draws whatever the job asks
   # (a job that asked for 20 used to get 20: EB-5). (2) The logistic-propensity
-  # route on the same data does NOT balance age (weighted SMD 0.119), and the job
-  # refuses by rule name with the same standardized difference cobalt reports;
-  # (3) on data it can balance, its ATT equals WeightIt's glm ATT to 1e-6.
+  # route on the same data does NOT balance age (weighted SMD 0.119): since the owner
+  # decision of 2026-11-01 the job delivers the estimate, `limited`, with the same
+  # standardized difference cobalt reports and the worst variable named (N09d reads
+  # both bands); (3) on data it can balance, its ATT equals WeightIt's glm ATT to 1e-6.
   suppressMessages({library(WeightIt); library(MatchIt); library(cobalt)})
   data("lalonde", package = "MatchIt")
   d <- lalonde
@@ -175,8 +176,9 @@ vcr_case("N09c", c("AC-08", "AC-30", "AC-07"), function() {
   worst_cb <- max(abs(cb[seq_along(covs)]))
   r_p <- vcr_test_run(vcr_test_job("comparator.propensity_weight", sc, list(inp), seed = 5L, job_id = "job_n09c_p"))
   worst_engine <- max(abs(r_p$diagnostics$balance$smdAdjusted))
-  ok_refuse <- identical(r_p$status, "not_estimable") && identical(r_p$notEstimableRule, "standardized_difference_above_floor") &&
-    length(r_p$measures) == 0L && abs(worst_engine - worst_cb) < 1e-3
+  ok_refuse <- identical(r_p$status, "succeeded") && identical(r_p$conclusion, "limited") && is.null(r_p$notEstimableRule) &&
+    length(r_p$measures) > 0L && abs(worst_engine - worst_cb) < 1e-3 &&
+    identical(r_p$diagnostics$balanceVerdict$band, "moderate") && identical(r_p$diagnostics$balanceVerdict$variable, "age")
 
   set.seed(3, kind = VCR_RNG_KIND); n <- 500L
   x1 <- stats::rnorm(n); x2 <- stats::rbinom(n, 1L, 0.5)
@@ -193,5 +195,51 @@ vcr_case("N09c", c("AC-08", "AC-30", "AC-07"), function() {
        detail = sprintf("entropy balancing ATT %.4f vs WeightIt %.4f (rel %.1e), ESS %.4f vs %.4f, bootstrap draws %d (job asked for 20), interval [%.1f, %.1f], ESS floor %g; propensity on LaLonde: %s/%s, worst weighted SMD %.4f vs cobalt %.4f; propensity ATT on balanced data %.5f vs WeightIt glm %.5f (rel %.1e)",
                         est$value, att_wi, abs(est$value - att_wi) / abs(att_wi), ess, ess_wi, r_e$diagnostics$bootstrapReplicates,
                         est$interval$low, est$interval$high, r_e$diagnostics$thresholds$essFloor,
-                        r_p$status, r_p$notEstimableRule %||% "NULL", worst_engine, worst_cb, est_p$value, att_pw, abs(est_p$value - att_pw) / abs(att_pw)))
+                        r_p$status, r_p$conclusion %||% "NULL", worst_engine, worst_cb, est_p$value, att_pw, abs(est_p$value - att_pw) / abs(att_pw)))
+})
+
+vcr_case("N09d", c("AC-08", "AC-30", "AC-07"), function() {
+  # The balance is read, never a refusal (owner decision 2026-11-01, remediation plan section 7 item 2). On LaLonde's real
+  # data with the logistic-propensity route, both bands the decision names, each against cobalt's own standardized differences:
+  #   - ATT leaves age at 0.119: above the 0.10 floor, at most 0.25 -> `limited`, the value and the worst variable said;
+  #   - ATE leaves re74 at 0.274: above 0.25 -> `limited` for a severe imbalance;
+  # and entropy balancing, which reaches the balance, is `estimable` with a balanced verdict. The estimate is delivered in every
+  # band, the balance table rides beside it, and none of them is a not-estimable rule.
+  suppressMessages({library(WeightIt); library(MatchIt); library(cobalt)})
+  data("lalonde", package = "MatchIt")
+  d <- lalonde
+  d$USUBJID <- sprintf("L%04d", seq_len(nrow(d)))
+  d$black <- as.numeric(d$race == "black"); d$hispan <- as.numeric(d$race == "hispan")
+  d$arm <- d$treat
+  covs <- c("age", "educ", "black", "hispan", "married", "nodegree", "re74", "re75")
+  inp <- vcr_test_input(d[, c("USUBJID", "arm", covs, "re78")], "snp_n09d:subject", "subject")
+  sc <- function(...) c(list(covariates = as.list(covs), outcomeColumn = "re78", treatmentColumn = "arm", endpoint = list(type = "continuous")), list(...))
+  cb_worst <- function(estimand) {
+    w <- WeightIt::weightit(treat ~ age + educ + black + hispan + married + nodegree + re74 + re75, data = d, method = "glm", estimand = estimand)
+    max(abs(cobalt::bal.tab(w, stats = "mean.diffs", un = FALSE, binary = "raw", s.d.denom = if (identical(estimand, "ATT")) "treated" else "pooled")$Balance$Diff.Adj[seq_along(covs)]))
+  }
+  att <- vcr_test_run(vcr_test_job("comparator.propensity_weight", sc(), list(inp), seed = 5L, replicates = 20L, job_id = "job_n09d_att"))
+  ate <- vcr_test_run(vcr_test_job("comparator.propensity_weight", sc(estimand = "ATE"), list(inp), seed = 5L, replicates = 20L, job_id = "job_n09d_ate"))
+  ebal <- vcr_test_run(vcr_test_job("comparator.entropy_balance", sc(), list(inp), seed = 5L, replicates = 20L, job_id = "job_n09d_eb"))
+  lim <- function(r) unlist(r$diagnostics$limitedBy)
+  v_att <- att$diagnostics$balanceVerdict; v_ate <- ate$diagnostics$balanceVerdict; v_eb <- ebal$diagnostics$balanceVerdict
+  ok_att <- identical(att$status, "succeeded") && identical(att$conclusion, "limited") && identical(v_att$band, "moderate") &&
+    identical(v_att$variable, "age") && v_att$worst > 0.10 && v_att$worst <= 0.25 && abs(v_att$worst - cb_worst("ATT")) < 1e-3 &&
+    "standardized_difference_above_floor" %in% lim(att) && !("standardized_difference_severe" %in% lim(att)) &&
+    !is.null(vcr_get_measure(att, "weighted_difference")) && nrow(att$diagnostics$balance) == length(covs) &&
+    abs(vcr_measure_value(att, "worst_standardized_difference") - v_att$worst) < 1e-12
+  ok_ate <- identical(ate$status, "succeeded") && identical(ate$conclusion, "limited") && identical(v_ate$band, "severe") &&
+    identical(v_ate$variable, "re74") && v_ate$worst > 0.25 && abs(v_ate$worst - cb_worst("ATE")) < 1e-3 &&
+    "standardized_difference_severe" %in% lim(ate) && !("standardized_difference_above_floor" %in% lim(ate)) &&
+    !is.null(vcr_get_measure(ate, "weighted_difference"))
+  ok_eb <- identical(ebal$status, "succeeded") && identical(v_eb$band, "balanced") && v_eb$worst <= 0.10 &&
+    !any(c("standardized_difference_above_floor", "standardized_difference_severe") %in% lim(ebal)) &&
+    is.finite(v_eb$floor) && v_eb$floor == 0.10 && v_eb$severeFloor == 0.25
+  # the closed rule is not the engine's any more: nothing the engine returns names it
+  fired <- vapply(list(att, ate, ebal), function(r) identical(r$notEstimableRule, "standardized_difference_above_floor"), logical(1))
+  list(pass = ok_att && ok_ate && ok_eb && !any(fired) && length(vcr_validate_result(att)) == 0L && length(vcr_validate_result(ate)) == 0L,
+       detail = sprintf("propensity ATT: %s/%s, %s %.3f on %s (cobalt %.3f); propensity ATE: %s/%s, %s %.3f on %s (cobalt %.3f); entropy balance: %s %.2e; limitedBy %s | %s",
+                        att$status, att$conclusion, v_att$band, v_att$worst, v_att$variable, cb_worst("ATT"),
+                        ate$status, ate$conclusion, v_ate$band, v_ate$worst, v_ate$variable, cb_worst("ATE"), v_eb$band, v_eb$worst,
+                        paste(lim(att), collapse = ","), paste(lim(ate), collapse = ",")))
 })

@@ -113,13 +113,18 @@ export class ResultReplayService {
   }
 
   /** Project-before-job lock ordering also fences project deletion. Nested
-   * product operations borrow this transaction rather than opening a new one. */
+   * product operations borrow this transaction rather than opening a new one.
+   * The project row is held FOR SHARE: that is what stops a deletion (FOR UPDATE), and the job row serializes this job's own
+   * steps (`withLease`). FOR UPDATE stopped the whole platform on 2026-11-01. The engine's start waits for the project's
+   * storage mutation under this lock, while a capture holding that mutation writes a row whose foreign key names the project,
+   * which FOR UPDATE refuses. PostgreSQL cannot see a wait in this process, so nothing ever ended it, and every other request
+   * then queued on the same row until the pool was empty. */
   async projectTransaction(ownerId, projectId, operation) {
     const database = this.jobs.database ?? this.documents.database;
     if (!database) return operation(null); // explicit in-memory test stores
     await migrateProductStore(database);
     return database.transaction(async client => {
-      const locked = await client.query(`SELECT id FROM ${CONTROL_PLANE_SCHEMA}.projects WHERE user_id=$1 AND id=$2 FOR UPDATE`, [ownerId, projectId]);
+      const locked = await client.query(`SELECT id FROM ${CONTROL_PLANE_SCHEMA}.projects WHERE user_id=$1 AND id=$2 FOR SHARE`, [ownerId, projectId]);
       if (!locked.rows[0]) throw new HttpError(404, "project_not_found", "The project is unavailable.");
       return database.withTransactionClient(client, () => operation(client));
     });
@@ -416,7 +421,13 @@ export class ResultReplayService {
     return this.status(userId, projectId, id);
   }
 
-  async cancelLocked(ownerId, jobId, replayId, client) {
+  /**
+   * Stop a calculation and settle its records on the caller's transaction. `keepPartial` keeps the partial output a stopped process
+   * leaves: that is a capture, which takes the project's storage mutation, so it is never asked of a transaction that holds the
+   * project row exclusively (a deletion's sweep), where it would wait for a capture that is itself waiting for that row, and
+   * PostgreSQL cannot see that wait (the stall of 2026-11-01). A project being removed has no use for a partial output.
+   */
+  async cancelLocked(ownerId, jobId, replayId, client, { keepPartial = true } = {}) {
     const job = client ? (await client.query("SELECT * FROM evimed_product.jobs WHERE user_id=$1 AND id=$2 AND kind='result-replay' FOR UPDATE", [ownerId, jobId])).rows[0]
       : await this.jobs.get(ownerId, jobId);
     if (!job) return;
@@ -425,7 +436,7 @@ export class ResultReplayService {
     const active = ["queued", "running"].includes(job.status);
     if (!active && (!current.payload.execution || current.payload.cleanup === "confirmed")) return;
     const answer = await this.stopExecution(current.payload.execution);
-    if (answer?.resultPath) {
+    if (keepPartial && answer?.resultPath) {
       try {
         const prepared = await this.preparedForRecord(current);
         if (prepared) await this.preservePartialOwned({ userId: ownerId, projectId: current.projectId, id: jobId,
@@ -461,7 +472,7 @@ export class ResultReplayService {
         WHERE j.user_id=$1 AND j.kind='result-replay' AND d.user_id=j.user_id AND d.kind='result-replay' AND d.deleted_at IS NULL
         AND ($2::text IS NULL OR j.project_id=$2) AND (j.status IN ('queued','running') OR (d.payload->'execution' IS NOT NULL
           AND d.payload->'execution'<>'null'::jsonb AND COALESCE(d.payload->>'cleanup','pending')<>'confirmed')) ORDER BY j.id FOR UPDATE OF j`, [ownerId, projectId])).rows;
-      for (const job of rows) await this.cancelLocked(ownerId, job.id, job.payload.replayId, client);
+      for (const job of rows) await this.cancelLocked(ownerId, job.id, job.payload.replayId, client, { keepPartial: false });
     });
   }
 

@@ -80,3 +80,52 @@ test("article sources keep separate latest evidence rows and exact versions can 
   assert.equal(write.ids.length, 1, JSON.stringify(write.issues));
   assert.equal((await store.itemsById({ userId: "u1", studyId: study.id, ids: write.ids }))[0].locator.kind, "literature_text");
 });
+
+test("a paper that does not report a parameter is a state of its own: stored without a value, never pooled, read back as not reported (C8)", options, async () => {
+  const study = await studies.createStudy({ userId: "u8", projectId: "p8", name: "Synthetic not-reported parameter", question: "q", dataTier: "T0" });
+  const text = "Table 2: Mean change -4.1 (n 100) in the treated arm and -1.9 (n 98) in the control arm.";
+  const hash = createHash("sha256").update(text).digest("hex");
+  const sources = { async get(userId, id) { return { id, userId, projectId: "p8", payload: { generation: 1, analysis: { textSha256: hash } } }; },
+    async loadCapture() { return { input: { text } }; } };
+  const pipeline = createVcrEvidencePipeline({ store }); pipeline.attachSources(createVcrEvidenceSources({ sources }));
+  const source = { sourceId: "src_paper", generation: 1, textSha256: hash };
+  const mention = "Mean change -4.1 (n 100) in the treated arm";
+  const reported = { literatureSource: source, parameter: "mean_value", arm: "treated", armRole: "treatment", value: -4.1, sampleSize: 100, unit: "points",
+    quote: mention, locator: { start: text.indexOf(mention), end: text.indexOf(mention) + mention.length }, endpointKey: "change" };
+  // The paper gives no SD: the run says so, with the source and the parameter and with no number.
+  const none = { literatureSource: source, parameter: "outcome_sd", arm: "control", armRole: "control", notReported: true, endpointKey: "change" };
+  const write = await vcrRuntimeWrite({ store: studies, service: { config: {} }, study, orchestrator: null, what: "evidence_item", items: [none], evidence: pipeline, evidenceStore: store });
+  assert.equal(write.ids.length, 1, JSON.stringify(write.issues));
+  assert.deepEqual(write.issues, [], "it is an answer, not a refusal and not a reminder");
+  const [row] = await store.itemsById({ userId: "u8", studyId: study.id, ids: write.ids });
+  assert.equal(row.locator.verification, "not_reported");
+  assert.equal(row.value, null);
+  assert.equal(row.value_text, "not_reported");
+  assert.equal(row.detail.notReported, true);
+  assert.equal(row.locator.sourceId, "src_paper", "the source it was read from is still named");
+  // It never reaches a pool or a card, and a later 「not reported」 never replaces a value that was verified.
+  assert.deepEqual(await store.verifiedItemsById({ userId: "u8", studyId: study.id, ids: write.ids }), []);
+  assert.equal((await store.listEvidenceItems({ userId: "u8", studyId: study.id, verifiedOnly: true })).length, 0);
+  const coverage = (await store.evidenceCoverage({ userId: "u8", studyId: study.id })).find((entry) => entry.parameter === "outcome_sd");
+  assert.deepEqual([coverage.extracted, coverage.verified, coverage.refused, coverage.not_reported], [1, 0, 0, 1]);
+  const read = await pipeline.evidenceRead(study, {});
+  const shown = read.items.find((entry) => entry.parameter === "outcome_sd");
+  assert.equal(shown.notReported, true);
+  assert.equal(shown.value, null);
+  assert.equal(shown.missing, undefined);
+  // A number written beside 「not reported」 is the contradiction it is, and is refused by name.
+  const withValue = await vcrRuntimeWrite({ store: studies, service: { config: {} }, study, orchestrator: null, what: "evidence_item",
+    items: [{ ...none, value: 8 }, { ...none, valueText: "unclear" }, { ...none, notReported: "yes" }], evidence: pipeline, evidenceStore: store });
+  assert.equal(withValue.ids.length, 0);
+  assert.deepEqual(new Set(withValue.issues.map((entry) => entry.field)), new Set(["notReported", "quote", "value", "valueText"]));
+  assert.ok(withValue.issues.some((entry) => entry.index === 0 && entry.field === "value"), "the value beside 「not reported」 is refused by name");
+  // A value that lacks what the pool reads (an interval for a difference) is saved and reminded, not refused.
+  const incomplete = await vcrRuntimeWrite({ store: studies, service: { config: {} }, study, orchestrator: null, what: "evidence_item", items: [reported], evidence: pipeline, evidenceStore: store });
+  assert.equal(incomplete.ids.length, 1, JSON.stringify(incomplete.issues));
+  assert.deepEqual(incomplete.issues.map((entry) => entry.code), ["vcr_evidence_item_incomplete"]);
+  assert.match(incomplete.issues[0].message, /置信区间下限、置信区间上限/);
+  const afterwards = await store.listEvidenceItems({ userId: "u8", studyId: study.id, latestOnly: true });
+  assert.equal(afterwards.filter((entry) => entry.locator.verification === "verified").length, 1);
+  const again = await pipeline.evidenceRead(study, {});
+  assert.deepEqual(again.items.find((entry) => entry.parameter === "mean_value").missing, ["ciLow", "ciHigh"]);
+});

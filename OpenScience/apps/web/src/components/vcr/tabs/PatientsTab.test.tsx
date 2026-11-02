@@ -328,6 +328,7 @@ describe("虚拟患者 · what the people are measured against", () => {
       if (!node) throw new Error("no strip");
       return node as HTMLElement;
     });
+    expect(within(strip).getByRole("heading", { name: "与输入对照" })).toBeInTheDocument();
     expect(within(strip).getByText("1 项生成值偏出证据区间")).toBeInTheDocument();
     const first = strip.querySelector("[data-vcr-calibration-row='control_median']") as HTMLElement;
     expect(first).toHaveAttribute("data-vcr-calibration-status", "outside");
