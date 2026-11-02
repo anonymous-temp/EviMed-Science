@@ -223,6 +223,31 @@ class VcrToolDefinitionTests(unittest.TestCase):
             self.assertIn("generated_records", text, kind)
         self.assertNotIn("generated_records", " ".join(vcr_platform.shape({"kind": "design_analytic"})["next_actions"]))
 
+    def test_a_paper_s_number_rides_the_call_that_computes_with_it_and_the_answer_says_what_became_of_each(self):
+        # 2026-11-02: a median read in a paper went straight into the scenario in 6 of 6 live designs and the result page called it an assumption.
+        simulate = {tool["name"]: tool for tool in vcr_platform.tool_definitions()}["vcr_simulate"]
+        sources = simulate["inputSchema"]["properties"]["sources"]
+        self.assertEqual(sorted(sources["items"]["properties"]), ["field", "publication", "quote"])
+        self.assertFalse(sources["items"]["additionalProperties"])
+        self.assertLess(len(sources["description"]), 300, "a property description rides every request of the run too")
+        for kind in vcr_platform.SOURCE_KINDS:
+            self.assertIn(kind, vcr_platform.JOB_KINDS)
+            self.assertIn("sources", " ".join(vcr_platform.shape({"kind": kind})["next_actions"]), kind)
+        for kind in ("generate_population", "generate_patients", "evalue"):
+            self.assertNotIn("sources", " ".join(vcr_platform.shape({"kind": kind})["next_actions"]), kind)
+        entry = {"field": "truth.controlMedian", "publication": "PMID 37676259", "quote": "13.8 months with sorafenib"}
+        answer = {"action": "start", "jobId": "job_1", "state": "queued", "progress": {}, "sources": [
+            dict(entry, state="carried", paper="PMID 37676259", checked=True),
+            {"field": "truth.hazardRatio", "state": "assumption", "because": "number_not_in_sentence", "message": "x"}]}
+        with mock.patch.object(vcr_platform, "_post", return_value=answer) as post:
+            result = vcr_platform.simulate({"action": "start", "kind": "design_analytic", "scenario": {"truth": {"controlMedian": 13.8}}, "sources": [entry]})
+        self.assertEqual(post.call_args_list[0].args[1]["sources"], [entry], "the platform is sent what the run named")
+        self.assertEqual(result["data"]["sources"][1]["because"], "number_not_in_sentence")
+        self.assertTrue(any("data.sources" in line and "which premises come from which paper" in line and "Fix the entries" in line for line in result["next_actions"]))
+        with mock.patch.object(vcr_platform, "_post", return_value={"action": "start", "jobId": "job_2", "state": "queued", "progress": {}}) as post:
+            vcr_platform.simulate({"action": "start", "kind": "design_analytic", "scenario": {}})
+        self.assertNotIn("sources", post.call_args_list[0].args[1], "nothing is sent that the run did not name")
+
     def test_the_job_kinds_are_the_domain_s(self):
         kinds = domain_job_kinds()
         self.assertGreaterEqual(len(kinds), 24, "the first release's twenty-four, then the kinds appended after them")

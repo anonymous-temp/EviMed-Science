@@ -147,7 +147,12 @@ function trialPremises(input) {
   const accrual = object(configuration.accrual);
   const analysis = object(configuration.analysis);
   const defaults = new Map(list(input.appliedDefaults).map(object).map((entry) => [String(entry.path), entry.value]));
-  const cardByPath = new Map(list(input.bound).map(object).map((entry) => [String(entry.path), list(input.cards).map(object).find((card) => card.key === entry.key) ?? null]));
+  // A job that recorded the number it took from a card (a conversation's own start) is read through that card only while the card still states
+  // it: a later version with another number is not this job's premise.
+  const cardByPath = new Map(list(input.bound).map(object).map((entry) => {
+    const card = list(input.cards).map(object).find((candidate) => candidate.key === entry.key) ?? null;
+    return [String(entry.path), card && (numeric(entry.value) === null || numeric(card.pointValue) === numeric(entry.value)) ? card : null];
+  }));
   /**
    * The value a path has in the run — the card's when one was laid over it, else what the scenario states — and where it came from.
    * @param {string} path @param {unknown} stated @returns {{ value: unknown, source: VcrPremise["source"], reason?: string | null } | null}

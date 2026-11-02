@@ -4020,8 +4020,8 @@ test("a person's new conversation is told once which files earlier conversations
   assert.match(text, /notes\.md/);
   assert.match(text, /designs\/A_fixed\.json、designs\/B_gs\.json/, "sorted, with the directory");
   assert.doesNotMatch(text, /knowledge-base|paper\.pdf|node_modules|dep\.js|\.evimed|\.hidden|__pycache__|plan\.json/, "the platform's directories, scratch, hidden names and the plan file are not an earlier conversation's files");
-  assert.match(text, /不属于这次请求/);
-  assert.match(text, /问一句/);
+  assert.match(text, /没有点到其中任何一份时，不要打开/);
+  assert.match(text, /先问清楚再动手/);
   // Once: neither the same first step again nor a later one says it twice.
   await f.step(1);
   await f.step(1, { stepNumber: 2 });

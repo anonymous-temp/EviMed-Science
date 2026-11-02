@@ -131,6 +131,8 @@ OBJECT_SHAPES = {
 # scenario reads. It rides in the image beside this file and is never edited by hand.
 # The kinds whose result is a table of generated rows (`vcr_read what generated_records` reads it back).
 RECORD_KINDS = tuple(OBJECT_SHAPES["population (definition)"] + OBJECT_SHAPES["patient_set (scenario)"])
+# The kinds whose scenario states the truth a design assumes: a number read in a paper can be tied to its field there (`sources`).
+SOURCE_KINDS = ("design_analytic", "design_simulation", "design_grid", "assurance", "procova")
 HELP_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "vcr_scenario_help.json")
 # Where the VCR methods are in the runtime image. They are capability skill bodies, which delegation injects into a planned
 # capability's run; a plain conversation in a study uses these tools too and its skill catalogue does not list them, so the tools
@@ -341,6 +343,11 @@ def _detailed_tool_definitions():
                     }, "additionalProperties": False},
                     "reconstructionResultId": ID,
                     "jobId": ID,
+                    "sources": {"type": "array", "maxItems": 8, "description": (
+                        "A number you read in a paper and wrote into the scenario: [{field: its path in the scenario, e.g. truth.controlMedian, "
+                        "publication: PMID or DOI, quote: the sentence that prints it}]. The platform records the paper, and the result page names it."),
+                        "items": {"type": "object", "properties": {"field": {"type": "string"}, "publication": {"type": "string"}, "quote": {"type": "string"}},
+                                  "required": ["field", "publication", "quote"], "additionalProperties": False}},
                 },
                 "required": ["action"],
                 "additionalProperties": False,
@@ -1116,6 +1123,12 @@ def shape(arguments: dict) -> dict:
         "would fill, the replicate count and any refusal by path, and does not wait, so you may start in the same turn.",
         "Then queue it with vcr_simulate action start, or write it as the object's configuration with vcr_write.",
     ]
+    if kind in SOURCE_KINDS:
+        # A median read in a paper went straight into the scenario in 6 of 6 live designs and the result page called it an assumption: the paper
+        # rides on the same call.
+        next_actions.append("A number you read in a paper (a control median, a hazard ratio, a rate) is tied to it in the same call, beside the scenario: "
+                            'sources [{"field": "truth.controlMedian", "publication": "PMID 18650514", "quote": "<the sentence that prints the number>"}]. '
+                            "The number is the one in the scenario; the result page then says it comes from the paper. A number of your own stays an assumption.")
     if kind in RECORD_KINDS:
         # Three of the four live conversations that did not enter the module for a cohort wrote their own script because they could not tell whether its rows could be handed to
         # the person as a file (2026-11-02: "I don't know if it writes a CSV I can access"). They can be read back.
@@ -1200,7 +1213,7 @@ def simulate(arguments: dict) -> dict:
         if kind not in JOB_KINDS:
             raise VcrPlatformError("vcr_simulate_payload_invalid", "kind must be one of: %s." % ", ".join(JOB_KINDS))
         payload["kind"] = kind
-        for key in ("scenario", "inputs", "seed", "replicates", "cpuSecondsLimit", "subjectId", "reconstructionResultId", "selection", "modelId", "modelVersion"):
+        for key in ("scenario", "inputs", "seed", "replicates", "cpuSecondsLimit", "subjectId", "reconstructionResultId", "selection", "modelId", "modelVersion", "sources"):
             if arguments.get(key) is not None:
                 payload[key] = arguments[key]
     else:
@@ -1254,6 +1267,7 @@ def _validate_answer(data: dict, kind) -> dict:
             ) if line],
         }
     actions = ["Nothing was queued and nothing was waited on: start with the same scenario in this turn when it is what the study intends."]
+    actions.extend(_source_lines(data))
     if isinstance(data.get("applied"), list) and data["applied"]:
         actions.append("data.applied lists what the platform will fill in because the scenario states none of it. Say each with its value in your reply; "
                        "one that is not what the study intends is stated in the scenario before it is started.")
@@ -1326,7 +1340,21 @@ def _with_applied(answer: dict, data: dict) -> dict:
     if isinstance(data, dict) and isinstance(data.get("normalized"), list) and data["normalized"]:
         lines.append("data.normalized lists keys of your scenario that only described what the method does anyway; the platform left them out and "
                      "they changed nothing. Leave them out next time.")
+    lines.extend(_source_lines(data))
     return {**answer, "next_actions": [*answer.get("next_actions", []), *lines]} if lines else answer
+
+
+def _source_lines(data: dict) -> list:
+    """What became of the papers the call named: a premise the platform tied to its paper, and one that stays the researcher's assumption."""
+    sources = data.get("sources") if isinstance(data, dict) else None
+    if not isinstance(sources, list) or not sources:
+        return []
+    kept = [entry for entry in sources if isinstance(entry, dict) and entry.get("state") == "assumption"]
+    line = ("data.sources says, for each paper you named, whether its number is now tied to the paper (carried) or stays an assumption, and why. "
+            "In the reply, say which premises come from which paper and which are assumptions.")
+    if kept:
+        line += " Fix the entries that stayed assumptions by their reason and send them again with the next start, or leave the paper out."
+    return [line]
 
 
 def _with_entry(answer: dict, data: dict) -> dict:

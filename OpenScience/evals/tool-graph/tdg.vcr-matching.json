@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "vcr-matching",
-  "version": "sha256:b7df5049731aaf386a6295f67164c1974d9cd5a049bb58704c730dc4c1e80624",
+  "version": "sha256:b032eb023567f855311e26410d523c7801c860a66afa38996ff7066f3c972326",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 31,
@@ -1772,6 +1772,31 @@
             "minLength": 1,
             "maxLength": 160,
             "pattern": "^[A-Za-z0-9_.:@-]+$"
+          },
+          "sources": {
+            "type": "array",
+            "maxItems": 8,
+            "description": "A number you read in a paper and wrote into the scenario: [{field: its path in the scenario, e.g. truth.controlMedian, publication: PMID or DOI, quote: the sentence that prints it}]. The platform records the paper, and the result page names it.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "field": {
+                  "type": "string"
+                },
+                "publication": {
+                  "type": "string"
+                },
+                "quote": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "field",
+                "publication",
+                "quote"
+              ],
+              "additionalProperties": false
+            }
           }
         },
         "required": [
@@ -1785,7 +1810,9 @@
         "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
         "fields": []
       },
-      "typeTags": [],
+      "typeTags": [
+        "source_id"
+      ],
       "requiredTypeTags": [],
       "outputTypeTags": [],
       "stateEffect": "none"

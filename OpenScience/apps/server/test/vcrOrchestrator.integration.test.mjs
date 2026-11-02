@@ -2526,3 +2526,140 @@ test("the 15 refused calls of the two live conversations of 2026-11-01, replayed
   assert.deepEqual(written[0].criteria.map((/** @type {any} */ criterion) => criterion.criterionType), ["demographic", "diagnosis", "prior_treatment", "biomarker", "diagnosis", "performance_status", "lab", "lab", "lab", "lab", "diagnosis", "other", "prior_treatment", "comorbidity", "comorbidity"]);
   console.log("replay c1: the matching write that was refused on 19 lines (11 of them in the first item, replayed) -> 0 refused; 10 types read as the type they mean, 1 (cns) saved as other");
 });
+
+/** The abstract of HIMALAYA as a literature tool preserves it (the capture `createVcrPublicationSources` reads), in a workspace of its own. */
+async function himalayaWorkspace() {
+  const abstract = "# HIMALAYA\n\n- PMID: 37676259\n\n## Abstract\n\nThe median OS was 16.4 months (95% CI, 14.2–19.6) with tremelimumab in combination with durvalumab and 13.8 months (95% CI, 12.3–16.1) with sorafenib.\n";
+  const hashes = { "abstract.md": sha(abstract) };
+  const version = sha(JSON.stringify(hashes));
+  const workspace = await fs.mkdtemp(path.join(os.tmpdir(), "vcr-srcint-"));
+  const captureDir = path.join(workspace, ".evimed-sources/pubmed/PMID37676259", version);
+  await fs.mkdir(captureDir, { recursive: true });
+  await fs.writeFile(path.join(captureDir, "abstract.md"), abstract);
+  await fs.writeFile(path.join(captureDir, "capture.json"), JSON.stringify({ version, artifacts: hashes }));
+  return workspace;
+}
+
+const SORAFENIB_SENTENCE = "13.8 months (95% CI, 12.3–16.1) with sorafenib";
+const paperDesign = (/** @type {Record<string, any>} */ truth = {}) => ({ endpoint: { type: "time_to_event" }, truth: { hazardRatio: 0.75, controlMedian: 13.8, ...truth },
+  design: { kind: "two_arm_fixed", allocation: 0.5 }, analysis: { alpha: 0.025, power: 0.9, sided: 1 }, accrual: { duration: 24, followup: 12 }, timeUnit: "months" });
+
+test("SOURCES a median the call says it read in a paper is the paper's on the result page: one start carries the evidence item, the card and which card the job took the number from; a number the sentence does not print stays an assumption and the job runs", options, async () => {
+  const { createVcrEvidencePipeline } = await import("../src/vcrEvidence.mjs");
+  const { createVcrPublicationSources } = await import("../src/vcrPublicationSources.mjs");
+  const workspace = await himalayaWorkspace();
+  const module = compose();
+  const evidenceStore = new VcrEvidenceStore({ database });
+  const evidence = createVcrEvidencePipeline({ store: evidenceStore, jobs: module.jobs });
+  evidence.attachPublications(createVcrPublicationSources({ resolveProject: async () => ({ workspaceDir: workspace }) }));
+  const model = modelConversation("sources", module, { evidence, evidenceStore });
+  assert.equal((await model.call("write", { what: "task_context" })).status, 200);
+  const study = await model.study();
+  const sources = [
+    { field: "truth.controlMedian", publication: "PMID 37676259", quote: SORAFENIB_SENTENCE },
+    // the sentence prints no 0.75: the premise stays the run's own, and the computation is not refused for it
+    { field: "truth.hazardRatio", publication: "PMID 37676259", quote: SORAFENIB_SENTENCE },
+    // a field no paper's number can be tied to here
+    { field: "accrual.duration", publication: "PMID 37676259", quote: SORAFENIB_SENTENCE },
+  ];
+
+  // validate reads the shape and writes nothing
+  const checked = await model.call("simulate", { action: "validate", kind: "design_analytic", scenario: paperDesign(), sources });
+  assert.equal(checked.status, 200, JSON.stringify(checked));
+  assert.equal(checked.data.valid, true, JSON.stringify(checked.data));
+  assert.deepEqual(checked.data.sources.map((/** @type {any} */ entry) => [entry.field, entry.state, entry.because ?? null]),
+    [["truth.controlMedian", "ready", null], ["truth.hazardRatio", "ready", null], ["accrual.duration", "assumption", "field_not_supported"]]);
+  assert.deepEqual(await store.assumptions(study.id), [], "validate wrote no card");
+  assert.deepEqual(await store.rows("SELECT id FROM evimed_vcr.evidence_items WHERE study_id = $1", [study.id]), [], "and no evidence");
+
+  const started = await model.call("simulate", { action: "start", kind: "design_analytic", scenario: paperDesign(), sources });
+  assert.equal(started.status, 200, JSON.stringify(started));
+  const said = new Map(started.data.sources.map((/** @type {any} */ entry) => [entry.field, entry]));
+  assert.equal(said.get("truth.controlMedian").state, "carried");
+  assert.equal(said.get("truth.controlMedian").checked, true, "the sentence is in the abstract the platform preserved");
+  assert.equal(said.get("truth.controlMedian").paper, "PMID 37676259");
+  assert.deepEqual([said.get("truth.hazardRatio").state, said.get("truth.hazardRatio").because], ["assumption", "number_not_in_sentence"]);
+  assert.equal(said.get("accrual.duration").because, "field_not_supported");
+
+  const cards = await store.assumptions(study.id);
+  assert.deepEqual(cards.map((card) => card.key), ["control_median_tte"], "one card, for the one number the sentence prints");
+  assert.deepEqual([cards[0].sourceKind, cards[0].pointValue, cards[0].unit, cards[0].valueSource], ["external_evidence", 13.8, "months", "extracted"]);
+  assert.equal(cards[0].pooling.citation, "PMID 37676259");
+  const [job] = await store.jobs(study.id);
+  assert.deepEqual(job.checkpoint.bound, [{ key: "control_median_tte", version: 1, path: "truth.controlMedian", value: 13.8 }]);
+  assert.equal((await store.rows("SELECT scenario FROM evimed_vcr.jobs WHERE id = $1", [job.id]))[0].scenario.truth.controlMedian, 13.8, "the scenario is the run's, as written");
+
+  // the same entries again are the same card, not a second one
+  const again = await model.call("simulate", { action: "start", kind: "design_analytic", scenario: paperDesign({ hazardRatio: 0.7 }), sources: [sources[0]] });
+  assert.equal(again.status, 200, JSON.stringify(again));
+  assert.equal((await store.assumptionVersions(study.id, "control_median_tte")).length, 1);
+  assert.equal((await store.rows("SELECT id FROM evimed_vcr.evidence_items WHERE study_id = $1 AND parameter = 'control_median' AND value IS NOT NULL", [study.id])).length, 1);
+
+  await drainJobs(module, study);
+  const trial = await module.service.tab({ id: study.userId }, study.id, "trial");
+  const control = trial.premises.find((/** @type {any} */ row) => row.key === "control");
+  assert.deepEqual([control.source, control.reason], ["literature", "引自 PMID 37676259"], "the page says 文献 and names the paper");
+  const effect = trial.premises.find((/** @type {any} */ row) => row.key === "effect");
+  assert.equal(effect.source, "assumed", "the hazard ratio is still the run's own");
+
+  // a paper the platform never read: the number is the paper's as reported, and the page says it was not checked
+  const unread = await model.call("simulate", { action: "start", kind: "design_analytic", scenario: paperDesign({ controlMedian: 10.7 }),
+    sources: [{ field: "truth.controlMedian", publication: "PMID 18650514", quote: "median overall survival was 10.7 months in the sorafenib group" }] });
+  assert.equal(unread.data.sources[0].state, "carried", JSON.stringify(unread.data.sources));
+  assert.equal(unread.data.sources[0].checked, false);
+  const stored = (await store.assumptions(study.id)).find((card) => card.key === "control_median_tte");
+  assert.equal(stored.version, 2, "another number for the key is a new version of the card");
+  assert.equal(stored.pooling.unchecked, true);
+
+  // a kind that states no truth is told so, and still runs
+  const population = await model.call("simulate", { action: "start", kind: "generate_population", scenario: { n: 50, population: { variables: [{ name: "age", family: "normal", mean: 60, sd: 10 }] } },
+    sources: [sources[0]] });
+  assert.equal(population.status, 200, JSON.stringify(population));
+  assert.equal(population.data.sources[0].because, "kind_not_supported");
+  // sources that are not a list are said, never thrown
+  const broken = await model.call("simulate", { action: "validate", kind: "design_analytic", scenario: paperDesign(), sources: "PMID 37676259" });
+  assert.equal(broken.status, 200, JSON.stringify(broken));
+  assert.equal(broken.data.sources[0].because, "sources_not_a_list");
+  await fs.rm(workspace, { recursive: true, force: true });
+});
+
+test("SOURCES a design and an assumption written with their paper carry it in the same call: the design rests on the card, and starting it by its id says 文献; an assumption whose sentence does not print its number is written as the run's own setting", options, async () => {
+  const { createVcrEvidencePipeline } = await import("../src/vcrEvidence.mjs");
+  const { createVcrPublicationSources } = await import("../src/vcrPublicationSources.mjs");
+  const workspace = await himalayaWorkspace();
+  const module = compose();
+  const evidenceStore = new VcrEvidenceStore({ database });
+  const evidence = createVcrEvidencePipeline({ store: evidenceStore, jobs: module.jobs });
+  evidence.attachPublications(createVcrPublicationSources({ resolveProject: async () => ({ workspaceDir: workspace }) }));
+  const model = modelConversation("sourceswrite", module, { evidence, evidenceStore });
+
+  const design = await model.call("write", { what: "trial_scenario", items: [{ label: "A 固定 1:1", design: "two_arm_fixed", endpointType: "time_to_event", configuration: paperDesign(),
+    sources: [{ field: "truth.controlMedian", publication: "PMID 37676259", quote: SORAFENIB_SENTENCE }] }] });
+  assert.equal(design.data.ok, true, JSON.stringify(design.data));
+  const study = await model.study();
+  assert.equal(design.data.results.find((/** @type {any} */ entry) => entry.sources).sources[0].state, "carried");
+  const [designId] = design.data.ids;
+  assert.deepEqual((await store.trialScenarios(study.id)).find((row) => row.id === designId).assumptionIds, ["control_median_tte"]);
+
+  const started = await model.call("simulate", { action: "start", kind: "design_analytic", subjectId: designId });
+  assert.equal(started.status, 200, JSON.stringify(started));
+  const job = (await store.jobs(study.id)).find((row) => row.id === started.data.jobId);
+  assert.deepEqual(job.checkpoint.bound.map((/** @type {any} */ entry) => [entry.key, entry.path]), [["control_median_tte", "truth.controlMedian"]],
+    "a design started by its id records the cards the platform laid over it, as the programme's own jobs do");
+  await drainJobs(module, study);
+  const trial = await module.service.tab({ id: study.userId }, study.id, "trial");
+  assert.equal(trial.premises.find((/** @type {any} */ row) => row.key === "control").source, "literature");
+
+  const own = await model.call("write", { what: "assumption", items: [
+    { key: "control_median_os", name: "对照组中位 OS", endpoint: "os", unit: "months", pointValue: 13.8, sources: [{ publication: "PMID 37676259", quote: SORAFENIB_SENTENCE }] },
+    { key: "hazard_ratio", name: "目标风险比", pointValue: 0.75, sourceKind: "expert_set", valueSource: "assumed", effectRole: "realistic_expectation",
+      sources: [{ publication: "PMID 37676259", quote: SORAFENIB_SENTENCE }] },
+  ] });
+  assert.equal(own.data.ok, true, JSON.stringify(own.data));
+  const cards = new Map((await store.assumptions(study.id)).map((card) => [card.key, card]));
+  assert.deepEqual([cards.get("control_median_os").sourceKind, cards.get("control_median_os").pooling.citation], ["external_evidence", "PMID 37676259"]);
+  assert.deepEqual([cards.get("hazard_ratio").sourceKind, cards.get("hazard_ratio").valueSource], ["expert_set", "assumed"], "a sentence that does not print 0.75 leaves the setting the run's own");
+  const reports = own.data.results.filter((/** @type {any} */ entry) => entry.sources).map((/** @type {any} */ entry) => entry.sources[0].state);
+  assert.deepEqual(reports, ["carried", "assumption"]);
+  await fs.rm(workspace, { recursive: true, force: true });
+});

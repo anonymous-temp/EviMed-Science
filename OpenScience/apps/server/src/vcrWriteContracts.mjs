@@ -28,7 +28,8 @@ export const VCR_WRITE_FIELDS = Object.freeze({
     "parameter",
     "effectRole",
     "fromPooling",
-    "expertFrom"
+    "expertFrom",
+    "sources"
   ],
   "precedent": [
     "registry",
@@ -120,7 +121,8 @@ export const VCR_WRITE_FIELDS = Object.freeze({
     "endpointType",
     "configuration",
     "assumptionIds",
-    "comparatorId"
+    "comparatorId",
+    "sources"
   ],
   "design_grid": [
     "dimensions",
@@ -281,6 +283,9 @@ export const VCR_WRITE_EXAMPLES = Object.freeze({
       effectRole: 'realistic_expectation', note: '同类试验的风险比在 0.66 到 0.78 之间，取 0.75；出处写在这里' },
     fromEvidence: { key: 'control_median_os', name: '对照组中位 OS', parameter: 'control_median_os', endpoint: 'os', unit: 'months',
       sourceKind: 'external_evidence', evidenceIds: ['<the id vcr_write what=evidence_item answered with>'] },
+    // The same card from the paper in one call: the platform writes the evidence item, holds the sentence against the paper and writes the card.
+    fromPaper: { key: 'control_median_os', name: '对照组中位 OS', endpoint: 'os', unit: 'months', pointValue: 13.8,
+      sources: [{ publication: 'PMID 37676259', quote: '13.8 months (95% CI, 12.3–16.1) with sorafenib' }] },
   }),
   trial_scenario: Object.freeze({
     label: 'A 固定 1:1', design: 'two_arm_fixed', endpointType: 'time_to_event',
@@ -323,9 +328,9 @@ export function vcrWriteContracts(kind = null) {
       source: 'a trial registry record (registry + registryId: clinicaltrials.gov, chictr, ctis) or a paper (publication: { pmid } or { doi }); the quotation is held against the text the platform read of it, and a number it cannot check is kept as unchecked',
       parameterRule: 'a parameter that an assumption cites by sourceKind external_evidence is the card\'s own parameter' },
     assumption: { ...contracts.assumption, words: wordsOf('assumption'), example: VCR_WRITE_EXAMPLES.assumption,
-      rule: 'expert_set and scenario: the number is yours (pointValue), valueSource is always assumed, the source goes in note. external_evidence: no pointValue; evidenceIds names the one evidence item (vcr_write what=evidence_item) whose number the card takes' },
+      rule: 'expert_set and scenario: the number is yours (pointValue), valueSource is always assumed, the source goes in note. external_evidence: no pointValue; evidenceIds names the one evidence item (vcr_write what=evidence_item) whose number the card takes. A number you read in a paper: pointValue with sources [{ publication, quote }] (one entry) makes the card from the paper in one call (fromPaper)' },
     trial_scenario: { ...contracts.trial_scenario, example: VCR_WRITE_EXAMPLES.trial_scenario,
-      rule: 'then vcr_simulate start kind=design_analytic|design_simulation|assurance with subjectId = the id and no scenario: the platform builds it from this object' },
+      rule: 'then vcr_simulate start kind=design_analytic|design_simulation|assurance with subjectId = the id and no scenario: the platform builds it from this object. A number of the configuration you read in a paper: sources [{ field: \'truth.controlMedian\', publication: \'PMID 37676259\', quote: \'<the sentence that prints it>\' }]' },
     design_grid: { ...contracts.design_grid, example: VCR_WRITE_EXAMPLES.design_grid, rule: 'labels are for the page; start kind=design_grid with subjectId = the id and no scenario' },
     plan: { ...contracts.plan, example: VCR_WRITE_EXAMPLES.plan, rule: 'analysis and sensitivity are objects; a list or a sentence is kept as it was written (under items or text)' },
     candidate_trial: { ...contracts.candidate_trial, words: wordsOf('criterion'), example: VCR_WRITE_EXAMPLES.candidate_trial },

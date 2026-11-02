@@ -3287,7 +3287,9 @@ export class VcrOrchestrator {
     const wanted = vcrJobStage(jobKind, kindOfObject);
     const found = plan.stages.find((entry) => entry.jobKind === jobKind && (wanted ? entry.stage === wanted : !String(entry.stage ?? "").endsWith("_null")));
     if (!found || found.snapshot || list(found.derived).length || found.after) return { unavailable: true };
-    return { scenario: found.scenario, detail: object(found.detail) };
+    // The cards the stage laid over the object's own numbers are the job's record of where they came from, as in the programme's own jobs:
+    // the result page reads them to say 文献 and name the paper.
+    return { scenario: found.scenario, detail: { ...object(found.detail), ...(list(found.bound).length ? { bound: found.bound } : {}) } };
   }
 
   /**

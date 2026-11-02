@@ -82,5 +82,5 @@ export function earlierFilesText(files) {
   if (!files.names.length) return ''
   const shown = files.names.join('、')
   const rest = files.more > 0 ? `，另有${files.truncated ? '至少 ' : ' '}${files.more} 个` : files.truncated ? '，目录较大，只列到这里' : ''
-  return `<evimed-earlier-files>这个项目的工作目录里已有文件，来自此前的对话：${shown}${rest}。它们不属于这次请求，除非用户点了名，或明说要接着此前的工作做；觉得用户可能指的是其中某一份，就问一句，不要自己当成这次的材料。</evimed-earlier-files>`
+  return `<evimed-earlier-files>此前的对话在工作目录里留下了这些文件：${shown}${rest}。这次的请求没有点到其中任何一份时，不要打开它们，也不要当作这次的材料；觉得用户可能指的是其中某一份，先问清楚再动手，不要替用户猜。</evimed-earlier-files>`
 }

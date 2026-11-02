@@ -88,6 +88,7 @@ import { DATE_QUOTE_MAX } from "./vcrClinicalDateEvidence.mjs";
 import { candidateRequest } from "./vcrCandidateSearch.mjs";
 import { VCR_RECONSTRUCTION_REFERENCE, vcrReconstructionReferenceFor, vcrResultKindFor } from "./vcrJobs.mjs";
 import { vcrPublicationId } from "./vcrPublicationSources.mjs";
+import { assumptionSourceEntry, carrySourceEntries, checkSourceEntries } from "./vcrScenarioSources.mjs";
 import { resolveJobSubject, prepareVcrSubjectPopulation, vcrConversationSubject, vcrJobFroze } from "./vcrSubjects.mjs";
 import { prepareVcrModelDesign } from "./vcrModelDesign.mjs";
 import { VCR_COVERAGE_POPULATION_NAME, vcrCohortRulesFromCriteria } from "./vcrCoverage.mjs";
@@ -337,7 +338,7 @@ const POOL_REQUEST_FIELDS = VCR_RUN_SCENARIO_FIELDS.pool_evidence;
 
 /** @param {Record<string, any>} body */
 function simulateRequest(body) {
-  onlyFields(body, ["action", "kind", "scenario", "inputs", "seed", "replicates", "cpuSecondsLimit", "jobId", "subjectId", "reconstructionResultId", "selection", "modelId", "modelVersion"]);
+  onlyFields(body, ["action", "kind", "scenario", "inputs", "seed", "replicates", "cpuSecondsLimit", "jobId", "subjectId", "reconstructionResultId", "selection", "modelId", "modelVersion", "sources"]);
   const action = body.action ?? "start";
   if (!["start", "status", "cancel", "validate"].includes(action)) {
     throw gatewayError(400, "vcr_simulate_action_invalid", "action must be start, status, cancel or validate.");
@@ -372,7 +373,9 @@ function simulateRequest(body) {
       seed: Number.isInteger(body.seed) ? body.seed : null,
       replicates: Number.isInteger(body.replicates) ? body.replicates : null,
       cpuSecondsLimit: Number.isInteger(body.cpuSecondsLimit) ? body.cpuSecondsLimit : null,
-      subjectId: body.subjectId == null ? null : String(body.subjectId).slice(0, 120) };
+      subjectId: body.subjectId == null ? null : String(body.subjectId).slice(0, 120),
+      // What the call says about where its numbers come from (`vcrScenarioSources`): read by the entry, never a reason to refuse the call.
+      sources: body.sources ?? null };
   }
   if (typeof body.jobId !== "string" || !ID.test(body.jobId)) {
     throw gatewayError(400, "vcr_simulate_payload_invalid", "jobId is the id start answered with.");
@@ -944,6 +947,23 @@ export function comparatorReminders({ route, targetTrial, configuration }) {
  * recorded why.
  * @type {Record<string, (item: Item, deps: WriteDeps, extra: { changed: string[], results: any[], reevaluate?: Set<string> }) => Promise<string | null | undefined>>}
  */
+/**
+ * What `carrySourceEntries` writes and reads through: the gateway's own writers (so a source is checked and stored exactly as a run's own
+ * evidence item and card are) and the study's cards and evidence. No recomputation is asked of the nested writes: the call that carries a
+ * source is itself the one that computes or records the object.
+ * @param {WriteDeps} deps
+ */
+function sourceWriters(deps) {
+  const { store, service, study, evidence, evidenceStore } = deps;
+  return {
+    write: (/** @type {string} */ what, /** @type {Record<string, any>} */ item) => vcrRuntimeWrite({ store, service, orchestrator: null, study, what, items: [item], data: null, evidence, evidenceStore, caller: null }),
+    cards: () => store.assumptions(study.id),
+    evidence: (/** @type {string[]} */ ids) => evidenceStore
+      ? (evidenceStore.citableItemsById ?? evidenceStore.verifiedItemsById).call(evidenceStore, { userId: study.userId, studyId: study.id, ids })
+      : Promise.resolve([]),
+  };
+}
+
 const WRITERS = {
   async definition(item, { store, study }) {
     if (!item.only(VCR_WRITE_FIELDS.definition)) return null;
@@ -978,6 +998,21 @@ const WRITERS = {
     /** @param {{ key: string, version: number }} saved */
     const noteChange = (saved) => { if (!afterFreeze) extra.changed.push(`assumption:${saved.key}@${saved.version}`); };
     if (!item.only(VCR_WRITE_FIELDS.assumption)) return null;
+    // A number the run read in a paper, written with that paper (`sources`): the platform writes the evidence item and then the card, in one
+    // call. Not carried (a sentence that does not print the number, a parameter no paper can state here) is written as the run's own setting.
+    if (item.row.sources != null && item.row.sourceKind !== "external_evidence" && item.row.fromPooling == null && item.row.expertFrom == null) {
+      const entry = assumptionSourceEntry(item.row);
+      if (!("raw" in entry)) extra.results.push({ index: item.index, sources: [{ field: "", state: "assumption", because: entry.because, message: entry.message }] });
+      else {
+        const carried = await carrySourceEntries({ ...entry, ...sourceWriters(deps) });
+        extra.results.push({ index: item.index, sources: carried.report });
+        const made = carried.bound[0];
+        if (made) {
+          noteChange(made);
+          return (await store.assumptions(study.id)).find((/** @type {any} */ card) => card.key === made.key)?.id ?? null;
+        }
+      }
+    }
     const key = item.str("key", { max: 64, required: true });
     if (key && !VCR_ASSUMPTION_KEY.test(key)) {
       item.bad("key", "key 是小写英文字母开头、只含小写字母、数字和下划线的参数名（最多 64 个字符），例如 control_median_pfs。");
@@ -1549,7 +1584,8 @@ const WRITERS = {
     return saved.id;
   },
 
-  async trial_scenario(item, { store, study }) {
+  async trial_scenario(item, deps, extra) {
+    const { store, study } = deps;
     if (!item.only(VCR_WRITE_FIELDS.trial_scenario)) return null;
     const label = item.str("label", { max: 120 }) ?? "";
     const design = item.choice("design", VCR_TRIAL_DESIGNS, { required: true });
@@ -1558,6 +1594,15 @@ const WRITERS = {
     const assumptionIds = (item.arr("assumptionIds", { max: 60 }) ?? []).map(String);
     const comparatorId = item.row.comparatorId == null ? null : String(item.row.comparatorId);
     if (comparatorId) await item.owned("comparatorId", "comparator", comparatorId);
+    // The papers its numbers were read in: each becomes a card of the study, and the design names the cards it rests on.
+    if (item.row.sources != null && item.ok) {
+      const carried = await carrySourceEntries({ raw: item.row.sources, scenario: configuration, endpointType, ...sourceWriters(deps) });
+      extra.results.push({ index: item.index, sources: carried.report });
+      for (const made of carried.bound) {
+        if (!assumptionIds.includes(made.key)) assumptionIds.push(made.key);
+        extra.changed.push(`assumption:${made.key}@${made.version}`);
+      }
+    }
     if (assumptionIds.length) {
       const held = await store.assumptions(study.id);
       for (const id of assumptionIds) {
@@ -2706,7 +2751,10 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
               if ("refused" in built) throw gatewayError(400, "vcr_simulate_payload_invalid", built.refused.message);
               if ("scenario" in built) scenario = built.scenario;
             }
-            return vcr.jobs.validate({ kind: asked.kind, scenario, inputs: asked.inputs, replicates: asked.replicates, studyId: study.id });
+            const checked = await vcr.jobs.validate({ kind: asked.kind, scenario, inputs: asked.inputs, replicates: asked.replicates, studyId: study.id });
+            // The papers a call names are read for their shape here and written when the job starts.
+            const sources = asked.sources == null ? [] : sourcesAreForKind(asked.kind) ? checkSourceEntries(asked.sources, scenario) : [sourcesNotForKind()];
+            return sources.length ? { ...checked, sources } : checked;
           }
           if (request.action === "start") {
             const started = await startJob(vcr, study, /** @type {any} */ (request));
@@ -2800,6 +2848,12 @@ async function nameWhatItHolds(vcr, study) {
   await vcr.store.nameFromWhatItHolds?.(study).catch(() => null);
 }
 
+/** The kinds a paper's number can be tied to: the design computations, whose scenario states the truth they assume. @param {string} kind */
+const sourcesAreForKind = (kind) => String(/** @type {Record<string, string>} */ (VCR_JOB_METHODS)[kind] ?? "").startsWith("design.");
+/** What a call is told when it names sources for a kind that has no use for them. */
+const sourcesNotForKind = () => ({ field: "", state: "assumption", because: "kind_not_supported",
+  message: "这一类计算不读来源：sources 只用于试验设计的计算（样本量、功效、设计比较）；这次没有读它，计算照常。" });
+
 /**
  * `simulate start`. Two kinds are not the run's scenario: a pooling job is
  * built by the platform from this study's verified extractions of the parameter
@@ -2809,7 +2863,8 @@ async function nameWhatItHolds(vcr, study) {
  *
  * @param {any} vcr @param {any} study
  * @param {{ kind: string, scenario: Record<string, any>, inputs: unknown[], seed: number | null, replicates: number | null,
- *   cpuSecondsLimit: number | null, subjectId: string | null, reconstructionResultId?: string | null, selection?: any, modelId?:string|null, modelVersion?:string|null }} request
+ *   cpuSecondsLimit: number | null, subjectId: string | null, reconstructionResultId?: string | null, selection?: any, modelId?:string|null, modelVersion?:string|null,
+ *   sources?: unknown }} request
  */
 async function startJob(vcr, study, request) {
   if (Object.hasOwn(VCR_LONGITUDINAL_JOBS,request.kind)) {
@@ -2964,7 +3019,24 @@ async function startJob(vcr, study, request) {
         message: "这个对象的这一步平台已经在算了：读这个作业的进度和结果就行，不必再排一个。" };
     }
   }
-  const scenarioHash = createHash("sha256").update(canonicalScenarioJson({ scenario, reconstruction: request.reconstructionResultId ?? null })).digest("hex").slice(0, 16);
+  // The papers the call names (`sources`): the platform writes the evidence item and the card of each and records which card each number of
+  // this job came from, so the result page can say 文献 and name the paper. A failure here costs that premise and nothing else.
+  /** @type {Array<Record<string, any>>} */
+  let sourceReport = [];
+  if (request.sources != null) {
+    if (!sourcesAreForKind(request.kind)) sourceReport = [sourcesNotForKind()];
+    else if (!vcr.evidence?.addEvidenceItem || !vcr.evidenceStore) {
+      sourceReport = [{ field: "", state: "assumption", because: "evidence_unavailable", message: "证据参数化未接入本部署：来源没有记下，这些前提仍是假设，计算照常。" }];
+    } else {
+      const carried = await carrySourceEntries({
+        raw: request.sources, scenario, ...sourceWriters({ store: vcr.store, service: vcr.service, study, evidence: vcr.evidence, evidenceStore: vcr.evidenceStore }),
+      }).catch(() => ({ bound: [], report: [{ field: "", state: "assumption", because: "unavailable", message: "来源暂时没能记下；这些前提仍是假设，计算照常。" }] }));
+      sourceReport = carried.report;
+      if (carried.bound.length) detail = { ...detail, bound: [...(Array.isArray(detail.bound) ? detail.bound : []), ...carried.bound] };
+    }
+  }
+  const scenarioHash = createHash("sha256").update(canonicalScenarioJson({ scenario, reconstruction: request.reconstructionResultId ?? null,
+    ...(Array.isArray(detail.bound) && detail.bound.length ? { bound: detail.bound } : {}) })).digest("hex").slice(0, 16);
   const { job, notice } = await vcr.jobs.enqueue({
     studyId: study.id, userId: study.userId, kind: request.kind, scenario, inputs, ...(derived.length ? { derived } : {}),
     ...(population.derived.length ? { internal: true } : {}),
@@ -2991,6 +3063,7 @@ async function startJob(vcr, study, request) {
   // duplicate computation, never this job.
   if (subject && vcr.orchestrator?.noteRuntimeJob) await vcr.orchestrator.noteRuntimeJob(study, subject.detail, job).catch(() => null);
   return { action: "start", jobId: job.id, state: job.state, progress: job.progress, ...(notes ? { notes } : {}), ...appliedOf(job),
+    ...(sourceReport.length ? { sources: sourceReport } : {}),
     ...(subject ? { subject: { kind: subject.objectKind, id: String(subject.row.id), version: Number(subject.row.version),
       ...(subjectName(subject.row) ? { name: subjectName(subject.row) } : {}) } } : {}),
     // A job stopped for budget is the second human stop: the run is
