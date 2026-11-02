@@ -49,7 +49,7 @@
  */
 
 import { clinicalDateInEvidence, clinicalIntervalInQuote } from './vcrClinicalDateEvidence.mjs';
-import { CLINICAL_ASSERTIVE_POLARITIES, clinicalConventionalUnit, clinicalFactPolarity, clinicalFactView, clinicalUnitToken, clinicalUnitInQuote, clinicalUnitPrintedBesideValue, convertClinicalUnit, vcrConvertTime, vcrTimeUnitOf } from "@evimed/domain";
+import { CLINICAL_ASSERTIVE_POLARITIES, clinicalConventionalUnit, clinicalFactPolarity, clinicalFactView, clinicalNumericValue, clinicalUnitToken, clinicalUnitInQuote, clinicalUnitPrintedBesideValue, convertClinicalUnit, vcrConvertTime, vcrTimeUnitOf } from "@evimed/domain";
 import { createHash } from 'node:crypto';
 import {
   canonicalScenarioJson, VCR_CRITERION_STATES, VCR_CRITERION_TYPES, VCR_ELIGIBILITY_SUMMARIES, VCR_MISSING_REASONS, validateRequirement,
@@ -304,8 +304,11 @@ export function verifyFactEvidence(fact, context = {}) {
   if (!surfaces.length) return { ok: false, reason: "surface_missing" };
   if (!surfaces.some((surface) => span.includes(surface))) return { ok: false, reason: "value_not_in_span" };
 
-  if (typeof fact?.value === "number" && Number.isFinite(fact.value)) {
-    if (!numeralsIn(span).some((number) => Math.abs(number - fact.value) < 1e-9)) {
+  // A value the evaluator reads as a number is held to the quotation as one, whether it was written as a number or as a plain numeric
+  // string (`"9.9"` beside "HbA1c 8.5%" is a number the record never printed).
+  const stated = clinicalNumericValue(fact?.value);
+  if (stated !== null) {
+    if (!numeralsIn(span).some((number) => Math.abs(number - stated) < 1e-9)) {
       return { ok: false, reason: "value_not_in_span" };
     }
   }
@@ -319,12 +322,12 @@ export function verifyFactEvidence(fact, context = {}) {
   }
   // A unit supports a number only where the quote prints it beside that number: a quote with two units supports each for its own
   // value, not for every value of the fact (E-10). A fact whose value is not a number is held to the older question, unit anywhere.
-  const printedValue = (/** @type {unknown} */ value) => (typeof value === 'number' && Number.isFinite(value) ? value : null);
+  const printedValue = clinicalNumericValue;
   if (source.unitBasis === 'conventional') {
     // Read, not printed: allowed for the one unit the domain's closed table gives this variable, for a bare number inside the range it
     // gives, and never beside a number that has a unit of its own printed next to it.
-    const conventional = clinicalConventionalUnit(fact.variable, fact.value);
-    if (!conventional || conventional.unit !== fact.unit || clinicalUnitPrintedBesideValue(span, /** @type {number} */ (fact.value))) return { ok: false, reason: 'unit_basis_unsupported' };
+    const conventional = clinicalConventionalUnit(fact.variable, stated);
+    if (!conventional || conventional.unit !== fact.unit || clinicalUnitPrintedBesideValue(span, /** @type {number} */ (stated))) return { ok: false, reason: 'unit_basis_unsupported' };
   } else if (clinicalUnitInQuote(fact.unit,span,Boolean(fact.clinical?.laboratory),printedValue(fact.value)) === false) return {ok:false,reason:'unit_not_in_span'};
   const original = fact.clinical?.laboratory;
   if (original?.originalValue != null && !numeralsIn(span).some(number => Math.abs(number-original.originalValue)<1e-9)) return {ok:false,reason:'value_not_in_span'};
@@ -407,9 +410,12 @@ export function settleFactEvidence(fact, context = {}) {
     verdict = verifyFactEvidence(settled, context);
   }
   if (!verdict.ok) return { ok: false, reason: String(verdict.reason) };
-  if (typeof settled.value === "number" && !settled.unit && settled.source) {
-    const conventional = clinicalConventionalUnit(settled.variable, settled.value);
-    if (conventional && !clinicalUnitPrintedBesideValue(String(settled.source.quote ?? ""), settled.value)) {
+  // A plain numeric string is stored as the number the quotation was checked for, so that what is kept is what was verified.
+  const number = clinicalNumericValue(settled.value);
+  if (typeof settled.value === "string" && number !== null) settled = { ...settled, value: number };
+  if (number !== null && !settled.unit && settled.source) {
+    const conventional = clinicalConventionalUnit(settled.variable, number);
+    if (conventional && !clinicalUnitPrintedBesideValue(String(settled.source.quote ?? ""), number)) {
       settled = { ...settled, unit: conventional.unit, source: { ...settled.source, unitBasis: "conventional" } };
       notes.push("unit_read_by_convention");
     }
@@ -678,12 +684,8 @@ function convertUnit(value, from, to, variable, custom) {
   return supplied != null && Number.isFinite(supplied) ? supplied : null;
 }
 
-/** A fact's value as a number, when it is one (a plain numeric string is one). @param {unknown} value @returns {number | null} */
-function numericValue(value) {
-  if (typeof value === "number") return Number.isFinite(value) ? value : null;
-  if (typeof value === "string" && /^\s*-?\d+(?:\.\d+)?\s*$/.test(value)) return Number(value);
-  return null;
-}
+/** A fact's value as a number, when it is one (a plain numeric string is one): the writer's read, so a value is checked as the number the evaluator will compare. */
+const numericValue = clinicalNumericValue;
 
 /** @param {any} node @param {any} context @returns {RequirementVerdict} */
 function evaluateCompare(node, context) {

@@ -1263,6 +1263,34 @@ test("a copiedFrom link is honoured only for a copy of the same variable at the 
   assert.equal(foreign.saved.length, 0);
 });
 
+test("P1-3 a value written as a numeric string is held to the quotation like a number, and kept as the number it was checked as", async () => {
+  const text = "2026-09-01 HbA1c 8.5%。";
+  const quote = "HbA1c 8.5%";
+  const start = text.indexOf(quote);
+  /** @param {string | number} value @param {Record<string, any>} [over] */
+  const fact = (value, over = {}) => ({ subjectKey: "P-1", documentId: "doc_1", variable: "hba1c", value, unit: "%", surface: "HbA1c", quote, start, end: start + quote.length, ...over });
+  // The probe of the review: the number the record never printed, as a string, was kept; as a number it was refused.
+  for (const value of ["9.9", " 9.9 ", 9.9]) {
+    const wrong = factWriter({ text });
+    const refused = await wrong.write(fact(value));
+    assert.equal(refused.ok, false, JSON.stringify(value));
+    assert.equal(wrong.saved.length, 0, JSON.stringify(value));
+    assert.equal(refused.issues[0].code, "vcr_evidence_unverified");
+    assert.match(refused.issues[0].message, /value_not_in_span/);
+  }
+  // The number the record printed is kept, as a number, whether it came as a string or not.
+  for (const value of ["8.5", 8.5]) {
+    const right = factWriter({ text });
+    const kept = await right.write(fact(value));
+    assert.equal(kept.ok, true, JSON.stringify(kept.issues));
+    assert.strictEqual(right.saved[0].value, 8.5, `${JSON.stringify(value)} is stored as the number`);
+  }
+  // A value with a word in it is text: nothing to hold to the numerals of the quotation, and nothing the evaluator reads as a number.
+  const word = factWriter({ text });
+  assert.equal((await word.write(fact("阳性", { unit: undefined }))).ok, true);
+  assert.strictEqual(word.saved[0].value, "阳性");
+});
+
 test("a defect in the metadata no verdict reads costs that metadata, never the quote-verified fact; the metadata a verdict reads is still refused (E-18)", async () => {
   const text = "2026-09-01 血肌酐 1.1 mg/dL。";
   const quote = "2026-09-01 血肌酐 1.1 mg/dL";

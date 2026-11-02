@@ -2699,6 +2699,7 @@ export {
   clinicalUnitInQuote,
   clinicalUnitPrintedBesideValue,
   clinicalConventionalUnit,
+  clinicalNumericValue,
   convertClinicalUnit,
 } from './src/clinicalUnits.mjs'
 

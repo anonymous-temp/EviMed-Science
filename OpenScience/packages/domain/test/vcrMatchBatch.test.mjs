@@ -155,10 +155,23 @@ test('D4: what the extractor proposes is held to the criteria\'s own variables b
   ] }, variables)
   assert.deepEqual(facts.map((fact) => fact.variable), ['age', 'ecog', 'pregnant'])
   assert.equal(facts[0].value, 63)
-  assert.equal(facts[1].value, '1')
+  assert.equal(facts[1].value, 1, 'a value that is nothing but a number is the number (it was the string \'1\' before the review of 2026-11-02)')
   assert.equal(facts[2].polarity, 'negated')
   assert.deepEqual(dropped, { variable_not_asked: 1, polarity_invalid: 1, quote_missing: 2 })
   assert.deepEqual(acceptExtractedFacts('not json', variables), { facts: [], dropped: {} })
+})
+
+test('P1-3: a value the model typed as a numeric string is the number, so the writer holds it to the quotation as one', () => {
+  const variables = new Set(['hba1c', 'diagnosis'])
+  const { facts } = acceptExtractedFacts({ facts: [
+    { variable: 'hba1c', value: '9.9', unit: '%', surface: 'HbA1c', quote: 'HbA1c 8.5%' },
+    { variable: 'hba1c', value: ' 8.5 ', surface: 'HbA1c', quote: 'HbA1c 8.5%' },
+    { variable: 'hba1c', value: 8.5, surface: 'HbA1c', quote: 'HbA1c 8.5%' },
+    { variable: 'diagnosis', value: '2型糖尿病', surface: '糖尿病', quote: '2型糖尿病' },
+    { variable: 'diagnosis', value: '1,200', surface: '1,200', quote: '1,200' },
+  ] }, variables)
+  assert.deepEqual(facts.map((fact) => fact.value), [9.9, 8.5, 8.5, '2型糖尿病', '1,200'])
+  assert.deepEqual(facts.map((fact) => typeof fact.value), ['number', 'number', 'number', 'string', 'string'])
 })
 
 test('D4: a second quotation for a fact\'s date is kept as the model wrote it, and only when it is a line', () => {

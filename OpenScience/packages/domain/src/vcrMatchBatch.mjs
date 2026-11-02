@@ -24,6 +24,7 @@
  * @module @evimed/domain/vcrMatchBatch
  */
 
+import { clinicalNumericValue } from './clinicalUnits.mjs'
 import { priceUsage } from './metering.mjs'
 import { suppressForModel } from './vcrSuppression.mjs'
 import { VCR_MIN_CELL_SIZE } from './vcrVocabulary.mjs'
@@ -223,7 +224,10 @@ export function acceptExtractedFacts(answer, variables) {
     const surface = typeof row.surface === 'string' && row.surface ? row.surface : ''
     if (!quote.trim() || !surface || !quote.includes(surface)) { drop('quote_missing'); continue }
     const item = /** @type {Record<string, any>} */ ({ variable, polarity, surface: surface.slice(0, 400), quote: quote.slice(0, 3000) })
-    if (typeof row.value === 'number' && Number.isFinite(row.value)) item.value = row.value
+    // A value that is a plain number is the number whatever the model typed it as: the writer holds it to the quotation as one, and the
+    // evaluator reads it as one (`clinicalNumericValue`); only a text value stays text.
+    const numeric = clinicalNumericValue(row.value)
+    if (numeric !== null) item.value = numeric
     else if (typeof row.value === 'string' && row.value.trim() && row.value.length <= 200) item.value = row.value.trim()
     if (typeof row.unit === 'string' && row.unit.trim() && row.unit.length <= 40) item.unit = row.unit.trim()
     if (typeof row.occurredAt === 'string' && /^\d{4}-\d{2}-\d{2}/.test(row.occurredAt)) item.occurredAt = row.occurredAt

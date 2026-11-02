@@ -115,6 +115,18 @@ export function clinicalUnitPrintedBesideValue(quote, value) {
 }
 
 /**
+ * A fact's value as the number it is, when it is one: a finite number, or a string that is nothing but a plain number (`"9.9"`,
+ * `" -3 "`). The one read the whole path shares: the writer holds such a value to the quotation like any number, the batch reader
+ * turns it into the number, and the evaluator compares it as the number. A string with a word, a unit or a separator in it is text.
+ * @param {unknown} value @returns {number | null}
+ */
+export function clinicalNumericValue(value) {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value === 'string' && /^\s*-?\d+(?:\.\d+)?\s*$/.test(value)) return Number(value);
+  return null;
+}
+
+/**
  * The unit a bare number of this analyte is read in, from the closed table of analytes that have exactly one (`conventional`; an
  * analyte with a conversion row has two and is never listed). A number outside the printed range the table gives is not read in it.
  * The caller records `unitBasis: conventional` beside the unit: it was not printed.

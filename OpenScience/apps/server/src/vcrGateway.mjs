@@ -62,7 +62,7 @@ import { extractSelection } from "./vcrMatchBatch.mjs";
 import { locateSourceText, OTHER_TRIAL_MIN_SOURCE_CHARS, sourceTextLength } from "./vcrPatientTrials.mjs";
 import { factsOnSameWords, surfaceBasis } from "./vcrFactBasis.mjs";
 import { dataIntakeShapeValid } from "./vcrDataIntake.mjs";
-import { clinicalFactIssues, clinicalFactPolarity } from "@evimed/domain";
+import { clinicalFactIssues, clinicalFactPolarity, clinicalNumericValue } from "@evimed/domain";
 import { createHash } from "node:crypto";
 import { VCR_LONGITUDINAL_JOBS, VCR_LONGITUDINAL_ERROR_CODES } from '@evimed/domain';
 
@@ -1764,6 +1764,9 @@ const WRITERS = {
     const variable = item.token("variable", /^[a-z][a-z0-9_]{0,63}$/, "小写英文变量名，与入排条件里的 variable 一致", { required: true });
     let value = item.row.value;
     if (value != null && !(typeof value === "string" ? value.length <= 200 : Number.isFinite(value))) { item.bad("value", "value 是一个数或不超过 200 字的文字。"); value = undefined; }
+    // A value that is nothing but a number is the number, written as a string or not: it is held to the quotation below like one (the
+    // evaluator reads it as one), and is kept as one.
+    if (typeof value === "string" && clinicalNumericValue(value) !== null) value = clinicalNumericValue(value);
     const unit = item.str("unit", { max: 40 });
     const polarity = item.choice("polarity", ["affirmed", "negated", "hypothetical", "family"], { fallback: "affirmed" });
     let occurredAt = item.iso("occurredAt");

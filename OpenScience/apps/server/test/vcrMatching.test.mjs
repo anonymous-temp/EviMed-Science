@@ -1136,6 +1136,34 @@ test("settleFactEvidence keeps the fact and drops a unit the quotation does not 
   assert.deepEqual(settleFactEvidence(fact("HgbA1c 7.4 last month.", { variable: "hba1c", value: 7.9, unit: "%" }), { documents }), { ok: false, reason: "value_not_in_span" });
 });
 
+test("P1-3 a value that parses as a number is held to the quotation as one, in the verifier and the settler, and stored as the number", () => {
+  const text = "HbA1c 8.5% at admission. Creatinine 1.1 mg/dL.";
+  const documents = { d: { text } };
+  /** @param {string} quote @param {Record<string, any>} over */
+  const fact = (quote, over) => ({ id: "f", polarity: "affirmed", extractedBy: "model", provenance: { factSchema: 2 }, surface: "HbA1c",
+    source: { documentId: "d", start: text.indexOf(quote), end: text.indexOf(quote) + quote.length, quote }, variable: "hba1c", ...over });
+  // The probe of the review: the same fact with the number 9.9 was refused value_not_in_span, and with the string "9.9" it passed.
+  for (const value of ["9.9", " 9.9 ", 9.9]) {
+    assert.deepEqual(verifyFactEvidence(fact("HbA1c 8.5%", { value }), { documents }), { ok: false, reason: "value_not_in_span" }, JSON.stringify(value));
+    assert.deepEqual(settleFactEvidence(fact("HbA1c 8.5%", { value, unit: "%" }), { documents }), { ok: false, reason: "value_not_in_span" }, JSON.stringify(value));
+  }
+  for (const value of ["8.5", 8.5]) {
+    assert.deepEqual(verifyFactEvidence(fact("HbA1c 8.5%", { value, unit: "%" }), { documents }), { ok: true, reason: null }, JSON.stringify(value));
+    const settled = settleFactEvidence(fact("HbA1c 8.5%", { value, unit: "%" }), { documents });
+    assert.equal(settled.ok && settled.fact.value, 8.5);
+    assert.equal(typeof (settled.ok && settled.fact.value), "number", "what is kept is what was checked");
+  }
+  // The conventional unit is read for the numeric string the same way as for the number.
+  const bare = settleFactEvidence(fact("HbA1c 8.5%", { value: "8.5" }), { documents });
+  assert.deepEqual(bare.ok && [bare.fact.value, bare.fact.unit ?? null], [8.5, null], "a bare percent sign is the printed unit: nothing is read by convention");
+  // The evaluator's read and the verifier's are the same read: what compares as 9.9 is what is held to the quotation as 9.9.
+  const criterion = { id: "c", kind: "inclusion", criterionType: "lab", requirement: { op: "compare", variable: "hba1c", comparator: "lte", value: 9, unit: "%" } };
+  const as = (/** @type {unknown} */ value) => evaluateCriterion(criterion, { facts: [{ ...fact("HbA1c 8.5%", { value, unit: "%" }), id: "f", variable: "hba1c", occurredAt: "2026-01-01T00:00:00Z", visibleAt: "2026-01-01T00:00:00Z" }], asOf: Date.parse(AS_OF) }).state;
+  assert.equal(as("9.9"), as(9.9), "a numeric string compares as the number");
+  // A string with a unit, a separator or a word is text: nothing is held to the numerals, and the evaluator does not compare it as a number.
+  assert.deepEqual(verifyFactEvidence(fact("HbA1c 8.5%", { value: "8.5%", unit: "%" }), { documents }), { ok: true, reason: null });
+});
+
 test("settleFactEvidence keeps the fact and drops a date nothing printed, each date field on its own, and stores no date that was not shown", () => {
   const text = "Record date: 2100-03-01\n\nTakes aspirin daily.\nPatient age 19; prior MI. Dataset 2100.";
   const documents = { d: { text } };
