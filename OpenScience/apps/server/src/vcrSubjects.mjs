@@ -166,6 +166,29 @@ export function vcrMatchTrialScenarios(jobScenario, rows, { sameNumbers = false 
   return scored.filter((entry) => entry.agreeing === best).map((entry) => entry.row);
 }
 
+/** The scenario an object of a self-filed kind holds. @param {string} objectKind @param {Record<string, any>} row @returns {Record<string, any> | null} */
+function configurationOf(objectKind, row) {
+  return objectKind === "trial_scenario" || objectKind === "comparator" ? object(row.configuration) : objectKind === "population" ? object(row.definition) : null;
+}
+
+/**
+ * The first value a scenario states differently from what an object holds: both say it and they disagree (`design.nTreat`). A key only one of
+ * them states is no disagreement. Null when there is none.
+ * @param {Record<string, any>} held @param {Record<string, any>} asked @param {string} [at]
+ * @returns {string | null}
+ */
+export function vcrContradiction(held, asked, at = "") {
+  for (const [key, value] of Object.entries(asked)) {
+    if (!(key in held)) continue;
+    const path = at ? `${at}.${key}` : key;
+    const mine = held[key];
+    const nested = value !== null && typeof value === "object" && !Array.isArray(value) && mine !== null && typeof mine === "object" && !Array.isArray(mine);
+    if (nested) { const inner = vcrContradiction(mine, value, path); if (inner) return inner; }
+    else if (canonicalScenarioJson(mine) !== canonicalScenarioJson(value)) return path;
+  }
+  return null;
+}
+
 /**
  * Whether a running job froze this scenario: every value the scenario states is the job's own at the same place. A job may hold more
  * (the programme's cards bound into it, the engine's own keys), never a different value. A stage in flight answers a start only when
@@ -320,9 +343,24 @@ const VCR_SELF_FILED_KINDS = new Set(["design_analytic", "design_simulation", "d
  * @returns {Promise<string | null>} the id to compute under, when one was made (or, for an E-value, the one that is the same)
  */
 export async function vcrConversationSubject({ store, study, userId, kind, subjectId = null, scenario = {} }) {
-  if (subjectId || study.scope !== "conversation" || !VCR_SELF_FILED_KINDS.has(kind)) return null;
+  if (study.scope !== "conversation" || !VCR_SELF_FILED_KINDS.has(kind)) return null;
   const objectKind = /** @type {string} */ (vcrJobObjectKind(kind));
-  const current = vcrCurrentObjects(objectKind, await objectRows(store, study.id, objectKind));
+  const rows = await objectRows(store, study.id, objectKind);
+  if (subjectId) {
+    // A run that names the object and states other values than it holds is revising it, not computing it: the revision is a new version of
+    // the object, written like the browser's method configurations (`prepareVcrMethodConfiguration`: the scenario is the configuration, as it
+    // is for an object made from a scenario), so that the result is filed under what was computed. A scenario that restates the object or only
+    // adds to it, and none at all (the stage is built from the object), are the object.
+    const named = rows.find((entry) => entry.id === subjectId);
+    const own = named ? configurationOf(objectKind, named) : null;
+    if (!named || !own || !Object.keys(scenario).length || !vcrContradiction(own, scenario)) return null;
+    // An E-value is one estimate and not a line of versions: another estimate is another object (below).
+    if (kind !== "evalue") {
+      const method = /** @type {Record<string, string>} */ (VCR_JOB_METHODS)[kind];
+      return (await prepareVcrMethodConfiguration({ store, study, userId, method, subjectId, name: String(named.label || named.name || ""), scenario })).subjectId;
+    }
+  }
+  const current = vcrCurrentObjects(objectKind, rows);
   // An E-value of a stated estimate and limit is an object of its own: it is never filed under another comparison the study holds, whose
   // result it would replace. The same estimate asked twice is the one object.
   if (kind === "evalue") {
