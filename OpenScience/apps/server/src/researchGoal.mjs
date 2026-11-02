@@ -11,6 +11,25 @@ export function researchGoalPrompt(goal) {
   return `/loopx ${goal}`;
 }
 
+/**
+ * Whether a run is the one that set a research goal, by the route the control plane minted for it (never by anything the person wrote).
+ * @param {{ effectiveRouteReason?: unknown } | null | undefined} run
+ */
+export function isResearchGoalRun(run) {
+  const route = String(run?.effectiveRouteReason ?? "");
+  return route === RESEARCH_GOAL_ROUTE || route.endsWith(`:${RESEARCH_GOAL_ROUTE}`);
+}
+
+/**
+ * The person's sentence in the message `researchGoalPrompt` made: the gesture at its head is the platform's and is taken out. One closed
+ * token that stands alone, not a reading of language; used for the messages of a run `isResearchGoalRun` names, so that what memory and
+ * learning see is what the person wrote. (The learning digest, in `@evimed/domain`, takes the same token out of the same message.)
+ * @param {unknown} text
+ */
+export function withoutResearchGoalGesture(text) {
+  return String(text ?? "").replace(/^\s*\/loopx(?:\s+|$)/, "");
+}
+
 /** What the run's context adds, so a goal that looks small still starts as a goal. */
 export function researchGoalBlock() {
   return `\n\n<evimed-research-goal>

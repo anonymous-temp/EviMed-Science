@@ -1,6 +1,7 @@
 import { isInternalProjectOf } from "./internalProjects.mjs";
 import { isPlatformStartedRun } from "./memoryDispatch.mjs";
 import { platformSessionOf } from "./openVikingSessions.mjs";
+import { isResearchGoalRun } from "./researchGoal.mjs";
 import { endedBeforeReset, memoryPausedFor } from "./memorySettings.mjs";
 
 /**
@@ -36,7 +37,8 @@ import { endedBeforeReset, memoryPausedFor } from "./memorySettings.mjs";
  */
 
 /**
- * @typedef {{ learn: boolean, recall: boolean, learnReason: string | null, recallReason: string | null, sessionId: string | null }} MemoryAdmission
+ * @typedef {{ learn: boolean, recall: boolean, learnReason: string | null, recallReason: string | null, sessionId: string | null, researchGoal?: boolean }} MemoryAdmission
+ *   `researchGoal`: the turn a message was spoken in set a research goal (`researchGoal.mjs`), so the gesture at its head is not the person's
  */
 
 export { isPlatformStartedRun };
@@ -118,6 +120,8 @@ export function createMemoryAdmission({ config, memorySettings, engineReady = nu
     // extract by its built-in types, which copy quoted messages into memory: nothing is sent to it.
     if (engineReady && !engineReady().ok) return answer("engine_unavailable");
 
+    // Whether the turn the message was spoken in set a research goal: its first message carries the gesture that started it.
+    let researchGoal = false;
     if (sessionId && conversations) {
       // A subagent's session is a platform-written brief and its answer, never the person's words.
       if (named && !running.some((run) => run.sessionId === named) && conversations.parentOf?.(named, running)) return answer("subagent");
@@ -127,6 +131,7 @@ export function createMemoryAdmission({ config, memorySettings, engineReady = nu
       if (isPlatformStartedRun(current)) return answer("automated_run");
       // No time on the message: a conversation whose last turn was over before the reset is over. A turn still running is not.
       if (resetAt && !(typeof at === "number" && Number.isFinite(at)) && current && current.status !== "running" && endedBeforeReset(current, resetAt)) return answer("before_reset");
+      researchGoal = isResearchGoalRun(current);
       const agentId = String(current?.effectiveAgentId ?? current?.agentId ?? "");
       if (agentId && internalAgent && await internalAgent(agentId).catch(() => false)) return answer("internal_project");
       if (clinicalContext && runs.length) {
@@ -134,7 +139,7 @@ export function createMemoryAdmission({ config, memorySettings, engineReady = nu
         if (read) return answer("clinical_context");
       }
     }
-    return answer(null);
+    return { ...answer(null), ...(researchGoal ? { researchGoal } : {}) };
   }
 
   return { admit };
