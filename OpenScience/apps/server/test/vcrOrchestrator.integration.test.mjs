@@ -1182,6 +1182,24 @@ test("P2-10 a batch reading and a population check that a conversation asked for
   assert.equal(notices_of(module).length, before);
 });
 
+test("a stand-alone E-value is started from a conversation with nothing written first, and lands on a comparison of its own", options, async () => {
+  const module = compose();
+  const study = await store.taskContext({ userId: "u_evalue_gateway", projectId: "prj_evalue_gateway", rootSessionId: "native-fixture" }, { create: true });
+  const gateway = conversationGateway(module, study);
+  const started = await gateway("simulate", { action: "start", kind: "evalue", scenario: { riskRatio: 0.6, confidenceLimit: 0.8, scale: "hazard_ratio", rare: true } });
+  assert.equal(started.status, 200, JSON.stringify(started));
+  assert.equal(started.data.subject.kind, "comparator");
+  await drainJobs(module, study);
+  const jobs = await store.rows("SELECT kind, method, state, checkpoint FROM evimed_vcr.jobs WHERE study_id=$1", [study.id]);
+  assert.deepEqual(jobs.map((job) => [job.kind, job.method, job.state]), [["evalue", "comparator.evalue", "succeeded"]]);
+  const [design] = await store.comparatorDesigns(study.id, 10);
+  assert.equal(design.id, started.data.subject.id);
+  assert.ok(design.resultId, "the result is the comparison's own");
+  // asked again with the same estimate it is the same comparison, not a second one
+  const again = await gateway("simulate", { action: "start", kind: "evalue", scenario: { riskRatio: 0.6, confidenceLimit: 0.8, scale: "hazard_ratio", rare: true } });
+  assert.equal(again.data.subject.id, design.id);
+});
+
 test("AC-33 everything the run set carries the AI-set label until a person countersigns it", options, async () => {
   const module = compose();
   const study = await makeStudy("aiset");

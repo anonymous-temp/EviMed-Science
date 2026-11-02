@@ -307,3 +307,26 @@ test('a conversation computes a design or a population with nothing written firs
   await assert.rejects(vcrConversationSubject({ store: vcr.store, study, userId: study.userId, kind: 'design_grid', scenario: {} }), { code: 'vcr_job_scenario_invalid' });
   assert.equal(await vcrConversationSubject({ store: vcr.store, study: { ...study, scope: 'study' }, userId: study.userId, kind: 'design_simulation', scenario: design }), null);
 });
+
+test("a stand-alone E-value of a stated estimate and limit runs in a conversation with nothing written first, and never under another comparison the study holds", options, async () => {
+  const study = await vcr.store.taskContext({ userId: 'evalue_owner', projectId: 'default', rootSessionId: 'evalue_root', runId: 'r', callId: 'c', dispatchId: null, routeReason: null, programme: false }, { create: true });
+  const hazard = { riskRatio: 0.6, confidenceLimit: 0.8, scale: 'hazard_ratio', rare: true };
+  // another comparison the study holds: its result is its own
+  const other = await vcr.store.saveComparatorDesign({ studyId: study.id, userId: study.userId, name: '对照 1', route: 'external_control', estimand: 'ATT', configuration: { covariates: ['age'] }, targetTrial: {} });
+  const made = await vcrConversationSubject({ store: vcr.store, study, userId: study.userId, kind: 'evalue', scenario: hazard });
+  assert.ok(made, 'the estimate is the object');
+  assert.notEqual(made, other.id, 'it is not filed under the comparison the study already holds');
+  const subject = await resolveJobSubject({ store: vcr.store, study, kind: 'evalue', subjectId: made, scenario: hazard });
+  assert.equal(subject.objectKind, 'comparator');
+  assert.equal(subject.row.route, 'literature_control');
+  assert.deepEqual(subject.row.configuration, hazard);
+  // the same estimate again is the one object; another estimate is another
+  assert.equal(await vcrConversationSubject({ store: vcr.store, study, userId: study.userId, kind: 'evalue', scenario: hazard }), made);
+  const second = await vcrConversationSubject({ store: vcr.store, study, userId: study.userId, kind: 'evalue', scenario: { ...hazard, riskRatio: 0.5 } });
+  assert.ok(second && second !== made);
+  // a scenario the engine would refuse is refused by what is wrong with it, and nothing is written
+  await assert.rejects(vcrConversationSubject({ store: vcr.store, study, userId: study.userId, kind: 'evalue', scenario: { riskRatio: -1, scale: 'hazard_ratio' } }), { code: 'vcr_job_scenario_invalid' });
+  assert.equal((await vcr.store.comparatorDesigns(study.id, 50)).length, 3, 'the other comparison, and the two estimates');
+  // a study with a page of its own still asks for the object first
+  assert.equal(await vcrConversationSubject({ store: vcr.store, study: { ...study, scope: 'project' }, userId: study.userId, kind: 'evalue', scenario: hazard }), null);
+});

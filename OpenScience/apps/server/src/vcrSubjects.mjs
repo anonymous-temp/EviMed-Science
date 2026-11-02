@@ -279,7 +279,7 @@ export async function resolveJobSubject({ store, study, kind, subjectId = null, 
 }
 
 /** The computations a conversation may start with nothing written first: what they compute is all in the scenario they send. */
-const VCR_SELF_FILED_KINDS = new Set(["design_analytic", "design_simulation", "design_grid", "generate_population", "literature_population"]);
+const VCR_SELF_FILED_KINDS = new Set(["design_analytic", "design_simulation", "design_grid", "generate_population", "literature_population", "evalue"]);
 
 /**
  * A conversation's research has no form to fill in. A design or a population the run computes with no object to file it under gets one,
@@ -288,13 +288,18 @@ const VCR_SELF_FILED_KINDS = new Set(["design_analytic", "design_simulation", "d
  * resolver then takes it or says which), for a study with a page of its own, or for a kind whose input is another object.
  *
  * @param {{ store: any, study: any, userId: string, kind: string, subjectId?: string | null, scenario?: Record<string, any> }} input
- * @returns {Promise<string | null>} the id to compute under, when one was made
+ * @returns {Promise<string | null>} the id to compute under, when one was made (or, for an E-value, the one that is the same)
  */
 export async function vcrConversationSubject({ store, study, userId, kind, subjectId = null, scenario = {} }) {
   if (subjectId || study.scope !== "conversation" || !VCR_SELF_FILED_KINDS.has(kind)) return null;
   const objectKind = /** @type {string} */ (vcrJobObjectKind(kind));
   const current = vcrCurrentObjects(objectKind, await objectRows(store, study.id, objectKind));
-  if (fittingObjects(objectKind, kind, scenario, current).length) return null;
+  // An E-value of a stated estimate and limit is an object of its own: it is never filed under another comparison the study holds, whose
+  // result it would replace. The same estimate asked twice is the one object.
+  if (kind === "evalue") {
+    const same = current.find((entry) => canonicalScenarioJson(entry.configuration) === canonicalScenarioJson(scenario));
+    if (same) return String(same.id);
+  } else if (fittingObjects(objectKind, kind, scenario, current).length) return null;
   const method = /** @type {Record<string, string>} */ (VCR_JOB_METHODS)[kind];
   const name = `${OBJECT_WORDS_ZH[objectKind]} ${current.length + 1}`;
   return (await prepareVcrMethodConfiguration({ store, study, userId, method, name, scenario })).subjectId;
