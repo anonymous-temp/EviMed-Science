@@ -1,5 +1,7 @@
 /** Exact calendar-date binding for newly extracted facts. It does not infer clinical dates from metadata. */
 
+import { createHash } from 'node:crypto';
+
 const MONTH = '(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)';
 /** Year first, with a separator or the Chinese year/month/day marks: 2067-05-03, 2067/5/3, 2067年5月3日. */
 const NUMERIC_DATE = /(?<!\d)(\d{4})\s*[-/.年]\s*(\d{1,2})\s*[-/.月]\s*(\d{1,2})(?:日)?(?!\d)/gu;
@@ -89,6 +91,52 @@ export const RECORD_HEADER_LABEL_MAX = 24;
 const BIRTH_LABEL = /\b(?:d\.?o\.?b\.?|birth\s*date|date\s+of\s+birth|born)\b|出生|生日/i;
 
 /**
+ * One line of a document read as a record header: it prints exactly one complete date, with its year, and what is left of the line once the
+ * date is taken out is a short label that is not a birth label. `null` for any other line. The line is trimmed as the document holds it.
+ * @param {string} body @param {number} start where the line starts @param {number} lineEnd where it ends (its newline, or the end of the text)
+ * @returns {{ date: string, start: number, end: number, quote: string, lineStart: number } | null}
+ */
+function headerOfLine(body, start, lineEnd) {
+  const line = body.slice(start, lineEnd);
+  const trimmed = line.trim();
+  if (!trimmed || trimmed.length > RECORD_HEADER_LINE_MAX) return null;
+  const printed = clinicalDatesPrinted(trimmed);
+  if (printed.length !== 1) return null;
+  const label = `${trimmed.slice(0, printed[0].start)} ${trimmed.slice(printed[0].end)}`.replace(/\s+/g, ' ').trim();
+  if (label.length > RECORD_HEADER_LABEL_MAX || BIRTH_LABEL.test(label)) return null;
+  const from = start + line.indexOf(trimmed);
+  return { date: printed[0].iso, start: from, end: from + trimmed.length, quote: trimmed, lineStart: start };
+}
+
+/**
+ * The header lines of a document, in the order of the text. Built once per document and kept (a write of two hundred facts of one chart
+ * reads the chart's lines once, not once for each fact): the key is the length and the digest of the text, so the cache holds no patient
+ * text, only the header lines themselves (each at most `RECORD_HEADER_LINE_MAX` characters).
+ * @param {string} body
+ */
+function headerIndex(body) {
+  const key = `${body.length}:${createHash('sha1').update(body).digest('hex')}`;
+  const kept = headerIndexes.get(key);
+  if (kept) return kept;
+  /** @type {Array<NonNullable<ReturnType<typeof headerOfLine>>>} */
+  const headers = [];
+  for (let start = 0; start <= body.length;) {
+    const found = body.indexOf('\n', start);
+    const lineEnd = found < 0 ? body.length : found;
+    const header = headerOfLine(body, start, lineEnd);
+    if (header) headers.push(header);
+    start = lineEnd + 1;
+  }
+  headerIndexes.set(key, headers);
+  // A write reads one or a few charts; the cache never holds more than a handful.
+  if (headerIndexes.size > HEADER_INDEXES_KEPT) headerIndexes.delete(/** @type {string} */ (headerIndexes.keys().next().value));
+  return headers;
+}
+/** @type {Map<string, ReturnType<typeof headerIndex>>} */
+const headerIndexes = new Map();
+const HEADER_INDEXES_KEPT = 4;
+
+/**
  * The record header above a position in a document: the nearest preceding line that prints one complete date, with its year, and
  * little else, so that what is left of the line once the date is taken out is a short label (「Record date: 2067-05-03」, 「记录日期：2026-07-01」,
  * 「2026-07-01 门诊记录」, 「入院日期：2026年3月4日 10:20」). It is a matter of the line's format, not of what the label says: a line that
@@ -100,23 +148,16 @@ const BIRTH_LABEL = /\b(?:d\.?o\.?b\.?|birth\s*date|date\s+of\s+birth|born)\b|�
 export function clinicalRecordHeader(text, position) {
   const body = String(text ?? '');
   if (!Number.isInteger(position) || position <= 0) return null;
-  let lineStart = body.lastIndexOf('\n', Math.min(position, body.length) - 1) + 1;
-  while (lineStart > 0) {
-    const lineEnd = lineStart - 1;
-    const start = lineEnd === 0 ? 0 : body.lastIndexOf('\n', lineEnd - 1) + 1;
-    const line = body.slice(start, lineEnd);
-    const trimmed = line.trim();
-    if (trimmed && trimmed.length <= RECORD_HEADER_LINE_MAX) {
-      const printed = clinicalDatesPrinted(trimmed);
-      if (printed.length === 1) {
-        const label = `${trimmed.slice(0, printed[0].start)} ${trimmed.slice(printed[0].end)}`.replace(/\s+/g, ' ').trim();
-        if (label.length <= RECORD_HEADER_LABEL_MAX && !BIRTH_LABEL.test(label)) {
-          const from = start + line.indexOf(trimmed);
-          return { date: printed[0].iso, start: from, end: from + trimmed.length, quote: trimmed };
-        }
-      }
-    }
-    lineStart = start;
+  const lineStart = body.lastIndexOf('\n', Math.min(position, body.length) - 1) + 1;
+  const headers = headerIndex(body);
+  // The last header line that starts above the line the position is in: the lines are in the order of the text.
+  let low = 0;
+  let high = headers.length;
+  while (low < high) {
+    const middle = (low + high) >> 1;
+    if (headers[middle].lineStart < lineStart) low = middle + 1; else high = middle;
   }
-  return null;
+  if (!low) return null;
+  const { date, start, end, quote } = headers[low - 1];
+  return { date, start, end, quote };
 }

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {clinicalDateInEvidence,clinicalDateInQuote,clinicalDatesPrinted,clinicalIntervalInQuote,clinicalRecordHeader,RECORD_HEADER_LABEL_MAX} from '../src/vcrClinicalDateEvidence.mjs';
+import {clinicalDateInEvidence,clinicalDateInQuote,clinicalDatesPrinted,clinicalIntervalInQuote,clinicalRecordHeader,RECORD_HEADER_LABEL_MAX,RECORD_HEADER_LINE_MAX} from '../src/vcrClinicalDateEvidence.mjs';
 import {verifyFactEvidence,evaluateCriterion,UNKNOWN} from '../src/vcrMatching.mjs';
 
 test('dataset year and undated age cannot supply a manufactured birth/event date',()=>{
@@ -130,4 +130,58 @@ test('no header above the position, or no position, gives no date',()=>{
  assert.equal(clinicalRecordHeader('Record date: 2067-05-03\nTakes aspirin.',-1),null);
  assert.equal(clinicalRecordHeader('Record date: 2067-05-03\nTakes aspirin.',Number.NaN),null);
  assert.equal(clinicalRecordHeader('Record date: 2067-05-03\nTakes aspirin.',9999)?.date,'2067-05-03','a position past the end reads the whole text above');
+});
+
+// REVIEWFIX 8: the header above a position is found from an index of the document's header lines, built once, and answers what the backward scan did.
+const referenceRecordHeader=(text,position)=>{
+ const body=String(text??'');
+ if(!Number.isInteger(position)||position<=0)return null;
+ let lineStart=body.lastIndexOf('\n',Math.min(position,body.length)-1)+1;
+ while(lineStart>0){
+  const lineEnd=lineStart-1;
+  const start=lineEnd===0?0:body.lastIndexOf('\n',lineEnd-1)+1;
+  const line=body.slice(start,lineEnd);
+  const trimmed=line.trim();
+  if(trimmed&&trimmed.length<=RECORD_HEADER_LINE_MAX){
+   const printed=clinicalDatesPrinted(trimmed);
+   if(printed.length===1){
+    const label=`${trimmed.slice(0,printed[0].start)} ${trimmed.slice(printed[0].end)}`.replace(/\s+/g,' ').trim();
+    if(label.length<=RECORD_HEADER_LABEL_MAX&&!/\b(?:d\.?o\.?b\.?|birth\s*date|date\s+of\s+birth|born)\b|出生|生日/i.test(label)){
+     const from=start+line.indexOf(trimmed);
+     return{date:printed[0].iso,start:from,end:from+trimmed.length,quote:trimmed};
+    }
+   }
+  }
+  lineStart=start;
+ }
+ return null;
+};
+
+test('the header index answers what the backward scan answered, for a position at the start of any line of a mixed document',()=>{
+ let seed=20261102;
+ const random=(n)=>{seed=(seed*1103515245+12345)&0x7fffffff;return seed%n;};
+ const pool=['Record date: 2067-05-03','2026-07-01 门诊记录','DOB: 1950-03-02','Seen 3/14 for review','Admitted 2067-02-02 discharged 2067-02-09','',' ','   2067-08-09   ',
+  'Takes aspirin daily.','入院日期：2026年3月4日 10:20','Date of visit: May 3, 2067','Patient was seen on 2067-02-02 for chest pain and discussed medications with the family.',
+  'x'.repeat(RECORD_HEADER_LABEL_MAX)+' 2067-05-03','Dataset year 2067','*****','记录日期：2026-07-01\r'];
+ for(let round=0;round<60;round+=1){
+  const lines=Array.from({length:1+random(40)},()=>pool[random(pool.length)]);
+  const text=lines.join(random(2)?'\n':'\n\n')+(random(2)?'\n':'');
+  const starts=[0];
+  for(let at=text.indexOf('\n');at>=0;at=text.indexOf('\n',at+1))starts.push(at+1);
+  for(const position of [...starts,text.length,text.length+7,-1,1.5]){
+   assert.deepEqual(clinicalRecordHeader(text,position),referenceRecordHeader(text,position),`round ${round} at ${position}`);
+  }
+ }
+});
+
+test('a document of many short lines with no header costs one pass, not one pass for every fact',()=>{
+ const text=Array.from({length:150_000},(_,at)=>`line ${at} ok`).join('\n');
+ const positions=Array.from({length:150},(_,at)=>text.length-1-at*17);
+ const began=process.hrtime.bigint();
+ for(const position of positions)assert.equal(clinicalRecordHeader(text,position),null);
+ const elapsedMs=Number(process.hrtime.bigint()-began)/1e6;
+ assert.ok(elapsedMs<1500,`150 facts of one document took ${Math.round(elapsedMs)} ms`);
+ // the same document with one header at the top is found from every position
+ const headed=`Record date: 2067-05-03\n${text}`;
+ assert.equal(clinicalRecordHeader(headed,headed.length-5)?.date,'2067-05-03');
 });
