@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type MutableRefObject } from "react";
 import { Link, useNavigate } from "react-router";
 import { getWebProjectId, listWebAgentRuns, steerWebAgentRun, WebApiError, type WebAgentRun } from "@/lib/apiClient";
 import { addAgendaMaterials, cancelEpisode, followUpAgenda, getResearchState, listAgendas, listEpisodes, removeAgendaMaterial, runAgendaNow, type AgendaRecord, type EpisodeRecord, type ResearchState } from "@/lib/autopilotClient";
@@ -139,6 +139,8 @@ function ResearchWorkspace({ projectId }: { projectId: string }) {
   const pendingStops = useRef(new Map<string, string>());
   const pendingDirections = useRef(new Map<string, { note: string; episodeId: string | null; requestId: string }>());
   const loadingTasks = useRef(false);
+  // The request a goal is started with, kept across the dialog's closing and opening until the goal is known to have started.
+  const goalRequest = useRef<ResearchGoalRequest | null>(null);
   const loadingGoals = useRef(false);
   const loadingHistory = useRef<string | null>(null);
   const loadingProgress = useRef<string | null>(null);
@@ -379,6 +381,7 @@ function ResearchWorkspace({ projectId }: { projectId: string }) {
   };
   const openFile = (path: string, runId: string) => { if (safeWorkspacePath(path) && SAFE_RUN.test(runId)) navigate(snapshotHref(runId, path)); };
   const onResearchStarted = (run: WebAgentRun) => {
+    goalRequest.current = null;
     setStarting(false); setChosen(true); setSelectedRound(null); setTab("results");
     setGoalRuns(old => [run, ...(old ?? []).filter(item => item.id !== run.id)]);
     if (typeof run.sessionId === "string") setSelectedGoal(goalKey(run.sessionId, run.id));
@@ -402,6 +405,9 @@ function ResearchWorkspace({ projectId }: { projectId: string }) {
   const subject = Boolean(goal || selected);
   const showViews = loaded && !nothing && !reading && subject;
   const canStart = longFeature === "enabled";
+  // A read that fails while the page is open does not take away what it showed: the error is said above it and the next read that succeeds
+  // clears it. Only a first read that failed (nothing was ever shown) is the error alone.
+  const shown = loaded && (queue.length > 0 || subject);
   // The header says the two things that start from here. With nothing yet the standby scene carries them and the header does not repeat them.
   const actionPlan: PageActionPlan = {
     primary: { id: "start-research", label: "发起研究", disabled: !canStart, onSelect: () => setStarting(true) },
@@ -462,7 +468,7 @@ function ResearchWorkspace({ projectId }: { projectId: string }) {
     {actionError && !steering && <p role="alert" className="text-ui text-error">{actionError}</p>}
     {actionNotice && <p role="status" className="text-ui text-text">{actionNotice}</p>}
     {reading && <div role="status" aria-label="正在载入研究" className="h-64 animate-pulse rounded-card bg-surface-2" />}
-    {!reading && !error && <div className="space-y-2">
+    {!reading && (!error || shown) && <div className="space-y-2">
       {queue.length > 0 && <ResearchQueue entries={queue} selected={queueSelected} disabled={busy} onSelect={choose} />}
       {subjectRow}
       <ResearchObservatory runId={runId} title={observedTitle} onOpenFile={openFile} onObserved={setObserved} standbyActions={nothing ? <>
@@ -488,7 +494,7 @@ function ResearchWorkspace({ projectId }: { projectId: string }) {
       </div></FormDialog>}
       {(databaseFor === "knowledge-base" || (databaseFor === "study" && selected)) && <ResearchDatabaseDialog key={`${projectId}:${databaseFor === "study" ? selected?.id : ""}`} projectId={projectId} agendaId={databaseFor === "study" ? selected?.id : undefined} onClose={() => setDatabaseFor(null)} onCaptured={() => { void load(true); void loadProgress(true); }} />}
       {picking && selected && <FormDialog title="从知识库添加资料" busy={busy} onClose={() => { if (!busy) setPicking(false); }}><MaterialPicker projectId={projectId} taken={(selected.payload.materials ?? []).map(item => item.sourceId)} busy={busy} onCancel={() => setPicking(false)} onChoose={sourceIds => { setPicking(false); void operation(() => addAgendaMaterials(selected.id, { sourceIds })); }} /></FormDialog>}
-      {starting && <StartResearchDialog onClose={() => setStarting(false)} onStarted={onResearchStarted} />}
+      {starting && <StartResearchDialog request={goalRequest} onClose={() => setStarting(false)} onStarted={onResearchStarted} />}
       {intake && <FormDialog title="接入数据" onClose={() => setIntake(false)}><div className="flex flex-wrap gap-2">
         <Button actionKind="set" onClick={connectFiles}>上传文件</Button>
         <Button variant="secondary" onClick={() => { setIntake(false); setDatabaseFor("knowledge-base"); }}>从数据库导入</Button>
@@ -497,12 +503,15 @@ function ResearchWorkspace({ projectId }: { projectId: string }) {
   </PageShell>;
 }
 
-/** 「发起研究」: the goal in the person's words. The same goal retried is the same request, so a lost answer cannot start it twice. */
-function StartResearchDialog({ onClose, onStarted }: { onClose: () => void; onStarted: (run: WebAgentRun) => void }) {
+/**
+ * 「发起研究」: the goal in the person's words. The same goal retried is the same request, so a lost answer cannot start it twice: the
+ * request lives with the page and not with the dialog, because a person whose answer was lost closes the dialog and opens it again, and the
+ * goal is started once or not at all until the page knows it started (`onStarted` clears it).
+ */
+function StartResearchDialog({ request, onClose, onStarted }: { request: MutableRefObject<ResearchGoalRequest | null>; onClose: () => void; onStarted: (run: WebAgentRun) => void }) {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
-  const request = useRef<ResearchGoalRequest | null>(null);
   const submit = async () => {
     const goal = text.trim();
     if (!goal || busy) return;

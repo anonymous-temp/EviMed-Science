@@ -47,7 +47,13 @@ bookkeeping notices never justify discarding supported work.
 1. Call `mcp__evimed__meta_analysis` with `action=capabilities`. If it is unavailable,
    stop and report the exact deployment precondition.
 2. Call it with `action=start`, the complete topic, language, and only the
-   applicable optional inputs. Record the returned job id immediately.
+   applicable optional inputs. Supply `maxPapers` only when the researcher
+   explicitly requested a screening cap; an arbitrary small cap can remove
+   landmark studies before screening. If no cap was requested, omit it and
+   disclose the engine's actual retrieval and screening limits. A named trial
+   is a candidate to retrieve and screen against the protocol, not an automatic
+   inclusion: report whether its primary report was actually retrieved and
+   assessed. Record the returned job id immediately.
    A start with exactly the same request returns the job already running or
    finished for it, and resumes a failed one from its last completed step; if
    you lose the job id, repeat the identical request rather than a reworded one.
@@ -135,6 +141,15 @@ produced it; no causal reading the design does not support). The independent
 review checks the report against the reporting checklist for this design and
 traces every stated result to the job's own output files. Write each result from
 the engine's display value; rounding is checked, not forbidden.
+
+Choose effect measure from the research question and estimand; differences in
+baseline risk can affect interpretation on both relative and absolute scales.
+Different sample sizes or observed control rates alone do not establish
+between-study effect heterogeneity or justify a random-effects model. Explain
+clinical and methodological variation and the assumptions behind the model.
+With few studies, a low I² or a nonsignificant Q does not establish homogeneity.
+In leave-one-out analyses compare effect estimates and intervals, not merely
+whether each p value crosses 0.05; removing data changes precision.
 
 ## Before delivering: two fixed steps
 

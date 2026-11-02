@@ -145,6 +145,17 @@ const BRIDGE_METHODS = Object.freeze(['GET', 'POST', 'DELETE'])
  */
 export const MEMORY_BRIDGE_DEADLINES = Object.freeze({ healthMs: 2_000, requestMs: 8_000, toolCallMs: 60_000 })
 
+/**
+ * How long the gateway may stay unanswering before a run is told memory went missing. One slow forward used to do it, and the
+ * next request found the gateway back: the reader's 「运行中有环节未能正常生效」 then described nothing that lasted. The window is
+ * measured on what was asked, not on the clock: it runs from the start of the first forward that failed since the service last
+ * answered, and the notice is raised by a forward that fails once that much time has passed (one that hangs the whole window
+ * and then fails is such a forward). A failure followed by minutes in which memory was not called is silence, not an outage,
+ * and a single answer ends the window. The state and its detail are logged at once either way, so a person looking for it
+ * still sees every blip.
+ */
+export const MEMORY_BRIDGE_OUTAGE_NOTICE_MS = 60_000
+
 /** After a forward fails in transport, how long the gateway is answered for without being asked. */
 export const MEMORY_BRIDGE_COOLDOWN_MS = 10_000
 
@@ -183,6 +194,8 @@ function isToolCall(pathname, body) {
  * @property {{ healthMs?: number, requestMs?: number, toolCallMs?: number }} [deadlines]
  * @property {number} [cooldownMs]
  * @property {(event: 'unreachable' | 'restored', detail: string) => void} [onState] called on a change, never per request
+ * @property {number} [outageMs] see {@link MEMORY_BRIDGE_OUTAGE_NOTICE_MS}
+ * @property {(detail: string) => void} [onOutage] called once per outage, by the forward that fails after the service has not answered for `outageMs`
  */
 
 /**
@@ -200,9 +213,13 @@ export function createMemoryBridge(options) {
   const now = options.now ?? Date.now
   const deadlines = { ...MEMORY_BRIDGE_DEADLINES, ...options.deadlines }
   const cooldownMs = options.cooldownMs ?? MEMORY_BRIDGE_COOLDOWN_MS
+  const outageMs = options.outageMs ?? MEMORY_BRIDGE_OUTAGE_NOTICE_MS
   const stats = { requests: 0, forwarded: 0, unavailable: 0, refused: 0, tokenRetries: 0 }
   let closedUntil = 0
   let reachable = true
+  /** When the first forward that failed since the service last answered began; null while it answers. */
+  let failingSince = /** @type {number | null} */ (null)
+  let outageTold = false
 
   /** @param {boolean} ok @param {string} detail */
   const observe = (ok, detail) => {
@@ -284,6 +301,7 @@ export function createMemoryBridge(options) {
       if (bearer) headers.authorization = `Bearer ${bearer}`
       return send(`${gateway}${url.pathname}${url.search}`, { method: req.method, headers, ...(body.length ? { body } : {}), signal: abort.signal, redirect: 'error' })
     }
+    const attemptStarted = now()
     try {
       let response = await forward(token)
       // The control plane accepts only the token its file holds now: a request that straddled a rewrite is asked once more
@@ -306,6 +324,8 @@ export function createMemoryBridge(options) {
       if (response.body) for await (const chunk of response.body) res.write(chunk)
       res.end()
       stats.forwarded += 1
+      failingSince = null
+      outageTold = false
       observe(true, `HTTP ${response.status}`)
     } catch (error) {
       // The caller hung up first: nothing was learned about the gateway, and there is nobody to answer.
@@ -313,7 +333,13 @@ export function createMemoryBridge(options) {
       const timedOut = abort.signal.aborted
       // A tool call that ran out of time says the tool was slow, not that the gateway is gone.
       if (!(timedOut && deadline === deadlines.toolCallMs)) closedUntil = now() + cooldownMs
-      observe(false, timedOut ? `no answer in ${deadline} ms` : reason(error))
+      const detail = timedOut ? `no answer in ${deadline} ms` : reason(error)
+      observe(false, detail)
+      failingSince ??= attemptStarted
+      if (!outageTold && now() - failingSince >= outageMs) {
+        outageTold = true
+        options.onOutage?.(detail)
+      }
       unavailable(res, timedOut ? 'timed out' : 'unreachable')
     } finally {
       clearTimeout(timer)
@@ -348,7 +374,7 @@ export function createMemoryBridge(options) {
  * dialling a closed port — which costs nothing — and a notice where an operator looks.
  *
  * @param {any} ctx
- * @param {{ enabled?: boolean, gatewayUrl?: string, tokenFile?: string, port?: number }} config
+ * @param {{ enabled?: boolean, gatewayUrl?: string, tokenFile?: string, port?: number, outageNoticeMs?: number, cooldownMs?: number }} config
  */
 export async function registerMemoryBridge(ctx, config) {
   if (config.enabled !== true) return
@@ -362,11 +388,12 @@ export async function registerMemoryBridge(ctx, config) {
     localKey,
     tokenFile: config.tokenFile,
     port: config.port,
-    onState: (event, detail) => {
-      // One line per state, not per failure: the set an operator reads holds each line once.
-      if (event === 'unreachable') diagnostics()?.degrade?.('memory bridge: the memory service did not answer; the conversation continued without it')
-      ctx.logger?.warn?.(`evimed memory bridge: gateway ${event} (${detail})`)
-    },
+    cooldownMs: config.cooldownMs,
+    outageMs: config.outageNoticeMs,
+    // One line per state, not per failure: the set an operator reads holds each line once.
+    onState: (event, detail) => ctx.logger?.warn?.(`evimed memory bridge: gateway ${event} (${detail})`),
+    // The reader is told only when the service was asked and did not answer for the whole window (see MEMORY_BRIDGE_OUTAGE_NOTICE_MS).
+    onOutage: () => diagnostics()?.degrade?.('memory bridge: the memory service did not answer; the conversation continued without it'),
   })
   // The plugin's skills that name abilities we do not offer stay out of the model's catalogue (see OPENVIKING_WITHHELD_SKILLS).
   const skills = ctx.get('skills') ?? ctx.skills

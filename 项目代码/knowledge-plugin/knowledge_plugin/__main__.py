@@ -137,7 +137,7 @@ async def _lifecycle(settings: Settings, apply: bool) -> int:
             print(json.dumps({"applied": len(plan), "by_reason": dict(Counter(i["reason"] for i in plan))}))
             return 0
         async with pool.connection() as conn:
-            plan = await retirement_plan(conn, now, curated)
+            plan = await retirement_plan(conn, now)
         for decision in plan:
             print(json.dumps({"source_id": decision.source_id, "reason": decision.reason,
                               "registry_row": decision.source_id in curated, "evidence": decision.evidence},

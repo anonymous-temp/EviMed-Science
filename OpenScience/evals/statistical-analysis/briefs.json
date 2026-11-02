@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "statistical-analysis",
-  "note": "Eight public-data briefs: three numerical controls, three goal-driven multi-turn agent scenarios, and two continuation scenarios (statistics-007, 008) that specify the cached-state and report-population guidance. Only the inputs and follow-up prompts reach a live run. Expected values and evaluator scripts remain outside its workspace. Adding briefs or passing offline tests does not constitute live agent acceptance.",
+  "note": "Nine briefs: eight on public data (three numerical controls, three goal-driven multi-turn agent scenarios, and two continuation scenarios, statistics-007 and 008, that specify the cached-state and report-population guidance) and one on a small synthetic file (statistics-009, a measurement below its limit of quantification). Only the inputs and follow-up prompts reach a live run. Expected values and evaluator scripts remain outside its workspace. Adding briefs or passing offline tests does not constitute live agent acceptance.",
   "briefs": [
     {
       "id": "statistics-001-wdbc-group-comparison",
@@ -254,6 +254,38 @@
         "Change a correct result to match the prior wording."
       ],
       "gradedOn": "Reference criteria: whole-data, training and held-out counts recomputed from the supplied source rows and predictions (evaluator-owned bindings, never in the workspace); the revised report and correction record name the population of each percentage; no classifier is refitted."
+    },
+    {
+      "id": "statistics-009-censored-biomarker-comparison",
+      "title": "Compare a biomarker where some measurements are below the assay's limit",
+      "why": "A value written <0.5 is a censored measurement. Replacing it with the limit, dropping it, or averaging a column that mixes numbers and text each changes the answer, and the first two look like analysis.",
+      "inputs": {
+        "datasetPath": "data/biomarker-lod.csv",
+        "dictionaryPath": "data/biomarker-lod-dictionary.md",
+        "analysisQuestion": "Compare the biomarker between the treated and control groups in data/biomarker-lod.csv; the dictionary is data/biomarker-lod-dictionary.md. Give the numbers of participants and of measurements below the limit in each group, the comparison with its uncertainty and a short report. Keep the code.",
+        "outputLanguage": "en"
+      },
+      "fixtures": [
+        {
+          "source": "fixtures/biomarker-lod.csv",
+          "destination": "data/biomarker-lod.csv"
+        },
+        {
+          "source": "fixtures/biomarker-lod-dictionary.md",
+          "destination": "data/biomarker-lod-dictionary.md"
+        }
+      ],
+      "mustDo": [
+        "Read <0.5 as a measurement below the limit of quantification, from the dictionary, and count the censored values per group before any test.",
+        "Use a method that handles left-censored values (a rank-based or censored-data approach), or show the alternative handling as a labelled sensitivity analysis beside it.",
+        "Keep the quantitative denominator (measured values) and the categorical one (below or above the limit) separate and name the population of each percentage."
+      ],
+      "mustNotDo": [
+        "Replace <0.5 with 0.5, 0, or any other single value and report the result as the observed mean difference.",
+        "Drop the below-limit rows without saying so, or analyse the column as text.",
+        "Claim an effect size on the original scale as exact when the censored values are unknown."
+      ],
+      "gradedOn": "Executed evidence that the censored values were identified and counted per group, a method that does not treat them as observed (or a labelled sensitivity beside one that does), separate denominators, uncertainty on the estimate, and a report that says what the limit does to the comparison. No numeric golden: the fixture is synthetic and the right method is a judgement."
     }
   ]
 }

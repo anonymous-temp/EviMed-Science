@@ -3,7 +3,7 @@ import { contextGenerationPaths, prepareContextGeneration, verifyContextGenerati
 import { contextPolicyIdentity, sameContextPolicy } from './geoContextItems.mjs';
 import { PLATFORM_SKILLS_RUNTIME_DIR, platformSkillGenerationRoot, verifyPlatformSkillGeneration } from "./platformSkillSupply.mjs";
 import {assertExtensionAssessmentAuthority} from './extensionAssessmentAuthority.mjs';
-import { RUNTIME_YIELDED_CODE, backgroundRuntimeLimit, isInternalProjectOf, isEvolutionProject } from "./internalProjects.mjs";
+import { RUNTIME_YIELDED_CODE, backgroundRuntimeLimit, isInternalProjectOf, isEvolutionProject, isDataAnalysisProject } from "./internalProjects.mjs";
 import { projectLibraryViewDir } from "./libraryScope.mjs";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { Buffer } from "node:buffer";
@@ -2974,7 +2974,7 @@ export function buildRuntimeLaunchPlan(config, project, port, {
           // The socket plugins this deployment runs without; every switch is
           // sent either way (`SOCKET_PLUGIN_SWITCHES`).
           disabledPlugins: config.runtimeDisabledSocketPlugins ?? [],
-          loopxEnabled: config.loopxEnabled !== false,
+          loopxEnabled: config.loopxEnabled !== false && !isDataAnalysisProject(project),
           geoSkills: geoSkills === true,
           // `retainTokens` is a port-level option with no row to read it, so it
           // never crosses the boundary. Sending it would put a name on the

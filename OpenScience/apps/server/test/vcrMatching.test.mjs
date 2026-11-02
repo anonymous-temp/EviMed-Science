@@ -1300,6 +1300,71 @@ test("the past-event guard: a bound before the window\'s start is decisively out
   assert.equal(withinWindow(current.fact, { months: 6 }, at("2100-09-05")), false);
 });
 
+test("REVIEWFIX 3 a fact dated by a record header later than the moment of the assessment is not seen by it, whatever the criterion kind", () => {
+  const text = "Record date: 2067-01-10\n\nHbA1c 7.0%\nHistory: takes metformin daily.\n*****\nRecord date: 2067-09-05\n\nHbA1c 9.5%\nTakes aspirin daily.\n";
+  const documents = { d: { id: "d", text } };
+  const settle = (/** @type {string} */ quote, /** @type {Record<string, any>} */ over) => {
+    const start = text.indexOf(quote);
+    const settled = settleFactEvidence({ id: `f-${start}`, polarity: "affirmed", extractedBy: "model", provenance: { factSchema: 2 }, visibleAt: "2067-01-11T00:00:00Z",
+      source: { documentId: "d", start, end: start + quote.length, quote }, ...over }, { documents });
+    assert.ok(settled.ok, JSON.stringify(settled));
+    return settled.fact;
+  };
+  const june = Date.parse("2067-06-15T00:00:00Z");
+  const january = settle("HbA1c 7.0%", { variable: "hba1c", surface: "HbA1c 7.0", value: 7, unit: "%" });
+  const september = settle("HbA1c 9.5%", { variable: "hba1c", surface: "HbA1c 9.5", value: 9.5, unit: "%" });
+  const aspirin = settle("Takes aspirin daily.", { variable: "aspirin", surface: "aspirin" });
+  assert.deepEqual([january.occurredAt, september.occurredAt, aspirin.occurredAt], ["2067-01-10", "2067-09-05", "2067-09-05"]);
+  const facts = [january, september, aspirin];
+  const run = (/** @type {any} */ requirement) => evaluateRequirement(requirement, { facts, asOf: june, documents });
+  // no window: the September reading does not win "latest", and the September exposure is not there to be present
+  const latest = run({ op: "compare", variable: "hba1c", comparator: "lt", value: 8, unit: "%", aggregate: "latest" });
+  assert.deepEqual([latest.state, latest.evidence.map((/** @type {any} */ entry) => entry.occurredAt)], [SATISFIED, ["2067-01-10"]], "the reading of January is the latest there is in June");
+  assert.deepEqual(run({ op: "present", variable: "aspirin" }).missing.map((/** @type {any} */ entry) => entry.reason), ["not_recorded"]);
+  // a window: a fact from a record not yet written is no evidence that the window was clear
+  assert.deepEqual(run({ op: "absent", variable: "aspirin", window: { months: 6 } }).missing.map((/** @type {any} */ entry) => entry.reason), ["not_recorded"]);
+  // the assessment: the same, and the facts it withheld are counted
+  const assessed = assessSubject({ subjectKey: "S", asOf: "2067-06-15T00:00:00Z", documents, facts, criteria: [
+    { id: "c1", kind: "inclusion", criterionType: "numeric", sourceText: "HbA1c < 8", requirement: { op: "compare", variable: "hba1c", comparator: "lt", value: 8, unit: "%", aggregate: "latest" } },
+    { id: "c2", kind: "exclusion", criterionType: "time_window", sourceText: "aspirin", requirement: { op: "present", variable: "aspirin" } }] });
+  assert.deepEqual(assessed.judgments.map((judgment) => judgment.state), [SATISFIED, UNKNOWN]);
+  assert.equal(assessed.factsWithheldAsFuture, 2);
+  // as of a day after the September header they are all there
+  const later = assessSubject({ subjectKey: "S", asOf: "2067-09-06T00:00:00Z", documents, facts, criteria: [
+    { id: "c1", kind: "inclusion", criterionType: "numeric", sourceText: "HbA1c < 8", requirement: { op: "compare", variable: "hba1c", comparator: "lt", value: 8, unit: "%", aggregate: "latest" } }] });
+  assert.equal(later.judgments[0].state, NOT_SATISFIED);
+  // a date the fact printed itself, or a structured fact, is the fact's own and is not this rule's
+  const printed = { ...aspirin, source: { ...aspirin.source, dateBasis: undefined }, occurredAt: "2067-09-05" };
+  assert.equal(factsVisibleAt([printed], june).length, 1);
+});
+
+test("REVIEWFIX 3 a line that prints a date after the moment the document entered the platform does not date a fact, whether the moment is the document's visible time or the assessment's", () => {
+  const text = "Record date: 2067-01-10\n\nTakes aspirin daily.\n下次复诊：2067-12-15\nTakes metformin daily.\n";
+  const start = text.indexOf("Takes metformin daily.");
+  const fact = { id: "f", variable: "metformin", polarity: "affirmed", extractedBy: "model", provenance: { factSchema: 2 }, surface: "metformin",
+    source: { documentId: "d", start, end: start + "Takes metformin daily.".length, quote: "Takes metformin daily." } };
+  const dated = (/** @type {Record<string, any>} */ document, /** @type {Record<string, any>} */ context = {}) => {
+    const settled = settleFactEvidence(fact, { documents: { d: { text, ...document } }, ...context });
+    assert.ok(settled.ok);
+    return settled.fact.occurredAt;
+  };
+  assert.equal(dated({}), "2067-12-15", "with no moment known, the nearest line above dates it, as it did");
+  assert.equal(dated({ visibleAt: "2067-06-15T00:00:00Z" }), "2067-01-10", "the document entered in June; a December date is not a record\'s");
+  assert.equal(dated({}, { asOf: "2067-06-15T00:00:00Z" }), "2067-01-10", "the harness names its moment by asOf, with the document as it holds it");
+  assert.equal(dated({ visibleAt: "2067-12-20T00:00:00Z" }, { asOf: "2067-06-15T00:00:00Z" }), "2067-01-10", "the earlier of the two is the moment");
+  assert.equal(dated({ visibleAt: "2067-12-20T00:00:00Z" }), "2067-12-15", "a document that entered after the date has its line as before");
+});
+
+test("REVIEWFIX 7 a fact on a short line that prints its date before it takes that date, not the header above", () => {
+  const text = "Record date: 2067-01-01\n2067-05-03 HbA1c 8.5%\n";
+  const start = text.indexOf("HbA1c 8.5%");
+  const settled = settleFactEvidence({ id: "f", variable: "hba1c", polarity: "affirmed", extractedBy: "model", provenance: { factSchema: 2 }, surface: "HbA1c 8.5", value: 8.5, unit: "%",
+    source: { documentId: "d", start, end: start + "HbA1c 8.5%".length, quote: "HbA1c 8.5%" } }, { documents: { d: { text } } });
+  assert.ok(settled.ok);
+  assert.deepEqual([settled.fact.occurredAt, settled.fact.source.dateQuote.quote, settled.fact.source.dateBasis, settled.notes], ["2067-05-03", "2067-05-03 HbA1c 8.5%", "record_header", ["date_from_record_header"]]);
+  assert.equal(verifyFactEvidence(settled.fact, { documents: { d: { text } } }).ok, true, "what is stored passes the strict check");
+});
+
 test("the past-event guard in a washout: a bound the washout already clears stands for the date, a bound inside it leaves the exposure unplaced", () => {
   const exposure = (/** @type {string} */ bound) => ({ id: "x", variable: "docetaxel", polarity: "affirmed", extractedBy: "snapshot", occurredAt: bound, source: { dateBound: "no_later_than" }, visibleAt: "2100-01-01T00:00:00Z" });
   const washout = { op: "elapsed_since", variable: "docetaxel", days: 28, comparator: "gte" };

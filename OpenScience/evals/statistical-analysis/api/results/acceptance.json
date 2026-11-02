@@ -1,0 +1,1767 @@
+{
+  "schemaVersion": 1,
+  "lastUpdated": "2026-11-02",
+  "status": "partial_development_evidence_with_open_acceptance_items",
+  "evidenceThroughUtc": "2026-11-02T07:55:44.198Z",
+  "scope": {
+    "data": "public_and_synthetic_only",
+    "fixturesManifest": "../datasets.json",
+    "fixturesManifestSha256": "e9656922429900501c2e3c7c3dd68085b0709b1ff15266599b4eaf55b52b7db4",
+    "attribution": "../THIRD_PARTY_NOTICES.md",
+    "sourceRecordRoot": "Operator-local evidence cache: evimed-data-analysis-api-20261102/results",
+    "includedLanes": [
+      "initial",
+      "api",
+      "final",
+      "closure",
+      "compact",
+      "verified"
+    ],
+    "observedAttempts": 19,
+    "completedExecutions": 16,
+    "failedAttemptsRetained": 3,
+    "distinctScenarios": 10,
+    "scientificAggregateScore": null,
+    "fullBixBenchScore": false,
+    "privateStudyEvidenceIncluded": false,
+    "successfulAnalysisAttempts": 14,
+    "cancelledPartialCaptureAttempts": 1,
+    "successfulDeliverySmokeAttempts": 1,
+    "distinctAnalyticalScenarios": 9,
+    "distinctDeliveryScenarios": 1
+  },
+  "provenance": {
+    "runtimeMetadata": "Selected fields and SHA-256 of each allowlisted local run.json. Raw records are not copied into Git.",
+    "scientificFindings": "Original independent-review findings supplied in the coordinating evaluation handoff, plus explicitly identified independent checks of appended closure runs; not inferred from succeeded status or primary-number tests.",
+    "notPublished": [
+      "raw transcripts",
+      "generated full reports",
+      "serialized models",
+      "private datasets",
+      "private study questions or outcomes"
+    ]
+  },
+  "acceptanceDimensions": {
+    "executionComplete": "Driver completed the requested evaluation flow and capture. Includes intentional cancellation and a precomputed delivery smoke; successful analysis attempts are counted separately. Not a statistical verdict.",
+    "primaryNumerics": "Required requested quantities checked independently; supplemental methods and prose are separate.",
+    "figureReadability": "File opens; does not establish complete curves, censoring, risk tables or correct labels.",
+    "figureSemantics": "Plotted data, full timelines, uncertainty labels and visual meaning require separate inspection.",
+    "stateReuse": "Requires fitted-state, transformation, metadata and execution-history review.",
+    "deployment": "No CI, merge, verified release image or production deployment is established by this ledger."
+  },
+  "attempts": [
+    {
+      "attempt": "initial/diagnostic-interpretation-1793590252043",
+      "case": "diagnostic-interpretation",
+      "sourceRecord": "initial/diagnostic-interpretation-1793590252043/run.json",
+      "sourceRecordSha256": "232c159c3c1044912d29f41fbe9ba8fa979e47056ede37cad8c7f941ded1a074",
+      "declaredEnvironment": "local-host-kernel-real-control-plane",
+      "executionComplete": true,
+      "turns": [
+        {
+          "index": 0,
+          "runId": "run_9adec71457a3823800348529d7b61f04",
+          "status": "succeeded",
+          "durationMs": 565248,
+          "observedToolCalls": 83,
+          "timedOut": false,
+          "captureComplete": true,
+          "agentEvidenceComplete": true
+        }
+      ],
+      "cleanup": {
+        "deleted": true,
+        "reason": null
+      },
+      "review": {
+        "numerical": "primary_welch_correct",
+        "interpretation": "partial_with_defects",
+        "findings": [
+          "Variance-test interpretation improved.",
+          "Unrequested supplementary methods and insufficient permutation caveat remained."
+        ],
+        "fullScientificAcceptance": "not_established"
+      },
+      "topologyCorrection": {
+        "actualEnvironment": "local_linux_control_plane_docker_runtime",
+        "basis": "Coordinating operator execution receipt: docker exec evimed-analysis-api-cp node evals/statistical-analysis/live/run.mjs; ordinary index.mjs control plane and DockerRuntimeProvider, Linux data volume and internal network; spawned Docker runtime observed.",
+        "declaredLabelIssue": "The live driver hardcodes a legacy host-kernel environment label. The raw source record remains unchanged.",
+        "browserAcceptance": "not_established"
+      },
+      "startedAt": "2026-11-02T03:30:52.234Z",
+      "finishedAt": "2026-11-02T03:40:22.872Z"
+    },
+    {
+      "attempt": "api/factorial-tooth-1793592367465",
+      "case": "factorial-tooth",
+      "sourceRecord": "api/factorial-tooth-1793592367465/run.json",
+      "sourceRecordSha256": "8e5b86fcb21049b1cf62394b64cd23b6ffe4122e84bd0cbf7347846b6993a746",
+      "declaredEnvironment": "local-linux-control-plane-docker-runtime",
+      "executionComplete": true,
+      "turns": [
+        {
+          "index": 0,
+          "turnId": "turn_50b188914564c2e4f0f429df77bbfd493f91020d",
+          "runId": "run_dbcf3ed2514ff987f607f9a4c8617f79",
+          "status": "succeeded",
+          "durationMs": 340249,
+          "downloadedArtifacts": 12,
+          "priorArtifactsRechecked": 0,
+          "figures": 1,
+          "structuredResults": true,
+          "notices": []
+        }
+      ],
+      "cleanup": {
+        "deleted": true,
+        "reason": null
+      },
+      "review": {
+        "numerical": "passed_required_primary",
+        "primaryChecksPassed": 3,
+        "interpretation": "failed_supplemental_claims",
+        "findings": [
+          "Primary sample size and interaction F/p checks passed.",
+          "Supplemental permutation-null reasoning and the Type II/Type III equivalence claim were wrong."
+        ],
+        "fullScientificAcceptance": "not_established"
+      },
+      "startedAt": "2026-11-02T04:06:07.469Z",
+      "finishedAt": "2026-11-02T04:11:48.740Z"
+    },
+    {
+      "attempt": "api/heart-survival-1793591471802",
+      "case": "heart-survival",
+      "sourceRecord": "api/heart-survival-1793591471802/run.json",
+      "sourceRecordSha256": "7a700ab5fb9323c8f0e04e0a83f4a5db7a6fbafb7391a22d5cc22d823c3cf610",
+      "declaredEnvironment": "local-linux-control-plane-docker-runtime",
+      "executionComplete": true,
+      "turns": [
+        {
+          "index": 0,
+          "turnId": "turn_bf11aafad144d866b72bc983f97a7af3ffd8616f",
+          "runId": "run_7660b8050e9159c85966d25cbd469ab8",
+          "status": "succeeded",
+          "durationMs": 214813,
+          "downloadedArtifacts": 11,
+          "priorArtifactsRechecked": 0,
+          "figures": 2,
+          "structuredResults": true,
+          "notices": []
+        }
+      ],
+      "cleanup": {
+        "deleted": true,
+        "reason": null
+      },
+      "review": {
+        "numerical": "passed_required_primary",
+        "primaryChecksPassed": 7,
+        "figureSemantics": "failed",
+        "findings": [
+          "The plot represented 30 of 203 censors.",
+          "The curve stopped at day 241 instead of day 285."
+        ],
+        "fullScientificAcceptance": "not_established"
+      },
+      "startedAt": "2026-11-02T03:51:11.802Z",
+      "finishedAt": "2026-11-02T03:54:48.468Z"
+    },
+    {
+      "attempt": "api/lung-native-r-1793592367465",
+      "case": "lung-native-r",
+      "sourceRecord": "api/lung-native-r-1793592367465/run.json",
+      "sourceRecordSha256": "39d453baecc2e2c5e1aacbb6eddb9fd5792fbf5cbf2aa29f609511fcb30da060",
+      "declaredEnvironment": "local-linux-control-plane-docker-runtime",
+      "executionComplete": true,
+      "turns": [
+        {
+          "index": 0,
+          "turnId": "turn_d8b230224c074ac396c29729327e612327029e89",
+          "runId": "run_f80022cae653e61983d03264b1bc5354",
+          "status": "succeeded",
+          "durationMs": 325748,
+          "downloadedArtifacts": 7,
+          "priorArtifactsRechecked": 0,
+          "figures": 1,
+          "structuredResults": true,
+          "notices": [
+            {
+              "code": "output_manifest_unavailable"
+            }
+          ]
+        }
+      ],
+      "cleanup": {
+        "deleted": true,
+        "reason": null
+      },
+      "review": {
+        "numerical": "passed_required_primary",
+        "primaryChecksPassed": 8,
+        "curveData": "passed_complete_timeline",
+        "interpretation": "no_blanket_verdict",
+        "findings": [
+          "Native R execution was observed.",
+          "The 187-row timeline (186 nonzero times plus origin) retained 165 deaths, 63 censors and maximum day 1022.",
+          "Exclude additional reported_timepoint rows when comparing the step timeline."
+        ],
+        "fullScientificAcceptance": "not_established"
+      },
+      "startedAt": "2026-11-02T04:06:07.474Z",
+      "finishedAt": "2026-11-02T04:11:33.923Z"
+    },
+    {
+      "attempt": "api/paired-sleep-1793591183044",
+      "case": "paired-sleep",
+      "sourceRecord": "api/paired-sleep-1793591183044/run.json",
+      "sourceRecordSha256": "c42fa5a6ddb5f588d21c3c7578b1819ebee9b724f9b8e329fa7e662b695043ec",
+      "declaredEnvironment": "local-linux-control-plane-docker-runtime",
+      "executionComplete": false,
+      "turns": [
+        {
+          "index": 0,
+          "turnId": "turn_f367664d32bae1d4e9c3b4e2c294f92996c60d38",
+          "runId": null,
+          "status": "failed",
+          "durationMs": 2951,
+          "downloadedArtifacts": 0,
+          "priorArtifactsRechecked": 0,
+          "figures": 0,
+          "structuredResults": false,
+          "notices": []
+        }
+      ],
+      "cleanup": {
+        "deleted": true,
+        "reason": null
+      },
+      "review": {
+        "numerical": "not_evaluated_no_run",
+        "figureSemantics": "not_evaluated_no_run",
+        "interpretation": "not_evaluated_no_run",
+        "findings": [
+          "invalid_research_session prevented run creation. Actual session-store input was corrected before a later attempt; this failure is retained."
+        ],
+        "fullScientificAcceptance": "not_established"
+      },
+      "startedAt": "2026-11-02T03:46:23.045Z",
+      "finishedAt": "2026-11-02T03:46:26.408Z",
+      "failure": {
+        "code": "acceptance_failed",
+        "message": "Run did not complete with downloadable output; dependent turns stopped."
+      }
+    },
+    {
+      "attempt": "api/paired-sleep-1793591375341",
+      "case": "paired-sleep",
+      "sourceRecord": "api/paired-sleep-1793591375341/run.json",
+      "sourceRecordSha256": "aed1921556e12cd1971b6c7753b221299c495b6bdeac6faa2a343182f4901429",
+      "declaredEnvironment": "local-linux-control-plane-docker-runtime",
+      "executionComplete": true,
+      "turns": [
+        {
+          "index": 0,
+          "turnId": "turn_230cb0e401a6142ea16ab1f075ee44be828b133a",
+          "runId": "run_c7b78b206df22a41ae4b096f8eb91374",
+          "status": "succeeded",
+          "durationMs": 172760,
+          "downloadedArtifacts": 8,
+          "priorArtifactsRechecked": 0,
+          "figures": 1,
+          "structuredResults": true,
+          "notices": [
+            {
+              "code": "output_manifest_unavailable"
+            }
+          ]
+        },
+        {
+          "index": 1,
+          "turnId": "turn_484bb9c82e5bd874e64609c31da030c94a7e516a",
+          "runId": "run_4ca35438f15f52ad2abd87b26054b7c7",
+          "status": "succeeded",
+          "durationMs": 203297,
+          "downloadedArtifacts": 9,
+          "priorArtifactsRechecked": 8,
+          "figures": 1,
+          "structuredResults": true,
+          "notices": [
+            {
+              "code": "manifest_reference_unavailable"
+            },
+            {
+              "code": "manifest_reference_unavailable"
+            },
+            {
+              "code": "manifest_reference_unavailable"
+            }
+          ]
+        }
+      ],
+      "cleanup": {
+        "deleted": true,
+        "reason": null
+      },
+      "review": {
+        "numerical": "passed_required_primary",
+        "primaryChecksPassed": 10,
+        "figureReadability": "passed_png",
+        "interpretation": "failed_supplemental_claim",
+        "findings": [
+          "Two turns completed.",
+          "Wilcoxon was incorrectly interpreted as a median test."
+        ],
+        "fullScientificAcceptance": "not_established"
+      },
+      "startedAt": "2026-11-02T03:49:35.342Z",
+      "finishedAt": "2026-11-02T03:55:52.754Z"
+    },
+    {
+      "attempt": "api/pbc-population-1793592840625",
+      "case": "pbc-population",
+      "sourceRecord": "api/pbc-population-1793592840625/run.json",
+      "sourceRecordSha256": "88b57b28a2090ec9938dcdfd314fdb8009588e4b4140cf2c652aad2f13d14a14",
+      "declaredEnvironment": "local-linux-control-plane-docker-runtime",
+      "executionComplete": true,
+      "turns": [
+        {
+          "index": 0,
+          "turnId": "turn_e55f7023e8113393f1a80d32f385b33e2beff72a",
+          "runId": "run_213e998f3c358b830179c037dc15beeb",
+          "status": "succeeded",
+          "durationMs": 287663,
+          "downloadedArtifacts": 8,
+          "priorArtifactsRechecked": 0,
+          "figures": 1,
+          "structuredResults": true,
+          "notices": [
+            {
+              "code": "manifest_reference_unavailable"
+            },
+            {
+              "code": "manifest_reference_unavailable"
+            },
+            {
+              "code": "manifest_reference_unavailable"
+            },
+            {
+              "code": "manifest_reference_unavailable"
+            },
+            {
+              "code": "manifest_reference_unavailable"
+            },
+            {
+              "code": "manifest_reference_unavailable"
+            }
+          ]
+        }
+      ],
+      "cleanup": {
+        "deleted": true,
+        "reason": null
+      },
+      "review": {
+        "numerical": "primary_population_and_outcomes_correct",
+        "delivery": "incomplete_capture",
+        "findings": [
+          "312 randomized and 106 additional observational participants were correctly distinguished, with correct outcome coding.",
+          "Nested tables and extra figures were not downloaded by the old artifact capture."
+        ],
+        "fullScientificAcceptance": "not_established"
+      },
+      "startedAt": "2026-11-02T04:14:00.626Z",
+      "finishedAt": "2026-11-02T04:18:48.893Z"
+    },
+    {
+      "attempt": "api/wdbc-prediction-1793592840625",
+      "case": "wdbc-prediction",
+      "sourceRecord": "api/wdbc-prediction-1793592840625/run.json",
+      "sourceRecordSha256": "79fdbe7e06e989f48cd9d83be4bc42a657c94dcf53f89f76b2dabf032983a819",
+      "declaredEnvironment": "local-linux-control-plane-docker-runtime",
+      "executionComplete": true,
+      "turns": [
+        {
+          "index": 0,
+          "turnId": "turn_5cb36e5d099a6f8deac2da9aa4cfcbf1253d0f4f",
+          "runId": "run_79a24af5315c3e829f2d0fb3a126749a",
+          "status": "succeeded",
+          "durationMs": 247783,
+          "downloadedArtifacts": 10,
+          "priorArtifactsRechecked": 0,
+          "figures": 0,
+          "structuredResults": true,
+          "notices": [
+            {
+              "code": "manifest_reference_unavailable"
+            },
+            {
+              "code": "manifest_reference_unavailable"
+            },
+            {
+              "code": "manifest_reference_unavailable"
+            },
+            {
+              "code": "manifest_reference_unavailable"
+            },
+            {
+              "code": "manifest_reference_unavailable"
+            },
+            {
+              "code": "manifest_reference_unavailable"
+            }
+          ]
+        },
+        {
+          "index": 1,
+          "turnId": "turn_3a7cff7e8eb6c259f90d6e933e87e521c616d20a",
+          "runId": "run_c8e94768c668973c40086cf3af665b82",
+          "status": "succeeded",
+          "durationMs": 194049,
+          "downloadedArtifacts": 7,
+          "priorArtifactsRechecked": 10,
+          "figures": 1,
+          "structuredResults": true,
+          "notices": [
+            {
+              "code": "manifest_reference_unavailable"
+            },
+            {
+              "code": "manifest_reference_unavailable"
+            },
+            {
+              "code": "manifest_reference_unavailable"
+            },
+            {
+              "code": "manifest_reference_unavailable"
+            }
+          ]
+        }
+      ],
+      "cleanup": {
+        "deleted": true,
+        "reason": null
+      },
+      "review": {
+        "numerical": "passed_selected_saved_pipeline_replay",
+        "delivery": "missing_requested_first_turn_figures",
+        "stateReuse": "selected_fitted_state_independently_replayed",
+        "replay": {
+          "isolation": "disposable_no_network_no_credential_container",
+          "nTrain": 398,
+          "nTest": 171,
+          "malignantTest": 64,
+          "auc": 0.9861273364485981,
+          "brier": 0.025121328509196017,
+          "threshold": 0.3,
+          "confusion": {
+            "tn": 106,
+            "fp": 1,
+            "fn": 4,
+            "tp": 60
+          },
+          "trainingOnlyScalerMatches": true,
+          "savedProbabilitiesReproduced": true
+        },
+        "findings": [
+          "First-turn requested nested ROC and calibration figures were missing from the API artifact manifest.",
+          "Saved-pipeline replay does not validate all prose or external clinical performance."
+        ],
+        "fullScientificAcceptance": "not_established"
+      },
+      "startedAt": "2026-11-02T04:14:00.626Z",
+      "finishedAt": "2026-11-02T04:21:22.974Z"
+    },
+    {
+      "attempt": "final/heart-survival-1793593688295",
+      "case": "heart-survival",
+      "sourceRecord": "final/heart-survival-1793593688295/run.json",
+      "sourceRecordSha256": "637f08763993e184add06c4a94297669d3a044c79dc4775fe603a1a21bd6b168",
+      "declaredEnvironment": "local-linux-control-plane-docker-runtime",
+      "executionComplete": true,
+      "turns": [
+        {
+          "index": 0,
+          "turnId": "turn_6f2f88d0ef2b8aa32ff7e860887716020555a45c",
+          "runId": "run_02404b53d0c736ef57ee8733a0324903",
+          "status": "succeeded",
+          "durationMs": 360689,
+          "downloadedArtifacts": 13,
+          "priorArtifactsRechecked": 0,
+          "figures": 2,
+          "structuredResults": true,
+          "notices": []
+        }
+      ],
+      "cleanup": {
+        "deleted": true,
+        "reason": null
+      },
+      "review": {
+        "numerical": "primary_and_full_curve_correct",
+        "interpretation": "failed",
+        "findings": [
+          "All 149 curve times were correct: 96 deaths, 203 censors, maximum day 285.",
+          "Scenario-width versus confidence-interval interpretation and all-cause/competing-risk prose were wrong."
+        ],
+        "fullScientificAcceptance": "not_established"
+      },
+      "startedAt": "2026-11-02T04:28:08.296Z",
+      "finishedAt": "2026-11-02T04:34:11.669Z",
+      "readinessStatus": 200,
+      "model": "deepseek-flash",
+      "sourceDigests": {
+        "capabilities/statistical-analysis/SKILL.md": "326fcfdcd0062a4be3a31dd901cd1a8d6e5272b0456d0e8a2b3de69074a75376",
+        "capabilities/statistical-analysis/scripts/analysis_checks.py": "25aba6056cafb2ca6a87cff14e3bc1aa7a8be384025e42618235c2a4b13259fa",
+        "apps/server/src/dataAnalysisService.mjs": "f062f542762849c02f7c2394f37be8c12ff5783c7a553c434d7326fc6f208bb6",
+        "apps/server/src/dataAnalysisArtifacts.mjs": "a23f5e562f66ca00dfba51029c89a296728ade1b8c8200323d0bcbec003a54ff"
+      },
+      "observedRuntime": {
+        "ok": true,
+        "mode": "kernel",
+        "sandboxMode": "docker",
+        "kernel": "dsh",
+        "kernelVersion": "0.2.1-rc.5",
+        "imageLocal": true,
+        "imageVerified": false,
+        "networkEgress": "disabled"
+      }
+    },
+    {
+      "attempt": "final/paired-sleep-1793593688295",
+      "case": "paired-sleep",
+      "sourceRecord": "final/paired-sleep-1793593688295/run.json",
+      "sourceRecordSha256": "f67e8ab0fde7d64496b6c2df5d6919de45b9e9ca01077fa52b22de31272be406",
+      "declaredEnvironment": "local-linux-control-plane-docker-runtime",
+      "executionComplete": true,
+      "turns": [
+        {
+          "index": 0,
+          "turnId": "turn_c0a32062138e11b4c9c67a66ac22392373f2e922",
+          "runId": "run_a4a587ee0b9fb7c58db917d2d8a812f3",
+          "status": "succeeded",
+          "durationMs": 160799,
+          "downloadedArtifacts": 10,
+          "priorArtifactsRechecked": 0,
+          "figures": 2,
+          "structuredResults": true,
+          "notices": []
+        },
+        {
+          "index": 1,
+          "turnId": "turn_203c166bfe136adb4f20be02d6916c75b204f864",
+          "runId": "run_2ab11636b5bad4ea4a81eeb9c83497a3",
+          "status": "succeeded",
+          "durationMs": 132957,
+          "downloadedArtifacts": 11,
+          "priorArtifactsRechecked": 10,
+          "figures": 2,
+          "structuredResults": true,
+          "notices": []
+        }
+      ],
+      "cleanup": {
+        "deleted": true,
+        "reason": null
+      },
+      "review": {
+        "numerical": "primary_correct",
+        "stateReuse": "failed_diagnostic_metadata_continuity",
+        "findings": [
+          "The second turn overwrote a diagnostic method label with Hodges-Lehmann."
+        ],
+        "fullScientificAcceptance": "not_established"
+      },
+      "startedAt": "2026-11-02T04:28:08.296Z",
+      "finishedAt": "2026-11-02T04:33:03.278Z",
+      "readinessStatus": 200,
+      "model": "deepseek-flash",
+      "sourceDigests": {
+        "capabilities/statistical-analysis/SKILL.md": "326fcfdcd0062a4be3a31dd901cd1a8d6e5272b0456d0e8a2b3de69074a75376",
+        "capabilities/statistical-analysis/scripts/analysis_checks.py": "25aba6056cafb2ca6a87cff14e3bc1aa7a8be384025e42618235c2a4b13259fa",
+        "apps/server/src/dataAnalysisService.mjs": "f062f542762849c02f7c2394f37be8c12ff5783c7a553c434d7326fc6f208bb6",
+        "apps/server/src/dataAnalysisArtifacts.mjs": "a23f5e562f66ca00dfba51029c89a296728ade1b8c8200323d0bcbec003a54ff"
+      },
+      "observedRuntime": {
+        "ok": true,
+        "mode": "kernel",
+        "sandboxMode": "docker",
+        "kernel": "dsh",
+        "kernelVersion": "0.2.1-rc.5",
+        "imageLocal": true,
+        "imageVerified": false,
+        "networkEgress": "disabled"
+      }
+    },
+    {
+      "attempt": "final/wdbc-prediction-1793594972528",
+      "case": "wdbc-prediction",
+      "sourceRecord": "final/wdbc-prediction-1793594972528/run.json",
+      "sourceRecordSha256": "447e5ad14220a7bfe011c27de15791c71ed1949fd3c099a09698bc32679197ae",
+      "declaredEnvironment": "local-linux-control-plane-docker-runtime",
+      "executionComplete": false,
+      "turns": [],
+      "cleanup": {
+        "deleted": true,
+        "reason": null
+      },
+      "review": {
+        "numerical": "not_evaluated_incomplete_capture",
+        "delivery": "transport_failure",
+        "findings": [
+          "fetch failed; no settled turn captured. Retained without a scientific verdict."
+        ],
+        "fullScientificAcceptance": "not_established"
+      },
+      "startedAt": "2026-11-02T04:49:32.530Z",
+      "finishedAt": "2026-11-02T04:53:55.038Z",
+      "failure": {
+        "code": "acceptance_failed",
+        "message": "fetch failed"
+      },
+      "readinessStatus": 200,
+      "model": "deepseek-flash",
+      "sourceDigests": {
+        "capabilities/statistical-analysis/SKILL.md": "fd93006bf8c3895280c39ef3f5c92f148f1cc6ecbc5359562a6c88713cc326aa",
+        "capabilities/statistical-analysis/scripts/analysis_checks.py": "40adc68ef0f749f8c69859999684be324831bb95917bfc3ee33f21ecbac568c5",
+        "apps/server/src/dataAnalysisService.mjs": "f062f542762849c02f7c2394f37be8c12ff5783c7a553c434d7326fc6f208bb6",
+        "apps/server/src/dataAnalysisArtifacts.mjs": "a23f5e562f66ca00dfba51029c89a296728ade1b8c8200323d0bcbec003a54ff"
+      },
+      "observedRuntime": {
+        "ok": true,
+        "mode": "kernel",
+        "sandboxMode": "docker",
+        "kernel": "dsh",
+        "kernelVersion": "0.2.1-rc.5",
+        "imageLocal": true,
+        "imageVerified": false,
+        "networkEgress": "disabled"
+      }
+    },
+    {
+      "attempt": "closure/paired-sleep-1793594972528",
+      "case": "paired-sleep",
+      "sourceRecord": "closure/paired-sleep-1793594972528/run.json",
+      "sourceRecordSha256": "91c806a33f35301f797a8bf9285f42decb2b57702b75f06518884421a6bac7cd",
+      "declaredEnvironment": "local-linux-control-plane-docker-runtime",
+      "executionComplete": false,
+      "turns": [],
+      "cleanup": {
+        "deleted": true,
+        "reason": null
+      },
+      "review": {
+        "numerical": "not_evaluated_incomplete_capture",
+        "delivery": "transport_failure",
+        "findings": [
+          "fetch failed; no settled turn captured. Retained without a scientific verdict."
+        ],
+        "fullScientificAcceptance": "not_established"
+      },
+      "startedAt": "2026-11-02T04:49:32.533Z",
+      "finishedAt": "2026-11-02T04:53:55.453Z",
+      "failure": {
+        "code": "acceptance_failed",
+        "message": "fetch failed"
+      },
+      "readinessStatus": 200,
+      "model": "deepseek-flash",
+      "sourceDigests": {
+        "capabilities/statistical-analysis/SKILL.md": "fd93006bf8c3895280c39ef3f5c92f148f1cc6ecbc5359562a6c88713cc326aa",
+        "capabilities/statistical-analysis/scripts/analysis_checks.py": "40adc68ef0f749f8c69859999684be324831bb95917bfc3ee33f21ecbac568c5",
+        "apps/server/src/dataAnalysisService.mjs": "f062f542762849c02f7c2394f37be8c12ff5783c7a553c434d7326fc6f208bb6",
+        "apps/server/src/dataAnalysisArtifacts.mjs": "a23f5e562f66ca00dfba51029c89a296728ade1b8c8200323d0bcbec003a54ff"
+      },
+      "observedRuntime": {
+        "ok": true,
+        "mode": "kernel",
+        "sandboxMode": "docker",
+        "kernel": "dsh",
+        "kernelVersion": "0.2.1-rc.5",
+        "imageLocal": true,
+        "imageVerified": false,
+        "networkEgress": "disabled"
+      }
+    },
+    {
+      "attempt": "compact/heart-survival-1793596288416",
+      "case": "heart-survival",
+      "sourceRecord": "compact/heart-survival-1793596288416/run.json",
+      "sourceRecordSha256": "75c226687b60cc3586ad596723fc14b2de3006c163e63e5fbf5c34eaf1c83655",
+      "declaredEnvironment": "local-linux-control-plane-docker-runtime",
+      "executionComplete": true,
+      "turns": [
+        {
+          "index": 0,
+          "turnId": "turn_3dbb23e3fd0c0d44b96f981c1ca8903cb27f0cf5",
+          "runId": "run_307caae1fffac73909d136a0cd41fffb",
+          "status": "succeeded",
+          "durationMs": 569943,
+          "downloadedArtifacts": 18,
+          "priorArtifactsRechecked": 0,
+          "figures": 2,
+          "structuredResults": true,
+          "notices": []
+        }
+      ],
+      "cleanup": {
+        "deleted": true,
+        "reason": null
+      },
+      "review": {
+        "numerical": "primary_correct",
+        "curveData": "passed_all_148_nonzero_time_survival_and_ci_rows",
+        "maximumAbsoluteDifferenceFromRLessThan": 5e-11,
+        "interpretation": "failed",
+        "findings": [
+          "All-cause/competing-risk wording remained incorrect.",
+          "A cumulative Greenwood term was mislabeled as variance."
+        ],
+        "fullScientificAcceptance": "not_established"
+      },
+      "startedAt": "2026-11-02T05:11:28.417Z",
+      "finishedAt": "2026-11-02T05:21:00.832Z",
+      "readinessStatus": 200,
+      "model": "deepseek-flash",
+      "sourceDigests": {
+        "capabilities/statistical-analysis/SKILL.md": "28329c35f3645c7892fc476d68bac17f28519f101b978ac2464d1f828f6ccbb9",
+        "capabilities/statistical-analysis/scripts/analysis_checks.py": "40adc68ef0f749f8c69859999684be324831bb95917bfc3ee33f21ecbac568c5",
+        "apps/server/src/dataAnalysisService.mjs": "f062f542762849c02f7c2394f37be8c12ff5783c7a553c434d7326fc6f208bb6",
+        "apps/server/src/dataAnalysisArtifacts.mjs": "a23f5e562f66ca00dfba51029c89a296728ade1b8c8200323d0bcbec003a54ff"
+      },
+      "observedRuntime": {
+        "ok": true,
+        "mode": "kernel",
+        "sandboxMode": "docker",
+        "kernel": "dsh",
+        "kernelVersion": "0.2.1-rc.5",
+        "imageLocal": true,
+        "imageVerified": false,
+        "networkEgress": "disabled"
+      },
+      "transportRetries": [
+        {
+          "method": "GET",
+          "attempt": 1,
+          "code": "ECONNRESET"
+        },
+        {
+          "method": "GET",
+          "attempt": 1,
+          "code": "ECONNRESET"
+        },
+        {
+          "method": "GET",
+          "attempt": 1,
+          "code": "ECONNRESET"
+        },
+        {
+          "method": "GET",
+          "attempt": 1,
+          "code": "ECONNRESET"
+        }
+      ]
+    },
+    {
+      "attempt": "compact/paired-sleep-1793596288416",
+      "case": "paired-sleep",
+      "sourceRecord": "compact/paired-sleep-1793596288416/run.json",
+      "sourceRecordSha256": "e7d3e04e8fc804b945b48524e1923d427a95ecb808d5c29598c146564f7e5531",
+      "declaredEnvironment": "local-linux-control-plane-docker-runtime",
+      "executionComplete": true,
+      "turns": [
+        {
+          "index": 0,
+          "turnId": "turn_59816843ccb2fff34b249f2804b0ea3e1f51683a",
+          "runId": "run_53919cb198a9e55eccca92d03f22b23a",
+          "status": "succeeded",
+          "durationMs": 451284,
+          "downloadedArtifacts": 16,
+          "priorArtifactsRechecked": 0,
+          "figures": 2,
+          "structuredResults": true,
+          "notices": []
+        },
+        {
+          "index": 1,
+          "turnId": "turn_4b448970613d79f9555a2682fd0aa2b3954b6b38",
+          "runId": "run_409e07bdb027deb196519c2176577c89",
+          "status": "succeeded",
+          "durationMs": 224375,
+          "downloadedArtifacts": 16,
+          "priorArtifactsRechecked": 16,
+          "figures": 2,
+          "structuredResults": true,
+          "notices": []
+        }
+      ],
+      "cleanup": {
+        "deleted": true,
+        "reason": null
+      },
+      "review": {
+        "numerical": "passed_primary_and_60_fold_conversion",
+        "stateReuse": "passed_reviewed_metadata_and_diagnostics",
+        "figureData": "passed_four_plot_and_subject_tables",
+        "reviewVerdict": "bounded_approval",
+        "findings": [
+          "All analysis metadata and diagnostics were preserved across two turns.",
+          "The API rechecked all 16 earlier artifacts after continuation.",
+          "Approval applies to this paired analysis and display conversion only."
+        ],
+        "fullScientificAcceptance": "not_claimed_beyond_reviewed_scope"
+      },
+      "startedAt": "2026-11-02T05:11:28.417Z",
+      "finishedAt": "2026-11-02T05:22:45.290Z",
+      "readinessStatus": 200,
+      "model": "deepseek-flash",
+      "sourceDigests": {
+        "capabilities/statistical-analysis/SKILL.md": "28329c35f3645c7892fc476d68bac17f28519f101b978ac2464d1f828f6ccbb9",
+        "capabilities/statistical-analysis/scripts/analysis_checks.py": "40adc68ef0f749f8c69859999684be324831bb95917bfc3ee33f21ecbac568c5",
+        "apps/server/src/dataAnalysisService.mjs": "f062f542762849c02f7c2394f37be8c12ff5783c7a553c434d7326fc6f208bb6",
+        "apps/server/src/dataAnalysisArtifacts.mjs": "a23f5e562f66ca00dfba51029c89a296728ade1b8c8200323d0bcbec003a54ff"
+      },
+      "observedRuntime": {
+        "ok": true,
+        "mode": "kernel",
+        "sandboxMode": "docker",
+        "kernel": "dsh",
+        "kernelVersion": "0.2.1-rc.5",
+        "imageLocal": true,
+        "imageVerified": false,
+        "networkEgress": "disabled"
+      },
+      "transportRetries": [
+        {
+          "method": "GET",
+          "attempt": 1,
+          "code": "ECONNRESET"
+        },
+        {
+          "method": "GET",
+          "attempt": 1,
+          "code": "ECONNRESET"
+        },
+        {
+          "method": "GET",
+          "attempt": 1,
+          "code": "ECONNRESET"
+        },
+        {
+          "method": "GET",
+          "attempt": 1,
+          "code": "ECONNRESET"
+        },
+        {
+          "method": "GET",
+          "attempt": 1,
+          "code": "ECONNRESET"
+        }
+      ]
+    },
+    {
+      "attempt": "closure/equivalent-formats-1793602972343",
+      "case": "equivalent-formats",
+      "sourceRecord": "closure/equivalent-formats-1793602972343/run.json",
+      "sourceRecordSha256": "a8d223ffa04e4fc2f0da3765c07db813309b735040b4052790c7518f1a237155",
+      "declaredEnvironment": "local-linux-control-plane-docker-runtime",
+      "executionComplete": true,
+      "turns": [
+        {
+          "index": 0,
+          "turnId": "turn_5f563d53be907dd7ca58c10ff876180e95db96c6",
+          "runId": "run_1b79a801fbf7934b57c6b3a878ebb604",
+          "status": "succeeded",
+          "durationMs": 401858,
+          "downloadedArtifacts": 13,
+          "priorArtifactsRechecked": 0,
+          "figures": 2,
+          "structuredResults": true,
+          "notices": []
+        }
+      ],
+      "cleanup": {
+        "deleted": true,
+        "reason": null
+      },
+      "startedAt": "2026-11-02T07:02:52.345Z",
+      "finishedAt": "2026-11-02T07:09:35.383Z",
+      "readinessStatus": 200,
+      "model": "deepseek-flash",
+      "sourceDigests": {
+        "capabilities/statistical-analysis/SKILL.md": "a8b81500360d8cd4000b0db3cc55f2f8924e2e5fe300355c1f7cc55f02405e78",
+        "capabilities/statistical-analysis/scripts/analysis_checks.py": "40adc68ef0f749f8c69859999684be324831bb95917bfc3ee33f21ecbac568c5",
+        "apps/server/src/dataAnalysisService.mjs": "f062f542762849c02f7c2394f37be8c12ff5783c7a553c434d7326fc6f208bb6",
+        "apps/server/src/dataAnalysisArtifacts.mjs": "a23f5e562f66ca00dfba51029c89a296728ade1b8c8200323d0bcbec003a54ff"
+      },
+      "observedRuntime": {
+        "ok": true,
+        "mode": "kernel",
+        "sandboxMode": "docker",
+        "kernel": "dsh",
+        "kernelVersion": "0.2.1-rc.5",
+        "imageLocal": true,
+        "imageVerified": false,
+        "networkEgress": "disabled"
+      },
+      "independentCaptureCheck": {
+        "basis": "Independent reread of saved API result, download manifest and artifact bytes; original driver performed HTTP downloads before account cleanup.",
+        "capturedArtifactHashesAndSizesMatched": 13,
+        "allDownloadsAttachments": true,
+        "frozenAt": "2026-11-02T07:09:34.679Z",
+        "resultRecordSha256": "5e251e290e6c6434011607ec8671eed5fee5df774393a46c1aaf86fd3b8c5d90",
+        "downloadManifestSha256": "e069931ea6d9442acb0ecaf2663f9bf82adcd4ad2c7a5fc8ea044589a5244db4",
+        "artifacts": [
+          {
+            "filename": "analysis-output.json",
+            "role": "data",
+            "bytes": 1882,
+            "sha256": "06b96c1c8dd9aa5e4e159cc70df3fa495b3c2add9da389626c635655621eebfb"
+          },
+          {
+            "filename": "analysis-results.json",
+            "role": "data",
+            "bytes": 6986,
+            "sha256": "b8624ec6e4143ec0351cbbb07004695cc2802306eec6b2dfc384976d95d349a9"
+          },
+          {
+            "filename": "analysis-run.json",
+            "role": "data",
+            "bytes": 8429,
+            "sha256": "d88dd95c8e4cda6b79f4014c3dc29889d3334fee45dcd5d22c3da43697bcfe02"
+          },
+          {
+            "filename": "01_consistency_analysis.py",
+            "role": "code",
+            "bytes": 50600,
+            "sha256": "1aed6badba33e96702bcd6831212b51d4acd34cee44a4ad8a32d03a29b8625ed"
+          },
+          {
+            "filename": "figure1_consistency.png",
+            "role": "figure",
+            "bytes": 213306,
+            "sha256": "a160f2b3751f416572d88734260167d3da974b73f811efdb4fd5c6ccdf53cb69"
+          },
+          {
+            "filename": "run-receipt.json",
+            "role": "data",
+            "bytes": 2796,
+            "sha256": "e6d7402f6c8fad5ea1648b03debd10c498941c396251776628c7e5030a6f2b9e"
+          },
+          {
+            "filename": "statistical-report.md",
+            "role": "report",
+            "bytes": 10332,
+            "sha256": "207e5ae1dfd2b99b606d81886d24053a9a7cfdab5f7853cdc5765665561b4034"
+          },
+          {
+            "filename": "table1_file-comparison.csv",
+            "role": "table",
+            "bytes": 784,
+            "sha256": "72248895dbecb8d2d6ce69386635ab403e637884aaa37ee16d3d757512ae4b68"
+          },
+          {
+            "filename": "figure1_consistency.svg",
+            "role": "figure",
+            "bytes": 122687,
+            "sha256": "6417d898af2ec6fad1e029c1f487742ee28facbcb36b2556b0dcbfc7693ea800"
+          },
+          {
+            "filename": "figure1_data.csv",
+            "role": "table",
+            "bytes": 1003,
+            "sha256": "12e3ae5712173e17bc751936fcf3e1e32ead46700453634c512dba59fd9d801c"
+          },
+          {
+            "filename": "table2_pairwise-comparison.csv",
+            "role": "table",
+            "bytes": 469,
+            "sha256": "8bad349c73a12527fbe601b8c03e5e2b266bfa27b0cc64442bae79302b056c28"
+          },
+          {
+            "filename": "table3_deduplication.csv",
+            "role": "table",
+            "bytes": 566,
+            "sha256": "33d6296a233654d7b425fb9376430b2f37b77ba872a1c308a381ae16335099d4"
+          },
+          {
+            "filename": "table4_field-comparison.csv",
+            "role": "table",
+            "bytes": 867,
+            "sha256": "47ca0903bd896718c23fd2ff4820bbe0b277b2a75b94d9ac610d8dd7a7e7ebd1"
+          }
+        ]
+      },
+      "review": {
+        "reviewBasis": "Independent source-fixture parsing, numerical comparisons, delivered table/plot-data checks, image-file inspection and PNG visual review. Generated code was not executed.",
+        "numerical": "passed_requested_metrics_for_all_three_formats",
+        "inputEquivalence": "all_three_parsed_tables_equal_frozen_csv_exactly",
+        "figureData": "passed_all_12_plotted_rows",
+        "figureReadability": "passed_png_and_svg",
+        "figureSemantics": "passed_visual_png_review_of_labels_values_and_four_panels",
+        "reviewVerdict": "bounded_approval",
+        "independentReference": {
+          "recordsPerFile": 299,
+          "columnsPerFile": 13,
+          "deathEvent1PerFile": 96,
+          "serumCreatinineMean": 1.3938795986622072,
+          "serumCreatinineMissingPerFile": 0,
+          "distinctRecordUnion": 299,
+          "naiveStackRows": 897,
+          "duplicateExportRows": 598,
+          "cellsComparedPerPair": 3887,
+          "differingCellsPerPair": 0
+        },
+        "figureRepresentations": {
+          "distinctFigures": 1,
+          "files": [
+            "PNG",
+            "SVG"
+          ],
+          "pngDimensions": [
+            2726,
+            1954
+          ]
+        },
+        "findings": [
+          "All uploaded fixture hashes match the repository manifest.",
+          "The table and four-panel figure report the requested metrics consistently.",
+          "No patient identifier is present: equivalence is established for record vectors, not independently established patient identities.",
+          "The verdict does not certify all supplemental narrative or external clinical validity."
+        ],
+        "fullScientificAcceptance": "not_claimed_beyond_reviewed_scope"
+      }
+    },
+    {
+      "attempt": "closure/continuity-supplement-1793602972343",
+      "case": "continuity-supplement",
+      "sourceRecord": "closure/continuity-supplement-1793602972343/run.json",
+      "sourceRecordSha256": "aec52a674a80168a634912f3475a620d95881ff9c0062144c0afae1959c1cb49",
+      "declaredEnvironment": "local-linux-control-plane-docker-runtime",
+      "executionComplete": true,
+      "turns": [
+        {
+          "index": 0,
+          "turnId": "turn_27910eec8943c2f3f16cbcb6cb4614c20a8c2167",
+          "runId": "run_d41e352449d7e00faeb04131d948079c",
+          "status": "canceled",
+          "durationMs": 125154,
+          "downloadedArtifacts": 6,
+          "priorArtifactsRechecked": 0,
+          "figures": 2,
+          "structuredResults": true,
+          "notices": [
+            {
+              "code": "unverified_artifacts"
+            },
+            {
+              "code": "output_manifest_unavailable"
+            },
+            {
+              "code": "summary_unavailable"
+            }
+          ],
+          "cancellationRequested": true
+        }
+      ],
+      "cleanup": {
+        "deleted": true,
+        "reason": null
+      },
+      "startedAt": "2026-11-02T07:02:52.345Z",
+      "finishedAt": "2026-11-02T07:04:58.281Z",
+      "readinessStatus": 200,
+      "model": "deepseek-flash",
+      "sourceDigests": {
+        "capabilities/statistical-analysis/SKILL.md": "a8b81500360d8cd4000b0db3cc55f2f8924e2e5fe300355c1f7cc55f02405e78",
+        "capabilities/statistical-analysis/scripts/analysis_checks.py": "40adc68ef0f749f8c69859999684be324831bb95917bfc3ee33f21ecbac568c5",
+        "apps/server/src/dataAnalysisService.mjs": "f062f542762849c02f7c2394f37be8c12ff5783c7a553c434d7326fc6f208bb6",
+        "apps/server/src/dataAnalysisArtifacts.mjs": "a23f5e562f66ca00dfba51029c89a296728ade1b8c8200323d0bcbec003a54ff"
+      },
+      "cancellationComplete": true,
+      "cancellationObservedFiles": [
+        "deliverables/statistical-analysis/analysis-results.json",
+        "deliverables/statistical-analysis/group-summary.csv",
+        "deliverables/statistical-analysis/marker_mm_by_group.png",
+        "deliverables/statistical-analysis/plot-data.csv"
+      ],
+      "observedRuntime": {
+        "ok": true,
+        "mode": "kernel",
+        "sandboxMode": "docker",
+        "kernel": "dsh",
+        "kernelVersion": "0.2.1-rc.5",
+        "imageLocal": true,
+        "imageVerified": false,
+        "networkEgress": "disabled"
+      },
+      "independentCaptureCheck": {
+        "basis": "Independent reread of saved API result, download manifest and artifact bytes; original driver performed HTTP downloads before account cleanup.",
+        "capturedArtifactHashesAndSizesMatched": 6,
+        "allDownloadsAttachments": true,
+        "frozenAt": "2026-11-02T07:04:54.877Z",
+        "resultRecordSha256": "8c1073de8d4cb1ff206aad04f9b0d6b794e80621c22420ef3c568d6c0018b486",
+        "downloadManifestSha256": "ff70d816ab4e382edef4ad58b98c25a39ef59f3ddeede59d02817ad0a1fba70a",
+        "artifacts": [
+          {
+            "filename": "analysis-results.json",
+            "role": "data",
+            "bytes": 5439,
+            "sha256": "f67992d1ba13a6f38ac08b9b761eb9342c74f5e731de095d76a46f16fb253ee0"
+          },
+          {
+            "filename": "analysis.py",
+            "role": "code",
+            "bytes": 16719,
+            "sha256": "a496d5c86548e55d2768934d8bc5fdf7d2a4100b9c03ffec177533269f3c06bb"
+          },
+          {
+            "filename": "group-summary.csv",
+            "role": "table",
+            "bytes": 395,
+            "sha256": "2307ce697f1e39299eba48ca3d0b6fbfee07bdebc4305f2accaefef67f40a519"
+          },
+          {
+            "filename": "marker_mm_by_group.png",
+            "role": "figure",
+            "bytes": 142088,
+            "sha256": "64aee6429fb471c3545c1ed616df6f4728c7092502da32237699d7b476b81ef8"
+          },
+          {
+            "filename": "marker_mm_by_group.svg",
+            "role": "figure",
+            "bytes": 63619,
+            "sha256": "5a945df6d3b7bb6e58c265cfaf6628d1e2926705f8505c7f6bec3bac2b11c39e"
+          },
+          {
+            "filename": "plot-data.csv",
+            "role": "table",
+            "bytes": 3491,
+            "sha256": "5e3c3d810172c00b1354c030a437e9a9ae47fc9282114d7fa1fe573be10a1d66"
+          }
+        ]
+      },
+      "review": {
+        "reviewBasis": "Independent inspection of cancellation state, snapshot timestamp, artifact labels, manifests, hashes and file readability.",
+        "cancellation": "passed_settled_cancellation_with_partial_output",
+        "numerical": "not_evaluated_for_cancellation_acceptance",
+        "interpretation": "not_evaluated_for_cancellation_acceptance",
+        "stateReuse": "not_evaluated_no_continuation",
+        "figureReadability": "passed_png_and_svg",
+        "figureSemantics": "not_evaluated",
+        "allArtifactsUnverified": true,
+        "summaryAvailable": false,
+        "partialNotices": [
+          "unverified_artifacts",
+          "output_manifest_unavailable",
+          "summary_unavailable"
+        ],
+        "figureRepresentations": {
+          "distinctFigures": 1,
+          "files": [
+            "PNG",
+            "SVG"
+          ],
+          "pngDimensions": [
+            2380,
+            1166
+          ]
+        },
+        "findings": [
+          "The driver observed output before requesting cancellation; cancellationRequested and cancellationComplete are true.",
+          "The turn settled canceled and six available artifacts were frozen and downloadable.",
+          "All captured artifact bytes and sizes match the API manifest; PNG/SVG open successfully.",
+          "The missing summary and output manifest are reported explicitly; partial artifacts remain unverified.",
+          "This is lifecycle and partial-output acceptance, not a completed scientific analysis or supplement/continuation test."
+        ],
+        "fullScientificAcceptance": "not_established"
+      }
+    },
+    {
+      "attempt": "verified/heart-survival-1793605363453",
+      "case": "heart-survival",
+      "attemptKind": "analysis",
+      "sourceRecord": "verified/heart-survival-1793605363453/run.json",
+      "sourceRecordSha256": "031aca86512de949bc6461bf51de151d69582173b2c5f1513a733cf8b59e3834",
+      "declaredEnvironment": "local-linux-control-plane-docker-runtime",
+      "executionComplete": true,
+      "turns": [
+        {
+          "index": 0,
+          "turnId": "turn_2f10b24f6fa1ec213114d2affb0cb28452a87d84",
+          "runId": "run_d7b5790cecf501a778c464266e87f610",
+          "status": "succeeded",
+          "durationMs": 268250,
+          "downloadedArtifacts": 13,
+          "priorArtifactsRechecked": 0,
+          "figures": 2,
+          "structuredResults": true,
+          "notices": []
+        }
+      ],
+      "cleanup": {
+        "deleted": true,
+        "reason": null
+      },
+      "startedAt": "2026-11-02T07:42:43.453Z",
+      "finishedAt": "2026-11-02T07:47:14.350Z",
+      "readinessStatus": 200,
+      "model": "deepseek-flash",
+      "sourceDigests": {
+        "capabilities/statistical-analysis/SKILL.md": "a8b81500360d8cd4000b0db3cc55f2f8924e2e5fe300355c1f7cc55f02405e78",
+        "capabilities/statistical-analysis/scripts/analysis_checks.py": "40adc68ef0f749f8c69859999684be324831bb95917bfc3ee33f21ecbac568c5",
+        "apps/server/src/dataAnalysisService.mjs": "36ae237ba85c5ad52b24d80a6a68cfe019f95341896c753f47fba372b1862cb5",
+        "apps/server/src/dataAnalysisArtifacts.mjs": "a23f5e562f66ca00dfba51029c89a296728ade1b8c8200323d0bcbec003a54ff"
+      },
+      "observedRuntime": {
+        "ok": true,
+        "mode": "kernel",
+        "sandboxMode": "docker",
+        "kernel": "dsh",
+        "kernelVersion": "0.2.1-rc.5",
+        "imageLocal": true,
+        "imageVerified": false,
+        "networkEgress": "disabled"
+      },
+      "independentCaptureCheck": {
+        "basis": "Independent reread of saved API manifests and downloaded bytes; size and SHA-256 matched for every artifact. Original driver performed HTTP downloads before account cleanup.",
+        "turns": [
+          {
+            "turn": 0,
+            "capturedArtifactsVerified": 13,
+            "resultRecordSha256": "06a47a7184693442176924d43dcd96eca97e7fbec9dd2f60b2bedd8719ff4ed2",
+            "downloadManifestSha256": "dc9a3fa9f3636535baba417121209c2b856807d556f9f73168b1bd9ac049b4e3",
+            "frozenAt": "2026-11-02T07:47:12.299Z",
+            "figureFiles": [
+              "km-survival-90d.png",
+              "km-survival-90d.svg"
+            ]
+          }
+        ]
+      },
+      "review": {
+        "reviewBasis": "Independent scientific review receipt: returned artifacts, native R recomputation and visual inspection.",
+        "sourceReview": "verified/heart-survival-1793605363453/independent-scientific-review.json",
+        "sourceReviewSha256": "65b118805264a38dc560a99b9714d60ee80764b6995aa2a3412dfff9b0bce5d2",
+        "reference": {
+          "engine": "R version 4.6.0 (2026-04-24)",
+          "survival": "3.8.6"
+        },
+        "numerical": "pass",
+        "curveData": "pass",
+        "plotVisual": "pass",
+        "primary": {
+          "n": 299,
+          "events": 96,
+          "censored": 203,
+          "survival90": 0.7626795340593714,
+          "interval95": [
+            0.7092429420863027,
+            0.8076422418121261
+          ],
+          "standardError": 0.02504188725337263,
+          "varianceGreenwood": 0.0006270961172106266,
+          "risk90": 189
+        },
+        "completeTimeline": {
+          "rows": 148,
+          "maxTime": 285,
+          "perTimeRiskEventCensorAndCumulativeCountsMatchSource": true,
+          "riskTableRowsChecked": 8
+        },
+        "maxAbsoluteDifferenceVsR": {
+          "survival": 4.959166410856142e-11,
+          "var_greenwood": 4.926376147296185e-13,
+          "se_greenwood": 4.999545916151149e-12,
+          "ci_lower_loglog": 4.962008581799182e-11,
+          "ci_upper_loglog": 4.999656244564221e-11,
+          "ci_lower_plain": 4.9285242553764874e-11,
+          "ci_upper_plain": 4.789657559456373e-11
+        },
+        "priorBlockers": {
+          "competingRiskBiasDirectionClaim": "resolved",
+          "scenarioRangeVersusSamplingUncertaintyRanking": "absent",
+          "missingCensorOnlyRowsAndTail": "resolved",
+          "greenwoodVarianceScale": "resolved"
+        },
+        "reportVerdict": "warning_corrections_required",
+        "reportFindings": [
+          {
+            "severity": "medium",
+            "file": "statistical-report.md",
+            "line": 31,
+            "issue": "Python version is 3.11.14 in prose but 3.11.2 in session-info and structured results",
+            "correction": "Use observed 3.11.2 or render from session-info."
+          },
+          {
+            "severity": "medium",
+            "file": "statistical-report.md",
+            "line": 90,
+            "issue": "Variable follow-up lengths do not establish that a common administrative cutoff was absent; entry dates and censoring reasons are unavailable",
+            "correction": "State that administrative cutoff and loss-to-follow-up mechanisms cannot be distinguished from this file."
+          },
+          {
+            "severity": "medium",
+            "file": "statistical-report.md",
+            "line": 88,
+            "issue": "Metadata absent from the CSV is described as unknown dataset provenance",
+            "correction": "Say not supplied in this CSV and not independently verified in this analysis, rather than source unknown."
+          }
+        ],
+        "implementationScope": "Generated analysis.py implements its own KM and compares with lifelines; it imports analysis_checks.audit_survival_curve, not analysis_methods.kaplan_meier. This run does not prove invocation of helper KM 1.1.0.",
+        "fullScientificAcceptance": "not_established_report_corrections_remain"
+      }
+    },
+    {
+      "attempt": "verified/wdbc-prediction-1793605362329",
+      "case": "wdbc-prediction",
+      "attemptKind": "analysis",
+      "sourceRecord": "verified/wdbc-prediction-1793605362329/run.json",
+      "sourceRecordSha256": "4de13bd6156ce329edca07a27ff0fc68612c01d88f25b1988dadebbe77b9a3a2",
+      "declaredEnvironment": "local-linux-control-plane-docker-runtime",
+      "executionComplete": true,
+      "turns": [
+        {
+          "index": 0,
+          "turnId": "turn_34460a8c9a8f42671e364a4a246621b87354a50a",
+          "runId": "run_d40c93139f2da641220c024c18e5005c",
+          "status": "succeeded",
+          "durationMs": 328051,
+          "downloadedArtifacts": 23,
+          "priorArtifactsRechecked": 0,
+          "figures": 4,
+          "structuredResults": true,
+          "notices": []
+        },
+        {
+          "index": 1,
+          "turnId": "turn_9585319f3e7698dbdeb61ce9fb42406bfb255b56",
+          "runId": "run_418125d598ae0dae242ac6792ebad7c3",
+          "status": "succeeded",
+          "durationMs": 217889,
+          "downloadedArtifacts": 17,
+          "priorArtifactsRechecked": 23,
+          "figures": 4,
+          "structuredResults": true,
+          "notices": []
+        }
+      ],
+      "cleanup": {
+        "deleted": true,
+        "reason": null
+      },
+      "startedAt": "2026-11-02T07:42:42.329Z",
+      "finishedAt": "2026-11-02T07:51:49.014Z",
+      "readinessStatus": 200,
+      "model": "deepseek-flash",
+      "sourceDigests": {
+        "capabilities/statistical-analysis/SKILL.md": "a8b81500360d8cd4000b0db3cc55f2f8924e2e5fe300355c1f7cc55f02405e78",
+        "capabilities/statistical-analysis/scripts/analysis_checks.py": "40adc68ef0f749f8c69859999684be324831bb95917bfc3ee33f21ecbac568c5",
+        "apps/server/src/dataAnalysisService.mjs": "36ae237ba85c5ad52b24d80a6a68cfe019f95341896c753f47fba372b1862cb5",
+        "apps/server/src/dataAnalysisArtifacts.mjs": "a23f5e562f66ca00dfba51029c89a296728ade1b8c8200323d0bcbec003a54ff"
+      },
+      "observedRuntime": {
+        "ok": true,
+        "mode": "kernel",
+        "sandboxMode": "docker",
+        "kernel": "dsh",
+        "kernelVersion": "0.2.1-rc.5",
+        "imageLocal": true,
+        "imageVerified": false,
+        "networkEgress": "disabled"
+      },
+      "independentCaptureCheck": {
+        "basis": "Independent reread of saved API manifests and downloaded bytes; size and SHA-256 matched for every artifact. Original driver performed HTTP downloads before account cleanup.",
+        "turns": [
+          {
+            "turn": 0,
+            "capturedArtifactsVerified": 23,
+            "resultRecordSha256": "e77cd217907efc8d07ef200b646afd81cbe5646fecb4e7bfe3f91c99df1d6c6e",
+            "downloadManifestSha256": "7cf2ff591738d9e85a112231c5ee5ff8fabec201f047bf5a0825b2b5db8cb532",
+            "frozenAt": "2026-11-02T07:48:10.356Z",
+            "figureFiles": [
+              "calibration-plot.png",
+              "calibration-plot.svg",
+              "roc-curve.png",
+              "roc-curve.svg"
+            ]
+          },
+          {
+            "turn": 1,
+            "capturedArtifactsVerified": 17,
+            "resultRecordSha256": "61758afaf8ad30fcddab2b534485eec7ace0b33be4c918d1fa084d38a6fa2723",
+            "downloadManifestSha256": "91d1a812ffaedc79e40186f2aebd5625e3fe3d681b5c7fe3567740584c07f3f4",
+            "frozenAt": "2026-11-02T07:51:47.990Z",
+            "figureFiles": [
+              "confusion-at-0.30.png",
+              "confusion-at-0.30.svg",
+              "threshold-sweep.png",
+              "threshold-sweep.svg"
+            ]
+          }
+        ]
+      },
+      "review": {
+        "reviewBasis": "Independent scientific-review receipt: isolated saved-pipeline replay, numerical/interval and plotted-data comparisons, four PNG visual reviews, and follow-up tool-history/state inspection.",
+        "sourceReview": "verified/wdbc-prediction-1793605362329/independent-scientific-review.json",
+        "sourceReviewSha256": "c17482ac349e46b6603934e848e5bf0f01c7708c5709cd1a3fd657bc74b4dcac",
+        "reviewVerdict": "bounded_pass_with_report_warnings",
+        "scope": "Saved source/split/model/probabilities, selected probability metrics and bootstrap CIs, full saved ROC and calibration data, threshold-followup data/plots and tool-transcript no-refit; not external validity or comprehensive model-selection replication.",
+        "numerical": "passed_reviewed_metrics_and_intervals",
+        "stateReuse": "passed_threshold_followup_without_observed_refit",
+        "delivery": "passed_all_40_captured_artifacts_and_requested_plot_files",
+        "figureData": "passed_full_saved_roc_calibration_and_threshold_data",
+        "figureVisual": "passed_four_pngs_svg_pdf_not_separately_rendered",
+        "artifacts": {
+          "hashAndSizeVerified": 40,
+          "turn0": 23,
+          "turn1": 17,
+          "pngsVisuallyReviewed": 4,
+          "svgAndPdfRenderedSeparately": false
+        },
+        "replaySandbox": {
+          "image": "evimed-analysis-replay:20261026",
+          "imageId": "d7e263aa7f2f",
+          "network": "none",
+          "rootFilesystem": "read-only",
+          "mounts": "only this public run directory and the public fixture, read-only",
+          "environment": "cleared; PATH and thread counts only",
+          "user": "65534:65534",
+          "capabilities": "ALL dropped",
+          "newPrivileges": false,
+          "python": "3.12.14",
+          "sklearn": "1.6.1"
+        },
+        "source": {
+          "sha256": "30c0edd07dac8c886b9ad11627caed4eb92d91756aaeddd23921bdafc2582971",
+          "rows": 569,
+          "train": 398,
+          "test": 171,
+          "testMalignant": 64,
+          "testBenign": 107,
+          "positiveCoding": "source breast_cancer_yn 0 -> malignant y=1",
+          "seed20240611StratifiedSplitReproduced": true
+        },
+        "modelReplay": {
+          "status": "pass",
+          "all30ImputerMediansAndScalerMeansVariancesMatchTrain": true,
+          "featureOrderAndClassesMatch": true,
+          "coefficientTableMatches": true,
+          "maximumProbabilityDifference": 1.1102230246251565e-16,
+          "noRefitPerformedByReviewer": true
+        },
+        "metrics": {
+          "rocAuc": 0.9969334112149533,
+          "brier": 0.02000730202643435,
+          "averagePrecision": 0.9954569363851578,
+          "logLoss": 0.06823506834678257,
+          "aucAndBrierBootstrapRepsIndependentlyReproduced": 2000,
+          "rocPointsVerified": 10,
+          "rocSimplification": "sklearn default collinear-point reduction; all saved coordinates and thresholds matched",
+          "calibrationBinsAndWilsonIntervalsVerified": 10,
+          "eceVerified": true,
+          "calibrationInterceptSlopeAndWaldCIsVerified": true,
+          "calibrationFitClippedProbabilitiesAt": [
+            1e-06,
+            0.999999
+          ],
+          "clippedRows": 16
+        },
+        "thresholdReuse": {
+          "status": "pass",
+          "threshold": 0.3,
+          "confusion": {
+            "tp": 63,
+            "fp": 6,
+            "fn": 1,
+            "tn": 101
+          },
+          "sensitivity": 0.984375,
+          "specificity": 0.9439252336448598,
+          "ppv": 0.9130434782608695,
+          "npv": 0.9901960784313726,
+          "all8ProportionDenominatorsAndWilsonCIsVerified": true,
+          "thresholdSweepRowsVerified": 201,
+          "rowDecisionsAndProbabilitiesMatchPrior": true,
+          "modelSplitProbabilityHashesMatchTurn0AndPriorLedger": true,
+          "baselineModelSha256": "33b5a277826144aa8b56a27685a56bd31d8c05850f2598f10b809fe9d591c5e1",
+          "baselineProbabilitySha256": "6d36a059c03be0ffbe8f16541920e84f910966971877d7dffb70b0a1ef9079ab",
+          "baselineSplitSha256": "0e3f47e2bb593c2fe0d2bfacf15a82c5219c5b52cf527359edd83241334faab0"
+        },
+        "executionHistoryReview": {
+          "scope": "tool inputs and outputs only; assistant reasoning not reviewed",
+          "modelOrPreprocessingRefitObserved": false,
+          "baselineRerunsObserved": true,
+          "followupPredictProbaUsedForVerification": true,
+          "rawTranscriptsPublished": false
+        },
+        "reportFindings": [
+          {
+            "severity": "medium",
+            "file": "turn-0/statistical-report.md",
+            "line": 29,
+            "issue": "Claims the test set was evaluated once, but the baseline training/evaluation script was rerun while fixing plots; ledger testSetEvaluations=1 is a constant, not an observed execution count.",
+            "correction": "State one fixed holdout split and model specification, with reruns for implementation/plot corrections; do not claim one physical evaluation."
+          },
+          {
+            "severity": "medium",
+            "file": "turn-0/statistical-report.md",
+            "line": 9,
+            "issue": "Unique row IDs and no exact duplicate rows do not verify patient-level independence or rule out repeated patients.",
+            "correction": "State row-level disjointness verified; patient independence is a dataset/design assumption unless source patient identity is checked."
+          },
+          {
+            "severity": "medium",
+            "file": "turn-0/statistical-report.md",
+            "line": 84,
+            "issue": "Similarity of training CV and this holdout does not establish that performance is not due to a favorable split.",
+            "correction": "Remove the claim excluding split luck; retain the single-split and non-external-validation limitations."
+          },
+          {
+            "severity": "medium",
+            "file": "turn-0/analysis-results.json",
+            "location": "analyses[id=heldout-calibration].interval and report table line44",
+            "issue": "Generic interval metadata labels calibration slope/intercept CIs as row-bootstrap, but code and independent reproduction use logistic Wald CIs.",
+            "correction": "Attach interval method per metric; Brier/AUC bootstrap, slope/intercept Wald, calibration bins Wilson. Disclose clipping before logit transform."
+          },
+          {
+            "severity": "low",
+            "file": "turn-1/threshold-report.md",
+            "line": 17,
+            "issue": "States probabilities were not recomputed, though predict_proba was run for a consistency check.",
+            "correction": "Say saved probabilities were used for decisions; model probabilities were recomputed only for verification, without refitting."
+          },
+          {
+            "severity": "low",
+            "file": "turn-1/analysis-results.json",
+            "location": "analyses[id=metric-denominators-at-0.30].estimate.otherMetrics.youden.note",
+            "issue": "Youden J range stated as0\u20131; its general range is-1\u20131.",
+            "correction": "Correct the range; observed J values are unchanged."
+          }
+        ],
+        "reportFindingCounts": {
+          "medium": 4,
+          "low": 2
+        },
+        "limitations": [
+          "No external validation or general performance ceiling established.",
+          "No evidence of followup retraining; baseline reruns remain documented rather than relabeled as one execution.",
+          "The reviewer did not retrain the selected model or independently repeat the full hyperparameter search."
+        ],
+        "fullScientificAcceptance": "not_established_beyond_bounded_review_report_corrections_remain"
+      }
+    },
+    {
+      "attempt": "verified/nested-bundle-delivery-1793606110320",
+      "case": "nested-bundle-delivery",
+      "attemptKind": "seeded_delivery_smoke",
+      "sourceRecord": "verified/nested-bundle-delivery-1793606110320/run.json",
+      "sourceRecordSha256": "a27ac0f5283ad889bcb4a4ea64f21487f489678d2e12b7864654d22b980bbd10",
+      "declaredEnvironment": "local-linux-control-plane-docker-runtime",
+      "executionComplete": true,
+      "turns": [
+        {
+          "index": 0,
+          "turnId": "turn_4688d5b6cfabe1b9bb4a85d9051fec4e6737b8a2",
+          "runId": "run_5ca78fa9057607104e46c0b07aab617c",
+          "status": "succeeded",
+          "durationMs": 32719,
+          "downloadedArtifacts": 8,
+          "priorArtifactsRechecked": 0,
+          "figures": 0,
+          "structuredResults": true,
+          "notices": [
+            {
+              "code": "nested_output_bundles"
+            }
+          ]
+        }
+      ],
+      "cleanup": {
+        "deleted": true,
+        "reason": null
+      },
+      "startedAt": "2026-11-02T07:55:10.320Z",
+      "finishedAt": "2026-11-02T07:55:44.198Z",
+      "readinessStatus": 200,
+      "model": "deepseek-flash",
+      "sourceDigests": {
+        "capabilities/statistical-analysis/SKILL.md": "a8b81500360d8cd4000b0db3cc55f2f8924e2e5fe300355c1f7cc55f02405e78",
+        "capabilities/statistical-analysis/scripts/analysis_checks.py": "40adc68ef0f749f8c69859999684be324831bb95917bfc3ee33f21ecbac568c5",
+        "apps/server/src/dataAnalysisService.mjs": "36ae237ba85c5ad52b24d80a6a68cfe019f95341896c753f47fba372b1862cb5",
+        "apps/server/src/dataAnalysisArtifacts.mjs": "13ec22eee0dbd933d4c999a562ac013e07113e87d45e726f12247ca3f3b41e56"
+      },
+      "observedRuntime": {
+        "ok": true,
+        "mode": "kernel",
+        "sandboxMode": "docker",
+        "kernel": "dsh",
+        "kernelVersion": "0.2.1-rc.5",
+        "imageLocal": true,
+        "imageVerified": false,
+        "networkEgress": "disabled"
+      },
+      "independentCaptureCheck": {
+        "basis": "Independent reread of saved API manifests and downloaded bytes; size and SHA-256 matched for every artifact. Original driver performed HTTP downloads before account cleanup.",
+        "turns": [
+          {
+            "turn": 0,
+            "capturedArtifactsVerified": 8,
+            "resultRecordSha256": "b9274158af09a4952533ad57bbf5d2f0be700ca9628846179a02aa8e89e3a64f",
+            "downloadManifestSha256": "a770018668ed27c9f1ca24cb1ab006845ba3500bf870592ba7d43e81d166fed1",
+            "frozenAt": "2026-11-02T07:55:42.900Z",
+            "figureFiles": []
+          }
+        ]
+      },
+      "review": {
+        "reviewBasis": "Independent delivery-review receipt and additional byte-for-byte comparison of all eight downloaded artifacts against the public seed ZIP.",
+        "sourceReview": "verified/nested-bundle-delivery-1793606110320/independent-delivery-review.json",
+        "sourceReviewSha256": "3f0b5907eea443fd0f5d83b80d586f8d5e06b5a233280a70e60c3a77637420d5",
+        "scope": "Seeded synthetic delivery selection, not numerical analysis",
+        "reviewVerdict": "passed_seeded_delivery_selection",
+        "primaryVersion": 3,
+        "nestedVersion": 2,
+        "artifactCount": 8,
+        "allOriginalBytesMatch": true,
+        "primaryOutput": {
+          "directory": "deliverables/current",
+          "reportPath": "deliverables/current/statistical-report.md",
+          "resultsPath": "deliverables/current/analysis-results.json",
+          "manifestPath": "deliverables/current/analysis-output.json"
+        },
+        "notices": [
+          {
+            "code": "nested_output_bundles"
+          }
+        ],
+        "seedFixture": "../fixtures/revision-package.zip",
+        "seedSha256": "15fe488e57963101852ebf7ab9d6648314c47dc6b1153437be48a1ef52e1e4d1",
+        "scientificAcceptance": "not_applicable_precomputed_delivery_fixture",
+        "findings": [
+          "Executed against the restarted candidate control plane after the generic selection fix.",
+          "Current version 3 supplied both API summary and structured results while nested version 2 remained downloadable.",
+          "Precomputed files were preserved exactly; no participant data or statistical performance claim."
+        ]
+      }
+    }
+  ],
+  "pendingAcceptance": [
+    {
+      "id": "wdbc_report_metadata_corrections",
+      "status": "bounded_scientific_and_reuse_pass_report_corrections_remain",
+      "reason": "Independent saved-model/numerical/plot/state review passed. Four medium and two low report/metadata findings remain: physical evaluation count, row-versus-patient independence, favorable-split claim, per-metric interval method/clipping, probability-verification wording and Youden J range. Full model selection and external validity were not established."
+    },
+    {
+      "id": "survival_interpretation_closure",
+      "status": "original_blockers_closed_report_corrections_remain",
+      "reason": "Final independent review passed primary values, full curve and visual checks, resolved the original blocker classes, and retained three report findings: Python version mismatch, administrative-censoring inference and CSV-metadata versus source-provenance wording."
+    },
+    {
+      "id": "supplemental_method_interpretation",
+      "status": "open",
+      "reason": "Original diagnostic permutation caveat and factorial permutation-null/Type II-III claims are retained defects; paired bounded approval does not close them."
+    },
+    {
+      "id": "pbc_nested_delivery",
+      "status": "not_yet_rechecked",
+      "reason": "Primary populations/outcomes were correct, but original nested table and extra-figure delivery was incomplete."
+    },
+    {
+      "id": "continuity_supplement",
+      "status": "completed_analysis_and_continuation_not_tested",
+      "reason": "An intentionally cancelled attempt verified partial-output retention only. No completed supplement or continuation is established by that attempt."
+    }
+  ],
+  "releaseStatus": {
+    "commit": "not_assessed_by_this_documentation_task",
+    "push": "not_assessed_by_this_documentation_task",
+    "ci": "not_established",
+    "merge": "not_established",
+    "productionDeployment": "not_performed",
+    "productionAcceptance": "not_established"
+  },
+  "closedAcceptance": [
+    {
+      "id": "equivalent_formats",
+      "status": "closed_with_bounded_acceptance",
+      "attempt": "closure/equivalent-formats-1793602972343",
+      "priorPendingReason": "CSV/XLSX/JSON/Parquet library round trips and equivalent public fixtures exist; actual agent duplicate-cohort handling is not established in these recorded lanes.",
+      "scope": "Requested format equivalence, primary metrics and inspected outputs."
+    },
+    {
+      "id": "cancellation_with_partial_output",
+      "status": "closed_with_bounded_acceptance",
+      "attempt": "closure/continuity-supplement-1793602972343",
+      "priorPendingReason": "Driver supports cancel-after-output; settled cancellation plus downloadable useful partial output has not yet been observed in these lanes.",
+      "scope": "Settled cancellation, frozen downloadable partial artifacts, honest unverified labels and notices; not scientific completion."
+    },
+    {
+      "id": "survival_primary_curve_and_original_blockers",
+      "status": "closed_with_bounded_acceptance",
+      "attempt": "verified/heart-survival-1793605363453",
+      "scope": "Primary values, full survival timeline/risk table, visual plot and original censoring/Greenwood/competing-risk blocker classes. Three report corrections remain; helper KM invocation not established."
+    },
+    {
+      "id": "nested_bundle_delivery",
+      "status": "closed_with_bounded_acceptance",
+      "attempt": "verified/nested-bundle-delivery-1793606110320",
+      "scope": "Seeded version-3 primary selection with nested version-2 attachments and preservation of eight original files; no independent scientific analysis."
+    },
+    {
+      "id": "wdbc_api_delivery_and_threshold_reuse",
+      "status": "closed_with_bounded_acceptance",
+      "attempt": "verified/wdbc-prediction-1793605362329",
+      "scope": "Saved source/split/model/probabilities, selected probability metrics and bootstrap CIs, full saved ROC and calibration data, threshold-followup data/plots and tool-transcript no-refit; not external validity or comprehensive model-selection replication.",
+      "reportWarningsRemain": {
+        "medium": 4,
+        "low": 2
+      }
+    }
+  ],
+  "localImplementationChecks": {
+    "provenance": "Test execution and final source-review outcomes reported by the coordinating agent; not inferred from the live run status. Fixture hashes were additionally checked by the documentation task after the seed was added.",
+    "checks": [
+      {
+        "id": "statistical_analysis_pytest",
+        "command": "python -m pytest evals/statistical-analysis -q -p no:cacheprovider -rs",
+        "passedTests": 226,
+        "passedSubtests": 26,
+        "warnings": 14,
+        "warningScope": "Existing matplotlib/pyparsing warnings",
+        "environment": "Final candidate image; no network; read-only filesystem/mount configuration with current code and wheels"
+      },
+      {
+        "id": "postgres_admission",
+        "command": "node --test apps/server/test/dataAnalysisAdmission.integration.test.mjs",
+        "passedTests": 1,
+        "environment": "Isolated loopback PostgreSQL sidecar",
+        "scope": [
+          "Four parallel admissions retain availability of a metadata pool of one."
+        ]
+      },
+      {
+        "id": "artifact_capture_and_bundle_selection",
+        "suite": "apps/server/test/dataAnalysisArtifacts.test.mjs",
+        "passedTests": 8,
+        "scope": "Nested artifacts, current versus archived bundles, explicit selection, ambiguity and coherent primary report/results selection."
+      },
+      {
+        "id": "final_source_reviews",
+        "status": "approved",
+        "areas": [
+          "scientific helpers",
+          "TypeScript",
+          "security"
+        ],
+        "scope": "Final code after selection fix; not deployment or universal scientific approval."
+      },
+      {
+        "id": "public_fixture_bytes",
+        "status": "passed",
+        "fixtureCount": 10,
+        "scope": "All public/synthetic fixture sizes and SHA-256 values, including the newly added revision-package.zip, matched datasets.json."
+      }
+    ]
+  }
+}

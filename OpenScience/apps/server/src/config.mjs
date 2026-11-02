@@ -3328,6 +3328,24 @@ export function loadConfig(overrides = {}) {
     memoryTopicsMinMemories: Math.max(4, Math.min(200, Math.trunc(Number(
       overrides.memoryTopicsMinMemories ?? process.env.OPEN_SCIENCE_MEMORY_TOPICS_MIN_MEMORIES ?? 12,
     )) || 12)),
+    // Off by default: turning it on lets an account's API key start billed analyses on the existing runtime.
+    dataAnalysisApiEnabled: overrides.dataAnalysisApiEnabled ?? boolEnv("OPEN_SCIENCE_DATA_ANALYSIS_API_ENABLED", false),
+    dataAnalysisMaxDispatches: boundedInteger(overrides.dataAnalysisMaxDispatches ?? process.env.OPEN_SCIENCE_DATA_ANALYSIS_MAX_DISPATCHES, 4, 1, 32, "OPEN_SCIENCE_DATA_ANALYSIS_MAX_DISPATCHES"),
+    dataAnalysisMaxInputBytes: boundedInteger(overrides.dataAnalysisMaxInputBytes ?? process.env.OPEN_SCIENCE_DATA_ANALYSIS_MAX_INPUT_BYTES, 20 * 1024 * 1024, 1024, 100 * 1024 * 1024, "OPEN_SCIENCE_DATA_ANALYSIS_MAX_INPUT_BYTES"),
+    dataAnalysisMaxArtifactBytes: boundedInteger(overrides.dataAnalysisMaxArtifactBytes ?? process.env.OPEN_SCIENCE_DATA_ANALYSIS_MAX_ARTIFACT_BYTES, 50 * 1024 * 1024, 1024, 100 * 1024 * 1024, "OPEN_SCIENCE_DATA_ANALYSIS_MAX_ARTIFACT_BYTES"),
+    dataAnalysisMaxSnapshotBytes: boundedInteger(overrides.dataAnalysisMaxSnapshotBytes ?? process.env.OPEN_SCIENCE_DATA_ANALYSIS_MAX_SNAPSHOT_BYTES, 200 * 1024 * 1024, 1024, 1024 * 1024 * 1024, "OPEN_SCIENCE_DATA_ANALYSIS_MAX_SNAPSHOT_BYTES"),
+    dataAnalysisFetchTimeoutMs: boundedInteger(overrides.dataAnalysisFetchTimeoutMs ?? process.env.OPEN_SCIENCE_DATA_ANALYSIS_FETCH_TIMEOUT_MS, 30_000, 1000, 120_000, "OPEN_SCIENCE_DATA_ANALYSIS_FETCH_TIMEOUT_MS"),
+    dataAnalysisSourcesFile: String(overrides.dataAnalysisSourcesFile ?? process.env.OPEN_SCIENCE_DATA_ANALYSIS_SOURCES_FILE ?? ""),
+    // An input is held in memory three ways at once (the request body, its decoded copy, the bytes being preserved), and a key costs
+    // nothing to mint, so the rate limit per key bounds nothing about memory: these two bound the inputs being handled at one time,
+    // for one account and for the whole server. A refusal is 429 `analysis_input_busy`, counted on
+    // `open_science_data_analysis_refusals_total{reason=input_account|input_server}`.
+    dataAnalysisMaxInputsInFlightPerAccount: boundedInteger(overrides.dataAnalysisMaxInputsInFlightPerAccount ?? process.env.OPEN_SCIENCE_DATA_ANALYSIS_INPUTS_IN_FLIGHT_PER_ACCOUNT, 2, 1, 32, "OPEN_SCIENCE_DATA_ANALYSIS_INPUTS_IN_FLIGHT_PER_ACCOUNT"),
+    dataAnalysisMaxInputsInFlight: boundedInteger(overrides.dataAnalysisMaxInputsInFlight ?? process.env.OPEN_SCIENCE_DATA_ANALYSIS_INPUTS_IN_FLIGHT, 6, 1, 64, "OPEN_SCIENCE_DATA_ANALYSIS_INPUTS_IN_FLIGHT"),
+    // The analyses one account keeps. They are the API's own projects and do not count against the account's project ceiling, so
+    // this is what bounds their storage (each may hold up to `MAX_SNAPSHOT_BYTES` of preserved bytes and its own workspace).
+    // A refusal is 409 `analysis_limit_reached`, counted as `reason=analysis_limit`; deleting an analysis frees one.
+    dataAnalysisMaxPerAccount: boundedInteger(overrides.dataAnalysisMaxPerAccount ?? process.env.OPEN_SCIENCE_DATA_ANALYSIS_MAX_PER_ACCOUNT, 50, 1, 1000, "OPEN_SCIENCE_DATA_ANALYSIS_MAX_PER_ACCOUNT"),
     // Off by default: turning it on publishes an account's memory to whoever
     // holds an API key. A deployment decides that, never a default.
     agentMemoryApiEnabled:

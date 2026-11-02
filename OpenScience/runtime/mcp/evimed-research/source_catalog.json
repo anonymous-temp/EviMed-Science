@@ -8,15 +8,26 @@
       "name": "ChiCTR",
       "domain": "临床试验",
       "priority": "P0/P1 EviMed",
-      "status": "blocked_no_api",
+      "status": "via_evimed_index",
       "accessClass": "website_or_partnership",
       "connector": null,
       "skill": null,
-      "credential": "接口/合作确认",
+      "credential": "平台已配置",
       "license": "数据使用条款",
       "officialUrl": null,
-      "blocker": "未确认稳定、允许自动化使用的官方 API；禁止以网页抓取冒充正式接入。",
-      "validation": null
+      "blocker": "",
+      "validation": {
+        "liveProbe": "pass",
+        "verifiedAt": "2026-11-02",
+        "productionRoute": "evimed_evidence_api"
+      },
+      "reachedThrough": {
+        "tool": "clinical_trial_search",
+        "arguments": {
+          "registry": 0
+        },
+        "note": "中文词，一到两个；多词时工具逐词询问再比对。"
+      }
     },
     {
       "id": "eu-ctis",
@@ -317,15 +328,27 @@
       "name": "Cochrane Library",
       "domain": "系统综述与指南",
       "priority": "P0/P1 EviMed",
-      "status": "blocked_license",
+      "status": "via_evimed_index",
       "accessClass": "commercial",
       "connector": null,
       "skill": null,
-      "credential": "合同/API 权限",
+      "credential": "平台已配置",
       "license": "商业/机构订阅",
       "officialUrl": null,
-      "blocker": "需要商业合同、机构订阅或商业再分发授权。",
-      "validation": null
+      "blocker": "",
+      "validation": {
+        "liveProbe": "pass",
+        "verifiedAt": "2026-11-02",
+        "productionRoute": "evimed_evidence_api"
+      },
+      "reachedThrough": {
+        "tool": "clinical_trial_search",
+        "arguments": {
+          "registry": 2
+        },
+        "note": "这是 CENTRAL（对照试验库），不含 Cochrane 系统评价全文；source 可筛来源库。",
+        "coverage": "只有 CENTRAL。"
+      }
     },
     {
       "id": "ema-epar",
@@ -457,15 +480,30 @@
       "name": "维普",
       "domain": "中文文献",
       "priority": "P0/P1 EviMed",
-      "status": "blocked_license",
+      "status": "via_evimed_index",
       "accessClass": "commercial",
       "connector": null,
       "skill": null,
-      "credential": "机构/API 合同",
+      "credential": "平台已配置",
       "license": "商业许可",
       "officialUrl": null,
-      "blocker": "需要商业合同、机构订阅或商业再分发授权。",
-      "validation": null
+      "blocker": "",
+      "validation": {
+        "liveProbe": "pass",
+        "verifiedAt": "2026-11-02",
+        "productionRoute": "evimed_evidence_api"
+      },
+      "reachedThrough": {
+        "tool": "literature_search",
+        "arguments": {
+          "databases": [
+            "internal"
+          ],
+          "language": "zh"
+        },
+        "note": "中文词，一到两个核心词最稳；索引按语义排序，看 queryTermsFound。",
+        "coverage": "索引里能查到的记录，不等于维普全库。"
+      }
     },
     {
       "id": "cnki",
@@ -473,15 +511,30 @@
       "name": "CNKI",
       "domain": "中文文献",
       "priority": "P0/P1 EviMed",
-      "status": "blocked_license",
+      "status": "via_evimed_index",
       "accessClass": "commercial",
       "connector": null,
       "skill": null,
-      "credential": "机构/API 合同",
+      "credential": "平台已配置",
       "license": "商业许可",
       "officialUrl": null,
-      "blocker": "需要商业合同、机构订阅或商业再分发授权。",
-      "validation": null
+      "blocker": "",
+      "validation": {
+        "liveProbe": "pass",
+        "verifiedAt": "2026-11-02",
+        "productionRoute": "evimed_evidence_api"
+      },
+      "reachedThrough": {
+        "tool": "literature_search",
+        "arguments": {
+          "databases": [
+            "internal"
+          ],
+          "language": "zh"
+        },
+        "note": "中文词，一到两个核心词最稳；索引按语义排序，看 queryTermsFound。",
+        "coverage": "索引里能查到的记录，不等于知网全库。"
+      }
     },
     {
       "id": "bindingdb",
@@ -1730,15 +1783,28 @@
       "name": "EviMed 内部证据库",
       "domain": "内部数据",
       "priority": "P2 扩展",
-      "status": "ready_private_adapter",
+      "status": "via_evimed_index",
       "accessClass": "internal",
       "connector": null,
       "skill": null,
-      "credential": "EVIMED_API_KEY/内部 URL",
+      "credential": "平台已配置",
       "license": "内部治理",
       "officialUrl": null,
-      "blocker": "需要部署本地数据库或旧业务服务，并配置项目级私有适配器。",
-      "validation": null
+      "blocker": "",
+      "validation": {
+        "liveProbe": "pass",
+        "verifiedAt": "2026-11-02",
+        "productionRoute": "evimed_evidence_api"
+      },
+      "reachedThrough": {
+        "tool": "literature_search",
+        "arguments": {
+          "databases": [
+            "internal"
+          ]
+        },
+        "note": "文献默认检索已合并它；clinical_trial_search、guideline_search、drug_label_search 也走它。"
+      }
     },
     {
       "id": "who-gho",
@@ -1985,15 +2051,28 @@
       "name": "Embase",
       "domain": "文献与系统综述",
       "priority": "P2 扩展",
-      "status": "blocked_license",
+      "status": "via_evimed_index",
       "accessClass": "commercial",
       "connector": null,
       "skill": null,
-      "credential": "Elsevier API/合同",
+      "credential": "平台已配置",
       "license": "商业许可",
       "officialUrl": null,
-      "blocker": "需要商业合同、机构订阅或商业再分发授权。",
-      "validation": null
+      "blocker": "",
+      "validation": {
+        "liveProbe": "pass",
+        "verifiedAt": "2026-11-02",
+        "productionRoute": "evimed_evidence_api"
+      },
+      "reachedThrough": {
+        "tool": "clinical_trial_search",
+        "arguments": {
+          "registry": 2,
+          "source": "Embase"
+        },
+        "note": "CENTRAL 中来自 Embase 的试验记录；literature_search databases:[\"internal\"] 另有部分带 embase.com 链接的记录。",
+        "coverage": "不是完整的 Embase 检索，不能写成已检索 Embase。"
+      }
     },
     {
       "id": "epistemonikos",
@@ -2268,15 +2347,30 @@
       "name": "SinoMed",
       "domain": "中文生物医学文献",
       "priority": "P2 扩展",
-      "status": "blocked_license",
+      "status": "via_evimed_index",
       "accessClass": "commercial",
       "connector": null,
       "skill": null,
-      "credential": "机构/API 权限",
+      "credential": "平台已配置",
       "license": "使用条款",
       "officialUrl": "https://www.sinomed.ac.cn/",
-      "blocker": "需要机构/API 合同及 SaaS 使用许可；未找到可无授权自动化调用的官方公共 API。",
-      "validation": null
+      "blocker": "",
+      "validation": {
+        "liveProbe": "pass",
+        "verifiedAt": "2026-11-02",
+        "productionRoute": "evimed_evidence_api"
+      },
+      "reachedThrough": {
+        "tool": "literature_search",
+        "arguments": {
+          "databases": [
+            "internal"
+          ],
+          "language": "zh"
+        },
+        "note": "中文词，一到两个核心词最稳；索引按语义排序，看 queryTermsFound。",
+        "coverage": "索引里能查到的记录，不等于 SinoMed 全库。"
+      }
     },
     {
       "id": "source-116",
@@ -2284,15 +2378,30 @@
       "name": "万方数据",
       "domain": "中文文献与专利",
       "priority": "P2 扩展",
-      "status": "blocked_license",
+      "status": "via_evimed_index",
       "accessClass": "commercial",
       "connector": null,
       "skill": null,
-      "credential": "机构/API 合同",
+      "credential": "平台已配置",
       "license": "商业许可",
       "officialUrl": null,
-      "blocker": "需要商业合同、机构订阅或商业再分发授权。",
-      "validation": null
+      "blocker": "",
+      "validation": {
+        "liveProbe": "pass",
+        "verifiedAt": "2026-11-02",
+        "productionRoute": "evimed_evidence_api"
+      },
+      "reachedThrough": {
+        "tool": "literature_search",
+        "arguments": {
+          "databases": [
+            "internal"
+          ],
+          "language": "zh"
+        },
+        "note": "中文词，一到两个核心词最稳；索引按语义排序，看 queryTermsFound。",
+        "coverage": "索引里能查到的记录，不等于万方全库。"
+      }
     },
     {
       "id": "depmap",
@@ -2429,6 +2538,28 @@
       "officialUrl": null,
       "blocker": "未确认稳定、允许自动化使用的官方 API；禁止以网页抓取冒充正式接入。",
       "validation": null
+    },
+    {
+      "id": "prospero",
+      "index": 124,
+      "name": "PROSPERO",
+      "domain": "系统评价注册",
+      "priority": "P0/P1 EviMed",
+      "status": "active_tool",
+      "accessClass": "public_api",
+      "connector": "prospero",
+      "skill": null,
+      "credential": "无需 key",
+      "license": "使用条款",
+      "officialUrl": "https://www.crd.york.ac.uk/PROSPERO/",
+      "blocker": "",
+      "validation": {
+        "contractTests": "pass",
+        "liveProbe": "pass",
+        "verifiedAt": "2026-11-02",
+        "productionRoute": "server_allowlisted_gateway",
+        "queryMode": "free_text"
+      }
     }
   ]
 }

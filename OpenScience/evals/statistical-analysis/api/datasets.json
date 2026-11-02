@@ -1,0 +1,109 @@
+{
+  "schemaVersion": 1,
+  "sources": [
+    {
+      "path": "fixtures/heart-failure.csv",
+      "source": "https://archive.ics.uci.edu/dataset/519/heart+failure+clinical+records",
+      "license": "CC-BY-4.0",
+      "sha256": "9c73cea7468ff5d517801ec050fe9993da5912fce4b56f296f8df3b38dd75912",
+      "bytes": 12239,
+      "acquiredAt": "2026-11-02",
+      "acquisition": "official UCI archive"
+    },
+    {
+      "path": "fixtures/sleep.csv",
+      "source": "https://stat.ethz.ch/R-manual/R-devel/library/datasets/html/sleep.html",
+      "license": "GPL-2.0-or-later",
+      "sha256": "c45604d3160d61f40535c8773b1762e120e47b824d95521950ea54ca17516fd9",
+      "bytes": 264,
+      "acquiredAt": "2026-11-02",
+      "acquisition": "installed R dataset exported unchanged without row names",
+      "rVersion": "4.2.2",
+      "package": "datasets",
+      "packageVersion": "4.2.2",
+      "exportCommand": "write.csv(datasets::sleep, \"sleep.csv\", row.names=FALSE)",
+      "notice": "THIRD_PARTY_NOTICES.md"
+    },
+    {
+      "path": "fixtures/tooth-growth.csv",
+      "source": "https://stat.ethz.ch/R-manual/R-devel/library/datasets/html/ToothGrowth.html",
+      "license": "GPL-2.0-or-later",
+      "sha256": "35d9d3e5931ec8679135d84ebe2fadc6a5b3582bb66792e289dd00c45a65ccb7",
+      "bytes": 760,
+      "acquiredAt": "2026-11-02",
+      "acquisition": "installed R dataset exported unchanged without row names",
+      "rVersion": "4.2.2",
+      "package": "datasets",
+      "packageVersion": "4.2.2",
+      "exportCommand": "write.csv(datasets::ToothGrowth, \"tooth-growth.csv\", row.names=FALSE)",
+      "notice": "THIRD_PARTY_NOTICES.md"
+    },
+    {
+      "path": "fixtures/pbc.csv",
+      "source": "https://stat.ethz.ch/R-manual/R-devel/library/survival/html/pbc.html",
+      "license": "LGPL-2.0-or-later",
+      "sha256": "8a300e2130e85edfcd1a36d96385bcf4d894f28aa5c7c9d065dece2d6844ff43",
+      "bytes": 33764,
+      "acquiredAt": "2026-11-02",
+      "acquisition": "installed R dataset exported unchanged without row names",
+      "rVersion": "4.2.2",
+      "package": "survival",
+      "packageVersion": "3.5.3",
+      "exportCommand": "write.csv(survival::pbc, \"pbc.csv\", row.names=FALSE)",
+      "notice": "THIRD_PARTY_NOTICES.md"
+    },
+    {
+      "path": "../fixtures/breast-cancer.csv",
+      "sourceManifest": "../fixtures/source-manifest.json",
+      "sha256": "30c0edd07dac8c886b9ad11627caed4eb92d91756aaeddd23921bdafc2582971",
+      "bytes": 123562,
+      "acquisition": "existing repository fixture"
+    },
+    {
+      "path": "../fixtures/lung.csv",
+      "sourceManifest": "../fixtures/source-manifest.json",
+      "sha256": "cf2ddfa766fdc3722364e4a24878162de2facaf71df1b66d48e7126c0a6e1f12",
+      "bytes": 6459,
+      "acquisition": "existing repository fixture"
+    },
+    {
+      "path": "fixtures/heart-failure.parquet",
+      "bytes": 13256,
+      "sha256": "81faa19e0545219d5d38136f84562039651a354e63c5849b18e889946a9abe92",
+      "source": "https://archive.ics.uci.edu/dataset/519/heart+failure+clinical+records",
+      "license": "CC-BY-4.0",
+      "derivedFromSha256": "9c73cea7468ff5d517801ec050fe9993da5912fce4b56f296f8df3b38dd75912",
+      "transformation": "same rows/columns serialized as Parquet, table-oriented JSON and Excel; not additional participants",
+      "notice": "THIRD_PARTY_NOTICES.md"
+    },
+    {
+      "path": "fixtures/heart-failure.json",
+      "bytes": 68354,
+      "sha256": "479471e18d3a80960ea8da715b5258580cb298aff0268a9ef4ab4584a8cf25d0",
+      "source": "https://archive.ics.uci.edu/dataset/519/heart+failure+clinical+records",
+      "license": "CC-BY-4.0",
+      "derivedFromSha256": "9c73cea7468ff5d517801ec050fe9993da5912fce4b56f296f8df3b38dd75912",
+      "transformation": "same rows/columns serialized as Parquet, table-oriented JSON and Excel; not additional participants",
+      "notice": "THIRD_PARTY_NOTICES.md"
+    },
+    {
+      "path": "fixtures/heart-failure.xlsx",
+      "bytes": 20142,
+      "sha256": "a4d01b576a1abe91c1815a1b0ab0c490ff7f951ae562d1e7627ec5bd27658d40",
+      "source": "https://archive.ics.uci.edu/dataset/519/heart+failure+clinical+records",
+      "license": "CC-BY-4.0",
+      "derivedFromSha256": "9c73cea7468ff5d517801ec050fe9993da5912fce4b56f296f8df3b38dd75912",
+      "transformation": "same rows/columns serialized as Parquet, table-oriented JSON and Excel; not additional participants",
+      "notice": "THIRD_PARTY_NOTICES.md"
+    },
+    {
+      "path": "fixtures/revision-package.zip",
+      "source": "Repository-owned synthetic precomputed delivery fixture; no participant records",
+      "license": "MIT",
+      "sha256": "15fe488e57963101852ebf7ab9d6648314c47dc6b1153437be48a1ef52e1e4d1",
+      "bytes": 2023,
+      "acquisition": "Two explicit bundle versions with eight precomputed JSON/Markdown/CSV files, testing selection and immutable downloads only"
+    }
+  ],
+  "boundary": "Public development fixtures; scientific questions and evaluator answers are separate."
+}

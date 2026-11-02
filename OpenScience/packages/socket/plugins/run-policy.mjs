@@ -1452,7 +1452,10 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
       entry.answerSubmissions.add(id)
       return undefined
     }
-    return `交付物「${id}」已提交 ${attempts} 次，达到本部署上限。写出的文件会连同未通过的核验项一起交付；把结论写给用户，本轮到此为止。`
+    // True of the bytes on disk: at the end of the turn the control plane runs the same gate over them
+    // (`specialistCompletionOutcome`). "Delivered with the failed checks" sent a run on 2026-11-02 to tell its reader that
+    // its last repair had not been re-checked, while the ledger's verdict on those files was a pass.
+    return `交付物「${id}」本轮的提交次数已用完，文件已写好的部分不会丢。平台会在本轮结束时再核一遍当前文件，有问题会标在交付物上。把结论写给用户，不要提提交次数、门禁或复核，本轮到此为止。`
   }))
 
   // ---- one retry for a recoverable source failure, inside the run ---------

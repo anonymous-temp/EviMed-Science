@@ -15,15 +15,28 @@
  *   called verified.
  * - **The abstract is not the paper.** A capture says what it is (`contentLevel`), and a quotation that lives in the full text is not
  *   found in an abstract: that is `quote_not_found` for what was read, with the level named, not a claim about the paper.
+ * - **A capture is only as trustworthy as the workspace it sits in (a known limit, 2026-11-02).** `sourceCapture` makes the manifest agree
+ *   with the bytes, not with the tool that wrote them: a run that can write files can write an `abstract.md` and a `capture.json` that agree
+ *   with each other, and a quotation from it reads as `verified`. The one record the run cannot write is the preserving tool's own result in
+ *   the kernel transcript (`data.artifactSha256s`, read at the end of a run by `successfulEvidenceSourceArtifacts` for the clinical gate); it
+ *   does not exist while the run is still calling this gateway, and a live copy of it would be a store of its own, which this module does not
+ *   build. What a forged capture can reach is bounded by what already passes over a `publication_text` item: it is never pooled (it names no
+ *   trial), never a baseline (`baseline_source_unit_unverified`), and no tenant boundary is crossed: the only text it can claim to be is a
+ *   paper the run itself names, in the run's own project. It can become a single-study card, with the paper's identifier on it.
  * - **A DOI is found by the slug the full-text tool names its directory with, or by the DOI line of a preserved abstract.** Nothing is
  *   fetched here and nothing is searched outside the one project's workspace.
+ * - **The full text a PMCID names is the same paper.** `open_access_fulltext` keeps an article under `.evimed-sources/PMC<id>/`, and says
+ *   in the capture itself which article it is: the DOI on the markdown's header line, the PMID and the DOI in the XML's `article-id`
+ *   elements. A PMID or a DOI is matched to those (the newest 300 such directories, the front matter of one version each, never the
+ *   whole file) and the text is then read like every other capture, through its manifest. The full text is what is read first, the
+ *   abstract beside it: a sentence is held against the one that holds it.
  *
  * @module vcrPublicationSources
  */
 
 import fs from "node:fs/promises";
 import { sourceCapture } from "./resultDeliveryCapture.mjs";
-import { openScopedDirectoryNoFollow, resolveScopedPath } from "./security.mjs";
+import { openScopedDirectoryNoFollow, openScopedFileNoFollow, resolveScopedPath } from "./security.mjs";
 
 /** A PubMed id, optionally written `PMID: 123`. */
 const PMID = /^(?:PMID\s*:?\s*)?(\d{1,9})$/i;
@@ -36,6 +49,13 @@ const READ_LIMIT = 4 * 1024 * 1024;
 const VERSIONS_TRIED = 4;
 /** Preserved abstracts looked through for a DOI line. */
 const ABSTRACTS_SCANNED = 300;
+/** Preserved full texts (`.evimed-sources/PMC<id>`) looked through for a PMID or a DOI, newest first. */
+const FULLTEXTS_SCANNED = 300;
+/** How much of a capture's own front matter is read to learn which article it is: the header lines of the markdown, the ids of the XML. */
+const MARKDOWN_HEAD_BYTES = 2 * 1024;
+const XML_HEAD_BYTES = 32 * 1024;
+
+/** @typedef {{ text: string, sha256: string, path: string, contentLevel: "abstract" | "full_text", sourceRef: string }} Capture */
 
 /**
  * A publication as the run names it, in the one form the platform keeps: `{ kind: "pmid" | "doi", id }`, or null.
@@ -98,37 +118,94 @@ export function createVcrPublicationSources({ resolveProject }) {
     return null;
   }
 
+  /** The front matter of one capture file, as text: its first bytes, never the whole file. @param {any} project @param {string} relativePath @param {number} bytes */
+  async function head(project, relativePath, bytes) {
+    let opened;
+    try {
+      opened = await openScopedFileNoFollow(project.workspaceDir, resolveScopedPath(project.workspaceDir, relativePath));
+      const buffer = Buffer.alloc(Math.min(bytes, opened.stat.size));
+      const { bytesRead } = await opened.handle.read(buffer, 0, buffer.length, 0);
+      return buffer.subarray(0, bytesRead).toString("utf8");
+    } catch { return ""; } finally { await opened?.handle.close().catch(() => {}); }
+  }
+
+  /**
+   * The full text of a paper, found by the identifiers its capture carries: the DOI on the markdown's header line (as printed, so compared
+   * without case) and the PMID and DOI of the XML's `article-id` elements. The directories are `.evimed-sources/PMC<id>`, newest first,
+   * and a match is read through its manifest like any capture.
+   * @param {any} project @param {{ pmid: string | null, doi: string | null }} wanted
+   */
+  async function fullTextOf(project, wanted) {
+    if (!wanted.pmid && !wanted.doi) return null;
+    const slugged = wanted.doi ? await readFirst(project, `.evimed-sources/${doiSlug(wanted.doi)}`, ["fulltext.md"]) : null;
+    if (slugged) return slugged;
+    let opened;
+    try { opened = await openScopedDirectoryNoFollow(project.workspaceDir, resolveScopedPath(project.workspaceDir, ".evimed-sources")); }
+    catch { return null; }
+    let directories = [];
+    try {
+      const entries = (await fs.readdir(opened.path, { withFileTypes: true })).filter((entry) => entry.isDirectory() && /^PMC\d{1,12}$/.test(entry.name));
+      const dated = await Promise.all(entries.map(async (entry) => ({ name: entry.name, at: (await fs.stat(`${opened.path}/${entry.name}`).catch(() => null))?.mtimeMs ?? 0 })));
+      directories = dated.sort((a, b) => b.at - a.at).slice(0, FULLTEXTS_SCANNED);
+    } finally { await opened.handle.close().catch(() => {}); }
+    for (const directory of directories) {
+      const root = `.evimed-sources/${directory.name}`;
+      const [newest] = await versions(project, root);
+      if (!newest) continue;
+      const markdown = await head(project, `${root}/${newest}/fulltext.md`, MARKDOWN_HEAD_BYTES);
+      let same = Boolean(wanted.doi) && (/^- DOI: (\S+)\s*$/im.exec(markdown)?.[1] ?? "").toLowerCase() === wanted.doi;
+      if (!same) {
+        const xml = await head(project, `${root}/${newest}/fulltext.xml`, XML_HEAD_BYTES);
+        const ids = new Map([...xml.matchAll(/<article-id[^>]*\bpub-id-type="(pmid|doi)"[^>]*>\s*([^<\s]+)\s*</gi)].map((match) => [match[1].toLowerCase(), match[2].toLowerCase()]));
+        same = (Boolean(wanted.pmid) && ids.get("pmid") === wanted.pmid) || (Boolean(wanted.doi) && ids.get("doi") === wanted.doi);
+      }
+      if (same) {
+        const found = await readFirst(project, root, ["fulltext.md"]);
+        if (found) return found;
+      }
+    }
+    return null;
+  }
+
   return {
     /**
+     * The captures of the paper the platform has read, the whole article before the abstract. The first is the answer; the others are
+     * what else was read of the same paper, for a caller that holds a sentence against the one that has it.
      * @param {{ userId: string, projectId: string, publication: { kind: "pmid" | "doi", id: string } }} input
-     * @returns {Promise<{ found: false } | { found: true, text: string, sourceRef: string, sha256: string, path: string, contentLevel: "abstract" | "full_text" }>}
+     * @returns {Promise<{ found: false } | (Capture & { found: true, others?: Capture[] })>}
      */
     async read({ userId, projectId, publication }) {
       const project = await resolveProject(userId, projectId);
       if (!project?.workspaceDir) return { found: false };
+      /** @type {Capture[]} */
+      const captures = [];
+      const sourceRef = paperAddress(publication);
+      /** @param {{ text: string, sha256: string, path: string } | null} found @param {"abstract" | "full_text"} contentLevel */
+      const keep = (found, contentLevel) => { if (found) captures.push({ text: found.text, sha256: found.sha256, path: found.path, contentLevel, sourceRef }); };
       if (publication.kind === "pmid") {
-        const root = `.evimed-sources/pubmed/PMID${publication.id}`;
-        const abstract = await readFirst(project, root, ["abstract.md"]);
-        return abstract ? { found: true, text: abstract.text, sha256: abstract.sha256, path: abstract.path, contentLevel: "abstract",
-          sourceRef: paperAddress(publication) } : { found: false };
-      }
-      const full = await readFirst(project, `.evimed-sources/${doiSlug(publication.id)}`, ["fulltext.md"]);
-      if (full) return { found: true, text: full.text, sha256: full.sha256, path: full.path, contentLevel: "full_text", sourceRef: paperAddress(publication) };
-      // An abstract that carries the DOI on its header line.
-      let opened;
-      try { opened = await openScopedDirectoryNoFollow(project.workspaceDir, resolveScopedPath(project.workspaceDir, ".evimed-sources/pubmed")); }
-      catch { return { found: false }; }
-      let directories = [];
-      try { directories = (await fs.readdir(opened.path, { withFileTypes: true })).filter((entry) => entry.isDirectory() && /^PMID\d{1,9}$/.test(entry.name)).slice(0, ABSTRACTS_SCANNED); }
-      finally { await opened.handle.close().catch(() => {}); }
-      for (const directory of directories) {
-        const abstract = await readFirst(project, `.evimed-sources/pubmed/${directory.name}`, ["abstract.md"]);
-        if (abstract && new RegExp(`^- DOI: ${publication.id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*$`, "im").test(abstract.text)) {
-          return { found: true, text: abstract.text, sha256: abstract.sha256, path: abstract.path, contentLevel: "abstract",
-            sourceRef: paperAddress(publication) };
+        const abstract = await readFirst(project, `.evimed-sources/pubmed/PMID${publication.id}`, ["abstract.md"]);
+        const doi = abstract ? /^- DOI: (\S+)\s*$/im.exec(abstract.text)?.[1]?.toLowerCase() ?? null : null;
+        keep(await fullTextOf(project, { pmid: publication.id, doi }), "full_text");
+        keep(abstract, "abstract");
+      } else {
+        keep(await fullTextOf(project, { pmid: null, doi: publication.id }), "full_text");
+        // An abstract that carries the DOI on its header line.
+        let opened = null;
+        try { opened = await openScopedDirectoryNoFollow(project.workspaceDir, resolveScopedPath(project.workspaceDir, ".evimed-sources/pubmed")); }
+        catch { /* no abstract was ever preserved here */ }
+        let directories = [];
+        if (opened) {
+          try { directories = (await fs.readdir(opened.path, { withFileTypes: true })).filter((entry) => entry.isDirectory() && /^PMID\d{1,9}$/.test(entry.name)).slice(0, ABSTRACTS_SCANNED); }
+          finally { await opened.handle.close().catch(() => {}); }
+        }
+        const doiLine = new RegExp(`^- DOI: ${publication.id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*$`, "im");
+        for (const directory of directories) {
+          const abstract = await readFirst(project, `.evimed-sources/pubmed/${directory.name}`, ["abstract.md"]);
+          if (abstract && doiLine.test(abstract.text)) { keep(abstract, "abstract"); break; }
         }
       }
-      return { found: false };
+      const [first, ...others] = captures;
+      return first ? { found: true, ...first, ...(others.length ? { others } : {}) } : { found: false };
     },
   };
 }

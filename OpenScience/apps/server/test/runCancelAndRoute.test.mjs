@@ -12,7 +12,7 @@ import { AgentRunStore } from "../src/agentRuns.mjs";
 import { runFinishedNotifies } from "../src/notificationService.mjs";
 import * as runRoute from "../src/runRoute.mjs";
 import { RUN_ESTIMATE_FALLBACKS, normalizeRunEstimate, runEstimate } from "../src/runRoute.mjs";
-import { researchGoalBlock, researchGoalPrompt } from "../src/researchGoal.mjs";
+import { isResearchGoalRun, researchGoalBlock, researchGoalPrompt, withoutResearchGoalGesture } from "../src/researchGoal.mjs";
 import { createWebApiApp } from "../src/server.mjs";
 import { HttpError } from "../src/security.mjs";
 import { SpecialistClassifier } from "../src/specialistClassifier.mjs";
@@ -372,4 +372,15 @@ test("a research goal's context asks for the skill, in a tag no reader takes for
   assert.match(researchGoalPrompt("评估队列的再入院风险"), /^\/loopx \S/);
   assert.ok(PLATFORM_CONTEXT_TAGS.some(item => item.tag === "evimed-research-goal"), "the block's tag is a platform tag");
   assert.match(block, /^\s*<evimed-research-goal>[\s\S]*<\/evimed-research-goal>$/);
+});
+
+test("the gesture a research goal is started with is taken out of the person's sentence, and nothing else is", () => {
+  for (const goal of ["评估队列的再入院风险", "/loopx 在句子里的词不动", "a\nb"]) {
+    assert.equal(withoutResearchGoalGesture(researchGoalPrompt(goal)), goal, "what the dispatch made, the strip undoes");
+  }
+  assert.equal(withoutResearchGoalGesture("/loopx"), "");
+  assert.equal(withoutResearchGoalGesture("/loopxy 评估"), "/loopxy 评估", "a longer word is not the gesture");
+  assert.equal(withoutResearchGoalGesture("评估 /loopx 队列"), "评估 /loopx 队列");
+  assert.deepEqual(["research-goal", "adopted:research-goal", "choice:answer", "loopx-continuation", undefined].map((effectiveRouteReason) => isResearchGoalRun({ effectiveRouteReason })),
+    [true, true, false, false, false]);
 });

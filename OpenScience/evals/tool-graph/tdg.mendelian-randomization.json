@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "mendelian-randomization",
-  "version": "sha256:af470ef248ca4161c64710ea74e2d8c5f3be9702eb2e30e59d0f0fe7acff051f",
+  "version": "sha256:e67cdff453af46cd3ae8856b2532d80b1527af6c74d8c02ea62851ccc89af577",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 26,
@@ -449,7 +449,7 @@
     {
       "name": "mcp__evimed__biomedical_source_search",
       "source": "mcp",
-      "description": "Query one audited public biomedical source through a bounded, traceable connector. Results are metadata or selected public fields and require primary-record verification.",
+      "description": "Query one audited public biomedical source through a bounded, traceable connector; `prospero` is the register of planned and ongoing systematic reviews. Results are metadata or selected public fields and require primary-record verification.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -519,6 +519,7 @@
               "archs4",
               "rummageo-geo-gene-set-enrichment-search",
               "sider",
+              "prospero",
               "core",
               "semantic-scholar",
               "unpaywall",
@@ -539,6 +540,12 @@
             "type": "integer",
             "minimum": 1,
             "maximum": 50
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 499,
+            "description": "Only for `prospero`: registrations to skip. data.outcome says when more matched and what offset reads on; a topic is not open on a partial read."
           }
         },
         "additionalProperties": false,
@@ -623,7 +630,7 @@
           "limit": {
             "type": "integer",
             "minimum": 1,
-            "maximum": 123
+            "maximum": 124
           }
         },
         "additionalProperties": false
@@ -759,7 +766,7 @@
     {
       "name": "mcp__evimed__literature_search",
       "source": "mcp",
-      "description": "Search the biomedical and scientific literature (PubMed and the other configured sources) through the EviMed evidence adapter. By default the answer leads with PubMed's Best Match records and adds the EviMed index's records that PubMed did not return (up to `limit` from each; an index record is compact — abstract cut to 800 characters, no AI summary); `databases` [\"pubmed\"] asks PubMed alone and [\"internal\"] asks the EviMed index alone with its full abstracts and AI summaries. Supply `relation` instead to retrieve the literature PubTator3 records a relation in — papers that assert the relation, not papers where both terms merely co-occur; get the concept identifiers from term_normalize. Supply `pmids` instead to fetch the abstracts, publication types and MeSH headings of PubMed records you have screened in (up to 60); each abstract is preserved and quotable, and past about 12,000 characters an item names its preserved file instead of carrying the text. Public results are bibliographic metadata unless abstract or full-text fields are explicitly present; never infer study design, evidence level, outcomes, or effect estimates from a title.",
+      "description": "Search the biomedical and scientific literature through the EviMed evidence adapter. The EviMed index reaches CNKI, Wanfang, VIP and SinoMed and some Embase-linked records; PubMed is searched directly. By default the answer leads with PubMed's Best Match records and adds the index's records that PubMed did not return (up to `limit` from each; an index record is compact — abstract cut to 800 characters, no AI summary), so leave `databases` out unless you mean to narrow it. `databases` [\"pubmed\"] asks PubMed alone and leaves all of those out; [\"internal\"] asks the index alone and is how to search the Chinese literature (add `language`: \"zh\" and Chinese words). The index ranks by meaning: each of its records says how many query words it holds (`queryTermsFound`), and few or unrelated results are not evidence of a gap. Supply `relation` instead to retrieve the literature PubTator3 records a relation in — papers that assert the relation, not papers where both terms merely co-occur; get the concept identifiers from term_normalize. Supply `pmids` instead to fetch the abstracts, publication types and MeSH headings of PubMed records you have screened in (up to 60); each abstract is preserved and quotable, and past about 12,000 characters an item names its preserved file instead of carrying the text. Public results are bibliographic metadata unless abstract or full-text fields are explicitly present; never infer study design, evidence level, outcomes, or effect estimates from a title.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -820,7 +827,7 @@
             "type": "integer",
             "minimum": 0,
             "maximum": 9999,
-            "description": "PubMed route: results to skip. data.outcome says when more exist and what to pass."
+            "description": "Results to skip, in PubMed's list or, with databases [\"internal\"], in the index's first 100. data.outcome says when more exist and what to pass."
           },
           "dateFrom": {
             "type": "string",
@@ -863,7 +870,8 @@
             "enum": [
               "zh",
               "en"
-            ]
+            ],
+            "description": "EviMed index only: records whose title is in this language."
           },
           "minImpactFactor": {
             "type": "number",
@@ -898,7 +906,11 @@
                 "crossref"
               ]
             },
-            "description": "Default (omit it): PubMed first, then the EviMed index's extra records, compact. [\"pubmed\"]: PubMed only. [\"internal\"]: the EviMed index only, full abstracts and AI summaries. [\"crossref\"]: Crossref."
+            "description": "Default (omit it): PubMed first, then the EviMed index's extra records, compact. [\"pubmed\"]: PubMed only. [\"internal\"]: the EviMed index only (CNKI, Wanfang, VIP, SinoMed, some Embase-linked records), compact. [\"crossref\"]: Crossref."
+          },
+          "fullRecords": {
+            "type": "boolean",
+            "description": "With databases [\"internal\"]: whole abstracts and AI summaries instead of compact records."
           }
         },
         "additionalProperties": false

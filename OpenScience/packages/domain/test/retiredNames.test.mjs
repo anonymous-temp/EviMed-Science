@@ -5,6 +5,14 @@ import { RETIRED_MODULE_NAMES, RETIRED_NAME_SEARCH_UNTIL, searchMatches, searchN
 const BEFORE = Date.parse("2026-12-01T00:00:00Z");
 const AFTER = Date.parse("2027-01-08T00:00:00Z");
 
+test("former research tool names still find their renamed cards during migration", () => {
+  const pairs = [["临床证据深度分析", "文献综述"], ["自动化 Meta 分析", "Meta 分析"], ["综合药品评价", "药品综合评价"], ["药品遴选评价", "药品遴选"], ["基金申报书开发", "基金申报"]];
+  for (const [oldName, name] of pairs) {
+    assert.equal(searchMatches(oldName, [name], BEFORE), true, oldName);
+    assert.equal(searchMatches(oldName, [name], Date.parse("2027-02-02T00:00:00Z")), false, oldName);
+  }
+});
+
 test("a retired module name is read as its current name while the alias lasts", () => {
   assert.deepEqual(searchNeedles("循证传播", BEFORE), ["循证传播", "循证 geo"]);
   assert.deepEqual(searchNeedles(" 虚拟临研 ", BEFORE), ["虚拟临研", "虚拟临床研究"]);

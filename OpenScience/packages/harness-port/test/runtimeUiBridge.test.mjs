@@ -762,3 +762,21 @@ test('the frame takes no account of where a GEO project stands: the page beside 
   shellSends(f,{type:'evimed.runtime-ui.geo',seq:1,sessionId:'session-a',journey:{title:'t',nextStep:'https://evil.test'}});
   assert.equal(delivered[0].journey,undefined);
 });
+
+test('the same native session announces a settled turn only after observed host running', async () => {
+  const f = fixture();
+  let running = false;
+  let changed = () => {};
+  f.ctx.sessions.list.getSnapshot = () => mainView('session-new', { 'session-new': { running } });
+  f.ctx.sessions.list.subscribe = (/** @type {() => void} */ listener) => { changed = listener; return () => {}; };
+  apply(f.ctx, {}, f.target);
+  await settle(); f.navigate(); await settle();
+  const notifications = () => f.sent.filter(row => row.message.type === 'evimed.runtime-ui.turn-settled');
+  assert.equal(notifications().length, 0);
+  running = true; changed();
+  assert.equal(notifications().length, 0);
+  running = false; changed(); changed();
+  assert.equal(notifications().length, 1);
+  assert.equal(notifications()[0].message.sessionId, 'session-new');
+  f.ctx.dispose();
+});

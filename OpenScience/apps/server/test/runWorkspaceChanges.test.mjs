@@ -1,12 +1,12 @@
 // What a run changed in its workspace (course correction 2026-10-12, GA16): the files an ordinary conversation produced,
 // found by what is new or modified between its start and its end, whichever tool wrote them.
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, symlink, utimes, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, symlink, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { WORKSPACE_WALK_DEPTH, workspaceChangedFiles } from "../src/runWorkspaceChanges.mjs";
+import { SPECIALIST_JOB_DIRECTORIES, WORKSPACE_WALK_DEPTH, withoutOtherRunsJobFiles, workspaceChangedFiles } from "../src/runWorkspaceChanges.mjs";
 
 async function withWorkspace(fn) {
   const root = await mkdtemp(path.join(tmpdir(), "os-workspace-changes-"));
@@ -86,4 +86,35 @@ test("a link is neither followed nor listed, and the walk is bounded in depth, e
     assert.ok((await workspaceChangedFiles(root, { since: now - 5_000, maxEntries: 3 })).length <= 3);
   });
   assert.deepEqual(await workspaceChangedFiles(path.join(tmpdir(), "os-no-such-workspace"), { since: 0 }), [], "a workspace that is not there has no changes");
+});
+
+test("a specialist job's files belong to the run that names the job", () => {
+  // 2026-11-02: two runs in one project; the conversation that started no job listed the other run's request.json.
+  const topic = "topic-20261102010101-a1b2c3d4e5f6";
+  const bibliometric = "bibliometric-20261102010202-0123456789ab";
+  const files = [`research-topic-runs/${topic}/output/request.json`, `bibliometric-analysis-runs/${bibliometric}/report.md`, "notes.md", "my-runs.md"];
+  assert.deepEqual(withoutOtherRunsJobFiles(files, [{ parts: [{ output: `jobId: ${bibliometric}` }] }]), [`bibliometric-analysis-runs/${bibliometric}/report.md`, "notes.md", "my-runs.md"]);
+  assert.deepEqual(withoutOtherRunsJobFiles(files, [{ parts: [{ output: "no job here" }] }]), ["notes.md", "my-runs.md"], "a transcript that never names a job is the witness that the run started none");
+});
+
+test("a run whose transcript is not held is not said to have started nothing", () => {
+  // A stopped or failed run is read from the ledger and the workspace only: with nothing to read its calls from, a job's files are neither
+  // its own nor another's, and dropping them lost a cancelled conversation's research-topic output.
+  const files = ["research-topic-runs/topic-20261102010101-a1b2c3d4e5f6/output/request.json", "notes.md"];
+  assert.deepEqual(withoutOtherRunsJobFiles(files, []), files);
+  assert.deepEqual(withoutOtherRunsJobFiles(files, undefined), files);
+  assert.deepEqual(withoutOtherRunsJobFiles(["a.md"], undefined), ["a.md"]);
+});
+
+test("only a specialist's job directory can be another run's: a loop's own output tree that is shaped like one never is", () => {
+  const files = ["cv-runs/fold3/x.csv", "bootstrap-runs/seed-7/summary.md", "research-topic-runs/notes/summary.md", "my-runs/topic-20261102010101-a1b2c3d4e5f6/a.md",
+    "drug-safety-runs/review-20261102010101-a1b2c3d4e5f6/a.md"];
+  assert.deepEqual(withoutOtherRunsJobFiles(files, [{ parts: [{ output: "nothing to do with any job" }] }]), files);
+});
+
+test("the closed list of job directories is the one the specialist job tool writes", async () => {
+  const source = await readFile(new URL("../../../runtime/mcp/evimed-research/specialist_jobs.py", import.meta.url), "utf8");
+  const written = [...source.matchAll(/"prefix": "([a-z-]+)",[\s\S]*?"directory": "([a-z-]+)"/g)].map((match) => [match[2], match[1]]).sort();
+  assert.equal(written.length, 5);
+  assert.deepEqual(Object.entries(SPECIALIST_JOB_DIRECTORIES).sort(), written);
 });

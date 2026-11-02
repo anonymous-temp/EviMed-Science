@@ -116,6 +116,17 @@ export function orderedGroups(groups: readonly GeoClusterRow[]): GeoClusterRow[]
  * for a percentage). The conclusion is the number of groups no engine named us in, the one thing a reader would count by hand.
  * A cell opens the group's drawer resting on that engine; the group's name opens it too.
  */
+/**
+ * Anatomy: ChartCard with a group-by-engine matrix and progressive row disclosure.
+ * Variants: Selected engine or all engines; existing read failure and content states.
+ * States: Actual group tallies determine the conclusion; missing reads keep local recovery.
+ * Hit area: Group links use the shared 28px small-control height and 14px UI text.
+ * Keyboard: Native group links and grid controls retain their destination and focus behavior.
+ * Long content: Group names truncate inside the grid column while retaining their accessible text.
+ * Theme: Existing surface, text and scientific matrix colour roles.
+ * Responsive: The grid owns its local overflow; no page-level width or workflow change.
+ * Verification: VisibilityTab.test.tsx and the existing geo-visibility walk; native acceptance is separate.
+ */
 export function ClusterMatrixCard({
   groups,
   engines,
@@ -137,9 +148,9 @@ export function ClusterMatrixCard({
   const rows = useMemo(() => visible.map((row) => ({
     key: row.id,
     name: clusterName(row),
-    // The group's name opens the drawer its cells open, at the cells' 28 px: one look for one job in one row (a 12 px inline link was a
-    // kind of control of its own beside them, the eleventh on 可见度 in the fixture walk of b559d4b7e). It still truncates in its column.
-    header: <ClusterLink groupId={row.id} className="block h-sm truncate leading-7">{clusterName(row)}</ClusterLink>,
+    // Use the shared small control height and UI text for the group's action instead of inheriting the grid's 12px metadata.
+    // The link still opens the same drawer as the cells and truncates within its column.
+    header: <ClusterLink groupId={row.id} className="block h-sm truncate text-ui leading-7">{clusterName(row)}</ClusterLink>,
     note: row.isControl ? <span className="shrink-0 text-meta text-text-3">对照</span> : undefined,
     tallies: row.byEngine,
   })), [visible]);

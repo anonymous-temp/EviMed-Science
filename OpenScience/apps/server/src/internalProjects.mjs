@@ -193,10 +193,13 @@ export function isInternalProjectOf(config, userId, projectId) {
  * must not be reachable by typing (`createResearcherProject`).
  * @param {unknown} projectId @returns {boolean}
  */
+/** Dedicated API projects retain ordinary quotas but have no native or scheduled root writer. */
+export function isDataAnalysisProject(project) { return /^da-[a-f0-9]{40}$/.test(String(project?.id ?? project)); }
+
 export function isReservedProjectId(projectId) {
   const id = String(projectId ?? "");
   return id === LIBRARY_PROJECT_ID || id === LEARNING_PROJECT_ID || id === SOURCES_PROJECT_ID || id === FRONTIER_PROJECT_ID || id === EVIDENCE_PROJECT_ID
-    || id === OPENVIKING_PROJECT_ID || EVALUATION_CELL_PROJECT.test(id);
+    || id === OPENVIKING_PROJECT_ID || EVALUATION_CELL_PROJECT.test(id) || isDataAnalysisProject(id);
 }
 
 /**

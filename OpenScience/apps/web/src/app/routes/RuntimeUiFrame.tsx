@@ -12,7 +12,7 @@ import { saveToKnowledgeBase } from "@/lib/sourceClient";
 import { listPath } from "@/lib/knowledgeNav";
 import { getWebSessionSourceScope, putWebSessionSourceScope } from "@/lib/apiClient";
 import { toast } from "@/lib/toast";
-import { provideFrameSessionSearch, reportPathOf, searchKnowledgeSources, useFrameRunBinding, type FrameSessionSearchResult } from "@/lib/runtimeUiBridge";
+import { CONVERSATION_SETTLED_EVENT, provideFrameSessionSearch, reportPathOf, searchKnowledgeSources, useFrameRunBinding, type FrameSessionSearchResult } from "@/lib/runtimeUiBridge";
 import { useFrameReplyChecks } from "@/lib/replyChecks";
 import { useResearchBilling } from "@/lib/useResearchBilling";
 import { conversationTitle } from "@/lib/conversationTitles";
@@ -816,6 +816,13 @@ export function RuntimeUiFrame({ projectId, origin, scope: scopeInput, scopeOwne
         incoming.current = message.seq;
         if (message.type === "evimed.runtime-ui.source-citations") postToFrame("source-citations-result", { requestId: message.requestId, ok: false, items: [] });
         else toast.error(message.type === "evimed.runtime-ui.save-to-knowledge-base" ? MEMBER_SAVE_TEXT : MEMBER_OPEN_TEXT);
+        return;
+      }
+      if (message.type === "evimed.runtime-ui.turn-settled") {
+        if (typeof message.sessionId !== "string" || message.sessionId !== frameTask
+          || (scope && message.sessionId !== scope.sessionId)) return;
+        incoming.current = message.seq;
+        window.dispatchEvent(new CustomEvent(CONVERSATION_SETTLED_EVENT, { detail: { sessionId: message.sessionId } }));
         return;
       }
       if (message.type === "evimed.runtime-ui.booted") {

@@ -14,8 +14,10 @@
  * returned, because the workspace is the model's and the model may have installed a package into it.
  *
  * Known limit, said once: two conversations running in one project at the same moment share a workspace, and a file one
- * writes inside the other's window is attributed to both. The tool-call witnesses (`artifactCandidates`) do not have that
- * limit and stay the first source; this is the second, for what they cannot see.
+ * writes inside the other's window can be attributed to both. Known foreign deliverable directories can be excluded by
+ * their independently witnessed identifiers, and a specialist job's own directory has an owner to check
+ * (`withoutOtherRunsJobFiles`); shared identifiers and other files remain ambiguous. Tool-call witnesses
+ * (`artifactCandidates`) stay the first source; this is the second, for what they cannot see.
  *
  * @module runWorkspaceChanges
  */
@@ -31,15 +33,56 @@ export const WORKSPACE_WALK_ENTRIES = 6000;
 export const WORKSPACE_WALK_FILES = 64;
 
 /**
+ * The five specialist job layouts, by directory: `<directory>/<job id>/…` with a job id that starts with the capability's prefix. Closed on
+ * purpose: only these directories are a job tool's, and `runtime/mcp/evimed-research/specialist_jobs.py` (`SPECS`) is where they are written
+ * (a test holds the two equal). A tree of the model's own that is merely shaped like one (`cv-runs/fold3/…`, a loop's `bootstrap-runs/`) is
+ * nobody's job and its files are the run's like any others.
+ * @type {Readonly<Record<string, string>>}
+ */
+export const SPECIALIST_JOB_DIRECTORIES = Object.freeze({
+  "mendelian-randomization-runs": "mr-",
+  "bibliometric-analysis-runs": "bibliometric-",
+  "research-topic-runs": "topic-",
+  "peer-review-runs": "review-",
+  "drug-safety-runs": "safety-",
+});
+
+const JOB_FILE = /^([a-z][a-z-]*-runs)\/([A-Za-z0-9._-]+)\//;
+
+/**
+ * Changed files without those of a specialist job this run never started. A conversation that started no job listed the other run's
+ * `research-topic-runs/<job>/output/request.json` as its own output, because both ran in one project (2026-11-02). A run's own job is named
+ * in its tool calls and results, so its id appearing in the transcript is the test.
+ *
+ * Only where the transcript is held. A stopped or failed run is read without one (`messages` empty), and a transcript that is not there cannot
+ * show that the run started nothing: its job files are kept, not claimed foreign, which is what lost a cancelled conversation's own
+ * `research-topic-runs/<job>/…` (REVIEWFIX2, 2026-11-02). And only a specialist's job directory (`SPECIALIST_JOB_DIRECTORIES`) can be
+ * another run's.
+ * @param {readonly string[]} files @param {unknown} messages the run's transcript, as far as it is held
+ * @returns {string[]}
+ */
+export function withoutOtherRunsJobFiles(files, messages) {
+  if (!Array.isArray(messages) || messages.length === 0) return [...files];
+  const jobs = files.map((file) => {
+    const match = JOB_FILE.exec(file);
+    const prefix = match ? SPECIALIST_JOB_DIRECTORIES[match[1]] : undefined;
+    return match && prefix && match[2].startsWith(prefix) ? match[2] : null;
+  });
+  if (!jobs.some(Boolean)) return [...files];
+  const transcript = JSON.stringify(messages);
+  return files.filter((_, index) => !jobs[index] || transcript.includes(/** @type {string} */ (jobs[index])));
+}
+
+/**
  * The files under `root` last written in `[since, until]`, as workspace-relative paths, sorted.
  *
  * @param {string} root the workspace directory on the host
- * @param {{ since: number, until?: number, maxEntries?: number, maxDepth?: number, limit?: number }} window
+ * @param {{ since: number, until?: number, maxEntries?: number, maxDepth?: number, limit?: number, excludedDeliverableIds?: ReadonlySet<string> }} window
  *   `since` and `until` are epoch milliseconds. A file's own mtime decides; `until` carries the one millisecond of slack the
  *   ledger's other freshness checks allow.
  * @returns {Promise<string[]>}
  */
-export async function workspaceChangedFiles(root, { since, until = Number.POSITIVE_INFINITY, maxEntries = WORKSPACE_WALK_ENTRIES, maxDepth = WORKSPACE_WALK_DEPTH, limit = WORKSPACE_WALK_FILES }) {
+export async function workspaceChangedFiles(root, { since, until = Number.POSITIVE_INFINITY, maxEntries = WORKSPACE_WALK_ENTRIES, maxDepth = WORKSPACE_WALK_DEPTH, limit = WORKSPACE_WALK_FILES, excludedDeliverableIds = new Set() }) {
   if (!Number.isFinite(since)) return [];
   /** @type {string[]} */
   const found = [];
@@ -63,6 +106,7 @@ export async function workspaceChangedFiles(root, { since, until = Number.POSITI
       // A link is neither followed nor listed: it can name anything on the host.
       if (entry.isSymbolicLink()) continue;
       if (entry.isDirectory()) {
+        if (relative === "deliverables" && excludedDeliverableIds.has(entry.name)) continue;
         if (depth + 1 <= maxDepth && isOrdinaryOutputDirectory(entry.name, relative === "")) queue.push({ relative: child, depth: depth + 1 });
         continue;
       }

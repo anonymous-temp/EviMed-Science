@@ -1422,6 +1422,20 @@ describe("the run behind the task, in the frame", () => {
     });
   });
 
+  it("refreshes the adjacent project on a validated native same-session settlement", async () => {
+    const { frame } = await openTask();
+    const settled = vi.fn();
+    window.addEventListener("evimed:conversation-settled", settled);
+    try {
+      emit(frame, { type: "evimed.runtime-ui.turn-settled", seq: 3, sessionId: "session-other" });
+      expect(settled).not.toHaveBeenCalled();
+      emit(frame, { type: "evimed.runtime-ui.turn-settled", seq: 4, sessionId: "session-a" });
+      expect(settled).toHaveBeenCalledTimes(1);
+      emit(frame, { type: "evimed.runtime-ui.turn-settled", seq: 4, sessionId: "session-a" });
+      expect(settled).toHaveBeenCalledTimes(1);
+    } finally { window.removeEventListener("evimed:conversation-settled", settled); }
+  });
+
   it("keeps the task when the reader opens a delegated child's view inside the frame", async () => {
     mocks.listRuns.mockResolvedValue([run]);
     const { frame } = await openTask();

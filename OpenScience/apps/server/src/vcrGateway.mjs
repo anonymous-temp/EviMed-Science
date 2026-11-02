@@ -88,10 +88,10 @@ import { DATE_QUOTE_MAX } from "./vcrClinicalDateEvidence.mjs";
 import { candidateRequest } from "./vcrCandidateSearch.mjs";
 import { VCR_RECONSTRUCTION_REFERENCE, vcrReconstructionReferenceFor, vcrResultKindFor } from "./vcrJobs.mjs";
 import { vcrPublicationId } from "./vcrPublicationSources.mjs";
-import { resolveJobSubject, prepareVcrSubjectPopulation, vcrConversationSubject } from "./vcrSubjects.mjs";
+import { resolveJobSubject, prepareVcrSubjectPopulation, vcrConversationSubject, vcrJobFroze } from "./vcrSubjects.mjs";
 import { prepareVcrModelDesign } from "./vcrModelDesign.mjs";
 import { VCR_COVERAGE_POPULATION_NAME, vcrCohortRulesFromCriteria } from "./vcrCoverage.mjs";
-import { readPoolResult, distributionFromPooled, naturalOf, parameterKindOf, poolTargetOf, defaultScaleOf, defaultArmRoleOf, evidenceItemGaps, EVIDENCE_ITEM_WORDS_ZH, VCR_POOL_MAX_STUDIES } from "./vcrEvidence.mjs";
+import { readPoolResult, distributionFromPooled, naturalOf, parameterKindOf, poolTargetOf, defaultScaleOf, defaultArmRoleOf, evidenceItemGaps, EVIDENCE_DERIVED_VALUE_SOURCES, EVIDENCE_ITEM_WORDS_ZH, VCR_POOL_MAX_STUDIES } from "./vcrEvidence.mjs";
 
 const gatewayPath = "/internal/vcr/v1";
 const operations = Object.freeze(["read", "write", "simulate", "digitize"]);
@@ -1088,8 +1088,10 @@ const WRITERS = {
       }
       if (cited.length !== 1) return void item.bad("evidenceIds", "直接取值只引用一条证据；多项证据用 fromPooling 交给引擎合并。");
       const [row] = await (evidenceStore.citableItemsById ?? evidenceStore.verifiedItemsById).call(evidenceStore, { userId: study.userId, studyId: study.id, ids: cited });
-      if (row.detail?.verificationScope === "quoted_inputs_only") {
-        return void item.bad("evidenceIds", "这条记录只核对了派生输入，不能冒充已发表的直接数值；请先保存实际计算的结果，或明确作为假设。", "vcr_evidence_unverified");
+      // A number the analyst computed is not a number a source reported, whether its inputs were checked (a registry's) or could not be (a
+      // paper's: `verificationScope` is none there, so the scope alone does not say it).
+      if (row.detail?.verificationScope === "quoted_inputs_only" || EVIDENCE_DERIVED_VALUE_SOURCES.includes(String(row.value_source))) {
+        return void item.bad("evidenceIds", "这条记录是算出来的值，不是论文或登记处报告的数，不能冒充已发表的直接数值；请先保存实际计算的结果，或明确作为假设（sourceKind expert_set、valueSource assumed，出处写进 note）。", "vcr_evidence_unverified");
       }
       // The arm the parameter is a quantity of, the same rule the pool takes its
       // studies by: a control-arm median is not the treatment arm's, and a card
@@ -1385,11 +1387,15 @@ const WRITERS = {
     if (notReported) return written.id;
     if (written.state === "reported_unverified") {
       // Saved, and usable as an external-evidence card's number: the answer says what it lacks and how to supply it.
-      const why = written.because === "publication_not_read" ? "平台还没有读到这篇文献的原文（先用文献检索按 PMID 取回摘要，它会被保全）"
-        : written.because === "calculated_from_publication" ? "这是由论文里的数算出来的值，平台不核对派生值"
-          : `引文不在平台读到的${written.publication?.contentRead === "abstract" ? "摘要" : "原文"}里（全文里的数要先取回全文）`;
-      item.issues.push(issue(item.index, "quote", "vcr_evidence_reported_unverified",
-        `已记录为文献报告的数，未核对：${why}。它可以作为外部证据假设卡的依据，结果页会写明“未核对”；取回原文后写同一条，就会核对。`));
+      const calculated = written.because === "calculated_from_publication";
+      // What will happen is said, and no more: a text is checked only once the platform has read one, and only the open-access full texts can be read.
+      const why = written.because === "publication_not_read" ? "平台还没有读到这篇文献的原文（先用文献检索按 PMID 取回摘要，它会被保全；数在全文里的话，再用 open_access_fulltext 取全文，只有开放获取的取得到）"
+        : calculated ? "这是由论文里的数算出来的值，平台不核对派生值"
+          : `引文不在平台读到的${written.publication?.contentRead === "abstract" ? "摘要" : "原文"}里${written.publication?.contentRead === "abstract" ? "（数在全文里的话，用 open_access_fulltext 取回全文，只有开放获取的取得到）" : ""}`;
+      // A computed value is kept as a record, and it is not what a card or a pool is made of: say so, and say what a card can be made of.
+      item.issues.push(issue(item.index, "quote", "vcr_evidence_reported_unverified", calculated
+        ? `已记录，未核对：${why}。它不能作为外部证据假设卡的依据，也不进入合并；论文报告的原数可以（写进 evidence_item 并整句引用），你自己的设定用 sourceKind expert_set、valueSource assumed，出处写进 note。`
+        : `已记录为文献报告的数，未核对：${why}。它可以作为外部证据假设卡的依据，结果页会写明“未核对”；平台读到文本之后再写同一条，引文逐字在文本里才会核对。`));
     } else if (!verified) {
       item.issues.push(issue(item.index, "quote", "vcr_evidence_unverified",
         `已记录，但没有通过原文核对（${written.state}），不会进入假设卡：引文要逐字出现在保全原文里，值、区间和样本量都要出现在引文里。`));
@@ -2438,7 +2444,7 @@ async function verifySourceSpan({ item, documents, study, subjectKey, documentId
     id: "check", variable: fact.variable, polarity: "affirmed", extractedBy: "model", surface: fact.surface ?? span.quote, value: fact.value, dateSurface: fact.dateSurface,
     clinical: fact.clinical, unit: fact.unit, occurredAt: fact.occurredAt, recordedAt: fact.recordedAt, provenance: { factSchema: 2 },
     source: { documentId, start, end, quote: span.quote, ...(dateQuote ? { dateQuote } : {}) },
-  }, { documents: new Map([[documentId, { text: document.text }]]) });
+  }, { documents: new Map([[documentId, { text: document.text, visibleAt: document.visibleAt ?? null }]]) });
   if (!settled.ok) {
     const { reason } = /** @type {{ ok: false, reason: string }} */ (settled);
     const dated = reason === "date_not_in_span" ? "clinical.occurredInterval 的起止日期要整个印在 quote 里（含年份）；没有就不写 occurredInterval。" : "";
@@ -2950,8 +2956,9 @@ async function startJob(vcr, study, request) {
   detail = { ...detail, ...population.detail, ...designBinding.detail };
   if (subject) {
     detail = { ...detail, ...subject.detail };
+    // The stage in flight is the answer to the scenario it froze, and to no other: a start that states another number is another job.
     const running = await vcr.orchestrator?.inFlightStage?.(study.id, subject.detail);
-    if (running) {
+    if (running && vcrJobFroze(running.scenario, scenario)) {
       return { action: "start", jobId: running.id, state: running.state, progress: running.progress ?? {}, alreadyRunning: true,
         subject: { kind: subject.objectKind, id: String(subject.row.id), version: Number(subject.row.version), ...(subjectName(subject.row) ? { name: subjectName(subject.row) } : {}) },
         message: "这个对象的这一步平台已经在算了：读这个作业的进度和结果就行，不必再排一个。" };

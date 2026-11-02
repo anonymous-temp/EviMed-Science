@@ -79,7 +79,8 @@ export function assessPatient(patient, answer, criteria = CRITERIA, { pastGuard 
       source: { documentId: DOCUMENT, start, end: start + item.quote.length, quote: item.quote, ...(dateQuote ? { dateQuote } : {}) },
       extractedBy: 'model', provenance: { schema: 1, status: 'batch_extraction', factSchema: 2 },
     };
-    const checked = settleFactEvidence(fact, { documents, anyPolarity: true });
+    // The patient's `asOf` (the date of the most recent record) is the moment the file entered: a line that prints a later date is a date ahead, not a record's.
+    const checked = settleFactEvidence(fact, { documents, anyPolarity: true, ...(patient.asOf ? { asOf: patient.asOf } : {}) });
     if (!checked.ok) { bump(dropped, String(checked.reason)); continue; }
     if (checked.notes.includes('unit_dropped')) unitDropped += 1;
     if (checked.notes.includes('unit_read_by_convention')) unitByConvention += 1;

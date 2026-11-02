@@ -344,6 +344,12 @@ function decimalsOf(value) {
   return (written.split(".")[1] ?? "").length;
 }
 
+/**
+ * The `valueSource` words of a number the analyst computed rather than a source reporting it. Its inputs can be held against a text, its
+ * answer cannot: a card is never made of one (the inputs are the evidence, not the figure).
+ */
+export const EVIDENCE_DERIVED_VALUE_SOURCES = Object.freeze(["calculated", "imputed", "predicted"]);
+
 /** The numeric fields of an extraction that a quotation must anchor, besides the value. */
 const COMPANION_NUMBERS = Object.freeze(["ciLow", "ciHigh", "sampleSize", "events"]);
 
@@ -373,7 +379,7 @@ export function verifyExtraction({ extraction, sourceText = "", checkedAt = "" }
   // derived value the check is therefore that every input it names is in the
   // preserved text, not that its own answer is. This is the same distinction
   // the clinical gate draws between a `direct` claim and a `derived` one.
-  const derived = ["calculated", "imputed", "predicted"].includes(String(extraction?.valueSource ?? ""));
+  const derived = EVIDENCE_DERIVED_VALUE_SOURCES.includes(String(extraction?.valueSource ?? ""));
   const inputs = Array.isArray(extraction?.locator?.inputs) ? extraction.locator.inputs : [];
   /** @type {string[]} */
   const unanchored = [];
@@ -1621,13 +1627,17 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
       // A number a publication reports, bound to the paper by its PMID or DOI: the quotation is held against the text the platform itself
       // read of that paper (a capture a literature tool preserved), and a paper it has not read is not a reason to refuse the number.
       const paper = !literature && item.publication && typeof item.publication === "object" ? /** @type {{ kind: "pmid" | "doi", id: string }} */ (item.publication) : null;
-      const paperRead = paper ? await publicationSources?.read({ userId, projectId, publication: paper }).catch(() => null) ?? { found: false } : null;
+      const paperReads = paper ? await publicationSources?.read({ userId, projectId, publication: paper }).catch(() => null) ?? { found: false } : null;
+      // The platform may have read more than one text of the paper (the whole article and its abstract): the sentence is held against the one
+      // that holds it, and when none does, against the most that was read.
+      const paperRead = paperReads?.found
+        ? { ...([paperReads, ...(paperReads.others ?? [])].find((read) => quoteIsPresent(read.text, String(item.quote ?? "").trim())) ?? paperReads), found: true } : paperReads;
       const precedent = literature || paper ? null : await store.precedentOfStudy({ userId, studyId, registry: registryName, registryId, recordHash: item.locator?.recordHash ?? null });
       if (!literature && !paper && !precedent) {
         return { status: "refused", code: "vcr_precedent_not_in_study",
           message: `${registryId} 还不在本研究的先例里；先用 vcr_write what:"precedent" 取回这条登记记录。` };
       }
-      const derived = ["calculated", "imputed", "predicted"].includes(String(item.valueSource ?? ""));
+      const derived = EVIDENCE_DERIVED_VALUE_SOURCES.includes(String(item.valueSource ?? ""));
       const sourceText = literature?.text ?? paperRead?.text ?? String(precedent?.record_text ?? "");
       const sourceHash = literature?.locator.sourceHash ?? paperRead?.sha256 ?? precedent?.record_hash ?? null;
       const sourceRef = literature?.sourceRef ?? (paper ? paperAddress(paper) : `${registryName}:${registryId}`);

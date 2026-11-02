@@ -183,6 +183,34 @@ test("null and alternative stages retain their own operating characteristics, Mo
   assert.notEqual(phases.simulation_null.tables[0].sha256, phases.simulation.tables[0].sha256);
 });
 
+test("a zero-effect check belongs to the simulation it was run for: it does not land beside another's power, and a simulation that lands takes an earlier one's check away", () => {
+  const stage = (/** @type {string} */ name, /** @type {string} */ jobId, /** @type {Record<string, any>} */ over = {}) => ({ stage: name, jobId, method: "design.simulate", methodVersion: "1.2.0", ...over });
+  const simulated = (/** @type {number} */ power) => ({ conclusion: "estimable", notEstimableRule: null, counts: { realPatients: 0, generatedRecords: 5000 },
+    measures: [{ name: "power", value: power, mcse: 0.005 }], diagnostics: {}, tables: [] });
+  const checked = (/** @type {number} */ error) => ({ conclusion: "estimable", notEstimableRule: null, counts: { realPatients: 0, generatedRecords: 20000 },
+    measures: [{ name: "type_one_error", value: error, mcse: 0.001 }], diagnostics: {}, tables: [] });
+  const filed = (/** @type {any} */ merged) => ({ id: "res_1", ...merged });
+  const names = (/** @type {any} */ merged) => merged.measures.map((/** @type {any} */ measure) => `${measure.name}=${measure.value}`).sort();
+  const first = vcrMergeStageResult(null, simulated(0.81), stage("simulation", "job_a"));
+  const withCheck = vcrMergeStageResult(/** @type {any} */ (filed(first)), checked(0.0243), stage("simulation_null", "job_a0", { checkOf: "job_a" }));
+  assert.deepEqual(names(withCheck), ["power=0.81", "type_one_error=0.0243"], "the check of the simulation beside it lands");
+  // another simulation lands: the figure of the first one's check leaves with it, and the stage record too
+  const second = vcrMergeStageResult(/** @type {any} */ (filed(withCheck)), simulated(0.9), stage("simulation", "job_b"));
+  assert.deepEqual(names(second), ["power=0.9"], "a type I error computed for another scenario is not shown beside this power");
+  assert.deepEqual(second.diagnostics.stages.map((/** @type {any} */ entry) => entry.stage), ["simulation"]);
+  assert.deepEqual(Object.keys(second.diagnostics.stageResults), ["simulation"]);
+  // the check of the first simulation lands late, after the second: it is not a figure of this result
+  const late = vcrMergeStageResult(/** @type {any} */ (filed(second)), checked(0.0243), stage("simulation_null", "job_a0", { checkOf: "job_a" }));
+  assert.deepEqual(names(late), ["power=0.9"]);
+  assert.deepEqual(late.diagnostics.stages.map((/** @type {any} */ entry) => entry.stage), ["simulation"]);
+  // and the check of the second one does
+  const own = vcrMergeStageResult(/** @type {any} */ (filed(second)), checked(0.0251), stage("simulation_null", "job_b0", { checkOf: "job_b" }));
+  assert.deepEqual(names(own), ["power=0.9", "type_one_error=0.0251"]);
+  // a check that names no simulation (the programme's, or one made before checks named theirs) is kept as it always was
+  const unnamed = vcrMergeStageResult(/** @type {any} */ (filed(first)), checked(0.0243), stage("simulation_null", "job_n"));
+  assert.deepEqual(names(vcrMergeStageResult(/** @type {any} */ (filed(unnamed)), simulated(0.9), stage("simulation", "job_b"))), ["power=0.9", "type_one_error=0.0243"]);
+});
+
 test("a zero-effect check that lands after the result adds its figure and never replaces the result's (A1)", () => {
   const stage = (name) => ({ stage: name, jobId: `job_${name}`, method: "design.simulate", methodVersion: "1.2.0" });
   const alternative = vcrMergeStageResult(null, { conclusion: "estimable", notEstimableRule: null, counts: { realPatients: 0, generatedRecords: 5000 },

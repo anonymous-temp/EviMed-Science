@@ -217,6 +217,18 @@ export function windowStart(window, anchor) {
 export const isBoundedDate = (fact) => fact?.source?.dateBound === "no_later_than";
 
 /**
+ * A fact dated by a record header (`source.dateBasis`) whose date is after the instant: the record it sits in had not been written then, so
+ * an evaluation as of that instant does not see the fact, whatever it asks of it. (A date the fact printed itself can be a planned one.)
+ * @param {any} fact @param {unknown} at
+ */
+function dateFromHeaderIsAfter(fact, at) {
+  if (fact?.source?.dateBasis !== "record_header") return false;
+  const asOf = instant(at);
+  const dated = instant(fact.occurredAt) ?? instant(fact.recordedAt);
+  return asOf !== null && dated !== null && dated > asOf;
+}
+
+/**
  * Is this fact inside the window? `null` means the fact carries no date and the
  * window needs one — which is an `unknown`, never a pass.
  * @param {any} fact @param {any} window @param {number} anchor
@@ -388,9 +400,13 @@ function datedByRecordHeader(fact, context) {
   const source = fact.source;
   if (!source || typeof source !== "object" || !Number.isInteger(source.start) || source.start < 0) return null;
   const documents = context.documents instanceof Map ? context.documents : new Map(Object.entries(context.documents ?? {}));
-  const text = documents.get(String(source.documentId))?.text;
+  const document = documents.get(String(source.documentId));
+  const text = document?.text;
   if (typeof text !== "string") return null;
-  const header = clinicalRecordHeader(text, source.start);
+  // A line that prints a date later than the moment the document entered the platform (its visible time, or the assessment's own moment
+  // when the caller names one) is a date ahead, not the date of a record: the scan passes over it.
+  const moments = [instant(document?.visibleAt), instant(context.asOf)].filter((at) => at !== null && Number.isFinite(at));
+  const header = clinicalRecordHeader(text, source.start, { notAfter: moments.length ? Math.min(.../** @type {number[]} */ (moments)) : null });
   if (!header) return null;
   const candidate = { ...fact, occurredAt: header.date, dateSurface: null,
     source: { ...source, dateQuote: { start: header.start, end: header.end, quote: header.quote }, dateBasis: "record_header",
@@ -484,7 +500,8 @@ export function admissibleFacts(facts, context = {}) {
  * The as-of view: only what the platform could see by `asOf` (AC-15, C2-18).
  * A fact with no `visibleAt` is treated as always visible, which is right for
  * structured rows frozen into a snapshot and is why an extraction without the
- * clock is refused upstream rather than defaulted here.
+ * clock is refused upstream rather than defaulted here. A fact dated by the
+ * header of a record written after `asOf` is not in the view either.
  * @param {readonly any[]} facts @param {number|string|Date} asOf
  */
 export function factsVisibleAt(facts, asOf) {
@@ -492,7 +509,7 @@ export function factsVisibleAt(facts, asOf) {
   if (at === null) return [...(facts ?? [])];
   return (facts ?? []).filter((fact) => {
     const visibleAt = instant(fact?.visibleAt);
-    return visibleAt === null || visibleAt <= at;
+    return (visibleAt === null || visibleAt <= at) && !dateFromHeaderIsAfter(fact, at);
   });
 }
 
@@ -608,7 +625,8 @@ function evaluateNode(node, context) {
 
 /** @param {any} context @param {string} variable */
 function factsFor(context, variable) {
-  return (context.facts ?? []).filter((fact) => String(fact?.variable ?? "") === String(variable ?? "")).map(fact => ({ ...fact, polarity: clinicalFactPolarity(fact) }));
+  return (context.facts ?? []).filter((fact) => String(fact?.variable ?? "") === String(variable ?? "") && !dateFromHeaderIsAfter(fact, context.asOf))
+    .map(fact => ({ ...fact, polarity: clinicalFactPolarity(fact) }));
 }
 
 /**

@@ -19,6 +19,7 @@ import test from "node:test";
 import { pathToFileURL } from "node:url";
 
 import { createMemoryAdmission } from "../src/memoryAdmission.mjs";
+import { researchGoalPrompt } from "../src/researchGoal.mjs";
 import { MEMORY_GATEWAY_PATH, createMemoryGatewayHandler } from "../src/memoryGateway.mjs";
 import { nativeMemoryCounters, resetNativeMemoryMetrics } from "../src/nativeMemoryMetrics.mjs";
 import { NativeTurnCommit } from "../src/nativeTurnCommit.mjs";
@@ -434,6 +435,27 @@ test("through the real gateway: the same admission and the same hourly bound as 
   await automated.open();
   await automated.finishTurn({ effectiveRouteReason: "autopilot:agenda" });
   assert.equal(automated.stub.sent("POST", `/api/v1/sessions/${ENGINE_SESSION}/commit`).length, 0);
+});
+
+test("REVIEWFIX 9 through the real gateway: a research goal reaches the engine as the person's sentence, without the gesture that started it", async (t) => {
+  const goal = "评估心衰队列的再入院风险，先看已有文献";
+  const started = { id: "run-goal", sessionId: CONVERSATION, status: "running", startedAt: new Date(Date.now() - 60_000).toISOString(), effectiveRouteReason: "research-goal" };
+  const { stub, say, open } = await gatewayFixture(t, { runs: [started] });
+  await open();
+  await say("user", researchGoalPrompt(goal));
+  await say("assistant", "好的，我先从已有文献开始。");
+  const held = await stub.sessions.get(`${OV_USER}/${ENGINE_SESSION}`);
+  assert.deepEqual(held.messages.map((message) => message.parts?.[0]?.text ?? message.content), [goal, "好的，我先从已有文献开始。"], "the gesture is the platform's");
+  // a person who types /loopx into a conversation of their own said it: no research-goal run, nothing is taken out
+  const own = await gatewayFixture(t, { runs: [{ ...started, effectiveRouteReason: "choice:answer" }] });
+  await own.open();
+  await own.say("user", researchGoalPrompt(goal));
+  assert.equal((await own.stub.sessions.get(`${OV_USER}/${ENGINE_SESSION}`)).messages[0].parts[0].text, researchGoalPrompt(goal));
+  // the gesture alone is nothing to remember
+  const bare = await gatewayFixture(t, { runs: [started] });
+  await bare.open();
+  await bare.say("user", "/loopx");
+  assert.equal((await bare.stub.sessions.get(`${OV_USER}/${ENGINE_SESSION}`)).messages.length, 0);
 });
 
 // ------------------------------------------------------------------------------------------------ the real plugin's logic

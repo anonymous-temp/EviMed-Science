@@ -32,7 +32,8 @@
         "Pass the aliases, the PS-only role filter, the oral route and both date windows to the managed job rather than re-deriving them.",
         "Record data_source, suspect_binding, suspect_roles, administration_routes, all four window bounds and snapshot_id in safety-report.md, not only in signals.csv.",
         "Report case counts, ROR, PRR, IC and EBGM exactly as the adapter returned them, including the suppression rule that produced any withheld cell.",
-        "Say which of the three events the report set can and cannot separate, and give the counts that decide it — cardiac-failure and ejection-fraction terms may be carried by the same reports, and co-reporting is something to count rather than assume."
+        "Say which of the three events the report set can and cannot separate, and give the counts that decide it — cardiac-failure and ejection-fraction terms may be carried by the same reports, and co-reporting is something to count rather than assume.",
+        "For any current product approval or availability claim, check the exact product and jurisdiction against later regulatory decisions and current official labeling; label unverified or superseded status explicitly."
       ],
       "mustNotDo": [
         "Describe an openfda_live result carrying suspect_binding=report_contains_suspect_approximation as PS-only or as same-drug-object binding.",

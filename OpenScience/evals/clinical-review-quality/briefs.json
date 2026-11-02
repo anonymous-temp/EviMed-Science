@@ -196,6 +196,41 @@
         "authoredAt": "2026-10-28",
         "authoredAtSource": "first-commit"
       }
+    },
+    {
+      "id": "review-005-aspree-followup-context",
+      "inputs": {
+        "question": "In adults aged 70 years and older without established cardiovascular disease, what are the cardiovascular and major-bleeding outcomes of aspirin primary prevention during ASPREE and its extended follow-up?",
+        "reviewType": "narrative",
+        "sources": [
+          {
+            "identifier": "PMID 30221597",
+            "url": "https://pubmed.ncbi.nlm.nih.gov/30221597/",
+            "expectedStudyId": "ASPREE",
+            "role": "randomized in-trial outcomes"
+          },
+          {
+            "identifier": "DOI 10.1093/eurheartj/ehaf514",
+            "url": "https://academic.oup.com/eurheartj/article/46/42/4410/8232480",
+            "expectedStudyId": "ASPREE",
+            "role": "long-term in-trial and post-trial follow-up"
+          }
+        ]
+      },
+      "mustDo": [
+        "Keep randomized in-trial and post-trial/long-term periods, endpoints, populations and event counts separate in both report and response.",
+        "Label person-time rate conversions as approximations with their time horizon and assumptions; compare the derived arithmetic against the executed values.",
+        "Distinguish lack of significant evidence from evidence of equivalence, including risk interaction and fatal-bleeding claims."
+      ],
+      "mustNotDo": [
+        "Present long-term fatal haemorrhage counts as events observed during the randomized trial alone.",
+        "Infer that every excess bleed was nonfatal from an inconclusive fatal-bleed comparison.",
+        "Describe observational post-trial comparisons as randomized treatment effects."
+      ],
+      "generated": {
+        "authoredAt": "2026-11-02",
+        "authoredAtSource": "live-replay"
+      }
     }
   ]
 }

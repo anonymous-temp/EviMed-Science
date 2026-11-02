@@ -203,10 +203,19 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     if (row && validId(row.parentId) && row.parentId !== sessionId) return { forkedFrom: row.parentId };
     return {};
   }
+  let observedTurn = { sessionId: /** @type {string | null} */ (null), running: false };
   function sessionChanged() {
     if (!ready || !activated || disposed) return;
     const snapshot = ctx.sessions.list.getSnapshot();
     const sessionId = mainViewSession(snapshot, previousSession ?? null);
+    // SessionSummary.running is the controller's public host-running state.
+    // Observe it before the same-session navigation guard: a turn does not
+    // change the selected conversation, but may have changed its project.
+    const running = sessionId !== null ? snapshot.byId?.[sessionId]?.running : undefined;
+    if (sessionId && observedTurn.sessionId === sessionId && observedTurn.running && running === false) {
+      post('turn-settled', { sessionId });
+    }
+    observedTurn = { sessionId, running: running === true };
     if (sessionId === previousSession) return;
     target.__EVIMED_RESULT_REVISION__?.clear(); target.__EVIMED_GEO_PLAN__?.clear(); target.__EVIMED_VCR_SELECTION__?.clear();
     previousSession = sessionId;

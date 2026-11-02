@@ -1,0 +1,10 @@
+# Public data attribution
+
+These fixtures are scientific development tests, not evidence that the platform is clinically validated. They contain public source data; no private local dataset is redistributed here.
+
+- **Heart Failure Clinical Records**: UCI Machine Learning Repository, DOI [10.24432/C5Z89R](https://doi.org/10.24432/C5Z89R), CC BY 4.0. Source dataset and attribution are at <https://archive.ics.uci.edu/dataset/519/heart+failure+clinical+records>. Associated study: Chicco D, Jurman G. BMC Medical Informatics and Decision Making 20, 16 (2020), DOI 10.1186/s12911-020-1023-5. Original CSV bytes were extracted unchanged from the official archive; only the local filename changed.
+- **sleep** and **ToothGrowth**: R 4.2.2 `datasets` package, distributed with R under GPL version 2 or later. Dataset documentation: <https://stat.ethz.ch/R-manual/R-devel/library/datasets/html/sleep.html> and <https://stat.ethz.ch/R-manual/R-devel/library/datasets/html/ToothGrowth.html>. Exported using `write.csv(..., row.names=FALSE)`; observations unchanged, R row names omitted. Original references and provenance remain in the linked manuals. R licensing: <https://www.r-project.org/COPYING>.
+- **pbc**: R `survival` package 3.5-3, LGPL version 2 or later. The dataset describes Mayo Clinic primary biliary cirrhosis participants and additional observational patients. Documentation: <https://stat.ethz.ch/R-manual/R-devel/library/survival/html/pbc.html>. Exported without R row names and with unchanged observations. The existing [LGPL-2 text](../fixtures/LGPL-2.txt) is retained alongside the original survival fixture collection.
+- **WDBC and lung**: reused from the existing parent evaluation fixtures; their original attribution and license notices remain in [source-manifest.json](../fixtures/source-manifest.json) and [THIRD_PARTY_LICENSES.txt](../fixtures/THIRD_PARTY_LICENSES.txt).
+
+`datasets.json` records source URLs, exact byte sizes, SHA-256 values, package versions and export commands. Any later transformed files must identify that transformation separately.

@@ -53,6 +53,7 @@ import { learningScopeOf, lessonPeers } from "./learningTriggers.mjs";
 import { recordSkippedBeforeReset } from "./memoryMetrics.mjs";
 import { endedBeforeReset } from "./memorySettings.mjs";
 import { HttpError } from "./security.mjs";
+import { isResearchGoalRun, withoutResearchGoalGesture } from "./researchGoal.mjs";
 
 /** The file the run reads its frozen input from. */
 export const DISTILLATION_INPUT_FILE = "distillation-input.json";
@@ -151,6 +152,26 @@ export function lessonSignal(input) {
 
 /** @param {any} message The text parts of one transcript message, joined. */
 const messageText = transcriptMessageText;
+
+/**
+ * The transcript of a run that set a research goal, with the gesture it was started with taken out of what the person said: the kernel holds
+ * the message as the control plane sent it (`/loopx <their sentence>`, `researchGoal.mjs`), and a model shown it reads the gesture as theirs. The
+ * same closed token the digest takes out on that route (`trajectoryDigest`); any other run's transcript is returned as it is, and so is the
+ * caller's own, since a copy is made.
+ * @param {{ header?: any, messages: any[] } | null | undefined} transcript @param {any} run
+ */
+function withoutGoalGesture(transcript, run) {
+  if (!transcript || !isResearchGoalRun(run)) return transcript;
+  /** @type {any[]} */
+  const messages = [];
+  for (const message of transcript.messages ?? []) {
+    if (message?.role !== "user" || message.source !== "user" || !(message.parts ?? []).some((/** @type {any} */ part) => part?.type === "text" && withoutResearchGoalGesture(part.text) !== part.text)) { messages.push(message); continue; }
+    const parts = message.parts.map((/** @type {any} */ part) => (part?.type === "text" ? { ...part, text: withoutResearchGoalGesture(part.text) } : part))
+      .filter((/** @type {any} */ part) => part?.type !== "text" || String(part.text).trim());
+    if (parts.length) messages.push({ ...message, parts });
+  }
+  return { ...transcript, messages };
+}
 
 /**
  * The corrections the researcher typed into the run, in their own words.
@@ -340,10 +361,11 @@ export function buildDistillationInput(input) {
   );
   const reactions = reactionsOf(input.feedback);
   const trajectory = digestOf(input.run, input.transcript, input.shapes, reactions, input.toolTraces);
-  const steered = steeredCorrections(input.transcript, input.run);
-  const { sessionId: rootSessionId } = rootSessionOf(input.transcript, input.run);
-  const anchored = input.transcript
-    ? anchoredExcerpts({ runId: input.run?.id ?? "", trigger: input.trigger, messages: input.transcript.messages, interventions: trajectory.interventions, rootSessionId })
+  const spoken = withoutGoalGesture(input.transcript, input.run);
+  const steered = steeredCorrections(spoken, input.run);
+  const { sessionId: rootSessionId } = rootSessionOf(spoken, input.run);
+  const anchored = spoken
+    ? anchoredExcerpts({ runId: input.run?.id ?? "", trigger: input.trigger, messages: spoken.messages, interventions: trajectory.interventions, rootSessionId })
     : { excerpts: [], dropped: { sensitive: 0, bounded: 0 } };
   const corrections = steered.corrections.slice(0, MAX_CORRECTIONS);
   const feedback = (input.feedback ?? []).slice(0, 20);

@@ -109,7 +109,10 @@ export function premiseSourceOfCard(card) {
 export function premiseReasonOfCard(card) {
   const pooling = object(card?.pooling);
   if (typeof pooling.citation !== "string" || !pooling.citation) return null;
-  return pooling.unchecked === true ? `引自 ${pooling.citation}，引文没有在平台读到的原文里找到，数值未核对` : `引自 ${pooling.citation}`;
+  if (pooling.unchecked !== true) return `引自 ${pooling.citation}`;
+  // A value computed from the paper's numbers has no quotation to find: the paper is where its inputs came from.
+  return ["calculated", "imputed", "predicted"].includes(String(card?.valueSource ?? "")) ? `引自 ${pooling.citation}，由论文里的数算出，数值未核对`
+    : `引自 ${pooling.citation}，引文没有在平台读到的原文里找到，数值未核对`;
 }
 
 /** The row's `reason` when the figure has one. @param {{ reason?: string | null } | null | undefined} stood */

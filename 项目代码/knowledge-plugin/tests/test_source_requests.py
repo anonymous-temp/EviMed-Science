@@ -44,6 +44,33 @@ def test_a_page_where_the_manifest_should_be_is_deferred_not_raised(plain_settin
     assert asyncio.run(crawler.pull_source_requests()) == {"status": "deferred", "reason": "manifest_invalid"}
 
 
+def test_the_manifest_is_read_as_an_api_and_a_failed_read_is_deferred_not_raised(plain_settings, monkeypatch):
+    """The platform's robots.txt closes /evolution/ to crawlers (2026-10-29); as a page, every pull was robots-denied and raised."""
+    import asyncio
+    from types import SimpleNamespace
+    from knowledge_plugin.model import FetchError
+    from knowledge_plugin.scheduler import Crawler
+
+    specs = []
+
+    class Fetcher:
+        def __init__(self, answer):
+            self.answer = answer
+
+        async def fetch(self, spec, **_):
+            specs.append(spec)
+            if isinstance(self.answer, Exception):
+                raise self.answer
+            return self.answer
+
+    monkeypatch.setenv("EVIMED_SOURCE_REQUESTS_URL", "https://platform.example.org/evolution/source-requests.json")
+    missing = Crawler(plain_settings, None, Fetcher(SimpleNamespace(status=404, body=b"{}")), adapters={})
+    assert asyncio.run(missing.pull_source_requests()) == {"status": "deferred", "reason": "manifest_unavailable"}
+    assert specs[0].api is True, "robots.txt is for pages, and this is our own platform's API"
+    denied = Crawler(plain_settings, None, Fetcher(FetchError("http-error", "connect_failed")), adapters={})
+    assert asyncio.run(denied.pull_source_requests()) == {"status": "deferred", "reason": "manifest_unreachable:http-error"}
+
+
 # The row the platform files for an arXiv feed its scout found (OpenScience/apps/server/src/evolutionSourceRequests.mjs `requestRow`; the
 # platform's test pins the same literal): every field the admission checks is set from a closed value, and the plugin admits it.
 PLATFORM_ARXIV_ROW = {

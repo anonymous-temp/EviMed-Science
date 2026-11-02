@@ -227,6 +227,7 @@ python_stack() {
     openpyxl==3.1.5 \
     xlrd==2.0.2 \
     pandas==2.2.3 \
+    pyarrow==20.0.0 \
     pdfplumber==0.11.7 \
     Pillow==10.4.0 \
     playwright==1.58.0 \
@@ -240,8 +241,18 @@ python_stack() {
   python - <<'PY'
 import importlib
 
-for package in ("ipykernel", "jupyterlab", "matplotlib", "numpy", "openpyxl", "xlrd", "pandas", "pdfplumber", "PIL", "playwright", "pypdf", "docx", "pptx", "sklearn", "scipy", "statsmodels", "xlsxwriter"):
+for package in ("ipykernel", "jupyterlab", "matplotlib", "numpy", "openpyxl", "xlrd", "pandas", "pyarrow", "pdfplumber", "PIL", "playwright", "pypdf", "docx", "pptx", "sklearn", "scipy", "statsmodels", "xlsxwriter"):
     importlib.import_module(package)
+
+# A successful import alone does not establish the table format used by the analysis API.
+import tempfile
+from pathlib import Path
+import pandas as pd
+with tempfile.TemporaryDirectory() as directory:
+    frame = pd.DataFrame({"subject": ["001", "002"], "value": [1.5, None]})
+    target = Path(directory) / "roundtrip.parquet"
+    frame.to_parquet(target, index=False)
+    pd.testing.assert_frame_equal(pd.read_parquet(target), frame)
 PY
   python /usr/local/lib/evimed/verify-legacy-spreadsheet.py
 }

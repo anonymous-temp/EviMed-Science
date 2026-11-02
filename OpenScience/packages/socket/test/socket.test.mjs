@@ -1211,7 +1211,7 @@ test("the guidance offers the capability catalogue as an index of professional w
   const text = buildGuidanceText(capabilities, { askUserEnabled: false, capsuleActive: true, reviewEnabled: false });
   // One line: the id and the contract kind a plan has to name, and the name a
   // reader knows it by. What it is for in detail arrives with the plan.
-  assert.match(text, /^- `clinical-evidence-synthesis`（clinical-evidence-report）临床证据深度分析$/m);
+  assert.match(text, /^- `clinical-evidence-synthesis`（clinical-evidence-report）文献综述$/m);
   assert.doesNotMatch(text, /何时用：|需要证据综述时/, "the long catalogue line rode every request of every conversation");
   // The sentence that made the catalogue a boundary is gone, and the index
   // says what it is not (2026-10-12 review, GA02).

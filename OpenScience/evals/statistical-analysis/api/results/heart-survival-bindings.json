@@ -1,0 +1,83 @@
+{
+  "case": "heart-survival",
+  "turns": [
+    {
+      "index": 0,
+      "confType": "log-log",
+      "required": [
+        "events",
+        "censored",
+        "n",
+        "survival",
+        "lower",
+        "upper",
+        "nRisk"
+      ],
+      "bindings": {
+        "events": {
+          "path": [
+            "result",
+            "structuredResults",
+            "dataChecks",
+            "events"
+          ]
+        },
+        "censored": {
+          "path": [
+            "result",
+            "structuredResults",
+            "dataChecks",
+            "censored"
+          ]
+        },
+        "n": {
+          "path": [
+            "result",
+            "structuredResults",
+            "analyses",
+            0,
+            "n"
+          ]
+        },
+        "survival": {
+          "path": [
+            "result",
+            "structuredResults",
+            "analyses",
+            0,
+            "estimate"
+          ]
+        },
+        "lower": {
+          "path": [
+            "result",
+            "structuredResults",
+            "analyses",
+            0,
+            "interval",
+            "lower"
+          ]
+        },
+        "upper": {
+          "path": [
+            "result",
+            "structuredResults",
+            "analyses",
+            0,
+            "interval",
+            "upper"
+          ]
+        },
+        "nRisk": {
+          "path": [
+            "result",
+            "structuredResults",
+            "analyses",
+            0,
+            "nAtRisk90"
+          ]
+        }
+      }
+    }
+  ]
+}

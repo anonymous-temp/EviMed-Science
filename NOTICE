@@ -50,6 +50,8 @@ Data
 - OpenScience/evals/statistical-analysis/fixtures/: see THIRD_PARTY_LICENSES.txt
   there (CC BY 4.0 data, BSD-3-Clause adapted reference code, LGPL-2 data from
   the R survival package, with the license text).
+- OpenScience/evals/statistical-analysis/api/fixtures/: see ../THIRD_PARTY_NOTICES.md
+  (UCI heart-failure CC BY 4.0; R datasets and survival data under their R package licenses).
 - 项目代码/vcr-engine/tests/fixtures/: data from the CRAN packages
   EmpiricalCalibration and maicplus, Apache-2.0, with their notices.
 - OpenScience/runtime/mcp/evimed-research/test/fixtures/vcr_imports/: synthetic

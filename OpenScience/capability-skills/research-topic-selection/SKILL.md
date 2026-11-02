@@ -27,6 +27,24 @@ The job gives you a first map. The evidence expansion below is what turns it
 into a judgment, and where the two disagree, say so — a candidate the job ranked
 highly that the wider search shows was answered in 2024 is a finding.
 
+## When the topics asked for are reviews or Meta-analyses
+
+The specialist job designs primary studies: asked for Meta topics it returned new-trial and real-world designs, took 25 minutes and was discarded (2026-11-02). For systematic-review or Meta topics, do not start it. Go straight to the duplicate check below, and build `research-portfolio.json` and `evidence-records.json` by the fallback shapes under Deliverables, with `research-topic-run.json` saying so: `{"jobStarted": false, "reason": "<one sentence>"}`.
+
+Depth follows the request: 「找几个」 is three to five candidates per direction, each one short — the question, the closest existing work, what is left, how many primary studies a pooling would rest on, and why it is worth doing. No study protocol, timetable or scoring table unless asked for.
+
+## The duplicate check
+
+A candidate is called open only after this, and it is the check that decides what the report says about it. In one real test (2026-11-02) ten of sixteen claimed gaps did not survive it: the runs had searched PubMed alone, with long queries, four to six records a query, and no registry of reviews.
+
+1. **Short queries.** Two or three core terms, in each language. PubMed needs every word to match and the index ranks by meaning, so a long query finds nothing in one and noise in the other.
+2. **Existing reviews.** `mcp__evimed__literature_search` with the core terms and `meta-analysis` (or `articleTypes: ["系统综述/Meta分析"]`). When `data.outcome` says more exist, read on until no new same-topic review appears. "Retrieved 4 of 86" is not a search. Then the same in Chinese with `databases: ["internal"]`, `language: "zh"`.
+3. **Registered reviews.** `mcp__evimed__biomedical_source_search` with `source: prospero`: read the titles and statuses. A completed or ongoing registration on the same question is occupied until shown otherwise.
+4. **The studies a pooling would rest on.** `mcp__evimed__clinical_trial_search` in all three registries, and the same literature queries limited to trials. Count them by name for the exact population and comparison. A Meta needs at least two comparable studies; name them, and do not count a study from another population to reach the number.
+5. **Read before counting.** `queryTermsFound` says which index records hold the words: a record with none may be a translation or may be off topic. An empty or irrelevant result is not a gap, and neither is a source that failed: say so instead.
+
+The report states which sources were actually searched. Before writing that a source was not covered, check `mcp__evimed__data_source_catalog`: `reachedThrough` is the call that reaches it. Embase is reached only in part (CENTRAL's Embase-sourced records and some Embase-linked index records): say that and not "Embase searched"; CNKI, Wanfang, VIP and SinoMed are "searched through the EviMed index", which is not each database's whole holding.
+
 ## Execute
 
 For managed jobs, send `action=start` with only the declared analysis inputs;
@@ -43,7 +61,8 @@ bookkeeping notices never justify discarding supported work.
 1. Preserve the user's disease, population, intervention or exposure, outcomes,
    available data, methods, and feasibility constraints. State only assumptions
    that do not materially change the direction.
-2. Call `mcp__evimed__research_topic_selection` with `action=capabilities`, start the
+2. Unless the topics asked for are reviews or Meta-analyses (above), call
+   `mcp__evimed__research_topic_selection` with `action=capabilities`, start the
    job, record the job id, and poll with `waitSeconds=45` until terminal.
    The job alone can take most of this capability's 20–90 minutes. Keep polling
    while `updatedAt` advances (every 30 s); treat the job as failed only on a
@@ -79,16 +98,18 @@ questions; use those relevant to the candidate rather than a fixed channel quota
 
 | Channel | Tool call | What only this one gives you |
 |---|---|---|
-| PubMed | `mcp__evimed__literature_search`, or `mcp__evimed__biomedical_source_search` with `sourceId: pubmed` | MeSH-indexed subject search; publication types |
-| Europe PMC | `sourceId: europe-pmc` | **Full-text** search — a method or a limitation stated only in a Discussion section |
-| OpenAlex | `sourceId: openalex` | Citation counts, concepts, publication year: how large a topic is and how fast it is moving |
-| Semantic Scholar | `sourceId: semantic-scholar` | References and citing works — who built on a paper, and who did not. Rate-limited without a key; retry with backoff |
-| Crossref | `sourceId: crossref` | Very recent DOIs, ahead of MEDLINE indexing |
-| Preprints | `mcp__evimed__biomedical_source_search` with `sourceId: europe-pmc` and `SRC:PPR` in the query | What is being done right now and is not yet published. `sourceId: biorxiv`/`medrxiv` resolves a DOI you already have — it is a lookup, not a search |
+| PubMed + EviMed index | `mcp__evimed__literature_search`, `databases` left out | MeSH-indexed subject search and publication types, then what only the index holds |
+| Chinese literature | `mcp__evimed__literature_search` with `databases: ["internal"]`, `language: "zh"` and Chinese words | CNKI, Wanfang, VIP, SinoMed. Records name their `database` |
+| Registered reviews | `mcp__evimed__biomedical_source_search` with `source: prospero` | PROSPERO: reviews planned or in progress, invisible to every literature search |
+| Europe PMC | `source: europe-pmc` | **Full-text** search — a method or a limitation stated only in a Discussion section |
+| OpenAlex | `source: openalex` | Citation counts, concepts, publication year: how large a topic is and how fast it is moving |
+| Semantic Scholar | `source: semantic-scholar` | References and citing works — who built on a paper, and who did not. Rate-limited without a key; retry with backoff |
+| Crossref | `source: crossref` | Very recent DOIs, ahead of MEDLINE indexing |
+| Preprints | `mcp__evimed__biomedical_source_search` with `source: europe-pmc` and `SRC:PPR` in the query | What is being done right now and is not yet published. `source: biorxiv`/`medrxiv` resolves a DOI you already have — it is a lookup, not a search |
 | Full text | `mcp__evimed__open_access_full_text` | The actual Methods and Limitations paragraphs |
-| Ongoing studies | `mcp__evimed__clinical_trial_search` | Registered questions, recruitment state and planned outcomes; a registration is not a completed finding |
+| Ongoing studies | `mcp__evimed__clinical_trial_search`: `registry` 1 ClinicalTrials.gov (default), 0 ChiCTR (Chinese words), 2 Cochrane CENTRAL (English words; `source: "Embase"` narrows to its Embase-sourced records) | Registered questions, recruitment state and planned outcomes; a registration is not a completed finding |
 | Guidelines | `mcp__evimed__guideline_search`, `mcp__evimed__web_read` | What practice already recommends, and on what evidence grade |
-| Drug and gene facts | `sourceId: dailymed` / `openfda` / `rxnorm` / `clinpgx-pharmgkb` | Label text, adverse-event counts, pharmacogenomic annotation |
+| Drug and gene facts | `source: dailymed` / `openfda` / `rxnorm` / `clinpgx-pharmgkb` | Label text, adverse-event counts, pharmacogenomic annotation |
 | Trend analysis | `mcp__evimed__bibliometric_analysis` | Publication-volume curve, author and institution clusters, emergent terms |
 | Open web | `mcp__evimed__web_search` | Everything the indexes do not carry — funding calls, conference programmes, society pages, registries, a method a group describes only on its own site |
 
@@ -128,7 +149,9 @@ outcomes, all legitimate, each stated out loud:
 
 - **No direct answer identified in this search** — state the bounded search
   scope, unresolved coverage gaps and closest neighbours. Do not assert that the
-  question is unoccupied across the whole field.
+  question is unoccupied across the whole field. Keep that same bounded wording
+  in the final reply: a missing exact design is not the absence of related local
+  studies. Name the closest work and the specific remaining difference.
 - **Occupied, but not in this population, setting, or era** — name the closest
   work and the exact axis of difference. Most real papers live here.
 - **Answered** — drop it and say so. A direction removed because the field has
@@ -203,11 +226,11 @@ permission to invent it. Reconcile the companion with any candidate removed or
 reframed after evidence expansion, keeping the original lineage and documenting
 the reason.
 
-An evidence record used by a candidate must carry the publication status
-returned by the current bibliographic lookup: `publicationStatus` is
-`active`, `corrected`, `retracted`, or `unknown`, with
-`statusCheckedAt` and `statusSource`. A retracted or unchecked record may be
-discussed as excluded context, but cannot support a recommended candidate.
+When a lookup returned an evidence record's publication status, record it:
+`publicationStatus` is `active`, `corrected`, `retracted`, or `unknown`, with
+`statusCheckedAt` and `statusSource`. Never fill these in by hand to complete the
+file. A retracted record may be discussed as excluded context, but cannot support a
+recommended candidate.
 
 ## Before claiming completion
 
@@ -274,6 +297,7 @@ reviewer, not by this platform.
   where, where a number came from, why an item does not apply — goes to
   `revision-notes.md`, never into a section of the deliverable. A statement
   nobody gave you (conflicts of interest, funding, authorship) is not written.
+- Nothing about how the run went, in the report or in the reply: no specialist job or parallel work, no gate, submission, review round or limit of this platform. If a limit changes what the reader can rely on, say what they can rely on.
 - Say what a field, status or file means, never its name: 「未排序（未提供评分
   细则）」, not `ranking: withheld`. No JSON keys, enum values, job or run ids,
   file paths, or sentences about this deployment, its tools or its routing.

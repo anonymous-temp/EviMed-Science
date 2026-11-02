@@ -406,7 +406,8 @@ const ORDER_OF_CONCLUSIONS = ["estimable", "limited", "not_estimable"];
  * @param {ReturnType<typeof resultFromRow> | null} prior
  * @param {{ conclusion: string | null, notEstimableRule: string | null, counts: Record<string, any>, measures: any[],
  *   diagnostics: Record<string, any>, tables: any[] }} incoming
- * @param {{ stage: string, jobId: string, method: string, methodVersion: string, at?: string | null }} stage
+ * @param {{ stage: string, jobId: string, method: string, methodVersion: string, at?: string | null, checkOf?: string }} stage
+ *   `checkOf`: for a zero-effect check a conversation's design was given, the simulation it is the check of
  * @param {{ staleSince?: string | null, planned?: readonly string[] | null }} [change]
  *   `staleSince`: when the object was marked stale and not yet recomputed;
  *   `planned`: the stages the recomputation runs (null: not known — carried, never dropped).
@@ -432,7 +433,18 @@ export function vcrMergeStageResult(prior, incoming, stage, { staleSince = null,
   const late = VCR_CHECK_STAGES.includes(stage.stage) && list(object(prior.diagnostics).stages).some((each) => object(each).stage === "simulation");
   /** @param {string} name @param {unknown} conclusion */
   const countedAs = (name, conclusion) => (VCR_CHECK_STAGES.includes(name) && conclusion === "not_estimable" ? "limited" : conclusion);
-  const before = list(object(prior.diagnostics).stages).map(object).filter((each) => each.stage !== stage.stage);
+  const stored = list(object(prior.diagnostics).stages).map(object).filter((each) => each.stage !== stage.stage);
+  // A zero-effect check is of one simulation, the one it was run on the scenario of. It does not land beside another simulation's
+  // power, and a simulation that lands takes with it the check of an earlier one: those figures were another scenario's, and the
+  // check of this one is queued behind it. (A check that names no simulation is the programme's: it follows the staleness rules below.)
+  const checked = list(object(prior.diagnostics).stages).map(object).find((each) => each.stage === "simulation");
+  if (VCR_CHECK_STAGES.includes(stage.stage) && stage.checkOf && checked && checked.jobId !== stage.checkOf) {
+    return { conclusion: prior.conclusion, notEstimableRule: prior.notEstimableRule, counts: prior.counts, measures: prior.measures,
+      diagnostics: prior.diagnostics, tables: prior.tables };
+  }
+  const foreign = stage.stage === "simulation"
+    ? stored.filter((each) => VCR_CHECK_STAGES.includes(String(each.stage)) && typeof each.checkOf === "string" && each.checkOf !== stage.jobId) : [];
+  const before = stored.filter((each) => !foreign.includes(each));
   const since = staleSince ? Date.parse(staleSince) : Number.NaN;
   /** Stages that landed before the change: their numbers describe the world as it was. */
   const old = Number.isFinite(since) ? before.filter((each) => typeof each.at === "string" && Date.parse(each.at) < since) : [];
@@ -444,7 +456,7 @@ export function vcrMergeStageResult(prior, incoming, stage, { staleSince = null,
   const namesOf = (/** @type {Record<string, any>[]} */ entries) => new Set(entries.flatMap((each) => list(each.measures).map(String)));
   const currentNames = namesOf([...current, entry]);
   const carriedNames = namesOf(carried);
-  const droppedNames = namesOf(dropped);
+  const droppedNames = namesOf([...dropped, ...foreign]);
 
   /** @type {Map<string, any>} */
   const byName = new Map();
@@ -2060,6 +2072,7 @@ export class VcrJobs {
           filed = vcrMergeStageResult(prior, incoming, {
             stage: String(detail.stage), jobId, method: String(row.method), methodVersion: String(row.method_version ?? ""),
             at: row.created_at ? new Date(row.created_at).toISOString() : null,
+            ...(typeof detail.checkOf === "string" ? { checkOf: detail.checkOf } : {}),
           }, { staleSince: marked?.marked_at ? new Date(marked.marked_at).toISOString() : null,
             planned: Array.isArray(detail.plannedStages) ? detail.plannedStages.map(String) : null });
         }

@@ -166,3 +166,67 @@ test("no reader of verified evidence reads a number that was not checked; the on
   assert.equal(baseline.ok, false);
   assert.ok(baseline.issues.some((/** @type {any} */ issue) => issue.code === "baseline_source_unit_unverified"));
 });
+
+// REVIEWFIX 6: the full text open_access_fulltext preserves under the PMCID is found by the identifiers its own capture carries.
+const FULLTEXT = [
+  "# FDA Approval Summary: Tremelimumab in Combination with Durvalumab", "", "- PMCID: PMC10501234", "- DOI: 10.1158/1078-0432.CCR-23-2124", "",
+  "## Abstract", "", "The median OS was 16.4 months with tremelimumab and 13.8 months with sorafenib.", "", "## Results", "",
+  "In the full report the 1-year survival rate was 61.3% (95% CI, 56.0-66.1) with the combination.", "",
+].join("\n");
+const FULLTEXT_XML = (/** @type {string} */ pmid, /** @type {string} */ doi) => `<?xml version="1.0"?><article><front><journal-meta><journal-title>Clin Cancer Res</journal-title></journal-meta><article-meta>`
+  + `<article-id pub-id-type="pmid">${pmid}</article-id><article-id pub-id-type="pmcid">PMC10501234</article-id><article-id pub-id-type="doi">${doi}</article-id></article-meta></front><body/></article>`;
+const FULL_QUOTE = "the 1-year survival rate was 61.3% (95% CI, 56.0-66.1) with the combination";
+
+/** A capture of several files the way `immutable_capture.preserve` writes it: the directory is the digest of the sorted manifest. */
+async function preserveCapture(/** @type {string} */ workspace, /** @type {string} */ root, /** @type {Record<string, string>} */ files) {
+  const names = Object.keys(files).sort();
+  const hashes = Object.fromEntries(names.map((name) => [name, sha(files[name])]));
+  const version = sha(JSON.stringify(hashes));
+  const directory = path.join(workspace, root, version);
+  await fs.mkdir(directory, { recursive: true });
+  for (const name of names) await fs.writeFile(path.join(directory, name), files[name]);
+  await fs.writeFile(path.join(directory, "capture.json"), JSON.stringify({ version, artifacts: hashes }));
+  return { version, directory };
+}
+
+test("REVIEWFIX 6 a number that is in the full text, cited by PMID or DOI, is held against the full text the platform preserved under the PMCID", async () => {
+  const workspace = await workspaceWith([[".evimed-sources/pubmed/PMID37676259", "abstract.md", ABSTRACT]]);
+  // decoys: other articles' full texts, and one whose bytes were edited after the tool wrote them
+  for (let at = 0; at < 25; at += 1) await preserveCapture(workspace, `.evimed-sources/PMC9${String(at).padStart(6, "0")}`, { "fulltext.md": `# Other ${at}\n\n- DOI: 10.9999/other${at}\n`, "fulltext.xml": FULLTEXT_XML(String(100 + at), `10.9999/other${at}`) });
+  const target = await preserveCapture(workspace, ".evimed-sources/PMC10501234", { "fulltext.md": FULLTEXT, "fulltext.xml": FULLTEXT_XML("37676259", "10.1158/1078-0432.CCR-23-2124") });
+  const reader = createVcrPublicationSources({ resolveProject: async () => ({ workspaceDir: workspace }) });
+
+  const byPmid = await reader.read({ userId: "u1", projectId: "default", publication: { kind: "pmid", id: "37676259" } });
+  assert.equal(byPmid.found, true);
+  assert.equal(byPmid.contentLevel, "full_text", "the whole article is what was read; the abstract is beside it");
+  assert.equal(byPmid.path, `.evimed-sources/PMC10501234/${target.version}/fulltext.md`);
+  assert.equal(byPmid.text, FULLTEXT);
+  assert.equal(byPmid.others?.[0]?.contentLevel, "abstract");
+  const byDoi = await reader.read({ userId: "u1", projectId: "default", publication: { kind: "doi", id: "10.1158/1078-0432.ccr-23-2124" } });
+  assert.equal(byDoi.contentLevel, "full_text", "the DOI is on the full text's own header, in the case it was printed");
+  assert.equal(byDoi.path, byPmid.path);
+  // a PMID the platform never preserved an abstract for, found by the article's own XML
+  const noAbstract = await workspaceWith([]);
+  await preserveCapture(noAbstract, ".evimed-sources/PMC10501234", { "fulltext.md": FULLTEXT, "fulltext.xml": FULLTEXT_XML("37676259", "10.1158/1078-0432.CCR-23-2124") });
+  const alone = await createVcrPublicationSources({ resolveProject: async () => ({ workspaceDir: noAbstract }) }).read({ userId: "u1", projectId: "default", publication: { kind: "pmid", id: "37676259" } });
+  assert.deepEqual([alone.found, alone.contentLevel], [true, "full_text"]);
+  // another paper's PMID is not this article's
+  assert.deepEqual(await reader.read({ userId: "u1", projectId: "default", publication: { kind: "pmid", id: "37676260" } }), { found: false });
+
+  // the pipeline: a sentence only the full text holds is verified, and a sentence only the abstract holds still is
+  const { saved, add } = pipelineOver(workspace);
+  const inFull = await add({ quote: FULL_QUOTE, value: 61.3, ciLow: 56, ciHigh: 66.1, unit: "%", sampleSize: undefined, parameter: "one_year_survival" });
+  assert.equal(inFull.state, "verified");
+  assert.deepEqual(inFull.publication, { kind: "pmid", id: "37676259", read: true, contentRead: "full_text" });
+  assert.equal(saved[0].locator.path, `.evimed-sources/PMC10501234/${target.version}/fulltext.md`);
+  const inAbstract = await add({});
+  assert.equal(inAbstract.state, "verified");
+  assert.equal(inAbstract.publication?.contentRead, "abstract", "the text that holds the sentence is the one it is held against");
+  const nowhere = await add({ quote: "a sentence the paper does not contain, 99.9 months" , value: 99.9 });
+  assert.equal(nowhere.state, "reported_unverified");
+  assert.equal(nowhere.publication?.contentRead, "full_text", "and what was not found in is the most the platform read");
+  // edited after it was preserved: not a source
+  await fs.writeFile(path.join(target.directory, "fulltext.md"), `${FULLTEXT}\nAn edited line.`);
+  assert.equal((await reader.read({ userId: "u1", projectId: "default", publication: { kind: "pmid", id: "37676259" } })).contentLevel, "abstract");
+  await Promise.all([workspace, noAbstract].map((directory) => fs.rm(directory, { recursive: true, force: true })));
+});
