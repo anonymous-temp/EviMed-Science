@@ -56,8 +56,9 @@ const ANSWER_SHAPE = `{
   "facts": [
     { "variable": "<one of the fact variables>", "polarity": "affirmed | negated | hypothetical | family",
       "value": <a number printed in the quotation, only for a numeric fact>, "unit": "<as the note prints it>",
-      "occurredAt": "YYYY-MM-DD, only when a date printed whole, with its year, is in the quotation or in dateQuote", "dateSurface": "<the date as printed>",
-      "dateQuote": "<a second verbatim line of the file that prints that date, when the quotation does not>",
+      "occurredAt": "YYYY-MM-DD, only when the note prints a date for this very fact, whole, with its year, in the quotation or in dateQuote", "dateSurface": "<the date as printed>",
+      "dateQuote": "<a second verbatim line of the file that prints that fact's date, when the quotation does not>",
+      "temporality": "historical, only when the quotation tells of an event in the past (the skill's clinical.temporality); left out for a current state",
       "surface": "<the words you read, inside the quotation>", "quote": "<verbatim from the note>" }
   ],
   "language_judgments": [

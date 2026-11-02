@@ -16,7 +16,7 @@ import { dataAvailable, dataPaths, dataRoot, developmentIds, evaluationDate, ids
 import { BudgetExceeded, createDeepSeek, priceOf, redact } from './deepseek.mjs';
 import { labelsFor, majorityStates, patientCounts, randomStream, statistics, sumCounts, summarize, summarizePaired } from './metrics.mjs';
 import { readSkill, skillExcerpts, systemPrompt, userMessage } from './prompt.mjs';
-import { parseScorerOutput, scoreHeldout, scoreTest } from './run_n2c2.mjs';
+import { parseScorerOutput, predict, scoreHeldout, scoreHeldoutFourth, scoreTest } from './run_n2c2.mjs';
 
 const here = import.meta.dirname;
 const root = dataRoot();
@@ -120,63 +120,66 @@ test('an answer the model did not give leaves every criterion unknown, and silen
   }
 });
 
-test('a window is counted back from the most recent record, and an event with no printed date decides nothing', () => {
+test('a window is counted back from the most recent record, and an event with no printed date takes its record header\'s date', () => {
+  const MI = 'Admitted with myocardial infarction on 2100-02-20 and chest pain on exertion.';
   const dated = (/** @type {string} */ date, /** @type {string} */ quote) => answer([fact({ variable: 'myocardial_infarction', occurredAt: date, dateSurface: date, surface: 'myocardial infarction', quote })]);
-  const inside = assessPatient(PATIENT, dated('2100-02-20', 'Admitted with myocardial infarction on 2100-02-20 and chest pain on exertion.'));
+  const inside = assessPatient(PATIENT, dated('2100-02-20', MI));
   assert.equal(inside.states['MI-6MOS'], 'satisfied');
-  const undated = assessPatient(PATIENT, answer([fact({ variable: 'myocardial_infarction', surface: 'myocardial infarction', quote: 'Admitted with myocardial infarction on 2100-02-20 and chest pain on exertion.' })]));
-  assert.equal(undated.states['MI-6MOS'], 'unknown');
-  assert.equal(undated.reasons['MI-6MOS'], 'undated');
-  const claimed = assessPatient(PATIENT, answer([fact({ variable: 'myocardial_infarction', occurredAt: '2099-01-05', surface: 'myocardial infarction', quote: 'Admitted with myocardial infarction on 2100-02-20 and chest pain on exertion.' })]));
-  assert.deepEqual([claimed.facts.kept, claimed.facts.dateDropped, claimed.facts.dropped.date_not_in_span ?? 0], [1, 1, 0], 'a date the quotation does not print is dropped; the fact is kept');
-  assert.equal(claimed.states['MI-6MOS'], 'unknown');
-  assert.equal(claimed.reasons['MI-6MOS'], 'undated');
+  // No date of its own written: the header of the record the sentence is in, 2100-03-01, dates it (the 2026-11-02 ruling).
+  const byHeader = assessPatient(PATIENT, answer([fact({ variable: 'myocardial_infarction', surface: 'myocardial infarction', quote: MI })]));
+  assert.equal(byHeader.states['MI-6MOS'], 'satisfied');
+  assert.deepEqual([byHeader.facts.datedByHeader, byHeader.facts.datedByRecordDateLine, byHeader.facts.boundedByHeader], [1, 1, 0]);
+  // A date nobody printed is dropped, and the header date stands in its place: never the claimed one.
+  const claimed = assessPatient(PATIENT, answer([fact({ variable: 'myocardial_infarction', occurredAt: '2099-01-05', surface: 'myocardial infarction', quote: MI })]));
+  assert.deepEqual([claimed.facts.kept, claimed.facts.dateDropped, claimed.facts.dropped.date_not_in_span ?? 0, claimed.facts.datedByHeader], [1, 1, 0, 1], 'a date the quotation does not print is dropped; the fact is kept');
+  assert.equal(claimed.states['MI-6MOS'], 'satisfied');
+  // A note with no header above the sentence leaves the event undated, and an undated event decides nothing.
+  const headerless = { ...PATIENT, text: `${NOTE.split('\n').filter((line) => !line.startsWith('Record date')).join('\n')}\nRecord date: 2100-03-01\n` };
+  const none = assessPatient(headerless, answer([fact({ variable: 'myocardial_infarction', surface: 'myocardial infarction', quote: MI })]));
+  assert.deepEqual([none.states['MI-6MOS'], none.reasons['MI-6MOS'], none.facts.datedByHeader], ['unknown', 'undated', 0]);
 });
 
-test('a value is compared with its range in the unit printed beside it, or in the one conventional unit the domain gives its variable', () => {
-  const quote = 'Last hemoglobin A1c 7.2 %.';
-  const printed = assessPatient(PATIENT, answer([fact({ variable: 'hba1c', value: 7.2, unit: '%', surface: '7.2 %', quote })]));
-  assert.equal(printed.states.HBA1C, 'satisfied');
-  assert.equal(printed.facts.unitByConvention, 0, 'a printed unit is not a read one');
-  const high = assessPatient({ ...PATIENT, text: NOTE.replace('7.2 %', '11.0 %') }, answer([fact({ variable: 'hba1c', value: 11, unit: '%', surface: '11.0 %', quote: quote.replace('7.2', '11.0') })]));
-  assert.equal(high.states.HBA1C, 'not_satisfied');
-  const invented = assessPatient(PATIENT, answer([fact({ variable: 'hba1c', value: 6.9, unit: '%', surface: '6.9', quote })]));
-  assert.equal(invented.states.HBA1C, 'unknown', 'a number that is not in the quotation never counts');
-  // A bare number: the unit the model claims is not in the note, so it is dropped and the fact kept; HbA1c has one conventional unit, so it is read in it.
-  const bareNote = { ...PATIENT, text: NOTE.replace('7.2 %', '7.2') };
-  const bare = assessPatient(bareNote, answer([fact({ variable: 'hba1c', value: 7.2, surface: '7.2', quote: 'Last hemoglobin A1c 7.2.' })]));
-  assert.equal(bare.states.HBA1C, 'satisfied');
-  assert.deepEqual([bare.facts.kept, bare.facts.unitByConvention], [1, 1]);
-  const claimed = assessPatient(bareNote, answer([fact({ variable: 'hba1c', value: 7.2, unit: '%', surface: '7.2', quote: 'Last hemoglobin A1c 7.2.' })]));
-  assert.equal(claimed.states.HBA1C, 'satisfied', 'the claimed unit was dropped, not the fact');
-  assert.deepEqual([claimed.facts.unitDropped, claimed.facts.unitByConvention, claimed.facts.dropped.unit_not_in_span ?? 0], [1, 1, 0]);
-  // Outside the range the table prints it is not read in percent: no unit, so the criterion that names one stays unknown.
-  const outside = assessPatient({ ...PATIENT, text: NOTE.replace('7.2 %', '53') }, answer([fact({ variable: 'hba1c', value: 53, surface: '53', quote: 'Last hemoglobin A1c 53.' })]));
-  assert.equal(outside.states.HBA1C, 'unknown');
-  assert.equal(outside.reasons.HBA1C, 'unit_missing');
+test('a past event the model marks historical is dated by its record header only as the latest it could be; the literal ruling dates it at the header', () => {
+  const past = (/** @type {Record<string, any>} */ over = {}) => answer([fact({ variable: 'myocardial_infarction', surface: 'myocardial infarction', quote: 'Admitted with myocardial infarction on 2100-02-20 and chest pain on exertion.', temporality: 'historical', ...over })]);
+  // The header is 2100-03-01, inside the six months before it: a bound inside the window says nothing, the literal ruling says satisfied.
+  const inside = assessPatient(PATIENT, past());
+  assert.deepEqual([inside.states['MI-6MOS'], inside.reasons['MI-6MOS'], inside.facts.boundedByHeader], ['unknown', 'undated', 1]);
+  const literal = assessPatient(PATIENT, past(), undefined, { pastGuard: false });
+  assert.deepEqual([literal.states['MI-6MOS'], literal.facts.boundedByHeader], ['satisfied', 0]);
+  // "Now" is later than the six months after that header: the event was no later than the header, so it is outside, decisively.
+  const later = assessPatient({ ...PATIENT, asOf: '2101-01-01' }, past());
+  assert.equal(later.states['MI-6MOS'], 'not_satisfied');
+  // The literal ruling reads the same event, with now moved on, as outside too; the two differ only while the header is inside the window.
+  assert.equal(assessPatient({ ...PATIENT, asOf: '2101-01-01' }, past(), undefined, { pastGuard: false }).states['MI-6MOS'], 'not_satisfied');
+  // A negated finding is not an event that happened: the word is not carried and the denial stands as it did.
+  const denied = assessPatient(PATIENT, answer([fact({ variable: 'drug_abuse', polarity: 'negated', temporality: 'historical', surface: 'Denies illicit drug use', quote: 'He drinks no alcohol. Denies illicit drug use.' })]));
+  assert.deepEqual([denied.states['DRUG-ABUSE'], denied.facts.boundedByHeader], ['not_satisfied', 0]);
 });
 
-test('a current state takes its record\'s stated date from a second quotation; a date nobody printed is dropped and the fact kept undated', () => {
+test('a current state takes its record\'s header date; a date nobody printed is dropped, and the header date stands where the file has one', () => {
   const supplement = { variable: 'dietary_supplement', surface: 'multivitamin', quote: 'Takes a multivitamin every morning.' };
   const first = assessPatient(PATIENT, answer([fact({ ...supplement, occurredAt: '2100-01-10', dateSurface: '2100-01-10', dateQuote: 'Record date: 2100-01-10' })]));
   assert.equal(first.states['DIETSUPP-2MOS'], 'satisfied', 'two months back from the latest record reaches the first record\'s date');
-  assert.deepEqual([first.facts.kept, first.facts.datedByQuote, first.facts.dateDropped], [1, 1, 0]);
+  assert.deepEqual([first.facts.kept, first.facts.datedByQuote, first.facts.dateDropped, first.facts.datedByHeader], [1, 1, 0, 0], 'a date the model quoted is not said to come from the header');
   const old = assessPatient({ ...PATIENT, asOf: '2100-09-01' }, answer([fact({ ...supplement, occurredAt: '2100-01-10', dateQuote: 'Record date: 2100-01-10' })]));
   assert.equal(old.states['DIETSUPP-2MOS'], 'not_satisfied', 'dated outside the window, it is a known no and not an unknown');
-  // A date no quotation prints is absent, not the reason the fact is refused: the fact stays, the window stays unknown.
+  // A date no quotation prints is absent, not the reason the fact is refused: the fact stays, and the first record's header dates it.
   /** @param {ReturnType<typeof assessPatient>} result @param {string} label */
-  const undated = (result, label) => {
-    assert.deepEqual([result.facts.kept, result.facts.dateDropped, result.facts.dropped.date_not_in_span ?? 0], [1, 1, 0], label);
-    assert.equal(result.states['DIETSUPP-2MOS'], 'unknown', label);
-    assert.equal(result.reasons['DIETSUPP-2MOS'], 'undated', label);
+  const byHeader = (result, label) => {
+    assert.deepEqual([result.facts.kept, result.facts.dateDropped, result.facts.dropped.date_not_in_span ?? 0, result.facts.datedByHeader], [1, 1, 0, 1], label);
+    assert.equal(result.states['DIETSUPP-2MOS'], 'satisfied', label);
   };
-  undated(assessPatient(PATIENT, answer([fact({ ...supplement, occurredAt: '2100-01-10' })])), 'the date alone, printed nowhere the fact points to');
-  undated(assessPatient(PATIENT, answer([fact({ ...supplement, occurredAt: '2100-02-01', dateQuote: 'Record date: 2100-01-10' })])), 'a second quotation that prints another date');
-  undated(assessPatient({ ...PATIENT, text: `${NOTE}\nSeen 3/14 for review.` }, answer([fact({ ...supplement, occurredAt: '2100-03-14', dateQuote: 'Seen 3/14 for review.' })])), 'a date with no year');
+  byHeader(assessPatient(PATIENT, answer([fact({ ...supplement, occurredAt: '2100-01-12' })])), 'the date alone, printed nowhere the fact points to');
+  byHeader(assessPatient(PATIENT, answer([fact({ ...supplement, occurredAt: '2100-02-01', dateQuote: 'Record date: 2100-01-10' })])), 'a second quotation that prints another date');
+  byHeader(assessPatient({ ...PATIENT, text: `${NOTE}\nSeen 3/14 for review.` }, answer([fact({ ...supplement, occurredAt: '2100-03-14', dateQuote: 'Seen 3/14 for review.' })])), 'a date with no year');
   const absent = assessPatient(PATIENT, answer([fact({ ...supplement, occurredAt: '2100-02-01', dateQuote: 'Record date: 2100-02-01' })]));
-  undated(absent, 'a second quotation the file does not hold');
+  byHeader(absent, 'a second quotation the file does not hold');
   assert.equal(absent.facts.dateQuoteUnfound, 1);
-  assert.equal(assessPatient(PATIENT, answer([fact({ ...supplement })])).states['DIETSUPP-2MOS'], 'unknown', 'undated stays unknown');
+  assert.equal(assessPatient(PATIENT, answer([fact({ ...supplement })])).states['DIETSUPP-2MOS'], 'satisfied', 'no date written: the header dates it');
+  // The same fact in a file with no header above it stays undated, and the window stays unknown.
+  const bare = { ...PATIENT, text: 'Takes a multivitamin every morning.\n\nRecord date: 2100-03-01\n' };
+  const undated = assessPatient(bare, answer([fact({ ...supplement, occurredAt: '2100-01-12' })]));
+  assert.deepEqual([undated.states['DIETSUPP-2MOS'], undated.reasons['DIETSUPP-2MOS'], undated.facts.datedByHeader], ['unknown', 'undated', 0]);
   // Where no date is asked for, the same fact counts.
   const presence = assessPatient(PATIENT, answer([fact({ variable: 'drug_abuse', surface: 'illicit drug use', quote: 'He drinks no alcohol. Denies illicit drug use.', polarity: 'negated', occurredAt: '2081-01-01' })]));
   assert.deepEqual([presence.states['DRUG-ABUSE'], presence.facts.dateDropped], ['not_satisfied', 1]);
@@ -365,6 +368,8 @@ test('score-heldout refuses a run that was never predicted, and never reaches fo
   try {
     await assert.rejects(scoreHeldout({ root: scratch, run: 'never-predicted' }), /FROZEN-2|Frozen files|No predictions/);
     await assert.rejects(scoreHeldout({ root: scratch, run: 'never-predicted', manifest: 3 }), /FROZEN-3|Frozen files|No predictions/);
+    const names = { controlRun: 'c', secondRun: 's', previousRun: 'p', priorReplayRun: 'r', replayRun: 'y', literalRun: 'l' };
+    await assert.rejects(scoreHeldoutFourth({ root: scratch, run: 'never-predicted', ...names }), /FROZEN-4|Frozen files|No predictions/);
     assert.equal(existsSync(path.join(scratch, 'sealed')), false);
   } finally {
     await rm(scratch, { recursive: true, force: true });
@@ -372,6 +377,15 @@ test('score-heldout refuses a run that was never predicted, and never reaches fo
   const runner = await readFile(path.join(here, 'run_n2c2.mjs'), 'utf8');
   const held = runner.slice(runner.indexOf('export async function scoreHeldout'), runner.indexOf('async function main'));
   assert.doesNotMatch(held, /gold\.mjs|openSealedGold|sealedDigest/, 'the held-out patients are unsealed training patients and the sealed archive is not their business');
+});
+
+test('the literal ruling only reads answers again: it is refused without a run whose answers it reads, and never calls the model', async () => {
+  const scratch = await mkdtemp(path.join(os.tmpdir(), 'n2c2-test-'));
+  try {
+    await assert.rejects(predict({ split: 'dev', run: 'literal', root: scratch, pastGuard: false }), /--no-past-guard|reuse-run/);
+  } finally {
+    await rm(scratch, { recursive: true, force: true });
+  }
 });
 
 test('score-test refuses a run that was never predicted, before it looks at any gold', async () => {

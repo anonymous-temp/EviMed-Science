@@ -30,6 +30,11 @@
  * cached answers read again through the fixed writer (`predict --reuse-run`, no model call), which isolates what the fix did to the
  * same model answers.
  *
+ * A fourth run (FROZEN-4.json) follows the same order on the same patients after the owner's ruling of 2026-11-02 (a fact with no date of its
+ * own takes the date of the record header above it), again a regression check on patients already seen. It reads the second run's cached answers
+ * through the new writer (no model call), takes one fresh model sample with the new skill text, and scores the fresh sample's answers a second time
+ * with the past-event guard off (`predict --no-past-guard --reuse-run`, no model call), which is the ruling taken literally.
+ *
  * The model's raw answers are cached per patient beside the data (never in the repository), so a re-run costs nothing and an
  * interrupted run resumes. Everything written into the repository is aggregate: counts, rates and intervals.
  */
@@ -42,8 +47,8 @@ import { parseArgs } from 'node:util';
 import { TAGS } from './criteria.mjs';
 import { DEV_SPLIT, SEALED_ARCHIVE, dataPaths, dataRoot, developmentIds, idsDigest, patientIds, readPatient, sha256 } from './data.mjs';
 import { assessPatient } from './assess.mjs';
-import { BudgetExceeded, HARD_BUDGET_CNY, MODEL, createDeepSeek } from './deepseek.mjs';
-import { BOOTSTRAP, labelsFor, majorityStates, patientCounts, summarize, summarizePaired } from './metrics.mjs';
+import { BudgetExceeded, HARD_BUDGET_CNY, MODEL, createDeepSeek, ledgerTotal } from './deepseek.mjs';
+import { BOOTSTRAP, labelsFor, majorityStates, patientCounts, sumCounts, summarize, summarizePaired } from './metrics.mjs';
 import { promptDigest, readSkill, systemPrompt, userMessage } from './prompt.mjs';
 
 const HERE = import.meta.dirname;
@@ -51,8 +56,9 @@ const REPO = path.resolve(HERE, '../../..');
 const FROZEN_PATH = path.join(HERE, 'FROZEN.json');
 const FROZEN_2_PATH = path.join(HERE, 'FROZEN-2.json');
 const FROZEN_3_PATH = path.join(HERE, 'FROZEN-3.json');
+const FROZEN_4_PATH = path.join(HERE, 'FROZEN-4.json');
 /** The manifests of the measurements on the held-out training patients, by number. */
-const HELDOUT_MANIFESTS = Object.freeze({ 2: FROZEN_2_PATH, 3: FROZEN_3_PATH });
+const HELDOUT_MANIFESTS = Object.freeze({ 2: FROZEN_2_PATH, 3: FROZEN_3_PATH, 4: FROZEN_4_PATH });
 const RESULTS = path.join(HERE, 'results');
 const SCORER_WRAPPER = path.join(HERE, 'run_official_scorer.py');
 
@@ -65,6 +71,7 @@ const PREDICT_FILES = Object.freeze([
   'evals/vcr-matching/n2c2/deepseek.mjs', 'evals/vcr-matching/n2c2/assess.mjs', 'evals/vcr-matching/n2c2/run_n2c2.mjs',
   'capabilities/vcr-matching/SKILL.md', 'apps/server/src/vcrMatching.mjs', 'apps/server/src/vcrClinicalDateEvidence.mjs',
   'packages/domain/src/vcrMatchBatch.mjs', 'packages/domain/src/metering.mjs', 'packages/domain/src/clinicalUnits.mjs', 'packages/domain/src/clinical-units.json',
+  'packages/domain/src/clinicalFact.mjs',
 ]);
 /** What decides a score: checked when the test is scored. */
 const SCORE_FILES = Object.freeze([
@@ -138,7 +145,8 @@ const rawPath = (root, run, id) => path.join(runDirectory(root, run), 'raw', `${
  * @param {{ split: 'dev' | 'test' | 'heldout', run: string, root: string, keyFile?: string, maxSeconds?: number, limit?: number, log?: (line: string) => void,
  *   fetchImpl?: typeof fetch }} options
  */
-export async function predict({ split, run, root, keyFile, maxSeconds, limit, log = () => {}, fetchImpl, manifest = 2, reuseRun }) {
+export async function predict({ split, run, root, keyFile, maxSeconds, limit, log = () => {}, fetchImpl, manifest = 2, reuseRun, pastGuard = true, budgetCny }) {
+  if (!pastGuard && !reuseRun) throw new Error('The literal ruling (--no-past-guard) only reads answers again: it needs --reuse-run.');
   const skill = await readSkill();
   const digest = promptDigest(skill);
   const ids = await splitIds(root);
@@ -151,7 +159,7 @@ export async function predict({ split, run, root, keyFile, maxSeconds, limit, lo
   /** @type {Record<string, string>} */
   let predictDigests = await fileDigests(PREDICT_FILES);
   if (split === 'test' || split === 'heldout') {
-    frozen = await readFrozen(split === 'test' ? FROZEN_PATH : HELDOUT_MANIFESTS[/** @type {2 | 3} */ (manifest)]);
+    frozen = await readFrozen(split === 'test' ? FROZEN_PATH : HELDOUT_MANIFESTS[/** @type {2 | 3 | 4} */ (manifest)]);
     predictDigests = await assertFilesMatch(frozen.predictFiles);
     if (frozen.prompt.sha256 !== digest) throw new Error('The prompt is not the frozen one.');
     if (split === 'test' && frozen.dataset.testIdsSha256 !== idsDigest(ids.test)) throw new Error('The test patients are not the frozen ones.');
@@ -162,25 +170,33 @@ export async function predict({ split, run, root, keyFile, maxSeconds, limit, lo
   const directoryOfRun = runDirectory(root, run);
   await mkdir(path.join(directoryOfRun, 'raw'), { recursive: true });
   const metaPath = path.join(directoryOfRun, 'meta.json');
-  const meta = { split, promptSha256: digest, model: SETTINGS.model, settings: SETTINGS, ...(reuseRun ? { reusedFrom: reuseRun } : {}) };
+  const meta = { split, promptSha256: digest, model: SETTINGS.model, settings: SETTINGS, ...(reuseRun ? { reusedFrom: reuseRun } : {}), ...(pastGuard ? {} : { pastGuard: false }) };
   if (existsSync(metaPath)) {
     const earlier = JSON.parse(await readFile(metaPath, 'utf8'));
     if (earlier.split !== split || earlier.promptSha256 !== digest) throw new Error(`The run "${run}" was made with another prompt or split: use a new run name.`);
     if ((earlier.reusedFrom ?? null) !== (reuseRun ?? null)) throw new Error(`The run "${run}" ${earlier.reusedFrom ? 'only reads another run\'s answers again' : 'makes its own model calls'}: use a new run name.`);
+    if ((earlier.pastGuard ?? true) !== pastGuard) throw new Error(`The run "${run}" was made with the past-event guard ${earlier.pastGuard === false ? 'off' : 'on'}: use a new run name.`);
   } else {
     await writeFile(metaPath, `${JSON.stringify({ ...meta, createdAt: new Date().toISOString() }, null, 2)}\n`);
   }
 
   const system = systemPrompt(skill);
+  const ledgerPath = path.join(dataPaths(root).runs, 'ledger.jsonl');
+  // `budgetCny` is the most this invocation may add to the ledger; the overall budget still holds as well.
   const client = createDeepSeek({ keyFile: keyFile ?? process.env.OPEN_SCIENCE_DEEPSEEK_API_KEY_FILE ?? path.join(root, '..', '..', 'secrets', 'deepseek.api-key'),
-    ledgerPath: path.join(dataPaths(root).runs, 'ledger.jsonl'), budget: HARD_BUDGET_CNY, retries: SETTINGS.retries, maxTokens: SETTINGS.maxTokens, fetchImpl });
+    ledgerPath, budget: Math.min(HARD_BUDGET_CNY, budgetCny === undefined ? HARD_BUDGET_CNY : ledgerTotal(ledgerPath) + budgetCny), retries: SETTINGS.retries, maxTokens: SETTINGS.maxTokens, fetchImpl });
 
   // Answers an earlier run already holds for this very prompt are read again through the current code, with no model call.
   /** @type {Set<string>} */
   const reused = new Set();
   if (reuseRun) {
     const earlier = JSON.parse(await readFile(path.join(runDirectory(root, reuseRun), 'meta.json'), 'utf8'));
-    if (earlier.split !== split || earlier.promptSha256 !== digest) throw new Error(`The run "${reuseRun}" was made with another prompt or split: its answers are not these.`);
+    if (earlier.split !== split) throw new Error(`The run "${reuseRun}" was made on another split: its answers are not these.`);
+    // Answers made under another prompt are read again only where the fixed code is what is measured on them: in development, and for the
+    // fourth manifest's replay, which names the prompt the answers were made under.
+    if (earlier.promptSha256 !== digest && !(split === 'dev' || (frozen?.replay?.of && frozen.replay.answersPromptSha256 === earlier.promptSha256 && frozen.replay.run === run))) {
+      throw new Error(`The run "${reuseRun}" was made with another prompt: its answers are not these.`);
+    }
     for (const id of wanted) {
       if (existsSync(rawPath(root, run, id)) || !existsSync(rawPath(root, reuseRun, id))) continue;
       await copyFile(rawPath(root, reuseRun, id), rawPath(root, run, id));
@@ -229,7 +245,7 @@ export async function predict({ split, run, root, keyFile, maxSeconds, limit, lo
     if (!raw.unreadable) { try { answer = JSON.parse(raw.content); } catch { answer = null; } }
     if (raw.unreadable) unreadableCount += 1;
     const patient = await readPatient(directory, id);
-    patients[id] = assessPatient(patient, answer);
+    patients[id] = assessPatient(patient, answer, undefined, { pastGuard });
     // A run that only reads another run's answers again made no call: it costs nothing and its usage is the earlier run's.
     if (!reuseRun) { cost += raw.cost; promptTokens += raw.usage.promptTokens; completionTokens += raw.usage.completionTokens; cacheHit += raw.usage.cacheHit; }
     calls += 1;
@@ -238,7 +254,7 @@ export async function predict({ split, run, root, keyFile, maxSeconds, limit, lo
   }
   const predictions = { schema: 1, run, split, promptSha256: digest, model: SETTINGS.model, servedModels: [...served].sort(), predictFiles: predictDigests,
     frozenDigest: frozen?.digest ?? null, madeAt: new Date().toISOString(), usage: { patients: calls, promptTokens, completionTokens, cacheHitTokens: cacheHit, costCny: Number(cost.toFixed(4)), patientsNeedingRetry: retried, unreadableAnswers: unreadableCount, ...(reuseRun ? { answersReadAgainFrom: reuseRun, answersReadAgain: reused.size } : {}) },
-    patients };
+    ...(pastGuard ? {} : { pastGuard: false }), patients };
   await writeFile(path.join(directoryOfRun, 'predictions.json'), `${JSON.stringify(predictions)}\n`);
   log(`predictions written for ${everyone.length} patients; this run cost CNY ${cost.toFixed(4)}, ledger total ${client.spent.toFixed(4)}`);
   return { complete: true, missing: 0, spent: client.spent, stopped };
@@ -301,11 +317,13 @@ export async function scoreSet({ predictions, gold, ids, goldFolder, scorer, tra
   /** @type {Record<string, number>} */
   const dropped = {};
   let proposed = 0, kept = 0, voided = 0, unitDropped = 0, unitByConvention = 0, datedByQuote = 0, dateDropped = 0, dateQuoteUnfound = 0;
+  let datedByHeader = 0, boundedByHeader = 0, datedByRecordDateLine = 0;
   for (const id of ids) {
     const p = predictions.patients[id];
     proposed += p.facts.proposed; kept += p.facts.kept; voided += p.facts.voidedByEvaluator;
     unitDropped += p.facts.unitDropped ?? 0; unitByConvention += p.facts.unitByConvention ?? 0; datedByQuote += p.facts.datedByQuote ?? 0;
     dateDropped += p.facts.dateDropped ?? 0; dateQuoteUnfound += p.facts.dateQuoteUnfound ?? 0;
+    datedByHeader += p.facts.datedByHeader ?? 0; boundedByHeader += p.facts.boundedByHeader ?? 0; datedByRecordDateLine += p.facts.datedByRecordDateLine ?? 0;
     for (const [reason, n] of Object.entries(p.facts.dropped)) dropped[reason] = (dropped[reason] ?? 0) + /** @type {number} */ (n);
     for (const tag of TAGS) {
       decided[tag] ??= { code: 0, model: 0 };
@@ -322,7 +340,9 @@ export async function scoreSet({ predictions, gold, ids, goldFolder, scorer, tra
     microC: { official: official.readingC.micro?.overallF1 ?? null, own: own('ALL.f1MicroC') },
     macroB: { official: official.readingB.macro?.overallF1 ?? null, own: own('ALL.f1MacroB') },
   };
-  return { patients: ids.length, summary, baseline, decidedBy: decided, unknownReasons, facts: { proposed, kept, voidedByEvaluator: voided, dropped, unitDropped, unitByConvention, datedByQuote, dateDropped, dateQuoteUnfound }, official, officialAgreement: agreement };
+  return { patients: ids.length, summary, baseline, decidedBy: decided, unknownReasons, confusion: sumCounts(perPatient),
+    facts: { proposed, kept, voidedByEvaluator: voided, dropped, unitDropped, unitByConvention, datedByQuote, dateDropped, dateQuoteUnfound, datedByHeader, boundedByHeader, datedByRecordDateLine },
+    official, officialAgreement: agreement };
 }
 
 /** @param {Awaited<ReturnType<typeof scoreSet>>} scored */
@@ -397,8 +417,8 @@ async function resultFile(prefix) {
  * the third (FROZEN-3.json) freezes it after one more fix for the same patients, as a regression check that follows the second.
  * @param {{ root: string, devRun: string, rounds: number, manifest?: 1 | 2 | 3, controlRun?: string, previousRun?: string, replayRun?: string }} options
  */
-export async function freeze({ root, devRun, rounds, manifest: number = 1, controlRun, previousRun, replayRun }) {
-  const file = number === 1 ? FROZEN_PATH : HELDOUT_MANIFESTS[/** @type {2 | 3} */ (number)];
+export async function freeze({ root, devRun, rounds, manifest: number = 1, controlRun, previousRun, replayRun, secondRun, priorReplayRun, literalRun, freshRun }) {
+  const file = number === 1 ? FROZEN_PATH : HELDOUT_MANIFESTS[/** @type {2 | 3 | 4} */ (number)];
   if (existsSync(file)) throw new Error(`${path.basename(file)} exists already: a freeze is written once.`);
   const skill = await readSkill();
   // What is frozen is what was developed: the final development run must have been predicted under this very prompt.
@@ -436,6 +456,27 @@ export async function freeze({ root, devRun, rounds, manifest: number = 1, contr
       control: { arm: 'the first measurement\'s pipeline, unchanged', run: controlRun, predictionsSha256: await predictionsDigest(controlRun), predictFiles: first.predictFiles },
       previous: { arm: 'the second measurement\'s pipeline', run: previousRun, predictionsSha256: await predictionsDigest(previousRun) },
       replay: { arm: 'the second run\'s answers read again through the fixed writer, with no model call', run: replayRun, of: previousRun },
+    };
+  }
+  if (number === 4 && first && firstResult) {
+    if (!controlRun || !secondRun || !previousRun || !priorReplayRun || !replayRun || !literalRun || !freshRun) {
+      throw new Error('The fourth manifest names the control run, the second run, the third run, the third run\'s replay, and the three runs it will make: the fresh sample, the replay of the second run\'s answers and the same sample under the literal ruling.');
+    }
+    const third = await readFrozen(FROZEN_3_PATH);
+    const thirdResult = await resultFile('heldout-3');
+    const metaOf = async (/** @type {string} */ name) => JSON.parse(await readFile(path.join(runDirectory(root, name), 'meta.json'), 'utf8'));
+    heldout = {
+      measurement: 'heldout-train-regression-check-4',
+      label: 'A fourth run on the same patients the second and third runs already scored. It checks the ruling that a fact with no date of its own takes the date of its record header; it is not a clean estimate.',
+      baseline: 'the class most of the forty development patients have for each criterion; the held-out patients\' labels are not used for it',
+      follows: { manifest: 'FROZEN-3.json', digest: third.digest, treeAtFreeze: third.treeAtFreeze, result: path.relative(REPO, thirdResult), resultSha256: sha256(await readFile(thirdResult)) },
+      control: { arm: 'the first measurement\'s pipeline, unchanged', run: controlRun, predictionsSha256: await predictionsDigest(controlRun), predictFiles: first.predictFiles },
+      second: { arm: 'the second measurement\'s pipeline', run: secondRun, predictionsSha256: await predictionsDigest(secondRun) },
+      previous: { arm: 'the third run: a fresh sample, the writer that drops an unsupported date and leaves the fact undated', run: previousRun, predictionsSha256: await predictionsDigest(previousRun) },
+      priorReplay: { arm: 'the second run\'s answers through the third run\'s writer, no model call', run: priorReplayRun, predictionsSha256: await predictionsDigest(priorReplayRun) },
+      fresh: { arm: 'a fresh model sample with the new skill text and the new writer', run: freshRun },
+      replay: { arm: 'the second run\'s answers read again through the new writer, with no model call', run: replayRun, of: secondRun, answersPromptSha256: (await metaOf(secondRun)).promptSha256 },
+      literal: { arm: 'the fresh sample\'s answers scored with the past-event guard off: every fact at the header date, the ruling taken literally', run: literalRun, of: freshRun, pastGuard: false },
     };
   }
   const body = {
@@ -589,13 +630,94 @@ export async function scoreHeldout({ root, run, controlRun, previousRun, replayR
   }
 }
 
+/**
+ * The fourth run, scored once: the fresh sample against its gold, and beside it, each from the same patients, the first pipeline, the second
+ * run, the third run, the second run's answers through the third run's writer and through the new one, and the fresh sample's answers under the
+ * literal ruling. Every earlier run is pinned by the digest of its predictions; the three runs this manifest makes carry its own digest.
+ * @param {{ root: string, run: string, controlRun: string, secondRun: string, previousRun: string, priorReplayRun: string, replayRun: string, literalRun: string, date?: string }} options
+ */
+export async function scoreHeldoutFourth({ root, run, controlRun, secondRun, previousRun, priorReplayRun, replayRun, literalRun, date = new Date().toISOString().slice(0, 10) }) {
+  const frozen = await readFrozen(FROZEN_4_PATH);
+  await assertFilesMatch(frozen.scoreFiles);
+  if (run !== frozen.fresh.run) throw new Error('The fresh sample is not the run the fourth manifest names.');
+  const marker = path.join(runDirectory(root, run), 'scored.json');
+  if (existsSync(marker)) throw new Error(`The held-out patients have been scored already (${marker}): they are scored once per manifest and the harness is never tuned after.`);
+  const ids = await splitIds(root);
+  const covers = (/** @type {any} */ held) => idsDigest(Object.keys(held.patients)) === frozen.dataset.heldoutIdsSha256;
+  if (idsDigest(ids.heldout) !== frozen.dataset.heldoutIdsSha256) throw new Error('The held-out patients are not the frozen ones.');
+  const digestOf = async (/** @type {string} */ name) => sha256(await readFile(path.join(runDirectory(root, name), 'predictions.json')));
+  /** A run an earlier measurement made, pinned by name and by the digest of its predictions. */
+  const pinned = async (/** @type {string} */ name, /** @type {{ run: string, predictionsSha256: string }} */ pin, /** @type {string} */ what) => {
+    if (name !== pin.run || await digestOf(name) !== pin.predictionsSha256) throw new Error(`The ${what} is not the one the fourth manifest pinned.`);
+    const held = await loadPredictions(root, name, 'heldout');
+    if (!covers(held)) throw new Error(`The ${what} does not cover exactly the held-out patients.`);
+    return held;
+  };
+  /** A run this manifest makes: its digest, its files, its patients, and not scored before. */
+  const made = async (/** @type {string} */ name, /** @type {{ run: string }} */ pin, /** @type {string} */ what) => {
+    if (name !== pin.run) throw new Error(`The ${what} is not the run the fourth manifest names.`);
+    if (name !== run && existsSync(path.join(runDirectory(root, name), 'scored.json'))) throw new Error(`The ${what} was scored already.`);
+    const held = await loadPredictions(root, name, 'heldout');
+    if (held.frozenDigest !== frozen.digest || !covers(held)) throw new Error(`The ${what} was not made under the fourth manifest for exactly the held-out patients.`);
+    for (const file of Object.keys(frozen.predictFiles)) if (held.predictFiles[file] !== frozen.predictFiles[file]) throw new Error(`The ${what} was made with a different ${file}.`);
+    return held;
+  };
+  const predictions = await made(run, frozen.fresh, 'fresh sample');
+  const replay = await made(replayRun, frozen.replay, 'replay');
+  const literal = await made(literalRun, frozen.literal, 'literal run');
+  if (literal.pastGuard !== false || predictions.pastGuard === false) throw new Error('The past-event guard is on in the literal run or off in the fresh sample.');
+  const control = await pinned(controlRun, frozen.control, 'control run');
+  for (const [file, digest] of Object.entries(frozen.control.predictFiles)) if (control.predictFiles[file] !== digest) throw new Error(`The control run was made with a different ${file} than the first measurement.`);
+  const second = await pinned(secondRun, frozen.second, 'second run');
+  const previous = await pinned(previousRun, frozen.previous, 'third run');
+  const priorReplay = await pinned(priorReplayRun, frozen.priorReplay, 'third run\'s replay');
+
+  const paths = dataPaths(root);
+  const all = await trainGoldOf(root, ids.train);
+  const goldFolder = await mkdtemp(path.join(os.tmpdir(), 'n2c2-heldout-'));
+  try {
+    for (const id of ids.heldout) await copyFile(path.join(paths.trainDir, `${id}.xml`), path.join(goldFolder, `${id}.xml`));
+    const baselineGold = ids.dev.map((id) => all[id]);
+    const scored = (/** @type {any} */ held) => scoreSet({ predictions: held, gold: all, ids: ids.heldout, goldFolder, scorer: paths.scorer, trainGold: baselineGold });
+    const counts = (/** @type {any} */ held) => ids.heldout.map((id) => patientCounts(held.patients[id].states, all[id]));
+    const change = (/** @type {any} */ after, /** @type {any} */ before) => summarizePaired(counts(after), counts(before));
+    const record = {
+      schema: 1, kind: 'heldout-train-regression-check-4', label: frozen.label, date, run, frozenDigest: frozen.digest, treeAtFreeze: frozen.treeAtFreeze,
+      controlRun, secondRun, previousRun, priorReplayRun, replayRun, literalRun,
+      follows: frozen.follows, model: predictions.model, servedModels: predictions.servedModels, promptSha256: predictions.promptSha256, skillSha256: frozen.prompt.skillSha256,
+      settings: frozen.model, resamples: BOOTSTRAP.resamples, usage: predictions.usage, developmentRounds: frozen.developmentRounds, baselineFrom: frozen.baseline,
+      // The fresh sample with the guard on: the headline.
+      ...(await scored(predictions)),
+      control: await scored(control), second: await scored(second), previous: await scored(previous), priorReplay: await scored(priorReplay),
+      replay: await scored(replay), literal: await scored(literal),
+      change: change(predictions, previous), changeFromControl: change(predictions, control),
+      literalChange: change(literal, previous), guardEffect: change(predictions, literal),
+      replayChangeFromSecond: change(replay, second), replayChangeFromPriorReplay: change(replay, priorReplay),
+    };
+    await mkdir(RESULTS, { recursive: true });
+    const out = path.join(RESULTS, `heldout-4-${date}.json`);
+    await writeFile(out, `${JSON.stringify(record, null, 2)}\n`);
+    const stamp = JSON.stringify({ scoredAt: new Date().toISOString(), result: path.relative(REPO, out) });
+    for (const name of [run, replayRun, literalRun]) await writeFile(path.join(runDirectory(root, name), 'scored.json'), `${stamp}\n`);
+    printSummary(record);
+    for (const [name, held] of /** @type {Array<[string, any]>} */ ([['the third run', record.previous], ['the second run\'s answers through the new writer', record.replay], ['the fresh sample under the literal ruling', record.literal]])) {
+      process.stdout.write(`-- ${name}\n`); printSummary(held);
+    }
+    process.stdout.write(`written ${path.relative(REPO, out)}\n`);
+    return record;
+  } finally {
+    await rm(goldFolder, { recursive: true, force: true });
+  }
+}
+
 // ---------------------------------------------------------------------------------------------------------------------------
 
 async function main() {
   const { positionals, values } = parseArgs({ allowPositionals: true, strict: true, options: {
     split: { type: 'string' }, run: { type: 'string' }, round: { type: 'string' }, 'max-seconds': { type: 'string' }, limit: { type: 'string' },
     'data-root': { type: 'string' }, 'key-file': { type: 'string' }, 'dev-run': { type: 'string' }, rounds: { type: 'string' }, date: { type: 'string' },
-    manifest: { type: 'string' }, 'control-run': { type: 'string' }, 'previous-run': { type: 'string' }, 'replay-run': { type: 'string' }, 'reuse-run': { type: 'string' } } });
+    manifest: { type: 'string' }, 'control-run': { type: 'string' }, 'previous-run': { type: 'string' }, 'replay-run': { type: 'string' }, 'reuse-run': { type: 'string' },
+    'second-run': { type: 'string' }, 'prior-replay-run': { type: 'string' }, 'literal-run': { type: 'string' }, 'fresh-run': { type: 'string' }, 'no-past-guard': { type: 'boolean' }, 'budget-cny': { type: 'string' } } });
   const mode = positionals[0];
   const root = dataRoot(values['data-root']);
   const log = (/** @type {string} */ line) => process.stdout.write(`${line}\n`);
@@ -604,11 +726,18 @@ async function main() {
     if (mode === 'predict') {
       if (!values.run || (values.split !== 'dev' && values.split !== 'test' && values.split !== 'heldout')) { process.stderr.write('predict needs --split dev|test|heldout and --run <name>.\n'); return 2; }
       const result = await predict({ split: values.split, run: values.run, root, keyFile: values['key-file'], maxSeconds: values['max-seconds'] ? Number(values['max-seconds']) : undefined, limit: values.limit ? Number(values.limit) : undefined, log,
-        manifest: values.manifest === '3' ? 3 : 2, reuseRun: values['reuse-run'] });
+        manifest: values.manifest === '4' ? 4 : values.manifest === '3' ? 3 : 2, reuseRun: values['reuse-run'], pastGuard: !values['no-past-guard'],
+        budgetCny: values['budget-cny'] ? Number(values['budget-cny']) : undefined });
       return result.complete ? 0 : 3;
     }
     if (mode === 'report-dev') { if (!values.run) throw new Error('report-dev needs --run.'); await reportDev({ root, run: values.run, round: values.round ? Number(values.round) : undefined }); return 0; }
-    if (mode === 'freeze') { if (!values['dev-run'] || !values.rounds) throw new Error('freeze needs --dev-run <name of the final development run> and --rounds <how many development rounds were run>.'); await freeze({ root, devRun: values['dev-run'], rounds: Number(values.rounds), manifest: values.manifest === '3' ? 3 : values.manifest === '2' ? 2 : 1, controlRun: values['control-run'], previousRun: values['previous-run'], replayRun: values['replay-run'] }); return 0; }
+    if (mode === 'freeze') { if (!values['dev-run'] || !values.rounds) throw new Error('freeze needs --dev-run <name of the final development run> and --rounds <how many development rounds were run>.'); await freeze({ root, devRun: values['dev-run'], rounds: Number(values.rounds), manifest: values.manifest === '4' ? 4 : values.manifest === '3' ? 3 : values.manifest === '2' ? 2 : 1, controlRun: values['control-run'], previousRun: values['previous-run'], replayRun: values['replay-run'],
+      secondRun: values['second-run'], priorReplayRun: values['prior-replay-run'], literalRun: values['literal-run'], freshRun: values['fresh-run'] }); return 0; }
+    if (mode === 'score-heldout' && values.manifest === '4') {
+      if (!values.run || !values['control-run'] || !values['second-run'] || !values['previous-run'] || !values['prior-replay-run'] || !values['replay-run'] || !values['literal-run']) throw new Error('score-heldout --manifest 4 needs --run, --control-run, --second-run, --previous-run, --prior-replay-run, --replay-run and --literal-run.');
+      await scoreHeldoutFourth({ root, run: values.run, controlRun: values['control-run'], secondRun: values['second-run'], previousRun: values['previous-run'], priorReplayRun: values['prior-replay-run'], replayRun: values['replay-run'], literalRun: values['literal-run'], date: values.date });
+      return 0;
+    }
     if (mode === 'score-heldout') { if (!values.run) throw new Error('score-heldout needs --run.'); await scoreHeldout({ root, run: values.run, controlRun: values['control-run'], previousRun: values['previous-run'], replayRun: values['replay-run'], date: values.date, manifest: values.manifest === '3' ? 3 : 2 }); return 0; }
     if (mode === 'score-test') { if (!values.run) throw new Error('score-test needs --run.'); await scoreTest({ root, run: values.run, date: values.date }); return 0; }
     process.stderr.write('Modes: predict, report-dev, freeze, score-test, score-heldout.\n');
