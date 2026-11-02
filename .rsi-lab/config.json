@@ -1,16 +1,18 @@
 {
   "mode": "lanes",
-  "batch": "b031",
+  "batch": "b032",
   "sourceRef": "5c740327bb8c0dfa515d01badf927618ed5ceebe",
   "labFrom": "branch",
   "imageRunId": 41307417699,
   "imageArtifact": "rsi-lab-images-5c740327bb8c",
-  "idleExitMin": 4,
+  "idleExitMin": 3,
   "arms": [
     {
-      "key": "base",
-      "jobs": 1,
-      "workers": 2
+      "key": "wp",
+      "jobs": 2,
+      "workers": 1,
+      "patch": "5c740327bb8c0dfa515d01badf927618ed5ceebe",
+      "webPatch": "5c740327bb8c0dfa515d01badf927618ed5ceebe"
     }
   ],
   "sandboxCheck": false,
