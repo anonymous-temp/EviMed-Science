@@ -90,6 +90,19 @@
         "authoredAt": "2026-09-05",
         "authoredAtSource": "first-commit"
       }
+    },
+    {
+      "id": "meta-topics-casual",
+      "inputs": {
+        "researchDirection": "找几个meta选题不，痛风这块的找几个 肾病的找几个"
+      },
+      "checks": [
+        "Reaches this capability from the free-text request (evals/routing case topic-meta-1) and does not start the topic engine",
+        "Every candidate names the closest existing review and any PROSPERO registration found, and how many comparable primary studies a pooling would rest on, by name",
+        "Searches PROSPERO, the EviMed index in Chinese and all three trial registries, and states exactly which sources were searched",
+        "No candidate is called open on the strength of an empty or noisy result; known occupied questions such as ERA with SGLT2 inhibitors are reported as occupied",
+        "Three to five short candidates per direction, with no protocol, timetable or scoring table, and no sentence about jobs, gates or submissions"
+      ]
     }
   ]
 }
