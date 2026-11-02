@@ -68,8 +68,8 @@ test("an installed skill with nothing missing reads installed, never executable:
 test("software a skill only touches on a guarded path is a note beside an installed one, not a limit", () => {
   const view = supply().view(/** @type {any} */ (SKILL_PACKAGES.get("core/large-file")), alice);
   assert.equal(view.state, "installed");
-  // h5py is not among them since 2026-10-12: AnnData installs it.
-  assert.deepEqual(view.notes.map((note) => note.detail).sort(), ["astropy", "cfgrib", "netCDF4", "pyarrow", "pygrib", "pysam", "uproot"].sort());
+  // h5py is not among them since 2026-10-12: AnnData installs it. Nor is pyarrow since 2026-11-02: the image installs it so Parquet tables read (the data-analysis work).
+  assert.deepEqual(view.notes.map((note) => note.detail).sort(), ["astropy", "cfgrib", "netCDF4", "pygrib", "pysam", "uproot"].sort());
   assert.equal(view.package.origin, "core");
   assert.equal(view.package.scripts, 1);
   assert.ok(view.package.dependencies.every((dependency) => dependency.basis === "observed"));
