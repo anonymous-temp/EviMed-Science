@@ -189,3 +189,36 @@ test('a real normalized pending kernel call can bridge delayed run adoption', as
   });
   assert.equal((await resolve({ userId: 'u', projectId: 'p' }, ctx('mine', 'high'))).runId, 'own-run');
 });
+
+test('delayed adoption resolves a live call against the actual run ledger projection', async () => {
+  const { AgentRunStore } = await import('../src/agentRuns.mjs');
+  const { mkdtemp, mkdir, rm } = await import('node:fs/promises');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const root = await mkdtemp(path.join(os.tmpdir(), 'evimed-engine-adoption-'));
+  const project = { id: 'project-1', userId: 'user-1', rootDir: root,
+    workspaceDir: path.join(root, 'workspace'), metaDir: path.join(root, '.openscience') };
+  try {
+    await mkdir(project.workspaceDir, { recursive: true });
+    await mkdir(project.metaDir, { recursive: true });
+    const ledger = new AgentRunStore({ get: async () => null }, { model: 'deepseek/deepseek-v4-flash', monitorIntervalMs: 60_000 });
+    ledger.scheduleMonitor = () => {};
+    const binding = { sessionId: 'mine', mode: 'open-domain', agentId: null, agentVersion: null, runtimeAgent: null };
+    const run = (await ledger.reserveRun(project, binding, { baselineCursor: null, nativeTurn: { startSeq: 10, userSeq: 11 } })).run;
+    let checks = 0;
+    const resolve = createEngineExecutionContextResolver({
+      config: { deepseekModel: 'deepseek-flash' },
+      store: { userById: async () => ({ id: 'user-1' }), requireProject: async () => project },
+      agentRuns: { activeRuns: async () => ++checks === 1 ? [] : ledger.activeRuns(project),
+        runIdForSession: (id, runs) => ledger.runIdForSession(id, runs) },
+      runtimeManager: { sessionTranscript: async () => ({ sessionId: 'mine', turns: [{ startSeq: 10, end: null }],
+        messages: [{ role: 'tool', turnStartSeq: 10, parts: [{ type: 'tool', callId: 'call-mine', status: 'pending' }] }] }),
+        sessionModelSelection: async () => ({ lastUsed: { provider: 'deepseek-official', model: 'deepseek-flash', reasoningEffort: 'high' } }) },
+      adoptionPollAttempts: 2, adoptionPollDelayMs: 1, wait: async () => {},
+    });
+    const result = await resolve({ userId: 'user-1', projectId: 'project-1' }, ctx('mine', 'high'));
+    assert.equal(result.runId, run.id);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
