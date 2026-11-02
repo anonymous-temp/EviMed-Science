@@ -5,6 +5,7 @@ import test from 'node:test';
 import { createDataAnalysisRoutes, DATA_ANALYSIS_PATH } from '../src/dataAnalysisRoutes.mjs';
 import { dataAnalysisOpenApi } from '../src/dataAnalysisOpenApi.mjs';
 import { HttpError, sendJson, sendError } from '../src/security.mjs';
+import { dataAnalysisMetricFamilies, resetDataAnalysisMetrics } from '../src/dataAnalysisMetrics.mjs';
 
 async function fixture(t, options = {}) {
   const calls = [];
@@ -19,9 +20,12 @@ async function fixture(t, options = {}) {
     async result(user, id, turnId) { calls.push(['result', user.id, id, turnId]); return { id: turnId, status: 'succeeded' }; },
     async cancel(user, id, turnId) { calls.push(['cancel', user.id, id, turnId]); return { id: turnId, status: 'cancelled' }; },
     async artifact(user, id, artifactId) { calls.push(['artifact', user.id, id, artifactId]); return { artifact: { filename: 'figure.svg', sha256: 'a'.repeat(64) }, buffer: Buffer.from('<svg/>') }; },
+    async remove(user, id, keyProjectId) { calls.push(['remove', user.id, id, keyProjectId]); return { id, deleted: true }; },
+    ...options.service,
   };
+  const tokens = options.tokens ?? { evk_test: { userId: identity.userId, keyId: identity.keyId } };
   const routes = createDataAnalysisRoutes({ config, service,
-    apiKeys: { async resolve(token) { if (token !== 'evk_test') throw new HttpError(401, 'agent_key_invalid', 'Invalid key.'); return identity; } },
+    apiKeys: { async resolve(token) { if (!tokens[token]) throw new HttpError(401, 'agent_key_invalid', 'Invalid key.'); return { ...identity, ...tokens[token] }; } },
     store: { async userById(id) { return options.deleted ? null : { id }; } },
     mutation: async operation => { if (options.maintenance) throw new HttpError(503, 'maintenance', 'Maintenance.'); calls.push(['admission']); return operation(); },
   });
@@ -92,4 +96,69 @@ test('active content downloads as an attachment and schema is available without 
 test('offline OpenAPI handoff is the contract actually served', async () => {
   const saved = JSON.parse(await readFile(new URL('../../../docs/data-analysis.openapi.json', import.meta.url), 'utf8'));
   assert.deepEqual(saved, dataAnalysisOpenApi());
+});
+
+async function until(check) {
+  for (let attempt = 0; attempt < 300; attempt++) { if (check()) return; await new Promise(resolve => setTimeout(resolve, 10)); }
+  assert.fail('timed out waiting for the held input');
+}
+const refusals = () => Object.fromEntries(dataAnalysisMetricFamilies()[0].series.map(row => [row.labels.reason, row.value]));
+const raw = (api, token, headers = {}) => api('/analyses/analysis-a/inputs?filename=a.csv', { method: 'POST', raw: 'x', headers: { authorization: `Bearer ${token}`, 'content-type': 'application/octet-stream', ...headers } });
+
+test('inputs in flight are bounded per account and across the server, whatever keys exist; the refusal is named, counted and freed with the work', { timeout: 20000 }, async t => {
+  resetDataAnalysisMetrics();
+  let release; const gate = new Promise(resolve => { release = resolve; }); const entered = [];
+  t.after(() => release());
+  const { api } = await fixture(t, {
+    config: { dataAnalysisMaxInputsInFlightPerAccount: 1, dataAnalysisMaxInputsInFlight: 2, dataAnalysisMaxInputBytes: 1024 },
+    tokens: { evk_a: { userId: 'account-a', keyId: 'key-a' }, evk_a2: { userId: 'account-a', keyId: 'key-a2' }, evk_b: { userId: 'account-b', keyId: 'key-b' }, evk_c: { userId: 'account-c', keyId: 'key-c' } },
+    service: { async rawInput(user, id, filename, buffer) { entered.push(user.id); await gate; return { id: 'input-a', bytes: buffer.length }; } },
+  });
+  const first = raw(api, 'evk_a'); await until(() => entered.length === 1);
+  const sameAccount = await raw(api, 'evk_a2');
+  assert.equal(sameAccount.status, 429);
+  assert.equal((await sameAccount.json()).code, 'analysis_input_busy', 'a second key of the same account shares its limit');
+  const second = raw(api, 'evk_b'); await until(() => entered.length === 2);
+  const server = await raw(api, 'evk_c');
+  assert.equal(server.status, 429, 'a third account is refused by the server-wide limit though it holds nothing');
+  assert.equal((await server.json()).code, 'analysis_input_busy');
+  assert.deepEqual(refusals(), { input_account: 1, input_server: 1, analysis_limit: 0 });
+  release();
+  assert.equal((await first).status, 201); assert.equal((await second).status, 201);
+  assert.equal((await raw(api, 'evk_a')).status, 201, 'the slots were released with the work');
+});
+
+test('a failed or refused input frees its slot, and JSON inputs share the same slots', async t => {
+  resetDataAnalysisMetrics();
+  let mode = 'fail';
+  const { api } = await fixture(t, {
+    config: { dataAnalysisMaxInputsInFlightPerAccount: 1, dataAnalysisMaxInputsInFlight: 1, dataAnalysisMaxInputBytes: 16 },
+    service: {
+      async rawInput() { if (mode === 'fail') throw new HttpError(409, 'analysis_busy', 'Busy.'); return { id: 'input-a' }; },
+      async input() { throw new HttpError(409, 'analysis_busy', 'Busy.'); },
+    },
+  });
+  for (let round = 0; round < 3; round++) assert.equal((await raw(api, 'evk_test')).status, 409, 'a failure is the work\'s answer, never a leaked slot');
+  assert.equal((await raw(api, 'evk_test', {}).then(response => response.status)), 409);
+  const tooBig = await api('/analyses/analysis-a/inputs?filename=a.csv', { method: 'POST', raw: 'x'.repeat(40), headers: { 'content-type': 'application/octet-stream' } });
+  assert.equal(tooBig.status, 413);
+  for (let round = 0; round < 3; round++) assert.equal((await api('/analyses/analysis-a/inputs', { method: 'POST', json: { filename: 'a.csv', base64: 'eA==' } })).status, 409);
+  mode = 'ok';
+  assert.equal((await raw(api, 'evk_test')).status, 201);
+  assert.deepEqual(refusals(), { input_account: 0, input_server: 0, analysis_limit: 0 });
+});
+
+test('DELETE removes one analysis through the service, with the key project for scope', async t => {
+  const { api, calls } = await fixture(t, { identity: { projectId: 'project-a' } });
+  const response = await api('/analyses/analysis-a', { method: 'DELETE' });
+  assert.equal(response.status, 200);
+  assert.deepEqual((await response.json()).data, { id: 'analysis-a', deleted: true });
+  assert.deepEqual(calls.find(row => row[0] === 'remove'), ['remove', 'account-a', 'analysis-a', 'project-a']);
+  const readOnly = await fixture(t, { identity: { scopes: ['analysis.read'] } });
+  assert.equal((await readOnly.api('/analyses/analysis-a', { method: 'DELETE' })).status, 403, 'deleting needs the write scope');
+});
+
+test('the offline OpenAPI document describes the delete', () => {
+  const doc = dataAnalysisOpenApi();
+  assert.ok(doc.paths['/analyses/{analysisId}'].delete, 'DELETE /analyses/{analysisId} is part of the contract');
 });

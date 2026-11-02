@@ -35,14 +35,17 @@ async function fixture(t){
   const documents={database:{transaction:async fn=>{let lock=null;try{return await fn({query:async(sql,args)=>{if(sql.includes('pg_try_advisory')){const key=args.join(':');if(dispatchLocks.has(key))return {rows:[{locked:false}]};dispatchLocks.add(key);lock=key;return {rows:[{locked:true}]};}return {rows:[]};}});}finally{if(lock)dispatchLocks.delete(lock);}}},get:async(user,kind,id)=>structuredClone(rows.get(`${user}:${id}`)??null),put:async(user,kind,id,payload,options)=>{
     const key=`${user}:${id}`,previous=rows.get(key);if((previous?.revision??0)!==options.expectedRevision)throw new HttpError(409,'product_revision_conflict','Conflict');
     const record={id,revision:(previous?.revision??0)+1,payload:structuredClone(payload)};rows.set(key,record);return structuredClone(record);
-  }};
-  const store={requireProject:async(user,id)=>{const project=projects.get(`${user.id}:${id}`);if(!project)throw new HttpError(404,'project_not_found','Missing');return project;}};
+  },remove:async(user,kind,id)=>{rows.delete(`${user}:${id}`);}};
+  const store={requireProject:async(user,id)=>{const project=projects.get(`${user.id}:${id}`);if(!project)throw new HttpError(404,'project_not_found','Missing');return project;},
+    listProjects:async user=>[...projects.values()].filter(project=>project.userId===user.id)};
   const withDispatchLock=async(user,turn,operation)=>{const key=`${user}:${turn}`;if(dispatchLocks.has(key))return operation(null);dispatchLocks.add(key);try{return await operation(async()=>{});}finally{dispatchLocks.delete(key);}};
   const deps={documents,store,withDispatchLock,config:{dataDir:directory,dataAnalysisMaxInputBytes:1024,dataAnalysisMaxArtifactBytes:1024*64,dataAnalysisMaxSnapshotBytes:1024*128},
     createProject:async(user,body)=>{const key=`${user.id}:${body.id}`;if(projects.has(key))throw new HttpError(409,'project_exists','Exists');const workspaceDir=path.join(directory,'projects',body.id);await fs.mkdir(workspaceDir,{recursive:true});projects.set(key,{id:body.id,userId:user.id,workspaceDir});},
     upload:async(user,project,relative,buffer)=>{const file=path.join(project.workspaceDir,relative);await fs.mkdir(path.dirname(file),{recursive:true});await fs.writeFile(file,buffer);},
     createSession:async()=> 'session-analysis',
     dispatch:async(user,project,sessionId,dispatchId,text,options)=>{dispatches++;assert.equal(options.unattended,true);assert.equal(options.automated,true);const run={id:`run_${dispatches}`,projectId:project.id,sessionId,dispatchId,status:'running',artifacts:[]};runs.push(run);return run;},
+    // The shared project teardown, as far as this service can see it: the project, its workspace and (by the foreign key) its documents go.
+    deleteProject:async(user,project)=>{projects.delete(`${user.id}:${project.id}`);for(const [key,row] of [...rows])if(row.payload.projectId===project.id)rows.delete(key);await fs.rm(project.workspaceDir,{recursive:true,force:true});},
     listRuns:async project=>runs.filter(run=>run.projectId===project.id),cancel:async(project,run)=>{run.status='cancelled';}};
   return {deps,service:new DataAnalysisService(deps),rows,projects,runs,user:{id:'alice'},dispatches:()=>dispatches};
 }
@@ -171,16 +174,37 @@ test('simultaneous original and replay before reservation cannot dispatch twice'
   assert.equal(admitted.runId,repeated.runId);assert.equal(f.dispatches(),1);
 });
 
-test('snapshot capacity failure retains reservation and retries after capacity is restored',async t=>{
+test('a snapshot limit lists what could not be preserved and returns the rest; polls, idle and cancel keep working',async t=>{
   const f=await fixture(t),a=await f.service.create(f.user,{name:'Capacity',requestId:'capacity'}),turn=await f.service.turn(f.user,a.id,{question:'Analyze',requestId:'t'});
-  const project=await f.deps.store.requireProject(f.user,a.projectId);await fs.writeFile(path.join(project.workspaceDir,'report.md'),'Keep this complete result');
-  f.runs[0].status='succeeded';f.runs[0].artifacts=['report.md'];f.deps.config.dataAnalysisMaxSnapshotBytes=5;
-  await assert.rejects(f.service.result(f.user,a.id,turn.id),{code:'analysis_snapshot_limit'});
-  assert.equal((await f.service.get(f.user,a.id)).active.id,turn.id);
-  await assert.rejects(f.service.turn(f.user,a.id,{question:'Next',requestId:'next'}),{code:'analysis_snapshot_limit'});
-  f.deps.config.dataAnalysisMaxSnapshotBytes=1000;const result=await f.service.result(f.user,a.id,turn.id);
-  assert.equal((await f.service.artifact(f.user,a.id,result.result.artifacts[0].id)).buffer.toString(),'Keep this complete result');
-  assert.equal((await f.service.get(f.user,a.id)).active,null);
+  const project=await f.deps.store.requireProject(f.user,a.projectId);
+  await fs.writeFile(path.join(project.workspaceDir,'report.md'),'Keep');await fs.writeFile(path.join(project.workspaceDir,'model.bin'),Buffer.alloc(900,1));
+  f.runs[0].status='succeeded';f.runs[0].artifacts=['report.md','model.bin'];f.deps.config.dataAnalysisMaxSnapshotBytes=300;
+  const result=await f.service.result(f.user,a.id,turn.id);
+  assert.deepEqual(result.result.artifacts.map(item=>item.filename),['report.md'],'what fits is returned');
+  assert.deepEqual(result.result.notices.filter(item=>item.code==='artifact_unavailable'),[{code:'artifact_unavailable',path:'model.bin',reason:'snapshot_limit'}]);
+  assert.equal((await f.service.artifact(f.user,a.id,result.result.artifacts[0].id)).buffer.toString(),'Keep');
+  assert.equal((await f.service.get(f.user,a.id)).active,null,'the reservation is released, not held on a limit');
+  assert.equal((await f.service.cancel(f.user,a.id,turn.id)).status,'succeeded');
+  const next=await f.service.turn(f.user,a.id,{question:'Next',requestId:'next'});assert.equal(next.status,'running');
+});
+
+test('storage that is full or the account total reached lists the file with its reason; an unexpected storage fault is retried, never thrown from a poll',async t=>{
+  const f=await fixture(t),a=await f.service.create(f.user,{name:'Storage',requestId:'storage'}),turn=await f.service.turn(f.user,a.id,{question:'Analyze',requestId:'t'});
+  const project=await f.deps.store.requireProject(f.user,a.projectId);
+  await fs.writeFile(path.join(project.workspaceDir,'a.csv'),'x'.repeat(100));await fs.writeFile(path.join(project.workspaceDir,'b.csv'),'y'.repeat(100));
+  f.runs[0].status='succeeded';f.runs[0].artifacts=['a.csv','b.csv'];f.deps.config.dataAnalysisMaxSnapshotBytes=150;f.deps.config.dataAnalysisMaxArtifactBytes=1000;
+  const result=(await f.service.result(f.user,a.id,turn.id)).result;
+  assert.deepEqual(result.artifacts.map(item=>item.filename),['a.csv']);
+  assert.deepEqual(result.notices.find(item=>item.code==='artifact_unavailable'),{code:'artifact_unavailable',path:'b.csv',reason:'snapshot_limit'});
+  const g=await fixture(t),b=await g.service.create(g.user,{name:'Fault',requestId:'fault'}),second=await g.service.turn(g.user,b.id,{question:'Analyze',requestId:'t'});
+  g.runs[0].status='succeeded';const root=g.service.root;
+  g.service.root=async()=>{throw Object.assign(new Error('no space left'),{code:'ENOSPC'});};
+  const held=await g.service.result(g.user,b.id,second.id);
+  assert.deepEqual(held.notices,[{code:'snapshot_retry_required'}]);assert.equal(held.status,'succeeded');
+  await assert.rejects(g.service.idle(g.user,b.id),{code:'analysis_busy'});
+  assert.equal((await g.service.cancel(g.user,b.id,second.id)).status,'succeeded');
+  g.service.root=root;assert.ok((await g.service.result(g.user,b.id,second.id)).result,'the next poll freezes it');
+  assert.equal((await g.service.get(g.user,b.id)).active,null);
 });
 
 import { ResearchSessionStore } from '../src/researchSessions.mjs';
@@ -266,4 +290,52 @@ test('package-relative manifest references label only already admitted artifacts
   f.runs[0].status='succeeded';f.runs[0].artifacts=['deliverables/chart.pdf','deliverables/analysis-output.json'];
   const result=(await f.service.result(f.user,a.id,turn.id)).result;
   assert.equal(result.artifacts.find(a=>a.filename==='chart.pdf').role,'figure');assert(!result.notices.some(n=>n.code==='manifest_reference_unavailable'));
+});
+
+import { dataAnalysisMetricFamilies, resetDataAnalysisMetrics } from '../src/dataAnalysisMetrics.mjs';
+import { analysisSnapshotRoot } from '../src/dataAnalysisArtifacts.mjs';
+
+test('an account keeps a bounded number of analyses; a replay is not a new one, the refusal is named and counted, deleting frees one',async t=>{
+  resetDataAnalysisMetrics();
+  const f=await fixture(t);f.deps.config.dataAnalysisMaxPerAccount=2;
+  const a=await f.service.create(f.user,{name:'A',requestId:'a'});await f.service.create(f.user,{name:'B',requestId:'b'});
+  assert.equal((await f.service.create(f.user,{name:'A',requestId:'a'})).id,a.id,'the same requestId at the cap is the same analysis');
+  await assert.rejects(f.service.create(f.user,{name:'C',requestId:'c'}),{code:'analysis_limit_reached',status:409});
+  assert.equal((await f.service.create({id:'bob'},{name:'C',requestId:'c'})).phase,'ready','another account has its own count');
+  assert.equal(dataAnalysisMetricFamilies()[0].series.find(row=>row.labels.reason==='analysis_limit').value,1);
+  await f.service.remove(f.user,a.id);
+  assert.equal((await f.service.create(f.user,{name:'C',requestId:'c'})).phase,'ready');
+});
+
+test('concurrent creations at the cap admit exactly as many as fit',async t=>{
+  const f=await fixture(t);f.deps.config.dataAnalysisMaxPerAccount=2;
+  await f.service.create(f.user,{name:'Seed',requestId:'seed'});
+  const outcomes=await Promise.allSettled(['x','y','z'].map(key=>f.service.create(f.user,{name:key,requestId:key})));
+  assert.equal(outcomes.filter(item=>item.status==='fulfilled').length,1);
+  assert.equal(outcomes.filter(item=>item.status==='rejected'&&item.reason.code==='analysis_limit_reached').length,2);
+});
+
+test('deleting an analysis removes its project, records and preserved bytes, stops running work, and only its own',async t=>{
+  const f=await fixture(t),a=await f.service.create(f.user,{name:'Doomed',requestId:'doomed'}),keep=await f.service.create(f.user,{name:'Keep',requestId:'keep'});
+  await f.service.input(f.user,a.id,{filename:'data.csv',base64:Buffer.from('x\n1').toString('base64')});
+  await f.service.input(f.user,keep.id,{filename:'data.csv',base64:Buffer.from('x\n1').toString('base64')});
+  await f.service.turn(f.user,a.id,{question:'Analyze',requestId:'t'});
+  const root=analysisSnapshotRoot(f.deps.config,f.user.id,a.id),keptRoot=analysisSnapshotRoot(f.deps.config,f.user.id,keep.id);
+  await fs.access(root);
+  await assert.rejects(f.service.remove({id:'mallory'},a.id),{code:'analysis_not_found'});
+  await assert.rejects(f.service.remove(f.user,a.id,'da-another-project'),{code:'analysis_project_scope',status:403});
+  assert.deepEqual(await f.service.remove(f.user,a.id,a.projectId),{id:a.id,deleted:true});
+  await assert.rejects(f.service.get(f.user,a.id),{code:'analysis_not_found'});
+  await assert.rejects(fs.access(root),{code:'ENOENT'});
+  assert.ok(!f.projects.has(`${f.user.id}:${a.projectId}`));
+  await fs.access(keptRoot);assert.equal((await f.service.get(f.user,keep.id)).id,keep.id);
+  await assert.rejects(f.service.remove(f.user,a.id),{code:'analysis_not_found'},'a second delete finds nothing');
+  assert.equal((await f.service.create(f.user,{name:'Doomed',requestId:'doomed'})).phase,'ready','the same requestId after a delete is a new analysis');
+});
+
+test('an analysis whose project was never created can still be deleted',async t=>{
+  const f=await fixture(t),a=await f.service.create(f.user,{name:'Half',requestId:'half'});
+  f.projects.delete(`${f.user.id}:${a.projectId}`);
+  assert.deepEqual(await f.service.remove(f.user,a.id),{id:a.id,deleted:true});
+  assert.equal(f.rows.has(`${f.user.id}:${a.id}`),false);
 });

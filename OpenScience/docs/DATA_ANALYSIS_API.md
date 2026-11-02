@@ -4,7 +4,7 @@ This versioned interface runs the existing statistical-analysis capability on De
 
 ## Enable and authenticate
 
-Set `OPEN_SCIENCE_DATA_ANALYSIS_API_ENABLED=true` on a configured EviMed control plane. PostgreSQL product storage, the ordinary model gateway and the DSH runtime must be available. Keep provider keys in the control plane. Existing account, project, storage and model-spend limits still apply.
+Set `OPEN_SCIENCE_DATA_ANALYSIS_API_ENABLED=true` on a configured EviMed control plane. PostgreSQL product storage, the ordinary model gateway and the DSH runtime must be available. Keep provider keys in the control plane. Existing account, storage and model-spend limits still apply. An analysis's project belongs to this API: it is not listed among the person's projects, does not count against their project ceiling (the per-account analysis limit below does instead), and is removed with `DELETE /analyses/{analysisId}` or with the account.
 
 Create an account API key through the existing authenticated `POST /api/agent-keys` interface with scopes `analysis.read` and `analysis.write`. Keys are returned once and can be revoked through the same account interface. Creating an analysis requires an unbound key; a key bound to the analysis's backing project may access that analysis only. Memory-only keys gain no analysis access. `X-Subject` is not supported.
 
@@ -19,10 +19,13 @@ Configuration defaults:
 | `OPEN_SCIENCE_DATA_ANALYSIS_MAX_ARTIFACT_BYTES` | 50 MiB | One returned artifact |
 | `OPEN_SCIENCE_DATA_ANALYSIS_MAX_SNAPSHOT_BYTES` | 200 MiB | Total preserved input/output bytes per analysis |
 | `OPEN_SCIENCE_DATA_ANALYSIS_MAX_DISPATCHES` | 4 | Bounded dedicated admission connections per web process; metadata query pool remains available |
+| `OPEN_SCIENCE_DATA_ANALYSIS_INPUTS_IN_FLIGHT_PER_ACCOUNT` | 2 | Inputs one account may have being received or acquired at once, whatever keys it holds; more are refused 429 `analysis_input_busy` |
+| `OPEN_SCIENCE_DATA_ANALYSIS_INPUTS_IN_FLIGHT` | 6 | The same for the whole web process. Each in-flight input holds about three times its size in memory (request body, decoded copy, preserved copy), so memory for inputs is bounded by this times three times `MAX_INPUT_BYTES` |
+| `OPEN_SCIENCE_DATA_ANALYSIS_MAX_PER_ACCOUNT` | 50 | Analyses one account keeps; creating another is refused 409 `analysis_limit_reached` until one is deleted. A replay of an existing `requestId` is not a new analysis |
 | `OPEN_SCIENCE_DATA_ANALYSIS_FETCH_TIMEOUT_MS` | 30000 | Source acquisition deadline |
 | `OPEN_SCIENCE_DATA_ANALYSIS_SOURCES_FILE` | empty | Optional server-owned JSON source map |
 
-An analysis supports at most 64 distinct inputs and 128 turns. A snapshot returns at most 64 artifacts. The route admits at most 120 operations per key per minute per web process. Limits and partial capture notices are observable; a large file is not silently truncated.
+An analysis supports at most 64 distinct inputs and 128 turns. A snapshot returns at most 64 artifacts. The route admits at most 120 operations per key per minute per web process. The three refusals above are counted on `open_science_data_analysis_refusals_total{reason=input_account|input_server|analysis_limit}`. Limits and partial capture notices are observable; a large file is not silently truncated.
 
 ## Create, upload, ask and retrieve
 
@@ -93,9 +96,9 @@ Retry the identical requestId and payload after an interrupted HTTP response. It
 
 `POST /analyses/{analysisId}/turns/{turnId}/cancel` requests cancellation. Poll until the actual runtime settles. If a request stopped during preparation before any dispatch, cancellation fences that preparation and a new requestId may start again. A crash before the run ledger reservation can recover by retrying the same requestId: a dedicated PostgreSQL admission lock reconciles the readable ledger and preserves the same dispatch identity. If the ledger is unavailable, or an existing run has unknown prompt acceptance, the reservation stays held rather than silently submitting a second potentially billable task. Query the same turn; do not automatically retry under new identifiers.
 
-Completed output bytes are frozen before another turn is admitted. Historical artifact IDs keep their original bytes when later code overwrites a workspace filename. Missing, individually oversized or invalid outputs are explicit partial-result notices. A snapshot-storage capacity or write failure instead keeps the reservation so capture can be retried after recovery; a later turn cannot overwrite the unfrozen outputs. Failed/cancelled runs preserve available artifacts as unverified partial results. The original source snapshots are controller-owned and are restored before each turn.
+Completed output bytes are frozen before another turn is admitted. Historical artifact IDs keep their original bytes when later code overwrites a workspace filename. A file that cannot be preserved is listed in `result.notices` as `artifact_unavailable` with its `path` and a `reason` (`missing`, `unreadable`, `too_large` for the artifact byte limit, `snapshot_limit` for the analysis's preserved-bytes limit, `not_a_file`, `unsafe_path`), and every other file, the summary and the structured results are returned: a limit never blocks the poll or the next turn. Only a fault of the preserved-bytes storage itself answers the turn with the notice `snapshot_retry_required` and keeps the reservation, so the next poll captures again and a later turn cannot overwrite the unfrozen outputs. Only files the run declared as its outputs carry its `verified` label; other files it wrote while working are listed as `unverified`. Failed/cancelled runs preserve available artifacts as unverified partial results. The original source snapshots are controller-owned and are restored before each turn.
 
-Individual analysis deletion is not exposed in v1. Generic project deletion, archival and renaming cannot bypass this API’s ownership or storage accounting. Existing account deletion durably removes the account’s private analysis snapshots as well as project data.
+`DELETE /analyses/{analysisId}` (scope `analysis.write`; a key bound to the analysis's project may delete that analysis) removes one analysis whole: it stops a turn that is still running, then deletes the backing project with its inputs, turns, results, memory and preserved bytes, and answers `{data:{id,deleted:true}}`. Deleted bytes cannot be recovered, and the same `requestId` afterwards creates a new analysis. Generic project deletion, archival and renaming through the ordinary project routes remain refused for these projects. Account deletion removes all of an account's analyses, including the preserved bytes kept outside its project data.
 
 ## Configured source example
 

@@ -98,3 +98,36 @@ test('presenting both nested and parent bundles preserves ambiguity', async t =>
   assert.equal(result.structuredResults, null);
   assert.ok(result.notices.some(item => item.code === 'primary_output_ambiguous'));
 });
+
+async function snapshotOf(t, files, run = {}, limits = {}) {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'analysis-capture-'));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const workspace = path.join(root, 'workspace'), destination = path.join(root, 'snapshots');
+  await fs.mkdir(destination); await fs.mkdir(workspace);
+  for (const [name, bytes] of Object.entries(files)) await fs.writeFile(path.join(workspace, name), bytes);
+  return { workspace, result: () => snapshotAnalysisRun({ workspaceDir: workspace }, { id: 'run-capture', startedAt: new Date(Date.now() - 10000).toISOString(), finishedAt: new Date(Date.now() + 1000).toISOString(), ...run }, destination,
+    { dataAnalysisMaxArtifactBytes: 1024, dataAnalysisMaxSnapshotBytes: 8192, ...limits }) };
+}
+
+test('a file the service may not read, one over the byte limit and one over the preserved-bytes limit are listed with their reasons and the rest is returned', { skip: process.getuid?.() === 0 }, async t => {
+  const fixture = await snapshotOf(t, { 'report.md': '# Findings', 'locked.csv': 'a,b\n1,2', 'model.bin': Buffer.alloc(2000, 1), 'fits.csv': 'x\n1' },
+    { artifacts: ['report.md', 'locked.csv', 'model.bin', 'fits.csv', 'absent.png'] }, {});
+  await fs.chmod(path.join(fixture.workspace, 'locked.csv'), 0o000);
+  const result = await fixture.result();
+  assert.deepEqual(result.artifacts.map(item => item.filename).sort(), ['fits.csv', 'report.md']);
+  const unavailable = Object.fromEntries(result.notices.filter(item => item.code === 'artifact_unavailable').map(item => [item.path, item.reason]));
+  assert.deepEqual(unavailable, { 'locked.csv': 'unreadable', 'model.bin': 'too_large', 'absent.png': 'missing' });
+  const small = await snapshotOf(t, { 'a.csv': 'x'.repeat(100), 'b.csv': 'y'.repeat(100) }, { artifacts: ['a.csv', 'b.csv'] }, { dataAnalysisMaxSnapshotBytes: 150 });
+  const limited = await small.result();
+  assert.deepEqual(limited.artifacts.map(item => item.filename), ['a.csv']);
+  assert.deepEqual(limited.notices.find(item => item.code === 'artifact_unavailable'), { code: 'artifact_unavailable', path: 'b.csv', reason: 'snapshot_limit' });
+});
+
+test('only files the run declared inherit its verification; scratch files found by change detection do not', async t => {
+  const fixture = await snapshotOf(t, { 'report.md': '# Findings', 'figure.png': 'png', 'scratch.csv': 'tmp', 'partial.csv': 'p' },
+    { verification: 'verified', artifacts: ['report.md'], presentedFiles: ['figure.png'], unverifiedArtifacts: ['partial.csv'] });
+  const marks = Object.fromEntries((await fixture.result()).artifacts.map(item => [item.filename, item.verification]));
+  assert.deepEqual(marks, { 'report.md': 'verified', 'figure.png': 'verified', 'scratch.csv': 'unverified', 'partial.csv': 'unverified' });
+  const unchecked = await snapshotOf(t, { 'report.md': '# Findings' }, { verification: 'unverified', artifacts: ['report.md'] });
+  assert.equal((await unchecked.result()).artifacts[0].verification, 'unverified', 'a run that was not verified verifies nothing');
+});

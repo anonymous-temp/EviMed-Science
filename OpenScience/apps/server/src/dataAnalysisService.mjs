@@ -4,7 +4,8 @@ import { isDataAnalysisProject } from './internalProjects.mjs';
 export { isDataAnalysisProject } from './internalProjects.mjs';
 import { HttpError, openScopedDirectoryNoFollow } from './security.mjs';
 import { analysisFields, analysisString, analysisFilename, analysisInputBytes } from './dataAnalysisInputs.mjs';
-import { analysisDigest, analysisSnapshotRoot, analysisRead, keepAnalysisBytes, snapshotAnalysisRun } from './dataAnalysisArtifacts.mjs';
+import { analysisDigest, analysisSnapshotRoot, analysisRead, keepAnalysisBytes, removeAnalysisSnapshots, snapshotAnalysisRun } from './dataAnalysisArtifacts.mjs';
+import { recordDataAnalysisRefusal } from './dataAnalysisMetrics.mjs';
 import { MAX_PROJECT_NAME_LENGTH, projectDisplayName } from './store.mjs';
 
 const KIND='data-analysis';
@@ -32,6 +33,10 @@ export class DataAnalysisService {
     this.createProject=dependencies.createProject;this.upload=dependencies.upload;this.createSession=dependencies.createSession;
     this.dispatch=dependencies.dispatch;this.listRuns=dependencies.listRuns;this.cancelRun=dependencies.cancel;
     this.transport=dependencies.transport;this.withDispatchLock=dependencies.withDispatchLock;
+    // The same teardown as `DELETE /api/projects/:id` (stop the runtime, the memory, library and engine copies, the rows), supplied by the server.
+    this.deleteProject=dependencies.deleteProject;
+    /** @type {Map<string,Promise<any>>} creations of one account run one after another, so the account's cap is counted exactly */
+    this.creating=new Map();
   }
   /** Shared run-ledger admission also covers native adoption and internal schedulers. Managed children settle inside the admitted root run.
    * @param {any} project @param {{sessionId:string,dispatchId:string|null,dispatchFingerprint:string|null}} input */
@@ -59,11 +64,21 @@ export class DataAnalysisService {
     const opened=await openScopedDirectoryNoFollow(this.config.dataDir,root,{create:true});await opened.handle.close();return root;
   }
   /** @param {any} user @param {any} body */
-  async create(user,body){
+  create(user,body){
+    const previous=this.creating.get(user.id)??Promise.resolve();
+    const next=previous.catch(()=>{}).then(()=>this.createOne(user,body));
+    this.creating.set(user.id,next);
+    return next.finally(()=>{if(this.creating.get(user.id)===next)this.creating.delete(user.id);});
+  }
+  /** @param {any} user @param {any} body */
+  async createOne(user,body){
     analysisFields(body,['name','requestId']);const name=analysisString(body.name,120),key=requestId(body.requestId);
     const digest=analysisDigest(`${user.id}:${key}`),id=`ana_${digest.slice(0,40)}`,projectId=`da-${digest.slice(0,40)}`;
     const existing=await this.documents.get(user.id,KIND,id);
     if(existing){if(existing.payload.name!==name)throw new HttpError(409,'analysis_request_conflict','This requestId was used with different content.');return this.finishCreate(user,existing);}
+    // These projects are the API's own and outside the account's project ceiling: this count is what bounds their storage.
+    const kept=(await this.store.listProjects(user)).filter(project=>isDataAnalysisProject(project)).length;
+    if(kept>=(this.config.dataAnalysisMaxPerAccount??50)){recordDataAnalysisRefusal('analysis_limit');throw new HttpError(409,'analysis_limit_reached',`This account already keeps ${kept} analyses, which is its limit. Delete one to create another.`);}
     // Create the reservation before the project. Concurrent create calls share the same deterministic identity.
     let record;
     try {record=await this.documents.put(user.id,KIND,id,{id,projectId,name,requestId:key,phase:'creating',inputs:[],turnIds:[],sessionId:null,active:null},{expectedRevision:0});}
@@ -198,7 +213,11 @@ export class DataAnalysisService {
     const run=runs.find(item=>item.dispatchId===turn.dispatchId);
     if(!run)return {...turn,status:['preparing','dispatching'].includes(turn.status)?'dispatch_unknown':turn.status};
     if(!terminal(run))return {...turn,runId:run.id,status:run.dispatchStatus==='unknown'?'dispatch_unknown':run.status,dispatchState:run.dispatchStatus??null};
-    const result=await snapshotAnalysisRun(project,run,await this.root(user,id),this.config);
+    let result;
+    // A file that cannot be preserved is listed in the result with its reason. What reaches this catch is the preserved-bytes storage itself
+    // failing: nothing was frozen, the reservation stays, and the next poll tries again. A poll, idle or cancel never throws for it.
+    try{result=await snapshotAnalysisRun(project,run,await this.root(user,id),this.config);}
+    catch(error){process.stderr.write(`data-analysis snapshot failed: ${typeof error?.code==='string'?error.code:'unknown'}\n`);return {...turn,runId:run.id,status:run.status,notices:[{code:'snapshot_retry_required'}]};}
     result.artifacts=result.artifacts.map(artifact=>({...artifact,downloadUrl:`/api/data-analysis/v1/analyses/${id}/artifacts/${artifact.id}`}));
     try{record=await this.save(user,record,{...turn,runId:run.id,status:run.status,result});turn=record.payload;}
     catch(error){if(error?.code!=='product_revision_conflict')throw error;turn=(await this.documents.get(user.id,KIND,turnId)).payload;}
@@ -208,7 +227,7 @@ export class DataAnalysisService {
   }
   /** @param {any} user @param {string} id @param {string} turnId */
   async cancel(user,id,turnId){
-    const turn=await this.result(user,id,turnId);if(turn.result||turn.status==='failed')return turn;
+    const turn=await this.result(user,id,turnId);if(turn.result||terminal(turn))return turn;
     const pending=await this.documents.get(user.id,KIND,turnId);
     if(pending?.payload.status==='preparing'){
       // No prompt can exist before the dispatching CAS. Cancelling this revision fences a live or crashed preparer.
@@ -221,6 +240,21 @@ export class DataAnalysisService {
     const run=(await this.listRuns(project)).find(item=>item.dispatchId===turn.dispatchId);
     if(!run)throw new HttpError(409,'analysis_dispatch_unknown','Dispatch acceptance is unknown; the reservation remains held.');
     await this.cancelRun(project,run);return this.result(user,id,turnId);
+  }
+  /** Delete one analysis whole: its project through the shared teardown (which stops a running turn and, by foreign key, takes the records), then the preserved bytes
+   * that live outside the project. @param {any} user @param {string} id @param {string|null} [keyProjectId] the project a bound key is limited to */
+  async remove(user,id,keyProjectId=null){
+    if(!/^ana_[a-f0-9]{40}$/.test(id))throw new HttpError(404,'analysis_not_found','Analysis not found.');
+    const record=await this.documents.get(user.id,KIND,id);
+    if(!record)throw new HttpError(404,'analysis_not_found','Analysis not found.');
+    if(keyProjectId&&keyProjectId!==record.payload.projectId)throw new HttpError(403,'analysis_project_scope','The analysis is outside this key project.');
+    const project=await this.store.requireProject(user,record.payload.projectId).catch(error=>{if(error?.code==='project_not_found')return null;throw error;});
+    if(project)await this.deleteProject(user,project);
+    // A creation that never reached its project has a record no project holds.
+    const left=await this.documents.get(user.id,KIND,id);
+    if(left)await this.documents.remove(user.id,KIND,id,left.revision);
+    await removeAnalysisSnapshots(this.config,user.id,id);
+    return {id,deleted:true};
   }
   /** @param {any} user @param {string} id @param {string} artifactId */
   async artifact(user,id,artifactId){

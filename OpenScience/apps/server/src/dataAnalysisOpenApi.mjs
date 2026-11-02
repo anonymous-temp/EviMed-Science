@@ -21,7 +21,7 @@ export function dataAnalysisOpenApi() {
     404: response('No resource visible to this account.', ref('Error')),
     409: response('Busy analysis, conflicting request ID or changed preserved bytes.', ref('Error')),
     413: response('Input or artifact exceeds the configured byte limit.', ref('Error')),
-    429: response('Request or execution limit reached.', ref('Error')),
+    429: response('Request, input-in-flight or execution limit reached. Retry the same requestId shortly.', ref('Error')),
     503: response('Service disabled, under maintenance or unavailable.', ref('Error')),
   };
   /** @param {string} operationId @param {string} summary @param {number} [status] @param {any} [request] @param {any[]} [parameters] */
@@ -40,7 +40,10 @@ export function dataAnalysisOpenApi() {
     security: [{ bearerAuth: [] }],
     paths: {
       '/analyses': { post: operation('createAnalysis', 'Create an isolated analysis; requires an unbound analysis.write key.', 201, body(ref('CreateAnalysis'))) },
-      '/analyses/{analysisId}': { get: operation('getAnalysis', 'Read analysis identity, inputs and turn history; requires analysis.read.', 200, undefined, [analysis]) },
+      '/analyses/{analysisId}': {
+        get: operation('getAnalysis', 'Read analysis identity, inputs and turn history; requires analysis.read.', 200, undefined, [analysis]),
+        delete: operation('deleteAnalysis', 'Delete the analysis with its project, inputs, turns, results and preserved bytes; requires analysis.write. A turn still running is stopped. Deleted bytes cannot be recovered; reusing its requestId creates a new analysis.', 200, undefined, [analysis]),
+      },
       '/analyses/{analysisId}/inputs': { post: operation('addAnalysisInput', 'Preserve a file, public HTTPS response or authorized configured source; requires analysis.write and an idle analysis.', 201, {
         required: true, content: { ...json(ref('Input')), 'application/octet-stream': { schema: { type: 'string', format: 'binary' } } },
       }, [analysis, { name: 'filename', in: 'query', required: false, description: 'Required for application/octet-stream. A filename, never a directory or host path.', schema: text(160) }]) },
@@ -62,6 +65,7 @@ export function dataAnalysisOpenApi() {
         Input: { ...object({ filename: text(160), base64: { type: 'string', contentEncoding: 'base64' }, url: { type: 'string', format: 'uri', maxLength: 2048 }, sourceId: text(80) }, ['filename']),
           oneOf: [{ required: ['base64'] }, { required: ['url'] }, { required: ['sourceId'] }],
           description: 'Exactly one source is required. URL input snapshots the returned bytes; it does not let a model fetch the source independently. Configured sources bind an exact endpoint and account grant on the server.' },
+        Deleted: { type: 'object', required: ['id', 'deleted'], properties: { id: text(100), deleted: { const: true } } },
         Envelope: { type: 'object', required: ['data'], properties: { data: { type: 'object', additionalProperties: true } } },
         Error: { type: 'object', properties: { code: { type: 'string' }, error: { type: 'string' }, requestId: { type: ['string', 'null'] } }, required: ['code', 'error', 'requestId'] },
         InputReceipt: { type: 'object', required: ['id', 'filename', 'sha256', 'bytes', 'path', 'provenance'], properties: {
@@ -74,7 +78,7 @@ export function dataAnalysisOpenApi() {
           inputs: { type: 'array', items: ref('InputReceipt'), maxItems: 64 }, turnIds: { type: 'array', items: text(100), maxItems: 128 },
           sessionId: { type: ['string', 'null'] }, active: { type: ['object', 'null'], description: 'A durable input/turn reservation. Poll the named turn before requesting another writer.' },
         } },
-        Notice: { type: 'object', required: ['code'], properties: { code: text(100), path: { type: 'string' } } },
+        Notice: { type: 'object', required: ['code'], properties: { code: text(100), path: { type: 'string' }, reason: { type: 'string', description: 'Why a file the run produced could not be preserved (missing, unreadable, too_large, snapshot_limit, not_a_file, unsafe_path); the rest of the result is returned.' } } },
         Artifact: { type: 'object', required: ['id', 'filename', 'role', 'mediaType', 'bytes', 'sha256', 'downloadUrl'], properties: {
           id: text(100), filename: text(160), path: { type: 'string' }, role: { enum: ['table', 'figure', 'report', 'code', 'data'] },
           mediaType: { type: 'string' }, bytes: { type: 'integer', minimum: 0 }, sha256: { type: 'string', pattern: '^[a-f0-9]{64}$' },
@@ -98,7 +102,7 @@ export function dataAnalysisOpenApi() {
       },
     },
   };
-  const outputs = { createAnalysis: 'Analysis', getAnalysis: 'Analysis', addAnalysisInput: 'InputReceipt', startAnalysisTurn: 'Turn', getAnalysisTurn: 'Turn', getAnalysisResults: 'Turn', cancelAnalysisTurn: 'Turn' };
+  const outputs = { createAnalysis: 'Analysis', getAnalysis: 'Analysis', deleteAnalysis: 'Deleted', addAnalysisInput: 'InputReceipt', startAnalysisTurn: 'Turn', getAnalysisTurn: 'Turn', getAnalysisResults: 'Turn', cancelAnalysisTurn: 'Turn' };
   for (const route of Object.values(contract.paths)) {
     for (const entry of Object.values(/** @type {Record<string, any>} */ (route))) {
       const name = outputs[entry.operationId];

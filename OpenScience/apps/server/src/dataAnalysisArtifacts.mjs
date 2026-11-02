@@ -1,12 +1,22 @@
 /** Controller-owned snapshots are outside the runtime's project mount. Paths from a model are never download authority. */
 import path from 'node:path';
+import { rm } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { HttpError, openScopedFileNoFollow, writeFileAtomicNoFollow, resolveScopedPath, mimeFor, directorySize } from './security.mjs';
 import { workspaceChangedFiles } from './runWorkspaceChanges.mjs';
 export const analysisDigest = value => createHash('sha256').update(value).digest('hex');
+/** Where every analysis of one account keeps its preserved bytes. @param {any} config @param {string} userId */
+export function analysisAccountRoot(config,userId) {
+  return path.join(config.dataDir,'.openscience','data-analysis',analysisDigest(userId));
+}
 /** @param {any} config @param {string} userId @param {string} analysisId */
 export function analysisSnapshotRoot(config,userId,analysisId) {
-  return path.join(config.dataDir,'.openscience','data-analysis',analysisDigest(userId),analysisId);
+  return path.join(analysisAccountRoot(config,userId),analysisId);
+}
+/** Preserved bytes live outside the project, so a project's or an account's deletion does not reach them: one analysis's, or all of an account's.
+ * @param {any} config @param {string} userId @param {string|null} [analysisId] */
+export async function removeAnalysisSnapshots(config,userId,analysisId=null) {
+  await rm(analysisId?analysisSnapshotRoot(config,userId,analysisId):analysisAccountRoot(config,userId),{recursive:true,force:true});
 }
 /** @param {string} root @param {string} relative @param {number} limit */
 export async function analysisRead(root,relative,limit) {
@@ -31,6 +41,17 @@ export async function keepAnalysisBytes(root,bytes,maxTotal) {
   if(await directorySize(root,{maxEntries:10000})+bytes.length>maxTotal)throw new HttpError(413,'analysis_snapshot_limit','The analysis snapshot storage limit was reached.');
   await writeFileAtomicNoFollow(root,path.join(root,sha256),bytes,{mode:0o600});
   return sha256;
+}
+/** Why one file the run produced could not be preserved, or null when the fault is not about that file and the snapshot should be tried again.
+ * @param {any} error @returns {string|null} */
+function unavailableReason(error) {
+  if (error?.message==='invalid path'||['path_outside_scope','invalid_path','symlink_not_allowed','path_forbidden','ELOOP'].includes(error?.code)) return 'unsafe_path';
+  if (['ENOENT','file_not_found'].includes(error?.code)) return 'missing';
+  if (error?.code==='not_a_file'||error?.code==='EISDIR') return 'not_a_file';
+  if (error?.code==='analysis_artifact_limit') return 'too_large';
+  if (['analysis_snapshot_limit','project_scan_too_large'].includes(error?.code)) return 'snapshot_limit';
+  if (['EACCES','EPERM'].includes(error?.code)) return 'unreadable';
+  return null;
 }
 /** @param {string} filename */
 function role(filename) {
@@ -74,7 +95,10 @@ export async function snapshotAnalysisRun(project,run,root,config) {
     until: Number.isFinite(Date.parse(run.finishedAt ?? '')) ? Date.parse(run.finishedAt) : Date.now(),
     limit: 65,
   });
-  const candidates=[...new Set([...(run.outputFiles ?? []),...(run.artifacts ?? []),...(run.presentedFiles ?? []),...unverified,...changed].filter(item=>typeof item==='string' && !item.startsWith('analysis-inputs/')))];
+  // Only a file the run itself declared was checked by the delivery contract. One found by change detection alone is a scratch file:
+  // it is preserved and listed, and it is not `verified` however the run's own files fared.
+  const declared=new Set([...(run.outputFiles ?? []),...(run.artifacts ?? []),...(run.presentedFiles ?? [])].filter(item=>typeof item==='string'));
+  const candidates=[...new Set([...declared,...unverified,...changed].filter(item=>typeof item==='string' && !item.startsWith('analysis-inputs/')))];
   let total=0,structuredResults=null,summary='',outputManifestSeen=false;
   for (const relative of candidates.slice(0,64)) {
     try {
@@ -83,12 +107,14 @@ export async function snapshotAnalysisRun(project,run,root,config) {
       if (total+bytes.length>config.dataAnalysisMaxSnapshotBytes) throw new HttpError(413,'analysis_snapshot_limit','The analysis snapshot storage limit was reached.');
       total+=bytes.length;
       const sha256=await keepAnalysisBytes(root,bytes,config.dataAnalysisMaxSnapshotBytes);
-      artifacts.push({id:`art_${analysisDigest(`${run.id}:${relative}:${sha256}`).slice(0,40)}`,filename:path.posix.basename(relative),path:relative,sha256,bytes:bytes.length,role:role(relative),mediaType:mimeFor(relative),verification:unverified.has(relative)?'unverified':run.verification==='verified'?'verified':'unverified'});
+      artifacts.push({id:`art_${analysisDigest(`${run.id}:${relative}:${sha256}`).slice(0,40)}`,filename:path.posix.basename(relative),path:relative,sha256,bytes:bytes.length,role:role(relative),mediaType:mimeFor(relative),verification:!unverified.has(relative)&&declared.has(relative)&&run.verification==='verified'?'verified':'unverified'});
       if(bytes.length<=65_536&&/\.(json|md|txt)$/i.test(relative))texts.set(relative,bytes.toString('utf8'));
     } catch (error) {
-      // Missing/oversized files are visible partial results. Snapshot storage failure holds the next turn.
-      if (!['ENOENT','file_not_found','path_outside_scope','invalid_path','symlink_not_allowed','analysis_artifact_limit','path_forbidden','not_a_file','ELOOP'].includes(error?.code) && error?.message!=='invalid path') throw error;
-      notices.push({code:'artifact_unavailable',path:relative.slice(0,512)});
+      // A file that cannot be preserved is listed with its reason and the rest of the result is returned. A fault that is not about
+      // this file (the preserved-bytes storage failing) is thrown, and the caller keeps the reservation to try the snapshot again.
+      const reason=unavailableReason(error);
+      if (reason===null) throw error;
+      notices.push({code:'artifact_unavailable',path:relative.slice(0,512),reason});
     }
   }
   const paths=artifacts.map(artifact=>artifact.path);

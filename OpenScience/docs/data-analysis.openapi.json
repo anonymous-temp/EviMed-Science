@@ -111,7 +111,7 @@
             }
           },
           "429": {
-            "description": "Request or execution limit reached.",
+            "description": "Request, input-in-flight or execution limit reached. Retry the same requestId shortly.",
             "content": {
               "application/json": {
                 "schema": {
@@ -229,7 +229,123 @@
             }
           },
           "429": {
-            "description": "Request or execution limit reached.",
+            "description": "Request, input-in-flight or execution limit reached. Retry the same requestId shortly.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service disabled, under maintenance or unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteAnalysis",
+        "summary": "Delete the analysis with its project, inputs, turns, results and preserved bytes; requires analysis.write. A turn still running is stopped. Deleted bytes cannot be recovered; reusing its requestId creates a new analysis.",
+        "parameters": [
+          {
+            "name": "analysisId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "data"
+                  ],
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Deleted"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request, input encoding or filename.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, expired or revoked API key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Missing scope, project grant or source grant.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No resource visible to this account.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Busy analysis, conflicting request ID or changed preserved bytes.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Input or artifact exceeds the configured byte limit.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Request, input-in-flight or execution limit reached. Retry the same requestId shortly.",
             "content": {
               "application/json": {
                 "schema": {
@@ -374,7 +490,7 @@
             }
           },
           "429": {
-            "description": "Request or execution limit reached.",
+            "description": "Request, input-in-flight or execution limit reached. Retry the same requestId shortly.",
             "content": {
               "application/json": {
                 "schema": {
@@ -502,7 +618,7 @@
             }
           },
           "429": {
-            "description": "Request or execution limit reached.",
+            "description": "Request, input-in-flight or execution limit reached. Retry the same requestId shortly.",
             "content": {
               "application/json": {
                 "schema": {
@@ -630,7 +746,7 @@
             }
           },
           "429": {
-            "description": "Request or execution limit reached.",
+            "description": "Request, input-in-flight or execution limit reached. Retry the same requestId shortly.",
             "content": {
               "application/json": {
                 "schema": {
@@ -758,7 +874,7 @@
             }
           },
           "429": {
-            "description": "Request or execution limit reached.",
+            "description": "Request, input-in-flight or execution limit reached. Retry the same requestId shortly.",
             "content": {
               "application/json": {
                 "schema": {
@@ -899,7 +1015,7 @@
             }
           },
           "429": {
-            "description": "Request or execution limit reached.",
+            "description": "Request, input-in-flight or execution limit reached. Retry the same requestId shortly.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1020,7 +1136,7 @@
             }
           },
           "429": {
-            "description": "Request or execution limit reached.",
+            "description": "Request, input-in-flight or execution limit reached. Retry the same requestId shortly.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1119,7 +1235,7 @@
             }
           },
           "429": {
-            "description": "Request or execution limit reached.",
+            "description": "Request, input-in-flight or execution limit reached. Retry the same requestId shortly.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1238,6 +1354,23 @@
           }
         ],
         "description": "Exactly one source is required. URL input snapshots the returned bytes; it does not let a model fetch the source independently. Configured sources bind an exact endpoint and account grant on the server."
+      },
+      "Deleted": {
+        "type": "object",
+        "required": [
+          "id",
+          "deleted"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100
+          },
+          "deleted": {
+            "const": true
+          }
+        }
       },
       "Envelope": {
         "type": "object",
@@ -1421,6 +1554,10 @@
           },
           "path": {
             "type": "string"
+          },
+          "reason": {
+            "type": "string",
+            "description": "Why a file the run produced could not be preserved (missing, unreadable, too_large, snapshot_limit, not_a_file, unsafe_path); the rest of the result is returned."
           }
         }
       },

@@ -208,6 +208,7 @@ import { createTopicsSource } from "./memoryMapSources/topics.mjs";
 import { AgentApiKeyStore } from "./agentApiKeys.mjs";
 import { DataAnalysisService, createDataAnalysisSession, assertNotDataAnalysisProject, isDataAnalysisProject } from "./dataAnalysisService.mjs";
 import { createDataAnalysisDispatchLock } from "./dataAnalysisAdmission.mjs";
+import { removeAnalysisSnapshots } from "./dataAnalysisArtifacts.mjs";
 import { createDataAnalysisRoutes } from "./dataAnalysisRoutes.mjs";
 import { createAgentMemoryRoutes } from "./agentMemoryRoutes.mjs";
 import { createAgentKeyRoutes } from "./agentKeyRoutes.mjs";
@@ -223,6 +224,7 @@ import {
 import { WEB_SEARCH_GATEWAY_PATH, createWebSearch, createWebSearchGatewayHandler } from "./webSearchGateway.mjs";
 import { createDeepSeekTools, deepseekToolMetricFamilies } from "./deepseekTools.mjs";
 import { geneExpressionMetricFamilies } from "./geneExpressionMetrics.mjs";
+import { dataAnalysisMetricFamilies } from "./dataAnalysisMetrics.mjs";
 import { projectGatewayLimitMetricFamily } from "./projectGatewayLimit.mjs";
 import { TOOL_UNIVERSE_GATEWAY_PATH, createToolUniverseGateway } from "./toolUniverseGateway.mjs";
 import { GEO_PROBE_GATEWAY_PATH, createGeoProbeGatewayHandler } from "./geoProbeGateway.mjs";
@@ -1190,6 +1192,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   setEvidencePublicBase(config.evidencePublicBasePath);
   // Whether a project is the platform's own, for its owner (`internalProjects.mjs`): a name alone is never enough.
   const internalFor = (/** @type {unknown} */ userId, /** @type {unknown} */ projectId) => isInternalProjectOf(config, userId, projectId);
+  // What the person's own lists leave out: the platform's projects, and the data-analysis API's (made and deleted through that API, kept in
+  // the person's account for their own data). Not `internalFor`: an analysis's runs are the person's, charged and counted like any other.
+  const hiddenFor = (/** @type {unknown} */ userId, /** @type {unknown} */ projectId) => internalFor(userId, projectId) || isDataAnalysisProject(String(projectId));
   if (config.evolutionRefusal) process.stderr.write(`evolution: ${config.evolutionRefusal.code} (${config.evolutionRefusal.key}); the module stays off and the platform starts\n`);
   const managedBrowser = overrides.managedBrowserService ?? createManagedBrowserService(config);
   const agentRegistry = loadAgentRegistry({ packageDirs: config.agentPackageDirs, capabilityDirs: config.capabilityDirs });
@@ -2508,7 +2513,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         if (!user || !agentRuns) return [];
         const runs = [];
         for (const listed of await store.listProjects(user)) {
-          if (internalFor(userId, listed.id)) continue;
+          if (hiddenFor(userId, listed.id)) continue;
           const project = await store.requireProject(user, listed.id);
           for (const run of await agentRuns.researcherRuns(project, { includeManaged: true })) runs.push({ projectId: project.id, run });
         }
@@ -2650,7 +2655,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
    * @param {any} user @param {{ id?: unknown, name?: unknown }} body
    */
   async function createResearcherProject(user, body, analysisOwned = false) {
-    const existing = (await store.listProjects(user)).filter((project) => !internalFor(user.id, project.id));
+    const existing = (await store.listProjects(user)).filter((project) => !hiddenFor(user.id, project.id));
     if (body.id == null && body.name == null) throw new HttpError(400, "invalid_payload", "A project needs a name.");
     const id = body.id == null
       ? projectIdFromName(String(body.name), new Set(existing.map((project) => project.id)))
@@ -2678,7 +2683,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // on their own, because an account at the limit can make another
     // project and have another of each. Archived projects count: they
     // still hold their storage.
+    // The data-analysis API's projects have a count of their own (`dataAnalysisMaxPerAccount`, in the service) and are outside this one.
     if (
+      !(analysisOwned && isDataAnalysisProject(id)) &&
       config.maxProjectsPerUser > 0 &&
       existing.length >= config.maxProjectsPerUser &&
       !existing.some((project) => project.id === id)
@@ -2696,6 +2703,100 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       await skillLibraryService.initializeProject(user, project).catch(() => { process.stderr.write("new-project personal skill defaults snapshot failed\n"); });
     }
     await audit({ config, user, project }, "project.create", "completed", { target: id });
+    return data;
+  }
+
+  /**
+   * A project's deletion whole: the runtime stopped, the memory, library and engine copies withdrawn, the rows and the directory gone. One
+   * teardown for `DELETE /api/projects/:id` and for the data-analysis API's `DELETE /analyses/:id`, so neither can leave behind what the other
+   * removes. The caller has checked who may ask; this checks that nothing is queued or running.
+   * @param {any} user @param {any} project
+   */
+  async function deleteResearcherProject(user, project) {
+    const projectId = project.id;
+    if (await taskManager.hasActiveProject(project)) {
+      throw new HttpError(409, "project_busy", "Project has queued or running tasks.");
+    }
+    // The researcher deleting their own project stops what was working in it: their stop.
+    await runtimeManager.stop(project, { by: "user" });
+    // Where the learning loop's lessons from this project go instead of
+    // down with it (learningPreservation.mjs): the account's learning
+    // project, made now if the account never learnt anything yet, and
+    // the ledger the waiting lessons' runs are read from. Before the
+    // transaction, because making a project is its own.
+    const learningProject = learningService && productDatabase && !hiddenFor(project.userId, project.id)
+      ? await ensureLearningProject(store, user) : null;
+    const lessonRuns = learningProject ? await agentRuns.list(project).catch(() => []) : [];
+    /** @type {{moved: number, preserved: string[]}} */
+    let lessons = { moved: 0, preserved: [] };
+    let methodsStopped = 0;
+    // The conversations' own memory state goes with the project; the capsule index's copies are owed a withdrawal in the capsule's
+    // own transaction below, and the index is never waited on (`memoryIndexWithdrawals.mjs`).
+    if (memorySettings.configured) await memorySettings.deleteProjectState(user.id, project.id);
+    // The engine's own memories of this project and the sessions of its conversations (`NativeMemoryStore.deleteProject`).
+    if (await nativeMemoryHeldBy(user.id)) await nativeMemory.deleteProject(user.id, project.id);
+    void memoryIndexWorker?.drainWithdrawals();
+    // What the project's documents and runs put in the account's own
+    // capsule — 「来自资料」 above all — is account-level and outlived
+    // every project deletion until 2026-09-24 (62 such memories were
+    // cleared by hand on production the day before). Withdrawn inside
+    // the deletion's own transaction, so the two commit together; the
+    // update is also what tells the recall index (`derivedMemory.mjs`).
+    if (productDatabase) await migrateProductStore(productDatabase);
+    /** @type {string[]} */
+    let geoScreenshots = [];
+    /** @type {import("./vcrStoreBase.mjs").VcrArtifacts | null} */
+    let vcrArtifacts = null;
+    await invalidateRsiSource({ userId: user.id, projectId });
+    const data = await store.deleteProject(user, projectId, {
+      beforeDelete: async (client) => {
+        await managedBrowser.closeProject(user.id, project.id);
+        if (client && hostedExtensions && !await productDatabase.withTransactionClient(client, () => hostedExtensions.joinProject(user.id, project.id))) {
+          throw new HttpError(409, "project_busy", "Extension execution is still stopping.");
+        }
+        if (client) { await documentExportService?.cancelProject(user.id, project.id, client); await resultReplays?.cancelProject(user.id, project.id, client); }
+        if (client) await withdrawProjectDerivedMemory(client, user.id, project.id);
+        // The project's id leaves every library entry's list, and an entry only this project's documents held goes with
+        // them: a project made later under the same id inherits nothing.
+        if (client) await libraryProjectDeleted(client, user.id, project.id);
+        // A GEO project's rows go with it, whether or not the module is
+        // on today (its money rows stay; geoStore.mjs).
+        if (client) geoScreenshots = (await deleteGeoProjectRows(client, user.id, project.id)).screenshots;
+        if (client) vcrArtifacts = (await deleteVcrProjectRows(client, user.id, project.id)).artifacts;
+        // The learning jobs filed under it move to the learning project,
+        // with what the waiting ones need to still be learnt (L-G1).
+        if (client && learningProject) {
+          lessons = await preserveProjectLessons({ client, userId: user.id, project, learningProject, runs: lessonRuns });
+        }
+        // A method is the account's, but one learnt only in this project is part of what the project held: it is
+        // stopped with it (review M-10/M-11, 2026-10-10). A method that a lesson from another project also shaped
+        // is not only this project's and stands. In the deletion's own transaction.
+        if (client && learningService && !hiddenFor(user.id, project.id)) {
+          methodsStopped = (await learningService.retireProjectMethods(user.id, project.id, { transactionClient: client })).retired.length;
+        }
+      },
+    });
+    // The project's directory of the library goes, and the other projects' directories follow the entries the deletion released.
+    // After the commit: a failure here is the convergence pass's to repair, never a reason the project is still there.
+    await libraryService?.dropProjectView(user.id, projectId)
+      .then(() => libraryService?.syncCopies({ userId: user.id }))
+      .catch((/** @type {any} */ error) => securityAudit(config, "library.sync", "failed", { code: error?.code ?? "library_sync_failed" }).catch(() => {}));
+    // What the engine held of the project — its documents' copies, its wiki, its graph — is owed a removal (openVikingSourceSync.forgetProject).
+    void sourceSync?.forgetProject(user.id, projectId);
+    recordMethodsRetired("project_deleted", methodsStopped);
+    // The audit line outlives the project. It used to be written into
+    // the project's own `.openscience/audit.jsonl` a moment before that
+    // directory was removed, so nobody could tell who deleted what, or
+    // when (audit 2026-09-26, L-G11).
+    await securityAudit(config, "project.delete", "completed", {
+      userId: user.id,
+      detail: `project=${project.id} learning_jobs_moved=${lessons.moved} lesson_inputs_kept=${lessons.preserved.length} methods_stopped=${methodsStopped}`,
+    });
+    // The screenshots only those rows referenced, once the deletion has committed.
+    await removeGeoScreenshotFiles(config.dataDir, geoScreenshots, (code) => process.stderr.write(`geo screenshot cleanup: ${code}\n`));
+    await removeVcrArtifacts({ dataPlaneDir: config.vcrDataPlaneDir, artifacts: vcrArtifacts, engineRemove: vcr?.removeEngineJob ?? null,
+      report: (code) => process.stderr.write(`vcr deletion cleanup: ${code}\n`) });
+    taskManager.purgeProject(project);
     return data;
   }
   // 「循证 GEO」 (geoService.mjs): composed only when switched on and a
@@ -6932,7 +7033,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     void (async () => {
       const user = await store.userById(String(userId));
       if (!user) return;
-      const listed = (await store.listProjects(user)).filter((entry) => !entry.archivedAt && !internalFor(user.id, entry.id));
+      const listed = (await store.listProjects(user)).filter((entry) => !entry.archivedAt && !hiddenFor(user.id, entry.id));
       await runtimeManager.warmMostRecent(await Promise.all(listed.map((entry) => store.requireProject(user, entry.id))));
     })().catch(() => {
       // isolated: a warm start is a head start, never a precondition.
@@ -6943,6 +7044,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     config, documents: productDocuments, store,
     withDispatchLock: createDataAnalysisDispatchLock(config),
     createProject: (user, body) => createResearcherProject(user, body, true),
+    deleteProject: deleteResearcherProject,
     upload: (user, project, rel, buffer) => writeProjectUpload({ user, project, config }, { root: "workspace", rel, buffer, register: false }),
     createSession: project => createDataAnalysisSession(project, { registry: agentRegistry, runtime: runtimeManager, sessions: researchSessions }),
     dispatch: dispatchChannelRun,
@@ -7483,7 +7585,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
               ...(["local", "evimed", "oidc", "development"].includes(user.authType) ? { authType: user.authType } : {}) },
             tenant: { id: user.tenantId ?? user.id, model: "individual-account", role: "owner" },
             project: { id: project.id, name: project.name },
-            projects: (await store.listProjects(user)).filter((item) => !internalFor(user.id, item.id)),
+            projects: (await store.listProjects(user)).filter((item) => !hiddenFor(user.id, item.id)),
             // The conversation to reopen in this project (C4), or null when
             // the researcher has not worked here yet — or the ledger cannot be
             // read, which is not a reason the shell should fail to render.
@@ -8434,6 +8536,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         });
         accountDeleted = true;
         } finally { if (!accountDeleted) runtimeManager.retireOwner(user.id, { undo: true }); }
+        // The data-analysis API keeps the bytes it preserved outside the account's directory; they are the account's and go with it.
+        await removeAnalysisSnapshots(config, user.id).catch(() => process.stderr.write("data-analysis snapshot cleanup failed\n"));
         // The screenshots only those rows referenced, now that they are gone.
         await removeGeoScreenshotFiles(config.dataDir, geoScreenshots, (code) => process.stderr.write(`geo screenshot cleanup: ${code}\n`));
         // And the patient-level files and engine job directories the study rows
@@ -8456,7 +8560,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         // as unknown activity for that row, never as a failed list.
         // The platform's own background projects are not the researcher's
         // (`internalProjects.mjs`).
-        const projects = (await store.listProjects(user)).filter((item) => !internalFor(user.id, item.id));
+        const projects = (await store.listProjects(user)).filter((item) => !hiddenFor(user.id, item.id));
         const data = await Promise.all(projects.map((item) => withProjectActivity(user, item)));
         sendJson(res, 200, { data });
         return;
@@ -8522,89 +8626,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             throw new HttpError(400, "delete_confirmation_required", "Project deletion requires an exact project id confirmation.");
           }
           const project = await store.requireProject(user, projectId);
-          if (await taskManager.hasActiveProject(project)) {
-            throw new HttpError(409, "project_busy", "Project has queued or running tasks.");
-          }
-          // The researcher deleting their own project stops what was working in it: their stop.
-          await runtimeManager.stop(project, { by: "user" });
-          // Where the learning loop's lessons from this project go instead of
-          // down with it (learningPreservation.mjs): the account's learning
-          // project, made now if the account never learnt anything yet, and
-          // the ledger the waiting lessons' runs are read from. Before the
-          // transaction, because making a project is its own.
-          const learningProject = learningService && productDatabase && !internalFor(project.userId, project.id)
-            ? await ensureLearningProject(store, user) : null;
-          const lessonRuns = learningProject ? await agentRuns.list(project).catch(() => []) : [];
-          /** @type {{moved: number, preserved: string[]}} */
-          let lessons = { moved: 0, preserved: [] };
-          let methodsStopped = 0;
-          // The conversations' own memory state goes with the project; the capsule index's copies are owed a withdrawal in the capsule's
-          // own transaction below, and the index is never waited on (`memoryIndexWithdrawals.mjs`).
-          if (memorySettings.configured) await memorySettings.deleteProjectState(user.id, project.id);
-          // The engine's own memories of this project and the sessions of its conversations (`NativeMemoryStore.deleteProject`).
-          if (await nativeMemoryHeldBy(user.id)) await nativeMemory.deleteProject(user.id, project.id);
-          void memoryIndexWorker?.drainWithdrawals();
-          // What the project's documents and runs put in the account's own
-          // capsule — 「来自资料」 above all — is account-level and outlived
-          // every project deletion until 2026-09-24 (62 such memories were
-          // cleared by hand on production the day before). Withdrawn inside
-          // the deletion's own transaction, so the two commit together; the
-          // update is also what tells the recall index (`derivedMemory.mjs`).
-          if (productDatabase) await migrateProductStore(productDatabase);
-          /** @type {string[]} */
-          let geoScreenshots = [];
-          /** @type {import("./vcrStoreBase.mjs").VcrArtifacts | null} */
-          let vcrArtifacts = null;
-          await invalidateRsiSource({ userId: user.id, projectId });
-          const data = await store.deleteProject(user, projectId, {
-            beforeDelete: async (client) => {
-              await managedBrowser.closeProject(user.id, project.id);
-              if (client && hostedExtensions && !await productDatabase.withTransactionClient(client, () => hostedExtensions.joinProject(user.id, project.id))) {
-                throw new HttpError(409, "project_busy", "Extension execution is still stopping.");
-              }
-              if (client) { await documentExportService?.cancelProject(user.id, project.id, client); await resultReplays?.cancelProject(user.id, project.id, client); }
-              if (client) await withdrawProjectDerivedMemory(client, user.id, project.id);
-              // The project's id leaves every library entry's list, and an entry only this project's documents held goes with
-              // them: a project made later under the same id inherits nothing.
-              if (client) await libraryProjectDeleted(client, user.id, project.id);
-              // A GEO project's rows go with it, whether or not the module is
-              // on today (its money rows stay; geoStore.mjs).
-              if (client) geoScreenshots = (await deleteGeoProjectRows(client, user.id, project.id)).screenshots;
-              if (client) vcrArtifacts = (await deleteVcrProjectRows(client, user.id, project.id)).artifacts;
-              // The learning jobs filed under it move to the learning project,
-              // with what the waiting ones need to still be learnt (L-G1).
-              if (client && learningProject) {
-                lessons = await preserveProjectLessons({ client, userId: user.id, project, learningProject, runs: lessonRuns });
-              }
-              // A method is the account's, but one learnt only in this project is part of what the project held: it is
-              // stopped with it (review M-10/M-11, 2026-10-10). A method that a lesson from another project also shaped
-              // is not only this project's and stands. In the deletion's own transaction.
-              if (client && learningService && !internalFor(user.id, project.id)) {
-                methodsStopped = (await learningService.retireProjectMethods(user.id, project.id, { transactionClient: client })).retired.length;
-              }
-            },
-          });
-          // The project's directory of the library goes, and the other projects' directories follow the entries the deletion released.
-          // After the commit: a failure here is the convergence pass's to repair, never a reason the project is still there.
-          await libraryService?.dropProjectView(user.id, projectId)
-            .then(() => libraryService?.syncCopies({ userId: user.id }))
-            .catch((/** @type {any} */ error) => securityAudit(config, "library.sync", "failed", { code: error?.code ?? "library_sync_failed" }).catch(() => {}));
-          // What the engine held of the project — its documents' copies, its wiki, its graph — is owed a removal (openVikingSourceSync.forgetProject).
-          void sourceSync?.forgetProject(user.id, projectId);
-          recordMethodsRetired("project_deleted", methodsStopped);
-          // The audit line outlives the project. It used to be written into
-          // the project's own `.openscience/audit.jsonl` a moment before that
-          // directory was removed, so nobody could tell who deleted what, or
-          // when (audit 2026-09-26, L-G11).
-          await securityAudit(config, "project.delete", "completed", {
-            userId: user.id,
-            detail: `project=${project.id} learning_jobs_moved=${lessons.moved} lesson_inputs_kept=${lessons.preserved.length} methods_stopped=${methodsStopped}`,
-          });
-          // The screenshots only those rows referenced, once the deletion has committed.
-          await removeGeoScreenshotFiles(config.dataDir, geoScreenshots, (code) => process.stderr.write(`geo screenshot cleanup: ${code}\n`));
-          await removeVcrArtifacts({ dataPlaneDir: config.vcrDataPlaneDir, artifacts: vcrArtifacts, engineRemove: vcr?.removeEngineJob ?? null,
-            report: (code) => process.stderr.write(`vcr deletion cleanup: ${code}\n`) });
-          taskManager.purgeProject(project);
+          const data = await deleteResearcherProject(user, project);
           sendJson(res, 200, { data });
           return;
         }
@@ -11156,6 +11178,8 @@ async function operatorMetricsText({ webVitals = null, judgeService = null, open
   // The NCBI Gene Expression Omnibus workflow's six resource limits and its named downloads (geneExpressionMetrics.mjs;
   // two limits counted by the gateway as bytes arrive, four reported by the runtime's tool). Not 循证 GEO's.
   for (const family of geneExpressionMetricFamilies()) addMetric(lines, family.name, family.help, family.type, family.series);
+  // The data-analysis API's own limits: inputs in flight per account and per server, and the analyses an account keeps (dataAnalysisMetrics.mjs).
+  for (const family of dataAnalysisMetricFamilies()) addMetric(lines, family.name, family.help, family.type, family.series);
   // The research-database connector's imports by outcome and its refusals and bitten limits by reason (researchDbMetrics.mjs).
   for (const family of researchDbMetricFamilies()) addMetric(lines, family.name, family.help, family.type, family.series);
   // Model requests booked uncertain, by why (usageLedger.mjs): a burst is a
