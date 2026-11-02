@@ -327,6 +327,7 @@ import { createAutopilotRunScope, episodeContextBlock, episodePlacementCounts, e
 import { createAutopilotRoutes } from "./autopilotRoutes.mjs";
 import { researchDbCredentialsFromConfig } from "./researchDbCredentials.mjs";
 import { createResearchDbPublisher } from "./researchDbPublish.mjs";
+import { RESEARCH_GOAL_ROUTE, researchGoalBlock, researchGoalPrompt } from "./researchGoal.mjs";
 import { researchDbMetricFamilies } from "./researchDbMetrics.mjs";
 import { createResearchDbRoutes } from "./researchDbRoutes.mjs";
 import { ResearchDbStaging } from "./researchDbStaging.mjs";
@@ -7844,7 +7845,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // A question, dispatched as a run.
       //
       //   POST /api/agent-runs/dispatch
-      //     { sessionId, dispatchId?, text, automated?: boolean, line?: "answer" | "<capability id>", timeBudgetMinutes?: integer }
+      //     { sessionId, dispatchId?, text, automated?: boolean, line?: "answer" | "<capability id>", timeBudgetMinutes?: integer, researchGoal?: boolean }
       //   202 { data: run }   run.estimatedMinutes says how long it usually takes (C3); where it went is the ledger's machine reason
       //   400 invalid_agent_run — an unknown field; a `line` that is neither `answer` nor a public
       //       capability id; a `line` on a conversation already bound to a capability; a `timeBudgetMinutes`
@@ -7857,10 +7858,13 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // `line` is the researcher's own choice and replaces the router and the
       // classifier: `answer` pins the answer line (「改为普通问答」), an id pins
       // that capability; the run records `choice:<line>`.
+      //
+      // `researchGoal` is 主动科研's 「发起研究」: the text is the person's goal, the answer line takes it, the kernel gets the skill's own gesture and the run's
+      // context asks for a sustained LoopX goal (`researchGoal.mjs`); the run is listed by their own sentence. Recorded as `research-goal`.
       if (pathname === "/api/agent-runs/dispatch" && req.method === "POST") {
         const ctx = await context(req, res);
         const body = assertObject(await readJson(req, config.maxJsonBytes), "agent run dispatch");
-        const unknown = Object.keys(body).filter((field) => !["sessionId", "dispatchId", "text", "automated", "line", "timeBudgetMinutes"].includes(field));
+        const unknown = Object.keys(body).filter((field) => !["sessionId", "dispatchId", "text", "automated", "line", "timeBudgetMinutes", "researchGoal"].includes(field));
         if (unknown.length > 0) {
           throw new HttpError(400, "invalid_agent_run", `Unknown agent run field(s): ${unknown.sort().join(", ")}.`);
         }
@@ -7870,6 +7874,12 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         if (body.automated != null && typeof body.automated !== "boolean") {
           throw new HttpError(400, "invalid_agent_run", "automated must be a boolean.");
         }
+        if (body.researchGoal != null && typeof body.researchGoal !== "boolean") {
+          throw new HttpError(400, "invalid_agent_run", "researchGoal must be a boolean.");
+        }
+        const researchGoal = body.researchGoal === true;
+        if (researchGoal && body.line != null) throw new HttpError(400, "invalid_agent_run", "A research goal takes no line.");
+        if (researchGoal && config.loopxEnabled === false) throw new HttpError(409, "research_goal_unavailable", "Long research is not available on this deployment.");
         // Context for the run's clock, never a limit: refused for this request when it is not minutes in range.
         if (body.timeBudgetMinutes != null && !runTimeBudgetMinutes(body.timeBudgetMinutes)) {
           throw new HttpError(400, "invalid_agent_run", `timeBudgetMinutes must be a whole number of minutes from ${RUN_TIME_BUDGET_MINUTES.min} to ${RUN_TIME_BUDGET_MINUTES.max}.`);
@@ -7913,7 +7923,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         // public capability. A choice is an instruction, not a hint: it
         // replaces the router and the classifier outright, and is recorded as
         // `choice:<line>` so the ledger and the reader both see it was chosen.
-        const chosenLine = chosenDispatchLine(body.line, boundSession, routableAgents);
+        const chosenLine = chosenDispatchLine(researchGoal ? "answer" : body.line, boundSession, routableAgents);
         // Routing is a judgement about what deliverable the request commissions,
         // and a word list cannot make it. Deciding by regex first sent six real
         // requests for a clinical evidence review to other pipelines because
@@ -7953,7 +7963,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
               // So when the classifier never got to decide, the ledger says so:
               // a batch cannot be read afterwards if a timed-out routing and a
               // genuinely open-domain question leave the same record.
-              reason: chosenLine
+              reason: researchGoal
+                ? RESEARCH_GOAL_ROUTE
+                : chosenLine
                 ? "choice:answer"
                 : classifierTrace.failure
                   ? classifierFailureReason("unrouted:open-domain", classifierTrace.failure)
@@ -7995,7 +8007,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           // class of the GEO brief stored as 「你说的」 (2026-09-26 audit, M-2).
           const promptText = typeof repairText === "string" && repairText.trim()
             ? `${repairText}\n\n<evimed-repair>${dispatchedRun.id}</evimed-repair>`
-            : text;
+            : researchGoal ? researchGoalPrompt(text) : text;
           let resident;
           try {
             resident = await residentProfiles.forDispatch(ctx.user.id, {
@@ -8055,7 +8067,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             // The capsule a 「试用一次」 conversation is trying reaches it through
             // the capsule plugin at its first step (memorySessions.mjs), for a
             // dispatch and a conversation typed in the kernel's own surface alike.
-            system: prepared.system,
+            system: researchGoal ? `${prepared.system}${researchGoalBlock()}` : prepared.system,
             routedCapability: prepared.routedCapability,
             memoryContext: prepared.memoryContext,
             agent: routedSpecialist?.runtimeAgent ?? session.runtimeAgent ?? answerAgent?.runtimeAgent ?? null,

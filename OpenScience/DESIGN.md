@@ -1134,5 +1134,9 @@ The owner asked that the process picture of 主动科研 be the page's core and 
   “—”, never 0. Members move to the stage of their last call; nothing is animated that did not happen.
 - **Motion has an off switch.** Flowing track, packets, rings, ripples, the sweep and blinking cursors stop under reduced
   motion; positions still change, without travel. Under 760 px the line keeps its size and scrolls sideways.
+- **The page opens on the scene (owner, 2026-11-01).** 主动科研 is what the AI is researching, not a form: it opens on the running
+  research's observatory, then the most recent one; a project with none stands by in the same dark scene, with the recipe and both
+  actions inside it. Two things start from here: 「发起研究」 (one sentence, the goal; the run is on screen at once, never a composer
+  or a command) and 「接入数据」 (into the project's knowledge base). A scheduled study is made in 定时任务 and shown in the queue.
 - **No back office on the page.** Tool names, route reasons, ledger caveats and “what was not observed” sentences stay out;
   operations are named in the reader's words (`callLabel`), and a missing observation is simply absent.

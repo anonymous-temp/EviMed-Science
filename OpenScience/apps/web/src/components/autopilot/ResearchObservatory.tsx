@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import "./ResearchObservatory.css";
 import { EVIMED_MARK_PATH } from "@/components/brand/EviMedMark";
 import { listWebAgentRuns, type WebAgentRun } from "@/lib/apiClient";
@@ -58,19 +58,23 @@ async function readRun(runId: string): Promise<WebAgentRun | null> {
  * Responsive: the picture scales with its width, and under 760 px it keeps its size and scrolls sideways (the scene is a tab stop then); the feed and the inspector stack under 1024 px.
  * Verification: ResearchObservatory.test.tsx, researchObservation.test.ts.
  */
-export function ResearchObservatory({ runId, title, onOpenFile }: { runId: string | null; title?: string; onOpenFile?: (path: string, runId: string) => void }) {
-  if (!runId) return <StandbyObservatory />;
+export function ResearchObservatory({ runId, title, onOpenFile, standbyActions }: { runId: string | null; title?: string; onOpenFile?: (path: string, runId: string) => void; standbyActions?: ReactNode }) {
+  if (!runId) return <StandbyObservatory actions={standbyActions} />;
   return <ObservatoryRun key={runId} runId={runId} title={title} onOpenFile={onOpenFile} />;
 }
 
-/** No run to watch: the console stands by with its research line dark, so the page still shows what will happen here. */
-function StandbyObservatory() {
+/**
+ * No run to watch: the console stands by with its research line dark, so the page still shows what will happen here. With no research
+ * in the project yet (`actions`) the scene is also the page's recipe: what happens and the ways to begin.
+ */
+function StandbyObservatory({ actions }: { actions?: ReactNode }) {
   const idle = emptyObservation();
   return <section aria-label="研究观测" className="obs" data-observatory="empty">
     <header className="obs-head"><div className="obs-head-main"><span className="obs-live"><i aria-hidden="true" />STANDBY</span>
       <div className="min-w-0"><p className="obs-kicker">研究观测舱</p><h2 className="obs-title">等待研究启动</h2></div></div>
       <span className="obs-clock" aria-hidden="true">{elapsedClock(null)}</span></header>
     <ResearchLine model={idle} counts={stageCounts(idle)} live={false} />
+    {actions && <div className="obs-recipe"><p className="obs-recipe-line">写下研究目标，AI 会自己检索、阅读、分析、撰写，一轮轮推进直到完成。</p><div className="obs-recipe-actions">{actions}</div></div>}
   </section>;
 }
 

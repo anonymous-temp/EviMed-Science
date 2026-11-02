@@ -63,11 +63,11 @@ interface NavItem {
 const NAV: NavItem[] = [
   { to: "/app/home", label: "新对话", icon: <SquarePen size={16} aria-hidden="true" /> },
   { to: "/app/capabilities", label: "科研工具", icon: <Bot size={16} aria-hidden="true" /> },
+  { to: "/app/active-research", label: "主动科研", icon: <Telescope size={16} aria-hidden="true" /> },
   { to: "/app/files", label: "知识库", icon: <FolderTree size={16} aria-hidden="true" /> },
   { to: "/app/memory", label: "记忆胶囊", icon: <Brain size={16} aria-hidden="true" /> },
   { to: "/app/autopilot", label: "定时任务", icon: <Orbit size={16} aria-hidden="true" /> },
   { to: "/app/extensions/discover", label: "插件与技能", icon: <Plug size={16} aria-hidden="true" /> },
-  { to: "/app/active-research", label: "主动科研", icon: <Telescope size={16} aria-hidden="true" /> },
 ];
 
 /**
@@ -80,7 +80,7 @@ const FRONTIER_NAV: NavItem = { to: "/app/frontier", label: "前沿动态", icon
 const SEARCH_NAV: NavItem = { to: "/app/search", label: "医学检索", icon: <Search size={16} aria-hidden="true" /> };
 
 /**
- * 「虚拟临床研究」 and 「循证 GEO」, in that order directly below 「科研工具」 — and,
+ * 「虚拟临床研究」 and 「循证 GEO」, in that order below 「主动科研」 — and,
  * like the frontier feed, only where `/api/me` offers the module to this
  * account (`features.vcr`, `features.geo`). A row that led to 「还没有开放」
  * would be a destination that is not one.
@@ -90,7 +90,7 @@ const GEO_NAV: NavItem = { to: "/app/geo", label: "循证 GEO", icon: <Radar siz
 
 /**
  * The rows in order: the frontier feed after 「新对话」, then 「虚拟临床研究」 and
- * 「循证 GEO」 after 「科研工具」, in that order — the two boards sit together,
+ * 「循证 GEO」 after 「科研工具」 and 「主动科研」, in that order — the two boards sit together,
  * and the one this account may not have simply is not there.
  */
 function navRows({ frontier, vcr, geo, search }: { frontier: boolean; vcr: boolean; geo: boolean; search: boolean }): NavItem[] {
@@ -98,7 +98,7 @@ function navRows({ frontier, vcr, geo, search }: { frontier: boolean; vcr: boole
     item,
     ...(frontier && item.to === "/app/home" ? [FRONTIER_NAV] : []),
     ...(search && item.to === "/app/home" ? [SEARCH_NAV] : []),
-    ...(item.to === "/app/capabilities" ? [...(vcr ? [VCR_NAV] : []), ...(geo ? [GEO_NAV] : [])] : []),
+    ...(item.to === "/app/active-research" ? [...(vcr ? [VCR_NAV] : []), ...(geo ? [GEO_NAV] : [])] : []),
   ]);
 }
 

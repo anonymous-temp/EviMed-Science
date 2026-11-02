@@ -176,7 +176,7 @@ describe("Sidebar navigation", () => {
   it("lists the workbench destinations in order and navigates to each", async () => {
     renderSidebar();
 
-    const order = ["新对话", "科研工具", "知识库", "记忆胶囊", "定时任务"];
+    const order = ["新对话", "科研工具", "主动科研", "知识库", "记忆胶囊", "定时任务"];
     const buttons = order.map((label) => screen.getByRole("link", { name: label }));
     for (let i = 1; i < buttons.length; i += 1) {
       expect(
@@ -238,7 +238,7 @@ describe("Sidebar navigation", () => {
     expect(row).toHaveAttribute("aria-current", "page");
   });
 
-  // 「循证 GEO」 is a row directly below 「科研工具」, and only where `/api/me`
+  // 「循证 GEO」 is a row below 「科研工具」 and 「主动科研」, and only where `/api/me`
   // offers the module to this account (`features.geo`).
   it("has no 循证 GEO row unless the account is offered the module", async () => {
     mocks.fetchWebMe.mockResolvedValue({ user: { id: "u", name: "u" }, project: { id: "default", name: "我的研究" }, projects: [], features: { frontier: true, geo: false } });
@@ -247,20 +247,20 @@ describe("Sidebar navigation", () => {
     expect(screen.queryByRole("link", { name: "循证 GEO" })).not.toBeInTheDocument();
   });
 
-  it("puts 循证 GEO directly below 科研工具 when the account is offered it", async () => {
+  it("puts 主动科研 directly below 科研工具 and 循证 GEO below it when the account is offered it", async () => {
     mocks.fetchWebMe.mockResolvedValue({ user: { id: "u", name: "u" }, project: { id: "default", name: "我的研究" }, projects: [], features: { frontier: true, geo: true } });
     renderSidebar();
     const row = await screen.findByRole("link", { name: "循证 GEO" });
     expect(row).toHaveAttribute("href", "/app/geo");
     await screen.findByRole("link", { name: "前沿动态" });
     const rows = screen.getAllByRole("link").filter(link => link.getAttribute("aria-label") !== "EviMed Science 首页").map((link) => link.textContent);
-    expect(rows.slice(0, 7)).toEqual(["新对话", "前沿动态", "科研工具", "循证 GEO", "知识库", "记忆胶囊", "定时任务"]);
+    expect(rows.slice(0, 8)).toEqual(["新对话", "前沿动态", "科研工具", "主动科研", "循证 GEO", "知识库", "记忆胶囊", "定时任务"]);
     await userEvent.click(row);
     expect(screen.getByTestId("location")).toHaveTextContent("/app/geo");
     expect(row).toHaveAttribute("aria-current", "page");
   });
 
-  // 「虚拟临床研究」 sits between 「科研工具」 and 「循证 GEO」, and only where
+  // 「虚拟临床研究」 sits between 「主动科研」 and 「循证 GEO」, and only where
   // `/api/me` offers it (`features.vcr`).
   it("has no 虚拟临床研究 row unless the account is offered the module", async () => {
     mocks.fetchWebMe.mockResolvedValue({ user: { id: "u", name: "u" }, project: { id: "default", name: "我的研究" }, projects: [], features: { geo: true } });
@@ -269,13 +269,13 @@ describe("Sidebar navigation", () => {
     expect(screen.queryByRole("link", { name: "虚拟临床研究" })).not.toBeInTheDocument();
   });
 
-  it("puts 虚拟临床研究 between 科研工具 and 循证 GEO when the account is offered both", async () => {
+  it("puts 虚拟临床研究 between 主动科研 and 循证 GEO when the account is offered both", async () => {
     mocks.fetchWebMe.mockResolvedValue({ user: { id: "u", name: "u" }, project: { id: "default", name: "我的研究" }, projects: [], features: { frontier: true, vcr: true, geo: true } });
     renderSidebar();
     const row = await screen.findByRole("link", { name: "虚拟临床研究" });
     expect(row).toHaveAttribute("href", "/app/virtual-research");
     const rows = screen.getAllByRole("link").filter(link => link.getAttribute("aria-label") !== "EviMed Science 首页").map((link) => link.textContent);
-    expect(rows.slice(0, 8)).toEqual(["新对话", "前沿动态", "科研工具", "虚拟临床研究", "循证 GEO", "知识库", "记忆胶囊", "定时任务"]);
+    expect(rows.slice(0, 9)).toEqual(["新对话", "前沿动态", "科研工具", "主动科研", "虚拟临床研究", "循证 GEO", "知识库", "记忆胶囊", "定时任务"]);
     await userEvent.click(row);
     expect(screen.getByTestId("location")).toHaveTextContent("/app/virtual-research");
     expect(row).toHaveAttribute("aria-current", "page");
@@ -327,7 +327,7 @@ describe("Sidebar navigation", () => {
     renderSidebar();
     await screen.findByRole("link", { name: "虚拟临床研究" });
     const rows = screen.getAllByRole("link").filter(link => link.getAttribute("aria-label") !== "EviMed Science 首页").map((link) => link.textContent);
-    expect(rows.slice(0, 6)).toEqual(["新对话", "科研工具", "虚拟临床研究", "知识库", "记忆胶囊", "定时任务"]);
+    expect(rows.slice(0, 7)).toEqual(["新对话", "科研工具", "主动科研", "虚拟临床研究", "知识库", "记忆胶囊", "定时任务"]);
     expect(screen.queryByRole("link", { name: "循证 GEO" })).not.toBeInTheDocument();
   });
 
@@ -336,7 +336,7 @@ describe("Sidebar navigation", () => {
     renderSidebar();
     await screen.findByRole("link", { name: "循证 GEO" });
     const rows = screen.getAllByRole("link").filter(link => link.getAttribute("aria-label") !== "EviMed Science 首页").map((link) => link.textContent);
-    expect(rows.slice(0, 6)).toEqual(["新对话", "科研工具", "循证 GEO", "知识库", "记忆胶囊", "定时任务"]);
+    expect(rows.slice(0, 7)).toEqual(["新对话", "科研工具", "主动科研", "循证 GEO", "知识库", "记忆胶囊", "定时任务"]);
   });
 
   // The people icon on a study in 「最近」: the project list is told which

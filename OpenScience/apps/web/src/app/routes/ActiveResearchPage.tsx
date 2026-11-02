@@ -1,24 +1,21 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router";
-import { FlaskConical } from "lucide-react";
+import { Link, useNavigate } from "react-router";
 import { getWebProjectId, listWebAgentRuns, steerWebAgentRun, WebApiError, type WebAgentRun } from "@/lib/apiClient";
 import { addAgendaMaterials, cancelEpisode, followUpAgenda, getResearchState, listAgendas, listEpisodes, removeAgendaMaterial, runAgendaNow, type AgendaRecord, type EpisodeRecord, type ResearchState } from "@/lib/autopilotClient";
 import { pickFiles, uploadFilesToWorkspace } from "@/lib/backend";
+import { newResearchGoalRequest, startResearchGoal, type ResearchGoalRequest } from "@/lib/dispatch";
 import { safeWorkspacePath } from "@/lib/claimCitations";
 import { sha256Hex } from "@/lib/fileDigest";
 import { formatDay, formatClock } from "@/lib/format";
 import { KNOWLEDGE_BASE_ACCEPT, partitionKnowledgeBaseFiles } from "@/lib/knowledgeBaseFiles";
 import { productErrorMessage } from "@/lib/productClient";
 import { useProjectStore } from "@/lib/projects";
-import { goalTitle, observedResearchGoals, type ObservedResearchGoal } from "@/lib/observedResearchGoals";
-import { chatPath } from "@/lib/runLocation";
-import { newRuntimeUiIntent, scopedConversationPath } from "@/lib/runtimeUiNavigation";
+import { goalKey, goalTitle, observedResearchGoals, type ObservedResearchGoal } from "@/lib/observedResearchGoals";
 import { registerTaskPane } from "@/lib/taskPane";
 import { snapshotHref } from "@/lib/readPages";
 import { researchDatabaseStatus } from "@/lib/researchDatabaseClient";
 import { listPlatformSkills } from "@/lib/skillLibraryClient";
 import { taskPath } from "@/lib/taskLocation";
-import { EmptyState } from "@/components/cards/EmptyState";
 import { LoadError } from "@/components/cards/LoadError";
 import { PageShell } from "@/components/layout/PageShell";
 import type { PageActionPlan } from "@/components/layout/HeaderActions";
@@ -28,7 +25,6 @@ import { ResearchDatabaseDialog } from "@/components/autopilot/ResearchDatabaseD
 import { ResearchDataPanel } from "@/components/autopilot/ResearchDataPanel";
 import { ResearchObservatory } from "@/components/autopilot/ResearchObservatory";
 import { QUEUE_MODE_WORD, ResearchQueue, type QueueEntry, type QueueMode } from "@/components/autopilot/ResearchQueue";
-import { TaskForm } from "@/components/autopilot/TaskForm";
 import { activeAgenda, inFlight, latestRun, repeatLine, runState, scheduleOf } from "@/components/autopilot/taskPresentation";
 import { Button } from "@/components/ui/Button";
 import { FormDialog } from "@/components/ui/FormDialog";
@@ -63,6 +59,12 @@ function roundMode(run: WebAgentRun): QueueMode {
   return run.status === "running" ? "running" : run.status === "succeeded" ? "done" : run.status === "failed" ? "failed" : "ended";
 }
 
+/** A goal in the queue reads by its latest round, and a round that ran to its end does not say the goal is finished. */
+function goalMode(goal: ObservedResearchGoal): QueueMode {
+  const mode = roundMode(goal.latest);
+  return mode === "done" ? "between" : mode;
+}
+
 function agendaMode(agenda: AgendaRecord, episodes: readonly EpisodeRecord[]): QueueMode {
   const live = episodes.find(item => item.payload.agendaId === agenda.id && inFlight(item));
   if (live) return live.payload.status === "queued" ? "queued" : "running";
@@ -71,7 +73,10 @@ function agendaMode(agenda: AgendaRecord, episodes: readonly EpisodeRecord[]): Q
   return last === "merged" ? "done" : last === "failed" ? "failed" : "waiting";
 }
 
-/** A project's active research — long goals and scheduled studies — with the live observatory of the one selected. */
+/**
+ * A project's active research, opened on what is at work: the observatory of the running research, with the queue of the rest above it.
+ * New research is one thing to do here (a goal, in the person's words) and data one more; a scheduled study is made in 定时任务 and shown here.
+ */
 export function ActiveResearchPage() {
   useProjectStore(state => state.currentId);
   const projectId = getWebProjectId();
@@ -80,19 +85,14 @@ export function ActiveResearchPage() {
 
 function ResearchWorkspace({ projectId }: { projectId: string }) {
   const navigate = useNavigate();
-  const location = useLocation();
-  const locationRef = useRef(location); locationRef.current = location;
-  const pendingNativeIntent = useRef<string | null>(null);
-  const acknowledgedNativeIntent = useRef<string | null>(null);
   const [agendas, setAgendas] = useState<AgendaRecord[] | null>(null);
   const [episodes, setEpisodes] = useState<EpisodeRecord[]>([]);
   const [goalRuns, setGoalRuns] = useState<WebAgentRun[] | null>(null);
   const [goalError, setGoalError] = useState(false);
   const [selectedGoal, setSelectedGoal] = useState<string | null>(null);
+  const [chosen, setChosen] = useState(false);
   const [selectedRound, setSelectedRound] = useState<string | null>(null);
   const [nativeSession, setNativeSession] = useState<string | null>(null);
-  const [nativePending, setNativePending] = useState(false);
-  const [nativeUncertain, setNativeUncertain] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedEpisodeId, setSelectedEpisodeId] = useState<string | null>(null);
   const [history, setHistory] = useState<{ agendaId: string; items: EpisodeRecord[]; nextCursor: string | null; paged: boolean } | null>(null);
@@ -106,10 +106,10 @@ function ResearchWorkspace({ projectId }: { projectId: string }) {
   const [available, setAvailable] = useState(true);
   const [longFeature, setLongFeature] = useState<"loading" | "enabled" | "disabled" | "error">("loading");
   const [busy, setBusy] = useState(false);
-  const [editorSaving, setEditorSaving] = useState(false);
-  const [editor, setEditor] = useState(false);
+  const [starting, setStarting] = useState(false);
+  const [intake, setIntake] = useState(false);
   const [picking, setPicking] = useState(false);
-  const [databaseOpen, setDatabaseOpen] = useState(false);
+  const [databaseFor, setDatabaseFor] = useState<"study" | "knowledge-base" | null>(null);
   const [databaseAvailable, setDatabaseAvailable] = useState(false);
   const [steering, setSteering] = useState(false);
   const [direction, setDirection] = useState("");
@@ -218,18 +218,13 @@ function ResearchWorkspace({ projectId }: { projectId: string }) {
   // The database entry is offered only where the deployment has the connector; an unknown answer hides it.
   useEffect(() => { void researchDatabaseStatus(projectId).then(status => { if (mounted.current) setDatabaseAvailable(status.available === true); }).catch(() => {}); }, [projectId]);
   useEffect(() => { const progressRequests = progressGeneration; const historyRequests = historyGeneration; setProgress(null); setProgressError(null); setHistory(null); setHistoryError(null); setHistoryBusy(false); setSelectedEpisodeId(null); void loadProgress(); void loadHistory(); return () => { progressRequests.current++; historyRequests.current++; loadingProgress.current = null; loadingHistory.current = null; }; }, [loadProgress, loadHistory]);
-  // A create intent restored by browser history or refresh has no live owner to accept its acknowledgement.
-  // Never replay it automatically: the prior session may already have been created.
-  useEffect(() => {
-    const state = location.state && typeof location.state === "object" ? location.state : null;
-    const intent = state?.runtimeUiIntent;
-    if (!intent || typeof intent.requestId !== "string" || intent.requestId === pendingNativeIntent.current) return;
-    if (intent.requestId !== acknowledgedNativeIntent.current) { setNativeSession(null); setNativePending(false); setNativeUncertain(true); }
-    const next = { ...state }; delete next.runtimeUiIntent;
-    navigate(location.pathname + location.search, { replace: true, state: next });
-  }, [location, navigate]);
   const goals = observedResearchGoals(goalRuns ?? []);
-  const goal = goals.find(item => item.key === selectedGoal) ?? null;
+  // Until the person chooses, the page shows what is at work: a running study, then a running goal, then whichever ran last.
+  const newestGoal = goals[0] ?? null;
+  const newestStudyRun = episodes.reduce((newest, item) => (item.payload.createdAt ?? "") > newest ? item.payload.createdAt ?? "" : newest, "");
+  const openingGoal = chosen || episodes.some(inFlight) ? null : goals.find(item => item.latest.status === "running")
+    ?? (!newestGoal || (newestStudyRun && Date.parse(newestStudyRun) > Date.parse(newestGoal.latest.startedAt)) ? null : newestGoal);
+  const goal = goals.find(item => item.key === selectedGoal) ?? openingGoal;
   const selected = !goal ? agendas?.find(item => item.id === selectedId) ?? null : null;
   const ownEpisodes = history?.agendaId === selectedId ? [...history.items].sort((a, b) => (b.payload.createdAt ?? "").localeCompare(a.payload.createdAt ?? "")) : [];
   const execution = ownEpisodes.find(item => item.id === selectedEpisodeId) ?? ownEpisodes[0] ?? null;
@@ -256,7 +251,7 @@ function ResearchWorkspace({ projectId }: { projectId: string }) {
 
   const queue: QueueEntry[] = [
     ...goals.map(item => ({ key: `goal:${item.key}`, title: goalTitle(item), kind: "长期" as const,
-      mode: roundMode(item.latest),
+      mode: goalMode(item),
       meta: item.latest.status === "running" ? `本轮 ${at(item.latest.startedAt)} 开始` : `最近一轮 ${at(item.latest.finishedAt ?? item.latest.startedAt)}` })),
     ...(agendas ?? []).map(item => {
       const last = latestRun(item.id, episodes);
@@ -274,22 +269,34 @@ function ResearchWorkspace({ projectId }: { projectId: string }) {
     catch (caught) { if (mounted.current) setActionError(caught instanceof MaterialInputError ? caught.message : productErrorMessage(caught)); }
     finally { operating.current = false; if (mounted.current) setBusy(false); }
   }
-  const upload = () => { if (!selectedId) return; void operation(async () => {
-    const target = selectedId;
-    const current = () => mounted.current && getWebProjectId() === projectId && selectedRef.current === target;
-    const files = (await pickFiles(KNOWLEDGE_BASE_ACCEPT));
+  /** Picks files and puts them in the project's knowledge base; what was accepted comes back, nothing when the person picked nothing. */
+  const uploadToKnowledgeBase = async (current: () => boolean) => {
+    const files = await pickFiles(KNOWLEDGE_BASE_ACCEPT);
     if (!current()) throw new Error("项目或研究已切换，请重新选择资料。");
     const { accepted, refused } = partitionKnowledgeBaseFiles(files);
     if (refused.length) throw new MaterialInputError(`部分文件无法添加：${refused.map(file => `${file.name}（${file.reason}）`).join("、")}`);
-    if (!accepted.length) return;
+    if (!accepted.length) return accepted;
     if (accepted.length > 10) throw new MaterialInputError("每次最多添加 10 份资料，请分批选择。");
     const names = await uploadFilesToWorkspace(accepted, "knowledge-base", "base", projectId, current);
     if (names.length !== accepted.length) throw new Error("上传未完成，请到知识库查看后重试。");
+    return accepted;
+  };
+  const upload = () => { if (!selectedId) return; void operation(async () => {
+    const target = selectedId;
+    const current = () => mounted.current && getWebProjectId() === projectId && selectedRef.current === target;
+    const accepted = await uploadToKnowledgeBase(current);
+    if (!accepted.length) return;
     const sha256 = await Promise.all(accepted.map(sha256Hex));
     if (!current()) throw new Error("项目或研究已切换，请重新选择资料。");
     try { await addAgendaMaterials(target, { sha256 }); }
     catch { throw new MaterialInputError("资料已上传到知识库，但没能加入本研究。请从知识库再选一次。"); }
   }); };
+  /** 「接入数据」: into the project's knowledge base, where its research reads it. */
+  const connectFiles = () => { setIntake(false); void operation(async () => {
+    const accepted = await uploadToKnowledgeBase(() => mounted.current && getWebProjectId() === projectId);
+    if (accepted.length && mounted.current) setActionNotice(`已接入 ${accepted.length} 份资料，这个项目的研究都可以使用。`);
+  }); };
+  const connectData = () => { if (databaseAvailable) setIntake(true); else connectFiles(); };
   const recordEpisode = (item: EpisodeRecord, agendaId: string) => {
     if (item.projectId !== projectId || item.payload.agendaId !== agendaId) throw new Error("执行记录与研究不一致。");
     if (!mounted.current) return;
@@ -336,38 +343,16 @@ function ResearchWorkspace({ projectId }: { projectId: string }) {
     });
   };
   const openFile = (path: string, runId: string) => { if (safeWorkspacePath(path) && SAFE_RUN.test(runId)) navigate(snapshotHref(runId, path)); };
-  const clearNativeIntent = () => {
-    const current = location.state && typeof location.state === "object" ? { ...location.state } : {};
-    if (!("runtimeUiIntent" in current)) return;
-    delete current.runtimeUiIntent;
-    navigate(location.pathname + location.search, { replace: true, state: current });
+  const closeNative = () => setNativeSession(null);
+  const onResearchStarted = (run: WebAgentRun) => {
+    setStarting(false); closeNative(); setChosen(true); setSelectedRound(null);
+    setGoalRuns(old => [run, ...(old ?? []).filter(item => item.id !== run.id)]);
+    if (typeof run.sessionId === "string") setSelectedGoal(goalKey(run.sessionId, run.id));
+    void loadGoals();
   };
-  const closeNative = () => { if (pendingNativeIntent.current) setNativeUncertain(true); pendingNativeIntent.current = null; setNativePending(false); setNativeSession(null); clearNativeIntent(); };
-  const startLongResearch = () => {
-    if (longFeature !== "enabled" || pendingNativeIntent.current) return;
-    const intent = newRuntimeUiIntent("/loopx ");
-    setNativeUncertain(false); pendingNativeIntent.current = intent.requestId; setNativePending(true);
-    setNativeSession(intent.sessionId);
-    const state = location.state && typeof location.state === "object" ? location.state : {};
-    navigate(location.pathname + location.search, { replace: true, state: { ...state, runtimeUiIntent: intent } });
-  };
-  const openGoalConversation = (sessionId: string) => {
-    pendingNativeIntent.current = null; setNativePending(false); clearNativeIntent(); setNativeSession(sessionId);
-  };
-  const onNativeAcknowledged = useCallback((requestId: string, sessionId: string) => {
-    if (!mounted.current || pendingNativeIntent.current !== requestId) return;
-    pendingNativeIntent.current = null; acknowledgedNativeIntent.current = requestId; setNativePending(false);
-    setNativeSession(sessionId);
-    const current = locationRef.current;
-    const state = current.state && typeof current.state === "object" ? { ...current.state } : {};
-    if (state.runtimeUiIntent?.requestId === requestId) {
-      delete state.runtimeUiIntent;
-      navigate(current.pathname + current.search, { replace: true, state });
-    }
-  }, [navigate]);
   const choose = (key: string) => {
     if (operating.current) return;
-    closeNative(); setSelectedEpisodeId(null); setSelectedRound(null);
+    closeNative(); setChosen(true); setSelectedEpisodeId(null); setSelectedRound(null);
     if (key.startsWith("goal:")) { setSelectedGoal(key.slice(5)); return; }
     setSelectedGoal(null); setSelectedId(key.slice(7));
   };
@@ -379,31 +364,28 @@ function ResearchWorkspace({ projectId }: { projectId: string }) {
   const reading = !error && (!loaded || (agendas.length === 0 && goalRuns === null && !goalError));
   const runId = goal ? round?.id ?? null : execution?.payload.runId ?? null;
   const observedTitle = goal ? goalTitle(goal) : selected?.payload.title;
-  const startButtons = <>
-    <Button disabled={nativePending || longFeature !== "enabled"} onClick={startLongResearch}>新建长期研究</Button>
-    <Button variant="secondary" disabled={!available} onClick={() => setEditor(true)}>新建定时研究</Button>
-  </>;
-  // The header says the same two things as an action plan (design system v3.2): the long research is the primary one.
-  const startPlan: PageActionPlan = {
-    primary: { id: "new-long", label: "新建长期研究", disabled: nativePending || longFeature !== "enabled", onSelect: startLongResearch },
-    secondary: [{ id: "new-scheduled", label: "新建定时研究", disabled: !available, onSelect: () => setEditor(true) }],
+  const canStart = longFeature === "enabled";
+  // With nothing yet the standby scene carries the two ways to begin; the header does not repeat them.
+  const actionPlan: PageActionPlan = {
+    primary: { id: "start-research", label: "发起研究", disabled: !canStart, onSelect: () => setStarting(true) },
+    secondary: [{ id: "connect-data", label: "接入数据", disabled: busy, onSelect: connectData }],
   };
 
-  // With nothing yet the empty state carries the two ways to start; the header does not repeat them.
-  return <PageShell title="主动科研" width="wide" actionPlan={nothing && !nativeSession ? undefined : startPlan}><div className="space-y-6">
-    {nativeUncertain && <p role="status" className="text-ui text-text">上次新建的长期研究可能已经创建，请先在对话列表里看一眼，再决定是否重新新建。</p>}
-    {longFeature === "error" && <LoadError message="长期研究暂时无法使用。" onRetry={() => void loadLongFeature()} />}
-    {longFeature === "disabled" && <p className="text-ui text-text">长期研究暂未开通，定时研究可以正常使用。</p>}
+  return <PageShell title="主动科研" width="wide" actionPlan={nothing ? undefined : actionPlan}><div className="space-y-6">
+    {longFeature === "error" && <LoadError message="发起研究暂时不可用。" onRetry={() => void loadLongFeature()} />}
+    {longFeature === "disabled" && <p className="text-ui text-text">这个账号暂未开通发起研究。</p>}
     {error && <LoadError message={error} onRetry={() => void load()} />}
     {goalError && <LoadError message="长期研究暂时无法载入。" onRetry={() => void loadGoals()} />}
     {!available && <p className="text-ui text-text">定时执行暂不可用，已有成果可以照常查看。</p>}
+    {actionError && !steering && <p role="alert" className="text-ui text-error">{actionError}</p>}
+    {actionNotice && <p role="status" className="text-ui text-text">{actionNotice}</p>}
     {reading && <div role="status" aria-label="正在载入研究" className="h-64 animate-pulse rounded-card bg-surface-2" />}
-    {nothing && !nativeSession && <EmptyState icon={FlaskConical} titleAs="h2" title="让 AI 持续为你做研究"
-      description={<><span className="block">长期研究：写下一个研究目标，AI 会检索、阅读、分析、撰写，一轮轮推进直到完成。</span><span className="mt-1 block">定时研究：按你设定的时间自动追踪一个问题，每次执行都会留下成果。</span></>}
-      action={<div className="flex flex-wrap justify-center gap-2">{startButtons}</div>} />}
-    {loaded && !nothing && !reading && <div>
-      <ResearchQueue entries={queue} selected={queueSelected} disabled={busy} onSelect={choose} />
-      <ResearchObservatory runId={runId} title={observedTitle} onOpenFile={openFile} />
+    {!reading && !error && <div>
+      {queue.length > 0 && <ResearchQueue entries={queue} selected={queueSelected} disabled={busy} onSelect={choose} />}
+      <ResearchObservatory runId={runId} title={observedTitle} onOpenFile={openFile} standbyActions={nothing ? <>
+        <Button disabled={!canStart} onClick={() => setStarting(true)}>发起研究</Button>
+        <Button variant="secondary" disabled={busy} onClick={connectData}>接入数据</Button>
+      </> : undefined} />
     </div>}
 
     {selected && <section aria-label="当前研究" className="space-y-6">
@@ -417,13 +399,11 @@ function ResearchWorkspace({ projectId }: { projectId: string }) {
           <Button variant="secondary" onClick={() => navigate(taskPath(selected.id))}>打开任务对话</Button>
         </div>
       </div>
-      {actionError && !steering && <p role="alert" className="text-ui text-error">{actionError}</p>}
-      {actionNotice && <p role="status" className="text-ui text-text">{actionNotice}</p>}
       <div className="grid gap-6 lg:grid-cols-2">
         <ResultsPanel progress={progress?.agendaId === selectedId ? progress : null} files={ownEpisodes.flatMap(item => (item.payload.artifactRefs ?? [])
           .filter(ref => ref.projectId === projectId && ref.runId === item.payload.runId && ref.sessionId === item.payload.sessionId && SAFE_RUN.test(ref.runId) && safeWorkspacePath(ref.path))
           .map(ref => ({ runId: ref.runId, path: ref.path, at: item.payload.createdAt })))} />
-        <ResearchDataPanel materials={progress?.agendaId === selectedId ? progress.materials : []} loading={!progress && !progressError} error={progressError} busy={busy} databaseAvailable={databaseAvailable} onUpload={upload} onPick={() => setPicking(true)} onDatabase={() => setDatabaseOpen(true)} onRemove={sourceId => void operation(() => removeAgendaMaterial(selected.id, sourceId))} onRetry={() => void loadProgress()} />
+        <ResearchDataPanel materials={progress?.agendaId === selectedId ? progress.materials : []} loading={!progress && !progressError} error={progressError} busy={busy} databaseAvailable={databaseAvailable} onUpload={upload} onPick={() => setPicking(true)} onDatabase={() => setDatabaseFor("study")} onRemove={sourceId => void operation(() => removeAgendaMaterial(selected.id, sourceId))} onRetry={() => void loadProgress()} />
       </div>
       <section aria-label="执行记录" className="space-y-2">
         <h3 className="text-ui font-semibold text-text">执行记录</h3>
@@ -438,8 +418,8 @@ function ResearchWorkspace({ projectId }: { projectId: string }) {
       </section>
     </section>}
 
-    {goal && <GoalWorkbench goal={goal} round={round} projectId={projectId} busy={busy} onRound={setSelectedRound} onOpenConversation={() => openGoalConversation(goal.sessionId)} />}
-    {nativeSession && <NativeResearchPane key={`${projectId}:${nativeSession}`} projectId={projectId} sessionId={nativeSession} onAcknowledged={onNativeAcknowledged} onClose={closeNative} />}
+    {goal && <GoalWorkbench goal={goal} round={round} busy={busy} onRound={setSelectedRound} onOpenConversation={() => setNativeSession(goal.sessionId)} />}
+    {nativeSession && <NativeResearchPane key={`${projectId}:${nativeSession}`} projectId={projectId} sessionId={nativeSession} onClose={closeNative} />}
 
     {steering && selected && <FormDialog title="调整研究方向" busy={busy} onClose={() => { if (!busy) setSteering(false); }}><div className="space-y-4">
       <Textarea label="希望研究如何调整" value={direction} maxLength={4000} onChange={event => setDirection(event.target.value)} />
@@ -447,29 +427,35 @@ function ResearchWorkspace({ projectId }: { projectId: string }) {
       {actionError && <p role="alert" className="text-ui text-error">{actionError}</p>}
       <div className="flex justify-end gap-2"><Button variant="secondary" disabled={busy} onClick={() => setSteering(false)}>取消</Button><Button disabled={busy || !direction.trim()} onClick={submitDirection}>提交方向</Button></div>
     </div></FormDialog>}
-    {databaseOpen && selected && <ResearchDatabaseDialog key={`${projectId}:${selected.id}`} projectId={projectId} agendaId={selected.id} onClose={() => setDatabaseOpen(false)} onCaptured={() => { void load(true); void loadProgress(true); }} />}
+    {(databaseFor === "knowledge-base" || (databaseFor === "study" && selected)) && <ResearchDatabaseDialog key={`${projectId}:${databaseFor === "study" ? selected?.id : ""}`} projectId={projectId} agendaId={databaseFor === "study" ? selected?.id : undefined} onClose={() => setDatabaseFor(null)} onCaptured={() => { void load(true); void loadProgress(true); }} />}
     {picking && selected && <FormDialog title="从知识库添加资料" busy={busy} onClose={() => { if (!busy) setPicking(false); }}><MaterialPicker projectId={projectId} taken={(selected.payload.materials ?? []).map(item => item.sourceId)} busy={busy} onCancel={() => setPicking(false)} onChoose={sourceIds => { setPicking(false); void operation(() => addAgendaMaterials(selected.id, { sourceIds })); }} /></FormDialog>}
-    {editor && <NewScheduledResearchDialog projectId={projectId} available={available} saving={editorSaving} onBusyChange={setEditorSaving} onClose={() => setEditor(false)}
-      onRecorded={record => { setSelectedGoal(null); setSelectedId(record.id); void load(); }}
-      onSaved={record => { setEditor(false); setSelectedGoal(null); setSelectedId(record.id); void load(); }} />}
+    {starting && <StartResearchDialog onClose={() => setStarting(false)} onStarted={onResearchStarted} />}
+    {intake && <FormDialog title="接入数据" onClose={() => setIntake(false)}><div className="flex flex-wrap gap-2">
+      <Button onClick={connectFiles}>上传文件</Button>
+      <Button variant="secondary" onClick={() => { setIntake(false); setDatabaseFor("knowledge-base"); }}>从数据库导入</Button>
+    </div></FormDialog>}
   </div></PageShell>;
 }
 
-/**
- * 「新建定时研究」: what to keep doing, and how often, made in place so the new research is the one the console shows. The scheduled-tasks
- * page makes a task in its main area (`NewTaskPane`); this is the same form (`TaskForm`) in a short dialog over the console, without the
- * examples and opportunities that page keeps beside it.
- */
-function NewScheduledResearchDialog({ projectId, available, saving, onBusyChange, onClose, onRecorded, onSaved }: {
-  projectId: string; available: boolean; saving: boolean; onBusyChange: (busy: boolean) => void; onClose: () => void;
-  onRecorded: (record: AgendaRecord) => void; onSaved: (record: AgendaRecord) => void;
-}) {
-  const [dirty, setDirty] = useState(false);
-  return <FormDialog title="新建定时研究" busy={saving} dirty={dirty} onClose={() => { if (!saving) onClose(); }}>
-    {(requestClose, markSaved) => <TaskForm projectId={projectId} showBudgets={false} schedulingAvailable={available}
-      onRecorded={record => { markSaved(); onRecorded(record); }} onBusyChange={onBusyChange} onDirtyChange={setDirty} onCancel={requestClose}
-      onSaved={record => { markSaved(); onSaved(record); }} />}
-  </FormDialog>;
+/** 「发起研究」: the goal in the person's words. The same goal retried is the same request, so a lost answer cannot start it twice. */
+function StartResearchDialog({ onClose, onStarted }: { onClose: () => void; onStarted: (run: WebAgentRun) => void }) {
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [failure, setFailure] = useState<string | null>(null);
+  const request = useRef<ResearchGoalRequest | null>(null);
+  const submit = async () => {
+    const goal = text.trim();
+    if (!goal || busy) return;
+    if (request.current?.text !== goal) request.current = newResearchGoalRequest(goal);
+    setBusy(true); setFailure(null);
+    try { onStarted(await startResearchGoal(request.current)); }
+    catch (caught) { setFailure(productErrorMessage(caught)); setBusy(false); }
+  };
+  return <FormDialog title="发起研究" busy={busy} dirty={text.trim().length > 0} onClose={() => { if (!busy) onClose(); }}><div className="space-y-4">
+    <Textarea label="研究目标" rows={5} value={text} maxLength={4000} placeholder="例如：评估 SGLT2 抑制剂对射血分数保留型心衰的长期获益，产出一份综述" onChange={event => setText(event.target.value)} />
+    {failure && <p role="alert" className="text-ui text-error">{failure}</p>}
+    <div className="flex justify-end gap-2"><Button variant="secondary" disabled={busy} onClick={onClose}>取消</Button><Button disabled={busy || !text.trim()} onClick={() => void submit()}>{busy ? "正在启动" : "开始研究"}</Button></div>
+  </div></FormDialog>;
 }
 
 /** What the research has produced: its findings with how each was checked, and every file its executions handed over. */
@@ -491,15 +477,12 @@ function ResultsPanel({ progress, files }: { progress: ResearchState | null; fil
 }
 
 /** A long goal: its rounds, the files they handed over, and its own conversation. */
-function GoalWorkbench({ goal, round, projectId, busy, onRound, onOpenConversation }: { goal: ObservedResearchGoal; round: WebAgentRun | null; projectId: string; busy: boolean; onRound: (id: string) => void; onOpenConversation: () => void }) {
+function GoalWorkbench({ goal, round, busy, onRound, onOpenConversation }: { goal: ObservedResearchGoal; round: WebAgentRun | null; busy: boolean; onRound: (id: string) => void; onOpenConversation: () => void }) {
   const files = goal.rounds.flatMap(run => SAFE_RUN.test(run.id) ? [...new Set([...(run.outputFiles ?? []), ...(run.presentedFiles ?? [])])].filter(path => safeWorkspacePath(path)).map(path => ({ runId: run.id, path, at: run.finishedAt ?? run.startedAt })) : []);
   return <section aria-label="长期研究" className="space-y-6">
     <div className="flex flex-wrap items-center justify-between gap-3">
       <div className="min-w-0"><h2 className="truncate text-section font-semibold text-text">{goalTitle(goal)}</h2><p className="text-caption text-text-3">长期研究 · 已推进 {goal.rounds.length} 轮</p></div>
-      <div className="flex flex-wrap items-center gap-2">
-        <Button variant="secondary" onClick={onOpenConversation}>在本页打开对话</Button>
-        <Link className="text-ui text-accent underline" to={scopedConversationPath(chatPath(goal.sessionId), projectId)}>打开所属对话</Link>
-      </div>
+      <Button variant="secondary" onClick={onOpenConversation}>查看对话</Button>
     </div>
     <div className="grid gap-6 lg:grid-cols-2">
       <ResultsPanel progress={null} files={files} />
@@ -513,18 +496,17 @@ function GoalWorkbench({ goal, round, projectId, busy, onRound, onOpenConversati
 }
 
 /** The shell's resident native conversation, placed inside this page without creating another composer. */
-function NativeResearchPane({ projectId, sessionId, onAcknowledged, onClose }: { projectId: string; sessionId: string; onAcknowledged: (requestId: string, sessionId: string) => void; onClose: () => void }) {
+function NativeResearchPane({ projectId, sessionId, onClose }: { projectId: string; sessionId: string; onClose: () => void }) {
   const pane = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     const element = pane.current;
     if (!element) return undefined;
-    const withdraw = registerTaskPane({ element, projectId, sessionId, onSessionAcknowledged: onAcknowledged });
+    const withdraw = registerTaskPane({ element, projectId, sessionId });
     element.scrollIntoView?.({ block: "start" });
     return withdraw;
-  }, [projectId, sessionId, onAcknowledged]);
-  return <section aria-label="长期研究对话" className="space-y-2">
-    <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-ui font-semibold text-text">长期研究对话</h2><Button variant="secondary" onClick={onClose}>收起对话</Button></div>
-    <p className="text-ui text-text">写下研究目标后发送，AI 会一轮轮推进，直到目标完成。</p>
+  }, [projectId, sessionId]);
+  return <section aria-label="研究对话" className="space-y-2">
+    <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-ui font-semibold text-text">研究对话</h2><Button variant="secondary" onClick={onClose}>收起对话</Button></div>
     <div ref={pane} role="region" aria-label="原生研究对话" className="relative min-h-screen" />
   </section>;
 }
