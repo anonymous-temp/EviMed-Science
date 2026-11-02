@@ -1722,6 +1722,17 @@ export async function createWebProject(name: string, options: { id?: string } = 
   return created;
 }
 
+/** Allocate and bind a fresh analysis without starting a runtime or changing this tab's selected project. */
+export async function createWebStatisticalWorkspace(input: { requestId: string; name?: string }): Promise<{ projectId: string; sessionId: string }> {
+  if (!hasWebApi) throw new BackendUnavailableError("statistical-workspaces.create");
+  const res = await fetchWithWebAuth(apiUrl("/statistical-workspaces"), {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(input),
+  });
+  const created = await parseApiResponse<{ projectId: string; sessionId: string }>(res);
+  invalidateWebMe();
+  return created;
+}
+
 /** Renames a project (`PATCH /api/projects/:id`). The id never changes: it is
  *  a path segment under the workspace root, and renaming it would move one. */
 export async function renameWebProject(projectId: string, name: string): Promise<WebProject> {
@@ -1858,11 +1869,12 @@ export async function listWebResearchSessions(): Promise<WebResearchSession[]> {
 export async function putWebResearchSession(
   sessionId: string,
   selection: WebResearchSessionSelection,
+  options: { projectId?: string } = {},
 ): Promise<WebResearchSession> {
   if (!hasWebApi) throw new BackendUnavailableError("researchSessions.put");
   const res = await fetchWithWebAuth(apiUrl(`/research-sessions/${encodeURIComponent(sessionId)}`), {
     method: "PUT",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...(options.projectId ? { "X-Open-Science-Project": options.projectId } : {}) },
     body: JSON.stringify(selection),
   });
   return parseApiResponse<WebResearchSession>(res);

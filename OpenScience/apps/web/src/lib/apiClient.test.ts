@@ -1585,3 +1585,26 @@ it("checks component lifetime again after CSRF readback before sending upload by
  expect(fetchMock).toHaveBeenCalledTimes(1); mounted = false; finish(csrfMeResponse());
  await expect(task).rejects.toBeInstanceOf(StaleSessionError); expect(fetchMock).toHaveBeenCalledTimes(1);
 });
+
+
+it("allocates an analysis with session auth and CSRF without changing the selected project", async () => {
+  const client = await loadClient("/api");
+  client.setWebProjectId("existing-project");
+  const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(csrfMeResponse())
+    .mockResolvedValueOnce(responseJson({ projectId: "stat-owned", sessionId: "session-owned" }));
+  expect(await client.createWebStatisticalWorkspace({ requestId: "retry-identity" }))
+    .toEqual({ projectId: "stat-owned", sessionId: "session-owned" });
+  expect(fetchMock.mock.calls[1][0]).toBe("/api/statistical-workspaces");
+  expect(JSON.parse(String(fetchMock.mock.calls[1][1]?.body))).toEqual({ requestId: "retry-identity" });
+  expect(callHeaders(fetchMock, 1).get("X-Open-Science-CSRF")).toBe("csrf_test");
+  expect(client.getWebProjectId()).toBe("existing-project");
+});
+
+
+it("binds a fresh tool in an explicit ordinary project without selecting it globally", async () => {
+  const client = await loadClient("/api"); client.setWebProjectId(`stat-${"a".repeat(40)}`);
+  const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(csrfMeResponse()).mockResolvedValueOnce(responseJson({ sessionId: "other-tool" }));
+  await client.putWebResearchSession("other-tool", { mode: "specialist", agentId: "meta-analysis", agentVersion: "1.0.0" }, { projectId: "default" });
+  expect(callHeaders(fetchMock, 1).get("X-Open-Science-Project")).toBe("default");
+  expect(client.getWebProjectId()).toMatch(/^stat-/);
+});

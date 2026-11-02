@@ -1208,6 +1208,7 @@ export function runtimeStartRecovery(code, status) {
  * entirely.
  */
 export const CONTROL_PLANE_ERROR_CODES = Object.freeze([
+  "statistical_workspace_session_reserved",
   // 2026-10-13: memory on OpenViking's native engine. The first four are what a person on the memory page can be answered
   // with; the `memory_gateway_*` ones are what the memory gateway answers a runtime's memory plugin (`memoryGateway.mjs`).
   'memory_engine_unavailable',
@@ -2129,6 +2130,7 @@ export function turnEndErrorCode(kind, wireCode, wireStatus) {
  * code is visibly untranslated rather than invisibly generic.
  */
 export const ERROR_CODE_MESSAGES = Object.freeze({
+  statistical_workspace_session_reserved: "这个分析使用原来的对话，请回到该对话继续。",
   // A project's runtime held by the per-project limit of a gateway that spends outside resources (`projectGatewayLimit.mjs`).
   public_source_gateway_project_rate_limited: '这个项目一分钟内读取公共数据源的次数已达上限，稍等片刻再继续；已读到的内容不受影响。',
   public_source_gateway_project_busy: '这个项目同时在读的公共数据源请求过多，等当前的读完再继续。',
@@ -3175,6 +3177,7 @@ const ERROR_CODE_OUTCOMES = Object.freeze({
   agent_run_limit_reached: 'capped',
   project_limit_reached: 'capped',
   default_project_protected: 'capped',
+  statistical_workspace_session_reserved: 'capped',
   // Memory on the native engine (2026-10-13): what the page or the gateway refused before asking the engine, and the engine not answering.
   memory_engine_unavailable: 'upstream',
   memory_engine_unsupported: 'capped',

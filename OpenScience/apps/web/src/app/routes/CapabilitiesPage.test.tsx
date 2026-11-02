@@ -95,6 +95,7 @@ const mocks = vi.hoisted(() => ({
   listWebResearchAgents: vi.fn(),
   listWebResearchSessions: vi.fn(),
   putWebResearchSession: vi.fn(),
+  createWebStatisticalWorkspace: vi.fn(),
   allowance: vi.fn(),
   estimates: vi.fn(),
   getVcrModels: vi.fn(),
@@ -108,6 +109,7 @@ vi.mock("@/lib/apiClient", async (importOriginal) => ({
   listWebResearchAgents: mocks.listWebResearchAgents,
   listWebResearchSessions: mocks.listWebResearchSessions,
   putWebResearchSession: mocks.putWebResearchSession,
+  createWebStatisticalWorkspace: mocks.createWebStatisticalWorkspace,
   fetchWebResearchAllowance: mocks.allowance,
   fetchWebResearchEstimates: mocks.estimates,
   getWebProjectId: () => "default",
@@ -144,7 +146,7 @@ function LocationProbe() {
   const location = useLocation();
   return (
     <div data-testid="location">
-      {location.pathname}
+      {location.pathname}{location.search}
       <span data-testid="capability">{String(location.state?.capabilityId ?? "")}</span>
       <span data-testid="intent">{JSON.stringify(location.state?.runtimeUiIntent)}</span>
     </div>
@@ -343,6 +345,19 @@ describe("CapabilitiesPage", () => {
     expect(await screen.findByRole("button", { name: /样本量估算/ })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /药品安全性分析/ })).not.toBeInTheDocument();
     expect(screen.queryByText(/虚拟临研/)).not.toBeInTheDocument();
+  });
+
+  it("a fresh data-analysis card opens its dedicated project and recorded native root", async () => {
+    mocks.listWebResearchAgents.mockResolvedValue([...agents, { ...agents[0], id: "statistical-analysis" }]);
+    mocks.createWebStatisticalWorkspace.mockResolvedValue({ projectId: "stat-owned", sessionId: "stats-root" });
+    render(<MemoryRouter initialEntries={["/app/capabilities"]}><Routes>
+      <Route path="/app/capabilities" element={<CapabilitiesPage />} />
+      <Route path="/app/chat" element={<LocationProbe />} />
+    </Routes></MemoryRouter>);
+    await userEvent.click(await screen.findByRole("button", { name: CAPABILITY_DISPLAY["statistical-analysis"].title }));
+    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/app/chat?project=stat-owned"));
+    expect(JSON.parse(screen.getByTestId("intent").textContent!)).toMatchObject({ kind: "create", projectId: "stat-owned", sessionId: "stats-root" });
+    expect(mocks.putWebResearchSession).not.toHaveBeenCalled();
   });
 
   // The drawer with its own question box is gone: a row opens the conversation
