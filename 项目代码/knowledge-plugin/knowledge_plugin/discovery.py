@@ -747,7 +747,7 @@ async def decide_trials(conn, now: datetime, day: str) -> list[dict]:
     screening = await screening_of(conn, now)
     decided = []
     for row in rows:
-        screened, off_topic = screening.get(row["source_id"], (None, None))
+        screened, off_topic, _selected = screening.get(row["source_id"], (None, None, None))
         verdict, reason = trial_verdict(TrialFacts(
             trial_until=row["trial_until"], medical_basis=row["medical_basis"], ok_polls=int(row["ok_polls"] or 0),
             new_entries=int(row["new_entries"] or 0), screened=screened, off_topic=off_topic), now)
