@@ -73,7 +73,12 @@ execution constraint: for a unit-only conversion or a fixed-threshold change on
 unchanged data, transform the executed estimates or saved probabilities, verify
 against them, and leave the original results, fitted state and inputs untouched;
 if a pipeline always recomputes everything, write a small separate continuation
-script. Judge fitted-state reuse from its recorded input, code, versions and
+script. In both the reply and report, describe what the executed continuation
+actually did: a statistic recomputed as an independent verification was still
+recomputed, even if its prior result was also reused. Do not claim it was not
+recomputed or that only affected calculations ran when the script reran other
+calculations. Prefer a small decisive verification to rerunning every unchanged
+analysis. Judge fitted-state reuse from its recorded input, code, versions and
 split, not by retraining. Persist transformation code, fitted state and the
 data/split definition. For predictive evaluation fit every learned transformation
 on training data only and apply that state to held-out data. On a data

@@ -1051,7 +1051,7 @@
       "origin": "capability",
       "version": "1.4.1",
       "source": {"kind":"release"},
-      "digest": "sha256:04f98a36cdd0a2f19e1aafb828418cf1d79bd84977754cc51a81e194e94ad064",
+      "digest": "sha256:35a59aeb65d61127ef4f3a508d60edbb34226cfdc771ef7de6ec5c5fc21aff5f",
       "digestAlgorithm": "release-directory-v1",
       "scripts": [
         {"path":"scripts/analysis_checks.py","sha256":"bad10054bdea386b3883a53185956e5d5ff172f844c6044c8307cddb2bfa2502"},
