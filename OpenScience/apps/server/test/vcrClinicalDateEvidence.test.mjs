@@ -101,7 +101,7 @@ test('with several records in one file the header is the nearest one above the p
  assert.equal(clinicalRecordHeader(file,file.indexOf('Takes'))?.date,'2067-01-10');
  assert.equal(clinicalRecordHeader(file,file.indexOf('Admitted'))?.date,'2067-03-01');
  assert.equal(clinicalRecordHeader(file,file.indexOf('Record date: 2067-03-01')+3)?.date,'2067-01-10','a position on the header line itself looks above it');
- // A position in the middle of a long line is in that line; the line is never its own header.
+ // A position in the middle of a long line is in that line; a line longer than a header is not one, whatever it holds.
  const long=`Record date: 2067-01-10\n${'Takes aspirin and other things. '.repeat(4)}Seen 2067-02-02 again.`;
  assert.equal(clinicalRecordHeader(long,long.indexOf('Seen'))?.date,'2067-01-10');
 });
@@ -157,7 +157,7 @@ const referenceRecordHeader=(text,position)=>{
  return null;
 };
 
-test('the header index answers what the backward scan answered, for a position at the start of any line of a mixed document',()=>{
+test('the header index answers what the backward scan answered, for a position at the start of any line of a mixed document, and past the end of one that ends in a newline',()=>{
  let seed=20261102;
  const random=(n)=>{seed=(seed*1103515245+12345)&0x7fffffff;return seed%n;};
  const pool=['Record date: 2067-05-03','2026-07-01 门诊记录','DOB: 1950-03-02','Seen 3/14 for review','Admitted 2067-02-02 discharged 2067-02-09','',' ','   2067-08-09   ',
@@ -168,7 +168,8 @@ test('the header index answers what the backward scan answered, for a position a
   const text=lines.join(random(2)?'\n':'\n\n')+(random(2)?'\n':'');
   const starts=[0];
   for(let at=text.indexOf('\n');at>=0;at=text.indexOf('\n',at+1))starts.push(at+1);
-  for(const position of [...starts,text.length,text.length+7,-1,1.5]){
+  // (a position on a header line after its date is the one the new rule changes: see REVIEWFIX 7)
+  for(const position of [...starts,...(text.endsWith('\n')?[text.length+7]:[]),-1,1.5]){
    assert.deepEqual(clinicalRecordHeader(text,position),referenceRecordHeader(text,position),`round ${round} at ${position}`);
   }
  }
@@ -195,4 +196,23 @@ test('REVIEWFIX 3 a header line dated after the moment the document entered is a
  assert.equal(clinicalRecordHeader(file,at,{notAfter:Date.parse('2067-12-15T00:00:00Z')})?.date,'2067-12-15','a header on the day itself is not later than it');
  assert.equal(clinicalRecordHeader('下次复诊：2067-12-15\nTakes metformin.',22,{notAfter:june}),null,'nothing but a later date above is no header');
  assert.equal(clinicalRecordHeader(file,at,{notAfter:Number.NaN})?.date,'2067-12-15','a moment that is no instant names no bound');
+});
+
+test('REVIEWFIX 7 a short line that holds a date before the quotation dates it; a position at or before the date still looks above',()=>{
+ const file='Record date: 2067-01-01\n2067-05-03 HbA1c 8.5%\nTakes aspirin daily.\n';
+ const dated=clinicalRecordHeader(file,file.indexOf('HbA1c'));
+ assert.deepEqual(dated,{date:'2067-05-03',start:24,end:45,quote:'2067-05-03 HbA1c 8.5%'},'the line the fact is on, trimmed as the document holds it');
+ assert.equal(clinicalRecordHeader(file,file.indexOf('2067-05-03')+4)?.date,'2067-01-01','a position inside the date is not after it');
+ assert.equal(clinicalRecordHeader(file,file.indexOf('2067-05-03'))?.date,'2067-01-01','nor is the date itself');
+ assert.equal(clinicalRecordHeader(file,file.indexOf('Takes'))?.date,'2067-05-03','the next line is under it');
+ // the date comes after the quotation on the line: it does not date what stands before it
+ const after='Record date: 2067-01-01\nHbA1c 8.5% on 2067-05-03\n';
+ assert.equal(clinicalRecordHeader(after,after.indexOf('HbA1c'))?.date,'2067-01-01');
+ // a line that is a sentence does not date its own fact, whatever it holds
+ const body='Record date: 2067-01-01\nSeen 2067-05-03 for review of chest pain and HbA1c 8.5% was noted on the visit.\n';
+ assert.equal(clinicalRecordHeader(body,body.indexOf('HbA1c'))?.date,'2067-01-01');
+ // a birth line and a line dated ahead are not records, on the fact\'s own line as above it
+ const birth='Record date: 2067-01-01\nDOB: 1950-03-02 HbA1c 8.5%\n';
+ assert.equal(clinicalRecordHeader(birth,birth.indexOf('HbA1c'))?.date,'2067-01-01');
+ assert.equal(clinicalRecordHeader(file,file.indexOf('HbA1c'),{notAfter:Date.parse('2067-04-01T00:00:00Z')})?.date,'2067-01-01');
 });

@@ -1355,6 +1355,16 @@ test("REVIEWFIX 3 a line that prints a date after the moment the document entere
   assert.equal(dated({ visibleAt: "2067-12-20T00:00:00Z" }), "2067-12-15", "a document that entered after the date has its line as before");
 });
 
+test("REVIEWFIX 7 a fact on a short line that prints its date before it takes that date, not the header above", () => {
+  const text = "Record date: 2067-01-01\n2067-05-03 HbA1c 8.5%\n";
+  const start = text.indexOf("HbA1c 8.5%");
+  const settled = settleFactEvidence({ id: "f", variable: "hba1c", polarity: "affirmed", extractedBy: "model", provenance: { factSchema: 2 }, surface: "HbA1c 8.5", value: 8.5, unit: "%",
+    source: { documentId: "d", start, end: start + "HbA1c 8.5%".length, quote: "HbA1c 8.5%" } }, { documents: { d: { text } } });
+  assert.ok(settled.ok);
+  assert.deepEqual([settled.fact.occurredAt, settled.fact.source.dateQuote.quote, settled.fact.source.dateBasis, settled.notes], ["2067-05-03", "2067-05-03 HbA1c 8.5%", "record_header", ["date_from_record_header"]]);
+  assert.equal(verifyFactEvidence(settled.fact, { documents: { d: { text } } }).ok, true, "what is stored passes the strict check");
+});
+
 test("the past-event guard in a washout: a bound the washout already clears stands for the date, a bound inside it leaves the exposure unplaced", () => {
   const exposure = (/** @type {string} */ bound) => ({ id: "x", variable: "docetaxel", polarity: "affirmed", extractedBy: "snapshot", occurredAt: bound, source: { dateBound: "no_later_than" }, visibleAt: "2100-01-01T00:00:00Z" });
   const washout = { op: "elapsed_since", variable: "docetaxel", days: 28, comparator: "gte" };

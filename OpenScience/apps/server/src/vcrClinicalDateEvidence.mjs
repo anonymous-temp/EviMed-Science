@@ -94,7 +94,7 @@ const BIRTH_LABEL = /\b(?:d\.?o\.?b\.?|birth\s*date|date\s+of\s+birth|born)\b|�
  * One line of a document read as a record header: it prints exactly one complete date, with its year, and what is left of the line once the
  * date is taken out is a short label that is not a birth label. `null` for any other line. The line is trimmed as the document holds it.
  * @param {string} body @param {number} start where the line starts @param {number} lineEnd where it ends (its newline, or the end of the text)
- * @returns {{ date: string, start: number, end: number, quote: string, lineStart: number } | null}
+ * @returns {{ date: string, start: number, end: number, quote: string, lineStart: number, dateEnd: number } | null} `dateEnd`: where the date ends in the document
  */
 function headerOfLine(body, start, lineEnd) {
   const line = body.slice(start, lineEnd);
@@ -105,7 +105,7 @@ function headerOfLine(body, start, lineEnd) {
   const label = `${trimmed.slice(0, printed[0].start)} ${trimmed.slice(printed[0].end)}`.replace(/\s+/g, ' ').trim();
   if (label.length > RECORD_HEADER_LABEL_MAX || BIRTH_LABEL.test(label)) return null;
   const from = start + line.indexOf(trimmed);
-  return { date: printed[0].iso, start: from, end: from + trimmed.length, quote: trimmed, lineStart: start };
+  return { date: printed[0].iso, start: from, end: from + trimmed.length, quote: trimmed, lineStart: start, dateEnd: from + printed[0].end };
 }
 
 /**
@@ -147,6 +147,8 @@ const HEADER_INDEXES_KEPT = 8;
  * 「2026-07-01 门诊记录」, 「入院日期：2026年3月4日 10:20」). It is a matter of the line's format, not of what the label says: a line that
  * prints two dates, or runs longer than a label, is a body sentence and is passed over, and nothing above the position means no header.
  * A fact with no date of its own takes this date (the owner's ruling of 2026-11-02): the header is the date of the record the fact sits in.
+ * The line the position is on counts when it is header-shaped and prints its date before the position (「2067-05-03 HbA1c 8.5%」): that
+ * line dates what follows its date, and a position in or before the date looks above, as it always did.
  * A line that prints a date later than the moment the document entered the platform (`notAfter`, an instant) is not a record's: it is a date
  * ahead (「下次复诊：2026-12-15」), and the scan passes over it like any body line.
  * @param {string} text the document @param {number} position where the fact's quotation starts
@@ -165,7 +167,9 @@ export function clinicalRecordHeader(text, position, { notAfter = null } = {}) {
     const middle = (low + high) >> 1;
     if (headers[middle].lineStart < lineStart) low = middle + 1; else high = middle;
   }
-  if (!low) return null;
-  const { date, start, end, quote } = headers[low - 1];
+  const own = headers[low]?.lineStart === lineStart && headers[low].dateEnd <= position ? headers[low] : null;
+  const found = own ?? (low ? headers[low - 1] : null);
+  if (!found) return null;
+  const { date, start, end, quote } = found;
   return { date, start, end, quote };
 }
