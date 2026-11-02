@@ -165,6 +165,7 @@ const QUOTE_LOCATOR = 'locate_quote'
 import { concurrentWriteNotice } from '../src/runPolicy.mjs'
 import { sha256Hex, skillBodyDigestAsync } from '../src/digest.mjs'
 import { ChildAttendance } from '../src/childAttendance.mjs'
+import { earlierFilesText, listEarlierFiles } from '../src/earlierFiles.mjs'
 import { unreadableSubmission } from '@evimed/domain'
 
 /**
@@ -788,6 +789,8 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
     if (!agent?.session || isSubagentSession(agent)) return false
     const entry = sessionState(String(agent.session.id ?? ''))
     entry.assembled = true
+    // What the first message names, for the earlier-files block: a file the person attached to it is not an earlier conversation's.
+    entry.claimedInputText = claimed.inputs.map((input) => String(input.text ?? '')).join('\n')
     let changed = false
     if (entry.nativeRouteNeedsReset || claimed.turn > 0 && entry.nativeRouteTurn !== claimed.turn) {
       entry.nativeRouteNeedsReset = false
@@ -1186,6 +1189,29 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
           injectContext(scopeAgent,
             `当前运行作用域：本次运行 ${entry.runId}，会话 ${entry.sessionId}。本次计划在 ${planFileFor(entry.runId)}，本次状态在 ${runStateFileFor(entry.runId)}；需要计划进度时用 evimed_plan action:status。项目资料和已交付成果仍共享；根目录 ${workspaceLayout.planFile} 与 ${workspaceLayout.runStateFile} 是旧运行历史，不代表本次任务，不得用其他会话的计划或状态替代当前用户请求。`, name)
           entry.pathContextRunId = entry.runId
+        }
+      }
+      // The files earlier conversations of the project left in the shared workspace, said once at a conversation's first step and only
+      // to a person's: an automated, scheduled or programme turn has nobody to ask and a child is told by its parent. The names are
+      // data the model could have listed itself; what they are and are not is one sentence (`earlierFiles.mjs`). Bounded, and a
+      // failure is a diagnostic, never a step lost.
+      if (step.root && !entry.earlierFilesTold && Number(payload?.turn ?? 0) <= 1 && Number(payload?.step ?? 0) <= 1 && entry.unattended !== true && entry.cwd) {
+        entry.earlierFilesTold = true
+        const filesAgent = ctx.get('agents')?.get?.(step.agentId)
+        if (filesAgent) {
+          /** @type {unknown[]} */
+          const unreadable = []
+          try {
+            const named = String(entry.claimedInputText ?? '')
+            const text = earlierFilesText(await listEarlierFiles(
+              (relative) => listDirAt(ctx, entry.cwd, relative || '.', payload?.signal, (error) => unreadable.push(error)),
+              { exclude: (path) => named.includes(path) || named.includes(path.split('/').pop() ?? path) },
+            ))
+            if (text) injectContext(filesAgent, text, name)
+          } catch (error) {
+            unreadable.push(error)
+          }
+          if (unreadable.length) diagnostics(step.sessionId)?.degrade?.(`the earlier-files listing met ${unreadable.length} unreadable director${unreadable.length === 1 ? 'y' : 'ies'}: ${errorMessage(unreadable[0])}`)
         }
       }
       // What the root needs to know about the `subagent` children it started, once per child, in the step that follows

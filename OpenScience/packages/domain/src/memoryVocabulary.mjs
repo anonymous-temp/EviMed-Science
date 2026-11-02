@@ -64,6 +64,8 @@ export const PLATFORM_CONTEXT_TAGS = Object.freeze([
   { tag: 'evimed-agenda', role: 'injected', emitters: ['packages/socket/plugins/run-policy.mjs'] },
   { tag: 'evimed-budget', role: 'injected', emitters: ['packages/socket/plugins/run-policy.mjs'] },
   { tag: 'evimed-run', role: 'injected', emitters: ['packages/socket/plugins/run-policy.mjs'] },
+  // The files earlier conversations of the project left in the shared workspace, said once at a person's conversation's first step (2026-11-02).
+  { tag: 'evimed-earlier-files', role: 'injected', emitters: ['packages/socket/src/earlierFiles.mjs'] },
   // A method the control plane mounts into a dispatch's context. The guidance plugin wrote it too until 2026-10-12, around the
   // evidence method it injected into every conversation; transcripts from before carry that copy under the same tag.
   { tag: 'evimed-skill', role: 'injected', emitters: ['apps/server/src/researchContext.mjs'] },

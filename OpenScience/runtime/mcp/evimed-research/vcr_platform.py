@@ -129,6 +129,8 @@ OBJECT_SHAPES = {
 }
 # What the platform generates from the domain's scenario schemas (`pnpm generate:vcr-scenario-help`): every key each method's
 # scenario reads. It rides in the image beside this file and is never edited by hand.
+# The kinds whose result is a table of generated rows (`vcr_read what generated_records` reads it back).
+RECORD_KINDS = tuple(OBJECT_SHAPES["population (definition)"] + OBJECT_SHAPES["patient_set (scenario)"])
 HELP_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "vcr_scenario_help.json")
 # Where the VCR methods are in the runtime image. They are capability skill bodies, which delegation injects into a planned
 # capability's run; a plain conversation in a study uses these tools too and its skill catalogue does not list them, so the tools
@@ -510,7 +512,7 @@ def tool_definitions():
     descriptions = {
         "vcr_read": "Read this conversation's research. what=study opens compact context and enables specialist tools. patient_context lists authenticated human-message references (filter beforeSeq/limit); use messageSeq to preserve an earlier case. subject_document reads permitted original material. trial_registry_record reads one registry (filter registryId). contracts gives write syntax before any task exists; data_intake lists original upload handles; matching filter.kind=contract gives write syntax; candidate_trials reads patient trial matches. Any eligibility verdict you deliver (reply, table or file) is copied from the saved read-back (matching or candidate_trials with filter.subjectKey), never retyped.",
         "vcr_write": "Save a research object; data_intake imports an owned original upload then maps/freezes it (read contracts first). candidate_trial stores registry-linked eligibility. Never write calculated results. patient_context data={messageSeq} preserves a listed original human case, or {sourceId} an owned human upload; no model-written prose. task_context opens an independent hidden task. A fact states only what its quote says: what the text does not mention is unknown, never negated, and age, sex or a diagnosis do not imply pregnancy, menopause or a negative result. A candidate_trial's criteria are that one trial's own eligibility lines. Use the VCR workflow skill for object contracts (read %s/vcr-matching/SKILL.md before writing facts, criteria or trials; vcr-protocol, vcr-evidence, vcr-analysis and vcr-package sit beside it; none is in the skill catalogue) and vcr_simulate action=shape for numerical inputs." % root,
-        "vcr_simulate": "Trial sample size, comparing designs, a synthetic population from a paper's baseline, comparators: calculate here. No study needed; the first start opens its page. action=shape with kind gives exact fields and examples; do not guess keys. Long jobs resume here if they outlive this turn. Failures stay explicit. modelId requires modelVersion.",
+        "vcr_simulate": "A human trial's sample size, power or events, comparing designs, a synthetic population from a paper's baseline, an external control: calculate here, not in a script of your own. No study needed; the first start opens a result page with versions and premises. action=shape with kind gives exact fields; do not guess keys. Long jobs resume here if they outlive this turn. modelId requires modelVersion.",
     }
     tools = _detailed_tool_definitions()
     for tool in tools:
@@ -1108,17 +1110,23 @@ def shape(arguments: dict) -> dict:
                       "question at a time, and otherwise go on with a stated assumption. role defaultable: settle it yourself (a default is filled "
                       "and listed in applied, an optional key may be left out, a choice among words follows from the question) and say which "
                       "value you took; do not ask. An object has no role: its keys do.")
+    next_actions = [
+        "Write exactly these keys and no others; a number the engine computes (a result, a count, a measure) is never a key.",
+        "Check a filled scenario without queueing it with vcr_simulate action validate (kind and scenario): it answers the defaults the platform "
+        "would fill, the replicate count and any refusal by path, and does not wait, so you may start in the same turn.",
+        "Then queue it with vcr_simulate action start, or write it as the object's configuration with vcr_write.",
+    ]
+    if kind in RECORD_KINDS:
+        # Three of the four live conversations that did not enter the module for a cohort wrote their own script because they could not tell whether its rows could be handed to
+        # the person as a file (2026-11-02: "I don't know if it writes a CSV I can access"). They can be read back.
+        next_actions.append("The result keeps the generated rows: vcr_read what generated_records with filter.id = the result's id returns them, "
+                            "at most 50 per call, for a file the person asks for.")
     return {
         "status": "success",
         "summary": summary,
         "data": data,
         "warnings": [],
-        "next_actions": [
-            "Write exactly these keys and no others; a number the engine computes (a result, a count, a measure) is never a key.",
-            "Check a filled scenario without queueing it with vcr_simulate action validate (kind and scenario): it answers the defaults the platform "
-            "would fill, the replicate count and any refusal by path, and does not wait, so you may start in the same turn.",
-            "Then queue it with vcr_simulate action start, or write it as the object's configuration with vcr_write.",
-        ],
+        "next_actions": next_actions,
     }
 
 

@@ -1,6 +1,6 @@
 ---
 name: vcr-matching
-description: Two-way eligibility matching for a 「虚拟临床研究」 study — structure a protocol's criteria, locate every patient fact in its source text with a character span and a visibility time, answer the language-only criteria with a quote, and hand back the computed four-state judgment set with its evidence gaps. Matching ends at scientific assessment.
+description: Matching one patient to trials, or a trial's criteria to patients, for 「虚拟临床研究」 — structure a protocol's criteria, locate every patient fact in its source text with a character span and a visibility time, answer the language-only criteria with a quote, and hand back the computed four-state judgment set with its evidence gaps. Matching ends at scientific assessment.
 metadata:
   evimed-agent: vcr-matching
 ---
