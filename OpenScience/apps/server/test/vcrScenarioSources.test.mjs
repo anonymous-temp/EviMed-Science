@@ -67,6 +67,10 @@ test("an assumption written with its paper is the single entry its key names; a 
   assert.ok("raw" in entryOf);
   assert.deepEqual(entryOf.raw, [{ publication: "PMID 37676259", quote: SENTENCE, field: "truth.controlMedian" }]);
   assert.deepEqual([entryOf.scenario.truth, entryOf.scenario.timeUnit, entryOf.card.key], [{ controlMedian: 13.8 }, "months", "control_median_os"]);
+  // the role and the note the run gave its card travel with it
+  const effect = assumptionSourceEntry({ key: "hazard_ratio", pointValue: 0.75, effectRole: "realistic_expectation", note: "from HIMALAYA", sources: [{ publication: "PMID 1", quote: "HR 0.75" }] });
+  assert.ok("card" in effect);
+  assert.deepEqual([effect.card.effectRole, effect.card.note, effect.scenario.endpoint.type], ["realistic_expectation", "from HIMALAYA", "time_to_event"]);
   assert.equal(/** @type {any} */ (assumptionSourceEntry({ key: "accrual_rate", pointValue: 3, sources: [{}] })).because, "field_not_supported");
   assert.equal(/** @type {any} */ (assumptionSourceEntry({ key: "hazard_ratio", pointValue: 0.75, sources: [{}, {}] })).because, "one_source");
 });

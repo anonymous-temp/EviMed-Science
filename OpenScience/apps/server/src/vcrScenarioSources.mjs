@@ -190,7 +190,7 @@ const CARRIED = Object.freeze(/** @type {Record<string, { checked: boolean, mess
  * @param {(what: "evidence_item" | "assumption", item: Record<string, any>) => Promise<{ ids: string[], issues: Array<Record<string, any>>, results?: any[] }>} input.write the gateway's own writer
  * @param {() => Promise<Array<Record<string, any>>>} input.cards the study's current cards
  * @param {(ids: string[]) => Promise<Array<Record<string, any>>>} input.evidence the evidence rows of some ids
- * @param {{ key: string, name?: string, endpoint?: string } | null} [input.card] the card the run itself named (an assumption written with its source): its key, not the platform's
+ * @param {{ key: string, name?: string, endpoint?: string, effectRole?: string, note?: string } | null} [input.card] the card the run itself named (an assumption written with its source): its key, role and note, not the platform's
  * @returns {Promise<{ bound: Array<{ key: string, version: number, path: string, value: number }>, report: Array<Record<string, any>> }>}
  */
 export async function carrySourceEntries({ raw, scenario, endpointType = null, write, cards, evidence, card: named = null }) {
@@ -237,7 +237,8 @@ export async function carrySourceEntries({ raw, scenario, endpointType = null, w
         }
         const made = await write("assumption", {
           key, name: named?.name ?? plan.spec.label, endpoint: named?.endpoint ?? plan.endpointKey, unit: plan.unit || undefined, parameter: plan.spec.parameter,
-          sourceKind: "external_evidence", evidenceIds: [evidenceId], note: "Named by the call that computed with it.",
+          sourceKind: "external_evidence", evidenceIds: [evidenceId], note: named?.note ?? "Named by the call that computed with it.",
+          ...(named?.effectRole ? { effectRole: named.effectRole } : {}),
         });
         const cardId = made.ids[0];
         card = cardId ? (await cards()).find((candidate) => candidate.id === cardId) ?? null : null;
@@ -276,6 +277,7 @@ export function assumptionSourceEntry(row) {
     raw: [{ ...given, field: `truth.${spec.leaf}` }],
     scenario: { endpoint: { type: spec.endpoint }, truth: { [spec.leaf]: pointValue }, ...(typeof row.unit === "string" ? { timeUnit: row.unit } : {}) },
     endpointType: spec.endpoint,
-    card: { key, ...(typeof row.name === "string" && row.name ? { name: row.name } : {}), ...(typeof row.endpoint === "string" && row.endpoint ? { endpoint: row.endpoint } : {}) },
+    card: { key, ...(typeof row.name === "string" && row.name ? { name: row.name } : {}), ...(typeof row.endpoint === "string" && row.endpoint ? { endpoint: row.endpoint } : {}),
+      ...(typeof row.effectRole === "string" && row.effectRole ? { effectRole: row.effectRole } : {}), ...(typeof row.note === "string" && row.note ? { note: row.note.slice(0, 1000) } : {}) },
   };
 }
