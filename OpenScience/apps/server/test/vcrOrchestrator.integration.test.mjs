@@ -2595,6 +2595,16 @@ test("SOURCES a median the call says it read in a paper is the paper's on the re
   assert.equal((await store.assumptionVersions(study.id, "control_median_tte")).length, 1);
   assert.equal((await store.rows("SELECT id FROM evimed_vcr.evidence_items WHERE study_id = $1 AND parameter = 'control_median' AND value IS NOT NULL", [study.id])).length, 1);
 
+  // a median of the run's own is not bound to the paper's card
+  const own = await model.call("simulate", { action: "start", kind: "design_analytic", scenario: paperDesign({ controlMedian: 12 }) });
+  assert.equal((await store.jobs(study.id)).find((row) => row.id === own.data.jobId).checkpoint.bound, undefined);
+  // a later start of a design being compared does not name the paper again: its number is, to the digit, the card's, so the card is its source
+  const unnamed = await model.call("simulate", { action: "start", kind: "design_analytic", scenario: paperDesign({ hazardRatio: 0.8 }) });
+  assert.equal(unnamed.status, 200, JSON.stringify(unnamed));
+  assert.equal(unnamed.data.sources, undefined, "nothing was named, and nothing is said");
+  const unnamedJob = (await store.jobs(study.id)).find((row) => row.id === unnamed.data.jobId);
+  assert.deepEqual(unnamedJob.checkpoint.bound, [{ key: "control_median_tte", version: 1, path: "truth.controlMedian", value: 13.8 }]);
+
   await drainJobs(module, study);
   const trial = await module.service.tab({ id: study.userId }, study.id, "trial");
   const control = trial.premises.find((/** @type {any} */ row) => row.key === "control");

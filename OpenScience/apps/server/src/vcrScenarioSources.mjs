@@ -281,3 +281,32 @@ export function assumptionSourceEntry(row) {
       ...(typeof row.effectRole === "string" && row.effectRole ? { effectRole: row.effectRole } : {}), ...(typeof row.note === "string" && row.note ? { note: row.note.slice(0, 1000) } : {}) },
   };
 }
+
+/**
+ * The cards the study already holds for the numbers of a scenario: a number the scenario states at `truth.<leaf>` that is, to the digit, the
+ * point value of a card made from a paper (`external_evidence`, with the paper on it) for the same parameter, in the same unit of time, is that
+ * card's number. A run that named the paper once does not have to name it on every start of the designs it compares (measured 2026-11-02:
+ * four starts, one with the paper, and the page read the one the run started last). A number of the run's own, or one that differs by anything,
+ * is not bound; nothing is written. When several cards state the number, the first by key.
+ * @param {{ scenario: Record<string, any>, endpointType?: string | null, cards: ReadonlyArray<Record<string, any>> }} input
+ * @returns {Array<{ key: string, version: number, path: string, value: number }>}
+ */
+export function standingSourceBindings({ scenario, endpointType = null, cards }) {
+  const type = String(object(scenario.endpoint).type ?? endpointType ?? "");
+  const truth = object(scenario.truth);
+  const days = (/** @type {unknown} */ unit) => vcrTimeUnitOf(unit) ?? VCR_DEFAULT_TIME_UNIT;
+  /** @type {Array<{ key: string, version: number, path: string, value: number }>} */
+  const bound = [];
+  for (const spec of VCR_SOURCE_PARAMETERS) {
+    const value = truth[spec.leaf];
+    if ((type && type !== spec.endpoint) || typeof value !== "number" || !Number.isFinite(value)) continue;
+    const card = [...cards].sort((left, right) => String(left.key).localeCompare(String(right.key))).find((candidate) => {
+      const key = String(candidate.key);
+      return (key === spec.parameter || key.startsWith(`${spec.parameter}_`)) && candidate.sourceKind === "external_evidence"
+        && typeof object(candidate.pooling).citation === "string" && Number(candidate.pointValue) === value
+        && (!spec.time || days(candidate.unit) === days(scenario.timeUnit));
+    });
+    if (card) bound.push({ key: String(card.key), version: Number(card.version), path: `truth.${spec.leaf}`, value });
+  }
+  return bound;
+}

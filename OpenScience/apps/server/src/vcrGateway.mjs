@@ -88,7 +88,7 @@ import { DATE_QUOTE_MAX } from "./vcrClinicalDateEvidence.mjs";
 import { candidateRequest } from "./vcrCandidateSearch.mjs";
 import { VCR_RECONSTRUCTION_REFERENCE, vcrReconstructionReferenceFor, vcrResultKindFor } from "./vcrJobs.mjs";
 import { vcrPublicationId } from "./vcrPublicationSources.mjs";
-import { assumptionSourceEntry, carrySourceEntries, checkSourceEntries } from "./vcrScenarioSources.mjs";
+import { assumptionSourceEntry, carrySourceEntries, checkSourceEntries, standingSourceBindings } from "./vcrScenarioSources.mjs";
 import { resolveJobSubject, prepareVcrSubjectPopulation, vcrConversationSubject, vcrJobFroze } from "./vcrSubjects.mjs";
 import { prepareVcrModelDesign } from "./vcrModelDesign.mjs";
 import { VCR_COVERAGE_POPULATION_NAME, vcrCohortRulesFromCriteria } from "./vcrCoverage.mjs";
@@ -3033,6 +3033,17 @@ async function startJob(vcr, study, request) {
       }).catch(() => ({ bound: [], report: [{ field: "", state: "assumption", because: "unavailable", message: "来源暂时没能记下；这些前提仍是假设，计算照常。" }] }));
       sourceReport = carried.report;
       if (carried.bound.length) detail = { ...detail, bound: [...(Array.isArray(detail.bound) ? detail.bound : []), ...carried.bound] };
+    }
+  }
+  // The cards the study already holds for this scenario's numbers (a paper named on an earlier start of a design being compared): a number that
+  // is to the digit a cited card's is that card's. Nothing is written, and a failure to read the cards costs the label and nothing else.
+  if (sourcesAreForKind(request.kind)) {
+    /** @type {ReturnType<typeof standingSourceBindings>} */
+    let standing = [];
+    try { standing = standingSourceBindings({ scenario, cards: await vcr.store.assumptions(study.id) }); } catch { /* the label is lost, the computation is not */ }
+    if (standing.length) {
+      const named = new Set((Array.isArray(detail.bound) ? detail.bound : []).map((/** @type {any} */ entry) => entry.path));
+      detail = { ...detail, bound: [...standing.filter((entry) => !named.has(entry.path)), ...(Array.isArray(detail.bound) ? detail.bound : [])] };
     }
   }
   const scenarioHash = createHash("sha256").update(canonicalScenarioJson({ scenario, reconstruction: request.reconstructionResultId ?? null,

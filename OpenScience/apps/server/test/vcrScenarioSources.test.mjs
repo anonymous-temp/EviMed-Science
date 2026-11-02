@@ -1,7 +1,7 @@
 // A paper's number named by the call that computes with it (2026-11-02): which fields a paper can be tied to, and what is said of the rest.
 import assert from "node:assert/strict";
 import test from "node:test";
-import { VCR_SOURCES_MAX, assumptionSourceEntry, carrySourceEntries, checkSourceEntries, normalizeSourceField, planSourceEntry, readSourceEntries } from "../src/vcrScenarioSources.mjs";
+import { VCR_SOURCES_MAX, assumptionSourceEntry, carrySourceEntries, checkSourceEntries, normalizeSourceField, planSourceEntry, readSourceEntries, standingSourceBindings } from "../src/vcrScenarioSources.mjs";
 
 const SENTENCE = "13.8 months (95% CI, 12.3–16.1) with sorafenib";
 const scenario = { endpoint: { type: "time_to_event" }, truth: { hazardRatio: 0.75, controlMedian: 13.8 }, timeUnit: "weeks" };
@@ -73,4 +73,20 @@ test("an assumption written with its paper is the single entry its key names; a 
   assert.deepEqual([effect.card.effectRole, effect.card.note, effect.scenario.endpoint.type], ["realistic_expectation", "from HIMALAYA", "time_to_event"]);
   assert.equal(/** @type {any} */ (assumptionSourceEntry({ key: "accrual_rate", pointValue: 3, sources: [{}] })).because, "field_not_supported");
   assert.equal(/** @type {any} */ (assumptionSourceEntry({ key: "hazard_ratio", pointValue: 0.75, sources: [{}, {}] })).because, "one_source");
+});
+
+test("a number that is, to the digit, the number of a card made from a paper is that card's: the paper is named once for the designs being compared", () => {
+  const card = (/** @type {Record<string, any>} */ more) => ({ key: "control_median_tte", version: 2, pointValue: 13.8, unit: "months", sourceKind: "external_evidence", pooling: { citation: "PMID 37676259" }, ...more });
+  const base = { endpoint: { type: "time_to_event" }, truth: { hazardRatio: 0.75, controlMedian: 13.8 }, timeUnit: "months" };
+  assert.deepEqual(standingSourceBindings({ scenario: base, cards: [card({})] }), [{ key: "control_median_tte", version: 2, path: "truth.controlMedian", value: 13.8 }]);
+  // not bound: another number, a unit of time that differs, a card of the run's own, a card with no paper on it, another endpoint, a number the scenario states as text
+  for (const [scenario, cards] of /** @type {Array<[any, any[]]>} */ ([
+    [{ ...base, truth: { controlMedian: 13.7 } }, [card({})]], [{ ...base, timeUnit: "weeks" }, [card({})]], [base, [card({ sourceKind: "expert_set" })]],
+    [base, [card({ pooling: {} })]], [{ ...base, endpoint: { type: "binary" }, truth: { controlMedian: 13.8 } }, [card({})]], [{ ...base, truth: { controlMedian: "13.8" } }, [card({})]],
+    [base, [card({ key: "dropout_rate" })]], [base, []],
+  ])) assert.deepEqual(standingSourceBindings({ scenario, cards }), []);
+  // a card read from a state with no unit is in the unit every card without one is read in (months), as the scenario without one is
+  assert.equal(standingSourceBindings({ scenario: { ...base, timeUnit: undefined }, cards: [card({ unit: "" })] }).length, 1);
+  // the first by key when two cards state the number
+  assert.equal(standingSourceBindings({ scenario: base, cards: [card({ key: "control_median_os" }), card({})] })[0].key, "control_median_os");
 });
