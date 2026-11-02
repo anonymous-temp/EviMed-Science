@@ -77,4 +77,4 @@ A rehearsal names explicit windows and a prefix: `rsi-lab-monthly.sh 2026-10 --d
 
 Local verification: `python3 -m pip install --target ../.evimed-local/toolchains/rsi-python -r evals/rsi-campaigns/requirements.txt`, then `pnpm test:rsi`, and the server's `rsi*.test.mjs` serially with a disposable localhost `OPEN_SCIENCE_TEST_POSTGRES_URL`.
 
-Not yet: paid DSH consumers and skill/tool/harness activation, the production import of a bundle (the thin layer is opt-in and not deployed), authorized-incident campaigns (they need the OSS channels), and the Harness2/GEPA research arms (the harness-patch consumer measures their candidates; it does not produce them).
+Not yet: paid DSH consumers and skill/tool/harness activation, the production import of a bundle (the thin layer is opt-in and not deployed), authorized-incident campaigns (they need the OSS channels), and a GEPA arm. The Harness2 arm is `evals/harness-adaptation` (round 1, 2026-11-01): it produces hypotheses for candidates, and the harness-patch consumer measures them.

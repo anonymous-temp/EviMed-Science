@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Compare the lab's levers (stack.py) with production's non-secret levers as read on 2026-11-01 (prod-levers-20261101.txt).
+"""Compare the lab's levers (stack.py) with production's non-secret levers as read on 2026-11-01 (an operator-only snapshot, given as the argument; it never enters this tree).
 
-  env_diff.py            print, per production lever: same / differs / not set in the lab / lab only
+  env_diff.py LEVERS     print, per production lever: same / differs / not set in the lab / lab only
 
 The comparison is the evidence behind ENV-DIFFERENCES.md; a lever production sets that the lab neither copies nor overrides is left at
 the code's default (or does not exist in the lab's stack), and is listed so the document can say which.
@@ -16,7 +16,7 @@ stack = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(stack)
 
 production = {}
-for line in (HERE / "prod-levers-20261101.txt").read_text().splitlines():
+for line in pathlib.Path(sys.argv[1]).read_text().splitlines():
     if "=" in line:
         name, _, value = line.partition("=")
         production[name] = value
