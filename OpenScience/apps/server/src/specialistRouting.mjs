@@ -139,9 +139,9 @@ export async function routeOpenDomain({ query, agents, classifier = null, consul
   const structured = routeSlashCommand(query, agents);
   if (structured) return { specialist: structured, decidedBy: "named", modelConsulted: false };
   // Whether 科研工具 lists a package is the catalogue's question (`display.listed`), not routing's: the four taken off that page on 2026-10-26
-  // are still the answer to a request for a dataset-first study, an appraisal, a GEO series or a manuscript. What an ordinary request can never
-  // reach is a module's own package (循证 GEO, 虚拟临床研究), which is opened from its module; inside it the control plane marks the
-  // verified selection's agents `listed: true` for that request.
+  // are still the answer to a request for a dataset-first study, an appraisal, an expression-dataset series or a manuscript. What an ordinary
+  // request can never reach is a module's own package (`moduleOfCapability` names the module, or null), which is opened from its module; inside
+  // it the control plane marks the verified selection's agents `listed: true` for that request.
   agents = agents.filter(agent => agent.listed !== false || moduleOfCapability(agent.id) === null);
   const modelConsulted = consultModel && classifier != null;
   if (modelConsulted) {
