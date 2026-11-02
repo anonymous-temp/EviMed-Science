@@ -354,7 +354,7 @@ The four criteria the ruling is about, with the pairs behind the error it can ca
 - **Wrong-record risk, measured in the dataset's own terms** (a read of the fresh answers made after the scoring, `header_risk.mjs`; no gold, not in the frozen code). Every note opens each record with a
   `Record date:` line, so the record a fact sits in is known. Of 1,762 facts dated by a header, 1,511 took that line; 251 took another short dated line, and for 202 of those it printed the same date. 49 facts (2.8%)
   took a date other than their record's: 46 earlier, 3 later; the median distance is 24 days, but the tail is decades (the 90th percentile is 22,347 days): a short line that prints a date of birth is
-  indistinguishable by format from a record header. This is the risk the owner accepted; it is small here because every record has a header of its own.
+  indistinguishable by format from a record header. This is the risk the owner accepted; it is small here because every record has a header of its own. After this run a birth-date line stopped counting as a header (`BIRTH_LABEL`); `header_risk.mjs` over the same answers then gives 42 facts (2.4%), median one day apart, at most 726 days. The scores above were not re-taken.
 - **HBA1C, which has no window, did not move** beyond what one sample moves it (+0.018 (-0.018 to +0.056)); the standing comparison with the majority baseline is unchanged under (b)
   (0.756 accuracy and 0.7390 micro F1 against 0.766 and 0.7595: still below it) and above it under (c), with the same caveat as before.
 
