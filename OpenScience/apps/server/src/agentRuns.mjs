@@ -4769,11 +4769,13 @@ export class AgentRunStore {
    * (a conversation trying someone else's capsule, and which run to record the
    * recall on), and what the model gateway attributes a request against. A
    * fold with no phase walk, because it is asked per request.
-   * @param {any} project @returns {Promise<{ id: string, sessionId: string }[]>}
+   * @param {any} project @returns {Promise<{ id: string, sessionId: string, nativeTurn?: { startSeq: number, userSeq: number } }[]>}
    */
   async activeRuns(project) {
     const runs = foldEvents(parseEvents(await readLedgerText(project, this.maxBytes)));
-    return [...runs.values()].filter((run) => run.status === "running").map((run) => ({ id: run.id, sessionId: run.sessionId }));
+    return [...runs.values()].filter((run) => run.status === "running").map((run) => ({
+      id: run.id, sessionId: run.sessionId, ...(run.nativeTurn ? { nativeTurn: run.nativeTurn } : {}),
+    }));
   }
 
   /**
