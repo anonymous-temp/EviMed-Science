@@ -344,6 +344,12 @@ function decimalsOf(value) {
   return (written.split(".")[1] ?? "").length;
 }
 
+/**
+ * The `valueSource` words of a number the analyst computed rather than a source reporting it. Its inputs can be held against a text, its
+ * answer cannot: a card is never made of one (the inputs are the evidence, not the figure).
+ */
+export const EVIDENCE_DERIVED_VALUE_SOURCES = Object.freeze(["calculated", "imputed", "predicted"]);
+
 /** The numeric fields of an extraction that a quotation must anchor, besides the value. */
 const COMPANION_NUMBERS = Object.freeze(["ciLow", "ciHigh", "sampleSize", "events"]);
 
@@ -373,7 +379,7 @@ export function verifyExtraction({ extraction, sourceText = "", checkedAt = "" }
   // derived value the check is therefore that every input it names is in the
   // preserved text, not that its own answer is. This is the same distinction
   // the clinical gate draws between a `direct` claim and a `derived` one.
-  const derived = ["calculated", "imputed", "predicted"].includes(String(extraction?.valueSource ?? ""));
+  const derived = EVIDENCE_DERIVED_VALUE_SOURCES.includes(String(extraction?.valueSource ?? ""));
   const inputs = Array.isArray(extraction?.locator?.inputs) ? extraction.locator.inputs : [];
   /** @type {string[]} */
   const unanchored = [];
@@ -1627,7 +1633,7 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
         return { status: "refused", code: "vcr_precedent_not_in_study",
           message: `${registryId} 还不在本研究的先例里；先用 vcr_write what:"precedent" 取回这条登记记录。` };
       }
-      const derived = ["calculated", "imputed", "predicted"].includes(String(item.valueSource ?? ""));
+      const derived = EVIDENCE_DERIVED_VALUE_SOURCES.includes(String(item.valueSource ?? ""));
       const sourceText = literature?.text ?? paperRead?.text ?? String(precedent?.record_text ?? "");
       const sourceHash = literature?.locator.sourceHash ?? paperRead?.sha256 ?? precedent?.record_hash ?? null;
       const sourceRef = literature?.sourceRef ?? (paper ? paperAddress(paper) : `${registryName}:${registryId}`);

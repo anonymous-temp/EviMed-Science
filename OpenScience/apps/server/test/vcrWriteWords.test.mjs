@@ -141,6 +141,37 @@ test("an external-evidence card takes the number of a publication the platform c
   assert.equal(other.issues[0].code, "vcr_evidence_unverified");
 });
 
+test("a value calculated from a paper's numbers is not a card, as a registry's calculated value is not; and a card that already holds one does not say a quotation was not found", async () => {
+  /** @type {any[]} */ const saved = [];
+  const row = { id: "evd_1", parameter: "control_median_os", value: "13.8", ci_low: null, ci_high: null, value_source: "calculated", arm_role: "control",
+    detail: { sourceStanding: "article_reported_unverified", verificationScope: "none", unverifiedBecause: "calculated_from_publication" },
+    locator: { kind: "publication_text", publication: { kind: "pmid", id: "37676259" }, verification: "reported_unverified" } };
+  const evidenceStore = {
+    async citableEvidenceIds() { return ["evd_1"]; },
+    async citableItemsById() { return [row]; },
+    async verifiedEvidenceIds() { return []; },
+    async saveAssumption(/** @type {any} */ input) { saved.push(input.card); return { id: "asm_1", key: input.card.key, version: 1 }; },
+  };
+  const card = { key: "control_median_os", name: "对照组中位 OS", parameter: "control_median_os", endpoint: "os", unit: "months", sourceKind: "external_evidence", evidenceIds: ["evd_1"] };
+  const refused = await write("assumption", [card], { evidenceStore });
+  assert.equal(refused.ok, false);
+  assert.equal(refused.issues[0].code, "vcr_evidence_unverified");
+  assert.match(refused.issues[0].message, /算出来的值/);
+  assert.deepEqual(saved, [], "nothing is saved for it");
+  // the same row from a registry, calculated and checked on its inputs, was already refused: both read the same
+  const registryRow = { ...row, locator: { kind: "registry_field", verification: "verified" }, detail: { verificationScope: "quoted_inputs_only" } };
+  const registry = await write("assumption", [card], { evidenceStore: { ...evidenceStore, async citableItemsById() { return [registryRow]; } } });
+  assert.equal(registry.issues[0].code, "vcr_evidence_unverified");
+  assert.match(registry.issues[0].message, /算出来的值/);
+  // a paper's reported number that was not checked is still a card, as before
+  const reported = await write("assumption", [card], { evidenceStore: { ...evidenceStore, async citableItemsById() { return [{ ...row, value_source: "extracted", detail: {} }]; } } });
+  assert.equal(reported.ok, true, JSON.stringify(reported.issues));
+  // a card that already holds a calculated number (written before) is not said to lack a quotation
+  const old = { pooling: { k: 1, citation: "PMID 37676259", unchecked: true }, valueSource: "calculated" };
+  assert.equal(premiseReasonOfCard(old), "引自 PMID 37676259，由论文里的数算出，数值未核对");
+  assert.equal(premiseReasonOfCard({ ...old, valueSource: "extracted" }), "引自 PMID 37676259，引文没有在平台读到的原文里找到，数值未核对");
+});
+
 test("a plan takes the lists and sentences a model writes", async () => {
   /** @type {any[]} */ const frozen = [];
   const store = { latestDefinition: async () => ({ estimand: { variable: "OS" }, endpointType: "time_to_event", pico: { outcome: "OS" } }), latestPopulation: async () => null,
