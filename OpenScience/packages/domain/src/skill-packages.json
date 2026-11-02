@@ -1109,12 +1109,12 @@
       "id": "capability/vcr-analysis",
       "name": "vcr-analysis",
       "origin": "capability",
-      "version": "1.8.1",
+      "version": "1.8.2",
       "source": {"kind":"release"},
-      "digest": "sha256:bee69a5e38cd9573aec9678170e3fb64ab813933235ae44b8e285d73a4552d85",
+      "digest": "sha256:0198f43112afb9441c7704f3d5cc674b7f61c91afb359984b68e8b10905909ca",
       "digestAlgorithm": "release-directory-v1",
       "references": [
-        {"path":"capability.yaml","sha256":"a32d41d6eac7ed956e062d2e487e6a417c7fd85fc8535276fc4d682414a34181"},
+        {"path":"capability.yaml","sha256":"3cbb8ab92559f90d4890e549feb764e6ac9e6b67e2963821bf93a5250e642ac3"},
         {"path":"references/comparators.md","sha256":"22f9d015f99d1663eb9582f9d0317a676d892d1b4b8431769e4d7d8c275251a3"},
         {"path":"references/delivery.md","sha256":"14bf6198c8ba48f89c93787ac473178b175403ffab9f33542df74724bbf525fe"},
         {"path":"references/longitudinal.md","sha256":"241d2acf2d570afca6d25dc7b66d3f07c555afb8663e4acf4a00d095e0821695"},
@@ -1219,11 +1219,11 @@
       "id": "capability/vcr-matching",
       "name": "vcr-matching",
       "origin": "capability",
-      "version": "1.6.1",
+      "version": "1.6.2",
       "source": {"kind":"release"},
-      "digest": "sha256:bb97ac2186fedb146d7295205b28c860915dd869d7b8f472d35a0a0b124b8ef6",
+      "digest": "sha256:0aecc2680fbe9f864c3b469adb757a85205c253f76d6e89f5dcc57ac36c6a995",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"b3a93b127b610345ad6e6274070fc10f59eb0c919da2f979470d612f0c909acf"}],
+      "references": [{"path":"capability.yaml","sha256":"5c5dec100a3f7a0e0e6993ad4d157bdebbf185eecba3a7b8c2e7d5b800e3b31a"}],
       "dependencies": [
         {"kind":"platform-tool","name":"clinical_trial_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"dataset_semantics","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -1285,12 +1285,12 @@
       "id": "capability/vcr-protocol",
       "name": "vcr-protocol",
       "origin": "capability",
-      "version": "1.4.4",
+      "version": "1.4.5",
       "source": {"kind":"release"},
-      "digest": "sha256:56822fa11fd4246cee3188da91d2a8dcee728fabdf1342ebe5542de6f16fc47e",
+      "digest": "sha256:62f357d317e4e5dd1f6d908a228988b2d533caaeea48667567afe6cb0e133091",
       "digestAlgorithm": "release-directory-v1",
       "references": [
-        {"path":"capability.yaml","sha256":"45c8418396b36e032bb762eaff23f9b60be4da6e19b9cf549cb57f0cf8aa6ec6"},
+        {"path":"capability.yaml","sha256":"8d8a30b6afa56343c38e5e0e02f371e73081e57a2032bfbb3282dd9a7d093ad6"},
         {"path":"references/operating-contract.md","sha256":"9050a5c45846c08a7f5676eff012a31701677be24c586f8806802c314f08e6aa"}
       ],
       "dependencies": [
@@ -3556,7 +3556,7 @@
         "file": {"path":"LICENSE.scientific-agent-skills.md","sha256":"09b02a3c9df3053c55531d503357a9c7cde275970e6c3ceaa1ddf5f0e90b40c1"},
         "basis": "inventory"
       },
-      "digest": "sha256:d1b9881fd4328d6a4a0b002cdeba71ef73ae948f0daf4e0e5b652362257c3c71",
+      "digest": "sha256:a6a2ec637848b7115ec1af120a1e1e6187d66d4f15c6b21c5c627dc68e967d69",
       "digestAlgorithm": "release-directory-v1",
       "scripts": [
         {"path":"scripts/export_power_analysis.py","sha256":"786b71dd59ef56d9423bf38306f3ef23a766adef9a280108270fa9b99e0e8e32"},
@@ -3725,7 +3725,7 @@
       "origin": "evimed",
       "version": "2.0.0",
       "source": {"kind":"release"},
-      "digest": "sha256:f348064f35d90e8d000b95dc3a22ebc3814a5f3267545ad80c3934e9a4765a0f",
+      "digest": "sha256:db9e24e421453e98a622c999ef137ef3f729ecdd86bf18db0d26d0c582b8d25a",
       "digestAlgorithm": "release-directory-v1",
       "references": [{"path":"agent.yaml","sha256":"9cf3448279c8ac69470607431dc35379b451356046313c82e19f0659148d41b8"}]
     },
