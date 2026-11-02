@@ -338,13 +338,13 @@ TOOL_DEFINITIONS = [
                         "retired_service", "licensed_dataset",
                     ],
                 },
-                "limit": {"type": "integer", "minimum": 1, "maximum": 123},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 124},
             }
         ),
     },
     {
         "name": "biomedical_source_search",
-        "description": "Query one audited public biomedical source through a bounded, traceable connector. Results are metadata or selected public fields and require primary-record verification.",
+        "description": "Query one audited public biomedical source through a bounded, traceable connector; `prospero` is the register of planned and ongoing systematic reviews. Results are metadata or selected public fields and require primary-record verification.",
         "inputSchema": object_schema(
             {
                 "source": {"type": "string", "enum": list(public_sources.QUERYABLE_BIOMEDICAL_SOURCE_IDS)},
@@ -509,7 +509,7 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "literature_search",
-        "description": "Search the biomedical and scientific literature (PubMed and the other configured sources) through the EviMed evidence adapter. By default the answer leads with PubMed's Best Match records and adds the EviMed index's records that PubMed did not return (up to `limit` from each; an index record is compact — abstract cut to 800 characters, no AI summary); `databases` [\"pubmed\"] asks PubMed alone and [\"internal\"] asks the EviMed index alone with its full abstracts and AI summaries. Supply `relation` instead to retrieve the literature PubTator3 records a relation in — papers that assert the relation, not papers where both terms merely co-occur; get the concept identifiers from term_normalize. Supply `pmids` instead to fetch the abstracts, publication types and MeSH headings of PubMed records you have screened in (up to 60); each abstract is preserved and quotable, and past about 12,000 characters an item names its preserved file instead of carrying the text. Public results are bibliographic metadata unless abstract or full-text fields are explicitly present; never infer study design, evidence level, outcomes, or effect estimates from a title.",
+        "description": "Search the biomedical and scientific literature through the EviMed evidence adapter. The EviMed index reaches CNKI, Wanfang, VIP and SinoMed and some Embase-linked records; PubMed is searched directly. By default the answer leads with PubMed's Best Match records and adds the index's records that PubMed did not return (up to `limit` from each; an index record is compact — abstract cut to 800 characters, no AI summary), so leave `databases` out unless you mean to narrow it. `databases` [\"pubmed\"] asks PubMed alone and leaves all of those out; [\"internal\"] asks the index alone and is how to search the Chinese literature (add `language`: \"zh\" and Chinese words). The index ranks by meaning: each of its records says how many query words it holds (`queryTermsFound`), and few or unrelated results are not evidence of a gap. Supply `relation` instead to retrieve the literature PubTator3 records a relation in — papers that assert the relation, not papers where both terms merely co-occur; get the concept identifiers from term_normalize. Supply `pmids` instead to fetch the abstracts, publication types and MeSH headings of PubMed records you have screened in (up to 60); each abstract is preserved and quotable, and past about 12,000 characters an item names its preserved file instead of carrying the text. Public results are bibliographic metadata unless abstract or full-text fields are explicitly present; never infer study design, evidence level, outcomes, or effect estimates from a title.",
         "inputSchema": object_schema(
             {
                 "query": STRING,
@@ -526,7 +526,7 @@ TOOL_DEFINITIONS = [
                     ("subject",),
                 ),
                 "limit": EVIMED_SEARCH_LIMIT,
-                "offset": {"type": "integer", "minimum": 0, "maximum": 9999, "description": "PubMed route: results to skip. data.outcome says when more exist and what to pass."},
+                "offset": {"type": "integer", "minimum": 0, "maximum": 9999, "description": "Results to skip, in PubMed's list or, with databases [\"internal\"], in the index's first 100. data.outcome says when more exist and what to pass."},
                 "dateFrom": DATE,
                 "dateTo": DATE,
                 "articleTypes": {
@@ -536,7 +536,7 @@ TOOL_DEFINITIONS = [
                     "description": "EviMed's own study-type labels, e.g. 随机对照试验 for randomized controlled trials.",
                 },
                 "hasPdf": {"type": "boolean"},
-                "language": {"type": "string", "enum": ["zh", "en"]},
+                "language": {"type": "string", "enum": ["zh", "en"], "description": "EviMed index only: records whose title is in this language."},
                 "minImpactFactor": {"type": "number", "minimum": 0, "maximum": 10000},
                 "maxImpactFactor": {"type": "number", "minimum": 0, "maximum": 10000},
                 "journalTiers": {
@@ -548,8 +548,9 @@ TOOL_DEFINITIONS = [
                     "type": "array",
                     "maxItems": 8,
                     "items": {"type": "string", "enum": ["internal", "pubmed", "crossref"]},
-                    "description": "Default (omit it): PubMed first, then the EviMed index's extra records, compact. [\"pubmed\"]: PubMed only. [\"internal\"]: the EviMed index only, full abstracts and AI summaries. [\"crossref\"]: Crossref.",
+                    "description": "Default (omit it): PubMed first, then the EviMed index's extra records, compact. [\"pubmed\"]: PubMed only. [\"internal\"]: the EviMed index only (CNKI, Wanfang, VIP, SinoMed, some Embase-linked records), compact. [\"crossref\"]: Crossref.",
                 },
+                "fullRecords": {"type": "boolean", "description": "With databases [\"internal\"]: whole abstracts and AI summaries instead of compact records."},
             },
         ),
     },
@@ -654,13 +655,13 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "clinical_trial_search",
-        "description": "Search configured clinical-trial registries.",
+        "description": "Search one clinical-trial registry at a time: ClinicalTrials.gov unless `registry` says otherwise. A duplicate or existence check asks all three, because each holds trials the others do not. A registry asked by name answers for itself: no records means this registry matched nothing, and no other is asked in its place.",
         "inputSchema": object_schema(
             {
                 "query": STRING,
                 "recruitmentStatus": SHORT_STRING,
                 "limit": EVIMED_SEARCH_LIMIT,
-                "registry": {"type": "integer", "minimum": 0, "maximum": 2},
+                "registry": {"type": "integer", "minimum": 0, "maximum": 2, "description": "0 ChiCTR (Chinese words, one or two work best); 1 ClinicalTrials.gov (default); 2 Cochrane CENTRAL (English words; controlled-trial reports from PubMed, Embase and others)."},
                 "pageToken": {"type": "string", "maxLength": 200, "pattern": "^[A-Za-z0-9_-]+$", "description": "ClinicalTrials.gov continuation from data.outcome.next; same query."},
                 "startYear": YEAR,
                 "endYear": YEAR,
@@ -668,7 +669,7 @@ TOOL_DEFINITIONS = [
                 "phase": {"type": "array", "maxItems": 20, "items": SHORT_STRING},
                 "studyType": {"type": "array", "maxItems": 20, "items": SHORT_STRING},
                 "hasArticles": {"type": "array", "maxItems": 1, "items": {"type": "integer", "minimum": 0, "maximum": 1}},
-                "source": {"type": "string", "enum": ["PubMed", "Embase", "ICTRP", "CT.gov", "CINAHL"]},
+                "source": {"type": "string", "enum": ["PubMed", "Embase", "ICTRP", "CT.gov", "CINAHL"], "description": "registry 2 only: CENTRAL records that came from this database."},
                 "minSampleSize": {"type": "integer", "minimum": 0, "maximum": 10000000},
                 "maxSampleSize": {"type": "integer", "minimum": 0, "maximum": 10000000},
             },
@@ -1561,8 +1562,8 @@ def _public_adapter_call(name, arguments):
             _circuit_failure(circuit_name, circuit_url)
         return _public_source_failure(
             error,
-            "Stop after one retry if the public source remains unavailable.",
-            ["Retry once or configure the corresponding private EviMed adapter."],
+            "Stop after one retry if the public source remains unavailable." if error.retryable else "The source refused this request; asking again unchanged gets the same answer.",
+            ["Retry once, then go on without this source and say it was not searched." if error.retryable else "Change the request (shorter terms, fewer filters), or go on without this source and say it was not searched."],
         )
     _circuit_success(circuit_name)
     if not isinstance(body, dict):
@@ -1581,7 +1582,7 @@ def _public_adapter_call(name, arguments):
         return warning(
             body.get("summary") or "%s returned no evidence." % name,
             ["The public sources returned an empty evidence set."],
-            ["Broaden the query or configure a private EviMed adapter."],
+            ["Broaden the query; an empty answer is not evidence that nothing exists."],
             data=data if data is not None else {"items": []},
             sources=sources,
         )
