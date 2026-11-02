@@ -80,3 +80,43 @@ def test_invalid_date_boundary_fails_closed():
         assert "invalid" in str(error).lower() or "month" in str(error).lower()
     else:
         raise AssertionError("invalid PubMed date boundary was accepted")
+
+
+def test_mesh_lookup_reads_ncbi_full_text_and_prefers_descriptor(monkeypatch):
+    search = '''<?xml version="1.0"?><eSearchResult><Count>2</Count><IdList>
+    <Id>2028264</Id><Id>2027927</Id></IdList></eSearchResult>'''
+    action = '''\n1: Sodium-Glucose Transporter 2 Inhibitors [Pharmacological Action]\n\nTree Number(s): D000077203\ndapagliflozin (Supplementary Concept)\n'''
+    descriptor = '''\n1: Sodium-Glucose Transporter 2 Inhibitors\nCompounds that inhibit the transporter.\nYear introduced: 2019\n\nTree Number(s): D27.505.519.936, D27.505.696.422.750\nEntry Terms:\n    Sodium Glucose Transporter 2 Inhibitors\n    SGLT-2 Inhibitors\n    SGLT2 Inhibitor\n    Gliflozins\n\n    All MeSH Categories\n        Chemicals and Drugs Category\n'''
+
+    class Response:
+        def __init__(self, text): self.text = text
+        def raise_for_status(self): pass
+
+    def get(url, params, timeout):
+        if url.endswith('esearch.fcgi'):
+            return Response(search)
+        return Response({'2028264': action, '2027927': descriptor}[params['id']])
+
+    monkeypatch.setattr(search_strategy, '_rate_limit', lambda: None)
+    monkeypatch.setattr(search_strategy.requests, 'get', get)
+    result, failed = search_strategy.lookup_mesh('SGLT2 inhibitors')
+    assert not failed
+    assert result.descriptor_name == 'Sodium-Glucose Transporter 2 Inhibitors'
+    assert 'SGLT2 Inhibitor' in result.entry_terms
+    assert 'dapagliflozin' not in result.entry_terms
+    assert result.tree_numbers == ['D27.505.519.936', 'D27.505.696.422.750']
+
+
+def test_mesh_lookup_does_not_label_pharmacological_action_as_descriptor(monkeypatch):
+    search = '<eSearchResult><Count>1</Count><IdList><Id>1</Id></IdList></eSearchResult>'
+    action = '\n1: Example [Pharmacological Action]\n\nTree Number(s): D012345\nExample drug (Supplementary Concept)\n'
+
+    class Response:
+        def __init__(self, text): self.text = text
+        def raise_for_status(self): pass
+
+    monkeypatch.setattr(search_strategy, '_rate_limit', lambda: None)
+    monkeypatch.setattr(search_strategy.requests, 'get', lambda url, params, timeout: Response(search if url.endswith('esearch.fcgi') else action))
+    result, failed = search_strategy.lookup_mesh('Example')
+    assert result is None
+    assert not failed
