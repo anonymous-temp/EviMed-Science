@@ -369,7 +369,7 @@ test('score-heldout refuses a run that was never predicted, and never reaches fo
     await assert.rejects(scoreHeldout({ root: scratch, run: 'never-predicted' }), /FROZEN-2|Frozen files|No predictions/);
     await assert.rejects(scoreHeldout({ root: scratch, run: 'never-predicted', manifest: 3 }), /FROZEN-3|Frozen files|No predictions/);
     const names = { controlRun: 'c', secondRun: 's', previousRun: 'p', priorReplayRun: 'r', replayRun: 'y', literalRun: 'l' };
-    await assert.rejects(scoreHeldoutFourth({ root: scratch, run: 'never-predicted', ...names }), /FROZEN-4|Frozen files|No predictions/);
+    await assert.rejects(scoreHeldoutFourth({ root: scratch, run: 'never-predicted', ...names }), /FROZEN-4|Frozen files|No predictions|is not the run the fourth manifest names/);
     assert.equal(existsSync(path.join(scratch, 'sealed')), false);
   } finally {
     await rm(scratch, { recursive: true, force: true });

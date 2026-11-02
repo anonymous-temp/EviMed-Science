@@ -6,7 +6,8 @@ evaluator do on this data set, with the model that ships. It is not a release co
 
 Two measurements are reported. The first, on the official test split, came before the product fixes that its findings led to; the second,
 after them, ran on training patients that were held out from tuning and is **not** the official split (see "Second measurement"). The first
-measurement's numbers below are unchanged.
+measurement's numbers below are unchanged. Two further runs on the same held-out patients (the "Third run" and the "Fourth run") are regression
+checks on patients already seen, not estimates.
 
 The notes are not in this repository, are never printed, and nothing here quotes them: the files in this directory hold code,
 a unit test on made-up notes, and aggregate numbers. The data sit under the maintainer's `.evimed-local/acceptance/n2c2-2018-t1/`
@@ -261,6 +262,107 @@ My computation agrees with the scorer to four decimals.
 Limits of this run, besides those below: the same 162 patients as the second measurement; one fresh sample; the control and the second run are the earlier predictions, pinned by digest, not re-run; the replay
 is a re-reading, not an independent sample. Spend: CNY 1.28 for the fresh sample, none for the replay, CNY 12.98 for everything so far of the hard budget of 200.
 
+## Fourth run: after the record header dates a fact (a regression check, not a clean estimate)
+
+**This is a fourth run on the same 162 training patients, which the second and third runs had already scored.** The patients are not unseen: their
+results were read before the rule below was chosen, and the third run's weak window criteria are what chose it. It checks that the rule does what it
+should, and what it costs. It is not a clean estimate and it is not the official test split, which is not run again. The earlier results are untouched,
+and nothing was changed after this run whatever it showed.
+
+The rule (the owner's ruling of 2026-11-02, with the risk of dating a fact to the wrong record accepted): a patient fact with no date of its own takes the
+date of the record header above it. A header is a matter of format: the nearest preceding line that prints exactly one complete date with its year and
+little else (a label of at most 24 characters, a line of at most 80; of the 1,197 lines of the 202 training files that print exactly one date, 1,125 have
+24 characters or fewer besides it, and the lines with more are, all but one, five words or longer). The header line is the fact's second quotation, so the
+evaluator's literal check is unchanged and passes; `source.dateBasis` says `record_header`. The model no longer writes the record's date; it writes a date
+only where the note prints one for that fact, and marks a past event (`temporality: historical`, the domain's own word). For a past event the header date is
+only an upper bound (`source.dateBound: no_later_than`): a bound before the window's start is decisively outside, a bound inside it stays `undated`. The
+skill (1.6.1), the batch reading's prompt and the answer shape of this harness say so in a few lines; the stretches the prompt cuts out of the skill are cut
+by the same opening and closing words.
+
+How it was run: development first, on the forty development patients only (`dev-r8`: `dev-r6`'s answers through the new writer, no model call; `dev-r9`: a
+fresh sample with the new skill text, CNY 0.79); the prompt's form was not changed after `dev-r9`. `FROZEN-4.json` was committed before any held-out
+patient was predicted. It pins the control (the first pipeline), the second run, the third run and the third run's replay by the digest of their
+predictions. Three sets of predictions were made under it: **the second run's cached answers read again through the new writer** (no model call: what the code
+alone does to identical model answers), **one fresh model sample** with the new skill text (CNY 3.07), and **the same fresh answers scored with the
+past-event guard off** (no model call: the ruling taken literally, every fact at its header's date whatever the model said of it). One scoring
+(`score-heldout --manifest 4`); the baseline is still learnt from the forty development patients only.
+
+### The numbers
+
+95% intervals from the patient-level cluster bootstrap (2,000 resamples); changes are resampled on both sides together. "Right when decided" is derived.
+
+| | Third run | Second run's answers, new writer (code alone) | **Fourth run (fresh sample, guard on)** | Fourth run, literal ruling (guard off) | Majority baseline |
+|---|---|---|---|---|---|
+| Accuracy (a), `unknown` is wrong | 0.355 (0.331 to 0.379) | 0.398 (0.373 to 0.425) | **0.403 (0.377 to 0.430)** | 0.407 (0.381 to 0.434) | 0.766 (0.750 to 0.782) |
+| Unknown share | 0.615 (0.591 to 0.639) | 0.547 (0.520 to 0.575) | **0.538 (0.510 to 0.566)** | 0.526 (0.498 to 0.553) | 0.000 |
+| `undated` unknowns (pairs) | 146 | 0 | **26** | 0 | |
+| Right when decided | 0.921 | 0.880 | **0.873** | 0.859 | |
+| Accuracy (b), `unknown` is not met | 0.749 (0.735 to 0.762) | 0.757 (0.743 to 0.771) | **0.756 (0.741 to 0.772)** | 0.752 (0.737 to 0.768) | 0.766 (0.750 to 0.782) |
+| Accuracy (c) | 0.873 (0.860 to 0.886) | 0.883 (0.869 to 0.896) | **0.883 (0.869 to 0.897)** | 0.879 (0.865 to 0.894) | 0.766 |
+| Micro F1 (b), official scorer | 0.723 (0.706 to 0.738) | 0.737 (0.720 to 0.754) | **0.739 (0.721 to 0.756)** | 0.737 (0.719 to 0.755) | 0.759 (0.743 to 0.776) |
+| Micro F1 (c), official scorer | 0.869 (0.855 to 0.882) | 0.880 (0.866 to 0.895) | **0.881 (0.867 to 0.896)** | 0.877 (0.864 to 0.892) | 0.759 |
+| Macro F1 (b) | 0.630 (0.610 to 0.647) | 0.667 (0.642 to 0.689) | **0.653 (0.628 to 0.673)** | 0.661 (0.638 to 0.680) | 0.426 |
+| Not met read as met | 0.046 (0.035 to 0.059) | 0.070 (0.057 to 0.083) | **0.087 (0.072 to 0.103)** | 0.102 (0.087 to 0.118) | 0.155 (0.138 to 0.173) |
+| Met read as not met, explicit | 0.011 (0.004 to 0.018) | 0.034 (0.023 to 0.047) | **0.023 (0.015 to 0.033)** | 0.023 (0.015 to 0.033) | |
+| Facts kept / dated from a header / of those, an upper bound only | 1,539 / 0 / 0 | 1,589 / 1,551 / 0 | **1,762 / 1,762 / 343** | 1,762 / 1,762 / 0 | |
+
+Official scorer, fourth run: micro F1 0.7390 (b) and 0.8809 (c), macro 0.6532 (b); the literal ruling 0.7367 and 0.8774, macro 0.6606; the replay 0.7374 and 0.8802,
+macro 0.6671. My computation agrees with the scorer to four decimals.
+
+| Change | Fourth run minus third run | Code alone: new writer minus third run's writer, same answers | Guard on minus guard off, same answers |
+|---|---|---|---|
+| Strict accuracy (a) | +0.048 (+0.028 to +0.068) | +0.051 (+0.044 to +0.059) | -0.004 (-0.007 to -0.002) |
+| Accuracy (b) | +0.007 (-0.009 to +0.022) | +0.017 (+0.009 to +0.025) | +0.004 (-0.001 to +0.009) |
+| Accuracy (c) | +0.009 (-0.005 to +0.023) | +0.017 (+0.009 to +0.025) | +0.004 (-0.001 to +0.009) |
+| Unknown share | -0.077 (-0.099 to -0.054) | -0.071 (-0.080 to -0.063) | +0.012 (+0.008 to +0.017) |
+| Micro F1 (b) | +0.016 (-0.002 to +0.035) | +0.025 (+0.017 to +0.034) | +0.002 (-0.002 to +0.007) |
+| Micro F1 (c) | +0.012 (-0.003 to +0.026) | +0.019 (+0.011 to +0.027) | +0.004 (-0.001 to +0.008) |
+| Macro F1 (b) | +0.023 (-0.002 to +0.047) | +0.050 (+0.040 to +0.060) | -0.007 (-0.020 to +0.005) |
+| Not met read as met | +0.041 (+0.028 to +0.054) | +0.019 (+0.012 to +0.026) | -0.015 (-0.021 to -0.008) |
+
+The four criteria the ruling is about, with the pairs behind the error it can cause (gold-not-met pairs the pipeline called met; gold-met pairs it called not met). The columns are the third run, the second run's answers through the new writer (code alone), the fourth run, and the fourth run's answers under the literal ruling:
+
+| Criterion | Strict accuracy | Fourth minus third | Not met read as met (pairs) | Met read as not met (pairs) |
+|---|---|---|---|---|
+| MI-6MOS (13 met, 149 not) | 0.198 / 0.457 / **0.401** / 0.457 | +0.204 (+0.123 to +0.284) | 0 / 18 / **2** / 18 of 149 | 0 / 1 / **0** / 0 of 13 |
+| KETO-1YR (1 met, 161 not) | 0.012 / 0.025 / **0.025** / 0.025 | +0.012 (-0.012 to +0.037) | 0 / 2 / **1** / 2 of 161 | 0 / 0 / **0** / 0 of 1 |
+| DIETSUPP-2MOS (84 met, 78 not) | 0.012 / 0.420 / **0.432** / 0.432 | +0.420 (+0.346 to +0.494) | 0 / 2 / **1** / 1 of 78 | 1 / 19 / **16** / 16 of 84 |
+| HBA1C (56 met, 106 not; no window) | 0.432 / 0.426 / **0.451** / 0.451 | +0.018 (-0.018 to +0.056) | 0 / 1 / **2** / 2 of 106 | 3 / 4 / **2** / 2 of 56 |
+
+### What it shows
+
+- **The windows are decided now.** On the second run's own answers the writer leaves no `undated` unknown (it was 149 with the third run's writer); strict accuracy
+  moves +0.051 (+0.044 to +0.059), DIETSUPP-2MOS from 0.018 to 0.420 and MI-6MOS from 0.198 to 0.457. In the fresh sample DIETSUPP-2MOS is 0.432 against 0.012 and
+  MI-6MOS 0.401 against 0.198; the 146 pairs the third run left `undated` for lack of a date became verdicts (26 stay `undated`: a past event whose header date is inside the window).
+- **The error the ruling can cause is real, and the guard takes most of it back.** With the second run's answers (the model said nothing of past events) the header
+  puts an old myocardial infarction, mentioned in a note inside the six months, inside the window: 18 of 149 gold-not-met MI-6MOS patients read as met (0.121 (0.069 to
+  0.174), against 0 before). The same happens under the literal ruling on the fresh answers: 18 of 149. With the model marking past events (343 of the 1,762 facts) and
+  the guard, it is 2 of 149 (0.013 (0.000 to 0.034)). Pooled over the three window criteria the false "met" pairs are 22 (code alone), 21 (literal) and 4 (guard).
+- **What the guard costs and buys, on the same answers.** It turns 9 of the 12 correct MI-6MOS "met" decisions into unknowns (12 to 3), and so costs 9 of 2,106 pairs
+  of strict accuracy (-0.004 (-0.007 to -0.002), the only measure on which it is lower; MI-6MOS alone -0.056 (-0.093 to -0.025)); it removes 16 of the 18 false "met"
+  (not met read as met -0.015 (-0.021 to -0.008), MI-6MOS -0.107 (-0.158 to -0.060)); and under reading (b) and the micro F1 it is level or slightly ahead (+0.004 and
+  +0.002, intervals that include zero). It is not worse overall, so the guard stays and the literal ruling is not adopted. The strict score credits any decision whether or not
+  it is right, which is why it prefers the literal ruling by a hair.
+- **Not all of the rise in "not met read as met" is the ruling's.** Pooled it went from 0.046 to 0.087 (+0.041 (+0.028 to +0.054)), which is 54 pairs in the third run and 102 here. Of
+  those, the three window criteria hold 0 in the third run and 4 here; the other 98 (54 before) are in criteria with no window, identical with the guard on and off: ABDOMINAL 21 to 49 of
+  98, ADVANCED-CAD 4 to 9, ALCOHOL-ABUSE 5 to 9, MAJOR-DIABETES 9 to 11. No date can reach those criteria. The fresh sample wrote more facts under the new skill text (1,762 kept against
+  1,539). I did not test the cause (one sample per arm; the second run's answers give the same 60 for those criteria through either writer), but it is a change in what the model wrote under the
+  new text and the sample, not in the dates, and it deserves its own look.
+- **A fact in an older record is dated by that record.** DIETSUPP-2MOS reads 16 of 84 gold-met patients as not met (against 1 before): a supplement listed in a note older than two months before "now" is
+  dated by that note and read as outside the window, though the harness prompt tells the model to assume status carries forward until a later record changes it, and the date logic does not carry it forward.
+  Under reading (b) these pairs were wrong already (unknown read as not met), so (b) did not move; but `not_satisfied` is now a stated verdict where `unknown` was.
+- **Wrong-record risk, measured in the dataset's own terms** (a read of the fresh answers made after the scoring, `header_risk.mjs`; no gold, not in the frozen code). Every note opens each record with a
+  `Record date:` line, so the record a fact sits in is known. Of 1,762 facts dated by a header, 1,511 took that line; 251 took another short dated line, and for 202 of those it printed the same date. 49 facts (2.8%)
+  took a date other than their record's: 46 earlier, 3 later; the median distance is 24 days, but the tail is decades (the 90th percentile is 22,347 days): a short line that prints a date of birth is
+  indistinguishable by format from a record header. This is the risk the owner accepted; it is small here because every record has a header of its own.
+- **HBA1C, which has no window, did not move** beyond what one sample moves it (+0.018 (-0.018 to +0.056)); the standing comparison with the majority baseline is unchanged under (b)
+  (0.756 accuracy and 0.7390 micro F1 against 0.766 and 0.7595: still below it) and above it under (c), with the same caveat as before.
+
+Limits of this run, besides those below: the same 162 patients as the second and third runs; one fresh sample, with a changed skill text, so its difference from the third run mixes the text, the writer and the
+model's run-to-run variation (the replay isolates the writer and the literal run isolates the guard, each on identical answers, and neither includes the model); the control, second and third runs and the
+third run's replay are the earlier predictions, pinned by digest, not re-run; 5 of 162 answers were unreadable JSON (the third run: 2). Spend: CNY 0.79 for the development sample, CNY 3.07 for the fresh sample,
+none for the replays: CNY 3.86 of this stream's budget of 30; CNY 16.83 of the hard budget of 200 so far.
+
 ## What was measured
 
 For each patient, one DeepSeek call (`deepseek-v4-flash`, temperature 0, JSON output, thinking off; the API served it as `deepseek-flash`) reads the whole
@@ -354,6 +456,13 @@ node evals/vcr-matching/n2c2/run_n2c2.mjs freeze --manifest 3 --dev-run <name> -
 node evals/vcr-matching/n2c2/run_n2c2.mjs predict --split heldout --manifest 3 --run <name>                       # a fresh model sample
 node evals/vcr-matching/n2c2/run_n2c2.mjs predict --split heldout --manifest 3 --run <replay> --reuse-run <second>  # the second run's answers, no model call
 node evals/vcr-matching/n2c2/run_n2c2.mjs score-heldout --manifest 3 --run <name> --control-run <name> --previous-run <name> --replay-run <replay>
+# the fourth run: the record header dates a fact (the run names are fixed in the manifest before anything is predicted)
+node evals/vcr-matching/n2c2/run_n2c2.mjs freeze --manifest 4 --dev-run <name> --rounds <n> --control-run <name> --second-run <name> --previous-run <name> --prior-replay-run <name> --fresh-run <name> --replay-run <name> --literal-run <name>
+node evals/vcr-matching/n2c2/run_n2c2.mjs predict --split heldout --manifest 4 --run <replay> --reuse-run <second>                  # the second run's answers through the new writer, no model call
+node evals/vcr-matching/n2c2/run_n2c2.mjs predict --split heldout --manifest 4 --run <fresh> --budget-cny <N>                       # a fresh model sample (--budget-cny: the most this call may add to the ledger)
+node evals/vcr-matching/n2c2/run_n2c2.mjs predict --split heldout --manifest 4 --run <literal> --reuse-run <fresh> --no-past-guard    # the same answers under the literal ruling, no model call
+node evals/vcr-matching/n2c2/run_n2c2.mjs score-heldout --manifest 4 --run <fresh> --control-run <name> --second-run <name> --previous-run <name> --prior-replay-run <name> --replay-run <replay> --literal-run <literal>
+node evals/vcr-matching/n2c2/header_risk.mjs --run <fresh> --split heldout                                                         # after the scoring: how often the header is not the dataset's own record line
 ```
 
 The tests also run with the server's (`apps/server/test/vcrN2c2Eval.test.mjs`); the data-dependent ones skip when the data is absent.
