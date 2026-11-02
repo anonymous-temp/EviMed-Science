@@ -181,7 +181,7 @@ export {
   zipEntryNames,
 } from './src/fileDeliverable.mjs'
 
-// workspaceLayout — 25 exports
+// workspaceLayout — 29 exports
 export {
   BRIEF_DIR,
   KNOWLEDGE_DIR,
@@ -194,13 +194,17 @@ export {
   RUN_PROTOCOL_SKEW_OPENING,
   RUN_STATE_DIR,
   RUN_TIME_BUDGET_MINUTES,
+  PLATFORM_ROOT_DIRECTORIES,
+  SCRATCH_DIRECTORIES,
   SOURCES_DIR,
   deliverableDir,
   deliverableIdOfPath,
   deliverablePath,
   isGateImplementationPath,
+  isOrdinaryOutputDirectory,
   isProtectedWritePath,
   normalizeWorkspacePath,
+  ordinaryOutputPath,
   briefFileForSession,
   deliverySummaryFileFor,
   planFileFor,
