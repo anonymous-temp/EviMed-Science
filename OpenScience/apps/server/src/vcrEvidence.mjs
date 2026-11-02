@@ -315,7 +315,8 @@ export function numberIsInQuote(quote, value, { unit = "" } = {}) {
   if (target === null) return false;
   const percent = /%|percent|百分/i.test(String(unit ?? ""));
   const candidates = percent ? [target, target * 100, target / 100] : [target];
-  const text = String(quote ?? "").replace(/\[\d+\]/g, "");
+  // The Lancet family prints a decimal point as a raised dot (「15·2 months」, 「0·62」): between two digits it is the point of the same number.
+  const text = String(quote ?? "").replace(/\[\d+\]/g, "").replace(/(?<=\d)[·⋅∙](?=\d)/g, ".");
   for (const match of text.matchAll(NUMBER_TOKEN)) {
     const token = match[0].replace(/,/g, "");
     const parsed = Number(token);
