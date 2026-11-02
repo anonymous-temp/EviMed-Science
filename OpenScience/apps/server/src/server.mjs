@@ -206,6 +206,9 @@ import { createNativeMemorySource } from "./memoryMapSources/nativeMemory.mjs";
 import { createNativeRecordLinks } from "./memoryMapSources/recordLinks.mjs";
 import { createTopicsSource } from "./memoryMapSources/topics.mjs";
 import { AgentApiKeyStore } from "./agentApiKeys.mjs";
+import { DataAnalysisService, createDataAnalysisSession, assertNotDataAnalysisProject, isDataAnalysisProject } from "./dataAnalysisService.mjs";
+import { createDataAnalysisDispatchLock } from "./dataAnalysisAdmission.mjs";
+import { createDataAnalysisRoutes } from "./dataAnalysisRoutes.mjs";
 import { createAgentMemoryRoutes } from "./agentMemoryRoutes.mjs";
 import { createAgentKeyRoutes } from "./agentKeyRoutes.mjs";
 import { deleteSubjectAccounts } from "./agentApiKeys.mjs";
@@ -2645,7 +2648,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
    * keeps it. Counted against the account's project limit before the create.
    * @param {any} user @param {{ id?: unknown, name?: unknown }} body
    */
-  async function createResearcherProject(user, body) {
+  async function createResearcherProject(user, body, analysisOwned = false) {
     const existing = (await store.listProjects(user)).filter((project) => !internalFor(user.id, project.id));
     if (body.id == null && body.name == null) throw new HttpError(400, "invalid_payload", "A project needs a name.");
     const id = body.id == null
@@ -2656,7 +2659,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // self-measurement shapes (`acceptance-*`, `audit-*`, `eval-method-*`): the paired evaluation makes
     // its own through this very route, and they are internal only for an operator (`isInternalProjectOf`);
     // for everyone else, the throwaway accounts of the acceptance drivers included, they are ordinary projects.
-    if (isReservedProjectId(id)) {
+    if (isReservedProjectId(id) && !(analysisOwned && isDataAnalysisProject(id))) {
       throw new HttpError(409, "project_id_reserved", "This project id is reserved for the platform's own work.");
     }
     // 「循证进化」's own projects are named, not detected: the id is what puts
@@ -4279,6 +4282,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
    *   verification: ReturnType<typeof createEvidenceSourceVerification> } | null} */
   let evidencePublish = null;
   agentRuns = new AgentRunStore(researchSessions, {
+    authorizeReservation: (project, input) => {
+      if (!isDataAnalysisProject(project)) return;
+      if (!dataAnalysisService) throw new HttpError(503, "product_state_unavailable", "Analysis admission is unavailable.");
+      return dataAnalysisService.authorizeReservation(project, input);
+    },
     promptStops:new RuntimePromptStops({database:productDatabase}),
     withPromptAdmission:(project,sessionId,operation)=>withSessionPromptAdmission(runtimeManager,project,sessionId,operation),
     nativeInputs: geoNativeInputs,
@@ -6694,6 +6702,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   }
 
   async function assertPublicSessionPrompt(project, sessionId, knownBinding = undefined) {
+    assertNotDataAnalysisProject(project);
     const binding = knownBinding ?? await researchSessions.get(project, sessionId);
     if (binding?.mode === "specialist") await assertPublicAgent(binding.agentId);
   }
@@ -6760,12 +6769,15 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       await researchSessions.put(project, sessionId, { mode: "open-domain" });
     }
     // Only an attended human dispatch can teach from the previous turn.
-    if (!options.nativeContinuation && !options.dispatchFingerprint) readDispatchedTurn(project, { sessionId, dispatchId, text });
+    if (!options.nativeContinuation && !options.automated && !options.dispatchFingerprint) readDispatchedTurn(project, { sessionId, dispatchId, text });
     const registry = await agentRegistry;
     const originalAgentId=options.continuationRoute?.effectiveAgentId ?? OPEN_DOMAIN_ANSWER_AGENT_ID;
     const originalAgent=registry.get(originalAgentId);
     if(options.nativeContinuation && !originalAgent) throw new HttpError(404,'vcr_completion_origin_unavailable','The original research capability version is unavailable.');
-    const route = options.nativeContinuation ? { effectiveAgentId:originalAgentId,
+    const explicitAgent = options.capabilityId ? registry.get(options.capabilityId) : null;
+    if (options.capabilityId && !explicitAgent) throw new HttpError(503, "analysis_capability_unavailable", "The analysis capability is unavailable.");
+    const route = explicitAgent ? { effectiveAgentId: explicitAgent.id, effectiveAgentVersion: explicitAgent.version,
+      effectiveRuntimeAgent: explicitAgent.runtimeAgent, effectiveRouteReason: "data-analysis-api", estimatedMinutes: undefined } : options.nativeContinuation ? { effectiveAgentId:originalAgentId,
       effectiveAgentVersion:originalAgent.version, effectiveRuntimeAgent:originalAgent.runtimeAgent,
       effectiveRouteReason:'vcr-job-completion', estimatedMinutes:undefined } : await routeAdoptedInput(project,sessionId,text);
     // The same allowance question the page's own dispatch asks (§9.6), after
@@ -6783,7 +6795,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       ...(options.dispatchFingerprint ? { dispatchFingerprint: options.dispatchFingerprint } : { waitForRoom: true }),
       ...(route.estimatedMinutes ? { estimatedMinutes: route.estimatedMinutes } : {}),
       question: options.originalQuestion ?? text,
-      ...(options.nativeContinuation ? { automated: true,routedOverBinding:true } : {}),
+      ...(options.nativeContinuation ? { automated: true,routedOverBinding:true } : options.automated ? { automated: true } : {}),
       effectiveAgentId: route.effectiveAgentId ?? null,
       effectiveAgentVersion: route.effectiveAgentVersion ?? null,
       effectiveRuntimeAgent: route.effectiveRuntimeAgent ?? null,
@@ -6800,7 +6812,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         let resident;
         try {
           // A question that arrived through a messaging channel is one a person asked and waits for.
-          resident = await residentProfiles.forDispatch(user.id, { projectId: project.id, sessionId: session.sessionId, attended: !options.nativeContinuation });
+          resident = await residentProfiles.forDispatch(user.id, { projectId: project.id, sessionId: session.sessionId, attended: !options.nativeContinuation && !options.unattended });
         } catch (error) {
           throw memoryRecallRejection(error);
         }
@@ -6813,7 +6825,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           resident,
           specialists: routableAgents,
           // A person sent this from their channel and reads the reply there.
-          attended: !options.nativeContinuation,
+          attended: !options.nativeContinuation && !options.unattended,
           routedSpecialist: routed
             ? { agentId: routed.id, agentVersion: routed.version, runtimeAgent: routed.runtimeAgent,
               skill: routed.skill, companionSkills: routed.companionSkills }
@@ -6848,7 +6860,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           requestId: dispatchedRun.kernelRequestIds?.at(-1),
           strictContext: true,
           // Calculation completion resumes unattended; a person's channel message remains attended.
-          unattended: options.nativeContinuation === true,
+          unattended: options.nativeContinuation === true || options.unattended === true,
         });
         await resident.delivered();
       } catch (error) {
@@ -6922,6 +6934,18 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // isolated: a warm start is a head start, never a precondition.
     });
   }
+
+  const dataAnalysisService = productDocuments ? new DataAnalysisService({
+    config, documents: productDocuments, store,
+    withDispatchLock: createDataAnalysisDispatchLock(config),
+    createProject: (user, body) => createResearcherProject(user, body, true),
+    upload: (user, project, rel, buffer) => writeProjectUpload({ user, project, config }, { root: "workspace", rel, buffer, register: false }),
+    createSession: project => createDataAnalysisSession(project, { registry: agentRegistry, runtime: runtimeManager, sessions: researchSessions }),
+    dispatch: dispatchChannelRun,
+    listRuns: project => agentRuns.list(project),
+    cancel: stopRunForUser,
+  }) : null;
+  const dataAnalysisRoutes = createDataAnalysisRoutes({ config, apiKeys: agentApiKeys, store, service: dataAnalysisService, mutation: maintenanceMutation });
 
   async function context(req, res) {
     const user = await store.ensureUser(req, res);
@@ -7090,6 +7114,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // while the gate itself would refuse every external agent with
       // "Authentication required" for want of a session it was never going to
       // have.
+      if (await dataAnalysisRoutes(req, res)) return;
       if (await agentMemoryRoutes(req, res)) return;
       // The public evidence feed carries no session either: what it lists is what the platform published to be read.
       if (await evidenceFeedRoutes(req, res)) return;
@@ -8436,6 +8461,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         const [rawProjectId, action, ...extra] = pathname.slice("/api/projects/".length).split("/");
         if (!rawProjectId || extra.length > 0) throw new HttpError(404, "not_found", "Route not found.");
         const projectId = decodeRouteComponent(rawProjectId, "project id");
+        assertNotDataAnalysisProject(projectId);
         // Renamed by its name only (C4); the id is a path and does not move.
         if (!action && req.method === "PATCH") {
           const user = await store.ensureUser(req, res);
