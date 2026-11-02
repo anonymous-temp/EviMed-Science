@@ -33,7 +33,7 @@ DOMAINS = ("medcalc", "arb-deep", "arb-wide", "bixbench", "mbc", "drb", "rcb")
 # Always-on text of a probe: the design's experimental ceiling (docs: evals section 14), counted on guidance.md alone.
 ALWAYS_ON_MAX = 4000
 
-BALANCE_FLOOR_CNY = 500.0
+BALANCE_FLOOR_CNY = float(os.environ.get("RSI_BALANCE_FLOOR_CNY", "500"))
 BALANCE_MIN_INTERVAL_S = 60
 ROUND_CAP_CNY = 800.0
 
