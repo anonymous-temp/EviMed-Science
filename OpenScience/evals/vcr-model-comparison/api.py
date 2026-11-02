@@ -8,6 +8,7 @@ from __future__ import annotations
 import fcntl
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -18,6 +19,11 @@ import urllib.request
 ENDPOINTS = {"deepseek": "https://api.deepseek.com/chat/completions",
              "typesafe": "https://api.typesafe.ai/v1/systemone",
              "dashscope": "https://dashscope.aliyuncs.com/compatible-api/v1/reranks"}
+
+# Evaluation reference prices, CNY per million tokens. Mirrored from the
+# platform's metering table for the frozen Flash/Pro comparison, 2026-11-02.
+DEEPSEEK_RATES = {"deepseek-v4-flash": (.04, 2, 8),
+                  "deepseek-v4-pro": (.3, 9, 27)}
 
 
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -70,6 +76,8 @@ class ProviderClient:
             raise ValueError("Unsafe receipt label")
         if payload.get("model") != model:
             raise ValueError("The requested model must match the payload")
+        if provider == "deepseek" and model not in DEEPSEEK_RATES:
+            raise ValueError("No frozen price for this DeepSeek model")
         cfg = self.config.get(provider, {})
         endpoint = cfg.get("endpoint", "")
         if endpoint != ENDPOINTS.get(provider):
@@ -90,7 +98,8 @@ class ProviderClient:
             data = json.dumps(payload, ensure_ascii=False).encode()
             # A conservative UTF-8-byte token bound, including all output allowance.
             if provider == "deepseek":
-                reserve = ((len(data) + 1000) * 2 + int(payload.get("max_tokens", 0)) * 8) / 1e6
+                _, miss_rate, output_rate = DEEPSEEK_RATES[model]
+                reserve = ((len(data) + 1000) * miss_rate + int(payload.get("max_tokens", 0)) * output_rate) / 1e6
             elif provider == "typesafe":
                 reserve = (len(data) + 1000) * .042 / 1e6
             else:
@@ -108,7 +117,14 @@ class ProviderClient:
                     raise ValueError("A prior attempt has no terminal receipt; its outcome and billing are uncertain")
                 if len(selected) >= cfg.get("max_calls", 4000):
                     raise ValueError("Provider call ceiling reached")
-                bound = sum(r["reservation"] for r in selected)
+                # A terminal usage receipt replaces its reservation; an
+                # in-flight, failed or orphaned attempt retains the full bound.
+                bound = 0
+                for row in selected:
+                    terminal = self.out_dir / (row["label"] + ".json")
+                    settled = json.loads(terminal.read_text()) if terminal.exists() else None
+                    cost = settled.get("cost") if isinstance(settled, dict) else None
+                    bound += cost if type(cost) in (int, float) and math.isfinite(cost) and cost >= 0 else row["reservation"]
                 if currency != "UNPRICED" and bound + reserve > cfg.get("budget", 30 if provider == "deepseek" else 2):
                     raise ValueError("Conservative provider budget reached")
                 ledger.write(json.dumps({"label": label, "provider": provider, "currency": currency,
@@ -138,10 +154,15 @@ class ProviderClient:
                 result["body"] = body
                 usage = body.get("usage", {})
                 result["usage"] = usage
-                if provider == "deepseek" and "prompt_tokens" in usage:
-                    hit = usage.get("prompt_cache_hit_tokens", 0)
-                    miss = usage.get("prompt_cache_miss_tokens", usage["prompt_tokens"] - hit)
-                    result["cost"] = (hit * .04 + miss * 2 + usage.get("completion_tokens", 0) * 8) / 1e6
+                if provider == "deepseek":
+                    integer = lambda x: type(x) is int and x >= 0
+                    prompt, completion = usage.get("prompt_tokens"), usage.get("completion_tokens")
+                    hit, miss = usage.get("prompt_cache_hit_tokens",0), usage.get("prompt_cache_miss_tokens",prompt)
+                    cache_present = [key in usage for key in ("prompt_cache_hit_tokens","prompt_cache_miss_tokens")]
+                    complete = integer(prompt) and integer(completion) and integer(hit) and integer(miss) and hit+miss==prompt and cache_present[0]==cache_present[1]
+                    hit_rate, miss_rate, output_rate = DEEPSEEK_RATES[model]
+                    if complete:
+                        result["cost"] = (hit * hit_rate + miss * miss_rate + completion * output_rate) / 1e6
                 if provider == "typesafe" and "input_tokens" in usage:
                     result["cost"] = usage["input_tokens"] * .042 / 1e6
                 if provider == "dashscope":
@@ -159,5 +180,7 @@ class ProviderClient:
             result["elapsed_s"] = time.monotonic() - started
             if result["error"]:
                 result["billing"] = "unknown unless provider usage was returned"
+            elif result['cost'] is None:
+                result['billing'] = 'unknown: complete valid provider usage was not returned'
             write_json(receipt_path, result)
             return result

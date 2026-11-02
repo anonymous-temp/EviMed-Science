@@ -264,11 +264,11 @@ test("C2-18 AC-15 the three clocks are distinct: occurred and recorded do not ad
 
 // --------------------------------------------------------------- C2-19
 
-test("C2-19 近 6 个月无心梗: denial, an event inside the window and an event outside it read met / not met / met", () => {
+test("C2-19 近 6 个月无心梗: unscoped denial and an old event stay unknown; an event inside the window fails absence", () => {
   const rows = [
-    ["否认心梗史。", "否认心梗史", "negated", null, SATISFIED],
+    ["否认心梗史。", "否认心梗史", "negated", null, UNKNOWN],
     ["2026-06-28 因急性心梗入院。", "2026-06-28 因急性心梗入院", "affirmed", "2026-06-28T00:00:00Z", NOT_SATISFIED],
-    ["2026-02-20 因急性心梗入院。", "2026-02-20 因急性心梗入院", "affirmed", "2026-02-20T00:00:00Z", SATISFIED],
+    ["2026-02-20 因急性心梗入院。", "2026-02-20 因急性心梗入院", "affirmed", "2026-02-20T00:00:00Z", UNKNOWN],
   ];
   for (const [text, surface, polarity, occurredAt, expected] of rows) {
     const source = chart(text);
@@ -279,7 +279,7 @@ test("C2-19 近 6 个月无心梗: denial, an event inside the window and an eve
     });
     assert.equal(judged.state, expected, `${surface} → ${expected}`);
     assert.equal(judged.decidedBy, "code");
-    assert.ok(judged.evidence.length >= 1, "a decided criterion cites the sentence it was decided from");
+    if (expected !== UNKNOWN) assert.ok(judged.evidence.length >= 1, "a decided criterion cites the sentence it was decided from");
   }
   // And the fourth reading, which is the one the other three exist to contrast:
   // the chart says nothing about the heart at all.
@@ -517,10 +517,13 @@ test("AC-14 a full assessment keeps the gaps, the void facts and the blocking ex
   ];
   const assessment = assessSubject({ studyId: "std-1", subjectKey: "S5", criteria, facts, documents: source.documents, asOf: AS_OF });
   assert.equal(assessment.summary, "insufficient_evidence");
-  assert.deepEqual(assessment.counts, { satisfied: 2, not_satisfied: 0, unknown: 1, pending_recheck: 0, notApplicable: 0, total: 3 });
+  assert.deepEqual(assessment.counts, { satisfied: 1, not_satisfied: 0, unknown: 2, pending_recheck: 0, notApplicable: 0, total: 3 });
   assert.deepEqual(assessment.voidedFacts, [{ factId: "creat", variable: "creatinine", reason: "value_not_in_span" }]);
-  assert.deepEqual(assessment.evidenceGaps, [{ variable: "docetaxel", reason: "not_recorded", criterionIds: ["crt-washout"] }]);
-  assert.deepEqual(assessment.blockingExclusionUnknowns, ["crt-washout"]);
+  assert.deepEqual(assessment.evidenceGaps, [
+    { variable: "myocardial_infarction", reason: "not_recorded", criterionIds: [CRITERION_MI.id] },
+    { variable: "docetaxel", reason: "not_recorded", criterionIds: ["crt-washout"] },
+  ]);
+  assert.deepEqual(assessment.blockingExclusionUnknowns, [CRITERION_MI.id, "crt-washout"]);
   assert.equal(assessment.asOf, "2026-09-28T00:00:00.000Z");
 
   // The structured companion the deliverable ships passes the domain contract.
@@ -662,17 +665,20 @@ test("C2-20 AC-36 the shipped evaluation set runs end to end and its numbers are
   const report = runMatchingEvaluation(dataset);
   assert.equal(report.synthetic, true);
   assert.equal(report.criterion.counted, 42);
-  // One real error of each direction that this set was built to contain, and
-  // no fabricated satisfaction at all.
+  // Preserve the fixture's original labels. Its old event and unscoped denials
+  // do not establish a clear lookback window, adding six positive/unknown pairs.
   assert.equal(report.criterion.satisfiedReadAsNotSatisfied, 1, "the model read hearing loss as incapacity");
   assert.equal(report.criterion.unknownReadAsSatisfied, 0, "nothing was rounded up to 满足");
   assert.equal(report.criterion.matrix[NOT_SATISFIED][UNKNOWN], 1, "the voided creatinine is safe but still wrong");
-  assert.equal(report.criterion.agreement, 40 / 42);
+  assert.equal(report.criterion.matrix[SATISFIED][UNKNOWN], 6, "old events and unscoped denials leave the window unknown");
+  assert.equal(report.criterion.agreement, 34 / 42);
   assert.equal(report.subject.subjects, 7);
   assert.equal(report.subject.goldEligible, 3);
-  assert.equal(report.subject.eligibleRecall, 2 / 3);
+  assert.equal(report.subject.eligibleRecall, 0);
   assert.equal(report.subject.falseExclusionRate, 1 / 3);
-  assert.equal(report.subject.positivePredictiveValue, 1);
+  assert.equal(report.subject.missedEligibleIncludingUnknown, 3);
+  assert.equal(report.subject.unknownEligibleRate, 2 / 3);
+  assert.equal(report.subject.positivePredictiveValue, null);
   assert.equal(report.applicability.agreedNotApplicable, 4);
   assert.equal(report.ceiling.pairs, 42);
   assert.equal(report.ceiling.agreement, 39 / 42);
@@ -683,8 +689,8 @@ test("C2-20 the evaluation runs the production evaluator, so a fixture case is r
   const file = path.join(repoRoot, "evals", "vcr-matching", "matching-eval-sample.json");
   const dataset = JSON.parse(await readFile(file, "utf8"));
   const expected = {
-    S1: "eligible", S2: "ineligible", S3: "insufficient_evidence", S4: "pending",
-    S5: "insufficient_evidence", S6: "eligible", S7: "ineligible",
+    S1: "insufficient_evidence", S2: "ineligible", S3: "insufficient_evidence", S4: "insufficient_evidence",
+    S5: "insufficient_evidence", S6: "insufficient_evidence", S7: "ineligible",
   };
   for (const item of dataset.cases) {
     const assessment = assessSubject({
@@ -721,6 +727,9 @@ test("C2-20 the difference between two evaluation runs is reported and never gat
   assert.equal(diff.numberNeededToScreen.change, null, "a missing number is null, not zero");
   assert.equal(diff.gated, false);
   assert.match(diff.note, /不门控/);
+  const changedDefinition = matchingReportDiff({ subject: { falseExclusionRate: 0.4 } }, { subject: { metricVersion: 2, falseExclusionRate: 0.2 } });
+  assert.equal(changedDefinition.falseExclusionRate.change, null, 'legacy and corrected exclusion rates have different definitions');
+  assert.equal(changedDefinition.falseExclusionRate.definitionChanged, true);
 });
 
 test("an assessment carries which model and prompt produced its language judgments", () => {
@@ -1000,7 +1009,7 @@ test('a current medication denial does not establish absence throughout a lookba
   assert.equal(evaluate(scoped),SATISFIED);
   assert.equal(evaluate({...scoped,occurredInterval:{start:'2026-09-10',end:'2026-10-09'}}),UNKNOWN);
   assert.equal(evaluate({...scoped,occurredInterval:{start:'2026-09-09',end:'2026-10-08'}}),UNKNOWN);
-  assert.equal(evaluateCriterion(criterion,{facts:[{...fact,clinical:null}],asOf}).state,SATISFIED);
+  assert.equal(evaluateCriterion(criterion,{facts:[{...fact,clinical:null}],asOf}).state,UNKNOWN);
 });
 
 

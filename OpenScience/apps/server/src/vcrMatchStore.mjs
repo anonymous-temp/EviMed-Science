@@ -33,6 +33,22 @@ import { carryScheduleForward } from "./vcrSchedule.mjs";
 const factId = () => `fac_${randomUUID().replace(/-/g, "").slice(0, 22)}`;
 
 /**
+ * Bind calendar dates as UTC midnight, like the evaluator, never as the database session's midnight.
+ * A timestamp must name its zone; check its calendar day separately because Date.parse rolls February 30 forward.
+ * @param {unknown} value @param {string} field @returns {string | null}
+ */
+function factTimestamp(value, field) {
+  if (value == null) return null;
+  const shape = typeof value === "string" && /^(\d{4}-\d{2}-\d{2})(?:T(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d(?:\.\d{1,3})?)?(?:Z|[+-](?:[01]\d|2[0-3]):[0-5]\d))?$/.exec(value);
+  const day = shape ? Date.parse(`${shape[1]}T00:00:00.000Z`) : NaN;
+  const timestamp = shape ? Date.parse(value) : NaN;
+  if (!shape || shape[1].startsWith("0000-") || !Number.isFinite(day) || new Date(day).toISOString().slice(0, 10) !== shape[1] || !Number.isFinite(timestamp)) {
+    throw new HttpError(400, "vcr_payload_invalid", `${field} must be a valid ISO calendar date or a timestamp with an explicit timezone.`);
+  }
+  return new Date(timestamp).toISOString();
+}
+
+/**
  * The outcomes recorded by every batch of one candidate denominator (the batches whose manifests differ only by offset), oldest
  * first: one equality on the stored digest, through the study-and-digest index (vcr_matching_inputs_digest_idx), and no manifest is read.
  */
@@ -642,6 +658,10 @@ export class VcrMatchStore extends VcrStoreBase {
    */
   async saveFact({ studyId, userId, fact }) {
     if (clinicalFactIssues(fact.clinical).length) throw new HttpError(400, 'vcr_clinical_fact_invalid', 'Clinical metadata is invalid.');
+    const occurredAt = factTimestamp(fact.occurredAt, "occurredAt");
+    const recordedAt = factTimestamp(fact.recordedAt, "recordedAt");
+    const visibleAt = factTimestamp(fact.visibleAt, "visibleAt");
+    // Keep the raw-input key: normalizing identity would duplicate previously stored readings on replay.
     const key = createHash("sha256").update(JSON.stringify([
       fact.subjectKey, fact.variable, fact.polarity, fact.value ?? null, fact.unit ?? null,
       fact.source?.documentId ?? null, fact.source?.start ?? null, fact.source?.end ?? null, fact.occurredAt ?? null, fact.source?.vocabularyVersion ?? null, ...(fact.clinical ? [fact.clinical] : []),
@@ -654,7 +674,7 @@ export class VcrMatchStore extends VcrStoreBase {
          VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, $11, $12, $13, $14, $15::jsonb, $16, $17::jsonb, $18::jsonb)
          ON CONFLICT (study_id, fact_key) DO UPDATE SET fact_key = EXCLUDED.fact_key RETURNING *, (xmax = 0) AS inserted`,
         [factId(), studyId, userId, fact.subjectKey, key, fact.variable, JSON.stringify(fact.value ?? null), fact.unit ?? null,
-          clinicalFactPolarity(fact), fact.occurredAt ?? null, fact.recordedAt ?? null, fact.visibleAt,
+          clinicalFactPolarity(fact), occurredAt, recordedAt, visibleAt,
           String(fact.surface ?? ""), fact.dateSurface ?? null, fact.source ? JSON.stringify(fact.source) : null, fact.extractedBy ?? "model",
           fact.provenance ? JSON.stringify(fact.provenance) : null, fact.clinical ? JSON.stringify(fact.clinical) : null]);
       const row = inserted.rows[0];

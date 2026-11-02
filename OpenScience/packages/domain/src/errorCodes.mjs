@@ -1642,7 +1642,7 @@ export const VCR_MODULE_ERROR_CODES = Object.freeze([
   'vcr_precedent_not_in_study', 'vcr_protocol_version_not_found',
   'vcr_assessment_save_failed', 'vcr_evaluation_failed', 'vcr_recheck_failed', 'vcr_parsed_criteria_unreadable', 'vcr_parsed_criteria_unsaved',
   // the batch reading of patient records (vcrMatchBatch.mjs) and the short record of a result (vcrResultRecord.mjs)
-  'vcr_extract_failed', 'vcr_extract_incomplete', 'vcr_extract_timeout', 'vcr_extract_unreadable', 'vcr_result_not_found',
+  'vcr_extract_failed', 'vcr_extract_incomplete', 'vcr_extract_timeout', 'vcr_extract_unreadable', 'vcr_extract_context_too_large', 'vcr_extract_questions_invalid', 'vcr_extract_replan_required', 'vcr_result_not_found',
   // jobs, derived tables and the orchestrator's step notes
   'vcr_derived_table_missing', 'vcr_population_profile_missing', 'vcr_derived_table_unsupported', 'vcr_engine_table_invalid', 'vcr_job_attempts_exhausted',
   'vcr_object_unknown', 'vcr_scenario_endpoint_missing', 'vcr_scenario_grid_empty', 'vcr_scenario_unknown_fields',
@@ -2564,6 +2564,9 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_extract_incomplete: '模型的回答被截断了，这份病历没有读成；下一次启动时会再读它。',
   vcr_extract_timeout: '读这份病历超时了，没有读成；下一次启动时会再读它。',
   vcr_extract_unreadable: '模型的回答不是能读的格式，这份病历没有读成；下一次启动时会再读它。',
+  vcr_extract_context_too_large: '条件信息超过当前读取范围，可在会话中单独核对；现有结果会保留。',
+  vcr_extract_questions_invalid: '这次读取的问题分组需要重新规划，请重新开始读取；已保存的事实会保留。',
+  vcr_extract_replan_required: '方案或读取预算已变化，请重新开始读取；已保存的事实会保留。',
   vcr_result_not_found: '这条结果不在这个研究里。',
   vcr_parsed_criteria_unreadable: '本账户以前对这份登记记录的解析现在读不出来；这次需要重新写入选排除条件，其余照常。',
   vcr_parsed_criteria_unsaved: '这次写的条件没能记到账户里供下一个研究沿用；这个试验本身已保存，下一个研究需要重新写条件。',

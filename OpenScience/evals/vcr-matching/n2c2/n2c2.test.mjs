@@ -162,7 +162,8 @@ test('a current state takes its record\'s stated date from a second quotation; a
   assert.equal(first.states['DIETSUPP-2MOS'], 'satisfied', 'two months back from the latest record reaches the first record\'s date');
   assert.deepEqual([first.facts.kept, first.facts.datedByQuote, first.facts.dateDropped], [1, 1, 0]);
   const old = assessPatient({ ...PATIENT, asOf: '2100-09-01' }, answer([fact({ ...supplement, occurredAt: '2100-01-10', dateQuote: 'Record date: 2100-01-10' })]));
-  assert.equal(old.states['DIETSUPP-2MOS'], 'not_satisfied', 'dated outside the window, it is a known no and not an unknown');
+  assert.equal(old.states['DIETSUPP-2MOS'], 'unknown', 'an older occurrence is dated, but does not prove no later occurrence within the window');
+  assert.deepEqual([old.facts.kept, old.facts.datedByQuote], [1, 1], 'the original date remains grounded while later history stays incomplete');
   // A date no quotation prints is absent, not the reason the fact is refused: the fact stays, the window stays unknown.
   /** @param {ReturnType<typeof assessPatient>} result @param {string} label */
   const undated = (result, label) => {

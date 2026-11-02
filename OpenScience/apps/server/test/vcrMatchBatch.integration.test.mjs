@@ -81,7 +81,7 @@ test("a reading is queued by the platform alone, held to its frozen shape, and t
   const started = await f.batch.start(f.study, {});
   assert.equal(started.state, "queued");
   const row = await studies.one("SELECT method,method_version,state,cpu_seconds_limit,max_attempts,checkpoint FROM evimed_vcr.jobs WHERE id=$1", [started.jobId]);
-  assert.deepEqual([row.method, row.method_version, row.state, Number(row.cpu_seconds_limit), row.max_attempts], ["matching.extract", "1.0.0", "queued", 60, 3]);
+  assert.deepEqual([row.method, row.method_version, row.state, Number(row.cpu_seconds_limit), row.max_attempts], ["matching.extract", "1.1.0", "queued", 60, 3]);
   assert.equal(row.checkpoint.protocolVersionId, "pv_1");
 
   assert.deepEqual(await f.jobs.claim({ lane: "local" }), [], "the short local lane does not take it");

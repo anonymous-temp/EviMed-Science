@@ -25,11 +25,11 @@
  *   applicable"), and the two demand opposite actions: one says go find a
  *   document, the other says stop looking.
  * - **Absence of evidence is not evidence of absence.** A washout requirement
- *   with no treatment history is `unknown`, never `satisfied`. But a *recorded
- *   denial* ("否认心梗史") and a *recorded event outside the window* ("7 个月前
- *   心梗") are both positive evidence that the window is clear, and both read
- *   `satisfied`. Those three readings are the minimal-edit perturbation set
- *   C2-19 exists to pin down.
+ *   with no treatment history is `unknown`, never `satisfied`. A recorded
+ *   denial can establish absence only over the scope its words cover. An
+ *   event outside a window says nothing about another event inside it, so
+ *   outside-only history keeps the criterion unknown. The temporal tests
+ *   preserve these distinct cases without assuming an exhaustive history.
  * - **A fact must be findable where it says it is.** The model hands back a
  *   document id, a character span and the surface form it read; this module
  *   re-reads the span. If the bytes are not there, the fact is void and every
@@ -591,8 +591,8 @@ function conflictingEvidence(variable, decisive) {
  *
  * The four readings that matter, and why (C2-19): a denial is evidence the
  * window is clear; an event dated inside the window is evidence it is not; an
- * event dated outside it is evidence the window is clear; an event with no date
- * at all cannot be placed and so decides nothing (`undated`). Silence is
+ * event dated outside it leaves the window unknown (another event may have
+ * occurred); an event with no date at all cannot be placed (`undated`). Silence is
  * `unknown` — which is what makes a missing treatment history fail a washout
  * instead of passing it (C2-16).
  * @param {any} node @param {any} context @returns {RequirementVerdict}
@@ -604,15 +604,16 @@ function evaluatePresence(node, context) {
   const affirmed = all.filter((fact) => String(fact?.polarity ?? "affirmed") === "affirmed");
   const negated = all.filter((fact) => {
     if (fact?.polarity !== "negated") return false;
-    // A current medication denial cannot establish a historical washout.
-    // Preserve legacy chart interpretations; new scoped medication assertions
-    // must cover the entire requested interval before deciding absence.
-    if (!node.window || !fact.clinical?.medication) return true;
-    if (fact.clinical.medication.absenceScope === 'never') return true;
-    const interval = fact.clinical.occurredInterval;
+    // A point denial of any clinical finding cannot establish absence throughout
+    // a lookback window. The recorded interval must cover it; the existing
+    // medication contract can also explicitly assert lifetime absence.
+    if (!node.window) return true;
+    if (fact.clinical?.medication?.absenceScope === 'never') return true;
+    if (fact.clinical?.medication && fact.clinical.medication.absenceScope !== 'interval') return false;
+    const interval = fact.clinical?.occurredInterval;
     const anchor = instant(node.window.anchorDate) ?? context.asOf;
     const start = windowStart(node.window, anchor);
-    return fact.clinical.medication.absenceScope === 'interval' && interval
+    return interval
       && start !== null && instant(interval.start) !== null && instant(interval.end) !== null
       && instant(interval.start) <= start && instant(interval.end) >= anchor;
   });
@@ -627,11 +628,11 @@ function evaluatePresence(node, context) {
       ?? verdict(wantPresent ? SATISFIED : NOT_SATISFIED, { evidence: inside.map(citation) });
   }
   if (undated.length) return conflictingEvidence(variable, undated) ?? unknownBecause(variable, "undated", undated.map(citation));
-  if (negated.length || outside.length) {
-    return conflictingEvidence(variable, [...negated, ...outside])
-      ?? verdict(wantPresent ? NOT_SATISFIED : SATISFIED, { evidence: [...negated, ...outside].map(citation) });
+  if (negated.length) {
+    return conflictingEvidence(variable, negated)
+      ?? verdict(wantPresent ? NOT_SATISFIED : SATISFIED, { evidence: negated.map(citation) });
   }
-  return unknownBecause(variable, "not_recorded");
+  return unknownBecause(variable, "not_recorded", outside.map(citation));
 }
 
 /**
@@ -1408,12 +1409,16 @@ export function patientMatchingMetrics(pairs) {
   const eligible = (value) => String(value) === "eligible";
   let truePositive = 0, falsePositive = 0, falseNegative = 0, trueNegative = 0;
   let goldEligible = 0, screened = 0, unresolved = 0;
+  let falseExclusions = 0, unknownEligible = 0;
   for (const pair of pairs ?? []) {
     const gold = eligible(pair?.gold);
     const predicted = eligible(pair?.predicted);
     screened += 1;
     if (gold) goldEligible += 1;
-    if (!["eligible", "ineligible"].includes(String(pair?.predicted))) unresolved += 1;
+    const isUnresolved = !["eligible", "ineligible"].includes(String(pair?.predicted));
+    if (isUnresolved) unresolved += 1;
+    if (gold && String(pair?.predicted) === "ineligible") falseExclusions += 1;
+    if (gold && isUnresolved) unknownEligible += 1;
     if (gold && predicted) truePositive += 1;
     else if (!gold && predicted) falsePositive += 1;
     else if (gold && !predicted) falseNegative += 1;
@@ -1421,6 +1426,9 @@ export function patientMatchingMetrics(pairs) {
   }
   const surfaced = truePositive + falsePositive;
   return {
+    // Version 1 called all nonsurfaced eligible patients exclusions. Preserve the
+    // binary recall counters, but label unresolved positives separately in v2.
+    metricVersion: 2,
     subjects: screened,
     goldEligible,
     surfaced,
@@ -1428,7 +1436,12 @@ export function patientMatchingMetrics(pairs) {
     // The primary pre-screen metric (plan §7.1).
     eligibleRecall: goldEligible ? truePositive / goldEligible : null,
     // Truly eligible and ruled out — the number 「待复核排除」 exists to keep countable.
-    falseExclusionRate: goldEligible ? falseNegative / goldEligible : null,
+    falseExclusions,
+    falseExclusionRate: goldEligible ? falseExclusions / goldEligible : null,
+    missedEligibleIncludingUnknown: falseNegative,
+    missedEligibleRateIncludingUnknown: goldEligible ? falseNegative / goldEligible : null,
+    unknownEligible,
+    unknownEligibleRate: goldEligible ? unknownEligible / goldEligible : null,
     positivePredictiveValue: surfaced ? truePositive / surfaced : null,
     // Charts a coordinator opens per eligible patient found. Workload, not quality.
     numberNeededToScreen: truePositive ? surfaced / truePositive : null,
@@ -1578,6 +1591,10 @@ export function matchingReportDiff(previous, current) {
     if (!Number.isFinite(before) || !Number.isFinite(after)) return { before: before ?? null, after: after ?? null, change: null };
     return { before, after, change: after - before };
   };
+  const falseExclusionRate = delta("subject.falseExclusionRate");
+  if ((previous?.subject?.metricVersion ?? 1) !== (current?.subject?.metricVersion ?? 1)) {
+    falseExclusionRate.change = null;
+  }
   return {
     versions: { previous: previous?.provenance ?? previous?.label ?? null, current: current?.provenance ?? current?.label ?? null },
     criterionAgreement: delta("criterion.agreement"),
@@ -1585,7 +1602,9 @@ export function matchingReportDiff(previous, current) {
     unknownReadAsSatisfied: delta("criterion.unknownReadAsSatisfied"),
     satisfiedReadAsNotSatisfied: delta("criterion.satisfiedReadAsNotSatisfied"),
     eligibleRecall: delta("subject.eligibleRecall"),
-    falseExclusionRate: delta("subject.falseExclusionRate"),
+    falseExclusionRate: { ...falseExclusionRate, definitionChanged: (previous?.subject?.metricVersion ?? 1) !== (current?.subject?.metricVersion ?? 1) },
+    missedEligibleIncludingUnknown: delta("subject.missedEligibleIncludingUnknown"),
+    unknownEligibleRate: delta("subject.unknownEligibleRate"),
     numberNeededToScreen: delta("subject.numberNeededToScreen"),
     gated: false,
     note: "版本间差异只报告，不门控；一次评测集上的差值不足以宣布回归。",

@@ -25,6 +25,7 @@
  */
 
 import { clinicalNumericValue } from './clinicalUnits.mjs'
+import { clinicalFactIssues, clinicalFactPolarity } from './clinicalFact.mjs'
 import { priceUsage } from './metering.mjs'
 import { suppressForModel } from './vcrSuppression.mjs'
 import { VCR_MIN_CELL_SIZE } from './vcrVocabulary.mjs'
@@ -33,7 +34,7 @@ export const VCR_MATCH_BATCH_SCHEMA = 1
 
 /** The one method, run by the control plane itself on the slow local lane (it calls a model per record). */
 export const VCR_MATCH_BATCH_METHODS = Object.freeze({
-  'matching.extract': Object.freeze({ version: '1.0.0', modelTier: null }),
+  'matching.extract': Object.freeze({ version: '1.1.0', modelTier: null }),
 })
 export const VCR_MATCH_BATCH_JOBS = Object.freeze({ match_extract: 'matching.extract' })
 /** The local methods that call a model per record: they run on a worker loop of their own so that a long job does not hold the short ones. */
@@ -44,11 +45,15 @@ export const VCR_MATCH_BATCH_LIMITS = Object.freeze({
   subjects: 5000,
   /** The most distinct variables one batch asks a record about. */
   variables: 120,
+  /** Bound the amount of quoted output requested from one model call. */
+  questionsPerCall: 6,
+  /** Full criterion context is never shortened; an oversized question fails explicitly. */
+  questionChars: 12000,
   /** The most a single record is read for, in characters (a longer one is read through the passages that bear on the criteria). */
   documentChars: 60000,
-  /** The instructions and the variable list that ride with every record, in tokens: counted into the ceiling once per record. */
+  /** Legacy default for callers without a measured prompt budget. The server supplies its complete chunk prompts. */
   overheadTokens: 1500,
-  /** What one record's answer may take, in tokens: the output ceiling of a call and of the estimate. */
+  /** The output ceiling of each question chunk, repeated in the estimate for every call. */
   outputTokens: 2000,
 })
 
@@ -73,7 +78,7 @@ export function validateMatchBatchScenario(method, scenario) {
   if (!Object.hasOwn(VCR_MATCH_BATCH_METHODS, method)) return [{ code: 'method_unknown', field: 'method', detail: 'Unknown batch matching method.' }]
   const problems = []
   const bad = (/** @type {string} */ field, /** @type {string} */ detail) => problems.push({ code: 'scenario_field_invalid', field: `scenario.${field}`, detail })
-  const allowed = ['protocolVersionId', 'asOf', 'subjects', 'variables', 'estimate', 'chain', 'prefilter', 'prefiltered', 'model']
+  const allowed = ['protocolVersionId', 'asOf', 'subjects', 'variables', 'estimate', 'chain', 'prefilter', 'prefiltered', 'model', 'questionsDigest']
   for (const key of Object.keys(scenario)) if (!allowed.includes(key)) problems.push({ code: 'scenario_field_unknown', field: `scenario.${key}`, detail: 'Unused scenario field.' })
   for (const key of ['protocolVersionId', 'asOf', 'subjects', 'variables', 'estimate']) {
     if (scenario[key] == null) problems.push({ code: 'scenario_field_required', field: `scenario.${key}`, detail: 'Frozen by the platform from the study.' })
@@ -89,6 +94,7 @@ export function validateMatchBatchScenario(method, scenario) {
   if (scenario.variables != null && (!Array.isArray(scenario.variables) || !scenario.variables.length || scenario.variables.length > VCR_MATCH_BATCH_LIMITS.variables
     || scenario.variables.some((entry) => typeof entry !== 'string' || !VARIABLE.test(entry)))) bad('variables', `One to ${VCR_MATCH_BATCH_LIMITS.variables} variable names in the criteria's own spelling.`)
   if (scenario.estimate != null && (typeof scenario.estimate !== 'object' || Array.isArray(scenario.estimate))) bad('estimate', 'The estimate stated before the batch began.')
+  if (scenario.questionsDigest != null && (typeof scenario.questionsDigest !== 'string' || !/^[a-f0-9]{64}$/.test(scenario.questionsDigest))) bad('questionsDigest', 'The digest of the complete reading context.')
   if (scenario.chain != null && (typeof scenario.chain !== 'string' || !ID.test(scenario.chain))) bad('chain', 'An id.')
   if (scenario.prefilter != null && typeof scenario.prefilter !== 'boolean') bad('prefilter', 'true or false.')
   if (scenario.model != null && (typeof scenario.model !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(scenario.model))) bad('model', 'A model name.')
@@ -114,9 +120,10 @@ export const matchBatchUnitKey = (subjectKey, documentId) => `${subjectKey}\u000
  *   at?: Date,
  *   peak?: boolean,
  *   answeredByTable?: readonly string[],
+ *   reading?: { calls: number, overheadTokens: number, promptVersion?: string },
  * }} input `done` holds `matchBatchUnitKey`s already read for these variables; `decided` marks a person whose table-held facts already decide the protocol against them
  */
-export function planMatchExtraction({ roster, done = null, limit, prefilter = true, model = VCR_MATCH_BATCH_DEFAULT_MODEL, peak = true, answeredByTable = [] }) {
+export function planMatchExtraction({ roster, done = null, limit, prefilter = true, model = VCR_MATCH_BATCH_DEFAULT_MODEL, peak = true, answeredByTable = [], reading = { calls: 1, overheadTokens: VCR_MATCH_BATCH_LIMITS.overheadTokens } }) {
   const bound = Math.max(1, Math.min(VCR_MATCH_BATCH_LIMITS.subjects, count(limit) || VCR_MATCH_BATCH_LIMITS.subjects))
   /** @type {Array<{ subjectKey: string, documents: Array<{ id: string, chars: number }> }>} */
   const toRead = []
@@ -140,12 +147,15 @@ export function planMatchExtraction({ roster, done = null, limit, prefilter = tr
   }
   const records = toRead.reduce((sum, entry) => sum + entry.documents.length, 0)
   const chars = toRead.reduce((sum, entry) => sum + entry.documents.reduce((inner, doc) => inner + Math.min(doc.chars, VCR_MATCH_BATCH_LIMITS.documentChars), 0), 0)
-  const inputTokens = chars + records * VCR_MATCH_BATCH_LIMITS.overheadTokens
-  const outputTokens = records * VCR_MATCH_BATCH_LIMITS.outputTokens
+  const calls = Math.max(1, count(reading.calls))
+  const inputTokens = chars * calls + records * count(reading.overheadTokens)
+  const outputTokens = records * calls * VCR_MATCH_BATCH_LIMITS.outputTokens
   const priced = priceUsage({ resourceType: 'model', model, cacheHit: 0, cacheMiss: inputTokens, output: outputTokens, peak })
   const estimate = {
     schema: VCR_MATCH_BATCH_SCHEMA, basis: 'ceiling', model,
     people: toRead.length, records, characters: chars, inputTokens, outputTokens,
+    callsPerRecord: calls, calls: records * calls, overheadTokensPerRecord: count(reading.overheadTokens),
+    ...(reading.promptVersion ? { promptVersion: reading.promptVersion } : {}),
     cost: priced.priced ? priced.cost : null, currency: priced.currency || 'CNY',
   }
   return {
@@ -224,6 +234,17 @@ export function acceptExtractedFacts(answer, variables) {
     const surface = typeof row.surface === 'string' && row.surface ? row.surface : ''
     if (!quote.trim() || !surface || !quote.includes(surface)) { drop('quote_missing'); continue }
     const item = /** @type {Record<string, any>} */ ({ variable, polarity, surface: surface.slice(0, 400), quote: quote.slice(0, 3000) })
+    // Batch extraction supports only the existing core assertion and literal
+    // interval fields. The fact writer still verifies both bounds in the quote.
+    if (row.clinical != null) {
+      const clinical = object(row.clinical)
+      if (Object.keys(clinical).some(key => !['schema', 'assertion', 'experiencer', 'occurredInterval'].includes(key))
+        || JSON.stringify(clinical).length > 512 || clinicalFactIssues(clinical).length
+        || clinicalFactPolarity({ clinical, polarity }) !== polarity) {
+        drop('clinical_invalid'); continue
+      }
+      item.clinical = globalThis.structuredClone(clinical)
+    }
     // A value that is a plain number is the number whatever the model typed it as: the writer holds it to the quotation as one, and the
     // evaluator reads it as one (`clinicalNumericValue`); only a text value stays text.
     const numeric = clinicalNumericValue(row.value)

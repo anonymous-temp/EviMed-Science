@@ -142,6 +142,26 @@ test('D4: the scenario is the platform\'s frozen roster and nothing a caller inv
   assert.deepEqual(validateMatchBatchScenario('matching.nothing', good).map((issue) => issue.code), ['method_unknown'])
 })
 
+test('batch clinical intervals retain only validated, bounded existing assertion fields', () => {
+  const clinical = { schema: 1, assertion: 'negated', experiencer: 'patient', occurredInterval: { start: '2026-05-01', end: '2026-11-01' } }
+  const fact = { variable: 'event_history', polarity: 'negated', surface: 'no event', quote: 'From 2026-05-01 through 2026-11-01: no event.', clinical }
+  const accepted = acceptExtractedFacts({ facts: [fact] }, new Set(['event_history']))
+  assert.deepEqual(accepted.facts[0].clinical, clinical)
+  assert.notEqual(accepted.facts[0].clinical, clinical, 'accepted metadata is copied')
+  for (const invalid of [
+    { ...clinical, schema: 9 },
+    { ...clinical, assertion: 'affirmed' },
+    { ...clinical, occurredInterval: { start: '2026-11-01', end: '2026-05-01' } },
+    { ...clinical, occurredInterval: { start: 'unknown', end: '2026-11-01' } },
+    { ...clinical, medication: { state: 'unknown', absenceScope: 'never' } },
+    { ...clinical, extra: 'x'.repeat(1000) },
+  ]) {
+    const refused = acceptExtractedFacts({ facts: [{ ...fact, clinical: invalid }] }, new Set(['event_history']))
+    assert.deepEqual(refused.facts, [])
+    assert.deepEqual(refused.dropped, { clinical_invalid: 1 })
+  }
+})
+
 test('D4: what the extractor proposes is held to the criteria\'s own variables before anything is written', () => {
   const variables = new Set(['age', 'ecog', 'pregnant'])
   const { facts, dropped } = acceptExtractedFacts({ facts: [

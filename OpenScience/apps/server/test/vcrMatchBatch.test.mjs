@@ -3,10 +3,10 @@
 // (vcrMatchBatch.integration.test.mjs); the real fact writer is held by the gateway's own tests.
 import assert from "node:assert/strict";
 import test from "node:test";
-import { matchBatchUnitKey } from "@evimed/domain";
+import { matchBatchUnitKey, planMatchExtraction } from "@evimed/domain";
 import { vcrRuntimeWrite } from "../src/vcrGateway.mjs";
 import {
-  createFactExtractor, createMatchBatch, createMatchBatchCounters, createMatchExtractExecutor, extractScenario, extractSelection, matchExtractDigest, planBatch, recordView,
+  createFactExtractor, createMatchBatch, createMatchBatchCounters, createMatchExtractExecutor, extractScenario, extractSelection, matchExtractBudget, matchExtractDigest, planBatch, recordView,
 } from "../src/vcrMatchBatch.mjs";
 
 const CRITERIA = [
@@ -52,6 +52,13 @@ function matchStoreDouble(overrides = {}) {
 
 const STUDY = { id: "std_1", userId: "u1", projectId: "p1" };
 const config = { vcrMatchBatchMaxSubjects: 300, vcrMatchExtractConcurrency: 1, deepseekModel: "deepseek-flash" };
+
+function frozenReading(variables, roster = ROSTER) {
+  const plan = planMatchExtraction({ roster: [...new Set(roster.map(row => row.subjectKey))].map(subjectKey => ({ subjectKey,
+    documents: roster.filter(row => row.subjectKey === subjectKey).map(row => ({ id: row.id, chars: row.chars })) })),
+    limit: 5000, reading: matchExtractBudget(CRITERIA, variables) });
+  return { questionsDigest: matchExtractDigest(variables, CRITERIA, 'pv_1'), estimate: plan.estimate, model: 'deepseek-flash' };
+}
 
 test("D4: the selection takes a protocol, subjects, an instant and the prefilter, and nothing else", () => {
   assert.deepEqual(extractSelection({ protocolVersionId: "pv_1", subjectKeys: ["P-001", "P-001"], asOf: "2026-11-01", prefilter: false }),
@@ -102,7 +109,7 @@ test("D4: with no table the people are all read, a record read before is not, an
   assert.equal(first.ok && first.plan.toRead.length, 3);
   assert.deepEqual(first.ok && first.plan.bounded, { limit: 3, deferred: 1 });
   assert.ok(first.ok && first.variables.includes("age"));
-  await store.recordExtraction({ studyId: STUDY.id, subjectKey: "P-001", documentId: "d1", variablesDigest: matchExtractDigest(first.ok ? first.variables : []) });
+  await store.recordExtraction({ studyId: STUDY.id, subjectKey: "P-001", documentId: "d1", variablesDigest: matchExtractDigest(first.ok ? first.variables : [], CRITERIA, 'pv_1') });
   const second = await planBatch({ study: STUDY, matchStore: store, documents: { roster: async () => ROSTER }, config: { ...config, vcrMatchBatchMaxSubjects: 3 } });
   assert.deepEqual(second.ok && second.plan.alreadyRead, ["P-001"]);
   assert.deepEqual(second.ok && second.plan.toRead.map((entry) => entry.subjectKey), ["P-002", "P-003", "P-004"], "the next start takes the people the bound left out");
@@ -154,7 +161,7 @@ function executorFixture({ extractor = extractorDouble(), store = matchStoreDoub
     },
   });
   const scenario = { protocolVersionId: "pv_1", asOf: "2026-11-01T00:00:00.000Z", subjects: ["P-001", "P-002", "P-003", "P-004"], variables: ["age", "brain_metastasis", "creatinine"],
-    estimate: { people: 4 }, chain: "chain1", prefilter: true, model: "deepseek-flash" };
+    ...frozenReading(["age", "brain_metastasis", "creatinine"]), chain: "chain1", prefilter: true };
   const job = (extra = {}) => ({ job: { id: "job_1", jobId: "job_1", studyId: STUDY.id, scenario, scenarioHash: "a".repeat(64), seed: 7, ...extra }, async onProgress() {}, isCanceled: async () => false });
   return { run, job, written, reads, reported, counters, store, scenario, extractor };
 }
@@ -171,7 +178,7 @@ test("D4: every record is read once for the criteria's variables, its facts go t
   assert.equal(result.diagnostics.remaining, 0);
   assert.deepEqual(progress.at(-1), { done: 4, total: 4 });
   assert.equal(f.store.rows.length, 4);
-  assert.ok(f.store.rows.every((row) => row.variablesDigest === matchExtractDigest(f.scenario.variables) && row.jobId === "job_1"));
+  assert.ok(f.store.rows.every((row) => row.variablesDigest === matchExtractDigest(f.scenario.variables, CRITERIA, 'pv_1') && row.jobId === "job_1"));
   // each fact carries the record's own positions (the writer verifies them against the bytes)
   const age = f.written.find((fact) => fact.documentId === "d1" && fact.variable === "age");
   assert.equal(RECORDS.d1.slice(age.start, age.end), "63岁");
@@ -191,7 +198,7 @@ test("D4: a repeated start reads nothing again; the result says so", async () =>
   assert.deepEqual(again.measures.map((m) => [m.name, m.value]).filter(([name]) => ["records_read", "records_already_read"].includes(name)), [["records_read", 0], ["records_already_read", 4]]);
   // a changed set of questions is a different reading: the records are read again for it
   const changed = executorFixture({ store: f.store });
-  const other = await changed.run({ ...changed.job(), job: { ...changed.job().job, scenario: { ...changed.scenario, variables: ["age", "creatinine"] } } });
+  const other = await changed.run({ ...changed.job(), job: { ...changed.job().job, scenario: { ...changed.scenario, variables: ["age", "creatinine"], ...frozenReading(["age", "creatinine"]) } } });
   assert.equal(other.measures[0].value, 4);
 });
 
@@ -353,7 +360,7 @@ test("D4: what the reading proposes goes through the ordinary fact writer: posit
     store: { async studyById() { return STUDY; }, async one() { return { checkpoint: {} }; } }, matchStore, documents, extractor, config: { vcrMatchExtractConcurrency: 1 }, report: (c) => reported.push(c),
     writeFacts: ({ study, items, documents: held, caller }) => vcrRuntimeWrite({ store: {}, service: null, orchestrator: null, study, what: "fact", items, data: null, matchStore, documents: held, report: () => {}, caller }),
   });
-  const scenario = { protocolVersionId: "pv_1", asOf: "2026-11-01T00:00:00.000Z", subjects: ["P-001"], variables: ["age", "creatinine"], estimate: {}, chain: "c" };
+  const scenario = { protocolVersionId: "pv_1", asOf: "2026-11-01T00:00:00.000Z", subjects: ["P-001"], variables: ["age", "creatinine"], ...frozenReading(["age", "creatinine"]), chain: "c" };
   const result = await run({ job: { id: "job_w", jobId: "job_w", studyId: STUDY.id, scenario, scenarioHash: "b".repeat(64), seed: 1 }, async onProgress() {}, isCanceled: async () => false });
   assert.equal(result.diagnostics.recordsRead, 1);
   assert.equal(saved.length, 1, "the fact the record supports is saved; the one whose number is not in its quotation is refused by the writer");
@@ -390,7 +397,7 @@ test("D4 / V2: a date the record does not show costs the batch reading the date 
     store: { async studyById() { return STUDY; }, async one() { return { checkpoint: {} }; } }, matchStore, documents, extractor, config: { vcrMatchExtractConcurrency: 1 },
     writeFacts: ({ study, items, documents: held, caller }) => vcrRuntimeWrite({ store: {}, service: null, orchestrator: null, study, what: "fact", items, data: null, matchStore, documents: held, report: () => {}, caller }),
   });
-  const scenario = { protocolVersionId: "pv_1", asOf: "2100-03-05T00:00:00.000Z", subjects: ["P-001"], variables: ["supplement", "creatinine"], estimate: {}, chain: "c" };
+  const scenario = { protocolVersionId: "pv_1", asOf: "2100-03-05T00:00:00.000Z", subjects: ["P-001"], variables: ["supplement", "creatinine"], ...frozenReading(["supplement", "creatinine"]), chain: "c" };
   const result = await run({ job: { id: "job_d", jobId: "job_d", studyId: STUDY.id, scenario, scenarioHash: "c".repeat(64), seed: 1 }, async onProgress() {}, isCanceled: async () => false });
   assert.equal(result.diagnostics.factsKept, 2, "both facts are kept");
   assert.equal(result.diagnostics.factsRefused, 0);

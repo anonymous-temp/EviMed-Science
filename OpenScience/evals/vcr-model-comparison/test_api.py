@@ -73,6 +73,61 @@ class ApiTests(unittest.TestCase):
         with self.assertRaises(urllib.error.URLError):
             NoRedirect().redirect_request(None, None, 302, "", {}, "https://another.invalid")
 
+    def test_incomplete_or_invalid_usage_does_not_settle_reservation(self):
+        invalid = [
+            {"prompt_tokens": 10},
+            {"prompt_tokens": 10, "completion_tokens": -1},
+            {"prompt_tokens": 10, "completion_tokens": float("nan")},
+            {"prompt_tokens": 10, "completion_tokens": float("inf")},
+            {"prompt_tokens": True, "completion_tokens": 1},
+            {"prompt_tokens": 10, "completion_tokens": 1.5},
+            {"prompt_tokens": 10, "completion_tokens": 1, "prompt_cache_hit_tokens": 2},
+            {"prompt_tokens": 10, "completion_tokens": 1,
+             "prompt_cache_hit_tokens": 2, "prompt_cache_miss_tokens": 9},
+        ]
+        for index, usage in enumerate(invalid):
+            with self.subTest(usage=usage):
+                result, _ = self.ask({"model": "deepseek-flash", "usage": usage}, str(index))
+                self.assertIsNone(result["cost"])
+                self.assertIn("unknown", result["billing"])
+
+    def test_complete_pro_usage_uses_pro_prices(self):
+        self.payload["model"] = "deepseek-v4-pro"
+        usage = {"prompt_tokens": 10, "completion_tokens": 3,
+                 "prompt_cache_hit_tokens": 2, "prompt_cache_miss_tokens": 8}
+        with patch("urllib.request.build_opener") as opener:
+            opener.return_value.open.return_value = Response({"model": "deepseek-v4-pro", "usage": usage})
+            result = self.client.request("deepseek", "deepseek-v4-pro", self.payload, "pro")
+        self.assertIsNone(result["error"])
+        self.assertAlmostEqual(result["cost"], (2 * .3 + 8 * 9 + 3 * 27) / 1e6)
+
+    def test_unknown_usage_retains_budget_reservation(self):
+        first, _ = self.ask({"model": "deepseek-flash", "usage": {"prompt_tokens": 10}})
+        self.client.config["deepseek"]["budget"] = first["reservation"] * 1.5
+        with patch("urllib.request.build_opener") as opener:
+            with self.assertRaisesRegex(ValueError, "Conservative provider budget"):
+                self.client.request("deepseek", "deepseek-v4-flash", self.payload, "two")
+            opener.assert_not_called()
+
+    def test_complete_usage_releases_reservation_for_next_attempt(self):
+        body = {"model": "deepseek-flash", "usage": {"prompt_tokens": 10, "completion_tokens": 1}}
+        first, _ = self.ask(body)
+        self.client.config["deepseek"]["budget"] = first["reservation"] * 1.5
+        second, calls = self.ask(body, "two")
+        self.assertEqual(calls, 1)
+        self.assertIsNone(second["error"])
+
+    def test_nonfinite_settled_cost_retains_reservation(self):
+        first, _ = self.ask({"model": "deepseek-flash"})
+        receipt_path = self.root / 'receipts/one.json'
+        first['cost'] = float('nan')
+        receipt_path.write_text(json.dumps(first))
+        self.client.config["deepseek"]["budget"] = first["reservation"] * 1.5
+        with patch("urllib.request.build_opener") as opener:
+            with self.assertRaisesRegex(ValueError, "Conservative provider budget"):
+                self.client.request("deepseek", "deepseek-v4-flash", self.payload, "two")
+            opener.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()
