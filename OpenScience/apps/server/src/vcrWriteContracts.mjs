@@ -269,7 +269,7 @@ export function vcrWriteContracts(kind = null) {
     data_intake: { fields: [...new Set(Object.values(VCR_DATA_INTAKE_CONTRACT.actions).flat())], actions: VCR_DATA_INTAKE_CONTRACT.actions,
       envelope: 'data is one object whose action names its fields; items is refused', additionalProperties: false,
       detail: 'dataIntake in this read gives each action\'s required fields and the sequence' },
-    task_context: { fields: [], required: [], creates: 'owned hidden conversation scope only' },
+    task_context: { fields: ['title'], required: [], title: 'optional, in data: a short name for the research question (at most 40 characters); never a person, and no identifier', creates: 'owned hidden conversation scope only' },
     patient_context: { fields: ['messageSeq', 'sourceId'], oneOf: ['authenticated human message sequence', 'owned uploaded source id'], automatedMessages: 'never admitted as human' },
     patient_set: { ...contracts.patient_set, anyOf: ['nonempty scenario', 'populationId', 'modelId'], scenario: 'when supplied, use vcr_simulate action=shape kind=generate_patients or supported variant gives exact keys' },
     decision: { ...contracts.decision, required: ['question', 'chosen', 'rationale'], chosen: 'nonempty structured choice', rationale: 'nonempty scientific basis; schema discovery uses contracts reads' },

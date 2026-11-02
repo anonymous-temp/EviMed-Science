@@ -5,13 +5,14 @@ import path from 'node:path';
 import os from 'node:os';
 import { ControlPlaneDatabase } from '../src/controlPlaneDatabase.mjs';
 import { composeVcr } from '../src/vcrComposition.mjs';
-import { vcrOpeningName } from '../src/vcrStore.mjs';
+import { VcrStore, vcrMonthDay, vcrNeutralStudyName, vcrTitleName } from '../src/vcrStore.mjs';
 import { vcrStudyName } from '../src/vcrNotify.mjs';
 import { resolveJobSubject, vcrConversationSubject } from '../src/vcrSubjects.mjs';
 import { createGeoTestDatabase } from './helpers/geoTestDatabase.mjs';
 
-// F1/F2 (VCR remediation 2026-11-01): the studies a conversation makes are named from its first sentence and listed on the module's home
-// in a field of their own; the list every other reader shares is not widened.
+// F1/F2 (VCR remediation 2026-11-01, review P1-4): the studies a conversation makes are named by the model's title for the research
+// question, or for the kind of work they hold and the day, and never from a sentence anyone said; they are listed on the module's home
+// in a field of their own, and the list every other reader shares is not widened.
 
 const options = { skip: !process.env.OPEN_SCIENCE_TEST_POSTGRES_URL && 'Owned local PostgreSQL is required' };
 /** @type {any} */ let isolated;
@@ -35,105 +36,141 @@ after(async () => {
 });
 
 const origin = (/** @type {string} */ session, userId = 'owner') => ({ userId, projectId: 'default', rootSessionId: session, sessionId: session, runId: 'run', callId: 'call' });
-const saying = (/** @type {string} */ text) => async () => text;
+const today = () => vcrMonthDay(new Date());
 
-test('the first sentence said in a conversation is its study\'s name, cut as a name is and never reworded', () => {
-  assert.equal(vcrOpeningName('用虚拟临床研究匹配患者和临床试验。资料是：62 岁男性，肺腺癌 IV 期'), '帮我匹配患者和临床试验');
-  assert.equal(vcrOpeningName('  我想比较两种试验设计的把握度！先看第一种  '), '我想比较两种试验设计的把握度');
-  assert.equal(vcrOpeningName('Plan a two-arm survival trial with 80% power and a hazard ratio of 0.7'), 'Plan a two-arm survival');
-  assert.equal(vcrOpeningName('第一行\n第二行'), '第一行');
-  assert.equal(vcrOpeningName('   '), null);
-  assert.equal(vcrOpeningName(null), null);
+test('a title is a name with the identifiers of closed formats taken out, cut as a name is; nothing said is ever one', () => {
+  assert.equal(vcrTitleName('晚期肺癌二线两臂设计'), '晚期肺癌二线两臂设计');
+  assert.equal(vcrTitleName('  住院号 20260123 患者的方案匹配  '), '住院号 患者的方案匹配', 'the record number goes, its label is only a label');
+  assert.equal(vcrTitleName('手机 13812345678 随访  试验'), '手机 随访 试验');
+  assert.equal(vcrTitleName('身份证 11010519491231002X'), '身份证');
+  assert.equal(vcrTitleName('2026年11月2日'), null, 'a title that was only an identifier names nothing');
+  assert.equal(vcrTitleName('一个很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长很长的名字').length, 40);
+  assert.equal(vcrTitleName('   '), null);
+  assert.equal(vcrTitleName(null), null);
+  assert.equal(vcrTitleName({ title: 'x' }), null);
 });
 
-test('a conversation\'s study is named by its first sentence; a second one of the same words is told apart by the day', options, async () => {
-  const first = await vcr.store.taskContext(origin('named_a'), { opening: saying('用虚拟临床研究匹配患者和临床试验。资料是：略') });
-  assert.equal(first.name, '帮我匹配患者和临床试验');
-  assert.equal(first.nameBasis, 'opening');
+test('an untitled study is called for the kind of work it holds and the day, from the tabs in their order', () => {
+  const day = new Date('2026-11-02T08:00:00Z');
+  assert.equal(vcrNeutralStudyName(['matching'], day), '患者匹配 · 11月2日');
+  assert.equal(vcrNeutralStudyName(['population', 'matching'], day), '虚拟人群 · 11月2日');
+  assert.equal(vcrNeutralStudyName(['trial'], day), '试验设计 · 11月2日');
+  assert.equal(vcrNeutralStudyName(['data'], day), '研究资料 · 11月2日');
+  assert.equal(vcrNeutralStudyName([], day), null, 'a study that holds nothing has no kind of work to name');
+  assert.equal(vcrNeutralStudyName(['elsewhere'], day), null);
+});
+
+test('a conversation\'s study is made with the placeholder and is not named from anything said', options, async () => {
+  const first = await vcr.store.taskContext(origin('named_a'), { opening: async () => '张三，男，58岁，住院号 20260123，诊断为肺腺癌' });
+  assert.equal(first.name, '对话研究', 'an opening sentence is not read, even when a caller hands one over');
+  assert.equal(first.nameBasis, null);
   assert.equal(first.scope, 'conversation');
-  const again = await vcr.store.taskContext(origin('named_a'), { opening: saying('完全不同的另一句话') });
+  const again = await vcr.store.taskContext(origin('named_a'));
   assert.equal(again.id, first.id);
-  assert.equal(again.name, first.name, 'a study is named once; the second look finds it named and does not read the ledger');
-  let read = 0;
-  const same = await vcr.store.taskContext(origin('named_b'), { opening: async () => { read += 1; return '用虚拟临床研究匹配患者和临床试验。资料是：另一位'; } });
-  assert.equal(read, 1);
-  assert.notEqual(same.name, first.name);
-  assert.match(same.name, /^帮我匹配患者和临床试验 \d+月\d+日$/);
-  let none = 0;
-  await vcr.store.taskContext(origin('named_b'), { opening: async () => { none += 1; return 'x'; } });
-  assert.equal(none, 0, 'a named study never reads the ledger again');
+  assert.equal(again.name, '对话研究');
+  assert.equal(await vcr.store.taskContext(origin('named_never'), { create: false }), null);
 });
 
-test('with nothing said the study keeps the placeholder, and the first write that can say names it once', options, async () => {
-  const bare = await vcr.store.taskContext(origin('named_none'), { opening: async () => null });
-  assert.equal(bare.name, '对话研究');
-  assert.equal(bare.nameBasis, null);
-  const lookup = await vcr.store.taskContext(origin('named_none'), { create: false });
-  assert.equal(lookup.name, '对话研究');
-  const named = await vcr.store.taskContext(origin('named_none'), { opening: saying('评估一个单臂二期试验的样本量') });
-  assert.equal(named.id, bare.id);
-  assert.equal(named.name, '评估一个单臂二期试验的样本量');
-  assert.equal(named.nameBasis, 'opening');
-  const failing = await vcr.store.taskContext(origin('named_failing'), { opening: async () => { throw new Error('ledger unreadable'); } });
-  assert.equal(failing.name, '对话研究', 'a ledger that cannot be read leaves the placeholder; the write goes on');
-});
-
-test('a saved definition may name a study the first sentence named; a name a person gave is not undone', options, async () => {
-  const study = await vcr.store.taskContext(origin('named_def'), { opening: saying('帮我看看这个设计') });
-  assert.equal(study.name, '帮我看看这个设计');
-  await vcr.store.saveDefinition({ studyId: study.id, userId: 'owner', pico: { population: '成人晚期肺癌' }, title: '晚期肺癌二线两臂设计', question: '二线治疗是否延长生存' });
+test('a title names the study once, a later title or a definition may name it again, and a person\'s name is never undone', options, async () => {
+  const study = await vcr.store.taskContext(origin('named_title'));
+  const titled = await vcr.store.nameConversationStudy(study, { title: '住院号 20260123 患者的二线治疗方案匹配' });
+  assert.equal(titled.name, '住院号 患者的二线治疗方案匹配', 'the identifier is taken out of the name');
+  assert.equal(titled.nameBasis, 'assigned');
+  assert.equal((await vcr.store.studyById(study.id)).name, titled.name);
+  // A later title replaces it (the model sharpened the question); a title that names nothing leaves it.
+  assert.equal((await vcr.store.nameConversationStudy(study, { title: '晚期肺癌二线两臂设计' })).name, '晚期肺癌二线两臂设计');
+  assert.equal(await vcr.store.nameConversationStudy(study, { title: '2026年11月2日' }), null);
+  assert.equal(await vcr.store.nameConversationStudy({ id: null }, { title: 'x' }), null);
+  assert.equal((await vcr.store.studyById(study.id)).name, '晚期肺癌二线两臂设计');
+  // A definition's title names it again; the definition's question and population do not: they are sentences.
+  await vcr.store.saveDefinition({ studyId: study.id, userId: 'owner', pico: { population: '成人晚期肺癌' }, title: '二线治疗的生存比较', question: '张三的二线治疗是否延长生存' });
   const defined = await vcr.store.studyById(study.id);
-  assert.equal(defined.name, '晚期肺癌二线两臂设计');
-  assert.equal(defined.nameBasis, null);
-  assert.equal(defined.question, '二线治疗是否延长生存');
-  await vcr.store.saveDefinition({ studyId: study.id, userId: 'owner', pico: {}, title: '又一个名字' });
-  assert.equal((await vcr.store.studyById(study.id)).name, '晚期肺癌二线两臂设计', 'a name a definition gave is not given again');
+  assert.equal(defined.name, '二线治疗的生存比较');
+  assert.equal(defined.nameBasis, 'assigned');
+  assert.equal(defined.question, '张三的二线治疗是否延长生存', 'the question is kept where it is kept');
+  await vcr.store.saveDefinition({ studyId: study.id, userId: 'owner', pico: {}, question: '又一个问题' });
+  assert.equal((await vcr.store.studyById(study.id)).name, '二线治疗的生存比较', 'a definition with no title leaves the name');
 
-  const renamed = await vcr.store.taskContext(origin('named_person'), { opening: saying('第一句话') });
+  // A person's rename is final.
+  const renamed = await vcr.store.taskContext(origin('named_person'));
   await vcr.store.updateStudy(renamed.id, { name: '我自己起的名字' }, 'owner');
+  assert.equal(await vcr.store.nameConversationStudy(renamed, { title: '模型想起的名字' }), null);
   await vcr.store.saveDefinition({ studyId: renamed.id, userId: 'owner', pico: { population: '成人' }, title: '定义给的名字' });
+  await vcr.store.savePopulation({ studyId: renamed.id, userId: 'owner', name: '情景人群', kind: 'scenario', definition: { n: 100 }, allowedUses: ['design'] });
+  assert.equal(await vcr.store.nameFromWhatItHolds(renamed), null);
   const kept = await vcr.store.studyById(renamed.id);
   assert.equal(kept.name, '我自己起的名字');
   assert.equal(kept.nameBasis, null);
-
-  // A definition with nothing to name it from leaves the first sentence's name where it is.
-  const quiet = await vcr.store.taskContext(origin('named_quiet'), { opening: saying('只有第一句话') });
-  await vcr.store.saveDefinition({ studyId: quiet.id, userId: 'owner', pico: {} });
-  const left = await vcr.store.studyById(quiet.id);
-  assert.equal(left.name, '只有第一句话');
-  assert.equal(left.nameBasis, 'opening');
 });
 
-test('a definition never renames the person\'s own project after a conversation\'s study', options, async () => {
-  const named = [];
-  vcr.store.onStudyNamed = async (/** @type {any} */ event) => { named.push(event); };
-  try {
-    const study = await vcr.store.taskContext(origin('named_project'), { opening: saying('这段对话的第一句话') });
-    await vcr.store.saveDefinition({ studyId: study.id, userId: 'owner', pico: { population: '成人' }, title: '定义的名字' });
-    assert.deepEqual(named, []);
-  } finally { vcr.store.onStudyNamed = null; }
+test('a study that holds something and has no title is named for the kind of work and the day, once, and a title that came meanwhile stands', options, async () => {
+  const bare = await vcr.store.taskContext(origin('named_held'));
+  assert.equal(await vcr.store.nameFromWhatItHolds(bare), null, 'nothing held: nothing to call it');
+  assert.equal((await vcr.store.studyById(bare.id)).name, '对话研究');
+  await vcr.matchStore.saveProtocolVersion({ studyId: bare.id, userId: 'owner', title: '方案 v1', criteria: [
+    { kind: 'inclusion', criterionType: 'demographic', sourceText: '年龄 ≥ 18 岁', sourceLocator: { page: 1 }, requirement: { op: 'compare', variable: 'age', comparator: 'gte', value: 18 }, evidenceNeeded: [] },
+  ] });
+  const named = await vcr.store.nameFromWhatItHolds(bare);
+  assert.equal(named.name, `患者匹配 · ${today()}`);
+  assert.equal(named.nameBasis, 'assigned');
+  // Once: a second call finds it named, and a study that holds more later keeps its name.
+  await vcr.store.savePopulation({ studyId: bare.id, userId: 'owner', name: '情景人群', kind: 'scenario', definition: { n: 100 }, allowedUses: ['design'] });
+  assert.equal(await vcr.store.nameFromWhatItHolds(bare), null);
+  assert.equal((await vcr.store.studyById(bare.id)).name, `患者匹配 · ${today()}`);
+  // A title replaces the kind of work.
+  assert.equal((await vcr.store.nameConversationStudy(bare, { title: '二线治疗匹配' })).name, '二线治疗匹配');
+
+  // A title that arrived between the look and the write is not overwritten by the neutral name.
+  const raced = await vcr.store.taskContext(origin('named_raced'));
+  await vcr.store.savePopulation({ studyId: raced.id, userId: 'owner', name: '情景人群', kind: 'scenario', definition: { n: 100 }, allowedUses: ['design'] });
+  await vcr.store.nameConversationStudy(raced, { title: '先到的标题' });
+  assert.equal(await vcr.store.nameFromWhatItHolds(raced), null);
+  assert.equal((await vcr.store.studyById(raced.id)).name, '先到的标题');
+});
+
+test('studies named from a first sentence before the review are named again for the kind of work, at start, once', options, async () => {
+  const held = await vcr.store.taskContext(origin('retire_held'));
+  await vcr.store.savePopulation({ studyId: held.id, userId: 'owner', name: '情景人群', kind: 'scenario', definition: { n: 100 }, allowedUses: ['design'] });
+  const empty = await vcr.store.taskContext(origin('retire_empty'));
+  const kept = await vcr.store.taskContext(origin('retire_person'));
+  await vcr.store.updateStudy(kept.id, { name: '我起的名字' }, 'owner');
+  await vcr.store.query(`UPDATE evimed_vcr.studies SET name = '张三，男，58岁，住院号 20260123', name_basis = 'opening' WHERE id = ANY($1::text[])`, [[held.id, empty.id]]);
+  // A process that starts later reads the rows once: the name a patient's sentence gave is gone from both, and nothing else moved.
+  const later = new VcrStore({ database });
+  await later.ready();
+  const [h, e, k] = [await vcr.store.studyById(held.id), await vcr.store.studyById(empty.id), await vcr.store.studyById(kept.id)];
+  assert.equal(h.name, `虚拟人群 · ${vcrMonthDay(h.createdAt)}`);
+  assert.equal(h.nameBasis, 'assigned');
+  assert.equal(e.name, '对话研究', 'a study that holds nothing has the placeholder back');
+  assert.equal(e.nameBasis, null);
+  assert.equal(k.name, '我起的名字');
+  const after = await vcr.store.rows(`SELECT count(*)::int AS n FROM evimed_vcr.studies WHERE name_basis = 'opening'`);
+  assert.equal(after[0].n, 0);
+  // Idempotent: a third process finds nothing to do and changes nothing.
+  await new VcrStore({ database }).ready();
+  assert.equal((await vcr.store.studyById(h.id)).name, h.name);
 });
 
 test('notices call a study by its name, and a placeholder by its question', () => {
-  assert.equal(vcrStudyName({ name: '帮我匹配患者和临床试验', question: '' }), '帮我匹配患者和临床试验');
+  assert.equal(vcrStudyName({ name: '二线治疗的生存比较', question: '' }), '二线治疗的生存比较');
   assert.equal(vcrStudyName({ name: '对话研究', question: '二线治疗是否延长生存' }), '二线治疗是否延长生存');
   assert.equal(vcrStudyName({ name: '对话研究', question: '' }), '虚拟临床研究');
 });
 
 test('the home lists a conversation\'s study in a field of its own, only once it holds something, and the shared list is not widened', options, async () => {
   const user = { id: 'home_owner' };
-  const empty = await vcr.store.taskContext(origin('home_empty', user.id), { opening: saying('只说了一句话，什么也没保存') });
-  const matched = await vcr.store.taskContext(origin('home_matching', user.id), { opening: saying('帮我给这位患者找试验') });
+  const empty = await vcr.store.taskContext(origin('home_empty', user.id));
+  const matched = await vcr.store.taskContext(origin('home_matching', user.id));
   await vcr.matchStore.saveProtocolVersion({ studyId: matched.id, userId: user.id, title: '方案 v1', criteria: [
     { kind: 'inclusion', criterionType: 'demographic', sourceText: '年龄 ≥ 18 岁', sourceLocator: { page: 1 }, requirement: { op: 'compare', variable: 'age', comparator: 'gte', value: 18 }, evidenceNeeded: [] },
   ] });
-  const designed = await vcr.store.taskContext(origin('home_design', user.id), { opening: saying('比较两种试验设计') });
+  const designed = await vcr.store.taskContext(origin('home_design', user.id));
   await vcr.store.saveDefinition({ studyId: designed.id, userId: user.id, pico: { population: '成人' }, title: '' });
-  const populated = await vcr.store.taskContext(origin('home_population', user.id), { opening: saying('生成一个虚拟人群') });
+  const populated = await vcr.store.taskContext(origin('home_population', user.id));
   await vcr.store.savePopulation({ studyId: populated.id, userId: user.id, name: '情景人群', kind: 'scenario', definition: { n: 100 }, allowedUses: ['design'] });
-  const other = await vcr.store.taskContext(origin('home_other', 'someone_else'), { opening: saying('别人的对话') });
+  const other = await vcr.store.taskContext(origin('home_other', 'someone_else'));
   await vcr.store.savePopulation({ studyId: other.id, userId: 'someone_else', name: '别人的人群', kind: 'scenario', definition: { n: 10 }, allowedUses: ['design'] });
-  const removed = await vcr.store.taskContext(origin('home_removed', user.id), { opening: saying('随后被删除的对话') });
+  const removed = await vcr.store.taskContext(origin('home_removed', user.id));
   await vcr.store.savePopulation({ studyId: removed.id, userId: user.id, name: '要删的人群', kind: 'scenario', definition: { n: 10 }, allowedUses: ['design'] });
   await vcr.store.softDeleteStudy(removed.id, user.id);
 
@@ -146,7 +183,9 @@ test('the home lists a conversation\'s study in a field of its own, only once it
   assert.deepEqual(byId.get(matched.id).tabs, ['matching']);
   assert.deepEqual(byId.get(designed.id).tabs, ['data']);
   assert.deepEqual(byId.get(populated.id).tabs, ['population']);
-  assert.equal(byId.get(matched.id).name, '帮我给这位患者找试验');
+  assert.equal(byId.get(matched.id).name, `患者匹配 · ${vcrMonthDay(byId.get(matched.id).createdAt)}`, 'called for the kind of work it holds and the day, in code');
+  assert.equal(byId.get(populated.id).name, `虚拟人群 · ${vcrMonthDay(byId.get(populated.id).createdAt)}`);
+  assert.equal(byId.get(designed.id).name, `研究资料 · ${vcrMonthDay(byId.get(designed.id).createdAt)}`, 'a definition with no title names nothing');
   assert.equal(byId.get(matched.id).originatingSessionId, 'home_matching');
   assert.equal(byId.get(matched.id).projectId, 'default');
   assert.deepEqual(Object.keys(byId.get(matched.id)).sort(), ['createdAt', 'id', 'name', 'originatingSessionId', 'projectId', 'question', 'status', 'tabs', 'updatedAt'],
@@ -161,15 +200,17 @@ test('the home lists a conversation\'s study in a field of its own, only once it
 
 test('the home lists the newest fifty, and says when the list could not be read instead of drawing an empty one', options, async () => {
   const user = { id: 'home_many' };
+  /** @type {string[]} */ const ids = [];
   for (let n = 0; n < 53; n += 1) {
-    const study = await vcr.store.taskContext(origin(`many_${n}`, user.id), { opening: saying(`第 ${n} 次对话`) });
+    const study = await vcr.store.taskContext(origin(`many_${n}`, user.id));
+    ids.push(study.id);
     await vcr.store.savePopulation({ studyId: study.id, userId: user.id, name: `人群 ${n}`, kind: 'scenario', definition: { n }, allowedUses: ['design'] });
     await vcr.store.query('UPDATE evimed_vcr.studies SET updated_at = $2 WHERE id = $1', [study.id, new Date(Date.UTC(2026, 9, 1, 0, n)).toISOString()]);
   }
   const home = await vcr.service.listStudies(user);
   assert.equal(home.conversationStudies.length, 50);
-  assert.equal(home.conversationStudies[0].name, '第 52 次对话');
-  assert.equal(home.conversationStudies[49].name, '第 3 次对话');
+  assert.equal(home.conversationStudies[0].id, ids[52]);
+  assert.equal(home.conversationStudies[49].id, ids[3]);
 
   const original = vcr.store.conversationStudies;
   vcr.store.conversationStudies = async () => { throw new Error('unreadable'); };
@@ -181,19 +222,22 @@ test('the home lists the newest fifty, and says when the list could not be read 
   } finally { vcr.store.conversationStudies = original; }
 });
 
-test('a row made before the first sentence named studies is called by its question', options, async () => {
+test('a row that still carries the placeholder is called for the kind of work it holds, and its question is not its name', options, async () => {
   const user = { id: 'home_legacy' };
   const study = await vcr.store.taskContext(origin('legacy_row', user.id));
   assert.equal(study.name, '对话研究');
   await vcr.store.savePopulation({ studyId: study.id, userId: user.id, name: '人群', kind: 'scenario', definition: { n: 10 }, allowedUses: ['design'] });
-  assert.equal((await vcr.service.listStudies(user)).conversationStudies[0].name, '未命名研究');
+  const listed = async () => (await vcr.service.listStudies(user)).conversationStudies[0];
+  assert.equal((await listed()).name, `虚拟人群 · ${vcrMonthDay(study.createdAt)}`);
   await vcr.store.query("UPDATE evimed_vcr.studies SET question = '二线治疗是否延长生存' WHERE id = $1", [study.id]);
-  assert.equal((await vcr.service.listStudies(user)).conversationStudies[0].name, '二线治疗是否延长生存');
+  const row = await listed();
+  assert.equal(row.name, `虚拟人群 · ${vcrMonthDay(study.createdAt)}`);
+  assert.equal(row.question, '二线治疗是否延长生存', 'the question is its own field');
 });
 
 test('the study page says which tabs hold something, so a study with only matching results can open on 匹配 (F4)', options, async () => {
   const user = { id: 'held_owner' };
-  const matched = await vcr.store.taskContext(origin('held_matching', user.id), { opening: saying('只做了匹配') });
+  const matched = await vcr.store.taskContext(origin('held_matching', user.id));
   assert.deepEqual((await vcr.service.studyView(user, matched.id)).holds, [], 'a study that holds nothing says so');
   await vcr.matchStore.saveProtocolVersion({ studyId: matched.id, userId: user.id, title: '方案 v1', criteria: [
     { kind: 'inclusion', criterionType: 'demographic', sourceText: '年龄 ≥ 18 岁', sourceLocator: { page: 1 }, requirement: { op: 'compare', variable: 'age', comparator: 'gte', value: 18 }, evidenceNeeded: [] },
@@ -208,7 +252,7 @@ test('the study page says which tabs hold something, so a study with only matchi
 
 test('the way back from a conversation study\'s page is the conversation it was made in, whatever a resolver would name for the project (F6)', options, async () => {
   const user = { id: 'back_owner' };
-  const study = await vcr.store.taskContext(origin('orig_conv', user.id), { opening: saying('调整一个设计') });
+  const study = await vcr.store.taskContext(origin('orig_conv', user.id));
   await vcr.store.savePopulation({ studyId: study.id, userId: user.id, name: '情景人群', kind: 'scenario', definition: { n: 100 }, allowedUses: ['design'] });
   const packages = vcr.service.packages;
   const original = packages.conversations;

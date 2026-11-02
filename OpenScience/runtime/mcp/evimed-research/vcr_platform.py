@@ -780,6 +780,10 @@ def write(arguments: dict) -> dict:
     reminders = [issue for issue in issues if issue.get("code") in _REMINDER_CODES]
     refused = [issue for issue in issues if issue.get("code") not in _REMINDER_CODES]
     next_actions = []
+    if what == "task_context" and data.get("untitled") is True:
+        # A conversation's study is named by the model's words and by nothing a person said: asked for once, in the answer that makes it.
+        next_actions.append("This research has no title yet: write task_context again with data={\"title\": ...}, a short name for the research question "
+                            "(at most 40 characters; the question's name, never a person or an identifier).")
     if refused:
         next_actions.append("Correct the refused items and write only those again.")
     if reminders:

@@ -1960,6 +1960,7 @@ export {
   VCR_STUDY_STATUS_LABELS_ZH,
   VCR_USER_STUDY_STATUSES,
   VCR_CONVERSATION_STUDY_NAME,
+  VCR_CONVERSATION_TASK_NAMES_ZH,
   VCR_DRAFT_STUDY_NAME,
   VCR_LEGACY_DEFAULT_STUDY_NAME,
   VCR_STUDY_NAME_FROM_QUESTION_MAX,
@@ -2123,13 +2124,14 @@ export {
   suppressForModel,
 } from './src/vcrSuppression.mjs'
 
-// vcrIdentifierSuggestions — 5 exports: the identifiers of closed formats in a patient record (resident identity number with its
+// vcrIdentifierSuggestions — 6 exports: the identifiers of closed formats in a patient record (resident identity number with its
 // checksum, mobile number, record number after its label, date) as spans a reviewer may accept; never applied, no date shifted
 export {
   VCR_IDENTIFIER_FORMATS,
   VCR_IDENTIFIER_KINDS,
   VCR_IDENTIFIER_SUGGESTION_LIMIT,
   isResidentIdNumber,
+  maskIdentifierSpans,
   suggestIdentifierSpans,
 } from './src/vcrIdentifierSuggestions.mjs'
 

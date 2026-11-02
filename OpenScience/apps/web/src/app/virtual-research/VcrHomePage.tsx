@@ -384,7 +384,7 @@ function StudyRow({ study, to, selected, opening }: { study: VcrStudySummary; to
 }
 
 /**
- * A study a conversation made, in the list: its name (the first sentence said in the conversation), the tabs that hold something and
+ * A study a conversation made, in the list: its name (the model's title for the research question, or the kind of work and the day), the tabs that hold something and
  * when it last moved. The press opens the study's page at the first of those tabs -- the way back to a result; the original conversation
  * is the page's own 「对话」.
  */

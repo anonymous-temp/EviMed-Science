@@ -1097,6 +1097,42 @@ test("A1 the platform adds no check to a conversation's design that is already t
     "a scenario that already states no effect needs no second one");
 });
 
+test("P1-4 a conversation's study is named by the title the model gives its research question, with the identifiers taken out, or for the kind of work and the day; a patient's words are never its name", async () => {
+  const module = compose({ resultFor: nullAware });
+  const day = (/** @type {any} */ row) => `${new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", month: "numeric", day: "numeric" }).format(new Date(row.createdAt)).replace("/", "月")}日`;
+
+  // 1. A design the conversation computes names the study for the kind of work: nothing was said that could be a name.
+  const designing = await store.taskContext({ userId: "u_named_a", projectId: "prj_named_a", rootSessionId: "native-fixture" }, { create: true });
+  assert.equal(designing.name, "对话研究");
+  const a = conversationGateway(module, designing);
+  const started = await a("simulate", { action: "start", kind: "design_simulation", scenario: engineScenario(1, "design_simulation") });
+  assert.equal(started.status, 200, JSON.stringify(started));
+  const designed = await store.studyById(designing.id);
+  assert.equal(designed.name, `试验设计 · ${day(designed)}`);
+  assert.equal(designed.nameBasis, "assigned");
+
+  // 2. The title the model gives names it; the answer says the name; the identifiers of closed formats are taken out; a person's name is not undone.
+  const matching = await store.taskContext({ userId: "u_named_b", projectId: "prj_named_b", rootSessionId: "native-fixture" }, { create: true });
+  const b = conversationGateway(module, matching);
+  const titled = await b("write", { what: "task_context", data: { title: "住院号 20260123 患者的二线治疗试验匹配" } });
+  assert.equal(titled.status, 200, JSON.stringify(titled));
+  assert.equal(titled.data.name, "住院号 患者的二线治疗试验匹配");
+  assert.equal((await store.studyById(matching.id)).name, "住院号 患者的二线治疗试验匹配");
+  // A later write that leaves something in the study does not rename it for the kind of work.
+  await b("write", { what: "population", items: [{ name: "情景人群", kind: "scenario", definition: { n: 100 }, allowedUses: ["design"] }] });
+  assert.equal((await store.studyById(matching.id)).name, "住院号 患者的二线治疗试验匹配");
+  // task_context with nothing, with a title that is only an identifier, and with a field it does not take.
+  assert.equal((await b("write", { what: "task_context" })).status, 200);
+  assert.equal((await b("write", { what: "task_context", data: { title: "2026年11月2日" } })).data.name, "住院号 患者的二线治疗试验匹配");
+  const refused = await b("write", { what: "task_context", data: { title: "x", question: "张三，男，58岁" } });
+  assert.equal(refused.status, 400);
+  assert.equal(refused.code, "vcr_write_payload_invalid");
+  assert.equal((await b("write", { what: "task_context", data: { title: 7 } })).status, 400);
+  await store.updateStudy(matching.id, { name: "我自己起的名字" }, "owner");
+  assert.equal((await b("write", { what: "task_context", data: { title: "模型的新标题" } })).data.name, "我自己起的名字");
+  assert.equal((await store.studyById(matching.id)).name, "我自己起的名字");
+});
+
 test("AC-33 everything the run set carries the AI-set label until a person countersigns it", options, async () => {
   const module = compose();
   const study = await makeStudy("aiset");

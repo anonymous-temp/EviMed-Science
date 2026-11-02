@@ -49,7 +49,7 @@ import { VCR_ENGINE_RETRYABLE_CODES } from "./vcrEngineClient.mjs";
 import { vcrExportHoldsDocument, vcrReportModel, vcrReportReviewRevision } from "./vcrRender.mjs";
 import { modelDocumentReaderSections, renderModelDocument } from "./vcrModelDocuments.mjs";
 import { contactsTable, scheduleTable } from "./vcrScheduleView.mjs";
-import { vcrObjectNode, vcrStudyNameFrom } from "./vcrStore.mjs";
+import { vcrNeutralStudyName, vcrObjectNode } from "./vcrStore.mjs";
 import { vcrStepSummaries } from "./vcrStudyStatus.mjs";
 import {
   allResultsOf, countsView, dominatedScenarioMap, evidenceLabel, finite, MODEL_TYPE_LABELS, VALIDATION_LABELS, intervalView, list, markFor, measureLabel, measureValue, METHOD_LABELS, numeric, object, rangeString, roundTo,
@@ -543,7 +543,8 @@ export function presentSummary({ study, results, allResults, stale, jobs, scenar
 /**
  * One row of the home's 「对话里的研究」: a study a conversation made, as light as a row can be -- its name, the question when it has
  * one, the tabs that hold something and when it last moved. None of the home list's per-study rows (steps, attention, conclusion)
- * is read for it. A row that still carries the placeholder name is called by its question when it has one.
+ * is read for it. A row that still carries the placeholder name is called for the kind of work it holds and the day it was made (the same name the store gives it
+ * when a write finds it unnamed), never by anything said.
  * @param {Record<string, any>} study the store's row with `heldTabs` @param {Date} now
  */
 export function presentConversationStudy(study, now) {
@@ -553,7 +554,7 @@ export function presentConversationStudy(study, now) {
   return {
     id: study.id,
     projectId: study.projectId,
-    name: placeholder ? vcrStudyNameFrom({ question }) ?? VCR_DRAFT_STUDY_NAME : study.name,
+    name: placeholder ? vcrNeutralStudyName(list(study.heldTabs).map(String), study.createdAt) ?? VCR_DRAFT_STUDY_NAME : study.name,
     question,
     status: study.status,
     originatingSessionId: study.conversationSessionId ?? null,

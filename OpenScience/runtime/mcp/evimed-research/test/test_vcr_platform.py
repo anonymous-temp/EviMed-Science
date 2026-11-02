@@ -482,6 +482,18 @@ class VcrReadWriteTests(_GatewayCase):
         self.assertEqual(write["status"], "warning")
         self.assertIn("no assumption to write", write["summary"])
 
+    def test_a_task_context_with_no_title_reminds_the_run_once_and_a_titled_one_does_not(self):
+        _Gateway.answers["write"] = (200, {"data": {"what": "task_context", "ok": True, "ids": ["std_1"], "issues": [], "studyId": "std_1", "name": "对话研究", "untitled": True}})
+        untitled = self.server.call_tool("vcr_write", {"what": "task_context"})
+        self.assertEqual(untitled["status"], "success")
+        self.assertEqual(len(untitled["next_actions"]), 1)
+        self.assertIn("title", untitled["next_actions"][0])
+        self.assertIn("never a person", untitled["next_actions"][0])
+        _Gateway.answers["write"] = (200, {"data": {"what": "task_context", "ok": True, "ids": ["std_1"], "issues": [], "studyId": "std_1", "name": "二线治疗的生存比较"}})
+        titled = self.server.call_tool("vcr_write", {"what": "task_context", "data": {"title": "二线治疗的生存比较"}})
+        self.assertEqual(titled["next_actions"], [])
+        self.assertEqual(_Gateway.seen[-1]["body"], {"what": "task_context", "data": {"title": "二线治疗的生存比较"}})
+
     def test_a_what_outside_the_vocabulary_never_leaves_the_runtime(self):
         result = self.server.call_tool("vcr_read", {"what": "passwords"})
         self.assertEqual(result["status"], "error")

@@ -45,7 +45,7 @@ import {
 } from "@evimed/domain";
 
 import { VCR_BENCHMARK_ONLY_USE_CEILING, vcrBenchmarkBasis } from "@evimed/domain";
-import { DISPLAY_TIME_ZONE, VCR_CONVERSATION_STUDY_NAME, VCR_DRAFT_STUDY_NAME, VCR_LEGACY_DEFAULT_STUDY_NAME, VCR_STUDY_NAME_FROM_QUESTION_MAX } from "@evimed/domain";
+import { DISPLAY_TIME_ZONE, VCR_CONVERSATION_STUDY_NAME, VCR_CONVERSATION_TASK_NAMES_ZH, VCR_DRAFT_STUDY_NAME, VCR_LEGACY_DEFAULT_STUDY_NAME, VCR_STUDY_NAME_FROM_QUESTION_MAX, maskIdentifierSpans } from "@evimed/domain";
 
 import { HttpError } from "./security.mjs";
 import { VCR_COMPARISON_RESULT_KIND, VCR_SCHEMA } from "./vcrPersistence.mjs";
@@ -134,8 +134,8 @@ export function vcrStudyFromRow(row) {
     status: String(row.status ?? "active"),
     purpose: ["calculation", "task"].includes(row.purpose) ? row.purpose : "programme",
     scope: row.scope === "conversation" ? "conversation" : "project",
-    // `opening`: the name was cut from the conversation's first sentence and nobody has named the study since, so a definition may name it.
-    nameBasis: row.name_basis === "opening" ? "opening" : null,
+    // `assigned`: the model's title or the kind of work gave the name and no person has since, so a title or a definition may name it again.
+    nameBasis: row.name_basis === "assigned" ? "assigned" : null,
     steps: normalizedVcrSteps(row.steps),
     budget: object(row.budget),
     outcomeSeal: object(row.outcome_seal),
@@ -200,27 +200,37 @@ export function vcrMonthDay(at) {
 }
 
 /**
- * Whether a study still carries a name nobody gave it: a draft's, one cut from the first sentence of its conversation, or the
- * placeholder a conversation's study had before that.
+ * Whether a study still carries a name nobody gave it: a draft's, the placeholder a conversation's study has until it is named, or a
+ * name the model's title or the kind of work gave it (`name_basis = 'assigned'`). A person's rename clears the basis for good.
  * @param {{ status?: string, name?: string, scope?: string, nameBasis?: string | null }} study
  */
 export function vcrStudyIsUnnamed(study) {
   return study?.status === "draft" || study?.name === VCR_DRAFT_STUDY_NAME || study?.name === VCR_LEGACY_DEFAULT_STUDY_NAME
-    || study?.nameBasis === "opening" || (study?.scope === "conversation" && study?.name === VCR_CONVERSATION_STUDY_NAME);
+    || study?.nameBasis === "assigned" || (study?.scope === "conversation" && study?.name === VCR_CONVERSATION_STUDY_NAME);
 }
 
 /**
- * What a conversation's study is called, from the first thing the person said in that conversation: its first sentence, as it was
- * said and cut where the name ends (`vcrStudyNameFrom`) -- exact text, never a summary. A sentence ends at its first mark
- * (。！？!?) or line end; nothing is read into it. Nothing said is `null`: the study keeps the placeholder.
- * @param {unknown} opening
+ * The name a title gives a conversation's study: the title the model wrote for the research question, with the identifiers of closed
+ * formats taken out (`maskIdentifierSpans`: a record number, a phone number, an identity number, a full date) and cut as a name is.
+ * Nothing the person typed ever reaches a name by this road or any other: the model chooses the words, and the title's contract says it
+ * names the research question and never a person. Nothing left is `null`.
+ * @param {unknown} title
  * @returns {string | null}
  */
-export function vcrOpeningName(opening) {
-  const said = typeof opening === "string" ? opening.trim() : "";
-  if (!said) return null;
-  const end = said.search(/[。！？!?\r\n]/u);
-  return vcrStudyNameFrom({ question: end > 0 ? said.slice(0, end) : said });
+export function vcrTitleName(title) {
+  return typeof title === "string" ? vcrStudyNameFrom({ title: maskIdentifierSpans(title) }) || null : null;
+}
+
+/**
+ * What a conversation's study is called when nobody gave it a title: the kind of work it holds and the day it was made, in code
+ * (`患者匹配 · 11月2日`). A study that holds nothing has no kind of work to name and keeps the placeholder.
+ * @param {readonly string[]} held the tabs that hold something (`heldTabs`) @param {string | Date | null} madeAt
+ * @returns {string | null}
+ */
+export function vcrNeutralStudyName(held, madeAt) {
+  const names = /** @type {Record<string, string>} */ (VCR_CONVERSATION_TASK_NAMES_ZH);
+  const tab = held.find((entry) => Object.hasOwn(names, entry));
+  return tab ? `${names[tab]} · ${vcrMonthDay(madeAt)}` : null;
 }
 
 /**
@@ -467,37 +477,27 @@ export class VcrStore extends VcrStoreBase {
   /**
    * The authenticated root conversation has its own idempotent task context. No project name or session binding is changed.
    *
-   * It is named from the conversation's first sentence (`opening`, read only when the study is made or still carries the
-   * placeholder, because reading it is a look into the run ledger): a second study of that name is told apart by the day, as a
-   * definition's naming does. A definition that is saved later may name it again (`vcrStudyIsUnnamed`); a person's rename may not be undone.
+   * It is made with the placeholder name and is named later, never from what anyone said: by the title the model gives the research
+   * question in a `task_context` write (`nameConversationStudy`), by a definition's title (`saveDefinition`), or, when it holds
+   * something and has neither, by the kind of work and the day (`nameFromWhatItHolds`). A person's rename may not be undone.
    * @param {{ userId: string, projectId: string, rootSessionId: string }} origin
-   * @param {{ create?: boolean, opening?: (() => Promise<string | null | undefined>) | null }} [options]
+   * @param {{ create?: boolean }} [options]
    */
-  async taskContext({ userId, projectId, rootSessionId }, { create = true, opening = null } = {}) {
+  async taskContext({ userId, projectId, rootSessionId }, { create = true } = {}) {
     if (![userId, projectId, rootSessionId].every(value => typeof value === 'string' && /^[A-Za-z0-9_-]{1,160}$/.test(value))) {
       throw new TypeError('Invalid conversation research scope.');
     }
     const existing = await this.one(`SELECT * FROM ${VCR_SCHEMA}.studies WHERE user_id=$1 AND project_id=$2 AND scope='conversation' AND conversation_session_id=$3`,[userId,projectId,rootSessionId]);
     if (existing?.deleted_at) throw new HttpError(410,'vcr_task_context_deleted','This conversation research context was deleted.');
-    if (existing) {
-      const found = vcrStudyFromRow(existing);
-      // A study made before the first sentence named it: named now, once, by the first write that finds the placeholder.
-      if (create && opening && found?.name === VCR_CONVERSATION_STUDY_NAME && !found.nameBasis) {
-        const name = await this.#openingName(userId, found.id, await Promise.resolve(opening()).catch(() => null), found.createdAt);
-        if (name) return vcrStudyFromRow(await this.one(`UPDATE ${VCR_SCHEMA}.studies SET name=$2, name_basis='opening' WHERE id=$1 AND name=$3 AND deleted_at IS NULL RETURNING *`,
-          [found.id, name, VCR_CONVERSATION_STUDY_NAME])) ?? found;
-      }
-      return found;
-    }
+    if (existing) return vcrStudyFromRow(existing);
     if (!create) return null;
-    const named = opening ? await this.#openingName(userId, null, await Promise.resolve(opening()).catch(() => null), new Date()) : null;
     return this.transaction(async client => {
       const row = (await client.query(`INSERT INTO ${VCR_SCHEMA}.studies
-        (id,user_id,project_id,name,name_basis,purpose,scope,conversation_session_id)
-        VALUES ($1,$2,$3,$4,$5,'task','conversation',$6)
+        (id,user_id,project_id,name,purpose,scope,conversation_session_id)
+        VALUES ($1,$2,$3,$4,'task','conversation',$5)
         ON CONFLICT (user_id,project_id,conversation_session_id) WHERE scope='conversation'
         DO UPDATE SET conversation_session_id=EXCLUDED.conversation_session_id WHERE studies.deleted_at IS NULL RETURNING *`,
-      [vcrId('study'),userId,projectId,named ?? VCR_CONVERSATION_STUDY_NAME,named ? 'opening' : null,rootSessionId])).rows[0];
+      [vcrId('study'),userId,projectId,VCR_CONVERSATION_STUDY_NAME,rootSessionId])).rows[0];
       if (!row) throw new HttpError(410,'vcr_task_context_deleted','This conversation research context was deleted.');
       await client.query(`INSERT INTO ${VCR_SCHEMA}.members (study_id,user_id,role,invited_by)
         VALUES ($1,$2,'lead',$2) ON CONFLICT DO NOTHING`,[row.id,userId]);
@@ -506,22 +506,77 @@ export class VcrStore extends VcrStoreBase {
   }
 
   /**
-   * The name a conversation's first sentence gives, free of the names the account already has (a second one is told apart by
-   * the day the study was made, two on one day by a number). Null when nothing was said.
-   * @param {string} userId @param {string | null} studyId @param {unknown} opening @param {string | Date | null} madeAt
-   * @returns {Promise<string | null>}
+   * The title the model gave a conversation's research question becomes the study's name, unless a person named it: the placeholder, a
+   * name the kind of work gave it and an earlier title are all replaced (`name_basis = 'assigned'`); a person's rename is not. The
+   * title is masked and cut as a name is (`vcrTitleName`); with nothing left of it the study keeps its name. The tags the study is
+   * found by follow its name.
+   * @param {{ id?: string | null }} study @param {{ title?: unknown }} input
+   * @returns {Promise<ReturnType<typeof vcrStudyFromRow> | null>} the study as named, or `null` when the title named nothing
    */
-  async #openingName(userId, studyId, opening, madeAt) {
-    const proposed = vcrOpeningName(opening);
-    if (!proposed) return null;
-    const taken = async (/** @type {string} */ candidate) => Boolean(await this.one(
-      `SELECT 1 AS taken FROM ${VCR_SCHEMA}.studies WHERE user_id = $1 AND ($2::text IS NULL OR id <> $2) AND deleted_at IS NULL AND status <> 'draft' AND name = $3 LIMIT 1`,
-      [userId, studyId, candidate]));
-    if (!await taken(proposed)) return proposed;
-    const dated = `${[...proposed].slice(0, VCR_STUDY_NAME_MAX - 8).join("")} ${vcrMonthDay(madeAt)}`;
-    let name = dated;
-    for (let n = 2; await taken(name) && n < 50; n += 1) name = `${dated} ${n}`;
-    return name;
+  async nameConversationStudy(study, { title }) {
+    const proposed = vcrTitleName(title);
+    if (!proposed || !study?.id) return null;
+    const row = await this.one(`UPDATE ${VCR_SCHEMA}.studies SET name = $2, name_basis = 'assigned', updated_at = now()
+      WHERE id = $1 AND scope = 'conversation' AND deleted_at IS NULL AND (name_basis = 'assigned' OR (name_basis IS NULL AND name = $3)) RETURNING *`,
+    [String(study.id), proposed, VCR_CONVERSATION_STUDY_NAME]);
+    return this.#tagged(vcrStudyFromRow(row));
+  }
+
+  /**
+   * A conversation's study that holds something and has no name yet is named for the kind of work and the day (`vcrNeutralStudyName`),
+   * in code and from what it holds, never from anything said. Only the placeholder is replaced, so a title or a person's name that
+   * arrived meanwhile stands.
+   * @param {{ id?: string | null, createdAt?: string | null }} study
+   * @returns {Promise<ReturnType<typeof vcrStudyFromRow> | null>}
+   */
+  async nameFromWhatItHolds(study) {
+    if (!study?.id) return null;
+    const name = vcrNeutralStudyName(await this.heldTabs(String(study.id)), study.createdAt ?? null);
+    if (!name) return null;
+    const row = await this.one(`UPDATE ${VCR_SCHEMA}.studies SET name = $2, name_basis = 'assigned', updated_at = now()
+      WHERE id = $1 AND scope = 'conversation' AND deleted_at IS NULL AND name_basis IS NULL AND name = $3 RETURNING *`,
+    [String(study.id), name, VCR_CONVERSATION_STUDY_NAME]);
+    return this.#tagged(vcrStudyFromRow(row));
+  }
+
+  /**
+   * The study with its entity keys made again from the name it now has; a failure to tag leaves it named.
+   * @param {ReturnType<typeof vcrStudyFromRow>} study
+   */
+  async #tagged(study) {
+    if (!study || !this.entityVocabulary) return study;
+    try {
+      const keys = await this.#entityKeys({ name: study.name, question: study.question }, (await this.latestDefinition(study.id))?.pico);
+      if (keys) await this.query(`UPDATE ${VCR_SCHEMA}.studies SET entity_keys = $2::text[] WHERE id = $1`, [study.id, keys]);
+    } catch { /* the study is named; its tags follow the next edit */ }
+    return study;
+  }
+
+  /**
+   * Studies named from the first sentence of their conversation (`name_basis = 'opening'`, made while that road existed) carry words a
+   * person typed: each is named again for the kind of work and the day, or given the placeholder back when it holds nothing. Idempotent:
+   * a study renamed here is `assigned` and is not read again. Runs once per process, after the schema, and never stops the module.
+   */
+  async #retireOpeningNames() {
+    const rows = (await this.database.query(`SELECT s.id, s.created_at, ${VCR_HELD_TABS_SQL} AS held_tabs FROM ${VCR_SCHEMA}.studies s WHERE s.name_basis = 'opening'`)).rows;
+    for (const row of rows) {
+      const name = vcrNeutralStudyName(Array.isArray(row.held_tabs) ? row.held_tabs.map(String) : [], row.created_at);
+      await this.database.query(`UPDATE ${VCR_SCHEMA}.studies SET name = $2, name_basis = $3 WHERE id = $1 AND name_basis = 'opening'`,
+        [row.id, name ?? VCR_CONVERSATION_STUDY_NAME, name ? "assigned" : null]);
+    }
+    return rows.length;
+  }
+
+  /** @type {ReturnType<VcrStoreBase["ready"]> | null} */
+  #named = null;
+
+  /** The schema, then the one-time retirement of the names the first sentence once gave (a failure of the second never fails the first). */
+  ready() {
+    this.#named ??= super.ready().then(async (schema) => { await this.#retireOpeningNames().catch(() => 0); return schema; }, (error) => {
+      this.#named = null;
+      throw error;
+    });
+    return this.#named;
   }
 
   /**
@@ -778,7 +833,7 @@ export class VcrStore extends VcrStoreBase {
     };
     if (patch.name !== undefined) {
       put("name", String(patch.name));
-      // Somebody gave it a name: it is no longer the first sentence's, and a definition does not name it again.
+      // A person gave it a name: it is no longer one the model or the kind of work gave, and neither a title nor a definition names it again.
       sets.push("name_basis = NULL");
     }
     if (patch.question !== undefined) put("question", String(patch.question));
@@ -884,7 +939,10 @@ export class VcrStore extends VcrStoreBase {
     // The structured population and intervention stand in for a question nobody wrote (a definition always states one of them).
     const pico = object(input.pico);
     const stated = [pico.population, pico.intervention].filter((value) => typeof value === "string" && value.trim()).join(" ");
-    const proposed = unnamed ? vcrStudyNameFrom({ title: input.title, question: question || before?.question || asked || stated }) : null;
+    // A conversation's study is named by a title and by nothing the definition quotes: the title is the model's name for the research
+    // question (identifiers taken out); the question and the population are sentences, and a sentence is not a name there.
+    const proposed = !unnamed ? null : before?.scope === "conversation" ? vcrTitleName(input.title)
+      : vcrStudyNameFrom({ title: input.title, question: question || before?.question || asked || stated });
     // The definition names the disease and the treatment: the study is tagged again from it.
     const entityKeys = before ? await this.#entityKeys({ name: proposed ?? before.name, question: question || before.question }, input.pico) : null;
     const saved = await this.transaction(async (client) => {
@@ -904,7 +962,7 @@ export class VcrStore extends VcrStoreBase {
             for (let n = 2; await taken(name) && n < 50; n += 1) name = `${dated} ${n}`;
           }
         }
-        const row = (await client.query(`UPDATE ${VCR_SCHEMA}.studies SET name = $2, name_basis = ${proposed ? "NULL" : "name_basis"}, question = CASE WHEN question = '' THEN $3 ELSE question END,
+        const row = (await client.query(`UPDATE ${VCR_SCHEMA}.studies SET name = $2, name_basis = ${proposed ? (before.scope === "conversation" ? "'assigned'" : "NULL") : "name_basis"}, question = CASE WHEN question = '' THEN $3 ELSE question END,
             status = CASE WHEN status = 'draft' THEN 'active' ELSE status END, updated_at = now() WHERE id = $1 RETURNING status`,
         [before.id, name, question])).rows[0];
         named = { name, status: String(row?.status ?? "active") };

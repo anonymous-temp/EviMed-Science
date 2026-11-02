@@ -619,8 +619,15 @@ export const VCR_USER_STUDY_STATUSES = frozen(['active', 'paused', 'archived'])
 export const VCR_DRAFT_STUDY_NAME = '未命名研究'
 /** The name every study carried before the draft state existed; one that still has it is named on its next definition write. */
 export const VCR_LEGACY_DEFAULT_STUDY_NAME = '新虚拟临研研究' // retired-word-ok
-/** What a conversation's study is called until the conversation's first sentence (or a definition) names it; rows made before that still carry it. */
+/** What a conversation's study is called until the model's title (or a definition) names it, or it holds something and is named for the kind of work; rows made before that still carry it. */
 export const VCR_CONVERSATION_STUDY_NAME = '对话研究'
+/**
+ * The kind of work a conversation's study holds, by the tab that holds it: what an untitled study is called (`患者匹配 · 11月2日`), in
+ * code and from what the study holds. Never a sentence of what anyone said: a conversation about a patient names the work, not the person.
+ */
+export const VCR_CONVERSATION_TASK_NAMES_ZH = Object.freeze({
+  population: '虚拟人群', patients: '虚拟患者', comparator: '对照比较', trial: '试验设计', matching: '患者匹配', data: '研究资料',
+})
 /** The longest a study's name is taken from its question, in characters. */
 export const VCR_STUDY_NAME_FROM_QUESTION_MAX = 24
 

@@ -62,7 +62,7 @@ import { extractSelection } from "./vcrMatchBatch.mjs";
 import { locateSourceText, OTHER_TRIAL_MIN_SOURCE_CHARS, sourceTextLength } from "./vcrPatientTrials.mjs";
 import { factsOnSameWords, surfaceBasis } from "./vcrFactBasis.mjs";
 import { dataIntakeShapeValid } from "./vcrDataIntake.mjs";
-import { clinicalFactIssues, clinicalFactPolarity, clinicalNumericValue } from "@evimed/domain";
+import { VCR_CONVERSATION_STUDY_NAME, clinicalFactIssues, clinicalFactPolarity, clinicalNumericValue } from "@evimed/domain";
 import { createHash } from "node:crypto";
 import { VCR_LONGITUDINAL_JOBS, VCR_LONGITUDINAL_ERROR_CODES } from '@evimed/domain';
 
@@ -2404,9 +2404,9 @@ function poolingSummary(result, about) {
  * @param {any} config @param {any} runtimeManager
  * @param {{ vcr: { service: any, store: any, jobs?: any, orchestrator?: any, evidence?: any, evidenceStore?: any, matchStore?: any,
  *   matching?: any, patientTrials?: any, seal?: any, dataPlaneSeam?: any, documents?: any, knowledge?: any, patientContext?: any, dataIntake?: any } | null,
- *   report?: (code: string) => void, budgetMs?: number, resolveStudyConversation?: ((study:any,options:any)=>Promise<any>)|null, resolveInvocation?: ((identity:any,header:any,operation:string,body:any)=>Promise<any>)|null, conversationOpening?: ((origin:any)=>Promise<string|null>)|null, readProducerRun?: ((study:any,runId:string)=>Promise<any>)|null }} dependencies
+ *   report?: (code: string) => void, budgetMs?: number, resolveStudyConversation?: ((study:any,options:any)=>Promise<any>)|null, resolveInvocation?: ((identity:any,header:any,operation:string,body:any)=>Promise<any>)|null, readProducerRun?: ((study:any,runId:string)=>Promise<any>)|null }} dependencies
  */
-export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = () => {}, budgetMs = answerBudgetMs, readProducerRun = null, resolveInvocation = null, resolveStudyConversation = null, conversationOpening = null }) {
+export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = () => {}, budgetMs = answerBudgetMs, readProducerRun = null, resolveInvocation = null, resolveStudyConversation = null }) {
   /** @type {Map<string, { until: number, count: number }>} */
   const windows = new Map();
   const registryDeadline = Number(config?.vcrRegistryTimeoutMs) > 0 ? Number(config.vcrRegistryTimeoutMs) : REGISTRY_DEADLINE_MS;
@@ -2489,8 +2489,8 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
       }
       if (origin && !programmeStudy && (!study || study.conversationSessionId!==origin.rootSessionId)) {
         const create=operation==='write' || operation==='digitize' || operation==='simulate' && (body.action ?? 'start')==='start';
-        // The study is named from the first thing the person said in this conversation, looked up only when a study is made or still unnamed.
-        study=await vcr.store.taskContext(origin,{create,opening:create && conversationOpening ? () => conversationOpening(origin) : null}) ?? {id:null,userId:origin.userId,projectId:origin.projectId,scope:'conversation',purpose:'task',conversationSessionId:origin.rootSessionId};
+        // The study is made with a placeholder name; a title the model gives (task_context) or the kind of work it comes to hold names it.
+        study=await vcr.store.taskContext(origin,{create}) ?? {id:null,userId:origin.userId,projectId:origin.projectId,scope:'conversation',purpose:'task',conversationSessionId:origin.rootSessionId};
       }
       if (!study) throw gatewayError(403,'vcr_invocation_unavailable','Use this research tool from the current conversation.');
       study.executionOrigin = origin;
@@ -2527,8 +2527,20 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
             if (!origin || !vcr.dataIntake || request.items) throw gatewayError(400, 'vcr_write_payload_invalid', 'Data intake uses one typed data action and a verified conversation.');
             return { what: request.what, ...await vcr.dataIntake(study, request.data, origin) };
           }
-          if (request.what === 'task_context') return { what: request.what, ok: true, ids: [study.id], issues: [], studyId: study.id,
-            scope: study.scope, conversationSessionId: study.conversationSessionId };
+          if (request.what === 'task_context') {
+            // The conversation's scope, and optionally the title of its research question: the study is named by the model's words, with the
+            // identifiers of closed formats taken out, and never from what the person typed. A study the person renamed keeps their name.
+            const given = request.data ?? {};
+            if (request.items || Object.keys(given).some((field) => field !== 'title') || (given.title != null && typeof given.title !== 'string')) {
+              throw gatewayError(400, 'vcr_write_payload_invalid', 'task_context takes data={title} (a short title for the research question) or nothing.');
+            }
+            const titled = given.title && study.id ? await vcr.store.nameConversationStudy?.(study, { title: given.title }).catch(() => null) : null;
+            const name = titled?.name ?? study.name ?? null;
+            // A study with no title yet says so, and the tool's answer reminds the run once to give one.
+            const untitled = name === VCR_CONVERSATION_STUDY_NAME || (study.nameBasis === 'assigned' && !titled);
+            return { what: request.what, ok: true, ids: [study.id], issues: [], studyId: study.id,
+              scope: study.scope, conversationSessionId: study.conversationSessionId, name, ...(untitled ? { untitled: true } : {}) };
+          }
           if (request.what === 'patient_context') {
             if (!origin || !vcr.patientContext) throw gatewayError(403, 'vcr_invocation_unavailable', 'A native patient message or owned attachment is required.');
             return withWriteEntry(request.what, { what: request.what, ...await vcr.patientContext(study, request.data, origin) }, { study, publicUrl: config?.publicUrl });
@@ -2547,6 +2559,7 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
           });
           vcr.service.counters.writes += 1;
           vcr.service.counters.writeIssues += result.issues.length;
+          await nameWhatItHolds(vcr, study);
           // A matching is judged at its write, so the answer to a matching write is where the person goes to read it.
           return withWriteEntry(request.what, { what: request.what, ...result }, { study, publicUrl: config?.publicUrl });
         };
@@ -2581,7 +2594,9 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
             return vcr.jobs.validate({ kind: asked.kind, scenario: asked.scenario, inputs: asked.inputs, replicates: asked.replicates, studyId: study.id });
           }
           if (request.action === "start") {
-            return withJobEntry(await startJob(vcr, study, /** @type {any} */ (request)), { study, resultKind: vcrResultKindFor(String(/** @type {any} */ (request).kind)), publicUrl: config?.publicUrl });
+            const started = await startJob(vcr, study, /** @type {any} */ (request));
+            await nameWhatItHolds(vcr, study);
+            return withJobEntry(started, { study, resultKind: vcrResultKindFor(String(/** @type {any} */ (request).kind)), publicUrl: config?.publicUrl });
           }
           if (request.action === "cancel") {
             const result = await vcr.jobs.cancel(study.id, request.jobId, { actor: "runtime",rootSessionId:origin?.rootSessionId ?? null });
@@ -2657,6 +2672,17 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
       });
     }
   };
+}
+
+/**
+ * A conversation's study that holds something and has no name is named for the kind of work and the day, in code (`患者匹配 · 11月2日`):
+ * the first write or computation that leaves something in it does it, once. Nothing said by anyone is in the name, and a failure to name
+ * leaves the study as it was.
+ * @param {any} vcr @param {any} study
+ */
+async function nameWhatItHolds(vcr, study) {
+  if (!study?.id || study.scope !== "conversation" || study.name !== VCR_CONVERSATION_STUDY_NAME || study.nameBasis) return;
+  await vcr.store.nameFromWhatItHolds?.(study).catch(() => null);
 }
 
 /**

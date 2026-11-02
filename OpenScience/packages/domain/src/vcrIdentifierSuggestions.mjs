@@ -123,3 +123,22 @@ export function suggestIdentifierSpans(text) {
   }
   return chosen.sort((left, right) => left.start - right.start)
 }
+
+/**
+ * The same text with the identifiers of closed formats taken out: for words that are not a record and must not carry one (a study's
+ * title, which is a name the platform shows in lists, notices and exports). Each found span is removed, whatever its format, and the
+ * space it leaves is closed; a label before a record number stays (the number is what is identifying). Nothing else is read: a
+ * name, an address or a hospital's wording is language, and the title's contract says it names the research question and never a
+ * person.
+ * @param {string} text
+ */
+export function maskIdentifierSpans(text) {
+  const value = String(text ?? '')
+  let out = ''
+  let at = 0
+  for (const span of suggestIdentifierSpans(value)) {
+    out += value.slice(at, span.start)
+    at = span.end
+  }
+  return (out + value.slice(at)).replace(/\s{2,}/g, ' ').trim()
+}

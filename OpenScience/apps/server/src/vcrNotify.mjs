@@ -54,7 +54,7 @@ function clip(value, max) {
   return [...text].length > max ? `${[...text].slice(0, max - 1).join("")}…` : text;
 }
 
-/** What a study is called in a notice: its name (the first sentence of its conversation, or what a definition called it), else its question. @param {any} study */
+/** What a study is called in a notice: its name (the model's title, what a definition called it, or the kind of work and the day), else its question. @param {any} study */
 export function vcrStudyName(study) {
   const name = study?.name === VCR_CONVERSATION_STUDY_NAME ? "" : study?.name;
   return clip(name || study?.question || "虚拟临床研究", 30);
