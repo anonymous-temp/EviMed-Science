@@ -431,6 +431,14 @@ Verify **T/W/M**, AT63. The conversation is one native composer in two forms, on
 
 A blank module conversation has no greeting and no project card, because the page beside it says where the work stands; it offers the module's ways to begin as small pills that fill the composer, and its composer is at the bottom, where it will stay. A role that reads and does not run has a link to the kept conversation and nothing to type into. Entering a module does not open the conversation by itself, for the same reason the bar starts no runtime.
 
+### Paper-and-ink visual application (owner review, 2026-11-02)
+
+DS23 remains the structure: its projection, next action, dock, result linkage and native column are not redesigned by a visual refresh. Use the existing page-ground and surface roles to distinguish work from navigation; align existing spacing, ink and weak boundaries before adding containers. Static cards gain no shadow or new palette. The native conversation's usable 432px column and its right-side panel remain acceptance requirements.
+
+Brand expression varies with the touchpoint within the existing one-brand-moment rule: entry and welcome surfaces may carry the established brand moment; workbench controls stay quiet; reading and data surfaces give priority to content. This does not add a welcome banner to each module, a new safety/source status panel, or an explanation of page value. Empty states say how to proceed. Keep the 24px page-title role and the kernel's 280px sidebar constant, including legitimate saved widths.
+
+Memory's star continues to lead its T4 overview; actual previews, categories and changes follow it. No approval or pending-memory area is introduced. The general home keeps its native input first; sidebar history and inbox work are not duplicated there. Existing navigation may have static group headings without changing routes or merging Research Tools with Extensions. Use the existing T1–T6 templates and page-templates.json; no parallel page-pattern registry is created. DS22.5 and DS22.6 continue to own data-state truth and contextual editing.
+
 ### DS23.6 Needs
 
 Verify **T/W**, AT64. What waits for a person (待提供, 待确认, 需处理, 平台外) is said over the results on every view and in the conversation's company, not only on an overview; the need is done in its own place. Only what already needs a person is listed. What is missing to begin is a checklist that ticks itself from what the project records, filled by saying it in the conversation or sending a file: not a form, and not a template pasted into the composer. Only what is stored can be ticked.

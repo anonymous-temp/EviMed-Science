@@ -18,14 +18,25 @@ export function useWorkspaceSplit(): boolean {
   return useMediaQuery(SPLIT_FROM);
 }
 
+/**
+ * Anatomy: Results beside a conversation paper with a title and collapse link.
+ * Variants: Split results/conversation or conversation covering the results.
+ * States: Media query selects the composition; the caller owns conversation and result state.
+ * Hit area: Collapse link uses the existing small text-button geometry.
+ * Keyboard: Native collapse link; no added focus interception or keyboard handler.
+ * Long content: Results can shrink; supplied content retains its own scrolling and overflow behavior.
+ * Theme: Existing surface paper, hairline outline and faint header separator; no elevation.
+ * Responsive: At 1180px the sticky conversation has 432px content width; below it the conversation fills the available width.
+ * Verification: GeoProjectPage.test.tsx covers split/cover and navigation behavior. Native rendering, browser geometry and real AT require separate checks.
+ */
 export function WorkspaceSplit({ results, conversation, collapseTo }: { results: ReactNode; conversation: ReactNode; collapseTo: string }) {
   const split = useWorkspaceSplit();
   return (
     <div data-workspace={split ? "split" : "cover"} className="flex min-w-0 items-start gap-6">
       {split && <div data-workspace-results="" className="min-w-0 flex-1">{results}</div>}
       <section aria-label="对话" data-workspace-conversation=""
-        className={split ? "sticky top-[calc(var(--page-chrome-h,0px)+8px)] w-[432px] flex-none" : "w-full min-w-0"}>
-        <div className="flex h-9 items-center justify-between">
+        className={split ? "rounded-panel outline outline-1 outline-border-hairline bg-surface sticky top-[calc(var(--page-chrome-h,0px)+8px)] w-[432px] flex-none" : "w-full min-w-0 rounded-panel outline outline-1 outline-border-hairline bg-surface"}>
+        <div className="flex h-9 items-center justify-between border-b border-border-faint px-3">
           <h2 className="text-ui font-normal text-text-2">对话</h2>
           <Link className={buttonClasses({ variant: "text", size: "sm" })} to={collapseTo}>
             <PanelRightClose size={16} aria-hidden="true" />{split ? "收起对话" : "回到结果"}

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import {
   Bot,
@@ -117,6 +117,17 @@ export function isCurrent(to: string, pathname: string, projectModule: "geo" | "
   return pathname.startsWith(to);
 }
 
+/**
+ * Anatomy: Brand header, grouped destinations and project tree in a scrollable body, account footer and resize divider.
+ * Variants: Persistent desktop column or narrow-screen overlay; expanded or collapsed.
+ * States: Feature availability, current destination, project module, account and transient resize state.
+ * Hit area: Destination rows are links; footer controls and the divider retain their existing targets.
+ * Keyboard: Native links and buttons; divider arrows resize, Home/End select limits and Enter collapses.
+ * Long content: Row labels truncate; the shared body scrolls on short windows while the tree retains its own viewport.
+ * Theme: Existing surface-1 ground, ink labels and neutral group metadata; selection comes from NavItem.
+ * Responsive: Resizable desktop width; overlay below lg; project area retains a minimum height in the scrolling body.
+ * Verification: Sidebar.test.tsx covers routing, groups and controls. Browser geometry, native integration and real AT require separate checks.
+ */
 export function Sidebar() {
   const location = useLocation();
   const { sidebarCollapsed, sidebarWidth, setSidebarCollapsed, setSidebarWidth, toggleSidebar } = useUiStore();
@@ -204,16 +215,25 @@ export function Sidebar() {
           </div>
         </div>
 
-        <nav aria-label="工作台" className="flex flex-col px-3">
+        {/* Navigation and the project tree share a scroll fallback on short windows;
+          * the tree keeps its own viewport and mounted state, and the account stays outside. */}
+        <div data-sidebar-body="" className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+        <nav aria-label="工作台" className="flex shrink-0 flex-col px-3">
           {rows.map((item) => (
+            <Fragment key={item.to}>
+            {(item.to === "/app/home" || item.to === "/app/capabilities" || item.to === "/app/files" || item.to === "/app/autopilot") && (
+              <h2 className={cn("px-2 pb-1 text-meta font-normal text-text-3", item.to === "/app/home" ? "pt-1" : "pt-3")}>
+                {item.to === "/app/home" ? "工作台" : item.to === "/app/capabilities" ? "研究" : item.to === "/app/files" ? "资料与记忆" : "自动化与扩展"}
+              </h2>
+            )}
             <NavRow
-              key={item.to}
               to={item.to}
               icon={item.icon}
               label={item.label}
               active={isCurrent(item.to, location.pathname, projectModule)}
               freshState={item.to === "/app/home" ? () => ({ globalEntry: crypto.randomUUID() }) : undefined}
             />
+            </Fragment>
           ))}
         </nav>
 
@@ -221,13 +241,16 @@ export function Sidebar() {
           * project a group, its conversations inside, any of them one click
           * away and opened in place. It replaced a project dropdown here and a
           * list of the current project's recent work below the rows above. */}
-        <ProjectBrowser geo={geo} vcr={vcr} onCurrentModule={setProjectModule} />
+        <div className="flex min-h-48 flex-1 flex-col">
+          <ProjectBrowser geo={geo} vcr={vcr} onCurrentModule={setProjectModule} />
+        </div>
+        </div>
 
         {/* Account identity above its utilities keeps every action reachable at
           * the minimum width. The count of data sources without a credential used to
           * sit here — a standing fact about the deployment, not the reader's
           * work; 设置 → 数据源 lists what needs setting. */}
-        <div className="px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
+        <div className="shrink-0 px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
           <div className="flex items-center gap-2">
             <span
               aria-hidden="true"

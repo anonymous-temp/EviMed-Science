@@ -493,3 +493,16 @@ describe("Sidebar chrome", () => {
     expect(screen.queryByText(/Ctrl K|⌘K/)).not.toBeInTheDocument();
   });
 });
+
+it("groups destinations without changing their order or dropping tools and extensions", () => {
+  renderSidebar();
+  const nav = screen.getByRole("navigation", { name: "工作台" });
+  expect(within(nav).getAllByRole("heading").map((heading) => heading.textContent)).toEqual([
+    "工作台", "研究", "资料与记忆", "自动化与扩展",
+  ]);
+  const destinations = within(nav).getAllByRole("link").map((link) => link.getAttribute("href"));
+  expect(destinations.indexOf("/app/capabilities")).toBeLessThan(destinations.indexOf("/app/files"));
+  expect(destinations.indexOf("/app/autopilot")).toBeLessThan(destinations.indexOf("/app/extensions/discover"));
+  expect(within(nav).getByRole("link", { name: "科研工具" })).toBeVisible();
+  expect(within(nav).getByRole("link", { name: "插件与技能" })).toBeVisible();
+});
