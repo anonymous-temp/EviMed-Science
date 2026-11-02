@@ -1805,7 +1805,16 @@ const WRITERS = {
     recordedAt = verified.recordedAt ?? undefined;
     dateSurface = verified.dateSurface ?? undefined;
     if (verified.notes.includes("date_dropped")) {
-      warnings.push({ field: verified.droppedDates.join("/"), code: "date_not_shown", message: "这个日期没有整个印在 quote 里（含年份），也没有 dateQuote 印着它，已去掉日期；事实已保存，没有日期。需要日期的时间窗类条件仍是“没有日期”的未知。" });
+      // What was dropped decides what the run is told: a date nothing printed is gone and the fact may be undated, while a date label
+      // alone that is gone leaves the date, which stands on the quotation.
+      const lost = verified.droppedDates.filter((field) => field !== "dateSurface");
+      const kept = [occurredAt != null ? "occurredAt" : null, recordedAt != null ? "recordedAt" : null].filter(Boolean);
+      if (lost.length) {
+        warnings.push({ field: lost.join("/"), code: "date_not_shown", message: `${lost.join("、")} 没有整个印在 quote 里（含年份），也没有 dateQuote 印着它，已去掉；事实已保存。`
+          + (kept.length ? `${kept.join("、")} 有依据，仍然保存着。` : "事实现在没有日期；需要日期的时间窗类条件仍是“没有日期”的未知。") });
+      } else {
+        warnings.push({ field: "dateSurface", code: "date_label_not_shown", message: `dateSurface 不在 quote 或 dateQuote 里，已去掉这个写法；${kept.join("、") || "日期"}有依据，仍然保存着，事实没有变成无日期。` });
+      }
     }
     if (verified.dateQuoteUnfound) {
       warnings.push({ field: "dateQuote", code: "date_quote_not_found", message: "原文里找不到这句日期引文（dateQuote 要逐字出现在同一份文档里），没有用它；事实已保存。" });

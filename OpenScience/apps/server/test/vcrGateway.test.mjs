@@ -1573,8 +1573,22 @@ test("a date the quotation does not print is read from a second quotation of the
 
   // Each date field stands or falls on its own: a date the quotations show is kept beside one they do not.
   const partly = factWriter({ text });
-  await partly.write(item({ occurredAt: "2100-03-01", recordedAt: "2100-06-30", dateSurface: "2100-03-02", dateQuote: "Record date: 2100-03-01" }));
+  const partlyResult = await partly.write(item({ occurredAt: "2100-03-01", recordedAt: "2100-06-30", dateSurface: "2100-03-02", dateQuote: "Record date: 2100-03-01" }));
+  const partlyTold = () => partlyResult.results[0].warnings.find((/** @type {any} */ warning) => warning.code === "date_not_shown").message;
   assert.deepEqual([partly.saved[0].occurredAt, partly.saved[0].recordedAt, partly.saved[0].dateSurface, partly.saved[0].source.dateQuote.quote], ["2100-03-01", null, null, "Record date: 2100-03-01"]);
+  // What the run is told follows what was lost (review P2-11): a date label alone that the quotations do not show leaves the date, and the run
+  // is not told the fact has none; a date that was lost says so, and says which one stands.
+  const label = factWriter({ text });
+  const labelled = await label.write(item({ occurredAt: "2100-03-01", dateSurface: "March the first", dateQuote: "Record date: 2100-03-01" }));
+  assert.deepEqual([label.saved[0].occurredAt, label.saved[0].dateSurface], ["2100-03-01", null], "the date stands on its quotation; the label that nothing showed goes");
+  assert.deepEqual(labelled.results[0].warnings.map((/** @type {any} */ warning) => warning.code), ["date_label_not_shown"]);
+  assert.match(labelled.results[0].warnings[0].message, /仍然保存着，事实没有变成无日期/);
+  assert.doesNotMatch(labelled.results[0].warnings[0].message, /没有日期；/);
+  assert.match(partlyTold(), /^recordedAt 没有整个印在 quote 里.*occurredAt 有依据，仍然保存着。$/);
+  const none = factWriter({ text });
+  const lost = await none.write(item({ occurredAt: "2100-06-30" }));
+  assert.equal(lost.results[0].warnings[0].code, "date_not_shown");
+  assert.match(lost.results[0].warnings[0].message, /^occurredAt 没有整个印在 quote 里.*事实现在没有日期；需要日期的时间窗类条件仍是“没有日期”的未知。$/);
   // An item that claims no date needs no second quotation, and one that names it but claims no date is not refused for it.
   const plain = factWriter({ text });
   assert.equal((await plain.write(item({}))).ok, true);
