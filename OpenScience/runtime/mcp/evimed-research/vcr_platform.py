@@ -1222,7 +1222,7 @@ def simulate(arguments: dict) -> dict:
         return _validate_answer(data, payload.get("kind"))
     if action in ("start", "status"):
         data = _wait_for_job(data)
-    return _with_entry(_with_applied(_job_answer(data, action), data), data)
+    return _with_entry(_with_applied(_with_source(_job_answer(data, action), action, payload.get("kind")), data), data)
 
 
 def _validate_answer(data: dict, kind) -> dict:
@@ -1309,6 +1309,34 @@ def _wait_for_job(first: dict) -> dict:
         answer = {**first, **{key: value for key, value in fresh.items() if key != "action"}}
         if not _is_computing(answer):
             return answer
+
+
+# The conversations that have been told, once, how a value taken from a paper stops reading as an assumption on the page.
+_SOURCE_TOLD = set()
+_SOURCE_KINDS = ("design_analytic", "design_simulation", "design_grid")
+
+
+def _with_source(answer: dict, action: str, kind) -> dict:
+    """The first design start of a conversation says what turns a premise taken from a paper from an assumption into a cited value.
+
+    Three of three live design comparisons (2026-11-02) cited a published control median in their reply and left it on the result page as
+    an assumption, because the scenario carries a number and nothing of where it came from: the page labels a value by the evidence the
+    study holds for it. The route exists (an evidence item that names the paper by PMID or DOI and the sentence stating the number, then
+    an assumption card citing it); a run that never wrote one did not know it was there.
+    """
+    if action != "start" or kind not in _SOURCE_KINDS:
+        return answer
+    context = _EXECUTION_CONTEXT.get()
+    session = context.get("sessionId", "") if isinstance(context, dict) else ""
+    if session in _SOURCE_TOLD:
+        return answer
+    if len(_SOURCE_TOLD) > 2000:
+        _SOURCE_TOLD.clear()
+    _SOURCE_TOLD.add(session)
+    line = ("A value you took from a paper (a control median, a hazard ratio) shows on the result page as an assumption until the paper is saved "
+            "as its evidence: vcr_write evidence_item with publication {pmid or doi} and the sentence that states the number, then the "
+            "assumption card citing it (the vcr-evidence skill has the shape). Do this for numbers you cite in your reply, once.")
+    return {**answer, "next_actions": [*answer.get("next_actions", []), line]}
 
 
 def _with_applied(answer: dict, data: dict) -> dict:
