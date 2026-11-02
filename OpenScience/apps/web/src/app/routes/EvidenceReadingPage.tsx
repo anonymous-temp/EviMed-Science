@@ -71,7 +71,9 @@ function EvidenceReadingContent({
   const [comment, setComment] = useState("");
   const [zone, setZone] = useState<EvidenceZone | null>(null);
   const [evidence, setEvidence] = useState<EvidenceCard | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  // What went wrong and what 重试 does about it: reading the card again when the card could not be read, and the action itself when an
+  // action failed — it used to read the card again whatever had failed (2026-11-01 audit D13), so a refused 发布 was met by a reload.
+  const [error, setError] = useState<{ message: string; retry: () => void } | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [refresh, setRefresh] = useState(0);
@@ -129,7 +131,7 @@ function EvidenceReadingContent({
         }
       })
       .catch((reason) => {
-        if (active) setError(evidenceErrorMessage(reason));
+        if (active) setError({ message: evidenceErrorMessage(reason), retry: () => setRefresh((value) => value + 1) });
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -138,6 +140,8 @@ function EvidenceReadingContent({
       active = false;
     };
   }, [zoneId, cardId, refresh]);
+  /** An action that was refused: which one, why, and 重试 does that action again. */
+  const failed = (action: string, reason: unknown, retry: () => void) => setError({ message: `${action}没有完成：${evidenceErrorMessage(reason)}`, retry });
   const research = async () => {
     if (!zone || !evidence) return;
     const current = capture();
@@ -150,7 +154,7 @@ function EvidenceReadingContent({
         state: { runtimeUiIntent: newRuntimeUiIntent(prepared.draft) },
       });
     } catch (reason) {
-      if (current()) setError(evidenceErrorMessage(reason));
+      if (current()) failed("提问", reason, () => void research());
     } finally {
       if (current()) setBusy(false);
     }
@@ -172,7 +176,58 @@ function EvidenceReadingContent({
         if (current()) setEvidence(card);
       })
       .catch((reason) => {
-        if (current()) setError(evidenceErrorMessage(reason));
+        if (current()) failed(evidence.state === "published" ? "撤回" : "发布", reason, publishCard);
+      })
+      .finally(() => {
+        if (current()) setBusy(false);
+      });
+  };
+  /** The card as the server has it now, after a write: the discussion, the reviews and the revisions are read from it. */
+  const reread = async (current: () => boolean) => {
+    const updated = await fetchZoneEvidence(zoneId, cardId);
+    if (current()) setEvidence(updated);
+    return current();
+  };
+  const deleteComment = (id: string) => {
+    if (!evidence) return;
+    const current = capture();
+    setBusy(true);
+    deleteEvidenceComment(evidence, id)
+      .then(() => reread(current))
+      .catch((reason) => {
+        if (current()) failed("删除讨论", reason, () => deleteComment(id));
+      })
+      .finally(() => {
+        if (current()) setBusy(false);
+      });
+  };
+  const submitReview = () => {
+    if (!evidence) return;
+    const current = capture();
+    setBusy(true);
+    setError(null);
+    reviewEvidenceCard(evidence, Number(score), reviewText.trim())
+      .then(async () => {
+        if (await reread(current)) setReviewText("");
+      })
+      .catch((reason) => {
+        if (current()) failed("发布评议", reason, submitReview);
+      })
+      .finally(() => {
+        if (current()) setBusy(false);
+      });
+  };
+  const submitComment = () => {
+    if (!evidence) return;
+    const current = capture();
+    setBusy(true);
+    setError(null);
+    commentEvidenceCard(evidence, comment.trim(), commentRequestId(`${evidence.id}:${comment.trim()}`))
+      .then(async () => {
+        if (await reread(current)) setComment("");
+      })
+      .catch((reason) => {
+        if (current()) failed("发布讨论", reason, submitComment);
       })
       .finally(() => {
         if (current()) setBusy(false);
@@ -190,9 +245,9 @@ function EvidenceReadingContent({
         (askable || evidence?.canEdit) && (
           <>
             {askable && (
-              <Tooltip content="在当前项目里带着这张卡提问">
-                <Button loading={busy} onClick={() => void research()}>
-                  问这条证据
+              <Tooltip content="在当前项目里带着这张卡提问，问题写好后由你发送">
+                <Button loading={busy} actionKind="draft" onClick={() => void research()}>
+                  在当前项目里问这条证据
                 </Button>
               </Tooltip>
             )}
@@ -236,12 +291,9 @@ function EvidenceReadingContent({
       )}
       {error && (
         <EmptyState
-          title={error}
+          title={error.message}
           action={
-            <Button
-              variant="secondary"
-              onClick={() => setRefresh((value) => value + 1)}
-            >
+            <Button variant="secondary" onClick={error.retry}>
               重试
             </Button>
           }
@@ -275,44 +327,14 @@ function EvidenceReadingContent({
                   <EvidenceReviews evidence={evidence} />
                   <EvidenceDiscussionList
                     evidence={evidence}
-                    onDeleteComment={(id) => {
-                      const current = capture();
-                      setBusy(true);
-                      deleteEvidenceComment(evidence, id)
-                        .then(async () => {
-                          const updated = await fetchZoneEvidence(zoneId, cardId);
-                          if (current()) setEvidence(updated);
-                        })
-                        .catch((reason) => {
-                          if (current()) setError(evidenceErrorMessage(reason));
-                        })
-                        .finally(() => {
-                          if (current()) setBusy(false);
-                        });
-                    }}
+                    onDeleteComment={deleteComment}
                   />
                   {evidence.canReview && (
                     <form
                       className="max-w-measure space-y-3"
                       onSubmit={(event) => {
                         event.preventDefault();
-                        const current = capture();
-                        setBusy(true);
-                        setError(null);
-                        reviewEvidenceCard(evidence, Number(score), reviewText.trim())
-                          .then(async () => {
-                            const updated = await fetchZoneEvidence(zoneId, cardId);
-                            if (current()) {
-                              setEvidence(updated);
-                              setReviewText("");
-                            }
-                          })
-                          .catch((reason) => {
-                            if (current()) setError(evidenceErrorMessage(reason));
-                          })
-                          .finally(() => {
-                            if (current()) setBusy(false);
-                          });
+                        submitReview();
                       }}
                     >
                       <FilterSelect
@@ -342,27 +364,7 @@ function EvidenceReadingContent({
                       className="max-w-measure space-y-3"
                       onSubmit={(event) => {
                         event.preventDefault();
-                        const current = capture();
-                        setBusy(true);
-                        setError(null);
-                        commentEvidenceCard(
-                          evidence,
-                          comment.trim(),
-                          commentRequestId(`${evidence.id}:${comment.trim()}`),
-                        )
-                          .then(async () => {
-                            const updated = await fetchZoneEvidence(zoneId, cardId);
-                            if (current()) {
-                              setEvidence(updated);
-                              setComment("");
-                            }
-                          })
-                          .catch((reason) => {
-                            if (current()) setError(evidenceErrorMessage(reason));
-                          })
-                          .finally(() => {
-                            if (current()) setBusy(false);
-                          });
+                        submitComment();
                       }}
                     >
                       <Textarea

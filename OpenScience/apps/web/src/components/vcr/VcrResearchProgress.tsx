@@ -1,13 +1,16 @@
 import { Link } from "react-router";
+import { workStateLabel } from "@evimed/domain";
 import { FactList, type Fact } from "@/components/ui/FactList";
 import { Section } from "@/components/ui/Section";
 import type { VcrResearchProgress as Progress } from "@/lib/vcrClient";
 import { vcrChatPath } from "@/lib/studyLocation";
 import { vcrTabPath } from "./vcrTabs";
 
+/** The calculation's row: the words of a state are the vocabulary of module work's, and only a result's own findings are this page's. */
 const computation: Record<Progress["calculation"], string> = {
-  none: "尚无计算结果", queued: "排队中", running: "计算中", awaiting_budget: "等待计算预算", failed: "计算未完成", canceled: "计算已取消",
-  available: "结果已生成", limited: "结果有局限", not_estimable: "不可估计", stale: "结果已过期，需重新计算",
+  none: "尚无计算结果", queued: workStateLabel("queued"), running: workStateLabel("running"), awaiting_budget: workStateLabel("waiting", "确认预算"),
+  failed: workStateLabel("failed"), canceled: workStateLabel("stopped"),
+  available: "结果已生成", limited: "结果有局限", not_estimable: "不可估计", stale: `结果${workStateLabel("stale")}，需重新计算`,
 };
 const availability: Record<Progress["input"], string> = { available: "可用于队列计算", missing: "尚无可用输入", unknown: "待检查", not_required: "本结果使用设定或文献，无需队列输入" };
 
@@ -32,7 +35,7 @@ export function VcrResearchProgress({ progress, studyId, showPopulationLink = tr
     { label: "计算", value: computation[progress.calculation] ?? "待检查" },
     // A result that exists for another snapshot is neither this population's nor a zero: said once, with how to go on.
     ...(progress.resultNotCounted ? [{ label: "另一份快照的结果", value: "未计入：它不是在这个人群的数据快照上算的。要在新快照上算，保存一个新的人群版本再计算。" }] : []),
-    ...(progress.resultStale && progress.calculation !== "stale" ? [{ label: "已有结果", value: "已过期" }] : []),
+    ...(progress.resultStale && progress.calculation !== "stale" ? [{ label: "已有结果", value: workStateLabel("stale") }] : []),
     ...(counts.sourcePatients != null ? [{ label: "来源表患者", value: `${counts.sourcePatients.toLocaleString()} 人` }] : []),
     ...(counts.realPatients != null ? [{ label: "结果真实患者", value: `${counts.realPatients.toLocaleString()} 人` }] : []),
     ...(counts.observations != null ? [{ label: "来源表观测", value: `${counts.observations.toLocaleString()} 条` }] : []),

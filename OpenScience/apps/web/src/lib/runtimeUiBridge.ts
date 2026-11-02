@@ -105,6 +105,9 @@ export interface FrameEvidence {
 const REPORT_NAME = "clinical-evidence-report.md";
 
 /** The run bound to a conversation: the most recent one on its root session. */
+/** On `window`, when a conversation's turn ends: `detail.sessionId`. A module page beside the conversation reads itself again. */
+export const CONVERSATION_SETTLED_EVENT = "evimed:conversation-settled";
+
 export function boundRunFor(runs: readonly WebAgentRun[], sessionId: string | null | undefined): WebAgentRun | null {
   if (!sessionId) return null;
   const mine = runs.filter((run) => run.sessionId === sessionId);
@@ -293,7 +296,15 @@ export function useFrameRunBinding({ scope, readRuns, sessionId, enabled, postRu
         if (active && state.runId === runId) posts.current.postEvidence(evidence);
       }).catch(() => { /* the tabs say there is nothing yet; the next change reads again */ if (active) evidenceKey = ""; });
     };
-    const publish = () => { sender.push(state); refreshEvidence(); };
+    let wasRunning = false;
+    const publish = () => {
+      sender.push(state);
+      refreshEvidence();
+      // A turn that ended may have written to the project the page beside it shows; polling would find out tens of seconds later.
+      const running = state.state === "running";
+      if (wasRunning && !running) window.dispatchEvent(new CustomEvent(CONVERSATION_SETTLED_EVENT, { detail: { sessionId } }));
+      wasRunning = running;
+    };
 
     const bind = (run: WebAgentRun | null) => {
       if (!active) return;

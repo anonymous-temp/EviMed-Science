@@ -1,7 +1,8 @@
 import { VcrResearchProgress } from "../VcrResearchProgress";
 import { resumeVcrStep } from "../vcrConversationActions";
 import { Link } from "react-router";
-import { VCR_STEPS, VCR_STEP_STATUS_LABELS_ZH } from "@evimed/domain";
+import { PenLine } from "lucide-react";
+import { VCR_STEPS, vcrStepStateLabel, workStateLabel } from "@evimed/domain";
 import { type VcrAttention, type VcrCountKey, type VcrStepKey, type VcrStudy, type VcrTabKey } from "@/lib/vcrClient";
 import { columnTime } from "@/lib/runPresentation";
 import { AllowanceTopUp } from "@/components/runs/AllowanceTopUp";
@@ -17,6 +18,8 @@ import { VcrNoDefinition } from "../VcrStates";
 import { useStudyFrame } from "../studyFrameContext";
 import { VCR_STEP_TABS, vcrTabPath } from "../vcrTabs";
 import { stepName } from "../vcrActivity";
+import { INTAKE_LABEL, RESUME_LABEL } from "../vcrActionWords";
+import { stepAllowanceWait } from "@/lib/allowanceWait";
 
 /**
  * 总览: where the study is, in the order a reader asks.
@@ -57,6 +60,7 @@ export function OverviewTab({ studyId, study }: { studyId: string; study: VcrStu
 
       <Attention items={attention} study={study} studyId={studyId} />
 
+
       <StepList study={study} studyId={studyId} />
 
       <Deliverables items={deliverables} studyId={studyId} />
@@ -79,10 +83,10 @@ function countTab(key: VcrCountKey, study: VcrStudy, studyId: string): string {
 /* ------------------------------------------------------------------------- the steps */
 
 const RAIL: Record<string, RailState> = {
-  done: "done", minimal: "done", running: "active", queued: "waiting", failed: "attention", stale: "attention", none: "todo",
+  done: "done", minimal: "done", running: "active", queued: "active", failed: "attention", stale: "attention", none: "todo",
 };
 
-/** The first step the study was asked to do and did not finish, to tell one 「这一步没有做完」 line from the next. */
+/** The first step the study was asked to do and did not finish, to tell one 「这一步未完成」 line from the next. */
 function failedSteps(study: Pick<VcrStudy, "steps">): VcrStepKey[] {
   return (VCR_STEPS as readonly VcrStepKey[]).filter((step) => study.steps[step]?.status === "failed");
 }
@@ -97,7 +101,8 @@ function StepList({ study, studyId }: { study: VcrStudy; studyId: string }) {
         {started.map((step) => {
           const record = study.steps[step];
           const status = record?.status ?? "none";
-          const state = RAIL[status] ?? "todo";
+          // A step in line is working its way to a start; only one the allowance refused is waiting for the reader.
+          const state = stepAllowanceWait(record) ? "waiting" : RAIL[status] ?? "todo";
           const note = study.stepSummaries[step]?.note ?? null;
           // A step nobody has started or that is only in line has no time of its own: the row of the study's creation would read as news.
           const moved = record?.updatedAt && status !== "none" && status !== "queued" ? Date.parse(record.updatedAt) : Number.NaN;
@@ -110,7 +115,7 @@ function StepList({ study, studyId }: { study: VcrStudy; studyId: string }) {
               leading={<RailMark state={state} />}
               trailing={(
                 <>
-                  <span data-vcr-step-state={status} className="w-14 shrink-0 text-text-2">{(VCR_STEP_STATUS_LABELS_ZH as Record<string, string>)[status] ?? "未开始"}</span>
+                  <span data-vcr-step-state={status} className="min-w-14 shrink-0 text-text-2">{vcrStepStateLabel(record)}</span>
                   <span className="min-w-20 text-right tabular-nums text-text sm:min-w-28">{note ?? ""}</span>
                   <span className="w-16 shrink-0 text-right tabular-nums max-sm:hidden">{Number.isFinite(moved) ? columnTime(moved) : ""}</span>
                 </>
@@ -153,10 +158,13 @@ function Attention({ items, study, studyId }: { items: readonly VcrAttention[]; 
     else if (item.kind === "step_failed") {
       const step = failed[failedAt++];
       if (step && mayRun) {
-        action = <Button size="sm" variant="secondary" onClick={() => resumeVcrStep(frame, studyId, step)}>在对话中继续</Button>;
+        action = <Button size="sm" variant="secondary" actionKind="draft" onClick={() => resumeVcrStep(frame, studyId, step)}><PenLine size={16} aria-hidden="true" />{RESUME_LABEL}</Button>;
       }
     } else if (item.kind === "stale") {
       action = <Button size="sm" variant="text" onClick={() => frame?.openPanel("changes")}>看变更记录</Button>;
+    } else if (item.kind === "intake_confirm" || item.kind === "intake_freeze") {
+      // The data's own waits open the one place they are done: 数据接入, over this tab.
+      action = <Button size="sm" variant="secondary" onClick={() => frame?.openPanel("intake")}>{item.action?.label ?? INTAKE_LABEL}</Button>;
     } else if (item.kind === "export_failed") {
       if (study.abilities.includes("export")) action = <Button size="sm" variant="secondary" onClick={() => frame?.openPanel("export")}>重新导出</Button>;
     } else {
@@ -165,6 +173,15 @@ function Attention({ items, study, studyId }: { items: readonly VcrAttention[]; 
     }
     return action ? [<Note key={`${item.kind}-${index}`} tone={tone} action={action}>{text}</Note>] : [];
   });
+  // The first sentence was said and the definition is still missing: the AI asked in the conversation and the study waits for the answer
+  // (`conversation.awaitingInput`, which no page read before). The answer is given where the question was asked.
+  if (study.conversation.awaitingInput === true && study.abilities.includes("write")) {
+    notes.unshift(
+      <Note key="awaiting-input" tone="warn" action={<Button size="sm" variant="secondary" onClick={() => frame?.openChat()}>补充信息</Button>}>
+        {`${workStateLabel("waiting")}补充研究信息：研究定义还缺几项，在研究对话里回答后研究才会继续。`}
+      </Note>,
+    );
+  }
   if (notes.length === 0) return null;
   return <section data-vcr-attention="" aria-label="需要关注" className="flex flex-col gap-2">{notes}</section>;
 }

@@ -1932,7 +1932,10 @@ export {
   VCR_STEP_NEEDS,
   VCR_STEP_PRODUCTS,
   VCR_STEP_STATUSES,
-  VCR_STEP_STATUS_LABELS_ZH,
+  vcrStepWorkState,
+  vcrStepStateLabel,
+  vcrStudyWorkState,
+  vcrJobWorkState,
   VCR_STUDY_STATUSES,
   VCR_STUDY_STATUS_LABELS_ZH,
   VCR_USER_STUDY_STATUSES,
@@ -2653,3 +2656,4 @@ export { RSI_CAMPAIGN_LIMITS, RSI_CAMPAIGN_SCHEMA_VERSION, RSI_CAMPAIGN_CLAIMS, 
   rsiCampaignIssues, rsiLabBindingIssues, rsiCompatibilityIssues, rsiBudgetAdmission, rsiCampaignMonth } from './src/rsiCampaign.mjs'
 
 export { GEO_STEP_DEPENDENCIES, geoWorkflowState, geoAutomationEnabled } from './src/geoWorkflow.mjs'
+export { WORK_STATES, WORK_STATE_LABEL, WORK_NEED_KINDS, WORK_NEED_LABEL, WORK_ACTION_KINDS, workStateLabel } from './src/workState.mjs'

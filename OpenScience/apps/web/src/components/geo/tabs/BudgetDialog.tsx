@@ -95,7 +95,7 @@ export function BudgetDialog({
         {error?.field === "form" && <p role="alert" className="text-ui text-danger">{error.message}</p>}
         <div className="mt-2 flex justify-end gap-2">
           <Button variant="secondary" onClick={onCancel}>取消</Button>
-          <Button type="submit" loading={saving}>保存</Button>
+          <Button type="submit" actionKind="external" loading={saving}>保存</Button>
         </div>
       </form>
     </FormDialog>

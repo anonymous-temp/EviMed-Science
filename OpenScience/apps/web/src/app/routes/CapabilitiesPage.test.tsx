@@ -6,6 +6,7 @@ import { CAPABILITY_DISPLAY, RESEARCH_TOOLS_NAME, SIMULATED_WALLET_LABEL, SIMULA
 import { CapabilitiesPage } from "./CapabilitiesPage";
 import { WebApiError } from "@/lib/apiClient";
 import { forgetResearchBilling } from "@/lib/useResearchBilling";
+import { useToastStore } from "@/lib/toast";
 
 const agents = [
   {
@@ -351,6 +352,29 @@ describe("CapabilitiesPage", () => {
     expect(intent.kind).toBe("create");
     expect(intent.sessionId).toMatch(/^web-/);
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+  });
+
+  // A binding the control plane refused used to open a conversation with no tool on it, and the reader asked their question of the general
+  // assistant believing the tool was chosen. It is said, and nothing opens.
+  it("says a refused binding and stays on the list: no conversation without the tool opens", async () => {
+    mocks.putWebResearchSession.mockRejectedValueOnce(new WebApiError("unavailable", { status: 503 }));
+    render(
+      <MemoryRouter initialEntries={["/app/capabilities"]}>
+        <Routes>
+          <Route path="/app/capabilities" element={<CapabilitiesPage />} />
+          <Route path="/app/chat" element={<LocationProbe />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    await userEvent.click(await screen.findByRole("button", { name: "药品安全性分析" }));
+    await waitFor(() => expect(useToastStore.getState().toasts.map((toast) => toast.message).join("\n")).toMatch(/药品安全性分析/));
+    expect(useToastStore.getState().toasts.some((toast) => toast.tone === "error")).toBe(true);
+    expect(screen.queryByTestId("location")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "药品安全性分析" })).toBeInTheDocument();
+    // Pressing again is the retry, and it opens the conversation with the tool on.
+    await userEvent.click(screen.getByRole("button", { name: "药品安全性分析" }));
+    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/app/chat"));
+    expect(screen.getByTestId("capability")).toHaveTextContent("adr-analysis");
   });
 
   // The 「循证 GEO」 capabilities stay public — their module binds a

@@ -44,6 +44,8 @@ export interface ActivityStripProps {
   to?: string;
   onCancel?: () => void;
   cancelling?: boolean;
+  /** What the stop says when it reaches further than the work shown (「停止整个研究」). Absent, 「取消」. */
+  cancelLabel?: string;
   variant?: "strip" | "chip";
   className?: string;
 }
@@ -55,12 +57,12 @@ export interface ActivityStripProps {
  * States: Waiting suppresses elapsed time; cancelling is caller controlled; no inferred percent.
  * Hit area: Chip uses h-sm; cancellation uses Button; text link has intrinsic target.
  * Keyboard: Native link/Button activation; no automatic focus movement.
- * Long content: Question truncates; strip facts and controls wrap.
+ * Long content: One line whatever the state, so that the band keeps its height: the question truncates, and on a phone the clock and the queue give way.
  * Theme: Information ground and running-dot role, the text in the ordinary ink (the ground says it, not coloured text: a page is held to seven text colours); reduced motion follows shared CSS.
  * Responsive: Strip wraps; chip is max-width constrained.
  * Verification: StepBarParts.test.tsx and Composition.test.tsx; /__gallery is visual evidence; real AT/touch and browser reflow require manual checks.
  */
-export function ActivityStrip({ label, phase, counts, startedAt, queued, waiting, to, onCancel, cancelling, variant = "strip", className }: ActivityStripProps) {
+export function ActivityStrip({ label, phase, counts, startedAt, queued, waiting, to, onCancel, cancelling, cancelLabel, variant = "strip", className }: ActivityStripProps) {
   const elapsed = useElapsed(waiting ? null : startedAt);
   const dot = waiting
     ? <span aria-hidden="true" data-forced-colors="preserve" className="h-2 w-2 shrink-0 rounded-full bg-surface ring-2 ring-info" />
@@ -81,15 +83,16 @@ export function ActivityStrip({ label, phase, counts, startedAt, queued, waiting
   }
   const detail = counts && counts.total > 0 ? `${phase ? `${phase} ` : ""}${NUMBER.format(counts.done)} / ${NUMBER.format(counts.total)}` : phase;
   return (
-    <div data-activity="strip" data-activity-state={waiting ? "queued" : "running"} className={cn("flex min-h-9 flex-wrap items-center gap-x-3 gap-y-1 rounded bg-info-soft px-3 py-1.5 text-ui text-text", className)}>
+    <div data-activity="strip" data-activity-state={waiting ? "queued" : "running"} className={cn("flex min-h-9 flex-nowrap items-center gap-x-3 rounded bg-info-soft px-3 py-1.5 text-ui text-text", className)}>
       {dot}
-      <span className="min-w-0 truncate">{waiting ? `${label} · 排队中` : `正在${label}`}</span>
-      {waiting ? <span>{waiting}</span> : detail && <span className="tabular-nums">{detail}</span>}
-      {elapsed && <span className="text-caption tabular-nums text-text-3">{elapsed}</span>}
-      {queued !== undefined && queued > 0 && <span className="text-caption text-text-2">{`另有 ${queued} 项排队`}</span>}
+      {/* A wait on the person (等你确认预算) is said by `waiting` alone: it is not a place in a queue. */}
+      <span className="min-w-0 truncate">{waiting ? (waiting.startsWith("等你") ? label : `${label} · 排队中`) : `正在${label}`}</span>
+      {waiting ? <span className="shrink-0">{waiting}</span> : detail && <span className="shrink-0 tabular-nums">{detail}</span>}
+      {elapsed && <span className="hidden shrink-0 text-caption tabular-nums text-text-3 sm:inline">{elapsed}</span>}
+      {queued !== undefined && queued > 0 && <span className="hidden shrink-0 text-caption text-text-2 sm:inline">{`另有 ${queued} 项排队`}</span>}
       <span className="flex-1" />
       {to && <Link to={to} className="rounded text-link hover:underline">查看进度</Link>}
-      {onCancel && <Button size="sm" variant="text" loading={cancelling} disabled={cancelling} onClick={onCancel}>取消</Button>}
+      {onCancel && <Button size="sm" variant="text" actionKind="set" loading={cancelling} disabled={cancelling} onClick={onCancel}>{cancelLabel ?? "取消"}</Button>}
     </div>
   );
 }

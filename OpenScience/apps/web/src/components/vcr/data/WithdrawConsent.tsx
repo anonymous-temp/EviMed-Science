@@ -45,7 +45,7 @@ export function WithdrawConsent({ studyId, source, onChanged }: { studyId: strin
       <Select label="撤回的患者" value={subject} onChange={event => setSubject(event.target.value)}>
         <option value="">选择患者</option>{subjects.map(key => <option key={key} value={key}>{key}</option>)}
       </Select>
-      <Button variant="secondary" loading={busy} disabled={busy || !subject} onClick={() => void withdraw()}>清除该患者的病历文本</Button>
+      <Button actionKind="set" variant="secondary" loading={busy} disabled={busy || !subject} onClick={() => void withdraw()}>清除该患者的病历文本</Button>
       {message && <p role={failed ? 'alert' : 'status'} className={failed ? 'text-caption text-error' : 'text-caption text-text-3'}>{message}</p>}
     </div>
   </Disclosure>;

@@ -12,7 +12,7 @@ import test from "node:test";
 import { VCR_ENGINE_METHODS, VCR_JOB_KINDS, VCR_PROGNOSTIC_QUALIFICATION_LABEL_ZH, VCR_TIME_UNITS, VCR_VALUE_SOURCES } from "@evimed/domain";
 
 import {
-  JOB_KIND_LABELS, assumptionNames, attentionOf, budgetView, conclusionOf, designsSentence, failedExportsOf, jobView, nodeLabel, notEstimableDesign, numberString, presentDeliverable,
+  JOB_KIND_LABELS, assumptionNames, attentionOf, intakeNeedsOf, budgetView, conclusionOf, designsSentence, failedExportsOf, jobView, nodeLabel, notEstimableDesign, numberString, presentDeliverable,
   presentDesigns, presentModelCard, presentModels, presentExport, presentPrecedent, presentStudy, presentSummary, registryDesignWords, reviewContextOf, reviewTargetFor, useCeilingOf,
   valueString, vcrCurrentNodes, vcrDependencies, vcrReviewIsCurrent,
 } from "../src/vcrViews.mjs";
@@ -603,11 +603,58 @@ test("an export that ended with no document is said under 「需要关注」 the
 
   // One rule, two pages: the home list's row and the study page's overview say the same lines after a failed step's.
   const steps = { trial: { status: "failed" } };
-  const expected = [{ kind: "step_failed", tone: "attention", tab: null, text: "「试验」这一步没有做完，已算出的部分保留" }, line("CDE 沟通交流资料包"), line("模拟报告")];
+  const expected = [{ kind: "step_failed", tone: "attention", tab: null, text: "「试验」这一步未完成，已算出的部分保留" }, line("CDE 沟通交流资料包"), line("模拟报告")];
   const home = presentSummary({ study: { ...study, steps, updatedAt: "2026-09-28T01:00:00.000Z", createdAt: "x" }, results: [], stale: [], jobs: [],
     scenarios: [], comparators: [], grid: null, exports: pilot, now: NOW });
   assert.deepEqual(home.attention, expected);
   assert.deepEqual(presentStudy({ ...emptyBundle(), study: { ...study, steps }, exports: pilot }).overview.attention, expected);
+});
+
+test("a line of 需要关注 that is a thing to do is shown only to a reader who can do it, on the home list and the study page alike", () => {
+  const rows = { comparators: [{ route: "external_control", conclusion: "not_estimable", gapList: [{ title: "同期治疗记录" }], resultId: null }], results: [],
+    stale: [{ node: "x", reason: "criterion_changed" }], jobs: [{ state: "awaiting_budget" }], steps: { trial: { status: "failed" }, evidence: { status: "queued", waiting: "allowance" } },
+    exports: [{ id: "exp_1", kind: "study_package", state: "failed", cover: {} }], intake: { confirm: 1, freeze: 0 } };
+  const kinds = (/** @type {string[] | null} */ abilities) => attentionOf({ ...rows, abilities }).map((line) => line.kind);
+  const all = ["not_estimable", "stale", "budget_confirm", "step_failed", "allowance_waiting", "export_failed", "intake_confirm"];
+  assert.deepEqual(kinds(null), all, "no reader named: every line, as before");
+  assert.deepEqual(kinds(["read", "write", "run", "export", "manage_study", "manage_data"]), all, "the lead is asked for everything");
+  // A viewer can read a gap and a stale result, and nothing else is theirs to do: no budget, no restart, no export, no data.
+  assert.deepEqual(kinds(["read"]), ["not_estimable", "stale"]);
+  // The budget is the lead's alone: a data manager runs steps and manages data but does not confirm the budget.
+  assert.deepEqual(kinds(["read", "write", "run", "manage_data"]), ["not_estimable", "stale", "step_failed", "allowance_waiting", "intake_confirm"]);
+  // A reviewer exports and reads.
+  assert.deepEqual(kinds(["read", "export"]), ["not_estimable", "stale", "export_failed"]);
+
+  // The same rule on both pages: the row of a viewer has no 去处理 that leads nowhere, and the lead's has them.
+  const study = { id: "std_1", projectId: "prj_1", name: "x", dataTier: "T0", intendedUse: "exploratory", status: "active", steps: { trial: { status: "failed" } } };
+  const home = (/** @type {string[]} */ roles) => presentSummary({ study: { ...study, updatedAt: "2026-09-28T01:00:00.000Z", createdAt: "x" }, results: [], stale: [],
+    jobs: [{ state: "awaiting_budget" }], scenarios: [], comparators: [], grid: null, roles, now: NOW }).attention.map((line) => line.kind);
+  assert.deepEqual(home(["lead"]), ["budget_confirm", "step_failed"]);
+  assert.deepEqual(home(["viewer"]), []);
+  const page = (/** @type {string[]} */ roles) => presentStudy({ ...emptyBundle(), study, jobs: [{ state: "awaiting_budget" }], roles }).overview.attention.map((line) => line.kind);
+  assert.deepEqual(page(["lead"]), ["budget_confirm", "step_failed"]);
+  assert.deepEqual(page(["viewer"]), []);
+});
+
+test("what the data intake waits on a person for is counted from the sources' rows, and is the data manager's to act on", () => {
+  const source = (/** @type {string} */ id, /** @type {string} */ fieldMapState, /** @type {string} */ status = "registered") => ({ id, fieldMapState, status });
+  const file = (/** @type {string} */ sourceId, /** @type {string} */ role = "data") => ({ id: `${sourceId}-file`, sourceId, role });
+  assert.deepEqual(intakeNeedsOf(null), { confirm: 0, freeze: 0 });
+  assert.deepEqual(intakeNeedsOf({ sources: [source("a", "none")], files: [], snapshots: [] }), { confirm: 0, freeze: 0 }, "a source with no file has nothing to map");
+  assert.deepEqual(intakeNeedsOf({ sources: [source("a", "none")], files: [file("a")], snapshots: [] }), { confirm: 1, freeze: 0 }, "a data file nobody has mapped");
+  assert.deepEqual(intakeNeedsOf({ sources: [source("a", "none")], files: [file("a", "dictionary")], snapshots: [] }), { confirm: 0, freeze: 0 }, "a dictionary alone is not data to map");
+  assert.deepEqual(intakeNeedsOf({ sources: [source("a", "proposed"), source("b", "proposed")], files: [], snapshots: [] }), { confirm: 2, freeze: 0 });
+  assert.deepEqual(intakeNeedsOf({ sources: [source("a", "confirmed"), source("b", "confirmed")], files: [file("a"), file("b")], snapshots: [{ sourceId: "a" }] }), { confirm: 0, freeze: 1 },
+    "a confirmed map with a snapshot is done; one without waits to be frozen");
+  assert.deepEqual(intakeNeedsOf({ sources: [source("a", "proposed", "withdrawn")], files: [], snapshots: [] }), { confirm: 0, freeze: 0 }, "a withdrawn source asks for nothing");
+
+  const rows = { comparators: [], results: [], stale: [], jobs: [], steps: {} };
+  const lines = attentionOf({ ...rows, intake: { confirm: 2, freeze: 1 }, abilities: ["read", "manage_data"] });
+  assert.deepEqual(lines.map((line) => [line.kind, line.text, line.action?.label]), [
+    ["intake_confirm", "2 份数据的字段映射在等你确认", "数据接入"], ["intake_freeze", "1 份数据的字段映射已确认，在等你冻结快照", "数据接入"]]);
+  assert.deepEqual(attentionOf({ ...rows, intake: { confirm: 2, freeze: 1 }, abilities: ["read"] }), [], "a viewer is not asked to confirm a map");
+  const overview = presentStudy({ ...emptyBundle(), study, intakeNeeds: { confirm: 1, freeze: 0 }, roles: ["lead"] }).overview.attention;
+  assert.deepEqual(overview.map((line) => line.kind), ["intake_confirm"]);
 });
 
 // --- the ceiling -----------------------------------------------------------------------------------------

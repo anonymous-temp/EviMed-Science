@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
-import { useNavigate, useParams, useSearchParams } from "react-router";
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router";
 import { UsersRound } from "lucide-react";
+import { workStateLabel } from "@evimed/domain";
 import { webErrorMessage } from "@/lib/apiClient";
 import {
   cancelVcrStudy,
@@ -31,14 +32,17 @@ import { VcrPackageReader } from "@/components/vcr/VcrPackageReader";
 import { VcrBackgroundRunsDrawer, VcrChangeLogDrawer } from "@/components/vcr/VcrStudyDrawers";
 import { VcrExportDialog, VcrRenameDialog } from "@/components/vcr/VcrStudyDialogs";
 import { VcrIntakeDrawer } from "@/components/vcr/VcrIntakeDrawer";
+import { INTAKE_LABEL } from "@/components/vcr/vcrActionWords";
 import { VcrTierOffer } from "@/components/vcr/VcrTierOffer";
-import { StudyFrame, type StudyView } from "@/components/vcr/StudyFrame";
-import { vcrCalculationPath } from "@/lib/vcrMethodLocation";
+import { STUDY_PANEL_ID, StudyFrame, type StudyView } from "@/components/vcr/StudyFrame";
+import { NeedsBar, type WorkNeed } from "@/components/workspace/NeedsBar";
+import { WorkspaceSplit } from "@/components/workspace/WorkspaceSplit";
+import { vcrCalculationPath, vcrCalculationViewPath } from "@/lib/vcrMethodLocation";
 import { StudyPane } from "@/components/vcr/StudyPane";
 import { useStudy } from "@/components/vcr/useStudy";
 import { useVcrRun } from "@/components/vcr/useVcrRun";
 import { announceVcrStudiesChanged } from "@/components/vcr/useVcrProjectIds";
-import { VcrTabBoundary } from "@/components/vcr/vcrTabKit";
+import { VcrRefreshContext, VcrRefreshNote, VcrTabBoundary, type VcrRefreshReporter } from "@/components/vcr/vcrTabKit";
 import { OverviewTab } from "@/components/vcr/tabs/OverviewTab";
 import { PopulationPatientsTab } from "@/components/vcr/tabs/PopulationPatientsTab";
 import { PatientsTab } from "@/components/vcr/tabs/PatientsTab";
@@ -95,10 +99,12 @@ export function VcrStudyPage() {
   const navigate = useNavigate();
   const feature = useVcrFeature();
   const [query] = useSearchParams();
+  const location = useLocation();
   const chat = tabParam === "chat";
-  const { tab, moved } = chat ? { tab: "overview" as VcrTabKey, moved: false } : resolveVcrTab(tabParam);
+  // With the conversation open the address also says which result is beside it.
+  const { tab, moved } = chat ? { tab: resolveVcrTab(query.get("result")).tab, moved: false } : resolveVcrTab(tabParam);
   const view: StudyView = chat ? "chat" : tab;
-  const { loaded, reload } = useStudy(studyId, feature !== "loading" && feature !== "off", view);
+  const { loaded, reload, refreshError } = useStudy(studyId, feature !== "loading" && feature !== "off", view);
 
   useEffect(() => {
     // An address that named a step is rewritten to the tab that holds it, in
@@ -130,27 +136,39 @@ export function VcrStudyPage() {
       </PageShell>
     );
   }
-  if (loaded.study.purpose === "calculation" && ((tab === "overview" && !query.has("package")) || (chat && !loaded.study.conversation.sessionId))) return <CalculationRedirect studyId={studyId} />;
+  if (loaded.study.purpose === "calculation") {
+    // A calculation has no overview (the history of its methods is its landing page), and each of its other views has one address: its own.
+    if ((tab === "overview" && !query.has("package")) || (chat && !loaded.study.conversation.sessionId)) return <CalculationRedirect to={vcrCalculationPath(studyId)} />;
+    if (!chat && location.pathname.startsWith(VCR_HOME_PATH)) return <CalculationRedirect to={`${vcrCalculationViewPath(studyId, tab)}${location.search}`} />;
+  }
   // Keyed by the study: the menu's dialogs and the run guard never outlive it.
-  return <StudyView key={studyId} studyId={studyId} study={loaded.study} view={view} tab={tab} reload={reload} />;
+  return <StudyView key={studyId} studyId={studyId} study={loaded.study} view={view} tab={tab} reload={reload} refreshError={refreshError} />;
 }
 
-function CalculationRedirect({ studyId }: { studyId: string }) {
+function CalculationRedirect({ to }: { to: string }) {
   const navigate = useNavigate();
-  useEffect(() => { navigate(vcrCalculationPath(studyId), { replace: true }); }, [navigate, studyId]);
+  useEffect(() => { navigate(to, { replace: true }); }, [navigate, to]);
   return <VcrStudySkeleton />;
 }
 
 /** Which of the page's panels is open over it. */
 type Panel = "rename" | "export" | "members" | "budget" | "changes" | "runs" | "intake" | "delete" | null;
 
-function StudyView({ studyId, study, view, tab, reload }: { studyId: string; study: VcrStudy; view: StudyView; tab: VcrTabKey; reload: () => void }) {
+function StudyView({ studyId, study, view, tab, reload, refreshError }: { studyId: string; study: VcrStudy; view: StudyView; tab: VcrTabKey; reload: () => void; refreshError: string | null }) {
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const { run, busy: running } = useVcrRun(study, { refresh: reload });
   const [panel, setPanel] = useState<Panel>(() => params.get("intake") === "1" ? "intake" : null);
   const [deleting, setDeleting] = useState(false);
   const [changingStatus, setChangingStatus] = useState(false);
+  // A read of this page that failed after it had answered (the study's own, or a tab's) keeps what it showed and says so once, here.
+  const [failures, setFailures] = useState<Record<string, { message: string; retry: () => void }>>({});
+  const reportFailure = useCallback<VcrRefreshReporter>((id, failure) => setFailures((current) => {
+    if (!failure) { if (!(id in current)) return current; const rest = { ...current }; delete rest[id]; return rest; }
+    return { ...current, [id]: failure };
+  }), []);
+  const refreshFailed = refreshError ?? Object.values(failures)[0]?.message ?? null;
+  const retryFailed = () => { reload(); for (const failure of Object.values(failures)) failure.retry(); };
   const packageId = params.get("package");
   const Tab = TABS[tab];
   // What this reader may do here, from the roles the server says they hold:
@@ -206,13 +224,13 @@ function StudyView({ studyId, study, view, tab, reload }: { studyId: string; stu
     ...(can("export") ? [{ label: "导出…", disabled: running, onSelect: () => setPanel("export") }] : []),
     // 数据接入 is one entry on every tier: a study with no data plane to take it says so in the drawer, and a tier that takes real
     // data finds its sources there — it used to be the last block of 定义与证据.
-    ...(can("manage_data") || can("read") ? [{ label: "数据接入", onSelect: () => setPanel("intake") }] : []),
+    ...(can("manage_data") || can("read") ? [{ label: INTAKE_LABEL, onSelect: () => setPanel("intake") }] : []),
     ...(can("manage_members") ? [{ label: "成员与角色", onSelect: () => setPanel("members") }] : []),
     // The compute budget, the study's status and its deletion are the lead's
     // (`manage_study`): the second human stop is confirmed by the person who
     // signs the study off, not by whoever queued the compute.
     ...(can("manage_study") ? [{ label: "计算预算", onSelect: () => setPanel("budget") }] : []),
-    ...(can("manage_study") ? [{ label: paused ? "继续" : "暂停", disabled: changingStatus, onSelect: setStatus }] : []),
+    ...(can("manage_study") ? [{ label: paused ? "继续研究" : "暂停研究", disabled: changingStatus, onSelect: setStatus }] : []),
     { label: "变更记录", onSelect: () => setPanel("changes") },
     { label: "AI 运行", onSelect: () => setPanel("runs") },
     ...(can("manage_study") ? ["separator" as const, { label: "删除", destructive: true, onSelect: () => setPanel("delete") }] : []),
@@ -253,8 +271,11 @@ function StudyView({ studyId, study, view, tab, reload }: { studyId: string; stu
     const intent: RuntimeUiIntent | null = draft && sessionId
       ? { kind: "open", projectId: study.projectId, requestId: crypto.randomUUID(), sessionId, draft, ...(restoreDraft ? { restoreDraft: true } : {}), ...(reference ? { vcrReference: reference } : {}) }
       : null;
-    navigate(vcrChatPath(studyId), intent ? { state: { runtimeUiIntent: intent } } : undefined);
-  }, [navigate, sessionId, study.projectId, studyId]);
+    // Whatever is being read stays beside the conversation.
+    const beside = new URLSearchParams(params);
+    beside.set("result", tab);
+    navigate(`${vcrChatPath(studyId)}?${beside}`, intent ? { state: { runtimeUiIntent: intent } } : undefined);
+  }, [navigate, sessionId, study.projectId, studyId, tab, params]);
   useEffect(() => {
     if (!sessionId || !pendingChat.current) return;
     const saved = pendingChat.current;
@@ -269,10 +290,12 @@ function StudyView({ studyId, study, view, tab, reload }: { studyId: string; stu
   }, [view, study.status, study.question, sessionId, studyId, openChat]);
   const openView = useCallback((next: StudyView) => {
     if (next === "chat") openChat();
-    else navigate(study.purpose === "calculation" ? `${vcrCalculationPath(studyId)}/${next}` : vcrTabPath(studyId, next));
-  }, [navigate, openChat, studyId, study.purpose]);
+    // With the conversation open, a destination changes what is beside it and leaves the conversation where it is.
+    else if (view === "chat") navigate(`${vcrChatPath(studyId)}?result=${next}`);
+    else navigate(study.purpose === "calculation" ? vcrCalculationViewPath(studyId, next) : vcrTabPath(studyId, next));
+  }, [navigate, openChat, studyId, study.purpose, view]);
 
-  const stop = () => { void cancelVcrStudy(studyId).then(reload).catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "暂时无法取消，请稍后重试。" }))); };
+  const stop = () => { void cancelVcrStudy(studyId).then(reload).catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "暂时无法停止，请稍后重试。" }))); };
 
   // What waits for the lead's word: a job past the budget. Said once, with the way to give it — and not to a reader who cannot.
   // The header's primary action is 确认预算 while this is so (`StudyFrame`); the sentence says how much, and its number opens the same dialog.
@@ -285,6 +308,17 @@ function StudyView({ studyId, study, view, tab, reload }: { studyId: string; stu
     />
   ) : null;
 
+  // A pause is the study's and not a step's: new work is not started until it goes on, and the one who paused it (the lead) goes on from here.
+  const pausedNote = paused ? (
+    <Note
+      tone="warn"
+      className="mb-4"
+      action={can("manage_study") ? <Button size="sm" variant="secondary" actionKind="set" loading={changingStatus} onClick={setStatus}>继续</Button> : undefined}
+    >
+      {`${workStateLabel("paused")}：新的步骤不会开始，已有的结果仍可查看。`}
+    </Note>
+  ) : null;
+
   // The tab's element is made once per study read: a toolbar its tab hands the band re-renders the band, never the tab.
   const body = useMemo(() => (
     <VcrTabBoundary key={tab}>
@@ -292,24 +326,45 @@ function StudyView({ studyId, study, view, tab, reload }: { studyId: string; stu
     </VcrTabBoundary>
   ), [Tab, tab, studyId, study, reload]);
 
+  // What the study waits for, over every result; the overview lists it all, and is where a line without a link of its own is done.
+  const needs: WorkNeed[] = tab === "overview" ? [] : study.overview.attention.filter((line) => line.tone === "attention").map((line) => ({
+    key: line.kind, kind: line.kind === "allowance_waiting" ? "resolve" as const : line.kind.startsWith("intake") || line.kind === "budget_confirm" ? "confirm" as const : "provide" as const, text: line.text,
+    action: <Link className="rounded text-link hover:underline" to={vcrTabPath(studyId, line.action?.tab ?? line.tab ?? "overview")}>{line.action?.label ?? "去处理"}</Link>,
+  }));
+  const results = (
+    <>
+      {pausedNote}
+      <NeedsBar needs={needs} more={<Link className="text-caption text-text-3 hover:underline" to={vcrTabPath(studyId, "overview")}>全部</Link>} />
+      {study.tierOffer && can("manage_study") && <VcrTierOffer studyId={studyId} offer={study.tierOffer} onMoved={reload} />}
+      {budgetNote}
+      {packageId ? (
+        <VcrPackageReader
+          studyId={studyId}
+          exportId={packageId}
+          onBack={() => { params.delete("package"); setParams(params, { replace: true }); }}
+        />
+      ) : body}
+    </>
+  );
+  const collapseTo = (() => {
+    const kept = new URLSearchParams(params);
+    kept.delete("result");
+    const query = kept.toString();
+    return `${study.purpose === "calculation" ? vcrCalculationViewPath(studyId, tab) : vcrTabPath(studyId, tab)}${query ? `?${query}` : ""}`;
+  })();
+
   return (
-    <StudyFrame studyId={studyId} study={study} view={view} reload={reload} menu={menu} onChat={openChat} onPanel={setPanel} onView={openView}>
+    <StudyFrame studyId={studyId} study={study} view={view} tab={tab} reload={reload} menu={menu} onChat={openChat} onPanel={setPanel} onView={openView}>
+      <VcrRefreshContext.Provider value={reportFailure}>
+      {(refreshError !== null || Object.keys(failures).length > 0) && <VcrRefreshNote message={refreshFailed} onRetry={retryFailed} />}
       {waitingDraft && !sessionId && <Note action={<Button size="sm" variant="text" onClick={reload}>重试连接研究对话</Button>}>请求已保留。研究对话连接后会恢复到输入框，由你发送。</Note>}
       {view === "chat" ? (
-        <StudyPane study={study} unreachable={unreachable} onRetry={reload} onStop={can("run") ? stop : undefined} />
-      ) : (
-        <>
-          {study.tierOffer && can("manage_study") && <VcrTierOffer studyId={studyId} offer={study.tierOffer} onMoved={reload} />}
-          {budgetNote}
-          {packageId ? (
-            <VcrPackageReader
-              studyId={studyId}
-              exportId={packageId}
-              onBack={() => { params.delete("package"); setParams(params, { replace: true }); }}
-            />
-          ) : body}
-        </>
-      )}
+        <WorkspaceSplit
+          collapseTo={collapseTo}
+          results={<div id={STUDY_PANEL_ID} role="region" aria-label="研究内容">{results}</div>}
+          conversation={<StudyPane study={study} unreachable={unreachable} onRetry={reload} onStop={can("run") ? stop : undefined} />}
+        />
+      ) : results}
 
       {panel === "rename" && <VcrRenameDialog studyId={studyId} name={study.name} onClose={() => setPanel(null)} onRenamed={renamed} />}
       {panel === "export" && <VcrExportDialog busy={running} onClose={() => setPanel(null)} onExport={exportAs} />}
@@ -338,6 +393,7 @@ function StudyView({ studyId, study, view, tab, reload }: { studyId: string; stu
           onCancel={() => setPanel(null)}
         />
       )}
+      </VcrRefreshContext.Provider>
     </StudyFrame>
   );
 }

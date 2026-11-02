@@ -1,14 +1,7 @@
-import { errorCodeMessage, runOutcomeKind } from "@evimed/domain";
-import type { WebAgentRun, WebAgentRunStatus } from "@/lib/apiClient";
+import { errorCodeMessage, runOutcomeKind, workStateLabel } from "@evimed/domain";
+import type { WebAgentRun } from "@/lib/apiClient";
 import { formatDate, formatDay, formatRelativeTime } from "@/lib/format";
 import { capabilityTitle } from "@/lib/researchAgentUi";
-
-export const WEB_RUN_STATUS_LABEL: Record<WebAgentRunStatus, string> = {
-  running: "执行中",
-  succeeded: "成功",
-  failed: "失败",
-  canceled: "已取消",
-};
 
 /**
  * The five states a run is shown in, and the one rule that picks them.
@@ -31,17 +24,18 @@ export interface RunStatePresentation {
 }
 
 export const RUN_STATE_LABEL: Record<RunStateKey, string> = {
-  running: "进行中",
-  done: "已完成",
-  // One word per state, the same words the inbox uses (2026-09-23 plan §5.8):
-  // 「已交付」 beside 「已完成」 was a distinction no reader could make, and
-  // 「有结论未逐字核对」 was the system describing its own check.
+  running: workStateLabel("running"),
+  done: workStateLabel("done"),
+  // One word per state, the same words every module page uses (`@evimed/domain` `workState.mjs`, 2026-11-01): 「已交付」 beside
+  // 「已完成」 was a distinction no reader could make, and 「有结论未逐字核对」 was the system describing its own check. 「待核对」
+  // is the one word of the four that was not a work state, and it keeps one meaning only: a run that delivered with a verdict still
+  // open. The inbox's own wait is 「待你核对」, a report's open claims are 「未核对」, and a payment under confirmation is the GEO
+  // agent's word.
   review: "待核对",
-  // Not 「失败」: a run the stall detector stopped, one refused for a missing
-  // credential and one whose package the gate could not read all land here,
-  // and none of those says the science failed.
-  failed: "未完成",
-  canceled: "已停止",
+  // Not 「失败」: a run the stall detector stopped, one refused for a missing credential and one whose package the gate could not
+  // read all land here, and none of those says the science failed.
+  failed: workStateLabel("failed"),
+  canceled: workStateLabel("stopped"),
 };
 
 export function runState(run: WebAgentRun): RunStatePresentation {

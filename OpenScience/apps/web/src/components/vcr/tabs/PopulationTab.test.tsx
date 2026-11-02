@@ -77,7 +77,7 @@ describe("人群 · a real cohort", () => {
   it("keeps a stale population on screen, greyed, under the bar that says a recomputation is queued", async () => {
     const { container } = draw();
     await screen.findByText("逐条筛选");
-    expect(container.querySelector("[data-vcr-stale]")).toHaveTextContent("入排条件已变更 · 输入已变更，排队重算中");
+    expect(container.querySelector("[data-vcr-stale]")).toHaveTextContent("入排条件已变更 · 输入已变更，数字已过期，排队重算中");
     const greyed = container.querySelector("[data-vcr-stale-block] [data-vcr-stale-results]") as HTMLElement;
     expect(greyed).not.toBeNull();
     expect(within(greyed).getByText("逐条筛选")).toBeInTheDocument();
@@ -270,7 +270,7 @@ describe("人群 · a generated population", () => {
     await found(container, "[data-headline]");
     expect(container.querySelector("[data-headline]")).toHaveTextContent("人群 v1 · 情景人群 · 1,000 条生成记录");
     expect(screen.queryByRole("table", { name: "每个变量设定的分布和生成的结果" })).toBeNull();
-    expect(screen.queryByText(/在对话中生成新版本/)).toBeInTheDocument();
+    expect(screen.queryByText(/让 AI 生成新版本/)).toBeInTheDocument();
     expect(screen.queryByText(/还没有画像/)).toBeNull();
   });
 
@@ -284,8 +284,8 @@ describe("人群 · a generated population", () => {
     serve();
     const { container } = draw(readOnly());
     await within(await found(container, "[data-page-chrome]")).findByRole("button", { name: "下载记录" });
-    expect(within(band(container)).queryByRole("button", { name: "在对话中生成新版本" })).toBeNull();
-    expect(within(band(container)).queryByRole("button", { name: "在对话中调整" })).toBeNull();
+    expect(within(band(container)).queryByRole("button", { name: "让 AI 生成新版本" })).toBeNull();
+    expect(within(band(container)).queryByRole("button", { name: "让 AI 调整设定" })).toBeNull();
   });
 });
 
@@ -296,7 +296,7 @@ describe("人群 · before there is one", () => {
     installVcrServer(network.productRequest, nothingIn("population"));
     const { container, spies } = draw(withStep("population", { status: "none", requested: false }));
     const recipe = await found(container, "[data-vcr-step-empty='population']");
-    await userEvent.click(within(recipe).getByRole("button", { name: "构建人群" }));
+    await userEvent.click(within(recipe).getByRole("button", { name: "让 AI 构建人群" }));
     expect(spies.openChat).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ studyId: STUDY_ID }));
     expect(network.productRequest.mock.calls.filter(([, method]) => method === "POST")).toEqual([]);
   });
@@ -305,7 +305,7 @@ describe("人群 · before there is one", () => {
     installVcrServer(network.productRequest, nothingIn("population"));
     const { container } = draw(withStep("population", { status: "none", requested: true }));
     const waiting = await found(container, "[data-vcr-step-waiting='population']");
-    expect(within(waiting).queryByRole("button", { name: "构建人群" })).toBeNull();
+    expect(within(waiting).queryByRole("button", { name: "让 AI 构建人群" })).toBeNull();
   });
 });
 
@@ -313,7 +313,7 @@ it("adjusts a cohort in its existing conversation with the result identity and n
   const payload = { ...generatedPopulation(), selection: { objectId: "pop_saved", version: 3, resultId: "res_9", resultVersion: 2 } };
   installVcrServer(network.productRequest, { [tab("population")]: payload });
   const view = renderTab(<PopulationTab studyId={STUDY_ID} study={ev201()} />);
-  await userEvent.click(await screen.findByRole("button", { name: "在对话中调整" }));
+  await userEvent.click(await screen.findByRole("button", { name: "让 AI 调整设定" }));
   expect(view.spies.openChat).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ studyId: STUDY_ID }));
   expect(view.spies.openChat.mock.calls[0][1]).toMatchObject({ objectId: "pop_saved", version: 3, resultId: "res_9", resultVersion: 2 });
   expect(view.spies.openChat.mock.calls[0][0]).not.toMatch(/std_|res_/);

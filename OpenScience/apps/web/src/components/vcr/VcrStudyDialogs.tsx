@@ -50,7 +50,7 @@ export function VcrRenameDialog({ studyId, name, onClose, onRenamed }: {
         />
         <div className="flex justify-end gap-2">
           <Button type="button" variant="secondary" disabled={busy} onClick={onClose}>取消</Button>
-          <Button type="submit" loading={busy} disabled={!valid || busy}>保存</Button>
+          <Button actionKind="set" type="submit" loading={busy} disabled={!valid || busy}>保存</Button>
         </div>
       </form>
     </FormDialog>
@@ -84,7 +84,7 @@ export function VcrExportDialog({ busy, onClose, onExport }: {
         </fieldset>
         <div className="flex justify-end gap-2">
           <Button type="button" variant="secondary" disabled={busy} onClick={onClose}>取消</Button>
-          <Button type="submit" loading={busy}>导出</Button>
+          <Button actionKind="start" type="submit" loading={busy}>开始导出</Button>
         </div>
       </form>
     </FormDialog>

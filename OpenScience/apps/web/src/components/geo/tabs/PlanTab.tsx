@@ -2,6 +2,7 @@ import { GeoAnalysisEntry } from "../GeoAnalysisEntry";
 import { ensureGeoConversationSession } from "../geoConversationSession";
 import { GEO_ARTICLE_CHANNEL_LABELS_ZH } from "@evimed/domain";
 import { useState } from "react";
+import { PenLine } from "lucide-react";
 import { Link, useLocation, useSearchParams } from "react-router";
 import { getGeoProject, stageGeoPlanContext, type GeoImplementationAction, type GeoStrategyView, type GeoProject } from "@/lib/geoClient";
 import { Button } from "@/components/ui/Button";
@@ -59,7 +60,7 @@ export function PlanTab({ geoId, project, sourceId, sourceUrl, selectionRef }: {
     <div id="implementation-plan" data-geo-tab="plan" className="flex flex-col gap-10">
       {/* A module tab's body holds no primary action: the page's is the header's (DESIGN.md T3). The plan's actions are its section's —
         * secondary, and 刷新方案 the text action of the sentence it ends (the fixture walk of b559d4b7e found them under the header's row). */}
-      <Section title="实施方案" toolbar={mayConverse ? <Button variant="secondary" disabled={busy} onClick={() => void handoff()}>{plan.version == null ? "生成方案" : "调整方案"}</Button> : undefined}>
+      <Section title="实施方案" toolbar={mayConverse ? <Button variant="secondary" actionKind="draft" disabled={busy} onClick={() => void handoff()}><PenLine size={16} aria-hidden="true" />{plan.version == null ? "让 AI 生成方案" : "让 AI 调整方案"}</Button> : undefined}>
         {error && <Note tone="warn" action={<Button variant="text" size="sm" onClick={reload}>刷新方案</Button>}>{error}</Note>}
         {plan.freshness?.status === "needs_update" && <Note tone="warn" action={<Button variant="text" size="sm" onClick={reload}>刷新方案</Button>}>所选资料或目标已变化，当前方案保留原有依据，可在对话中更新。</Note>}
         {plan.freshness?.status === "unknown" && <Note action={<Button variant="text" size="sm" onClick={reload}>刷新方案</Button>}>部分依据暂时无法核实；金额与工作量未估时保留为空。</Note>}
@@ -98,7 +99,7 @@ function PlanActions({ plan, canUse, disabled, onUse }: { plan: GeoStrategyView;
     {visible.map(action => <div key={action.key} className="flex flex-col gap-2">
       <h3 className="text-ui font-semibold text-text">{action.sequence != null ? `${action.sequence}. ` : ""}{action.what.title || action.need.judgment || "内容行动"}</h3>
       <PlanActionFacts action={action} basis={plan.basis} />
-      {canUse && <Button variant="secondary" className="self-start" disabled={disabled} onClick={() => onUse(action)}>用于内容</Button>}
+      {canUse && <Button variant="secondary" className="self-start" actionKind="draft" disabled={disabled} onClick={() => onUse(action)}><PenLine size={16} aria-hidden="true" />让 AI 按此写稿</Button>}
     </div>)}
     <ShowMore remaining={remaining} unit="项行动" onMore={more} />
   </div>;

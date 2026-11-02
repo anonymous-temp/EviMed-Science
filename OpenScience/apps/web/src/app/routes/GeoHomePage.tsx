@@ -134,7 +134,7 @@ export function GeoHomePage() {
   const loading = feature === "loading" || listing.kind === "loading";
   const none = listing.kind === "ready" && listing.projects.length === 0;
   const newProject = (
-    <Button onClick={create} loading={creating} disabled={listing.kind !== "ready"}>
+    <Button actionKind="set" onClick={create} loading={creating} disabled={listing.kind !== "ready"}>
       <Plus size={16} aria-hidden="true" />
       新建项目
     </Button>
@@ -253,7 +253,7 @@ function ProjectRow({ project, label, selected, to }: { project: GeoProjectSumma
       to={to}
       selected={selected}
       title={<span className="block truncate">{label}</span>}
-      meta={(
+      meta={project.status === "paused" || alert || progressLine(project) ? (
         <span data-geo-subline="" className="block truncate">
           {project.status === "paused" ? "已暂停" : alert ? (
             <>
@@ -263,7 +263,7 @@ function ProjectRow({ project, label, selected, to }: { project: GeoProjectSumma
             </>
           ) : progressLine(project)}
         </span>
-      )}
+      ) : undefined}
       actions={<Link className="rounded text-ui text-link hover:underline" to={journey.next.step ? geoDestinationPath(project.id, GEO_STEP_HOME[journey.next.step]) : `/app/geo/${encodeURIComponent(project.id)}`}>继续工作</Link>}
       trailing={(
         <span className="flex items-baseline gap-1.5 text-ui">

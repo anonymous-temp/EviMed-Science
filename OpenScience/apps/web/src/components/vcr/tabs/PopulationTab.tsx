@@ -30,6 +30,8 @@ import { variableLabels } from "../patients/patientFilters";
 import { useStudyFrame, useVcrToolbar } from "../studyFrameContext";
 import { useVcrLoad, VcrTabError } from "../vcrTabKit";
 import { countText, numberText } from "../vcrText";
+import { COMPARE_DRAFT_LABEL, DRAFT_PREFIX, INTAKE_LABEL } from "../vcrActionWords";
+import { scrollBlockToTop } from "../vcrScroll";
 
 /** The id the records table has on the page, so the headline's count can take the reader to it. */
 const RECORDS_ID = "vcr-population-records";
@@ -111,19 +113,19 @@ function PopulationView({ studyId, study, data, reload, onStudyChanged }: {
 
   // --- the band's one row -----------------------------------------------------------------------------------------------
   const actions: VcrToolbarAction[] = [];
-  if (frame) actions.push({ key: "sources", label: "数据来源", quiet: true, onSelect: () => frame.openPanel("intake") });
+  if (frame) actions.push({ key: "sources", label: INTAKE_LABEL, quiet: true, onSelect: () => frame.openPanel("intake") });
   if (!nothing) {
     if (generated) {
       if (data.download) actions.push({ key: "download", label: "下载记录", icon: Download, loading: busy === "download", onSelect: download });
       if (mayWrite) {
-        actions.push({ key: "settings", label: "在对话中调整", quiet: true, onSelect: () => ask("调整人群设定") });
-        actions.push({ key: "regenerate", label: "在对话中生成新版本", onSelect: () => ask("按当前证据生成一个可比较的新队列版本") });
+        actions.push({ key: "settings", label: `${DRAFT_PREFIX}调整设定`, kind: "draft", quiet: true, onSelect: () => ask("调整人群设定") });
+        actions.push({ key: "regenerate", label: `${DRAFT_PREFIX}生成新版本`, kind: "draft", onSelect: () => ask("按当前证据生成一个可比较的新队列版本") });
       }
     } else if (mayWrite && data.criteria.length > 0) {
-      actions.push({ key: "criteria", label: "在对话中调整条件", quiet: true, onSelect: () => ask("比较修改入排条件后的人群变化") });
+      actions.push({ key: "criteria", label: `${DRAFT_PREFIX}调整条件`, kind: "draft", quiet: true, onSelect: () => ask("比较修改入排条件后的人群变化") });
     }
   }
-  if (!nothing && frame) actions.push({ key: "compare", label: "比较版本", quiet: true, onSelect: () => setComparing(true) });
+  if (!nothing && frame) actions.push({ key: "compare", label: COMPARE_DRAFT_LABEL, kind: "draft", quiet: true, onSelect: () => setComparing(true) });
   const comparison = comparing ? <VcrVersionComparison studyId={studyId} kind="population" versions={data.versions.flatMap(row => row.version ? [{ ...row, objectId: row.id, version: row.version }] : [])} onClose={() => setComparing(false)} /> : null;
   const summary = [data.version, data.kind].filter(Boolean).join(" · ");
   useVcrToolbar(actions.length > 0 || (!nothing && summary)
@@ -161,7 +163,7 @@ function PopulationView({ studyId, study, data, reload, onStudyChanged }: {
 /* ------------------------------------------------------------------------- a generated population */
 
 /** Where a count in the headline takes the reader: down to the thing it counts. */
-const scrollTo = (id: string) => () => document.getElementById(id)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+const scrollTo = (id: string) => () => scrollBlockToTop(document.getElementById(id));
 
 /**
  * The generated population: the sentence that says what it is and whether any record broke a limit, the variables (set → came out →

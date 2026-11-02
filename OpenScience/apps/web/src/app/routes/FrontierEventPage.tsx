@@ -247,7 +247,7 @@ function EventBody({ event, order, onOrder, wide }: { event: FrontierEvent; orde
   return (
     <EventFrame
       title={event.title}
-      actions={<Button onClick={research}>深入研究</Button>}
+      actions={<Button actionKind="draft" onClick={research}>让 AI 深入研究</Button>}
       aside={wide ? <EventRecord event={event} layout="column" /> : undefined}
       wide={wide}
       facts={(

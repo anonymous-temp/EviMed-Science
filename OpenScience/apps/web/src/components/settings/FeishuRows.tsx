@@ -22,6 +22,7 @@ import { PanelRow } from "@/components/ui/Panel";
 import { AsyncSwitch } from "@/components/ui/AsyncSwitch";
 import { formatDate } from "@/lib/format";
 import { toast } from "@/lib/toast";
+import { FEISHU_UNBIND_CONFIRM } from "./feishuUnbind";
 
 /** How often a waiting registration is asked about; the SDK itself polls Feishu every 5 s. */
 const REGISTRATION_POLL_MS = 2_000;
@@ -169,9 +170,9 @@ export function FeishuRow({ im }: { im: ImState }) {
 
   const dialog = confirmUnbind && createPortal(
     <ConfirmDialog
-      title="解除飞书机器人的绑定？"
-      body="解除后，飞书里的消息不再派发任务，通知也不再推送到飞书；已经完成的任务不受影响。机器人应用仍在你的飞书里，不再需要时可以在飞书开发者后台删除。"
-      confirmLabel="解除绑定"
+      title={FEISHU_UNBIND_CONFIRM.title}
+      body={FEISHU_UNBIND_CONFIRM.body}
+      confirmLabel={FEISHU_UNBIND_CONFIRM.confirmLabel}
       onConfirm={() => { setConfirmUnbind(false); void unbind(); }}
       onCancel={() => setConfirmUnbind(false)}
     />,

@@ -120,6 +120,17 @@ export function vcrDataPlaneSeam({ dataPlane, access }) {
       await access.require({ studyId: study.id, actor: user.id, ability: "read", purpose: "page" });
       return dataPlane.taskInputAvailability(study, user);
     },
+    /**
+     * The rows the study's overview reads its data-intake waits from (`intakeNeedsOf`): the sources, their files and the snapshots frozen
+     * from them. Metadata only; the plane's own judgement of who may read is not asked, because no column and no value leaves here.
+     * @param {any} study
+     */
+    async intakeRows(study) {
+      const [sources, files, snapshots] = await Promise.all([
+        dataPlane.store.listSourcesForStudy(study.id), dataPlane.store.listSourceFilesForStudy(study.id), dataPlane.store.listSnapshots({ studyId: study.id }),
+      ]);
+      return { sources, files, snapshots };
+    },
     /** @param {any} study @param {{ id: string }} user */
     async tab(study, user) {
       const decision = await access.judge({

@@ -1,7 +1,7 @@
 import { VCR_PREDICTION_LIMIT_LABELS_ZH } from "@evimed/domain";
 import { VcrVersionComparison } from "../VcrVersionComparison";
 import { useState, type ReactNode } from "react";
-import { ChevronLeft, CircleCheck, Info } from "lucide-react";
+import { ChevronLeft, CircleCheck, Info, PenLine } from "lucide-react";
 import { VCR_COMPARATOR_ROUTE_LABELS_ZH } from "@evimed/domain";
 import { getVcrComparator, type VcrComparatorTab as ComparatorData, type VcrStudy } from "@/lib/vcrClient";
 import { cn } from "@/lib/cn";
@@ -25,6 +25,7 @@ import { DimensionBand } from "../comparator/DimensionBand";
 import { useStudyFrame } from "../studyFrameContext";
 import { pairRows, useVcrLoad, VcrTabError } from "../vcrTabKit";
 import { conclusionLabel, intervalText } from "../vcrText";
+import { COMPARE_DRAFT_LABEL, INTAKE_LABEL } from "../vcrActionWords";
 
 const ROUTE_LABELS = VCR_COMPARATOR_ROUTE_LABELS_ZH as Record<string, string>;
 
@@ -220,7 +221,7 @@ function UsedRoute({ data }: { data: ComparatorData }) {
 
   return (
     <>
-      {frame && <Button variant="text" size="sm" onClick={() => setComparing(true)}>比较版本</Button>}
+      {frame && <Button variant="text" size="sm" actionKind="draft" onClick={() => setComparing(true)}><PenLine size={16} aria-hidden="true" />{COMPARE_DRAFT_LABEL}</Button>}
       {comparing && frame && <VcrVersionComparison studyId={frame.studyId} kind="comparator" versions={data.versions ?? []} onClose={() => setComparing(false)} />}
 
       {data.predictionBenchmark && <PredictionBenchmark data={data.predictionBenchmark} />}
@@ -298,7 +299,7 @@ function OtherRoute({ data, route }: { data: ComparatorData; route: ComparatorDa
     <>
       <Section
         title={ROUTE_LABELS[route.route] ?? route.route}
-        toolbar={needs && frame ? <Button size="sm" variant="secondary" onClick={() => frame.openPanel("intake")}>接入数据</Button> : undefined}
+        toolbar={needs && frame ? <Button size="sm" variant="secondary" onClick={() => frame.openPanel("intake")}>{INTAKE_LABEL}</Button> : undefined}
       >
         <div data-vcr-route-record={route.route} className="flex flex-col gap-4">
           {rows.length > 0 && <FactList rows={rows} />}

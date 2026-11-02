@@ -60,6 +60,8 @@ it('a historical judgment member exposes its original receipt kind and assessmen
 for(const kind of ['question_set_created','question_set_locked'])it('keeps the addressed native session for '+kind+' rather than a stale session query',()=>{
  render(<MemoryRouter initialEntries={['/app/geo/g/chat/native-session?session=wrong-session&selectionRef=gsel_old&questionVersion=10&round=old']}><GeoHistoryMember geoId="g" selectionRef="gsel_old" item={{id:'set',kind,questionVersion:7}}/></MemoryRouter>);
  const target=new URL(screen.getByRole('link',{name:'查看事件关联的问题集版本'}).getAttribute('href')!,'https://local.invalid');
- expect(target.searchParams.get('session')).toBe('native-session');expect(target.searchParams.get('questionVersion')).toBe('7');
+ // Opened beside the conversation, the link stays on the conversation's address: the addressed session is in the path and the result is named.
+ expect(target.pathname).toBe('/app/geo/g/chat/native-session');expect(target.searchParams.get('result')).toBe('questions');
+ expect(target.searchParams.has('session')).toBe(false);expect(target.searchParams.get('questionVersion')).toBe('7');
  for(const key of ['selectionRef','round'])expect(target.searchParams.has(key)).toBe(false);
 });

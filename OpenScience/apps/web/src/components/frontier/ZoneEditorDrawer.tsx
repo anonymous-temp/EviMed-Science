@@ -226,7 +226,7 @@ export function ZoneEditorDrawer({ mode, zone, seed, onClose, onSaved }: ZoneEdi
         <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
           {/* The switch first, then what it does: reversed on the screen, the sentence still comes first for a screen reader. */}
           <Note className="flex-row-reverse justify-end" action={<Switch checked={published} onChange={setPublished} label="公开到平台" showLabel />}>公开后，平台里的其他人也能看到和关注</Note>
-          <Button variant="primary" loading={saving} disabled={!canSave} onClick={() => void save()}>{editing ? "保存" : "建立"}</Button>
+          <Button variant="primary" actionKind="set" loading={saving} disabled={!canSave} onClick={() => void save()}>{editing ? "保存" : "建立"}</Button>
         </div>
       ) : undefined}
     >
@@ -245,7 +245,9 @@ export function ZoneEditorDrawer({ mode, zone, seed, onClose, onSaved }: ZoneEdi
             {!editing && !work && EXAMPLES.map((example) => (
               <Button key={example} variant="secondary" size="sm" onClick={() => setSentence(example)}>{example}</Button>
             ))}
-            <Button variant={work ? "secondary" : "primary"} className="ml-auto" loading={drafting} disabled={!sentence.trim()} onClick={() => void draft(sentence.trim())}>生成</Button>
+            {/* A structured settings form, not a draft for the composer (audit D15): 生成 asks the model for a zone definition now and shows it
+                to be edited, so it is a start, and 建立 below saves what the reader accepted. */}
+            <Button variant={work ? "secondary" : "primary"} actionKind="start" className="ml-auto" loading={drafting} disabled={!sentence.trim()} onClick={() => void draft(sentence.trim())}>生成</Button>
           </div>
         </div>
 

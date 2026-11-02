@@ -86,7 +86,6 @@ describe("T3 — a study, at each of its tabs", () => {
     await screen.findByRole("region", { name: "研究对话" });
     const facts = expectComposed(container, { stepRail: false, tablists: 0 });
     expect(facts.chrome!.querySelectorAll("[data-rail-step]")).toHaveLength(0);
-    expect(screen.getByRole("button", { name: "查看：对话" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "对话" })).toBeNull();
     expect(screen.queryByRole("tab", { selected: true })).toBeNull();
     expect(container.querySelector("[role=tabpanel]")).toBeNull();
@@ -120,11 +119,11 @@ describe("T2 — the list of studies, with a preview beside it", () => {
     expect(column).toContainElement(facts.header);
     expect(precedes(facts.header!, facts.toolbars[0])).toBe(true);
     expect(facts.headerPrimaryActions).toHaveLength(0);
-    expect(screen.getByRole("button", { name: "开始" })).toHaveClass("bg-accent");
+    expect(screen.getByRole("button", { name: "在对话中开始" })).toHaveClass("bg-accent");
     expect(container.querySelectorAll(".bg-accent")).toHaveLength(1);
     await userEvent.click(screen.getByRole("link", { name: /EV-201 二线/ }));
     expect(screen.getByRole("button", { name: "新研究" })).toHaveClass("bg-accent");
-    expect(screen.queryByRole("button", { name: "开始" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "在对话中开始" })).toBeNull();
     expect(container.querySelectorAll(".bg-accent")).toHaveLength(1);
   });
 

@@ -124,15 +124,15 @@ export function CloudDocuments({ studyId, source, onChanged }: { studyId: string
         <Input label="授权依据" value={reference} onChange={event => setReference(event.target.value)} required maxLength={500} placeholder="合作协议、公开许可或模拟数据说明" />
         <label className="flex items-start gap-2 text-caption text-text-2"><input type="checkbox" checked={terms} onChange={event => setTerms(event.target.checked)} />
           已核实服务不保留文本、不用于训练、无人工查看，且包含日志与缓存约定</label>
-        <Button type="submit" loading={busy} disabled={busy || !destinations.length || !reference.trim() || (dataClass === 'deidentified' || dataClass === 'clinical') && !terms}>保存云端处理授权</Button>
+        <Button type="submit" actionKind="set" loading={busy} disabled={busy || !destinations.length || !reference.trim() || (dataClass === 'deidentified' || dataClass === 'clinical') && !terms}>保存云端处理授权</Button>
       </form>}
       {cloud.state === 'restricted' && <>
         <p className="text-caption text-text-3">这个数据源的病历不会交给云端模型。</p>
-        <Button variant="secondary" disabled={busy} onClick={() => void run(() => setVcrCloudPermission(studyId, source.id, { status: 'default' }), '已恢复云端处理。')}>恢复云端处理</Button>
+        <Button variant="secondary" actionKind="set" disabled={busy} onClick={() => void run(() => setVcrCloudPermission(studyId, source.id, { status: 'default' }), '已恢复云端处理。')}>恢复云端处理</Button>
       </>}
       {cloud.state === 'allowed' && <>
         {cloud.basis === 'source_permission' && <p className="text-caption text-text-3">{source.cloudPermission?.reference}</p>}
-        <Button variant="secondary" disabled={busy} onClick={() => void run(() => setVcrCloudPermission(studyId, source.id, { status: 'revoked' }),
+        <Button variant="secondary" actionKind="set" disabled={busy} onClick={() => void run(() => setVcrCloudPermission(studyId, source.id, { status: 'revoked' }),
           cloud.basis === 'source_permission' ? '已停止后续云端读取。' : '已限制这个数据源的云端处理。')}>
           {cloud.basis === 'source_permission' ? '撤销云端处理授权' : '限制云端处理'}</Button>
         {documents.length ? <div className="flex flex-col gap-3">
@@ -145,7 +145,7 @@ export function CloudDocuments({ studyId, source, onChanged }: { studyId: string
           {saved.length > 0 && <ul aria-label="已保存的脱敏文本" className="flex flex-col divide-y divide-faint">
             {saved.map((projection, index) => <li key={projection.id} className="flex items-center justify-between gap-3 py-2">
               <span className="text-caption text-text-2">{`脱敏文本 ${index + 1}${projection.at ? ` · ${projection.at.slice(0, 10)} 保存` : ''}`}</span>
-              <Button variant="text" size="sm" disabled={busy} onClick={() => void run(() => retireVcrProjection(studyId, projection.id), '已停用并清除这份脱敏文本。')}>停用并清除</Button>
+              <Button variant="text" size="sm" actionKind="set" disabled={busy} onClick={() => void run(() => retireVcrProjection(studyId, projection.id), '已停用并清除这份脱敏文本。')}>停用并清除</Button>
             </li>)}
           </ul>}
           {document && <Redaction document={document} identifiers={identifiers} accepted={accepted} reviewed={reviewed} busy={busy}
@@ -203,7 +203,7 @@ function Redaction({ document, identifiers, accepted, reviewed, busy, onIdentifi
     </div>
     <label className="flex items-start gap-2 text-caption text-text-2"><input type="checkbox" checked={reviewed} onChange={event => onReviewed(event.target.checked)} />
       已检查脱敏后的全文；其余文本已获授权，可用于所列云端服务</label>
-    <Button loading={busy} disabled={busy || !reviewed} onClick={onSave}>保存脱敏文本</Button>
+    <Button actionKind="set" loading={busy} disabled={busy || !reviewed} onClick={onSave}>保存脱敏文本</Button>
   </>;
 }
 

@@ -61,7 +61,7 @@ beforeEach(() => {
   useToastStore.setState({ toasts: [] });
 });
 
-describe("问 AI", () => {
+describe("让 AI 解读", () => {
   it("opens the project's conversation with the draft, unsent", async () => {
     renderAsk();
     await userEvent.click(screen.getByRole("button", { name: "开始药品价值分析" }));
@@ -92,11 +92,11 @@ it("is not offered to a role that may not open the conversation: there is nothin
   for (const roles of [["viewer"], ["medical_reviewer"]]) {
     const project = geoProject({}, { access: { roles, abilities: roles[0] === "viewer" ? ["read"] : ["read", "review"], owner: false } });
     const view = render(<MemoryRouter><GeoFrameHarness project={project}><AskAi project={{ projectId: "prj_geo_1", sessionId: "ses_geo_1" }} draft="这个数说明了什么？" /></GeoFrameHarness></MemoryRouter>);
-    expect(screen.queryByRole("button", { name: "问 AI" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "让 AI 解读" })).not.toBeInTheDocument();
     view.unmount();
   }
   render(<MemoryRouter><GeoFrameHarness project={geoProject()}><AskAi project={{ projectId: "prj_geo_1", sessionId: "ses_geo_1" }} draft="这个数说明了什么？" /></GeoFrameHarness></MemoryRouter>);
-  expect(screen.getByRole("button", { name: "问 AI" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "让 AI 解读" })).toBeInTheDocument();
 });
 
 it('keeps the exact result reference, conversation and scoped return destination during a handoff',async()=>{

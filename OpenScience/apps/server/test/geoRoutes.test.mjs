@@ -96,6 +96,25 @@ test("the members behind an analysis cell are a four-part GET, and the query rea
   await assert.rejects(routes(request("GET", "/api/geo/projects/geo_abc/analysis/members/extra"), response()), { status: 404 });
 });
 
+test("the strip's stop asks for one run of the project as its owner, needs the run ability, and takes no body of its own", async () => {
+  const seen = /** @type {any[]} */ ([]);
+  const audits = /** @type {any[]} */ ([]);
+  const asked = /** @type {any[]} */ ([]);
+  const { routes } = fixture({
+    audit: async (/** @type {string} */ event, /** @type {string} */ status, /** @type {any} */ details) => { audits.push([event, status, details]); },
+    service: { allows: () => true, isOperator: () => false, requireProject: async (/** @type {any} */ _user, /** @type {string} */ id, /** @type {string} */ ability) => { asked.push([id, ability]); return { id, userId: "owner", projectId: "prj_1" }; } },
+    projects: { stopProgrammeRun: async (/** @type {string} */ ownerId, /** @type {string} */ projectId, /** @type {string} */ runId) => { seen.push([ownerId, projectId, runId]); return { root: "canceled" }; } },
+  });
+  const res = response();
+  assert.equal(await routes(request("POST", "/api/geo/projects/geo_1/runs/run_1/stop", {}), res), true);
+  assert.deepEqual(asked, [["geo_1", "run"]]);
+  assert.deepEqual(seen, [["owner", "prj_1", "run_1"]]);
+  assert.equal(res.json().data.root, "canceled");
+  assert.deepEqual(audits, [["geo.run.stop", "completed", { userId: "reader", code: "geo_1", detail: "run_1:canceled" }]]);
+  await assert.rejects(routes(request("POST", "/api/geo/projects/geo_1/runs/run_1/stop", { projectId: "other" }), response()), { status: 400 });
+  assert.equal(seen.length, 1);
+});
+
 test("the module conversation's 停止 names one run of that conversation, and nothing else reaches the stop", async () => {
   const seen = /** @type {any[]} */ ([]);
   const audits = /** @type {any[]} */ ([]);

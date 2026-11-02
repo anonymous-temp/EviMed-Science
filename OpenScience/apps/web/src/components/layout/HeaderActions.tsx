@@ -2,11 +2,11 @@ import { useRef, type ReactNode } from 'react';
 import { ChevronDown, Loader2 } from 'lucide-react';
 import { useContainerNarrow } from '@/lib/useContainerNarrow';
 import { useMediaQuery } from '@/lib/useMediaQuery';
-import { Button, buttonClasses } from '@/components/ui/Button';
+import { Button, buttonClasses, type ButtonProps } from '@/components/ui/Button';
 import { ActionLink, Menu, type MenuEntry, type MenuItem } from '@/components/ui/Menu';
 
 /** An action's identity and behavior are declared by its owner, never inferred from rendered text. */
-export type PageAction = { id: string; label: string; disabled?: boolean; loading?: boolean; destructive?: boolean; icon?: MenuItem['icon']; checked?: boolean; toggle?: boolean } & (
+export type PageAction = { id: string; label: string; disabled?: boolean; loading?: boolean; destructive?: boolean; icon?: MenuItem['icon']; checked?: boolean; kind?: ButtonProps['actionKind']; toggle?: boolean } & (
   { to: string; state?: unknown; onSelect?: () => void } | { to?: never; onSelect(): void }
 );
 export type PagePrimaryAction = PageAction | { id: string; label: string; items: readonly MenuEntry[]; disabled?: boolean; loading?: boolean };
@@ -40,7 +40,7 @@ export function HeaderActions({ plan, density }: { plan: PageActionPlan; /** Par
   const overflow = [...(plan.secondary?.slice(compact ? 0 : 2) ?? []), ...(plan.overflow ?? [])];
   const renderAction = (action: PageAction, primary = false) => action.to !== undefined
     ? <ActionLink key={action.id} to={action.to} state={action.state} inert={action.disabled || action.loading} aria-disabled={action.disabled || action.loading || undefined} aria-busy={action.loading || undefined} onClick={action.onSelect} onAuxClick={event => { if (action.disabled || action.loading) event.preventDefault(); }} className={buttonClasses({ variant: primary ? action.destructive ? 'danger' : 'primary' : 'secondary', destructive: action.destructive, className: 'min-w-0 shrink max-w-xs whitespace-normal h-auto min-h-control py-1.5 text-center' })}>{action.loading && <Loader2 size={16} aria-hidden="true" className="shrink-0 animate-spin" />}{action.icon && <action.icon size={16} aria-hidden="true" className="shrink-0" />}{action.label}</ActionLink>
-    : <Button key={action.id} variant={primary ? action.destructive ? 'danger' : 'primary' : 'secondary'} loading={action.loading} disabled={action.disabled} destructive={action.destructive} onClick={action.onSelect} className="h-auto min-h-control min-w-0 shrink max-w-xs whitespace-normal py-1.5">{action.icon && <action.icon size={16} aria-hidden="true" className="shrink-0" />}{action.label}</Button>;
+    : <Button key={action.id} actionKind={action.kind} variant={primary ? action.destructive ? 'danger' : 'primary' : 'secondary'} loading={action.loading} disabled={action.disabled} destructive={action.destructive} onClick={action.onSelect} className="h-auto min-h-control min-w-0 shrink max-w-xs whitespace-normal py-1.5">{action.icon && <action.icon size={16} aria-hidden="true" className="shrink-0" />}{action.label}</Button>;
   const items: MenuEntry[] = overflow.map(action => {
     if (action === 'separator' || 'heading' in action) return action;
     return { ...action, onSelect: () => action.onSelect?.() };

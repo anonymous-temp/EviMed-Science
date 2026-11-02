@@ -5,6 +5,8 @@ import { useProjectStore } from "@/lib/projects";
 import { RUNS_CHANGED_EVENT } from "@/lib/runPresentation";
 import { rememberGeoProject } from "./useGeoProjectIds";
 import { toast } from "@/lib/toast";
+import { geoAutomationEnabled } from "@evimed/domain";
+import { GEO_AUTOMATION_STOPPED } from "./geoText";
 import type { FrameGeoOptions } from "./frameGeoOptions";
 import { GEO_CAPABILITY_IDS } from "./geoCapabilities";
 
@@ -127,6 +129,8 @@ export function useFrameGeoOptions({
           const next = { ...project, ...found.current?.project, ...patch };
           found.current = { ...current, project: next };
           post(frameGeoOptions(current.sessionId, next));
+          // The chip is one of the two places that can end automatic monitoring (the agreement was to these engines and this window).
+          if (geoAutomationEnabled(project) && !geoAutomationEnabled(next)) toast.error(GEO_AUTOMATION_STOPPED);
         },
         (error: unknown) => {
           if (!sameConversation()) return;

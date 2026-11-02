@@ -1,8 +1,10 @@
 import { useCallback } from "react";
 import { useLocation } from "react-router";
 import { geoReadScopeFromSearch, geoReadScopeQuery } from "@/lib/geoReadScope";
-import { geoSessionIdFromChatPath } from "@/lib/geoLocation";
-import { geoDestinationPath } from "./geoTabs";
+import { geoChatPath, geoSessionIdFromChatPath } from "@/lib/geoLocation";
+import { geoDestinationPath, GEO_TABS } from "./geoTabs";
+
+const GEO_RESULT_TABS: ReadonlySet<string> = new Set(GEO_TABS.map((tab) => tab.key));
 
 /** Carry analytical context inside this project only; a destination's own narrowing takes precedence. */
 export function geoPathWithContext(path: string, from: { pathname: string; search: string }): string {
@@ -20,6 +22,13 @@ export function geoPathWithContext(path: string, from: { pathname: string; searc
   for (const key of new Set(target.searchParams.keys())) {
     kept.delete(key);
     for (const value of target.searchParams.getAll(key)) kept.append(key, value);
+  }
+  // The conversation is open beside the results: a press in them changes what is beside it, and the conversation stays open.
+  const tab = targetParts[4];
+  if (session && geoSessionIdFromChatPath(from.pathname) && (!tab || GEO_RESULT_TABS.has(tab))) {
+    kept.delete("session");
+    kept.set("result", tab || "overview");
+    return `${geoChatPath(sourceParts[3], session)}?${kept.toString()}${target.hash}`;
   }
   const query = kept.toString();
   return `${target.pathname}${query ? `?${query}` : ""}${target.hash}`;

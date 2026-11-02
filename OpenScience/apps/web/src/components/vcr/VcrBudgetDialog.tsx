@@ -88,7 +88,7 @@ export function VcrBudgetDialog({
         <dl className="divide-y divide-border rounded-card border border-border">
           {[
             { label: "已用", value: budget?.usedSeconds },
-            { label: "运行中预留", value: budget?.committedSeconds },
+            { label: "进行中预留", value: budget?.committedSeconds },
             { label: "上限", value: budget?.limitSeconds },
           ].map((row) => (
             <div key={row.label} className="flex items-baseline justify-between gap-4 px-3 py-2">
@@ -104,6 +104,7 @@ export function VcrBudgetDialog({
               <h3 className="text-ui font-semibold text-text">等待确认</h3>
               <Button
                 size="sm"
+                actionKind="set"
                 loading={busy === "all"}
                 disabled={busy !== null || waiting.seconds <= 0}
                 onClick={() => confirm("all", { cpuSeconds: waiting.seconds }, "已确认，等待中的计算会开始。")}
@@ -121,6 +122,7 @@ export function VcrBudgetDialog({
                   <Button
                     size="sm"
                     variant="secondary"
+                    actionKind="set"
                     loading={busy === job.id}
                     disabled={busy !== null}
                     onClick={() => confirm(job.id, { jobId: job.id }, "已确认，这项计算会开始。")}
@@ -150,7 +152,7 @@ export function VcrBudgetDialog({
             onChange={(event) => setMinutes(event.target.value)}
             className="w-40"
           />
-          <Button type="submit" variant="secondary" loading={busy === "add"} disabled={!valid || busy !== null}>增加</Button>
+          <Button actionKind="set" type="submit" variant="secondary" loading={busy === "add"} disabled={!valid || busy !== null}>增加</Button>
         </form>
       </div>
     </Drawer>

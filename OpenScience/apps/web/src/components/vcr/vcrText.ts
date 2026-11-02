@@ -37,6 +37,7 @@ import {
   VCR_REVIEW_KIND_LABELS_ZH,
   VCR_STEP_LABELS_ZH,
   VCR_VALUE_SOURCE_LABELS_ZH,
+  workStateLabel,
 } from "@evimed/domain";
 import type {
   VcrConclusion,
@@ -243,7 +244,7 @@ export function valueSentence(value: VcrValue | null | undefined): string {
     sourceLabel(value.source),
     intervalText(value.interval, value.precision),
     value.mcse != null ? `蒙特卡洛标准误 ${mcseText(value.mcse)}` : "",
-    value.stale ? "已过期" : "",
+    value.stale ? workStateLabel("stale") : "",
     value.reason ?? "",
   ].filter(Boolean).join("，");
 }
@@ -254,8 +255,8 @@ export function valueSentence(value: VcrValue | null | undefined): string {
  * light result recomputes at once and a heavy one may wait for a person, and a
  * sentence that promised a queue that does not exist would be a false one.
  */
-export const STALE_SENTENCE = "输入已变更，排队重算中";
-export const STALE_SENTENCE_NOT_QUEUED = "输入已变更，这些数字可能已过期";
+export const STALE_SENTENCE = `输入已变更，数字${workStateLabel("stale")}，排队重算中`;
+export const STALE_SENTENCE_NOT_QUEUED = `输入已变更，这些数字可能${workStateLabel("stale")}`;
 export const staleSentence = (queued: boolean | null | undefined) => (queued ? STALE_SENTENCE : STALE_SENTENCE_NOT_QUEUED);
 
 /**

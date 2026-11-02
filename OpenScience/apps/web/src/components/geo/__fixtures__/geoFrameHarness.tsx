@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import type { GeoProject } from "@/lib/geoClient";
 import { Toolbar, type ToolbarProps } from "@/components/ui/Toolbar";
-import { GeoFrameContext, type GeoFrameApi } from "../geoFrame";
+import { GeoFrameContext, type GeoAnswerBack, type GeoFrameApi } from "../geoFrame";
 import { GeoDataCache } from "../geoProjectData";
 import type { GeoTabKey } from "../geoTabs";
 import type { GeoReadScope } from "@/lib/geoReadScope";
@@ -25,6 +25,7 @@ export function GeoFrameHarness({
   openPanel = NOOP,
   conversation = null,
   scope,
+  onAnswerBack,
   children,
 }: {
   project: GeoProject;
@@ -35,13 +36,15 @@ export function GeoFrameHarness({
   /** The conversation the page holds; none is the project's own. */
   conversation?: string | null;
   scope?: GeoReadScope;
+  /** Where the page says the band's way back goes (an answer's `useGeoAnswerBack`); the layout draws it, so a test reads it here. */
+  onAnswerBack?: (back: GeoAnswerBack | null) => void;
   children: ReactNode;
 }) {
   const [toolbar, setToolbar] = useState<ToolbarProps | null | undefined>(undefined);
   const [data] = useState(() => new GeoDataCache());
   const api = useMemo<GeoFrameApi>(
-    () => ({ geoId, project, tab, conversation: conversation ?? project.sessionId ?? null, reload, openPanel, data, setToolbar, scope }),
-    [geoId, project, tab, conversation, reload, openPanel, data, scope],
+    () => ({ geoId, project, tab, conversation: conversation ?? project.sessionId ?? null, reload, openPanel, data, setToolbar, scope, setAnswerBack: onAnswerBack }),
+    [geoId, project, tab, conversation, reload, openPanel, data, scope, onAnswerBack],
   );
   return (
     <GeoFrameContext.Provider value={api}>

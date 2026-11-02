@@ -65,7 +65,7 @@ export function OpenListBrowser({ projectId, onImported, onFolderRegistered }: {
           actions={<Button variant="text" size="sm" disabled={busy} onClick={() => void registerFolder(entry.path)}><FolderSync size={16} aria-hidden="true" />同步</Button>} />
         : <ListRow key={entry.path} leading={<FileText size={16} className="text-text-3" aria-hidden="true" />} title={entry.name}
           trailing={entry.providerHash?.startsWith("sha256:")
-            ? <Button variant="text" size="sm" disabled={busy} onClick={() => void importFile(entry.path)}>导入</Button>
+            ? <Button actionKind="start" variant="text" size="sm" disabled={busy} onClick={() => void importFile(entry.path)}>导入</Button>
             : <span>不支持此文件</span>} />)}
     </List>}
   </section>;

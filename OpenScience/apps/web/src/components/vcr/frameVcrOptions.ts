@@ -12,7 +12,7 @@
  * control here: attaching data is the composer's own 「+」, and the study's
  * sources are read and registered on 定义与证据.
  */
-import { VCR_ACTIONS, VCR_INTENDED_USES, VCR_INTENDED_USE_LABELS_ZH } from "@evimed/domain";
+import { VCR_ACTIONS, VCR_INTENDED_USES, VCR_INTENDED_USE_LABELS_ZH, VCR_STEP_LABELS_ZH, VCR_TAB_LABELS_ZH } from "@evimed/domain";
 import type { VcrAction, VcrFrameStudy, VcrIntendedUse, VcrStepKey } from "@/lib/vcrClient";
 
 /** Where a study starts: everything, or one of the four workspaces. */
@@ -33,25 +33,29 @@ export interface FrameVcrOptions {
   starters: Array<{ label: string; draft: string; requirement?: string; minimumFields?: string; inputLabel?: string }>;
 }
 
-/** The five starting points, in the plan's order (§9.3), by the words the pill uses. */
+/**
+ * The five starting points, in the plan's order (§9.3), by the words the pill uses. A starting point is a step, and is named as the
+ * step is everywhere (`VCR_STEP_LABELS_ZH`): the pill said 队列 for what the page calls 人群, and the home said 合成对照 for what the tab
+ * is called 对照 (module workspace audit, 2026-11-01, unranked note on task names).
+ */
 export const VCR_START_OPTIONS: ReadonlyArray<{ id: VcrStart; label: string }> = Object.freeze([
   { id: "auto", label: "自动" },
-  { id: "cohort", label: "队列" },
-  { id: "patients", label: "患者" },
-  { minimumFields: "效果分析需治疗组别、结局定义、观察时间、混杂协变量与可比对照；无结局数据可先开展可行性设计。", indicators: [{ key: "comparator", label: "纵向结局与对照资料" }] as const, id: "comparator", label: "对照" },
-  { minimumFields: "设计需终点类型、效应与变异度、显著性水平、目标把握度、入组和随访假设，并保留参数来源。", indicators: [{ key: "trial", label: "文献／设计假设" }] as const, id: "trial", label: "试验" },
+  { id: "cohort", label: VCR_STEP_LABELS_ZH.population },
+  { id: "patients", label: VCR_STEP_LABELS_ZH.patients },
+  { minimumFields: "效果分析需治疗组别、结局定义、观察时间、混杂协变量与可比对照；无结局数据可先开展可行性设计。", indicators: [{ key: "comparator", label: "纵向结局与对照资料" }] as const, id: "comparator", label: VCR_STEP_LABELS_ZH.comparator },
+  { minimumFields: "设计需终点类型、效应与变异度、显著性水平、目标把握度、入组和随访假设，并保留参数来源。", indicators: [{ key: "trial", label: "文献／设计假设" }] as const, id: "trial", label: VCR_STEP_LABELS_ZH.trial },
 ]);
 
 /**
- * The six starting points of a new study (plan §9.3, R10 mockup v02): a short name on the pill, and the sentence it puts in the
+ * The starting points of a new study (plan §9.3, R10 mockup v02): a short name on the pill — the name of the tab where the work lands —, and the sentence it puts in the
  * composer — never sent. Each ends where the reader continues. They only fill the box: pressing one is not a request, and the
  * study stays a draft until the researcher has said what it is about.
  */
 export const VCR_TASKS = Object.freeze([
-  { minimumFields: "个体病例需年龄、关键诊断和分期、既往治疗、与入排条件有关的检查及其时间。未知信息保留为未知。", indicators: [{ key: "matching", label: "原始病例／患者数据集" }] as const, id: "matching", label: "患者匹配", summary: "查找适合患者的试验，核对入排条件。", inputLabel: "需患者资料", draft: "帮我匹配患者和临床试验。资料是：", requirement: "需要患者资料；批量匹配需上传或连接患者数据集。试验方案可上传或检索。" },
-  { minimumFields: "真实队列需稳定的去标识化编号、筛选字段与数据字典；合成人群需文献分布与假设；个体轨迹需适用模型和所需协变量。", indicators: [{ key: "cohort", label: "真实患者数据集" }, { key: "patient", label: "适用模型与个体资料" }] as const, id: "population", label: "人群与患者", summary: "建立研究队列，查看个体的模拟结果。", inputLabel: "可先用文献", draft: "帮我研究人群或个体患者。需求是：", requirement: "文献驱动的合成人群无需患者数据集；真实队列需患者数据，个体轨迹还需适用的模型。" },
-  { minimumFields: "效果分析需治疗组别、结局定义、观察时间、混杂协变量与可比对照；无结局数据可先开展可行性设计。", indicators: [{ key: "comparator", label: "纵向结局与对照资料" }] as const, id: "comparator", label: "合成对照", summary: "构建对照人群，比较两组结局。", inputLabel: "效果分析需结局数据", draft: "帮我构建对照并比较结局。研究是：", requirement: "估计治疗效果需试验组结局和可比对照证据；没有数据时先做可行性与方案设计。" },
-  { minimumFields: "设计需终点类型、效应与变异度、显著性水平、目标把握度、入组和随访假设，并保留参数来源。", indicators: [{ key: "trial", label: "文献／设计假设" }] as const, id: "trial", label: "虚拟试验", summary: "比较不同试验方案的样本量、把握度和周期。", inputLabel: "可先用文献", draft: "帮我比较临床试验设计。研究是：", requirement: "设计仿真可先用文献参数，无需患者数据集；个体数据用于校准与验证。" },
+  { minimumFields: "个体病例需年龄、关键诊断和分期、既往治疗、与入排条件有关的检查及其时间。未知信息保留为未知。", indicators: [{ key: "matching", label: "原始病例／患者数据集" }] as const, id: "matching", label: VCR_TAB_LABELS_ZH.matching, summary: "查找适合患者的试验，核对入排条件。", inputLabel: "需患者资料", draft: "帮我匹配患者和临床试验。资料是：", requirement: "需要患者资料；批量匹配需上传或连接患者数据集。试验方案可上传或检索。" },
+  { minimumFields: "真实队列需稳定的去标识化编号、筛选字段与数据字典；合成人群需文献分布与假设；个体轨迹需适用模型和所需协变量。", indicators: [{ key: "cohort", label: "真实患者数据集" }, { key: "patient", label: "适用模型与个体资料" }] as const, id: "population", label: VCR_TAB_LABELS_ZH.population, summary: "建立研究队列，查看个体的模拟结果。", inputLabel: "可先用文献", draft: "帮我研究人群或个体患者。需求是：", requirement: "文献驱动的合成人群无需患者数据集；真实队列需患者数据，个体轨迹还需适用的模型。" },
+  { minimumFields: "效果分析需治疗组别、结局定义、观察时间、混杂协变量与可比对照；无结局数据可先开展可行性设计。", indicators: [{ key: "comparator", label: "纵向结局与对照资料" }] as const, id: "comparator", label: VCR_TAB_LABELS_ZH.comparator, summary: "构建对照人群，比较两组结局。", inputLabel: "效果分析需结局数据", draft: "帮我构建对照并比较结局。研究是：", requirement: "估计治疗效果需试验组结局和可比对照证据；没有数据时先做可行性与方案设计。" },
+  { minimumFields: "设计需终点类型、效应与变异度、显著性水平、目标把握度、入组和随访假设，并保留参数来源。", indicators: [{ key: "trial", label: "文献／设计假设" }] as const, id: "trial", label: VCR_TAB_LABELS_ZH.trial, summary: "比较不同试验方案的样本量、把握度和周期。", inputLabel: "可先用文献", draft: "帮我比较临床试验设计。研究是：", requirement: "设计仿真可先用文献参数，无需患者数据集；个体数据用于校准与验证。" },
 ]);
 
 /** Task starters fill the native composer without submitting or creating a study. */

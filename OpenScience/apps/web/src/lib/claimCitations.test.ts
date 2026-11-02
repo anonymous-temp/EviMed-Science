@@ -39,7 +39,7 @@ describe("claim citations", () => {
       counts: { verified: 1, quote_not_found: 1, source_unavailable: 1, derived: 1 },
     });
     expect(mixed?.attention).toBe(true);
-    expect(mixed?.text).toBe("⚠ 2 条待核对");
+    expect(mixed?.text).toBe("⚠ 2 条未核对");
     expect(claimStatuses({ claims: [claim("CLM-001", "verified")], counts: {} }).get("CLM-001")).toBe("verified");
     // Every status the control plane can answer has words for a reader.
     for (const status of ["verified", "quote_not_found", "source_unavailable", "no_quote", "derived"]) {
@@ -162,7 +162,7 @@ describe("claim citations", () => {
     expect(verification.claims[0].sources.map((source) => source.status)).toEqual(["verified", "verified", "no_quote"]);
     expect(verification.claims[0].sources[2].artifactPath).toBeNull();
     expect(claimVerification({ matrix: { claims: [parsed] }, sourceArtifacts })).toEqual(verification);
-    expect(claimVerificationSummary(verification)?.text).toBe("⚠ 1 条待核对");
+    expect(claimVerificationSummary(verification)?.text).toBe("⚠ 1 条未核对");
     expect(claimGuidance(parsed, verification.claims[0])).toMatch(/^第 3 段引文缺少/);
 
     const identical = { ...raw, supportQuote: raw.supportingSources[0].supportQuote };

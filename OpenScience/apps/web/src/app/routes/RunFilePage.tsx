@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useParams, useSearchParams } from "react-router";
-import { ArrowLeft, FileQuestion, Loader2 } from "lucide-react";
+import { FileQuestion, Loader2 } from "lucide-react";
 import { hasWebApi, listWebAgentRuns, webErrorMessage, type WebAgentRun } from "@/lib/apiClient";
 import { extOf, extToKind, previewKindForName } from "@/lib/artifacts";
 import { readArtifact } from "@/lib/artifactFile";
@@ -13,7 +13,9 @@ import { saveToKnowledgeBase } from "@/lib/sourceClient";
 import { toast } from "@/lib/toast";
 import { ProvenancePanel } from "@/components/inspector/ProvenancePanel";
 import { Button } from "@/components/ui/Button";
+import { PageShell } from "@/components/layout/PageShell";
 import { PageTitle } from "@/components/layout/PageTitle";
+import { FrontierBack } from "@/components/frontier/FrontierBack";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { ReportReader } from "@/components/report/ReportReader";
 import { EvidenceMatrixTable } from "@/components/report/EvidenceMatrixTable";
@@ -148,64 +150,59 @@ function OwnedRunFilePage() {
     return () => { cancelled = true; };
   }, [path, readsText, showVersions, reload]);
 
-  // Back into the conversation this file was written in. It used to be the run
-  // ledger's row about it; that page was deleted on 2026-09-20, and a run with
-  // no conversation to return to lands on the surface itself rather than on a
-  // page that no longer exists.
-  const backTo = chatPath(run?.sessionId);
+  // Back into the conversation this file was written in: the run's own, once the ledger has named it; until then, and for a run the ledger
+  // does not hold, the resolver the notices and the cards use (`/app/runs?run=`), which finds the conversation in whichever project the run
+  // is in. A bare `/app/chat` (what this fell back to) resumes the last conversation, not this run's (2026-11-01 audit D12).
+  const backTo = run?.sessionId ? chatPath(run.sessionId) : runId ? `/app/runs?run=${encodeURIComponent(runId)}` : chatPath();
+  const title = path ? artifactDisplayName(path) : "文件";
 
   return (
     <ReportRunContext.Provider value={runId ? { runId: run?.id ?? runId, run } : null}>
-      <div className="flex h-full flex-col bg-bg">
-        <PageTitle page={path ? artifactDisplayName(path) : "文件"} />
-        <header className="flex shrink-0 items-center gap-3 border-b border-border bg-surface px-4 py-2 sm:px-6" data-print-hide="">
-          {/* Never squeezed by a long title (at 390 px it stacked a character
-            * a line), and a 30 px target: on a phone it is the way back. */}
-          <Link to={backTo} className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap py-1 text-ui text-link hover:underline">
-            <ArrowLeft size={16} aria-hidden="true" />返回对话
-          </Link>
-          <span className="text-muted" aria-hidden="true">/</span>
-          <h1 className="min-w-0 truncate text-ui font-semibold text-text">
-            {run ? `${runTitle(run)} · ` : ""}{path ? artifactDisplayName(path) : "文件"}
-          </h1>
-          {path && <Button variant="text" onClick={() => setShowVersions((current) => !current)}>{showVersions ? "查看当前文件" : "结果版本"}</Button>}
-          {path && <Button variant="text" loading={saving} onClick={() => void saveToLibrary(path)}>存入知识库</Button>}
-        </header>
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          {showVersions && !locating && path && <ProvenancePanel key={`${path}:${initialVersionId ?? ""}`} path={path} runId={run?.id} initialVersionId={initialVersionId} />}
-          {locating && (
-            <p role="status" className="flex items-center gap-2 p-6 text-ui text-muted">
-              <Loader2 size={16} className="animate-spin" aria-hidden="true" />正在打开
-            </p>
-          )}
-          {!locating && !path && (
-            <EmptyState icon={FileQuestion} title="这个地址没有指向文件" />
-          )}
-          {!showVersions && !locating && path && readsText && loading && (
-            <p role="status" className="flex items-center gap-2 p-6 text-ui text-muted">
-              <Loader2 size={16} className="animate-spin" aria-hidden="true" />正在读取 {filename}
-            </p>
-          )}
-          {!showVersions && !locating && path && readsText && !loading && error && (
-            <div role="alert" className="mx-auto mt-8 max-w-read rounded-card border border-border bg-surface p-5 text-ui text-text max-sm:mx-4"><p>{error}</p><Button variant="secondary" className="mt-3" onClick={() => setReload((current) => current + 1)}>重试</Button></div>
-          )}
-          {!showVersions && !locating && path && readsText && !loading && text !== null && (
-            isClaimMatrixPath(path)
-              ? <MatrixPage path={path} runId={run?.id ?? runId} />
-              : <ReportReader path={path} root="workspace" text={text} run={run} runId={run?.id ?? runId} layout="page" focusClaim={focusClaim} highlight={quote} />
-          )}
-          {!showVersions && !locating && path && !readsText && (
-            <Suspense fallback={<p className="p-6 text-ui text-muted">正在打开预览</p>}>
-              <div className="h-full">
-                <FilePreviewInspector
-                  data={{ variant: "file", path, filename, artifact: extToKind(extOf(filename)), root: "workspace" }}
-                  onClose={() => window.history.back()}
-                />
-              </div>
-            </Suspense>
-          )}
-        </div>
-      </div>
+      <PageShell
+        title={title}
+        titleVariant="document"
+        documentTitle={title}
+        meta={run ? runTitle(run) : undefined}
+        width="wide"
+        back={<FrontierBack to={backTo} label="对话" />}
+        actionPlan={path ? {
+          primary: { id: "save", label: "存入知识库", kind: "set", loading: saving, onSelect: () => void saveToLibrary(path) },
+          secondary: [{ id: "versions", label: showVersions ? "查看当前文件" : "结果版本", onSelect: () => setShowVersions((current) => !current) }],
+        } : undefined}
+      >
+        {showVersions && !locating && path && <ProvenancePanel key={`${path}:${initialVersionId ?? ""}`} path={path} runId={run?.id} initialVersionId={initialVersionId} />}
+        {locating && (
+          <p role="status" className="flex items-center gap-2 text-ui text-muted">
+            <Loader2 size={16} className="animate-spin" aria-hidden="true" />正在打开
+          </p>
+        )}
+        {!locating && !path && (
+          <EmptyState icon={FileQuestion} title="这个地址没有指向文件" />
+        )}
+        {!showVersions && !locating && path && readsText && loading && (
+          <p role="status" className="flex items-center gap-2 text-ui text-muted">
+            <Loader2 size={16} className="animate-spin" aria-hidden="true" />正在读取 {filename}
+          </p>
+        )}
+        {!showVersions && !locating && path && readsText && !loading && error && (
+          <div role="alert" className="mx-auto max-w-read rounded-card border border-border bg-surface p-5 text-ui text-text"><p>{error}</p><Button variant="secondary" className="mt-3" onClick={() => setReload((current) => current + 1)}>重试</Button></div>
+        )}
+        {!showVersions && !locating && path && readsText && !loading && text !== null && (
+          isClaimMatrixPath(path)
+            ? <MatrixPage path={path} runId={run?.id ?? runId} />
+            : <ReportReader path={path} root="workspace" text={text} run={run} runId={run?.id ?? runId} layout="page" focusClaim={focusClaim} highlight={quote} />
+        )}
+        {!showVersions && !locating && path && !readsText && (
+          <Suspense fallback={<p className="text-ui text-muted">正在打开预览</p>}>
+            <div className="h-screen min-h-96">
+              <FilePreviewInspector
+                data={{ variant: "file", path, filename, artifact: extToKind(extOf(filename)), root: "workspace" }}
+                onClose={() => window.history.back()}
+              />
+            </div>
+          </Suspense>
+        )}
+      </PageShell>
     </ReportRunContext.Provider>
   );
 }

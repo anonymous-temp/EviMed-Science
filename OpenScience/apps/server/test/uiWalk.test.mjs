@@ -764,7 +764,7 @@ function context() {
         },
       }],
       getByRole: (role, { name } = {}) => role === "menuitemradio" ? {
-        allTextContents: async () => ["对话", "总览", "匹配", "人群与患者", "对照", "试验", "依据"],
+        allTextContents: async () => ["总览", "匹配", "人群与患者", "对照", "试验", "依据"],
         click: async () => {
           const base = target().pathname.match(/^\/app\/virtual-research\/[^/]+/)[0];
           const keys = { "对话": "chat", "总览": "", "匹配": "matching", "人群与患者": "population", "对照": "comparator", "试验": "trial", "依据": "data" };
@@ -773,6 +773,7 @@ function context() {
       } : ({ ...locator(role, name), waitFor: async () => {} }),
       locator: () => ({
         count: async () => 0,
+        click: async () => {},
         allTextContents: async () => [],
         locator: () => ({ count: async () => 0, evaluateAll: async () => [], locator: () => ({ count: async () => 0 }) }),
         getByRole: () => ({ count: async () => 1, click: async () => {} }),
@@ -2681,7 +2682,7 @@ test("where a list page keeps its place is read from the address and from what i
 });
 
 test("the event page's 深入研究 is read at the hand-off: the title, a link to a source, a create intent that cannot send, and Back to the event", async () => {
-  const eventPage = (button = true) => node("body", {}, [node("main", {}, [node("header", {}, [node("h1", { text: "某事件" })]), ...(button ? [node("button", { text: "深入研究" })] : [])])]);
+  const eventPage = (button = true) => node("body", {}, [node("main", {}, [node("header", {}, [node("h1", { text: "某事件" })]), ...(button ? [node("button", { text: "让 AI 深入研究" })] : [])])]);
   assert.deepEqual(inPage(eventPage(), () => handoffProbe(["event"]), { path: "/app/frontier/events/ev_1" }), { path: "/app/frontier/events/ev_1", title: "某事件", button: true });
   assert.equal(inPage(eventPage(false), () => handoffProbe(["event"])).button, false);
   const withState = (usr) => inPage(eventPage(), () => { globalThis.window.history = { state: usr === undefined ? null : { usr, key: "k", idx: 2 } }; return handoffProbe(["intent"]); }, { path: "/app/chat" });

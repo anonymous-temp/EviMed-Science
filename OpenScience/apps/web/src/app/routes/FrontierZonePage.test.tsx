@@ -377,6 +377,7 @@ describe("a zone's overview", () => {
   });
 
   it("counts a module as content only when it holds something: every kind of module that came empty leaves the page as the empty state", async () => {
+    topic.fetchZone.mockResolvedValue(zone({ counts: { week: 0, month: 0, all: 0 }, updatedAt: null, lastItemAt: null }));
     topic.fetchZoneOverview.mockResolvedValue(overview({ modules: [
       { key: "cards", cards: [], total: 0 }, { key: "approved-drugs", rows: [] }, { key: "multi-source", events: [] }, { key: "key-updates", items: [], more: null },
       { key: "latest", items: [], more: { role: null, window: "30d" } },
@@ -684,6 +685,7 @@ describe("the 动态 tab", () => {
   });
 
   it("says a zone with no items yet is being filled, a search with no match says so, and an error has 重试", async () => {
+    topic.fetchZone.mockResolvedValue(zone({ counts: { week: 0, month: 0, all: 0 }, updatedAt: null, lastItemAt: null }));
     topic.fetchZoneItems.mockResolvedValue(page([]));
     mount("/app/frontier/zones/zone-glp1?tab=items");
     expect(await screen.findByText("正在为这个专区搜集内容，通常几分钟内出现第一批")).toBeInTheDocument();
@@ -726,3 +728,83 @@ describe("the 证据卡片 tab", () => {
 it("reads a zone's detail through the client's own parser (the fixture is the contract's shape)", () => {
   expect(parseZoneDetail(rawZone())).toMatchObject({ id: "zone-glp1", slug: "glp1-obesity", counts: { week: 58, month: 247, all: 610 }, cards: 0 });
 });
+
+describe("a zone that is being filled (module workspace audit, D6)", () => {
+    const fresh = () => zone({ counts: { week: 0, month: 0, all: 0 }, updatedAt: null, lastItemAt: null });
+    const nothing = () => overview({ modules: [{ key: "latest", items: [], more: { role: null, window: "30d" } }] });
+    const advance = (ms: number) => act(async () => { await vi.advanceTimersByTimeAsync(ms); });
+
+    it("does not claim to be collecting when the zone was made long ago and has never held an item, or has held items", async () => {
+      topic.fetchZone.mockResolvedValue(zone({ counts: { week: 0, month: 0, all: 0 }, updatedAt: "2026-09-01T00:00:00.000Z", lastItemAt: null }));
+      topic.fetchZoneOverview.mockResolvedValue(nothing());
+      mount();
+      expect(await screen.findByText("近期没有新的内容")).toBeInTheDocument();
+      expect(screen.queryByText(/正在为这个专区搜集内容/)).toBeNull();
+      cleanup();
+      // An established zone whose month was quiet: it holds items, so the page offers them.
+      topic.fetchZone.mockResolvedValue(zone({ counts: { week: 0, month: 0, all: 40 } }));
+      mount();
+      expect(await screen.findByText("近期没有新的内容")).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "看全部动态" })).toBeInTheDocument();
+    });
+
+    it("reads a collecting zone again on a growing wait, and says the first batch came when it does", async () => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"], shouldAdvanceTime: true });
+      topic.fetchZone.mockResolvedValue(fresh());
+      topic.fetchZoneOverview.mockResolvedValue(nothing());
+      mount();
+      expect(await screen.findByText("正在为这个专区搜集内容，通常几分钟内出现第一批")).toBeInTheDocument();
+      expect(topic.fetchZoneOverview).toHaveBeenCalledTimes(1);
+      // While it waits, the band says what is going on, and stops saying it when the first batch is in.
+      expect(document.querySelector("[data-page-chrome] [data-activity='strip']")).toHaveTextContent("正在搜集“GLP-1 受体激动剂减重”的第一批内容");
+      await advance(14_000);
+      expect(topic.fetchZoneOverview).toHaveBeenCalledTimes(1);
+      await advance(1_000);
+      expect(topic.fetchZoneOverview).toHaveBeenCalledTimes(2);
+      // The second wait is longer than the first.
+      await advance(29_000);
+      expect(topic.fetchZoneOverview).toHaveBeenCalledTimes(2);
+      topic.fetchZoneOverview.mockResolvedValue(overview());
+      await advance(1_000);
+      expect(topic.fetchZoneOverview).toHaveBeenCalledTimes(3);
+      expect(await screen.findByRole("heading", { level: 2, name: "最新进展" })).toBeInTheDocument();
+      expect(screen.queryByText(/正在为这个专区搜集内容/)).toBeNull();
+      expect(screen.getByText("“GLP-1 受体激动剂减重”的第一批内容到了")).toBeInTheDocument();
+      expect(document.querySelector("[data-activity]")).toBeNull();
+      // Having arrived, it asks no more.
+      await advance(600_000);
+      expect(topic.fetchZoneOverview).toHaveBeenCalledTimes(3);
+    });
+
+    it("stops asking after about ten minutes and says so, with a way to look again", async () => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"], shouldAdvanceTime: true });
+      topic.fetchZone.mockResolvedValue(fresh());
+      topic.fetchZoneOverview.mockResolvedValue(nothing());
+      mount();
+      await screen.findByText("正在为这个专区搜集内容，通常几分钟内出现第一批");
+      // Each wait is scheduled after the page has drawn the one before, so the clock moves a wait at a time.
+      for (let wait = 0; wait < 8; wait += 1) await advance(121_000);
+      expect(screen.getByText("还没有搜集到内容，可以稍后再看")).toBeInTheDocument();
+      expect(screen.queryByText(/正在为这个专区搜集内容/)).toBeNull();
+      const reads = topic.fetchZoneOverview.mock.calls.length;
+      expect(reads).toBe(1 + 7);
+      await advance(600_000);
+      expect(topic.fetchZoneOverview.mock.calls.length).toBe(reads);
+      topic.fetchZoneOverview.mockResolvedValue(overview());
+      await act(async () => { screen.getByRole("button", { name: "重新加载" }).click(); await vi.advanceTimersByTimeAsync(0); });
+      expect(await screen.findByRole("heading", { level: 2, name: "最新进展" })).toBeInTheDocument();
+    });
+
+    it("reads the 动态 list of a collecting zone again too, without taking the empty state away first", async () => {
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"], shouldAdvanceTime: true });
+      topic.fetchZone.mockResolvedValue(fresh());
+      topic.fetchZoneItems.mockResolvedValue(page([]));
+      mount("/app/frontier/zones/zone-glp1?tab=items");
+      expect(await screen.findByText("正在为这个专区搜集内容，通常几分钟内出现第一批")).toBeInTheDocument();
+      const calls = topic.fetchZoneItems.mock.calls.length;
+      topic.fetchZoneItems.mockResolvedValue(page([rawItem("n1", "刚到的第一条动态")]));
+      await advance(15_000);
+      expect(topic.fetchZoneItems.mock.calls.length).toBeGreaterThan(calls);
+      expect(await screen.findByRole("link", { name: "刚到的第一条动态" })).toBeInTheDocument();
+    });
+  });

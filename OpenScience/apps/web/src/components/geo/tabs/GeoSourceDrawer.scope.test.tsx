@@ -68,7 +68,7 @@ it('loads an exact source id without inventing a source row and preserves 404 re
  client.getGeoSource.mockRejectedValueOnce(new WebApiError('Source unavailable',{status:404})).mockResolvedValueOnce({...detail,source:{...detail.source,id:'source-2001',name:'Registered source 2001'}});
  render(<MemoryRouter><GeoSourceDrawer geoId="g" project={geoProject()} source={{id:'source-2001'}} engine="all" selectionRef="tail-exact" focus={null} onClose={()=>{}}/></MemoryRouter>);
  expect(screen.getByRole('status')).toHaveTextContent('正在读取引用它的回答');
- expect(screen.queryByRole('button',{name:'在对话中处理'})).toBeNull();
+ expect(screen.queryByRole('button',{name:'让 AI 处理这个信源'})).toBeNull();
  expect(await screen.findByRole('note')).toBeVisible();expect(screen.getByRole('dialog',{name:'信源'})).toBeVisible();
  await userEvent.click(screen.getByRole('button',{name:'重试'}));
  expect(await screen.findByRole('dialog',{name:'Registered source 2001'})).toBeVisible();

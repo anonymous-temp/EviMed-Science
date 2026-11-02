@@ -1,5 +1,6 @@
 import { geoClaimApplicability, geoClaimAssessmentIdentity, geoClaimForStatement, geoStatementAssessmentIdentity } from "@evimed/domain";
 import { useEffect, useRef, useState } from "react";
+import { PenLine } from "lucide-react";
 import { Link, useLocation } from "react-router";
 import { getGeoDiagnosisReview, getGeoProject, stageGeoPlanContext, submitGeoDiagnosisFeedback, type GeoAnswer, type GeoProject, type GeoStatementFact, type GeoAction, type GeoDiagnosisReview } from "@/lib/geoClient";
 import { geoSessionIdFromChatPath } from "@/lib/geoLocation";
@@ -135,7 +136,7 @@ export function DiagnosisReview({ geoId, data, project, actions, onAssessmentCha
     } finally { setBusy(false); }
   };
   /**
-   * 「更新项目结论或文章」/「创建出处或问题群处置任务」: the errors this statement is, the actions already correcting them and the
+   * 「让 AI 更新项目结论或文章」/「让 AI 创建出处或问题群处置任务」: the errors this statement is, the actions already correcting them and the
    * analysis range are staged as the conversation's context (`stageGeoPlanContext`, as 方案 does), and the composer holds only the
    * person's sentence — never the records' identities, which the person would otherwise send as their own words. An error outside the
    * staged range is left to the conversation's own reads rather than refusing the hand-off.
@@ -202,9 +203,9 @@ export function DiagnosisReview({ geoId, data, project, actions, onAssessmentCha
           {canEdit && canRun && ready.assessmentVersion && current && <Button variant="secondary" size="sm" onClick={() => { setEditing(statementKey); setNote(""); setRequestKey(crypto.randomUUID()); }}>反馈并复核判定</Button>}
           {editing === statementKey && <div className="flex flex-col gap-2">
             <Textarea label="反馈理由与适用条件" value={note} maxLength={4000} onChange={event => setNote(event.target.value)} />
-            <div className="flex gap-2"><Button size="sm" loading={busy} disabled={!note.trim()} onClick={() => void send(statement)}>提交复核</Button><Button variant="text" size="sm" onClick={() => setEditing(null)}>取消</Button></div>
+            <div className="flex gap-2"><Button size="sm" actionKind="start" loading={busy} disabled={!note.trim()} onClick={() => void send(statement)}>开始复核</Button><Button variant="text" size="sm" onClick={() => setEditing(null)}>取消</Button></div>
           </div>}
-          {canConverse && <div className="flex flex-wrap gap-2"><Button variant="secondary" size="sm" disabled={handing} onClick={() => void act(statement, "conclusion")}>更新项目结论或文章</Button><Button variant="secondary" size="sm" disabled={handing} onClick={() => void act(statement, "treatment")}>创建出处或问题群处置任务</Button></div>}
+          {canConverse && <div className="flex flex-wrap gap-2"><Button variant="secondary" size="sm" actionKind="draft" disabled={handing} onClick={() => void act(statement, "conclusion")}><PenLine size={16} aria-hidden="true" />让 AI 更新项目结论或文章</Button><Button variant="secondary" size="sm" actionKind="draft" disabled={handing} onClick={() => void act(statement, "treatment")}><PenLine size={16} aria-hidden="true" />让 AI 创建出处或问题群处置任务</Button></div>}
           <ErrorCorrections inline geoId={geoId} project={project} corrections={actions.filter(action => action.need.errorIds.some(id => data.errors.some(row => row.id === id && geoClaimAssessmentIdentity(row) === geoClaimAssessmentIdentity(statement))))} canRun={canConverse} onAsk={() => void act(statement, "conclusion")} />
           {history.length > 1 && <div className="text-caption text-text-3">{history.slice().reverse().map((entry) => { const item = (entry.assessment?.statements ?? []).find(row => geoStatementAssessmentIdentity(row) === geoStatementAssessmentIdentity(statement)); return <p key={entry.version}>{entry.assessment.judgedAt ? `${new Date(entry.assessment.judgedAt).toLocaleString("zh-CN")} ` : "历史"}判定：{item ? verdictWords[item.verdict] : "未覆盖此句"}</p>; })}</div>}
           {feedback.map(row => <div key={row.id} className="text-ui text-text-2"><p>反馈：{row.note}</p><p>{statusWords[row.status] ?? "复核状态未知"} · 提交时原判定：{verdictWords[row.original.verdict]}</p>{row.result && <p>复核结果：{verdictWords[row.result.statements.find(item => geoStatementAssessmentIdentity(item) === geoStatementAssessmentIdentity(row.original))?.verdict ?? "unverifiable"]}</p>}</div>)}

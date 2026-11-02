@@ -4,6 +4,7 @@ import { webErrorMessage } from "@/lib/apiClient";
 import { PreservedConversation } from "@/components/chat/PreservedConversation";
 import { LoadError } from "@/components/cards/LoadError";
 import { registerTaskPane } from "@/lib/taskPane";
+import { useFitToScroller } from "@/components/workspace/WorkspaceSplit";
 
 /** The shell places its resident native conversation over this pane. */
 export function GeoConversationPane({ projectId, sessionId, geoId, canRun = true, owner = true }: { projectId: string; sessionId: string; geoId: string; canRun?: boolean; owner?: boolean }) {
@@ -20,24 +21,12 @@ export function GeoConversationPane({ projectId, sessionId, geoId, canRun = true
     }).catch(cause => { if (active) setError(webErrorMessage(cause, {fallback:"对话暂时无法打开。"})); });
     return () => { active = false; };
   }, [geoId, projectId, sessionId, attempt, canRun]);
+  useFitToScroller(pane, Boolean(scope));
   useLayoutEffect(() => {
     if (!pane.current || !scope) return undefined;
     const element = pane.current;
     const withdraw = registerTaskPane({ element, projectId, sessionId, scope, owner });
-    let scroller: HTMLElement = document.documentElement;
-    for (let parent = element.parentElement; parent; parent = parent.parentElement) {
-      if (["auto", "scroll"].includes(getComputedStyle(parent).overflowY)) { scroller = parent; break; }
-    }
-    const fit = () => {
-      const top = element.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop;
-      element.style.height = `${Math.max(360, Math.floor(scroller.clientHeight - top - 24))}px`;
-    };
-    fit();
-    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(fit);
-    observer?.observe(scroller);
-    for (const part of scroller.querySelectorAll("[data-page-header], [data-page-chrome]")) observer?.observe(part);
-    window.addEventListener("resize", fit);
-    return () => { withdraw(); observer?.disconnect(); window.removeEventListener("resize", fit); };
+    return withdraw;
   }, [projectId, sessionId, scope, owner]);
   if (!canRun) return <PreservedConversation projectId={projectId} sessionId={sessionId} scope={{kind:"geo",geoProjectId:geoId,sessionId}} />;
   if (error) return <LoadError message={error} onRetry={() => setAttempt(value => value + 1)} />;

@@ -7,6 +7,7 @@ import { StepPending } from './tabs/geoTabKit';
 import { GeoProjectPreview } from './GeoHomePreview';
 import { GEO_SUMMARIES } from './__fixtures__/geoProjects';
 import { frameGeoOptions } from './frameGeoOptions';
+import { geoJourney } from './geoJourney';
 const calls=vi.hoisted(()=>({run:vi.fn(),open:vi.fn(),toast:vi.fn()}));
 vi.mock('@/lib/geoClient',async original=>({...await original<typeof import('@/lib/geoClient')>(),runGeoStep:calls.run}));
 vi.mock('./useOpenGeoConversation',()=>({useOpenGeoConversation:()=>calls.open}));
@@ -29,7 +30,7 @@ describe('GEO task action authority and feedback',()=>{
   });
   it('takes missing product inputs through the existing conversation instead of an unattended background task',async()=>{
     mount(<StepPending geoId="g" project={project({product:{}})} step="evidence"/>);
-    await userEvent.click(screen.getByRole('button',{name:'在对话中补充产品与资料'}));
+    await userEvent.click(screen.getByRole('button',{name:'让 AI 补充产品与资料'}));
     expect(calls.open).toHaveBeenCalledWith(expect.objectContaining({geoId:'g',projectId:'p'}),expect.stringContaining('目标受众'));
     expect(calls.run).not.toHaveBeenCalled();
   });
@@ -45,7 +46,10 @@ describe('GEO task action authority and feedback',()=>{
     expect(value.starters).toEqual([]);
     const writable=frameGeoOptions('session',project());
     expect(writable.starters.map(item=>item.label)).toEqual(['诊断 AI 回答','修改已有稿件','制定策略与方案']);
-    expect(writable.journey?.detail).toContain('已有资料');
+    // The frame no longer draws a journey card or a requirement line: the page beside the conversation says where the work stands.
+    expect(writable).not.toHaveProperty('journey');
+    expect(writable).not.toHaveProperty('requirement');
+    expect(geoJourney(project()).detail).toContain('已有资料');
   });
 });
 

@@ -209,7 +209,7 @@ describe("准确与安全: the list is by claim", () => {
     expect(told).toHaveTextContent("出处 baike.baidu.com（百科词条） 等 2 处");
     // the correction under way: its status is on the row and the row asks for no second one
     expect(told).toHaveTextContent("纠错稿：");
-    expect(within(told).queryByRole("button", { name: "写纠错稿" })).toBeNull();
+    expect(within(told).queryByRole("button", { name: "让 AI 写纠错稿" })).toBeNull();
     // six error rows, four claims: the grave ones to start with
     expect(claimKeys()).toEqual(["fp_b", "fp_a"]);
   });
@@ -274,20 +274,20 @@ describe("准确与安全: the list is by claim", () => {
     expect(told.querySelector("[data-severity='S4']")).not.toBeNull();
   });
 
-  it("offers 「写纠错稿」 on a claim nobody is correcting: its records are staged as the conversation's context and the composer holds the sentence, unsent", async () => {
+  it("offers 「让 AI 写纠错稿」 on a claim nobody is correcting: its records are staged as the conversation's context and the composer holds the sentence, unsent", async () => {
     renderTab();
     const bare = await findClaim("fp_b");
-    await userEvent.click(within(bare).getByRole("button", { name: "写纠错稿" }));
+    await userEvent.click(within(bare).getByRole("button", { name: "让 AI 写纠错稿" }));
     await waitFor(() => expect(conversation.open).toHaveBeenCalledTimes(1));
     expectStagedHandoff(["err_4"], "哺乳期可以正常使用信尔美");
     expect((conversation.open.mock.calls[0] as unknown as [unknown, string])[1]).toContain("原文：哺乳期妇女不得使用本品。");
-    expect(screen.queryByRole("button", { name: "问 AI" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "让 AI 解读" })).toBeNull();
   });
 
   it("says so in a toast and gives the button back when the context cannot be staged, and opens nothing", async () => {
     client.stageGeoPlanContext.mockRejectedValueOnce(new Error("network"));
     renderTab();
-    const button = within(await findClaim("fp_b")).getByRole("button", { name: "写纠错稿" });
+    const button = within(await findClaim("fp_b")).getByRole("button", { name: "让 AI 写纠错稿" });
     await userEvent.click(button);
     await waitFor(() => expect(useToastStore.getState().toasts.map(toast => toast.message)).toEqual(["对话暂时无法打开，请稍后重试。"]));
     expect(conversation.open).not.toHaveBeenCalled();
@@ -444,7 +444,7 @@ describe("准确与安全: a claim's drawer", () => {
     });
     expect(action.getAttribute("href")).toBe("/app/geo/geo_1/actions?action=correct_error%3Aggr_brand%3Awrong");
     expect(await within(record).findByText("关于每周一次用法的更正")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "再写一篇纠错稿" }));
+    await userEvent.click(screen.getByRole("button", { name: "让 AI 再写一篇纠错稿" }));
     await waitFor(() => expect(conversation.open).toHaveBeenCalledTimes(1));
     // A claim three engines tell stages all three errors; the draft is the sentence.
     expect(client.stageGeoPlanContext.mock.calls[0][1].errorIds).toHaveLength(3);
@@ -457,12 +457,12 @@ describe("准确与安全: a claim's drawer", () => {
     await userEvent.click(within(await findClaim("fp_b")).getByRole("button", { name: /哺乳期可以正常使用信尔美/ }));
     const record = await findErrorRecord();
     expect(within(record).getByText("这条说法还没有纠错稿。")).toBeInTheDocument();
-    await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "写纠错稿" }));
+    await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "让 AI 写纠错稿" }));
     await waitFor(() => expect(conversation.open).toHaveBeenCalledTimes(1));
     expectStagedHandoff(["err_4"], "哺乳期可以正常使用信尔美");
   });
 
-  it("the drawer's 写纠错稿 says so in a toast and gives the button back when the context cannot be staged", async () => {
+  it("the drawer's 让 AI 写纠错稿 says so in a toast and gives the button back when the context cannot be staged", async () => {
     client.stageGeoPlanContext.mockRejectedValueOnce(new Error("network"));
     renderTab();
     await userEvent.click(within(await findClaim("fp_b")).getByRole("button", { name: /哺乳期可以正常使用信尔美/ }));
@@ -478,7 +478,7 @@ describe("准确与安全: a claim's drawer", () => {
   it("a claim outside the staged range is still handed over, staged without its errors", async () => {
     client.stageGeoPlanContext.mockRejectedValueOnce(new WebApiError("outside", { status: 400, code: "geo_plan_focus_invalid" }));
     renderTab();
-    await userEvent.click(within(await findClaim("fp_b")).getByRole("button", { name: "写纠错稿" }));
+    await userEvent.click(within(await findClaim("fp_b")).getByRole("button", { name: "让 AI 写纠错稿" }));
     await waitFor(() => expect(conversation.open).toHaveBeenCalledTimes(1));
     expect(client.stageGeoPlanContext).toHaveBeenCalledTimes(2);
     expect(client.stageGeoPlanContext.mock.calls[0][1].errorIds).toEqual(["err_4"]);

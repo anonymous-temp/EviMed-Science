@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { Link } from "react-router";
 import { safeWorkspacePath } from "@/lib/claimCitations";
 import { ChevronLeft } from "lucide-react";
-import { sourceCitationProse } from "@evimed/domain";
+import { sourceCitationProse, workStateLabel } from "@evimed/domain";
 import { getWebConversationHistory, listWebAgentRuns, webErrorMessage, type PreservedConversationHistory } from "@/lib/apiClient";
 import type { ProgrammeRun, ProgrammeRunPage } from "@/lib/programmeRuns";
 import { ShowMore } from "@/components/ui/ShowMore";
@@ -16,7 +16,7 @@ import { List, ListRow } from "@/components/ui/ListRow";
 import { MarkdownViewer } from "@/components/markdown-viewer/MarkdownViewer";
 import { cn } from "@/lib/cn";
 
-export const PROGRAMME_RUN_STATE_LABELS: Readonly<Record<ProgrammeRun["state"], string>> = { running: "进行中", finished: "已完成", stopped: "未完成" };
+export const PROGRAMME_RUN_STATE_LABELS: Readonly<Record<ProgrammeRun["state"], string>> = { running: workStateLabel("running"), finished: workStateLabel("done"), stopped: workStateLabel("failed") };
 
 /** How often the list is read again while a step is under way. */
 const WATCH_MS = 10_000;

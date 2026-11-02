@@ -1,4 +1,4 @@
-import { RUN_ACTIVITY_PHASE_LABELS_ZH } from "@evimed/domain";
+import { RUN_ACTIVITY_PHASE_LABELS_ZH, workStateLabel } from "@evimed/domain";
 import type {
   WebAgentRun,
   WebRunActivityPhase,
@@ -155,15 +155,19 @@ export function runDeliverables(run: WebAgentRun, live?: LiveRunFold | null): We
   return merged;
 }
 
-/** What each deliverable state is called on screen. */
+/**
+ * What each deliverable state is called on screen: the product's work-state words, one map for every page that lists a plan's items.
+ * The ledger's gate words (核对中, 需修改, 已通过核对, 已交付) described the system's own check, and 「核对」 is the word for comparing a
+ * quotation with its source; a reader of a research plan is told whether an item is waiting, going, done or not finished.
+ */
 export const DELIVERABLE_STATUS_LABEL: Record<WebRunDeliverableStatus, string> = {
-  planned: "待开始",
-  delegated: "进行中",
-  submitted: "核对中",
-  rejected: "需修改",
-  accepted: "已通过核对",
-  delivered: "已交付",
-  failed: "未完成",
+  planned: workStateLabel("todo"),
+  delegated: workStateLabel("running"),
+  submitted: workStateLabel("running"),
+  rejected: workStateLabel("running"),
+  accepted: workStateLabel("done"),
+  delivered: workStateLabel("done"),
+  failed: workStateLabel("failed"),
 };
 
 /**
@@ -189,12 +193,12 @@ export function currentPhaseLabel(progress: WebRunProgress | null): string | nul
   return labels[phase] ? `正在${labels[phase]}` : null;
 }
 
-/** 「子任务 2/3 运行中」, or null when the run delegated nothing. */
+/** 「子任务 2/3 进行中」, or null when the run delegated nothing. */
 export function childrenLine(progress: WebRunProgress | null): string | null {
   const children = progress?.children ?? [];
   if (children.length === 0) return null;
   const running = children.filter((child) => child.state === "running").length;
-  return running > 0 ? `子任务 ${running}/${children.length} 运行中` : `子任务 ${children.length} 个`;
+  return running > 0 ? `子任务 ${running}/${children.length} ${workStateLabel("running")}` : `子任务 ${children.length} 个`;
 }
 
 /**

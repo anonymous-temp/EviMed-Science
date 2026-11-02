@@ -142,7 +142,7 @@ per-project workspace + JSONL provenance.
 
 - UI baseline language is **Simplified Chinese** (code/comments stay English); technical identifiers
   (URLs, enum values, model/provider ids) stay as-is. The maintained design authority is
-  `docs/FRONTEND_DESIGN_SYSTEM.md` **v3.2**; `DESIGN.md` holds the engineering rules and the component
+  `docs/FRONTEND_DESIGN_SYSTEM.md` **v3.3**; `DESIGN.md` holds the engineering rules and the component
   adoption map; component JSDoc plus `/__gallery` and the composition fixtures own each implemented
   contract; product scope stays in the linked module plans. Chinese reading copies are dated snapshots
   or link indexes, not a second normative specification.
@@ -370,6 +370,6 @@ Read [the execution ledger](../docs/superpowers/plans/2026-10-26-design-system-v
 
 ## Owner review adopted 2026-10-27: page composition v3.2
 
-The canonical `docs/FRONTEND_DESIGN_SYSTEM.md` DS22.1–DS22.8 and AT51–AT58 own composition and complexity: explicit current-task modes, scoped action ownership and header defaults, distinct workflow/view/filter controls, adaptive filters, parent-level shared first-use state, contextual import/edit, meaningful grouping and whole-page state/width verification. Apply those rules through existing PageShell, Toolbar, StepRail and DocumentExport components; preserve all eight workflow steps, actual permissions, drafts, valid results and the native composer. Token package 3.0.0 remains unchanged.
+The canonical `docs/FRONTEND_DESIGN_SYSTEM.md` DS23 and AT59–AT66 own the module workspace (one projection, one state vocabulary, one next step, four kinds of action, the conversation as a bar or a column beside the results): **after fixing a front-end interaction problem, update DS and DESIGN.md in the same branch, adding what is missing and correcting what is stale** (owner, 2026-11-01). Built: `components/workspace/`, `@evimed/domain` `workState.mjs`, `attentionOf` filtering by the reader's abilities with `intake_confirm` / `intake_freeze`, `PUT /api/knowledge-pages/auto` (a project's pause of automatic compiling), `POST /api/geo/projects/:id/runs/:runId/stop`. DS22.1–DS22.8 and AT51–AT58 own composition and complexity: explicit current-task modes, scoped action ownership and header defaults, distinct workflow/view/filter controls, adaptive filters, parent-level shared first-use state, contextual import/edit, meaningful grouping and whole-page state/width verification. Apply those rules through existing PageShell, Toolbar, StepRail and DocumentExport components; preserve all eight workflow steps, actual permissions, drafts, valid results and the native composer. Token package 3.0.0 remains unchanged.
 
 These are adoption targets until the coordinating execution ledger records implementation and verification. The owner authorized affected-page implementation, commit and branch push; deployment remains unauthorized. Preserve the dated v3.1 audit and its seven OPEN acceptance items separately. Do not substitute a cosmetic classifier pass, arbitrary budget relaxation or a universal five-second claim for task and behavioral evidence. The specification owns detailed rules; this entry is an authority pointer, not a parallel specification.

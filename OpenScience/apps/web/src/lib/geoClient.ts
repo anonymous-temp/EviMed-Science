@@ -1527,6 +1527,9 @@ export function setGeoMonitoringAutomation(geoId: string, enabled: boolean) {
 }
 
 /** “让 AI 做”: starts one step now. The person stays where they are. */
+/** Stops one run of the programme's; what it had done stays. */
+export const stopGeoStepRun = (geoId: string, runId: string) => productRequest<{ root: string }>(`${project(geoId)}/runs/${encodeURIComponent(runId)}/stop`, "POST", {});
+
 export function runGeoStep(geoId: string, step: GeoStepKey) {
   return productRequest<GeoStartAnswer>(`${project(geoId)}/run`, "POST", { step });
 }

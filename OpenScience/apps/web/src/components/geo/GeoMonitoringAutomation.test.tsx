@@ -8,25 +8,25 @@ const api=vi.hoisted(()=>({set:vi.fn()}));
 vi.mock('@/lib/geoClient',async original=>({...await original<typeof import('@/lib/geoClient')>(),setGeoMonitoringAutomation:api.set}));
 const render=(node:React.ReactNode)=>rtlRender(node,{wrapper:MemoryRouter});
 beforeEach(()=>{api.set.mockReset().mockResolvedValue({enabled:true});});
-it('does not imply past scope authorization; starting and declining are explicit choices',async()=>{
+it('does not imply past scope authorization; turning it on and declining are explicit choices',async()=>{
   render(<GeoMonitoringAutomation project={geoProject({monitoring:'done'})}/>);
-  expect(screen.getByRole('heading',{name:'尚未开启自动监测'})).toBeVisible();
+  expect(screen.getByRole('heading',{name:'等你开启自动监测'})).toBeVisible();
   expect(screen.getByText('监测范围')).toBeVisible();
   expect(screen.getByText(/覆盖窗口 90 天/)).toBeVisible();
   expect(screen.getByText(/开启后才会安排后续复测/)).toBeVisible();
   expect(screen.getByText(/每日风险抽查和发布后检查/)).toBeVisible();
   expect(screen.getByText('这些任务均按实际调用使用项目额度')).toBeVisible();
   expect(screen.getByText('不再创建新任务，已经受理的任务会继续')).toBeVisible();
-  await userEvent.click(screen.getByRole('button',{name:'开始自动监测'}));
+  await userEvent.click(screen.getByRole('button',{name:'开启自动监测'}));
   await waitFor(()=>expect(api.set).toHaveBeenCalledWith('geo_1',true));
   await userEvent.click(screen.getByRole('button',{name:'暂不启动'}));
   await waitFor(()=>expect(api.set).toHaveBeenCalledWith('geo_1',false));
 });
 it('does not offer an enable action to paused or read-only projects',()=>{
   const first=render(<GeoMonitoringAutomation project={geoProject({}, {status:'paused'})}/>);
-  expect(screen.queryByRole('button',{name:'开始自动监测'})).toBeNull();first.unmount();
+  expect(screen.queryByRole('button',{name:'开启自动监测'})).toBeNull();first.unmount();
   render(<GeoMonitoringAutomation project={geoProject({}, {access:{abilities:['read'],roles:['viewer'],owner:false}})}/>);
-  expect(screen.queryByRole('button',{name:'开始自动监测'})).toBeNull();
+  expect(screen.queryByRole('button',{name:'开启自动监测'})).toBeNull();
 });
 it('points a member who cannot change monitoring at the scope the measurements cover',()=>{
   render(<GeoMonitoringAutomation project={geoProject({}, {access:{abilities:['read'],roles:['viewer'],owner:false}})}/>);
@@ -39,7 +39,7 @@ it('requires the confirmed engine/window scope to match before calling monitorin
   const view=render(<GeoMonitoringAutomation project={p}/>);
   expect(screen.getByRole('button',{name:'停止自动监测'})).toBeVisible();
   view.rerender(<GeoMonitoringAutomation project={{...p,coverageDays:180}}/>);
-  expect(screen.getByRole('heading',{name:'尚未开启自动监测'})).toBeVisible();
+  expect(screen.getByRole('heading',{name:'等你开启自动监测'})).toBeVisible();
   expect(screen.getByText(/当前引擎或覆盖窗口已经变化/)).toBeVisible();
 });
 
@@ -49,7 +49,7 @@ it('allows stopping confirmed automation while the project is paused',async()=>{
   render(<GeoMonitoringAutomation project={p}/>);
   await userEvent.click(screen.getByRole('button',{name:'停止自动监测'}));
   await waitFor(()=>expect(api.set).toHaveBeenCalledWith('geo_1',false));
-  expect(screen.queryByRole('button',{name:'开始自动监测'})).toBeNull();
+  expect(screen.queryByRole('button',{name:'开启自动监测'})).toBeNull();
 });
 
 it('lets a read-only member inspect the exact accepted round without offering new work',()=>{

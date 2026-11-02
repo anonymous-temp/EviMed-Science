@@ -172,14 +172,14 @@ export function claimStatuses(verification: ClaimVerification | null | undefined
 }
 
 /** The one line a report opens with when some of its claims need checking —
- *  「⚠ 3 条待核对」 — and nothing when none do (2026-09-23 plan §4: a check
+ *  「⚠ 3 条未核对」 — and nothing when none do (2026-09-23 plan §4: a check
  *  shows where it found a problem, never a tally of what passed). The ✓ and ⚠
  *  beside each sentence carry the rest. */
 export function claimVerificationSummary(verification: ClaimVerification | null | undefined): { text: string; attention: boolean } | null {
   const counts = verification?.counts ?? {};
   const pending = (counts.quote_not_found ?? 0) + (counts.source_unavailable ?? 0) + (counts.no_quote ?? 0);
   if (pending === 0) return null;
-  return { text: `⚠ ${pending} 条待核对`, attention: true };
+  return { text: `⚠ ${pending} 条未核对`, attention: true };
 }
 
 /**

@@ -677,15 +677,12 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
         read();
         return () => { result(); switched(); };
       }, []);
-      if (!selectedTool && !geoState?.journey && !geoState?.unavailable && !selection?.sourceIds?.length && !selection?.originReference) return null;
+      if (!selectedTool && !geoState?.unavailable && !selection?.sourceIds?.length && !selection?.originReference) return null;
       // One budget for all EviMed controls, so the kernel can still measure
       // when its model picker must collapse, with no wrapped or scrolling row.
       return h('span', { 'data-evimed-composer-context': true,
         style: { display: 'inline-flex', alignItems: 'center', gap: '4px', minWidth: 0, maxWidth: barChipBudget, flex: '0 1 auto' } },
         h(ToolChip, { placement: 'bar' }),
-        geoState?.journey ? h('button', {type:'button', style:{...chipStyle,...textButton,minWidth:0,maxWidth:barChipBudget},
-          title:[geoState.journey.requested,geoState.journey.title,geoState.journey.detail].join(' · '), 'aria-label':`当前工作：${geoState.journey.title}`,
-          onClick:() => target.__EVIMED_SHELL__?.navigate?.('geo',undefined,{tab:geoState.journey.nextStep ?? 'overview'})}, h('span',{style:starterText},geoState.journey.title)) : null,
         geoState?.unavailable ? h('span',{role:'status',style:{fontSize:'12px',overflowWrap:'anywhere'}},geoState.unavailable) : null,
         selection?.originReference ? h('button', { type: 'button', 'data-evimed-origin-reference': true,
           style: { ...chipStyle, ...textButton, flex: '0 1 auto', minWidth: 0, fontSize: '12px', maxWidth: barChipBudget },
@@ -724,20 +721,12 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
       if (!model || model.geo || model.vcr) {
         const options = model?.vcr ? vcrState : geoState;
         const starters = options && Array.isArray(options.starters) ? options.starters : [];
-        if (!starters.length && !options?.journey && !options?.unavailable) return null;
+        if (!starters.length && !options?.unavailable) return null;
         return h('div', {
           'data-evimed-tool-starters': model?.id ?? 'geo',
           style: { flexBasis: '100%', display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: '8px', minWidth: 0 },
         }, options?.unavailable ? h('p',{role:'status',style:{fontSize:'14px',margin:0}},options.unavailable) : null,
-        options?.journey ? h('section',{'aria-label':'当前工作','data-evimed-geo-journey':true,style:{flexBasis:'100%',display:'flex',flexDirection:'column',gap:'8px',textAlign:'left',minWidth:0}},
-          h('span',{style:{fontSize:'12px'}},options.journey.requested),h('strong',{style:{fontSize:'14px'}},options.journey.title),h('p',{style:{fontSize:'14px',margin:0,overflowWrap:'anywhere'}},options.journey.detail),
-          h('button',{type:'button',style:{...starterStyle,alignSelf:'flex-start'},onClick:() => options.journey.nextDraft ? fill(options.journey.nextDraft) : target.__EVIMED_SHELL__?.navigate?.('geo',undefined,{tab:options.journey.nextStep ?? 'overview'})},options.journey.nextLabel)) : null,
-        starters.map((/** @type {{ label: string, draft: string, requirement?: string, minimumFields?: string, inputLabel?: string }} */ starter) => model?.vcr || options?.journey ? h('div', {
-          key: starter.label, style: { display: 'flex', flexDirection: 'column', gap: '8px', minWidth: 0, width: '100%', textAlign: 'left' },
-        }, h('button', { type: 'button', title: starter.draft, style: starterStyle, onClick: () => fill(starter.draft) }, h('span', { style: starterText }, starter.label)),
-          h('span', { style: { fontSize: '12px', overflowWrap: 'anywhere' } }, [starter.inputLabel, starter.requirement].filter(Boolean).join(' · ')),
-          starter.minimumFields ? h('details', null, h('summary', { style: { cursor: 'pointer', fontSize: '12px' } }, '查看最低字段'), h('p', { style: { fontSize: '12px', margin: '8px 0', overflowWrap: 'anywhere' } }, starter.minimumFields)) : null)
-          : h('button', { key: starter.label, type: 'button', title: starter.draft, style: starterStyle, onClick: () => fill(starter.draft) }, h('span', { style: starterText }, starter.label))));
+        starters.map((/** @type {{ label: string, draft: string }} */ starter) => h('button', { key: starter.label, type: 'button', title: starter.draft, style: starterStyle, onClick: () => fill(starter.draft) }, h('span', { style: starterText }, starter.label))));
       }
       if (!model.starters.length) return null;
       return h('span', { 'data-evimed-tool-starters': model.id, style: { display: 'contents' } },
@@ -776,9 +765,11 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
       const geoState = useGeoOptions();
       const hasToolbar = useToolbar();
       const model = modelOf(id);
-      if (!model && !geoState?.starters?.length && !geoState?.journey && !geoState?.unavailable) return blankExamples.length ? h(BlankExamples) : null;
+      if (!model && !geoState?.starters?.length && !geoState?.unavailable) return blankExamples.length ? h(BlankExamples) : null;
       return h('div', {
         'data-evimed-hero-tools': model?.id ?? 'geo',
+        // A module's page says where the work stands and what it lacks, beside this frame: its blank conversation has no greeting of its own (`runtimeUiShell`).
+        ...(!model || model.geo || model.vcr ? { 'data-evimed-module-hero': '' } : {}),
         style: { width: '100%', maxWidth: 'var(--dsh-composer-card-max-width, 952px)', margin: '8px auto 0', display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'center', gap: '8px', minWidth: 0 },
       }, hasToolbar || !model ? null : h(ToolChip, { placement: 'hero' }), h(Starters));
     };

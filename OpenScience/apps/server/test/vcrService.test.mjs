@@ -357,6 +357,24 @@ test("the study header offers the move its frozen data supports, once, to the le
   assert.equal((await view("T1", t0Study, [], { async tierSupport() { throw new Error("plane down"); } })).tierOffer, null);
 });
 
+test("the study's overview says what its data intake waits for, to the member who manages the data, and survives a plane that cannot answer", async () => {
+  const rows = { sources: [{ id: "src_1", fieldMapState: "proposed", status: "registered" }], files: [{ id: "f1", sourceId: "src_1", role: "data" }], snapshots: [] };
+  /** @param {string[]} roles @param {any} plane */
+  const kinds = async (roles, plane) => {
+    const { store } = studyOnly(t0Study, { roles });
+    const view = await new VcrService({ store: /** @type {any} */ (store), config: {}, dataPlane: plane }).studyView({ id: roles.length ? "member" : "lead" }, t0Study.id);
+    return view.overview.attention.map((/** @type {{ kind: string }} */ line) => line.kind);
+  };
+  assert.deepEqual(await kinds([], { intakeRows: async () => rows }), ["intake_confirm"], "the lead is asked to confirm the map");
+  assert.deepEqual(await kinds(["data_manager"], { intakeRows: async () => rows }), ["intake_confirm"]);
+  // A member who cannot manage data is told nothing they cannot act on.
+  assert.deepEqual(await kinds(["viewer"], { intakeRows: async () => rows }), []);
+  // The plane cannot answer, or is not composed: the overview is the overview, with nothing said of the intake.
+  assert.deepEqual(await kinds([], { intakeRows: async () => { throw new Error("plane down"); } }), []);
+  assert.deepEqual(await kinds([], null), []);
+  assert.deepEqual(await kinds([], {}), []);
+});
+
 test("a rise in tier needs data that supports it; T3 needs the data that qualifies as T2; a lowering or the same tier is never held to it", async () => {
   /** @param {string} from @param {string} supports @param {string} to */
   const move = async (from, supports, to) => {

@@ -67,10 +67,10 @@ beforeEach(() => {
 
 const EMPTY_TABS = ["population", "patients", "comparator", "trial"] as const;
 const BUTTON: Record<string, [string, string]> = {
-  population: ["构建人群", "population"],
-  patients: ["生成虚拟患者", "patients"],
-  comparator: ["设计对照", "comparator"],
-  trial: ["模拟试验方案", "trial"],
+  population: ["让 AI 构建人群", "population"],
+  patients: ["让 AI 生成虚拟患者", "patients"],
+  comparator: ["让 AI 设计对照", "comparator"],
+  trial: ["让 AI 模拟试验方案", "trial"],
 };
 
 describe("a task that has not begun opens the existing native conversation", () => {
@@ -94,7 +94,7 @@ describe("a task that has not begun opens the existing native conversation", () 
       raw.steps.evidence = { ...raw.steps.evidence, status: "none", requested: false };
     }, { [`GET /vcr/studies/${STUDY_ID}/data`]: fixture("empty/data.json") });
     drawStudy(`/app/virtual-research/${STUDY_ID}/data`);
-    await userEvent.click(await screen.findByRole("button", { name: "找证据、整理假设卡" }));
+    await userEvent.click(await screen.findByRole("button", { name: "让 AI 找证据、整理假设卡" }));
     await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent(`/app/virtual-research/${STUDY_ID}/chat`));
     expect(posts(server, "/run")).toHaveLength(0);
     expect(shell.select).not.toHaveBeenCalled();
@@ -121,7 +121,7 @@ describe("unfinished work continues in the existing native conversation", () => 
       expect(found).not.toBeNull();
       return found as HTMLElement;
     });
-    await userEvent.click(within(failed).getByRole("button", { name: "在对话中继续" }));
+    await userEvent.click(within(failed).getByRole("button", { name: "让 AI 接着做" }));
     await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent(`/app/virtual-research/${STUDY_ID}/chat`));
     expect(screen.getByRole("region", { name: "研究对话" })).toBeInTheDocument();
     expect(posts(server, "/run")).toHaveLength(0);
@@ -136,7 +136,7 @@ describe("unfinished work continues in the existing native conversation", () => 
       expect(found).not.toBeNull();
       return found as HTMLElement;
     });
-    await userEvent.click(within(attention).getByRole("button", { name: "在对话中继续" }));
+    await userEvent.click(within(attention).getByRole("button", { name: "让 AI 接着做" }));
     await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent(`/app/virtual-research/${STUDY_ID}/chat`));
     expect(screen.getByRole("region", { name: "研究对话" })).toBeInTheDocument();
     expect(posts(server, "/run")).toHaveLength(0);
@@ -151,7 +151,7 @@ describe("an export is a start too", () => {
     await userEvent.click(await screen.findByRole("button", { name: "更多操作" }));
     await userEvent.click(await screen.findByRole("menuitem", { name: "导出…" }));
     const dialog = await screen.findByRole("dialog", { name: "导出" });
-    await userEvent.click(within(dialog).getByRole("button", { name: "导出" }));
+    await userEvent.click(within(dialog).getByRole("button", { name: "开始导出" }));
     await waitFor(() => expect(posts(server, "/export")).toHaveLength(1));
     await waitFor(() => expect(document.querySelector("[data-activity='strip']")).not.toBeNull());
     expect(screen.getByTestId("where")).toHaveTextContent(`/app/virtual-research/${STUDY_ID}/trial`);

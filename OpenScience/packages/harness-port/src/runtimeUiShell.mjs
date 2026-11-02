@@ -53,7 +53,7 @@ export const inject = ['slots'];
  *
  * Re-read at 0.2.0-rc.2 (2026-10-14): every CSS-module class suffix below
  * (`_sidebarCol`, `_centerCol`, `_rightbarCol`, `_overlayLayer`, `_handle`,
- * `_dock`, `_hero`, `_embeddedBody`, `_scroll`, `_previewBadge`) is in the new
+ * `_dock`, `_hero`, `_embeddedBody`, `_scroll`, `_previewBadge`, and since 2026-11-01 the blank conversation's `_scrollBody`, `_composerStack` and `_headline`, measured on the live frame at 432 px) is in the new
  * client bundles under the same hashed name, and the composer was measured at
  * 1512 and 390 px in a real frame (room under the card, one toolbar line, no
  * statistics for a researcher). Re-read at 0.2.1-rc.2 (2026-10-17): the same ten
@@ -164,6 +164,10 @@ export function shellStylesheet(pin, operator = false) {
     // `env()` is the browser's own and is zero in a frame that is not given an
     // inset, so the shell gives the frame's container the inset itself.
     '[class$="_root"]:not([class*="_hero"]):has(> [class$="_card"] ~ [class$="_dock"]){padding-bottom:max(16px,env(safe-area-inset-bottom)) !important}',
+    // A module's blank conversation stands beside the page that says what comes next: no greeting, and the composer where it will stay, at
+    // the bottom, and not centred to move there on the first message (2026-11-01, the module workspace).
+    '[class*="_composerStack"]:has([data-evimed-module-hero]) [class$="_headline"]{display:none !important}',
+    '[class$="_scrollBody"]:has([data-evimed-module-hero]){justify-content:flex-end !important;padding-bottom:16px !important}',
     // A finished turn's footer (`data-turn-tail`) keeps copy, branch and its
     // time. Its usage pill (「用量 860K tok」) and duration pill (「用时 …」,
     // with tok/s and TTFT behind it) are the footer's only dialog triggers,

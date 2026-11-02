@@ -70,7 +70,7 @@ it('resolves the exact GEO primary then stages the exact analysis and unsent dra
   read.mockResolvedValue({view:{viewId:'V01',dimension:'project'},selection:{reference:'gsel_first'},digest:'exact-digest',columns:[],rows:[],page:{total:0,shown:0,nextOffset:null},availability:{status:'ready'}});
   render(<MemoryRouter><GeoAnalysisWorkbench geoId="geo" project={{...project,sessionId:null} as never}/></MemoryRouter>);
   fireEvent.click(screen.getByText('所选数据分析'));
-  fireEvent.click(await screen.findByRole('button',{name:'在对话中解释'}));
+  fireEvent.click(await screen.findByRole('button',{name:'让 AI 解释'}));
   await waitFor(()=>expect(navigation.stage).toHaveBeenCalledWith('geo',expect.objectContaining({sessionId:'created-session',mode:'analysis',selectionRef:'gsel_first',expectedDigest:'exact-digest'})));
   expect(navigation.create).toHaveBeenCalledWith('geo',{kind:'primary'});
   expect(navigation.open).toHaveBeenCalledTimes(1);
@@ -90,18 +90,18 @@ describe('what the role may do with the selected analysis',()=>{
  it('shows a viewer the analysis, with neither the conversation nor the export',async()=>{
   await renderAs(access(['read']));
   await waitFor(()=>expect(screen.getByRole('button',{name:'首批数据'})).toBeTruthy());
-  expect(screen.queryByRole('button',{name:'在对话中解释'})).toBeNull();
+  expect(screen.queryByRole('button',{name:'让 AI 解释'})).toBeNull();
   expect(screen.queryByTestId('export')).toBeNull();
  });
  it('shows an editor both',async()=>{
   await renderAs(access(['read','run','edit']));
-  expect(await screen.findByRole('button',{name:'在对话中解释'})).toBeTruthy();
+  expect(await screen.findByRole('button',{name:'让 AI 解释'})).toBeTruthy();
   expect(screen.getByTestId('export').textContent).toContain('gsel_role');
  });
  it('offers a role that may run but not edit the export alone: the conversation takes both',async()=>{
   await renderAs(access(['read','run']));
   expect(await screen.findByTestId('export')).toBeTruthy();
-  expect(screen.queryByRole('button',{name:'在对话中解释'})).toBeNull();
+  expect(screen.queryByRole('button',{name:'让 AI 解释'})).toBeNull();
  });
 });
 
@@ -112,11 +112,11 @@ it('retains the selected analysis with a recoverable error if first-session crea
   read.mockResolvedValue({view:{viewId:'V01',dimension:'project'},selection:{reference:'gsel_retry'},digest:'retry-digest',columns:[],rows:[],page:{total:0,shown:0,nextOffset:null},availability:{status:'ready'}});
   render(<MemoryRouter><GeoAnalysisWorkbench geoId="geo" project={{...project,sessionId:null} as never}/></MemoryRouter>);
   fireEvent.click(screen.getByText('所选数据分析'));
-  fireEvent.click(await screen.findByRole('button',{name:'在对话中解释'}));
+  fireEvent.click(await screen.findByRole('button',{name:'让 AI 解释'}));
   expect(await screen.findByRole('button',{name:'刷新分析'})).toBeTruthy();
   expect(navigation.stage).not.toHaveBeenCalled();expect(navigation.open).not.toHaveBeenCalled();
   expect(screen.getByTestId('export').textContent).toContain('gsel_retry');
-  expect(screen.getByRole('button',{name:'在对话中解释'})).not.toBeDisabled();
+  expect(screen.getByRole('button',{name:'让 AI 解释'})).not.toBeDisabled();
 });
 
 it('keeps answer and statement count units separate and opens exact paginated members',async()=>{
@@ -181,7 +181,7 @@ it('V09 retains quoted conditions and independent units while staging the same s
  read.mockResolvedValue({view:{viewId:'V09',dimension:'project'},selection:{reference:'gsel_c3'},digest:'c3-digest',columns:[{key:'expressions',label:'表达数（互斥分类）'},{key:'answers',label:'独立回答数（分类间可重叠）'}],rows:[{key:'expression',label:'条件性推荐 · Alpha',metricId:null,dimensions:{kind:'expression',conditionQuote:'If adult',explicitPosition:null},values:{expressions:{value:2,state:'known',unit:'expressions',metric:null,members:null},answers:{value:1,state:'known',unit:'answers',metric:null,members:null}}}],page:{total:1,shown:1,nextOffset:null},availability:{status:'partial'}});
  render(<MemoryRouter><GeoAnalysisWorkbench geoId="geo" project={project as never} initialView="V09"/></MemoryRouter>);fireEvent.click(screen.getByText('所选数据分析'));
  expect(await screen.findByText(/条件：If adult/)).toBeVisible();expect(screen.getByText('2 表达')).toBeVisible();expect(screen.getByText('1 回答')).toBeVisible();
- fireEvent.click(screen.getByRole('button',{name:'在对话中解释'}));
+ fireEvent.click(screen.getByRole('button',{name:'让 AI 解释'}));
  await waitFor(()=>expect(navigation.stage).toHaveBeenCalledWith('geo',expect.objectContaining({mode:'analysis',view:{viewId:'V09',dimension:'project'},selectionRef:'gsel_c3',expectedDigest:'c3-digest'})));
  expect(navigation.open).toHaveBeenCalledWith(expect.objectContaining({geoPlanContext:{referenceId:'gpc_c3'}}),'Explain preserved expressions');
  expect(screen.getByTestId('export')).toHaveTextContent('gsel_c3');
@@ -221,7 +221,7 @@ it('V19 chooses exact group facets and V22 stages categorical history with the s
  read.mockResolvedValue({view:{viewId:'V22',sourceLevel:'page'},selection:{reference:'gsel_history'},digest:'history-digest',columns:[{key:'observation',label:'页面观察状态'},{key:'transition',label:'可比观察变化'}],rows:[{key:'history',label:'Page · r3',metricId:null,dimensions:{kind:'source_history',sourceKey:'news.example/page',roundLabel:'第 3 轮',setVersion:1,questionId:'q1',mode:'web'},values:{observation:{value:'absent',state:'known',unit:'observations'},transition:{value:'no_longer_observed',state:'known',unit:'observations'}}}],page:{total:1,shown:1,nextOffset:null},availability:{status:'ready',reasons:['citation_history_selected_scope','citation_completeness_required']}});
  fireEvent.click(screen.getByRole('button',{name:/分析：来源与平台/}));fireEvent.click(screen.getByRole('menuitemradio',{name:'页面引用观察历史'}));
  expect(await screen.findByText('可观测未引用')).toBeVisible();expect(screen.getByText('同一可比范围内未再观察到')).toBeVisible();expect(screen.getByText(/采集端记录的引用列表完整性/)).toBeVisible();
- fireEvent.click(screen.getByRole('button',{name:'在对话中解释'}));await waitFor(()=>expect(navigation.stage).toHaveBeenCalledWith('geo',expect.objectContaining({selectionRef:'gsel_history',view:{viewId:'V22',sourceLevel:'page'},expectedDigest:'history-digest'})));
+ fireEvent.click(screen.getByRole('button',{name:'让 AI 解释'}));await waitFor(()=>expect(navigation.stage).toHaveBeenCalledWith('geo',expect.objectContaining({selectionRef:'gsel_history',view:{viewId:'V22',sourceLevel:'page'},expectedDigest:'history-digest'})));
  expect(navigation.open).toHaveBeenCalledWith(expect.objectContaining({geoPlanContext:{referenceId:'gpc_d2'}}),'Explain selected history');expect(screen.getByTestId('export')).toHaveTextContent('history-digest');
 });
 it.each(['V19','V22'] as const)('%s retains loading, read error and empty states in the shared workbench',async(viewId)=>{
@@ -235,7 +235,7 @@ it('V21 stages an unsent next-steps draft with exact row, metric and frozen gaps
  navigation.stage.mockReset().mockResolvedValue({referenceId:'gpc_opportunity',sessionId:'session',draft:'Unsent exact group plan'});
  read.mockReset().mockResolvedValue({view:{viewId:'V21',dimension:'project',ownedMetricId:'M-08'},selection:{reference:'gsel_d3'},digest:'d'.repeat(64),columns:[{key:'owned',label:'登记自有 M-08'}],rows:[{key:'exact-row',label:'Same · v1',metricId:null,dimensions:{kind:'opportunity',groupId:'g1',setVersion:1,configureAction:{step:'sources',action:'configure_owned_sources'},gaps:{evidence:{state:'linked',items:[{id:'claim-1',version:1,statement:'Claim',quote:'Preserved source quote',sourceRef:'https://evidence.example/a',status:'active'}],action:{step:'evidence',groupId:'g1',setVersion:1}},source:{state:'observed',items:[{url:'https://shared.example/a?id=1'}],action:{step:'sources',groupId:'g1',setVersion:1}},content:{state:'linked',items:[{id:'article-old',resultVersionId:'001',digest:'a'.repeat(64)}],action:{step:'content',groupId:'g1',setVersion:1}}}},values:{owned:{value:null,state:'unknown',reason:'owned_not_registered',metric:null,members:null}}}],page:{total:1,shown:1,nextOffset:null},availability:{status:'partial',reasons:['owned_not_registered']}});
  render(<MemoryRouter><GeoAnalysisWorkbench geoId="geo" project={project as never} initialView="V21" embedded/></MemoryRouter>);
- const action=await screen.findByRole('button',{name:'按此问题群拟定方案'});fireEvent.click(action);
+ const action=await screen.findByRole('button',{name:'让 AI 按此问题群拟定方案'});fireEvent.click(action);
  await waitFor(()=>expect(navigation.stage).toHaveBeenCalledWith('geo',expect.objectContaining({intent:'next_steps',mode:'strategy',selectionRef:'gsel_d3',expectedDigest:'d'.repeat(64),focus:{rowKey:'exact-row',columnKey:'owned'}})));
  expect(navigation.open).toHaveBeenCalledWith(expect.objectContaining({geoPlanContext:{referenceId:'gpc_opportunity'}}),'Unsent exact group plan');
  expect(screen.getByRole('link',{name:'登记自有发布地址'})).toBeTruthy();
@@ -299,7 +299,7 @@ it('keeps an exact historical plan descriptor for export and native explanation'
  render(<MemoryRouter><GeoAnalysisWorkbench geoId="geo" project={project as never} initialView="V26" initialDescriptor={view} embedded/></MemoryRouter>);
  await waitFor(()=>expect(read).toHaveBeenCalledWith('geo',{round:'old'},view,0,undefined));
  expect(screen.getByTestId('export').textContent).toContain('"strategyVersion":3');expect(screen.getByTestId('export').textContent).toContain('"targetVersion":2');
- fireEvent.click(screen.getByRole('button',{name:'在对话中解释'}));
+ fireEvent.click(screen.getByRole('button',{name:'让 AI 解释'}));
  await waitFor(()=>expect(navigation.stage).toHaveBeenCalledWith('geo',expect.objectContaining({view,mode:'analysis',selectionRef:'gsel_current',expectedDigest:'historical-digest'})));
  fireEvent.click(screen.getByRole('button',{name:'方案版本：方案版本 3'}));fireEvent.click(screen.getByRole('menuitemradio',{name:'所选范围最新方案'}));
  await waitFor(()=>expect(read).toHaveBeenCalledWith('geo',{round:'old'},{viewId:'V26',strategyVersion:undefined,targetVersion:undefined},0,undefined));

@@ -55,9 +55,9 @@ export function ClaimRow({
       muted={withdrawn || claim.status === "closed"}
       meta={meta}
       actions={!withdrawn && !lead && canRun && claim.status !== "closed" ? (
-        <Button variant="secondary" size="sm" loading={busy} onClick={onCorrect}>
+        <Button variant="secondary" size="sm" actionKind="draft" loading={busy} onClick={onCorrect}>
           {!busy && <PenLine size={16} aria-hidden="true" />}
-          写纠错稿
+          让 AI 写纠错稿
         </Button>
       ) : undefined}
     />

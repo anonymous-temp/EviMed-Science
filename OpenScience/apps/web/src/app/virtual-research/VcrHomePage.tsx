@@ -1,7 +1,8 @@
 import { VcrLegacyDraftRecovery } from "@/components/vcr/VcrLegacyDraftRecovery";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router";
-import { Plus, RefreshCw, UsersRound } from "lucide-react";
+import { PenLine, Plus, RefreshCw, UsersRound } from "lucide-react";
+import { workStateLabel } from "@evimed/domain";
 import { webErrorMessage } from "@/lib/apiClient";
 import {
   getVcrHome,
@@ -62,12 +63,16 @@ type Listing =
   | { kind: "ready"; home: VcrHome };
 
 /** The one filter and the one sort the list has. */
-type StudyFilter = "all" | "need" | "running" | "done";
+type StudyFilter = "all" | Exclude<StudyState, "other">;
 type StudySort = "recent" | "state";
 
-const STATE_WORDS: Record<Exclude<StudyFilter, "all">, string> = { need: "需要你", running: "进行中", done: "已完成" };
+/** The filter's words are the vocabulary of module work's (`@evimed/domain` `workState.mjs`), never a table of the page's own. */
+const STATE_WORDS: Record<Exclude<StudyFilter, "all">, string> = {
+  need: workStateLabel("waiting"), running: workStateLabel("running"), paused: workStateLabel("paused"), done: workStateLabel("done"),
+};
+const STATE_KEYS = ["need", "running", "paused", "done"] as const;
 /** The order of the state sort: what asks for the reader first, what is finished last. */
-const STATE_RANK: Record<StudyState, number> = { need: 0, running: 1, other: 2, done: 3 };
+const STATE_RANK: Record<StudyState, number> = { need: 0, running: 1, paused: 2, other: 3, done: 4 };
 
 /**
  * The page's one view switch: studies, and the three libraries that load their own data. Leaving a view lets go of the study it had open.
@@ -146,7 +151,7 @@ export function VcrHomePage() {
 
   const needle = query.trim().toLowerCase();
   const counts = useMemo(() => {
-    const total = { all: studies.length, need: 0, running: 0, done: 0 } as Record<StudyFilter, number>;
+    const total = { all: studies.length, need: 0, running: 0, paused: 0, done: 0 } as Record<StudyFilter, number>;
     for (const study of studies) {
       const kind = studyStateOf(study);
       if (kind !== "other") total[kind] += 1;
@@ -185,9 +190,10 @@ export function VcrHomePage() {
   const opening = { replace: showingDetail, state: { [PREVIEW_PUSHED]: showingDetail ? pushedHere : true } };
   const newStudy: PageActionPlan = { primary: { id: "new-study", label: "新研究", icon: Plus, onSelect: () => setParams(current => { const next = new URLSearchParams(current); next.delete("study"); next.set("new", "1"); return next; }, opening) } };
 
-  // A state with no study in it is not a chip: 0 is not a filter.
+  // A state with no study in it is not a chip: 0 is not a filter. The one that is applied stays, though a refresh took its count to 0:
+  // a selected filter is never erased from under the reader, who would be looking at an empty list with nothing to say why.
   const filters: ToolbarFilter[] = [];
-  const stateOptions = (["need", "running", "done"] as const).filter((key) => counts[key] > 0);
+  const stateOptions = STATE_KEYS.filter((key) => counts[key] > 0 || key === state);
   if (stateOptions.length > 0) {
     filters.push({
       kind: "chips",
@@ -249,7 +255,7 @@ export function VcrHomePage() {
           <EmptyState
             icon={UsersRound}
             title="暂无研究"
-            reason="选一项任务开始后，研究会列在这里。"
+            reason="在对话里说明要研究什么，发送后研究会列在这里。"
           />
         )
         : shown.length === 0
@@ -315,7 +321,7 @@ export function VcrHomePage() {
 
 /**
  * Component: TaskEntry; owner: VCR; rules: one selected task opens an unsent native draft.
- * Anatomy: Heading, task selector, purpose, data requirements and start action.
+ * Anatomy: Heading, task selector, purpose, data requirements and the draft action (在对话中开始).
  * Variants: Four task types share the same controls.
  * States: Exactly one task is selected.
  * Hit area: Shared segmented control, disclosure and button.
@@ -336,7 +342,8 @@ function TaskEntry({ ask }: { ask: ReturnType<typeof useGeneralResearchDraft> })
       </div>
       <p className="text-ui text-text-2">{task.summary}</p>
       <VcrTaskRequirements task={task} />
-      <Button type="submit">开始</Button>
+      {/* Nothing starts here: the sentence waits in the composer and the study exists once it is sent (the VCR reset ruling). */}
+      <Button type="submit" actionKind="draft"><PenLine size={16} aria-hidden="true" />在对话中开始</Button>
     </form>
   );
 }

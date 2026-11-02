@@ -99,7 +99,7 @@ function RegisterSource({ studyId, options, onChanged }: { studyId: string; opti
         <Input label="可见时间：起" type="date" value={from} onChange={(event) => setFrom(event.target.value)} />
         <Input label="可见时间：止" type="date" value={to} onChange={(event) => setTo(event.target.value)} />
         <div className="flex justify-end sm:col-span-2">
-          <Button type="submit" loading={busy} disabled={!valid || busy}>登记</Button>
+          <Button actionKind="set" type="submit" loading={busy} disabled={!valid || busy}>登记</Button>
         </div>
       </form>
     </Card>

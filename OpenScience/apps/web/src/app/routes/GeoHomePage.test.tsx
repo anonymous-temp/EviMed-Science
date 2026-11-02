@@ -95,7 +95,7 @@ describe("循证 GEO home — the list", () => {
     ]);
     renderHome();
     const subline = within(await list()).getAllByRole("listitem")[0].querySelector("[data-geo-subline]");
-    expect(subline).toHaveTextContent("诊断没有做完");
+    expect(subline).toHaveTextContent("诊断未完成");
     expect(subline).not.toHaveTextContent("正在做");
   });
 
@@ -112,7 +112,7 @@ describe("循证 GEO home — the list", () => {
     expect(sentence).not.toHaveClass("text-danger");
     expect(rows.querySelectorAll("[data-severity]")).toHaveLength(1);
     expect(within(rows).getByText("3 条讲错待处理")).toBeInTheDocument();
-    expect(within(rows).getByText("1 篇稿件的安全问题待确认")).toBeInTheDocument();
+    expect(within(rows).getByText("1 篇稿件等你放行")).toBeInTheDocument();
   });
 
   it("tells two projects of one name apart by the day each started, and leaves a single name alone", async () => {
@@ -199,9 +199,11 @@ describe("循证 GEO home — the preview beside the list", () => {
     await list();
     const view = within(preview());
     expect(view.queryByRole("group", { name: "综合可见度指数" })).toBeNull();
-    expect(view.getByRole("region",{name:"当前工作"})).toHaveTextContent("尚未提交工作");
+    // Nothing was asked for, so the section says what to do and not that nothing has been done.
+    expect(view.getByRole("region",{name:"当前工作"})).toHaveTextContent("选择本次任务");
+    expect(view.getByRole("region",{name:"当前工作"})).not.toHaveTextContent(/尚未提交工作|未请求/);
     await userEvent.click(screen.getByRole("link", { name: "已排上诊断的项目" }));
-    expect(view.getByRole("region",{name:"当前工作"})).toHaveTextContent("已排队");
+    expect(view.getByRole("region",{name:"当前工作"})).toHaveTextContent("排队中");
     expect(view.queryByText(GEO_STEP_EMPTY.diagnosis)).toBeNull();
     // A project whose diagnosis has run is not told to wait for it: the number's own word is the reason.
     await userEvent.click(screen.getByRole("link", { name: "注射用重组人脑利钠肽" }));

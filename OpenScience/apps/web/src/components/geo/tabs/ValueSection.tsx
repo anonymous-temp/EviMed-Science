@@ -1,6 +1,7 @@
 import { useGeoDestinationPath } from "../useGeoPath";
 import { useGeoPath } from "../useGeoPath";
 import { useState } from "react";
+import { PenLine } from "lucide-react";
 import { Link } from "react-router";
 import { geoValueText, GEO_VALUE_DOMAINS } from "@evimed/domain";
 import type { GeoProject, GeoValue } from "@/lib/geoClient";
@@ -196,6 +197,9 @@ function StartAnalysis({ geoId, project, className }: { geoId: string; project: 
       <StepState
         phase="empty"
         step="开始药品价值分析"
+        startLabel="让 AI 开始药品价值分析"
+        startKind="draft"
+        startIcon={PenLine}
         noun="药品价值分析"
         uses={[{ label: "结论库", to: geoDestinationPath(geoId, { tab: "evidence" }) }]}
         gives="这个药的获益、风险、适用性、费用与可及性"

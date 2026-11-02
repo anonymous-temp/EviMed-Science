@@ -72,7 +72,7 @@ describe("a GEO number", () => {
     expect(geoCellPhrase(cell(38, null, 1240), "index")).toBe("38，1,240 次回答");
   });
 
-  it("writes 问 AI's draft from the number, its name, the date and the sample", () => {
+  it("writes 让 AI 解读's draft from the number, its name, the date and the sample", () => {
     expect(geoNumberDraft({ product: "玛仕度肽注射液", scope: "豆包", name: "品牌提及率", cell: cell(18, 56, 310), date: "9月22日" }))
       .toBe("玛仕度肽注射液 · 豆包 · 品牌提及率：18%，310 次里 56 次（9月22日测量）。这个数说明了什么，接下来该做什么？");
     expect(geoNumberDraft({ name: "引用命中率", cell: cell(6, 2, 24, "insufficient") }))

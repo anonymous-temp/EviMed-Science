@@ -1,7 +1,7 @@
 import { formatRelativeTime } from "@/lib/format";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-router";
 import { InboxPage } from "./InboxPage";
 import * as api from "@/lib/inboxClient";
@@ -209,14 +209,100 @@ it("keeps a decision the notice asks for in its 「⋯」, and it is gone once m
   vi.mocked(api.resolveInboxItem).mockResolvedValue({ ...review, revision: 2, readAt: at(0), resolvedAt: at(0), resolution: { actionId: "adopt" } });
   open();
   const row = (await screen.findByText("审阅一个研究结论")).closest("li")!;
-  expect(within(row).getByText("待核对")).toBeInTheDocument();
+  expect(within(row).getByText("待你核对")).toBeInTheDocument();
   await userEvent.click(within(row).getByRole("button", { name: "处理" }));
   expect(await screen.findByRole("menuitem", { name: "驳回" })).toHaveClass("text-danger");
   await userEvent.click(screen.getByRole("menuitem", { name: "采纳" }));
   await waitFor(() => expect(api.resolveInboxItem).toHaveBeenCalledWith("review-one", "adopt", 1));
   expect(await screen.findByText("已处理")).toBeInTheDocument();
   expect(screen.queryByRole("button", { name: "处理" })).not.toBeInTheDocument();
-  expect(screen.queryByText("待核对")).not.toBeInTheDocument();
+  expect(screen.queryByText("待你核对")).not.toBeInTheDocument();
+});
+
+// Module workspace audit D4: a danger decision asks first, whichever notice it is on.
+const unbindNotice: api.InboxItem = {
+  ...review, id: "bound", noticeType: "notify", title: "飞书机器人已绑定到你的账号", body: "绑定的飞书身份：张三。",
+  source: { type: "system", id: "feishu-binding:1" }, actions: [{ id: "feishu-unbind", label: "解除绑定", style: "danger" }],
+};
+it("asks what the settings page asks before it unbinds Feishu, and unbinds only on the confirmation", async () => {
+  serve({ items: [unbindNotice], nextCursor: null });
+  vi.mocked(api.resolveInboxItem).mockResolvedValue({ ...unbindNotice, revision: 2, readAt: at(0), resolvedAt: at(0), resolution: { actionId: "feishu-unbind" } });
+  open();
+  const row = (await screen.findByText("飞书机器人已绑定到你的账号")).closest("li")!;
+  await userEvent.click(within(row).getByRole("button", { name: "处理" }));
+  await userEvent.click(await screen.findByRole("menuitem", { name: "解除绑定" }));
+  // Nothing has happened yet: the dialog is the settings page's, word for word.
+  const dialog = await screen.findByRole("alertdialog", { name: "解除飞书机器人的绑定？" });
+  expect(dialog).toHaveTextContent("解除后，飞书里的消息不再派发任务，通知也不再推送到飞书");
+  expect(api.resolveInboxItem).not.toHaveBeenCalled();
+  await userEvent.click(within(dialog).getByRole("button", { name: "取消" }));
+  expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+  expect(api.resolveInboxItem).not.toHaveBeenCalled();
+  await userEvent.click(within(row).getByRole("button", { name: "处理" }));
+  await userEvent.click(await screen.findByRole("menuitem", { name: "解除绑定" }));
+  await userEvent.click(within(await screen.findByRole("alertdialog")).getByRole("button", { name: "解除绑定" }));
+  await waitFor(() => expect(api.resolveInboxItem).toHaveBeenCalledWith("bound", "feishu-unbind", 1));
+});
+
+it("asks before any other danger decision too, and not before one that is not a danger", async () => {
+  vi.mocked(api.resolveInboxItem).mockResolvedValue({ ...review, revision: 2, readAt: at(0), resolvedAt: at(0), resolution: { actionId: "adopt" } });
+  open();
+  const row = (await screen.findByText("审阅一个研究结论")).closest("li")!;
+  await userEvent.click(within(row).getByRole("button", { name: "处理" }));
+  await userEvent.click(await screen.findByRole("menuitem", { name: "驳回" }));
+  const dialog = await screen.findByRole("alertdialog", { name: "驳回？" });
+  expect(dialog).toHaveTextContent("审阅一个研究结论");
+  expect(api.resolveInboxItem).not.toHaveBeenCalled();
+  await userEvent.click(within(dialog).getByRole("button", { name: "取消" }));
+  // 采纳 is a primary decision: it is made at once, as before.
+  await userEvent.click(within(row).getByRole("button", { name: "处理" }));
+  await userEvent.click(await screen.findByRole("menuitem", { name: "采纳" }));
+  await waitFor(() => expect(api.resolveInboxItem).toHaveBeenCalledWith("review-one", "adopt", 1));
+  expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+});
+
+// Module workspace audit D5: the open list reads itself again, in step with the bell and on focus.
+describe("the open list", () => {
+  afterEach(() => vi.useRealTimers());
+  const settle = () => act(async () => { await vi.advanceTimersByTimeAsync(0); });
+  it("reads itself again every minute while the tab is visible, keeping what is on screen", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    serve({ items: [runNotice({ id: "first", title: "第一条消息" })], nextCursor: null, unreadTotal: 1 });
+    open();
+    expect(await screen.findByText("第一条消息")).toBeInTheDocument();
+    serve({ items: [runNotice({ id: "second", title: "新来的消息" }), runNotice({ id: "first", title: "第一条消息" })], nextCursor: null, unreadTotal: 2 });
+    await act(async () => { await vi.advanceTimersByTimeAsync(59_000); });
+    expect(screen.queryByText("新来的消息")).not.toBeInTheDocument();
+    await act(async () => { await vi.advanceTimersByTimeAsync(1_000); });
+    expect(await screen.findByText("新来的消息")).toBeInTheDocument();
+    // The list was never taken away while it read: the first notice stayed, and no skeleton was drawn.
+    expect(screen.getByText("第一条消息")).toBeInTheDocument();
+  });
+  it("reads again when the reader comes back to the tab, and not while it is hidden", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    serve({ items: [runNotice({ id: "first", title: "第一条消息" })], nextCursor: null });
+    open();
+    await screen.findByText("第一条消息"); await settle();
+    const calls = vi.mocked(api.listInbox).mock.calls.length;
+    serve({ items: [runNotice({ id: "second", title: "回来时看到的消息" })], nextCursor: null });
+    const visibility = vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+    await act(async () => { await vi.advanceTimersByTimeAsync(120_000); });
+    expect(vi.mocked(api.listInbox).mock.calls.length).toBe(calls);
+    visibility.mockReturnValue("visible");
+    await act(async () => { window.dispatchEvent(new Event("focus")); await vi.advanceTimersByTimeAsync(0); });
+    expect(await screen.findByText("回来时看到的消息")).toBeInTheDocument();
+    visibility.mockRestore();
+  });
+  it("leaves the list as it is when a read fails", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    serve({ items: [runNotice({ id: "first", title: "第一条消息" })], nextCursor: null });
+    open();
+    await screen.findByText("第一条消息"); await settle();
+    vi.mocked(api.listInbox).mockRejectedValue(new Error("offline"));
+    await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
+    expect(screen.getByText("第一条消息")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
 });
 
 it("opens a notice that points nowhere in place, whole, and reads it", async () => {

@@ -2,7 +2,9 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { GEO_PROJECT } from "./__fixtures__/geoProjects";
+import { useToastStore } from "@/lib/toast";
 import { GeoSettingsDrawer } from "./GeoSettingsDrawer";
+import { GEO_AUTOMATION_STOPPED } from "./geoText";
 
 const client = vi.hoisted(() => ({ patchGeoProject: vi.fn() }));
 vi.mock("@/lib/geoClient", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/geoClient")>()), ...client }));
@@ -15,8 +17,16 @@ function renderDrawer(overrides: Partial<typeof project> = {}) {
   return { ...view, ...handlers, drawer: () => screen.getByRole("dialog", { name: "项目设置" }) };
 }
 
+/** The project with the agreement to monitor automatically in force: for these engines and this window. */
+const agreed = (): Partial<typeof project> => {
+  const steps = { ...project.steps, monitoring: { status: "running" as const, requested: true, automation: { state: "confirmed" as const, actorId: "actor", at: "2026-10-01T00:00:00Z", engines: [...project.engines], coverageDays: project.coverageDays } } };
+  return { steps };
+};
+const toasts = () => useToastStore.getState().toasts.map((toast) => toast.message);
+
 beforeEach(() => {
   client.patchGeoProject.mockReset().mockResolvedValue({});
+  useToastStore.setState({ toasts: [] });
 });
 
 describe("项目设置", () => {
@@ -78,5 +88,41 @@ describe("项目设置", () => {
     expect(within(drawer()).queryByRole("button", { name: "修改" })).not.toBeInTheDocument();
     expect(within(drawer()).queryByRole("group", { name: "覆盖周期" })).not.toBeInTheDocument();
     expect(within(drawer()).getByRole("button", { name: "查看" })).toBeInTheDocument();
+  });
+});
+
+
+describe("项目设置: a change that ends automatic monitoring says so before and after", () => {
+  it("warns beside 保存 when the engines change under an agreement, and says it again once saved", async () => {
+    const { drawer, onChanged } = renderDrawer(agreed());
+    await userEvent.click(within(drawer()).getByRole("button", { name: "Kimi" }));
+    expect(within(drawer()).getByText("保存后自动监测会停止，需要重新开启。")).toBeInTheDocument();
+    await userEvent.click(within(drawer()).getByRole("button", { name: "保存" }));
+    await waitFor(() => expect(onChanged).toHaveBeenCalled());
+    expect(toasts()).toContain(GEO_AUTOMATION_STOPPED);
+  });
+
+  it("warns for the coverage window the same way", async () => {
+    const { drawer } = renderDrawer(agreed());
+    await userEvent.click(within(within(drawer()).getByRole("group", { name: "覆盖周期" })).getByRole("button", { name: "180 天" }));
+    expect(within(drawer()).getByText("保存后自动监测会停止，需要重新开启。")).toBeInTheDocument();
+    await userEvent.click(within(drawer()).getByRole("button", { name: "保存" }));
+    await waitFor(() => expect(client.patchGeoProject).toHaveBeenCalledWith("geo_masi", { coverageDays: 180 }));
+    await waitFor(() => expect(toasts()).toContain(GEO_AUTOMATION_STOPPED));
+  });
+
+  it("says nothing of it where no agreement is in force: there is nothing to end", async () => {
+    const { drawer, onChanged } = renderDrawer();
+    await userEvent.click(within(drawer()).getByRole("button", { name: "Kimi" }));
+    expect(within(drawer()).queryByText("保存后自动监测会停止，需要重新开启。")).not.toBeInTheDocument();
+    await userEvent.click(within(drawer()).getByRole("button", { name: "保存" }));
+    await waitFor(() => expect(onChanged).toHaveBeenCalled());
+    expect(toasts()).not.toContain(GEO_AUTOMATION_STOPPED);
+  });
+
+  it("declares its saves as writes to the project", async () => {
+    const { drawer } = renderDrawer();
+    await userEvent.click(within(drawer()).getByRole("button", { name: "Kimi" }));
+    expect(within(drawer()).getByRole("button", { name: "保存" })).toHaveAttribute("data-action-kind", "set");
   });
 });

@@ -74,7 +74,7 @@ describe("对照 · the routes and the record in use", () => {
     expect(record).toHaveTextContent("状态不适用");
     expect(record).toHaveTextContent("需要什么需要 T3 随机试验个体数据");
     expect(container.querySelector("[data-vcr-diagnostics]")).toBeNull();
-    await userEvent.click(screen.getByRole("button", { name: "接入数据" }));
+    await userEvent.click(screen.getByRole("button", { name: "数据接入" }));
     expect(spies.openPanel).toHaveBeenCalledWith("intake");
     expect(network.productRequest.mock.calls.some(([, method]) => method === "POST")).toBe(false);
     // Looking is not choosing: the route in use is still the one that is marked.
@@ -245,7 +245,7 @@ describe("对照 · comparability and the prior", () => {
     expect(note).toHaveTextContent("可比性：未评估");
     expect(container.querySelector("[data-vcr-dimension]")).toBeNull();
     expect(container.textContent).not.toContain("十个维度都还没有评估");
-    await userEvent.click(within(note).getByRole("button", { name: "评估可比性" }));
+    await userEvent.click(within(note).getByRole("button", { name: "让 AI 评估可比性" }));
     expect(spies.openChat).toHaveBeenCalledWith(expect.stringContaining(VCR_ASSESS_COMPARABILITY_DRAFT), expect.objectContaining({ kind: "comparator", studyId: STUDY_ID }));
     const draft = spies.openChat.mock.calls[0][0];
     expect(draft).not.toMatch(/std_|res_|literature_control|external_control/);
@@ -319,7 +319,7 @@ describe("对照 · before there is a comparison", () => {
     raw.steps.comparator = { status: "none", requested: false };
     const { container, spies } = draw(readVcrStudy(raw));
     const recipe = await found(container, "[data-vcr-step-empty='comparator']");
-    await userEvent.click(within(recipe).getByRole("button", { name: "设计对照" }));
+    await userEvent.click(within(recipe).getByRole("button", { name: "让 AI 设计对照" }));
     expect(spies.openChat).toHaveBeenCalledWith(expect.any(String), { kind: "step", studyId: STUDY_ID, objectId: "comparator" });
     expect(network.productRequest.mock.calls.some(([, method]) => method === "POST")).toBe(false);
   });
@@ -331,7 +331,7 @@ it("binds a comparability draft to the explicitly displayed comparator and resul
   raw.dimensions = raw.dimensions.map((dimension: any) => ({ ...dimension, state: "unknown", reason: null }));
   installVcrServer(network.productRequest, { [tab("comparator")]: raw });
   const { spies } = draw();
-  await userEvent.click(await screen.findByRole("button", { name: "评估可比性" }));
+  await userEvent.click(await screen.findByRole("button", { name: "让 AI 评估可比性" }));
   const draft = spies.openChat.mock.calls[0][0];
   expect(draft).toContain("版本 4");
   expect(draft).not.toMatch(/cmp_saved|result_saved|external_control/);

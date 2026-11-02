@@ -376,7 +376,7 @@ function KnowledgeBase({ sourceId }: { sourceId: string | null }) {
     summary: `已选 ${selected.size} 份`,
     actions: (
       <>
-        <Button size="sm" onClick={openSelected}>在对话中使用</Button>
+        <Button actionKind="draft" size="sm" onClick={openSelected}>在对话中使用</Button>
         <Button size="sm" variant="text" onClick={() => setSelected(new Map())}>取消</Button>
       </>
     ),

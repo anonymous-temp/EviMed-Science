@@ -61,7 +61,7 @@ export function PlatformSkillDrawer({ skill, projectId, projectName, onClose, on
       {!skill.requirement?.required && <div className="rounded-card bg-surface-1 p-4"><DrawerSection title="当前项目">
         {current?.activation.phase !== "not-applicable" && <Switch showLabel label={`在“${projectName}”里使用`} checked={enabled} disabled={!current || saving || copying} onChange={checked => void save(checked)} />}
         <p role="status" className="text-ui text-text-2">{skillActivationText(enabled, current?.activation)}</p>
-        {current && ["failed", "rolled-back"].includes(current.activation.phase) && <Button variant="text" disabled={saving} onClick={() => void save(enabled)}>重新应用</Button>}
+        {current && ["failed", "rolled-back"].includes(current.activation.phase) && <Button actionKind="set" variant="text" disabled={saving} onClick={() => void save(enabled)}>重新应用</Button>}
         {policy.state.status === "error" && <LoadError message={policy.state.message} onRetry={() => policy.reload()} />}
       </DrawerSection></div>}
       {detail?.when && <DrawerSection title="适用场景"><p className="text-ui text-text">{detail.when}</p></DrawerSection>}
@@ -72,7 +72,7 @@ export function PlatformSkillDrawer({ skill, projectId, projectName, onClose, on
       {state.status === "error" && <LoadError message={state.message} onRetry={() => reload()} />}
       {detail?.instructions && <Disclosure summary="查看技能全文"><pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-card bg-surface-1 p-4 text-ui text-text">{detail.instructions}</pre></Disclosure>}
       {error && <p role="alert" className="text-ui text-error">{error}</p>}
-      {skill.canCopy && <div className="mt-auto pt-2"><Button variant="secondary" disabled={saving} loading={copying} onClick={() => void copy()}>复制为我的技能</Button></div>}
+      {skill.canCopy && <div className="mt-auto pt-2"><Button actionKind="set" variant="secondary" disabled={saving} loading={copying} onClick={() => void copy()}>复制为我的技能</Button></div>}
     </div>
   </Drawer>;
 }

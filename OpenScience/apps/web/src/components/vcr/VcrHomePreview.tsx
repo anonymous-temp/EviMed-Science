@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { Link } from "react-router";
 import { X } from "lucide-react";
-import { VCR_STEP_ACTION_LABELS_ZH, VCR_STEP_STATUS_LABELS_ZH } from "@evimed/domain";
+import { VCR_STEP_ACTION_LABELS_ZH, vcrStepStateLabel, vcrStudyWorkState, workStateLabel } from "@evimed/domain";
 import { stepAllowanceWait } from "@/lib/allowanceWait";
 import { vcrChatPath } from "@/lib/studyLocation";
 import { VCR_STEP_KEYS, type VcrStep, type VcrStepKey, type VcrStudySummary } from "@/lib/vcrClient";
@@ -11,7 +11,7 @@ import { buttonClasses } from "@/components/ui/Button";
 import { IconButton } from "@/components/ui/IconButton";
 import { FactList, type Fact } from "@/components/ui/FactList";
 import { Note } from "@/components/ui/Note";
-import { RAIL_STATE_WORDS, RailMark, type RailState } from "@/components/ui/ProgressRail";
+import { RailMark, type RailState } from "@/components/ui/ProgressRail";
 import { Section } from "@/components/ui/Section";
 import { stepLabel } from "./vcrText";
 import { vcrTabPath } from "./vcrTabs";
@@ -22,8 +22,11 @@ import { vcrTabPath } from "./vcrTabs";
  * question, latest finding and requested or active work. Nothing is read a second time.
  */
 
-/** How a study stands, for the one filter and the one sort the list has. */
-export type StudyState = "need" | "running" | "done" | "other";
+/**
+ * How a study stands, for the one filter and the one sort the list has. A pause is the project's and outranks the rest
+ * (`vcrStudyWorkState`): a paused study with a step still marked running does not read 进行中.
+ */
+export type StudyState = "need" | "running" | "done" | "paused" | "other";
 
 const FINISHED = new Set(["done", "minimal"]);
 const IN_FLIGHT = new Set(["running", "queued"]);
@@ -31,7 +34,8 @@ const IN_FLIGHT = new Set(["running", "queued"]);
 /**
  * A study is complete when its requested work is complete; unrequested work never contributes to its status.
  */
-export function studyStateOf(study: Pick<VcrStudySummary, "steps" | "attention">): StudyState {
+export function studyStateOf(study: Pick<VcrStudySummary, "steps" | "attention"> & { status?: string }): StudyState {
+  if (vcrStudyWorkState(study.status) === "paused") return "paused";
   const records = Object.values(study.steps);
   if (study.attention.some((line) => line.tone === "attention")) return "need";
   if (records.some((record) => record?.status === "running" || record?.status === "queued")) return "running";
@@ -41,39 +45,41 @@ export function studyStateOf(study: Pick<VcrStudySummary, "steps" | "attention">
 }
 
 /**
- * The one line under a study's name in the list: what asks for the reader, what is being done, or how far it has come. A study that
- * waits for somebody says what, in the study's own words.
+ * The one line under a study's name in the list: what asks for the reader, what is being done, or how far it has come, in the words of
+ * the vocabulary of module work. A study that waits for somebody says what, in the study's own words.
  */
-export function studyStatusLine(study: Pick<VcrStudySummary, "steps" | "attention">): string {
+export function studyStatusLine(study: Pick<VcrStudySummary, "steps" | "attention"> & { status?: string }): string {
   const state = studyStateOf(study);
-  if (state === "need") return `需要你 · ${study.attention.find((line) => line.tone === "attention")?.text ?? ""}`;
+  if (state === "paused") return workStateLabel("paused");
+  if (state === "need") return `${workStateLabel("waiting")} · ${study.attention.find((line) => line.tone === "attention")?.text ?? ""}`;
   const records = Object.entries(study.steps) as Array<[VcrStepKey, VcrStep | undefined]>;
   if (state === "running") {
     const working = records.filter(([, record]) => record && IN_FLIGHT.has(record.status));
-    return working.length === 1 ? `进行中 · 正在${(VCR_STEP_ACTION_LABELS_ZH as Record<string, string>)[working[0][0]] ?? stepLabel(working[0][0])}` : "进行中";
+    const running = workStateLabel("running");
+    return working.length === 1 ? `${running} · 正在${(VCR_STEP_ACTION_LABELS_ZH as Record<string, string>)[working[0][0]] ?? stepLabel(working[0][0])}` : running;
   }
-  if (state === "done") return "已完成";
+  if (state === "done") return workStateLabel("done");
   const requested = records.filter(([, record]) => record?.requested === true);
   const finished = requested.filter(([, record]) => record && FINISHED.has(record.status)).length;
-  return finished > 0 ? `已完成 ${finished} / ${requested.length} 步` : "还没开始";
+  return finished > 0 ? `${workStateLabel("done")} ${finished} / ${requested.length} 步` : workStateLabel("todo");
 }
 
 /**
  * A step as the study page draws its dots, from the list's own record of it. A step queued behind the allowance is the one 「等你」 the
- * list can tell; one that is out of date or did not finish needs a look.
+ * list can tell; one that is out of date or did not finish needs a look. The word is the vocabulary's (`vcrStepStateLabel`), so the
+ * dot, the overview's record and the strip say a step the same way.
  */
 export function stepMark(step: VcrStep | undefined): { state: RailState; word: string } {
-  const status = step?.status ?? "none";
-  if (stepAllowanceWait(step)) return { state: "waiting", word: RAIL_STATE_WORDS.waiting };
-  const word = (VCR_STEP_STATUS_LABELS_ZH as Record<string, string>)[status] ?? RAIL_STATE_WORDS.todo;
-  switch (status) {
+  const word = vcrStepStateLabel(step);
+  if (stepAllowanceWait(step)) return { state: "waiting", word };
+  switch (step?.status) {
     case "done":
     case "minimal": return { state: "done", word };
     case "running":
     case "queued": return { state: "active", word };
     case "failed":
     case "stale": return { state: "attention", word };
-    default: return { state: "todo", word: step?.requested === false ? "未请求" : word };
+    default: return { state: "todo", word };
   }
 }
 
@@ -152,7 +158,7 @@ export function VcrStudyPreview({ study, heading, onClose }: {
             </Link>
           )}
         >
-          {`需要你 · ${line.text}`}
+          {line.text}
         </Note>
       ))}
 
@@ -165,7 +171,7 @@ export function VcrStudyPreview({ study, heading, onClose }: {
               <span className="mt-0.5"><RailMark state={mark.state} /></span>
               <span className="min-w-0 text-ui text-text">
                 {stepLabel(mark.key)}
-                <span className="block text-caption text-text-3">{mark.word}</span>
+                {mark.word && <span className="block text-caption text-text-3">{mark.word}</span>}
               </span>
             </li>
           ))}

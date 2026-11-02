@@ -239,6 +239,18 @@ it("a tool row opens a new conversation bound to that tool, as its 科研工具 
   await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent("/app/chat"));
 });
 
+it("a tool whose binding was refused says so and opens nothing: no conversation without the tool", async () => {
+  api.listWebResearchAgents.mockResolvedValue(toolCatalogue);
+  api.putWebResearchSession.mockRejectedValueOnce(new WebApiError("unavailable", { status: 503 }));
+  openWithChat("/app/extensions/installed");
+  await userEvent.click(await screen.findByRole("button", { name: toolTitle("statistical-analysis") }));
+  await waitFor(() => expect(useToastStore.getState().toasts.some(toast => toast.tone === "error" && toast.message.includes(toolTitle("statistical-analysis")))).toBe(true));
+  expect(screen.getByTestId("where")).toHaveTextContent("/app/extensions/installed");
+  expect(screen.queryByText("对话")).not.toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: toolTitle("statistical-analysis") }));
+  await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent("/app/chat"));
+});
+
 it("a catalogue of tools that cannot be read says so with a way to try again, and the skills still show", async () => {
   skills.listPlatformSkills.mockResolvedValue(platformList);
   api.listWebResearchAgents.mockRejectedValueOnce(new WebApiError("down", { status: 503 })).mockResolvedValue(toolCatalogue);

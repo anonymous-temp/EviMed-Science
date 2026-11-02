@@ -94,9 +94,11 @@ it('an incomplete GEO grant never falls through to an account-owned file', async
 describe("RunFilePage", () => {
   it("opens a run's report in the reader, under the run's title, and opens the claim the fragment names", async () => {
     renderAt(`/app/runs/run_1/files/${REPORT}#CLM-001`);
-    expect(await screen.findByRole("heading", { level: 1, name: "阿司匹林一级预防 · 证据分析报告" })).toBeInTheDocument();
+    const title = await screen.findByRole("heading", { level: 1, name: "证据分析报告" });
+    // The run's title stands with the file's name in the page's own header (a reader page, T5), not in a hand-built bar.
+    expect(title.closest("[data-page-header]")).toHaveTextContent("阿司匹林一级预防");
     // Back into the conversation the file was written in, not into a ledger row.
-    expect(screen.getByRole("link", { name: "返回对话" })).toHaveAttribute("href", "/app/chat/ses_1");
+    expect(screen.getByRole("link", { name: "对话" })).toHaveAttribute("href", "/app/chat/ses_1");
     const evidence = await screen.findByRole("dialog");
     expect(within(evidence).getByText("结论。")).toBeInTheDocument();
     expect(mocks.readArtifact).toHaveBeenCalledWith(REPORT, "workspace");
@@ -165,6 +167,23 @@ describe("RunFilePage", () => {
     await waitFor(() => expect(screen.getByText(/结论/)).toBeInTheDocument());
     expect(mocks.openRunProject).toHaveBeenCalledWith("run_gone");
     expect(screen.queryByText("正在打开这次运行所在的项目…")).toBeNull();
+  });
+
+  // Module workspace audit D12: a run the ledger does not hold used to go back to the bare surface, which resumes the last conversation.
+  it("goes back to the conversation by the run, through the resolver, when the ledger has not named it", async () => {
+    renderAt(`/app/runs/run_gone/files/${REPORT}`);
+    expect(await screen.findByRole("heading", { level: 1, name: "证据分析报告" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "对话" })).toHaveAttribute("href", "/app/runs?run=run_gone");
+  });
+
+  it("is a page of the shell: its way back, its title and its actions are the shell's, with the actions declared", async () => {
+    renderAt(`/app/runs/run_1/files/${REPORT}`);
+    await screen.findByRole("heading", { level: 1, name: "证据分析报告" });
+    expect(document.querySelector("[data-page-header]")).not.toBeNull();
+    expect(screen.getByRole("navigation", { name: "返回" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "存入知识库" })).toHaveAttribute("data-action-kind", "set");
+    await userEvent.click(screen.getByRole("button", { name: "结果版本" }));
+    expect(await screen.findByRole("button", { name: "查看当前文件" })).toBeInTheDocument();
   });
 
   it("says a file that cannot be read cannot be read", async () => {

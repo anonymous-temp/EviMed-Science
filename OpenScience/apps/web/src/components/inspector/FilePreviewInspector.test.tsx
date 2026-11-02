@@ -101,7 +101,7 @@ describe("FilePreviewInspector — markdown", () => {
     });
     render(<FilePreviewInspector data={{ ...md, path: "deliverables/d1/clinical-evidence-report.md", filename: "clinical-evidence-report.md",
       content: "单一机构数据库 [1]<!-- claim:CLM-001 -->。队列 50,920 人 [1]<!-- claim:CLM-002 -->。" }} onClose={() => {}} />);
-    expect(await screen.findByRole("note")).toHaveTextContent("⚠ 1 条待核对");
+    expect(await screen.findByRole("note")).toHaveTextContent("⚠ 1 条未核对");
     expect(screen.getByRole("button", { name: "查看这句话的依据（1 条结论，其中有未核对上的引文）" })).toBeInTheDocument();
     // Every quotation of this sentence was found: the mark says so, in words.
     expect(screen.getByRole("button", { name: "查看这句话的依据（1 条结论，引文均已核对）" })).toHaveTextContent("依据 ✓");

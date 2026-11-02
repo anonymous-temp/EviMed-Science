@@ -1,11 +1,11 @@
 import { Link } from "react-router";
 import { formatRelativeTime } from "@/lib/format";
-import { stepAllowanceWait } from "@/lib/allowanceWait";
-import { GEO_STEP_KEYS, type GeoProjectSummary, type GeoStep } from "@/lib/geoClient";
+import { GEO_STEP_KEYS, type GeoProjectSummary } from "@/lib/geoClient";
 import { Button, buttonClasses } from "@/components/ui/Button";
 import { FactList, type Fact } from "@/components/ui/FactList";
 import { Note } from "@/components/ui/Note";
-import { RAIL_STATE_WORDS, RailMark, type RailState } from "@/components/ui/ProgressRail";
+import { RailMark } from "@/components/ui/ProgressRail";
+import { geoStepView } from "./geoBand";
 import { Section } from "@/components/ui/Section";
 import { SeverityBadge } from "@/components/ui/SeverityBadge";
 import { StatBand, StatTile } from "@/components/ui/StatTile";
@@ -28,11 +28,14 @@ export function alertText(project: GeoProjectSummary): string | null {
   const { severe, wrongOurs, safety } = project.alert;
   if (severe > 0) return `${severe} 条严重讲错待处理`;
   if (wrongOurs > 0) return `${wrongOurs} 条讲错待处理`;
-  if (safety > 0) return `${safety} 篇稿件的安全问题待确认`;
+  if (safety > 0) return `${safety} 篇稿件等你放行`;
   return null;
 }
 
-/** “10月1日～12月31日 · 第 3 周”, or what a project that has done one step only did, or “还没开始”. */
+/**
+ * “10月1日～12月31日 · 第 3 周”, or what a project that has done one step only did. A project nothing was asked of says nothing: 「还没开始」
+ * was one more word for the state that has no word, and the list row shows its name alone.
+ */
 export function progressLine(project: GeoProjectSummary): string {
   const journey = geoJourney(project);
   const asked = journey.workflow.requested as typeof GEO_STEP_KEYS[number][];
@@ -42,10 +45,10 @@ export function progressLine(project: GeoProjectSummary): string {
     const names = asked.map((key) => GEO_STEP_WORK[key]).join("、");
     // A step that ended without finishing is not under way: it says so, and the project's page says what to do about it.
     const failed = asked.filter((key) => project.steps[key]?.status === "failed");
-    if (failed.length > 0) return `${failed.map((key) => GEO_STEP_WORK[key]).join("、")}没有做完`;
+    if (failed.length > 0) return `${failed.map((key) => GEO_STEP_WORK[key]).join("、")}未完成`;
     return asked.every((key) => project.steps[key]?.status === "done") ? `只做了${names}` : `正在做${names}`;
   }
-  if (touched.length === 0) return "还没开始";
+  if (touched.length === 0) return "";
   const start = project.startedAt ?? project.createdAt ?? null;
   const week = weekOf(start);
   return [coverageText(project.coverageDays, start), ...(week ? [`第 ${week} 周`] : [])].join(" · ");
@@ -53,22 +56,6 @@ export function progressLine(project: GeoProjectSummary): string {
 
 /** The tab an open alert is handled in: the errors and the safety stops are 准确与安全's. */
 const ALERT_TAB = "accuracy";
-
-/**
- * A step as the project page's rail draws it, from the list's own record of it. The page's rail also knows a budget a person still
- * has to set, which the list does not carry: a step the allowance would not start is the one 「等你」 it can tell.
- */
-export function stepMark(step: GeoStep | undefined): { state: RailState; word: string } {
-  if (stepAllowanceWait(step)) return { state: "waiting", word: RAIL_STATE_WORDS.waiting };
-  switch (step?.status ?? "none") {
-    case "done": return { state: "done", word: RAIL_STATE_WORDS.done };
-    case "running": return { state: "active", word: RAIL_STATE_WORDS.active };
-    case "queued": return { state: "active", word: "排队中" };
-    case "failed": return { state: "attention", word: RAIL_STATE_WORDS.attention };
-    case "minimal": return { state: "partial", word: RAIL_STATE_WORDS.partial };
-    default: return { state: "todo", word: step?.requestOrigin === "legacy" && step.requested ? "待确认" : step?.requested === true ? "待开始" : step?.requested === false ? "未请求" : RAIL_STATE_WORDS.todo };
-  }
-}
 
 /**
  * Why a number is not there yet, said once under the two figures: the diagnosis, which asks the AI engines, is what measures them. Once
@@ -97,7 +84,7 @@ export function GeoProjectPreview({ project, label, heading, resuming, onResume,
   const alert = paused ? null : alertText(project);
   const start = project.startedAt ?? project.createdAt ?? null;
   const week = weekOf(start);
-  const marks = GEO_STEP_KEYS.map((key) => ({ key, ...stepMark(project.steps[key]) }));
+  const marks = GEO_STEP_KEYS.map((key) => ({ key, ...geoStepView(project, key) }));
   const done = marks.filter((mark) => mark.state === "done").length;
 
   const { gvi, mention } = project.headline;
@@ -122,7 +109,7 @@ export function GeoProjectPreview({ project, label, heading, resuming, onResume,
         {heading && (
           <div className="min-w-0 flex-1 basis-48">
             <h2 className="line-clamp-2 text-section font-semibold text-text">{label}</h2>
-            <p data-geo-subline="" className="mt-1 text-caption text-text-3">{paused ? "已暂停" : progressLine(project)}</p>
+            {(paused || progressLine(project)) && <p data-geo-subline="" className="mt-1 text-caption text-text-3">{paused ? "已暂停" : progressLine(project)}</p>}
           </div>
         )}
         {/* The preview's own way on is secondary: the page's one solid button is 新建项目, in the list's header. */}
@@ -133,7 +120,7 @@ export function GeoProjectPreview({ project, label, heading, resuming, onResume,
       </div>
 
       {paused && (
-        <Note tone="warn" action={geoActionPermission(project, "edit").allowed ? <Button variant="text" size="sm" loading={resuming} onClick={onResume} aria-label={`继续“${label}”`}>恢复项目</Button> : undefined}>
+        <Note tone="warn" action={geoActionPermission(project, "edit").allowed ? <Button variant="text" size="sm" actionKind="set" loading={resuming} onClick={onResume} aria-label={`继续“${label}”`}>恢复项目</Button> : undefined}>
           项目已暂停。
         </Note>
       )}
@@ -145,7 +132,7 @@ export function GeoProjectPreview({ project, label, heading, resuming, onResume,
       )}
 
       <section aria-label="当前工作" data-geo-journey={journey.stage} className="flex flex-col gap-2">
-        <p className="text-caption text-text-3">{journey.requested}</p>
+        {journey.requested && <p className="text-caption text-text-3">{journey.requested}</p>}
         <h3 className="text-section font-semibold text-text">{journey.title}</h3>
         <Note action={<Link className="shrink-0 rounded text-link hover:underline" to={journey.next.step ? geoDestinationPath(project.id, GEO_STEP_HOME[journey.next.step]) : `/app/geo/${encodeURIComponent(project.id)}`}>继续当前工作</Link>}>{journey.detail}</Note>
         {journey.retained.length > 0 && <FactList rows={[{ label: "已保留", value: journey.retained.join("、") }]} ruled={false} />}
@@ -168,10 +155,10 @@ export function GeoProjectPreview({ project, label, heading, resuming, onResume,
         <ol aria-label="八步进度" className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">
           {marks.map((mark) => (
             <li key={mark.key} data-geo-step={mark.key} className="flex min-w-0 items-start gap-2">
-              <span className="mt-0.5"><RailMark state={mark.state} /></span>
+              {mark.work !== null && <span className="mt-0.5"><RailMark state={mark.state} /></span>}
               <Link to={geoDestinationPath(project.id, GEO_STEP_HOME[mark.key])} className="min-w-0 rounded text-ui text-text hover:underline">
                 {GEO_STEP_NAMES[mark.key]}
-                <span className="block text-caption text-text-3">{mark.word}</span>
+                {mark.word && <span className="block text-caption text-text-3">{mark.word}</span>}
               </Link>
             </li>
           ))}

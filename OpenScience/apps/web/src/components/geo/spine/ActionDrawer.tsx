@@ -1,5 +1,6 @@
 import { useGeoDestinationPath } from "../useGeoPath";
 import { useMemo, useState } from "react";
+import { PenLine } from "lucide-react";
 import { Link } from "react-router";
 import { pythonRound } from "@evimed/domain";
 import { webErrorMessage } from "@/lib/apiClient";
@@ -182,7 +183,7 @@ function ActionBody({
         <Menu label="这条行动的更多操作" items={[{ label: skipped ? "恢复这条行动" : "跳过这条行动", onSelect: () => onSkip(action, !skipped) }]} />
       ) : undefined}
       onClose={onClose}
-      footer={<Button data-geo-action-handoff="" loading={asking} onClick={ask}>在对话中调整</Button>}
+      footer={<Button data-geo-action-handoff="" actionKind="draft" loading={asking} onClick={ask}>{!asking && <PenLine size={16} aria-hidden="true" />}让 AI 调整这条行动</Button>}
     >
       <div data-geo-action-drawer={action.key} className="flex flex-col gap-6">
         {questions.length > 0 && (
@@ -202,7 +203,7 @@ function ActionBody({
 
         <Section title="稿件" count={mine.length > 0 ? `${mine.length} 篇` : undefined} level="sub">
           {mine.length === 0 ? (
-            <Note action={can("run") ? <Button variant="secondary" size="sm" loading={asking} onClick={ask}>让 AI 写这一篇</Button> : undefined}>
+            <Note action={can("run") ? <Button variant="secondary" size="sm" actionKind="draft" loading={asking} onClick={ask}><PenLine size={16} aria-hidden="true" />让 AI 写这一篇</Button> : undefined}>
               {action.what.title ? `还没有稿件：${action.what.title}` : "还没有稿件。"}
             </Note>
           ) : (
@@ -221,7 +222,7 @@ function ActionBody({
                     meta={[articleMeta(article), articleStatusLine(article)].filter(Boolean).join(" · ")}
                     trailing={held ? <Tag tone="safety">安全待复核</Tag> : undefined}
                     actions={held && can("review")
-                      ? <Button variant="text" size="sm" loading={articleActions.busy === article.id} onClick={() => articleActions.release(article)}>放行</Button>
+                      ? <Button variant="text" size="sm" actionKind="external" loading={articleActions.busy === article.id} onClick={() => articleActions.release(article)}>放行</Button>
                       : undefined}
                     menu={!withdrawn && can("edit")
                       ? <Menu label={`“${article.title || "这篇稿件"}”的操作`} items={[{ label: "撤回", onSelect: () => articleActions.withdraw(article) }]} />
@@ -235,7 +236,7 @@ function ActionBody({
 
         <Section title="发到哪" count={action.sources.length > 0 ? `${action.sources.length} 个` : undefined} level="sub">
           {action.sources.length === 0 ? (
-            <Note action={can("run") ? <Button variant="secondary" size="sm" onClick={ask}>让 AI 找信源</Button> : undefined}>这条行动还没有推荐的信源。</Note>
+            <Note action={can("run") ? <Button variant="secondary" size="sm" actionKind="draft" onClick={ask}><PenLine size={16} aria-hidden="true" />让 AI 找信源</Button> : undefined}>这条行动还没有推荐的信源。</Note>
           ) : (
             <List label="推荐的信源" divided>
               {action.sources.map((source, index) => (

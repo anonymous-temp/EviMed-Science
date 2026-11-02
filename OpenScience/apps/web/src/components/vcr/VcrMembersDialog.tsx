@@ -107,7 +107,7 @@ export function VcrMembersDialog({ studyId, onClose }: { studyId: string; onClos
             </select>
           </div>
           <div className="flex justify-end">
-            <Button type="submit" loading={busy === "add"} disabled={!valid || busy !== null}>添加</Button>
+            <Button actionKind="set" type="submit" loading={busy === "add"} disabled={!valid || busy !== null}>添加</Button>
           </div>
         </form>
       </div>

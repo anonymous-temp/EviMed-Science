@@ -1,14 +1,21 @@
 import { useEffect, useRef, useState } from "react";
+import { workStateLabel } from "@evimed/domain";
 import "./ResearchObservatory.css";
 import { EVIMED_MARK_PATH } from "@/components/brand/EviMedMark";
 import { listWebAgentRuns, type WebAgentRun } from "@/lib/apiClient";
 import { safeWorkspacePath } from "@/lib/claimCitations";
 import { formatApproxCount, formatClock, formatDuration, formatLingdou } from "@/lib/format";
 import { DELIVERABLE_STATUS_LABEL } from "@/lib/runProgress";
+import type { ObservedRun } from "./researchRunState";
 import { emptyObservation, ROOT_AGENT, rootStage, STAGES, stageCounts, useResearchObservation, type ObservedAgent, type ObservedCall, type Observation, type StageKey } from "@/lib/researchObservation";
 
-const RUN_WORD: Record<string, string> = { running: "进行中", succeeded: "已完成", failed: "未完成", canceled: "已停止", cancelled: "已停止" };
-const AGENT_WORD: Record<ObservedAgent["state"], string> = { running: "工作中", idle: "待命", done: "已完成", failed: "未完成", canceled: "已停止", unknown: "待命" };
+const RUN_WORD: Record<string, string> = {
+  running: workStateLabel("running"), succeeded: workStateLabel("done"), failed: workStateLabel("failed"), canceled: workStateLabel("stopped"), cancelled: workStateLabel("stopped"),
+};
+/** 「待命」 is a member waiting for its next call, not a state of work; the rest are the work-state words. */
+const AGENT_WORD: Record<ObservedAgent["state"], string> = {
+  running: workStateLabel("running"), idle: "待命", done: workStateLabel("done"), failed: workStateLabel("failed"), canceled: workStateLabel("stopped"), unknown: "待命",
+};
 const SAFE_RUN = /^[A-Za-z0-9_-]{1,160}$/;
 const number = (value: unknown): number | null => (typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null);
 const obj = (value: unknown): Record<string, unknown> | null => (value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null);
@@ -58,9 +65,16 @@ async function readRun(runId: string): Promise<WebAgentRun | null> {
  * Responsive: the picture scales with its width, and under 760 px it keeps its size and scrolls sideways (the scene is a tab stop then); the feed and the inspector stack under 1024 px.
  * Verification: ResearchObservatory.test.tsx, researchObservation.test.ts.
  */
-export function ResearchObservatory({ runId, title, onOpenFile }: { runId: string | null; title?: string; onOpenFile?: (path: string, runId: string) => void }) {
+export function ResearchObservatory({ runId, title, onOpenFile, onObserved }: {
+  runId: string | null; title?: string; onOpenFile?: (path: string, runId: string) => void;
+  /**
+   * What the run's stream says about it, whenever that changes, and null once the stream is gone (the run on screen changed, or the
+   * observatory left): the page's one account of whether the run is going is the stream's while it is open (`runLive`).
+   */
+  onObserved?: (observed: ObservedRun | null) => void;
+}) {
   if (!runId) return <StandbyObservatory />;
-  return <ObservatoryRun key={runId} runId={runId} title={title} onOpenFile={onOpenFile} />;
+  return <ObservatoryRun key={runId} runId={runId} title={title} onOpenFile={onOpenFile} onObserved={onObserved} />;
 }
 
 /** No run to watch: the console stands by with its research line dark, so the page still shows what will happen here. */
@@ -74,10 +88,14 @@ function StandbyObservatory() {
   </section>;
 }
 
-function ObservatoryRun({ runId, title, onOpenFile }: { runId: string; title?: string; onOpenFile?: (path: string, runId: string) => void }) {
+function ObservatoryRun({ runId, title, onOpenFile, onObserved }: { runId: string; title?: string; onOpenFile?: (path: string, runId: string) => void; onObserved?: (observed: ObservedRun | null) => void }) {
   const [run, setRun] = useState<WebAgentRun | null>(null);
   const [recordRead, setRecordRead] = useState<"loading" | "loaded" | "unavailable">("loading");
   const { model, connected } = useResearchObservation(runId, run?.progress ?? null);
+  // The callback is read at call time, so a page that passes a fresh function each render does not restart the report.
+  const report = useRef(onObserved); report.current = onObserved;
+  useEffect(() => { report.current?.({ runId, state: model.state ?? null, connected }); }, [runId, model.state, connected]);
+  useEffect(() => () => report.current?.(null), [runId]);
   const state = model.state ?? run?.status ?? null;
   const ended = !!state && state !== "running";
   // Only the latest read lands: an initial read that answers after the terminal refresh must not put back a running record.
@@ -117,7 +135,7 @@ function ObservatoryRun({ runId, title, onOpenFile }: { runId: string; title?: s
   const claims = progress && progress.claims.total > 0 ? progress.claims : null;
   const live = state === "running";
   const status = live ? (connected ? "实时" : "重新连接") : state ? RUN_WORD[state] ?? "已结束" : recordRead === "loading" || !connected ? "连接中" : "等待开始";
-  const heading = title || run?.title || run?.question || "研究进行中";
+  const heading = title || run?.title || run?.question || "这次研究";
 
   return <section aria-label="研究观测" className="obs" data-observatory={live ? "live" : ended ? "ended" : "waiting"}>
     <header className="obs-head">
@@ -267,7 +285,7 @@ function Inspector({ call, who }: { call: ObservedCall | null; who: string }) {
   return <section aria-label="操作详情" className="obs-panel obs-inspector">
     <p className="obs-section-label">操作详情</p>
     <p className="obs-inspect-title">{call.label}</p>
-    <p className="obs-inspect-meta">{who} · {call.state === "running" ? "进行中" : call.state === "error" ? "未成功" : "已完成"}{call.durationMs !== undefined ? ` · ${formatDuration(call.durationMs)}` : ""}</p>
+    <p className="obs-inspect-meta">{who} · {call.state === "running" ? workStateLabel("running") : call.state === "error" ? workStateLabel("failed") : workStateLabel("done")}{call.durationMs !== undefined ? ` · ${formatDuration(call.durationMs)}` : ""}</p>
     <Payload title="输入" text={input} pending="—" />
     <Payload title="结果" text={output} pending={call.state === "running" ? "等待结果" : "—"} />
   </section>;

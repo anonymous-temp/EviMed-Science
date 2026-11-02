@@ -37,7 +37,7 @@ export interface TabItem<V extends string = string> {
  */
 export type TabDot = "done" | "active" | "partial" | "attention" | "todo";
 
-export const DOT_WORDS: Record<TabDot, string> = { done: "已完成", active: "进行中", partial: "部分完成", attention: "需要留意", todo: "未开始" };
+export const DOT_WORDS: Record<TabDot, string> = { done: "已完成", active: "进行中", partial: "简版已完成", attention: "未完成", todo: "未开始" };
 
 const DOT_CLASSES: Record<TabDot, string> = {
   done: "h-2 w-2 rounded-full bg-ok",

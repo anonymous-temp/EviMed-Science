@@ -916,6 +916,20 @@ test("the plane's seam answers a refusal as an answer and the identity as metada
   assert.deepEqual(await vcrSubjectTableSeam({ dataPlane: null }).read({ id: "std_1" }), { available: false, reason: "vcr_data_plane_unavailable" });
 });
 
+test("the plane's seam hands the overview the intake's rows without asking who may read them: metadata only, one read of each kind", async () => {
+  const reads = [];
+  const store = {
+    listSourcesForStudy: async (/** @type {string} */ id) => { reads.push(["sources", id]); return [{ id: "src_1", fieldMapState: "proposed", status: "registered" }]; },
+    listSourceFilesForStudy: async (/** @type {string} */ id) => { reads.push(["files", id]); return [{ id: "f1", sourceId: "src_1", role: "data" }]; },
+    listSnapshots: async (/** @type {{ studyId: string }} */ query) => { reads.push(["snapshots", query.studyId]); return []; },
+  };
+  const seam = vcrDataPlaneSeam({ dataPlane: { store }, access: { require: async () => { throw new Error("not asked"); }, judge: async () => { throw new Error("not asked"); } } });
+  const rows = await seam.intakeRows({ id: "std_1" });
+  assert.deepEqual(rows.sources.map((/** @type {{ id: string }} */ row) => row.id), ["src_1"]);
+  assert.deepEqual(reads.map(([kind]) => kind).sort(), ["files", "snapshots", "sources"]);
+  assert.ok(reads.every(([, id]) => id === "std_1"));
+});
+
 test("clinical enrichment is every study's unless the deployment lists study ids, and the deployment's config says so", () => {
   for (const unset of [[], undefined, null]) assert.equal(clinicalEnrichmentOn(unset, "std_1"), true, `a list of ${JSON.stringify(unset)} is every study`);
   assert.equal(clinicalEnrichmentOn(["std_2"], "std_1"), false);

@@ -2,7 +2,7 @@ import { VcrAccrualForecasts } from "../VcrAccrualForecasts";
 import { VcrScientificBasis } from "../VcrScientificBasis";
 import { VcrVersionComparison } from "../VcrVersionComparison";
 import { useRef, useState } from "react";
-import { CircleCheck, TriangleAlert } from "lucide-react";
+import { CircleCheck, PenLine, TriangleAlert } from "lucide-react";
 import { getVcrTrial, recordVcrDecision, type VcrDesign, type VcrStudy, type VcrTrialTab as TrialData } from "@/lib/vcrClient";
 import { webErrorMessage } from "@/lib/apiClient";
 import { toast } from "@/lib/toast";
@@ -29,6 +29,7 @@ import { RegulatoryContactForm, VcrRegulatoryLog } from "../VcrRegulatoryLog";
 import { VcrScheduleCard } from "../VcrSchedule";
 import { VcrNumber } from "../VcrNumber";
 import { VcrToolbarActions, type VcrToolbarAction } from "../VcrToolbarActions";
+import { COMPARE_DRAFT_LABEL, DRAFT_PREFIX } from "../vcrActionWords";
 import { PartialResultNote, Stale, VcrStepFailed, VcrStepPending, VcrTabSkeleton } from "../VcrStates";
 import { useStudyFrame, useVcrPrimary, useVcrToolbar } from "../studyFrameContext";
 import { pairRows, useVcrLoad, VcrTabError } from "../vcrTabKit";
@@ -129,13 +130,13 @@ function TrialView({ studyId, study, data, reload }: { studyId: string; study: V
   const editDesign = (design: VcrDesign) => frame?.openChat(`调整试验方案“${designContext(design)}”。先读取该版本及其证据参数，建立新版本并比较把握度、周期和假设变化。`, design.version ? { kind: "trial_scenario", studyId, objectId: design.id, version: design.version, ...(design.resultId ? { resultId: design.resultId, resultVersion: design.resultVersion } : {}) } : { kind: "step", studyId, objectId: "trial" });
 
   const actions: VcrToolbarAction[] = [];
-  if (frame && data.designs.length && !noneRan) actions.push({ key: "compare", label: "比较版本", quiet: true, onSelect: () => setComparing(true) });
+  if (frame && data.designs.length && !noneRan) actions.push({ key: "compare", label: COMPARE_DRAFT_LABEL, kind: "draft", quiet: true, onSelect: () => setComparing(true) });
   if (shown === "designs" && !nothing) {
     if (canWrite) {
       if (!noneRan && decided) actions.push({ key: "choose", label: "改选方案", onSelect: () => setChoosing(true) });
       if (frame) {
-        actions.push({ key: "add", label: "在对话中添加方案", quiet: !noneRan, onSelect: draft(VCR_ADD_DESIGN_DRAFT) });
-        actions.push({ key: "change", label: "在对话中调整假设", quiet: true, onSelect: draft(VCR_CHANGE_ASSUMPTION_DRAFT) });
+        actions.push({ key: "add", label: `${DRAFT_PREFIX}添加方案`, kind: "draft", quiet: !noneRan, onSelect: draft(VCR_ADD_DESIGN_DRAFT) });
+        actions.push({ key: "change", label: `${DRAFT_PREFIX}调整假设`, kind: "draft", quiet: true, onSelect: draft(VCR_CHANGE_ASSUMPTION_DRAFT) });
       }
     }
     if ((!noneRan && canFile) || hasForecasts) actions.push({ key: "register", label: "登记预测", onSelect: () => setRegistering(true) });
@@ -487,7 +488,7 @@ function designColumns(data: TrialData, onEdit: ((design: VcrDesign) => void) | 
       header: <span className="sr-only">操作</span>,
       align: "right" as const,
       cell: (design: VcrDesign) => (
-        <Button size="sm" variant="text" data-vcr-edit={design.code} onClick={() => onEdit(design)} aria-label={`在对话中调整：方案 ${design.code}`}>在对话中调整</Button>
+        <Button size="sm" variant="text" actionKind="draft" data-vcr-edit={design.code} onClick={() => onEdit(design)} aria-label={`${DRAFT_PREFIX}调整：方案 ${design.code}`}><PenLine size={16} aria-hidden="true" />{`${DRAFT_PREFIX}调整`}</Button>
       ),
     }] : []),
   ];
@@ -529,7 +530,7 @@ function DesignRecordDrawer({ design, onClose, onEdit }: { design: VcrDesign; on
       <div data-vcr-design-record={design.code} className="flex flex-col gap-4">
         {design.computationBasis && <VcrScientificBasis basis={design.computationBasis} />}
         {rows.length > 0 && <FactList rows={rows} />}
-        {onEdit && <div><Button variant="secondary" size="sm" onClick={onEdit}>在对话中调整</Button></div>}
+        {onEdit && <div><Button variant="secondary" size="sm" actionKind="draft" onClick={onEdit}><PenLine size={16} aria-hidden="true" />{`${DRAFT_PREFIX}调整`}</Button></div>}
       </div>
     </Drawer>
   );
@@ -640,7 +641,7 @@ function DecisionForm({ studyId, decision, designs, onRecorded }: {
         rows={2}
       />
       <div className="flex flex-wrap items-center gap-3">
-        <Button type="submit" disabled={!ready || busy} loading={busy}>写入决策记录</Button>
+        <Button actionKind="set" type="submit" disabled={!ready || busy} loading={busy}>写入决策记录</Button>
         {decision?.recordedAt && <span className="text-caption tabular-nums text-text-3">{`上次记录于 ${decision.recordedAt}`}</span>}
       </div>
     </form>

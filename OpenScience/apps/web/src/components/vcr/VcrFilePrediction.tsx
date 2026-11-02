@@ -63,7 +63,7 @@ export function VcrFilePrediction({ studyId, designs, onFiled }: { studyId: stri
       <Input id={ids.registry} label="试验登记号" value={registryId} placeholder="例如 NCT02296125" onChange={(event) => setRegistryId(event.target.value)} />
       <Input id={ids.endpoint} label="主要终点" value={endpoint} maxLength={120} onChange={(event) => setEndpoint(event.target.value)} />
       <div>
-        <Button size="sm" variant="secondary" loading={busy} disabled={!registryId.trim() || !endpoint.trim()} onClick={file}>登记预测</Button>
+        <Button actionKind="set" size="sm" variant="secondary" loading={busy} disabled={!registryId.trim() || !endpoint.trim()} onClick={file}>登记预测</Button>
       </div>
     </div>
   );

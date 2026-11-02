@@ -105,7 +105,7 @@ export function EvimedSearchPage() {
         inputProps: { onCompositionStart: () => { composing.current = true; }, onCompositionEnd: () => { composing.current = false; } } },
       // Secondary: the page's main thing is its results, and a primary action belongs to the header's row, which a phone's wrapped
       // toolbar is not (the walk's composition rule). Enter in the box submits as well.
-      actions: <Button size="sm" variant="secondary" disabled={!draft.trim()} loading={busy && draft.trim() === query} onClick={submitSearch}>检索</Button>,
+      actions: <Button size="sm" variant="secondary" actionKind="start" disabled={!draft.trim()} loading={busy && draft.trim() === query} onClick={submitSearch}>检索</Button>,
     }}>
       {busy && searchMode === "submit" ? <EvimedSearchTransition category={category} query={query} onEdit={returnToEdit} />
         // An account that cannot search at all (no EviMed login, or no medical search on this deployment) has no results to sort,

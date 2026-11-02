@@ -191,7 +191,7 @@ function EditAssessment({ studyId, record, onClose, onSaved }: {
 
         <div className="flex justify-end gap-2">
           <Button type="button" variant="secondary" disabled={busy} onClick={onClose}>取消</Button>
-          <Button type="submit" loading={busy} disabled={busy}>保存</Button>
+          <Button actionKind="set" type="submit" loading={busy} disabled={busy}>保存</Button>
         </div>
       </form>
     </FormDialog>

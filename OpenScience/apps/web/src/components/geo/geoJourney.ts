@@ -35,14 +35,24 @@ export function geoJourney(project: JourneyProject) {
   const waitingFor = current ? workflow.steps[current].waitingFor as GeoStepKey[] : [];
   const retained = GEO_STEP_KEYS.flatMap(key => steps[key]?.summary?.text ? [steps[key]!.summary!.text] : []);
   const inputDraft = `请先根据我提供的资料确认产品，再完成我选择的任务。产品名称及适用场景：${product ?? ''}；目标受众（患者、医生或其他）：；本次希望得到：。说明书、证据或已有稿件我会在此对话中附上。缺少会影响工作的资料时请具体指出。`;
-  const requested = legacy.length && !workflow.requested.length ? '历史工作范围待确认' : workflow.full ? '本次工作：完整八步方案' : workflow.requested.length ? `本次工作：${names(workflow.requested)}` : '尚未提交工作';
+  const requested = legacy.length && !workflow.requested.length ? '历史工作范围待确认' : workflow.full ? '本次工作：完整八步方案' : workflow.requested.length ? `本次工作：${names(workflow.requested)}` : '';
+  // What is known so far, from what the project records: the conversation writes these and the page ticks them as it does. Only what is
+  // stored can be ticked, so an audience, which the project does not keep, is said in the sentence and is not a row.
+  const inputs = [
+    {key:'name',label:'产品名称',done:Boolean(product)},
+    {key:'indication',label:'适用场景',done:Boolean((project.product as {indication?:string|null}|null|undefined)?.indication)},
+    {key:'task',label:'这次要做什么',done:workflow.requested.length > 0 || legacy.length > 0},
+  ];
+  const missing = inputs.filter(input => !input.done).length;
   let stage: 'inputs' | 'ready' | 'running' | 'queued' | 'blocked' | 'failed' | 'paused' | 'results' = 'ready';
-  let title = product ? `继续${product}的工作` : '先说明产品与这次要做的事';
-  let detail = product ? '选择本次任务；已有资料可直接附在对话中。' : '产品名称与适用场景、目标受众、本次目标能帮助确定工作范围；说明书、证据或已有稿件可直接附在对话中。';
-  let next: GeoJourneyAction = { kind: 'conversation', label: '在对话中补充产品与任务', draft: inputDraft };
+  let title = product ? `继续${product}的工作` : `还差 ${missing} 项就能开始`;
+  let detail = product ? '选择本次任务；已有资料可直接附在对话中。' : '在对话里直接说，或把说明书、证据、已有稿件发给 AI，受众也可以一起说。读到后这里会自动打勾。';
+  let next: GeoJourneyAction = { kind: 'conversation', label: '让 AI 确认产品', draft: inputDraft };
   if (!product) stage = 'inputs';
   else if (project.steps.questions && ['done', 'minimal'].includes(project.steps.questions.status)) {
-    next = {kind:'step',step:'diagnosis',label:'查看诊断与开始测量'};
+    // The round is started where its questions are read: the diagnosis's own tab holds its results and has nothing to press yet.
+    if (!project.steps.diagnosis || project.steps.diagnosis.status === 'none') next = {kind:'step',step:'questions',label:'去开始诊断'};
+    else next = {kind:'step',step:'diagnosis',label:'查看诊断结果'};
     detail = '测量问题已有结果。核对范围后，可明确开始一轮 AI 回答诊断。';
   } else if (project.steps.evidence && ['done', 'minimal'].includes(project.steps.evidence.status)) {
     next = {kind:'step',step:'questions',label:'查看问题与下一步'};
@@ -55,17 +65,18 @@ export function geoJourney(project: JourneyProject) {
   if (current) {
     next = {kind:'step',step:current,label:'继续当前工作'};
     const state = workflow.steps[current];
-    if (blocked) {stage='blocked';title=`${GEO_STEP_NAMES[current]}等待额度`;detail='打开当前工作查看额度状态和已保留的结果。';}
-    else if (active) {stage=state.status === 'running' ? 'running' : 'queued';title=`${state.status === 'running' ? '正在' : '已排队：'}${GEO_STEP_WORK[current]}`;detail=waitingFor.length ? `等待${names(waitingFor)}。` : '查看这次任务的执行详情与已有结果。';}
-    else if (failed) {stage='failed';title=`${GEO_STEP_NAMES[current]}没有完成`;detail='查看失败原因与这次运行；已保留的结果仍可打开。';}
-    else {stage='queued';title=`待继续：${GEO_STEP_WORK[current]}`;detail=waitingFor.length ? `还需要${names(waitingFor)}。` : '该项工作已请求，尚未观察到开始运行。';}
+    if (blocked) {stage='blocked';title=`${GEO_STEP_NAMES[current]}等你补额度`;detail='打开当前工作查看额度状态和已保留的结果。';}
+    else if (active) {stage=state.status === 'running' ? 'running' : 'queued';title=`${state.status === 'running' ? '正在' : '排队中：'}${GEO_STEP_WORK[current]}`;detail=waitingFor.length ? `等待${names(waitingFor)}。` : '查看这次任务的对话记录与已有结果。';}
+    else if (failed) {stage='failed';title=`${GEO_STEP_NAMES[current]}未完成`;detail='查看未完成的原因与这次运行；已保留的结果仍可打开。';}
+    else {stage='queued';title=`待开始：${GEO_STEP_WORK[current]}`;detail=waitingFor.length ? `还需要${names(waitingFor)}。` : '该项工作已请求，尚未观察到开始运行。';}
     if (!active && !failed && !blocked && waitingFor.length) next = {kind:'step',step:waitingFor[0],label:`查看${GEO_STEP_NAMES[waitingFor[0]]}`};
   }
   if (legacy.length && !active && !workflow.requested.length) {
     stage='ready';title='历史步骤范围待确认，选择需要继续的任务';detail='历史结果和已受理的任务都保留。选择本次需要继续的一项工作；不会按旧标记自动启动完整方案。';
   }
   if (workflow.requested.includes('monitoring') && !active && !failed) {
-    stage=geoAutomationEnabled(project)?'ready':'blocked';title=geoAutomationEnabled(project)?'自动监测已开启，等待下一轮':'尚未开启自动监测';detail='已有测量任务和结果保留。查看当前引擎与覆盖周期和后续复测安排。';
+    const declined=steps.monitoring?.automation?.state==='declined';
+    stage=geoAutomationEnabled(project)||declined?'ready':'blocked';title=geoAutomationEnabled(project)?'自动监测已开启，等待下一轮':declined?'自动监测已关闭':'等你开启自动监测';detail='已有测量任务和结果保留。查看当前引擎与覆盖周期和后续复测安排。';
     next={kind:'step',step:'monitoring',label:'查看范围与自动监测设置'};
   }
   if (['paused','archived'].includes(project.status)) {
@@ -75,5 +86,5 @@ export function geoJourney(project: JourneyProject) {
     const starter = GEO_STARTERS.find(item => item.key === key)!;
     return {key,label:starter.label,draft:starter.draft(product)};
   });
-  return {product,workflow,stage,title,detail,requested,current,waitingFor,retained,next,canConverse,runId:current ? workflow.steps[current].runId as string | null : null,intents};
+  return {product,workflow,stage,title,detail,requested,inputs,current,waitingFor,retained,next,canConverse,runId:current ? workflow.steps[current].runId as string | null : null,intents};
 }

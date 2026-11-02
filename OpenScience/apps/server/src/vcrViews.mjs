@@ -42,7 +42,7 @@ import {
   VCR_MODEL_INTERFACE_LABELS_ZH, VCR_REGISTRY_ALLOCATION_LABELS_ZH, VCR_REGISTRY_MASKING_LABELS_ZH, VCR_REGISTRY_PHASE_LABELS_ZH, VCR_REVIEW_KIND_LABELS_ZH, VCR_ROLE_ABILITIES, VCR_STALE_REASON_LABELS_ZH,
   VCR_STEP_LABELS_ZH, VCR_STEPS, VCR_TWIN_LABELS_ZH, VCR_TWIN_EVIDENCE, VCR_VALUE_SOURCE_LABELS_ZH,
   VCR_TRIAL_DESIGN_LABELS_ZH,
-  allowanceWaitingSentence, intendedUseCeiling, lineageNode, parseLineageNode, twinLabel, useWithin, vcrModelCardIssues, vcrModelInterfaceOf,
+  allowanceWaitingSentence, workStateLabel, intendedUseCeiling, lineageNode, parseLineageNode, twinLabel, useWithin, vcrModelCardIssues, vcrModelInterfaceOf,
 } from "@evimed/domain";
 
 import { VCR_ENGINE_RETRYABLE_CODES } from "./vcrEngineClient.mjs";
@@ -324,15 +324,52 @@ export function failedExportsOf(exports) {
 }
 
 /**
+ * The ability a line of 需要关注 asks of its reader, for the lines that are a thing to do and not a thing to look at. A line is a need
+ * only for a reader who can do it: the budget is the lead's (`manage_study`, the second human stop), a step is started and so
+ * restarted by whoever may `run`, a document is exported by whoever may `export`, and the data's map and snapshot are the data
+ * manager's. A reader without the ability is left with the lines anyone can read (a route that cannot be estimated, results gone
+ * stale), because 「去处理」 led a member to a page with nothing on it to do (module workspace audit, 2026-11-01, VCR defect 3).
+ */
+const ATTENTION_ABILITY = Object.freeze(/** @type {Record<string, string>} */ ({
+  budget_confirm: "manage_study", step_failed: "run", allowance_waiting: "run", export_failed: "export",
+  intake_confirm: "manage_data", intake_freeze: "manage_data",
+}));
+
+/**
+ * What the study's data intake waits for a person to do, from the rows the data plane keeps: a source whose field map has been proposed
+ * (or has not been made, with a data file waiting to be mapped) and is not confirmed, and a confirmed map with no frozen snapshot
+ * from it. A withdrawn source asks for nothing. The page used to show both only inside 数据接入, so a study could wait on them with
+ * nothing said on its overview.
+ * @param {{ sources?: readonly Record<string, any>[], files?: readonly Record<string, any>[], snapshots?: readonly Record<string, any>[] } | null | undefined} rows
+ * @returns {{ confirm: number, freeze: number }}
+ */
+export function intakeNeedsOf(rows) {
+  const files = list(rows?.files).filter((file) => !file.erasedAt && file.role === "data");
+  const snapshots = list(rows?.snapshots);
+  let confirm = 0;
+  let freeze = 0;
+  for (const source of list(rows?.sources)) {
+    if (source.status === "withdrawn") continue;
+    const state = String(source.fieldMapState ?? "none");
+    if (state === "proposed" || (state === "none" && files.some((file) => file.sourceId === source.id))) confirm += 1;
+    else if (state === "confirmed" && !snapshots.some((snapshot) => snapshot.sourceId === source.id)) freeze += 1;
+  }
+  return { confirm, freeze };
+}
+
+/**
  * The lines under 「需要关注」: what the reader has to look at. Deterministic
  * over the rows, so the home list and the overview say the same thing. A value an AI set and no one has countersigned is not
  * among them: who set a value is the platform's own record, and a countersignature is an act the reader may take or leave
  * (owner ruling 2026-10-10), so the list holds only what is broken, stale or waiting.
+ *
+ * `abilities` is what the reader may do in this study; given, a line that is a thing to do is left out for a reader who cannot do it
+ * (`ATTENTION_ABILITY`). Left out, nothing is filtered: a caller with no reader (a test, an export) sees every line.
  * @param {{ comparators: readonly Record<string, any>[], results: readonly Record<string, any>[], allResults?: readonly Record<string, any>[],
  *   stale: readonly Record<string, any>[], jobs: readonly Record<string, any>[], steps: Record<string, any>,
- *   exports?: readonly Record<string, any>[] }} input
+ *   exports?: readonly Record<string, any>[], abilities?: readonly string[] | null, intake?: { confirm: number, freeze: number } | null }} input
  */
-export function attentionOf({ comparators, results, allResults, stale, jobs, steps, exports = [] }) {
+export function attentionOf({ comparators, results, allResults, stale, jobs, steps, exports = [], abilities = null, intake = null }) {
   /** @type {Array<Record<string, any>>} */
   const lines = [];
   const unestimable = notEstimableDesign(comparators, allResults ?? results);
@@ -350,7 +387,7 @@ export function attentionOf({ comparators, results, allResults, stale, jobs, ste
     const reason = (/** @type {Record<string, string>} */ (VCR_STALE_REASON_LABELS_ZH))[String(stale[0].reason)];
     lines.push({
       kind: "stale", tone: "stale",
-      text: `${stale.length} 个结果已过期${reason ? `：${reason}` : ""}`,
+      text: `${stale.length} 个结果${workStateLabel("stale")}${reason ? `：${reason}` : ""}`,
     });
   }
   const waiting = jobs.filter((job) => job.state === "awaiting_budget");
@@ -360,7 +397,7 @@ export function attentionOf({ comparators, results, allResults, stale, jobs, ste
   for (const step of VCR_STEPS) {
     if (steps?.[step]?.status === "failed") {
       lines.push({ kind: "step_failed", tone: "attention", tab: null,
-        text: `「${(/** @type {Record<string, string>} */ (VCR_STEP_LABELS_ZH))[step]}」这一步没有做完，已算出的部分保留` });
+        text: `「${(/** @type {Record<string, string>} */ (VCR_STEP_LABELS_ZH))[step]}」这一步${workStateLabel("failed")}，已算出的部分保留` });
     }
   }
   // A step the allowance would not start is waiting for the reader's top-up, and a queued step that says nothing reads as work
@@ -381,7 +418,17 @@ export function attentionOf({ comparators, results, allResults, stale, jobs, ste
     lines.push({ kind: "export_failed", tone: "attention", tab: null,
       text: `「${(/** @type {Record<string, string>} */ (VCR_EXPORT_KIND_LABELS_ZH))[String(row.kind)] ?? "研究包"}」没有生成，已算出的结果保留` });
   }
-  return lines;
+  // The data's own two waits, said where the study is read and not only inside 数据接入. Both open that panel (the page knows the kind).
+  if (intake?.confirm) {
+    lines.push({ kind: "intake_confirm", tone: "attention", tab: null,
+      text: intake.confirm === 1 ? "1 份数据的字段映射在等你确认" : `${intake.confirm} 份数据的字段映射在等你确认`, action: { label: "数据接入", tab: null } });
+  }
+  if (intake?.freeze) {
+    lines.push({ kind: "intake_freeze", tone: "attention", tab: null,
+      text: intake.freeze === 1 ? "1 份数据的字段映射已确认，在等你冻结快照" : `${intake.freeze} 份数据的字段映射已确认，在等你冻结快照`, action: { label: "数据接入", tab: null } });
+  }
+  if (!abilities) return lines;
+  return lines.filter((line) => !ATTENTION_ABILITY[line.kind] || abilities.includes(ATTENTION_ABILITY[line.kind]));
 }
 
 // --- the conclusion sentence ---------------------------------------------------------------------------
@@ -462,12 +509,13 @@ export function numberString(value, precision, mcse = null) {
 
 /**
  * One row of the home list.
+ * `roles` are the viewer's in this study: the row's 需要你 lines are the ones this viewer can act on (`attentionOf`).
  * @param {{ study: Record<string, any>, results: readonly Record<string, any>[], stale: readonly Record<string, any>[],
  *   jobs: readonly Record<string, any>[], scenarios: readonly Record<string, any>[],
  *   comparators: readonly Record<string, any>[], grid: Record<string, any> | null, decisions?: readonly Record<string, any>[], now: Date,
- *   allResults?: readonly Record<string, any>[], exports?: readonly Record<string, any>[] }} input
+ *   allResults?: readonly Record<string, any>[], exports?: readonly Record<string, any>[], roles?: readonly string[] | null }} input
  */
-export function presentSummary({ study, results, allResults, stale, jobs, scenarios, comparators, grid, decisions = [], exports = [], now }) {
+export function presentSummary({ study, results, allResults, stale, jobs, scenarios, comparators, grid, decisions = [], exports = [], roles = null, now }) {
   const { designs } = presentDesigns({ study, scenarios, results, allResults, stale, executions: new Map(), grid, decisions, now });
   return {
     id: study.id,
@@ -480,7 +528,7 @@ export function presentSummary({ study, results, allResults, stale, jobs, scenar
     purpose: study.purpose ?? "programme",
     steps: study.purpose === "calculation" ? [] : publicSteps(study.steps),
     conclusion: conclusionOf({ designs, results, allResults, comparators }),
-    attention: attentionOf({ comparators, results, allResults, stale, jobs, steps: study.steps, exports }),
+    attention: attentionOf({ comparators, results, allResults, stale, jobs, steps: study.steps, exports, abilities: roles ? abilitiesOf(roles) : null }),
     updatedAt: zhTime(study.updatedAt, now) ?? "",
     createdAt: study.createdAt,
   };
@@ -617,7 +665,7 @@ export function presentStudy(bundle) {
     metrics: overviewMetrics(bundle, designs),
     counts: headline ? countsView(headline.counts, { tier: study.dataTier, scope: headlineScope(headline, rows) }) : null,
     designs,
-    attention: attentionOf({ comparators, results, allResults: allResultsOf(bundle), stale, jobs, steps: study.steps, exports }),
+    attention: attentionOf({ comparators, results, allResults: allResultsOf(bundle), stale, jobs, steps: study.steps, exports, abilities: roles ? abilitiesOf(roles) : null, intake: bundle.intakeNeeds ?? null }),
     changes: presentChanges(bundle),
     // The AI reviews and the people's, apart from the changes: the study page's 变更记录 shows both (no model names: `presentVcrReview`).
     reviews: reviews.slice(0, 6).map((/** @type {any} */ review) => presentVcrReview(review, reviewContextOf(bundle))),
@@ -815,7 +863,7 @@ export function presentDeliverable(row, index, all, now) {
   const forgotten = row.state === "queued" && Number.isFinite(Date.parse(String(row.updatedAt)))
     && now.getTime() - Date.parse(String(row.updatedAt)) >= EXPORT_QUEUED_FRESH_MS;
   const stateWord = forgotten ? "没有生成"
-    : /** @type {Record<string, string>} */ ({ queued: "排队中", running: "生成中", ready: "已生成", failed: "未完成" })[String(row.state)] ?? "";
+    : /** @type {Record<string, string>} */ ({ queued: workStateLabel("queued"), running: "生成中", ready: "已生成", failed: workStateLabel("failed") })[String(row.state)] ?? "";
   // A newer document of its kind replaces it, and it stays listed as what it was: a document is asked for again when the study moved
   // on from what it was written from, and the earlier one is not dropped.
   const superseded = all.slice(0, Math.max(0, index)).some((other) => other.kind === row.kind && vcrExportHoldsDocument(other.cover));

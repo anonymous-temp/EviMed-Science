@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { Input, Textarea, Select } from "@/components/ui/Input";
 import { Note } from "@/components/ui/Note";
-import { cancellationPending, inLingdou, lingdou, recurrence, scheduleOf, revisionConflict, TASK_TYPES, WEEKDAYS, zoneName, type Recommendation } from "./taskPresentation";
+import { cancellationPending, CONVERSATION_HELD_EACH_RUN, inLingdou, lingdou, recurrence, scheduleOf, revisionConflict, TASK_TYPES, WEEKDAYS, zoneName, type Recommendation } from "./taskPresentation";
 
 /**
  * What to keep doing, and how often: the whole of a new task. The platform sets the budget and the stopping rules (the owner's rulings
@@ -158,9 +158,9 @@ export function TaskForm({ projectId, agenda, recommendation, showBudgets = fals
         said once, by its own field above. The sentence is the buttons' own (`Note`), so it stands beside them and not as a line by itself. */}
     <Note className="gap-y-3 sm:flex-nowrap sm:justify-between" action={<span className="ml-auto flex shrink-0 gap-2">
       {onCancel && <Button variant="secondary" disabled={saving || disabled} onClick={onCancel}>{conflict ? "关闭编辑" : "取消"}</Button>}
-      <Button type="submit" loading={saving} disabled={blocked || !valid || !scheduleValid || conflict}>{agenda ? "保存修改" : created ? "重试启用" : "创建并启用"}</Button>
+      <Button type="submit" loading={saving} actionKind={agenda ? "set" : "start"} disabled={blocked || !valid || !scheduleValid || conflict}>{agenda ? "保存修改" : created ? "重试启用" : "创建并启用"}</Button>
     </span>}>
-      <span aria-live="polite">{projectName ? `在“${projectName}”运行` : "在当前项目运行"} · <span className="whitespace-nowrap">{schedule.kind === "weekly" && (schedule.weekdays?.length ?? 0) === 0 ? "请选择星期" : recurrence(schedule)}</span>{firstRun ? <> · {firstRun}</> : null}</span>
+      <span aria-live="polite">{projectName ? `在“${projectName}”运行` : "在当前项目运行"} · <span className="whitespace-nowrap">{schedule.kind === "weekly" && (schedule.weekdays?.length ?? 0) === 0 ? "请选择星期" : recurrence(schedule)}</span>{firstRun ? <> · {firstRun}</> : null}<span className="block">{CONVERSATION_HELD_EACH_RUN}</span></span>
     </Note>
   </form>;
 }

@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { Download, FileUp } from 'lucide-react';
+import { Download, FileUp, PenLine } from 'lucide-react';
 import { Select } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { Disclosure } from '@/components/ui/Disclosure';
@@ -18,6 +18,7 @@ import { VcrTrajectoryChart, VcrSeriesLegend } from './VcrCharts';
 import { useVcrLoad } from './vcrTabKit';
 import { useStudyFrame, useVcrToolbar } from './studyFrameContext';
 import { VcrToolbarActions, type VcrToolbarAction } from './VcrToolbarActions';
+import { DRAFT_PREFIX } from './vcrActionWords';
 
 const number = (value: number | null | undefined) => typeof value === 'number' && Number.isFinite(value) ? value.toLocaleString('zh-CN', { maximumFractionDigits: 3 }) : '—';
 const date = (value?: string) => value ? new Date(value).toLocaleDateString('zh-CN') : '时间未记录';
@@ -49,9 +50,11 @@ export function hasLongitudinal(data: VcrLongitudinalData | null | undefined): b
  * here. Templates and imports are the toolbar's 「⋯」: a button that cannot act (a prediction file with no history to attach it to)
  * is not in it.
  */
-export function VcrLongitudinalPanel({ studyId, canRun, data, onReload, switcher }: {
+export function VcrLongitudinalPanel({ studyId, canRun, canManage = false, data, onReload, switcher }: {
   studyId: string;
   canRun: boolean;
+  /** The reader may confirm the compute budget (`manage_study`): a job past it waits for them. */
+  canManage?: boolean;
   data: VcrLongitudinalData;
   /** Read the records again (after an import, or a comparison that finished). */
   onReload: () => void;
@@ -124,7 +127,7 @@ export function VcrLongitudinalPanel({ studyId, canRun, data, onReload, switcher
     ...(canRun && history ? [{ key: 'import', label: '导入预测文件', icon: FileUp, loading: busy, onSelect: () => input.current?.click() }] : []),
     ...(canRun ? [{ key: 'import-benchmark', label: '导入试验预测', icon: FileUp, loading: busy, onSelect: () => benchmarkInput.current?.click() }] : []),
   ];
-  if (canRun && frame) actions.unshift({ key: 'history', label: '接入纵向资料', onSelect: () => frame.openChat(`为研究 ${studyId} 接入纵向患者资料。请读取我上传的文件，识别患者标识、观测时间、治疗与结局字段，说明缺失及来源边界后生成历史快照；未观察的试验内治疗和结局不可补造。`) });
+  if (canRun && frame) actions.unshift({ key: 'history', label: `${DRAFT_PREFIX}接入纵向资料`, kind: 'draft', onSelect: () => frame.openChat(`为研究 ${studyId} 接入纵向患者资料。请读取我上传的文件，识别患者标识、观测时间、治疗与结局字段，说明缺失及来源边界后生成历史快照；未观察的试验内治疗和结局不可补造。`) });
   useVcrToolbar({
     ...(switcher ? { filters: [switcher] } : {}),
     actions: <VcrToolbarActions actions={actions} label="模板与导入" menu />,
@@ -147,7 +150,7 @@ export function VcrLongitudinalPanel({ studyId, canRun, data, onReload, switcher
     <input ref={input} type="file" accept=".json,application/json" className="sr-only" aria-label="选择预测结果文件" onChange={event => { void upload(event.target.files?.[0]); }} />
     <input ref={benchmarkInput} type="file" accept=".json,application/json" className="sr-only" aria-label="选择试验预测文件" onChange={event => { void upload(event.target.files?.[0], true); }} />
 
-    {!history && <EmptyState title="接入个体的纵向观测" description="个体轨迹需要带时间的患者观测数据。上传既有诊疗或随访记录后，由 AI 建立历史快照；预测与实际观测分别保留。" action={canRun && frame ? <Button onClick={() => frame.openChat(`为研究 ${studyId} 接入我提供的纵向患者资料，先检查时间、患者标识及授权范围，再建立历史快照。`)}>接入纵向患者资料</Button> : undefined} />}
+    {!history && <EmptyState title="接入个体的纵向观测" description="个体轨迹需要带时间的患者观测数据。上传既有诊疗或随访记录后，由 AI 建立历史快照；预测与实际观测分别保留。" action={canRun && frame ? <Button actionKind="draft" onClick={() => frame.openChat(`为研究 ${studyId} 接入我提供的纵向患者资料，先检查时间、患者标识及授权范围，再建立历史快照。`)}><PenLine size={16} aria-hidden="true" />{`${DRAFT_PREFIX}接入纵向患者资料`}</Button> : undefined} />}
     {history && <div className="flex flex-col gap-3">
       <Select label="输入历史" value={history.id} onChange={event => { setHistoryId(event.target.value); setSelectedId(''); }}>
         {histories.map(r => <option key={r.id} value={r.id}>{date(r.summary.origin)} · {number(r.summary.subjects)} 人 · {number(r.summary.events)} 条记录</option>)}
@@ -176,7 +179,7 @@ export function VcrLongitudinalPanel({ studyId, canRun, data, onReload, switcher
         <ul className="flex flex-col gap-1 text-ui text-text-2">{failures.map((line, index) => <li key={index}>{line}</li>)}</ul>
       </Section>}
       {evaluations.map(record => <VcrForecastEvaluation key={record.id} record={record} />)}
-      <VcrForecastComparison key={selected.id} studyId={studyId} selected={selected} records={records} canRun={canRun} onComplete={refresh} />
+      <VcrForecastComparison key={selected.id} studyId={studyId} selected={selected} records={records} canRun={canRun} canManage={canManage} onComplete={refresh} />
     </div>}
 
     {benchmark && <Section title="试验效果基准验证" level="sub">
