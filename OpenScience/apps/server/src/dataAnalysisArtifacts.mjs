@@ -2,6 +2,7 @@
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { HttpError, openScopedFileNoFollow, writeFileAtomicNoFollow, resolveScopedPath, mimeFor, directorySize } from './security.mjs';
+import { workspaceChangedFiles } from './runWorkspaceChanges.mjs';
 export const analysisDigest = value => createHash('sha256').update(value).digest('hex');
 /** @param {any} config @param {string} userId @param {string} analysisId */
 export function analysisSnapshotRoot(config,userId,analysisId) {
@@ -40,11 +41,40 @@ function role(filename) {
   if (['.md','.pdf','.html','.docx','.txt'].includes(ext)) return 'report';
   return 'data';
 }
+/** Select a coherent bundle before reading its summary/results. A copied nested
+ * bundle is retained for download, but cannot silently override its parent.
+ * Sibling alternatives need one explicitly presented bundle or remain ambiguous.
+ * @param {string[]} paths @param {string[]} candidates @param {string[]} presented @param {any[]} notices */
+function primaryAnalysisOutput(paths,candidates,presented,notices) {
+  // Unavailable current markers still establish identity. Otherwise a missing or
+  // oversized current JSON file would silently promote a readable old copy.
+  const valid=candidates.filter(file=>file.length<=512&&!path.isAbsolute(file)&&!file.split('/').includes('..')&&file===path.posix.normalize(file));
+  const roots=[...new Set(valid.filter(file=>['analysis-output.json','analysis-results.json'].includes(path.posix.basename(file))).map(file=>path.posix.dirname(file)))];
+  const inside=(file,directory)=>directory==='.'||file.startsWith(`${directory}/`);
+  const outer=roots.filter(root=>!roots.some(other=>other!==root&&inside(root,other)));
+  if(roots.length>outer.length)notices.push({code:'nested_output_bundles'});
+  const explicit=roots.filter(root=>presented.some(file=>valid.includes(file)&&path.posix.dirname(file)===root));
+  const selected=explicit.length?explicit:outer;
+  if(selected.length!==1){if(selected.length>1)notices.push({code:'primary_output_ambiguous'});return null;}
+  const directory=selected[0];
+  const member=name=>{const file=path.posix.join(directory,name);return paths.includes(file)?file:null;};
+  const reports=paths.filter(file=>path.posix.dirname(file)===directory&&/\.(md|txt)$/i.test(file));
+  return {directory,manifestPath:member('analysis-output.json'),resultsPath:member('analysis-results.json'),reportPath:member('statistical-report.md')??(reports.length===1?reports[0]:null)};
+}
 /** @param {any} project @param {any} run @param {string} root @param {any} config */
 export async function snapshotAnalysisRun(project,run,root,config) {
-  const notices=[],artifacts=[], roles=new Map();
+  const notices=[],artifacts=[], roles=new Map(),texts=new Map();
   const unverified=new Set((run.unverifiedArtifacts??[]).filter(item=>typeof item==='string'));
-  const candidates=[...new Set([...(run.outputFiles ?? []),...(run.artifacts ?? []),...(run.presentedFiles ?? []),...unverified].filter(item=>typeof item==='string'))];
+  // The statistical contract lists its principal files, not every program-written
+  // figure/table below them. Dedicated analysis workspaces have one admitted root
+  // turn, so the existing bounded change detector can safely supply those outputs.
+  // The scoped opener below still refuses symlinks; a manifest never grants access.
+  const changed = await workspaceChangedFiles(project.workspaceDir, {
+    since: Date.parse(run.startedAt ?? ''),
+    until: Number.isFinite(Date.parse(run.finishedAt ?? '')) ? Date.parse(run.finishedAt) : Date.now(),
+    limit: 65,
+  });
+  const candidates=[...new Set([...(run.outputFiles ?? []),...(run.artifacts ?? []),...(run.presentedFiles ?? []),...unverified,...changed].filter(item=>typeof item==='string' && !item.startsWith('analysis-inputs/')))];
   let total=0,structuredResults=null,summary='',outputManifestSeen=false;
   for (const relative of candidates.slice(0,64)) {
     try {
@@ -54,27 +84,38 @@ export async function snapshotAnalysisRun(project,run,root,config) {
       total+=bytes.length;
       const sha256=await keepAnalysisBytes(root,bytes,config.dataAnalysisMaxSnapshotBytes);
       artifacts.push({id:`art_${analysisDigest(`${run.id}:${relative}:${sha256}`).slice(0,40)}`,filename:path.posix.basename(relative),path:relative,sha256,bytes:bytes.length,role:role(relative),mediaType:mimeFor(relative),verification:unverified.has(relative)?'unverified':run.verification==='verified'?'verified':'unverified'});
-      if (!summary && /\.(md|txt)$/i.test(relative) && bytes.length<=65_536) summary=bytes.toString('utf8').slice(0,8000);
-      if (path.basename(relative)==='analysis-results.json' && bytes.length<=65_536) {
-        try { const data=JSON.parse(bytes.toString('utf8')); if (data.schemaVersion!==1 || !Array.isArray(data.analyses) || data.analyses.length>64) throw new Error(); structuredResults=data; }
-        catch { notices.push({code:'structured_results_invalid'}); }
-      }
-      if (path.basename(relative)==='analysis-output.json' && bytes.length<=32_768) {
-        outputManifestSeen=true;
-        try {const manifest=JSON.parse(bytes.toString('utf8'));if(manifest.schemaVersion!==1)throw new Error();summary=typeof manifest.summary==='string'?manifest.summary.slice(0,8000):'';
-          for(const kind of ['tables','figures','code']) for(const entry of (Array.isArray(manifest[kind])?manifest[kind].slice(0,64):[])) {
-            const referenced=typeof entry==='string'?entry:entry?.path;
-            const matches=typeof referenced==='string'?[...new Set([referenced,path.posix.join(path.posix.dirname(relative),referenced)])].filter(candidate=>candidates.includes(candidate)):[];
-            if(matches.length!==1)notices.push({code:matches.length?'manifest_reference_ambiguous':'manifest_reference_unavailable'});
-            else roles.set(matches[0],kind==='tables'?'table':kind==='figures'?'figure':'code');
-          }
-        } catch {notices.push({code:'output_manifest_invalid'});}
-      }
+      if(bytes.length<=65_536&&/\.(json|md|txt)$/i.test(relative))texts.set(relative,bytes.toString('utf8'));
     } catch (error) {
       // Missing/oversized files are visible partial results. Snapshot storage failure holds the next turn.
       if (!['ENOENT','file_not_found','path_outside_scope','invalid_path','symlink_not_allowed','analysis_artifact_limit','path_forbidden','not_a_file','ELOOP'].includes(error?.code) && error?.message!=='invalid path') throw error;
       notices.push({code:'artifact_unavailable',path:relative.slice(0,512)});
     }
+  }
+  const paths=artifacts.map(artifact=>artifact.path);
+  const primaryOutput=primaryAnalysisOutput(paths,candidates,run.presentedFiles??[],notices);
+  if(primaryOutput?.resultsPath){
+    try {const data=JSON.parse(texts.get(primaryOutput.resultsPath));if(data?.schemaVersion!==1||!Array.isArray(data.analyses)||data.analyses.length>64)throw new Error();structuredResults=data;}
+    catch {notices.push({code:'structured_results_invalid'});}
+  }
+  if(primaryOutput?.manifestPath){
+    outputManifestSeen=true;
+    try {
+      const source=texts.get(primaryOutput.manifestPath);
+      if(!source||Buffer.byteLength(source)>32_768)throw new Error();
+      const manifest=JSON.parse(source);if(manifest?.schemaVersion!==1)throw new Error();
+      summary=typeof manifest.summary==='string'?manifest.summary.slice(0,8000):'';
+      for(const kind of ['tables','figures','code'])for(const entry of(Array.isArray(manifest[kind])?manifest[kind].slice(0,64):[])){
+        const referenced=typeof entry==='string'?entry:entry?.path;
+        const matches=typeof referenced==='string'?[...new Set([referenced,path.posix.join(primaryOutput.directory,referenced)])].filter(candidate=>paths.includes(candidate)):[];
+        if(matches.length!==1)notices.push({code:matches.length?'manifest_reference_ambiguous':'manifest_reference_unavailable'});
+        else roles.set(matches[0],kind==='tables'?'table':kind==='figures'?'figure':'code');
+      }
+    }catch{notices.push({code:'output_manifest_invalid'});}
+  }
+  if(!summary&&primaryOutput?.reportPath)summary=(texts.get(primaryOutput.reportPath)??'').slice(0,8000);
+  if(!summary&&!primaryOutput&&!notices.some(notice=>notice.code==='primary_output_ambiguous')){
+    const reports=paths.filter(file=>/\.(md|txt)$/i.test(file)&&texts.has(file));
+    if(reports.length===1)summary=texts.get(reports[0]).slice(0,8000);
   }
   for(const artifact of artifacts)if(roles.has(artifact.path))artifact.role=roles.get(artifact.path);
   if(candidates.length>64)notices.push({code:'artifact_count_limit'});
@@ -83,5 +124,5 @@ export async function snapshotAnalysisRun(project,run,root,config) {
   if(!outputManifestSeen)notices.push({code:'output_manifest_unavailable'});
   if(!artifacts.length)notices.push({code:'no_artifacts'});
   if(!summary)notices.push({code:'summary_unavailable'});
-  return {summary,structuredResults,artifacts,notices: [...notices,...(Array.isArray(run.notices)?run.notices.slice(0,32).map(item=>({code:String(item?.code??'run_notice').slice(0,100)})):[])].slice(0,128),frozenAt:new Date().toISOString()};
+  return {summary,structuredResults,primaryOutput,artifacts,notices: [...notices,...(Array.isArray(run.notices)?run.notices.slice(0,32).map(item=>({code:String(item?.code??'run_notice').slice(0,100)})):[])].slice(0,128),frozenAt:new Date().toISOString()};
 }

@@ -1,0 +1,92 @@
+{
+  "case": "lung-native-r",
+  "turns": [
+    {
+      "index": 0,
+      "confType": "log-log",
+      "required": [
+        "n",
+        "events",
+        "censored",
+        "survival",
+        "median",
+        "lower",
+        "upper",
+        "nRisk"
+      ],
+      "bindings": {
+        "n": {
+          "path": [
+            "result",
+            "structuredResults",
+            "cohort",
+            "n"
+          ]
+        },
+        "events": {
+          "path": [
+            "result",
+            "structuredResults",
+            "cohort",
+            "nEvents"
+          ]
+        },
+        "censored": {
+          "path": [
+            "result",
+            "structuredResults",
+            "cohort",
+            "nCensored"
+          ]
+        },
+        "survival": {
+          "path": [
+            "result",
+            "structuredResults",
+            "analyses",
+            1,
+            "estimate"
+          ]
+        },
+        "median": {
+          "path": [
+            "result",
+            "structuredResults",
+            "analyses",
+            0,
+            "estimate"
+          ]
+        },
+        "lower": {
+          "path": [
+            "result",
+            "structuredResults",
+            "analyses",
+            1,
+            "interval",
+            "lower"
+          ]
+        },
+        "upper": {
+          "path": [
+            "result",
+            "structuredResults",
+            "analyses",
+            1,
+            "interval",
+            "upper"
+          ]
+        },
+        "nRisk": {
+          "path": [
+            "result",
+            "structuredResults",
+            "analyses",
+            1,
+            "nAtRiskAtTime"
+          ]
+        }
+      }
+    }
+  ]
+}

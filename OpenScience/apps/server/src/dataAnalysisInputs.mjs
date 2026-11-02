@@ -12,12 +12,13 @@ export function analysisFields(body, allowed) {
 }
 /** @param {any} value @param {number} max */
 export function analysisString(value, max) {
-  if (typeof value !== 'string' || !value.trim() || value.length > max || /\0/.test(value)) throw new HttpError(400, 'analysis_payload_invalid', 'A required string is empty or too long.');
+  if (typeof value !== 'string' || !value.trim() || value.length > max * 2 || [...value].length > max || /\0/.test(value)) throw new HttpError(400, 'analysis_payload_invalid', 'A required string is empty or too long.');
   return value.trim();
 }
 /** @param {any} value */
 export function analysisFilename(value) {
   const name = analysisString(value, 160);
+  if (Buffer.byteLength(name, 'utf8') > 240) throw new HttpError(400, 'analysis_filename_invalid', 'A filename must fit within 240 UTF-8 bytes.');
   if (name.startsWith('.') || /[/\\]/.test(name) || [...name].some(character => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127) || name.endsWith('.')) throw new HttpError(400, 'analysis_filename_invalid', 'Use a filename without directories, control characters or a leading dot.');
   return name;
 }

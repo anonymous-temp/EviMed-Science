@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
+import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { createDataAnalysisRoutes, DATA_ANALYSIS_PATH } from '../src/dataAnalysisRoutes.mjs';
 import { dataAnalysisOpenApi } from '../src/dataAnalysisOpenApi.mjs';
@@ -86,4 +87,9 @@ test('active content downloads as an attachment and schema is available without 
   assert.equal((await doc.json()).openapi, '3.1.0');
   assert.equal((await api('/analyses/analysis-a', { headers: { authorization: '' } })).status, 401);
   assert.equal(dataAnalysisOpenApi().components.schemas.TurnRequest.properties.question.maxLength, 16000);
+});
+
+test('offline OpenAPI handoff is the contract actually served', async () => {
+  const saved = JSON.parse(await readFile(new URL('../../../docs/data-analysis.openapi.json', import.meta.url), 'utf8'));
+  assert.deepEqual(saved, dataAnalysisOpenApi());
 });

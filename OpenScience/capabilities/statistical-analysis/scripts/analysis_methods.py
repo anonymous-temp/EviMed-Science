@@ -609,20 +609,25 @@ def _survival_notes(kept: pd.DataFrame) -> list[dict[str, Any]]:
 def _km_curve(time: np.ndarray, event: np.ndarray, level: float, conf_type: str) -> dict[str, Any]:
     order = np.argsort(time, kind="stable")
     time, event = time[order], event[order]
-    distinct = np.unique(time[event == 1])
+    # A plotting table must include censor-only times and the final observed plateau.
+    distinct, starts, counts = np.unique(time, return_index=True, return_counts=True)
     survival, rows, at_risk_total = 1.0, [], len(time)
     greenwood = 0.0
     z = stats.norm.ppf(1 - (1 - level) / 2)
-    for point in distinct:
-        at_risk = int((time >= point).sum())
-        deaths = int(((time == point) & (event == 1)).sum())
-        censored = int(((time == point) & (event == 0)).sum())
+    for point, start, count in zip(distinct, starts, counts):
+        at_risk = int(at_risk_total - start)
+        deaths = int(event[start:start + count].sum())
+        censored = int(count - deaths)
         survival *= 1 - deaths / at_risk
-        greenwood += deaths / (at_risk * (at_risk - deaths)) if at_risk > deaths else float("inf")
+        if deaths:
+            greenwood += deaths / (at_risk * (at_risk - deaths)) if at_risk > deaths else float("inf")
         se_log = math.sqrt(greenwood) if math.isfinite(greenwood) else float("nan")
         se = survival * se_log if math.isfinite(se_log) else float("nan")
         if survival <= 0 or not math.isfinite(se_log):
             lower = upper = None
+        elif survival == 1:
+            # Unit-survival boundary convention of survival 3.8-6; older log-log implementations returned NA.
+            lower = upper = 1.0
         elif conf_type == "log":
             lower, upper = survival * math.exp(-z * se_log), min(1.0, survival * math.exp(z * se_log))
         elif conf_type == "log-log":
@@ -632,13 +637,14 @@ def _km_curve(time: np.ndarray, event: np.ndarray, level: float, conf_type: str)
         else:
             lower, upper = max(0.0, survival - z * se), min(1.0, survival + z * se)
         rows.append({"time": float(point), "atRisk": at_risk, "events": deaths, "censoredAtTime": censored, "survival": float(survival),
-                     "se": _finite(se), "lower": lower, "upper": upper})
+                     "se": _finite(se), "variance": _finite(se * se), "greenwoodCumulative": _finite(greenwood), "lower": lower, "upper": upper})
     return {"table": rows, "median": _km_quantile(rows, "survival"), "medianLower": _km_quantile(rows, "lower"), "medianUpper": _km_quantile(rows, "upper"),
             "n": int(at_risk_total), "events": int(event.sum()), "maxTime": float(time.max()) if len(time) else None}
 
 
 def _km_quantile(rows: list[dict[str, Any]], key: str, p: float = 0.5) -> float | None:
-    """The first time the curve is at or below p; where it sits exactly on p, the midpoint to the next event time (R's survfit)."""
+    """Match the median in R summary(survfit)$table, not the terminal-plateau rule of quantile.survfit."""
+    rows = [row for row in rows if row["events"] > 0]
     for index, row in enumerate(rows):
         value = row[key]
         if value is not None and value <= p + 1e-12:
@@ -684,7 +690,10 @@ def kaplan_meier(time: Any, event: Any, group: Any = None, *, conf_type: str = "
         diagnostics.append(_diagnostic("median_not_reached", NOTICE, group=next(iter(curves))))
     return _entry(method, label, status="complete" if reached else "partial", estimand=estimand, n=n, estimate=first["median"], interval=interval,
                   level=level, reason=None if reached else "median_not_reached",
-                  values={"curves": curves, "confType": conf_type, "medianNote": "the first group's median is the headline; see curves for every group"},
+                  values={"curves": curves, "confType": conf_type,
+                          "medianConvention": "summary(survfit)$table; midpoint to the next event when the curve equals 0.5",
+                          "unitSurvivalBandConvention": "bounds 1 at survival 1, as in R survival 3.8-6; no-events findings still apply",
+                          "medianNote": "the first group's median is the headline; see curves for every group"},
                   diagnostics=diagnostics)
 
 

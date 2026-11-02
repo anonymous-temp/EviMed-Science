@@ -8,7 +8,7 @@ Set `OPEN_SCIENCE_DATA_ANALYSIS_API_ENABLED=true` on a configured EviMed control
 
 Create an account API key through the existing authenticated `POST /api/agent-keys` interface with scopes `analysis.read` and `analysis.write`. Keys are returned once and can be revoked through the same account interface. Creating an analysis requires an unbound key; a key bound to the analysis's backing project may access that analysis only. Memory-only keys gain no analysis access. `X-Subject` is not supported.
 
-All data endpoints require `Authorization: Bearer <account-key>`. The enabled service publishes its contract at `/api/data-analysis/v1/openapi.json`. It accepts no browser-cookie fallback or provider key. Error responses use HTTP status plus `{error,code,requestId}`.
+All data endpoints require `Authorization: Bearer <account-key>`. An offline [OpenAPI contract](data-analysis.openapi.json) is included for integration without starting the server. It is checked against the served schema by a regression test. The enabled service publishes its contract at `/api/data-analysis/v1/openapi.json`. It accepts no browser-cookie fallback or provider key. Error responses use HTTP status plus `{error,code,requestId}`.
 
 Configuration defaults:
 
@@ -76,7 +76,9 @@ curl --fail-with-body "$EVIMED_BASE/api/data-analysis/v1/analyses/$ANALYSIS_ID/t
   -H "Authorization: Bearer $EVIMED_ANALYSIS_KEY"
 ```
 
-A settled turn contains `result.summary`, `result.structuredResults`, `result.artifacts`, `result.notices` and `result.frozenAt`. Structured results may be null when not produced or invalid; the response says so. Artifacts carry `id`, `filename`, `role`, `mediaType`, `bytes`, `sha256` and `downloadUrl`. Roles distinguish tables, figures, reports, code and other data. Follow `downloadUrl` with the same authorization header; downloads are attachments, including HTML/SVG active content. Verify the bytes against the manifest digest. Never execute a generated script or model pickle merely to preview it.
+A settled turn contains `result.summary`, `result.structuredResults`, `result.artifacts`, `result.notices` and `result.frozenAt`. Structured results may be null when not produced or invalid; the response says so. Artifacts carry `id`, `filename`, `role`, `mediaType`, `bytes`, `sha256` and `downloadUrl`. Roles distinguish tables, figures, reports, code and other data. Follow `downloadUrl` with the same authorization header; downloads are attachments, including HTML/SVG active content. Verify the bytes against the manifest digest. The artifact verification field preserves the platform delivery-check label; it does not establish independent statistical validation or external clinical validity. Never execute a generated script or model pickle merely to preview it.
+
+Use `result.primaryOutput` to locate the selected bundle's manifest, results and report by their full `path`; filenames alone are not unique. Summary and structured results come from the same bundle: one explicitly presented bundle first, otherwise the unique outermost bundle. Nested copies remain downloadable for reproducibility; discovery order cannot replace the chosen result. Multiple explicitly presented bundles or unresolved outermost alternatives return null `primaryOutput` and structured results with `primary_output_ambiguous`; all captured files remain available. A malformed or unavailable selected result does not fall back to a historical result. This is delivery selection, not scientific verification.
 
 ```bash
 curl --fail-with-body "$EVIMED_BASE/api/data-analysis/v1/analyses/$ANALYSIS_ID/artifacts/$ARTIFACT_ID" \

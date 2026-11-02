@@ -5,6 +5,7 @@ export { isDataAnalysisProject } from './internalProjects.mjs';
 import { HttpError, openScopedDirectoryNoFollow } from './security.mjs';
 import { analysisFields, analysisString, analysisFilename, analysisInputBytes } from './dataAnalysisInputs.mjs';
 import { analysisDigest, analysisSnapshotRoot, analysisRead, keepAnalysisBytes, snapshotAnalysisRun } from './dataAnalysisArtifacts.mjs';
+import { MAX_PROJECT_NAME_LENGTH, projectDisplayName } from './store.mjs';
 
 const KIND='data-analysis';
 const terminal=run=>['succeeded','failed','cancelled','canceled'].includes(run?.status);
@@ -72,7 +73,8 @@ export class DataAnalysisService {
   /** A reserved deterministic project can be completed again after a crash, without dispatching work. @param {any} user @param {any} record */
   async finishCreate(user,record){
     if(record.payload.phase==='ready')return record.payload;
-    try{await this.createProject(user,{id:record.payload.projectId,name:record.payload.name});}
+    const projectName=projectDisplayName([...record.payload.name].slice(0,MAX_PROJECT_NAME_LENGTH).join(''));
+    try{await this.createProject(user,{id:record.payload.projectId,name:projectName});}
     catch(error){if(error?.code!=='project_exists')throw error;await this.store.requireProject(user,record.payload.projectId);}
     try{return (await this.save(user,record,{...record.payload,phase:'ready'})).payload;}
     catch(error){if(error?.code!=='product_revision_conflict')throw error;return (await this.documents.get(user.id,KIND,record.id)).payload;}

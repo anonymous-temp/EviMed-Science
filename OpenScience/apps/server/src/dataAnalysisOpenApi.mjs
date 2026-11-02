@@ -78,10 +78,14 @@ export function dataAnalysisOpenApi() {
         Artifact: { type: 'object', required: ['id', 'filename', 'role', 'mediaType', 'bytes', 'sha256', 'downloadUrl'], properties: {
           id: text(100), filename: text(160), path: { type: 'string' }, role: { enum: ['table', 'figure', 'report', 'code', 'data'] },
           mediaType: { type: 'string' }, bytes: { type: 'integer', minimum: 0 }, sha256: { type: 'string', pattern: '^[a-f0-9]{64}$' },
+          verification: { enum: ['verified', 'unverified'], description: 'Existing platform delivery-check label; not independent statistical validation, external validity or clinical certification.' },
           downloadUrl: { type: 'string', description: 'Same-origin API path. Send the account key to this path; never a provider credential.' },
         } },
         Result: { type: 'object', required: ['summary', 'structuredResults', 'artifacts', 'notices', 'frozenAt'], properties: {
           summary: { type: 'string', maxLength: 8000 },
+          primaryOutput: { type: ['object', 'null'], description: 'The coherent output bundle selected for summary and structuredResults: one explicitly presented bundle first, otherwise one outermost bundle. Discovery of nested copies cannot override it. Multiple explicit or unresolved outermost bundles return null with a notice.', properties: {
+            directory: { type: 'string' }, manifestPath: { type: ['string', 'null'] }, resultsPath: { type: ['string', 'null'] }, reportPath: { type: ['string', 'null'] },
+          } },
           structuredResults: { type: ['object', 'null'], description: 'Executed analysis JSON, when available. Its method-specific fields are open; missing/invalid content is null with a notice.', properties: { schemaVersion: { const: 1 }, analyses: { type: 'array', items: { type: 'object' }, maxItems: 64 } } },
           artifacts: { type: 'array', items: ref('Artifact'), maxItems: 64 }, notices: { type: 'array', items: ref('Notice'), maxItems: 128 }, frozenAt: { type: 'string', format: 'date-time' },
         } },

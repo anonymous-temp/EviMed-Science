@@ -25,6 +25,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { DataAnalysisService } from '../src/dataAnalysisService.mjs';
+import { projectDisplayName } from '../src/store.mjs';
 import { HttpError } from '../src/security.mjs';
 
 async function fixture(t){
@@ -45,6 +46,19 @@ async function fixture(t){
     listRuns:async project=>runs.filter(run=>run.projectId===project.id),cancel:async(project,run)=>{run.status='cancelled';}};
   return {deps,service:new DataAnalysisService(deps),rows,projects,runs,user:{id:'alice'},dispatches:()=>dispatches};
 }
+
+test('API analysis names retain their full contract length while the backing project uses its own display limit',async t=>{
+  const f=await fixture(t),create=f.deps.createProject,seen=[];
+  f.deps.createProject=async(user,body)=>{seen.push(projectDisplayName(body.name));return create(user,body);};
+  f.service=new DataAnalysisService(f.deps);
+  const name='A long clinical analysis title with multiple data views and an explicit correction stage';
+  const analysis=await f.service.create(f.user,{name,requestId:'long-name'});
+  assert.equal(analysis.name,name);
+  assert.ok([...seen[0]].length<=40);
+  assert.equal((await f.service.create(f.user,{name,requestId:'long-name'})).id,analysis.id);
+  const unicodeName='🧬'.repeat(120);
+  assert.equal((await f.service.create(f.user,{name:unicodeName,requestId:'unicode-name'})).name,unicodeName);
+});
 
 test('serial lifecycle persists idempotency across restart and freezes historical files',async t=>{
   const f=await fixture(t),{user}=f,analysis=await f.service.create(user,{name:'Study',requestId:'create-1'});
