@@ -109,6 +109,7 @@ if [ "$COMMAND" = close ]; then
   CLOSURE_JS=/opt/evimed/OpenScience/evals/rsi-campaigns/harness_closure.mjs MOUNT=()
   if [ "$RAN_IN" != "$IMAGE" ]; then
     docker run --rm --network none --read-only --user 10001:10001 --entrypoint cat "$IMAGE" "$CLOSURE_JS" > "$RUN/harness_closure.mjs" || { log "harness_closure.mjs is not in $IMAGE"; exit 3; }
+    chown 10001:10001 "$RUN/harness_closure.mjs" # written by root under umask 027; the closure runs as the lab user
     MOUNT=(-v "$RUN/harness_closure.mjs:$CLOSURE_JS:ro")
   fi
   log "closure runs in $RAN_IN (current image $IMAGE)"
