@@ -9,6 +9,7 @@ import { VcrMatchStore } from "../src/vcrMatchStore.mjs";
 import { VcrStore } from "../src/vcrStore.mjs";
 import { VCR_TABLES } from "../src/vcrPersistence.mjs";
 import { createMatchBatch, createMatchBatchCounters, createMatchExtractExecutor, matchExtractDigest } from "../src/vcrMatchBatch.mjs";
+import { createVcrWorkerLoops } from "../src/vcrWorker.mjs";
 import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
 
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL;
@@ -189,4 +190,43 @@ test("P2-8 the same selection started twice while it is out is one job; after a 
   const [claimed] = await g.jobs.claim({ lane: "slow" });
   await g.jobs.advance(claimed);
   assert.equal(g.extractor.calls.length, 3);
+});
+
+test("P2-9 the slow lane's tick does not wait for a batch: two accounts' batches run together, one account's second batch waits for its first, and the lane keeps ticking", options, async () => {
+  /** @type {() => void} */ let open = () => {};
+  const gate = new Promise((resolve) => { open = () => resolve(null); });
+  const blocking = { model: "deepseek-flash", calls: /** @type {string[]} */ ([]), async extract({ text }) {
+    this.calls.push(text);
+    await gate;
+    return { answer: { facts: [] }, inputTokens: 5, outputTokens: 1 };
+  } };
+  const x = await fixture(blocking);
+  const y = await fixture(blocking);
+  // the executors are the first fixture's: the roster and the records are the same doubles for both studies
+  const firstX = await x.batch.start(x.study, {});
+  const secondX = await x.batch.start(x.study, { subjectKeys: ["P-001", "P-002"] });
+  const onlyY = await y.batch.start(y.study, {});
+  assert.notEqual(firstX.jobId, secondX.jobId);
+  const loops = createVcrWorkerLoops({ jobs: x.jobs, orchestrator: null, store: studies });
+  const tick = /** @type {() => Promise<any>} */ (loops.slowJobs);
+  const started = await tick();
+  // the tick returned while the batches were still out (they wait at the gate), with one batch of each account claimed
+  assert.deepEqual([started.claimed, started.inFlight], [2, 2]);
+  const states = Object.fromEntries((await studies.rows("SELECT id, state FROM evimed_vcr.jobs WHERE kind='match_extract'")).map((row) => [row.id, row.state]));
+  assert.equal(states[firstX.jobId], "running");
+  assert.equal(states[onlyY.jobId], "running", "another account's batch did not wait behind the first account's");
+  assert.equal(states[secondX.jobId], "queued", "an account's second batch waits for its first");
+  const again = await tick();
+  assert.deepEqual([again.claimed, again.advanced, again.inFlight], [0, 0, 2], "the lane ticks while they run, and starts nothing twice");
+  open();
+  for (let n = 0; n < 200 && (await studies.rows("SELECT 1 FROM evimed_vcr.jobs WHERE kind='match_extract' AND state NOT IN ('succeeded','failed','canceled')")).length > 1; n += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  const last = await tick();
+  assert.equal(last.claimed, 1, "once the first is done the account's second batch is taken");
+  for (let n = 0; n < 200 && (await studies.rows("SELECT 1 FROM evimed_vcr.jobs WHERE kind='match_extract' AND state NOT IN ('succeeded','failed','canceled')")).length; n += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  const ended = Object.fromEntries((await studies.rows("SELECT id, state FROM evimed_vcr.jobs WHERE kind='match_extract'")).map((row) => [row.id, row.state]));
+  assert.deepEqual([ended[firstX.jobId], ended[secondX.jobId], ended[onlyY.jobId]], ["succeeded", "succeeded", "succeeded"]);
 });

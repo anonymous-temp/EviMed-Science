@@ -264,18 +264,49 @@ export class VcrWorker {
  * @param {{ jobs: any, orchestrator: any, store: any, matching?: any, frontierEvents?: any, knowledge?: any, drafts?: any, completions?: any }} vcr
  */
 export function createVcrWorkerLoops({ jobs, orchestrator, store, matching = null, frontierEvents = null, knowledge = null, drafts = null, completions = null }) {
+  /**
+   * The slow lane's work in this process, by job id. A batch reading is hours of model calls, so the lane's tick starts it and does not
+   * wait for it: the tick that waited held the lane, and another account's batch queued behind the first whatever the lane's capacity
+   * said. What bounds the lane is the claim's: at most one running job per account (fairness is its order, the first job of each
+   * account in turn) and `vcrLocalConcurrency` running jobs across accounts. A job in flight is not advanced again by the next tick.
+   * @type {Map<string, Promise<void>>}
+   */
+  const inFlight = new Map();
+  let slowFinished = 0;
+  /** @param {any} result */
+  const finishedHook = async (result) => {
+    if (result?.action === "finished") {
+      slowFinished++;
+      if (orchestrator?.onJobFinished && !orchestrator.durableJobFinishes) await orchestrator.onJobFinished(result);
+    }
+  };
   const jobLoop = lane => jobs ? async () => {
     const claimed = await jobs.claim({ limit: lane !== "engine" ? Number(jobs.config?.vcrLocalConcurrency ?? 2) : Math.max(1,Number(jobs.maxConcurrent ?? 1)), lane });
     const methods = Object.keys(jobs.localExecutors ?? {});
     const laneOf = (/** @type {string} */ method) => (VCR_SLOW_LOCAL_METHODS.includes(method) && methods.includes(method) ? "slow" : methods.includes(method) ? "local" : "engine");
     const running = await store.rows("SELECT id,method,kind FROM evimed_vcr.jobs WHERE state='running' AND lease_owner=$1 LIMIT 20",[jobs.owner]);
     const selected = [...claimed,...running.filter(row => !claimed.some(job => job.id===String(row.id)) && laneOf(String(row.method))===lane)];
-    const settled = await Promise.allSettled(selected.map(job => jobs.advance(job)));
+    /** @type {Array<{ status: string, value?: any, reason?: any }>} */
+    let settled = [];
+    let started = selected.length;
+    if (lane === "slow") {
+      // start what is not already running here, and do not wait for it
+      const fresh = selected.filter(job => !inFlight.has(String(job.id)));
+      started = fresh.length;
+      for (const job of fresh) {
+        const id = String(job.id);
+        inFlight.set(id, Promise.resolve().then(() => jobs.advance(job)).then(finishedHook)
+          .catch((reason) => { jobs.report?.(reason?.code ?? "vcr_job_advance_failed"); }).finally(() => { inFlight.delete(id); }));
+      }
+    } else {
+      settled = await Promise.allSettled(selected.map(job => jobs.advance(job)));
+    }
     let finished = 0;
     for (const result of settled) {
       if (result.status === "rejected") { jobs.report?.(result.reason?.code ?? "vcr_job_advance_failed"); continue; }
       if (result.value?.action === "finished") { finished++; if (orchestrator?.onJobFinished && !orchestrator.durableJobFinishes) await orchestrator.onJobFinished(result.value); }
     }
+    if (lane === "slow") { finished = slowFinished; slowFinished = 0; }
     const reaped = jobs.takeReaped?.() ?? [];
     for (const job of reaped) {
       if (orchestrator?.durableJobFinishes) await jobs.deliverFinishHooks(job.id);
@@ -286,7 +317,7 @@ export function createVcrWorkerLoops({ jobs, orchestrator, store, matching = nul
       if (orchestrator?.durableJobFinishes) await jobs.deliverFinishHooks(kept.job.id);
       else if (orchestrator?.onJobFinished) await orchestrator.onJobFinished({...kept,partial:true});
     }
-    return { claimed:claimed.length,advanced:selected.length,finished,failedForAttempts:reaped.length,recovered:recovered.length };
+    return { claimed:claimed.length,advanced:started,finished,failedForAttempts:reaped.length,recovered:recovered.length,...(lane === "slow" ? { inFlight: inFlight.size } : {}) };
   } : null;
   return {
     localJobs: jobLoop("local"),
