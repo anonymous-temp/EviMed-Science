@@ -103,6 +103,17 @@ BioXArena data is CC BY-NC). The builders under tools/ recreate them into a work
   judge later). A calibration against the official judge (GPT-5.5 since 2026-05-11, Gemini-2.5-Pro on the legacy board) would run the
   official pipeline on the same tasks for both arms and compare the sign and rank of the differences; it needs the owner's decision on a
   paid judge, and nothing here calls one.
+- `tools/build_round_gold.py`, `score_round.py`, `judged_packets_round.py` (with `round_lib.py` and `score_runs.mjs`) — the development-side scoring path of an RSI
+  round (2026-11-01), on the box that holds the gold (`$BENCH_ROOT/rsi/score/`, never in git, never in a lane request). `build_round_gold.py --rows rows.json`
+  writes the development gold of the rows a round names in the shape `export_harness_arms.py` reads (`<domain>.items.jsonl`, `<domain>.rows.json`, a manifest)
+  and REFUSES, by name and before reading anything, any id on a pool's confirmation list (also dropped, baseline-v1 and unknown ids). `score_round.py --arm NAME=PREFIX
+  ... --rows rows.json` reads the lanes' bundles (`<rid>.tgz` + `.meta.json`, safely unpacked, sha256 checked) and scores them with the lab's own scorers
+  (`score_runs.mjs` calls `evals/rsi-campaigns/harness_scorers.mjs`; nothing is ported): per family and arm the score with a bootstrap interval, delivery, timeouts,
+  time, settled cost, tool calls, language mismatches, contamination hits and the at-cap facts, per-slice tables, and paired differences over rows. Infrastructure
+  failures (by `export_harness_arms.classify`) and runs that have not arrived are listed apart and never zero-filled; BixBench capsules code cannot score are
+  judge-only and the open-question share is printed because `bixbench-deterministic` is a floor. `judged_packets_round.py` writes blinded packets for the judged
+  parts (DeepResearch Bench pairwise with swapped order, or absolute; ResearchClawBench; BixBench questions code leaves to a judge; MedBrowseComp cases) with the
+  key to the arms kept apart in `operator/`. Tests: `test_build_round_gold.py`, `test_score_round.py`, `test_judged_packets_round.py` (synthetic data only).
 - `tools/build_rsi_items.py`, `rsi_slice.py`, `export_skill_arms.py`, `preview_choice.mjs` — the capability-skill RSI
   campaign's production arms (evals/rsi-campaigns/skill_campaign.mjs is the consumer the lab runs).
 

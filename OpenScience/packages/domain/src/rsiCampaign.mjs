@@ -10,6 +10,8 @@ export const RSI_CAMPAIGN_SURFACES = Object.freeze({
   'autopilot-planner': { kind: 'policy', consumer: 'autopilot-planner', activation: 'cohort' },
   'geo-supplements': { kind: 'policy', consumer: 'geo-capability', activation: 'cohort' },
   'capability-skill': { kind: 'skill', consumer: 'dsh-capability', activation: 'cohort' },
+  // A patched runtime image (guidance supplement + skills) measured offline on lane runs (2026-11-01). Shadow only: nothing of it is imported into production in this round, a qualified result is a pull-request proposal.
+  'harness-patch': { kind: 'harness-patch', consumer: 'dsh-harness', activation: 'shadow' },
   'isolated-tool': { kind: 'isolated-tool', consumer: 'isolated-executor', activation: 'cohort' },
 })
 
@@ -43,8 +45,8 @@ export function rsiCampaignIssues(value) {
   const budget = value.budget
   if (!keysWithin(budget, ['campaignCny', 'monthCny']) || !finite(budget.campaignCny) || budget.campaignCny <= 0 || budget.campaignCny > RSI_CAMPAIGN_LIMITS.campaignCny
     || !finite(budget.monthCny) || budget.monthCny <= 0 || budget.monthCny > RSI_CAMPAIGN_LIMITS.monthCny || budget.campaignCny > budget.monthCny) issues.push('campaign_budget_invalid')
-  // A registered grid (a threshold sweep) proposes without a model; only the improver may say so.
-  const gridImprover = keysWithin(value.models?.improver, ['provider', 'model']) && value.models.improver.provider === 'none' && value.models.improver.model === 'registered-grid'
+  // A registered grid (a threshold sweep) or a registered set of candidates written outside the lab proposes without a model call of the lab's; only the improver may say so.
+  const gridImprover = keysWithin(value.models?.improver, ['provider', 'model']) && value.models.improver.provider === 'none' && ['registered-grid', 'registered-candidates'].includes(value.models.improver.model)
   if (!keysWithin(value.models, ['solver', 'improver', 'reviewer']) || !['solver', 'improver', 'reviewer'].every(role => modelIdentity(value.models?.[role]) || (role === 'improver' && gridImprover))) issues.push('campaign_model_invalid')
   if (rsiCompatibilityIssues(value.target, value.target).length || value.target?.surface !== value.surface) issues.push('campaign_target_invalid')
   if (!keysWithin(value.registration, ['digest', 'procedure', 'claim']) || !digest(value.registration.digest) || !identifier(value.registration.procedure)

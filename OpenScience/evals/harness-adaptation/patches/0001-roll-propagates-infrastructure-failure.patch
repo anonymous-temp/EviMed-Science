@@ -1,0 +1,13 @@
+diff --git a/harness2/core/recursion.py b/harness2/core/recursion.py
+index dda6b98..cdbaf88 100644
+--- a/harness2/core/recursion.py
++++ b/harness2/core/recursion.py
+@@ -287,6 +287,8 @@ def _roll(
+             error="" if exists else "adapter returned a missing run directory",
+         )
+     except Exception as exc:
++        if getattr(exc, "infrastructure", False):  # EviMed patch 0001: a lab failure is not a dead harness
++            raise
+         rv = RunView(
+             label=label,
+             run_id=run_id,
