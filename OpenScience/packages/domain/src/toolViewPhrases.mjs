@@ -103,6 +103,7 @@ const PHRASES = Object.freeze({
   social_posts_search: phrase('采集社媒真实问法', ['query']),
   // pharmacy data
   drug_label_search: phrase('检索说明书', ['drug', 'query']),
+  drug_approval_records: phrase('查美国药品批准记录', ['name', 'applNo']),
   pharmacy_reference_search: phrase('查药学参考', ['query']),
   adr_case_query: phrase('查不良反应个例', ['drug', 'query']),
   adr_signal_analysis: phrase('做不良反应信号分析', ['drug', 'query']),
@@ -145,6 +146,7 @@ const PHRASES = Object.freeze({
   curve_digitize: phrase('数字化生存曲线图'),
   evidence_pool: phrase('合并证据参数', ['parameter']),
   research_calculate: phrase('计算研究数据', ['method']),
+  clinical_score: phrase('计算临床评分', ['id']),
   dataset_semantics: phrase('读写数据含义'),
   // 定时任务 made and changed from a conversation: drawn as the task's card once it answers (a name, when it runs, 「打开」).
   schedule_task: phrase('安排定时任务', ['title', 'instruction'], 'text', 'task'),

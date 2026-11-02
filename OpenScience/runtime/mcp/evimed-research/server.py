@@ -31,6 +31,7 @@ import web_read
 import quote_locator
 import source_types
 import drug_label_index
+import drug_approval_index
 from immutable_capture import ImmutableCaptureError, managed_workspace, preserve
 import meta_agent
 import specialist_jobs
@@ -44,6 +45,7 @@ import task_tools
 import geo_platform
 import vcr_platform
 import research_calculate
+import clinical_scores
 import data_semantics
 import gene_expression_tools
 
@@ -997,6 +999,10 @@ TOOL_DEFINITIONS.extend(geo_platform.tool_definitions())
 # None of them computes in the model: `vcr_simulate` queues a frozen scenario.
 TOOL_DEFINITIONS.extend(vcr_platform.tool_definitions())
 TOOL_DEFINITIONS.extend(research_calculate.tool_definitions())
+# Clinical scales and multi-step clinical formulas, computed from their published definitions (2026-11-02). Local and
+# deterministic: it needs no gateway, no execution context and no account, so a deployment offers it unless an operator
+# names it in EVIMED_DISABLED_TOOLS.
+TOOL_DEFINITIONS.extend(clinical_scores.tool_definitions())
 # What a project's datasets mean, and the deterministic checks of its files against that (2026-10-04, N03):
 # offered to the two capabilities that start from a researcher's own data. With the module off it answers a
 # warning and `check` still runs on what the call declares, so it is not an optional tool.
@@ -1004,6 +1010,9 @@ TOOL_DEFINITIONS.extend(data_semantics.tool_definitions())
 # The NCBI Gene Expression Omnibus workflow (2026-10-04, N17): a series preserved and identity-checked, and the
 # differential-expression computation the platform's engine does (never the model). Not the 循证 GEO module.
 TOOL_DEFINITIONS.extend(gene_expression_tools.tool_definitions())
+# US FDA applications, their submissions, patents and exclusivities, read from the dated snapshot of the Orange Book and Drugs@FDA
+# data files that the image carries (2026-11-02). Local: no request, no gateway, no account.
+TOOL_DEFINITIONS.extend(drug_approval_index.tool_definitions())
 
 
 TOOLS = {tool["name"]: tool for tool in TOOL_DEFINITIONS}
@@ -1091,8 +1100,11 @@ def disabled_tools():
 # schedule_task, update_task: scheduling a task from a conversation needs the product ledger and its own switch
 # (`OPEN_SCIENCE_TASK_TOOLS_ENABLED`); without them the 定时任务 page is where a task is made, and every research question is
 # answered without the tools (2026-10-09).
+# clinical_score: a local calculator with no dependency, so nothing here withholds it; an operator may still switch it off
+# with EVIMED_DISABLED_TOOLS, and every question is answered without it, as it was before it existed (2026-11-02).
 OPTIONAL_TOOLS = frozenset({"patent_search", "web_read", "frontier_search", "schedule_task", "update_task", "geo_read", "geo_write", "social_posts_search",
-                            "vcr_read", "vcr_write", "vcr_simulate", "trial_registry_record", "curve_digitize", "evidence_pool", "research_calculate"})
+                            "vcr_read", "vcr_write", "vcr_simulate", "trial_registry_record", "curve_digitize", "evidence_pool", "research_calculate",
+                            "clinical_score"})
 
 
 def list_tools():
@@ -2127,6 +2139,8 @@ def _dispatch(name, arguments, execution_context=None):
                     # container runtime it lives with the drug evidence adapter,
                     # so `configured: false` here is the expected answer.
                     "drugLabelIndex": drug_label_index.status(),
+                    # The FDA approval-records snapshot the image carries, and which one it is.
+                    "fdaApprovals": drug_approval_index.status(),
                 },
                 name,
                 arguments,
@@ -2227,6 +2241,30 @@ def _dispatch(name, arguments, execution_context=None):
             return task_tools.call(name, arguments)
         except task_tools.TaskToolError as error:
             return failure(error.code, str(error), error.retryable, error.stop_reason(), [error.next_action()])
+    if name == clinical_scores.TOOL_NAME:
+        try:
+            # No provenance wrapper: this is arithmetic on the caller's own inputs, and the result already names its sources.
+            return clinical_scores.call(arguments)
+        except clinical_scores.ScoreError as error:
+            # One calculation declined with its reason; nothing else is affected, so the answer goes on without a guess.
+            refused = failure(error.code, str(error), False,
+                              "unsupported" if error.code == "clinical_score_not_applicable" else "invalid_input",
+                              [clinical_scores.next_action(error)])
+            if error.data:
+                refused["data"] = error.data
+            return refused
+    if name == drug_approval_index.TOOL_NAME:
+        try:
+            # No provenance wrapper: the snapshot statement is in every answer, and the wrapper would echo the account and project.
+            return drug_approval_index.call(arguments)
+        except drug_approval_index.DrugApprovalError as error:
+            if error.code == "drug_approval_input_invalid":
+                next_action = "Correct the named field and call again."
+            elif error.code == "drug_approval_application_not_found":
+                next_action = "Look the drug up with action=find, or check the application on the Drugs@FDA page with web_read."
+            else:
+                next_action = "Use the Drugs@FDA or Orange Book pages with web_read, and say the local snapshot was not available."
+            return failure(error.code, str(error), error.retryable, error.stop_reason(), [next_action])
     if name == "dataset_semantics":
         try:
             result = data_semantics.call(arguments)

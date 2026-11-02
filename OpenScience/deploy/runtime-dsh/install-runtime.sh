@@ -560,6 +560,9 @@ office_smoke() {
 sider_cache() {
   set -x
   python3 /opt/evimed/mcp/evimed-research/build_sider_cache.py
+  # The FDA approval-records index rides this phase. FDA replaces its files in place, so the builder reuses the index the build
+  # context holds (the CI cache restores it there) and stops, naming the pinned files, when it would have to download a moved input.
+  python3 /opt/evimed/mcp/evimed-research/build_fda_approvals.py
 }
 
 socket_client() {

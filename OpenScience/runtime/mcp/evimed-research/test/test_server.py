@@ -95,6 +95,8 @@ class ToolContractTests(unittest.TestCase):
             "patent_search",
             "pharmacy_reference_search",
             "drug_label_search",
+            # US FDA applications, patents and exclusivities from the image's dated snapshot (`drug_approval_index.py`, 2026-11-02).
+            "drug_approval_records",
             "adr_case_query",
             "adr_signal_analysis",
             "offlabel_evidence_packet",
@@ -166,6 +168,9 @@ class ToolContractTests(unittest.TestCase):
             # control plane's task service (`task_tools.py`, 2026-10-09).
             "schedule_task",
             "update_task",
+            # Clinical scales and multi-step clinical formulas computed from their
+            # published definitions (`clinical_scores.py`, 2026-11-02).
+            "clinical_score",
         }
         self.assertEqual(set(by_name), expected)
         for tool in tools:
