@@ -175,6 +175,26 @@ class Materialise(unittest.TestCase):
         self.assertFalse((folder / 'marker.txt').exists())
         self.assertEqual((folder / 'answer.md').read_text(), 'a different answer')
 
+    def test_an_arm_can_be_taken_from_a_later_repeat_of_a_prefix_as_a_development_ab_control(self):
+        for row in ROWS:
+            self.bundle('m2', row, repeat=0, answer=f'first {row}')
+            self.bundle('m2', row, repeat=1, answer=f'second {row}')
+            self.bundle('m2', row, repeat=2, answer=f'third {row}')
+            self.bundle('t2', row, repeat=0, answer=f'tools {row}')
+        code, out, err = self.run_tool('baseline=m2', 'aa=m2@1', f'{CAND}=t2')
+        self.assertEqual((code, err), (0, ''))
+        self.assertIn('aa (m2@1): 3/3 materialised', out)
+        self.assertEqual((self.out / 'baseline' / 'medcalc-rsi__base__101' / 'answer.md').read_text(), 'first 101')
+        self.assertEqual((self.out / 'aa' / 'medcalc-rsi__aa__101' / 'answer.md').read_text(), 'second 101', 'the second run stands as the target\'s only repeat')
+        self.assertEqual((self.out / CAND / f'medcalc-rsi__{CAND}__101' / 'answer.md').read_text(), 'tools 101')
+        runs = {x['rid'] for entry in self.report()['arms'].values() for x in entry['runs']}
+        self.assertIn('m2.medcalc.101.r1', runs)
+        self.assertNotIn('m2.medcalc.101.r2', runs, 'a repeat nobody asked for is not opened')
+        # the same prefix at the same repeat twice is one arm twice: refused; a prefix at two repeats is two arms
+        self.assertEqual(self.run_tool('baseline=m2', 'aa=m2')[0], 2)
+        self.assertEqual(self.run_tool('baseline=m2', 'aa=m2@x')[0], 2)
+        self.assertEqual(self.run_tool('baseline=m2@0', 'aa=m2@0')[0], 2)
+
     # ------------------------------------------------------------------------------------------------ a bad request
 
     def test_bad_requests_are_exit_2(self):

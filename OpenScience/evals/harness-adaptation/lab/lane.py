@@ -76,6 +76,8 @@ class Broker:
     def call(self, *words, stdin_path=None, timeout=180, tries=4):
         command = ["ssh", "-i", str(self.key), "-o", "BatchMode=yes", "-o", "IdentitiesOnly=yes", "-o", f"UserKnownHostsFile={self.known_hosts}",
                    "-o", "StrictHostKeyChecking=yes", "-o", "ConnectTimeout=20", "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=4",
+                   # One connection per job: the broker host is shared and small, and a handshake per call for 30 workers took it to a load of 40 (2026-11-02).
+                   "-o", "ControlMaster=auto", "-o", "ControlPath=/tmp/rsi-broker-%C", "-o", "ControlPersist=300",
                    self.target, " ".join(shlex.quote(w) for w in words)]
         last = ""
         for attempt in range(tries):
