@@ -333,7 +333,7 @@ vcr_apply_missingness <- function(df, missing) {
 #' NA and failed on the first row (`missing value where TRUE/FALSE needed`).
 vcr_population_literature <- function(table, n, correlation = NULL,
                                       correlation_source = "assumed",
-                                      parameter_draws = 1L, seed = NULL, constraints = NULL) {
+                                      parameter_draws = 1L, seed = NULL, constraints = NULL, legacy = FALSE) {
   rows <- .vcr_baseline_rows(table)
   if (!length(rows)) vcr_abort("scenario_field_missing", "scenario.baselineTable", "A literature population needs at least one baseline row.")
   labels <- list()
@@ -375,13 +375,14 @@ vcr_population_literature <- function(table, n, correlation = NULL,
   # No matrix means the variables are drawn independently: that is a stated assumption, with a source row of its own, and never
   # a citation (there is nothing to cite). A matrix the author states is theirs until the source is checked (`cited` is
   # the author's word, not the engine's).
-  if (is.null(correlation)) correlation_source <- "assumed"
+  if (!legacy && is.null(correlation)) correlation_source <- "assumed"
   out$correlationSource <- correlation_source
-  out$correlationVerification <- if (is.null(correlation)) "independence_assumed"
+  out$correlationVerification <- if (!legacy && is.null(correlation)) "independence_assumed"
                                  else if (identical(correlation_source, "cited")) "declared_citation_not_verified_by_engine" else "assumed"
   out$applicability <- "source_trial_population"
   out$columnSources <- stats::setNames(rep("aggregate", length(vars)), vapply(vars, function(v) v$name, character(1)))
-  out$columnSources[["(correlation)"]] <- if (is.null(correlation) || identical(correlation_source, "assumed")) "assumed" else "aggregate"
+  # 1.0.0 listed the correlation among the column sources only when a matrix was given; 1.1.0 lists it always (no matrix: assumed)
+  if (!legacy || !is.null(correlation)) out$columnSources[["(correlation)"]] <- if ((!legacy && is.null(correlation)) || identical(correlation_source, "assumed")) "assumed" else "aggregate"
   if (identical(correlation_source, "assumed") && !is.null(correlation) && n >= 20L) {
     out$correlationSensitivity <- .vcr_correlation_sensitivity(spec, out$data, min(n, 2000L), seed)
   }

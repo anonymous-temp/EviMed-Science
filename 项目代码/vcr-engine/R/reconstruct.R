@@ -207,19 +207,20 @@ vcr_guyot <- function(t, S, t_risk, n_risk, total_events = NA_real_) {
 #' median within 5%, |log HR - reported log HR| <= 0.05. A reconstruction that
 #' fails is `reconstruction_failed_qc` and may not enter an analysis (AC-27).
 #' A check the paper reported nothing for (`risk_table_reported = FALSE`, no total
-#' events) is `not_reported`: it is listed, it does not pass and it does not fail.
+#' events) is `not_reported`: it is listed, it does not pass and it does not fail. `legacy` is a job labelled 1.0.0, which has none of
+#' that: the at-risk check is always held and a missing event total is not listed.
 vcr_reconstruction_qc <- function(recon, t_risk, n_risk_reported,
                                   total_events_reported = NA_real_,
                                   median_reported = NA_real_,
                                   log_hr_reported = NA_real_, log_hr_recon = NA_real_,
-                                  tolerance = list(), risk_table_reported = TRUE) {
+                                  tolerance = list(), risk_table_reported = TRUE, legacy = FALSE) {
   tol <- utils::modifyList(list(atRiskAbsolute = 2, atRiskRelative = 0.05,
                                 events = 0.05, median = 0.05, logHazardRatio = 0.05), tolerance)
   ipd <- recon$ipd
   # A check the paper gave nothing to check against is listed as not reported and is not passed: a pass that silently skipped the
   # at-risk or the event check read the same as one that held them, and the information level says which it was.
   checks <- list()
-  if (isTRUE(risk_table_reported)) {
+  if (isTRUE(risk_table_reported) || legacy) {
     at_risk <- vapply(t_risk, function(tt) sum(ipd$time >= tt), numeric(1))
     at_risk_diff <- abs(at_risk - n_risk_reported)
     at_risk_allow <- pmax(tol$atRiskAbsolute, tol$atRiskRelative * n_risk_reported)
@@ -235,7 +236,7 @@ vcr_reconstruction_qc <- function(recon, t_risk, n_risk_reported,
                           reconstructed = events,
                           pass = abs(events - total_events_reported) <=
                             tol$events * max(total_events_reported, 1))
-  } else {
+  } else if (!legacy) {
     checks$events <- list(name = "total events", status = "not_reported", pass = NA)
   }
   km <- vcr_km(ipd$time, ipd$status)
@@ -250,11 +251,11 @@ vcr_reconstruction_qc <- function(recon, t_risk, n_risk_reported,
     checks$logHazardRatio <- list(name = "log hazard ratio", reported = log_hr_reported,
                                   reconstructed = log_hr_recon,
                                   pass = abs(log_hr_recon - log_hr_reported) <= tol$logHazardRatio)
-  } else if (!is.na(log_hr_reported)) {
+  } else if (!is.na(log_hr_reported) && !legacy) {
     # A reported hazard ratio with no recoverable one beside it (information level 4): said, not skipped.
     checks$logHazardRatio <- list(name = "log hazard ratio", reported = log_hr_reported, status = "not_checked", pass = NA)
   }
-  held <- checks[!vapply(checks, function(c) isTRUE(c$status %in% c("not_reported", "not_checked")), logical(1))]
+  held <- if (legacy) checks else checks[!vapply(checks, function(c) isTRUE(c$status %in% c("not_reported", "not_checked")), logical(1))]
   passed <- all(vapply(held, function(c) isTRUE(c$pass), logical(1)))
   list(
     pass = passed,

@@ -130,22 +130,25 @@ vcr_job_weighted_cox <- function(job, output_dir = NULL, cancel_file = NULL, ...
                 diagnostics = list(detail = fit$detail, method = weighting, cohort = cohort$info, valueSourcesUsed = sources_used)))
   }
   w <- fit$allWeights
+  # What a release added runs only for the jobs labelled with it (replay): 1.2.0 reads the weighted balance and never refuses on it, and
+  # adds the E-value; 1.3.0 adds the enrolment-year row. An older label gets the refusal on the balance and none of the rest.
+  reads_balance <- vcr_job_at_least(job, "1.2.0"); with_year <- vcr_job_at_least(job, "1.3.0")
   balance <- vcr_balance_table(X, treat, w, estimand)
-  enrolment <- vcr_enrolment_year(subj, tabs, sc, treat, w, estimand)
+  enrolment <- if (with_year) vcr_enrolment_year(subj, tabs, sc, treat, w, estimand) else NULL
   ps <- vcr_propensity_weights(X, treat, "ATT")$propensity
   support <- vcr_common_support(ps, treat)
   ess <- vcr_ess(w[treat == 0L])
-  rule <- vcr_not_estimable_weighting(ess = ess, support = support,
+  rule <- vcr_not_estimable_weighting(balance = if (reads_balance) NULL else balance, ess = ess, support = support,
                                       ebal = if (identical(weighting, "entropy_balance")) fit else NULL)
-  limits_used <- list(essFloor = vcr_limit("essFloor", 10), supportCeiling = vcr_limit("supportCeiling", 0.1),
-                      smdFloor = vcr_limit("smdFloor", 0.1), smdSevere = vcr_limit("smdSevere", 0.25), bootstrapMin = vcr_limit("bootstrapMin", 2000),
-                      coxFewEvents = vcr_limit("coxFewEvents", 10))
+  limits_used <- c(list(essFloor = vcr_limit("essFloor", 10), supportCeiling = vcr_limit("supportCeiling", 0.1), smdFloor = vcr_limit("smdFloor", 0.1)),
+                   if (reads_balance) list(smdSevere = vcr_limit("smdSevere", 0.25)),
+                   list(bootstrapMin = vcr_limit("bootstrapMin", 2000), coxFewEvents = vcr_limit("coxFewEvents", 10)))
   wdiag <- vcr_weight_diagnostics(w, treat)
   if (!is.null(rule)) {
     return(list(status = "not_estimable", notEstimableRule = rule$rule, measures = list(),
                 counts = vcr_counts(realPatients = nrow(subj), effectiveSampleSize = ess, events = sum(status)),
-                diagnostics = list(detail = rule$detail, balance = balance, enrolmentYear = enrolment, support = support, weights = wdiag,
-                                   thresholds = limits_used, cohort = cohort$info, valueSourcesUsed = sources_used)))
+                diagnostics = c(list(detail = rule$detail, balance = balance), if (with_year) list(enrolmentYear = enrolment),
+                                list(support = support, weights = wdiag, thresholds = limits_used, cohort = cohort$info, valueSourcesUsed = sources_used))))
   }
 
   primary <- vcr_cox_primary(time, status, treat, w, ties, ph_transform)
@@ -218,7 +221,7 @@ vcr_job_weighted_cox <- function(job, output_dir = NULL, cancel_file = NULL, ...
   # ratio stands for a risk ratio only when the outcome is rare (under 15 percent), and the approximation for a common one is the
   # method's own
   hr_iv <- if (is.null(bs$interval)) c(hr_robust$low, hr_robust$high) else bs$interval
-  evalue <- vcr_evalue_after(exp(beta), hr_iv[1], hr_iv[2], "hazard_ratio", mean(status) < 0.15, est_src)
+  evalue <- if (reads_balance) vcr_evalue_after(exp(beta), hr_iv[1], hr_iv[2], "hazard_ratio", mean(status) < 0.15, est_src) else NULL
   if (!is.null(evalue)) measures <- c(measures, evalue$measures)
   # weight truncation as a sensitivity analysis only, as in the weighting job (plan 5.3)
   cap <- stats::quantile(w[treat == 0L], 0.99, names = FALSE)
@@ -230,7 +233,7 @@ vcr_job_weighted_cox <- function(job, output_dir = NULL, cancel_file = NULL, ...
   changed <- !identical(estimand, "ATT")
   ph_rejected <- !is.null(gph) && isTRUE(gph$p < ph_alpha)
   few <- unname(events_by_arm[events_by_arm < vcr_limit("coxFewEvents", 10)])
-  verdict <- vcr_balance_verdict(balance)
+  verdict <- if (reads_balance) vcr_balance_verdict(balance) else NULL
   limited_by <- c(if (bs$failureShare > 0.01) "bootstrap_failure_share",
                   if (changed) "estimand_changed_from_att",
                   if (length(tt_limits)) "target_trial_item_cannot_be_emulated",
@@ -247,7 +250,7 @@ vcr_job_weighted_cox <- function(job, output_dir = NULL, cancel_file = NULL, ...
   list(status = "succeeded", measures = measures,
        conclusion = if (length(limited_by)) "limited" else "estimable",
        counts = vcr_counts(realPatients = nrow(subj), effectiveSampleSize = ess, events = sum(status)),
-       diagnostics = list(
+       diagnostics = c(list(
          method = weighting, estimand = estimand, endpoint = "time_to_event", tau = tau, timeUnit = unit, timeUnitBasis = time_unit[["basis"]],
          model = list(formula = "Surv(time, status) ~ arm", ties = ties, weights = "case weights, estimated inside the job",
                       coding = "arm 1 (the trial) against arm 0 (the control); the hazard ratio is the trial's"),
@@ -261,12 +264,15 @@ vcr_job_weighted_cox <- function(job, output_dir = NULL, cancel_file = NULL, ...
          proportionalHazards = ph_block,
          rmstCompanion = if (with_rmst) list(available = TRUE, tau = tau, source = "calculated")
                          else c(list(available = FALSE), tau_rule),
-         curves = vcr_arm_curves(time, status, treat, weights = w, source = data_src, tau = if (with_rmst) tau else NULL),
-         eValue = if (!is.null(evalue)) evalue$diagnostics else .vcr_evalue_absent("no_hazard_ratio"),
-         estimandChanged = changed, balance = balance, enrolmentYear = enrolment, balanceVerdict = verdict, support = support, weights = wdiag, thresholds = limits_used,
+         curves = vcr_arm_curves(time, status, treat, weights = w, source = data_src, tau = if (with_rmst) tau else NULL)),
+         if (reads_balance) list(eValue = if (!is.null(evalue)) evalue$diagnostics else .vcr_evalue_absent("no_hazard_ratio")),
+         list(estimandChanged = changed, balance = balance),
+         if (with_year) list(enrolmentYear = enrolment),
+         if (reads_balance) list(balanceVerdict = verdict),
+         list(support = support, weights = wdiag, thresholds = limits_used,
          sensitivity = list(truncatedWeights = list(quantile = 0.99, hazardRatio = if (is.finite(trunc_beta)) exp(trunc_beta) else NULL)),
          limitedBy = as.list(limited_by), targetTrialCannot = as.list(tt_limits), cohort = cohort$info,
-         valueSourcesUsed = sources_used, comparabilityDimensions = vcr_domain()$comparabilityDimensions),
+         valueSourcesUsed = sources_used, comparabilityDimensions = vcr_domain()$comparabilityDimensions)),
        tables = .vcr_tables_of(list(
          vcr_write_table(balance, "balance", output_dir),
          vcr_write_table(data.frame(row = which(keep), arm = treat, weight = w), "weights", output_dir),

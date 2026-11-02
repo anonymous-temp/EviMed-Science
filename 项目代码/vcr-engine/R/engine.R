@@ -665,16 +665,16 @@ vcr_job_generate_population <- function(job, output_dir = NULL, ...) {
        measures = list(vcr_measure("generated_records", pop$n, source = "synthetic"),
                        vcr_measure("constraint_violations", viol, source = "synthetic")),
        counts = pop$counts,
-       diagnostics = list(kind = pop$kind, parameterDraws = pop$parameterDraws,
-                          parameterSpread = spread,
-                          # no matrix: the variables were drawn independently, which is an assumption and is said as one
-                          correlationVerification = if (is.null(sc$population[["correlation"]])) "independence_assumed" else "assumed",
-                          copulaRepaired = pop$copulaRepaired,
-                          constraintViolations = pop$constraintViolations,
-                          constraintEnforcement = pop$constraintEnforcement,
-                          missingReasons = pop$missingReasons,
-                          profile = tryCatch(vcr_population_profile(pop$data, stated$declared, stated$labels), error = function(e) NULL),
-                          valueSource = pop$valueSource, modelTier = pop$modelTier),
+       diagnostics = c(list(kind = pop$kind, parameterDraws = pop$parameterDraws,
+                            parameterSpread = spread),
+                       # no matrix: the variables were drawn independently, which is an assumption and is said as one (1.1.0 on)
+                       if (vcr_job_at_least(job, "1.1.0")) list(correlationVerification = if (is.null(sc$population[["correlation"]])) "independence_assumed" else "assumed"),
+                       list(copulaRepaired = pop$copulaRepaired,
+                            constraintViolations = pop$constraintViolations,
+                            constraintEnforcement = pop$constraintEnforcement,
+                            missingReasons = pop$missingReasons,
+                            profile = tryCatch(vcr_population_profile(pop$data, stated$declared, stated$labels), error = function(e) NULL),
+                            valueSource = pop$valueSource, modelTier = pop$modelTier)),
        tables = .vcr_tables_of(list(vcr_write_table(pop$data, "population", output_dir),
                                     if (!is.null(pop$parameterTable)) vcr_write_table(pop$parameterTable, "population-parameters", output_dir))))
 }
@@ -686,20 +686,23 @@ vcr_job_population_literature <- function(job, output_dir = NULL, ...) {
     vcr_abort("scenario_value_invalid", "scenario.n", "The population size (times the parameter draws) is a positive number this engine can hold.")
   }
   set.seed(job$seed, kind = VCR_RNG_KIND)
+  # 1.1.0 says that no matrix is an assumption and how many parameter draws were made; a job labelled 1.0.0 replays without either
+  legacy <- !vcr_job_at_least(job, "1.1.0")
   pop <- vcr_population_literature(sc$baselineTable, n, sc[["correlation"]],
-                                   as.character(sc$correlationSource %||% "assumed"), K, seed = job$seed)
+                                   as.character(sc$correlationSource %||% "assumed"), K, seed = job$seed, legacy = legacy)
   list(status = "succeeded",
        measures = list(vcr_measure("generated_records", pop$n, source = "synthetic")),
        counts = pop$counts,
-       diagnostics = list(kind = pop$kind, applicability = pop$applicability, parameterDraws = pop$parameterDraws,
-                          correlationSource = pop$correlationSource, correlationVerification = pop$correlationVerification, modelTier = pop$modelTier,
+       diagnostics = c(list(kind = pop$kind, applicability = pop$applicability),
+                       if (!legacy) list(parameterDraws = pop$parameterDraws),
+                       list(correlationSource = pop$correlationSource, correlationVerification = pop$correlationVerification, modelTier = pop$modelTier,
                           valueSource = "synthetic", columnSources = as.list(pop$columnSources),
                           correlationSensitivity = pop$correlationSensitivity,
                           constraintEnforcement = pop$constraintEnforcement,
                           profile = tryCatch({
                             stated <- .vcr_declared_literature(sc[["baselineTable"]])
                             vcr_population_profile(pop$data, stated$declared, stated$labels, stated$orders)
-                          }, error = function(e) NULL)),
+                          }, error = function(e) NULL))),
        tables = .vcr_tables_of(list(vcr_write_table(pop$data, "population", output_dir))))
 }
 
@@ -955,10 +958,23 @@ vcr_job_pool_evidence <- function(job, output_dir = NULL, ...) {
 
 #' One reconstruction arm from a scenario fragment: the digitized curve as rows
 #' `{ time, surv }` and the risk table as rows `{ time, atRisk }`.
-.vcr_reconstruct_arm <- function(a, field) {
+.vcr_reconstruct_arm <- function(a, field, legacy = FALSE) {
   curve <- vcr_rows_df(a$curve)
   if (!all(c("time", "surv") %in% names(curve)) || nrow(curve) < 3L) {
     vcr_abort("scenario_field_missing", paste0(field, ".curve"), "Reconstruction needs the digitized curve as rows of time and surv.")
+  }
+  if (legacy) {
+    # 1.0.0 replays: the published numbers at risk are required, and a paper without them is not reconstructed
+    risk <- vcr_rows_df(a$riskTable)
+    if (!all(c("time", "atRisk") %in% names(risk)) || nrow(risk) < 1L) {
+      vcr_abort("scenario_field_missing", paste0(field, ".riskTable"), "Reconstruction needs the published numbers at risk; without them censoring is not identified and no reconstruction is run.")
+    }
+    ct <- as.numeric(curve$time); cs <- as.numeric(curve$surv); rt <- as.numeric(risk$time); rn <- as.numeric(risk$atRisk)
+    if (anyNA(c(ct, cs, rt, rn))) vcr_abort("scenario_value_invalid", field, "The curve and the risk table are numeric.")
+    te <- vcr_scalar(a$totalEvents, NA_real_)
+    recon <- vcr_guyot(ct, cs, rt, rn, total_events = te)
+    return(list(recon = recon, riskTime = rt, atRisk = rn, totalEvents = te, reportedMedian = vcr_scalar(a$reportedMedian, NA_real_),
+                name = as.character(a$name %||% ""), hasTable = TRUE, hasEvents = !is.na(te), level = if (!is.na(te)) 1L else 2L))
   }
   # The published numbers at risk are the best information a reconstruction can have, and many papers print none. Without them the
   # arm's size at the start (`initialAtRisk`, the randomized N) still anchors the reconstruction; without that no one is counted.
@@ -1002,13 +1018,16 @@ vcr_job_reconstruct_km <- function(job, output_dir = NULL, ...) {
   .vcr_check_provenance(sc$provenance)
   # The scenario's own curve and risk table are the (control) arm; a second arm
   # is the `treatmentArm`, and only two arms can check a reported hazard ratio.
+  # 1.1.0 reads a paper with no risk table (four information levels) and says how much the paper gave; a job labelled 1.0.0 replays what
+  # that release did: the risk table is required and the result says nothing of levels.
+  legacy <- !vcr_job_at_least(job, "1.1.0")
   arms <- list(list(name = "control", curve = sc$curve, riskTable = sc$riskTable, initialAtRisk = sc[["initialAtRisk"]], totalEvents = sc$totalEvents, reportedMedian = sc$reportedMedian))
   if (!is.null(sc$treatmentArm)) arms[[2]] <- c(list(name = "treatment"), sc$treatmentArm)
   hr_reported <- vcr_scalar(sc$reportedLogHazardRatio, NA_real_)
   if (!is.na(hr_reported) && length(arms) < 2L) {
     vcr_abort("scenario_value_invalid", "scenario.reportedLogHazardRatio", "A reported hazard ratio is checked against two reconstructed arms; one arm cannot check it.")
   }
-  rec <- lapply(seq_along(arms), function(i) .vcr_reconstruct_arm(arms[[i]], if (i == 1L) "scenario" else "scenario.treatmentArm"))
+  rec <- lapply(seq_along(arms), function(i) .vcr_reconstruct_arm(arms[[i]], if (i == 1L) "scenario" else "scenario.treatmentArm", legacy = legacy))
   # The tolerances are the domain's (plan 5.3); a scenario cannot loosen them.
   tol <- list(atRiskAbsolute = 2, atRiskRelative = 0.05, events = 0.05, median = 0.05, logHazardRatio = 0.05)
   dom <- vcr_limit("tolerance", NULL)
@@ -1017,7 +1036,7 @@ vcr_job_reconstruct_km <- function(job, output_dir = NULL, ...) {
   log_hr <- if (length(rec) == 2L) vcr_cox_loghr(ipd_all$time, ipd_all$status, ipd_all$arm) else NA_real_
   # A hazard ratio from arms that were reconstructed without a risk table and without total events is not recoverable: not estimable,
   # and said so, while the curves, medians and event counts stay.
-  hr_estimable <- all(vapply(rec, function(r) r$hasTable || r$hasEvents, logical(1)))
+  hr_estimable <- legacy || all(vapply(rec, function(r) r$hasTable || r$hasEvents, logical(1)))
   if (!hr_estimable) log_hr <- NA_real_
   levels <- vapply(rec, function(r) r$level, integer(1))
   information <- list(level = max(levels), key = .VCR_RECONSTRUCTION_LEVELS[max(levels)],
@@ -1031,7 +1050,7 @@ vcr_job_reconstruct_km <- function(job, output_dir = NULL, ...) {
                           median_reported = r$reportedMedian,
                           log_hr_reported = if (i == 2L) hr_reported else NA_real_,
                           log_hr_recon = if (i == 2L) log_hr else NA_real_, tolerance = tol,
-                          risk_table_reported = r$hasTable)
+                          risk_table_reported = r$hasTable, legacy = legacy)
   })
   n_pseudo <- nrow(ipd_all)
   pass <- all(vapply(qc, function(q) isTRUE(q$pass), logical(1)))
@@ -1039,7 +1058,8 @@ vcr_job_reconstruct_km <- function(job, output_dir = NULL, ...) {
     return(list(status = "not_estimable", notEstimableRule = "reconstruction_failed_qc",
                 measures = list(),
                 counts = vcr_counts(realPatients = 0, reconstructedPseudoPatients = n_pseudo),
-                diagnostics = list(qualityControl = if (length(qc) == 1L) qc[[1]] else qc, tolerances = tol, informationLevel = information)))
+                diagnostics = c(list(qualityControl = if (length(qc) == 1L) qc[[1]] else qc, tolerances = tol),
+                                if (!legacy) list(informationLevel = information))))
   }
   measures <- list(); events_total <- 0
   for (i in seq_along(rec)) {
@@ -1066,17 +1086,17 @@ vcr_job_reconstruct_km <- function(job, output_dir = NULL, ...) {
     curves[[length(curves) + 1L]] <- vcr_km_series(r$recon$ipd$time, r$recon$ipd$status, NULL, paste0("reconstructed_", i),
                                                     paste0(nm, "（重建的伪个体）"), "reconstructed", ours = i == 2L)
   }
-  list(status = "succeeded", measures = measures,
-       # Without a risk table (levels 3 and 4) the survival probabilities and the median are delivered and say they are limited.
-       conclusion = if (any(levels >= 3L)) "limited" else "estimable",
-       counts = vcr_counts(realPatients = 0, events = events_total, reconstructedPseudoPatients = n_pseudo),
-       diagnostics = list(curves = curves, qualityControl = if (length(qc) == 1L) qc[[1]] else qc, tolerances = tol, valueSource = "reconstructed",
-                          informationLevel = information, hazardRatio = hazard_ratio,
-                          provenance = sc$provenance,
-                          medianNotReached = as.list(not_reached),
-                          logHazardRatioReconstructed = if (is.finite(log_hr)) log_hr else NULL,
-                          note = "Reconstructed pseudo-individuals are never counted as observed patients (AC-27)."),
-       tables = .vcr_tables_of(list(vcr_write_table(ipd_all, "reconstructed-ipd", output_dir))))
+  c(list(status = "succeeded", measures = measures),
+    # Without a risk table (levels 3 and 4) the survival probabilities and the median are delivered and say they are limited.
+    if (!legacy) list(conclusion = if (any(levels >= 3L)) "limited" else "estimable"),
+    list(counts = vcr_counts(realPatients = 0, events = events_total, reconstructedPseudoPatients = n_pseudo),
+         diagnostics = c(list(curves = curves, qualityControl = if (length(qc) == 1L) qc[[1]] else qc, tolerances = tol, valueSource = "reconstructed"),
+                         if (!legacy) list(informationLevel = information, hazardRatio = hazard_ratio),
+                         list(provenance = sc$provenance,
+                              medianNotReached = as.list(not_reached),
+                              logHazardRatioReconstructed = if (is.finite(log_hr)) log_hr else NULL,
+                              note = "Reconstructed pseudo-individuals are never counted as observed patients (AC-27).")),
+         tables = .vcr_tables_of(list(vcr_write_table(ipd_all, "reconstructed-ipd", output_dir)))))
 }
 
 # --- the weighted comparators ----------------------------------------------------
@@ -1221,24 +1241,27 @@ vcr_job_weight_comparator <- function(job, output_dir = NULL, cancel_file = NULL
                 diagnostics = list(detail = fit$detail, method = method, cohort = cohort$info)))
   }
   w <- fit$allWeights
+  # What a release added runs only for the jobs labelled with it (replay): 1.2.0 reads the weighted balance and never refuses on it, and
+  # adds the E-value; 1.3.0 adds the enrolment-year row. An older label gets the refusal on the balance and none of the rest.
+  reads_balance <- vcr_job_at_least(job, "1.2.0"); with_year <- vcr_job_at_least(job, "1.3.0")
   balance <- vcr_balance_table(X, treat, w, estimand)
-  enrolment <- vcr_enrolment_year(subj, tabs, sc, treat, w, estimand)
+  enrolment <- if (with_year) vcr_enrolment_year(subj, tabs, sc, treat, w, estimand) else NULL
   ps <- vcr_propensity_weights(X, treat, "ATT")$propensity
   support <- vcr_common_support(ps, treat)
   ess <- vcr_ess(w[treat == 0L])
   # Every threshold that decides "not estimable" is the domain's: a scenario is
   # written by the run and may not loosen (or set) them (EB-5).
-  rule <- vcr_not_estimable_weighting(ess = ess, support = support,
+  rule <- vcr_not_estimable_weighting(balance = if (reads_balance) NULL else balance, ess = ess, support = support,
                                       ebal = if (identical(method, "entropy_balance")) fit else NULL)
-  limits_used <- list(essFloor = vcr_limit("essFloor", 10), supportCeiling = vcr_limit("supportCeiling", 0.1),
-                      smdFloor = vcr_limit("smdFloor", 0.1), smdSevere = vcr_limit("smdSevere", 0.25), bootstrapMin = vcr_limit("bootstrapMin", 2000))
+  limits_used <- c(list(essFloor = vcr_limit("essFloor", 10), supportCeiling = vcr_limit("supportCeiling", 0.1), smdFloor = vcr_limit("smdFloor", 0.1)),
+                   if (reads_balance) list(smdSevere = vcr_limit("smdSevere", 0.25)), list(bootstrapMin = vcr_limit("bootstrapMin", 2000)))
   wdiag <- vcr_weight_diagnostics(w, treat)
   if (!is.null(rule)) {
     return(list(status = "not_estimable", notEstimableRule = rule$rule, measures = list(),
                 counts = vcr_counts(realPatients = nrow(subj), effectiveSampleSize = ess,
                                     events = if (identical(endpoint, "time_to_event")) sum(outcome$status) else NULL),
-                diagnostics = list(detail = rule$detail, balance = balance, enrolmentYear = enrolment, support = support, weights = wdiag,
-                                   thresholds = limits_used, cohort = cohort$info)))
+                diagnostics = c(list(detail = rule$detail, balance = balance), if (with_year) list(enrolmentYear = enrolment),
+                                list(support = support, weights = wdiag, thresholds = limits_used, cohort = cohort$info))))
   }
 
   # one function of (weights, rows) -> the primary estimate followed by its secondaries
@@ -1295,7 +1318,7 @@ vcr_job_weight_comparator <- function(job, output_dir = NULL, cancel_file = NULL
     vcr_measure("effective_sample_size", ess, source = est_src),
     vcr_measure("worst_standardized_difference", max(abs(balance$smdAdjusted)), source = est_src)))
   # the E-value of the risk ratio, after the estimate and beside it (A5): only a binary outcome has a ratio here
-  evalue <- if (identical(endpoint, "binary") && is.finite(est[2])) {
+  evalue <- if (reads_balance && identical(endpoint, "binary") && is.finite(est[2])) {
     iv <- boot$intervals[2, ]
     vcr_evalue_after(exp(est[2]), if (anyNA(iv)) NULL else exp(iv[1]), if (anyNA(iv)) NULL else exp(iv[2]), "risk_ratio", FALSE, est_src)
   } else NULL
@@ -1308,33 +1331,35 @@ vcr_job_weight_comparator <- function(job, output_dir = NULL, cancel_file = NULL
   tt_limits <- .vcr_target_trial_limits(sc)
   changed <- !identical(estimand, "ATT")
   # the balance is read, not judged: a weighted covariate still apart limits the estimate and rides beside it (2026-11-01)
-  verdict <- vcr_balance_verdict(balance)
+  verdict <- if (reads_balance) vcr_balance_verdict(balance) else NULL
   imbalance <- vcr_balance_limit(verdict)
   limited <- boot$failureShare > 0.01 || changed || length(tt_limits) > 0L || !is.null(imbalance)
   list(status = "succeeded", measures = measures,
        conclusion = if (limited) "limited" else "estimable",
        counts = vcr_counts(realPatients = nrow(subj), effectiveSampleSize = ess,
                            events = if (identical(endpoint, "time_to_event")) sum(outcome$status) else NULL),
-       diagnostics = list(method = method, estimand = estimand, endpoint = endpoint, timeUnit = time_unit,
-                          tau = if (identical(endpoint, "time_to_event")) tau else NULL,
-                          curves = if (identical(endpoint, "time_to_event"))
-                            vcr_arm_curves(outcome$time, outcome$status, treat, weights = w, source = data_src, tau = tau)
-                          else NULL,
-                          valueSourcesUsed = vcr_value_sources_used(used),
-                          estimandChanged = changed,
-                          balance = balance, enrolmentYear = enrolment, support = support, weights = wdiag,
-                          thresholds = limits_used,
-                          bootstrapReplicates = boot$replicates, bootstrapFailureShare = boot$failureShare,
-                          sensitivity = list(truncatedWeights = list(quantile = 0.99, primaryEstimate = trunc_est)),
-                          balanceVerdict = verdict,
-                          eValue = if (!is.null(evalue)) evalue$diagnostics else .vcr_evalue_absent(
-                            if (identical(endpoint, "binary")) "no_risk_ratio" else if (identical(endpoint, "time_to_event")) "rmst_difference_has_no_ratio" else "continuous_outcome"),
-                          limitedBy = as.list(c(if (boot$failureShare > 0.01) "bootstrap_failure_share",
-                                                if (changed) "estimand_changed_from_att",
-                                                if (length(tt_limits)) "target_trial_item_cannot_be_emulated",
-                                                imbalance)),
-                          targetTrialCannot = as.list(tt_limits), cohort = cohort$info,
-                          comparabilityDimensions = vcr_domain()$comparabilityDimensions),
+       diagnostics = c(list(method = method, estimand = estimand, endpoint = endpoint, timeUnit = time_unit,
+                            tau = if (identical(endpoint, "time_to_event")) tau else NULL,
+                            curves = if (identical(endpoint, "time_to_event"))
+                              vcr_arm_curves(outcome$time, outcome$status, treat, weights = w, source = data_src, tau = tau)
+                            else NULL,
+                            valueSourcesUsed = vcr_value_sources_used(used),
+                            estimandChanged = changed,
+                            balance = balance),
+                       if (with_year) list(enrolmentYear = enrolment),
+                       list(support = support, weights = wdiag,
+                            thresholds = limits_used,
+                            bootstrapReplicates = boot$replicates, bootstrapFailureShare = boot$failureShare,
+                            sensitivity = list(truncatedWeights = list(quantile = 0.99, primaryEstimate = trunc_est))),
+                       if (reads_balance) list(balanceVerdict = verdict,
+                                               eValue = if (!is.null(evalue)) evalue$diagnostics else .vcr_evalue_absent(
+                                                 if (identical(endpoint, "binary")) "no_risk_ratio" else if (identical(endpoint, "time_to_event")) "rmst_difference_has_no_ratio" else "continuous_outcome")),
+                       list(limitedBy = as.list(c(if (boot$failureShare > 0.01) "bootstrap_failure_share",
+                                                  if (changed) "estimand_changed_from_att",
+                                                  if (length(tt_limits)) "target_trial_item_cannot_be_emulated",
+                                                  imbalance)),
+                            targetTrialCannot = as.list(tt_limits), cohort = cohort$info,
+                            comparabilityDimensions = vcr_domain()$comparabilityDimensions)),
        tables = .vcr_tables_of(list(
          vcr_write_table(balance, "balance", output_dir),
          vcr_write_table(data.frame(row = which(keep), arm = treat, weight = w), "weights", output_dir))))
@@ -1608,10 +1633,13 @@ vcr_job_map_prior <- function(job, output_dir = NULL, ...) {
   spec <- sc$operatingCharacteristics
   if (!is.null(spec)) {
     # The control plane asks for the borrowing floor (100,000 under the null, `vcrReplicatesForJob`); a table the engine's own
-    # ceiling holds below it is run at the ceiling and the result says it is limited.
+    # ceiling holds below it is run at the ceiling and the result says it is limited. A job labelled 1.0.0 replays the count it was
+    # given, as that release ran it, and states no plan.
     asked <- as.integer(job$replicates %||% 5000L)
-    reps <- as.integer(min(asked, vcr_max_replicates()))
-    oc_plan <- list(replicates = reps, asked = asked, capped = asked > reps)
+    if (vcr_job_at_least(job, "1.1.0")) {
+      reps <- as.integer(min(asked, vcr_max_replicates()))
+      oc_plan <- list(replicates = reps, asked = asked, capped = asked > reps)
+    } else reps <- asked
     oc <- vcr_hybrid_operating_characteristics(
       mix, unit_var, vcr_scalar(spec$nControl), vcr_scalar(spec$nTreatment), vcr_num(spec$drifts), vcr_scalar(spec$effect, 0),
       robust_weights = { rw <- vcr_num(spec$robustWeights); if (length(rw)) rw else c(0.2, 0.5) },
@@ -1623,9 +1651,9 @@ vcr_job_map_prior <- function(job, output_dir = NULL, ...) {
                 counts = vcr_counts(priorEffectiveSampleSize = ess_rob),
                 diagnostics = list(conflict = conflict, tau = map$tauPosteriorMedian, thresholds = list(conflictBound = bound))))
   }
-  list(status = "succeeded",
-       conclusion = if (isTRUE(oc_plan$capped)) "limited" else "estimable",
-       measures = list(
+  c(list(status = "succeeded"),
+    if (vcr_job_at_least(job, "1.1.0")) list(conclusion = if (isTRUE(oc_plan$capped)) "limited" else "estimable"),
+    list(measures = list(
          vcr_measure("map_mean", map$mean, source = "aggregate"),
          vcr_measure("map_sd", map$sd, source = "aggregate"),
          vcr_measure("prior_effective_sample_size_moment", ess_rob, source = "aggregate"),
@@ -1635,17 +1663,17 @@ vcr_job_map_prior <- function(job, output_dir = NULL, ...) {
          vcr_measure("prior_effective_sample_size_ceiling", ceiling_, source = "aggregate"),
          vcr_measure("tau_posterior_median", map$tauPosteriorMedian, source = "aggregate")),
        counts = vcr_counts(priorEffectiveSampleSize = ess_rob),
-       diagnostics = list(mixture = mix, robustMixture = robust, robustWeight = w_r,
+       diagnostics = c(list(mixture = mix, robustMixture = robust, robustWeight = w_r,
                           tauPrior = c(map$tauPrior, list(support = map$tauSupport, nodes = map$gridNodes, reach = map$tauMax, finitePredictiveVariance = map$finitePredictiveVariance,
                                                           note = if (!map$finitePredictiveVariance) "With two studies the posterior of tau under a half-Cauchy prior has no finite second moment: map_sd depends on how far the quadrature reaches (reach); three studies, or a half-normal prior, make it finite." else NULL)),
                           essMapMoment = ess_map, essMapElir = elir_map, conflict = conflict, k = map$k,
-                          thresholds = list(conflictBound = bound),
+                          thresholds = list(conflictBound = bound)),
                           # The table the page draws: the file keeps every row, and this is the same rows in the result (a table file is
                           # not read back by a page). The null rows (effect 0) are the type I error at each drift, each with its error.
-                          operatingCharacteristics = if (is.null(oc)) NULL else c(oc_plan, list(
-                            rows = lapply(seq_len(nrow(oc)), function(i) as.list(oc[i, , drop = FALSE])))),
-                          note = "Under strict type-I control, borrowing does not buy power (Kopp-Schneider 2020)."),
-       tables = .vcr_tables_of(list(if (!is.null(oc)) vcr_write_table(oc, "operating-characteristics", output_dir))))
+                          if (vcr_job_at_least(job, "1.1.0")) list(operatingCharacteristics = if (is.null(oc)) NULL else c(oc_plan, list(
+                            rows = lapply(seq_len(nrow(oc)), function(i) as.list(oc[i, , drop = FALSE]))))),
+                          list(note = "Under strict type-I control, borrowing does not buy power (Kopp-Schneider 2020).")),
+       tables = .vcr_tables_of(list(if (!is.null(oc)) vcr_write_table(oc, "operating-characteristics", output_dir)))))
 }
 
 # --- design ---------------------------------------------------------------------

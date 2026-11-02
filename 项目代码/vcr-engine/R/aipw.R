@@ -121,19 +121,22 @@ vcr_job_aipw <- function(job, output_dir = NULL, cancel_file = NULL, ...) {
   }
   w_ctl <- core$w[treat == 0L]
   w_scaled <- core$w; w_scaled[treat == 1L] <- 1; w_scaled[treat == 0L] <- w_scaled[treat == 0L] * sum(treat == 1L) / sum(w_scaled[treat == 0L])
+  # What a release added runs only for the jobs labelled with it (replay): 1.1.0 reads the weighted balance as a verdict beside the
+  # estimate and adds the E-value; 1.2.0 adds the enrolment-year row. The doubly robust job never refused on the balance.
+  reads_balance <- vcr_job_at_least(job, "1.1.0"); with_year <- vcr_job_at_least(job, "1.2.0")
   balance <- vcr_balance_table(Xall, treat, w_scaled, "ATT")
-  enrolment <- vcr_enrolment_year(subj, tabs, sc, treat, w_scaled, "ATT")
+  enrolment <- if (with_year) vcr_enrolment_year(subj, tabs, sc, treat, w_scaled, "ATT") else NULL
   support <- vcr_common_support(core$e, treat)
   ess <- vcr_ess(w_ctl)
   rule <- vcr_not_estimable_weighting(ess = ess, support = support)
-  limits_used <- list(essFloor = vcr_limit("essFloor", 10), supportCeiling = vcr_limit("supportCeiling", 0.1),
-                      smdFloor = vcr_limit("smdFloor", 0.1), smdSevere = vcr_limit("smdSevere", 0.25), bootstrapMin = vcr_limit("bootstrapMin", 2000))
+  limits_used <- c(list(essFloor = vcr_limit("essFloor", 10), supportCeiling = vcr_limit("supportCeiling", 0.1), smdFloor = vcr_limit("smdFloor", 0.1)),
+                   if (reads_balance) list(smdSevere = vcr_limit("smdSevere", 0.25)), list(bootstrapMin = vcr_limit("bootstrapMin", 2000)))
   wdiag <- vcr_weight_diagnostics(w_scaled, treat)
   counts <- vcr_counts(realPatients = n, effectiveSampleSize = ess)
   if (!is.null(rule)) {
     return(list(status = "not_estimable", notEstimableRule = rule$rule, measures = list(), counts = counts,
-                diagnostics = list(detail = rule$detail, balance = balance, enrolmentYear = enrolment, support = support, weights = wdiag, thresholds = limits_used,
-                                   cohort = cohort$info, valueSourcesUsed = sources_used)))
+                diagnostics = c(list(detail = rule$detail, balance = balance), if (with_year) list(enrolmentYear = enrolment),
+                                list(support = support, weights = wdiag, thresholds = limits_used, cohort = cohort$info, valueSourcesUsed = sources_used))))
   }
 
   # the whole pipeline in every resample: both models refitted, the estimate recomputed
@@ -184,15 +187,18 @@ vcr_job_aipw <- function(job, output_dir = NULL, cancel_file = NULL, ...) {
   trunc <- vcr_aipw_att(y, treat, Xps, Xout, binary, with_if = FALSE, cap = cap)
   # the E-value of the risk ratio of a binary outcome, after the estimate and beside it (A5); a continuous outcome has no ratio
   rr_measure <- Filter(function(m) identical(m$name, "aipw_risk_ratio"), measures)
-  evalue <- if (binary && length(rr_measure)) {
+  evalue <- if (reads_balance && binary && length(rr_measure)) {
     m <- rr_measure[[1]]
     vcr_evalue_after(m$value, m$interval$low, m$interval$high, "risk_ratio", FALSE, est_src)
   } else NULL
   if (!is.null(evalue)) measures <- c(measures, evalue$measures)
   tt_limits <- .vcr_target_trial_limits(sc)
-  verdict <- vcr_balance_verdict(balance)
+  verdict <- if (reads_balance) vcr_balance_verdict(balance) else NULL
+  # before the verdict, a weighted covariate still apart by the floor was said by this one code and nothing else
+  smd_notice <- !reads_balance && is.finite(max(abs(balance$smdAdjusted))) && max(abs(balance$smdAdjusted)) >= limits_used$smdFloor
   limited_by <- c(if (bs$failureShare > 0.01) "bootstrap_failure_share",
                   if (length(tt_limits)) "target_trial_item_cannot_be_emulated",
+                  if (smd_notice) "standardized_difference_above_floor",
                   vcr_balance_limit(verdict),
                   if (isTRUE(core$separation)) "outcome_model_separation",
                   if (binary && (core$mu0 < 0 || core$mu0 > 1)) "adjusted_control_mean_outside_unit_interval",
@@ -202,7 +208,7 @@ vcr_job_aipw <- function(job, output_dir = NULL, cancel_file = NULL, ...) {
                           oddsRatio = if (binary && is.finite(core$influence$seLogOddsRatio)) list(se = core$influence$seLogOddsRatio, scale = "log odds ratio") else NULL,
                           basis = "efficient influence function of the ATT with the nuisance estimates plugged in; it ignores the estimation of the two models")
   list(status = "succeeded", measures = measures, conclusion = if (length(limited_by)) "limited" else "estimable", counts = counts,
-       diagnostics = list(
+       diagnostics = c(list(
          method = "aipw", estimand = "ATT", endpoint = endpoint, scale = if (binary) "risk difference" else "mean difference",
          nuisance = list(propensity = list(covariates = as.list(ps_covs), family = "binomial", converged = core$psConverged),
                          outcome = list(covariates = as.list(out_covs), family = if (binary) "binomial" else "gaussian", fittedOn = "external controls only",
@@ -213,12 +219,15 @@ vcr_job_aipw <- function(job, output_dir = NULL, cancel_file = NULL, ...) {
          bootstrap = vcr_boot_diagnostics(bs, B, "rows resampled within arm; the propensity and the outcome model are both refitted in every resample",
                                           se_scale = if (binary) "risk difference" else "mean difference", interval_scale = if (binary) "risk difference" else "mean difference"),
          varianceComparison = list(influenceSe = se_if, bootstrapSe = bs$se, ratioInfluenceToBootstrap = se_if / bs$se,
-                                   note = "a metric, never a gate: the influence-function standard error ignores the estimation of the two models"),
-         eValue = if (!is.null(evalue)) evalue$diagnostics else .vcr_evalue_absent(if (binary) "no_risk_ratio" else "continuous_outcome"),
-         balance = balance, enrolmentYear = enrolment, balanceVerdict = verdict, support = support, weights = wdiag, thresholds = limits_used,
+                                   note = "a metric, never a gate: the influence-function standard error ignores the estimation of the two models")),
+         if (reads_balance) list(eValue = if (!is.null(evalue)) evalue$diagnostics else .vcr_evalue_absent(if (binary) "no_risk_ratio" else "continuous_outcome")),
+         list(balance = balance),
+         if (with_year) list(enrolmentYear = enrolment),
+         if (reads_balance) list(balanceVerdict = verdict),
+         list(support = support, weights = wdiag, thresholds = limits_used,
          sensitivity = list(truncatedWeights = list(quantile = 0.99, primaryEstimate = if (isTRUE(trunc$ok)) trunc$tau else NULL)),
          limitedBy = as.list(limited_by), targetTrialCannot = as.list(tt_limits), cohort = cohort$info,
-         valueSourcesUsed = sources_used, comparabilityDimensions = vcr_domain()$comparabilityDimensions),
+         valueSourcesUsed = sources_used, comparabilityDimensions = vcr_domain()$comparabilityDimensions)),
        tables = .vcr_tables_of(list(
          vcr_write_table(balance, "balance", output_dir),
          vcr_write_table(data.frame(row = which(keep), arm = treat, propensity = core$e, oddsWeight = core$w, outcomePrediction = core$m0), "weights", output_dir))))

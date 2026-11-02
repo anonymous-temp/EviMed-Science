@@ -401,8 +401,13 @@ vcr_bootstrap_pipeline <- function(n_rows, estimate_fn, replicates = 2000L,
 #' Covariate balance is not among them since 2026-11-01 (owner decision, remediation
 #' plan section 7 item 2): 0.1 is a convention, not a law, and a comparison that is
 #' unbalanced is still an estimate a reader can weigh when the balance is shown
-#' beside it. `vcr_balance_verdict` reads it and the job says `limited`.
-vcr_not_estimable_weighting <- function(ess = NULL, ess_floor = NULL, support = NULL, support_ceiling = NULL, ebal = NULL) {
+#' beside it. `vcr_balance_verdict` reads it and the job says `limited`. A job labelled
+#' with a release from before that (the weighting jobs before 1.2.0, AIPW and the
+#' negative-control analysis before 1.1.0) replays what that release did: its caller
+#' passes `balance` (and a stricter `smd_floor` if it has one), and the rule below
+#' refuses a weighted covariate still apart by the floor. Every other caller passes none.
+vcr_not_estimable_weighting <- function(ess = NULL, ess_floor = NULL, support = NULL, support_ceiling = NULL, ebal = NULL,
+                                        balance = NULL, smd_floor = NULL) {
   # Every threshold is the domain's; a caller may only pass a *stricter* one.
   ess_floor <- max(ess_floor %||% 0, vcr_limit("essFloor", 10))
   support_ceiling <- min(support_ceiling %||% Inf, vcr_limit("supportCeiling", 0.1))
@@ -415,6 +420,16 @@ vcr_not_estimable_weighting <- function(ess = NULL, ess_floor = NULL, support = 
   if (!is.null(ess) && ess < ess_floor) {
     return(list(rule = "effective_sample_size_below_floor",
                 detail = sprintf("weighted effective sample size %.1f is below the floor %.1f", ess, ess_floor)))
+  }
+  floor_ <- min(smd_floor %||% Inf, vcr_limit("smdFloor", 0.1))
+  if (!is.null(balance)) {
+    worst <- max(abs(balance$smdAdjusted))
+    if (is.finite(worst) && worst >= floor_) {
+      j <- which.max(abs(balance$smdAdjusted))
+      return(list(rule = "standardized_difference_above_floor",
+                  detail = sprintf("%s still differs by %.3f after weighting (floor %.2f)",
+                                   balance$covariate[j], balance$smdAdjusted[j], floor_)))
+    }
   }
   NULL
 }

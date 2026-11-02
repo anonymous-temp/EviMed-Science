@@ -212,14 +212,15 @@ vcr_job_apply_prognostic_model <- function(job, output_dir = NULL, ...) {
   counts <- vcr_table_counts(data)
   list(status = "succeeded", conclusion = if (applied[["valid"]] > 0) "limited" else "not_estimable",
     notEstimableRule = if (applied[["valid"]] > 0) NULL else "nuisance_model_not_estimable", counts = counts, measures = measures,
-    diagnostics = list(modelScope = "published_prognostic_equation", valueSourcesUsed = vcr_value_sources_used(used), cohort = cohort[["info"]], sourceCondition = sc[["sourceCondition"]],
+    diagnostics = c(list(modelScope = "published_prognostic_equation", valueSourcesUsed = vcr_value_sources_used(used), cohort = cohort[["info"]], sourceCondition = sc[["sourceCondition"]],
       family = sc[["model"]][["family"]], endpoint = sc[["endpoint"]], validPredictions = applied[["valid"]], invalidPredictions = applied[["invalid"]],
       absoluteRiskAvailable = applied[["absoluteRiskAvailable"]], causalEffectIdentified = FALSE,
       coefficientUncertainty = applied[["coefficientUncertainty"]], clinicallyValidated = FALSE,
-      populationVarianceIncludesResidual = !is.null(applied[["outcomeSd"]]),
-      localCalibration = calibration,
-      limits = list(if (is.null(calibration)) "Transportability and calibration in this target population have not been established."
+      populationVarianceIncludesResidual = !is.null(applied[["outcomeSd"]])),
+      # the key is a release's (1.1.0): a job labelled 1.0.0 replays without it (it cannot ask for a calibration either)
+      if (vcr_job_at_least(job, "1.1.0")) list(localCalibration = calibration),
+      list(limits = list(if (is.null(calibration)) "Transportability and calibration in this target population have not been established."
                     else "Calibration was measured on the observed outcomes of this table; transportability to any other population has not been established.",
-        "Predictions are not observed control outcomes or an independent increase in sample size.")),
+        "Predictions are not observed control outcomes or an independent increase in sample size."))),
     tables = .vcr_tables_of(list(vcr_write_table(output, "prognostic-predictions", output_dir))))
 }

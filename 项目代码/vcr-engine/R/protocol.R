@@ -1051,6 +1051,15 @@ vcr_validate_job <- function(job) {
   issues
 }
 
+#' Whether a job runs a method release at least `from`. What a release added runs only for the jobs labelled with it or a later one: a job
+#' labelled with an older compatible version returns what that version returned (replay), whatever the engine can do now. A job with no
+#' label (a handler called directly) is the current release's.
+vcr_job_at_least <- function(job, from) {
+  mv <- job[["methodVersion"]]
+  if (is.null(mv) || !is.character(mv) || length(mv) != 1L || !nzchar(mv)) return(TRUE)
+  utils::compareVersion(mv, from) >= 0L
+}
+
 # Does a simulation scenario ask for what design.simulate and design.grid 1.3.0 added? Mirrors usesNonProportionalHazards in the domain.
 .vcrp_uses_nph <- function(sc) {
   truths <- c(list(.vcrp_get(sc,"truth")), if(is.list(.vcrp_get(sc,"truths"))) unname(.vcrp_get(sc,"truths")) else list())
