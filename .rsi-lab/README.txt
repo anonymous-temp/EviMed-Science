@@ -8,15 +8,15 @@ RSI lab lanes. A batch is one commit that edits config.json on this branch (mode
   idleExitMin   a lane that has been given nothing for this long ends
   sandboxCheck  true: run deploy/runtime-dsh/check-tool-sandbox.sh and print the Landlock ABI before taking requests
   promptMarkers ["text", ...]: capture the runtime-to-gateway traffic and print how often each text occurs (a guidance change reached a live session)
-  arms          [{"key": image key, "jobs": 1..8 in all, "workers": concurrent items per job, "patch": ref or null, "webPatch": ref or null,
-                  "share": true|false}]
+  arms          [{"key": image key, "jobs": 1..8 in all, "workers": concurrent items per job, "patch": ref or null, "webPatch": ref or null}]
                 an arm with a patch ref builds a candidate runtime image from it (Dockerfile.delta, about 10 minutes, swap on for the build)
                 and claims requests whose "image" is its key; an arm without one runs the base images.
-                "webPatch": a ref whose apps/server/src and packages/domain are laid over the base web image (Dockerfile.web-delta), for a
+                "webPatch": a ref whose apps/server/src and packages/domain are laid over the base web image (Dockerfile.web-delta, seconds), for a
                 candidate that changes a gateway (the control plane's side); it may be given with or without "patch".
-                "share": an arm with a patch or webPatch and more than one job builds its delta image(s) once, in a build job, and its lane
-                jobs load the result from an artifact (default true when jobs > 1); false builds in every job.
                 The stack of every job has the context engine (OpenViking) and the document parser on, as production does; ENV-DIFFERENCES.md
                 (OpenScience/evals/harness-adaptation/lab) lists what remains different.
+                Tried 2026-11-02 and removed: building an arm's delta image once and loading it in the arm's other jobs from an artifact. The
+                build and the transfer worked (runtime delta 511 s, archive 1,925 MiB zstd), `docker load` of the saved image failed on the
+                runner ("max depth exceeded"), so every job of a patched arm builds its own.
 
 Requests, results and the broker are on the lab host; see OpenScience/evals/harness-adaptation/lab/brokerctl.py.

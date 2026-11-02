@@ -1,6 +1,6 @@
 {
   "mode": "lanes",
-  "batch": "b032",
+  "batch": "b033",
   "sourceRef": "5c740327bb8c0dfa515d01badf927618ed5ceebe",
   "labFrom": "branch",
   "imageRunId": 41307417699,
@@ -9,9 +9,8 @@
   "arms": [
     {
       "key": "wp",
-      "jobs": 2,
+      "jobs": 1,
       "workers": 1,
-      "patch": "5c740327bb8c0dfa515d01badf927618ed5ceebe",
       "webPatch": "5c740327bb8c0dfa515d01badf927618ed5ceebe"
     }
   ],

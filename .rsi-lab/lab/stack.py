@@ -8,8 +8,6 @@ a model output: every line is a counter, a name or a bounded code.
   stack.py build-delta --patch-src DIR --key K   build a candidate runtime image from the loaded base with Dockerfile.delta
   stack.py build-web-delta --patch-src DIR --key K   build a candidate web image: the base web image with apps/server/src and
                                             packages/domain of the patch ref (a candidate that changes a gateway)
-  stack.py save-delta --out DIR             write the delta image(s) this job built as one archive, for the batch's other jobs
-  stack.py load-delta --archive DIR         load a delta archive another job built (verified by sha256), instead of building it
   stack.py env     --lanes N [--delta] [--web-delta]   write deploy/web/.env.lab, the secret files and the seeded data volume
   stack.py up                               start the stack (the services listed in SERVICES) and wait until the web API answers
   stack.py ready                            print the readiness checks that are not ok (codes only)
@@ -342,52 +340,6 @@ def cmd_build_web_delta(args):
     (WORK / "images.json").write_text(json.dumps(images, indent=2))
     shutil.rmtree(context, ignore_errors=True)
     say(f"web delta image built in {time.time() - started:.0f}s: {tag} from revision {revision[:12]}")
-
-
-DELTA_ARCHIVE = "delta-images.tar"
-
-
-def cmd_save_delta(args):
-    """The delta image(s) this job built, as one archive with a sha256 (the batch's other jobs load it instead of building the same thing)."""
-    images = load_images()
-    tags = [images[name] for name in ("runtimeDelta", "webDelta") if images.get(name)]
-    if not tags:
-        raise SystemExit("this job built no delta image")
-    out = pathlib.Path(args.out)
-    out.mkdir(parents=True, exist_ok=True)
-    started = time.time()
-    saver = subprocess.Popen(["docker", "save", *tags], stdout=subprocess.PIPE)
-    with open(out / DELTA_ARCHIVE, "wb") as sink:
-        packer = subprocess.Popen(["zstd", "-1", "-T0", "-q"], stdin=saver.stdout, stdout=sink)
-        saver.stdout.close()
-        if packer.wait() != 0 or saver.wait() != 0:
-            raise SystemExit("docker save failed")
-    (out / (DELTA_ARCHIVE + ".sha256")).write_text(f"{sha256_file(out / DELTA_ARCHIVE)}  {DELTA_ARCHIVE}\n")
-    wanted = {name: images[name] for name in ("runtimeDelta", "runtimeDeltaRevision", "webDelta", "webDeltaRevision") if images.get(name)}
-    ids = {tag: run(["docker", "image", "inspect", "--format", "{{.Id}}", tag], capture=True).stdout.strip() for tag in tags}
-    (out / "delta-images.json").write_text(json.dumps({"images": wanted, "ids": ids}, indent=2))
-    say(f"delta archive written in {time.time() - started:.0f}s: {len(tags)} image(s), {(out / DELTA_ARCHIVE).stat().st_size // 1048576} MiB")
-
-
-def cmd_load_delta(args):
-    archive = pathlib.Path(args.archive)
-    expected = (archive / (DELTA_ARCHIVE + ".sha256")).read_text().split()[0]
-    if sha256_file(archive / DELTA_ARCHIVE) != expected:
-        raise SystemExit("the delta archive does not match its recorded sha256")
-    record = json.loads((archive / "delta-images.json").read_text())
-    started = time.time()
-    unpack = subprocess.Popen(["zstd", "-dc", str(archive / DELTA_ARCHIVE)], stdout=subprocess.PIPE)
-    loader = subprocess.Popen(["docker", "load", "-q"], stdin=unpack.stdout, stdout=subprocess.DEVNULL)
-    unpack.stdout.close()
-    if loader.wait() != 0 or unpack.wait() != 0:
-        raise SystemExit("docker load of the delta archive failed")
-    for tag, image_id in record["ids"].items():
-        if run(["docker", "image", "inspect", "--format", "{{.Id}}", tag], capture=True).stdout.strip() != image_id:
-            raise SystemExit("a delta image is not the one the archive recorded")
-    images = load_images()
-    images.update(record["images"])
-    (WORK / "images.json").write_text(json.dumps(images, indent=2))
-    say(f"delta archive loaded in {time.time() - started:.0f}s: {len(record['ids'])} image(s)")
 
 
 # ------------------------------------------------------------------------------------------------------------------ env
@@ -885,10 +837,6 @@ def main():
     s = sub.add_parser("build-web-delta")
     s.add_argument("--patch-src", required=True)
     s.add_argument("--key", required=True)
-    s = sub.add_parser("save-delta")
-    s.add_argument("--out", required=True)
-    s = sub.add_parser("load-delta")
-    s.add_argument("--archive", required=True)
     s = sub.add_parser("env")
     s.add_argument("--lanes", required=True)
     s.add_argument("--delta", action="store_true")
@@ -898,7 +846,7 @@ def main():
     for name in ("up", "ready", "health", "verify", "selfcheck", "down", "facts"):
         sub.add_parser(name)
     args = parser.parse_args()
-    {"images": cmd_images, "build-delta": cmd_build_delta, "build-web-delta": cmd_build_web_delta, "save-delta": cmd_save_delta, "load-delta": cmd_load_delta,
+    {"images": cmd_images, "build-delta": cmd_build_delta, "build-web-delta": cmd_build_web_delta,
      "env": cmd_env, "up": cmd_up, "ready": cmd_ready, "health": cmd_health, "verify": cmd_verify, "selfcheck": cmd_selfcheck, "down": cmd_down,
      "diagnose": cmd_diagnose, "facts": cmd_facts}[args.command](args)
 

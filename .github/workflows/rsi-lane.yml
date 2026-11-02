@@ -22,8 +22,6 @@ jobs:
     outputs:
       mode: ${{ steps.cfg.outputs.mode }}
       matrix: ${{ steps.cfg.outputs.matrix }}
-      buildMatrix: ${{ steps.cfg.outputs.buildMatrix }}
-      hasBuild: ${{ steps.cfg.outputs.hasBuild }}
       imageRunId: ${{ steps.cfg.outputs.imageRunId }}
       imageArtifact: ${{ steps.cfg.outputs.imageArtifact }}
       sourceRef: ${{ steps.cfg.outputs.sourceRef }}
@@ -40,28 +38,17 @@ jobs:
           cfg = json.load(open('.rsi-lab/config.json'))
           mode = cfg['mode']
           assert mode in ('reupload', 'probe', 'lanes', 'idle'), mode
-          include, builds = [], {}
+          include = []
           for arm in cfg.get('arms', []):
-              jobs = int(arm.get('jobs', 1))
-              patch, web_patch = arm.get('patch') or '', arm.get('webPatch') or ''
-              # An arm with several jobs builds its delta image once (a build job) and the lane jobs load it; "share": false builds in each job.
-              shared = bool((patch or web_patch) and arm.get('share', jobs > 1))
-              share_name = f"{cfg['batch']}-{arm['key']}"
-              if shared:
-                  builds[share_name] = {'key': arm['key'], 'patch': patch, 'webPatch': web_patch, 'shareName': share_name}
-              for job in range(1, jobs + 1):
-                  include.append({'key': arm['key'], 'patch': patch, 'webPatch': web_patch, 'workers': int(arm.get('workers', 3)), 'job': job,
-                                  'lane': f"{cfg['batch']}-{arm['key']}-{job}", 'shared': 'true' if shared else 'false', 'shareName': share_name})
+              for job in range(1, int(arm.get('jobs', 1)) + 1):
+                  include.append({'key': arm['key'], 'patch': arm.get('patch') or '', 'webPatch': arm.get('webPatch') or '', 'workers': int(arm.get('workers', 3)), 'job': job,
+                                  'lane': f"{cfg['batch']}-{arm['key']}-{job}"})
           assert len(include) <= 8, 'at most 8 lane jobs'
-          assert len(builds) <= 4, 'at most 4 shared builds'
           if mode == 'lanes':
               assert include, 'no arms'
-          none = {'key': 'none', 'patch': '', 'webPatch': '', 'workers': 0, 'job': 0, 'lane': 'none', 'shared': 'false', 'shareName': 'none'}
           with open(os.environ['GITHUB_OUTPUT'], 'a') as fh:
               fh.write(f"mode={mode}\n")
-              fh.write("matrix=" + json.dumps({'include': include or [none]}) + "\n")
-              fh.write("buildMatrix=" + json.dumps({'include': list(builds.values()) or [{'key': 'none', 'patch': '', 'webPatch': '', 'shareName': 'none'}]}) + "\n")
-              fh.write(f"hasBuild={'true' if builds and mode == 'lanes' else 'false'}\n")
+              fh.write("matrix=" + json.dumps({'include': include or [{'key': 'none', 'patch': '', 'webPatch': '', 'workers': 0, 'job': 0, 'lane': 'none'}]}) + "\n")
               fh.write(f"imageRunId={int(cfg['imageRunId'])}\n")
               fh.write(f"imageArtifact={cfg['imageArtifact']}\n")
               fh.write(f"sourceRef={cfg.get('sourceRef', 'main')}\n")
@@ -106,108 +93,9 @@ jobs:
           nproc; free -m | sed -n 2p; df -h / | cat
           docker --version; docker compose version
 
-  # One build of an arm's delta image(s) for all of its jobs (an arm with "jobs" above 1 and a patch or webPatch, unless "share": false): the
-  # runtime delta takes about ten minutes and a swap file, and each job of the arm would otherwise build the same image. The result travels as
-  # an artifact of this run (zstd-compressed docker save, sha256 beside it), one day.
-  build:
-    needs: plan
-    if: needs.plan.outputs.mode == 'lanes' && needs.plan.outputs.hasBuild == 'true'
-    name: build ${{ matrix.shareName }}
-    runs-on: ubuntu-24.04
-    timeout-minutes: 120
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.plan.outputs.buildMatrix) }}
-    defaults:
-      run:
-        shell: /usr/local/bin/evimed-ci-root-shell {0}
-    env:
-      LAB_WORK: /opt/rsi-lab
-      LAB_SRC: ${{ github.workspace }}/src/OpenScience
-      COMPOSE_PARALLEL_LIMIT: "1"
-    steps:
-      - name: Prepare the disposable Docker host operator shell
-        shell: bash
-        run: |
-          test "$RUNNER_ENVIRONMENT" = "github-hosted"
-          cat > "$RUNNER_TEMP/evimed-ci-root-shell" <<'SH'
-          #!/usr/bin/env bash
-          exec sudo -E env "PATH=$PATH" bash --noprofile --norc -eo pipefail "$1"
-          SH
-          sudo install -o 0 -g 0 -m 0755 "$RUNNER_TEMP/evimed-ci-root-shell" /usr/local/bin/evimed-ci-root-shell
-
-      - uses: actions/checkout@v4
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ needs.plan.outputs.sourceRef }}
-          path: src
-          fetch-depth: 1
-      - uses: actions/checkout@v4
-        if: matrix.patch != ''
-        with:
-          ref: ${{ matrix.patch }}
-          path: patch
-          fetch-depth: 1
-      - uses: actions/checkout@v4
-        if: matrix.webPatch != ''
-        with:
-          ref: ${{ matrix.webPatch }}
-          path: webpatch
-          fetch-depth: 1
-
-      - name: Choose the lab files
-        run: |
-          git config --global --add safe.directory '*'
-          install -d -m 0700 "$LAB_WORK"
-          if [ "${{ needs.plan.outputs.labFrom }}" = "source" ]; then
-            echo "LAB=$GITHUB_WORKSPACE/src/OpenScience/evals/harness-adaptation/lab" >> "$GITHUB_ENV"
-          else
-            echo "LAB=$GITHUB_WORKSPACE/.rsi-lab/lab" >> "$GITHUB_ENV"
-          fi
-
-      - name: Fetch the release images from this repository's artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ needs.plan.outputs.imageArtifact }}
-          run-id: ${{ needs.plan.outputs.imageRunId }}
-          github-token: ${{ github.token }}
-          repository: ${{ github.repository }}
-          path: ${{ runner.temp }}/img
-
-      - name: Verify and load the images
-        run: |
-          python3 -B "$LAB/stack.py" images --archive "$RUNNER_TEMP/img"
-          rm -f "$RUNNER_TEMP/img/images.tar.gz"
-
-      - name: Build the candidate runtime image
-        if: matrix.patch != ''
-        run: |
-          fallocate -l 24G /swap-build && chmod 600 /swap-build && mkswap /swap-build >/dev/null && swapon /swap-build
-          python3 -B "$LAB/stack.py" build-delta --patch-src "$GITHUB_WORKSPACE/patch/OpenScience" --key "${{ matrix.key }}" || status=$?
-          systemctl restart docker
-          for i in $(seq 1 30); do docker info >/dev/null 2>&1 && break; sleep 2; done
-          swapoff /swap-build && rm -f /swap-build
-          exit "${status:-0}"
-
-      - name: Build the candidate web image
-        if: matrix.webPatch != ''
-        run: python3 -B "$LAB/stack.py" build-web-delta --patch-src "$GITHUB_WORKSPACE/webpatch/OpenScience" --key "${{ matrix.key }}"
-
-      - name: Write the delta archive
-        run: python3 -B "$LAB/stack.py" save-delta --out "$RUNNER_TEMP/delta"
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: delta-${{ github.sha }}-${{ matrix.shareName }}
-          path: ${{ runner.temp }}/delta/
-          if-no-files-found: error
-          compression-level: 0
-          retention-days: 1
-
   lane:
-    needs: [plan, build]
-    # The build job is skipped when no arm shares a build; a shared build that failed stops the batch's lanes (they would have no image).
-    if: always() && needs.plan.result == 'success' && needs.plan.outputs.mode == 'lanes' && (needs.build.result == 'success' || needs.build.result == 'skipped')
+    needs: plan
+    if: needs.plan.outputs.mode == 'lanes'
     name: lane ${{ matrix.lane }}
     runs-on: ubuntu-24.04
     timeout-minutes: 350
@@ -247,13 +135,13 @@ jobs:
           path: src
           fetch-depth: 1
       - uses: actions/checkout@v4
-        if: matrix.patch != '' && matrix.shared != 'true'
+        if: matrix.patch != ''
         with:
           ref: ${{ matrix.patch }}
           path: patch
           fetch-depth: 1
       - uses: actions/checkout@v4
-        if: matrix.webPatch != '' && matrix.shared != 'true'
+        if: matrix.webPatch != ''
         with:
           ref: ${{ matrix.webPatch }}
           path: webpatch
@@ -298,22 +186,8 @@ jobs:
           df -h / | tail -1
           echo "images ready after $((SECONDS - started)) s"
 
-      - name: Fetch the delta image(s) this arm's build job made
-        if: matrix.shared == 'true'
-        uses: actions/download-artifact@v4
-        with:
-          name: delta-${{ github.sha }}-${{ matrix.shareName }}
-          path: ${{ runner.temp }}/delta
-
-      - name: Load the delta image(s)
-        if: matrix.shared == 'true'
-        run: |
-          python3 -B "$LAB/stack.py" load-delta --archive "$RUNNER_TEMP/delta"
-          rm -rf "$RUNNER_TEMP/delta"
-          df -h / | tail -1
-
       - name: Build the candidate runtime image
-        if: matrix.patch != '' && matrix.shared != 'true'
+        if: matrix.patch != ''
         run: |
           # A swap file for the build only: it is taken away again before any request runs, so the lane's own memory is what it is.
           fallocate -l 24G /swap-build && chmod 600 /swap-build && mkswap /swap-build >/dev/null && swapon /swap-build
@@ -327,7 +201,7 @@ jobs:
           exit "${status:-0}"
 
       - name: Build the candidate web image
-        if: matrix.webPatch != '' && matrix.shared != 'true'
+        if: matrix.webPatch != ''
         run: python3 -B "$LAB/stack.py" build-web-delta --patch-src "$GITHUB_WORKSPACE/webpatch/OpenScience" --key "${{ matrix.key }}"
 
       - name: Write the environment and the secret files
