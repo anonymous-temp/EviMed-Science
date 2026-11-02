@@ -9016,6 +9016,34 @@ test("a runtime that stopped after its answer keeps the file the conversation wr
   }
 });
 
+test("a conversation stopped halfway keeps the job files and loop output it wrote, since nothing shows they are another run's", async () => {
+  // REVIEWFIX2 8: the stop path reads no transcript, and the filter that drops another run's job files took a cancelled conversation's own
+  // `research-topic-runs/<job>/…` and a loop-written `cv-runs/fold3/x.csv` as foreign.
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-stop-jobs-"));
+  try {
+    const project = { id: "project-1", userId: "user-1", rootDir: root, workspaceDir: path.join(root, "workspace"), metaDir: path.join(root, ".openscience") };
+    await mkdir(path.join(project.workspaceDir, workspaceLayout.runStateDir), { recursive: true });
+    await mkdir(project.metaDir, { recursive: true });
+    const binding = { sessionId: "ses_stop_jobs", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null };
+    const store = new AgentRunStore({ get: async () => binding }, { model: "deepseek/deepseek-v4-pro", readSessionHistory: async () => [], monitorIntervalMs: 60_000 });
+    store.scheduleMonitor = () => {};
+    const started = await store.start(project, { sessionId: binding.sessionId });
+    await relabelReceipt(project, started.id);
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    const files = { "research-topic-runs/topic-20261102010101-a1b2c3d4e5f6/output/request.json": "{}", "cv-runs/fold3/x.csv": "a,b\n1,2\n", "notes.md": "# 一\n" };
+    for (const [name, text] of Object.entries(files)) {
+      await mkdir(path.dirname(path.join(project.workspaceDir, name)), { recursive: true });
+      await writeFile(path.join(project.workspaceDir, name), text);
+    }
+    await store.finishInternal(project, started.id, { status: "canceled", errorCode: "runtime_canceled", artifacts: [], canceledBy: "user" });
+    const finished = (await store.list(project)).find((item) => item.id === started.id);
+    await store.closeAll();
+    assert.deepEqual([...(finished?.unverifiedArtifacts ?? [])].sort(), Object.keys(files).sort());
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("what a run recorded as its outputs is what a reader is shown, whatever the registry says on the day it is read", async () => {
   await withAnswerModeRun(async ({ project, binding, dispatch, appendHistory, skillLoadedPart, store }) => {
     await dispatch("turn_recorded_outputs");

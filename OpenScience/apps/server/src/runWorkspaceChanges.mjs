@@ -32,23 +32,45 @@ export const WORKSPACE_WALK_DEPTH = 6;
 export const WORKSPACE_WALK_ENTRIES = 6000;
 export const WORKSPACE_WALK_FILES = 64;
 
-/** A specialist job's file: `<capability>-runs/<job id>/…`, the layout `specialist_jobs.py` writes. */
-const JOB_FILE = /^[a-z][a-z-]*-runs\/([A-Za-z0-9._-]+)\//;
+/**
+ * The five specialist job layouts, by directory: `<directory>/<job id>/…` with a job id that starts with the capability's prefix. Closed on
+ * purpose: only these directories are a job tool's, and `runtime/mcp/evimed-research/specialist_jobs.py` (`SPECS`) is where they are written
+ * (a test holds the two equal). A tree of the model's own that is merely shaped like one (`cv-runs/fold3/…`, a loop's `bootstrap-runs/`) is
+ * nobody's job and its files are the run's like any others.
+ * @type {Readonly<Record<string, string>>}
+ */
+export const SPECIALIST_JOB_DIRECTORIES = Object.freeze({
+  "mendelian-randomization-runs": "mr-",
+  "bibliometric-analysis-runs": "bibliometric-",
+  "research-topic-runs": "topic-",
+  "peer-review-runs": "review-",
+  "drug-safety-runs": "safety-",
+});
+
+const JOB_FILE = /^([a-z][a-z-]*-runs)\/([A-Za-z0-9._-]+)\//;
 
 /**
- * Changed files without those of a job this run never started. A conversation that started no job listed the other run's
- * `research-topic-runs/<job>/output/request.json` as its own output, because both ran in one project (2026-11-02). A run's
- * own job is named in its tool calls and results, so its id appearing in the transcript is the test.
+ * Changed files without those of a specialist job this run never started. A conversation that started no job listed the other run's
+ * `research-topic-runs/<job>/output/request.json` as its own output, because both ran in one project (2026-11-02). A run's own job is named
+ * in its tool calls and results, so its id appearing in the transcript is the test.
+ *
+ * Only where the transcript is held. A stopped or failed run is read without one (`messages` empty), and a transcript that is not there cannot
+ * show that the run started nothing: its job files are kept, not claimed foreign, which is what lost a cancelled conversation's own
+ * `research-topic-runs/<job>/…` (REVIEWFIX2, 2026-11-02). And only a specialist's job directory (`SPECIALIST_JOB_DIRECTORIES`) can be
+ * another run's.
  * @param {readonly string[]} files @param {unknown} messages the run's transcript, as far as it is held
  * @returns {string[]}
  */
 export function withoutOtherRunsJobFiles(files, messages) {
-  if (!files.some((file) => JOB_FILE.test(file))) return [...files];
-  const transcript = JSON.stringify(messages ?? []);
-  return files.filter((file) => {
-    const job = JOB_FILE.exec(file)?.[1];
-    return !job || transcript.includes(job);
+  if (!Array.isArray(messages) || messages.length === 0) return [...files];
+  const jobs = files.map((file) => {
+    const match = JOB_FILE.exec(file);
+    const prefix = match ? SPECIALIST_JOB_DIRECTORIES[match[1]] : undefined;
+    return match && prefix && match[2].startsWith(prefix) ? match[2] : null;
   });
+  if (!jobs.some(Boolean)) return [...files];
+  const transcript = JSON.stringify(messages);
+  return files.filter((_, index) => !jobs[index] || transcript.includes(/** @type {string} */ (jobs[index])));
 }
 
 /**

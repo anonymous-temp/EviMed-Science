@@ -1218,6 +1218,9 @@ export function runtimeStartRecovery(code, status) {
  * entirely.
  */
 export const CONTROL_PLANE_ERROR_CODES = Object.freeze([
+  // 2026-11-02: the data-analysis API's own limits (`dataAnalysisRoutes.mjs`, `dataAnalysisService.mjs`).
+  'analysis_input_busy',
+  'analysis_limit_reached',
   // 2026-10-13: memory on OpenViking's native engine. The first four are what a person on the memory page can be answered
   // with; the `memory_gateway_*` ones are what the memory gateway answers a runtime's memory plugin (`memoryGateway.mjs`).
   'memory_engine_unavailable',
@@ -2141,6 +2144,8 @@ export function turnEndErrorCode(kind, wireCode, wireStatus) {
  * code is visibly untranslated rather than invisibly generic.
  */
 export const ERROR_CODE_MESSAGES = Object.freeze({
+  analysis_input_busy: '这个账户（或服务）同时在接收的数据文件已达上限，稍等片刻再重新发送；已保存的数据不受影响。',
+  analysis_limit_reached: '这个账户保存的分析数量已达上限。先删除不再需要的分析，再新建。',
   // A project's runtime held by the per-project limit of a gateway that spends outside resources (`projectGatewayLimit.mjs`).
   public_source_gateway_project_rate_limited: '这个项目一分钟内读取公共数据源的次数已达上限，稍等片刻再继续；已读到的内容不受影响。',
   public_source_gateway_project_busy: '这个项目同时在读的公共数据源请求过多，等当前的读完再继续。',
@@ -3194,6 +3199,8 @@ const ERROR_CODE_OUTCOMES = Object.freeze({
   agent_run_active: 'capped',
   agent_run_limit_reached: 'capped',
   project_limit_reached: 'capped',
+  analysis_input_busy: 'capped',
+  analysis_limit_reached: 'capped',
   default_project_protected: 'capped',
   // Memory on the native engine (2026-10-13): what the page or the gateway refused before asking the engine, and the engine not answering.
   memory_engine_unavailable: 'upstream',
