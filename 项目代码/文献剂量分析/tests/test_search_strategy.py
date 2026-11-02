@@ -120,3 +120,53 @@ def test_mesh_lookup_does_not_label_pharmacological_action_as_descriptor(monkeyp
     result, failed = search_strategy.lookup_mesh('Example')
     assert result is None
     assert not failed
+
+
+def test_mesh_lookup_reads_normal_descriptor_entry_terms(monkeypatch):
+    search = '<eSearchResult><Count>1</Count><IdList><Id>1</Id></IdList></eSearchResult>'
+    descriptor = '\n1: Atrial Flutter\nDefinition.\n\nTree Number(s): C14.280.067.248\nEntry Terms:\n    Atrial Flutters\n    Flutter, Atrial\n\n    All MeSH Categories\n'
+
+    class Response:
+        def __init__(self, text): self.text = text
+        def raise_for_status(self): pass
+
+    monkeypatch.setattr(search_strategy, '_rate_limit', lambda: None)
+    monkeypatch.setattr(search_strategy.requests, 'get', lambda url, params, timeout: Response(search if url.endswith('esearch.fcgi') else descriptor))
+    result, failed = search_strategy.lookup_mesh('atrial flutter')
+    assert not failed
+    assert result.descriptor_name == 'Atrial Flutter'
+    assert result.entry_terms == ['Atrial Flutters', 'Flutter, Atrial']
+    assert result.tree_numbers == ['C14.280.067.248']
+
+
+def test_mesh_lookup_refuses_unrelated_descriptor_after_action(monkeypatch):
+    search = '<eSearchResult><Count>2</Count><IdList><Id>1</Id><Id>2</Id></IdList></eSearchResult>'
+    records = {'1': '\n1: Example [Pharmacological Action]\n', '2': '\n1: Unrelated Descriptor\n'}
+
+    class Response:
+        def __init__(self, text): self.text = text
+        def raise_for_status(self): pass
+
+    monkeypatch.setattr(search_strategy, '_rate_limit', lambda: None)
+    monkeypatch.setattr(search_strategy.requests, 'get', lambda url, params, timeout: Response(search if url.endswith('esearch.fcgi') else records[params['id']]))
+    assert search_strategy.lookup_mesh('Example') == (None, False)
+
+
+def test_mesh_lookup_marks_malformed_full_record_as_failed(monkeypatch):
+    search = '<eSearchResult><Count>1</Count><IdList><Id>1</Id></IdList></eSearchResult>'
+
+    class Response:
+        def __init__(self, text): self.text = text
+        def raise_for_status(self): pass
+
+    monkeypatch.setattr(search_strategy, '_rate_limit', lambda: None)
+    monkeypatch.setattr(search_strategy.requests, 'get', lambda url, params, timeout: Response(search if url.endswith('esearch.fcgi') else 'not a MeSH record'))
+    assert search_strategy.lookup_mesh('Example') == (None, True)
+
+
+def test_search_strategy_does_not_invent_or_emit_empty_descriptor_id():
+    mesh = search_strategy.MeSHResult(descriptor_name='Atrial Flutter', entry_terms=['Atrial Flutters'])
+    block = search_strategy.ConceptBlock(label='atrial flutter', mesh=mesh, free_terms=['atrial flutter'])
+    text = search_strategy._format_strategy([block], 'test query', '', '')
+    assert 'MeSH descriptor: Atrial Flutter' in text
+    assert 'Atrial Flutter ()' not in text
