@@ -164,8 +164,8 @@ export function checkSourceEntries(raw, scenario) {
   const { entries, said } = readSourceEntries(raw);
   const checked = entries.map((entry) => {
     const plan = planSourceEntry(entry, scenario);
-    return plan.ok ? { field: entry.field, state: "ready", message: "平台会在启动时把这句原文对到论文上，写成文献来源。" }
-      : { field: entry.field, state: "assumption", because: plan.because, message: plan.message };
+    return "because" in plan ? { field: entry.field, state: "assumption", because: plan.because, message: plan.message }
+      : { field: entry.field, state: "ready", message: "平台会在启动时把这句原文对到论文上，写成文献来源。" };
   });
   return [...checked, ...said.map(({ index: _index, ...rest }) => rest)];
 }
@@ -201,7 +201,7 @@ export async function carrySourceEntries({ raw, scenario, endpointType = null, w
   const report = [];
   for (const entry of entries) {
     const plan = planSourceEntry(entry, scenario, endpointType);
-    if (!plan.ok) { report.push({ field: entry.field, state: "assumption", because: plan.because, message: plan.message }); continue; }
+    if ("because" in plan) { report.push({ field: entry.field, state: "assumption", because: plan.because, message: plan.message }); continue; }
     try {
       const paper = /** @type {{ kind: "pmid" | "doi", id: string }} */ (entry.publication);
       const citation = `${paper.kind === "pmid" ? "PMID" : "DOI"} ${paper.id}`;

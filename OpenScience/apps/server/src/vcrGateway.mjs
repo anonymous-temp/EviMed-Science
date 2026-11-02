@@ -951,7 +951,7 @@ export function comparatorReminders({ route, targetTrial, configuration }) {
  * What `carrySourceEntries` writes and reads through: the gateway's own writers (so a source is checked and stored exactly as a run's own
  * evidence item and card are) and the study's cards and evidence. No recomputation is asked of the nested writes: the call that carries a
  * source is itself the one that computes or records the object.
- * @param {WriteDeps} deps
+ * @param {Pick<WriteDeps, "store" | "service" | "study" | "evidence" | "evidenceStore">} deps
  */
 function sourceWriters(deps) {
   const { store, service, study, evidence, evidenceStore } = deps;
