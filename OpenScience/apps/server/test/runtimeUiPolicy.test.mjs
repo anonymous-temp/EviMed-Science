@@ -42,7 +42,7 @@ async function eventually(predicate) {
   assert.ok(predicate(), "condition did not become true within 500ms");
 }
 
-async function fixture(t, overrides = {}, muxOptions = {}, { authorizePrompt = null, preparePrompt = null, recordPromptActor = null, recordPromptAttendance = null, agentRuns = null, audit = undefined, managedBrowser = null, balanceGate = null, recordUploadAttempt = null, recordUploadSuccess = null, noteFileRead = null, beforeDataCleanup = null, shared = null, projectId = 'default' } = {}) {
+async function fixture(t, overrides = {}, muxOptions = {}, { authorizePrompt = null, preparePrompt = null, recordPromptActor = null, recordPromptAttendance = null, agentRuns = null, audit = undefined, managedBrowser = null, balanceGate = null, recordUploadAttempt = null, recordUploadSuccess = null, noteFileRead = null, beforeDataCleanup = null, shared = null } = {}) {
   const dataDir = await mkdtemp(path.join(os.tmpdir(), "evimed-ui-policy-"));
   const peers = new Set(), clients = new Set();
   let upstream, wss, ui;
@@ -72,8 +72,7 @@ async function fixture(t, overrides = {}, muxOptions = {}, { authorizePrompt = n
   const loginCookie = cookie;
   if (shared) await store.createUser('geo-owner', 'local-fixture-password', 'Owner');
   const owner = shared ? await store.userById('geo-owner') : user;
-  if (projectId !== 'default') await store.createProject(owner, projectId, 'Analysis');
-  const project = await store.requireProject(owner, projectId);
+  const project = await store.requireProject(owner, 'default');
   const delegation = shared ? { kind: 'geo', actorId: user.id, ownerId: owner.id, controlProjectId: project.id, geoProjectId: 'geo-shared', rootSessionId: 'shared-root',
     actorCreatedAt: '2026-01-01', ownerCreatedAt: '2026-01-01', projectCreatedAt: '2026-01-01', geoCreatedAt: '2026-01-01', membershipEpoch: 'a'.repeat(64) } : null;
   const frame = issueRuntimeUiFrame({ config, req: { headers: { cookie } }, user, session, project, delegation });
@@ -2472,30 +2471,4 @@ test('native Remote file-upload fallback retains only upstream-confirmed origina
     value: { receiptId: 'native-receipt', file: { attachmentId: 'native-attachment', name: 'cases.csv', bytes: bytes.length } } }));
   await c.next();
   assert.equal(successes.length, 1); assert.deepEqual(successes[0].bytes, bytes); assert.equal(successes[0].sessionId, 's1');
-});
-
-
-test('statistical workspace rejects a foreign native upload before HTTP or mux bytes reach upstream', { timeout: 5000 }, async t => {
-  const f = await fixture(t, {}, {}, { projectId: `stat-${'a'.repeat(40)}`, authorizePrompt: async (_project, sessionId) => {
-    if (sessionId !== 'stats-root') throw new HttpError(409, 'statistical_workspace_session_reserved', 'Use the root');
-  } });
-  const forwarded = [];
-  f.manager.proxy = async (_req, res) => { forwarded.push(true); res.writeHead(200); res.end('{}'); };
-  const headers = { Cookie: f.cookie, Origin: UI_ORIGIN, 'content-type': 'application/octet-stream' };
-  for (const query of ['?sessionId=other-root', '']) {
-    const denied = await fetch(`${f.base}/api/session/uploadFileBinary${query}`, { method: 'POST', headers, body: 'patient data' });
-    assert([400, 409].includes(denied.status));
-  }
-  const deniedRpc = await fetch(`${f.base}/api/fileUploads/upload`, { method: 'POST', headers,
-    body: JSON.stringify({ type: 'client-request', method: 'fileUploads/upload', payload: { args: { agentId: 'other-root', request: { name: 'data.csv', data: 'eA==' } } } }) });
-  assert.equal(deniedRpc.status, 409);
-  assert.equal(forwarded.length, 0);
-  assert.equal((await fetch(`${f.base}/api/session/uploadFileBinary?sessionId=stats-root`, { method: 'POST', headers, body: 'patient data' })).status, 200);
-  const c = f.connect({ Origin: SHELL_ORIGIN }); assert.equal(await c.opened, 101);
-  c.send(open('denied-upload', 'fileUploads/upload', { agentId: 'other-root', request: { name: 'data.csv', data: 'eA==' } }));
-  assert.equal((await c.next()).type, 'error');
-  assert.equal((await c.next()).type, 'end');
-  assert.equal(f.received.some(item => item.endpoint === 'fileUploads/upload'), false);
-  c.send(open('root-upload', 'fileUploads/upload', { agentId: 'stats-root', request: { name: 'data.csv', data: 'eA==' } }));
-  assert.equal((await c.next()).value.reached, 'fileUploads/upload');
 });

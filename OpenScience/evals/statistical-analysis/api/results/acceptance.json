@@ -1732,13 +1732,12 @@
         "environment": "Final candidate image; no network; read-only filesystem/mount configuration with current code and wheels"
       },
       {
-        "id": "postgres_admission_and_native_workspace",
-        "command": "node --test apps/server/test/dataAnalysisAdmission.integration.test.mjs apps/server/test/statisticalWorkspace.integration.test.mjs",
-        "passedTests": 2,
+        "id": "postgres_admission",
+        "command": "node --test apps/server/test/dataAnalysisAdmission.integration.test.mjs",
+        "passedTests": 1,
         "environment": "Isolated loopback PostgreSQL sidecar",
         "scope": [
-          "Four parallel admissions retain availability of a metadata pool of one.",
-          "Native workspace HTTP authentication, durable root admission, restart and ordinary quota behavior."
+          "Four parallel admissions retain availability of a metadata pool of one."
         ]
       },
       {

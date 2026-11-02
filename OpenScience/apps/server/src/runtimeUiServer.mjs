@@ -6,7 +6,7 @@ import { createServer } from "node:http";
 import path from "node:path";
 import { SEAMS } from "@evimed/harness-port";
 
-import { isStatisticalWorkspaceProjectId, CAPABILITY_DISPLAY, capabilityBrief, capabilityListed, errorCodeMessage, isDeniedRuntimeUiHostRoute, isDeniedRuntimeUiMethod, isRuntimeUiSettingsRead, RUNTIME_UI_ANSWERED_HOST_ROUTES, RUNTIME_UI_ANSWERED_METHODS, RUNTIME_UI_SETTINGS_READ, RUNTIME_UI_WORKSPACE_PATH_METHODS, runtimeUiMethodFromPath, runtimeUiSettingsAnswer, runtimeUiWorkspacePathRefusal } from "@evimed/domain";
+import { CAPABILITY_DISPLAY, capabilityBrief, capabilityListed, errorCodeMessage, isDeniedRuntimeUiHostRoute, isDeniedRuntimeUiMethod, isRuntimeUiSettingsRead, RUNTIME_UI_ANSWERED_HOST_ROUTES, RUNTIME_UI_ANSWERED_METHODS, RUNTIME_UI_SETTINGS_READ, RUNTIME_UI_WORKSPACE_PATH_METHODS, runtimeUiMethodFromPath, runtimeUiSettingsAnswer, runtimeUiWorkspacePathRefusal } from "@evimed/domain";
 import { assertSpendWithinLimits } from "./usageMetering.mjs";
 
 import { assertNoSymlinkPath, HttpError, mimeFor, openScopedFileNoFollow, readBody, readStableFileHandle } from "./security.mjs";
@@ -905,20 +905,6 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
       await authorizeMethod(config, project, "session/prompt", false, usageLedger, runtimeManager, balanceGate,
         { args: { request: { sessionId: loopxBody.payload.sessionId } } });
     }
-    // Root ownership is checked before the upstream can store any bytes, regardless of optional evidence-copy hooks.
-    if (isStatisticalWorkspaceProjectId(project.id) && req.method === "POST" && [RUNTIME_UI_UPLOAD_METHOD, "fileUploads/upload"].includes(method)) {
-      let sessionId;
-      if (method === RUNTIME_UI_UPLOAD_METHOD) sessionId = new URL(req.url, "http://runtime.invalid").searchParams.get("sessionId");
-      else {
-        const raw = await nativeBody(Math.ceil(config.maxFileBytes / 3) * 4 + 4096);
-        req.__openScienceProxyBody = raw;
-        let upload;
-        try { upload = JSON.parse(raw.toString("utf8")); } catch { /* refused below */ }
-        if (upload?.type !== "client-request" || upload.method !== method) throw new HttpError(400, "runtime_ui_prompt_invalid", "A native upload RPC is required.");
-        sessionId = upload.payload?.args?.agentId;
-      }
-      await authorizePromptSession(project, { args: { request: { sessionId } } });
-    }
     let nativeInputRequest = null;
     let originalUpload = null;
     if (method === RUNTIME_UI_UPLOAD_METHOD && req.method === 'POST' && recordUploadSuccess && !scoped) {
@@ -1091,9 +1077,6 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
           }
           if (currentActor.scoped?.nativeInputs && currentActor.scoped.inputOperation(endpoint)) {
             await currentActor.scoped.prepareOperation(endpoint, payload);
-          }
-          if (endpoint === "fileUploads/upload" && isStatisticalWorkspaceProjectId(project.id)) {
-            await authorizePromptSession(project, { args: { request: { sessionId: payload?.args?.agentId } } });
           }
           if (endpoint === "fileUploads/upload" && recordUploadAttempt) await recordUploadAttempt(currentActor.project);
           if (endpoint === "session/prompt") {

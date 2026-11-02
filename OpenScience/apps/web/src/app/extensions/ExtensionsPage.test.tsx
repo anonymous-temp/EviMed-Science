@@ -19,12 +19,12 @@ afterAll(() => { globalThis.Request = NativeRequest; });
 const skills = vi.hoisted(() => ({ listPlatformSkills: vi.fn(), projectPlatformSkills: vi.fn(), listPersonalSkills: vi.fn(), pendingPersonalSkillTransfers: vi.fn(),
   getPersonalSkill: vi.fn(), personalSkillHistory: vi.fn(), personalSkillDefaults: vi.fn(), projectSkills: vi.fn(), personalSkillSupply: vi.fn(), createPersonalSkill: vi.fn(), saveProjectSkills: vi.fn() }));
 const extensions = vi.hoisted(() => ({ inventory: vi.fn(), extensionCatalogue: vi.fn(), extensionInstallations: vi.fn(), projectExtensions: vi.fn(), projectBuiltinPlugins: vi.fn() }));
-const api = vi.hoisted(() => ({ listWebPlugins: vi.fn(), listWebResearchAgents: vi.fn(), putWebResearchSession: vi.fn(), createWebStatisticalWorkspace: vi.fn(), fetchWebMe: vi.fn() }));
+const api = vi.hoisted(() => ({ listWebPlugins: vi.fn(), listWebResearchAgents: vi.fn(), putWebResearchSession: vi.fn(), fetchWebMe: vi.fn() }));
 vi.mock("@/lib/skillLibraryClient", async original => ({ ...(await original<object>()), ...skills }));
 vi.mock("@/lib/extensionsClient", async original => ({ ...(await original<object>()), ...extensions }));
 vi.mock("@/lib/apiClient", async original => ({ ...(await original<object>()), ...api }));
 const mine = { id: "skill:mine", revision: 1, payload: { title: "我的检索方案", description: "自己写的", instructions: "Use sources.", nativeName: "personal-x", digest: "sha256:x", resources: [], prepared: true }, createdAt: "", updatedAt: "", deletedAt: null };
-function Where() { const location = useLocation(); return <p data-testid="where">{location.pathname}{location.search}</p>; }
+function Where() { return <p data-testid="where">{useLocation().pathname}</p>; }
 function open(path: string) { return render(<MemoryRouter initialEntries={[path]}><UnsavedRouteGuard /><Where /><Routes><Route path="/app/extensions/:tab/:itemId?" element={<ExtensionsPage />} /></Routes></MemoryRouter>); }
 /** The same page with the conversation route beside it: a tool row opens a conversation, and that is where it lands. */
 function openWithChat(path: string) {
@@ -61,7 +61,6 @@ beforeEach(() => {
   api.fetchWebMe.mockImplementation(async ({ projectId }: { projectId: string }) => ({ user: { id: "owner" }, project: { id: projectId } }));
   api.listWebPlugins.mockResolvedValue([]);
   api.listWebResearchAgents.mockResolvedValue([]);
-  api.createWebStatisticalWorkspace.mockResolvedValue({ projectId: "stat-owned", sessionId: "owned-analysis" });
   api.putWebResearchSession.mockImplementation(async (sessionId: string, selection: object) => ({ sessionId, ...selection }));
 });
 
@@ -235,14 +234,14 @@ it("a tool row opens a new conversation bound to that tool, as its 科研工具 
   api.listWebResearchAgents.mockResolvedValue(toolCatalogue);
   openWithChat("/app/extensions/installed");
   await userEvent.click(await screen.findByRole("button", { name: toolTitle("statistical-analysis") }));
-  await waitFor(() => expect(api.createWebStatisticalWorkspace).toHaveBeenCalledWith({ requestId: expect.any(String) }));
-  expect(api.putWebResearchSession).not.toHaveBeenCalled();
+  await waitFor(() => expect(api.putWebResearchSession).toHaveBeenCalledWith(
+    expect.stringMatching(/^web-/), { mode: "specialist", agentId: "statistical-analysis", agentVersion: "1.0.0" }));
   await waitFor(() => expect(screen.getByTestId("where")).toHaveTextContent("/app/chat"));
 });
 
 it("a tool whose binding was refused says so and opens nothing: no conversation without the tool", async () => {
   api.listWebResearchAgents.mockResolvedValue(toolCatalogue);
-  api.createWebStatisticalWorkspace.mockRejectedValueOnce(new WebApiError("unavailable", { status: 503 }));
+  api.putWebResearchSession.mockRejectedValueOnce(new WebApiError("unavailable", { status: 503 }));
   openWithChat("/app/extensions/installed");
   await userEvent.click(await screen.findByRole("button", { name: toolTitle("statistical-analysis") }));
   await waitFor(() => expect(useToastStore.getState().toasts.some(toast => toast.tone === "error" && toast.message.includes(toolTitle("statistical-analysis")))).toBe(true));

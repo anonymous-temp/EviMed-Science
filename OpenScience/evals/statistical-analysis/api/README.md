@@ -242,7 +242,7 @@ separate from the live model's scientific findings and production readiness.
 | Check | Recorded result and scope |
 | --- | --- |
 | `python -m pytest evals/statistical-analysis -q -p no:cacheprovider -rs` | 226 tests and 26 subtests passed in the final candidate image, with network disabled and read-only mounts for current code/wheels. Fourteen existing matplotlib/pyparsing warnings remained. |
-| `node --test apps/server/test/dataAnalysisAdmission.integration.test.mjs apps/server/test/statisticalWorkspace.integration.test.mjs` | Two tests passed against an isolated loopback PostgreSQL sidecar: four parallel admissions with a metadata pool of one, and native HTTP authentication, durable root admission, restart and ordinary quotas. |
+| `node --test apps/server/test/dataAnalysisAdmission.integration.test.mjs` | One test passed against an isolated loopback PostgreSQL sidecar: four parallel admissions with a metadata pool of one. (The native-workspace allocator that shared this run was removed on 2026-11-02; a catalogue click opens a conversation in the current project.) |
 | `dataAnalysisArtifacts.test.mjs` | Eight focused regression tests passed, covering nested artifact capture and coherent selection of current, archived and explicitly presented result bundles without mixing summary/results from different bundles. |
 | Final source reviews | Helper changes, TypeScript and security review were approved after the result-selection fix. These are source-review outcomes, not live scientific or deployment approval. |
 

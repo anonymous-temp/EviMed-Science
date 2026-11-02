@@ -209,7 +209,6 @@ import { AgentApiKeyStore } from "./agentApiKeys.mjs";
 import { DataAnalysisService, createDataAnalysisSession, assertNotDataAnalysisProject, isDataAnalysisProject } from "./dataAnalysisService.mjs";
 import { createDataAnalysisDispatchLock } from "./dataAnalysisAdmission.mjs";
 import { createDataAnalysisRoutes } from "./dataAnalysisRoutes.mjs";
-import { StatisticalWorkspaceService, isStatisticalWorkspaceProject } from "./statisticalWorkspaceService.mjs";
 import { createAgentMemoryRoutes } from "./agentMemoryRoutes.mjs";
 import { createAgentKeyRoutes } from "./agentKeyRoutes.mjs";
 import { deleteSubjectAccounts } from "./agentApiKeys.mjs";
@@ -2650,7 +2649,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
    * keeps it. Counted against the account's project limit before the create.
    * @param {any} user @param {{ id?: unknown, name?: unknown }} body
    */
-  async function createResearcherProject(user, body, analysisOwned = false, statisticalOwned = false) {
+  async function createResearcherProject(user, body, analysisOwned = false) {
     const existing = (await store.listProjects(user)).filter((project) => !internalFor(user.id, project.id));
     if (body.id == null && body.name == null) throw new HttpError(400, "invalid_payload", "A project needs a name.");
     const id = body.id == null
@@ -2661,8 +2660,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // self-measurement shapes (`acceptance-*`, `audit-*`, `eval-method-*`): the paired evaluation makes
     // its own through this very route, and they are internal only for an operator (`isInternalProjectOf`);
     // for everyone else, the throwaway accounts of the acceptance drivers included, they are ordinary projects.
-    if ((isReservedProjectId(id) && !(analysisOwned && isDataAnalysisProject(id))) ||
-        (isStatisticalWorkspaceProject(id) && !statisticalOwned)) {
+    if (isReservedProjectId(id) && !(analysisOwned && isDataAnalysisProject(id))) {
       throw new HttpError(409, "project_id_reserved", "This project id is reserved for the platform's own work.");
     }
     // 「循证进化」's own projects are named, not detected: the id is what puts
@@ -4287,8 +4285,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
    *   verification: ReturnType<typeof createEvidenceSourceVerification> } | null} */
   let evidencePublish = null;
   agentRuns = new AgentRunStore(researchSessions, {
-    authorizeReservation: async (project, input) => {
-      await assertStatisticalWorkspaceSession(project, input.sessionId);
+    authorizeReservation: (project, input) => {
       if (!isDataAnalysisProject(project)) return;
       if (!dataAnalysisService) throw new HttpError(503, "product_state_unavailable", "Analysis admission is unavailable.");
       return dataAnalysisService.authorizeReservation(project, input);
@@ -6708,15 +6705,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     }
   }
 
-  async function assertStatisticalWorkspaceSession(project, sessionId) {
-    if (!isStatisticalWorkspaceProject(project)) return;
-    if (!statisticalWorkspaceService) throw new HttpError(503, "product_state_unavailable", "Analysis admission is unavailable.");
-    await statisticalWorkspaceService.authorizeSession(project, sessionId);
-  }
-
   async function assertPublicSessionPrompt(project, sessionId, knownBinding = undefined) {
     assertNotDataAnalysisProject(project);
-    await assertStatisticalWorkspaceSession(project, sessionId);
     const binding = knownBinding ?? await researchSessions.get(project, sessionId);
     if (binding?.mode === "specialist") await assertPublicAgent(binding.agentId);
   }
@@ -6948,11 +6938,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // isolated: a warm start is a head start, never a precondition.
     });
   }
-
-  const statisticalWorkspaceService = productDocuments ? new StatisticalWorkspaceService({
-    documents: productDocuments, store, registry: agentRegistry, sessions: researchSessions,
-    createProject: (user, body) => createResearcherProject(user, body, false, true),
-  }) : null;
 
   const dataAnalysisService = productDocuments ? new DataAnalysisService({
     config, documents: productDocuments, store,
@@ -7796,7 +7781,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         const ctx = await context(req, res);
         const body = await readJson(req, config.maxJsonBytes);
         if (body?.mode === "specialist") await assertPublicAgent(body.agentId);
-        await assertStatisticalWorkspaceSession(ctx.project, sessionId);
         sendJson(res, 200, { data: await researchSessions.put(ctx.project, sessionId, body) });
         return;
       }
@@ -8475,13 +8459,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         const projects = (await store.listProjects(user)).filter((item) => !internalFor(user.id, item.id));
         const data = await Promise.all(projects.map((item) => withProjectActivity(user, item)));
         sendJson(res, 200, { data });
-        return;
-      }
-
-      if (pathname === "/api/statistical-workspaces" && req.method === "POST") {
-        const user = await store.ensureUser(req, res);
-        if (!statisticalWorkspaceService) throw new HttpError(503, "product_state_unavailable", "Analysis workspaces require durable storage.");
-        sendJson(res, 201, { data: await statisticalWorkspaceService.create(user, await readJson(req, config.maxJsonBytes)) });
         return;
       }
 

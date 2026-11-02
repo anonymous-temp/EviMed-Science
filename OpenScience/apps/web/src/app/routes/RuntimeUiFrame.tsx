@@ -1,4 +1,3 @@
-import { isStatisticalWorkspaceProjectId } from "@evimed/domain";
 import { geoConversationCapability, geoConversationChecks, geoConversationRuns, geoConversationSources, geoConversationSourceScope, geoConversationStatus, startGeoConversation, stopGeoConversationRun, type GeoConversationScope } from "@/lib/geoNativeClient";
 import { geoChatPath, geoIdFromChatPath } from "@/lib/geoLocation";
 import { putConversationReference, recordWebVital, stageVcrConversationReference } from "@/lib/apiClient";
@@ -1018,12 +1017,6 @@ export function RuntimeUiFrame({ projectId, origin, scope: scopeInput, scopeOwne
         const agent = capabilityId ? capabilityAgents.current.get(capabilityId) ?? null : null;
         if (capabilityId && !agent) return;
         const from = typeof message.sessionId === "string" && SESSION_ID.test(message.sessionId) ? message.sessionId : null;
-        if (isStatisticalWorkspaceProjectId(projectId)) {
-          // Keep the original session, draft and attachment chips: this bridge cannot transfer attached files to a new project.
-          postToFrame("capability", { capabilityId: "statistical-analysis", sessionId: from });
-          if (capabilityId !== "statistical-analysis") toast.error("这个分析使用原来的对话，请回到该对话继续。使用其他工具可从科研工具新建，当前草稿和附件会保留。");
-          return;
-        }
         void bindConversationCapability(from, agent)
           .then((bound) => {
             if (!bound.rebound) { postToFrame("capability", { capabilityId, sessionId: bound.sessionId }); return; }
