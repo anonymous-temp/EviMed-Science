@@ -142,6 +142,39 @@ class Requests(Fixture):
         self.assertEqual(self.run_tool("--force")[0], 0)
         self.assertEqual((self.out / "requests.base.jsonl").read_bytes(), before)
 
+    def test_a_family_with_input_files_gets_the_public_data_manifest_beside_its_requests(self):
+        entries = [{"url": "https://example.invalid/a.zip", "bytes": 10, "sha256": "ab" * 32, "dest": "/srv/x/_zips/a.zip", "unzip": {"into": "/srv/x/a"}}]
+        with mock.patch.object(F, "fetch_entries", lambda domain, ids, **kw: entries if sorted(ids) == ["900", "901"] else []):
+            code, out, err = self.run_tool()
+        self.assertEqual((code, err), (0, ""))
+        self.assertEqual(json.loads((self.out / "fetch.json").read_text()), entries)
+        self.assertIn("fetch.json", out)
+        self.assertRegex(out, r"fetch\.json \d+ bytes, 1 public-data entries")
+        # the same entries again are fine; other entries do not replace the manifest without --force
+        with mock.patch.object(F, "fetch_entries", lambda domain, ids, **kw: entries):
+            self.assertEqual(self.run_tool()[0], 0)
+        with mock.patch.object(F, "fetch_entries", lambda domain, ids, **kw: [{**entries[0], "bytes": 11}]):
+            code, _, err = self.run_tool()
+        self.assertEqual(code, 2)
+        self.assertIn("--force", err)
+        # a family with none (medcalc here) writes no manifest
+        self.out = self.dir / "other"
+        self.assertEqual(self.run_tool()[0], 0)
+        self.assertFalse((self.dir / "other" / "fetch.json").exists())
+
+    def test_the_exclusion_files_a_registration_was_made_with_are_needed_to_build_from_it(self):
+        listed = self.dir / "unbuildable.json"
+        listed.write_text(json.dumps({"reason": "the request builder cannot name these", "ids": ["1", "999"]}))
+        with contextlib.redirect_stdout(io.StringIO()):
+            code = RR.main(["--round", "r", "--family", "medcalc", "--benchmark", "medcalc-bench", "--scorer", "medcalc", "--pools", str(self.bench / "pools/medcalc.json"),
+                            "--development-rows", "2", "--confirmation-rows", "2", "--salt", "s", "--failure-slice", "1", "--candidates-max", "1", "--exclude-ids", str(listed),
+                            "--out", str(self.registration), "--force"])
+        self.assertEqual(code, 0)
+        code, _, err = self.run_tool()
+        self.assertEqual(code, 2)
+        self.assertIn("--exclude-ids", err)
+        self.assertEqual(self.run_tool("--exclude-ids", str(listed))[0], 0)
+
     def test_the_development_loader_still_refuses_a_confirmation_row(self):
         family = F.Family("medcalc", root=self.bench, fetcher=F.Fetcher(self.dir / "cache", enabled=False))
         with self.assertRaises(F.ContaminationRefused):

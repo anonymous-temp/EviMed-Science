@@ -70,7 +70,7 @@ test('the harness table is closed: the skill table\'s four, by reference, and tw
   assert.equal(called, false, 'a registration cannot hand in a function');
   assert.deepEqual(scorerBenchmarks(HARNESS_SCORERS.medcalc), ['medcalc-bench']);
   assert.deepEqual(scorerBenchmarks(HARNESS_SCORERS['mbc-normalized']), ['medbrowsecomp']);
-  assert.deepEqual([...scorerBenchmarks(HARNESS_SCORERS['judged-verdicts'])], ['deepresearchbench', 'researchclawbench']);
+  assert.deepEqual([...scorerBenchmarks(HARNESS_SCORERS['judged-verdicts'])], ['deepresearchbench', 'researchclawbench', 'bixbench']);
 });
 
 test('a medbrowsecomp row needs a task the scorer knows, the same task in the stratum, and an answer it can read', () => {

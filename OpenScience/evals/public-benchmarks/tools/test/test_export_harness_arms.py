@@ -549,6 +549,106 @@ class JudgedAbsolute(unittest.TestCase):
         self.assertFalse((lab.dir / 'confirmation.gold.json').exists(), 'a judged benchmark has no gold')
 
 
+def bix_item(row):
+    return {'key': f'bixbench/{row}', 'bench': 'bixbench', 'id': row, 'gold': {'questions': [{'n': 1, 'qid': f'{row}-q1', 'eval_mode': 'llm_verifier', 'ideal': GOLD_MARK}]},
+            'meta': {'topic': 'transcriptomics' if row.endswith('1') else 'imaging'}}
+
+
+class JudgedBixbench(unittest.TestCase):
+    """BixBench scored by a judge (benchmark `bixbench-judged`, source benchmark `bixbench`): per-question verdicts become one score per run and pass."""
+    ROWS = ('bix-1', 'bix-2')
+    QUESTIONS = {'bix-1': ['bix-1-q1', 'bix-1-q2', 'bix-1-q3', 'bix-1-q4'], 'bix-2': ['bix-2-q1', 'bix-2-q2']}
+
+    def setUp(self):
+        self.lab = Lab(self)
+        for arm in ('baseline', ARM_ONE):
+            self.lab.fill(arm, self.ROWS, bench='bix-rsi', answer='Final answers:\n1. 12\n2. yes')
+        self.items_path = self.lab.items(self.ROWS, name='bix.jsonl', make=bix_item)
+        self.ids_path = self.lab.dir / 'question-ids.json'
+        self.ids_path.write_text(json.dumps(self.QUESTIONS))
+
+    def key(self, arm, row):
+        return f'bix-rsi/{"base" if arm == "baseline" else arm}/{row}'
+
+    def verdict_files(self, passes=2, wrong=lambda arm, row, k: (), drop=(), extra=()):
+        files = []
+        for k in range(1, passes + 1):
+            path = self.lab.dir / ('bix.verdicts.jsonl' if k == 1 else f'bix.verdicts.p{k}.jsonl')
+            lines = []
+            for arm in ('baseline', ARM_ONE):
+                for row in self.ROWS:
+                    for q in self.QUESTIONS[row]:
+                        if (arm, row, k, q) in drop:
+                            continue
+                        lines.append({'key': f'{self.key(arm, row)}#{q}', 'verdict': 'incorrect' if q in wrong(arm, row, k) else 'correct', 'judge': 'claude-bix-judge'})
+            lines += list(extra)
+            path.write_text(''.join(json.dumps(l) + '\n' for l in lines))
+            files.append(str(path))
+        return files
+
+    def argv(self, files, **kw):
+        extra = ['--verdicts', *files, '--dialect', 'questions', '--judge-id', 'claude-bix-judge', '--judge-provider', 'anthropic', '--judge-form', 'absolute', '--judge-passes', '2']
+        if kw.get('ids', True):
+            extra += ['--question-ids', str(self.ids_path)]
+        return ['--role', kw.get('role', 'development'), '--benchmark', kw.get('benchmark', 'bixbench-judged'), '--items', str(self.items_path), '--arm', f'baseline={self.lab.dirof("baseline")}',
+                '--arm', f'{ARM_ONE}={self.lab.dirof(ARM_ONE)}', '--bundles', str(self.lab.bundles), '--image-id', IMAGE_ID, '--image-digest', IMAGE_DIGEST,
+                '--bench-key', 'bix-rsi', '--repeats', '1', '--out', str(self.lab.dir / 'conf.json'), *extra]
+
+    def test_the_score_of_a_run_is_the_share_of_its_questions_judged_correct_and_the_rows_carry_no_gold(self):
+        lab = self.lab
+        # bix-1: baseline pass 1 gets one of four wrong, the candidate two in pass 2; bix-2 is all correct
+        wrong = lambda arm, row, k: ('bix-1-q2',) if (arm, row, k) == ('baseline', 'bix-1', 1) else ('bix-1-q1', 'bix-1-q4') if (arm, row, k) == (ARM_ONE, 'bix-1', 2) else ()
+        code, out, err = lab.run(self.argv(self.verdict_files(wrong=wrong), role='confirmation'))
+        self.assertEqual(code, 0, err)
+        source = lab.load('conf.json')
+        self.assertEqual(source['benchmark'], 'bixbench', 'the lab knows the benchmark by its own name; the judged shape is the scorer\'s')
+        self.assertEqual(source['rows'], [{'id': 'bix-1', 'category': 'transcriptomics'}, {'id': 'bix-2', 'category': 'imaging'}])
+        self.assertFalse((lab.dir / 'conf.gold.json').exists(), 'a judged benchmark has no gold file and no gold in a row')
+        self.assertNotIn(GOLD_MARK, json.dumps(source))
+        self.assertEqual(source['judged']['calls'], 8, '4 runs x 2 passes: a judge call is a capsule\'s answer, not a question')
+        records = {(r['row'], r['arm'], r['pass']): r['score'] for r in map(json.loads, (lab.dir / 'conf.verdicts.jsonl').read_text().splitlines())}
+        self.assertEqual(records[('bix-1', 'baseline', 1)], 0.75)
+        self.assertEqual(records[('bix-1', 'baseline', 2)], 1.0)
+        self.assertEqual(records[('bix-1', ARM_ONE, 2)], 0.5)
+        self.assertEqual(records[('bix-2', ARM_ONE, 1)], 1.0)
+        self.assertEqual(len(records), 8)
+        self.assertNotIn('0.75', out + err)
+        lab.assert_checksum('conf.verdicts.jsonl')
+
+    def test_a_missing_or_surplus_question_is_an_error_never_a_half_score(self):
+        lab = self.lab
+        code, _, err = lab.run(self.argv(self.verdict_files(drop={('baseline', 'bix-1', 2, 'bix-1-q3')})))
+        self.assertEqual(code, 2)
+        self.assertIn('pass 2: no verdict for 1 of 4 questions', err)
+        self.assertFalse((lab.dir / 'conf.json').exists())
+        code, _, err = lab.run(self.argv(self.verdict_files(extra=[{'key': f'{self.key("baseline", "bix-2")}#bix-9-q1', 'verdict': 'correct'}])))
+        self.assertEqual(code, 2)
+        self.assertIn('is not a question of bix-2', err)
+        code, _, err = lab.run(self.argv(self.verdict_files(extra=[{'key': 'bix-rsi/base/bix-7#bix-7-q1', 'verdict': 'correct'}])))
+        self.assertEqual(code, 2)
+        self.assertIn('unknown verdict key', err)
+        code, _, err = lab.run(self.argv(self.verdict_files(extra=[{'key': f'{self.key("baseline", "bix-2")}#bix-2-q1', 'verdict': 'maybe'}])))
+        self.assertEqual(code, 2)
+        self.assertIn('"correct" or "incorrect"', err)
+        # a pass with no line at all for a succeeded run is a missing pass
+        code, _, err = lab.run(self.argv(self.verdict_files(passes=1)[:1]))
+        self.assertEqual(code, 2)
+        self.assertIn('lacks pass', err)
+
+    def test_the_question_list_is_required_and_a_code_scored_benchmark_takes_no_verdicts(self):
+        lab = self.lab
+        code, _, err = lab.run(self.argv(self.verdict_files(), ids=False))
+        self.assertEqual(code, 2)
+        self.assertIn('--question-ids', err)
+        self.ids_path.write_text(json.dumps({'bix-1': ['bix-1-q1']}))
+        code, _, err = lab.run(self.argv(self.verdict_files()))
+        self.assertEqual(code, 2)
+        self.assertIn('bix-2', err)
+        code, _, err = lab.run(self.argv(self.verdict_files(), benchmark='bixbench'))
+        self.assertEqual(code, 2)
+        self.assertIn('scored by code', err)
+
+
 class JudgedPairwise(unittest.TestCase):
     def setUp(self):
         self.lab = Lab(self)

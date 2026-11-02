@@ -35,6 +35,8 @@ Benchmarks and rows (the id is a string; rows are natural-sorted):
   autoresearchbench-deep / -wide      {id, category, gold: {type, titles, arxiv_ids, is_none}}
   medbrowsecomp                       {id, task, gold: {task_name, answer}}
   deepresearchbench / researchclawbench   {id, category}   (judged: no gold; scores come from verdict records)
+  bixbench-judged                     {id, category}   (the same capsules scored by a judge, source benchmark `bixbench`: the category is the capsule's topic and the
+                                      rows carry no gold; the judge reads each question's ideal answer from its packet, the exporter only needs --question-ids)
 Rows come from --items (bench-driver item files; `#r<k>` is stripped from ids and ids are deduplicated; for the autoresearchbench
 benchmarks only items of the matching gold type are taken) or from --rows (already in lab form: {"rows": [...]}). --row-ids
 FILE ({"rows": [ids]} or a round registration whose `rows` is {development: [...], confirmation: [...]}) must equal the exported
@@ -51,6 +53,9 @@ Judged benchmarks (--verdicts FILE..., raw judge JSONL; the pass is the file's `
   absolute dialects  unit (line.score in [0,1]), percent (line.score / 100), race (line.race): the verdict `key` is mapped to
                      (arm, row, repeat) by building the expected key of every run with --key-template and inverting it; an
                      unknown key is an error, never dropped.
+  questions          bixbench-judged: one line per QUESTION, `{key: "<run key>#<question id>", verdict: "correct"|"incorrect"}` (judge/bixbench.md); a run's score
+                     is the share of its capsule's questions judged correct, computed here from --question-ids ({"<row>": ["<question id>", ...]}), and every
+                     question of the capsule must have exactly one verdict in every pass (a missing or surplus question is an error, never a half-score)
   pairwise           drb_pairwise.aggregate over --pairwise-order (repeatable) and --pair-map; each pass gives the candidate
                      share (3 + s) / 6 with s the signed preference toward the candidate (-3..+3); the baseline has no record.
 A record is required for exactly each succeeded run (pairwise: each succeeded run of a non-baseline arm); a verdict for a run that
@@ -77,6 +82,7 @@ BENCHMARKS = {
     'medbrowsecomp': {'stratum': 'task', 'gold': True, 'judged': False},
     'deepresearchbench': {'stratum': 'category', 'gold': False, 'judged': True},
     'researchclawbench': {'stratum': 'category', 'gold': False, 'judged': True},
+    'bixbench-judged': {'stratum': 'category', 'gold': False, 'judged': True, 'source': 'bixbench'},
 }
 INFRA_STATUSES = frozenset({'driver_error', 'dispatch_refused', 'interrupted', 'canceled'})
 DELIVERY_STATUSES = frozenset({'succeeded', 'failed', 'timeout'})
@@ -273,6 +279,8 @@ def row_from_item(benchmark, item):
         return {'id': row_id, 'category': meta['topic']}
     if benchmark == 'researchclawbench':
         return {'id': row_id, 'category': meta['domain']}
+    if benchmark == 'bixbench-judged':
+        return {'id': row_id, 'category': meta['topic']}
     raise ExportError(f'unknown benchmark {benchmark}')
 
 
@@ -312,6 +320,22 @@ def load_rows(benchmark, items, rows_file):
     if not rows:
         raise ExportError('no rows: give --items or --rows')
     return [rows[k] for k in sorted(rows, key=natural_key)]
+
+
+def load_question_ids(path, rows):
+    """{row id: [question id, ...]} of --question-ids, one non-empty list of distinct ids for every exported row."""
+    if not path:
+        raise ExportError('the questions dialect needs --question-ids ({"<row>": ["<question id>", ...]})')
+    data = json.loads(pathlib.Path(path).read_text(encoding='utf-8'))
+    if not isinstance(data, dict):
+        raise ExportError('--question-ids is {"<row>": ["<question id>", ...]}')
+    out = {}
+    for row in rows:
+        ids = data.get(row['id'])
+        if not isinstance(ids, list) or not ids or not all(isinstance(q, str) and q and '#' not in q for q in ids) or len(set(ids)) != len(ids):
+            raise ExportError(f'--question-ids has no usable list of distinct question ids for row {row["id"]}')
+        out[row['id']] = ids
+    return out
 
 
 def check_row_ids(rows, path, role):
@@ -507,6 +531,56 @@ def absolute_records(args, rows, arms):
     return found, calls
 
 
+def question_records(args, rows, arms):
+    """The `questions` dialect: per-question verdict lines into one score per (run, pass), the share of the capsule's questions judged correct."""
+    table, slots, problems = _expected_keys(args, rows, arms), {}, []
+    wanted = args.question_ids_map
+    for path in args.verdicts:
+        suffix = re.search(r'\.p(\d+)\.jsonl$', pathlib.Path(path).name)
+        file_pass = int(suffix.group(1)) if suffix else 1
+        for number, line in enumerate(pathlib.Path(path).read_text(encoding='utf-8').splitlines(), 1):
+            if not line.strip():
+                continue
+            where = f'{pathlib.Path(path).name}:{number}'
+            try:
+                obj = json.loads(line)
+            except ValueError:
+                problems.append(f'{where}: not JSON')
+                continue
+            run_key, _, question = str(obj.get('key') if isinstance(obj, dict) else '').rpartition('#')
+            if run_key not in table or not question:
+                problems.append(f'{where}: unknown verdict key {obj.get("key") if isinstance(obj, dict) else obj!r} (a run key, `#`, a question id)')
+                continue
+            if 'pass' in obj and obj['pass'] != file_pass:
+                problems.append(f'{where}: pass {obj["pass"]!r} disagrees with the file name (pass {file_pass})')
+                continue
+            if 'judge' in obj and obj['judge'] != args.judge_id:
+                problems.append(f'{where}: judge {obj["judge"]!r} is not {args.judge_id!r}')
+                continue
+            if obj.get('verdict') not in ('correct', 'incorrect'):
+                problems.append(f'{where}: a verdict is "correct" or "incorrect"')
+                continue
+            arm, row, repeat = table[run_key]
+            if question not in wanted[row]:
+                problems.append(f'{where}: {question!r} is not a question of {row}')
+                continue
+            given = slots.setdefault((arm, row, repeat, file_pass), {})
+            if question in given and given[question] != obj['verdict']:
+                problems.append(f'{where}: a different verdict for the same question, run and pass')
+                continue
+            given[question] = obj['verdict']
+    found = {}
+    for (arm, row, repeat, k), given in slots.items():
+        missing = [q for q in wanted[row] if q not in given]
+        if missing:
+            problems.append(f'{arm}/{row}#{repeat} pass {k}: no verdict for {len(missing)} of {len(wanted[row])} questions ({", ".join(missing[:3])})')
+            continue
+        found[(arm, row, repeat, k)] = sum(given[q] == 'correct' for q in wanted[row]) / len(wanted[row])
+    if problems:
+        raise ExportError('verdicts rejected:\n  ' + '\n  '.join(problems[:20]) + (f'\n  ... and {len(problems) - 20} more' if len(problems) > 20 else ''))
+    return found, len(slots)
+
+
 def pairwise_records(args, rows):
     sys.path.insert(0, str(TOOLS))
     import drb_pairwise
@@ -559,7 +633,7 @@ def judged_section(args, rows, arms, runs):
     check_judge(args)
     status = {(r['arm'], r['row'], r['repeat']): r['status'] for r in runs}
     pairwise = args.judge_form == 'pairwise'
-    found, calls = pairwise_records(args, rows) if pairwise else absolute_records(args, rows, arms)
+    found, calls = pairwise_records(args, rows) if pairwise else question_records(args, rows, arms) if args.dialect == 'questions' else absolute_records(args, rows, arms)
     problems = []
     for (arm, row, repeat, k), _ in found.items():
         if status.get((arm, row, repeat)) is None:
@@ -637,6 +711,8 @@ def export(args):
     candidates = candidate_arms(args.bundles, image, args.surface) if args.bundles else {}
     arms = parse_arms(args.arm, candidates, args.role)
     rows = load_rows(args.benchmark, args.items, args.rows)
+    if args.verdicts and args.dialect == 'questions':
+        args.question_ids_map = load_question_ids(args.question_ids, rows)
     if args.row_ids:
         check_row_ids(rows, args.row_ids, args.role)
     runs, incomplete, uncertain = collect_runs(args, rows, arms, spec['judged'])
@@ -656,7 +732,7 @@ def export(args):
         if spec['gold'] and args.role == 'confirmation':
             gold_map[row['id']] = row.pop('gold')
         out_rows.append(row)
-    source = {'kind': 'harness-arms', 'schema': 1, 'role': args.role, 'benchmark': args.benchmark, 'image': image, 'repeats': args.repeats,
+    source = {'kind': 'harness-arms', 'schema': 1, 'role': args.role, 'benchmark': spec.get('source', args.benchmark), 'image': image, 'repeats': args.repeats,
               'rows': out_rows,
               'arms': {name: ({'harness': None} if name == BASELINE else {'harness': None, 'control': 'A/A'} if name == CONTROL else {'harness': candidates[name]})
                        for name, _ in arms},
@@ -711,7 +787,8 @@ def build_parser():
     p.add_argument('--allow-incomplete', action='store_true')
     p.add_argument('--infrastructure-code', action='append', default=[])
     p.add_argument('--verdicts', nargs='+')
-    p.add_argument('--dialect', choices=['unit', 'percent', 'race', 'pairwise'])
+    p.add_argument('--dialect', choices=['unit', 'percent', 'race', 'questions', 'pairwise'])
+    p.add_argument('--question-ids', help='the questions dialect: {"<row>": ["<question id>", ...]}')
     p.add_argument('--judge-id')
     p.add_argument('--judge-provider')
     p.add_argument('--judge-form')

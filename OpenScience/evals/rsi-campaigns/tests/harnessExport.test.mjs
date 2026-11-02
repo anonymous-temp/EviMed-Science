@@ -212,3 +212,75 @@ test('a judged export is digested records the lab joins, and the judge it names 
   assert.notEqual(refused.status, 0);
   assert.match(refused.stderr, /deepseek/i);
 });
+
+// BixBench through the judged path (2026-11-02): capsules too few for the procedure (a directional campaign), scored by a judge's per-question
+// verdicts. The exporter turns the verdict lines into one score per run and pass; the registrar admits the benchmark under `judged-verdicts`;
+// the assembly takes it; the runner opens the corpus directionally and the campaign cannot be qualified.
+test('a judged BixBench export assembles under judged-verdicts, and below the procedure\'s groups it is a directional reference', async () => {
+  const dir = join(scratch, 'bix-judged');
+  await mkdir(dir, { recursive: true });
+  const BIX_DEV = Array.from({ length: 8 }, (_, i) => `bix-${i + 1}`), BIX_CONF = Array.from({ length: 7 }, (_, i) => `bix-${i + 21}`);
+  const questionsOf = (id) => Array.from({ length: 1 + (Number(id.slice(4)) % 3) }, (_, i) => `${id}-q${i + 1}`);
+  const bundles = join(dir, 'bundles.json');
+  await writeFile(bundles, JSON.stringify({ candidates: [{ title: GOOD.harness.title, bundle: GOOD.harness.bundle }] }));
+  const bixItem = (ids) => ids.map((id, index) => JSON.stringify({ key: `bixbench/${id}`, bench: 'bixbench', id, gold: { questions: [] }, meta: { topic: index % 2 ? 'imaging' : 'transcriptomics' } })).join('\n') + '\n';
+  await writeFile(join(dir, 'items-dev.jsonl'), bixItem(BIX_DEV));
+  await writeFile(join(dir, 'items-conf.jsonl'), bixItem(BIX_CONF));
+  await writeFile(join(dir, 'question-ids.json'), JSON.stringify(Object.fromEntries([...BIX_DEV, ...BIX_CONF].map((id) => [id, questionsOf(id)]))));
+  const JUDGE = 'claude-bix-judge-test';
+  const spec = { dev: { ids: BIX_DEV, repeats: 1, arms: ['baseline', 'aa', GOOD.arm] }, conf: { ids: BIX_CONF, repeats: 3, arms: ['baseline', GOOD.arm] } };
+  const verdictFiles = { dev: [], conf: [] }, armDirs = { dev: {}, conf: {} };
+  for (const [side, { ids, repeats, arms }] of Object.entries(spec)) {
+    const lines = [[], []];
+    for (const arm of arms) {
+      const token = arm === 'baseline' ? 'base' : arm, root = join(dir, `${side}-${arm}`);
+      armDirs[side][arm] = root;
+      for (const id of ids) for (let repeat = 0; repeat < repeats; repeat += 1) {
+        const key = `bix-rsi/${token}/${id}${repeats > 1 ? `#r${repeat}` : ''}`, folder = join(root, key.replace('/', '__').replace('/', '__').replace(/[^A-Za-z0-9_.-]/g, '_'));
+        await mkdir(folder, { recursive: true });
+        await writeFile(join(folder, 'result.json'), JSON.stringify({ key, status: 'succeeded', driver: 'bench-driver/3', runId: `run-${token}-${id}-${repeat}`, errorCode: null, cost: { cost: 0.4, openCost: 0, uncertain: 0 } }));
+        await writeFile(join(folder, 'answer.md'), 'Final answers:\n1. 3\n');
+        for (const pass of [0, 1]) for (const question of questionsOf(id)) lines[pass].push(JSON.stringify({ key: `${key}#${question}`, verdict: arm === GOOD.arm || question.endsWith('q1') ? 'correct' : 'incorrect', judge: JUDGE }));
+      }
+    }
+    for (const [pass, rows] of lines.entries()) {
+      const file = join(dir, `${side}${pass === 0 ? '' : `.p${pass + 1}`}.jsonl`);
+      await writeFile(file, `${rows.join('\n')}\n`);
+      verdictFiles[side].push(file);
+    }
+  }
+  const pools = join(dir, 'pools.json'), registration = join(dir, 'registration.json');
+  await writeFile(pools, JSON.stringify({ schema: 'bench-pools/1', bench: 'bixbench', salt: 'rsi-test', pools: { main: { development: BIX_DEV, confirmation: BIX_CONF } } }));
+  const judgeArgs = ['--judge-id', JUDGE, '--judge-provider', 'anthropic', '--judge-form', 'absolute', '--judge-passes', '2', '--judge-max-calls', '400', '--judge-agreement', '0.95',
+    '--judge-noise-sd', '0.06', '--judge-noise-band', '0.12', '--judge-measured-on', 'synthetic', '--judge-min-agreement', '0.9', '--judge-max-noise-band', '0.15'];
+  const registered = python('register_round.py', ['--round', 'rsi2-test', '--family', 'bixbench', '--benchmark', 'bixbench', '--scorer', 'judged-verdicts', '--pools', pools, '--failure-slice', 'imaging,transcriptomics',
+    '--development-rows', '8', '--confirmation-rows', '7', '--candidates-max', '1', ...judgeArgs, '--out', registration]);
+  assert.equal(registered.status, 0, registered.stderr);
+  const exportRole = (role) => {
+    const side = role === 'development' ? 'dev' : 'conf';
+    return python('export_harness_arms.py', ['--role', role, '--benchmark', 'bixbench-judged', '--items', join(dir, `items-${side}.jsonl`), '--row-ids', registration, '--bundles', bundles, '--image-id', IMAGE.id, '--image-digest', IMAGE.digest,
+      '--bench-key', 'bix-rsi', '--repeats', String(spec[side].repeats), ...Object.entries(armDirs[side]).flatMap(([arm, root]) => ['--arm', `${arm}=${root}`]),
+      '--verdicts', ...verdictFiles[side], '--dialect', 'questions', '--question-ids', join(dir, 'question-ids.json'), '--judge-id', JUDGE, '--judge-provider', 'anthropic', '--judge-form', 'absolute', '--judge-passes', '2',
+      '--out', join(dir, `${side}-export`, `${role}.json`)]);
+  };
+  for (const role of ['development', 'confirmation']) { const made = exportRole(role); assert.equal(made.status, 0, made.stderr); }
+  const exported = (role) => join(dir, `${role === 'development' ? 'dev' : 'conf'}-export`, `${role}.json`);
+  const development = JSON.parse(await readChecked(exported('development'))), confirmation = JSON.parse(await readChecked(exported('confirmation')));
+  assert.equal(confirmation.benchmark, 'bixbench');
+  assert.deepEqual(confirmation.rows.map((row) => Object.keys(row).sort()), BIX_CONF.map(() => ['category', 'id']), 'rows carry a category and no gold');
+  const round = JSON.parse(await readChecked(registration));
+  assert.equal(round.judge.callsRequired, (8 * 3 + 7 * 3 * 2) * 2);
+  const verdicts = { development: await readChecked(join(dir, 'dev-export', 'development.verdicts.jsonl')), confirmation: await readChecked(join(dir, 'conf-export', 'confirmation.verdicts.jsonl')) };
+  const built = await buildHarnessCampaign({ development, confirmation, registration: round, developmentVerdicts: verdicts.development, confirmationVerdicts: verdicts.confirmation, month: '2026-11', pilotRationale: 'Synthetic.' });
+  assert.equal(built.supply.directional, true, '7 capsules are below the procedure\'s 25 groups');
+  assert.equal(built.supply.judge.calls, development.judged.calls + confirmation.judged.calls);
+  const { completed } = await runToVerdict({ manifest: built.manifest, inputs: built.inputs }, { dir: join(dir, 'verdict') });
+  assert.equal(completed.qualification, 'inconclusive', 'a directional campaign cannot be qualified');
+  assert.equal(completed.checkpoint.evaluation.scope, 'directional-reference');
+  // the deterministic scorer does not take judged rows: the same capsules registered under it are refused by name
+  const codeRegistration = join(dir, 'registration-code.json');
+  const asCode = python('register_round.py', ['--round', 'rsi2-test', '--family', 'bixbench', '--benchmark', 'bixbench', '--scorer', 'bixbench-deterministic', '--pools', pools, '--failure-slice', 'imaging',
+    '--development-rows', '8', '--confirmation-rows', '7', '--candidates-max', '1', '--out', codeRegistration]);
+  assert.equal(asCode.status, 0, asCode.stderr);
+  await assert.rejects(buildHarnessCampaign({ development, confirmation, registration: JSON.parse(await readChecked(codeRegistration)), month: '2026-11', pilotRationale: 'x' }), { message: /^(harness_arms_rows_invalid|campaign_source_invalid|harness_confirmation_gold_missing|harness_confirmation_not_sealed)$/ });
+});

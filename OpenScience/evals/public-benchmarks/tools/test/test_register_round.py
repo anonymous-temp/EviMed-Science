@@ -166,6 +166,27 @@ class Selection(Fixture):
         self.assertEqual(code, 2)
         self.assertIn('rows hold the lists', err)
 
+    def test_listed_ids_leave_both_roles_with_their_reason_and_the_registration_verifies_only_against_the_same_files(self):
+        file = self.write('infeasible.json', {'reason': 'files over the upload limit; the request builder cannot name the capsule', 'ids': ['101', '3', '999']})
+        doc = self.register(out='listed.json', extra=['--development-rows', '10', '--confirmation-rows', '12', '--exclude-ids', str(file)])
+        self.assertFalse({'101', '3'} & set(doc['rows']['confirmation'] + doc['rows']['development']))
+        listed, = doc['excluded']['listed']
+        self.assertEqual((listed['name'], listed['reason'][:11], listed['removed']), ('infeasible.json', 'files over ', ['3', '101']))  # 999 is not in the pool: not listed as removed
+        self.assertEqual(len(listed['sha256']), 64)
+        self.assertEqual(doc['available'], {'development': 39, 'confirmation': 39})
+        expected = [i for i in sorted(CONF, key=lambda i: h(SALT, i)) if i != '101'][:12]
+        self.assertEqual(doc['rows']['confirmation'], expected)
+        path = str(self.dir / 'listed.json')
+        self.assertEqual(rr.check(path, str(self.pools), 'main', None, [], [str(file)]), [])
+        self.assertTrue(rr.check(path, str(self.pools), 'main', None, [], []), 'the listed files are needed to re-derive the selection')
+        other = self.write('other.json', {'reason': 'files over the upload limit; the request builder cannot name the capsule', 'ids': ['101', '3']})
+        self.assertTrue(rr.check(path, str(self.pools), 'main', None, [], [str(other)]), 'another file is not the one recorded')
+        self.assertNotIn('listed', self.register(out='plain-listed.json')['excluded'], 'without the option a registration is what it was')
+        for bad in ({'ids': ['1']}, {'reason': ' ', 'ids': ['1']}, {'reason': 'x'}, ['1']):
+            code, _, err = self.run_main(self.args(out='bad-listed.json', extra=['--exclude-ids', str(self.write('bad-l.json', bad))]))
+            self.assertEqual(code, 2, bad)
+            self.assertIn('--exclude-ids', err)
+
     def test_the_tool_patch_surface_is_recorded_and_the_default_writes_no_field(self):
         tool = self.register(out='tool.json', extra=['--surface', 'tool-patch'])
         self.assertEqual(tool['surface'], 'tool-patch')
@@ -317,6 +338,20 @@ class Judged(Fixture):
         (self.dir / 'low.json').write_text(json.dumps(doc))
         self.assertTrue(any('below the 228' in p for p in rr.check(str(self.dir / 'low.json'), None, None, None)))
         self.assertEqual(rr.check(str(self.dir / 'reg.json'), None, None, None), [])
+
+    def test_bixbench_is_a_judged_benchmark_beside_the_deterministic_scorer_and_the_absolute_budget_counts_every_arm(self):
+        code, _, err = self.run_main(self.args(out='bix-judged.json', scorer='judged-verdicts', benchmark='bixbench', extra=self.judged_extra(**{'--judge-form': 'absolute', '--judge-max-calls': '5000'})
+                                               + ['--development-rows', '8', '--confirmation-rows', '7', '--repeats-confirmation', '3', '--candidates-max', '1']))
+        self.assertEqual(code, 0, err)
+        doc = json.loads((self.dir / 'bix-judged.json').read_text())
+        self.assertEqual((doc['scorer'], doc['benchmark'], doc['judge']['form']), ('judged-verdicts', 'bixbench', 'absolute'))
+        # absolute judging scores every arm: development baseline + A/A + 1 candidate, confirmation baseline + 1 candidate; 2 passes
+        self.assertEqual(doc['judge']['callsRequired'], (8 * 1 * 3 + 7 * 3 * 2) * 2)
+        code, _, err = self.run_main(self.args(out='bix-code.json', scorer='bixbench-deterministic', benchmark='bixbench'))
+        self.assertEqual(code, 0, err)
+        code, _, err = self.run_main(self.args(out='bix-wrong.json', scorer='judged-verdicts', benchmark='medcalc-bench', extra=self.judged_extra()))
+        self.assertEqual(code, 2)
+        self.assertIn('scorer judged-verdicts scores', err)
 
     def test_the_family_of_the_solver_is_refused(self):
         for override in ({'--judge-id': 'deepseek-v4-pro'}, {'--judge-provider': 'DeepSeek'}):

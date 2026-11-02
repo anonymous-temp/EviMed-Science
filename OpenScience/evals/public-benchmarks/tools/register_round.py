@@ -26,6 +26,9 @@ ordered, and the parameters the lab will hold the campaign to. What it fixes:
 --exclude-opened FILE (repeatable) takes the rows earlier campaigns opened, so this registration's confirmation rows are fresh. A file is an
 earlier registration (its confirmation rows are the opened ones, removed from both roles; its development rows were seen, removed from the
 confirmation role), or a list / {"opened": [...]} of opened ids. The excluded ids and each file's sha256 are recorded and re-checked.
+--exclude-ids FILE (repeatable) takes {"reason": "<why>", "ids": [...]}: ids that cannot be run or built (a task the hosted runtime cannot run, a capsule whose
+files are over the upload limit or that the request builder cannot name) leave BOTH roles, and the registration records each file's name, sha256, reason and the
+ids the pool held. It is the honest way to say "these rows are not part of the corpus" without calling them opened; `--check` re-derives the selection with the same files.
 --surface tool-patch registers the family for the tool-patch surface (a candidate that holds code; its own error-budget ledger and
 consumer identity); the default is harness-patch and writes no `surface` field.
 `groupsBelowMinimum` states an observation (fewer confirmation rows than the procedure's minimum groups: the report will call
@@ -58,7 +61,7 @@ SCORER_BENCHMARKS = {
     'arb-deep': {'autoresearchbench-deep'},
     'arb-wide': {'autoresearchbench-wide'},
     'mbc-normalized': {'medbrowsecomp'},
-    'judged-verdicts': {'deepresearchbench', 'researchclawbench'},
+    'judged-verdicts': {'deepresearchbench', 'researchclawbench', 'bixbench'},
 }
 JUDGE_ARGS = ('judge_id', 'judge_provider', 'judge_form', 'judge_passes', 'judge_max_calls', 'judge_agreement', 'judge_noise_sd',
               'judge_noise_band', 'judge_measured_on', 'judge_min_agreement', 'judge_max_noise_band', 'judge_noise', 'judge_noise_key')
@@ -170,6 +173,26 @@ def opened_ids(paths):
             raise RegistrationError(f'{path}: --exclude-opened takes a registration, a list of ids or {{"opened": [...]}}')
         files.append({'name': pathlib.Path(path).name, 'sha256': sha256_hex(raw)})
     return opened, seen - opened, files
+
+
+def listed_ids(paths):
+    """(listed ids, [{name, sha256, reason, ids}]) of the files --exclude-ids names: {"reason": "<why>", "ids": [...]} each."""
+    listed, files = set(), []
+    for path in paths or []:
+        raw = pathlib.Path(path).read_bytes()
+        data = read_json(path, '--exclude-ids file')
+        if not isinstance(data, dict) or not isinstance(data.get('ids'), list) or not isinstance(data.get('reason'), str) or not data['reason'].strip():
+            raise RegistrationError(f'{path}: --exclude-ids takes {{"reason": "<why these rows leave the corpus>", "ids": [...]}}')
+        ids = [str(i) for i in data['ids']]
+        listed |= set(ids)
+        files.append({'name': pathlib.Path(path).name, 'sha256': sha256_hex(raw), 'reason': data['reason'].strip(), 'ids': ids})
+    return listed, files
+
+
+def listed_removed(pool, files):
+    """What each --exclude-ids file actually removed from the pool, in natural order, as the registration records it."""
+    held = set(pool['development']) | set(pool['confirmation'])
+    return [{'name': f['name'], 'sha256': f['sha256'], 'reason': f['reason'], 'removed': sorted(set(f['ids']) & held, key=natural_key)} for f in files]
 
 
 def select_rows(pool, salt, ppc, development_rows, confirmation_rows, development_salt=None, opened=(), seen=()):
@@ -295,7 +318,8 @@ def register(args):
         ppc_name, ppc_sha = pathlib.Path(args.ppc).name, sha256_hex(pathlib.Path(args.ppc).read_bytes())
     development_salt = args.development_salt if args.development_salt not in (None, salt) else None
     opened, seen, opened_files = opened_ids(args.exclude_opened)
-    rows, available, removed = select_rows(pool, salt, ppc, args.development_rows, args.confirmation_rows, development_salt, opened, seen)
+    listed, listed_files = listed_ids(args.exclude_ids)
+    rows, available, removed = select_rows(pool, salt, ppc, args.development_rows, args.confirmation_rows, development_salt, opened | listed, seen)
     removed_opened = opened_removed(pool, opened)
     judge = judge_block(args)
     if judge is not None:
@@ -312,7 +336,8 @@ def register(args):
         'pool': {'file': pathlib.Path(args.pools).name, 'name': pool_name, 'digest': pool_digest},
         'hashOrder': {'salt': salt, 'rule': HASH_RULE, **({'developmentSalt': development_salt} if development_salt else {})},
         'rows': rows, 'available': available,
-        'excluded': {'ppc': removed, 'ppcFile': ppc_name, 'ppcFileSha256': ppc_sha, **({'opened': removed_opened, 'openedFiles': opened_files, 'seen': sorted(seen & set(pool['development']), key=natural_key)} if opened_files else {})},
+        'excluded': {'ppc': removed, 'ppcFile': ppc_name, 'ppcFileSha256': ppc_sha, **({'opened': removed_opened, 'openedFiles': opened_files, 'seen': sorted(seen & set(pool['development']), key=natural_key)} if opened_files else {}),
+                     **({'listed': listed_removed(pool, listed_files)} if listed_files else {})},
         'repeats': {'development': args.repeats_development, 'confirmation': args.repeats_confirmation},
         'failureSlice': failure_slice(args.failure_slice, args.scorer),
         'failureSliceKey': 'failureCalculators' if args.scorer == 'medcalc' else 'failureSlice',
@@ -333,7 +358,7 @@ def register(args):
 
 # ------------------------------------------------------------------------------------------------------------------ check
 
-def check(path, pools, pool_name, ppc_path, exclude_opened=()):
+def check(path, pools, pool_name, ppc_path, exclude_opened=(), exclude_ids=()):
     """A list of differences (empty when the file verifies)."""
     doc = read_json(path, 'the registration')
     problems = []
@@ -375,8 +400,14 @@ def check(path, pools, pool_name, ppc_path, exclude_opened=()):
         opened, seen, opened_files = opened_ids(exclude_opened)
         if opened_files != recorded:
             problems.append('the --exclude-opened files are not the ones recorded in the registration (names or sha256 differ)')
+        recorded_listed = doc.get('excluded', {}).get('listed') or []
+        if recorded_listed and not exclude_ids:
+            problems.append('the registration excluded listed ids: give the same --exclude-ids files to re-derive the selection')
+        listed, listed_files = listed_ids(exclude_ids)
+        if listed_removed(pool, listed_files) != recorded_listed:
+            problems.append('the --exclude-ids files are not the ones recorded in the registration (names, sha256, reasons or removed ids differ)')
         try:
-            again, _, removed = select_rows(pool, salt, ppc, len(rows['development']), len(rows['confirmation']), development_salt, opened, seen)
+            again, _, removed = select_rows(pool, salt, ppc, len(rows['development']), len(rows['confirmation']), development_salt, opened | listed, seen)
             removed_opened = opened_removed(pool, opened)
         except RegistrationError as error:
             problems.append(f'rows cannot be re-derived: {error}')
@@ -401,6 +432,7 @@ def build_parser():
     p.add_argument('--pool', help='the pool inside the pools file (default main)')
     p.add_argument('--ppc')
     p.add_argument('--exclude-opened', action='append', default=[], metavar='FILE', help='earlier registration(s) or id lists whose opened rows leave this registration (repeatable)')
+    p.add_argument('--exclude-ids', action='append', default=[], metavar='FILE', help='{"reason", "ids"} files: rows that cannot be run or built leave both roles (repeatable)')
     p.add_argument('--surface', default='harness-patch', help='tool-patch: the candidate holds code (its own error-budget ledger and consumer identity)')
     p.add_argument('--salt')
     p.add_argument('--development-salt', help='order the development role by this salt instead of --salt (rows chosen and run before the registration)')
@@ -437,7 +469,7 @@ def main(argv=None):
     args = build_parser().parse_args(argv)
     try:
         if args.check:
-            problems = check(args.check, args.pools, args.pool, args.ppc, args.exclude_opened)
+            problems = check(args.check, args.pools, args.pool, args.ppc, args.exclude_opened, args.exclude_ids)
             for problem in problems:
                 print(f'register_round: {problem}', file=sys.stderr)
             print('register_round: ' + ('differences found' if problems else 'verified'), file=sys.stderr)
