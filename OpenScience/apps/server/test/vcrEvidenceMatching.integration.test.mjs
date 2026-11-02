@@ -216,7 +216,7 @@ test("an assumption key is a name the lineage can carry, refused by name otherwi
     { key: "dist_nan", name: "x", pointValue: 1, distribution: { family: "normal", params: { mean: "abc" } } },
     { key: "value_source_typed", name: "x", pointValue: 1, valueSource: "observed" },
   ]);
-  assert.equal(result.ids.length, 1);
+  assert.equal(result.ids.length, 2, "the dropout rate, and the number whose label was read as the one it can be");
   const byIndex = Object.fromEntries(result.issues.map((issue) => [issue.index, `${issue.field}:${issue.code}`]));
   assert.match(byIndex[1], /^key:vcr_write_value_invalid$/);
   assert.match(byIndex[2], /^key:/);
@@ -225,11 +225,14 @@ test("an assumption key is a name the lineage can carry, refused by name otherwi
   assert.equal(result.issues.filter((issue) => issue.index === 4)[0].code, "vcr_write_field_forbidden");
   assert.match(byIndex[5], /^distribution\.family:/);
   assert.match(byIndex[6], /^distribution\.params\.mean:/);
-  assert.match(byIndex[7], /^valueSource:/, "a run cannot label its own number as observed");
+  // A run cannot label its own number as observed. Until 2026-11-02 that was a refusal; since the closed synonym tables (`vcrWriteWords`) the label
+  // is read as the one word an expert setting can carry: the number is saved as assumed, what the run wrote goes into the note, and the answer says so.
+  assert.equal(byIndex[7], undefined, "no longer refused for the word");
+  const applied = result.results.flatMap((entry) => entry.applied ?? []).find((entry) => entry.index === 7);
+  assert.deepEqual([applied?.field, applied?.from, applied?.value], ["valueSource", "observed", "assumed"]);
   const cards = await vcr.store.assumptions(study.id);
-  assert.deepEqual(cards.map((card) => card.key), ["dropout_rate"]);
-  assert.equal(cards[0].reviewState, "ai_set");
-  assert.equal(cards[0].valueSource, "assumed");
+  assert.deepEqual(cards.map((card) => card.key).sort(), ["dropout_rate", "value_source_typed"]);
+  for (const card of cards) assert.deepEqual([card.reviewState, card.valueSource], ["ai_set", "assumed"], `${card.key}: nothing a run writes is observed`);
 });
 
 test("PA-14 a model-typed number cannot enter through a write at any depth: population, grid, forecast and comparator", options, async () => {
