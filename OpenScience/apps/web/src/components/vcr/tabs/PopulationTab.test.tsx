@@ -256,7 +256,7 @@ describe("人群 · a generated population", () => {
       web.fetchWithWebAuth.mockResolvedValue(new Response("a,b\n1,2\n", { status: 200, headers: { "content-disposition": 'attachment; filename="synthetic-population.csv"' } }));
       const { container } = draw();
       await screen.findByRole("table", { name: "每个变量设定的分布和生成的结果" });
-      await userEvent.click(within(band(container)).getByRole("button", { name: "下载记录" }));
+      await userEvent.click(within(band(container)).getByRole("button", { name: "下载 CSV" }));
       await waitFor(() => expect(click).toHaveBeenCalled());
       expect(String(web.fetchWithWebAuth.mock.calls[0][0])).toMatch(/\/vcr\/studies\/std_1\/records\/res_9\.csv$/);
       expect((click.mock.contexts[0] as HTMLAnchorElement).download).toBe("synthetic-population.csv");
@@ -267,7 +267,7 @@ describe("人群 · a generated population", () => {
       web.fetchWithWebAuth.mockResolvedValue(new Response(JSON.stringify({ error: "x", code: "vcr_records_not_synthetic" }), { status: 403, headers: { "content-type": "application/json" } }));
       const { container } = draw();
       await screen.findByRole("table", { name: "每个变量设定的分布和生成的结果" });
-      await userEvent.click(within(band(container)).getByRole("button", { name: "下载记录" }));
+      await userEvent.click(within(band(container)).getByRole("button", { name: "下载 CSV" }));
       await waitFor(() => expect(toasts.error).toHaveBeenCalled());
       expect(click).not.toHaveBeenCalled();
     });
@@ -276,7 +276,7 @@ describe("人群 · a generated population", () => {
       serve((raw) => { raw.download = null; });
       const { container } = draw();
       await screen.findByRole("table", { name: "每个变量设定的分布和生成的结果" });
-      expect(within(band(container)).queryByRole("button", { name: "下载记录" })).toBeNull();
+      expect(within(band(container)).queryByRole("button", { name: "下载 CSV" })).toBeNull();
     });
   });
 
@@ -301,7 +301,7 @@ describe("人群 · a generated population", () => {
   it("offers a reader who cannot write the download and nothing that would be refused", async () => {
     serve();
     const { container } = draw(readOnly());
-    await within(await found(container, "[data-page-chrome]")).findByRole("button", { name: "下载记录" });
+    await within(await found(container, "[data-page-chrome]")).findByRole("button", { name: "下载 CSV" });
     expect(within(band(container)).queryByRole("button", { name: "让 AI 生成新版本" })).toBeNull();
     expect(within(band(container)).queryByRole("button", { name: "让 AI 调整设定" })).toBeNull();
   });

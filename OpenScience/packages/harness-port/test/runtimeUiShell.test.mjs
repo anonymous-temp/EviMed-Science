@@ -367,9 +367,15 @@ test('the address of a result page is read exactly: the shell\'s origin, a study
   for (const tab of ['overview', 'population', 'patients', 'comparator', 'trial', 'matching', 'data']) {
     assert.deepEqual(vcrResultOfLink(`https://evimed.example/app/virtual-research/study-A_9/${tab}`, shell), { studyId: 'study-A_9', tab });
   }
+  // The comparison tab opens on the saved comparison a reply cited (2026-11-02); no other tab takes a query.
+  assert.deepEqual(vcrResultOfLink('https://evimed.example/app/virtual-research/std_1/comparator?object=cmp_9a-B', shell), { studyId: 'std_1', tab: 'comparator', object: 'cmp_9a-B' });
   for (const href of [
     'https://evil.example/app/virtual-research/std_1/matching', 'http://evimed.example/app/virtual-research/std_1/matching',
     'https://evimed.example:8443/app/virtual-research/std_1/matching', 'https://evimed.example/app/virtual-research/std_1/matching?x=1',
+    'https://evimed.example/app/virtual-research/std_1/matching?object=cmp_1',
+    'https://evimed.example/app/virtual-research/std_1/comparator?x=1', 'https://evimed.example/app/virtual-research/std_1/comparator?object=',
+    'https://evimed.example/app/virtual-research/std_1/comparator?object=a%2Fb', 'https://evimed.example/app/virtual-research/std_1/comparator?object=cmp_1&x=1',
+    'https://evimed.example/app/virtual-research/std_1/comparator?object=cmp_1&object=cmp_2', `https://evimed.example/app/virtual-research/std_1/comparator?object=${'x'.repeat(161)}`,
     'https://evimed.example/app/virtual-research/std_1/matching#a', 'https://evimed.example/app/virtual-research/std_1/chat',
     'https://evimed.example/app/virtual-research/std_1', 'https://evimed.example/app/virtual-research/std_1/matching/extra',
     'https://evimed.example/app/virtual-research/../x/matching', 'https://evimed.example/app/virtual-research/a%2Fb/matching',

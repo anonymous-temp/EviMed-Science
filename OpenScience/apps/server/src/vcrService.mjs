@@ -1062,6 +1062,8 @@ export class VcrService {
       criteria: protocol ? await this.store.criteria(protocol.id) : [], jobMarks,
       currentNodes,
     };
+    // The saved comparison a link names (`?object=`): the comparison tab's headline follows it, and the newest stays without one.
+    if (tab === "comparator" && typeof query.object === "string") bundle.askedComparator = query.object;
     // What the study's data intake waits on a person for: said on the overview, where the study is read, and not only inside 数据接入.
     if (tab === 'overview') {
       bundle.intakeNeeds = intakeNeedsOf(await this.packages.dataPlane?.intakeRows?.(study).catch(() => null));

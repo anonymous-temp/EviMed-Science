@@ -2789,7 +2789,7 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
             cpuSeconds: job.cpuSecondsUsed, error: job.error, result, ...(pooling ? { pooling } : {}),
             ...(job.state === "awaiting_budget" ? { awaitingBudget: true, message: AWAITING_BUDGET_MESSAGE } : {}) };
           const safe = withJobEntry(await vcr.service.forModel(answer, { projection: "job_result" }),
-            { study, resultKind: String(result?.kind ?? vcrResultKindFor(String(job.kind))), publicUrl: config?.publicUrl });
+            { study, resultKind: String(result?.kind ?? vcrResultKindFor(String(job.kind))), publicUrl: config?.publicUrl, object: job.checkpoint?.subjectId ?? result?.subjectId });
           if (origin && ["succeeded","failed","canceled"].includes(job.state)) await vcr.store.query(`UPDATE evimed_vcr.jobs
             SET checkpoint=checkpoint || jsonb_build_object('originTerminalObservation',$4::jsonb) WHERE id=$1
             AND checkpoint->'conversationOrigin'->>'runId'=$2 AND checkpoint->'conversationOrigin'->>'rootSessionId'=$3`,[job.id,origin.runId,origin.rootSessionId,JSON.stringify({runId:origin.runId,rootSessionId:origin.rootSessionId,callId:origin.callId,state:job.state,resultKey:result ? `${result.id}:${result.version}` : 'none'})]);

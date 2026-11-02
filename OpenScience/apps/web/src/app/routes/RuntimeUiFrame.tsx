@@ -966,7 +966,9 @@ export function RuntimeUiFrame({ projectId, origin, scope: scopeInput, scopeOwne
         // frame names the study and the tab from the closed shapes; the address is spelled here, and the page reads the study for the
         // account itself (a study that is not theirs is not found).
         incoming.current = message.seq;
-        navigate(vcrTabPath(message.studyId, message.tab));
+        // The comparison tab opens on the saved comparison the reply cited; the id is of the shape the application puts in an address.
+        const object = message.tab === "comparator" && typeof message.object === "string" && /^[A-Za-z0-9_-]{1,160}$/.test(message.object) ? message.object : null;
+        navigate(`${vcrTabPath(message.studyId, message.tab)}${object ? `?${new URLSearchParams({ object })}` : ""}`);
       } else if (message.type === "evimed.runtime-ui.open-source"
         && typeof message.sourceId === "string" && /^src_[a-f0-9]{32}$/.test(message.sourceId)) {
         incoming.current = message.seq;

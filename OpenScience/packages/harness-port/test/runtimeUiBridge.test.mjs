@@ -477,6 +477,12 @@ test('a 虚拟临床研究 result is opened by naming a study id and one of the 
   ]) hub.send('open-vcr-result', fields);
   const opened = f.sent.filter((row) => row.message.type === 'evimed.runtime-ui.open-vcr-result').map((row) => row.message);
   assert.deepEqual(opened.map((message) => [message.studyId, message.tab]), VCR_TABS.map((tab) => ['std_1', tab]));
+  // The comparison tab, and only it, may name which saved comparison it opens on; an id that is not an application id is dropped, not the message.
+  hub.send('open-vcr-result', { studyId: 'std_1', tab: 'comparator', object: 'cmp_1' });
+  hub.send('open-vcr-result', { studyId: 'std_1', tab: 'trial', object: 'cmp_1' });
+  hub.send('open-vcr-result', { studyId: 'std_1', tab: 'comparator', object: '../x' });
+  const named = f.sent.filter((row) => row.message.type === 'evimed.runtime-ui.open-vcr-result').map((row) => row.message).slice(VCR_TABS.length);
+  assert.deepEqual(named.map((message) => [message.tab, message.object ?? null]), [['comparator', 'cmp_1'], ['trial', null], ['comparator', null]]);
   // Only the two fields travel: the frame names a place, never an address.
   for (const message of opened) assert.deepEqual(Object.keys(message).sort(), ['frameId', 'projectId', 'seq', 'studyId', 'tab', 'type', 'version'].sort());
   assert.equal(opened[0].projectId, f.sent[0].message.projectId, 'the frame\'s own project, not the one the body named');

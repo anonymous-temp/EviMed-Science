@@ -609,7 +609,8 @@ function robustnessView(result, value) {
  */
 export function presentComparatorTab(bundle) {
   const { study, comparators, stale, now } = bundle;
-  const current = comparators[0] ?? null;
+  // The comparison a link named, when it is one of this study's; else the newest.
+  const current = (typeof bundle.askedComparator === "string" ? comparators.find((design) => design.id === bundle.askedComparator) : null) ?? comparators[0] ?? null;
   // The newest version whose compute failed has no result of its own. The page keeps the
   // last version of the same route that has one — its numbers stay on the page — and says
   // so: a route that lost its numbers because the latest edit did not compute would read

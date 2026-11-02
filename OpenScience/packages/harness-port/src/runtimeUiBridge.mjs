@@ -602,13 +602,15 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     },
     /**
      * A 虚拟临床研究 result a reply linked to: which study and which of its seven tabs, both from the closed shapes (a study id the
-     * application puts in an address, a tab of the study page). The shell opens that page; the address is the shell's to spell, and
-     * nothing else this frame could name reaches it.
+     * application puts in an address, a tab of the study page), and for the comparison tab which saved comparison it opens on. The shell
+     * opens that page; the address is the shell's to spell, and nothing else this frame could name reaches it.
      * @param {any} fields
      */
     'open-vcr-result'(fields) {
       const tabs = ['overview', 'population', 'patients', 'comparator', 'trial', 'matching', 'data'];
-      return validId(fields?.studyId) && typeof fields?.tab === 'string' && tabs.includes(fields.tab) ? { studyId: fields.studyId, tab: fields.tab } : null;
+      if (!(validId(fields?.studyId) && typeof fields?.tab === 'string' && tabs.includes(fields.tab))) return null;
+      const object = fields.tab === 'comparator' && validId(fields.object) ? { object: fields.object } : {};
+      return { studyId: fields.studyId, tab: fields.tab, ...object };
     },
     /** @param {any} fields */
     'open-source'(fields) {

@@ -1,6 +1,7 @@
 import { VCR_PREDICTION_LIMIT_LABELS_ZH } from "@evimed/domain";
 import { VcrVersionComparison } from "../VcrVersionComparison";
 import { useState, type ReactNode } from "react";
+import { useSearchParams } from "react-router";
 import { ChevronLeft, CircleCheck, Info, PenLine } from "lucide-react";
 import { VCR_COMPARATOR_ROUTE_LABELS_ZH } from "@evimed/domain";
 import { getVcrComparator, type VcrComparatorTab as ComparatorData, type VcrConclusion, type VcrOperatingCharacteristics, type VcrPremise, type VcrStudy } from "@/lib/vcrClient";
@@ -64,7 +65,10 @@ export const VCR_ASSESS_COMPARABILITY_DRAFT = "请评估这项对照在十个可
  *    route (what it is, what it would need) and changes nothing the study computes.
  */
 export function ComparatorTab({ studyId, study }: { studyId: string; study: VcrStudy }) {
-  const { state, reload } = useVcrLoad(`${studyId}:comparator`, () => getVcrComparator(studyId));
+  // The saved comparison a reply's link named (`?object=`) is the headline; without one the newest comparison stays.
+  const [params] = useSearchParams();
+  const object = params.get("object");
+  const { state, reload } = useVcrLoad(`${studyId}:comparator:${object ?? ""}`, () => getVcrComparator(studyId, object ? { object } : undefined));
   if (state.kind === "loading") return <VcrTabSkeleton />;
   if (state.kind === "error") return <VcrTabError message={state.message} onRetry={reload} />;
   return <ComparatorView studyId={studyId} study={study} data={state.data} />;

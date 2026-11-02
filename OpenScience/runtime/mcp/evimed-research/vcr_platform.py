@@ -1132,8 +1132,9 @@ def shape(arguments: dict) -> dict:
     if kind in RECORD_KINDS:
         # Three of the four live conversations that did not enter the module for a cohort wrote their own script because they could not tell whether its rows could be handed to
         # the person as a file (2026-11-02: "I don't know if it writes a CSV I can access"). They can be read back.
-        next_actions.append("The result keeps the generated rows: vcr_read what generated_records with filter.id = the result's id returns them, "
-                            "at most 50 per call, for a file the person asks for.")
+        next_actions.append("The result keeps the generated rows. For a file the person asks for, the result page has 下载 CSV for the whole table: "
+                            "give the page link the answer's resultEntry carries and say so. vcr_read what generated_records with filter.id = the "
+                            "result's id returns the rows, at most 50 per call, for working with them yourself.")
     return {
         "status": "success",
         "summary": summary,
