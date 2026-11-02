@@ -106,6 +106,43 @@ describe("active research workspace", () => {
     const [first, second] = dispatchMocks.startResearchGoal.mock.calls.map(call => call[0]);
     expect(second.dispatchId).toBe(first.dispatchId); expect(second.sessionId).toBe(first.sessionId);
   });
+  it("REVIEWFIX 10 reopening the dialog after a lost answer is the same request until the goal is known to have started", async () => {
+    const user = userEvent.setup();
+    dispatchMocks.startResearchGoal.mockRejectedValueOnce(new Error("网络中断")).mockResolvedValue({ id: "new-run", sessionId: "new-session", effectiveRouteReason: "research-goal", question: "目标", startedAt: "2026-11-01T00:00:00Z", status: "running" });
+    renderPage(); await screen.findByText("cohort.csv");
+    await waitFor(() => expect(screen.getByRole("button", { name: "发起研究" })).toBeEnabled());
+    await user.click(screen.getByRole("button", { name: "发起研究" }));
+    await user.type(screen.getByLabelText("研究目标"), "目标");
+    await user.click(screen.getByRole("button", { name: "开始研究" }));
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    // the answer was lost: the person closes the dialog and opens it again with the same goal
+    await user.click(screen.getByRole("button", { name: "取消" }));
+    await waitFor(() => expect(screen.queryByLabelText("研究目标")).not.toBeInTheDocument());
+    await user.click(screen.getByRole("button", { name: "发起研究" }));
+    await user.type(screen.getByLabelText("研究目标"), "目标");
+    await user.click(screen.getByRole("button", { name: "开始研究" }));
+    await waitFor(() => expect(dispatchMocks.startResearchGoal).toHaveBeenCalledTimes(2));
+    const [first, second] = dispatchMocks.startResearchGoal.mock.calls.map(call => call[0]);
+    expect(second.dispatchId).toBe(first.dispatchId); expect(second.sessionId).toBe(first.sessionId);
+  });
+  it("REVIEWFIX 10 another goal is another request, even when the first answer was lost", async () => {
+    const user = userEvent.setup();
+    dispatchMocks.startResearchGoal.mockRejectedValueOnce(new Error("网络中断")).mockResolvedValue({ id: "new-run", sessionId: "new-session", effectiveRouteReason: "research-goal", question: "另一个目标", startedAt: "2026-11-01T00:00:00Z", status: "running" });
+    renderPage(); await screen.findByText("cohort.csv");
+    await waitFor(() => expect(screen.getByRole("button", { name: "发起研究" })).toBeEnabled());
+    await user.click(screen.getByRole("button", { name: "发起研究" }));
+    await user.type(screen.getByLabelText("研究目标"), "目标");
+    await user.click(screen.getByRole("button", { name: "开始研究" }));
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "取消" }));
+    await waitFor(() => expect(screen.queryByLabelText("研究目标")).not.toBeInTheDocument());
+    await user.click(screen.getByRole("button", { name: "发起研究" }));
+    await user.type(screen.getByLabelText("研究目标"), "另一个目标");
+    await user.click(screen.getByRole("button", { name: "开始研究" }));
+    await waitFor(() => expect(dispatchMocks.startResearchGoal).toHaveBeenCalledTimes(2));
+    const [first, second] = dispatchMocks.startResearchGoal.mock.calls.map(call => call[0]);
+    expect(second.dispatchId).not.toBe(first.dispatchId);
+  });
   it("makes no scheduled study here: it is shown in the queue and made in 定时任务", async () => {
     renderPage(); await screen.findByText("cohort.csv");
     expect(within(screen.getByLabelText("研究队列")).getByRole("button", { name: "进行中研究" })).toBeInTheDocument();
