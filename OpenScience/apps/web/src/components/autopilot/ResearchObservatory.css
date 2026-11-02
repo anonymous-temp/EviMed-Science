@@ -258,6 +258,11 @@ button.obs-file:hover { border-color: var(--obs-cyan); color: var(--obs-cyan); b
 .rq-card.m-running .rq-state, .rq-card.m-queued .rq-state { color: #3fe8ff; }
 .rq-card.m-running .rq-state i { background: #3fe8ff; box-shadow: 0 0 8px #3fe8ff; animation: obs-blink 1.1s steps(2, start) infinite; }
 .rq-card.m-queued .rq-state i { background: transparent; box-shadow: inset 0 0 0 1.5px #3fe8ff; }
+.obs-recipe { position: relative; z-index: 2; margin-top: 8px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 24px; }
+.obs-recipe-line { font-size: 14px; line-height: 1.6; color: var(--obs-text); }
+.obs-recipe-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.rq-card.m-between .rq-state { color: #5ce1ff; }
+.rq-card.m-between .rq-state i { background: #5ce1ff; }
 .rq-card.m-done .rq-state { color: #b8ff5c; }
 .rq-card.m-done .rq-state i { background: #b8ff5c; }
 .rq-card.m-failed .rq-state { color: #ff5c7a; }

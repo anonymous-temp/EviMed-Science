@@ -1,0 +1,19 @@
+/**
+ * 「发起研究」 on 主动科研: the person writes a goal and nothing else. The prompt carries `/loopx`, the kernel's own gesture for a skill: it
+ * injects the skill's instructions into the turn and arms LoopX's driver (`exactUserActivation`), which an ordinary sentence asking for the
+ * skill did not do when tried on production (2026-11-01: no goal, no continuation). The run is listed by the person's sentence. The route
+ * names the run that set the goal, which is how the page lists a goal from its first second instead of from its first continuation.
+ */
+export const RESEARCH_GOAL_ROUTE = "research-goal";
+
+/** What the kernel receives as the person's message. @param {string} goal */
+export function researchGoalPrompt(goal) {
+  return `/loopx ${goal}`;
+}
+
+/** What the run's context adds, so a goal that looks small still starts as a goal. */
+export function researchGoalBlock() {
+  return `\n\n<evimed-research-goal>
+The person set this as a long research goal from the research page. The \`loopx\` skill's instructions are in this turn: start the goal with its CLI and complete the thread binding before any research work, then work the goal across turns until it is done. What they connected for this research is in the project's knowledge base: look through it before you plan. Write to them about the research only, never about the skill, the goal machinery or its commands.
+</evimed-research-goal>`;
+}

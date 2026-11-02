@@ -61,6 +61,20 @@ export async function dispatchResearch(target: DispatchTarget, text: string): Pr
   return run;
 }
 
+/** One 「发起研究」: its session and dispatch id are made once, so a retry of the same goal is the same run. */
+export interface ResearchGoalRequest { sessionId: string; dispatchId: string; text: string }
+export function newResearchGoalRequest(text: string): ResearchGoalRequest {
+  return { sessionId: newResearchSessionId(), dispatchId: `web-${crypto.randomUUID().replace(/-/g, "")}`, text: text.trim() };
+}
+
+/** Starts a long research goal: the person's sentence is the run's question and the control plane asks for the goal (`researchGoal`). */
+export async function startResearchGoal({ sessionId, dispatchId, text }: ResearchGoalRequest): Promise<WebAgentRun> {
+  await putWebResearchSession(sessionId, { mode: "open-domain" });
+  const run = await dispatchWebAgentRun(sessionId, text, dispatchId, undefined, true);
+  announceRunsChanged();
+  return run;
+}
+
 /**
  * Changes the line of a run that was just started: stop it, and start the
  * same question on the other line (plan §9.6, appendix E §5.3 — the endpoint
