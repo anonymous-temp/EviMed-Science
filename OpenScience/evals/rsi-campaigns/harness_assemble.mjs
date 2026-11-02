@@ -9,6 +9,10 @@
  *   node harness_assemble.mjs --development-only --development dev.json --registration registration.json --month 2026-11 --out-dir dir
  *   node harness_assemble.mjs --preview --development dev.json --registration registration.json     (the dev box: the development choice, nothing written)
  *
+ * `--preview` and `--development-only` apply to the development source and the registration every refusal the run applies on that side (one function,
+ * `harnessDevelopmentIssue` of harness_campaign.mjs, also called by the runner): the control arm, K, the registered rows and repeats, the choice rule, the
+ * alpha allocation and, for a judged family, the registered call maximum against what the registration itself needs.
+ *
  * The seal. A confirmation export holds the answers and the costs and nothing that scores them: no gold in its rows, no verdict
  * records. The gold (`confirmation.gold.json`) and the verdict records (`*.verdicts.jsonl`) are joined here, in the lab's
  * assembly, each checked against the digest the export recorded; a confirmation source that already carries gold or records is
@@ -26,7 +30,8 @@ import { RSI_QUARTER_ALPHA } from './campaign_runner.mjs';
 import { beijingMonthEnd } from './frontier_assemble.mjs';
 import { inSkillSlice, skillSlice } from './skill_campaign.mjs';
 import { harnessScorer } from './harness_scorers.mjs';
-import { HARNESS_COST_IDENTITY, HARNESS_SELECTION, chooseHarnessCandidate, harnessArmsIssues, harnessCampaignConsumerIdentity, harnessDevelopmentResult, harnessJudgeRegistrationIssue } from './harness_campaign.mjs';
+import { HARNESS_COST_IDENTITY, HARNESS_SELECTION, HARNESS_SURFACE, TOOL_PATCH_SURFACE, chooseHarnessCandidate, harnessArmsIssues, harnessCampaignConsumerIdentity, harnessDevelopmentIssue, harnessDevelopmentResult, harnessJudgeRegistrationIssue, registrationSurface } from './harness_campaign.mjs';
+import { toolPatchCampaignConsumerIdentity } from './tool_patch_campaign.mjs';
 
 const sha = (value) => createHash('sha256').update(value).digest('hex');
 const PROCEDURE = Object.freeze({ id: 'rsi-paired-group-v5', digest_codec: 'rfc8785-sha256-v1', test_alpha_fraction: 0.5, minimum_slice_groups: 25 });
@@ -47,9 +52,26 @@ function checkRound(round) {
   if (roundRegistrationDigest(round) !== round.digest) throw new Error('campaign_registration_digest_mismatch');
   const scorer = harnessScorer({ scorer: round.scorer });
   if (!scorer) throw new Error('campaign_scorer_not_qualified');
+  if (![HARNESS_SURFACE, TOOL_PATCH_SURFACE].includes(registrationSurface(round))) throw new Error('campaign_surface_invalid');
   const slice = round.failureSlice;
   if (round.failureSliceKey !== scorer.slice.registration || !Array.isArray(slice) || !slice.length || !slice.every(scorer.slice.valid)) throw new Error('campaign_registration_invalid');
+  const alpha = round.alpha?.perCampaign;
+  if (!(alpha > 0) || !Number.isInteger(round.alpha.campaignsPerQuarter) || alpha * round.alpha.campaignsPerQuarter > RSI_QUARTER_ALPHA + 1e-12) throw new Error('campaign_alpha_registration_invalid');
+  if (scorer.judged && Number.isInteger(round.judge?.maxCalls) && round.judge.maxCalls >= 1 && round.judge.maxCalls < judgeCallsRequired(round)) throw new Error('campaign_judge_budget_below_registration');
   return scorer;
+}
+
+/**
+ * The verdict records a judged registration will produce, from its own rows, repeats, passes and candidates: development carries the
+ * baseline, the A/A control and up to K candidates, confirmation the baseline and one candidate. Pairwise judging records the
+ * non-baseline arms only (the baseline is the 0.5 reference), absolute judging every arm. `register_round.py` computes the same
+ * figure and refuses a maximum below it.
+ * @param {any} round
+ */
+export function judgeCallsRequired(round) {
+  const passes = round.judge.passes, pairwise = round.judge.form === 'pairwise';
+  const developmentArms = (pairwise ? 0 : 1) + 1 + round.candidatesMax, confirmationArms = pairwise ? 1 : 2;
+  return (round.rows.development.length * round.repeats.development * developmentArms + round.rows.confirmation.length * round.repeats.confirmation * confirmationArms) * passes;
 }
 
 /**
@@ -64,6 +86,7 @@ function namedRegistration(round, development, improvement) {
     margin: round.margin, selection: { ...HARNESS_SELECTION }, costRatio: round.costRatio, candidatesMax: round.candidatesMax, control: { arm: round.control.arm, kind: round.control.kind },
     image: development.image, rows: { development: [...round.rows.development], confirmation: [...round.rows.confirmation] }, repeats: { ...round.repeats },
     alpha: { ...round.alpha }, ...(round.judge ? { judge: structuredClone(round.judge) } : {}),
+    ...(registrationSurface(round) === HARNESS_SURFACE ? {} : { surface: registrationSurface(round) }),
     roundRegistration: { round: round.round, digest: round.digest }, ...(improvement ? { improvement } : {}),
   };
 }
@@ -122,10 +145,13 @@ export async function buildHarnessCampaign({ development: devExport, confirmatio
     const issues = harnessArmsIssues(source, named);
     if (issues.length) throw new Error(issues[0]);
   }
-  const identity = await harnessCampaignConsumerIdentity(named);
+  // Everything the runner will refuse on the development side is refused here, before a manifest exists.
+  const refusedOnDevelopment = harnessDevelopmentIssue(named, development, SOLVER);
+  if (refusedOnDevelopment) throw new Error(refusedOnDevelopment);
+  const surface = registrationSurface(round);
+  const identity = await (surface === TOOL_PATCH_SURFACE ? toolPatchCampaignConsumerIdentity : harnessCampaignConsumerIdentity)(named);
   const slice = skillSlice(named, scorer);
   const alpha = round.alpha.perCampaign;
-  if (!(alpha > 0) || alpha * round.alpha.campaignsPerQuarter > RSI_QUARTER_ALPHA + 1e-12) throw new Error('campaign_alpha_registration_invalid');
   const deadline = beijingMonthEnd(month);
   const statistics = {
     procedure: { ...PROCEDURE }, version: 1, paid_cost_budget: paidCostBudget, consumer_id: identity.implementationSha256, corpus_digest: rsiDigest(confirmation),
@@ -137,10 +163,10 @@ export async function buildHarnessCampaign({ development: devExport, confirmatio
   const registration = { ...named, statistics,
     candidates: Object.entries(development.arms).filter(([id, arm]) => arm.harness).map(([arm, entry]) => ({ arm, digest: entry.harness.digest, chars: entry.harness.chars, alwaysOnChars: entry.harness.alwaysOnChars, title: entry.harness.title ?? null })) };
   const baselineRevision = `${round.family}-harness-baseline-${development.image.id}`.slice(0, 160);
-  const target = { surface: 'harness-patch', dependencyDigest: identity.implementationSha256, baselineRevision };
+  const target = { surface, dependencyDigest: identity.implementationSha256, baselineRevision };
   const sources = { [`development-${month}`]: development, [`confirmation-${month}`]: confirmation };
   const manifest = {
-    schemaVersion: 1, id: `${idPrefix}harness-patch-${round.family}-${month}`, surface: 'harness-patch', candidateKind: 'harness-patch', claim: 'targeted-repair', automated: true,
+    schemaVersion: 1, id: `${idPrefix}${surface}-${round.family}-${month}`, surface, candidateKind: surface, claim: 'targeted-repair', automated: true,
     createdAt: now, deadline, budget: { campaignCny: 1000, monthCny: 30000 },
     models: { solver: { ...SOLVER }, improver: { provider: 'none', model: 'registered-candidates' }, reviewer: { provider: 'dashscope', model: 'qwen3.8-max' } },
     target, registration: { digest: rsiDigest(registration), procedure: PROCEDURE.id, claim: 'targeted-repair' },
@@ -185,9 +211,13 @@ export function developmentOnly({ development: devExport, registration: round, d
   if (scorer.judged) { const refused = harnessJudgeRegistrationIssue(registration.judge, SOLVER); if (refused) throw new Error(refused); }
   const issues = harnessArmsIssues(development, registration);
   if (issues.length) throw new Error(issues[0]);
+  // The preview and `--development-only` apply what `run` applies to the development side: the control arm, K, the registered rows and
+  // repeats, the choice rule. A preview that says eligible has met every refusal the runner has for a development source.
+  const refusedOnDevelopment = harnessDevelopmentIssue(registration, development, SOLVER);
+  if (refusedOnDevelopment) throw new Error(refusedOnDevelopment);
   const choice = chooseHarnessCandidate(development, registration), slice = skillSlice(registration, scorer);
   const sum = (arm) => round6(development.runs.filter((run) => run.arm === arm).reduce((total, run) => total + (run.cost ?? 0), 0));
-  return { status: 'development-only', campaignId: `harness-patch-${round.family}-${month}`, registration, developmentDigest: rsiDigest(development),
+  return { status: 'development-only', campaignId: `${registrationSurface(round)}-${round.family}-${month}`, registration, developmentDigest: rsiDigest(development),
     supply: { development: { rows: development.rows.length, sliceRows: development.rows.filter((row) => inSkillSlice(slice, scorer, row)).length, arms: Object.keys(development.arms), runs: development.runs.length,
       costCny: Object.fromEntries(Object.keys(development.arms).map((arm) => [arm, sum(arm)])) },
       developmentChoice: { frozen: choice.frozen, reason: choice.reason, candidates: choice.candidates, controls: choice.controls, noiseFloor: choice.noiseFloor,

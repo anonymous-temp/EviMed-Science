@@ -74,5 +74,24 @@ class ScorerVectors(unittest.TestCase):
         self.assertGreater(names['emoji-astral']['chars'], len(names['emoji-astral']['bundle']['guidanceSupplement']))
 
 
+    def test_tool_patch_digest_vectors_follow_the_stated_recipe_and_leave_the_harness_ones_alone(self):
+        import hashlib
+        cases = self.fixture['toolPatchDigest']
+        self.assertGreaterEqual(len(cases), 7)
+        for case in cases:
+            skills = sorted(case['bundle']['skills'], key=lambda s: s['name'])
+            code = dict(case['code'], files=sorted(case['code']['files'], key=lambda f: f['path']))
+            body = {'code': code, 'guidanceSupplement': case['bundle']['guidanceSupplement'], 'image': case['image'], 'skills': skills}
+            text = json.dumps(body, sort_keys=True, separators=(',', ':'), ensure_ascii=False)
+            self.assertEqual(case['digest'], hashlib.sha256(text.encode('utf-8')).hexdigest(), case['name'])
+            utf16 = lambda value: len(value.encode('utf-16-le')) // 2
+            always = utf16(case['bundle']['guidanceSupplement']) + sum(utf16(s['name']) + utf16(s['description']) for s in skills) + case['code']['toolCatalogueChars']
+            self.assertEqual(case['alwaysOnChars'], always, case['name'])
+        names = {c['name']: c for c in cases}
+        self.assertNotEqual(names['text-and-code']['digest'], names['same-code-other-image']['digest'])
+        # a tool patch is not the harness patch of the same text: the code is part of what was measured
+        harness = {c['name']: c for c in self.fixture['harnessDigest']}
+        self.assertTrue(set(c['digest'] for c in cases).isdisjoint(c['digest'] for c in harness.values()))
+
 if __name__ == '__main__':
     unittest.main()

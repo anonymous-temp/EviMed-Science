@@ -28,6 +28,9 @@ BioXArena data is CC BY-NC). The builders under tools/ recreate them into a work
     Scorers and judge packets read it as delivery `at-cap`; report.py reports the strict figure (timeout = 0) and the at-cap one.
   - `firstReportAtMs` (first completed write of a report-like file by a tool call, milliseconds after the turn began; `firstReportPath`)
     and `deliveredWithinCap` (the run ended on its own inside the cap with an answer or a report) — null/false when not known.
+  - Cost: a usage record that still shows an uncertain call or an open reservation when it is read is read again (every `--usage-poll-ms`,
+    10 s, for up to `--usage-settle-s`, 90 s; `0` reads once); `costSettle` {waitedMs, reads, first, final, settled} says what was seen first and last, and
+    a record that never closes is kept as the ledger last said it.
   - Item field `timeBudgetMinutes` (absent by default) is passed to the dispatch as the product's field of the same name and
     recorded; `timeoutMin` stays the driver's own cap and is never sent.
   - A dispatch answered 500/502/503/504 is infrastructure: asked again with a bounded exponential backoff (10 s doubling to 2 min,
@@ -114,6 +117,12 @@ BioXArena data is CC BY-NC). The builders under tools/ recreate them into a work
   judge-only and the open-question share is printed because `bixbench-deterministic` is a floor. `judged_packets_round.py` writes blinded packets for the judged
   parts (DeepResearch Bench pairwise with swapped order, or absolute; ResearchClawBench; BixBench questions code leaves to a judge; MedBrowseComp cases) with the
   key to the arms kept apart in `operator/`. Tests: `test_build_round_gold.py`, `test_score_round.py`, `test_judged_packets_round.py` (synthetic data only).
+- `tools/export_harness_arms.py`, `register_round.py`, `make_harness_bundle.py`, `make_cost_closure.py` — the harness-patch / tool-patch campaign's export, pre-registration
+  and candidate tools (evals/rsi-campaigns/README.md has the campaign). A run whose ledger record is uncertain keeps `cost.cost` (the settled sum, a lower bound) in the source and
+  is listed in `<out>.uncertain-costs.json`; only a run with no cost record is null. `register_round.py` computes the judge's call budget from the registration and refuses a lower maximum,
+  takes `--exclude-opened FILE` (rows earlier campaigns opened) and `--surface tool-patch`. `make_harness_bundle.py --tool-patch` records a branch's code (`--code-path`,
+  `--tool-catalogue-chars`) in the candidate; `export_harness_arms.py --surface tool-patch` carries it onto the arm. `make_cost_closure.py` collects the ledger records of the runs a refused
+  receipt names (`--run ROW:ARM:REPEAT=result.json`) for `rsi-lab-harness.sh <month> <family> close`.
 - `tools/build_rsi_items.py`, `rsi_slice.py`, `export_skill_arms.py`, `preview_choice.mjs` — the capability-skill RSI
   campaign's production arms (evals/rsi-campaigns/skill_campaign.mjs is the consumer the lab runs).
 

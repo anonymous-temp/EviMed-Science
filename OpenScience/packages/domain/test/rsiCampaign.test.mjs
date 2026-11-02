@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { RSI_CAMPAIGN_LIMITS, rsiCampaignIssues, rsiLabBindingIssues, rsiCompatibilityIssues, rsiBudgetAdmission, rsiCampaignMonth } from '../src/rsiCampaign.mjs'
+import { RSI_CAMPAIGN_LIMITS, RSI_CAMPAIGN_SURFACES, rsiCampaignIssues, rsiLabBindingIssues, rsiCompatibilityIssues, rsiBudgetAdmission, rsiCampaignMonth } from '../src/rsiCampaign.mjs'
 
 const digest = 'a'.repeat(64)
 const manifest = () => ({ schemaVersion: 1, id: 'campaign-20261026', surface: 'frontier-selection', candidateKind: 'policy', claim: 'targeted-repair',
@@ -30,6 +30,19 @@ test('non-automated, changed claim, hidden raw tenant scope and unknown candidat
   for (const mutate of mutations) {
     const input = manifest(); mutate(input); assert.notEqual(rsiCampaignIssues(input).length, 0)
   }
+})
+
+test('the harness-patch and tool-patch surfaces are two registered shadow surfaces, each with its own kind, and a manifest names the kind of its own surface', () => {
+  assert.deepEqual(RSI_CAMPAIGN_SURFACES['harness-patch'], { kind: 'harness-patch', consumer: 'dsh-harness', activation: 'shadow' })
+  assert.deepEqual(RSI_CAMPAIGN_SURFACES['tool-patch'], { kind: 'tool-patch', consumer: 'dsh-tool-patch', activation: 'shadow' })
+  const harness = { ...manifest(), surface: 'harness-patch', candidateKind: 'harness-patch', target: { ...manifest().target, surface: 'harness-patch' } }
+  assert.deepEqual(rsiCampaignIssues(harness), [])
+  const tool = { ...manifest(), surface: 'tool-patch', candidateKind: 'tool-patch', target: { ...manifest().target, surface: 'tool-patch' } }
+  assert.deepEqual(rsiCampaignIssues(tool), [])
+  // a tool-patch manifest with a harness-patch kind, or the other way round, is another surface's candidate
+  assert.ok(rsiCampaignIssues({ ...tool, candidateKind: 'harness-patch' }).includes('campaign_surface_invalid'))
+  assert.ok(rsiCampaignIssues({ ...harness, candidateKind: 'tool-patch' }).includes('campaign_surface_invalid'))
+  assert.ok(rsiCampaignIssues({ ...tool, target: { ...tool.target, surface: 'harness-patch' } }).includes('campaign_target_invalid'))
 })
 
 test('one authorized incident is eligible without a five-account gate, with explicit source authority', () => {

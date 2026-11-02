@@ -61,14 +61,14 @@ def copy_tree_text(src: Path, dst: Path) -> None:
 
 class Round:
     def __init__(self, args, *, client=None, fetcher=None, balance=None, ledger=None, channels=None, clock=time.monotonic, sleep=time.sleep):
-        from evimed_h2 import balance as balance_mod, channels as channels_mod, families
+        from evimed_h2 import balance as balance_mod, channels as channels_mod, families, guard
         from evimed_h2.broker import BrokerctlClient
         from evimed_h2.ledger import Ledger
 
         self.args = args
         self.runs_root = Path(args.runs_root)
         self.out_root = Path(args.out)
-        self.families, self.channels_mod = families, channels_mod
+        self.families, self.channels_mod, self.guard_module = families, channels_mod, guard
         self.fetcher = fetcher or families.Fetcher(self.runs_root / "cache", enabled=not args.offline)
         self.channels = channels or channels_mod.load_channels(args.channels)
         self.ledger = ledger or Ledger(args.ledger)
@@ -139,23 +139,16 @@ class Round:
         everything = family.tasks()  # the whole development pool, for the tree guard only
         names = self.guard_names(everything)
         return DshAdapter(
-            domain, tasks, all_prompts=[t.prompt for t in everything.values()], names=names, runs_root=self.runs_root, client=self.client,
+            domain, tasks, all_prompts=[t.prompt for t in everything.values()], names=names, reference=self.guard_module.platform_prose(config.OPENSCIENCE_ROOT),
+            runs_root=self.runs_root, client=self.client,
             channels=self.channels, ledger=self.ledger, balance=self.balance, poll_s=self.args.poll_s, max_wait_s=self.args.max_wait_s,
             clock=self.clock, sleep=self.sleep, max_numerals=self.args.max_numerals)
 
     @staticmethod
     def guard_names(tasks) -> list[str]:
-        names: set[str] = set()
-        for task in tasks.values():
-            names.add(task.id) if len(task.id) >= 6 and not task.id.isdigit() else None
-            for entry in task.files:
-                base = Path(entry["dest"]).name
-                names.add(base)
-                names.add(base.split(".")[0])
-            uuid = task.facts.get("uuid")
-            if uuid:
-                names.add(uuid)
-        return sorted(n for n in names if len(n) >= 5)
+        from evimed_h2 import guard
+
+        return guard.candidate_names(tasks.values())
 
     def run_domain(self, domain: str, ids: list[str]) -> dict:
         from evimed_h2 import upstream

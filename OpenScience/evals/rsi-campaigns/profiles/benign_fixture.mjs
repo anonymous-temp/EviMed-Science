@@ -232,7 +232,7 @@ export function memoryCampaignStore({ ledger = new Map(), corpora = new Map() } 
       reserveConfirmation: async (request) => {
         const ledgerId = `${request.surface}:${request.quarter}`;
         const decision = confirmationDecision(ledger.get(ledgerId), corpora.get(request.corpusDigest), request);
-        if (decision.write) { ledger.set(ledgerId, structuredClone(decision.ledger)); corpora.set(request.corpusDigest, structuredClone(decision.corpus)); }
+        if (decision.write) { if (decision.ledger) ledger.set(ledgerId, structuredClone(decision.ledger)); corpora.set(request.corpusDigest, structuredClone(decision.corpus)); }
         return decision.result;
       },
     }),

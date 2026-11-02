@@ -11,6 +11,10 @@
  *  - the candidate: `arms[id].harness = {digest, chars, alwaysOnChars, title, bundle}`, `digest` over the canonical JSON of the
  *    bundle AND the image identity it was measured on (`harnessPatchDigest`), recomputed here from the bundle; the always-on
  *    growth (guidance + skill names and descriptions) is capped;
+ *  - the `tool-patch` surface (2026-11-02) is this consumer for a candidate that holds code as well as text: its arm adds
+ *    `harness.code = {image, patchSha256, files, toolCatalogueChars}` (the patched image it ran on, the digest of the code diff, the
+ *    changed files and what its tools add to the first request), bound into the digest and counted in the always-on growth; a
+ *    registration says which surface it is for (`surface`, absent means harness-patch) and the two never accept each other's arms;
  *  - the scorer table is harness_scorers.mjs (the skill table plus `mbc-normalized` and `judged-verdicts`);
  *  - an A/A control arm (`aa`, the unmodified image run a second time) is part of every development source: it can never be
  *    chosen, and a candidate has to beat its apparent difference from the baseline (the noise floor) to be eligible;
@@ -28,6 +32,11 @@ import { harnessScorer, scorerBenchmarks } from './harness_scorers.mjs';
 const sha = (value) => createHash('sha256').update(value).digest('hex');
 export const HARNESS_ARMS_SCHEMA = 1;
 export const HARNESS_BASELINE_ARM = 'baseline';
+export const HARNESS_SURFACE = 'harness-patch';
+/** A harness-patch whose candidate holds code (a tool, a connector) as well as text: its own error-budget ledger and consumer identity. */
+export const TOOL_PATCH_SURFACE = 'tool-patch';
+/** The surface a registration is for; a registration written before the field existed is a harness-patch one. @param {any} registration */
+export const registrationSurface = (registration) => registration?.surface ?? HARNESS_SURFACE;
 export const HARNESS_CONTROL_ARM = 'aa';
 /** The cost identity of runs that happened on a lane stack: settled CNY per run from that stack's own usage ledger, exported with the runs. */
 export const HARNESS_COST_IDENTITY = 'lane-usage-ledger-settled-cny';
@@ -52,17 +61,18 @@ const finite = (value) => typeof value === 'number' && Number.isFinite(value);
 
 /**
  * The bundle in its canonical form (skills sorted by name), or null when it is not one: exactly the keys guidanceSupplement and
- * skills, skill names `^[a-z0-9][a-z0-9-]{0,63}$` and unique, no other keys, not both empty.
- * @param {any} bundle
+ * skills, skill names `^[a-z0-9][a-z0-9-]{0,63}$` and unique, no other keys, not both empty (a tool patch may carry no text at all:
+ * `allowEmpty`, its code is the patch).
+ * @param {any} bundle @param {{ allowEmpty?: boolean }} [options]
  */
-export function normalizeHarnessBundle(bundle) {
+export function normalizeHarnessBundle(bundle, { allowEmpty = false } = {}) {
   if (!keysWithin(bundle, ['guidanceSupplement', 'skills']) || !isText(bundle.guidanceSupplement) || !Array.isArray(bundle.skills) || bundle.skills.length > 32) return null;
   const skills = [];
   for (const skill of bundle.skills) {
     if (!keysWithin(skill, ['name', 'description', 'body']) || !SKILL_NAME.test(skill.name ?? '') || !isText(skill.description) || !isText(skill.body)) return null;
     skills.push({ name: skill.name, description: skill.description, body: skill.body });
   }
-  if (new Set(skills.map((skill) => skill.name)).size !== skills.length || (bundle.guidanceSupplement === '' && !skills.length)) return null;
+  if (new Set(skills.map((skill) => skill.name)).size !== skills.length || (!allowEmpty && bundle.guidanceSupplement === '' && !skills.length)) return null;
   skills.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
   return { guidanceSupplement: bundle.guidanceSupplement, skills };
 }
@@ -70,22 +80,46 @@ export function normalizeHarnessBundle(bundle) {
 /** An image identity: `{id: identifier, digest: 64 hex}`. @param {any} image */
 export const harnessImageValid = (image) => keysWithin(image, ['id', 'digest']) && IDENTIFIER.test(image.id ?? '') && HEX64.test(image.digest ?? '');
 
+const RELATIVE_PATH = /^(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$))[A-Za-z0-9._@+\-/]{1,200}$/;
+
 /**
- * sha256 of the RFC 8785 canonical JSON of the bundle and the image identity it was measured on. The same patch on another
- * image is another candidate.
- * @param {any} bundle @param {any} image @returns {string}
+ * The code a tool patch adds to the image, in its canonical form (files sorted by path), or null when it is not one: the patched
+ * image it ran on, the sha256 of the code diff, the changed files with their sha256 after the change (1 to 200, relative, unique)
+ * and the characters its tools add to the first request (a non-negative integer).
+ * @param {any} code
  */
-export function harnessPatchDigest(bundle, image) {
-  const normal = normalizeHarnessBundle(bundle);
-  if (!normal || !harnessImageValid(image)) throw new Error('harness_bundle_invalid');
-  return sha(canonicalRsiJson({ guidanceSupplement: normal.guidanceSupplement, image: { digest: image.digest, id: image.id }, skills: normal.skills }));
+export function normalizeToolPatchCode(code) {
+  if (!keysWithin(code, ['image', 'patchSha256', 'files', 'toolCatalogueChars']) || !harnessImageValid(code.image) || !HEX64.test(code.patchSha256 ?? '')
+    || !Number.isInteger(code.toolCatalogueChars) || code.toolCatalogueChars < 0 || !Array.isArray(code.files) || !code.files.length || code.files.length > 200) return null;
+  const files = [];
+  for (const file of code.files) {
+    if (!keysWithin(file, ['path', 'sha256']) || !isText(file.path) || !RELATIVE_PATH.test(file.path) || !HEX64.test(file.sha256 ?? '')) return null;
+    files.push({ path: file.path, sha256: file.sha256 });
+  }
+  if (new Set(files.map((file) => file.path)).size !== files.length) return null;
+  files.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+  return { image: { id: code.image.id, digest: code.image.digest }, patchSha256: code.patchSha256, files, toolCatalogueChars: code.toolCatalogueChars };
 }
 
-/** Sizes in UTF-16 code units (`.length`): `chars` of everything, `alwaysOnChars` of what every session carries. @param {any} bundle */
-export function harnessPatchSizes(bundle) {
-  const normal = normalizeHarnessBundle(bundle);
-  if (!normal) throw new Error('harness_bundle_invalid');
-  const alwaysOnChars = normal.guidanceSupplement.length + normal.skills.reduce((total, skill) => total + skill.name.length + skill.description.length, 0);
+/**
+ * sha256 of the RFC 8785 canonical JSON of the bundle and the image identity it was measured on — and, for a tool patch, the code it
+ * holds. The same patch on another image is another candidate; a harness patch's digest is byte for byte what it was before the
+ * `code` field existed.
+ * @param {any} bundle @param {any} image @param {any} [code] @returns {string}
+ */
+export function harnessPatchDigest(bundle, image, code) {
+  const normal = normalizeHarnessBundle(bundle, { allowEmpty: code !== undefined });
+  const patch = code === undefined ? undefined : normalizeToolPatchCode(code);
+  if (!normal || !harnessImageValid(image) || (code !== undefined && !patch)) throw new Error('harness_bundle_invalid');
+  return sha(canonicalRsiJson({ ...(patch ? { code: patch } : {}), guidanceSupplement: normal.guidanceSupplement, image: { digest: image.digest, id: image.id }, skills: normal.skills }));
+}
+
+/** Sizes in UTF-16 code units (`.length`): `chars` of everything, `alwaysOnChars` of what every session carries (a tool patch's tool catalogue included). @param {any} bundle @param {any} [code] */
+export function harnessPatchSizes(bundle, code) {
+  const normal = normalizeHarnessBundle(bundle, { allowEmpty: code !== undefined });
+  const patch = code === undefined ? null : normalizeToolPatchCode(code);
+  if (!normal || (code !== undefined && !patch)) throw new Error('harness_bundle_invalid');
+  const alwaysOnChars = normal.guidanceSupplement.length + normal.skills.reduce((total, skill) => total + skill.name.length + skill.description.length, 0) + (patch?.toolCatalogueChars ?? 0);
   return { chars: alwaysOnChars + normal.skills.reduce((total, skill) => total + skill.body.length, 0), alwaysOnChars };
 }
 
@@ -207,12 +241,15 @@ export function harnessArmsIssues(source, registration) {
       if (!keysWithin(arm, ['harness', 'control']) || arm.harness !== null || arm.control !== 'A/A' || source.role !== 'development') issues.add('harness_arms_control_invalid');
       continue;
     }
-    const h = arm?.harness, bundle = normalizeHarnessBundle(h?.bundle);
-    let ok = keysWithin(arm, ['harness']) && keysWithin(h, ['digest', 'chars', 'alwaysOnChars', 'title', 'bundle']) && bundle && /^cand-[a-f0-9]{12}$/.test(id) && HEX64.test(h.digest ?? '') && id === `cand-${h.digest.slice(0, 12)}`
-      && harnessImageValid(source.image) && (h.title === undefined || isText(h.title));
+    // A tool patch's arm holds code, a harness patch's does not, and neither surface admits the other's arms.
+    const h = arm?.harness, toolPatch = registrationSurface(registration) === TOOL_PATCH_SURFACE, bundle = normalizeHarnessBundle(h?.bundle, { allowEmpty: toolPatch });
+    let ok = keysWithin(arm, ['harness']) && keysWithin(h, toolPatch ? ['digest', 'chars', 'alwaysOnChars', 'title', 'bundle', 'code'] : ['digest', 'chars', 'alwaysOnChars', 'title', 'bundle'])
+      && bundle && /^cand-[a-f0-9]{12}$/.test(id) && HEX64.test(h.digest ?? '') && id === `cand-${h.digest.slice(0, 12)}`
+      && harnessImageValid(source.image) && (h.title === undefined || isText(h.title)) && (!toolPatch || normalizeToolPatchCode(h.code) !== null);
     if (ok) {
-      const sizes = harnessPatchSizes(bundle);
-      ok = h.digest === harnessPatchDigest(bundle, source.image) && h.chars === sizes.chars && h.alwaysOnChars === sizes.alwaysOnChars && sizes.alwaysOnChars <= HARNESS_ALWAYS_ON_MAX_CHARS;
+      const code = toolPatch ? h.code : undefined;
+      const sizes = harnessPatchSizes(bundle, code);
+      ok = h.digest === harnessPatchDigest(bundle, source.image, code) && h.chars === sizes.chars && h.alwaysOnChars === sizes.alwaysOnChars && sizes.alwaysOnChars <= HARNESS_ALWAYS_ON_MAX_CHARS;
     }
     if (!ok) issues.add('harness_arms_candidate_invalid');
   }
@@ -320,18 +357,20 @@ export function harnessObservationCosts(source, frozen) {
 const sameIds = (rows, ids) => Array.isArray(ids) && ids.length === rows.length && new Set(ids.map(String)).size === ids.length && rows.every((row) => ids.map(String).includes(String(row.id)));
 
 /**
- * The runner's validation of a harness-patch campaign's inputs (`campaign_runner.mjs`): a closed `campaign_*` code, or null.
- * @param {any} manifest @param {any} inputs @param {{ id: string }} dev @param {{ id: string }} confirm
+ * What the registration and the development source alone decide, in the order the runner decides it: the same checks the assembly's
+ * preview (`harness_assemble.mjs --preview`, `--development-only`) and the runner's validation both apply, so a preview that says a
+ * campaign is eligible has passed every refusal a development source can meet before the confirmation is opened. A closed
+ * `campaign_*` code, or null.
+ * @param {any} registration @param {any} development @param {any} [solver]
  */
-export function harnessCampaignIssue(manifest, inputs, dev, confirm) {
-  const registration = inputs.registration, scorer = harnessScorer(registration);
+export function harnessDevelopmentIssue(registration, development, solver) {
+  const scorer = harnessScorer(registration);
   if (!scorer) return 'campaign_scorer_not_qualified';
   // The judge first: a judge on the solver's family, or one nobody qualified, is named as such before anything is read through it.
-  const judgeIssue = scorer.judged ? harnessJudgeRegistrationIssue(registration.judge, manifest.models?.solver) : (registration.judge === undefined ? null : 'campaign_judge_unexpected');
+  const judgeIssue = scorer.judged ? harnessJudgeRegistrationIssue(registration.judge, solver) : (registration.judge === undefined ? null : 'campaign_judge_unexpected');
   if (judgeIssue) return judgeIssue;
-  const development = inputs.sources[dev.id], confirmation = inputs.sources[confirm.id];
-  for (const source of [development, confirmation]) if (harnessArmsIssues(source, registration).length) return 'campaign_source_invalid';
-  if (development.role !== 'development' || confirmation.role !== 'confirmation') return 'campaign_source_role_mismatch';
+  if (harnessArmsIssues(development, registration).length) return 'campaign_source_invalid';
+  if (development.role !== 'development') return 'campaign_source_role_mismatch';
   const slice = registration[scorer.slice.registration];
   if (!Array.isArray(slice) || !slice.length || slice.some((id) => !scorer.slice.valid(id)) || !(registration.margin > 0 && registration.margin < 1)) return 'campaign_registration_invalid';
   if (!record(registration.selection) || Object.entries(HARNESS_SELECTION).some(([key, value]) => registration.selection[key] !== value)) return 'campaign_selection_registration_missing';
@@ -339,12 +378,33 @@ export function harnessCampaignIssue(manifest, inputs, dev, confirm) {
   if (!Number.isInteger(registration.candidatesMax) || registration.candidatesMax < 1 || registration.candidatesMax > 10) return 'campaign_registration_invalid';
   if (!keysWithin(registration.control, ['arm', 'kind']) || registration.control.arm !== HARNESS_CONTROL_ARM || registration.control.kind !== 'A/A') return 'campaign_control_unregistered';
   if (!Object.hasOwn(development.arms, HARNESS_CONTROL_ARM)) return 'campaign_control_arm_missing';
-  if (Object.keys(confirmation.arms).some((id) => id === HARNESS_CONTROL_ARM || isControlArm(confirmation.arms[id]))) return 'campaign_control_arm_in_confirmation';
   if (candidateArmIds(development).length > registration.candidatesMax) return 'campaign_candidates_exceed_registration';
-  if (development.image.digest !== confirmation.image.digest || development.image.id !== confirmation.image.id || !record(registration.image)
-    || registration.image.digest !== development.image.digest || registration.image.id !== development.image.id) return 'campaign_image_changed';
-  if (!record(registration.rows) || !sameIds(development.rows, registration.rows.development) || !sameIds(confirmation.rows, registration.rows.confirmation)) return 'campaign_rows_unregistered';
-  if (!record(registration.repeats) || registration.repeats.development !== development.repeats || registration.repeats.confirmation !== confirmation.repeats) return 'campaign_repeats_unregistered';
+  if (!record(registration.image) || registration.image.digest !== development.image.digest || registration.image.id !== development.image.id) return 'campaign_image_changed';
+  if (!record(registration.rows) || !sameIds(development.rows, registration.rows.development)) return 'campaign_rows_unregistered';
+  if (!record(registration.repeats) || registration.repeats.development !== development.repeats) return 'campaign_repeats_unregistered';
+  return null;
+}
+
+/**
+ * The runner's validation of a harness-patch campaign's inputs (`campaign_runner.mjs`): a closed `campaign_*` code, or null. The
+ * development half is `harnessDevelopmentIssue`, shared with the preview.
+ * @param {any} manifest @param {any} inputs @param {{ id: string }} dev @param {{ id: string }} confirm
+ */
+export function harnessCampaignIssue(manifest, inputs, dev, confirm) {
+  const registration = inputs.registration, scorer = harnessScorer(registration);
+  if (!scorer) return 'campaign_scorer_not_qualified';
+  if (![HARNESS_SURFACE, TOOL_PATCH_SURFACE].includes(registrationSurface(registration)) || registrationSurface(registration) !== manifest.surface) return 'campaign_surface_registration_mismatch';
+  const development = inputs.sources[dev.id], confirmation = inputs.sources[confirm.id];
+  const judgeIssue = scorer.judged ? harnessJudgeRegistrationIssue(registration.judge, manifest.models?.solver) : (registration.judge === undefined ? null : 'campaign_judge_unexpected');
+  if (judgeIssue) return judgeIssue;
+  for (const source of [development, confirmation]) if (harnessArmsIssues(source, registration).length) return 'campaign_source_invalid';
+  if (development.role !== 'development' || confirmation.role !== 'confirmation') return 'campaign_source_role_mismatch';
+  const developmentIssue = harnessDevelopmentIssue(registration, development, manifest.models?.solver);
+  if (developmentIssue) return developmentIssue;
+  if (Object.keys(confirmation.arms).some((id) => id === HARNESS_CONTROL_ARM || isControlArm(confirmation.arms[id]))) return 'campaign_control_arm_in_confirmation';
+  if (development.image.digest !== confirmation.image.digest || development.image.id !== confirmation.image.id) return 'campaign_image_changed';
+  if (!sameIds(confirmation.rows, registration.rows.confirmation)) return 'campaign_rows_unregistered';
+  if (registration.repeats.confirmation !== confirmation.repeats) return 'campaign_repeats_unregistered';
   if (manifest.data.classification !== 'synthetic') {
     const devRows = new Set(development.rows.map((row) => String(row.id)));
     if (confirmation.rows.some((row) => devRows.has(String(row.id)))) return 'campaign_confirmation_not_independent';

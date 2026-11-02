@@ -12,6 +12,8 @@ export const RSI_CAMPAIGN_SURFACES = Object.freeze({
   'capability-skill': { kind: 'skill', consumer: 'dsh-capability', activation: 'cohort' },
   // A patched runtime image (guidance supplement + skills) measured offline on lane runs (2026-11-01). Shadow only: nothing of it is imported into production in this round, a qualified result is a pull-request proposal.
   'harness-patch': { kind: 'harness-patch', consumer: 'dsh-harness', activation: 'shadow' },
+  // The same consumer for a candidate that holds code (a tool, a connector) as well as text, with an error-budget ledger and a consumer identity of its own (2026-11-02).
+  'tool-patch': { kind: 'tool-patch', consumer: 'dsh-tool-patch', activation: 'shadow' },
   'isolated-tool': { kind: 'isolated-tool', consumer: 'isolated-executor', activation: 'cohort' },
 })
 

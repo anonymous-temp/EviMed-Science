@@ -5,8 +5,10 @@ import { rsiLabConfigurationIssues } from '../../apps/server/src/rsiLabConfigura
 import { ProductDocuments } from '../../apps/server/src/productStore.mjs';
 import {canonicalRsiJson,rsiDigest} from '../../apps/server/src/rsiCampaignBundle.mjs';
 import { chooseFrontierCandidate, evaluateFrontierDays, frontierCampaignConsumerIdentity, frontierDaysIssues, frontierObservations } from './frontier_campaign.mjs';
+import { directionalCounts } from './directional.mjs';
 import { chooseSkillCandidate, inSkillSlice, skillArmsIssues, skillCampaignConsumerIdentity, skillObservations, skillScorer, skillSlice, SKILL_BASELINE_ARM } from './skill_campaign.mjs';
 import { chooseHarnessCandidate, harnessCampaignConsumerIdentity, harnessCampaignIssue, harnessDevelopmentResult, harnessObservations } from './harness_campaign.mjs';
+import { toolPatchCampaignConsumerIdentity } from './tool_patch_campaign.mjs';
 export const digest = rsiDigest;
 const stop = reason => ({status:'not-qualified',reason});
 /** Statistics answers that are a verdict on the evidence; anything else (authority, receipt, process failure) is retried. */
@@ -46,7 +48,8 @@ export function productCampaignStore(database, owner) {
      const [ledger,corpus]=await Promise.all([documents.get(owner,'knowledge',ledgerId),documents.get(owner,'knowledge',corpusId)]);
      const decision=confirmationDecision(ledger?.payload,corpus?.payload,request);
      if(decision.write){
-      await documents.put(owner,'knowledge',ledgerId,decision.ledger,{expectedRevision:ledger?.revision ?? 0,transactionClient:tx});
+      // A directional campaign draws no error budget: its corpus is recorded, the quarter's ledger is not touched.
+      if(decision.ledger) await documents.put(owner,'knowledge',ledgerId,decision.ledger,{expectedRevision:ledger?.revision ?? 0,transactionClient:tx});
       await documents.put(owner,'knowledge',corpusId,decision.corpus,{expectedRevision:corpus?.revision ?? 0,transactionClient:tx});
      }
      return decision.result;
@@ -54,11 +57,24 @@ export function productCampaignStore(database, owner) {
   } finally { await client.query('SELECT pg_advisory_unlock(hashtext($1))',[key]); client.release(); }
  }};
 }
-/** Pure ledger rule shared by the PostgreSQL store and test stores. */
-export function confirmationDecision(ledger, corpus, {surface,quarter,campaignId,alpha,corpusDigest,at}) {
+/**
+ * Pure ledger rule shared by the PostgreSQL store and test stores.
+ * A directional campaign (fewer groups than the registered procedure's minimum, so no qualified verdict is possible) opens its corpus
+ * and draws no error budget: `alpha` must be 0, the quarter's ledger is not written, and the corpus record says `directional`. The
+ * corpus is spent all the same: no other campaign may open it, and a campaign that opened it directionally cannot later claim an
+ * error budget for it.
+ */
+export function confirmationDecision(ledger, corpus, {surface,quarter,campaignId,alpha,corpusDigest,at,directional=false}) {
  const reservations=Array.isArray(ledger?.reservations)?ledger.reservations:[];
  const own=reservations.find(row=>row.campaignId===campaignId);
  if(corpus && corpus.campaignId!==campaignId) return {write:false,result:{authorized:false,reason:'campaign_confirmation_corpus_already_opened'}};
+ if(directional) {
+  if(alpha!==0 || own) return {write:false,result:{authorized:false,reason:'campaign_confirmation_reservation_changed'}};
+  if(corpus) return corpus.directional===true && corpus.corpusDigest===corpusDigest?{write:false,result:{authorized:true,look:1,reused:true,directional:true}}:{write:false,result:{authorized:false,reason:'campaign_confirmation_reservation_changed'}};
+  return {write:true,result:{authorized:true,look:1,reused:false,directional:true},
+   corpus:{recordType:'rsi-opened-corpus',corpusDigest,campaignId,surface,openedAt:at,directional:true}};
+ }
+ if(corpus?.directional===true) return {write:false,result:{authorized:false,reason:'campaign_confirmation_reservation_changed'}};
  if(own) return own.corpusDigest===corpusDigest&&own.alpha===alpha?{write:false,result:{authorized:true,look:own.looks ?? 1,reused:true}}:{write:false,result:{authorized:false,reason:'campaign_confirmation_reservation_changed'}};
  const used=reservations.reduce((sum,row)=>sum+row.alpha,0);
  if(!(alpha>0) || used+alpha>RSI_QUARTER_ALPHA+1e-12) return {write:false,result:{authorized:false,reason:'campaign_alpha_budget_exhausted',used}};
@@ -66,6 +82,23 @@ export function confirmationDecision(ledger, corpus, {surface,quarter,campaignId
   ledger:{recordType:'rsi-alpha-ledger',surface,quarter,reservations:[...reservations,{campaignId,alpha,corpusDigest,at,looks:1}]},
   corpus:{recordType:'rsi-opened-corpus',corpusDigest,campaignId,surface,openedAt:at}};
 }
+/** A patched runtime image measured on recorded lane runs (harness_campaign.mjs), with an A/A control arm in development and a scorer of harness_scorers.mjs (judged families included: their verdict records are part of the source). Paid and stochastic like capability-skill; nothing of a qualified result is imported into production. */
+const harnessConsumer={
+  deterministic:true,
+  paidMeasurement:true,
+  directional:registration=>directionalCounts(registration.statistics),
+  identity:harnessCampaignConsumerIdentity,
+  validate:(manifest,inputs,dev,confirm)=>harnessCampaignIssue(manifest,inputs,dev,confirm),
+  develop(source, registration) {
+   const choice=chooseHarnessCandidate(source,registration);
+   return {result:harnessDevelopmentResult(choice),frozen:choice.frozen,reason:choice.reason};
+  },
+  freeze:(frozen)=>({arm:frozen.arm,harnessDigest:frozen.harnessDigest,imageDigest:frozen.imageDigest}),
+  confirm(source, registration, frozen) {
+   const measured=harnessObservations(source,registration,frozen);
+   return {result:{observations:measured.observations,scores:measured.scores ?? null},reason:measured.reason};
+  },
+ };
 /** Closed consumer registry: no executable paths, prompts, dynamic module imports or arbitrary callbacks in inputs. */
 const consumers = Object.freeze({
  'frontier-selection': {
@@ -111,6 +144,7 @@ const consumers = Object.freeze({
  'capability-skill': {
   deterministic:true,
   paidMeasurement:true,
+  directional:registration=>directionalCounts(registration.statistics),
   identity:skillCampaignConsumerIdentity,
   validate(manifest, inputs, dev, confirm) {
    const development=inputs.sources[dev.id], confirmation=inputs.sources[confirm.id], registration=inputs.registration, scorer=skillScorer(registration);
@@ -142,26 +176,12 @@ const consumers = Object.freeze({
    return {result:{observations:measured.observations,scores:measured.scores ?? null},reason:measured.reason};
   },
  },
+ 'harness-patch': harnessConsumer,
  /**
-  * A patched runtime image (guidance supplement and skills) measured on recorded lane runs (harness_campaign.mjs), with an A/A
-  * control arm in development and a scorer of harness_scorers.mjs (judged families included: their verdict records are part of
-  * the source). Paid and stochastic like capability-skill; nothing of a qualified result is imported into production.
+  * The same consumer for a candidate that holds code (a tool, a connector) as well as text (tool_patch_campaign.mjs): its own surface key
+  * (so its own error-budget ledger, `tool-patch:<quarter>`) and its own consumer identity.
   */
- 'harness-patch': {
-  deterministic:true,
-  paidMeasurement:true,
-  identity:harnessCampaignConsumerIdentity,
-  validate:(manifest,inputs,dev,confirm)=>harnessCampaignIssue(manifest,inputs,dev,confirm),
-  develop(source, registration) {
-   const choice=chooseHarnessCandidate(source,registration);
-   return {result:harnessDevelopmentResult(choice),frozen:choice.frozen,reason:choice.reason};
-  },
-  freeze:(frozen)=>({arm:frozen.arm,harnessDigest:frozen.harnessDigest,imageDigest:frozen.imageDigest}),
-  confirm(source, registration, frozen) {
-   const measured=harnessObservations(source,registration,frozen);
-   return {result:{observations:measured.observations,scores:measured.scores ?? null},reason:measured.reason};
-  },
- },
+ 'tool-patch': {...harnessConsumer,identity:toolPatchCampaignConsumerIdentity},
 });
 function validateInputs(manifest, inputs) {
  if (!inputs || typeof inputs !== 'object' || !inputs.registration || !inputs.sources) return 'campaign_inputs_missing';
@@ -212,11 +232,14 @@ export async function runCampaign({manifest,inputs,configuration,store,attestLab
    if(stage==='confirmation') {
     if(!state.frozenPolicy || digest(state.frozenPolicy)!==state.frozenPolicyDigest) return stop('campaign_frozen_policy_tampered');
     if(!inputs.registration.statistics) return finish(stop('campaign_statistics_registration_missing'));
-    const alpha=Object.values(inputs.registration.statistics?.claims ?? {}).reduce((a,b)=>a+(Number(b)||0),0);
+    const registered=Object.values(inputs.registration.statistics?.claims ?? {}).reduce((a,b)=>a+(Number(b)||0),0);
     if(!checkpoint.reserveConfirmation) return stop('campaign_confirmation_ledger_unavailable');
+    // A campaign below the procedure's minimum groups cannot reach a qualified verdict: it draws no error budget and opens its corpus as a directional one.
+    const directional=consumer.directional?.(inputs.registration)!=null;
+    const alpha=directional?0:registered;
     // Synthetic campaigns and rehearsals keep ledgers of their own: they must never spend a real quarter's alpha.
     const ledgerSurface=manifest.data.classification==='synthetic'?`synthetic:${manifest.surface}`:manifest.id.startsWith('rehearsal-')?`rehearsal:${manifest.surface}`:manifest.surface;
-    const reservation=await checkpoint.reserveConfirmation({surface:ledgerSurface,quarter:rsiCampaignQuarter(now()),campaignId:manifest.id,alpha,corpusDigest:source.digest,at:now()});
+    const reservation=await checkpoint.reserveConfirmation({surface:ledgerSurface,quarter:rsiCampaignQuarter(now()),campaignId:manifest.id,alpha,corpusDigest:source.digest,at:now(),...(directional?{directional:true}:{})});
     if(!reservation?.authorized) return finish(stop(reservation?.reason ?? 'campaign_confirmation_ledger_unavailable'));
     state.confirmationOpenedAt ??= now();
     state.confirmationLooks=1;
@@ -312,9 +335,12 @@ async function evaluateCampaignEvidence({manifest,inputs,state,request,attestEva
  }
  const receipt={...ATTESTED.reduce((all,key)=>({...all,[key]:attestations[key]}),{}),deterministic_qualification:qualification,now:now().replace(/Z$/, '+00:00')};
  const statisticsInput={registration,observations,receipt};
- const evaluated=await evaluateStatistics(statisticsInput,{pythonExecutable:statisticsPython,modulePath:statisticsModulePath});
+ let evaluated=await evaluateStatistics(statisticsInput,{pythonExecutable:statisticsPython,modulePath:statisticsModulePath});
  if(!VERDICTS.includes(evaluated.decision)) return retry(evaluated.reason ?? 'campaign_statistics_failed');
- const scope=manifest.data.classification==='synthetic'?'synthetic-finite-corpus-only':registration.mode==='paired-t'?'registered-population-task-family':'registered-finite-confirmation-corpus';
+ // Below the procedure's minimum groups nothing can be qualified, whatever the arms scored: a directional reading, said as such.
+ const directional=consumers[manifest.surface].directional?.(inputs.registration) ?? null;
+ if(directional) evaluated={...evaluated,decision:'inconclusive',reasons:['campaign_directional_below_minimum_groups',...(evaluated.reasons ?? [])],directional};
+ const scope=directional?'directional-reference':manifest.data.classification==='synthetic'?'synthetic-finite-corpus-only':registration.mode==='paired-t'?'registered-population-task-family':'registered-finite-confirmation-corpus';
  return {final:true,...evaluated,statisticsInput,...(authority.expiresAt?{expiresAt:authority.expiresAt}:{}),observationDigest:digest(observations),costProvenance:authority.costProvenance,authorityReceiptDigest:digest(authority),...(confirmation.volumeRatio===undefined?{}:{volumeRatio:confirmation.volumeRatio}),scope};
 }
 /** The launcher reads this owner-controlled public trust profile. Signing keys are never accepted. */

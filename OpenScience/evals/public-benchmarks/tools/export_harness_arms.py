@@ -6,6 +6,11 @@ built on. The baseline arm is the unmodified image; an optional `aa` arm is a se
 negative control of the development gate). This script turns the fetched run folders of the arms into the sources the RSI
 lab consumes; the lab scores them, this script never does and never prints a score.
 
+A candidate that holds code as well as text (a tool, a connector: the `tool-patch` surface, --surface tool-patch) has a `code` entry in the
+bundles file, {image (the patched image it ran on), patchSha256 (of the code diff), files: [{path, sha256}], toolCatalogueChars (what its tools
+add to the first request)}; it is bound into the digest and its toolCatalogueChars count as always-on growth. A harness-patch export refuses
+a candidate with code, and a tool-patch export refuses one without.
+
 Usage (one invocation per role):
   export_harness_arms.py --role development --benchmark medcalc-bench --items items/medcalc-rsi-dev.jsonl \\
       --arm baseline=results/dev-base --arm aa=results/dev-aa --arm cand-0123456789ab=results/dev-c1 \\
@@ -20,6 +25,9 @@ Files written next to --out (stem = --out without `.json`), each with a `<file>.
                          exported artifact cannot be scored on the dev box before the runner opens it.
   <stem>.verdicts.jsonl  judged benchmarks, once verdicts are given: one record per line {row, arm, repeat, pass, score, judge}
   <out>.incomplete.json  only with --allow-incomplete and missing runs: [{arm, row, repeat, key, reason, status, errorCode}]
+  <out>.uncertain-costs.json  only when a run's usage record still shows an uncertain call or an open reservation: that run keeps the
+                         ledger's settled `cost.cost` (a lower bound) in the source and is listed here with what the ledger and the driver
+                         saw; a run with no cost record at all is the only one whose cost is null
 
 Benchmarks and rows (the id is a string; rows are natural-sorted):
   medcalc-bench                       {id, calculatorId, gold: {answer, lower, upper}}
@@ -77,9 +85,13 @@ INFRASTRUCTURE_CODES = frozenset({
     'runtime_event_stream_unavailable', 'runtime_wire_protocol_mismatch', 'runtime_seam_missing', 'runtime_sandbox_unavailable',
     'runtime_preset_unavailable', 'runtime_bundle_version_mismatch', 'runtime_domain_version_mismatch', 'runtime_turn_end_unknown',
     'internal_error'})
+UNCERTAIN_COST_NOTE = ('Each listed run carries the ledger\'s settled sum for its calls; the ledger also holds a call it booked uncertain (sent, no provider '
+                       'count will arrive) or a reservation still open, so the true cost is that sum or a little more. The figure is a lower bound for these runs only.')
 SKILL_NAME = re.compile(r'^[a-z0-9][a-z0-9-]{0,63}$')
 IMAGE_ID = re.compile(r'^[A-Za-z0-9][A-Za-z0-9_.:-]{0,159}$')
 HEX64 = re.compile(r'^[0-9a-f]{64}$')
+RELATIVE_PATH = re.compile(r'^(?!/)[A-Za-z0-9._@+\-/]{1,200}$')
+HARNESS_SURFACE, TOOL_PATCH_SURFACE = 'harness-patch', 'tool-patch'
 DEFAULT_KEY_TEMPLATE = '{bench}/{armtoken}/{row}{rep}'
 DEFAULT_JUDGE_NOTE = "Judge calls run under the operator's Claude subscription; not metered in CNY."
 BASELINE, CONTROL = 'baseline', 'aa'
@@ -105,8 +117,9 @@ def _utf16_len(text):
     return len(text.encode('utf-16-le')) // 2
 
 
-def normalize_bundle(bundle):
-    """The bundle {guidanceSupplement, skills: [{name, description, body}]} with its skills sorted by name, or an ExportError."""
+def normalize_bundle(bundle, allow_empty=False):
+    """The bundle {guidanceSupplement, skills: [{name, description, body}]} with its skills sorted by name, or an ExportError.
+    `allow_empty` is for a tool patch, whose code is the patch and which may carry no text at all."""
     if not isinstance(bundle, dict) or set(bundle) != {'guidanceSupplement', 'skills'}:
         raise ExportError('a bundle has exactly the keys guidanceSupplement and skills')
     guidance = _utf8(bundle['guidanceSupplement'], 'guidanceSupplement')
@@ -123,7 +136,7 @@ def normalize_bundle(bundle):
             raise ExportError(f'skill name {name!r} appears twice')
         seen.add(name)
         skills.append({'name': name, 'description': _utf8(skill['description'], 'skill description'), 'body': _utf8(skill['body'], 'skill body')})
-    if guidance == '' and not skills:
+    if guidance == '' and not skills and not allow_empty:
         raise ExportError('a bundle needs a guidanceSupplement or at least one skill')
     return {'guidanceSupplement': guidance, 'skills': sorted(skills, key=lambda s: s['name'])}
 
@@ -135,39 +148,85 @@ def check_image(image):
     return {'id': image['id'], 'digest': image['digest']}
 
 
-def harness_patch_digest(bundle, image):
-    """sha256 of the RFC 8785 canonical JSON of {guidanceSupplement, image, skills (sorted by name)}: the patch and the image it was measured on."""
-    normal = normalize_bundle(bundle)
+def normalize_code(code):
+    """The code a tool patch adds to the image: {image (the patched one), patchSha256 (of the code diff), files: [{path, sha256}] sorted by
+    path, toolCatalogueChars}, or an ExportError. Mirrors `normalizeToolPatchCode` of harness_campaign.mjs."""
+    if not isinstance(code, dict) or set(code) != {'image', 'patchSha256', 'files', 'toolCatalogueChars'}:
+        raise ExportError('code has exactly the keys image, patchSha256, files and toolCatalogueChars')
+    image = check_image(code['image'])
+    if not isinstance(code['patchSha256'], str) or not HEX64.match(code['patchSha256']):
+        raise ExportError('code.patchSha256 is 64 lowercase hex')
+    chars = code['toolCatalogueChars']
+    if not isinstance(chars, int) or isinstance(chars, bool) or chars < 0:
+        raise ExportError('code.toolCatalogueChars is a non-negative integer')
+    files = code['files']
+    if not isinstance(files, list) or not 1 <= len(files) <= 200:
+        raise ExportError('code.files lists 1 to 200 changed files')
+    out, seen = [], set()
+    for entry in files:
+        if not isinstance(entry, dict) or set(entry) != {'path', 'sha256'}:
+            raise ExportError('a code file is {path, sha256}')
+        path = entry['path']
+        if not isinstance(path, str) or not RELATIVE_PATH.match(path) or '..' in path.split('/'):
+            raise ExportError(f'code file path {path!r} is not a short relative path')
+        if not isinstance(entry['sha256'], str) or not HEX64.match(entry['sha256']):
+            raise ExportError(f'code file {path}: sha256 is 64 lowercase hex')
+        if path in seen:
+            raise ExportError(f'code file {path} appears twice')
+        seen.add(path)
+        out.append({'path': path, 'sha256': entry['sha256']})
+    return {'image': image, 'patchSha256': code['patchSha256'], 'files': sorted(out, key=lambda f: f['path']), 'toolCatalogueChars': chars}
+
+
+def harness_patch_digest(bundle, image, code=None):
+    """sha256 of the RFC 8785 canonical JSON of {guidanceSupplement, image, skills (sorted by name)}: the patch and the image it was measured on;
+    for a tool patch also its `code`. A harness patch's digest is what it was before `code` existed."""
+    normal = normalize_bundle(bundle, allow_empty=code is not None)
     body = {'guidanceSupplement': normal['guidanceSupplement'], 'image': check_image(image), 'skills': normal['skills']}
+    if code is not None:
+        body['code'] = normalize_code(code)
     canonical = json.dumps(body, sort_keys=True, separators=(',', ':'), ensure_ascii=False)
     return hashlib.sha256(canonical.encode('utf-8')).hexdigest()
 
 
-def harness_patch_sizes(bundle):
-    """(chars, alwaysOnChars) in UTF-16 code units, as JavaScript counts them: all text, and the part every session carries."""
-    normal = normalize_bundle(bundle)
+def harness_patch_sizes(bundle, code=None):
+    """(chars, alwaysOnChars) in UTF-16 code units, as JavaScript counts them: all text, and the part every session carries (a tool patch's
+    tool catalogue included)."""
+    normal = normalize_bundle(bundle, allow_empty=code is not None)
     guidance = _utf16_len(normal['guidanceSupplement'])
-    always = guidance + sum(_utf16_len(s['name']) + _utf16_len(s['description']) for s in normal['skills'])
-    return guidance + sum(_utf16_len(s['name']) + _utf16_len(s['description']) + _utf16_len(s['body']) for s in normal['skills']), always
+    tools = normalize_code(code)['toolCatalogueChars'] if code is not None else 0
+    always = guidance + sum(_utf16_len(s['name']) + _utf16_len(s['description']) for s in normal['skills']) + tools
+    return always + sum(_utf16_len(s['body']) for s in normal['skills']), always
 
 
-def candidate_arms(bundles_path, image):
-    """{arm id: harness record} for every candidate of a bundles file ({"candidates": [{"title", "bundle"}]})."""
+def candidate_arms(bundles_path, image, surface=HARNESS_SURFACE):
+    """{arm id: harness record} for every candidate of a bundles file ({"candidates": [{"title", "bundle"[, "code"]}]}). A tool-patch
+    candidate carries `code`; a harness-patch one may not, and the two never share a file."""
     data = json.loads(pathlib.Path(bundles_path).read_text(encoding='utf-8'))
     if not isinstance(data, dict) or not isinstance(data.get('candidates'), list):
         raise ExportError('--bundles must be {"candidates": [{"title", "bundle"}]}')
+    tool = surface == TOOL_PATCH_SURFACE
+    if surface not in (HARNESS_SURFACE, TOOL_PATCH_SURFACE):
+        raise ExportError(f'--surface is {HARNESS_SURFACE} or {TOOL_PATCH_SURFACE}')
     arms = {}
     for index, candidate in enumerate(data['candidates']):
         if not isinstance(candidate, dict) or 'bundle' not in candidate:
             raise ExportError(f'candidate {index} has no bundle')
-        bundle = normalize_bundle(candidate['bundle'])
-        digest = harness_patch_digest(bundle, image)
+        if tool and 'code' not in candidate:
+            raise ExportError(f'candidate {index} has no code: a tool-patch candidate holds code as well as text')
+        if not tool and 'code' in candidate:
+            raise ExportError(f'candidate {index} holds code: it belongs to the {TOOL_PATCH_SURFACE} surface (--surface {TOOL_PATCH_SURFACE})')
+        code = normalize_code(candidate['code']) if tool else None
+        bundle = normalize_bundle(candidate['bundle'], allow_empty=tool)
+        digest = harness_patch_digest(bundle, image, code)
         arm = f'cand-{digest[:12]}'
         if arm in arms:
             raise ExportError(f'candidates {arms[arm]["title"]!r} and {index} are the same patch')
-        chars, always = harness_patch_sizes(bundle)
+        chars, always = harness_patch_sizes(bundle, code)
         title = candidate.get('title')
         arms[arm] = {'digest': digest, 'chars': chars, 'alwaysOnChars': always, 'title': title if isinstance(title, str) and title else arm, 'bundle': bundle}
+        if code is not None:
+            arms[arm]['code'] = code
     return arms
 
 
@@ -326,8 +385,27 @@ def report_text(folder):
     return text
 
 
+def is_number(value):
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def run_cost(result):
+    """(the cost a run carries, the sidecar entry or None). The ledger's `cost.cost` is the sum of the calls it settled. A run
+    whose usage record still shows an uncertain call or an open reservation keeps that sum, a lower bound, and is listed in the
+    sidecar with what the driver saw; only a run with no cost record at all has no cost."""
+    record = result.get('cost')
+    if not isinstance(record, dict) or not is_number(record.get('cost')) or record['cost'] < 0:
+        return None, None
+    if record.get('openCost') == 0 and record.get('uncertain') == 0:
+        return record['cost'], None
+    note = {key: record.get(key) for key in ('cost', 'openCost', 'uncertain', 'calls')}
+    if isinstance(result.get('costSettle'), dict):
+        note['driverSaw'] = result['costSettle']
+    return record['cost'], note
+
+
 def collect_runs(args, rows, arms, judged_benchmark):
-    runs, incomplete = [], []
+    runs, incomplete, uncertain = [], [], []
     for arm, directory in arms:
         for row in rows:
             for repeat in range(args.repeats):
@@ -341,16 +419,17 @@ def collect_runs(args, rows, arms, judged_benchmark):
                 folder = result_folder(directory, key)
                 answer_path = folder / 'answer.md'
                 answer = answer_path.read_text(encoding='utf-8') if answer_path.exists() else None
-                cost = result.get('cost') or {}
-                settled = cost.get('cost') if cost.get('openCost', 1) == 0 and cost.get('uncertain', 1) == 0 else None
+                amount, note = run_cost(result)
                 run = {'row': row['id'], 'arm': arm, 'repeat': repeat, 'runId': result.get('runId') or f'none:{key}',
-                       'status': result.get('status'), 'answer': None if judged_benchmark else answer, 'cost': settled}
+                       'status': result.get('status'), 'answer': None if judged_benchmark else answer, 'cost': amount}
+                if note:
+                    uncertain.append({'arm': arm, 'row': row['id'], 'repeat': repeat, 'key': key, 'runId': run['runId'], **note})
                 if judged_benchmark:
                     text = report_text(folder)
                     run['answerChars'] = len(text)
                     run['reportSha256'] = hashlib.sha256(text.encode('utf-8')).hexdigest()
                 runs.append(run)
-    return runs, incomplete
+    return runs, incomplete, uncertain
 
 
 # ------------------------------------------------------------------------------------------------------- judge verdicts
@@ -555,12 +634,12 @@ def export(args):
     judged_args = bool(args.verdicts or args.pairwise_order or args.pair_map)
     if judged_args and not spec['judged']:
         raise ExportError(f'{args.benchmark} is scored by code in the lab; verdict files belong to judged benchmarks only')
-    candidates = candidate_arms(args.bundles, image) if args.bundles else {}
+    candidates = candidate_arms(args.bundles, image, args.surface) if args.bundles else {}
     arms = parse_arms(args.arm, candidates, args.role)
     rows = load_rows(args.benchmark, args.items, args.rows)
     if args.row_ids:
         check_row_ids(rows, args.row_ids, args.role)
-    runs, incomplete = collect_runs(args, rows, arms, spec['judged'])
+    runs, incomplete, uncertain = collect_runs(args, rows, arms, spec['judged'])
     if incomplete and not args.allow_incomplete:
         return 3, {'written': False, 'incomplete': incomplete}
     out = pathlib.Path(args.out)
@@ -601,9 +680,13 @@ def export(args):
     if incomplete:
         write_checked(f'{out}.incomplete.json', dump(incomplete))
         written.append(f'{out}.incomplete.json')
+    if uncertain:
+        write_checked(f'{out}.uncertain-costs.json', dump({'kind': 'harness-uncertain-costs', 'schema': 1, 'benchmark': args.benchmark, 'role': args.role,
+                                                           'note': UNCERTAIN_COST_NOTE, 'runs': uncertain}))
+        written.append(f'{out}.uncertain-costs.json')
     summary = {'written': True, 'role': args.role, 'rows': len(rows), 'arms': [a for a, _ in arms], 'runs': len(runs),
                'expectedRuns': len(rows) * len(arms) * args.repeats, 'incomplete': len(incomplete),
-               'unsettled': sum(1 for r in runs if r['cost'] is None), 'files': written}
+               'unsettled': sum(1 for r in runs if r['cost'] is None), 'uncertainCosts': len(uncertain), 'files': written}
     if judged is not None:
         summary['records'] = len(judged['records'])
     return (3 if incomplete else 0), summary
@@ -618,6 +701,7 @@ def build_parser():
     p.add_argument('--row-ids')
     p.add_argument('--arm', action='append', required=True, help='ARM=RESULTS_DIR (baseline, aa or cand-xxxxxxxxxxxx)')
     p.add_argument('--bundles')
+    p.add_argument('--surface', choices=[HARNESS_SURFACE, TOOL_PATCH_SURFACE], default=HARNESS_SURFACE, help='tool-patch: every candidate of --bundles holds code')
     p.add_argument('--image-id', required=True)
     p.add_argument('--image-digest', required=True)
     p.add_argument('--bench-key', required=True)

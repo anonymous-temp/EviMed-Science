@@ -58,7 +58,7 @@ class Fixture(unittest.TestCase):
 
     def judged_extra(self, **override):
         values = {'--judge-id': 'claude-judge-1', '--judge-provider': 'anthropic', '--judge-form': 'pairwise', '--judge-passes': '2',
-                  '--judge-max-calls': '400', '--judge-agreement': '0.95', '--judge-noise-sd': '0.0155', '--judge-noise-band': '0.0304',
+                  '--judge-max-calls': '2000', '--judge-agreement': '0.95', '--judge-noise-sd': '0.0155', '--judge-noise-band': '0.0304',
                   '--judge-measured-on': 'judge-noise.txt@2026-10-31', '--judge-min-agreement': '0.9', '--judge-max-noise-band': '0.05'}
         values.update(override)
         return [x for pair in values.items() if pair[1] is not None for x in pair]
@@ -129,6 +129,51 @@ class Selection(Fixture):
             code, _, err = self.run_main(self.args(out='bad.json', extra=['--ppc', str(self.write('bad-ppc.json', bad))]))
             self.assertEqual(code, 2, bad)
             self.assertIn('ppc', err)
+
+    def test_opened_rows_of_earlier_campaigns_leave_both_roles_and_their_development_rows_leave_the_confirmation_role(self):
+        # an earlier registration: its confirmation rows were opened, its development rows were seen
+        earlier = self.register(out='earlier.json', extra=['--development-rows', '10', '--confirmation-rows', '12'])
+        opened, seen = set(earlier['rows']['confirmation']), set(earlier['rows']['development'])
+        earlier_path = self.dir / 'earlier.json'
+        doc = self.register(out='round2.json', extra=['--development-rows', '10', '--confirmation-rows', '12', '--exclude-opened', str(earlier_path)])
+        self.assertFalse(opened & set(doc['rows']['confirmation']) or opened & set(doc['rows']['development']), 'an opened row is in neither role')
+        self.assertFalse(seen & set(doc['rows']['confirmation']), 'a row seen in an earlier development is not fresh for confirmation')
+        self.assertEqual(doc['available']['confirmation'], 40 - len(opened) - len(seen & set(CONF)) - len(seen - set(CONF)) * 0)
+        self.assertEqual(doc['excluded']['opened'], sorted(opened & (set(DEV) | set(CONF)), key=lambda i: int(i)))
+        self.assertEqual(doc['excluded']['seen'], sorted(seen, key=lambda i: int(i)))
+        self.assertEqual(doc['excluded']['openedFiles'][0]['name'], 'earlier.json')
+        self.assertEqual(len(doc['excluded']['openedFiles'][0]['sha256']), 64)
+        # fresh rows are the next ones in the hash order, nothing else moves
+        expected = [i for i in sorted(CONF, key=lambda i: h(SALT, i)) if i not in opened and i not in seen][:12]
+        self.assertEqual(doc['rows']['confirmation'], expected)
+        # a plain list, {"opened": [...]} and the absence of the option
+        for name, shape in (('list', ['101', '102']), ('keyed', {'opened': ['101', '102']})):
+            listed = self.register(out=f'{name}.json', extra=['--exclude-opened', str(self.write(f'o-{name}.json', shape))])
+            self.assertNotIn('101', listed['rows']['confirmation'])
+            self.assertEqual(listed['excluded']['opened'], ['101', '102'])
+        plain = self.register(out='plain-again.json')
+        self.assertNotIn('opened', plain['excluded'], 'without the option a registration is what it was')
+        self.assertNotIn('surface', plain)
+        # the registration verifies only against the same files
+        self.assertEqual(rr.check(str(self.dir / 'round2.json'), str(self.pools), 'main', None, [str(earlier_path)]), [])
+        self.assertTrue(rr.check(str(self.dir / 'round2.json'), str(self.pools), 'main', None, []))
+        self.assertTrue(rr.check(str(self.dir / 'round2.json'), str(self.pools), 'main', None, [str(self.dir / 'o-list.json')]))
+        # too few rows left is an error that says how many are available
+        code, _, err = self.run_main(self.args(out='toomany.json', extra=['--confirmation-rows', '39', '--exclude-opened', str(earlier_path)]))
+        self.assertEqual(code, 2)
+        self.assertIn('available', err)
+        code, _, err = self.run_main(self.args(out='bad-opened.json', extra=['--exclude-opened', str(self.write('bad-o.json', {'rows': {'development': ['1']}}))]))
+        self.assertEqual(code, 2)
+        self.assertIn('rows hold the lists', err)
+
+    def test_the_tool_patch_surface_is_recorded_and_the_default_writes_no_field(self):
+        tool = self.register(out='tool.json', extra=['--surface', 'tool-patch'])
+        self.assertEqual(tool['surface'], 'tool-patch')
+        default = self.register(out='default.json')
+        self.assertNotIn('surface', default)
+        self.assertNotEqual(tool['digest'], default['digest'])
+        code, _, err = self.run_main(self.args(out='bad.json', extra=['--surface', 'skill-patch']))
+        self.assertEqual(code, 2)
 
     def test_a_development_salt_orders_the_development_role_only_and_is_recorded(self):
         doc = self.register(extra=['--development-rows', '10', '--confirmation-rows', '12', '--development-salt', 'screen'])
@@ -241,9 +286,37 @@ class Judged(Fixture):
         code, _, err = self.judged()
         self.assertEqual(code, 0, err)
         doc = json.loads((self.dir / 'reg.json').read_text())
-        self.assertEqual(doc['judge'], {'id': 'claude-judge-1', 'provider': 'anthropic', 'form': 'pairwise', 'passes': 2, 'maxCalls': 400,
+        self.assertEqual(doc['judge'], {'id': 'claude-judge-1', 'provider': 'anthropic', 'form': 'pairwise', 'passes': 2, 'maxCalls': 2000, 'callsRequired': 560,
                                         'qualification': {'agreement': 0.95, 'noiseSd': 0.0155, 'noiseBand95': 0.0304, 'measuredOn': 'judge-noise.txt@2026-10-31',
                                                           'minimumAgreement': 0.9, 'maximumNoiseBand': 0.05}})
+
+    def test_the_call_budget_is_computed_from_the_registration_and_a_lower_maximum_is_refused(self):
+        # 40 development rows x 1 repeat and 40 confirmation rows x 3 repeats; pairwise records the arms that are not the baseline:
+        # development the A/A control and up to 3 candidates, confirmation the one candidate; 2 passes
+        self.assertEqual(rr.judge_calls_required('pairwise', 2, 40, 40, 1, 3, 3), (40 * 1 * (1 + 3) + 40 * 3 * 1) * 2)
+        # absolute judging scores every arm: the baseline too
+        self.assertEqual(rr.judge_calls_required('absolute', 3, 12, 30, 1, 3, 1), (12 * 1 * (1 + 1 + 1) + 30 * 3 * 2) * 3)
+        # round 1's drb: 12 development rows, 30 confirmation rows x 3, pairwise, 2 passes, K = 1, control: 228 records against a maximum of 200
+        self.assertEqual(rr.judge_calls_required('pairwise', 2, 12, 30, 1, 3, 1), 228)
+        code, _, err = self.judged(**{'--judge-max-calls': '559'})
+        self.assertEqual(code, 2)
+        self.assertIn('560 verdict records', err)
+        self.assertFalse((self.dir / 'reg.json').exists())
+        code, _, err = self.run_main(self.args(scorer='judged-verdicts', benchmark='deepresearchbench', extra=['--development-rows', '12', '--confirmation-rows', '30', '--candidates-max', '1']
+                                               + self.judged_extra(**{'--judge-max-calls': '200'})))
+        self.assertEqual(code, 2)
+        self.assertIn('at least 228', err)
+        code, _, err = self.run_main(self.args(scorer='judged-verdicts', benchmark='deepresearchbench', extra=['--development-rows', '12', '--confirmation-rows', '30', '--candidates-max', '1']
+                                               + self.judged_extra(**{'--judge-max-calls': '228'})))
+        self.assertEqual(code, 0, err)
+        self.assertEqual(json.loads((self.dir / 'reg.json').read_text())['judge']['callsRequired'], 228)
+        # a registration that was edited or written by an older tool is held to the same figure by --check
+        doc = json.loads((self.dir / 'reg.json').read_text())
+        doc['judge']['maxCalls'] = 200
+        doc['digest'] = rr.content_digest(doc)
+        (self.dir / 'low.json').write_text(json.dumps(doc))
+        self.assertTrue(any('below the 228' in p for p in rr.check(str(self.dir / 'low.json'), None, None, None)))
+        self.assertEqual(rr.check(str(self.dir / 'reg.json'), None, None, None), [])
 
     def test_the_family_of_the_solver_is_refused(self):
         for override in ({'--judge-id': 'deepseek-v4-pro'}, {'--judge-provider': 'DeepSeek'}):

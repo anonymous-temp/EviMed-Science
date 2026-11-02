@@ -62,6 +62,8 @@ class Lab:
         record.update(extra)
         if cost is None:
             record['cost'] = {'cost': 0.5, 'openCost': 0.1, 'uncertain': 1}
+        elif cost == 'absent':
+            del record['cost']
         (folder / 'result.json').write_text(json.dumps(record))
         if answer is not None:
             (folder / 'answer.md').write_text(answer)
@@ -216,15 +218,48 @@ class Development(unittest.TestCase):
         ids.write_text(json.dumps({'rows': {'development': ['1', '2'], 'confirmation': ['1']}}))
         self.assertEqual(lab.run(lab.argv(rows=('1', '2'), extra=['--row-ids', str(ids)]))[0], 0)
 
-    def test_an_unsettled_cost_is_null_not_zero(self):
+    def test_an_uncertain_cost_keeps_the_ledger_sum_and_is_listed_beside_the_source(self):
         lab = self.lab
         lab.fill('baseline', ['1', '2'])
-        lab.result('baseline', 'medcalc-rsi/base/2', cost=None)
+        lab.result('baseline', 'medcalc-rsi/base/2', cost=None, costSettle={'waitedMs': 90000, 'reads': 10, 'settled': False})
         code, out, _ = lab.run(lab.argv(rows=('1', '2')))
         self.assertEqual(code, 0)
         runs = lab.load()['runs']
-        self.assertEqual([r['cost'] for r in runs], [0.01, None])
-        self.assertEqual(json.loads(out.splitlines()[-1])['unsettled'], 1)
+        self.assertEqual([r['cost'] for r in runs], [0.01, 0.5], 'the settled sum of the ledger, not null and not the reservation')
+        summary = json.loads(out.splitlines()[-1])
+        self.assertEqual((summary['unsettled'], summary['uncertainCosts']), (0, 1))
+        sidecar = (lab.dir / 'development.json.uncertain-costs.json')
+        self.assertTrue(sidecar.exists() and Path(f'{sidecar}.sha256').exists())
+        note = json.loads(sidecar.read_text())
+        self.assertEqual((note['kind'], note['role'], len(note['runs'])), ('harness-uncertain-costs', 'development', 1))
+        listed = note['runs'][0]
+        self.assertEqual((listed['arm'], listed['row'], listed['repeat'], listed['cost'], listed['openCost'], listed['uncertain']), ('baseline', '2', 0, 0.5, 0.1, 1))
+        self.assertEqual(listed['driverSaw']['waitedMs'], 90000)
+        self.assertIn('lower bound', note['note'])
+        self.assertNotIn('uncertain', json.dumps(lab.load()), 'the source itself carries no new field')
+
+    def test_a_run_with_no_cost_record_is_null_not_zero(self):
+        lab = self.lab
+        lab.fill('baseline', ['1', '2'])
+        lab.result('baseline', 'medcalc-rsi/base/2', cost='absent')
+        code, out, _ = lab.run(lab.argv(rows=('1', '2')))
+        self.assertEqual(code, 0)
+        self.assertEqual([r['cost'] for r in lab.load()['runs']], [0.01, None])
+        summary = json.loads(out.splitlines()[-1])
+        self.assertEqual((summary['unsettled'], summary['uncertainCosts']), (1, 0))
+        self.assertFalse((lab.dir / 'development.json.uncertain-costs.json').exists(), 'nothing uncertain, no sidecar')
+
+    def test_a_record_that_never_says_whether_it_is_closed_is_listed_as_uncertain(self):
+        lab = self.lab
+        lab.fill('baseline', ['1'])
+        folder = lab.result('baseline', 'medcalc-rsi/base/1')
+        record = json.loads((folder / 'result.json').read_text())
+        record['cost'] = {'cost': 0.02}
+        (folder / 'result.json').write_text(json.dumps(record))
+        code, out, _ = lab.run(lab.argv(rows=('1',)))
+        self.assertEqual(code, 0)
+        self.assertEqual(lab.load()['runs'][0]['cost'], 0.02)
+        self.assertEqual(json.loads(out.splitlines()[-1])['uncertainCosts'], 1)
 
     def test_repeats_use_the_hash_suffix_in_keys(self):
         lab = self.lab
@@ -644,6 +679,73 @@ class JudgedPairwise(unittest.TestCase):
         argv = self.argv([self.out / 'order.json'], files, {'1': {'row': '1', 'repeat': 0, 'arm': ARM_ONE}})
         argv[argv.index('--judge-passes') + 1] = '3'
         self.assertEqual(self.lab.run(argv)[0], 2)
+
+
+TOOL_CODE = {'image': {'id': 'lane-image-1-delta', 'digest': 'cd' * 32}, 'patchSha256': 'ef' * 32,
+             'files': [{'path': 'runtime/mcp/evimed-research/tool.py', 'sha256': '12' * 32}, {'path': 'runtime/mcp/evimed-research/data/index.json', 'sha256': '34' * 32}],
+             'toolCatalogueChars': 420}
+
+
+class ToolPatchCandidates(unittest.TestCase):
+    """A candidate that holds code: the `tool-patch` surface (the digest binds the code; the two surfaces never share candidates)."""
+
+    def bundles(self, entries):
+        tmp = tempfile.TemporaryDirectory(prefix='tool-patch-test-')
+        self.addCleanup(tmp.cleanup)
+        path = Path(tmp.name) / 'bundles.json'
+        path.write_text(json.dumps({'candidates': entries}))
+        return str(path)
+
+    def test_the_code_is_bound_into_the_digest_and_counted_in_the_always_on_growth(self):
+        text = {'guidanceSupplement': 'Call the scale tool for any named score.', 'skills': []}
+        path = self.bundles([{'title': 'scales', 'bundle': text, 'code': TOOL_CODE}])
+        (arm, record), = eha.candidate_arms(path, IMAGE, 'tool-patch').items()
+        self.assertEqual(record['digest'], eha.harness_patch_digest(text, IMAGE, TOOL_CODE))
+        self.assertNotEqual(record['digest'], eha.harness_patch_digest(text, IMAGE), 'the same text without its code is another candidate')
+        self.assertEqual(arm, f'cand-{record["digest"][:12]}')
+        self.assertEqual(record['alwaysOnChars'], len(text['guidanceSupplement']) + 420)
+        self.assertEqual(record['code']['files'][0]['path'], 'runtime/mcp/evimed-research/data/index.json', 'files are sorted by path')
+        for change in ({'patchSha256': '00' * 32}, {'toolCatalogueChars': 421}, {'image': {'id': 'lane-image-1-delta', 'digest': 'ce' * 32}},
+                       {'files': TOOL_CODE['files'][:1]}):
+            other = eha.harness_patch_digest(text, IMAGE, {**TOOL_CODE, **change})
+            self.assertNotEqual(other, record['digest'], change)
+
+    def test_a_tool_patch_may_have_no_text_a_harness_patch_may_not(self):
+        empty = {'guidanceSupplement': '', 'skills': []}
+        (_, record), = eha.candidate_arms(self.bundles([{'title': 't', 'bundle': empty, 'code': TOOL_CODE}]), IMAGE, 'tool-patch').items()
+        self.assertEqual(record['alwaysOnChars'], 420)
+        with self.assertRaises(eha.ExportError):
+            eha.candidate_arms(self.bundles([{'title': 't', 'bundle': empty}]), IMAGE, 'harness-patch')
+
+    def test_the_surfaces_refuse_each_others_candidates_and_a_malformed_code(self):
+        text = {'guidanceSupplement': 'g', 'skills': []}
+        with self.assertRaisesRegex(eha.ExportError, 'has no code'):
+            eha.candidate_arms(self.bundles([{'title': 't', 'bundle': text}]), IMAGE, 'tool-patch')
+        with self.assertRaisesRegex(eha.ExportError, 'holds code'):
+            eha.candidate_arms(self.bundles([{'title': 't', 'bundle': text, 'code': TOOL_CODE}]), IMAGE, 'harness-patch')
+        for bad in ({**TOOL_CODE, 'extra': 1}, {**TOOL_CODE, 'files': []}, {**TOOL_CODE, 'patchSha256': 'XYZ'}, {**TOOL_CODE, 'toolCatalogueChars': -1},
+                    {**TOOL_CODE, 'files': [{'path': '../etc/passwd', 'sha256': '12' * 32}]}, {**TOOL_CODE, 'files': [{'path': '/abs/x.py', 'sha256': '12' * 32}]},
+                    {**TOOL_CODE, 'files': TOOL_CODE['files'] * 2}):
+            with self.assertRaises(eha.ExportError, msg=str(bad)[:60]):
+                eha.candidate_arms(self.bundles([{'title': 't', 'bundle': text, 'code': bad}]), IMAGE, 'tool-patch')
+
+    def test_the_exported_source_carries_the_code_on_the_arm(self):
+        tmp = tempfile.TemporaryDirectory(prefix='tool-patch-export-')
+        self.addCleanup(tmp.cleanup)
+        lab = Lab(self)
+        text = {'guidanceSupplement': 'Call the scale tool.', 'skills': []}
+        bundles = Path(tmp.name) / 'bundles.json'
+        bundles.write_text(json.dumps({'candidates': [{'title': 'scales', 'bundle': text, 'code': TOOL_CODE}]}))
+        (arm, record), = eha.candidate_arms(str(bundles), IMAGE, 'tool-patch').items()
+        lab.fill('baseline', ['1', '2'])
+        lab.fill(arm, ['1', '2'])
+        code, _, err = lab.run(lab.argv(arms=('baseline', arm), rows=('1', '2'), extra=['--surface', 'tool-patch']) + ['--bundles', str(bundles)])
+        self.assertEqual(code, 0, err)
+        self.assertEqual(lab.load()['arms'][arm]['harness']['code'], record['code'])
+        # the same arm directory exported as a harness patch is refused
+        code, _, err = lab.run(lab.argv(arms=('baseline', arm), rows=('1', '2'), out='again.json') + ['--bundles', str(bundles)])
+        self.assertEqual(code, 2)
+        self.assertIn('holds code', err)
 
 
 if __name__ == '__main__':

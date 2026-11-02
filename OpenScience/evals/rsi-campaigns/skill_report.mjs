@@ -58,7 +58,7 @@ async function main() {
     ...(report.confirmation?.baseline ? [`- 对照：总体 ${pct(report.confirmation.baseline.overall)}，失败子集 ${pct(report.confirmation.baseline.slice)}`] : []),
     ...(report.confirmation?.candidate ? [`- 候选：总体 ${pct(report.confirmation.candidate.overall)}，失败子集 ${pct(report.confirmation.candidate.slice)}`] : []),
     ...(report.confirmation?.costCny ? [`- 成本：${JSON.stringify(report.confirmation.costCny)} 元`] : []),
-    ...(directional ? ['- 方向性：组数不足时，登记的统计程序自己拒绝给出判定；上面的差异只说明方向，不能当作合格结果。'] : []),
+    ...(directional ? ['- 方向性：组数不足时，登记的统计程序自己拒绝给出判定；上面的差异只说明方向，不能当作合格结果。', '- 本活动未动用本季度 α；确认集按“方向性”开启，之后不再作为合格活动的确认集。'] : []),
     ...(report.statistics ? ['', '## 统计', '', `- 判定 ${report.statistics.decision}；${(report.statistics.reasons ?? []).join('；') || '无附加原因'}`] : []),
     '', '本阶段不向生产导入任何东西；通过只代表一项提议：把该技能加入平台技能库。',
   ];

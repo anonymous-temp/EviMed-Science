@@ -20,9 +20,16 @@ ordered, and the parameters the lab will hold the campaign to. What it fixes:
               for another), alpha allocation (0.05 per quarter divided by the campaigns planned in it), K (the most candidates
               the development gate may carry), and the A/A control arm of the development gate
   judge       judged-verdicts only: the fixed judge identity, its passes and call budget, and its qualification (agreement and the
-              noise band of repeated judging, from judge-noise.txt or given) with the thresholds it must meet
+              noise band of repeated judging, from judge-noise.txt or given) with the thresholds it must meet. The call budget is
+              computed from the registration itself (rows x repeats x arms x passes, development and confirmation; pairwise judging
+              records the arms that are not the baseline) and a maximum below it is refused (`judge.callsRequired` says the figure)
+--exclude-opened FILE (repeatable) takes the rows earlier campaigns opened, so this registration's confirmation rows are fresh. A file is an
+earlier registration (its confirmation rows are the opened ones, removed from both roles; its development rows were seen, removed from the
+confirmation role), or a list / {"opened": [...]} of opened ids. The excluded ids and each file's sha256 are recorded and re-checked.
+--surface tool-patch registers the family for the tool-patch surface (a candidate that holds code; its own error-budget ledger and
+consumer identity); the default is harness-patch and writes no `surface` field.
 `groupsBelowMinimum` states an observation (fewer confirmation rows than the procedure's minimum groups: the report will call
-the result directional); it is not a decision. The digest is the sha256 of the canonical JSON (sorted keys, compact, UTF-8) of
+the result directional and the campaign draws no error budget); it is not a decision. The digest is the sha256 of the canonical JSON (sorted keys, compact, UTF-8) of
 the file without `digest` and `registeredAt`, so the same inputs always give the same digest. An existing --out is never
 overwritten without --force. `--check` recomputes the digest, the hash order and the disjointness of the two lists, and with
 --pools (and --ppc) re-derives the whole row selection from the parameters in the file; exit 1 on any difference.
@@ -41,6 +48,7 @@ SCHEMA = 'rsi-round-registration/1'
 TOOL = 'register_round.py/1'
 QUARTER_ALPHA = 0.05
 COST_RATIO = 1.1
+SURFACES = ('harness-patch', 'tool-patch')
 HASH_RULE = 'ascending sha256(salt|id)'
 CONTROL_RULE = ('a candidate is eligible only if its failure-slice gain exceeds the absolute failure-slice difference '
                 'the A/A arm shows against the baseline')
@@ -141,13 +149,37 @@ def ppc_ids(data, prefixes):
     raise RegistrationError('the ppc file must be a list, {"tasks": [...]} or {"<family or bench or domain>": [...]}')
 
 
-def select_rows(pool, salt, ppc, development_rows, confirmation_rows, development_salt=None):
-    """(rows by role, available by role, ppc ids actually removed). The development role is ordered by `development_salt` when given."""
+def opened_ids(paths):
+    """(opened ids, seen-in-development ids, [{name, sha256}]) of the files --exclude-opened names: earlier registrations (rows.confirmation are
+    the opened rows, rows.development the seen ones) or a list / {"opened": [...]} of opened ids."""
+    opened, seen, files = set(), set(), []
+    for path in paths or []:
+        raw = pathlib.Path(path).read_bytes()
+        data = read_json(path, '--exclude-opened file')
+        if isinstance(data, dict) and isinstance(data.get('rows'), dict):
+            confirmation, development = data['rows'].get('confirmation'), data['rows'].get('development')
+            if not isinstance(confirmation, list) or not isinstance(development, list):
+                raise RegistrationError(f'{path}: a registration\'s rows hold the lists development and confirmation')
+            opened |= {str(i) for i in confirmation}
+            seen |= {str(i) for i in development}
+        elif isinstance(data, dict) and isinstance(data.get('opened'), list):
+            opened |= {str(i) for i in data['opened']}
+        elif isinstance(data, list):
+            opened |= {str(i) for i in data}
+        else:
+            raise RegistrationError(f'{path}: --exclude-opened takes a registration, a list of ids or {{"opened": [...]}}')
+        files.append({'name': pathlib.Path(path).name, 'sha256': sha256_hex(raw)})
+    return opened, seen - opened, files
+
+
+def select_rows(pool, salt, ppc, development_rows, confirmation_rows, development_salt=None, opened=(), seen=()):
+    """(rows by role, available by role, ppc ids actually removed). The development role is ordered by `development_salt` when given.
+    Opened rows leave both roles (`opened_removed` lists the ones the pool held); rows seen in an earlier development leave the confirmation role."""
     removed = sorted((set(ppc) & (set(pool['development']) | set(pool['confirmation']))), key=natural_key)
-    skip = set(ppc)
+    skip = set(ppc) | set(opened)
     rows, available = {}, {}
     for role, other in (('development', 'confirmation'), ('confirmation', 'development')):
-        keep = [i for i in dict.fromkeys(pool[role]) if i not in skip and i not in set(pool[other])]
+        keep = [i for i in dict.fromkeys(pool[role]) if i not in skip and i not in set(pool[other]) and not (role == 'confirmation' and i in set(seen))]
         ordered = hash_order(development_salt if role == 'development' and development_salt else salt, keep)
         available[role] = len(ordered)
         want = development_rows if role == 'development' else confirmation_rows
@@ -159,7 +191,22 @@ def select_rows(pool, salt, ppc, development_rows, confirmation_rows, developmen
     return rows, available, removed
 
 
+def opened_removed(pool, opened):
+    """The opened ids the pool held, in natural order: what --exclude-opened actually removed."""
+    return sorted((set(opened) & (set(pool['development']) | set(pool['confirmation']))), key=natural_key)
+
+
 # --------------------------------------------------------------------------------------------------------------- judge
+
+def judge_calls_required(form, passes, development_rows, confirmation_rows, repeats_development, repeats_confirmation, candidates_max):
+    """The verdict records a judged registration will produce. Development carries the baseline, the A/A control and up to K candidates;
+    confirmation the baseline and one candidate. Absolute judging scores every arm; pairwise judging records the arms that are not the
+    baseline (the baseline is the 0.5 reference). `harness_assemble.mjs` computes the same figure (`judgeCallsRequired`)."""
+    pairwise = form == 'pairwise'
+    development_arms = (0 if pairwise else 1) + 1 + candidates_max
+    confirmation_arms = 1 if pairwise else 2
+    return (development_rows * repeats_development * development_arms + confirmation_rows * repeats_confirmation * confirmation_arms) * passes
+
 
 def judge_block(args):
     given = {name: getattr(args, name) for name in JUDGE_ARGS if getattr(args, name) is not None}
@@ -226,6 +273,8 @@ def register(args):
         raise RegistrationError(f'--scorer {args.scorer!r} is not in the lab\'s closed table: {", ".join(SCORER_BENCHMARKS)}')
     if args.benchmark not in SCORER_BENCHMARKS[args.scorer]:
         raise RegistrationError(f'scorer {args.scorer} scores {sorted(SCORER_BENCHMARKS[args.scorer])}, not {args.benchmark}')
+    if args.surface not in SURFACES:
+        raise RegistrationError(f'--surface is one of {", ".join(SURFACES)}')
     if args.cost_ratio != COST_RATIO:
         raise RegistrationError(f'the registered procedure\'s targeted-repair cost bound is {COST_RATIO}; a registration cannot ask for {args.cost_ratio}')
     if not 0 < args.margin < 1:
@@ -245,14 +294,25 @@ def register(args):
         ppc = ppc_ids(read_json(args.ppc, 'the ppc file'), {args.family, str(pool_file.get('bench'))})
         ppc_name, ppc_sha = pathlib.Path(args.ppc).name, sha256_hex(pathlib.Path(args.ppc).read_bytes())
     development_salt = args.development_salt if args.development_salt not in (None, salt) else None
-    rows, available, removed = select_rows(pool, salt, ppc, args.development_rows, args.confirmation_rows, development_salt)
+    opened, seen, opened_files = opened_ids(args.exclude_opened)
+    rows, available, removed = select_rows(pool, salt, ppc, args.development_rows, args.confirmation_rows, development_salt, opened, seen)
+    removed_opened = opened_removed(pool, opened)
     judge = judge_block(args)
+    if judge is not None:
+        required = judge_calls_required(judge['form'], judge['passes'], len(rows['development']), len(rows['confirmation']),
+                                        args.repeats_development, args.repeats_confirmation, args.candidates_max)
+        if judge['maxCalls'] < required:
+            raise RegistrationError(
+                f'--judge-max-calls {judge["maxCalls"]} is below the {required} verdict records this registration needs '
+                f'({len(rows["development"])} development rows x {args.repeats_development} + {len(rows["confirmation"])} confirmation rows x {args.repeats_confirmation}, '
+                f'{judge["passes"]} passes, {judge["form"]}, up to {args.candidates_max} candidates and the A/A control); raise it to at least {required}')
+        judge['callsRequired'] = required
     doc = {
         'schema': SCHEMA, 'tool': TOOL, 'round': args.round, 'family': args.family, 'benchmark': args.benchmark, 'scorer': args.scorer,
         'pool': {'file': pathlib.Path(args.pools).name, 'name': pool_name, 'digest': pool_digest},
         'hashOrder': {'salt': salt, 'rule': HASH_RULE, **({'developmentSalt': development_salt} if development_salt else {})},
         'rows': rows, 'available': available,
-        'excluded': {'ppc': removed, 'ppcFile': ppc_name, 'ppcFileSha256': ppc_sha},
+        'excluded': {'ppc': removed, 'ppcFile': ppc_name, 'ppcFileSha256': ppc_sha, **({'opened': removed_opened, 'openedFiles': opened_files, 'seen': sorted(seen & set(pool['development']), key=natural_key)} if opened_files else {})},
         'repeats': {'development': args.repeats_development, 'confirmation': args.repeats_confirmation},
         'failureSlice': failure_slice(args.failure_slice, args.scorer),
         'failureSliceKey': 'failureCalculators' if args.scorer == 'medcalc' else 'failureSlice',
@@ -264,6 +324,8 @@ def register(args):
     }
     if judge is not None:
         doc['judge'] = judge
+    if args.surface != 'harness-patch':
+        doc['surface'] = args.surface
     doc['registeredAt'] = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
     doc['digest'] = content_digest(doc)
     return doc
@@ -271,7 +333,7 @@ def register(args):
 
 # ------------------------------------------------------------------------------------------------------------------ check
 
-def check(path, pools, pool_name, ppc_path):
+def check(path, pools, pool_name, ppc_path, exclude_opened=()):
     """A list of differences (empty when the file verifies)."""
     doc = read_json(path, 'the registration')
     problems = []
@@ -291,6 +353,15 @@ def check(path, pools, pool_name, ppc_path):
             problems.append(f'{role} rows repeat an id')
     if set(rows.get('development', [])) & set(rows.get('confirmation', [])):
         problems.append('an id is in both roles')
+    judge = doc.get('judge')
+    if isinstance(judge, dict) and isinstance(judge.get('maxCalls'), int) and judge.get('form') in ('absolute', 'pairwise') and isinstance(judge.get('passes'), int):
+        repeats = doc.get('repeats') or {}
+        required = judge_calls_required(judge['form'], judge['passes'], len(rows.get('development', [])), len(rows.get('confirmation', [])),
+                                        repeats.get('development', 1), repeats.get('confirmation', 1), doc.get('candidatesMax', 1))
+        if judge['maxCalls'] < required:
+            problems.append(f'the judge call maximum {judge["maxCalls"]} is below the {required} verdict records the registration needs')
+        if 'callsRequired' in judge and judge['callsRequired'] != required:
+            problems.append(f'judge.callsRequired is {judge["callsRequired"]}, the registration needs {required}')
     if pools:
         pool_file, pool, pool_digest = read_pool(pools, pool_name or doc.get('pool', {}).get('name', 'main'))
         if pool_digest != doc.get('pool', {}).get('digest'):
@@ -298,8 +369,15 @@ def check(path, pools, pool_name, ppc_path):
         ppc = []
         if ppc_path:
             ppc = ppc_ids(read_json(ppc_path, 'the ppc file'), {doc.get('family'), str(pool_file.get('bench'))})
+        recorded = doc.get('excluded', {}).get('openedFiles') or []
+        if recorded and not exclude_opened:
+            problems.append('the registration excluded opened rows: give the same --exclude-opened files to re-derive the selection')
+        opened, seen, opened_files = opened_ids(exclude_opened)
+        if opened_files != recorded:
+            problems.append('the --exclude-opened files are not the ones recorded in the registration (names or sha256 differ)')
         try:
-            again, _, removed = select_rows(pool, salt, ppc, len(rows['development']), len(rows['confirmation']), development_salt)
+            again, _, removed = select_rows(pool, salt, ppc, len(rows['development']), len(rows['confirmation']), development_salt, opened, seen)
+            removed_opened = opened_removed(pool, opened)
         except RegistrationError as error:
             problems.append(f'rows cannot be re-derived: {error}')
         else:
@@ -307,6 +385,8 @@ def check(path, pools, pool_name, ppc_path):
                 problems.append('the rows differ from a fresh selection over the pools file')
             if removed != doc.get('excluded', {}).get('ppc'):
                 problems.append('the excluded ppc ids differ from a fresh selection')
+            if opened_files and removed_opened != doc.get('excluded', {}).get('opened'):
+                problems.append('the excluded opened ids differ from a fresh selection')
     return problems
 
 
@@ -320,6 +400,8 @@ def build_parser():
     p.add_argument('--pools')
     p.add_argument('--pool', help='the pool inside the pools file (default main)')
     p.add_argument('--ppc')
+    p.add_argument('--exclude-opened', action='append', default=[], metavar='FILE', help='earlier registration(s) or id lists whose opened rows leave this registration (repeatable)')
+    p.add_argument('--surface', default='harness-patch', help='tool-patch: the candidate holds code (its own error-budget ledger and consumer identity)')
     p.add_argument('--salt')
     p.add_argument('--development-salt', help='order the development role by this salt instead of --salt (rows chosen and run before the registration)')
     p.add_argument('--development-rows', type=int)
@@ -355,7 +437,7 @@ def main(argv=None):
     args = build_parser().parse_args(argv)
     try:
         if args.check:
-            problems = check(args.check, args.pools, args.pool, args.ppc)
+            problems = check(args.check, args.pools, args.pool, args.ppc, args.exclude_opened)
             for problem in problems:
                 print(f'register_round: {problem}', file=sys.stderr)
             print('register_round: ' + ('differences found' if problems else 'verified'), file=sys.stderr)
