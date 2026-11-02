@@ -7,7 +7,7 @@
   --form dev           a bundle is `<prefix>.<domain>.<row>.r<k>` (the rids of make_screen.py and the arm builders); --arm NAME=PREFIX[@N]; `@N` takes the arm's runs from repeat
                        N of that prefix (a run is the target's repeat 0 when N is 1: `aa=m2@1` is the second run of the arm m2 standing as a
                        development A/A beside `baseline=m2`, which is its first)
-  --form confirmation  a bundle is `cf.<domain>.<row>.<tag>.r<k>`; --arm NAME=TAG (tag `base` or `cstar`)
+  --form confirmation  a bundle is `cf.<domain>.<row>.<tag>.r<k>`; --arm NAME=TAG (tag `base` or `cstar`); --confirmation-prefix cf2 names the round's own `cf2.<domain>.<row>.<tag>.r<k>`
 
 NAME is the arm of the source: `baseline`, `aa` or `cand-<12 hex>` (the candidate's digest on its image, which export_harness_arms.py
 computes from --bundles). Rows and repeats are the registration's for the role. Output, below --out:
@@ -45,10 +45,10 @@ class MaterialiseError(Exception):
     pass
 
 
-def rid_of(form, prefix, domain, row, repeat):
+def rid_of(form, prefix, domain, row, repeat, confirmation_prefix='cf'):
     if form == 'dev':
         return rl.rid_of(prefix, domain, row, repeat)
-    return f'cf.{domain}.{row}.{prefix}.r{repeat}'.replace('/', '_')
+    return f'{confirmation_prefix}.{domain}.{row}.{prefix}.r{repeat}'.replace('/', '_')
 
 
 def candidates_of(rid, inboxes):
@@ -156,13 +156,13 @@ def run(args):
     out = pathlib.Path(args.out)
     report = {'schema': SCHEMA, 'registration': {'family': registration.get('family'), 'digest': registration.get('digest')}, 'role': args.role,
               'domain': args.domain, 'form': args.form, 'benchKey': args.bench_key, 'repeats': repeats, 'rows': len(rows), 'inboxes': [str(p) for p in inboxes],
-              'arms': {}, 'ignoredPrefixes': ignored_prefixes(inboxes, args.domain, {prefix for _, prefix, _ in arms})}
+              'arms': {}, 'ignoredPrefixes': ignored_prefixes(inboxes, args.domain, {prefix for _, prefix, _ in arms} | ({args.confirmation_prefix} if args.form == 'confirmation' else set()))}
     problems = 0
     for name, prefix, offset in arms:
         entry = {'prefix': prefix + (f'@{offset}' if offset else ''), 'expected': len(rows) * repeats, 'materialised': 0, 'runs': [], 'notMaterialised': []}
         for row in rows:
             for repeat in range(repeats):
-                rid = rid_of(args.form, prefix, args.domain, row, repeat + offset)
+                rid = rid_of(args.form, prefix, args.domain, row, repeat + offset, args.confirmation_prefix)
                 key = eha.run_key(args.key_template, args.bench_key, name, row, repeat, repeats)
                 folder = eha.result_folder(out / name, key)
                 outcome = materialise_run(rid, args.domain, row, inboxes, folder)
@@ -186,6 +186,7 @@ def main(argv=None):
     p.add_argument('--bench-key', required=True)
     p.add_argument('--arm', action='append', required=True, help='NAME=PREFIX (baseline, aa or cand-<12 hex>)')
     p.add_argument('--form', default='dev', help='dev (<prefix>.<domain>.<row>.r<k>) or confirmation (cf.<domain>.<row>.<tag>.r<k>)')
+    p.add_argument('--confirmation-prefix', default='cf', help='the leading token of a confirmation rid (default cf; a round that submitted under another, cf2, names it)')
     p.add_argument('--repeats', type=int, help='default: the registration\'s repeats for the role')
     p.add_argument('--key-template', default=eha.DEFAULT_KEY_TEMPLATE)
     p.add_argument('--inbox', action='append', help='directory of <rid>.tgz bundles (repeatable; default $H2_RUNS_ROOT/inbox and inbox/archive)')
