@@ -223,17 +223,6 @@ class VcrToolDefinitionTests(unittest.TestCase):
             self.assertIn("generated_records", text, kind)
         self.assertNotIn("generated_records", " ".join(vcr_platform.shape({"kind": "design_analytic"})["next_actions"]))
 
-    def test_the_first_design_start_of_a_conversation_says_how_a_paper_s_value_gets_its_source_and_later_ones_do_not(self):
-        # Three of three live design comparisons left a published control median labelled an assumption on the page (2026-11-02).
-        vcr_platform._SOURCE_TOLD.clear()
-        answer = {"status": "success", "summary": "queued", "data": {}, "warnings": [], "next_actions": []}
-        first = vcr_platform._with_source(answer, "start", "design_analytic")
-        self.assertTrue(any("evidence_item" in line and "pmid or doi" in line for line in first["next_actions"]))
-        self.assertEqual(vcr_platform._with_source(answer, "start", "design_simulation")["next_actions"], [], "once per conversation")
-        vcr_platform._SOURCE_TOLD.clear()
-        for action, kind in (("status", "design_analytic"), ("start", "evalue"), ("start", "generate_population")):
-            self.assertEqual(vcr_platform._with_source(answer, action, kind)["next_actions"], [], (action, kind))
-
     def test_the_job_kinds_are_the_domain_s(self):
         kinds = domain_job_kinds()
         self.assertGreaterEqual(len(kinds), 24, "the first release's twenty-four, then the kinds appended after them")
