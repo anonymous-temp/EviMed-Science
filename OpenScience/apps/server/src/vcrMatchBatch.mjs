@@ -31,7 +31,7 @@
  * @module vcrMatchBatch
  */
 
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import {
   VCR_ENGINE_PROTOCOL_VERSION, VCR_MATCH_BATCH_DEFAULT_MODEL, VCR_MATCH_BATCH_LIMITS, VCR_MATCH_BATCH_METHODS, VCR_MIN_CELL_SIZE, acceptExtractedFacts,
   canonicalScenarioJson, matchBatchStatement, matchBatchUnitKey, planMatchExtraction, vcrResultOutputPayload,
@@ -272,13 +272,25 @@ export async function planBatch({ study, selection: raw = {}, matchStore, docume
 // ---------------------------------------------------------------------------
 
 /**
+ * What a reading is, whoever asks for it and whenever: the records it will read (a person's documents), the questions it asks of them and
+ * the instructions it asks them with. The same selection started twice is the same reading, so the second start finds the first and does
+ * not queue a second job that would finish empty and send a second continuation to the conversation.
+ * @param {{ protocolVersionId: string, variables: readonly string[], plan: { toRead: ReadonlyArray<{ subjectKey: string, documents: ReadonlyArray<{ id: string }> }> } }} built
+ */
+export function extractChain(built) {
+  const units = built.plan.toRead.map((entry) => [entry.subjectKey, entry.documents.map((doc) => doc.id)]);
+  return createHash('sha256').update(canonicalScenarioJson({ protocolVersionId: built.protocolVersionId, variables: [...new Set(built.variables)].sort(),
+    prompt: MATCH_EXTRACT_PROMPT_VERSION, units })).digest('hex').slice(0, 16);
+}
+
+/**
  * The scenario a `match_extract` job freezes: the roster and the questions, as the platform read them when the work was started.
  * @param {Awaited<ReturnType<typeof planBatch>> & { ok: true }} built
  */
 export function extractScenario(built) {
   return {
     protocolVersionId: built.protocolVersionId, asOf: built.asOf, subjects: built.plan.toRead.map((entry) => entry.subjectKey), variables: built.variables,
-    estimate: built.plan.estimate, chain: randomUUID().replace(/-/g, '').slice(0, 16), prefilter: built.prefilter,
+    estimate: built.plan.estimate, chain: extractChain(built), prefilter: built.prefilter,
     ...(built.plan.prefiltered.length ? { prefiltered: built.plan.prefiltered } : {}), model: built.model,
   };
 }
@@ -463,9 +475,15 @@ export function createMatchBatch({ jobs, matchStore, documents, subjectTable = n
       };
       if (!built.plan.toRead.length) return { action: 'start', kind: 'match_extract', state: 'nothing_to_read', jobId: null, ...summary };
       const scenario = extractScenario(built);
+      // The same reading asked for again while it is out is that reading; one that has ended is a new attempt (a record that failed is read
+      // again), so the key carries how many readings of this one there have been.
+      const same = await jobs.store?.rows?.(`SELECT id, state FROM evimed_vcr.jobs WHERE study_id = $1 AND kind = 'match_extract' AND scenario ->> 'chain' = $2
+        ORDER BY created_at`, [study.id, scenario.chain]) ?? [];
+      const open = same.find((entry) => ['queued', 'running', 'awaiting_budget'].includes(String(entry.state)));
+      if (open) return { action: 'start', kind: 'match_extract', state: String(open.state), jobId: String(open.id), alreadyRunning: true, ...summary };
       const { job } = await jobs.enqueue({
         studyId: study.id, userId: study.userId, kind: 'match_extract', scenario, inputs: [], internal: true, runId: study.executionOrigin?.runId ?? null,
-        cpuSecondsLimit: 60, maxAttempts: 3, idempotencyKey: `vcr:${study.id}:extract:${scenario.chain}`,
+        cpuSecondsLimit: 60, maxAttempts: 3, idempotencyKey: `vcr:${study.id}:extract:${scenario.chain}:g${same.length}`,
         detail: { origin: actor, protocolVersionId: built.protocolVersionId, principal: study.userId,
           ...(study.cloudContext ? { cloudContext: { runId: String(study.cloudContext.runId), sessionId: String(study.cloudContext.sessionId) } } : {}),
           ...(study.completionOrigin ? { conversationOrigin: study.completionOrigin } : {}) },

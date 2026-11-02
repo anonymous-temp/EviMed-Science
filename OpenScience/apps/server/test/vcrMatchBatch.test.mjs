@@ -297,13 +297,30 @@ test("D4: starting states the cost and queues the reading with the conversation'
   assert.deepEqual(started.plan, { toRead: 4, alreadyRead: 0, prefiltered: 0, noDocuments: 0, deferred: 0 });
   const [input] = queued;
   assert.deepEqual([input.kind, input.internal, input.cpuSecondsLimit, input.inputs], ["match_extract", true, 60, []]);
-  assert.match(input.idempotencyKey, /^vcr:std_1:extract:[a-f0-9]{16}$/);
+  assert.match(input.idempotencyKey, /^vcr:std_1:extract:[a-f0-9]{16}:g0$/);
   assert.deepEqual(input.detail.cloudContext, { runId: "run_1", sessionId: "ses_1" });
   assert.deepEqual(input.detail.conversationOrigin, study.completionOrigin);
   assert.deepEqual(input.scenario.subjects, ["P-001", "P-002", "P-003", "P-004"]);
   assert.equal(counters.started, 1);
-  // two starts are two chains: a restart after a cancel is a new job, not the old one back
-  assert.notEqual(extractScenario(await planBatch({ study, matchStore: matchStoreDouble(), documents: { roster: async () => ROSTER }, config })).chain, input.scenario.chain);
+  // the same selection is the same reading (what it reads, the questions, the instructions), whoever asks and whenever; another set of records is another
+  const again = extractScenario(await planBatch({ study, matchStore: matchStoreDouble(), documents: { roster: async () => ROSTER }, config }));
+  assert.equal(again.chain, input.scenario.chain);
+  assert.match(again.chain, /^[a-f0-9]{16}$/);
+  const fewer = extractScenario(await planBatch({ study, selection: { subjectKeys: ["P-001", "P-002"] }, matchStore: matchStoreDouble(), documents: { roster: async () => ROSTER }, config }));
+  assert.notEqual(fewer.chain, input.scenario.chain);
+  // a start while that reading is out is that reading: no second job, no second continuation
+  /** @type {any[]} */ const others = [];
+  const open = createMatchBatch({ jobs: { async enqueue(input) { others.push(input); return { job: { id: "job_78", state: "queued" }, created: true }; },
+    store: { async rows() { return [{ id: "job_77", state: "running" }]; } } }, matchStore: matchStoreDouble(), documents: { roster: async () => ROSTER }, config });
+  const repeated = await open.start(study, {});
+  assert.deepEqual([repeated.jobId, repeated.state, repeated.alreadyRunning], ["job_77", "running", true]);
+  assert.equal(others.length, 0, "nothing was queued");
+  // one that has ended is an attempt that can be made again, under a key of its own
+  const ended = createMatchBatch({ jobs: { async enqueue(input) { others.push(input); return { job: { id: "job_79", state: "queued" }, created: true }; },
+    store: { async rows() { return [{ id: "job_77", state: "failed" }, { id: "job_78", state: "canceled" }]; } } }, matchStore: matchStoreDouble(), documents: { roster: async () => ROSTER }, config });
+  const retried = await ended.start(study, {});
+  assert.deepEqual([retried.jobId, retried.alreadyRunning], ["job_79", undefined]);
+  assert.match(others.at(-1).idempotencyKey, /:g2$/);
 
   // everything already read: nothing is queued and the answer says what to do instead
   const done = matchStoreDouble({ async extractionsRead() { return new Set(ROSTER.map((r) => matchBatchUnitKey(r.subjectKey, r.id))); } });

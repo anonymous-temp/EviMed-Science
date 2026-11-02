@@ -171,3 +171,22 @@ test("a fact written with a second quotation for its date and a unit read by con
   // Without the document the quotations cannot be re-read: the stored date does not stand on its own.
   assert.equal(assessSubject({ subjectKey: "P-001", criteria, facts: stored, documents: { d1: { text: "other" } }, asOf: "2100-03-05" }).judgments[1].state, "unknown");
 });
+
+test("P2-8 the same selection started twice while it is out is one job; after a cancel it is a new one, and the ledger keeps both honest", options, async () => {
+  const g = await fixture();
+  const first = await g.batch.start(g.study, {});
+  const second = await g.batch.start(g.study, {});
+  assert.equal(second.jobId, first.jobId, "the second start finds the reading that is out");
+  assert.equal(second.alreadyRunning, true);
+  assert.equal((await studies.rows("SELECT 1 FROM evimed_vcr.jobs WHERE study_id=$1 AND kind='match_extract'", [g.study.id])).length, 1, "one job, so one continuation");
+  // a person's cancel ends it; the same selection asked again is a new attempt, not the old job back
+  await g.jobs.cancel(g.study.id, first.jobId, { actor: "owner" });
+  const third = await g.batch.start(g.study, {});
+  assert.notEqual(third.jobId, first.jobId);
+  assert.equal(third.alreadyRunning, undefined);
+  assert.equal((await studies.rows("SELECT 1 FROM evimed_vcr.jobs WHERE study_id=$1 AND kind='match_extract'", [g.study.id])).length, 2);
+  // and the reading that ran is the ledger's: it has read each record once
+  const [claimed] = await g.jobs.claim({ lane: "slow" });
+  await g.jobs.advance(claimed);
+  assert.equal(g.extractor.calls.length, 3);
+});
