@@ -1256,6 +1256,17 @@ test("a copiedFrom link is honoured only for a copy of the same variable at the 
     assert.equal(honest.saved[0].clinical.copiedFrom, "fct_orig", occurredAt);
     assert.equal(kept.results[0].warnings, undefined, occurredAt);
   }
+  // A copy carried forward into a later record has no date of its own either: the date its record\'s header gives it is the record\'s, not the
+  // event\'s, so it is not compared with the original\'s and the link stands (owner ruling 2026-11-02).
+  const forward = "Record date: 2026-09-25\n多西他赛治疗。";
+  const header = { ...original, occurredAt: "2026-08-01T00:00:00.000Z", source: { dateBasis: "record_header" } };
+  const carried = factWriter({ text: forward, known: [header] });
+  const kept = await carried.write({ subjectKey: "P-1", documentId: "doc_1", variable: "docetaxel", surface: "多西他赛", quote: "多西他赛治疗。", clinical: { ...PATIENT, medication: { state: "administered" }, copiedFrom: "fct_orig" } });
+  assert.deepEqual([kept.ok, carried.saved[0].occurredAt, carried.saved[0].source.dateBasis, carried.saved[0].clinical.copiedFrom, kept.results[0].warnings], [true, "2026-09-25", "record_header", "fct_orig", undefined]);
+  // The same copy, when the original had a date of its own, is still a different instant.
+  const ownDate = factWriter({ text: forward, known: [original] });
+  const flaggedForward = await ownDate.write({ subjectKey: "P-1", documentId: "doc_1", variable: "docetaxel", surface: "多西他赛", quote: "多西他赛治疗。", clinical: { ...PATIENT, medication: { state: "administered" }, copiedFrom: "fct_orig" } });
+  assert.deepEqual([ownDate.saved[0].clinical.copiedFrom, flaggedForward.results[0].warnings[0].code], [undefined, "clinical_copied_from_other_date"]);
   // The fence is as before: a link to a fact that is not this patient's is refused whole.
   const foreign = factWriter({ text, known: [{ ...original, subjectKey: "P-2" }] });
   const refused = await foreign.write(copy("2026-08-01 多西他赛治疗", "2026-08-01", "fct_orig"));
@@ -1543,8 +1554,9 @@ test("a date the quotation does not print is read from a second quotation of the
   assert.equal(text.slice(honest.saved[0].source.dateQuote.start, honest.saved[0].source.dateQuote.end), "Record date: 2100-03-01");
   assert.equal(done.results[0].warnings, undefined, "a date that is shown needs no notice");
 
-  // The 10-29 counterexamples hold: a date nothing printed is never stored. The fact is kept without it, undated, and the run is told;
-  // a criterion that needs the date stays unknown for want of it.
+  // The 10-29 counterexamples hold: a date nothing printed is never stored. The fact is kept without it, and the run is told; with a record
+  // header above the fact it stands at the header\'s date (owner ruling 2026-11-02), and with none it is undated and a criterion that needs the
+  // date stays unknown for want of it (the same cases below, in a document with no header).
   for (const [label, over] of /** @type {Array<[string, Record<string, any>]>} */ ([
     ["no second quotation at all", { occurredAt: "2100-03-01" }],
     ["an upload time or a file's date, which no quotation prints", { occurredAt: "2100-06-30", recordedAt: "2100-06-30" }],
@@ -1559,13 +1571,20 @@ test("a date the quotation does not print is read from a second quotation of the
     const kept = await probe.write(item(over));
     assert.equal(kept.ok, true, `${label}: ${JSON.stringify(kept.issues)}`);
     assert.equal(probe.saved.length, 1, label);
-    assert.deepEqual([probe.saved[0].occurredAt, probe.saved[0].recordedAt, probe.saved[0].dateSurface], [null, null, null], `${label}: nothing is stored as a date`);
-    assert.equal(probe.saved[0].source.dateQuote, undefined, `${label}: a second quotation no date rests on is not kept`);
+    assert.deepEqual([probe.saved[0].occurredAt, probe.saved[0].recordedAt, probe.saved[0].dateSurface], ["2100-03-01", null, null], `${label}: the claimed date is not stored; the record header\'s is`);
+    assert.deepEqual([probe.saved[0].source.dateBasis, probe.saved[0].source.dateQuote.quote], ["record_header", "Record date: 2100-03-01"], `${label}: the header line is its date quotation`);
     assert.equal(probe.saved[0].variable, "aspirin", label);
     assert.equal(kept.results[0].warnings.some((/** @type {any} */ warning) => ["date_not_shown", "date_quote_not_found", "date_quote_unusable"].includes(warning.code)), true, `${label}: the run is told`);
+    // The same case in a document with no header above the fact: nothing is stored as a date, and a window is unknown for want of it.
+    const bareText = text.replace("Record date: 2100-03-01\n\n", "");
+    const bare = factWriter({ text: bareText });
+    const bareKept = await bare.write(item({ ...over, dateQuote: over.dateQuote === "Record date: 2100-03-01" ? undefined : over.dateQuote }));
+    assert.equal(bareKept.ok, true, `${label} (no header): ${JSON.stringify(bareKept.issues)}`);
+    assert.deepEqual([bare.saved[0].occurredAt, bare.saved[0].recordedAt, bare.saved[0].dateSurface, bare.saved[0].source.dateQuote], [null, null, null, undefined], `${label} (no header): nothing is stored as a date`);
     const window = { id: "w", kind: "inclusion", requirement: { op: "present", variable: "aspirin", window: { months: 2 } } };
-    assert.equal(evaluateCriterion(window, { facts: [probe.saved[0]], asOf: Date.parse("2100-03-05") }).missing[0].reason, "undated", `${label}: a window is unknown for want of the date`);
-    assert.equal(evaluateCriterion({ id: "p", kind: "inclusion", requirement: { op: "present", variable: "aspirin" } }, { facts: [probe.saved[0]], asOf: Date.parse("2100-03-05") }).state, SATISFIED, `${label}: where no date is asked for, the fact counts`);
+    assert.equal(evaluateCriterion(window, { facts: [bare.saved[0]], asOf: Date.parse("2100-03-05") }).missing[0].reason, "undated", `${label}: a window is unknown for want of the date`);
+    assert.equal(evaluateCriterion(window, { facts: [probe.saved[0]], asOf: Date.parse("2100-03-05") }).state, SATISFIED, `${label}: with the header\'s date it is inside the window`);
+    assert.equal(evaluateCriterion({ id: "p", kind: "inclusion", requirement: { op: "present", variable: "aspirin" } }, { facts: [bare.saved[0]], asOf: Date.parse("2100-03-05") }).state, SATISFIED, `${label}: where no date is asked for, the fact counts`);
   }
   const notFound = factWriter({ text });
   const told = await notFound.write(item({ occurredAt: "2100-04-01", dateQuote: "Record date: 2100-04-01" }));
@@ -1585,14 +1604,27 @@ test("a date the quotation does not print is read from a second quotation of the
   assert.match(labelled.results[0].warnings[0].message, /仍然保存着，事实没有变成无日期/);
   assert.doesNotMatch(labelled.results[0].warnings[0].message, /没有日期；/);
   assert.match(partlyTold(), /^recordedAt 没有整个印在 quote 里.*occurredAt 有依据，仍然保存着。$/);
-  const none = factWriter({ text });
+  const none = factWriter({ text: text.replace("Record date: 2100-03-01\n\n", "") });
   const lost = await none.write(item({ occurredAt: "2100-06-30" }));
   assert.equal(lost.results[0].warnings[0].code, "date_not_shown");
   assert.match(lost.results[0].warnings[0].message, /^occurredAt 没有整个印在 quote 里.*事实现在没有日期；需要日期的时间窗类条件仍是“没有日期”的未知。$/);
-  // An item that claims no date needs no second quotation, and one that names it but claims no date is not refused for it.
+  // With a header above the fact the run is told the fact has the header\'s date, not that it has none.
+  const headed = factWriter({ text });
+  const headedLost = await headed.write(item({ occurredAt: "2100-06-30" }));
+  assert.match(headedLost.results[0].warnings[0].message, /^occurredAt 没有整个印在 quote 里.*事实取了所在病历抬头的日期（2100-03-01）作为 occurredAt，不需要重写。$/);
+  // An item that claims no date needs no second quotation, and one that names it but claims no date is not refused for it. With a header
+  // above it the fact is dated by it, silently: the run did nothing wrong and is not told anything.
   const plain = factWriter({ text });
-  assert.equal((await plain.write(item({}))).ok, true);
-  assert.equal(plain.saved[0].occurredAt, null);
+  const plainResult = await plain.write(item({}));
+  assert.equal(plainResult.ok, true);
+  assert.deepEqual([plain.saved[0].occurredAt, plain.saved[0].source.dateBasis, plainResult.results[0].warnings], ["2100-03-01", "record_header", undefined]);
+  const plainBare = factWriter({ text: text.replace("Record date: 2100-03-01\n\n", "") });
+  assert.equal((await plainBare.write(item({}))).ok, true);
+  assert.equal(plainBare.saved[0].occurredAt, null);
+  // A past event the run marks historical is the header\'s date as the latest it could be.
+  const past = factWriter({ text });
+  assert.equal((await past.write(item({ clinical: { schema: 1, assertion: "affirmed", experiencer: "patient", temporality: "historical" } }))).ok, true);
+  assert.deepEqual([past.saved[0].occurredAt, past.saved[0].source.dateBasis, past.saved[0].source.dateBound], ["2100-03-01", "record_header", "no_later_than"]);
   // What this does not touch: a number or a quotation the document does not hold is still refused whole.
   const invented = factWriter({ text });
   assert.equal((await invented.write(item({ quote: "Takes aspirin twice daily.", occurredAt: "2100-03-01", dateQuote: "Record date: 2100-03-01" }))).ok, false);

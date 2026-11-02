@@ -93,14 +93,15 @@ export function extractSelection(raw = {}) {
 // ---------------------------------------------------------------------------
 
 const INSTRUCTIONS = [
-  '你从一份病历里为入排条件找事实。只输出 JSON：{"facts":[{"variable","polarity","value","unit","occurredAt","dateSurface","dateQuote","surface","quote"}]}。',
+  '你从一份病历里为入排条件找事实。只输出 JSON：{"facts":[{"variable","polarity","value","unit","occurredAt","dateSurface","dateQuote","temporality","surface","quote"}]}。',
   '规则：',
   '1. variable 只能是下面列出的变量名，原样使用；病历没提到的变量不要写，不要猜。',
   '2. quote 是病历里的一句原话，逐字照抄，不改写、不换算、不合并两句；surface 是 quote 里你读到的词；有数值时 value 是 quote 里印着的数。unit 只在 quote 里紧挨着数值印着单位时才写，没印就不写（事实仍保存，数值保留）。',
   '3. polarity：affirmed（确有）、negated（quote 本身明确否认，如“否认妊娠”）、hypothetical（拟行、可能、不除外）、family（家族史）。病历没提到的是未知，不是 negated。',
-  '4. occurredAt（YYYY-MM-DD）只在日期完整印在 quote 里，或印在 dateQuote 里时填，日期原文放进 dateSurface。dateQuote 是同一份病历里印着这个完整日期（含年份）的另一句原话，逐字照抄，例如记录抬头的日期行；只有“此刻的状态”（正在用的药、本次就诊的事）才取它所在那条记录的日期，既往的事件自己没有日期就不填。缺年份的写法（如 3/14）不算日期，不要补全。',
-  '5. 年龄、性别、诊断推不出绝经、妊娠、操作史或阴性结果，这类不要写。',
-  '6. 没有可写的事实就返回 {"facts":[]}。',
+  '4. occurredAt（YYYY-MM-DD）只在病历为这个事实印出了完整日期（含年份）时填：日期在 quote 里，或印在 dateQuote 里（同一份病历里为这一条事实印着日期的另一句原话，逐字照抄），日期原文放进 dateSurface。事实自己没有日期就都不填，不要把所在记录的日期补进来——平台会取它上面记录抬头的日期。缺年份的写法（如 3/14）不算日期，不要补全。',
+  '5. temporality：quote 说的是既往发生的事（既往史、曾经做过的手术、“曾患”）时写 "historical"，这时记录抬头的日期只算“不晚于这一天”；现在的状态（正在用的药、本次就诊的事）不写这一项。',
+  '6. 年龄、性别、诊断推不出绝经、妊娠、操作史或阴性结果，这类不要写。',
+  '7. 没有可写的事实就返回 {"facts":[]}。',
 ].join('\n');
 
 /**

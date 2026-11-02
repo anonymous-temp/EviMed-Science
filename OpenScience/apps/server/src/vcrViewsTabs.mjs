@@ -1431,8 +1431,20 @@ const EVIDENCE_SHOWN = 3;
 function evidenceNote(evidence) {
   const parts = [];
   if (evidence.unitBasis === "conventional" && text(evidence.unit)) parts.push(`单位 ${evidence.unit} 是按惯例读出的，原文没有印`);
-  if (evidence.dateLocator) parts.push("日期取自同一份病历的另一处，不是这句话里印的");
+  // A date from the record's header has its own words, beside the date (`dateNote`); this one is for a date read from some other line.
+  if (evidence.dateLocator && evidence.dateBasis !== "record_header") parts.push("日期取自同一份病历的另一处，不是这句话里印的");
   return parts.length ? parts.join("；") : null;
+}
+
+/**
+ * The words beside a date the fact did not print itself but took from the header of the record it sits in (`source.dateBasis`), and for a
+ * past event that this is only the latest it could have been (`dateBound`): a scientist judging a window verdict needs both. Null for a date the
+ * quotation or a quotation for that very fact printed.
+ * @param {unknown} basis @param {unknown} bound @returns {string | null}
+ */
+function dateNote(basis, bound) {
+  if (basis !== "record_header") return null;
+  return bound === "no_later_than" ? "日期取自病历抬头，事件发生不晚于这一天" : "日期取自病历抬头";
 }
 
 /**
@@ -1449,6 +1461,8 @@ function judgementView(criterion, code, judgment, now, documentNames = new Map()
     source: evidence.quoteKind === "snapshot_cell" ? `数据快照字段「${object(evidence.locator).field ?? evidence.variable}」`
       : evidence.quoteKind === "verbatim" ? (documentNames.get(String(object(evidence.locator).documentId)) ?? "病历原文") : (vcrLocatorText(evidence.locator) ?? text(evidence.source)),
     at: zhDate(evidence.at ?? evidence.occurredAt ?? object(evidence.locator).at, now),
+    // Where the date came from when no quotation of the fact printed it: the header of the record, said beside the date.
+    dateNote: dateNote(evidence.dateBasis, evidence.dateBound),
     // What the quotation does not itself say, said beside it: a unit the domain's table supplied, a date taken from another line.
     note: evidenceNote(evidence),
   }));
@@ -1631,7 +1645,7 @@ export function presentMatchingTab(bundle, query = {}) {
     comparisons: list(match.comparisons).map(entry => ({ protocol: entry.protocol, summary: entry.assessment?.summary ?? null,
       asOf: entry.assessment?.asOf ?? null, evidenceGaps: entry.assessment?.evidenceGaps ?? [] })),
     timeline: (abilitiesOf(list(bundle.roles).map(String)).includes("read_patient_level") ? list(match.timeline) : []).map(fact => ({ id: fact.id, variable: fact.variable, value: fact.value, unit: fact.unit,
-      at: fact.occurredAt ?? null, assertion: fact.clinical?.assertion ?? fact.polarity, experiencer: fact.clinical?.experiencer ?? null,
+      at: fact.occurredAt ?? null, dateNote: dateNote(fact.source?.dateBasis, fact.source?.dateBound), assertion: fact.clinical?.assertion ?? fact.polarity, experiencer: fact.clinical?.experiencer ?? null,
       medicationState: fact.clinical?.medication?.state ?? null, correctionOf: fact.clinical?.correctionOf ?? null,
       superseded: fact.superseded === true, conflictFactIds: fact.conflicts ?? [], correctionReason: fact.clinical?.correctionReason ?? null,
       ...(fact.basis ? { basis: fact.basis } : {}),

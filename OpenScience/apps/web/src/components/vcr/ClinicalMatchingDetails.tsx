@@ -128,7 +128,7 @@ export function CriterionTable({ label, rows, facts, extraColumns = [] }: {
           {(row.evidenceItems?.length ? row.evidenceItems : [row.evidence]).map((item, index) => (
             <span key={`${item.quote}-${index}`} className="block">
               <span className="block text-text">{`“${item.quote}”`}</span>
-              <span className="block text-caption text-text-3">{[item.source, item.at].filter(Boolean).join(' · ')}</span>
+              <span className="block text-caption text-text-3">{[item.source, item.at, item.dateNote].filter(Boolean).join(' · ')}</span>
               {item.note && <span className="block text-caption text-text-3">{item.note}</span>}
             </span>
           ))}
@@ -348,7 +348,7 @@ export function ClinicalTimeline({ studyId, data, mayReadOriginal, subject }: {
   return <Disclosure summary={subject ? `${subject} 的临床记录与更正` : '临床记录与更正'}>
     <ol className="divide-y divide-faint">
       {shown.visible.map(entry => <li key={entry.id} className="flex flex-col gap-2 py-3">
-        <p className="text-caption text-text-3">{[formatDay(entry.at) || '日期未记载', assertions[entry.assertion] ?? '未知',
+        <p className="text-caption text-text-3">{[formatDay(entry.at) || '日期未记载', entry.dateNote ?? null, assertions[entry.assertion] ?? '未知',
           entry.experiencer ? experiencers[entry.experiencer] : null, entry.medicationState ? medicationStates[entry.medicationState] : null,
           entry.correctionOf ? '更正记录' : null, entry.superseded ? '已有更正' : null, entry.conflictFactIds?.length ? '记录有冲突' : null,
           entry.basis === 'updated' ? '依据已更新' : null, entry.document ?? null].filter(Boolean).join(' · ')}</p>

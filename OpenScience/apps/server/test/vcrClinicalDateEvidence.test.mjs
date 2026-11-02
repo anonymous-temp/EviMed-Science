@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {clinicalDateInEvidence,clinicalDateInQuote,clinicalIntervalInQuote} from '../src/vcrClinicalDateEvidence.mjs';
+import {clinicalDateInEvidence,clinicalDateInQuote,clinicalDatesPrinted,clinicalIntervalInQuote,clinicalRecordHeader,RECORD_HEADER_LABEL_MAX} from '../src/vcrClinicalDateEvidence.mjs';
 import {verifyFactEvidence,evaluateCriterion,UNKNOWN} from '../src/vcrMatching.mjs';
 
 test('dataset year and undated age cannot supply a manufactured birth/event date',()=>{
@@ -54,4 +54,71 @@ test('a date may rest on a second verbatim quotation of the same document, and o
  refuse({source:{...fact.source,dateQuote:undefined},occurredAt:'2100-03-01'},'date_not_in_span');
  refuse({recordedAt:'2100-05-01'},'date_not_in_span');
  assert.equal(verifyFactEvidence({...fact,recordedAt:'2100-03-01'},{documents:{d:{text}}}).ok,true,'recordedAt reads the same evidence');
+});
+
+test('the dates a text prints are the ones the evidence check accepts, real calendar dates only',()=>{
+ assert.deepEqual(clinicalDatesPrinted('Record date: 2067-05-03').map(d=>d.iso),['2067-05-03']);
+ assert.deepEqual(clinicalDatesPrinted('入院日期：2026年3月4日 10:20').map(d=>d.iso),['2026-03-04']);
+ assert.deepEqual(clinicalDatesPrinted('on May 3, 2067 and 3 June 2067').map(d=>d.iso),['2067-05-03','2067-06-03']);
+ assert.deepEqual(clinicalDatesPrinted('2067/5/3').map(d=>d.iso),['2067-05-03']);
+ for(const none of ['seen 3/14','in 2067','2067-02-30','Feb 30, 2067','2067-13-01',''])assert.deepEqual(clinicalDatesPrinted(none),[],none);
+ const [one]=clinicalDatesPrinted('Takes aspirin; seen 2067-05-03.');
+ assert.deepEqual([one.start,one.end],[20,30]);
+ assert.equal(clinicalDateInQuote('2067-05-03','Record date: 2067-05-03'),true,'the evidence check reads through the same helper');
+});
+
+// A record header is a matter of format: the nearest line above that prints one complete date and little else (owner ruling 2026-11-02).
+test('a record header is the nearest short line above that prints one date with its year: English, Chinese, bare, with a time',()=>{
+ const at=(text,needle)=>text.indexOf(needle);
+ const english='Record date: 2067-05-03\n\nTakes aspirin daily.\n';
+ assert.deepEqual(clinicalRecordHeader(english,at(english,'Takes')),{date:'2067-05-03',start:0,end:23,quote:'Record date: 2067-05-03'});
+ const chinese='记录日期：2026-07-01\n\n每日口服多种维生素。\n';
+ assert.equal(clinicalRecordHeader(chinese,at(chinese,'每日'))?.date,'2026-07-01');
+ const trailing='2026-07-01 门诊记录\n患者主诉头晕。';
+ assert.deepEqual(clinicalRecordHeader(trailing,at(trailing,'患者')),{date:'2026-07-01',start:0,end:15,quote:'2026-07-01 门诊记录'});
+ const admitted='入院日期：2026年3月4日 10:20\n既往高血压病史。';
+ assert.equal(clinicalRecordHeader(admitted,at(admitted,'既往'))?.date,'2026-03-04');
+ const bare='  2067-05-03  \nTakes aspirin.';
+ const found=clinicalRecordHeader(bare,at(bare,'Takes'));
+ assert.deepEqual([found?.date,found?.quote,bare.slice(found?.start,found?.end)],['2067-05-03','2067-05-03','2067-05-03'],'the line is trimmed as the document holds it');
+ const named='Date of visit: May 3, 2067\nTakes aspirin.';
+ assert.equal(clinicalRecordHeader(named,at(named,'Takes'))?.date,'2067-05-03');
+ const crlf='Record date: 2067-05-03\r\nTakes aspirin.';
+ assert.deepEqual(clinicalRecordHeader(crlf,at(crlf,'Takes')),{date:'2067-05-03',start:0,end:23,quote:'Record date: 2067-05-03'});
+});
+
+test('with several records in one file the header is the nearest one above the position',()=>{
+ const file=['Record date: 2067-01-10','','Takes aspirin.','','*'.repeat(40),'Record date: 2067-03-01','','Admitted with chest pain.'].join('\n');
+ assert.equal(clinicalRecordHeader(file,file.indexOf('Takes'))?.date,'2067-01-10');
+ assert.equal(clinicalRecordHeader(file,file.indexOf('Admitted'))?.date,'2067-03-01');
+ assert.equal(clinicalRecordHeader(file,file.indexOf('Record date: 2067-03-01')+3)?.date,'2067-01-10','a position on the header line itself looks above it');
+ // A position in the middle of a long line is in that line; the line is never its own header.
+ const long=`Record date: 2067-01-10\n${'Takes aspirin and other things. '.repeat(4)}Seen 2067-02-02 again.`;
+ assert.equal(clinicalRecordHeader(long,long.indexOf('Seen'))?.date,'2067-01-10');
+});
+
+test('a body sentence that holds a date is not a header, and neither is a line with two dates or a short form',()=>{
+ const body='Record date: 2067-01-10\nPatient was seen on 2067-02-02 for chest pain and discussed medications with the family.\nTakes aspirin.';
+ assert.equal(clinicalRecordHeader(body,body.indexOf('Takes'))?.date,'2067-01-10','the sentence is passed over for the header above it');
+ const two='Admitted 2067-02-02 discharged 2067-02-09\nTakes aspirin.';
+ assert.equal(clinicalRecordHeader(two,two.indexOf('Takes')),null);
+ const short='Seen 3/14 for review\nTakes aspirin.';
+ assert.equal(clinicalRecordHeader(short,short.indexOf('Takes')),null);
+ const year='Dataset year 2067\nTakes aspirin.';
+ assert.equal(clinicalRecordHeader(year,year.indexOf('Takes')),null);
+ const label='x'.repeat(RECORD_HEADER_LABEL_MAX);
+ assert.equal(clinicalRecordHeader(`${label} 2067-05-03\nTakes aspirin.`,label.length+14)?.date,'2067-05-03','a label of the longest length is still a label');
+ assert.equal(clinicalRecordHeader(`${label}y 2067-05-03\nTakes aspirin.`,label.length+15),null,'one character more and the line is a sentence');
+ const wide=`Record date: 2067-05-03 ${'.'.repeat(70)}\nTakes aspirin.`;
+ assert.equal(clinicalRecordHeader(wide,wide.indexOf('Takes')),null,'a line longer than a header is a body line whatever it holds');
+});
+
+test('no header above the position, or no position, gives no date',()=>{
+ assert.equal(clinicalRecordHeader('Takes aspirin.\nRecord date: 2067-05-03\n',0),null,'nothing above the first line');
+ assert.equal(clinicalRecordHeader('Takes aspirin.\nRecord date: 2067-05-03\n',3),null,'a header below the fact does not date it');
+ assert.equal(clinicalRecordHeader('Takes aspirin.',5),null);
+ assert.equal(clinicalRecordHeader('',0),null);
+ assert.equal(clinicalRecordHeader('Record date: 2067-05-03\nTakes aspirin.',-1),null);
+ assert.equal(clinicalRecordHeader('Record date: 2067-05-03\nTakes aspirin.',Number.NaN),null);
+ assert.equal(clinicalRecordHeader('Record date: 2067-05-03\nTakes aspirin.',9999)?.date,'2067-05-03','a position past the end reads the whole text above');
 });

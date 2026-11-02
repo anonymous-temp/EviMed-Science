@@ -1808,10 +1808,13 @@ const WRITERS = {
       // What was dropped decides what the run is told: a date nothing printed is gone and the fact may be undated, while a date label
       // alone that is gone leaves the date, which stands on the quotation.
       const lost = verified.droppedDates.filter((field) => field !== "dateSurface");
-      const kept = [occurredAt != null ? "occurredAt" : null, recordedAt != null ? "recordedAt" : null].filter(Boolean);
+      // A date the record\'s header gave is not one the run\'s own quotations showed: it does not count as kept.
+      const kept = verified.dateBasis === "record_header" ? [] : [occurredAt != null ? "occurredAt" : null, recordedAt != null ? "recordedAt" : null].filter(Boolean);
       if (lost.length) {
         warnings.push({ field: lost.join("/"), code: "date_not_shown", message: `${lost.join("、")} 没有整个印在 quote 里（含年份），也没有 dateQuote 印着它，已去掉；事实已保存。`
-          + (kept.length ? `${kept.join("、")} 有依据，仍然保存着。` : "事实现在没有日期；需要日期的时间窗类条件仍是“没有日期”的未知。") });
+          + (kept.length ? `${kept.join("、")} 有依据，仍然保存着。` : verified.dateBasis === "record_header"
+            ? `事实取了所在病历抬头的日期（${String(occurredAt).slice(0, 10)}）作为 occurredAt${verified.dateBound ? "，只算“不晚于这一天”" : ""}，不需要重写。`
+            : "事实现在没有日期；需要日期的时间窗类条件仍是“没有日期”的未知。") });
       } else {
         warnings.push({ field: "dateSurface", code: "date_label_not_shown", message: `dateSurface 不在 quote 或 dateQuote 里，已去掉这个写法；${kept.join("、") || "日期"}有依据，仍然保存着，事实没有变成无日期。` });
       }
@@ -1832,12 +1835,13 @@ const WRITERS = {
       if (known.length !== referenced.length || known.some(row => row.subjectKey !== subjectKey)) return void item.bad('clinical', '事实引用必须属于本研究的同一受试者。');
       if (clinical.correctionOf && known.find(row => row.id === clinical.correctionOf)?.variable !== variable) return void item.bad('clinical.correctionOf', '更正必须针对同一临床变量。');
       // `copiedFrom` takes a fact out of a washout, so it is honoured only where the record itself supports it: a copy
-      // states the same variable at the same instant as the fact it copies (copied text keeps its original event date).
+      // states the same variable at the same instant as the fact it copies (copied text keeps its original event date). A date the record's
+      // header gave is the record's, not the event's, and so is no date to compare: a copy forward in a later note stays a copy.
       // Any other link is the model's guess; the fact stands as its own event and the run is told, never refused.
       if (clinical.copiedFrom) {
         const original = known.find(row => row.id === clinical.copiedFrom);
         const code = original?.variable !== variable ? 'clinical_copied_from_other_variable'
-          : sameInstant(original.occurredAt, occurredAt) ? null : 'clinical_copied_from_other_date';
+          : sameInstant(original.source?.dateBasis === 'record_header' ? null : original.occurredAt, verified.dateBasis === 'record_header' ? null : occurredAt) ? null : 'clinical_copied_from_other_date';
         if (code) {
           delete clinical.copiedFrom;
           warnings.push({ field: 'clinical.copiedFrom', targetFactId: original?.id, code,
@@ -1880,7 +1884,8 @@ const WRITERS = {
       subjectKey, variable, value: value ?? null, unit: verified.unit ?? null, polarity: effective, clinical, occurredAt: occurredAt ?? null, recordedAt: recordedAt ?? null,
       visibleAt: visibleAt ?? verified.document.visibleAt ?? new Date().toISOString(), surface, dateSurface: dateSurface ?? null,
       source: { documentId, start: verified.span.start, end: verified.span.end, quote: verified.span.quote, vocabularyVersion, projectionHash: verified.document.projectionHash ?? null, sourceHash: verified.document.sourceHash ?? null,
-        ...(verified.dateQuote ? { dateQuote: verified.dateQuote } : {}), ...(verified.unitBasis ? { unitBasis: verified.unitBasis } : {}) }, extractedBy: "model",
+        ...(verified.dateQuote ? { dateQuote: verified.dateQuote } : {}), ...(verified.unitBasis ? { unitBasis: verified.unitBasis } : {}),
+        ...(verified.dateBasis ? { dateBasis: verified.dateBasis } : {}), ...(verified.dateBound ? { dateBound: verified.dateBound } : {}) }, extractedBy: "model",
       provenance: { ...(caller?.provenance ?? { schema: 1, status: 'unknown', runId: caller?.runtimeRunId ?? null }),
         inputProjectionHash: verified.document.projectionHash ?? null, terminologyVersion: vocabularyVersion, factSchema: 2 },
     } });
@@ -2356,7 +2361,8 @@ async function verifySourceSpan({ item, documents, study, subjectKey, documentId
   return { document, span: { start: /** @type {number} */ (start), end: /** @type {number} */ (end), quote: span.quote },
     dateQuote: settled.fact.source.dateQuote ?? null, dateQuoteUnfound, droppedDates: settled.droppedDates,
     occurredAt: settled.fact.occurredAt ?? null, recordedAt: settled.fact.recordedAt ?? null, dateSurface: settled.fact.dateSurface ?? null,
-    unit: settled.fact.unit ?? null, unitBasis: settled.fact.source.unitBasis ?? null, notes: settled.notes };
+    unit: settled.fact.unit ?? null, unitBasis: settled.fact.source.unitBasis ?? null,
+    dateBasis: settled.fact.source.dateBasis ?? null, dateBound: settled.fact.source.dateBound ?? null, notes: settled.notes };
 }
 
 /**
