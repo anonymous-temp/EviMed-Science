@@ -471,7 +471,7 @@
       "id": "statistical-analysis",
       "visibility": "public",
       "evalHarness": "evals/statistical-analysis",
-      "briefCount": 8,
+      "briefCount": 9,
       "realDelivery": {
         "status": "accepted",
         "evidence": "evals/statistical-analysis/results/2026-09-30-statistics-001-wdbc-group-comparison-run2/run.json",

@@ -38,9 +38,11 @@ unavailable, continue from the files and disclose the missing check. Keep source
 snapshots unchanged and derived files separate. An unfetched URL is not data.
 
 Infer the estimand, independent unit, coding, units and analysis population from
-the question/dictionary. Ask only when an ambiguity changes the answer and cannot
-be resolved from supplied material. A row or unique ID does not prove independence,
-absence of clustering, absence of time-dependent bias or noninformative censoring.
+the question/dictionary. Take event and category meanings from the dictionary or
+source metadata; class counts and feature direction only check them. Ask only when
+an ambiguity changes the answer and cannot be resolved from supplied material. A row
+or unique ID does not prove independence, absence of clustering, absence of
+time-dependent bias or noninformative censoring.
 Name unobserved design assumptions; do not invent absent treatment/event histories.
 Separate observed table facts, quoted source statements and unverified hypotheses
 in quality findings (use `evidenceBasis` when useful). Cross-view correspondence
@@ -50,6 +52,12 @@ identify MAR/MNAR. Preserve contradictory ranges literally and mark them unknown
 do not reorder endpoints or invent units, averaging rules or clinical dose limits.
 Coding coverage is not clinical applicability. Hashing an identifier does not
 establish the patient/episode identity that identifier represents.
+
+A censored measurement (below a detection limit, right-censored) is neither
+missing nor the limit: never substitute the limit for the unknown value, never
+drop a known category, and keep quantitative and categorical denominators
+separate, each labelled by its population (full data, training, held-out,
+complete cases).
 
 ## Execute and check
 
@@ -66,8 +74,13 @@ reported numbers from executed outputs, keep full precision in machine-readable
 results, and round only display strings. A successful script is not scientific
 verification. A diagnostic that fails to reject its null does not prove the
 assumption. Nonsignificance is not equivalence or proof of no effect; p values
-do not establish importance or causation. Different tests
-can address different nulls, so their agreement need not establish robustness.
+do not establish importance or causation: a causal question needs its identifying
+assumptions named, otherwise report an association without causal language.
+Several comparisons or endpoints need a stated multiplicity adjustment
+(`analysis_methods.adjust_pvalues`) beside the unadjusted p values. A cut-point
+chosen on these data is an exploratory fitted rule, not validated performance.
+Different tests can address different nulls, so their agreement need not establish
+robustness.
 Permutation tests need the relevant exchangeability/randomization; signed-rank
 location interpretations need symmetry. Do not label an arbitrary sample median
 as a signed-rank effect estimate. Finite-cohort missing-outcome scenarios are not
@@ -75,8 +88,10 @@ population bounds, confidence intervals or comparable uncertainty components.
 
 For prediction, keep learned preprocessing/selection/tuning/calibration inside
 training folds, preserve splits and probabilities, and label the positive class
-explicitly. Use `analysis_checks.audit_predictions` when its declared checks fit;
-it does not prove absence of every leakage risk or external validity.
+explicitly. Keep each patient on one side of a split; a row number is an
+observation key, and without a true patient ID say that leakage cannot be excluded.
+Use `analysis_checks.audit_predictions` when its declared checks fit; it does not
+prove absence of every leakage risk or external validity.
 
 For survival plots, use a library's complete timeline including censor-only
 times, carry the curve through the last follow-up, and check event/censor totals

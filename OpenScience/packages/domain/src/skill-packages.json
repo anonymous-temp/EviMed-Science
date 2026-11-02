@@ -286,11 +286,11 @@
       "id": "capability/clinical-evidence-synthesis",
       "name": "clinical-evidence-synthesis",
       "origin": "capability",
-      "version": "3.0.0",
+      "version": "3.0.1",
       "source": {"kind":"release"},
-      "digest": "sha256:2b91d2b011bd528562c0200a5d500734a8b7ac8247ed8a59d6da70a2f03bcf33",
+      "digest": "sha256:7a841dc1a149375d30cb98f1aa47489a215a07bb4d13059df3001866a09d5bfe",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"040478455daf29240d2dcf8d02232ad7185507215aa8dd443b186e5dd3d72fec"}],
+      "references": [{"path":"capability.yaml","sha256":"5c10e935060ffe8f2246252cff81f0020952799f7fb0b6c628f17ea54665faa6"}],
       "dependencies": [
         {"kind":"platform-tool","name":"biomedical_source_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"clinical_trial_snapshot","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -814,7 +814,7 @@
       "origin": "capability",
       "version": "1.1.4",
       "source": {"kind":"release"},
-      "digest": "sha256:6a23959bbfde1cf067f6a7f5229d09203d3b583ebbf67bc08f980c8d17387396",
+      "digest": "sha256:4ed66d6483c24793bc9bd21beeb5d3c9f1e55d15dd16eb29029b3ff3cbc181b0",
       "digestAlgorithm": "release-directory-v1",
       "references": [{"path":"capability.yaml","sha256":"34e2ca651623b23c110e281f997395a6e0e537b26d834e7537f0e963bdc1275b"}],
       "dependencies": [{"kind":"platform-tool","name":"meta_analysis","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"}],
@@ -991,15 +991,15 @@
       "id": "capability/research-topic-selection",
       "name": "research-topic-selection",
       "origin": "capability",
-      "version": "1.4.0",
+      "version": "1.5.0",
       "source": {"kind":"release"},
-      "digest": "sha256:5cdca74f966663c3179b1e1ffbe7606bc7b38a2b23595780df09c3b538eaaea0",
+      "digest": "sha256:7053b2b0eda0f5afaad0d4074db2cffe6f1c33c76c80c4b8fd310a3d1f72c430",
       "digestAlgorithm": "release-directory-v1",
       "scripts": [
         {"path":"scripts/evidence_floor.py","sha256":"ddc4d2e25ddd51e69aeae1c0443cb103cb8488d2e40d331234d00334ff1f07d0"},
         {"path":"scripts/preflight.py","sha256":"f263b76c7a42afe7cd2b06375299889df21181cd0f1534305e57fee0a8faff2c"}
       ],
-      "references": [{"path":"capability.yaml","sha256":"2afeee1ce56d565323fa002014a207f8852589428ecb6c43d40c9b6b1a733605"}],
+      "references": [{"path":"capability.yaml","sha256":"17fb5d19d98c7207311ff8a33a8d429b8d8125862d178a01e48908b792beef71"}],
       "dependencies": [
         {"kind":"platform-tool","name":"bibliometric_analysis","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"biomedical_source_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -1051,9 +1051,9 @@
       "id": "capability/statistical-analysis",
       "name": "statistical-analysis",
       "origin": "capability",
-      "version": "1.5.0",
+      "version": "1.5.1",
       "source": {"kind":"release"},
-      "digest": "sha256:1de389d25c87af78d71f4e3937c86e357cc6fccc54b1ae7c0ca304a0dd4504d9",
+      "digest": "sha256:b94eb0643651f012c328d0744ab8c2ad344be7b1f8282ee5de5661ab7f36bd1b",
       "digestAlgorithm": "release-directory-v1",
       "scripts": [
         {"path":"scripts/analysis_checks.py","sha256":"40adc68ef0f749f8c69859999684be324831bb95917bfc3ee33f21ecbac568c5"},
@@ -1062,7 +1062,7 @@
         {"path":"scripts/run_analysis.py","sha256":"d4161a3f888a59409e314f8e8c1eb2462f52241efb8083488abbae5f21825198"}
       ],
       "references": [
-        {"path":"capability.yaml","sha256":"e2edc19f9025ea7ea0a2e03db89528621bf4f3f5cdea98f67c0d762e98673f77"},
+        {"path":"capability.yaml","sha256":"b67afc5453095f8f952aead557aaa63cc5730f494bc432e6dac87f6e4dd611c6"},
         {"path":"references/execution.md","sha256":"6b4701f17483b1e6deaf9cf26fdabff44ef51ea3e63c6efd50e7475f7cf590d5"},
         {"path":"scripts/analysis_method_records.json","sha256":"d8eb0991b3e3b1ee4eaf2c42b32eb87bf8c24a1ec15e042897e60c69d0a081a6"}
       ],
@@ -1112,11 +1112,19 @@
       "id": "capability/vcr-analysis",
       "name": "vcr-analysis",
       "origin": "capability",
-      "version": "1.5.1",
+      "version": "1.8.1",
       "source": {"kind":"release"},
-      "digest": "sha256:33784b3ea3618e13f0e53efdcadd45244e16bd2fb4006d932fc9691965cdd75b",
+      "digest": "sha256:bee69a5e38cd9573aec9678170e3fb64ab813933235ae44b8e285d73a4552d85",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"3ac3f74c2aa62dc1c8dffa731f48285add7c1c4031a0f6b7681f07cfc5519c65"}],
+      "references": [
+        {"path":"capability.yaml","sha256":"a32d41d6eac7ed956e062d2e487e6a417c7fd85fc8535276fc4d682414a34181"},
+        {"path":"references/comparators.md","sha256":"22f9d015f99d1663eb9582f9d0317a676d892d1b4b8431769e4d7d8c275251a3"},
+        {"path":"references/delivery.md","sha256":"14bf6198c8ba48f89c93787ac473178b175403ffab9f33542df74724bbf525fe"},
+        {"path":"references/longitudinal.md","sha256":"241d2acf2d570afca6d25dc7b66d3f07c555afb8663e4acf4a00d095e0821695"},
+        {"path":"references/models.md","sha256":"1bc12035760ac0d76226ab363301caabd525f02b3ebe023e6df8e9b3cad6f56a"},
+        {"path":"references/populations-and-patients.md","sha256":"2ce702f5d66995beff49865103e07199269529ad262196fd61378e92a1b916d8"},
+        {"path":"references/trial-design.md","sha256":"427aec206bfccf28d2c533675ccb2d1c1a1f1032f8a322b6118c13488ffb1a0e"}
+      ],
       "dependencies": [
         {"kind":"platform-tool","name":"clinical_trial_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"curve_digitize","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -1168,11 +1176,11 @@
       "id": "capability/vcr-evidence",
       "name": "vcr-evidence",
       "origin": "capability",
-      "version": "1.4.1",
+      "version": "1.5.1",
       "source": {"kind":"release"},
-      "digest": "sha256:916ee022b39fc514dc48171048bf8067fdb7fb1bce037a7e94a7fa258ff2a237",
+      "digest": "sha256:c271d84ab5e6cf79d81f397f822a3d24495c3c045baa255ae792248b4263ec11",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"96d6fa46ca6c3a4cf5fc1415d4e1f3f1f0cb4ec6c70d3244dd9d706c53d2807f"}],
+      "references": [{"path":"capability.yaml","sha256":"1237f6752a0eb18ac67440afcd9d38ead2d70cb5abd409fbeac323e18c4cd6d0"}],
       "dependencies": [
         {"kind":"platform-tool","name":"clinical_trial_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"curve_digitize","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -1214,11 +1222,11 @@
       "id": "capability/vcr-matching",
       "name": "vcr-matching",
       "origin": "capability",
-      "version": "1.3.2",
+      "version": "1.6.1",
       "source": {"kind":"release"},
-      "digest": "sha256:62eecf7181765126105364a336497c01645e85bb4e5bca060fb90785cd39ceb2",
+      "digest": "sha256:bb97ac2186fedb146d7295205b28c860915dd869d7b8f472d35a0a0b124b8ef6",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"6f92a5d3276d057b121b6455eaf6e27c49d1783a402ee98e76c37587b5d2703a"}],
+      "references": [{"path":"capability.yaml","sha256":"b3a93b127b610345ad6e6274070fc10f59eb0c919da2f979470d612f0c909acf"}],
       "dependencies": [
         {"kind":"platform-tool","name":"clinical_trial_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"dataset_semantics","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -1280,13 +1288,13 @@
       "id": "capability/vcr-protocol",
       "name": "vcr-protocol",
       "origin": "capability",
-      "version": "1.4.1",
+      "version": "1.4.4",
       "source": {"kind":"release"},
-      "digest": "sha256:85a3207a1c5b3ddcc389e6460bb838c7861d97fbe87f1ff1ed7a38a3a3d5a2f8",
+      "digest": "sha256:56822fa11fd4246cee3188da91d2a8dcee728fabdf1342ebe5542de6f16fc47e",
       "digestAlgorithm": "release-directory-v1",
       "references": [
-        {"path":"capability.yaml","sha256":"b8abe78bdc9001fd56c6024fd14d82546e05010a61a0fdcf84de6c904390aee3"},
-        {"path":"references/operating-contract.md","sha256":"d9306548fb550d7a3a47e0637dd5826905d19d3d1fb504cbcf59e93f356957b4"}
+        {"path":"capability.yaml","sha256":"45c8418396b36e032bb762eaff23f9b60be4da6e19b9cf549cb57f0cf8aa6ec6"},
+        {"path":"references/operating-contract.md","sha256":"9050a5c45846c08a7f5676eff012a31701677be24c586f8806802c314f08e6aa"}
       ],
       "dependencies": [
         {"kind":"platform-tool","name":"clinical_trial_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -3720,7 +3728,7 @@
       "origin": "evimed",
       "version": "2.0.0",
       "source": {"kind":"release"},
-      "digest": "sha256:f348064f35d90e8d000b95dc3a22ebc3814a5f3267545ad80c3934e9a4765a0f",
+      "digest": "sha256:e617591066f781c1fb78889c1b314e666d06fcbb54a4108162ea660023c7bfbe",
       "digestAlgorithm": "release-directory-v1",
       "references": [{"path":"agent.yaml","sha256":"9cf3448279c8ac69470607431dc35379b451356046313c82e19f0659148d41b8"}]
     },

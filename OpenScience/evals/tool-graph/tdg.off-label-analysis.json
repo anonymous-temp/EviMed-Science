@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "off-label-analysis",
-  "version": "sha256:66fc6e104fcf0177dd902736b0f0f28303f9c6332b8ee2917ff2fee04fb5c17f",
+  "version": "sha256:d8d8c01b919f3d3ab4fb6233b3711b2a841633f7542b3f684176dcfc9e754cb9",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 35,
@@ -540,6 +540,12 @@
             "type": "integer",
             "minimum": 1,
             "maximum": 50
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 499,
+            "description": "Only for `prospero`: registrations to skip. data.outcome says when more matched and what offset reads on; a topic is not open on a partial read."
           }
         },
         "additionalProperties": false,

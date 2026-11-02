@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "mendelian-randomization",
-  "version": "sha256:7900cf20c30d1fb59973f6eeaa09904705f231496824292e44867712dc2de408",
+  "version": "sha256:e67cdff453af46cd3ae8856b2532d80b1527af6c74d8c02ea62851ccc89af577",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 26,
@@ -540,6 +540,12 @@
             "type": "integer",
             "minimum": 1,
             "maximum": 50
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 499,
+            "description": "Only for `prospero`: registrations to skip. data.outcome says when more matched and what offset reads on; a topic is not open on a partial read."
           }
         },
         "additionalProperties": false,
