@@ -1,21 +1,15 @@
 {
   "mode": "lanes",
-  "batch": "b028",
+  "batch": "b029",
   "sourceRef": "main",
   "labFrom": "branch",
   "imageRunId": 41307417699,
   "imageArtifact": "rsi-lab-images-5c740327bb8c",
-  "idleExitMin": 30,
+  "idleExitMin": 3,
   "arms": [
     {
-      "key": "cand-cstar",
-      "jobs": 4,
-      "workers": 4,
-      "patch": "rsi-lab/patch-cstar"
-    },
-    {
       "key": "base",
-      "jobs": 4,
+      "jobs": 1,
       "workers": 4
     }
   ],
