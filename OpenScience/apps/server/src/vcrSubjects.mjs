@@ -119,42 +119,66 @@ export function vcrDesignShare(design) {
 
 /**
  * How a job's frozen scenario reads against one trial scenario: the design kind, the endpoint and the allocation share must
- * agree where both say one, and the count of agreeing numbers in the design and the truth breaks a tie.
+ * agree where both say one, and the count of agreeing numbers in the design and the truth breaks a tie. A number both state and
+ * that differs is counted too (`disagreeing`): it does not unfit a design here (the backfill reads old results against the design
+ * as it is now), but a scenario a conversation sends is not about a design it contradicts.
  * @param {Record<string, any>} jobScenario @param {{ design: string, endpointType: string, configuration: Record<string, any> }} row
- * @returns {{ fits: boolean, agreeing: number }}
+ * @returns {{ fits: boolean, agreeing: number, disagreeing: number }}
  */
 export function vcrTrialScenarioFit(jobScenario, row) {
   const scenario = object(jobScenario);
   const design = object(scenario.design);
   const kind = typeof design.kind === "string" ? design.kind : null;
-  if (kind !== null && kind !== row.design) return { fits: false, agreeing: 0 };
+  if (kind !== null && kind !== row.design) return { fits: false, agreeing: 0, disagreeing: 0 };
   const endpoint = typeof object(scenario.endpoint).type === "string" ? object(scenario.endpoint).type : null;
-  if (endpoint !== null && endpoint !== row.endpointType) return { fits: false, agreeing: 0 };
+  if (endpoint !== null && endpoint !== row.endpointType) return { fits: false, agreeing: 0, disagreeing: 0 };
   const own = object(row.configuration);
   const share = vcrDesignShare(design);
   const ownShare = vcrDesignShare(object(own.design));
-  if (share !== null && ownShare !== null && Math.abs(share - ownShare) > 0.005) return { fits: false, agreeing: 0 };
+  if (share !== null && ownShare !== null && Math.abs(share - ownShare) > 0.005) return { fits: false, agreeing: 0, disagreeing: 0 };
   let agreeing = 0;
+  let disagreeing = 0;
   for (const part of ["design", "truth"]) {
     const ours = object(own[part]);
     const theirs = object(scenario[part]);
     for (const [key, value] of Object.entries(theirs)) {
-      if (typeof value === "number" && finite(ours[key]) !== null && Math.abs(Number(ours[key]) - value) <= 1e-9 * Math.max(1, Math.abs(value))) agreeing += 1;
-      else if (Array.isArray(value) && Array.isArray(ours[key]) && JSON.stringify(value) === JSON.stringify(ours[key])) agreeing += 1;
+      if (typeof value === "number" && finite(ours[key]) !== null) {
+        if (Math.abs(Number(ours[key]) - value) <= 1e-9 * Math.max(1, Math.abs(value))) agreeing += 1; else disagreeing += 1;
+      } else if (Array.isArray(value) && Array.isArray(ours[key])) {
+        if (JSON.stringify(value) === JSON.stringify(ours[key])) agreeing += 1; else disagreeing += 1;
+      }
     }
   }
-  return { fits: true, agreeing };
+  return { fits: true, agreeing, disagreeing };
 }
 
 /**
  * The trial scenarios a job scenario fits, best first: none when it fits none, one when it fits one design, and several only when
- * they fit equally well (the caller treats that as ambiguous).
+ * they fit equally well (the caller treats that as ambiguous). With `sameNumbers`, a design whose stated numbers the scenario
+ * contradicts is not one it fits.
  * @param {Record<string, any>} jobScenario @param {ReadonlyArray<Record<string, any>>} rows the current row of each design
+ * @param {{ sameNumbers?: boolean }} [options]
  */
-export function vcrMatchTrialScenarios(jobScenario, rows) {
-  const scored = rows.map((row) => ({ row, ...vcrTrialScenarioFit(jobScenario, /** @type {any} */ (row)) })).filter((entry) => entry.fits);
+export function vcrMatchTrialScenarios(jobScenario, rows, { sameNumbers = false } = {}) {
+  const scored = rows.map((row) => ({ row, ...vcrTrialScenarioFit(jobScenario, /** @type {any} */ (row)) }))
+    .filter((entry) => entry.fits && !(sameNumbers && entry.disagreeing > 0));
   const best = Math.max(0, ...scored.map((entry) => entry.agreeing));
   return scored.filter((entry) => entry.agreeing === best).map((entry) => entry.row);
+}
+
+/**
+ * Whether a running job froze this scenario: every value the scenario states is the job's own at the same place. A job may hold more
+ * (the programme's cards bound into it, the engine's own keys), never a different value. A stage in flight answers a start only when
+ * this holds; a start that states another number is another job.
+ * @param {unknown} frozen the job's scenario @param {unknown} asked the scenario the start would freeze
+ * @returns {boolean}
+ */
+export function vcrJobFroze(frozen, asked) {
+  if (asked !== null && typeof asked === "object" && !Array.isArray(asked)) {
+    const own = object(frozen);
+    return Object.entries(/** @type {Record<string, unknown>} */ (asked)).every(([key, value]) => key in own && vcrJobFroze(own[key], value));
+  }
+  return JSON.stringify(frozen) === JSON.stringify(asked);
 }
 
 /**
@@ -219,9 +243,14 @@ function holdings(objectKind, current) {
   return `本研究现有的${OBJECT_WORDS_ZH[objectKind]}：${named.join("、")}。`;
 }
 
-/** The objects a scenario said without an id could be about. @param {string} objectKind @param {string} kind @param {Record<string, any>} scenario @param {ReadonlyArray<Record<string, any>>} current */
-function fittingObjects(objectKind, kind, scenario, current) {
-  return objectKind === "trial_scenario" ? vcrMatchTrialScenarios(scenario, current)
+/**
+ * The objects a scenario said without an id could be about. In a conversation the scenario is the object (it files what it sends), so
+ * a design is one only when no number the scenario states contradicts it (2026-11-02: n=500 asked beside a running n=300 design was
+ * answered with the n=300 job); a study with a page of its own names its objects, and a design there is read by its share.
+ * @param {string} objectKind @param {string} kind @param {Record<string, any>} scenario @param {ReadonlyArray<Record<string, any>>} current
+ * @param {boolean} sameNumbers */
+function fittingObjects(objectKind, kind, scenario, current, sameNumbers) {
+  return objectKind === "trial_scenario" ? vcrMatchTrialScenarios(scenario, current, { sameNumbers })
     : objectKind === "population" ? current.filter((entry) => POPULATION_KIND_OF_JOB[kind] === undefined || entry.kind === POPULATION_KIND_OF_JOB[kind])
       : current;
 }
@@ -229,7 +258,7 @@ function fittingObjects(objectKind, kind, scenario, current) {
 /**
  * Say which object a job computes. `null` for a job that is not about one.
  *
- * @param {{ store: any, study: { id: string }, kind: string, subjectId?: string | null, scenario?: Record<string, any> }} input
+ * @param {{ store: any, study: { id: string, scope?: string }, kind: string, subjectId?: string | null, scenario?: Record<string, any> }} input
  * @returns {Promise<null | { objectKind: string, row: Record<string, any>, detail: Record<string, any> }>}
  *   `detail` is what the job carries so its result is filed under the object and lands on it: the subject, the result kind, the
  *   lineage node, the step, the stage and the versions it replaces.
@@ -258,7 +287,7 @@ export async function resolveJobSubject({ store, study, kind, subjectId = null, 
     }
   } else {
     // Said without an id: the one object that fits what the scenario states is the one it is about.
-    const fitting = fittingObjects(objectKind, kind, scenario, current);
+    const fitting = fittingObjects(objectKind, kind, scenario, current, study.scope === "conversation");
     if (fitting.length !== 1) {
       throw new VcrSubjectError("vcr_simulate_subject_required",
         `这项计算要说明它算的是本研究的哪一个${OBJECT_WORDS_ZH[objectKind]}：把它的 id 作为 subjectId 传进来。`
@@ -299,7 +328,7 @@ export async function vcrConversationSubject({ store, study, userId, kind, subje
   if (kind === "evalue") {
     const same = current.find((entry) => canonicalScenarioJson(entry.configuration) === canonicalScenarioJson(scenario));
     if (same) return String(same.id);
-  } else if (fittingObjects(objectKind, kind, scenario, current).length) return null;
+  } else if (fittingObjects(objectKind, kind, scenario, current, true).length) return null;
   const method = /** @type {Record<string, string>} */ (VCR_JOB_METHODS)[kind];
   const name = `${OBJECT_WORDS_ZH[objectKind]} ${current.length + 1}`;
   return (await prepareVcrMethodConfiguration({ store, study, userId, method, name, scenario })).subjectId;

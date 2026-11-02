@@ -88,7 +88,7 @@ import { DATE_QUOTE_MAX } from "./vcrClinicalDateEvidence.mjs";
 import { candidateRequest } from "./vcrCandidateSearch.mjs";
 import { VCR_RECONSTRUCTION_REFERENCE, vcrReconstructionReferenceFor, vcrResultKindFor } from "./vcrJobs.mjs";
 import { vcrPublicationId } from "./vcrPublicationSources.mjs";
-import { resolveJobSubject, prepareVcrSubjectPopulation, vcrConversationSubject } from "./vcrSubjects.mjs";
+import { resolveJobSubject, prepareVcrSubjectPopulation, vcrConversationSubject, vcrJobFroze } from "./vcrSubjects.mjs";
 import { prepareVcrModelDesign } from "./vcrModelDesign.mjs";
 import { VCR_COVERAGE_POPULATION_NAME, vcrCohortRulesFromCriteria } from "./vcrCoverage.mjs";
 import { readPoolResult, distributionFromPooled, naturalOf, parameterKindOf, poolTargetOf, defaultScaleOf, defaultArmRoleOf, evidenceItemGaps, EVIDENCE_ITEM_WORDS_ZH, VCR_POOL_MAX_STUDIES } from "./vcrEvidence.mjs";
@@ -2950,8 +2950,9 @@ async function startJob(vcr, study, request) {
   detail = { ...detail, ...population.detail, ...designBinding.detail };
   if (subject) {
     detail = { ...detail, ...subject.detail };
+    // The stage in flight is the answer to the scenario it froze, and to no other: a start that states another number is another job.
     const running = await vcr.orchestrator?.inFlightStage?.(study.id, subject.detail);
-    if (running) {
+    if (running && vcrJobFroze(running.scenario, scenario)) {
       return { action: "start", jobId: running.id, state: running.state, progress: running.progress ?? {}, alreadyRunning: true,
         subject: { kind: subject.objectKind, id: String(subject.row.id), version: Number(subject.row.version), ...(subjectName(subject.row) ? { name: subjectName(subject.row) } : {}) },
         message: "这个对象的这一步平台已经在算了：读这个作业的进度和结果就行，不必再排一个。" };

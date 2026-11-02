@@ -805,6 +805,28 @@ test("simulate validate asks the queue's own check and answers it: nothing is en
   }
 });
 
+test("a stage in flight is the answer only to the scenario the running job froze: another number is another job", async () => {
+  const frozen = { design: { kind: "two_arm_fixed", nTreat: 150, nControl: 150 }, endpoint: { type: "time_to_event" }, truth: { hazardRatio: 0.7, controlMedian: 12 },
+    analysis: { method: "logrank", alpha: 0.025, sided: 1 }, accrual: { kind: "uniform", duration: 12, followup: 12 } };
+  const running = { id: "job_300", state: "running", progress: { done: 1, total: 5 }, scenario: { ...frozen, replicates: 2000 } };
+  const held = { id: "scn_300", version: 1, label: "设计 1", design: "two_arm_fixed", endpointType: "time_to_event", configuration: frozen };
+  const build = () => fixture({ store: { ...fixture().vcr.store, async trialScenarios() { return [held]; } },
+    orchestrator: { async inFlightStage() { return running; }, async noteRuntimeJob() {} } });
+  const ask = async (/** @type {Record<string, any>} */ scenario) => {
+    const { handler, calls } = build();
+    const res = response();
+    await handler(request("/internal/vcr/v1/simulate", { action: "start", kind: "design_simulation", subjectId: "scn_300", scenario }), res);
+    return { data: res.json().data, calls };
+  };
+  const same = await ask(frozen);
+  assert.deepEqual([same.data.jobId, same.data.alreadyRunning], ["job_300", true], "the same scenario is the job that is running");
+  assert.equal(same.calls.some((call) => call[0] === "enqueue"), false);
+  const other = await ask({ ...frozen, design: { kind: "two_arm_fixed", nTreat: 250, nControl: 250 } });
+  assert.equal(other.data.alreadyRunning, undefined, "n=500 is not answered with the n=300 job");
+  assert.equal(other.data.jobId, "job_1");
+  assert.ok(other.calls.some((call) => call[0] === "enqueue" && call[1] === "design_simulation"));
+});
+
 test("simulate is start / status / cancel, and a job over budget says so plainly", async () => {
   const { calls, handler, vcr } = fixture({ store: { ...fixture().vcr.store, async trialScenarios() { return [DESIGN_A]; } } });
   void vcr;
