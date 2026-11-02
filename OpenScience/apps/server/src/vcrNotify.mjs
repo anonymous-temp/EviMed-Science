@@ -93,7 +93,7 @@ export function vcrJobNoticeText({ resultKind, stage = null, label = null, state
   const what = resultKind === "trial_scenario"
     ? (/** @type {Record<string, string>} */ ({ analytic: "方案计算", simulation: "方案模拟", assurance: "成功把握计算" })[String(stage)] ?? "方案模拟")
     : (/** @type {Record<string, string>} */ ({ population: "人群生成", patient_set: "虚拟患者生成", comparator: "对照分析", design_grid: "设计网格",
-      accrual_forecast: "入组预测", matching: "匹配评估" })[resultKind] ?? "计算");
+      accrual_forecast: "入组预测", matching: "匹配评估", match_extract: "病历阅读", population_check: "人群核对" })[resultKind] ?? "计算");
   const name = clip(String(label ?? "").replace(/^[A-Z]\d*\s+/, ""), 24);
   if (state === "failed") {
     const code = typeof error?.code === "string" ? error.code : "";
@@ -124,6 +124,15 @@ export function vcrJobNoticeText({ resultKind, stage = null, label = null, state
     const generated = finiteNumber(result?.counts?.generatedRecords);
     const real = finiteNumber(result?.counts?.realPatients);
     headline = generated !== null && generated > 0 ? `${count(generated)} 条生成记录` : real !== null && real > 0 ? `${count(real)} 人` : null;
+  } else if (resultKind === "match_extract") {
+    // The reading of patient records is the one computation that takes hours: the person is told it is over, and how much of it was read.
+    const read = measure("records_read");
+    const left = finiteNumber(result?.diagnostics?.remaining) ?? 0;
+    headline = read && read.value > 0 ? (left > 0 ? `读了 ${count(read.value)} 份病历，中途停下，还有 ${count(left)} 份没读` : `读完 ${count(read.value)} 份病历`) : null;
+  } else if (resultKind === "population_check") {
+    const compared = measure("variables_compared");
+    const apart = measure("variables_apart");
+    headline = compared ? `比较了 ${count(compared.value)} 个变量${apart && apart.value > 0 ? `，${count(apart.value)} 个有差异` : "，都接近"}` : null;
   } else if (resultKind === "comparator") {
     // A benchmark says so (A8): the researcher is not told that an effect was estimated when what landed is a reference.
     const word = vcrResultClass({ conclusion: result?.conclusion, method, diagnostics: result?.diagnostics, measures: result?.measures });
