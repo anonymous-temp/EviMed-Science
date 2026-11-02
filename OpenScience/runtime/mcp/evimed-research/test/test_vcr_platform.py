@@ -215,6 +215,14 @@ class VcrToolDefinitionTests(unittest.TestCase):
         self.assertEqual(vcr_platform.VcrPlatformError("vcr_gateway_token_invalid", "x", status=400).stop_reason(), "unsupported")
         self.assertEqual(vcr_platform.VcrPlatformError("vcr_gateway_unreachable", "x", retryable=True).stop_reason(), "retry")
 
+    def test_a_population_shape_says_its_rows_can_be_read_back_and_a_design_shape_does_not(self):
+        # Three of the four live conversations that did not enter the module for a cohort wrote a script of their own because they could not tell whether a generated cohort could be
+        # handed over as a file; the answer of shape now says the rows are read back by generated_records.
+        for kind in ("generate_population", "literature_population", "generate_patients"):
+            text = " ".join(vcr_platform.shape({"kind": kind})["next_actions"])
+            self.assertIn("generated_records", text, kind)
+        self.assertNotIn("generated_records", " ".join(vcr_platform.shape({"kind": "design_analytic"})["next_actions"]))
+
     def test_the_job_kinds_are_the_domain_s(self):
         kinds = domain_job_kinds()
         self.assertGreaterEqual(len(kinds), 24, "the first release's twenty-four, then the kinds appended after them")

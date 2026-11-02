@@ -129,6 +129,8 @@ OBJECT_SHAPES = {
 }
 # What the platform generates from the domain's scenario schemas (`pnpm generate:vcr-scenario-help`): every key each method's
 # scenario reads. It rides in the image beside this file and is never edited by hand.
+# The kinds whose result is a table of generated rows (`vcr_read what generated_records` reads it back).
+RECORD_KINDS = tuple(OBJECT_SHAPES["population (definition)"] + OBJECT_SHAPES["patient_set (scenario)"])
 HELP_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "vcr_scenario_help.json")
 # Where the VCR methods are in the runtime image. They are capability skill bodies, which delegation injects into a planned
 # capability's run; a plain conversation in a study uses these tools too and its skill catalogue does not list them, so the tools
@@ -1108,17 +1110,23 @@ def shape(arguments: dict) -> dict:
                       "question at a time, and otherwise go on with a stated assumption. role defaultable: settle it yourself (a default is filled "
                       "and listed in applied, an optional key may be left out, a choice among words follows from the question) and say which "
                       "value you took; do not ask. An object has no role: its keys do.")
+    next_actions = [
+        "Write exactly these keys and no others; a number the engine computes (a result, a count, a measure) is never a key.",
+        "Check a filled scenario without queueing it with vcr_simulate action validate (kind and scenario): it answers the defaults the platform "
+        "would fill, the replicate count and any refusal by path, and does not wait, so you may start in the same turn.",
+        "Then queue it with vcr_simulate action start, or write it as the object's configuration with vcr_write.",
+    ]
+    if kind in RECORD_KINDS:
+        # Three of the four live conversations that did not enter the module for a cohort wrote their own script because they could not tell whether its rows could be handed to
+        # the person as a file (2026-11-02: "I don't know if it writes a CSV I can access"). They can be read back.
+        next_actions.append("The result keeps the generated rows: vcr_read what generated_records with filter.id = the result's id returns them, "
+                            "at most 50 per call, for a file the person asks for.")
     return {
         "status": "success",
         "summary": summary,
         "data": data,
         "warnings": [],
-        "next_actions": [
-            "Write exactly these keys and no others; a number the engine computes (a result, a count, a measure) is never a key.",
-            "Check a filled scenario without queueing it with vcr_simulate action validate (kind and scenario): it answers the defaults the platform "
-            "would fill, the replicate count and any refusal by path, and does not wait, so you may start in the same turn.",
-            "Then queue it with vcr_simulate action start, or write it as the object's configuration with vcr_write.",
-        ],
+        "next_actions": next_actions,
     }
 
 
