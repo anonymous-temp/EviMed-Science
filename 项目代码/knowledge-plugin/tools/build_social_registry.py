@@ -34,9 +34,9 @@ from knowledge_plugin.social.wechat import temporary_link  # noqa: E402
 
 RESEARCH = ROOT / "registry" / "research"
 X_DATE = "2026-10-22"
-WECHAT_DATE = "2026-10-24"
+WECHAT_DATE = "2026-11-02"
 WATCH_DATE = "2026-10-22"
-WECHAT_GROUPS = ("industry", "clinical", "society-journal", "hospital", "regulator", "research-media")
+WECHAT_GROUPS = ("industry", "clinical", "society-journal", "hospital", "regulator", "research-media", "company")
 OUT = ROOT / "registry" / "social-sources.json"
 PLATFORMS = [
     ("xiaohongshu", "xhs", "小红书", "https://www.xiaohongshu.com/"),
@@ -97,11 +97,14 @@ def wechat_rows(date: str) -> list[dict]:
             config["verified_url"] = account["verified_url"]
         if account.get("biz"):
             config["biz"] = account["biz"]
+        days = account.get("read_every_days")
+        if days:
+            config["read_every_days"] = days
         rows.append({
             "id": account["id"], "name": account["name"], "homepage": url, "lane": "mixed",
             "source_type": account["source_type"], "access": "dajiala", "egress": "api", "authority": account["authority"],
             "safety_feed": False, "owner_entity": account["owner_entity"], "launch_tier": "P1", "language": "zh", "region": "CN",
-            "poll_floor_s": 43200 if polls == 2 else 86400, "poll_ceiling_s": 86400, "enabled": True,
+            "poll_floor_s": 43200 if polls == 2 else 86400, "poll_ceiling_s": 86400 * (days or 1), "enabled": True,
             "category": f"wechat-{account['category']}", "config": config,
         })
     return sorted(rows, key=lambda r: r["id"])

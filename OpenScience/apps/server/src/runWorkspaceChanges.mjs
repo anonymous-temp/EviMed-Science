@@ -13,9 +13,10 @@
  * knowledge base, and the platform's own plan and receipt files. The walk is bounded in depth, in entries read and in files
  * returned, because the workspace is the model's and the model may have installed a package into it.
  *
- * Known limit, said once: two conversations running in one project at the same moment share a workspace, and a file one
- * writes inside the other's window is attributed to both. The tool-call witnesses (`artifactCandidates`) do not have that
- * limit and stay the first source; this is the second, for what they cannot see.
+ * Known limit, said once: two conversations running in one project at the same moment share a workspace, and an ordinary
+ * file one writes inside the other's window is attributed to both. The tool-call witnesses (`artifactCandidates`) do not have
+ * that limit and stay the first source; this is the second, for what they cannot see. A specialist job's own directory does
+ * have an owner to check (`withoutOtherRunsJobFiles`).
  *
  * @module runWorkspaceChanges
  */
@@ -29,6 +30,25 @@ export const WORKSPACE_WALK_DEPTH = 6;
 /** How many directory entries one walk reads before it stops, and how many files it returns. */
 export const WORKSPACE_WALK_ENTRIES = 6000;
 export const WORKSPACE_WALK_FILES = 64;
+
+/** A specialist job's file: `<capability>-runs/<job id>/…`, the layout `specialist_jobs.py` writes. */
+const JOB_FILE = /^[a-z][a-z-]*-runs\/([A-Za-z0-9._-]+)\//;
+
+/**
+ * Changed files without those of a job this run never started. A conversation that started no job listed the other run's
+ * `research-topic-runs/<job>/output/request.json` as its own output, because both ran in one project (2026-11-02). A run's
+ * own job is named in its tool calls and results, so its id appearing in the transcript is the test.
+ * @param {readonly string[]} files @param {unknown} messages the run's transcript, as far as it is held
+ * @returns {string[]}
+ */
+export function withoutOtherRunsJobFiles(files, messages) {
+  if (!files.some((file) => JOB_FILE.test(file))) return [...files];
+  const transcript = JSON.stringify(messages ?? []);
+  return files.filter((file) => {
+    const job = JOB_FILE.exec(file)?.[1];
+    return !job || transcript.includes(job);
+  });
+}
 
 /**
  * The files under `root` last written in `[since, until]`, as workspace-relative paths, sorted.

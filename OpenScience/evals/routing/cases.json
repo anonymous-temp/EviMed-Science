@@ -426,6 +426,36 @@
       "expect": "research-topic-selection"
     },
     {
+      "id": "topic-meta-1",
+      "source": "2026-11-02, a real request sent to the conversation line",
+      "message": "找几个meta选题不，痛风这块的找几个 肾病的找几个",
+      "expect": "research-topic-selection"
+    },
+    {
+      "id": "topic-meta-2",
+      "source": "2026-11-02, the same kind of request",
+      "message": "糖尿病肾病方向有什么可以做的 meta 分析，帮我看几个题目",
+      "expect": "research-topic-selection"
+    },
+    {
+      "id": "topic-meta-3",
+      "source": "2026-11-02, the same kind of request",
+      "message": "Can you suggest a few systematic review topics in gout?",
+      "expect": "research-topic-selection"
+    },
+    {
+      "id": "topic-meta-no-1",
+      "source": "2026-11-02, the words without the request",
+      "message": "meta 分析选题一般怎么判断有没有人做过？",
+      "expect": "none"
+    },
+    {
+      "id": "topic-meta-no-2",
+      "source": "2026-11-02, a different deliverable",
+      "message": "帮我做一个秋水仙碱预防痛风发作的 meta 分析",
+      "expect": "meta-analysis"
+    },
+    {
       "id": "offlabel-1",
       "source": "off-label",
       "message": "评估某药超说明书用于儿童感染的证据，出一份评价报告",

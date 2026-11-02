@@ -314,3 +314,40 @@ test('the two skills that describe abilities we do not offer are registered clos
     for (const name of [...Object.keys(OPENVIKING_PLUGIN_ENVIRONMENT), 'OPENVIKING_API_KEY']) { if (env[name] === undefined) delete process.env[name]; else process.env[name] = env[name] }
   }
 })
+
+test('one failed forward tells no one; a gateway that stays away does, and one that came back does not', async () => {
+  const env = { ...process.env }
+  /** @type {(() => unknown)[]} */ const disposers = []
+  /** @type {string[]} */ const degraded = []
+  const gatewayPort = await freePort()
+  const port = await freePort()
+  const wait = (/** @type {number} */ ms) => new Promise((resolve) => setTimeout(resolve, ms))
+  const ask = () => globalThis.fetch(`http://127.0.0.1:${port}/health`, { headers: { authorization: `Bearer ${process.env.OPENVIKING_API_KEY}` } })
+  try {
+    await registerMemoryBridge({
+      get: (/** @type {string} */ name) => ({
+        evimedDiagnostics: { degrade: (/** @type {string} */ line) => degraded.push(line) },
+        skills: { register: () => () => {} },
+      })[name],
+      effect: (/** @type {() => () => unknown} */ install) => { disposers.push(install()) },
+      provide: () => {},
+      logger: { warn: () => {} },
+    }, { enabled: true, gatewayUrl: `http://127.0.0.1:${gatewayPort}`, tokenFile: '', port, outageNoticeMs: 120, cooldownMs: 0 })
+    assert.equal((await ask()).status, 503)
+    assert.deepEqual(degraded, [], 'not on the failure itself')
+    const gateway = http.createServer((_req, res) => { res.writeHead(200, { 'content-type': 'application/json' }); res.end('{}') })
+    await new Promise((resolve) => gateway.listen(gatewayPort, '127.0.0.1', () => resolve(undefined)))
+    assert.equal((await ask()).status, 200)
+    await wait(200)
+    assert.deepEqual(degraded, [], 'it came back within the window')
+    gateway.closeAllConnections?.()
+    await new Promise((resolve) => gateway.close(() => resolve(undefined)))
+    assert.equal((await ask()).status, 503)
+    await wait(200)
+    assert.equal(degraded.length, 1)
+    assert.match(degraded[0], /did not answer/)
+  } finally {
+    for (const dispose of disposers) await dispose?.()
+    for (const name of [...Object.keys(OPENVIKING_PLUGIN_ENVIRONMENT), 'OPENVIKING_API_KEY']) { if (env[name] === undefined) delete process.env[name]; else process.env[name] = env[name] }
+  }
+})

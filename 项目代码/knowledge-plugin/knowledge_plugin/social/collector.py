@@ -340,7 +340,7 @@ class SocialCollector:
         via = " resolved=nickname" if resolved.get("via") == "nickname" and resolved.get("at") == now.isoformat() else ""
         await self._finish(row, now, outcome="ok" if posts else "empty", result=result, cursor=cursor, host=DAJIALA_HOST,
                            detail=f"bodies={bodies}{via}", requests=1 + bodies,
-                           next_at=now + timedelta(days=1) / wechat_mod.polls_per_day(row))
+                           next_at=now + wechat_mod.read_interval(row))
         return "ok"
 
     async def wechat_resolve(self, row: dict, now: datetime) -> tuple[str, dict | None, History | None]:
