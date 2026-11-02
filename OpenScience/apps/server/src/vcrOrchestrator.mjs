@@ -2215,7 +2215,10 @@ export class VcrOrchestrator {
     const execution = result.executionId ? await this.store.one(`SELECT id, job_id, method, method_version, scenario_hash, seed, replicates, output_hash, environment, inputs
       FROM ${VCR_SCHEMA}.executions WHERE study_id = $1 AND id = $2`, [study.id, result.executionId]) : null;
     const job = execution?.job_id ? await this.store.one(`SELECT scenario, checkpoint FROM ${VCR_SCHEMA}.jobs WHERE study_id = $1 AND id = $2`, [study.id, execution.job_id]) : null;
-    const record = buildResultRecord({ study, result, publicUrl: this.config.publicUrl ?? null,
+    // A comparison is read by its route (a literature curve is a benchmark, a comparison is an estimate).
+    const route = result.kind === "comparator" && result.subjectId
+      ? (await this.store.one(`SELECT route FROM ${VCR_SCHEMA}.comparator_designs WHERE study_id = $1 AND id = $2`, [study.id, result.subjectId]))?.route ?? null : null;
+    const record = buildResultRecord({ study, result, route: route == null ? null : String(route), publicUrl: this.config.publicUrl ?? null,
       execution: execution ? { method: execution.method, methodVersion: execution.method_version, scenarioHash: execution.scenario_hash, seed: execution.seed == null ? null : Number(execution.seed),
         replicates: execution.replicates == null ? null : Number(execution.replicates), outputHash: execution.output_hash, environment: object(execution.environment), inputs: list(execution.inputs) } : null,
       scenario: job?.scenario ?? null, checkpoint: object(job?.checkpoint) });

@@ -70,6 +70,35 @@ export function vcrResultClass({ conclusion = null, method = null, route = null,
   return vcrBenchmarkBasis({ method, route, diagnostics, measures }) ? 'benchmark_only' : conclusion
 }
 
+/**
+ * Why a result is read with care, in sentences a reader can act on: the weighted balance (the estimate is delivered with it, limited
+ * above 0.10 and severe above 0.25), the reasons the comparator's own records give (A7), and what a benchmark is a benchmark of (A8). A
+ * not-estimable result has its gap list instead and no sentences here. One function for the comparison page and the result record, so
+ * the two never say different things of one result.
+ * @param {{ conclusion?: string | null, method?: string | null, route?: string | null, diagnostics?: Record<string, any> | null,
+ *   measures?: ReadonlyArray<Record<string, any>> | null }} input
+ * @returns {Array<{ key: string, text: string }>}
+ */
+export function vcrResultLimits({ conclusion = null, method = null, route = null, diagnostics = null, measures = null } = {}) {
+  if (conclusion === 'not_estimable') return []
+  const found = object(diagnostics)
+  /** @type {Array<{ key: string, text: string }>} */
+  const limits = []
+  const verdict = Object.keys(object(found.balanceVerdict)).length ? object(found.balanceVerdict)
+    : vcrBalanceVerdictOf((Array.isArray(found.balance) ? found.balance : []).map(object))
+  const balance = vcrBalanceSentence(verdict)
+  if (balance) limits.push({ key: 'balance', text: balance })
+  const labels = /** @type {Record<string, string>} */ (VCR_APPLICABILITY_LIMIT_LABELS_ZH)
+  for (const entry of (Array.isArray(found.applicabilityLimits) ? found.applicabilityLimits : []).map(object)) {
+    const sentence = labels[String(entry.code)] ?? text(entry.reason)
+    if (sentence) limits.push({ key: String(entry.code), text: sentence })
+  }
+  // An unanchored comparison says what it leaves unknown in the premises (residual error of unknown size); the other two say it here.
+  const basis = vcrResultClass({ conclusion, method, route, diagnostics, measures }) === 'benchmark_only' ? vcrBenchmarkBasis({ method, route, diagnostics, measures }) : null
+  if (basis && basis !== 'unanchored_maic') limits.push({ key: 'benchmark', text: /** @type {Record<string, string>} */ (VCR_BENCHMARK_ONLY_BASIS_LABELS_ZH)[basis] })
+  return limits
+}
+
 // --- the weighted balance, said (owner decision 2 of 2026-11-01) --------------------------------------------------------------------
 
 /**

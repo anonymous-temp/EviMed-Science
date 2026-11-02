@@ -2069,7 +2069,7 @@ test("D7 a result is exported as a short record only on request: written from th
   const { job } = await module.jobs.enqueue({ studyId: study.id, userId: study.userId, kind: "design_simulation", scenario, inputs: [], internal: true,
     idempotencyKey: `record:${Math.random()}`, detail: { subjectId: null, origin: "runtime" } });
   await store.query(`UPDATE evimed_vcr.jobs SET checkpoint = checkpoint || $2::jsonb WHERE id = $1`, [job.id,
-    JSON.stringify({ appliedDefaults: [{ path: "accrual.dropoutAnnual", value: 0 }], replicatePlan: { replicates: 5000, reason: "备择情景的默认下限 5,000 次" } })]);
+    JSON.stringify({ appliedDefaults: [{ path: "accrual.dropoutAnnual", value: 0 }], replicatePlan: { floor: 5000, basis: "default", intendedUse: "exploratory", targetMcse: null } })]);
   const execution = await store.recordExecution({ jobId: job.id, studyId: study.id, userId: study.userId, method: job.method, methodVersion: "1.3.0", scenarioHash: "a1b2c3d4e5f60708".repeat(4),
     inputs: [{ kind: "assumption", id: "hazard_ratio@2" }], environment: { engineVersion: "1.0.0", rVersion: "4.3.3", packageLockHash: "56edc6432ad4aaaaaaaa" }, seed: 777, replicates: 5000, outputHash: "9f".repeat(32),
     receipt: {}, cpuSeconds: 3, startedAt: null, finishedAt: null });

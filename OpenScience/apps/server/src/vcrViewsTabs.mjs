@@ -42,8 +42,8 @@ import {
   VCR_PROGNOSTIC_QUALIFICATION, VCR_PROGNOSTIC_QUALIFICATION_LABEL_ZH, VCR_ROBUSTNESS_STAGES, VCR_ROBUSTNESS_STAGE_LABELS_ZH,
   VCR_MODEL_RISK_RULE_LABELS_ZH, VCR_RATING_LABELS_ZH, VCR_DESIGN_SUPPORT, VCR_INTENDED_USE_LABELS_ZH, knownErrorCodeMessage, vcrAppliedDefaults,
   vcrAssessmentIssues, vcrAssessmentRows,
-  VCR_APPLICABILITY_LIMIT_LABELS_ZH, VCR_BENCHMARK_ONLY_BASIS_LABELS_ZH, VCR_EFFECT_ROLE_LABELS_ZH, VCR_RESULT_CLASSES, VCR_RESULT_CLASS_LABELS_ZH, VCR_SMD_SEVERE,
-  vcrApplicability, vcrBalanceSentence, vcrBalanceVerdictOf, vcrBenchmarkBasis, vcrResultClass, vcrTargetTrial,
+  VCR_EFFECT_ROLE_LABELS_ZH, VCR_RESULT_CLASSES, VCR_RESULT_CLASS_LABELS_ZH, VCR_SMD_SEVERE,
+  vcrApplicability, vcrResultClass, vcrResultLimits, vcrTargetTrial,
 } from "@evimed/domain";
 
 import { vcrObjectNode } from "./vcrStore.mjs";
@@ -733,20 +733,7 @@ export function presentComparatorTab(bundle) {
   // Why the result is read with care, in sentences: the weighted balance (decision 2: the estimate is delivered with it, limited above
   // 0.10 and severe above 0.25), the reasons the comparator's own records give (A7), and what a benchmark is a benchmark of (A8).
   // A not-estimable result has its gap list instead.
-  /** @type {Array<{ key: string, text: string }>} */
-  const limits = [];
-  if (result && conclusion !== "not_estimable") {
-    const verdict = Object.keys(object(diagnostics.balanceVerdict)).length ? object(diagnostics.balanceVerdict) : vcrBalanceVerdictOf(list(diagnostics.balance).map(object));
-    const balanceSentence = vcrBalanceSentence(verdict);
-    if (balanceSentence) limits.push({ key: "balance", text: balanceSentence });
-    for (const entry of list(diagnostics.applicabilityLimits).map(object)) {
-      const sentence = (/** @type {Record<string, string>} */ (VCR_APPLICABILITY_LIMIT_LABELS_ZH))[String(entry.code)] ?? text(entry.reason);
-      if (sentence) limits.push({ key: String(entry.code), text: sentence });
-    }
-    // An unanchored comparison says what it leaves unknown in the premises (残余误差大小未知); the other two say it here.
-    const basis = readAs === "benchmark_only" ? vcrBenchmarkBasis({ method: execution?.method ?? null, route: shown?.route, diagnostics, measures: result.measures }) : null;
-    if (basis && basis !== "unanchored_maic") limits.push({ key: "benchmark", text: (/** @type {Record<string, string>} */ (VCR_BENCHMARK_ONLY_BASIS_LABELS_ZH))[basis] });
-  }
+  const limits = result ? vcrResultLimits({ conclusion, method: execution?.method ?? null, route: shown?.route, diagnostics, measures: result.measures }) : [];
   // The target trial, as one record whichever shape it was written in.
   const targetTrial = current ? vcrTargetTrial(current.targetTrial, current.configuration?.targetTrial) : null;
   // The owned execution identifies a sensitivity-only run. An E-value measure alongside

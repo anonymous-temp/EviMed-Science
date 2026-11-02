@@ -2027,6 +2027,7 @@ export {
   vcrBenchmarkBasis,
   vcrIsEffectCardKey,
   vcrResultClass,
+  vcrResultLimits,
   vcrTargetTrial,
   vcrTargetTrialEngineItems,
   vcrTargetTrialStored,

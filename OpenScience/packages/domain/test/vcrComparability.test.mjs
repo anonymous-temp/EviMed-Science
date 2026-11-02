@@ -8,7 +8,7 @@ import {
   VCR_CONCLUSIONS, VCR_EFFECT_ROLES, VCR_EFFECT_ROLE_LABELS_ZH, VCR_INTENDED_USES, VCR_RESULT_CLASSES, VCR_RESULT_CLASS_LABELS_ZH,
   VCR_SMD_FLOOR, VCR_SMD_SEVERE, VCR_TARGET_TRIAL_COMPONENTS, VCR_TARGET_TRIAL_COMPONENT_LABELS_ZH, VCR_TARGET_TRIAL_STATUSES,
   vcrApplicability, vcrApplicabilityLimits, vcrBalanceBand, vcrBalanceSentence, vcrBalanceVerdictOf, vcrBenchmarkBasis, vcrIsEffectCardKey,
-  vcrResultClass, vcrTargetTrial, vcrTargetTrialEngineItems, vcrTargetTrialStored,
+  vcrResultClass, vcrResultLimits, vcrTargetTrial, vcrTargetTrialEngineItems, vcrTargetTrialStored,
 } from "../index.mjs";
 
 test("the result classes are the three conclusions and one more, each with its word", () => {
@@ -160,4 +160,24 @@ test("an effect has one of two roles, and the keys that are effects are the clos
   for (const key of ["control_median_pfs", "dropout_rate", "control_event_rate", "outcome_sd", "my_hazard_ratio", "hazard_ratios", ""]) {
     assert.equal(vcrIsEffectCardKey(key), false, key);
   }
+});
+
+test("P1-6 the sentences a result is read with are one function for the page and the record: balance, the records' limits, what a benchmark is of", () => {
+  const worst = { band: "severe", worst: 0.31, variable: "age" };
+  assert.deepEqual(vcrResultLimits({ conclusion: "limited", diagnostics: { balanceVerdict: worst } }), [{ key: "balance", text: vcrBalanceSentence(worst) }]);
+  // A result that predates the verdict is read from its balance table.
+  assert.deepEqual(vcrResultLimits({ conclusion: "limited", diagnostics: { balance: [{ covariate: "age", smdAdjusted: 0.12 }, { covariate: "sex", smdAdjusted: -0.04 }] } }).map((limit) => limit.key), ["balance"]);
+  // The comparator's own records, by their code, or the reason the engine wrote for a code this version does not know.
+  const code = Object.keys(VCR_APPLICABILITY_LIMIT_LABELS_ZH)[0];
+  assert.deepEqual(vcrResultLimits({ conclusion: "limited", diagnostics: { applicabilityLimits: [{ code, reason: "x" }, { code: "unknown_code", reason: "自己写的理由" }, { code: "empty" }] } }),
+    [{ key: code, text: /** @type {Record<string, string>} */ (VCR_APPLICABILITY_LIMIT_LABELS_ZH)[code] }, { key: "unknown_code", text: "自己写的理由" }]);
+  // A benchmark says what it is a benchmark of, except an unanchored comparison, whose residual error is a premise instead.
+  assert.deepEqual(vcrResultLimits({ conclusion: "estimable", method: "evidence.reconstruct_km", route: "literature_control", measures: [] }),
+    [{ key: "benchmark", text: VCR_BENCHMARK_ONLY_BASIS_LABELS_ZH.literature_curve }]);
+  assert.deepEqual(vcrResultLimits({ conclusion: "limited", method: "comparator.maic", diagnostics: { anchored: false } }), []);
+  assert.deepEqual(vcrResultLimits({ conclusion: "limited", method: "model.prognostic_apply" }).map((limit) => limit.key), ["benchmark"]);
+  // Nothing to read with, or nothing estimated: none.
+  assert.deepEqual(vcrResultLimits({ conclusion: "estimable", diagnostics: { balanceVerdict: { band: "balanced", worst: 0.03, variable: "age" } } }), []);
+  assert.deepEqual(vcrResultLimits({ conclusion: "not_estimable", diagnostics: { balanceVerdict: worst } }), []);
+  assert.deepEqual(vcrResultLimits(), []);
 });

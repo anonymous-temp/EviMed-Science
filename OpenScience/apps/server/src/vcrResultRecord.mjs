@@ -12,6 +12,10 @@
  *   applied default (`checkpoint.appliedDefaults`). A long scenario is cut at a fixed number of lines and says how many it left out.
  * - **The example trial is the engine's.** A simulation of 1.3.0 states its first replicate (`diagnostics.exampleTrial`: the run's
  *   seed always gives the same trial); a result that is not a simulation says it has none. Nothing is re-simulated here.
+ * - **The record says what the page says.** The class a result is read in (可估计, 有限制地估计, 仅基准, 不可估计) and the reasons it
+ *   is read with care are the page's own (`vcrResultClass`, `vcrResultLimits`: an imbalance, a limit the comparator's records give, what a
+ *   benchmark is a benchmark of), and the replicate count says what set it (`replicateReasonOf`): a record that left them out would read
+ *   better than the result it describes.
  * - **Links back are the application's own addresses** (`vcrResultEntry`): the tab that holds the result, absolute when the
  *   deployment knows its public address.
  *
@@ -19,7 +23,8 @@
  */
 
 import { createHash } from "node:crypto";
-import { VCR_CONCLUSION_LABELS_ZH, VCR_TAB_LABELS_ZH } from "@evimed/domain";
+import { VCR_RESULT_CLASS_LABELS_ZH, VCR_TAB_LABELS_ZH, vcrResultClass, vcrResultLimits } from "@evimed/domain";
+import { replicateReasonOf } from "./vcrJobs.mjs";
 import { vcrResultAddress, vcrResultTab } from "./vcrResultEntry.mjs";
 import { METHOD_LABELS } from "./vcrViewsKit.mjs";
 
@@ -64,6 +69,20 @@ export function scenarioLines(scenario, applied = []) {
   return lines;
 }
 
+/**
+ * What set the replicate count, as the job froze it (`checkpoint.replicatePlan`: the floor, the basis, the intended use and the precision
+ * asked for), in the words of `replicateReasonOf`. A job from before the plan was frozen has none to say.
+ * @param {Record<string, any>} plan @param {unknown} replicates @param {unknown} scenario
+ */
+function replicateWhy(plan, replicates, scenario) {
+  if (!Number.isFinite(Number(plan.floor)) || !plan.basis) return null;
+  const count = Number(replicates);
+  try {
+    return replicateReasonOf({ replicates: count, floor: Number(plan.floor), basis: String(plan.basis), intendedUse: plan.intendedUse == null ? null : String(plan.intendedUse),
+      targetMcse: plan.targetMcse == null ? null : Number(plan.targetMcse) }, object(scenario), plan.basis === "asked" ? count : null, "zh");
+  } catch { return null; }
+}
+
 /** @param {unknown} value */
 function leaf(value) {
   if (typeof value === "string") return value.length > 80 ? `${value.slice(0, 77)}…` : value;
@@ -77,18 +96,21 @@ function leaf(value) {
  *   execution: Record<string, any> | null,
  *   scenario?: unknown,
  *   checkpoint?: Record<string, any> | null,
+ *   route?: string | null,
  *   publicUrl?: unknown,
- * }} input
+ * }} input `route`: the comparator route of a comparison result (a benchmark is told by it)
  * @returns {{ title: string, markdown: string, sections: Array<{ id: string, title: string, lines: string[] }>, digest: string, hasExampleTrial: boolean }}
  */
-export function buildResultRecord({ study, result, execution, scenario = null, checkpoint = null, publicUrl = null }) {
+export function buildResultRecord({ study, result, execution, scenario = null, checkpoint = null, route = null, publicUrl = null }) {
   const diagnostics = object(result.diagnostics);
   const env = object(execution?.environment);
   const plan = object(object(checkpoint).replicatePlan);
   const applied = list(object(checkpoint).appliedDefaults);
   const method = String(execution?.method ?? "");
   const methodWord = (/** @type {Record<string, string>} */ (METHOD_LABELS))[method] ?? method;
-  const conclusion = (/** @type {Record<string, string>} */ (VCR_CONCLUSION_LABELS_ZH))[String(result.conclusion)] ?? null;
+  const readAs = vcrResultClass({ conclusion: result.conclusion, method, route, diagnostics, measures: list(result.measures) });
+  const conclusion = readAs ? (/** @type {Record<string, string>} */ (VCR_RESULT_CLASS_LABELS_ZH))[readAs] ?? null : null;
+  const limits = vcrResultLimits({ conclusion: result.conclusion, method, route, diagnostics, measures: list(result.measures) });
   const tab = vcrResultTab(String(result.kind));
   const tabWord = (/** @type {Record<string, string>} */ (VCR_TAB_LABELS_ZH))[tab] ?? tab;
   const studyName = String(study.name ?? "").trim() || "研究";
@@ -99,6 +121,7 @@ export function buildResultRecord({ study, result, execution, scenario = null, c
     `- 研究：${studyName}`,
     `- 结果：${result.kind}，第 ${Number(result.version ?? 1)} 版${conclusion ? `，${conclusion}` : ""}`,
     `- 方法：${methodWord}${method && methodWord !== method ? `（${method}）` : ""}${execution?.methodVersion ? ` ${execution.methodVersion}` : ""}`,
+    ...limits.map((limit) => `- 要带着这个读：${limit.text}`),
     ...(result.createdAt ? [`- 算完于：${String(result.createdAt).slice(0, 19).replace("T", " ")}（UTC）`] : []),
   ] });
 
@@ -114,7 +137,7 @@ export function buildResultRecord({ study, result, execution, scenario = null, c
   const engine = [env.engineVersion ?? env.version, env.rVersion ? `R ${env.rVersion}` : null, env.packageLockHash ? `包锁定 ${String(env.packageLockHash).slice(0, 12)}` : null].filter(Boolean);
   sections.push({ id: "versions", title: "种子和版本", lines: [
     `- 随机种子：${execution?.seed ?? "没有记录"}`,
-    ...(execution?.replicates != null ? [`- 重复次数：${Number(execution.replicates).toLocaleString("en-US")}${plan.reason ? `（${String(plan.reason)}）` : ""}`] : []),
+    ...(execution?.replicates != null ? [`- 重复次数：${Number(execution.replicates).toLocaleString("en-US")}${replicateWhy(plan, execution.replicates, scenario) ? `（${replicateWhy(plan, execution.replicates, scenario)}）` : ""}`] : []),
     `- 方法版本：${method || "没有记录"}${execution?.methodVersion ? ` ${execution.methodVersion}` : ""}`,
     ...(engine.length ? [`- 计算引擎：${engine.join("，")}`] : []),
     ...(execution?.scenarioHash ? [`- 场景哈希：${String(execution.scenarioHash).slice(0, 16)}`] : []),

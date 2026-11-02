@@ -1,4 +1,4 @@
-import { VCR_TIME_UNITS, vcrTimeUnitOf } from "@evimed/domain";
+import { VCR_INTENDED_USE_LABELS_ZH, VCR_TIME_UNITS, vcrTimeUnitOf } from "@evimed/domain";
 import { maintenanceAllowsClaims } from "./maintenanceService.mjs";
 import { heavyWorkAdmission } from "./heavyWorkAdmission.mjs";
 // What a study's compute budget holds a job back for. Three things are counted and a fourth is not:
@@ -356,20 +356,32 @@ const SIZED_KINDS = new Set(["design_simulation", "design_grid", "map_prior"]);
 const PLATFORM_BOUND_KINDS = new Set(["literature_population", "population_check", "reconstruct_km", "maic_time_to_event_comparator", "apply_prognostic_model", "pool_evidence", "match_criteria", "match_extract"]);
 
 /**
- * What set a simulation's replicate count, in a sentence a run can repeat: the floor of its case, the study's intended use, a
- * borrowing design, the precision asked for, or the count the run asked for.
+ * What set a simulation's replicate count, in a sentence: the floor of its case, the study's intended use, a borrowing design, the
+ * precision asked for, or the count the run asked for. In English for the run that is told it, in Chinese for a document a person reads
+ * (`language: "zh"`, the result record); the same decision either way.
  * @param {{ replicates: number, floor: number, basis: string, intendedUse: string | null, targetMcse: number | null }} plan
- * @param {Record<string, any>} scenario @param {number | null | undefined} asked
+ * @param {Record<string, any>} scenario @param {number | null | undefined} asked @param {"en" | "zh"} [language]
  */
-function replicateReasonOf(plan, scenario, asked) {
+export function replicateReasonOf(plan, scenario, asked, language = "en") {
   const null_ = vcrReplicatePlanFor(scenario, { intendedUse: plan.intendedUse });
   const floor = plan.floor.toLocaleString("en-US");
+  const count = plan.replicates.toLocaleString("en-US");
+  const more = Number.isInteger(asked) && Number(asked) > plan.floor;
+  if (language === "zh") {
+    const use = plan.intendedUse ? (/** @type {Record<string, string>} */ (VCR_INTENDED_USE_LABELS_ZH))[plan.intendedUse] ?? plan.intendedUse : "";
+    const why = plan.basis === "asked" ? "你要求的次数"
+      : plan.basis === "intended_use" ? `研究用途（${use}）下零效应情景的下限 ${floor} 次`
+        : plan.basis === "borrowing" ? `借用外部数据的设计在零效应下的下限 ${floor} 次`
+          : plan.basis === "target_mcse" ? `为达到 ${plan.targetMcse} 的蒙特卡洛误差而提高（下限 ${floor} 次）`
+            : `${null_.isNull ? "零效应情景" : "备择情景"}的默认下限 ${floor} 次`;
+    return more ? `你要求的 ${count} 次（下限 ${floor} 次：${why}）` : why;
+  }
   const why = plan.basis === "asked" ? "the count you asked for"
     : plan.basis === "intended_use" ? `the floor for the study's intended use (${plan.intendedUse}) under no effect`
       : plan.basis === "borrowing" ? "the floor for a design that borrows external data, under no effect"
         : plan.basis === "target_mcse" ? `raised to reach a Monte-Carlo error of ${plan.targetMcse}`
           : `the default floor for ${null_.isNull ? "a scenario with no effect" : "an alternative"}`;
-  return Number.isInteger(asked) && Number(asked) > plan.floor ? `${plan.replicates.toLocaleString("en-US")}, the count you asked for (the floor is ${floor}: ${why})` : `${floor}: ${why}`;
+  return more ? `${count}, the count you asked for (the floor is ${floor}: ${why})` : `${floor}: ${why}`;
 }
 
 /** Weakest first: the worst of two conclusions is the later one. */
