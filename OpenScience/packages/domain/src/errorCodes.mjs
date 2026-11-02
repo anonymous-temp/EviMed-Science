@@ -791,6 +791,8 @@ export const terminalEvidenceSourceErrorCodes = new Set([
   "vcr_comparator_record_incomplete",
   "vcr_assumption_role_missing",
   "vcr_evidence_item_incomplete",
+  // A publication's number the platform could not hold against a text it read: saved as reported and unchecked, a reminder on the item.
+  "vcr_evidence_reported_unverified",
   // A candidate trial written for a registry record that has no original eligibility wording (ChiCTR is a listing): saved, every criterion
   // unknown for 缺登记原文. A warning on the item the run wrote, not a refusal.
   "registry_text_missing",
@@ -1583,6 +1585,7 @@ export const VCR_WRITE_ISSUE_CODES = Object.freeze([
   'vcr_comparator_record_incomplete',
   'vcr_assumption_role_missing',
   'vcr_evidence_item_incomplete',
+  'vcr_evidence_reported_unverified',
   'registry_text_missing',
   'vcr_report_section_invalid',
 ])
@@ -2434,6 +2437,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_assumption_role_missing: '这张效应卡没有写它是“重要差异”还是“现实预期”；已保存，补上后再写一个版本。',
   registry_text_missing: '这条登记记录没有入排条件原文（ChiCTR 经证据接口只有清单）；条件已保存，评估时一律按未知算，原因是缺登记原文，不会判成满足或不满足。',
   vcr_evidence_item_incomplete: '这条抽取值还缺合并要用的项（置信区间或样本量）；已保存，论文里有就补进同一条，论文没有报告就另写一条“未报告”。',
+  vcr_evidence_reported_unverified: '这条文献数值已保存，但引文没能对上平台读到的原文，所以标为“未核对”；它仍可作为假设卡的依据，取回原文后再写同一条就会核对。',
   vcr_model_assessment_incomplete: '这条模型评估记录还有没填的项（关注的问题、使用情境、评级及理由、技术标准等）；已保存，文件里会写「未填写」，补上后再写一个版本。',
   vcr_report_section_invalid: '这份文件的文字只写规定的几节，表格与登记项由平台写；这次提交的文字没有保存，换成允许的节再写。',
   // The trial registry channel.

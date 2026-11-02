@@ -77,7 +77,7 @@ import { isModelDocumentKind } from "./vcrModelDocuments.mjs";
 import { VCR_COMPARISON_RESULT_KIND, VCR_SCHEMA } from "./vcrPersistence.mjs";
 import { vcrSealRequired } from "./vcrSeal.mjs";
 import { VCR_SUBJECT_KINDS, vcrResultKindFor } from "./vcrJobs.mjs";
-import { vcrObjectLine } from "./vcrSubjects.mjs";
+import { vcrJobStage, vcrObjectLine } from "./vcrSubjects.mjs";
 import { vcrRequestedSteps, vcrRouteOptions } from "./vcrService.mjs";
 import { vcrObjectNode } from "./vcrStore.mjs";
 import { vcrCurrentNodes, vcrInputDigest, vcrReviewIsCurrent } from "./vcrViews.mjs";
@@ -3207,6 +3207,53 @@ export class VcrOrchestrator {
     if (!mark || !["claimed", "running"].includes(String(mark.state)) || !mark.job_id) return null;
     const job = await this.store.job(studyId, String(mark.job_id));
     return job && ["queued", "running", "awaiting_budget"].includes(String(job.state)) ? job : null;
+  }
+
+  /**
+   * The scenario of one stage of an object the study already holds, built the way the programme builds it: the object's own
+   * configuration with the assumption cards that bind into it laid over a copy, and cut to the keys that stage's method reads.
+   * A conversation that wrote a design and then starts it by naming the object sends no scenario (`vcr_simulate start` with a
+   * `subjectId`); the engine used to be asked for an empty one and refused it key by key. Only a stage that reads nothing but the
+   * object and its cards is built here (a design's analytic, simulation and assurance, a design grid, a stated population, an E-value): one
+   * that waits on another result, a table or a snapshot is the programme's and answers `{ unavailable: true }`.
+   *
+   * @param {any} study @param {string} subjectId @param {string} jobKind
+   * @returns {Promise<{ scenario: Record<string, any>, detail: Record<string, any> } | { refused: { code: string, message: string, paths?: string[] } }
+   *   | { unavailable: true }>} `unavailable`: this is not an object (or a stage) the platform can build a scenario for
+   */
+  async stageScenarioOf(study, subjectId, jobKind) {
+    // A stand-alone E-value is its own scenario: the comparison it was filed as (`vcrConversationSubject`) holds the estimate and limit.
+    if (jobKind === "evalue") {
+      const filed = list(await this.store.comparatorDesigns(study.id, 200)).find((entry) => entry.id === subjectId);
+      return filed && Object.keys(object(filed.configuration)).length ? { scenario: structuredClone(object(filed.configuration)), detail: {} } : { unavailable: true };
+    }
+    const kindOfObject = /** @type {Record<string, string>} */ ({ design_analytic: "trial_scenario", design_simulation: "trial_scenario", assurance: "trial_scenario",
+      design_grid: "design_grid", generate_population: "population", literature_population: "population" })[jobKind];
+    if (!kindOfObject) return { unavailable: true };
+    const read = await this.#read(study);
+    const row = kindOfObject === "trial_scenario" ? list(await this.store.trialScenarios(study.id, 200)).find((entry) => entry.id === subjectId)
+      : kindOfObject === "design_grid" ? (read.grid && read.grid.id === subjectId ? read.grid : null)
+        : list(await this.store.populations(study.id, 200)).find((entry) => entry.id === subjectId);
+    if (!row) return { unavailable: true };
+    let modelResult = null;
+    const modelResultId = object(row.configuration).modelResultId ?? object(row.dimensions?.base).modelResultId;
+    if (modelResultId) {
+      try { modelResult = await readVcrModelDesignResult(this.store, study.id, String(modelResultId)); }
+      catch (error) { return { refused: { code: codeOf(error), message: String(error.message) } }; }
+    }
+    const plan = vcrBuildStages({ kind: kindOfObject, row }, { study,
+      definition: read.definition, assumptions: read.assumptions, populations: read.populations, scenarios: read.scenarios, grid: read.grid,
+      analytic: null, analyticJob: null, models: read.models, forecast: read.forecast, modelResult });
+    if (plan.ok === false) {
+      if ("refused" in plan) return { refused: plan.refused };
+      if ("waiting" in plan) return { unavailable: true };
+      const gap = list(object(plan.unavailable).gaps)[0];
+      return { refused: { code: "vcr_job_scenario_invalid", message: gap ? `${gap.title}。${gap.answers ?? ""}`.trim() : "引擎暂不支持这个对象的这一步。" } };
+    }
+    const wanted = vcrJobStage(jobKind, kindOfObject);
+    const found = plan.stages.find((entry) => entry.jobKind === jobKind && (wanted ? entry.stage === wanted : !String(entry.stage ?? "").endsWith("_null")));
+    if (!found || found.snapshot || list(found.derived).length || found.after) return { unavailable: true };
+    return { scenario: found.scenario, detail: object(found.detail) };
   }
 
   /**

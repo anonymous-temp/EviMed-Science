@@ -2260,6 +2260,24 @@ export {
   whenHolds,
 } from './src/vcrScenarioSchemas.mjs'
 
+// vcrScenarioDescriptive — 3 exports: the closed list of keys that only describe what the engine does anyway, taken out of a scenario
+// before it is checked and hashed, and the lists whose entries may carry a display label
+export {
+  VCR_DESCRIPTIVE_SCENARIO_KEYS,
+  VCR_LABELLED_SCENARIO_LISTS,
+  vcrNormalizeScenarioKeys,
+} from './src/vcrScenarioDescriptive.mjs'
+
+// vcrWriteWords — 5 exports: the closed words of a write's fields with what each means, and the near-miss spellings that mean exactly one
+// of them (read as that one, and said), so a spelling costs no round
+export {
+  VCR_WRITE_WORDS,
+  vcrNormalizeWriteRow,
+  vcrReadWord,
+  vcrWordKey,
+  vcrWordList,
+} from './src/vcrWriteWords.mjs'
+
 // vcrScenarioHelp — 9 exports: what a model is given to write a scenario from, rendered from the schemas above
 // (`runtime/mcp/evimed-research/vcr_scenario_help.json` is generated from it), and the keys read inside a node
 export {

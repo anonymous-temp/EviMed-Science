@@ -2152,3 +2152,217 @@ test("D7 a result is exported as a short record only on request: written from th
   assert.equal(document.title, "EV-201 record — 结果记录");
   assert.doesNotMatch(document.canonicalMarkdown, /未计算/, "no typed number was blanked by the report's number template");
 });
+
+/**
+ * A model's side of the gateway for an account and a project nothing exists for yet: the first write or computation makes the
+ * conversation's study, as it does for a real conversation. Returns the call and the study once it exists.
+ * @param {string} label @param {ReturnType<typeof compose>} module
+ */
+function modelConversation(label, module, extra = {}) {
+  const ids = { userId: `u_${label}`, projectId: "default" };
+  const runtimeManager = { assertActiveModelGatewayToken: () => ids };
+  const origin = { ...ids, rootSessionId: `ses_${label}`, sessionId: `ses_${label}`, callId: `call_${label}`, runId: null };
+  const handler = createVcrGatewayHandler({ vcrEnabled: true, vcrAudience: "all", modelGatewayInternalUrl: "http://127.0.0.1:8788/internal/models/v1" }, runtimeManager,
+    { vcr: { service: module.service, store, jobs: module.jobs, orchestrator: module.orchestrator, ...extra }, resolveInvocation: async () => origin });
+  const call = async (/** @type {string} */ operation, /** @type {Record<string, any>} */ body) => {
+    const req = Object.assign(Readable.from([Buffer.from(JSON.stringify(body))]), { method: "POST", url: `/internal/vcr/v1/${operation}`, headers: { authorization: "Bearer t", "x-evimed-execution-context": "native-fixture" } });
+    const res = { status: 0, body: "", writeHead(/** @type {number} */ status) { this.status = status; return this; }, end(/** @type {string} */ chunk = "") { this.body = String(chunk); } };
+    await handler(req, res);
+    return { status: res.status, ...JSON.parse(res.body) };
+  };
+  return { call, study: async () => store.taskContext(origin, { create: false }) };
+}
+
+/** The shape of the 2026-11-01 design comparison (live run c4b3): the same designs, written once and then started by id alone. */
+const liveDesigns = ["A 固定 1:1", "B 成组序贯 1:1", "C 固定 2:1"].map((label, at) => ({
+  label, design: at === 1 ? "group_sequential" : "two_arm_fixed", endpointType: "time_to_event",
+  configuration: { design: { kind: at === 1 ? "group_sequential" : "two_arm_fixed", allocation: at === 2 ? 0.6667 : 0.5, nTreat: at === 2 ? 639 : 415, nControl: at === 2 ? 320 : 415,
+    ...(at === 1 ? { informationRates: [0.5, 1], spending: "obrien_fleming" } : {}) },
+    endpoint: { type: "time_to_event" }, truth: { hazardRatio: 0.75, controlMedian: 13.5 },
+    analysis: { method: "logrank", alpha: 0.025, sided: 1, power: 0.9 }, accrual: { kind: "uniform", duration: 24, followup: 12, dropoutAnnual: 0.05 }, timeUnit: "months", performance: ["power"] },
+}));
+
+test("a design written in the conversation is validated and started by its id alone: the platform builds the scenario from the object", options, async () => {
+  const module = compose();
+  const model = modelConversation("byid", module);
+  const written = await model.call("write", { what: "trial_scenario", items: liveDesigns });
+  assert.equal(written.data.ok, true, JSON.stringify(written));
+  const [a, b] = written.data.ids;
+  const named = written.data.results.find((/** @type {any} */ entry) => entry.named);
+  assert.deepEqual(named.named.map((/** @type {any} */ entry) => entry.name), ["A 固定 1:1", "B 成组序贯 1:1", "C 固定 2:1"], "the answer gives the names a reply uses, beside the ids");
+  assert.deepEqual(named.named.map((/** @type {any} */ entry) => entry.id), written.data.ids);
+  // validate with a subject and no scenario: the object's own configuration, not the three missing keys of an empty one
+  const checked = await model.call("simulate", { action: "validate", kind: "design_analytic", subjectId: a });
+  assert.equal(checked.status, 200, JSON.stringify(checked));
+  assert.equal(checked.data.valid, true, JSON.stringify(checked.data.issues));
+  assert.equal(checked.data.scenario.truth.hazardRatio, 0.75);
+  assert.equal(checked.data.scenario.analysis.method, undefined, "the analytic stage reads no test name: the object's description of it did not travel");
+  const started = await model.call("simulate", { action: "start", kind: "design_analytic", subjectId: a });
+  assert.equal(started.status, 200, JSON.stringify(started));
+  assert.equal(started.data.subject.id, a);
+  assert.equal(started.data.subject.name, "A 固定 1:1");
+  const frozen = async (/** @type {string} */ id) => (await store.rows("SELECT scenario FROM evimed_vcr.jobs WHERE id = $1", [id]))[0].scenario;
+  const job = { scenario: await frozen(started.data.jobId) };
+  assert.deepEqual(job.scenario.design, { kind: "two_arm_fixed", allocation: 0.5 });
+  assert.deepEqual(job.scenario.truth, { hazardRatio: 0.75, controlMedian: 13.5 });
+  // the simulation of a group-sequential design carries its looks, from the object
+  const simulated = await model.call("simulate", { action: "start", kind: "design_simulation", subjectId: b });
+  assert.equal(simulated.status, 200, JSON.stringify(simulated));
+  assert.deepEqual((await frozen(simulated.data.jobId)).design.informationRates, [0.5, 1]);
+  // a subject the study does not hold is still refused by name, not guessed
+  const unknown = await model.call("simulate", { action: "start", kind: "design_analytic", subjectId: "scn_nobody" });
+  assert.equal(unknown.status, 400);
+  assert.equal(unknown.code, "vcr_simulate_subject_unknown");
+});
+
+test("keys that only describe what design_analytic does are left out and said, a described value the engine would not honour is refused with the reason, and a misspelt key still fails", options, async () => {
+  const module = compose();
+  const model = modelConversation("descriptive", module);
+  const scenario = { design: { kind: "two_arm_fixed", allocation: 0.5 }, endpoint: { type: "time_to_event" }, truth: { hazardRatio: 0.75, controlMedian: 13.5 },
+    analysis: { alpha: 0.025, power: 0.9, sided: 1 }, accrual: { duration: 24, followup: 12, dropoutAnnual: 0.05 }, timeUnit: "months" };
+  const described = { ...scenario, analysis: { ...scenario.analysis, method: "logrank" }, accrual: { ...scenario.accrual, kind: "uniform" } };
+  const checked = await model.call("simulate", { action: "validate", kind: "design_analytic", scenario: described });
+  assert.equal(checked.data.valid, true, JSON.stringify(checked.data.issues));
+  assert.deepEqual(checked.data.normalized.map((/** @type {any} */ entry) => entry.field), ["analysis.method", "accrual.kind"]);
+  assert.deepEqual(checked.data.scenario, scenario, "the frozen scenario is the one without the descriptions");
+  // an analysis the analytic design does not make is not a description
+  const other = await model.call("simulate", { action: "validate", kind: "design_analytic", scenario: { ...scenario, analysis: { ...scenario.analysis, method: "maxcombo" } } });
+  assert.equal(other.data.valid, false);
+  assert.equal(other.data.issues[0].field, "scenario.analysis.method");
+  assert.match(other.data.issues[0].message, /log-rank/);
+  assert.match(other.data.issues[0].message, /maxcombo/);
+  // a key that is not on the list keeps failing: a silent ignore would change the computation
+  const misspelt = await model.call("simulate", { action: "validate", kind: "design_analytic", scenario: { ...scenario, accrual: { duration: 24, followup: 12, dropoutAnual: 0.05 } } });
+  assert.equal(misspelt.data.valid, false);
+  assert.equal(misspelt.data.issues[0].field, "scenario.accrual.dropoutAnual");
+  // started with the descriptions or without them, it is one job
+  const first = await model.call("simulate", { action: "start", kind: "design_analytic", scenario: described });
+  assert.equal(first.status, 200, JSON.stringify(first));
+  assert.deepEqual(first.data.normalized.map((/** @type {any} */ entry) => entry.field), ["analysis.method", "accrual.kind"]);
+  const second = await model.call("simulate", { action: "start", kind: "design_analytic", scenario });
+  assert.equal(second.status, 200, JSON.stringify(second));
+  assert.equal(second.data.jobId, first.data.jobId, "the description is not part of what makes a job the same job");
+});
+
+test("a design grid with labelled designs and truths is computed with nothing written first, labels left out and said; and the grid written as an object is started by its id alone", options, async () => {
+  const module = compose();
+  const model = modelConversation("grid", module);
+  const grid = {
+    accrual: { dropoutAnnual: 0.05, duration: 24, followup: 12 }, design: { kind: "two_arm_fixed", nControl: 415, nTreat: 415 },
+    designs: [{ kind: "two_arm_fixed", label: "A 固定 1:1", nControl: 415, nTreat: 415 },
+      { informationRates: [0.5, 1], kind: "group_sequential", label: "B 成组序贯 1:1", nControl: 416, nTreat: 416, spending: "obrien_fleming" },
+      { kind: "two_arm_fixed", label: "C 固定 2:1", nControl: 320, nTreat: 639 }],
+    endpoint: { type: "time_to_event" }, performance: ["power", "type_one_error"], timeUnit: "months", truth: { controlMedian: 13.5, hazardRatio: 0.75 },
+    truths: [{ hazardRatio: 0.75, label: "HR 0.75" }, { hazardRatio: 0.8, label: "HR 0.80" }, { hazardRatio: 1, label: "零效应", null: true }],
+  };
+  const checked = await model.call("simulate", { action: "validate", kind: "design_grid", scenario: grid });
+  assert.equal(checked.data.valid, true, JSON.stringify(checked.data.issues));
+  assert.deepEqual(checked.data.normalized.map((/** @type {any} */ entry) => entry.field), ["designs[].label", "truths[].label"]);
+  assert.equal(checked.data.scenario.designs.some((/** @type {any} */ design) => "label" in design), false);
+  const started = await model.call("simulate", { action: "start", kind: "design_grid", scenario: grid });
+  assert.equal(started.status, 200, JSON.stringify(started));
+  assert.equal(started.data.subject.kind, "design_grid", "the grid is the object the scenario was filed under");
+  const study = await model.study();
+  const stored = await store.latestDesignGrid(study.id);
+  assert.equal(stored.id, started.data.subject.id);
+  // the same grid again is that grid; started by its id alone it is built from the object
+  const again = await model.call("simulate", { action: "start", kind: "design_grid", scenario: grid });
+  assert.equal(again.status, 200, JSON.stringify(again));
+  assert.equal(again.data.subject.id, stored.id);
+  const byId = await model.call("simulate", { action: "start", kind: "design_grid", subjectId: stored.id });
+  assert.equal(byId.status, 200, JSON.stringify(byId));
+  assert.equal(byId.data.subject.id, stored.id);
+
+  // the grid as the model wrote it as an object (dimensions, truthScenarios, labels, a test name in the base) and started by its id alone
+  const other = modelConversation("grid_object", module);
+  const written = await other.call("write", { what: "design_grid", data: {
+    comparisonGoal: { text: "比较三个方案", measures: [{ name: "power", direction: "higher" }] },
+    dimensions: { base: { accrual: { dropoutAnnual: 0.05, duration: 24, followup: 12 }, analysis: { alpha: 0.025, method: "logrank", sided: 1 }, endpoint: { type: "time_to_event" },
+      performance: ["power", "type_one_error"], timeUnit: "months", truth: { controlMedian: 13.5 } },
+    designs: [{ kind: "two_arm_fixed", label: "A 固定 1:1", nControl: 415, nTreat: 415 }, { kind: "two_arm_fixed", label: "C 固定 2:1", nControl: 320, nTreat: 639 }] },
+    truthScenarios: [{ hazardRatio: 0.75, label: "设计目标 HR 0.75" }, { hazardRatio: 1, label: "零效应", null: true }] } });
+  assert.equal(written.data.ok, true, JSON.stringify(written.data.issues));
+  const checkedGrid = await other.call("simulate", { action: "validate", kind: "design_grid", subjectId: written.data.ids[0] });
+  assert.equal(checkedGrid.data.valid, true, JSON.stringify(checkedGrid.data.issues));
+  const gridStart = await other.call("simulate", { action: "start", kind: "design_grid", subjectId: written.data.ids[0] });
+  assert.equal(gridStart.status, 200, JSON.stringify(gridStart));
+  // a population and an E-value filed by their scenario are started by their ids alone as well
+  const hazard = { riskRatio: 0.6, confidenceLimit: 0.8, scale: "hazard_ratio", rare: true };
+  const evalue = await other.call("simulate", { action: "start", kind: "evalue", scenario: hazard });
+  assert.equal(evalue.status, 200, JSON.stringify(evalue));
+  const evalueAgain = await other.call("simulate", { action: "start", kind: "evalue", subjectId: evalue.data.subject.id });
+  assert.equal(evalueAgain.status, 200, JSON.stringify(evalueAgain));
+  assert.equal(evalueAgain.data.jobId, evalue.data.jobId, "the object's own scenario is the same frozen scenario");
+  const people = { n: 100, population: { variables: [{ name: "age", family: "normal", mean: 60, sd: 10 }] } };
+  const population = await other.call("simulate", { action: "start", kind: "generate_population", scenario: people });
+  assert.equal(population.status, 200, JSON.stringify(population));
+  const populationAgain = await other.call("simulate", { action: "start", kind: "generate_population", subjectId: population.data.subject.id });
+  assert.equal(populationAgain.status, 200, JSON.stringify(populationAgain));
+  const frozenGrid = (await store.rows("SELECT scenario FROM evimed_vcr.jobs WHERE id = $1", [gridStart.data.jobId]))[0].scenario;
+  assert.equal(frozenGrid.designs.length, 2);
+  assert.equal(frozenGrid.truths.length, 2);
+  assert.equal(frozenGrid.designs.some((/** @type {any} */ design) => "label" in design), false);
+});
+
+test("a median OS read from a PubMed abstract is evidence of its paper: verified against the abstract the platform preserved, or kept and marked unchecked, and a card made of either reads as literature on the page", async () => {
+  const { createVcrEvidencePipeline } = await import("../src/vcrEvidence.mjs");
+  const { createVcrPublicationSources } = await import("../src/vcrPublicationSources.mjs");
+  const { premiseReasonOfCard, premiseSourceOfCard } = await import("../src/vcrPremises.mjs");
+  const abstract = "# HIMALAYA\n\n- PMID: 37676259\n\n## Abstract\n\nThe median OS was 16.4 months (95% CI, 14.2–19.6) with tremelimumab in combination with durvalumab and 13.8 months (95% CI, 12.3–16.1) with sorafenib.\n";
+  const hashes = { "abstract.md": sha(abstract) };
+  const version = sha(JSON.stringify(hashes));
+  const workspace = await fs.mkdtemp(path.join(os.tmpdir(), "vcr-pubint-"));
+  const captureDir = path.join(workspace, ".evimed-sources/pubmed/PMID37676259", version);
+  await fs.mkdir(captureDir, { recursive: true });
+  await fs.writeFile(path.join(captureDir, "abstract.md"), abstract);
+  await fs.writeFile(path.join(captureDir, "capture.json"), JSON.stringify({ version, artifacts: hashes }));
+
+  const module = compose();
+  const evidenceStore = new VcrEvidenceStore({ database });
+  const evidence = createVcrEvidencePipeline({ store: evidenceStore, jobs: module.jobs });
+  evidence.attachPublications(createVcrPublicationSources({ resolveProject: async () => ({ workspaceDir: workspace }) }));
+  const model = modelConversation("paper", module, { evidence, evidenceStore });
+  const live = (/** @type {Record<string, any>} */ more = {}) => ({ registry: "pubmed", registryId: "37676259", parameter: "control_median_os", arm: "sorafenib", armRole: "control", value: 13.8, unit: "months",
+    ciLow: 12.3, ciHigh: 16.1, sampleSize: 389, valueSource: "reported", quote: "13.8 months (95% CI, 12.3–16.1) with sorafenib", endpointKey: "os", line: "first", evidenceKind: "outcome", ...more });
+
+  // the call the model made, with the words it chose: nothing is refused for a spelling or for the registry it named
+  const read = await model.call("write", { what: "evidence_item", items: [live({ sampleSize: undefined })] });
+  assert.equal(read.status, 200, JSON.stringify(read));
+  assert.equal(read.data.ok, true, JSON.stringify(read.data.issues));
+  const [checkedId] = read.data.ids;
+  // a paper the platform never read: the number is kept, unchecked, and the write says so without refusing it
+  const unread = await model.call("write", { what: "evidence_item", items: [live({ registryId: "11111111", parameter: "control_median_os" })] });
+  assert.equal(unread.data.ok, true, JSON.stringify(unread.data.issues));
+  assert.deepEqual(unread.data.issues.map((/** @type {any} */ entry) => entry.code), ["vcr_evidence_reported_unverified"]);
+  const [uncheckedId] = unread.data.ids;
+  const study = await model.study();
+  const stored = await evidenceStore.itemsById({ userId: study.userId, studyId: study.id, ids: [checkedId, uncheckedId] });
+  const by = new Map(stored.map((/** @type {any} */ row) => [row.id, row]));
+  assert.equal(by.get(checkedId).locator.verification, "verified");
+  assert.equal(Number(by.get(checkedId).value), 13.8);
+  assert.equal(by.get(uncheckedId).locator.verification, "reported_unverified");
+  assert.equal(Number(by.get(uncheckedId).value), 13.8, "an unchecked number is kept as reported");
+  assert.equal(by.get(uncheckedId).arm_role, "control");
+  assert.equal(by.get(checkedId).value_source, "extracted");
+  assert.deepEqual(await evidenceStore.verifiedEvidenceIds({ userId: study.userId, studyId: study.id, parameter: "control_median_os" }), [checkedId], "pooling and baselines read the checked one only");
+
+  // a card that takes either, with the words the model used
+  const card = (/** @type {string} */ id, /** @type {string} */ key) => ({ key, name: "对照组 OS 中位数", parameter: "control_median_os", endpoint: "os", unit: "months", sourceKind: "literature", evidenceIds: [id] });
+  const fromChecked = await model.call("write", { what: "assumption", items: [card(checkedId, "control_median_os")] });
+  assert.equal(fromChecked.data.ok, true, JSON.stringify(fromChecked.data.issues));
+  const fromUnchecked = await model.call("write", { what: "assumption", items: [card(uncheckedId, "control_median_os_unchecked")] });
+  assert.equal(fromUnchecked.data.ok, true, JSON.stringify(fromUnchecked.data.issues));
+  const cards = new Map((await store.assumptions(study.id)).map((/** @type {any} */ entry) => [entry.key, entry]));
+  const first = cards.get("control_median_os");
+  const second = cards.get("control_median_os_unchecked");
+  assert.equal(first.pointValue, 13.8);
+  assert.equal(first.sourceKind, "external_evidence");
+  assert.deepEqual(first.evidenceIds, [checkedId]);
+  assert.equal(premiseSourceOfCard(first), "literature", "the page says 文献, not 假设");
+  assert.equal(premiseReasonOfCard(first), "引自 PMID 37676259");
+  assert.equal(premiseSourceOfCard(second), "literature");
+  assert.match(premiseReasonOfCard(second) ?? "", /未核对/);
+  // the literature value could not be a simulated one: the card is the paper's number as the paper gave it
+  assert.equal(second.pointValue, 13.8);
+  await fs.rm(workspace, { recursive: true, force: true });
+});

@@ -786,6 +786,12 @@ def write(arguments: dict) -> dict:
                             "(at most 40 characters; the question's name, never a person or an identifier).")
     if refused:
         next_actions.append("Correct the refused items and write only those again.")
+    for result in data.get("results") or []:
+        # Words the platform read as the closed ones, and the names to call the saved objects by: said once, in the answer that has them.
+        if isinstance(result, dict) and result.get("applied"):
+            next_actions.append("data.results[].applied lists words the platform read as the vocabulary's own (field: what you wrote, what it took); write the closed word next time.")
+        if isinstance(result, dict) and result.get("named"):
+            next_actions.append("Refer to the saved objects in your reply by data.results[].named[].name, never by id.")
     if reminders:
         next_actions.append("The warnings that name a record or a role are reminders: the object is saved and its result is delivered as it "
                             "stands. Add what they name by writing the same object again (a new version), without waiting for anyone.")
@@ -800,7 +806,7 @@ def write(arguments: dict) -> dict:
 
 
 # The write issues that are reminders of a record the object has not got yet, not refusals (the object is saved).
-_REMINDER_CODES = frozenset({"vcr_comparator_record_incomplete", "vcr_assumption_role_missing", "vcr_evidence_item_incomplete"})
+_REMINDER_CODES = frozenset({"vcr_comparator_record_incomplete", "vcr_assumption_role_missing", "vcr_evidence_item_incomplete", "vcr_evidence_reported_unverified"})
 
 
 def _issue_line(issue: dict) -> str:
@@ -1116,8 +1122,34 @@ def shape(arguments: dict) -> dict:
     }
 
 
+# The kinds whose complete example a conversation has been given, once: (session, kind). A refusal that is the first of its kind in a
+# conversation carries one valid scenario to copy; the later ones carry the keys of the place they were refused and nothing more.
+_EXAMPLED = set()
+
+
+def _first_example(kind, method) -> str:
+    """One complete, valid scenario of the kind (from the generated help), the first time a refusal of it is answered in this conversation."""
+    context = _EXECUTION_CONTEXT.get()
+    session = context.get("sessionId", "") if isinstance(context, dict) else ""
+    if (session, kind) in _EXAMPLED:
+        return ""
+    examples = method.get("examples") if isinstance(method, dict) else None
+    scenario = examples[0].get("scenario") if isinstance(examples, list) and examples and isinstance(examples[0], dict) else None
+    if not isinstance(scenario, dict) or not scenario:
+        return ""
+    if len(_EXAMPLED) > 2000:
+        _EXAMPLED.clear()
+    _EXAMPLED.add((session, kind))
+    return " A complete valid scenario of %s, to copy and change to this study's own numbers: %s" % (
+        kind, json.dumps(scenario, ensure_ascii=False, separators=(",", ":")))
+
+
 def refusal_hint(kind, issues: list) -> str:
-    """The keys of the place a job was refused, from the same generated help, so the repair needs no second lookup."""
+    """The keys of the place a job was refused, from the same generated help, so the repair needs no second lookup.
+
+    The first refusal of a kind in a conversation also carries a whole valid example of it: on 2026-11-01 a design comparison spent
+    fourteen refused calls learning, key by key, what one example would have shown.
+    """
     if not isinstance(kind, str) or not issues:
         return ""
     try:
@@ -1144,8 +1176,8 @@ def refusal_hint(kind, issues: list) -> str:
             lines.append(line)
     if not lines:
         return ""
-    return "From the engine's schema for %s (method %s) -- %s. Every key, its range and an example: vcr_simulate action shape, kind %s." % (
-        kind, method_id, " | ".join(lines), kind)
+    return "From the engine's schema for %s (method %s) -- %s. Every key and its range: vcr_simulate action shape, kind %s.%s" % (
+        kind, method_id, " | ".join(lines), kind, _first_example(kind, method))
 
 
 def simulate(arguments: dict) -> dict:
@@ -1217,6 +1249,8 @@ def _validate_answer(data: dict, kind) -> dict:
     if isinstance(data.get("applied"), list) and data["applied"]:
         actions.append("data.applied lists what the platform will fill in because the scenario states none of it. Say each with its value in your reply; "
                        "one that is not what the study intends is stated in the scenario before it is started.")
+    if isinstance(data.get("normalized"), list) and data["normalized"]:
+        actions.append("data.normalized lists keys that only described what the method does anyway; the platform leaves them out and they change nothing.")
     return {
         "status": "success",
         "summary": "The scenario is valid; nothing was queued.",
@@ -1277,11 +1311,14 @@ def _with_applied(answer: dict, data: dict) -> dict:
     study intends is stated in the scenario and the job queued again.
     """
     applied = data.get("applied") if isinstance(data, dict) else None
-    if not isinstance(applied, list) or not applied:
-        return answer
-    line = ("data.applied lists what the platform filled in because the scenario did not state it. Say each with its value in your "
-            "reply; one that is not what the study intends is stated in the scenario and the job queued again.")
-    return {**answer, "next_actions": [*answer.get("next_actions", []), line]}
+    lines = []
+    if isinstance(applied, list) and applied:
+        lines.append("data.applied lists what the platform filled in because the scenario did not state it. Say each with its value in your "
+                     "reply; one that is not what the study intends is stated in the scenario and the job queued again.")
+    if isinstance(data, dict) and isinstance(data.get("normalized"), list) and data["normalized"]:
+        lines.append("data.normalized lists keys of your scenario that only described what the method does anyway; the platform left them out and "
+                     "they changed nothing. Leave them out next time.")
+    return {**answer, "next_actions": [*answer.get("next_actions", []), *lines]} if lines else answer
 
 
 def _with_entry(answer: dict, data: dict) -> dict:

@@ -811,7 +811,7 @@ test("simulate is start / status / cancel, and a job over budget says so plainly
   const started = response();
   await handler(request("/internal/vcr/v1/simulate", { action: "start", kind: "design_simulation", scenario: { design: { kind: "two_arm_fixed" } } }), started);
   assert.deepEqual(started.json().data, { action: "start", jobId: "job_1", state: "queued", progress: {},
-    subject: { kind: "trial_scenario", id: "scn_a", version: 1 } }, "the one design the scenario fits is the one it is about");
+    subject: { kind: "trial_scenario", id: "scn_a", version: 1, name: "A 2:1 固定设计" } }, "the one design the scenario fits is the one it is about, with the name a reply calls it by");
   assert.ok(calls.some((call) => call[0] === "enqueue" && call[1] === "design_simulation"));
 
   const status = response();
@@ -871,7 +871,7 @@ test("a design's computation names the trial scenario it is for: its result is f
 
   const analytic = await start({ kind: "design_analytic", subjectId: "scn_b", scenario: { design: { kind: "two_arm_fixed", allocation: 0.5 } } });
   assert.equal(analytic.status, 200, analytic.body);
-  assert.deepEqual(analytic.json().data.subject, { kind: "trial_scenario", id: "scn_b", version: 2 });
+  assert.deepEqual(analytic.json().data.subject, { kind: "trial_scenario", id: "scn_b", version: 2, name: "B 1:1 固定设计" });
   assert.deepEqual(queued[0].detail, { subjectId: "scn_b", origin: "runtime", resultKind: "trial_scenario", node: "trial_scenario:scn_b@2", step: "trial",
     stage: "analytic", supersedes: ["scn_b0"] }, "the subject, where the result lands, the stage it is, and the earlier version of the same design it replaces");
   assert.match(queued[0].idempotencyKey, /design_analytic:scn_b:/, "the same scenario asked for another design is another job");

@@ -533,6 +533,21 @@ class VcrReadWriteTests(_GatewayCase):
         self.assertIn("1 refused, 1 reminder(s)", both["summary"])
         self.assertEqual(len(both["next_actions"]), 2)
 
+    def test_words_the_platform_read_as_closed_ones_and_the_names_to_call_objects_by_are_said_once_in_the_answer_that_has_them(self):
+        _Gateway.answers["write"] = (200, {"data": {"what": "trial_scenario", "ok": True, "ids": ["scn_1"], "issues": [], "results": [
+            {"named": [{"id": "scn_1", "name": "A 固定 1:1"}], "say": "回复里用这些名字称呼它们，不要写编号。"},
+            {"applied": [{"index": 0, "field": "valueSource", "from": "reported", "value": "extracted"}], "note": "x"}]}})
+        result = self.server.call_tool("vcr_write", {"what": "trial_scenario", "items": [{"label": "A 固定 1:1"}]})
+        joined = " ".join(result["next_actions"])
+        self.assertIn("Refer to the saved objects in your reply by data.results[].named[].name, never by id.", joined)
+        self.assertIn("write the closed word next time", joined)
+        # a publication's number the platform could not check is a reminder: the item is saved, the answer says so and refuses nothing
+        _Gateway.answers["write"] = (200, {"data": {"what": "evidence_item", "ok": True, "ids": ["evd_1"], "issues": [
+            {"index": 0, "field": "quote", "code": "vcr_evidence_reported_unverified", "message": "已记录为文献报告的数，未核对。"}]}})
+        saved = self.server.call_tool("vcr_write", {"what": "evidence_item", "items": [{"publication": {"pmid": "37676259"}}]})
+        self.assertIn("1 written, 1 reminder(s)", saved["summary"])
+        self.assertNotIn("refused", saved["summary"])
+
     def test_a_matching_write_hands_over_the_link_to_the_matching_page(self):
         entry = {"studyId": "std_conv", "tab": "matching", "label": "在“匹配”页查看", "url": "https://evimed.example/app/virtual-research/std_conv/matching"}
         _Gateway.answers["write"] = (200, {"data": {"what": "fact", "ok": True, "ids": ["f1"], "issues": [], "resultEntry": entry}})
@@ -697,6 +712,35 @@ class VcrSimulateTests(_GatewayCase):
         self.assertIn("accrual.dropoutAnnual: number >=0 <1 (proportion per year); optional; default 0", rows)
         self.assertIn("accrual.duration: number >=0 (time units); required once accrual is given", rows)
         self.assertIn("design.kind × endpoint.type this method implements", rows)
+
+    def test_the_first_refusal_of_a_kind_in_a_conversation_carries_one_complete_valid_example_and_the_later_ones_do_not(self):
+        # 2026-11-01: a design comparison paid 14 refused calls to learn, key by key, what one valid scenario shows at once.
+        vcr_platform._EXAMPLED.clear()
+        issues = [{"code": "scenario_field_missing", "field": "scenario.design"}]
+        example = vcr_platform.scenario_help()["methods"]["design.analytic"]["examples"][0]["scenario"]
+        marker = "A complete valid scenario of design_analytic, to copy and change to this study's own numbers: "
+
+        def hint(session):
+            with vcr_platform.invocation({"sessionId": session}):
+                return vcr_platform.refusal_hint("design_analytic", issues)
+
+        first = hint("ses_a")
+        self.assertIn(marker, first)
+        self.assertEqual(json.loads(first.split(marker, 1)[1]), example, "the example is the generated help's own, whole")
+        self.assertIn("vcr_simulate action shape, kind design_analytic", first)
+        self.assertNotIn(marker, hint("ses_a"), "once per kind in a conversation")
+        self.assertIn(marker, hint("ses_b"), "another conversation is given it again")
+        # the refusal a run reads is the gateway's sentence with the hint after it, example included, on the first
+        vcr_platform._EXAMPLED.clear()
+        _Gateway.answers["simulate"] = (400, {"error": "作业不符合引擎协议：scenario.design（scenario_field_missing）。", "code": "vcr_request_invalid", "issues": issues})
+        message = self.server.call_tool("vcr_simulate", {"action": "start", "kind": "design_analytic", "subjectId": "scn_x"})["error"]["message"]
+        self.assertIn(marker, message)
+        # a validate that is refused carries it the same way
+        vcr_platform._EXAMPLED.clear()
+        _Gateway.answers["simulate"] = (200, {"data": {"action": "validate", "kind": "design_analytic", "queued": False, "checked": True, "valid": False, "issues": [
+            {"code": "scenario_field_missing", "field": "scenario.design", "message": "design is required."}]}})
+        validated = self.server.call_tool("vcr_simulate", {"action": "validate", "kind": "design_analytic", "scenario": {}})
+        self.assertIn(marker, " ".join(validated["next_actions"]))
 
     def test_the_generators_answer_a_refusal_in_their_own_code_and_carry_the_keys_too(self):
         _Gateway.answers["simulate"] = (400, {"error": "作业不符合引擎协议：scenario.accrual.months（scenario_field_unknown）。", "code": "vcr_simulate_payload_invalid",

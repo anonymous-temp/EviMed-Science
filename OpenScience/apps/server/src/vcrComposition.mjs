@@ -78,6 +78,7 @@ import { matchingVariablesOf, subjectTableFacts } from "./vcrMatchingTable.mjs";
 import { createVcrEvidencePipeline } from "./vcrEvidence.mjs";
 import { createVcrCorrectionCases } from "./vcrCorrectionCases.mjs";
 import { createVcrCurveEvidence } from "./vcrCurveEvidence.mjs";
+import { createVcrPublicationSources } from "./vcrPublicationSources.mjs";
 import { createIntakeCounters, createVcrRecordExtractor } from "./vcrRecordExtract.mjs";
 import { createVcrCurveDigitizer } from "./vcrCurveDigitizer.mjs";
 import { VcrEvidenceStore } from "./vcrEvidenceStore.mjs";
@@ -1139,6 +1140,13 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   });
   const evidence = createVcrEvidencePipeline({ store: evidenceStore, registry, jobs });
   jobs.baselineVerifier = input => evidence.verifyBaselineTable(input);
+  // A number a paper reports is held against the text the platform itself read of that paper (a capture in the project's workspace).
+  if (projectStore) {
+    evidence.attachPublications(createVcrPublicationSources({ resolveProject: async (userId, projectId) => {
+      const owner = await projectStore.userById(userId);
+      return projectStore.requireProject(owner, projectId);
+    } }));
+  }
   const digitizer = createVcrCurveDigitizer({ config, controller: intakeController, counters: intakeCounters, report });
   const curves = createVcrCurveEvidence({ store: evidenceStore, studyStore: store, access, digitizer, resolveProject: async study => {
     if (!projectStore) throw new HttpError(503, 'vcr_curve_provenance_unavailable', 'Source image access is unavailable.');

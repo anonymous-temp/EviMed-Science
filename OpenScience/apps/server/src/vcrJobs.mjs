@@ -129,7 +129,7 @@ import path from "node:path";
 
 import {
   VCR_CHECK_STAGES, VCR_ENGINE_METHODS, VCR_ENGINE_PROTOCOL_VERSION, VCR_JOB_KINDS, VCR_JOB_METHODS, VCR_JOB_STATES, VCR_ROBUSTNESS_STAGES,
-  canonicalScenarioJson, errorCodeMessage, knownErrorCodeMessage, validateCallerInputs, validateEngineJob, vcrAppliedDefaults, vcrLocationIsValid, vcrNullReplicateFloor, vcrReplicatePlanFor, vcrResultOutputPayload, vcrScenarioRows,
+  canonicalScenarioJson, errorCodeMessage, knownErrorCodeMessage, validateCallerInputs, validateEngineJob, vcrAppliedDefaults, vcrLocationIsValid, vcrNormalizeScenarioKeys, vcrNullReplicateFloor, vcrReplicatePlanFor, vcrResultOutputPayload, vcrScenarioRows,
 } from "@evimed/domain";
 
 import { VCR_SCHEMA } from "./vcrPersistence.mjs";
@@ -868,7 +868,9 @@ export class VcrJobs {
         message: "这类计算的场景由平台在启动时补全（来源绑定、曲线回执、模型方程或已保存的记录），这里不检查；直接 start，被拒的字段会按路径回来。" };
     }
     const unitBound = vcrCanonicalScenarioTimeUnit(method, object(input.scenario));
-    const scenario = unitBound.scenario;
+    // Keys that only describe what the method does anyway (`vcrNormalizeScenarioKeys`) are left out, as the frozen job would leave them.
+    const described = vcrNormalizeScenarioKeys(method, unitBound.scenario);
+    const scenario = described.scenario;
     const asked = list(input.inputs);
     const callerIssues = validateCallerInputs(asked, { kind });
     // A key that names one of the job's inputs (a snapshot's table) is resolved from the snapshot at start; it is not this call's to judge.
@@ -883,13 +885,17 @@ export class VcrJobs {
     // The patient-level kinds' table is resolved from the snapshot at start; a missing snapshot is `callerIssues`' to say.
     const issues = [...(unitBound.issue ? [unitBound.issue] : []), ...callerIssues,
       ...validateEngineJob(skeleton).filter((issue) => issue.code !== "patient_input_required" && !namesAnInput(issue.field))];
-    const found = issues.slice(0, 20).map((issue) => ({ code: issue.code, field: issue.field, message: issue.detail }));
-    if (found.length) return { action: "validate", kind, queued: false, checked: true, valid: false, issues: found };
+    // A descriptive key whose value disagrees with the engine is refused with the reason, not with "the engine does not read it".
+    const said = new Map(described.conflicts.map((conflict) => [conflict.field, conflict.detail]));
+    const found = issues.slice(0, 20).map((issue) => ({ code: issue.code, field: issue.field, message: said.get(issue.field) ?? issue.detail }));
+    const normalized = described.applied.length ? { normalized: described.applied } : {};
+    if (found.length) return { action: "validate", kind, queued: false, checked: true, valid: false, issues: found, ...normalized };
     const applied = /^(design|population|comparator)\./.test(method) ? vcrAppliedDefaults(method, scenario) : [];
     return {
       action: "validate", kind, queued: false, checked: true, valid: true, issues: [],
       scenario,
       applied: applied.slice(0, 24).map((entry) => ({ field: entry.path, value: entry.value })),
+      ...normalized,
       ...(plan ? { replicates: { count: plan.replicates, reason: replicateReasonOf(plan, scenario, input.replicates) } } : {}),
       seed: skeleton.seed,
       cost: { class: HEAVY_KINDS.has(kind) ? "heavy" : "light", cpuSecondsLimit: this.jobCpuSeconds },
@@ -930,6 +936,9 @@ export class VcrJobs {
     const unitBound = vcrCanonicalScenarioTimeUnit(method, scenario);
     if (unitBound.issue) throw this.#invalid("vcr_job_scenario_invalid", [unitBound.issue]);
     scenario = unitBound.scenario;
+    // The same list, before the scenario is validated and hashed: a described engine default is not part of what makes a job the same job.
+    const described = vcrNormalizeScenarioKeys(method, scenario);
+    scenario = described.scenario;
     const patientGenerator = ["generate_patients", "generate_patients_continuous", "generate_patients_binary", "generate_patients_longitudinal"].includes(kind);
     if (patientGenerator && !scenario.pairing && object(input.detail).populationId) {
       scenario = { ...scenario, pairing: { key: `${object(input.detail).populationId}@${object(input.detail).populationVersion}`, replicate: 1 } };
@@ -1077,7 +1086,10 @@ export class VcrJobs {
     const issues = longitudinal ? validateLongitudinalScenario(method,scenario)
       : batch ? validateMatchBatchScenario(method,scenario)
       : validateEngineJob(job).filter((issue) => !(runsLocally && issue.code === "patient_input_required"));
-    if (issues.length) throw this.#invalid("vcr_job_scenario_invalid", issues);
+    if (issues.length) {
+      const said = new Map(described.conflicts.map((conflict) => [conflict.field, conflict.detail]));
+      throw this.#invalid("vcr_job_scenario_invalid", issues.map((issue) => (said.has(issue.field) ? { ...issue, detail: said.get(issue.field) } : issue)));
+    }
 
     const baseKey = vcrIdempotencyKey({ key: input.idempotencyKey ?? null, kind, studyId, scenarioHash, inputs, seed });
     const sourceModel = object(object(input.detail).sourceModel);
@@ -1105,7 +1117,7 @@ export class VcrJobs {
     [id, studyId, String(input.userId), kind, method, methodVersion, state, JSON.stringify(scenario), scenarioHash,
       JSON.stringify(inputs), seed, replicates, cpuSecondsLimit,
       Math.max(1, Number(input.maxAttempts ?? VCR_JOB_MAX_ATTEMPTS)), input.runId ?? null, key,
-      JSON.stringify({ ...object(input.detail), ...(randomization ? { randomization } : {}), ...(unitBinding.detail ? { inputUnitBinding: unitBinding.detail } : {}), ...curveDetail, ...baselineDetail, ...(derivedEntries.some(entry => isReconstructionReference(kind, entry)) ? { reconstructionResultId: derivedEntries.find(entry => isReconstructionReference(kind, entry))?.resultId } : {}), ...(kind === "reconstruct_km" ? { keepTables: ["reconstructed-ipd"] } : {}), ...(kind === "apply_prognostic_model" ? { keepTables: ["prognostic-predictions"] } : {}), ...(sized && replicatePlan ? { replicatePlan: { floor: replicatePlan.floor, basis: replicatePlan.basis, intendedUse: replicatePlan.intendedUse, targetMcse: replicatePlan.targetMcse } } : {}), ...(defaulted.length ? { appliedDefaults: defaulted } : {}), ...(qualityBasis ? { qualityBasis } : {}), ...(kind === "population_quality" ? { qualityAttachmentResultId } : {}), configurationInputRefs: asked.map((entry) => ({ kind: object(entry).kind, id: object(entry).id })), cost: HEAVY_KINDS.has(kind) ? "heavy" : "light" })])).rows[0];
+      JSON.stringify({ ...object(input.detail), ...(randomization ? { randomization } : {}), ...(unitBinding.detail ? { inputUnitBinding: unitBinding.detail } : {}), ...curveDetail, ...baselineDetail, ...(derivedEntries.some(entry => isReconstructionReference(kind, entry)) ? { reconstructionResultId: derivedEntries.find(entry => isReconstructionReference(kind, entry))?.resultId } : {}), ...(kind === "reconstruct_km" ? { keepTables: ["reconstructed-ipd"] } : {}), ...(kind === "apply_prognostic_model" ? { keepTables: ["prognostic-predictions"] } : {}), ...(sized && replicatePlan ? { replicatePlan: { floor: replicatePlan.floor, basis: replicatePlan.basis, intendedUse: replicatePlan.intendedUse, targetMcse: replicatePlan.targetMcse } } : {}), ...(defaulted.length ? { appliedDefaults: defaulted } : {}), ...(described.applied.length ? { normalizedKeys: described.applied } : {}), ...(qualityBasis ? { qualityBasis } : {}), ...(kind === "population_quality" ? { qualityAttachmentResultId } : {}), configurationInputRefs: asked.map((entry) => ({ kind: object(entry).kind, id: object(entry).id })), cost: HEAVY_KINDS.has(kind) ? "heavy" : "light" })])).rows[0];
       // Completion locks the job before its population. A duplicate enqueue must take the same order:
       // the UPSERT may wait for a finishing job; only then lock and recheck its generation in this transaction.
       if (qualityBasis) {

@@ -92,6 +92,9 @@ export async function verifyLiteratureBaseline({ store, userId, studyId, baselin
         used.add(binding);
         const item = evidence.get(String(binding.evidenceId));
         if (!item || item.locator?.verification !== "verified") { problem("baseline_evidence_unverified"); continue; }
+        // A number a publication was named for (by PMID or DOI) is held against the text the platform read, but not for its unit: a
+        // baseline statistic is bound to a source with a unit proof (`literatureSource`).
+        if (item.locator?.kind === "publication_text") { problem("baseline_source_unit_unverified"); continue; }
         if (item.value_source !== "extracted" || item.detail?.evidenceKind !== "baseline" || item.detail?.verificationScope === "quoted_inputs_only"
           || item.enrollment_kind === "estimated" || item.detail?.sourceStanding === "registry_planned") {
           problem("reported_baseline_required"); continue;
