@@ -1171,12 +1171,61 @@ export const VCR_RECONSTRUCTION_TOLERANCE = Object.freeze({
 export const VCR_PEOPLE_COUNT_FIELDS = frozen([
   'n', 'count', 'patients', 'realPatients', 'subjects', 'events', 'kept', 'excluded', 'indeterminate',
   'cohortSize', 'screened', 'eligible', 'enrolled', 'referred', 'contacted', 'candidates',
+  // the people with no event beside the people with one (a local calibration's table): `n` less `events`, so one hidden alone is
+  // one subtraction away (`VCR_PEOPLE_COUNT_LINKS`); and the predictions an applied equation made for real people
+  'nonEvents', 'validPredictions', 'invalidPredictions',
 ])
 /**
  * Keys under which an object maps a category to a head count
  * (`{ "A": 12, "B": 3 }`): its entries are sibling cells.
  */
-export const VCR_PEOPLE_COUNT_MAP_KEYS = frozen(['levels'])
+export const VCR_PEOPLE_COUNT_MAP_KEYS = frozen([
+  'levels',
+  // an arm's head count under the arm's name (`{ treated, control }`): the comparison's people and the people whose date could be read
+  'people', 'readable',
+])
+/**
+ * Keys that count people only inside the block of this name, as they do anywhere under `VCR_PEOPLE_COUNT_FIELDS`: the keys of the
+ * object found under the name, or of each cell of the list found under it, and not of anything deeper. `byYear` is the enrolment-year
+ * row of a comparison, one cell per calendar year with the people of each arm in it; `estimate` is a batch reading's estimate, which
+ * states how many people and records it will read, and `plan` is the platform's sorting of the roster it was given (who is read, who
+ * was before, who the table decided against, who has no record, who waits), each count its own and judged as the batch counters
+ * of `VCR_PEOPLE_COUNT_SCALAR_FIELDS` are. A name that is generic outside the block (`people`, `records`, `treated`) is a head count
+ * nowhere else, so it is listed here and not above.
+ */
+export const VCR_PEOPLE_COUNT_BLOCK_FIELDS = Object.freeze({
+  byYear: frozen(['treated', 'control']),
+  estimate: frozen(['people', 'records']),
+  plan: frozen(['toRead', 'alreadyRead', 'prefiltered', 'noDocuments', 'deferred']),
+})
+/**
+ * Counts that stand in arithmetic with each other, and what is computed from them. A table of outcomes states its people, its events
+ * and its non-events (`n = events + nonEvents`) and the rate of the events among them; hiding the small one of the three and printing
+ * the others is a subtraction, and a rate over a visible total is the count itself. When any of the `triggers` is a small count, every
+ * key of `whole` the object holds goes with it (only when it holds all of them: the identity is what makes the rest a complement), and
+ * so does every key of `derived`.
+ */
+export const VCR_PEOPLE_COUNT_LINKS = Object.freeze([
+  Object.freeze({
+    triggers: frozen(['events', 'nonEvents']),
+    whole: frozen(['n', 'events', 'nonEvents']),
+    derived: frozen(['observedRisk', 'calibrationInLarge']),
+  }),
+])
+/**
+ * Measures that are a function of a block's hidden count, by the field of the block they restate. A local calibration's observed risk
+ * and its distance from the predicted one are also written as measures of the result; when the block hid the field they restate, the
+ * measure is hidden with it.
+ */
+export const VCR_PEOPLE_DERIVED_MEASURES = Object.freeze({ observedRisk: 'observed_risk', calibrationInLarge: 'calibration_in_the_large' })
+/**
+ * Blocks that are about one group of people and are withheld whole when the group is too small to show: of the keys named in `gates`
+ * (each a map of arm to head count), any one hidden takes everything but `keep` with it. An enrolment-year row summarises the years
+ * each arm entered in; the extremes and the middle of a handful of people are those people's dates.
+ */
+export const VCR_PEOPLE_COUNT_WITHHELD_BLOCKS = Object.freeze({
+  enrolmentYear: Object.freeze({ gates: frozen(['people', 'readable']), keep: frozen(['status', 'column', 'unit', 'note']) }),
+})
 /**
  * Keys that count people but are never one of a list's sibling cells: a table's
  * row total, the rows a cohort started from and kept, the rows a synthetic
@@ -1193,6 +1242,9 @@ export const VCR_PEOPLE_COUNT_MAP_KEYS = frozen(['levels'])
 export const VCR_PEOPLE_COUNT_SCALAR_FIELDS = frozen([
   'rows', 'startingRows', 'keptRows', 'trainingObservations', 'effectiveSampleSize',
   'requestedSubjects', 'batchSubjects', 'batchEvaluated', 'batchUnavailable', 'outsideBatch', 'subjectsNotEvaluated',
+  // a batch reading of patient records (`matching.extract`): the people and the records it was asked to read, the records read and
+  // the ones read before, and the people the table had already decided against (their records are left unread)
+  'peopleSelected', 'recordsToRead', 'recordsRead', 'recordsAlreadyRead', 'prefiltered',
 ])
 /**
  * Names of measures — `{ name, value }` — whose value is a head count of the
@@ -1208,6 +1260,8 @@ export const VCR_PEOPLE_COUNT_SCALAR_FIELDS = frozen([
 export const VCR_PEOPLE_COUNT_MEASURES = frozen([
   'rows', 'cohort_size', 'cohort_size_strict', 'cohort_size_lenient', 'training_observations', 'effective_sample_size',
   ...VCR_ELIGIBILITY_SUMMARIES,
+  // a batch reading's records, by the records of this study's people it read and the ones it had read before
+  'records_read', 'records_already_read',
 ])
 
 /**

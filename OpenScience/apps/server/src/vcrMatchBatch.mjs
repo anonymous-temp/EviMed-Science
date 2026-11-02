@@ -33,7 +33,7 @@
 
 import { createHash, randomUUID } from 'node:crypto';
 import {
-  VCR_ENGINE_PROTOCOL_VERSION, VCR_MATCH_BATCH_DEFAULT_MODEL, VCR_MATCH_BATCH_LIMITS, VCR_MATCH_BATCH_METHODS, acceptExtractedFacts,
+  VCR_ENGINE_PROTOCOL_VERSION, VCR_MATCH_BATCH_DEFAULT_MODEL, VCR_MATCH_BATCH_LIMITS, VCR_MATCH_BATCH_METHODS, VCR_MIN_CELL_SIZE, acceptExtractedFacts,
   canonicalScenarioJson, matchBatchStatement, matchBatchUnitKey, planMatchExtraction, vcrResultOutputPayload,
 } from '@evimed/domain';
 import { HttpError } from './security.mjs';
@@ -49,6 +49,15 @@ const LOCK_HASH = createHash('sha256').update(`evimed-control-plane:matching.ext
 
 const object = (/** @type {unknown} */ value) => (value && typeof value === 'object' && !Array.isArray(value) ? /** @type {Record<string, any>} */ (value) : {});
 const list = (/** @type {unknown} */ value) => (Array.isArray(value) ? value : []);
+
+/**
+ * The smallest head count the model is shown: the domain's floor, raised and never lowered by the deployment (the service's own rule).
+ * @param {Record<string, any>} config
+ */
+export function matchBatchMinCell(config) {
+  const configured = Number(config?.vcrMinCellSize);
+  return Number.isInteger(configured) && configured > VCR_MIN_CELL_SIZE ? configured : VCR_MIN_CELL_SIZE;
+}
 
 /** What the batch counts, for the operator's metric family (principle 15). */
 export function createMatchBatchCounters() {
@@ -226,7 +235,7 @@ export async function planBatch({ study, selection: raw = {}, matchStore, docume
   const variables = wanted.filter((variable) => !answeredByTable.includes(variable));
   if (!variables.length) {
     const plan = planMatchExtraction({ roster: [], limit: 1, answeredByTable });
-    return { ok: true, protocolVersionId: String(latest.id), asOf, variables, plan, statement: `${matchBatchStatement(plan)}（表格已回答入排条件用到的全部变量。）`,
+    return { ok: true, protocolVersionId: String(latest.id), asOf, variables, plan, statement: `${matchBatchStatement(plan, { minCell: matchBatchMinCell(config) })}（表格已回答入排条件用到的全部变量。）`,
       prefilter: selection.prefilter !== false, model: String(config.deepseekModel || VCR_MATCH_BATCH_DEFAULT_MODEL) };
   }
 
@@ -255,7 +264,7 @@ export async function planBatch({ study, selection: raw = {}, matchStore, docume
     roster: people.map((subjectKey) => ({ subjectKey, documents: byPerson.get(subjectKey) ?? [], decided: decided.has(subjectKey) })),
     done, limit: Number(config.vcrMatchBatchMaxSubjects) || VCR_MATCH_BATCH_LIMITS.subjects, prefilter: selection.prefilter !== false, model, answeredByTable,
   });
-  return { ok: true, protocolVersionId: String(latest.id), asOf, variables, plan, statement: matchBatchStatement(plan), prefilter: selection.prefilter !== false, model };
+  return { ok: true, protocolVersionId: String(latest.id), asOf, variables, plan, statement: matchBatchStatement(plan, { minCell: matchBatchMinCell(config) }), prefilter: selection.prefilter !== false, model };
 }
 
 // ---------------------------------------------------------------------------
@@ -447,7 +456,7 @@ export function createMatchBatch({ jobs, matchStore, documents, subjectTable = n
       counters.started += 1;
       const summary = {
         statement: built.statement, estimate: built.plan.estimate,
-        people: { toRead: built.plan.toRead.length, alreadyRead: built.plan.alreadyRead.length, prefiltered: built.plan.prefiltered.length,
+        plan: { toRead: built.plan.toRead.length, alreadyRead: built.plan.alreadyRead.length, prefiltered: built.plan.prefiltered.length,
           noDocuments: built.plan.noDocuments.length, deferred: built.plan.deferred.length },
         ...(built.plan.bounded ? { bounded: built.plan.bounded } : {}),
         protocolVersionId: built.protocolVersionId,

@@ -86,8 +86,10 @@ test("D4: the plan leaves unread the people the table decides against and the va
   assert.deepEqual(built.plan.prefiltered, ["P-003"], "a 17-year-old is ineligible from the table alone: the record is not read");
   assert.deepEqual(built.plan.toRead.map((entry) => entry.subjectKey), ["P-001", "P-002", "P-004"]);
   assert.deepEqual(built.plan.answeredByTable, ["age"]);
-  assert.match(built.statement, /这一批要读 3 位病人的 3 份病历/);
-  assert.match(built.statement, /1 位按表格里已知的信息已确定不符合，病历不读（仍会评估）/);
+  // Three to read and one decided against are head counts under the floor: the sentence a model reads does not print them.
+  assert.match(built.statement, /这一批要读的病历（人数不显示）/);
+  assert.doesNotMatch(built.statement, /\d+ 位|\d+ 份|已确定不符合/);
+  assert.match(built.statement, /人数少的类别按小样本规则不显示具体人数/);
   assert.match(built.statement, /表格里已有的变量不再问病历：age/);
   // switched off, the prefilter reads everyone with a record
   const all = await planBatch({ study: STUDY, selection: { prefilter: false }, matchStore: matchStoreDouble(), documents: { roster: async () => ROSTER }, subjectTable, config });
@@ -288,9 +290,11 @@ test("D4: starting states the cost and queues the reading with the conversation'
   const study = { ...STUDY, cloudContext: { runId: "run_1", sessionId: "ses_1" }, completionOrigin: { runId: "run_1", sessionId: "ses_1" } };
   const started = await batch.start(study, {});
   assert.deepEqual([started.kind, started.state, started.jobId], ["match_extract", "queued", "job_77"]);
-  assert.match(started.statement, /这一批要读 4 位病人的 4 份病历，预计最多/);
+  // The sentence is a model's to read: four people are not printed in it (the gateway passes the rest of the answer through the same boundary).
+  assert.match(started.statement, /这一批要读的病历（人数不显示），预计最多/);
+  assert.doesNotMatch(started.statement, /4 位|4 份/);
   assert.equal(started.estimate.basis, "ceiling");
-  assert.deepEqual(started.people, { toRead: 4, alreadyRead: 0, prefiltered: 0, noDocuments: 0, deferred: 0 });
+  assert.deepEqual(started.plan, { toRead: 4, alreadyRead: 0, prefiltered: 0, noDocuments: 0, deferred: 0 });
   const [input] = queued;
   assert.deepEqual([input.kind, input.internal, input.cpuSecondsLimit, input.inputs], ["match_extract", true, 60, []]);
   assert.match(input.idempotencyKey, /^vcr:std_1:extract:[a-f0-9]{16}$/);

@@ -25,6 +25,8 @@
  */
 
 import { priceUsage } from './metering.mjs'
+import { suppressForModel } from './vcrSuppression.mjs'
+import { VCR_MIN_CELL_SIZE } from './vcrVocabulary.mjs'
 
 export const VCR_MATCH_BATCH_SCHEMA = 1
 
@@ -159,29 +161,39 @@ const wan = (value) => (value >= 10000 ? `${Math.round(value / 1000) / 10} 万` 
 /**
  * The sentence the start answer opens with: what will be read, what it will cost at most, what will not be read and why, and that
  * the work can be stopped and started again without paying twice. No confirmation is asked for; it has already begun.
- * @param {ReturnType<typeof planMatchExtraction>} plan
+ *
+ * The sentence is a model's to read, so its head counts are the model boundary's: the people to read, the ones read before, the ones
+ * the table already decided against, the ones with no record and the ones that wait are each judged as the batch counters are
+ * (`suppressForModel`, the `plan` block). A count it hides is not printed and one sentence says that some are not shown; a category
+ * whose count is shown as zero is not mentioned.
+ * @param {ReturnType<typeof planMatchExtraction>} plan @param {{ minCell?: number }} [options]
  */
-export function matchBatchStatement(plan) {
+export function matchBatchStatement(plan, { minCell = VCR_MIN_CELL_SIZE } = {}) {
   const { estimate: e } = plan
+  const shown = suppressForModel({ plan: { toRead: e.people, alreadyRead: plan.alreadyRead.length, prefiltered: plan.prefiltered.length,
+    noDocuments: plan.noDocuments.length, deferred: plan.deferred.length }, estimate: { people: e.people, records: e.records } }, { minCell })
+  const cells = shown.plan
+  const aside = Object.values(cells).some((value) => value === null) || shown.estimate.records === null ? '人数少的类别按小样本规则不显示具体人数。' : ''
   if (!e.people) {
     const parts = []
-    if (plan.alreadyRead.length) parts.push(`${plan.alreadyRead.length} 位的病历已经读过，不会重读`)
-    if (plan.prefiltered.length) parts.push(`${plan.prefiltered.length} 位按表格里已知的信息已确定不符合，病历不读`)
-    if (plan.noDocuments.length) parts.push(`${plan.noDocuments.length} 位没有病历文档`)
-    return `这一批没有要读的病历${parts.length ? `：${parts.join('；')}` : ''}。可以直接做逐条评估。`
+    if (cells.alreadyRead) parts.push(`${cells.alreadyRead} 位的病历已经读过，不会重读`)
+    if (cells.prefiltered) parts.push(`${cells.prefiltered} 位按表格里已知的信息已确定不符合，病历不读`)
+    if (cells.noDocuments) parts.push(`${cells.noDocuments} 位没有病历文档`)
+    return `这一批没有要读的病历${parts.length ? `：${parts.join('；')}` : ''}。${aside}可以直接做逐条评估。`
   }
   const cost = e.cost == null ? '费用按当前价格表算不出' : `最多约 ${e.cost.toFixed(2)} 元`
   const lines = [
-    `这一批要读 ${e.people} 位病人的 ${e.records} 份病历，预计最多 ${wan(e.inputTokens)} 个输入词元、${wan(e.outputTokens)} 个输出词元，${cost}`
+    `${cells.toRead === null ? '这一批要读的病历（人数不显示）' : `这一批要读 ${cells.toRead} 位病人${shown.estimate.records === null ? '的病历' : `的 ${e.records} 份病历`}`}，预计最多 ${wan(e.inputTokens)} 个输入词元、${wan(e.outputTokens)} 个输出词元，${cost}`
       + `（输入按每个字一个词元、外加每份病历的指令估，是上限，实际通常更低；做完会写出实际读了多少）。`,
   ]
   const skipped = []
-  if (plan.alreadyRead.length) skipped.push(`${plan.alreadyRead.length} 位读过的不会重读`)
-  if (plan.prefiltered.length) skipped.push(`${plan.prefiltered.length} 位按表格里已知的信息已确定不符合，病历不读（仍会评估）`)
-  if (plan.noDocuments.length) skipped.push(`${plan.noDocuments.length} 位没有病历文档`)
+  if (cells.alreadyRead) skipped.push(`${cells.alreadyRead} 位读过的不会重读`)
+  if (cells.prefiltered) skipped.push(`${cells.prefiltered} 位按表格里已知的信息已确定不符合，病历不读（仍会评估）`)
+  if (cells.noDocuments) skipped.push(`${cells.noDocuments} 位没有病历文档`)
   if (skipped.length) lines.push(`不读的：${skipped.join('；')}。`)
   if (plan.answeredByTable.length) lines.push(`表格里已有的变量不再问病历：${plan.answeredByTable.slice(0, 12).join('、')}${plan.answeredByTable.length > 12 ? '等' : ''}。`)
-  if (plan.bounded) lines.push(`一批最多读 ${plan.bounded.limit} 位，还有 ${plan.bounded.deferred} 位这次没排进来：这一批读完后再启动同样的选择，会接着读剩下的。`)
+  if (plan.bounded) lines.push(`一批最多读 ${plan.bounded.limit} 位，${cells.deferred === null ? '还有一些' : `还有 ${cells.deferred} 位`}这次没排进来：这一批读完后再启动同样的选择，会接着读剩下的。`)
+  if (aside) lines.push(aside)
   lines.push('已经开始，不用确认。中途取消，读完的保留；再启动同样的选择会接着读没读过的。读完会通知；之后再做逐条评估。')
   return lines.join('')
 }

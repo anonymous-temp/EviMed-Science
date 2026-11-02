@@ -11,10 +11,14 @@ import test from "node:test";
 
 import {
   VCR_MIN_CELL_SIZE,
+  VCR_PEOPLE_COUNT_BLOCK_FIELDS,
   VCR_PEOPLE_COUNT_FIELDS,
+  VCR_PEOPLE_COUNT_LINKS,
   VCR_PEOPLE_COUNT_MAP_KEYS,
   VCR_PEOPLE_COUNT_MEASURES,
   VCR_PEOPLE_COUNT_SCALAR_FIELDS,
+  VCR_PEOPLE_COUNT_WITHHELD_BLOCKS,
+  VCR_PEOPLE_DERIVED_MEASURES,
   suppressForModel,
 } from "@evimed/domain";
 
@@ -28,12 +32,19 @@ const numbers = (value) => (typeof value === "number" ? [value]
 test("the people-count keys are the contract's, and the floor is ten", () => {
   assert.equal(VCR_MIN_CELL_SIZE, 10);
   assert.deepEqual([...VCR_PEOPLE_COUNT_FIELDS], ["n", "count", "patients", "realPatients", "subjects", "events", "kept", "excluded",
-    "indeterminate", "cohortSize", "screened", "eligible", "enrolled", "referred", "contacted", "candidates"]);
-  assert.deepEqual([...VCR_PEOPLE_COUNT_MAP_KEYS], ["levels"]);
+    "indeterminate", "cohortSize", "screened", "eligible", "enrolled", "referred", "contacted", "candidates", "nonEvents", "validPredictions", "invalidPredictions"]);
+  assert.deepEqual([...VCR_PEOPLE_COUNT_MAP_KEYS], ["levels", "people", "readable"]);
   assert.deepEqual([...VCR_PEOPLE_COUNT_SCALAR_FIELDS], ["rows", "startingRows", "keptRows", "trainingObservations", "effectiveSampleSize",
-    "requestedSubjects", "batchSubjects", "batchEvaluated", "batchUnavailable", "outsideBatch", "subjectsNotEvaluated"]);
+    "requestedSubjects", "batchSubjects", "batchEvaluated", "batchUnavailable", "outsideBatch", "subjectsNotEvaluated",
+    "peopleSelected", "recordsToRead", "recordsRead", "recordsAlreadyRead", "prefiltered"]);
   assert.deepEqual([...VCR_PEOPLE_COUNT_MEASURES], ["rows", "cohort_size", "cohort_size_strict", "cohort_size_lenient", "training_observations", "effective_sample_size",
-    "eligible", "ineligible", "insufficient_evidence", "pending"]);
+    "eligible", "ineligible", "insufficient_evidence", "pending", "records_read", "records_already_read"]);
+  assert.deepEqual(Object.fromEntries(Object.entries(VCR_PEOPLE_COUNT_BLOCK_FIELDS).map(([block, keys]) => [block, [...keys]])),
+    { byYear: ["treated", "control"], estimate: ["people", "records"], plan: ["toRead", "alreadyRead", "prefiltered", "noDocuments", "deferred"] });
+  assert.deepEqual(VCR_PEOPLE_COUNT_LINKS.map((link) => [[...link.triggers], [...link.whole], [...link.derived]]),
+    [[["events", "nonEvents"], ["n", "events", "nonEvents"], ["observedRisk", "calibrationInLarge"]]]);
+  assert.deepEqual({ ...VCR_PEOPLE_DERIVED_MEASURES }, { observedRisk: "observed_risk", calibrationInLarge: "calibration_in_the_large" });
+  assert.deepEqual(Object.keys(VCR_PEOPLE_COUNT_WITHHELD_BLOCKS), ["enrolmentYear"]);
 });
 
 test("a count of 1 to 9 that stands alone becomes null, and its object says which keys it hid", () => {
@@ -298,4 +309,138 @@ test("a matching result's tallies and batch counts are head counts under the nam
   const tiny = suppressForModel({ diagnostics: { requestedSubjects: 3, batchSubjects: 3, batchEvaluated: 2, batchUnavailable: 1, outsideBatch: 0, subjectsNotEvaluated: 1 },
     measures: [{ name: "insufficient_evidence", value: 3 }] });
   assert.deepEqual(numbers(tiny).filter((value) => value > 0), []);
+});
+
+// --- the diagnostics of the 2026-11-01 remediation (review P0-2): one test per shape ---------------------------------------------------
+
+/** The enrolment-year row the weighting, weighted-Cox and AIPW jobs write, with the shapes of `vcr_enrolment_year`. @param {Record<string, any>} [over] */
+const enrolmentYear = (over = {}) => ({
+  column: "STARTDT", unit: "calendar year", people: { treated: 30, control: 200 }, readable: { treated: 28, control: 190 }, status: "computed",
+  treated: { min: 2014, median: 2016, max: 2018, mean: 2016.1, weightedMean: 2016.1 }, control: { min: 2010, median: 2015, max: 2019, mean: 2014.7, weightedMean: 2016 },
+  smdUnadjusted: -0.45, smdAdjusted: 0.04, controlOutsideTrialYears: { share: 0.2, weightedShare: 0.05 },
+  byYear: [
+    { year: 2014, treated: 12, control: 70, controlWeightShare: 0.3 }, { year: 2015, treated: 2, control: 7, controlWeightShare: 0.04 },
+    { year: 2016, treated: 16, control: 123, controlWeightShare: 0.66 },
+  ],
+  note: "calendar year of the time-zero date", ...over,
+});
+
+test("enrolment years: a year with fewer than ten of an arm is hidden with its neighbour, whole, and its identity stays", () => {
+  const shown = suppressForModel({ diagnostics: { enrolmentYear: enrolmentYear() } }).diagnostics.enrolmentYear;
+  // The year-by-arm cell {2015: 2 treated, 7 control} is small. It is hidden with the next-smallest year (2014), so that the hidden
+  // people number ten and sit in two cells; 2016 stays.
+  assert.deepEqual(shown.byYear.map((/** @type {any} */ cell) => [cell.year, cell.treated, cell.control, cell.controlWeightShare]),
+    [[2014, null, null, undefined], [2015, null, null, undefined], [2016, 16, 123, 0.66]]);
+  for (const cell of shown.byYear.slice(0, 2)) assert.deepEqual(cell.suppressed, ["treated", "control"]);
+  // The arm totals are large and shown, and so are the year summaries of arms that are large.
+  assert.deepEqual(shown.people, { treated: 30, control: 200 });
+  assert.equal(shown.treated.median, 2016);
+});
+
+test("enrolment years: an arm with fewer than ten people whose date could be read withholds the whole row but what it is", () => {
+  const shown = suppressForModel({ diagnostics: { enrolmentYear: enrolmentYear({ readable: { treated: 3, control: 190 } }) } }).diagnostics.enrolmentYear;
+  assert.deepEqual(Object.keys(shown).sort(), ["column", "status", "suppressed", "unit", "note"].sort());
+  assert.equal(shown.status, "computed");
+  // Nothing of the arms is left: not the arm sizes, not the years of three people (their extremes are their dates), not the cells.
+  assert.deepEqual(numbers(shown), []);
+  assert.ok(shown.suppressed.includes("readable") && shown.suppressed.includes("byYear") && shown.suppressed.includes("treated"));
+  // The same for the arm sizes themselves: `people: { treated: 5 }` beside a table total is the subtraction the map rule exists for.
+  const small = suppressForModel({ counts: { realPatients: 205 }, diagnostics: { enrolmentYear: enrolmentYear({ people: { treated: 5, control: 200 } }) } });
+  assert.deepEqual(numbers(small), [205], "both arm sizes are hidden together, so 205 minus 200 is not 5");
+  // A status that read nobody has only the sizes to say: they are hidden the same way, and the status stays.
+  const none = suppressForModel({ enrolmentYear: { status: "unreadable", column: "STARTDT", people: { treated: 4, control: 90 }, readable: { treated: 0, control: 0 } } });
+  assert.equal(none.enrolmentYear.status, "unreadable");
+  assert.deepEqual(numbers(none), []);
+});
+
+test("enrolment years: a row of large arms and large years passes untouched, and the same keys are nothing special elsewhere", () => {
+  const row = enrolmentYear({ byYear: [{ year: 2014, treated: 14, control: 70 }, { year: 2015, treated: 16, control: 80 }] });
+  assert.deepEqual(suppressForModel({ diagnostics: { enrolmentYear: row } }), { diagnostics: { enrolmentYear: row } });
+  // `treated` and `control` are a design's planned sample or a mean outside the block, and are not head counts there.
+  const design = { design: { treated: 6, control: 4 }, covariate: { treated: 2.5, control: 3 } };
+  assert.deepEqual(suppressForModel(clone(design)), design);
+});
+
+/** The local calibration of a logistic prognostic model on observed outcomes. @param {Record<string, any>} [over] */
+const calibration = (over = {}) => ({
+  family: "logistic", source: "observed", n: 120, excluded: 0, events: 3, nonEvents: 117, observedRisk: 0.025, predictedRisk: 0.031, calibrationInLarge: 0.006,
+  intercept: { value: -0.2, se: 0.5, low: -1.2, high: 0.8, level: 0.95 }, slopeUnavailable: "too_few_events", slopeNeeds: { events: 10, nonEvents: 10 }, ...over,
+});
+
+test("local calibration: with a small event count the people, the events, the non-events and the rate are all hidden, not one subtraction away", () => {
+  const shown = suppressForModel({ diagnostics: { localCalibration: calibration() } }).diagnostics.localCalibration;
+  for (const key of ["n", "events", "nonEvents", "observedRisk", "calibrationInLarge"]) assert.equal(shown[key], null, key);
+  assert.deepEqual([...shown.suppressed].sort(), ["calibrationInLarge", "events", "n", "nonEvents", "observedRisk"]);
+  // What is not a head count of the table stays: the predicted risk is the model's, the intercept an estimate, the floors a rule.
+  assert.equal(shown.predictedRisk, 0.031);
+  assert.equal(shown.intercept.value, -0.2);
+  assert.deepEqual(shown.slopeNeeds, { events: 10, nonEvents: 10 });
+  assert.equal(shown.slopeUnavailable, "too_few_events");
+  // A small number of non-events is the same table: the other way round.
+  const mirrored = suppressForModel({ localCalibration: calibration({ events: 117, nonEvents: 3, observedRisk: 0.975, calibrationInLarge: -0.944 }) }).localCalibration;
+  assert.deepEqual([mirrored.n, mirrored.events, mirrored.nonEvents, mirrored.observedRisk, mirrored.calibrationInLarge], [null, null, null, null, null]);
+});
+
+test("local calibration: a table with enough of both is shown whole, and zero events says nobody is there without a person", () => {
+  const big = calibration({ n: 400, events: 130, nonEvents: 270, observedRisk: 0.325, calibrationInLarge: 0.011 });
+  assert.deepEqual(suppressForModel({ localCalibration: big }), { localCalibration: big });
+  const none = calibration({ n: 120, events: 0, nonEvents: 120, observedRisk: 0, calibrationInLarge: 0.031 });
+  assert.deepEqual(suppressForModel({ localCalibration: none }), { localCalibration: none }, "no event at all is not a small cell of events");
+});
+
+test("local calibration: a time-to-event table hides its events and the risk read from them, and keeps its people", () => {
+  const cox = { family: "cox", n: 120, excluded: 2, events: 4, horizon: 5, observedRisk: 0.04, predictedRisk: 0.05, calibrationInLarge: 0.01, slopeUnavailable: "too_few_events" };
+  const shown = suppressForModel({ localCalibration: cox }).localCalibration;
+  assert.deepEqual([shown.events, shown.observedRisk, shown.calibrationInLarge], [null, null, null]);
+  assert.equal(shown.n, 120, "without a count of non-events the people are no complement of the events");
+  assert.equal(shown.predictedRisk, 0.05);
+});
+
+test("local calibration: the measures that restate the observed risk go with it, and the rest of the result stays", () => {
+  const result = { measures: [
+    { name: "calibration_intercept", value: -0.2, source: "calculated", interval: { kind: "confidence", low: -1.2, high: 0.8 } },
+    { name: "calibration_in_the_large", value: 0.006, source: "calculated" }, { name: "observed_risk", value: 0.025, source: "observed" },
+    { name: "predicted_population_mean", value: 0.031, source: "predicted" },
+  ], counts: { realPatients: 120 }, diagnostics: { validPredictions: 120, invalidPredictions: 0, localCalibration: calibration() } };
+  const shown = suppressForModel(clone(result));
+  assert.deepEqual(shown.measures.map((/** @type {any} */ measure) => [measure.name, measure.value]),
+    [["calibration_intercept", -0.2], ["calibration_in_the_large", null], ["observed_risk", null], ["predicted_population_mean", 0.031]]);
+  assert.deepEqual(shown.measures[2], { name: "observed_risk", source: "observed", value: null, suppressed: ["value"] });
+  // A table shown whole keeps them.
+  const whole = suppressForModel(clone({ ...result, diagnostics: { localCalibration: calibration({ n: 400, events: 130, nonEvents: 270 }) } }));
+  assert.deepEqual(whole.measures.map((/** @type {any} */ measure) => measure.value), [-0.2, 0.006, 0.025, 0.031]);
+  // The predictions an applied equation made for a handful of people are a head count of them.
+  const few = suppressForModel({ diagnostics: { validPredictions: 6, invalidPredictions: 2 } });
+  assert.deepEqual([few.diagnostics.validPredictions, few.diagnostics.invalidPredictions], [null, null]);
+});
+
+test("a batch reading's result: the people and records it was asked to read, the ones read before and the ones the table decided against", () => {
+  const result = { counts: { realPatients: 7, events: null, effectiveSampleSize: null, generatedRecords: 0 },
+    measures: [{ name: "records_read", value: 6 }, { name: "facts_kept", value: 14 }, { name: "records_already_read", value: 1 }, { name: "records_failed", value: 0 }],
+    diagnostics: { protocolVersionId: "pv_1", variables: 12, peopleSelected: 7, recordsToRead: 7, recordsRead: 6, recordsAlreadyRead: 1, recordsFailed: 0, remaining: 1,
+      factsKept: 14, factsRefused: 2, prefiltered: 3, estimate: { people: 7, records: 7, characters: 9000, inputTokens: 19500, outputTokens: 14000, cost: 0.2, basis: "ceiling" },
+      used: { inputTokens: 8000, outputTokens: 3000 } } };
+  const shown = suppressForModel(clone(result));
+  const d = shown.diagnostics;
+  assert.deepEqual([d.peopleSelected, d.recordsToRead, d.recordsRead, d.recordsAlreadyRead, d.prefiltered], [null, null, null, null, null]);
+  assert.deepEqual([d.estimate.people, d.estimate.records], [null, null], "the estimate states the same people and records");
+  assert.deepEqual(shown.measures.map((/** @type {any} */ measure) => measure.value), [null, 14, null, 0], "records read and read before are head counts; facts are not");
+  // What is not a head count stays: the cost, the tokens, the facts, the failures, the variables.
+  assert.deepEqual([d.estimate.inputTokens, d.estimate.cost, d.factsKept, d.recordsFailed, d.variables, d.used.inputTokens], [19500, 0.2, 14, 0, 12, 8000]);
+  // A batch of a hundred is shown whole.
+  const big = suppressForModel({ diagnostics: { peopleSelected: 100, recordsToRead: 120, recordsRead: 118, prefiltered: 31, estimate: { people: 100, records: 120 } } });
+  assert.deepEqual(big, { diagnostics: { peopleSelected: 100, recordsToRead: 120, recordsRead: 118, prefiltered: 31, estimate: { people: 100, records: 120 } } });
+});
+
+test("a batch reading's start answer: the plan's counts are judged one by one, and `plan` or `estimate` are nothing special elsewhere", () => {
+  const answer = { action: "start", kind: "match_extract", state: "queued", jobId: "job_1",
+    plan: { toRead: 52, alreadyRead: 0, prefiltered: 3, noDocuments: 2, deferred: 0 }, estimate: { people: 52, records: 60, inputTokens: 90000, cost: 0.9 }, bounded: { limit: 100, deferred: 5 } };
+  const shown = suppressForModel(clone(answer));
+  assert.deepEqual(shown.plan, { toRead: 52, alreadyRead: 0, prefiltered: null, noDocuments: null, deferred: 0, suppressed: ["prefiltered", "noDocuments"] });
+  assert.deepEqual(shown.estimate, { people: 52, records: 60, inputTokens: 90000, cost: 0.9 });
+  assert.deepEqual(shown.bounded, { limit: 100, deferred: 5 }, "a limit and the people left over are not the block's keys");
+  assert.deepEqual(suppressForModel({ estimate: { people: 4 }, plan: { toRead: 3, name: "x", estimate: 4 } }),
+    { estimate: { people: null, suppressed: ["people"] }, plan: { toRead: null, name: "x", estimate: 4, suppressed: ["toRead"] } });
+  // `estimate` in another place is a point estimate and `plan` a plan: no key there is a count.
+  assert.deepEqual(suppressForModel({ result: { estimate: 4, plan: { rule: "x", records: 3 } } }), { result: { estimate: 4, plan: { rule: "x", records: 3 } } });
 });

@@ -626,7 +626,8 @@ test("D4: a batch reading starts with a selection and no scenario, and the answe
   const started = [];
   const matchBatch = { async start(/** @type {any} */ _study, /** @type {any} */ selection) {
     started.push(selection);
-    return { action: "start", kind: "match_extract", state: "queued", jobId: "job_5", statement: "这一批要读 3 位病人的 3 份病历，预计最多 1 万个输入词元。", estimate: { basis: "ceiling" } };
+    return { action: "start", kind: "match_extract", state: "queued", jobId: "job_5", statement: "这一批要读 3 位病人的 3 份病历，预计最多 1 万个输入词元。",
+      plan: { toRead: 52, alreadyRead: 0, prefiltered: 3, noDocuments: 12, deferred: 0 }, estimate: { basis: "ceiling", people: 52, records: 60, cost: 0.9 } };
   } };
   const { handler } = fixture({ matchBatch });
   const start = async (/** @type {Record<string, any>} */ body) => { const res = response(); await handler(request("/internal/vcr/v1/simulate", { action: "start", kind: "match_extract", ...body }), res); return res; };
@@ -634,6 +635,9 @@ test("D4: a batch reading starts with a selection and no scenario, and the answe
   assert.equal(ok.status, 200, ok.body);
   assert.equal(ok.json().data.jobId, "job_5");
   assert.match(ok.json().data.statement, /这一批要读 3 位病人/);
+  // The plan's counts are the study's people: the answer passes the boundary once, so the three the table decided against are not a number.
+  assert.deepEqual(ok.json().data.plan, { toRead: 52, alreadyRead: 0, prefiltered: null, noDocuments: 12, deferred: 0, suppressed: ["prefiltered"] });
+  assert.deepEqual(ok.json().data.estimate, { basis: "ceiling", people: 52, records: 60, cost: 0.9 });
   assert.deepEqual(started, [{ protocolVersionId: "pv_1", prefilter: false }]);
   // with no selection the platform takes the newest protocol and everyone
   await start({});

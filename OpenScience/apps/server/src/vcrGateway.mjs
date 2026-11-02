@@ -2680,7 +2680,10 @@ async function startJob(vcr, study, request) {
     if (Object.keys(request.scenario).length || request.inputs.length) {
       throw gatewayError(400, "vcr_simulate_payload_invalid", "读病历不接受场景：平台按方案版本的入排条件和研究里的病历自己冻结它；只写 selection。");
     }
-    return vcr.matchBatch.start(study, request.selection ?? {});
+    // The plan's head counts (who is read, who was, who the table decided against) are the study's people: the answer passes the model
+    // boundary like a read, and its sentence was written from the same cells (`matchBatchStatement`).
+    if (typeof vcr.service.forModel !== "function") throw gatewayError(503, "vcr_gateway_unavailable", "这份读取结果无法确认不含小样本格子，已整体拒绝。");
+    return vcr.service.forModel(await vcr.matchBatch.start(study, request.selection ?? {}), { projection: "match_extract_start" });
   }
   if (request.kind === "pool_evidence") {
     if (!vcr.evidence?.poolParameter) throw gatewayError(503, "vcr_gateway_unavailable", "证据参数化未接入本部署：这一步暂不可用。");

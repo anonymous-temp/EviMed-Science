@@ -127,8 +127,8 @@ test("a cancel stops the reading between records, keeps what was read, and the n
   assert.equal(cancelling.texts.length, 2);
 
   const resumed = await g.batch.start(g.study, {});
-  assert.equal(resumed.people.toRead, 1);
-  assert.equal(resumed.people.alreadyRead, 2);
+  assert.equal(resumed.plan.toRead, 1);
+  assert.equal(resumed.plan.alreadyRead, 2);
   const [next] = await g.jobs.claim({ lane: "slow" });
   await g.jobs.advance(next);
   assert.equal(cancelling.texts.length, 3, "three calls in all: nothing was read twice");
