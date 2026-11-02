@@ -44,7 +44,14 @@ its rendered string from execution, compute comparative claims from the executed
 quantities, and say which results and figures a script regenerates.
 Report effect direction, denominators, estimate, appropriate uncertainty and
 assumptions, and keep material diagnostics, convergence warnings and exploratory
-status. A nonsignificant diagnostic does not prove its assumption; a p value
+status. For a diagnostic whose null states an assumption, compare its p value
+with the chosen threshold: a nonsignificant test only says the data did not
+reject that null, not that the assumption holds. For example, Levene or
+Brown–Forsythe p=1 and a sample variance ratio of 1 do not prove equal
+population variances. Review this distinction in both the report and reply;
+consider power and the analysis method's actual assumptions. The optional
+`analysis_checks.interpret_assumption_test` records this distinction for such
+diagnostics (not equivalence tests or tests with a different null). A p value
 alone does not establish importance or causation; a cut-point chosen on these
 data is an exploratory fitted rule, not validated performance. For a censored
 measurement, do not substitute the detection limit for the unknown value or drop
@@ -66,7 +73,12 @@ execution constraint: for a unit-only conversion or a fixed-threshold change on
 unchanged data, transform the executed estimates or saved probabilities, verify
 against them, and leave the original results, fitted state and inputs untouched;
 if a pipeline always recomputes everything, write a small separate continuation
-script. Judge fitted-state reuse from its recorded input, code, versions and
+script. In both the reply and report, describe what the executed continuation
+actually did: a statistic recomputed as an independent verification was still
+recomputed, even if its prior result was also reused. Do not claim it was not
+recomputed or that only affected calculations ran when the script reran other
+calculations. Prefer a small decisive verification to rerunning every unchanged
+analysis. Judge fitted-state reuse from its recorded input, code, versions and
 split, not by retraining. Persist transformation code, fitted state and the
 data/split definition. For predictive evaluation fit every learned transformation
 on training data only and apply that state to held-out data. On a data

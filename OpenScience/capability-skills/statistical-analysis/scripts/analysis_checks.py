@@ -35,6 +35,12 @@ to zero. Unknown, null, nonfinite and nonnumeric values are not_checked. An empt
 comparison list is partial with reason no_comparisons. This is
 only a check of the supplied bindings; research_calculate still owns rendering.
 
+``interpret_assumption_test(p_value, alpha=0.05)`` interprets a diagnostic whose
+null hypothesis is that a specified model assumption holds. Not rejecting this
+null does not establish the assumption. It does not judge test choice, power,
+independence, missingness or the validity of the p value; equivalence tests and
+diagnostics with a different null require their own interpretation.
+
 Optional local JSON CLI (reads a file or stdin, emits aggregate JSON to stdout):
     python analysis_checks.py request.json
     python analysis_checks.py - < request.json
@@ -57,6 +63,20 @@ from numbers import Integral, Real
 from pathlib import Path
 import sys
 import warnings
+
+
+def interpret_assumption_test(p_value, *, alpha=0.05):
+    """Interpret a diagnostic whose null is the specified assumption, not an equivalence test."""
+    p = _number(p_value)
+    threshold = _number(alpha)
+    if p is None or not 0 <= p <= 1 or threshold is None or not 0 < threshold < 1:
+        return {"status": "unsupported", "reason": "invalid_p_value_or_alpha"}
+    rejected = p < threshold
+    return {"status": "complete", "conclusion": "rejected" if rejected else "not_rejected",
+            "assumptionEstablished": False, "pValue": p, "alpha": threshold,
+            "interpretation": ("The test rejects its null at the specified threshold; the assumption may be violated."
+                               if rejected else "The test did not reject its null; this does not establish the assumption."),
+            "scope": "diagnostic_with_assumption_as_null; validity, power and test choice not checked"}
 
 
 def _missing(value):

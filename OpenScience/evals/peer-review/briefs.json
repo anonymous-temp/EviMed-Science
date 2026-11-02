@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "peer-review",
-  "note": "Four briefs. A review is judged by an editor holding the same manuscript, so the way this capability fails is specific: the findings are individually plausible, the rubric items are all named, and one of the findings is about a section the parser never read. A confident 「未报告样本量估算」 against a table that failed to extract is indistinguishable, in the delivered report, from the same sentence when it is true. Manuscripts are described rather than attached; a real run binds to a workspace-relative file, and what these briefs fix is the shape of the document and what it does to the review. The input states what an editor's desk states — the file, its form, the numbers printed in it and the author's covering note; what the review is graded on finding is in each brief's `why`, where a grader can read it and a run cannot.",
+  "note": "Briefs. A review is judged by an editor holding the same manuscript, so the way this capability fails is specific: the findings are individually plausible, the rubric items are all named, and one of the findings is about a section the parser never read. A confident 「未报告样本量估算」 against a table that failed to extract is indistinguishable, in the delivered report, from the same sentence when it is true. Manuscripts are described rather than attached; a real run binds to a workspace-relative file, and what these briefs fix is the shape of the document and what it does to the review. The input states what an editor's desk states — the file, its form, the numbers printed in it and the author's covering note; what the review is graded on finding is in each brief's `why`, where a grader can read it and a run cannot.",
   "briefs": [
     {
       "id": "review-001-retrospective-cohort-strobe",
@@ -140,6 +140,33 @@
       "generated": {
         "authoredAt": "2026-09-29",
         "authoredAtSource": "written for the 2026-09-29 acceptance rerun"
+      }
+    },
+    {
+      "id": "review-006-synthetic-cohort-interpretation",
+      "title": "虚构药学队列：核对原文、时间零点和统计解释",
+      "why": "A live synthetic-manuscript run identified several real defects but also claimed a nonexistent abstract subgroup statement, named an outcome-as-predictor error collider adjustment without a causal basis, and reported a reciprocal observed risk difference as a treatment number in an unadjusted observational comparison. Findings in the final reply need the same provenance and causal qualification as the report.",
+      "inputs": {
+        "manuscript": "data/manuscripts/synthetic-cohort-manuscript.txt（虚构单中心回顾性队列：总样本100，摘要写干预组60及对照组60，但结果写60及40；30天再入院12/60对20/40；由医师选择干预，纳入干预组需存活至第7天，对照从出院开始随访；模型将后续再入院作为协变量；OR 0.75，95% CI 0.30–1.80，p=0.02；未提供亚组分析）",
+        "articleType": "observational-cohort",
+        "outputLanguage": "zh-CN"
+      },
+      "mustDo": [
+        "Locate the inconsistent denominators, time-zero mismatch, outcome leakage, and apparent confidence interval and p-value inconsistency in the supplied manuscript.",
+        "Explain the assumptions behind any reconstructed statistical check and distinguish observed risks from causal effects.",
+        "Describe missing subgroup analysis as absent or unreported according to the text; do not invent an abstract assertion.",
+        "Treat ethics approval and missing data details as items to clarify when not supplied, rather than inventing their status."
+      ],
+      "mustNotDo": [
+        "Call outcome-as-predictor collider adjustment without demonstrating a causal structure.",
+        "Present the reciprocal of the unadjusted observational risk difference as a treatment number needed to treat.",
+        "Claim the abstract describes subgroup analysis when it does not.",
+        "Present the review recommendation as an editor or journal decision."
+      ],
+      "gradedOn": "Whether both the report and final reply remain faithful to the manuscript, distinguish observation from causation, and correctly qualify computed checks.",
+      "generated": {
+        "authoredAt": "2026-11-02",
+        "authoredAtSource": "synthetic live browser run"
       }
     }
   ]

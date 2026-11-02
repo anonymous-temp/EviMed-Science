@@ -41,6 +41,7 @@ import {
 } from "./runNotices.mjs";
 import { describeRunArtifacts, describeRunArtifactRoles, isOrdinaryConversation } from "./runArtifacts.mjs";
 import { withoutOtherRunsJobFiles, workspaceChangedFiles } from "./runWorkspaceChanges.mjs";
+import { foreignDeliverableIds, overlappingRuns } from "./runArtifactAttribution.mjs";
 import { pickMainDocuments } from "./terminalPresentation.mjs";
 import { normalizeRunEstimate } from "./runRoute.mjs";
 import {
@@ -1403,6 +1404,8 @@ function nativeWorkflowEvidence(run, history) {
   let kernelRunId = null;
   const submissions = new Map();
   const delegates = new Set();
+  /** @type {Set<string>} */
+  const writtenPlanIds = new Set();
   /** The ids of the current plan's ordinary files: what a submission of one of them is not evidence of. @type {Set<string>} */
   let ordinaryFiles = new Set();
   for (const message of history) for (const part of message.parts ?? []) {
@@ -1425,6 +1428,9 @@ function nativeWorkflowEvidence(run, history) {
       if (typeof result.data?.runId !== "string" || !result.data.runId || result.data.runId.length > 256) continue;
       if (kernelRunId && kernelRunId !== result.data.runId) return null;
       kernelRunId = result.data.runId;
+      if (args.action === "write") for (const item of definitions) {
+        if (writtenPlanIds.size < 256) writtenPlanIds.add(item.id);
+      }
       plan = { revision: result.data.revision, written: args.action === "write", items: definitions, ...span };
     }
     if (part.tool === "evimed_submit_deliverable" && typeof args.deliverableId === "string"
@@ -1455,7 +1461,7 @@ function nativeWorkflowEvidence(run, history) {
   ), run.nativeTurn.startSeq);
   return { turnStartSeq: run.nativeTurn.startSeq, throughSeq, throughMessage: messageId(history.at(-1)), endTime: history.at(-1)?.info?.turnEnd?.time ?? null,
     ...(kernelRunId ? { kernelRunId } : {}),
-    plan, submissions: [...submissions.values()], delegates: [...delegates] };
+    plan, writtenPlanIds: [...writtenPlanIds], submissions: [...submissions.values()], delegates: [...delegates] };
 }
 
 function nativeWorkflowNotices(proof) {
@@ -2395,16 +2401,16 @@ function isOrdinaryRun(run, registry) {
  * `answered`: a turn of a conversation bound to a capability that took no contract on (it planned, delegated and submitted
  * nothing and left none of the capability's files) is an answer, so its files are an ordinary conversation's.
  *
- * @param {{ project: any, run: any, registry: any, assistants: readonly any[], runtimeWorkspaceRoot: string, endTime: number | null | undefined, answered?: boolean }} input
+ * @param {{ project: any, run: any, registry: any, assistants: readonly any[], runtimeWorkspaceRoot: string, endTime: number | null | undefined, answered?: boolean, excludedDeliverableIds?: ReadonlySet<string> }} input
  * @returns {Promise<{ files: string[], presented: string[], notices: any[] }>}
  */
-async function ordinaryConversationOutputs({ project, run, registry, assistants, runtimeWorkspaceRoot, endTime, answered = false }) {
+async function ordinaryConversationOutputs({ project, run, registry, assistants, runtimeWorkspaceRoot, endTime, answered = false, excludedDeliverableIds = new Set() }) {
   const none = { files: [], presented: [], notices: [] };
   if (!answered && !isOrdinaryRun(run, registry)) return none;
   const startedAt = Date.parse(String(run.startedAt ?? ""));
   const until = typeof endTime === "number" && Number.isFinite(endTime) ? endTime : Date.now();
   const changed = withoutOtherRunsJobFiles(
-    Number.isFinite(startedAt) ? await workspaceChangedFiles(project.workspaceDir, { since: startedAt, until }) : [],
+    Number.isFinite(startedAt) ? await workspaceChangedFiles(project.workspaceDir, { since: startedAt, until, excludedDeliverableIds }) : [],
     assistants,
   );
   const handedOver = [...new Set(assistants.flatMap((message) => presentedCandidates(message, runtimeWorkspaceRoot)))].slice(0, maxArtifacts);
@@ -2447,7 +2453,7 @@ async function outputFormatNotices(project, files) {
   return notices;
 }
 
-async function readRequiredFile(project, relative, freshSince = null) {
+async function readRequiredFile(project, relative, freshSince = null, excludedDeliverableIds = new Set()) {
   // Prefer a file this run actually wrote.
   //
   // The root lookup below is first because a capability declares bare names and
@@ -2471,7 +2477,7 @@ async function readRequiredFile(project, relative, freshSince = null) {
   // candidate is fresh the original order stands, so a genuinely stale package
   // still reaches the staleness verdict with the same file it always did.
   if (freshSince != null) {
-    for (const candidate of [relative, ...await deliverableCandidatePaths(project, relative)]) {
+    for (const candidate of [relative, ...await deliverableCandidatePaths(project, relative, excludedDeliverableIds)]) {
       const found = await openWorkspaceText(project, candidate);
       if (found && found.stat.mtimeMs + 1_000 >= freshSince) return found;
     }
@@ -2493,7 +2499,7 @@ async function readRequiredFile(project, relative, freshSince = null) {
   // Resolved rather than configured: the deliverable id belongs to the run, not
   // to the deployment, and the receipt that names it is not always present —
   // this path also runs while the container is still alive.
-  for (const candidate of await deliverableCandidatePaths(project, relative)) {
+  for (const candidate of await deliverableCandidatePaths(project, relative, excludedDeliverableIds)) {
     const found = await openWorkspaceText(project, candidate);
     if (found) return found;
   }
@@ -2578,7 +2584,7 @@ async function matrixClaimSummary(project, relativePaths, previousKey = null) {
  * @param {Record<string, any>} project @param {string} relative
  * @returns {Promise<string[]>}
  */
-async function deliverableCandidatePaths(project, relative) {
+async function deliverableCandidatePaths(project, relative, excludedDeliverableIds = new Set()) {
   if (relative.includes("/")) return [];
   let entries;
   try {
@@ -2587,7 +2593,7 @@ async function deliverableCandidatePaths(project, relative) {
     return [];
   }
   return entries
-    .filter((entry) => entry.isDirectory())
+    .filter((entry) => entry.isDirectory() && !excludedDeliverableIds.has(entry.name))
     .map((entry) => `${workspaceLayout.deliverablesDir}/${entry.name}/${relative}`)
     .sort();
 }
@@ -2739,6 +2745,7 @@ async function requiredSpecialistArtifacts(
   sourceArtifactProvenance = new Map(),
   assistantMessages = [],
   briefText = null,
+  excludedDeliverableIds = new Set(),
 ) {
   // Notices a check raises that do not decide the verdict. Collected here
   // because the checks below each return the moment they conclude, so a finding
@@ -2777,6 +2784,7 @@ async function requiredSpecialistArtifacts(
     advisories,
     briefText,
     skippedChecks,
+    excludedDeliverableIds,
   );
   // A turn asked in the conversation window that started no delivery — no
   // plan, no delegation, no submission — and left none of the capability's
@@ -2928,6 +2936,7 @@ async function specialistCompletionOutcome(
   advisories,
   briefText,
   skippedChecks = [],
+  excludedDeliverableIds = new Set(),
 ) {
   if (!run.effectiveAgentId) return { artifacts: [], errorCode: null };
   const registry = await agentRegistry;
@@ -3031,7 +3040,7 @@ async function specialistCompletionOutcome(
       // The same workspace holds every turn's files. Apply the existing
       // freshness rule to the log's actual interval, not the later sweep time;
       // a root file from yesterday must not hide today's nested deliverable.
-      const candidates = [relative, ...await deliverableCandidatePaths(project, relative)];
+      const candidates = [relative, ...await deliverableCandidatePaths(project, relative, excludedDeliverableIds)];
       for (const candidate of candidates) {
         const found = await openWorkspaceText(project, candidate);
         if (found && found.stat.mtimeMs >= Date.parse(run.startedAt)
@@ -3043,7 +3052,7 @@ async function specialistCompletionOutcome(
         if (found) outsideNativeTurn = true;
       }
     } else {
-      file = await readRequiredFile(project, relative, Date.parse(run.startedAt));
+      file = await readRequiredFile(project, relative, Date.parse(run.startedAt), excludedDeliverableIds);
       if (file) artifactPath = file.relativePath;
     }
     return { file, artifactPath, outsideNativeTurn };
@@ -3990,7 +3999,7 @@ async function consumeRepairAuthorization(project, input, {
  * @param {number | null} [until] epoch ms the run's turn ended, when it is
  *   known; a file written after it is a later turn's of the same conversation
  */
-async function writtenDeliverableFiles(project, since = null, until = null) {
+async function writtenDeliverableFiles(project, since = null, until = null, excludedDeliverableIds = new Set()) {
   /** @type {string[]} */
   const found = [];
   /** @type {import('node:fs').Dirent[]} */
@@ -4004,6 +4013,7 @@ async function writtenDeliverableFiles(project, since = null, until = null) {
     if (found.length >= maxArtifacts) break;
     if (!entry.isDirectory()) continue;
     const id = entry.name;
+    if (excludedDeliverableIds.has(id)) continue;
     if (!id || id.includes("/") || id.includes("\\") || id === "." || id === "..") continue;
     let files;
     try {
@@ -4765,11 +4775,13 @@ export class AgentRunStore {
    * (a conversation trying someone else's capsule, and which run to record the
    * recall on), and what the model gateway attributes a request against. A
    * fold with no phase walk, because it is asked per request.
-   * @param {any} project @returns {Promise<{ id: string, sessionId: string }[]>}
+   * @param {any} project @returns {Promise<{ id: string, sessionId: string, nativeTurn?: { startSeq: number, userSeq: number } }[]>}
    */
   async activeRuns(project) {
     const runs = foldEvents(parseEvents(await readLedgerText(project, this.maxBytes)));
-    return [...runs.values()].filter((run) => run.status === "running").map((run) => ({ id: run.id, sessionId: run.sessionId }));
+    return [...runs.values()].filter((run) => run.status === "running").map((run) => ({
+      id: run.id, sessionId: run.sessionId, ...(run.nativeTurn ? { nativeTurn: run.nativeTurn } : {}),
+    }));
   }
 
   /**
@@ -4901,7 +4913,8 @@ export class AgentRunStore {
       const runtimeRoot = await this.runtimeWorkspaceRoot(project).catch(() => project.workspaceDir);
       const written = bounded.flatMap(message => artifactCandidates(message, runtimeRoot));
       const handedOver = bounded.flatMap(message => presentedCandidates(message, runtimeRoot));
-      const disk = await writtenDeliverableFiles(project, start, end);
+      const excluded = foreignDeliverableIds(run, await this.list(project));
+      const disk = await writtenDeliverableFiles(project, start, end, excluded);
       const previousFiles = [...run.artifacts, ...run.unverifiedArtifacts];
       const candidates = [...new Set([...previousFiles, ...written, ...disk, ...handedOver])].slice(0, maxArtifacts).sort();
       const evidence = [];
@@ -5773,7 +5786,8 @@ export class AgentRunStore {
       // the stop verdicts below and keeps its files the way every run that does
       // not succeed does (`finishInternal`: the written deliverables as
       // unverified, an ordinary conversation's changed files as its outputs).
-      const written = this.turnOpenAtStop(run) ? [] : await writtenDeliverableFiles(project, since).catch(() => []);
+      const excluded = foreignDeliverableIds(run, await this.list(project));
+      const written = this.turnOpenAtStop(run) ? [] : await writtenDeliverableFiles(project, since, null, excluded).catch(() => []);
       if (written.length > 0) {
         return this.finishInternal(project, run.id, {
           status: "succeeded",
@@ -6098,8 +6112,11 @@ export class AgentRunStore {
       // 2026-09-19 two minutes in "recovered" 34 files an aspirin run had
       // written two days earlier in the same workspace, and its claim summary
       // counted their 284 claims.
-      const started = Date.parse((await this.list(project).catch(() => [])).find((item) => item.id === runId)?.startedAt ?? "");
-      const recovered = await writtenDeliverableFiles(project, Number.isFinite(started) ? started : null).catch(() => []);
+      const runs = await this.list(project).catch(() => []);
+      const current = runs.find((item) => item.id === runId);
+      const started = Date.parse(current?.startedAt ?? "");
+      const excluded = current ? foreignDeliverableIds(current, runs) : new Set();
+      const recovered = await writtenDeliverableFiles(project, Number.isFinite(started) ? started : null, null, excluded).catch(() => []);
       if (recovered.length > 0) {
         normalized.unverifiedArtifacts = normalizeArtifacts(recovered);
         const notice = (normalized.status === "canceled" ? "运行已取消。" : "") + UNVERIFIED_DELIVERY_NOTICE;
@@ -6122,6 +6139,7 @@ export class AgentRunStore {
           const found = await ordinaryConversationOutputs({
             project, run: current, registry: await this.agentRegistry.catch(() => null), assistants: [],
             runtimeWorkspaceRoot: project.workspaceDir, endTime: Number.isFinite(endTime) ? endTime : this.now().getTime(),
+            excludedDeliverableIds: foreignDeliverableIds(current, await this.list(project)),
           });
           if (found.files.length > 0) {
             const key = normalized.status === "succeeded" ? "artifacts" : "unverifiedArtifacts";
@@ -6131,6 +6149,16 @@ export class AgentRunStore {
           }
         }
       } catch { /* isolated: the files stay in the workspace; the record just does not list the ones only the workspace saw */ }
+    }
+    if (normalized.artifacts.length || normalized.unverifiedArtifacts.length) {
+      const runs = await this.list(project);
+      const current = runs.find((item) => item.id === runId);
+      const end = terminal.finishedAt ?? this.now().toISOString();
+      if (current && overlappingRuns({ ...current, finishedAt: end }, runs).length) {
+        const text = "同一项目中有其他任务与本次运行同时进行。未明确记录归属的文件可能混入或遗漏，请核对项目文件及来源。";
+        normalized.qualityNotices = normalizeQualityNotices([runNotice("run_concurrent_attribution_uncertain", text, { detail: text }),
+          ...normalized.qualityNotices]);
+      }
     }
     // A run that was stopped hands over its main document. It kept its files above; this says which of them is the
     // document, so a reader of the record is not left to tell a report from the scripts and the pieces it was built from
@@ -6393,6 +6421,7 @@ export class AgentRunStore {
     if (run.dispatchId && ownsTurns && !history.some((message) => workloadInput(message) && message.info?.sourceRequestId === run.kernelRequestIds?.at(-1))) return run;
     const ownEnd = history.at(-1)?.info?.turnEnd;
     if (ownsTurns && !ownEnd) return run;
+    const excludedDeliverableIds = foreignDeliverableIds(ownEnd?.time ? { ...run, finishedAt: new Date(ownEnd.time).toISOString() } : run, await this.list(project));
     const baselineIndex = ownsTurns && !run.nativeTurn ? -1 : baselineCursor == null
       ? -1
       : history.findIndex((message) => messageId(message) === baselineCursor);
@@ -6477,6 +6506,7 @@ export class AgentRunStore {
           // beside the ledger so a restart does not lose it. Never the copy in
           // the workspace, which the run can write.
           await this.dispatchedBrief(project, run.id),
+          excludedDeliverableIds,
         );
       } catch {
         completion = { artifacts: [], errorCode: "specialist_contract_unavailable" };
@@ -6772,7 +6802,7 @@ export class AgentRunStore {
       const filesOnDisk = async () => {
         const startedAt = Date.parse(String(run.startedAt ?? ""));
         const written = await writtenDeliverableFiles(project, Number.isFinite(startedAt) ? startedAt : null,
-          typeof ownEnd?.time === "number" ? ownEnd.time : null).catch(() => []);
+          typeof ownEnd?.time === "number" ? ownEnd.time : null, excludedDeliverableIds).catch(() => []);
         const presented = allRunAssistants.flatMap(message => presentedCandidates(message, runtimeWorkspaceRoot));
         const present = await existingArtifacts(project, presented);
         artifacts = [...new Set([...artifacts, ...await existingArtifacts(project, written, run, ownEnd?.time, true), ...present])].slice(0, maxArtifacts).sort();
@@ -6984,11 +7014,11 @@ export class AgentRunStore {
     if (terminal.status === "succeeded") {
       const presented = await existingArtifacts(project, allRunAssistants.flatMap(message => presentedCandidates(message, runtimeWorkspaceRoot)));
       const outputStartedAt = Date.parse(run.startedAt);
-      const written = await writtenDeliverableFiles(project, Number.isFinite(outputStartedAt) ? outputStartedAt : null, ownEnd?.time ?? null).catch(() => []);
+      const written = await writtenDeliverableFiles(project, Number.isFinite(outputStartedAt) ? outputStartedAt : null, ownEnd?.time ?? null, excludedDeliverableIds).catch(() => []);
       artifacts = [...new Set([...artifacts, ...await existingArtifacts(project, written, run, ownEnd?.time, true), ...presented])].slice(0, maxArtifacts).sort();
       if (presented.length) terminal.presentedFiles = presented;
       try {
-        outputs = await ordinaryConversationOutputs({ project, run, registry: await this.agentRegistry, assistants: allRunAssistants, runtimeWorkspaceRoot, endTime: ownEnd?.time, answered: answeredTurn });
+        outputs = await ordinaryConversationOutputs({ project, run, registry: await this.agentRegistry, assistants: allRunAssistants, runtimeWorkspaceRoot, endTime: ownEnd?.time, answered: answeredTurn, excludedDeliverableIds });
       } catch { /* isolated: the files stay in the workspace; the record just does not list the ones only the workspace saw */ }
     }
     return this.finishInternal(project, run.id, { ...terminal,
@@ -8432,4 +8462,9 @@ export function delegatedDocumentReadsForTest(messages) {
  *  @param {any[]} issues @param {any} [shrinkage] @param {boolean} [revisionRequired] @returns {string} */
 export function clinicalEvidenceRepairPromptForTest(issues, shrinkage = null, revisionRequired = true) {
   return clinicalEvidenceRepairPrompt(issues, shrinkage, revisionRequired);
+}
+
+/** @param {any} run @param {any[]} history */
+export function nativeWorkflowEvidenceForTest(run, history) {
+  return nativeWorkflowEvidence(run, history);
 }

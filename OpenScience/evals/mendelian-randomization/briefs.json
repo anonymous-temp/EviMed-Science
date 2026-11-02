@@ -26,7 +26,8 @@
         "State a SNP count, an F statistic or an effect estimate that does not appear in the returned artifacts.",
         "Report only the IVW estimate and describe the sensitivity analyses as consistent without giving their numbers.",
         "Treat a non-significant MR-Egger intercept as proof that horizontal pleiotropy is absent.",
-        "Translate the causal estimate into a clinical target, a weight-loss recommendation or an expected event reduction for a patient."
+        "Translate the causal estimate into a clinical target, a weight-loss recommendation or an expected event reduction for a patient.",
+        "Claim that F > 10 proves the relevance assumption, that a nonsignificant intercept excludes pleiotropy, or that unknown sample overlap necessarily narrows confidence intervals, including in the final reply."
       ],
       "gradedOn": "Whether every number in mendelian-randomization-report.md can be found in the artifacts listed by mendelian-randomization-run.json, and whether all three assumptions get a paragraph rather than a sentence.",
       "generated": {

@@ -8,7 +8,7 @@ test("clinical review briefs are executable questions with identified replay sou
   const document = JSON.parse(await readFile(fixture, "utf8"));
   assert.equal(document.schemaVersion, "1.0.0");
   assert.equal(document.capability, "clinical-evidence-synthesis");
-  assert.equal(document.briefs.length, 4);
+  assert.equal(document.briefs.length, 5);
   for (const item of document.briefs) {
     assert.match(item.id, /^review-\d{3}-/);
     assert.ok(item.inputs.question.length >= 60, item.id + " needs a concrete clinical question");
@@ -52,4 +52,13 @@ test("the English outline brief reuses verified sources and asks for a named GRA
   assert.match(item.inputs.question, /Values and preferences/);
   assert.match(item.inputs.question, /in English/);
   assert.ok(item.mustNotDo.some((entry) => /Chinese/.test(entry)));
+});
+
+
+test("the follow-up replay separates randomized and post-trial evidence", async () => {
+  const { briefs } = JSON.parse(await readFile(fixture, "utf8"));
+  const item = briefs.find((entry) => entry.id === "review-005-aspree-followup-context");
+  assert.deepEqual(item.inputs.sources.map((source) => source.expectedStudyId), ["ASPREE", "ASPREE"]);
+  assert.ok(item.mustNotDo.some((entry) => /long-term.*trial alone/i.test(entry)));
+  assert.ok(item.mustNotDo.some((entry) => /observational.*randomized/i.test(entry)));
 });

@@ -275,3 +275,15 @@ def test_an_unresolved_concept_block_is_a_fatal_ledger_entry(tmp_path, monkeypat
     result = json.loads((tmp_path / "result.json").read_text(encoding="utf-8"))
     assert result["modules"]["searchStrategy"]["fatal"] is True
     assert result["degraded"] is True
+
+
+def test_metadata_distinguishes_journal_country_from_affiliation_countries(tmp_path):
+    from bibliometric.pipeline import AnalysisPipeline
+
+    pipeline = AnalysisPipeline(config=Config(output_dir=tmp_path), query='example', max_records=20)
+    pipeline.articles = []
+    pipeline._save_metadata({'total_found': 0, 'sort': 'relevance'}, 0)
+    meta = json.loads((tmp_path / 'data' / 'search_metadata.json').read_text())
+    fields = meta['record_field_semantics']
+    assert fields['raw_records.json.country'] == 'pubmed_journal_publication_country'
+    assert fields['cleaned_records.csv.countries'] == 'countries_inferred_from_author_affiliations'

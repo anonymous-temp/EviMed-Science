@@ -417,7 +417,9 @@ def _methods(ctx):
             "从PubMed XML格式解析文献记录，作者姓名规范化为「姓 名字首字母」格式，"
             "通过模式匹配提取机构信息，合并MeSH主题词与作者自定义关键词，"
             "并剔除「Humans」、「Male」、「Female」等无信息量的人口学限定词，"
-            "通过PMID和标准化标题进行去重处理。\n"
+            "通过PMID和标准化标题进行去重处理。"
+            "原始记录的country是期刊出版国，不代表作者国别；"
+            "国家统计使用从作者机构地址推断的countries，地址缺失或解析不完整会影响结果。\n"
         )
 
         tbl = _next_table(ctx)
@@ -501,7 +503,9 @@ def _methods(ctx):
             "using pattern matching. Keywords were merged from both MeSH descriptors "
             "and author-supplied keywords, with non-informative terms (demographic "
             "qualifiers such as \"Humans\", \"Male\", \"Female\") removed. "
-            "Deduplication was performed by PMID and normalized title matching.\n"
+            "Deduplication was performed by PMID and normalized title matching. "
+            "The raw country field is the journal publication country, not author location; "
+            "country statistics use countries inferred from author affiliations, which may be missing or incomplete.\n"
         )
 
         tbl = _next_table(ctx)

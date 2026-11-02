@@ -228,3 +228,14 @@ def test_citation_limit_does_not_invent_modeled_counts(tmp_path):
         text = generator._discussion(ctx)
         assert "modeled" not in text and "影响因子" not in text
         assert "observation" in text if lang == "en" else "观测" in text
+
+
+def test_methods_explain_distinct_country_fields_in_both_languages():
+    ctx = generator._build_context('example', '2022', '2023', [], {}, {}, '.')
+    ctx['lang'] = 'zh'
+    chinese = generator._methods(ctx)
+    assert '期刊出版国' in chinese and '作者机构' in chinese
+    ctx['lang'] = 'en'
+    english = generator._methods(ctx)
+    assert 'journal publication country' in english
+    assert 'author affiliations' in english
