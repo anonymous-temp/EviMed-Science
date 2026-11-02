@@ -105,9 +105,8 @@ The target (owner, 2026-10-22) is at least ten net new working sources a day: ad
 means the source produced a new entry during a seven-day trial. `discovery.py` runs hourly and does each step once a
 Shanghai day:
 
-1. **Retire** by rule (`lifecycle.py`), any source: two robots refusals in a row; 401/403 for seven days; silent past its
-   own rhythm (AIHOT's rule: quiet longer than four times its median gap over 90 days; while the rhythm cannot be
-   measured, 14 quiet days for a discovered source, 60 for a row of the registry file); off-topic by the platform's own
+1. **Retire** by rule (`lifecycle.py`), any source: two robots refusals in a row; 401/403 for seven days; nothing new for
+   90 days; off-topic by the platform's own
    screen (more than half not medical and fewer than three medical entries in its window). A retired source is left
    out of the registry composition (`sources.retired_at`), keeps its row and history, and is re-checked (robots 30
    days, 401/403 7, silence 14; off-topic only by an operator).
