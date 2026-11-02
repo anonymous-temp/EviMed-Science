@@ -12,6 +12,7 @@ import httpx
 import pytest
 
 from knowledge_plugin.registry import parse_registry, sync_registry
+from knowledge_plugin.social import wechat as wechat_mod
 from knowledge_plugin.social import x as x_mod
 from knowledge_plugin.social.collector import SocialCollector
 
@@ -173,6 +174,16 @@ def wx_row(source_id="wx-dxy-heart", name="丁香园心血管时间", *, priorit
                        "verified_url": "https://mp.weixin.qq.com/s?__biz=MzA5&mid=1&idx=2&sn=a",
                        "expected_names": [name], "priority": priority, "polls_per_day": polls,
                        "allowed_hosts": ["mp.weixin.qq.com"]}}
+
+
+def test_an_account_waits_its_tier_or_its_own_days_between_reads():
+    assert wechat_mod.read_interval(wx_row()) == timedelta(hours=12)
+    assert wechat_mod.read_interval(wx_row(priority=4, polls=1)) == timedelta(days=1)
+    company = wx_row(priority=4, polls=1)
+    company["config"]["read_every_days"] = 3
+    assert wechat_mod.read_interval(company) == timedelta(days=3)
+    company["config"]["read_every_days"] = 90
+    assert wechat_mod.read_interval(company) == timedelta(days=1), "a value out of range is the ordinary pace"
 
 
 def wx_post(mid, idx=1, *, hours=2, original=1):

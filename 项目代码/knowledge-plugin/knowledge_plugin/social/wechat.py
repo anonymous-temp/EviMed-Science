@@ -22,7 +22,9 @@ After AIHOT's ``providers/dajiala.ts`` and ``sources/mp.ts`` (MIT, engine at 475
   account's first read: nothing is paid twice. The name asked is the first of ``expected_names``.
 - **Pace and priority.** At most ``config.polls_per_day`` reads a day (two for the first priority tier, one for the rest),
   due accounts highest priority first, every call within the day's cap — with the balance at about ¥30 on 2026-10-22,
-  the regulators, journals and societies are read before the portals and the trade press.
+  the regulators, journals and societies are read before the portals and the trade press. A company's own account is read
+  every ``config.read_every_days`` days instead (2026-11-02: the 65 accounts sampled from the owner's list posted about 8
+  times in 30 days when alive, so a daily ¥0.14 read mostly finds nothing; a read still returns the posts it missed).
 - **Bodies.** A post seen for the first time (and not older than the first-contact window) has its text bought once
   (``article_detail``, ¥0.03, at most eight a read) and arrives with it; a body that fails, or that the cap no longer
   allows, leaves the post readable from its title and digest, and its text is bought later, when the platform asks
@@ -136,6 +138,14 @@ def name_resolution(nickname: str | None, ghid: str | None, posts: list[dict], r
 def polls_per_day(row: dict) -> int:
     value = (row.get("config") or {}).get("polls_per_day")
     return value if isinstance(value, int) and 1 <= value <= 2 else 1
+
+
+def read_interval(row: dict) -> timedelta:
+    """How long until the account's next read (``Pace and priority`` above)."""
+    days = (row.get("config") or {}).get("read_every_days")
+    if isinstance(days, int) and 2 <= days <= 7:
+        return timedelta(days=days)
+    return timedelta(days=1) / polls_per_day(row)
 
 
 def priority(row: dict) -> int:

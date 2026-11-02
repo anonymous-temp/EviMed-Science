@@ -115,7 +115,11 @@ def test_the_builder_names_a_wechat_row_by_its_article_its_biz_or_its_name_and_r
     (research / "wechat-accounts-2099-01-01.json").write_text(json.dumps({"accounts": [account]}))
     (row,) = build.wechat_rows("2099-01-01")
     assert row["config"]["polls_per_day"] == 2 and row["poll_floor_s"] == 43200, "tier 1 is read twice a day"
-    assert "verified_url" not in row["config"] and "biz" not in row["config"]
+    assert "verified_url" not in row["config"] and "biz" not in row["config"] and "read_every_days" not in row["config"]
+    (research / "wechat-accounts-2099-01-01.json").write_text(json.dumps({"accounts": [{**account, "group": "company", "priority": 4,
+                                                                                        "read_every_days": 3}]}))
+    (row,) = build.wechat_rows("2099-01-01")
+    assert row["config"]["read_every_days"] == 3 and (row["poll_floor_s"], row["poll_ceiling_s"]) == (86400, 259200)
     temporary = {**account, "verified_url": "https://mp.weixin.qq.com/s?src=11&timestamp=1&ver=1&signature=x"}
     (research / "wechat-accounts-2099-01-01.json").write_text(json.dumps({"accounts": [temporary]}))
     with pytest.raises(SystemExit, match="temporary link"):
@@ -126,14 +130,18 @@ def test_the_builder_names_a_wechat_row_by_its_article_its_biz_or_its_name_and_r
 
 
 def test_the_wechat_list_has_its_categories_and_tiers():
-    """S3 (ct-src 2026-10-24): 150–200 accounts, by group, regulators and societies first."""
+    """S3 (ct-src 2026-10-24, the owner's list 2026-11-02): by group, regulators and societies first; a company is read every three days."""
     document = json.loads(SOCIAL.read_text())
     counts = document["counts"]
-    assert 150 <= counts["wechat"] <= 200
+    assert 400 <= counts["wechat"] <= 900
     groups = counts["wechat_by_group"]
     assert groups["industry"] >= 30 and groups["clinical"] >= 40 and groups["society-journal"] >= 25
     assert groups["hospital"] >= 10 and groups["regulator"] >= 10
+    assert groups["company"] >= 100
     assert sum(counts["wechat_by_priority"].values()) == counts["wechat"]
+    for row in document["sources"]:
+        if row["access"] == "dajiala":
+            assert row["config"].get("read_every_days") == (3 if row["category"].startswith("wechat-company") else None), row["id"]
 
 
 def test_the_names_the_2026_10_25_review_could_not_read_are_the_nicknames_dajiala_answers_to():
@@ -147,8 +155,10 @@ def test_the_names_the_2026_10_25_review_could_not_read_are_the_nicknames_dajial
         source = rows[source_id]
         assert (source.name, ask_name({"name": source.name, "config": source.config}), source.config["biz"]) == (name, name, biz), source_id
     assert rows["wx-cjem"].config["biz"] == "MzA4ODYzMzg0Mg==" and rows["wx-cjem"].name == "中华内分泌代谢杂志"
-    for gone in ("wx-nature-portfolio", "wx-yxj-lab", "wx-healthai", "wx-yigu"):
+    for gone in ("wx-nature-portfolio", "wx-healthai", "wx-yigu"):
         assert gone not in rows, gone
+    # The fourth was renamed: the owner's list of 2026-11-02 held its WeChat id, and Dajiala answered to that id.
+    assert (rows["wx-yxj-lab"].name, rows["wx-yxj-lab"].config["expected_names"]) == ("医学界影像与检验频道", ["医学界影像与检验频道"])
     asked = {ask_name({"name": source.name, "config": source.config}) for source in rows.values() if source.access == "dajiala"}
     for code_107 in ("CellPress细胞科学", "丁香园肾内时间", "医学界精神病学频道", "药融云", "血液肿瘤资讯", "生物制药小编", "Nature Portfolio",
                      "医学界检验频道", "医健AI掘金志", "肿瘤资讯"):
