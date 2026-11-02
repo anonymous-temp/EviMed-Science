@@ -105,6 +105,13 @@ export const VCR_WRITE_WORDS = Object.freeze({
       one: 'assumed',
     }),
   }),
+  // The trial registries a write names; the same words in the evidence item, the precedent and the candidate trial.
+  registry: Object.freeze({
+    registry: Object.freeze({
+      meanings: Object.freeze({ 'clinicaltrials.gov': '美国临床试验登记库（NCT 号）', chictr: '中国临床试验注册中心（ChiCTR 号）', ctis: '欧盟临床试验信息系统（EU CT 号）' }),
+      synonyms: Object.freeze({ ctgov: 'clinicaltrials.gov', clinicaltrials: 'clinicaltrials.gov', clinicaltrials_gov: 'clinicaltrials.gov', nct: 'clinicaltrials.gov', eu_ctis: 'ctis' }),
+    }),
+  }),
   criterion: Object.freeze({
     criterionType: Object.freeze({
       meanings: Object.freeze({
@@ -201,6 +208,9 @@ export function vcrNormalizeWriteRow(what, row) {
 
   if (what === 'evidence_item') {
     for (const field of ['evidenceKind', 'valueSource', 'armRole']) out = read(out, 'evidence_item', field, field)
+    out = read(out, 'registry', 'registry', 'registry')
+  } else if (what === 'precedent') {
+    out = read(out, 'registry', 'registry', 'registry')
   } else if (what === 'assumption') {
     out = read(out, 'assumption', 'sourceKind', 'sourceKind')
     const kind = out.sourceKind ?? 'expert_set'
@@ -225,6 +235,7 @@ export function vcrNormalizeWriteRow(what, row) {
       }
     }
   } else if (what === 'protocol' || what === 'criteria' || what === 'candidate_trial') {
+    if (what === 'candidate_trial') out = read(out, 'registry', 'registry', 'registry')
     const { at, list } = criteriaOf(what, out)
     let changed = false
     const next = list.map((criterion, index) => {

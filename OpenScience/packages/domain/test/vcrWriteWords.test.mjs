@@ -86,6 +86,15 @@ test("criterion types are read in criteria, in a protocol's and in a candidate t
   assert.deepEqual(alone.applied.map((entry) => entry.field), ["criterionType"]);
 });
 
+test("a registry is read in its own spelling, and a publication's name is left for the evidence writer", () => {
+  assert.equal(vcrNormalizeWriteRow("candidate_trial", { registry: "ClinicalTrials.gov", registryId: "NCT06927986", criteria: [] }).row.registry, "clinicaltrials.gov");
+  assert.equal(vcrNormalizeWriteRow("precedent", { registry: "CTgov", registryId: "NCT06927986" }).row.registry, "clinicaltrials.gov");
+  assert.equal(vcrNormalizeWriteRow("evidence_item", { registry: "ChiCTR", registryId: "ChiCTR2000000001" }).row.registry, "chictr");
+  const paper = { registry: "pubmed", registryId: "37676259" };
+  assert.deepEqual(vcrNormalizeWriteRow("evidence_item", paper), { row: paper, applied: [] });
+  assert.equal(vcrNormalizeWriteRow("candidate_trial", { registry: "WHO ICTRP" }).row.registry, "WHO ICTRP", "a registry that is none of the three is refused by its writer");
+});
+
 test("a plan's lists and sentences are kept as they were written", () => {
   const read = vcrNormalizeWriteRow("plan", { analysis: ["先解析后模拟", "再复核把握度"], sensitivity: "HR 0.80 与脱落率 10%", sealedFields: [] });
   assert.deepEqual(read.row, { analysis: { items: ["先解析后模拟", "再复核把握度"] }, sensitivity: { text: "HR 0.80 与脱落率 10%" }, sealedFields: [] });
