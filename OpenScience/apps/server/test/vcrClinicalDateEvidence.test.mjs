@@ -87,6 +87,15 @@ test('a record header is the nearest short line above that prints one date with 
  assert.deepEqual(clinicalRecordHeader(crlf,at(crlf,'Takes')),{date:'2067-05-03',start:0,end:23,quote:'Record date: 2067-05-03'});
 });
 
+test('a birth date line is passed over for the record header above it',()=>{
+ for(const line of ['DOB: 1950-03-02','Date of birth: March 2, 1950','出生日期：1950-03-02','生日 1950年3月2日','Birthdate 1950-03-02']){
+  const file=`Record date: 2067-01-10\n${line}\nTakes aspirin.`;
+  assert.equal(clinicalRecordHeader(file,file.indexOf('Takes'))?.date,'2067-01-10',line);
+  const alone=`${line}\nTakes aspirin.`;
+  assert.equal(clinicalRecordHeader(alone,alone.indexOf('Takes')),null,line);
+ }
+});
+
 test('with several records in one file the header is the nearest one above the position',()=>{
  const file=['Record date: 2067-01-10','','Takes aspirin.','','*'.repeat(40),'Record date: 2067-03-01','','Admitted with chest pain.'].join('\n');
  assert.equal(clinicalRecordHeader(file,file.indexOf('Takes'))?.date,'2067-01-10');

@@ -85,6 +85,9 @@ export function clinicalDateInEvidence(value, ...quotes) {
 export const RECORD_HEADER_LINE_MAX = 80;
 export const RECORD_HEADER_LABEL_MAX = 24;
 
+/** A birth date has a header's shape and dates nothing: the one label a header's format cannot tell apart, and a closed list of its names. */
+const BIRTH_LABEL = /\b(?:d\.?o\.?b\.?|birth\s*date|date\s+of\s+birth|born)\b|出生|生日/i;
+
 /**
  * The record header above a position in a document: the nearest preceding line that prints one complete date, with its year, and
  * little else, so that what is left of the line once the date is taken out is a short label (「Record date: 2067-05-03」, 「记录日期：2026-07-01」,
@@ -107,7 +110,7 @@ export function clinicalRecordHeader(text, position) {
       const printed = clinicalDatesPrinted(trimmed);
       if (printed.length === 1) {
         const label = `${trimmed.slice(0, printed[0].start)} ${trimmed.slice(printed[0].end)}`.replace(/\s+/g, ' ').trim();
-        if (label.length <= RECORD_HEADER_LABEL_MAX) {
+        if (label.length <= RECORD_HEADER_LABEL_MAX && !BIRTH_LABEL.test(label)) {
           const from = start + line.indexOf(trimmed);
           return { date: printed[0].iso, start: from, end: from + trimmed.length, quote: trimmed };
         }
