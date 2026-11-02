@@ -2438,7 +2438,7 @@ async function verifySourceSpan({ item, documents, study, subjectKey, documentId
     id: "check", variable: fact.variable, polarity: "affirmed", extractedBy: "model", surface: fact.surface ?? span.quote, value: fact.value, dateSurface: fact.dateSurface,
     clinical: fact.clinical, unit: fact.unit, occurredAt: fact.occurredAt, recordedAt: fact.recordedAt, provenance: { factSchema: 2 },
     source: { documentId, start, end, quote: span.quote, ...(dateQuote ? { dateQuote } : {}) },
-  }, { documents: new Map([[documentId, { text: document.text }]]) });
+  }, { documents: new Map([[documentId, { text: document.text, visibleAt: document.visibleAt ?? null }]]) });
   if (!settled.ok) {
     const { reason } = /** @type {{ ok: false, reason: string }} */ (settled);
     const dated = reason === "date_not_in_span" ? "clinical.occurredInterval 的起止日期要整个印在 quote 里（含年份）；没有就不写 occurredInterval。" : "";

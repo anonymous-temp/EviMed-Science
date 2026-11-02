@@ -1338,6 +1338,23 @@ test("REVIEWFIX 3 a fact dated by a record header later than the moment of the a
   assert.equal(factsVisibleAt([printed], june).length, 1);
 });
 
+test("REVIEWFIX 3 a line that prints a date after the moment the document entered the platform does not date a fact, whether the moment is the document's visible time or the assessment's", () => {
+  const text = "Record date: 2067-01-10\n\nTakes aspirin daily.\n下次复诊：2067-12-15\nTakes metformin daily.\n";
+  const start = text.indexOf("Takes metformin daily.");
+  const fact = { id: "f", variable: "metformin", polarity: "affirmed", extractedBy: "model", provenance: { factSchema: 2 }, surface: "metformin",
+    source: { documentId: "d", start, end: start + "Takes metformin daily.".length, quote: "Takes metformin daily." } };
+  const dated = (/** @type {Record<string, any>} */ document, /** @type {Record<string, any>} */ context = {}) => {
+    const settled = settleFactEvidence(fact, { documents: { d: { text, ...document } }, ...context });
+    assert.ok(settled.ok);
+    return settled.fact.occurredAt;
+  };
+  assert.equal(dated({}), "2067-12-15", "with no moment known, the nearest line above dates it, as it did");
+  assert.equal(dated({ visibleAt: "2067-06-15T00:00:00Z" }), "2067-01-10", "the document entered in June; a December date is not a record\'s");
+  assert.equal(dated({}, { asOf: "2067-06-15T00:00:00Z" }), "2067-01-10", "the harness names its moment by asOf, with the document as it holds it");
+  assert.equal(dated({ visibleAt: "2067-12-20T00:00:00Z" }, { asOf: "2067-06-15T00:00:00Z" }), "2067-01-10", "the earlier of the two is the moment");
+  assert.equal(dated({ visibleAt: "2067-12-20T00:00:00Z" }), "2067-12-15", "a document that entered after the date has its line as before");
+});
+
 test("the past-event guard in a washout: a bound the washout already clears stands for the date, a bound inside it leaves the exposure unplaced", () => {
   const exposure = (/** @type {string} */ bound) => ({ id: "x", variable: "docetaxel", polarity: "affirmed", extractedBy: "snapshot", occurredAt: bound, source: { dateBound: "no_later_than" }, visibleAt: "2100-01-01T00:00:00Z" });
   const washout = { op: "elapsed_since", variable: "docetaxel", days: 28, comparator: "gte" };

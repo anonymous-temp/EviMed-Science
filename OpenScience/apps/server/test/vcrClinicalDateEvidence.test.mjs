@@ -185,3 +185,14 @@ test('a document of many short lines with no header costs one pass, not one pass
  const headed=`Record date: 2067-05-03\n${text}`;
  assert.equal(clinicalRecordHeader(headed,headed.length-5)?.date,'2067-05-03');
 });
+
+test('REVIEWFIX 3 a header line dated after the moment the document entered is a planned date, not a record\'s: the scan passes over it',()=>{
+ const file='Record date: 2067-01-10\nTakes aspirin.\n下次复诊：2067-12-15\nTakes metformin.\n';
+ const at=file.indexOf('Takes metformin');
+ assert.equal(clinicalRecordHeader(file,at)?.date,'2067-12-15','with no moment named, the line above is the header it always was');
+ const june=Date.parse('2067-06-15T00:00:00Z');
+ assert.deepEqual(clinicalRecordHeader(file,at,{notAfter:june}),{date:'2067-01-10',start:0,end:23,quote:'Record date: 2067-01-10'});
+ assert.equal(clinicalRecordHeader(file,at,{notAfter:Date.parse('2067-12-15T00:00:00Z')})?.date,'2067-12-15','a header on the day itself is not later than it');
+ assert.equal(clinicalRecordHeader('下次复诊：2067-12-15\nTakes metformin.',22,{notAfter:june}),null,'nothing but a later date above is no header');
+ assert.equal(clinicalRecordHeader(file,at,{notAfter:Number.NaN})?.date,'2067-12-15','a moment that is no instant names no bound');
+});

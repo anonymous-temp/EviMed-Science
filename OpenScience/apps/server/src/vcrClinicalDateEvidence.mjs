@@ -109,32 +109,37 @@ function headerOfLine(body, start, lineEnd) {
 }
 
 /**
- * The header lines of a document, in the order of the text. Built once per document and kept (a write of two hundred facts of one chart
- * reads the chart's lines once, not once for each fact): the key is the length and the digest of the text, so the cache holds no patient
- * text, only the header lines themselves (each at most `RECORD_HEADER_LINE_MAX` characters).
- * @param {string} body
+ * The header lines of a document, in the order of the text, leaving out the ones dated after `notAfter`. Built once per document and
+ * kept (a write of two hundred facts of one chart reads the chart's lines once, not once for each fact): the key is the length and the
+ * digest of the text, so the cache holds no patient text, only the header lines themselves (each at most `RECORD_HEADER_LINE_MAX`).
+ * @param {string} body @param {number | null} notAfter
  */
-function headerIndex(body) {
-  const key = `${body.length}:${createHash('sha1').update(body).digest('hex')}`;
+function headerIndex(body, notAfter) {
+  const base = `${body.length}:${createHash('sha1').update(body).digest('hex')}`;
+  const key = notAfter === null ? base : `${base}:${notAfter}`;
   const kept = headerIndexes.get(key);
   if (kept) return kept;
-  /** @type {Array<NonNullable<ReturnType<typeof headerOfLine>>>} */
-  const headers = [];
-  for (let start = 0; start <= body.length;) {
-    const found = body.indexOf('\n', start);
-    const lineEnd = found < 0 ? body.length : found;
-    const header = headerOfLine(body, start, lineEnd);
-    if (header) headers.push(header);
-    start = lineEnd + 1;
+  let all = headerIndexes.get(base);
+  if (!all) {
+    all = [];
+    for (let start = 0; start <= body.length;) {
+      const found = body.indexOf('\n', start);
+      const lineEnd = found < 0 ? body.length : found;
+      const header = headerOfLine(body, start, lineEnd);
+      if (header) all.push(header);
+      start = lineEnd + 1;
+    }
+    headerIndexes.set(base, all);
   }
-  headerIndexes.set(key, headers);
+  const index = notAfter === null ? all : all.filter((header) => Date.parse(header.date) <= notAfter);
+  headerIndexes.set(key, index);
   // A write reads one or a few charts; the cache never holds more than a handful.
-  if (headerIndexes.size > HEADER_INDEXES_KEPT) headerIndexes.delete(/** @type {string} */ (headerIndexes.keys().next().value));
-  return headers;
+  while (headerIndexes.size > HEADER_INDEXES_KEPT) headerIndexes.delete(/** @type {string} */ (headerIndexes.keys().next().value));
+  return index;
 }
-/** @type {Map<string, ReturnType<typeof headerIndex>>} */
+/** @type {Map<string, Array<NonNullable<ReturnType<typeof headerOfLine>>>>} */
 const headerIndexes = new Map();
-const HEADER_INDEXES_KEPT = 4;
+const HEADER_INDEXES_KEPT = 8;
 
 /**
  * The record header above a position in a document: the nearest preceding line that prints one complete date, with its year, and
@@ -142,14 +147,17 @@ const HEADER_INDEXES_KEPT = 4;
  * 「2026-07-01 门诊记录」, 「入院日期：2026年3月4日 10:20」). It is a matter of the line's format, not of what the label says: a line that
  * prints two dates, or runs longer than a label, is a body sentence and is passed over, and nothing above the position means no header.
  * A fact with no date of its own takes this date (the owner's ruling of 2026-11-02): the header is the date of the record the fact sits in.
+ * A line that prints a date later than the moment the document entered the platform (`notAfter`, an instant) is not a record's: it is a date
+ * ahead (「下次复诊：2026-12-15」), and the scan passes over it like any body line.
  * @param {string} text the document @param {number} position where the fact's quotation starts
+ * @param {{ notAfter?: number | null }} [moment]
  * @returns {{ date: string, start: number, end: number, quote: string } | null} the line, trimmed, as the document holds it
  */
-export function clinicalRecordHeader(text, position) {
+export function clinicalRecordHeader(text, position, { notAfter = null } = {}) {
   const body = String(text ?? '');
   if (!Number.isInteger(position) || position <= 0) return null;
   const lineStart = body.lastIndexOf('\n', Math.min(position, body.length) - 1) + 1;
-  const headers = headerIndex(body);
+  const headers = headerIndex(body, typeof notAfter === 'number' && Number.isFinite(notAfter) ? notAfter : null);
   // The last header line that starts above the line the position is in: the lines are in the order of the text.
   let low = 0;
   let high = headers.length;

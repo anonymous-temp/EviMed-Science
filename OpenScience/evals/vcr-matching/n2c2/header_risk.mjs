@@ -47,7 +47,7 @@ for (const id of ids) {
     const settled = settleFactEvidence({ id: 'f', subjectKey: id, variable: item.variable, polarity: item.polarity, value: item.value ?? null, unit: item.unit ?? null,
       occurredAt: item.occurredAt ?? null, recordedAt: null, surface: item.surface, dateSurface: item.dateSurface ?? null,
       source: { documentId: 'note', start, end: start + item.quote.length, quote: item.quote }, extractedBy: 'model', provenance: { schema: 1, status: 'batch_extraction', factSchema: 2 } },
-    { documents, anyPolarity: true });
+    { documents, anyPolarity: true, ...(patient.asOf ? { asOf: patient.asOf } : {}) });
     if (!settled.ok) continue;
     tally.facts += 1;
     if (!settled.notes.includes('date_from_record_header')) continue;

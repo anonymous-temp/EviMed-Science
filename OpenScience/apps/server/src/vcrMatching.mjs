@@ -400,9 +400,13 @@ function datedByRecordHeader(fact, context) {
   const source = fact.source;
   if (!source || typeof source !== "object" || !Number.isInteger(source.start) || source.start < 0) return null;
   const documents = context.documents instanceof Map ? context.documents : new Map(Object.entries(context.documents ?? {}));
-  const text = documents.get(String(source.documentId))?.text;
+  const document = documents.get(String(source.documentId));
+  const text = document?.text;
   if (typeof text !== "string") return null;
-  const header = clinicalRecordHeader(text, source.start);
+  // A line that prints a date later than the moment the document entered the platform (its visible time, or the assessment's own moment
+  // when the caller names one) is a date ahead, not the date of a record: the scan passes over it.
+  const moments = [instant(document?.visibleAt), instant(context.asOf)].filter((at) => at !== null && Number.isFinite(at));
+  const header = clinicalRecordHeader(text, source.start, { notAfter: moments.length ? Math.min(.../** @type {number[]} */ (moments)) : null });
   if (!header) return null;
   const candidate = { ...fact, occurredAt: header.date, dateSurface: null,
     source: { ...source, dateQuote: { start: header.start, end: header.end, quote: header.quote }, dateBasis: "record_header",
