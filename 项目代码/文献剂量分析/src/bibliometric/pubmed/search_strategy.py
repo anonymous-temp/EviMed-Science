@@ -177,6 +177,47 @@ def _get_xml(url: str, params: dict) -> Optional[ET.Element]:
         return None
 
 
+def _get_text(url: str, params: dict) -> Optional[str]:
+    """Fetch the documented MeSH full-record text format."""
+    _rate_limit()
+    try:
+        response = requests.get(url, params=params, timeout=_REQUEST_TIMEOUT)
+        response.raise_for_status()
+        return response.text
+    except Exception as exc:
+        logger.warning("MeSH API error: %s", exc)
+        return None
+
+
+def _parse_mesh_full_text(text: str) -> tuple[Optional["MeSHResult"], Optional[str], bool]:
+    """Return a descriptor or a pharmacological-action name, never confuse them."""
+    lines = text.splitlines()
+    header_index = next((i for i, line in enumerate(lines) if line.strip()), None)
+    if header_index is None:
+        return None, None, False
+    match = re.fullmatch(r"\s*\d+:\s*(.+?)\s*", lines[header_index])
+    if not match:
+        return None, None, False
+    heading = match.group(1)
+    suffix = " [Pharmacological Action]"
+    if heading.endswith(suffix):
+        return None, heading[:-len(suffix)], True
+    if heading.endswith("]"):
+        return None, None, True
+    entries: list[str] = []
+    trees: list[str] = []
+    for index, line in enumerate(lines[header_index + 1:], header_index + 1):
+        if line.startswith("Tree Number(s):"):
+            trees = re.findall(r"\b[A-Z]\d+(?:\.\d+)+\b", line)
+        if line.strip() == "Entry Terms:":
+            for entry in lines[index + 1:]:
+                if not entry.strip() or not entry.startswith("    "):
+                    break
+                entries.append(entry.strip())
+            break
+    return MeSHResult(descriptor_name=heading, entry_terms=entries[:10], tree_numbers=trees), None, True
+
+
 @dataclass
 class MeSHResult:
     descriptor_name: str
@@ -288,7 +329,7 @@ def lookup_mesh(term: str, api_key: str = "", email: str = "") -> tuple[Optional
         logger.info("  MeSH cache hit: %s → %s (%s)", term, cached.descriptor_name, cached.descriptor_ui)
         return cached, False
 
-    params = {"db": "mesh", "term": f"{term}[MeSH Terms]", "retmax": "1"}
+    params = {"db": "mesh", "term": f"{term}[MeSH Terms]", "retmax": "5"}
     if api_key:
         params["api_key"] = api_key
     if email:
@@ -296,50 +337,35 @@ def lookup_mesh(term: str, api_key: str = "", email: str = "") -> tuple[Optional
 
     root = _get_xml(_ESEARCH_URL, params)
     if root is None:
-        return None, True  # API/network failure
-
-    count_el = root.find("Count")
-    if count_el is None or count_el.text == "0":
-        return None, False  # No matching descriptor
-
-    uid_el = root.find(".//IdList/Id")
-    if uid_el is None or not uid_el.text:
+        return None, True
+    count = root.findtext("Count")
+    if count is None:
+        return None, True
+    if count == "0":
         return None, False
+    ids = [node.text for node in root.findall(".//IdList/Id") if node.text]
+    if not ids:
+        return None, True
 
-    fetch_params = {"db": "mesh", "id": uid_el.text, "rettype": "full"}
-    if api_key:
-        fetch_params["api_key"] = api_key
-    fetch_root = _get_xml(_EFETCH_URL, fetch_params)
-    if fetch_root is None:
-        return None, True  # API failure on fetch
+    action_name = None
+    for uid in ids:
+        fetch_params = {"db": "mesh", "id": uid, "rettype": "full", "retmode": "text"}
+        if api_key:
+            fetch_params["api_key"] = api_key
+        if email:
+            fetch_params["email"] = email
+        text = _get_text(_EFETCH_URL, fetch_params)
+        if text is None:
+            return None, True
+        descriptor, action, parsed = _parse_mesh_full_text(text)
+        if not parsed:
+            return None, True
+        if action and action_name is None:
+            action_name = action
+        if descriptor and (action_name is None or descriptor.descriptor_name.casefold() == action_name.casefold()):
+            return descriptor, False
+    return None, False
 
-    name = ""
-    name_el = fetch_root.find(".//DescriptorName/String")
-    if name_el is not None and name_el.text:
-        name = name_el.text
-
-    ui = ""
-    ui_el = fetch_root.find(".//DescriptorUI")
-    if ui_el is not None and ui_el.text:
-        ui = ui_el.text
-
-    entry_terms = []
-    for concept in fetch_root.findall(".//Concept"):
-        for term_el in concept.findall(".//Term/String"):
-            if term_el.text and term_el.text != name:
-                entry_terms.append(term_el.text)
-
-    tree_numbers = []
-    for tn_el in fetch_root.findall(".//TreeNumber"):
-        if tn_el.text:
-            tree_numbers.append(tn_el.text)
-
-    return MeSHResult(
-        descriptor_name=name,
-        descriptor_ui=ui,
-        entry_terms=entry_terms[:10],
-        tree_numbers=tree_numbers,
-    ), False
 
 
 def _split_query_into_concepts(query: str) -> list[str]:
