@@ -398,8 +398,9 @@ def verify_sources():
     )
     require(summary.get("connectedPublic") == len(registered) and states.get("connected_public") == len(registered), "connected data-source count is inflated")
     require(summary.get("skillGuidanceOnly") == counted.get("skill_guidance", 0), "skill-guidance data-source count drifted")
+    require(summary.get("viaEvimedIndex") == counted.get("connected_via_evimed_index", 0), "EviMed-index data-source count drifted")
     require(
-        summary.get("notConnected") == len(rows) - len(registered) - counted.get("skill_guidance", 0),
+        summary.get("notConnected") == len(rows) - len(registered) - counted.get("skill_guidance", 0) - counted.get("connected_via_evimed_index", 0),
         "not-connected data-source count drifted",
     )
     # The one state that must stay empty: `catalog_only` means a row nobody

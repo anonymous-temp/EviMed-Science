@@ -70,6 +70,7 @@ QUERY_CASES = {
     "who-gho": ("maternal mortality", "life expectancy"),
     "clinicaltrials-gov": ("metformin type 2 diabetes", "aspirin cardiovascular prevention"),
     "isrctn": ("diabetes", "asthma"),
+    "prospero": ("gout", "chronic kidney disease"),
     "biorxiv": ("10.64898/2026.06.26.734908", "10.64898/2026.01.24.701325"),
     "medrxiv": ("10.1101/2025.08.29.25334726", "10.1101/2025.10.19.25337876"),
     "bindingdb": ("P23219", "P35354"),
