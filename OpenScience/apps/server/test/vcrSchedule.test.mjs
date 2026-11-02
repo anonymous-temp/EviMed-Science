@@ -239,7 +239,7 @@ function gateway(storeOverrides = {}) {
       return study;
     },
     async latestSchedule() { return SCHEDULE; },
-    async savePatientSet(input) { saved.push(input); return { id: "pts_1", version: 1 }; },
+    async savePatientSet(input) { saved.push(input); return { id: `pts_${saved.length}`, version: 1 }; },
     async patientSets() { return [{ id: "pts_1", version: 1, name: "虚拟患者" }]; },
     async models() { return []; },
     ...storeOverrides,
@@ -274,9 +274,11 @@ test("a patient set whose trajectory takes the protocol's schedule has the visit
   assert.deepEqual(saved.map((entry) => entry.scenario.visits), [[0, 2, 4, 8], [0, 3, 6], [0, 0.46, 0.9199, 1.8398]],
     "the stored scenario carries numbers, as the engine's schema reads them; an unstated unit is months");
   // The run is told which unit the schedule's days were read in, and that months was assumed where it named none.
+  // And the write's answer lists the names beside the ids (`named`), so a reply calls each set by its name and never by its id.
   assert.deepEqual(res.json().data.results, [
     { index: 0, visitTimes: { unit: "weeks", basis: "stated", times: [0, 2, 4, 8] } },
     { index: 2, visitTimes: { unit: "months", basis: "assumed", times: [0, 0.46, 0.9199, 1.8398] } },
+    { named: [{ id: "pts_1", name: "按日程" }, { id: "pts_2", name: "手写" }, { id: "pts_3", name: "没写单位" }], say: "回复里用这些名字称呼它们，不要写编号。" },
   ]);
   assert.deepEqual(res.json().data.issues.map((issue) => [issue.index, issue.field]), [[3, "scenario.visits"]]);
   assert.match(res.json().data.issues[0].message, /unit 写/);

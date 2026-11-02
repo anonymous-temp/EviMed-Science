@@ -24,7 +24,9 @@ const customerKinds = ["capsule", "fact", "method", "source", "source-unit", "kn
   "document-export", "result-version", "result-impact", "result-revision", "result-replay",
   // What a project's datasets were understood to mean: the researcher's own corrections and the model's readings with
   // their basis, the file hashes they were read from, no patient row (dataSemanticsService.mjs).
-  "dataset-semantics", ...EXTENSION_CUSTOMER_KINDS];
+  "dataset-semantics",
+  // The person's own analyses through the data-analysis API: the analysis, its inputs and the turns they asked, with what each returned (dataAnalysisService.mjs).
+  "data-analysis", ...EXTENSION_CUSTOMER_KINDS];
 
 /** The document kinds the archive deliberately leaves out, and why.
  *
@@ -318,6 +320,27 @@ const payloadProjections = {
       ...(payload.stopError ? { error: { code: String(payload.stopError) } } : {}),
       ...(Array.isArray(payload.artifacts) ? { artifacts: payload.artifacts.map((/** @type {any} */ file) => pick(file, ["path", "sha256", "bytes"])) } : {}),
       ...(payload.initial ? { initial: { ...pick(payload.initial, ["recipe", "inputVersionId"]), producer: pick(payload.initial.producer, producerKeys) } } : {}) };
+  },
+  // The analyses a person ran through the data-analysis API (dataAnalysisService.mjs). Two shapes share the kind: the analysis (its name, the inputs
+  // it was given and the turns it took) and one turn (the question and what came back). Bytes are named as a result version's are, by workspace
+  // path and SHA-256: the analysis's project is an ordinary project whose workspace is in this archive, and the controller's own frozen copy under
+  // `.openscience/data-analysis/` is not (it duplicates files the archive already holds, and a file the workspace has overwritten since leaves as a
+  // record whose bytes this archive does not hold). Behind: the reservation a turn is dispatched under (`active`, `dispatchId`, `fingerprint`), the
+  // caller's idempotency key (`requestId`), the runtime's conversation id (`sessionId`) and `downloadUrl`, a route of this deployment.
+  "data-analysis": payload => {
+    if (Array.isArray(payload?.turnIds)) {
+      return { ...pick(payload, ["id", "projectId", "name", "phase", "turnIds"]),
+        inputs: (Array.isArray(payload.inputs) ? payload.inputs : []).map((/** @type {any} */ input) => ({ ...pick(input, ["id", "filename", "sha256", "bytes", "path"]),
+          provenance: pick(input?.provenance, ["kind", "origin", "pathname", "sourceId", "acquiredAt"]) })) };
+    }
+    if (typeof payload?.analysisId !== "string") throw new Error("Not a data-analysis record.");
+    const result = payload.result;
+    return { ...pick(payload, ["id", "analysisId", "projectId", "question", "status", "runId", "errorCode"]),
+      ...(result && typeof result === "object" ? { result: { ...pick(result, ["summary", "structuredResults", "frozenAt"]),
+        primaryOutput: pick(result.primaryOutput, ["directory", "manifestPath", "resultsPath", "reportPath"]),
+        artifacts: (Array.isArray(result.artifacts) ? result.artifacts : []).map((/** @type {any} */ artifact) =>
+          pick(artifact, ["id", "filename", "path", "sha256", "bytes", "role", "mediaType", "verification"])),
+        notices: (Array.isArray(result.notices) ? result.notices : []).map((/** @type {any} */ notice) => pick(notice, ["code", "path", "reason"])) } } : {}) };
   },
   // What was converted, from which revision of it, and what came out.
   "document-export": payload => ({

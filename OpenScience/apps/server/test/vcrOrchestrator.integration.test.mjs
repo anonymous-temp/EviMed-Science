@@ -2400,7 +2400,7 @@ test("a design grid with labelled designs and truths is computed with nothing wr
   assert.equal(frozenGrid.designs.some((/** @type {any} */ design) => "label" in design), false);
 });
 
-test("a median OS read from a PubMed abstract is evidence of its paper: verified against the abstract the platform preserved, or kept and marked unchecked, and a card made of either reads as literature on the page", async () => {
+test("a median OS read from a PubMed abstract is evidence of its paper: verified against the abstract the platform preserved, or kept and marked unchecked, and a card made of either reads as literature on the page", options, async () => {
   const { createVcrEvidencePipeline } = await import("../src/vcrEvidence.mjs");
   const { createVcrPublicationSources } = await import("../src/vcrPublicationSources.mjs");
   const { premiseReasonOfCard, premiseSourceOfCard } = await import("../src/vcrPremises.mjs");
