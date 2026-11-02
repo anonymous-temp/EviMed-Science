@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { isStatisticalWorkspaceProjectId } from "@evimed/domain";
 import { useNavigate } from "react-router";
-import { webErrorMessage } from "@/lib/apiClient";
-import { bindConversationCapability } from "@/lib/dispatch";
+import { createWebStatisticalWorkspace, getWebProjectId, putWebResearchSession, webErrorMessage } from "@/lib/apiClient";
+import { bindConversationCapability, newResearchSessionId } from "@/lib/dispatch";
 import type { CapabilityUi } from "@/lib/researchAgentUi";
-import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
+import { newRuntimeUiIntent, scopedConversationPath } from "@/lib/runtimeUiNavigation";
+import { useProjectStore } from "@/lib/projects";
 import { toast } from "@/lib/toast";
 
 /**
@@ -20,13 +22,37 @@ export function useOpenTool() {
   const [opening, setOpening] = useState<string | null>(null);
   const alive = useRef(true);
   const busy = useRef(false);
+  // Retained on failure: the server may have created the project before the binding response was lost.
+  const statisticalRequestId = useRef<string | null>(null);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const open = useCallback((agent: CapabilityUi) => {
     if (busy.current) return;
     busy.current = true;
     setOpening(agent.id);
-    void bindConversationCapability(null, { agentId: agent.id, agentVersion: agent.version })
-      .then((bound) => navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent(undefined, bound.sessionId), capabilityId: agent.id } }))
+    const allocate = async () => {
+      if (agent.id === "statistical-analysis") {
+        statisticalRequestId.current ??= crypto.randomUUID();
+        const bound = await createWebStatisticalWorkspace({ requestId: statisticalRequestId.current });
+        await useProjectStore.getState().load();
+        if (!alive.current) return;
+        navigate(scopedConversationPath("/app/chat", bound.projectId), { state: {
+          runtimeUiIntent: { ...newRuntimeUiIntent(undefined, bound.sessionId), projectId: bound.projectId }, capabilityId: agent.id,
+        } });
+        statisticalRequestId.current = null;
+        return;
+      }
+      if (isStatisticalWorkspaceProjectId(getWebProjectId())) {
+        const sessionId = newResearchSessionId();
+        await putWebResearchSession(sessionId, { mode: "specialist", agentId: agent.id, agentVersion: agent.version }, { projectId: "default" });
+        if (alive.current) navigate(scopedConversationPath("/app/chat", "default"), { state: {
+          runtimeUiIntent: { ...newRuntimeUiIntent(undefined, sessionId), projectId: "default" }, capabilityId: agent.id,
+        } });
+        return;
+      }
+      const bound = await bindConversationCapability(null, { agentId: agent.id, agentVersion: agent.version });
+      if (alive.current) navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent(undefined, bound.sessionId), capabilityId: agent.id } });
+    };
+    void allocate()
       .catch((error: unknown) => toast.error(`没能选定“${agent.title}”，对话没有打开。${webErrorMessage(error, { fallback: "请稍后重试。" })}`))
       .finally(() => { busy.current = false; if (alive.current) setOpening(null); });
   }, [navigate]);

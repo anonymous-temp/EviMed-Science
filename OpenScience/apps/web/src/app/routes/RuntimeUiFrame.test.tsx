@@ -1939,6 +1939,31 @@ describe("the conversation surface outlives the route", () => {
 });
 
 describe("which research tool a conversation runs", () => {
+  it("keeps the dedicated analysis root, draft and attachments in place when the native picker changes or drops its tool", async () => {
+    const projectId = `stat-${'a'.repeat(40)}`;
+    mocks.projectId = projectId; useProjectStore.setState({ currentId: projectId });
+    mocks.listSessions.mockResolvedValue([{ sessionId: "stats-root", mode: "specialist", agentId: "statistical-analysis", agentVersion: "1.0.0" }]);
+    const view = mount({ conversationProjectId: projectId }, "/app/chat/stats-root");
+    await waitFor(() => expect(view.container.querySelector("iframe")).not.toBeNull());
+    const frame = view.container.querySelector("iframe")!, post = vi.spyOn(frame.contentWindow!, "postMessage");
+    emit(frame, { type: "evimed.runtime-ui.booted", projectId });
+    emit(frame, { type: "evimed.runtime-ui.ready", seq: 2, projectId });
+    await waitFor(() => expect(post.mock.calls.some(([data]) => data.type === "evimed.runtime-ui.navigate")).toBe(true));
+    const command = post.mock.calls.map(([data]) => data).find(data => data.type === "evimed.runtime-ui.navigate");
+    emit(frame, { type: "evimed.runtime-ui.ack", seq: 3, projectId, requestId: command.requestId, ok: true, sessionId: "stats-root" });
+    await act(async () => { await Promise.resolve(); });
+    post.mockClear(); mocks.putSession.mockClear(); mocks.toastError.mockClear();
+    for (const [index, capabilityId] of ["adr-analysis", null].entries()) {
+      emit(frame, { type: "evimed.runtime-ui.bind-capability", seq: 4 + index, projectId, capabilityId, sessionId: "stats-root", draft: "Keep my draft and attached data" });
+    }
+    await waitFor(() => expect(mocks.toastError).toHaveBeenCalledTimes(2));
+    expect(mocks.putSession).not.toHaveBeenCalled();
+    expect(post.mock.calls.some(([data]) => data.type === "evimed.runtime-ui.navigate")).toBe(false);
+    expect(post.mock.calls.filter(([data]) => data.type === "evimed.runtime-ui.capability").every(([data]) => data.capabilityId === "statistical-analysis" && data.sessionId === "stats-root")).toBe(true);
+    expect(view.container.querySelector("iframe")).toBe(frame);
+    expect(testPath).toBe("/app/chat/stats-root");
+  });
+
   it("tells the frame what the control plane holds, and binds what the frame picks", async () => {
     mocks.listSessions.mockResolvedValue([{ sessionId: "session-a", mode: "specialist", agentId: "adr-analysis", agentVersion: "1.0.0" }]);
     const view = mount(null, "/app/chat/session-a");

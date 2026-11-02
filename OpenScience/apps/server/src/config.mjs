@@ -3330,6 +3330,13 @@ export function loadConfig(overrides = {}) {
     )) || 12)),
     // Off by default: turning it on publishes an account's memory to whoever
     // holds an API key. A deployment decides that, never a default.
+    dataAnalysisApiEnabled: overrides.dataAnalysisApiEnabled ?? boolEnv("OPEN_SCIENCE_DATA_ANALYSIS_API_ENABLED", false),
+    dataAnalysisMaxDispatches: boundedInteger(overrides.dataAnalysisMaxDispatches ?? process.env.OPEN_SCIENCE_DATA_ANALYSIS_MAX_DISPATCHES, 4, 1, 32, "OPEN_SCIENCE_DATA_ANALYSIS_MAX_DISPATCHES"),
+    dataAnalysisMaxInputBytes: boundedInteger(overrides.dataAnalysisMaxInputBytes ?? process.env.OPEN_SCIENCE_DATA_ANALYSIS_MAX_INPUT_BYTES, 20 * 1024 * 1024, 1024, 100 * 1024 * 1024, "OPEN_SCIENCE_DATA_ANALYSIS_MAX_INPUT_BYTES"),
+    dataAnalysisMaxArtifactBytes: boundedInteger(overrides.dataAnalysisMaxArtifactBytes ?? process.env.OPEN_SCIENCE_DATA_ANALYSIS_MAX_ARTIFACT_BYTES, 50 * 1024 * 1024, 1024, 100 * 1024 * 1024, "OPEN_SCIENCE_DATA_ANALYSIS_MAX_ARTIFACT_BYTES"),
+    dataAnalysisMaxSnapshotBytes: boundedInteger(overrides.dataAnalysisMaxSnapshotBytes ?? process.env.OPEN_SCIENCE_DATA_ANALYSIS_MAX_SNAPSHOT_BYTES, 200 * 1024 * 1024, 1024, 1024 * 1024 * 1024, "OPEN_SCIENCE_DATA_ANALYSIS_MAX_SNAPSHOT_BYTES"),
+    dataAnalysisFetchTimeoutMs: boundedInteger(overrides.dataAnalysisFetchTimeoutMs ?? process.env.OPEN_SCIENCE_DATA_ANALYSIS_FETCH_TIMEOUT_MS, 30_000, 1000, 120_000, "OPEN_SCIENCE_DATA_ANALYSIS_FETCH_TIMEOUT_MS"),
+    dataAnalysisSourcesFile: String(overrides.dataAnalysisSourcesFile ?? process.env.OPEN_SCIENCE_DATA_ANALYSIS_SOURCES_FILE ?? ""),
     agentMemoryApiEnabled:
       overrides.agentMemoryApiEnabled ?? boolEnv("OPEN_SCIENCE_AGENT_MEMORY_API_ENABLED", false),
     // 「转为深度研究」 (fusion plan §9.5, researchHandoff.mjs): EviMed's shell

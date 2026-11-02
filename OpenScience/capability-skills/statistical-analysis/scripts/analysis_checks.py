@@ -56,6 +56,7 @@ from __future__ import annotations
 import argparse
 from bisect import bisect_right
 from collections import Counter, defaultdict
+from copy import deepcopy
 from fractions import Fraction
 import json
 import math
@@ -511,6 +512,130 @@ def compare_reported_numbers(results, comparisons):
             **({"reason": "no_comparisons"} if not checked else {}),
             "scope": "explicit_numeric_bindings_only", "proseChecked": False, "comparisons": checked,
             "counts": {"requested": len(checked), "matched": counts["match"], "mismatched": counts["mismatch"], "notChecked": counts["not_checked"]}}
+
+
+def convert_result_units(document, *, factor, value_paths, unit_paths, unit):
+    """Copy a result and change only explicit dimensional leaves and unit labels.
+
+    This is a linear scaling operation, not a statistical refit or an inference
+    about units. Variances need the squared factor in a separate operation;
+    offset conversions and changes of estimand require a different calculation.
+    The caller must select dimensional quantities, never ratios or probabilities.
+    """
+    scale = _number(factor)
+    if scale is None or scale <= 0 or not isinstance(document, dict):
+        raise ValueError("finite_positive_factor_and_result_object_required")
+    if not isinstance(value_paths, list) or not value_paths or not isinstance(unit_paths, list):
+        raise ValueError("explicit_conversion_paths_required")
+    if not isinstance(unit, str) or not unit.strip() or len(unit) > 80:
+        raise ValueError("unit_label_invalid")
+    protected = {"pValue", "p_value", "n", "counts", "statistic", "df", "seed", "level", "intervalLevel", "diagnostics"}
+    seen = set()
+    result = deepcopy(document)
+
+    def leaf(pointer):
+        if not isinstance(pointer, list) or not pointer or any(type(key) not in (str, int) or isinstance(key, int) and key < 0 for key in pointer):
+            raise ValueError("conversion_path_invalid")
+        signature = tuple(pointer)
+        if signature in seen:
+            raise ValueError("duplicate_conversion_path")
+        seen.add(signature)
+        parent = result
+        try:
+            for key in pointer[:-1]:
+                if not (isinstance(parent, dict) and isinstance(key, str) or isinstance(parent, list) and type(key) is int):
+                    raise ValueError("conversion_path_invalid")
+                parent = parent[key]
+            key = pointer[-1]
+            if not (isinstance(parent, dict) and isinstance(key, str) or isinstance(parent, list) and type(key) is int):
+                raise ValueError("conversion_path_invalid")
+            return parent, key, parent[key]
+        except (KeyError, IndexError, TypeError) as error:
+            raise ValueError("conversion_path_missing") from error
+
+    for pointer in value_paths:
+        if isinstance(pointer, list) and any(isinstance(key, str) and key in protected for key in pointer):
+            raise ValueError("dimensionless_field_cannot_be_scaled")
+        parent, key, value = leaf(pointer)
+        number = _number(value)
+        if number is None or not math.isfinite(number * scale):
+            raise ValueError("finite_dimensional_value_required")
+        parent[key] = number * scale
+    for pointer in unit_paths:
+        parent, key, value = leaf(pointer)
+        if key not in {"unit", "estimateUnit", "displayUnit", "timeUnit"} or not isinstance(value, str):
+            raise ValueError("explicit_unit_label_path_required")
+        parent[key] = unit
+    return result
+
+
+def audit_survival_curve(rows, *, n, events, censored, max_time, time_column="time",
+                         at_risk_column="atRisk", event_column="events",
+                         censor_column="censored", survival_column="survival"):
+    """Check a complete, static-cohort KM plot table, including censor-only times.
+
+    This does not validate censoring assumptions, delayed entry, competing risks,
+    weights or population generalizability. Totals are caller declarations;
+    compare them with independently read input data. Return aggregate findings,
+    never source rows. A truncated-horizon plot needs a separate declared scope.
+    """
+    totals = [_number(value) for value in (n, events, censored)]
+    end_time = _number(max_time)
+    if (any(value is None or value < 0 or int(value) != value for value in totals)
+            or not totals[0] or totals[1] + totals[2] != totals[0]
+            or end_time is None or end_time < 0):
+        return {"status": "unavailable", "reason": "valid_static_cohort_totals_required", "findings": []}
+    if not isinstance(rows, list) or not rows:
+        return {"status": "unavailable", "reason": "complete_timeline_required", "findings": []}
+    counts_by_code = Counter()
+    sample_rows = defaultdict(list)
+
+    def finding(code, row=None):
+        counts_by_code[code] += 1
+        if row is not None and len(sample_rows[code]) < 3:
+            sample_rows[code].append(row)
+
+    observed_events = observed_censors = 0
+    available, previous_survival, previous_time = totals[0], 1.0, -1.0
+    for index, row in enumerate(rows):
+        if not isinstance(row, dict):
+            finding("invalid_row", index)
+            continue
+        time = _number(row.get(time_column), strings=True)
+        risk, deaths, withdrawals = [_number(row.get(column), strings=True)
+                                     for column in (at_risk_column, event_column, censor_column)]
+        survival = _number(row.get(survival_column), strings=True)
+        if time is None or time < 0 or time <= previous_time:
+            finding("time_not_increasing", index)
+        else:
+            previous_time = time
+        if any(value is None or value < 0 or int(value) != value for value in (risk, deaths, withdrawals)):
+            finding("invalid_count", index)
+            continue
+        observed_events += deaths
+        observed_censors += withdrawals
+        if risk != available or deaths + withdrawals > risk:
+            finding("risk_set_mismatch", index)
+        if survival is None or not 0 <= survival <= 1:
+            finding("invalid_survival", index)
+        elif risk == 0:
+            finding("empty_risk_set", index)
+        else:
+            expected = previous_survival * (1 - deaths / risk)
+            if not math.isclose(survival, expected, rel_tol=1e-7, abs_tol=1e-9):
+                finding("survival_recursion_mismatch", index)
+            previous_survival = survival
+        available -= deaths + withdrawals
+    if observed_events != totals[1]:
+        finding("event_total_mismatch")
+    if observed_censors != totals[2]:
+        finding("censor_total_mismatch")
+    if not math.isclose(previous_time, end_time, rel_tol=1e-9, abs_tol=1e-9):
+        finding("timeline_ends_early" if previous_time < end_time else "timeline_exceeds_followup")
+    findings = [{"code": code, "count": count, "rows": sample_rows[code]} for code, count in counts_by_code.items()]
+    return {"schemaVersion": 1, "kind": "survival_curve_audit", "scope": "declared_static_cohort_complete_timeline",
+            "status": "findings" if findings else "supported_by_declared_checks", "findings": findings,
+            "counts": {"rows": len(rows), "events": observed_events, "censored": observed_censors}}
 
 
 def main():

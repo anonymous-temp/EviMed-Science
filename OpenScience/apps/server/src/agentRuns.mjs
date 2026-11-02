@@ -4429,6 +4429,7 @@ export class AgentRunStore {
   constructor(researchSessions, options = {}) {
     this.researchSessions = researchSessions;
     this.nativeInputs = options.nativeInputs ?? null;
+    this.authorizeReservation = options.authorizeReservation ?? (async () => {});
     this.agentRegistry = Promise.resolve(options.agentRegistry);
     // The same registry, once it has loaded, for the one synchronous reader:
     // a pushed `run/state` describes its artifacts like the list does.
@@ -5070,6 +5071,7 @@ export class AgentRunStore {
     goal = null,
     beforeReserve = null,
   } = {}) {
+    await this.authorizeReservation(project, { sessionId: session.sessionId, dispatchId, dispatchFingerprint });
     return withProjectStorageMutation(project, async () => {
       const events = parseEvents(await readLedgerText(project, this.maxBytes));
       const runs = foldEvents(events);

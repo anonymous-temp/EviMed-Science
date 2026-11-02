@@ -18,6 +18,7 @@
       "pdfplumber": "0.11.7",
       "pillow": "10.4.0",
       "playwright": "1.58.0",
+      "pyarrow": "20.0.0",
       "pydeseq2": "0.5.4",
       "pypdf": "6.7.0",
       "python-docx": "1.2.0",
@@ -47,6 +48,7 @@
       "pdfplumber": ["pdfplumber","pdfminer","pypdfium2"],
       "pillow": ["PIL"],
       "playwright": ["playwright","greenlet","pyee"],
+      "pyarrow": ["pyarrow"],
       "pydeseq2": ["pydeseq2","formulaic_contrasts"],
       "pypdf": ["pypdf"],
       "python-docx": ["docx","lxml"],
@@ -812,7 +814,7 @@
       "origin": "capability",
       "version": "1.1.4",
       "source": {"kind":"release"},
-      "digest": "sha256:4ed66d6483c24793bc9bd21beeb5d3c9f1e55d15dd16eb29029b3ff3cbc181b0",
+      "digest": "sha256:6a23959bbfde1cf067f6a7f5229d09203d3b583ebbf67bc08f980c8d17387396",
       "digestAlgorithm": "release-directory-v1",
       "references": [{"path":"capability.yaml","sha256":"34e2ca651623b23c110e281f997395a6e0e537b26d834e7537f0e963bdc1275b"}],
       "dependencies": [{"kind":"platform-tool","name":"meta_analysis","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"}],
@@ -1049,19 +1051,20 @@
       "id": "capability/statistical-analysis",
       "name": "statistical-analysis",
       "origin": "capability",
-      "version": "1.4.1",
+      "version": "1.5.0",
       "source": {"kind":"release"},
-      "digest": "sha256:35a59aeb65d61127ef4f3a508d60edbb34226cfdc771ef7de6ec5c5fc21aff5f",
+      "digest": "sha256:1de389d25c87af78d71f4e3937c86e357cc6fccc54b1ae7c0ca304a0dd4504d9",
       "digestAlgorithm": "release-directory-v1",
       "scripts": [
-        {"path":"scripts/analysis_checks.py","sha256":"bad10054bdea386b3883a53185956e5d5ff172f844c6044c8307cddb2bfa2502"},
-        {"path":"scripts/analysis_methods.py","sha256":"43405739eeeb483706088d1ad5062fd93420db740e7340b813f57d880fb51996"},
+        {"path":"scripts/analysis_checks.py","sha256":"40adc68ef0f749f8c69859999684be324831bb95917bfc3ee33f21ecbac568c5"},
+        {"path":"scripts/analysis_methods.py","sha256":"57fb994767c7a569f32329300b002c13316d9dd092a073b59cf9fec07ee57201"},
         {"path":"scripts/analysis_session.py","sha256":"2b62a585a569c0eb83b0d8c5e4a5f898ac989f2a3c8d77cd1aa41cbcdd95c5cf"},
         {"path":"scripts/run_analysis.py","sha256":"d4161a3f888a59409e314f8e8c1eb2462f52241efb8083488abbae5f21825198"}
       ],
       "references": [
-        {"path":"capability.yaml","sha256":"9d980528dc0a8bca5e7edcf960e36e030442e9c984b213507ed76975726a9f65"},
-        {"path":"scripts/analysis_method_records.json","sha256":"6dac24227531b26c8f8822ea660340104ad3c17a13c6ca15d1ddb298c87e6bc8"}
+        {"path":"capability.yaml","sha256":"e2edc19f9025ea7ea0a2e03db89528621bf4f3f5cdea98f67c0d762e98673f77"},
+        {"path":"references/execution.md","sha256":"6b4701f17483b1e6deaf9cf26fdabff44ef51ea3e63c6efd50e7475f7cf590d5"},
+        {"path":"scripts/analysis_method_records.json","sha256":"d8eb0991b3e3b1ee4eaf2c42b32eb87bf8c24a1ec15e042897e60c69d0a081a6"}
       ],
       "dependencies": [
         {"kind":"platform-tool","name":"dataset_semantics","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},

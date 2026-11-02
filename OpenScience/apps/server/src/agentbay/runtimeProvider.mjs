@@ -1,3 +1,4 @@
+import { isDataAnalysisProject } from '../internalProjects.mjs';
 import {platformSkillGenerationRoot,verifyPlatformSkillGeneration} from "../platformSkillSupply.mjs";
 import { verifyPersonalSkillGeneration } from '../personalSkillGenerationService.mjs';
 import { openScopedFileNoFollow, readStableFileHandle } from '../security.mjs';
@@ -661,7 +662,7 @@ export class AgentBayRuntimeProvider {
         bundleVersion: String(config.socketBundleVersion ?? ""),
         compaction: compactionRuntimeEnv(runtimeCompactionSettings(config)),
         disabledPlugins: config.runtimeDisabledSocketPlugins ?? [],
-        loopxEnabled: config.loopxEnabled !== false,
+        loopxEnabled: config.loopxEnabled !== false && !isDataAnalysisProject(project),
         geoSkills: plan.geoSkills === true,
         flags: {
           hosted: Boolean(config.production || config.runtimeUiProxyEnabled),

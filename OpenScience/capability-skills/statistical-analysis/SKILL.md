@@ -1,186 +1,136 @@
 ---
 name: statistical-analysis
-description: Execute reproducible Python/R statistical analyses of supplied data and explain results, uncertainty, diagnostics and limitations.
+description: Analyze supplied data with executed Python/R, preserve multi-turn state, and return results, tables, figures and reproducible code.
 ---
 
 # Statistical analysis
 
-You own the analysis from the researcher's question to the executed answer. The
-researcher supplies a goal and data, not an algorithm checklist: inspect, choose,
-execute, check and explain in the conversation, with Python/R and installed
-scientific libraries doing the numerical work. The reference helpers are
-optional and are not the boundary of what you can analyze.
+The researcher gives a question and data. You own the analysis: inspect the
+actual input, choose a suitable installed method, execute, check, and explain.
+DeepSeek/DSH handles the conversation and tools; numerical libraries compute the
+numbers. Do the work, not an algorithm-selection form or an unevaluated script.
 
-Keep the work proportional. A descriptive question needs a descriptive answer, a
-prediction question needs held-out evaluation, a causal question needs its
-identifying assumptions. Start a simple comparison with one primary estimate,
-its uncertainty, the relevant data checks and a small independent cross-check;
-add a sensitivity analysis only for an identified concern. Use installed
-libraries rather than writing a distribution or interval algorithm yourself, and
-never answer a requested calculation with only a proposed script, an algorithm
-menu or an unevaluated formula.
+## Work to the question
 
-Infer the estimand, population, independent unit and outcome/event coding from
-the question and data; ask only about ambiguities that change the analysis,
-otherwise state the assumption and proceed. Profile locally with aggregates and
-masked examples, keep source data unchanged, and account for clustering,
-repeated measurements, exclusions and missing values: a row is not necessarily
-an independent subject. Take category and event meanings from the dictionary or
-source metadata; feature direction and class counts are only consistency checks.
+Start with one primary analysis that answers the question. Return its estimate,
+uncertainty when relevant, population/denominator and requested outputs. A small
+comparison needs a short report, not a catalogue of tests. Do not add power
+simulations, alternative estimators, a methods bibliography, speculative clinical
+mechanisms or extended sensitivity sections unless the researcher requested them
+or a concrete failure of the primary analysis makes them necessary. One small
+independent calculation is usually enough. Stop when the requested work is ready.
+A prediction task can require validation; a descriptive task does not require a
+predictive model. General data, corpus and exploratory work are valid here.
 
-Start from what the project already knows about the data: read it with
-`mcp__evimed__dataset_semantics` (action `read`). A recorded interpretation (unit,
-keys, code lists, population, joins, applied transformations) is the starting
-point for a repeat analysis; state any departure. Write what you establish or the
-researcher corrects (action `write`) with its basis: `researcher_confirmed` (never
-overwritten by an inference), `dictionary_stated` or `model_inferred`; record each
-derived variable and filter with action `transform`. On a new delivery of the data
-action `check` names drift, repeated observations, join multiplicity, differing
-denominators and post-outcome predictors: handle and report each finding, and
-treat a check that did not run as unknown, not clean.
+## Read the data and its meaning
 
-Choose methods from the design and question. Obtain every reported number and
-its rendered string from execution, compute comparative claims from the executed
-quantities, and say which results and figures a script regenerates.
-Report effect direction, denominators, estimate, appropriate uncertainty and
-assumptions, and keep material diagnostics, convergence warnings and exploratory
-status. For a diagnostic whose null states an assumption, compare its p value
-with the chosen threshold: a nonsignificant test only says the data did not
-reject that null, not that the assumption holds. For example, Levene or
-Brown–Forsythe p=1 and a sample variance ratio of 1 do not prove equal
-population variances. Review this distinction in both the report and reply;
-consider power and the analysis method's actual assumptions. The optional
-`analysis_checks.interpret_assumption_test` records this distinction for such
-diagnostics (not equivalence tests or tests with a different null). A p value
-alone does not establish importance or causation; a cut-point chosen on these
-data is an exploratory fitted rule, not validated performance. For a censored
-measurement, do not substitute the detection limit for the unknown value or drop
-a known category, and keep quantitative and categorical denominators distinct.
+Inspect real files, sheets/tables, types, keys and existing results before coding.
+CSV, Excel, JSON and Parquet have different schemas and missing-value conventions.
+Repeated exports are not extra participants. Check join cardinality and unmatched
+keys; use patient plus encounter keys when the relation needs both. A document
+chunk/embedding table is a corpus, not a clinical cohort. Use selected columns or
+batches for large inputs; do not dump private rows into the conversation.
 
-Before writing code, inspect the actual files and any existing executed results,
-receipt and dictionary. Reuse a saved result only if its input fingerprint,
-cohort, coding, units, question, method, executed code and dependency versions
-match; do not recompute because a question was rephrased or reuse incompatible
-state because a file has a familiar name. After execution,
-check outputs, denominators and effect direction, and cross-check a small
-decisive result when practical. If code fails, diagnose the actual error, repair
-or choose a defensible alternative and keep the successful work.
+Read established meaning with `mcp__evimed__dataset_semantics` (`read`). Preserve
+researcher-confirmed meanings; record corrections and derived variables with
+`write`/`transform`, and check drift when new data arrives. If that service is
+unavailable, continue from the files and disclose the missing check. Keep source
+snapshots unchanged and derived files separate. An unfetched URL is not data.
 
-On a follow-up, reuse the established unit, cohort and fitted state and rerun
-only the affected steps; changed data and a changed question are different
-things. When the researcher asks to keep the existing computation, treat it as an
-execution constraint: for a unit-only conversion or a fixed-threshold change on
-unchanged data, transform the executed estimates or saved probabilities, verify
-against them, and leave the original results, fitted state and inputs untouched;
-if a pipeline always recomputes everything, write a small separate continuation
-script. In both the reply and report, describe what the executed continuation
-actually did: a statistic recomputed as an independent verification was still
-recomputed, even if its prior result was also reused. Do not claim it was not
-recomputed or that only affected calculations ran when the script reran other
-calculations. Prefer a small decisive verification to rerunning every unchanged
-analysis. Judge fitted-state reuse from its recorded input, code, versions and
-split, not by retraining. Persist transformation code, fitted state and the
-data/split definition. For predictive evaluation fit every learned transformation
-on training data only and apply that state to held-out data. On a data
-supplement compare fingerprints and deliberately update or refit.
+Infer the estimand, independent unit, coding, units and analysis population from
+the question/dictionary. Ask only when an ambiguity changes the answer and cannot
+be resolved from supplied material. A row or unique ID does not prove independence,
+absence of clustering, absence of time-dependent bias or noninformative censoring.
+Name unobserved design assumptions; do not invent absent treatment/event histories.
+Separate observed table facts, quoted source statements and unverified hypotheses
+in quality findings (use `evidenceBasis` when useful). Cross-view correspondence
+does not reveal how a file was produced; all-zero indicators may include reference
+categories or unknowns. Missingness associated with observed outcomes does not
+identify MAR/MNAR. Preserve contradictory ranges literally and mark them unknown;
+do not reorder endpoints or invent units, averaging rules or clinical dose limits.
+Coding coverage is not clinical applicability. Hashing an identifier does not
+establish the patient/episode identity that identifier represents.
 
-Use only tools actually exposed in this session. An external catalogue such as
-ToolUniverse may supplement the workflow with an admitted tool; check its data
-boundary first and never send patient-level data to an external service. The
-hosted helpers live in `$EVIMED_CAPABILITY_SKILLS_DIR/statistical-analysis/scripts`
-(beside this file otherwise); do not search the host or dump its environment.
+## Execute and check
 
-## Updating an analysis across turns
+Use the installed scientific libraries and relevant skills. Native Python/R is
+open-ended; the nine reference helpers are optional components, not a capability
+boundary. Do not install unpinned packages during a research turn. Locate helpers
+at `$EVIMED_CAPABILITY_SKILLS_DIR/statistical-analysis/scripts`, beside this skill
+otherwise. Read `references/execution.md` only for the helper or continuity details
+needed now; do not perform every workflow it describes.
 
-The optional `scripts/analysis_session.py` keeps `analysis-session.json` (your
-step definition) apart from `analysis-state.json` (observed executions). Separate
-preparation, estimation and report/threshold evaluation when their dependencies
-differ, and give each step only the semantics it needs in its `context`
-(grouping, unit, coding, transform, model). A unit or
-fixed-threshold change should leave the fitted model and split reusable; new
-patients or corrected labels invalidate what they touch. A result is reusable
-only while its sources, code, dependencies, context, versions, latest receipt and
-output hashes match. An undefined value (a p-value in a degenerate
-subgroup) is stored as null with a `nonfinite` warning listed by `status`; it is
-a result, and its dependants may run.
+Check execution, effect direction, denominators, exclusions, missingness and
+material warnings. Preserve working results if another calculation fails. Obtain
+reported numbers from executed outputs, keep full precision in machine-readable
+results, and round only display strings. A successful script is not scientific
+verification. A diagnostic that fails to reject its null does not prove the
+assumption. Nonsignificance is not equivalence or proof of no effect; p values
+do not establish importance or causation. Different tests
+can address different nulls, so their agreement need not establish robustness.
+Permutation tests need the relevant exchangeability/randomization; signed-rank
+location interpretations need symmetry. Do not label an arbitrary sample median
+as a signed-rank effect estimate. Finite-cohort missing-outcome scenarios are not
+population bounds, confidence intervals or comparable uncertainty components.
 
-```json
-{"schemaVersion":1,"steps":[{"id":"estimate","script":"estimate.py","interpreter":"python","inputs":["data.csv"],"outputs":["estimates.json"],"results":"estimates.json","dependsOn":[],"context":{"group":"B minus A","unit":"mm"}},{"id":"report","script":"report.py","interpreter":"python","inputs":["estimates.json"],"outputs":["report-values.json","statistical-report.md"],"results":"report-values.json","dependsOn":["estimate"],"context":{"displayUnit":"cm"},"args":["--scale","0.1"]}]}
-```
+For prediction, keep learned preprocessing/selection/tuning/calibration inside
+training folds, preserve splits and probabilities, and label the positive class
+explicitly. Use `analysis_checks.audit_predictions` when its declared checks fit;
+it does not prove absence of every leakage risk or external validity.
 
-```bash
-SCRIPTS="$EVIMED_CAPABILITY_SKILLS_DIR/statistical-analysis/scripts"
-python "$SCRIPTS/analysis_session.py" status --workspace . --spec analysis-session.json --state analysis-state.json
-python "$SCRIPTS/analysis_session.py" run --workspace . --spec analysis-session.json --state analysis-state.json --step estimate
-```
+For survival plots, use a library's complete timeline including censor-only
+times, carry the curve through the last follow-up, and check event/censor totals
+and risk sets against the input. `analysis_checks.audit_survival_curve` checks a
+complete static-cohort table; delayed entry, weights or competing-risk estimands
+need their own scope. A correct landmark estimate does not validate a whole plot.
+For all-cause death, transplantation or a treatment change is not automatically
+a competing event: death can still occur afterwards. If death follow-up stops,
+consider potentially informative censoring, without inventing a bias direction.
+Competing-event definitions depend on the endpoint. Keep Greenwood's cumulative
+term distinct from Var(S), which is S squared times that term (and SE squared).
 
-Only the named step runs: check `status`, run any stale dependency first, one
-command at a time. Declare every script, fitted state, configuration and input a
-step reads, pass a single parameter as an argument or a small declared file, and
-write all declared outputs. A failed update keeps the prior results and history;
-hashes establish continuity, not scientific correctness.
+When a report goes beyond directly counted facts and arithmetic cannot check its interpretation, use a
+brief read-only review by an available native subagent when useful: have it read
+the primary report, executed results and plotted data, checking estimand, units,
+denominators, null hypotheses and source-supported limitations. Review existing
+work, do not request extra analyses. Correct supported findings in place and
+retain useful results and explicit uncertainty; this is not a delivery veto.
 
-## Deliverables and helpers
+## Continue without losing valid work
 
-Deliver the answer in plain language and a substantive `statistical-report.md`
-with the findings, remaining uncertainty and limitations, plus useful
-reproducibility artifacts (optional names `analysis-results.json`,
-`analysis-run.json`, `analysis.py`, `analysis.R`; no empty placeholders, no need
-for both languages). Prefer structured results with `schemaVersion: 1` and
-`analyses: [{id, status, method, estimand, n, estimate, interval, pValue,
-warnings}]`; omit inapplicable fields, give a failed or unsupported status a
-reason, and never label a null or non-finite estimate complete.
+Read prior results, code, data fingerprints, split and fitted state. Reuse only
+compatible state and rerun only affected steps. Unit-only and fixed-threshold
+changes must not retrain a model. For linear unit conversion, use
+`analysis_checks.convert_result_units` to deep-copy JSON and update explicit
+numeric/unit paths; preserve method labels, diagnostics, p values and counts.
+Variances need a squared factor separately. Check unchanged metadata against the
+original. A threshold change reuses saved probabilities. New patients or corrected
+labels require deliberate invalidation. The optional `analysis_session.py` step
+graph and `run_analysis.py` receipts retain dependencies, hashes and history.
+Say what the continuation actually did: a statistic recomputed as a check was
+recomputed, even if its prior result was also reused.
 
-`scripts/analysis_methods.py` (add its directory to `sys.path`) has
-`compare_groups`, `covariate_balance`, `contingency_test`, `linear_regression`,
-`logistic_regression`, `kaplan_meier`, `log_rank`, `cox_regression` and
-`adjust_pvalues`. Each returns an entry shaped for `analysis-results.json` with
-its diagnostics, method record and library versions; a computation the data
-cannot support comes back `unsupported` with a reason and no number, and every
-other analysis stays. Its diagnostics are labels, not verdicts.
+## Return usable outputs
 
-`scripts/run_analysis.py` records provenance:
+Give a concise answer plus `statistical-report.md`, executed `analysis-results.json`
+and useful code/receipts. Prefer `schemaVersion: 1` and
+`analyses: [{id,status,method,estimand,n,estimate,interval,pValue,warnings}]`;
+omit inapplicable fields, explain partial/unsupported values, never fake a number.
+`research_calculate(action=render)` can bind display strings to executed JSON.
 
-```bash
-python "$EVIMED_CAPABILITY_SKILLS_DIR/statistical-analysis/scripts/run_analysis.py" --workspace . --interpreter python --script analysis.py --input data.csv --results analysis-results.json --receipt analysis-run.json
-```
+For requested figures, save an actual PNG preview and useful SVG/PDF; use headless
+plotting, clear labels/units and suitable uncertainty. Save the exact plotted data
+as CSV/JSON, check the image opens and the plot matches those arrays. Optional
+interactive HTML is an additional download. Never claim a plot exists when it
+failed. Do not overwrite prior results on a follow-up.
 
-Use `--interpreter r --script analysis.R` for native R; repeat `--input`,
-`--transform` (persisted state) and `--arg`; `--parent` links a follow-up to an
-earlier execution id. It records hashes, versions and output observations and
-selects no method. Direct native execution is valid; a missing receipt is only a
-traceability notice.
+Write a small `analysis-output.json` with `schemaVersion: 1`, `summary`,
+`tables: [{path,title}]`, `figures: [{path,title,dataPath,caption}]`, and `code: [path]`.
+Paths must name actual files relative to the workspace or this manifest's folder.
+The API validates files and returns download URLs; do not invent URLs yourself.
+This index is not scientific proof or permission to read another workspace.
 
-To carry executed numbers into the report, write it as a template with
-`{{n:alias.key|format}}` references and call `mcp__evimed__research_calculate`
-with `action=render`, naming each alias's `{resultsPath, receiptPath}`. It writes
-a new file; an unresolved reference reads 未计算 and typed numbers are checked.
-
-For prediction, `scripts/analysis_checks.py` provides `audit_predictions` over
-row dictionaries. Supply `outcome_column`, `positive_label`, `negative_label`,
-`probability_column`, `probability_label`, `split_column` and `patient_id_column`;
-labels stay typed strings and the event is the label you name, never inferred
-from numeric order. Keep training rows in the input, declare every learned stage
-(imputation, selection, tuning, calibration, final fit) in `fit_stages` as
-`{"name":..., "fitIds":[...], "idLevel":"patient", "predictors":[...]}` with the
-IDs it really fitted on, give `predictor_columns`, and count upstream exclusions
-in `withheld_rows`. A row-number ID is an observation key, not evidence of
-independent patients; keep each patient on one side of a split. Without a true
-patient ID or fitting scope, report that limit rather than claim no leakage. Its
-findings and metrics do not prove external validity.
-
-`compare_reported_numbers(results, comparisons)` checks explicit bindings such
-as `{"id":"auc","source":["metrics","auc"],"reported":0.923,"absoluteTolerance":0.0005}`
-for the numbers inserted into the report; it certifies no prose. Keep numerical
-results, probabilities and model state at full precision and round only display
-strings. Label every denominator by its population (full data, training,
-held-out, complete cases) and recompute each percentage from that population's
-numerator and denominator, in the reply as well as the report, reusing the
-executed display strings.
-
-An unavailable package, invalid model input, failed extra calculation or
-formatting error affects that operation. Preserve existing results and code,
-state the limitation and use a defensible alternative. Never fabricate an
-execution, replace a failed estimate with zero, discard a whole package or require
-human approval to continue. Do not print raw patient rows, credentials,
-environment dumps or complete process logs into the report.
+Keep private data and source credentials in their authorized boundary. Use only
+exposed tools; an optional external catalogue does not authorize sending patient
+rows elsewhere. Do not replace useful partial work with a stub or require human
+approval to deliver it. State material limits in both the report and final reply.

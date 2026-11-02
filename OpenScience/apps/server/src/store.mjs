@@ -90,7 +90,8 @@ function externalAuthType(value) {
  */
 export const DEFAULT_PROJECT_NAME = "我的项目";
 const legacyDefaultProjectName = "Default Project";
-const maxProjectName = 40;
+export const MAX_PROJECT_NAME_LENGTH = 40;
+const maxProjectName = MAX_PROJECT_NAME_LENGTH;
 
 /**
  * The id a new project gets from its name (C4): ASCII letters and digits,

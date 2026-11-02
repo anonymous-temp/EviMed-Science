@@ -1,0 +1,125 @@
+{
+  "schemaVersion": 1,
+  "cases": [
+    {
+      "id": "paired-sleep",
+      "inputs": [
+        {
+          "file": "fixtures/sleep.csv"
+        }
+      ],
+      "turns": [
+        "这份公开的 sleep 数据中，同一 ID 对应同一个人，extra 是相对基线增加的睡眠小时数，group 是两种药物。比较药物2相对药物1的平均变化及95%区间。请给出简洁报告、结构化数值、体现配对关系的图及绘图数据和代码，只做回答这个问题必要的分析。",
+        "沿用上轮已经执行的结果，把主要差值和区间改用分钟显示，生成更新后的图和结果JSON。不要重跑原分析，不要修改原有结果和原始数据。"
+      ]
+    },
+    {
+      "id": "heart-survival",
+      "inputs": [
+        {
+          "url": "https://archive.ics.uci.edu/ml/machine-learning-databases/00519/heart_failure_clinical_records_dataset.csv",
+          "filename": "heart-failure.csv"
+        }
+      ],
+      "turns": [
+        "分析这份公开心衰队列。time是随访天数，DEATH_EVENT为1表示死亡、0表示删失。估计全队列90天生存概率及95%区间，说明删失和观察性研究限制。返回简洁报告、结构化结果、生存曲线及风险人数、曲线数据和可复现代码。不要把随访时长当作入组时预测变量。"
+      ]
+    },
+    {
+      "id": "lung-native-r",
+      "inputs": [
+        {
+          "file": "../fixtures/lung.csv"
+        }
+      ],
+      "turns": [
+        "这是R survival包的lung公开数据。status编码1=删失、2=死亡，time单位为天。用R估计总体中位生存期和180天生存概率，画生存曲线和风险人数，保留结构化结果、绘图数据、R代码与简洁报告。缺失协变量不应减少这个未调整生存分析的人数。"
+      ]
+    },
+    {
+      "id": "pbc-population",
+      "inputs": [
+        {
+          "file": "fixtures/pbc.csv"
+        }
+      ],
+      "turns": [
+        "检查这份公开PBC队列，区分有随机治疗分组trt的试验参与者和没有该分组的额外观察者。status为0删失、1移植、2死亡。汇总两类人群的样本数、结局和关键缺失情况，给出表格、图、结构化结果和可复现代码。只做描述性分析，不把移植混作死亡，不把trt缺失当作第三个随机治疗组。"
+      ]
+    },
+    {
+      "id": "factorial-tooth",
+      "inputs": [
+        {
+          "file": "fixtures/tooth-growth.csv"
+        }
+      ],
+      "turns": [
+        "这是公开ToothGrowth动物实验数据，len为牙齿长度，supp是补充形式，dose有三个剂量水平。分析不同剂量下两种补充形式的差异是否一致，把dose作为分类因素评估交互作用。返回简洁报告、结构化结果、交互图、绘图数据和代码，说明研究对象，避免外推人体疗效。"
+      ]
+    },
+    {
+      "id": "wdbc-prediction",
+      "inputs": [
+        {
+          "file": "../fixtures/breast-cancer.csv"
+        }
+      ],
+      "turns": [
+        "基于公开乳腺肿瘤数据建立一个适度复杂的恶性概率预测基线。breast_cancer_yn=0为恶性、1为良性。保留独立测试集，所有学习的预处理只能用训练数据。保存测试预测概率、模型、划分和代码；给出ROC、校准图及绘图数据、AUC和Brier等结构化结果与简洁报告。不要为追求高分反复挑选测试集。",
+        "保留原模型、划分和预测概率，只把恶性判定阈值改为0.3，重新计算测试集混淆矩阵与相关指标，生成结果JSON和对应图。不要重新训练，并明确每个指标的分母。"
+      ]
+    },
+    {
+      "id": "diagnostic-interpretation",
+      "inputs": [
+        {
+          "file": "../live/fixtures/diagnostic.csv"
+        }
+      ],
+      "turns": [
+        "这是模拟数据，A、B两组各是独立对象。比较B相对A的measurement均值差及95%区间，解释方法选择和实际检查的假设，给简洁可复现报告、结果JSON和一张必要的图。"
+      ]
+    },
+    {
+      "id": "continuity-supplement",
+      "inputs": [
+        {
+          "file": "../live/fixtures/cohort.csv"
+        }
+      ],
+      "turns": [
+        "这份模拟数据按subject标识独立患者，measurement单位mm。比较B相对A的平均差异，给出95%区间、结构化结果、图表数据和可复现报告。"
+      ]
+    },
+    {
+      "id": "equivalent-formats",
+      "inputs": [
+        {
+          "file": "fixtures/heart-failure.parquet"
+        },
+        {
+          "file": "fixtures/heart-failure.xlsx"
+        },
+        {
+          "file": "fixtures/heart-failure.json"
+        }
+      ],
+      "turns": [
+        "这三份公开心衰数据以不同格式导出。检查它们是否表示同一批记录，不能把重复导出当作新增患者；核对每份文件的人数、DEATH_EVENT=1的数量、serum_creatinine均值和缺失数。保留简洁的结构化对照结果、可下载表格、一个适当的图和代码。只做数据一致性分析，不做疗效或预测推断。"
+      ]
+    },
+    {
+      "id": "nested-bundle-delivery",
+      "inputs": [
+        {
+          "file": "fixtures/revision-package.zip"
+        }
+      ],
+      "turns": [
+        "This is a synthetic artifact-delivery smoke, not a statistical task. The attached revision-package.zip already contains the current bundle in deliverables/current and a historical base-v2 subdirectory. Extract all eight files with their relative paths intact into this workspace, verify that the current report and JSON say version 3, and present only deliverables/current/statistical-report.md as the current report. Preserve the nested historical files unchanged as reproducibility attachments. Do not recompute or rewrite the precomputed files and do not create a new report. Briefly confirm completion."
+      ],
+      "scope": "Seeded output-delivery smoke, not independent scientific analysis"
+    }
+  ]
+}

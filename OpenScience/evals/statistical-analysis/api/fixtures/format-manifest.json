@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "sourceSha256": "9c73cea7468ff5d517801ec050fe9993da5912fce4b56f296f8df3b38dd75912",
+  "transformation": "same rows/columns serialized as Parquet, table-oriented JSON and Excel; not additional participants",
+  "rows": 299,
+  "pandasVersion": "2.2.3",
+  "files": [
+    {
+      "path": "heart-failure.parquet",
+      "bytes": 13256,
+      "sha256": "81faa19e0545219d5d38136f84562039651a354e63c5849b18e889946a9abe92"
+    },
+    {
+      "path": "heart-failure.json",
+      "bytes": 68354,
+      "sha256": "479471e18d3a80960ea8da715b5258580cb298aff0268a9ef4ab4584a8cf25d0"
+    },
+    {
+      "path": "heart-failure.xlsx",
+      "bytes": 20142,
+      "sha256": "a4d01b576a1abe91c1815a1b0ab0c490ff7f951ae562d1e7627ec5bd27658d40"
+    }
+  ]
+}

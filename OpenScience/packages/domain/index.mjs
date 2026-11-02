@@ -2758,3 +2758,5 @@ export { RSI_CAMPAIGN_LIMITS, RSI_CAMPAIGN_SCHEMA_VERSION, RSI_CAMPAIGN_CLAIMS, 
 
 export { GEO_STEP_DEPENDENCIES, geoWorkflowState, geoAutomationEnabled } from './src/geoWorkflow.mjs'
 export { WORK_STATES, WORK_STATE_LABEL, WORK_NEED_KINDS, WORK_NEED_LABEL, WORK_ACTION_KINDS, workStateLabel } from './src/workState.mjs'
+
+export { isStatisticalWorkspaceProjectId } from './src/statisticalWorkspace.mjs';
