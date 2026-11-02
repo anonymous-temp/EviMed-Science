@@ -1,0 +1,1731 @@
+{
+ "about": "Refused calls of two real conversations on a real DSH + DeepSeek session, 2026-11-01 (c4b3: a three-design comparison of a first-line HCC phase III against sorafenib, 64 tool calls, 14 refused; c1: a patient-to-trial matching, one write refused on 19 lines). The arguments are the recorded ones. The patient of c1 is synthetic. `recorded` is what the platform answered then; `after` is what the platform now answers to the same arguments, held by apps/server/test/vcrLiveRefusalReplay in vcrOrchestrator.integration.test.mjs on every run: a class that comes back fails there.",
+ "c4b3": {
+  "prompt": "一线不可切除肝细胞癌的 III 期试验，对照索拉非尼，OS 终点，帮我比较三个设计方案。",
+  "calls": [
+   {
+    "id": "c4b3-380",
+    "line": 380,
+    "op": "write",
+    "args": {
+     "what": "definition",
+     "data": {
+      "title": "一线肝癌三方案设计比较",
+      "question": "一线不可切除肝细胞癌的 III 期试验，对照索拉非尼，OS 终点，比较三个设计方案。",
+      "pico": {
+       "population": "既往未接受过系统治疗、不可切除的肝细胞癌成人患者（BCLC B/C 期，Child-Pugh A 级）",
+       "intervention": "试验组方案（研究药物，联合或不联合）",
+       "comparator": "索拉非尼 400 mg 每日两次口服",
+       "outcome": "总生存期（OS），从随机化到任何原因死亡"
+      },
+      "estimand": {
+       "population": "随机化入组的意向治疗人群",
+       "variable": "从随机化到任何原因死亡的时间",
+       "treatment": "试验组方案与索拉非尼",
+       "intercurrentEvents": [
+        {
+         "event": "后续抗肿瘤治疗（含停药后换用其他系统治疗）",
+         "strategy": "treatment_policy"
+        },
+        {
+         "event": "治疗中断或停药",
+         "strategy": "treatment_policy"
+        }
+       ],
+       "summary": "两组 OS 的风险比（试验组相对索拉非尼）与相应生存曲线"
+      },
+      "endpointType": "time_to_event",
+      "intendedUse": "design_support",
+      "fieldSources": {
+       "endpointType": "按主要终点的测量方式：OS 为事件时间终点",
+       "pico": "用户给定的病种、线数、对照与终点；人群按该类 III 期试验的常规范围写出",
+       "estimand": "OS 分析惯例：后续治疗按治疗策略处理，不以停药删失",
+       "intendedUse": "用户要做的是试验设计比较"
+      }
+     }
+    },
+    "recorded": {
+     "refused": false,
+     "ids": [
+      "def_05cf8de12bdb4c8d82f3f6"
+     ]
+    }
+   },
+   {
+    "id": "c4b3-394",
+    "line": 394,
+    "op": "write",
+    "args": {
+     "what": "evidence_item",
+     "items": [
+      {
+       "registry": "pubmed",
+       "registryId": "37676259",
+       "parameter": "control_median_os",
+       "arm": "sorafenib",
+       "armRole": "control",
+       "value": 13.8,
+       "unit": "months",
+       "ciLow": 12.3,
+       "ciHigh": 16.1,
+       "sampleSize": 389,
+       "valueSource": "reported",
+       "quote": "The median OS was 16.4 months (95% CI, 14.2–19.6) with tremelimumab in combination with durvalumab and 13.8 months (95% CI, 12.3–16.1) with sorafenib.",
+       "endpointKey": "os",
+       "line": "first",
+       "evidenceKind": "rct",
+       "note": "HIMALAYA 索拉非尼对照臂的 OS 中位数，作为本试验对照臂水平的外部锚点"
+      },
+      {
+       "registry": "pubmed",
+       "registryId": "34902530",
+       "parameter": "control_median_os",
+       "arm": "sorafenib",
+       "armRole": "control",
+       "value": 13.4,
+       "unit": "months",
+       "ciLow": 11.4,
+       "ciHigh": 16.9,
+       "sampleSize": 165,
+       "valueSource": "reported",
+       "quote": "the median OS was 19.2 months (95% CI 17.0–23.7) with atezolizumab plus bevacizumab and 13.4 months (95% CI 11.4–16.9) with sorafenib (hazard ratio [HR] 0.66; 95% CI 0.52–0.85; descriptive p <0.001).",
+       "endpointKey": "os",
+       "line": "first",
+       "evidenceKind": "rct",
+       "note": "IMbrave150 更新分析中索拉非尼臂的 OS 中位数"
+      },
+      {
+       "registry": "pubmed",
+       "registryId": "37676259",
+       "parameter": "hazard_ratio",
+       "arm": "tremelimumab+durvalumab",
+       "armRole": "experimental",
+       "value": 0.78,
+       "ciLow": 0.66,
+       "ciHigh": 0.92,
+       "valueSource": "reported",
+       "quote": "The primary objective of improvement in overall survival (OS) for tremelimumab in combination with durvalumab compared with sorafenib met statistical significance with a stratified HR of 0.78 [95% confidence interval (CI), 0.66–0.92; P = 0.0035].",
+       "endpointKey": "os",
+       "line": "first",
+       "evidenceKind": "rct",
+       "note": "同类一线 III 期试验对索拉非尼达到的 OS 风险比，用于判断 0.75 这一目标是否现实"
+      }
+     ]
+    },
+    "recorded": {
+     "refused": true,
+     "ids": [],
+     "issues": [
+      [
+       "evidenceKind",
+       "vcr_write_value_invalid"
+      ],
+      [
+       "registry",
+       "vcr_write_value_invalid"
+      ],
+      [
+       "valueSource",
+       "vcr_write_value_invalid"
+      ],
+      [
+       "evidenceKind",
+       "vcr_write_value_invalid"
+      ],
+      [
+       "registry",
+       "vcr_write_value_invalid"
+      ],
+      [
+       "valueSource",
+       "vcr_write_value_invalid"
+      ],
+      [
+       "evidenceKind",
+       "vcr_write_value_invalid"
+      ],
+      [
+       "registry",
+       "vcr_write_value_invalid"
+      ],
+      [
+       "armRole",
+       "vcr_write_value_invalid"
+      ],
+      [
+       "valueSource",
+       "vcr_write_value_invalid"
+      ]
+     ]
+    },
+    "after": {
+     "outcome": "refuses",
+     "fields": [
+      "evidenceKind"
+     ],
+     "why": "evidenceKind \"rct\" names a study design, not a kind of number: it has no single meaning among baseline, outcome and design, so it is refused (three items, one line each) with the three words and what each is for. The other seven lines (registry pubmed, valueSource reported, armRole experimental) are read and said."
+    }
+   },
+   {
+    "id": "c4b3-403",
+    "line": 403,
+    "op": "write",
+    "args": {
+     "what": "assumption",
+     "items": [
+      {
+       "key": "hazard_ratio",
+       "name": "目标 OS 风险比",
+       "endpoint": "os",
+       "unit": "ratio",
+       "pointValue": 0.75,
+       "effectRole": "realistic_expectation",
+       "sourceKind": "literature",
+       "valueSource": "同类一线 III 期试验对索拉非尼达到的 OS 风险比在 0.66–0.78 之间（HIMALAYA 0.78，IMbrave150 更新分析 0.66），取 0.75 作为本试验的设计目标",
+       "note": "0.75 对应中位 OS 从 13.5 个月延长到约 18 个月"
+      }
+     ]
+    },
+    "recorded": {
+     "refused": true,
+     "ids": [],
+     "issues": [
+      [
+       "sourceKind",
+       "vcr_write_value_invalid"
+      ]
+     ]
+    },
+    "after": {
+     "outcome": "refuses",
+     "fields": [
+      "evidenceIds"
+     ],
+     "why": "a card of kind external_evidence cites an evidence item, and none was written: the answer now says the exact next call (write the evidence item, or use expert_set). The number was a design target the model chose, not a value read from a paper."
+    }
+   },
+   {
+    "id": "c4b3-414",
+    "line": 414,
+    "op": "write",
+    "args": {
+     "items": [
+      {
+       "effectRole": "realistic_expectation",
+       "endpoint": "os",
+       "key": "hazard_ratio",
+       "name": "目标 OS 风险比",
+       "note": "0.75 对应中位 OS 从 13.5 个月延长到约 18.0 个月",
+       "pointValue": 0.75,
+       "sourceKind": "external_evidence",
+       "unit": "ratio",
+       "valueSource": "同类一线 III 期试验对索拉非尼达到的 OS 风险比在 0.66–0.78 之间（HIMALAYA 0.78，IMbrave150 更新分析 0.66），取 0.75 作为设计目标"
+      },
+      {
+       "endpoint": "os",
+       "key": "control_median_os",
+       "name": "对照臂 OS 中位数",
+       "note": "HIMALAYA 索拉非尼臂 13.8 个月（95% CI 12.3–16.1），IMbrave150 更新分析索拉非尼臂 13.4 个月（95% CI 11.4–16.9）",
+       "pointValue": 13.5,
+       "sourceKind": "external_evidence",
+       "unit": "months",
+       "valueSource": "近年一线不可切除肝癌 III 期试验中索拉非尼对照臂的 OS 中位数"
+      },
+      {
+       "endpoint": "os",
+       "key": "dropout_rate",
+       "name": "年脱落率",
+       "note": "失访与撤回知情合并估算，OS 分析中以删失处理",
+       "pointValue": 0.05,
+       "sourceKind": "expert_set",
+       "unit": "proportion_per_year",
+       "valueSource": "该类 III 期试验常用的年脱落率假设"
+      }
+     ],
+     "what": "assumption"
+    },
+    "recorded": {
+     "refused": true,
+     "ids": [],
+     "issues": [
+      [
+       "evidenceIds",
+       "vcr_write_value_invalid"
+      ],
+      [
+       "evidenceIds",
+       "vcr_write_value_invalid"
+      ],
+      [
+       "valueSource",
+       "vcr_write_value_invalid"
+      ]
+     ]
+    },
+    "after": {
+     "outcome": "partly",
+     "fields": [
+      "evidenceIds"
+     ],
+     "items": {
+      "0": "refuses",
+      "1": "refuses",
+      "2": "passes"
+     },
+     "why": "the third card (an expert setting whose valueSource was a sentence) is saved with the sentence in note; the first two are external_evidence cards with no evidence to cite, refused with the exact next call."
+    }
+   },
+   {
+    "id": "c4b3-426",
+    "line": 426,
+    "op": "write",
+    "args": {
+     "items": [
+      {
+       "effectRole": "realistic_expectation",
+       "endpoint": "os",
+       "key": "hazard_ratio",
+       "name": "目标 OS 风险比",
+       "note": "同类一线 III 期试验对索拉非尼达到的 OS 风险比在 0.66–0.78 之间（HIMALAYA 0.78，IMbrave150 更新分析 0.66），取 0.75 作为设计目标；对应中位 OS 从 13.5 个月延长到约 18.0 个月",
+       "pointValue": 0.75,
+       "sourceKind": "expert_set",
+       "unit": "ratio",
+       "valueSource": "assumed"
+      },
+      {
+       "endpoint": "os",
+       "key": "control_median_os",
+       "name": "对照臂 OS 中位数",
+       "note": "近年一线不可切除肝癌 III 期试验中索拉非尼对照臂的 OS 中位数：HIMALAYA 13.8 个月（95% CI 12.3–16.1），IMbrave150 更新分析 13.4 个月（95% CI 11.4–16.9）；取 13.5 个月",
+       "pointValue": 13.5,
+       "sourceKind": "expert_set",
+       "unit": "months",
+       "valueSource": "assumed"
+      },
+      {
+       "endpoint": "os",
+       "key": "dropout_rate",
+       "name": "年脱落率",
+       "note": "失访与撤回知情合并估算，OS 分析中以删失处理",
+       "pointValue": 0.05,
+       "sourceKind": "expert_set",
+       "unit": "proportion_per_year",
+       "valueSource": "assumed"
+      }
+     ],
+     "what": "assumption"
+    },
+    "recorded": {
+     "refused": false,
+     "ids": [
+      "asm_2326d4cbc17847799ccc88",
+      "asm_223a780a9b7d4ead9f28b6",
+      "asm_fb1d6803b8ed4e339c2833"
+     ]
+    }
+   },
+   {
+    "id": "c4b3-458",
+    "line": 458,
+    "op": "write",
+    "args": {
+     "items": [
+      {
+       "label": "A 固定 1:1",
+       "design": "two_arm_fixed",
+       "endpointType": "time_to_event",
+       "assumptionIds": [
+        "asm_2326d4cbc17847799ccc88",
+        "asm_223a780a9b7d4ead9f28b6",
+        "asm_fb1d6803b8ed4e339c2833"
+       ],
+       "configuration": {
+        "design": {
+         "kind": "two_arm_fixed",
+         "allocation": 0.5
+        },
+        "endpoint": {
+         "type": "time_to_event"
+        },
+        "truth": {
+         "hazardRatio": 0.75,
+         "controlMedian": 13.5
+        },
+        "analysis": {
+         "method": "logrank",
+         "alpha": 0.025,
+         "sided": 1,
+         "power": 0.9
+        },
+        "accrual": {
+         "kind": "uniform",
+         "duration": 24,
+         "followup": 12,
+         "dropoutAnnual": 0.05
+        },
+        "timeUnit": "months",
+        "performance": [
+         "power"
+        ]
+       }
+      },
+      {
+       "label": "B 成组序贯 1:1（一次期中）",
+       "design": "group_sequential",
+       "endpointType": "time_to_event",
+       "assumptionIds": [
+        "asm_2326d4cbc17847799ccc88",
+        "asm_223a780a9b7d4ead9f28b6",
+        "asm_fb1d6803b8ed4e339c2833"
+       ],
+       "configuration": {
+        "design": {
+         "kind": "group_sequential",
+         "allocation": 0.5,
+         "informationRates": [
+          0.5,
+          1
+         ],
+         "spending": "obrien_fleming"
+        },
+        "endpoint": {
+         "type": "time_to_event"
+        },
+        "truth": {
+         "hazardRatio": 0.75,
+         "controlMedian": 13.5
+        },
+        "analysis": {
+         "method": "logrank",
+         "alpha": 0.025,
+         "sided": 1,
+         "power": 0.9
+        },
+        "accrual": {
+         "kind": "uniform",
+         "duration": 24,
+         "followup": 12,
+         "dropoutAnnual": 0.05
+        },
+        "timeUnit": "months",
+        "performance": [
+         "power"
+        ]
+       }
+      },
+      {
+       "label": "C 固定 2:1",
+       "design": "two_arm_fixed",
+       "endpointType": "time_to_event",
+       "assumptionIds": [
+        "asm_2326d4cbc17847799ccc88",
+        "asm_223a780a9b7d4ead9f28b6",
+        "asm_fb1d6803b8ed4e339c2833"
+       ],
+       "configuration": {
+        "design": {
+         "kind": "two_arm_fixed",
+         "allocation": 0.6667
+        },
+        "endpoint": {
+         "type": "time_to_event"
+        },
+        "truth": {
+         "hazardRatio": 0.75,
+         "controlMedian": 13.5
+        },
+        "analysis": {
+         "method": "logrank",
+         "alpha": 0.025,
+         "sided": 1,
+         "power": 0.9
+        },
+        "accrual": {
+         "kind": "uniform",
+         "duration": 24,
+         "followup": 12,
+         "dropoutAnnual": 0.05
+        },
+        "timeUnit": "months",
+        "performance": [
+         "power"
+        ]
+       }
+      }
+     ],
+     "what": "trial_scenario"
+    },
+    "recorded": {
+     "refused": false,
+     "ids": [
+      "scn_e7ff9c25083f44b68fc3ef",
+      "scn_e39ed2fcfd364143bcf897",
+      "scn_839ce1381f1d49fb91d707"
+     ]
+    }
+   },
+   {
+    "id": "c4b3-463",
+    "line": 463,
+    "op": "simulate",
+    "args": {
+     "action": "validate",
+     "kind": "design_analytic",
+     "subjectId": "scn_e7ff9c25083f44b68fc3ef"
+    },
+    "recorded": {
+     "refused": true,
+     "issues": [
+      [
+       "scenario.design",
+       "scenario_field_missing"
+      ],
+      [
+       "scenario.endpoint",
+       "scenario_field_missing"
+      ],
+      [
+       "scenario.truth",
+       "scenario_field_missing"
+      ]
+     ]
+    },
+    "after": {
+     "outcome": "passes",
+     "why": "a start or validate naming the design and no scenario is built from the design as written, with its assumption cards"
+    }
+   },
+   {
+    "id": "c4b3-466",
+    "line": 466,
+    "op": "simulate",
+    "args": {
+     "action": "validate",
+     "kind": "design_analytic",
+     "scenario": {
+      "accrual": {
+       "dropoutAnnual": 0.05,
+       "duration": 24,
+       "followup": 12,
+       "kind": "uniform"
+      },
+      "analysis": {
+       "alpha": 0.025,
+       "method": "logrank",
+       "power": 0.9,
+       "sided": 1
+      },
+      "design": {
+       "allocation": 0.5,
+       "kind": "two_arm_fixed"
+      },
+      "endpoint": {
+       "type": "time_to_event"
+      },
+      "timeUnit": "months",
+      "truth": {
+       "controlMedian": 13.5,
+       "hazardRatio": 0.75
+      }
+     }
+    },
+    "recorded": {
+     "refused": true,
+     "issues": [
+      [
+       "scenario.analysis.method",
+       "scenario_field_unknown"
+      ],
+      [
+       "scenario.accrual.kind",
+       "scenario_field_unknown"
+      ]
+     ]
+    },
+    "after": {
+     "outcome": "passes",
+     "why": "analysis.method logrank and accrual.kind uniform describe what design_analytic does; they are left out and said"
+    }
+   },
+   {
+    "id": "c4b3-467",
+    "line": 467,
+    "op": "simulate",
+    "args": {
+     "action": "validate",
+     "kind": "design_analytic",
+     "scenario": {
+      "accrual": {
+       "dropoutAnnual": 0.05,
+       "duration": 24,
+       "followup": 12,
+       "kind": "uniform"
+      },
+      "analysis": {
+       "alpha": 0.025,
+       "method": "logrank",
+       "power": 0.9,
+       "sided": 1
+      },
+      "design": {
+       "allocation": 0.5,
+       "informationRates": [
+        0.5,
+        1
+       ],
+       "kind": "group_sequential",
+       "spending": "obrien_fleming"
+      },
+      "endpoint": {
+       "type": "time_to_event"
+      },
+      "timeUnit": "months",
+      "truth": {
+       "controlMedian": 13.5,
+       "hazardRatio": 0.75
+      }
+     }
+    },
+    "recorded": {
+     "refused": true,
+     "issues": [
+      [
+       "scenario.analysis.method",
+       "scenario_field_unknown"
+      ],
+      [
+       "scenario.accrual.kind",
+       "scenario_field_unknown"
+      ]
+     ]
+    },
+    "after": {
+     "outcome": "passes",
+     "why": "as 466, for a group-sequential design"
+    }
+   },
+   {
+    "id": "c4b3-468",
+    "line": 468,
+    "op": "simulate",
+    "args": {
+     "action": "validate",
+     "kind": "design_analytic",
+     "scenario": {
+      "accrual": {
+       "dropoutAnnual": 0.05,
+       "duration": 24,
+       "followup": 12,
+       "kind": "uniform"
+      },
+      "analysis": {
+       "alpha": 0.025,
+       "method": "logrank",
+       "power": 0.9,
+       "sided": 1
+      },
+      "design": {
+       "allocation": 0.6667,
+       "kind": "two_arm_fixed"
+      },
+      "endpoint": {
+       "type": "time_to_event"
+      },
+      "timeUnit": "months",
+      "truth": {
+       "controlMedian": 13.5,
+       "hazardRatio": 0.75
+      }
+     }
+    },
+    "recorded": {
+     "refused": true,
+     "issues": [
+      [
+       "scenario.analysis.method",
+       "scenario_field_unknown"
+      ],
+      [
+       "scenario.accrual.kind",
+       "scenario_field_unknown"
+      ]
+     ]
+    },
+    "after": {
+     "outcome": "passes",
+     "why": "as 466, for a 2:1 allocation"
+    }
+   },
+   {
+    "id": "c4b3-473",
+    "line": 473,
+    "op": "simulate",
+    "args": {
+     "action": "validate",
+     "kind": "design_analytic",
+     "scenario": {
+      "accrual": {
+       "dropoutAnnual": 0.05,
+       "duration": 24,
+       "followup": 12
+      },
+      "analysis": {
+       "alpha": 0.025,
+       "power": 0.9,
+       "sided": 1
+      },
+      "design": {
+       "allocation": 0.5,
+       "kind": "two_arm_fixed"
+      },
+      "endpoint": {
+       "type": "time_to_event"
+      },
+      "timeUnit": "months",
+      "truth": {
+       "controlMedian": 13.5,
+       "hazardRatio": 0.75
+      }
+     }
+    },
+    "recorded": {
+     "refused": false
+    }
+   },
+   {
+    "id": "c4b3-474",
+    "line": 474,
+    "op": "simulate",
+    "args": {
+     "action": "validate",
+     "kind": "design_analytic",
+     "scenario": {
+      "accrual": {
+       "dropoutAnnual": 0.05,
+       "duration": 24,
+       "followup": 12
+      },
+      "analysis": {
+       "alpha": 0.025,
+       "power": 0.9,
+       "sided": 1
+      },
+      "design": {
+       "allocation": 0.5,
+       "informationRates": [
+        0.5,
+        1
+       ],
+       "kind": "group_sequential",
+       "spending": "obrien_fleming"
+      },
+      "endpoint": {
+       "type": "time_to_event"
+      },
+      "timeUnit": "months",
+      "truth": {
+       "controlMedian": 13.5,
+       "hazardRatio": 0.75
+      }
+     }
+    },
+    "recorded": {
+     "refused": false
+    }
+   },
+   {
+    "id": "c4b3-475",
+    "line": 475,
+    "op": "simulate",
+    "args": {
+     "action": "validate",
+     "kind": "design_analytic",
+     "scenario": {
+      "accrual": {
+       "dropoutAnnual": 0.05,
+       "duration": 24,
+       "followup": 12
+      },
+      "analysis": {
+       "alpha": 0.025,
+       "power": 0.9,
+       "sided": 1
+      },
+      "design": {
+       "allocation": 0.6667,
+       "kind": "two_arm_fixed"
+      },
+      "endpoint": {
+       "type": "time_to_event"
+      },
+      "timeUnit": "months",
+      "truth": {
+       "controlMedian": 13.5,
+       "hazardRatio": 0.75
+      }
+     }
+    },
+    "recorded": {
+     "refused": false
+    }
+   },
+   {
+    "id": "c4b3-494",
+    "line": 494,
+    "op": "write",
+    "args": {
+     "items": [
+      {
+       "assumptionIds": [
+        "asm_2326d4cbc17847799ccc88",
+        "asm_223a780a9b7d4ead9f28b6",
+        "asm_fb1d6803b8ed4e339c2833"
+       ],
+       "configuration": {
+        "accrual": {
+         "dropoutAnnual": 0.05,
+         "duration": 24,
+         "followup": 12
+        },
+        "analysis": {
+         "alpha": 0.025,
+         "power": 0.9,
+         "sided": 1
+        },
+        "design": {
+         "allocation": 0.5,
+         "kind": "two_arm_fixed"
+        },
+        "endpoint": {
+         "type": "time_to_event"
+        },
+        "timeUnit": "months",
+        "truth": {
+         "controlMedian": 13.5,
+         "hazardRatio": 0.75
+        }
+       },
+       "design": "two_arm_fixed",
+       "endpointType": "time_to_event",
+       "label": "A 固定 1:1"
+      },
+      {
+       "assumptionIds": [
+        "asm_2326d4cbc17847799ccc88",
+        "asm_223a780a9b7d4ead9f28b6",
+        "asm_fb1d6803b8ed4e339c2833"
+       ],
+       "configuration": {
+        "accrual": {
+         "dropoutAnnual": 0.05,
+         "duration": 24,
+         "followup": 12
+        },
+        "analysis": {
+         "alpha": 0.025,
+         "power": 0.9,
+         "sided": 1
+        },
+        "design": {
+         "allocation": 0.5,
+         "informationRates": [
+          0.5,
+          1
+         ],
+         "kind": "group_sequential",
+         "spending": "obrien_fleming"
+        },
+        "endpoint": {
+         "type": "time_to_event"
+        },
+        "timeUnit": "months",
+        "truth": {
+         "controlMedian": 13.5,
+         "hazardRatio": 0.75
+        }
+       },
+       "design": "group_sequential",
+       "endpointType": "time_to_event",
+       "label": "B 成组序贯 1:1（一次期中）"
+      },
+      {
+       "assumptionIds": [
+        "asm_2326d4cbc17847799ccc88",
+        "asm_223a780a9b7d4ead9f28b6",
+        "asm_fb1d6803b8ed4e339c2833"
+       ],
+       "configuration": {
+        "accrual": {
+         "dropoutAnnual": 0.05,
+         "duration": 24,
+         "followup": 12
+        },
+        "analysis": {
+         "alpha": 0.025,
+         "power": 0.9,
+         "sided": 1
+        },
+        "design": {
+         "allocation": 0.6667,
+         "kind": "two_arm_fixed"
+        },
+        "endpoint": {
+         "type": "time_to_event"
+        },
+        "timeUnit": "months",
+        "truth": {
+         "controlMedian": 13.5,
+         "hazardRatio": 0.75
+        }
+       },
+       "design": "two_arm_fixed",
+       "endpointType": "time_to_event",
+       "label": "C 固定 2:1"
+      }
+     ],
+     "what": "trial_scenario"
+    },
+    "recorded": {
+     "refused": false,
+     "ids": [
+      "scn_22a61fa5e27a4477a7d448",
+      "scn_2790745456a9402ca8002c",
+      "scn_846132ee006b49939b1322"
+     ]
+    }
+   },
+   {
+    "id": "c4b3-497",
+    "line": 497,
+    "op": "simulate",
+    "args": {
+     "action": "start",
+     "kind": "design_analytic",
+     "subjectId": "scn_22a61fa5e27a4477a7d448"
+    },
+    "recorded": {
+     "refused": true,
+     "code": "vcr_request_invalid",
+     "summary": "作业不符合引擎协议：scenario.design（scenario_field_missing）、scenario.endpoint（scenario_field_missing）、scenario.truth（scenario_field_missing）。 From the engine's schema for design_analytic (method design.analytic"
+    },
+    "after": {
+     "outcome": "passes",
+     "why": "built from the design written as an object"
+    }
+   },
+   {
+    "id": "c4b3-498",
+    "line": 498,
+    "op": "simulate",
+    "args": {
+     "action": "start",
+     "kind": "design_analytic",
+     "subjectId": "scn_2790745456a9402ca8002c"
+    },
+    "recorded": {
+     "refused": true,
+     "code": "vcr_request_invalid",
+     "summary": "作业不符合引擎协议：scenario.design（scenario_field_missing）、scenario.endpoint（scenario_field_missing）、scenario.truth（scenario_field_missing）。 From the engine's schema for design_analytic (method design.analytic"
+    },
+    "after": {
+     "outcome": "passes",
+     "why": "built from the design written as an object"
+    }
+   },
+   {
+    "id": "c4b3-499",
+    "line": 499,
+    "op": "simulate",
+    "args": {
+     "action": "start",
+     "kind": "design_analytic",
+     "subjectId": "scn_846132ee006b49939b1322"
+    },
+    "recorded": {
+     "refused": true,
+     "code": "vcr_request_invalid",
+     "summary": "作业不符合引擎协议：scenario.design（scenario_field_missing）、scenario.endpoint（scenario_field_missing）、scenario.truth（scenario_field_missing）。 From the engine's schema for design_analytic (method design.analytic"
+    },
+    "after": {
+     "outcome": "passes",
+     "why": "built from the design written as an object"
+    }
+   },
+   {
+    "id": "c4b3-506",
+    "line": 506,
+    "op": "simulate",
+    "args": {
+     "action": "start",
+     "kind": "design_analytic",
+     "scenario": {
+      "accrual": {
+       "dropoutAnnual": 0.05,
+       "duration": 24,
+       "followup": 12
+      },
+      "analysis": {
+       "alpha": 0.025,
+       "power": 0.9,
+       "sided": 1
+      },
+      "design": {
+       "allocation": 0.5,
+       "kind": "two_arm_fixed"
+      },
+      "endpoint": {
+       "type": "time_to_event"
+      },
+      "timeUnit": "months",
+      "truth": {
+       "controlMedian": 13.5,
+       "hazardRatio": 0.75
+      }
+     }
+    },
+    "recorded": {
+     "refused": false,
+     "jobId": "job_47a652c61ee7472dac5476",
+     "subjectId": "scn_22a61fa5e27a4477a7d448"
+    }
+   },
+   {
+    "id": "c4b3-507",
+    "line": 507,
+    "op": "simulate",
+    "args": {
+     "action": "start",
+     "kind": "design_analytic",
+     "scenario": {
+      "accrual": {
+       "dropoutAnnual": 0.05,
+       "duration": 24,
+       "followup": 12
+      },
+      "analysis": {
+       "alpha": 0.025,
+       "power": 0.9,
+       "sided": 1
+      },
+      "design": {
+       "allocation": 0.5,
+       "informationRates": [
+        0.5,
+        1
+       ],
+       "kind": "group_sequential",
+       "spending": "obrien_fleming"
+      },
+      "endpoint": {
+       "type": "time_to_event"
+      },
+      "timeUnit": "months",
+      "truth": {
+       "controlMedian": 13.5,
+       "hazardRatio": 0.75
+      }
+     }
+    },
+    "recorded": {
+     "refused": false,
+     "jobId": "job_fc56acc9971d4aeab65b7b",
+     "subjectId": "scn_2790745456a9402ca8002c"
+    }
+   },
+   {
+    "id": "c4b3-508",
+    "line": 508,
+    "op": "simulate",
+    "args": {
+     "action": "start",
+     "kind": "design_analytic",
+     "scenario": {
+      "accrual": {
+       "dropoutAnnual": 0.05,
+       "duration": 24,
+       "followup": 12
+      },
+      "analysis": {
+       "alpha": 0.025,
+       "power": 0.9,
+       "sided": 1
+      },
+      "design": {
+       "allocation": 0.6667,
+       "kind": "two_arm_fixed"
+      },
+      "endpoint": {
+       "type": "time_to_event"
+      },
+      "timeUnit": "months",
+      "truth": {
+       "controlMedian": 13.5,
+       "hazardRatio": 0.75
+      }
+     }
+    },
+    "recorded": {
+     "refused": false,
+     "jobId": "job_348ef7b56c6d40258a9f3b",
+     "subjectId": "scn_846132ee006b49939b1322"
+    }
+   },
+   {
+    "id": "c4b3-569",
+    "line": 569,
+    "op": "write",
+    "args": {
+     "data": {
+      "analysis": [
+       "三个方案共用同一组假设（对照臂 OS 中位数 13.5 个月、目标 HR 0.75、单侧 α 0.025、目标把握度 90%、入组 24 个月、末例入组后随访 12 个月、年脱落 5%）",
+       "每个方案先用解析法求所需样本量与事件数，必要时再用模拟复核把握度与 I 类错误",
+       "比较维度：总样本量、事件数、把握度、预期研究周期、对效应高估的敏感度、期中提前终止的可能"
+      ],
+      "sealedFields": [],
+      "sensitivity": [
+       "真值 HR 从 0.75 变到 0.80（效应小于设计目标）与 1.00（零效应）时各方案的表现",
+       "对照臂中位 OS 从 13.5 个月变到 11 和 16 个月",
+       "年脱落率从 5% 变到 10%"
+      ]
+     },
+     "what": "plan"
+    },
+    "recorded": {
+     "refused": true,
+     "ids": [],
+     "issues": [
+      [
+       "analysis",
+       "vcr_write_value_invalid"
+      ],
+      [
+       "sensitivity",
+       "vcr_write_value_invalid"
+      ]
+     ]
+    },
+    "after": {
+     "outcome": "passes",
+     "why": "lists of sentences are kept as they were written under items"
+    }
+   },
+   {
+    "id": "c4b3-680",
+    "line": 680,
+    "op": "simulate",
+    "args": {
+     "action": "validate",
+     "kind": "design_grid",
+     "scenario": {
+      "accrual": {
+       "dropoutAnnual": 0.05,
+       "duration": 24,
+       "followup": 12
+      },
+      "design": {
+       "kind": "two_arm_fixed",
+       "nControl": 415,
+       "nTreat": 415
+      },
+      "designs": [
+       {
+        "kind": "two_arm_fixed",
+        "label": "A 固定 1:1",
+        "nControl": 415,
+        "nTreat": 415
+       },
+       {
+        "informationRates": [
+         0.5,
+         1
+        ],
+        "kind": "group_sequential",
+        "label": "B 成组序贯 1:1",
+        "nControl": 416,
+        "nTreat": 416,
+        "spending": "obrien_fleming"
+       },
+       {
+        "kind": "two_arm_fixed",
+        "label": "C 固定 2:1",
+        "nControl": 320,
+        "nTreat": 639
+       }
+      ],
+      "endpoint": {
+       "type": "time_to_event"
+      },
+      "performance": [
+       "power",
+       "type_one_error"
+      ],
+      "timeUnit": "months",
+      "truth": {
+       "controlMedian": 13.5,
+       "hazardRatio": 0.75
+      },
+      "truths": [
+       {
+        "hazardRatio": 0.75,
+        "label": "HR 0.75"
+       },
+       {
+        "hazardRatio": 0.8,
+        "label": "HR 0.80"
+       },
+       {
+        "hazardRatio": 1,
+        "label": "零效应",
+        "null": true
+       }
+      ]
+     }
+    },
+    "recorded": {
+     "refused": true,
+     "issues": [
+      [
+       "scenario.designs[0].label",
+       "scenario_field_unknown"
+      ],
+      [
+       "scenario.designs[1].label",
+       "scenario_field_unknown"
+      ],
+      [
+       "scenario.designs[2].label",
+       "scenario_field_unknown"
+      ],
+      [
+       "scenario.truths[0].label",
+       "scenario_field_unknown"
+      ],
+      [
+       "scenario.truths[1].label",
+       "scenario_field_unknown"
+      ],
+      [
+       "scenario.truths[2].label",
+       "scenario_field_unknown"
+      ]
+     ]
+    },
+    "after": {
+     "outcome": "passes",
+     "why": "labels of a grid's designs and truths are left out and said"
+    }
+   },
+   {
+    "id": "c4b3-683",
+    "line": 683,
+    "op": "simulate",
+    "args": {
+     "action": "validate",
+     "kind": "design_grid",
+     "scenario": {
+      "accrual": {
+       "dropoutAnnual": 0.05,
+       "duration": 24,
+       "followup": 12
+      },
+      "design": {
+       "kind": "two_arm_fixed",
+       "nControl": 415,
+       "nTreat": 415
+      },
+      "designs": [
+       {
+        "kind": "two_arm_fixed",
+        "nControl": 415,
+        "nTreat": 415
+       },
+       {
+        "informationRates": [
+         0.5,
+         1
+        ],
+        "kind": "group_sequential",
+        "nControl": 416,
+        "nTreat": 416,
+        "spending": "obrien_fleming"
+       },
+       {
+        "kind": "two_arm_fixed",
+        "nControl": 320,
+        "nTreat": 639
+       }
+      ],
+      "endpoint": {
+       "type": "time_to_event"
+      },
+      "performance": [
+       "power",
+       "type_one_error"
+      ],
+      "timeUnit": "months",
+      "truth": {
+       "controlMedian": 13.5,
+       "hazardRatio": 0.75
+      },
+      "truths": [
+       {
+        "hazardRatio": 0.75
+       },
+       {
+        "hazardRatio": 0.8
+       },
+       {
+        "hazardRatio": 1,
+        "null": true
+       }
+      ]
+     }
+    },
+    "recorded": {
+     "refused": false
+    }
+   },
+   {
+    "id": "c4b3-692",
+    "line": 692,
+    "op": "simulate",
+    "args": {
+     "action": "start",
+     "kind": "design_grid",
+     "scenario": {
+      "accrual": {
+       "dropoutAnnual": 0.05,
+       "duration": 24,
+       "followup": 12
+      },
+      "design": {
+       "kind": "two_arm_fixed",
+       "nControl": 415,
+       "nTreat": 415
+      },
+      "designs": [
+       {
+        "kind": "two_arm_fixed",
+        "nControl": 415,
+        "nTreat": 415
+       },
+       {
+        "informationRates": [
+         0.5,
+         1
+        ],
+        "kind": "group_sequential",
+        "nControl": 416,
+        "nTreat": 416,
+        "spending": "obrien_fleming"
+       },
+       {
+        "kind": "two_arm_fixed",
+        "nControl": 320,
+        "nTreat": 639
+       }
+      ],
+      "endpoint": {
+       "type": "time_to_event"
+      },
+      "performance": [
+       "power",
+       "type_one_error"
+      ],
+      "timeUnit": "months",
+      "truth": {
+       "controlMedian": 13.5,
+       "hazardRatio": 0.75
+      },
+      "truths": [
+       {
+        "hazardRatio": 0.75
+       },
+       {
+        "hazardRatio": 0.8
+       },
+       {
+        "hazardRatio": 1,
+        "null": true
+       }
+      ]
+     }
+    },
+    "recorded": {
+     "refused": true,
+     "code": "vcr_simulate_subject_required",
+     "summary": "这项计算要说明它算的是本研究的哪一个设计网格：把它的 id 作为 subjectId 传进来。本研究还没有设计网格：先用 vcr_write what=\\"
+    },
+    "after": {
+     "outcome": "passes",
+     "why": "a grid whose scenario is complete is filed as the study's grid and computed"
+    }
+   },
+   {
+    "id": "c4b3-701",
+    "line": 701,
+    "op": "write",
+    "args": {
+     "data": {
+      "comparisonGoal": {
+       "measures": [
+        {
+         "direction": "higher",
+         "name": "power"
+        },
+        {
+         "direction": "lower",
+         "name": "required_patients"
+        },
+        {
+         "direction": "lower",
+         "name": "duration_months"
+        }
+       ],
+       "text": "在单侧 α 0.025、目标把握度 90%、HR 0.75 下比较三个方案的样本量、把握度与周期；再看 HR 降到 0.80 时把握度如何衰减，以及零效应下 I 类错误是否守住 2.5%"
+      },
+      "dimensions": {
+       "base": {
+        "accrual": {
+         "dropoutAnnual": 0.05,
+         "duration": 24,
+         "followup": 12
+        },
+        "analysis": {
+         "alpha": 0.025,
+         "method": "logrank",
+         "sided": 1
+        },
+        "endpoint": {
+         "type": "time_to_event"
+        },
+        "performance": [
+         "power",
+         "type_one_error"
+        ],
+        "timeUnit": "months",
+        "truth": {
+         "controlMedian": 13.5
+        }
+       },
+       "designs": [
+        {
+         "kind": "two_arm_fixed",
+         "label": "A 固定 1:1",
+         "nControl": 415,
+         "nTreat": 415
+        },
+        {
+         "informationRates": [
+          0.5,
+          1
+         ],
+         "kind": "group_sequential",
+         "label": "B 成组序贯 1:1（一次期中）",
+         "nControl": 416,
+         "nTreat": 416,
+         "spending": "obrien_fleming"
+        },
+        {
+         "kind": "two_arm_fixed",
+         "label": "C 固定 2:1",
+         "nControl": 320,
+         "nTreat": 639
+        }
+       ]
+      },
+      "truthScenarios": [
+       {
+        "hazardRatio": 0.75,
+        "label": "设计目标 HR 0.75"
+       },
+       {
+        "hazardRatio": 0.8,
+        "label": "效应偏小 HR 0.80"
+       },
+       {
+        "hazardRatio": 1,
+        "label": "零效应",
+        "null": true
+       }
+      ]
+     },
+     "what": "design_grid"
+    },
+    "recorded": {
+     "refused": false,
+     "ids": [
+      "grd_35f85bfabc97464da094d8"
+     ]
+    }
+   },
+   {
+    "id": "c4b3-704",
+    "line": 704,
+    "op": "simulate",
+    "args": {
+     "action": "start",
+     "kind": "design_grid",
+     "subjectId": "grd_35f85bfabc97464da094d8"
+    },
+    "recorded": {
+     "refused": true,
+     "code": "vcr_request_invalid",
+     "summary": "作业不符合引擎协议：scenario.design（scenario_field_missing）、scenario.endpoint（scenario_field_missing）、scenario.truth（scenario_field_missing）、scenario.designs（scenario_field_missing）、scenario.truths（scenario_fie"
+    },
+    "after": {
+     "outcome": "passes",
+     "why": "the grid written as an object is built into a scenario"
+    }
+   },
+   {
+    "id": "c4b3-707",
+    "line": 707,
+    "op": "simulate",
+    "args": {
+     "action": "start",
+     "kind": "design_grid",
+     "scenario": {
+      "accrual": {
+       "dropoutAnnual": 0.05,
+       "duration": 24,
+       "followup": 12
+      },
+      "design": {
+       "kind": "two_arm_fixed",
+       "nControl": 415,
+       "nTreat": 415
+      },
+      "designs": [
+       {
+        "kind": "two_arm_fixed",
+        "nControl": 415,
+        "nTreat": 415
+       },
+       {
+        "informationRates": [
+         0.5,
+         1
+        ],
+        "kind": "group_sequential",
+        "nControl": 416,
+        "nTreat": 416,
+        "spending": "obrien_fleming"
+       },
+       {
+        "kind": "two_arm_fixed",
+        "nControl": 320,
+        "nTreat": 639
+       }
+      ],
+      "endpoint": {
+       "type": "time_to_event"
+      },
+      "performance": [
+       "power",
+       "type_one_error"
+      ],
+      "timeUnit": "months",
+      "truth": {
+       "controlMedian": 13.5,
+       "hazardRatio": 0.75
+      },
+      "truths": [
+       {
+        "hazardRatio": 0.75
+       },
+       {
+        "hazardRatio": 0.8
+       },
+       {
+        "hazardRatio": 1,
+        "null": true
+       }
+      ]
+     },
+     "subjectId": "grd_35f85bfabc97464da094d8"
+    },
+    "recorded": {
+     "refused": false,
+     "jobId": "job_b73c1d2d145d4e14a8c129",
+     "subjectId": "grd_35f85bfabc97464da094d8"
+    }
+   }
+  ]
+ },
+ "c1": {
+  "id": "c1-442",
+  "line": 442,
+  "recordedAs": "the call was recorded to 4,000 characters: the first item's criteria are whole, its registry fields are those of the successful call that followed (c1 line 449), and the second item (NCT06567015) was cut off and is not replayed",
+  "item": {
+   "registry": "clinicaltrials.gov",
+   "registryId": "NCT06927986",
+   "criteria": [
+    {
+     "criterionType": "demographic",
+     "kind": "inclusion",
+     "requirement": {
+      "comparator": "between",
+      "highValue": 75,
+      "op": "compare",
+      "unit": "岁",
+      "value": 18,
+      "variable": "age"
+     },
+     "sourceText": "Aged 18-75 (inclusive) years old, male or females"
+    },
+    {
+     "criterionType": "disease",
+     "kind": "inclusion",
+     "requirement": {
+      "key": "unresectable_stage_iiib_nsclc",
+      "op": "language",
+      "text": "locally advanced or metastatic NSCLC including stage IIIB or IIIC not suitable for surgical resection or radical chemoradiotherapy"
+     },
+     "sourceText": "Patients with pathologically confirmed locally advanced or metastatic NSCLC, including those with stage IIIB or IIIC based on 8th edition of the AJCC staging system who are not suitable for surgical resection or radical chemoradiotherapy"
+    },
+    {
+     "criterionType": "prior_therapy",
+     "kind": "inclusion",
+     "requirement": {
+      "op": "present",
+      "variable": "egfr_tki_progression"
+     },
+     "sourceText": "Patients with EGFR-mutated locally advanced or metastatic NSCLC who have failed EGFR TKI therapy"
+    },
+    {
+     "criterionType": "biomarker",
+     "kind": "inclusion",
+     "requirement": {
+      "op": "present",
+      "variable": "egfr_exon19_deletion"
+     },
+     "sourceText": "Presence of at least one EGFR-sensitive mutation"
+    },
+    {
+     "criterionType": "disease",
+     "kind": "inclusion",
+     "requirement": {
+      "op": "present",
+      "variable": "measurable_lesion"
+     },
+     "sourceText": "At least one measurable lesion confirmed by CT or MRI scan according to RECIST v1.1 criteria"
+    },
+    {
+     "criterionType": "performance",
+     "kind": "inclusion",
+     "requirement": {
+      "comparator": "lte",
+      "op": "compare",
+      "value": 1,
+      "variable": "ecog"
+     },
+     "sourceText": "ECOG performance status of 0-1"
+    },
+    {
+     "criterionType": "organ_function",
+     "kind": "inclusion",
+     "requirement": {
+      "comparator": "gte",
+      "op": "compare",
+      "unit": "×10⁹/L",
+      "value": 1.5,
+      "variable": "anc"
+     },
+     "sourceText": "Absolute neutrophil count (ANC) ≥1.5×10^9/L"
+    },
+    {
+     "criterionType": "organ_function",
+     "kind": "inclusion",
+     "requirement": {
+      "comparator": "gte",
+      "op": "compare",
+      "unit": "×10⁹/L",
+      "value": 100,
+      "variable": "platelet"
+     },
+     "sourceText": "Platelet count (PLT) ≥100×10^9/L"
+    },
+    {
+     "criterionType": "organ_function",
+     "kind": "inclusion",
+     "requirement": {
+      "comparator": "gte",
+      "op": "compare",
+      "unit": "g/L",
+      "value": 100,
+      "variable": "hemoglobin"
+     },
+     "sourceText": "Hemoglobin (HGB) ≥100g/L"
+    },
+    {
+     "criterionType": "organ_function",
+     "kind": "inclusion",
+     "requirement": {
+      "comparator": "gte",
+      "op": "compare",
+      "unit": "mL/min",
+      "value": 50,
+      "variable": "creatinine_clearance"
+     },
+     "sourceText": "creatinine clearance ≥ 50 mL/min"
+    },
+    {
+     "criterionType": "histology",
+     "kind": "exclusion",
+     "requirement": {
+      "op": "present",
+      "variable": "squamous_histology"
+     },
+     "sourceText": "Histologically or cytologically confirmed combined small cell lung cancer,squamous cell lung carcinoma, neuroendocrine carcinoma,or carcinosarcoma"
+    },
+    {
+     "criterionType": "cns",
+     "kind": "exclusion",
+     "requirement": {
+      "op": "present",
+      "variable": "active_cns_metastasis"
+     },
+     "sourceText": "Patients with meningeal metastasis, brainstem metastasis, spinal cord metastasis and/or compression, or active CNS metastasis."
+    },
+    {
+     "criterionType": "prior_therapy",
+     "kind": "exclusion",
+     "requirement": {
+      "op": "present",
+      "variable": "prior_systemic_chemotherapy"
+     },
+     "sourceText": "Previously received systemic anti-tumor therapy for locally advanced or metastatic non-squamous NSCLC other than EGFR TKI"
+    },
+    {
+     "criterionType": "comorbidity",
+     "kind": "exclusion",
+     "requirement": {
+      "op": "present",
+      "variable": "ild_history"
+     },
+     "sourceText": "Patients who have a history of ILD/non-infectious pneumonitis treated with corticosteroids in the past, currently have ILD/non-infectious pneumonitis"
+    },
+    {
+     "criterionType": "comorbidity",
+     "kind": "exclusion",
+     "requirement": {
+      "op": "present",
+      "variable": "active_hbv_hcv_infection"
+     },
+     "sourceText": "Active HBV or HCV infection (hepatitis B surface antigen and/or hepatitis B core antibody positive and HBV DNA copies ≥ 1×104 copies/mL or ≥ 2000 IU/mL, HCV antibody positive and HCV RNA above the lower limit of detection)"
+    }
+   ]
+  },
+  "recorded": {
+   "refused": true,
+   "issuesInTotal": 19,
+   "field": "criterionType",
+   "of": "two items; the first is replayed (11 of the 19 lines)"
+  },
+  "after": {
+   "outcome": "passes",
+   "why": "five spellings of a type (disease, prior_therapy, performance, organ_function, histology) are read as the type they mean, and cns, which is none of the types, is saved as other and said; no line is refused"
+  }
+ }
+}

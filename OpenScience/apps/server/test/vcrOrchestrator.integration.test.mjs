@@ -2366,3 +2366,67 @@ test("a median OS read from a PubMed abstract is evidence of its paper: verified
   assert.equal(second.pointValue, 13.8);
   await fs.rm(workspace, { recursive: true, force: true });
 });
+
+/**
+ * The refused calls of the two live conversations of 2026-11-01 (`fixtures/vcr-live-refusals-20261101.json`), replayed without a model through
+ * the gateway as it is now: the recorded arguments in the recorded order, the ids a call refers to mapped to the ones the replay made.
+ * Each call that was refused then is held to what the fixture says it is now (`after`), with the reason: a class of refusal that comes back
+ * fails here by name, and so does a refusal that should stand and does not.
+ */
+test("the 15 refused calls of the two live conversations of 2026-11-01, replayed without a model: what passes now, and what still refuses and should", options, async () => {
+  const fixture = JSON.parse(await fs.readFile(new URL("./fixtures/vcr-live-refusals-20261101.json", import.meta.url), "utf8"));
+  const module = compose();
+  const model = modelConversation("replay", module, { seal: module.seal });
+  /** @type {Map<string, string>} */
+  const ids = new Map();
+  const substitute = (/** @type {any} */ value) => { let text = JSON.stringify(value); for (const [from, to] of ids) text = text.replaceAll(from, to); return JSON.parse(text); };
+  const reminders = new Set(["vcr_evidence_reported_unverified", "vcr_assumption_role_missing", "vcr_comparator_record_incomplete", "vcr_evidence_item_incomplete"]);
+  /** @type {Array<Record<string, any>>} */
+  const table = [];
+  for (const call of fixture.c4b3.calls) {
+    const answer = await model.call(call.op, substitute(call.args));
+    /** @type {{ outcome: string, fields: string[], items: Record<string, string> }} */
+    let seen;
+    if (call.op === "write") {
+      const refusals = (answer.data?.issues ?? []).filter((/** @type {any} */ entry) => !reminders.has(entry.code));
+      const indexes = new Set(refusals.map((/** @type {any} */ entry) => entry.index ?? 0));
+      const count = Array.isArray(call.args.items) ? call.args.items.length : 1;
+      seen = { outcome: !refusals.length ? "passes" : (answer.data?.ids?.length ? "partly" : "refuses"), fields: [...new Set(refusals.map((/** @type {any} */ entry) => String(entry.field)))],
+        items: Object.fromEntries([...Array(count).keys()].map((at) => [String(at), indexes.has(at) ? "refuses" : "passes"])) };
+      for (const [at, id] of (answer.data?.ids ?? []).entries()) if (call.recorded.ids?.[at]) ids.set(call.recorded.ids[at], id);
+    } else if (call.args.action === "validate") {
+      seen = { outcome: answer.status === 200 && answer.data?.valid === true ? "passes" : "refuses", fields: (answer.data?.issues ?? []).map((/** @type {any} */ entry) => String(entry.field)), items: {} };
+    } else {
+      seen = { outcome: answer.status === 200 && answer.data?.jobId ? "passes" : "refuses", fields: (answer.issues ?? []).map((/** @type {any} */ entry) => String(entry.field)), items: {} };
+      if (call.recorded.subjectId && answer.data?.subject?.id) ids.set(call.recorded.subjectId, answer.data.subject.id);
+    }
+    if (!call.recorded.refused) {
+      assert.equal(seen.outcome, "passes", `${call.id}: a call that was accepted then is still accepted: ${JSON.stringify(answer).slice(0, 400)}`);
+      continue;
+    }
+    assert.ok(call.after, `${call.id}: a refused call has an expectation`);
+    assert.equal(seen.outcome, call.after.outcome, `${call.id} (${call.after.why}): ${JSON.stringify(answer).slice(0, 600)}`);
+    if (call.after.fields) assert.deepEqual([...new Set(seen.fields)].sort(), [...call.after.fields].sort(), `${call.id}: what still refuses, and by which field`);
+    if (call.after.items) assert.deepEqual(seen.items, call.after.items, `${call.id}: item by item`);
+    table.push({ id: call.id, was: call.recorded.issues?.length ?? 1, now: seen.outcome, fields: seen.fields });
+  }
+  const tally = { passes: table.filter((row) => row.now === "passes").length, partly: table.filter((row) => row.now === "partly").length, refuses: table.filter((row) => row.now === "refuses").length };
+  console.log(`replay c4b3: ${table.length} refused calls then -> ${tally.passes} pass, ${tally.partly} partly (the refused items still refuse), ${tally.refuses} still refuse`);
+  assert.deepEqual([table.length, tally], [14, { passes: 11, partly: 1, refuses: 2 }]);
+
+  // c1: the matching write that was refused on nineteen lines (the first item's eleven are replayed: the second item's criteria were not recorded)
+  const { vcrRuntimeWrite: write } = await import("../src/vcrGateway.mjs");
+  const item = fixture.c1.item;
+  const trial = { registry: "clinicaltrials.gov", registryId: item.registryId, recordHash: "fixture", eligibilityText: item.criteria.map((/** @type {any} */ criterion) => criterion.sourceText).join("\n") };
+  /** @type {any[]} */ const written = [];
+  const answer = await write({ store: {}, service: {}, orchestrator: null, study: { id: "std_c1", userId: "u_c1", projectId: "default", scope: "conversation" }, what: "candidate_trial", items: [item], data: null,
+    evidence: { async candidateRecord() { return { status: "ok", trial }; } },
+    patientTrials: { async holds() { return true; }, async writeTrial(/** @type {any} */ _study, /** @type {any} */ input) { written.push(input); return { trial: { id: "ctr_1" }, created: true, criteria: input.criteria, evaluation: { evaluated: [] } }; } } });
+  assert.deepEqual(answer.issues.filter((/** @type {any} */ entry) => /criterionType/.test(entry.field)), [], "no line is refused for a type");
+  assert.equal(answer.ok, true, JSON.stringify(answer.issues));
+  assert.equal(written[0].criteria.length, 15, "all fifteen criteria are written");
+  const read = answer.results.find((/** @type {any} */ entry) => entry.applied).applied;
+  assert.equal(read.length, fixture.c1.recorded.issuesInTotal === 19 ? 11 : read.length, "the eleven lines that were refused are the eleven words read");
+  assert.deepEqual(written[0].criteria.map((/** @type {any} */ criterion) => criterion.criterionType), ["demographic", "diagnosis", "prior_treatment", "biomarker", "diagnosis", "performance_status", "lab", "lab", "lab", "lab", "diagnosis", "other", "prior_treatment", "comorbidity", "comorbidity"]);
+  console.log("replay c1: the matching write that was refused on 19 lines (11 of them in the first item, replayed) -> 0 refused; 10 types read as the type they mean, 1 (cns) saved as other");
+});
