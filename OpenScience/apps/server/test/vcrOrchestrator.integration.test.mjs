@@ -1033,6 +1033,70 @@ test("A1 a zero-effect check that fails leaves the design's result as it was and
   }
 });
 
+test("A1 a design a conversation simulated gets its zero-effect check from the platform, and only that: no step was asked for and nothing else of the design's plan is queued; a check that fails or is cancelled takes nothing back", options, async () => {
+  for (const how of /** @type {const} */ (["done", "failed", "canceled"])) {
+    const module = compose({ resultFor: (job) => (how === "failed" && job.method === "design.simulate" && job.scenario.truth?.hazardRatio === 1
+      ? engineResult(job, { status: "failed", conclusion: null, measures: [], counts: {}, diagnostics: { issues: [{ code: "handler_error", field: "scenario", detail: "no" }] } })
+      : nullAware(job)) });
+    const study = await store.taskContext({ userId: `u_convnull_${how}`, projectId: `prj_convnull_${how}`, rootSessionId: "native-fixture" }, { create: true });
+    assert.equal(study.scope, "conversation");
+    const gateway = conversationGateway(module, study);
+    const started = await gateway("simulate", { action: "start", kind: "design_simulation", scenario: engineScenario(1, "design_simulation") });
+    assert.equal(started.status, 200, JSON.stringify(started));
+    if (how === "canceled") {
+      // Stop the check while it waits in the queue: the alternative has landed and the check has been queued behind it.
+      let queued = null;
+      for (let pass = 0; pass < 20 && !queued; pass += 1) {
+        await module.loops.jobs();
+        await module.orchestrator.advance(study.id);
+        queued = (await store.rows("SELECT id FROM evimed_vcr.jobs WHERE study_id=$1 AND checkpoint->>'stage'='simulation_null' AND state='queued'", [study.id]))[0] ?? null;
+      }
+      assert.ok(queued, "the check was queued after the alternative landed");
+      await module.jobs.cancel(study.id, queued.id, { actor: "owner" });
+    }
+    await drainJobs(module, study);
+    const jobs = await store.rows("SELECT id, kind, state, checkpoint, scenario FROM evimed_vcr.jobs WHERE study_id=$1 ORDER BY created_at", [study.id]);
+    assert.deepEqual(jobs.map((job) => `${job.kind}:${job.checkpoint.stage}`), ["design_simulation:simulation", "design_simulation:simulation_null"],
+      "the alternative the conversation asked for, then the check, and no analytic or assurance stage nobody asked for");
+    const check = jobs[1];
+    assert.equal(check.state, how === "done" ? "succeeded" : how);
+    assert.equal(check.checkpoint.check, true);
+    assert.equal(check.scenario.truth.hazardRatio, 1, "the one key that says no effect");
+    assert.equal(check.scenario.truth.controlMedian, 6, "and the control level is the design's");
+    assert.deepEqual([check.scenario.design.nTreat, check.scenario.design.nControl], [90, 90], "on the design that was simulated");
+    const [design] = await store.trialScenarios(study.id);
+    const current = await store.currentResultOf(study.id, "trial_scenario", design.id);
+    assert.equal(current.measures.find((/** @type {any} */ measure) => measure.name === "power").value, 0.712, "the alternative's power stands");
+    assert.equal(current.conclusion, "estimable");
+    if (how === "done") {
+      assert.equal(current.measures.find((/** @type {any} */ measure) => measure.name === "type_one_error").value, 0.0246);
+    } else {
+      assert.equal(current.measures.some((/** @type {any} */ measure) => measure.name === "type_one_error"), false);
+    }
+    const trial = await module.service.tab({ id: study.userId }, study.id, "trial");
+    assert.equal(trial.designs[0].nullState, how === "done" ? "done" : how, "the page says how the check went, beside the figure");
+    // A second pass queues nothing more, and a design the check was refused for is not asked again.
+    await module.orchestrator.advance(study.id);
+    assert.equal((await store.rows("SELECT 1 FROM evimed_vcr.jobs WHERE study_id=$1", [study.id])).length, 2);
+  }
+});
+
+test("A1 the platform adds no check to a conversation's design that is already the zero-effect case", options, async () => {
+  const module = compose({ resultFor: nullAware });
+  const study = await store.taskContext({ userId: "u_convnull_none", projectId: "prj_convnull_none", rootSessionId: "native-fixture" }, { create: true });
+  const gateway = conversationGateway(module, study);
+  const nullCase = engineScenario(1, "design_simulation");
+  nullCase.truth = { ...nullCase.truth, hazardRatio: 1 };
+  const answer = await gateway("simulate", { action: "start", kind: "design_simulation", scenario: nullCase });
+  assert.equal(answer.status, 200, JSON.stringify(answer));
+  await module.orchestrator.advance(study.id);
+  // The simulation is still queued: nothing is queued behind it.
+  assert.equal((await store.rows("SELECT 1 FROM evimed_vcr.jobs WHERE study_id=$1", [study.id])).length, 1);
+  await drainJobs(module, study);
+  assert.deepEqual((await store.rows("SELECT checkpoint->>'stage' AS stage FROM evimed_vcr.jobs WHERE study_id=$1", [study.id])).map((row) => row.stage), ["simulation"],
+    "a scenario that already states no effect needs no second one");
+});
+
 test("AC-33 everything the run set carries the AI-set label until a person countersigns it", options, async () => {
   const module = compose();
   const study = await makeStudy("aiset");

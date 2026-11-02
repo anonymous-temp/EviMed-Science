@@ -2695,6 +2695,43 @@ export class VcrOrchestrator {
       const enqueued = await this.#enqueueFor(study, item, read);
       result.enqueued.push(...enqueued);
     }
+    // A conversation's study asks for no step, so nothing above is queued for it; the check that follows a two-arm design's
+    // simulation is the platform's whatever asked for the simulation (A1).
+    if (!plan.want.has("trial")) await this.#enqueueConversationChecks(study, read, result);
+  }
+
+  /**
+   * The zero-effect check of a design a conversation simulated. A conversation computes its designs itself (`vcr_simulate`) and the
+   * programme queues none of them, so the check the skill promises ("the platform adds it") is queued here, once the alternative's
+   * simulation has landed on the design and only for that design: nothing else of the design's plan is run. It is the same stage as
+   * the programme's (`vcrBuildStages` builds it, `#enqueueStage` queues it), so the result, the page and a failed or cancelled check
+   * read as they do there: a check that does not finish never touches the result.
+   * @param {any} study @param {VcrRead} read @param {{ enqueued: string[] }} result
+   */
+  async #enqueueConversationChecks(study, read, result) {
+    if (study.scope !== "conversation") return;
+    for (const row of read.scenarios) {
+      const node = vcrObjectNode("trial_scenario", row);
+      const marks = read.marksByNode.get(node) ?? [];
+      if (marks.find((mark) => mark.key === `job:${node}#simulation`)?.state !== "done"
+        || marks.some((mark) => mark.key === `job:${node}#simulation_null`)) continue;
+      const item = { step: "trial", kind: "trial_scenario", row };
+      let modelResult = null;
+      const modelResultId = object(row.configuration).modelResultId;
+      if (modelResultId) {
+        try { modelResult = await readVcrModelDesignResult(this.store, study.id, String(modelResultId)); } catch { continue; }
+      }
+      // A design the plan cannot be built for is not a failure of the conversation's result, which stands: no check, no mark.
+      const plan = vcrBuildStages(item, { study, definition: read.definition, assumptions: read.assumptions, populations: read.populations,
+        scenarios: read.scenarios, grid: read.grid, analytic: null, analyticJob: null, models: read.models, forecast: read.forecast, modelResult });
+      if (plan.ok === false) continue;
+      const check = plan.stages.find((entry) => entry.stage === "simulation_null");
+      if (!check) continue;
+      const generation = Number((await this.store.one(`SELECT count(*)::integer AS n FROM ${VCR_SCHEMA}.jobs
+        WHERE study_id = $1 AND checkpoint ->> 'node' = $2`, [study.id, node]))?.n ?? 0);
+      const outcome = await this.#enqueueStage(study, item, node, check, read, generation, plan.stages.map((entry) => String(entry.stage)), [check]);
+      if (outcome.jobId) result.enqueued.push(outcome.jobId);
+    }
   }
 
   /** @param {string} studyId @param {string} key */
