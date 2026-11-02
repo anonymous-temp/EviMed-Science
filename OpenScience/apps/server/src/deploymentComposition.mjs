@@ -28,7 +28,7 @@
  * @module deploymentComposition
  */
 
-import { MCP_MANAGED_JOB_BASE_NAMES, VCR_CAPABILITIES } from "@evimed/domain";
+import { MCP_MANAGED_JOB_BASE_NAMES } from "@evimed/domain";
 import { frontierGatewayProviderUrl } from "./frontierGateway.mjs";
 import { frontierAudienceAllows } from "./frontierService.mjs";
 import { geoGatewayProviderUrl } from "./geoGateway.mjs";
@@ -52,21 +52,7 @@ export const ENGINE_TOOL_ADAPTER_KEYS = Object.freeze({
   drug_safety_analysis: "drugSafetyAnalysis",
 });
 
-/** The 「循证 GEO」 capabilities, by id. The VCR ones are the domain's `VCR_CAPABILITIES`. */
-export const GEO_CAPABILITY_IDS = Object.freeze(["geo-insight", "geo-strategy", "geo-content", "geo-proposal"]);
-
-/**
- * The module a capability is opened from, or null for an ordinary one. These
- * capabilities stay public (a bound conversation needs them) but are reachable
- * only from their module, so a module that is off or closed to the account
- * makes the capability itself unavailable rather than merely limited.
- * @param {string} capabilityId @returns {"geo" | "vcr" | null}
- */
-export function moduleOfCapability(capabilityId) {
-  if (GEO_CAPABILITY_IDS.includes(capabilityId)) return "geo";
-  if (VCR_CAPABILITIES.includes(capabilityId)) return "vcr";
-  return null;
-}
+export { GEO_CAPABILITY_IDS, moduleOfCapability } from "./capabilityModules.mjs";
 
 /**
  * Whether a module is on for this account: `on`, `off` for the deployment, or
