@@ -1388,13 +1388,14 @@ const WRITERS = {
     if (written.state === "reported_unverified") {
       // Saved, and usable as an external-evidence card's number: the answer says what it lacks and how to supply it.
       const calculated = written.because === "calculated_from_publication";
-      const why = written.because === "publication_not_read" ? "平台还没有读到这篇文献的原文（先用文献检索按 PMID 取回摘要，它会被保全）"
+      // What will happen is said, and no more: a text is checked only once the platform has read one, and only the open-access full texts can be read.
+      const why = written.because === "publication_not_read" ? "平台还没有读到这篇文献的原文（先用文献检索按 PMID 取回摘要，它会被保全；数在全文里的话，再用 open_access_fulltext 取全文，只有开放获取的取得到）"
         : calculated ? "这是由论文里的数算出来的值，平台不核对派生值"
-          : `引文不在平台读到的${written.publication?.contentRead === "abstract" ? "摘要" : "原文"}里（全文里的数要先取回全文）`;
+          : `引文不在平台读到的${written.publication?.contentRead === "abstract" ? "摘要" : "原文"}里${written.publication?.contentRead === "abstract" ? "（数在全文里的话，用 open_access_fulltext 取回全文，只有开放获取的取得到）" : ""}`;
       // A computed value is kept as a record, and it is not what a card or a pool is made of: say so, and say what a card can be made of.
       item.issues.push(issue(item.index, "quote", "vcr_evidence_reported_unverified", calculated
         ? `已记录，未核对：${why}。它不能作为外部证据假设卡的依据，也不进入合并；论文报告的原数可以（写进 evidence_item 并整句引用），你自己的设定用 sourceKind expert_set、valueSource assumed，出处写进 note。`
-        : `已记录为文献报告的数，未核对：${why}。它可以作为外部证据假设卡的依据，结果页会写明“未核对”；取回原文后写同一条，就会核对。`));
+        : `已记录为文献报告的数，未核对：${why}。它可以作为外部证据假设卡的依据，结果页会写明“未核对”；平台读到文本之后再写同一条，引文逐字在文本里才会核对。`));
     } else if (!verified) {
       item.issues.push(issue(item.index, "quote", "vcr_evidence_unverified",
         `已记录，但没有通过原文核对（${written.state}），不会进入假设卡：引文要逐字出现在保全原文里，值、区间和样本量都要出现在引文里。`));

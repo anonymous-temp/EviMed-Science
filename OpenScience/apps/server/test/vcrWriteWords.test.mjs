@@ -70,6 +70,7 @@ test("a number the platform could not check is saved, and the answer says it is 
     assert.equal(written.issues[0].code, "vcr_evidence_reported_unverified");
     assert.match(written.issues[0].message, /未核对/);
     assert.match(written.issues[0].message, pattern);
+    assert.doesNotMatch(written.issues[0].message, /就会核对/, "the reminder promises what will happen: a quotation that is in the text read is checked, not that fetching checks it");
   }
   // a registry value that fails its check is still refused as it always was
   const failed = await write("evidence_item", [paperItem({ registry: "clinicaltrials.gov", registryId: "NCT03434379" })], { evidence: evidenceAnswering("quote_not_found") });

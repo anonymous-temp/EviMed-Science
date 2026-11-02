@@ -1627,7 +1627,11 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
       // A number a publication reports, bound to the paper by its PMID or DOI: the quotation is held against the text the platform itself
       // read of that paper (a capture a literature tool preserved), and a paper it has not read is not a reason to refuse the number.
       const paper = !literature && item.publication && typeof item.publication === "object" ? /** @type {{ kind: "pmid" | "doi", id: string }} */ (item.publication) : null;
-      const paperRead = paper ? await publicationSources?.read({ userId, projectId, publication: paper }).catch(() => null) ?? { found: false } : null;
+      const paperReads = paper ? await publicationSources?.read({ userId, projectId, publication: paper }).catch(() => null) ?? { found: false } : null;
+      // The platform may have read more than one text of the paper (the whole article and its abstract): the sentence is held against the one
+      // that holds it, and when none does, against the most that was read.
+      const paperRead = paperReads?.found
+        ? { ...([paperReads, ...(paperReads.others ?? [])].find((read) => quoteIsPresent(read.text, String(item.quote ?? "").trim())) ?? paperReads), found: true } : paperReads;
       const precedent = literature || paper ? null : await store.precedentOfStudy({ userId, studyId, registry: registryName, registryId, recordHash: item.locator?.recordHash ?? null });
       if (!literature && !paper && !precedent) {
         return { status: "refused", code: "vcr_precedent_not_in_study",
