@@ -51,10 +51,11 @@ vcr_job_covariate_sets <- function(job, output_dir = NULL, cancel_file = NULL, .
   primary_name <- if (identical(analysis, "aipw")) "aipw_difference" else if (identical(endpoint, "time_to_event")) "rmst_difference" else "weighted_difference"
 
   # The analysis under each set is the base method's, at the release this job's own label stands for (replay): from 1.2.0 the weighted
-  # balance is read and never a refusal (the base methods' 1.2.0, the doubly robust one's 1.1.0); before it, the refusal is the rule. The
+  # balance is read and never a refusal (the base methods' 1.2.0, the doubly robust one's 1.1.0); before it, the refusal is the rule, and a 1.0.0 label also runs without the source time unit. The
   # enrolment-year row is not among what a set reports, so it is not run.
   nested_version <- if (vcr_job_at_least(job, "1.2.0")) { if (identical(analysis, "aipw")) "1.1.0" else "1.2.0" }
-                    else { if (identical(analysis, "aipw")) "1.0.0" else "1.1.0" }
+                    else if (vcr_job_at_least(job, "1.1.0")) { if (identical(analysis, "aipw")) "1.0.0" else "1.1.0" }
+                    else "1.0.0"
   runs <- vector("list", length(sets)); stopped <- NULL
   for (k in seq_along(sets)) {
     reason <- vcr_interrupt()
