@@ -15,6 +15,14 @@
  *   called verified.
  * - **The abstract is not the paper.** A capture says what it is (`contentLevel`), and a quotation that lives in the full text is not
  *   found in an abstract: that is `quote_not_found` for what was read, with the level named, not a claim about the paper.
+ * - **A capture is only as trustworthy as the workspace it sits in (a known limit, 2026-11-02).** `sourceCapture` makes the manifest agree
+ *   with the bytes, not with the tool that wrote them: a run that can write files can write an `abstract.md` and a `capture.json` that agree
+ *   with each other, and a quotation from it reads as `verified`. The one record the run cannot write is the preserving tool's own result in
+ *   the kernel transcript (`data.artifactSha256s`, read at the end of a run by `successfulEvidenceSourceArtifacts` for the clinical gate); it
+ *   does not exist while the run is still calling this gateway, and a live copy of it would be a store of its own, which this module does not
+ *   build. What a forged capture can reach is bounded by what already passes over a `publication_text` item: it is never pooled (it names no
+ *   trial), never a baseline (`baseline_source_unit_unverified`), and no tenant boundary is crossed: the only text it can claim to be is a
+ *   paper the run itself names, in the run's own project. It can become a single-study card, with the paper's identifier on it.
  * - **A DOI is found by the slug the full-text tool names its directory with, or by the DOI line of a preserved abstract.** Nothing is
  *   fetched here and nothing is searched outside the one project's workspace.
  *
