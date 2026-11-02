@@ -255,6 +255,28 @@ describe("active research workspace", () => {
       await advance(20_000);
       expect(mocks.listWebAgentRuns).toHaveBeenCalledTimes(2);
     });
+    it("REVIEWFIX 11 a read that fails while the page is open leaves what was shown where it was, with the error said above it; a first read that fails shows the error alone", async () => {
+      vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+      renderPage(); await screen.findByText("cohort.csv"); await settle();
+      mocks.listAgendas.mockRejectedValue(new Error("网络中断"));
+      await advance(5_000);
+      expect(await screen.findByText(/研究暂时无法载入/)).toBeInTheDocument();
+      expect(screen.getByLabelText("研究队列")).toBeInTheDocument();
+      expect(screen.getByTestId("observatory")).toHaveTextContent("run-active");
+      expect(screen.getByText("cohort.csv")).toBeInTheDocument();
+      // the next read that succeeds takes the error away
+      mocks.listAgendas.mockResolvedValue({ items: [task("b", "已完成研究"), task("a", "进行中研究")], nextCursor: null, available: true });
+      await advance(5_000);
+      expect(screen.queryByText(/研究暂时无法载入/)).not.toBeInTheDocument();
+      expect(screen.getByTestId("observatory")).toHaveTextContent("run-active");
+    });
+    it("REVIEWFIX 11 the first read failing shows the error and nothing of the research", async () => {
+      mocks.listAgendas.mockReset().mockRejectedValue(new Error("网络中断"));
+      renderPage();
+      expect(await screen.findByText(/研究暂时无法载入/)).toBeInTheDocument();
+      expect(screen.queryByLabelText("研究队列")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("observatory")).not.toBeInTheDocument();
+    });
     it("reads quietly, every 30 s, when no execution is on its way — the run list still at 20 s", async () => {
       vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
       mocks.listEpisodes.mockImplementation(async (_project: string, agendaId?: string) => ({ items: agendaId === "a" ? [] : [finished], nextCursor: null }));

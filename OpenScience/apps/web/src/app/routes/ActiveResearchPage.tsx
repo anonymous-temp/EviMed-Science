@@ -405,6 +405,9 @@ function ResearchWorkspace({ projectId }: { projectId: string }) {
   const subject = Boolean(goal || selected);
   const showViews = loaded && !nothing && !reading && subject;
   const canStart = longFeature === "enabled";
+  // A read that fails while the page is open does not take away what it showed: the error is said above it and the next read that succeeds
+  // clears it. Only a first read that failed (nothing was ever shown) is the error alone.
+  const shown = loaded && (queue.length > 0 || subject);
   // The header says the two things that start from here. With nothing yet the standby scene carries them and the header does not repeat them.
   const actionPlan: PageActionPlan = {
     primary: { id: "start-research", label: "发起研究", disabled: !canStart, onSelect: () => setStarting(true) },
@@ -465,7 +468,7 @@ function ResearchWorkspace({ projectId }: { projectId: string }) {
     {actionError && !steering && <p role="alert" className="text-ui text-error">{actionError}</p>}
     {actionNotice && <p role="status" className="text-ui text-text">{actionNotice}</p>}
     {reading && <div role="status" aria-label="正在载入研究" className="h-64 animate-pulse rounded-card bg-surface-2" />}
-    {!reading && !error && <div className="space-y-2">
+    {!reading && (!error || shown) && <div className="space-y-2">
       {queue.length > 0 && <ResearchQueue entries={queue} selected={queueSelected} disabled={busy} onSelect={choose} />}
       {subjectRow}
       <ResearchObservatory runId={runId} title={observedTitle} onOpenFile={openFile} onObserved={setObserved} standbyActions={nothing ? <>
