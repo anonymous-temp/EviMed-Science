@@ -1765,7 +1765,6 @@
       "geo_write",
       "social_posts_search",
       "drug_label_search",
-      "drug_approval_records",
       "pharmacy_reference_search",
       "adr_case_query",
       "adr_signal_analysis",
@@ -1800,7 +1799,6 @@
       "curve_digitize",
       "evidence_pool",
       "research_calculate",
-      "clinical_score",
       "dataset_semantics",
       "schedule_task",
       "update_task"

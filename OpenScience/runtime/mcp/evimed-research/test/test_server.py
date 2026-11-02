@@ -95,8 +95,6 @@ class ToolContractTests(unittest.TestCase):
             "patent_search",
             "pharmacy_reference_search",
             "drug_label_search",
-            # US FDA applications, patents and exclusivities from the image's dated snapshot (`drug_approval_index.py`, 2026-11-02).
-            "drug_approval_records",
             "adr_case_query",
             "adr_signal_analysis",
             "offlabel_evidence_packet",
@@ -168,9 +166,6 @@ class ToolContractTests(unittest.TestCase):
             # control plane's task service (`task_tools.py`, 2026-10-09).
             "schedule_task",
             "update_task",
-            # Clinical scales and multi-step clinical formulas computed from their
-            # published definitions (`clinical_scores.py`, 2026-11-02).
-            "clinical_score",
         }
         self.assertEqual(set(by_name), expected)
         for tool in tools:
@@ -232,8 +227,8 @@ class ToolContractTests(unittest.TestCase):
         self.assertEqual(sleep.call_count, 2)
 
     def test_catalog_is_searchable_and_never_turns_blocked_sources_into_evidence(self):
-        active = self.server.call_tool("data_source_catalog", {"status": "connected_public", "limit": 123})
-        blocked = self.server.call_tool("data_source_catalog", {"status": "blocked_license", "limit": 123})
+        active = self.server.call_tool("data_source_catalog", {"status": "connected_public", "limit": 124})
+        blocked = self.server.call_tool("data_source_catalog", {"status": "blocked_license", "limit": 124})
         self.assert_contract(active)
         self.assert_contract(blocked)
         self.assertEqual(active["status"], "success")
@@ -243,10 +238,11 @@ class ToolContractTests(unittest.TestCase):
         self.assertTrue(all(item["catalogStatus"] == "active_tool" for item in active["data"]["items"]))
         summary = active["data"]["integrationSummary"]
         registered = set(self.server.public_sources.BIOMEDICAL_SOURCE_IDS)
-        self.assertEqual(summary["reviewedTotal"], 123)
+        self.assertEqual(summary["reviewedTotal"], 124)
         self.assertEqual(summary["connectedPublic"], len(registered))
         self.assertEqual(summary["skillGuidanceOnly"], 13)
-        self.assertEqual(summary["notConnected"], 123 - len(registered) - 13)
+        self.assertEqual(summary["viaEvimedIndex"], 8)
+        self.assertEqual(summary["notConnected"], 124 - len(registered) - 13 - 8)
         self.assertEqual({item["connector"] for item in active["data"]["items"]}, registered)
         self.assertEqual(summary["productionConnectorRoute"], "controlled_connector_routes")
         self.assertEqual(
@@ -263,7 +259,7 @@ class ToolContractTests(unittest.TestCase):
         # pass a live probe" with the probe state `blocked_missing_operator_credential`:
         # a key was the operator's to supply. It is the deployment's, or the
         # researcher's own, saved under 设置 → 数据源 and asked for at the moment of use.
-        ready = self.server.call_tool("data_source_catalog", {"status": "ready_credentials", "limit": 123})
+        ready = self.server.call_tool("data_source_catalog", {"status": "ready_credentials", "limit": 124})
         self.assert_contract(ready)
         rows = ready["data"]["items"]
         self.assertEqual({row["id"] for row in rows}, {
@@ -274,7 +270,7 @@ class ToolContractTests(unittest.TestCase):
             self.assertIn("设置 → 数据源", row["blocker"], row["id"])
             self.assertIn("研究者", row["blocker"], row["id"])
             self.assertEqual(row["validation"]["liveProbe"], "blocked_missing_credential", row["id"])
-        everything = self.server.call_tool("data_source_catalog", {"limit": 123})
+        everything = self.server.call_tool("data_source_catalog", {"limit": 124})
         self.assertNotIn("operator credential", json.dumps(everything["data"], ensure_ascii=False).lower().replace("_", " "))
 
     def test_an_empty_us_label_search_says_what_the_source_matches_and_where_labels_are(self):
@@ -320,7 +316,7 @@ class ToolContractTests(unittest.TestCase):
         self.assert_contract(first)
         self.assertEqual(first, second)
         self.assertEqual(first["data"]["service"], "evimed-research")
-        self.assertEqual(first["data"]["dataSourceCatalog"]["reviewedTotal"], 123)
+        self.assertEqual(first["data"]["dataSourceCatalog"]["reviewedTotal"], 124)
         self.assertIn("pubmed", first["data"]["dataSourceCatalog"]["activeConnectorIds"])
         self.assertNotIn("retrievedAt", first["data"])
         self.assertEqual(first["data"]["provenance"], {
@@ -722,10 +718,10 @@ class AdapterTests(unittest.TestCase):
             thread.join()
             httpd.server_close()
 
-        self.assertEqual(result["status"], "warning")
+        self.assertEqual(result["status"], "success")
         self.assertEqual(result["data"]["items"][0]["pmid"], "12345")
         self.assertEqual(result["sources"][0]["source"], "pubmed")
-        self.assertTrue(any("bibliographic metadata only" in item for item in result["warnings"]))
+        self.assertTrue(any("bibliographic metadata only" in item for item in result["next_actions"]))
         self.assertTrue(any("abstract or full text" in item for item in result["next_actions"]))
         self.assertEqual(result["data"]["provenance"]["scope"]["userId"], "user-public")
         self.assertEqual(len(requests), 2)

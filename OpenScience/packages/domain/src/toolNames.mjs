@@ -79,9 +79,6 @@ export const MCP_TOOL_BASE_NAMES = Object.freeze([
   'social_posts_search',
   // pharmacy data
   'drug_label_search',
-  // US FDA applications with their submissions, patents and exclusivities, from the dated Orange Book and Drugs@FDA snapshot the
-  // image carries: local, no request (drug_approval_index.py, 2026-11-02)
-  'drug_approval_records',
   'pharmacy_reference_search',
   'adr_case_query',
   'adr_signal_analysis',
@@ -134,9 +131,6 @@ export const MCP_TOOL_BASE_NAMES = Object.freeze([
   'curve_digitize',
   'evidence_pool',
   'research_calculate',
-  // clinical scales and multi-step clinical formulas computed from their published definitions, deterministically — local, no
-  // gateway (clinical_scores.py, 2026-11-02)
-  'clinical_score',
   // what a project's datasets mean — the recorded interpretation, its exact source versions and the deterministic
   // data checks — through the control plane's ledger; offered to the two capabilities that start from a
   // researcher's own data (dataset_semantics, data_semantics.py; plan 2026-10-02 §11.3 N03)
@@ -263,9 +257,6 @@ export const ROOT_VISIBLE_MCP_BASE_NAMES = Object.freeze([
   // way by the wiki's contents, a page, the graph (model-chosen, never forced).
   'kb_browse',
   'research_calculate',
-  // A score or a multi-step clinical formula is arithmetic the model gets wrong by hand; the root may need one in any
-  // medical conversation, so it is not a delegate's tool (model-chosen, never forced).
-  'clinical_score',
   'vcr_read', 'vcr_write', 'vcr_simulate',
   // "每周五帮我看看……" is said in any conversation, and "改到每周一 8 点" in a task's own
   // conversation: a tool the root is not shown would fail exactly the sentence it exists for (model-chosen, never forced).
@@ -279,9 +270,6 @@ export const ROOT_VISIBLE_MCP_BASE_NAMES = Object.freeze([
   'clinical_trial_search',
   'biomedical_source_search',
   'drug_label_search',
-  // "who holds the NDA, when does the patent or the exclusivity end": a lookup the root may need in any drug question, and a
-  // wrong guess is exactly what it exists to prevent (model-chosen, never forced).
-  'drug_approval_records',
   'pharmacy_reference_search',
   'drug_term_normalize',
   'term_normalize',

@@ -497,10 +497,6 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   // the other label connectors are still there to ask.
   "drug_label_index_unconfigured",
   "drug_label_not_found",
-  // The FDA approval-records snapshot (drug_approval_records, 2026-11-02) is not installed in this runtime, or holds no application
-  // under that number: a fact about the snapshot, and the Drugs@FDA and Orange Book pages are still there to read.
-  "drug_approval_index_unconfigured",
-  "drug_approval_application_not_found",
   // `web_read` (2026-09-20) reads any public page, so most answers it can get
   // are facts about the page: the site's robots.txt says no, the site needs a
   // browser this deployment does not have, the page is still unreadable after
@@ -594,9 +590,6 @@ export const terminalEvidenceSourceErrorCodes = new Set([
   "drug_label_section_unknown",
   "drug_label_preservation_failed",
   "drug_label_index_invalid",
-  // The same tool: a name, number or limit the run built wrongly, or a snapshot file this server cannot trust.
-  "drug_approval_input_invalid",
-  "drug_approval_index_invalid",
   "public_source_url_invalid",
   "public_source_dataset_invalid",
   "public_source_gateway_invalid",
@@ -683,19 +676,6 @@ export const terminalEvidenceSourceErrorCodes = new Set([
   "kb_browse_limit_invalid",
   "kb_browse_request_invalid",
   "kb_browse_request_too_large",
-  // And a clinical score (clinical_score → clinical_scores.py): an id, version, item, unit or value the run got wrong, an item
-  // it did not give, or a patient outside the score's population. The calculation is declined with the reason and computes
-  // nothing; every other answer goes on (`clinical_score_kit.ERROR_CODES` is the list, held equal by a test).
-  "clinical_score_request_invalid",
-  "clinical_score_unknown_id",
-  "clinical_score_unknown_version",
-  "clinical_score_unknown_input",
-  "clinical_score_input_invalid",
-  "clinical_score_unit_invalid",
-  "clinical_score_out_of_range",
-  "clinical_score_not_applicable",
-  "clinical_score_missing_inputs",
-  "clinical_score_assume_absent_invalid",
   ...DATA_SEMANTICS_RUN_FIXES,
   // And for a task tool: an instruction, title, schedule or id the run built wrongly, a task that is not this project's, a change
   // that changes nothing.
@@ -3054,7 +3034,6 @@ export const ERROR_CODE_FAMILIES = Object.freeze([
   [/^mr_open_/, 'GWAS Catalog 的公开汇总数据这次没能用于孟德尔随机化；报告会写明缺了什么，或改用其他研究。'],
   [/^pharmacy_reference_/, '药学参考数据这次没能给出结果。'],
   [/^drug_label_/, '药品说明书库这次没能给出结果；可以改用其他说明书来源继续。'],
-  [/^drug_approval_/, 'FDA 批准记录这次没能给出结果；可以改读 Drugs@FDA 或橙皮书的网页继续，报告会写明用的是哪一期快照。'],
   [/^quote_/, '引文核对这次没能完成；这只是一次查找，已写的报告不受影响。'],
   [/^evimed_evidence_/, '专有证据接口这次没能给出结果。'],
   [/^invalid_assessment/, '这次评估请求的格式不符合要求。'],
@@ -3071,7 +3050,6 @@ export const ERROR_CODE_FAMILIES = Object.freeze([
   [/^source_parser_/, '文档解析这次没有完成，稍后再重新分析。'],
   [/^kb_search_/, '资料库检索这次没能完成；运行会直接读取知识库里的文件继续。'],
   [/^kb_browse_/, '知识库目录这次没能打开；运行会改用资料库检索或直接读取知识库里的文件继续。'],
-  [/^clinical_score_/, '这次临床评分没有算出：输入有缺项、单位不对或超出该评分的适用人群；请按提示补充后再算，其余结论不受影响。'],
   [/^semantics_/, DATA_SEMANTICS_ERROR_MESSAGE_ZH],
   [/^task_(?:tools_|limit_reached$|revision_conflict$|instruction_invalid$|title_invalid$|schedule_|materials_invalid$|id_invalid$|not_found$|update_empty$|paused_invalid$)/, TASK_TOOL_ERROR_MESSAGE_ZH],
   [/^frontier_(?:disabled$|search_)/, '前沿动态检索这次没能完成；回答会改用文献、指南和监管来源继续。'],

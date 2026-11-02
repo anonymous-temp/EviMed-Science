@@ -116,21 +116,11 @@ RUN set -eux; \
 # only: an import made inside a function (the record extractor imports `pypdf`
 # there, on purpose) passes it, so what keeps such a module honest is the
 # stack list above, not this loop.
-# The FDA approval-records index (`data/fda-approvals.sqlite`, `drug_approval_records`) is a second generated file in that tree,
-# and a base built before the tool existed does not have it. FDA replaces its source files in place, so this build cannot
-# download the pinned bytes the way the full build's SIDER step can; the index is taken from the build context, where the CI
-# cache restores it (web.yml) and a lab or host build places the pinned file before it builds. A context without one leaves the
-# base's index in place; a base with none and a context with none stops the build at `build_fda_approvals.py`, which names
-# the moved input instead of building from a different snapshot.
-# In the one COPY, because a base image is close to the layer limit: a layer more answered "max depth exceeded" on a lane (2026-11-02).
-COPY runtime/mcp/evimed-research/*.py runtime/mcp/evimed-research/*.json runtime/mcp/evimed-research/data/fda-approvals* /opt/evimed/mcp/evimed-research/
+COPY runtime/mcp/evimed-research/*.py runtime/mcp/evimed-research/*.json /opt/evimed/mcp/evimed-research/
 RUN set -eux; \
   test -s /opt/evimed/mcp/evimed-research/data/sider-4.1.sqlite; \
   cd /opt/evimed/mcp/evimed-research; \
-  if [ -s fda-approvals.sqlite ]; then install -m 0444 fda-approvals.sqlite data/fda-approvals.sqlite; rm -f fda-approvals.sqlite; fi; \
-  install -m 0444 fda-approvals.SOURCE.json data/fda-approvals.SOURCE.json; rm -f fda-approvals.SOURCE.json; \
   python3 build_sider_cache.py; \
-  python3 build_fda_approvals.py; \
   for module in *.py; do python3 -c "import sys; sys.path.insert(0, '.'); import ${module%.py}"; done; \
   chmod -R a-w /opt/evimed/mcp
 

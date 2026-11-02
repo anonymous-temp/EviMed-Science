@@ -49,29 +49,6 @@ jobs:
           path: OpenScience/runtime/mcp/evimed-research/data/sider-4.1.sqlite
           key: sider-4.1-6427a3e3-119b2f53
 
-      # The FDA approval-records index (drug_approval_records) is kept the same way, with one difference that matters: FDA replaces
-      # its files in place (Drugs@FDA every weekday, the Orange Book every month), so unlike SIDER the publisher stops serving
-      # the pinned bytes within days. The index and the four raw inputs are therefore restored from the cache first, and a run
-      # that finds neither builds from FDA only while the digests still match (`build_fda_approvals.py` names the way out when
-      # they do not: the pinned files supplied through --source-cache). The pinned inputs need a durable home outside this cache.
-      - name: Restore the pinned FDA approvals index
-        uses: actions/cache/restore@v4
-        with:
-          path: OpenScience/runtime/mcp/evimed-research/data/fda-approvals.sqlite
-          key: fda-approvals-c2088c7a-5eaa76ec-v1
-      - uses: actions/cache@v4
-        with:
-          path: ${{ runner.temp }}/fda-inputs
-          key: fda-inputs-c2088c7a-5eaa76ec-3a79adea-d1ebc103
-      - name: Build and smoke the pinned FDA approvals index
-        run: python3 runtime/mcp/evimed-research/build_fda_approvals.py --source-cache "$RUNNER_TEMP/fda-inputs"
-      - name: Keep the pinned FDA approvals index
-        uses: actions/cache/save@v4
-        continue-on-error: true
-        with:
-          path: OpenScience/runtime/mcp/evimed-research/data/fda-approvals.sqlite
-          key: fda-approvals-c2088c7a-5eaa76ec-v1
-
   web:
     runs-on: ubuntu-22.04
     # A hang guard, not a target: the job ran ~75 min on 2026-10-27 once the RSI and evolution integration suites joined the
@@ -1033,15 +1010,6 @@ jobs:
         with:
           path: OpenScience/runtime/mcp/evimed-research/data/sider-4.1.sqlite
           key: sider-4.1-6427a3e3-119b2f53
-
-      # The FDA approvals index goes into the runtime image the same way, and for a stronger reason: its publisher no longer serves
-      # the pinned bytes, so an image build that finds no index in its context cannot make one (the runtime image's
-      # `sider-cache` phase runs build_fda_approvals.py, which reuses the index here or stops on a moved input).
-      - name: Restore the pinned FDA approvals index into the build context
-        uses: actions/cache/restore@v4
-        with:
-          path: OpenScience/runtime/mcp/evimed-research/data/fda-approvals.sqlite
-          key: fda-approvals-c2088c7a-5eaa76ec-v1
 
       # BuildKit's `gha` cache backend talks to the Actions cache service with
       # the job's runtime token, which the runner hands to actions and not to
