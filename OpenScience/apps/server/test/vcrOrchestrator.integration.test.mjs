@@ -1097,6 +1097,72 @@ test("A1 the platform adds no check to a conversation's design that is already t
     "a scenario that already states no effect needs no second one");
 });
 
+test("REVIEWFIX 1 a conversation that starts the same design with another sample size gets a design and a job of its own, and only the same scenario is answered with the job that is running", options, async () => {
+  const module = compose({ resultFor: nullAware });
+  const study = await store.taskContext({ userId: "u_convsized", projectId: "prj_convsized", rootSessionId: "native-fixture" }, { create: true });
+  const gateway = conversationGateway(module, study);
+  const sized = (/** @type {number} */ each) => { const scenario = engineScenario(1, "design_simulation"); scenario.design = { ...scenario.design, nTreat: each, nControl: each }; return scenario; };
+  const start = (/** @type {number} */ each) => gateway("simulate", { action: "start", kind: "design_simulation", scenario: sized(each) });
+  const n300 = await start(150);
+  assert.equal(n300.status, 200, JSON.stringify(n300));
+  // while n=300 runs, n=500 is not answered with it
+  const n500 = await start(250);
+  assert.equal(n500.status, 200, JSON.stringify(n500));
+  assert.equal(n500.data.alreadyRunning, undefined);
+  assert.notEqual(n500.data.jobId, n300.data.jobId);
+  assert.notEqual(n500.data.subject.id, n300.data.subject.id, "its own design, so its own result");
+  // and the same scenario is the job that is running
+  const again = await start(150);
+  assert.deepEqual([again.data.alreadyRunning, again.data.jobId, again.data.subject.id], [true, n300.data.jobId, n300.data.subject.id]);
+  await drainJobs(module, study);
+  const results = await store.results(study.id, "trial_scenario");
+  assert.deepEqual(results.map((row) => row.subjectId).sort(), [n300.data.subject.id, n500.data.subject.id].sort(), "each design holds the result of its own numbers");
+  const jobs = await store.rows("SELECT scenario, checkpoint FROM evimed_vcr.jobs WHERE study_id=$1 AND checkpoint->>'stage'='simulation_null'", [study.id]);
+  assert.deepEqual(jobs.map((job) => job.scenario.design.nTreat).sort(), [150, 250], "and the zero-effect check of each is of its own numbers");
+});
+
+test("REVIEWFIX 2 the zero-effect check of a conversation's design is the check of the simulation that was run: its frozen scenario, again for each simulation, and a type I error computed under other numbers is never shown beside a power", options, async () => {
+  const module = compose({ resultFor: nullAware });
+  const study = await store.taskContext({ userId: "u_convnull_own", projectId: "prj_convnull_own", rootSessionId: "native-fixture" }, { create: true });
+  const written = await vcrRuntimeWrite({ store, service: module.service, orchestrator: module.orchestrator, study, what: "trial_scenario",
+    items: [{ ...conversationDesigns[1], configuration: { ...conversationDesigns[1].configuration, truth: { hazardRatio: 0.7, controlMedian: 6 } } }], data: null });
+  const [id] = written.ids;
+  const gateway = conversationGateway(module, study);
+  // The run states its own sample size, which is not the one the design was written with (90 and 90).
+  const sized = (/** @type {number} */ each) => { const scenario = engineScenario(1, "design_simulation"); scenario.design = { ...scenario.design, nTreat: each, nControl: each }; return scenario; };
+  const checksOf = async () => store.rows("SELECT id, state, scenario, checkpoint FROM evimed_vcr.jobs WHERE study_id=$1 AND checkpoint->>'stage'='simulation_null' ORDER BY created_at", [study.id]);
+  const simulationsOf = async () => store.rows("SELECT id, scenario FROM evimed_vcr.jobs WHERE study_id=$1 AND checkpoint->>'stage'='simulation' ORDER BY created_at", [study.id]);
+
+  const first = await gateway("simulate", { action: "start", kind: "design_simulation", subjectId: id, scenario: sized(150) });
+  assert.equal(first.status, 200, JSON.stringify(first));
+  await drainJobs(module, study);
+  const [check] = await checksOf();
+  assert.deepEqual([check.scenario.design.nTreat, check.scenario.design.nControl], [150, 150], "the check is of the scenario the simulation froze, not of the design as it was written");
+  const [firstSimulation] = await simulationsOf();
+  assert.equal(check.checkpoint.checkOf, firstSimulation.id, "and says which simulation it is the check of");
+  assert.equal(check.scenario.truth.hazardRatio, 1);
+
+  // A second simulation of the same design with other numbers is a second computation, and its check is its own: the first check no
+  // longer stands for it.
+  const second = await gateway("simulate", { action: "start", kind: "design_simulation", subjectId: id, scenario: sized(250) });
+  assert.equal(second.status, 200, JSON.stringify(second));
+  assert.notEqual(second.data.jobId, first.data.jobId);
+  assert.equal(second.data.alreadyRunning, undefined);
+  await drainJobs(module, study);
+  const checks = await checksOf();
+  assert.equal(checks.length, 2, "one check for each simulation");
+  assert.deepEqual([checks[1].scenario.design.nTreat, checks[1].scenario.design.nControl], [250, 250]);
+  const simulations = await simulationsOf();
+  assert.equal(checks[1].checkpoint.checkOf, simulations[1].id);
+  const current = await store.currentResultOf(study.id, "trial_scenario", id);
+  assert.equal(current.diagnostics.stageResults.simulation.jobId, simulations[1].id);
+  assert.equal(current.diagnostics.stageResults.simulation_null.jobId, checks[1].id, "the type I error beside the power is the one computed for it");
+  assert.equal(current.measures.filter((/** @type {any} */ measure) => measure.name === "type_one_error").length, 1);
+  // Nothing more is queued on a pass that has nothing new.
+  await module.orchestrator.advance(study.id);
+  assert.equal((await checksOf()).length, 2);
+});
+
 test("P1-4 a conversation's study is named by the title the model gives its research question, with the identifiers taken out, or for the kind of work and the day; a patient's words are never its name", options, async () => {
   const module = compose({ resultFor: nullAware });
   const day = (/** @type {any} */ row) => `${new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", month: "numeric", day: "numeric" }).format(new Date(row.createdAt)).replace("/", "月")}日`;
