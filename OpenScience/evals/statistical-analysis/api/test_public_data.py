@@ -2,6 +2,7 @@
 import hashlib
 import json
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import xml.etree.ElementTree as ET
@@ -18,7 +19,13 @@ sys.path.insert(0, str(HERE.parents[2] / "capabilities/statistical-analysis/scri
 import analysis_methods as methods
 
 
-def r_json(code):
+def r_json(code, packages=("jsonlite", "survival")):
+    """R is the reference these comparisons are held to; a machine without it skips them by name, it does not fail them."""
+    if not shutil.which("Rscript"):
+        pytest.skip("Rscript is not installed")
+    probe = "cat(all(sapply(c(%s), requireNamespace, quietly=TRUE)))" % ",".join('"%s"' % name for name in packages)
+    if subprocess.check_output(["Rscript", "--vanilla", "-e", probe], text=True).strip() != "TRUE":
+        pytest.skip("R lacks one of: " + ", ".join(packages))
     return json.loads(subprocess.check_output(["Rscript", "--vanilla", "-e", code], text=True))
 
 
@@ -89,13 +96,14 @@ def test_scientific_table_formats_preserve_subject_codes_and_missing_values(tmp_
         original.to_json(target, orient="table", index=False)
         restored = pd.read_json(target, orient="table")
     else:
+        pytest.importorskip("pyarrow")
         original.to_parquet(target, index=False)
         restored = pd.read_parquet(target)
     pd.testing.assert_frame_equal(original, restored, check_dtype=False)
 
 
 def test_headless_png_and_svg_plot_actual_estimates(tmp_path):
-    import matplotlib
+    matplotlib = pytest.importorskip("matplotlib")
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     from PIL import Image
