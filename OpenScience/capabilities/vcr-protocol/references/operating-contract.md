@@ -14,7 +14,7 @@ clinical outcome. Trial simulation compares designs under stated assumptions;
 it is not remote trial operations and does not prove a drug works.
 
 Use available context first. For a new research object, `mcp__evimed__vcr_write` with
-`{"what":"task_context"}` obtains the authenticated conversation's scope. Never
+`{"what":"task_context"}` obtains the authenticated conversation's scope; add `data: {"title": ...}`, a short title for the research question (never a person or an identifier), and that is what the study is called. Never
 invent session/project/study identifiers or create a second conversation. A narrow
 aggregate sample-size/power question can use ordinary conversation calculation without a study.
 Read existing results before calculating again. Preserve exact object, model,

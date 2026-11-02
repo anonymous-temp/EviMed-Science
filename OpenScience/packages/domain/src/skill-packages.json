@@ -1109,18 +1109,18 @@
       "id": "capability/vcr-analysis",
       "name": "vcr-analysis",
       "origin": "capability",
-      "version": "1.8.0",
+      "version": "1.8.1",
       "source": {"kind":"release"},
-      "digest": "sha256:286c34999dbeec6f5f0691dc406f0a82b2dac8e7224a885c305ca2dc3a8fda38",
+      "digest": "sha256:bee69a5e38cd9573aec9678170e3fb64ab813933235ae44b8e285d73a4552d85",
       "digestAlgorithm": "release-directory-v1",
       "references": [
-        {"path":"capability.yaml","sha256":"82283a150efd8ae581eef7a318b301152086da2b7844bb6fe8609fe73024a8cd"},
-        {"path":"references/comparators.md","sha256":"89eb972bbe4d9f90eaa0a890713bb0326cc8781a4ad723d4e52d44a8c2d002ea"},
+        {"path":"capability.yaml","sha256":"a32d41d6eac7ed956e062d2e487e6a417c7fd85fc8535276fc4d682414a34181"},
+        {"path":"references/comparators.md","sha256":"22f9d015f99d1663eb9582f9d0317a676d892d1b4b8431769e4d7d8c275251a3"},
         {"path":"references/delivery.md","sha256":"14bf6198c8ba48f89c93787ac473178b175403ffab9f33542df74724bbf525fe"},
         {"path":"references/longitudinal.md","sha256":"241d2acf2d570afca6d25dc7b66d3f07c555afb8663e4acf4a00d095e0821695"},
         {"path":"references/models.md","sha256":"1bc12035760ac0d76226ab363301caabd525f02b3ebe023e6df8e9b3cad6f56a"},
         {"path":"references/populations-and-patients.md","sha256":"2ce702f5d66995beff49865103e07199269529ad262196fd61378e92a1b916d8"},
-        {"path":"references/trial-design.md","sha256":"a7b3ca9eacdd2dd9756a2ea3ea2681bb5dded047ddca6cc0ca66197b57687789"}
+        {"path":"references/trial-design.md","sha256":"427aec206bfccf28d2c533675ccb2d1c1a1f1032f8a322b6118c13488ffb1a0e"}
       ],
       "dependencies": [
         {"kind":"platform-tool","name":"clinical_trial_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -1285,13 +1285,13 @@
       "id": "capability/vcr-protocol",
       "name": "vcr-protocol",
       "origin": "capability",
-      "version": "1.4.3",
+      "version": "1.4.4",
       "source": {"kind":"release"},
-      "digest": "sha256:28e5d29f580a59068fbe8ad4fbbc753e9db4057e6241fb1c6b529d218b7cb333",
+      "digest": "sha256:56822fa11fd4246cee3188da91d2a8dcee728fabdf1342ebe5542de6f16fc47e",
       "digestAlgorithm": "release-directory-v1",
       "references": [
-        {"path":"capability.yaml","sha256":"6057122234d60a4cf8704f2652308dfa8f0730662de6e243c58c525bb5ee9f7b"},
-        {"path":"references/operating-contract.md","sha256":"b61360fc089d2c1bd8bff6ecfa75141b417ec6dd2df0e8afdd35ed4bb3d764f6"}
+        {"path":"capability.yaml","sha256":"45c8418396b36e032bb762eaff23f9b60be4da6e19b9cf549cb57f0cf8aa6ec6"},
+        {"path":"references/operating-contract.md","sha256":"9050a5c45846c08a7f5676eff012a31701677be24c586f8806802c314f08e6aa"}
       ],
       "dependencies": [
         {"kind":"platform-tool","name":"clinical_trial_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
