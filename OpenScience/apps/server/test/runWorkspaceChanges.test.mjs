@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { WORKSPACE_WALK_DEPTH, workspaceChangedFiles } from "../src/runWorkspaceChanges.mjs";
+import { WORKSPACE_WALK_DEPTH, withoutOtherRunsJobFiles, workspaceChangedFiles } from "../src/runWorkspaceChanges.mjs";
 
 async function withWorkspace(fn) {
   const root = await mkdtemp(path.join(tmpdir(), "os-workspace-changes-"));
@@ -86,4 +86,12 @@ test("a link is neither followed nor listed, and the walk is bounded in depth, e
     assert.ok((await workspaceChangedFiles(root, { since: now - 5_000, maxEntries: 3 })).length <= 3);
   });
   assert.deepEqual(await workspaceChangedFiles(path.join(tmpdir(), "os-no-such-workspace"), { since: 0 }), [], "a workspace that is not there has no changes");
+});
+
+test("a specialist job's files belong to the run that names the job", () => {
+  // 2026-11-02: two runs in one project; the conversation that started no job listed the other run's request.json.
+  const files = ["research-topic-runs/topic-1/output/request.json", "bibliometric-analysis-runs/job-2/report.md", "notes.md", "my-runs.md"];
+  assert.deepEqual(withoutOtherRunsJobFiles(files, [{ parts: [{ output: "jobId: job-2" }] }]), ["bibliometric-analysis-runs/job-2/report.md", "notes.md", "my-runs.md"]);
+  assert.deepEqual(withoutOtherRunsJobFiles(files, []), ["notes.md", "my-runs.md"]);
+  assert.deepEqual(withoutOtherRunsJobFiles(["a.md"], undefined), ["a.md"]);
 });

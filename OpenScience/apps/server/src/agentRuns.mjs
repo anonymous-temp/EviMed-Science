@@ -40,7 +40,7 @@ import {
   runSideDegradedNotice,
 } from "./runNotices.mjs";
 import { describeRunArtifacts, describeRunArtifactRoles, isOrdinaryConversation } from "./runArtifacts.mjs";
-import { workspaceChangedFiles } from "./runWorkspaceChanges.mjs";
+import { withoutOtherRunsJobFiles, workspaceChangedFiles } from "./runWorkspaceChanges.mjs";
 import { pickMainDocuments } from "./terminalPresentation.mjs";
 import { normalizeRunEstimate } from "./runRoute.mjs";
 import {
@@ -2403,7 +2403,10 @@ async function ordinaryConversationOutputs({ project, run, registry, assistants,
   if (!answered && !isOrdinaryRun(run, registry)) return none;
   const startedAt = Date.parse(String(run.startedAt ?? ""));
   const until = typeof endTime === "number" && Number.isFinite(endTime) ? endTime : Date.now();
-  const changed = Number.isFinite(startedAt) ? await workspaceChangedFiles(project.workspaceDir, { since: startedAt, until }) : [];
+  const changed = withoutOtherRunsJobFiles(
+    Number.isFinite(startedAt) ? await workspaceChangedFiles(project.workspaceDir, { since: startedAt, until }) : [],
+    assistants,
+  );
   const handedOver = [...new Set(assistants.flatMap((message) => presentedCandidates(message, runtimeWorkspaceRoot)))].slice(0, maxArtifacts);
   const files = [...new Set([
     ...await existingArtifacts(project, changed, run, endTime),
@@ -3783,6 +3786,9 @@ function receiptNotices(entries, projection) {
   }
   return (entries ?? []).flatMap((entry) => (Array.isArray(entry?.notices) ? entry.notices : []))
     .filter((line) => typeof line === "string" && line)
+    // "No action is required": said to the run, which can move the file under a clinical contract if it advises on the
+    // medicine. A reader was shown 「提及高警示药品，请核对」 on a Meta topic report for naming colchicine (2026-11-02).
+    .filter((line) => known.get(line)?.code !== "clinical_high_risk_entity_notice")
     .map((line) => {
       const issue = known.get(line);
       if (!issue) return runNotice("gate_advisory", line);
