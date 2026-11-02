@@ -6,11 +6,17 @@ a model output: every line is a counter, a name or a bounded code.
 
   stack.py images  --archive DIR            verify and load the CI release archive; write $LAB_WORK/images.json
   stack.py build-delta --patch-src DIR --key K   build a candidate runtime image from the loaded base with Dockerfile.delta
-  stack.py env     --lanes N [--runtime-image TAG]   write deploy/web/.env.lab, the secret files and the seeded data volume
+  stack.py build-web-delta --patch-src DIR --key K   build a candidate web image: the base web image with apps/server/src and
+                                            packages/domain of the patch ref (a candidate that changes a gateway)
+  stack.py save-delta --out DIR             write the delta image(s) this job built as one archive, for the batch's other jobs
+  stack.py load-delta --archive DIR         load a delta archive another job built (verified by sha256), instead of building it
+  stack.py env     --lanes N [--delta] [--web-delta]   write deploy/web/.env.lab, the secret files and the seeded data volume
   stack.py up                               start the stack (the services listed in SERVICES) and wait until the web API answers
   stack.py ready                            print the readiness checks that are not ok (codes only)
   stack.py health                           exit 0 when the stack is fit to take the next item; restart what died
-  stack.py verify                           the lab's own checks: dataset hosts unreachable, runtime keyless, sandbox level
+  stack.py verify                           the lab's own checks: dataset hosts unreachable, runtime keyless, sandbox level, the context
+                                            engine and the document parser answering, the Tokyo edge's reachability (counters only)
+  stack.py facts                            print the stack facts the lane records in every result bundle (`stack` of lane.json)
   stack.py selfcheck                        register and delete one throwaway account through the product's own helper
   stack.py diagnose [--logs]                container state (and redacted log tails)
   stack.py down                             stop and remove everything
@@ -19,6 +25,7 @@ Environment: LAB_WORK (scratch, default $RUNNER_TEMP/lab), LAB_SRC (the OpenScie
 decoded RSI_LAB_BUNDLE: secrets/ and broker/).
 """
 import argparse
+import base64
 import hashlib
 import json
 import os
@@ -45,8 +52,14 @@ API = "http://127.0.0.1:8787"
 COMPOSE_FILES = ["docker-compose.yml", "docker-compose.local-auth.yml", "docker-compose.backup.yml", "docker-compose.result-replay.yml"]
 OVERLAY = HERE / "docker-compose.lab.yml"
 PROFILES = ["backup", "web-search"]
-SERVICES = ["evimed-postgres", "open-science-web-search", "open-science-runtime-controller", "evimed-drug-evidence-adapter", "result-replay",
-            "open-science-backup", "open-science-web"]
+SERVICES = ["evimed-postgres", "evimed-openviking", "open-science-web-search", "open-science-runtime-controller", "evimed-drug-evidence-adapter",
+            "result-replay", "open-science-backup", "open-science-web"]
+FACTS_FILE = WORK / "stack-facts.json"
+# Optional bundle files (make-bundle.sh): production's document parsing service address and the Tokyo edge's host. Both are infrastructure
+# addresses of the operator's, kept out of this public repository; a bundle without one leaves that piece out and says so.
+PARSER_URL_FILE = "document-parser.url"
+EDGE_HOST_FILE = "edge-proxy.host"
+
 
 # Levers copied from production's .env as read on 2026-11-01 (see ENV-DIFFERENCES.md). Anything production sets that is neither here
 # nor in LAB_OVERRIDES is a lever the lab leaves at the code's default or does not use at all, and the document says which.
@@ -143,6 +156,20 @@ PARITY = {
     "OPEN_SCIENCE_RUNTIME_SKILL_DIRS": "runtime/skills/core,runtime/skills/curated-scientific,runtime/skills/office,runtime/skills/community,runtime/skills/geo-private,capability-skills",
     "OPEN_SCIENCE_DEEPSEEK_RELEASE_RECEIPT_MAX_AGE_MS": "86400000",
     "OPEN_SCIENCE_LEARNING_WINDOW": "",
+    # The context engine and memory, on as in production (2026-11-02; the lab ran without them in round 1): every account's memory is
+    # OpenViking's, the account is `evimed`, the reranker and the recall budgets are production's.
+    "OPEN_SCIENCE_MEMORY_INDEX_PROVIDER": "openviking",
+    "OPEN_SCIENCE_OPENVIKING_ACCOUNT": "evimed",
+    "OPEN_SCIENCE_OPENVIKING_REQUEST_TIMEOUT_MS": "8000",
+    "OPEN_SCIENCE_MEMORY_EXTRACTION_ENABLED": "true",
+    "OPEN_SCIENCE_MEMORY_EXTRACTION_TIMEOUT_MS": "120000",
+    "OPEN_SCIENCE_MEMORY_RERANK_MODEL": "qwen3-rerank",
+    "OPEN_SCIENCE_MEMORY_RERANK_API_BASE": "https://dashscope.aliyuncs.com/compatible-api/v1/reranks",
+    "OPEN_SCIENCE_MEMORY_RERANK_TIMEOUT_MS": "3000",
+    "OPEN_SCIENCE_MEMORY_CONTEXT_LIMIT": "8",
+    "OPEN_SCIENCE_MEMORY_CONTEXT_MAX_CHARS": "20000",
+    "OPEN_SCIENCE_DOCUMENT_PARSER_TIMEOUT_MS": "300000",
+    "OPEN_SCIENCE_REQUIRE_DOCUMENT_PARSER": "true",  # `env` writes false when the bundle names no parser service
 }
 
 
@@ -153,11 +180,8 @@ def lab_overrides(lanes):
                                     "computes from this scheme (https here would refuse every registration with 403 csrf_required)"),
         "OPEN_SCIENCE_DOMAIN": ("localhost", "no public address"),
         "OPEN_SCIENCE_RUNTIME_UI_PUBLIC_ORIGIN": ("https://localhost:8443", "no public address; readiness wants an https origin for the kernel page"),
-        "OPEN_SCIENCE_OPENVIKING_URL": ("", "no context engine"),
-        "OPEN_SCIENCE_MEMORY_ENABLED": ("false", "no context engine: memory is off, nothing is recalled or kept"),
         "OPEN_SCIENCE_MEMORY_INDEX_STRICT": ("false", "same as production"),
-        "OPEN_SCIENCE_SOURCE_INGESTION_ENABLED": ("false", "no OpenList and no parsing API; the benchmarks upload into the workspace"),
-        "OPEN_SCIENCE_REQUIRE_DOCUMENT_PARSER": ("false", "no parsing API key"),
+        "OPEN_SCIENCE_SOURCE_INGESTION_ENABLED": ("false", "no OpenList: knowledge-base intake is not run; the benchmarks upload into the workspace, which parses nothing in production either"),
         "OPEN_SCIENCE_REQUIRE_ALL_SPECIALIST_ADAPTERS": ("false", "the six specialist engines are not run"),
         "OPEN_SCIENCE_VCR_ENABLED": ("false", "module off"),
         "OPEN_SCIENCE_GEO_ENABLED": ("false", "module off"),
@@ -166,7 +190,7 @@ def lab_overrides(lanes):
         "OPEN_SCIENCE_IM_ENABLED": ("false", "no messaging channel"),
         "OPEN_SCIENCE_WEB_RENDER_ENABLED": ("false", "no cloud browser account"),
         "OPEN_SCIENCE_MANAGED_BROWSER_ENABLED": ("false", "the managed browser container is not run"),
-        "OPEN_SCIENCE_WEB_SEARCH_URL": ("http://open-science-web-search:8080/search", "the bundled SearXNG, direct (no Tokyo edge)"),
+        "OPEN_SCIENCE_WEB_SEARCH_URL": ("http://open-science-web-search:8080/search", "the bundled SearXNG, direct (the Tokyo edge accepts only production's address, see ENV-DIFFERENCES.md)"),
         "OPEN_SCIENCE_MAX_RUNNING_RUNTIMES": (str(lanes + 1), "per runner: one runtime per worker and one spare"),
         "OPEN_SCIENCE_MAX_RUNNING_RUNTIMES_PER_USER": ("2", "same as production; each request has its own account"),
         "OPEN_SCIENCE_MAX_CONCURRENT_TASKS": (str(lanes + 1), "per runner"),
@@ -285,7 +309,99 @@ def cmd_build_delta(args):
     say(f"delta runtime image built in {time.time() - started:.0f}s: {tag} from revision {revision[:12]}")
 
 
+def cmd_build_web_delta(args):
+    """The base web image with the control plane's gateways and the domain package of a patch ref: for a candidate that changes what the
+    web container does (a gateway, a connector, the run policy's server half), where the runtime delta changes what runs in a session."""
+    images = load_images()
+    base = images["roles"]["web"]
+    source = pathlib.Path(args.patch_src).resolve()  # the OpenScience directory of the patch checkout
+    tag = f"open-science-web:lab-{re.sub(r'[^A-Za-z0-9_.-]', '-', args.key)}"
+    revision = run(["git", "-C", str(source.parent), "rev-parse", "HEAD"], capture=True).stdout.strip()
+    started = time.time()
+    context = WORK / "web-delta-context"
+    if context.exists():
+        shutil.rmtree(context)
+    for relative in ("apps/server/src", "packages/domain/src"):
+        shutil.copytree(source / relative, context / relative, ignore=shutil.ignore_patterns("__pycache__", "*.test.mjs"))
+    for relative in ("packages/domain/index.mjs", "packages/domain/package.json"):
+        (context / relative).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source / relative, context / relative)
+    shutil.copyfile(HERE / "Dockerfile.web-delta", context / "Dockerfile")
+    command = ["docker", "build", "--progress=plain", "--build-arg", f"WEB_BASE_IMAGE={base}", "--build-arg", f"PATCH_REVISION={revision}", "-t", tag, str(context)]
+    done = run(command, check=False, capture=True, timeout=1200)
+    if done.returncode != 0:
+        say("web delta build failed; the log's last lines:\n" + ((done.stdout or "") + (done.stderr or ""))[-1800:])
+        raise SystemExit(f"web delta build failed ({done.returncode})")
+    # The overlay changes only the files the patch changes; the entry point and the dependencies are the base's. A syntax error would
+    # otherwise show only when the web container is started, minutes later and inside a half-up stack.
+    probe = run(["docker", "run", "--rm", "--network", "none", "--entrypoint", "node", tag, "--check", "/app/apps/server/src/index.mjs"], check=False, capture=True, timeout=120)
+    if probe.returncode != 0:
+        raise SystemExit("web delta: the control plane's entry point does not parse")
+    images["webDelta"] = tag
+    images["webDeltaRevision"] = revision
+    (WORK / "images.json").write_text(json.dumps(images, indent=2))
+    shutil.rmtree(context, ignore_errors=True)
+    say(f"web delta image built in {time.time() - started:.0f}s: {tag} from revision {revision[:12]}")
+
+
+DELTA_ARCHIVE = "delta-images.tar"
+
+
+def cmd_save_delta(args):
+    """The delta image(s) this job built, as one archive with a sha256 (the batch's other jobs load it instead of building the same thing)."""
+    images = load_images()
+    tags = [images[name] for name in ("runtimeDelta", "webDelta") if images.get(name)]
+    if not tags:
+        raise SystemExit("this job built no delta image")
+    out = pathlib.Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    started = time.time()
+    saver = subprocess.Popen(["docker", "save", *tags], stdout=subprocess.PIPE)
+    with open(out / DELTA_ARCHIVE, "wb") as sink:
+        packer = subprocess.Popen(["zstd", "-1", "-T0", "-q"], stdin=saver.stdout, stdout=sink)
+        saver.stdout.close()
+        if packer.wait() != 0 or saver.wait() != 0:
+            raise SystemExit("docker save failed")
+    (out / (DELTA_ARCHIVE + ".sha256")).write_text(f"{sha256_file(out / DELTA_ARCHIVE)}  {DELTA_ARCHIVE}\n")
+    wanted = {name: images[name] for name in ("runtimeDelta", "runtimeDeltaRevision", "webDelta", "webDeltaRevision") if images.get(name)}
+    ids = {tag: run(["docker", "image", "inspect", "--format", "{{.Id}}", tag], capture=True).stdout.strip() for tag in tags}
+    (out / "delta-images.json").write_text(json.dumps({"images": wanted, "ids": ids}, indent=2))
+    say(f"delta archive written in {time.time() - started:.0f}s: {len(tags)} image(s), {(out / DELTA_ARCHIVE).stat().st_size // 1048576} MiB")
+
+
+def cmd_load_delta(args):
+    archive = pathlib.Path(args.archive)
+    expected = (archive / (DELTA_ARCHIVE + ".sha256")).read_text().split()[0]
+    if sha256_file(archive / DELTA_ARCHIVE) != expected:
+        raise SystemExit("the delta archive does not match its recorded sha256")
+    record = json.loads((archive / "delta-images.json").read_text())
+    started = time.time()
+    unpack = subprocess.Popen(["zstd", "-dc", str(archive / DELTA_ARCHIVE)], stdout=subprocess.PIPE)
+    loader = subprocess.Popen(["docker", "load", "-q"], stdin=unpack.stdout, stdout=subprocess.DEVNULL)
+    unpack.stdout.close()
+    if loader.wait() != 0 or unpack.wait() != 0:
+        raise SystemExit("docker load of the delta archive failed")
+    for tag, image_id in record["ids"].items():
+        if run(["docker", "image", "inspect", "--format", "{{.Id}}", tag], capture=True).stdout.strip() != image_id:
+            raise SystemExit("a delta image is not the one the archive recorded")
+    images = load_images()
+    images.update(record["images"])
+    (WORK / "images.json").write_text(json.dumps(images, indent=2))
+    say(f"delta archive loaded in {time.time() - started:.0f}s: {len(record['ids'])} image(s)")
+
+
 # ------------------------------------------------------------------------------------------------------------------ env
+def optional_secret(path):
+    """The one line of an optional bundle file, or "" when the bundle has none."""
+    return path.read_text().strip() if path.exists() else ""
+
+
+def openviking_image():
+    """The context engine's image exactly as deps-version.json pins it: repository, tag and digest."""
+    pin = json.loads((SRC / "deps-version.json").read_text())["openviking"]
+    return f"{pin['image']}:{pin['imageTag']}@{pin['imageDigest']}"
+
+
 def write_secret(name, value, mode=0o600):
     path = SECRETS_DIR / name
     path.write_text(value if value.endswith("\n") else value + "\n")
@@ -329,6 +445,10 @@ def cmd_env(args):
     gid = os.stat("/var/run/docker.sock").st_gid
     roles = images["roles"]
     runtime_image = images.get("runtimeDelta") if args.delta else roles["runtime"]
+    web_image = images.get("webDelta") if args.web_delta else roles["web"]
+    if (args.delta and not images.get("runtimeDelta")) or (args.web_delta and not images.get("webDelta")):
+        raise SystemExit("a delta image was asked for and none is loaded")
+    parser_url = optional_secret(bundle / PARSER_URL_FILE)
     env = {
         "NODE_ENV": "production",
         "OPEN_SCIENCE_DATA_VOLUME": "open-science-data",
@@ -336,7 +456,8 @@ def cmd_env(args):
         "OPEN_SCIENCE_RELEASE_ID": images["releaseId"],
         "OPEN_SCIENCE_SOURCE_REVISION": images["sourceRevision"],
         "OPEN_SCIENCE_BUILD_CREATED": images["buildCreated"],
-        "OPEN_SCIENCE_WEB_CONTAINER_IMAGE": roles["web"],
+        "OPEN_SCIENCE_WEB_CONTAINER_IMAGE": web_image,
+        "OPEN_SCIENCE_OPENVIKING_IMAGE": openviking_image(),
         "OPEN_SCIENCE_RUNTIME_CONTAINER_IMAGE": runtime_image,
         "OPEN_SCIENCE_RESULT_REPLAY_IMAGE": roles["resultReplay"],
         "OPEN_SCIENCE_RESULT_ENGINE_URL": "http://result-replay:8031",
@@ -381,6 +502,10 @@ def cmd_env(args):
     }
     for name, (value, _why) in lab_overrides(lanes).items():
         env[name] = value
+    # The document parsing service is the parser team's own, reached over HTTP; its address is the operator's (the bundle), and without
+    # one the lab has no parser and says so (readiness is not asked for it).
+    env["OPEN_SCIENCE_DOCUMENT_PARSER_URL"] = parser_url
+    env["OPEN_SCIENCE_REQUIRE_DOCUMENT_PARSER"] = "true" if parser_url else "false"
     # The overrides that are not "production's value" are applied last, so a name in both is the lab's.
     ENV_FILE.write_text("".join(f"{k}={v}\n" for k, v in sorted(env.items())))
     os.chmod(ENV_FILE, 0o600)
@@ -416,7 +541,8 @@ def cmd_env(args):
          "-v", "open-science-data:/data", "-v", f"{fixture}:/lab-fixture.sqlite:ro", runtime_image,
          "-ec", "test ! -e /data/pharmacy-reference.sqlite; mkdir -p /data/users; chmod 700 /data/users; cp /lab-fixture.sqlite /data/pharmacy-reference.sqlite; chmod 444 /data/pharmacy-reference.sqlite"],
         capture=True)
-    say(f"environment written: {len(env)} levers, runtime image {runtime_image.split(':')[0]}:{runtime_image.split(':')[-1][:24]}")
+    say(f"environment written: {len(env)} levers, runtime image {runtime_image.split(':')[0]}:{runtime_image.split(':')[-1][:24]}, "
+        f"web image {web_image.split(':')[0]}:{web_image.split(':')[-1][:24]}, document parser {'configured' if parser_url else 'absent'}")
 
 
 # ------------------------------------------------------------------------------------------------------------------ up
@@ -564,8 +690,138 @@ def cmd_verify(args):
         failures.append("runner:hf")
     # (3) A runtime container holds no provider key; checked on any runtime that is running.
     verify_runtime_keyless(failures)
+    # (4) The context engine answers, and the document parser does (an optional service down is a fact in the bundles, not a failed job).
+    facts = collect_facts()
+    say("verify: " + ", ".join(f"{name} {json.dumps(value, sort_keys=True)}" for name, value in facts.items()))
+    if not facts["openviking"]["answering"]:
+        failures.append("openviking:down")
     say("verify: " + ("ok" if not failures else "failed " + ",".join(failures)))
     sys.exit(1 if failures else 0)
+
+
+# A one-page PDF with a line of text, written in place (the xref offsets are computed): what the parser is asked to read in the check.
+def tiny_pdf():
+    objects = ["<< /Type /Catalog /Pages 2 0 R >>", "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+               "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 144] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>",
+               None, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"]
+    stream = "BT /F1 18 Tf 20 80 Td (RSI lab parser check, one line of text.) Tj ET"
+    objects[3] = f"<< /Length {len(stream)} >>\nstream\n{stream}\nendstream"
+    body, offsets = "%PDF-1.4\n", []
+    for number, content in enumerate(objects, 1):
+        offsets.append(len(body.encode("latin-1")))
+        body += f"{number} 0 obj\n{content}\nendobj\n"
+    xref_at = len(body.encode("latin-1"))
+    body += f"xref\n0 {len(objects) + 1}\n0000000000 65535 f \n" + "".join(f"{offset:010d} 00000 n \n" for offset in offsets)
+    body += f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref_at}\n%%EOF\n"
+    return body.encode("latin-1")
+
+
+PARSER_PROBE = (
+    "import { DocumentParserClient } from '/app/apps/server/src/documentParserClient.mjs';"
+    "const out = { configured: Boolean(process.env.OPEN_SCIENCE_DOCUMENT_PARSER_URL), health: false, parse: null };"
+    "if (out.configured) {"
+    " const client = new DocumentParserClient({ baseUrl: process.env.OPEN_SCIENCE_DOCUMENT_PARSER_URL, token: '', timeoutMs: 60000 });"
+    " try { const h = await client.health(); out.health = Boolean(h && h.configured === true && h.status === 'healthy'); out.credential = String(h?.credential ?? '').slice(0, 8); } catch (e) { out.healthError = String(e?.code ?? e?.name ?? 'error').slice(0, 60); }"
+    " try { const bytes = Buffer.from(process.argv[1], 'base64'); const r = await client.parseBytes({ bytes, filename: 'lab-check.pdf', mediaType: 'application/pdf' });"
+    "  out.parse = { ok: true, chars: String(r?.text ?? '').length, extractor: String(r?.extractor ?? '').slice(0, 40) }; }"
+    " catch (e) { out.parse = { ok: false, code: String(e?.code ?? e?.name ?? 'error').slice(0, 60) }; }"
+    "} console.log(JSON.stringify(out));"
+)
+
+
+def edge_reachable():
+    """Whether this runner can open a TCP connection to the Tokyo edge proxy's port (443), the way production's web container reaches it. No
+    credential is sent and no request is made. The edge accepts only production's own address (its firewall), so a runner is expected to
+    be refused: the answer is the evidence behind ENV-DIFFERENCES.md, not a gate."""
+    host = optional_secret(BUNDLE / "secrets" / EDGE_HOST_FILE)
+    if not host:
+        return {"checked": False}
+    import socket
+    started = time.time()
+    try:
+        with socket.create_connection((host, 443), timeout=10):
+            return {"checked": True, "tcp443": "open", "ms": round((time.time() - started) * 1000)}
+    except socket.timeout:
+        return {"checked": True, "tcp443": "timeout"}
+    except OSError as error:
+        return {"checked": True, "tcp443": type(error).__name__}
+
+
+def web_node(script, *words, timeout=240):
+    return run(compose_command(["exec", "-T", "open-science-web", "node", "--input-type=module", "-e", script, *words]), check=False, capture=True, timeout=timeout)
+
+
+def metrics_facts():
+    """Counters from the control plane's operator metrics: what memory and learning did with the runs so far. Every run of this lab is
+    `automated` on a throwaway account, so a memory commit or a learning lesson is a defect; the refusals are counted by reason."""
+    token = ""
+    for line in ENV_FILE.read_text().splitlines():
+        if line.startswith("OPEN_SCIENCE_OPERATOR_METRICS_TOKEN="):
+            token = line.split("=", 1)[1]
+    try:
+        request = urllib.request.Request(API + "/api/ops/metrics", headers={"Authorization": f"Bearer {token}"})
+        with urllib.request.urlopen(request, timeout=20) as response:
+            text = response.read(8 << 20).decode("utf-8", "replace")
+    except (urllib.error.URLError, OSError):
+        return {"read": False}
+    return parse_metrics(text)
+
+
+def parse_metrics(text):
+    """The sums the lab reports, from Prometheus text: memory commits of a turn that were scheduled or made (zero for an all-automated lab),
+    the turns the platform started that the commit path declined to read, learning refusals, learning records."""
+    committed = refused = lessons = platform = 0.0
+    sample = re.compile(r"^([A-Za-z_:][A-Za-z0-9_:]*)(\{.*\})?\s+(\S+)$")
+    for line in text.splitlines():
+        found = None if line.startswith("#") else sample.match(line)
+        if not found:
+            continue
+        name, labels, value = found.group(1), found.group(2) or "", found.group(3)
+        try:
+            number = float(value)
+        except ValueError:
+            continue
+        if name == "open_science_native_memory_turn_commits_total" and ('outcome="committed"' in labels or 'outcome="scheduled"' in labels):
+            committed += number
+        elif name == "open_science_native_memory_turn_commits_total" and 'outcome="platform_started"' in labels:
+            platform += number
+        elif name == "open_science_learning_trigger_refused_total":
+            refused += number
+        elif name in ("open_science_learning_evidence_observations_total", "open_science_learning_evidence_incidents_total"):
+            lessons += number
+    return {"read": True, "memoryTurnCommitted": committed, "memoryTurnPlatformStarted": platform, "learningRefused": refused, "learningRecorded": lessons}
+
+
+def collect_facts():
+    """What this job's stack has that production's has and round 1's lab had not, as counters; written for every result bundle."""
+    facts = {}
+    answering, tries = False, 0
+    for tries in range(1, 41):  # a cold engine takes up to two minutes (its own health check allows 120 s)
+        probe = web_node("const r = await fetch('http://evimed-openviking:1933/health', { signal: AbortSignal.timeout(4000) }).catch(() => null);"
+                         "console.log(JSON.stringify({ status: r ? r.status : 0 }));", timeout=60)
+        try:
+            answering = json.loads((probe.stdout or "{}").strip().splitlines()[-1]).get("status") == 200
+        except (ValueError, IndexError):
+            answering = False
+        if answering:
+            break
+        time.sleep(5)
+    status, checks = readiness_summary()
+    facts["openviking"] = {"answering": answering, "tries": tries, "readyChecksNotOk": sorted(name for name in checks if name in ("memory", "memoryIndex"))}
+    probe = web_node(PARSER_PROBE, base64.b64encode(tiny_pdf()).decode("ascii"), timeout=180)
+    try:
+        facts["documentParser"] = json.loads((probe.stdout or "{}").strip().splitlines()[-1])
+    except (ValueError, IndexError):
+        facts["documentParser"] = {"configured": None, "error": "probe_failed"}
+    facts["edge"] = edge_reachable()
+    facts["metrics"] = metrics_facts()
+    WORK.mkdir(parents=True, exist_ok=True)
+    FACTS_FILE.write_text(json.dumps(facts, sort_keys=True))
+    return facts
+
+
+def cmd_facts(args):
+    say(json.dumps(collect_facts(), sort_keys=True))
 
 
 def verify_runtime_keyless(failures):
@@ -626,16 +882,25 @@ def main():
     s = sub.add_parser("build-delta")
     s.add_argument("--patch-src", required=True)
     s.add_argument("--key", required=True)
+    s = sub.add_parser("build-web-delta")
+    s.add_argument("--patch-src", required=True)
+    s.add_argument("--key", required=True)
+    s = sub.add_parser("save-delta")
+    s.add_argument("--out", required=True)
+    s = sub.add_parser("load-delta")
+    s.add_argument("--archive", required=True)
     s = sub.add_parser("env")
     s.add_argument("--lanes", required=True)
     s.add_argument("--delta", action="store_true")
+    s.add_argument("--web-delta", action="store_true")
     s = sub.add_parser("diagnose")
     s.add_argument("--logs", action="store_true")
-    for name in ("up", "ready", "health", "verify", "selfcheck", "down"):
+    for name in ("up", "ready", "health", "verify", "selfcheck", "down", "facts"):
         sub.add_parser(name)
     args = parser.parse_args()
-    {"images": cmd_images, "build-delta": cmd_build_delta, "env": cmd_env, "up": cmd_up, "ready": cmd_ready, "health": cmd_health,
-     "verify": cmd_verify, "selfcheck": cmd_selfcheck, "down": cmd_down, "diagnose": cmd_diagnose}[args.command](args)
+    {"images": cmd_images, "build-delta": cmd_build_delta, "build-web-delta": cmd_build_web_delta, "save-delta": cmd_save_delta, "load-delta": cmd_load_delta,
+     "env": cmd_env, "up": cmd_up, "ready": cmd_ready, "health": cmd_health, "verify": cmd_verify, "selfcheck": cmd_selfcheck, "down": cmd_down,
+     "diagnose": cmd_diagnose, "facts": cmd_facts}[args.command](args)
 
 
 if __name__ == "__main__":
