@@ -79,13 +79,10 @@ describe("可见度: the order of what it shows", () => {
     client.getGeoDiagnosis.mockResolvedValue({ ...withEngines, byEngine: withEngines.byEngine.filter(row => row.engine === "deepseek") });
     renderTab(geoProject(), `/app/geo/geo_1/visibility?engine=deepseek&pool=${group.pool}&cluster=${group.id}`);
     await screen.findByRole("heading", { name: /综合可见度指数/ });
-    await userEvent.click(within(toolbar()).getByRole("button", { name: /^引擎/ }));
-    expect(await screen.findByRole("menuitemradio", { name: "豆包" })).toBeVisible();
-    await userEvent.keyboard("{Escape}");
-    await userEvent.click(within(toolbar()).getByRole("button", { name: /^问句池/ }));
-    expect((await screen.findAllByRole("menuitemradio")).length).toBeGreaterThan(2);
-    await userEvent.keyboard("{Escape}");
-    expect(within(toolbar()).getByRole("button", { name: /^问题群/ })).toBeVisible();
+    await userEvent.click(within(toolbar()).getByRole("button", { name: /^筛选/ }));
+    expect(await screen.findByRole("button", { name: "豆包" })).toBeVisible();
+    expect(screen.getByRole("group", { name: "问句池" })).toBeVisible();
+    expect(screen.getByRole("group", { name: "问题群" })).toBeVisible();
   });
   it("keeps the risk rate in ordinary sentence flow with its sample, direction and answer link", async () => {
     client.getGeoDiagnosis.mockResolvedValue({ ...withEngines, more: [...withEngines.more, { metricId: "M-15", name: "风险问句被推荐率", cell: cell(30, 36, 120, { snapshotIds: ["risk_answer"] }) }] });
@@ -174,15 +171,10 @@ describe("可见度: the band's toolbar drives every block", () => {
     renderTab();
     await screen.findByRole("heading", { name: /综合可见度指数/ });
     await waitFor(() => expect(document.querySelector("[data-cluster-grid]")).not.toBeNull());
-    expect(within(toolbar()).getByRole("group", { name: "指标" })).toBeInTheDocument();
-    expect(within(toolbar()).getByRole("button", { name: "引擎" })).toBeInTheDocument();
-    expect(within(toolbar()).getByRole("button", { name: "问句池" })).toBeInTheDocument();
-    expect(within(toolbar()).getByRole("button", { name: "问题群" })).toBeInTheDocument();
-    for (const group of document.querySelectorAll("[role='group'][aria-label]")) {
-      if (["各引擎的提及、准确与引用"].includes(group.getAttribute("aria-label") ?? "")) continue;
-      expect(toolbar().contains(group) || group.closest("[data-toolbar]") !== null || group.getAttribute("aria-label") === "指标", group.getAttribute("aria-label") ?? "").toBe(true);
-    }
-    for (const search of document.querySelectorAll("input[type='search']")) expect(toolbar().contains(search)).toBe(true);
+    expect(within(toolbar()).getByRole("button", { name: /^指标：/ })).toBeVisible();
+    expect(screen.queryByRole("group", { name: "引擎" })).toBeNull();
+    await userEvent.click(within(toolbar()).getByRole("button", { name: /^筛选/ }));
+    for (const name of ["引擎", "问句池", "问题群"]) expect(screen.getByRole("group", { name })).toBeVisible();
   });
 
   it("a metric chip moves the trend, rings the grid's column and swaps the engines' card for that rate's bars", async () => {
@@ -191,7 +183,8 @@ describe("可见度: the band's toolbar drives every block", () => {
     // the index has no column of its own: nothing is ringed, and the engines' card is the mention trend
     expect(document.querySelector("th[data-heat-emphasis]")).toBeNull();
     expect(document.querySelector("[data-geo-engine-trend]")).not.toBeNull();
-    await userEvent.click(within(toolbar()).getByRole("button", { name: "事实准确率" }));
+    await userEvent.click(within(toolbar()).getByRole("button", { name: /^指标：/ }));
+    await userEvent.click(await screen.findByRole("menuitemradio", { name: "事实准确率" }));
     await screen.findByRole("heading", { name: /^事实准确率 94%/ });
     expect(document.querySelector("th[data-heat-emphasis]")).toHaveTextContent("事实准确率");
     expect(document.querySelector("[data-geo-engine-trend]")).toBeNull();
@@ -203,8 +196,8 @@ describe("可见度: the band's toolbar drives every block", () => {
     renderTab();
     await screen.findByRole("heading", { name: /综合可见度指数/ });
     await waitFor(() => expect(document.querySelector("[data-cluster-grid]")).not.toBeNull());
-    await userEvent.click(within(toolbar()).getByRole("button", { name: "引擎" }));
-    await userEvent.click(await screen.findByRole("menuitemradio", { name: "千问" }));
+    await userEvent.click(within(toolbar()).getByRole("button", { name: /^筛选/ }));
+    await userEvent.click(await screen.findByRole("button", { name: "千问" }));
     expect(screen.getByTestId("search")).toHaveTextContent("engine=qianwen");
     // the groups are read on that engine alone
     const brand = groupRow(G_BRAND)!;
@@ -217,16 +210,15 @@ describe("可见度: the band's toolbar drives every block", () => {
   it("a pool narrows the groups to it and the pool table to its row; the group choice offers only what the pool holds", async () => {
     renderTab();
     await waitFor(() => expect(groupRow(G_BRAND)).not.toBeNull());
-    await userEvent.click(within(toolbar()).getByRole("button", { name: "问句池" }));
-    await userEvent.click(await screen.findByRole("menuitemradio", { name: "增量" }));
+    await userEvent.click(within(toolbar()).getByRole("button", { name: /^筛选/ }));
+    await userEvent.click(await screen.findByRole("button", { name: "增量" }));
     expect(screen.getByTestId("search")).toHaveTextContent("pool=P2");
     expect(groupRow(G_BRAND)).toBeNull();
     expect(groupRow(G_EFFECT)).not.toBeNull();
     expect(groupRow(G_CONTROL)).not.toBeNull();
     expect(groupRow(G_SAFETY)).toBeNull();
     expect(document.querySelectorAll("[data-geo-pool]")).toHaveLength(1);
-    await userEvent.click(within(toolbar()).getByRole("button", { name: "问题群" }));
-    const offered = (await screen.findAllByRole("menuitemradio")).map((item) => item.textContent);
+    const offered = within(screen.getByRole("group", { name: "问题群" })).getAllByRole("button").map(item => item.textContent);
     expect(offered).toEqual(expect.arrayContaining(["效果怎么样、要打多久", "对照一"]));
     expect(offered).not.toContain("说明书安全题组");
   });
