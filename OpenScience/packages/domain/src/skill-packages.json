@@ -284,11 +284,11 @@
       "id": "capability/clinical-evidence-synthesis",
       "name": "clinical-evidence-synthesis",
       "origin": "capability",
-      "version": "3.0.0",
+      "version": "3.0.1",
       "source": {"kind":"release"},
-      "digest": "sha256:9e33cf43d21191cc1d6c0f7dcb762b754745afb31bae93d4189ec6a7d311b1fe",
+      "digest": "sha256:8b53effb7599dadfa09d60a40a4068a29be7516a0f5acc3738a2dc37c6399bfb",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"c5ab22f4a58543bc9b0885b6f48a5a7565b59a28a542eead46755520d4cdf042"}],
+      "references": [{"path":"capability.yaml","sha256":"dfcbe11535598c46c767f944ab76b6e0d2d1022c8e83cd22890c6d753e4aa374"}],
       "dependencies": [
         {"kind":"platform-tool","name":"biomedical_source_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"clinical_trial_snapshot","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -989,15 +989,15 @@
       "id": "capability/research-topic-selection",
       "name": "research-topic-selection",
       "origin": "capability",
-      "version": "1.4.0",
+      "version": "1.5.0",
       "source": {"kind":"release"},
-      "digest": "sha256:95688f245e7b86e1c794a536037cf2dd2b01238fcbca9dc3b47c63bfac1f8842",
+      "digest": "sha256:ec9aa0d1173e549fe880dd2112feaf9de94656db474ad5472ab58df864b4f410",
       "digestAlgorithm": "release-directory-v1",
       "scripts": [
         {"path":"scripts/evidence_floor.py","sha256":"ddc4d2e25ddd51e69aeae1c0443cb103cb8488d2e40d331234d00334ff1f07d0"},
         {"path":"scripts/preflight.py","sha256":"f263b76c7a42afe7cd2b06375299889df21181cd0f1534305e57fee0a8faff2c"}
       ],
-      "references": [{"path":"capability.yaml","sha256":"021ef9f97cf274d576e005933fb54a9b3f28cc79f67ce177fb2563600e27919c"}],
+      "references": [{"path":"capability.yaml","sha256":"1d38dbb7beac332945c54ee75ceac540132a626cee425c746da3e78cfa2b37cd"}],
       "dependencies": [
         {"kind":"platform-tool","name":"bibliometric_analysis","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"biomedical_source_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -3725,7 +3725,7 @@
       "origin": "evimed",
       "version": "2.0.0",
       "source": {"kind":"release"},
-      "digest": "sha256:f348064f35d90e8d000b95dc3a22ebc3814a5f3267545ad80c3934e9a4765a0f",
+      "digest": "sha256:e617591066f781c1fb78889c1b314e666d06fcbb54a4108162ea660023c7bfbe",
       "digestAlgorithm": "release-directory-v1",
       "references": [{"path":"agent.yaml","sha256":"9cf3448279c8ac69470607431dc35379b451356046313c82e19f0659148d41b8"}]
     },

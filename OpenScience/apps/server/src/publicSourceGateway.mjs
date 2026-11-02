@@ -41,6 +41,7 @@ const allowedHosts = new Set([
   "data.rcsb.org",
   "dgidb.org",
   "euclinicaltrials.eu",
+  "www.crd.york.ac.uk",
   "eutils.ncbi.nlm.nih.gov",
   "export.arxiv.org",
   "fred.stlouisfed.org",
@@ -114,6 +115,8 @@ const apiPathPrefixes = new Map([
   // search (a POST, below) and one trial's record (a GET), and nothing else the
   // portal serves.
   ["euclinicaltrials.eu", ["/ctis-public-api/"]],
+  // PROSPERO's public search (a POST, below), and nothing else the site serves.
+  ["www.crd.york.ac.uk", ["/PROSPERO/api/search"]],
 ]);
 /** The one path on `euclinicaltrials.eu` a GET may read: a trial by its EU CT number. */
 const ctisRetrievePath = /^\/ctis-public-api\/retrieve\/\d{4}-\d{6}-\d{2}-\d{2}$/;
@@ -356,6 +359,33 @@ for (const endpoint of evimedPostEndpoints.keys()) allowedPostEndpoints.add(endp
  */
 const ctisPostEndpoints = new Set(["euclinicaltrials.eu/ctis-public-api/search"]);
 for (const endpoint of ctisPostEndpoints) allowedPostEndpoints.add(endpoint);
+/**
+ * PROSPERO's search, the one POST approved on `www.crd.york.ac.uk`: anonymous, and the shape its own public search page sends
+ * (recorded 2026-11-02). Only the term and the page size vary, and those are what the runtime's connector states.
+ */
+const prosperoPostEndpoints = new Set(["www.crd.york.ac.uk/PROSPERO/api/search"]);
+for (const endpoint of prosperoPostEndpoints) allowedPostEndpoints.add(endpoint);
+const PROSPERO_BODY_FIELDS = Object.freeze(["term", "actual", "line", "page", "nperpage", "sort", "sortorder", "filters", "download"]);
+/** @param {any} body */
+function validProsperoSearchBody(body) {
+  if (body == null || typeof body !== "object" || Array.isArray(body)) return false;
+  const keys = Object.keys(body);
+  return keys.length === PROSPERO_BODY_FIELDS.length && PROSPERO_BODY_FIELDS.every((key) => keys.includes(key))
+    && typeof body.term === "string" && body.term.trim().length > 0 && body.term.length <= 512 && !/[\r\n\0]/.test(body.term)
+    && body.actual === body.term && body.line === 1 && body.page === 1
+    && Number.isSafeInteger(body.nperpage) && body.nperpage >= 1 && body.nperpage <= 50
+    && body.sort === "score" && body.sortorder === "desc"
+    && Array.isArray(body.filters) && body.filters.length === 0 && body.download === false;
+}
+/**
+ * The request header PROSPERO's own page puts on every search: the time in base64. It is no credential; a search without it
+ * answers an error. Written here, at the one place that talks upstream.
+ * @param {URL} url
+ * @returns {Record<string, string>}
+ */
+function prosperoRequestHeaders(url) {
+  return url.hostname === "www.crd.york.ac.uk" ? { "prospero-auth-token": Buffer.from(String(Date.now())).toString("base64") } : {};
+}
 const CTIS_TEXT_CRITERIA = Object.freeze([
   "containAll", "containAny", "containNot", "title", "number", "medicalCondition", "sponsor", "productName", "endPoint", "eudraCtCode",
 ]);
@@ -816,7 +846,10 @@ function validatedRequest(value) {
     if (hostname === "www.wikipathways.org" && url.pathname !== "/json/getPathwayInfo.json") {
       throw gatewayError(403, "public_source_api_path_forbidden", "Only the official WikiPathways metadata index is approved on this host.");
     }
-    if (method !== "GET" && !ctisPostEndpoints.has(`${hostname}${url.pathname}`)) {
+    if (hostname === "www.crd.york.ac.uk" && method === "GET") {
+      throw gatewayError(403, "public_source_api_request_forbidden", "Only PROSPERO's search is approved on this host.");
+    }
+    if (method !== "GET" && !ctisPostEndpoints.has(`${hostname}${url.pathname}`) && !prosperoPostEndpoints.has(`${hostname}${url.pathname}`)) {
       throw gatewayError(403, "public_source_api_request_forbidden", "This host is approved for read-only API requests.");
     }
     if (method === "GET" && hostname === "euclinicaltrials.eu" && !ctisRetrievePath.test(url.pathname)) {
@@ -854,6 +887,12 @@ function validatedRequest(value) {
   if (ctisPostEndpoints.has(endpoint)) {
     if (!validCtisSearchBody(body)) {
       throw gatewayError(400, "public_source_gateway_body_invalid", "The EU CTIS search request is invalid.");
+    }
+    return { url, accept: [...new Set(value.accept)], method, body, credentialProfile };
+  }
+  if (prosperoPostEndpoints.has(endpoint)) {
+    if (!validProsperoSearchBody(body)) {
+      throw gatewayError(400, "public_source_gateway_body_invalid", "The PROSPERO search request is invalid.");
     }
     return { url, accept: [...new Set(value.accept)], method, body, credentialProfile };
   }
@@ -1637,6 +1676,7 @@ export function createPublicSourceGatewayHandler(config, runtimeManager, {
         const upstreamHeaders = {
           accept: request.accept.join(", "),
           "user-agent": "EviMed-Research/1.2 (server public-source gateway)",
+          ...prosperoRequestHeaders(request.url),
         };
         if (request.method === "POST") upstreamHeaders["content-type"] = "application/json";
         if (request.credentialProfile) {

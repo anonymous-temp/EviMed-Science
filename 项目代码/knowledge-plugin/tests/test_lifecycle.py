@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
 
-from knowledge_plugin.lifecycle import SourceFacts, TrialFacts, retirement, rhythm, rhythm_multiple, trial_verdict
+from knowledge_plugin.lifecycle import SourceFacts, TrialFacts, retirement, trial_verdict
 
 NOW = datetime(2026, 10, 22, 6, 0, tzinfo=timezone.utc)
 TODAY = NOW.date()
@@ -20,31 +20,18 @@ def facts(**overrides) -> SourceFacts:
     return SourceFacts(**{**base, **overrides})
 
 
-def test_rhythm_reads_distinct_days_inside_the_window():
-    r = rhythm(days_ago(1, 1, 8, 15, 22, 200), TODAY)
-    assert (r.evidence_days, r.median_gap_days, r.quiet_days) == (4, 7.0, 1)
-    assert rhythm([], TODAY).quiet_days is None
-    assert rhythm_multiple(rhythm(days_ago(3, 10), TODAY)) is None            # two days: no rhythm to measure
-
-
-def test_a_weekly_source_quiet_for_three_weeks_is_slow_not_silent():
-    weekly = facts(new_days=days_ago(21, 28, 35, 42, 49))
-    assert retirement(weekly, NOW) is None                                      # 21 / 7 = 3 times its gap
-    gone = facts(new_days=days_ago(30, 37, 44, 51, 58))
-    decision = retirement(gone, NOW)
-    assert decision.reason == "silent" and decision.evidence["quiet_days"] == 30   # 30 / 7 > 4
-
-
-def test_unmeasured_rhythm_waits_longer_for_a_curated_row():
-    once = dict(new_days=days_ago(22), first_contact_at=NOW - timedelta(days=22))
-    assert retirement(facts(**once), NOW).reason == "silent"                    # discovered: 14 days
-    assert retirement(facts(curated=True, **once), NOW) is None                  # a file row: 60 days
-    old = dict(new_days=[], first_contact_at=NOW - timedelta(days=61))
-    assert retirement(facts(curated=True, **old), NOW).reason == "silent"
+def test_a_source_is_silent_after_ninety_quiet_days_whatever_its_rhythm_or_origin():
+    """Owner 2026-11-02: 「3个月没有更新再退役」. BMJ Medicine had been retired after 14 quiet days against a gap of 3."""
+    assert retirement(facts(new_days=days_ago(14, 17, 20, 23, 26, 29)), NOW) is None
+    assert retirement(facts(new_days=days_ago(89), first_contact_at=NOW - timedelta(days=200)), NOW) is None
+    decision = retirement(facts(new_days=[], first_contact_at=NOW - timedelta(days=90)), NOW)
+    assert decision.reason == "silent" and decision.evidence == {"quiet_days": 90}
+    assert retirement(facts(new_days=days_ago(120), first_contact_at=NOW - timedelta(days=200)), NOW).reason == "silent"
+    assert retirement(facts(new_days=[], first_contact_at=NOW - timedelta(days=89)), NOW) is None, "young: quiet since its first contact"
 
 
 def test_silence_is_not_judged_for_young_failing_safety_or_operator_sources():
-    quiet = dict(new_days=days_ago(30))
+    quiet = dict(new_days=days_ago(100), first_contact_at=NOW - timedelta(days=200))
     assert retirement(facts(first_contact_at=NOW - timedelta(days=10), new_days=[]), NOW) is None
     assert retirement(facts(failing_since=NOW - timedelta(days=2), **quiet), NOW) is None
     assert retirement(facts(safety_feed=True, **quiet), NOW) is None

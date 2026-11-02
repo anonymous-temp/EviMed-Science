@@ -122,6 +122,7 @@ export const GATE_CHECK_TITLES_ZH = Object.freeze({
   'topic-evidence-lineage': '选题证据来源无法追溯',
   'topic-study-plan': '研究设计要素尚未确定',
   'topic-research-context': '研究背景前后不一致',
+  'topic-research-context-fields': '研究背景字段不符合要求',
   'topic-publication-status': '所用证据的发表状态未核实',
   'source-understanding-schema': '文献解读结果格式有误',
   'method-candidate-schema': '方法候选格式有误',

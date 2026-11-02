@@ -10,6 +10,9 @@ CONNECTION_STATE = {
     "active_tool": "connected_public",
     "active_skill": "skill_guidance",
     "catalogued": "catalog_only",
+    # Reached through the EviMed evidence API rather than a connector of its own; `reachedThrough` is the exact call.
+    # Until 2026-11-02 CNKI, Wanfang, VIP, SinoMed, ChiCTR, Cochrane and Embase read "blocked" here while the API served them.
+    "via_evimed_index": "connected_via_evimed_index",
 }
 BUNDLED_DATASET_CONNECTORS = {"sider"}
 
@@ -88,12 +91,14 @@ def integration_summary():
     states = connection_counts()
     connected = states.get("connected_public", 0)
     skill_guidance = states.get("skill_guidance", 0)
+    via_index = states.get("connected_via_evimed_index", 0)
     total = len(sources())
     return {
         "reviewedTotal": total,
         "connectedPublic": connected,
         "skillGuidanceOnly": skill_guidance,
-        "notConnected": total - connected - skill_guidance,
+        "viaEvimedIndex": via_index,
+        "notConnected": total - connected - skill_guidance - via_index,
         "connectionStateCounts": states,
         "productionConnectorRoute": "controlled_connector_routes",
         "productionConnectorRoutes": ["bundled_verified_dataset", "server_allowlisted_gateway"],

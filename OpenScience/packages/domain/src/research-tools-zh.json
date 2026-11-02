@@ -15,7 +15,7 @@
     "term_normalize": { "group": "文献与指南检索", "use": "把医学术语规范成标准词，可选查出对应的概念编号。" },
     "locate_quote": { "group": "文献与指南检索", "use": "核对一段引文是否出现在已保存的来源里。" },
 
-    "clinical_trial_search": { "group": "试验登记", "use": "检索临床试验登记库。" },
+    "clinical_trial_search": { "group": "试验登记", "use": "检索临床试验登记库：ChiCTR、ClinicalTrials.gov、Cochrane CENTRAL。" },
     "clinical_trial_snapshot": { "group": "试验登记", "use": "完整读取并保存一条 ClinicalTrials.gov 记录，列出它与上次读取相比的变化。" },
     "trial_registry_record": { "group": "试验登记", "use": "取一条试验登记记录的结构化字段：设计、分组、入组、终点和已发布的结果。" },
 

@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "vcr-evidence",
-  "version": "sha256:2ae8740d763c6f347975f93f72486d62182006bb4469aa886ef1363d768e6475",
+  "version": "sha256:c3974b85be82072570714d9577ce745a3fa2441130cb78771065d04b0473c46c",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 37,
@@ -457,7 +457,7 @@
     {
       "name": "mcp__evimed__clinical_trial_search",
       "source": "mcp",
-      "description": "Search configured clinical-trial registries.",
+      "description": "Search one clinical-trial registry at a time: ClinicalTrials.gov unless `registry` says otherwise. A duplicate or existence check asks all three, because each holds trials the others do not. A registry asked by name answers for itself: no records means this registry matched nothing, and no other is asked in its place.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -479,7 +479,8 @@
           "registry": {
             "type": "integer",
             "minimum": 0,
-            "maximum": 2
+            "maximum": 2,
+            "description": "0 ChiCTR (Chinese words, one or two work best); 1 ClinicalTrials.gov (default); 2 Cochrane CENTRAL (English words; controlled-trial reports from PubMed, Embase and others)."
           },
           "pageToken": {
             "type": "string",
@@ -541,7 +542,8 @@
               "ICTRP",
               "CT.gov",
               "CINAHL"
-            ]
+            ],
+            "description": "registry 2 only: CENTRAL records that came from this database."
           },
           "minSampleSize": {
             "type": "integer",
@@ -1246,7 +1248,7 @@
     {
       "name": "mcp__evimed__literature_search",
       "source": "mcp",
-      "description": "Search the biomedical and scientific literature (PubMed and the other configured sources) through the EviMed evidence adapter. By default the answer leads with PubMed's Best Match records and adds the EviMed index's records that PubMed did not return (up to `limit` from each; an index record is compact — abstract cut to 800 characters, no AI summary); `databases` [\"pubmed\"] asks PubMed alone and [\"internal\"] asks the EviMed index alone with its full abstracts and AI summaries. Supply `relation` instead to retrieve the literature PubTator3 records a relation in — papers that assert the relation, not papers where both terms merely co-occur; get the concept identifiers from term_normalize. Supply `pmids` instead to fetch the abstracts, publication types and MeSH headings of PubMed records you have screened in (up to 60); each abstract is preserved and quotable, and past about 12,000 characters an item names its preserved file instead of carrying the text. Public results are bibliographic metadata unless abstract or full-text fields are explicitly present; never infer study design, evidence level, outcomes, or effect estimates from a title.",
+      "description": "Search the biomedical and scientific literature through the EviMed evidence adapter. The EviMed index reaches CNKI, Wanfang, VIP and SinoMed and some Embase-linked records; PubMed is searched directly. By default the answer leads with PubMed's Best Match records and adds the index's records that PubMed did not return (up to `limit` from each; an index record is compact — abstract cut to 800 characters, no AI summary), so leave `databases` out unless you mean to narrow it. `databases` [\"pubmed\"] asks PubMed alone and leaves all of those out; [\"internal\"] asks the index alone and is how to search the Chinese literature (add `language`: \"zh\" and Chinese words). The index ranks by meaning: each of its records says how many query words it holds (`queryTermsFound`), and few or unrelated results are not evidence of a gap. Supply `relation` instead to retrieve the literature PubTator3 records a relation in — papers that assert the relation, not papers where both terms merely co-occur; get the concept identifiers from term_normalize. Supply `pmids` instead to fetch the abstracts, publication types and MeSH headings of PubMed records you have screened in (up to 60); each abstract is preserved and quotable, and past about 12,000 characters an item names its preserved file instead of carrying the text. Public results are bibliographic metadata unless abstract or full-text fields are explicitly present; never infer study design, evidence level, outcomes, or effect estimates from a title.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1307,7 +1309,7 @@
             "type": "integer",
             "minimum": 0,
             "maximum": 9999,
-            "description": "PubMed route: results to skip. data.outcome says when more exist and what to pass."
+            "description": "Results to skip, in PubMed's list or, with databases [\"internal\"], in the index's first 100. data.outcome says when more exist and what to pass."
           },
           "dateFrom": {
             "type": "string",
@@ -1350,7 +1352,8 @@
             "enum": [
               "zh",
               "en"
-            ]
+            ],
+            "description": "EviMed index only: records whose title is in this language."
           },
           "minImpactFactor": {
             "type": "number",
@@ -1385,7 +1388,11 @@
                 "crossref"
               ]
             },
-            "description": "Default (omit it): PubMed first, then the EviMed index's extra records, compact. [\"pubmed\"]: PubMed only. [\"internal\"]: the EviMed index only, full abstracts and AI summaries. [\"crossref\"]: Crossref."
+            "description": "Default (omit it): PubMed first, then the EviMed index's extra records, compact. [\"pubmed\"]: PubMed only. [\"internal\"]: the EviMed index only (CNKI, Wanfang, VIP, SinoMed, some Embase-linked records), compact. [\"crossref\"]: Crossref."
+          },
+          "fullRecords": {
+            "type": "boolean",
+            "description": "With databases [\"internal\"]: whole abstracts and AI summaries instead of compact records."
           }
         },
         "additionalProperties": false

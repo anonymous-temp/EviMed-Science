@@ -9,16 +9,9 @@ Retirement (any source: a file row, a medical-discovery feed, an AI request, a d
   could not be read is not a refusal (``robots.py`` keeps the last copy read).
 - **forbidden** — 401 or 403 is what it has answered for seven days (the failure streak started at least seven days ago
   and its last answer is one of them).
-- **silent** — nothing new for 14 days, measured against the source's own rhythm: a source whose days with new items
-  over the last 90 days are four or more is silent only when it has been quiet longer than four times its median gap
-  (a monthly bulletin is quiet for a month between issues without being broken). The rule and its constants are
-  AIHOT's (``packages/backend/src/sources/health.ts``, MIT, 47531fa): ``RHYTHM_WINDOW_DAYS`` 90, ``RHYTHM_MIN_DAYS`` 4,
-  ``RHYTHM_MULTIPLE`` 4. A first contact delivers many keys on one day and counts as that one day. While the rhythm
-  cannot be measured, a discovered or dynamic source is silent after 14 quiet days, and a row of the registry file — a
-  person chose it knowing its cadence: an annual guideline, a congress — after 60. Production on 2026-10-22, 30 days
-  after the plugin started: 94 file rows had been quiet 14–30 days with one to three days of output, every one of them
-  a guideline body, a congress, a monthly bulletin or a Chinese journal whose rhythm 30 days cannot show. Official
-  safety feeds are exempt: their silence is the good news.
+- **silent** — nothing new for 90 days (owner, 2026-11-02: 「3个月没有更新再退役」), any source. It replaced a rule measured
+  against each source's own rhythm, which retired BMJ Medicine and Google's health blog after 14 quiet days. A first contact
+  delivers many keys on one day and counts as that one day. Official safety feeds are exempt: their silence is the good news.
 - **off-topic** — the platform's own screen (``source_screening``, reported by the platform) judged more than half of
   what the source delivered not medical, and fewer than three entries in its window were medical. The second clause
   keeps a general journal (Nature: 9 medical of 122 in 14 days) and retires a general tech feed (3,261 screened, 40
@@ -38,15 +31,10 @@ then fails ``unjudged``.
 
 from __future__ import annotations
 
-import statistics
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 
-RHYTHM_WINDOW_DAYS = 90
-RHYTHM_MIN_DAYS = 4
-RHYTHM_MULTIPLE = 4
-SILENT_AFTER_DAYS = 14
-SILENT_UNMEASURED_CURATED_DAYS = 60
+SILENT_AFTER_DAYS = 90
 FORBIDDEN_AFTER = timedelta(days=7)
 ROBOTS_STREAK = 2
 OFF_TOPIC_SHARE = 0.5
@@ -62,36 +50,10 @@ RETIREMENT_REASONS = tuple(RECHECK_AFTER)
 
 
 @dataclass
-class Rhythm:
-    evidence_days: int
-    median_gap_days: float | None
-    quiet_days: int | None
-
-
-def rhythm(days: list[date], today: date) -> Rhythm:
-    """The source's own output rhythm over the window: distinct days with something new, the median gap between them,
-    and the whole days since the newest (AIHOT ``withRhythm``)."""
-    window = sorted({d for d in days if today - timedelta(days=RHYTHM_WINDOW_DAYS) <= d <= today})
-    if not window:
-        return Rhythm(0, None, None)
-    gaps = [(b - a).days for a, b in zip(window, window[1:])]
-    median = float(statistics.median(gaps)) if gaps else None
-    return Rhythm(len(window), median, (today - window[-1]).days)
-
-
-def rhythm_multiple(r: Rhythm) -> float | None:
-    """How many times its own median gap the source has been quiet; ``None`` while its history is too thin to say."""
-    if r.evidence_days < RHYTHM_MIN_DAYS or not r.median_gap_days or r.quiet_days is None:
-        return None
-    return r.quiet_days / r.median_gap_days
-
-
-@dataclass
 class SourceFacts:
     """What the rules read about one source (``collect_facts`` builds it from the tables)."""
 
     id: str
-    curated: bool = False                                   # a row of the registry file (not discovered, not dynamic)
     enabled: bool = True
     retired: bool = False
     operator_enabled: bool | None = None
@@ -102,7 +64,7 @@ class SourceFacts:
     failing_since: datetime | None = None
     last_error_code: str | None = None
     consecutive_failures: int = 0
-    new_days: list[date] = field(default_factory=list)      # days with a new key, last 90 days
+    new_days: list[date] = field(default_factory=list)      # days with a new key, the last ``SILENT_AFTER_DAYS`` and one
     screened: int | None = None                             # the platform's screen, when reported recently
     off_topic: int | None = None
     selected: int | None = None                             # items the platform selected (its 30 days), when reported
@@ -134,20 +96,11 @@ def retirement(facts: SourceFacts, now: datetime) -> Retirement | None:
         return Retirement(facts.id, "off-topic", {"screened": facts.screened, "not_medical": facts.off_topic})
     if facts.safety_feed or facts.first_contact_at is None or facts.failing_since is not None:
         return None    # a failing source is quiet because it fails: its health says so, silence is not the reason
-    if now - facts.first_contact_at < timedelta(days=SILENT_AFTER_DAYS):
-        return None
     today = now.date()
-    r = rhythm(facts.new_days, today)
-    quiet = r.quiet_days if r.quiet_days is not None else (today - facts.first_contact_at.date()).days
+    quiet = (today - max(facts.new_days)).days if facts.new_days else (today - facts.first_contact_at.date()).days
     if quiet < SILENT_AFTER_DAYS:
         return None
-    multiple = rhythm_multiple(r)
-    if multiple is not None and multiple <= RHYTHM_MULTIPLE:
-        return None
-    if multiple is None and facts.curated and quiet < SILENT_UNMEASURED_CURATED_DAYS:
-        return None
-    return Retirement(facts.id, "silent", {"quiet_days": quiet, "evidence_days": r.evidence_days,
-                                           "median_gap_days": r.median_gap_days})
+    return Retirement(facts.id, "silent", {"quiet_days": quiet})
 
 
 @dataclass
@@ -193,9 +146,8 @@ async def screening_of(conn, now: datetime) -> dict[str, tuple[int, int, int | N
     return {row["source_id"]: (row["screened"], row["off_topic"], row["selected"]) for row in rows}
 
 
-async def collect_facts(conn, now: datetime, curated_ids: set[str] = frozenset()) -> list[SourceFacts]:
-    """Every source the lifecycle may judge (enabled, not retired), with its rhythm and the platform's verdicts;
-    ``curated_ids`` are the rows of the registry file."""
+async def collect_facts(conn, now: datetime) -> list[SourceFacts]:
+    """Every source the lifecycle may judge (enabled, not retired), with its days of new keys and the platform's verdicts."""
     rows = await (await conn.execute(
         """SELECT id, enabled, retired_at, operator_enabled, safety_feed, platform_produced, first_contact_at, last_ok_at,
                   failing_since, last_error_code, consecutive_failures
@@ -204,7 +156,7 @@ async def collect_facts(conn, now: datetime, curated_ids: set[str] = frozenset()
     days = await (await conn.execute(
         """SELECT source_id, array_agg(DISTINCT (first_seen_at AT TIME ZONE 'UTC')::date) AS days
              FROM evimed_knowledge.seen_keys WHERE first_seen_at > %s GROUP BY source_id""",
-        (now - timedelta(days=RHYTHM_WINDOW_DAYS + 1),),
+        (now - timedelta(days=SILENT_AFTER_DAYS + 1),),
     )).fetchall()
     new_days = {row["source_id"]: list(row["days"] or []) for row in days}
     screening = await screening_of(conn, now)
@@ -212,7 +164,7 @@ async def collect_facts(conn, now: datetime, curated_ids: set[str] = frozenset()
     for row in rows:
         screened, off_topic, selected = screening.get(row["id"], (None, None, None))
         facts.append(SourceFacts(
-            id=row["id"], curated=row["id"] in curated_ids, enabled=row["enabled"], retired=row["retired_at"] is not None,
+            id=row["id"], enabled=row["enabled"], retired=row["retired_at"] is not None,
             operator_enabled=row["operator_enabled"], safety_feed=row["safety_feed"],
             platform_produced=bool(row["platform_produced"]), first_contact_at=row["first_contact_at"],
             last_ok_at=row["last_ok_at"], failing_since=row["failing_since"], last_error_code=row["last_error_code"],
@@ -221,8 +173,8 @@ async def collect_facts(conn, now: datetime, curated_ids: set[str] = frozenset()
     return facts
 
 
-async def retirement_plan(conn, now: datetime, curated_ids: set[str] = frozenset()) -> list[Retirement]:
-    return [decision for facts in await collect_facts(conn, now, curated_ids) if (decision := retirement(facts, now))]
+async def retirement_plan(conn, now: datetime) -> list[Retirement]:
+    return [decision for facts in await collect_facts(conn, now) if (decision := retirement(facts, now))]
 
 
 async def retired_ids(conn) -> set[str]:

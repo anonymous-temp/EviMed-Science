@@ -145,6 +145,13 @@ const BRIDGE_METHODS = Object.freeze(['GET', 'POST', 'DELETE'])
  */
 export const MEMORY_BRIDGE_DEADLINES = Object.freeze({ healthMs: 2_000, requestMs: 8_000, toolCallMs: 60_000 })
 
+/**
+ * How long the gateway may stay unreachable before a run is told memory went missing. One slow forward used to do it, and the
+ * next request found the gateway back: the reader's 「运行中有环节未能正常生效」 then described nothing that lasted. The state and
+ * its detail are logged at once either way, so a person looking for it still sees every blip.
+ */
+export const MEMORY_BRIDGE_OUTAGE_NOTICE_MS = 60_000
+
 /** After a forward fails in transport, how long the gateway is answered for without being asked. */
 export const MEMORY_BRIDGE_COOLDOWN_MS = 10_000
 
@@ -348,7 +355,7 @@ export function createMemoryBridge(options) {
  * dialling a closed port — which costs nothing — and a notice where an operator looks.
  *
  * @param {any} ctx
- * @param {{ enabled?: boolean, gatewayUrl?: string, tokenFile?: string, port?: number }} config
+ * @param {{ enabled?: boolean, gatewayUrl?: string, tokenFile?: string, port?: number, outageNoticeMs?: number, cooldownMs?: number }} config
  */
 export async function registerMemoryBridge(ctx, config) {
   if (config.enabled !== true) return
@@ -357,14 +364,23 @@ export async function registerMemoryBridge(ctx, config) {
   pinOpenVikingPluginEnvironment(localKey)
   const gatewayUrl = String(config.gatewayUrl ?? '').trim()
   if (!gatewayUrl) diagnostics()?.degrade?.('memory bridge: no memory gateway is configured for this runtime')
+  const outageNoticeMs = config.outageNoticeMs ?? MEMORY_BRIDGE_OUTAGE_NOTICE_MS
+  /** @type {ReturnType<typeof setTimeout> | undefined} */
+  let outage
+  ctx.effect(() => () => clearTimeout(outage))
   const bridge = createMemoryBridge({
     gatewayUrl,
     localKey,
     tokenFile: config.tokenFile,
     port: config.port,
+    cooldownMs: config.cooldownMs,
     onState: (event, detail) => {
+      clearTimeout(outage)
       // One line per state, not per failure: the set an operator reads holds each line once.
-      if (event === 'unreachable') diagnostics()?.degrade?.('memory bridge: the memory service did not answer; the conversation continued without it')
+      if (event === 'unreachable') {
+        outage = setTimeout(() => diagnostics()?.degrade?.('memory bridge: the memory service did not answer; the conversation continued without it'), outageNoticeMs)
+        outage.unref?.()
+      }
       ctx.logger?.warn?.(`evimed memory bridge: gateway ${event} (${detail})`)
     },
   })

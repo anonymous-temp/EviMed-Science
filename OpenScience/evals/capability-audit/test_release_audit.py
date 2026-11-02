@@ -756,7 +756,7 @@ class SourceCountsAreDerived(unittest.TestCase):
         self.assertGreater(len(rows), 0, "the catalog is empty; this test proved nothing")
         self.assertEqual(summary["reviewedTotal"], len(rows))
         self.assertEqual(dict(summary["connectionStateCounts"]), dict(counted))
-        self.assertEqual(summary["notConnected"], len(rows) - summary["connectedPublic"] - summary["skillGuidanceOnly"])
+        self.assertEqual(summary["notConnected"], len(rows) - summary["connectedPublic"] - summary["skillGuidanceOnly"] - summary["viaEvimedIndex"])
 
     def _verify_sources_with(self, perturb):
         """Run the real `verify_sources()` over a perturbed summary."""

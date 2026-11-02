@@ -320,6 +320,59 @@ async def test_a_source_on_trial_is_judged_by_its_trial_not_retired(pool, regist
             assert [r["reason"] for r in await apply_retirements(conn, NOW, DAY, set())] == ["off-topic"]
 
 
+async def test_a_trial_the_platform_has_screened_is_decided_on_that_screen(pool, registry_file):
+    """``screening_of`` answers three values (``selected`` since 2026-10-22). From 10-29, when the first screened trials ended, unpacking
+    two raised and rolled back the whole of the daily decisions, the retirements with them, every day."""
+    from knowledge_plugin.discovery import decide_trials
+    from knowledge_plugin.registry import sync_registry
+
+    row = site_row("https://www.tech.example.org/feed", access="rss", egress="direct", name="Tech feed",
+                   homepage="https://www.tech.example.org/", hint={}, language="en", line="outbound")
+    ended = NOW - timedelta(days=1)
+    async with pool.connection() as conn:
+        await sync_registry(conn, parse_registry({"sources": [row]}), NOW)
+        await conn.execute("""UPDATE evimed_knowledge.sources SET first_contact_at = %s WHERE id = %s""", (NOW - timedelta(days=8), row["id"]))
+        await conn.execute("""INSERT INTO evimed_knowledge.source_candidates (id, line, key, first_seen_at, last_seen_at, state,
+                                state_at, source_id, row, trial_started_at, trial_until)
+                              VALUES ('c1', 'outbound', 'https://www.tech.example.org/', %s, %s, 'trial', %s, %s, %s, %s, %s)""",
+                           (NOW, NOW, NOW, row["id"], json.dumps(row), NOW - timedelta(days=8), ended))
+        await conn.execute("""INSERT INTO evimed_knowledge.fetches (source_id, fetched_at, egress, outcome)
+                              VALUES (%s, %s, 'direct', 'ok')""", (row["id"], NOW - timedelta(days=3)))
+        await conn.execute("""INSERT INTO evimed_knowledge.entries (entry_id, source_id, external_key, identity_key, url,
+                                canonical_url, title, first_seen_at, content_sha256)
+                              VALUES ('t:a', %s, 'k', 'url:x', 'https://www.tech.example.org/a', 'https://www.tech.example.org/a',
+                                'A new phone', %s, %s)""", (row["id"], NOW - timedelta(days=2), "a" * 64))
+        await conn.execute("""INSERT INTO evimed_knowledge.source_screening (source_id, screened, off_topic, window_days, reported_at, selected)
+                              VALUES (%s, 20, 19, 14, %s, 0)""", (row["id"], NOW))
+        async with conn.transaction():
+            decided = await decide_trials(conn, NOW, DAY)
+    assert [(d["source_id"], d["verdict"], d["reason"]) for d in decided] == [(row["id"], "rejected", "off_topic")]
+
+
+async def test_a_silence_retired_by_the_old_rhythm_rule_comes_back_and_one_of_ninety_days_stays(pool, registry_file):
+    from knowledge_plugin.db import migrate
+    from knowledge_plugin.registry import sync_registry
+
+    early, late = (site_row(f"https://www.{name}.example.org/feed", access="rss", egress="direct", name=name,
+                            homepage=f"https://www.{name}.example.org/", hint={}, language="en", line="outbound")
+                   for name in ("early", "late"))
+    async with pool.connection() as conn:
+        await sync_registry(conn, parse_registry({"sources": [early, late]}), NOW)
+        for row, key, evidence in ((early, "a", {"quiet_days": 14, "evidence_days": 6, "median_gap_days": 3.0}), (late, "b", {"quiet_days": 95})):
+            await conn.execute("""INSERT INTO evimed_knowledge.source_lifecycle (source_id, reason, line, decided_at, recheck_after, evidence)
+                                  VALUES (%s, 'silent', 'outbound', %s, %s, %s)""", (row["id"], NOW, NOW, json.dumps(evidence)))
+            await conn.execute("""INSERT INTO evimed_knowledge.source_candidates (id, line, key, first_seen_at, last_seen_at, state,
+                                    state_reason, state_at, source_id, row)
+                                  VALUES (%s, 'outbound', %s, %s, %s, 'retired', 'silent', %s, %s, %s)""",
+                               (key, f"https://{key}.example.org/", NOW, NOW, NOW, row["id"], json.dumps(row)))
+        for _ in range(2):                                                      # it runs on every start
+            await migrate(conn)
+        left = await (await conn.execute("SELECT source_id FROM evimed_knowledge.source_lifecycle")).fetchall()
+        states = await (await conn.execute("SELECT id, state FROM evimed_knowledge.source_candidates ORDER BY id")).fetchall()
+    assert [row["source_id"] for row in left] == [late["id"]]
+    assert [(row["id"], row["state"]) for row in states] == [("a", "admitted"), ("b", "retired")]
+
+
 def test_discovery_data_is_read_beside_the_registry_the_plugin_runs_on(tmp_path):
     from knowledge_plugin.discovery import DATA_PATH, data_path
     registry = tmp_path / "registry" / "sources.json"

@@ -433,7 +433,7 @@
       "id": "research-topic-selection",
       "visibility": "public",
       "evalHarness": "evals/research-topic-quality",
-      "briefCount": 3,
+      "briefCount": 4,
       "realDelivery": {
         "status": "accepted",
         "evidence": "evals/research-topic-quality/results/2026-09-28-ordinary-constrained-cohort/run.json",
