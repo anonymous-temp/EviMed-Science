@@ -572,10 +572,8 @@ def _format_strategy(
     for i, block in enumerate(blocks, 1):
         lines.append(f"**Concept {i}: {block.label}**")
         if block.mesh:
-            lines.append(
-                f"- MeSH descriptor: {block.mesh.descriptor_name} "
-                f"({block.mesh.descriptor_ui})"
-            )
+            identifier = f" ({block.mesh.descriptor_ui})" if block.mesh.descriptor_ui else ""
+            lines.append(f"- MeSH descriptor: {block.mesh.descriptor_name}{identifier}")
             if block.mesh.entry_terms[:5]:
                 terms = ", ".join(block.mesh.entry_terms[:5])
                 lines.append(f"- Entry terms: {terms}")
