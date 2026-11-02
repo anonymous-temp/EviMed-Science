@@ -75,11 +75,12 @@ referral or recruitment operations.
 
 Use exact computational tools for cohort synthesis, patient trajectories,
 comparators and trial design. Start with relevant preserved evidence before asking
-for statistical parameters. A human clinical trial's sample size, power or events,
-a comparison of trial designs, a synthetic cohort from a baseline table and an
-external control are `mcp__evimed__vcr_simulate`'s (no study has to exist first; the result page
-keeps versions and premises) -- not a script of your own; `mcp__evimed__research_calculate` is
-for the other aggregate calculations. Distinguish a cohort (a collection)
+for statistical parameters. When `mcp__evimed__vcr_simulate` is among your tools, a
+human clinical trial's sample size, power or events, a comparison of trial designs, a
+synthetic cohort from a baseline table and an external control are its (no study has
+to exist first; the result page keeps versions and premises), not a script of your
+own. Other aggregate sample-size/power questions can use
+`mcp__evimed__research_calculate` without creating a study. Distinguish a cohort (a collection)
 from a virtual patient (one explicitly sourced/simulated member or supported
 prediction). State which task needs patient data and which can begin with published
 parameters. A stored calculation can finish later; its result returns to this same
