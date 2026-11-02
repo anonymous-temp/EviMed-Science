@@ -1133,6 +1133,37 @@ test("P1-4 a conversation's study is named by the title the model gives its rese
   assert.equal((await store.studyById(matching.id)).name, "我自己起的名字");
 });
 
+test("P1-5 on the programme path a design whose hazard ratio changes over time queues its simulation and the zero-effect check, no analytic stage, and the page reads done", options, async () => {
+  const module = compose({ resultFor: nullAware });
+  const study = await makeStudy("nph");
+  const write = (/** @type {string} */ what, /** @type {any} */ data) => vcrRuntimeWrite({ store, service: module.service, orchestrator: module.orchestrator,
+    study, what, items: Array.isArray(data) ? data : null, data: Array.isArray(data) ? null : data });
+  await write("definition", definition);
+  await write("assumption", [
+    { key: "control_median_pfs", name: "对照组中位 PFS", pointValue: 6, sourceKind: "expert_set", valueSource: "assumed" },
+    { key: "hazard_ratio", name: "风险比", pointValue: 0.7, sourceKind: "expert_set", valueSource: "assumed" },
+  ]);
+  const delayed = { label: "延迟起效", design: "two_arm_fixed", endpointType: "time_to_event", assumptionIds: [],
+    configuration: { design: { nTreat: 120, nControl: 120 }, analysis: { method: "maxcombo", alpha: 0.025, sided: 1 },
+      truth: { treatmentHazardRatios: { breaks: [6], ratios: [1, 0.6] }, controlMedian: 8 }, accrual: { kind: "uniform", duration: 12, followup: 12 } } };
+  await write("trial_scenario", delayed);
+  await module.orchestrator.advance(study.id);
+  await drainJobs(module, study);
+  const jobs = await store.rows("SELECT kind, state, checkpoint FROM evimed_vcr.jobs WHERE study_id=$1 ORDER BY created_at", [study.id]);
+  assert.deepEqual(jobs.map((job) => `${job.kind}:${job.checkpoint.stage}:${job.state}`), ["design_simulation:simulation:succeeded", "design_simulation:simulation_null:succeeded"],
+    "the closed form is not asked for, and the check is not refused");
+  const failed = await store.rows("SELECT key, detail FROM evimed_vcr.schedule_marks WHERE study_id=$1 AND state='failed'", [study.id]);
+  assert.deepEqual(failed, [], "no stage is left failed");
+  const nullJob = await store.one("SELECT scenario FROM evimed_vcr.jobs WHERE study_id=$1 AND checkpoint->>'stage'='simulation_null'", [study.id]);
+  assert.equal(nullJob.scenario.truth.hazardRatio, 1);
+  assert.equal(Object.hasOwn(nullJob.scenario.truth, "treatmentHazardRatios"), false);
+  assert.equal(nullJob.scenario.analysis.method, "maxcombo", "the same analysis");
+  assert.equal((await store.studyById(study.id)).steps.trial.status, "done");
+  const trial = await module.service.tab({ id: study.userId }, study.id, "trial");
+  assert.equal(trial.designs[0].nullState, "done");
+  assert.match(trial.designs[0].note, /没有解析结果/);
+});
+
 test("AC-33 everything the run set carries the AI-set label until a person countersigns it", options, async () => {
   const module = compose();
   const study = await makeStudy("aiset");

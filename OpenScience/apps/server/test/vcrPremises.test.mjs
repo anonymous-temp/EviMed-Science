@@ -194,6 +194,19 @@ test("the trial page: the premises of the design a person is looking at, the dro
   assert.doesNotMatch(JSON.stringify(tab.premises), /job_|res_|design\.|appliedDefaults|stageResults/);
 });
 
+test("P1-5 a design with no closed form says so beside its result, in a plain line, and a design with one says nothing of the kind", () => {
+  const withConfiguration = (/** @type {Record<string, any>} */ over) => {
+    const bundle = designBundle({ withNull: true });
+    delete bundle.allResults[0].diagnostics.stageResults.analytic;
+    bundle.scenarios[0] = { ...bundle.scenarios[0], configuration: { ...SIX_VALUES, ...over } };
+    return presentTrialTab(bundle).designs[0];
+  };
+  const wording = /没有解析结果：风险比随时间变化或 MaxCombo 检验没有封闭公式，功效和 I 类错误来自模拟/;
+  assert.match(withConfiguration({ truth: { treatmentHazardRatios: { breaks: [6], ratios: [1, 0.6] }, controlMedian: 8 } }).note, wording);
+  assert.match(withConfiguration({ analysis: { method: "maxcombo", alpha: 0.025, sided: 1 } }).note, wording);
+  assert.equal(withConfiguration({}).note, null);
+});
+
 test("the type I error is measured after the result: queued, then there with its error, held against its closed form where one exists", () => {
   // Before: the alternative has landed, the check is planned; a column waits for it and the cell says where it stands.
   const planned = presentTrialTab(designBundle({ jobs: [job("simulation", "succeeded")] }));

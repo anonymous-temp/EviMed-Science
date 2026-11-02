@@ -1080,7 +1080,9 @@ export function vcrNullTruth(scenario) {
   const truth = scenario?.truth === undefined ? {} : scenario?.truth
   const kind = scenario?.design?.kind
   if (!isObject(truth) || !['two_arm_fixed', 'group_sequential'].includes(kind)) return null
-  const { null: _label, effect: _effect, hazardRatio: _hazardRatio, treatmentRate: _treatmentRate, riskDifference: _riskDifference, oddsRatio: _oddsRatio, ...rest } = truth
+  // The hazard ratio that changes over time is the alternative's law too: the null case states one key for no effect, and two laws for one
+  // arm are refused (`Give only one of`).
+  const { null: _label, effect: _effect, hazardRatio: _hazardRatio, treatmentHazardRatios: _treatmentHazardRatios, treatmentRate: _treatmentRate, riskDifference: _riskDifference, oddsRatio: _oddsRatio, ...rest } = truth
   switch (scenario?.endpoint?.type) {
     case 'continuous': return { ...rest, effect: 0 }
     case 'time_to_event': return { ...rest, hazardRatio: 1 }
@@ -1489,16 +1491,27 @@ function checkDesignSemantics(scenario, path, ctx) {
 }
 
 /**
+ * The fields of a design scenario that have no closed form: a hazard ratio that changes over time and the MaxCombo analysis. A design
+ * stating either is sized by simulation only; the analytic design and the assurance are not asked for it (the programme skips them) and
+ * refuse it by name when asked (`checkNoNonProportionalHazards`).
+ * @param {any} scenario
+ * @returns {string[]} the paths, empty for a design that has a closed form
+ */
+export function vcrNoClosedFormFields(scenario) {
+  return [
+    scenario?.truth && typeof scenario.truth === 'object' && Object.hasOwn(scenario.truth, 'treatmentHazardRatios') ? 'truth.treatmentHazardRatios' : null,
+    scenario?.analysis?.method === 'maxcombo' ? 'analysis.method' : null,
+  ].filter((field) => field !== null)
+}
+
+/**
  * A hazard ratio that changes over time and the MaxCombo analysis exist in the simulation only (remediation plan D1): a formula sizes a
  * proportional-hazards design. The analytic design and the assurance refuse them by name and say where to go, in place of the
  * schema's "the engine does not read it".
  * @param {any} scenario @param {string} path @param {WalkContext} ctx
  */
 function checkNoNonProportionalHazards(scenario, path, ctx) {
-  const where = [
-    scenario?.truth && Object.hasOwn(scenario.truth, 'treatmentHazardRatios') ? 'truth.treatmentHazardRatios' : null,
-    scenario?.analysis?.method === 'maxcombo' ? 'analysis.method' : null,
-  ].filter((field) => field !== null)
+  const where = vcrNoClosedFormFields(scenario)
   if (!where.length) return
   ctx.issues = ctx.issues.filter((issue) => !(issue.code === 'scenario_field_unknown' && where.some((field) => issue.field === at(path, /** @type {string} */ (field)))))
   for (const field of where) {

@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   VCR_REPLICATES_NULL_MIN, VCR_REPLICATES_NULL_MIN_BORROWING, VCR_REPLICATES_NULL_MIN_BY_USE, VCR_INTENDED_USES, replicateFloor, replicatePlan,
-  validateScenario, vcrAppliedDefaults, vcrBorrowsExternally, vcrIsNullScenario, vcrNullReplicateFloor, vcrNullTruth, vcrReplicateFloorFor, vcrReplicatePlanFor,
+  validateScenario, vcrAppliedDefaults, vcrBorrowsExternally, vcrIsNullScenario, vcrNoClosedFormFields, vcrNullReplicateFloor, vcrNullTruth, vcrReplicateFloorFor, vcrReplicatePlanFor,
 } from "../index.mjs";
 
 /** The two-arm survival design that states six values and nothing else: the sizes, the effect, the control median, the accrual and the follow-up. */
@@ -110,4 +110,19 @@ test("the floor of a scenario takes the use and the borrowing into account, and 
   assert.equal(vcrBorrowsExternally(SIX_VALUES), false);
   assert.equal(vcrReplicateFloorFor(external, { intendedUse: "exploratory" }), 100_000);
   assert.equal(vcrReplicatePlanFor(external, { intendedUse: "exploratory" }).basis, "borrowing");
+});
+
+test("P1-5 the null case of a design with a hazard ratio that changes over time states one law, and the closed-form predicate names both reasons", () => {
+  const delayed = { design: { kind: "two_arm_fixed", nTreat: 100, nControl: 100 }, endpoint: { type: "time_to_event" },
+    truth: { treatmentHazardRatios: { breaks: [6], ratios: [1, 0.6] }, controlMedian: 8 } };
+  const nullTruth = vcrNullTruth(delayed);
+  assert.deepEqual(nullTruth, { controlMedian: 8, hazardRatio: 1 }, "the time-varying law is the alternative's: it does not stay beside the ratio of 1");
+  assert.deepEqual(validateScenario("design.simulate", { ...delayed, truth: nullTruth }), []);
+  assert.equal(vcrIsNullScenario({ ...delayed, truth: nullTruth }), true);
+  assert.deepEqual(vcrNoClosedFormFields(delayed), ["truth.treatmentHazardRatios"]);
+  assert.deepEqual(vcrNoClosedFormFields({ ...delayed, truth: { hazardRatio: 0.7 }, analysis: { method: "maxcombo" } }), ["analysis.method"]);
+  assert.deepEqual(vcrNoClosedFormFields({ ...delayed, analysis: { method: "maxcombo" } }), ["truth.treatmentHazardRatios", "analysis.method"]);
+  assert.deepEqual(vcrNoClosedFormFields({ ...delayed, truth: { hazardRatio: 0.7 } }), []);
+  assert.deepEqual(vcrNoClosedFormFields({}), []);
+  assert.deepEqual(vcrNoClosedFormFields(null), []);
 });

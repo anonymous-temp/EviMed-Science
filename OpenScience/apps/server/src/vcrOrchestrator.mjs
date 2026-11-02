@@ -65,7 +65,7 @@ import {
   VCR_MODEL_INTERFACE_LABELS_ZH, VCR_SCENARIO_SCHEMAS, VCR_STALE_REASONS, VCR_STEPS, VCR_STEP_CAPABILITIES, VCR_STEP_NEEDS, VCR_STEP_PRODUCTS,
   VCR_DEFAULT_TIME_UNIT, allowanceWaitingNote, knownErrorCodeMessage, lineageNode, parseLineageNode, recomputePlan, stepWaitingFor, validateLongitudinalScenario,
   vcrCommonTimeUnit, vcrConvertTime, vcrEventHistoryScopeIssues, vcrModelCardIssues, vcrModelInterfaceOf, vcrScenarioChildKeys, vcrScenarioParentOf, vcrTimeUnitOf,
-  VCR_ROBUSTNESS_STAGES, vcrIsNullScenario, vcrNullTruth, vcrVisibleQuestion, whenHolds, vcrApplicabilityLimits, vcrTargetTrial, vcrTargetTrialEngineItems,
+  VCR_ROBUSTNESS_STAGES, vcrIsNullScenario, vcrNoClosedFormFields, vcrNullTruth, vcrVisibleQuestion, whenHolds, vcrApplicabilityLimits, vcrTargetTrial, vcrTargetTrialEngineItems,
 } from "@evimed/domain";
 
 import { HttpError, randomId } from "./security.mjs";
@@ -612,10 +612,13 @@ const lastKey = (path) => path.replace(/\[\d+\]$/, "").split(".").pop() ?? path;
  * it applies to. A key this table does not know is a lineage input and nothing
  * more; it never changes a scenario by accident.
  * `time` marks a parameter that is a time: its card states the unit it is in, and the scenario's own unit decides what number it binds.
- * @type {ReadonlyArray<{ match: RegExp, endpoint: string, path: readonly string[], group?: readonly string[], time?: boolean }>}
+ * `unlessStated` is the section and key of the object that, when it states it, takes the place of the card (the card is not bound at all).
+ * @type {ReadonlyArray<{ match: RegExp, endpoint: string, path: readonly string[], group?: readonly string[], time?: boolean, unlessStated?: readonly [string, string] }>}
  */
 export const VCR_ASSUMPTION_BINDINGS = Object.freeze([
-  { match: /^hazard_ratio(?:_|$)/, endpoint: "time_to_event", path: ["truth", "hazardRatio"] },
+  // A design that states its own hazard law over time (`truth.treatmentHazardRatios`) is not given the card's single ratio besides it:
+  // two laws for one arm are refused by the engine's schema, and the object's own law is the run's.
+  { match: /^hazard_ratio(?:_|$)/, endpoint: "time_to_event", path: ["truth", "hazardRatio"], unlessStated: ["truth", "treatmentHazardRatios"] },
   { match: /^(?:control_median|median_time|median_survival)/, endpoint: "time_to_event", path: ["truth", "controlMedian"], time: true },
   { match: /^(?:dropout_rate|dropout_annual|annual_dropout)/, endpoint: "time_to_event", path: ["accrual", "dropoutAnnual"] },
   { match: /^(?:control_event_rate|control_rate|control_response_rate)$/, endpoint: "binary", path: ["truth", "controlRate"] },
@@ -665,6 +668,7 @@ export function vcrBindAssumptions(candidate, cards, endpoint, timeUnit = vcrRes
     const value = Number(card?.pointValue);
     const rule = VCR_ASSUMPTION_BINDINGS.find((entry) => entry.endpoint === endpoint && entry.match.test(String(card?.key)));
     if (!rule || card?.pointValue === null || card?.pointValue === undefined || !Number.isFinite(value)) continue;
+    if (rule.unlessStated && isObject(candidate[rule.unlessStated[0]]) && Object.hasOwn(candidate[rule.unlessStated[0]], rule.unlessStated[1])) continue;
     const [section, name] = rule.path;
     const target = isObject(candidate[section]) ? candidate[section] : (candidate[section] = {});
     for (const other of rule.group ?? []) if (other !== name) delete target[other];
@@ -1426,7 +1430,10 @@ export function vcrBuildStages(item, context) {
     const stages = [];
     const simon = row.design === "simon_two_stage" && type === "binary";
     const statedBoundary = simon && ["n1", "n", "r1", "r"].every((key) => Number.isSafeInteger(design[key]));
-    if (supports("design.analytic") && !statedBoundary) stages.push(stage("design_analytic", base, { stage: "analytic", endpoint: type, cards: used, snapshot: false }));
+    // A hazard ratio that changes over time and the MaxCombo analysis have no closed form: the design is sized by its simulation, and the
+    // analytic stage and the assurance (which integrates the closed form) are not asked of the engine, which would refuse them by name.
+    const simulatedOnly = vcrNoClosedFormFields(base).length > 0;
+    if (supports("design.analytic") && !statedBoundary && !simulatedOnly) stages.push(stage("design_analytic", base, { stage: "analytic", endpoint: type, cards: used, snapshot: false }));
     if (simon) {
       const waiting = () => finish([...stages, stage("design_simulation", base, { stage: "simulation", endpoint: type,
         cards: used, snapshot: false, after: "analytic", detail: { awaitingAnalytic: true } })]);
@@ -1471,7 +1478,7 @@ export function vcrBuildStages(item, context) {
         answers: "改用引擎支持的设计并排比较，或等这个设计完成数值验证后再算。" }] } };
     }
     // Assurance integrates power over the design prior the effect's card states.
-    const prior = supports("design.assurance") ? vcrDesignPriorFrom(used, type) : null;
+    const prior = supports("design.assurance") && !simulatedOnly ? vcrDesignPriorFrom(used, type) : null;
     if (prior) {
       const events = type === "time_to_event"
         ? Math.ceil(Number(configuration.design?.events ?? findMeasure(context.analytic, "required_events") ?? Number.NaN)) : null;

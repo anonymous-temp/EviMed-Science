@@ -612,6 +612,46 @@ test("a two-arm design is also run under no effect, after the alternative (A1): 
   assert.ok(sizeOnly.stages.some((/** @type {any} */ entry) => entry.stage === "simulation_null"), "a design with no truth at all still gets its null case: the one key it adds");
 });
 
+test("P1-5 a hazard ratio that changes over time, or MaxCombo, is sized by its simulation: no analytic stage, no assurance, and a null check the engine accepts", () => {
+  const delayed = { treatmentHazardRatios: { breaks: [6], ratios: [1, 0.6] }, controlMedian: 8 };
+  const accrual = { kind: "uniform", duration: 12, followup: 12 };
+  /** @type {Array<[string, Record<string, any>, string]>} */
+  const designs = [
+    ["a delayed effect", { design: { nTreat: 120, nControl: 120 }, truth: delayed, accrual }, "two_arm_fixed"],
+    ["a delayed effect in a sequential design", { design: { nTreat: 120, nControl: 120, informationRates: [0.5, 1], spending: "obrien_fleming" }, truth: delayed, accrual }, "group_sequential"],
+    ["MaxCombo", { design: { nTreat: 120, nControl: 120 }, truth: { hazardRatio: 0.7, controlMedian: 8 }, analysis: { method: "maxcombo", alpha: 0.025, sided: 1 }, accrual }, "two_arm_fixed"],
+  ];
+  // The effect card (a prediction distribution) and an analytic result are there, as they are for an ordinary design: neither is used.
+  const analytic = { measures: [{ name: "required_events", value: 246.2 }] };
+  for (const [name, configuration, design] of designs) {
+    for (const withCards of [false, true]) {
+      const plan = /** @type {any} */ (vcrBuildStages({ kind: "trial_scenario", row: trialRow(configuration, { design }) }, { ...context, assumptions: withCards ? cards : [], analytic }));
+      const label = `${name}${withCards ? " with the effect card" : ""}`;
+      assert.equal(plan.ok, true, `${label}: ${JSON.stringify(plan.refused)}`);
+      assert.deepEqual(plan.stages.map((/** @type {any} */ entry) => entry.stage), ["simulation", "simulation_null"], label);
+      for (const entry of plan.stages) {
+        assert.deepEqual(validateScenario(VCR_JOB_METHODS[entry.jobKind], entry.scenario), [], `${label} ${entry.stage}: the engine accepts it`);
+      }
+      const alternative = plan.stages[0];
+      const check = plan.stages[1];
+      assert.equal(check.after, "simulation");
+      assert.equal(check.scenario.truth.hazardRatio, 1, `${label}: no effect`);
+      assert.equal(Object.hasOwn(check.scenario.truth, "treatmentHazardRatios"), false, `${label}: one law for one arm`);
+      assert.equal(vcrIsNullScenario(check.scenario), true, label);
+      assert.equal(vcrIsNullScenario(alternative.scenario), false, label);
+      assert.equal(check.scenario.analysis?.method, alternative.scenario.analysis?.method, `${label}: the same analysis`);
+      if (configuration.truth.treatmentHazardRatios) {
+        assert.deepEqual(alternative.scenario.truth.treatmentHazardRatios, delayed.treatmentHazardRatios, `${label}: the design's own law stands`);
+        assert.equal(Object.hasOwn(alternative.scenario.truth, "hazardRatio"), false, `${label}: the card's single ratio is not laid beside it`);
+        assert.equal(alternative.bound.some((/** @type {any} */ entry) => entry.key === "hazard_ratio"), false, `${label}: the job does not claim the card`);
+      }
+    }
+  }
+  // The same designs with a constant ratio keep their analytic stage: nothing else moved.
+  const plain = /** @type {any} */ (vcrBuildStages({ kind: "trial_scenario", row: trialRow({ design: { nTreat: 120, nControl: 120 }, accrual }) }, context));
+  assert.deepEqual(plain.stages.map((/** @type {any} */ entry) => entry.stage), ["analytic", "simulation", "simulation_null"]);
+});
+
 test("a design the engine does not implement is said in a sentence and never run as something else; a key it does not read is refused by its path", () => {
   const single = /** @type {any} */ (vcrBuildStages({ kind: "trial_scenario", row: trialRow({ design: { nTreat: 80 } }, { design: "single_arm_external" }) }, context));
   assert.equal(single.ok, false);

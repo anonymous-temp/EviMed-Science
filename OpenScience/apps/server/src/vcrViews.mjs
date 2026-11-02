@@ -42,7 +42,7 @@ import {
   VCR_MODEL_INTERFACE_LABELS_ZH, VCR_REGISTRY_ALLOCATION_LABELS_ZH, VCR_REGISTRY_MASKING_LABELS_ZH, VCR_REGISTRY_PHASE_LABELS_ZH, VCR_REVIEW_KIND_LABELS_ZH, VCR_ROLE_ABILITIES, VCR_STALE_REASON_LABELS_ZH,
   VCR_CONVERSATION_STUDY_NAME, VCR_DRAFT_STUDY_NAME, VCR_RESULT_KIND_TABS, VCR_STEP_LABELS_ZH, VCR_STEPS, VCR_TABS, VCR_TWIN_LABELS_ZH, VCR_TWIN_EVIDENCE, VCR_VALUE_SOURCE_LABELS_ZH,
   VCR_TRIAL_DESIGN_LABELS_ZH, VCR_EFFECT_ROLE_LABELS_ZH, VCR_BENCHMARK_ONLY_BASES, VCR_BENCHMARK_ONLY_USE_CEILING,
-  allowanceWaitingSentence, workStateLabel, intendedUseCeiling, lineageNode, parseLineageNode, twinLabel, useWithin, vcrModelCardIssues, vcrModelInterfaceOf, vcrModelTripod,
+  allowanceWaitingSentence, workStateLabel, intendedUseCeiling, lineageNode, parseLineageNode, twinLabel, useWithin, vcrModelCardIssues, vcrModelInterfaceOf, vcrModelTripod, vcrNoClosedFormFields,
 } from "@evimed/domain";
 
 import { VCR_ENGINE_RETRYABLE_CODES } from "./vcrEngineClient.mjs";
@@ -966,6 +966,17 @@ function designStages(scenario, results) {
 }
 
 /**
+ * The one line under a design that has no closed form: a hazard ratio that changes over time, or the MaxCombo test, is sized by simulation
+ * only, so there is no analytic row to look for. Null for a design that has one.
+ * @param {Record<string, any>} scenario
+ */
+function simulatedOnlyNote(scenario) {
+  const configuration = object(scenario.configuration);
+  return vcrNoClosedFormFields({ truth: configuration.truth, analysis: configuration.analysis }).length
+    ? "没有解析结果：风险比随时间变化或 MaxCombo 检验没有封闭公式，功效和 I 类错误来自模拟。" : null;
+}
+
+/**
  * Where the zero-effect check of a design stands: landed (`done`), waiting in the queue (`queued`: planned and not yet taken up, or
  * taken up and not started), running, failed or cancelled; null when the design has none to wait for. Read from the jobs the study
  * holds for this design — the check is a stage of its own, and a page that shows the design's result before it must say so.
@@ -1183,7 +1194,7 @@ export function presentDesigns(bundle) {
       dominated: Boolean(beaten),
       dominatedBy: beaten ? beaten.code : null,
       chosen: chosenId ? chosenId === scenario.id : chosenCode ? chosenCode === code : false,
-      note: beaten ? `在比较目标的全部指标上都不优于 ${beaten.code}` : designNote(stages),
+      note: beaten ? `在比较目标的全部指标上都不优于 ${beaten.code}` : designNote(stages) ?? simulatedOnlyNote(scenario),
       measures: beaten ? {} : measures,
       method: beaten ? null : designMethod(stages),
       replicates: beaten ? null : (executionOfStage("simulation")?.replicates ?? null),
