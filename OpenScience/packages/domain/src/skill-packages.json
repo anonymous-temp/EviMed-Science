@@ -1112,18 +1112,18 @@
       "id": "capability/vcr-analysis",
       "name": "vcr-analysis",
       "origin": "capability",
-      "version": "1.11.0",
+      "version": "1.12.0",
       "source": {"kind":"release"},
-      "digest": "sha256:151478666302c8159e58769d287cedb5f7a61648e72b3f1ba65256f24f7bedfe",
+      "digest": "sha256:25dcba00381b5040d831b04bd4cc9d9c1853f84097562246507a203d30754192",
       "digestAlgorithm": "release-directory-v1",
       "references": [
-        {"path":"capability.yaml","sha256":"12c99255f24a1ba901292829823496ff427ad37f66de07093f66f5674d17e8b5"},
+        {"path":"capability.yaml","sha256":"502ecee73fd016e26698ec774dc457bc5ce81348539a389cb2ad92af7b8c17da"},
         {"path":"references/comparators.md","sha256":"301e5a02eea1b5680617696f2b4193141638e948659771324039276f3eefe4d3"},
         {"path":"references/delivery.md","sha256":"14bf6198c8ba48f89c93787ac473178b175403ffab9f33542df74724bbf525fe"},
         {"path":"references/longitudinal.md","sha256":"241d2acf2d570afca6d25dc7b66d3f07c555afb8663e4acf4a00d095e0821695"},
         {"path":"references/models.md","sha256":"1bc12035760ac0d76226ab363301caabd525f02b3ebe023e6df8e9b3cad6f56a"},
         {"path":"references/populations-and-patients.md","sha256":"2ce702f5d66995beff49865103e07199269529ad262196fd61378e92a1b916d8"},
-        {"path":"references/trial-design.md","sha256":"03e526c3e6ce9a079edcf642271ca2131c9bbc02c8afdcb566f09b49c67ea9ad"}
+        {"path":"references/trial-design.md","sha256":"3bc595236fa0bbbdbb81d1ca2f998e4d3f9d2e5815763f49561479b15e8c6877"}
       ],
       "dependencies": [
         {"kind":"platform-tool","name":"clinical_trial_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -1176,11 +1176,11 @@
       "id": "capability/vcr-evidence",
       "name": "vcr-evidence",
       "origin": "capability",
-      "version": "1.5.1",
+      "version": "1.6.0",
       "source": {"kind":"release"},
-      "digest": "sha256:c271d84ab5e6cf79d81f397f822a3d24495c3c045baa255ae792248b4263ec11",
+      "digest": "sha256:dc4eafc1a43ea499dceac00f83d77894e1ab12a158ca39500690e7904a2e84d1",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"1237f6752a0eb18ac67440afcd9d38ead2d70cb5abd409fbeac323e18c4cd6d0"}],
+      "references": [{"path":"capability.yaml","sha256":"f8456b1a8b4ffe7f5def37e69c41808937bde7e7c49858b62d2f5fcf329c6b34"}],
       "dependencies": [
         {"kind":"platform-tool","name":"clinical_trial_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"curve_digitize","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},

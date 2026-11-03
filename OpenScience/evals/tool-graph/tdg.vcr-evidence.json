@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "vcr-evidence",
-  "version": "sha256:c1777522486a494d2fc4a41b26c6f9a5470121071fcc1789be101da0b86e28d6",
+  "version": "sha256:31cf9d925d2df0a32fa171efcfce0a5bb805bb43a4c3d4b22fb76fd0afc92903",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 37,
@@ -925,6 +925,36 @@
             ],
             "default": "random_effects_reml"
           },
+          "tauPrior": {
+            "type": "object",
+            "description": "Optional Cochrane reference for the spread between studies; gives two studies a prediction interval. Its shape is in vcr_simulate action=shape.",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "turner_2015",
+                  "turner_2015_generic",
+                  "bartos_2023"
+                ]
+              },
+              "outcome": {
+                "type": "string",
+                "maxLength": 60
+              },
+              "comparison": {
+                "type": "string",
+                "maxLength": 60
+              },
+              "effectScale": {
+                "type": "string",
+                "maxLength": 40
+              }
+            },
+            "required": [
+              "kind"
+            ],
+            "additionalProperties": false
+          },
           "jobId": {
             "type": "string",
             "minLength": 1,
@@ -1663,7 +1693,8 @@
               "candidate_trials",
               "soa",
               "regulatory_contacts",
-              "candidates"
+              "candidates",
+              "success_rates"
             ]
           },
           "filter": {
@@ -1745,6 +1776,9 @@
               "design_confirmatory",
               "bias_analysis",
               "stc_comparator",
+              "network_meta",
+              "dose_response_meta",
+              "effect_shrinkage",
               "match_extract",
               "forecast_trajectories",
               "evaluate_forecast",
