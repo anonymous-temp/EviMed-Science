@@ -358,6 +358,34 @@
         "1.0.0"
       ]
     },
+    "design.dose": {
+      "version": "1.0.0",
+      "endpoints": [],
+      "crossChecks": [
+        "BOIN (get.boundary, select.mtd, get.oc): the decision tables, the final dose of 300 random trials and the operating characteristics",
+        "Keyboard (get.boundary.kb, get.oc.kb): the decision tables and the operating characteristics",
+        "dfcrm (crm, getprior, crmsim): the Bayes estimate of the parameter to 3e-8, the skeleton and the operating characteristics",
+        "exact enumeration of the 3+3 rule as a Markov chain over the patients treated at each dose",
+        "brute-force enumeration of every outcome of a randomised selection"
+      ],
+      "modelTier": "scenario"
+    },
+    "design.bayesian": {
+      "version": "1.0.0",
+      "endpoints": [
+        "continuous",
+        "binary",
+        "time_to_event"
+      ],
+      "crossChecks": [
+        "BOP2FE (get_boundary_binary): the futility and success boundaries; get_oc_binary: a simulated check of the operating characteristics",
+        "RBesT (oc2S, pmixdiff): the type I error and power of a probability threshold between two beta-binomial arms, and the probability that a difference exceeds a margin",
+        "Simon's two-stage design (1989: 1/10, 5/29, expected size 15.0 at 0.1 and 0.3)",
+        "brute-force enumeration of every path of a small phase II trial",
+        "a simulation in plain R of the predictive-probability rule and of a normal threshold"
+      ],
+      "modelTier": "scenario"
+    },
     "design.grid": {
       "version": "1.4.0",
       "endpoints": [
@@ -682,7 +710,9 @@
     "network_meta": "evidence.network",
     "dose_response_meta": "evidence.dose_response",
     "effect_shrinkage": "evidence.shrinkage",
-    "target_trial_emulation": "comparator.target_trial"
+    "target_trial_emulation": "comparator.target_trial",
+    "design_dose": "design.dose",
+    "design_bayesian": "design.bayesian"
   },
   "patientLevelJobKinds": [
     "fit_survival_model",
@@ -8717,6 +8747,805 @@
         }
       }
     },
+    "design.dose": {
+      "t": "object",
+      "fields": {
+        "design": {
+          "t": "object",
+          "fields": {
+            "kind": {
+              "t": "string",
+              "values": [
+                "three_plus_three",
+                "boin",
+                "keyboard",
+                "crm",
+                "randomized_selection"
+              ],
+              "badValueCode": "design_unknown",
+              "req": true
+            },
+            "compare": {
+              "t": "array",
+              "items": {
+                "t": "string",
+                "values": [
+                  "three_plus_three",
+                  "boin",
+                  "keyboard",
+                  "crm"
+                ]
+              },
+              "min": 1,
+              "max": 3,
+              "unique": true,
+              "when": {
+                "path": "design.kind",
+                "notIn": [
+                  "randomized_selection"
+                ]
+              }
+            },
+            "targetToxicity": {
+              "t": "number",
+              "min": 0.05,
+              "max": 0.6,
+              "default": 0.3,
+              "unit": "probability of a dose-limiting toxicity",
+              "when": {
+                "path": "design.kind",
+                "notIn": [
+                  "randomized_selection"
+                ]
+              }
+            },
+            "cohortSize": {
+              "t": "integer",
+              "min": 1,
+              "max": 6,
+              "default": 3,
+              "unit": "patients",
+              "when": {
+                "path": "design.kind",
+                "notIn": [
+                  "randomized_selection"
+                ]
+              }
+            },
+            "maxPatients": {
+              "t": "integer",
+              "min": 6,
+              "max": 200,
+              "default": 30,
+              "unit": "patients",
+              "when": {
+                "path": "design.kind",
+                "notIn": [
+                  "randomized_selection"
+                ]
+              }
+            },
+            "startDose": {
+              "t": "integer",
+              "min": 1,
+              "max": 10,
+              "default": 1,
+              "when": {
+                "path": "design.kind",
+                "notIn": [
+                  "randomized_selection"
+                ]
+              }
+            },
+            "boin": {
+              "t": "object",
+              "fields": {
+                "safeRate": {
+                  "t": "number",
+                  "gt": 0,
+                  "lt": 1,
+                  "unit": "toxicity rate deemed safe"
+                },
+                "toxicRate": {
+                  "t": "number",
+                  "gt": 0,
+                  "lt": 1,
+                  "unit": "toxicity rate deemed too toxic"
+                },
+                "eliminationCutoff": {
+                  "t": "number",
+                  "gt": 0.5,
+                  "lt": 1,
+                  "default": 0.95
+                }
+              },
+              "when": {
+                "path": "design.kind",
+                "notIn": [
+                  "randomized_selection"
+                ]
+              }
+            },
+            "keyboard": {
+              "t": "object",
+              "fields": {
+                "margin": {
+                  "t": "number",
+                  "gt": 0,
+                  "max": 0.2,
+                  "default": 0.05,
+                  "unit": "half the width of the target key"
+                },
+                "eliminationCutoff": {
+                  "t": "number",
+                  "gt": 0.5,
+                  "lt": 1,
+                  "default": 0.95
+                }
+              },
+              "when": {
+                "path": "design.kind",
+                "notIn": [
+                  "randomized_selection"
+                ]
+              }
+            },
+            "crm": {
+              "t": "object",
+              "fields": {
+                "skeleton": {
+                  "t": "array",
+                  "items": {
+                    "t": "number",
+                    "gt": 0,
+                    "lt": 1
+                  },
+                  "min": 2,
+                  "max": 10
+                },
+                "halfwidth": {
+                  "t": "number",
+                  "gt": 0,
+                  "max": 0.2,
+                  "default": 0.05
+                },
+                "priorVariance": {
+                  "t": "number",
+                  "gt": 0,
+                  "max": 20,
+                  "default": 1.34
+                },
+                "restrictEscalation": {
+                  "t": "boolean",
+                  "default": true
+                }
+              },
+              "when": {
+                "path": "design.kind",
+                "notIn": [
+                  "randomized_selection"
+                ]
+              }
+            },
+            "margin": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "unit": "response rate difference",
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "randomized_selection"
+                ]
+              },
+              "req": true
+            },
+            "perArm": {
+              "t": "integer",
+              "min": 2,
+              "max": 2000,
+              "unit": "patients per dose",
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "randomized_selection"
+                ]
+              }
+            },
+            "maxPerArm": {
+              "t": "integer",
+              "min": 4,
+              "max": 2000,
+              "default": 300,
+              "unit": "patients per dose",
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "randomized_selection"
+                ]
+              }
+            },
+            "targetProbability": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "default": 0.9,
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "randomized_selection"
+                ]
+              }
+            }
+          },
+          "req": true
+        },
+        "truth": {
+          "t": "object",
+          "fields": {
+            "toxicity": {
+              "t": "array",
+              "items": {
+                "t": "number",
+                "gt": 0,
+                "lt": 1
+              },
+              "min": 2,
+              "max": 10,
+              "when": {
+                "path": "design.kind",
+                "notIn": [
+                  "randomized_selection"
+                ]
+              },
+              "req": true
+            },
+            "responseScenarios": {
+              "t": "array",
+              "items": {
+                "t": "array",
+                "items": {
+                  "t": "number",
+                  "gt": 0,
+                  "lt": 1
+                },
+                "min": 2,
+                "max": 3
+              },
+              "min": 1,
+              "max": 6,
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "randomized_selection"
+                ]
+              },
+              "req": true
+            }
+          },
+          "req": true
+        }
+      }
+    },
+    "design.bayesian": {
+      "t": "object",
+      "fields": {
+        "design": {
+          "t": "object",
+          "fields": {
+            "kind": {
+              "t": "string",
+              "values": [
+                "bop2",
+                "predictive_monitoring",
+                "threshold_calibration"
+              ],
+              "badValueCode": "design_unknown",
+              "req": true
+            },
+            "maxN": {
+              "t": "integer",
+              "min": 10,
+              "max": 300,
+              "unit": "patients",
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "bop2",
+                  "predictive_monitoring"
+                ]
+              },
+              "req": true
+            },
+            "lookEvery": {
+              "t": "integer",
+              "min": 1,
+              "max": 300,
+              "default": 10,
+              "unit": "patients",
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "bop2",
+                  "predictive_monitoring"
+                ]
+              }
+            },
+            "prior": {
+              "t": "object",
+              "fields": {
+                "a": {
+                  "t": "number",
+                  "gt": 0,
+                  "max": 1000,
+                  "req": true
+                },
+                "b": {
+                  "t": "number",
+                  "gt": 0,
+                  "max": 1000,
+                  "req": true
+                }
+              },
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "bop2",
+                  "predictive_monitoring"
+                ]
+              }
+            },
+            "objective": {
+              "t": "string",
+              "values": [
+                "max_power",
+                "min_expected_n"
+              ],
+              "default": "max_power",
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "bop2",
+                  "predictive_monitoring"
+                ]
+              }
+            },
+            "bop2": {
+              "t": "object",
+              "fields": {
+                "lambda": {
+                  "t": "number",
+                  "gt": 0,
+                  "lt": 1
+                },
+                "gamma": {
+                  "t": "number",
+                  "gt": 0,
+                  "max": 10
+                },
+                "efficacyEta": {
+                  "t": "number",
+                  "gt": 0,
+                  "max": 10
+                }
+              },
+              "requires": {
+                "lambda": [
+                  "gamma"
+                ],
+                "gamma": [
+                  "lambda"
+                ]
+              },
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "bop2"
+                ]
+              }
+            },
+            "predictive": {
+              "t": "object",
+              "fields": {
+                "final": {
+                  "t": "number",
+                  "gt": 0,
+                  "lt": 1
+                },
+                "futility": {
+                  "t": "number",
+                  "gt": 0,
+                  "lt": 1,
+                  "default": 0.05
+                },
+                "efficacy": {
+                  "t": "number",
+                  "gt": 0,
+                  "lt": 1
+                }
+              },
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "predictive_monitoring"
+                ]
+              }
+            },
+            "nTreat": {
+              "t": "integer",
+              "min": 2,
+              "max": 600,
+              "unit": "patients",
+              "when": [
+                {
+                  "path": "design.kind",
+                  "in": [
+                    "threshold_calibration"
+                  ]
+                },
+                {
+                  "path": "endpoint.type",
+                  "notIn": [
+                    "time_to_event"
+                  ]
+                }
+              ],
+              "req": true
+            },
+            "nControl": {
+              "t": "integer",
+              "min": 2,
+              "max": 600,
+              "unit": "patients",
+              "when": [
+                {
+                  "path": "design.kind",
+                  "in": [
+                    "threshold_calibration"
+                  ]
+                },
+                {
+                  "path": "endpoint.type",
+                  "notIn": [
+                    "time_to_event"
+                  ]
+                }
+              ],
+              "req": true
+            },
+            "events": {
+              "t": "integer",
+              "min": 2,
+              "max": 100000,
+              "unit": "events",
+              "when": [
+                {
+                  "path": "design.kind",
+                  "in": [
+                    "threshold_calibration"
+                  ]
+                },
+                {
+                  "path": "endpoint.type",
+                  "in": [
+                    "time_to_event"
+                  ]
+                }
+              ],
+              "req": true
+            },
+            "allocation": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "default": 0.5,
+              "when": [
+                {
+                  "path": "design.kind",
+                  "in": [
+                    "threshold_calibration"
+                  ]
+                },
+                {
+                  "path": "endpoint.type",
+                  "in": [
+                    "time_to_event"
+                  ]
+                }
+              ]
+            },
+            "margin": {
+              "t": "number",
+              "min": -1,
+              "max": 1000,
+              "unit": "the effect the posterior must exceed: a difference, a risk difference, or a hazard ratio below which the treatment is better",
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "threshold_calibration"
+                ]
+              }
+            },
+            "threshold": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "threshold_calibration"
+                ]
+              }
+            },
+            "priorTreatment": {
+              "t": "object",
+              "fields": {
+                "a": {
+                  "t": "number",
+                  "gt": 0,
+                  "max": 1000,
+                  "req": true
+                },
+                "b": {
+                  "t": "number",
+                  "gt": 0,
+                  "max": 1000,
+                  "req": true
+                }
+              },
+              "when": [
+                {
+                  "path": "design.kind",
+                  "in": [
+                    "threshold_calibration"
+                  ]
+                },
+                {
+                  "path": "endpoint.type",
+                  "in": [
+                    "binary"
+                  ]
+                }
+              ]
+            },
+            "priorControl": {
+              "t": "object",
+              "fields": {
+                "a": {
+                  "t": "number",
+                  "gt": 0,
+                  "max": 1000,
+                  "req": true
+                },
+                "b": {
+                  "t": "number",
+                  "gt": 0,
+                  "max": 1000,
+                  "req": true
+                }
+              },
+              "when": [
+                {
+                  "path": "design.kind",
+                  "in": [
+                    "threshold_calibration"
+                  ]
+                },
+                {
+                  "path": "endpoint.type",
+                  "in": [
+                    "binary"
+                  ]
+                }
+              ]
+            },
+            "priorEffect": {
+              "t": "object",
+              "fields": {
+                "mean": {
+                  "t": "number",
+                  "req": true
+                },
+                "sd": {
+                  "t": "number",
+                  "gt": 0,
+                  "req": true
+                }
+              },
+              "when": [
+                {
+                  "path": "design.kind",
+                  "in": [
+                    "threshold_calibration"
+                  ]
+                },
+                {
+                  "path": "endpoint.type",
+                  "notIn": [
+                    "binary"
+                  ]
+                }
+              ]
+            }
+          },
+          "req": true
+        },
+        "endpoint": {
+          "t": "object",
+          "fields": {
+            "type": {
+              "t": "string",
+              "values": [
+                "continuous",
+                "binary",
+                "time_to_event"
+              ],
+              "badValueCode": "endpoint_unknown",
+              "req": true
+            }
+          },
+          "when": {
+            "path": "design.kind",
+            "in": [
+              "threshold_calibration"
+            ]
+          },
+          "req": true
+        },
+        "truth": {
+          "t": "object",
+          "fields": {
+            "nullRate": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "bop2",
+                  "predictive_monitoring"
+                ]
+              },
+              "req": true
+            },
+            "alternativeRate": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "bop2",
+                  "predictive_monitoring"
+                ]
+              },
+              "req": true
+            },
+            "sd": {
+              "t": "number",
+              "gt": 0,
+              "default": 1,
+              "unit": "outcome units",
+              "when": [
+                {
+                  "path": "design.kind",
+                  "in": [
+                    "threshold_calibration"
+                  ]
+                },
+                {
+                  "path": "endpoint.type",
+                  "in": [
+                    "continuous"
+                  ]
+                }
+              ]
+            },
+            "effect": {
+              "t": "number",
+              "when": [
+                {
+                  "path": "design.kind",
+                  "in": [
+                    "threshold_calibration"
+                  ]
+                },
+                {
+                  "path": "endpoint.type",
+                  "in": [
+                    "continuous"
+                  ]
+                }
+              ],
+              "req": true
+            },
+            "hazardRatio": {
+              "t": "number",
+              "gt": 0,
+              "when": [
+                {
+                  "path": "design.kind",
+                  "in": [
+                    "threshold_calibration"
+                  ]
+                },
+                {
+                  "path": "endpoint.type",
+                  "in": [
+                    "time_to_event"
+                  ]
+                }
+              ],
+              "req": true
+            },
+            "controlRate": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "when": [
+                {
+                  "path": "design.kind",
+                  "in": [
+                    "threshold_calibration"
+                  ]
+                },
+                {
+                  "path": "endpoint.type",
+                  "in": [
+                    "binary"
+                  ]
+                }
+              ],
+              "req": true
+            },
+            "treatmentRate": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "when": [
+                {
+                  "path": "design.kind",
+                  "in": [
+                    "threshold_calibration"
+                  ]
+                },
+                {
+                  "path": "endpoint.type",
+                  "in": [
+                    "binary"
+                  ]
+                }
+              ],
+              "req": true
+            }
+          },
+          "req": true
+        },
+        "analysis": {
+          "t": "object",
+          "fields": {
+            "alpha": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "unit": "one-sided level"
+            },
+            "power": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "bop2",
+                  "predictive_monitoring"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
     "design.grid": {
       "t": "object",
       "fields": {
@@ -11189,7 +12018,9 @@
     "network_meta",
     "dose_response_meta",
     "effect_shrinkage",
-    "target_trial_emulation"
+    "target_trial_emulation",
+    "design_dose",
+    "design_bayesian"
   ],
   "endpointTypes": [
     "continuous",
@@ -11228,6 +12059,18 @@
     "pocock",
     "hwang_shih_decani",
     "kim_demets"
+  ],
+  "doseDesigns": [
+    "three_plus_three",
+    "boin",
+    "keyboard",
+    "crm",
+    "randomized_selection"
+  ],
+  "bayesianDesigns": [
+    "bop2",
+    "predictive_monitoring",
+    "threshold_calibration"
   ],
   "notEstimableRules": [
     "entropy_balance_infeasible",

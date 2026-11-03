@@ -44,6 +44,8 @@
     "dose_response_meta": {"method":"evidence.dose_response"},
     "effect_shrinkage": {"method":"evidence.shrinkage"},
     "target_trial_emulation": {"method":"comparator.target_trial"},
+    "design_dose": {"method":"design.dose"},
+    "design_bayesian": {"method":"design.bayesian"},
     "match_extract": {"method":"matching.extract","platformBuilt":[]},
     "forecast_trajectories": {"method":"forecast.trajectories"},
     "evaluate_forecast": {"method":"forecast.evaluate"},
@@ -3106,6 +3108,571 @@
         {
           "label": "a count endpoint (attacks per patient-year): rate ratio 0.67 on a control rate of 0.6, overdispersion 0.5",
           "scenario": {"design":{"kind":"count_endpoint"},"truth":{"controlEventRate":0.6,"rateRatio":0.67,"overdispersion":0.5,"exposureTime":1}}
+        }
+      ]
+    },
+    "design.dose": {
+      "endpoints": [],
+      "notes": [
+        "design.kind is the design asked about: three_plus_three, boin, keyboard or crm, simulated on truth.toxicity (the true toxicity of each dose, in order), or randomized_selection (exact, with truth.responseScenarios). design.compare lists other simulated designs to run on the SAME curve with the SAME random numbers: the result shows them side by side with the paired difference and its error. Report that comparison; do not recompute a number.",
+        "Defaults the engine takes (each returned in doseFinding.assumed: report them as assumptions): target toxicity 0.3, cohorts of 3, 30 patients, start at dose 1, BOIN's safe and toxic rates 0.6 and 1.4 times the target and elimination at 0.95, the keyboard design's half-width 0.05, the CRM skeleton from a half-width of 0.05 around the target with the prior guess of the MTD at the starting dose (the skeleton matters a great deal: ask the person for one if they have it), prior variance 1.34, and no climbing more than one level or after a cohort at or above the target. 3+3 uses its own cohort size and number of patients.",
+        "The true MTD is the dose whose true toxicity is closest to the target (the lower on a tie): correct_selection_probability is the chance the trial picks it; patients_above_mtd counts patients treated at higher doses. BOIN here is the local design with a non-informative prior; combinations and late-onset toxicity are not in it. Never say or imply that any design is qualified, endorsed or accepted by an agency.",
+        "randomized_selection: the lowest dose is the candidate and a higher dose replaces it when its observed response rate is at least design.margin higher; correct means the lowest dose strictly within the margin of the best true rate. With design.perArm the result is the table at that size; without it the engine searches for the size per dose at which every scenario reaches design.targetProbability (default 0.9) and returns both the first such size and the first from which every larger size does (a count cut-off makes the probability saw-tooth). It is a selection rule of the kind the randomised dose-optimisation literature uses, not a copy of a published decision table."
+      ],
+      "rows": [
+        {"path":"design","type":"object","required":true},
+        {"path":"design.kind","type":"string","values":["three_plus_three","boin","keyboard","crm","randomized_selection"],"required":true,"fieldRole":"defaultable"},
+        {
+          "path": "design.compare",
+          "type": "list",
+          "count": {"min":1,"max":3},
+          "items": {"type":"string","values":["three_plus_three","boin","keyboard","crm"]},
+          "unique": true,
+          "when": [{"path":"design.kind","notIn":["randomized_selection"]}],
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "design.targetToxicity",
+          "type": "number",
+          "min": 0.05,
+          "max": 0.6,
+          "unit": "probability of a dose-limiting toxicity",
+          "default": 0.3,
+          "when": [{"path":"design.kind","notIn":["randomized_selection"]}],
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "design.cohortSize",
+          "type": "integer",
+          "min": 1,
+          "max": 6,
+          "unit": "patients",
+          "default": 3,
+          "when": [{"path":"design.kind","notIn":["randomized_selection"]}],
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "design.maxPatients",
+          "type": "integer",
+          "min": 6,
+          "max": 200,
+          "unit": "patients",
+          "default": 30,
+          "when": [{"path":"design.kind","notIn":["randomized_selection"]}],
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "design.startDose",
+          "type": "integer",
+          "min": 1,
+          "max": 10,
+          "default": 1,
+          "when": [{"path":"design.kind","notIn":["randomized_selection"]}],
+          "fieldRole": "defaultable"
+        },
+        {"path":"design.boin","type":"object","when":[{"path":"design.kind","notIn":["randomized_selection"]}]},
+        {
+          "path": "design.boin.safeRate",
+          "type": "number",
+          "gt": 0,
+          "lt": 1,
+          "unit": "toxicity rate deemed safe",
+          "within": "design.boin",
+          "when": [{"path":"design.kind","notIn":["randomized_selection"]}],
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "design.boin.toxicRate",
+          "type": "number",
+          "gt": 0,
+          "lt": 1,
+          "unit": "toxicity rate deemed too toxic",
+          "within": "design.boin",
+          "when": [{"path":"design.kind","notIn":["randomized_selection"]}],
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "design.boin.eliminationCutoff",
+          "type": "number",
+          "gt": 0.5,
+          "lt": 1,
+          "default": 0.95,
+          "within": "design.boin",
+          "when": [{"path":"design.kind","notIn":["randomized_selection"]}],
+          "fieldRole": "defaultable"
+        },
+        {"path":"design.keyboard","type":"object","when":[{"path":"design.kind","notIn":["randomized_selection"]}]},
+        {
+          "path": "design.keyboard.margin",
+          "type": "number",
+          "max": 0.2,
+          "gt": 0,
+          "unit": "half the width of the target key",
+          "default": 0.05,
+          "within": "design.keyboard",
+          "when": [{"path":"design.kind","notIn":["randomized_selection"]}],
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "design.keyboard.eliminationCutoff",
+          "type": "number",
+          "gt": 0.5,
+          "lt": 1,
+          "default": 0.95,
+          "within": "design.keyboard",
+          "when": [{"path":"design.kind","notIn":["randomized_selection"]}],
+          "fieldRole": "defaultable"
+        },
+        {"path":"design.crm","type":"object","when":[{"path":"design.kind","notIn":["randomized_selection"]}]},
+        {
+          "path": "design.crm.skeleton",
+          "type": "list",
+          "count": {"min":2,"max":10},
+          "items": {"type":"number","gt":0,"lt":1},
+          "within": "design.crm",
+          "when": [{"path":"design.kind","notIn":["randomized_selection"]}],
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "design.crm.halfwidth",
+          "type": "number",
+          "max": 0.2,
+          "gt": 0,
+          "default": 0.05,
+          "within": "design.crm",
+          "when": [{"path":"design.kind","notIn":["randomized_selection"]}],
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "design.crm.priorVariance",
+          "type": "number",
+          "max": 20,
+          "gt": 0,
+          "default": 1.34,
+          "within": "design.crm",
+          "when": [{"path":"design.kind","notIn":["randomized_selection"]}],
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "design.crm.restrictEscalation",
+          "type": "boolean",
+          "default": true,
+          "within": "design.crm",
+          "when": [{"path":"design.kind","notIn":["randomized_selection"]}],
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "design.margin",
+          "type": "number",
+          "gt": 0,
+          "lt": 1,
+          "unit": "response rate difference",
+          "required": true,
+          "when": [{"path":"design.kind","in":["randomized_selection"]}],
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "design.perArm",
+          "type": "integer",
+          "min": 2,
+          "max": 2000,
+          "unit": "patients per dose",
+          "when": [{"path":"design.kind","in":["randomized_selection"]}],
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "design.maxPerArm",
+          "type": "integer",
+          "min": 4,
+          "max": 2000,
+          "unit": "patients per dose",
+          "default": 300,
+          "when": [{"path":"design.kind","in":["randomized_selection"]}],
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "design.targetProbability",
+          "type": "number",
+          "gt": 0,
+          "lt": 1,
+          "default": 0.9,
+          "when": [{"path":"design.kind","in":["randomized_selection"]}],
+          "fieldRole": "defaultable"
+        },
+        {"path":"truth","type":"object","required":true},
+        {
+          "path": "truth.toxicity",
+          "type": "list",
+          "count": {"min":2,"max":10},
+          "items": {"type":"number","gt":0,"lt":1},
+          "required": true,
+          "when": [{"path":"design.kind","notIn":["randomized_selection"]}],
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "truth.responseScenarios",
+          "type": "list",
+          "count": {"min":1,"max":6},
+          "items": {"type":"list","count":{"min":2,"max":3},"items":{"type":"number","gt":0,"lt":1}},
+          "required": true,
+          "when": [{"path":"design.kind","in":["randomized_selection"]}],
+          "fieldRole": "research_fact"
+        }
+      ],
+      "examples": [
+        {
+          "label": "BOIN against 3+3 on a six-dose toxicity curve, target 0.30, 30 patients in cohorts of 3 (the same curve and the same random numbers for both)",
+          "scenario": {"design":{"kind":"boin","compare":["three_plus_three"],"targetToxicity":0.3,"cohortSize":3,"maxPatients":30},"truth":{"toxicity":[0.05,0.1,0.2,0.3,0.45,0.6]}}
+        },
+        {
+          "label": "four designs side by side on one curve: CRM with a stated skeleton, BOIN, the keyboard design and 3+3",
+          "scenario": {
+            "design": {"kind":"crm","compare":["boin","keyboard","three_plus_three"],"targetToxicity":0.25,"maxPatients":36,"crm":{"skeleton":[0.05,0.12,0.25,0.4,0.55,0.7]}},
+            "truth": {"toxicity":[0.05,0.1,0.2,0.3,0.45,0.6]}
+          }
+        },
+        {
+          "label": "how many patients per dose to choose the lower of two doses with probability 0.9 when it is not worse (the higher dose must look 10 points better to be chosen)",
+          "scenario": {"design":{"kind":"randomized_selection","margin":0.1,"targetProbability":0.9},"truth":{"responseScenarios":[[0.3,0.3],[0.3,0.45]]}}
+        }
+      ]
+    },
+    "design.bayesian": {
+      "endpoints": ["continuous","binary","time_to_event"],
+      "notes": [
+        "design.kind: bop2 (Bayesian optimal phase II) and predictive_monitoring are single-arm phase II designs for a response rate (truth.nullRate and truth.alternativeRate, a look every design.lookEvery patients up to design.maxN); threshold_calibration is the success rule \"probability that the effect exceeds design.margin is above a threshold\" for a two-arm trial under a conjugate prior (endpoint continuous with a known sd, time_to_event from the number of events, or binary with beta priors). Every number is exact: there is no simulation and no Monte-Carlo error.",
+        "bop2 and predictive_monitoring return the stopping table (futility when the responses so far are at or below a count; success at the end at a count or more), the type I error, power and expected size under both rates, and Simon's optimal and minimax designs at the same alpha and power as the baseline: report the saving as the difference of two numbers the result carries. design.objective is max_power (the published BOP2 choice) or min_expected_n (the fewest expected patients under the null among the designs that keep alpha and reach the power): say which was used. alpha defaults to 0.05 and power to 0.8 for these two; the prior of the response rate is Beta(p0, 1 - p0) unless design.prior states one. State bop2.lambda and bop2.gamma, or predictive.final, to evaluate a design instead of searching.",
+        "threshold_calibration returns three rows: the threshold you stated (if any), the conventional 1 - alpha, and the calibrated threshold that makes the type I error the level (for a binary endpoint the discrete type I error is a step function, so the calibrated threshold is the smallest that keeps it at or below alpha, with the achieved level). The effect is positive when the treatment is better: a difference of means, a risk difference, or (time to event) a hazard ratio below design.margin (default 1). design.priorEffect is a normal prior on the effect (a log hazard ratio for time to event); left out, the prior is flat. alpha defaults to 0.025."
+      ],
+      "rows": [
+        {"path":"design","type":"object","required":true},
+        {"path":"design.kind","type":"string","values":["bop2","predictive_monitoring","threshold_calibration"],"required":true,"fieldRole":"defaultable"},
+        {
+          "path": "design.maxN",
+          "type": "integer",
+          "min": 10,
+          "max": 300,
+          "unit": "patients",
+          "required": true,
+          "when": [{"path":"design.kind","in":["bop2","predictive_monitoring"]}],
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "design.lookEvery",
+          "type": "integer",
+          "min": 1,
+          "max": 300,
+          "unit": "patients",
+          "default": 10,
+          "when": [{"path":"design.kind","in":["bop2","predictive_monitoring"]}],
+          "fieldRole": "defaultable"
+        },
+        {"path":"design.prior","type":"object","when":[{"path":"design.kind","in":["bop2","predictive_monitoring"]}]},
+        {
+          "path": "design.prior.a",
+          "type": "number",
+          "max": 1000,
+          "gt": 0,
+          "required": true,
+          "within": "design.prior",
+          "when": [{"path":"design.kind","in":["bop2","predictive_monitoring"]}],
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "design.prior.b",
+          "type": "number",
+          "max": 1000,
+          "gt": 0,
+          "required": true,
+          "within": "design.prior",
+          "when": [{"path":"design.kind","in":["bop2","predictive_monitoring"]}],
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "design.objective",
+          "type": "string",
+          "values": ["max_power","min_expected_n"],
+          "default": "max_power",
+          "when": [{"path":"design.kind","in":["bop2","predictive_monitoring"]}],
+          "fieldRole": "defaultable"
+        },
+        {"path":"design.bop2","type":"object","when":[{"path":"design.kind","in":["bop2"]}]},
+        {"path":"design.bop2.lambda","type":"number","gt":0,"lt":1,"within":"design.bop2","when":[{"path":"design.kind","in":["bop2"]}],"fieldRole":"research_fact"},
+        {"path":"design.bop2.gamma","type":"number","max":10,"gt":0,"within":"design.bop2","when":[{"path":"design.kind","in":["bop2"]}],"fieldRole":"research_fact"},
+        {
+          "path": "design.bop2.efficacyEta",
+          "type": "number",
+          "max": 10,
+          "gt": 0,
+          "within": "design.bop2",
+          "when": [{"path":"design.kind","in":["bop2"]}],
+          "fieldRole": "defaultable"
+        },
+        {"path":"design.predictive","type":"object","when":[{"path":"design.kind","in":["predictive_monitoring"]}]},
+        {
+          "path": "design.predictive.final",
+          "type": "number",
+          "gt": 0,
+          "lt": 1,
+          "within": "design.predictive",
+          "when": [{"path":"design.kind","in":["predictive_monitoring"]}],
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "design.predictive.futility",
+          "type": "number",
+          "gt": 0,
+          "lt": 1,
+          "default": 0.05,
+          "within": "design.predictive",
+          "when": [{"path":"design.kind","in":["predictive_monitoring"]}],
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "design.predictive.efficacy",
+          "type": "number",
+          "gt": 0,
+          "lt": 1,
+          "within": "design.predictive",
+          "when": [{"path":"design.kind","in":["predictive_monitoring"]}],
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "design.nTreat",
+          "type": "integer",
+          "min": 2,
+          "max": 600,
+          "unit": "patients",
+          "required": true,
+          "when": [{"path":"design.kind","in":["threshold_calibration"]},{"path":"endpoint.type","notIn":["time_to_event"]}],
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "design.nControl",
+          "type": "integer",
+          "min": 2,
+          "max": 600,
+          "unit": "patients",
+          "required": true,
+          "when": [{"path":"design.kind","in":["threshold_calibration"]},{"path":"endpoint.type","notIn":["time_to_event"]}],
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "design.events",
+          "type": "integer",
+          "min": 2,
+          "max": 100000,
+          "unit": "events",
+          "required": true,
+          "when": [{"path":"design.kind","in":["threshold_calibration"]},{"path":"endpoint.type","in":["time_to_event"]}],
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "design.allocation",
+          "type": "number",
+          "gt": 0,
+          "lt": 1,
+          "default": 0.5,
+          "when": [{"path":"design.kind","in":["threshold_calibration"]},{"path":"endpoint.type","in":["time_to_event"]}],
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "design.margin",
+          "type": "number",
+          "min": -1,
+          "max": 1000,
+          "unit": "the effect the posterior must exceed: a difference, a risk difference, or a hazard ratio below which the treatment is better",
+          "when": [{"path":"design.kind","in":["threshold_calibration"]}],
+          "fieldRole": "defaultable"
+        },
+        {"path":"design.threshold","type":"number","gt":0,"lt":1,"when":[{"path":"design.kind","in":["threshold_calibration"]}],"fieldRole":"defaultable"},
+        {"path":"design.priorTreatment","type":"object","when":[{"path":"design.kind","in":["threshold_calibration"]},{"path":"endpoint.type","in":["binary"]}]},
+        {
+          "path": "design.priorTreatment.a",
+          "type": "number",
+          "max": 1000,
+          "gt": 0,
+          "required": true,
+          "within": "design.priorTreatment",
+          "when": [{"path":"design.kind","in":["threshold_calibration"]},{"path":"endpoint.type","in":["binary"]}],
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "design.priorTreatment.b",
+          "type": "number",
+          "max": 1000,
+          "gt": 0,
+          "required": true,
+          "within": "design.priorTreatment",
+          "when": [{"path":"design.kind","in":["threshold_calibration"]},{"path":"endpoint.type","in":["binary"]}],
+          "fieldRole": "research_fact"
+        },
+        {"path":"design.priorControl","type":"object","when":[{"path":"design.kind","in":["threshold_calibration"]},{"path":"endpoint.type","in":["binary"]}]},
+        {
+          "path": "design.priorControl.a",
+          "type": "number",
+          "max": 1000,
+          "gt": 0,
+          "required": true,
+          "within": "design.priorControl",
+          "when": [{"path":"design.kind","in":["threshold_calibration"]},{"path":"endpoint.type","in":["binary"]}],
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "design.priorControl.b",
+          "type": "number",
+          "max": 1000,
+          "gt": 0,
+          "required": true,
+          "within": "design.priorControl",
+          "when": [{"path":"design.kind","in":["threshold_calibration"]},{"path":"endpoint.type","in":["binary"]}],
+          "fieldRole": "research_fact"
+        },
+        {"path":"design.priorEffect","type":"object","when":[{"path":"design.kind","in":["threshold_calibration"]},{"path":"endpoint.type","notIn":["binary"]}]},
+        {
+          "path": "design.priorEffect.mean",
+          "type": "number",
+          "required": true,
+          "within": "design.priorEffect",
+          "when": [{"path":"design.kind","in":["threshold_calibration"]},{"path":"endpoint.type","notIn":["binary"]}],
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "design.priorEffect.sd",
+          "type": "number",
+          "gt": 0,
+          "required": true,
+          "within": "design.priorEffect",
+          "when": [{"path":"design.kind","in":["threshold_calibration"]},{"path":"endpoint.type","notIn":["binary"]}],
+          "fieldRole": "research_fact"
+        },
+        {"path":"endpoint","type":"object","required":true,"when":[{"path":"design.kind","in":["threshold_calibration"]}]},
+        {
+          "path": "endpoint.type",
+          "type": "string",
+          "values": ["continuous","binary","time_to_event"],
+          "required": true,
+          "when": [{"path":"design.kind","in":["threshold_calibration"]}],
+          "fieldRole": "defaultable"
+        },
+        {"path":"truth","type":"object","required":true},
+        {
+          "path": "truth.nullRate",
+          "type": "number",
+          "gt": 0,
+          "lt": 1,
+          "required": true,
+          "when": [{"path":"design.kind","in":["bop2","predictive_monitoring"]}],
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "truth.alternativeRate",
+          "type": "number",
+          "gt": 0,
+          "lt": 1,
+          "required": true,
+          "when": [{"path":"design.kind","in":["bop2","predictive_monitoring"]}],
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "truth.sd",
+          "type": "number",
+          "gt": 0,
+          "unit": "outcome units",
+          "default": 1,
+          "when": [{"path":"design.kind","in":["threshold_calibration"]},{"path":"endpoint.type","in":["continuous"]}],
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "truth.effect",
+          "type": "number",
+          "required": true,
+          "when": [{"path":"design.kind","in":["threshold_calibration"]},{"path":"endpoint.type","in":["continuous"]}],
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "truth.hazardRatio",
+          "type": "number",
+          "gt": 0,
+          "required": true,
+          "when": [{"path":"design.kind","in":["threshold_calibration"]},{"path":"endpoint.type","in":["time_to_event"]}],
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "truth.controlRate",
+          "type": "number",
+          "gt": 0,
+          "lt": 1,
+          "required": true,
+          "when": [{"path":"design.kind","in":["threshold_calibration"]},{"path":"endpoint.type","in":["binary"]}],
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "truth.treatmentRate",
+          "type": "number",
+          "gt": 0,
+          "lt": 1,
+          "required": true,
+          "when": [{"path":"design.kind","in":["threshold_calibration"]},{"path":"endpoint.type","in":["binary"]}],
+          "fieldRole": "research_fact"
+        },
+        {"path":"analysis","type":"object"},
+        {"path":"analysis.alpha","type":"number","gt":0,"lt":1,"unit":"one-sided level","within":"analysis","fieldRole":"defaultable"},
+        {
+          "path": "analysis.power",
+          "type": "number",
+          "gt": 0,
+          "lt": 1,
+          "within": "analysis",
+          "when": [{"path":"design.kind","in":["bop2","predictive_monitoring"]}],
+          "fieldRole": "defaultable"
+        }
+      ],
+      "rules": [
+        {"kind":"requires","key":"design.bop2.lambda","needs":["design.bop2.gamma"],"when":[{"path":"design.kind","in":["bop2"]}]},
+        {"kind":"requires","key":"design.bop2.gamma","needs":["design.bop2.lambda"],"when":[{"path":"design.kind","in":["bop2"]}]}
+      ],
+      "examples": [
+        {
+          "label": "Bayesian optimal phase II: a look every 10 patients up to 40, response rate 0.1 against 0.3, searched for the largest power at one-sided 0.05; Simon's design is the baseline",
+          "scenario": {"design":{"kind":"bop2","maxN":40,"lookEvery":10},"truth":{"nullRate":0.1,"alternativeRate":0.3},"analysis":{"alpha":0.05,"power":0.8}}
+        },
+        {
+          "label": "the same trial searched for the fewest expected patients under the null among the designs that keep alpha and reach 80% power",
+          "scenario": {
+            "design": {"kind":"bop2","maxN":40,"lookEvery":10,"objective":"min_expected_n"},
+            "truth": {"nullRate":0.1,"alternativeRate":0.3},
+            "analysis": {"alpha":0.05,"power":0.8}
+          }
+        },
+        {
+          "label": "predictive-probability monitoring: stop when the chance of a successful final analysis is below 5%",
+          "scenario": {
+            "design": {"kind":"predictive_monitoring","maxN":40,"lookEvery":10,"predictive":{"futility":0.05}},
+            "truth": {"nullRate":0.1,"alternativeRate":0.3},
+            "analysis": {"alpha":0.05,"power":0.8}
+          }
+        },
+        {
+          "label": "the type I error and power of a posterior-probability success rule (0.975) for a mean difference under a normal prior, and the threshold that gives 0.025",
+          "scenario": {
+            "design": {"kind":"threshold_calibration","nTreat":100,"nControl":100,"threshold":0.975,"priorEffect":{"mean":0.2,"sd":0.3}},
+            "endpoint": {"type":"continuous"},
+            "truth": {"sd":1,"effect":0.4},
+            "analysis": {"alpha":0.025}
+          }
+        },
+        {
+          "label": "the same for a hazard ratio from 200 events (the log hazard ratio under a normal prior)",
+          "scenario": {
+            "design": {"kind":"threshold_calibration","events":200,"margin":1,"priorEffect":{"mean":-0.2,"sd":0.2}},
+            "endpoint": {"type":"time_to_event"},
+            "truth": {"hazardRatio":0.7}
+          }
+        },
+        {
+          "label": "the same for two beta-binomial arms of 60 and a non-inferiority margin of 10 points on the risk difference",
+          "scenario": {"design":{"kind":"threshold_calibration","nTreat":60,"nControl":60,"margin":-0.1},"endpoint":{"type":"binary"},"truth":{"controlRate":0.3,"treatmentRate":0.3}}
         }
       ]
     },

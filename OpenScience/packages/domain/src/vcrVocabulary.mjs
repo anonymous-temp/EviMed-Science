@@ -522,7 +522,7 @@ export const VCR_TAB_LABELS_ZH = Object.freeze({
  */
 export const VCR_RESULT_KIND_TABS = Object.freeze({
   population: 'population', patient_set: 'patients', comparator: 'comparator', trial_scenario: 'trial', design_grid: 'trial',
-  accrual_forecast: 'trial', design_confirmatory: 'trial', matching: 'matching', match_extract: 'matching', evidence_pool: 'data', snapshot_profile: 'data', population_check: 'population',
+  accrual_forecast: 'trial', design_confirmatory: 'trial', design_dose: 'trial', design_bayesian: 'trial', matching: 'matching', match_extract: 'matching', evidence_pool: 'data', snapshot_profile: 'data', population_check: 'population',
   network_meta: 'data', dose_response_meta: 'data', effect_shrinkage: 'data',
 })
 /**
@@ -792,6 +792,21 @@ export const VCR_SPENDING_FUNCTIONS = frozen(['obrien_fleming', 'pocock'])
  * designs `design.analytic` and `design.simulate` take, and a design here is a different question with a different result.
  */
 export const VCR_CONFIRMATORY_DESIGNS = frozen(['futility_group_sequential', 'sample_size_reestimation', 'multi_arm_selection', 'enrichment', 'count_endpoint'])
+/**
+ * The dose-finding designs `design.dose` computes (algorithm round T7, T15, 2026-11-03): the 3+3 rule, BOIN (local boundaries and a
+ * non-informative prior only), the keyboard design, the continual reassessment method, and the exact probability of choosing the right
+ * dose among two or three randomised ones. The first four are simulated on one toxicity curve with the same random numbers.
+ */
+export const VCR_DOSE_DESIGNS = frozen(['three_plus_three', 'boin', 'keyboard', 'crm', 'randomized_selection'])
+/** The designs of `design.dose` that are simulated trials on a toxicity curve (the randomised selection is exact). */
+export const VCR_DOSE_FINDING_DESIGNS = frozen(['three_plus_three', 'boin', 'keyboard', 'crm'])
+/**
+ * The Bayesian designs `design.bayesian` computes without MCMC (algorithm round T8, T10, 2026-11-03): the Bayesian optimal phase II design,
+ * predictive-probability monitoring, and the calibration of a posterior-probability success threshold under a conjugate prior.
+ */
+export const VCR_BAYESIAN_DESIGNS = frozen(['bop2', 'predictive_monitoring', 'threshold_calibration'])
+/** What a phase II Bayesian design is searched for: the largest power among the designs that keep alpha, or the fewest expected patients under the null among those that also reach the power. */
+export const VCR_BAYESIAN_OBJECTIVES = frozen(['max_power', 'min_expected_n'])
 /** The alpha- and beta-spending functions of a confirmatory group-sequential design (the Lan-DeMets O'Brien-Fleming and Pocock types, Hwang-Shih-DeCani and Kim-DeMets with their gamma). */
 export const VCR_CONFIRMATORY_SPENDING = frozen(['obrien_fleming', 'pocock', 'hwang_shih_decani', 'kim_demets'])
 export const VCR_SPENDING_FUNCTION_LABELS_ZH = Object.freeze({ obrien_fleming: "O'Brien-Fleming", pocock: 'Pocock' })
@@ -883,6 +898,8 @@ export const VCR_JOB_KINDS = frozen([
   'network_meta', 'dose_response_meta', 'effect_shrinkage',
   // --- appended (2026-11-03): target-trial emulation from a person-period table: a sequence of trials and clone-censor-weight (algorithm round C3, C4) ---
   'target_trial_emulation',
+  // --- appended (2026-11-03): dose-finding designs and Bayesian designs without MCMC (algorithm round T7, T15, T8, T10) ---
+  'design_dose', 'design_bayesian',
   // --- appended (2026-11-01): the batch reading of patient records for the criteria's facts (remediation plan D4) ---
   'match_extract',
   'forecast_trajectories', 'evaluate_forecast', 'compare_forecasts', 'benchmark_trial_effect',
@@ -904,7 +921,7 @@ export const VCR_JOB_KIND_STEPS = Object.freeze({
   rmst: 'comparator', weighted_cox_comparator: 'comparator', maic_time_to_event_comparator: 'comparator', aipw_comparator: 'comparator',
   covariate_set_comparator: 'comparator', negative_control_comparator: 'comparator', tipping_point: 'comparator',
   prognostic_adjustment_comparator: 'comparator', bias_analysis: 'comparator', stc_comparator: 'comparator', target_trial_emulation: 'comparator',
-  design_analytic: 'trial', design_simulation: 'trial', design_confirmatory: 'trial', design_grid: 'trial', assurance: 'trial', procova: 'trial', accrual_forecast: 'trial',
+  design_analytic: 'trial', design_simulation: 'trial', design_confirmatory: 'trial', design_dose: 'trial', design_bayesian: 'trial', design_grid: 'trial', assurance: 'trial', procova: 'trial', accrual_forecast: 'trial',
   match_criteria: 'matching', match_extract: 'matching',
 })
 export const VCR_JOB_STATES = frozen(['queued', 'running', 'succeeded', 'failed', 'canceled', 'awaiting_budget'])

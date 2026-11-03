@@ -179,6 +179,31 @@ export const NUMERIC_REFERENCES = {
   N79b: { methods: ['comparator.target_trial'], anchors: ['abs(v("risk_difference_pp") - (v("risk_treated_pp") - v("risk_control_pp"))) < 1e-12', 'list(pass = ok_run && est_ok && said && ci_ok && same && cap_ok && far_ok && none_ok && gone_ok,'] },
   N80a: { methods: ['comparator.target_trial'], anchors: ['truth <- .n80_truth()', 'list(pass = abs(z_ccw) < 2.5 && abs(z_naive) > 10 && mean(out[, "naive"]) < truth[["difference"]],'] },
   N80b: { methods: ['comparator.target_trial'], anchors: ['est_ok <- abs(v("risk_difference_pp") - (hand$risks[12, "treated"] - hand$risks[12, "control"])) < 1e-12', 'ok <- identical(r1$status, "succeeded") && est_ok && same && said && far_ok && ne_ok && cap_ok'] },
+  // --- the algorithm round's dose-finding and Bayesian designs (T7, T15, T8, T10, 2026-11-03) ---
+  // design.dose: the decision tables and final doses equal BOIN's, the keyboard package's and dfcrm's; 3+3 equals its exact enumeration and the closed form of Lin and Shih; the operating characteristics equal get.oc, get.oc.kb and crmsim
+  N81a: { methods: ['design.dose'], anchors: ['BOIN::get.boundary(tg, 12, 3, p.saf = phi1, p.tox = phi2, cutoff.eli = cut)$full_boundary_tab', 'BOIN::select.mtd(0.3, N[t, ], Y[t, ])$MTD'] },
+  N81b: { methods: ['design.dose'], anchors: ['Keyboard::get.boundary.kb(s[1], 12, 3, marginL = s[2], marginR = s[2])$full_boundary_tab'] },
+  N81c: { methods: ['design.dose'], anchors: ['ref <- dfcrm::crm(sk, 0.25, tox, lev, var.est = FALSE)', 'dfcrm::getprior(0.05, 0.25, 3, 5)'] },
+  N81d: { methods: ['design.dose'], anchors: ['exact <- .n81_exact_three_plus_three(p)', 'exact = (1 - q)^3 + 3 * q * (1 - q)^5'] },
+  N81e: { methods: ['design.dose'], anchors: ['oc <- BOIN::get.oc(target, p, 10, 3, ntrial = nb, p.saf = 0.18, p.tox = 0.42)', 'cs <- dfcrm::crmsim(p, vcr_crm_skeleton(0.05, target, 1L, K), target, 30, 1, nsim = nc, mcohort = 3, restrict = TRUE, count = FALSE)'] },
+  // design.dose (randomized_selection): an enumeration of every outcome, the two-dose closed form and a simulation
+  N83a: { methods: ['design.dose'], anchors: ['ref <- .n83_brute(n, rates, cut)', 'worst <- max(worst, abs(mine - ref)); checked <- checked + 1L'] },
+  N83b: { methods: ['design.dose'], anchors: ['higher <- sum(outer(ph, pl)[outer(0:n, 0:n, function(h, l) h - l >= cut)])'] },
+  N83c: { methods: ['design.dose'], anchors: ['pick <- ifelse(x3 - xc >= cut, 3L, cand)', 'z <- max(abs(sim - mine) / sqrt(mine * (1 - mine) / draws))'] },
+  // design.bayesian (bop2): BOP2FE's bounds and its own simulation, an enumeration of every response sequence, Simon's published design
+  N84a: { methods: ['design.bayesian'], anchors: ['ref <- tryCatch(BOP2FE::get_boundary_binary(p0, a, b, sizes, lambda = lambda, gamma = gamma, eta = eta, method = "power"), error = function(e) NULL)'] },
+  N84b: { methods: ['design.bayesian'], anchors: ['ref <- .n84_enumerate(p, looks, a, b, 0.2, setup$lambda, setup$gamma, setup$eta)', 'worst <- max(worst, abs(got - want))'] },
+  N84c: { methods: ['design.bayesian'], anchors: ['oc <- BOP2FE::get_boundary_oc_binary(p0, p1, c(10, 10, 10, 10), nsim, lambda = 0.9, gamma = 1, eta = 1, method = "power", seed = 8403)'] },
+  N84d: { methods: ['design.bayesian'], anchors: ['published <- simon$n1 == 10 && simon$r1 == 1 && simon$n == 29 && simon$r == 5 && abs(simon$expectedN0 - 15.0) < 0.05'] },
+  // design.bayesian (predictive_monitoring): the predictive probability by integration, an enumeration, a simulation of the rule
+  N85a: { methods: ['design.bayesian'], anchors: ['ref <- if (need > N - n) 0 else sum(.n85_predictive(x, n, N, a, b, s))'] },
+  N85b: { methods: ['design.bayesian'], anchors: ['ref <- .n85_enumerate(p, looks, 0.2, 0.8, 0.2, setup$theta, setup$futility, setup$efficacy)'] },
+  N85c: { methods: ['design.bayesian'], anchors: ['decision <- lapply(looks[-length(looks)], function(n) vapply(0:n, function(x) {', 'z <- c(abs(n0["rate"] - m0$type_one_error$value) / n0["se_rate"]'] },
+  // design.bayesian (threshold_calibration): RBesT's exact operating characteristics and posterior differences, QUADPACK, and a simulation of the estimate
+  N86a: { methods: ['design.bayesian'], anchors: ['oc <- RBesT::oc2S(RBesT::mixbeta(c(1, setup$pt[1], setup$pt[2])), RBesT::mixbeta(c(1, setup$pc[1], setup$pc[2])), setup$n[1], setup$n[2],'] },
+  N86b: { methods: ['design.bayesian'], anchors: ['ref <- RBesT::pmixdiff(RBesT::mixbeta(c(1, priors[[1]][1] + xt, priors[[1]][2] + nT - xt))', 'worst_int <- max(worst_int, abs(post[xt + 1L, xc + 1L] - exact(xt, xc, nT, nC, priors[[1]], priors[[2]], margin)))'] },
+  N86c: { methods: ['design.bayesian'], anchors: ['oc <- function(c) RBesT::oc2S(RBesT::mixbeta(c(1, 1, 1)), RBesT::mixbeta(c(1, 1, 1)), nT, nC, RBesT::decision2S(c, 0, lower.tail = FALSE))(0.3, 0.3)'] },
+  N86d: { methods: ['design.bayesian'], anchors: ['p_null <- rule(s$null + s$se * z); p_alt <- rule(s$alt + s$se * z)'] },
   N72a: { methods: ['comparator.bias_analysis'], anchors: ['want_limit <- if (lim > 0) back(lim) else if (ratio) 1 else 0', 'abs(rows[[i]]$z - zz) < 1e-12 && abs(rows[[i]]$p - (1 - stats::pnorm(zz))) < 1e-12'] },
   N72b: { methods: ['comparator.bias_analysis'], anchors: ['tip_bin <- function(b, g, p_other) tipr::tip_with_binary(', 'tn <- tipr::tip_rr(1.6, confounder_outcome_effect = 2, verbose = FALSE)$exposure_confounder_effect'] },
   N72c: { methods: ['comparator.bias_analysis'], anchors: ['abs(row1$carrierPrevalence / 0.05 - 9) < 1e-4'] },

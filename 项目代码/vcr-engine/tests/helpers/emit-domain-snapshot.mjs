@@ -72,6 +72,8 @@ const snapshot = {
   spendingFunctions: [...vocab.VCR_SPENDING_FUNCTIONS],
   confirmatoryDesigns: [...vocab.VCR_CONFIRMATORY_DESIGNS],
   confirmatorySpending: [...vocab.VCR_CONFIRMATORY_SPENDING],
+  doseDesigns: [...vocab.VCR_DOSE_DESIGNS],
+  bayesianDesigns: [...vocab.VCR_BAYESIAN_DESIGNS],
   notEstimableRules: [...vocab.VCR_NOT_ESTIMABLE_RULES],
   countKeys: [...vocab.VCR_COUNT_KEYS],
   optionalCountKeys: [...vocab.VCR_OPTIONAL_COUNT_KEYS],

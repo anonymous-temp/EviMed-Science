@@ -94,6 +94,8 @@ vcr_engine_handlers <- function() list(
   "design.analytic" = vcr_job_design_analytic,
   "design.simulate" = vcr_job_design_simulate,
   "design.confirmatory" = vcr_job_design_confirmatory,
+  "design.dose" = vcr_job_design_dose,
+  "design.bayesian" = vcr_job_design_bayesian,
   "comparator.bias_analysis" = vcr_job_bias_analysis,
   "comparator.stc" = vcr_job_stc,
   "comparator.target_trial" = vcr_job_target_trial,
@@ -124,6 +126,10 @@ VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "population_check")
 # --- the confirmatory designs (algorithm round T2-T6, 2026-11-03): rpact behind its adapter, the five designs in their own file ---
 VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "rpact_adapter", "design_confirmatory")
 # --- end confirmatory designs ---
+
+# --- dose-finding designs (T7, T15) and Bayesian designs without MCMC (T8, T10), 2026-11-03: written here, never calling a package ---
+VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "design_dose", "design_bayesian")
+# --- end dose-finding and Bayesian designs ---
 
 # --- quantitative bias analysis of an estimate (C1, C2) and the G-computation simulated treatment comparison (C9), 2026-11-03 ---
 VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "bias_analysis", "stc")

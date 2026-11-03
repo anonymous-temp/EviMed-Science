@@ -58,6 +58,7 @@
 import {
   VCR_CRITERION_STATES, VCR_CRITERION_TYPES, VCR_ENDPOINT_TYPES, VCR_MISSING_REASONS, VCR_PERFORMANCE_MEASURES,
   VCR_CONFIRMATORY_DESIGNS, VCR_CONFIRMATORY_SPENDING, VCR_POOLING_METHODS, VCR_SPENDING_FUNCTIONS, VCR_TRIAL_DESIGNS,
+  VCR_BAYESIAN_DESIGNS, VCR_BAYESIAN_OBJECTIVES, VCR_DOSE_DESIGNS, VCR_DOSE_FINDING_DESIGNS,
 } from './vcrVocabulary.mjs'
 import {
   VCR_ROW_RULE_COLUMN_PATTERN, findExpressionFields, validateNamedRules, validateRowRule,
@@ -407,6 +408,102 @@ const CONFIRMATORY_SCHEMA = object({
     dropoutAnnual: number({ min: 0, lt: 1, default: 0, unit: 'proportion per year' }),
   }), [TIME_TO_EVENT, CONF_KIND('futility_group_sequential', 'sample_size_reestimation')]),
   timeUnit: gated(string({ values: [...VCR_TIME_UNITS], default: VCR_DEFAULT_TIME_UNIT }), [TIME_TO_EVENT, CONF_KIND('futility_group_sequential', 'sample_size_reestimation')]),
+})
+
+/**
+ * A dose-finding design (algorithm round T7, T15, `design.dose` 1.0.0). `design.kind` is the design asked about; `design.compare` lists others
+ * to run on the same toxicity curve with the same random numbers (3+3, BOIN, keyboard, CRM). The per-design settings (`boin`, `keyboard`,
+ * `crm`) are read when that design runs, whether it is the one asked about or a comparison; one for a design that does not run is refused
+ * (`checkDoseSemantics`). A randomised selection among two or three doses is exact and has its own truth (`responseScenarios`).
+ * Everything left out is a default the result lists as an assumption.
+ */
+const DOSE_SELECTION = is('design.kind', 'randomized_selection')
+const DOSE_SIMULATED = isNot('design.kind', 'randomized_selection')
+const DOSE_SCHEMA = object({
+  design: req(object({
+    kind: req(string({ values: [...VCR_DOSE_DESIGNS], badValueCode: 'design_unknown' })),
+    compare: gated(array(string({ values: [...VCR_DOSE_FINDING_DESIGNS] }), { min: 1, max: 3, unique: true }), DOSE_SIMULATED),
+    targetToxicity: gated(number({ min: 0.05, max: 0.6, default: 0.3, unit: 'probability of a dose-limiting toxicity' }), DOSE_SIMULATED),
+    cohortSize: gated(integer({ min: 1, max: 6, default: 3, unit: 'patients' }), DOSE_SIMULATED),
+    maxPatients: gated(integer({ min: 6, max: 200, default: 30, unit: 'patients' }), DOSE_SIMULATED),
+    startDose: gated(integer({ min: 1, max: 10, default: 1 }), DOSE_SIMULATED),
+    boin: gated(object({
+      safeRate: number({ gt: 0, lt: 1, unit: 'toxicity rate deemed safe' }),
+      toxicRate: number({ gt: 0, lt: 1, unit: 'toxicity rate deemed too toxic' }),
+      eliminationCutoff: number({ gt: 0.5, lt: 1, default: 0.95 }),
+    }), DOSE_SIMULATED),
+    keyboard: gated(object({
+      margin: number({ gt: 0, max: 0.2, default: 0.05, unit: 'half the width of the target key' }),
+      eliminationCutoff: number({ gt: 0.5, lt: 1, default: 0.95 }),
+    }), DOSE_SIMULATED),
+    crm: gated(object({
+      skeleton: array(number({ gt: 0, lt: 1 }), { min: 2, max: 10 }),
+      halfwidth: number({ gt: 0, max: 0.2, default: 0.05 }),
+      priorVariance: number({ gt: 0, max: 20, default: 1.34 }),
+      restrictEscalation: boolean({ default: true }),
+    }), DOSE_SIMULATED),
+    // the randomised selection: the higher dose is chosen only when it looks better by at least the margin
+    margin: req(gated(number({ gt: 0, lt: 1, unit: 'response rate difference' }), DOSE_SELECTION)),
+    perArm: gated(integer({ min: 2, max: 2000, unit: 'patients per dose' }), DOSE_SELECTION),
+    maxPerArm: gated(integer({ min: 4, max: 2000, default: 300, unit: 'patients per dose' }), DOSE_SELECTION),
+    targetProbability: gated(number({ gt: 0, lt: 1, default: 0.9 }), DOSE_SELECTION),
+  })),
+  truth: req(object({
+    toxicity: req(gated(array(number({ gt: 0, lt: 1 }), { min: 2, max: 10 }), DOSE_SIMULATED)),
+    responseScenarios: req(gated(array(array(number({ gt: 0, lt: 1 }), { min: 2, max: 3 }), { min: 1, max: 6 }), DOSE_SELECTION)),
+  })),
+})
+
+/**
+ * A Bayesian design without MCMC (algorithm round T8, T10, `design.bayesian` 1.0.0): the phase II designs `bop2` and `predictive_monitoring` for a
+ * single-arm response rate (stated by the null and the alternative rate), and `threshold_calibration` for the success rule
+ * "posterior probability that the effect exceeds a margin is above c" of a two-arm trial under a conjugate prior. All exact.
+ */
+const BAYES_KIND = (/** @type {string[]} */ ...kinds) => is('design.kind', ...kinds)
+const BAYES_PHASE2 = BAYES_KIND('bop2', 'predictive_monitoring')
+const BAYES_CALIBRATION = BAYES_KIND('threshold_calibration')
+const BAYES_BETA = object({ a: req(number({ gt: 0, max: 1000 })), b: req(number({ gt: 0, max: 1000 })) })
+const BAYESIAN_SCHEMA = object({
+  design: req(object({
+    kind: req(string({ values: [...VCR_BAYESIAN_DESIGNS], badValueCode: 'design_unknown' })),
+    // phase II: the largest size, how often to look, the prior of the response rate, what the search is for
+    maxN: req(gated(integer({ min: 10, max: 300, unit: 'patients' }), BAYES_PHASE2)),
+    lookEvery: gated(integer({ min: 1, max: 300, default: 10, unit: 'patients' }), BAYES_PHASE2),
+    prior: gated(BAYES_BETA, BAYES_PHASE2),
+    objective: gated(string({ values: [...VCR_BAYESIAN_OBJECTIVES], default: 'max_power' }), BAYES_PHASE2),
+    bop2: gated(object({
+      lambda: number({ gt: 0, lt: 1 }), gamma: number({ gt: 0, max: 10 }),
+      efficacyEta: number({ gt: 0, max: 10 }),
+    }, { requires: { lambda: ['gamma'], gamma: ['lambda'] } }), BAYES_KIND('bop2')),
+    predictive: gated(object({
+      final: number({ gt: 0, lt: 1 }), futility: number({ gt: 0, lt: 1, default: 0.05 }), efficacy: number({ gt: 0, lt: 1 }),
+    }), BAYES_KIND('predictive_monitoring')),
+    // threshold calibration
+    nTreat: req(gated(integer({ min: 2, max: 600, unit: 'patients' }), [BAYES_CALIBRATION, isNot('endpoint.type', 'time_to_event')])),
+    nControl: req(gated(integer({ min: 2, max: 600, unit: 'patients' }), [BAYES_CALIBRATION, isNot('endpoint.type', 'time_to_event')])),
+    events: req(gated(integer({ min: 2, max: 100000, unit: 'events' }), [BAYES_CALIBRATION, TIME_TO_EVENT])),
+    allocation: gated(number({ ...PROBABILITY, default: 0.5 }), [BAYES_CALIBRATION, TIME_TO_EVENT]),
+    margin: gated(number({ min: -1, max: 1000, unit: 'the effect the posterior must exceed: a difference, a risk difference, or a hazard ratio below which the treatment is better' }), BAYES_CALIBRATION),
+    threshold: gated(number({ gt: 0, lt: 1 }), BAYES_CALIBRATION),
+    priorTreatment: gated(BAYES_BETA, [BAYES_CALIBRATION, BINARY]),
+    priorControl: gated(BAYES_BETA, [BAYES_CALIBRATION, BINARY]),
+    // a normal prior on the effect (a difference of means, or a log hazard ratio); left out, the prior is flat
+    priorEffect: gated(object({ mean: req(number()), sd: req(number({ gt: 0 })) }), [BAYES_CALIBRATION, isNot('endpoint.type', 'binary')]),
+  })),
+  endpoint: req(gated(ENDPOINT(), BAYES_CALIBRATION)),
+  truth: req(object({
+    nullRate: req(gated(number({ ...PROBABILITY }), BAYES_PHASE2)),
+    alternativeRate: req(gated(number({ ...PROBABILITY }), BAYES_PHASE2)),
+    sd: gated(number({ gt: 0, default: 1, unit: 'outcome units' }), [BAYES_CALIBRATION, CONTINUOUS]),
+    effect: req(gated(number(), [BAYES_CALIBRATION, CONTINUOUS])),
+    hazardRatio: req(gated(number({ gt: 0 }), [BAYES_CALIBRATION, TIME_TO_EVENT])),
+    controlRate: req(gated(number({ ...PROBABILITY }), [BAYES_CALIBRATION, BINARY])),
+    treatmentRate: req(gated(number({ ...PROBABILITY }), [BAYES_CALIBRATION, BINARY])),
+  })),
+  analysis: object({
+    alpha: number({ ...PROBABILITY, unit: 'one-sided level' }),
+    power: gated(number({ ...PROBABILITY }), BAYES_PHASE2),
+  }),
 })
 
 const SIMULATE_FIELDS = {
@@ -1132,6 +1229,10 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
   'design.simulate': object({ ...SIMULATE_FIELDS }),
 
   'design.confirmatory': CONFIRMATORY_SCHEMA,
+
+  'design.dose': DOSE_SCHEMA,
+
+  'design.bayesian': BAYESIAN_SCHEMA,
 
   'design.grid': object({
     ...SIMULATE_FIELDS,
@@ -1859,6 +1960,65 @@ function checkConfirmatorySemantics(scenario, path, ctx) {
 }
 
 /**
+ * The coupled fields of a dose-finding design (mirrored by protocol.R): a comparison is with another design, the settings of a design that does
+ * not run are refused (an ignored setting is a silent change), the starting dose and the skeleton fit the curve, and the rates BOIN and the
+ * keyboard design are built around sit on either side of the target.
+ * @param {any} scenario @param {string} path @param {WalkContext} ctx
+ */
+function checkDoseSemantics(scenario, path, ctx) {
+  const bad = (/** @type {string} */ field, /** @type {string} */ detail) => raise(ctx, 'scenario_value_invalid', at(path, field), detail)
+  const design = scenario?.design
+  const kind = design?.kind
+  if (!isObject(design) || !VCR_DOSE_DESIGNS.includes(kind)) return
+  const truth = isObject(scenario?.truth) ? scenario.truth : {}
+  if (kind === 'randomized_selection') {
+    const rows = Array.isArray(truth.responseScenarios) ? truth.responseScenarios.filter(Array.isArray) : []
+    if (rows.length && rows.some((/** @type {any[]} */ row) => row.length !== rows[0].length)) bad('truth.responseScenarios', 'Every scenario states one response rate per dose, the same doses in each.')
+    return
+  }
+  const asked = [kind, ...(Array.isArray(design.compare) ? design.compare : [])]
+  if (Array.isArray(design.compare) && design.compare.includes(kind)) bad('design.compare', 'The design asked about is not also compared with itself.')
+  for (const name of ['boin', 'keyboard', 'crm']) {
+    if (design[name] !== undefined && !asked.includes(name)) bad(`design.${name}`, `Settings for the ${name} design are given, but that design is not one of those asked about.`)
+  }
+  const doses = Array.isArray(truth.toxicity) ? truth.toxicity.length : null
+  if (doses !== null && Number.isInteger(design.startDose) && design.startDose > doses) bad('design.startDose', 'The starting dose is one of the doses on the curve.')
+  if (doses !== null && Array.isArray(design.crm?.skeleton) && design.crm.skeleton.length !== doses) bad('design.crm.skeleton', 'The skeleton has one prior toxicity guess per dose on the curve.')
+  const target = typeof design.targetToxicity === 'number' ? design.targetToxicity : 0.3
+  const safe = design.boin?.safeRate
+  const toxic = design.boin?.toxicRate
+  if ((typeof safe === 'number' && !(safe < target)) || (typeof toxic === 'number' && !(toxic > target))) {
+    bad('design.boin', 'The toxicity rate deemed safe is below the target and the one deemed too toxic above it.')
+  }
+  const margin = design.keyboard?.margin
+  if (typeof margin === 'number' && !(target - margin > 0 && target + margin < 1)) bad('design.keyboard.margin', 'The target key lies inside 0 and 1.')
+}
+
+/**
+ * The coupled fields of a Bayesian design (mirrored by protocol.R): the alternative response rate is above the null rate, the looks fit the
+ * size, a hazard-ratio margin is positive, and the rate a risk-difference margin leads to stays a rate.
+ * @param {any} scenario @param {string} path @param {WalkContext} ctx
+ */
+function checkBayesianSemantics(scenario, path, ctx) {
+  const bad = (/** @type {string} */ field, /** @type {string} */ detail) => raise(ctx, 'scenario_value_invalid', at(path, field), detail)
+  const design = scenario?.design
+  const kind = design?.kind
+  if (!isObject(design) || !VCR_BAYESIAN_DESIGNS.includes(kind)) return
+  const truth = isObject(scenario?.truth) ? scenario.truth : {}
+  if (kind !== 'threshold_calibration') {
+    if (typeof truth.nullRate === 'number' && typeof truth.alternativeRate === 'number' && !(truth.alternativeRate > truth.nullRate)) bad('truth.alternativeRate', 'The alternative response rate is above the null rate.')
+    if (Number.isInteger(design.lookEvery) && Number.isInteger(design.maxN) && design.lookEvery > design.maxN) bad('design.lookEvery', 'The first look comes at or before the largest size.')
+    return
+  }
+  const type = scenario?.endpoint?.type
+  if (type === 'time_to_event' && typeof design.margin === 'number' && !(design.margin > 0)) bad('design.margin', 'A hazard-ratio margin is positive.')
+  if (type === 'binary' && typeof design.margin === 'number' && typeof truth.controlRate === 'number') {
+    const rate = truth.controlRate + design.margin
+    if (!(rate > 0 && rate < 1)) bad('design.margin', 'The control rate plus the margin is a rate strictly between 0 and 1.')
+  }
+}
+
+/**
  * What a non-inferiority margin may be asked of (T1): a comparison of two arms, run by the test the margin is defined for, with the
  * margin on the scale of its endpoint. Mirrored by protocol.R.
  * @param {any} scenario @param {string} path @param {WalkContext} ctx
@@ -2004,6 +2164,8 @@ export function validateScenario(method, scenario, { inputIds = null, path = 'sc
   checkObject(schema, scenario, path, ctx)
   if (method === 'design.simulate' || method === 'design.grid' || method === 'design.analytic') checkDesignSemantics(scenario, path, ctx)
   if (method === 'design.confirmatory') checkConfirmatorySemantics(scenario, path, ctx)
+  if (method === 'design.dose') checkDoseSemantics(scenario, path, ctx)
+  if (method === 'design.bayesian') checkBayesianSemantics(scenario, path, ctx)
   if (method === 'design.analytic' || method === 'design.assurance') checkNoNonProportionalHazards(scenario, path, ctx)
   if (method === 'comparator.maic') checkMaicSemantics(scenario, path, ctx)
   if (method === 'accrual.poisson_gamma') checkAccrualSemantics(scenario, path, ctx)

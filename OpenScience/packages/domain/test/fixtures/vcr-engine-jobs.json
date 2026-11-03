@@ -5129,6 +5129,449 @@
           }
         ]
       }
+    },
+    {
+      "name": "dose finding: BOIN against 3+3, the keyboard design and CRM on one toxicity curve",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_dose",
+        "method": "design.dose",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "design": {
+            "kind": "boin",
+            "compare": [
+              "three_plus_three",
+              "keyboard",
+              "crm"
+            ],
+            "targetToxicity": 0.3,
+            "cohortSize": 3,
+            "maxPatients": 30
+          },
+          "truth": {
+            "toxicity": [
+              0.05,
+              0.1,
+              0.2,
+              0.3,
+              0.45,
+              0.6
+            ]
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "dose finding: settings of the designs that run, a stated skeleton",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_dose",
+        "method": "design.dose",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "design": {
+            "kind": "crm",
+            "compare": [
+              "boin"
+            ],
+            "targetToxicity": 0.25,
+            "startDose": 2,
+            "boin": {
+              "safeRate": 0.15,
+              "toxicRate": 0.35
+            },
+            "crm": {
+              "skeleton": [
+                0.05,
+                0.12,
+                0.25,
+                0.4,
+                0.55,
+                0.7
+              ],
+              "priorVariance": 1.34,
+              "restrictEscalation": false
+            }
+          },
+          "truth": {
+            "toxicity": [
+              0.05,
+              0.1,
+              0.2,
+              0.3,
+              0.45,
+              0.6
+            ]
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "dose finding: a keyboard design with a narrower target key",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_dose",
+        "method": "design.dose",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "design": {
+            "kind": "keyboard",
+            "keyboard": {
+              "margin": 0.03,
+              "eliminationCutoff": 0.9
+            }
+          },
+          "truth": {
+            "toxicity": [
+              0.1,
+              0.25,
+              0.4
+            ]
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "dose selection: three randomised doses, the size searched",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_dose",
+        "method": "design.dose",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "design": {
+            "kind": "randomized_selection",
+            "margin": 0.1,
+            "targetProbability": 0.9,
+            "maxPerArm": 400
+          },
+          "truth": {
+            "responseScenarios": [
+              [
+                0.3,
+                0.3,
+                0.3
+              ],
+              [
+                0.3,
+                0.4,
+                0.5
+              ]
+            ]
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "dose selection: two doses at a stated size",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_dose",
+        "method": "design.dose",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "design": {
+            "kind": "randomized_selection",
+            "margin": 0.1,
+            "perArm": 40
+          },
+          "truth": {
+            "responseScenarios": [
+              [
+                0.3,
+                0.3
+              ],
+              [
+                0.3,
+                0.45
+              ]
+            ]
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Bayesian phase II: BOP2 searched, every 10 patients, against Simon",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_bayesian",
+        "method": "design.bayesian",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "design": {
+            "kind": "bop2",
+            "maxN": 40,
+            "lookEvery": 10
+          },
+          "truth": {
+            "nullRate": 0.1,
+            "alternativeRate": 0.3
+          },
+          "analysis": {
+            "alpha": 0.05,
+            "power": 0.8
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Bayesian phase II: BOP2 with stated parameters, an efficacy stop and a prior",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_bayesian",
+        "method": "design.bayesian",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "design": {
+            "kind": "bop2",
+            "maxN": 40,
+            "lookEvery": 10,
+            "objective": "min_expected_n",
+            "prior": {
+              "a": 0.5,
+              "b": 1.5
+            },
+            "bop2": {
+              "lambda": 0.9,
+              "gamma": 1,
+              "efficacyEta": 1
+            }
+          },
+          "truth": {
+            "nullRate": 0.1,
+            "alternativeRate": 0.3
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Bayesian phase II: predictive-probability monitoring",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_bayesian",
+        "method": "design.bayesian",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "design": {
+            "kind": "predictive_monitoring",
+            "maxN": 40,
+            "lookEvery": 10,
+            "predictive": {
+              "futility": 0.05,
+              "efficacy": 0.99
+            }
+          },
+          "truth": {
+            "nullRate": 0.1,
+            "alternativeRate": 0.3
+          },
+          "analysis": {
+            "alpha": 0.05,
+            "power": 0.8
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Bayesian threshold: a difference of means under a normal prior, a stated threshold",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_bayesian",
+        "method": "design.bayesian",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "design": {
+            "kind": "threshold_calibration",
+            "nTreat": 100,
+            "nControl": 100,
+            "threshold": 0.975,
+            "priorEffect": {
+              "mean": 0.2,
+              "sd": 0.3
+            }
+          },
+          "endpoint": {
+            "type": "continuous"
+          },
+          "truth": {
+            "sd": 1,
+            "effect": 0.4
+          },
+          "analysis": {
+            "alpha": 0.025
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Bayesian threshold: a hazard ratio from the events",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_bayesian",
+        "method": "design.bayesian",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "design": {
+            "kind": "threshold_calibration",
+            "events": 200,
+            "allocation": 0.5,
+            "margin": 1,
+            "priorEffect": {
+              "mean": -0.2,
+              "sd": 0.2
+            }
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "truth": {
+            "hazardRatio": 0.7
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Bayesian threshold: two beta-binomial arms, a non-inferiority margin",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_bayesian",
+        "method": "design.bayesian",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "design": {
+            "kind": "threshold_calibration",
+            "nTreat": 60,
+            "nControl": 60,
+            "margin": -0.1,
+            "priorTreatment": {
+              "a": 1,
+              "b": 1
+            },
+            "priorControl": {
+              "a": 2,
+              "b": 3
+            }
+          },
+          "endpoint": {
+            "type": "binary"
+          },
+          "truth": {
+            "controlRate": 0.3,
+            "treatmentRate": 0.3
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      }
     }
   ],
   "invalid": [
@@ -22760,6 +23203,998 @@
       },
       "expected": [
         "input_source_not_individual@inputs[0].valueSource"
+      ]
+    },
+    {
+      "name": "dose finding: the design asked about is also compared with itself",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_dose",
+        "method": "design.dose",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "design": {
+            "kind": "boin",
+            "compare": [
+              "boin",
+              "crm"
+            ],
+            "targetToxicity": 0.3,
+            "cohortSize": 3,
+            "maxPatients": 30
+          },
+          "truth": {
+            "toxicity": [
+              0.05,
+              0.1,
+              0.2,
+              0.3,
+              0.45,
+              0.6
+            ]
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.design.compare"
+      ]
+    },
+    {
+      "name": "dose finding: BOIN settings without BOIN among the designs",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_dose",
+        "method": "design.dose",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "design": {
+            "kind": "crm",
+            "boin": {
+              "safeRate": 0.15
+            }
+          },
+          "truth": {
+            "toxicity": [
+              0.05,
+              0.1,
+              0.2,
+              0.3,
+              0.45,
+              0.6
+            ]
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.design.boin"
+      ]
+    },
+    {
+      "name": "dose finding: a starting dose beyond the curve",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_dose",
+        "method": "design.dose",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "design": {
+            "kind": "boin",
+            "compare": [
+              "three_plus_three",
+              "keyboard",
+              "crm"
+            ],
+            "targetToxicity": 0.3,
+            "cohortSize": 3,
+            "maxPatients": 30,
+            "startDose": 7
+          },
+          "truth": {
+            "toxicity": [
+              0.05,
+              0.1,
+              0.2,
+              0.3,
+              0.45,
+              0.6
+            ]
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.design.startDose"
+      ]
+    },
+    {
+      "name": "dose finding: a skeleton that does not match the curve",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_dose",
+        "method": "design.dose",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "design": {
+            "kind": "crm",
+            "compare": [
+              "boin"
+            ],
+            "targetToxicity": 0.25,
+            "startDose": 2,
+            "boin": {
+              "safeRate": 0.15,
+              "toxicRate": 0.35
+            },
+            "crm": {
+              "skeleton": [
+                0.1,
+                0.2,
+                0.3
+              ],
+              "priorVariance": 1.34,
+              "restrictEscalation": false
+            }
+          },
+          "truth": {
+            "toxicity": [
+              0.05,
+              0.1,
+              0.2,
+              0.3,
+              0.45,
+              0.6
+            ]
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.design.crm.skeleton"
+      ]
+    },
+    {
+      "name": "dose finding: BOIN rates on the wrong side of the target",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_dose",
+        "method": "design.dose",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "design": {
+            "kind": "crm",
+            "compare": [
+              "boin"
+            ],
+            "targetToxicity": 0.25,
+            "startDose": 2,
+            "boin": {
+              "safeRate": 0.3,
+              "toxicRate": 0.35
+            },
+            "crm": {
+              "skeleton": [
+                0.05,
+                0.12,
+                0.25,
+                0.4,
+                0.55,
+                0.7
+              ],
+              "priorVariance": 1.34,
+              "restrictEscalation": false
+            }
+          },
+          "truth": {
+            "toxicity": [
+              0.05,
+              0.1,
+              0.2,
+              0.3,
+              0.45,
+              0.6
+            ]
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.design.boin"
+      ]
+    },
+    {
+      "name": "dose finding: a keyboard key that leaves 0 to 1",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_dose",
+        "method": "design.dose",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "design": {
+            "kind": "keyboard",
+            "keyboard": {
+              "margin": 0.2,
+              "eliminationCutoff": 0.9
+            },
+            "targetToxicity": 0.1
+          },
+          "truth": {
+            "toxicity": [
+              0.1,
+              0.25,
+              0.4
+            ]
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.design.keyboard.margin"
+      ]
+    },
+    {
+      "name": "dose finding: no toxicity curve",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_dose",
+        "method": "design.dose",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "design": {
+            "kind": "boin",
+            "compare": [
+              "three_plus_three",
+              "keyboard",
+              "crm"
+            ],
+            "targetToxicity": 0.3,
+            "cohortSize": 3,
+            "maxPatients": 30
+          },
+          "truth": {}
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_missing@scenario.truth.toxicity"
+      ]
+    },
+    {
+      "name": "dose finding: a toxicity of exactly one",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_dose",
+        "method": "design.dose",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "design": {
+            "kind": "boin",
+            "compare": [
+              "three_plus_three",
+              "keyboard",
+              "crm"
+            ],
+            "targetToxicity": 0.3,
+            "cohortSize": 3,
+            "maxPatients": 30
+          },
+          "truth": {
+            "toxicity": [
+              0.1,
+              0.5,
+              1
+            ]
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.truth.toxicity[2]"
+      ]
+    },
+    {
+      "name": "dose finding: a design this build does not have",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_dose",
+        "method": "design.dose",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "design": {
+            "kind": "mtpi",
+            "compare": [
+              "three_plus_three",
+              "keyboard",
+              "crm"
+            ],
+            "targetToxicity": 0.3,
+            "cohortSize": 3,
+            "maxPatients": 30
+          },
+          "truth": {
+            "toxicity": [
+              0.05,
+              0.1,
+              0.2,
+              0.3,
+              0.45,
+              0.6
+            ]
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "design_unknown@scenario.design.kind"
+      ]
+    },
+    {
+      "name": "dose finding: a key the engine does not read",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_dose",
+        "method": "design.dose",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "design": {
+            "kind": "boin",
+            "compare": [
+              "three_plus_three",
+              "keyboard",
+              "crm"
+            ],
+            "targetToxicity": 0.3,
+            "cohortSize": 3,
+            "maxPatients": 30,
+            "interimLook": 2
+          },
+          "truth": {
+            "toxicity": [
+              0.05,
+              0.1,
+              0.2,
+              0.3,
+              0.45,
+              0.6
+            ]
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_unknown@scenario.design.interimLook"
+      ]
+    },
+    {
+      "name": "dose selection: no margin",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_dose",
+        "method": "design.dose",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "design": {
+            "kind": "randomized_selection",
+            "targetProbability": 0.9,
+            "maxPerArm": 400
+          },
+          "truth": {
+            "responseScenarios": [
+              [
+                0.3,
+                0.3,
+                0.3
+              ],
+              [
+                0.3,
+                0.4,
+                0.5
+              ]
+            ]
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_missing@scenario.design.margin"
+      ]
+    },
+    {
+      "name": "dose selection: scenarios with different numbers of doses",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_dose",
+        "method": "design.dose",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "design": {
+            "kind": "randomized_selection",
+            "margin": 0.1,
+            "targetProbability": 0.9,
+            "maxPerArm": 400
+          },
+          "truth": {
+            "responseScenarios": [
+              [
+                0.3,
+                0.3
+              ],
+              [
+                0.3,
+                0.4,
+                0.5
+              ]
+            ]
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.truth.responseScenarios"
+      ]
+    },
+    {
+      "name": "dose selection: a toxicity curve for a selection",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_dose",
+        "method": "design.dose",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "design": {
+            "kind": "randomized_selection",
+            "margin": 0.1,
+            "targetProbability": 0.9,
+            "maxPerArm": 400
+          },
+          "truth": {
+            "responseScenarios": [
+              [
+                0.3,
+                0.3,
+                0.3
+              ],
+              [
+                0.3,
+                0.4,
+                0.5
+              ]
+            ],
+            "toxicity": [
+              0.1,
+              0.2
+            ]
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_unknown@scenario.truth.toxicity"
+      ]
+    },
+    {
+      "name": "Bayesian phase II: no largest size",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_bayesian",
+        "method": "design.bayesian",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "design": {
+            "kind": "bop2",
+            "lookEvery": 10
+          },
+          "truth": {
+            "nullRate": 0.1,
+            "alternativeRate": 0.3
+          },
+          "analysis": {
+            "alpha": 0.05,
+            "power": 0.8
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_missing@scenario.design.maxN"
+      ]
+    },
+    {
+      "name": "Bayesian phase II: an alternative below the null",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_bayesian",
+        "method": "design.bayesian",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "design": {
+            "kind": "bop2",
+            "maxN": 40,
+            "lookEvery": 10
+          },
+          "truth": {
+            "nullRate": 0.1,
+            "alternativeRate": 0.05
+          },
+          "analysis": {
+            "alpha": 0.05,
+            "power": 0.8
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.truth.alternativeRate"
+      ]
+    },
+    {
+      "name": "Bayesian phase II: the first look beyond the size",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_bayesian",
+        "method": "design.bayesian",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "design": {
+            "kind": "bop2",
+            "maxN": 40,
+            "lookEvery": 60
+          },
+          "truth": {
+            "nullRate": 0.1,
+            "alternativeRate": 0.3
+          },
+          "analysis": {
+            "alpha": 0.05,
+            "power": 0.8
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.design.lookEvery"
+      ]
+    },
+    {
+      "name": "Bayesian phase II: lambda without gamma",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_bayesian",
+        "method": "design.bayesian",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "design": {
+            "kind": "bop2",
+            "maxN": 40,
+            "lookEvery": 10,
+            "objective": "min_expected_n",
+            "prior": {
+              "a": 0.5,
+              "b": 1.5
+            },
+            "bop2": {
+              "lambda": 0.9,
+              "efficacyEta": 1
+            }
+          },
+          "truth": {
+            "nullRate": 0.1,
+            "alternativeRate": 0.3
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_missing@scenario.design.bop2.gamma"
+      ]
+    },
+    {
+      "name": "Bayesian phase II: the predictive settings of another design",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_bayesian",
+        "method": "design.bayesian",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "design": {
+            "kind": "bop2",
+            "maxN": 40,
+            "lookEvery": 10,
+            "predictive": {
+              "futility": 0.1
+            }
+          },
+          "truth": {
+            "nullRate": 0.1,
+            "alternativeRate": 0.3
+          },
+          "analysis": {
+            "alpha": 0.05,
+            "power": 0.8
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_unknown@scenario.design.predictive"
+      ]
+    },
+    {
+      "name": "Bayesian phase II: an endpoint it does not take",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_bayesian",
+        "method": "design.bayesian",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "design": {
+            "kind": "bop2",
+            "maxN": 40,
+            "lookEvery": 10
+          },
+          "truth": {
+            "nullRate": 0.1,
+            "alternativeRate": 0.3
+          },
+          "analysis": {
+            "alpha": 0.05,
+            "power": 0.8
+          },
+          "endpoint": {
+            "type": "binary"
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_unknown@scenario.endpoint"
+      ]
+    },
+    {
+      "name": "Bayesian threshold: a hazard-ratio margin of zero",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_bayesian",
+        "method": "design.bayesian",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "design": {
+            "kind": "threshold_calibration",
+            "events": 200,
+            "allocation": 0.5,
+            "margin": 0,
+            "priorEffect": {
+              "mean": -0.2,
+              "sd": 0.2
+            }
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "truth": {
+            "hazardRatio": 0.7
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.design.margin"
+      ]
+    },
+    {
+      "name": "Bayesian threshold: a margin that pushes the rate out of 0 to 1",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_bayesian",
+        "method": "design.bayesian",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "design": {
+            "kind": "threshold_calibration",
+            "nTreat": 60,
+            "nControl": 60,
+            "margin": -0.4,
+            "priorTreatment": {
+              "a": 1,
+              "b": 1
+            },
+            "priorControl": {
+              "a": 2,
+              "b": 3
+            }
+          },
+          "endpoint": {
+            "type": "binary"
+          },
+          "truth": {
+            "controlRate": 0.3,
+            "treatmentRate": 0.3
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.design.margin"
+      ]
+    },
+    {
+      "name": "Bayesian threshold: patients for a time-to-event endpoint",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_bayesian",
+        "method": "design.bayesian",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "design": {
+            "kind": "threshold_calibration",
+            "events": 200,
+            "allocation": 0.5,
+            "margin": 1,
+            "priorEffect": {
+              "mean": -0.2,
+              "sd": 0.2
+            },
+            "nTreat": 100
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "truth": {
+            "hazardRatio": 0.7
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_unknown@scenario.design.nTreat"
+      ]
+    },
+    {
+      "name": "Bayesian threshold: a normal prior for a binary endpoint",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_bayesian",
+        "method": "design.bayesian",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "design": {
+            "kind": "threshold_calibration",
+            "nTreat": 60,
+            "nControl": 60,
+            "margin": -0.1,
+            "priorTreatment": {
+              "a": 1,
+              "b": 1
+            },
+            "priorControl": {
+              "a": 2,
+              "b": 3
+            },
+            "priorEffect": {
+              "mean": 0,
+              "sd": 1
+            }
+          },
+          "endpoint": {
+            "type": "binary"
+          },
+          "truth": {
+            "controlRate": 0.3,
+            "treatmentRate": 0.3
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_unknown@scenario.design.priorEffect"
       ]
     }
   ],

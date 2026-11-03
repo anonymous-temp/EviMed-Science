@@ -358,6 +358,9 @@ vcr_test_handler_jobs <- function() {
                              designs = list(list(nTreat = 30, nControl = 30), list(nTreat = 60, nControl = 60)), truths = list(list(effect = 0.4))), NULL, 300L),
     # the confirmatory designs: the futility boundary is the cheap one (an analytic design); the simulated kinds have their own cases (N65-N68)
     list("design.confirmatory", list(design = list(kind = "futility_group_sequential", informationRates = c(0.5, 1)), endpoint = list(type = "continuous"), truth = list(plannedEffect = 0.4, sd = 1), analysis = list(alpha = 0.025, power = 0.9)), NULL),
+    # dose-finding and Bayesian designs: small trials, the exact phase II search at a small size (the simulated curves have their own cases, N81-N83)
+    list("design.dose", list(design = list(kind = "boin", compare = list("three_plus_three"), maxPatients = 12), truth = list(toxicity = c(0.1, 0.3, 0.5))), NULL, 200L),
+    list("design.bayesian", list(design = list(kind = "bop2", maxN = 20, lookEvery = 10), truth = list(nullRate = 0.1, alternativeRate = 0.4), analysis = list(alpha = 0.1, power = 0.8)), NULL),
     # quantitative bias analysis (a stated estimate; the probabilistic part simulates, at the domain's floor of draws) and the G-computation simulated treatment comparison
     list("comparator.bias_analysis", list(scale = "hazard_ratio", estimate = 0.7, lower = 0.5, upper = 0.98, shiftedNull = list(biases = list(1.1, 1.25)),
                                           probabilistic = list(bias = list(family = "uniform", min = 1, max = 1.3))), NULL, 20000L),

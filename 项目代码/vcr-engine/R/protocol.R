@@ -916,6 +916,59 @@ vcr_pattern_match <- function(pattern, x) {
   invisible(NULL)
 }
 
+# The coupled fields of a dose-finding design (design.dose): a comparison is with another design, the settings of a design that does not run are
+# refused, the starting dose and the skeleton fit the curve, and the rates BOIN and the keyboard design are built around sit on either side of the
+# target. Mirrors checkDoseSemantics.
+.vcrp_check_dose <- function(sc, path, ctx) {
+  design <- .vcrp_get(sc, "design"); kind <- .vcrp_get(design, "kind")
+  if (!.vcrp_named(design) || !.vcrp_chr(kind) || !(kind %in% unlist(vcr_domain()$doseDesigns))) return(invisible(NULL))
+  bad <- function(field, detail) ctx$raise("scenario_value_invalid", .vcrp_at(path, field), detail)
+  truth <- .vcrp_get(sc, "truth"); if (!.vcrp_named(truth)) truth <- list()
+  if (identical(kind, "randomized_selection")) {
+    rows <- Filter(is.list, as.list(.vcrp_items(.vcrp_get(truth, "responseScenarios"))))
+    if (length(rows) && any(vapply(rows, length, integer(1)) != length(rows[[1L]]))) bad("truth.responseScenarios", "Every scenario states one response rate per dose, the same doses in each.")
+    return(invisible(NULL))
+  }
+  compare <- .vcrp_items(.vcrp_get(design, "compare"))
+  asked <- c(kind, if (!is.null(compare)) unlist(compare))
+  if (kind %in% unlist(compare)) bad("design.compare", "The design asked about is not also compared with itself.")
+  for (name in c("boin", "keyboard", "crm")) {
+    if (.vcrp_has(design, name) && !(name %in% asked)) bad(paste0("design.", name), sprintf("Settings for the %s design are given, but that design is not one of those asked about.", name))
+  }
+  tox <- .vcrp_items(.vcrp_get(truth, "toxicity")); doses <- if (is.null(tox)) NULL else length(tox)
+  if (!is.null(doses) && .vcrp_int(.vcrp_get(design, "startDose")) && design[["startDose"]] > doses) bad("design.startDose", "The starting dose is one of the doses on the curve.")
+  skel <- .vcrp_items(.vcrp_get(.vcrp_get(design, "crm"), "skeleton"))
+  if (!is.null(doses) && !is.null(skel) && length(skel) != doses) bad("design.crm.skeleton", "The skeleton has one prior toxicity guess per dose on the curve.")
+  target <- if (.vcrp_num(.vcrp_get(design, "targetToxicity"))) design[["targetToxicity"]] else 0.3
+  safe <- .vcrp_get(.vcrp_get(design, "boin"), "safeRate"); toxic <- .vcrp_get(.vcrp_get(design, "boin"), "toxicRate")
+  if ((.vcrp_num(safe) && !(safe < target)) || (.vcrp_num(toxic) && !(toxic > target))) bad("design.boin", "The toxicity rate deemed safe is below the target and the one deemed too toxic above it.")
+  margin <- .vcrp_get(.vcrp_get(design, "keyboard"), "margin")
+  if (.vcrp_num(margin) && !(target - margin > 0 && target + margin < 1)) bad("design.keyboard.margin", "The target key lies inside 0 and 1.")
+  invisible(NULL)
+}
+
+# The coupled fields of a Bayesian design (design.bayesian): the alternative response rate is above the null rate, the looks fit the size, a
+# hazard-ratio margin is positive, and the rate a risk-difference margin leads to stays a rate. Mirrors checkBayesianSemantics.
+.vcrp_check_bayesian <- function(sc, path, ctx) {
+  design <- .vcrp_get(sc, "design"); kind <- .vcrp_get(design, "kind")
+  if (!.vcrp_named(design) || !.vcrp_chr(kind) || !(kind %in% unlist(vcr_domain()$bayesianDesigns))) return(invisible(NULL))
+  bad <- function(field, detail) ctx$raise("scenario_value_invalid", .vcrp_at(path, field), detail)
+  truth <- .vcrp_get(sc, "truth"); if (!.vcrp_named(truth)) truth <- list()
+  if (!identical(kind, "threshold_calibration")) {
+    if (.vcrp_num(truth[["nullRate"]]) && .vcrp_num(truth[["alternativeRate"]]) && !(truth[["alternativeRate"]] > truth[["nullRate"]])) bad("truth.alternativeRate", "The alternative response rate is above the null rate.")
+    if (.vcrp_int(design[["lookEvery"]]) && .vcrp_int(design[["maxN"]]) && design[["lookEvery"]] > design[["maxN"]]) bad("design.lookEvery", "The first look comes at or before the largest size.")
+    return(invisible(NULL))
+  }
+  type <- .vcrp_get(.vcrp_get(sc, "endpoint"), "type")
+  margin <- .vcrp_get(design, "margin")
+  if (identical(type, "time_to_event") && .vcrp_num(margin) && !(margin > 0)) bad("design.margin", "A hazard-ratio margin is positive.")
+  if (identical(type, "binary") && .vcrp_num(margin) && .vcrp_num(truth[["controlRate"]])) {
+    rate <- truth[["controlRate"]] + margin
+    if (!(rate > 0 && rate < 1)) bad("design.margin", "The control rate plus the margin is a rate strictly between 0 and 1.")
+  }
+  invisible(NULL)
+}
+
 # The aggregate outcome of an unanchored MAIC is on the outcome's own scale -- the link is applied to it, and to its standard error by the
 # delta method -- so it has to be inside the link's domain: a proportion strictly between 0 and 1 for the logit link, a positive mean or
 # rate for the log link. Mirrors checkMaicSemantics in the domain.
@@ -957,6 +1010,8 @@ vcr_validate_scenario <- function(method, scenario, input_ids = NULL, path = "sc
   .vcrp_check_object(schema, scenario, path, ctx)
   if (method %in% c("design.simulate","design.grid","design.analytic")) .vcrp_check_design_semantics(scenario,path,ctx)
   if (identical(method,"design.confirmatory")) .vcrp_check_confirmatory(scenario,path,ctx)
+  if (identical(method,"design.dose")) .vcrp_check_dose(scenario,path,ctx)
+  if (identical(method,"design.bayesian")) .vcrp_check_bayesian(scenario,path,ctx)
   if (method %in% c("design.analytic","design.assurance")) .vcrp_check_no_nph(scenario,path,ctx)
   if (identical(method, "comparator.maic")) .vcrp_check_maic_semantics(scenario, path, ctx)
   if (identical(method, "accrual.poisson_gamma")) .vcrp_check_accrual_semantics(scenario, path, ctx)
