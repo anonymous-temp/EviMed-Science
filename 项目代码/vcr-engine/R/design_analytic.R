@@ -179,7 +179,7 @@ vcr_hypothesis <- function(sc) {
 vcr_hypothesis_note <- function(h) list(
   kind = h$kind, margin = h$margin,
   scale = switch(h$endpoint, continuous = "mean_difference", binary = "risk_difference", time_to_event = "hazard_ratio", NA_character_),
-  nullValue = if (identical(h$endpoint, "time_to_event")) h$nullHr else h$null,
+  nullValue = if (identical(h$endpoint, "time_to_event")) h$nullHr else h[["null"]],
   test = switch(h$endpoint, continuous = "t_test_against_margin", binary = "farrington_manning_score", time_to_event = "logrank_score_at_margin", NA_character_))
 
 # --- a design is sized for an effect ---------------------------------------
@@ -210,11 +210,11 @@ vcr_analytic_effect_guard <- function(kind, endpoint, truth, hypothesis = NULL) 
   if (!is.null(hypothesis)) {
     # the effect that leaves nothing to resolve is the margin itself
     on_margin <- switch(hypothesis$endpoint,
-      continuous = { e <- vcr_scalar(truth$effect, NULL); !is.null(e) && tiny(e - hypothesis$null) },
+      continuous = { e <- vcr_scalar(truth$effect, NULL); !is.null(e) && tiny(e - hypothesis[["null"]]) },
       time_to_event = { h <- vcr_scalar(truth$hazardRatio, NULL); !is.null(h) && h > 0 && tiny(log(h / hypothesis$nullHr)) },
       binary = { p0 <- vcr_scalar(truth[["controlRate"]], NULL)
         p1 <- vcr_binary_treatment_rate(p0, vcr_scalar(truth[["treatmentRate"]], NULL), vcr_scalar(truth$riskDifference, NULL), vcr_scalar(truth$oddsRatio, NULL))
-        tiny(p1 - p0 - hypothesis$null) },
+        tiny(p1 - p0 - hypothesis[["null"]]) },
       FALSE)
     if (on_margin) vcr_abort("design_effect_null", "scenario.hypothesis.margin", paste(
       "The effect the design is meant to show equals the non-inferiority margin, so there is no sample size to compute:",
@@ -721,7 +721,7 @@ vcr_tte_patients <- function(hr, dist, accrual_duration, followup, dropout_hazar
 vcr_analytic_sweep <- function(sc, e, alpha, power, alloc, sided, inflation = 1, integer_allocation = TRUE, gs = NULL) {
   tr <- sc$truth
   hyp <- vcr_hypothesis(sc)
-  nl <- if (is.null(hyp)) 0 else hyp$null      # the null difference of a non-inferiority test (T1); 0 for superiority
+  nl <- if (is.null(hyp)) 0 else hyp[["null"]]      # the null difference of a non-inferiority test (T1); 0 for superiority
   nh <- if (is.null(hyp)) 1 else hyp$nullHr    # and its null hazard ratio
   wiggle <- c(0.8, 1.2)
   rows <- list()

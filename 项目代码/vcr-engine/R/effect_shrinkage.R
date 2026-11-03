@@ -36,7 +36,7 @@
 #' The mixture of the signal-to-noise ratio (van Zwet et al. 2023, Table 1), from the domain's table.
 vcr_shrink_mixture <- function() {
   m <- vcr_domain()$vanZwet2023$mixture
-  list(pi = as.numeric(unlist(m$proportion)), tau = as.numeric(unlist(m$sdSnr)))
+  list(pi = as.numeric(unlist(m[["proportion"]])), tau = as.numeric(unlist(m$sdSnr)))
 }
 
 #' The posterior of the signal-to-noise ratio given a z statistic: component weights, means and variances.

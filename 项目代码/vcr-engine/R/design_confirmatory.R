@@ -44,7 +44,7 @@ VCR_CONFIRMATORY_NULL_RATE_RATIO <- 1
 
 .vcr_conf_common <- function(sc) {
   d <- sc$design; an <- sc$analysis %||% list(); tr <- sc$truth %||% list()
-  spending <- as.character(d$spending %||% "obrien_fleming")
+  spending <- as.character(d[["spending"]] %||% "obrien_fleming")
   list(kind = as.character(d$kind), endpoint = as.character(sc$endpoint$type %||% ""),
        alpha = vcr_scalar(an$alpha, 0.025), power = vcr_scalar(an$power, 0.9), allocation = vcr_scalar(d$allocation, 0.5),
        rates = vcr_num(d$informationRates), spending = spending, gamma = vcr_scalar(d$spendingGamma, NULL),
@@ -64,7 +64,7 @@ VCR_CONFIRMATORY_NULL_RATE_RATIO <- 1
   d <- sc$design; an <- sc$analysis %||% list(); tr <- sc$truth %||% list()
   if (is.null(an$alpha)) p <- .vcr_conf_assume(p, "analysis.alpha", p$alpha)
   if (is.null(an$power) && !identical(p$kind, "multi_arm_selection") && !identical(p$kind, "enrichment")) p <- .vcr_conf_assume(p, "analysis.power", p$power)
-  if (is.null(d$spending)) p <- .vcr_conf_assume(p, "design.spending", p$spending)
+  if (is.null(d[["spending"]])) p <- .vcr_conf_assume(p, "design.spending", p[["spending"]])
   if (is.null(d$allocation) && p$kind %in% c("futility_group_sequential", "sample_size_reestimation", "count_endpoint")) p <- .vcr_conf_assume(p, "design.allocation", p$allocation)
   if (identical(p$endpoint, "continuous") && is.null(tr$sd)) p <- .vcr_conf_assume(p, "truth.sd", p$sd)
   p
@@ -143,13 +143,13 @@ VCR_CONFIRMATORY_NULL_RATE_RATIO <- 1
   fut <- d$futility %||% list()
   if (is.null(d$futility)) p <- .vcr_conf_assume(p, "design.futility", "beta spending, O'Brien-Fleming type, not binding")
   else {
-    if (is.null(fut$spending)) p <- .vcr_conf_assume(p, "design.futility.spending", "obrien_fleming")
+    if (is.null(fut[["spending"]])) p <- .vcr_conf_assume(p, "design.futility.spending", "obrien_fleming")
     if (is.null(fut$binding)) p <- .vcr_conf_assume(p, "design.futility.binding", FALSE)
   }
-  futility <- list(spending = as.character(fut$spending %||% "obrien_fleming"), gamma = vcr_scalar(fut$gamma, NULL), binding = isTRUE(fut$binding))
+  futility <- list(spending = as.character(fut[["spending"]] %||% "obrien_fleming"), gamma = vcr_scalar(fut$gamma, NULL), binding = isTRUE(fut$binding))
   effect <- vcr_scalar(tr$plannedEffect)
   k <- length(p$rates)
-  gs <- vcr_rpact_design(p$rates, p$alpha, p$power, p$spending, p$gamma, futility)
+  gs <- vcr_rpact_design(p$rates, p$alpha, p$power, p[["spending"]], p$gamma, futility)
   op <- vcr_rpact_operating(gs)
   size <- vcr_rpact_sample_size(p$endpoint, gs, effect, p$alpha, p$power, p$allocation, p$sd, p$control_rate, p$control_median)
   # the fixed design it is read against: the engine's own closed form, not rpact's
@@ -240,7 +240,7 @@ VCR_CONFIRMATORY_NULL_RATE_RATIO <- 1
   effects <- c(if (!has_null) null_value, asked)
   if (!has_null) p <- .vcr_conf_assume(p, "truth.effects", null_value, basis = "added: the null, to show the type I error")
   # the group-sequential design the same looks make (efficacy only), and the fixed one; both sized for the planned effect
-  gs <- vcr_rpact_design(p$rates, p$alpha, p$power, p$spending, p$gamma, NULL)
+  gs <- vcr_rpact_design(p$rates, p$alpha, p$power, p[["spending"]], p$gamma, NULL)
   gs_size <- vcr_rpact_sample_size(p$endpoint, gs, planned_effect, p$alpha, p$power, p$allocation, p$sd, p$control_rate, p$control_median)
   fx_size <- vcr_rpact_sample_size(p$endpoint, NULL, planned_effect, p$alpha, p$power, p$allocation, p$sd, p$control_rate, p$control_median)
   plan_total <- if (!is.null(d$plannedSize)) vcr_scalar(d$plannedSize) else .vcr_conf_ceiling(gs_size$max)
@@ -254,7 +254,7 @@ VCR_CONFIRMATORY_NULL_RATE_RATIO <- 1
     as.integer(worst)
   }
   accrual <- if (events) list(duration = ctx$duration, dropoutAnnual = vcr_scalar(sc$accrual$dropoutAnnual, 0), perYear = ctx$perYear, maxSubjects = max_subjects)
-  inv <- vcr_rpact_inverse_normal(p$rates, p$alpha, p$spending, p$gamma)
+  inv <- vcr_rpact_inverse_normal(p$rates, p$alpha, p[["spending"]], p$gamma)
   is_null <- abs(effects - null_value) < 1e-12
   iters <- .vcr_conf_iterations_planned(job, NULL, NULL, is_null)
   batches <- vcr_rpact_batches(function(take, seed, s) vcr_rpact_sim_reestimation(p$endpoint, inv, effects[s], plan, cap, cp, p$allocation, take, seed,
@@ -331,7 +331,7 @@ VCR_CONFIRMATORY_NULL_RATE_RATIO <- 1
   has_null <- any(vapply(scenarios, function(e) all(abs(e - null_value) < 1e-12), logical(1)))
   if (!has_null) { scenarios <- c(list(rep(null_value, arms)), scenarios); p <- .vcr_conf_assume(p, "truth.effectScenarios", if (events) "all arms at a hazard ratio of 1" else "all arms at no effect", basis = "added: the global null, to show the type I error") }
   is_null <- vapply(scenarios, function(e) all(abs(e - null_value) < 1e-12), logical(1))
-  inv <- vcr_rpact_inverse_normal(p$rates, p$alpha, p$spending, p$gamma)
+  inv <- vcr_rpact_inverse_normal(p$rates, p$alpha, p[["spending"]], p$gamma)
   iters <- .vcr_conf_iterations_planned(job, NULL, NULL, is_null)
   batches <- vcr_rpact_batches(function(take, seed, s) vcr_rpact_sim_multiarm(p$endpoint, inv, scenarios[[s]], planned, selection, intersection, take, seed,
                                  sd = p$sd, control_rate = p$control_rate),
@@ -407,7 +407,7 @@ VCR_CONFIRMATORY_NULL_RATE_RATIO <- 1
   has_null <- any(vapply(scenarios, function(e) all(abs(e - null_value) < 1e-12), logical(1)))
   if (!has_null) { scenarios <- c(list(c(subset = null_value, rest = null_value)), scenarios); p <- .vcr_conf_assume(p, "truth.subsetEffects", if (events) "a hazard ratio of 1 in either group" else "no effect in either group", basis = "added: the null, to show the type I error") }
   is_null <- vapply(scenarios, function(e) all(abs(e - null_value) < 1e-12), logical(1))
-  inv <- vcr_rpact_inverse_normal(p$rates, p$alpha, p$spending, p$gamma)
+  inv <- vcr_rpact_inverse_normal(p$rates, p$alpha, p[["spending"]], p$gamma)
   iters <- .vcr_conf_iterations_planned(job, NULL, NULL, is_null)
   batches <- vcr_rpact_batches(function(take, seed, s) vcr_rpact_sim_enrichment(p$endpoint, inv, scenarios[[s]][["subset"]], scenarios[[s]][["rest"]], prevalence, planned,
                                  selection, intersection, take, seed, sd = p$sd, control_rate = p$control_rate),
@@ -461,7 +461,7 @@ VCR_CONFIRMATORY_NULL_RATE_RATIO <- 1
   d <- sc$design; tr <- sc$truth
   exposure <- vcr_scalar(tr$exposureTime, 1)
   if (is.null(tr$exposureTime)) p <- .vcr_conf_assume(p, "truth.exposureTime", exposure)
-  gs <- if (length(p$rates)) vcr_rpact_design(p$rates, p$alpha, p$power, p$spending, p$gamma, NULL) else NULL
+  gs <- if (length(p$rates)) vcr_rpact_design(p$rates, p$alpha, p$power, p[["spending"]], p$gamma, NULL) else NULL
   args <- list(rate_ratio = vcr_scalar(tr$rateRatio), control_rate = vcr_scalar(tr$controlEventRate), overdispersion = vcr_scalar(tr$overdispersion),
                exposure = exposure, alpha = p$alpha, power = p$power, allocation = p$allocation)
   fixed <- do.call(vcr_rpact_counts, c(list(NULL), args))

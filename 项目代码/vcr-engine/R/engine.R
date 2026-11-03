@@ -1778,7 +1778,7 @@ vcr_job_design_analytic <- function(job, ...) {
   tr <- sc$truth
   # A closed-form size needs an effect to size for; a null one is refused by name here, never as a non-finite measure below
   hyp <- vcr_hypothesis(sc)   # 1.4.0: a non-inferiority margin moves the null every formula below is measured from
-  nl <- if (is.null(hyp)) 0 else hyp$null
+  nl <- if (is.null(hyp)) 0 else hyp[["null"]]
   nh <- if (is.null(hyp)) 1 else hyp$nullHr
   vcr_analytic_effect_guard(kind, e, tr, hyp)
   if(identical(kind,"single_arm")) {
@@ -1801,7 +1801,7 @@ vcr_job_design_analytic <- function(job, ...) {
   add <- function(name, value, ...) measures[[length(measures) + 1L]] <<- vcr_measure(name, value, source = "calculated", ...)
   gs <- NULL; inflation <- 1
   if (identical(kind, "group_sequential")) {
-    gs <- vcr_group_sequential(vcr_num(d$informationRates), alpha / sided, as.character(d$spending %||% "obrien_fleming"))
+    gs <- vcr_group_sequential(vcr_num(d$informationRates), alpha / sided, as.character(d[["spending"]] %||% "obrien_fleming"))
     for (k in seq_along(gs$criticalValues)) {
       add(sprintf("boundary_%d", k), gs$criticalValues[k])
       add(sprintf("cumulative_alpha_%d", k), gs$cumulativeAlphaSpent[k])
@@ -1809,7 +1809,7 @@ vcr_job_design_analytic <- function(job, ...) {
     inflation <- vcr_gs_inflation(gs, power)
     diag$inflationFactor <- inflation
     diag$informationRates <- gs$informationRates
-    diag$spending <- gs$spending
+    diag$spending <- gs[["spending"]]
     fixed <- stats::qnorm(1 - alpha / sided) + stats::qnorm(power)
     h1 <- vcr_group_sequential_power(gs, sqrt(inflation) * fixed)
     h0 <- vcr_group_sequential_power(gs, 0)

@@ -120,7 +120,7 @@ vcr_job_stc <- function(job, output_dir = NULL, ...) {
   latent <- if (is.null(stated_cor)) {
     rho <- suppressWarnings(stats::cor(X, method = "spearman"))
     if (anyNA(rho)) rho <- diag(length(covs))   # a constant column has no rank correlation: independence for it
-    vcr_copula_correlation(rho, "spearman")$correlation
+    vcr_copula_correlation(rho, "spearman")[["correlation"]]
   } else vcr_correlation_matrix(stated_cor, length(covs))
   size <- as.integer(vcr_scalar(sc$size, 10000L))
   set.seed(job$seed, kind = VCR_RNG_KIND)

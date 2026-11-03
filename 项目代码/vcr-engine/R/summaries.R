@@ -167,7 +167,7 @@ vcr_power_curve <- function(scenario, alpha, sided) {
   if (is.null(n1) || is.null(n0)) return(NULL)
   m <- seq(0, 1.6, by = 0.1)
   hyp <- vcr_hypothesis(scenario)
-  nl <- if (is.null(hyp)) 0 else hyp$null
+  nl <- if (is.null(hyp)) 0 else hyp[["null"]]
   nh <- if (is.null(hyp)) 1 else hyp$nullHr
   if (identical(e, "continuous")) {
     eff <- vcr_scalar(tr$effect, NULL); if (is.null(eff) || eff == nl) return(NULL)

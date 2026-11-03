@@ -258,10 +258,10 @@ vcr_scenario_runner <- function(scenario, extras = list()) {
   n0 <- vcr_scalar(design$nControl, n1)
   gs <- identical(design$kind, "group_sequential")
   hyp <- vcr_hypothesis(scenario)     # 1.4.0: a non-inferiority test is run against its margin
-  nl <- if (is.null(hyp)) 0 else hyp$null
+  nl <- if (is.null(hyp)) 0 else hyp[["null"]]
   nh <- if (is.null(hyp)) 1 else hyp$nullHr
   gs_design <- if (gs) vcr_group_sequential(vcr_num(design$informationRates), alpha / sided,
-                                            design$spending %||% "obrien_fleming") else NULL
+                                            design[["spending"]] %||% "obrien_fleming") else NULL
   acc <- scenario$accrual
   tu <- vcr_time_unit(scenario)
   # a deterministic calendar length, when the scenario states an accrual
@@ -677,7 +677,7 @@ vcr_analytic_check <- function(scenario, measures) {
   n1 <- vcr_scalar(design$nTreat, NA_real_); n0 <- vcr_scalar(design$nControl, n1)
   fixed <- identical(design$kind %||% "two_arm_fixed", "two_arm_fixed")
   hyp <- vcr_hypothesis(scenario)
-  nl <- if (is.null(hyp)) 0 else hyp$null
+  nl <- if (is.null(hyp)) 0 else hyp[["null"]]
   nh <- if (is.null(hyp)) 1 else hyp$nullHr
   method <- scenario$analysis$method %||% NULL
   if (identical(endpoint, "continuous") && fixed && !identical(method, "ancova")) {
@@ -854,7 +854,7 @@ vcr_maxcombo_strong_law <- function(sc) {
 
 vcr_maxcombo_strong_null <- function(job, sc, cancel_file = NULL) {
   law <- vcr_maxcombo_strong_law(sc)
-  breaks <- law$breaks; harm <- law$ratios[1]; basis <- law$basis
+  breaks <- law$breaks; harm <- law$ratios[1]; basis <- law[["basis"]]
   sc2 <- sc
   sc2$truth[["hazardRatio"]] <- NULL; sc2$truth[["null"]] <- NULL
   sc2$truth$treatmentHazardRatios <- list(breaks = breaks, ratios = c(harm, 1))

@@ -80,7 +80,7 @@ vcr_rpact_design <- function(rates, alpha, power, spending = "obrien_fleming", g
                  typeOfDesign = unname(.VCR_RPACT_ALPHA_TYPE[[spending]]))
     if (!is.null(gamma)) args$gammaA <- gamma
     if (!is.null(futility)) {
-      args$typeBetaSpending <- unname(.VCR_RPACT_BETA_TYPE[[futility$spending]])
+      args$typeBetaSpending <- unname(.VCR_RPACT_BETA_TYPE[[futility[["spending"]]]])
       if (!is.null(futility$gamma)) args$gammaB <- futility$gamma
       args$bindingFutility <- isTRUE(futility$binding)
     }
