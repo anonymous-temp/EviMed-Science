@@ -9,12 +9,13 @@
 //       revived | retried | revive_failed    a goal taken up again, or set again because its first turn came back with nothing
 //       finished | waiting | interrupted     what a goal with no more rounds came to
 //       noted_sources                        a running round was told what was connected meanwhile
+//       held_pause                           a round LoopX started on a paused goal was stopped
 //       observe_failed | review_failed | tick_failed   the bookkeeping itself failed; the goal is untouched
 
 export const RESEARCH_GOAL_EVENTS = Object.freeze([
   "paused_no_progress", "paused_budget", "paused_person", "resumed_person",
   "revived", "retried", "revive_failed",
-  "finished", "waiting", "interrupted", "noted_sources",
+  "finished", "waiting", "interrupted", "noted_sources", "held_pause",
   "observe_failed", "review_failed", "tick_failed",
 ]);
 

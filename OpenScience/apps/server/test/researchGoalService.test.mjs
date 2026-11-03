@@ -263,6 +263,35 @@ test("a round LoopX starts after a pause is stopped and does not count as the go
   } finally { await w.close(); }
 });
 
+test("rounds too short to be seen running are stopped too: a round that began after the pause is itself the sign, and only while the driver is still trying", async () => {
+  const stopped = { read: { result: { kind: "present", snapshot: { goalId: "g", loopxAgentId: "a", goalActivation: "stopped", agentStatus: "idle", progress: {} } } } };
+  const w = await world({ runs: [setting(), round(1)], bar: stopped });
+  try {
+    w.state.now = T0;
+    await w.goals.noteBarAction(w.project, "s", "pause");
+    // A round the ledger only ever saw finished, thirteen seconds long.
+    const brief = round(2, { startedAt: iso(T0 + 20_000), finishedAt: iso(T0 + 33_000) });
+    w.state.runs = [setting(), round(1), brief];
+    w.state.now = T0 + 40_000;
+    await w.goals.tick();
+    assert.deepEqual(w.calls.cancel, ["c2"], "the kernel's turn is stopped through the session, which needs no live record");
+    assert.equal(w.docs.get("goal-s").payload.status, "paused");
+
+    // Nothing new for a while: nothing is trying, so nothing is stopped.
+    w.calls.cancel.length = 0;
+    w.state.now = T0 + 300_000;
+    await w.goals.tick();
+    assert.equal(w.calls.cancel.length, 0);
+
+    // A person's own turn after the pause is theirs.
+    const mine = { ...round(3), id: "p1", automated: false, effectiveRouteReason: "default", status: "running", finishedAt: null, startedAt: iso(T0 + 310_000) };
+    w.state.runs = [setting(), round(1), brief, mine];
+    w.state.now = T0 + 320_000;
+    await w.goals.tick();
+    assert.equal(w.calls.cancel.length, 0);
+  } finally { await w.close(); }
+});
+
 test("a goal someone started on the bar is not held: the bar's word is asked before a round is stopped, and a person's message takes a paused goal up", async () => {
   const w = await world({ runs: [setting(), round(1)], bar: { read: { result: { kind: "present", snapshot: { goalId: "g", loopxAgentId: "a", goalActivation: "active", agentStatus: "running", progress: {} } } } } });
   try {

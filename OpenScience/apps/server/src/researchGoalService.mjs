@@ -32,6 +32,8 @@ const SOURCE_DIRECTORY = "knowledge-base";
 /** How many names of newly connected files one note carries, and how many names a goal remembers. */
 const NOTE_NAMES = 5;
 const KNOWN_SOURCES = 500;
+/** How long after a round of LoopX's that began after a pause its driver is taken to be still trying: well past its 18-second cycle, and no longer. */
+const LATE_ROUND_WINDOW_MS = 120_000;
 /** What a goal that has been taken up again is told. It reads as the platform's, because it is. */
 const RESUME_TEXT = "请接着做这项研究：上一轮被中断了。先看已有的产出，只做没做完的部分，不要从头重做。";
 const PERSON_RESUME_TEXT = "继续这项研究。先看已有的产出，只做没做完的部分。";
@@ -381,14 +383,17 @@ export class ResearchGoals {
 
   /**
    * What holds a paused goal. A round that was going when the pause came is let finish. But a pause can leave a round LoopX cannot close, because
-   * a stopped goal may not spend, and its driver then starts a round every half a minute to close it, for ever (the walk of 2026-11-03: five
-   * rounds in three minutes saying the goal is paused); and a pause the bar did not confirm has nothing holding it at all. Stopping such a round
-   * ends the driver's turn until someone starts the goal, so it costs one short round and is not a loop of its own.
+   * a stopped goal may not spend, and its driver then starts a round every 18 seconds to close it, for ever (drill D02, 2026-11-03: 80 rounds in
+   * 25 minutes saying the goal is paused); and a pause the bar did not confirm has nothing holding it at all. Those rounds last 13 seconds, too
+   * short to be seen running on a 30-second pass, so a round of LoopX's that began after the pause is itself the sign, and the kernel's turn
+   * is stopped whether the ledger has it yet or not. A stopped turn ends the driver's trying until someone starts the goal.
    */
   async #enforcePause(/** @type {any} */ project, /** @type {string} */ sessionId, /** @type {any} */ payload, /** @type {readonly any[]} */ rounds) {
-    const live = rounds.find(isLive);
-    if (live && !isGoalContinuation(live)) return;
-    if (live && (payload.pauseUnconfirmed || Date.parse(live.startedAt ?? 0) > Date.parse(payload.statusAt ?? 0))) {
+    const last = rounds.at(-1);
+    if (!isGoalContinuation(last)) return;
+    const late = Date.parse(last.startedAt ?? 0) > Date.parse(payload.statusAt ?? 0);
+    const recent = isLive(last) || this.now().getTime() - endOf(last) < LATE_ROUND_WINDOW_MS;
+    if (recent && (late || (payload.pauseUnconfirmed && isLive(last)))) {
       // Unless someone started it on the bar and the news did not reach here.
       if (!payload.pauseUnconfirmed) {
         const read = await this.#readBar(project, sessionId);
@@ -397,7 +402,8 @@ export class ResearchGoals {
           return;
         }
       }
-      await this.cancelRound(project, live).catch(() => {});
+      recordResearchGoalEvent("held_pause");
+      await this.cancelRound(project, last).catch(() => {});
     }
     if (payload.pauseUnconfirmed && await this.#pauseOnBar(project, sessionId)) await this.#update(project, sessionId, (current) => ({ ...current, pauseUnconfirmed: false }));
   }
