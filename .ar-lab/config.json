@@ -1,6 +1,6 @@
 {
   "sourceRef": "3970e4f8f052fd286a4d4de4de93ebe2d95cf4cd",
-  "patchRef": "af74358746b944c6acc6ada58e1cbfee434af187",
+  "patchRef": "bbf2d0b9529188f15ec370b16f1e17376ee42db4",
   "imageRunId": 41463065673,
   "imageArtifact": "evimed-core-release-3970e4f8f052fd286a4d4de4de93ebe2d95cf4cd",
   "jobs": [
@@ -14,33 +14,9 @@
     },
     {
       "key": "pause",
-      "drills": "D30,D31,D34",
+      "drills": "D30,D31,D02",
       "parallel": "1",
       "capCny": 6,
-      "maxTasks": "",
-      "walk": ""
-    },
-    {
-      "key": "ctrl",
-      "drills": "D02,D21,D22,D23",
-      "parallel": "1",
-      "capCny": 8,
-      "maxTasks": "",
-      "walk": ""
-    },
-    {
-      "key": "kill",
-      "drills": "D03,D04",
-      "parallel": "1",
-      "capCny": 5,
-      "maxTasks": "",
-      "walk": ""
-    },
-    {
-      "key": "rel",
-      "drills": "D05,D06",
-      "parallel": "",
-      "capCny": 5,
       "maxTasks": "",
       "walk": ""
     }

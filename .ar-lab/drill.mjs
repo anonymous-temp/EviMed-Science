@@ -320,8 +320,21 @@ async function pageWalk(drill) {
   for (const [width, height] of [[1280, 720], [390, 844]]) {
     await step(`fit-${width}`, async () => { await page.setViewportSize({ width, height }); await sleep(2500); await shot(`04-fit-${width}`); return fit(); });
   }
+  await step("fit-390-fresh", async () => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.locator('section[aria-label="当前研究"]').waitFor({ timeout: 60_000 });
+    await openConversation();
+    await sleep(3000);
+    await shot("04-fit-390-fresh");
+    return fit();
+  });
   await page.setViewportSize({ width: 1440, height: 900 });
   await step("bar-pause", async () => {
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.locator('section[aria-label="当前研究"]').waitFor({ timeout: 60_000 });
+    await openConversation();
+    for (let i = 0; i < 60 && !(await bar()).present; i += 1) await sleep(1000);
     const section = frame().locator("section[aria-busy]").first();
     const button = section.getByRole("button").first();
     const label = await button.innerText();
@@ -337,6 +350,13 @@ async function pageWalk(drill) {
     }
     await shot("05-bar-after-pause");
     return { label, settledMs: Date.now() - t, sawError: error, ...last };
+  });
+  await step("pause-holds", async () => {
+    const paused = Date.now();
+    await watch(drill, person, { ms: 4 * 60_000, label: "after the bar's pause" });
+    await person.goalStates();
+    const after = person.roundsOf(set.session).filter((run) => Date.parse(run.startedAt) > paused);
+    return { roundsAfter: after.map((run) => [run.status, run.canceledBy ?? null, run.observedToolCalls ?? null]), state: person.stateOf(set.session) };
   });
   await step("page-catches-up", async () => {
     await page.reload({ waitUntil: "domcontentloaded" });
