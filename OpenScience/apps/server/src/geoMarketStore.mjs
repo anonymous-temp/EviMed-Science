@@ -10,6 +10,8 @@ export const ARTICLE_LIVE_INDEX = "geo_orders_live_article_key";
 
 /** Amounts closer than a cent are equal. */
 export const EPSILON_CNY = 0.01;
+// A decision must either see the full order set or refuse new spending.
+export const GEO_MARKET_DECISION_ORDERS_MAX = 10_000;
 
 const round2 = (/** @type {number} */ value) => Math.round(value * 100) / 100;
 
@@ -701,6 +703,30 @@ export class GeoMarketStore {
       runId: version.run_id, onlineUpdateNeeded: false };
   }
 
+  /** Resolve a bounded batch against each order's own immutable pin. */
+  async getOrderArticles(orders) {
+    if (orders.length > GEO_MARKET_STORE_LIMITS.listMax) throw storeError("Too many articles in one lookup.");
+    if (!orders.length) return [];
+    const articles = new Map((await this.getArticles(orders.map(order => order.articleId).filter(Boolean))).map(article => [String(article.id), article]));
+    const pinned = orders.filter(order => order.articleId && order.articleResultVersionId);
+    const versions = pinned.length ? (await this.#query(`SELECT v.* FROM evimed_geo.article_versions v
+      JOIN unnest($1::text[],$2::text[],$3::text[]) AS wanted(geo_id,article_id,version_id)
+        ON v.geo_project_id=wanted.geo_id AND v.article_id=wanted.article_id AND v.result_version_id=wanted.version_id`,
+    [pinned.map(order => String(order.geoProjectId)), pinned.map(order => String(order.articleId)), pinned.map(order => String(order.articleResultVersionId))])).rows : [];
+    const key = (geo, article, version) => `${geo}\u0000${article}\u0000${version}`;
+    const byVersion = new Map(versions.map(row => [key(row.geo_project_id,row.article_id,row.result_version_id), row]));
+    return orders.map(order => {
+      const article=articles.get(String(order.articleId));
+      if (!article || article.geoProjectId !== order.geoProjectId) return null;
+      if (!order.articleResultVersionId) return article.currentResultVersionId ? null : article;
+      const version=byVersion.get(key(order.geoProjectId,order.articleId,order.articleResultVersionId));
+      if (!version || version.digest !== order.articleDigest) return null;
+      return { ...article, ...reviewOfVersion(article, version), id: article.id, isControl: article.isControl,
+        currentResultVersionId: version.result_version_id, contentSha256: version.digest, path: version.path,
+        runId: version.run_id, onlineUpdateNeeded: false };
+    });
+  }
+
   /**
    * Move an article forward (placed, published); never backward. A paid placement records its label (广告 or 商业合作) on the
    * article, and a later move keeps the one that is there.
@@ -974,6 +1000,28 @@ export class GeoMarketStore {
   async listOrders(filter) {
     const limit = assertLimit(filter.limit, GEO_MARKET_STORE_LIMITS.listMax);
     const offset = assertOffset(filter.offset ?? 0);
+    return this.#selectOrders(filter, limit, offset);
+  }
+
+  /** Complete, single-statement order input for a new placement decision. */
+  async listDecisionOrders(filter) {
+    const rows = await this.#selectOrders(filter, GEO_MARKET_DECISION_ORDERS_MAX + 1, 0);
+    if (rows.length > GEO_MARKET_DECISION_ORDERS_MAX) throw new HttpError(422, 'geo_spine_incomplete', 'The complete market order input exceeds its limit. Contact an administrator before retrying.');
+    return rows;
+  }
+
+  /** Select only due reserved orders, so recent reservations cannot starve recovery. */
+  async listRecoverableReserved({ sendingBefore, idleBefore, limit }) {
+    assertLimit(limit, GEO_MARKET_STORE_LIMITS.listMax);
+    const result=await this.#query(`SELECT * FROM (${ORDER_SELECT} WHERE o.state='reserved') candidate
+      WHERE (candidate.sent_at IS NOT NULL AND (candidate.state_at IS NULL OR candidate.sent_at >= candidate.state_at) AND candidate.sent_at < $1::timestamptz)
+        OR ((candidate.sent_at IS NULL OR (candidate.state_at IS NOT NULL AND candidate.sent_at < candidate.state_at)) AND candidate.state_at < $2::timestamptz)
+      ORDER BY coalesce(candidate.sent_at,candidate.state_at),candidate.id LIMIT $3`,[assertAt(sendingBefore),assertAt(idleBefore),limit]);
+    return result.rows.map(mapOrder);
+  }
+
+  /** @param {any} filter @param {number} limit @param {number} offset */
+  async #selectOrders(filter, limit, offset) {
     for (const state of filter.states ?? []) assertOneOf(state, ORDER_STATES, "order state");
     const where = [];
     const values = [];
@@ -1032,7 +1080,7 @@ export class GeoMarketStore {
    */
   async platformFlowsSince(since) {
     const at = assertAt(since);
-    const max = GEO_MARKET_STORE_LIMITS.flowsMax;
+    const max = GEO_MARKET_STORE_LIMITS.flowsMax + 1;
     const [charges, refunds, topups, adjustments] = await Promise.all([
       this.#query(`SELECT o.id, o.price_cny, e.at FROM evimed_geo.order_events e JOIN evimed_geo.orders o ON o.id = e.order_id
         WHERE e.to_state = 'submitted' AND e.from_state IS DISTINCT FROM 'submitted' AND e.at > $1 ORDER BY e.at LIMIT $2`, [at, max]),
@@ -1043,6 +1091,9 @@ export class GeoMarketStore {
       this.#query(`SELECT id, amount_cny, created_at FROM evimed_geo.ledger
         WHERE kind = 'adjustment' AND geo_project_id IS NULL AND order_id IS NULL AND created_at > $1 ORDER BY created_at LIMIT $2`, [at, max]),
     ]);
+    if ([charges, refunds, topups, adjustments].some(result => result.rows.length > GEO_MARKET_STORE_LIMITS.flowsMax)) {
+      throw new HttpError(422, 'geo_spine_incomplete', 'The complete market balance input exceeds its limit. Contact an administrator before retrying.');
+    }
     return {
       charges: charges.rows.map((row) => ({ orderId: row.id, amountCny: Number(row.price_cny ?? 0), at: iso(row.at) })),
       refunds: refunds.rows.map((row) => ({ orderId: row.order_id, amountCny: Number(row.detail?.amountCny ?? 0), at: iso(row.at) })),
@@ -1104,6 +1155,14 @@ export class GeoMarketStore {
     const result = await this.#query(`SELECT * FROM evimed_geo.topups WHERE ($1::text IS NULL OR status = $1)
       ORDER BY requested_at DESC, id LIMIT $2`, [status ?? null, limit]);
     return result.rows.map(mapTopup);
+  }
+
+  /** All pending top-ups needed to attribute a balance change, or an explicit refusal. */
+  async listDecisionTopups() {
+    const rows=(await this.#query(`SELECT * FROM evimed_geo.topups WHERE status='requested' ORDER BY requested_at DESC,id LIMIT $1`,
+      [GEO_MARKET_DECISION_ORDERS_MAX + 1])).rows;
+    if (rows.length > GEO_MARKET_DECISION_ORDERS_MAX) throw new HttpError(422, 'geo_spine_incomplete', 'The complete top-up input exceeds its limit. Contact an administrator before retrying.');
+    return rows.map(mapTopup);
   }
 
   /** @param {string} id */

@@ -335,17 +335,6 @@ async function listAllBudgetedProjects(store, { activeOnly = true } = {}) {
   return projects;
 }
 
-/** @param {any} store @param {Record<string, any>} filter @param {number} [max] */
-async function listAllOrders(store, filter, max = 5_000) {
-  const rows = [];
-  for (let offset = 0; offset < max; offset += 500) {
-    const page = await store.listOrders({ ...filter, limit: 500, offset });
-    rows.push(...page);
-    if (page.length < 500) break;
-  }
-  return rows;
-}
-
 /**
  * Move an order, refusing a move the table does not allow (a programming
  * error, not a runtime condition). `null` when another writer moved it first.
@@ -854,7 +843,7 @@ export async function tickCatalogue(deps) {
 
 /** @param {ReturnType<typeof context>} ctx */
 async function blockedOutlets(ctx) {
-  const unknown = await ctx.store.listOrders({ states: ["unknown"], limit: 500 });
+  const unknown = await ctx.store.listDecisionOrders({ states: ["unknown"] });
   return new Set(unknown.map((order) => mediaKey(order.mediaType, order.resourceId)));
 }
 
@@ -881,7 +870,7 @@ function sourceFor(sources, media) {
  */
 async function domainUsage(ctx, geoProjectId, mediaByKey) {
   const since = new Date(ctx.now().getTime() - MARKET_RULES.sameDomainWindowDays * DAY).toISOString();
-  const orders = await listAllOrders(ctx.store, { geoProjectId, states: [...DOMAIN_CAP_STATES], createdSince: since });
+  const orders = await ctx.store.listDecisionOrders({ geoProjectId, states: [...DOMAIN_CAP_STATES], createdSince: since });
   const missing = orders.filter((order) => !mediaByKey.has(mediaKey(order.mediaType, order.resourceId)));
   for (const mediaType of MEDIA_TYPES) {
     const ids = missing.filter((order) => order.mediaType === mediaType).map((order) => order.resourceId);
@@ -953,10 +942,10 @@ async function planProject(ctx, project, candidates, blocked, counts, choices) {
   const articles = await ctx.store.listPlaceableArticles(project.id, 200, { withoutOrderIn: LIVE_STATES });
   if (!articles.length) return;
   const { usage, recent, hard, sources, outcomes } = await rankingFacts(ctx, project, candidates);
-  const articleOrders = await listAllOrders(ctx.store, { geoProjectId: project.id, articleIds: articles.map((article) => article.id) }, 2_000);
+  const articleOrders = await ctx.store.listDecisionOrders({ geoProjectId: project.id, articleIds: articles.map((article) => article.id) });
   const money = projectMoney(project, await ctx.store.ledgerSums({ geoProjectId: project.id }));
   // What the plans already made hold back from the budget is every planned order of the project, not those of the articles listed above.
-  const plannedReserve = (await listAllOrders(ctx.store, { geoProjectId: project.id, states: ["planned"] }, 2_000))
+  const plannedReserve = (await ctx.store.listDecisionOrders({ geoProjectId: project.id, states: ["planned"] }))
     .reduce((total, order) => total + (order.reserveCny ?? 0), 0);
   let room = round2((money.availableCny ?? 0) - plannedReserve);
   const plan = ctx.store.latestPlacementPlan ? await ctx.store.latestPlacementPlan(project.id) : null;
@@ -1120,12 +1109,35 @@ export async function previewOutlets(deps, { project, groups, candidates, choice
  * @param {{ skippedArticleIds: Set<string> }} choices a plan for an article a person set aside is withdrawn: nothing is held for it
  */
 async function withdrawStalePlans(ctx, project, candidatesByKey, counts, choices) {
-  const planned = await listAllOrders(ctx.store, { geoProjectId: project.id, states: ["planned"] }, 2_000);
+  const planned = await ctx.store.listDecisionOrders({ geoProjectId: project.id, states: ["planned"] });
   if (!planned.length) return;
-  const articles = new Map((await ctx.store.getArticles(planned.map((order) => order.articleId))).map((article) => [article.id, article]));
+  // The ranking catalogue is a bounded sample. An existing plan outside that
+  // sample must be checked by its actual media key before it is withdrawn.
+  for (const mediaType of MEDIA_TYPES) {
+    const ids = [...new Set(planned.filter(order => order.mediaType === mediaType && !candidatesByKey.has(mediaKey(order.mediaType, order.resourceId)))
+      .map(order => String(order.resourceId)))];
+    for (let offset = 0; offset < ids.length; offset += 1000) {
+      for (const media of await ctx.store.getMediaRows(mediaType, ids.slice(offset, offset + 1000))) {
+        if (media.available && !media.blacklisted && media.priceCny != null && media.priceCny <= MARKET_RULES.autoSelectMaxPriceCny) {
+          candidatesByKey.set(mediaKey(media.mediaType, media.resourceId), media);
+        }
+      }
+    }
+  }
+  const articles = new Map();
+  for (let offset = 0; offset < planned.length; offset += 500) {
+    const page=planned.slice(offset, offset + 500);
+    if (ctx.store.getOrderArticles) {
+      const rows=await ctx.store.getOrderArticles(page);
+      page.forEach((order,index)=>articles.set(order.id,rows[index] ?? null));
+    } else {
+      const rows=new Map((await ctx.store.getArticles(page.map(order=>order.articleId))).map(article=>[article.id,article]));
+      for(const order of page) articles.set(order.id,rows.get(order.articleId) ?? null);
+    }
+  }
   for (const order of planned) {
     const media = candidatesByKey.get(mediaKey(order.mediaType, order.resourceId));
-    const plannedArticle = ctx.store.getOrderArticle ? await ctx.store.getOrderArticle(order) : articles.get(order.articleId);
+    const plannedArticle = articles.get(order.id);
     const articleIssues = articleProblems(plannedArticle);
     const reason = articleIssues[0] ?? (choices.skippedArticleIds.has(String(order.articleId)) ? "action_skipped" : null)
       ?? (!media ? "outlet_withdrawn" : media.priceCny !== order.priceCny ? "price_changed" : null);
@@ -1147,9 +1159,10 @@ async function withdrawStalePlans(ctx, project, candidatesByKey, counts, choices
  * @param {ReturnType<typeof context>} ctx
  */
 async function recoverInterruptedSends(ctx) {
-  const reserved = await ctx.store.listOrders({ states: ["reserved"], limit: 500 });
   const now = ctx.now().getTime();
   const sendDeadline = Number(ctx.market?.sendTimeoutMs ?? 30_000) + MARKET_RULES.sendRecoveryMarginMs;
+  const reserved = await ctx.store.listRecoverableReserved({ sendingBefore: new Date(now-sendDeadline).toISOString(),
+    idleBefore: new Date(now-MARKET_RULES.stalledReserveMs).toISOString(), limit: 500 });
   let recovered = 0;
   for (const order of reserved) {
     if (sendInFlight(order)) {
@@ -1361,13 +1374,25 @@ async function keepLateOrderNumber(ctx, order, orderNid) {
 export async function tickOrders(deps) {
   const ctx = context(deps);
   /** @type {{ projects: number, planned: number, withdrawn: number, recovered: number, submitted: number, unknown: number, refused: number,
-   *   notDelivered: number, skipped: Record<string, number> }} */
+   *   notDelivered: number, skipped: Record<string, number>, incompleteProjectIds?: string[], incompleteProjectsTruncated?: boolean }} */
   const counts = { projects: 0, planned: 0, withdrawn: 0, recovered: 0, submitted: 0, unknown: 0, refused: 0, notDelivered: 0, skipped: {} };
   const skip = (/** @type {string} */ reason) => { counts.skipped[reason] = (counts.skipped[reason] ?? 0) + 1; };
+  const noteIncomplete = (/** @type {string} */ projectId) => {
+    counts.incompleteProjectIds ??= [];
+    if (counts.incompleteProjectIds.includes(projectId)) return;
+    if (counts.incompleteProjectIds.length < 100) counts.incompleteProjectIds.push(projectId);
+    else counts.incompleteProjectsTruncated = true;
+  };
   const started = ctx.now().toISOString();
   const first = await ctx.store.listProjectsInTurn(MARKET_RULES.projectsPerPage);
   if (!first.length) return counts;
   if (ctx.configured) counts.recovered = await recoverInterruptedSends(ctx);
+  // Do not start a new send when the inputs needed by balance attribution or
+  // reconciliation cannot be read in full. Recovery above remains independent.
+  await ctx.store.listDecisionOrders({ hasVendorNid: true });
+  await ctx.store.listDecisionTopups();
+  const previousReconciliation = await ctx.store.latestReconciliation();
+  if (previousReconciliation) await ctx.store.platformFlowsSince(anchorOf(previousReconciliation).at);
   const candidates = await ctx.store.listCandidateMedia({ maxPriceCny: MARKET_RULES.autoSelectMaxPriceCny, limit: 5_000 });
   const candidatesByKey = new Map(candidates.map((media) => [mediaKey(media.mediaType, media.resourceId), media]));
   const blocked = await blockedOutlets(ctx);
@@ -1387,8 +1412,9 @@ export async function tickOrders(deps) {
     if (somethingToDo) {
       try {
         choices = await placementChoicesOf(ctx, project);
-      } catch {
-        skip("choices_unavailable");
+      } catch (error) {
+        if (error?.code === 'geo_spine_incomplete') { noteIncomplete(project.id); skip('decision_input_incomplete'); }
+        else skip("choices_unavailable");
         return;
       }
     }
@@ -1412,11 +1438,12 @@ export async function tickOrders(deps) {
       let outcome;
       try {
         outcome = await placeOrder(ctx, project, order, state);
-      } catch {
+      } catch (error) {
         // One order's failure (a lost connection, a store refusal) is that
         // order's: the reserve and the send are one write, so nothing is held
         // for it, and the next order goes on.
-        outcome = "error";
+        outcome = error?.code === 'geo_spine_incomplete' ? 'decision_input_incomplete' : 'error';
+        if (outcome === 'decision_input_incomplete') noteIncomplete(project.id);
       }
       balance = state.balance;
       if (["submitted", "unknown", "refused", "not_delivered"].includes(outcome)) sends += 1;
@@ -1447,8 +1474,9 @@ export async function tickOrders(deps) {
         try {
           const run = await ctx.store.withProjectLock(project.id, () => work(project));
           if (!run.locked) skip("project_busy");
-        } catch {
-          skip("error");
+        } catch (error) {
+          if (error?.code === 'geo_spine_incomplete') { noteIncomplete(project.id); skip('decision_input_incomplete'); }
+          else skip("error");
         }
       }
       if (page.length < MARKET_RULES.projectsPerPage) break;
@@ -1555,8 +1583,8 @@ async function resolveArrivals(ctx, { flagged = new Map(), confirmRefunds = true
   const { money } = await ctx.market.balance();
   const { expected } = await expectedBalance(ctx, anchor);
   const surplus = round2(money - expected);
-  const topups = await ctx.store.listTopups({ status: "requested", limit: 50 });
-  const refundable = (await listAllOrders(ctx.store, { states: [...POLL_STATES], hasVendorNid: true }))
+  const topups = await ctx.store.listDecisionTopups();
+  const refundable = (await ctx.store.listDecisionOrders({ states: [...POLL_STATES], hasVendorNid: true }))
     .filter((order) => ["rejected", "cancelled"].includes(order.state) || order.refundSeenAt || flagged.has(order.id));
   const items = [
     ...topups.map((topup) => ({ kind: "topup", id: topup.id, amountCny: amounts.get(topup.id) ?? topup.amountCny ?? 0, row: topup })),
@@ -1621,7 +1649,7 @@ export async function tickPoll(deps) {
   counts.recovered = await recoverInterruptedSends(ctx);
   const now = ctx.now();
   const afterSale = now.getTime() - MARKET_RULES.afterSaleDays * DAY;
-  const orders = (await listAllOrders(ctx.store, { states: [...POLL_STATES], hasVendorNid: true }))
+  const orders = (await ctx.store.listDecisionOrders({ states: [...POLL_STATES], hasVendorNid: true }))
     .filter((order) => order.state !== "settled" || Date.parse(order.stateAt ?? order.updatedAt) >= afterSale);
   /** @type {Map<string, { order: any, amountCny: number }>} */
   const flagged = new Map();
@@ -1650,19 +1678,24 @@ export async function tickPoll(deps) {
     counts.refunds += arrivals.refunded.length;
     counts.topupsConfirmed = arrivals.topupsConfirmed.length;
     counts.pendingRefunds += await notePendingRefunds(ctx, flagged, new Set(arrivals.refunded));
-  } catch { counts.errors += 1; }
+  } catch (error) {
+    // Capacity means the balance attribution was not evaluated completely;
+    // keep its code for the worker rather than reporting a successful poll.
+    if (error?.code === 'geo_spine_incomplete') throw error;
+    counts.errors += 1;
+  }
   // Windows.
   const events = async (/** @type {any} */ order) => ctx.store.listOrderEvents(order.id, 500);
   // Withdrawn or rejected, and no refund in sight after the escalation window:
   // the reserve stays held (no money is assumed back) and an operator is told once.
-  const awaiting = await ctx.store.listOrders({ states: ["rejected", "cancelled"], hasVendorNid: true, limit: 500 });
+  const awaiting = await ctx.store.listDecisionOrders({ states: ["rejected", "cancelled"], hasVendorNid: true });
   for (const order of awaiting) {
     if (!order.stateAt || now.getTime() - Date.parse(order.stateAt) <= MARKET_RULES.refundEscalationDays * DAY) continue;
     if ((await events(order)).some((event) => event.detail?.phase === "refund_escalated")) continue;
     await ctx.store.annotateOrder(order.id, { at: now.toISOString(), detail: { phase: "refund_escalated", reason: "no_refund_flag" } });
     await fire(ctx.alertOperator, { type: "refund_overdue", orderId: order.id, idempotencyKey: `geo:order:${order.id}:refund_escalated` });
   }
-  const stale = await ctx.store.listOrders({ states: ["submitted", "accepted"], limit: 500 });
+  const stale = await ctx.store.listDecisionOrders({ states: ["submitted", "accepted"] });
   for (const order of stale) {
     if (order.state === "submitted" && order.submittedAt && now.getTime() - Date.parse(order.submittedAt) > MARKET_RULES.unacceptedWindowHours * HOUR) {
       if ((await events(order)).some((event) => event.detail?.phase === "auto_cancel")) continue;
@@ -1765,7 +1798,7 @@ async function afterFirstVerification(ctx, order, now, counts) {
  * @param {ReturnType<typeof context>} ctx @param {Record<string, number>} counts
  */
 async function settleVerifiedOrders(ctx, counts) {
-  const stranded = (await listAllOrders(ctx.store, { states: ["verified"], hasVendorNid: true })).filter((order) => order.settledCny == null);
+  const stranded = (await ctx.store.listDecisionOrders({ states: ["verified"], hasVendorNid: true })).filter((order) => order.settledCny == null);
   for (const order of stranded) {
     try {
       const settled = await settleOrder(ctx, order);
@@ -1877,7 +1910,7 @@ export async function tickVerify(deps) {
   if (!ctx.webReader) return { ...counts, skipped: "web_reader_unavailable" };
   const now = ctx.now();
   // Checkpoints end at +48 h; a week of slack covers a verifier that was down.
-  const orders = await listAllOrders(ctx.store, { states: ["published", "verified", "settled", "problem"], hasVendorNid: true,
+  const orders = await ctx.store.listDecisionOrders({ states: ["published", "verified", "settled", "problem"], hasVendorNid: true,
     updatedSince: new Date(now.getTime() - 7 * DAY).toISOString() });
   const due = orders.map((order) => ({ order, checkpoint: dueCheckpoint(order, now) })).filter((item) => item.checkpoint);
   counts.due = due.length;
@@ -1934,7 +1967,7 @@ export async function tickReconcile(deps) {
   // Our orders against the vendor's view of them.
   const counts = { polled: 0, transitions: 0, missing: 0, unmapped: 0, refunds: 0, pendingRefunds: 0, errors: 0 };
   const recent = now.getTime() - 2 * DAY;
-  const orders = (await listAllOrders(ctx.store, { hasVendorNid: true }))
+  const orders = (await ctx.store.listDecisionOrders({ hasVendorNid: true }))
     .filter((order) => POLL_STATES.includes(order.state) || Date.parse(order.updatedAt) >= recent);
   const missing = [];
   const priceMismatch = [];
@@ -1974,7 +2007,7 @@ export async function tickReconcile(deps) {
   /** @type {Array<{ orderId?: string, topupId?: string, amountCny: number }>} */
   let explainedCredits = [];
   if (Math.abs(diff) > MARKET_RULES.epsilonCny) {
-    const open = await listAllOrders(ctx.store, { states: ["unknown", "reserved"] });
+    const open = await ctx.store.listDecisionOrders({ states: ["unknown", "reserved"] });
     const debits = open.filter((order) => order.state === "unknown" || sendInFlight(order)).map((order) => ({ orderId: order.id, amountCny: order.priceCny ?? 0 }));
     // Money that may have arrived and is not counted yet: refunds not flagged, top-ups not certain.
     const credits = arrivals.pending.map((item) => (item.kind === "topup" ? { topupId: item.id, amountCny: item.amountCny } : { orderId: item.id, amountCny: item.amountCny }));
@@ -1987,7 +2020,7 @@ export async function tickReconcile(deps) {
   // Every project's ledger against its orders.
   const projectBreaks = [];
   for (const project of await listAllBudgetedProjects(ctx.store, { activeOnly: false })) {
-    const breaks = projectIdentityBreaks(await listAllOrders(ctx.store, { geoProjectId: project.id }, 20_000), await ctx.store.ledgerSums({ geoProjectId: project.id }));
+    const breaks = projectIdentityBreaks(await ctx.store.listDecisionOrders({ geoProjectId: project.id }), await ctx.store.ledgerSums({ geoProjectId: project.id }));
     for (const item of breaks) projectBreaks.push({ geoProjectId: project.id, ...item });
   }
   const balanced = Math.abs(residual) <= MARKET_RULES.epsilonCny && !projectBreaks.length;
@@ -2030,7 +2063,7 @@ async function projectedDailySpend(ctx) {
   const now = ctx.now();
   const flows = await ctx.store.platformFlowsSince(new Date(now.getTime() - 7 * DAY).toISOString());
   const weekly = flows.charges.reduce((total, row) => total + row.amountCny, 0) / 7;
-  const queued = (await listAllOrders(ctx.store, { states: ["planned", "reserved"] }, 2_000)).reduce((total, order) => total + (order.priceCny ?? 0), 0);
+  const queued = (await ctx.store.listDecisionOrders({ states: ["planned", "reserved"] })).reduce((total, order) => total + (order.priceCny ?? 0), 0);
   return round2(weekly + queued / MARKET_RULES.lowWaterDays);
 }
 

@@ -11169,6 +11169,13 @@ async function operatorMetricsText({ webVitals = null, judgeService = null, open
   // 循证 GEO: `open_science_geo_enabled 0` when off (geoService.mjs `geoMetricFamilies`).
   const geoSnapshot = geo ? await geoMetricsSnapshot(geo) : null;
   for (const family of geoMetricFamilies(Boolean(geo), geoSnapshot)) addMetric(lines, family.name, family.help, family.type, family.series);
+  // This scrape is protected by the operator metrics token; readiness keeps counts only.
+  const geoCapacity = geo?.worker?.marketCapacityDiagnostics?.();
+  if (geoCapacity) {
+    addMetric(lines, "open_science_geo_market_incomplete_project", "Projects whose latest market tick could not read a complete decision input.", "gauge",
+      geoCapacity.projectIds.map((/** @type {string} */ id) => ({ labels: { geo_project_id: id }, value: 1 })));
+    addMetric(lines, "open_science_geo_market_incomplete_projects_truncated", "Whether the project diagnostic list was truncated.", "gauge", [{ value: geoCapacity.truncated ? 1 : 0 }]);
+  }
   // 虚拟临床研究: `open_science_vcr_enabled 0` when off; queue gauges (queued,
   // running, awaiting_budget — the second human stop), studies, the service's
   // and the job queue's counters, the worker's loops (vcrComposition.mjs).

@@ -12,7 +12,9 @@ import {
   budgetStopped,
   dailyReserved,
   projectMoney,
+  sendInFlight,
   GEO_MARKET_STORE_LIMITS,
+  GEO_MARKET_DECISION_ORDERS_MAX,
 
   MEDIA_TYPES,
   ORDER_STATES,
@@ -490,6 +492,25 @@ export class GeoMarketStoreDouble {
     return rows.slice(offset, offset + limit).map((order) => this.#orderView(order));
   }
 
+  async listDecisionOrders(filter) {
+    const rows=[];
+    for(let offset=0;offset<=GEO_MARKET_DECISION_ORDERS_MAX;offset+=500){
+      const page=await this.listOrders({...filter,limit:Math.min(500,GEO_MARKET_DECISION_ORDERS_MAX+1-offset),offset});
+      rows.push(...page);
+      if(rows.length>GEO_MARKET_DECISION_ORDERS_MAX)throw new HttpError(422,'geo_spine_incomplete','The complete market order input exceeds its limit.');
+      if(page.length<Math.min(500,GEO_MARKET_DECISION_ORDERS_MAX+1-offset))break;
+    }
+    return rows;
+  }
+
+  async listRecoverableReserved({sendingBefore,idleBefore,limit}) {
+    assertLimit(limit,GEO_MARKET_STORE_LIMITS.listMax);
+    const sending=Date.parse(assertAt(sendingBefore)),idle=Date.parse(assertAt(idleBefore));
+    return [...this.orders.values()].filter(order=>order.state==='reserved').map(order=>this.#orderView(order))
+      .filter(order=>sendInFlight(order) ? Date.parse(order.sentAt)<sending : order.stateAt && Date.parse(order.stateAt)<idle)
+      .sort((a,b)=>byTime(a.sentAt ?? a.stateAt,b.sentAt ?? b.stateAt) || String(a.id).localeCompare(String(b.id))).slice(0,limit);
+  }
+
   /** @param {string} orderId @param {number} limit */
   async listOrderEvents(orderId, limit) {
     assertLimit(limit, GEO_MARKET_STORE_LIMITS.listMax);
@@ -527,9 +548,9 @@ export class GeoMarketStoreDouble {
   async platformFlowsSince(since) {
     const cutoff = Date.parse(assertAt(since));
     const after = (/** @type {string} */ at) => Date.parse(at) > cutoff;
-    const max = GEO_MARKET_STORE_LIMITS.flowsMax;
+    const max = GEO_MARKET_STORE_LIMITS.flowsMax + 1;
     const sorted = [...this.events].sort((a, b) => byTime(a.at, b.at));
-    return {
+    const result = {
       charges: sorted.filter((event) => event.toState === "submitted" && event.fromState !== "submitted" && after(event.at))
         .slice(0, max).map((event) => ({ orderId: event.orderId, amountCny: Number(this.orders.get(event.orderId)?.priceCny ?? 0), at: event.at })),
       refunds: sorted.filter((event) => event.toState === "refunded" && event.fromState !== "refunded" && after(event.at))
@@ -539,6 +560,8 @@ export class GeoMarketStoreDouble {
       adjustments: this.ledger.filter((row) => row.kind === "adjustment" && row.geoProjectId == null && row.orderId == null && after(row.createdAt))
         .sort((a, b) => byTime(a.createdAt, b.createdAt)).slice(0, max).map((row) => ({ id: row.id, amountCny: row.amountCny, at: row.createdAt })),
     };
+    if (Object.values(result).some(rows=>rows.length>GEO_MARKET_STORE_LIMITS.flowsMax)) throw new HttpError(422,'geo_spine_incomplete','The complete market balance input exceeds its limit.');
+    return result;
   }
 
   // ------------------------------------------------------------ top-ups
@@ -585,6 +608,13 @@ export class GeoMarketStoreDouble {
     if (status != null) assertOneOf(status, TOPUP_STATUSES, "top-up status");
     return [...this.topups.values()].filter((topup) => status == null || topup.status === status)
       .sort((a, b) => byTime(b.requestedAt, a.requestedAt) || (a.id < b.id ? -1 : 1)).slice(0, limit).map(clone);
+  }
+
+  async listDecisionTopups() {
+    const rows=[...this.topups.values()].filter(topup=>topup.status==='requested')
+      .sort((a,b)=>byTime(b.requestedAt,a.requestedAt) || (a.id < b.id ? -1 : 1));
+    if(rows.length>GEO_MARKET_DECISION_ORDERS_MAX) throw new HttpError(422,'geo_spine_incomplete','The complete top-up input exceeds its limit.');
+    return rows.map(clone);
   }
 
   /** @param {string} id */
