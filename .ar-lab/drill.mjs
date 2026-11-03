@@ -675,6 +675,13 @@ async function runDrill(name) {
     drill.facts.outcome = error instanceof CapReached ? "cap" : "error";
     drill.note("drill-stopped", { why: String(error?.message ?? error).slice(0, 400) });
   }
+  for (const person of drill.people) {
+    await person.runs().catch(() => {});
+    for (const goal of person.states ?? []) {
+      const rest = goal.status === "active" ? null : Date.parse(goal.statusAt ?? 0);
+      if (rest) drill.fact("roundsAfterRest", { status: goal.status, reason: goal.reason, rounds: person.roundsOf(goal.sessionId).length, after: person.roundsOf(goal.sessionId).filter((run) => Date.parse(run.startedAt) > rest).map((run) => [run.status, run.canceledBy ?? null, run.observedToolCalls ?? null]) });
+    }
+  }
   for (const person of drill.people) await person.close().catch(() => {});
   drill.facts.spend = drill.spend();
   drill.facts.finishedAt = new Date().toISOString();
