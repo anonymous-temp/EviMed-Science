@@ -29,6 +29,7 @@ import { imputationPremise } from "./vcrImputationView.mjs";
 import { targetTrialPremises } from "./vcrTargetTrialView.mjs";
 import { TIME_UNIT_WORDS, hazardLawWords, list, numeric, object, text } from "./vcrViewsKit.mjs";
 import { biasEstimatePhrase, biasStatedWords } from "./vcrBiasAnalysis.mjs";
+import { borrowingPremises } from "./vcrBorrowing.mjs";
 
 /**
  * @typedef {{ key: string, label: string, value: string, source: 'literature' | 'assumed' | 'default' | 'given', decisive: boolean,
@@ -46,6 +47,10 @@ const PRIORITY = Object.freeze([
   "applicability", "targetTrial", "trimmedPopulation", "missingAtRandom", "trialStrategy", "trialWeights", "maicTarget", "maicModifiers", "residual", "borrowedHistory", "priorWorth", "unmeasured",
   // a bias analysis: the estimate it analyses and the bias that was stated
   "biasEstimate", "biasStated",
+  // a dynamic borrowing: the history, the way of borrowing, the difference that stops it, the elastic function
+  "borrowingHistory", "borrowingPrior", "borrowingDelta", "borrowingFunction", "borrowingWeight",
+  // a spline survival fit: how far beyond the data, how flexible, the tail it assumes
+  "splineBeyond", "splineKnots", "splineTail",
 ]);
 
 /**
@@ -388,7 +393,7 @@ function comparatorPremises(input) {
   }
 
   // A borrowed prior rests on the historical numbers it was built from, and is worth some number of this study's patients.
-  if (route === "hybrid_control") {
+  if (route === "hybrid_control" && !Object.keys(object(diagnostics.borrowing)).length) {
     rows.push({ key: "borrowedHistory", label: "历史对照的数字",
       value: diagnostics.inputsAssumed === true ? "没有经过核对的来源（输入为假设）" : "来自核对过的证据",
       source: diagnostics.inputsAssumed === true ? "assumed" : "literature", decisive: true });
@@ -417,6 +422,10 @@ function comparatorPremises(input) {
     if (grid) rows.push({ key: "biasGrid", label: "混杂强度的取值", value: `${list(grid.value).map((entry) => plain(Number(entry))).join("、")}（没有设定，按参考网格算）`, source: "default", decisive: false });
     rows.push({ key: "biasDirection", label: "偏倚的方向", value: "只考虑把效应夸大的偏倚（去掉它，估计值向无效线靠近）", source: "default", decisive: false });
   }
+
+  // Dynamic borrowing (C10-C12): the history it borrows from, the kind of prior and what it was told, the clinical difference that places it, the elastic function.
+  const borrowing = object(diagnostics.borrowing);
+  if (Object.keys(borrowing).length) rows.push(...borrowingPremises(borrowing));
 
   // Who the estimate is about after a propensity trimming: the people with no comparable counterpart are removed, so the conclusion is the
   // kept people's (EU HTA guideline 6.2). A fixed bound is the person's; Crump's rule is the engine's default.

@@ -605,7 +605,7 @@ export async function prepareVcrMethodConfiguration({ store, study, userId, meth
     design: object(scenario.design).kind ?? object(object(object(schema.fields).design).fields).kind?.default, endpointType: object(scenario.endpoint).type,
     configuration: scenario, assumptionIds: previous?.assumptionIds ?? [], comparatorId: previous?.comparatorId ?? null }, { client });
   else if (objectKind === "comparator") saved = await store.saveComparatorDesign({ ...base, route: previous?.route ?? (method === "design.procova" || method === "comparator.prognostic_adjustment" ? "prognostic_adjustment"
-      : method === "comparator.map_prior" ? "hybrid_control" : ["comparator.maic", "comparator.evalue", "comparator.bias_analysis", "comparator.stc", "comparator.maic_time_to_event"].includes(method) ? "literature_control" : "external_control"),
+      : method === "comparator.map_prior" || method === "comparator.borrowing" ? "hybrid_control" : ["comparator.maic", "comparator.evalue", "comparator.bias_analysis", "comparator.stc", "comparator.maic_time_to_event"].includes(method) ? "literature_control" : "external_control"),
     estimand: scenario.estimand ?? object(object(schema.fields).estimand).default ?? null, configuration: scenario, targetTrial: previous?.targetTrial ?? {} }, { client });
   else saved = await store.saveDesignGrid({ ...base, dimensions: { base: Object.fromEntries(Object.entries(scenario).filter(([key]) => key !== "designs" && key !== "truths")), designs: scenario.designs ?? [] }, truthScenarios: scenario.truths ?? [], cells: [] }, { client });
   return { subjectId: String(saved.id), objectKind, version: Number(saved.version) };

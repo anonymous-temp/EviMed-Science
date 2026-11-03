@@ -73,7 +73,8 @@ import { abilitiesOfRoles } from "./vcrMembers.mjs";
 import { VCR_PUBLICATION_KINDS, VCR_PUBLICATION_LIMITS } from "./vcrPublications.mjs";
 import { prepareVcrMethodConfiguration, resolveJobSubject, prepareVcrSubjectPopulation } from "./vcrSubjects.mjs";
 import { prepareVcrModelDesign } from "./vcrModelDesign.mjs";
-import { zhTime } from "./vcrViewsKit.mjs";
+import { measureValue, zhTime } from "./vcrViewsKit.mjs";
+import { presentSplineFit } from "./vcrSplineFit.mjs";
 import { checkRegulatoryContact } from "./vcrScheduleView.mjs";
 import { VCR_ROWS_PAGE_MAX } from "./vcrRows.mjs";
 import { readRunMarks } from "./vcrStudyStatus.mjs";
@@ -1304,6 +1305,8 @@ export function createVcrRoutes(dependencies) {
         const { supersededBy: _supersededBy, ...historicalResult } = result;
         return reply({ jobId: parts[3], result: service.forModel(historicalResult),
           computationBasis:vcrAnalyticComputationBasis(result,job),
+          // a spline survival fit (C13): the median, the restricted mean and the survival with how far beyond the data each lies, and the premises
+          splineFit: job.method === "model.survival_fit" ? presentSplineFit(result, (measure) => measureValue(measure, { kind: result.kind, result, tab: "patients", staleMark: null })) : null,
           execution: { method: job.method, methodVersion: job.methodVersion, seed: job.seed, scenarioHash: job.scenarioHash, sourceModel: job.checkpoint?.sourceModel ? { id: job.checkpoint.sourceModel.id, version: job.checkpoint.sourceModel.version } : null },
           records: available ? { ...described, available: true, state: "available", csvUrl: `${prefix}/records/${encodeURIComponent(result.id)}.csv`,
             rowsUrl: `${prefix}/${result.kind === "population" ? "population" : "patients"}/rows?result=${encodeURIComponent(result.id)}` }

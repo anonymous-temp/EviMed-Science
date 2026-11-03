@@ -569,6 +569,7 @@
   ],
   "robustness": null,
   "biasAnalysis": null,
+  "borrowing": null,
   "trim": null,
   "imputation": null,
   "targetTrialEmulation": null,

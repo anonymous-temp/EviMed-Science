@@ -1085,6 +1085,38 @@ export interface VcrBiasConfounderCell {
 }
 
 /**
+ * A dynamic borrowing of an external control arm (C10-C12): the control arm's posterior beside no borrowing and full borrowing, the table of
+ * conflict against borrowing, and the type I error and power over drifts of the true control value. A part the job did not ask for is null.
+ */
+export interface VcrBorrowingCard {
+  question: string;
+  kind: "power" | "sam" | "elastic";
+  kindWord: string;
+  endpoint: "binary" | "continuous";
+  weight: VcrValue | null;
+  borrowedSampleSize: VcrValue | null;
+  posterior: Array<{ which: "none" | "chosen" | "full"; label: string; mean: VcrValue | null; lower: VcrValue | null; upper: VcrValue | null; probabilityBetter: VcrValue | null; weight: VcrValue | null }>;
+  conflict: { patients: number | null; delta: string; note: string; rows: Array<{ differenceWords: string; weight: VcrValue | null }> } | null;
+  operatingCharacteristics: {
+    nControl: number | null; nTreatment: number | null; note: string;
+    rows: Array<{ driftWords: string; none: { typeOneError: VcrValue | null; power: VcrValue | null }; chosen: { typeOneError: VcrValue | null; power: VcrValue | null; weight: VcrValue | null } }>;
+  } | null;
+  note: string;
+}
+
+/** The result page's block of a spline survival fit (C13): the median, the restricted mean, the survival with how far beyond the data each lies, and its premises. */
+export interface VcrSplineFitBlock {
+  question: string;
+  median: VcrValue | null;
+  rmst: { tauWords: string; value: VcrValue | null } | null;
+  curve: Array<{ timeWords: string; survival: VcrValue | null; beyondData: boolean; timesLongestFollowUp: number | null }>;
+  longestFollowUp: string | null;
+  specifications: Array<{ knots: number; selected: boolean; estimable: boolean; survival: VcrValue | null; median: VcrValue | null }>;
+  note: string;
+  premises: VcrPremise[];
+}
+
+/**
  * A quantitative bias analysis of the comparison: how much bias flips the conclusion, and the optional parts the call asked for. A
  * part the call did not ask for is null, and so is the whole card on a result that holds no bias analysis.
  */
@@ -1236,6 +1268,7 @@ export interface VcrComparatorTab {
   robustness?: { rows: Array<{ key: string; label: string; value: VcrValue }>; notes: string[]; qualification: string | null } | null;
   /** The bias analysis of this result (tipping bias, shifted null, confounder tipping, probabilistic): null when it holds none. */
   biasAnalysis?: VcrBiasAnalysisCard | null;
+  borrowing?: VcrBorrowingCard | null;
   /** Who the propensity trimming removed and who the estimate is about: null when the result did not trim. */
   trim?: VcrTrimCard | null;
   /** What filling in missing covariate values did to the answer: null when the result did not impute. */
@@ -2607,6 +2640,54 @@ function readBiasAnalysis(raw: unknown): VcrBiasAnalysisCard | null {
   };
 }
 
+/** The borrowing card; a card without its question and a posterior or one of the two tables, and anything of an unknown shape, reads as nothing. */
+function readBorrowing(raw: unknown): VcrBorrowingCard | null {
+  const card = obj(raw);
+  const question = text(card.question);
+  const kind = card.kind === "power" || card.kind === "sam" || card.kind === "elastic" ? card.kind : null;
+  if (!question || !kind) return null;
+  const posterior = arr(card.posterior).flatMap((row) => {
+    const which: "none" | "chosen" | "full" | null = row.which === "none" ? "none" : row.which === "chosen" ? "chosen" : row.which === "full" ? "full" : null;
+    return which ? [{ which, label: text(row.label) ?? "", mean: readOptionalValue(row.mean), lower: readOptionalValue(row.lower), upper: readOptionalValue(row.upper),
+      probabilityBetter: readOptionalValue(row.probabilityBetter), weight: readOptionalValue(row.weight) }] : [];
+  });
+  const conflict = obj(card.conflict), oc = obj(card.operatingCharacteristics);
+  const conflictRows = arr(conflict.rows).flatMap((row) => { const words = text(row.differenceWords); return words ? [{ differenceWords: words, weight: readOptionalValue(row.weight) }] : []; });
+  const ocRows = arr(oc.rows).flatMap((row) => {
+    const words = text(row.driftWords), none = obj(row.none), chosen = obj(row.chosen);
+    return words ? [{ driftWords: words, none: { typeOneError: readOptionalValue(none.typeOneError), power: readOptionalValue(none.power) },
+      chosen: { typeOneError: readOptionalValue(chosen.typeOneError), power: readOptionalValue(chosen.power), weight: readOptionalValue(chosen.weight) } }] : [];
+  });
+  if (!posterior.length && !conflictRows.length && !ocRows.length) return null;
+  return {
+    question, kind, kindWord: text(card.kindWord) ?? "", endpoint: card.endpoint === "continuous" ? "continuous" : "binary",
+    weight: readOptionalValue(card.weight), borrowedSampleSize: readOptionalValue(card.borrowedSampleSize), posterior,
+    conflict: conflictRows.length ? { patients: finite(conflict.patients), delta: text(conflict.delta) ?? "", note: text(conflict.note) ?? "", rows: conflictRows } : null,
+    operatingCharacteristics: ocRows.length ? { nControl: finite(oc.nControl), nTreatment: finite(oc.nTreatment), note: text(oc.note) ?? "", rows: ocRows } : null,
+    note: text(card.note) ?? "",
+  };
+}
+
+/** The spline-fit block; without its question and a curve, and for anything of an unknown shape, there is nothing to say. */
+export function readSplineFit(raw: unknown): VcrSplineFitBlock | null {
+  const block = obj(raw);
+  const question = text(block.question);
+  const curve = arr(block.curve).flatMap((point) => {
+    const timeWords = text(point.timeWords);
+    return timeWords ? [{ timeWords, survival: readOptionalValue(point.survival), beyondData: point.beyondData === true, timesLongestFollowUp: finite(point.timesLongestFollowUp) }] : [];
+  });
+  if (!question || !curve.length) return null;
+  const rmst = obj(block.rmst);
+  return {
+    question, median: readOptionalValue(block.median),
+    rmst: text(rmst.tauWords) ? { tauWords: text(rmst.tauWords) ?? "", value: readOptionalValue(rmst.value) } : null,
+    curve, longestFollowUp: text(block.longestFollowUp),
+    specifications: arr(block.specifications).map((spec) => ({ knots: finite(spec.knots) ?? 0, selected: spec.selected === true, estimable: spec.estimable === true,
+      survival: readOptionalValue(spec.survival), median: readOptionalValue(spec.median) })),
+    note: text(block.note) ?? "", premises: readPremises(block.premises),
+  };
+}
+
 /** The trimming restatement; without its sentence, and for anything of an unknown shape, there is nothing to say. */
 function readTrim(raw: unknown): VcrTrimCard | null {
   const trim = obj(raw);
@@ -3179,6 +3260,7 @@ export function readVcrComparator(raw: unknown): VcrComparatorTab {
     diagnostics: arr(value.diagnostics).map((row) => ({ key: text(row.key) ?? "", label: text(row.label) ?? "", value: readVcrValue(row.value) })),
     prior: arr(value.prior).map((row) => ({ key: text(row.key) ?? "", label: text(row.label) ?? "", value: readVcrValue(row.value) })),
     biasAnalysis: readBiasAnalysis(value.biasAnalysis),
+    borrowing: readBorrowing(value.borrowing),
     trim: readTrim(value.trim),
     imputation: readImputation(value.imputation),
     targetTrialEmulation: readTargetTrial(value.targetTrialEmulation),
@@ -4330,6 +4412,8 @@ export function saveVcrMethodConfiguration(studyId: string, input: { method: str
 }
 export interface VcrMethodResult {
   computationBasis?: VcrScientificComputationBasis | null;
+  /** A spline survival fit's block (C13), on a result that holds one. */
+  splineFit?: VcrSplineFitBlock | null;
   jobId: string;
   result: { id: string; kind: string; subjectId?: string | null; conclusion?: VcrConclusion; counts?: Partial<VcrCounts>; measures?: Array<{ name: string; label?: string; value: number | null; unit?: string; mcse?: number | null; interval?: VcrInterval | null; lower?: number | null; upper?: number | null; source?: VcrValueSource }>; diagnostics?: Record<string, unknown>; [key: string]: unknown } | null;
   execution?: { method: string; methodVersion?: string | null; seed?: number | null; scenarioHash?: string | null; sourceModel?: { id: string; version: string } | null };
@@ -4338,7 +4422,7 @@ export interface VcrMethodResult {
 /** The immutable result of this job, including a partial result; never the study's latest tab. */
 export async function getVcrMethodResult(studyId: string, jobId: string): Promise<VcrMethodResult> {
   const answer = await productRequest<VcrMethodResult>(`${study(studyId)}/jobs/${id(jobId)}/result`);
-  return { ...answer, records: { ...answer.records, profile: arr(answer.records?.profile).map(row => {
+  return { ...answer, splineFit: readSplineFit(answer.splineFit), records: { ...answer.records, profile: arr(answer.records?.profile).map(row => {
     const profile = readGeneratedRow({ ...row, levels: arr(row.levels).map(level => ({ ...level, percent: finite(level.percent) ?? (finite(level.p) == null ? null : Number(level.p) * 100) })) });
     const histogram = obj(row.histogram);
     if ([...Array.isArray(histogram.breaks) ? histogram.breaks : [], ...Array.isArray(histogram.counts) ? histogram.counts : []].some(value => finite(value) === null)) profile.histogram = null;

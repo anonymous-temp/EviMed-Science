@@ -60,6 +60,7 @@ import { presentBayesianDesigns } from "./vcrBayesianDesign.mjs";
 import { presentWinRatioDesigns } from "./vcrWinRatio.mjs";
 import { presentEvidenceSyntheses, tauPriorWords, vcrSuccessRatesPage } from "./vcrEvidenceSynthesis.mjs";
 import { presentBiasAnalysis } from "./vcrBiasAnalysis.mjs";
+import { presentBorrowing } from "./vcrBorrowing.mjs";
 import { evidenceValueFindings } from "./vcrValueChecks.mjs";
 import { presentTrim } from "./vcrTrimView.mjs";
 import { presentImputation } from "./vcrImputationView.mjs";
@@ -826,6 +827,8 @@ export function presentComparatorTab(bundle) {
     robustness: robustnessView(result, value),
     // Quantitative bias analysis (C1, C2) and who a propensity trimming left (C14): cards of the comparison, null when the result has neither.
     biasAnalysis: presentBiasAnalysis(result, value),
+    // Dynamic borrowing of an external control arm (C10-C12): the posterior beside no and full borrowing, the conflict table, the operating characteristics.
+    borrowing: presentBorrowing(result, value),
     trim: presentTrim(diagnostics.trim),
     // Missing covariates that were imputed (C7): the pooled answer beside the complete-case one, and what it assumed.
     imputation: presentImputation(result, value),

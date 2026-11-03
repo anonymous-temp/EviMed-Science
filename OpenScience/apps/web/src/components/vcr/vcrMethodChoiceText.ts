@@ -55,6 +55,8 @@ const ruleLabels: Record<string, string> = {
 };
 /** Words read only at their own path, because the same short word means something else elsewhere: the shape of a mean curve, and which value a dropout looks at. */
 const pathLabels: Record<string, Record<string, string>> = {
+  "comparator.borrowing:prior.kind": { power: "固定折扣（幂先验）", sam: "自适应混合先验（SAM）", elastic: "弹性先验" },
+  "comparator.borrowing:prior.function": { logistic: "逻辑斯蒂函数", step: "阶梯函数" },
   "patients.longitudinal:trajectory.kind": { plateau: "逐渐趋平", quadratic: "二次曲线" },
   "patients.longitudinal:dropoutModel.mechanism": { mar: "随机缺失（看上一次的值）", mnar: "非随机缺失（看这次的值）" },
 };
@@ -245,6 +247,11 @@ const exampleLabels: Record<string, Record<string, string>> = {
   "comparator.bias_analysis": {
     "how large a bias, and what confounder, turns a hazard ratio of 0.70 (95% interval 0.50 to 0.98): the tipping bias and the tipping confounder": "风险比 0.70（95% 区间 0.50–0.98）要多大的偏倚、什么样的混杂才会翻转",
     "the same estimate tested against stated biases (the shifted null), with a probabilistic analysis of a confounder that is twice as common in the treated": "设定偏倚后的检验，并按混杂因素在试验组更常见做概率性分析"
+  },
+  "comparator.borrowing": {
+    "the external control counts for 0.3 of a patient each: a power prior on a response rate (90 of 300 historically, 40 of 150 now, 100 of 300 on treatment)": "外部对照每人只算 0.3 人：应答率的幂先验（历史 90/300，现在 40/150，试验组 100/300）",
+    "borrowing decided by the data: a self-adapting mixture prior, a difference of 0.1 in the response rate being too much to borrow across, and what it does to the type I error and power if the true control rate drifts": "借用多少由数据决定：自适应混合先验，应答率差 0.1 就不再借用，以及对照组真实应答率偏离时 I 类错误和功效的变化",
+    "how a conflict becomes a level of borrowing: an elastic prior on a mean (historical mean 10, sd 4, 120 patients; 60 now, mean 11), a difference of 2 being a conflict": "冲突怎样换算成借用程度：均值的弹性先验（历史均值 10、标准差 4、120 例；现在 60 例、均值 11），差 2 就算冲突"
   },
   "comparator.stc": {
     "an anchored comparison on a binary outcome: the aggregate trial's log odds ratio against the common comparator is -0.35 (standard error 0.12)": "锚定的二分类比较：对方试验相对共同对照的对数优势比为 -0.35（标准误 0.12）"
