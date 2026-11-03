@@ -58,6 +58,17 @@ function allowanceText(estimate: WebResearchEstimate | undefined): string | null
 }
 
 /**
+ * Component: CapabilitiesPage; owner: H; rules: DS17, DS22.1, DS22.7.
+ * Anatomy: Catalogue filters, category sections, and tool rows.
+ * Variants: Full catalogue, category selection, and search results.
+ * States: Loading, retryable error, empty, available and blocked tools.
+ * Hit area: Shared toolbar controls, full tool rows and connector links.
+ * Keyboard: Native row actions and toolbar navigation.
+ * Long content: Descriptions and availability details wrap in their rows.
+ * Theme: Paper canvas and semantic availability roles.
+ * Responsive: Category sections share a row only when the catalogue has space.
+ * Verification: CapabilitiesPage tests and the catalogue fixture walk.
+ *
  * 科研工具 — the medical professional workflows, one list per category.
  *
  * What is here is a workflow with a contract and a deliverable, and a category to
@@ -173,9 +184,9 @@ export function CapabilitiesPage() {
               action={filtering ? <Button variant="secondary" onClick={clear}>清除筛选</Button> : undefined}
             />
           ) : (
-            <div>
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,26rem),1fr))] items-start gap-x-8 gap-y-6">
               {groups.map(([name, items]) => (
-                <Section key={name} title={name} count={items.length}>
+                <Section key={name} title={name} count={items.length} compact className="mt-0">
                   <List label={name} divided>
                     {items.map((agent) => (
                       <ToolRow key={agent.id} agent={agent} estimate={billing.simulated ? estimates.get(agent.id) : undefined} busy={opening === agent.id} onOpen={() => open(agent)} />

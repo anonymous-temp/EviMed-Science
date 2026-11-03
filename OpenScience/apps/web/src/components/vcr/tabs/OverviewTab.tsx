@@ -13,13 +13,16 @@ import { List, ListRow } from "@/components/ui/ListRow";
 import { Note } from "@/components/ui/Note";
 import { RailMark, type RailState } from "@/components/ui/ProgressRail";
 import { Section } from "@/components/ui/Section";
-import { VcrCountsBand } from "../VcrCounts";
+import { presentCounts, VcrCountsBand } from "../VcrCounts";
 import { VcrNoDefinition } from "../VcrStates";
 import { useStudyFrame } from "../studyFrameContext";
 import { VCR_STEP_TABS, vcrTabPath } from "../vcrTabs";
 import { stepName } from "../vcrActivity";
 import { INTAKE_LABEL, RESUME_LABEL } from "../vcrActionWords";
 import { stepAllowanceWait } from "@/lib/allowanceWait";
+import { cn } from "@/lib/cn";
+
+const WIDE_COLUMNS = "[@container(min-width:54rem)]:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]";
 
 /**
  * 总览: where the study is, in the order a reader asks.
@@ -43,27 +46,33 @@ import { stepAllowanceWait } from "@/lib/allowanceWait";
  * Keyboard: Native links and buttons remain focusable.
  * Long content: Fact rows wrap.
  * Theme: Shared sections and semantic tokens.
- * Responsive: Sections stack.
+ * Responsive: Progress and compact counts, then records and deliverables, pair where the workbench has room.
  * Verification: OverviewTab.test.tsx and VcrResearchProgress.test.tsx.
  */
 export function OverviewTab({ studyId, study }: { studyId: string; study: VcrStudy }) {
-  const { headline, counts, attention, deliverables } = study.overview;
-  if (!study.question?.trim() && !headline && !counts && deliverables.length === 0 && study.overview.researchProgress?.definition !== "saved") return <VcrNoDefinition study={study} />;
+  const { headline, counts, attention, deliverables, researchProgress } = study.overview;
+  if (!study.question?.trim() && !headline && !counts && deliverables.length === 0 && researchProgress?.definition !== "saved") return <VcrNoDefinition study={study} />;
   const sentence = headline ?? study.question;
+  const countTotal = presentCounts(counts).length;
+  const started = (VCR_STEPS as readonly VcrStepKey[]).filter(step => study.steps[step]?.requested === true || study.steps[step]?.status && study.steps[step]?.status !== "none");
   return (
-    <div className="flex flex-col gap-6">
-      {sentence && <Headline parts={[sentence]} className={headline ? undefined : "text-text-2"} />}
-
-      <VcrResearchProgress progress={study.overview.researchProgress} studyId={studyId} />
-
-      <VcrCountsBand counts={counts} tabOf={(key) => countTab(key, study, studyId)} />
-
-      <Attention items={attention} study={study} studyId={studyId} />
-
-
-      <StepList study={study} studyId={studyId} />
-
-      <Deliverables items={deliverables} studyId={studyId} />
+    <div className="[container-type:inline-size]">
+      <div className="flex flex-col gap-6">
+        {sentence && <Headline parts={[sentence]} className={headline ? undefined : "text-text-2"} />}
+        {(researchProgress || countTotal > 0) && (
+          <div className={cn("grid items-start gap-6", researchProgress && countTotal > 0 && countTotal <= 2 && WIDE_COLUMNS)}>
+            <VcrResearchProgress progress={researchProgress} studyId={studyId} />
+            <VcrCountsBand counts={counts} tabOf={(key) => countTab(key, study, studyId)} />
+          </div>
+        )}
+        <Attention items={attention} study={study} studyId={studyId} />
+        {(started.length > 0 || deliverables.length > 0) && (
+          <div className={cn("grid items-start gap-6", started.length > 0 && deliverables.length > 0 && WIDE_COLUMNS)}>
+            <StepList study={study} studyId={studyId} started={started} />
+            <Deliverables items={deliverables} studyId={studyId} />
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -92,8 +101,7 @@ function failedSteps(study: Pick<VcrStudy, "steps">): VcrStepKey[] {
 }
 
 /** The seven steps, in order, each a row that opens the tab that holds it. */
-function StepList({ study, studyId }: { study: VcrStudy; studyId: string }) {
-  const started = (VCR_STEPS as readonly VcrStepKey[]).filter(step => study.steps[step]?.requested === true || study.steps[step]?.status && study.steps[step]?.status !== "none");
+function StepList({ study, studyId, started }: { study: VcrStudy; studyId: string; started: readonly VcrStepKey[] }) {
   if (!started.length) return null;
   return (
     <Section title="研究记录">
@@ -209,7 +217,7 @@ function Deliverables({ items, studyId }: { items: VcrStudy["overview"]["deliver
     </List>
   );
   return (
-    <Section title="交付物" count={finished.length > 0 ? finished.length : drafts.length}>
+    <Section title="交付物" count={finished.length > 0 ? finished.length : drafts.length} className="mt-0">
       {finished.length > 0 ? rows(finished) : rows(drafts)}
       {finished.length > 0 && drafts.length > 0 && (
         <Disclosure summary={`草稿 ${drafts.length}`} className="mt-3">

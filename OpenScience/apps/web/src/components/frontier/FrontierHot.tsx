@@ -66,8 +66,23 @@ export function HotTopics({ topics }: { topics: readonly FrontierTopicSummary[] 
 }
 
 const WINDOW_OPTIONS = FRONTIER_HOT_WINDOWS.map((value) => ({ value, label: value === "current" ? "当前" : value === "week" ? "本周" : "本月" }));
+const RAIL_ROW = "group relative py-2 pl-8";
+// Use the feed's inline headline treatment, with the same stretched link and focus ring.
+const RAIL_LINK = "rounded text-body font-semibold after:absolute after:inset-0 after:rounded after:content-[''] focus-visible:outline-none focus-visible:after:outline focus-visible:after:outline-2 focus-visible:after:outline-focus";
+const PREVIEW_LINK = "group flex h-control items-center gap-3 rounded text-ui";
 
 /**
+ * Component: HotCard; owner: H; rules: DS12, DS22.1, DS22.7.
+ * Anatomy: Ranking preview with direct event links and full ranking action.
+ * Variants: Compact side rail or horizontal preview above the feed.
+ * States: Empty rankings and topic lists produce no card.
+ * Hit area: Whole event links and an inline action.
+ * Keyboard: Native links and button.
+ * Long content: Rail titles wrap within the available column.
+ * Theme: Paper surface with existing rank roles.
+ * Responsive: The feed measures available width; phone preview retains its first entry.
+ * Verification: Frontier tests and the fixture feed walk.
+ *
  * 当前热点, at the top of 精选 (plan 2026-09-23 §6.2): the three hottest
  * events (five until 2026-10-07 — the full ranking is one tab away), each one
  * line — the rank in the rank colours, the title, the heat in grey and how the
@@ -76,7 +91,7 @@ const WINDOW_OPTIONS = FRONTIER_HOT_WINDOWS.map((value) => ({ value, label: valu
  * card is its first line and 「完整热榜 ›」: three rows of it stood between the
  * header and the first article on a 844 px screen.
  */
-export function HotCard({ events, onOpenAll }: { events: readonly FrontierHotEvent[]; onOpenAll: () => void }) {
+export function HotCard({ events, onOpenAll, beside = false }: { events: readonly FrontierHotEvent[]; onOpenAll: () => void; beside?: boolean }) {
   const origin = useFrontierOrigin();
   // c2-leads 2026-10-25: one active surge topic — a public event high on several boards at once — leads the card.
   const surge = (useFrontierTopics() ?? []).find((topic) => topic.surge) ?? null;
@@ -85,6 +100,7 @@ export function HotCard({ events, onOpenAll }: { events: readonly FrontierHotEve
   return (
     <Card
       padding="p-3"
+      className={beside ? "w-64 shrink-0" : undefined}
       header={(
         <div className="flex items-center justify-between gap-3">
           {/* The feed's own group heading size (the day's heading and the titles are 16/600 too): at 18 it was a fifth type pair on 精选, which holds four. */}
@@ -96,23 +112,30 @@ export function HotCard({ events, onOpenAll }: { events: readonly FrontierHotEve
       <ol aria-label="当前热点" className="px-1">
         {/* The surge topic's row has no rank: its title starts on the events' edge and its label stands after the link. */}
         {surge && (
-          <li className="flex min-w-0 items-center gap-3">
-            <Link state={origin} onClick={rememberFrontierPosition} to={topicPath(surge.id)} className="group flex h-control min-w-0 flex-1 items-center gap-3 rounded text-ui">
-              <span aria-hidden="true" className="w-5 shrink-0" />
-              <span data-row-title data-prose="" className="min-w-0 flex-1 truncate text-text group-hover:text-accent">{surge.title}</span>
+          <li className={cn("min-w-0", beside ? RAIL_ROW : "flex items-center gap-3")}>
+            <Link state={origin} onClick={rememberFrontierPosition} to={topicPath(surge.id)} className={beside ? RAIL_LINK : cn(PREVIEW_LINK, "min-w-0 flex-1")}>
+              {!beside && <span aria-hidden="true" className="w-5 shrink-0" />}
+              <span data-row-title data-prose="" className={cn("min-w-0 flex-1 text-text group-hover:text-accent", beside ? "break-words" : "truncate")}>{surge.title}</span>
             </Link>
-            <Tag tone="accent">话题</Tag>
+            <Tag tone="accent" className={beside ? "ml-2 align-middle" : undefined}>话题</Tag>
           </li>
         )}
         {top.map((event, index) => {
           const change = rankChangeLabel(event.rankChange);
           return (
-            <li key={event.id} className={index > 0 || surge ? "max-sm:hidden" : undefined}>
-              <Link state={origin} onClick={rememberFrontierPosition} to={eventPath(event.id)} className="group flex h-control items-center gap-3 rounded text-ui">
-                <span className={cn("w-5 shrink-0 text-right tabular-nums", rankTone(event.rank))}>{event.rank}</span>
-                <span data-row-title data-prose="" className="min-w-0 flex-1 truncate text-text group-hover:text-accent">{event.title}</span>
-                {event.heat !== null && <span className="shrink-0 text-caption text-text-3"><span className="tabular-nums">{event.heat}</span> 热度</span>}
-                {change && <span className="shrink-0 text-caption text-text-2">{change}</span>}
+            <li key={event.id} className={cn(beside && RAIL_ROW, (index > 0 || surge) && "max-sm:hidden")}>
+              <Link state={origin} onClick={rememberFrontierPosition} to={eventPath(event.id)} className={beside ? RAIL_LINK : PREVIEW_LINK}>
+                <span className={cn("w-5 shrink-0 text-right tabular-nums", beside && "absolute left-0 top-2 text-ui font-normal", rankTone(event.rank))}>{event.rank}</span>
+                <span data-row-title data-prose="" className={cn("min-w-0 flex-1 text-text group-hover:text-accent", beside ? "break-words" : "truncate")}>{event.title}</span>
+                {beside ? (event.heat !== null || change) && (
+                  <span className="mt-1 flex flex-wrap gap-x-2 text-caption font-normal tabular-nums text-text-3">
+                    {event.heat !== null && <span>{event.heat} 热度</span>}
+                    {change && <span className="text-text-2">{change}</span>}
+                  </span>
+                ) : <>
+                  {event.heat !== null && <span className="shrink-0 text-caption text-text-3"><span className="tabular-nums">{event.heat}</span> 热度</span>}
+                  {change && <span className="shrink-0 text-caption text-text-2">{change}</span>}
+                </>}
               </Link>
             </li>
           );

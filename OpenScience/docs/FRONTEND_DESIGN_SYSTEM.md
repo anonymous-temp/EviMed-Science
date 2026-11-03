@@ -448,6 +448,13 @@ The monitoring-page review adds the following composition requirements inside th
 - Recurring automation keeps its actual state, current scope, accepted measurement and stop action/consequence in sight. Schedule and allowance details may be disclosed after consent; before enabling or re-enabling, show what will be scheduled and charged. Stopping recurrence is never described as canceling an already accepted measurement.
 - Review the composed page with full, empty, failed and long-content states, at narrow and split widths, in both themes. Check relationships between sections, not only isolated primitive screenshots. Preserve the existing page inventory and complexity budgets.
 
+#### Platform adoption outside GEO (owner review, 2026-11-03)
+
+- T4 memory starts with the existing interactive star when available. Retain its renderer, controls, relationship and topic modes, and compact fallback. Keep actual category counts and recent changes below the star. A change chart and the records that explain it may sit side by side when both fit in the available content area.
+- T5 addressed reports put the document first. On roomy layouts keep the outline and a compact summary of recorded sources beside the document, with one action leading to the full source list for the current report version. In a narrow reader keep the same evidence and version actions reachable in the reading flow. Embedded readers follow the enclosing workspace's layout.
+- T1 and T4 put related information beside the main list or selected record when it can be read independently. The curated feed remains primary beside its ranking; priority inbox notices precede the ordinary list. In a workbench, a secondary section yields space to the work under review. Determine fit from the content area's width after navigation and panels, and keep a single reading order on compact layouts.
+- Apply the existing templates by task and state. Group controls by the object they affect, and keep their current permission and recovery rules. GEO is reserved for the owner's separate reconstruction; the November 3 adoption applies to the other platform areas.
+
 ### DS23.6 Needs
 
 Verify **T/W**, AT64. What waits for a person (待提供, 待确认, 需处理, 平台外) is said over the results on every view and in the conversation's company, not only on an overview; the need is done in its own place. Only what already needs a person is listed. What is missing to begin is a checklist that ticks itself from what the project records, filled by saying it in the conversation or sending a file: not a form, and not a template pasted into the composer. Only what is stored can be ticked.

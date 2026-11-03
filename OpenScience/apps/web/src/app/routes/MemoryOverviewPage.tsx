@@ -59,6 +59,16 @@ const RECEIVED = memoryTabAddress("received");
  * sources failed, so a number whose source failed says so instead of drawing zero), the learned methods and the packs received each have a read of
  * their own. The sentence names only what was read. An account with no memory and no learned method has no sentence, no chart and no table: one
  * recipe with one button, under the tiles.
+ *
+ * Anatomy: scope, summary, sky, category links, change chart and list, relations.
+ * Variants: dynamic sky and the existing compact exploration fallback.
+ * States: each independently read area keeps its empty, loading, failure and retry behavior.
+ * Hit area: chart and list use their existing marks, row targets and shared controls.
+ * Keyboard: category links and change controls keep their native focus order.
+ * Long content: chart and list stay within their columns and retain their own detail targets.
+ * Theme: the page uses the existing semantic surfaces and sky palette.
+ * Responsive: the chart and list share a row only when each has room in the overview.
+ * Verification: MemoryOverviewPage.test.tsx and memoryOverviewComposition.test.tsx.
  */
 export function MemoryOverviewPage() {
   const feature = useMemoryMapFeature();
@@ -235,7 +245,7 @@ function Overview() {
       onChooseTopic={(topic) => narrow({ topic })} onHideEdge={hideEdge} onChanged={map.reload} onStarUnavailable={() => setStarLost(true)}
     />
   ) } : null;
-  const changes = doc && !empty && growthRead && growth ? { key: "changes", span: 2 as const, node: (
+  const changes = doc && !empty && growthRead && growth && (
     <ChangeChart
       state="content" growth={growth} events={shown} timeZone={timeZone} words={rangeWords(selection.range)} selectedWeek={selection.week}
       emptyText={events.length === 0 ? "还没有变化。" : "这个范围里没有变化。"} onRetry={reloadAll}
@@ -247,12 +257,10 @@ function Overview() {
       }}
       onSelectWeek={(start) => narrow({ week: selection.week === start ? null : start })}
     />
-  ) } : null;
+  );
   // The sky leads the page when there is one, above the tiles, wherever the reader has switched to, so the switch does not move the card under them. Else the page tells
   // what changed first and the picture stands under that, as it did before there was a sky.
   const leads = views.includes("star");
-  const gridRows = (leads ? [changes] : [changes, explorePanel]).filter((row) => row !== null);
-  const grid = doc && !empty && gridRows.length > 0 && <ChartGrid rows={gridRows.map((row) => [row])} />;
 
   const table = doc && !empty && growthRead && (
     rows.length > 0
@@ -285,8 +293,16 @@ function Overview() {
           />
         )}
         {doc && !empty && !growthRead && <LoadError message="暂时读不到变化。" onRetry={reloadAll} />}
-        {grid}
-        {table}
+        {leads ? (changes || table) && (
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,28rem),1fr))] items-start gap-3">
+            {changes && <div className="min-w-0">{changes}</div>}
+            {table && <div className="min-w-0">{table}</div>}
+          </div>
+        ) : <>
+          {changes}
+          {doc && !empty && explorePanel && <ChartGrid rows={[[explorePanel]]} />}
+          {table}
+        </>}
       </div>
       {drawer.value && !pack && !drawer.value.startsWith("pack:") && (
         <MapDrawer

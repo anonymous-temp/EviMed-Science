@@ -3,8 +3,20 @@ import { Copy, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { toast } from "@/lib/toast";
 import { IconButton } from "@/components/ui/IconButton";
+import { BlockHeading } from "@/components/ui/Section";
 
 /**
+ * Component: OpsCard; owner: H; rules: DS17, DS19, DS22.7.
+ * Anatomy: Context-aware heading, optional state/refresh, and ledger body.
+ * Variants: With or without refresh and secondary context.
+ * States: Caller owns reading and refresh availability.
+ * Hit area: Shared refresh icon button.
+ * Keyboard: Native refresh control and caller-owned ledger controls.
+ * Long content: Header text wraps and the ledger owns its row presentation.
+ * Theme: Paper surface and a consistent hairline boundary.
+ * Responsive: Single column within its operator section.
+ * Verification: OpsCard.test.tsx and operator-card route checks.
+ *
  * The operator console's one card (R19.1, the walk of the owner's account; DESIGN.md rules 4 and 7).
  *
  * 运维 was five cards that each wrote the same shell by hand — a bordered box, a header with a 16 px title, a refresh icon and a second
@@ -31,10 +43,10 @@ export function OpsCard({ title, description, refresh, trailing, children }: {
   children: ReactNode;
 }) {
   return (
-    <section aria-label={title} className="mt-5 rounded-card border border-border bg-surface">
+    <section aria-label={title} className="mt-5 rounded-card border border-border bg-surface first:mt-0">
       <header className="flex items-center gap-3 px-5 py-3">
         <div className="min-w-0 flex-1">
-          <h2 className="text-ui font-semibold text-text">{title}</h2>
+          <BlockHeading className="text-ui font-semibold text-text">{title}</BlockHeading>
           {description && <p className="mt-0.5 text-caption text-text-3">{description}</p>}
         </div>
         {trailing}
