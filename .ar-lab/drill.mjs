@@ -11,7 +11,7 @@ import { pathToFileURL } from "node:url";
 import { setTimeout as sleep } from "node:timers/promises";
 import { randomBytes } from "node:crypto";
 
-const base = "http://127.0.0.1:8787";
+const base = process.env.LAB_BASE || "http://127.0.0.1:8787";
 const RESULTS = process.env.RESULTS ?? "/tmp/ar-results";
 const DRILLS = (process.env.DRILLS ?? "").split(",").map((name) => name.trim()).filter(Boolean);
 const PARALLEL = process.env.PARALLEL === "1";
@@ -232,20 +232,21 @@ async function nobodyComesBack(drill, person, session) {
   const after = person.roundsOf(session);
   drill.fact("revival", { roundsBefore: before, roundsAfter: after.length, resumes: after.filter((run) => /research-goal-(resume|retry)/.test(String(run.effectiveRouteReason))).length, continuations: after.filter((run) => /loopx-continuation/.test(String(run.effectiveRouteReason))).length, quiet: end.quiet, state: person.stateOf(session) });
 }
-/** The kernel's frame origin of the lab (`https://localhost:8443`), which nothing else listens on: TLS ended here, bytes passed to the web container's frame port. */
-async function frameOrigin() {
-  const web = await webContainer();
-  const ip = text((await shell("docker", ["inspect", "-f", "{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}", web])).stdout).trim().split(/\s+/)[0];
+/** The shell and the kernel's frame on one host and one scheme with two ports, which is what the control plane admits a frame on (`runtimeUiOrigins`) and what production has: TLS ended here, bytes passed to the published ports. */
+async function tlsFronts() {
   const dir = `${RESULTS}/../tls`;
   mkdirSync(dir, { recursive: true });
   await shell("openssl", ["req", "-x509", "-newkey", "rsa:2048", "-nodes", "-subj", "/CN=localhost", "-addext", "subjectAltName=DNS:localhost", "-keyout", `${dir}/k.pem`, "-out", `${dir}/c.pem`, "-days", "2"]);
-  const server = tls.createServer({ key: readFileSync(`${dir}/k.pem`), cert: readFileSync(`${dir}/c.pem`) }, (socket) => {
-    const upstream = net.connect(8788, ip);
-    socket.pipe(upstream); upstream.pipe(socket);
-    socket.on("error", () => upstream.destroy()); upstream.on("error", () => socket.destroy());
+  const options = { key: readFileSync(`${dir}/k.pem`), cert: readFileSync(`${dir}/c.pem`) };
+  const front = (port, target) => new Promise((resolve) => {
+    const server = tls.createServer(options, (socket) => {
+      const upstream = net.connect(target, "127.0.0.1");
+      socket.pipe(upstream); upstream.pipe(socket);
+      socket.on("error", () => upstream.destroy()); upstream.on("error", () => socket.destroy());
+    });
+    server.listen(port, "127.0.0.1", () => resolve(server));
   });
-  await new Promise((resolve) => { server.listen(8443, "127.0.0.1", resolve); });
-  return server;
+  return [await front(8442, 8787), await front(8443, 8788)];
 }
 /** Every step is written down and none stops the next: a walk that fails half way still says what the other half saw. */
 async function pageWalk(drill) {
@@ -253,7 +254,6 @@ async function pageWalk(drill) {
   const set = await establish(drill, person, G5);
   await roundRunning(drill, person, set.session, 2, { ranMs: 5000 });
   const { chromium } = await import(pathToFileURL(`${process.env.PW_ROOT}/node_modules/playwright-core/index.mjs`).href);
-  const proxy = await frameOrigin();
   const browser = await chromium.launch({ executablePath: "/usr/bin/google-chrome", headless: true, args: ["--no-sandbox", "--ignore-certificate-errors"] });
   const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, ignoreHTTPSErrors: true, locale: "zh-CN" });
   const cookie = person.account.headers.cookie ?? person.account.headers.Cookie ?? "";
@@ -262,6 +262,12 @@ async function pageWalk(drill) {
   const page = await context.newPage();
   const consoleErrors = [];
   page.on("pageerror", (error) => consoleErrors.push(String(error?.message ?? error).slice(0, 200)));
+  const frameNet = [];
+  const noteNet = (row) => { if (frameNet.length < 120) frameNet.push(row); };
+  const scrub = (url) => url.replace(/__evimed\/f\/[^/]+/, "__evimed/f/ID").slice(0, 160);
+  page.on("response", (response) => { const url = response.url(); if (/runtime-ui\/frames|__evimed\//.test(url) && (response.status() >= 300 || /frames/.test(url))) noteNet({ status: response.status(), url: scrub(url) }); });
+  page.on("requestfailed", (request) => { const url = request.url(); if (/runtime-ui|__evimed|8443/.test(url)) noteNet({ failed: request.failure()?.errorText ?? "?", url: scrub(url) }); });
+  page.on("console", (message) => { if (message.type() === "error") noteNet({ console: message.text().slice(0, 220) }); });
   const shot = async (name) => { await page.screenshot({ path: `${drill.dir}/${name}.png` }).catch(() => {}); };
   const step = async (name, fn) => {
     const t = Date.now();
@@ -278,7 +284,7 @@ async function pageWalk(drill) {
     await page.getByRole("button", { name: "打开对话" }).first().click({ timeout: 30_000 });
     await page.locator('[aria-label="原生研究对话"]').waitFor({ timeout: 30_000 });
     for (let i = 0; i < 90 && !frame(); i += 1) await sleep(1000);
-    if (!frame()) throw new Error("no kernel frame");
+    if (!frame()) throw new Error(`no kernel frame; ${JSON.stringify(frameNet.slice(-6)).slice(0, 700)}`);
     await frame().locator("textarea, [contenteditable=true]").first().waitFor({ timeout: 120_000 });
   };
   const fit = async () => page.evaluate(() => {
@@ -372,8 +378,9 @@ async function pageWalk(drill) {
     return { barAfterMs: null, present: false };
   });
   drill.fact("pageErrors", consoleErrors.slice(0, 12));
+  drill.fact("frameNet", frameNet);
+  drill.fact("frames", page.frames().map((one) => scrub(one.url())));
   await browser.close().catch(() => {});
-  proxy.close();
   await person.close();
 }
 
@@ -656,8 +663,11 @@ async function runDrill(name) {
 }
 
 mkdirSync(RESULTS, { recursive: true });
+const fronts = base.startsWith("https:") ? await tlsFronts() : [];
 if (PARALLEL) await Promise.all(DRILLS.map(runDrill));
 else for (const name of DRILLS) await runDrill(name);
 const dmesg = await shell("sh", ["-c", "dmesg -T 2>/dev/null | grep -iE 'oom|killed process' | tail -60; journalctl -k --no-pager 2>/dev/null | grep -iE 'oom-kill|killed process' | tail -60"]);
 writeFileSync(`${RESULTS}/kernel-oom.txt`, dmesg.stdout);
 say(`done jobSpend=${jobSpend.toFixed(2)} drills=${DRILLS.length}`);
+for (const server of fronts) server.close();
+process.exit(0);

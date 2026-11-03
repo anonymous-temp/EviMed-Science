@@ -127,6 +127,7 @@ jobs:
         if: matrix.walk == '1'
         working-directory: patch/OpenScience
         run: |
+          apt-get install -y --no-install-recommends fonts-noto-cjk >/dev/null 2>&1 || true
           npm install -g pnpm@9.4.0 >/dev/null 2>&1
           pnpm install --frozen-lockfile --filter @ai4s/web... 2>&1 | tail -1 | cut -c1-120
           pnpm build:web 2>&1 | tail -1 | cut -c1-120
@@ -146,10 +147,17 @@ jobs:
             grep -c '^OPEN_SCIENCE_MAX_CONCURRENT_TASKS=${{ matrix.maxTasks }}$' "$LAB_SRC/deploy/web/.env.lab"
           fi
 
+      - name: Put the shell and the frame on one host and scheme
+        if: matrix.walk == '1'
+        run: |
+          sed -i -e 's#^OPEN_SCIENCE_PUBLIC_URL=.*#OPEN_SCIENCE_PUBLIC_URL=https://localhost:8442#' -e 's#^OPEN_SCIENCE_RUNTIME_UI_PUBLIC_ORIGIN=.*#OPEN_SCIENCE_RUNTIME_UI_PUBLIC_ORIGIN=https://localhost:8443#' "$LAB_SRC/deploy/web/.env.lab"
+          grep -c '^OPEN_SCIENCE_PUBLIC_URL=https://localhost:8442$' "$LAB_SRC/deploy/web/.env.lab"
+
       - name: Start the stack
         run: python3 -B "$LAB/stack.py" up
 
       - name: Account self-check
+        if: matrix.walk != '1'
         run: python3 -B "$LAB/stack.py" selfcheck
 
       - name: Run the drills
@@ -160,6 +168,8 @@ jobs:
           PARALLEL: ${{ matrix.parallel }}
           JOB_CAP_CNY: ${{ matrix.capCny }}
           DRILL_CAP_CNY: "4"
+          LAB_BASE: ${{ matrix.walk == '1' && 'https://localhost:8442' || '' }}
+          NODE_TLS_REJECT_UNAUTHORIZED: ${{ matrix.walk == '1' && '0' || '1' }}
           PW_ROOT: /opt/ar-lab/pw
         run: node "$GITHUB_WORKSPACE/.ar-lab/drill.mjs"
 
