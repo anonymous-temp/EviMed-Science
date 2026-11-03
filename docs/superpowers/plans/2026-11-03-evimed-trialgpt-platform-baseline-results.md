@@ -51,3 +51,5 @@ The benchmark suite passed 32 Python checks and 14 Node checks at the tested rev
 Private evidence includes the first-attempt manifest with parent freeze hashes, criterion-level alignment rows, scorer output, three TREC topic receipts, redacted gateway audit and cleanup records. The shared estimated-price journal retained CNY 27.18 in settled usage and CNY 47.49 in unresolved reservations across the local campaigns and prior probes. These are reference-price ledger figures. The journal was retained outside the removed containers.
 
 The next acceptance decision requires a stable rerun with coverage and saved-output targets, then a paired comparison after the product changes. This local public-data run exercises automated product dispatch. Browser acceptance, independent clinical holdout validation and deployment remain separate.
+
+The prioritized follow-up tasks and proposed acceptance targets are in the [matching recovery plan](2026-11-03-vcr-next-stage-todo.md).
