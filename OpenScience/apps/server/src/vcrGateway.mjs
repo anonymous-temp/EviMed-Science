@@ -1195,6 +1195,7 @@ const WRITERS = {
       extracted.status === "registry_not_found" ? "registry_not_found" : "registry_unavailable");
     }
     extra.results.push({ index: item.index, registryId, extracted: extracted.counts.extracted, verified: extracted.counts.verified, refused: extracted.counts.refused });
+    for (const note of extracted.notes ?? []) item.issues.push(issue(item.index, "registryId", "vcr_evidence_values_inconsistent", note.message));
     return extracted.precedent?.id ?? null;
   },
 
@@ -1376,6 +1377,9 @@ const WRITERS = {
     const ciHigh = item.num("ciHigh");
     const sampleSize = item.num("sampleSize", { min: 0, integer: true });
     const events = item.num("events", { min: 0, integer: true });
+    // The p-value the paper prints for this value, only to be held against its interval: kept when its number is in the quotation.
+    const pValue = item.num("pValue", { min: 0, max: 1 });
+    const pRelation = item.choice("pRelation", ["=", "<", ">"]);
     if (ciLow != null && ciHigh != null && ciLow >= ciHigh) item.bad("ciLow", "ciLow 要小于 ciHigh。");
     const valueSource = item.choice("valueSource", ["extracted", "calculated"], { fallback: "extracted", words: vcrWordList("evidence_item", "valueSource") });
     // The one thing a paper that does not report a parameter cannot give is a sentence that states it: the quotation is asked for a
@@ -1402,6 +1406,7 @@ const WRITERS = {
     if (!evidence?.addEvidenceItem) return void item.bad("registryId", "证据参数化未接入本部署。", "vcr_write_refused");
     const written = await evidence.addEvidenceItem({ userId: study.userId, studyId: study.id, projectId: study.projectId, item: {
       registry, registryId, parameter, arm, armRole, value, valueText, unit, ciLow, ciHigh, sampleSize, events, valueSource, quote, locator,
+      ...(pValue != null ? { pValue, ...(pRelation ? { pRelation } : {}) } : {}),
       endpointKey, enrollmentKind, historicalBaseline: item.row.historicalBaseline === true, line, biomarker, outcome: item.row.outcome, note: item.row.note,
       ...(notReported ? { notReported: true } : {}),
       trialIdentity, timepoint: item.row.timepoint, ...(literatureSource ? { literatureSource } : {}), ...(publication ? { publication } : {}), evidenceKind, ...(source ? { source } : {}), ...(candidateFrom ? { candidateFrom } : {}),
@@ -1411,6 +1416,11 @@ const WRITERS = {
     const verified = written.state === "verified";
     extra.results.push({ index: item.index, id: written.id, verified, state: written.state, ...(notReported ? { notReported: true } : {}),
       ...(written.publication ? { publication: written.publication } : {}) });
+    // Numbers of this value that do not agree with each other or with its trial's other values: advice with the numbers named, the value is kept.
+    for (const note of written.notes ?? []) item.issues.push(issue(item.index, "value", "vcr_evidence_values_inconsistent", note.message));
+    if (written.pValueNotInQuote) {
+      item.issues.push(issue(item.index, "pValue", "vcr_evidence_item_incomplete", "pValue 没有出现在 quote 里，没有用来核对这条的区间；这一条已保存。要核对，把写着 p 值的那句原文也放进 quote。"));
+    }
     // What a pool needs of this parameter that the item does not carry: said once, in the answer of the write. The item is saved as it
     // stands (it is the paper that decides what it reports), and the run either reads the rest off the paper or records that the paper
     // does not report it.
@@ -2165,6 +2175,13 @@ const WRITERS = {
   WRITERS.assumption = async (item, deps, extra) => {
     const id = await writeCard(item, deps, extra);
     const key = typeof item.row.key === "string" ? item.row.key : "";
+    // The numbers the card is made of, held against each other (E2): said in the answer of the write that made the card, which is saved as it is.
+    if (id && item.ok && typeof deps.evidence?.valueNotes === "function") {
+      const stored = (await deps.store.assumptions(deps.study.id).catch(() => [])).find((/** @type {any} */ card) => card.id === id);
+      const cited = Array.isArray(stored?.evidenceIds) ? stored.evidenceIds.map(String) : [];
+      const notes = cited.length ? await deps.evidence.valueNotes({ userId: deps.study.userId, studyId: deps.study.id, ids: cited }).catch(() => []) : [];
+      for (const note of notes) item.issues.push(issue(item.index, "evidenceIds", "vcr_evidence_values_inconsistent", note.message));
+    }
     if (id && item.ok && vcrIsEffectCardKey(key) && !VCR_EFFECT_ROLES.includes(/** @type {any} */ (item.row.effectRole))) {
       const stored = (await deps.store.assumptions(deps.study.id)).find((card) => card.key === key);
       if (!stored?.effectRole) {

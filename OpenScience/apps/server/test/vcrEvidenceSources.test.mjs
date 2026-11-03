@@ -146,3 +146,77 @@ test("literature baseline bindings match the exact statistic, value, unit and au
   assert.equal(derived.ok, false);
   assert.ok(derived.issues.some(issue => issue.code === "reported_baseline_required"));
 });
+
+// E2: the numbers of a value that do not agree with each other come back as notes on the write. The value is saved as it was read.
+function consistencyFixture(text) {
+  const source = { id: `src_${"c".repeat(32)}`, userId: "u1", projectId: "p1", payload: { generation: 1, analysis: { textSha256: sha(text) } } };
+  const sources = { async get() { return source; }, async loadCapture() { return { input: { text } }; } };
+  /** @type {any[]} */ const rows = [];
+  const store = {
+    async appendEvidenceItems({ items }) {
+      const ids = items.map((item, at) => { const id = `ev${rows.length + at + 1}`; rows.push({ ...snake(item), id, created_at: new Date(2026, 10, 3, 12, rows.length) }); return id; });
+      return { ids };
+    },
+    async listEvidenceItems() { return rows.map((row) => ({ ...row })); },
+  };
+  const pipeline = createVcrEvidencePipeline({ store });
+  pipeline.attachSources(createVcrEvidenceSources({ sources }));
+  const literatureSource = { sourceId: source.id, generation: 1, textSha256: sha(text) };
+  const write = (quote, fields) => pipeline.addEvidenceItem({ userId: "u1", studyId: "s1", projectId: "p1", item: {
+    literatureSource, armRole: "contrast", arm: "Drug vs placebo", endpointKey: "os", evidenceKind: "outcome", historicalBaseline: true,
+    quote, locator: { start: text.indexOf(quote), end: text.indexOf(quote) + quote.length }, ...fields } });
+  return { pipeline, rows, write };
+}
+/** An item as the store keeps it: the columns the checks read, in their own names. */
+function snake(item) {
+  return { parameter: item.parameter, arm: item.arm, arm_role: item.armRole, value: item.value, unit: item.unit, ci_low: item.ciLow, ci_high: item.ciHigh,
+    sample_size: item.sampleSize, events: item.events, locator: item.locator, detail: item.detail, source_ref: item.sourceRef, endpoint_key: item.endpointKey };
+}
+
+test("E2: an interval that does not fit its estimate is named in the answer of the write, with the numbers, and the value is kept", async () => {
+  const good = "Overall survival: HR 0.62 (95% CI 0.48 to 0.80), p < 0.001.";
+  const bad = "Progression-free survival: HR 0.62 (95% CI 0.48 to 0.95), p < 0.001.";
+  const f = consistencyFixture(`${good}\n${bad}\n`);
+  const first = await f.write(good, { parameter: "hazard_ratio", value: 0.62, ciLow: 0.48, ciHigh: 0.8, pValue: 0.001, pRelation: "<" });
+  assert.equal(first.state, "verified");
+  assert.equal(first.notes, undefined, "printed rounding passes in silence");
+  const second = await f.write(bad, { parameter: "hazard_ratio", value: 0.62, ciLow: 0.48, ciHigh: 0.95, endpointKey: "pfs" });
+  assert.equal(second.state, "verified", "the value is saved and verified as it was read");
+  assert.equal(f.rows[1].value, 0.62);
+  assert.equal(second.notes.length, 1);
+  assert.equal(second.notes[0].kind, "consistency");
+  assert.match(second.notes[0].message, /风险比（Drug vs placebo）：估计值 0\.62、区间 0\.48–0\.95/);
+  assert.match(second.notes[0].message, /几何中点是 0\.675/);
+  assert.deepEqual(second.notes[0].evidenceIds, ["ev2"]);
+  // Asked again for the cards that cite the two, only the second is named; nothing was stored for it.
+  assert.deepEqual((await f.pipeline.valueNotes({ userId: "u1", studyId: "s1", ids: ["ev1", "ev2"] })).map((note) => note.evidenceIds), [["ev2"]]);
+  assert.deepEqual(await f.pipeline.valueNotes({ userId: "u1", studyId: "s1", ids: ["ev1"] }), []);
+  assert.deepEqual(await f.pipeline.valueNotes({ userId: "u1", studyId: "s1", ids: [] }), []);
+  assert.equal(f.pipeline.counters.valueChecks["consistency:interval_not_symmetric"], 1, "counted once, at the write that made the value");
+});
+
+test("E2: a p-value is kept only when its number is in the quotation, and is then held against the interval", async () => {
+  const text = "Hazard ratio 0.82 (95% CI 0.62 to 1.09); the log-rank p was 0.0004.\nHazard ratio 0.82 (95% CI 0.62 to 1.09).\n";
+  const f = consistencyFixture(text);
+  const withP = await f.write(text.split("\n")[0], { parameter: "hazard_ratio", value: 0.82, ciLow: 0.62, ciHigh: 1.09, pValue: 0.0004 });
+  assert.equal(f.rows[0].detail.pValue, 0.0004);
+  assert.equal(withP.notes.length, 1);
+  assert.match(withP.notes[0].message, /包含 1（不显著）/);
+  assert.match(withP.notes[0].message, /p = 0\.0004/);
+  // The same p stated on a sentence that does not print it is not used, and the answer says so.
+  const withoutP = await f.write(text.split("\n")[1], { parameter: "hazard_ratio", value: 0.82, ciLow: 0.62, ciHigh: 1.09, pValue: 0.0004, endpointKey: "other" });
+  assert.equal(withoutP.pValueNotInQuote, true);
+  assert.equal(f.rows[1].detail.pValue, undefined);
+  assert.equal(withoutP.notes, undefined);
+});
+
+test("E2: a write whose store cannot be read back says nothing about the numbers and still succeeds", async () => {
+  const text = "HR 0.62 (95% CI 0.48 to 0.95).\n";
+  const source = { id: `src_${"d".repeat(32)}`, userId: "u1", projectId: "p1", payload: { generation: 1, analysis: { textSha256: sha(text) } } };
+  const pipeline = createVcrEvidencePipeline({ store: { async appendEvidenceItems() { return { ids: ["ev1"] }; } } });
+  pipeline.attachSources(createVcrEvidenceSources({ sources: { async get() { return source; }, async loadCapture() { return { input: { text } }; } } }));
+  const written = await pipeline.addEvidenceItem({ userId: "u1", studyId: "s1", projectId: "p1", item: { literatureSource: { sourceId: source.id, generation: 1, textSha256: sha(text) },
+    parameter: "hazard_ratio", armRole: "contrast", value: 0.62, ciLow: 0.48, ciHigh: 0.95, quote: text.trim(), locator: { start: 0, end: text.trim().length }, endpointKey: "os" } });
+  assert.equal(written.state, "verified");
+  assert.equal(written.notes, undefined);
+});

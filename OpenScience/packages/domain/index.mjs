@@ -2287,6 +2287,14 @@ export {
   vcrSuccessRates,
 } from './src/vcrSuccessRates.mjs'
 
+// vcrValueConsistency — do the numbers an extraction carries agree with each other (interval symmetry, p against interval, counts against rate,
+// arms against total); a pure function whose findings are advice, never a refusal (algorithm round E2)
+export {
+  P_LEVELS,
+  extractedValueConsistency,
+  printedHalfUnit,
+} from './src/vcrValueConsistency.mjs'
+
 // vcrScenarioSchemas — 4 exports: the walker that checks a scenario against its method's schema, and the two tables of
 // which analysis a design may run
 export {

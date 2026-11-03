@@ -824,6 +824,9 @@ def write(arguments: dict) -> dict:
     if reminders:
         next_actions.append("The warnings that name a record or a role are reminders: the object is saved and its result is delivered as it "
                             "stands. Add what they name by writing the same object again (a new version), without waiting for anyone.")
+    if any(issue.get("code") == "vcr_evidence_values_inconsistent" for issue in reminders):
+        next_actions.append("A warning that names numbers which do not agree is advice: read those numbers in the source again; if one was copied wrong, "
+                            "write the item again with the right one, otherwise leave it. The value is kept as read either way.")
     return _with_entry({
         "status": "warning" if issues else "success",
         "summary": "Wrote %s: %d written%s%s." % (what, len(ids), ", %d refused" % len(refused) if refused else "",
@@ -835,7 +838,8 @@ def write(arguments: dict) -> dict:
 
 
 # The write issues that are reminders of a record the object has not got yet, not refusals (the object is saved).
-_REMINDER_CODES = frozenset({"vcr_comparator_record_incomplete", "vcr_assumption_role_missing", "vcr_evidence_item_incomplete", "vcr_evidence_reported_unverified"})
+_REMINDER_CODES = frozenset({"vcr_comparator_record_incomplete", "vcr_assumption_role_missing", "vcr_evidence_item_incomplete", "vcr_evidence_reported_unverified",
+                            "vcr_evidence_values_inconsistent"})
 
 
 def _issue_line(issue: dict) -> str:

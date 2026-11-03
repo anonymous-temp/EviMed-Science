@@ -583,6 +583,19 @@ class VcrReadWriteTests(_GatewayCase):
         self.assertIn("1 written, 1 reminder(s)", saved["summary"])
         self.assertNotIn("refused", saved["summary"])
 
+    def test_numbers_that_do_not_agree_are_advice_on_a_saved_item_and_say_what_to_do_with_the_value(self):
+        # E2: the item is saved as read; the answer names the numbers and does not tell the run to rewrite it or to wait for anyone.
+        _Gateway.answers["write"] = (200, {"data": {"what": "evidence_item", "ok": True, "ids": ["evd_1"], "issues": [
+            {"index": 0, "field": "value", "code": "vcr_evidence_values_inconsistent", "message": "风险比：估计值 0.62、区间 0.48–0.95 对不上。"}]}})
+        result = self.server.call_tool("vcr_write", {"what": "evidence_item", "items": [{"registryId": "NCT01234567"}]})
+        self.assertEqual(result["status"], "warning")
+        self.assertIn("1 written, 1 reminder(s)", result["summary"])
+        self.assertNotIn("refused", result["summary"])
+        self.assertEqual(result["warnings"], ["item 0, value: 风险比：估计值 0.62、区间 0.48–0.95 对不上。"])
+        joined = " ".join(result["next_actions"])
+        self.assertIn("The value is kept as read either way", joined)
+        self.assertNotIn("Correct the refused items", joined)
+
     def test_a_matching_write_hands_over_the_link_to_the_matching_page(self):
         entry = {"studyId": "std_conv", "tab": "matching", "label": "在“匹配”页查看", "url": "https://evimed.example/app/virtual-research/std_conv/matching"}
         _Gateway.answers["write"] = (200, {"data": {"what": "fact", "ok": True, "ids": ["f1"], "issues": [], "resultEntry": entry}})

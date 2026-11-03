@@ -234,6 +234,35 @@ describe("the cards beside the one in view", () => {
   });
 });
 
+describe("the numbers a card is made of", () => {
+  it("mark a card whose evidence does not agree with itself with a ⚠ in the list and the numbers in the card, and a card that agrees with nothing", async () => {
+    const raw = fixture("ev201/data.json");
+    raw.assumptions[0].valueChecks = [{ kind: "consistency", message: "风险比：估计值 0.62、区间 0.48–0.95。这类区间在对数尺度上应对称于估计值，对不上。" }];
+    installVcrServer(network.productRequest, { [`GET /vcr/studies/${STUDY_ID}/data`]: raw });
+    draw(<DataTab studyId={STUDY_ID} study={study()} />);
+    await ready();
+    expect(document.querySelectorAll("[data-tag]")).not.toHaveLength(0);
+    const flagged = [...document.querySelectorAll("[data-tag]")].filter((tag) => tag.textContent === "⚠ 数值待核");
+    expect(flagged).toHaveLength(1);
+    await userEvent.click(document.querySelector(`[data-vcr-assumption="${raw.assumptions[0].id}"]`) as HTMLElement);
+    const checks = document.querySelector("[data-vcr-value-checks]") as HTMLElement;
+    expect(checks).toHaveTextContent("⚠ 这张卡用到的数有对不上的地方");
+    expect(checks).toHaveTextContent("估计值 0.62、区间 0.48–0.95");
+    // Nothing else is said: the value stands, no button asks for anything, no back-office word.
+    expect(within(checks).queryByRole("button")).toBeNull();
+    expect(checks.textContent).not.toMatch(/hazard_ratio|evidence|vcr_/);
+  });
+
+  it("show nothing for a card that agrees", async () => {
+    const raw = fixture("ev201/data.json");
+    installVcrServer(network.productRequest, { [`GET /vcr/studies/${STUDY_ID}/data`]: raw });
+    draw(<DataTab studyId={STUDY_ID} study={study()} />);
+    await ready();
+    expect([...document.querySelectorAll("[data-tag]")].some((tag) => tag.textContent === "⚠ 数值待核")).toBe(false);
+    expect(document.querySelector("[data-vcr-value-checks]")).toBeNull();
+  });
+});
+
 describe("the precedents", () => {
   it("are a table with planned and actual in columns of their own and no line under it explaining which is which", async () => {
     draw(<DataTab studyId={STUDY_ID} study={study()} />);

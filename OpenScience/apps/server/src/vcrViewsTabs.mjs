@@ -57,6 +57,7 @@ import { presentPopulationCheck } from "./vcrPopulationCheck.mjs";
 import { presentConfirmatoryDesigns } from "./vcrConfirmatory.mjs";
 import { presentEvidenceSyntheses, tauPriorWords, vcrSuccessRatesPage } from "./vcrEvidenceSynthesis.mjs";
 import { presentBiasAnalysis } from "./vcrBiasAnalysis.mjs";
+import { evidenceValueFindings } from "./vcrValueChecks.mjs";
 import { presentTrim } from "./vcrTrimView.mjs";
 import { localCalibrationView } from "./vcrLocalCalibration.mjs";
 import {
@@ -1795,9 +1796,13 @@ export function presentDataTab(bundle, query = {}) {
     }
     return objects.slice(0, 8);
   };
+  // The numbers of the study's extracted values that do not agree with each other (E2), once; a card carries those of the evidence it cites.
+  const consistency = list(evidence?.items).length ? evidenceValueFindings(list(evidence?.items)) : [];
   const cards = assumptions.map((/** @type {any} */ card) => {
     const items = evidenceFor(card);
     const value = assumptionValue(card, { now, evidence: items });
+    const cited = new Set(list(card.evidenceIds).map(String));
+    const valueChecks = consistency.filter((finding) => finding.ids.some((id) => cited.has(id))).map((finding) => ({ kind: "consistency", message: finding.message }));
     const pooling = object(card.pooling);
     const versions = (bundle.assumptionVersions?.get?.(card.key) ?? []).map((/** @type {any} */ row) => ({
       version: row.version, at: zhTime(row.createdAt, now), text: text(row.note) ?? `${row.name || row.key}${row.pointValue != null ? ` = ${row.pointValue}` : ""}`,
@@ -1824,6 +1829,8 @@ export function presentDataTab(bundle, query = {}) {
       sensitivity: sensitivityText(card),
       review: reviewOf(card),
       ...(newEvidence ? { newEvidence } : {}),
+      // ⚠ The numbers the card is made of that do not agree: advice with the numbers named; the value stands as it was read.
+      ...(valueChecks.length ? { valueChecks } : {}),
       // What an edit starts from. A person's value is an expert setting: it keeps the card's endpoint and applicability but not the pooled
       // evidence, which no longer supports the number (AC-25).
       edit: { pointValue: numeric(card.pointValue), unit: zhUnit(text(card.unit)), note: text(card.note), endpoint: text(card.endpoint), applicability: object(card.applicability) },

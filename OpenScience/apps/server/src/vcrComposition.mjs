@@ -1434,6 +1434,11 @@ export function vcrMetricFamilies(enabled, snapshot) {
     add("card_candidates_total", "Evidence items a run wrote as candidates it found through an evidence card (flywheel F23): written, and the ones that passed the quote and number check.", "counter",
       [{ labels: { outcome: "written" }, value: Number(snapshot.evidence.cardCandidates ?? 0) },
         { labels: { outcome: "verified" }, value: Number(snapshot.evidence.cardCandidatesVerified ?? 0) }]);
+    add("evidence_value_checks_total", "What the checks on extracted values said since this process started, by check and outcome: the numbers of a value that do not agree with each other (consistency, by what disagreed) — advice, the value is kept.", "counter",
+      Object.entries(snapshot.evidence.valueChecks ?? {}).map(([key, value]) => {
+        const [check, outcome] = key.split(":");
+        return { labels: { check, outcome: outcome ?? "" }, value: Number(value) };
+      }));
   }
   if (snapshot.predictions) {
     add("predictions_total", "Predictions of a registered trial's primary endpoint filed with the registry from a study's trial scenario (flywheel F25): filed, asked again, refused, and filings the registry did not take.", "counter",

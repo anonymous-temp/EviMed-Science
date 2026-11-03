@@ -110,6 +110,7 @@ import { verifyLiteratureBaseline } from "./vcrEvidenceSources.mjs";
 import { bindEvidenceTrialIdentity, independentTrialItems } from "./vcrTrialIdentity.mjs";
 import { paperAddress } from "./vcrPublicationSources.mjs";
 import { numericLiteralInSpan } from "./vcrNumericLiterals.mjs";
+import { evidenceValueFindings, parsePrintedP } from "./vcrValueChecks.mjs";
 
 /** The two-sided 95% normal quantile every interval here is read with. */
 export const Z_95 = 1.959963984540054;
@@ -1227,6 +1228,10 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
    * passes: the share that verified is what says whether the cards are worth reading as leads.
    */
   const counters = { cardCandidates: 0, cardCandidatesVerified: 0 };
+  /** What the checks on extracted values said, by `check:outcome` (E2: the consistency findings by their code), since this process started. @type {Record<string, number>} */
+  const valueChecks = {};
+  /** @param {string} key */
+  const countCheck = (key) => { valueChecks[key] = (valueChecks[key] ?? 0) + 1; };
 
   /**
    * A registry read that did not give a record, as the answer the run reads:
@@ -1600,8 +1605,10 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
       });
 
       note("vcr.evidence.extracted", { userId, studyId, registryId, verified: saved.verified, refused: saved.refused });
+      const notes = await pipeline.valueNotes({ userId, studyId, ids: saved.ids, count: true }).catch(() => []);
       return {
         status: "ok",
+        ...(notes.length ? { notes } : {}),
         precedent: saved.precedent,
         versions: await store.registryVersions(userId, studyId, saved.precedent.id),
         freshness: { checkedAt, recruitment: "registry_reported_not_site_confirmed" },
@@ -1656,6 +1663,9 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
       try { trialIdentity = paper ? null : bindEvidenceTrialIdentity({ asked: item.trialIdentity, registry: registryName, registryId, literature }); }
       catch { return { status: "refused", code: "vcr_evidence_unverified", message: "Name the trial in an exact preserved trialIdentity span before pooling literature." }; }
       const checkedAt = now().toISOString();
+      // A printed p-value is kept (for the consistency check) only when its number is in the quotation, like every number on the item.
+      const printedP = parsePrintedP(item.pValue, item.pRelation);
+      const keptP = printedP && numberIsInQuote(String(item.quote ?? ""), printedP.pValue) ? printedP : null;
       const timepoint = item.timepoint;
       const checkedTarget = timepoint && typeof timepoint === 'object' ? verifyExtraction({
         extraction:{value:timepoint.value,quote:String(timepoint.quote ?? ''),valueSource:'extracted'},
@@ -1697,7 +1707,7 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
           historicalBaseline: !derived && item.enrollmentKind !== "estimated" && item.historicalBaseline === true,
           applicability: { line: item.line, biomarker: item.biomarker, endpointKey: String(item.endpointKey ?? "") },
           // `candidateFrom` and `source` are the run's own statements, kept beside the verdict and read by nothing that decides it.
-          detail: { outcome: item.outcome ?? null, note: item.note ?? null, trialIdentity,
+          detail: { outcome: item.outcome ?? null, note: item.note ?? null, trialIdentity, ...(keptP ?? {}),
             evidenceKind: ["baseline", "outcome", "design"].includes(item.evidenceKind) ? item.evidenceKind : "outcome",
             sourceStanding: literature || paper ? (derived ? "article_derived" : "article_reported")
               : (derived ? "registry_derived" : item.enrollmentKind === "estimated" ? "registry_planned" : "registry_reported"),
@@ -1732,8 +1742,28 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
         counters.cardCandidates += 1;
         if (checked.verified) counters.cardCandidatesVerified += 1;
       }
-      return { status: "ok", id: appended.ids[0], state: checked.state, ...(paper ? { publication: { ...paper, read: paperRead?.found === true, ...(paperRead?.found ? { contentRead: paperRead.contentLevel } : {}) },
+      const notes = item.notReported === true ? [] : await pipeline.valueNotes({ userId, studyId, ids: appended.ids, count: true }).catch(() => []);
+      return { status: "ok", id: appended.ids[0], state: checked.state, ...(printedP && !keptP ? { pValueNotInQuote: true } : {}), ...(notes.length ? { notes } : {}), ...(paper ? { publication: { ...paper, read: paperRead?.found === true, ...(paperRead?.found ? { contentRead: paperRead.contentLevel } : {}) },
         ...(checked.state === "reported_unverified" ? { because: checked.item.detail.unverifiedBecause } : {}) } : {}) };
+    },
+
+    /**
+     * What is worth a second look in the numbers of some evidence items (E2): the places where the values of one trial do not agree with
+     * each other, as sentences. Advice, never a refusal: the items are saved and cited as they were read. Computed from the stored rows
+     * each time, so nothing is kept and a corrected value stops being flagged.
+     * @param {{ userId: string, studyId: string, ids: readonly string[], count?: boolean }} input `count`: these are findings of a write, counted once
+     * @returns {Promise<Array<{ kind: "consistency", code: string, evidenceIds: string[], message: string }>>}
+     */
+    async valueNotes({ userId, studyId, ids, count = false }) {
+      const wanted = new Set((ids ?? []).map(String));
+      if (!wanted.size) return [];
+      const rows = [...await store.listEvidenceItems({ userId, studyId, latestOnly: true, limit: 2000 })];
+      const held = new Set(rows.map((/** @type {any} */ row) => String(row.id)));
+      const missing = [...wanted].filter((id) => !held.has(id));
+      if (missing.length && typeof store.itemsById === "function") rows.push(...await store.itemsById({ userId, studyId, ids: missing }));
+      const findings = evidenceValueFindings(rows, { only: wanted });
+      if (count) for (const finding of findings) countCheck(`consistency:${finding.code}`);
+      return findings.map((finding) => ({ kind: /** @type {const} */ ("consistency"), code: finding.code, evidenceIds: finding.ids, message: finding.message }));
     },
 
     /**
@@ -2057,7 +2087,7 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
      */
     verifiedEvidenceIds(input) { return store.verifiedEvidenceIds(input); },
 
-    counters,
+    counters: Object.assign(counters, { valueChecks }),
   };
   return pipeline;
 }
