@@ -41,7 +41,7 @@ async function* sourceFiles(directory) {
   }
 }
 
-test("every <evimed-*> tag the platform writes is named, and every named tag is still written", async () => {
+test("every platform tag the platform writes is named, and every named tag is still written", async () => {
   /** @type {Map<string, Set<string>>} */
   const emitted = new Map();
   let scanned = 0;
@@ -49,7 +49,7 @@ test("every <evimed-*> tag the platform writes is named, and every named tag is 
     for await (const file of sourceFiles(path.join(repoRoot, tree))) {
       scanned += 1;
       const text = await readFile(file, "utf8");
-      for (const match of text.matchAll(/<\/?(evimed-[a-z][a-z-]*[a-z])/g)) {
+      for (const match of text.matchAll(/<\/?(evimed[-_][a-z][a-z_-]*[a-z])(?=[\s>/])/g)) {
         const files = emitted.get(match[1]) ?? new Set();
         files.add(path.relative(repoRoot, file));
         emitted.set(match[1], files);
@@ -76,6 +76,13 @@ test("every <evimed-*> tag the platform writes is named, and every named tag is 
       assert.ok(text.includes(`<${entry.tag}`), `${entry.tag} is listed as written by ${emitter}, which no longer writes it`);
     }
   }
+});
+
+test("a selected result's platform block is registered as injected context", () => {
+  const selection = PLATFORM_CONTEXT_TAGS.find((item) => item.tag === "evimed_result_selection");
+  assert.equal(selection?.role, "injected");
+  assert.ok(selection?.emitters.includes("apps/server/src/resultRevision.mjs"));
+  assert.equal(carriesPlatformContext("<evimed_result_selection>{}</evimed_result_selection>"), true);
 });
 
 test("an injected block is recognised with or without attributes; a user wrapper is not machine text", () => {
