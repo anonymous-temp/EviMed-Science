@@ -1,0 +1,158 @@
+name: ar-drill
+
+# Fault drills of 主动科研's long research goals. Only this file and .ar-lab/ live on the orphan branch ar-lab/drills, so a push here starts
+# nothing else. The logs of this repository are public: every step prints drill names, counters and bounded codes, never a prompt, an answer
+# or a file. Results leave the job encrypted.
+on:
+  push:
+    branches: ["ar-lab/drills"]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: ar-drill-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.cfg.outputs.matrix }}
+      imageRunId: ${{ steps.cfg.outputs.imageRunId }}
+      imageArtifact: ${{ steps.cfg.outputs.imageArtifact }}
+      sourceRef: ${{ steps.cfg.outputs.sourceRef }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: cfg
+        run: |
+          python3 - <<'PY'
+          import json, os
+          cfg = json.load(open('.ar-lab/config.json'))
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as fh:
+              fh.write("matrix=" + json.dumps({'include': cfg['jobs']}) + "\n")
+              fh.write(f"imageRunId={int(cfg['imageRunId'])}\n")
+              fh.write(f"imageArtifact={cfg['imageArtifact']}\n")
+              fh.write(f"sourceRef={cfg['sourceRef']}\n")
+          PY
+
+  drill:
+    needs: plan
+    name: drill ${{ matrix.key }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 200
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    defaults:
+      run:
+        shell: /usr/local/bin/evimed-ci-root-shell {0}
+    env:
+      LAB_WORK: /opt/ar-lab
+      LAB_BUNDLE: /opt/ar-lab/bundle
+      LAB_SRC: ${{ github.workspace }}/src/OpenScience
+      RESULTS: /opt/ar-lab/results
+      COMPOSE_PARALLEL_LIMIT: "1"
+    steps:
+      - name: Prepare the disposable Docker host operator shell
+        shell: bash
+        run: |
+          test "$RUNNER_ENVIRONMENT" = "github-hosted"
+          cat > "$RUNNER_TEMP/evimed-ci-root-shell" <<'SH'
+          #!/usr/bin/env bash
+          exec sudo -E env "PATH=$PATH" bash --noprofile --norc -eo pipefail "$1"
+          SH
+          sudo install -o 0 -g 0 -m 0755 "$RUNNER_TEMP/evimed-ci-root-shell" /usr/local/bin/evimed-ci-root-shell
+
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.plan.outputs.sourceRef }}
+          path: src
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.0
+
+      - name: Place the lab files and the secret bundle
+        env:
+          AR_LAB_BUNDLE: ${{ secrets.AR_LAB_BUNDLE }}
+        run: |
+          set +x
+          git config --global --add safe.directory '*'
+          install -d -m 0700 "$LAB_WORK" "$LAB_BUNDLE"
+          printf '%s' "$AR_LAB_BUNDLE" | base64 -d | tar -xz -C "$LAB_BUNDLE"
+          for f in "$LAB_BUNDLE"/secrets/*; do
+            v="$(tr -d '\r\n' < "$f")"
+            if [ -n "$v" ]; then echo "::add-mask::$v"; fi
+          done
+          echo "LAB=$GITHUB_WORKSPACE/.ar-lab/lab" >> "$GITHUB_ENV"
+          echo "secrets placed: $(ls "$LAB_BUNDLE"/secrets | wc -l) files"
+
+      - name: Fetch the release images from this repository's artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.plan.outputs.imageArtifact }}
+          run-id: ${{ needs.plan.outputs.imageRunId }}
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          path: ${{ runner.temp }}/img
+
+      - name: Verify and load the images
+        run: |
+          python3 -B "$LAB/stack.py" images --archive "$RUNNER_TEMP/img"
+          rm -f "$RUNNER_TEMP/img/images.tar.gz"
+          df -h / | tail -1
+
+      - name: Write the environment and the secret files
+        run: |
+          python3 -B "$LAB/stack.py" env --lanes 3
+          if [ -n "${{ matrix.maxTasks }}" ]; then
+            sed -i "s/^OPEN_SCIENCE_MAX_CONCURRENT_TASKS=.*/OPEN_SCIENCE_MAX_CONCURRENT_TASKS=${{ matrix.maxTasks }}/" "$LAB_SRC/deploy/web/.env.lab"
+            grep -c '^OPEN_SCIENCE_MAX_CONCURRENT_TASKS=${{ matrix.maxTasks }}$' "$LAB_SRC/deploy/web/.env.lab"
+          fi
+
+      - name: Start the stack
+        run: python3 -B "$LAB/stack.py" up
+
+      - name: Account self-check
+        run: python3 -B "$LAB/stack.py" selfcheck
+
+      - name: Run the drills
+        continue-on-error: true
+        timeout-minutes: 170
+        env:
+          DRILLS: ${{ matrix.drills }}
+          PARALLEL: ${{ matrix.parallel }}
+          JOB_CAP_CNY: ${{ matrix.capCny }}
+        run: node "$GITHUB_WORKSPACE/.ar-lab/drill.mjs"
+
+      - name: Container state
+        if: always()
+        run: |
+          python3 -B "$LAB/stack.py" diagnose > /dev/null 2>&1 || true
+          docker ps -a --format '{{.Status}}' | sort | uniq -c | cut -c1-60 || true
+
+      - name: Encrypt the results
+        if: always()
+        run: |
+          mkdir -p "$RESULTS"
+          tar -C "$RESULTS" -czf /opt/ar-lab/results.tgz .
+          openssl enc -aes-256-cbc -pbkdf2 -salt -pass "file:$LAB_BUNDLE/secrets/results.pass" -in /opt/ar-lab/results.tgz -out "$RUNNER_TEMP/results-${{ matrix.key }}.enc"
+          chmod 0644 "$RUNNER_TEMP/results-${{ matrix.key }}.enc"
+          ls -la "$RUNNER_TEMP/results-${{ matrix.key }}.enc" | awk '{print $5}'
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ar-drill-${{ matrix.key }}
+          path: ${{ runner.temp }}/results-${{ matrix.key }}.enc
+          if-no-files-found: warn
+          compression-level: 0
+          retention-days: 3
+
+      - name: Stop the stack
+        if: always()
+        run: python3 -B "$LAB/stack.py" down || true

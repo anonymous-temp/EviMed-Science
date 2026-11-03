@@ -1,0 +1,59 @@
+# The RSI lab's overlay on the production Compose stack, applied last (see stack.py and ENV-DIFFERENCES.md).
+#
+# It does four things and nothing else:
+#   - the web service waits for the services this stack runs, not for the ones it leaves out (the six specialist engines), so the stack
+#     comes up without them; the context engine (OpenViking, pinned as deps-version.json says) is one it runs, as production does, so
+#     memory is on: every account's memory is the engine's, and a lab run is `automated` on a throwaway account, which the engine is
+#     handed nothing for and learns nothing from;
+#   - the document parsing service of production (the parser team's own, over HTTP; its address is the operator's, from the secret
+#     bundle) is wired the way the ingestion overlay wires it, without OpenList: the control plane reads a PDF through it when a page it
+#     fetches is one, as production does;
+#   - the benchmarks' own datasets are unreachable from the control plane and from the search service. A run once opened the
+#     dataset of the benchmark it was being measured on; the hosts below resolve to this container's own loopback, which the web-read
+#     gateway refuses as not publicly routable and which it never forwards to a second reader. The runner host itself (the lane's
+#     own data fetch) still reaches them, and the runtime containers have no route out at all.
+services:
+  open-science-web:
+    depends_on: !override
+      evimed-postgres:
+        condition: service_healthy
+      open-science-runtime-controller:
+        condition: service_healthy
+      open-science-backup:
+        condition: service_started
+      evimed-drug-evidence-adapter:
+        condition: service_healthy
+      evimed-openviking:
+        # As in the base stack: started, not healthy (a recall degrades to the term matcher when the index cannot answer).
+        condition: service_started
+    environment:
+      # Forwarded by the ingestion overlay in production, which this stack does not compose (no OpenList: knowledge-base intake is not run).
+      OPEN_SCIENCE_SOURCE_INGESTION_ENABLED: ${OPEN_SCIENCE_SOURCE_INGESTION_ENABLED:-false}
+      OPEN_SCIENCE_REQUIRE_DOCUMENT_PARSER: ${OPEN_SCIENCE_REQUIRE_DOCUMENT_PARSER:-false}
+      OPEN_SCIENCE_DOCUMENT_PARSER_URL: ${OPEN_SCIENCE_DOCUMENT_PARSER_URL:-}
+      OPEN_SCIENCE_DOCUMENT_PARSER_TOKEN_FILE: /run/secrets/document-parser-token
+      OPEN_SCIENCE_DOCUMENT_PARSER_TIMEOUT_MS: ${OPEN_SCIENCE_DOCUMENT_PARSER_TIMEOUT_MS:-300000}
+      OPEN_SCIENCE_DOCUMENT_PARSER_REVISION: ${OPEN_SCIENCE_DOCUMENT_PARSER_REVISION:-evimed-extract@0.5.0}
+    volumes:
+      # Empty in content: the parser service needs no key (measured 2026-09-22); an empty file sends no Authorization header.
+      - type: bind
+        source: ${OPEN_SCIENCE_DOCUMENT_PARSER_TOKEN_HOST_FILE:?set OPEN_SCIENCE_DOCUMENT_PARSER_TOKEN_HOST_FILE}
+        target: /run/secrets/document-parser-token
+        read_only: true
+        bind:
+          create_host_path: false
+    extra_hosts: &dataset-hosts
+      - "huggingface.co:127.0.0.1"
+      - "www.huggingface.co:127.0.0.1"
+      - "hf.co:127.0.0.1"
+      - "www.hf.co:127.0.0.1"
+      - "cdn-lfs.huggingface.co:127.0.0.1"
+      - "cdn-lfs-us-1.huggingface.co:127.0.0.1"
+      - "cdn-uploads.huggingface.co:127.0.0.1"
+      - "datasets-server.huggingface.co:127.0.0.1"
+      - "cdn-lfs.hf.co:127.0.0.1"
+      - "cas-bridge.xethub.hf.co:127.0.0.1"
+      - "transfer.xethub.hf.co:127.0.0.1"
+      - "hf-mirror.com:127.0.0.1"
+  open-science-web-search:
+    extra_hosts: *dataset-hosts
