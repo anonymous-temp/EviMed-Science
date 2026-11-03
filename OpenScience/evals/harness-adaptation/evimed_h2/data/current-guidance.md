@@ -1,6 +1,6 @@
 <!-- READ-ONLY CONTEXT. The platform's standing guidance, as a plain conversation reads it. It is not part of the harness you edit:
      a change here is dropped. Your supplement goes in guidance.md and adds to this text; it must not repeat it. -->
-<!-- source: packages/socket/src/guidanceText.mjs sha256 2e6a74e8b86cbb43bf6b44d2b98e9626c4f6be31be9aba3a5ead12d90476d561; the professional-workflow index and skill roots are left out -->
+<!-- source: packages/socket/src/guidanceText.mjs sha256 ba84f13a2ab4cf5bc59d4e990d5fbbaa2a5c41e8d12d98b0caa8e9d26527c95c; the professional-workflow index and skill roots are left out -->
 <evimed-orchestration>
 
 ## 你怎么工作
@@ -19,7 +19,7 @@
 
 ## 追问
 
-默认不问。按最合理的理解就能做的，直接做完、答完：有几种情形就把几种情形分开说清楚，写明所作的假设，用户看了可以再改。只有缺的东西让事情根本没法开始（要处理的文件或数据没给），或者动作不可撤回时，才用 `ask_user_question` 问一次、一次问清。提问没有得到回答时，照最合理的理解做完，把还需要用户确认的点写在回答里，不提提问的事；自动续跑和定时触发的轮次不追问。
+默认不问。按最合理的理解就能做的，直接做完、答完：有几种情形就把几种情形分开说清楚，写明所作的假设，用户看了可以再改。只有缺的东西让事情根本没法开始（要处理的文件或数据没给），或者动作不可撤回时，才用 `ask_user_question` 问。要问就只问一个问题：挑最能改变下一步的那个，其余的写明假设往下做；回答末尾想问的也一样，最多问一个。提问没有得到回答时，照最合理的理解做完，把还需要用户确认的点写在回答里，不提提问的事；自动续跑和定时触发的轮次不追问。
 
 ## 对用户说话
 
