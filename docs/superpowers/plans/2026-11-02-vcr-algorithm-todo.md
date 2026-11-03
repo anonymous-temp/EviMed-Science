@@ -42,10 +42,10 @@ X2 到 X5 的结果决定：是否新增 Jev 判定位、是否把 Jev 升到 1.
 - [ ] G4 用 rsimsum 外部核对蒙特卡洛标准误（只进 CI）。
 - [ ] E3 KM 数字化和重建的已知真值测试台。
 - [ ] E4 基线表解析实测（20–30 篇 RCT，内部解析 API 对 Docling）。
-- [ ] N6 读真实使用记录，用结果调整后面的顺序。
+- [x] N6 读真实使用记录：2026-11-03 线上 `evimed_vcr` 只读统计，研究 0 个、作业 0 个；文件账本 242 次运行没有一次是 `vcr-*`（主要是 evolution-scout 84、clinical-evidence-synthesis 65、open-domain-answer 56）。没有真实需求可以改变顺序，所以顺序不变。
 - [ ] 方法文案：MaxCombo 不作默认；无锚定 MAIC 和 E 值标明适用范围。
-- [ ] `matching_extractions` 忽略文档哈希：同一份文档改了内容不会重读。
-- [ ] 补上 Jev 对报告的影响（M6、M3）。
+- [ ] `matching_extractions` 忽略文档哈希：同一份文档改了内容不会重读。（放到匹配阶段，叠在团队分支上）
+- [x] 把 Jev 的结论补进报告（M3、M6）。
 
 ## 阶段 3 上 rpact
 
