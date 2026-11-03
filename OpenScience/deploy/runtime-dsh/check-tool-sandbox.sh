@@ -22,7 +22,7 @@ guard="${GUARD:-/usr/local/bin/evimed-oom-guard}"
 tool_env="${TOOL_ENV:-/usr/local/lib/evimed/evimed-tool-env.sh}"
 runner="${RUNNER:-/usr/local/lib/evimed/evimed-landlock-run}"
 
-inner="$(cat <<'INNER'
+inner=$(cat <<'INNER'
 set -u
 launcher="$(ls /usr/local/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/node-addon-system-*/bin/landlock-run | head -n 1)"
 # What the kernel's bash tool runs, for a workspace-write command in /workspace: the sandbox row's runner, the profile
@@ -109,7 +109,7 @@ check "a cancel of the process group reaches a command started through the runne
 
 exit "${failed}"
 INNER
-)"
+)
 
 set +e
 "${docker_bin}" run --rm --network none --memory 512m --memory-swap 512m --pids-limit 512 \
@@ -120,9 +120,13 @@ set +e
 status=$?
 
 echo "== the analysis libraries (1 GB container)"
+library_command=$(cat <<'LIBRARY'
+"${RUNNER}" --ro-bind / / --dev /dev --unshare-pid --proc /proc --die-with-parent --tmpfs /tmp --bind /workspace /workspace -- Rscript -e 'suppressMessages({library(DESeq2); library(edgeR); library(limma); library(org.Hs.eg.db)}); cat("ok")' 2>&1 | grep -v "partial enforcement" | tail -n 1
+LIBRARY
+)
 libraries="$("${docker_bin}" run --rm --network none --memory 1g --memory-swap 1g --pids-limit 512 \
   --cap-drop ALL --security-opt no-new-privileges --read-only \
   --tmpfs /tmp:rw,nosuid,nodev,size=64m --tmpfs /runtime:rw --tmpfs /workspace:rw --workdir /workspace \
-  -e TMPDIR=/tmp -e "RUNNER=${runner}" --entrypoint bash "${image}" -c '"${RUNNER}" --ro-bind / / --dev /dev --unshare-pid --proc /proc --die-with-parent --tmpfs /tmp --bind /workspace /workspace -- Rscript -e '"'"'suppressMessages({library(DESeq2); library(edgeR); library(limma); library(org.Hs.eg.db)}); cat("ok")'"'"' 2>&1 | grep -v "partial enforcement" | tail -n 1')"
+  -e TMPDIR=/tmp -e "RUNNER=${runner}" --entrypoint bash "${image}" -c "${library_command}")"
 if [ "${libraries}" = ok ]; then echo "ok    DESeq2, edgeR, limma and org.Hs.eg.db load"; else echo "FAIL  DESeq2, edgeR, limma and org.Hs.eg.db load: got [${libraries}], want [ok]"; status=1; fi
 exit "${status}"

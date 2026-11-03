@@ -62,6 +62,18 @@ export function replyNumberSentences(replyText) {
 }
 
 /**
+ * The ids the platform filed research objects under that a reply wrote out (`scn_…`, `pop_…`, `asm_…`): two to four lowercase letters, an
+ * underscore and 22 hex digits, the shape `vcrId` makes. A closed shape, so it is code and not language: whether a reply should have
+ * named the object in words is the reply's, but an id in its prose is a back-office word on the reader's page. The address of a link
+ * (`…/virtual-research/std_…/trial`) is the platform's own and is not prose, and nor is fenced code.
+ * @param {string} replyText @returns {string[]} each id once, in the order they appear
+ */
+export function replyInternalIds(replyText) {
+  const prose = String(replyText ?? "").replace(/```[\s\S]*?```/g, " ").replace(/\]\([^)\s]*\)/g, "] ");
+  return [...new Set(prose.match(/(?<![A-Za-z0-9_/=.-])[a-z]{2,4}_[0-9a-f]{22}(?![0-9A-Za-z_])/g) ?? [])];
+}
+
+/**
  * A number as written: its value, how many decimals it was printed to, and whether it was a percentage.
  * @param {string} written
  * @returns {{ value: number, decimals: number, percent: boolean } | null}

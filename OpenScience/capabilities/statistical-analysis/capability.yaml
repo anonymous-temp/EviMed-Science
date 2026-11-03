@@ -1,5 +1,5 @@
 id: statistical-analysis
-version: 1.4.1
+version: 1.5.1
 title: Statistical Analysis
 category: Research Planning
 description: Analyze supplied research data with executed Python or R, preserving reproducible code, numerical results, uncertainty and partial findings.
@@ -47,7 +47,7 @@ starterPrompts:
 display:
   title: "统计分析"
   category: "研究设计与数据"
-  description: "分析你的研究数据，解释统计结果、效应大小与不确定性。"
+  description: "上传研究数据，用自然语言提出问题，完成统计分析并生成可复现结果。"
   starterPrompts:
   - "分析我上传的数据，比较两组结局并给出效应量与置信区间。"
   - "继续上次的分析，沿用预处理并检查新增数据的影响。"

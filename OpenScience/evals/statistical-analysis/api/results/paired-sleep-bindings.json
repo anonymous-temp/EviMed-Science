@@ -1,0 +1,125 @@
+{
+  "case": "paired-sleep",
+  "turns": [
+    {
+      "index": 0,
+      "scale": 1,
+      "required": [
+        "n",
+        "estimate",
+        "pValue",
+        "lower",
+        "upper"
+      ],
+      "bindings": {
+        "n": {
+          "path": [
+            "result",
+            "structuredResults",
+            "analyses",
+            0,
+            "n"
+          ]
+        },
+        "estimate": {
+          "path": [
+            "result",
+            "structuredResults",
+            "analyses",
+            0,
+            "estimate"
+          ]
+        },
+        "pValue": {
+          "path": [
+            "result",
+            "structuredResults",
+            "analyses",
+            0,
+            "pValue"
+          ]
+        },
+        "lower": {
+          "path": [
+            "result",
+            "structuredResults",
+            "analyses",
+            0,
+            "interval",
+            0
+          ]
+        },
+        "upper": {
+          "path": [
+            "result",
+            "structuredResults",
+            "analyses",
+            0,
+            "interval",
+            1
+          ]
+        }
+      }
+    },
+    {
+      "index": 1,
+      "scale": 60,
+      "required": [
+        "n",
+        "estimate",
+        "pValue",
+        "lower",
+        "upper"
+      ],
+      "bindings": {
+        "n": {
+          "path": [
+            "result",
+            "structuredResults",
+            "analyses",
+            0,
+            "n"
+          ]
+        },
+        "estimate": {
+          "path": [
+            "result",
+            "structuredResults",
+            "analyses",
+            0,
+            "estimate"
+          ]
+        },
+        "pValue": {
+          "path": [
+            "result",
+            "structuredResults",
+            "analyses",
+            0,
+            "pValue"
+          ]
+        },
+        "lower": {
+          "path": [
+            "result",
+            "structuredResults",
+            "analyses",
+            0,
+            "interval",
+            0
+          ]
+        },
+        "upper": {
+          "path": [
+            "result",
+            "structuredResults",
+            "analyses",
+            0,
+            "interval",
+            1
+          ]
+        }
+      }
+    }
+  ]
+}

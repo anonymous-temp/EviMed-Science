@@ -1366,11 +1366,13 @@ export async function readBytesAt(ctx, baseDir, relativePath, maxBytes, signal) 
 
 /**
  * @param {any} ctx @param {string} baseDir @param {string} relativePath @param {AbortSignal} [signal]
+ * @param {(error: unknown) => void} [onError] told why the answer is empty, for a caller that has to tell an unreadable
+ *   directory from an empty one; the answer is `[]` either way
  * @returns {Promise<{ name: string, directory: boolean }[]>}
  */
-export async function listDirAt(ctx, baseDir, relativePath, signal) {
+export async function listDirAt(ctx, baseDir, relativePath, signal, onError) {
   const fs = ctx.get('fs')
-  if (!fs) return []
+  if (!fs) { onError?.(new Error('ctx.fs is unavailable')); return [] }
   try {
     const target = await fs.resolve(relativePath, { cwd: baseDir, signal })
     const entries = await fs.listDir(target, signal)
@@ -1378,7 +1380,8 @@ export async function listDirAt(ctx, baseDir, relativePath, signal) {
       name: String(entry?.name ?? ''),
       directory: Boolean(entry?.isDirectory ?? entry?.directory ?? entry?.type === 'directory'),
     })).filter((/** @type {any} */ entry) => entry.name)
-  } catch {
+  } catch (error) {
+    onError?.(error)
     return []
   }
 }

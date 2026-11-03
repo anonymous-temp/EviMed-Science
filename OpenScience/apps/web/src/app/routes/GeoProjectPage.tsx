@@ -278,7 +278,7 @@ function GeoProjectView({ geoId }: { geoId: string }) {
   }, [geoId]);
 
   // The conversation the page holds: the one on screen, else the one the address carries from it (`?session=`), else the project's
-  // own. The header's 「对话」 and every 「写纠错稿」 below it open this one (`useOpenGeoConversation`).
+  // own. The conversation dock and correction actions open this one (`useOpenGeoConversation`).
   const heldSession = addressedSession ?? new URLSearchParams(location.search).get("session");
   const api = useMemo<GeoFrameApi | null>(
     () => (loaded.kind === "ready" ? { geoId, scope, scopePending: loaded.scopeKey !== scopeKey, scopeError: loaded.scopeError,
@@ -586,7 +586,7 @@ function GeoBand({
     // address never applies unsaid; 行动's monitoring view reads none.
     scopeAction: !coverChat && (analysis || !(tab === "actions" && selectedStep === "monitoring")) ? {id:"analysis-scope",label:`分析范围${geoReadScopeQuery(api.scope) ? " · 已筛选" : ""}`,onSelect:()=>setScopeOpen(true)} : undefined,
     // The open step's own action is the toolbar's, beside what it acts on, and a quiet text button: the page's one primary is the
-    // header's 「对话」 (DESIGN.md 「页面结构」 rule 3; the fixture walk of df17091ad read “加问” as a second one at 156 px). A tab's own
+    // header's next-step action (DESIGN.md 「页面结构」 rule 3; the fixture walk of df17091ad read “加问” as a second one at 156 px). A tab's own
     // `actionPlan` or `actions` (the journey's downloads) stay as the tab declared them.
     // Its view and scope choices cannot fold into 「筛选」, so on a phone the row scrolls: the band is one line, the same on every tab.
     nowrap: true,
@@ -599,15 +599,15 @@ function GeoBand({
     // One answer, read inside the band: the route's own element, which may still be on its way.
     <Suspense fallback={<TabSkeleton rows={4} />}><Outlet context={api} /></Suspense>
   ) : (
-    <>
+    <div className="flex flex-col gap-8">
       {!analysis && <h2 className="sr-only">{GEO_TABS.find((item) => item.key === tab)?.label}</h2>}
       {/* The work's one 「现在」, before anything else the project has to show. */}
       {tab === "overview" && !analysis && <GeoJourneySummary project={project} compact={started} />}
-      {tab !== "overview" && <NeedsBar needs={needs} more={<span className="text-caption text-text-3">其余在总览</span>} />}
+      {tab !== "overview" && <NeedsBar quiet needs={needs} more={<span className="text-caption text-text-3">其余在总览</span>} />}
       {!analysis && project.signalsSupported && <GeoSignalsWorkbench geoId={geoId} project={project} step={api.step} />}
       {api.scopePending && (api.scopeError ? <LoadError message={api.scopeError} onRetry={reload} /> : <TabSkeleton />)}
       <div hidden={api.scopePending || !analysis && project.signalsSupported && params.has("signal")}><PendingFeedbackBoundary mode={api.scopePending || !analysis && project.signalsSupported && params.has("signal") ? "inactive" : "active"}>{analysis ? <GeoAnalysisMainArea api={api} /> : <GeoTab api={api} />}</PendingFeedbackBoundary></div>
-    </>
+    </div>
   );
 
   return (
@@ -619,7 +619,7 @@ function GeoBand({
         ? <Link className="inline-block text-ui text-accent" to={destination("overview")}>项目总览</Link>
         : <Link className="inline-block text-ui text-accent" to="/app/geo">循证 GEO</Link>}
       steps={{ label: "循证 GEO 进度", steps, activeSteps: selectedStep ? [selectedStep] : [], trailing: now, visible: true, showState: true }}
-      {...(strip ? { activity: { label: strip.label, startedAt: strip.startedAt, waiting: strip.waiting, queued: strip.queued, to: destination(GEO_STEP_HOME[strip.step].tab, GEO_STEP_HOME[strip.step].view, strip.step, GEO_STEP_HOME[strip.step].section), ...(can("run") && strip.runId ? { onCancel: stopStep, cancelLabel: "停止这一项", cancelling: busy === "stop" } : {}) } } : {})}
+      {...(strip ? { activity: { quiet: true, label: strip.label, startedAt: strip.startedAt, waiting: strip.waiting, queued: strip.queued, to: destination(GEO_STEP_HOME[strip.step].tab, GEO_STEP_HOME[strip.step].view, strip.step, GEO_STEP_HOME[strip.step].section), ...(can("run") && strip.runId ? { onCancel: stopStep, cancelLabel: "停止这一项", cancelling: busy === "stop" } : {}) } } : {})}
       dock={onChat ? undefined : <ConversationBar busy={busy === "conversation"} readOnlyTo={readOnlyChat} onOpen={canConverse ? (draft) => { setBusy("conversation"); void openConversation(target, draft).finally(() => setBusy(null)); } : undefined} />}
       documentTitle={GEO_MONITORING_TABS.includes(tab) ? `${project.name} · ${GEO_MONITORING_TITLE}` : undefined}
       width={onChat ? "full" : "wide"}

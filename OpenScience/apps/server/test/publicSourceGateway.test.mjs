@@ -480,6 +480,10 @@ test("PROSPERO: its public search is approved with the page's own request shape 
   assert.deepEqual(upstream[0].body, good);
   assert.ok(Number(Buffer.from(upstream[0].headers["prospero-auth-token"], "base64").toString()) > 0, "the header its own page sends");
   assert.equal(upstream[0].headers.authorization, undefined);
+  // The registry is read page by page, up to the tenth (the connector's `PROSPERO_REACHABLE` of 500 at 50 a page).
+  const later = await gatewayRequest(base, { url, accept: ["application/json"], method: "POST", body: { ...good, page: 10, nperpage: 50 } });
+  assert.equal(later.status, 200);
+  assert.deepEqual(upstream[1].body, { ...good, page: 10, nperpage: 50 });
   /** @type {[string, Record<string, unknown>, number][]} */
   const refused = [
     ["another path", { url: "https://www.crd.york.ac.uk/PROSPERO/api/record/dashboardcounts", method: "POST", body: good }, 403],
@@ -487,6 +491,9 @@ test("PROSPERO: its public search is approved with the page's own request shape 
     ["a download of the result", { url, method: "POST", body: { ...good, download: true } }, 400],
     ["an unknown field", { url, method: "POST", body: { ...good, command: "x" } }, 400],
     ["a page size over the bound", { url, method: "POST", body: { ...good, nperpage: 500 } }, 400],
+    ["a page past the tenth", { url, method: "POST", body: { ...good, page: 11 } }, 400],
+    ["page zero", { url, method: "POST", body: { ...good, page: 0 } }, 400],
+    ["a second result line", { url, method: "POST", body: { ...good, line: 2 } }, 400],
     ["a line break in the term", { url, method: "POST", body: { ...good, term: "a\nb", actual: "a\nb" } }, 400],
   ];
   for (const [label, request, status] of refused) {

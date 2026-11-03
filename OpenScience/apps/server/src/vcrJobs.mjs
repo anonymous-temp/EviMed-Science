@@ -1,4 +1,4 @@
-import { VCR_TIME_UNITS, vcrTimeUnitOf } from "@evimed/domain";
+import { VCR_INTENDED_USE_LABELS_ZH, VCR_TIME_UNITS, vcrTimeUnitOf } from "@evimed/domain";
 import { maintenanceAllowsClaims } from "./maintenanceService.mjs";
 import { heavyWorkAdmission } from "./heavyWorkAdmission.mjs";
 // What a study's compute budget holds a job back for. Three things are counted and a fourth is not:
@@ -123,12 +123,13 @@ const RELEASE_FITTING_SQL = `UPDATE ${VCR_SCHEMA}.jobs j SET state = 'queued', r
 
 import { createHash } from "node:crypto";
 import { VCR_LONGITUDINAL_METHODS, VCR_LONGITUDINAL_JOBS, validateLongitudinalScenario } from '@evimed/domain';
+import { VCR_MATCH_BATCH_METHODS, VCR_MATCH_BATCH_JOBS, VCR_SLOW_LOCAL_METHODS, validateMatchBatchScenario } from '@evimed/domain';
 import fs from "node:fs/promises";
 import path from "node:path";
 
 import {
-  VCR_ENGINE_METHODS, VCR_ENGINE_PROTOCOL_VERSION, VCR_JOB_KINDS, VCR_JOB_METHODS, VCR_JOB_STATES, VCR_ROBUSTNESS_STAGES,
-  canonicalScenarioJson, errorCodeMessage, knownErrorCodeMessage, validateCallerInputs, validateEngineJob, vcrLocationIsValid, vcrReplicateFloorFor, vcrResultOutputPayload,
+  VCR_CHECK_STAGES, VCR_ENGINE_METHODS, VCR_ENGINE_PROTOCOL_VERSION, VCR_JOB_KINDS, VCR_JOB_METHODS, VCR_JOB_STATES, VCR_ROBUSTNESS_STAGES,
+  canonicalScenarioJson, errorCodeMessage, knownErrorCodeMessage, validateCallerInputs, validateEngineJob, vcrAppliedDefaults, vcrLocationIsValid, vcrNormalizeScenarioKeys, vcrNullReplicateFloor, vcrReplicatePlanFor, vcrResultOutputPayload, vcrScenarioRows,
 } from "@evimed/domain";
 
 import { VCR_SCHEMA } from "./vcrPersistence.mjs";
@@ -137,6 +138,7 @@ import { jobSummaryFromRow, resultFromRow } from "./vcrStore.mjs";
 import { HttpError } from "./security.mjs";
 import { VcrEngineError, vcrComputedOutputHash, vcrResultEchoIssues, vcrExecutionReceiptVerified } from "./vcrEngineClient.mjs";
 import { vcrPopulationGenerationInput } from "./vcrSubjects.mjs";
+import { populationCheckIndependence, populationCheckRows } from "./vcrPopulationCheck.mjs";
 import { vcrCohortInputIssue } from "./vcrSnapshotBinding.mjs";
 import { vcrSynthesisIssue } from "./vcrSynthesisGuard.mjs";
 import { assertDataPlaneRoot } from "./vcrDataPlane.mjs";
@@ -273,19 +275,42 @@ export function vcrIdempotencyKey({ key, kind, studyId, scenarioHash, inputs, se
 /**
  * How many replicates a job needs: the domain's floor for the scenario (20,000
  * under the null, 5,000 under an alternative, raised to the precision asked for,
- * on the worst truth of a grid), raised again to what the caller asked for.
+ * on the worst truth of a grid, and raised again to 100,000 under the null for a specified analysis, a submission and a
+ * design that borrows), raised again to what the caller asked for.
+ * A MAP prior's operating-characteristics table borrows by definition: its rows, the zero-drift ones above all, are held to the
+ * borrowing floor, where they used to run at the engine's own default of 5,000 and nobody read them.
  * @param {string} kind @param {Record<string, any>} scenario @param {number | null} asked
+ * @param {{ intendedUse?: string | null }} [options] the study's intended use
  * @returns {number | null} null for a method that has no replicates
  */
-export function vcrReplicatesForJob(kind, scenario, asked) {
-  if (kind === "design_simulation") return Math.max(vcrReplicateFloorFor(scenario), Number.isInteger(asked) ? Number(asked) : 0);
+export function vcrReplicatesForJob(kind, scenario, asked, options = {}) {
+  return vcrReplicatePlanForJob(kind, scenario, asked, options)?.replicates ?? null;
+}
+
+/**
+ * `vcrReplicatesForJob`, with what set the number — recorded beside the job so a result can say why it took as many replicates as
+ * it did (the default of its case, the intended use, a borrowing design, or the precision asked for).
+ * @param {string} kind @param {Record<string, any>} scenario @param {number | null} asked @param {{ intendedUse?: string | null }} [options]
+ * @returns {{ replicates: number, floor: number, basis: string, intendedUse: string | null, targetMcse: number | null } | null}
+ */
+export function vcrReplicatePlanForJob(kind, scenario, asked, { intendedUse = null } = {}) {
+  const requested = Number.isInteger(asked) ? Number(asked) : 0;
+  if (kind === "design_simulation") {
+    const plan = vcrReplicatePlanFor(scenario, { intendedUse });
+    return { replicates: Math.max(plan.floor, requested), floor: plan.floor, basis: plan.basis, intendedUse, targetMcse: plan.targetMcse };
+  }
   if (kind === "design_grid") {
     const truths = list(scenario?.truths).filter((truth) => truth && typeof truth === "object");
-    const worst = Math.max(...(truths.length ? truths : [{}]).map((cell) => vcrReplicateFloorFor({
-      ...scenario, truth: { ...object(scenario?.truth), ...cell } })));
-    return Math.max(worst, Number.isInteger(asked) ? Number(asked) : 0);
+    const plans = (truths.length ? truths : [{}]).map((cell) => vcrReplicatePlanFor({
+      ...scenario, truth: { ...object(scenario?.truth), ...cell } }, { intendedUse }));
+    const worst = plans.reduce((a, b) => (b.floor > a.floor ? b : a));
+    return { replicates: Math.max(worst.floor, requested), floor: worst.floor, basis: worst.basis, intendedUse, targetMcse: worst.targetMcse };
   }
-  return Number.isInteger(asked) && Number(asked) > 0 ? Number(asked) : null;
+  if (kind === "map_prior" && scenario?.operatingCharacteristics) {
+    const floor = vcrNullReplicateFloor({ intendedUse, borrowing: true });
+    return { replicates: Math.max(floor.floor, requested), floor: floor.floor, basis: floor.basis, intendedUse, targetMcse: null };
+  }
+  return requested > 0 ? { replicates: requested, floor: requested, basis: "asked", intendedUse, targetMcse: null } : null;
 }
 
 /**
@@ -320,6 +345,45 @@ export function vcrScenarioColumns(scenario) {
 const HEAVY_KINDS = new Set(["design_simulation", "design_grid", "synthesize_population", "generate_patients",
   "generate_patients_continuous", "generate_patients_binary", "generate_patients_longitudinal"]);
 
+/** The kinds whose replicate count is a floor (`vcrReplicatePlanForJob`), which the study's intended use can raise. */
+const SIZED_KINDS = new Set(["design_simulation", "design_grid", "map_prior"]);
+
+/**
+ * The kinds whose scenario the platform rewrites when it starts them, so that the scenario as a run states it is not the scenario
+ * that is validated: a literature population (its baseline bindings are verified and removed), a reconstruction (its curve receipt),
+ * a matched time-to-event comparison (its reconstruction), a model's equation, and the pooled and matched scenarios the platform builds.
+ */
+const PLATFORM_BOUND_KINDS = new Set(["literature_population", "population_check", "reconstruct_km", "maic_time_to_event_comparator", "apply_prognostic_model", "pool_evidence", "match_criteria", "match_extract"]);
+
+/**
+ * What set a simulation's replicate count, in a sentence: the floor of its case, the study's intended use, a borrowing design, the
+ * precision asked for, or the count the run asked for. In English for the run that is told it, in Chinese for a document a person reads
+ * (`language: "zh"`, the result record); the same decision either way.
+ * @param {{ replicates: number, floor: number, basis: string, intendedUse: string | null, targetMcse: number | null }} plan
+ * @param {Record<string, any>} scenario @param {number | null | undefined} asked @param {"en" | "zh"} [language]
+ */
+export function replicateReasonOf(plan, scenario, asked, language = "en") {
+  const null_ = vcrReplicatePlanFor(scenario, { intendedUse: plan.intendedUse });
+  const floor = plan.floor.toLocaleString("en-US");
+  const count = plan.replicates.toLocaleString("en-US");
+  const more = Number.isInteger(asked) && Number(asked) > plan.floor;
+  if (language === "zh") {
+    const use = plan.intendedUse ? (/** @type {Record<string, string>} */ (VCR_INTENDED_USE_LABELS_ZH))[plan.intendedUse] ?? plan.intendedUse : "";
+    const why = plan.basis === "asked" ? "你要求的次数"
+      : plan.basis === "intended_use" ? `研究用途（${use}）下零效应情景的下限 ${floor} 次`
+        : plan.basis === "borrowing" ? `借用外部数据的设计在零效应下的下限 ${floor} 次`
+          : plan.basis === "target_mcse" ? `为达到 ${plan.targetMcse} 的蒙特卡洛误差而提高（下限 ${floor} 次）`
+            : `${null_.isNull ? "零效应情景" : "备择情景"}的默认下限 ${floor} 次`;
+    return more ? `你要求的 ${count} 次（下限 ${floor} 次：${why}）` : why;
+  }
+  const why = plan.basis === "asked" ? "the count you asked for"
+    : plan.basis === "intended_use" ? `the floor for the study's intended use (${plan.intendedUse}) under no effect`
+      : plan.basis === "borrowing" ? "the floor for a design that borrows external data, under no effect"
+        : plan.basis === "target_mcse" ? `raised to reach a Monte-Carlo error of ${plan.targetMcse}`
+          : `the default floor for ${null_.isNull ? "a scenario with no effect" : "an alternative"}`;
+  return more ? `${count}, the count you asked for (the floor is ${floor}: ${why})` : `${floor}: ${why}`;
+}
+
 /** Weakest first: the worst of two conclusions is the later one. */
 const ORDER_OF_CONCLUSIONS = ["estimable", "limited", "not_estimable"];
 
@@ -342,7 +406,8 @@ const ORDER_OF_CONCLUSIONS = ["estimable", "limited", "not_estimable"];
  * @param {ReturnType<typeof resultFromRow> | null} prior
  * @param {{ conclusion: string | null, notEstimableRule: string | null, counts: Record<string, any>, measures: any[],
  *   diagnostics: Record<string, any>, tables: any[] }} incoming
- * @param {{ stage: string, jobId: string, method: string, methodVersion: string, at?: string | null }} stage
+ * @param {{ stage: string, jobId: string, method: string, methodVersion: string, at?: string | null, checkOf?: string }} stage
+ *   `checkOf`: for a zero-effect check a conversation's design was given, the simulation it is the check of
  * @param {{ staleSince?: string | null, planned?: readonly string[] | null }} [change]
  *   `staleSince`: when the object was marked stale and not yet recomputed;
  *   `planned`: the stages the recomputation runs (null: not known — carried, never dropped).
@@ -363,7 +428,23 @@ export function vcrMergeStageResult(prior, incoming, stage, { staleSince = null,
   }
   // --- end robustness methods ---
 
-  const before = list(object(prior.diagnostics).stages).map(object).filter((each) => each.stage !== stage.stage);
+  // A check landing after the result it checks (the zero-effect simulation after the alternative's): the numbers of the result are
+  // not replaced by the check's, and a check that could not be estimated limits the conclusion without voiding it.
+  const late = VCR_CHECK_STAGES.includes(stage.stage) && list(object(prior.diagnostics).stages).some((each) => object(each).stage === "simulation");
+  /** @param {string} name @param {unknown} conclusion */
+  const countedAs = (name, conclusion) => (VCR_CHECK_STAGES.includes(name) && conclusion === "not_estimable" ? "limited" : conclusion);
+  const stored = list(object(prior.diagnostics).stages).map(object).filter((each) => each.stage !== stage.stage);
+  // A zero-effect check is of one simulation, the one it was run on the scenario of. It does not land beside another simulation's
+  // power, and a simulation that lands takes with it the check of an earlier one: those figures were another scenario's, and the
+  // check of this one is queued behind it. (A check that names no simulation is the programme's: it follows the staleness rules below.)
+  const checked = list(object(prior.diagnostics).stages).map(object).find((each) => each.stage === "simulation");
+  if (VCR_CHECK_STAGES.includes(stage.stage) && stage.checkOf && checked && checked.jobId !== stage.checkOf) {
+    return { conclusion: prior.conclusion, notEstimableRule: prior.notEstimableRule, counts: prior.counts, measures: prior.measures,
+      diagnostics: prior.diagnostics, tables: prior.tables };
+  }
+  const foreign = stage.stage === "simulation"
+    ? stored.filter((each) => VCR_CHECK_STAGES.includes(String(each.stage)) && typeof each.checkOf === "string" && each.checkOf !== stage.jobId) : [];
+  const before = stored.filter((each) => !foreign.includes(each));
   const since = staleSince ? Date.parse(staleSince) : Number.NaN;
   /** Stages that landed before the change: their numbers describe the world as it was. */
   const old = Number.isFinite(since) ? before.filter((each) => typeof each.at === "string" && Date.parse(each.at) < since) : [];
@@ -375,7 +456,7 @@ export function vcrMergeStageResult(prior, incoming, stage, { staleSince = null,
   const namesOf = (/** @type {Record<string, any>[]} */ entries) => new Set(entries.flatMap((each) => list(each.measures).map(String)));
   const currentNames = namesOf([...current, entry]);
   const carriedNames = namesOf(carried);
-  const droppedNames = namesOf(dropped);
+  const droppedNames = namesOf([...dropped, ...foreign]);
 
   /** @type {Map<string, any>} */
   const byName = new Map();
@@ -385,16 +466,22 @@ export function vcrMergeStageResult(prior, incoming, stage, { staleSince = null,
     else if (carriedNames.has(name)) byName.set(name, { ...object(measure), stale: true });
     else if (!droppedNames.has(name)) byName.set(name, measure);
   }
-  for (const measure of incoming.measures) byName.set(String(object(measure).name), measure);
+  for (const measure of incoming.measures) {
+    const name = String(object(measure).name);
+    // The check's own figure is the type I error; the rest of what the null run measured stays in its stage record.
+    if (late && byName.has(name) && name !== "type_one_error") continue;
+    byName.set(name, measure);
+  }
 
   const counts = { ...object(prior.counts) };
-  for (const [key, value] of Object.entries(object(incoming.counts))) if (value !== null && value !== undefined) counts[key] = value;
+  if (!late) for (const [key, value] of Object.entries(object(incoming.counts))) if (value !== null && value !== undefined) counts[key] = value;
   const kept = [...current, ...carried];
   const keptNames = new Set(kept.map((each) => String(each.stage)));
   const stageResults = Object.fromEntries(Object.entries(object(object(prior.diagnostics).stageResults))
     .filter(([name]) => keptNames.has(name)).map(([name, value]) => [name, { ...object(value), stale: carried.some((each) => each.stage === name) }]));
   stageResults[stage.stage] = stageResult;
-  const conclusions = kept.length ? [incoming.conclusion, ...kept.map((each) => each.conclusion)] : [prior.conclusion, incoming.conclusion];
+  const conclusions = kept.length ? [countedAs(stage.stage, incoming.conclusion), ...kept.map((each) => countedAs(String(each.stage), each.conclusion))]
+    : [prior.conclusion, countedAs(stage.stage, incoming.conclusion)];
   const worst = conclusions.filter(Boolean)
     .sort((a, b) => ORDER_OF_CONCLUSIONS.indexOf(String(b)) - ORDER_OF_CONCLUSIONS.indexOf(String(a)))[0] ?? incoming.conclusion;
   // --- robustness methods ---
@@ -402,7 +489,7 @@ export function vcrMergeStageResult(prior, incoming, stage, { staleSince = null,
   // conclusion and its rule are the ones the object states. Without any such stage the object is what the robustness stages say, and
   // never more than limited: the comparison itself has not been computed.
   const making = [...kept, entry].filter((each) => !robustness.has(String(each.stage)));
-  let verdict = { conclusion: worst ?? null, notEstimableRule: incoming.notEstimableRule ?? prior.notEstimableRule ?? null };
+  let verdict = { conclusion: worst ?? null, notEstimableRule: (late ? null : incoming.notEstimableRule) ?? prior.notEstimableRule ?? null };
   if (robustness.has(stage.stage) || kept.some((each) => robustness.has(String(each.stage)))) {
     const counted = (/** @type {Record<string, any>} */ each) => (making.length && robustness.has(String(each.stage)) && each.conclusion === "not_estimable" ? "limited" : each.conclusion);
     const settled = [...kept, entry].map(counted).filter(Boolean)
@@ -418,7 +505,7 @@ export function vcrMergeStageResult(prior, incoming, stage, { staleSince = null,
   const notRerun = [...list(object(prior.diagnostics).notRerun).map(object).filter((each) => each.stage !== stage.stage),
     ...dropped.map((each) => ({ stage: String(each.stage), measures: list(each.measures).map(String) }))];
   /** @type {Record<string, any>} */
-  const diagnostics = { ...prior.diagnostics, ...incoming.diagnostics, stages: [...current, ...carried, entry], stageResults };
+  const diagnostics = { ...prior.diagnostics, ...(late ? {} : incoming.diagnostics), stages: [...current, ...carried, entry], stageResults };
   if (notRerun.length) diagnostics.notRerun = notRerun;
   else delete diagnostics.notRerun;
   return {
@@ -445,12 +532,17 @@ export function vcrResultKindFor(kind) {
   if (kind === "fit_survival_model") return "model_fit";
   if (kind === "apply_prognostic_model") return "model_prediction";
   if (kind === "population_quality") return "population_quality";
+  // The check of a generated population against a second baseline table is its own result, filed under the population it is about and
+  // replacing only an earlier check of that population: it is not a version of the population.
+  if (kind === "population_check") return "population_check";
   if (["build_cohort", "generate_population", "literature_population", "synthesize_population"].includes(kind)) return "population";
   if (["generate_patients", "generate_patients_continuous", "generate_patients_binary", "generate_patients_longitudinal"].includes(kind)) return "patient_set";
   if (method.startsWith("comparator.") || kind === "procova") return "comparator";
   if (["design_analytic", "design_simulation", "assurance"].includes(kind)) return "trial_scenario";
   if (kind === "design_grid") return "design_grid";
   if (kind === "match_criteria") return "matching";
+  // The batch reading of patient records leaves a record of what was read, not a matching: its own kind, read by nothing that lists matchings.
+  if (kind === "match_extract") return "match_extract";
   if (kind === "accrual_forecast") return "accrual_forecast";
   if (["pool_evidence", "reconstruct_km"].includes(kind)) return "evidence_pool";
   return "snapshot_profile";
@@ -468,7 +560,7 @@ export const VCR_SUBJECT_KINDS = Object.freeze(["population", "patient_set", "co
  * @param {string} kind
  */
 export function vcrJobObjectKind(kind) {
-  if (kind === "population_quality") return "population";
+  if (kind === "population_quality" || kind === "population_check") return "population";
   const filed = vcrResultKindFor(kind);
   return VCR_SUBJECT_KINDS.includes(filed) ? filed : null;
 }
@@ -765,6 +857,64 @@ export class VcrJobs {
   // --- enqueue ----------------------------------------------------------------------
 
   /**
+   * A scenario checked the way `enqueue` checks it and answered, never queued (remediation plan C1; a run asks it and, when it
+   * is valid, starts in the same turn — it is not a wait). It returns the scenario as it would be frozen (the comparator's time unit
+   * in its canonical spelling), the fields the platform would fill in because the scenario stated none (the same list a started job
+   * carries as `applied`), how many replicates a simulation would take and what set the number, and the job's cost class and CPU
+   * ceiling. A refusal is an answer with its issues, not an error: the point is to learn them before the call that would queue it.
+   *
+   * What it does not do: the kinds whose scenario the platform rewrites when it starts them (a literature population's bindings, a
+   * reconstruction's curve receipt, a pooled or matched scenario, a model's equation) are not checked here and say so; the bindings
+   * of the object a job is filed under are not applied; and there is no estimate of how long it would run, because no method has a
+   * measured cost the code can read off a scenario (the one measured model, the synthetic copy's, needs the table's size).
+   *
+   * @param {{ kind: string, scenario?: Record<string, any>, inputs?: unknown[], replicates?: number | null, studyId?: string | null }} input
+   * @returns {Promise<Record<string, any>>}
+   */
+  async validate(input) {
+    const kind = String(input.kind);
+    if (!VCR_JOB_KINDS.includes(kind)) throw new HttpError(400, "vcr_job_kind_invalid", `kind must be one of: ${VCR_JOB_KINDS.join(", ")}.`);
+    const method = /** @type {Record<string, string>} */ (VCR_JOB_METHODS)[kind];
+    if (PLATFORM_BOUND_KINDS.has(kind) || Object.hasOwn(VCR_LONGITUDINAL_JOBS, kind) || Object.hasOwn(VCR_MATCH_BATCH_JOBS, kind)) {
+      return { action: "validate", kind, queued: false, checked: false,
+        message: "这类计算的场景由平台在启动时补全（来源绑定、曲线回执、模型方程或已保存的记录），这里不检查；直接 start，被拒的字段会按路径回来。" };
+    }
+    const unitBound = vcrCanonicalScenarioTimeUnit(method, object(input.scenario));
+    // Keys that only describe what the method does anyway (`vcrNormalizeScenarioKeys`) are left out, as the frozen job would leave them.
+    const described = vcrNormalizeScenarioKeys(method, unitBound.scenario);
+    const scenario = described.scenario;
+    const asked = list(input.inputs);
+    const callerIssues = validateCallerInputs(asked, { kind });
+    // A key that names one of the job's inputs (a snapshot's table) is resolved from the snapshot at start; it is not this call's to judge.
+    const inputKeys = new Set(vcrScenarioRows(method).rows.filter((row) => row.role === "input id").map((row) => row.path));
+    const namesAnInput = (/** @type {string} */ field) => inputKeys.has(field.replace(/^scenario\./, "").replace(/\[\d+\]/g, "[]"));
+    const scenarioHash = vcrScenarioHash(scenario);
+    const intendedUse = SIZED_KINDS.has(kind) && input.studyId ? ((await this.store.studyById(input.studyId))?.intendedUse ?? null) : null;
+    const plan = vcrReplicatePlanForJob(kind, scenario, Number.isInteger(input.replicates) ? Number(input.replicates) : null, { intendedUse });
+    const skeleton = { jobId: "job_validate", studyId: input.studyId || "std_validate", kind, method,
+      methodVersion: /** @type {Record<string, any>} */ (VCR_ENGINE_METHODS)[method]?.version ?? "", protocolVersion: VCR_ENGINE_PROTOCOL_VERSION,
+      seed: vcrSeedFor(scenarioHash), replicates: plan?.replicates ?? null, cpuSecondsLimit: this.jobCpuSeconds, inputs: [], scenario };
+    // The patient-level kinds' table is resolved from the snapshot at start; a missing snapshot is `callerIssues`' to say.
+    const issues = [...(unitBound.issue ? [unitBound.issue] : []), ...callerIssues,
+      ...validateEngineJob(skeleton).filter((issue) => issue.code !== "patient_input_required" && !namesAnInput(issue.field))];
+    // A descriptive key whose value disagrees with the engine is refused with the reason, not with "the engine does not read it".
+    const said = new Map(described.conflicts.map((conflict) => [conflict.field, conflict.detail]));
+    const found = issues.slice(0, 20).map((issue) => ({ code: issue.code, field: issue.field, message: said.get(issue.field) ?? issue.detail }));
+    const normalized = described.applied.length ? { normalized: described.applied } : {};
+    if (found.length) return { action: "validate", kind, queued: false, checked: true, valid: false, issues: found, ...normalized };
+    const applied = /^(design|population|comparator)\./.test(method) ? vcrAppliedDefaults(method, scenario) : [];
+    return {
+      action: "validate", kind, queued: false, checked: true, valid: true, issues: [],
+      scenario,
+      applied: applied.slice(0, 24).map((entry) => ({ field: entry.path, value: entry.value })),
+      ...normalized,
+      ...(plan ? { replicates: { count: plan.replicates, reason: replicateReasonOf(plan, scenario, input.replicates) } } : {}),
+      seed: skeleton.seed,
+      cost: { class: HEAVY_KINDS.has(kind) ? "heavy" : "light", cpuSecondsLimit: this.jobCpuSeconds },
+    };
+  }
+
+  /**
    * Freeze a scenario into a job row.
    *
    * `inputs` are what a caller names: lineage references (`{ kind:
@@ -788,13 +938,19 @@ export class VcrJobs {
     }
     const studyId = String(input.studyId);
     const method = /** @type {Record<string, string>} */ ({...VCR_JOB_METHODS,...VCR_LONGITUDINAL_JOBS})[kind];
-    const methodVersion = /** @type {Record<string, any>} */ ({...VCR_ENGINE_METHODS,...VCR_LONGITUDINAL_METHODS})[method]?.version ?? "";
+    const methodVersion = /** @type {Record<string, any>} */ ({...VCR_ENGINE_METHODS,...VCR_LONGITUDINAL_METHODS,...VCR_MATCH_BATCH_METHODS})[method]?.version ?? "";
     const longitudinal = Object.hasOwn(VCR_LONGITUDINAL_JOBS,kind);
     if (longitudinal && input.internal !== true) throw new HttpError(400,'vcr_job_scenario_invalid','Longitudinal jobs freeze owned input references before enqueue.');
+    // The batch reading of records (D4) is frozen by the platform from the roster, like the longitudinal jobs are from their artifacts.
+    const batch = Object.hasOwn(VCR_MATCH_BATCH_JOBS,kind);
+    if (batch && input.internal !== true) throw new HttpError(400,'vcr_job_scenario_invalid','A batch reading freezes its roster from the study before enqueue.');
     let scenario = { ...object(input.scenario) };
     const unitBound = vcrCanonicalScenarioTimeUnit(method, scenario);
     if (unitBound.issue) throw this.#invalid("vcr_job_scenario_invalid", [unitBound.issue]);
     scenario = unitBound.scenario;
+    // The same list, before the scenario is validated and hashed: a described engine default is not part of what makes a job the same job.
+    const described = vcrNormalizeScenarioKeys(method, scenario);
+    scenario = described.scenario;
     const patientGenerator = ["generate_patients", "generate_patients_continuous", "generate_patients_binary", "generate_patients_longitudinal"].includes(kind);
     if (patientGenerator && !scenario.pairing && object(input.detail).populationId) {
       scenario = { ...scenario, pairing: { key: `${object(input.detail).populationId}@${object(input.detail).populationVersion}`, replicate: 1 } };
@@ -805,11 +961,14 @@ export class VcrJobs {
     let asked = list(input.inputs);
     /** @type {Record<string, any>} */
     let baselineDetail = {};
-    if (kind === "literature_population") {
+    if (kind === "literature_population" || kind === "population_check") {
+      const checking = kind === "population_check";
       const direct = scenario.baselineBindings;
       const configured = object(input.detail).baselineBindings;
       if (!this.baselineVerifier || direct != null && configured != null && canonicalScenarioJson(direct) !== canonicalScenarioJson(configured)) {
-        throw new HttpError(400, "vcr_job_scenario_invalid", "Literature population statistics require exact source bindings; use a scenario population for explicitly assumed distributions.");
+        throw new HttpError(400, "vcr_job_scenario_invalid", checking
+          ? "The second baseline table needs exact source bindings (baselineBindings): its numbers are checked against the quoted passages before they are compared."
+          : "Literature population statistics require exact source bindings; use a scenario population for explicitly assumed distributions.");
       }
       const checked = await this.baselineVerifier({ userId: String(input.userId), studyId, correlationSource: scenario.correlationSource,
         baselineTable: scenario.baselineTable, bindings: direct ?? configured });
@@ -818,8 +977,28 @@ export class VcrJobs {
       const { baselineBindings: _metadata, ...numeric } = scenario;
       scenario = numeric;
       asked = [...asked.filter(entry => object(entry).kind !== "evidence"), ...checked.evidenceIds.map(id => ({ kind: "evidence", id }))];
-      baselineDetail = { baselineBindings: checked.bindings, literatureBaseline: { verification: "marginals_source_verified", correlation: "assumed", bindings: checked.bindings,
-        evidenceIds: checked.evidenceIds, scope: "quoted_statistics_only", transportability: "not_validated" } };
+      if (checking) {
+        // The generated side is the population's own profile, copied here and never typed by a caller.
+        if (scenario.generated != null && input.internal !== true) {
+          throw new HttpError(400, "vcr_job_scenario_invalid", "generated is filled in from the population the check is about; send the second baseline table and its bindings only.");
+        }
+        const subjectId = object(input.detail).subjectId;
+        const population = subjectId ? (await this.store.populations(studyId, 1000)).find(row => row.id === subjectId) : null;
+        const populationResult = population?.resultId ? await this.store.result(studyId, population.resultId) : null;
+        const generated = populationCheckRows(object(populationResult?.diagnostics).profile);
+        if (!population || !populationResult || !generated.length) {
+          throw new HttpError(409, "vcr_population_profile_missing", "这份人群还没有可以对照的生成结果：先生成人群，再和第二份基线表对照。");
+        }
+        scenario = { ...scenario, generated };
+        const independence = populationCheckIndependence({
+          populationEvidenceIds: object(object(populationResult.diagnostics).literatureBaseline).evidenceIds, referenceEvidenceIds: checked.evidenceIds });
+        baselineDetail = { baselineBindings: checked.bindings, populationCheck: { populationId: String(population.id), populationVersion: Number(population.version),
+          populationResultId: String(populationResult.id), populationKind: String(population.kind ?? ""), independent: independence.independent,
+          populationSourced: independence.populationSourced, sharedEvidenceIds: independence.shared, referenceEvidenceIds: checked.evidenceIds } };
+      } else {
+        baselineDetail = { baselineBindings: checked.bindings, literatureBaseline: { verification: "marginals_source_verified", correlation: "assumed", bindings: checked.bindings,
+          evidenceIds: checked.evidenceIds, scope: "quoted_statistics_only", transportability: "not_validated" } };
+      }
     }
     /** @type {Record<string, any>} */
     let curveDetail = {};
@@ -837,7 +1016,7 @@ export class VcrJobs {
     // patient-level ones: its input is a frozen as-of, a protocol id and a token of the facts.
     const runsLocally = typeof this.localExecutors[method] === "function";
     const hasBoundReconstruction = list(input.derived).some(entry => isReconstructionReference(kind, object(entry)));
-    const callerIssues = longitudinal && input.internal === true ? []
+    const callerIssues = (longitudinal || batch) && input.internal === true ? []
       : [...validateCallerInputs(asked, { kind: (input.internal === true && list(input.derived).length) || hasBoundReconstruction || runsLocally ? undefined : kind })];
     const derivedEntries = list(input.derived).map(object);
     // A caller other than the orchestrator may only point at a reconstruction result for the job that reads one.
@@ -888,7 +1067,15 @@ export class VcrJobs {
       pairingKey: pairing.key ?? null, replicate: pairing.replicate ?? 1, seed,
       seedSource: Number.isInteger(input.seed) ? "explicit" : pairing.key ? "population_or_explicit_pairing_key" : "scenario_hash",
       replicateStreams: "L'Ecuyer-CMRG nextRNGStream", causalIndividualEffectIdentified: false } : null;
-    const replicates = vcrReplicatesForJob(kind, scenario, Number.isInteger(input.replicates) ? Number(input.replicates) : null);
+    // The floor depends on what the study is for: the same simulation is held to a larger null case on a specified analysis than on
+    // an exploration. The plan (floor and what set it) rides on the job so the result can say why it ran as many replicates as it did.
+    const sized = ["design_simulation", "design_grid", "map_prior"].includes(kind);
+    const intendedUse = sized ? ((await this.store.studyById(studyId))?.intendedUse ?? null) : null;
+    const replicatePlan = vcrReplicatePlanForJob(kind, scenario, Number.isInteger(input.replicates) ? Number(input.replicates) : null, { intendedUse });
+    const replicates = replicatePlan?.replicates ?? null;
+    // What the engine filled in because the scenario stated none (a dropout of 0, an alpha of 0.025): kept with the job, said by its
+    // result, and listed in the answer of the call that started it — a default nobody was told of is a parameter nobody chose.
+    const defaulted = /^(design|population|comparator)\./.test(method) ? vcrAppliedDefaults(method, scenario) : [];
     const cpuSecondsLimit = Math.min(this.jobCpuSeconds,
       Math.max(1, Number(input.cpuSecondsLimit ?? this.jobCpuSeconds)));
     // A synthesis that cannot finish inside its CPU budget fails whole, with no copy kept: one that could not finish even at the model's
@@ -909,8 +1096,12 @@ export class VcrJobs {
 
     // 3. what the engine will check (a locally computed method has no engine to read a table)
     const issues = longitudinal ? validateLongitudinalScenario(method,scenario)
+      : batch ? validateMatchBatchScenario(method,scenario)
       : validateEngineJob(job).filter((issue) => !(runsLocally && issue.code === "patient_input_required"));
-    if (issues.length) throw this.#invalid("vcr_job_scenario_invalid", issues);
+    if (issues.length) {
+      const said = new Map(described.conflicts.map((conflict) => [conflict.field, conflict.detail]));
+      throw this.#invalid("vcr_job_scenario_invalid", issues.map((issue) => (said.has(issue.field) ? { ...issue, detail: said.get(issue.field) } : issue)));
+    }
 
     const baseKey = vcrIdempotencyKey({ key: input.idempotencyKey ?? null, kind, studyId, scenarioHash, inputs, seed });
     const sourceModel = object(object(input.detail).sourceModel);
@@ -938,7 +1129,7 @@ export class VcrJobs {
     [id, studyId, String(input.userId), kind, method, methodVersion, state, JSON.stringify(scenario), scenarioHash,
       JSON.stringify(inputs), seed, replicates, cpuSecondsLimit,
       Math.max(1, Number(input.maxAttempts ?? VCR_JOB_MAX_ATTEMPTS)), input.runId ?? null, key,
-      JSON.stringify({ ...object(input.detail), ...(randomization ? { randomization } : {}), ...(unitBinding.detail ? { inputUnitBinding: unitBinding.detail } : {}), ...curveDetail, ...baselineDetail, ...(derivedEntries.some(entry => isReconstructionReference(kind, entry)) ? { reconstructionResultId: derivedEntries.find(entry => isReconstructionReference(kind, entry))?.resultId } : {}), ...(kind === "reconstruct_km" ? { keepTables: ["reconstructed-ipd"] } : {}), ...(kind === "apply_prognostic_model" ? { keepTables: ["prognostic-predictions"] } : {}), ...(qualityBasis ? { qualityBasis } : {}), ...(kind === "population_quality" ? { qualityAttachmentResultId } : {}), configurationInputRefs: asked.map((entry) => ({ kind: object(entry).kind, id: object(entry).id })), cost: HEAVY_KINDS.has(kind) ? "heavy" : "light" })])).rows[0];
+      JSON.stringify({ ...object(input.detail), ...(randomization ? { randomization } : {}), ...(unitBinding.detail ? { inputUnitBinding: unitBinding.detail } : {}), ...curveDetail, ...baselineDetail, ...(derivedEntries.some(entry => isReconstructionReference(kind, entry)) ? { reconstructionResultId: derivedEntries.find(entry => isReconstructionReference(kind, entry))?.resultId } : {}), ...(kind === "reconstruct_km" ? { keepTables: ["reconstructed-ipd"] } : {}), ...(kind === "apply_prognostic_model" ? { keepTables: ["prognostic-predictions"] } : {}), ...(sized && replicatePlan ? { replicatePlan: { floor: replicatePlan.floor, basis: replicatePlan.basis, intendedUse: replicatePlan.intendedUse, targetMcse: replicatePlan.targetMcse } } : {}), ...(defaulted.length ? { appliedDefaults: defaulted } : {}), ...(described.applied.length ? { normalizedKeys: described.applied } : {}), ...(qualityBasis ? { qualityBasis } : {}), ...(kind === "population_quality" ? { qualityAttachmentResultId } : {}), configurationInputRefs: asked.map((entry) => ({ kind: object(entry).kind, id: object(entry).id })), cost: HEAVY_KINDS.has(kind) ? "heavy" : "light" })])).rows[0];
       // Completion locks the job before its population. A duplicate enqueue must take the same order:
       // the UPSERT may wait for a finishing job; only then lock and recheck its generation in this transaction.
       if (qualityBasis) {
@@ -1189,9 +1380,15 @@ export class VcrJobs {
    * @param {{ workerId?: string, leaseMs?: number, limit?: number, lane?: string }} [options]
    */
   async claim({ workerId = this.owner, leaseMs = this.leaseMs, limit = 1, lane = 'all' } = {}) {
-    if (lane === 'all') return [...await this.claim({workerId,leaseMs,limit,lane:'local'}), ...await this.claim({workerId,leaseMs,limit,lane:'engine'})];
-    const localMethods = Object.keys(this.localExecutors).filter(method => typeof this.localExecutors[method] === 'function');
-    if (lane === 'local' && !localMethods.length) return [];
+    if (lane === 'all') return [...await this.claim({workerId,leaseMs,limit,lane:'local'}), ...await this.claim({workerId,leaseMs,limit,lane:'slow'}), ...await this.claim({workerId,leaseMs,limit,lane:'engine'})];
+    // Three lanes. The engine's takes what is not a local method; the local one takes the short local methods (a verdict, a forecast);
+    // the slow one takes the local methods that call a model per record (`VCR_SLOW_LOCAL_METHODS`), so that one long job does not hold
+    // the short ones behind it on the same worker loop.
+    const allLocal = Object.keys(this.localExecutors).filter(method => typeof this.localExecutors[method] === 'function');
+    const localMethods = lane === 'slow' ? allLocal.filter(method => VCR_SLOW_LOCAL_METHODS.includes(method))
+      : lane === 'local' ? allLocal.filter(method => !VCR_SLOW_LOCAL_METHODS.includes(method)) : allLocal;
+    const takesListed = lane !== 'engine';
+    if (takesListed && !localMethods.length) return [];
     if (lane === 'engine') await this.reconcileStoppedEngineWork();
     const rows = await this.store.transaction(async (client) => {
       const interrupted = (await client.query(`SELECT id FROM ${VCR_SCHEMA}.jobs WHERE state='queued'
@@ -1216,8 +1413,8 @@ export class VcrJobs {
       await this.#releaseFitting(client);
       const running = Number((await client.query(`SELECT count(*)::integer AS n FROM ${VCR_SCHEMA}.jobs
         WHERE state = 'running' AND (lease_until IS NULL OR lease_until > now())
-          AND (method=ANY($1::text[]))=$2`, [localMethods,lane==='local'])).rows[0]?.n ?? 0);
-      const capacity = lane === 'local' ? Math.max(1,Math.min(4,Number(this.config.vcrLocalConcurrency ?? 2))) : this.maxConcurrent;
+          AND (method=ANY($1::text[]))=$2`, [localMethods,takesListed])).rows[0]?.n ?? 0);
+      const capacity = takesListed ? Math.max(1,Math.min(4,Number(this.config.vcrLocalConcurrency ?? 2))) : this.maxConcurrent;
       const free = Math.max(0, capacity - running);
       if (!free) return [];
       const take = Math.min(free, Math.max(1, limit));
@@ -1231,7 +1428,7 @@ export class VcrJobs {
             AND (r.lease_until IS NULL OR r.lease_until>now()) AND (r.method=ANY($3::text[]))=$4)<$5)
         SELECT j.id FROM ${VCR_SCHEMA}.jobs j JOIN eligible e ON e.id=j.id WHERE e.account_order<=$5
         ORDER BY e.account_order, CASE WHEN e.state='running' OR e.checkpoint ? 'engineJobId' THEN 0 ELSE 1 END,e.run_after,e.created_at
-        LIMIT $1 FOR UPDATE OF j SKIP LOCKED`, [take,resumingId,localMethods,lane==='local',lane==='local' ? 1 : capacity]);
+        LIMIT $1 FOR UPDATE OF j SKIP LOCKED`, [take,resumingId,localMethods,takesListed,takesListed ? 1 : capacity]);
       if (!picked.rows.length) return [];
       const ids = picked.rows.map((/** @type {any} */ row) => String(row.id));
       const claimed = await client.query(`UPDATE ${VCR_SCHEMA}.jobs
@@ -1241,7 +1438,7 @@ export class VcrJobs {
       return claimed.rows;
     });
     this.counters.claimed += rows.length;
-    if (lane === 'local') this.counters.localClaimed += rows.length;
+    if (takesListed) this.counters.localClaimed += rows.length;
     this.counters.exhausted += this.reaped.length;
     return rows.map((row) => ({ ...jobSummaryFromRow(row), leaseOwner: String(row.lease_owner) }));
   }
@@ -1832,9 +2029,13 @@ export class VcrJobs {
         const sourced = assumedInputs
           ? measures.map((measure) => (object(measure).source === "aggregate" ? { ...object(measure), source: "assumed" } : measure))
           : measures;
+        // What the comparator's own records limit it by (the orchestrator froze it with the job): an estimable result is then `limited`
+        // and says why. A result the engine already called limited or not estimable is not changed by it, and nothing is withheld.
+        const recordLimits = list(detail.applicabilityLimits).map(object).filter((entry) => typeof entry.code === "string");
         /** @type {any} */
         const incoming = {
-          conclusion: complete ? (status === "not_estimable" ? "not_estimable" : (result.conclusion ?? "estimable")) : "limited",
+          conclusion: complete ? (status === "not_estimable" ? "not_estimable"
+            : (result.conclusion ?? "estimable") === "estimable" && recordLimits.length ? "limited" : (result.conclusion ?? "estimable")) : "limited",
           notEstimableRule: result.notEstimableRule ?? null,
           counts: object(result.counts), measures: sourced,
           diagnostics: { ...object(result.diagnostics), ...(detail.sourceModel ? { sourceModel: detail.sourceModel } : {}),
@@ -1844,7 +2045,13 @@ export class VcrJobs {
             // The unit the scenario's times were stated in and where it came from (stated, taken from its evidence, or assumed to be
             // months), frozen with the job by the orchestrator: what the numbers of a result are in, said by the result. (The engine's
             // own `timeUnit` is a method's echo of the word it was given; this is the control plane's account of how it was settled.)
-            ...(Object.keys(object(detail.timeUnitBasis)).length ? { timeUnitBasis: object(detail.timeUnitBasis) } : {}) },
+            ...(Object.keys(object(detail.timeUnitBasis)).length ? { timeUnitBasis: object(detail.timeUnitBasis) } : {}),
+            // Control-plane facts about the run, frozen with the job: the defaults it took, and why it ran as many replicates as it did.
+            ...(list(detail.appliedDefaults).length ? { appliedDefaults: list(detail.appliedDefaults) } : {}),
+            ...(recordLimits.length ? { applicabilityLimits: recordLimits.map((entry) => ({ code: String(entry.code), reason: String(entry.reason ?? "") })) } : {}),
+            ...(Object.keys(object(detail.replicatePlan)).length ? { replicatePlan: object(detail.replicatePlan) } : {}),
+            // What a population check was about and whether its second table was made from other evidence: the control plane's account.
+            ...(Object.keys(object(detail.populationCheck)).length ? { populationCheck: object(detail.populationCheck) } : {}) },
           tables: list(result.tables),
         };
         let filed = incoming;
@@ -1865,6 +2072,7 @@ export class VcrJobs {
           filed = vcrMergeStageResult(prior, incoming, {
             stage: String(detail.stage), jobId, method: String(row.method), methodVersion: String(row.method_version ?? ""),
             at: row.created_at ? new Date(row.created_at).toISOString() : null,
+            ...(typeof detail.checkOf === "string" ? { checkOf: detail.checkOf } : {}),
           }, { staleSince: marked?.marked_at ? new Date(marked.marked_at).toISOString() : null,
             planned: Array.isArray(detail.plannedStages) ? detail.plannedStages.map(String) : null });
         }
@@ -1877,7 +2085,7 @@ export class VcrJobs {
           diagnostics: filed.diagnostics, tables: filed.tables,
           tiers: [...new Set([...tiers, ...carried.filter((entry) => entry.name === "method").map((entry) => String(entry.tier))])],
           models: [...models, ...carried.filter((entry) => entry.name !== "method")],
-          supersedesSubjects: list(detail.supersedes).map(String), requestedUse: study?.intendedUse ?? "exploratory",
+          supersedesSubjects: list(detail.supersedes).map(String), requestedUse: study?.intendedUse ?? "exploratory", method: String(row.method),
         }, { client });
         if (outcome.verifiedStage) {
           const proof = { recordedResultId: recorded.id, recordedResultVersion: recorded.version,
@@ -1972,6 +2180,9 @@ export class VcrJobs {
     const detail = object(row.checkpoint);
     const kind = row.method === "population.quality" ? "population_quality" : String(detail.resultKind || this.#resultKind(String(row.kind)));
     const subjectId = detail.subjectId == null ? null : String(detail.subjectId);
+    // A cancelled check is not filed as the object's current result: the partial is not folded into the stages the way a landing is,
+    // and it would take the place of the result the check was checking (the cancel names the job; the page says it was cancelled).
+    if (VCR_CHECK_STAGES.includes(String(detail.stage))) return null;
     return this.store.transaction(async (client) => {
       const locked = (await client.query(`SELECT * FROM ${VCR_SCHEMA}.jobs WHERE id = $1 FOR UPDATE`, [String(row.id)])).rows[0];
       const has = await client.query(`SELECT 1 FROM ${VCR_SCHEMA}.executions WHERE job_id = $1`, [String(row.id)]);

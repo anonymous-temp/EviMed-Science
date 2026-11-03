@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "clinical-evidence-synthesis",
-  "version": "sha256:3e504c1941723598a04447dd536ae910b2d029e35570f094593088d6a1ec3283",
+  "version": "sha256:825d6a1fa94ece6486ec8f36dea3cab889c629a6421365d8034b4b9db3127975",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 37,
@@ -583,6 +583,12 @@
             "type": "integer",
             "minimum": 1,
             "maximum": 50
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 499,
+            "description": "Only for `prospero`: registrations to skip. data.outcome says when more matched and what offset reads on; a topic is not open on a partial read."
           }
         },
         "additionalProperties": false,

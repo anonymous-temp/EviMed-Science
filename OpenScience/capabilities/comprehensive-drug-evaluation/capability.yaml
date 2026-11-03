@@ -95,9 +95,9 @@ starterPrompts:
 # orchestrator (the fields above). The generator derives the shell's and the
 # frame's capability table from this block, and adds what evals/ measured.
 display:
-  title: "综合药品评价"
+  title: "药品综合评价"
   category: "药学评价"
-  description: "从有效性、安全性、适用性、经济性等维度写出可追溯的药品评价报告。"
+  description: "从有效性、安全性、经济性等维度汇总证据，形成药品综合评价。"
   starterPrompts:
   - "围绕司美格鲁肽用于 2 型糖尿病合并肥胖完成综合评价，先提示我需要补充的数据。"
   - "对恩格列净用于射血分数降低的心衰做一次综合药品评价，重点看安全性与经济性。"

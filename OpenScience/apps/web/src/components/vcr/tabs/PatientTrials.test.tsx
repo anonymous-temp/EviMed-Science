@@ -101,9 +101,9 @@ describe("给患者找试验 — a patient with trials", () => {
 
     const first = within(trialRow("ctr_1"));
     expect(first.getByText("EV-201 plus docetaxel versus docetaxel in previously treated NSCLC")).toBeInTheDocument();
-    expect(first.getByText("III 期 · 招募中")).toBeInTheDocument();
+    expect(first.getByText("III 期 · 招募中（今天）")).toBeInTheDocument();
     expect(first.getByText("符合")).toBeInTheDocument();
-    expect(first.getByText("3 条满足 · 0 条未知 · 0 条不满足")).toBeInTheDocument();
+    expect(first.getByText("已判 3/3 · 3 条满足 · 0 条未知 · 0 条不满足")).toBeInTheDocument();
     // The registry id is a link out to the trial's own page.
     const link = first.getByRole("link", { name: /NCT05000001/ });
     expect(link).toHaveAttribute("href", "https://clinicaltrials.gov/study/NCT05000001");
@@ -112,8 +112,8 @@ describe("给患者找试验 — a patient with trials", () => {
 
     const open = within(trialRow("ctr_2"));
     expect(open.getByText("证据不足")).toBeInTheDocument();
-    expect(open.getByText("2 条满足 · 1 条未知 · 0 条不满足")).toBeInTheDocument();
-    expect(open.getByText("II 期 · 尚未开始招募")).toBeInTheDocument();
+    expect(open.getByText("已判 2/3 · 2 条满足 · 1 条未知 · 0 条不满足")).toBeInTheDocument();
+    expect(open.getByText("II 期 · 尚未开始招募（今天）")).toBeInTheDocument();
     expect(within(trialRow("ctr_3")).getByText("不符合")).toBeInTheDocument();
     // The excluded trial is last, not gone.
     expect(rows.at(-1)).toBe(trialRow("ctr_3"));
@@ -152,6 +152,8 @@ describe("给患者找试验 — a patient with trials", () => {
     await waitFor(() => expect(criterionRow("I2")).toHaveAttribute("data-vcr-criterion-state", "unknown"));
     expect(criterionRow("I2")).toHaveTextContent("Documented EGFR exon 19 deletion or L858R mutation");
     expect(criterionRow("I2")).toHaveTextContent("EGFR 突变检测报告");
+    // Beside what to ask for, why the criterion is not decided (the assessment's own reason, in words).
+    expect(criterionRow("I2")).toHaveTextContent("未记录");
     expect(screen.getByText("不能判为符合：入选标准 I2 未知")).toBeInTheDocument();
     expect(within(trialRow("ctr_2")).getByRole("button", { name: /EGFR-mutant NSCLC/ })).toHaveAttribute("aria-current", "true");
     expect(within(trialRow("ctr_1")).getByRole("button", { name: /EV-201 plus docetaxel/ })).not.toHaveAttribute("aria-current");

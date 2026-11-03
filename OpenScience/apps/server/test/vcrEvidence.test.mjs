@@ -266,6 +266,11 @@ test("E-9 every number of an extraction is checked against its quotation, and an
   assert.equal(numberIsInQuote("locations[12].zip: 10012", 12), false);
   assert.equal(numberIsInQuote("locations[12].zip: 10012", 10012), true);
   assert.equal(numberIsInQuote("phase: PHASE1", 1), false, "the 1 of PHASE1 is part of a word");
+  // The Lancet family prints its decimal point raised: 22·1 months is 22.1 months, and a raised dot between a digit and a word is nothing.
+  assert.equal(numberIsInQuote("vs 15·2 months [13·0-18·5]; HR 0·62", 15.2), true);
+  assert.equal(numberIsInQuote("vs 15·2 months [13·0-18·5]; HR 0·62", 0.62), true);
+  assert.equal(numberIsInQuote("vs 15·2 months", 15), false, "the integer part alone is not the number the sentence prints");
+  assert.equal(numberIsInQuote("12 · 5 months", 12.5), false, "spaces around a dot make it two numbers");
   const zero = verifyExtraction({ extraction: { parameter: "x", value: 0, valueSource: "extracted", quote: "a.b[0].c: response", locator: { kind: "registry_field", path: "a.b[0].c" } }, sourceText: "a.b[0].c: response" });
   assert.equal(zero.verified, false, "0 is not in 「response」; the [0] does not count");
 });

@@ -3,14 +3,14 @@ import { MemoryRouter, Route, Routes, Link } from "react-router";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
 import { VcrMethodWorkbenchPage } from "./VcrMethodWorkbenchPage";
-const api = vi.hoisted(() => ({ getVcrStudy: vi.fn(), getVcrModels: vi.fn(), getVcrJob: vi.fn(), getVcrMethodConfiguration: vi.fn(), getVcrMethodResult: vi.fn(), queueVcrJob: vi.fn(), createVcrStudy: vi.fn() }));
+const api = vi.hoisted(() => ({ getVcrStudy: vi.fn(), getVcrModels: vi.fn(), getVcrJob: vi.fn(), getVcrMethodConfiguration: vi.fn(), getVcrMethodResult: vi.fn(), queueVcrJob: vi.fn() }));
 vi.mock("@/lib/vcrClient", async load => ({ ...await load<object>(), ...api }));
 beforeEach(() => { vi.clearAllMocks(); api.getVcrStudy.mockResolvedValue({ purpose: "programme" }); api.getVcrModels.mockResolvedValue({ methods: [{ id: "comparator.evalue", name: "E-value 敏感性分析" }] }); api.getVcrJob.mockImplementation(async (_s, id) => ({ id, kind: "evalue", state: "succeeded" })); api.getVcrMethodConfiguration.mockResolvedValue({ method: "comparator.evalue", scenario: { riskRatio: 4 }, seed: 9, inputRefs: [] }); api.getVcrMethodResult.mockResolvedValue({ result: null, records: { state: "unavailable" } }); });
 afterEach(cleanup);
 function draw(path: string) { return render(<MemoryRouter initialEntries={[path]}><Link to="/app/capabilities/methods/evalue?study=b&job=job_b">Other history</Link><Routes><Route path="/app/capabilities/methods/:methodId" element={<VcrMethodWorkbenchPage />} /></Routes></MemoryRouter>); }
 it.each(["", "?study=a"])("retires the unaddressed calculator %s without creating work", async query => {
   draw(`/app/capabilities/methods/evalue${query}`); expect(screen.getByText("计算已移入研究对话")).toBeInTheDocument();
-  expect(api.getVcrJob).not.toHaveBeenCalled(); expect(api.queueVcrJob).not.toHaveBeenCalled(); expect(api.createVcrStudy).not.toHaveBeenCalled();
+  expect(api.getVcrJob).not.toHaveBeenCalled(); expect(api.queueVcrJob).not.toHaveBeenCalled();
 });
 it("reads the exact historical job and its configuration without editable controls", async () => {
   draw("/app/capabilities/methods/evalue?study=a&job=job_a");

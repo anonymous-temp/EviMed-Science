@@ -1,4 +1,5 @@
 import { carriesPlatformContext, maskIdentifiers, projectContextLine, unwrapUserWrappers } from "@evimed/domain";
+import { withoutResearchGoalGesture } from "./researchGoal.mjs";
 
 import {
   recordGatewayCommit, recordGatewayMasked, recordGatewayMessage, recordGatewayRefusal, recordGatewayRequest,
@@ -260,10 +261,12 @@ function projectMemoryVisible(uri, userRoot, types, directory = false) {
  * A platform tag anywhere in the text (after a researcher's own wrapper is removed) drops the whole message, for either
  * role: an assistant message echoing an injected block is evidence of nothing. What goes on is the role, the text and the
  * time — never a tool part, a peer, or a field this gateway does not know.
- * @param {any} body
+ * In the turn that set a research goal the person's message is `/loopx <their sentence>`: the gesture is the platform's and is taken out
+ * of what a user says there (`withoutResearchGoalGesture`); a message that was only the gesture is no text.
+ * @param {any} body @param {{ researchGoal?: boolean }} [turn]
  * @returns {{ forward: { role: string, parts: { type: "text", text: string }[], created_at?: string }, masked: boolean } | { drop: "invalid" | "platform_context" | "no_text" }}
  */
-export function filterCapturedMessage(body) {
+export function filterCapturedMessage(body, { researchGoal = false } = {}) {
   if (!body || typeof body !== "object" || Array.isArray(body) || !["user", "assistant"].includes(body.role)) return { drop: "invalid" };
   const texts = typeof body.content === "string" ? [body.content]
     : Array.isArray(body.parts) ? body.parts.filter((/** @type {any} */ part) => part?.type === "text" && typeof part.text === "string").map((/** @type {any} */ part) => part.text) : [];
@@ -272,7 +275,7 @@ export function filterCapturedMessage(body) {
   /** @type {{ type: "text", text: string }[]} */
   const parts = [];
   for (const text of texts) {
-    const own = unwrapUserWrappers(text);
+    const own = researchGoal && body.role === "user" ? withoutResearchGoalGesture(unwrapUserWrappers(text)).trim() : unwrapUserWrappers(text);
     if (!own) continue;
     const safe = maskIdentifiers(own);
     if (safe !== own) masked = true;
@@ -690,7 +693,7 @@ export function createMemoryGatewayHandler({ config, runtimeManager, store, sess
         if (admitted.learnReason === "clinical_context") dropClinicalSession(ctx.user.id, sessionId, ctx.sessions);
         return { ...accepted, outcome: "withheld" };
       }
-      const decision = filterCapturedMessage(ctx.json);
+      const decision = filterCapturedMessage(ctx.json, { researchGoal: admitted.researchGoal === true });
       if ("drop" in decision) {
         recordGatewayMessage(decision.drop);
         if (decision.drop === "invalid") throw new HttpError(400, "memory_gateway_body_invalid", "A message needs a role and text.");

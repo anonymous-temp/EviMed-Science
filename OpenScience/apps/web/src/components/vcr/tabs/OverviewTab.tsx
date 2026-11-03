@@ -2,7 +2,7 @@ import { VcrResearchProgress } from "../VcrResearchProgress";
 import { resumeVcrStep } from "../vcrConversationActions";
 import { Link } from "react-router";
 import { PenLine } from "lucide-react";
-import { VCR_STEPS, vcrStepStateLabel, workStateLabel } from "@evimed/domain";
+import { VCR_STEPS, VCR_TAB_LABELS_ZH, vcrStepStateLabel, workStateLabel } from "@evimed/domain";
 import { type VcrAttention, type VcrCountKey, type VcrStepKey, type VcrStudy, type VcrTabKey } from "@/lib/vcrClient";
 import { columnTime } from "@/lib/runPresentation";
 import { AllowanceTopUp } from "@/components/runs/AllowanceTopUp";
@@ -16,7 +16,7 @@ import { Section } from "@/components/ui/Section";
 import { VcrCountsBand } from "../VcrCounts";
 import { VcrNoDefinition } from "../VcrStates";
 import { useStudyFrame } from "../studyFrameContext";
-import { VCR_STEP_TABS, vcrTabPath } from "../vcrTabs";
+import { VCR_STEP_TABS, overviewIsEmpty, vcrTabPath } from "../vcrTabs";
 import { stepName } from "../vcrActivity";
 import { INTAKE_LABEL, RESUME_LABEL } from "../vcrActionWords";
 import { stepAllowanceWait } from "@/lib/allowanceWait";
@@ -48,13 +48,25 @@ import { stepAllowanceWait } from "@/lib/allowanceWait";
  */
 export function OverviewTab({ studyId, study }: { studyId: string; study: VcrStudy }) {
   const { headline, counts, attention, deliverables } = study.overview;
-  if (!study.question?.trim() && !headline && !counts && deliverables.length === 0 && study.overview.researchProgress?.definition !== "saved") return <VcrNoDefinition study={study} />;
+  if (overviewIsEmpty(study)) {
+    // Nothing was asked of this study and it defined nothing, yet it may hold results (a matching done in a conversation): the overview
+    // lists where they are, and the first sentence is asked for only by a study that holds nothing at all.
+    const held = [...new Set((study.holds ?? []).map((tab) => (tab === "patients" ? "population" : tab)))] as VcrTabKey[];
+    if (held.length === 0) return <VcrNoDefinition study={study} />;
+    return (
+      <div className="flex flex-col gap-6">
+        <Attention items={attention} study={study} studyId={studyId} />
+        <HeldTabs tabs={held} studyId={studyId} />
+      </div>
+    );
+  }
   const sentence = headline ?? study.question;
   return (
     <div className="flex flex-col gap-6">
       {sentence && <Headline parts={[sentence]} className={headline ? undefined : "text-text-2"} />}
 
-      <VcrResearchProgress progress={study.overview.researchProgress} studyId={studyId} />
+      {/* A population's progress is about a population: a study that never had one says nothing of it. */}
+      <VcrResearchProgress progress={study.overview.researchProgress} studyId={studyId} onlyWithPopulation />
 
       <VcrCountsBand counts={counts} tabOf={(key) => countTab(key, study, studyId)} />
 
@@ -65,6 +77,17 @@ export function OverviewTab({ studyId, study }: { studyId: string; study: VcrStu
 
       <Deliverables items={deliverables} studyId={studyId} />
     </div>
+  );
+}
+
+/** Where what the study holds is: one row per tab that holds something, each a way in. */
+function HeldTabs({ tabs, studyId }: { tabs: readonly VcrTabKey[]; studyId: string }) {
+  return (
+    <Section title="已有结果">
+      <List label="已有结果的页签" divided>
+        {tabs.map((tab) => <ListRow key={tab} title={(VCR_TAB_LABELS_ZH as Record<string, string>)[tab] ?? tab} to={vcrTabPath(studyId, tab)} titleProps={{ "data-vcr-held": tab }} />)}
+      </List>
+    </Section>
   );
 }
 

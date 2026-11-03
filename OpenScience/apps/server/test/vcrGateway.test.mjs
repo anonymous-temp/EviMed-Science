@@ -8,13 +8,16 @@ import assert from "node:assert/strict";
 import { Readable } from "node:stream";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
-import { VCR_EXPORT_KINDS, VCR_EXPORT_KIND_LABELS_ZH, VCR_MODEL_DOCUMENT_KINDS, VCR_MODEL_DOCUMENT_SECTIONS } from "@evimed/domain";
+import { VCR_EXPORT_KINDS as ALL_EXPORT_KINDS, VCR_EXPORT_KIND_LABELS_ZH, VCR_MODEL_DOCUMENT_KINDS, VCR_MODEL_DOCUMENT_SECTIONS } from "@evimed/domain";
+
+/** The documents a run writes. A result record is the platform's own, from one result (D7): no run is sent out for it and none fills it. */
+const VCR_EXPORT_KINDS = ALL_EXPORT_KINDS.filter((kind) => kind !== "result_record");
 import {
   VCR_GATEWAY_OPERATIONS, VCR_GATEWAY_PATH, VCR_GATEWAY_WINDOW_LIMITS, createVcrGatewayHandler, vcrGatewayProviderUrl,
   vcrGatewayRoutePattern, vcrRuntimeWrite,
 } from "../src/vcrGateway.mjs";
 import { VCR_READ_WHATS, VCR_WRITE_WHATS, VcrService } from "../src/vcrService.mjs";
-import { PENDING_RECHECK, evaluateCriterion } from "../src/vcrMatching.mjs";
+import { PENDING_RECHECK, SATISFIED, evaluateCriterion } from "../src/vcrMatching.mjs";
 import { vcrReportModel } from "../src/vcrRender.mjs";
 import { HttpError } from "../src/security.mjs";
 
@@ -190,6 +193,27 @@ test("read and write vocabularies are closed, and the filter fields are too", as
     await handler(request(`/internal/vcr/v1/${operation}`, body), res);
     assert.equal(res.json().code, code, `${operation} ${JSON.stringify(body)}`);
   }
+});
+
+test("the registry search keys belong to what: candidates, are checked in words, and reach the service bounded (M1)", async () => {
+  const { calls, handler } = fixture();
+  const ask = async (body) => { const res = response(); await handler(request("/internal/vcr/v1/read", body), res); return res; };
+  const filter = { condition: "non-small cell lung cancer", terms: ["NSCLC", "非小细胞肺癌"], age: 63, sex: "female", region: "China", status: "open", limit: 10 };
+  const ok = await ask({ what: "candidates", filter });
+  assert.equal(ok.status, 200);
+  assert.deepEqual(calls.at(-1), ["read", "candidates", filter]);
+  // The keys are another read's to refuse.
+  const stray = await ask({ what: "criteria", filter: { condition: "x" } });
+  assert.deepEqual([stray.status, stray.json().code], [400, "vcr_read_filter_invalid"]);
+  assert.match(stray.json().error, /candidates/);
+  // And the request's own findings answer in words, before the service is reached.
+  const before = calls.length;
+  for (const bad of [{ condition: "x", age: 400 }, { condition: "x", sex: "unknown" }, { condition: "x", terms: ["a", "b", "c", "d"] }, { age: 50 }, { condition: "x", status: "closed" }]) {
+    const res = await ask({ what: "candidates", filter: bad });
+    assert.deepEqual([res.status, res.json().code], [400, "vcr_read_filter_invalid"], JSON.stringify(bad));
+    assert.match(res.json().error, /filter\./);
+  }
+  assert.equal(calls.length, before, "nothing was read for a request that was refused");
 });
 
 test("a runtime write may not write a number, a count or an execution record", async () => {
@@ -407,8 +431,12 @@ test("a comparator is a route and an estimand; whether it is estimable is the en
   const data = res.json().data;
   assert.equal(data.ok, true);
   assert.deepEqual(calls.filter((call) => call[0] === "comparator"), [["comparator", "external_control", null]]);
-  assert.deepEqual(data.issues.map((/** @type {any} */ issue) => [issue.index, issue.field, issue.code]), [[1, "conclusion", "vcr_write_field_forbidden"]],
+  const refused = data.issues.filter((/** @type {any} */ issue) => issue.code !== "vcr_comparator_record_incomplete");
+  assert.deepEqual(refused.map((/** @type {any} */ issue) => [issue.index, issue.field, issue.code]), [[1, "conclusion", "vcr_write_field_forbidden"]],
     "a conclusion is not a field of the write at all, and the gap list beside it is a result field");
+  // the saved comparator has no target-trial record and no applicability record: both come back as reminders, and it was saved all the same
+  assert.deepEqual(data.issues.filter((/** @type {any} */ issue) => issue.index === 0).map((/** @type {any} */ issue) => [issue.field, issue.code]),
+    [["targetTrial", "vcr_comparator_record_incomplete"], ["configuration.applicability", "vcr_comparator_record_incomplete"]]);
 });
 
 test("a run may ask for a step and leave a note; it cannot declare one finished, and says so by being refused", async () => {
@@ -593,6 +621,40 @@ test("a pooling start tells the run every study it left out, not the first twent
   assert.deepEqual(data.refused[44], { id: "evd_44", reasons: ["quote_not_verified"] });
 });
 
+test("D4: a batch reading starts with a selection and no scenario, and the answer is the platform's statement of what it will read and cost", async () => {
+  /** @type {any[]} */
+  const started = [];
+  const matchBatch = { async start(/** @type {any} */ _study, /** @type {any} */ selection) {
+    started.push(selection);
+    return { action: "start", kind: "match_extract", state: "queued", jobId: "job_5", statement: "这一批要读 3 位病人的 3 份病历，预计最多 1 万个输入词元。",
+      plan: { toRead: 52, alreadyRead: 0, prefiltered: 3, noDocuments: 12, deferred: 0 }, estimate: { basis: "ceiling", people: 52, records: 60, cost: 0.9 } };
+  } };
+  const { handler } = fixture({ matchBatch });
+  const start = async (/** @type {Record<string, any>} */ body) => { const res = response(); await handler(request("/internal/vcr/v1/simulate", { action: "start", kind: "match_extract", ...body }), res); return res; };
+  const ok = await start({ selection: { protocolVersionId: "pv_1", prefilter: false } });
+  assert.equal(ok.status, 200, ok.body);
+  assert.equal(ok.json().data.jobId, "job_5");
+  assert.match(ok.json().data.statement, /这一批要读 3 位病人/);
+  // The plan's counts are the study's people: the answer passes the boundary once, so the three the table decided against are not a number.
+  assert.deepEqual(ok.json().data.plan, { toRead: 52, alreadyRead: 0, prefiltered: null, noDocuments: 12, deferred: 0, suppressed: ["prefiltered"] });
+  assert.deepEqual(ok.json().data.estimate, { basis: "ceiling", people: 52, records: 60, cost: 0.9 });
+  assert.deepEqual(started, [{ protocolVersionId: "pv_1", prefilter: false }]);
+  // with no selection the platform takes the newest protocol and everyone
+  await start({});
+  assert.deepEqual(started.at(-1), {});
+  // a scenario, rows or a selection of the evaluation's kind are refused by name
+  for (const body of [{ scenario: { subjects: ["P-001"] } }, { inputs: [{ kind: "snapshot", id: "snp_1" }] }, { selection: { snapshotId: "a".repeat(64) } }, { selection: { direction: "patient_to_trial" } }]) {
+    const refused = await start(body);
+    assert.equal(refused.status, 400, JSON.stringify(body));
+  }
+  assert.equal(started.length, 2, "nothing refused reached the reading");
+  // a deployment without the module's reader says so, and the other steps carry on
+  const none = fixture({ matchBatch: null });
+  const res = response();
+  await none.handler(request("/internal/vcr/v1/simulate", { action: "start", kind: "match_extract" }), res);
+  assert.equal(res.status, 503);
+});
+
 test("the comparator-effect kinds start through the gateway; a time-to-event MAIC names its comparator by a reconstruction result, never by rows", async () => {
   /** @type {any[]} */
   const queued = [];
@@ -708,13 +770,70 @@ test("a refused scenario tells the run where it was refused as a code and a path
   assert.equal("issues" in (await send(plain.handler, "design_analytic")).json(), false);
 });
 
+test("simulate validate asks the queue's own check and answers it: nothing is enqueued, no subject is resolved, a refusal is an answer (C1)", async () => {
+  /** @type {any[]} */
+  const asked = [];
+  const base = fixture();
+  const jobs = {
+    ...base.vcr.jobs,
+    async validate(/** @type {any} */ input) { asked.push(input); return input.kind === "design_simulation" ? { action: "validate", kind: input.kind, queued: false, checked: true, valid: true, issues: [], applied: [{ field: "analysis.alpha", value: 0.025 }] }
+      : { action: "validate", kind: input.kind, queued: false, checked: true, valid: false, issues: [{ code: "scenario_value_invalid", field: "scenario.design", message: "x" }] }; },
+    async enqueue() { throw new Error("validate must not queue"); },
+  };
+  const { handler, calls } = fixture({ jobs });
+  const ok = response();
+  await handler(request("/internal/vcr/v1/simulate", { action: "validate", kind: "design_simulation", scenario: { design: { kind: "two_arm_fixed" } }, replicates: 7000 }), ok);
+  assert.equal(ok.status, 200, ok.body);
+  assert.deepEqual(ok.json().data.applied, [{ field: "analysis.alpha", value: 0.025 }]);
+  assert.equal(ok.json().data.queued, false);
+  assert.equal(asked[0].studyId, "std_1");
+  assert.deepEqual([asked[0].kind, asked[0].replicates, asked[0].scenario], ["design_simulation", 7000, { design: { kind: "two_arm_fixed" } }]);
+  const refused = response();
+  await handler(request("/internal/vcr/v1/simulate", { action: "validate", kind: "design_analytic", scenario: {} }), refused);
+  assert.equal(refused.status, 200, "a refused scenario is the answer, not an error");
+  assert.equal(refused.json().data.valid, false);
+  // A model or a reconstruction named here is bound at start, and says so.
+  const bound = response();
+  await handler(request("/internal/vcr/v1/simulate", { action: "validate", kind: "weighted_cox_comparator", scenario: {}, reconstructionResultId: "res_7" }), bound);
+  assert.equal(bound.status, 400, "the reconstruction is for the one kind that reads it, as in start");
+  assert.equal(calls.filter((call) => call[0] === "enqueue").length, 0);
+  // the same body is refused by the same rules: no kind, a malformed scenario
+  for (const body of [{ action: "validate" }, { action: "validate", kind: "design_simulation", scenario: [] }]) {
+    const bad = response();
+    await handler(request("/internal/vcr/v1/simulate", body), bad);
+    assert.equal(bad.json().code, "vcr_simulate_payload_invalid", JSON.stringify(body));
+  }
+});
+
+test("a stage in flight is the answer only to the scenario the running job froze: another number is another job", async () => {
+  const frozen = { design: { kind: "two_arm_fixed", nTreat: 150, nControl: 150 }, endpoint: { type: "time_to_event" }, truth: { hazardRatio: 0.7, controlMedian: 12 },
+    analysis: { method: "logrank", alpha: 0.025, sided: 1 }, accrual: { kind: "uniform", duration: 12, followup: 12 } };
+  const running = { id: "job_300", state: "running", progress: { done: 1, total: 5 }, scenario: { ...frozen, replicates: 2000 } };
+  const held = { id: "scn_300", version: 1, label: "设计 1", design: "two_arm_fixed", endpointType: "time_to_event", configuration: frozen };
+  const build = () => fixture({ store: { ...fixture().vcr.store, async trialScenarios() { return [held]; } },
+    orchestrator: { async inFlightStage() { return running; }, async noteRuntimeJob() {} } });
+  const ask = async (/** @type {Record<string, any>} */ scenario) => {
+    const { handler, calls } = build();
+    const res = response();
+    await handler(request("/internal/vcr/v1/simulate", { action: "start", kind: "design_simulation", subjectId: "scn_300", scenario }), res);
+    return { data: res.json().data, calls };
+  };
+  const same = await ask(frozen);
+  assert.deepEqual([same.data.jobId, same.data.alreadyRunning], ["job_300", true], "the same scenario is the job that is running");
+  assert.equal(same.calls.some((call) => call[0] === "enqueue"), false);
+  const other = await ask({ ...frozen, design: { kind: "two_arm_fixed", nTreat: 250, nControl: 250 } });
+  assert.equal(other.data.alreadyRunning, undefined, "n=500 is not answered with the n=300 job");
+  assert.equal(other.data.jobId, "job_1");
+  assert.ok(other.calls.some((call) => call[0] === "enqueue" && call[1] === "design_simulation"));
+});
+
 test("simulate is start / status / cancel, and a job over budget says so plainly", async () => {
   const { calls, handler, vcr } = fixture({ store: { ...fixture().vcr.store, async trialScenarios() { return [DESIGN_A]; } } });
   void vcr;
   const started = response();
   await handler(request("/internal/vcr/v1/simulate", { action: "start", kind: "design_simulation", scenario: { design: { kind: "two_arm_fixed" } } }), started);
   assert.deepEqual(started.json().data, { action: "start", jobId: "job_1", state: "queued", progress: {},
-    subject: { kind: "trial_scenario", id: "scn_a", version: 1 } }, "the one design the scenario fits is the one it is about");
+    subject: { kind: "trial_scenario", id: "scn_a", version: 1, name: "A 2:1 固定设计" } }, "the one design the scenario fits is the one it is about, with the name a reply calls it by");
   assert.ok(calls.some((call) => call[0] === "enqueue" && call[1] === "design_simulation"));
 
   const status = response();
@@ -774,7 +893,7 @@ test("a design's computation names the trial scenario it is for: its result is f
 
   const analytic = await start({ kind: "design_analytic", subjectId: "scn_b", scenario: { design: { kind: "two_arm_fixed", allocation: 0.5 } } });
   assert.equal(analytic.status, 200, analytic.body);
-  assert.deepEqual(analytic.json().data.subject, { kind: "trial_scenario", id: "scn_b", version: 2 });
+  assert.deepEqual(analytic.json().data.subject, { kind: "trial_scenario", id: "scn_b", version: 2, name: "B 1:1 固定设计" });
   assert.deepEqual(queued[0].detail, { subjectId: "scn_b", origin: "runtime", resultKind: "trial_scenario", node: "trial_scenario:scn_b@2", step: "trial",
     stage: "analytic", supersedes: ["scn_b0"] }, "the subject, where the result lands, the stage it is, and the earlier version of the same design it replaces");
   assert.match(queued[0].idempotencyKey, /design_analytic:scn_b:/, "the same scenario asked for another design is another job");
@@ -1159,11 +1278,50 @@ test("a copiedFrom link is honoured only for a copy of the same variable at the 
     assert.equal(honest.saved[0].clinical.copiedFrom, "fct_orig", occurredAt);
     assert.equal(kept.results[0].warnings, undefined, occurredAt);
   }
+  // A copy carried forward into a later record has no date of its own either: the date its record\'s header gives it is the record\'s, not the
+  // event\'s, so it is not compared with the original\'s and the link stands (owner ruling 2026-11-02).
+  const forward = "Record date: 2026-09-25\n多西他赛治疗。";
+  const header = { ...original, occurredAt: "2026-08-01T00:00:00.000Z", source: { dateBasis: "record_header" } };
+  const carried = factWriter({ text: forward, known: [header] });
+  const kept = await carried.write({ subjectKey: "P-1", documentId: "doc_1", variable: "docetaxel", surface: "多西他赛", quote: "多西他赛治疗。", clinical: { ...PATIENT, medication: { state: "administered" }, copiedFrom: "fct_orig" } });
+  assert.deepEqual([kept.ok, carried.saved[0].occurredAt, carried.saved[0].source.dateBasis, carried.saved[0].clinical.copiedFrom, kept.results[0].warnings], [true, "2026-09-25", "record_header", "fct_orig", undefined]);
+  // The same copy, when the original had a date of its own, is still a different instant.
+  const ownDate = factWriter({ text: forward, known: [original] });
+  const flaggedForward = await ownDate.write({ subjectKey: "P-1", documentId: "doc_1", variable: "docetaxel", surface: "多西他赛", quote: "多西他赛治疗。", clinical: { ...PATIENT, medication: { state: "administered" }, copiedFrom: "fct_orig" } });
+  assert.deepEqual([ownDate.saved[0].clinical.copiedFrom, flaggedForward.results[0].warnings[0].code], [undefined, "clinical_copied_from_other_date"]);
   // The fence is as before: a link to a fact that is not this patient's is refused whole.
   const foreign = factWriter({ text, known: [{ ...original, subjectKey: "P-2" }] });
   const refused = await foreign.write(copy("2026-08-01 多西他赛治疗", "2026-08-01", "fct_orig"));
   assert.equal(refused.ok, false);
   assert.equal(foreign.saved.length, 0);
+});
+
+test("P1-3 a value written as a numeric string is held to the quotation like a number, and kept as the number it was checked as", async () => {
+  const text = "2026-09-01 HbA1c 8.5%。";
+  const quote = "HbA1c 8.5%";
+  const start = text.indexOf(quote);
+  /** @param {string | number} value @param {Record<string, any>} [over] */
+  const fact = (value, over = {}) => ({ subjectKey: "P-1", documentId: "doc_1", variable: "hba1c", value, unit: "%", surface: "HbA1c", quote, start, end: start + quote.length, ...over });
+  // The probe of the review: the number the record never printed, as a string, was kept; as a number it was refused.
+  for (const value of ["9.9", " 9.9 ", 9.9]) {
+    const wrong = factWriter({ text });
+    const refused = await wrong.write(fact(value));
+    assert.equal(refused.ok, false, JSON.stringify(value));
+    assert.equal(wrong.saved.length, 0, JSON.stringify(value));
+    assert.equal(refused.issues[0].code, "vcr_evidence_unverified");
+    assert.match(refused.issues[0].message, /value_not_in_span/);
+  }
+  // The number the record printed is kept, as a number, whether it came as a string or not.
+  for (const value of ["8.5", 8.5]) {
+    const right = factWriter({ text });
+    const kept = await right.write(fact(value));
+    assert.equal(kept.ok, true, JSON.stringify(kept.issues));
+    assert.strictEqual(right.saved[0].value, 8.5, `${JSON.stringify(value)} is stored as the number`);
+  }
+  // A value with a word in it is text: nothing to hold to the numerals of the quotation, and nothing the evaluator reads as a number.
+  const word = factWriter({ text });
+  assert.equal((await word.write(fact("阳性", { unit: undefined }))).ok, true);
+  assert.strictEqual(word.saved[0].value, "阳性");
 });
 
 test("a defect in the metadata no verdict reads costs that metadata, never the quote-verified fact; the metadata a verdict reads is still refused (E-18)", async () => {
@@ -1318,4 +1476,223 @@ test("a write that will be refused on its shape alone opens no scope; one that c
   assert.equal(mixed.status, 200, mixed.body);
   assert.equal(probe.scopes.length, 1, "a batch with one writable item is written, so it has its scope");
   assert.ok(mixed.json().data.issues.some((/** @type {any} */ found) => found.index === 0 && found.code === "vcr_write_field_forbidden"), "and the refused item is still named");
+});
+
+// ---------------------------------------------------------------------------
+// F3 (VCR remediation 2026-11-01): the answer to a call made in a conversation carries the entry to the page that holds what it
+// produced, built by the server; the programme's quiet runs get none.
+// ---------------------------------------------------------------------------
+
+/** A native call from a conversation, on a deployment with (or without) a public address. @param {string} [publicUrl] */
+function conversationCalls(publicUrl) {
+  const made = fixture();
+  made.vcr.store.taskContext = async (/** @type {any} */ origin) => ({ id: "std_task", userId: "u1", projectId: "prj_1", scope: "conversation", purpose: "task", conversationSessionId: origin.rootSessionId });
+  made.vcr.patientContext = async () => ({ ok: true, subjectKey: "P-1", documentId: "doc_1" });
+  made.vcr.jobs.get = async (/** @type {string} */ _studyId, /** @type {string} */ id) => id === "job_1"
+    ? { id: "job_1", kind: "design_simulation", state: "running", progress: { done: 3, total: 10 }, cpuSecondsUsed: 4, error: null } : null;
+  const handler = createVcrGatewayHandler({ ...config, ...(publicUrl === undefined ? {} : { publicUrl }) }, runtimeManager, { vcr: made.vcr,
+    resolveInvocation: async () => ({ userId: "u1", projectId: "prj_1", runId: "run_1", rootSessionId: "sess_1", callId: "call_1" }) });
+  /** @param {string} operation @param {Record<string, any>} body */
+  const call = async (operation, body) => {
+    const res = response();
+    await handler(request(`/internal/vcr/v1/${operation}`, body, { authorization: "Bearer token", "x-evimed-execution-context": "{}" }), res);
+    return res;
+  };
+  return { call, made };
+}
+
+test("a conversation's matching write and a job's status carry the entry to the page that holds them; the address is the server's", async () => {
+  const { call } = conversationCalls("https://evimed.example");
+  const write = await call("write", { what: "patient_context", data: { messageSeq: 1 } });
+  assert.equal(write.status, 200);
+  assert.deepEqual(write.json().data.resultEntry, { studyId: "std_task", tab: "matching", label: "在“匹配”页查看", url: "https://evimed.example/app/virtual-research/std_task/matching" });
+  const status = await call("simulate", { action: "status", jobId: "job_1" });
+  assert.equal(status.status, 200);
+  assert.equal(status.json().data.state, "running");
+  assert.deepEqual(status.json().data.resultEntry, { studyId: "std_task", tab: "trial", label: "在“试验”页查看", url: "https://evimed.example/app/virtual-research/std_task/trial" });
+});
+
+test("a deployment with no public address still names the page; and a write that wrote nothing has no entry", async () => {
+  const { call, made } = conversationCalls();
+  const write = await call("write", { what: "patient_context", data: { messageSeq: 1 } });
+  assert.deepEqual(write.json().data.resultEntry, { studyId: "std_task", tab: "matching", label: "在“匹配”页查看" });
+  made.vcr.patientContext = async () => ({ ok: false, issues: [{ code: "vcr_patient_context_invalid" }] });
+  const refused = await call("write", { what: "patient_context", data: { messageSeq: 2 } });
+  assert.equal(refused.json().data.resultEntry, undefined);
+});
+
+test("the programme's quiet run is given no entry: nobody reads its reply", async () => {
+  const { handler } = fixture();
+  const status = response();
+  await handler(request("/internal/vcr/v1/simulate", { action: "status", jobId: "job_1" }), status);
+  assert.equal(status.status, 200);
+  assert.equal(status.json().data.jobId, "job_1");
+  assert.equal(status.json().data.resultEntry, undefined);
+});
+
+test("D7: a run asks for a result record by the result's id and is told where the export is; it cannot write the record's words", async () => {
+  /** @type {any[]} */ const asked = [];
+  const orchestrator = { async requestExport(/** @type {any} */ user, /** @type {any} */ target, /** @type {string} */ kind, /** @type {any} */ options) {
+    asked.push({ user, target: target.id, kind, options });
+    if (options.resultId === "res_nobody") throw new HttpError(404, "vcr_result_not_found", "这条结果不在这个研究里。");
+    return { export: { id: "exp_9", kind, state: "ready" } };
+  } };
+  const written = await vcrRuntimeWrite({ store: {}, service: { config: { publicUrl: "https://app.example.org" } }, orchestrator, study, what: "result_record", items: [{ resultId: "res_1" }], data: null });
+  assert.equal(written.ok, true, JSON.stringify(written));
+  assert.deepEqual(written.ids, ["exp_9"]);
+  assert.deepEqual(asked, [{ user: { id: "u1" }, target: "std_1", kind: "result_record", options: { resultId: "res_1" } }]);
+  assert.equal(written.results[0].state, "ready");
+  assert.match(written.results[0].note, /假设、种子、版本、一个示例试验和回到哪里看/);
+  assert.equal(written.results[0].resultEntry.url, "https://app.example.org/app/virtual-research/std_1/overview");
+  // an unknown field, a missing id and a result that is not the study's are each refused by name, and nothing else is made
+  const loose = await vcrRuntimeWrite({ store: {}, service: {}, orchestrator, study, what: "result_record", items: [{ resultId: "res_1", text: "我写的话" }], data: null });
+  assert.equal(loose.ok, false);
+  const none = await vcrRuntimeWrite({ store: {}, service: {}, orchestrator, study, what: "result_record", items: [{}], data: null });
+  assert.equal(none.ok, false);
+  const missing = await vcrRuntimeWrite({ store: {}, service: {}, orchestrator, study, what: "result_record", items: [{ resultId: "res_nobody" }], data: null });
+  assert.equal(missing.ok, false);
+  assert.ok(missing.issues.some((entry) => entry.code === "vcr_write_refused"));
+  assert.equal(asked.length, 2, "only the two well-formed asks reached the orchestrator");
+  // and a report cannot be of this kind: its words would be the record's
+  const report = await vcrRuntimeWrite({ store: {}, service: {}, orchestrator, study, what: "report", items: null, data: { kind: "result_record", template: "写进去的话" } });
+  assert.equal(report.ok, false);
+  assert.ok(report.issues.some((entry) => /结果记录由平台从结果写成/.test(String(entry.message))), JSON.stringify(report.issues));
+});
+
+// ---------------------------------------------------------------------------
+// A fact's date and unit: a second quotation for the date, the unit dropped and not the fact, a bare HbA1c read in percent
+// ---------------------------------------------------------------------------
+
+test("a date the quotation does not print is read from a second quotation of the same document and from nowhere else (dateQuote)", async () => {
+  const text = "Record date: 2100-03-01\n\nTakes aspirin daily.\nSeen on 3/14 for a cough. Dataset year 2100. Patient age 19; prior MI.\n";
+  /** @param {Record<string, any>} over */
+  const item = (over) => ({ subjectKey: "P-1", documentId: "doc_1", variable: "aspirin", surface: "aspirin", quote: "Takes aspirin daily.", ...over });
+
+  const honest = factWriter({ text });
+  const done = await honest.write(item({ occurredAt: "2100-03-01", dateSurface: "2100-03-01", dateQuote: "Record date: 2100-03-01" }));
+  assert.equal(done.ok, true, JSON.stringify(done.issues));
+  assert.equal(honest.saved[0].occurredAt, "2100-03-01");
+  assert.deepEqual(honest.saved[0].source.dateQuote, { start: 0, end: 23, quote: "Record date: 2100-03-01" }, "kept as a located quotation, like the first");
+  assert.equal(text.slice(honest.saved[0].source.dateQuote.start, honest.saved[0].source.dateQuote.end), "Record date: 2100-03-01");
+  assert.equal(done.results[0].warnings, undefined, "a date that is shown needs no notice");
+
+  // The 10-29 counterexamples hold: a date nothing printed is never stored. The fact is kept without it, and the run is told; with a record
+  // header above the fact it stands at the header\'s date (owner ruling 2026-11-02), and with none it is undated and a criterion that needs the
+  // date stays unknown for want of it (the same cases below, in a document with no header).
+  for (const [label, over] of /** @type {Array<[string, Record<string, any>]>} */ ([
+    ["no second quotation at all", { occurredAt: "2100-03-01" }],
+    ["an upload time or a file's date, which no quotation prints", { occurredAt: "2100-06-30", recordedAt: "2100-06-30" }],
+    ["a second quotation the document does not hold", { occurredAt: "2100-04-01", dateQuote: "Record date: 2100-04-01" }],
+    ["a second quotation that prints another date", { occurredAt: "2100-03-02", dateQuote: "Record date: 2100-03-01" }],
+    ["a short form with no year", { occurredAt: "2100-03-14", dateQuote: "Seen on 3/14 for a cough." }],
+    ["a dataset year", { occurredAt: "2100-01-01", dateQuote: "Dataset year 2100." }],
+    ["a birth year worked out from an undated age", { occurredAt: "2081-01-01", dateQuote: "Patient age 19; prior MI." }],
+    ["a second quotation too long to be a line", { occurredAt: "2100-03-01", dateQuote: `Record date: 2100-03-01${" ".repeat(200)}` }],
+  ])) {
+    const probe = factWriter({ text });
+    const kept = await probe.write(item(over));
+    assert.equal(kept.ok, true, `${label}: ${JSON.stringify(kept.issues)}`);
+    assert.equal(probe.saved.length, 1, label);
+    assert.deepEqual([probe.saved[0].occurredAt, probe.saved[0].recordedAt, probe.saved[0].dateSurface], ["2100-03-01", null, null], `${label}: the claimed date is not stored; the record header\'s is`);
+    assert.deepEqual([probe.saved[0].source.dateBasis, probe.saved[0].source.dateQuote.quote], ["record_header", "Record date: 2100-03-01"], `${label}: the header line is its date quotation`);
+    assert.equal(probe.saved[0].variable, "aspirin", label);
+    assert.equal(kept.results[0].warnings.some((/** @type {any} */ warning) => ["date_not_shown", "date_quote_not_found", "date_quote_unusable"].includes(warning.code)), true, `${label}: the run is told`);
+    // The same case in a document with no header above the fact: nothing is stored as a date, and a window is unknown for want of it.
+    const bareText = text.replace("Record date: 2100-03-01\n\n", "");
+    const bare = factWriter({ text: bareText });
+    const bareKept = await bare.write(item({ ...over, dateQuote: over.dateQuote === "Record date: 2100-03-01" ? undefined : over.dateQuote }));
+    assert.equal(bareKept.ok, true, `${label} (no header): ${JSON.stringify(bareKept.issues)}`);
+    assert.deepEqual([bare.saved[0].occurredAt, bare.saved[0].recordedAt, bare.saved[0].dateSurface, bare.saved[0].source.dateQuote], [null, null, null, undefined], `${label} (no header): nothing is stored as a date`);
+    const window = { id: "w", kind: "inclusion", requirement: { op: "present", variable: "aspirin", window: { months: 2 } } };
+    assert.equal(evaluateCriterion(window, { facts: [bare.saved[0]], asOf: Date.parse("2100-03-05") }).missing[0].reason, "undated", `${label}: a window is unknown for want of the date`);
+    assert.equal(evaluateCriterion(window, { facts: [probe.saved[0]], asOf: Date.parse("2100-03-05") }).state, SATISFIED, `${label}: with the header\'s date it is inside the window`);
+    assert.equal(evaluateCriterion({ id: "p", kind: "inclusion", requirement: { op: "present", variable: "aspirin" } }, { facts: [bare.saved[0]], asOf: Date.parse("2100-03-05") }).state, SATISFIED, `${label}: where no date is asked for, the fact counts`);
+  }
+  const notFound = factWriter({ text });
+  const told = await notFound.write(item({ occurredAt: "2100-04-01", dateQuote: "Record date: 2100-04-01" }));
+  assert.deepEqual(told.results[0].warnings.map((/** @type {any} */ warning) => warning.code).sort(), ["date_not_shown", "date_quote_not_found"]);
+
+  // Each date field stands or falls on its own: a date the quotations show is kept beside one they do not.
+  const partly = factWriter({ text });
+  const partlyResult = await partly.write(item({ occurredAt: "2100-03-01", recordedAt: "2100-06-30", dateSurface: "2100-03-02", dateQuote: "Record date: 2100-03-01" }));
+  const partlyTold = () => partlyResult.results[0].warnings.find((/** @type {any} */ warning) => warning.code === "date_not_shown").message;
+  assert.deepEqual([partly.saved[0].occurredAt, partly.saved[0].recordedAt, partly.saved[0].dateSurface, partly.saved[0].source.dateQuote.quote], ["2100-03-01", null, null, "Record date: 2100-03-01"]);
+  // What the run is told follows what was lost (review P2-11): a date label alone that the quotations do not show leaves the date, and the run
+  // is not told the fact has none; a date that was lost says so, and says which one stands.
+  const label = factWriter({ text });
+  const labelled = await label.write(item({ occurredAt: "2100-03-01", dateSurface: "March the first", dateQuote: "Record date: 2100-03-01" }));
+  assert.deepEqual([label.saved[0].occurredAt, label.saved[0].dateSurface], ["2100-03-01", null], "the date stands on its quotation; the label that nothing showed goes");
+  assert.deepEqual(labelled.results[0].warnings.map((/** @type {any} */ warning) => warning.code), ["date_label_not_shown"]);
+  assert.match(labelled.results[0].warnings[0].message, /仍然保存着，事实没有变成无日期/);
+  assert.doesNotMatch(labelled.results[0].warnings[0].message, /没有日期；/);
+  assert.match(partlyTold(), /^recordedAt 没有整个印在 quote 里.*occurredAt 有依据，仍然保存着。$/);
+  const none = factWriter({ text: text.replace("Record date: 2100-03-01\n\n", "") });
+  const lost = await none.write(item({ occurredAt: "2100-06-30" }));
+  assert.equal(lost.results[0].warnings[0].code, "date_not_shown");
+  assert.match(lost.results[0].warnings[0].message, /^occurredAt 没有整个印在 quote 里.*事实现在没有日期；需要日期的时间窗类条件仍是“没有日期”的未知。$/);
+  // With a header above the fact the run is told the fact has the header\'s date, not that it has none.
+  const headed = factWriter({ text });
+  const headedLost = await headed.write(item({ occurredAt: "2100-06-30" }));
+  assert.match(headedLost.results[0].warnings[0].message, /^occurredAt 没有整个印在 quote 里.*事实取了所在病历抬头的日期（2100-03-01）作为 occurredAt，不需要重写。$/);
+  // An item that claims no date needs no second quotation, and one that names it but claims no date is not refused for it. With a header
+  // above it the fact is dated by it, silently: the run did nothing wrong and is not told anything.
+  const plain = factWriter({ text });
+  const plainResult = await plain.write(item({}));
+  assert.equal(plainResult.ok, true);
+  assert.deepEqual([plain.saved[0].occurredAt, plain.saved[0].source.dateBasis, plainResult.results[0].warnings], ["2100-03-01", "record_header", undefined]);
+  const plainBare = factWriter({ text: text.replace("Record date: 2100-03-01\n\n", "") });
+  assert.equal((await plainBare.write(item({}))).ok, true);
+  assert.equal(plainBare.saved[0].occurredAt, null);
+  // A past event the run marks historical is the header\'s date as the latest it could be.
+  const past = factWriter({ text });
+  assert.equal((await past.write(item({ clinical: { schema: 1, assertion: "affirmed", experiencer: "patient", temporality: "historical" } }))).ok, true);
+  assert.deepEqual([past.saved[0].occurredAt, past.saved[0].source.dateBasis, past.saved[0].source.dateBound], ["2100-03-01", "record_header", "no_later_than"]);
+  // What this does not touch: a number or a quotation the document does not hold is still refused whole.
+  const invented = factWriter({ text });
+  assert.equal((await invented.write(item({ quote: "Takes aspirin twice daily.", occurredAt: "2100-03-01", dateQuote: "Record date: 2100-03-01" }))).ok, false);
+});
+
+test("a unit the quotation does not print drops the unit and keeps the fact; a bare HbA1c is read in percent and says so", async () => {
+  const text = "Creatinine 1.1 today. HgbA1c 7.4 last month. HbA1c 53 mmol/mol. HbA1c 53 in March. A1c 6.0 mmol/mol.";
+  /** @param {Record<string, any>} over */
+  const item = (over) => ({ subjectKey: "P-1", documentId: "doc_1", ...over });
+
+  // The model's own unit, not in the quotation: the number stays, the unit goes, and the run is told.
+  const creatinine = factWriter({ text });
+  const kept = await creatinine.write(item({ variable: "creatinine", value: 1.1, unit: "mg/dL", surface: "1.1", quote: "Creatinine 1.1 today." }));
+  assert.equal(kept.ok, true, JSON.stringify(kept.issues));
+  assert.deepEqual([creatinine.saved[0].value, creatinine.saved[0].unit, creatinine.saved[0].source.unitBasis], [1.1, null, undefined]);
+  assert.deepEqual(kept.results[0].warnings.map((/** @type {any} */ warning) => warning.code), ["unit_not_in_quote"]);
+  assert.equal(evaluateCriterion({ id: "c", kind: "inclusion", requirement: { op: "compare", variable: "creatinine", comparator: "lt", value: 2, unit: "mg/dL" } },
+    { facts: [creatinine.saved[0]], asOf: Date.parse("2100-01-01") }).missing[0].reason, "unit_missing", "a variable with more than one unit stays unknown");
+
+  // HbA1c: one conventional unit in the domain's table, so a bare number beside it reads in percent, recorded as read and not printed.
+  const bare = factWriter({ text });
+  const read = await bare.write(item({ variable: "hba1c", value: 7.4, unit: "%", surface: "7.4", quote: "HgbA1c 7.4 last month." }));
+  assert.equal(read.ok, true, JSON.stringify(read.issues));
+  assert.deepEqual([bare.saved[0].unit, bare.saved[0].source.unitBasis], ["%", "conventional"]);
+  assert.deepEqual(read.results[0].warnings.map((/** @type {any} */ warning) => warning.code), ["unit_read_by_convention"]);
+  const between = { id: "a1c", kind: "inclusion", requirement: { op: "compare", variable: "hba1c", comparator: "between", value: 6.5, highValue: 9.5, unit: "%", aggregate: "any" } };
+  const judged = evaluateCriterion(between, { facts: [bare.saved[0]], asOf: Date.parse("2100-01-01") });
+  assert.equal(judged.state, SATISFIED);
+  assert.equal(judged.evidence[0].unitBasis, "conventional", "the citation carries that the unit was read");
+  const without = factWriter({ text });
+  await without.write(item({ variable: "hba1c", value: 7.4, surface: "7.4", quote: "HgbA1c 7.4 last month." }));
+  assert.deepEqual([without.saved[0].unit, without.saved[0].source.unitBasis], ["%", "conventional"], "the same when the run gave no unit");
+
+  // The unit that is printed is kept as printed, and a number outside the printed range is not read in percent.
+  const printed = factWriter({ text });
+  await printed.write(item({ variable: "hba1c", value: 53, unit: "mmol/mol", surface: "53 mmol/mol", quote: "HbA1c 53 mmol/mol." }));
+  assert.deepEqual([printed.saved[0].unit, printed.saved[0].source.unitBasis], ["mmol/mol", undefined]);
+  const outside = factWriter({ text });
+  await outside.write(item({ variable: "hba1c", value: 53, unit: "%", surface: "53", quote: "HbA1c 53 in March." }));
+  assert.deepEqual([outside.saved[0].unit, outside.saved[0].source.unitBasis], [null, undefined]);
+  assert.equal(evaluateCriterion(between, { facts: [outside.saved[0]], asOf: Date.parse("2100-01-01") }).missing[0].reason, "unit_missing");
+  // A unit of the closed vocabulary printed beside the number is the number's, so a claimed percent is dropped and not substituted.
+  const other = factWriter({ text });
+  await other.write(item({ variable: "hba1c", value: 6, unit: "%", surface: "6.0", quote: "A1c 6.0 mmol/mol." }));
+  assert.deepEqual([other.saved[0].unit, other.saved[0].source.unitBasis], [null, undefined]);
+  // A number the quotation does not print is still refused whole.
+  const invented = factWriter({ text });
+  assert.equal((await invented.write(item({ variable: "hba1c", value: 7.9, unit: "%", surface: "7.9", quote: "HgbA1c 7.4 last month." }))).ok, false);
 });

@@ -387,6 +387,37 @@ def test_lung_median_and_curve_match_the_survival_package():
     assert at[last]["lower"] == pytest.approx(0.820584892081, abs=1e-12)
 
 
+def test_km_table_retains_censor_only_times_and_names_variance_scales():
+    entry = am.kaplan_meier([1, 2, 3, 4], [1, 0, 1, 0])
+    rows = entry["values"]["curves"]["all"]["table"]
+    assert [row["time"] for row in rows] == [1, 2, 3, 4]
+    assert sum(row["events"] for row in rows) == 2
+    assert sum(row["censoredAtTime"] for row in rows) == 2
+    assert [row["survival"] for row in rows] == pytest.approx([.75, .75, .375, .375])
+    for row in rows:
+        assert row["variance"] == pytest.approx(row["se"] ** 2)
+        assert row["variance"] == pytest.approx(row["survival"] ** 2 * row["greenwoodCumulative"])
+
+
+def test_km_half_survival_plateau_uses_the_next_event_not_an_intermediate_censor():
+    # R survfit: after deaths at 1 and 2, S=.5 until the death at 4; the censor at 3 is not the end of the plateau.
+    result = am.kaplan_meier([1, 2, 3, 4], [1, 1, 0, 1])
+    assert result["estimate"] == 3.0
+
+
+@pytest.mark.parametrize("event", [[0, 1, 0], [0, 0, 0]])
+def test_km_unit_survival_boundary_has_explicit_modern_loglog_convention(event):
+    result = am.kaplan_meier([1, 2, 3], event, conf_type="log-log")
+    row = result["values"]["curves"]["all"]["table"][0]
+    assert (row["survival"], row["se"], row["variance"], row["lower"], row["upper"]) == (1, 0, 0, 1, 1)
+    if not any(event):
+        assert "no_events_in_group" in codes(result) and result["status"] == "partial"
+
+
+def test_km_terminal_half_plateau_matches_survfit_summary_median():
+    assert am.kaplan_meier([1, 2], [1, 0])["estimate"] == 1
+
+
 def test_lung_log_rank_by_sex_matches_survdiff():
     entry = am.log_rank(LUNG["time"], LUNG_EVENT, LUNG["sex"])
     assert entry["values"]["chiSquare"] == pytest.approx(10.3267419549, rel=1e-9)

@@ -22,7 +22,7 @@
  */
 import {
   VCR_RETIRED_MEMBER_ROLE_LABELS_ZH,
-  VCR_CONCLUSION_LABELS_ZH,
+  VCR_RESULT_CLASS_LABELS_ZH,
   VCR_COUNT_LABELS_ZH,
   VCR_CRITERION_STATE_LABELS_ZH,
   VCR_DATA_TIER_LABELS_ZH,
@@ -62,7 +62,8 @@ const table = <K extends string>(labels: unknown) => (key: K | null | undefined)
   (labels as Record<string, string>)[String(key)] ?? "";
 
 export const sourceLabel = table<VcrValueSource>(VCR_VALUE_SOURCE_LABELS_ZH);
-export const conclusionLabel = table<VcrConclusion>(VCR_CONCLUSION_LABELS_ZH);
+/** The word a conclusion or a result class is read in: the three conclusions and 仅基准 (`VCR_RESULT_CLASS_LABELS_ZH`). */
+export const conclusionLabel = table<VcrConclusion>(VCR_RESULT_CLASS_LABELS_ZH);
 export const reviewKindLabel = table<VcrReviewKind>(VCR_REVIEW_KIND_LABELS_ZH);
 export const countLabel = table<VcrCountKey>(VCR_COUNT_LABELS_ZH);
 export const intervalLabel = table<VcrInterval["kind"]>(VCR_INTERVAL_KIND_LABELS_ZH);

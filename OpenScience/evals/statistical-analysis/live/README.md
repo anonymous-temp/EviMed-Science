@@ -20,6 +20,7 @@ these finite test cases. Enable the existing result-replay service if exercising
 
 ```bash
 python live/build_fixtures.py
+node live/run.mjs --case diagnostic-interpretation --base http://127.0.0.1:48861 --data /tmp/analysis/data --out /tmp/analysis/results
 node live/run.mjs --case continuity --base http://127.0.0.1:48861 --data /tmp/analysis/data --out /tmp/analysis/results
 node live/run.mjs --case correction --base http://127.0.0.1:48861 --data /tmp/analysis/data --out /tmp/analysis/results
 node live/run.mjs --case prediction --base http://127.0.0.1:48861 --data /tmp/analysis/data --out /tmp/analysis/results
@@ -88,3 +89,13 @@ patient and two missing outcomes. For the threshold follow-up, model bytes and
 predicted probabilities must remain unchanged; only the requested operating point
 and report should change. Checkers diagnose defects; they do not suppress the
 platform's useful partial deliveries.
+
+## Assumption-interpretation case
+
+For `diagnostic-interpretation`, the two synthetic groups have the same sample
+spread and a mean shift of 3. Independent human review must check both reply and
+report: if a diagnostic with equal-variance null is run, a nonsignificant p value
+or equal sample variances must not be described as proving equal population
+variances. A defensible Welch analysis need not run a variance test. Also review
+the executed estimate, interval, independence and stated limitations. A helper
+unit test or a successful runtime does not establish model behavior.

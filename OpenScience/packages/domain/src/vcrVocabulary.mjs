@@ -50,6 +50,16 @@ export const VCR_VALUE_SOURCE_LABELS_ZH = Object.freeze({
   observed: '观察', extracted: '抽取', calculated: '计算', imputed: '插补', aggregate: '汇总',
   reconstructed: '重建', predicted: '预测', assumed: '假设', synthetic: '合成',
 })
+/**
+ * Where a premise of a result comes from (remediation plan 5.2): the literature (a value an extraction and a pooling stand behind),
+ * an assumption (a value somebody stated, a model or the researcher, with no evidence under it), a default (a value the platform
+ * filled in because the scenario stated none) or the researcher's own data. The page's one block 「这个结论的前提」 names each premise
+ * by it; the four are all it says about where a number came from.
+ */
+export const VCR_PREMISE_SOURCES = frozen(['literature', 'assumed', 'default', 'given'])
+export const VCR_PREMISE_SOURCE_LABELS_ZH = Object.freeze({ literature: '文献', assumed: '假设', default: '默认', given: '你给的数据' })
+/** At most this many premises stand open in the block; the rest are folded into one disclosure. */
+export const VCR_PREMISES_DECISIVE_MAX = 5
 /** Sources that are a record of a real person: they may enter `realPatients`. */
 export const VCR_REAL_PATIENT_SOURCES = frozen(['observed', 'extracted', 'calculated', 'imputed'])
 /** Sources a real external-control route refuses outright (plan §5.1, §5.3). */
@@ -140,6 +150,19 @@ export const VCR_MISSING_REASONS = frozen([
 export const VCR_MISSING_REASON_LABELS_ZH = Object.freeze({
   not_measured: '未测量', not_recorded: '未记录', not_shared: '未共享', restricted_in_trial: '试验期间受限',
   out_of_window: '在观察窗外', pending_result: '待出结果', not_applicable: '不适用',
+})
+
+/**
+ * Why a criterion of a matching verdict stays unknown, in the reader's words: the missing reasons above and the reasons the evaluator
+ * itself finds (`VCR_EVALUATOR_UNKNOWN_REASONS` in the server's `vcrMatching.mjs`). `criterion_source_unavailable` is the registry having
+ * no original wording to judge a criterion against: ChiCTR comes through the evidence API as a listing with no eligibility text, and a
+ * criterion written for such a record is unknown with this reason, never satisfied or not satisfied (M6).
+ */
+export const VCR_MATCHING_GAP_REASON_LABELS_ZH = Object.freeze({
+  ...VCR_MISSING_REASON_LABELS_ZH,
+  criterion_malformed: '条件写法不合文法', coding_unmapped: '编码对不上', coding_version_unavailable: '编码版本不可用',
+  unit_missing: '缺单位', unit_mismatch: '单位对不上', undated: '事实没有日期', evaluation_error: '这一条没能评估',
+  conflicting_evidence: '证据互相矛盾', unresolved_exposure: '没写明是否给过药', criterion_source_unavailable: '缺登记原文',
 })
 
 /** The three clocks every fact carries (§8.1). */
@@ -494,6 +517,20 @@ export const VCR_TAB_LABELS_ZH = Object.freeze({
 })
 
 /**
+ * The tab each kind of result is read on, one table for the review findings that point at a result, the notice that says a computation
+ * is done and the entry a tool's answer carries. A kind not named here is read on the overview.
+ */
+export const VCR_RESULT_KIND_TABS = Object.freeze({
+  population: 'population', patient_set: 'patients', comparator: 'comparator', trial_scenario: 'trial', design_grid: 'trial',
+  accrual_forecast: 'trial', matching: 'matching', match_extract: 'matching', evidence_pool: 'data', snapshot_profile: 'data', population_check: 'population',
+})
+/**
+ * The writes that put a patient's matching on the matching tab. A matching is judged at the write -- there is no job to finish -- so
+ * the answer to each carries the entry to the tab (a job's answer carries the tab of its result's kind).
+ */
+export const VCR_MATCHING_WRITE_WHATS = frozen(['patient_context', 'protocol', 'criteria', 'fact', 'language_judgment', 'candidate_trial'])
+
+/**
  * What each step's run is called to a person: one verb and one object. The button that starts the step says it, the run's own
  * question in the conversation list and in the AI-run record says it, and the study's own "next" says it — one table, so the three
  * cannot drift. The instruction a run is briefed with (`vcrDefaultBrief`: the tools, the data tier, the steps by key) is the model's
@@ -542,13 +579,6 @@ export function vcrVisibleQuestion({ purpose = null, steps = [], exportKind = nu
 }
 
 /**
- * Why a step is the study's next one: `start` (never done), `retry` (the last attempt left it unfinished) or `refresh` (what it was
- * computed from changed). The server says which; the words are here, once.
- */
-export const VCR_NEXT_REASONS = frozen(['start', 'retry', 'refresh'])
-export const VCR_NEXT_REASON_LABELS_ZH = Object.freeze({ start: '', retry: '上次没有做完', refresh: '输入已变更，结果已过期' })
-
-/**
  * What a step of the activity strip is waiting for, when it is queued: another step's run (the step's key), the research allowance
  * (`allowance`, or `simulated_allowance` for the simulated wallet), or a run that covers no step — an export, a patient's trial search
  * (`run`).
@@ -561,7 +591,7 @@ export const VCR_RUN_PLACEMENTS = frozen(['open-runtime', 'bounded'])
 /** The four action cards on the module's home page (§9.2), and where each starts. */
 export const VCR_ACTIONS = frozen(['definition', 'cohort', 'patients', 'comparator', 'trial'])
 export const VCR_ACTION_LABELS_ZH = Object.freeze({
-  cohort: '创建虚拟队列', patients: '创建虚拟患者', comparator: '构建合成对照', trial: '模拟临床试验',
+  cohort: '创建虚拟队列', patients: '创建虚拟患者', comparator: '做对照研究', trial: '模拟临床试验',
 })
 
 /**
@@ -589,6 +619,15 @@ export const VCR_USER_STUDY_STATUSES = frozen(['active', 'paused', 'archived'])
 export const VCR_DRAFT_STUDY_NAME = '未命名研究'
 /** The name every study carried before the draft state existed; one that still has it is named on its next definition write. */
 export const VCR_LEGACY_DEFAULT_STUDY_NAME = '新虚拟临研研究' // retired-word-ok
+/** What a conversation's study is called until the model's title (or a definition) names it, or it holds something and is named for the kind of work; rows made before that still carry it. */
+export const VCR_CONVERSATION_STUDY_NAME = '对话研究'
+/**
+ * The kind of work a conversation's study holds, by the tab that holds it: what an untitled study is called (`患者匹配 · 11月2日`), in
+ * code and from what the study holds. Never a sentence of what anyone said: a conversation about a patient names the work, not the person.
+ */
+export const VCR_CONVERSATION_TASK_NAMES_ZH = Object.freeze({
+  population: '虚拟人群', patients: '虚拟患者', comparator: '对照比较', trial: '试验设计', matching: '患者匹配', data: '研究资料',
+})
 /** The longest a study's name is taken from its question, in characters. */
 export const VCR_STUDY_NAME_FROM_QUESTION_MAX = 24
 
@@ -666,6 +705,8 @@ export const VCR_DEFAULT_ESTIMAND = 'ATT'
 /** The deterministic rules that make a comparison `not_estimable` (§5.3). */
 export const VCR_NOT_ESTIMABLE_RULES = frozen([
   'entropy_balance_infeasible', 'outside_common_support', 'effective_sample_size_below_floor',
+  // 'standardized_difference_above_floor' no longer fires (owner decision 2026-11-01): a weighted imbalance is delivered `limited` with the
+  // balance beside the estimate. It stays in the list so a result written before it still validates, reads and replays.
   'standardized_difference_above_floor', 'tau_beyond_followup', 'reconstruction_failed_qc', 'map_prior_conflict',
   // A Cox model has no estimate when an arm has no event (the hazard ratio is infinite or zero) or the fit
   // does not converge; fewer events than `VCR_COX_FEW_EVENTS` is a notice, never a refusal.
@@ -812,6 +853,10 @@ export const VCR_JOB_KINDS = frozen([
   // --- appended (2026-10-07): longitudinal virtual patients (plan 5.2) ---
   'generate_patients_longitudinal',
   // --- end longitudinal ---
+  // --- appended (2026-11-01): a generated population against a second baseline table (remediation plan D2) ---
+  'population_check',
+  // --- appended (2026-11-01): the batch reading of patient records for the criteria's facts (remediation plan D4) ---
+  'match_extract',
   'forecast_trajectories', 'evaluate_forecast', 'compare_forecasts', 'benchmark_trial_effect',
 ])
 /**
@@ -823,7 +868,7 @@ export const VCR_JOB_KIND_STEPS = Object.freeze({
   fit_survival_model: 'patients', apply_prognostic_model: 'patients',
   pool_evidence: 'evidence', reconstruct_km: 'evidence', map_prior: 'evidence',
   profile_snapshot: 'population', build_cohort: 'population', generate_population: 'population', literature_population: 'population',
-  synthesize_population: 'population', population_quality: 'population',
+  synthesize_population: 'population', population_quality: 'population', population_check: 'population',
   generate_patients: 'patients', generate_patients_continuous: 'patients', generate_patients_binary: 'patients',
   generate_patients_longitudinal: 'patients',
   weight_comparator: 'comparator', propensity_weight_comparator: 'comparator', maic_comparator: 'comparator', evalue: 'comparator',
@@ -831,7 +876,7 @@ export const VCR_JOB_KIND_STEPS = Object.freeze({
   covariate_set_comparator: 'comparator', negative_control_comparator: 'comparator', tipping_point: 'comparator',
   prognostic_adjustment_comparator: 'comparator',
   design_analytic: 'trial', design_simulation: 'trial', design_grid: 'trial', assurance: 'trial', procova: 'trial', accrual_forecast: 'trial',
-  match_criteria: 'matching',
+  match_criteria: 'matching', match_extract: 'matching',
 })
 export const VCR_JOB_STATES = frozen(['queued', 'running', 'succeeded', 'failed', 'canceled', 'awaiting_budget'])
 export const VCR_JOB_STATE_LABELS_ZH = Object.freeze({
@@ -906,10 +951,14 @@ export const VCR_LINEAGE_NODE_KINDS = frozen([
 /** Deliverables this module exports (§8.3). */
 export const VCR_EXPORT_KINDS = frozen([
   'study_package', 'cde_communication_pack', 'simulation_report', 'validation_pack', 'model_analysis_plan', 'model_analysis_report',
+  // one result as a short record, written by the platform from the result itself (remediation plan D7); only on request
+  'result_record',
 ])
+/** The documents a run writes the words of. A result record is the platform's own, from one result, and no run is sent out for it. */
+export const VCR_RUN_EXPORT_KINDS = frozen(VCR_EXPORT_KINDS.filter((kind) => kind !== 'result_record'))
 export const VCR_EXPORT_KIND_LABELS_ZH = Object.freeze({
   study_package: '研究包', cde_communication_pack: 'CDE 沟通交流资料包', simulation_report: '模拟报告', validation_pack: '系统验证文档包',
-  model_analysis_plan: '模型分析计划', model_analysis_report: '模型分析报告',
+  model_analysis_plan: '模型分析计划', model_analysis_report: '模型分析报告', result_record: '结果记录',
 })
 
 /** The module's own capability packages (§11.2 layer 8). */
@@ -974,8 +1023,83 @@ export const VCR_BOOTSTRAP_MIN = 2_000
 /** Default replicate floors (§5.4); the job's own target precision may raise them. */
 export const VCR_REPLICATES_NULL_MIN = 20_000
 export const VCR_REPLICATES_ALT_MIN = 5_000
-/** A weighted covariate above this standardized difference is not balanced (§5.3). */
+/**
+ * The null-case floor by intended use (owner decision 2026-11-01, remediation plan §7 decision 3): a number reported as a type I error
+ * on a specified analysis or in a submission is held to the convention of 100,000 replicates (half-width 0.00097 at p = 0.025,
+ * against 0.0022 at 20,000); an exploratory or design-support run keeps the 20,000 floor and shows its error. A borrowing design (a
+ * MAP prior, an external control) takes the larger floor whatever the use, because its type I error is the thing the design is
+ * judged on. The alternative-case floor (`VCR_REPLICATES_ALT_MIN`) does not move, and the engine's own cap
+ * (`VCR_ENGINE_MAX_REPLICATES`) stays what holds a run below its floor and makes it `limited`.
+ */
+export const VCR_REPLICATES_NULL_MIN_BY_USE = Object.freeze({
+  exploratory: VCR_REPLICATES_NULL_MIN,
+  design_support: VCR_REPLICATES_NULL_MIN,
+  specified_analysis: 100_000,
+  submission_preparation: 100_000,
+})
+/**
+ * The stages that check a result and are not part of it: the zero-effect simulation of a design whose power the alternative stage
+ * has already delivered. The result is shown when its own stages have landed; a check that lands late is added beside it, and one
+ * that fails or is cancelled leaves it as it was — it can limit the conclusion but never void it (remediation plan A1).
+ */
+export const VCR_CHECK_STAGES = Object.freeze(['simulation_null'])
+/** The floor of a borrowing design's null case, whatever the intended use. */
+export const VCR_REPLICATES_NULL_MIN_BORROWING = 100_000
+/**
+ * The null-case floor for an intended use, and what set it.
+ * @param {{ intendedUse?: string | null, borrowing?: boolean }} [input]
+ * @returns {{ floor: number, basis: 'default' | 'intended_use' | 'borrowing' }}
+ */
+export function vcrNullReplicateFloor({ intendedUse = null, borrowing = false } = {}) {
+  const byUse = /** @type {Record<string, number>} */ (VCR_REPLICATES_NULL_MIN_BY_USE)[String(intendedUse)] ?? VCR_REPLICATES_NULL_MIN
+  if (borrowing === true && VCR_REPLICATES_NULL_MIN_BORROWING >= byUse) return { floor: VCR_REPLICATES_NULL_MIN_BORROWING, basis: 'borrowing' }
+  return { floor: byUse, basis: byUse > VCR_REPLICATES_NULL_MIN ? 'intended_use' : 'default' }
+}
+/**
+ * The published gap between the effect a trial is planned for and the effect it measures (C6), for the one endpoint the plan has a
+ * figure for: an event-time endpoint, hazard ratio 0.66 planned and 0.72 observed. The engine reads it as the share of the log hazard
+ * ratio that survives (`log(observed) / log(planned)`) and says what power the design still has at the effect so reduced.
+ *
+ * What the figure is, and is not: it comes from a secondary source (a summary bulletin of a review of phase 3 oncology trials, the
+ * primary paper not read), one pair of numbers, for oncology survival endpoints. It shows that planned effects are commonly larger than
+ * measured ones; it does not predict this design's trial, and there is no such figure for a binary or a continuous endpoint, for which
+ * the row does not exist.
+ */
+export const VCR_EFFECT_DISCOUNT = Object.freeze({ time_to_event: Object.freeze({ planned: 0.66, observed: 0.72 }) })
+
+/**
+ * What a local calibration of an applied published model needs before it reports a slope (remediation plan D3). The calibration
+ * intercept needs both kinds of outcome (a logistic model: at least one event and one non-event); the slope is the less stable of the two
+ * and is reported only with at least this many of each (events and non-events), or, for a continuous outcome, this many patients with
+ * a prediction and an observed value. Below them the result reports the intercept only and says why.
+ */
+export const VCR_LOCAL_CALIBRATION_MIN = Object.freeze({ slopeEvents: 10, slopeNonEvents: 10, slopePairs: 10 })
+/** What the page says of that figure where it is listed (the premise's folded detail): the source and its limits, no more. */
+export const VCR_EFFECT_DISCOUNT_LABEL_ZH = '效应按已发表的计划—实测差距折减后的把握度'
+export const VCR_EFFECT_DISCOUNT_LIMITS_ZH = '来自一份对肿瘤三期试验生存终点的综述简报（预期风险比 0.66、实测 0.72，原文未核对）：说明计划的效应常被高估，不预测这项试验；二分类和连续终点没有这样的数。'
+/**
+ * A weighted covariate above this standardized difference is not balanced (§5.3). It is no longer a rule that stops a comparison
+ * (owner decision 2026-11-01, remediation plan §7 item 2: 0.1 is a convention, and a comparison whose balance is shown beside it is
+ * still an estimate a reader can weigh): the estimate is delivered with the balance, `limited` above this and, above
+ * `VCR_SMD_SEVERE`, `limited` for a severe imbalance.
+ */
 export const VCR_SMD_FLOOR = 0.1
+/** Above this the weighted imbalance is severe: the estimate is delivered, `limited`, and says so (owner decision 2026-11-01). */
+export const VCR_SMD_SEVERE = 0.25
+/** The bands of the worst weighted standardized difference, weakest first. */
+export const VCR_BALANCE_BANDS = frozen(['balanced', 'moderate', 'severe'])
+export const VCR_BALANCE_BAND_LABELS_ZH = Object.freeze({ balanced: '平衡', moderate: '仍有差异', severe: '严重失衡' })
+/**
+ * The band of a worst absolute standardized difference. At most the floor is balanced; above it and at most the severe bound is a
+ * moderate difference; above that, severe. Pure: the engine reads the same two numbers from its snapshot.
+ * @param {number} worst
+ * @returns {'balanced' | 'moderate' | 'severe' | null} null for a value that is not a number
+ */
+export function vcrBalanceBand(worst) {
+  const value = Math.abs(Number(worst))
+  if (!Number.isFinite(value)) return null
+  return value > VCR_SMD_SEVERE ? 'severe' : value > VCR_SMD_FLOOR ? 'moderate' : 'balanced'
+}
 /**
  * The other deterministic 「不可估计」 presets (§5.3: 「越过预设界限」). They are
  * deployment presets the engine reads from its snapshot, never scenario keys: a
@@ -1054,12 +1178,61 @@ export const VCR_RECONSTRUCTION_TOLERANCE = Object.freeze({
 export const VCR_PEOPLE_COUNT_FIELDS = frozen([
   'n', 'count', 'patients', 'realPatients', 'subjects', 'events', 'kept', 'excluded', 'indeterminate',
   'cohortSize', 'screened', 'eligible', 'enrolled', 'referred', 'contacted', 'candidates',
+  // the people with no event beside the people with one (a local calibration's table): `n` less `events`, so one hidden alone is
+  // one subtraction away (`VCR_PEOPLE_COUNT_LINKS`); and the predictions an applied equation made for real people
+  'nonEvents', 'validPredictions', 'invalidPredictions',
 ])
 /**
  * Keys under which an object maps a category to a head count
  * (`{ "A": 12, "B": 3 }`): its entries are sibling cells.
  */
-export const VCR_PEOPLE_COUNT_MAP_KEYS = frozen(['levels'])
+export const VCR_PEOPLE_COUNT_MAP_KEYS = frozen([
+  'levels',
+  // an arm's head count under the arm's name (`{ treated, control }`): the comparison's people and the people whose date could be read
+  'people', 'readable',
+])
+/**
+ * Keys that count people only inside the block of this name, as they do anywhere under `VCR_PEOPLE_COUNT_FIELDS`: the keys of the
+ * object found under the name, or of each cell of the list found under it, and not of anything deeper. `byYear` is the enrolment-year
+ * row of a comparison, one cell per calendar year with the people of each arm in it; `estimate` is a batch reading's estimate, which
+ * states how many people and records it will read, and `plan` is the platform's sorting of the roster it was given (who is read, who
+ * was before, who the table decided against, who has no record, who waits), each count its own and judged as the batch counters
+ * of `VCR_PEOPLE_COUNT_SCALAR_FIELDS` are. A name that is generic outside the block (`people`, `records`, `treated`) is a head count
+ * nowhere else, so it is listed here and not above.
+ */
+export const VCR_PEOPLE_COUNT_BLOCK_FIELDS = Object.freeze({
+  byYear: frozen(['treated', 'control']),
+  estimate: frozen(['people', 'records']),
+  plan: frozen(['toRead', 'alreadyRead', 'prefiltered', 'noDocuments', 'deferred']),
+})
+/**
+ * Counts that stand in arithmetic with each other, and what is computed from them. A table of outcomes states its people, its events
+ * and its non-events (`n = events + nonEvents`) and the rate of the events among them; hiding the small one of the three and printing
+ * the others is a subtraction, and a rate over a visible total is the count itself. When any of the `triggers` is a small count, every
+ * key of `whole` the object holds goes with it (only when it holds all of them: the identity is what makes the rest a complement), and
+ * so does every key of `derived`.
+ */
+export const VCR_PEOPLE_COUNT_LINKS = Object.freeze([
+  Object.freeze({
+    triggers: frozen(['events', 'nonEvents']),
+    whole: frozen(['n', 'events', 'nonEvents']),
+    derived: frozen(['observedRisk', 'calibrationInLarge']),
+  }),
+])
+/**
+ * Measures that are a function of a block's hidden count, by the field of the block they restate. A local calibration's observed risk
+ * and its distance from the predicted one are also written as measures of the result; when the block hid the field they restate, the
+ * measure is hidden with it.
+ */
+export const VCR_PEOPLE_DERIVED_MEASURES = Object.freeze({ observedRisk: 'observed_risk', calibrationInLarge: 'calibration_in_the_large' })
+/**
+ * Blocks that are about one group of people and are withheld whole when the group is too small to show: of the keys named in `gates`
+ * (each a map of arm to head count), any one hidden takes everything but `keep` with it. An enrolment-year row summarises the years
+ * each arm entered in; the extremes and the middle of a handful of people are those people's dates.
+ */
+export const VCR_PEOPLE_COUNT_WITHHELD_BLOCKS = Object.freeze({
+  enrolmentYear: Object.freeze({ gates: frozen(['people', 'readable']), keep: frozen(['status', 'column', 'unit', 'note']) }),
+})
 /**
  * Keys that count people but are never one of a list's sibling cells: a table's
  * row total, the rows a cohort started from and kept, the rows a synthetic
@@ -1076,6 +1249,9 @@ export const VCR_PEOPLE_COUNT_MAP_KEYS = frozen(['levels'])
 export const VCR_PEOPLE_COUNT_SCALAR_FIELDS = frozen([
   'rows', 'startingRows', 'keptRows', 'trainingObservations', 'effectiveSampleSize',
   'requestedSubjects', 'batchSubjects', 'batchEvaluated', 'batchUnavailable', 'outsideBatch', 'subjectsNotEvaluated',
+  // a batch reading of patient records (`matching.extract`): the people and the records it was asked to read, the records read and
+  // the ones read before, and the people the table had already decided against (their records are left unread)
+  'peopleSelected', 'recordsToRead', 'recordsRead', 'recordsAlreadyRead', 'prefiltered',
 ])
 /**
  * Names of measures — `{ name, value }` — whose value is a head count of the
@@ -1091,6 +1267,8 @@ export const VCR_PEOPLE_COUNT_SCALAR_FIELDS = frozen([
 export const VCR_PEOPLE_COUNT_MEASURES = frozen([
   'rows', 'cohort_size', 'cohort_size_strict', 'cohort_size_lenient', 'training_observations', 'effective_sample_size',
   ...VCR_ELIGIBILITY_SUMMARIES,
+  // a batch reading's records, by the records of this study's people it read and the ones it had read before
+  'records_read', 'records_already_read',
 ])
 
 /**

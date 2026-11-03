@@ -195,6 +195,59 @@ class VcrToolDefinitionTests(unittest.TestCase):
         self.assertEqual(definitions["vcr_read"]["inputSchema"]["properties"]["what"]["enum"], list(vcr_platform.READ_WHATS))
         self.assertEqual(definitions["vcr_write"]["inputSchema"]["properties"]["what"]["enum"], list(vcr_platform.WRITE_WHATS))
 
+    def test_the_root_conversation_s_tool_descriptions_do_not_grow(self):
+        # C1/C2/C4/C7 add an action, a role on every row and a template to the answers of shape and validate -- none of it to what rides
+        # every request of the run. The lengths are the ones the root conversation had before validate existed, except vcr_simulate's:
+        # 343 -> 420 on 2026-11-02, the owner's ruling that a general conversation is pointed at the module (a human trial's sample size,
+        # a synthetic cohort, an external control) instead of writing its own script.
+        present = {"vcr_read": 698, "vcr_write": 938, "vcr_simulate": 420, "trial_registry_record": 304, "curve_digitize": 2096, "evidence_pool": 644}
+        definitions = {tool["name"]: tool for tool in vcr_platform.tool_definitions()}
+        for name, length in present.items():
+            self.assertLessEqual(len(definitions[name]["description"]), length, name)
+        self.assertIn("validate", definitions["vcr_simulate"]["inputSchema"]["properties"]["action"]["enum"])
+        self.assertNotIn("validate", definitions["vcr_simulate"]["description"], "it is found in the schema and in the answer of shape, not in the description")
+
+    def test_a_refusal_the_gateway_answers_with_400_is_the_run_s_to_fix(self):
+        # "Go on without the study" is for a module that is not there, not for a sentence that says what to write first.
+        fixable = vcr_platform.VcrPlatformError("vcr_simulate_subject_required", "first write a trial_scenario", status=400)
+        self.assertEqual(fixable.stop_reason(), "invalid_input")
+        self.assertEqual(vcr_platform.VcrPlatformError("vcr_invocation_unavailable", "x", status=403).stop_reason(), "unsupported")
+        self.assertEqual(vcr_platform.VcrPlatformError("vcr_gateway_token_invalid", "x", status=400).stop_reason(), "unsupported")
+        self.assertEqual(vcr_platform.VcrPlatformError("vcr_gateway_unreachable", "x", retryable=True).stop_reason(), "retry")
+
+    def test_a_population_shape_says_its_rows_can_be_read_back_and_a_design_shape_does_not(self):
+        # Three of the four live conversations that did not enter the module for a cohort wrote a script of their own because they could not tell whether a generated cohort could be
+        # handed over as a file; the answer of shape now says the rows are read back by generated_records.
+        for kind in ("generate_population", "literature_population", "generate_patients"):
+            text = " ".join(vcr_platform.shape({"kind": kind})["next_actions"])
+            self.assertIn("generated_records", text, kind)
+        self.assertNotIn("generated_records", " ".join(vcr_platform.shape({"kind": "design_analytic"})["next_actions"]))
+
+    def test_a_paper_s_number_rides_the_call_that_computes_with_it_and_the_answer_says_what_became_of_each(self):
+        # 2026-11-02: a median read in a paper went straight into the scenario in 6 of 6 live designs and the result page called it an assumption.
+        simulate = {tool["name"]: tool for tool in vcr_platform.tool_definitions()}["vcr_simulate"]
+        sources = simulate["inputSchema"]["properties"]["sources"]
+        self.assertEqual(sorted(sources["items"]["properties"]), ["field", "publication", "quote"])
+        self.assertFalse(sources["items"]["additionalProperties"])
+        self.assertLess(len(sources["description"]), 300, "a property description rides every request of the run too")
+        for kind in vcr_platform.SOURCE_KINDS:
+            self.assertIn(kind, vcr_platform.JOB_KINDS)
+            self.assertIn("sources", " ".join(vcr_platform.shape({"kind": kind})["next_actions"]), kind)
+        for kind in ("generate_population", "generate_patients", "evalue"):
+            self.assertNotIn("sources", " ".join(vcr_platform.shape({"kind": kind})["next_actions"]), kind)
+        entry = {"field": "truth.controlMedian", "publication": "PMID 37676259", "quote": "13.8 months with sorafenib"}
+        answer = {"action": "start", "jobId": "job_1", "state": "queued", "progress": {}, "sources": [
+            dict(entry, state="carried", paper="PMID 37676259", checked=True),
+            {"field": "truth.hazardRatio", "state": "assumption", "because": "number_not_in_sentence", "message": "x"}]}
+        with mock.patch.object(vcr_platform, "_post", return_value=answer) as post:
+            result = vcr_platform.simulate({"action": "start", "kind": "design_analytic", "scenario": {"truth": {"controlMedian": 13.8}}, "sources": [entry]})
+        self.assertEqual(post.call_args_list[0].args[1]["sources"], [entry], "the platform is sent what the run named")
+        self.assertEqual(result["data"]["sources"][1]["because"], "number_not_in_sentence")
+        self.assertTrue(any("data.sources" in line and "which premises come from which paper" in line and "Fix the entries" in line for line in result["next_actions"]))
+        with mock.patch.object(vcr_platform, "_post", return_value={"action": "start", "jobId": "job_2", "state": "queued", "progress": {}}) as post:
+            vcr_platform.simulate({"action": "start", "kind": "design_analytic", "scenario": {}})
+        self.assertNotIn("sources", post.call_args_list[0].args[1], "nothing is sent that the run did not name")
+
     def test_the_job_kinds_are_the_domain_s(self):
         kinds = domain_job_kinds()
         self.assertGreaterEqual(len(kinds), 24, "the first release's twenty-four, then the kinds appended after them")
@@ -253,7 +306,7 @@ class VcrToolDefinitionTests(unittest.TestCase):
         data = answer["data"]
         self.assertEqual((data["kind"], data["method"]), ("design_analytic", "design.analytic"))
         lines = {line.split(":", 1)[0]: line for line in data["keys"]}
-        self.assertEqual(lines["accrual.duration"], "accrual.duration: number >=0 (time units); required once accrual is given")
+        self.assertEqual(lines["accrual.duration"], "accrual.duration: number >=0 (time units); required once accrual is given; role: research_fact")
         self.assertIn("accrual.followup: number >=0 (time units)", lines["accrual.followup"])
         self.assertIn("number >=0 <1 (proportion per year); optional; default 0", lines["accrual.dropoutAnnual"])
         self.assertEqual(lines["accrual"], "accrual: object; optional; read only when endpoint.type is time_to_event")
@@ -274,6 +327,43 @@ class VcrToolDefinitionTests(unittest.TestCase):
         rules = " ".join(vcr_platform.shape({"kind": "design_simulation"})["data"]["rules"])
         self.assertIn("accrual.rates lists 1 more value than accrual.breaks (when endpoint.type is time_to_event and accrual.kind is piecewise", rules)
         self.assertIn("truth.controlDistribution.rates lists 1 more value than truth.controlDistribution.breaks", rules)
+
+    def test_the_literature_population_says_where_a_pasted_table_goes(self):
+        notes = vcr_platform.shape({"kind": "literature_population"})["data"]["notes"]
+        self.assertTrue(any("generate_population" in note for note in notes))
+
+    def test_every_row_of_shape_says_what_it_asks_of_a_person_and_no_object_does(self):
+        # C2: the role is read off the schema by the platform (research_fact: required, no default, not a choice of words; defaultable: the
+        # rest), printed on every key, and explained once.
+        data = vcr_platform.shape({"kind": "design_simulation"})["data"]
+        lines = {line.split(":", 1)[0]: line for line in data["keys"]}
+        self.assertIn("; role: research_fact", lines["truth.hazardRatio"])
+        self.assertIn("; role: research_fact", lines["design.nTreat"])
+        self.assertIn("; role: defaultable", lines["analysis.alpha"])
+        self.assertIn("; role: defaultable", lines["accrual.dropoutAnnual"])
+        self.assertIn("; role: defaultable", lines["endpoint.type"], "a choice among the method's own words follows from the question")
+        self.assertNotIn("role:", lines["truth"], "an object is only its keys")
+        for key, line in lines.items():
+            self.assertTrue(" role: " in line or line.split(": ", 1)[1].startswith("object"), key)
+        self.assertIn("ask about it only if the answer would change the next computation, one question at a time", data["legend"])
+        self.assertIn("do not ask", data["legend"])
+        pool = vcr_platform.shape({"kind": "pool_evidence"})["data"]
+        self.assertTrue(all(" role: " in line for line in pool["keys"]), "the platform-built kinds' keys carry their role too")
+
+    def test_shape_gives_the_minimal_template_of_each_common_path_and_says_where_validate_is(self):
+        # C4: the facts of the research and nothing the platform defaults; the same scenarios the domain's test holds to the validator.
+        names = {kind: [template["name"] for template in vcr_platform.shape({"kind": kind})["data"]["templates"]] for kind in ("design_analytic", "design_simulation")}
+        self.assertEqual(names["design_analytic"], ["two_arm_time_to_event", "two_arm_binary", "two_arm_continuous"])
+        self.assertEqual(names["design_simulation"], names["design_analytic"])
+        survival = vcr_platform.shape({"kind": "design_simulation"})["data"]["templates"][0]["scenario"]
+        self.assertEqual(survival["truth"], {"hazardRatio": 0.7, "controlMedian": 12})
+        self.assertNotIn("analysis", survival, "alpha, power and the analysis are the platform's to default")
+        self.assertEqual([t["name"] for t in vcr_platform.shape({"kind": "literature_population"})["data"]["templates"]], ["literature_population"])
+        self.assertEqual([t["name"] for t in vcr_platform.shape({"kind": "weight_comparator"})["data"]["templates"]], ["entropy_balance"])
+        self.assertNotIn("templates", vcr_platform.shape({"kind": "rmst"})["data"])
+        self.assertNotIn("templates", vcr_platform.shape({"kind": "pool_evidence"})["data"], "a scenario the platform builds has no template to copy")
+        answer = vcr_platform.shape({"kind": "design_simulation"})
+        self.assertTrue(any("action validate" in line and "you may start in the same turn" in line for line in answer["next_actions"]))
 
     def test_shape_of_the_unanchored_maic_says_which_scale_the_aggregate_outcome_is_on(self):
         data = vcr_platform.shape({"kind": "maic_comparator"})["data"]
@@ -427,6 +517,18 @@ class VcrReadWriteTests(_GatewayCase):
         self.assertEqual(write["status"], "warning")
         self.assertIn("no assumption to write", write["summary"])
 
+    def test_a_task_context_with_no_title_reminds_the_run_once_and_a_titled_one_does_not(self):
+        _Gateway.answers["write"] = (200, {"data": {"what": "task_context", "ok": True, "ids": ["std_1"], "issues": [], "studyId": "std_1", "name": "对话研究", "untitled": True}})
+        untitled = self.server.call_tool("vcr_write", {"what": "task_context"})
+        self.assertEqual(untitled["status"], "success")
+        self.assertEqual(len(untitled["next_actions"]), 1)
+        self.assertIn("title", untitled["next_actions"][0])
+        self.assertIn("never a person", untitled["next_actions"][0])
+        _Gateway.answers["write"] = (200, {"data": {"what": "task_context", "ok": True, "ids": ["std_1"], "issues": [], "studyId": "std_1", "name": "二线治疗的生存比较"}})
+        titled = self.server.call_tool("vcr_write", {"what": "task_context", "data": {"title": "二线治疗的生存比较"}})
+        self.assertEqual(titled["next_actions"], [])
+        self.assertEqual(_Gateway.seen[-1]["body"], {"what": "task_context", "data": {"title": "二线治疗的生存比较"}})
+
     def test_a_what_outside_the_vocabulary_never_leaves_the_runtime(self):
         result = self.server.call_tool("vcr_read", {"what": "passwords"})
         self.assertEqual(result["status"], "error")
@@ -445,6 +547,54 @@ class VcrReadWriteTests(_GatewayCase):
         self.assertEqual(caught.exception.code, "vcr_write_payload_invalid")
         self.assertEqual(len(_Gateway.seen), 1)
 
+    def test_a_record_the_object_has_not_got_yet_is_a_reminder_and_never_a_refusal(self):
+        # The comparator is saved and computed as it stands; the answer says what to add in a next version (remediation plan A6, A7, A13).
+        _Gateway.answers["write"] = (200, {"data": {"what": "comparator", "ok": True, "ids": ["cmp_1"], "issues": [
+            {"index": 0, "field": "targetTrial", "code": "vcr_comparator_record_incomplete", "message": "目标试验记录还缺：时间零点。"},
+            {"index": 0, "field": "configuration.applicability", "code": "vcr_comparator_record_incomplete", "message": "对照没有适用性记录。"}]}})
+        result = self.server.call_tool("vcr_write", {"what": "comparator", "items": [{"route": "external_control"}]})
+        self.assertEqual(result["status"], "warning")
+        self.assertIn("1 written, 2 reminder(s)", result["summary"])
+        self.assertNotIn("refused", result["summary"])
+        self.assertEqual(len(result["warnings"]), 2)
+        self.assertEqual(len(result["next_actions"]), 1)
+        self.assertIn("reminders", result["next_actions"][0])
+        self.assertNotIn("Correct the refused items", result["next_actions"][0])
+        # a refusal beside a reminder keeps both lines
+        _Gateway.answers["write"] = (200, {"data": {"what": "assumption", "ok": True, "ids": ["asm_1"], "issues": [
+            {"index": 0, "field": "effectRole", "code": "vcr_assumption_role_missing", "message": "写 effectRole。"},
+            {"index": 1, "field": "key", "code": "vcr_write_value_invalid", "message": "key is a lowercase name."}]}})
+        both = self.server.call_tool("vcr_write", {"what": "assumption", "items": [{"key": "hazard_ratio"}, {"key": "Bad Key"}]})
+        self.assertIn("1 refused, 1 reminder(s)", both["summary"])
+        self.assertEqual(len(both["next_actions"]), 2)
+
+    def test_words_the_platform_read_as_closed_ones_and_the_names_to_call_objects_by_are_said_once_in_the_answer_that_has_them(self):
+        _Gateway.answers["write"] = (200, {"data": {"what": "trial_scenario", "ok": True, "ids": ["scn_1"], "issues": [], "results": [
+            {"named": [{"id": "scn_1", "name": "A 固定 1:1"}], "say": "回复里用这些名字称呼它们，不要写编号。"},
+            {"applied": [{"index": 0, "field": "valueSource", "from": "reported", "value": "extracted"}], "note": "x"}]}})
+        result = self.server.call_tool("vcr_write", {"what": "trial_scenario", "items": [{"label": "A 固定 1:1"}]})
+        joined = " ".join(result["next_actions"])
+        self.assertIn("Refer to the saved objects in your reply by data.results[].named[].name, never by id.", joined)
+        self.assertIn("write the closed word next time", joined)
+        # a publication's number the platform could not check is a reminder: the item is saved, the answer says so and refuses nothing
+        _Gateway.answers["write"] = (200, {"data": {"what": "evidence_item", "ok": True, "ids": ["evd_1"], "issues": [
+            {"index": 0, "field": "quote", "code": "vcr_evidence_reported_unverified", "message": "已记录为文献报告的数，未核对。"}]}})
+        saved = self.server.call_tool("vcr_write", {"what": "evidence_item", "items": [{"publication": {"pmid": "37676259"}}]})
+        self.assertIn("1 written, 1 reminder(s)", saved["summary"])
+        self.assertNotIn("refused", saved["summary"])
+
+    def test_a_matching_write_hands_over_the_link_to_the_matching_page(self):
+        entry = {"studyId": "std_conv", "tab": "matching", "label": "在“匹配”页查看", "url": "https://evimed.example/app/virtual-research/std_conv/matching"}
+        _Gateway.answers["write"] = (200, {"data": {"what": "fact", "ok": True, "ids": ["f1"], "issues": [], "resultEntry": entry}})
+        result = self.server.call_tool("vcr_write", {"what": "fact", "items": [{"subjectKey": "P-1"}]})
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["data"]["resultEntry"], entry)
+        self.assertTrue(any("[在“匹配”页查看](https://evimed.example/app/virtual-research/std_conv/matching)" in action for action in result["next_actions"]), result["next_actions"])
+        # A write that wrote nothing has nowhere to send the reader.
+        _Gateway.answers["write"] = (200, {"data": {"what": "fact", "ok": False, "ids": [], "issues": [{"index": 0, "message": "no"}]}})
+        refused = self.server.call_tool("vcr_write", {"what": "fact", "items": [{"subjectKey": "P-1"}]})
+        self.assertFalse(any("resultEntry" in action for action in refused["next_actions"]))
+
     def test_a_delivered_verdict_is_told_to_come_from_the_saved_read_back(self):
         # 8 of 46 mixed-up patient tasks delivered a result that disagreed with the platform's own saved judgments.
         _Gateway.answers["read"] = (200, {"data": {"what": "matching", "subjectKey": "P-0192", "assessment": {"summary": "eligible", "judgments": []}}})
@@ -456,6 +606,44 @@ class VcrReadWriteTests(_GatewayCase):
         _Gateway.answers["read"] = (200, {"data": {"what": "candidate_trials", "trials": [], "more": False}})
         listed = self.server.call_tool("vcr_read", {"what": "candidate_trials"})
         self.assertFalse(any("ranking" in action for action in listed["next_actions"]), "the list of trials is not a patient's table")
+
+    def test_the_passages_of_a_long_record_are_told_to_be_a_hint_and_a_long_record_how_to_ask(self):
+        # M4: the answer of subject_document says what a passage is and is not, in the tool answer and not in a description.
+        _Gateway.answers["read"] = (200, {"data": {"what": "subject_document", "available": True, "document": {"id": "doc_1", "chars": 91234},
+                                                    "passages": [{"start": 100, "end": 180, "text": "..."}], "passageSearch": {"criterionId": "crt_1", "returned": 1}}})
+        found = self.server.call_tool("vcr_read", {"what": "subject_document", "filter": {"subjectKey": "P-1", "documentId": "doc_1", "id": "crt_1"}})
+        said = " ".join(found["next_actions"])
+        for fragment in ("hint, never a verdict", "offset=start-300", "verbatim quote", "criterion stays unknown", "negated"):
+            self.assertIn(fragment, said)
+        self.assertEqual(_Gateway.seen[-1]["body"]["filter"], {"subjectKey": "P-1", "documentId": "doc_1", "id": "crt_1"})
+        _Gateway.answers["read"] = (200, {"data": {"what": "subject_document", "available": True, "document": {"id": "doc_1", "chars": 91234, "text": "..."},
+                                                    "long": {"chars": 91234, "threshold": 40000, "how": "..."}}})
+        long = self.server.call_tool("vcr_read", {"what": "subject_document", "filter": {"subjectKey": "P-1", "documentId": "doc_1"}})
+        self.assertTrue(any("filter.id" in action and "filter.query" in action for action in long["next_actions"]))
+        _Gateway.answers["read"] = (200, {"data": {"what": "subject_document", "available": True, "document": {"id": "doc_2", "chars": 900, "text": "..."}}})
+        short = self.server.call_tool("vcr_read", {"what": "subject_document", "filter": {"subjectKey": "P-1", "documentId": "doc_2"}})
+        self.assertFalse(any("passages" in action or "long" in action for action in short["next_actions"]))
+
+    def test_a_registry_search_for_a_patient_is_a_read_that_says_where_it_looked(self):
+        # M1: `candidates` is one more `what`, not a new root tool, and what the root conversation carries every request does not grow.
+        self.assertIn("candidates", vcr_platform.READ_WHATS)
+        definitions = {tool["name"]: tool for tool in vcr_platform.tool_definitions()}
+        self.assertIn("candidates", definitions["vcr_read"]["inputSchema"]["properties"]["what"]["enum"])
+        self.assertNotIn("candidates", definitions["vcr_read"]["description"].replace("candidate_trials", ""), "found in the schema and the skill, not in the description")
+        answer = {"what": "candidates", "available": True, "status": "ok", "asOf": "2026-11-01T08:00:00.000Z",
+                  "coverage": "已查（2026-11-01）：ClinicalTrials.gov；没有覆盖：CDE、ICTRP。", "candidates": [{"registry": "chictr", "registryId": "ChiCTR2400000031", "unknown": ["age"]}]}
+        _Gateway.answers["read"] = (200, {"data": answer})
+        found = self.server.call_tool("vcr_read", {"what": "candidates", "filter": {"condition": "lung cancer", "terms": ["NSCLC"], "age": 63, "sex": "female", "region": "China"}})
+        self.assertEqual(found["status"], "success")
+        self.assertEqual(_Gateway.seen[-1]["body"], {"what": "candidates", "filter": {"condition": "lung cancer", "terms": ["NSCLC"], "age": 63, "sex": "female", "region": "China"}})
+        said = " ".join(found["next_actions"])
+        for fragment in ("data.coverage", "CDE and ICTRP", "not a ranking", "unknown", "trial_registry_record", "parsedBefore"):
+            self.assertIn(fragment, said)
+        # An unavailable registry search is a warning the run reads and moves on from, with no registry-specific advice.
+        _Gateway.answers["read"] = (200, {"data": {"what": "candidates", "available": False, "code": "registry_unavailable", "message": "试验登记检索未接入"}})
+        off = self.server.call_tool("vcr_read", {"what": "candidates", "filter": {"condition": "x"}})
+        self.assertEqual(off["status"], "warning")
+        self.assertFalse(any("CDE and ICTRP" in action for action in off["next_actions"]))
 
     def test_the_trials_found_for_a_patient_are_a_write_and_a_read_of_their_own(self):
         # 「给患者找试验」: a run writes the registry trial and its structured criteria, and reads them back.
@@ -560,6 +748,35 @@ class VcrSimulateTests(_GatewayCase):
         self.assertIn("accrual.duration: number >=0 (time units); required once accrual is given", rows)
         self.assertIn("design.kind × endpoint.type this method implements", rows)
 
+    def test_the_first_refusal_of_a_kind_in_a_conversation_carries_one_complete_valid_example_and_the_later_ones_do_not(self):
+        # 2026-11-01: a design comparison paid 14 refused calls to learn, key by key, what one valid scenario shows at once.
+        vcr_platform._EXAMPLED.clear()
+        issues = [{"code": "scenario_field_missing", "field": "scenario.design"}]
+        example = vcr_platform.scenario_help()["methods"]["design.analytic"]["examples"][0]["scenario"]
+        marker = "A complete valid scenario of design_analytic, to copy and change to this study's own numbers: "
+
+        def hint(session):
+            with vcr_platform.invocation({"sessionId": session}):
+                return vcr_platform.refusal_hint("design_analytic", issues)
+
+        first = hint("ses_a")
+        self.assertIn(marker, first)
+        self.assertEqual(json.loads(first.split(marker, 1)[1]), example, "the example is the generated help's own, whole")
+        self.assertIn("vcr_simulate action shape, kind design_analytic", first)
+        self.assertNotIn(marker, hint("ses_a"), "once per kind in a conversation")
+        self.assertIn(marker, hint("ses_b"), "another conversation is given it again")
+        # the refusal a run reads is the gateway's sentence with the hint after it, example included, on the first
+        vcr_platform._EXAMPLED.clear()
+        _Gateway.answers["simulate"] = (400, {"error": "作业不符合引擎协议：scenario.design（scenario_field_missing）。", "code": "vcr_request_invalid", "issues": issues})
+        message = self.server.call_tool("vcr_simulate", {"action": "start", "kind": "design_analytic", "subjectId": "scn_x"})["error"]["message"]
+        self.assertIn(marker, message)
+        # a validate that is refused carries it the same way
+        vcr_platform._EXAMPLED.clear()
+        _Gateway.answers["simulate"] = (200, {"data": {"action": "validate", "kind": "design_analytic", "queued": False, "checked": True, "valid": False, "issues": [
+            {"code": "scenario_field_missing", "field": "scenario.design", "message": "design is required."}]}})
+        validated = self.server.call_tool("vcr_simulate", {"action": "validate", "kind": "design_analytic", "scenario": {}})
+        self.assertIn(marker, " ".join(validated["next_actions"]))
+
     def test_the_generators_answer_a_refusal_in_their_own_code_and_carry_the_keys_too(self):
         _Gateway.answers["simulate"] = (400, {"error": "作业不符合引擎协议：scenario.accrual.months（scenario_field_unknown）。", "code": "vcr_simulate_payload_invalid",
                                               "issues": [{"code": "scenario_field_unknown", "field": "scenario.accrual.months"}],
@@ -618,6 +835,52 @@ class VcrSimulateTests(_GatewayCase):
         self.assertIn("kept its completed batches", result["summary"])
         self.assertTrue(any("never write a zero" in action for action in result["next_actions"]))
 
+    ENTRY = {"studyId": "std_conv", "tab": "trial", "label": "在“试验”页查看", "url": "https://evimed.example/app/virtual-research/std_conv/trial"}
+
+    def test_a_job_s_answer_hands_over_the_platform_s_own_link_to_give_once_and_never_an_address_of_the_model_s_own(self):
+        # F3: the control plane builds the entry; the model copies it. Terminal or not, the state of the answer does not change.
+        for state, expected in (("succeeded", "success"), ("failed", "warning"), ("canceled", "warning"), ("running", "success")):
+            _Gateway.answers["simulate"] = (200, {"data": {"action": "status", "jobId": "job_9", "state": state, "resultEntry": self.ENTRY}})
+            result = self.server.call_tool("vcr_simulate", {"action": "status", "jobId": "job_9"})
+            self.assertEqual(result["status"], expected, state)
+            lines = [action for action in result["next_actions"] if "resultEntry" in action]
+            self.assertEqual(len(lines), 1, state)
+            self.assertIn("[在“试验”页查看](https://evimed.example/app/virtual-research/std_conv/trial)", lines[0])
+            self.assertIn("Once, at the end of your reply", lines[0])
+            self.assertIn("Never write an address yourself", lines[0])
+            self.assertEqual(result["data"]["resultEntry"], self.ENTRY)
+
+    def test_an_answer_without_an_entry_is_exactly_what_it_was(self):
+        _Gateway.answers["simulate"] = (200, {"data": {"action": "status", "jobId": "job_9", "state": "succeeded"}})
+        result = self.server.call_tool("vcr_simulate", {"action": "status", "jobId": "job_9"})
+        self.assertFalse(any("resultEntry" in action for action in result["next_actions"]))
+
+    # A2: the six-value two-arm survival design states six numbers and the platform fills in the rest; the answer lists what it filled in.
+    APPLIED = [{"field": "analysis.alpha", "value": 0.025}, {"field": "analysis.sided", "value": 1}, {"field": "accrual.dropoutAnnual", "value": 0}]
+
+    def test_an_answer_lists_what_the_platform_filled_in_and_tells_the_run_to_say_it(self):
+        for state in ("queued", "running", "succeeded"):
+            _Gateway.answers["simulate"] = (200, {"data": {"action": "start", "jobId": "job_7", "state": state, "applied": self.APPLIED}})
+            result = self.server.call_tool("vcr_simulate", {"action": "start", "kind": "design_simulation", "scenario": {"design": {"kind": "two_arm_fixed"}}})
+            self.assertEqual(result["data"]["applied"], self.APPLIED, state)
+            lines = [action for action in result["next_actions"] if "data.applied" in action]
+            self.assertEqual(len(lines), 1, state)
+            self.assertIn("Say each with its value", lines[0])
+        # Nothing is said when nothing was filled in, and the line does not touch the state of the answer.
+        _Gateway.answers["simulate"] = (200, {"data": {"action": "start", "jobId": "job_8", "state": "queued", "applied": []}})
+        plain = self.server.call_tool("vcr_simulate", {"action": "start", "kind": "design_simulation", "scenario": {"design": {"kind": "two_arm_fixed"}}})
+        self.assertFalse(any("data.applied" in action for action in plain["next_actions"]))
+        self.assertEqual(plain["status"], "success")
+
+    def test_a_deployment_that_cannot_give_an_address_still_names_the_page_and_the_model_writes_none(self):
+        entry = {key: value for key, value in self.ENTRY.items() if key != "url"}
+        _Gateway.answers["simulate"] = (200, {"data": {"action": "status", "jobId": "job_9", "state": "succeeded", "resultEntry": entry}})
+        result = self.server.call_tool("vcr_simulate", {"action": "status", "jobId": "job_9"})
+        line = [action for action in result["next_actions"] if "resultEntry" in action][0]
+        self.assertIn("在“试验”页查看", line)
+        self.assertNotIn("http", line)
+        self.assertIn("Never write an address yourself", line)
+
     def test_status_and_cancel_need_the_job_id_the_start_answered_with(self):
         with self.assertRaises(vcr_platform.VcrPlatformError) as caught:
             vcr_platform.simulate({"action": "status"})
@@ -642,6 +905,68 @@ class _Clock:
     def sleep(self, seconds):
         self.slept.append(seconds)
         self.now += seconds
+
+
+class VcrValidateTests(_GatewayCase):
+    """C1: ``action: validate`` sends the scenario to the platform's own check, waits for nothing, queues nothing, and says what a start would do."""
+
+    SURVIVAL = {"design": {"kind": "two_arm_fixed", "nTreat": 150, "nControl": 150}, "endpoint": {"type": "time_to_event"}, "truth": {"hazardRatio": 0.7, "controlMedian": 12}}
+
+    def validate(self, **extra):
+        return self.server.call_tool("vcr_simulate", {"action": "validate", "kind": "design_simulation", "scenario": self.SURVIVAL, **extra})
+
+    def test_a_valid_scenario_comes_back_with_its_defaults_its_replicates_and_no_wait(self):
+        _Gateway.answers["simulate"] = (200, {"data": {"action": "validate", "kind": "design_simulation", "queued": False, "checked": True, "valid": True, "issues": [],
+            "scenario": self.SURVIVAL, "applied": [{"field": "analysis.alpha", "value": 0.025}, {"field": "accrual.dropoutAnnual", "value": 0}],
+            "replicates": {"count": 5000, "reason": "5,000: the default floor for an alternative"}, "seed": 7, "cost": {"class": "heavy", "cpuSecondsLimit": 600}}})
+        before = len(_Gateway.seen)
+        result = self.validate(replicates=2000)
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["summary"], "The scenario is valid; nothing was queued.")
+        self.assertEqual(len(_Gateway.seen) - before, 1, "one request: it is not a wait")
+        sent = _Gateway.seen[-1]["body"]
+        self.assertEqual((sent["action"], sent["kind"], sent["replicates"]), ("validate", "design_simulation", 2000))
+        self.assertEqual(sent["scenario"], self.SURVIVAL)
+        self.assertEqual(result["data"]["replicates"]["count"], 5000)
+        self.assertTrue(any("data.applied" in line and "Say each with its value" in line for line in result["next_actions"]))
+        self.assertTrue(any("start with the same scenario in this turn" in line for line in result["next_actions"]))
+        self.assertNotIn("jobId", result["data"])
+
+    def test_a_refused_scenario_comes_back_by_path_with_the_keys_of_the_place_and_still_queues_nothing(self):
+        _Gateway.answers["simulate"] = (200, {"data": {"action": "validate", "kind": "design_simulation", "queued": False, "checked": True, "valid": False, "issues": [
+            {"code": "scenario_field_unknown", "field": "scenario.accrual.months", "message": "The engine does not read accrual.months."}]}})
+        result = self.validate()
+        self.assertEqual(result["status"], "warning")
+        self.assertIn("not valid as written (1 issue); nothing was queued", result["summary"])
+        self.assertEqual(result["warnings"], ["scenario.accrual.months: The engine does not read accrual.months."])
+        joined = " ".join(result["next_actions"])
+        self.assertIn("do not ask the researcher about a field the schema defaults", joined)
+        self.assertIn("inside accrual the engine reads", joined, "the keys of the place it was refused, from the same help shape renders")
+
+    def test_a_kind_the_platform_completes_at_start_says_so_instead_of_guessing(self):
+        _Gateway.answers["simulate"] = (200, {"data": {"action": "validate", "kind": "reconstruct_km", "queued": False, "checked": False, "message": "由平台在启动时补全。"}})
+        result = self.server.call_tool("vcr_simulate", {"action": "validate", "kind": "reconstruct_km", "scenario": {}})
+        self.assertEqual(result["status"], "success")
+        self.assertIn("validate does not check reconstruct_km", result["summary"])
+        self.assertTrue(any("action start" in line for line in result["next_actions"]))
+
+    def test_a_validate_without_a_kind_is_refused_before_a_request(self):
+        before = len(_Gateway.seen)
+        result = self.server.call_tool("vcr_simulate", {"action": "validate", "scenario": {}})
+        self.assertEqual(len(_Gateway.seen), before)
+        self.assertNotEqual(result["status"], "success")
+        self.assertIn("kind must be one of", json.dumps(result))
+
+    def test_a_finished_design_asks_the_reply_for_one_recommendation_that_names_the_constraint(self):
+        # C7: the platform draws the bounds and tags what misses them; the sentence that recommends is the reply's, and says what decided it.
+        for kind, asks in (("trial_scenario", True), ("design_grid", True), ("population", False), ("comparator_design", False)):
+            _Gateway.answers["simulate"] = (200, {"data": {"action": "status", "jobId": "job_7", "state": "succeeded", "result": {"id": "res_1", "kind": kind}}})
+            result = self.server.call_tool("vcr_simulate", {"action": "status", "jobId": "job_7"})
+            lines = [line for line in result["next_actions"] if "one sentence of recommendation" in line]
+            self.assertEqual(len(lines) == 1, asks, kind)
+            if asks:
+                self.assertIn("which constraint decided it", lines[0])
+                self.assertIn("the platform does not pick the design", lines[0])
 
 
 class VcrJobWaitTests(_GatewayCase):
@@ -804,7 +1129,10 @@ class CurveDigitizeTests(_GatewayCase):
         for forbidden in ("curve", "points", "provenance", "origin", "surv"):
             self.assertNotIn(forbidden, schema["properties"])
         arm = schema["properties"]["arms"]["items"]
-        self.assertEqual(arm["required"], ["riskTable"])
+        # The numbers at risk are the best a reconstruction can have and not a condition of one: a paper that prints none gives the arm's size.
+        self.assertNotIn("required", arm)
+        self.assertEqual(arm["anyOf"], [{"required": ["riskTable"]}, {"required": ["initialAtRisk"]}])
+        self.assertIn("initialAtRisk", arm["properties"])
         self.assertEqual(set(arm["properties"]["curve"]["properties"]), {"color", "legendOrder"})
         self.assertEqual(schema["properties"]["calibration"]["properties"]["y"]["properties"]["scale"]["enum"], ["fraction", "percent"])
         text = definition["description"]

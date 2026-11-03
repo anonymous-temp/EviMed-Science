@@ -91,6 +91,53 @@ test("absent registry eligibility and invented criteria remain unknown despite c
   assert.equal(read.trials[0].retrievedAt, "2026-10-10T07:00:00.000Z");
 });
 
+test("a record with no original wording makes every criterion unknown for 缺登记原文 — whatever the patient's facts say — and the read-back says so (M6)", options, async () => {
+  const study = await seedStudy(); await seedPatient(study);
+  // ChiCTR through the evidence API is a listing: title, status, sample size — and no eligibility text, so nothing a criterion could quote.
+  await fact(study, "P-1", "egfr_mutation", true);
+  const trials = seam();
+  const written = await trials.writeTrial(study, {
+    trial: trialOf("ChiCTR2400000001", { registry: "chictr", eligibilityText: "", status: "招募中" }),
+    // Age 63 satisfies the first; the brain-metastasis exclusion is explicitly negated; the next is a plain mismatch (63 < 70); and the
+    // EGFR fact is there: with the wording, every one of these would be decided.
+    criteria: [AGE_18, NO_BRAIN, AGE_70, EGFR], subjectKeys: ["P-1"],
+  });
+  const verdict = written.evaluation.evaluated[0];
+  assert.equal(verdict.summary, "insufficient_evidence");
+  assert.deepEqual([verdict.counts.satisfied, verdict.counts.not_satisfied, verdict.counts.unknown], [0, 0, 4], "never satisfied, never not satisfied");
+  const detail = await trials.detail(study, { subjectKey: "P-1", id: written.trial.id });
+  assert.ok(detail.judgments.every((judgment) => judgment.state === "unknown" && judgment.decidedBy === "code" && judgment.evidence.length === 0));
+
+  const read = await trials.runtimeRead(study, { subjectKey: "P-1" });
+  const [row] = read.ranking;
+  assert.deepEqual(row.decided, { decided: 0, applicable: 4, percent: 0 }, "unknowns stay in the denominator");
+  assert.deepEqual(row.evidenceGaps.map((gap) => [gap.reason, gap.label]), Array(4).fill(["criterion_source_unavailable", "缺登记原文"]), "one gap per criterion: each is missing its own wording");
+  assert.deepEqual(row.undecided.map((entry) => [entry.ordinal, entry.reason, entry.label]), [1, 2, 3, 4].map((ordinal) => [ordinal, "criterion_source_unavailable", "缺登记原文"]));
+  assert.equal(row.undecided[0].text, "Age >= 18");
+  assert.equal(row.statusAsOf, "2026-10-10T07:00:00.000Z");
+
+  const one = await trials.runtimeRead(study, { id: written.trial.id, subjectKey: "P-1" });
+  assert.equal(one.trials[0].eligibilityCoverage.status, "unavailable");
+  assert.match(one.trials[0].eligibilityCoverage.note, /缺登记原文/);
+  assert.ok(one.assessment.judgments.every((judgment) => judgment.missing[0]?.label === "缺登记原文"), "each criterion of the read-back says why it is not decided");
+});
+
+test("the list puts a well-decided trial above one with few parsed criteria, says how much of each is decided, and keeps the unknowns in the count (M5)", options, async () => {
+  const study = await seedStudy(); await seedPatient(study);
+  const trials = seam();
+  // Thin: one parsed criterion the patient's chart says nothing about. Fewer open (1) than the other trial's two, which used to win.
+  await trials.writeTrial(study, { trial: trialOf("NCT06000101", { title: "Thin" }), criteria: [EGFR], subjectKeys: ["P-1"] });
+  await trials.writeTrial(study, { trial: trialOf("NCT06000102", { title: "Well decided" }), criteria: [AGE_18, ECOG, NO_BRAIN, EGFR, CONSENT], subjectKeys: ["P-1"] });
+  const read = await trials.runtimeRead(study, { subjectKey: "P-1" });
+  assert.deepEqual(read.ranking.map((row) => [row.registryId, row.decided.decided, row.decided.applicable, row.decided.percent]), [
+    ["NCT06000102", 3, 5, 60],
+    ["NCT06000101", 0, 1, 0],
+  ]);
+  assert.deepEqual(read.ranking[0].undecided.map((entry) => entry.text), ["EGFR mutation", "Able to sign consent"], "what is still to settle is named, in the trial's own words");
+  assert.ok(read.ranking[0].undecided.every((entry) => entry.reason && entry.label), "each with the reason it is not decided");
+  assert.equal(read.ranking[0].statusAsOf, "2026-10-10T07:00:00.000Z", "the registry's word is dated by the day its record was read");
+});
+
 async function seedPatient(study, subjectKey = "P-1") {
   await fact(study, subjectKey, "age", 63, { unit: "year" });
   await fact(study, subjectKey, "ecog", 1);

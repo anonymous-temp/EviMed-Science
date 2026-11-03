@@ -69,9 +69,9 @@ starterPrompts:
 # orchestrator (the fields above). The generator derives the shell's and the
 # frame's capability table from this block, and adds what evals/ measured.
 display:
-  title: "自动化 Meta 分析"
+  title: "Meta 分析"
   category: "临床证据"
-  description: "自动完成检索、筛选、统计合并与 GRADE 分级，生成图表和论文初稿。"
+  description: "检索和筛选相关研究，合并适用数据并生成图表与分析报告。"
   starterPrompts:
   - "氨甲环酸在初次全膝关节置换中减少失血的系统评价与 Meta 分析。"
   - "围绕一个明确的 PICO 问题完成系统评价和 Meta 分析，并生成可追溯的完整研究包。"

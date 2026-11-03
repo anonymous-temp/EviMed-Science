@@ -366,13 +366,15 @@ for (const endpoint of ctisPostEndpoints) allowedPostEndpoints.add(endpoint);
 const prosperoPostEndpoints = new Set(["www.crd.york.ac.uk/PROSPERO/api/search"]);
 for (const endpoint of prosperoPostEndpoints) allowedPostEndpoints.add(endpoint);
 const PROSPERO_BODY_FIELDS = Object.freeze(["term", "actual", "line", "page", "nperpage", "sort", "sortorder", "filters", "download"]);
+/** How many pages of one query the registry is read through: the connector reads at most `PROSPERO_REACHABLE` (500) registrations, 50 a page. */
+const PROSPERO_MAX_PAGE = 10;
 /** @param {any} body */
 function validProsperoSearchBody(body) {
   if (body == null || typeof body !== "object" || Array.isArray(body)) return false;
   const keys = Object.keys(body);
   return keys.length === PROSPERO_BODY_FIELDS.length && PROSPERO_BODY_FIELDS.every((key) => keys.includes(key))
     && typeof body.term === "string" && body.term.trim().length > 0 && body.term.length <= 512 && !/[\r\n\0]/.test(body.term)
-    && body.actual === body.term && body.line === 1 && body.page === 1
+    && body.actual === body.term && body.line === 1 && Number.isSafeInteger(body.page) && body.page >= 1 && body.page <= PROSPERO_MAX_PAGE
     && Number.isSafeInteger(body.nperpage) && body.nperpage >= 1 && body.nperpage <= 50
     && body.sort === "score" && body.sortorder === "desc"
     && Array.isArray(body.filters) && body.filters.length === 0 && body.download === false;

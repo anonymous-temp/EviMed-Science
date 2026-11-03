@@ -10,6 +10,7 @@
 //   POST /internal/vcr/v1/read      {what, filter?}                 → aggregates and structure only
 //   POST /internal/vcr/v1/write     {what, items? | data?}          → {ok, ids, issues[]}
 //   POST /internal/vcr/v1/simulate  {action, kind?, scenario?, …}   → {jobId, state, progress}
+//     (action validate: the same scenario checked and answered, never queued → {valid, applied, replicates, cost, issues})
 //   POST /internal/vcr/v1/digitize  {imageArtifactId, calibration, arms, …} → {state, receiptId?, …}
 //
 // Hidden knowledge:
@@ -57,32 +58,41 @@
 
 import { VCR_WRITE_FIELDS, vcrContractsRead } from "./vcrWriteContracts.mjs";
 import { matchingSelection } from "./vcrMatchingSnapshot.mjs";
+import { extractSelection } from "./vcrMatchBatch.mjs";
 import { locateSourceText, OTHER_TRIAL_MIN_SOURCE_CHARS, sourceTextLength } from "./vcrPatientTrials.mjs";
 import { factsOnSameWords, surfaceBasis } from "./vcrFactBasis.mjs";
 import { dataIntakeShapeValid } from "./vcrDataIntake.mjs";
-import { clinicalFactIssues, clinicalFactPolarity } from "@evimed/domain";
+import { VCR_CONVERSATION_STUDY_NAME, clinicalFactIssues, clinicalFactPolarity, clinicalNumericValue } from "@evimed/domain";
 import { createHash } from "node:crypto";
 import { VCR_LONGITUDINAL_JOBS, VCR_LONGITUDINAL_ERROR_CODES } from '@evimed/domain';
 
 import {
   VCR_ASSESSMENT_KEY, VCR_ASSESSMENT_LIMITS, VCR_ASSESSMENT_RATING_FIELDS, VCR_ASSESSMENT_TEXT_FIELDS, VCR_ASSUMPTION_KEY, VCR_CRITERION_TYPES, VCR_DISTRIBUTIONS, VCR_ENDPOINT_TYPES, VCR_ESTIMANDS, VCR_EXPORT_KINDS, VCR_EXPORT_KIND_LABELS_ZH,
-  VCR_INTENDED_USES, VCR_JOB_KINDS, VCR_MODEL_DOCUMENT_SECTIONS, VCR_MODEL_DOCUMENT_SECTION_LABELS_ZH, VCR_MODEL_RISKS,
+  VCR_INTENDED_USES, VCR_JOB_KINDS, VCR_JOB_METHODS, VCR_MODEL_DOCUMENT_SECTIONS, VCR_MODEL_DOCUMENT_SECTION_LABELS_ZH, VCR_MODEL_RISKS,
   VCR_MODEL_DOCUMENT_KINDS, VCR_POPULATION_KINDS, VCR_RATINGS, VCR_RUN_SCENARIO_FIELDS, VCR_SCENARIO_SCHEMAS,
   VCR_STEPS, VCR_SYNTHETIC_USES, VCR_TRIAL_DESIGNS, canonicalScenarioJson, findExpressionFields, validateRequirement, vcrAssessmentIssues,
   isPlatformCardAddress, platformCardCitations, vcrModelDocumentTakesProse, VCR_SOA_LIMITS,
+  VCR_APPLICABILITY_NOTE_MAX, VCR_APPLICABILITY_STATES, VCR_COMPARISON_CLAIMS, VCR_EFFECT_ROLES, VCR_EFFECT_ROLE_LABELS_ZH,
+  VCR_TARGET_TRIAL_COMPONENTS, VCR_TARGET_TRIAL_COMPONENT_LABELS_ZH, VCR_TARGET_TRIAL_STATUSES, VCR_TARGET_TRIAL_TEXT_MAX,
+  vcrApplicability, vcrIsEffectCardKey, vcrNormalizeScenarioKeys, vcrNormalizeWriteRow, vcrTargetTrial, vcrTargetTrialStored, vcrWordKey, vcrWordList,
 } from "@evimed/domain";
 
 import { HttpError } from "./security.mjs";
 import { VCR_READ_WHATS, VCR_READ_MAX_ITEMS, VCR_WRITE_WHATS, vcrRouteOptions } from "./vcrService.mjs";
+import { vcrResultEntry, withJobEntry, withWriteEntry } from "./vcrResultEntry.mjs";
 import { renderVcrNumbers } from "./vcrRender.mjs";
 import { checkRegulatoryContact, resolveVisitsRef, visitKey } from "./vcrScheduleView.mjs";
 import { EVIDENCE_ARM_ROLES } from "./vcrEvidenceStore.mjs";
-import { VCR_MATCHING_VOCABULARY_VERSION, storedExclusion } from "./vcrMatching.mjs";
-import { VCR_RECONSTRUCTION_REFERENCE, vcrReconstructionReferenceFor } from "./vcrJobs.mjs";
-import { resolveJobSubject, prepareVcrSubjectPopulation } from "./vcrSubjects.mjs";
+import { VCR_MATCHING_VOCABULARY_VERSION, settleFactEvidence, storedExclusion } from "./vcrMatching.mjs";
+import { DATE_QUOTE_MAX } from "./vcrClinicalDateEvidence.mjs";
+import { candidateRequest } from "./vcrCandidateSearch.mjs";
+import { VCR_RECONSTRUCTION_REFERENCE, vcrReconstructionReferenceFor, vcrResultKindFor } from "./vcrJobs.mjs";
+import { vcrPublicationId } from "./vcrPublicationSources.mjs";
+import { assumptionSourceEntry, carrySourceEntries, checkSourceEntries, standingSourceBindings } from "./vcrScenarioSources.mjs";
+import { resolveJobSubject, prepareVcrSubjectPopulation, vcrConversationSubject, vcrJobFroze } from "./vcrSubjects.mjs";
 import { prepareVcrModelDesign } from "./vcrModelDesign.mjs";
 import { VCR_COVERAGE_POPULATION_NAME, vcrCohortRulesFromCriteria } from "./vcrCoverage.mjs";
-import { readPoolResult, distributionFromPooled, naturalOf, parameterKindOf, poolTargetOf, defaultScaleOf, defaultArmRoleOf, VCR_POOL_MAX_STUDIES } from "./vcrEvidence.mjs";
+import { readPoolResult, distributionFromPooled, naturalOf, parameterKindOf, poolTargetOf, defaultScaleOf, defaultArmRoleOf, evidenceItemGaps, EVIDENCE_DERIVED_VALUE_SOURCES, EVIDENCE_ITEM_WORDS_ZH, VCR_POOL_MAX_STUDIES } from "./vcrEvidence.mjs";
 
 const gatewayPath = "/internal/vcr/v1";
 const operations = Object.freeze(["read", "write", "simulate", "digitize"]);
@@ -101,7 +111,11 @@ const answerBudgetMs = 10_000;
 const REGISTRY_MARGIN_MS = 3_000;
 /** The registry client's default deadline (its own default), when the deployment names none: `OPEN_SCIENCE_VCR_REGISTRY_TIMEOUT_MS`. */
 const REGISTRY_DEADLINE_MS = 20_000;
-const readFilterFields = Object.freeze(["id", "parentId", "kind", "limit", "offset", "registryId", "registry", "snapshotId", "sourceId", "subjectKey", "documentId", "protocolVersionId", "beforeSeq", "query", "cursor"]);
+const readFilterFields = Object.freeze(["id", "parentId", "kind", "limit", "offset", "registryId", "registry", "snapshotId", "sourceId", "subjectKey", "documentId", "protocolVersionId", "beforeSeq", "query", "cursor",
+  // `what: candidates` (M1): the search a run writes and what it knows of the patient. Their shape is `candidateRequest`'s, in `vcrCandidateSearch.mjs`.
+  "condition", "terms", "age", "sex", "region", "status"]);
+/** The filter keys only `what: candidates` takes. */
+const CANDIDATE_FILTER_FIELDS = Object.freeze(["condition", "terms", "age", "sex", "region", "status"]);
 const WRITE_MAX_ITEMS = 200;
 
 /**
@@ -233,6 +247,13 @@ function readRequest(body) {
     if (!ID.test(String(raw[key]))) throw gatewayError(400, "vcr_read_filter_invalid", `filter.${key} is not an id.`);
     filter[key] = String(raw[key]);
   }
+  if (CANDIDATE_FILTER_FIELDS.some((key) => raw[key] != null)) {
+    if (body.what !== "candidates") throw gatewayError(400, "vcr_read_filter_invalid", `filter.${CANDIDATE_FILTER_FIELDS.find((key) => raw[key] != null)} belongs to what: candidates.`);
+    // The request's own checks answer in words (`candidateRequest`); this only carries the keys through, bounded.
+    const asked = candidateRequest(raw);
+    if (asked.ok === false) throw gatewayError(400, "vcr_read_filter_invalid", asked.message);
+    for (const key of CANDIDATE_FILTER_FIELDS) if (raw[key] != null) filter[key] = raw[key];
+  }
   if (raw.query != null) {
     const query = String(raw.query).replace(/\s+/g, " ").trim();
     if (!query || query.length > 200) throw gatewayError(400, "vcr_read_filter_invalid", "filter.query is text of 1 to 200 characters.");
@@ -317,12 +338,13 @@ const POOL_REQUEST_FIELDS = VCR_RUN_SCENARIO_FIELDS.pool_evidence;
 
 /** @param {Record<string, any>} body */
 function simulateRequest(body) {
-  onlyFields(body, ["action", "kind", "scenario", "inputs", "seed", "replicates", "cpuSecondsLimit", "jobId", "subjectId", "reconstructionResultId", "selection", "modelId", "modelVersion"]);
+  onlyFields(body, ["action", "kind", "scenario", "inputs", "seed", "replicates", "cpuSecondsLimit", "jobId", "subjectId", "reconstructionResultId", "selection", "modelId", "modelVersion", "sources"]);
   const action = body.action ?? "start";
-  if (!["start", "status", "cancel"].includes(action)) {
-    throw gatewayError(400, "vcr_simulate_action_invalid", "action must be start, status or cancel.");
+  if (!["start", "status", "cancel", "validate"].includes(action)) {
+    throw gatewayError(400, "vcr_simulate_action_invalid", "action must be start, status, cancel or validate.");
   }
-  if (action === "start") {
+  // `validate` takes what `start` takes and queues nothing (C1).
+  if (action === "start" || action === "validate") {
     if (typeof body.kind !== "string" || !VCR_JOB_KINDS.includes(body.kind)) {
       throw gatewayError(400, "vcr_simulate_payload_invalid", `kind must be one of: ${VCR_JOB_KINDS.join(", ")}.`);
     }
@@ -345,13 +367,15 @@ function simulateRequest(body) {
       throw gatewayError(400,'vcr_simulate_payload_invalid','modelId requires its immutable modelVersion.');
     }
     if (body.modelVersion != null && body.modelId == null) throw gatewayError(400,'vcr_simulate_payload_invalid','modelVersion requires modelId.');
-    if (body.selection != null && body.kind !== 'match_criteria') throw gatewayError(400, 'vcr_simulate_payload_invalid', 'selection is for matching only.');
-    return { action, kind: body.kind, modelId: body.modelId ?? null, modelVersion: body.modelVersion ?? null, selection: body.selection == null ? null : matchingSelection(body.selection), scenario: object(body.scenario), inputs: list(body.inputs),
+    if (body.selection != null && !['match_criteria', 'match_extract'].includes(body.kind)) throw gatewayError(400, 'vcr_simulate_payload_invalid', 'selection is for matching only.');
+    return { action, kind: body.kind, modelId: body.modelId ?? null, modelVersion: body.modelVersion ?? null, selection: body.selection == null ? null : body.kind === 'match_extract' ? extractSelection(body.selection) : matchingSelection(body.selection), scenario: object(body.scenario), inputs: list(body.inputs),
       reconstructionResultId: body.reconstructionResultId == null ? null : body.reconstructionResultId,
       seed: Number.isInteger(body.seed) ? body.seed : null,
       replicates: Number.isInteger(body.replicates) ? body.replicates : null,
       cpuSecondsLimit: Number.isInteger(body.cpuSecondsLimit) ? body.cpuSecondsLimit : null,
-      subjectId: body.subjectId == null ? null : String(body.subjectId).slice(0, 120) };
+      subjectId: body.subjectId == null ? null : String(body.subjectId).slice(0, 120),
+      // What the call says about where its numbers come from (`vcrScenarioSources`): read by the entry, never a reason to refuse the call.
+      sources: body.sources ?? null };
   }
   if (typeof body.jobId !== "string" || !ID.test(body.jobId)) {
     throw gatewayError(400, "vcr_simulate_payload_invalid", "jobId is the id start answered with.");
@@ -448,6 +472,39 @@ function candidateOf(item) {
   return { cardId, ...(claimId ? { claimId } : {}) };
 }
 
+/**
+ * What a reply calls an object the platform filed under an id: the words the run gave it (a design's label, a population's name, a
+ * card's name). The write's answer lists them beside the ids (`named`), so a reply says “A 固定 1:1” and never `scn_…`.
+ */
+const DISPLAY_NAME_FIELD = Object.freeze(/** @type {Record<string, string>} */ ({
+  trial_scenario: "label", population: "name", patient_set: "name", comparator: "name", assumption: "name", model: "name", definition: "title",
+}));
+
+/** What a computed object is called: its label (a design) or its name (a population, a comparison). @param {unknown} row @returns {string | null} */
+function subjectName(row) { return displayNameOf("trial_scenario", row) ?? displayNameOf("population", row); }
+
+/** @param {string} what @param {unknown} row @returns {string | null} */
+function displayNameOf(what, row) {
+  const field = DISPLAY_NAME_FIELD[what];
+  const written = field && row && typeof row === "object" ? /** @type {Record<string, any>} */ (row)[field] : null;
+  return typeof written === "string" && written.trim() ? [...written.trim()].slice(0, 60).join("") : null;
+}
+
+/** The `registry` words that name a publication, not a trial registry: the paper's identifier is then the `registryId`. */
+const PUBLICATION_REGISTRY_WORDS = new Set(["pubmed", "pmid", "medline", "doi", "pmc", "publication", "paper", "article", "journal", "literature"]);
+
+/**
+ * What a card made of one publication's number says about its source: the paper by its identifier, and that the platform could not
+ * check the number against a text it read (`unchecked`). The result page prints it beside the figure; a registry's value says nothing
+ * here (it has always been the platform's own read).
+ * @param {Record<string, any>} row an evidence item row @returns {{ citation?: string, unchecked?: true }}
+ */
+export function citationOf(row) {
+  const paper = row?.locator?.kind === "publication_text" ? row.locator.publication : null;
+  if (!paper || typeof paper.id !== "string") return {};
+  return { citation: `${paper.kind === "pmid" ? "PMID" : "DOI"} ${paper.id}`, ...(row.locator.verification === "reported_unverified" ? { unchecked: true } : {}) };
+}
+
 /** An ISO date or instant. */
 const ISO = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?(Z|[+-]\d{2}:\d{2})?)?$/;
 
@@ -519,15 +576,21 @@ class Item {
     return value.trim();
   }
 
-  /** @param {string} field @param {readonly string[]} vocabulary @param {{ required?: boolean, fallback?: string }} [options] @returns {string | undefined} */
-  choice(field, vocabulary, { required = false, fallback = undefined } = {}) {
+  /**
+   * @param {string} field @param {readonly string[]} vocabulary
+   * @param {{ required?: boolean, fallback?: string, words?: string }} [options] `words`: the vocabulary with what each word means (`vcrWordList`),
+   *   printed in place of the bare list so a refusal says what each word is for
+   * @returns {string | undefined}
+   */
+  choice(field, vocabulary, { required = false, fallback = undefined, words = "" } = {}) {
     const value = this.row[field];
+    const allowed = words || vocabulary.join("、");
     if (value == null) {
-      if (required) this.bad(field, `${field} 必填，取值：${vocabulary.join("、")}。`);
+      if (required) this.bad(field, `${field} 必填，取值：${allowed}。`);
       return fallback;
     }
     if (typeof value !== "string" || !vocabulary.includes(value)) {
-      this.bad(field, `${field} 必须是：${vocabulary.join("、")}。`);
+      this.bad(field, `${field} 必须是：${allowed}。`);
       return undefined;
     }
     return value;
@@ -720,7 +783,7 @@ function checkedCriterion(deps, candidate, index, where, issues) {
   item.prefix = where;
   if (!item.only(CRITERION_FIELDS)) return null;
   const kind = item.choice("kind", ["inclusion", "exclusion"], { required: true });
-  const criterionType = item.choice("criterionType", VCR_CRITERION_TYPES, { fallback: "other" });
+  const criterionType = item.choice("criterionType", VCR_CRITERION_TYPES, { fallback: "other", words: vcrWordList("criterion", "criterionType") });
   const sourceText = item.str("sourceText", { max: 4000 }) ?? "";
   const sourceLocator = item.obj("sourceLocator", { bytes: 4096 }) ?? {};
   const evidenceNeeded = item.arr("evidenceNeeded", { max: 30 }) ?? [];
@@ -798,11 +861,109 @@ function activitiesOf(item) {
 }
 
 /**
+ * The target-trial record of a write, validated and in its one stored shape. A record is the seven components (each a sentence or
+ * `{ status, text }`, `status` one of `exact`, `approximate`, `not_possible`); the engine's `{ item, emulation }` list and the page's
+ * old `{ population, treatment, note }` are read too. A word outside the closed ones is refused by name, because a status nobody can
+ * read would be a record that says nothing; a record that is merely short is a reminder, not a refusal.
+ * @param {Item} item @param {string} field @param {unknown} raw
+ * @returns {Record<string, any> | undefined} the stored record, or undefined when there is none or it was refused
+ */
+function targetTrialOf(item, field, raw) {
+  if (raw === undefined || raw === null) return undefined;
+  if (typeof raw !== "object") { item.bad(field, `${field} 是一个对象：七项目标试验要素，每项写 { status, text }。`); return undefined; }
+  if (!Array.isArray(raw)) {
+    const known = new Set([...VCR_TARGET_TRIAL_COMPONENTS, "time_zero", "population", "treatment", "note", "other"]);
+    const stray = Object.keys(raw).find((key) => !known.has(key));
+    if (stray) { item.bad(`${field}.${stray}`, `${stray} 不是目标试验的要素；只写这七项：${VCR_TARGET_TRIAL_COMPONENTS.join("、")}。`); return undefined; }
+    for (const key of VCR_TARGET_TRIAL_COMPONENTS) {
+      const value = /** @type {any} */ (raw)[key] ?? (key === "timeZero" ? /** @type {any} */ (raw).time_zero : undefined);
+      if (value === undefined || value === null || typeof value === "string") {
+        if (typeof value === "string" && [...value].length > VCR_TARGET_TRIAL_TEXT_MAX) { item.bad(`${field}.${key}`, `${key} 的说明不超过 ${VCR_TARGET_TRIAL_TEXT_MAX} 个字符。`); return undefined; }
+        continue;
+      }
+      const entry = object(value);
+      const status = entry.status ?? entry.emulation;
+      if (typeof value !== "object" || Array.isArray(value)
+        || (status !== undefined && !["cannot", ...VCR_TARGET_TRIAL_STATUSES].includes(String(status)))
+        || (entry.text !== undefined && (typeof entry.text !== "string" || [...entry.text].length > VCR_TARGET_TRIAL_TEXT_MAX))) {
+        item.bad(`${field}.${key}`, `${key} 写 { status, text }：status 取 ${VCR_TARGET_TRIAL_STATUSES.join(" / ")}，text 是不超过 ${VCR_TARGET_TRIAL_TEXT_MAX} 个字符的一句话。`);
+        return undefined;
+      }
+    }
+  }
+  return vcrTargetTrialStored(vcrTargetTrial(raw));
+}
+
+/**
+ * The applicability record (`configuration.applicability`) of a comparator write: how suitable the run judges the comparison for the
+ * question, and what claim it is to support. A word outside the closed ones is refused by name; a missing record is a reminder.
+ * @param {Item} item @param {Record<string, any>} configuration
+ */
+function applicabilityOf(item, configuration) {
+  const raw = configuration.applicability;
+  if (raw === undefined || raw === null) return;
+  const record = object(raw);
+  if (typeof raw !== "object" || Array.isArray(raw)
+    || !VCR_APPLICABILITY_STATES.includes(record.state)
+    || (record.claim !== undefined && !VCR_COMPARISON_CLAIMS.includes(record.claim))
+    || (record.note !== undefined && (typeof record.note !== "string" || [...record.note].length > VCR_APPLICABILITY_NOTE_MAX))) {
+    item.bad("configuration.applicability", `applicability 写 { state, claim, note }：state 取 ${VCR_APPLICABILITY_STATES.join(" / ")}，claim（这项比较要支持什么）取 ${VCR_COMPARISON_CLAIMS.join(" / ")}，note 是不超过 ${VCR_APPLICABILITY_NOTE_MAX} 个字符的一两句话。`);
+  }
+}
+
+/**
+ * What a saved comparator has not said, as reminders: the target-trial components without a status (a real-data external control), and
+ * the applicability record (every comparison that borrows its control). Advice to the run, in the answer of the write that saved the
+ * comparator; the comparison is computed whatever the record holds.
+ * @param {{ route: string, targetTrial: unknown, configuration: Record<string, any> }} input
+ * @returns {Array<{ field: string, code: string, message: string }>}
+ */
+export function comparatorReminders({ route, targetTrial, configuration }) {
+  /** @type {Array<{ field: string, code: string, message: string }>} */
+  const reminders = [];
+  if (route === "external_control") {
+    const record = vcrTargetTrial(targetTrial, configuration.targetTrial);
+    if (record.missing.length) {
+      const labels = /** @type {Record<string, string>} */ (VCR_TARGET_TRIAL_COMPONENT_LABELS_ZH);
+      // A component the run wrote a sentence for and did not give a status is said apart from one it did not write at all.
+      const said = (/** @type {string} */ key) => `${labels[key]}${record.components.some((entry) => entry.key === key) ? "（没标 status）" : ""}`;
+      reminders.push({ field: "targetTrial", code: "vcr_comparator_record_incomplete",
+        message: `目标试验记录还缺：${record.missing.map(said).join("、")}。每项写 { status, text }（status 取 ${VCR_TARGET_TRIAL_STATUSES.join(" / ")}）；这一版已保存、照常计算，补上后把对照再写一个版本。` });
+    }
+  }
+  // A single published curve is a benchmark and has no comparison to be suitable for; a MAIC or two curves compared do.
+  const compares = route === "external_control" || route === "hybrid_control"
+    || (route === "literature_control" && (configuration.method === "maic" || (configuration.treatmentArm !== null && typeof configuration.treatmentArm === "object")));
+  if (compares && !vcrApplicability(configuration).present) {
+    reminders.push({ field: "configuration.applicability", code: "vcr_comparator_record_incomplete",
+      message: `对照没有适用性记录：在 configuration.applicability 写 { state, claim, note }（state 取 ${VCR_APPLICABILITY_STATES.join(" / ")}，claim 是这项比较要支持的结论）。这一版已保存、照常计算，补上后再写一个版本。` });
+  }
+  return reminders;
+}
+
+/**
  * The writers, one per kind. Each takes the item's kit and the deps, validates
  * every field it uses first, and returns the id it wrote — or nothing, having
  * recorded why.
  * @type {Record<string, (item: Item, deps: WriteDeps, extra: { changed: string[], results: any[], reevaluate?: Set<string> }) => Promise<string | null | undefined>>}
  */
+/**
+ * What `carrySourceEntries` writes and reads through: the gateway's own writers (so a source is checked and stored exactly as a run's own
+ * evidence item and card are) and the study's cards and evidence. No recomputation is asked of the nested writes: the call that carries a
+ * source is itself the one that computes or records the object.
+ * @param {Pick<WriteDeps, "store" | "service" | "study" | "evidence" | "evidenceStore">} deps
+ */
+function sourceWriters(deps) {
+  const { store, service, study, evidence, evidenceStore } = deps;
+  return {
+    write: (/** @type {string} */ what, /** @type {Record<string, any>} */ item) => vcrRuntimeWrite({ store, service, orchestrator: null, study, what, items: [item], data: null, evidence, evidenceStore, caller: null }),
+    cards: () => store.assumptions(study.id),
+    evidence: (/** @type {string[]} */ ids) => evidenceStore
+      ? (evidenceStore.citableItemsById ?? evidenceStore.verifiedItemsById).call(evidenceStore, { userId: study.userId, studyId: study.id, ids })
+      : Promise.resolve([]),
+  };
+}
+
 const WRITERS = {
   async definition(item, { store, study }) {
     if (!item.only(VCR_WRITE_FIELDS.definition)) return null;
@@ -837,6 +998,21 @@ const WRITERS = {
     /** @param {{ key: string, version: number }} saved */
     const noteChange = (saved) => { if (!afterFreeze) extra.changed.push(`assumption:${saved.key}@${saved.version}`); };
     if (!item.only(VCR_WRITE_FIELDS.assumption)) return null;
+    // A number the run read in a paper, written with that paper (`sources`): the platform writes the evidence item and then the card, in one
+    // call. Not carried (a sentence that does not print the number, a parameter no paper can state here) is written as the run's own setting.
+    if (item.row.sources != null && item.row.sourceKind !== "external_evidence" && item.row.fromPooling == null && item.row.expertFrom == null) {
+      const entry = assumptionSourceEntry(item.row);
+      if (!("raw" in entry)) extra.results.push({ index: item.index, sources: [{ field: "", state: "assumption", because: entry.because, message: entry.message }] });
+      else {
+        const carried = await carrySourceEntries({ ...entry, ...sourceWriters(deps) });
+        extra.results.push({ index: item.index, sources: carried.report });
+        const made = carried.bound[0];
+        if (made) {
+          noteChange(made);
+          return (await store.assumptions(study.id)).find((/** @type {any} */ card) => card.key === made.key)?.id ?? null;
+        }
+      }
+    }
     const key = item.str("key", { max: 64, required: true });
     if (key && !VCR_ASSUMPTION_KEY.test(key)) {
       item.bad("key", "key 是小写英文字母开头、只含小写字母、数字和下划线的参数名（最多 64 个字符），例如 control_median_pfs。");
@@ -847,7 +1023,10 @@ const WRITERS = {
     const note = item.str("note", { max: 1000 }) ?? "";
     const applicability = item.obj("applicability", { bytes: 8 * 1024 }) ?? {};
     const parameter = item.str("parameter", { max: 120 });
-    const sourceKind = item.choice("sourceKind", ["expert_set", "scenario", "external_evidence"], { fallback: "expert_set" });
+    const sourceKind = item.choice("sourceKind", ["expert_set", "scenario", "external_evidence"], { fallback: "expert_set", words: vcrWordList("assumption", "sourceKind") });
+    // What an effect is on its card (A13): the difference worth finding, or the difference realistically expected. Optional here;
+    // an effect card without one is reminded after it is saved (`assumption`'s wrapper below), never refused.
+    const effectRole = item.choice("effectRole", VCR_EFFECT_ROLES) ?? null;
     const derived = item.row.fromPooling != null || item.row.expertFrom != null || sourceKind === "external_evidence";
     if (!item.ok) return null;
 
@@ -877,7 +1056,7 @@ const WRITERS = {
       }
       const saved = await evidence.saveAssumptionFromPooling({
         userId: study.userId, studyId: study.id, key, name, parameter: poolParameter, endpoint: endpoint ?? "", unit: unit ?? "",
-        results, evidenceIdsByCalibre, applicability, note, afterFreeze,
+        results, evidenceIdsByCalibre, applicability, note, afterFreeze, effectRole,
       });
       if (!saved.assumption) {
         return void item.bad("fromPooling", saved.reason === "no_pool_succeeded"
@@ -917,29 +1096,37 @@ const WRITERS = {
         return void item.bad("expertFrom", "expertFrom 写 { evidenceId } 或 { jobId }，再加 reason。");
       }
       const saved = await evidence.saveExpertSet({ userId: study.userId, studyId: study.id, key, name, parameter: parameter ?? "", unit: unit ?? "",
-        nearest, reason, applicability, afterFreeze });
+        nearest, reason, applicability, afterFreeze, effectRole });
       noteChange(saved.assumption);
       return saved.assumption.id;
     }
 
     // 3. One verified value, taken as it is (「单项研究直接取值」).
     if (sourceKind === "external_evidence") {
+      if (!Array.isArray(item.row.evidenceIds) || !item.row.evidenceIds.length) {
+        return void item.bad("evidenceIds", "sourceKind external_evidence 的卡取自一条已写入的证据条目：先 vcr_write what=evidence_item 写下这条数"
+          + "（publication: { pmid } 或登记号，加论文里的原句 quote），再把它答回来的 id 放进 evidenceIds，并写 parameter。"
+          + "这个数只是你的设定、不是某篇文献读出来的，就用 sourceKind expert_set、valueSource assumed，出处写进 note。");
+      }
       const ids = item.arr("evidenceIds", { max: 20, required: true });
       if (!ids) return null;
       const typed = ["pointValue", "distribution", "sensitivity", "valueSource"].filter((field) => item.row[field] != null);
       if (typed.length) return void item.bad(typed[0], `${typed.join("、")} 由被引用的证据推出，不可手填；多项证据用 fromPooling。`, "vcr_write_field_forbidden");
       if (!parameter) return void item.bad("parameter", "外部证据的假设卡要写明是哪个参数的证据（parameter）。");
       if (!evidenceStore) return void item.bad("evidenceIds", "证据参数化未接入本部署。", "vcr_write_refused");
-      const verified = new Set(await evidenceStore.verifiedEvidenceIds({ userId: study.userId, studyId: study.id, parameter }));
+      // A value read from a verified record, or a publication's number the platform could not check (it is carried as unchecked).
+      const citable = new Set(await (evidenceStore.citableEvidenceIds ?? evidenceStore.verifiedEvidenceIds).call(evidenceStore, { userId: study.userId, studyId: study.id, parameter }));
       const cited = ids.map(String);
-      const unverified = cited.filter((id) => !verified.has(id));
+      const unverified = cited.filter((id) => !citable.has(id));
       if (unverified.length) {
-        return void item.bad("evidenceIds", `这些证据不是本研究关于「${parameter}」的、通过原文核对的抽取值：${unverified.slice(0, 5).join("、")}。`, "vcr_evidence_unverified");
+        return void item.bad("evidenceIds", `这些证据不是本研究关于「${parameter}」的抽取值（或引文没对上、没有数）：${unverified.slice(0, 5).join("、")}。证据的 parameter 要和这张卡的 parameter 一致。`, "vcr_evidence_unverified");
       }
       if (cited.length !== 1) return void item.bad("evidenceIds", "直接取值只引用一条证据；多项证据用 fromPooling 交给引擎合并。");
-      const [row] = await evidenceStore.verifiedItemsById({ userId: study.userId, studyId: study.id, ids: cited });
-      if (row.detail?.verificationScope === "quoted_inputs_only") {
-        return void item.bad("evidenceIds", "这条记录只核对了派生输入，不能冒充已发表的直接数值；请先保存实际计算的结果，或明确作为假设。", "vcr_evidence_unverified");
+      const [row] = await (evidenceStore.citableItemsById ?? evidenceStore.verifiedItemsById).call(evidenceStore, { userId: study.userId, studyId: study.id, ids: cited });
+      // A number the analyst computed is not a number a source reported, whether its inputs were checked (a registry's) or could not be (a
+      // paper's: `verificationScope` is none there, so the scope alone does not say it).
+      if (row.detail?.verificationScope === "quoted_inputs_only" || EVIDENCE_DERIVED_VALUE_SOURCES.includes(String(row.value_source))) {
+        return void item.bad("evidenceIds", "这条记录是算出来的值，不是论文或登记处报告的数，不能冒充已发表的直接数值；请先保存实际计算的结果，或明确作为假设（sourceKind expert_set、valueSource assumed，出处写进 note）。", "vcr_evidence_unverified");
       }
       // The arm the parameter is a quantity of, the same rule the pool takes its
       // studies by: a control-arm median is not the treatment arm's, and a card
@@ -953,7 +1140,8 @@ const WRITERS = {
         key, name, endpoint, unit, pointValue: Number(row.value),
         distribution: { family: "point", params: { point: Number(row.value) }, range },
         sensitivity: { range, calibres: [] }, sourceKind: "external_evidence", valueSource: row.value_source, poolingMethod: "single_study",
-        pooling: { k: 1, note: "单项研究直接取值，没有预测区间" }, evidenceIds: cited, applicability, reviewState: "ai_set", note, afterFreeze,
+        pooling: { k: 1, note: "单项研究直接取值，没有预测区间", ...citationOf(row) }, evidenceIds: cited, applicability, reviewState: "ai_set", note, afterFreeze,
+        ...(effectRole ? { effectRole } : {}),
       } });
       noteChange(saved);
       return saved.id;
@@ -965,13 +1153,13 @@ const WRITERS = {
     if (item.row.evidenceIds != null && list(item.row.evidenceIds).length) {
       return void item.bad("evidenceIds", "专家设定和情景假设不引用证据；引用证据的假设卡用 sourceKind external_evidence 或 fromPooling。");
     }
-    const valueSource = item.choice("valueSource", ["assumed"], { fallback: "assumed" });
+    const valueSource = item.choice("valueSource", ["assumed"], { fallback: "assumed", words: vcrWordList("assumption", "valueSource") });
     const pointValue = item.num("pointValue");
     const distribution = distributionOf(item, "distribution", item.row.distribution) ?? {};
     const sensitivity = item.obj("sensitivity", { bytes: 8 * 1024 }) ?? {};
     if (!item.ok) return null;
     const card = { key, name, endpoint, unit, pointValue: pointValue ?? null, distribution, sensitivity, sourceKind, valueSource,
-      poolingMethod: null, pooling: {}, evidenceIds: [], applicability, reviewState: "ai_set", note, afterFreeze };
+      poolingMethod: null, pooling: {}, evidenceIds: [], applicability, reviewState: "ai_set", note, afterFreeze, ...(effectRole ? { effectRole } : {}) };
     const saved = evidenceStore ? await evidenceStore.saveAssumption({ userId: study.userId, studyId: study.id, card })
       : await store.saveAssumption({ studyId: study.id, userId: study.userId, ...card });
     noteChange(saved);
@@ -1038,9 +1226,11 @@ const WRITERS = {
     }
     if (!item.ok) return null;
     if (!evidence?.candidateRecord || !patientTrials?.writeTrial) return void item.bad("registryId", "给患者找试验在本部署尚未接入。", "vcr_write_refused");
-    if (checked === null && typeof patientTrials.holds === "function" && !(await patientTrials.holds(study, { registry, registryId }))) {
-      return void item.bad("criteria", "这个试验本研究里还没有：第一次写它要同时写入它的入排条件（criteria）。");
-    }
+    const newHere = checked === null && typeof patientTrials.holds === "function" && !(await patientTrials.holds(study, { registry, registryId }));
+    // A trial this study has not met, named without criteria: if this account structured the same record (same hash) in another study, that
+    // structuring is read again instead of asked for; a record that changed since, or a trial never structured, needs the criteria written.
+    const needCriteria = () => item.bad("criteria", "这个试验本研究里还没有：第一次写它要同时写入它的入排条件（criteria）。账户里没有这份登记记录（同一版本）的解析可沿用。");
+    if (newHere && typeof patientTrials.parsedCriteria !== "function") return void needCriteria();
     const fetched = await evidence.candidateRecord({ userId: study.userId, registry, registryId });
     if (fetched?.status !== "ok") {
       const missing = fetched?.status === "registry_not_found";
@@ -1048,6 +1238,18 @@ const WRITERS = {
         missing ? "registry_not_found" : "registry_unavailable");
     }
     const trial = fetched.trial;
+    let reused = false;
+    if (newHere) {
+      const earlier = await patientTrials.parsedCriteria(study, { registry: trial.registry ?? registry, registryId: trial.registryId ?? registryId, recordHash: trial.recordHash ?? null });
+      /** @type {Array<Record<string, any>>} */
+      const again = [];
+      const scratch = [];
+      // The grammar is read again: a vocabulary that has moved since the parse was kept makes it a parse to ask for anew, not a trial lost.
+      for (const raw of earlier ?? []) { const criterion = checkedCriterion(deps, raw, item.index, "", scratch); if (criterion) again.push(criterion); else break; }
+      if (!earlier?.length || scratch.length || again.length !== earlier.length) return void needCriteria();
+      checked = again;
+      reused = true;
+    }
     /** @type {any[]} */
     const warnings = [];
     let located = 0;
@@ -1094,6 +1296,12 @@ const WRITERS = {
       // Where the wording stands is the platform's to say: the platform's locator replaces whatever the run typed.
       return { ...criterion, sourceLocator: found ? { recordHash: trial.recordHash, ...found } : { recordHash: trial.recordHash, located: false } };
     }) : null;
+    // A record with no original wording (ChiCTR through the evidence API is a listing) gives no criterion anything to rest on: the criteria
+    // are saved as written and every one of them is unknown for 缺登记原文 — never satisfied, never not satisfied (M6).
+    if (checked && !String(trial.eligibilityText ?? "").trim()) {
+      warnings.push({ field: "criteria", code: "registry_text_missing",
+        message: "这条登记记录没有入排条件原文（ChiCTR 经证据接口只有清单）：条件照写保存，但没有原文可对，评估时一律按未知算，原因是缺登记原文。不要补写原文，也不要从别处的记录里拿。" });
+    }
     /** The patients to evaluate: the ones the study holds. */
     const roster = new Set(typeof matchStore?.candidateSubjects === "function" ? await matchStore.candidateSubjects({ studyId: study.id }).catch(() => []) : []);
     /** @type {string[]} */
@@ -1111,6 +1319,7 @@ const WRITERS = {
     const unavailable = saved.evaluation?.unavailable ?? [];
     extra.results.push({
       index: item.index, id: saved.trial.id, registryId, created: saved.created, criteria: saved.criteria.length,
+      ...(reused ? { reused: true, note: "沿用了本账户先前对这条登记记录（同一版本）的解析，没有重新解析；记录一旦有变，需要重新写条件。" } : {}),
       ...(criteria ? { located } : {}), evaluated: saved.evaluation?.evaluated ?? [],
       ...(unavailable.length ? { unavailable } : {}), ...(warnings.length ? { warnings } : {}),
       // The trial's criteria are the set this write carried: a corrected criterion is written with the whole set again.
@@ -1126,24 +1335,49 @@ const WRITERS = {
       || typeof literatureSource.sourceId !== "string" || !literatureSource.sourceId || !Number.isSafeInteger(literatureSource.generation)
       || literatureSource.generation < 1 || !/^[a-f0-9]{64}$/.test(String(literatureSource.textSha256)))) item.bad("literatureSource", "Name one preserved source with its exact generation and textSha256.");
     if (literatureSource && (item.row.registry != null || item.row.registryId != null)) item.bad("registryId", "Choose one preserved literature source or one registry record.");
+    // A number a paper reports is bound to the paper: `publication: { pmid }` or `{ doi }`, or the registry field naming a publication
+    // (pubmed, pmid, doi) with its identifier as registryId. The platform checks the quotation against the text it read of that paper.
+    const registryWord = typeof item.row.registry === "string" ? vcrWordKey(item.row.registry) : "";
+    const namesPaper = PUBLICATION_REGISTRY_WORDS.has(registryWord);
+    /** @type {{ kind: "pmid" | "doi", id: string } | null} */
+    let publication = null;
+    if (item.row.publication != null || namesPaper) {
+      if (literatureSource) item.bad("publication", "Choose one preserved literature source or one publication.");
+      else if (item.row.publication != null && (item.row.registryId != null || (item.row.registry != null && !namesPaper))) {
+        item.bad("publication", "一条数只有一个出处：写 publication（PMID 或 DOI），或写登记库的 registry 和 registryId，不要两个都写。");
+      } else {
+        publication = vcrPublicationId(item.row.publication ?? item.row.registryId);
+        if (!publication) item.bad(item.row.publication != null ? "publication" : "registryId", "文献写 PMID（一串数字，例如 37676259）或 DOI（10.xxxx/…）：publication: { pmid: \"37676259\" } 或 { doi: \"10.1056/NEJMoa1915745\" }。");
+      }
+    }
     const trialIdentity = item.obj("trialIdentity", { bytes: 1024 });
-    const evidenceKind = item.choice("evidenceKind", ["baseline", "outcome", "design"], { fallback: "outcome" });
-    const registry = item.choice("registry", ["clinicaltrials.gov", "chictr", "ctis"], { fallback: "clinicaltrials.gov" });
-    const registryId = item.token("registryId", /^[A-Za-z0-9][A-Za-z0-9-]{2,63}$/, "这条数所在的登记记录的登记号", { required: !literatureSource });
+    const evidenceKind = item.choice("evidenceKind", ["baseline", "outcome", "design"], { fallback: "outcome", words: vcrWordList("evidence_item", "evidenceKind") });
+    const registry = publication || namesPaper ? "clinicaltrials.gov" : item.choice("registry", ["clinicaltrials.gov", "chictr", "ctis"], { fallback: "clinicaltrials.gov" });
+    const registryId = publication || namesPaper ? undefined : item.token("registryId", /^[A-Za-z0-9][A-Za-z0-9-]{2,63}$/, "这条数所在的登记记录的登记号", { required: !literatureSource && item.row.publication == null });
     const parameter = item.str("parameter", { max: 120, required: true });
     const arm = item.str("arm", { max: 200 });
-    const armRole = item.choice("armRole", EVIDENCE_ARM_ROLES, { required: true });
+    const armRole = item.choice("armRole", EVIDENCE_ARM_ROLES, { required: true, words: vcrWordList("evidence_item", "armRole") });
+    // 「论文未报告」 (C8): the paper was read and does not give this parameter. The item names the source, the parameter and the arm and
+    // carries no number, no text and no interval: it never gets a value, and it is read back as 未取到.
+    if (item.row.notReported != null && item.row.notReported !== true) item.bad("notReported", "notReported 写 true：这篇论文没有报告这个参数；报告了就写数值，不要写这个字段。");
+    const notReported = item.row.notReported === true;
     const value = item.num("value");
     const valueText = item.str("valueText", { max: 200 });
-    if (value == null && !valueText) item.bad("value", "value（数）和 valueText（文字）至少写一个。");
+    if (notReported) {
+      for (const field of ["value", "valueText", "ciLow", "ciHigh", "sampleSize", "events"]) {
+        if (item.row[field] != null && item.row[field] !== "") item.bad(field, "论文没有报告的参数不带数值：去掉这个字段；论文报告了就写数值和引文，不要写 notReported。");
+      }
+    } else if (value == null && !valueText) item.bad("value", "value（数）和 valueText（文字）至少写一个。");
     const unit = item.str("unit", { max: 40 });
     const ciLow = item.num("ciLow");
     const ciHigh = item.num("ciHigh");
     const sampleSize = item.num("sampleSize", { min: 0, integer: true });
     const events = item.num("events", { min: 0, integer: true });
     if (ciLow != null && ciHigh != null && ciLow >= ciHigh) item.bad("ciLow", "ciLow 要小于 ciHigh。");
-    const valueSource = item.choice("valueSource", ["extracted", "calculated"], { fallback: "extracted" });
-    const quote = item.str("quote", { max: 3000, required: true });
+    const valueSource = item.choice("valueSource", ["extracted", "calculated"], { fallback: "extracted", words: vcrWordList("evidence_item", "valueSource") });
+    // The one thing a paper that does not report a parameter cannot give is a sentence that states it: the quotation is asked for a
+    // value and optional for its absence (a line saying what the table does report is welcome, never required).
+    const quote = item.str("quote", { max: 3000, required: !notReported });
     const locator = item.obj("locator", { bytes: 4096 });
     const endpointKey = item.token("endpointKey", TOKEN, "终点口径的短标识，例如 pfs-blinded");
     const enrollmentKind = item.choice("enrollmentKind", ["estimated", "actual"]);
@@ -1166,13 +1400,38 @@ const WRITERS = {
     const written = await evidence.addEvidenceItem({ userId: study.userId, studyId: study.id, projectId: study.projectId, item: {
       registry, registryId, parameter, arm, armRole, value, valueText, unit, ciLow, ciHigh, sampleSize, events, valueSource, quote, locator,
       endpointKey, enrollmentKind, historicalBaseline: item.row.historicalBaseline === true, line, biomarker, outcome: item.row.outcome, note: item.row.note,
-      trialIdentity, timepoint: item.row.timepoint, ...(literatureSource ? { literatureSource } : {}), evidenceKind, ...(source ? { source } : {}), ...(candidateFrom ? { candidateFrom } : {}),
+      ...(notReported ? { notReported: true } : {}),
+      trialIdentity, timepoint: item.row.timepoint, ...(literatureSource ? { literatureSource } : {}), ...(publication ? { publication } : {}), evidenceKind, ...(source ? { source } : {}), ...(candidateFrom ? { candidateFrom } : {}),
     } });
     if (written.status !== "ok") return void item.bad(written.code === "vcr_precedent_not_in_study" ? "registryId" : "quote", written.message ?? "没有写入。",
       written.code === "vcr_precedent_not_in_study" ? "vcr_write_value_invalid" : "vcr_evidence_unverified");
     const verified = written.state === "verified";
-    extra.results.push({ index: item.index, id: written.id, verified, state: written.state });
-    if (!verified) {
+    extra.results.push({ index: item.index, id: written.id, verified, state: written.state, ...(notReported ? { notReported: true } : {}),
+      ...(written.publication ? { publication: written.publication } : {}) });
+    // What a pool needs of this parameter that the item does not carry: said once, in the answer of the write. The item is saved as it
+    // stands (it is the paper that decides what it reports), and the run either reads the rest off the paper or records that the paper
+    // does not report it.
+    if (verified) {
+      const gaps = evidenceItemGaps(parameter, { value, ciLow, ciHigh, sampleSize });
+      if (gaps.length) {
+        const words = /** @type {Record<string, string>} */ (EVIDENCE_ITEM_WORDS_ZH);
+        item.issues.push(issue(item.index, "value", "vcr_evidence_item_incomplete",
+          `${parameter} 还缺：${gaps.map((gap) => words[gap]).join("、")}。论文里有就补进同一条（数要出现在引文里）；论文没有报告，就另写一条同一来源、同一参数、notReported: true、不带数值。这一条已保存。`));
+      }
+    }
+    if (notReported) return written.id;
+    if (written.state === "reported_unverified") {
+      // Saved, and usable as an external-evidence card's number: the answer says what it lacks and how to supply it.
+      const calculated = written.because === "calculated_from_publication";
+      // What will happen is said, and no more: a text is checked only once the platform has read one, and only the open-access full texts can be read.
+      const why = written.because === "publication_not_read" ? "平台还没有读到这篇文献的原文（先用文献检索按 PMID 取回摘要，它会被保全；数在全文里的话，再用 open_access_fulltext 取全文，只有开放获取的取得到）"
+        : calculated ? "这是由论文里的数算出来的值，平台不核对派生值"
+          : `引文不在平台读到的${written.publication?.contentRead === "abstract" ? "摘要" : "原文"}里${written.publication?.contentRead === "abstract" ? "（数在全文里的话，用 open_access_fulltext 取回全文，只有开放获取的取得到）" : ""}`;
+      // A computed value is kept as a record, and it is not what a card or a pool is made of: say so, and say what a card can be made of.
+      item.issues.push(issue(item.index, "quote", "vcr_evidence_reported_unverified", calculated
+        ? `已记录，未核对：${why}。它不能作为外部证据假设卡的依据，也不进入合并；论文报告的原数可以（写进 evidence_item 并整句引用），你自己的设定用 sourceKind expert_set、valueSource assumed，出处写进 note。`
+        : `已记录为文献报告的数，未核对：${why}。它可以作为外部证据假设卡的依据，结果页会写明“未核对”；平台读到文本之后再写同一条，引文逐字在文本里才会核对。`));
+    } else if (!verified) {
       item.issues.push(issue(item.index, "quote", "vcr_evidence_unverified",
         `已记录，但没有通过原文核对（${written.state}），不会进入假设卡：引文要逐字出现在保全原文里，值、区间和样本量都要出现在引文里。`));
     }
@@ -1308,17 +1567,25 @@ const WRITERS = {
     // The routes this version can compute: the model-prediction comparator is not one of them, at any tier (it is listed as unsupported).
     const route = item.choice("route", vcrRouteOptions(study.dataTier).filter((option) => option.supported).map((option) => option.route), { required: true });
     const estimand = item.choice("estimand", VCR_ESTIMANDS, { fallback: "ATT" });
-    const targetTrial = item.obj("targetTrial") ?? {};
     const configuration = item.obj("configuration") ?? {};
+    // One shape for the target trial (A6): the seven components, each with how far the comparison can emulate it. The older shapes
+    // are read as they were written and stored as this one.
+    const targetTrial = targetTrialOf(item, "targetTrial", item.row.targetTrial) ?? {};
+    if (configuration.targetTrial !== undefined && !Array.isArray(configuration.targetTrial)) targetTrialOf(item, "configuration.targetTrial", configuration.targetTrial);
+    applicabilityOf(item, configuration);
     if (configuration.snapshotId != null) await item.owned("configuration.snapshotId", "snapshot", configuration.snapshotId);
     if (!item.ok) return null;
     const saved = await store.saveComparatorDesign({
       studyId: study.id, userId: study.userId, route, estimand, targetTrial, configuration, conclusion: null, gapList: [], reviewState: "ai_set",
     });
+    // What the record has not said yet comes back as notices, never as a refusal: it is stored as it stands, the comparison is
+    // computed, and the next version carries what is added (A6, A7).
+    for (const reminder of comparatorReminders({ route, targetTrial, configuration })) item.issues.push(issue(item.index, reminder.field, reminder.code, reminder.message));
     return saved.id;
   },
 
-  async trial_scenario(item, { store, study }) {
+  async trial_scenario(item, deps, extra) {
+    const { store, study } = deps;
     if (!item.only(VCR_WRITE_FIELDS.trial_scenario)) return null;
     const label = item.str("label", { max: 120 }) ?? "";
     const design = item.choice("design", VCR_TRIAL_DESIGNS, { required: true });
@@ -1327,6 +1594,15 @@ const WRITERS = {
     const assumptionIds = (item.arr("assumptionIds", { max: 60 }) ?? []).map(String);
     const comparatorId = item.row.comparatorId == null ? null : String(item.row.comparatorId);
     if (comparatorId) await item.owned("comparatorId", "comparator", comparatorId);
+    // The papers its numbers were read in: each becomes a card of the study, and the design names the cards it rests on.
+    if (item.row.sources != null && item.ok) {
+      const carried = await carrySourceEntries({ raw: item.row.sources, scenario: configuration, endpointType, ...sourceWriters(deps) });
+      extra.results.push({ index: item.index, sources: carried.report });
+      for (const made of carried.bound) {
+        if (!assumptionIds.includes(made.key)) assumptionIds.push(made.key);
+        extra.changed.push(`assumption:${made.key}@${made.version}`);
+      }
+    }
     if (assumptionIds.length) {
       const held = await store.assumptions(study.id);
       for (const id of assumptionIds) {
@@ -1387,6 +1663,23 @@ const WRITERS = {
     }
     extra.results.push({ index: item.index, visit, activities: saved.activities, replaced: saved.replaced, protocolVersion: protocol.version });
     return saved.id;
+  },
+
+  /**
+   * One result as a short record (「结果记录」, D7): asked for by name and written by the platform from the stored result, so the run
+   * writes no words and no number into it. The answer says where the export is, like any export's.
+   */
+  async result_record(item, { study, orchestrator, service }, extra) {
+    // `resultId` is spelled like an engine output and is a reference to one of this study's results: a plain string, checked by the export
+    if (!item.only(VCR_WRITE_FIELDS.result_record, { ids: ["resultId"] })) return null;
+    const resultId = item.str("resultId", { max: 120, required: true });
+    if (!item.ok) return null;
+    if (typeof orchestrator?.requestExport !== "function") return void item.bad("resultId", "结果记录暂时不能生成。", "vcr_write_refused");
+    const asked = await orchestrator.requestExport({ id: study.userId }, study, "result_record", { resultId });
+    const entry = vcrResultEntry({ studyId: study.id, tab: "overview", publicUrl: service?.config?.publicUrl ?? null });
+    extra.results.push({ index: item.index, id: asked.export.id, state: asked.export.state, kind: "result_record",
+      note: "结果记录已经写好，在总览的交付物里；它只含这条结果的假设、种子、版本、一个示例试验和回到哪里看。", ...(entry ? { resultEntry: entry } : {}) });
+    return asked.export.id;
   },
 
   /**
@@ -1591,10 +1884,13 @@ const WRITERS = {
     const variable = item.token("variable", /^[a-z][a-z0-9_]{0,63}$/, "小写英文变量名，与入排条件里的 variable 一致", { required: true });
     let value = item.row.value;
     if (value != null && !(typeof value === "string" ? value.length <= 200 : Number.isFinite(value))) { item.bad("value", "value 是一个数或不超过 200 字的文字。"); value = undefined; }
+    // A value that is nothing but a number is the number, written as a string or not: it is held to the quotation below like one (the
+    // evaluator reads it as one), and is kept as one.
+    if (typeof value === "string" && clinicalNumericValue(value) !== null) value = clinicalNumericValue(value);
     const unit = item.str("unit", { max: 40 });
     const polarity = item.choice("polarity", ["affirmed", "negated", "hypothetical", "family"], { fallback: "affirmed" });
-    const occurredAt = item.iso("occurredAt");
-    const recordedAt = item.iso("recordedAt");
+    let occurredAt = item.iso("occurredAt");
+    let recordedAt = item.iso("recordedAt");
     const visibleAt = item.iso("visibleAt");
     const clinical = item.row.clinical == null ? null : structuredClone(item.row.clinical);
     /** What the run should know about a fact that was kept: a link or a block the platform did not take. @type {any[]} */
@@ -1606,7 +1902,13 @@ const WRITERS = {
     }
     for (const code of clinicalFactIssues(clinical)) item.bad('clinical', code);
     const surface = item.str("surface", { max: 400, required: true });
-    const dateSurface = item.str("dateSurface", { max: 80 });
+    let dateSurface = item.str("dateSurface", { max: 80 });
+    // The second quotation is evidence, not a field the item stands on: one that is not a line of text is not used and the fact is kept.
+    const dateQuoteGiven = item.row.dateQuote;
+    const dateQuote = typeof dateQuoteGiven === "string" && dateQuoteGiven.trim() && dateQuoteGiven.length <= DATE_QUOTE_MAX ? dateQuoteGiven : undefined;
+    if (dateQuoteGiven != null && dateQuote === undefined && !(typeof dateQuoteGiven === "string" && !dateQuoteGiven.trim())) {
+      warnings.push({ field: "dateQuote", code: "date_quote_unusable", message: `dateQuote 要是同一份文档里不超过 ${DATE_QUOTE_MAX} 个字符的一句话，没有用它；事实已保存。` });
+    }
     const documentId = item.token("documentId", ID, "vcr_read what:subject_document 给出的文档 id", { required: true });
     const start = item.num("start", { min: 0, integer: true });
     const end = item.num("end", { min: 1, integer: true });
@@ -1615,8 +1917,37 @@ const WRITERS = {
     if (!item.ok) return null;
     const verified = await verifySourceSpan({ item, documents, study, subjectKey: String(subjectKey), documentId: String(documentId),
       span: { start: start ?? null, end: end ?? null, quote: String(quote) },
-      fact: { surface, dateSurface, occurredAt, recordedAt, value: typeof value === "number" ? value : undefined, clinical, unit } });
+      fact: { variable: String(variable), surface, dateSurface, dateQuote, occurredAt, recordedAt, value: typeof value === "number" ? value : undefined, clinical, unit } });
     if (!verified) return null;
+    // What was settled without losing the fact: a date nothing printed is dropped (the fact stays, undated), a unit the quotation does
+    // not print is dropped, a bare number of a variable with one conventional unit is read in it. The run is told, never refused for it.
+    occurredAt = verified.occurredAt ?? undefined;
+    recordedAt = verified.recordedAt ?? undefined;
+    dateSurface = verified.dateSurface ?? undefined;
+    if (verified.notes.includes("date_dropped")) {
+      // What was dropped decides what the run is told: a date nothing printed is gone and the fact may be undated, while a date label
+      // alone that is gone leaves the date, which stands on the quotation.
+      const lost = verified.droppedDates.filter((field) => field !== "dateSurface");
+      // A date the record\'s header gave is not one the run\'s own quotations showed: it does not count as kept.
+      const kept = verified.dateBasis === "record_header" ? [] : [occurredAt != null ? "occurredAt" : null, recordedAt != null ? "recordedAt" : null].filter(Boolean);
+      if (lost.length) {
+        warnings.push({ field: lost.join("/"), code: "date_not_shown", message: `${lost.join("、")} 没有整个印在 quote 里（含年份），也没有 dateQuote 印着它，已去掉；事实已保存。`
+          + (kept.length ? `${kept.join("、")} 有依据，仍然保存着。` : verified.dateBasis === "record_header"
+            ? `事实取了所在病历抬头的日期（${String(occurredAt).slice(0, 10)}）作为 occurredAt${verified.dateBound ? "，只算“不晚于这一天”" : ""}，不需要重写。`
+            : "事实现在没有日期；需要日期的时间窗类条件仍是“没有日期”的未知。") });
+      } else {
+        warnings.push({ field: "dateSurface", code: "date_label_not_shown", message: `dateSurface 不在 quote 或 dateQuote 里，已去掉这个写法；${kept.join("、") || "日期"}有依据，仍然保存着，事实没有变成无日期。` });
+      }
+    }
+    if (verified.dateQuoteUnfound) {
+      warnings.push({ field: "dateQuote", code: "date_quote_not_found", message: "原文里找不到这句日期引文（dateQuote 要逐字出现在同一份文档里），没有用它；事实已保存。" });
+    }
+    if (verified.notes.includes("unit_dropped") && !verified.notes.includes("unit_read_by_convention")) {
+      warnings.push({ field: "unit", code: "unit_not_in_quote", message: "unit 没有印在这句引文里，已去掉 unit；事实和数值已保存。条件要求单位而病历没印时，该条件仍是“单位缺失”的未知。" });
+    }
+    if (verified.notes.includes("unit_read_by_convention")) {
+      warnings.push({ field: "unit", code: "unit_read_by_convention", message: `数值旁没有印单位；${String(variable)} 按领域表里的惯例单位 ${String(verified.unit)} 读，已记为“按惯例读出”，不是病历印出的。` });
+    }
     if (clinical) {
       const referenced = [...new Set([clinical.copiedFrom, clinical.correctionOf,
         ...(clinical.relations ?? []).filter(r => r.state === 'supported').map(r => r.targetFactId)].filter(Boolean))];
@@ -1624,12 +1955,13 @@ const WRITERS = {
       if (known.length !== referenced.length || known.some(row => row.subjectKey !== subjectKey)) return void item.bad('clinical', '事实引用必须属于本研究的同一受试者。');
       if (clinical.correctionOf && known.find(row => row.id === clinical.correctionOf)?.variable !== variable) return void item.bad('clinical.correctionOf', '更正必须针对同一临床变量。');
       // `copiedFrom` takes a fact out of a washout, so it is honoured only where the record itself supports it: a copy
-      // states the same variable at the same instant as the fact it copies (copied text keeps its original event date).
+      // states the same variable at the same instant as the fact it copies (copied text keeps its original event date). A date the record's
+      // header gave is the record's, not the event's, and so is no date to compare: a copy forward in a later note stays a copy.
       // Any other link is the model's guess; the fact stands as its own event and the run is told, never refused.
       if (clinical.copiedFrom) {
         const original = known.find(row => row.id === clinical.copiedFrom);
         const code = original?.variable !== variable ? 'clinical_copied_from_other_variable'
-          : sameInstant(original.occurredAt, occurredAt) ? null : 'clinical_copied_from_other_date';
+          : sameInstant(original.source?.dateBasis === 'record_header' ? null : original.occurredAt, verified.dateBasis === 'record_header' ? null : occurredAt) ? null : 'clinical_copied_from_other_date';
         if (code) {
           delete clinical.copiedFrom;
           warnings.push({ field: 'clinical.copiedFrom', targetFactId: original?.id, code,
@@ -1669,9 +2001,11 @@ const WRITERS = {
     const mine = { variable: String(variable), polarity: effective, basis: surfaceBasis({ surface, source: { documentId, start: verified.span.start, quote: verified.span.quote } }) };
     const sharing = mine.basis ? factsOnSameWords(mine, await factBasisOfSubject({ matchStore, study, subjectKey: String(subjectKey), seen: extra })) : [];
     const saved = await matchStore.saveFact({ studyId: study.id, userId: study.userId, fact: {
-      subjectKey, variable, value: value ?? null, unit: unit ?? null, polarity: effective, clinical, occurredAt: occurredAt ?? null, recordedAt: recordedAt ?? null,
+      subjectKey, variable, value: value ?? null, unit: verified.unit ?? null, polarity: effective, clinical, occurredAt: occurredAt ?? null, recordedAt: recordedAt ?? null,
       visibleAt: visibleAt ?? verified.document.visibleAt ?? new Date().toISOString(), surface, dateSurface: dateSurface ?? null,
-      source: { documentId, start: verified.span.start, end: verified.span.end, quote: verified.span.quote, vocabularyVersion, projectionHash: verified.document.projectionHash ?? null, sourceHash: verified.document.sourceHash ?? null }, extractedBy: "model",
+      source: { documentId, start: verified.span.start, end: verified.span.end, quote: verified.span.quote, vocabularyVersion, projectionHash: verified.document.projectionHash ?? null, sourceHash: verified.document.sourceHash ?? null,
+        ...(verified.dateQuote ? { dateQuote: verified.dateQuote } : {}), ...(verified.unitBasis ? { unitBasis: verified.unitBasis } : {}),
+        ...(verified.dateBasis ? { dateBasis: verified.dateBasis } : {}), ...(verified.dateBound ? { dateBound: verified.dateBound } : {}) }, extractedBy: "model",
       provenance: { ...(caller?.provenance ?? { schema: 1, status: 'unknown', runId: caller?.runtimeRunId ?? null }),
         inputProjectionHash: verified.document.projectionHash ?? null, terminologyVersion: vocabularyVersion, factSchema: 2 },
     } });
@@ -1764,6 +2098,8 @@ const WRITERS = {
     const template = item.str("template", { max: 200_000 }) ?? item.str("text", { max: 200_000 });
     if (!template?.trim()) return void item.bad("template", "报告文字不能为空。");
     const named = item.choice("kind", VCR_EXPORT_KINDS);
+    // a result record is written by the platform from one result; a run has no words to put in it
+    if (named === "result_record") return void item.bad("kind", "结果记录由平台从结果写成，不由运行写：用 what=result_record 并给 resultId。");
     const section = item.str("section", { max: 60 }) ?? "main";
     if (!item.ok) return null;
     const dispatched = typeof orchestrator?.exportDispatch === "function" ? await orchestrator.exportDispatch(study.id, caller ?? {}) : null;
@@ -1819,6 +2155,25 @@ const WRITERS = {
   },
 };
 
+// An effect card without its role is reminded and never refused (A13): the card is saved as it stands, and the answer says that the
+// difference worth finding and the difference expected are two numbers.
+{
+  const writeCard = WRITERS.assumption;
+  WRITERS.assumption = async (item, deps, extra) => {
+    const id = await writeCard(item, deps, extra);
+    const key = typeof item.row.key === "string" ? item.row.key : "";
+    if (id && item.ok && vcrIsEffectCardKey(key) && !VCR_EFFECT_ROLES.includes(/** @type {any} */ (item.row.effectRole))) {
+      const stored = (await deps.store.assumptions(deps.study.id)).find((card) => card.key === key);
+      if (!stored?.effectRole) {
+        const labels = /** @type {Record<string, string>} */ (VCR_EFFECT_ROLE_LABELS_ZH);
+        item.issues.push(issue(item.index, "effectRole", "vcr_assumption_role_missing",
+          `这张卡是效应：写 effectRole，${VCR_EFFECT_ROLES.map((role) => `${role}（${labels[role]}）`).join(" 还是 ")}？前者是研究认为值得发现的最小差异，后者是实际预期的差异，两个数不同。这张卡已保存，补上后再写一个版本。`));
+      }
+    }
+    return id;
+  };
+}
+
 /**
  * The runtime's write. Every `what` validates its own fields, refuses item by
  * item and never fails the batch; `ids` are what was written.
@@ -1836,7 +2191,17 @@ export async function vcrRuntimeWrite({ store, service, orchestrator, study, wha
   const changed = [];
   /** @type {any[]} */
   const results = [];
-  const rows = items ?? (data ? [data] : []);
+  // The near-miss words of the closed vocabularies are read as the word they mean, once, before any writer sees the row, and the answer
+  // says which (`vcrNormalizeWriteRow`): a spelling is not a round.
+  /** @type {Array<Record<string, any>>} */
+  const wordsRead = [];
+  /** @type {Array<{ id: string, name: string }>} */
+  const named = [];
+  const rows = (items ?? (data ? [data] : [])).map((/** @type {any} */ raw, /** @type {number} */ index) => {
+    const read = vcrNormalizeWriteRow(what, raw);
+    for (const entry of read.applied) wordsRead.push({ index, ...entry });
+    return read.row;
+  });
   if (!rows.length) {
     return { ok: false, ids, issues: [issue(null, "", "vcr_write_empty", "这次写入没有任何内容。")] };
   }
@@ -1893,7 +2258,11 @@ export async function vcrRuntimeWrite({ store, service, orchestrator, study, wha
       const item = new Item({ row: /** @type {Record<string, any>} */ (raw), index, issues, study, store });
       try {
         const written = await writer(item, deps, scratch);
-        if (written && item.ok) ids.push(written);
+        if (written && item.ok) {
+          ids.push(written);
+          const name = displayNameOf(what, item.row);
+          if (name) named.push({ id: written, name });
+        }
       } catch (error) {
         if (error instanceof HttpError) issues.push(issue(index, "", "vcr_write_refused", error.message));
         else if (isDatabaseError(error)) {
@@ -1920,6 +2289,10 @@ export async function vcrRuntimeWrite({ store, service, orchestrator, study, wha
       studyId: study.id, changed, reason: what === "criteria" || what === "protocol" ? "criterion_changed" : "assumption_changed",
       detail: { by: "runtime", what },
     }).catch(() => null);
+  }
+  if (named.length) results.push({ named, say: "回复里用这些名字称呼它们，不要写编号。" });
+  if (wordsRead.length) {
+    results.push({ applied: wordsRead.slice(0, 40), note: "applied 列出的写法已按它们的唯一含义读成了规定的词（field：写的是 from，按 value 处理）；下次直接写规定的词。" });
   }
   return { ok: ids.length > 0, ids, issues, ...(results.length ? { results } : {}), ...(what === "fact" && ids.length ? { note: FACT_RESULT_NOTE } : {}) };
 }
@@ -1951,11 +2324,12 @@ async function loadPoolJob(store, study, jobId, parameter) {
  * document is this study's and this subject's, the quotation is the document's
  * bytes between `start` and `end`, and the surface and any value are in it
  * (`verifyFactEvidence`, the same check the evaluator applies again when it
- * judges). Records the refusal on the item and answers `null` when any of it fails.
+ * judges). Records the refusal on the item and answers `null` when any of it fails. A unit or a date the quotation does not show is
+ * not a failure of the fact: it is dropped (`settleFactEvidence`) and the fact kept.
  *
  * @param {{ item: Item, documents: any, study: any, subjectKey: string, documentId: string,
  *   span: { start: number | null, end: number | null, quote: string },
- *   fact: { surface?: string, dateSurface?: string, occurredAt?:string|null, recordedAt?:string|null, value?: number, clinical?:any, unit?:string|null }, field?: string }} input
+ *   fact: { variable?: string, surface?: string, dateSurface?: string, dateQuote?: string, occurredAt?:string|null, recordedAt?:string|null, value?: number, clinical?:any, unit?:string|null }, field?: string }} input
  * @returns {Promise<{ document: { id: string, text: string, visibleAt: string | null, projectionHash?:string, sourceHash?:string }, span: { start: number, end: number, quote: string } } | null>}
  */
 /**
@@ -2099,17 +2473,34 @@ async function verifySourceSpan({ item, documents, study, subjectKey, documentId
     start = at[0];
     end = at[0] + span.quote.length;
   }
-  const { verifyFactEvidence } = await import("./vcrMatching.mjs");
-  const verdict = verifyFactEvidence({
-    id: "check", polarity: "affirmed", extractedBy: "model", surface: fact.surface ?? span.quote, value: fact.value, dateSurface: fact.dateSurface,
+  // A date the quotation does not print may be taken from a second quotation of the same document that prints it whole: it is found
+  // in the document's own text like the first, and a quotation the document does not hold is refused the same way.
+  /** @type {{ start: number, end: number, quote: string } | null} */
+  let dateQuote = null;
+  let dateQuoteUnfound = false;
+  if (fact.dateQuote) {
+    const at = document.text.indexOf(fact.dateQuote);
+    // A second quotation the document does not hold is not used, and the fact is not refused for it: the date then has only the first
+    // quotation to rest on, and is dropped if that does not print it.
+    if (at < 0) dateQuoteUnfound = true;
+    else dateQuote = { start: at, end: at + fact.dateQuote.length, quote: fact.dateQuote };
+  }
+  const settled = settleFactEvidence({
+    id: "check", variable: fact.variable, polarity: "affirmed", extractedBy: "model", surface: fact.surface ?? span.quote, value: fact.value, dateSurface: fact.dateSurface,
     clinical: fact.clinical, unit: fact.unit, occurredAt: fact.occurredAt, recordedAt: fact.recordedAt, provenance: { factSchema: 2 },
-    source: { documentId, start, end, quote: span.quote },
-  }, { documents: new Map([[documentId, { text: document.text }]]) });
-  if (!verdict.ok) {
-    item.bad(field, `原文里核对不上（${verdict.reason}）：start 到 end 之间的字要和 quote 逐字一致，quote 要包含 surface、数值，以及紧挨着数值写出的单位。`, "vcr_evidence_unverified");
+    source: { documentId, start, end, quote: span.quote, ...(dateQuote ? { dateQuote } : {}) },
+  }, { documents: new Map([[documentId, { text: document.text, visibleAt: document.visibleAt ?? null }]]) });
+  if (!settled.ok) {
+    const { reason } = /** @type {{ ok: false, reason: string }} */ (settled);
+    const dated = reason === "date_not_in_span" ? "clinical.occurredInterval 的起止日期要整个印在 quote 里（含年份）；没有就不写 occurredInterval。" : "";
+    item.bad(field, `原文里核对不上（${reason}）：start 到 end 之间的字要和 quote 逐字一致，quote 要包含 surface、数值，以及紧挨着数值写出的单位。${dated}`, "vcr_evidence_unverified");
     return null;
   }
-  return { document, span: { start: /** @type {number} */ (start), end: /** @type {number} */ (end), quote: span.quote } };
+  return { document, span: { start: /** @type {number} */ (start), end: /** @type {number} */ (end), quote: span.quote },
+    dateQuote: settled.fact.source.dateQuote ?? null, dateQuoteUnfound, droppedDates: settled.droppedDates,
+    occurredAt: settled.fact.occurredAt ?? null, recordedAt: settled.fact.recordedAt ?? null, dateSurface: settled.fact.dateSurface ?? null,
+    unit: settled.fact.unit ?? null, unitBasis: settled.fact.source.unitBasis ?? null,
+    dateBasis: settled.fact.source.dateBasis ?? null, dateBound: settled.fact.source.dateBound ?? null, notes: settled.notes };
 }
 
 /**
@@ -2231,7 +2622,7 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
       let proofTimer;
       const origin = nativeHeader ? await Promise.race([
         resolveInvocation(identity,nativeHeader,operation,body),
-        new Promise((_,reject)=>{proofTimer=setTimeout(()=>reject(gatewayError(504,'vcr_gateway_timeout','The native call proof timed out.')),budgetMs);proofTimer.unref?.();}),
+        new Promise((_,reject)=>{proofTimer=setTimeout(()=>reject(gatewayError(504,'vcr_gateway_timeout','The native call proof timed out.')),Math.max(budgetMs, Number(config?.vcrRunAdoptionWaitMs ?? 0) + budgetMs));proofTimer.unref?.();}),
       ]).finally(()=>clearTimeout(proofTimer)) : null;
       if(origin && (origin.userId!==String(identity.userId) || origin.projectId!==String(identity.projectId))) throw gatewayError(403,'vcr_invocation_unavailable','The native research scope changed.');
       const boundedScope = origin ? null : runtimeManager.boundedRuntimeScope?.({userId:String(identity.userId),id:String(identity.projectId)});
@@ -2251,6 +2642,7 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
       }
       if (origin && !programmeStudy && (!study || study.conversationSessionId!==origin.rootSessionId)) {
         const create=operation==='write' || operation==='digitize' || operation==='simulate' && (body.action ?? 'start')==='start';
+        // The study is made with a placeholder name; a title the model gives (task_context) or the kind of work it comes to hold names it.
         study=await vcr.store.taskContext(origin,{create}) ?? {id:null,userId:origin.userId,projectId:origin.projectId,scope:'conversation',purpose:'task',conversationSessionId:origin.rootSessionId};
       }
       if (!study) throw gatewayError(403,'vcr_invocation_unavailable','Use this research tool from the current conversation.');
@@ -2272,7 +2664,7 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
         const request = readRequest(body);
         // A registry read waits on a registry: its budget is its client's deadline
         // and a margin, so the gateway never gives up before the client does.
-        if (request.what === "trial_registry_record") budget = Math.max(budgetMs, registryDeadline + REGISTRY_MARGIN_MS);
+        if (request.what === "trial_registry_record" || request.what === "candidates") budget = Math.max(budgetMs, registryDeadline + REGISTRY_MARGIN_MS);
         work = async () => ({ what: request.what, ...(request.what === 'data_intake'
           ? await vcr.dataIntake?.read(study, request.filter, origin) ?? { available: false, code: 'vcr_gateway_unavailable' }
           : request.what==='patient_context'
@@ -2288,11 +2680,23 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
             if (!origin || !vcr.dataIntake || request.items) throw gatewayError(400, 'vcr_write_payload_invalid', 'Data intake uses one typed data action and a verified conversation.');
             return { what: request.what, ...await vcr.dataIntake(study, request.data, origin) };
           }
-          if (request.what === 'task_context') return { what: request.what, ok: true, ids: [study.id], issues: [], studyId: study.id,
-            scope: study.scope, conversationSessionId: study.conversationSessionId };
+          if (request.what === 'task_context') {
+            // The conversation's scope, and optionally the title of its research question: the study is named by the model's words, with the
+            // identifiers of closed formats taken out, and never from what the person typed. A study the person renamed keeps their name.
+            const given = request.data ?? {};
+            if (request.items || Object.keys(given).some((field) => field !== 'title') || (given.title != null && typeof given.title !== 'string')) {
+              throw gatewayError(400, 'vcr_write_payload_invalid', 'task_context takes data={title} (a short title for the research question) or nothing.');
+            }
+            const titled = given.title && study.id ? await vcr.store.nameConversationStudy?.(study, { title: given.title }).catch(() => null) : null;
+            const name = titled?.name ?? study.name ?? null;
+            // A study with no title yet says so, and the tool's answer reminds the run once to give one.
+            const untitled = name === VCR_CONVERSATION_STUDY_NAME || (study.nameBasis === 'assigned' && !titled);
+            return { what: request.what, ok: true, ids: [study.id], issues: [], studyId: study.id,
+              scope: study.scope, conversationSessionId: study.conversationSessionId, name, ...(untitled ? { untitled: true } : {}) };
+          }
           if (request.what === 'patient_context') {
             if (!origin || !vcr.patientContext) throw gatewayError(403, 'vcr_invocation_unavailable', 'A native patient message or owned attachment is required.');
-            return { what: request.what, ...await vcr.patientContext(study, request.data, origin) };
+            return withWriteEntry(request.what, { what: request.what, ...await vcr.patientContext(study, request.data, origin) }, { study, publicUrl: config?.publicUrl });
           }
           const clinicalWrite = ["fact", "language_judgment"].includes(request.what);
           const runReceipt = clinicalWrite && runtimeRunId && readProducerRun ? await readProducerRun(study, runtimeRunId).catch(() => null) : null;
@@ -2308,7 +2712,9 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
           });
           vcr.service.counters.writes += 1;
           vcr.service.counters.writeIssues += result.issues.length;
-          return { what: request.what, ...result };
+          await nameWhatItHolds(vcr, study);
+          // A matching is judged at its write, so the answer to a matching write is where the person goes to read it.
+          return withWriteEntry(request.what, { what: request.what, ...result }, { study, publicUrl: config?.publicUrl });
         };
         // A write that fetches a registry record waits on the registry too.
         if (request.what === "precedent") budget = Math.max(budgetMs, registryDeadline + REGISTRY_MARGIN_MS);
@@ -2330,7 +2736,31 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
           if (!vcr.jobs) {
             throw gatewayError(503, "vcr_gateway_unavailable", "作业队列在本部署尚未接入：这一步暂不可用。");
           }
-          if (request.action === "start") return startJob(vcr, study, /** @type {any} */ (request));
+          if (request.action === "validate") {
+            // The scenario as `start` would check it, answered with its defaults and its replicate count and never queued. A model or a
+            // reconstruction named here is a binding the platform makes at start, and is not this call's.
+            const asked = /** @type {any} */ (request);
+            if (asked.modelId || asked.reconstructionResultId) {
+              return { action: "validate", kind: asked.kind, queued: false, checked: false,
+                message: "有模型或曲线重建结果的计算由平台在启动时绑定，这里不检查；直接 start，被拒的字段会按路径回来。" };
+            }
+            // An object named with no scenario is checked as the programme would build it from the object (see `startJob`).
+            let scenario = asked.scenario;
+            if (asked.subjectId && !Object.keys(scenario).length && !asked.inputs.length && typeof vcr.orchestrator?.stageScenarioOf === "function") {
+              const built = await vcr.orchestrator.stageScenarioOf(study, asked.subjectId, asked.kind);
+              if ("refused" in built) throw gatewayError(400, "vcr_simulate_payload_invalid", built.refused.message);
+              if ("scenario" in built) scenario = built.scenario;
+            }
+            const checked = await vcr.jobs.validate({ kind: asked.kind, scenario, inputs: asked.inputs, replicates: asked.replicates, studyId: study.id });
+            // The papers a call names are read for their shape here and written when the job starts.
+            const sources = asked.sources == null ? [] : sourcesAreForKind(asked.kind) ? checkSourceEntries(asked.sources, scenario) : [sourcesNotForKind()];
+            return sources.length ? { ...checked, sources } : checked;
+          }
+          if (request.action === "start") {
+            const started = await startJob(vcr, study, /** @type {any} */ (request));
+            await nameWhatItHolds(vcr, study);
+            return withJobEntry(started, { study, resultKind: vcrResultKindFor(String(/** @type {any} */ (request).kind)), publicUrl: config?.publicUrl });
+          }
           if (request.action === "cancel") {
             const result = await vcr.jobs.cancel(study.id, request.jobId, { actor: "runtime",rootSessionId:origin?.rootSessionId ?? null });
             return { action: "cancel", jobId: request.jobId, state: result.job?.state ?? "canceled", canceled: result.canceled };
@@ -2355,10 +2785,11 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
             ? poolingSummary(result, object(await vcr.store.one("SELECT checkpoint FROM evimed_vcr.jobs WHERE id = $1", [job.id]).then((/** @type {any} */ row) => row?.checkpoint))) : null;
           // What a run reads of a result is what a page shows a member, less
           // its small cells (contract §4): the answer passes the boundary once.
-          const answer = { action: "status", jobId: job.id, state: job.state, progress: job.progress,
+          const answer = { action: "status", jobId: job.id, state: job.state, progress: job.progress, ...appliedOf(job),
             cpuSeconds: job.cpuSecondsUsed, error: job.error, result, ...(pooling ? { pooling } : {}),
             ...(job.state === "awaiting_budget" ? { awaitingBudget: true, message: AWAITING_BUDGET_MESSAGE } : {}) };
-          const safe = await vcr.service.forModel(answer, { projection: "job_result" });
+          const safe = withJobEntry(await vcr.service.forModel(answer, { projection: "job_result" }),
+            { study, resultKind: String(result?.kind ?? vcrResultKindFor(String(job.kind))), publicUrl: config?.publicUrl, object: job.checkpoint?.subjectId ?? result?.subjectId });
           if (origin && ["succeeded","failed","canceled"].includes(job.state)) await vcr.store.query(`UPDATE evimed_vcr.jobs
             SET checkpoint=checkpoint || jsonb_build_object('originTerminalObservation',$4::jsonb) WHERE id=$1
             AND checkpoint->'conversationOrigin'->>'runId'=$2 AND checkpoint->'conversationOrigin'->>'rootSessionId'=$3`,[job.id,origin.runId,origin.rootSessionId,JSON.stringify({runId:origin.runId,rootSessionId:origin.rootSessionId,callId:origin.callId,state:job.state,resultKey:result ? `${result.id}:${result.version}` : 'none'})]);
@@ -2407,6 +2838,23 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
 }
 
 /**
+ * A conversation's study that holds something and has no name is named for the kind of work and the day, in code (`患者匹配 · 11月2日`):
+ * the first write or computation that leaves something in it does it, once. Nothing said by anyone is in the name, and a failure to name
+ * leaves the study as it was.
+ * @param {any} vcr @param {any} study
+ */
+async function nameWhatItHolds(vcr, study) {
+  if (!study?.id || study.scope !== "conversation" || study.name !== VCR_CONVERSATION_STUDY_NAME || study.nameBasis) return;
+  await vcr.store.nameFromWhatItHolds?.(study).catch(() => null);
+}
+
+/** The kinds a paper's number can be tied to: the design computations, whose scenario states the truth they assume. @param {string} kind */
+const sourcesAreForKind = (kind) => String(/** @type {Record<string, string>} */ (VCR_JOB_METHODS)[kind] ?? "").startsWith("design.");
+/** What a call is told when it names sources for a kind that has no use for them. */
+const sourcesNotForKind = () => ({ field: "", state: "assumption", because: "kind_not_supported",
+  message: "这一类计算不读来源：sources 只用于试验设计的计算（样本量、功效、设计比较）；这次没有读它，计算照常。" });
+
+/**
  * `simulate start`. Two kinds are not the run's scenario: a pooling job is
  * built by the platform from this study's verified extractions of the parameter
  * the run names, and a matching job freezes the protocol's own criteria. Every
@@ -2415,13 +2863,26 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
  *
  * @param {any} vcr @param {any} study
  * @param {{ kind: string, scenario: Record<string, any>, inputs: unknown[], seed: number | null, replicates: number | null,
- *   cpuSecondsLimit: number | null, subjectId: string | null, reconstructionResultId?: string | null, selection?: any, modelId?:string|null, modelVersion?:string|null }} request
+ *   cpuSecondsLimit: number | null, subjectId: string | null, reconstructionResultId?: string | null, selection?: any, modelId?:string|null, modelVersion?:string|null,
+ *   sources?: unknown }} request
  */
 async function startJob(vcr, study, request) {
   if (Object.hasOwn(VCR_LONGITUDINAL_JOBS,request.kind)) {
     if (!vcr.longitudinal) throw gatewayError(503,'vcr_gateway_unavailable','纵向数据尚未接入；其他分析可以继续。');
     const {job} = await vcr.longitudinal.prepare(study,request,study.userId,{ detail: study.completionOrigin ? { conversationOrigin:study.completionOrigin } : {} });
     return {action:'start',jobId:job.id,state:job.state,progress:job.progress};
+  }
+  // The batch reading of patient records: the platform plans it from the study (who has records, who need not be read, who was read
+  // before), states what it will cost, and queues it on its own lane. The run gives it a selection and nothing else.
+  if (request.kind === "match_extract") {
+    if (!vcr.matchBatch) throw gatewayError(503, "vcr_gateway_unavailable", "批量读病历未接入本部署：这一步暂不可用，其余步骤照常。");
+    if (Object.keys(request.scenario).length || request.inputs.length) {
+      throw gatewayError(400, "vcr_simulate_payload_invalid", "读病历不接受场景：平台按方案版本的入排条件和研究里的病历自己冻结它；只写 selection。");
+    }
+    // The plan's head counts (who is read, who was, who the table decided against) are the study's people: the answer passes the model
+    // boundary like a read, and its sentence was written from the same cells (`matchBatchStatement`).
+    if (typeof vcr.service.forModel !== "function") throw gatewayError(503, "vcr_gateway_unavailable", "这份读取结果无法确认不含小样本格子，已整体拒绝。");
+    return vcr.service.forModel(await vcr.matchBatch.start(study, request.selection ?? {}), { projection: "match_extract_start" });
   }
   if (request.kind === "pool_evidence") {
     if (!vcr.evidence?.poolParameter) throw gatewayError(503, "vcr_gateway_unavailable", "证据参数化未接入本部署：这一步暂不可用。");
@@ -2519,10 +2980,30 @@ async function startJob(vcr, study, request) {
       detail = { ...detail, timeUnitBasis: { ...times.timeUnit } };
     }
   }
+  // A start that names an object and sends no scenario computes the object as it was written: the platform builds the stage's scenario
+  // from it, as the programme does, instead of asking the engine to run an empty one (2026-11-01: a design written in the conversation
+  // and started by its id was refused three times for the design, endpoint and truth that were sitting in the object).
+  if (request.subjectId && !Object.keys(scenario).length && !inputs.length && !derived.length && typeof vcr.orchestrator?.stageScenarioOf === "function") {
+    const built = await vcr.orchestrator.stageScenarioOf(study, request.subjectId, request.kind);
+    if ("refused" in built) throw gatewayError(400, "vcr_simulate_payload_invalid", built.refused.message);
+    if ("scenario" in built) { scenario = built.scenario; detail = { ...detail, ...built.detail }; }
+  }
+  // Keys that only describe what the method does anyway are left out before anything else reads the scenario (the object it fits, the
+  // object it is filed as, the job it is frozen into), and the answer says so; a described value the engine would not honour is refused
+  // here with the reason, since the sentence "the engine does not read it" would be the wrong one.
+  const described = vcrNormalizeScenarioKeys(String(/** @type {Record<string, string>} */ (VCR_JOB_METHODS)[request.kind] ?? ""), scenario);
+  if (described.conflicts.length) {
+    const refusal = gatewayError(400, "vcr_simulate_payload_invalid", described.conflicts.map((conflict) => `${conflict.field}: ${conflict.detail}`).join(" "));
+    refusal.issues = described.conflicts.map((conflict) => ({ code: "scenario_field_unknown", field: conflict.field }));
+    throw refusal;
+  }
+  scenario = described.scenario;
+  if (described.applied.length) detail = { ...detail, normalizedKeys: described.applied };
   // A computation of a research object names it: its result is filed under that object and replaces only that object's earlier
   // results. The id the run gave is checked against the study; with none, the one object the scenario fits is taken, and several
   // (or none) are refused by name with what the study holds.
-  const subject = await resolveJobSubject({ store: vcr.store, study, kind: request.kind, subjectId: request.subjectId, scenario });
+  const madeFor = await vcrConversationSubject({ store: vcr.store, study, userId: String(study.userId), kind: request.kind, subjectId: request.subjectId, scenario });
+  const subject = await resolveJobSubject({ store: vcr.store, study, kind: request.kind, subjectId: madeFor ?? request.subjectId, scenario });
   const population = await prepareVcrSubjectPopulation({ store: vcr.store, study, kind: request.kind, subject, scenario,
     inputs: /** @type {any[]} */ (inputs), sourceModel: detail.sourceModel });
   const designBinding = await prepareVcrModelDesign({ store: vcr.store, study, subject, scenario: population.scenario, inputs: population.inputs });
@@ -2530,14 +3011,43 @@ async function startJob(vcr, study, request) {
   detail = { ...detail, ...population.detail, ...designBinding.detail };
   if (subject) {
     detail = { ...detail, ...subject.detail };
+    // The stage in flight is the answer to the scenario it froze, and to no other: a start that states another number is another job.
     const running = await vcr.orchestrator?.inFlightStage?.(study.id, subject.detail);
-    if (running) {
+    if (running && vcrJobFroze(running.scenario, scenario)) {
       return { action: "start", jobId: running.id, state: running.state, progress: running.progress ?? {}, alreadyRunning: true,
-        subject: { kind: subject.objectKind, id: String(subject.row.id), version: Number(subject.row.version) },
+        subject: { kind: subject.objectKind, id: String(subject.row.id), version: Number(subject.row.version), ...(subjectName(subject.row) ? { name: subjectName(subject.row) } : {}) },
         message: "这个对象的这一步平台已经在算了：读这个作业的进度和结果就行，不必再排一个。" };
     }
   }
-  const scenarioHash = createHash("sha256").update(canonicalScenarioJson({ scenario, reconstruction: request.reconstructionResultId ?? null })).digest("hex").slice(0, 16);
+  // The papers the call names (`sources`): the platform writes the evidence item and the card of each and records which card each number of
+  // this job came from, so the result page can say 文献 and name the paper. A failure here costs that premise and nothing else.
+  /** @type {Array<Record<string, any>>} */
+  let sourceReport = [];
+  if (request.sources != null) {
+    if (!sourcesAreForKind(request.kind)) sourceReport = [sourcesNotForKind()];
+    else if (!vcr.evidence?.addEvidenceItem || !vcr.evidenceStore) {
+      sourceReport = [{ field: "", state: "assumption", because: "evidence_unavailable", message: "证据参数化未接入本部署：来源没有记下，这些前提仍是假设，计算照常。" }];
+    } else {
+      const carried = await carrySourceEntries({
+        raw: request.sources, scenario, ...sourceWriters({ store: vcr.store, service: vcr.service, study, evidence: vcr.evidence, evidenceStore: vcr.evidenceStore }),
+      }).catch(() => ({ bound: [], report: [{ field: "", state: "assumption", because: "unavailable", message: "来源暂时没能记下；这些前提仍是假设，计算照常。" }] }));
+      sourceReport = carried.report;
+      if (carried.bound.length) detail = { ...detail, bound: [...(Array.isArray(detail.bound) ? detail.bound : []), ...carried.bound] };
+    }
+  }
+  // The cards the study already holds for this scenario's numbers (a paper named on an earlier start of a design being compared): a number that
+  // is to the digit a cited card's is that card's. Nothing is written, and a failure to read the cards costs the label and nothing else.
+  if (sourcesAreForKind(request.kind)) {
+    /** @type {ReturnType<typeof standingSourceBindings>} */
+    let standing = [];
+    try { standing = standingSourceBindings({ scenario, cards: await vcr.store.assumptions(study.id) }); } catch { /* the label is lost, the computation is not */ }
+    if (standing.length) {
+      const named = new Set((Array.isArray(detail.bound) ? detail.bound : []).map((/** @type {any} */ entry) => entry.path));
+      detail = { ...detail, bound: [...standing.filter((entry) => !named.has(entry.path)), ...(Array.isArray(detail.bound) ? detail.bound : [])] };
+    }
+  }
+  const scenarioHash = createHash("sha256").update(canonicalScenarioJson({ scenario, reconstruction: request.reconstructionResultId ?? null,
+    ...(Array.isArray(detail.bound) && detail.bound.length ? { bound: detail.bound } : {}) })).digest("hex").slice(0, 16);
   const { job, notice } = await vcr.jobs.enqueue({
     studyId: study.id, userId: study.userId, kind: request.kind, scenario, inputs, ...(derived.length ? { derived } : {}),
     ...(population.derived.length ? { internal: true } : {}),
@@ -2563,13 +3073,30 @@ async function startJob(vcr, study, request) {
   // The programme learns the stage is taken and lands the result on the object when it ends; a failure to say so costs a
   // duplicate computation, never this job.
   if (subject && vcr.orchestrator?.noteRuntimeJob) await vcr.orchestrator.noteRuntimeJob(study, subject.detail, job).catch(() => null);
-  return { action: "start", jobId: job.id, state: job.state, progress: job.progress, ...(notes ? { notes } : {}),
-    ...(subject ? { subject: { kind: subject.objectKind, id: String(subject.row.id), version: Number(subject.row.version) } } : {}),
+  return { action: "start", jobId: job.id, state: job.state, progress: job.progress, ...(notes ? { notes } : {}), ...appliedOf(job),
+    ...(sourceReport.length ? { sources: sourceReport } : {}),
+    ...(subject ? { subject: { kind: subject.objectKind, id: String(subject.row.id), version: Number(subject.row.version),
+      ...(subjectName(subject.row) ? { name: subjectName(subject.row) } : {}) } } : {}),
     // A job stopped for budget is the second human stop: the run is
     // told plainly so it goes on with what it can do (§10.1).
     ...(job.state === "awaiting_budget" ? { awaitingBudget: true, message: AWAITING_BUDGET_MESSAGE } : {}),
     // A job that was queued but may not finish inside its budget (a synthesis): the run is told, with what to reduce.
     ...(notice ? { notice } : {}) };
+}
+
+/**
+ * The fields the platform filled in because the scenario stated none, as the call's answer lists them (`applied`: the field and
+ * the value it took — a dropout of 0, an alpha of 0.025). Frozen with the job when it was queued (`vcrAppliedDefaults`), so a run
+ * that reads it says the values the computation really used; nothing is listed for a job that took no default.
+ * @param {any} job @returns {{ applied?: Array<{ field: string, value: unknown }>, normalized?: Array<{ field: string, value: unknown, took: string }> }}
+ */
+function appliedOf(job) {
+  const taken = Array.isArray(job?.checkpoint?.appliedDefaults) ? job.checkpoint.appliedDefaults : [];
+  const applied = taken.filter((/** @type {any} */ entry) => entry && typeof entry.path === "string").slice(0, 24)
+    .map((/** @type {any} */ entry) => ({ field: entry.path, value: entry.value }));
+  // Keys the platform left out because they only described what the method does anyway (`vcrNormalizeScenarioKeys`): said, not hidden.
+  const left = Array.isArray(job?.checkpoint?.normalizedKeys) ? job.checkpoint.normalizedKeys.filter((/** @type {any} */ entry) => entry && typeof entry.field === "string").slice(0, 12) : [];
+  return { ...(applied.length ? { applied } : {}), ...(left.length ? { normalized: left } : {}) };
 }
 
 /** What a run is told of a job only a person can release: it is not coming, so the run does not wait for it or ask again. */

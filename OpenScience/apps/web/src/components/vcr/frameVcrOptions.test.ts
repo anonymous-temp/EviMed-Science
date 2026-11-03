@@ -37,7 +37,9 @@ describe("the names of the tasks", () => {
   it("are the tab's name on the home and the step's name on the chip", () => {
     const tabLabel = VCR_TAB_LABELS_ZH as Record<string, string>;
     const stepLabel = VCR_STEP_LABELS_ZH as Record<string, string>;
-    for (const task of VCR_STARTERS) expect(task.label, task.id).toBe(tabLabel[task.id]);
+    // The comparison task is called 对照研究 as a task (owner decision of 2026-11-01); its tab and its step stay 对照.
+    const taskName: Record<string, string> = { comparator: "对照研究" };
+    for (const task of VCR_STARTERS) expect(task.label, task.id).toBe(taskName[task.id] ?? tabLabel[task.id]);
     const startStep: Record<string, string> = { cohort: "population", patients: "patients", comparator: "comparator", trial: "trial" };
     for (const [id, step] of Object.entries(startStep)) expect(VCR_START_OPTIONS.find((option) => option.id === id)?.label, id).toBe(stepLabel[step]);
   });
@@ -46,7 +48,7 @@ describe("the names of the tasks", () => {
 describe("what the chip draws", () => {
   it("is the plan's five starting points and the six starting points of a new study, in order", () => {
     expect(VCR_START_OPTIONS.map((option) => option.label)).toEqual(["自动", "人群", "患者", "对照", "试验"]);
-    expect(VCR_STARTERS.map((starter) => starter.label)).toEqual(["匹配", "人群与患者", "对照", "试验"]);
+    expect(VCR_STARTERS.map((starter) => starter.label)).toEqual(["匹配", "人群与患者", "对照研究", "试验"]);
     expect(VCR_STARTERS.map((starter) => starter.summary)).toEqual(["查找适合患者的试验，核对入排条件。", "建立研究队列，查看个体的模拟结果。", "构建对照人群，比较两组结局。", "比较不同试验方案的样本量、把握度和周期。"]);
     // Each starter is a short unsent request; the researcher supplies the details.
     for (const starter of VCR_STARTERS) {

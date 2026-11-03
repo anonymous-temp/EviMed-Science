@@ -350,6 +350,7 @@ TOOL_DEFINITIONS = [
                 "source": {"type": "string", "enum": list(public_sources.QUERYABLE_BIOMEDICAL_SOURCE_IDS)},
                 "query": STRING,
                 "limit": {"type": "integer", "minimum": 1, "maximum": 50},
+                "offset": {"type": "integer", "minimum": 0, "maximum": 499, "description": "Only for `prospero`: registrations to skip. data.outcome says when more matched and what offset reads on; a topic is not open on a partial read."},
             },
             ("source", "query"),
         ),

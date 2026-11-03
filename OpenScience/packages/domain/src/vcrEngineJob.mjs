@@ -48,12 +48,13 @@
 
 import {
   VCR_ANALYSIS_TABLES, VCR_COLUMN_SOURCES, VCR_CONCLUSIONS, VCR_ENDPOINT_TYPES, VCR_INTERVAL_KINDS, VCR_JOB_KINDS, VCR_MODEL_RISKS,
-  VCR_MODEL_TIERS, VCR_NOT_ESTIMABLE_RULES, VCR_REPLICATES_ALT_MIN, VCR_REPLICATES_NULL_MIN, VCR_TRIAL_DESIGNS,
-  VCR_REAL_PATIENT_SOURCES, VCR_VALUE_SOURCES,
+  VCR_MODEL_TIERS, VCR_NOT_ESTIMABLE_RULES, VCR_REPLICATES_ALT_MIN, VCR_TRIAL_DESIGNS,
+  VCR_REAL_PATIENT_SOURCES, VCR_VALUE_SOURCES, vcrNullReplicateFloor,
 } from './vcrVocabulary.mjs'
 import { VCR_DESIGN_SUPPORT, validateScenario, vcrIsNullScenario } from './vcrScenarioSchemas.mjs'
 import { VCR_TIME_UNITS } from './vcrTimeUnits.mjs'
 import { VCR_LONGITUDINAL_JOBS } from './vcrLongitudinal.mjs'
+import { VCR_MATCH_BATCH_JOBS } from './vcrMatchBatch.mjs'
 
 // The schemas live in their own module (they are the file most likely to be
 // edited); the protocol's callers find them here, beside the validators.
@@ -99,39 +100,41 @@ const SIMULATE_RELEASES = Object.freeze([Object.freeze({
  */
 export const VCR_ENGINE_METHODS = Object.freeze({
   'model.survival_fit': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['independent base-R likelihood optimization', 'flexsurv distribution and delta-method output oracle', 'closed-form censored exponential likelihood']), modelTier: 'literature' },
-  'model.prognostic_apply': { version: '1.0.0', endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['closed-form published equation evaluation']), modelTier: 'literature' },
+  'model.prognostic_apply': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['closed-form published equation evaluation']), modelTier: 'literature' },
   'profile.snapshot': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen([]), crossChecks: frozen(['profile_dataset.py']), modelTier: null },
   'cohort.build': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen([]), crossChecks: frozen([]), modelTier: null },
-  'population.scenario': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['simstudy semantics']), modelTier: 'scenario' },
-  'population.literature': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen([]), modelTier: 'literature' },
+  'population.scenario': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen([]), crossChecks: frozen(['simstudy semantics']), modelTier: 'scenario' },
+  'population.literature': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen([]), crossChecks: frozen([]), modelTier: 'literature' },
   'population.synthpop': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['synthpop']), modelTier: 'data' },
   'population.quality': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen([]), modelTier: 'data' },
+  // A generated population held against a second baseline table (remediation plan D2): margins only, no model, so no tier.
+  'population.check': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['base-R recomputation of the standardized differences']), modelTier: null },
   'patients.continuous': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['continuous']), crossChecks: frozen([]), modelTier: 'scenario' },
   'patients.binary': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['binary']), crossChecks: frozen([]), modelTier: 'scenario' },
   'patients.time_to_event': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['time_to_event']), crossChecks: frozen(['simsurv']), modelTier: 'scenario' },
   'evidence.pool': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['metafor', 'meta engine']), modelTier: 'literature' },
-  'evidence.reconstruct_km': { version: '1.0.0', endpoints: frozen(['time_to_event']), crossChecks: frozen(['IPDfromKM']), modelTier: 'literature' },
-  'comparator.entropy_balance': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['WeightIt', 'cobalt']), modelTier: 'data' },
-  'comparator.propensity_weight': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['WeightIt']), modelTier: 'data' },
+  'evidence.reconstruct_km': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['time_to_event']), crossChecks: frozen(['IPDfromKM']), modelTier: 'literature' },
+  'comparator.entropy_balance': { version: '1.3.0', compatibleVersions: frozen(['1.0.0', '1.1.0', '1.2.0']), endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['WeightIt', 'cobalt']), modelTier: 'data' },
+  'comparator.propensity_weight': { version: '1.3.0', compatibleVersions: frozen(['1.0.0', '1.1.0', '1.2.0']), endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['WeightIt']), modelTier: 'data' },
   'comparator.rmst': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['time_to_event']), crossChecks: frozen(['survRM2']), modelTier: 'data' },
   'comparator.maic': { version: '1.0.0', endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['NICE DSU TSD 18']), modelTier: 'data' },
   'comparator.evalue': { version: '1.0.0', endpoints: frozen(['binary', 'time_to_event']), crossChecks: frozen(['EValue']), modelTier: 'scenario' },
-  'comparator.map_prior': { version: '1.0.0', endpoints: frozen(['binary', 'continuous']), crossChecks: frozen(['RBesT']), modelTier: 'literature' },
-  'design.analytic': { version: '1.2.0', legacyVersion: '1.0.0', legacyDesigns: frozen(['two_arm_fixed', 'group_sequential', 'simon_two_stage']), legacyReleases: ANALYTIC_RELEASES, endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['rpact', 'gsDesign', 'stats::binom.test', 'Simon 1989']), modelTier: 'scenario' },
-  'design.simulate': { version: '1.2.0', legacyVersion: '1.0.0', legacyDesigns: frozen(['two_arm_fixed', 'group_sequential']), legacyReleases: SIMULATE_RELEASES, endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['design.analytic', 'independent beta-binomial variance', 'exact non-central t power of the one-sample test', 'independent normal approximation of the one-sample log-rank score']), modelTier: 'scenario' },
-  'design.grid': { version: '1.2.0', legacyVersion: '1.0.0', legacyDesigns: frozen(['two_arm_fixed', 'group_sequential']), legacyReleases: SIMULATE_RELEASES, endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen([]), modelTier: 'scenario' },
+  'comparator.map_prior': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['binary', 'continuous']), crossChecks: frozen(['RBesT']), modelTier: 'literature' },
+  'design.analytic': { version: '1.3.0', compatibleVersions: frozen(['1.2.0']), legacyVersion: '1.0.0', legacyDesigns: frozen(['two_arm_fixed', 'group_sequential', 'simon_two_stage']), legacyReleases: ANALYTIC_RELEASES, endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['rpact', 'gsDesign', 'stats::binom.test', 'Simon 1989']), modelTier: 'scenario' },
+  'design.simulate': { version: '1.3.0', compatibleVersions: frozen(['1.2.0']), legacyVersion: '1.0.0', legacyDesigns: frozen(['two_arm_fixed', 'group_sequential']), legacyReleases: SIMULATE_RELEASES, endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['design.analytic', 'independent beta-binomial variance', 'exact non-central t power of the one-sample test', 'independent normal approximation of the one-sample log-rank score']), modelTier: 'scenario' },
+  'design.grid': { version: '1.3.0', compatibleVersions: frozen(['1.2.0']), legacyVersion: '1.0.0', legacyDesigns: frozen(['two_arm_fixed', 'group_sequential']), legacyReleases: SIMULATE_RELEASES, endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen([]), modelTier: 'scenario' },
   'design.assurance': { version: '1.1.0', legacyVersion: '1.0.0', legacyDesigns: frozen(['two_arm_fixed']), endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(["O'Hagan 2005", 'independent Monte Carlo of the sequential design under the design prior']), modelTier: 'scenario' },
   'design.procova': { version: '1.0.0', endpoints: frozen(['continuous']), crossChecks: frozen(['EMA 2022 qualification opinion']), modelTier: 'scenario' },
   'accrual.poisson_gamma': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['Anisimov & Fedorov 2007']), modelTier: 'scenario' },
   'matching.evaluate': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['Kleene truth table']), modelTier: null },
   // The comparator-effect methods (2026-10-04). A new method is a new entry here, a job kind, a schema and a handler; none of the
   // methods above changed.
-  'comparator.weighted_cox': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['time_to_event']), crossChecks: frozen(['survival::coxph on WeightIt weights', 'independent score test for non-proportional hazards']), modelTier: 'data' },
+  'comparator.weighted_cox': { version: '1.3.0', compatibleVersions: frozen(['1.0.0', '1.1.0', '1.2.0']), endpoints: frozen(['time_to_event']), crossChecks: frozen(['survival::coxph on WeightIt weights', 'independent score test for non-proportional hazards']), modelTier: 'data' },
   'comparator.maic_time_to_event': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['time_to_event']), crossChecks: frozen(['maicplus 0.1.2 vignette (Apache-2.0)', 'NICE DSU TSD 18', 'simulated target-population hazard ratio']), modelTier: 'data' },
-  'comparator.aipw': { version: '1.0.0', endpoints: frozen(['continuous', 'binary']), crossChecks: frozen(['closed-form AIPW (Bang & Robins 2005) on WeightIt weights', 'simulation with a known ATT: double robustness']), modelTier: 'data' },
-  'comparator.covariate_sets': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['comparator.entropy_balance', 'comparator.propensity_weight', 'comparator.aipw']), modelTier: 'data' },
+  'comparator.aipw': { version: '1.2.0', compatibleVersions: frozen(['1.0.0', '1.1.0']), endpoints: frozen(['continuous', 'binary']), crossChecks: frozen(['closed-form AIPW (Bang & Robins 2005) on WeightIt weights', 'simulation with a known ATT: double robustness']), modelTier: 'data' },
+  'comparator.covariate_sets': { version: '1.2.0', compatibleVersions: frozen(['1.0.0', '1.1.0']), endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['comparator.entropy_balance', 'comparator.propensity_weight', 'comparator.aipw']), modelTier: 'data' },
   // --- robustness methods (2026-10-04). A new method is a new entry here, a job kind, a schema and a handler; none of the methods above changed. ---
-  'comparator.negative_control': { version: '1.0.0', endpoints: frozen(['binary', 'time_to_event']), crossChecks: frozen(['EmpiricalCalibration 3.1.4 (sccs example)', 'Lipsitch 2010', 'Schuemie 2014']), modelTier: 'data' },
+  'comparator.negative_control': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['binary', 'time_to_event']), crossChecks: frozen(['EmpiricalCalibration 3.1.4 (sccs example)', 'Lipsitch 2010', 'Schuemie 2014']), modelTier: 'data' },
   'comparator.tipping_point': { version: '1.0.0', endpoints: frozen(['binary', 'time_to_event']), crossChecks: frozen(['stats::fisher.test and stats::binom.test', 'closed-form worst case (censoring as event)', 'Jackson et al. 2014']), modelTier: 'data' },
   'comparator.prognostic_adjustment': { version: '1.0.0', endpoints: frozen(['binary', 'time_to_event']), crossChecks: frozen(['FDA 2023 covariate-adjustment guidance, Table 1', 'M-estimation sandwich by numerical Jacobians', 'survival::coxph and survfit(newdata)']), modelTier: 'data' },
   // --- end robustness methods ---
@@ -184,6 +187,9 @@ export const VCR_JOB_METHODS = Object.freeze({
   prognostic_adjustment_comparator: 'comparator.prognostic_adjustment',
   // --- end robustness methods ---
   generate_patients_longitudinal: 'patients.longitudinal',
+  population_check: 'population.check',
+  // The batch reading of patient records (D4): run by the control plane on its slow local lane, never by the R engine.
+  ...VCR_MATCH_BATCH_JOBS,
   // The longitudinal forecast kinds, last, in VCR_JOB_KINDS' order (the scenario help lists kinds in this object's order).
   ...VCR_LONGITUDINAL_JOBS,
 })
@@ -425,27 +431,64 @@ export function mcseOf({ measure, replicates, p = 0.5, sd = 1 }) {
  * scenario measures: alpha under the null (20,000 replicates is what alpha =
  * 0.025 needs for a standard error of 0.0011), the worst case 0.5 under an
  * alternative. Passing `p` overrides it.
- * @param {{ isNull: boolean, targetMcse?: number | null, alpha?: number, p?: number }} input
+ *
+ * The null floor also rises with the intended use and for a borrowing design
+ * (`vcrNullReplicateFloor`): 100,000 for a specified analysis, a submission and any
+ * design that borrows. Neither is known to the scenario; the caller states them.
+ * @param {{ isNull: boolean, targetMcse?: number | null, alpha?: number, p?: number, intendedUse?: string | null, borrowing?: boolean }} input
  */
-export function replicateFloor({ isNull, targetMcse = null, alpha = 0.025, p }) {
-  const base = isNull ? VCR_REPLICATES_NULL_MIN : VCR_REPLICATES_ALT_MIN
-  if (!targetMcse) return base
-  const proportion = p ?? (isNull ? alpha : 0.5)
-  return Math.max(base, replicatesForMcse({ measure: 'proportion', target: targetMcse, p: proportion }))
+export function replicateFloor({ isNull, targetMcse = null, alpha = 0.025, p, intendedUse = null, borrowing = false }) {
+  return replicatePlan({ isNull, targetMcse, alpha, p, intendedUse, borrowing }).floor
 }
 
 /**
- * The floor of a whole scenario, with its null predicate and alpha read from
- * the scenario itself — what the control plane uses when it enqueues.
+ * The floor and what set it, for the page that says why a run took as many replicates as it did: the default of the case, the
+ * intended use, a borrowing design, or the precision the scenario asked for.
+ * @param {{ isNull: boolean, targetMcse?: number | null, alpha?: number, p?: number, intendedUse?: string | null, borrowing?: boolean }} input
+ * @returns {{ floor: number, basis: 'default' | 'intended_use' | 'borrowing' | 'target_mcse', isNull: boolean, targetMcse: number | null }}
+ */
+export function replicatePlan({ isNull, targetMcse = null, alpha = 0.025, p, intendedUse = null, borrowing = false }) {
+  const set = isNull ? vcrNullReplicateFloor({ intendedUse, borrowing }) : { floor: VCR_REPLICATES_ALT_MIN, basis: /** @type {const} */ ('default') }
+  const target = targetMcse && targetMcse > 0 ? targetMcse : null
+  if (!target) return { floor: set.floor, basis: set.basis, isNull, targetMcse: null }
+  const proportion = p ?? (isNull ? alpha : 0.5)
+  const needed = replicatesForMcse({ measure: 'proportion', target, p: proportion })
+  return needed > set.floor ? { floor: needed, basis: 'target_mcse', isNull, targetMcse: target } : { floor: set.floor, basis: set.basis, isNull, targetMcse: target }
+}
+
+/**
+ * Whether the design borrows from outside the trial: a stratified external control. (A MAP prior is a borrowing *method*; its job
+ * states that itself.)
  * @param {any} scenario
  */
-export function vcrReplicateFloorFor(scenario) {
+export function vcrBorrowsExternally(scenario) {
+  const kind = scenario?.design?.kind
+  return kind === 'single_arm_external' || (Array.isArray(scenario?.designs) && scenario.designs.some((/** @type {any} */ design) => design?.kind === 'single_arm_external'))
+}
+
+/**
+ * The floor of a whole scenario, with its null predicate and alpha read
+ * from the scenario itself — what the control plane uses when it enqueues.
+ * `intendedUse` is the study's; a design that borrows from an external control takes the borrowing floor.
+ * @param {any} scenario @param {{ intendedUse?: string | null, borrowing?: boolean }} [options]
+ */
+export function vcrReplicateFloorFor(scenario, options = {}) {
+  return vcrReplicatePlanFor(scenario, options).floor
+}
+
+/**
+ * `vcrReplicateFloorFor`, with what set the floor.
+ * @param {any} scenario @param {{ intendedUse?: string | null, borrowing?: boolean }} [options]
+ */
+export function vcrReplicatePlanFor(scenario, { intendedUse = null, borrowing } = {}) {
   const target = Number(scenario?.targetMcse)
   const alpha = Number(scenario?.analysis?.alpha)
-  return replicateFloor({
+  return replicatePlan({
     isNull: vcrIsNullScenario(scenario),
     targetMcse: Number.isFinite(target) && target > 0 ? target : null,
     alpha: Number.isFinite(alpha) && alpha > 0 && alpha < 1 ? alpha : 0.025,
+    intendedUse,
+    borrowing: borrowing ?? vcrBorrowsExternally(scenario),
   })
 }
 
@@ -686,6 +729,16 @@ export function validateEngineJob(job) {
 }
 
 /**
+ * Does a simulation scenario ask for what design.simulate and design.grid 1.3.0 added: a treatment-arm hazard ratio that changes over
+ * time (in the truth, or in a cell of a grid) or the MaxCombo analysis? Mirrored by `.vcrp_legacy_design_version` in protocol.R.
+ * @param {any} scenario
+ */
+function usesNonProportionalHazards(scenario) {
+  const truths = [scenario?.truth, ...(Array.isArray(scenario?.truths) ? scenario.truths : [])]
+  return truths.some((truth) => truth && typeof truth === 'object' && truth.treatmentHazardRatios !== undefined) || scenario?.analysis?.method === 'maxcombo'
+}
+
+/**
  * Replay prior supported designs under their recorded version; never label new designs as old. Two kinds of record: the oldest
  * (`legacyVersion`) is by design, and a later release (`legacyReleases`) is by design and endpoint.
  * @param {any} job
@@ -693,7 +746,13 @@ export function validateEngineJob(job) {
 function legacyDesignVersionMatches(job) {
   const spec = /** @type {any} */ (VCR_ENGINE_METHODS)[job.method]
   if (!spec) return false
-  if ((spec.compatibleVersions ?? []).includes(job.methodVersion)) return !job.method.startsWith('patients.') || (!job.scenario?.pairing && !job.scenario?.cohortRules)
+  if ((spec.compatibleVersions ?? []).includes(job.methodVersion)) {
+    // a design is never labelled with a version that did not have it: 1.3.0 added the hazard ratio that changes over time and MaxCombo
+    if ((job.method === 'design.simulate' || job.method === 'design.grid') && usesNonProportionalHazards(job.scenario)) return false
+    // and model.prognostic_apply 1.1.0 added the local calibration against the outcome the table holds
+    if (job.method === 'model.prognostic_apply' && job.scenario?.calibration !== undefined) return false
+    return !job.method.startsWith('patients.') || (!job.scenario?.pairing && !job.scenario?.cohortRules)
+  }
   const base = job.scenario?.design?.kind
   const kinds = job.method === 'design.grid' && Array.isArray(job.scenario?.designs)
     ? job.scenario.designs.map((/** @type {any} */ design) => design.kind ?? base) : [base]

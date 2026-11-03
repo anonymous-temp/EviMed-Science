@@ -665,15 +665,15 @@
   },
   "kaplan_meier": {
    "id": "kaplan_meier",
-   "version": "1.0.0",
+   "version": "1.1.0",
    "engine": "analysis_methods",
    "title": "Kaplan-Meier survival curve with Greenwood standard errors and the median survival time",
    "estimand": "The probability of remaining event-free beyond each event time, per group, with a 95% band (log scale by default, as R's survfit) and the median survival time with its interval.",
    "assumptions": [
     {
      "id": "noninformative_censoring",
-     "text": "Censoring is unrelated to the prognosis: a subject censored at a time has the same outlook as those who stay.",
-     "checkedBy": "diagnostic:heavy_censoring"
+     "text": "Censoring must be independent of the event process under the analysis assumptions. Its frequency is descriptive and cannot test this independence.",
+     "checkedBy": "none"
     },
     {
      "id": "event_coding",
@@ -682,7 +682,7 @@
     },
     {
      "id": "one_event_type",
-     "text": "There are no competing events that preclude the event of interest; with competing risks 1 - KM overstates the incidence.",
+     "text": "Competing events must preclude the endpoint. Transplantation or treatment change is not automatically competing for all-cause death, which may still occur afterwards; ending death follow-up can cause informative censoring with unknown bias direction. For cause-specific incidence, use an appropriate competing-risk estimator rather than 1 - KM.",
      "checkedBy": "none"
     },
     {
@@ -692,7 +692,7 @@
     },
     {
      "id": "tail_is_thin",
-     "text": "The curve's tail rests on the few subjects still at risk.",
+     "text": "Precision near the end depends on the remaining risk set and events; inspect their observed counts.",
      "checkedBy": "diagnostic:small_final_risk_set, diagnostic:few_events"
     }
    ],
@@ -760,12 +760,12 @@
     {
      "code": "tied_event_times",
      "severity": "notice",
-     "when": "several events share a time; the tie-handling method matters (Efron is used unless Breslow is asked for)"
+     "when": "events at the same time are handled together using d/n; censoring at that time remains in the preceding risk set"
     },
     {
      "code": "zero_follow_up",
      "severity": "notice",
-     "when": "some subjects have a follow-up time of exactly 0 and contribute nothing"
+     "when": "some follow-up times are zero; verify origin, time precision and event coding. Events at time zero are retained."
     },
     {
      "code": "no_events_in_group",
@@ -775,7 +775,7 @@
     {
      "code": "small_final_risk_set",
      "severity": "notice",
-     "when": "fewer than ten subjects remain at risk at the last event time"
+     "when": "fewer than ten subjects are at risk at the last observed event or censoring time"
     },
     {
      "code": "median_not_reached",
@@ -809,15 +809,15 @@
   },
   "log_rank": {
    "id": "log_rank",
-   "version": "1.0.0",
+   "version": "1.0.1",
    "engine": "analysis_methods",
    "title": "Log-rank test of equal hazards across groups, optionally stratified",
    "estimand": "Whether the groups' hazard functions are equal over follow-up (chi-square on groups - 1 degrees of freedom). It is a test, not an effect size.",
    "assumptions": [
     {
      "id": "noninformative_censoring",
-     "text": "Censoring is unrelated to the prognosis.",
-     "checkedBy": "diagnostic:heavy_censoring"
+     "text": "Censoring must be independent of the event process under the analysis assumptions. Its frequency is descriptive and cannot test this independence.",
+     "checkedBy": "none"
     },
     {
      "id": "proportional_hazards_for_power",
@@ -911,12 +911,12 @@
     {
      "code": "tied_event_times",
      "severity": "notice",
-     "when": "several events share a time; the tie-handling method matters (Efron is used unless Breslow is asked for)"
+     "when": "events sharing a time are grouped in the risk-set expected-count and covariance calculation"
     },
     {
      "code": "zero_follow_up",
      "severity": "notice",
-     "when": "some subjects have a follow-up time of exactly 0 and contribute nothing"
+     "when": "some follow-up times are zero; verify origin, time precision and event coding. Events at time zero are retained."
     }
    ],
    "seeded": false,
@@ -945,7 +945,7 @@
   },
   "cox_regression": {
    "id": "cox_regression",
-   "version": "1.0.0",
+   "version": "1.0.1",
    "engine": "analysis_methods",
    "title": "Cox proportional hazards regression with Efron or Breslow ties, a likelihood-ratio test and a proportional-hazards test",
    "estimand": "The log hazard ratio of the event per unit of each covariate, holding the others fixed, reported as hazard ratios with Wald 95% intervals.",
@@ -957,8 +957,8 @@
     },
     {
      "id": "noninformative_censoring",
-     "text": "Censoring is unrelated to the prognosis.",
-     "checkedBy": "diagnostic:heavy_censoring"
+     "text": "Censoring must be independent of the event process under the analysis assumptions. Its frequency is descriptive and cannot test this independence.",
+     "checkedBy": "none"
     },
     {
      "id": "independent_subjects",
@@ -1088,7 +1088,7 @@
     {
      "code": "zero_follow_up",
      "severity": "notice",
-     "when": "some subjects have a follow-up time of exactly 0 and contribute nothing"
+     "when": "some follow-up times are zero; verify origin, time precision and event coding. Events at time zero are retained."
     },
     {
      "code": "few_events_per_variable",

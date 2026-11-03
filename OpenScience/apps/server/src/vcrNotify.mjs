@@ -30,7 +30,7 @@
  */
 
 import {
-  VCR_NOTIFICATION_KINDS, VCR_NOT_ESTIMABLE_RULE_LABELS_ZH, VCR_TAB_LABELS_ZH, errorCodeMessage,
+  VCR_CONVERSATION_STUDY_NAME, VCR_NOTIFICATION_KINDS, VCR_NOT_ESTIMABLE_RULE_LABELS_ZH, VCR_RESULT_KIND_TABS, VCR_TAB_LABELS_ZH, errorCodeMessage, vcrResultClass,
 } from "@evimed/domain";
 
 /** The seven kinds, by the key each notice is counted under. */
@@ -54,9 +54,10 @@ function clip(value, max) {
   return [...text].length > max ? `${[...text].slice(0, max - 1).join("")}…` : text;
 }
 
-/** What a study is called in a notice. @param {any} study */
+/** What a study is called in a notice: its name (the model's title, what a definition called it, or the kind of work and the day), else its question. @param {any} study */
 export function vcrStudyName(study) {
-  return clip(study?.name || study?.question || "虚拟临床研究", 30);
+  const name = study?.name === VCR_CONVERSATION_STUDY_NAME ? "" : study?.name;
+  return clip(name || study?.question || "虚拟临床研究", 30);
 }
 
 /** The inbox refuses a replay whose content moved; that event was sent. @param {unknown} error */
@@ -83,18 +84,16 @@ const count = (value) => Math.round(value).toLocaleString("en-US");
  * (「B 1:1 固定设计」 reads as 「1:1 固定设计」: the letter is the page's).
  *
  * @param {{ resultKind: string, stage?: string | null, label?: string | null, state: "succeeded" | "failed", result?: Record<string, any> | null,
- *   error?: Record<string, any> | null }} facts
+ *   error?: Record<string, any> | null, method?: string | null }} facts `method`: the engine method of the job, which tells a comparator that is a benchmark
+ *   (a literature curve, an unanchored MAIC, a model's prediction) from one that estimates an effect
  * @returns {{ title: string, body: string, tab: string } | null} null for a computation that has nothing to say (a not-estimable comparator has its own notice)
  */
-export function vcrJobNoticeText({ resultKind, stage = null, label = null, state, result = null, error = null }) {
-  const tab = /** @type {Record<string, string>} */ ({
-    population: "population", patient_set: "patients", comparator: "comparator", trial_scenario: "trial", design_grid: "trial",
-    accrual_forecast: "trial", matching: "matching",
-  })[resultKind] ?? "overview";
+export function vcrJobNoticeText({ resultKind, stage = null, label = null, state, result = null, error = null, method = null }) {
+  const tab = /** @type {Record<string, string>} */ (VCR_RESULT_KIND_TABS)[resultKind] ?? "overview";
   const what = resultKind === "trial_scenario"
     ? (/** @type {Record<string, string>} */ ({ analytic: "方案计算", simulation: "方案模拟", assurance: "成功把握计算" })[String(stage)] ?? "方案模拟")
     : (/** @type {Record<string, string>} */ ({ population: "人群生成", patient_set: "虚拟患者生成", comparator: "对照分析", design_grid: "设计网格",
-      accrual_forecast: "入组预测", matching: "匹配评估" })[resultKind] ?? "计算");
+      accrual_forecast: "入组预测", matching: "匹配评估", match_extract: "病历阅读", population_check: "人群核对" })[resultKind] ?? "计算");
   const name = clip(String(label ?? "").replace(/^[A-Z]\d*\s+/, ""), 24);
   if (state === "failed") {
     const code = typeof error?.code === "string" ? error.code : "";
@@ -125,8 +124,19 @@ export function vcrJobNoticeText({ resultKind, stage = null, label = null, state
     const generated = finiteNumber(result?.counts?.generatedRecords);
     const real = finiteNumber(result?.counts?.realPatients);
     headline = generated !== null && generated > 0 ? `${count(generated)} 条生成记录` : real !== null && real > 0 ? `${count(real)} 人` : null;
+  } else if (resultKind === "match_extract") {
+    // The reading of patient records is the one computation that takes hours: the person is told it is over, and how much of it was read.
+    const read = measure("records_read");
+    const left = finiteNumber(result?.diagnostics?.remaining) ?? 0;
+    headline = read && read.value > 0 ? (left > 0 ? `读了 ${count(read.value)} 份病历，中途停下，还有 ${count(left)} 份没读` : `读完 ${count(read.value)} 份病历`) : null;
+  } else if (resultKind === "population_check") {
+    const compared = measure("variables_compared");
+    const apart = measure("variables_apart");
+    headline = compared ? `比较了 ${count(compared.value)} 个变量${apart && apart.value > 0 ? `，${count(apart.value)} 个有差异` : "，都接近"}` : null;
   } else if (resultKind === "comparator") {
-    headline = /** @type {Record<string, string>} */ ({ estimable: "可以估计", limited: "有限制地估计" })[String(result?.conclusion)] ?? null;
+    // A benchmark says so (A8): the researcher is not told that an effect was estimated when what landed is a reference.
+    const word = vcrResultClass({ conclusion: result?.conclusion, method, diagnostics: result?.diagnostics, measures: result?.measures });
+    headline = /** @type {Record<string, string>} */ ({ estimable: "可以估计", limited: "有限制地估计", benchmark_only: "仅基准" })[String(word)] ?? null;
   }
   return {
     title: `${what}完成${headline ? `：${headline}` : ""}`,
@@ -252,10 +262,10 @@ export function createVcrNotifier({ notifications, store, config = {}, now = () 
      * per job; the programme's own recomputation sends none. The source is the study's tab, which carries both the study and the
      * tab for whoever opens it or toasts it.
      * @param {any} study @param {{ jobId: string, resultKind: string, stage?: string | null, label?: string | null,
-     *   state: "succeeded" | "failed", result?: Record<string, any> | null, error?: Record<string, any> | null }} facts
+     *   state: "succeeded" | "failed", result?: Record<string, any> | null, error?: Record<string, any> | null, method?: string | null }} facts
      */
-    async jobFinished(study, { jobId, resultKind, stage = null, label = null, state, result = null, error = null }) {
-      const text = vcrJobNoticeText({ resultKind, stage, label, state, result, error });
+    async jobFinished(study, { jobId, resultKind, stage = null, label = null, state, result = null, error = null, method = null }) {
+      const text = vcrJobNoticeText({ resultKind, stage, label, state, result, error, method });
       if (!text) return true;
       return send(study, "job_finished", {
         // The title is the finding; which study it is about is the first thing the body says.

@@ -467,8 +467,14 @@ test('an import that left something out says so in the title, the source, the si
     assert(lines.some(line => line.action === 'research_db.import' && line.status === 'failed' && line.error === 'research_db_tls_failed'));
     assert(lines.some(line => line.action === 'research_db.connection.save' && line.target === id));
     assert(!JSON.stringify(lines).match(/hidden-fixture-password|reader|db\.example\.org/i), 'no password, user name or host in an audit line');
+    // No study named: the table goes to the project's knowledge base and no study's material list changes.
+    const held = (await ctx.app.autopilotService.researchState(ctx.user.id, agenda.id)).materials.map(item => item.sourceId);
+    const toBase = await call(`/api/research-databases/${id}/snapshot`, { projectId: ctx.project.id, schema: 'public', table: 'research_db_part_third', requestId: randomUUID() });
+    assert.equal(toBase.status, 201, JSON.stringify(toBase));
+    assert.ok(await ctx.app.sourceService.get(ctx.user.id, toBase.body.data.sourceId));
+    assert.deepEqual((await ctx.app.autopilotService.researchState(ctx.user.id, agenda.id)).materials.map(item => item.sourceId), held);
     const removed = await call(`/api/research-databases/${id}`, { projectId: ctx.project.id }, 'DELETE'); assert.equal(removed.body.data.removed, true);
-    auditLines.expect = lines.length + 1;
+    auditLines.expect = lines.length + 2;
     assert((await auditLines()).some(line => line.action === 'research_db.connection.remove' && line.target === id));
   } finally {
     await ctx.close();

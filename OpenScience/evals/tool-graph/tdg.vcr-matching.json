@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "vcr-matching",
-  "version": "sha256:047bc684f71d8692b4a04c3515feeaa2ca01ca664935c7a5a17cb3b2b0b3dbc7",
+  "version": "sha256:b032eb023567f855311e26410d523c7801c860a66afa38996ff7066f3c972326",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 31,
@@ -1629,7 +1629,8 @@
               "longitudinal",
               "candidate_trials",
               "soa",
-              "regulatory_contacts"
+              "regulatory_contacts",
+              "candidates"
             ]
           },
           "filter": {
@@ -1655,7 +1656,7 @@
     {
       "name": "mcp__evimed__vcr_simulate",
       "source": "mcp",
-      "description": "Run, read or cancel research calculations. action=shape with kind returns exact fields and examples before start; do not guess keys. Long jobs resume here only when they outlive this turn. Failures, cancellations and partials remain explicit. modelId requires modelVersion. Narrow aggregate methods also use research_calculate without a study.",
+      "description": "A human trial's sample size, power or events, comparing designs, a synthetic population from a paper's baseline, an external control: calculate here, not in a script of your own. No study needed; the first start opens a result page with versions and premises. action=shape with kind gives exact fields; do not guess keys. Long jobs resume here if they outlive this turn. modelId requires modelVersion.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1665,7 +1666,8 @@
               "start",
               "status",
               "cancel",
-              "shape"
+              "shape",
+              "validate"
             ],
             "default": "start"
           },
@@ -1706,6 +1708,8 @@
               "tipping_point",
               "prognostic_adjustment_comparator",
               "generate_patients_longitudinal",
+              "population_check",
+              "match_extract",
               "forecast_trajectories",
               "evaluate_forecast",
               "compare_forecasts",
@@ -1768,6 +1772,31 @@
             "minLength": 1,
             "maxLength": 160,
             "pattern": "^[A-Za-z0-9_.:@-]+$"
+          },
+          "sources": {
+            "type": "array",
+            "maxItems": 8,
+            "description": "A number you read in a paper and wrote into the scenario: [{field: its path in the scenario, e.g. truth.controlMedian, publication: PMID or DOI, quote: the sentence that prints it}]. The platform records the paper, and the result page names it.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "field": {
+                  "type": "string"
+                },
+                "publication": {
+                  "type": "string"
+                },
+                "quote": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "field",
+                "publication",
+                "quote"
+              ],
+              "additionalProperties": false
+            }
           }
         },
         "required": [
@@ -1781,7 +1810,9 @@
         "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
         "fields": []
       },
-      "typeTags": [],
+      "typeTags": [
+        "source_id"
+      ],
       "requiredTypeTags": [],
       "outputTypeTags": [],
       "stateEffect": "none"
@@ -1826,7 +1857,8 @@
               "trial_benchmark",
               "candidate_trial",
               "soa",
-              "regulatory_contact"
+              "regulatory_contact",
+              "result_record"
             ]
           },
           "items": {

@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "drug-selection",
-  "version": "sha256:a0f96030d51c9a90410acb5c41c5524afb0563ed50117843c93697af67602c97",
+  "version": "sha256:e13b5b1827624ab73714035e657b01d375fbb6a30e4164e65b172e40ff6d5bbd",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 35,
@@ -540,6 +540,12 @@
             "type": "integer",
             "minimum": 1,
             "maximum": 50
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 499,
+            "description": "Only for `prospero`: registrations to skip. data.outcome says when more matched and what offset reads on; a topic is not open on a partial read."
           }
         },
         "additionalProperties": false,

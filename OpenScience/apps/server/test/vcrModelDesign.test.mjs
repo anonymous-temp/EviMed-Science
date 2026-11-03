@@ -69,3 +69,21 @@ test('model quantiles cross every declared treatment truth and retain each truth
   assert.equal(new Set(grid.stages[0].scenario.truths.map(row=>`${row.hazardRatio}/${row.controlDistribution.scale}`)).size,9);
   assert.deepEqual(grid.stages[0].detail.modelDesign.scenarios.map(row=>row.truthIndex),[0,0,0,1,1,1,2,2,2]);
 });
+
+test('D3: a model comparator that names the outcome its table holds plans a calibrated run on a real cohort, and refuses a generated population for it',()=>{
+  const equation={model:{family:'logistic',intercept:-3,terms:[{column:'age',coefficient:0.02,unit:'years',transform:'identity',center:0,scale:1}]},endpoint:{type:'binary',horizon:12,timeUnit:'months'},sourceCondition:'control'};
+  const model={id:'mdl',userId:'owner',version:'1.0.0',name:'Published risk',endpointType:'binary',applicability:{endpoints:['binary'],requiredFields:['age']},card:{interfaceShape:'baseline_to_outcome',executionSpec:{method:'model.prognostic_apply',scenario:equation}}};
+  const real={id:'popreal',version:2,kind:'real',resultId:'cohortresult',snapshotId:'snapshot1',definition:{rules:[{name:'adult',rule:{op:'compare',column:'age',comparator:'gte',value:18}}]},profile:{rows:[{key:'age',min:18,max:90}]}};
+  const generated={id:'popgen',version:4,kind:'scenario',resultId:'resgen',definition:{population:{variables:[{name:'age',family:'normal',mean:50,sd:5}]}}};
+  const context={study:{id:'std',dataTier:'T2'},definition:{endpointType:'binary'},assumptions:[],models:[model],populations:[real,generated]};
+  const configuration={modelId:model.id,modelVersion:model.version,populationId:real.id,endpoint:{type:'binary'},inputId:'snapshot1:1',inputUnits:{age:'years'}};
+  const comparator=(extra)=>({id:'cmp',version:1,route:'model_comparator',configuration:{...configuration,...extra}});
+  const calibrated=vcrBuildStages({kind:'comparator',row:comparator({calibration:{outcomeColumn:'response'}})},context);
+  assert.equal(calibrated.ok,true,JSON.stringify(calibrated));
+  assert.deepEqual(calibrated.stages[0].scenario.calibration,{outcomeColumn:'response'},'the outcome the table holds rides to the engine');
+  const plain=vcrBuildStages({kind:'comparator',row:comparator({})},context);
+  assert.equal(plain.ok,true);assert.equal(plain.stages[0].scenario.calibration,undefined,'a run that names none is the run it was');
+  // a generated population has no observed outcome to hold the equation against
+  const synthetic=vcrBuildStages({kind:'comparator',row:comparator({populationId:generated.id,inputId:undefined,calibration:{outcomeColumn:'response'}})},context);
+  assert.equal(synthetic.ok,false);assert.equal(synthetic.refused.code,'vcr_model_not_applicable');assert.match(synthetic.refused.message,/合成人群没有观察到的结局/);
+});

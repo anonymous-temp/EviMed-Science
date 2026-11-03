@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "meta-analysis",
-  "note": "Four briefs. The pipeline is deterministic where it matters — the model does the eligibility, extraction and interpretation, and never the arithmetic — so the failures here are not arithmetic failures. They are a pooled estimate produced from a body that should not have been pooled, a release status read as a pass, an evidence gap written up as a null result, and a synthesis that answers a treatment question it was not asked. Each is invisible in the finished manuscript, which is the point. Study identifiers are left to the run to resolve. ma-003 does not assert that this literature's network is disconnected — the published networks for these agents are connected through placebo; the committee's head-to-head-only restriction is what can fragment it, and whether it does is what the run has to establish and report.",
+  "note": "Briefs. The pipeline is deterministic where it matters — the model does the eligibility, extraction and interpretation, and never the arithmetic — so the failures here are not arithmetic failures. They are a pooled estimate produced from a body that should not have been pooled, a release status read as a pass, an evidence gap written up as a null result, and a synthesis that answers a treatment question it was not asked. Each is invisible in the finished manuscript, which is the point. Study identifiers are left to the run to resolve. ma-003 does not assert that this literature's network is disconnected — the published networks for these agents are connected through placebo; the committee's head-to-head-only restriction is what can fragment it, and whether it does is what the run has to establish and report.",
   "briefs": [
     {
       "id": "ma-001-tranexamic-acid-tka",
@@ -25,13 +25,15 @@
         "Say which routes and dose bands were merged into the primary comparison and what was left out, so the pooled estimate has a defined population of comparisons.",
         "Report the pooled estimate, its interval, the heterogeneity statistic and the model exactly as the deterministic engine returned them.",
         "Keep the certainty rating traceable: the starting level, each downgrade, and the step that produced it.",
-        "Report the exact releaseStatus, artifact paths, warnings, blockers and next actions from the terminal job response."
+        "Report the exact releaseStatus, artifact paths, warnings, blockers and next actions from the terminal job response.",
+        "Explain the estimand, sources of heterogeneity and model assumptions; interpret leave-one-out effect estimates and intervals rather than significance alone."
       ],
       "mustNotDo": [
         "Pool the venous thromboembolism outcome across trials that did not define or ascertain it the same way, without saying so.",
         "Restate a number in the navigation report that differs from the generated manuscript or figure.",
         "Describe an abstract or a bibliographic record as full text.",
-        "Recommend a dose, a route or a timing for the medicine anywhere in the deliverable."
+        "Recommend a dose, a route or a timing for the medicine anywhere in the deliverable.",
+        "Treat unequal sample sizes, low I-squared or a changed significance label alone as proof of between-study heterogeneity or instability."
       ],
       "gradedOn": "Whether every numerical claim in meta-analysis-report.md matches the generated artifacts, and whether a reader can tell which comparisons the pooled figure is an average of.",
       "generated": {
@@ -147,6 +149,31 @@
       "generated": {
         "authoredAt": "2026-09-07",
         "authoredAtSource": "first-commit"
+      }
+    },
+    {
+      "id": "ma-005-uncapped-landmark-trials",
+      "title": "HFrEF 随机试验检索：不应擅自设置筛选上限",
+      "why": "A live candidate run invented a maxPapers value of 40, retrieved only the first 200 PubMed records, and screened neither the named DAPA-HF nor EMPEROR-Reduced primary report; it correctly declined to invent a pooled result.",
+      "inputs": {
+        "topic": "成人 HFrEF 中 SGLT2 抑制剂对照安慰剂，心血管死亡或心衰住院复合结局的随机试验；包括 DAPA-HF 和 EMPEROR-Reduced",
+        "analysisType": "pairwise"
+      },
+      "mustDo": [
+        "Omit maxPapers from the managed start request when no screening limit was requested.",
+        "Verify whether each named trial primary report was actually retrieved and screened; subject every candidate to the same eligibility checks.",
+        "Report the actual retrieval and screening limits, exclusions and unassessed records before interpreting results.",
+        "Report any blocked release and missing study evidence accurately; never infer absence of effect from an empty synthesis."
+      ],
+      "mustNotDo": [
+        "Invent an explicit screening limit that the user did not request.",
+        "Treat a named trial as eligible or pooled without source-backed screening and extraction.",
+        "Claim a comprehensive synthesis when the search or screening was truncated."
+      ],
+      "gradedOn": "Whether the actual managed request and source/selection ledger preserve the user scope without an invented budget, and whether any remaining truncation is made visible.",
+      "generated": {
+        "authoredAt": "2026-11-02",
+        "authoredAtSource": "real candidate browser run"
       }
     }
   ]

@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "adr-analysis",
-  "version": "sha256:af750dc97890ea135e7d7a9a87548858cd74022b4bfe909a40a8b559f5d92bd7",
+  "version": "sha256:cb9bdf42c6692989df70a7418ecbe4983c1d4bc31e93fe717771c8a970f41ddd",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 31,
@@ -673,6 +673,12 @@
             "type": "integer",
             "minimum": 1,
             "maximum": 50
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 499,
+            "description": "Only for `prospero`: registrations to skip. data.outcome says when more matched and what offset reads on; a topic is not open on a partial read."
           }
         },
         "additionalProperties": false,

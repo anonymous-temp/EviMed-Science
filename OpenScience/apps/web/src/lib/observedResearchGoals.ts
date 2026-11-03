@@ -1,30 +1,50 @@
 import type { WebAgentRun } from "./apiClient";
 
 /**
- * A long research goal as this project's run ledger shows it: the continuation rounds LoopX ran for it, newest first,
- * and the turn that set it when that turn is still listed. The latest round's state is that round's, not the goal's.
+ * A long research goal as this project's run ledger shows it: the turn that set it and the continuation rounds LoopX ran for it, newest
+ * first. The latest round's state is that round's, not the goal's: nothing here knows whether LoopX has more rounds to run.
  */
-export interface ObservedResearchGoal { key: string; sessionId: string; goalId: string; latest: WebAgentRun; rounds: WebAgentRun[]; anchor: WebAgentRun | null }
+export interface ObservedResearchGoal { key: string; sessionId: string; goalId: string | null; latest: WebAgentRun; rounds: WebAgentRun[]; anchor: WebAgentRun | null }
 const sessionPattern = /^[A-Za-z0-9_-]{1,160}$/;
 const goalPattern = /^[A-Za-z0-9_.:-]{1,256}$/;
 
+const routeOf = (run: WebAgentRun) => (typeof run.effectiveRouteReason === "string" ? run.effectiveRouteReason : "");
+const listable = (run: WebAgentRun) => typeof run.sessionId === "string" && typeof run.id === "string" && sessionPattern.test(run.sessionId) && sessionPattern.test(run.id) && Number.isFinite(Date.parse(run.startedAt));
+
+/** The turn that set a goal: 「发起研究」 records its route, and a goal typed in a conversation starts with the command. */
+function setsGoal(run: WebAgentRun): boolean {
+  if (run.automated === true) return false;
+  const route = routeOf(run);
+  return route === "research-goal" || route.endsWith(":research-goal") || /^\/loopx(\s|$)/i.test(run.question?.trim() ?? "");
+}
+
+/** A goal's address for as long as it lives: by the turn that set it, so a goal keeps its place when its first continuation arrives. */
+export function goalKey(sessionId: string, anchorOrGoal: string): string { return JSON.stringify([sessionId, anchorOrGoal]); }
+
 export function observedResearchGoals(runs: readonly WebAgentRun[]): ObservedResearchGoal[] {
   const groups = new Map<string, ObservedResearchGoal>();
-  for (const run of runs) {
-    const reason = typeof run.effectiveRouteReason === "string" ? run.effectiveRouteReason : "";
-    if (run.automated !== true || !(reason === "loopx-continuation" || reason.endsWith(":loopx-continuation"))) continue;
-    if (!run.goal || typeof run.goal.id !== "string" || typeof run.sessionId !== "string" || typeof run.id !== "string" || !goalPattern.test(run.goal.id) || !sessionPattern.test(run.sessionId) || !sessionPattern.test(run.id)) continue;
-    if (!Number.isFinite(Date.parse(run.startedAt))) continue;
-    const key = JSON.stringify([run.sessionId, run.goal.id]);
+  const add = (key: string, run: WebAgentRun, goalId: string | null) => {
     const old = groups.get(key);
-    const rounds = [...(old?.rounds ?? []), run];
-    const latest = !old || Date.parse(run.startedAt) > Date.parse(old.latest.startedAt) ? run : old.latest;
-    groups.set(key, { key, sessionId: run.sessionId, goalId: run.goal.id, latest, rounds, anchor: null });
+    groups.set(key, { key, sessionId: run.sessionId as string, goalId: goalId ?? old?.goalId ?? null, rounds: [...(old?.rounds ?? []), run], latest: run, anchor: old?.anchor ?? null });
+  };
+  for (const run of runs) {
+    const reason = routeOf(run);
+    if (run.automated !== true || !(reason === "loopx-continuation" || reason.endsWith(":loopx-continuation"))) continue;
+    if (!listable(run) || !run.goal || typeof run.goal.id !== "string" || !goalPattern.test(run.goal.id)) continue;
+    const anchorId = typeof run.goal.runId === "string" && sessionPattern.test(run.goal.runId) ? run.goal.runId : null;
+    add(goalKey(run.sessionId as string, anchorId ?? run.goal.id), run, run.goal.id);
+  }
+  // The turn that set the goal is its first round: the goal is listed, and watched, from its first second.
+  for (const run of runs) {
+    if (!listable(run)) continue;
+    const key = goalKey(run.sessionId as string, run.id);
+    if (setsGoal(run) || groups.has(key)) add(key, run, null);
+    const group = groups.get(key);
+    if (group) group.anchor = run;
   }
   for (const goal of groups.values()) {
     goal.rounds.sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt));
-    const anchorId = goal.rounds.map(round => round.goal?.runId).find((id): id is string => typeof id === "string" && sessionPattern.test(id));
-    goal.anchor = anchorId ? runs.find(run => run.id === anchorId && run.sessionId === goal.sessionId) ?? null : null;
+    goal.latest = goal.rounds[0];
   }
   return [...groups.values()].sort((a, b) => Date.parse(b.latest.startedAt) - Date.parse(a.latest.startedAt));
 }

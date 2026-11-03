@@ -330,6 +330,38 @@ vcr_case("N21b", c("AC-30", "AC-07"), function() {
                         sum(vapply(refused, function(x) identical(x$status, "failed"), logical(1)))))
 })
 
+vcr_case("N21d", c("AC-30", "AC-07"), function() {
+  # A11 (remediation plan): the MAP prior's operating characteristics are in the result, not only in a table file no page reads. Each
+  # row carries its drift, prior, scenario, rejection probability, Monte-Carlo error and the replicates it ran; the rows with no true
+  # effect are the type I error at that drift. The replicates are what the control plane asked for (the borrowing floor, 100,000 under
+  # the null) and not the engine's default of 5,000; a table the engine's own ceiling (VCR_ENGINE_MAX_REPLICATES) holds below the
+  # request (the default of 5,000 here, since the engine refuses a job that asks for more than its ceiling, as it always did) runs at
+  # the ceiling and the result is `limited`, with the request kept beside what ran. The page's numbers are the file's: the two
+  # agree row by row.
+  hist <- list(events = list(140, 180, 90, 220, 110), n = list(1000, 1200, 800, 1500, 900))
+  sc <- list(historical = hist, robustWeight = 0.2, operatingCharacteristics = list(nControl = 100, nTreatment = 100, drifts = list(0, 0.5), effect = 0.8))
+  run <- function(reps) vcr_test_run(vcr_test_job("comparator.map_prior", sc, seed = 21L, replicates = reps, job_id = "job_n21d"), output_dir = dir)
+  dir <- tempfile("n21d"); dir.create(dir)
+  full <- run(20000L)
+  file_rows <- vcr_test_table(full, "operating-characteristics", dir)
+  rows <- full$diagnostics$operatingCharacteristics$rows
+  rows_df <- data.frame(drift = vapply(rows, function(r) as.numeric(r$drift), numeric(1)), prior = vapply(rows, function(r) as.character(r$prior), character(1)),
+                        scenario = vapply(rows, function(r) as.character(r$scenario), character(1)), rejection = vapply(rows, function(r) as.numeric(r$rejection), numeric(1)),
+                        mcse = vapply(rows, function(r) as.numeric(r$mcse), numeric(1)), replicates = vapply(rows, function(r) as.integer(r$replicates), integer(1)))
+  null_rows <- rows_df[rows_df$scenario == "null", ]
+  same <- !is.null(file_rows) && nrow(file_rows) == nrow(rows_df) && isTRUE(all.equal(file_rows$rejection, rows_df$rejection, tolerance = 1e-12))
+  capped <- .e10_with_env(c(VCR_ENGINE_MAX_REPLICATES = "600"), run(NULL))
+  ok <- identical(full$status, "succeeded") && identical(full$conclusion, "estimable") && nrow(rows_df) == 12L && all(rows_df$replicates == 20000L) &&
+    all(rows_df$mcse > 0) && nrow(null_rows) == 6L && same &&
+    identical(full$diagnostics$operatingCharacteristics$replicates, 20000L) && isFALSE(full$diagnostics$operatingCharacteristics$capped) &&
+    identical(capped$status, "succeeded") && identical(capped$conclusion, "limited") && isTRUE(capped$diagnostics$operatingCharacteristics$capped) &&
+    identical(capped$diagnostics$operatingCharacteristics$replicates, 600L) && identical(capped$diagnostics$operatingCharacteristics$asked, 5000L)
+  list(pass = ok,
+       detail = sprintf("%d rows in the result (%d with no effect), each with its error (smallest %.5f) and 20000 replicates, equal to the file's: %s; the type I error at no drift: %s; held to a ceiling of 600: %s, ran %s of %s",
+                        nrow(rows_df), nrow(null_rows), min(rows_df$mcse), same, paste(sprintf("%.4f", null_rows$rejection[null_rows$drift == 0]), collapse = " / "),
+                        capped$conclusion %||% "NULL", capped$diagnostics$operatingCharacteristics$replicates %||% "NULL", capped$diagnostics$operatingCharacteristics$asked %||% "NULL"))
+})
+
 vcr_case("N21c", c("AC-30", "AC-07"), function() {
   # The tau priors are the ones their names say. The grid over tau ran on [0, max(6 s, 4 sd(y))] for every prior, so a UNIFORM prior was
   # flat on that range and `scale` was not its upper bound (scale 0.5 on five studies: a predictive sd of 0.431 where U(0, 0.5) gives

@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "research-topic-selection",
-  "version": "sha256:5d7612991d28b0b4fde57c5de2f7a945e1be446e405eb0c50b1d35e6b9957358",
+  "version": "sha256:3997fd16a94a3a17bdd380677d65b886965efaa699d126e10aff599b45e08d8e",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 32,
@@ -615,6 +615,12 @@
             "type": "integer",
             "minimum": 1,
             "maximum": 50
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 499,
+            "description": "Only for `prospero`: registrations to skip. data.outcome says when more matched and what offset reads on; a topic is not open on a partial read."
           }
         },
         "additionalProperties": false,

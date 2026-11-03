@@ -149,7 +149,9 @@ outcomes, all legitimate, each stated out loud:
 
 - **No direct answer identified in this search** — state the bounded search
   scope, unresolved coverage gaps and closest neighbours. Do not assert that the
-  question is unoccupied across the whole field.
+  question is unoccupied across the whole field. Keep that same bounded wording
+  in the final reply: a missing exact design is not the absence of related local
+  studies. Name the closest work and the specific remaining difference.
 - **Occupied, but not in this population, setting, or era** — name the closest
   work and the exact axis of difference. Most real papers live here.
 - **Answered** — drop it and say so. A direction removed because the field has

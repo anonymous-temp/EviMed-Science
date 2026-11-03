@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { STUDY_NAME_MAX, acceptanceStudyName, validateConfig, boundedBytes, pollReady, redact, runAcceptance, validateTables, reviewAcceptance, safeRead } from '../live-acceptance.mjs';
-import { VCR_EXPORT_KINDS } from '../../../packages/domain/src/vcrVocabulary.mjs';
+import { VCR_RUN_EXPORT_KINDS } from '../../../packages/domain/src/vcrVocabulary.mjs';
 import { VCR_STUDY_NAME_MAX, vcrStudyName } from '../../../apps/server/src/vcrRoutes.mjs';
 import { mkdtemp, writeFile, readFile, rm, stat, symlink, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -220,16 +220,16 @@ test('a VCR export kind that fails is recorded under its own name; the kinds aft
     json(res, { projectId: 'prj_1' });
   }, async c => {
     const result = await runAcceptance({ ...c, command: 'vcr-exports', studyId: 'std_1', allowResearch: 'yes' });
-    assert.equal(exports, VCR_EXPORT_KINDS.length, 'every kind was asked for, the ones after the failure included');
-    assert.deepEqual(Object.keys(result.reviewAcceptance), [...VCR_EXPORT_KINDS]);
-    const failed = VCR_EXPORT_KINDS[1];
+    assert.equal(exports, VCR_RUN_EXPORT_KINDS.length, 'every kind was asked for, the ones after the failure included');
+    assert.deepEqual(Object.keys(result.reviewAcceptance), [...VCR_RUN_EXPORT_KINDS]);
+    const failed = VCR_RUN_EXPORT_KINDS[1];
     assert.deepEqual(result.reviewAcceptance[failed], { verified: false, state: 'export_failed', conversion: 'failed', vcrExportId: 'vex_2', error: 'conversion_failed' });
-    assert.equal(result.outputs.length, 2 * (VCR_EXPORT_KINDS.length - 1), 'Word and PDF of every kind that was delivered');
-    for (const kind of VCR_EXPORT_KINDS.filter(kind => kind !== failed)) {
+    assert.equal(result.outputs.length, 2 * (VCR_RUN_EXPORT_KINDS.length - 1), 'Word and PDF of every kind that was delivered');
+    for (const kind of VCR_RUN_EXPORT_KINDS.filter(kind => kind !== failed)) {
       assert.equal(result.reviewAcceptance[kind].verified, true, `${kind} was inspected after the failure`);
       assert.equal(result.reviewAcceptance[kind].exportState, 'ready');
     }
-    assert.deepEqual([...new Set(inspected)].sort(), VCR_EXPORT_KINDS.map((_, index) => `vex_${index + 1}`).filter(id => id !== 'vex_2'));
+    assert.deepEqual([...new Set(inspected)].sort(), VCR_RUN_EXPORT_KINDS.map((_, index) => `vex_${index + 1}`).filter(id => id !== 'vex_2'));
     assert.equal(result.status, 'incomplete', 'one failed kind keeps the receipt incomplete');
     assert.equal(result.error, undefined, 'and the failure is that kind\'s, not the whole run\'s');
   });
@@ -247,7 +247,7 @@ test('every VCR Word/PDF conversion survives unavailable or stale AI review with
     json(res, { projectId: 'prj_1' });
   }, async c => {
     const result = await runAcceptance({ ...c, command: 'vcr-exports', studyId: 'std_1', allowResearch: 'yes' });
-    assert.equal(result.outputs.length, 2 * VCR_EXPORT_KINDS.length); assert.equal(exports, VCR_EXPORT_KINDS.length);
+    assert.equal(result.outputs.length, 2 * VCR_RUN_EXPORT_KINDS.length); assert.equal(exports, VCR_RUN_EXPORT_KINDS.length);
     assert.equal(result.status, 'incomplete');
     assert.equal(Object.values(result.reviewAcceptance).every(row => row.conversion === 'completed' && !row.verified), true);
   });

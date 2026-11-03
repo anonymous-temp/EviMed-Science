@@ -2236,8 +2236,14 @@ test("a capability's two skill copies never drift apart by more than their known
   // can block a package (three, plus no manuscript at all), that everything
   // else is advice delivered with the package, and that a blocked job is never
   // restarted more than once (+15).
+  // Raised on 2026-11-02, same direction (the int/1102 integration: the pharmacy, meta-analysis, MR, peer-review and topic skills' own revisions
+  // of that week, merged with the VCR and data-analysis rounds): each went into the two trees a run reads (`capabilities/`, `capability-skills/`,
+  // held equal by their own test) and not into `runtime/skills/evimed/`, the retired kernel's copy that is not edited by plan. Measured against
+  // the integration base, where every entry below still held: adr-analysis 63→64, clinical-evidence-synthesis 50→53, comprehensive-drug-evaluation
+  // 45→46, drug-selection 44→47, mendelian-randomization 81→87, meta-analysis 95→110, off-label-analysis 44→46, peer-review 40→51,
+  // research-topic-selection 109→112. The statistical-analysis and VCR skills have no copy in the retired tree and are not compared.
   const knownDivergence = {
-    "adr-analysis": 63,
+    "adr-analysis": 64,
     "bibliometric-analysis": 58,
     // Raised on 2026-10-05 (evidence-flywheel F04): one sentence saying to look in the frontier feed first for what is new (+1).
     // Raised on 2026-10-10 (review G-D3): the brief's session-scoped path, the same words in both copies, wrapped to
@@ -2245,23 +2251,23 @@ test("a capability's two skill copies never drift apart by more than their known
     // Lowered to 50 on 2026-10-28 (3.0.0): the DSH body was rewritten from ~150,000 to ~13,500 characters so the whole
     // stack is injected inline — the request decides the form and the language, no mandated Chinese headings — and
     // the retired kernel's copy is not edited, so what is left are the new body's own lines.
-    "clinical-evidence-synthesis": 50,
-    "comprehensive-drug-evaluation": 45,
+    "clinical-evidence-synthesis": 53,
+    "comprehensive-drug-evaluation": 46,
     // The optional-output scoping revision synchronized the retained body too.
     "dataset-research-scoping": 0,
-    "drug-selection": 44,
+    "drug-selection": 47,
     // The hosted-input/replay changes propagated all 18 pre-delivery and
     // revision-notes lines into the retained copy; none was removed, and the
     // MR bodies agreed after the DSH-only kernel flip — until the method
     // priors of 2026-09-23, its first DSH-only lines.
-    "mendelian-randomization": 81,
-    "meta-analysis": 95,
-    "off-label-analysis": 44,
-    "peer-review": 40,
+    "mendelian-randomization": 87,
+    "meta-analysis": 110,
+    "off-label-analysis": 46,
+    "peer-review": 51,
     // 2026-09-27: the fallback files' field-for-field shapes (six lines) are
     // DSH-only; the retained kernel copy is not edited.
     // Raised on 2026-11-02 (Meta topics and the duplicate check, the reader line, evidence sources by name): the same words in both copies (+24).
-    "research-topic-selection": 109,
+    "research-topic-selection": 112,
   };
 
   const dshRoot = path.join(repoRoot, "capability-skills");

@@ -56,6 +56,18 @@ import { ClusterMatrixCard, EngineHeatCard, EngineMetricCard, isEngineBarMetric,
  * The choices are the band's toolbar: the metric, and the engine, the question pool and the question group the page is narrowed
  * to (`?engine=` `?pool=` `?cluster=`, so a link means what it says). Nothing on the page filters from below.
  */
+/**
+ * Component: VisibilityTab; owner: GEO; rules: DS23.
+ * Anatomy: Metric trend, engine and group readings, pools, rivals and monitoring.
+ * Variants: Metric navigation with folded engine, pool and group filters; active tokens and clear.
+ * States: Independent diagnosis/monitoring loading, partial failure/retry and unmeasured baselines.
+ * Hit area: Shared controls retain their standard targets.
+ * Keyboard: Native controls preserve Tab and activation behavior.
+ * Long content: Text wraps within the available reading width.
+ * Theme: Shared surface, border and ink tokens.
+ * Responsive: Content follows the parent workspace width.
+ * Verification: Focused component behavior tests and fixture walkthrough.
+ */
 export function VisibilityTab({ geoId, project }: { geoId: string; project: GeoProject }) {
   const monitoring = useGeoMonitoring(geoId);
   const diagnosis = useGeoDiagnosis(geoId);
@@ -93,10 +105,10 @@ export function VisibilityTab({ geoId, project }: { geoId: string; project: GeoP
   const metric = line ? line.key : null;
 
   useGeoToolbar(options.length > 1 || engines.length > 1 || pools.length > 1 || groupOptions.length > 1 ? {
+    navigation: options.length > 1 ? [{ kind: "select" as const, label: "指标", options, value: metric ?? options[0].value, onChange: (value: string | null) => { if (value) setKey(value); } }] : [],
     filters: [
-      ...(options.length > 1 ? [{ kind: "chips" as const, label: "指标", options, value: metric ?? options[0].value, onChange: setKey }] : []),
       ...(engines.length > 1 ? [{
-        kind: "select" as const,
+        kind: "select" as const, folded: true,
         label: "引擎",
         allLabel: "全部引擎",
         options: engines.map((name) => ({ value: name, label: engineName(name) })),
@@ -104,7 +116,7 @@ export function VisibilityTab({ geoId, project }: { geoId: string; project: GeoP
         onChange: setEngineParam,
       }] : []),
       ...(pools.length > 1 || pool ? [{
-        kind: "select" as const,
+        kind: "select" as const, folded: true,
         label: "问句池",
         allLabel: "全部问句池",
         options: pools,
@@ -113,7 +125,7 @@ export function VisibilityTab({ geoId, project }: { geoId: string; project: GeoP
         onChange: (value: string | null) => change({ [GEO_POOL_PARAM]: value, [GEO_CLUSTER_FILTER_PARAM]: null }),
       }] : []),
       ...(groupOptions.length > 1 || cluster ? [{
-        kind: "select" as const,
+        kind: "select" as const, folded: true,
         label: "问题群",
         allLabel: "全部问题群",
         options: groupOptions.map((row) => ({ value: row.id, label: clusterName(row) })),

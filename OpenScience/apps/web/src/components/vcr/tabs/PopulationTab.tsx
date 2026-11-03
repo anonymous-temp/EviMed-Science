@@ -4,7 +4,7 @@ import { useState } from "react";
 import { CircleCheck, Download, TriangleAlert } from "lucide-react";
 import {
   downloadVcrRecords, getVcrPopulation,
-  type VcrGeneratedRow, type VcrPopulationTab as PopulationData, type VcrProfileRow, type VcrQualityReport, type VcrStudy,
+  type VcrGeneratedRow, type VcrPopulationTab as PopulationData, type VcrPremise, type VcrProfileRow, type VcrQualityReport, type VcrStudy,
 } from "@/lib/vcrClient";
 import { webErrorMessage } from "@/lib/apiClient";
 import { toast } from "@/lib/toast";
@@ -20,10 +20,12 @@ import { VcrAttritionChart, VcrFunnelBar, VcrSmdDot } from "../VcrDiagrams";
 import { VcrMiniHistogram } from "../VcrMiniHistogram";
 import { SourceTag } from "../VcrMarks";
 import { VcrNumber } from "../VcrNumber";
+import { VcrPremises, premiseDraft } from "../VcrPremises";
 import { PartialResultNote, Stale, VcrStepFailed, VcrStepPending, VcrTabSkeleton } from "../VcrStates";
 import { VcrDefinitionsSection } from "../VcrKnowledge";
 import { VcrToolbarActions, type VcrToolbarAction } from "../VcrToolbarActions";
 import { DistributionGrid } from "../patients/DistributionGrid";
+import { PopulationCheckCard } from "../patients/PopulationCheckCard";
 import { boundsText, limitState } from "../patients/distribution";
 import { PatientTable } from "../patients/PatientTable";
 import { variableLabels } from "../patients/patientFilters";
@@ -96,7 +98,7 @@ function PopulationView({ studyId, study, data, reload, onStudyChanged }: {
   const progress = study.overview.researchProgress;
   const currentProgress = progress && (data.selection ? progress.populationId === data.selection.objectId && progress.populationVersion === data.selection.version : progress.populationId === null) ? progress : null;
   const nothing = !data.version && data.criteria.length === 0 && data.attrition.length === 0 && data.profile.length === 0
-    && data.generated.length === 0 && !data.outcome && !data.quality && !data.records;
+    && data.generated.length === 0 && !data.outcome && !data.quality && !data.check && !data.records;
   // A generated population is read as a table of its variables; a real cohort as the rules that selected it and what each did to the count.
   const generated = isGenerated(data);
   const mayWrite = study.abilities.includes("write");
@@ -109,6 +111,7 @@ function PopulationView({ studyId, study, data, reload, onStudyChanged }: {
       .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "记录暂时无法下载，请稍后重试。" })))
       .finally(() => setBusy(null));
   };
+  const changePremise = (premise: VcrPremise) => ask(premiseDraft(premise).replace(/：$/, ""));
   const ask = (request: string) => frame?.openChat(`${request}。请读取“${data.version ?? "当前人群"}”，保留原结果并说明变化。`, data.selection ? { kind: "population", studyId, ...data.selection } : { kind: "step", studyId, objectId: "population" });
 
   // --- the band's one row -----------------------------------------------------------------------------------------------
@@ -116,7 +119,7 @@ function PopulationView({ studyId, study, data, reload, onStudyChanged }: {
   if (frame) actions.push({ key: "sources", label: INTAKE_LABEL, quiet: true, onSelect: () => frame.openPanel("intake") });
   if (!nothing) {
     if (generated) {
-      if (data.download) actions.push({ key: "download", label: "下载记录", icon: Download, loading: busy === "download", onSelect: download });
+      if (data.download) actions.push({ key: "download", label: "下载 CSV", icon: Download, loading: busy === "download", onSelect: download });
       if (mayWrite) {
         actions.push({ key: "settings", label: `${DRAFT_PREFIX}调整设定`, kind: "draft", quiet: true, onSelect: () => ask("调整人群设定") });
         actions.push({ key: "regenerate", label: `${DRAFT_PREFIX}生成新版本`, kind: "draft", onSelect: () => ask("按当前证据生成一个可比较的新队列版本") });
@@ -147,12 +150,14 @@ function PopulationView({ studyId, study, data, reload, onStudyChanged }: {
       <Stale note={data.stale}>
         <div className="flex flex-col gap-6">
           {generated
-            ? <GeneratedBody studyId={studyId} data={data} />
+            ? <GeneratedBody studyId={studyId} data={data} onChangePremise={mayWrite && frame ? changePremise : null} />
             : <CohortBody data={data} />}
 
           {data.quality && (data.quality.groups.length > 0 || data.quality.trainingRecords != null || data.quality.copies != null) && (
             <QualityCard quality={data.quality} />
           )}
+
+          {data.check && <PopulationCheckCard check={data.check} />}
         </div>
       </Stale>
       {templates}
@@ -169,7 +174,7 @@ const scrollTo = (id: string) => () => scrollBlockToTop(document.getElementById(
  * The generated population: the sentence that says what it is and whether any record broke a limit, the variables (set → came out →
  * shape → limit), the same shapes against what was declared, and the first rows.
  */
-function GeneratedBody({ studyId, data }: { studyId: string; data: PopulationData }) {
+function GeneratedBody({ studyId, data, onChangePremise }: { studyId: string; data: PopulationData; onChangePremise: ((premise: VcrPremise) => void) | null }) {
   const records = data.records?.rows ?? data.counts?.generatedRecords ?? data.download?.rows ?? null;
   const rows = data.generated;
   const broken = rows.filter((row) => limitState(row)?.ok === false).length;
@@ -193,6 +198,9 @@ function GeneratedBody({ studyId, data }: { studyId: string; data: PopulationDat
   return (
     <>
       {parts.length > 0 && <Headline parts={parts as Parameters<typeof Headline>[0]["parts"]} />}
+
+      {/* What the generated records stand on: how the variables relate, how far this is the source trial's, how far its parameters moved. */}
+      <VcrPremises premises={data.premises} onChange={onChangePremise} />
 
       {rows.length > 0 && (
         <div id="vcr-population-variables" tabIndex={-1} className="outline-none">

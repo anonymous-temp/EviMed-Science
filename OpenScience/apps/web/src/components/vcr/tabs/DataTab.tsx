@@ -2,7 +2,7 @@ import { VcrFollowupHistory } from "../VcrFollowupHistory";
 import { VcrReferenceWorkspace } from "../VcrReferenceSearch";
 import { VcrRegistryCoverage } from "../VcrRegistryCoverage";
 import { useRef, useState } from "react";
-import { useSearchParams } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import { ExternalLink } from "lucide-react";
 import {
   getVcrData,
@@ -41,6 +41,7 @@ import { useVcrToolbar } from "../studyFrameContext";
 import { useVcrLoad, VcrTabError } from "../vcrTabKit";
 import { intervalText, reviewKindLabel, valueText } from "../vcrText";
 import { vcrTabPath } from "../vcrTabs";
+import { VCR_LIBRARIES, vcrLibraryPath } from "../vcrLibraries";
 import { scrollBlockToTop } from "../vcrScroll";
 
 type Filter = "all" | "key";
@@ -146,6 +147,7 @@ function DataView({ studyId, study, data, reload, onStudyChanged }: {
         <VcrReferenceWorkspace studyId={studyId} onApplied={() => { reload(); onStudyChanged?.(); }} />
         <VcrRegistryCoverage sources={data.registryCoverage} />
         {defined || study.question?.trim() ? <VcrStepPending studyId={studyId} study={study} step="evidence" blocked={data.evidenceNote} /> : <VcrNoDefinition study={study} />}
+        <LibraryLinks />
       </div>
     );
   }
@@ -242,7 +244,22 @@ function DataView({ studyId, study, data, reload, onStudyChanged }: {
       )}
 
       {data.precedentCandidates && data.precedentCandidates.length > 0 && <PrecedentCandidates rows={data.precedentCandidates} />}
+      <LibraryLinks />
     </div>
+  );
+}
+
+/**
+ * The whole libraries behind a study's 依据: every reference trial, population definition and model with its parameters the account has
+ * saved, not only the ones this study uses. They were views of the module's home beside the studies; they are context, and this is where
+ * a study goes to them (their addresses are unchanged, so a saved link still opens).
+ */
+function LibraryLinks() {
+  return (
+    <nav aria-label="资料库" data-vcr-libraries="" className="flex flex-wrap items-center gap-x-4 gap-y-1 text-ui text-text-2">
+      <span>资料库</span>
+      {VCR_LIBRARIES.map((library) => <Link key={library.tab} to={vcrLibraryPath(library.tab)} className="rounded text-link hover:underline">{library.label}</Link>)}
+    </nav>
   );
 }
 

@@ -1,0 +1,44 @@
+{
+  "case": "factorial-tooth",
+  "turns": [
+    {
+      "index": 0,
+      "required": [
+        "n",
+        "interactionF",
+        "interactionP"
+      ],
+      "bindings": {
+        "n": {
+          "path": [
+            "result",
+            "structuredResults",
+            "analyses",
+            0,
+            "n"
+          ]
+        },
+        "interactionF": {
+          "path": [
+            "result",
+            "structuredResults",
+            "analyses",
+            0,
+            "estimate"
+          ],
+          "absoluteTolerance": 5e-07
+        },
+        "interactionP": {
+          "path": [
+            "result",
+            "structuredResults",
+            "analyses",
+            0,
+            "pValue"
+          ],
+          "absoluteTolerance": 5e-07
+        }
+      }
+    }
+  ]
+}

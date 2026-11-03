@@ -9,10 +9,12 @@ import {
   VCR_ENGINE_METHOD_IDS,
   VCR_JOB_KINDS,
   VCR_JOB_METHODS,
+  VCR_MINIMAL_TEMPLATES,
   VCR_RUN_SCENARIO_FIELDS,
   VCR_SCENARIO_EXAMPLES,
   VCR_SCENARIO_SCHEMAS,
   validateScenario,
+  vcrRowRole,
   vcrScenarioChildKeys,
   vcrScenarioHelp,
   vcrScenarioParentOf,
@@ -267,7 +269,7 @@ test("the keys read inside a node answer a refusal, and a gate that does not hol
 });
 
 test("the kinds the platform builds name the keys a run states, and the gateway's refusal uses the same list", () => {
-  assert.deepEqual(Object.keys(VCR_RUN_SCENARIO_FIELDS).sort(), ["match_criteria", "pool_evidence"]);
+  assert.deepEqual(Object.keys(VCR_RUN_SCENARIO_FIELDS).sort(), ["match_criteria", "match_extract", "pool_evidence"]);
   for (const [kind, fields] of Object.entries(VCR_RUN_SCENARIO_FIELDS)) {
     assert.deepEqual(help.kinds[kind].platformBuilt, [...fields], kind);
   }
@@ -275,4 +277,78 @@ test("the kinds the platform builds name the keys a run states, and the gateway'
   const read = new Set(vcrScenarioRows("accrual.poisson_gamma").rows.map((row) => row.path));
   for (const field of ["target", "sites[].enrolled", "sites[].exposureTime"]) assert.ok(read.has(field), field);
   assert.equal(help.kinds.accrual_forecast.platformBuilt, undefined, "accrual uses supplied design assumptions, never an operational ledger");
+});
+
+// --- what a key asks of a person, and the minimal scenario of each common path (C2, C4) -----------------------------------------
+
+test("every key says whether it is a fact of the research or something the model settles, from the schema's structure alone (C2)", () => {
+  let facts = 0;
+  let settled = 0;
+  for (const [method, entry] of Object.entries(help.methods)) {
+    const { rules } = vcrScenarioRows(method);
+    for (const row of /** @type {any} */ (entry).rows) {
+      assert.equal(row.fieldRole ?? null, vcrRowRole(row, { rules }), `${method} ${row.path}`);
+      if (row.type === "object") { assert.equal(row.fieldRole, undefined, `${method} ${row.path}: an object has no role of its own`); continue; }
+      assert.ok(["research_fact", "defaultable"].includes(row.fieldRole), `${method} ${row.path}`);
+      if (row.fieldRole === "research_fact") {
+        facts += 1;
+        // The definition, stated again as the test's oracle: required in some case, no default, and not a closed vocabulary.
+        assert.ok(row.required === true || row.requiredWhen?.length > 0 || rules.some((rule) => (rule.keys ?? []).includes(row.path) || (rule.needs ?? []).includes(row.path)), `${method} ${row.path} is not needed`);
+        assert.equal(row.default, undefined, `${method} ${row.path} has a default`);
+        assert.ok(!(row.type === "string" && (row.values || row.valuesBy)), `${method} ${row.path} is a choice`);
+      } else settled += 1;
+    }
+  }
+  assert.ok(facts > 100 && settled > 100, `the walk found both kinds (${facts} / ${settled})`);
+  const rows = new Map(help.methods["design.simulate"].rows.map((/** @type {any} */ row) => [row.path, row]));
+  // The hazard ratio of a survival design is the research's; alpha, the dropout and the analysis are the platform's to default; the endpoint is a choice.
+  assert.equal(rows.get("truth.hazardRatio").fieldRole, "research_fact");
+  assert.equal(rows.get("truth.controlMedian").fieldRole, "research_fact");
+  assert.equal(rows.get("design.nTreat").fieldRole, "research_fact");
+  for (const path of ["analysis.alpha", "analysis.sided", "accrual.dropoutAnnual", "accrual.kind", "analysis.method", "endpoint.type", "performance", "seed"]) {
+    if (rows.has(path)) assert.equal(rows.get(path).fieldRole, "defaultable", path);
+  }
+  // exactly one of treatmentRate / riskDifference / oddsRatio must be given: each is a fact, though each alone is optional
+  for (const path of ["truth.treatmentRate", "truth.riskDifference", "truth.oddsRatio"]) assert.equal(rows.get(path).fieldRole, "research_fact", path);
+});
+
+/** The leaf paths of a template, a list index read as the list's item. @param {any} node @param {string} path @returns {string[]} */
+function leaves(node, path = "") {
+  if (Array.isArray(node)) return node.some((item) => item && typeof item === "object" && !Array.isArray(item)) ? node.flatMap((item) => leaves(item, `${path}[]`)) : [path];
+  if (node && typeof node === "object") return Object.entries(node).flatMap(([key, value]) => leaves(value, path ? `${path}.${key}` : key));
+  return [path];
+}
+
+test("each common path has one minimal template: a scenario the validator accepts that states nothing the platform defaults (C4)", () => {
+  assert.deepEqual(Object.keys(VCR_MINIMAL_TEMPLATES).sort(), ["comparator.entropy_balance", "design.analytic", "design.simulate", "population.literature"]);
+  assert.deepEqual(VCR_MINIMAL_TEMPLATES["design.analytic"].map((template) => template.name), ["two_arm_time_to_event", "two_arm_binary", "two_arm_continuous"]);
+  assert.deepEqual(VCR_MINIMAL_TEMPLATES["design.simulate"].map((template) => template.name), ["two_arm_time_to_event", "two_arm_binary", "two_arm_continuous"]);
+  for (const [method, templates] of Object.entries(VCR_MINIMAL_TEMPLATES)) {
+    const rows = new Map(vcrScenarioRows(method).rows.map((row) => [row.path, row]));
+    for (const template of templates) {
+      assert.deepEqual(validateScenario(method, template.scenario), [], `${method} ${template.name} is refused by the validator`);
+      for (const path of leaves(template.scenario)) {
+        const row = rows.get(path);
+        assert.ok(row, `${method} ${template.name}: ${path} is not a key the method reads`);
+        assert.equal(row.default, undefined, `${method} ${template.name}: ${path} has a default the platform would fill`);
+      }
+    }
+  }
+  // The help the runtime renders carries them, and a method with none says nothing.
+  assert.equal(help.methods["design.simulate"].templates.length, 3);
+  assert.equal(help.methods["comparator.rmst"].templates, undefined);
+});
+
+test("what a template leaves to the platform is listed with the values the schema states for it (C4)", async () => {
+  const { vcrAppliedDefaults } = await import("@evimed/domain");
+  for (const method of ["design.simulate", "design.analytic"]) {
+    const rows = new Map(vcrScenarioRows(method).rows.map((row) => [row.path, row]));
+    for (const template of VCR_MINIMAL_TEMPLATES[method]) {
+      const applied = vcrAppliedDefaults(method, template.scenario);
+      for (const entry of applied) assert.equal(entry.value, rows.get(entry.path)?.default ?? entry.value, `${method} ${template.name}: ${entry.path}`);
+      const paths = applied.map((entry) => entry.path);
+      assert.ok(paths.includes("analysis.alpha"), `${method} ${template.name} lists the alpha it takes`);
+      if (template.scenario.endpoint.type === "time_to_event") assert.ok(paths.includes("accrual.dropoutAnnual"), `${method} ${template.name} lists the dropout it takes`);
+    }
+  }
 });

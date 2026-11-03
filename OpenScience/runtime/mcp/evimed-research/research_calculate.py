@@ -97,7 +97,7 @@ METHOD_INPUTS.update({
         "input": {"scenario": {"design": {"kind": "two_arm_fixed", "nTreat": 100, "nControl?": 100},
             "endpoint": {"type": "binary"}, "truth": {"controlRate": 0.3, "treatmentRate": 0.5},
             "analysis?": {"method?": "logistic"}}, "seed?": 1, "replicates?": 1000},
-        "note": "aggregate assumptions only; Monte Carlo power, bias and duration have simulation uncertainty; seed and 1-100000 requested replicates are optional; method precision floors may raise the planned count, which is recorded separately",
+        "note": "Monte Carlo power, bias and duration have simulation uncertainty; seed and 1-100000 requested replicates are optional; method precision floors may raise the planned count",
     },
     "design.assurance": {
         "input": {"scenario": {"design": {"allocation?": 0.5, "events": 300}, "endpoint": {"type": "time_to_event"},
@@ -171,7 +171,7 @@ def _method_text(method):
 
 def tool_definitions():
     return [{"name": "research_calculate", "description": (
-        "Compute frozen aggregate JSON with an admitted deterministic engine. inputPath is a JSON file in its method's "
+        "One calculation on frozen aggregate JSON; designing a trial, comparing designs or simulating one goes to vcr_simulate. inputPath is a JSON file in its method's "
         "shape, written here with ? after an optional key and | between a key's alternatives; a missing key, or one the "
         "engine does not read, fails the calculation. "
         + ". ".join(_method_text(method) for method in METHODS)

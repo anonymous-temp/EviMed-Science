@@ -367,6 +367,12 @@ vcr_replicate_floor <- function(is_null, target_mcse = NULL, p = NULL, alpha = 0
   tiny <- function(x) abs(x) < 1e-12
   if (type == "continuous") return(.vcrp_num(truth[["effect"]]) && tiny(truth[["effect"]]))
   if (type == "time_to_event") {
+    # a hazard ratio that changes over time is null only when every ratio is 1
+    nph <- truth[["treatmentHazardRatios"]]
+    if (.vcrp_named(nph)) {
+      r <- unlist(nph[["ratios"]])
+      return(is.numeric(r) && length(r) > 0L && all(is.finite(r)) && all(r > 0) && all(tiny(log(r))))
+    }
     hr <- truth[["hazardRatio"]]
     return(.vcrp_num(hr) && hr > 0 && tiny(log(hr)))
   }
@@ -750,7 +756,11 @@ vcr_pattern_match <- function(pattern, x) {
     cell[["designs"]] <- NULL
     cell[["truths"]] <- NULL
     cell[["design"]] <- .vcrp_merge(scenario[["design"]], designs[[d]])
-    cell[["truth"]] <- .vcrp_merge(scenario[["truth"]], truths[[t]])
+    # a truth that states its own hazard law replaces the base's, in either form: both would be two laws for one arm
+    base_truth <- scenario[["truth"]]
+    if (!is.null(truths[[t]][["treatmentHazardRatios"]])) base_truth[["hazardRatio"]] <- NULL
+    if (!is.null(truths[[t]][["hazardRatio"]])) base_truth[["treatmentHazardRatios"]] <- NULL
+    cell[["truth"]] <- .vcrp_merge(base_truth, truths[[t]])
     inner <- .vcrp_walk_ctx(cell, ctx$input_ids)
     .vcrp_check_object(cell_schema, cell, "", inner)
     .vcrp_check_design_semantics(cell,"",inner)
@@ -766,6 +776,20 @@ vcr_pattern_match <- function(pattern, x) {
   invisible(NULL)
 }
 
+# A hazard ratio that changes over time and the MaxCombo analysis are simulated, never sized by a formula; mirrors
+# checkNoNonProportionalHazards in the domain (the analytic design and the assurance refuse them by name).
+.vcrp_check_no_nph <- function(sc,path,ctx) {
+  tr<-.vcrp_get(sc,"truth");an<-.vcrp_get(sc,"analysis")
+  where<-c(if(.vcrp_named(tr) && "treatmentHazardRatios" %in% names(tr))"truth.treatmentHazardRatios",
+           if(.vcrp_named(an) && identical(an[["method"]],"maxcombo"))"analysis.method")
+  if(!length(where))return(invisible(NULL))
+  drop<-vapply(ctx$issues,function(i)identical(i$code,"scenario_field_unknown") && i$field %in% vapply(where,function(w).vcrp_at(path,w),character(1)),logical(1))
+  ctx$issues<-ctx$issues[!drop]
+  for(w in where)ctx$raise("scenario_value_invalid",.vcrp_at(path,w),
+    "A hazard ratio that changes over time and the MaxCombo analysis are simulated, not sized by a formula: ask for design_simulation (design.simulate) with this truth and analysis.")
+  invisible(NULL)
+}
+
 # Coupled fields of single-arm rules; mirrors checkDesignSemantics in the domain.
 .vcrp_check_design_semantics <- function(sc,path,ctx) {
   d<-.vcrp_get(sc,"design");an<-.vcrp_get(sc,"analysis");tr<-.vcrp_get(sc,"truth")
@@ -775,9 +799,10 @@ vcr_pattern_match <- function(pattern, x) {
   if(!.vcrp_chr(kind))kind<-""
   bad<-function(field,detail)ctx$raise("scenario_value_invalid",.vcrp_at(path,field),detail)
   if (!(kind %in% c("single_arm","single_arm_external","simon_two_stage"))) {
-    methods<-list(continuous=c("ttest","ancova"),binary=c("risk_difference","logistic"),time_to_event=c("logrank","rmst"))
+    methods<-list(continuous=c("ttest","ancova"),binary=c("risk_difference","logistic"),time_to_event=c("logrank","rmst","maxcombo"))
     allowed<-if(.vcrp_chr(endpoint))methods[[endpoint]] else character(0)
     if (!is.null(method) && !(method %in% allowed)) bad("analysis.method","The analysis must match the endpoint.")
+    if (identical(method,"maxcombo") && identical(kind,"group_sequential")) bad("analysis.method","MaxCombo is a fixed-design analysis: a group-sequential design looks with the log-rank statistic.")
     return(invisible(NULL))
   }
   # the analyses a single-arm design runs, by endpoint (VCR_SINGLE_ARM_ANALYSIS_METHODS in the domain)
@@ -842,6 +867,7 @@ vcr_validate_scenario <- function(method, scenario, input_ids = NULL, path = "sc
   }
   .vcrp_check_object(schema, scenario, path, ctx)
   if (method %in% c("design.simulate","design.grid","design.analytic")) .vcrp_check_design_semantics(scenario,path,ctx)
+  if (method %in% c("design.analytic","design.assurance")) .vcrp_check_no_nph(scenario,path,ctx)
   if (identical(method, "comparator.maic")) .vcrp_check_maic_semantics(scenario, path, ctx)
   if (identical(method, "accrual.poisson_gamma")) .vcrp_check_accrual_semantics(scenario, path, ctx)
   if (!is.null(schema$gridCells)) .vcrp_check_grid(schema, scenario, ctx)
@@ -1025,8 +1051,29 @@ vcr_validate_job <- function(job) {
   issues
 }
 
+#' Whether a job runs a method release at least `from`. What a release added runs only for the jobs labelled with it or a later one: a job
+#' labelled with an older compatible version returns what that version returned (replay), whatever the engine can do now. A job with no
+#' label (a handler called directly) is the current release's.
+vcr_job_at_least <- function(job, from) {
+  mv <- job[["methodVersion"]]
+  if (is.null(mv) || !is.character(mv) || length(mv) != 1L || !nzchar(mv)) return(TRUE)
+  utils::compareVersion(mv, from) >= 0L
+}
+
+# Does a simulation scenario ask for what design.simulate and design.grid 1.3.0 added? Mirrors usesNonProportionalHazards in the domain.
+.vcrp_uses_nph <- function(sc) {
+  truths <- c(list(.vcrp_get(sc,"truth")), if(is.list(.vcrp_get(sc,"truths"))) unname(.vcrp_get(sc,"truths")) else list())
+  any(vapply(truths,function(t).vcrp_named(t) && "treatmentHazardRatios" %in% names(t),logical(1))) || identical(.vcrp_get(.vcrp_get(sc,"analysis"),"method"),"maxcombo")
+}
+
 .vcrp_legacy_design_version <- function(job,spec) {
-  if (job$methodVersion %in% unlist(spec$compatibleVersions)) return(!startsWith(job[["method"]], "patients.") || (is.null(job$scenario$pairing) && is.null(job$scenario$cohortRules)))
+  if (job$methodVersion %in% unlist(spec$compatibleVersions)) {
+    # a design is never labelled with a version that did not have it: 1.3.0 added the hazard ratio that changes over time and MaxCombo
+    if (job[["method"]] %in% c("design.simulate","design.grid") && .vcrp_uses_nph(job$scenario)) return(FALSE)
+    # and model.prognostic_apply 1.1.0 added the local calibration against the outcome the table holds
+    if (identical(job[["method"]],"model.prognostic_apply") && !is.null(.vcrp_get(job$scenario,"calibration"))) return(FALSE)
+    return(!startsWith(job[["method"]], "patients.") || (is.null(job$scenario$pairing) && is.null(job$scenario$cohortRules)))
+  }
   sc<-.vcrp_get(job,"scenario");base<-.vcrp_get(.vcrp_get(sc,"design"),"kind")
   if(!.vcrp_chr(base))base<-""
   designs<-.vcrp_get(sc,"designs")

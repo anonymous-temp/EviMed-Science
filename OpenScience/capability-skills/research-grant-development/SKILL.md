@@ -74,6 +74,15 @@ carry it as an open risk. **An unresolved feasibility risk that survives into
 the audit is worth more than one that quietly disappears** — the second is the
 version that surfaces during review instead.
 
+Compare a required sample size to a site's confirmed eligible accrual, data
+coverage and enrollment period before calling the study feasible or infeasible;
+without those denominators, label feasibility unknown and specify what must be
+verified. Apply the same qualification in the final reply. Label illustrative
+power calculations with their design, outcome, assumptions and uncertainty: a
+binary event-risk calculation is not power for a person-time rate, clustered
+trial or interrupted time series. Do not transfer its numerical conclusion to a
+different design without the required parameters and calculation.
+
 ## The designed study's reporting checklist
 
 When the plan declared the type of the one study the proposal designs — a

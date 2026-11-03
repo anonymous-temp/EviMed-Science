@@ -200,7 +200,7 @@ const TOOLBAR_ROW = "min-h-11";
 
 /**
  * Component: PageShell; owner: H; rules: DS22/AT52–AT54.
- * Anatomy: Header, optional sticky navigation/controls, headline and body.
+ * Anatomy: Scrollable header, sticky navigation/controls, headline and body; optional dock is a sibling below the scroll viewport.
  * Variants: Read, page, wide, full and optional aside.
  * States: Owner supplies content state; absent toolbar reserves no row.
  * Hit area: Shared slot components own targets.
@@ -242,6 +242,8 @@ export function PageShell<V extends string = string>({
   // The band has a hairline under it once the header has scrolled out from over it.
   const [stuck, setStuck] = useState(false);
   const hasBand = Boolean(steps || activity || tabs || toolbar);
+  const hasDock = dock != null;
+  // Re-measure chrome when the dock changes the scroll viewport geometry; its DOM stays stable.
 
   useEffect(() => {
     const element = band.current;
@@ -255,12 +257,13 @@ export function PageShell<V extends string = string>({
       observer?.disconnect();
       holder.style.removeProperty(PAGE_CHROME_VAR);
     };
-  }, [hasBand]);
+  }, [hasBand, hasDock]);
 
   // Stuck: the band is held at the top of the scroll container, which is when a 1 px shrunken root no longer holds all of it.
   // (The band itself is observed, so the page has no marker element between its header and the band.)
   useEffect(() => {
     const element = band.current;
+    setStuck(false);
     if (!hasBand || !element || typeof IntersectionObserver === "undefined") return undefined;
     const observer = new IntersectionObserver(
       ([entry]) => {
@@ -270,7 +273,7 @@ export function PageShell<V extends string = string>({
     );
     observer.observe(element);
     return () => observer.disconnect();
-  }, [hasBand]);
+  }, [hasBand, hasDock]);
 
   if (import.meta.env.DEV && tabs && toolbar?.views) {
     console.warn("PageShell: a page has one view-switch row — `tabs` and `toolbar.views` are both set.");
@@ -326,13 +329,13 @@ export function PageShell<V extends string = string>({
     </>
   );
 
-  return (
+  const content = (
     // `scroll-pt`: an anchor, a `scrollIntoView` and the browser's scroll to a focused control all stop below the band, not under it.
-    <div ref={scroller} className={cn("h-full min-h-0 overflow-y-auto bg-bg scroll-pt-[var(--page-chrome-h,0px)]", dock != null && "flex flex-col", className)}>
+    <div ref={scroller} data-page-scroll="" className={cn("min-h-0 overflow-y-auto bg-bg scroll-pt-[var(--page-chrome-h,0px)]", "flex-1", className)}>
       {back && backPlacement === "edge" && <div className="px-4 pt-6 md:px-6">{back}</div>}
       {/* One box: the page gutter (16 px, 24 from `md`) and the one column, so
           the header and the body cannot disagree about where the left edge is. */}
-      <div className={cn("mx-auto w-full px-4 pb-6 md:px-6", dock != null && "flex-1", back && backPlacement === "edge" ? "pt-2" : "pt-6", COLUMN[width], aside != null && "lg:grid lg:grid-cols-[minmax(0,1fr)_15.5rem] lg:gap-x-12")}>
+      <div className={cn("mx-auto w-full px-4 pb-6 md:px-6", back && backPlacement === "edge" ? "pt-2" : "pt-6", COLUMN[width], aside != null && "lg:grid lg:grid-cols-[minmax(0,1fr)_15.5rem] lg:gap-x-12")}>
         {aside != null ? (
           <>
             <div className="min-w-0">{page}</div>
@@ -340,7 +343,7 @@ export function PageShell<V extends string = string>({
           </>
         ) : page}
       </div>
-      {dock != null && <div data-page-dock="" className="sticky bottom-0 z-sticky flex-none bg-bg px-4 py-2 md:px-6">{dock}</div>}
     </div>
   );
+  return <div className="flex h-full min-h-0 flex-col bg-bg">{content}{hasDock && <div data-page-dock="" className="flex-none bg-bg px-4 py-2 md:px-6">{dock}</div>}</div>;
 }

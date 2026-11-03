@@ -24,7 +24,7 @@ import {
   VCR_COX_FEW_EVENTS,
   VCR_JOB_KINDS,
   VCR_JOB_METHODS,
-  VCR_LONGITUDINAL_JOBS,
+  VCR_LONGITUDINAL_JOBS, VCR_MATCH_BATCH_JOBS,
   VCR_MAX_REPLICATES,
   VCR_MODEL_TIERS,
   VCR_NOT_ESTIMABLE_RULES,
@@ -102,7 +102,7 @@ test("the engine's generated snapshot carries exactly the live schemas, patterns
   assert.deepEqual(snapshot.scenarioSchemas, plain(VCR_SCENARIO_SCHEMAS), "regenerate it: node 项目代码/vcr-engine/tests/helpers/emit-domain-snapshot.mjs");
   assert.deepEqual(snapshot.designSupport, plain(VCR_DESIGN_SUPPORT));
   assert.deepEqual(snapshot.patterns, plain(VCR_PATTERNS));
-  assert.deepEqual(snapshot.jobMethods, plain(Object.fromEntries(Object.entries(VCR_JOB_METHODS).filter(([kind]) => !Object.hasOwn(VCR_LONGITUDINAL_JOBS,kind)))));
+  assert.deepEqual(snapshot.jobMethods, plain(Object.fromEntries(Object.entries(VCR_JOB_METHODS).filter(([kind]) => !Object.hasOwn(VCR_LONGITUDINAL_JOBS,kind) && !Object.hasOwn(VCR_MATCH_BATCH_JOBS,kind)))));
   assert.deepEqual(snapshot.observedOnlyMethods, [...VCR_OBSERVED_ONLY_METHODS]);
   assert.deepEqual(snapshot.columnSources, [...VCR_COLUMN_SOURCES]);
   assert.deepEqual(snapshot.columnSourceLimits, plain(VCR_COLUMN_SOURCE_LIMITS));
@@ -116,7 +116,7 @@ test("the engine's generated snapshot carries exactly the live schemas, patterns
 test("every method has one scenario schema, every kind one method, and both tables are total", () => {
   assert.deepEqual(Object.keys(VCR_SCENARIO_SCHEMAS).sort(), [...VCR_ENGINE_METHOD_IDS].sort());
   assert.ok(VCR_ENGINE_METHOD_IDS.length >= 25, "the 24 methods of the first release and the comparator-effect methods after them");
-  assert.equal(VCR_ENGINE_METHOD_IDS.length + Object.keys(VCR_LONGITUDINAL_JOBS).length, VCR_JOB_KINDS.length, "engine and cloud/control-plane kinds are distinct");
+  assert.equal(VCR_ENGINE_METHOD_IDS.length + Object.keys(VCR_LONGITUDINAL_JOBS).length + Object.keys(VCR_MATCH_BATCH_JOBS).length, VCR_JOB_KINDS.length, "engine and cloud/control-plane kinds are distinct");
   assert.deepEqual(Object.keys(VCR_JOB_METHODS).sort(), [...VCR_JOB_KINDS].sort());
   assert.equal(new Set(Object.values(VCR_JOB_METHODS)).size, VCR_JOB_KINDS.length, "no two kinds run one method");
   for (const kind of VCR_PATIENT_LEVEL_JOB_KINDS) assert.ok(VCR_JOB_KINDS.includes(kind), kind);
@@ -417,11 +417,16 @@ test("the comparator-effect methods are appended, read patients, and every rule 
   // After the source models and original 24, this stream's four remain in the order they were added, then whatever other streams appended
   // (the robustness methods): derived from the domain, so a stream that appends a kind does not edit this line.
   assert.deepEqual([...VCR_JOB_KINDS].slice(26, 26 + COMPARATOR_EFFECT_METHODS.length), COMPARATOR_EFFECT_METHODS.map(([, kind]) => kind), "appended in the order they were added");
-  assert.equal(VCR_JOB_KINDS.length, Object.keys(VCR_ENGINE_METHODS).length + Object.keys(VCR_LONGITUDINAL_JOBS).length, "every kind has an engine or control-plane method");
+  assert.equal(VCR_JOB_KINDS.length, Object.keys(VCR_ENGINE_METHODS).length + Object.keys(VCR_LONGITUDINAL_JOBS).length + Object.keys(VCR_MATCH_BATCH_JOBS).length, "every kind has an engine or control-plane method");
   for (const [method, kind] of COMPARATOR_EFFECT_METHODS) {
     assert.equal(/** @type {Record<string, string>} */ (VCR_JOB_METHODS)[kind], method, kind);
     assert.ok(VCR_PATIENT_LEVEL_JOB_KINDS.includes(kind), `${kind} reads patient-level rows`);
-    assert.equal(/** @type {any} */ (VCR_ENGINE_METHODS)[method].version, ["comparator.weighted_cox", "comparator.covariate_sets", "comparator.maic_time_to_event"].includes(method) ? "1.1.0" : "1.0.0", method);
+    // 1.2.0: the weighted balance is read, not a rule (owner decision 2026-11-01) and the E-value follows the estimate; 1.3.0: the enrolment-year
+    // row when the field map has a time-zero date (D6). AIPW is at 1.2.0 for the same row; older results replay.
+    const version = { "comparator.weighted_cox": "1.3.0", "comparator.covariate_sets": "1.2.0", "comparator.aipw": "1.2.0", "comparator.maic_time_to_event": "1.1.0" };
+    assert.equal(/** @type {any} */ (VCR_ENGINE_METHODS)[method].version, /** @type {Record<string, string>} */ (version)[method] ?? "1.0.0", method);
+    const older = { "1.2.0": ["1.0.0", "1.1.0"], "1.3.0": ["1.0.0", "1.1.0", "1.2.0"] }[/** @type {Record<string, string>} */ (version)[method]];
+    if (older) assert.deepEqual([.../** @type {any} */ (VCR_ENGINE_METHODS)[method].compatibleVersions], older, `${method}: older results replay`);
     assert.equal(/** @type {any} */ (VCR_ENGINE_METHODS)[method].modelTier, "data", method);
     assert.ok(/** @type {any} */ (VCR_ENGINE_METHODS)[method].crossChecks.length > 0, `${method} names what its numeric cases are held against`);
     assert.ok(VCR_OBSERVED_ONLY_METHODS.includes(method), `${method} refuses synthetic, aggregate and predicted rows`);

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 from datetime import datetime, timezone
+import errno
 import hashlib
 import importlib.metadata
 import json
@@ -22,6 +23,13 @@ import uuid
 
 def resolved(path: Path, *, strict=False) -> Path:
     try:
+        # Python 3.14's non-strict Path.resolve may leave symlink loops unresolved.
+        # stat follows each path component and reports ELOOP even in that case.
+        try:
+            path.stat()
+        except OSError as error:
+            if error.errno == errno.ELOOP:
+                raise ValueError('Path resolution failed.') from error
         return path.resolve(strict=strict)
     except RuntimeError as error:
         # Python 3.12 reports symlink loops as RuntimeError, unlike other I/O.

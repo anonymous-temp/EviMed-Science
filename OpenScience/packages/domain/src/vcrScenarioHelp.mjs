@@ -54,6 +54,8 @@ export const VCR_SCENARIO_HELP_VERSION = 1
 export const VCR_RUN_SCENARIO_FIELDS = Object.freeze({
   pool_evidence: Object.freeze(['parameter', 'endpointKey', 'calibres', 'armRole', 'target', 'method']),
   match_criteria: Object.freeze([]),
+  // The batch reading of records takes a selection and no scenario: the platform freezes the roster, the questions and the estimate.
+  match_extract: Object.freeze([]),
 })
 
 /**
@@ -279,6 +281,8 @@ export const VCR_SCENARIO_EXAMPLES = Object.freeze({
     baselineTable: [{ variable: 'age', label: '年龄', mean: 62, sd: 9 }, { variable: 'male', proportion: 0.55 }, { variable: 'ecog', proportions: [0.4, 0.5, 0.1], levels: ['0', '1', '2'] }], n: 400 } }],
   'population.synthpop': [{ label: 'a synthetic copy of the study table', scenario: { holdoutShare: 0.2, m: 5, constraints: [{ name: 'age', rule: { op: 'between', column: 'age', low: 18, high: 100 } }] } }],
   'population.quality': [{ label: 'a synthetic table against its training table', scenario: { trainingInputId: 'snp_1:subject', syntheticInputId: 'pop_synth@1' } }],
+  'population.check': [{ label: 'a generated population against a second, independent baseline table (the platform fills `generated` from the population subjectId names)', scenario: {
+    baselineTable: [{ variable: 'age', mean: 63, sd: 10 }, { variable: 'male', proportion: 0.58 }], referenceN: 412 } }],
   'patients.continuous': [{ label: 'a continuous endpoint', scenario: {
     design: { nTreat: 60, nControl: 60 }, endpoint: { type: 'continuous' }, truth: { effect: -0.5, sd: 1.2 } } }],
   'patients.binary': [{ label: 'a binary endpoint', scenario: {
@@ -318,6 +322,9 @@ export const VCR_SCENARIO_EXAMPLES = Object.freeze({
       performance: ['power', 'bias'], targetMcse: 0.005 } },
     { label: 'two-arm binary: no accrual', scenario: {
       design: { kind: 'two_arm_fixed', nTreat: 100, nControl: 100 }, endpoint: { type: 'binary' }, truth: { controlRate: 0.3, treatmentRate: 0.5 }, analysis: { method: 'logistic' } } },
+    { label: 'a delayed treatment effect (hazard ratio 1 for 6 months, 0.6 after) analysed by MaxCombo: simulation only', scenario: {
+      design: { kind: 'two_arm_fixed', nTreat: 150, nControl: 150 }, endpoint: { type: 'time_to_event' }, truth: { treatmentHazardRatios: { breaks: [6], ratios: [1, 0.6] }, controlMedian: 12 },
+      accrual: { kind: 'uniform', duration: 12, followup: 18 }, analysis: { method: 'maxcombo', alpha: 0.025, sided: 1 } } },
     { label: 'single arm, continuous: 40 patients against a historical mean of 50, one-sample t', scenario: {
       design: { kind: 'single_arm', n: 40 }, endpoint: { type: 'continuous' }, truth: { benchmark: 50, effect: 5, sd: 12 },
       analysis: { method: 'one_sample_t', alternative: 'greater', sided: 1, alpha: 0.025 }, performance: ['power', 'bias'] } },
@@ -365,6 +372,71 @@ export const VCR_SCENARIO_EXAMPLES = Object.freeze({
   ],
   'comparator.prognostic_adjustment': [{ label: 'binary endpoint with a prognostic score column', scenario: {
     endpoint: { type: 'binary' }, prognosticScoreColumn: 'prognostic_score', treatmentColumn: 'arm', outcomeColumn: 'response', covariates: ['age', 'stratum'] } }],
+})
+
+// ---------------------------------------------------------------------------
+// What a row asks of the person, and the minimal scenario of each common path (C2, C4)
+// ---------------------------------------------------------------------------
+
+/**
+ * Whether a key of a scenario is a fact of the research or something the model can settle itself, read from the row's own
+ * structure and from nothing kept beside it (remediation plan C2):
+ *
+ * - `research_fact` — the schema requires it (always, in the case the row's gate describes, or as one of the keys a coupled rule
+ *   says one of must be given) and states no default, and it is not a choice among the method's own words: a hazard ratio, a
+ *   control median, a sample size. Only the research can give it, so it is the one kind of key a conversation may ask about, and
+ *   only when the answer would change the next computation.
+ * - `defaultable` — everything else: a key with a default (the platform fills it and says so in `applied`), an optional key (the engine
+ *   goes on without it), and a closed vocabulary with no default (the endpoint, the design: a choice the question itself makes).
+ *   The model settles these, states the assumption in its reply, and does not ask.
+ *
+ * An object has no role of its own — it is only its keys, and a key inside it that depends on a sibling's value is a fact only when
+ * that value says so — and `null` is returned for it; the keys inside carry the roles.
+ * @param {VcrHelpRow} row @param {{ rules?: readonly VcrHelpRule[] }} [context] the method's coupled rules
+ * @returns {'research_fact' | 'defaultable' | null}
+ */
+export function vcrRowRole(row, { rules = [] } = {}) {
+  if (row.type === 'object') return null
+  if (row.default !== undefined) return 'defaultable'
+  const coupled = rules.some((rule) => (rule.kind === 'exactlyOne' || rule.kind === 'atLeastOne') && (rule.keys ?? []).includes(row.path)
+    || rule.kind === 'requires' && (rule.needs ?? []).includes(row.path))
+  const needed = row.required === true || (Array.isArray(row.requiredWhen) && row.requiredWhen.length > 0) || coupled
+  if (!needed) return 'defaultable'
+  const choice = row.type === 'string' && (Array.isArray(row.values) || Boolean(row.valuesBy))
+  return choice ? 'defaultable' : 'research_fact'
+}
+
+/**
+ * One minimal scenario per common path: the facts of the research and the choices the question makes, and nothing the platform
+ * defaults (alpha, power, the analysis, the accrual's shape, the dropout). It is a starting point a model reads, never a form and
+ * never shown to a person; a number in it is a placeholder for the study's own. The test runs every template through
+ * `validateScenario` and holds it to the rule above: no key of a template has a default.
+ * @type {Readonly<Record<string, ReadonlyArray<{ name: string, label: string, scenario: Record<string, any> }>>>}
+ */
+export const VCR_MINIMAL_TEMPLATES = Object.freeze({
+  'design.analytic': [
+    { name: 'two_arm_time_to_event', label: 'sample size of a two-arm time-to-event design', scenario: {
+      design: { kind: 'two_arm_fixed' }, endpoint: { type: 'time_to_event' }, truth: { hazardRatio: 0.7, controlMedian: 12 }, accrual: { duration: 12, followup: 12 } } },
+    { name: 'two_arm_binary', label: 'sample size of a two-arm binary design', scenario: {
+      design: { kind: 'two_arm_fixed' }, endpoint: { type: 'binary' }, truth: { controlRate: 0.3, treatmentRate: 0.45 } } },
+    { name: 'two_arm_continuous', label: 'sample size of a two-arm continuous design, the effect in standard-deviation units (truth.sd defaults to 1: state it when the effect is in the outcome\'s own unit)', scenario: {
+      design: { kind: 'two_arm_fixed' }, endpoint: { type: 'continuous' }, truth: { effect: 0.5 } } },
+  ],
+  'design.simulate': [
+    { name: 'two_arm_time_to_event', label: 'operating characteristics of a two-arm time-to-event design', scenario: {
+      design: { kind: 'two_arm_fixed', nTreat: 150, nControl: 150 }, endpoint: { type: 'time_to_event' }, truth: { hazardRatio: 0.7, controlMedian: 12 } } },
+    { name: 'two_arm_binary', label: 'operating characteristics of a two-arm binary design', scenario: {
+      design: { kind: 'two_arm_fixed', nTreat: 100, nControl: 100 }, endpoint: { type: 'binary' }, truth: { controlRate: 0.3, treatmentRate: 0.45 } } },
+    { name: 'two_arm_continuous', label: 'operating characteristics of a two-arm continuous design, the effect in standard-deviation units (truth.sd defaults to 1: state it when the effect is in the outcome\'s own unit)', scenario: {
+      design: { kind: 'two_arm_fixed', nTreat: 100, nControl: 100 }, endpoint: { type: 'continuous' }, truth: { effect: 0.5 } } },
+  ],
+  'population.literature': [
+    { name: 'literature_population', label: 'a population from a published baseline table', scenario: {
+      baselineTable: [{ variable: 'age', mean: 62, sd: 9 }, { variable: 'male', proportion: 0.55 }] } },
+  ],
+  'comparator.entropy_balance': [
+    { name: 'entropy_balance', label: 'entropy-balance weighting of an external control', scenario: { covariates: ['age', 'ecog'] } },
+  ],
 })
 
 // ---------------------------------------------------------------------------
@@ -421,9 +493,20 @@ const METHOD_NOTES = Object.freeze({
   'patients.time_to_event': PATIENT_PAIRING_NOTES,
   'patients.longitudinal': PATIENT_PAIRING_NOTES,
   'model.survival_fit': ['Uses survival::survreg with a fixed intercept-only formula and four closed distributions. It fits a population baseline, not an individual digital twin.', 'Declare and select the source treatment group before using a fit as a control baseline. Never infer exposure across an unobserved trial period. Select exactly one time/event row per observed patient; CNSR is a censor indicator and must use statusEncoding=censor. Reconstructed pseudo-IPD retains its source and omitted reconstruction uncertainty.', 'Median P10/P50/P90 describe delta-method parameter uncertainty, not patient-time percentiles or trial success probabilities. Baseline scenarios hold fitted shape fixed. Only exponential and Weibull currently have patient/design adapters; other fitted curves remain available. Observed survival-time units must agree with the frozen field map.'],
-  'model.prognostic_apply': ['Apply only an immutable source-bound typed equation. Missing predictors, category mappings or units stay unknown; never fill them with zero. Observed predictor units come from the selected frozen field map, while synthetic units are explicit scenario declarations. Source horizon units stay bound to the literal publication.', 'Equation coefficients are linear-predictor beta. Source bindings explicitly declare coefficientScale=linear_predictor or ratio; positive Cox HR/logistic OR are converted once by log_of_ratio. Apply transform first, then subtract center and divide by scale, both on the transformed predictor scale. For a nonidentity transform, center bindings explicitly declare centerScale=transformed or source_raw; source_raw is converted with the same transform. A Cox equation without baseline survival yields relative scores only. Every centered baseline reference, including zero, needs its preserved numeric binding; standardized zero references remain valid. Baseline centering, horizon and units must match the publication.', 'Predicted control outcomes are descriptive benchmarks. They do not identify treatment effects, replace observed controls or increase effective sample size.'],
+  'model.prognostic_apply': ['Apply only an immutable source-bound typed equation. Missing predictors, category mappings or units stay unknown; never fill them with zero. Observed predictor units come from the selected frozen field map, while synthetic units are explicit scenario declarations. Source horizon units stay bound to the literal publication.', 'Equation coefficients are linear-predictor beta. Source bindings explicitly declare coefficientScale=linear_predictor or ratio; positive Cox HR/logistic OR are converted once by log_of_ratio. Apply transform first, then subtract center and divide by scale, both on the transformed predictor scale. For a nonidentity transform, center bindings explicitly declare centerScale=transformed or source_raw; source_raw is converted with the same transform. A Cox equation without baseline survival yields relative scores only. Every centered baseline reference, including zero, needs its preserved numeric binding; standardized zero references remain valid. Baseline centering, horizon and units must match the publication.', 'Predicted control outcomes are descriptive benchmarks. They do not identify treatment effects, replace observed controls or increase effective sample size.', 'calibration (optional) holds the applied equation against the outcome the table itself has: outcomeColumn for a linear or logistic equation (a binary outcome is 0/1), timeColumn and statusColumn (1 = event) for a Cox equation. The result then reports the calibration intercept (ideal 0) and slope (ideal 1) with intervals, the observed and the predicted risk and why anything is missing: the slope needs at least 10 events and 10 non-events (10 pairs for a continuous outcome), with fewer only the intercept is reported, and with none of one kind there is no intercept either. The outcome must be observed, never a synthetic or predicted column. It is calibration in this table, not clinical validation, and it says nothing about any other population: the conclusion stays limited.'],
   'accrual.poisson_gamma': Object.freeze([
     'eventTarget counts events among every patient the forecast follows: the patients still to enrol and the patients already enrolled (the sum of explicitly supplied sites[].enrolled design assumptions; no operational ledger is read), so it is at most the target, or the patients already enrolled if there are more (scenario_value_invalid at eventTarget above that). The events of the enrolled patients are simulated, not read: the engine is given no observed event count, so it draws how long each enrolled patient has been followed from how long the site has been open (sites[].exposureTime) and an event time after enrolment from eventHazard; diagnostics.eventForecast says how many events that drew as already happened. With every patient already enrolled, last_patient_in_months is 0 and target_events_months is still forecast. Write eventHazard with eventTarget.',
+  ]),
+  'design.simulate': Object.freeze([
+    'A hazard ratio that changes over time is simulation-only: truth.treatmentHazardRatios = { breaks, ratios } gives the treatment arm\'s hazard as ratios[j] times the control\'s on the j-th interval of breaks (ratios has one more value than breaks, the last runs on), so a delayed effect is breaks [6], ratios [1, 0.6] and a crossing of the curves [6], [1.4, 0.6]. State it INSTEAD of truth.hazardRatio, not beside it; the analytic design (design_analytic) and the assurance refuse it by name. There is then no single true hazard ratio, so bias, mean squared error and coverage are not computed for the log-rank family, and no closed form is drawn for the power; an RMST analysis keeps its bias, against the RMST difference integrated from the two survival curves.',
+    'analysis.method maxcombo (time-to-event, two-arm, fixed design only) is the most favourable of the four Fleming-Harrington weighted log-rank statistics G(0,0), G(0,1), G(1,0), G(1,1), its p-value read from their joint null distribution. It is never a default: the analysis is the log-rank unless you say otherwise, because the log-rank is often as good (it loses to MaxCombo mainly when the curves separate late or cross), and the choice is made before the data. A group-sequential design looks with the log-rank and refuses maxcombo.',
+  ]),
+  'design.grid': Object.freeze([
+    'From design.grid 1.3.0 the truth scenarios of one design share that design\'s random stream (common random numbers), where the generator makes that an honest pairing (two-arm designs); designs are never paired with each other and single-arm designs keep independent seeds. A difference between two truths of a design is then a cleaner comparison; each cell is still one immutable run, equal to the design.simulate job at its own seed. A truth that states treatmentHazardRatios replaces the base truth\'s hazardRatio (and the other way round).',
+  ]),
+  'population.check': Object.freeze([
+    'subjectId is the existing population the check is about. `generated` is the population\'s own profile, filled in by the platform: do not write it (a scenario that carries one is refused). baselineTable is a SECOND baseline table, one that did not make the population, and baselineBindings bind each of its numbers to a verified evidence item exactly as a literature population\'s do; a table from the same evidence the population was built on is a comparison with the inputs, and the result says so.',
+    'Each variable of the table is held against the same variable of the population, by its own distribution: a standardized difference for a continuous or binary variable, the total variation distance for a categorical one, "close" at or under 0.1 and "apart" above it. The joint structure, the shape and the tails of the distributions and any subgroup are not compared, so the result is not a validation of the population; say what it covered and what it did not. referenceN (the second table\'s sample size, when its source gives it) adds the standard error of each difference.',
   ]),
   'comparator.map_prior': Object.freeze([
     'tauPrior is the prior on the between-study spread tau, on the analysis scale (a logit for events / n): half_normal has density proportional to exp(-tau^2 / (2 scale^2)), half_cauchy proportional to 1 / (1 + (tau / scale)^2) over the whole half line, and uniform is flat on [0, scale] and zero beyond scale. With two historical studies a half-Cauchy prior leaves the predictive spread without a finite value (diagnostics.tauPrior says so); three or more, or a half-normal prior, make it finite. current.estimate and current.se are on the analysis scale as well: the logit of the control rate (and its standard error on that scale) on the events / n path, the scale of historical.estimate on the estimate / se path.',
@@ -443,13 +526,16 @@ function methodEntry(method) {
   const schema = /** @type {Record<string, any>} */ (VCR_SCENARIO_SCHEMAS)[method]
   const spec = /** @type {Record<string, any>} */ (VCR_ENGINE_METHODS)[method]
   const notes = [...designNotes(method), .../** @type {Record<string, readonly string[]>} */ (METHOD_NOTES)[method] ?? []]
+  const templates = /** @type {Record<string, any>} */ (VCR_MINIMAL_TEMPLATES)[method]
   return compact({
     endpoints: [...spec.endpoints],
     designs: /** @type {Record<string, any>} */ (VCR_DESIGN_SUPPORT)[method] ? JSON.parse(JSON.stringify(/** @type {Record<string, any>} */ (VCR_DESIGN_SUPPORT)[method])) : undefined,
     gridCells: schema.gridCells,
     notes: notes.length ? notes : undefined,
-    rows,
+    // Every key says what it asks of a person (research fact or defaultable; an object is only its keys): derived from the row, never kept as a list.
+    rows: rows.map((row) => { const fieldRole = vcrRowRole(row, { rules }); return fieldRole ? { ...row, fieldRole } : row }),
     rules: rules.length ? rules : undefined,
+    templates: templates ? JSON.parse(JSON.stringify(templates)) : undefined,
     examples: (/** @type {Record<string, any>} */ (VCR_SCENARIO_EXAMPLES)[method] ?? []).map((/** @type {any} */ example) => JSON.parse(JSON.stringify(example))),
   })
 }

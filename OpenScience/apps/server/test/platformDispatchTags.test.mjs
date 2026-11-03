@@ -32,9 +32,15 @@ const sourceRoot = path.join(serverRoot, "src");
 const USER_WORDS = [
   {
     file: "server.mjs",
+    text: 'typeof repairText === "string" && repairText.trim() ? `${repairText}\\n\\n<evimed-repair>${dispatchedRun.id}</evimed-repair>` : researchGoal ? researchGoalPrompt(text) : text',
+    count: 1,
+    why: "the chat route: what the researcher typed (a research goal with the skill's gesture in front of it), or the delivery gate's repair round under its own tag",
+  },
+  {
+    file: "server.mjs",
     text: 'typeof repairText === "string" && repairText.trim() ? `${repairText}\\n\\n<evimed-repair>${dispatchedRun.id}</evimed-repair>` : text',
-    count: 2,
-    why: "the chat route and a question from a messaging channel: what the researcher typed, or the delivery gate's repair round under its own tag",
+    count: 1,
+    why: "a question from a messaging channel: what the researcher typed, or the delivery gate's repair round under its own tag",
   },
   {
     file: "server.mjs",

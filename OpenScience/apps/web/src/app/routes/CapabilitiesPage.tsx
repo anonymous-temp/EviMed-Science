@@ -14,7 +14,7 @@ import { LoadError } from "@/components/cards/LoadError";
 import { PageShell } from "@/components/layout/PageShell";
 import { SimulatedAllowanceNotice } from "@/components/settings/SimulatedAllowance";
 import { Button, buttonClasses } from "@/components/ui/Button";
-import { List, ListRow } from "@/components/ui/ListRow";
+import { Card } from "@/components/ui/Card";
 import { Section } from "@/components/ui/Section";
 import { Tag } from "@/components/ui/Tag";
 
@@ -58,13 +58,13 @@ function allowanceText(estimate: WebResearchEstimate | undefined): string | null
 }
 
 /**
- * 科研工具 — the medical professional workflows, one list per category.
+ * 科研工具 — the medical professional workflows, one card grid per category.
  *
  * What is here is a workflow with a contract and a deliverable, and a category to
  * choose it by (临床证据 · 药学评价 · 研究设计与数据 · 写作与传播). Documents, spreadsheets, slides, data,
  * the open web and code are what the assistant does in any conversation; they are not tools to pick and
  * have no row here (owner, 2026-10-14). The page is the product's list page: one toolbar over the list —
- * the categories as one row of chips, the search and the count — and a row per tool: its icon and name, one
+ * the categories as one row of chips, the search and the count — and a card per tool: its icon and name, one
  * complete sentence, how long it usually takes.
  *
  * Choosing a tool opens a new conversation with that tool on: the reader types into the composer they were
@@ -176,11 +176,11 @@ export function CapabilitiesPage() {
             <div>
               {groups.map(([name, items]) => (
                 <Section key={name} title={name} count={items.length}>
-                  <List label={name} divided>
+                  <ul aria-label={name} className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
                     {items.map((agent) => (
                       <ToolRow key={agent.id} agent={agent} estimate={billing.simulated ? estimates.get(agent.id) : undefined} busy={opening === agent.id} onOpen={() => open(agent)} />
                     ))}
-                  </List>
+                  </ul>
                 </Section>
               ))}
             </div>
@@ -197,7 +197,8 @@ const FIX_PATH = "/app/account?tab=connectors";
  * takes — and, where the allowance is simulated, what it usually takes out of it. A state is said only when
  * it is a reason the reader can act on, as a word and, where there is one, its sentence with the way to
  * mend it. The row opens the same conversation whatever it says (an unavailable tool reports "blocked" by its
- * own mechanism when asked).
+ * own mechanism when asked). The name is a title by its ink, at the body's weight: the category headings above the cards are the
+ * page's fourth size × weight pair, and a bold name would be a fifth (DESIGN.md rule 4; the release walk of 2026-11-03).
  */
 function ToolRow({ agent, estimate, busy, onOpen }: { agent: CapabilityUi; estimate?: WebResearchEstimate; busy: boolean; onOpen: () => void }) {
   const Icon = capabilityIcon(agent.id);
@@ -207,42 +208,40 @@ function ToolRow({ agent, estimate, busy, onOpen }: { agent: CapabilityUi; estim
   const facts = [duration, allowance].filter(Boolean).join(" · ");
   const connector = agent.availability?.reason.code === "data-source-not-configured";
   return (
-    <ListRow
-      leading={<Icon size={20} className="text-accent" aria-hidden="true" />}
-      title={agent.title}
-      muted={busy}
-      meta={(
-        <>
-          <span className="block">{agent.description}</span>
-          {(facts || drawn) && (
-            <span className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1">
-              {drawn && <Tag>{drawn.label}</Tag>}
-              {drawn?.text && <span>{drawn.text}</span>}
-              {facts && <span className="tabular-nums">{facts}</span>}
-            </span>
-          )}
-        </>
-      )}
-      actions={connector ? <Link to={FIX_PATH} className={buttonClasses({ variant: "text", size: "sm" })}>去添加</Link> : undefined}
-      onOpen={onOpen}
-    />
+    <li className="min-w-0">
+      <Card className="relative flex h-full flex-col transition-colors hover:border-border-strong focus-within:border-accent [&>div]:flex [&>div]:flex-1 [&>div]:flex-col">
+        <div className="flex items-start gap-3">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded bg-surface-1"><Icon size={20} className="text-accent" aria-hidden="true" /></div>
+          <div className="min-w-0 flex-1">
+            <Button variant="text" disabled={busy} aria-busy={busy || undefined} onClick={onOpen} className="!static h-auto max-w-full whitespace-normal p-0 text-left text-title-ink after:absolute after:inset-0">{agent.title}</Button>
+            <div className="mt-1 text-caption text-text-3">{agent.category}</div>
+          </div>
+        </div>
+        <p data-prose className="mb-5 mt-4 text-ui text-text-2">{agent.description}</p>
+        <div className="mt-auto flex flex-wrap items-center gap-x-1.5 gap-y-1 text-caption text-text-3">
+          {drawn && <Tag>{drawn.label}</Tag>}
+          {drawn?.text && <span>{drawn.text}</span>}
+          {facts && <span className="tabular-nums">{facts}</span>}
+          {connector && <Link to={FIX_PATH} className={buttonClasses({ variant: "text", size: "sm", className: "relative z-sticky" })}>去添加</Link>}
+        </div>
+      </Card>
+    </li>
   );
 }
 
-/** The list's shape while the catalogue loads: a heading and six grey rows. */
+/** The grid's shape while the catalogue loads: a heading and six grey cards. */
 function ToolListSkeleton() {
   return (
     <PendingFeedback><div className="animate-pulse" aria-hidden="true">
       <div className="mb-3 h-5 w-24 rounded bg-surface-2" />
-      {Array.from({ length: 6 }, (_, index) => (
-        <div key={index} className="flex items-start gap-3 px-2 py-3">
-          <div className="mt-0.5 h-5 w-5 rounded bg-surface-2" />
-          <div className="flex-1 space-y-2">
-            <div className="h-4 w-1/3 rounded bg-surface-2" />
-            <div className="h-3 w-2/3 rounded bg-surface-1" />
-          </div>
-        </div>
-      ))}
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {Array.from({ length: 6 }, (_, index) => (
+          <Card key={index}><div className="flex min-h-32 items-start gap-3">
+            <div className="h-10 w-10 shrink-0 rounded bg-surface-2" />
+            <div className="flex-1 space-y-3 pt-1"><div className="h-4 w-1/2 rounded bg-surface-2" /><div className="h-3 w-3/4 rounded bg-surface-1" /></div>
+          </div></Card>
+        ))}
+      </div>
     </div></PendingFeedback>
   );
 }

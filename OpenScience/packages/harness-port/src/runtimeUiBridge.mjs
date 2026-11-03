@@ -203,10 +203,19 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     if (row && validId(row.parentId) && row.parentId !== sessionId) return { forkedFrom: row.parentId };
     return {};
   }
+  let observedTurn = { sessionId: /** @type {string | null} */ (null), running: false };
   function sessionChanged() {
     if (!ready || !activated || disposed) return;
     const snapshot = ctx.sessions.list.getSnapshot();
     const sessionId = mainViewSession(snapshot, previousSession ?? null);
+    // SessionSummary.running is the controller's public host-running state.
+    // Observe it before the same-session navigation guard: a turn does not
+    // change the selected conversation, but may have changed its project.
+    const running = sessionId !== null ? snapshot.byId?.[sessionId]?.running : undefined;
+    if (sessionId && observedTurn.sessionId === sessionId && observedTurn.running && running === false) {
+      post('turn-settled', { sessionId });
+    }
+    observedTurn = { sessionId, running: running === true };
     if (sessionId === previousSession) return;
     target.__EVIMED_RESULT_REVISION__?.clear(); target.__EVIMED_GEO_PLAN__?.clear(); target.__EVIMED_VCR_SELECTION__?.clear();
     previousSession = sessionId;
@@ -591,6 +600,18 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     'open-item'(fields) {
       return /^[a-z0-9]{12,32}$/.test(fields?.itemId ?? '') ? { itemId: fields.itemId } : null;
     },
+    /**
+     * A 虚拟临床研究 result a reply linked to: which study and which of its seven tabs, both from the closed shapes (a study id the
+     * application puts in an address, a tab of the study page), and for the comparison tab which saved comparison it opens on. The shell
+     * opens that page; the address is the shell's to spell, and nothing else this frame could name reaches it.
+     * @param {any} fields
+     */
+    'open-vcr-result'(fields) {
+      const tabs = ['overview', 'population', 'patients', 'comparator', 'trial', 'matching', 'data'];
+      if (!(validId(fields?.studyId) && typeof fields?.tab === 'string' && tabs.includes(fields.tab))) return null;
+      const object = fields.tab === 'comparator' && validId(fields.object) ? { object: fields.object } : {};
+      return { studyId: fields.studyId, tab: fields.tab, ...object };
+    },
     /** @param {any} fields */
     'open-source'(fields) {
       if (!/^src_[a-f0-9]{32}$/.test(fields.sourceId)) return null;
@@ -673,7 +694,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
   };
   const detachHub = hub?.attach((/** @type {string} */ type, /** @type {any} */ fields) => {
     if (!Object.hasOwn(OUTBOUND, type)) return;
-    const payload = OUTBOUND[/** @type {'open-artifact' | 'save-to-knowledge-base' | 'kb-query' | 'bind-capability' | 'geo-options' | 'vcr-options'} */ (type)](fields ?? {});
+    const payload = OUTBOUND[/** @type {'open-artifact' | 'open-vcr-result' | 'save-to-knowledge-base' | 'kb-query' | 'bind-capability' | 'geo-options' | 'vcr-options'} */ (type)](fields ?? {});
     if (payload) post(type, payload);
   });
 

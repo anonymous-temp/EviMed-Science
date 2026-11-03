@@ -54,6 +54,12 @@
         "title": "EV-201 plus docetaxel versus docetaxel in previously treated NSCLC",
         "phase": "III 期",
         "status": "招募中",
+        "statusAsOf": "今天",
+        "decided": {
+          "decided": 3,
+          "applicable": 3,
+          "percent": 100
+        },
         "conditions": [
           "Non-small Cell Lung Cancer"
         ],
@@ -83,6 +89,12 @@
         "title": "EV-201 方案 v1",
         "phase": "",
         "status": "",
+        "statusAsOf": null,
+        "decided": {
+          "decided": 2,
+          "applicable": 2,
+          "percent": 100
+        },
         "conditions": [],
         "sites": null,
         "eligibility": "eligible",
@@ -105,6 +117,12 @@
         "title": "A phase 2 study of EV-201 in EGFR-mutant NSCLC after osimertinib",
         "phase": "II 期",
         "status": "尚未开始招募",
+        "statusAsOf": "今天",
+        "decided": {
+          "decided": 2,
+          "applicable": 3,
+          "percent": 67
+        },
         "conditions": [
           "Non-small Cell Lung Cancer"
         ],
@@ -134,6 +152,12 @@
         "title": "EV-201 in elderly patients with advanced NSCLC",
         "phase": "II 期",
         "status": "招募中",
+        "statusAsOf": "今天",
+        "decided": {
+          "decided": 2,
+          "applicable": 2,
+          "percent": 100
+        },
         "conditions": [
           "Non-small Cell Lung Cancer"
         ],
@@ -167,6 +191,7 @@
           "evidence": null,
           "evidenceItems": [],
           "request": null,
+          "reason": null,
           "requestNote": null,
           "decidedBy": "code",
           "overridden": false
@@ -181,6 +206,7 @@
           "evidence": null,
           "evidenceItems": [],
           "request": null,
+          "reason": null,
           "requestNote": null,
           "decidedBy": "code",
           "overridden": false
@@ -195,6 +221,7 @@
           "evidence": null,
           "evidenceItems": [],
           "request": null,
+          "reason": null,
           "requestNote": null,
           "decidedBy": "code",
           "overridden": false
@@ -293,6 +320,7 @@
         "evidence": null,
         "evidenceItems": [],
         "request": null,
+        "reason": null,
         "requestNote": null,
         "decidedBy": "code",
         "overridden": false
@@ -307,6 +335,7 @@
         "evidence": null,
         "evidenceItems": [],
         "request": null,
+        "reason": null,
         "requestNote": null,
         "decidedBy": "code",
         "overridden": false

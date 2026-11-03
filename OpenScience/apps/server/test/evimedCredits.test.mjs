@@ -66,7 +66,7 @@ test("the memo names the work in Chinese and carries nothing technical", () => {
   // The plan's own example (§9.6). A statement line is not a trace: a run id, a
   // session id or a model name in one is a support ticket waiting to happen.
   assert.equal(settlementMemo({ capabilityId: "clinical-evidence-synthesis", subject: "司美格鲁肽减重 Meta 分析" }),
-    "临床证据深度分析 · 司美格鲁肽减重 Meta 分析");
+    "文献综述 · 司美格鲁肽减重 Meta 分析");
   // No capability: the deep-research line pays for it under its own name.
   assert.equal(settlementMemo({ subject: "利伐沙班在房颤患者的剂量" }), "深度研究 · 利伐沙班在房颤患者的剂量");
   assert.equal(settlementMemo({}), "深度研究");

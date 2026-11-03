@@ -20,6 +20,13 @@ const olderConversionObservation = (refresh, conversion) => refresh.conversionId
 /** All VCR export kinds use one immutable report adapter. */
 export function canonicalVcrDocument(study, row) {
   const cover = row.cover ?? {};
+  // A result record is written by the platform from one result (remediation plan D7): its markdown is the document, with no prose of a
+  // run in it to render numbers into, no review of a study's package around it and nothing that goes stale with the study.
+  if (row.kind === 'result_record' && cover.record?.digest && cover.reports?.[0]?.rendered) {
+    const title = cover.record.title ?? `${study.name} — ${VCR_EXPORT_KIND_LABELS_ZH.result_record}`;
+    return { title, canonicalMarkdown: cover.reports[0].rendered, cover: { exportKind: 'result_record', reviews: [], stale: [], seal: null, intendedUse: cover.intendedUse ?? study.intendedUse },
+      revision: exportHash(documentExportDigest({ record: cover.record.digest })) };
+  }
   const model = cover.results;
   const completedReview = cover.documentReview;
   // Only trusted conversion completion installs this metadata. The retained

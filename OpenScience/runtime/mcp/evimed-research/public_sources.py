@@ -2054,7 +2054,7 @@ def _named_registry_records(arguments, registry):
         if whole_error is not None:
             raise whole_error
         return whole
-    merged, order, failures = {}, [], []
+    merged, order, failures, outage = {}, [], [], False
     for term in asked:
         try:
             page = _evimed_trial_records({**arguments, "query": term, "limit": TRIAL_TERM_CANDIDATES})
@@ -2062,12 +2062,22 @@ def _named_registry_records(arguments, registry):
             raise
         except PublicSourceError as error:
             failures.append("%s: %s" % (term, error))
+            outage = outage or error.retryable
             continue
         for item, source in zip(page["data"]["items"], page["sources"]):
             if item["id"] not in merged:
                 merged[item["id"]] = (item, source)
                 order.append(item["id"])
     if not merged and failures:
+        if outage:
+            # The registry did not answer (HTTP 5xx, a timeout, a rate limit): that says nothing about the words, and nothing was found
+            # or ruled out. Rewording will not help; asking again later may.
+            raise PublicSourceError(
+                "public_source_unavailable",
+                "%s did not answer for any word of this query, so nothing is known about it yet: %s. This is the registry being unavailable, not a refusal of the query; ask again later."
+                % (TRIAL_REGISTRY_NAMES[registry], "; ".join(failures)),
+                True,
+            )
         raise whole_error or PublicSourceError(
             "public_source_http_error", "%s could not be asked for any word of this query: %s" % (TRIAL_REGISTRY_NAMES[registry], "; ".join(failures)),
         )
@@ -3778,6 +3788,10 @@ def _simple_json_source(source_id, query, limit):
 
 
 PROSPERO_SEARCH_URL = "https://www.crd.york.ac.uk/PROSPERO/api/search"
+# The registry's own page size, so that a record's position names its page; and how far one query can be read: ten pages, the most the
+# gateway admits (`PROSPERO_MAX_PAGE`, publicSourceGateway.mjs). Both are said in the answer, never left to be guessed from a count.
+PROSPERO_PAGE_SIZE = 50
+PROSPERO_REACHABLE = 500
 
 
 def _prospero_term(query):
@@ -3789,24 +3803,41 @@ def _prospero_term(query):
     return " AND ".join(text.split(" "))
 
 
-def _prospero(query, limit):
+def _prospero(query, limit, offset=0):
     """Registered systematic reviews: what a new Meta would collide with before anything is published.
 
     The search the registry's own public page sends (recorded 2026-11-02), anonymous; the request's token header is the
     gateway's to add (`publicSourceGateway.mjs`). Without this connector a duplicate check had no way to see a review in
     progress, and in one real test (2026-11-02) that was where most of the false gaps came from.
+
+    The registry reports how many registrations match, and a read of ten of 101 is not an answer about the other ninety-one: a topic was
+    called open on it. So the answer states how many were read of how many, says it is partial when it is, and names the `offset` that
+    reads on; the registry is paged through (its own pages of 50) to reach the records asked for, up to `PROSPERO_REACHABLE`.
     """
+    from source_outcome import complete, more_available, truncated  # lazy: it imports this module
+    if offset + limit > PROSPERO_REACHABLE:
+        raise PublicSourceError(
+            "public_source_query_invalid",
+            "PROSPERO can be read as far as its first %d registrations for one query; offset %d with limit %d goes past that. Narrow the query instead." % (PROSPERO_REACHABLE, offset, limit),
+        )
     term = _prospero_term(query)
-    body = {"term": term, "actual": term, "line": 1, "page": 1, "nperpage": limit, "sort": "score", "sortorder": "desc", "filters": [], "download": False}
-    answer = _get_json_value(PROSPERO_SEARCH_URL, method="POST", json_body=body)
-    line = answer[0] if isinstance(answer, list) and answer else {}
-    if not isinstance(line, dict) or "retvals" not in line:
-        message = _dict(answer).get("errormessage") if isinstance(answer, dict) else None
-        raise PublicSourceError("public_source_invalid_response", "PROSPERO did not return a search result%s." % (": %s" % message if isinstance(message, str) else ""))
-    hits = _dict(_dict(line.get("retvals")).get("hits"))
-    total = line.get("hits") if isinstance(line.get("hits"), int) else None
+    first_page, last_page = offset // PROSPERO_PAGE_SIZE + 1, (offset + limit - 1) // PROSPERO_PAGE_SIZE + 1
+    hits, total = [], None
+    for page in range(first_page, last_page + 1):
+        body = {"term": term, "actual": term, "line": 1, "page": page, "nperpage": PROSPERO_PAGE_SIZE, "sort": "score", "sortorder": "desc", "filters": [], "download": False}
+        answer = _get_json_value(PROSPERO_SEARCH_URL, method="POST", json_body=body)
+        line = answer[0] if isinstance(answer, list) and answer else {}
+        if not isinstance(line, dict) or "retvals" not in line:
+            message = _dict(answer).get("errormessage") if isinstance(answer, dict) else None
+            raise PublicSourceError("public_source_invalid_response", "PROSPERO did not return a search result%s." % (": %s" % message if isinstance(message, str) else ""))
+        total = line.get("hits") if isinstance(line.get("hits"), int) else total
+        page_hits = _list(_dict(_dict(line.get("retvals")).get("hits")).get("hits"))
+        hits.extend(page_hits)
+        if len(page_hits) < PROSPERO_PAGE_SIZE:
+            break
+    asked = hits[offset - (first_page - 1) * PROSPERO_PAGE_SIZE:][:limit]
     items, sources = [], []
-    for value in _list(hits.get("hits"))[:limit]:
+    for value in asked:
         record = _dict(_dict(value).get("_source"))
         identifier = str(record.get("accessionnumber") or "").strip()
         if not identifier:
@@ -3825,6 +3856,26 @@ def _prospero(query, limit):
     )
     result["data"]["total"] = total
     result["data"]["term"] = term
+    read = offset + len(asked)
+    if items and isinstance(total, int) and read < total:
+        if read >= PROSPERO_REACHABLE:
+            outcome = truncated(
+                kept=read, limit=PROSPERO_REACHABLE, unit="registrations", total=total,
+                how="Only the first %d of %d matching registrations can be read for one query: narrow the query (a more specific condition or intervention) to see the rest." % (PROSPERO_REACHABLE, total),
+            )
+        else:
+            outcome = more_available(
+                returned=read, total=total, next_arguments={"offset": read},
+                how="%d of %d matching registrations have been read; call again with offset=%d for the next ones." % (read, total, read),
+            )
+        result["data"]["outcome"] = outcome
+        result["summary"] = "Read %d of %d matching PROSPERO registrations (a partial read; the rest have not been seen)." % (read, total)
+        result["warnings"].append(
+            "Do not conclude that no registered review covers this topic from a partial read: %d of %d registrations were read. %s"
+            % (read, total, outcome["how"] if outcome["state"] == "truncated" else "Read on with offset=%d, or narrow the query." % read)
+        )
+    elif items:
+        result["data"]["outcome"] = complete(returned=read, total=total)
     return result
 
 
@@ -4827,6 +4878,9 @@ def biomedical_search(arguments):
     source_id = arguments["source"]
     query = arguments["query"]
     limit = min(arguments.get("limit", 10), 50)
+    offset = arguments.get("offset", 0)
+    if offset and source_id != "prospero":
+        raise PublicSourceError("public_source_query_invalid", "offset is read only for prospero, the register that pages; %s answers its first %d records." % (source_id, limit))
     credentialed_connectors = {
         "core": _core,
         "semantic-scholar": _semantic_scholar,
@@ -4870,7 +4924,7 @@ def biomedical_search(arguments):
     if source_id == "isrctn":
         return _isrctn(query, limit)
     if source_id == "prospero":
-        return _prospero(query, limit)
+        return _prospero(query, limit, offset)
     if source_id in {"biorxiv", "medrxiv"}:
         return _preprint(source_id, query, limit)
     if source_id == "bindingdb":

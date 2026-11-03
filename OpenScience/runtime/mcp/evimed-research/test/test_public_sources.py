@@ -1535,6 +1535,32 @@ class TrialRegistryAskedByName(unittest.TestCase):
             with self.assertRaises(sources.PublicSourceError):
                 sources.trials({"registry": 0, "query": "痛风"})
 
+    def test_an_outage_on_every_word_is_an_outage_and_retryable_not_a_refusal_of_the_query(self):
+        """REVIEWFIX2 11: the whole query came back empty and every word answered 503; the run was told the registry refused the query."""
+        def answer(query):
+            if query == "痛风 秋水仙碱":
+                return self.page()
+            raise sources.PublicSourceError("public_source_http_error", "Public source returned HTTP 503.", True)
+
+        with self.assertRaises(sources.PublicSourceError) as caught:
+            self.ask(answer, query="痛风 秋水仙碱")
+        error = caught.exception
+        self.assertTrue(error.retryable, "an outage is for trying again, not for rewording")
+        self.assertNotIn("refused", str(error))
+        self.assertIn("HTTP 503", str(error), "the plain cause")
+        self.assertIn("ChiCTR", str(error))
+
+    def test_words_the_registry_refused_are_still_a_refusal(self):
+        def answer(query):
+            if query == "痛风 秋水仙碱":
+                return self.page()
+            raise sources.PublicSourceError("public_source_http_error", "Public source returned HTTP 400.", False)
+
+        with self.assertRaises(sources.PublicSourceError) as caught:
+            self.ask(answer, query="痛风 秋水仙碱")
+        self.assertFalse(caught.exception.retryable)
+        self.assertIn("refused this query", str(caught.exception))
+
     def test_the_default_registry_says_what_it_did_not_ask(self):
         with mock.patch.object(sources, "_get_json", return_value=self.page({"registrationNo": "NCT1", "title": "t"})):
             result = sources.trials({"query": "gout"})
@@ -1554,7 +1580,7 @@ class ProsperoConnector(unittest.TestCase):
         with mock.patch.object(sources, "_get_json_value", return_value=answer) as call:
             result = sources.biomedical_search({"source": "prospero", "query": "gout colchicine", "limit": 3})
         body = call.call_args.kwargs["json_body"]
-        self.assertEqual((body["term"], body["nperpage"]), ("gout AND colchicine", 3))
+        self.assertEqual((body["term"], body["page"], body["nperpage"]), ("gout AND colchicine", 1, 50), "the registry's own page size, so pages line up")
         item = result["data"]["items"][0]
         self.assertEqual(item, {
             "id": "CRD42024589149", "title": "Colchicine & gout", "url": "https://www.crd.york.ac.uk/PROSPERO/view/CRD42024589149",
@@ -1562,6 +1588,58 @@ class ProsperoConnector(unittest.TestCase):
         })
         self.assertEqual(result["data"]["total"], 101)
         self.assertEqual(result["sources"][0]["source"], "prospero")
+
+    @staticmethod
+    def register(total):
+        """A registry holding `total` reviews, paged as its own page does."""
+        def answer(url, **kwargs):
+            body = kwargs["json_body"]
+            first = (body["page"] - 1) * body["nperpage"]
+            hits = [{"_source": {"accessionnumber": "CRD42%06d" % number, "title": "Review %d" % number, "reviewstatus": "Ongoing"}}
+                    for number in range(first, min(first + body["nperpage"], total))]
+            return [{"linenumber": 1, "hits": total, "retvals": {"hits": {"hits": hits}}}]
+        return answer
+
+    def test_a_partial_read_says_how_much_was_read_of_how_many_and_how_to_read_on(self):
+        """REVIEWFIX2 9: 101 hits at limit 10 read "Retrieved 10" with only data.total, and a topic could be called open on a partial read."""
+        with mock.patch.object(sources, "_get_json_value", side_effect=self.register(101)):
+            result = sources.biomedical_search({"source": "prospero", "query": "gout colchicine", "limit": 10})
+        self.assertEqual(len(result["data"]["items"]), 10)
+        outcome = result["data"]["outcome"]
+        self.assertEqual((outcome["state"], outcome["returned"], outcome["total"], outcome["remaining"]), ("more_available", 10, 101, 91))
+        self.assertEqual(outcome["next"]["arguments"], {"offset": 10})
+        self.assertIn("10 of 101", result["summary"])
+        self.assertIn("partial", result["summary"].lower())
+        self.assertTrue(any("do not conclude" in warning.lower() for warning in result["warnings"]))
+
+    def test_the_register_is_paged_through_to_the_asked_records_and_a_whole_read_is_complete(self):
+        asked = []
+        register = self.register(101)
+
+        def recorded(url, **kwargs):
+            asked.append(kwargs["json_body"]["page"])
+            return register(url, **kwargs)
+
+        with mock.patch.object(sources, "_get_json_value", side_effect=recorded):
+            result = sources.biomedical_search({"source": "prospero", "query": "gout", "limit": 10, "offset": 95})
+        self.assertEqual(asked, [2, 3], "records 95..104 sit on the second and third pages")
+        self.assertEqual([item["title"] for item in result["data"]["items"]], ["Review %d" % number for number in range(95, 101)])
+        self.assertEqual(result["data"]["outcome"]["state"], "complete")
+        self.assertEqual(result["data"]["outcome"]["returned"], 101)
+
+    def test_how_far_one_query_can_be_read_is_stated_and_a_larger_ask_is_refused(self):
+        with mock.patch.object(sources, "_get_json_value", side_effect=self.register(2000)):
+            result = sources.biomedical_search({"source": "prospero", "query": "review", "limit": 5, "offset": 495})
+            self.assertEqual(result["data"]["outcome"]["state"], "truncated")
+            self.assertEqual(result["data"]["outcome"]["limit"], sources.PROSPERO_REACHABLE)
+            with self.assertRaises(sources.PublicSourceError) as caught:
+                sources.biomedical_search({"source": "prospero", "query": "review", "limit": 10, "offset": 495})
+        self.assertEqual(caught.exception.code, "public_source_query_invalid")
+
+    def test_an_offset_is_for_the_register_that_pages_and_no_other_source(self):
+        with self.assertRaises(sources.PublicSourceError) as caught:
+            sources.biomedical_search({"source": "isrctn", "query": "gout", "limit": 3, "offset": 10})
+        self.assertEqual(caught.exception.code, "public_source_query_invalid")
 
     def test_an_error_answer_is_not_an_empty_register(self):
         with mock.patch.object(sources, "_get_json_value", return_value={"errormessage": "Nothing to search for"}):

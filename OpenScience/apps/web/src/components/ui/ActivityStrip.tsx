@@ -47,6 +47,7 @@ export interface ActivityStripProps {
   /** What the stop says when it reaches further than the work shown (「停止整个研究」). Absent, 「取消」. */
   cancelLabel?: string;
   variant?: "strip" | "chip";
+  quiet?: boolean;
   className?: string;
 }
 
@@ -57,12 +58,12 @@ export interface ActivityStripProps {
  * States: Waiting suppresses elapsed time; cancelling is caller controlled; no inferred percent.
  * Hit area: Chip uses h-sm; cancellation uses Button; text link has intrinsic target.
  * Keyboard: Native link/Button activation; no automatic focus movement.
- * Long content: One line whatever the state, so that the band keeps its height: the question truncates, and on a phone the clock and the queue give way.
+ * Long content: Default strip truncates its label; quiet strip wraps its label and keeps progress/stop words intact.
  * Theme: Information ground and running-dot role, the text in the ordinary ink (the ground says it, not coloured text: a page is held to seven text colours); reduced motion follows shared CSS.
- * Responsive: Strip wraps; chip is max-width constrained.
+ * Responsive: Quiet strip places actions on a second mobile row; other strips remain one line; chip is max-width constrained.
  * Verification: StepBarParts.test.tsx and Composition.test.tsx; /__gallery is visual evidence; real AT/touch and browser reflow require manual checks.
  */
-export function ActivityStrip({ label, phase, counts, startedAt, queued, waiting, to, onCancel, cancelling, cancelLabel, variant = "strip", className }: ActivityStripProps) {
+export function ActivityStrip({ label, phase, counts, startedAt, queued, waiting, to, onCancel, cancelling, cancelLabel, variant = "strip", quiet = false, className }: ActivityStripProps) {
   const elapsed = useElapsed(waiting ? null : startedAt);
   const dot = waiting
     ? <span aria-hidden="true" data-forced-colors="preserve" className="h-2 w-2 shrink-0 rounded-full bg-surface ring-2 ring-info" />
@@ -83,16 +84,16 @@ export function ActivityStrip({ label, phase, counts, startedAt, queued, waiting
   }
   const detail = counts && counts.total > 0 ? `${phase ? `${phase} ` : ""}${NUMBER.format(counts.done)} / ${NUMBER.format(counts.total)}` : phase;
   return (
-    <div data-activity="strip" data-activity-state={waiting ? "queued" : "running"} className={cn("flex min-h-9 flex-nowrap items-center gap-x-3 rounded bg-info-soft px-3 py-1.5 text-ui text-text", className)}>
+    <div data-activity="strip" data-activity-state={waiting ? "queued" : "running"} className={cn("flex min-h-9 flex-nowrap items-center gap-x-3 rounded px-3 py-1.5 text-ui text-text", quiet ? "flex-wrap gap-y-2 bg-surface sm:flex-nowrap" : "bg-info-soft", className)}>
       {dot}
       {/* A wait on the person (等你确认预算) is said by `waiting` alone: it is not a place in a queue. */}
-      <span className="min-w-0 truncate">{waiting ? (waiting.startsWith("等你") ? label : `${label} · 排队中`) : `正在${label}`}</span>
+      <span className={quiet ? "min-w-0 flex-1 sm:flex-none" : "min-w-0 truncate"}>{waiting ? (waiting.startsWith("等你") ? label : `${label} · 排队中`) : `正在${label}`}</span>
       {waiting ? <span className="shrink-0">{waiting}</span> : detail && <span className="shrink-0 tabular-nums">{detail}</span>}
       {elapsed && <span className="hidden shrink-0 text-caption tabular-nums text-text-3 sm:inline">{elapsed}</span>}
       {queued !== undefined && queued > 0 && <span className="hidden shrink-0 text-caption text-text-2 sm:inline">{`另有 ${queued} 项排队`}</span>}
-      <span className="flex-1" />
-      {to && <Link to={to} className="rounded text-link hover:underline">查看进度</Link>}
-      {onCancel && <Button size="sm" variant="text" actionKind="set" loading={cancelling} disabled={cancelling} onClick={onCancel}>{cancelLabel ?? "取消"}</Button>}
+      <span className={quiet ? "basis-full sm:basis-auto sm:flex-1" : "flex-1"} />
+      {to && <Link to={to} className="shrink-0 whitespace-nowrap rounded text-link hover:underline">查看进度</Link>}
+      {onCancel && <Button size="sm" variant="text" className="shrink-0 whitespace-nowrap" actionKind="set" loading={cancelling} disabled={cancelling} onClick={onCancel}>{cancelLabel ?? "取消"}</Button>}
     </div>
   );
 }

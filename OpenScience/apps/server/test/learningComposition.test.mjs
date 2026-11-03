@@ -285,9 +285,14 @@ test("a terminal write in flight is waited for before the store it writes into g
 test("a project deletion hands its lessons to the learning project and is audited where it outlives the project", () => {
   // L-G1, L-G11: the method, its revisions and the waiting lessons went with
   // the project; the audit line went into the directory being removed.
-  const handler = serverSource.slice(serverSource.indexOf('if (!action && req.method === "DELETE") {'),
+  // The teardown is one function since the data-analysis API (REVIEWFIX2): `DELETE /api/projects/:id` and that API's `DELETE /analyses/:id`
+  // both call it, so this reads it where it is and checks the route still goes through it.
+  const begins = serverSource.indexOf("async function deleteResearcherProject(user, project) {");
+  const handler = serverSource.slice(begins, serverSource.indexOf("// 「循证 GEO」 (geoService.mjs): composed only", begins));
+  assert.ok(begins > 0 && handler.length > 500, "the deletion teardown moved; this test now checks nothing");
+  const route = serverSource.slice(serverSource.indexOf('if (!action && req.method === "DELETE") {'),
     serverSource.indexOf('if (pathname.startsWith("/api/commands/") && req.method === "POST")'));
-  assert.ok(handler.length > 500, "the deletion handler moved; this test now checks nothing");
+  assert.match(route, /await deleteResearcherProject\(user, project\)/, "the route no longer runs the teardown that hands the lessons over");
   assert.match(handler, /await ensureLearningProject\(store, user\)/);
   assert.match(handler, /beforeDelete: async \(client\) => \{[\s\S]*preserveProjectLessons\(\{ client, userId: user\.id, project, learningProject, runs: lessonRuns \}\)/,
     "inside the deletion's own transaction, before the project row goes");

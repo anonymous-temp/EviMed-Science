@@ -894,7 +894,9 @@
           "simulated": 81,
           "differencePoints": 0.4,
           "agrees": true
-        }
+        },
+        "nullState": null,
+        "nullCheck": null
       },
       {
         "id": "scn_2",
@@ -1227,7 +1229,9 @@
           "simulated": 81,
           "differencePoints": 0.4,
           "agrees": true
-        }
+        },
+        "nullState": null,
+        "nullCheck": null
       },
       {
         "id": "scn_3",
@@ -1560,7 +1564,9 @@
           "simulated": 81,
           "differencePoints": 0.4,
           "agrees": true
-        }
+        },
+        "nullState": null,
+        "nullCheck": null
       },
       {
         "id": "scn_4",
@@ -1576,7 +1582,9 @@
         "measures": {},
         "method": null,
         "replicates": null,
-        "crossCheck": null
+        "crossCheck": null,
+        "nullState": null,
+        "nullCheck": null
       }
     ],
     "attention": [
@@ -1715,6 +1723,14 @@
   },
   "updatedAt": "今天 09:09",
   "createdAt": "2026-09-27T01:07:00.000Z",
+  "holds": [
+    "population",
+    "patients",
+    "comparator",
+    "trial",
+    "matching",
+    "data"
+  ],
   "activity": {
     "run": null,
     "queue": [],

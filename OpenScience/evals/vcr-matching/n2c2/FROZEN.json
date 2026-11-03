@@ -1,0 +1,68 @@
+{
+  "schema": 1,
+  "frozenAt": "2026-11-01T21:17:35.590Z",
+  "treeAtFreeze": "50d9e0a2e5dd1d1035353f193050580256b2c4ca",
+  "devRun": "dev-r2",
+  "developmentRounds": 3,
+  "model": {
+    "model": "deepseek-v4-flash",
+    "temperature": 0,
+    "thinking": "disabled",
+    "responseFormat": "json_object",
+    "maxTokens": 4000,
+    "retries": 2,
+    "concurrency": 3
+  },
+  "prompt": {
+    "sha256": "67ffdf066ad847fa6a3c853e2212aac7035eade155529c4d9218478009a71cc2",
+    "skillSha256": "549964567a66e0054b5a1da99c66bd3022c96e5e4154b8d314c153415ea149ca",
+    "excerptsSha256": "0243ecfab8c175a16432b50ab8a9d774a0674d52c80eb071dc24d3c9c09bfcb0"
+  },
+  "predictFiles": {
+    "evals/vcr-matching/n2c2/criteria.mjs": "0223227b911b386781c9c166512df7d0e0e61af497b56ac927e8bbfd95ff8876",
+    "evals/vcr-matching/n2c2/data.mjs": "06c7b3289c56e45654b8dbfcb0959b5a2b65c4bc36ab33d96a0a5936c75e9bca",
+    "evals/vcr-matching/n2c2/prompt.mjs": "c207ae48774bfb94ac7b3d7bd386daf6c7fb853cdf026ace06e39b65e37eb036",
+    "evals/vcr-matching/n2c2/deepseek.mjs": "95e7db1922bad1f05201c42afb2a7a8fe7f68316a1843fa876bc0ac2a5fb228b",
+    "evals/vcr-matching/n2c2/assess.mjs": "cc087b0d1850bbbc17b9cc9ba9fef1caa70adf308a31630d96dd760d4060f97b",
+    "evals/vcr-matching/n2c2/run_n2c2.mjs": "035a47a64767029395dfd479500c4d8018c2cf8251ed0790b92f6afa34a99933",
+    "capabilities/vcr-matching/SKILL.md": "549964567a66e0054b5a1da99c66bd3022c96e5e4154b8d314c153415ea149ca",
+    "apps/server/src/vcrMatching.mjs": "0baa38931f02d1a492f84ed6f9b4814a62ce27b36dfc47b23e1ee37c80804ea1",
+    "apps/server/src/vcrClinicalDateEvidence.mjs": "b82fc1b6725821bdc1f77d0f0dccef5768b551876d966c45e341848211870ae3",
+    "packages/domain/src/vcrMatchBatch.mjs": "e449bc9f15f90462d46f560b008f693f5fdd0af3bbcd1e9ab5879053eb04642b",
+    "packages/domain/src/metering.mjs": "e08b99df8848c02816e125ecc1170c103543ce0cb5d63af67eb16b6f92eac41e"
+  },
+  "scoreFiles": {
+    "evals/vcr-matching/n2c2/criteria.mjs": "0223227b911b386781c9c166512df7d0e0e61af497b56ac927e8bbfd95ff8876",
+    "evals/vcr-matching/n2c2/data.mjs": "06c7b3289c56e45654b8dbfcb0959b5a2b65c4bc36ab33d96a0a5936c75e9bca",
+    "evals/vcr-matching/n2c2/metrics.mjs": "1f2f5485eee47b1d7e80d554b6fa0c461820391ae0d161af329639c34a7e44e3",
+    "evals/vcr-matching/n2c2/gold.mjs": "d22533ca9b820296b5e195e2ebdef20250496f79a9938c47947eb5415849befa",
+    "evals/vcr-matching/n2c2/run_n2c2.mjs": "035a47a64767029395dfd479500c4d8018c2cf8251ed0790b92f6afa34a99933",
+    "evals/vcr-matching/n2c2/run_official_scorer.py": "98d15c71edb873045f6de712170ff4cd90963c08dc42d0c3696df23385bcd805"
+  },
+  "readings": {
+    "a": "unknown is wrong and stays in the denominator",
+    "b": "unknown is not met",
+    "c": "unknown is not met, except ENGLISH and MAKES-DECISIONS where it is met"
+  },
+  "bootstrap": {
+    "resamples": 2000,
+    "seed": 20261101
+  },
+  "dataset": {
+    "trainZipSha256": "5c89a73b38c8155b9d337ed07b7e437f82d0f06a758abfc143dfc37501f4f953",
+    "testZipSha256": "eebaa71f32ff628e218cfda787b43e0e4d34352babf4edd6c6a1edf68c90d0e4",
+    "scorerZipSha256": "5bb5882f9182b277894223cfe6e22ba9a3951296210c0e1316f929391d92d665",
+    "guideSha256": "85c02963e76f7e8796187325b477236ab7611e38d0db9b01164d45763b437b9e",
+    "sealedGoldZipSha256": "f0cd49d80228f29373f02c673becad3242916fb0bd378c9da705b67d00c47045",
+    "trainPatients": 202,
+    "testPatients": 86,
+    "testIdsSha256": "1e5e99f95f97475f5a43b0296bab9c551dbb9023974ab01b12132bbd679ab040",
+    "developmentSplit": {
+      "salt": "n2c2-dev-v1",
+      "size": 40,
+      "idsSha256": "abf3d52129f817e06fec1cfb54554133a579681a4c76270f869e5fb74963652c"
+    }
+  },
+  "budgetCny": 200,
+  "digest": "c74479646fa57aa51351e95c17101d360cf334a1586bfbb60976da04315a0939"
+}

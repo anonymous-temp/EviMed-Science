@@ -17,7 +17,7 @@ import test from "node:test";
 import { createVcrRoutes } from "../src/vcrRoutes.mjs";
 import {
   assessmentBody, assumptionBody, budgetBody, cancelBody, decisionBody, definitionCompareBody, definitionSaveBody, definitionUseBody, exportBody,
-  jobBody, memberBody, packBindBody, regulatoryContactBody, reviewBody, runBody, studyCreateBody, studyPatchBody,
+  jobBody, memberBody, packBindBody, regulatoryContactBody, reviewBody, runBody, studyPatchBody,
 } from "../../web/src/lib/vcrBodies.ts";
 
 /** @param {string} method @param {string} url @param {unknown} [body] */
@@ -113,8 +113,9 @@ function harness() {
 
 /** Every case: the route, and what the builder makes of a realistic input. */
 const CASES = /** @type {Array<[string, string, string, unknown]>} */ ([
-  ["create a study from an action card", "POST", "/api/vcr/studies", studyCreateBody({ action: "cohort" })],
-  ["create a study with a name, tier and use", "POST", "/api/vcr/studies", studyCreateBody({ name: "EV-201", dataTier: "T1", intendedUse: "design_support", question: "q" })],
+  // the page no longer creates a study (its builder was deleted with its client, D8); the route stays for the acceptance scripts that call it
+  ["create a study from an action card", "POST", "/api/vcr/studies", { action: "cohort" }],
+  ["create a study with a name, tier and use", "POST", "/api/vcr/studies", { name: "EV-201", dataTier: "T1", intendedUse: "design_support", question: "q" }],
   ["pause a study", "PATCH", "/api/vcr/studies/std_1", studyPatchBody({ status: "paused" })],
   ["rename a study", "PATCH", "/api/vcr/studies/std_1", studyPatchBody({ name: "EV-201 v2" })],
   ["run a step", "POST", "/api/vcr/studies/std_1/run", runBody("population")],

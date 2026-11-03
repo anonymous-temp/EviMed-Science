@@ -1,6 +1,7 @@
 import { CLINICAL_FACT_CONTRACT, FACT_EVIDENCE_RULE, VCR_REQUIREMENT_CONTRACT, VCR_CRITERION_TYPES, clinicalTerminologyContext } from '@evimed/domain';
 import { clinicalSemanticFields } from '@evimed/domain';
 import { clinicalDocumentWindow } from './vcrDocumentWindow.mjs';
+import { locatePassages, passageWindow } from './vcrPassages.mjs';
 /**
  * 「虚拟临床研究」, composed: the seven packages joined into the one object the
  * control plane registers (build plan 2026-09-28 §11.2, build contract §2).
@@ -77,6 +78,7 @@ import { matchingVariablesOf, subjectTableFacts } from "./vcrMatchingTable.mjs";
 import { createVcrEvidencePipeline } from "./vcrEvidence.mjs";
 import { createVcrCorrectionCases } from "./vcrCorrectionCases.mjs";
 import { createVcrCurveEvidence } from "./vcrCurveEvidence.mjs";
+import { createVcrPublicationSources } from "./vcrPublicationSources.mjs";
 import { createIntakeCounters, createVcrRecordExtractor } from "./vcrRecordExtract.mjs";
 import { createVcrCurveDigitizer } from "./vcrCurveDigitizer.mjs";
 import { VcrEvidenceStore } from "./vcrEvidenceStore.mjs";
@@ -104,6 +106,8 @@ import {
   VCR_MATCHING_VOCABULARY_VERSION, matchingInputDigest, assessSubject, eligibilityCounts, frozenAsOf, languageKeysOf, requiresLanguageJudgment,
 } from "./vcrMatching.mjs";
 import { VCR_JOB_PURPOSE } from "./vcrJobs.mjs";
+import { createFactExtractor, createMatchBatch, createMatchBatchCounters, createMatchExtractExecutor } from "./vcrMatchBatch.mjs";
+import { vcrRuntimeWrite } from "./vcrGateway.mjs";
 import { MATCHING_SNAPSHOT_PREFIX, freezeMatchingInputs, hydrateMatchingInputs, matchingSelection, verifyMatchingSnapshot } from "./vcrMatchingSnapshot.mjs";
 
 /**
@@ -402,6 +406,10 @@ export function vcrMatchingExecutor({ matchStore, store, documents = null, subje
   };
 }
 
+/** What every passage answer says: the passages are found by shared words, so a missing one proves nothing. */
+const PASSAGES_NOTE = "这些是按条件的用词在病历里找出的候选片段（位置是 UTF-16 字符偏移），是检索线索，不是判断：没出现不等于病历没写。" +
+  "找不到相关片段时，事实不写，条件保持未知，不能写成 negated；需要上下文就用 offset 读那一段的前后。事实仍要带逐字引文，写入时照常核对。";
+
 /**
  * The documents seam of the matching flow: a patient document read through the
  * data plane's own reader, which judges the read as a patient-level read of the
@@ -410,12 +418,14 @@ export function vcrMatchingExecutor({ matchStore, store, documents = null, subje
  * the document's own (the pseudonym the plane stored with it), or the document is
  * not found — a run that guessed another patient's document id gets nothing.
  *
- * @param {{ dataPlane: VcrDataPlane | null }} parts
+ * @param {{ dataPlane: VcrDataPlane | null, passagesMinChars?: number }} parts
  */
-export function vcrDocumentsSeam({ dataPlane }) {
+export function vcrDocumentsSeam({ dataPlane, passagesMinChars = 40_000 }) {
   return {
     /** Characters of one document a read returns: the window a run reads a chart through. */
     windowChars: 20_000,
+    /** A document longer than this is offered by the passages that bear on a criterion (`vcrPassages`), not only window after window. */
+    passagesMinChars,
     /**
      * One document with its text, or `null`.
      * @param {any} study @param {{ subjectKey: string, documentId: string }} input
@@ -426,6 +436,18 @@ export function vcrDocumentsSeam({ dataPlane }) {
       if (!document || String(document.subjectKey ?? "") !== String(subjectKey)) return null;
       return { id: document.id, text: String(document.text), visibleAt: document.visibleAt ?? null, subjectKey: String(document.subjectKey),
         sourceHash: document.sourceHash ?? null, projectionHash: document.projectionHash ?? null };
+    },
+    /**
+     * Every record of the study with its owner and length, no text: what the batch reading plans from (D4). A record whose person
+     * the plane did not note is not a record of anyone and is left out.
+     * @param {any} study
+     * @returns {Promise<Array<{ id: string, subjectKey: string, chars: number | null }>>}
+     */
+    async roster(study) {
+      if (!dataPlane) return [];
+      const listed = await dataPlane.listDocuments({ studyId: study.id, principal: study.userId });
+      return listed.filter((/** @type {any} */ entry) => entry.subjectKey)
+        .map((/** @type {any} */ entry) => ({ id: String(entry.id), subjectKey: String(entry.subjectKey), chars: Number.isFinite(Number(entry.chars)) ? Number(entry.chars) : null }));
     },
     /** The only document reader used by a cloud run. @param {any} study @param {any} input */
     async runtimeRead(study, { subjectKey, documentId }) {
@@ -495,10 +517,31 @@ export function vcrDocumentsSeam({ dataPlane }) {
         }
         if (!document) return { available: false, code: "vcr_document_not_found", message: "这位受试者没有这份文档。" };
         const offset = Math.max(0, Number(filter?.offset ?? 0));
+        const chars = document.text.length;
+        const long = chars > this.passagesMinChars;
+        const asked = /** @type {{ terms: import('./vcrPassages.mjs').PassageTerms, criterionId: string | null } | undefined} */ (filter?.passages);
+        if (asked && long) {
+          // The passages of a long record that carry the criterion's words, each with where it stands (a retrieval hint, never a verdict).
+          const found = locatePassages(document.text, asked.terms);
+          if (study.cloudContext && dataPlane.recordDocumentWindow) {
+            for (const passage of found.passages) await dataPlane.recordDocumentWindow(study.id, document.id, study.cloudContext, passageWindow(passage, chars));
+          }
+          return { available: true,
+            document: { id: document.id, subjectKey, chars, visibleAt: document.visibleAt, offsetUnit: "utf16", projectionHash: document.projectionHash },
+            passages: found.passages,
+            passageSearch: { criterionId: asked.criterionId, variables: asked.terms.variables, terminologyTerms: asked.terms.fromTerminology, queryWords: found.queryTokens,
+              searchedChars: chars, units: found.units, returned: found.passages.length },
+            note: PASSAGES_NOTE };
+        }
         const window = clinicalDocumentWindow(document.text, offset, this.windowChars);
         if (study.cloudContext && dataPlane.recordDocumentWindow) await dataPlane.recordDocumentWindow(study.id, document.id, study.cloudContext, window);
-        return { available: true, document: { id: document.id, subjectKey, chars: document.text.length, visibleAt: document.visibleAt,
-          ...window, projectionHash: document.projectionHash } };
+        return { available: true, document: { id: document.id, subjectKey, chars, visibleAt: document.visibleAt,
+          ...window, projectionHash: document.projectionHash },
+        // A record this long is not read in order: say how to ask for the part a criterion bears on. A short one is read as it always was.
+        ...(long && !asked && offset === 0 ? { long: { chars, threshold: this.passagesMinChars,
+          how: "这份病历很长，不必一段段读完：同样的读取里再写 id（一条入排条件的 id）或 query（几个检索词），平台会按条件找出相关片段并给出位置；" +
+            "找不到片段的条件，事实不写（条件保持未知），不要写成否认。" } } : {}),
+        ...(asked && !long ? { passages: [], passageSearch: { searchedChars: chars, note: `这份病历只有 ${chars} 字，不超过 ${this.passagesMinChars} 字：直接读窗口就行。` } } : {}) };
       }
       const documents = await dataPlane.listDocuments({ studyId: study.id, principal: study.userId, subjectKey });
       if (subjectKey) {
@@ -586,6 +629,24 @@ export function vcrMatchingSeam({ matchStore, store, documents = null, subjectTa
 
   const seam = {
     languageKeys,
+
+    /**
+     * A criterion of any of the study's protocol versions, by id — what the passages of a long record are looked for with (M4).
+     * @param {any} study @param {string} id
+     */
+    async criterionById(study, id) {
+      if (!study?.id) return null;
+      return (await matchStore.listCriteria({ studyId: study.id, allVersions: true }).catch(() => [])).find((criterion) => criterion.id === id) ?? null;
+    },
+
+    /**
+     * The terminology the deployment's disease pack holds for the variables a criterion names (labels, Chinese labels, synonyms), or null:
+     * words for a lexical search of a long record. Selected pack definitions, never a patient diagnosis.
+     * @param {any} study @param {any} criterion
+     */
+    async passageTerminology(study, criterion) {
+      return clinicalEnabled(study) ? clinicalContext(study, [criterion]).catch(() => null) : null;
+    },
 
     /** @param {any} study */
     async tab(study) {
@@ -1002,9 +1063,10 @@ export function createVcrEngineJobRemover({ config, fetchImpl, engine = null }) 
  *   sourceChanges?: { getMany?: (identifiers: unknown[]) => Promise<Map<string, any>> } | null,
  *   officialZoneForKeys?: ((keys: string[]) => Promise<string | null>) | null,
  *   predictionRegistry?: { register: (prediction: Record<string, any>) => Promise<any> } | null,
+ *   usageLedger?: any,
  * }} input
  */
-export function composeVcr({ config, productDatabase, projectStore = null, audit = async () => {}, fetchImpl, report = () => {}, connectorCredentials = null, intakeController = null, entityVocabulary = null, sourceChanges = null, officialZoneForKeys = null, predictionRegistry = null }) {
+export function composeVcr({ config, productDatabase, projectStore = null, audit = async () => {}, fetchImpl, report = () => {}, connectorCredentials = null, intakeController = null, entityVocabulary = null, sourceChanges = null, officialZoneForKeys = null, predictionRegistry = null, usageLedger = null }) {
   if (!config?.vcrEnabled || !productDatabase) return null;
 
   // The shared entity vocabulary tags a study with what it is about (`entityVocabulary.mjs`).
@@ -1050,7 +1112,7 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
 
   // Patient documents are read through the plane's own judged, audited reader;
   // with no plane there are none, and a fact a run wrote about a document is void.
-  const documents = vcrDocumentsSeam({ dataPlane });
+  const documents = vcrDocumentsSeam({ dataPlane, passagesMinChars: Number(config.vcrPassagesMinChars) > 0 ? Number(config.vcrPassagesMinChars) : undefined });
   const subjectTable = dataPlane ? vcrSubjectTableSeam({ dataPlane }) : null;
   const jobs = new VcrJobs({
     store, config, engine, report, dataPlane, engineObserver: engineProbe,
@@ -1078,6 +1140,13 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   });
   const evidence = createVcrEvidencePipeline({ store: evidenceStore, registry, jobs });
   jobs.baselineVerifier = input => evidence.verifyBaselineTable(input);
+  // A number a paper reports is held against the text the platform itself read of that paper (a capture in the project's workspace).
+  if (projectStore) {
+    evidence.attachPublications(createVcrPublicationSources({ resolveProject: async (userId, projectId) => {
+      const owner = await projectStore.userById(userId);
+      return projectStore.requireProject(owner, projectId);
+    } }));
+  }
   const digitizer = createVcrCurveDigitizer({ config, controller: intakeController, counters: intakeCounters, report });
   const curves = createVcrCurveEvidence({ store: evidenceStore, studyStore: store, access, digitizer, resolveProject: async study => {
     if (!projectStore) throw new HttpError(503, 'vcr_curve_provenance_unavailable', 'Source image access is unavailable.');
@@ -1108,6 +1177,17 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
     for (const method of Object.keys(VCR_LONGITUDINAL_METHODS)) jobs.localExecutors[method] = longitudinal.execute;
     service.attach({longitudinal});
   }
+
+  // Batch matching (D4): the patient records of a roster read for the criteria's facts, a record at a time, in a job on the slow local
+  // lane. The model is the control plane's own client (purpose `vcr` in the usage ledger); a fact it proposes is written by the same
+  // writer a conversation's facts go through.
+  const matchBatchCounters = createMatchBatchCounters();
+  jobs.localExecutors["matching.extract"] = createMatchExtractExecutor({
+    store, matchStore, documents, config, report, counters: matchBatchCounters,
+    extractor: createFactExtractor({ config, usageLedger, fetchImpl: call }),
+    writeFacts: ({ study, items, documents: held, caller }) => vcrRuntimeWrite({ store, service: null, orchestrator: null, study, what: "fact", items, data: null, matchStore, documents: held, report, caller }),
+  });
+  const matchBatch = createMatchBatch({ jobs, matchStore, documents, subjectTable, config, counters: matchBatchCounters });
 
   const corrections = createVcrCorrectionCases({ store, matchStore, dataPlane, access });
   // The disease packs and the account's library of population definitions: read and written by the study's pages,
@@ -1151,7 +1231,7 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   service.attach({ records });
   composed = {
     publications, simulations, frontierEvents, predictions, records,
-    store, dataStore, matchStore, erasure, candidateStore, patientTrials, evidenceStore, corrections, knowledge, knowledgeStore, longitudinal,
+    store, dataStore, matchStore, erasure, candidateStore, patientTrials, evidenceStore, corrections, knowledge, knowledgeStore, longitudinal, matchBatch, matchBatchCounters,
     access, members, dataPlane, dataPlaneSeam, documents, engine, engineProbe, engineStatus, removeEngineJob, jobs, seal, evidence, matching, registry, service,
     intake: { counters: intakeCounters, extractor, importer, digitizer },
     // Composed later, beside the other modules' workers (server.mjs).
@@ -1271,6 +1351,7 @@ export async function vcrMetricsSnapshot(vcr) {
     publications: vcr.publications ? { ...vcr.publications.counters, reads: Number(vcr.simulations?.counters?.reads ?? 0) } : null,
     predictions: vcr.predictions ? { ...vcr.predictions.counters } : null,
     patientTrials: vcr.patientTrials?.counters ? { ...vcr.patientTrials.counters } : null,
+    matchBatch: vcr.matchBatchCounters ? { ...vcr.matchBatchCounters } : null,
     frontierEvents: vcr.frontierEvents ? { ...vcr.frontierEvents.counters } : null,
     platformPacks: vcr.knowledge?.platform?.enabled
       ? Object.fromEntries(Object.entries(vcr.knowledge.counters).filter(([kind]) => kind.startsWith("platform"))) : null,
@@ -1359,8 +1440,12 @@ export function vcrMetricFamilies(enabled, snapshot) {
       Object.entries(snapshot.predictions).map(([outcome, value]) => ({ labels: { outcome }, value: Number(value) })));
   }
   if (snapshot.patientTrials) {
-    add("patient_trials_total", "What 「给患者找试验」 did since this process started: candidate trials written and updated, writes refused, and writes refused because the study already holds the most it may (OPEN_SCIENCE_VCR_CANDIDATE_TRIALS_MAX); patients evaluated against a trial, evaluations that could not be made, and the searches the page asked for.", "counter",
+    add("patient_trials_total", "What 「给患者找试验」 did since this process started: candidate trials written and updated, writes refused, and writes refused because the study already holds the most it may (OPEN_SCIENCE_VCR_CANDIDATE_TRIALS_MAX); patients evaluated against a trial, evaluations that could not be made, the searches the page asked for, and the parses kept for an account (parsedKept) and read again by a later study (parsedReused).", "counter",
       Object.entries(snapshot.patientTrials).map(([kind, value]) => ({ labels: { kind }, value: Number(value) })));
+  }
+  if (snapshot.matchBatch) {
+    add("match_batch_total", "What the batch reading of patient records did since this process started: batches started, records read, facts kept and facts the writer or the closed vocabulary refused, records that failed or could not be read (and are read again by the next start), and batches canceled.", "counter",
+      Object.entries(snapshot.matchBatch).map(([kind, value]) => ({ labels: { kind }, value: Number(value) })));
   }
   if (snapshot.platformPacks) {
     add("platform_packs_total", "What the platform knowledge packs did since this process started (flywheel F26): packs that passed the re-check and were copied, requests that failed it, authors who took their name off, and platform packs labelled 来源有变更.", "counter",

@@ -94,7 +94,7 @@ function checkArm(arm, index) {
   const bad = message => refuse(400, 'vcr_request_invalid', `arms[${index}]: ${message}`);
   if (!plain(arm)) throw bad('an arm is an object.');
   const value = /** @type {Record<string, any>} */ (arm);
-  const extra = Object.keys(value).filter(key => !['name', 'curve', 'riskTable', 'totalEvents', 'reportedMedian'].includes(key));
+  const extra = Object.keys(value).filter(key => !['name', 'curve', 'riskTable', 'initialAtRisk', 'totalEvents', 'reportedMedian'].includes(key));
   if (extra.length) throw bad(`${extra.join(', ')} is not a field of an arm (curve points are never stated: they are measured).`);
   const curve = value.curve ?? {};
   if (!plain(curve) || Object.keys(curve).some(key => !['color', 'legendOrder'].includes(key))) throw bad('curve names the curve by color (#rrggbb) or legendOrder (1 is the first swatch from the top).');
@@ -103,13 +103,19 @@ function checkArm(arm, index) {
   if (curve.color != null && curve.legendOrder != null) throw bad('name the curve by color or by legendOrder, not both.');
   const name = value.name == null ? '' : String(value.name).trim();
   if (name.length > 60) throw bad('name is at most 60 characters.');
-  if (!Array.isArray(value.riskTable) || value.riskTable.length < 2 || value.riskTable.length > 200) {
-    throw bad('riskTable is the published numbers at risk, [{time, atRisk}] with at least two rows: without them censoring is not identified and no reconstruction is run.');
+  // The numbers at risk are the best a reconstruction can have and not a condition of one: a paper that prints none still gives the
+  // arm's size at the start (initialAtRisk), and the reconstruction says what it was given (its information level).
+  if (value.riskTable != null && (!Array.isArray(value.riskTable) || value.riskTable.length < 2 || value.riskTable.length > 200)) {
+    throw bad('riskTable is the published numbers at risk, [{time, atRisk}] with at least two rows; when the paper prints none, give initialAtRisk, the arm\'s size at the start.');
+  }
+  if (value.initialAtRisk != null && (!Number.isInteger(value.initialAtRisk) || value.initialAtRisk < 1)) throw bad('initialAtRisk is the arm\'s size at the start, a whole number.');
+  if (value.riskTable == null && value.initialAtRisk == null) {
+    throw bad('state the published numbers at risk (riskTable), or initialAtRisk, the arm\'s size at the start: a curve alone does not say how many patients it describes.');
   }
   return {
     name: name || (index === 0 ? 'control' : 'treatment'),
     selector: { ...(curve.color != null ? { color: String(curve.color).startsWith('#') ? String(curve.color) : `#${curve.color}` } : {}), ...(curve.legendOrder != null ? { legendOrder: curve.legendOrder } : {}) },
-    riskTable: value.riskTable, totalEvents: value.totalEvents, reportedMedian: value.reportedMedian,
+    riskTable: value.riskTable, ...(value.initialAtRisk != null ? { initialAtRisk: value.initialAtRisk } : {}), totalEvents: value.totalEvents, reportedMedian: value.reportedMedian,
   };
 }
 
@@ -218,7 +224,8 @@ export function createVcrCurveDigitizer({ config, controller = null, counters = 
       }
       const provenance = { kind: 'digitizer', tool: VCR_DIGITIZER_TOOL, toolVersion: String(result.algorithm.version) };
       const armScenario = (/** @type {any} */ arm, /** @type {any} */ curve) => ({
-        curve: curve.points.map((/** @type {any} */ point) => ({ time: point.time, surv: point.surv })), riskTable: arm.riskTable,
+        curve: curve.points.map((/** @type {any} */ point) => ({ time: point.time, surv: point.surv })),
+        ...(arm.riskTable != null ? { riskTable: arm.riskTable } : {}), ...(arm.initialAtRisk != null ? { initialAtRisk: arm.initialAtRisk } : {}),
         ...(arm.totalEvents != null ? { totalEvents: arm.totalEvents } : {}), ...(arm.reportedMedian != null ? { reportedMedian: arm.reportedMedian } : {}),
       });
       const scenario = {

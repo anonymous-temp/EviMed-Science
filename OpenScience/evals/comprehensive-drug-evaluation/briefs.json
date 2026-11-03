@@ -35,7 +35,8 @@
         "State that the pivotal trial was stopped early for efficacy and what that does to the reported effect size, in the effectiveness domain rather than in a limitations footnote.",
         "Keep the with-diabetes and without-diabetes results separate with their own denominators, and say which of them the committee's population resembles.",
         "Leave economics unscored with its missing inputs named; describe what a local price, price date and perspective would let the committee compute.",
-        "Read the label the evaluation rests on through drug_label_search (search by the medicine, then read the one used by its labelId) and cite it by its approval number and label id; add only scope, evidence access and observed fields to evidence-snapshot.json, whose `retrieved` record each submission writes from what the run's tools returned."
+        "Read the label the evaluation rests on through drug_label_search (search by the medicine, then read the one used by its labelId) and cite it by its approval number and label id; add only scope, evidence access and observed fields to evidence-snapshot.json, whose `retrieved` record each submission writes from what the run's tools returned.",
+        "For any current product approval or availability claim, check the exact product and jurisdiction against later regulatory decisions and current official labeling; label unverified or superseded status explicitly."
       ],
       "mustNotDo": [
         "Rate certainty high, or convert it into recommendation strength, because the evidence is a randomized trial; certainty is not_rated unless a formal assessment with named judgements is supplied.",

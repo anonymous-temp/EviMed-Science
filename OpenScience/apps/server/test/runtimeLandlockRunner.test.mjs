@@ -30,6 +30,11 @@ const runnerSource = await readFile(path.join(repo, "deploy/runtime-dsh/evimed-l
 const fixture = JSON.parse(await readFile(path.join(repo, "deploy/runtime-dsh/fixtures/sandbox-profile.json"), "utf8"));
 const socketPatch = await readFile(path.join(repo, "packages/socket/cordis.patch.yml"), "utf8");
 
+test("the container sandbox acceptance script parses before it is run", () => {
+  const check = spawnSync("bash", ["-n", path.join(repo, "deploy/runtime-dsh/check-tool-sandbox.sh")], { encoding: "utf8" });
+  assert.equal(check.status, 0, check.stderr);
+});
+
 const realLauncher = process.env.EVIMED_LANDLOCK_RUN ?? "";
 const landlockWorks = realLauncher !== "" && spawnSync(realLauncher, ["--probe"], { encoding: "utf8" }).status === 0;
 const needsLandlock = { skip: !landlockWorks && "needs EVIMED_LANDLOCK_RUN (the kernel's landlock-run) on a kernel that enforces Landlock" };

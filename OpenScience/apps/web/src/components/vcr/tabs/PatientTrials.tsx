@@ -29,7 +29,14 @@ const ELIGIBILITY_TONE: Record<string, TagTone> = { eligible: "accent", insuffic
 
 /** The registry, phase and status line a trial's row and card share; whatever the registry did not say is left out, never filled in. */
 function phaseAndStatus(trial: VcrPatientTrial): string {
-  return [trial.phase, trial.status].filter(Boolean).join(" · ");
+  // A registry's word for where a trial stands is as of the day its record was read; the date goes with it.
+  const status = trial.status && trial.statusAsOf ? `${trial.status}（${trial.statusAsOf}）` : trial.status;
+  return [trial.phase, status].filter(Boolean).join(" · ");
+}
+
+/** 已判 n/m, then the counts: the criteria decided over every one that applies. */
+function decidedAndCounts(trial: VcrPatientTrial): string {
+  return [trial.decided && trial.decided.applicable > 0 ? `已判 ${trial.decided.decided}/${trial.decided.applicable}` : null, trial.summary].filter(Boolean).join(" · ");
 }
 
 /** The conditions and the sites of a registry trial, as the registry's record has them; nothing for the study's own protocol. */
@@ -82,7 +89,7 @@ function TrialRow({ trial, current, onPick }: { trial: VcrPatientTrial; current:
       <button type="button" aria-current={current ? "true" : undefined} onClick={onPick} className="mt-1 block w-full rounded text-left">
         <span className="block text-ui font-semibold text-text">{trial.title}</span>
         {line && <span className="block text-caption text-text-2">{line}</span>}
-        <span className="block text-caption text-text-3">{trial.summary}</span>
+        <span className="block text-caption text-text-3">{decidedAndCounts(trial)}</span>
       </button>
     </li>
   );

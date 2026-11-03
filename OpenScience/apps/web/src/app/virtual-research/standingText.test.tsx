@@ -115,12 +115,12 @@ describe("the list", () => {
     });
     afterEach(() => rect.mockRestore());
 
-    it("the pane keeps detailed requirements inside a closed disclosure", async () => {
+    it("the pane says what is enough to begin in the four examples' own rows, and stands no paragraph", async () => {
       installVcrServer(network.productRequest);
       drawStudy("/app/virtual-research");
       await screen.findByRole("list", { name: "研究" });
-      expect(screen.getByText("数据要求").closest("details")).not.toHaveAttribute("open");
-      expect(blocks()).toHaveLength(1);
+      expect(screen.getByRole("list", { name: "研究示例" }).querySelectorAll("li")).toHaveLength(4);
+      expect(blocks()).toEqual([]);
     });
 
     it("a chosen study's preview stands one block of text — the finding the study wrote — and every other sentence is a note, a row or a fact", async () => {
