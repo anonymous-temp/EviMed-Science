@@ -108,6 +108,7 @@ describe('switching the analysis view builds a descriptor the server admits', ()
   it('carries only what means the same in both views', () => {
     expect(geoAnalysisDescriptorForView('V03', { viewId: 'V02', metricId: 'M-05', dimension: 'group', timeGrain: 'round' })).toEqual({ viewId: 'V03', dimension: 'engine', metricId: 'M-05' });
     expect(geoAnalysisDescriptorForView('V08', { viewId: 'V02', metricId: 'M-05', timeGrain: 'round' })).toEqual({ viewId: 'V08', dimension: 'project', timeGrain: 'round' });
+    expect(geoAnalysisDescriptorForView('V05', { viewId: 'V04', metricId: 'M-13' })).toEqual({ viewId: 'V05', dimension: 'group' });
     expect(geoAnalysisDescriptorForView('V19', { viewId: 'V17', sourceType: 'official', sourceRelationship: 'wrong', topN: 5 })).toMatchObject({ viewId: 'V19', sourceType: 'official', sourceRelationship: 'wrong', topN: 5 });
     expect(geoAnalysisDescriptorForView('V26', { viewId: 'V26', strategyVersion: 7, targetVersion: 3 })).toMatchObject({ strategyVersion: 7, targetVersion: 3 });
     expect(geoAnalysisDescriptorForView('V10', { viewId: 'V26', strategyVersion: 7 })).toEqual({ viewId: 'V10', dimension: 'project' });

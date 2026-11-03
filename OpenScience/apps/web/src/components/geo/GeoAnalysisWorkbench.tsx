@@ -2,7 +2,7 @@ import { ensureGeoConversationSession } from "./geoConversationSession";
 import { useEffect, useRef, useState } from "react";
 import { PenLine } from "lucide-react";
 import { Link, useLocation } from "react-router";
-import { GEO_METRIC_LABELS_ZH, GEO_SOURCE_KIND_LABELS_ZH } from "@evimed/domain";
+import { GEO_METRIC_LABELS_ZH, GEO_SOURCE_KIND_LABELS_ZH, geoMetricDefinition } from "@evimed/domain";
 import {
   getGeoAnalysis,
   type GeoAnalysisDescriptor,
@@ -331,7 +331,7 @@ function AnalysisPage({
                     view.metricId ?? (view.viewId === "V08" ? "M-16" : ["V02", "V03", "V04", "V05", "V27"].includes(view.viewId) ? "M-01" : null),
                   allLabel: view.viewId === "V01" ? "全部指标" : undefined,
                   options: Object.entries(GEO_METRIC_LABELS_ZH)
-                    .filter(([id]) => id.startsWith("M-") && (view.viewId !== "V08" || ["M-16","M-17"].includes(id)) && (!["V04", "V05", "V27"].includes(view.viewId) || !["M-16", "M-17", "M-18", "M-21"].includes(id)))
+                    .filter(([id]) => id.startsWith("M-") && (view.viewId !== "V08" || ["M-16","M-17"].includes(id)) && (!(view.viewId === "V05" && id === "M-13")) && (!["V04", "V05", "V27"].includes(view.viewId) || !["M-16", "M-17", "M-18", "M-21"].includes(id)))
                     .map(([value, label]) => ({ value, label: String(label) })),
                   onChange: (value: string | null) =>
                     setView({ ...view, metricId: value }),
@@ -415,6 +415,10 @@ function AnalysisPage({
       {state.kind === "error" && data && <Note tone="warn" action={<Button size="sm" variant="text" onClick={refresh}>重试读取分析</Button>}>{state.message}</Note>}
       <fieldset disabled={resultsLocked} inert={resultsLocked || undefined} aria-label={resultsLocked ? state.kind === "error" ? "上次范围的分析结果（读取失败）" : "上次范围的分析结果（正在更新）" : "当前范围的分析结果"} className="flex min-w-0 flex-col gap-4 border-0 p-0"
         onClickCapture={event => { if (resultsLocked) { event.preventDefault(); event.stopPropagation(); } }}>
+      {data && (data.view.metricId === "M-13" || data.rows.some(row => row.metricId === "M-13")) && <Note action={null}>
+        {geoMetricDefinition("M-13")?.note}
+        {data.view.viewId === "V05" && " 单个问题群通常只属于一个问题池，无法独立计算这个跨池比值；可在平台指标比较中查看。"}
+      </Note>}
       {data && <GeoAnalysisVisual data={data} onSelect={cell => {
         if (resultsLocked) return;
         if (cell.members) { selectMembers(cell.members); return; }
@@ -512,10 +516,10 @@ function AnalysisPage({
                     word
                   )}
                   {value.reason && value.state !== "known" && word !== analysisReason(value.reason) && <span className="text-caption text-text-3">{analysisReason(value.reason)}</span>}
-                  {(value.denominator ?? value.metric?.denominator ?? 0) > 0 && (
+                  {(row.metricId !== "M-13" || value.state === "known") && (value.denominator ?? value.metric?.denominator ?? 0) > 0 && (
                     <span className="text-caption text-text-3">
-                      {value.numerator ?? value.metric?.numerator ?? "—"} /{" "}
-                      {value.denominator ?? value.metric?.denominator}
+                      {value.numerator ?? value.metric?.numerator ?? "—"}{row.metricId === "M-13" ? "%" : ""} /{" "}
+                      {value.denominator ?? value.metric?.denominator}{row.metricId === "M-13" ? "%" : ""}
                     </span>
                   )}
                 </span>
@@ -661,6 +665,7 @@ function unitWord(unit: string) {
       {
         business_events:"事件",history_answer_refs:"样本关联",history_target_refs:"关联材料",CNY:"元",weeks:"周",placements:"次",ledger_entries:"账目记录",ledger_balance_readings:"余额读数",target_rows:"规划目标",frozen_metric_readings:"冻结实测",
         percentage_points: "个百分点",
+        ratio: "倍",
         rank: "名",
         percent: "%",
         index: "分",

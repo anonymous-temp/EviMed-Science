@@ -210,6 +210,7 @@ export interface GeoAnalysisMemberItem {
   groupContext?: string; businessScopeState?: string;
   amountCny?: number; currency?: string; balance?: Record<string,number|null>;
   strategyVersion?: number; targetVersion?: number; memberReference?: string|null; memberDigest?: string|null; memberCount?:number|null;
+  metricId?: string;
   numerator?:number|null;denominator?:number|null;value?:number|null;target?:number|null;baseline?:number|null;budgetCny?:number|null;horizonWeeks?:number|null;placements?:number|null;
   errorStatement?: string | null; fingerprint?: string; errorType?: string | null; severity?: string | null;
   judgmentState?: string; errorRevision?: string | null; evidenceQuote?: string | null;

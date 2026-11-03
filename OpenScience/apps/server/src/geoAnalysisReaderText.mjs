@@ -16,7 +16,7 @@ export const GEO_READER_STATE_ZH = Object.freeze({ known: "已知", insufficient
   partial: "部分", unjudged: "未判定", absent: "未测" });
 
 /** @type {Record<string, string>} */
-const UNITS = { percent: "百分比", count: "计数", index: "指数", answers: "回答", observations: "观察", expressions: "表达", statements: "陈述", findings: "发现",
+const UNITS = { percent: "百分比", count: "计数", index: "指数", ratio: "比值", answers: "回答", observations: "观察", expressions: "表达", statements: "陈述", findings: "发现",
   articles: "稿件", article_formats: "稿件格式", source_pairs: "回答与页面配对", source_pages: "页面", rounds: "轮次", questions: "问题", publications: "发布",
   order_events: "订单事件", orders: "订单", ledger_entries: "账目", ledger_balance_readings: "余额读数", history_answer_refs: "样本关联",
   history_target_refs: "材料关联", frozen_metric_readings: "冻结读数", distinct_answered_questions: "取得回答的问题", claims: "结论", business_events: "业务事件",
@@ -27,7 +27,7 @@ const UNITS = { percent: "百分比", count: "计数", index: "指数", answers:
 
 /** @type {Record<string, string>} */
 const REASONS = { answer_applicability_is_separate: "适用性另行判断", answer_not_returned: "没有取得回答", citations_without_links: "引用没有可测的链接",
-  comparison_not_selected: "未选择对照区间", conversion_not_derivable: "不能推算转化", engine_absent: "该平台未测", event_has_no_material_of_this_kind: "该事件没有这类材料",
+  comparison_not_selected: "未选择对照区间", conversion_not_derivable: "缺少可计算比值的问法提及率", engine_absent: "该平台未测", event_has_no_material_of_this_kind: "该事件没有这类材料",
   event_not_metric: "事件不是指标读数", linked_not_verified: "已关联但未核实", no_red_flag_expectations: "没有设定红旗预期", no_sampling: "没有采样",
   no_snapshots: "没有回答", not_adjudicated: "尚未判定", not_mentioned: "未提及", not_planned: "未计划", not_recorded: "未记录", no_valid_answers: "没有有效回答",
   no_validated_applicability_assessment: "没有已核实的适用性判定", observed_records_are_not_a_plan: "观察记录不是计划", owned_not_registered: "未登记自有信源",

@@ -69,6 +69,8 @@ describe("a GEO number", () => {
     expect(formatGeoValue(18.4)).toBe("18%");
     expect(formatGeoValue(0.43)).toBe("0.4%");
     expect(formatGeoValue(38.2, "index")).toBe("38");
+    expect(formatGeoValue(1.75, "ratio")).toBe("1.75 倍");
+    expect(geoSampleText(cell(1.75, 70, 40), "ratio")).toBeNull();
     expect(geoCellPhrase(cell(38, null, 1240), "index")).toBe("38，1,240 次回答");
   });
 

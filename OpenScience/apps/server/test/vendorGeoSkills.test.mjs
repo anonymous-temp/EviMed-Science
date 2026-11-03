@@ -293,6 +293,8 @@ test("with the private root holding only its README, the GEO capabilities still 
     const body = await readFile(path.join(repoRoot, "capability-skills", id, "SKILL.md"), "utf8");
     assert.match(body, /本部署未安装 GEO 方法包/, `${id} does not say what happens without the method pack`);
     assert.match(body, /\$GEO_LIB/, `${id} does not say where the pack's shared layer is`);
+    assert.match(body, /not guaranteed to\s+be an exported shell variable/, `${id} must not assume GEO_LIB exists in the runtime environment`);
+    assert.match(body, /\.\.\/\.\.\/shared\/rules\/x\.yaml/, `${id} must resolve shared rules from the loaded skill base`);
   }
   // The skills a capability body tells the run to load are skills the pack
   // ships — asked of the vendored tree only where one exists.

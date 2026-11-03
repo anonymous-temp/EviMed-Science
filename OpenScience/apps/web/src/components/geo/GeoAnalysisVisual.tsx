@@ -179,7 +179,7 @@ export function GeoAnalysisVisual({ data, onSelect }: {
   if (chart.kind === "comparison") {
     const cells = chart.cells ?? [], known = cells.filter(cell => cell.state === "known" && cell.value !== null);
     const max = Math.max(1, ...known.map(cell => Math.abs(cell.value!)));
-    return <ChartCard title="可比变化排序" state={known.length ? "content" : "empty"} emptyText="尚无可排序的可比读数；两期读数和原因保留在下表。" legend={<ul aria-label="变化与不可比状态">{cells.map(cell=><li key={cell.rowKey}><Button size="sm" variant="text" onClick={()=>onSelect(cell)}>{cell.label.replace(cell.engine ?? "\u0000",engineName(cell.engine ?? ""))} · {cell.value === null ? "不排序" : `${cell.value>0?"+":""}${cell.value} ${cell.unit === "percentage_points" ? "个百分点" : "分"}`}</Button>{cell.value===null&&<span className="text-caption text-text-3">{unavailableReason(cell)}</span>}</li>)}</ul>}>
+    return <ChartCard title="可比变化排序" state={known.length ? "content" : "empty"} emptyText="尚无可排序的可比读数；两期读数和原因保留在下表。" legend={<ul aria-label="变化与不可比状态">{cells.map(cell=><li key={cell.rowKey}><Button size="sm" variant="text" onClick={()=>onSelect(cell)}>{cell.label.replace(cell.engine ?? "\u0000",engineName(cell.engine ?? ""))} · {cell.value === null ? "不排序" : `${cell.value>0?"+":""}${cell.value} ${cell.unit === "percentage_points" ? "个百分点" : cell.unit === "ratio" ? "倍" : "分"}`}</Button>{cell.value===null&&<span className="text-caption text-text-3">{unavailableReason(cell)}</span>}</li>)}</ul>}>
       <svg role="img" aria-label="可比变化排序" viewBox={`0 0 600 ${Math.max(48,known.length*32)}`} className="w-full">
         <line x1="300" x2="300" y1="0" y2={known.length*32} className="stroke-border"/>
         {known.map((cell,index)=><rect key={cell.rowKey} x={cell.value!<0?300-Math.abs(cell.value!)/max*280:300} y={index*32+4} width={Math.abs(cell.value!)/max*280} height="24" className={cell.value!<0?"fill-current text-text-3":"fill-current text-accent"}><title>{cell.label}：{cell.value}</title></rect>)}
@@ -268,7 +268,7 @@ export function GeoAnalysisVisual({ data, onSelect }: {
             key: cell.rowKey,
             label: platformLabel(cell),
             value: cell.value!,
-            unit: cell.unit === "percent" ? "%" : cell.unit === "answers" ? "回答" : undefined,
+            unit: cell.unit === "percent" ? "%" : cell.unit === "ratio" ? "倍" : cell.unit === "answers" ? "回答" : undefined,
           }))}
           onSelect={key => {
             const cell = cells.find(item => item.rowKey === key);

@@ -187,13 +187,15 @@ test("a metric id has one reader name and a name one id: the table every page, r
   const units = /** @type {Record<string, string>} */ (GEO_METRIC_UNITS);
   for (const id of ids) {
     assert.ok(typeof labels[id] === "string" && labels[id].length > 0, `${id} has no reader name`);
-    assert.ok(["percent", "index", "count"].includes(units[id]), `${id} has no unit`);
+    assert.ok(["percent", "index", "count", "ratio"].includes(units[id]), `${id} has no unit`);
   }
   assert.deepEqual(Object.keys(GEO_METRIC_LABELS_ZH).sort(), [...ids].sort(), "the table names exactly the metrics there are");
   const names = Object.values(GEO_METRIC_LABELS_ZH);
   assert.equal(new Set(names).size, names.length, "no name stands for two ids");
   assert.equal(GEO_METRIC_LABELS_ZH["M-01"], "品牌提及率");
   assert.equal(GEO_METRIC_LABELS_ZH["M-01S"], "品类问题可见率");
+  assert.equal(GEO_METRIC_LABELS_ZH["M-13"], "品牌问法与品类问法提及率比值");
+  assert.equal(geoMetricUnit("M-13"), "ratio");
   assert.notEqual(GEO_METRIC_LABELS_ZH["M-01S"], GEO_METRIC_LABELS_ZH["M-01"], "mention over a pool and mention over the category questions are not one name");
   // a reader asking by the overview's key gets the id's name
   for (const { key, metricId } of GEO_OVERVIEW_METRICS) {

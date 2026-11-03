@@ -11,7 +11,7 @@ export function GeoFinanceVisual({data,onSelect}:{data:GeoAnalysisView;onSelect(
   const metricKeys=['frozenBaseline','recordedBaseline','current','target'];
   const amountKeys=ledger?['amountCny']:['reserveCny','releaseCny','settleCny','refundCny','spentCny'];
   const keys=plan?metricKeys:amountKeys;
-  const word=(cell:GeoAnalysisChartCell)=>cell.value===null?'未知':`${cell.value}${cell.unit==='percent'?'%':cell.unit==='CNY'?' 元':cell.unit==='weeks'?' 周':cell.unit==='placements'?' 次':''}${cell.state==='known'?'':cell.state==='insufficient'?'（样本不足）':'（依据尚不完整）'}`;
+  const word=(cell:GeoAnalysisChartCell)=>cell.state==='insufficient'?'样本不足':cell.value===null?'未知':`${cell.value}${cell.unit==='percent'?'%':cell.unit==='ratio'?' 倍':cell.unit==='CNY'?' 元':cell.unit==='weeks'?' 周':cell.unit==='placements'?' 次':''}${cell.state==='known'?'':'（依据尚不完整）'}`;
   const basis=data.contextualBasis?.find(item=>item.kind==='frozen_plan');
   return <>
     <ChartCard title={plan?'方案冻结实测、当前实测与目标':'项目金额记录'} state={data.rows.length?'content':'empty'} emptyText={plan?'这个范围没有匹配的冻结方案与目标。':'这个范围没有账目记录。'}
@@ -19,12 +19,12 @@ export function GeoFinanceVisual({data,onSelect}:{data:GeoAnalysisView;onSelect(
       {plan&&basis&&<p className="text-caption text-text-2">方案版本 {basis.strategyVersion??'未知'} · 冻结目标版本 {basis.targetVersion??'未知'}</p>}
       {data.rows.map(row=>{
         const values=cells.filter(cell=>cell.rowKey===row.key&&keys.includes(cell.columnKey));
-        const scale=chartScale(values.map(cell=>cell.value),null,[0,0]);
+        const scale=chartScale(values.map(cell=>cell.state==='known'?cell.value:null),null,[0,0]);
         const x=(value:number)=>scale?10+(value-scale.low)/(scale.high-scale.low)*480:10;
         return <div key={row.key} className="flex flex-col gap-2">
           <p className="text-caption">{row.label}</p>
           <svg role="img" aria-label={`${row.label} · ${plan?'实测与目标':'人民币金额'}`} viewBox={`0 0 500 ${Math.max(1,values.length)*18}`} className="w-full">
-            {values.filter(cell=>cell.value!==null).map((cell,index)=><line key={cell.columnKey} x1={x(0)} x2={x(cell.value!)} y1={index*18+8} y2={index*18+8} strokeWidth="6" className={cell.columnKey==='target'?'stroke-text-3':'stroke-accent'} strokeDasharray={cell.columnKey==='target'?'4 3':undefined}><title>{data.columns.find(column=>column.key===cell.columnKey)?.label}：{word(cell)}</title></line>)}
+            {values.filter(cell=>cell.state==='known'&&cell.value!==null).map((cell,index)=><line key={cell.columnKey} x1={x(0)} x2={x(cell.value!)} y1={index*18+8} y2={index*18+8} strokeWidth="6" className={cell.columnKey==='target'?'stroke-text-3':'stroke-accent'} strokeDasharray={cell.columnKey==='target'?'4 3':undefined}><title>{data.columns.find(column=>column.key===cell.columnKey)?.label}：{word(cell)}</title></line>)}
           </svg>
           <ul aria-label={`${row.label}精确读数`}>{values.map(cell=><li key={cell.columnKey}><Button size="sm" variant="text" disabled={!cell.members} onClick={()=>onSelect(cell)}>{data.columns.find(column=>column.key===cell.columnKey)?.label}：{word(cell)}</Button></li>)}</ul>
           {plan&&<p className="text-caption text-text-2">规划费用 {row.values.budgetCny?.value??'未估'} {row.values.budgetCny?.value!=null?'元':''} · 投放 {row.values.placements?.value??'未估'} · 周期 {row.values.horizonWeeks?.value??'未估'} 周</p>}

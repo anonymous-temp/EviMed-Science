@@ -113,7 +113,7 @@ export function metricTriple(metric: GeoOverviewMetric | null, key: string, stra
 }
 
 const TILE_ORDER: readonly GeoOverviewMetricKey[] = ["gvi", "mention", "accuracy", "citation"];
-const UNIT_TEXT: Record<GeoUnit, string | undefined> = { index: "/ 100", percent: "%", count: undefined };
+const UNIT_TEXT: Record<GeoUnit, string | undefined> = { index: "/ 100", percent: "%", count: undefined, ratio: undefined };
 
 /** The number without its unit — the tile sets the unit beside it, once. */
 export function tileValue(cell: GeoCell | null | undefined, unit: GeoUnit): { reading: MetricReading; value: string; unit?: string; placeholder: boolean } {
@@ -242,8 +242,8 @@ export function changeWord(change: ReadingChange, unit: GeoUnit): string | null 
   if (change.coverage) return coverageNotice(change);
   if (change.delta === null) return null;
   if (change.flat) return "与上次持平";
-  const size = Math.abs(change.delta) >= 1 ? Math.round(Math.abs(change.delta)) : Math.round(Math.abs(change.delta) * 10) / 10;
-  return `比上次${change.delta > 0 ? "高" : "低"} ${size}${unit === "percent" ? " 个百分点" : ""}`;
+  const size = unit === "ratio" ? Math.round(Math.abs(change.delta) * 100) / 100 : Math.abs(change.delta) >= 1 ? Math.round(Math.abs(change.delta)) : Math.round(Math.abs(change.delta) * 10) / 10;
+  return `比上次${change.delta > 0 ? "高" : "低"} ${size}${unit === "percent" ? " 个百分点" : unit === "ratio" ? " 倍" : ""}`;
 }
 
 /** The metric a catalogue id names, when the diagnosis measured one this page wants. */

@@ -1020,7 +1020,7 @@ export type GeoStrategyCell = (GeoCell & { date?: string | null; roundId?: strin
 export interface GeoStrategyTargetRow {
   metricId: string;
   name: string;
-  unit: "percent" | "index" | "count";
+  unit: "percent" | "index" | "count" | "ratio";
   pool: "all" | GeoPool;
   tiers: Partial<Record<GeoTierId, {
     target: number | null;

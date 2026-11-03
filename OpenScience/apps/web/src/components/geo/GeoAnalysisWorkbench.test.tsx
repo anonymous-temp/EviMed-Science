@@ -169,6 +169,23 @@ it('identifies a renamed generic as current configuration while retaining unknow
  expect(screen.getByTestId('export').textContent).toContain('Renamed');
 });
 
+it('shows the M-13 ratio with its real precision and explains the two question pools',async()=>{
+ const view={viewId:'V04',metricId:'M-13',dimension:'engine'};
+ read.mockResolvedValue({view,selection:{reference:'gsel_ratio'},digest:'ratio-digest',columns:[{key:'current',label:'所选实测'}],rows:[{key:'ratio',label:'品牌问法与品类问法提及率比值 · DeepSeek',metricId:'M-13',dimensions:{engine:'deepseek'},values:{current:{value:1.75,state:'known',unit:'ratio',metric:{value:1.75,numerator:70,denominator:40,status:'ok'},members:null}}}],page:{total:1,shown:1,nextOffset:null},availability:{status:'ready'}});
+ render(<MemoryRouter><GeoAnalysisWorkbench geoId="geo" project={project as never} initialDescriptor={view as never} embedded/></MemoryRouter>);
+ expect(await screen.findByText(/不是用户转化率/)).toBeVisible();
+ expect(screen.getByText('1.75 倍')).toBeVisible();
+ expect(screen.getByText(/70%\s*\/\s*40%/)).toBeVisible();
+});
+
+it('does not offer a cross-pool ratio for an individual question group',async()=>{
+ const view={viewId:'V05',metricId:'M-01',dimension:'group'};
+ read.mockResolvedValue({view,selection:{reference:'gsel_groups'},digest:'group-digest',columns:[],rows:[],page:{total:0,shown:0,nextOffset:null},availability:{status:'ready'}});
+ render(<MemoryRouter><GeoAnalysisWorkbench geoId="geo" project={project as never} initialDescriptor={view as never} embedded/></MemoryRouter>);
+ fireEvent.click(await screen.findByRole('button',{name:'指标：品牌提及率'}));
+ expect(screen.queryByRole('menuitemradio',{name:'品牌问法与品类问法提及率比值'})).toBeNull();
+});
+
 it('V03 keeps a working comparison action and both exact period member requests',async()=>{
  const view={viewId:'V03',metricId:'M-01',dimension:'engine'},member=(columnKey:string)=>({selectionRef:'gsel_compare',view,rowKey:'compared',columnKey,expectedDigest:'compare-digest',unit:'answers',total:1,exact:true});
  read.mockResolvedValue({view,selection:{reference:'gsel_compare'},digest:'compare-digest',columns:[{key:'previous',label:'对照实测'},{key:'current',label:'所选实测'},{key:'delta',label:'变化'}],rows:[{key:'compared',label:'品牌提及率',metricId:'M-01',dimensions:{},values:{previous:{value:0,state:'known',unit:'percent',metric:null,members:member('previous')},current:{value:20,state:'known',unit:'percent',metric:null,members:member('current')},delta:{value:null,state:'unknown',reason:'comparison_not_selected',metric:null,members:null}}}],page:{total:1,shown:1,nextOffset:null},availability:{status:'partial',reasons:['comparison_not_selected']}});
@@ -310,6 +327,21 @@ it('keeps an exact historical plan descriptor for export and native explanation'
  await waitFor(()=>expect(navigation.stage).toHaveBeenCalledWith('geo',expect.objectContaining({view,mode:'analysis',selectionRef:'gsel_current',expectedDigest:'historical-digest'})));
  fireEvent.click(screen.getByRole('button',{name:'方案版本：方案版本 3'}));fireEvent.click(screen.getByRole('menuitemradio',{name:'所选范围最新方案'}));
  await waitFor(()=>expect(read).toHaveBeenCalledWith('geo',{round:'old'},{viewId:'V26',strategyVersion:undefined,targetVersion:undefined},0,undefined));
+});
+
+it('keeps ratio units on frozen-plan charts and their exact readings',async()=>{
+ const view={viewId:'V26'}, row={key:'ratio-plan',label:'品牌问法与品类问法提及率比值',metricId:'M-13',dimensions:{},values:{current:{value:1.75,state:'known',unit:'ratio',members:null}}};
+ read.mockResolvedValue({view,selection:{reference:'gsel_ratio_plan'},digest:'ratio-plan',columns:[{key:'current',label:'当前实测'}],rows:[row],chart:{kind:'frozen_plan_targets',cells:[{rowKey:'ratio-plan',columnKey:'current',label:row.label,value:1.75,state:'known',unit:'ratio'}]},page:{total:1,shown:1,nextOffset:null},availability:{status:'ready'}});
+ render(<MemoryRouter><GeoAnalysisWorkbench geoId="geo" project={project as never} initialView="V26" embedded/></MemoryRouter>);
+ expect(await screen.findByRole('button',{name:'当前实测：1.75 倍'})).toBeVisible();
+});
+
+it('does not reveal or chart an insufficient ratio or its underlying rates',async()=>{
+ const view={viewId:'V26'}, row={key:'thin-plan',label:'品牌问法与品类问法提及率比值',metricId:'M-13',dimensions:{},values:{current:{value:1.75,state:'insufficient',unit:'ratio',metric:{value:1.75,numerator:70,denominator:40,status:'insufficient'},members:null}}};
+ read.mockResolvedValue({view,selection:{reference:'gsel_thin'},digest:'thin',columns:[{key:'current',label:'当前实测'}],rows:[row],chart:{kind:'frozen_plan_targets',cells:[{rowKey:'thin-plan',columnKey:'current',label:row.label,value:1.75,state:'insufficient',unit:'ratio'}]},page:{total:1,shown:1,nextOffset:null},availability:{status:'ready'}});
+ render(<MemoryRouter><GeoAnalysisWorkbench geoId="geo" project={project as never} initialView="V26" embedded/></MemoryRouter>);
+ expect(await screen.findByRole('button',{name:'当前实测：样本不足'})).toBeVisible();
+ expect(screen.queryByText(/1\.75|70%|40%/)).toBeNull();
 });
 
 const ready = (extra: Record<string, unknown> = {}) => ({

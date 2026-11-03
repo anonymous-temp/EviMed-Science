@@ -89,6 +89,7 @@ function defaultDimension(viewId: GeoAnalysisId): NonNullable<GeoAnalysisDescrip
 /** Metrics the view cannot read (the registry's own refusals): rivals read M-16/M-17 only, the platform views none of the rival and cost ones. */
 function metricFits(viewId: GeoAnalysisId, metricId: string): boolean {
   if (viewId === 'V08') return ['M-16', 'M-17'].includes(metricId);
+  if (viewId === 'V05' && metricId === 'M-13') return false;
   if (['V04', 'V05', 'V27'].includes(viewId)) return !['M-16', 'M-17', 'M-18', 'M-21'].includes(metricId);
   return true;
 }

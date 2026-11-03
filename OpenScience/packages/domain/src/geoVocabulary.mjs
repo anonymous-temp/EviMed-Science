@@ -289,16 +289,16 @@ export const GEO_METRIC_LABELS_ZH = Object.freeze({
   'M-01': '品牌提及率', 'M-01S': '品类问题可见率', 'M-02': '首位提及率', 'M-03': '推荐位提及率', 'M-04': '品牌声量份额',
   'M-04C': '品牌登记覆盖率', 'M-05': '平均出现位序', 'M-06': '事实准确率', 'M-07': '错误陈述条数', 'M-08': '引用命中率',
   'M-08B': '正文引用命中率', 'M-08S': '信源问题引用率', 'M-09': '自有内容被引条数', 'M-09S': '信源数量引用率', 'M-10': '检索触发率',
-  'M-11': '就医红旗覆盖率', 'M-12': '禁忌与特殊人群提示率', 'M-13': '通用名到厂牌转化率', 'M-14': '泛症状可见度',
+  'M-11': '就医红旗覆盖率', 'M-12': '禁忌与特殊人群提示率', 'M-13': '品牌问法与品类问法提及率比值', 'M-14': '泛症状可见度',
   'M-15': '风险问句被推荐率', 'M-16': '竞品提及率', 'M-17': '竞品声量份额', 'M-18': '与头部竞品的差距档位', 'M-19': '综合可见度指数',
   'M-20': '回答有效率', 'M-21': '发布稿件被引篇数',
   NET: '净效应', NOISE: '噪声区间',
 })
-/** The scale a metric is read on: a percentage, a 0–100 index, or a count (a position or a ratio reads as an index). */
+/** The scale a metric is read on: percentage, index, count, or a dimensionless ratio. */
 export const GEO_METRIC_UNITS = Object.freeze({
   'M-01': 'percent', 'M-01S': 'percent', 'M-02': 'percent', 'M-03': 'percent', 'M-04': 'percent', 'M-04C': 'percent', 'M-05': 'index',
   'M-06': 'percent', 'M-07': 'count', 'M-08': 'percent', 'M-08B': 'percent', 'M-08S': 'percent', 'M-09': 'count', 'M-09S': 'percent',
-  'M-10': 'percent', 'M-11': 'percent', 'M-12': 'percent', 'M-13': 'index', 'M-14': 'percent', 'M-15': 'percent', 'M-16': 'percent',
+  'M-10': 'percent', 'M-11': 'percent', 'M-12': 'percent', 'M-13': 'ratio', 'M-14': 'percent', 'M-15': 'percent', 'M-16': 'percent',
   'M-17': 'percent', 'M-18': 'index', 'M-19': 'index', 'M-20': 'percent', 'M-21': 'count', NET: 'index', NOISE: 'index',
 })
 /** The overview's four keys and the 检索 key a series may name a metric by, as the metric ids they are. */
@@ -321,11 +321,11 @@ export function geoMetricName(idOrKey) {
 /**
  * A metric's scale (`percent` when the word is not known: a rate is the common case).
  * @param {string | null | undefined} idOrKey
- * @returns {'percent' | 'index' | 'count'}
+ * @returns {'percent' | 'index' | 'count' | 'ratio'}
  */
 export function geoMetricUnit(idOrKey) {
   const id = geoMetricId(idOrKey)
-  return /** @type {'percent' | 'index' | 'count'} */ ((id && /** @type {Record<string, string>} */ (GEO_METRIC_UNITS)[id]) || 'percent')
+  return /** @type {'percent' | 'index' | 'count' | 'ratio'} */ ((id && /** @type {Record<string, string>} */ (GEO_METRIC_UNITS)[id]) || 'percent')
 }
 
 /**
