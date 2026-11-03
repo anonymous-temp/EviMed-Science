@@ -867,6 +867,20 @@ describe("native frame identity and readiness", () => {
     await waitFor(() => expect(mocks.create).toHaveBeenCalledTimes(2));
   });
 
+  it("replaces a frame whose scoped native initialization timed out when the person retries", async () => {
+    mocks.create.mockResolvedValueOnce(binding).mockResolvedValueOnce({ ...binding, frameId: "frame-b", frameUrl: "https://host.example:8443/__evimed/f/frame-b/" });
+    const { container } = mount(null, "/app/chat/session-a");
+    await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull());
+    const first = container.querySelector("iframe")!;
+    emit(first, { type: "evimed.runtime-ui.error", error: "NATIVE_NOT_READY" });
+    expect(await screen.findByRole("alert")).toHaveTextContent("对话没有完成初始化");
+    await userEvent.click(screen.getByRole("button", { name: "重试" }));
+    await waitFor(() => expect(container.querySelector("iframe")?.src).toContain("/f/frame-b/"));
+    expect(container.querySelector("iframe")).not.toBe(first);
+    expect(mocks.create).toHaveBeenCalledTimes(2);
+    expect(screen.getByTestId("path")).toHaveTextContent("/app/chat/session-a");
+  });
+
   // Every frame refusal used to arrive as 「研究会话暂时无法连接」 with a retry
   // button beside it. Both halves were wrong for a ceiling: the sentence named
   // a cause the code contradicts, and the only offered action is the one action

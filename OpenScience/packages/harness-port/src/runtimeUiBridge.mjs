@@ -221,7 +221,25 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     return {};
   }
   let observedTurn = { sessionId: /** @type {string | null} */ (null), running: false };
+  const scopedStartup = Object.hasOwn(frame, 'access') ? target.__EVIMED_SCOPED_STARTUP__ : null;
+  let startupOpening = false;
+  let startupOpened = false;
+  let startupDone = false;
+  function openScopedStartup() {
+    if (!scopedStartup || startupDone || startupOpening || disposed || !validId(scopedStartup.sessionId)) return;
+    const root = scopedStartup.sessionId;
+    if (!ctx.sessions.list.getSnapshot().byId?.[root]) return;
+    if (!startupOpened) {
+      startupOpening = true;
+      try { ctx.uiWorkspace.openSession(root); startupOpened = true; } catch { /* Wait for a later native list update. */ }
+      finally { startupOpening = false; }
+    }
+    if (startupOpened && mainViewSession(ctx.sessions.list.getSnapshot()) === root) {
+      startupDone = scopedStartup.release(root) === true;
+    }
+  }
   function sessionChanged() {
+    openScopedStartup();
     if (!ready || !activated || disposed) return;
     const snapshot = ctx.sessions.list.getSnapshot();
     const sessionId = mainViewSession(snapshot, previousSession ?? null);
@@ -746,6 +764,8 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
   target.addEventListener('message', message);
   target.addEventListener('keydown', keydown);
   const unsubscribe = ctx.sessions.list.subscribe(sessionChanged);
+  scopedStartup?.onFailure?.(() => { if (!disposed) { unavailable(); post('error', { error: 'NATIVE_NOT_READY' }); } });
+  openScopedStartup();
   const unsubscribeGeneration = ctx.connection.generation.subscribe(() => {
     if (!ctx.connection.generation.getSnapshot()) unavailable();
     void establish();

@@ -246,6 +246,36 @@ test('a scoped frame waits for its exact session to arrive rather than creating 
   f.ctx.dispose();
 });
 
+test('a scoped startup releases workspace only after the authorized root is retained', async () => {
+  const f = fixture();
+  f.target.__EVIMED_FRAME__.access = { type: 'baseline', owner: false, grants: [] };
+  /** @type {string[]} */ const released = [];
+  /** @type {any} */ (f.target).__EVIMED_SCOPED_STARTUP__ = { sessionId: 'session-scoped', release: (/** @type {string} */ id) => { released.push(id); return true; } };
+  let visible = false, retained = false;
+  /** @type {() => void} */ let changed = () => {};
+  f.ctx.sessions.list.getSnapshot = () => mainView(retained ? 'session-scoped' : null, visible ? { 'session-scoped': {} } : {});
+  f.ctx.sessions.list.subscribe = (/** @type {() => void} */ callback) => { changed = callback; return () => {}; };
+  f.ctx.uiWorkspace.openSession = (/** @type {string} */ id) => { assert.equal(id, 'session-scoped'); retained = true; f.calls.push(['open', id]); };
+  apply(f.ctx, {}, f.target); await settle();
+  assert.deepEqual(released, []); assert.deepEqual(f.calls, []);
+  visible = true; changed(); await settle();
+  assert.deepEqual(f.calls, [['open', 'session-scoped']]);
+  assert.deepEqual(released, ['session-scoped']);
+  f.ctx.dispose();
+});
+
+test('a scoped startup does not release workspace after native root retention fails', async () => {
+  const f = fixture();
+  f.target.__EVIMED_FRAME__.access = { type: 'baseline', owner: false, grants: [] };
+  /** @type {string[]} */ const released = [];
+  /** @type {any} */ (f.target).__EVIMED_SCOPED_STARTUP__ = { sessionId: 'session-scoped', release: (/** @type {string} */ id) => released.push(id) };
+  f.ctx.sessions.list.getSnapshot = () => mainView(null, { 'session-scoped': {} });
+  f.ctx.uiWorkspace.openSession = () => { throw new Error('not yet retained'); };
+  apply(f.ctx, {}, f.target); await settle();
+  assert.deepEqual(released, []);
+  f.ctx.dispose();
+});
+
 test('a scoped frame never creates a missing session or opens a different one', async () => {
   for (const kind of ['open', 'create']) {
     const f = fixture(); f.target.__EVIMED_FRAME__.access = { type: 'baseline', owner: false, grants: [] };
