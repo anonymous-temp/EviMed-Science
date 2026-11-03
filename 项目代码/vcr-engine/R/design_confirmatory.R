@@ -57,6 +57,9 @@ VCR_CONFIRMATORY_NULL_RATE_RATIO <- 1
   p$assumed[[length(p$assumed) + 1L]] <- list(key = key, value = value, basis = basis)
   p
 }
+#' What a design's sizes count, as the closed code the control plane words ("events" for a time-to-event design, "patients" for the rest;
+#' it is not a unit a number carries, so it is not the "例" of a measure). One definition, because five designs write it.
+.vcr_conf_count_kind <- function(events) if (isTRUE(events)) "events" else "patients"
 .vcr_conf_note_defaults <- function(p, sc) {
   d <- sc$design; an <- sc$analysis %||% list(); tr <- sc$truth %||% list()
   if (is.null(an$alpha)) p <- .vcr_conf_assume(p, "analysis.alpha", p$alpha)
@@ -155,7 +158,7 @@ VCR_CONFIRMATORY_NULL_RATE_RATIO <- 1
     binary = vcr_n_proportions(p$control_rate, p$control_rate + effect, p$alpha, p$power, p$allocation, 1)$total,
     time_to_event = vcr_events_schoenfeld(effect, p$alpha, p$power, p$allocation, 1))
   events <- identical(p$endpoint, "time_to_event")
-  unit <- if (events) "events" else "patients"
+  unit <- .vcr_conf_count_kind(events)
   max_size <- size$max
   at_look <- max_size * p$rates
   patients <- NULL
@@ -224,7 +227,7 @@ VCR_CONFIRMATORY_NULL_RATE_RATIO <- 1
 .vcr_conf_reestimation <- function(job, progress = NULL) {
   sc <- job$scenario; p <- .vcr_conf_note_defaults(.vcr_conf_common(sc), sc)
   d <- sc$design; tr <- sc$truth
-  events <- identical(p$endpoint, "time_to_event"); unit <- if (events) "events" else "patients"
+  events <- identical(p$endpoint, "time_to_event"); unit <- .vcr_conf_count_kind(events)
   cp <- vcr_scalar(d$conditionalPower, 0.8); factor <- vcr_scalar(d$maxSampleSizeFactor, 2)
   zone <- if (is.null(d$promisingZone)) NULL else list(lower = vcr_scalar(d$promisingZone$lower), upper = vcr_scalar(d$promisingZone$upper))
   if (is.null(d$conditionalPower)) p <- .vcr_conf_assume(p, "design.conditionalPower", cp)
@@ -311,7 +314,7 @@ VCR_CONFIRMATORY_NULL_RATE_RATIO <- 1
 .vcr_conf_multiarm <- function(job, progress = NULL) {
   sc <- job$scenario; p <- .vcr_conf_note_defaults(.vcr_conf_common(sc), sc)
   d <- sc$design; tr <- sc$truth
-  events <- identical(p$endpoint, "time_to_event"); unit <- if (events) "events" else "patients"
+  events <- identical(p$endpoint, "time_to_event"); unit <- .vcr_conf_count_kind(events)
   arms <- as.integer(d$activeArms)
   selection <- list(rule = as.character(d$selection$rule %||% "best"), r = vcr_scalar(d$selection$r, NULL), epsilon = vcr_scalar(d$selection$epsilon, NULL))
   if (is.null(d$selection)) p <- .vcr_conf_assume(p, "design.selection.rule", "best", basis = "default: the arm with the best interim estimate continues")
@@ -387,7 +390,7 @@ VCR_CONFIRMATORY_NULL_RATE_RATIO <- 1
 .vcr_conf_enrichment <- function(job, progress = NULL) {
   sc <- job$scenario; p <- .vcr_conf_note_defaults(.vcr_conf_common(sc), sc)
   d <- sc$design; tr <- sc$truth
-  events <- identical(p$endpoint, "time_to_event"); unit <- if (events) "events" else "patients"
+  events <- identical(p$endpoint, "time_to_event"); unit <- .vcr_conf_count_kind(events)
   prevalence <- vcr_scalar(d$subsetPrevalence)
   selection <- list(rule = as.character(d$selection$rule %||% "best"), r = vcr_scalar(d$selection$r, NULL), epsilon = vcr_scalar(d$selection$epsilon, NULL))
   if (is.null(d$selection)) p <- .vcr_conf_assume(p, "design.selection.rule", "best", basis = "default: the population with the better interim estimate continues")
@@ -474,7 +477,7 @@ VCR_CONFIRMATORY_NULL_RATE_RATIO <- 1
     looks <- lapply(seq_along(p$rates), function(i) list(look = i, informationRate = p$rates[i], size = seq_$max * p$rates[i], efficacyBound = gs$efficacyBounds[i], alphaSpent = gs$alphaSpent[i]))
   }
   list(status = "succeeded", measures = measures, counts = vcr_counts(), conclusion = "estimable",
-       diagnostics = list(confirmatory = list(kind = p$kind, endpoint = "count", unit = "patients", looks = looks,
+       diagnostics = list(confirmatory = list(kind = p$kind, endpoint = "count", unit = .vcr_conf_count_kind(FALSE), looks = looks,
          baselines = list(fixed = list(size = sum(per_arm(fixed)), perArm = as.list(per_arm(fixed)))), model = "negative_binomial", assumed = p$assumed, given = .vcr_conf_given(sc))))
 }
 
