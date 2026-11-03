@@ -12,6 +12,9 @@
 #   c  the log-rank rejection probability in that world against a simulation in plain R (piecewise exponential times, uniform entry,
 #      administrative censoring) tested with survival::survdiff, within three combined Monte-Carlo errors
 #   d  a job at 1.3.0 reports none of it (a replay), and a scenario with another analysis reports none
+#   e  the strong null spends only what the design's own replicates left of the job's CPU budget: they are never shortened for it (it
+#      starts after them: a asserts that they all ran), and a world that cannot finish on what is left is not started (d: the plan on
+#      stated numbers, so the case depends on no clock)
 
 .n69_scenario <- function(truth, n = 30L, method = "maxcombo") list(design = list(kind = "two_arm_fixed", nTreat = n, nControl = n),
   endpoint = list(type = "time_to_event"), truth = truth, accrual = list(kind = "uniform", duration = 12, followup = 18),
@@ -19,16 +22,23 @@
 
 vcr_case("N69a", c("AC-28", "AC-31"), function() {
   sc <- .n69_scenario(list(hazardRatio = 0.9, controlMedian = 12))
-  # the CPU budget of the MaxCombo job is held to a minute so that the second simulation (the strong null, N69c) is not what this case waits for
-  max_job <- vcr_test_run(vcr_test_job("design.simulate", sc, seed = 6901L, replicates = 5000L, cores = VCR_TEST_CORES, job_id = "job_n69a", extra = list(cpuSecondsLimit = 60L)))
+  # The release before reports none of it (a replay), and it costs what the design's own replicates cost, with no strong null: it is the
+  # measure of this machine. The MaxCombo job is given three times that to run its replicates in, which leaves the strong null (about four
+  # times the design's own cost) no room, so the case waits for the design alone and no faster or slower machine changes what it holds.
+  # (A fixed limit of a minute was 25 percent over the design's cost here and cut the replicates short on a slower runner, so the log-rank
+  # power beside MaxCombo was read on fewer trials than the log-rank job's.)
+  old <- vcr_test_run(vcr_test_job("design.simulate", sc, seed = 6901L, replicates = 5000L, cores = VCR_TEST_CORES, job_id = "job_n69a3", extra = list(methodVersion = "1.3.0")))
+  limit <- as.integer(ceiling(3 * old$manifest$cpuSeconds / 0.9))
+  max_job <- vcr_test_run(vcr_test_job("design.simulate", sc, seed = 6901L, replicates = 5000L, cores = VCR_TEST_CORES, job_id = "job_n69a", extra = list(cpuSecondsLimit = limit)))
   lr_job <- vcr_test_run(vcr_test_job("design.simulate", .n69_scenario(list(hazardRatio = 0.9, controlMedian = 12), method = "logrank"), seed = 6901L, replicates = 5000L, cores = VCR_TEST_CORES, job_id = "job_n69a2"))
-  old <- vcr_test_run(vcr_test_job("design.simulate", sc, seed = 6901L, replicates = 5000L, job_id = "job_n69a3", extra = list(methodVersion = "1.3.0")))
   same <- identical(vcr_measure_value(max_job, "power_logrank"), vcr_measure_value(lr_job, "power"))
-  ok <- c(same = same, mcse = isTRUE(vcr_get_measure(max_job, "power_logrank")$simulated) && is.finite(vcr_get_measure(max_job, "power_logrank")$mcse),
+  ok <- c(full = identical(max_job$status, "succeeded") && identical(as.integer(max_job$diagnostics$replicatesCompleted), 5000L) && identical(as.integer(old$diagnostics$replicatesCompleted), 5000L),
+          same = same, mcse = isTRUE(vcr_get_measure(max_job, "power_logrank")$simulated) && is.finite(vcr_get_measure(max_job, "power_logrank")$mcse),
           replay = is.na(vcr_measure_value(old, "power_logrank")) && is.null(old$diagnostics$strongNull),
           logrank_job = is.na(vcr_measure_value(lr_job, "power_logrank")) && is.null(lr_job$diagnostics$strongNull))
-  list(pass = all(ok), detail = sprintf("MaxCombo power %.4f; log-rank power beside it %.4f (+-%.4f) = the power of a log-rank job at the same seed %.4f; 1.3.0 replay reports no log-rank column, a log-rank analysis none%s",
-                                        vcr_measure_value(max_job, "power"), vcr_measure_value(max_job, "power_logrank"), vcr_get_measure(max_job, "power_logrank")$mcse, vcr_measure_value(lr_job, "power"),
+  list(pass = all(ok), detail = sprintf("MaxCombo power %.4f on %s replicates under a CPU limit of %d s (3 x the design's own %.0f s); log-rank power beside it %.4f (+-%.4f) = the power of a log-rank job at the same seed %.4f; 1.3.0 replay reports no log-rank column, a log-rank analysis none%s",
+                                        vcr_measure_value(max_job, "power"), format(max_job$diagnostics$replicatesCompleted), limit, old$manifest$cpuSeconds,
+                                        vcr_measure_value(max_job, "power_logrank"), vcr_get_measure(max_job, "power_logrank")$mcse, vcr_measure_value(lr_job, "power"),
                                         if (all(ok)) "" else paste0("; FAILED: ", paste(names(ok)[!ok], collapse = ","))))
 })
 
@@ -74,4 +84,23 @@ vcr_case("N69c", c("AC-28", "AC-29"), function() {
           mcse = isTRUE(mx$simulated) && is.finite(mx$mcse) && mx$mcse > 0 || mx$value == 0)
   list(pass = all(ok), detail = sprintf("strong null (early hazard ratio %.3f to month %g, then 1): log-rank rejects %.4f (+-%.4f) in the job, %.4f (+-%.4f) in plain R with survival::survdiff, %.2f combined errors; MaxCombo %.4f (+-%.4f); nominal %.3f%s",
                                         harm, cut, lr$value, lr$mcse, p, se, z, mx$value, mx$mcse, 0.025, if (all(ok)) "" else paste0("; FAILED: ", paste(names(ok)[!ok], collapse = ","))))
+})
+
+# The plan is arithmetic on stated numbers (no clock): the design's own replicates took 40 CPU s for 5000, so 20000 strong-null replicates are
+# projected at 160 s, and the strong null runs only when that fits in what is left of the job's limit and of the running job's budget.
+vcr_case("N69d", c("AC-28"), function() {
+  plan <- function(...) vcr_strong_null_plan(40, 5000L, 20000L, ...)
+  ok <- c(fits = plan(limit = 300)$run && isTRUE(all.equal(plan(limit = 300)$remaining, 260)) && isTRUE(all.equal(plan(limit = 300)$needed, 160)),
+          too_small = !plan(limit = 100)$run && isTRUE(all.equal(plan(limit = 100)$remaining, 60)),
+          at_the_edge = plan(limit = 201)$run && !plan(limit = 199)$run,
+          running_budget_binds = !plan(limit = 600, running = 100)$run && plan(limit = 600, running = 200)$run && isTRUE(all.equal(plan(limit = 600, running = 200)$remaining, 200)),
+          no_budget = plan()$run && is.infinite(plan()$remaining),
+          spent_limit = !plan(limit = 40)$run && !plan(limit = 30)$run && isTRUE(all.equal(plan(limit = 30)$remaining, 0)),
+          nothing_known = vcr_strong_null_plan(0, 0L, 20000L, limit = 50)$run && !vcr_strong_null_plan(0, 0L, 20000L, limit = 0)$run)
+  # not started, so nothing is spent: the job and its scenario are never read beyond the law, and the answer says it was not computed
+  job <- list(seed = 1L, replicates = 5000L, cores = 1L, cpuSecondsLimit = 100)
+  skipped <- vcr_maxcombo_strong_null(job, .n69_scenario(list(hazardRatio = 0.9, controlMedian = 12)), spent = 90, completed = 5000L)
+  ok <- c(ok, skipped = identical(skipped$diagnostics$computed, FALSE) && length(skipped$measures) == 0L && nzchar(skipped$diagnostics$reason))
+  list(pass = all(ok), detail = sprintf("40 CPU s for 5000 replicates projects 160 s for 20000: runs under a limit of 300 (260 left), not under 100 (60 left), at the edge of 160 s (161 s left runs, 159 s left does not); the running job's own budget binds when it is smaller; no budget runs it; a spent limit never does; a job with 90 of 100 s used skips it, computed false, no measure%s",
+                        if (all(ok)) "" else paste0("; FAILED: ", paste(names(ok)[!ok], collapse = ","))))
 })

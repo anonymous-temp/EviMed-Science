@@ -841,7 +841,7 @@ vcr_dominated_designs <- function(rows, maximize = character(), minimize = chara
 #' chose MaxCombo for a delayed effect should see both numbers. The case is derived from the design, never typed: the early hazard
 #' ratio is the design's own if it states one above 1 (a crossing), else the mirror of its benefit (1 / the smallest ratio), from the
 #' design's first break (or half the control median for a proportional-hazards design), and 1 after. It is information, not a gate: a
-#' CPU budget spent by the main run leaves it out, and the result says it was not computed.
+#' CPU budget the main run leaves too small for it leaves it out, and the result says it was not computed.
 vcr_maxcombo_strong_law <- function(sc) {
   tr <- sc$truth
   nph <- if (is.list(tr$treatmentHazardRatios)) tr$treatmentHazardRatios else NULL
@@ -852,15 +852,30 @@ vcr_maxcombo_strong_law <- function(sc) {
   list(breaks = breaks[1], ratios = c(harm, 1), basis = basis)
 }
 
-vcr_maxcombo_strong_null <- function(job, sc, cancel_file = NULL) {
+#' Whether the strong null can be run on what the design's own replicates left of the job's CPU budget, and on how much.
+#'
+#' Hidden knowledge: the design's own replicates come first and are never shortened for the strong null (it starts only after they have
+#' all run), and it may spend only what they left of the job's budget, the stricter of the job's limit less what they used and what the
+#' running job still has (`vcr_cpu_remaining`, which is 0.9 of the kernel limit). A world that cannot finish on that is not started: a cut
+#' run is discarded whole, since a rejection probability from fewer replicates than the null floor would carry a precision nobody asked
+#' for, so every second it spent would be spent for nothing. Its cost is projected from the main run's own cost per replicate.
+vcr_strong_null_plan <- function(spent, completed, replicates, limit = Inf, running = Inf) {
+  remaining <- min(if (is.finite(limit)) max(0, limit - spent) else Inf, running)
+  needed <- if (completed > 0) spent / completed * replicates else 0
+  list(run = is.infinite(remaining) || (remaining > 0 && needed <= remaining), remaining = remaining, needed = needed)
+}
+
+vcr_maxcombo_strong_null <- function(job, sc, cancel_file = NULL, spent = 0, completed = 0) {
   law <- vcr_maxcombo_strong_law(sc)
   breaks <- law$breaks; harm <- law$ratios[1]; basis <- law[["basis"]]
   sc2 <- sc
   sc2$truth[["hazardRatio"]] <- NULL; sc2$truth[["null"]] <- NULL
   sc2$truth$treatmentHazardRatios <- list(breaks = breaks, ratios = c(harm, 1))
   reps <- as.integer(max(vcr_scalar(job$replicates, 0), vcr_domain()$limits$replicatesNullMin))
+  plan <- vcr_strong_null_plan(spent, completed, reps, vcr_scalar(job$cpuSecondsLimit, Inf), vcr_cpu_remaining())
+  if (!plan$run) return(list(measures = list(), diagnostics = list(computed = FALSE, reason = "what the design's own replicates left of the CPU budget would not finish it")))
   res <- vcr_run_simulation(sc2, as.integer((as.numeric(job$seed) + 104729) %% 2147483647), reps, vcr_cores(job$cores), cancel_file = cancel_file,
-                            batch_size = vcr_scalar(job$batchSize, 500L), cpu_seconds_limit = vcr_scalar(job$cpuSecondsLimit, Inf), extras = list(logrank = TRUE))
+                            batch_size = vcr_scalar(job$batchSize, 500L), cpu_seconds_limit = plan$remaining, extras = list(logrank = TRUE))
   if (!identical(res$status, "succeeded") || is.null(res$values)) return(list(measures = list(), diagnostics = list(computed = FALSE, reason = "the CPU budget or a cancel ended the run first")))
   total <- nrow(res$values)
   one <- function(name, column) {

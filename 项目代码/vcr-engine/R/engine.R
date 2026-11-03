@@ -2009,7 +2009,7 @@ vcr_job_design_simulate <- function(job, output_dir = NULL, cancel_file = NULL, 
                             checkpoint = cp, cancel_file = cancel_file,
                             batch_size = vcr_scalar(job$batchSize, 500L), progress = progress,
                             cpu_seconds_limit = vcr_scalar(job$cpuSecondsLimit, Inf), extras = list(logrank = maxcombo))
-  strong <- if (maxcombo && identical(res$status, "succeeded")) tryCatch(vcr_maxcombo_strong_null(job, sc, cancel_file), error = function(e) NULL) else NULL
+  strong <- if (maxcombo && identical(res$status, "succeeded")) tryCatch(vcr_maxcombo_strong_null(job, sc, cancel_file, spent = res$diagnostics$cpuSeconds, completed = res$diagnostics$replicatesCompleted), error = function(e) NULL) else NULL
   if (!is.null(strong)) { res$measures <- c(res$measures, strong$measures); res$diagnostics$strongNull <- strong$diagnostics }
   check <- tryCatch(vcr_analytic_check(sc, res$measures), error = function(e) NULL)
   tables <- if (!is.null(output_dir) && !is.null(res$values) && nrow(res$values)) {

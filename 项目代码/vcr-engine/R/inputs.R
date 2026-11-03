@@ -144,6 +144,13 @@ vcr_interrupt <- function() {
   NULL
 }
 
+#' CPU seconds the job now running may still spend before `vcr_interrupt()` says "cpu_budget"; Inf when it has no budget. A run that
+#' follows another inside one job (the strong null of a MaxCombo design) sizes itself on this instead of starting with a budget of its own.
+vcr_cpu_remaining <- function() {
+  if (!is.finite(.vcr_ctx$budget)) return(Inf)
+  max(0, .vcr_ctx$budget - (vcr_cpu_seconds() - .vcr_ctx$cpu_base))
+}
+
 # --- reading an input ---------------------------------------------------------
 
 VCR_TABLE_INPUT_KINDS <- c("analysis_table", "snapshot_file")
