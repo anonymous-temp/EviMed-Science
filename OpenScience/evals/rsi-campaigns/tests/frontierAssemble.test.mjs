@@ -8,11 +8,12 @@ import { join } from 'node:path';
 import { gzipSync } from 'node:zlib';
 import { rsiDigest } from '../../../apps/server/src/rsiCampaignBundle.mjs';
 import { computeRsiDependencyClosure } from '../../../apps/server/src/rsiDependencyClosure.mjs';
-import { rsiCampaignIssues } from '../../../packages/domain/src/rsiCampaign.mjs';
+import { createRsiServingAdapters, rsiIncumbent, rsiPolicyDefaults } from '../../../apps/server/src/rsiServingAdapters.mjs';
+import { rsiCampaignIssues, rsiCompatibilityIssues } from '../../../packages/domain/src/rsiCampaign.mjs';
 import { RSI_QUARTER_ALPHA } from '../campaign_runner.mjs';
-import { frontierCampaignConsumerIdentity } from '../frontier_campaign.mjs';
+import { chooseFrontierCandidate, evaluateFrontierDays, frontierCampaignConsumerIdentity } from '../frontier_campaign.mjs';
 import { replayFrontierPool } from '../frontier_selection.mjs';
-import { FRONTIER_CAMPAIGN_REGISTRATION, beijingMonthEnd, buildCampaign, campaignRegistration, minimumDetectableEffect, planCampaign, readFrontierExport, replayDrift, shiftMonth, splitDays } from '../frontier_assemble.mjs';
+import { FRONTIER_CAMPAIGN_REGISTRATION, UNBOUND_BASELINE_PREFIX, beijingMonthEnd, buildCampaign, campaignRegistration, decideDevelopment, mergeLabelFiles, minimumDetectableEffect, planCampaign, readFrontierExport, replayDrift, shiftMonth, splitDays, unboundBaselineRevision } from '../frontier_assemble.mjs';
 import { BENIGN_PROCEDURE, STATISTICS_MODULE_PATH, STATISTICS_PYTHON, frontierDayPool, frontierDaysSource, runToVerdict } from '../profiles/benign_fixture.mjs';
 
 const execFileAsync = promisify(execFile);
@@ -20,6 +21,8 @@ const root = new URL('../../../', import.meta.url).pathname;
 const assembleScript = new URL('../frontier_assemble.mjs', import.meta.url).pathname;
 const NOW = '2026-10-26T00:00:00Z';
 const BASELINE = 64;
+/** What production's export carries for a module that runs on the code defaults: the serving layer's own identity (`rsiIncumbent`), threshold 64. */
+const INCUMBENT = { revisionId: rsiIncumbent('frontier', null, rsiPolicyDefaults('frontier', { frontierSelectThreshold: BASELINE })).revisionId, threshold: BASELINE };
 
 /** August (development) and September (confirmation) of an export, in the `rsi-frontier-export-v1` shape. */
 function exportDocument() {
@@ -31,20 +34,23 @@ function exportDocument() {
   return {
     schema: 'rsi-frontier-export-v1', exportedAt: '2026-10-01T00:00:00Z', releaseId: 'release-test.1', from: '2026-08-01', to: '2026-09-30',
     settings: { threshold: BASELINE, thresholdSource: 'test', preprintPlaces: 2, preprintMinScore: 50, scoreVersion: 'current', timeZone: 'Asia/Shanghai' },
-    consumer: [], days: [...august, ...september, ...thin, incomplete], texts: {}, signals: {},
+    incumbent: INCUMBENT, consumer: [], days: [...august, ...september, ...thin, incomplete], texts: {}, signals: {},
   };
 }
 const allRows = (document) => document.days.flatMap((day) => day.rows);
+/** The provider and model the jury's files name (frontier_labels.mjs writes both in the labels and in the calibration): the frontier jury, the one Qwen adjudicator the domain admits. */
+const JURY_PROVIDER = 'dashscope';
+const JURY_MODEL = 'qwen3.8-max';
 /** What a labeller would say: a pick from 72 up, an alert is always a pick, every seventeenth row is left unlabelled. */
 function labelsFor(ids, document) {
   const byId = new Map(allRows(document).map((row) => [String(row.id), row]));
-  return { juryVersion: 'test-jury-1', model: 'test-model', labels: ids.map((id, i) => {
+  return { juryVersion: 'test-jury-1', provider: JURY_PROVIDER, model: JURY_MODEL, labels: ids.map((id, i) => {
     const row = byId.get(id);
     return { id, worth: i % 17 === 16 ? null : row.safety_alert === true || row.score_total >= 72 ? 'pick' : row.score_total >= 68 ? 'ok' : 'no' };
   }) };
 }
 /** The jury's calibration file as `frontier_labels.mjs calibrate` writes it: metrics under `calibration`, the gate under `qualification`. */
-const CALIBRATION = { schema: 'rsi-frontier-jury-calibration-v1', juryVersion: 'test-jury-1', calibration: { pickKappa: 0.81, abstentionRate: 0.05, pickPrecision: 0.8 }, qualification: { qualified: true, reasons: [] } };
+const CALIBRATION = { schema: 'rsi-frontier-jury-calibration-v1', juryVersion: 'test-jury-1', provider: JURY_PROVIDER, model: JURY_MODEL, calibration: { pickKappa: 0.81, abstentionRate: 0.05, pickPrecision: 0.8 }, qualification: { qualified: true, reasons: [] } };
 
 async function withExport(fn, document = exportDocument()) {
   const dir = await mkdtemp(join(tmpdir(), 'rsi-assemble-'));
@@ -223,7 +229,8 @@ test('an assembled campaign passes the manifest contract and registers the measu
     assert.deepEqual(rsiCampaignIssues(manifest), []);
     assert.deepEqual([manifest.id, manifest.surface, manifest.candidateKind, manifest.claim, manifest.automated, manifest.deadline],
       ['frontier-selection-2026-10', 'frontier-selection', 'policy', 'superiority', true, '2026-10-31T16:00:00.000Z']);
-    assert.deepEqual(manifest.models.improver, { provider: 'none', model: 'registered-grid' });
+    // No improver (the registered grid) and, as the judge, the jury the labels file names.
+    assert.deepEqual(manifest.models, { solver: { provider: 'deepseek', model: 'deepseek-flash' }, improvers: [], judges: [{ role: 'jury', provider: JURY_PROVIDER, model: JURY_MODEL, id: 'test-jury-1' }] });
     assert.deepEqual([manifest.data.classification, manifest.data.sources.map((row) => [row.id, row.role, row.exposure])],
       ['public', [['development-2026-08', 'development', 'exposed'], ['confirmation-2026-09', 'confirmation', 'sealed']]]);
     // Every digest the manifest carries is the digest of what the inputs hold.
@@ -232,7 +239,8 @@ test('an assembled campaign passes the manifest contract and registers the measu
     assert.deepEqual(inputs.target, manifest.target);
     const closure = await computeRsiDependencyClosure({ rootDir: root, surface: 'frontier-selection', settings: { model: 'deepseek-flash', provider: 'deepseek' } });
     assert.equal(manifest.target.dependencyDigest, closure.dependencyDigest);
-    assert.equal(manifest.target.baselineRevision, 'threshold-64-release-test.1');
+    assert.equal(manifest.target.baselineRevision, INCUMBENT.revisionId, 'the baseline is the incumbent identity the export carries, as it is');
+    assert.match(manifest.target.baselineRevision, /^default:[a-f0-9]{64}$/);
     // Sources: only their own days, only their own labels, the band of the grid.
     const development = inputs.sources['development-2026-08'], confirmation = inputs.sources['confirmation-2026-09'];
     assert.ok(development.days.every((day) => day.day.startsWith('2026-08')) && confirmation.days.every((day) => day.day.startsWith('2026-09')));
@@ -262,17 +270,18 @@ test('an assembled campaign passes the manifest contract and registers the measu
     // The selection registration and the labelling record.
     assert.deepEqual([inputs.registration.baselineThreshold, inputs.registration.maxVolumeRatio, inputs.registration.minLabelled], [BASELINE, 1.1, 20]);
     assert.deepEqual(inputs.registration.selection, { objective: 'weighted-accuracy-difference', tieBreak: 'nearest-baseline' });
-    assert.deepEqual(inputs.registration.labelling, { juryVersion: 'test-jury-1', model: 'test-model', calibrationDigest: rsiDigest({ qualification: CALIBRATION.qualification, calibration: CALIBRATION.calibration }) });
+    assert.deepEqual(inputs.registration.labelling, { juryVersion: 'test-jury-1', provider: JURY_PROVIDER, model: JURY_MODEL, calibrationDigest: rsiDigest({ qualification: CALIBRATION.qualification, calibration: CALIBRATION.calibration }) });
     // The supply report reads development alone.
     assert.equal(supply.development.days, 31);
     assert.equal(supply.confirmation.measuredDays, expectedDays.length);
     assert.equal(supply.alpha.allocated, RSI_QUARTER_ALPHA / 3);
     assert.equal(supply.alpha.testAlpha, RSI_QUARTER_ALPHA / 6);
     assert.equal(supply.minimumGroups, 25);
+    assert.equal(supply.directional, false, `${expectedDays.length} measured days reach the minimum`);
     assert.deepEqual(supply.developmentChoice.frozen, { threshold: 72 }, 'labels pick from 72 up, so the 72 line is the best of the grid');
     assert.ok(supply.power.mde > 0 && supply.power.mde < 0.1, JSON.stringify(supply.power));
     assert.equal(supply.exportSha256, plan.exportSha256);
-    assert.deepEqual(supply.calibration, { qualified: true, juryVersion: 'test-jury-1', metrics: CALIBRATION.calibration });
+    assert.deepEqual(supply.calibration, { qualified: true, juryVersion: 'test-jury-1', model: JURY_MODEL, metrics: CALIBRATION.calibration });
     assert.ok(supply.development.abstained > 0 && supply.confirmation.abstained > 0);
   });
 });
@@ -338,6 +347,32 @@ test('windows and an id prefix make a rehearsal campaign with its own ids and de
     const groups = built.inputs.registration.statistics.groups;
     assert.ok(groups.length > 0 && groups.every((group) => group.day >= '2026-08-21' && group.day <= '2026-08-31'), 'groups come from the confirmation window only');
     assert.equal(built.inputs.registration.statistics.G_target, groups.length);
+    assert.equal(built.supply.directional, true, `${groups.length} measured days are below the procedure's 25: the runner reserves no alpha for it`);
+  });
+});
+
+test('the judge is the jury that produced the labels, held to the domain\'s rule: the frontier jury (Qwen, role jury) or a pinned Claude model; any other jury, or labels from another jury than the calibrated one, assemble nothing', async () => {
+  await withExport(async ({ gz, document }) => {
+    const plan = await planCampaign({ exportPath: gz, month: '2026-10' });
+    const labels = labelsFor(plan.ids, document);
+    const build = (labelsFile, calibration = CALIBRATION) => buildCampaign({ exportPath: gz, plan, labels: labelsFile, calibration, now: NOW, rootDir: root });
+    // The jury of the lab: admitted, and the manifest says so in the form the domain admits on this surface.
+    const built = await build(labels);
+    assert.equal(built.status, 'assembled');
+    assert.deepEqual(built.manifest.models.judges, [{ role: 'jury', provider: 'dashscope', model: 'qwen3.8-max', id: 'test-jury-1' }]);
+    // A pinned Claude model is still an admitted adjudicator everywhere, this surface included.
+    assert.equal((await build({ ...labels, provider: 'anthropic', model: 'claude-sonnet-5-5' }, { ...CALIBRATION, provider: 'anthropic', model: 'claude-sonnet-5-5' })).status, 'assembled');
+    // Anything else is refused by name, before anything is assembled: a file that names no provider, another Qwen, a DeepSeek model, a provider that does not match the model.
+    for (const [provider, model] of [[undefined, JURY_MODEL], [undefined, 'claude-sonnet-5-5'], ['dashscope', 'qwen3.8-plus'], ['dashscope', 'qwen-max'], ['deepseek', 'deepseek-flash'], ['deepseek', 'deepseek-v4-pro'],
+      ['anthropic', 'qwen3.8-max'], ['dashscope', 'claude-sonnet-5-5'], ['openai', 'gpt-5'], ['dashscope', undefined]]) {
+      const refused = await build({ ...labels, provider, model }, { ...CALIBRATION, provider, model });
+      assert.deepEqual([refused.status, refused.reason, refused.manifest], ['not-run', 'campaign_judge_refused', undefined], `${provider}/${model}`);
+    }
+    // Labels from another model or another provider than the calibration qualified are another jury.
+    const changed = await build({ ...labels, provider: 'anthropic', model: 'claude-opus-5-5' });
+    assert.deepEqual([changed.status, changed.reason, changed.jury], ['not-run', 'campaign_labels_jury_changed', { labels: 'claude-opus-5-5', calibration: JURY_MODEL }]);
+    const provider = await build({ ...labels, provider: 'anthropic' });
+    assert.deepEqual([provider.status, provider.reason], ['not-run', 'campaign_labels_jury_changed']);
   });
 });
 
@@ -375,5 +410,264 @@ test('the plan and build commands write what the runner reads and refuse by clos
     const missing = await run(['plan', '--export', join(dir, 'absent.json'), '--month', '2026-10', '--out', planPath]).catch((error) => error);
     assert.equal(JSON.parse(missing.stderr).reason, 'campaign_assembly_failed');
     assert.equal((await run(['bogus']).catch((error) => error)).code, 1);
+  });
+});
+
+// ---- the incumbent as the baseline ----
+
+test('an incumbent the export carries must be one of the two forms the serving layer reports, for the threshold it states; one it does not carry is recorded as none', async () => {
+  const absent = exportDocument();
+  delete absent.incumbent;
+  for (const document of [absent, { ...exportDocument(), incumbent: null }]) await withExport(async ({ gz }) => assert.equal((await planCampaign({ exportPath: gz, month: '2026-10' })).incumbent, null), document);
+  for (const incumbent of [{ revisionId: 'threshold-64-release-test.1', threshold: BASELINE }, { revisionId: 'default:abc', threshold: BASELINE }, { revisionId: 'evolution-module-policy-frontier:0', threshold: BASELINE },
+    { revisionId: 'evolution-module-policy-autopilot:3', threshold: BASELINE }, { revisionId: INCUMBENT.revisionId, threshold: 70 }, { revisionId: INCUMBENT.revisionId }, 'default']) {
+    await withExport(async ({ gz }) => assert.rejects(planCampaign({ exportPath: gz, month: '2026-10' }), { message: 'campaign_export_incumbent_invalid' }, JSON.stringify(incumbent)), { ...exportDocument(), incumbent });
+  }
+  await withExport(async ({ gz }) => {
+    const plan = await planCampaign({ exportPath: gz, month: '2026-10' });
+    assert.deepEqual(plan.incumbent, { revisionId: 'evolution-module-policy-frontier:12', threshold: BASELINE });
+  }, { ...exportDocument(), incumbent: { revisionId: 'evolution-module-policy-frontier:12', threshold: BASELINE } });
+});
+
+test('a month whose export carries no incumbent is still planned, decided and built; its baseline is unbound and no served baseline matches it', async () => {
+  const absent = exportDocument();
+  delete absent.incumbent;
+  await withExport(async ({ gz, document }) => {
+    const plan = await planCampaign({ exportPath: gz, month: '2026-10' });
+    assert.equal(plan.incumbent, null);
+    assert.ok(plan.ids.length > 0 && plan.idsByRole.development.length > 0, 'the plan is the same plan: the operator labels the same rows');
+    const decision = await decideDevelopment({ exportPath: gz, plan, labels: phaseLabels(plan, document, 'development'), calibration: CALIBRATED });
+    assert.equal(decision.status, 'confirmation-needed');
+    assert.equal(decision.supply.incumbent, null);
+    const merged = mergeLabelFiles([phaseLabels(plan, document, 'development'), phaseLabels(plan, document, 'confirmation')], plan);
+    const built = await buildCampaign({ exportPath: gz, plan, labels: merged, calibration: CALIBRATED, now: NOW, rootDir: root });
+    assert.equal(built.status, 'assembled');
+    assert.equal(built.manifest.target.baselineRevision, 'unbound:release-test.1');
+    assert.deepEqual(rsiCampaignIssues(built.manifest), [], 'the domain accepts the manifest');
+    assert.equal(built.supply.incumbent, null);
+    // The importer's compatibility check can never pass it against what production serves: a default or a module policy.
+    for (const row of [null, { payload: { status: 'active', policy: { selectionThreshold: BASELINE } }, revision: 7 }]) {
+      assert.deepEqual(rsiCompatibilityIssues(built.manifest.target, await servingTarget(row)), ['campaign_baseline_changed']);
+    }
+    // The same labels on the same export with its incumbent measure the same campaign but for the baseline's name.
+    const bound = await buildCampaign({ exportPath: gz, plan: { ...plan, incumbent: INCUMBENT }, labels: merged, calibration: CALIBRATED, now: NOW, rootDir: root });
+    assert.deepEqual({ ...built.manifest, target: null }, { ...bound.manifest, target: null });
+    assert.deepEqual({ ...built.inputs, target: null }, { ...bound.inputs, target: null });
+    assert.deepEqual({ ...built.manifest.target, baselineRevision: null }, { ...bound.manifest.target, baselineRevision: null });
+    assert.equal(bound.manifest.target.baselineRevision, INCUMBENT.revisionId);
+  }, absent);
+});
+
+test('the unbound baseline names the release, in the characters a baseline identifier takes, and never an empty one', () => {
+  assert.equal(UNBOUND_BASELINE_PREFIX, 'unbound:');
+  assert.equal(unboundBaselineRevision('release-test.1'), 'unbound:release-test.1');
+  assert.equal(unboundBaselineRevision(null), 'unbound:unknown');
+  assert.equal(unboundBaselineRevision(undefined), 'unbound:unknown');
+  assert.equal(unboundBaselineRevision(''), 'unbound:unknown');
+  assert.equal(unboundBaselineRevision('rel ease/1 中'), 'unbound:rel-ease-1--');
+  assert.equal(unboundBaselineRevision('r'.repeat(500)).length, 'unbound:'.length + 150);
+  for (const releaseId of [null, 'release-test.1', 'a b', 'r'.repeat(500), '中文']) assert.match(unboundBaselineRevision(releaseId), /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,159}$/, `${releaseId}: a valid baseline identifier`);
+});
+
+/** The target a serving process with this module-policy row would report for the frontier surface (the real adapter, a client that answers one row). */
+async function servingTarget(policyRow) {
+  const serving = createRsiServingAdapters({ config: { frontierModel: 'deepseek-flash', frontierSelectThreshold: BASELINE, rootDir: root }, service: { owner: async () => 'owner' }, database: {}, documents: {} });
+  return serving.currentTarget('frontier-selection', { query: async () => ({ rows: policyRow ? [policyRow] : [] }) });
+}
+
+test('a bundle built from an export names the baseline the serving layer will compare it with: default code, or the active module policy', async () => {
+  const policyRow = { payload: { status: 'active', policy: { selectionThreshold: BASELINE } }, revision: 7 };
+  for (const row of [null, policyRow, { payload: { status: 'stopped', policy: { selectionThreshold: 70 } }, revision: 9 }, { payload: { status: 'active', policy: { selectionThreshold: 'high' } }, revision: 3 }]) {
+    // What the export script records: the serving layer's own function over the row it read.
+    const incumbent = rsiIncumbent('frontier', row, rsiPolicyDefaults('frontier', { frontierSelectThreshold: BASELINE }));
+    await withExport(async ({ gz, document }) => {
+      const plan = await planCampaign({ exportPath: gz, month: '2026-10' });
+      const built = await buildCampaign({ exportPath: gz, plan, labels: labelsFor(plan.ids, document), calibration: CALIBRATION, now: NOW, rootDir: root });
+      const current = await servingTarget(row);
+      assert.equal(current.qualified, true);
+      assert.deepEqual(rsiCompatibilityIssues(built.manifest.target, current), [], `${incumbent.revisionId}: the importer's compatibility check passes`);
+      assert.equal(built.manifest.target.baselineRevision, current.baselineRevision);
+      assert.equal(built.manifest.target.dependencyDigest, current.dependencyDigest);
+    }, { ...exportDocument(), incumbent: { revisionId: incumbent.revisionId, threshold: BASELINE } });
+  }
+  assert.match((await servingTarget(policyRow)).baselineRevision, /^evolution-module-policy-frontier:7$/);
+  assert.match((await servingTarget(null)).baselineRevision, /^default:[a-f0-9]{64}$/);
+});
+
+test('a bundle whose baseline is not the incumbent at import is refused, whatever else matches: a policy changed since the export, or the label the lab used to write', async () => {
+  await withExport(async ({ gz, document }) => {
+    const plan = await planCampaign({ exportPath: gz, month: '2026-10' });
+    const { manifest } = await buildCampaign({ exportPath: gz, plan, labels: labelsFor(plan.ids, document), calibration: CALIBRATION, now: NOW, rootDir: root });
+    const activated = await servingTarget({ payload: { status: 'active', policy: { selectionThreshold: 70 } }, revision: 2 });
+    assert.deepEqual(rsiCompatibilityIssues(manifest.target, activated), ['campaign_baseline_changed']);
+    const old = { ...manifest.target, baselineRevision: 'threshold-64-release-test.1' };
+    assert.deepEqual(rsiCompatibilityIssues(old, await servingTarget(null)), ['campaign_baseline_changed']);
+  });
+});
+
+// ---- two phases of labelling: development decides whether confirmation is labelled ----
+
+const PROMPT_DIGEST = 'f'.repeat(64);
+/** A labels file as `frontier_labels.mjs label` writes it for one phase of a plan (the calibration it was qualified by names the same jury). */
+function phaseLabels(plan, document, phase, over = {}) {
+  const ids = plan.idsByRole[phase], file = labelsFor(ids, document);
+  return { schema: 'rsi-frontier-jury-labels-v1', phase, month: plan.month, idPrefix: '', exportSha256: plan.exportSha256, juryVersion: file.juryVersion, provider: JURY_PROVIDER, model: JURY_MODEL, promptDigest: PROMPT_DIGEST,
+    items: ids.length, missing: 0, labelled: file.labels.length, incomplete: 0, labelCounts: { pick: 1, ok: 2, no: 3, abstained: 4, refused: 5 }, calls: 2 * ids.length, cachedCalls: 0,
+    costCny: phase === 'development' ? 1.25 : 0.5, stopped: null, labels: file.labels, ...over };
+}
+const CALIBRATED = { ...CALIBRATION, promptDigest: PROMPT_DIGEST };
+/** Labels that make the baseline perfect on every day: a row is a pick exactly when the baseline selects it, so no threshold can beat it. */
+function baselineIsPerfect(plan, document, phase) {
+  const selected = new Set(document.days.filter((day) => day.complete).flatMap((day) => replayFrontierPool(day, plan.registration.baselineThreshold).selectedIds.map(String)));
+  const file = phaseLabels(plan, document, phase);
+  return { ...file, labels: file.labels.map((label) => ({ ...label, worth: selected.has(label.id) ? 'pick' : 'ok' })) };
+}
+
+test('the plan asks about development first and confirmation only for ids development did not ask', async () => {
+  await withExport(async ({ gz, document }) => {
+    const plan = await planCampaign({ exportPath: gz, month: '2026-10' });
+    const { development, confirmation } = plan.idsByRole;
+    assert.ok(development.length > 0 && confirmation.length > 0);
+    assert.equal(new Set([...development, ...confirmation]).size, development.length + confirmation.length, 'an id is asked once');
+    assert.deepEqual([...new Set([...development, ...confirmation])].sort(), plan.ids);
+    const rowsOf = (days) => new Set(document.days.filter((day) => days.includes(day.day)).flatMap((day) => day.rows.map((row) => String(row.id))));
+    assert.ok(development.every((id) => rowsOf(plan.devDays).has(id)) && confirmation.every((id) => rowsOf(plan.confirmDays).has(id)));
+    // The rehearsal windows split the same way.
+    const windowed = await planCampaign({ exportPath: gz, month: '2026-09', windows: { development: ['2026-08-01', '2026-08-20'], confirmation: ['2026-08-21', '2026-08-31'] }, idPrefix: 'rehearsal-' });
+    assert.ok(windowed.idsByRole.development.every((id) => rowsOf(windowed.devDays).has(id)));
+  });
+});
+
+test('decide: development labels alone freeze a candidate, so confirmation is worth labelling, and it is the choice the build and the runner reach', async () => {
+  await withExport(async ({ gz, document }) => {
+    const plan = await planCampaign({ exportPath: gz, month: '2026-10' });
+    const decision = await decideDevelopment({ exportPath: gz, plan, labels: phaseLabels(plan, document, 'development'), calibration: CALIBRATED });
+    assert.deepEqual([decision.status, decision.reason, decision.frozen], ['confirmation-needed', null, { threshold: 72 }]);
+    assert.equal(decision.supply.development.days, 31);
+    assert.equal(decision.supply.confirmation.days, 29);
+    assert.deepEqual([decision.supply.confirmation.measuredDays, decision.supply.confirmation.labelled], [null, null], 'what confirmation labels would make of its days is not known yet');
+    assert.deepEqual(decision.supply.calibration, { qualified: true, juryVersion: 'test-jury-1', model: JURY_MODEL, metrics: CALIBRATION.calibration });
+    assert.deepEqual(decision.supply.incumbent, INCUMBENT);
+    // The same labels, both phases merged, build the same development choice.
+    const merged = mergeLabelFiles([phaseLabels(plan, document, 'development'), phaseLabels(plan, document, 'confirmation')], plan);
+    const built = await buildCampaign({ exportPath: gz, plan, labels: merged, calibration: CALIBRATED, now: NOW, rootDir: root });
+    assert.equal(built.status, 'assembled');
+    assert.deepEqual(built.supply.developmentChoice, decision.supply.developmentChoice);
+    assert.deepEqual(built.inputs.registration.labelling, { juryVersion: 'test-jury-1', provider: JURY_PROVIDER, model: JURY_MODEL, calibrationDigest: rsiDigest({ qualification: CALIBRATION.qualification, calibration: CALIBRATION.calibration }) });
+    assert.deepEqual(built.manifest.models.judges, [{ role: 'jury', provider: JURY_PROVIDER, model: JURY_MODEL, id: 'test-jury-1' }]);
+    assert.equal(decision.supply.replayFidelity, built.supply.replayFidelity);
+  });
+});
+
+test('decide, build and the runner choose under the registered volume ratio, whatever it is: a ratio below the frozen candidate\'s volume refuses it in all three', async () => {
+  await withExport(async ({ gz, document }) => {
+    const plan = await planCampaign({ exportPath: gz, month: '2026-10' });
+    const development = phaseLabels(plan, document, 'development');
+    const usual = await decideDevelopment({ exportPath: gz, plan, labels: development, calibration: CALIBRATED });
+    const frozen = usual.supply.developmentChoice.candidates.find((c) => c.threshold === usual.frozen.threshold);
+    assert.ok(frozen.volumeRatio < 1.1, `the usual choice selects ${frozen.volumeRatio} of the baseline's volume`);
+    const registered = { ...FRONTIER_CAMPAIGN_REGISTRATION, maxVolumeRatio: Math.round(frozen.volumeRatio * 0.9 * 1000) / 1000 };
+    const tight = await decideDevelopment({ exportPath: gz, plan, labels: development, calibration: CALIBRATED, registered });
+    assert.notDeepEqual(tight.frozen, usual.frozen, 'the registered ratio refuses the threshold the default ratio would freeze');
+    assert.ok(tight.supply.developmentChoice.candidates.filter((c) => c.eligible).every((c) => c.volumeRatio <= registered.maxVolumeRatio));
+    const merged = mergeLabelFiles([development, phaseLabels(plan, document, 'confirmation')], plan);
+    const built = await buildCampaign({ exportPath: gz, plan, labels: merged, calibration: CALIBRATED, now: NOW, rootDir: root, registered });
+    assert.equal(built.inputs.registration.maxVolumeRatio, registered.maxVolumeRatio);
+    assert.deepEqual(built.supply.developmentChoice, tight.supply.developmentChoice);
+    // The runner's own development stage over the built inputs (campaign_runner.mjs `develop`): the same functions, the same registration.
+    const source = built.inputs.sources[built.manifest.data.sources.find((row) => row.role === 'development').id];
+    const runner = chooseFrontierCandidate(evaluateFrontierDays(source, built.inputs.registration), built.inputs.registration);
+    assert.deepEqual(runner.frozen, tight.frozen);
+    assert.deepEqual(runner.candidates, tight.supply.developmentChoice.candidates);
+  });
+});
+
+test('decide: a month whose development finds no candidate ends there, with the reason the runner gives, and confirmation is never asked for', async () => {
+  await withExport(async ({ gz, document }) => {
+    const plan = await planCampaign({ exportPath: gz, month: '2026-10' });
+    const decision = await decideDevelopment({ exportPath: gz, plan, labels: baselineIsPerfect(plan, document, 'development'), calibration: CALIBRATED });
+    assert.deepEqual([decision.status, decision.reason, decision.frozen], ['development-ended', 'campaign_no_improving_candidate', null]);
+    assert.equal(decision.supply.developmentChoice.frozen, null);
+    assert.equal(decision.supply.confirmation.measuredDays, null);
+    assert.ok(decision.supply.development.labelled > 0);
+  });
+});
+
+test('decide refuses what is not the development labels of this plan, and an unqualified or changed jury ends the month before anything is read', async () => {
+  await withExport(async ({ gz, plain, document }) => {
+    const plan = await planCampaign({ exportPath: gz, month: '2026-10' });
+    const labels = phaseLabels(plan, document, 'development');
+    const decide = (over = {}, calibration = CALIBRATED, file = labels) => decideDevelopment({ exportPath: gz, plan, labels: { ...file, ...over }, calibration });
+    assert.deepEqual(Object.values(await decide({}, { ...CALIBRATED, qualification: { qualified: false, reasons: ['kappa_below_minimum'] } })).slice(0, 2), ['not-run', 'campaign_labels_unqualified']);
+    for (const [over, calibration, reason] of [[{ model: 'claude-opus-5-5' }, CALIBRATED, 'campaign_labels_jury_changed'], [{ provider: 'anthropic' }, CALIBRATED, 'campaign_labels_jury_changed'],
+      [{ promptDigest: 'e'.repeat(64) }, CALIBRATED, 'campaign_labels_jury_changed'], [{}, { ...CALIBRATED, juryVersion: 'other' }, 'campaign_labels_jury_changed'],
+      [{ model: 'qwen3.8-plus' }, { ...CALIBRATED, model: 'qwen3.8-plus' }, 'campaign_judge_refused'], [{ provider: 'deepseek', model: 'deepseek-flash' }, { ...CALIBRATED, provider: 'deepseek', model: 'deepseek-flash' }, 'campaign_judge_refused']]) {
+      const refused = await decide(over, calibration);
+      assert.deepEqual([refused.status, refused.reason, refused.frozen], ['not-run', reason, undefined], JSON.stringify(over));
+    }
+    for (const [over, message] of [[{ phase: 'confirmation' }, 'campaign_labels_phase_invalid'], [{ phase: 'all' }, 'campaign_labels_phase_invalid'], [{ schema: 'rsi-frontier-jury-calibration-v1' }, 'campaign_labels_phase_invalid'],
+      [{ exportSha256: 'e'.repeat(64) }, 'campaign_labels_phase_invalid'], [{ stopped: 'jury_quota' }, 'campaign_labels_incomplete'], [{ incomplete: 3 }, 'campaign_labels_incomplete'],
+      [{ labels: [...labels.labels, { id: plan.idsByRole.confirmation[0], worth: 'pick', basis: 'jury-agree', passes: [] }] }, 'campaign_labels_outside_plan']]) {
+      await assert.rejects(decide(over), { message }, JSON.stringify(Object.keys(over)));
+    }
+    await assert.rejects(decideDevelopment({ exportPath: plain, plan, labels, calibration: CALIBRATED }), { message: 'campaign_export_changed' });
+  });
+});
+
+test('merge-labels takes exactly the two phases of one jury, one export and one finished run each, and sums what they cost', async () => {
+  await withExport(async ({ gz, document }) => {
+    const plan = await planCampaign({ exportPath: gz, month: '2026-10' });
+    const dev = phaseLabels(plan, document, 'development'), conf = phaseLabels(plan, document, 'confirmation');
+    const merged = mergeLabelFiles([dev, conf], plan);
+    assert.deepEqual([merged.schema, merged.phase, merged.provider, merged.model, merged.juryVersion, merged.promptDigest, merged.exportSha256, merged.stopped, merged.incomplete, merged.costCny],
+      ['rsi-frontier-jury-labels-v1', 'all', JURY_PROVIDER, JURY_MODEL, 'test-jury-1', PROMPT_DIGEST, plan.exportSha256, null, 0, 1.75]);
+    assert.ok(!('effort' in merged) && !('tokens' in merged) && !('costBasis' in merged), 'nothing of the retired Claude-CLI form');
+    assert.equal(merged.labels.length, plan.ids.length);
+    assert.deepEqual(merged.labelCounts, { pick: 2, ok: 4, no: 6, abstained: 8, refused: 10 });
+    assert.deepEqual([merged.calls, merged.labelled], [dev.calls + conf.calls, plan.ids.length]);
+    // The merge is a labels file: the build takes it and sees one jury.
+    assert.equal((await buildCampaign({ exportPath: gz, plan, labels: merged, calibration: CALIBRATED, now: NOW, rootDir: root })).status, 'assembled');
+    for (const [files, message] of [
+      [[dev], 'campaign_labels_phase_invalid'], [[dev, dev], 'campaign_labels_phase_invalid'], [[dev, conf, conf], 'campaign_labels_phase_invalid'], [[dev, { ...conf, phase: undefined }], 'campaign_labels_phase_invalid'],
+      [[dev, { ...conf, model: 'claude-opus-5-5' }], 'campaign_labels_jury_changed'], [[dev, { ...conf, provider: 'anthropic' }], 'campaign_labels_jury_changed'], [[dev, { ...conf, juryVersion: 'v2' }], 'campaign_labels_jury_changed'],
+      [[dev, { ...conf, exportSha256: 'e'.repeat(64) }], 'campaign_labels_export_mismatch'], [[{ ...dev, stopped: 'jury_quota' }, conf], 'campaign_labels_incomplete'], [[dev, { ...conf, incomplete: 1 }], 'campaign_labels_incomplete'],
+      [[dev, { ...conf, labels: [dev.labels[0], ...conf.labels] }], 'campaign_labels_outside_plan'], [[{ ...dev, labels: [...dev.labels, dev.labels[0]] }, conf], 'campaign_labels_outside_plan'],
+    ]) assert.throws(() => mergeLabelFiles(files, plan), { message }, message);
+  });
+});
+
+test('a build refuses labels made from another export or from a run that did not finish', async () => {
+  await withExport(async ({ gz, document }) => {
+    const plan = await planCampaign({ exportPath: gz, month: '2026-10' });
+    const labels = { ...labelsFor(plan.ids, document), promptDigest: PROMPT_DIGEST };
+    const build = (over) => buildCampaign({ exportPath: gz, plan, labels: { ...labels, ...over }, calibration: CALIBRATED, now: NOW, rootDir: root });
+    assert.equal((await build({})).status, 'assembled');
+    await assert.rejects(build({ exportSha256: 'e'.repeat(64) }), { message: 'campaign_labels_export_mismatch' });
+    await assert.rejects(build({ stopped: 'jury_quota' }), { message: 'campaign_labels_incomplete' });
+    await assert.rejects(build({ incomplete: 2 }), { message: 'campaign_labels_incomplete' });
+    assert.equal((await build({ provider: 'anthropic' })).reason, 'campaign_labels_jury_changed');
+  });
+});
+
+test('the decide and merge-labels commands write what the lab script reads', async () => {
+  await withExport(async ({ gz, dir, document }) => {
+    const run = (args) => execFileAsync(process.execPath, [assembleScript, ...args], { cwd: dir, env: { PATH: process.env.PATH } });
+    const planPath = join(dir, 'plan.json');
+    await run(['plan', '--export', gz, '--month', '2026-10', '--out', planPath]);
+    const plan = JSON.parse(await readFile(planPath, 'utf8'));
+    const write = (name, value) => writeFile(join(dir, name), JSON.stringify(value));
+    await write('dev.json', phaseLabels(plan, document, 'development')); await write('conf.json', phaseLabels(plan, document, 'confirmation')); await write('calibration.json', CALIBRATED);
+    const decided = JSON.parse((await run(['decide', '--export', gz, '--plan', planPath, '--labels', join(dir, 'dev.json'), '--calibration', join(dir, 'calibration.json'), '--out', join(dir, 'decision.json')])).stdout);
+    assert.deepEqual(decided, { status: 'confirmation-needed', reason: null, frozen: { threshold: 72 } });
+    assert.equal(JSON.parse(await readFile(join(dir, 'decision.json'), 'utf8')).supply.development.days, 31);
+    const merged = JSON.parse((await run(['merge-labels', '--plan', planPath, '--labels', join(dir, 'dev.json'), '--labels', join(dir, 'conf.json'), '--out', join(dir, 'labels.json')])).stdout);
+    assert.equal(merged.status, 'merged');
+    const built = JSON.parse((await run(['build', '--export', gz, '--plan', planPath, '--labels', join(dir, 'labels.json'), '--calibration', join(dir, 'calibration.json'), '--out-dir', join(dir, 'campaign'), '--now', NOW])).stdout);
+    assert.equal(built.status, 'assembled');
+    // Closed refusals.
+    const phase = await run(['decide', '--export', gz, '--plan', planPath, '--labels', join(dir, 'conf.json'), '--calibration', join(dir, 'calibration.json'), '--out', join(dir, 'x.json')]).catch((error) => error);
+    assert.deepEqual(JSON.parse(phase.stderr), { status: 'refused', reason: 'campaign_labels_phase_invalid' });
+    const two = await run(['build', '--export', gz, '--plan', planPath, '--labels', join(dir, 'dev.json'), '--labels', join(dir, 'conf.json'), '--calibration', join(dir, 'calibration.json'), '--out-dir', join(dir, 'campaign2')]).catch((error) => error);
+    assert.equal(JSON.parse(two.stderr).reason, 'campaign_labels_phase_invalid');
   });
 });

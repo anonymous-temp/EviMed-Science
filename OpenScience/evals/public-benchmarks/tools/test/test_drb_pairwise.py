@@ -178,6 +178,16 @@ class AggregateTests(unittest.TestCase):
         self.assertEqual(task['verdict'], 'tie')
         self.assertEqual(result['summary']['positionBias']['mean'], 1.0)
 
+    def test_a_judge_that_only_ties_has_no_agreement_and_ties_never_agree(self):
+        fx = Fixture(self)
+        order, out = fx.packets()
+        task = dp.aggregate(out / 'order.json', [fx.verdicts(judge(order, '7', toward_a=(0, 0, 0)))])['tasks'][0]
+        self.assertIsNone(task['agreement'])    # it used to count 0 == 0 as agreeing: 1.0
+        self.assertEqual((task['ties'], task['contradiction']), (1.0, 0.0))
+        # one criterion tied in both orders, two decided the same way: the tie is left out, not counted for or against
+        task = dp.aggregate(out / 'order.json', [fx.verdicts(judge(order, '7', toward_a=(0, 2, 1)))])['tasks'][0]
+        self.assertEqual((task['agreement'], task['ties']), (1.0, round(1 / 3, 4)))
+
     def test_bias_and_preference_together_over_four_passes(self):
         fx = Fixture(self)
         order, out = fx.packets(passes=4, seed=5)

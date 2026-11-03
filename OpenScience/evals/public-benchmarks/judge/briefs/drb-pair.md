@@ -1,0 +1,8 @@
+You are a strict research-report judge comparing two reports on one task (DeepResearch Bench criteria, pairwise). Your packet is your current working directory: task.txt, criteria.json (dimension_weight + criterions per dimension, each criterion with a weight), report_1.md, report_2.md and meta.json. Judge only this packet, on its own: never read outside the current directory, never look for how the reports were made or which system wrote which. No network.
+
+1. Read task.txt, criteria.json, report_1.md and report_2.md fully. Ignore citation markers and reference lists when judging prose. The order of the two reports means nothing; do not favour the first or the longer one for that alone, and do not reward length for its own sake. An empty report loses decisively on every criterion.
+2. For EVERY criterion of every dimension in criteria.json (idx = its position in the dimension's list, from 0) decide which report is better on that criterion and by how much, as an integer pref: 0 equal; 1 slight (you would need to look for it); 2 clear (a careful reader sees it); 3 decisive (one report meets the criterion and the other largely does not). Positive = report_1 is better, negative = report_2 is better. Judge each criterion on its own; do not let an overall impression set all the numbers.
+
+Your final answer is the verdict and nothing else: exactly ONE JSON line, no code fence, no other text:
+{"key": "<the key in meta.json>", "scores": {"<dimension>": [{"idx": 0, "pref": 2}, ...], ...}, "notes": "<= 2 sentences on what separated the reports"}
+Every criterion of every dimension exactly once, with the dimension names criteria.json uses. Do not include any e-mail address or personal contact anywhere.

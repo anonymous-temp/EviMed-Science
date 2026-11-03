@@ -12,7 +12,7 @@ import { createHash, generateKeyPairSync } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { digest, confirmationDecision, signedEvaluatorReceipt } from '../campaign_runner.mjs';
+import { digest, confirmationDecision, exposureDecision, frontierJuryIdentity, signedEvaluatorReceipt } from '../campaign_runner.mjs';
 import { FRONTIER_DAYS_SCHEMA, evaluateFrontierDays, frontierCampaignConsumerIdentity } from '../frontier_campaign.mjs';
 import { evaluatorReceiptPayload, signEnvelope } from '../evaluator.mjs';
 
@@ -27,6 +27,8 @@ export const BENIGN_PROCEDURE = Object.freeze({ id: 'rsi-paired-group-v5', diges
 export const BENIGN_CLAIM_ALPHA = 0.05 / 3;
 export const BENIGN_DEADLINE = '2026-10-31T16:00:00.000Z';
 export const BENIGN_CLOCK_START = '2026-10-26T01:00:00.000Z';
+/** The jury a synthetic frontier campaign's labels are said to come from (a seeded rule wrote them; no model did): the frontier jury, the one Qwen adjudicator the domain admits. */
+export const BENIGN_JURY = Object.freeze({ juryVersion: 'frontier-jury-test', provider: 'dashscope', model: 'qwen3.8-max' });
 /** The pinned numpy / scipy / rfc8785 the statistics process imports. */
 export const STATISTICS_PYTHON = process.env.RSI_TEST_PYTHON ?? 'python3';
 // Where `pnpm test:rsi`'s CI step installs them (`pip install --target ../.evimed-local/toolchains/rsi-python`, relative to
@@ -113,7 +115,7 @@ export function frontierDaysSource({ start, days, rowsPerDay, seed, prefix, cuto
 export function benignRegistration({ baselineThreshold = BENIGN_BASELINE, thresholds = [...BENIGN_THRESHOLDS], minLabelled = 3, maxVolumeRatio, labelThresholds } = {}) {
   return {
     baselineThreshold, thresholds, minLabelled, ...(maxVolumeRatio === undefined ? {} : { maxVolumeRatio }), ...(labelThresholds ? { labelThresholds } : {}),
-    selection: { objective: 'weighted-accuracy-difference', tieBreak: 'nearest-baseline' },
+    selection: { objective: 'weighted-accuracy-difference', tieBreak: 'nearest-baseline' }, labelling: { ...BENIGN_JURY },
   };
 }
 
@@ -136,9 +138,9 @@ export function benignCampaignFixture({ days = 30, rowsPerDay = 6, classificatio
   const target = { surface: 'frontier-selection', dependencyDigest: 'a'.repeat(64), baselineRevision: 'benign-baseline' };
   const exposure = (role) => classification === 'synthetic' ? 'synthetic' : role === 'confirmation' ? 'sealed' : 'exposed';
   const manifest = {
-    schemaVersion: 1, id, surface: 'frontier-selection', candidateKind: 'policy', claim: 'superiority', automated: true,
+    schemaVersion: 2, id, surface: 'frontier-selection', candidateKind: 'policy', claim: 'superiority', automated: true,
     createdAt, deadline, budget: { campaignCny: 1000, monthCny: 30000 },
-    models: { solver: { provider: 'deepseek', model: 'deepseek-flash' }, improver: { provider: 'none', model: 'registered-grid' }, reviewer: { provider: 'dashscope', model: 'qwen3.8-max' } },
+    models: { solver: { provider: 'deepseek', model: 'deepseek-flash' }, improvers: [], judges: [frontierJuryIdentity(registration.labelling)] },
     target, registration: { digest: digest(registration), procedure: BENIGN_PROCEDURE.id, claim: 'superiority' },
     data: { classification, ...(classification === 'authorized-incident' ? { authorization: { ...INCIDENT_AUTHORIZATION } } : {}),
       sources: Object.entries(sources).map(([role, source]) => ({ id: role, digest: digest(source), role, exposure: role === 'confirmation' && confirmationExposure ? confirmationExposure : exposure(role) })) },
@@ -204,7 +206,7 @@ export const labConfiguration = Object.freeze({
   signer: { keyId: 'kms-lab', publicKeySha256: 'a'.repeat(64) },
   authority: { role: 'rsi-lab', accountId: 'lab-test', dataDir: '/srv/rsi-lab', databaseRole: 'rsi_lab' },
   budget: { campaignCny: 1000, monthCny: 30000 },
-  providers: { deepseekFlash: { provider: 'deepseek', model: 'deepseek-flash', credentialRef: 'lab:deepseek' }, qwenMax: { provider: 'dashscope', model: 'qwen3.8-max', credentialRef: 'lab:qwen' } },
+  providers: { qwenMax: { provider: 'dashscope', model: 'qwen3.8-max', credentialRef: 'lab:qwen' } },
 });
 export const labAttest = async () => ({ role: 'rsi_lab', database: 'evimed_rsi_lab', hostInstanceId: 'i-lab', hostPurpose: 'rsi-lab' });
 
@@ -220,7 +222,8 @@ export function tickingClock(start = BENIGN_CLOCK_START, stepMs = 1000) {
 /**
  * An in-memory campaign store with the shape `runCampaign` takes: `withCampaign(id, fn)` hands `{read, write, reserveConfirmation}`.
  * The ledger and the opened-corpus records are shared by every campaign of one store, as the lab account's are, and apply
- * `confirmationDecision` to them. `writes()` counts checkpoint writes; `ledger` / `corpora` expose the records.
+ * `confirmationDecision` (the consumer's quarter and its legacy surface keys, `<key>:<quarter>`) and `exposureDecision` to them.
+ * `writes()` counts checkpoint writes; `ledger` / `corpora` expose the records.
  */
 export function memoryCampaignStore({ ledger = new Map(), corpora = new Map() } = {}) {
   const states = new Map();
@@ -230,12 +233,18 @@ export function memoryCampaignStore({ ledger = new Map(), corpora = new Map() } 
       read: () => (states.has(id) ? structuredClone(states.get(id)) : null),
       write: async (payload) => { states.set(id, structuredClone(payload)); writes += 1; },
       reserveConfirmation: async (request) => {
-        const ledgerId = `${request.surface}:${request.quarter}`;
-        const decision = confirmationDecision(ledger.get(ledgerId), corpora.get(request.corpusDigest), request);
-        if (decision.write) { ledger.set(ledgerId, structuredClone(decision.ledger)); corpora.set(request.corpusDigest, structuredClone(decision.corpus)); }
+        const ledgerId = `${request.ledger}:${request.quarter}`;
+        const legacy = request.legacy.map((key) => ledger.get(`${key}:${request.quarter}`)).filter(Boolean);
+        const decision = confirmationDecision(ledger.get(ledgerId), corpora.get(request.corpusDigest), request, structuredClone(legacy));
+        if (decision.write) { if (decision.ledger) ledger.set(ledgerId, structuredClone(decision.ledger)); corpora.set(request.corpusDigest, structuredClone(decision.corpus)); }
         return decision.result;
       },
     }),
+    recordExposure: async (request) => {
+      const decision = exposureDecision(corpora.get(request.corpusDigest), request);
+      if (decision.write) corpora.set(request.corpusDigest, structuredClone(decision.corpus));
+      return decision.result;
+    },
     state: (id) => (states.has(id) ? structuredClone(states.get(id)) : null),
     putState: (id, payload) => { states.set(id, structuredClone(payload)); },
     writes: () => writes,

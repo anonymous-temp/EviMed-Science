@@ -313,6 +313,29 @@ def harness_digest_cases():
 
 
 
+TOOL_CODE = {'image': {'id': 'lane-image-1-delta', 'digest': 'cd' * 32}, 'patchSha256': 'ef' * 32,
+             'files': [{'path': 'runtime/mcp/evimed-research/tool.py', 'sha256': '12' * 32}, {'path': 'runtime/mcp/evimed-research/data/index.json', 'sha256': '34' * 32}],
+             'toolCatalogueChars': 420}
+TOOL_PATCH_CASES = [
+    ('text-and-code', {'guidanceSupplement': 'Call the scale tool for any named score.', 'skills': []}, IMAGE, TOOL_CODE),
+    ('code-only', {'guidanceSupplement': '', 'skills': []}, IMAGE, TOOL_CODE),
+    ('code-with-skill', {'guidanceSupplement': 'g', 'skills': [skill('scale-notes', 'Use with the scale tool.', 'Name the scale first.')]}, IMAGE, TOOL_CODE),
+    ('files-unsorted', {'guidanceSupplement': 'g', 'skills': []}, IMAGE, {**TOOL_CODE, 'files': list(reversed(TOOL_CODE['files']))}),
+    ('no-tool-catalogue', {'guidanceSupplement': 'g', 'skills': []}, IMAGE, {**TOOL_CODE, 'toolCatalogueChars': 0}),
+    ('same-code-other-image', {'guidanceSupplement': 'Call the scale tool for any named score.', 'skills': []}, OTHER_IMAGE, TOOL_CODE),
+    ('non-ascii', {'guidanceSupplement': '\u4f7f\u7528\u91cf\u8868\u5de5\u5177 \U0001F9EA', 'skills': []}, IMAGE, TOOL_CODE),
+]
+
+
+def tool_patch_digest_cases():
+    mod = _load('export_harness_arms')
+    rows = []
+    for name, bundle, image, code in TOOL_PATCH_CASES:
+        chars, always = mod.harness_patch_sizes(bundle, code)
+        rows.append({'name': name, 'bundle': bundle, 'image': image, 'code': code, 'digest': mod.harness_patch_digest(bundle, image, code), 'chars': chars, 'alwaysOnChars': always})
+    return rows
+
+
 def ratio_pairs():
     """Pairs of strings (a seeded generator): small alphabets and repeats, short and past the autojunk threshold of 200."""
     rng = random.Random(20261031)
@@ -355,6 +378,7 @@ def build():
                          'sizes in UTF-16 code units). Both are invented inputs.'),
         'mbc': mbc_cases(),
         'harnessDigest': harness_digest_cases(),
+        'toolPatchDigest': tool_patch_digest_cases(),
     }
 
 

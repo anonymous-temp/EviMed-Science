@@ -30,11 +30,14 @@ const openCostWindowValues = new Set(Object.values(openCostWindows));
  *  platform parsing and judging measured answers on its own schedule, held by
  *  the module's own daily budget. So are the evidence programme's (`evidence`,
  *  2026-10-05): the publisher account's own research, held by its own daily
- *  budget (`evidenceBudget.mjs`). `evidence-upkeep` is deliberately NOT here:
+ *  budget (`evidenceBudget.mjs`). So are the offline improvement campaigns'
+ *  incident extractions (`rsi`, 2026-11-03): the publisher's, held by the
+ *  deployment's extraction ceiling (`rsiOnlineRuntime.mjs`).
+ *  `evidence-upkeep` is deliberately NOT here:
  *  it is an account's own zone kept current, booked to that account, counted
  *  against its caps and charged to it. Bound as a query parameter, never
  *  spliced. */
-export const UNCAPPED_USAGE_PURPOSES = Object.freeze(["engine", "frontier", "geo", "vcr", "evolution", "evidence"]);
+export const UNCAPPED_USAGE_PURPOSES = Object.freeze(["engine", "frontier", "geo", "vcr", "evolution", "evidence", "rsi"]);
 const placeholderPattern = /^\$[1-9][0-9]*$/;
 
 /**

@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { authenticateEvaluation, consumerClosure, finalizeCampaign } from '../finalize.mjs';
 import { createCampaignSigner } from '../signing.mjs';
+import { unboundBaselineRevision } from '../frontier_assemble.mjs';
 import { canonicalRsiJson, rsiDigest, verifyRsiCampaignBundle } from '../../../apps/server/src/rsiCampaignBundle.mjs';
 import { computeRsiDependencyClosure } from '../../../apps/server/src/rsiDependencyClosure.mjs';
 import { finalizerEvidencePayload, procedureQualification, qualificationDigests } from '../evaluator.mjs';
@@ -210,6 +211,10 @@ test('a qualified day-group campaign signs a bundle whose publisher and evaluato
     expectedIdentity: { id: 'unit-bundle', campaignId: c.manifest.id }, currentTarget: c.manifest.target, qualification: { ...proof, verifyReceipt: async () => true } });
   assert.equal(result.ok, true, JSON.stringify(result));
   assert.deepEqual(result.files, c.files);
+  // Design §11: the signed bundle names the solver and, separately, who improved (a registered grid: no one) and who judged (the labelling jury).
+  assert.deepEqual(result.manifest.models, { solver: { provider: 'deepseek', model: 'deepseek-flash' }, improvers: [],
+    judges: [{ role: 'jury', provider: 'dashscope', model: 'qwen3.8-max', id: 'frontier-jury-test' }] });
+  assert.deepEqual(result.manifest.models, c.manifest.models);
 });
 
 test('signers loaded from owner-only key files finalize the same campaign', async () => {
@@ -228,6 +233,22 @@ test('signers loaded from owner-only key files finalize the same campaign', asyn
   // The same key under two names is one party, and it is refused with the same closed reason.
   c.overrides.loadSigners = async () => ({ publisher: await createCampaignSigner(publisher), evaluator: await createCampaignSigner({ ...publisher, keyId: 'evaluator' }) });
   await assert.rejects(c.finalize(), { message: 'campaign_evaluator_not_independent' });
+});
+
+test('a campaign measured against an unbound baseline (its export carried no incumbent) is refused by name, whatever else about it is in order', async () => {
+  const c = await context('qualified');
+  // The same campaign, its baseline renamed everywhere the record and the evidence carry it.
+  const baseline = (revision) => { c.manifest.target.baselineRevision = revision; c.inputs.target = structuredClone(c.manifest.target); c.signed.consumerProof.baselineRevision = revision; c.rebind(); };
+  baseline(unboundBaselineRevision('release-test.1'));
+  await refuses(c, 'campaign_export_incumbent_missing', 'unbound baseline');
+  // The refusal does not depend on what production is asked to compare it with (a lab that declares `currentTarget: "manifest"` compares it with itself).
+  c.overrides.currentTarget = { ...c.manifest.target, baselineRevision: 'a-served-baseline' };
+  await refuses(c, 'campaign_export_incumbent_missing', 'unbound baseline against a served one');
+  delete c.overrides.currentTarget;
+  // Control: the very same record with the incumbent's identity as its baseline is what the finalizer signs.
+  baseline(`default:${'a'.repeat(64)}`);
+  const envelope = await c.finalize();
+  assert.equal(JSON.parse(envelope.evaluatorReceipt.payload).status, 'qualified');
 });
 
 test('a synthetic campaign never finalizes, even when everything else about it is in order', async () => {

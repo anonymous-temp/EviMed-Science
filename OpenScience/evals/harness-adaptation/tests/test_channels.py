@@ -3,11 +3,11 @@ import os
 import sys
 import unittest
 
-from support import FAKE_CLAUDE, FAKE_KEY, Sandbox
+from support import FAKE_KEY, Sandbox, channels as fixture_channels
 
-from evimed_h2 import channels as C
+from evimed_h2 import channels as C, config
 from evimed_h2.errors import InfrastructureFailure, QuotaExhausted
-from evimed_h2.ledger import Ledger, deepseek_cny
+from evimed_h2.ledger import Ledger
 
 
 class ChannelsTest(unittest.TestCase):
@@ -54,18 +54,14 @@ class ChannelsTest(unittest.TestCase):
         self.assertFalse(reply.cached)
         self.assertEqual(len(self.box.cli_calls()), 2)
 
-    def test_deepseek_stage_gets_its_endpoint_and_key_and_the_key_is_not_stored(self):
-        self.call("dom1", "# YOUR DIMENSION: DOMAIN\nedit it")
-        call = self.box.cli_calls()[-1]
-        self.assertEqual(call["model"], "deepseek-v4-pro[1m]")
-        self.assertEqual(call["base_url"], "http://127.0.0.1:9/anthropic")
-        import hashlib
-        self.assertEqual(call["token_sha"], hashlib.sha256(FAKE_KEY.encode()).hexdigest()[:12])
-        for path in self.box.runs.rglob("*"):
-            if path.is_file():
-                self.assertNotIn(FAKE_KEY, path.read_text(errors="replace"))
-        row = self.ledger.rows()[-1]
-        self.assertEqual(row["cny"], deepseek_cny("deepseek-v4-pro[1m]", row["usage"]))
+    def test_every_stage_runs_on_the_box_login_and_an_improver_row_carries_no_cash(self):
+        for label, model in (("inv1", "claude-sonnet-5-5"), ("dom1", "claude-sonnet-5-5"), ("agg1", "claude-opus-5-5")):
+            self.call(label, "# YOUR DIMENSION: INVARIANT\nedit it")
+            call = self.box.cli_calls()[-1]
+            self.assertEqual((call["model"], call["base_url"], call["leaked_env"]), (model, None, []))
+        for row in self.ledger.rows():
+            self.assertNotIn("cny", row)
+            self.assertNotIn("provider", row)
 
     def test_quota_is_infrastructure_and_not_a_proposer_error(self):
         os.environ["FAKE_CLAUDE_MODE"] = "quota"
@@ -105,6 +101,59 @@ class ChannelsTest(unittest.TestCase):
         self.assertEqual(C.classify({"subtype": "error_during_execution"}, "weird", 1)[0], "error")
 
 
+class RolesTest(unittest.TestCase):
+    """Owner 2026-11-03: every improver stage is Claude on the box's login; nothing in configuration can make one a DeepSeek or provider stage."""
+
+    def document(self):
+        return json.loads(json.dumps(fixture_channels()))
+
+    def refused(self, document, *fragments):
+        with self.assertRaises(ValueError) as caught:
+            C.validate(document)
+        for fragment in fragments:
+            self.assertIn(fragment, str(caught.exception))
+        with self.assertRaises(ValueError):
+            C.build_router(config.SCRATCH / "never-created", channels=document)  # a dict handed straight to the router is held to the same rule
+
+    def test_a_deepseek_model_is_refused_in_any_stage(self):
+        for stage in C.STAGES:
+            document = self.document()
+            document["stages"][stage]["model"] = "deepseek-v4-pro[1m]"
+            self.refused(document, "improver stages run on Claude", stage)
+
+    def test_a_provider_is_refused_even_on_a_claude_model(self):
+        document = self.document()
+        document["stages"]["dom"]["provider"] = "deepseek"
+        self.refused(document, "provider")
+
+    def test_a_providers_block_is_refused(self):
+        document = self.document()
+        document["providers"] = {"deepseek": {"base_url": "https://api.deepseek.com/anthropic", "key_file": "/nonexistent"}}
+        self.refused(document, "providers block")
+
+    def test_a_channel_that_is_not_the_claude_cli_is_refused(self):
+        document = self.document()
+        document["stages"]["agg"]["kind"] = "opencode"
+        self.refused(document, "claude_cli")
+
+    def test_only_a_plain_claude_model_id_passes(self):
+        for bad in ("claude", "Claude-opus-5-5", "claude-opus-5-5[1m]", "claude-opus 5", "anthropic/claude-opus-5-5", "deepseek-flash", ""):
+            document = self.document()
+            document["stages"]["select"]["model"] = bad
+            self.refused(document, "select")
+        document = self.document()
+        document["stages"]["select"]["model"] = "claude-opus-5-6"
+        self.assertIs(C.validate(document), document)
+
+    def test_the_shipped_file_is_the_owners_role_policy(self):
+        stages = C.load_channels()["stages"]
+        self.assertEqual({s: row["model"] for s, row in stages.items()}, {
+            "inv": "claude-sonnet-5-5", "dom": "claude-sonnet-5-5", "agg": "claude-opus-5-5", "select": "claude-opus-5-5", "experience": "claude-opus-5-5"})
+        raw = json.loads(config.CHANNELS_FILE.read_text())
+        self.assertNotIn("providers", raw)
+        self.assertTrue(all("provider" not in row and row["kind"] == "claude_cli" for row in raw["stages"].values()))
+
+
 class LedgerTest(unittest.TestCase):
     def test_a_key_is_written_once_and_a_torn_line_is_tolerated(self):
         import tempfile
@@ -115,14 +164,11 @@ class LedgerTest(unittest.TestCase):
             self.assertFalse(ledger.append("a", kind="rollout", cny=1.0))
             with open(ledger.path, "a") as handle:
                 handle.write('{"key": "torn", "kind"')
-            self.assertTrue(ledger.append("b", kind="improver", stage="dom", cny=0.25, usage={"output_tokens": 5}))
+            self.assertTrue(ledger.append("b", kind="improver", stage="dom", usd_reported=0.25, usage={"output_tokens": 5}))
             totals = ledger.totals()
-            self.assertEqual((totals["rollouts"], totals["improver_calls"], totals["round_cash_cny"]), (1, 1, 1.25))
-
-    def test_deepseek_estimate_uses_the_platform_reference_rates(self):
-        usage = {"input_tokens": 1_000_000, "cache_read_input_tokens": 1_000_000, "output_tokens": 1_000_000}
-        self.assertAlmostEqual(deepseek_cny("deepseek-v4-pro", usage), 9 + 0.3 + 27)
-        self.assertIsNone(deepseek_cny("claude-opus-5-5", usage))
+            self.assertEqual((totals["rollouts"], totals["improver_calls"], totals["solver_cny"]), (1, 1, 1.0))
+            self.assertEqual(totals["by_stage"]["dom"], {"calls": 1, "usd_reported": 0.25, "input": 0, "output": 5, "cache_read": 0})
+            self.assertNotIn("round_cash_cny", totals)  # the solver is the only cash; an improver row has none to add
 
 
 class BalanceTest(unittest.TestCase):

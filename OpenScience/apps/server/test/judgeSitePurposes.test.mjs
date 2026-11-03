@@ -15,9 +15,15 @@ test("every registered site books to a purpose the usage ledger knows", () => {
 });
 
 test("the evolution module's sites book to evolution, not to the learning loop's per-account cap", () => {
-  for (const id of ["J10", "J11", "J12", "J17", "J23"]) assert.equal(JUDGE_SITES[id].purpose, "evolution", id);
+  for (const id of ["J10", "J11", "J12", "J17"]) assert.equal(JUDGE_SITES[id].purpose, "evolution", id);
   // The learning loop's own screen stays where it was.
   assert.equal(JUDGE_SITES.J1.purpose, "learning");
+});
+
+test("the harm check of the promotion to everyone's pack books where the promotion's other calls do, never to evolution", () => {
+  // Audit 2026-11-03, D6: J23 is online learning's (`officialPromotion.mjs`), and its spend under `evolution` was the one production call
+  // left on that purpose once the module's experiments moved offline. The promotion's judge and review book `evidence` (server.mjs).
+  assert.equal(JUDGE_SITES.J23.purpose, "evidence");
 });
 
 test("the purpose reaches the ledger from the registry row, not from the caller", async () => {

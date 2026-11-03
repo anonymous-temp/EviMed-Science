@@ -166,7 +166,8 @@ test("what runs say counts across accounts: a body that is corrected again and a
   for (let n = 0; n < 3; n += 1) assert.deepEqual(await official.recordApplied({ key: held.key, sha: held.sha, runId: `run_${n}`, outcome: "corrected", at: at(n), userId: person }), { changed: true, stopped: false });
   assert.deepEqual(await official.recordApplied({ key: held.key, sha: held.sha, runId: "run_0", outcome: "corrected", at: at(0), userId: person }), { changed: false, stopped: false }, "a run is counted once");
   assert.equal((await capsules.officialMethods(other)).some((method) => method.key === held.key), true);
-  // A fourth correction from the same account would be a finding, but one account does not stop a body every account is given.
+  // A fourth correction from the same account would be a finding, but one account does not stop a body every account is given: the
+  // boundary is the first run at which the corrections read so far come from two accounts.
   assert.deepEqual(await official.recordApplied({ key: held.key, sha: held.sha, runId: "run_3", outcome: "corrected", at: at(3), userId: person }), { changed: true, stopped: false });
   assert.deepEqual(await official.recordApplied({ key: held.key, sha: held.sha, runId: "run_4", outcome: "corrected", at: at(4), userId: other }), { changed: true, stopped: true });
   // Stopped for every account at once, with the numbers it was stopped on, and gone from the shelf's list of what a pack holds.
@@ -174,7 +175,7 @@ test("what runs say counts across accounts: a body that is corrected again and a
   assert.equal((await capsules.officialMethods(person)).some((method) => method.key === held.key), false);
   const record = await documents.get(PUBLISHER, "preferences", `official-method:review:pooling:${held.sha.slice(0, 12)}`);
   assert.equal(record.payload.status, "stopped");
-  assert.deepEqual([record.payload.stopped.reason, record.payload.stopped.runs, record.payload.stopped.bad], ["harm", 4, 4]);
+  assert.deepEqual([record.payload.stopped.reason, record.payload.stopped.runs, record.payload.stopped.bad], ["harm", 5, 5]);
   assert.deepEqual((await capsules.received(other)).find((pack) => pack.official?.packId === "review")?.methods, []);
   assert.deepEqual(await official.recordApplied({ key: held.key, sha: held.sha, runId: "run_9", outcome: "clean", at: at(9) }), { changed: false, stopped: true }, "nothing more is counted for a stopped body");
   // One call gives it back, counted from nothing; a body that was not stopped cannot be "restored".

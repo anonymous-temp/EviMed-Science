@@ -2,24 +2,30 @@
 /**
  * The lab's campaign CLI. `run` executes development and the sealed confirmation and stops at `awaiting-evaluation`,
  * writing the evaluator's request and the checkpoint to --out-dir; the evaluator (evaluator.mjs, its own key) signs a
- * receipt; `resume` with --evaluator-profile completes the registered statistics. Every command prints one JSON result.
+ * receipt; `resume` with --evaluator-profile completes the registered statistics. `record-exposure` records a confirmation corpus the
+ * operator read outside the runner in the lab's opened-corpus ledger, so no campaign can open it later as unseen (`exposureDecision`).
+ * Every command prints one JSON result.
  *
  *   node run.mjs plan|preflight|run|resume|report --manifest m.json --inputs i.json --config /run/rsi-lab/config.json
  *        [--evaluator-profile /run/rsi-lab/evaluator.json] [--incident-transport /run/rsi-lab/transport.json] [--out-dir dir]
+ *   node run.mjs record-exposure --corpus <the confirmation source's digest, as the manifest names it> --reason "<text>" --config /run/rsi-lab/config.json
  */
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
-import { campaignPlan, runCampaign, labPreflight, productCampaignStore, signedEvaluatorReceipt } from './campaign_runner.mjs';
+import { campaignPlan, exposureDecision, recordCorpusExposure, runCampaign, labPreflight, productCampaignStore, signedEvaluatorReceipt } from './campaign_runner.mjs';
 import { rsiLabConfigurationIssues } from '../../apps/server/src/rsiLabConfiguration.mjs';
 
 const [command] = process.argv.slice(2);
 const { values } = parseArgs({ args: process.argv.slice(3), options: { manifest: { type: 'string' }, inputs: { type: 'string' }, config: { type: 'string' },
-  'evaluator-profile': { type: 'string' }, 'incident-transport': { type: 'string' }, 'out-dir': { type: 'string' } } });
+  'evaluator-profile': { type: 'string' }, 'incident-transport': { type: 'string' }, 'out-dir': { type: 'string' }, corpus: { type: 'string' }, reason: { type: 'string' } } });
 const json = async (path) => JSON.parse(await readFile(path, 'utf8'));
 const ownerMount = (path) => typeof path === 'string' && path.startsWith('/run/rsi-lab/') && !path.split('/').includes('..');
-if (!['plan', 'preflight', 'run', 'resume', 'report'].includes(command)) throw new Error('Usage: run.mjs plan|preflight|run|resume|report --manifest m.json --inputs i.json --config c.json');
-const manifest = await json(values.manifest);
+if (!['plan', 'preflight', 'run', 'resume', 'report', 'record-exposure'].includes(command)) throw new Error('Usage: run.mjs plan|preflight|run|resume|report --manifest m.json --inputs i.json --config c.json | record-exposure --corpus <digest> --reason <text> --config c.json');
+const exposure = command === 'record-exposure';
+// An exposure names a corpus and a reason, never a campaign; both are checked before anything is opened.
+const refusedExposure = exposure ? exposureDecision(undefined, { corpusDigest: values.corpus, reason: values.reason, at: new Date().toISOString() }).result.reason ?? null : null;
+const manifest = exposure ? null : await json(values.manifest);
 const emit = async (result) => {
   console.log(JSON.stringify(result, null, 1));
   if (values['out-dir']) {
@@ -29,6 +35,7 @@ const emit = async (result) => {
   }
 };
 if (command === 'plan') await emit(campaignPlan(manifest));
+else if (refusedExposure) { await emit({ status: 'not-qualified', reason: refusedExposure }); process.exitCode = 2; }
 else {
   const configuration = values.config ? await json(values.config) : {};
   const issues = rsiLabConfigurationIssues(configuration);
@@ -54,8 +61,8 @@ else {
         attestEvaluation = await signedEvaluatorReceipt(profile);
       }
       let incidentTransport;
-      if (manifest.data.classification === 'authorized-incident' && configuration.transport?.kind === 'none') throw new Error('campaign_transport_unavailable');
-      if (manifest.data.classification === 'authorized-incident' && ['run', 'resume'].includes(command)) {
+      if (manifest?.data.classification === 'authorized-incident' && configuration.transport?.kind === 'none') throw new Error('campaign_transport_unavailable');
+      if (manifest?.data.classification === 'authorized-incident' && ['run', 'resume'].includes(command)) {
         if (!ownerMount(values['incident-transport'])) throw new Error('campaign_incident_authority_unavailable');
         const { readRsiDeploymentRecord } = await import('../../apps/server/src/rsiDeploymentAuthority.mjs');
         const { createRsiOssTransport } = await import('../../apps/server/src/rsiOssTransport.mjs');
@@ -64,13 +71,14 @@ else {
         incidentTransport = await createRsiOssTransport(transportConfig);
       }
       let result;
-      if (command === 'preflight') result = await labPreflight(configuration, attestLab);
+      if (exposure) result = await recordCorpusExposure({ configuration, attestLab, store, corpusDigest: values.corpus, reason: values.reason });
+      else if (command === 'preflight') result = await labPreflight(configuration, attestLab);
       else if (command === 'report') {
         const ready = await labPreflight(configuration, attestLab);
         result = ready.status === 'ready' ? await store.withCampaign(manifest.id, async (cp) => ({ status: 'checkpoint', checkpoint: cp.read() })) : ready;
       } else result = await runCampaign({ manifest, inputs: await json(values.inputs), configuration, store, attestLab, attestEvaluation, incidentTransport, statisticsModulePath: process.env.RSI_STATISTICS_PYTHONPATH ?? '/opt/evimed/rsi-python' });
       await emit(result);
-      if (!['completed', 'ready', 'checkpoint', 'awaiting-evaluation'].includes(result?.status)) process.exitCode = 2;
+      if (!['completed', 'ready', 'checkpoint', 'awaiting-evaluation', 'recorded'].includes(result?.status)) process.exitCode = 2;
     } finally { await database.close(); }
   }
 }

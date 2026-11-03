@@ -95,5 +95,69 @@ class Bundle(unittest.TestCase):
         self.assertFalse(self.out.exists())
 
 
+class ToolPatch(Bundle):
+    """A branch that holds code beside (or without) guidance text."""
+
+    CODE = 'OpenScience/runtime/mcp/evimed-research/tool.py'
+
+    def code_branch(self, name, text='def tool():\n    return 1\n', guidance=None):
+        run('git', 'checkout', '-q', '-b', name, 'main', cwd=self.repo)
+        (self.repo / self.CODE).parent.mkdir(parents=True, exist_ok=True)
+        (self.repo / self.CODE).write_text(text)
+        if guidance is not None:
+            (self.repo / PATH).write_text(guidance)
+        run('git', 'add', '-A', cwd=self.repo)
+        run('git', 'commit', '-q', '-m', name, cwd=self.repo)
+        run('git', 'checkout', '-q', 'main', cwd=self.repo)
+
+    def test_a_tool_patch_records_its_code_and_binds_it_into_the_digest(self):
+        self.code_branch('t1')
+        code, out, err = self.tool('t1', '--tool-patch', '--code-path', 'OpenScience/runtime/mcp/evimed-research', '--tool-catalogue-chars', '640', '--note', 'Use the tool for scales.')
+        self.assertEqual((code, err), (0, ''), err)
+        document = json.loads(self.out.read_text())
+        entry = document['candidates'][0]
+        self.assertEqual(entry['bundle'], {'guidanceSupplement': 'Use the tool for scales.', 'skills': []})
+        commit = subprocess.run(['git', '-C', str(self.repo), 'rev-parse', 't1'], capture_output=True, text=True).stdout.strip()
+        base_image = {'id': 'img-1', 'digest': hashlib.sha256(f'artifact-1|{commit}'.encode()).hexdigest()}
+        code_entry = entry['code']
+        self.assertEqual(code_entry['image'], {'id': f'img-1-{commit[:8]}', 'digest': hashlib.sha256(f'artifact-1|{commit}|delta'.encode()).hexdigest()})
+        self.assertEqual(code_entry['files'], [{'path': self.CODE, 'sha256': hashlib.sha256(b'def tool():\n    return 1\n').hexdigest()}])
+        self.assertEqual(code_entry['toolCatalogueChars'], 640)
+        diff = subprocess.run(['git', '-C', str(self.repo), 'diff', '--binary', 'main...t1', '--', 'OpenScience/runtime/mcp/evimed-research'], capture_output=True, text=True).stdout
+        self.assertEqual(code_entry['patchSha256'], hashlib.sha256(diff.encode()).hexdigest())
+        identity = json.loads((self.out.parent / 'bundles.identity.json').read_text())
+        self.assertEqual(identity['surface'], 'tool-patch')
+        self.assertEqual(identity['alwaysOnChars'], len('Use the tool for scales.') + 640, 'the tool catalogue counts as always-on growth')
+        arms = eha.candidate_arms(str(self.out), base_image, 'tool-patch')
+        self.assertEqual(list(arms), [identity['arm']])
+        # the same candidate as a harness patch is another thing: refused, not silently digested without its code
+        with self.assertRaises(eha.ExportError):
+            eha.candidate_arms(str(self.out), base_image, 'harness-patch')
+        # code changes the digest: the same text without it is another candidate
+        text_only = eha.harness_patch_digest(entry['bundle'], base_image)
+        self.assertNotEqual(text_only, arms[identity['arm']]['digest'])
+
+    def test_a_tool_patch_may_change_no_guidance_but_must_change_code(self):
+        self.code_branch('t2')
+        self.assertEqual(self.tool('t2', '--tool-patch', '--code-path', 'OpenScience/runtime/mcp/evimed-research')[0], 0, 'no guidance line, no note: the code is the patch')
+        self.assertEqual(json.loads(self.out.read_text())['candidates'][0]['bundle'], {'guidanceSupplement': '', 'skills': []})
+        self.out.unlink()
+        self.code_branch('t3', guidance=BASE.replace("    '2. second',\n", "    '2. second',\n    '8. use it',\n"))
+        self.assertEqual(self.tool('t3', '--tool-patch', '--code-path', 'OpenScience/runtime/mcp/evimed-research')[0], 0)
+        self.assertEqual(json.loads(self.out.read_text())['candidates'][0]['bundle']['guidanceSupplement'], '8. use it')
+        self.out.unlink()
+        self.branch('only-text', BASE.replace("    '2. second',\n", "    '2. second',\n    '8. use it',\n"))
+        code, _, err = self.tool('only-text', '--tool-patch', '--code-path', 'OpenScience/runtime/mcp/evimed-research')
+        self.assertEqual(code, 2)
+        self.assertIn('changes nothing under the --code-path', err)
+        self.assertFalse(self.out.exists())
+        code, _, err = self.tool('t2', '--tool-patch')
+        self.assertEqual(code, 2)
+        self.assertIn('--code-path', err)
+        code, _, err = self.tool('t2', '--code-path', 'x')
+        self.assertEqual(code, 2)
+        self.assertIn('belong to --tool-patch', err)
+
+
 if __name__ == '__main__':
     unittest.main()

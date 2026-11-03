@@ -158,7 +158,7 @@ import { archivedLessonRun, ensureLearningProject, preserveProjectLessons, resol
 import { learnedMethodFamilyForRuntime, methodFamily, officialMethodDocument, runScopeOf } from "./learnedMethodMount.mjs";
 import { OfficialPacks, officialPackMetricFamilies } from "./officialPacks.mjs";
 import { OFFICIAL_PACKS_DIR } from "./officialPackSources.mjs";
-import { createMethodAppliedOutcomes } from "./methodAppliedOutcomes.mjs";
+import { createMethodAppliedOutcomes, learningPassAccounts } from "./methodAppliedOutcomes.mjs";
 import { persistExecutedToolEdges, persistToolTraces } from "./toolExecutionEdges.mjs";
 import { PLATFORM_PUBLISHER_USER_ID, CONNECTOR_CREDENTIAL_IDS, MIN_PASSWORD_LENGTH, accountMonthStart, autopilotEpisodeCapability, conversationTurnRouteReason, deliverableDir, deliverableIdOfPath, geoCardProducer, geoDisclosurePerson, geoMetricDefinition, geoPublishableText, geoVisibleQuestionOfReason, isChargeableResearchRun, isConversationTurnRun, isResearcherOwnedWork, isVerificationRun, meetsPasswordMinimum, mountedMethodDigest, runRoleOf, RUN_TIME_BUDGET_MINUTES, runTimeBudgetMinutes, usagePurposeOfRun, VCR_STEP_CAPABILITIES } from "@evimed/domain";
 import { requestedSourceScope, ResearchSessionStore } from "./researchSessions.mjs";
@@ -1503,7 +1503,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     report: (line) => process.stderr.write(`${line}\n`),
   });
   // 重读旧记忆 on the native engine: the engine's own memory consolidation, asked for now and then and read back into the overlay as
-  // revisions (`nativeMemoryConsolidation.mjs`). Off unless `OPEN_SCIENCE_NATIVE_MEMORY_CONSOLIDATION_ENABLED`; the worker's pass asks it.
+  // revisions (`nativeMemoryConsolidation.mjs`). On by default since 2026-10-24; `OPEN_SCIENCE_NATIVE_MEMORY_CONSOLIDATION_ENABLED=false` turns it
+  // off (config.mjs); the worker's pass asks it.
   nativeMemoryWorker.consolidation = new NativeMemoryConsolidation({
     config, memorySettings, sessions: openVikingSessions, resources: openVikingResources, overlay: nativeMemoryOverlay,
     ingest: (userId, task) => nativeMemoryWorker.ingestConsolidation(userId, task),
@@ -5195,7 +5196,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       audit: (event, detail) => securityAudit(config, event, "failed", detail),
       // The platform's official methods a run opened are counted in their own, platform-wide records (`OfficialPacks.recordApplied`), never in the account's.
       official: officialPacks ? {
-        methods: async (userId) => (await officialPacks.methodsFor(userId)).map((method) => ({ key: method.key, name: method.name, sha: method.sha, digest: officialMethodDocument(method).digest })),
+        methods: async (userId, options) => (await officialPacks.methodsFor(userId, options)).map((method) => ({ key: method.key, name: method.name, sha: method.sha, digest: officialMethodDocument(method).digest })),
         recordApplied: (applied) => officialPacks.recordApplied(applied),
       } : null,
     });
@@ -9242,36 +9243,33 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       return consolidationScheduleRun;
     }
     const schedule = async () => {
-      // Researchers holding at least one learned method that is not already
-      // retired. A library of nothing has nothing to consolidate, and
-      // enqueueing for it would put a job on every account in the deployment
-      // every hour.
-      const result = await productDatabase.query(`SELECT DISTINCT user_id FROM evimed_product.documents
-        WHERE kind='method' AND deleted_at IS NULL AND payload->>'recordType'='learned-method'
-          AND payload->>'status' IS DISTINCT FROM 'retired'
-        ORDER BY user_id LIMIT 200`);
+      // Every account with learning evidence in the settlement window, and every researcher holding at least one learned method
+      // that is not already retired, in pages (`learningPassAccounts`). Only the second are consolidated: a library of nothing has
+      // nothing to consolidate, and enqueueing for it would put a job on every account in the deployment every hour.
       const interval = Math.max(60_000, Number(config.learningConsolidationIntervalMs) || 3_600_000);
       const period = Math.floor(Date.now() / interval);
       const date = new Date(period * interval).toISOString();
-      for (const row of result.rows) {
+      for await (const account of learningPassAccounts(productDatabase)) {
         try {
-          const user = await store.userById(row.user_id);
+          const user = await store.userById(account.userId);
           if (!user) continue;
-          await ensureLearningProject(store, user);
           // What the researcher did after the runs that opened a method since the last pass reaches the counters first, so the pass that
-          // decides what to stop reads it (`methodAppliedOutcomes.mjs`). A failure of it is its own and costs the pass nothing.
-          await methodApplied?.settleUser(row.user_id).catch(() => null);
-          const pass = await productJobs.enqueue(row.user_id, "consolidate", { action: "sleep", date }, {
+          // decides what to stop reads it (`methodAppliedOutcomes.mjs`): their own methods' and the official ones'. A failure of it is its
+          // own and costs the pass nothing.
+          await methodApplied?.settleUser(account.userId).catch(() => null);
+          if (!account.library) continue;
+          await ensureLearningProject(store, user);
+          const pass = await productJobs.enqueue(account.userId, "consolidate", { action: "sleep", date }, {
             // One pass per researcher per interval however often this timer fires.
             idempotencyKey: `consolidate:sleep:${interval}:${period}`,
             projectId: LEARNING_PROJECT_ID,
           });
           // An earlier hour's pass still waiting — the account's learning budget was spent, and it waited — is
           // this one's work: one pass runs when the budget allows, not one per hour waited (2026-10-08, live: 23).
-          await productJobs.supersedeQueued(row.user_id, "consolidate", "sleep", pass.id);
+          await productJobs.supersedeQueued(account.userId, "consolidate", "sleep", pass.id);
         } catch (error) {
           await securityAudit(config, "learning.consolidate.enqueue", "failed", {
-            userId: row.user_id,
+            userId: account.userId,
             code: typeof error?.code === "string" ? error.code : "learning_enqueue_failed",
           });
         }

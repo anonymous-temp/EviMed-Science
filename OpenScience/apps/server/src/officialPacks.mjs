@@ -38,7 +38,7 @@
  * @module officialPacks
  */
 
-import { PLATFORM_ACCOUNT_AUTH_TYPE, PLATFORM_PUBLISHER_NAME, PLATFORM_PUBLISHER_USER_ID, emptyLearning, foldApplied, methodHarmTest } from "@evimed/domain";
+import { PLATFORM_ACCOUNT_AUTH_TYPE, PLATFORM_PUBLISHER_NAME, PLATFORM_PUBLISHER_USER_ID, emptyLearning, foldApplied, methodHarmTest, trimObservations } from "@evimed/domain";
 import { OFFICIAL_PACKS_DIR, officialPack, readOfficialPackSources } from "./officialPackSources.mjs";
 import { createHash } from "node:crypto";
 
@@ -51,8 +51,13 @@ export const SHARED_PRACTICES_PACK_ID = "shared-practices";
 export const SHARED_PRACTICES_TITLE = "大家的做法";
 const SHARED_PRACTICES_SUMMARY = "用过的人普遍觉得好用、也不涉及任何个人内容的做法，EviMed 收集在这里，所有人都可以用。";
 
-/** What one method body keeps of its runs: the newest observations are enough for the sequential test, which reads forty at most. */
+/** What one method body keeps of its runs: the newest observations, never fewer than the settlement window still reads, and what the sequential
+ *  test read of the older ones (`trimObservations`), which it reads first: a window that only moved restarted the test at another run each time, and
+ *  stopped a harmless body sooner or later. */
 const OBSERVATION_LIMIT = 200;
+/** The harm test as an official body is read: every account is given it, so the corrections that find it harmful come from two accounts at least
+ *  (`methodHarmTest`, `minAccounts`; each reaction carries its account's one-way key). */
+const OFFICIAL_HARM_TEST = Object.freeze({ minAccounts: 2 });
 /** How long what is read from the ledger for the mount (the stopped bodies) may be reused, in ms: a stop takes effect within this. */
 const STOPPED_TTL_MS = 15_000;
 /** How many times a seal is asked again when the password derivation was busy. */
@@ -405,13 +410,14 @@ export class OfficialPacks {
 
   /**
    * The official methods this account may be given: those of its enabled copies that are in force, none that were stopped. Which of them a run
-   * is given is the mount's decision (`selectOfficialMethods`).
-   * @param {string} userId
+   * is given is the mount's decision (`selectOfficialMethods`). `ensure: false` reads the copies the account holds and makes none: what a
+   * settlement of its past runs reads (`methodAppliedOutcomes.mjs`), which writes nothing for an account that was offered nothing.
+   * @param {string} userId @param {{ ensure?: boolean }} [options]
    * @returns {Promise<OfficialMethod[]>}
    */
-  async methodsFor(userId) {
+  async methodsFor(userId, { ensure = true } = {}) {
     if (!this.enabled) return [];
-    await this.ensureFor(userId).catch(() => null);
+    if (ensure) await this.ensureFor(userId).catch(() => null);
     const stopped = await this.stoppedBodies().catch(() => new Set());
     /** @type {OfficialMethod[]} */
     const methods = [];
@@ -449,28 +455,34 @@ export class OfficialPacks {
   /**
    * What became of one run that opened an official method, from the researcher's own next words (`methodAppliedOutcomes.mjs`): folded into
    * the method body's record, once per run, and read by the sequential harm test. A body the test finds harmful is stopped for every account
-   * (`status: stopped`, with the numbers it was stopped on) and the mount stops offering it within seconds — but only once the corrections
-   * come from at least two accounts (`correctedBy`, one-way keys): a body every account is given is not stopped for all of them by one.
-   * @param {{ key: string, sha: string, runId: string, outcome: "corrected" | "clean", at: string, userId?: string }} applied
+   * (`status: stopped`, with the numbers it was stopped on) and the mount stops offering it within seconds — but only on corrections from at
+   * least two accounts among the rejected runs up to the boundary (`OFFICIAL_HARM_TEST`; each reaction carries its account's one-way key,
+   * `by`): a body every account is given is not stopped for all of them by one, nor by a second account's one correction after the first
+   * account's ran the sum up. Until 2026-11-03 the accounts were a list of every account that ever corrected it, read against a verdict
+   * reached earlier, so one account's four early corrections and another's one, five hundred clean runs later, stopped it (review of
+   * 2026-11-03).
+   *
+   * The record is bounded (`trimObservations`): it holds every reaction the settlement may still read again (`keepSince`, the start of its
+   * window) and the newest beyond that, and a run it let go of is not counted again (`since`, when the run began; `foldApplied`).
+   * @param {{ key: string, sha: string, runId: string, outcome: "corrected" | "clean", at: string, userId?: string, since?: string, keepSince?: string }} applied
    * @returns {Promise<{ changed: boolean, stopped: boolean }>}
    */
-  async recordApplied({ key, sha, runId, outcome, at, userId }) {
+  async recordApplied({ key, sha, runId, outcome, at, userId, since, keepSince }) {
     const parsed = key.split(":");
     if (parsed[0] !== "official" || parsed.length !== 3 || !sha) return { changed: false, stopped: false };
     const id = `official-method:${parsed[1]}:${parsed[2]}:${String(sha).slice(0, 12)}`;
+    const by = userId ? createHash("sha256").update(`official-corrected\u0000${userId}`).digest("hex").slice(0, 16) : undefined;
     for (let attempt = 0; attempt < 5; attempt += 1) {
       const row = await this.documents.get(this.publisherId, "preferences", id);
-      const base = row?.payload ?? { recordType: OFFICIAL_METHOD_RECORD, key, sha, packId: parsed[1], methodId: parsed[2], status: "active", learning: emptyLearning(sha), createdAt: this.now().toISOString() };
+      // `correctedBy`, the list the stop used to read, is dropped on the next write: the accounts are on the observations now.
+      const { correctedBy: _retired, ...base } = row?.payload ?? { recordType: OFFICIAL_METHOD_RECORD, key, sha, packId: parsed[1], methodId: parsed[2], status: "active", learning: emptyLearning(sha), createdAt: this.now().toISOString() };
       if (base.status === "stopped") return { changed: false, stopped: true };
-      const learning = foldApplied(base.learning, { runId, outcome, at });
+      const learning = foldApplied(base.learning, { runId, outcome, at, ...(since ? { since } : {}), ...(by ? { by } : {}) });
       if (learning === base.learning) return { changed: false, stopped: false };
-      const trimmed = { ...learning, observations: (learning.observations ?? []).slice(-OBSERVATION_LIMIT) };
-      const who = userId ? createHash("sha256").update(`official-corrected\u0000${userId}`).digest("hex").slice(0, 16) : null;
-      const correctedBy = outcome === "corrected" && who && !(base.correctedBy ?? []).includes(who)
-        ? [...(base.correctedBy ?? []), who].slice(-50) : (base.correctedBy ?? []);
-      const verdict = methodHarmTest(trimmed);
-      const stopped = verdict.state === "harm" && correctedBy.length >= 2;
-      const payload = { ...base, learning: trimmed, correctedBy,
+      const trimmed = trimObservations(learning, OBSERVATION_LIMIT, { ...OFFICIAL_HARM_TEST, ...(keepSince ? { keepSince } : {}) });
+      const verdict = methodHarmTest(trimmed, OFFICIAL_HARM_TEST);
+      const stopped = verdict.state === "harm";
+      const payload = { ...base, learning: trimmed,
         ...(stopped ? { status: "stopped", stopped: { at: this.now().toISOString(), reason: "harm", runs: verdict.runs, bad: verdict.bad, llr: verdict.llr } } : {}) };
       try {
         if (row) await this.documents.put(this.publisherId, "preferences", id, payload, { expectedRevision: row.revision, telemetry: !stopped });
@@ -493,6 +505,8 @@ export class OfficialPacks {
   /**
    * Give a stopped body back: the record is active again with its runs counted from nothing, because what stopped it was read against the
    * body as it was; and the mount offers it again within seconds. One call, with the reason it was stopped still on the record's history.
+   * Nothing is counted for a run that began before the restore (`harmCarried.through`, `foldApplied`): the hourly settlement re-reads its
+   * window, and it would otherwise read back the very corrections that stopped the body and stop it again within the hour.
    * @param {string} key `official:<pack>:<method>` @param {string} sha the body's hash (or its first twelve characters)
    * @returns {Promise<boolean>}
    */
@@ -502,8 +516,11 @@ export class OfficialPacks {
     const id = `official-method:${parsed[1]}:${parsed[2]}:${String(sha).slice(0, 12)}`;
     const row = await this.documents.get(this.publisherId, "preferences", id);
     if (!row || row.payload.status !== "stopped") return false;
-    await this.documents.put(this.publisherId, "preferences", id, { ...row.payload, status: "active", learning: emptyLearning(row.payload.sha),
-      restoredAt: this.now().toISOString(), restoredFrom: row.payload.stopped }, { expectedRevision: row.revision });
+    const restoredAt = this.now().toISOString();
+    const { correctedBy: _retired, ...payload } = row.payload;
+    await this.documents.put(this.publisherId, "preferences", id, { ...payload, status: "active",
+      learning: { ...emptyLearning(row.payload.sha), harmCarried: { runs: 0, bad: 0, through: restoredAt } },
+      restoredAt, restoredFrom: row.payload.stopped }, { expectedRevision: row.revision });
     this.stoppedCache = null;
     this.counters.restored += 1;
     return true;
@@ -517,7 +534,7 @@ export class OfficialPacks {
     const packs = (await this.#publicationRows()).map((row) => ({ packId: row.payload.packId, status: row.payload.status, version: row.payload.version, contentHash: row.payload.contentHash,
       publishedAt: row.payload.publishedAt, methods: (row.payload.methods ?? []).map((/** @type {any} */ method) => ({ key: method.key, sha: method.sha })) }));
     const methods = (await this.#listAll(OFFICIAL_METHOD_RECORD)).map((row) => {
-      const harm = methodHarmTest(row.payload.learning ?? emptyLearning(row.payload.sha));
+      const harm = methodHarmTest(row.payload.learning ?? emptyLearning(row.payload.sha), OFFICIAL_HARM_TEST);
       return { key: row.payload.key, sha: row.payload.sha, status: row.payload.status, runs: harm.runs, corrected: harm.bad, test: harm.state, ...(row.payload.stopped ? { stopped: row.payload.stopped } : {}) };
     });
     return { packs, methods };

@@ -1,19 +1,21 @@
-import test from 'node:test';
+import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildHarnessCampaign, readChecked } from '../harness_assemble.mjs';
 import { harnessArmsIssues } from '../harness_campaign.mjs';
 import { runToVerdict, runnerEnvironment } from '../profiles/benign_fixture.mjs';
-import { GOOD, IMAGE, generator } from '../profiles/harness_fixture.mjs';
+import { GOOD, IMAGE, IMPROVEMENT, generator } from '../profiles/harness_fixture.mjs';
 
 // The Python exporter and registrar write what this consumer reads: synthetic bench-driver/3 result folders, through
 // export_harness_arms.py and register_round.py (python3 -I), into the assembler, the runner, the evaluator and the statistics.
 const tools = fileURLToPath(new URL('../../public-benchmarks/tools/', import.meta.url));
 const scratch = await mkdtemp(join(tmpdir(), 'rsi-export-'));
+after(() => rm(scratch, { recursive: true, force: true }));
 const assembler = fileURLToPath(new URL('../harness_assemble.mjs', import.meta.url));
 const python = (script, args) => spawnSync('python3', ['-I', join(tools, script), ...args], { encoding: 'utf8' });
 
@@ -86,18 +88,26 @@ test('what the exporter and the registrar write is a campaign the lab assembles,
   assert.deepEqual(Object.keys(development.arms).sort(), ['aa', 'baseline', GOOD.arm].sort());
   assert.equal(development.arms[GOOD.arm].harness.digest, GOOD.harness.digest, 'Python and JS digest the same patch the same way');
   const round = JSON.parse(await readChecked(join(scratch, 'registration.json')));
-  const built = await buildHarnessCampaign({ development, confirmation: JSON.parse(await readChecked(join(out, 'confirmation.json'))), registration: round, confirmationGold: goldFile, month: '2026-11', pilotRationale: 'Synthetic.' });
+  const built = await buildHarnessCampaign({ development, confirmation: JSON.parse(await readChecked(join(out, 'confirmation.json'))), registration: round, confirmationGold: goldFile, improvement: IMPROVEMENT, month: '2026-11', pilotRationale: 'Synthetic.' });
   assert.equal(built.supply.developmentChoice.frozen.arm, GOOD.arm);
   const { completed } = await runToVerdict({ manifest: built.manifest, inputs: built.inputs }, { dir: join(scratch, 'verdict') });
   assert.equal(completed.qualification, 'qualified', JSON.stringify(completed.checkpoint?.evaluation?.reasons ?? completed).slice(0, 300));
   // The command line the lab script calls builds the same campaign from the files, checking each against its digest first.
   const cli = (args) => spawnSync('node', [assembler, ...args], { encoding: 'utf8', env: process.env });
-  const common = ['--registration', inputs.registration, '--month', '2026-11'];
+  // The improvement record travels like every inbox file, with its sha256 sidecar; without it nothing is assembled.
+  const improvementPath = join(out, 'improvement.json'), improvementText = JSON.stringify(IMPROVEMENT);
+  await writeFile(improvementPath, improvementText);
+  await writeFile(`${improvementPath}.sha256`, `${createHash('sha256').update(improvementText).digest('hex')}  improvement.json\n`);
+  const unnamed = cli(['--preview', '--development', join(out, 'development.json'), '--registration', inputs.registration, '--month', '2026-11']);
+  assert.equal(unnamed.status, 1);
+  assert.match(unnamed.stderr, /campaign_improvement_missing/);
+  const common = ['--registration', inputs.registration, '--improvement', improvementPath, '--month', '2026-11'];
   const assembled = cli(['--development', join(out, 'development.json'), '--confirmation', join(out, 'confirmation.json'), '--confirmation-gold', join(out, 'confirmation.gold.json'), ...common,
     '--out-dir', join(out, 'cli'), '--pilot-rationale', 'Synthetic.']);
   assert.equal(assembled.status, 0, assembled.stderr);
   const fromFiles = JSON.parse(await readFile(join(out, 'cli', 'manifest.json'), 'utf8'));
   assert.deepEqual(fromFiles.data.sources, built.manifest.data.sources, 'the same sources, byte for byte');
+  assert.deepEqual(fromFiles.models, { solver: { provider: 'deepseek', model: 'deepseek-flash' }, improvers: IMPROVEMENT.improvers, judges: [] }, 'the improvers of the record, no judge for a code scorer');
   assert.equal(fromFiles.registration.digest, built.manifest.registration.digest);
   const preview = cli(['--preview', '--development', join(out, 'development.json'), ...common]);
   assert.equal(preview.status, 0, preview.stderr);
@@ -146,6 +156,20 @@ const DRB_IDS = Array.from({ length: 30 }, (_, i) => String(i + 1)), DRB_CONF = 
 const DRB_SLICE_SHARE = { dev: 0.6, conf: 0.85 };
 const category = (side, index, ids) => (index < Math.round(ids.length * DRB_SLICE_SHARE[side]) ? 'Science' : 'Health');
 const drbItem = (side, ids) => ids.map((id, index) => JSON.stringify({ key: `drb-rsi/${id}`, bench: 'drb', id, meta: { topic: category(side, index, ids), language: 'en' } })).join('\n') + '\n';
+/** What every verdict line of the judge carries (claude_judge.py stamps its parts and `remap` keeps the stamps), and the judge's measurement and record. */
+const STAMPS = { model: 'claude-sonnet-5-5', effort: 'medium' };
+/** A judge-noise/2 measurement (noise_sample.py band) of one family in one form, on the verdict's 0-1 scale. */
+async function noiseFile(dir, family, form, values) {
+  const file = join(dir, 'judge-noise.json');
+  await writeFile(file, JSON.stringify({ schema: 'judge-noise/2', scale: 'verdict-0-1', families: { [family]: { [form]: { form, scale: 'verdict-0-1', ...values } } } }));
+  return file;
+}
+/** The judge.json of the parts directory the verdicts came from (claude_judge.py). */
+async function judgeRecord(dir, judge) {
+  const file = join(dir, 'judge.json');
+  await writeFile(file, JSON.stringify({ schema: 'claude-judge/2', judge, ...STAMPS, dialect: 'score', briefSha256: 'ab'.repeat(32) }));
+  return file;
+}
 
 test('a judged export is digested records the lab joins, and the judge it names is the one registered', async () => {
   const dir = join(scratch, 'judged');
@@ -169,7 +193,7 @@ test('a judged export is digested records the lab joins, and the judge it names 
         await mkdir(folder, { recursive: true });
         await writeFile(join(folder, 'result.json'), JSON.stringify({ key, status: 'succeeded', driver: 'bench-driver/3', runId: `run-${token}-${id}-${repeat}`, errorCode: null, cost: { cost: Math.round(0.1 * (0.85 + 0.3 * random()) * 1e6) / 1e6, openCost: 0, uncertain: 0 } }));
         await writeFile(join(folder, 'answer.md'), `# Report ${id} by ${token} (${repeat})\n\nBody.\n`);
-        for (let pass = 0; pass < 3; pass += 1) lines[pass].push(JSON.stringify({ key, score: Math.round(Math.min(1, Math.max(0, mean(arm) + (random() - 0.5) * 0.4)) * 1e6) / 1e6, judge: JUDGE }));
+        for (let pass = 0; pass < 3; pass += 1) lines[pass].push(JSON.stringify({ key, score: Math.round(Math.min(1, Math.max(0, mean(arm) + (random() - 0.5) * 0.4)) * 1e6) / 1e6, judge: JUDGE, ...STAMPS }));
       }
     }
     for (const [pass, rows] of lines.entries()) {
@@ -180,35 +204,116 @@ test('a judged export is digested records the lab joins, and the judge it names 
   }
   const pools = join(dir, 'pools.json'), registration = join(dir, 'registration.json');
   await writeFile(pools, JSON.stringify({ schema: 'bench-pools/1', bench: 'drb', salt: 'rsi-test', pools: { main: { development: DRB_IDS, confirmation: DRB_CONF } } }));
-  const judgeArgs = ['--judge-id', JUDGE, '--judge-provider', 'anthropic', '--judge-form', 'absolute', '--judge-passes', '3', '--judge-max-calls', '5000', '--judge-agreement', '0.96',
-    '--judge-noise-sd', '0.0155', '--judge-noise-band', '0.0304', '--judge-measured-on', 'judge-noise.txt (synthetic)', '--judge-min-agreement', '0.9', '--judge-max-noise-band', '0.05'];
+  const judgeArgs = ['--judge-id', JUDGE, '--judge-provider', 'anthropic', '--judge-model', 'claude-sonnet-5-5', '--judge-effort', 'medium', '--judge-form', 'absolute', '--judge-passes', '3', '--judge-max-calls', '5000',
+    '--judge-noise', await noiseFile(dir, 'drb', 'absolute', { agreement: 0.96, noiseSd: 0.0155, noiseBand95: 0.0304 }), '--judge-noise-key', 'drb'];
+  const record = await judgeRecord(dir, JUDGE);
   const registered = python('register_round.py', ['--round', 'rsi1-test', '--family', 'drb', '--benchmark', 'deepresearchbench', '--scorer', 'judged-verdicts', '--pools', pools, '--failure-slice', 'Science', ...judgeArgs, '--out', registration]);
   assert.equal(registered.status, 0, registered.stderr);
   const exportRole = (role) => {
     const side = role === 'development' ? 'dev' : 'conf';
     return python('export_harness_arms.py', ['--role', role, '--benchmark', 'deepresearchbench', '--items', join(dir, `items-${side}.jsonl`), '--row-ids', registration, '--bundles', bundles, '--image-id', IMAGE.id, '--image-digest', IMAGE.digest,
       '--bench-key', 'drb-rsi', '--repeats', String(spec[side].repeats), ...Object.entries(armDirs[side]).flatMap(([arm, root]) => ['--arm', `${arm}=${root}`]),
-      '--verdicts', ...verdictFiles[side], '--dialect', 'unit', '--judge-id', JUDGE, '--judge-provider', 'anthropic', '--judge-form', 'absolute', '--judge-passes', '3', '--out', join(dir, `${side}-export`, `${role}.json`)]);
+      '--verdicts', ...verdictFiles[side], '--dialect', 'unit', '--registration', registration, '--judge-record', record, '--out', join(dir, `${side}-export`, `${role}.json`)]);
   };
   for (const role of ['development', 'confirmation']) { const made = exportRole(role); assert.equal(made.status, 0, made.stderr); }
   const exported = (role) => join(dir, `${role === 'development' ? 'dev' : 'conf'}-export`, `${role}.json`);
   const development = JSON.parse(await readChecked(exported('development'))), confirmation = JSON.parse(await readChecked(exported('confirmation')));
   assert.ok(confirmation.rows.every((row) => !('gold' in row)) && confirmation.judged.records === undefined && development.judged.records === undefined, 'no scores in an export');
   assert.equal(confirmation.runs.every((r) => r.answer === null && /^[a-f0-9]{64}$/.test(r.reportSha256)), true);
-  assert.deepEqual(development.judged.judge, { id: JUDGE, provider: 'anthropic', form: 'absolute', passes: 3 });
+  assert.deepEqual(development.judged.judge, { id: JUDGE, provider: 'anthropic', model: 'claude-sonnet-5-5', effort: 'medium', form: 'absolute', passes: 3 });
   assert.equal(development.judged.cost.settledCny, 0);
   const round = JSON.parse(await readChecked(registration));
   const verdicts = { development: await readChecked(join(dir, 'dev-export', 'development.verdicts.jsonl')), confirmation: await readChecked(join(dir, 'conf-export', 'confirmation.verdicts.jsonl')) };
-  const built = await buildHarnessCampaign({ development, confirmation, registration: round, developmentVerdicts: verdicts.development, confirmationVerdicts: verdicts.confirmation, month: '2026-11', pilotRationale: 'Synthetic.' });
+  const built = await buildHarnessCampaign({ development, confirmation, registration: round, developmentVerdicts: verdicts.development, confirmationVerdicts: verdicts.confirmation, improvement: IMPROVEMENT, month: '2026-11', pilotRationale: 'Synthetic.' });
   assert.equal(built.supply.developmentChoice.frozen.arm, GOOD.arm);
   assert.equal(built.supply.judge.calls, development.judged.calls + confirmation.judged.calls);
   const { completed } = await runToVerdict({ manifest: built.manifest, inputs: built.inputs }, { dir: join(dir, 'verdict') });
   assert.equal(completed.qualification, 'qualified', JSON.stringify(completed.checkpoint?.evaluation?.reasons ?? completed).slice(0, 300));
   // A record changed after the export is not the file the export digested.
-  await assert.rejects(buildHarnessCampaign({ development, confirmation, registration: round, developmentVerdicts: verdicts.development.replace('0.', '0.1'), confirmationVerdicts: verdicts.confirmation, month: '2026-11', pilotRationale: 'x' }), { message: 'campaign_judge_verdicts_changed' });
-  // A judge on the solver's family is refused by the exporter before a record is written.
+  await assert.rejects(buildHarnessCampaign({ development, confirmation, registration: round, developmentVerdicts: verdicts.development.replace('0.', '0.1'), confirmationVerdicts: verdicts.confirmation, improvement: IMPROVEMENT, month: '2026-11', pilotRationale: 'x' }), { message: 'campaign_judge_verdicts_changed' });
+  // A judge that is not Claude is refused by the exporter before a record is written, even in a registration written by hand.
+  const hostile = join(dir, 'registration-deepseek.json');
+  await writeFile(hostile, JSON.stringify({ ...round, judge: { ...round.judge, id: 'deepseek-v4-pro', provider: 'deepseek', model: 'deepseek-v4-pro' } }));
   const refused = python('export_harness_arms.py', ['--role', 'development', '--benchmark', 'deepresearchbench', '--items', join(dir, 'items-dev.jsonl'), '--bundles', bundles, '--image-id', IMAGE.id, '--image-digest', IMAGE.digest, '--bench-key', 'drb-rsi', '--repeats', '1',
-    ...Object.entries(armDirs.dev).flatMap(([arm, root]) => ['--arm', `${arm}=${root}`]), '--verdicts', ...verdictFiles.dev, '--dialect', 'unit', '--judge-id', 'deepseek-v4-pro', '--judge-provider', 'deepseek', '--judge-form', 'absolute', '--judge-passes', '3', '--out', join(dir, 'refused', 'development.json')]);
+    ...Object.entries(armDirs.dev).flatMap(([arm, root]) => ['--arm', `${arm}=${root}`]), '--verdicts', ...verdictFiles.dev, '--dialect', 'unit', '--registration', hostile, '--judge-record', record, '--out', join(dir, 'refused', 'development.json')]);
   assert.notEqual(refused.status, 0);
   assert.match(refused.stderr, /deepseek/i);
+});
+
+// BixBench through the judged path (2026-11-02): capsules too few for the procedure (a directional campaign), scored by a judge's per-question
+// verdicts. The exporter turns the verdict lines into one score per run and pass; the registrar admits the benchmark under `judged-verdicts`;
+// the assembly takes it; the runner opens the corpus directionally and the campaign cannot be qualified.
+test('a judged BixBench export assembles under judged-verdicts, and below the procedure\'s groups it is a directional reference', async () => {
+  const dir = join(scratch, 'bix-judged');
+  await mkdir(dir, { recursive: true });
+  const BIX_DEV = Array.from({ length: 8 }, (_, i) => `bix-${i + 1}`), BIX_CONF = Array.from({ length: 7 }, (_, i) => `bix-${i + 21}`);
+  const questionsOf = (id) => Array.from({ length: 1 + (Number(id.slice(4)) % 3) }, (_, i) => `${id}-q${i + 1}`);
+  const bundles = join(dir, 'bundles.json');
+  await writeFile(bundles, JSON.stringify({ candidates: [{ title: GOOD.harness.title, bundle: GOOD.harness.bundle }] }));
+  const bixItem = (ids) => ids.map((id, index) => JSON.stringify({ key: `bixbench/${id}`, bench: 'bixbench', id, gold: { questions: [] }, meta: { topic: index % 2 ? 'imaging' : 'transcriptomics' } })).join('\n') + '\n';
+  await writeFile(join(dir, 'items-dev.jsonl'), bixItem(BIX_DEV));
+  await writeFile(join(dir, 'items-conf.jsonl'), bixItem(BIX_CONF));
+  await writeFile(join(dir, 'question-ids.json'), JSON.stringify(Object.fromEntries([...BIX_DEV, ...BIX_CONF].map((id) => [id, questionsOf(id)]))));
+  const JUDGE = 'claude-bix-judge-test';
+  const spec = { dev: { ids: BIX_DEV, repeats: 1, arms: ['baseline', 'aa', GOOD.arm] }, conf: { ids: BIX_CONF, repeats: 3, arms: ['baseline', GOOD.arm] } };
+  const verdictFiles = { dev: [], conf: [] }, armDirs = { dev: {}, conf: {} };
+  for (const [side, { ids, repeats, arms }] of Object.entries(spec)) {
+    const lines = [[], []];
+    for (const arm of arms) {
+      const token = arm === 'baseline' ? 'base' : arm, root = join(dir, `${side}-${arm}`);
+      armDirs[side][arm] = root;
+      for (const id of ids) for (let repeat = 0; repeat < repeats; repeat += 1) {
+        const key = `bix-rsi/${token}/${id}${repeats > 1 ? `#r${repeat}` : ''}`, folder = join(root, key.replace('/', '__').replace('/', '__').replace(/[^A-Za-z0-9_.-]/g, '_'));
+        await mkdir(folder, { recursive: true });
+        await writeFile(join(folder, 'result.json'), JSON.stringify({ key, status: 'succeeded', driver: 'bench-driver/3', runId: `run-${token}-${id}-${repeat}`, errorCode: null, cost: { cost: 0.4, openCost: 0, uncertain: 0 } }));
+        await writeFile(join(folder, 'answer.md'), 'Final answers:\n1. 3\n');
+        for (const pass of [0, 1]) for (const question of questionsOf(id)) lines[pass].push(JSON.stringify({ key: `${key}#${question}`, verdict: arm === GOOD.arm || question.endsWith('q1') ? 'correct' : 'incorrect', judge: JUDGE, ...STAMPS }));
+      }
+    }
+    for (const [pass, rows] of lines.entries()) {
+      const file = join(dir, `${side}${pass === 0 ? '' : `.p${pass + 1}`}.jsonl`);
+      await writeFile(file, `${rows.join('\n')}\n`);
+      verdictFiles[side].push(file);
+    }
+  }
+  const pools = join(dir, 'pools.json'), registration = join(dir, 'registration.json');
+  await writeFile(pools, JSON.stringify({ schema: 'bench-pools/1', bench: 'bixbench', salt: 'rsi-test', pools: { main: { development: BIX_DEV, confirmation: BIX_CONF } } }));
+  const judgeArgs = async (band) => ['--judge-id', JUDGE, '--judge-provider', 'anthropic', '--judge-model', 'claude-sonnet-5-5', '--judge-effort', 'medium', '--judge-form', 'absolute', '--judge-passes', '2',
+    '--judge-max-calls', '400', '--judge-noise', await noiseFile(dir, 'bixbench', 'absolute', { agreement: 0.95, noiseSd: band / 1.96, noiseBand95: band }), '--judge-noise-key', 'bixbench'];
+  const register = async (band) => python('register_round.py', ['--round', 'rsi2-test', '--family', 'bixbench', '--benchmark', 'bixbench', '--scorer', 'judged-verdicts', '--pools', pools, '--failure-slice', 'imaging,transcriptomics',
+    '--development-rows', '8', '--confirmation-rows', '7', '--candidates-max', '1', ...(await judgeArgs(band)), '--out', registration, '--force']);
+  const record = await judgeRecord(dir, JUDGE);
+  // round 2's judge band (0.1166 over 2 passes is 0.0824) is above the 0.05 margin: the registrar refuses it, whatever maximum it is offered
+  const wide = await register(0.1166);
+  assert.equal(wide.status, 2);
+  assert.match(wide.stderr, /exceeds the margin 0\.05/);
+  const registered = await register(0.06);
+  assert.equal(registered.status, 0, registered.stderr);
+  const exportRole = (role) => {
+    const side = role === 'development' ? 'dev' : 'conf';
+    return python('export_harness_arms.py', ['--role', role, '--benchmark', 'bixbench-judged', '--items', join(dir, `items-${side}.jsonl`), '--row-ids', registration, '--bundles', bundles, '--image-id', IMAGE.id, '--image-digest', IMAGE.digest,
+      '--bench-key', 'bix-rsi', '--repeats', String(spec[side].repeats), ...Object.entries(armDirs[side]).flatMap(([arm, root]) => ['--arm', `${arm}=${root}`]),
+      '--verdicts', ...verdictFiles[side], '--dialect', 'questions', '--question-ids', join(dir, 'question-ids.json'), '--registration', registration, '--judge-record', record,
+      '--out', join(dir, `${side}-export`, `${role}.json`)]);
+  };
+  for (const role of ['development', 'confirmation']) { const made = exportRole(role); assert.equal(made.status, 0, made.stderr); }
+  const exported = (role) => join(dir, `${role === 'development' ? 'dev' : 'conf'}-export`, `${role}.json`);
+  const development = JSON.parse(await readChecked(exported('development'))), confirmation = JSON.parse(await readChecked(exported('confirmation')));
+  assert.equal(confirmation.benchmark, 'bixbench');
+  assert.deepEqual(confirmation.rows.map((row) => Object.keys(row).sort()), BIX_CONF.map(() => ['category', 'id']), 'rows carry a category and no gold');
+  const round = JSON.parse(await readChecked(registration));
+  assert.equal(round.judge.callsRequired, (8 * 3 + 7 * 3 * 2) * 2);
+  const verdicts = { development: await readChecked(join(dir, 'dev-export', 'development.verdicts.jsonl')), confirmation: await readChecked(join(dir, 'conf-export', 'confirmation.verdicts.jsonl')) };
+  const built = await buildHarnessCampaign({ development, confirmation, registration: round, developmentVerdicts: verdicts.development, confirmationVerdicts: verdicts.confirmation, improvement: IMPROVEMENT, month: '2026-11', pilotRationale: 'Synthetic.' });
+  assert.equal(built.supply.directional, true, '7 capsules are below the procedure\'s 25 groups');
+  assert.equal(built.supply.judge.calls, development.judged.calls + confirmation.judged.calls);
+  const { completed } = await runToVerdict({ manifest: built.manifest, inputs: built.inputs }, { dir: join(dir, 'verdict') });
+  assert.equal(completed.qualification, 'inconclusive', 'a directional campaign cannot be qualified');
+  assert.equal(completed.checkpoint.evaluation.scope, 'directional-reference');
+  // the deterministic scorer does not take judged rows: the same capsules registered under it are refused by name
+  const codeRegistration = join(dir, 'registration-code.json');
+  const asCode = python('register_round.py', ['--round', 'rsi2-test', '--family', 'bixbench', '--benchmark', 'bixbench', '--scorer', 'bixbench-deterministic', '--pools', pools, '--failure-slice', 'imaging',
+    '--development-rows', '8', '--confirmation-rows', '7', '--candidates-max', '1', '--out', codeRegistration]);
+  assert.equal(asCode.status, 0, asCode.stderr);
+  await assert.rejects(buildHarnessCampaign({ development, confirmation, registration: JSON.parse(await readChecked(codeRegistration)), improvement: IMPROVEMENT, month: '2026-11', pilotRationale: 'x' }), { message: /^(harness_arms_rows_invalid|campaign_source_invalid|harness_confirmation_gold_missing|harness_confirmation_not_sealed)$/ });
 });

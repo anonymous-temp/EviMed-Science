@@ -6,6 +6,11 @@ built on. The baseline arm is the unmodified image; an optional `aa` arm is a se
 negative control of the development gate). This script turns the fetched run folders of the arms into the sources the RSI
 lab consumes; the lab scores them, this script never does and never prints a score.
 
+A candidate that holds code as well as text (a tool, a connector: the `tool-patch` surface, --surface tool-patch) has a `code` entry in the
+bundles file, {image (the patched image it ran on), patchSha256 (of the code diff), files: [{path, sha256}], toolCatalogueChars (what its tools
+add to the first request)}; it is bound into the digest and its toolCatalogueChars count as always-on growth. A harness-patch export refuses
+a candidate with code, and a tool-patch export refuses one without.
+
 Usage (one invocation per role):
   export_harness_arms.py --role development --benchmark medcalc-bench --items items/medcalc-rsi-dev.jsonl \\
       --arm baseline=results/dev-base --arm aa=results/dev-aa --arm cand-0123456789ab=results/dev-c1 \\
@@ -20,6 +25,9 @@ Files written next to --out (stem = --out without `.json`), each with a `<file>.
                          exported artifact cannot be scored on the dev box before the runner opens it.
   <stem>.verdicts.jsonl  judged benchmarks, once verdicts are given: one record per line {row, arm, repeat, pass, score, judge}
   <out>.incomplete.json  only with --allow-incomplete and missing runs: [{arm, row, repeat, key, reason, status, errorCode}]
+  <out>.uncertain-costs.json  only when a run's usage record still shows an uncertain call or an open reservation: that run keeps the
+                         ledger's settled `cost.cost` (a lower bound) in the source and is listed here with what the ledger and the driver
+                         saw; a run with no cost record at all is the only one whose cost is null
 
 Benchmarks and rows (the id is a string; rows are natural-sorted):
   medcalc-bench                       {id, calculatorId, gold: {answer, lower, upper}}
@@ -27,6 +35,8 @@ Benchmarks and rows (the id is a string; rows are natural-sorted):
   autoresearchbench-deep / -wide      {id, category, gold: {type, titles, arxiv_ids, is_none}}
   medbrowsecomp                       {id, task, gold: {task_name, answer}}
   deepresearchbench / researchclawbench   {id, category}   (judged: no gold; scores come from verdict records)
+  bixbench-judged                     {id, category}   (the same capsules scored by a judge, source benchmark `bixbench`: the category is the capsule's topic and the
+                                      rows carry no gold; the judge reads each question's ideal answer from its packet, the exporter only needs --question-ids)
 Rows come from --items (bench-driver item files; `#r<k>` is stripped from ids and ids are deduplicated; for the autoresearchbench
 benchmarks only items of the matching gold type are taken) or from --rows (already in lab form: {"rows": [...]}). --row-ids
 FILE ({"rows": [ids]} or a round registration whose `rows` is {development: [...], confirmation: [...]}) must equal the exported
@@ -43,11 +53,18 @@ Judged benchmarks (--verdicts FILE..., raw judge JSONL; the pass is the file's `
   absolute dialects  unit (line.score in [0,1]), percent (line.score / 100), race (line.race): the verdict `key` is mapped to
                      (arm, row, repeat) by building the expected key of every run with --key-template and inverting it; an
                      unknown key is an error, never dropped.
+  questions          bixbench-judged: one line per QUESTION, `{key: "<run key>#<question id>", verdict: "correct"|"incorrect"}` (judge/bixbench.md); a run's score
+                     is the share of its capsule's questions judged correct, computed here from --question-ids ({"<row>": ["<question id>", ...]}), and every
+                     question of the capsule must have exactly one verdict in every pass (a missing or surplus question is an error, never a half-score)
   pairwise           drb_pairwise.aggregate over --pairwise-order (repeatable) and --pair-map; each pass gives the candidate
                      share (3 + s) / 6 with s the signed preference toward the candidate (-3..+3); the baseline has no record.
 A record is required for exactly each succeeded run (pairwise: each succeeded run of a non-baseline arm); a verdict for a run that
-did not succeed, a missing pass or a judge id that is not --judge-id is an error. A judge id or provider matching /deepseek/i is
-refused. The judge runs under the operator's Claude subscription: `judged.cost.settledCny` is 0 and says so in `note`.
+did not succeed or a missing pass is an error. What judged is bound, never taken on the operator's word: the judge is the one --registration
+(the round registration, register_round.py) names — id, provider anthropic, a pinned claude-* model, its effort, form and passes (every offline
+judge is Claude, owner 2026-11-03) —, every --judge-record (the judge.json of each claude_judge.py parts directory the verdicts come from) must name
+the same id, model and effort, and every verdict line must carry `judge`, `model` and `effort` equal to them (claude_judge.py stamps its parts and
+`remap` carries the stamps). `judged.judge` records that identity and the lab holds it equal to the registration's judge.
+The judge runs under the operator's Claude subscription: `judged.cost.settledCny` is 0 and says so in `note`.
 
 Exit: 0 written, 2 error, 3 incomplete. Python 3.10 compatible; run with `python3 -I`.
 """
@@ -69,6 +86,7 @@ BENCHMARKS = {
     'medbrowsecomp': {'stratum': 'task', 'gold': True, 'judged': False},
     'deepresearchbench': {'stratum': 'category', 'gold': False, 'judged': True},
     'researchclawbench': {'stratum': 'category', 'gold': False, 'judged': True},
+    'bixbench-judged': {'stratum': 'category', 'gold': False, 'judged': True, 'source': 'bixbench'},
 }
 INFRA_STATUSES = frozenset({'driver_error', 'dispatch_refused', 'interrupted', 'canceled'})
 DELIVERY_STATUSES = frozenset({'succeeded', 'failed', 'timeout'})
@@ -77,9 +95,13 @@ INFRASTRUCTURE_CODES = frozenset({
     'runtime_event_stream_unavailable', 'runtime_wire_protocol_mismatch', 'runtime_seam_missing', 'runtime_sandbox_unavailable',
     'runtime_preset_unavailable', 'runtime_bundle_version_mismatch', 'runtime_domain_version_mismatch', 'runtime_turn_end_unknown',
     'internal_error'})
-SKILL_NAME = re.compile(r'^[a-z0-9][a-z0-9-]{0,63}$')
-IMAGE_ID = re.compile(r'^[A-Za-z0-9][A-Za-z0-9_.:-]{0,159}$')
-HEX64 = re.compile(r'^[0-9a-f]{64}$')
+UNCERTAIN_COST_NOTE = ('Each listed run carries the ledger\'s settled sum for its calls; the ledger also holds a call it booked uncertain (sent, no provider '
+                       'count will arrive) or a reservation still open, so the true cost is that sum or a little more. The figure is a lower bound for these runs only.')
+SKILL_NAME = re.compile(r'[a-z0-9][a-z0-9-]{0,63}')
+IMAGE_ID = re.compile(r'[A-Za-z0-9][A-Za-z0-9_.:-]{0,159}')
+HEX64 = re.compile(r'[0-9a-f]{64}')
+RELATIVE_PATH = re.compile(r'(?!/)[A-Za-z0-9._@+\-/]{1,200}')
+HARNESS_SURFACE, TOOL_PATCH_SURFACE = 'harness-patch', 'tool-patch'
 DEFAULT_KEY_TEMPLATE = '{bench}/{armtoken}/{row}{rep}'
 DEFAULT_JUDGE_NOTE = "Judge calls run under the operator's Claude subscription; not metered in CNY."
 BASELINE, CONTROL = 'baseline', 'aa'
@@ -105,8 +127,9 @@ def _utf16_len(text):
     return len(text.encode('utf-16-le')) // 2
 
 
-def normalize_bundle(bundle):
-    """The bundle {guidanceSupplement, skills: [{name, description, body}]} with its skills sorted by name, or an ExportError."""
+def normalize_bundle(bundle, allow_empty=False):
+    """The bundle {guidanceSupplement, skills: [{name, description, body}]} with its skills sorted by name, or an ExportError.
+    `allow_empty` is for a tool patch, whose code is the patch and which may carry no text at all."""
     if not isinstance(bundle, dict) or set(bundle) != {'guidanceSupplement', 'skills'}:
         raise ExportError('a bundle has exactly the keys guidanceSupplement and skills')
     guidance = _utf8(bundle['guidanceSupplement'], 'guidanceSupplement')
@@ -117,57 +140,103 @@ def normalize_bundle(bundle):
         if not isinstance(skill, dict) or set(skill) != {'name', 'description', 'body'}:
             raise ExportError('a skill has exactly the keys name, description and body')
         name = _utf8(skill['name'], 'skill name')
-        if not SKILL_NAME.match(name):
+        if not SKILL_NAME.fullmatch(name):
             raise ExportError(f'skill name {name!r} does not match {SKILL_NAME.pattern}')
         if name in seen:
             raise ExportError(f'skill name {name!r} appears twice')
         seen.add(name)
         skills.append({'name': name, 'description': _utf8(skill['description'], 'skill description'), 'body': _utf8(skill['body'], 'skill body')})
-    if guidance == '' and not skills:
+    if guidance == '' and not skills and not allow_empty:
         raise ExportError('a bundle needs a guidanceSupplement or at least one skill')
     return {'guidanceSupplement': guidance, 'skills': sorted(skills, key=lambda s: s['name'])}
 
 
 def check_image(image):
-    if not isinstance(image, dict) or set(image) != {'id', 'digest'} or not isinstance(image['id'], str) or not IMAGE_ID.match(image['id']) \
-            or not isinstance(image['digest'], str) or not HEX64.match(image['digest']):
+    if not isinstance(image, dict) or set(image) != {'id', 'digest'} or not isinstance(image['id'], str) or not IMAGE_ID.fullmatch(image['id']) \
+            or not isinstance(image['digest'], str) or not HEX64.fullmatch(image['digest']):
         raise ExportError('an image identity is {id: identifier, digest: 64 lowercase hex}')
     return {'id': image['id'], 'digest': image['digest']}
 
 
-def harness_patch_digest(bundle, image):
-    """sha256 of the RFC 8785 canonical JSON of {guidanceSupplement, image, skills (sorted by name)}: the patch and the image it was measured on."""
-    normal = normalize_bundle(bundle)
+def normalize_code(code):
+    """The code a tool patch adds to the image: {image (the patched one), patchSha256 (of the code diff), files: [{path, sha256}] sorted by
+    path, toolCatalogueChars}, or an ExportError. Mirrors `normalizeToolPatchCode` of harness_campaign.mjs."""
+    if not isinstance(code, dict) or set(code) != {'image', 'patchSha256', 'files', 'toolCatalogueChars'}:
+        raise ExportError('code has exactly the keys image, patchSha256, files and toolCatalogueChars')
+    image = check_image(code['image'])
+    if not isinstance(code['patchSha256'], str) or not HEX64.fullmatch(code['patchSha256']):
+        raise ExportError('code.patchSha256 is 64 lowercase hex')
+    chars = code['toolCatalogueChars']
+    if not isinstance(chars, int) or isinstance(chars, bool) or chars < 0:
+        raise ExportError('code.toolCatalogueChars is a non-negative integer')
+    files = code['files']
+    if not isinstance(files, list) or not 1 <= len(files) <= 200:
+        raise ExportError('code.files lists 1 to 200 changed files')
+    out, seen = [], set()
+    for entry in files:
+        if not isinstance(entry, dict) or set(entry) != {'path', 'sha256'}:
+            raise ExportError('a code file is {path, sha256}')
+        path = entry['path']
+        if not isinstance(path, str) or not RELATIVE_PATH.fullmatch(path) or '..' in path.split('/'):
+            raise ExportError(f'code file path {path!r} is not a short relative path')
+        if not isinstance(entry['sha256'], str) or not HEX64.fullmatch(entry['sha256']):
+            raise ExportError(f'code file {path}: sha256 is 64 lowercase hex')
+        if path in seen:
+            raise ExportError(f'code file {path} appears twice')
+        seen.add(path)
+        out.append({'path': path, 'sha256': entry['sha256']})
+    return {'image': image, 'patchSha256': code['patchSha256'], 'files': sorted(out, key=lambda f: f['path']), 'toolCatalogueChars': chars}
+
+
+def harness_patch_digest(bundle, image, code=None):
+    """sha256 of the RFC 8785 canonical JSON of {guidanceSupplement, image, skills (sorted by name)}: the patch and the image it was measured on;
+    for a tool patch also its `code`. A harness patch's digest is what it was before `code` existed."""
+    normal = normalize_bundle(bundle, allow_empty=code is not None)
     body = {'guidanceSupplement': normal['guidanceSupplement'], 'image': check_image(image), 'skills': normal['skills']}
+    if code is not None:
+        body['code'] = normalize_code(code)
     canonical = json.dumps(body, sort_keys=True, separators=(',', ':'), ensure_ascii=False)
     return hashlib.sha256(canonical.encode('utf-8')).hexdigest()
 
 
-def harness_patch_sizes(bundle):
-    """(chars, alwaysOnChars) in UTF-16 code units, as JavaScript counts them: all text, and the part every session carries."""
-    normal = normalize_bundle(bundle)
+def harness_patch_sizes(bundle, code=None):
+    """(chars, alwaysOnChars) in UTF-16 code units, as JavaScript counts them: all text, and the part every session carries (a tool patch's
+    tool catalogue included)."""
+    normal = normalize_bundle(bundle, allow_empty=code is not None)
     guidance = _utf16_len(normal['guidanceSupplement'])
-    always = guidance + sum(_utf16_len(s['name']) + _utf16_len(s['description']) for s in normal['skills'])
-    return guidance + sum(_utf16_len(s['name']) + _utf16_len(s['description']) + _utf16_len(s['body']) for s in normal['skills']), always
+    tools = normalize_code(code)['toolCatalogueChars'] if code is not None else 0
+    always = guidance + sum(_utf16_len(s['name']) + _utf16_len(s['description']) for s in normal['skills']) + tools
+    return always + sum(_utf16_len(s['body']) for s in normal['skills']), always
 
 
-def candidate_arms(bundles_path, image):
-    """{arm id: harness record} for every candidate of a bundles file ({"candidates": [{"title", "bundle"}]})."""
+def candidate_arms(bundles_path, image, surface=HARNESS_SURFACE):
+    """{arm id: harness record} for every candidate of a bundles file ({"candidates": [{"title", "bundle"[, "code"]}]}). A tool-patch
+    candidate carries `code`; a harness-patch one may not, and the two never share a file."""
     data = json.loads(pathlib.Path(bundles_path).read_text(encoding='utf-8'))
     if not isinstance(data, dict) or not isinstance(data.get('candidates'), list):
         raise ExportError('--bundles must be {"candidates": [{"title", "bundle"}]}')
+    tool = surface == TOOL_PATCH_SURFACE
+    if surface not in (HARNESS_SURFACE, TOOL_PATCH_SURFACE):
+        raise ExportError(f'--surface is {HARNESS_SURFACE} or {TOOL_PATCH_SURFACE}')
     arms = {}
     for index, candidate in enumerate(data['candidates']):
         if not isinstance(candidate, dict) or 'bundle' not in candidate:
             raise ExportError(f'candidate {index} has no bundle')
-        bundle = normalize_bundle(candidate['bundle'])
-        digest = harness_patch_digest(bundle, image)
+        if tool and 'code' not in candidate:
+            raise ExportError(f'candidate {index} has no code: a tool-patch candidate holds code as well as text')
+        if not tool and 'code' in candidate:
+            raise ExportError(f'candidate {index} holds code: it belongs to the {TOOL_PATCH_SURFACE} surface (--surface {TOOL_PATCH_SURFACE})')
+        code = normalize_code(candidate['code']) if tool else None
+        bundle = normalize_bundle(candidate['bundle'], allow_empty=tool)
+        digest = harness_patch_digest(bundle, image, code)
         arm = f'cand-{digest[:12]}'
         if arm in arms:
             raise ExportError(f'candidates {arms[arm]["title"]!r} and {index} are the same patch')
-        chars, always = harness_patch_sizes(bundle)
+        chars, always = harness_patch_sizes(bundle, code)
         title = candidate.get('title')
         arms[arm] = {'digest': digest, 'chars': chars, 'alwaysOnChars': always, 'title': title if isinstance(title, str) and title else arm, 'bundle': bundle}
+        if code is not None:
+            arms[arm]['code'] = code
     return arms
 
 
@@ -214,6 +283,8 @@ def row_from_item(benchmark, item):
         return {'id': row_id, 'category': meta['topic']}
     if benchmark == 'researchclawbench':
         return {'id': row_id, 'category': meta['domain']}
+    if benchmark == 'bixbench-judged':
+        return {'id': row_id, 'category': meta['topic']}
     raise ExportError(f'unknown benchmark {benchmark}')
 
 
@@ -253,6 +324,22 @@ def load_rows(benchmark, items, rows_file):
     if not rows:
         raise ExportError('no rows: give --items or --rows')
     return [rows[k] for k in sorted(rows, key=natural_key)]
+
+
+def load_question_ids(path, rows):
+    """{row id: [question id, ...]} of --question-ids, one non-empty list of distinct ids for every exported row."""
+    if not path:
+        raise ExportError('the questions dialect needs --question-ids ({"<row>": ["<question id>", ...]})')
+    data = json.loads(pathlib.Path(path).read_text(encoding='utf-8'))
+    if not isinstance(data, dict):
+        raise ExportError('--question-ids is {"<row>": ["<question id>", ...]}')
+    out = {}
+    for row in rows:
+        ids = data.get(row['id'])
+        if not isinstance(ids, list) or not ids or not all(isinstance(q, str) and q and '#' not in q for q in ids) or len(set(ids)) != len(ids):
+            raise ExportError(f'--question-ids has no usable list of distinct question ids for row {row["id"]}')
+        out[row['id']] = ids
+    return out
 
 
 def check_row_ids(rows, path, role):
@@ -326,8 +413,27 @@ def report_text(folder):
     return text
 
 
+def is_number(value):
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
+def run_cost(result):
+    """(the cost a run carries, the sidecar entry or None). The ledger's `cost.cost` is the sum of the calls it settled. A run
+    whose usage record still shows an uncertain call or an open reservation keeps that sum, a lower bound, and is listed in the
+    sidecar with what the driver saw; only a run with no cost record at all has no cost."""
+    record = result.get('cost')
+    if not isinstance(record, dict) or not is_number(record.get('cost')) or record['cost'] < 0:
+        return None, None
+    if record.get('openCost') == 0 and record.get('uncertain') == 0:
+        return record['cost'], None
+    note = {key: record.get(key) for key in ('cost', 'openCost', 'uncertain', 'calls')}
+    if isinstance(result.get('costSettle'), dict):
+        note['driverSaw'] = result['costSettle']
+    return record['cost'], note
+
+
 def collect_runs(args, rows, arms, judged_benchmark):
-    runs, incomplete = [], []
+    runs, incomplete, uncertain = [], [], []
     for arm, directory in arms:
         for row in rows:
             for repeat in range(args.repeats):
@@ -341,16 +447,17 @@ def collect_runs(args, rows, arms, judged_benchmark):
                 folder = result_folder(directory, key)
                 answer_path = folder / 'answer.md'
                 answer = answer_path.read_text(encoding='utf-8') if answer_path.exists() else None
-                cost = result.get('cost') or {}
-                settled = cost.get('cost') if cost.get('openCost', 1) == 0 and cost.get('uncertain', 1) == 0 else None
+                amount, note = run_cost(result)
                 run = {'row': row['id'], 'arm': arm, 'repeat': repeat, 'runId': result.get('runId') or f'none:{key}',
-                       'status': result.get('status'), 'answer': None if judged_benchmark else answer, 'cost': settled}
+                       'status': result.get('status'), 'answer': None if judged_benchmark else answer, 'cost': amount}
+                if note:
+                    uncertain.append({'arm': arm, 'row': row['id'], 'repeat': repeat, 'key': key, 'runId': run['runId'], **note})
                 if judged_benchmark:
                     text = report_text(folder)
                     run['answerChars'] = len(text)
                     run['reportSha256'] = hashlib.sha256(text.encode('utf-8')).hexdigest()
                 runs.append(run)
-    return runs, incomplete
+    return runs, incomplete, uncertain
 
 
 # ------------------------------------------------------------------------------------------------------- judge verdicts
@@ -364,18 +471,56 @@ def _is_number(value):
     return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
+# The domain's rule for an offline adjudicator (packages/domain/src/rsiCampaign.mjs), in Python, and the Claude CLI's effort levels (claude_judge.py).
+JUDGE_PROVIDER = 'anthropic'
+JUDGE_MODEL = re.compile(r'claude-[a-z0-9-]+')
+JUDGE_EFFORTS = ('low', 'medium', 'high', 'xhigh', 'max')
+JUDGE_ID = re.compile(r'[A-Za-z0-9][A-Za-z0-9_.:-]{0,159}')
+JUDGE_RECORD_SCHEMA = 'claude-judge/2'
+STAMPS = ('judge', 'model', 'effort')
+
+
 def check_judge(args):
-    if re.search('deepseek', f'{args.judge_id} {args.judge_provider}', re.I):
-        raise ExportError('the judge may not be on the solver\'s family (a judge id or provider naming deepseek is refused)')
-    if not args.judge_id or not args.judge_provider:
-        raise ExportError('--judge-id and --judge-provider are required with verdicts')
-    if args.judge_form not in ('absolute', 'pairwise'):
-        raise ExportError('--judge-form is absolute or pairwise')
-    if (args.dialect == 'pairwise') != (args.judge_form == 'pairwise'):
+    """The registered judge (args.judge_*) from --registration, and the same id, model and effort in every --judge-record. Returns the stamps every
+    verdict line must carry ({judge, model, effort})."""
+    if not args.registration or not args.judge_record:
+        raise ExportError('verdicts need --registration (the round registration naming the judge) and --judge-record (the judge.json of each parts directory)')
+    try:
+        judge = json.loads(pathlib.Path(args.registration).read_text(encoding='utf-8')).get('judge')
+    except (OSError, ValueError, AttributeError):
+        raise ExportError(f'--registration {args.registration} cannot be read as a round registration')
+    if not isinstance(judge, dict):
+        raise ExportError(f'--registration {args.registration} names no judge')
+    if judge.get('provider') != JUDGE_PROVIDER or not isinstance(judge.get('model'), str) or not JUDGE_MODEL.fullmatch(judge['model']):
+        raise ExportError(f'every offline judge is Claude: the registration names {judge.get("provider")!r} {judge.get("model")!r}, not {JUDGE_PROVIDER} with a pinned claude-* model')
+    if not isinstance(judge.get('id'), str) or not JUDGE_ID.fullmatch(judge['id']) or judge.get('effort') not in JUDGE_EFFORTS:
+        raise ExportError('the registration\'s judge has no id or no effort (register_round.py --judge-id, --judge-effort)')
+    if judge.get('form') not in ('absolute', 'pairwise'):
+        raise ExportError('the registration\'s judge form is absolute or pairwise')
+    if (args.dialect == 'pairwise') != (judge['form'] == 'pairwise'):
         raise ExportError('the pairwise dialect and the pairwise judge form go together')
-    passes = args.judge_passes
-    if not isinstance(passes, int) or passes < 2 or (args.judge_form == 'pairwise' and passes % 2):
-        raise ExportError('--judge-passes is an integer of at least 2 (even for pairwise: every pair is judged in both orders)')
+    passes = judge.get('passes')
+    if not isinstance(passes, int) or isinstance(passes, bool) or passes < 2 or (judge['form'] == 'pairwise' and passes % 2):
+        raise ExportError('the registration\'s judge passes are an integer of at least 2 (even for pairwise: every pair is judged in both orders)')
+    args.judge_id, args.judge_provider, args.judge_model, args.judge_effort, args.judge_form, args.judge_passes = (
+        judge['id'], judge['provider'], judge['model'], judge['effort'], judge['form'], passes)
+    stamps = {'judge': judge['id'], 'model': judge['model'], 'effort': judge['effort']}
+    for path in args.judge_record:
+        try:
+            record = json.loads(pathlib.Path(path).read_text(encoding='utf-8'))
+        except (OSError, ValueError):
+            raise ExportError(f'--judge-record {path} cannot be read')
+        named = {name: record.get(name) for name in STAMPS} if isinstance(record, dict) else None
+        if not isinstance(record, dict) or record.get('schema') != JUDGE_RECORD_SCHEMA or named != stamps:
+            raise ExportError(f'--judge-record {path} names {named} ({record.get("schema") if isinstance(record, dict) else None}), '
+                              f'not the registered judge {stamps} ({JUDGE_RECORD_SCHEMA})')
+    return stamps
+
+
+def stamp_problems(obj, stamps, where):
+    """What keeps a verdict line from being the registered judge's: each of judge, model and effort present and equal."""
+    wrong = [f'{name} {obj.get(name)!r}' for name in STAMPS if obj.get(name) != stamps[name]]
+    return [f'{where}: {", ".join(wrong)} is not the registered judge ({", ".join(f"{n} {v}" for n, v in stamps.items())})'] if wrong else []
 
 
 def _expected_keys(args, rows, arms):
@@ -387,7 +532,7 @@ def _expected_keys(args, rows, arms):
     return table
 
 
-def absolute_records(args, rows, arms):
+def absolute_records(args, rows, arms, stamps):
     table, found, calls = _expected_keys(args, rows, arms), {}, 0
     problems = []
     for path in args.verdicts:
@@ -409,8 +554,9 @@ def absolute_records(args, rows, arms):
             if 'pass' in obj and obj['pass'] != file_pass:
                 problems.append(f'{where}: pass {obj["pass"]!r} disagrees with the file name (pass {file_pass})')
                 continue
-            if 'judge' in obj and obj['judge'] != args.judge_id:
-                problems.append(f'{where}: judge {obj["judge"]!r} is not {args.judge_id!r}')
+            wrong = stamp_problems(obj, stamps, where)
+            if wrong:
+                problems += wrong
                 continue
             raw = obj.get({'unit': 'score', 'percent': 'score', 'race': 'race'}[args.dialect])
             score = raw / 100 if args.dialect == 'percent' and _is_number(raw) else raw
@@ -428,13 +574,75 @@ def absolute_records(args, rows, arms):
     return found, calls
 
 
-def pairwise_records(args, rows):
+def question_records(args, rows, arms, stamps):
+    """The `questions` dialect: per-question verdict lines into one score per (run, pass), the share of the capsule's questions judged correct."""
+    table, slots, problems = _expected_keys(args, rows, arms), {}, []
+    wanted = args.question_ids_map
+    for path in args.verdicts:
+        suffix = re.search(r'\.p(\d+)\.jsonl$', pathlib.Path(path).name)
+        file_pass = int(suffix.group(1)) if suffix else 1
+        for number, line in enumerate(pathlib.Path(path).read_text(encoding='utf-8').splitlines(), 1):
+            if not line.strip():
+                continue
+            where = f'{pathlib.Path(path).name}:{number}'
+            try:
+                obj = json.loads(line)
+            except ValueError:
+                problems.append(f'{where}: not JSON')
+                continue
+            run_key, _, question = str(obj.get('key') if isinstance(obj, dict) else '').rpartition('#')
+            if run_key not in table or not question:
+                problems.append(f'{where}: unknown verdict key {obj.get("key") if isinstance(obj, dict) else obj!r} (a run key, `#`, a question id)')
+                continue
+            if 'pass' in obj and obj['pass'] != file_pass:
+                problems.append(f'{where}: pass {obj["pass"]!r} disagrees with the file name (pass {file_pass})')
+                continue
+            wrong = stamp_problems(obj, stamps, where)
+            if wrong:
+                problems += wrong
+                continue
+            if obj.get('verdict') not in ('correct', 'incorrect'):
+                problems.append(f'{where}: a verdict is "correct" or "incorrect"')
+                continue
+            arm, row, repeat = table[run_key]
+            if question not in wanted[row]:
+                problems.append(f'{where}: {question!r} is not a question of {row}')
+                continue
+            given = slots.setdefault((arm, row, repeat, file_pass), {})
+            if question in given and given[question] != obj['verdict']:
+                problems.append(f'{where}: a different verdict for the same question, run and pass')
+                continue
+            given[question] = obj['verdict']
+    found = {}
+    for (arm, row, repeat, k), given in slots.items():
+        missing = [q for q in wanted[row] if q not in given]
+        if missing:
+            problems.append(f'{arm}/{row}#{repeat} pass {k}: no verdict for {len(missing)} of {len(wanted[row])} questions ({", ".join(missing[:3])})')
+            continue
+        found[(arm, row, repeat, k)] = sum(given[q] == 'correct' for q in wanted[row]) / len(wanted[row])
+    if problems:
+        raise ExportError('verdicts rejected:\n  ' + '\n  '.join(problems[:20]) + (f'\n  ... and {len(problems) - 20} more' if len(problems) > 20 else ''))
+    return found, len(slots)
+
+
+def pairwise_records(args, rows, stamps):
     sys.path.insert(0, str(TOOLS))
     import drb_pairwise
     pair_map = json.loads(pathlib.Path(args.pair_map).read_text(encoding='utf-8'))
     if not isinstance(pair_map, dict):
         raise ExportError('--pair-map is {task label: {row, repeat, arm}}')
     found, seen_tasks, problems = {}, set(), []
+    # The parts claude_judge.py wrote, read as they are: every line names what judged it.
+    for path in args.verdicts:
+        for number, line in enumerate(pathlib.Path(path).read_text(encoding='utf-8').splitlines(), 1):
+            if line.strip():
+                try:
+                    obj = json.loads(line)
+                except ValueError:
+                    obj = None
+                problems += stamp_problems(obj, stamps, f'{pathlib.Path(path).name}:{number}') if isinstance(obj, dict) else [f'{pathlib.Path(path).name}:{number}: not a JSON object']
+    if problems:
+        raise ExportError('pairwise verdicts rejected:\n  ' + '\n  '.join(problems[:20]))
     for order_file in args.pairwise_order:
         order = drb_pairwise.load_order(order_file)
         names = order['arms']
@@ -477,10 +685,11 @@ def pairwise_records(args, rows):
 
 def judged_section(args, rows, arms, runs):
     """The verdict records (and the text of their file) once the run set is final; ExportError on any gap or surplus."""
-    check_judge(args)
+    stamps = check_judge(args)
     status = {(r['arm'], r['row'], r['repeat']): r['status'] for r in runs}
     pairwise = args.judge_form == 'pairwise'
-    found, calls = pairwise_records(args, rows) if pairwise else absolute_records(args, rows, arms)
+    found, calls = (pairwise_records(args, rows, stamps) if pairwise else question_records(args, rows, arms, stamps) if args.dialect == 'questions'
+                    else absolute_records(args, rows, arms, stamps))
     problems = []
     for (arm, row, repeat, k), _ in found.items():
         if status.get((arm, row, repeat)) is None:
@@ -555,12 +764,14 @@ def export(args):
     judged_args = bool(args.verdicts or args.pairwise_order or args.pair_map)
     if judged_args and not spec['judged']:
         raise ExportError(f'{args.benchmark} is scored by code in the lab; verdict files belong to judged benchmarks only')
-    candidates = candidate_arms(args.bundles, image) if args.bundles else {}
+    candidates = candidate_arms(args.bundles, image, args.surface) if args.bundles else {}
     arms = parse_arms(args.arm, candidates, args.role)
     rows = load_rows(args.benchmark, args.items, args.rows)
+    if args.verdicts and args.dialect == 'questions':
+        args.question_ids_map = load_question_ids(args.question_ids, rows)
     if args.row_ids:
         check_row_ids(rows, args.row_ids, args.role)
-    runs, incomplete = collect_runs(args, rows, arms, spec['judged'])
+    runs, incomplete, uncertain = collect_runs(args, rows, arms, spec['judged'])
     if incomplete and not args.allow_incomplete:
         return 3, {'written': False, 'incomplete': incomplete}
     out = pathlib.Path(args.out)
@@ -577,7 +788,7 @@ def export(args):
         if spec['gold'] and args.role == 'confirmation':
             gold_map[row['id']] = row.pop('gold')
         out_rows.append(row)
-    source = {'kind': 'harness-arms', 'schema': 1, 'role': args.role, 'benchmark': args.benchmark, 'image': image, 'repeats': args.repeats,
+    source = {'kind': 'harness-arms', 'schema': 1, 'role': args.role, 'benchmark': spec.get('source', args.benchmark), 'image': image, 'repeats': args.repeats,
               'rows': out_rows,
               'arms': {name: ({'harness': None} if name == BASELINE else {'harness': None, 'control': 'A/A'} if name == CONTROL else {'harness': candidates[name]})
                        for name, _ in arms},
@@ -590,7 +801,8 @@ def export(args):
             digest, lines = _digest_file(path)
             files.append({'name': pathlib.Path(path).name, 'sha256': digest, 'lines': lines})
         records_digest = hashlib.sha256(judged['text'].encode('utf-8')).hexdigest()
-        source['judged'] = {'schema': 1, 'judge': {'id': args.judge_id, 'provider': args.judge_provider, 'form': args.judge_form, 'passes': args.judge_passes},
+        source['judged'] = {'schema': 1, 'judge': {'id': args.judge_id, 'provider': args.judge_provider, 'model': args.judge_model, 'effort': args.judge_effort,
+                                                   'form': args.judge_form, 'passes': args.judge_passes},
                             'calls': judged['calls'], 'cost': {'settledCny': 0, 'note': args.judge_cost_note}, 'files': files,
                             'recordsFile': {'name': records_name, 'sha256': records_digest, 'lines': len(judged['records'])}}
     if gold_map:
@@ -601,9 +813,13 @@ def export(args):
     if incomplete:
         write_checked(f'{out}.incomplete.json', dump(incomplete))
         written.append(f'{out}.incomplete.json')
+    if uncertain:
+        write_checked(f'{out}.uncertain-costs.json', dump({'kind': 'harness-uncertain-costs', 'schema': 1, 'benchmark': args.benchmark, 'role': args.role,
+                                                           'note': UNCERTAIN_COST_NOTE, 'runs': uncertain}))
+        written.append(f'{out}.uncertain-costs.json')
     summary = {'written': True, 'role': args.role, 'rows': len(rows), 'arms': [a for a, _ in arms], 'runs': len(runs),
                'expectedRuns': len(rows) * len(arms) * args.repeats, 'incomplete': len(incomplete),
-               'unsettled': sum(1 for r in runs if r['cost'] is None), 'files': written}
+               'unsettled': sum(1 for r in runs if r['cost'] is None), 'uncertainCosts': len(uncertain), 'files': written}
     if judged is not None:
         summary['records'] = len(judged['records'])
     return (3 if incomplete else 0), summary
@@ -618,6 +834,7 @@ def build_parser():
     p.add_argument('--row-ids')
     p.add_argument('--arm', action='append', required=True, help='ARM=RESULTS_DIR (baseline, aa or cand-xxxxxxxxxxxx)')
     p.add_argument('--bundles')
+    p.add_argument('--surface', choices=[HARNESS_SURFACE, TOOL_PATCH_SURFACE], default=HARNESS_SURFACE, help='tool-patch: every candidate of --bundles holds code')
     p.add_argument('--image-id', required=True)
     p.add_argument('--image-digest', required=True)
     p.add_argument('--bench-key', required=True)
@@ -627,11 +844,10 @@ def build_parser():
     p.add_argument('--allow-incomplete', action='store_true')
     p.add_argument('--infrastructure-code', action='append', default=[])
     p.add_argument('--verdicts', nargs='+')
-    p.add_argument('--dialect', choices=['unit', 'percent', 'race', 'pairwise'])
-    p.add_argument('--judge-id')
-    p.add_argument('--judge-provider')
-    p.add_argument('--judge-form')
-    p.add_argument('--judge-passes', type=int)
+    p.add_argument('--dialect', choices=['unit', 'percent', 'race', 'questions', 'pairwise'])
+    p.add_argument('--question-ids', help='the questions dialect: {"<row>": ["<question id>", ...]}')
+    p.add_argument('--registration', help='verdicts: the round registration (register_round.py) whose judge judged them')
+    p.add_argument('--judge-record', action='append', default=[], help='verdicts: the judge.json of each claude_judge.py parts directory (repeatable)')
     p.add_argument('--pairwise-order', action='append', default=[])
     p.add_argument('--pair-map')
     p.add_argument('--judge-cost-note', default=DEFAULT_JUDGE_NOTE)

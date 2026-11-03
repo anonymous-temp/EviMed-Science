@@ -94,7 +94,7 @@ class DshSubstrate:
 class DshAdapter:
     def __init__(self, domain: str, tasks: dict[str, Task], *, all_prompts: list[str], names: list[str], runs_root: Path, client: BrokerClient,
                  channels: dict, ledger: Ledger | None = None, balance=None, image: str = IMAGE_BASE, poll_s: float = 30.0,
-                 max_wait_s: float = 6 * 3600, clock=time.monotonic, sleep=time.sleep, max_numerals: int = 12):
+                 max_wait_s: float = 6 * 3600, clock=time.monotonic, sleep=time.sleep, max_numerals: int = 12, reference: list[str] = ()):
         surface_mod.register_prompts()
         self.domain = domain
         self.task_map = dict(tasks)
@@ -104,7 +104,7 @@ class DshAdapter:
         self.max_wait_s = max_wait_s
         self.inbox = Inbox(self.runs_root / "inbox", client, poll_s=poll_s, clock=clock, sleep=sleep)
         self.substrate = DshSubstrate()
-        self.guard = guard.TreeGuard(all_prompts, names, max_numerals=max_numerals)
+        self.guard = guard.TreeGuard(all_prompts, names, max_numerals=max_numerals, reference=reference)
         self._routes_path = self.runs_root / "routes" / f"{domain}.json"
         self._routes = self._load_routes()
         proposer = channels["stages"]["inv"]

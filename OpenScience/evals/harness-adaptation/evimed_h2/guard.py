@@ -10,7 +10,11 @@ names of its data has stopped being process text. Three tests, all decidable:
 
   * a long verbatim stretch of any development prompt of the domain (60 squashed characters: letters and digits, case folded),
   * more numerals than a handful (list markers and step numbers excluded),
-  * the name of a data set, a file, a trial, a paper or a task id that a prompt of the domain mentions.
+  * the name of a data set, a file, a trial, a paper or a task id that a prompt of the domain mentions. What counts as a name is
+    decided in code from data, never from a list of words: a candidate is a name when it is distinctive by shape (a digit, a joined or
+    dotted compound, capitals inside it) or, when it is a plain word, when it is rare in the domain's own task texts and in the
+    platform's own prose (its skill library). A plain word that those texts use freely is vocabulary: "count" and "rules" are the stems
+    of data files in some tasks and ordinary words everywhere, and a tree that says "count the rows" has not named a data set.
 
 The error text names what was found, so the editor can fix it in place; it never contains anything the editor has not already been shown.
 """
@@ -18,6 +22,7 @@ The error text names what was found, so the editor can fix it in place; it never
 from __future__ import annotations
 
 import re
+from pathlib import Path
 from typing import Iterable, Mapping
 
 from .errors import ContaminationRefused
@@ -132,21 +137,101 @@ BENCHMARK_NAMES = (
 )
 
 
+# A plain word that this many task texts of the domain use (or this share of them, whichever is larger) is vocabulary there; so is
+# one that this many documents of the platform's own prose (SKILL.md files) use.
+ORDINARY_MIN_TASKS = 3
+ORDINARY_SHARE = 0.03
+ORDINARY_MIN_DOCUMENTS = 5
+_JOINED = re.compile(r"[A-Za-z0-9][_\-./][A-Za-z0-9]")
+_ASCII_WORD = re.compile(r"[A-Za-z]+")
+
+
+def has_name_shape(candidate: str) -> bool:
+    """Distinctive by shape alone: a digit, two parts joined by `_ - . /` (a file name, an accession), or two capitals (TASK, MedCalc).
+    A word in capitals only at its start ("Count") and a word in no case (Chinese) have no shape."""
+    text = candidate.strip()
+    if any(char.isdigit() for char in text):
+        return True
+    if _JOINED.search(text):
+        return True
+    return sum(char.isupper() for char in text) >= 2
+
+
+def platform_prose(openscience_root: Path) -> list[str]:
+    """The platform's own prose, as reference text for what is ordinary: every SKILL.md under the skill roots of the tree. An absent
+    root contributes nothing (a sparse checkout, a test), and the guard then judges by the domain's task texts alone."""
+    texts: list[str] = []
+    for sub in ("runtime/skills", "capability-skills", "capabilities"):
+        root = Path(openscience_root) / sub
+        if root.is_dir():
+            for path in sorted(root.rglob("SKILL.md")):
+                try:
+                    texts.append(path.read_text(encoding="utf-8"))
+                except (OSError, UnicodeDecodeError):
+                    continue
+    return texts
+
+
+def candidate_names(tasks: Iterable) -> list[str]:
+    """The names a harness must not repeat, as the tasks of a domain offer them: task ids, the files they ship (the whole name and its
+    stem) and the UUIDs in their facts. A stem that is a plain word and the stem of files in two or more tasks is the generic name of a
+    kind of file (counts, metadata, rules), not the name of a data set, and is left out here; whether the rest are names is
+    `TreeGuard`'s decision (shape or rarity)."""
+    tasks = list(tasks)
+    stems: dict[str, set[str]] = {}
+    names: set[str] = set()
+    for task in tasks:
+        if len(task.id) >= 6 and not task.id.isdigit():
+            names.add(task.id)
+        for entry in task.files:
+            base = Path(entry["dest"]).name
+            names.add(base)
+            stems.setdefault(base.split(".")[0], set()).add(task.id)
+        uuid = task.facts.get("uuid")
+        if uuid:
+            names.add(uuid)
+    for stem, owners in stems.items():
+        if len(owners) < 2 or has_name_shape(stem):
+            names.add(stem)
+    return sorted(n for n in names if len(n) >= 5)
+
+
 class TreeGuard:
-    def __init__(self, prompts: Iterable[str], names: Iterable[str] = (), *, max_numerals: int = 12, window: int = 60, sample: int = 3):
+    def __init__(self, prompts: Iterable[str], names: Iterable[str] = (), *, max_numerals: int = 12, window: int = 60, sample: int = 3,
+                 reference: Iterable[str] = ()):
         self.window, self.sample, self.max_numerals = window, sample, max_numerals
         self._hashes: set[int] = set()
-        n_prompts = 0
+        squashed_prompts: list[str] = []
         for prompt in prompts:
-            n_prompts += 1
             squashed, _ = squash(prompt)
+            squashed_prompts.append(squashed)
             for start in range(0, max(0, len(squashed) - window + 1)):
                 h = hash(squashed[start:start + window])
                 if h % sample == 0:
                     self._hashes.add(h)
-        self.n_prompts = n_prompts
-        self.names = sorted({n.strip() for n in list(names) + list(BENCHMARK_NAMES) if len(squash(n.strip())[0]) >= 5}, key=str.lower)
-        self._squashed_names = [(n, squash(n)[0]) for n in self.names]
+        self.n_prompts = len(squashed_prompts)
+        squashed_reference = [squash(text)[0] for text in reference]
+        ordinary_at = max(ORDINARY_MIN_TASKS, ORDINARY_SHARE * self.n_prompts)
+        self.names, self.vocabulary = [], []
+        for name in sorted({n.strip() for n in names if len(squash(n.strip())[0]) >= 5}, key=str.lower):
+            squashed_name = squash(name)[0]
+            if has_name_shape(name):
+                self.names.append(name)
+                continue
+            tasks_using = sum(1 for text in squashed_prompts if squashed_name in text)
+            documents_using = sum(1 for text in squashed_reference if squashed_name in text)
+            if tasks_using < ordinary_at and documents_using < ORDINARY_MIN_DOCUMENTS:
+                self.names.append(name)
+            else:
+                self.vocabulary.append(name)  # kept for the audit: what was not taken for a name
+        for name in BENCHMARK_NAMES:
+            if len(squash(name)[0]) >= 5 and name not in self.names:
+                self.names.append(name)
+        self.names.sort(key=str.lower)
+        # Shape names match squashed (any spacing or punctuation of the same letters); a plain ASCII word matches as a whole word only,
+        # so a rare stem is not found inside "account" or "discount".
+        self._squashed_names = [(n, squash(n)[0], None if has_name_shape(n) or not _ASCII_WORD.fullmatch(n) or n in BENCHMARK_NAMES
+                                 else re.compile(rf"(?<![A-Za-z0-9]){re.escape(n)}(?![A-Za-z0-9])", re.I)) for n in self.names]
 
     def long_matches(self, text: str) -> list[str]:
         squashed, where = squash(text)
@@ -171,7 +256,7 @@ class TreeGuard:
 
     def named(self, text: str) -> list[str]:
         squashed, _ = squash(text)
-        found = [n for n, s in self._squashed_names if s and s in squashed]
+        found = [n for n, s, word in self._squashed_names if s and (word.search(text) if word else s in squashed)]
         for label, pattern in _PATTERNS.items():
             hit = pattern.search(text)
             if hit:

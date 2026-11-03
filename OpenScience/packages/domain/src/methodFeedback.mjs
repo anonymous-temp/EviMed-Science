@@ -69,7 +69,8 @@ export const METHOD_FEEDBACK_POLARITY = Object.freeze({
 /** What the engine's own diagnostics said about the data. `unflagged` is not `applicable`. */
 export const METHOD_APPLICABILITY_STATES = Object.freeze(['unknown', 'flagged', 'unflagged'])
 
-/** How many entries one method record keeps. The oldest go first; a count is never a megabyte. */
+/** How many entries one method record keeps. The oldest result versions go first, whole, and what the lifecycle read of them is carried
+ *  (`foldMethodFeedback`); a count is never a megabyte. */
 export const METHOD_FEEDBACK_LIMIT = 60
 
 /** What a method's record says about how it was left: returned to an earlier body, or stopped — because the results made under the newer body were found wrong (`*_for_regression`), or because the newer text contradicted runs the person had accepted (`*_for_replay`, `MethodReplay`: `results` is the runs it was read against, `against` the contradictions). */
@@ -222,17 +223,85 @@ export function hasMethodFeedback(scientific, id) {
   return Array.isArray(scientific?.entries) && scientific.entries.some((/** @type {any} */ entry) => entry?.id === id)
 }
 
+/** How a version the record let go of was read, one character each in `carried[digest].read`. */
+const CARRIED_READING = Object.freeze({ s: 'supports', a: 'against', n: 'neutral' })
+const CARRIED_CODE = Object.freeze({ supports: 's', against: 'a', neutral: 'n' })
+const CARRIED_VERSION_KEY = /^[a-f0-9]{16}$/
+
+/** The key a version the record let go of is remembered by: the last sixteen hex characters of its identity, a digest. @param {string} versionId */
+const carriedVersionKey = (versionId) => versionId.slice(-16)
+
+/**
+ * What one revision's record let go of (`foldMethodFeedback`): each dropped result version's reading, once, in the order it was read
+ * (`carried[digest].read`, which `scientificRegression` reads too), and the versions' keys. Empty for a record that never filled; what
+ * is not of this shape is not read.
+ * @param {any} scientific @param {string} digest
+ * @returns {{ readings: ('supports' | 'against' | 'neutral')[], versions: string[] }}
+ */
+function scientificCarried(scientific, digest) {
+  const held = isRecord(scientific?.carried) && Object.hasOwn(scientific.carried, digest) ? scientific.carried[digest] : null
+  const read = typeof held?.read === 'string' && /^[san]*$/.test(held.read) ? held.read : ''
+  const versions = (Array.isArray(held?.versions) ? held.versions : []).filter((/** @type {unknown} */ key) => typeof key === 'string' && CARRIED_VERSION_KEY.test(key))
+  return { readings: [...read].map((code) => /** @type {Record<string, 'supports' | 'against' | 'neutral'>} */ (CARRIED_READING)[code]), versions }
+}
+
+/**
+ * The record within its limit: the result versions whose reading settled first go, whole — every entry of a version together, so a
+ * version is never half read — until the entries fit, and each one's reading and key are appended to its revision's carried part.
+ * @param {{ schemaVersion?: number, entries: any[], carried?: any }} record
+ */
+function withinLimit(record) {
+  if (record.entries.length <= METHOD_FEEDBACK_LIMIT) return record
+  /** Each version at the moment its reading settled, as `scientificOutcomes` reads it. @type {Map<string, { digest: string, versionId: string, reading: 'supports' | 'against' | 'neutral', at: string, size: number }>} */
+  const versions = new Map()
+  for (const entry of record.entries) {
+    const key = `${entry.digest}\u0000${entry.result.versionId}`
+    const polarity = /** @type {'supports' | 'against' | 'neutral'} */ (/** @type {Record<string, string>} */ (METHOD_FEEDBACK_POLARITY)[entry.signal])
+    const held = versions.get(key)
+    if (!held) { versions.set(key, { digest: entry.digest, versionId: entry.result.versionId, reading: polarity, at: entry.at, size: 1 }); continue }
+    held.size += 1
+    if ((held.reading === 'neutral' && polarity !== 'neutral') || (held.reading === 'supports' && polarity === 'against')) Object.assign(held, { reading: polarity, at: entry.at })
+  }
+  /** @type {Record<string, { read: string, versions: string[] }>} */
+  const carried = {}
+  for (const digest of isRecord(record.carried) ? Object.keys(record.carried) : []) {
+    const { readings, versions: keys } = scientificCarried(record, digest)
+    if (readings.length || keys.length) carried[digest] = { read: readings.map((reading) => CARRIED_CODE[reading]).join(''), versions: keys }
+  }
+  /** @type {Set<string>} */
+  const dropped = new Set()
+  let size = record.entries.length
+  for (const version of [...versions.values()].sort((left, right) => left.at.localeCompare(right.at) || left.versionId.localeCompare(right.versionId))) {
+    if (size <= METHOD_FEEDBACK_LIMIT) break
+    dropped.add(`${version.digest}\u0000${version.versionId}`)
+    size -= version.size
+    const held = carried[version.digest] ?? { read: '', versions: [] }
+    carried[version.digest] = { read: held.read + CARRIED_CODE[version.reading], versions: [...held.versions, carriedVersionKey(version.versionId)] }
+  }
+  return { ...record, entries: record.entries.filter((entry) => !dropped.has(`${entry.digest}\u0000${entry.result.versionId}`)), carried }
+}
+
 /**
  * Add one entry to a record, once: an entry of an identity the record already holds changes nothing (one result
- * version, one signal source, one entry, however often the join replays), and the oldest entries go when the record is
- * full. Returns the record it was given when nothing was added.
+ * version, one signal source, one entry, however often the join replays). Returns the record it was given when nothing was added.
+ *
+ * When the record is full the result versions whose reading settled first go, whole, and what was read of them stays: each one's
+ * reading, in order, under the revision it was made under, and its key (`scientificCarried`). The sequential test reads that part
+ * first and the entries after it, so it reads the whole record (`scientificRegression`); and an entry of a version the record let
+ * go of changes nothing — a replay of the join, or a later signal on it. Until 2026-11-03 the record kept its last sixty entries and
+ * nothing of the rest, so the test read a window that slid and a harmless revision was rolled back sooner or later (at the 25%
+ * background rate a third of them by the hundredth result and 92% by the three hundredth), and a replay added back what had slid out
+ * (review of 2026-11-03). The carried part grows by one character and one sixteen-character key per version let go of.
  * @param {any} scientific @param {unknown} entry
  */
 export function foldMethodFeedback(scientific, entry) {
-  const current = isRecord(scientific) && Array.isArray(scientific.entries) ? scientific : emptyScientific()
+  /** @type {{ schemaVersion?: number, entries: any[], carried?: any }} */
+  const current = isRecord(scientific) && Array.isArray(scientific.entries) ? /** @type {any} */ (scientific) : emptyScientific()
   const cleaned = projectMethodFeedback(entry)
-  if (hasMethodFeedback(current, cleaned.id)) return scientific ?? current
-  return { schemaVersion: METHOD_FEEDBACK_VERSION, entries: [...current.entries, cleaned].slice(-METHOD_FEEDBACK_LIMIT) }
+  if (hasMethodFeedback(current, cleaned.id) || scientificCarried(current, cleaned.digest).versions.includes(carriedVersionKey(cleaned.result.versionId))) {
+    return scientific ?? current
+  }
+  return withinLimit({ schemaVersion: METHOD_FEEDBACK_VERSION, entries: [...current.entries, cleaned], ...(isRecord(current.carried) ? { carried: current.carried } : {}) })
 }
 
 /* --------------------------------------------------------------- readings */
@@ -277,24 +346,26 @@ export function scientificOutcomes(scientific, digest) {
  * What one revision's record says, for a reader: how many results it was used for, how many were reproduced and how
  * many were not or were corrected, the applicability the engine's diagnostics gave, and the results that count against
  * it. `causalBenefit` is `unproven` in every summary: this is what happened after the method was used, not what the
- * method did.
+ * method did. The counts are the whole record's, the versions it let go of included (`scientificCarried`); the counterexamples
+ * and limits are the entries it holds.
  * @param {any} scientific @param {string} digest
  * @returns {MethodScientific}
  */
 export function methodScientific(scientific, digest) {
   const entries = (Array.isArray(scientific?.entries) ? scientific.entries : []).filter((/** @type {any} */ entry) => entry?.digest === digest)
   const outcomes = scientificOutcomes(scientific, digest)
+  const { readings: carried } = scientificCarried(scientific, digest)
   const flagged = entries.filter((/** @type {any} */ entry) => entry.applicability?.state === 'flagged')
   const unflagged = entries.some((/** @type {any} */ entry) => entry.applicability?.state === 'unflagged')
   const neutral = new Set(entries.filter((/** @type {any} */ entry) => /** @type {Record<string, string>} */ (METHOD_FEEDBACK_POLARITY)[entry.signal] === 'neutral')
     .map((/** @type {any} */ entry) => entry.result.versionId))
-  const supports = outcomes.filter((outcome) => outcome.polarity === 'supports').length
-  const against = outcomes.filter((outcome) => outcome.polarity === 'against').length
+  const supports = outcomes.filter((outcome) => outcome.polarity === 'supports').length + carried.filter((reading) => reading === 'supports').length
+  const against = outcomes.filter((outcome) => outcome.polarity === 'against').length + carried.filter((reading) => reading === 'against').length
   const againstIds = new Set(outcomes.filter((outcome) => outcome.polarity === 'against').map((outcome) => outcome.entryId))
   return {
     digest,
-    results: new Set(entries.map((/** @type {any} */ entry) => entry.result.versionId)).size,
-    supports, against, assessed: supports + against, neutral: neutral.size,
+    results: new Set(entries.map((/** @type {any} */ entry) => entry.result.versionId)).size + carried.length,
+    supports, against, assessed: supports + against, neutral: neutral.size + carried.filter((reading) => reading === 'neutral').length,
     applicability: flagged.length ? 'flagged' : unflagged ? 'unflagged' : 'unknown',
     causalBenefit: 'unproven',
     counterexamples: entries.filter((/** @type {any} */ entry) => againstIds.has(entry.id)).slice(-8).reverse().map((/** @type {any} */ entry) => ({

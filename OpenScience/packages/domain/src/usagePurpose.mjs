@@ -15,7 +15,7 @@
  * `other` — bookkeeping never fails a model call.
  */
 
-/** @typedef {'kernel'|'memory-extraction'|'routing'|'title'|'task-type'|'engine'|'capsule-scan'|'channel-intent'|'source-understanding'|'knowledge'|'learning'|'autopilot'|'frontier'|'review'|'geo'|'vcr'|'web-search'|'evolution'|'evidence'|'evidence-upkeep'|'other'} UsagePurpose */
+/** @typedef {'kernel'|'memory-extraction'|'routing'|'title'|'task-type'|'engine'|'capsule-scan'|'channel-intent'|'source-understanding'|'knowledge'|'learning'|'autopilot'|'frontier'|'review'|'geo'|'vcr'|'web-search'|'evolution'|'evidence'|'evidence-upkeep'|'rsi'|'other'} UsagePurpose */
 
 /** Every purpose, in report order. `frontier` is the frontier feed reading
  *  the literature for everyone (screening, editing, the daily issue): one
@@ -52,6 +52,12 @@
  *  internal `evimed-openviking` project and under the engine's own daily
  *  budget. What a compile used of its account's `knowledge` caps is counted
  *  separately, by the page service, from the tokens each task reports.
+ *  `rsi` is the platform's offline improvement campaigns' one online call:
+ *  reading a failed conversation into the minimum incident the lab may
+ *  receive (`rsiOnlineRuntime.mjs`), made by the publisher account in its
+ *  `evimed-evidence` project under the deployment's own extraction ceiling.
+ *  It was booked `learning` until 2026-11-03 (audit D6), which is a person's
+ *  own learning loop and drew on its per-account cap.
  *  `task-type` is no longer made by anything: it was the one small call that
  *  said what kind of work a finished conversation was, for the memory map's
  *  radar, which is gone. It stays in the vocabulary because the ledger's CHECK
@@ -77,6 +83,7 @@ export const USAGE_PURPOSES = /** @type {readonly UsagePurpose[]} */ (Object.fre
   'evolution',
   'evidence',
   'evidence-upkeep',
+  'rsi',
   'other',
 ]))
 
@@ -102,6 +109,7 @@ export const USAGE_PURPOSE_LABELS_ZH = /** @type {Readonly<Record<UsagePurpose, 
   evolution: '循证进化',
   evidence: '证据中心',
   'evidence-upkeep': '证据专区维护',
+  rsi: '平台改进事件',
   other: '其他',
 }))
 

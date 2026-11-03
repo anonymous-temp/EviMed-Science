@@ -133,6 +133,8 @@ export const METHOD_APPLIED_OUTCOMES = Object.freeze(['corrected', 'clean'])
  * @property {boolean} [invoked]  the run called the method, not merely loaded it
  * @property {'corrected' | 'clean'} [applied]  set when the step is the researcher's reaction to a run that opened the method
  *   (`foldApplied`), whose family is `applied:<run id>`: a deliverable's observation never carries it
+ * @property {string} [by]  a one-way key of the account the reaction was, on a record every account adds to (`OfficialPacks.recordApplied`),
+ *   so the harm test can ask for corrections from more than one account (`minAccounts`)
  */
 
 /**
@@ -154,7 +156,15 @@ export const METHOD_APPLIED_OUTCOMES = Object.freeze(['corrected', 'clean'])
  * @property {string|null} [lastReadAt]  when a run last read the body with nothing to attribute it to
  * @property {{key: string, at: string, version?: number}} [decided]  the group of methods this one was last decided in
  *   (`foldDecided`): the sha256 of the group's sorted `id@digest`, so an unchanged group is not read again
+ * @property {{runs: number, bad: number, through?: string, by?: string[], crossed?: {runs: number, bad: number}}} [harmCarried]  what the
+ *   harm test read of the observations a bounded record dropped (`trimObservations`), oldest first; it is read before the observations the
+ *   record still holds. `through` is the newest `at` it dropped, before which no run's reaction is counted again (`foldApplied`); `by`
+ *   the accounts among the dropped rejected runs, as many as `minAccounts` asks for
  */
+
+/** @typedef {Partial<Record<keyof typeof METHOD_SCIENTIFIC_HARM_TEST, number>> & { minAccounts?: number }} HarmTestOptions
+ *  the harm test's bounds, any of which may be replaced, and how many accounts the rejected runs up to the upper boundary must come from
+ *  (`by`; 0, the default, asks for none) */
 
 /**
  * @typedef {object} MethodProvenance
@@ -349,8 +359,17 @@ export function foldExplored(learning) {
  * Idempotent, and a correction is never taken back: a run recorded `clean` and corrected later becomes `corrected`; a run
  * recorded `corrected` stays so. A run no reaction is known for is not recorded at all: a missing check never reads as clean.
  *
+ * Once ever, on a bounded record too. A record that let observations go (`trimObservations`) keeps the newest `at` it dropped
+ * (`harmCarried.through`), and a reaction to a run it does not hold that began at or before that moment (`since`, the run's start,
+ * which no reaction to it precedes; its `at` when not given) changes nothing: it may be one already read. The hourly settlement
+ * re-reads its whole window, and a file delivered by a run is opened days later, so until 2026-11-03 every run a full record had
+ * dropped was added back and read again on every pass (300 reactions in 72 hours on a record of 200 read as 400 runs at the
+ * second pass and 700 at the fifth; review of 2026-11-03). What it costs: a run whose first reaction arrives after newer ones were
+ * already let go of is not counted.
+ *
  * @param {MethodLearning | undefined} learning
- * @param {{ runId: string, outcome: 'corrected' | 'clean', at: string }} applied
+ * @param {{ runId: string, outcome: 'corrected' | 'clean', at: string, since?: string, by?: string }} applied  `by`: the account's
+ *   one-way key, on a record every account adds to (`MethodObservation.by`)
  * @returns {MethodLearning}
  */
 export function foldApplied(learning, applied) {
@@ -362,11 +381,14 @@ export function foldApplied(learning, applied) {
   const existing = observations.findIndex((entry) => entry.family === family)
   const counts = { ...current.counts }
   const outcome = applied.outcome === 'corrected' ? 'rejected' : 'accepted'
+  const by = typeof applied.by === 'string' && applied.by ? { by: applied.by } : {}
   if (existing < 0) {
-    observations.push({ runId, family, outcome, at: String(applied.at ?? ''), invoked: true, applied: applied.outcome })
+    const through = Date.parse(current.harmCarried?.through ?? '')
+    if (Number.isFinite(through) && !(Date.parse(String(applied.since ?? applied.at ?? '')) > through)) return current
+    observations.push({ runId, family, outcome, at: String(applied.at ?? ''), invoked: true, applied: applied.outcome, ...by })
   } else {
     if (observations[existing].applied === applied.outcome || observations[existing].applied === 'corrected') return current
-    observations[existing] = { ...observations[existing], outcome, applied: 'corrected', at: String(applied.at ?? observations[existing].at ?? '') }
+    observations[existing] = { ...by, ...observations[existing], outcome, applied: 'corrected', at: String(applied.at ?? observations[existing].at ?? '') }
     counts.appliedClean = Math.max(0, Number(counts.appliedClean ?? 0) - 1)
   }
   const key = applied.outcome === 'corrected' ? 'appliedCorrected' : 'appliedClean'
@@ -488,13 +510,32 @@ export function methodStrength(observations, nowMs, tauDays = MEMORY_STRENGTH_TA
 /**
  * Whether the runs that used a method show it making results worse.
  *
- * Wald's sequential probability-ratio test, capped: the runs are read in the
- * order they happened, each bad when its deliverable was rejected, and the
- * log-likelihood ratio of "harmful rate" against "background rate" is summed
- * until it crosses a boundary or the cap is reached. `harm` when it crosses the
- * upper one, `clear` when it crosses the lower one or reaches the cap without
- * crossing, `watching` before either. Only runs of the text the method holds
- * now count (`learning.digest`); an amendment starts a new test.
+ * Wald's sequential probability-ratio test, read over the whole record each
+ * time it is asked: the runs in the order they happened, each bad when its
+ * deliverable was rejected, and the log-likelihood ratio of "harmful rate"
+ * against "background rate" summed run by run. `harm` once the sum reaches the
+ * upper boundary, from `minRuns` on; `clear` while the record as it stands is
+ * at or below the lower boundary, or holds `maxRuns` runs without having
+ * reached the upper one; `watching` otherwise. Only runs of the text the method
+ * holds now count (`learning.digest`); an amendment starts a new test.
+ *
+ * `harm` is a decision and the reading stops at it. `clear` is not: it is where
+ * the record stands, and every later run is read on top of it. Until 2026-11-03
+ * the lower boundary and the cap ended the reading too, so three clean runs
+ * first and nothing after them was ever read, for personal and official methods
+ * alike (audit 2026-11-03, D3). Reading on needs no new error budget: under the
+ * background rate the likelihood ratio is a martingale, so the chance that it
+ * ever reaches the upper boundary, however long the record grows, is at most
+ * α/(1−β) (Ville's inequality: 6.25% on these bounds; exactly 4.3% at the 25%
+ * background rate, against 3.6% for the stopped test, and 0.06% at 10% for
+ * both). What is bought: a 60% rate is found within 40 runs 98% of the time
+ * (84% stopped), and within the 40 after three clean first runs 95% of the
+ * time (never, stopped). What it costs is the other face of the same
+ * martingale: this tests the method's rate over its record, not a change in it,
+ * so a long clean record takes a long run of corrections to overturn. A test
+ * restarted after each verdict, or read over a window that slides, has no
+ * such bound and its false alarms grow with use (`evolutionMaintenance.mjs`,
+ * B3; `trimObservations`).
  *
  * Only observations where the method was *used* are read — `invoked`, which
  * `runMethodObservations` sets when the session called the method through the
@@ -520,33 +561,103 @@ export function methodStrength(observations, nowMs, tauDays = MEMORY_STRENGTH_TA
  * researcher already paid for, and a sequential test keeps its false-alarm rate
  * however often it is read.
  *
+ * `minAccounts` (the official packs': two) moves the upper boundary's run to the
+ * first one at which the rejected runs read so far come from that many accounts
+ * (`by`): a body every account is given is not found harmful on one account's
+ * corrections, however many, nor on a second account's one correction long
+ * after the first account's ran the sum up. It only ever makes `harm` rarer, so
+ * the bound above holds.
+ *
  * @param {MethodLearning} learning
- * @param {Partial<Record<keyof typeof METHOD_SCIENTIFIC_HARM_TEST, number>>} [options] the test's bounds; any of them may be replaced
+ * @param {HarmTestOptions} [options]
  * @returns {{state: 'harm'|'clear'|'watching', reason: 'upper-boundary'|'lower-boundary'|'window-exhausted'|'accumulating', runs: number, bad: number, llr: number}}
  */
 export function methodHarmTest(learning, options = {}) {
-  const { baseRate, harmRate, alpha, beta, minRuns, maxRuns } = { ...METHOD_SCIENTIFIC_HARM_TEST, ...options }
+  const bounds = { ...METHOD_SCIENTIFIC_HARM_TEST, ...options }
+  const path = harmPath(learning?.harmCarried, learning?.observations, bounds)
+  if (path.crossed) return { state: 'harm', reason: 'upper-boundary', ...path.crossed }
+  const { runs, bad, llr } = path
+  if (llr <= Math.log(bounds.beta / (1 - bounds.alpha)) + 1e-9) return { state: 'clear', reason: 'lower-boundary', runs, bad, llr }
+  return { state: runs >= bounds.maxRuns ? 'clear' : 'watching', reason: runs >= bounds.maxRuns ? 'window-exhausted' : 'accumulating', runs, bad, llr }
+}
+
+/**
+ * The harm test's walk: the carried part of a record (`harmCarried`), then its observations that used the method, oldest first, with
+ * the first run from `minRuns` on whose sum reached the upper boundary with the rejected runs so far from `minAccounts` accounts
+ * (`crossed`), if one did, and the accounts of the rejected runs read, as many as `minAccounts` asks for (`by`).
+ * @param {MethodLearning['harmCarried']} carried @param {readonly MethodObservation[] | undefined} observations
+ * @param {{ baseRate: number, harmRate: number, alpha: number, beta: number, minRuns: number, minAccounts?: number }} bounds
+ * @returns {{ runs: number, bad: number, llr: number, by: string[], crossed: { runs: number, bad: number, llr: number } | null }}
+ */
+function harmPath(carried, observations, { baseRate, harmRate, alpha, beta, minRuns, minAccounts = 0 }) {
   const upper = Math.log((1 - beta) / alpha)
-  const lower = Math.log(beta / (1 - alpha))
   const badStep = Math.log(harmRate / baseRate)
   const goodStep = Math.log((1 - harmRate) / (1 - baseRate))
-  const observations = [...(learning?.observations ?? [])]
-    .filter((observation) => METHOD_OBSERVATION_OUTCOMES.includes(observation?.outcome) && observation?.invoked === true)
-    .sort((left, right) => String(left.at ?? '').localeCompare(String(right.at ?? '')))
-  let llr = 0
-  let runs = 0
-  let bad = 0
-  for (const observation of observations) {
-    if (runs >= maxRuns) break
+  const sum = (/** @type {number} */ runs, /** @type {number} */ bad) => bad * badStep + (runs - bad) * goodStep
+  const accounts = Math.max(0, Math.trunc(Number(minAccounts) || 0))
+  let runs = Math.max(0, Math.trunc(Number(carried?.runs) || 0))
+  let bad = Math.min(runs, Math.max(0, Math.trunc(Number(carried?.bad) || 0)))
+  let llr = sum(runs, bad)
+  /** @type {Set<string>} */
+  const by = new Set((Array.isArray(carried?.by) ? carried.by : []).filter((key) => typeof key === 'string' && key).slice(0, accounts))
+  const held = carried?.crossed ? { runs: Math.trunc(Number(carried.crossed.runs) || 0), bad: Math.trunc(Number(carried.crossed.bad) || 0) } : null
+  let crossed = held ? { ...held, llr: sum(held.runs, held.bad) } : null
+  for (const observation of usedObservations(observations)) {
     runs += 1
     const rejected = observation.outcome === 'rejected'
     if (rejected) bad += 1
+    if (rejected && by.size < accounts && typeof observation.by === 'string' && observation.by) by.add(observation.by)
     llr += rejected ? badStep : goodStep
     // A small tolerance: two exact log steps must reach a boundary they sum to.
-    if (runs >= minRuns && llr >= upper - 1e-9) return { state: 'harm', reason: 'upper-boundary', runs, bad, llr }
-    if (llr <= lower + 1e-9) return { state: 'clear', reason: 'lower-boundary', runs, bad, llr }
+    if (!crossed && runs >= minRuns && by.size >= accounts && llr >= upper - 1e-9) crossed = { runs, bad, llr }
   }
-  return { state: runs >= maxRuns ? 'clear' : 'watching', reason: runs >= maxRuns ? 'window-exhausted' : 'accumulating', runs, bad, llr }
+  return { runs, bad, llr, by: [...by], crossed }
+}
+
+/** The observations the harm test reads — a known outcome of a run that used the method — oldest first. @param {readonly MethodObservation[] | undefined} observations */
+function usedObservations(observations) {
+  return [...(observations ?? [])]
+    .filter((observation) => METHOD_OBSERVATION_OUTCOMES.includes(observation?.outcome) && observation?.invoked === true)
+    .sort((left, right) => String(left.at ?? '').localeCompare(String(right.at ?? '')))
+}
+
+/**
+ * Keep a record's newest `keep` observations, and carry what the harm test read of the ones it drops (`harmCarried`), so the test
+ * goes on reading the whole record. A record cut to its last N without this starts the test at another run every time the window
+ * moves, and a harmless body read that way is found harmful sooner or later: at the 25% background rate a 200-run window read after
+ * every run read `harm` by run 400 in 86% of 2,000 seeded histories, stopped and whole-record reading alike (the official packs'
+ * records, cut that way until 2026-11-03).
+ *
+ * An observation at or after `keepSince` is never dropped, however many there are: it is a run whose reaction the settlement may still
+ * read again, and while it is held a reaction to it is folded into it (an acceptance that turns into a correction is read as one) and
+ * not added beside it. Below that, the newest `at` dropped is kept (`through`), and no reaction to a run that began before it is counted
+ * again (`foldApplied`).
+ * @param {MethodLearning} learning @param {number} keep
+ * @param {HarmTestOptions & { keepSince?: string | number }} [options] the bounds the carried part is read with, which must be the ones the
+ *   record is tested with, and the start of the window a reaction may still be read again in
+ * @returns {MethodLearning}
+ */
+export function trimObservations(learning, keep, options = {}) {
+  const { keepSince, ...bounds } = options
+  const observations = learning?.observations ?? []
+  const surplus = observations.length - Math.max(0, Math.trunc(keep))
+  if (!learning || surplus <= 0) return learning
+  const order = observations.map((observation, index) => ({ observation, index }))
+    .sort((left, right) => String(left.observation.at ?? '').localeCompare(String(right.observation.at ?? '')))
+  const floor = typeof keepSince === 'number' ? keepSince : Date.parse(String(keepSince ?? ''))
+  let drop = 0
+  while (drop < surplus && !(Date.parse(String(order[drop].observation.at ?? '')) >= floor)) drop += 1
+  if (!drop) return learning
+  const dropped = new Set(order.slice(0, drop).map((entry) => entry.index))
+  const path = harmPath(learning.harmCarried, observations.filter((_, index) => dropped.has(index)), { ...METHOD_SCIENTIFIC_HARM_TEST, ...bounds })
+  const through = order.slice(0, drop).reduce((newest, entry) => Math.max(newest, Date.parse(String(entry.observation.at ?? '')) || -Infinity),
+    Date.parse(learning.harmCarried?.through ?? '') || -Infinity)
+  return {
+    ...learning,
+    observations: observations.filter((_, index) => !dropped.has(index)),
+    harmCarried: { runs: path.runs, bad: path.bad, ...(Number.isFinite(through) ? { through: new Date(through).toISOString() } : {}),
+      ...(path.by.length && !path.crossed ? { by: path.by } : {}), ...(path.crossed ? { crossed: { runs: path.crossed.runs, bad: path.crossed.bad } } : {}) },
+  }
 }
 
 /**
@@ -563,6 +674,10 @@ export function methodHarmTest(learning, options = {}) {
  * digest), and stopped only when it has none (`retire`). It is a regression of this body against its predecessors, and
  * never a finding that the method caused anything: `methodFeedback.mjs` says why.
  *
+ * Over the whole record: the versions the record let go of are read first, in the order they were read (`foldMethodFeedback`), and
+ * the entries it holds after them, so a regression is decided where the upper boundary is reached and a clear reading is where the
+ * record stands (`methodHarmTest`). Until 2026-11-03 the last sixty entries were read and nothing before them.
+ *
  * @param {{ digest: string, revisions?: readonly string[], scientific: any, options?: Partial<Record<keyof typeof METHOD_SCIENTIFIC_HARM_TEST, number>> }} input
  *   `revisions`: every body the method has held, newest first (the current one among them)
  * @returns {{ state: 'regression' | 'watching' | 'clear', harm: ReturnType<typeof methodHarmTest>, action: 'rollback' | 'retire' | null,
@@ -572,9 +687,14 @@ export function scientificRegression({ digest, revisions = [], scientific, optio
   /** @param {string} body */
   const read = (body) => {
     const outcomes = scientificOutcomes(scientific, body)
+    // What the record let go of (`foldMethodFeedback`: one character per version, in the order it was read — `s` reproduced, `a` not
+    // reproduced or corrected, `n` neutral), as trials before what it holds: an empty `at` sorts first, and the sort keeps their order.
+    const letGo = scientific?.carried?.[body]?.read
+    const carried = [...(typeof letGo === 'string' && /^[san]*$/.test(letGo) ? letGo : '')].flatMap((code, index) => (code === 'n' ? []
+      : [{ runId: `carried:${index}`, family: `carried:${index}`, outcome: code === 'a' ? 'rejected' : 'accepted', invoked: true, at: '' }]))
     // One result version is one trial: the version stands for the run and the family a delivery's observation carries.
-    return { outcomes, harm: methodHarmTest({ ...emptyLearning(body), observations: outcomes.map((outcome) => ({
-      runId: outcome.versionId, family: outcome.versionId, outcome: outcome.polarity === 'against' ? 'rejected' : 'accepted', invoked: true, at: outcome.at })) },
+    return { outcomes, harm: methodHarmTest({ ...emptyLearning(body), observations: [...carried, ...outcomes.map((outcome) => ({
+      runId: outcome.versionId, family: outcome.versionId, outcome: outcome.polarity === 'against' ? 'rejected' : 'accepted', invoked: true, at: outcome.at }))] },
     { ...METHOD_SCIENTIFIC_HARM_TEST, ...options }) }
   }
   const current = read(digest)
