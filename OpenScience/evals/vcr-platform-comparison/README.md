@@ -3,15 +3,18 @@
 This suite exercises the integrated product through a real local DSH kernel,
 authenticated uploads, automated dispatch, VCR tools/jobs and the product's saved
 matching views. It does not insert correct criteria, patient facts or judgments.
-The host-kernel adapter replaces container launch only; it does not certify
-container filesystem isolation. Public regression cases are not an independent
-clinical holdout, and raw internal model reasoning is not a product deliverable.
+Formal campaigns require the local Docker-backed control plane and the pinned
+DSH runtime image. The runtime receives only its own project's workspace and
+home subpaths. The frozen index is available only to the control plane, and gold,
+scorers and historical outputs remain on the operator host. Public regression
+cases are not an independent clinical holdout, and raw internal model reasoning
+is not a product deliverable.
 
-On macOS the adapter selects the pinned kernel's native Seatbelt backend instead
-of the runtime image's Linux Landlock executable. Hosted `workspace-write` with
-approval policy `never` remains enforced; escalation is never approved. Both
-the main and runtime UI listeners bind loopback. A sandbox startup failure is
-an environment diagnostic, not an eligibility prediction.
+Host-kernel campaigns are diagnostics only. The macOS adapter repaired its
+native sandbox startup and exposed a real ordinary-text intake defect, but one
+later case read historical corpus bytes from the host. All host campaigns are
+quarantined from formal comparison, including cases that appeared successful.
+Account cleanup receipts and the original artifacts remain preserved.
 
 The implementation combines `c180ff7b5` and release integration `3970e4f8f` in
 `faa8d0f28`, followed by the frozen-corpus/ranking and evaluation changes here.
@@ -39,20 +42,35 @@ separate. This BM25/RRF implementation is not MedCPT.
 
 ## Local runtime
 
-Stage the merged tree using `evals/general-tasks/runner/seed.sh`, after the
-socket's `prepack` step. Reuse only a sealed profile with the pinned kernel.
-Configure `OS`, `TREE_DIR`, `LIVE_DIR`, `LIVE_DATA`, `LIVE_PORT`,
-`LIVE_DATABASE_URL` (a loopback `evimed_test_*` database without query options),
-`DSH_BIN`, `EVAL_DEEPSEEK_KEY_FILE`, `VCR_COLLECTION_MANIFEST`,
-`VCR_STARTUP_RECEIPT`, and `VCR_BENCHMARK_BUDGET_FILE`, then run `server.mjs`.
-Provider keys remain at the control plane and are never copied into case files.
+Use `container-launch.mjs` with `--name`, `--state`, `--collection`,
+`--docker-client`, and `--budget-dir`. A formal launch additionally requires
+`--paid` and `--deepseek-key-file`; use `--seed-budget` only once to carry earlier
+costs into a fresh durable journal. State, corpus, budget and secret paths must
+remain private. The launcher builds an overlay from an explicit tracked-source
+allowlist and records the exact image ID. It does not deploy the platform.
 
-The wrapper pins the official DeepSeek endpoint and disables external VCR engine
-access, memory extraction/recall, learning, evolution, autopilot and LoopX. The
-local JavaScript matching executor remains available. The startup receipt binds
-the live instance, source SHA, actual resolved configuration, staged core files,
-kernel version and collection manifest. A readiness-only dirty instance cannot
-be used for a baseline.
+The control plane uses a fresh PostgreSQL database and named data volume. It
+publishes only loopback ports; project kernels run on an internal Docker network
+without the repository, corpus, gold, host socket or provider key. Public-source
+and web-search gateway requests are refused, and live-registry transport is
+refused rather than substituted for the selected frozen collection. The runtime
+cannot call browser/admin APIs through the control plane. Model calls still use
+the actual platform gateway and official DeepSeek Flash endpoint.
+
+Memory extraction/recall, learning, evolution, autopilot and LoopX are disabled.
+The local JavaScript matching executor remains available. Run
+`container-probe.mjs <state>` before inference: the current-instance receipt
+must establish the real kernel/source bytes, workspace access, prohibited mounts,
+direct and mediated egress refusal, and disposable-account/runtime cleanup.
+Readiness probes dispatch no model prompt. A dirty or readiness-only launch is
+not accepted as a paid baseline.
+
+After export and account cleanup, `node container-resources.mjs <absolute-state>`
+removes only inventory- and label-verified owned Docker resources; host evidence
+and the durable budget remain. Never prune unrelated Docker resources.
+
+The older `server.mjs` and host adapter remain for local diagnosis; `run.mjs`
+rejects their startup receipts for formal benchmarking.
 
 The benchmark ingress journal covers every model purpose, including VCR calls
 excluded from normal account-wide caps. Its default aggregate allowance is

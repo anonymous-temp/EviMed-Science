@@ -1,6 +1,6 @@
 # EviMed Science versus TrialGPT: platform evaluation protocol
 
-Date: 2026-11-03. Status: integrated implementation under final local verification; paid platform benchmark pending.
+Date: 2026-11-03. Status: integrated product changes committed and pushed; isolated Docker harness under final verification; formal platform benchmark pending.
 
 Owner execution amendment (2026-11-03): merge `c180ff7b5` with the current integration line (`origin/codex/release-1102`, `3970e4f8f`) first. Implement missing ranking and a usable frozen-corpus retrieval path, verify locally, commit and push before the paid platform baseline. Production remains the owner's reported November 1 version and is not the baseline. Run a real local DSH kernel. This amendment supersedes any earlier instruction here to benchmark the unmerged feature or count alignment failures as incorrect predictions.
 
@@ -11,14 +11,15 @@ Owner execution amendment (2026-11-03): merge `c180ff7b5` with the current integ
 - [x] Support a frozen, versioned trial collection through the same product retrieval/record boundary, with up to 500 candidates and paged reads; preserve live-registry behavior separately.
 - [x] Implement source-span alignment with explicit unresolved buckets; the executable policy is frozen with each campaign before inference.
 - [x] Build the local platform driver with throwaway-account lifecycle, automated attribution, patient-specific projects/sessions, and memory extraction disabled.
-- [ ] Complete scoped tests and independent code review; commit/push the integrated candidate without deployment.
+- [x] Complete scoped product tests and independent review; commit/push the integrated product candidate without deployment (`3434ff107`, followed by intake fix `aa17e0d66`).
+- [ ] Close the Docker benchmark environment review, commit/push its harness, and verify the exact live instance before formal inference.
 - [ ] Run the real local product baseline at that pushed revision, then record findings and any required repair/retest.
 
 ### Mandatory test hygiene
 
 Each campaign registers and deletes its own account using `scripts/ops/throwaway-account.mjs`. Cleanup is required on success, failure and interruption; cancel owned jobs before deletion and retain an explicit cleanup receipt. Each patient gets a different project and conversation because conversations in one project share files. All dispatched/native runs carry verifiable `automated` attribution. Disable memory extraction and benchmark memory read/write/learning, and verify effective configuration rather than merely omitting a memory service. Model-visible workspaces contain no gold labels, prior answers or scorer code. Export needed test artifacts before deleting the account. No production account, production runtime or historical business workspace is used.
 
-Implementation clarification: each patient receives a separate throwaway account as well as a project/session, bounding retained runtime disk usage. All inference uses the supported automated dispatch route; native browser submissions do not expose the automation mark and are not used for paid bulk inference. The actual resolved configuration and live-instance receipt are checked. The real host DSH adapter is not an OS-level container isolation proof; this public regression must not be advertised as a strictly blinded independent clinical study. The durable benchmark budget journal includes every model purpose and survives account deletion; it uses reference-price estimates and preserves uncertain charges.
+Implementation clarification: each patient receives a separate throwaway account as well as a project/session, bounding retained runtime disk usage. All inference uses the supported automated dispatch route; native browser submissions do not expose the automation mark and are not used for paid bulk inference. The actual resolved configuration and live-instance receipt are checked. The host DSH adapter is now diagnostic-only: a case bypassed the platform and read historical corpus bytes on the host. All host campaigns are quarantined, not just that case. Formal runs require Docker project isolation, a control-plane-only frozen index, no host/gold mounts, direct public egress blocked, mediated public-source/search and live-registry routes refused, and a current-instance no-model probe. The runtime may not access browser/admin APIs. This public regression must not be advertised as an independent clinical holdout. The durable benchmark budget journal includes every model purpose and survives account deletion; it uses reference-price estimates and preserves uncertain charges.
 
 ### Frozen alignment rule
 
@@ -188,7 +189,7 @@ Prioritize fixes that restore the actual journey: normal intake and routing, ful
 
 Do not introduce benchmark-only reasoning rules into production, prefill expected facts, or flatten all unknown cases into favorable labels to improve the headline. Report reference-policy disagreements without silently altering the score. A higher benchmark score still needs the separate real-record and product-completion evidence.
 
-This turn researched and specified the comparison; it did not execute the full platform batch, modify production behavior or deploy. The next implementation should first establish E0 on the real product path, then fix demonstrated failures and produce E1. Local verification, review, commit and push remain distinct from deployment; deployment is not authorized by this protocol.
+The integrated candidate and ordinary-text source-intake repair have been committed and pushed. Host operational probes exposed environment, intake and criterion-compilation problems; none is a formal comparative performance result. The next valid E0 must run on the isolated Docker platform path. Clinical-semantic issues observed in diagnostics remain in the remediation backlog and require paired isolated evidence before any E1 claim. Local verification, review, commit and push remain distinct from deployment; deployment is not authorized by this protocol.
 
 ## Sources
 
@@ -198,3 +199,25 @@ This turn researched and specified the comparison; it did not execute the full p
 - [Criterion annotations](https://huggingface.co/datasets/ncbi/TrialGPT-Criterion-Annotations): input/answer separation and reference conventions.
 - [NIST TREC 2022 data](https://trec.nist.gov/data/trials2022.html): topics, judgments and relevance-label meanings.
 - [DeepSeek model identity](https://api-docs.deepseek.com/quick_start/pricing/) and [thinking configuration](https://api-docs.deepseek.com/guides/thinking_mode/): inference configuration, not evidence of task-specific superiority.
+
+## 9. Diagnostic findings carried into the formal run
+
+The real product intake now retains authenticated TXT/Markdown originals with
+exact source handles; automated text is never relabeled as a human statement.
+The host probe subsequently persisted one patient, two trials and 31 judgments,
+but that run is quarantined with the rest of the host campaigns. Its generated
+report is not a substitute for saved feature results.
+
+Independent clinical review of that diagnostic found lost disease subtypes,
+procedure plans and event relationships, time windows and risk-factor thresholds
+in agent-authored criteria. No language judgments were saved. A valid source
+span and schema do not prove semantic equivalence. The isolated baseline must
+measure complete-clause preservation, handling of language-judgment requests,
+source-grounded facts, and faithful persisted-versus-reported results. Do not
+change labels or reinterpret unknowns to hide these failures.
+
+Two separate evaluator questions remain to verify with explicit counterexamples:
+unknown applicability combined with a failed requirement, and month-end calendar
+subtraction. These are not established causes of the host case's disagreements.
+Metadata retries (`evidenceNeeded` shape and missing clinical schema) are another
+observed cost/usability issue; any repair must preserve clinical validation.

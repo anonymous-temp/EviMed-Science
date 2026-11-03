@@ -55,6 +55,33 @@ export function usageBound(summary,ceiling) {
   return Math.max(0,summary.actualCost);
 }
 
+export async function verifyContainerStartup(startup, startupPath) {
+  const config = startup.resolvedConfig;
+  if (startup.paid !== true || startup.closedCorpus !== true || startup.sandboxBackend !== 'docker' || startup.approvalPolicy !== 'never'
+      || config?.runtimeSandboxMode !== 'docker' || config.runtimeTransport !== 'unix'
+      || !config.runtimeDataVolume || !config.runtimeInternalNetworkName
+      || config.runtimeNetworkMode !== config.runtimeInternalNetworkName || config.allowRuntimeNetworkEgress !== false
+      || config.webReadEnabled !== false || config.webSearchDeepseekEnabled !== false
+      || config.sourceIngestionEnabled !== false || startup.corpusProbe?.liveAvailable !== false
+      || !Number.isSafeInteger(startup.corpusProbe?.blockedRegistryFetches) || startup.corpusProbe.blockedRegistryFetches < 1
+      || startup.corpusProbe.allowedFetches !== 0
+      || !/^sha256:[a-f0-9]{64}$/.test(startup.image) || config.vcrTrialCorpusManifest !== '/audit/collection.json') {
+    throw new Error('Formal benchmarking requires a paid Docker control plane on an internal runtime network');
+  }
+  const state = path.resolve(path.dirname(startupPath), '..');
+  const hostManifest = path.join(state, 'audit', 'collection.json');
+  if (startup.collectionManifestHostPath !== hostManifest) throw new Error('Container collection host mapping differs');
+  const probe = JSON.parse(await fs.readFile(path.join(state, 'probe.json')));
+  if (probe.instance !== startup.instance || probe.sourceSha !== startup.sourceSha || probe.image !== startup.image
+      || probe.network !== config.runtimeInternalNetworkName || probe.kernelVersion !== startup.kernelVersion
+      || probe.dispatchedPrompts !== 0 || probe.privileged !== false
+      || ['internal', 'workspaceReadWrite', 'forbiddenPathsAbsent', 'directPublicConnectionFailed', 'accountDeleted',
+        'runtimeRemoved', 'budgetUnchanged', 'publicDnsBlocked', 'runtimeSourceBytesMatched', 'gatewayBoundaryVerified'].some(key => probe[key] !== true)) {
+    throw new Error('Current server instance needs a successful container isolation probe');
+  }
+  return hostManifest;
+}
+
 export async function verifyCampaign({base,manifestPath,startupPath,expectedSha}) {
   const url=new URL(base);
   if (url.protocol!=='http:' || !['127.0.0.1','localhost'].includes(url.hostname)
@@ -78,8 +105,11 @@ export async function verifyCampaign({base,manifestPath,startupPath,expectedSha}
   const bytes=await fs.readFile(manifestPath);const manifest=JSON.parse(bytes);
   if(manifest.version!==1||!Array.isArray(manifest.cases)||!manifest.cases.length)throw new Error('Invalid case manifest');
   if(new Set(manifest.cases.map(row=>row.id)).size!==manifest.cases.length)throw new Error('Duplicate case identities');
-  const collectionBytes=await fs.readFile(startup.resolvedConfig.vcrTrialCorpusManifest);
-  if(hash(collectionBytes)!==startup.collectionManifestSha256||JSON.parse(collectionBytes).id!==manifest.collection)throw new Error('Frozen collection differs');
+  const collectionBytes=await fs.readFile(await verifyContainerStartup(startup,startupPath));
+  const collection=JSON.parse(collectionBytes);
+  if(hash(collectionBytes)!==startup.collectionManifestSha256||collection.id!==manifest.collection
+      ||collection.databasePath!=='/collections/index.sqlite'||collection.databaseSha256!==startup.collectionDatabaseSha256
+      ||startup.corpusProbe.collection!==collection.id)throw new Error('Frozen collection differs');
   for(const example of manifest.cases) {
     safe(example.id);
     const names=example.files.map(file=>file.name).sort();
