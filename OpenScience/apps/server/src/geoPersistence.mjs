@@ -79,7 +79,7 @@ export const GEO_SCHEMA = "evimed_geo";
  * a table nobody cleans up.
  */
 export const GEO_TABLES = Object.freeze([
-  "projects", "claims", "question_sets", "question_groups", "questions", "journeys", "rounds", "probe_jobs", "snapshots", "facts",
+  "projects", "project_create_receipts", "claims", "question_sets", "question_groups", "questions", "journeys", "rounds", "probe_jobs", "snapshots", "facts",
   "errors", "metrics", "strategy", "targets", "placement_plans", "sources", "articles", "article_versions",
   "media", "media_outcomes", "orders", "order_events", "ledger", "topups", "reconciliations", "schedule_marks", "owned_links", "members", "value_profiles",
   "action_choices", "read_selections", "probe_requests", "social_jobs",
@@ -127,6 +127,12 @@ CREATE TABLE IF NOT EXISTS evimed_geo.projects (
   updated_at    timestamptz NOT NULL DEFAULT now(),
   deleted_at    timestamptz,
   UNIQUE (user_id, project_id)
+);
+CREATE TABLE IF NOT EXISTS evimed_geo.project_create_receipts (
+  user_id text NOT NULL REFERENCES evimed_control.users(id) ON DELETE CASCADE,
+  request_key text NOT NULL, payload_hash text NOT NULL,
+  geo_id text NOT NULL, project_id text NOT NULL, session_id text, bound boolean NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY (user_id, request_key)
 );
 CREATE INDEX IF NOT EXISTS geo_projects_user_idx ON evimed_geo.projects (user_id, updated_at DESC) WHERE deleted_at IS NULL;
 

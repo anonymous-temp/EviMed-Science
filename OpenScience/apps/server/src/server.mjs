@@ -105,7 +105,7 @@ import { personalSkillRuntimeIdentity } from "./personalSkillRuntimeIdentity.mjs
 import { removePrivateExtensionFiles } from "./extensionPrivateCleanup.mjs";
 import { createServer } from "node:http";
 import { spawnSync } from "node:child_process";
-import { createHash, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { once } from "node:events";
 import fs from "node:fs";
 import fsp from "node:fs/promises";
@@ -421,7 +421,7 @@ import { GeoMembers } from "./geoMembers.mjs";
 import { createGeoQuestionBank, questionBankSummary } from "./geoQuestionBank.mjs";
 import { createGeoValueUpkeep } from "./geoValueUpkeep.mjs";
 import { geoArticleGateBound, geoArticleGateOf } from "./geoWrites.mjs";
-import { GeoService, geoAudienceAllows, isGeoPlaceholderName, geoMetricFamilies, geoMetricsSnapshot, geoReadiness, oldestPersonalConversation } from "./geoService.mjs";
+import { GeoService, geoAccountGeneration, geoAudienceAllows, isGeoPlaceholderName, geoMetricFamilies, geoMetricsSnapshot, geoReadiness, oldestPersonalConversation } from "./geoService.mjs";
 import { createGeoRoutes, geoRoutePattern } from "./geoRoutes.mjs";
 import { GEO_GATEWAY_PATH, createGeoGatewayHandler, geoGatewayRoutePattern } from "./geoGateway.mjs";
 import { createSocialCrawlClient } from "./socialCrawlClient.mjs";
@@ -2653,12 +2653,14 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
    * projects/, so it stays ASCII and is derived; a caller that still sends one
    * keeps it. Counted against the account's project limit before the create.
    * @param {any} user @param {{ id?: unknown, name?: unknown }} body
+   * @param {boolean} analysisOwned @param {"named" | "random" | undefined} reservation
    */
-  async function createResearcherProject(user, body, analysisOwned = false) {
+  async function createResearcherProject(user, body, analysisOwned = false, reservation = undefined) {
     const existing = (await store.listProjects(user)).filter((project) => !hiddenFor(user.id, project.id));
     if (body.id == null && body.name == null) throw new HttpError(400, "invalid_payload", "A project needs a name.");
-    const id = body.id == null
-      ? projectIdFromName(String(body.name), new Set(existing.map((project) => project.id)))
+    const takenIds = new Set(existing.map((project) => project.id));
+    let id = body.id == null
+      ? projectIdFromName(String(body.name), takenIds)
       : safeId(assertString(body.id, "id", { max: 64 }), "project id");
     // The ids the platform makes itself — the loop's, the knowledge base's, the frontier's and an
     // evaluation cell's — are internal by name for any owner, so they cannot be typed here. Not the
@@ -2688,7 +2690,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       !(analysisOwned && isDataAnalysisProject(id)) &&
       config.maxProjectsPerUser > 0 &&
       existing.length >= config.maxProjectsPerUser &&
-      !existing.some((project) => project.id === id)
+      (reservation || !takenIds.has(id))
     ) {
       throw new HttpError(
         409,
@@ -2696,13 +2698,32 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         `This account already holds ${existing.length} projects, which is its limit: each has its own storage and research runtime. Export and delete one to make another.`,
       );
     }
+    if (reservation) {
+      const defaultProject = await store.defaultProject(user);
+      const root = path.dirname(defaultProject.rootDir);
+      let reserved = false;
+      for (let attempt = 0; attempt < 16; attempt++) {
+        id = reservation === "random" ? `p-${randomBytes(16).toString("hex")}` : projectIdFromName(name, takenIds);
+        try { await fsp.mkdir(path.join(root, id), { mode: 0o700 }); }
+        catch (error) {
+          if (error?.code !== "EEXIST") throw error;
+          takenIds.add(id);
+          continue;
+        }
+        reserved = true;
+        break;
+      }
+      if (!reserved) throw new HttpError(503, "geo_unavailable", "Unable to reserve a project path.");
+      // An uncertain COMMIT can already own this directory. Record the path and leave it untouched.
+      productDatabase?.afterRollback(() => securityAudit(config, "geo.project.create", "filesystem_reservation_retained", { userId: user.id, detail: id }));
+    }
     const data = await store.createProject(user, id, name);
     const project = await store.requireProject(user, id);
     if (skillLibraryService && !existing.some(item => item.id === id)) {
       // Defaults snapshot only on actual creation. An optional method must never prevent ordinary research project creation.
       await skillLibraryService.initializeProject(user, project).catch(() => { process.stderr.write("new-project personal skill defaults snapshot failed\n"); });
     }
-    await audit({ config, user, project }, "project.create", "completed", { target: id });
+    if (!reservation) await audit({ config, user, project }, "project.create", "completed", { target: id });
     return data;
   }
 
@@ -2985,7 +3006,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     store, service: geo?.service ?? null, config, maxJsonBytes: config.maxJsonBytes,
     audit: (event, status, details) => securityAudit(config, event, status, details),
     projects: {
-      create: (user, name) => createResearcherProject(user, { name }),
+      create: (user, name, options) => createResearcherProject(user, { name }, false, options?.reservation),
       // Create the real primary only when the person explicitly opens it.
       bindSession: async () => ({ sessionId: null, bound: false }),
       // The project's own conversation: the native authority's primary (`geoNativeAuthority.primary`), the one a GEO frame is issued
@@ -7582,6 +7603,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         sendJson(res, 200, {
           data: {
             user: { ...store.publicUser(user),
+              accountGeneration: geoAccountGeneration(user),
               ...(["local", "evimed", "oidc", "development"].includes(user.authType) ? { authType: user.authType } : {}) },
             tenant: { id: user.tenantId ?? user.id, model: "individual-account", role: "owner" },
             project: { id: project.id, name: project.name },

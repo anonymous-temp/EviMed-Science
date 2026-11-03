@@ -1584,7 +1584,7 @@ export async function releaseWebRuntimeUiFrame(frameId: string): Promise<void> {
 }
 
 export interface WebMe {
-  user: { id: string; name: string; tenantId?: string; authType?: "local" | "evimed" | "oidc" | "development" };
+  user: { id: string; name: string; tenantId?: string; accountGeneration?: string; authType?: "local" | "evimed" | "oidc" | "development" };
   features?: Record<string, boolean>;
   tenant?: { id: string; model: "individual-account"; role: "owner" };
   /** Whether this deployment offers this account the operations page. The

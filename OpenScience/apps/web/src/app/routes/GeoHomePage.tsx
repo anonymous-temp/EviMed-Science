@@ -19,21 +19,26 @@ const EMPTY_SENTENCE = "药企和医生在这里研究并传播自己产品的�
 type Sort = "recent" | "state";
 type Listing = { kind: "loading" } | { kind: "off" } | { kind: "error"; message: string } | { kind: "ready"; projects: GeoProjectSummary[] };
 const NO_PROJECTS: GeoProjectSummary[] = [];
-type Pending = { kind: "unknown" } | { kind: "created"; id: string };
-const pendingKey = (tenant: string, user: string) => `evimed.geo.create.v1:${encodeURIComponent(tenant)}:${encodeURIComponent(user)}`;
+type Pending = { kind: "unknown"; requestKey?: string; retried?: boolean; legacyMarker?: string } | { kind: "created"; id: string; requestKey?: string } | { kind: "gone" | "conflict"; requestKey: string };
+const pendingKey = (tenant: string, user: string, generation?: string) => `evimed.geo.create.v1:${encodeURIComponent(tenant)}:${encodeURIComponent(user)}${generation ? `:${encodeURIComponent(generation)}` : ""}`;
 function readPending(key: string): Pending | null {
   const raw = localStorage.getItem(key);
   if (!raw) return null;
   try {
     const value = JSON.parse(raw) as Pending;
-    return value.kind === "created" && typeof value.id === "string" && /^[A-Za-z0-9_-]{1,160}$/.test(value.id) ? value : { kind: "unknown" };
+    if ((value.kind === "gone" || value.kind === "conflict") && typeof value.requestKey === "string") return value;
+    if (value.kind === "created" && typeof value.id === "string" && /^[A-Za-z0-9_-]{1,160}$/.test(value.id)) return value;
+    return value.kind === "unknown" && typeof value.requestKey === "string" && /^[A-Za-z0-9_-]{16,128}$/.test(value.requestKey) ? value : { kind: "unknown" };
   } catch { return { kind: "unknown" }; }
 }
-// These are emitted before the control project is created, not after a partial write.
-function knownRejection(error: unknown): boolean {
-  return error instanceof WebApiError && ((error.status === 400 && error.code === "geo_payload_invalid") || (error.status === 409 && error.code === "project_limit_reached") || isGeoOff(error));
+function readLegacyPending(key: string): Pending | null {
+  const legacyMarker = localStorage.getItem(key);
+  return legacyMarker === null ? null : { kind: "unknown", legacyMarker };
 }
-
+// Coordinate marker changes across tabs in browsers with the Web Locks API.
+async function withPendingLock<T>(key: string, update: () => T): Promise<T> {
+  return navigator.locks ? navigator.locks.request(key, update) : update();
+}
 function stateRank(project: GeoProjectSummary): number {
   if (project.status === "paused") return 4;
   if (project.alert.severe > 0) return 0;
@@ -49,10 +54,10 @@ export function GeoHomePage() {
   const [reloads, setReloads] = useState(0);
   const [creating, setCreating] = useState(false);
   const [accountKey, setAccountKey] = useState<string | null>(null);
-  const [identityFailed, setIdentityFailed] = useState(false);
+  const [identityError, setIdentityError] = useState<"unavailable" | "missing-generation" | null>(null);
   const [pending, setPending] = useState<Pending | null>(null);
   const [accountRevision, setAccountRevision] = useState(0);
-  const accountRef = useRef<string | null>(null);
+  const accountRef = useRef<{ key: string; legacyKey: string; generation: string } | null>(null);
   const inFlight = useRef(false);
   const generation = useRef(0);
   const createdId = pending?.kind === "created" ? pending.id : null;
@@ -72,19 +77,35 @@ export function GeoHomePage() {
   useEffect(() => {
     const epoch = generation.current;
     let live = true;
-    setIdentityFailed(false);
+    setIdentityError(null);
     void fetchWebMe().then((me) => {
       if (!live || generation.current !== epoch) return;
-      if (!me?.user?.id) { setIdentityFailed(true); return; }
-      const key = pendingKey(me.tenant?.id ?? me.user.tenantId ?? me.user.id, me.user.id);
-      try { const value = readPending(key); accountRef.current = key; setPending(value); setAccountKey(key); }
-      catch { setIdentityFailed(true); }
-    }).catch(() => { if (live && generation.current === epoch) setIdentityFailed(true); });
+      if (!me?.user?.id || !me.user.accountGeneration) {
+        accountRef.current = null;
+        setAccountKey(null);
+        setPending(null);
+        setIdentityError(me?.user?.id ? "missing-generation" : "unavailable");
+        return;
+      }
+      const oldKey = pendingKey(me.tenant?.id ?? me.user.tenantId ?? me.user.id, me.user.id);
+      const key = pendingKey(me.tenant?.id ?? me.user.tenantId ?? me.user.id, me.user.id, me.user.accountGeneration);
+      try {
+        const value = readPending(key) ?? readLegacyPending(oldKey);
+        accountRef.current = { key, legacyKey: oldKey, generation: me.user.accountGeneration };
+        setPending(value);
+        setAccountKey(key);
+      } catch { setIdentityError("unavailable"); }
+    }).catch(() => { if (live && generation.current === epoch) setIdentityError("unavailable"); });
     return () => { live = false; };
   }, [accountRevision]);
   useEffect(() => {
     if (!accountKey) return undefined;
-    const changed = (event: StorageEvent) => { if (event.key === accountKey && accountRef.current === accountKey) { try { setPending(readPending(accountKey)); } catch { setIdentityFailed(true); } } };
+    const changed = (event: StorageEvent) => {
+      const account = accountRef.current;
+      if (account?.key !== accountKey || (event.key !== account.key && event.key !== account.legacyKey)) return;
+      try { setPending(readPending(account.key) ?? readLegacyPending(account.legacyKey)); }
+      catch { setIdentityError("unavailable"); }
+    };
     window.addEventListener("storage", changed);
     return () => window.removeEventListener("storage", changed);
   }, [accountKey]);
@@ -116,54 +137,108 @@ export function GeoHomePage() {
 
   if (feature === "off" || listing.kind === "off") return <GeoOffPage />;
 
-  const create = async () => {
-    const key = accountRef.current;
-    if (!key || inFlight.current || pending) return;
-    try {
-      if (readPending(key)) { setPending(readPending(key)); return; }
-      localStorage.setItem(key, JSON.stringify({ kind: "unknown" }));
-    } catch { setIdentityFailed(true); return; }
-    inFlight.current = true;
+  const create = async (retry = false) => {
+    const account = accountRef.current;
+    if (!account || inFlight.current || identityError) return;
+    const { key } = account;
     const epoch = generation.current;
-    const current = () => generation.current === epoch && accountRef.current === key;
-    setPending({ kind: "unknown" });
+    const current = () => generation.current === epoch && accountRef.current === account;
+    inFlight.current = true;
     setCreating(true);
     try {
-      const created = await createGeoProject({});
-      const known: Pending = { kind: "created", id: created.id };
-      try { localStorage.setItem(key, JSON.stringify(known)); } catch { /* The existing unknown marker remains. */ }
-      if (!current()) return;
+      const requestKey = await withPendingLock(key, () => {
+        if (!current()) return null;
+        const existing = readPending(key);
+        if (retry) {
+          if (existing?.kind !== "unknown" || !existing.requestKey || existing.requestKey !== pending?.requestKey) return null;
+          const retrying: Pending = { ...existing, retried: true };
+          localStorage.setItem(key, JSON.stringify(retrying));
+          setPending(retrying);
+          return existing.requestKey;
+        }
+        const unresolved = existing ?? readLegacyPending(account.legacyKey) ?? pending;
+        if (unresolved) { setPending(unresolved); return null; }
+        const next = crypto.randomUUID();
+        localStorage.setItem(key, JSON.stringify({ kind: "unknown", requestKey: next }));
+        setPending({ kind: "unknown", requestKey: next });
+        return next;
+      });
+      if (!requestKey || !current()) return;
+      const replace = (kind: "unknown" | "created" | "active", next: Pending | null, requireNoRetry = false) => withPendingLock(key, () => {
+        const stored = readPending(key);
+        if (!stored || stored.requestKey !== requestKey) return false;
+        if (kind === "active" ? stored.kind !== "unknown" && stored.kind !== "created" : stored.kind !== kind) return false;
+        if (requireNoRetry && stored.kind === "unknown" && stored.retried) return false;
+        if (next) localStorage.setItem(key, JSON.stringify(next));
+        else localStorage.removeItem(key);
+        return true;
+      });
+      let created: Awaited<ReturnType<typeof createGeoProject>>;
+      try {
+        created = await createGeoProject({ requestKey, accountGeneration: account.generation });
+      } catch (error: unknown) {
+        if (error instanceof WebApiError && error.status === 410 && error.code === "geo_project_deleted") {
+          const gone: Pending = { kind: "gone", requestKey };
+          if (await replace("active", gone) && current()) setPending(gone);
+        } else if (error instanceof WebApiError && error.status === 409 && error.code === "geo_request_key_conflict") {
+          const conflict: Pending = { kind: "conflict", requestKey };
+          if (await replace("unknown", conflict) && current()) setPending(conflict);
+        } else if (error instanceof WebApiError && error.code === "geo_account_changed") {
+          if (current()) {
+            invalidateWebMe();
+            setAccountRevision((value) => value + 1);
+          }
+        } else if (!retry && error instanceof WebApiError && error.code === "project_limit_reached" && await replace("unknown", null, true)) {
+          if (current()) {
+            setPending(null);
+            toast.error(webErrorMessage(error, { fallback: "无法新建项目，请稍后重试。" }));
+          }
+        } else if (current()) {
+          setQuery("");
+          setReloads((value) => value + 1);
+        }
+        return;
+      }
+      const known: Pending = { kind: "created", id: created.id, requestKey };
+      if (!(await replace("unknown", known)) || !current()) return;
       setPending(known);
       try {
         const opened = await openConversation({ geoId: created.id, projectId: created.projectId, sessionId: created.sessionId });
-        if (current() && !opened) setReloads((value) => value + 1);
-        if (opened) { try { localStorage.removeItem(key); } catch { /* A retained marker is safer than a duplicate. */ } }
+        if (opened && await replace("created", null) && current()) setPending(null);
+        else if (current()) setReloads((value) => value + 1);
       } catch { if (current()) setReloads((value) => value + 1); }
-    } catch (error: unknown) {
-      if (knownRejection(error)) {
-        try { localStorage.removeItem(key); } catch { /* Keep the conservative marker. */ }
-        if (current()) { try { setPending(readPending(key)); } catch { setIdentityFailed(true); } if (isGeoOff(error)) setListing({ kind: "off" }); else toast.error(webErrorMessage(error, { fallback: "无法新建项目，请稍后重试。" })); }
-      } else if (current()) { setQuery(""); setReloads((value) => value + 1); }
-    } finally { if (current()) { inFlight.current = false; setCreating(false); } }
+    } catch { if (current()) setIdentityError("unavailable"); }
+    finally { if (current()) { inFlight.current = false; setCreating(false); } }
   };
   const clearPending = () => {
-    if (!accountKey || listing.kind !== "ready" || creating) return;
-    try { localStorage.removeItem(accountKey); setPending(null); } catch { setIdentityFailed(true); }
-  };
-  const acknowledgeCreated = () => {
-    if (!accountKey || pending?.kind !== "created") return;
-    try { localStorage.removeItem(accountKey); setPending(null); } catch { setIdentityFailed(true); }
+    const account = accountRef.current;
+    if (!account || !pending || creating) return;
+    if (pending.kind === "unknown" && listing.kind !== "ready") return;
+    const { key } = account;
+    void withPendingLock(key, () => {
+      if (accountRef.current !== account && pending.kind !== "created") return;
+      const stored = readPending(key);
+      const active = stored ?? readLegacyPending(account.legacyKey);
+      if (active && JSON.stringify(active) !== JSON.stringify(pending)) {
+        if (accountRef.current === account) setPending(active);
+        return;
+      }
+      if (stored) localStorage.removeItem(key);
+      else if (active) localStorage.removeItem(account.legacyKey);
+      if (accountRef.current === account) setPending(readLegacyPending(account.legacyKey));
+    }).catch(() => { if (accountRef.current === account) setIdentityError("unavailable"); });
   };
 
   const loading = feature === "loading" || listing.kind === "loading";
   const none = listing.kind === "ready" && projects.length === 0;
-  const newProject = <Button actionKind="set" onClick={() => void create()} loading={creating} disabled={listing.kind !== "ready" || pending !== null || !accountKey || identityFailed}><Plus size={16} aria-hidden="true" />新建项目</Button>;
+  const newProject = <Button actionKind="set" onClick={() => void create(false)} loading={creating} disabled={listing.kind !== "ready" || pending !== null || !accountKey || identityError !== null}><Plus size={16} aria-hidden="true" />新建项目</Button>;
   return (
     <div className="mx-auto flex min-h-0 w-full max-w-page flex-1 flex-col px-4 md:px-6">
       <PageHeader title="循证 GEO" actions={none && !pending ? undefined : newProject} className="shrink-0 pb-3 pt-5" />
-      {identityFailed && <div role="alert" className="mb-4 text-ui">无法确认账号或保存创建状态，请重试后再新建。<Button variant="secondary" size="sm" onClick={() => setAccountRevision((n) => n + 1)}>重试账号读取</Button></div>}
-      {pending?.kind === "unknown" && <div role="status" className="mb-4 rounded border border-border p-4 text-ui"><p>项目创建结果未知，项目可能仍在创建，稍后才出现在列表中；再次新建可能产生重复项目。</p>{listing.kind === "ready" && !creating && <Button variant="secondary" size="sm" onClick={clearPending}>已检查列表，仍要新建</Button>}</div>}
-      {createdId && <div role="status" className="mb-4 rounded border border-border p-4 text-ui">项目已创建，但对话未能打开。<Link className="ml-2 text-link underline" to={`/app/geo/${encodeURIComponent(createdId)}`} onClick={acknowledgeCreated}>打开已创建的项目</Link></div>}
+      {identityError && <div role="alert" className="mb-4 text-ui">{identityError === "missing-generation" ? "服务器未返回确认新建请求所需的账号信息，暂时无法新建项目。" : "无法确认账号或保存创建状态，请重试后再新建。"}<Button variant="secondary" size="sm" onClick={() => setAccountRevision((n) => n + 1)}>重试账号读取</Button></div>}
+      {pending?.kind === "unknown" && <div role="status" className="mb-4 rounded border border-border p-4 text-ui"><p>项目创建结果未知，项目可能仍在创建，稍后才出现在列表中；再次新建可能产生重复项目。</p>{!creating && pending.requestKey && <Button variant="secondary" size="sm" onClick={() => void create(true)}>重试同一创建请求</Button>}{listing.kind === "ready" && !creating && <Button variant="secondary" size="sm" onClick={clearPending}>已检查列表，仍要新建</Button>}</div>}
+      {(pending?.kind === "gone" || pending?.kind === "conflict") && <div role="status" className="mb-4 rounded border border-border p-4 text-ui">{pending.kind === "gone" ? "该创建请求对应的项目已删除。" : "此请求编号已用于另一项创建，无法重试。请检查项目列表后再开始新项目。"}<Button variant="secondary" size="sm" onClick={clearPending}>开始另一个项目</Button></div>}
+      {createdId && <div role="status" className="mb-4 rounded border border-border p-4 text-ui">项目已创建，但对话未能打开。<Link className="ml-2 text-link underline" to={`/app/geo/${encodeURIComponent(createdId)}`} onClick={clearPending}>打开已创建的项目</Link></div>}
       {projects.length > 0 && <Toolbar label="项目排序" filters={[{
         kind: "chips", label: "排序", value: sort, neutral: "recent",
         options: [{ value: "recent", label: "最近活动" }, { value: "state", label: "需要处理的在前" }],

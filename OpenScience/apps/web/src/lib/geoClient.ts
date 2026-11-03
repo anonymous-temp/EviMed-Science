@@ -1247,7 +1247,7 @@ export async function listGeoProjects(): Promise<GeoProjectSummary[]> {
   return (Array.isArray(data?.projects) ? data.projects : []).map(readSummary);
 }
 
-export function createGeoProject(input: { brandName?: string; coverageDays?: number; engines?: string[] } = {}) {
+export function createGeoProject(input: { brandName?: string; coverageDays?: number; engines?: string[]; requestKey?: string; accountGeneration?: string } = {}) {
   return productRequest<{ id: string; projectId: string; sessionId: string | null }>("/geo/projects", "POST", input);
 }
 

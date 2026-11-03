@@ -1,3 +1,4 @@
+import { geoAccountGeneration } from "./geoService.mjs";
 import { GEO_SOURCE_PAGE_FIELDS, geoReadPage, normalizeGeoMember, geoScopeFromQuery } from "./geoReadScope.mjs";
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
@@ -178,7 +179,7 @@ function money(value, field, zero = false) {
 /**
  * @param {{ store: any, service: any, config: Record<string, any>, maxJsonBytes: number,
  *   audit?: (event: string, status: string, details: Record<string, any>) => Promise<unknown>,
- *   projects?: { create: (user: any, name: string) => Promise<{ id: string, name: string }>,
+ *   projects?: { create: (user: any, name: string, options?: { reservation: "named" | "random" }) => Promise<{ id: string, name: string }>,
  *     rename?: (ownerId: string, projectId: string, name: string) => Promise<unknown>,
  *     bindSession: (user: any, projectId: string, geoProject?: any) => Promise<{ sessionId: string | null, bound: boolean }>,
  *     conversationSessionId?: (user: any, geoId: string) => Promise<string | null>,
@@ -297,18 +298,24 @@ export function createGeoRoutes(dependencies) {
     if (parts.length === 1) {
       if (method === "GET") return reply(await service.listProjects(user));
       if (method === "POST") {
-        const body = await bodyOf(req, maxJsonBytes, ["brandName", "coverageDays", "engines"]);
+        const body = await bodyOf(req, maxJsonBytes, ["brandName", "coverageDays", "engines", "requestKey", "accountGeneration"]);
+        if (body.requestKey != null && (typeof body.requestKey !== "string" || !/^[A-Za-z0-9_-]{16,128}$/.test(body.requestKey))) throw new HttpError(400, "geo_payload_invalid", "Invalid request key.");
+        if (body.accountGeneration !== undefined &&
+          (typeof body.accountGeneration !== "string" || body.accountGeneration !== geoAccountGeneration(user))) {
+          throw new HttpError(409, "geo_account_changed", "This creation request belongs to another account generation.");
+        }
         const input = {
+          requestKey: body.requestKey ?? undefined,
           brandName: brandName(body.brandName) ?? undefined,
           coverageDays: body.coverageDays == null ? undefined : coverageDays(body.coverageDays),
           engines: body.engines == null ? undefined : engines(body.engines),
         };
         if (!dependencies.projects) throw UNAVAILABLE();
-        const created = await service.createProject(user, input, {
+        const { replayed, ...created } = await service.createProject(user, input, {
           createControlProject: dependencies.projects.create,
           bindSession: dependencies.projects.bindSession,
         });
-        await audit("geo.project.create", "completed", { userId: user.id, code: created.id, detail: created.projectId });
+        await audit("geo.project.create", replayed ? "replayed" : "completed", { userId: user.id, code: created.id, detail: created.projectId });
         return reply(created, 201);
       }
     }

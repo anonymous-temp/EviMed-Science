@@ -1371,17 +1371,17 @@ describe("apiClient budget refusals", () => {
   });
 
   it("reads the HTTP-date form of Retry-After an intermediary may rewrite it into", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(Date.parse("2026-11-03T12:00:00Z"));
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce(refusal(undefined, "task_queue_full", 429, {
       "Retry-After": new Date(Date.now() + 45_000).toUTCString(),
     }));
     const client = await loadClient("https://science.example/api");
 
     const error = await client.fetchWebAccountUsage().catch((err: unknown) => err) as InstanceType<typeof client.WebApiError>;
-    expect(error.retryAfterSeconds).toBeGreaterThanOrEqual(40);
-    expect(error.retryAfterSeconds).toBeLessThanOrEqual(45);
+    expect(error.retryAfterSeconds).toBe(45);
     // Not a ceiling, so it gets the retry wording rather than the release one.
-    // The header carries whole seconds, so the observed wait is 44 or 45.
-    expect(client.webErrorMessage(error)).toMatch(/^请求过于频繁，已被暂时限流。请在约 4[45] 秒后重试。$/);
+    // Freeze the clock so asynchronous module loading cannot consume the asserted interval.
+    expect(client.webErrorMessage(error)).toBe("请求过于频繁，已被暂时限流。请在约 45 秒后重试。");
   });
 
   it("says nothing about time when the control plane said nothing", async () => {

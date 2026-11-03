@@ -68,13 +68,17 @@ before(async () => {
   store = new GeoStore({ database });
   service = new GeoService({ store, config: { ...config, dataDir }, now: () => new Date() });
   await service.ready();
+  for (const id of [ALICE, MALLORY, OPS]) {
+    await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES ($1,$1,'development')", [id]);
+  }
   // The platform's own authentication, reduced to what the routes ask of it:
   // the account is the one the test names in a header.
   const auth = {
     async ensureSessionUser(/** @type {any} */ req) {
       const id = String(req.headers["x-test-user"] ?? "");
       if (!id) throw Object.assign(new Error("Authentication required."), { status: 401, code: "auth_required" });
-      return { user: { id } };
+      const account = await database.query("SELECT created_at::text AS generation FROM evimed_control.users WHERE id=$1", [id]);
+      return { user: { id, accountCreatedAt: account.rows[0]?.generation } };
     },
     async assertCsrf() {},
   };

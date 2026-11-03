@@ -390,6 +390,11 @@ export function compactAction(action) {
   };
 }
 
+/** @param {{ id: string, accountCreatedAt?: string }} user */
+export function geoAccountGeneration(user) {
+  return user.accountCreatedAt ? createHash("sha256").update(`${user.id}\0${user.accountCreatedAt}`).digest("hex") : undefined;
+}
+
 export class GeoService {
   /** @type {any} */ planContexts = null;
   /** @type {import('./geoSignals.mjs').GeoSignals | null} */ signals = null;
@@ -674,14 +679,58 @@ export class GeoService {
   /**
    * `POST /api/geo/projects`: the control-plane project, its GEO row, and a
    * conversation bound to `geo-insight`.
-   * @param {{ id: string }} user
-   * @param {{ brandName?: string, coverageDays?: number, engines?: string[] }} input already validated by the route
-   * @param {{ createControlProject: (user: any, name: string) => Promise<{ id: string, name: string }>,
+   * @param {{ id: string, accountCreatedAt?: string }} user
+   * @param {{ brandName?: string, coverageDays?: number, engines?: string[], requestKey?: string }} input already validated by the route
+   * @param {{ createControlProject: (user: any, name: string, options?: { reservation: "named" | "random" }) => Promise<{ id: string, name: string }>,
    *   bindSession: (user: any, projectId: string, geoProject?: any) => Promise<{ sessionId: string | null, bound: boolean }> }} hooks
    */
   async createProject(user, input, hooks) {
+    const database = this.store.database;
+    if (!database?.withTransactionClient) {
+      if (input.requestKey) throw failure(503, "geo_unavailable", "Idempotent creation requires shared transaction support.");
+      const project = await this.#createProjectRows(user, input, hooks);
+      this.counters.projectsCreated += 1;
+      return { ...project, replayed: false };
+    }
+    await this.store.ready();
+    const created = await database.transaction(client => database.withTransactionClient(client, async () => {
+      if (typeof user.accountCreatedAt !== "string" || !user.accountCreatedAt) throw failure(401, "unauthorized", "Account generation unavailable.");
+      const account = await client.query("SELECT id FROM evimed_control.users WHERE id=$1 AND created_at=$2::timestamptz FOR KEY SHARE", [String(user.id), user.accountCreatedAt]);
+      if (!account.rowCount) throw failure(401, "unauthorized", "Account generation unavailable.");
+      if (!input.requestKey) return { project: await this.#createProjectRows(user, input, hooks), replayed: false };
+
+      const payload = JSON.stringify({ brandName: input.brandName ?? null, coverageDays: input.coverageDays ?? null, engines: input.engines ?? null });
+      const digest = createHash("sha256").update(payload).digest("hex");
+      await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [JSON.stringify(["geo-project-create", String(user.id), input.requestKey])]);
+      const result = await client.query(`SELECT r.*, g.id AS live_geo, c.id AS live_control
+        FROM evimed_geo.project_create_receipts r
+        LEFT JOIN evimed_geo.projects g ON g.id=r.geo_id AND g.user_id=r.user_id AND g.deleted_at IS NULL
+        LEFT JOIN evimed_control.projects c ON c.user_id=r.user_id AND c.id=r.project_id
+        WHERE r.user_id=$1 AND r.request_key=$2`, [String(user.id), input.requestKey]);
+      const receipt = result.rows[0];
+      if (receipt) {
+        if (receipt.payload_hash !== digest) throw failure(409, "geo_request_key_conflict", "Request key already names a different creation request.");
+        // One MVCC snapshot establishes whether both rows existed, without reversing deletion's lock order.
+        if (!receipt.live_geo || !receipt.live_control) throw failure(410, "geo_project_deleted", "The project for this request is no longer available.");
+        return { project: { id: receipt.geo_id, projectId: receipt.project_id, sessionId: receipt.session_id, bound: receipt.bound }, replayed: true };
+      }
+      const project = await this.#createProjectRows(user, input, hooks);
+      await client.query(`INSERT INTO evimed_geo.project_create_receipts(user_id,request_key,payload_hash,geo_id,project_id,session_id,bound)
+        VALUES ($1,$2,$3,$4,$5,$6,$7)`, [String(user.id), input.requestKey, digest, project.id, project.projectId, project.sessionId, project.bound]);
+      return { project, replayed: false };
+    }));
+    if (!created.replayed) this.counters.projectsCreated += 1;
+    return { ...created.project, replayed: created.replayed };
+  }
+
+  /** @param {{ id: string }} user
+   * @param {{ brandName?: string, coverageDays?: number, engines?: string[], requestKey?: string }} input
+   * @param {Parameters<GeoService["createProject"]>[2]} hooks */
+  async #createProjectRows(user, input, hooks) {
     const name = input.brandName || GEO_DEFAULT_PROJECT_NAME;
-    const control = await hooks.createControlProject(user, name);
+    /** @type {"named" | "random" | undefined} */
+    const reservation = this.store.database?.withTransactionClient ? (input.requestKey ? "random" : "named") : undefined;
+    const control = await hooks.createControlProject(user, name, reservation ? { reservation } : undefined);
     const engines = input.engines?.length ? input.engines : (this.config.geoEngines?.length ? this.config.geoEngines : GEO_DEFAULT_ENGINES);
     const project = await this.store.createProject({
       userId: String(user.id), projectId: control.id, engines, coverageDays: input.coverageDays ?? 90,
@@ -691,7 +740,6 @@ export class GeoService {
     // The conversation made here is the project's own from now on: recorded, so the page does not drift to a later one (a project whose
     // conversation opens later is bound when it opens: `GeoNativeAuthority.descriptor`).
     if (typeof session.sessionId === "string" && session.sessionId) await this.store.setConversationSession(project.id, session.sessionId);
-    this.counters.projectsCreated += 1;
     return { id: project.id, projectId: control.id, sessionId: session.sessionId, bound: session.bound };
   }
 

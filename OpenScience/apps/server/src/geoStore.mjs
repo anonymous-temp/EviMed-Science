@@ -399,6 +399,8 @@ export async function deleteGeoProjectRows(client, userId, projectId) {
  */
 export async function deleteGeoUserRows(client, userId) {
   if (!client || !(await geoSchemaExists(client))) return { projects: 0, screenshots: [] };
+  const receiptTable = await client.query("SELECT to_regclass('evimed_geo.project_create_receipts') AS name");
+  if (receiptTable.rows[0]?.name) await client.query("DELETE FROM evimed_geo.project_create_receipts WHERE user_id=$1", [userId]);
   if (await probeRequestsTableExists(client)) await client.query(`DELETE FROM evimed_geo.probe_requests WHERE user_id = $1`, [userId]);
   if (await socialJobsTableExists(client)) await client.query(`DELETE FROM evimed_geo.social_jobs WHERE user_id = $1`, [userId]);
   const candidates = await screenshotsOf(client, "user_id = $1", [userId]);
@@ -521,7 +523,12 @@ export class GeoStore {
 
   /** The entity keys of a product, or null where there is no vocabulary or it cannot tag. @param {Record<string, any>} product */
   async #entityKeys(product) {
-    return (await this.entityVocabulary?.tag({ texts: productTexts(product) })) ?? null;
+    if (!this.entityVocabulary) return null;
+    const tag = () => this.entityVocabulary.tag({ texts: productTexts(product) });
+    if (!this.database.transactionScope?.()) return (await tag()) ?? null;
+    // The glossary absorbs lookup errors, but PostgreSQL still needs to unwind the failed statement.
+    try { return (await this.database.transaction(tag)) ?? null; }
+    catch { return null; }
   }
 
   /**
