@@ -60,8 +60,10 @@ For these paths, zero-effect scenarios state `responseRate == nullRate` or zero 
 **确认性设计 `kind: "design_confirmatory"`**：下面这些问题各用一种 `design.kind`，先 `action: "shape"` 看字段。结果在“试验”页，答案里的 `resultEntry` 给了去处；每个数都是引擎算的，不要自己重算，也不要重新排版。
 - 中期发现没戏就停，能省多少人：`futility_group_sequential`（有效性和无效性边界、期望样本量、每次分析的停止概率）。无效性边界默认不具约束力，要具约束力要在 `design.futility.binding` 里写明。
 - 效应没把握，中期加样：`sample_size_reestimation`（中期按条件功效重定样本量，上限 `maxSampleSizeFactor` 倍；结果把固定设计和同样分析次数的成组序贯设计并排放在每个设想的效应旁边）。`truth.plannedEffect` 是计划按它定样本量的效应，`truth.effects` 是想看的真实效应。无效应一行平台自己补，I 类错误和无效应时的平均样本量都要在回复里说，这类设计在无效应时常常加样很多。
-- 几个剂量加一个对照，中期只留一个：`multi_arm_selection`（连续和二分类终点；`plannedSize` 是每组的例数）。回答比“每个剂量各做一个试验”省多少、选中真正最好的臂的概率。
-- 标志物阳性只占一部分，中期收窄入组：`enrichment`（连续和二分类终点；`plannedSize` 是全人群的总例数，`subsetPrevalence` 是阳性所占比例）。
+  - 只想在“有希望”的区间加样：写 `design.promisingZone: {"lower": 0.36, "upper": 0.8}`（中期条件功效的下限和上限）。条件功效低于下限或高于上限时保持原计划样本量，落在区间里才加到目标条件功效（上限仍是 `maxSampleSizeFactor` 倍）。区间是研究者的选择，不要替人编；没写就是每次中期都重算，无效应的试验也会加样，这时把“无效应时加样的概率”在回复里说出来。
+- 几个剂量加一个对照，中期只留一个：`multi_arm_selection`（连续、二分类和事件时间终点；`plannedSize` 是每组的例数）。回答比“每个剂量各做一个试验”省多少、选中真正最好的臂的概率。
+- 标志物阳性只占一部分，中期收窄入组：`enrichment`（连续、二分类和事件时间终点；`plannedSize` 是全人群的总例数，`subsetPrevalence` 是阳性所占比例；检验用 `simes` 或 `bonferroni`，`dunnett` 会被拒绝）。
+  - 这两种设计的事件时间版本按计划事件数直接模拟各组的对数秩统计量，假定比例风险、各组对照风险相同，不模拟入组、随访和脱落：所以不写 `truth.controlMedian` 和 `accrual`，`plannedSize` 是事件数（多臂是最后分析时留下的臂加对照的总事件数），效应写风险比；结果以事件数计，回复里说清这个模拟方式（结果的前提里已列出）。
 - 每年发作次数这类计数终点：`count_endpoint`（负二项，率比 `truth.rateRatio`，过度离散 `truth.overdispersion`；不知道过度离散就问，0 表示泊松，会把样本量算少；写了 `design.informationRates` 就是成组序贯）。
 结果里的 `confirmatory.assumed` 是平台没得到说明而采用的值（消耗函数、条件功效、取自成组序贯设计的计划样本量、补的零效应行等），回复里逐条说明，不要略去。
 
