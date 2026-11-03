@@ -361,6 +361,7 @@ vcr_test_handler_jobs <- function() {
     # dose-finding and Bayesian designs: small trials, the exact phase II search at a small size (the simulated curves have their own cases, N81-N83)
     list("design.dose", list(design = list(kind = "boin", compare = list("three_plus_three"), maxPatients = 12), truth = list(toxicity = c(0.1, 0.3, 0.5))), NULL, 200L),
     list("design.bayesian", list(design = list(kind = "bop2", maxN = 20, lookEvery = 10), truth = list(nullRate = 0.1, alternativeRate = 0.4), analysis = list(alpha = 0.1, power = 0.8)), NULL),
+    list("design.win_ratio", list(design = list(nTreat = 30, nControl = 30, followup = 12), truth = list(death = list(controlRisk = 0.2, hazardRatio = 0.7), events = list(controlRate = 0.05, rateRatio = 0.8), score = list(shift = 0.3))), NULL, 20L),
     # quantitative bias analysis (a stated estimate; the probabilistic part simulates, at the domain's floor of draws) and the G-computation simulated treatment comparison
     list("comparator.bias_analysis", list(scale = "hazard_ratio", estimate = 0.7, lower = 0.5, upper = 0.98, shiftedNull = list(biases = list(1.1, 1.25)),
                                           probabilistic = list(bias = list(family = "uniform", min = 1, max = 1.3))), NULL, 20000L),

@@ -5572,6 +5572,189 @@
           }
         ]
       }
+    },
+    {
+      "name": "win ratio: death, hospitalisations and a score at a stated size",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_win_ratio",
+        "method": "design.win_ratio",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "design": {
+            "nTreat": 300,
+            "nControl": 300,
+            "followup": 24,
+            "dropoutAnnual": 0.05
+          },
+          "truth": {
+            "death": {
+              "controlRisk": 0.15,
+              "hazardRatio": 0.75
+            },
+            "events": {
+              "controlRate": 0.04,
+              "rateRatio": 0.8,
+              "overdispersion": 1
+            },
+            "score": {
+              "shift": 4,
+              "sd": 20,
+              "threshold": 5
+            },
+            "correlation": 0.3
+          },
+          "analysis": {
+            "alpha": 0.025,
+            "sided": 1
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "win ratio: the size that reaches a power wanted",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_win_ratio",
+        "method": "design.win_ratio",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "design": {
+            "followup": 24,
+            "dropoutAnnual": 0.05,
+            "maxPerArm": 800
+          },
+          "truth": {
+            "death": {
+              "controlRisk": 0.15,
+              "hazardRatio": 0.75
+            },
+            "events": {
+              "controlRate": 0.04,
+              "rateRatio": 0.8,
+              "overdispersion": 1
+            },
+            "score": {
+              "shift": 4,
+              "sd": 20,
+              "threshold": 5
+            },
+            "correlation": 0.3
+          },
+          "analysis": {
+            "alpha": 0.025,
+            "sided": 1,
+            "power": 0.9
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "win ratio: death and a score only, a median instead of a risk, a time unit",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_win_ratio",
+        "method": "design.win_ratio",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "design": {
+            "nTreat": 300,
+            "nControl": 300,
+            "followup": 24,
+            "dropoutAnnual": 0.05
+          },
+          "truth": {
+            "death": {
+              "controlMedian": 60,
+              "hazardRatio": 0.8
+            },
+            "score": {
+              "shift": 4,
+              "sd": 20,
+              "threshold": 5
+            },
+            "correlation": 0.3
+          },
+          "analysis": {
+            "alpha": 0.025,
+            "sided": 1
+          },
+          "timeUnit": "months"
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "win ratio: death and events only, a plain Poisson process",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_win_ratio",
+        "method": "design.win_ratio",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "design": {
+            "nTreat": 300,
+            "nControl": 300,
+            "followup": 24,
+            "dropoutAnnual": 0.05
+          },
+          "truth": {
+            "death": {
+              "controlRisk": 0.15,
+              "hazardRatio": 0.75
+            },
+            "events": {
+              "controlRate": 0.04,
+              "rateRatio": 0.8,
+              "overdispersion": 0
+            },
+            "correlation": 0.3
+          },
+          "analysis": {
+            "alpha": 0.025,
+            "sided": 1
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      }
     }
   ],
   "invalid": [
@@ -24232,6 +24415,509 @@
       },
       "expected": [
         "scenario_value_invalid@scenario.design.lookEvery"
+      ]
+    },
+    {
+      "name": "win ratio: no size and no power wanted",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_win_ratio",
+        "method": "design.win_ratio",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "design": {
+            "followup": 24,
+            "dropoutAnnual": 0.05
+          },
+          "truth": {
+            "death": {
+              "controlRisk": 0.15,
+              "hazardRatio": 0.75
+            },
+            "events": {
+              "controlRate": 0.04,
+              "rateRatio": 0.8,
+              "overdispersion": 1
+            },
+            "score": {
+              "shift": 4,
+              "sd": 20,
+              "threshold": 5
+            },
+            "correlation": 0.3
+          },
+          "analysis": {
+            "alpha": 0.025,
+            "sided": 1
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_missing@scenario.design.nTreat"
+      ]
+    },
+    {
+      "name": "win ratio: a size and a power wanted together",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_win_ratio",
+        "method": "design.win_ratio",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "design": {
+            "nTreat": 300,
+            "nControl": 300,
+            "followup": 24,
+            "dropoutAnnual": 0.05
+          },
+          "truth": {
+            "death": {
+              "controlRisk": 0.15,
+              "hazardRatio": 0.75
+            },
+            "events": {
+              "controlRate": 0.04,
+              "rateRatio": 0.8,
+              "overdispersion": 1
+            },
+            "score": {
+              "shift": 4,
+              "sd": 20,
+              "threshold": 5
+            },
+            "correlation": 0.3
+          },
+          "analysis": {
+            "alpha": 0.025,
+            "sided": 1,
+            "power": 0.9
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.analysis.power"
+      ]
+    },
+    {
+      "name": "win ratio: only death, no level after it",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_win_ratio",
+        "method": "design.win_ratio",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "design": {
+            "nTreat": 300,
+            "nControl": 300,
+            "followup": 24,
+            "dropoutAnnual": 0.05
+          },
+          "truth": {
+            "death": {
+              "controlRisk": 0.15,
+              "hazardRatio": 0.75
+            },
+            "correlation": 0.3
+          },
+          "analysis": {
+            "alpha": 0.025,
+            "sided": 1
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_missing@scenario.truth.events"
+      ]
+    },
+    {
+      "name": "win ratio: a median and a risk of dying together",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_win_ratio",
+        "method": "design.win_ratio",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "design": {
+            "nTreat": 300,
+            "nControl": 300,
+            "followup": 24,
+            "dropoutAnnual": 0.05
+          },
+          "truth": {
+            "death": {
+              "controlRisk": 0.15,
+              "hazardRatio": 0.75,
+              "controlMedian": 60
+            },
+            "events": {
+              "controlRate": 0.04,
+              "rateRatio": 0.8,
+              "overdispersion": 1
+            },
+            "score": {
+              "shift": 4,
+              "sd": 20,
+              "threshold": 5
+            },
+            "correlation": 0.3
+          },
+          "analysis": {
+            "alpha": 0.025,
+            "sided": 1
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.truth.death.controlRisk"
+      ]
+    },
+    {
+      "name": "win ratio: a control size without a treatment size",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_win_ratio",
+        "method": "design.win_ratio",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "design": {
+            "nControl": 300,
+            "followup": 24,
+            "dropoutAnnual": 0.05
+          },
+          "truth": {
+            "death": {
+              "controlRisk": 0.15,
+              "hazardRatio": 0.75
+            },
+            "events": {
+              "controlRate": 0.04,
+              "rateRatio": 0.8,
+              "overdispersion": 1
+            },
+            "score": {
+              "shift": 4,
+              "sd": 20,
+              "threshold": 5
+            },
+            "correlation": 0.3
+          },
+          "analysis": {
+            "alpha": 0.025,
+            "sided": 1,
+            "power": 0.9
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_unknown@scenario.design.nControl"
+      ]
+    },
+    {
+      "name": "win ratio: more than eight events per person on average",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_win_ratio",
+        "method": "design.win_ratio",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "design": {
+            "nTreat": 300,
+            "nControl": 300,
+            "followup": 24,
+            "dropoutAnnual": 0.05
+          },
+          "truth": {
+            "death": {
+              "controlRisk": 0.15,
+              "hazardRatio": 0.75
+            },
+            "events": {
+              "controlRate": 0.5,
+              "rateRatio": 0.8,
+              "overdispersion": 1
+            },
+            "score": {
+              "shift": 4,
+              "sd": 20,
+              "threshold": 5
+            },
+            "correlation": 0.3
+          },
+          "analysis": {
+            "alpha": 0.025,
+            "sided": 1
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.truth.events.controlRate"
+      ]
+    },
+    {
+      "name": "win ratio: a correlation above the limit",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_win_ratio",
+        "method": "design.win_ratio",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "design": {
+            "nTreat": 300,
+            "nControl": 300,
+            "followup": 24,
+            "dropoutAnnual": 0.05
+          },
+          "truth": {
+            "death": {
+              "controlRisk": 0.15,
+              "hazardRatio": 0.75
+            },
+            "events": {
+              "controlRate": 0.04,
+              "rateRatio": 0.8,
+              "overdispersion": 1
+            },
+            "score": {
+              "shift": 4,
+              "sd": 20,
+              "threshold": 5
+            },
+            "correlation": 0.99
+          },
+          "analysis": {
+            "alpha": 0.025,
+            "sided": 1
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.truth.correlation"
+      ]
+    },
+    {
+      "name": "win ratio: no follow-up",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_win_ratio",
+        "method": "design.win_ratio",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "design": {
+            "nTreat": 300,
+            "nControl": 300,
+            "dropoutAnnual": 0.05
+          },
+          "truth": {
+            "death": {
+              "controlRisk": 0.15,
+              "hazardRatio": 0.75
+            },
+            "events": {
+              "controlRate": 0.04,
+              "rateRatio": 0.8,
+              "overdispersion": 1
+            },
+            "score": {
+              "shift": 4,
+              "sd": 20,
+              "threshold": 5
+            },
+            "correlation": 0.3
+          },
+          "analysis": {
+            "alpha": 0.025,
+            "sided": 1
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_missing@scenario.design.followup"
+      ]
+    },
+    {
+      "name": "win ratio: a maximum size without a power wanted",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_win_ratio",
+        "method": "design.win_ratio",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "design": {
+            "nTreat": 300,
+            "nControl": 300,
+            "followup": 24,
+            "dropoutAnnual": 0.05,
+            "maxPerArm": 500
+          },
+          "truth": {
+            "death": {
+              "controlRisk": 0.15,
+              "hazardRatio": 0.75
+            },
+            "events": {
+              "controlRate": 0.04,
+              "rateRatio": 0.8,
+              "overdispersion": 1
+            },
+            "score": {
+              "shift": 4,
+              "sd": 20,
+              "threshold": 5
+            },
+            "correlation": 0.3
+          },
+          "analysis": {
+            "alpha": 0.025,
+            "sided": 1
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_unknown@scenario.design.maxPerArm"
+      ]
+    },
+    {
+      "name": "win ratio: an unknown level",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_win_ratio",
+        "method": "design.win_ratio",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "design": {
+            "nTreat": 300,
+            "nControl": 300,
+            "followup": 24,
+            "dropoutAnnual": 0.05
+          },
+          "truth": {
+            "death": {
+              "controlRisk": 0.15,
+              "hazardRatio": 0.75
+            },
+            "events": {
+              "controlRate": 0.04,
+              "rateRatio": 0.8,
+              "overdispersion": 1
+            },
+            "score": {
+              "shift": 4,
+              "sd": 20,
+              "threshold": 5
+            },
+            "correlation": 0.3,
+            "recurrence": {
+              "rate": 1
+            }
+          },
+          "analysis": {
+            "alpha": 0.025,
+            "sided": 1
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_unknown@scenario.truth.recurrence"
       ]
     }
   ],

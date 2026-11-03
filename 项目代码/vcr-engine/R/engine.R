@@ -95,6 +95,7 @@ vcr_engine_handlers <- function() list(
   "design.simulate" = vcr_job_design_simulate,
   "design.confirmatory" = vcr_job_design_confirmatory,
   "design.dose" = vcr_job_design_dose,
+  "design.win_ratio" = vcr_job_design_win_ratio,
   "design.bayesian" = vcr_job_design_bayesian,
   "comparator.bias_analysis" = vcr_job_bias_analysis,
   "comparator.stc" = vcr_job_stc,
@@ -130,6 +131,10 @@ VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "rpact_adapter", "design_c
 # --- dose-finding designs (T7, T15) and Bayesian designs without MCMC (T8, T10), 2026-11-03: written here, never calling a package ---
 VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "design_dose", "design_bayesian")
 # --- end dose-finding and Bayesian designs ---
+
+# --- hierarchical composite endpoints (T9), 2026-11-03: the win ratio simulated and sized in the engine's own code; hce is the check ---
+VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "design_win_ratio")
+# --- end win ratio ---
 
 # --- quantitative bias analysis of an estimate (C1, C2) and the G-computation simulated treatment comparison (C9), 2026-11-03 ---
 VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "bias_analysis", "stc")

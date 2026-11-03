@@ -947,6 +947,19 @@ vcr_pattern_match <- function(pattern, x) {
   invisible(NULL)
 }
 
+# The coupled fields of a win-ratio design (design.win_ratio): a size and a power wanted are two ways to ask, never both, and the events level tracks at
+# most 8 events per person on average. Mirrors checkWinRatioSemantics.
+.vcrp_check_win_ratio <- function(sc, path, ctx) {
+  bad <- function(field, detail) ctx$raise("scenario_value_invalid", .vcrp_at(path, field), detail)
+  design <- .vcrp_get(sc, "design"); if (!.vcrp_named(design)) design <- list()
+  analysis <- .vcrp_get(sc, "analysis"); if (!.vcrp_named(analysis)) analysis <- list()
+  if (!is.null(design[["nTreat"]]) && !is.null(analysis[["power"]])) bad("analysis.power", "State the size of each arm to get the power, or the power wanted to get the size; not both.")
+  events <- .vcrp_get(.vcrp_get(sc, "truth"), "events")
+  if (.vcrp_named(events) && .vcrp_num(events[["controlRate"]]) && .vcrp_num(events[["rateRatio"]]) && .vcrp_num(design[["followup"]]) &&
+      events[["controlRate"]] * design[["followup"]] * max(1, events[["rateRatio"]]) > 8) bad("truth.events.controlRate", "More than 8 events per person on average are not tracked by this method.")
+  invisible(NULL)
+}
+
 # The coupled fields of a Bayesian design (design.bayesian): the alternative response rate is above the null rate, the looks fit the size, a
 # hazard-ratio margin is positive, and the rate a risk-difference margin leads to stays a rate. Mirrors checkBayesianSemantics.
 .vcrp_check_bayesian <- function(sc, path, ctx) {
@@ -1013,6 +1026,7 @@ vcr_validate_scenario <- function(method, scenario, input_ids = NULL, path = "sc
   if (identical(method,"design.confirmatory")) .vcrp_check_confirmatory(scenario,path,ctx)
   if (identical(method,"design.dose")) .vcrp_check_dose(scenario,path,ctx)
   if (identical(method,"design.bayesian")) .vcrp_check_bayesian(scenario,path,ctx)
+  if (identical(method,"design.win_ratio")) .vcrp_check_win_ratio(scenario,path,ctx)
   if (method %in% c("design.analytic","design.assurance")) .vcrp_check_no_nph(scenario,path,ctx)
   if (identical(method, "comparator.maic")) .vcrp_check_maic_semantics(scenario, path, ctx)
   if (identical(method, "accrual.poisson_gamma")) .vcrp_check_accrual_semantics(scenario, path, ctx)

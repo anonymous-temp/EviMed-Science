@@ -138,6 +138,10 @@ export const VCR_ENGINE_METHODS = Object.freeze({
   // Bayesian designs without MCMC (algorithm round T8, T10, 2026-11-03): the Bayesian optimal phase II design, predictive-probability monitoring and the calibration
   // of a posterior-probability success threshold under a conjugate prior. Every number is exact (a dynamic programme over the responses, closed forms, Gauss-Legendre).
   'design.bayesian': { version: '1.0.0', endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['BOP2FE (get_boundary_binary): the futility and success boundaries; get_oc_binary: a simulated check of the operating characteristics', 'RBesT (oc2S, pmixdiff): the type I error and power of a probability threshold between two beta-binomial arms, and the probability that a difference exceeds a margin', "Simon's two-stage design (1989: 1/10, 5/29, expected size 15.0 at 0.1 and 0.3)", 'brute-force enumeration of every path of a small phase II trial', 'a simulation in plain R of the predictive-probability rule and of a normal threshold']), modelTier: 'scenario' },
+  // Hierarchical composite endpoints compared by win ratio (algorithm round T9, 2026-11-03): death, then recurrent events, then a score, compared pair by pair
+  // (the win ratio, the win difference, the win odds and the share of ties), tested by the Finkelstein-Schoenfeld permutation test and sized by simulation. Written
+  // in R: winratiosim takes 0.4 s a trial and hce compares on one ordinal scale with no censoring; hce is the check.
+  'design.win_ratio': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['hce (calcWO): the wins, losses, ties and win odds of the same uncensored patients on the single scale of ranks it takes', 'exact win, loss and tie probabilities of independent levels (exponential deaths, negative-binomial counts, a normal score with a threshold) against the simulated proportions', 'a pair-by-pair loop in plain R, written apart from the engine, on patients who drop out (the three levels, to the last pair)', 'the permutation variance of the Finkelstein-Schoenfeld statistic from relabelling the arms in plain R']), modelTier: 'scenario' },
   'design.grid': { version: '1.4.0', compatibleVersions: frozen(['1.2.0', '1.3.0']), legacyVersion: '1.0.0', legacyDesigns: frozen(['two_arm_fixed', 'group_sequential']), legacyReleases: SIMULATE_RELEASES, endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen([]), modelTier: 'scenario' },
   'design.assurance': { version: '1.1.0', legacyVersion: '1.0.0', legacyDesigns: frozen(['two_arm_fixed']), endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['numerical integration of power over the design prior (the O\'Hagan 2005 definition)', 'independent Monte Carlo of the sequential design under the design prior']), modelTier: 'scenario' },
   'design.procova': { version: '1.0.0', endpoints: frozen(['continuous']), crossChecks: frozen(['closed-form sample size under the EMA 2022 opinion\'s correlation and variance discounts']), modelTier: 'scenario' },
@@ -236,6 +240,8 @@ export const VCR_JOB_METHODS = Object.freeze({
   // dose-finding designs and Bayesian designs without MCMC (2026-11-03)
   design_dose: 'design.dose',
   design_bayesian: 'design.bayesian',
+  // hierarchical composite endpoints compared by win ratio (2026-11-03)
+  design_win_ratio: 'design.win_ratio',
   // The batch reading of patient records (D4): run by the control plane on its slow local lane, never by the R engine.
   ...VCR_MATCH_BATCH_JOBS,
   // The longitudinal forecast kinds, last, in VCR_JOB_KINDS' order (the scenario help lists kinds in this object's order).

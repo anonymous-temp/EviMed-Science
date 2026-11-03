@@ -204,6 +204,13 @@ export const NUMERIC_REFERENCES = {
   N86b: { methods: ['design.bayesian'], anchors: ['ref <- RBesT::pmixdiff(RBesT::mixbeta(c(1, priors[[1]][1] + xt, priors[[1]][2] + nT - xt))', 'worst_int <- max(worst_int, abs(post[xt + 1L, xc + 1L] - exact(xt, xc, nT, nC, priors[[1]], priors[[2]], margin)))'] },
   N86c: { methods: ['design.bayesian'], anchors: ['oc <- function(c) RBesT::oc2S(RBesT::mixbeta(c(1, 1, 1)), RBesT::mixbeta(c(1, 1, 1)), nT, nC, RBesT::decision2S(c, 0, lower.tail = FALSE))(0.3, 0.3)'] },
   N86d: { methods: ['design.bayesian'], anchors: ['p_null <- rule(s$null + s$se * z); p_alt <- rule(s$alt + s$se * z)'] },
+  // design.win_ratio: a plain-R loop over every pair (all three levels, dropout), hce::calcWO on the same uncensored people, exact pair probabilities of independent levels, hce::sizeWR, the permutation variance
+  N87a: { methods: ['design.win_ratio'], anchors: ['ref <- .n87_loop_pairs(p, d)', 'same <- same && identical(unname(mine), unname(ref)) && all(mine == -t(mine))'] },
+  N87b: { methods: ['design.win_ratio'], anchors: ['ref <- hce::calcWO(df, AVAL = "AVAL", TRTP = "TRTP", ref = "P")', 'worst <- max(worst, abs(ref$WP - wp), abs(ref$WO - wo))'] },
+  N87c: { methods: ['design.win_ratio'], anchors: ['ex <- .n87_exact(cfg$risk, cfg$hr, 12, 0.1, cfg$rr, cfg$theta, cfg$shift, 1, cfg$thr)', 'z <- abs(got - ex[names(got)]) / pmax(se, 1e-12)'] },
+  N87d: { methods: ['design.win_ratio'], anchors: ['perm <- vapply(seq_len(40000L), function(i) sum(u[sample.int(N, 70L)]), numeric(1))', 'v_formula <- 70 * 70 / (N * (N - 1)) * sum(u^2)'] },
+  N87e: { methods: ['design.win_ratio'], anchors: ['need <- Filter(function(x) identical(x$name, "required_per_arm"), sr$measures)[[1]]$value', 'abs(pw$value - 0.8) < 4 * pw$mcse + 0.03'] },
+  N87f: { methods: ['design.win_ratio'], anchors: ['f <- hce::sizeWR(WR = want_wr, power = 0.8, Pties = want_ties, alpha = 0.05)', 'abs(pw$value - 0.8) < 4 * pw$mcse + 0.1'] },
   N72a: { methods: ['comparator.bias_analysis'], anchors: ['want_limit <- if (lim > 0) back(lim) else if (ratio) 1 else 0', 'abs(rows[[i]]$z - zz) < 1e-12 && abs(rows[[i]]$p - (1 - stats::pnorm(zz))) < 1e-12'] },
   N72b: { methods: ['comparator.bias_analysis'], anchors: ['tip_bin <- function(b, g, p_other) tipr::tip_with_binary(', 'tn <- tipr::tip_rr(1.6, confounder_outcome_effect = 2, verbose = FALSE)$exposure_confounder_effect'] },
   N72c: { methods: ['comparator.bias_analysis'], anchors: ['abs(row1$carrierPrevalence / 0.05 - 9) < 1e-4'] },

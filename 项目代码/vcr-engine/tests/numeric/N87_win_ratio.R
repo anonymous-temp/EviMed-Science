@@ -1,0 +1,213 @@
+# N87 — hierarchical composite endpoints compared by win ratio (algorithm round T9, 2026-11-03): design.win_ratio.
+#
+# "死亡、住院次数、KCCQ 三层比较，要多少人，平局占多少": people are compared pair by pair on death, then on the number of events, then on a
+# score; the result is the win ratio, the win difference, the win odds, the share of ties and the power of the Finkelstein-Schoenfeld test.
+# The engine writes its own simulation (winratiosim takes 0.4 s a trial) and is held to things that are not its code:
+#
+#   a  a pair-by-pair loop in plain R, written apart from the engine, on people who drop out (all three levels, thresholds, to the last pair and to
+#      the test statistic)
+#   b  hce::calcWO on the same uncensored people, put on the single scale of ranks hce takes: the same wins, losses, ties and win odds
+#   c  exact win, loss and tie probabilities of independent levels (exponential deaths, negative-binomial counts, a normal score with a threshold)
+#   d  the type I error of the permutation test, and the permutation variance of the statistic from relabelling the arms
+#   e  the job: one and two cores give the same bits, a spent CPU budget keeps the batches that ran, the size that reaches a power wanted is
+#      checked by running at it, a null scenario cannot be sized
+#   f  hce::sizeWR, a published formula, against the simulated power at the size it gives (reported with its gap; the formula is held to a
+#      loose band, the engine to its own error)
+
+.n87_scenario <- function(n = 60, dropout = 0.1, followup = 12, events = TRUE, score = TRUE, rho = 0.3, hr = 0.7, rr = 0.8, shift = 0.4, thr = 0.1,
+                          risk = 0.3, theta = 1, rate = 0.08, sd = 1) {
+  truth <- list(death = list(controlRisk = risk, hazardRatio = hr), correlation = rho)
+  if (events) truth$events <- list(controlRate = rate, rateRatio = rr, overdispersion = theta)
+  if (score) truth$score <- list(shift = shift, sd = sd, threshold = thr)
+  list(design = list(nTreat = n, nControl = n, followup = followup, dropoutAnnual = dropout), truth = truth, analysis = list(alpha = 0.025, sided = 1))
+}
+
+# the reference: every pair compared by a loop that reads the rules, level by level
+.n87_loop_pairs <- function(p, d) {
+  N <- length(d$x); res <- matrix(0L, N, N)
+  for (i in seq_len(N)) for (j in seq_len(N)) if (i != j) {
+    r <- 0L
+    if (d$died[j] && d$dx[j] <= d$x[i]) r <- r + 1L
+    if (d$died[i] && d$dx[i] <= d$x[j]) r <- r - 1L
+    if (r == 0L && p$has_events) {
+      w <- min(d$x[i], d$x[j]); ci <- sum(d$events[i, ] <= w); cj <- sum(d$events[j, ] <= w)
+      if (ci != cj) r <- if (ci < cj) 1L else -1L
+    }
+    if (r == 0L && p$has_score && !is.na(d$score[i]) && !is.na(d$score[j])) {
+      df <- d$score[i] - d$score[j]
+      if (df > p$thr) r <- 1L else if (df < -p$thr) r <- -1L
+    }
+    res[i, j] <- r
+  }
+  res
+}
+
+vcr_case("N87a", c("AC-29", "AC-30"), function() {
+  worst_z <- 0; same <- TRUE; cells <- 0L
+  for (cfg in list(list(seed = 8701L, ev = TRUE, sc = TRUE, thr = 0.1), list(seed = 8702L, ev = TRUE, sc = FALSE, thr = 0), list(seed = 8703L, ev = FALSE, sc = TRUE, thr = 0.3),
+                   list(seed = 8704L, ev = TRUE, sc = TRUE, thr = 0))) {
+    sc <- .n87_scenario(n = 45, dropout = 0.35, followup = 12, events = cfg$ev, score = cfg$sc, thr = cfg$thr, risk = 0.4, rate = 0.15)
+    p <- .vcr_wr_read(sc)
+    set.seed(cfg$seed, kind = VCR_RNG_KIND); d <- .vcr_wr_draw(p, 45L, 45L)
+    ref <- .n87_loop_pairs(p, d)
+    lv <- .vcr_wr_levels(p, d); L <- length(lv); code <- 0L
+    for (k in seq_len(L)) code <- code + as.integer(3^(L - k)) * lv[[k]]
+    mine <- (code > 0L) - (code < 0L)
+    same <- same && identical(unname(mine), unname(ref)) && all(mine == -t(mine))
+    cells <- cells + length(ref)
+    # the trial's statistic from the same stream
+    set.seed(cfg$seed, kind = VCR_RNG_KIND); tr <- .vcr_wr_trial(p, 45L, 45L)
+    tc <- 46:90; cc <- 1:45
+    u <- rowSums(ref); N <- 90L
+    z_ref <- sum(u[cc]) / sqrt(45 * 45 / (N * (N - 1)) * sum(u^2))
+    b <- ref[cc, tc]
+    worst_z <- max(worst_z, abs(tr[["z"]] - z_ref), abs(tr[["win"]] - mean(b == 1L)), abs(tr[["loss"]] - mean(b == -1L)), abs(tr[["tie"]] - mean(b == 0L)))
+  }
+  # (the loop's first 45 are the treated people: arm 1 comes first in a trial)
+  list(pass = same && worst_z < 1e-12,
+       detail = sprintf("4 configurations (death with %s, dropout 35%%, thresholds 0 to 0.3), %d ordered pairs: the matrix of every pair equals the plain-R loop (%s) and is antisymmetric; the trial's statistic, wins, losses and ties equal the loop's to %.1e",
+                        "events and/or a score", cells, same, worst_z))
+})
+
+vcr_case("N87b", c("AC-29"), function() {
+  if (!requireNamespace("hce", quietly = TRUE)) return(list(pass = FALSE, detail = "hce (the cross-check package) is not installed"))
+  worst <- 0; ties_seen <- 0
+  for (seed in c(8711L, 8712L, 8713L)) {
+    sc <- .n87_scenario(n = 120, dropout = 0, followup = 12, thr = 0, risk = 0.25, rate = 0.1, sd = 2.5)
+    p <- .vcr_wr_read(sc)
+    set.seed(seed, kind = VCR_RNG_KIND); d <- .vcr_wr_draw(p, 120L, 120L)
+    d$score <- round(d$score)                                   # whole-number scores tie, so the tie share is not zero
+    lv <- .vcr_wr_levels(p, d); code <- 9L * lv$death + 3L * lv$events + lv$score; res <- (code > 0L) - (code < 0L)
+    tr <- 1:120; co <- 121:240
+    nw <- sum(res[tr, co] == 1L); nl <- sum(res[tr, co] == -1L); nt <- 120 * 120 - nw - nl
+    # hce takes one scale of ranks and no censoring: deaths first by time, then survivors by fewer events and a higher score
+    ne <- rowSums(is.finite(d$events))
+    key <- ifelse(d$died, 0, 1)
+    ord <- order(key, ifelse(d$died, d$dx, 0), -ne, d$score)
+    # equal (events, score) among survivors tie; deaths never tie (continuous times)
+    grp <- paste(key, ifelse(d$died, d$dx, 0), -ne, d$score)[ord]
+    aval <- numeric(length(ord)); aval[ord] <- cumsum(c(TRUE, grp[-1L] != grp[-length(grp)]))
+    df <- data.frame(AVAL = aval, TRTP = ifelse(d$arm == 1L, "A", "P"))
+    ref <- hce::calcWO(df, AVAL = "AVAL", TRTP = "TRTP", ref = "P")
+    wp <- (nw + nt / 2) / (120 * 120); wo <- (nw + nt / 2) / (nl + nt / 2)
+    worst <- max(worst, abs(ref$WP - wp), abs(ref$WO - wo))
+    ties_seen <- ties_seen + nt
+  }
+  list(pass = worst < 1e-12 && ties_seen > 0,
+       detail = sprintf("3 uncensored samples of 120 + 120 people (death, events, whole-number scores; %d tied pairs in all): hce::calcWO on the single scale of ranks gives the win probability and the win odds of the engine's pair counts to %.1e", ties_seen, worst))
+})
+
+# the exact pair probabilities of three independent levels, no dropout
+.n87_exact <- function(risk, hr, followup, rate, rr, theta, shift, sd, thr) {
+  h0 <- -log1p(-risk) / followup; hT <- h0 * hr; s <- h0 + hT
+  w1 <- h0 / s * (1 - exp(-s * followup)); l1 <- hT / s * (1 - exp(-s * followup)); t1 <- exp(-s * followup)
+  k <- 0:400
+  pmf <- function(mu) if (theta > 0) stats::dnbinom(k, size = 1 / theta, mu = mu) else stats::dpois(k, mu)
+  pT <- pmf(rate * rr * followup); pC <- pmf(rate * followup)
+  cumC <- cumsum(pC)
+  pt_less <- sum(pT * (1 - cumC)); pt_more <- sum(pC * (1 - cumsum(pT)))
+  t2 <- 1 - pt_less - pt_more
+  dif_sd <- sd * sqrt(2)
+  w3 <- 1 - stats::pnorm((thr - shift) / dif_sd); l3 <- stats::pnorm((-thr - shift) / dif_sd); t3 <- 1 - w3 - l3
+  c(win = w1 + t1 * (pt_less + t2 * w3), loss = l1 + t1 * (pt_more + t2 * l3), tie = t1 * t2 * t3,
+    w1 = w1, l1 = l1, w2 = t1 * pt_less, l2 = t1 * pt_more, w3 = t1 * t2 * w3, l3 = t1 * t2 * l3)
+}
+
+vcr_case("N87c", c("AC-29"), function() {
+  worst <- 0; rows <- character(0)
+  for (cfg in list(list(hr = 0.7, rr = 0.8, theta = 1, shift = 0.3, thr = 0.8, risk = 0.3, seed = 8721L), list(hr = 1, rr = 0.6, theta = 0.5, shift = 0, thr = 0.25, risk = 0.2, seed = 8722L),
+                   list(hr = 0.5, rr = 1, theta = 0, shift = 0.6, thr = 0, risk = 0.4, seed = 8723L))) {
+    sc <- .n87_scenario(n = 80, dropout = 0, followup = 12, rho = 0, hr = cfg$hr, rr = cfg$rr, shift = cfg$shift, thr = cfg$thr, risk = cfg$risk, theta = cfg$theta, rate = 0.1)
+    job <- list(scenario = sc, seed = cfg$seed, replicates = 1500L, cores = vcr_cores(NULL), cpuSecondsLimit = 600)
+    r <- vcr_job_design_win_ratio(job)
+    ex <- .n87_exact(cfg$risk, cfg$hr, 12, 0.1, cfg$rr, cfg$theta, cfg$shift, 1, cfg$thr)
+    cells <- r$diagnostics$winRatio$cells
+    lv <- r$diagnostics$winRatio$byLevel
+    got <- c(win = cells$win_proportion$value, loss = cells$loss_proportion$value, tie = cells$tie_proportion$value,
+             w1 = lv[[1]]$cells$win_proportion$value, l1 = lv[[1]]$cells$loss_proportion$value, w2 = lv[[2]]$cells$win_proportion$value, l2 = lv[[2]]$cells$loss_proportion$value,
+             w3 = lv[[3]]$cells$win_proportion$value, l3 = lv[[3]]$cells$loss_proportion$value)
+    se <- c(cells$win_proportion$mcse, cells$loss_proportion$mcse, cells$tie_proportion$mcse, lv[[1]]$cells$win_proportion$mcse, lv[[1]]$cells$loss_proportion$mcse,
+            lv[[2]]$cells$win_proportion$mcse, lv[[2]]$cells$loss_proportion$mcse, lv[[3]]$cells$win_proportion$mcse, lv[[3]]$cells$loss_proportion$mcse)
+    z <- abs(got - ex[names(got)]) / pmax(se, 1e-12)
+    worst <- max(worst, z)
+    rows <- c(rows, sprintf("HR %.1f/rate ratio %.1f/shift %.1f: win %.4f (%.4f) loss %.4f (%.4f) tie %.4f (%.4f)", cfg$hr, cfg$rr, cfg$shift, got[["win"]], ex[["win"]], got[["loss"]], ex[["loss"]], got[["tie"]], ex[["tie"]]))
+  }
+  list(pass = worst < 4.5, detail = sprintf("independent levels (correlation 0, no dropout), 1,500 trials of 80 + 80 each: simulated (exact) %s; the nine proportions of each (overall and by level) are within %.2f of their Monte-Carlo errors", paste(rows, collapse = "; "), worst))
+})
+
+vcr_case("N87d", c("AC-28", "AC-29"), function() {
+  # (1) the type I error of the test, with dropout and correlation, through the job; (2) the permutation variance
+  sc <- .n87_scenario(n = 120, dropout = 0.1, followup = 12, hr = 1, rr = 1, shift = 0, thr = 0.1, rho = 0.4)
+  r <- vcr_test_run(vcr_test_job("design.win_ratio", sc, seed = 8731L, replicates = 6000L, cores = vcr_cores(NULL)))
+  m <- Filter(function(x) identical(x$name, "type_one_error"), r$measures)
+  alpha_hat <- if (length(m)) m[[1]]$value else NA_real_
+  se <- if (length(m)) m[[1]]$mcse else NA_real_
+  # the variance: fixed people, many relabellings
+  p <- .vcr_wr_read(.n87_scenario(n = 70, dropout = 0.2, followup = 12, hr = 1, rr = 1, shift = 0, thr = 0.1, risk = 0.3))
+  set.seed(8732L, kind = VCR_RNG_KIND); d <- .vcr_wr_draw(p, 70L, 70L)
+  lv <- .vcr_wr_levels(p, d); code <- 9L * lv$death + 3L * lv$events + lv$score; res <- (code > 0L) - (code < 0L)
+  u <- rowSums(res); N <- 140L
+  set.seed(8733L)
+  perm <- vapply(seq_len(40000L), function(i) sum(u[sample.int(N, 70L)]), numeric(1))
+  v_formula <- 70 * 70 / (N * (N - 1)) * sum(u^2)
+  rel <- abs(stats::var(perm) / v_formula - 1); rel_se <- sqrt(2 / (length(perm) - 1))
+  list(pass = identical(r$status, "succeeded") && length(m) == 1L && abs(alpha_hat - 0.025) < 4 * se + 0.004 && rel < 4 * rel_se && abs(mean(perm)) < 4 * sqrt(v_formula / length(perm)),
+       detail = sprintf("type I error with 10%% dropout and correlation 0.4, 120 + 120 people, 6,000 trials: %.4f (error %.4f) against 0.025; 40,000 relabellings of the arms of 70 + 70 people: variance %.1f, the formula n1 n0 sum(U^2) / (N (N - 1)) gives %.1f (%.2f%% apart, error %.2f%%), mean %.2f",
+                        alpha_hat, se, stats::var(perm), v_formula, 100 * rel, 100 * rel_se, mean(perm)))
+})
+
+vcr_case("N87e", c("AC-31", "AC-28"), function() {
+  sc <- .n87_scenario(n = 70, dropout = 0.1)
+  sc_hash <- function(cores) {
+    r <- vcr_test_run(vcr_test_job("design.win_ratio", sc, seed = 8741L, replicates = 200L, cores = cores))
+    vcr_sha256(vcr_canonical_json(r$measures))
+  }
+  same_cores <- identical(sc_hash(1L), sc_hash(2L))
+  full <- vcr_test_run(vcr_test_job("design.win_ratio", sc, seed = 8741L, replicates = 200L, cores = 1L))
+  # the CPU budget ends the run between batches and keeps the ones that finished
+  cut <- vcr_test_run(vcr_test_job("design.win_ratio", .n87_scenario(n = 400, dropout = 0.1), seed = 8742L, replicates = 100000L, cores = 1L, extra = list(cpuSecondsLimit = 3)))
+  kept <- cut$diagnostics$replicatesCompleted
+  # the size searched for a power wanted, then run at that size with other random numbers
+  ss <- .n87_scenario(n = 100, dropout = 0.05, events = FALSE, shift = 0.6, hr = 0.8, thr = 0.1); ss$design$nTreat <- NULL; ss$design$nControl <- NULL; ss$analysis$power <- 0.8
+  sr <- vcr_test_run(vcr_test_job("design.win_ratio", ss, seed = 8743L, replicates = 1500L, cores = vcr_cores(NULL)))
+  need <- Filter(function(x) identical(x$name, "required_per_arm"), sr$measures)[[1]]$value
+  at <- .n87_scenario(n = need, dropout = 0.05, events = FALSE, shift = 0.6, hr = 0.8, thr = 0.1)
+  chk <- vcr_test_run(vcr_test_job("design.win_ratio", at, seed = 8744L, replicates = 2000L, cores = vcr_cores(NULL)))
+  pw <- Filter(function(x) identical(x$name, "power"), chk$measures)[[1]]
+  # a scenario with no effect at any level cannot be sized
+  nul <- .n87_scenario(n = 100, hr = 1, rr = 1, shift = 0); nul$design$nTreat <- NULL; nul$design$nControl <- NULL; nul$analysis$power <- 0.9
+  nr <- vcr_test_run(vcr_test_job("design.win_ratio", nul, seed = 8745L, replicates = 500L, cores = 1L))
+  # a size above the cap is refused by name, from the pilot, without running a trial of that size
+  tiny <- .n87_scenario(n = 100, events = FALSE, hr = 0.99, shift = 0.01); tiny$design$nTreat <- NULL; tiny$design$nControl <- NULL; tiny$analysis$power <- 0.9; tiny$design$maxPerArm <- 100
+  tr_ <- vcr_test_run(vcr_test_job("design.win_ratio", tiny, seed = 8747L, replicates = 500L, cores = 1L))
+  bare <- .n87_scenario(n = 40); bare$truth$correlation <- NULL; bare$truth$events$overdispersion <- NULL; bare$truth$score$sd <- NULL; bare$truth$score$threshold <- NULL
+  bare_run <- vcr_test_run(vcr_test_job("design.win_ratio", bare, seed = 8746L, replicates = 100L, cores = 1L))
+  assumed <- vapply(bare_run$diagnostics$winRatio$assumed, function(a) a$key, character(1))
+  list(pass = same_cores && identical(full$status, "succeeded") && identical(cut$conclusion, "limited") && "cpu_budget_exhausted" %in% vcr_test_issue_codes(cut) && kept >= 20L && kept < 100000L &&
+         identical(sr$status, "succeeded") && abs(pw$value - 0.8) < 4 * pw$mcse + 0.03 && identical(nr$status, "failed") && "design_effect_null" %in% vcr_test_issue_codes(nr) && identical(tr_$status, "failed") && "design_not_computable" %in% vcr_test_issue_codes(tr_) &&
+         all(c("truth.events.overdispersion", "truth.correlation", "truth.score.sd", "truth.score.threshold", "method.test") %in% assumed),
+       detail = sprintf("1 and 2 cores give the same measures (%s); a 3 s CPU budget on a 400 + 400 trial kept %d trials and is limited (cpu_budget_exhausted); the size for 80%% power is %d per arm and a run at it gives %.3f (error %.3f); a null scenario cannot be sized (design_effect_null) and a size above the cap is refused from the pilot (design_not_computable); defaults listed: %s",
+                        same_cores, kept, as.integer(need), pw$value, pw$mcse, paste(assumed, collapse = ", ")))
+})
+
+vcr_case("N87f", c("AC-29"), function() {
+  # the published formula (hce::sizeWR, the k-based coefficient of Yu and Ganju) against the simulated power at the size it gives
+  if (!requireNamespace("hce", quietly = TRUE)) return(list(pass = FALSE, detail = "hce (the cross-check package) is not installed"))
+  want_wr <- 1.5; want_ties <- 0.3
+  f <- hce::sizeWR(WR = want_wr, power = 0.8, Pties = want_ties, alpha = 0.05)
+  w <- (1 - want_ties) * want_wr / (1 + want_wr); l <- (1 - want_ties) / (1 + want_wr)
+  # one normal score with a threshold gives any pair of win and loss probabilities: solve for the shift and the threshold
+  g <- function(par) { s <- par[1]; th <- par[2]; c(1 - stats::pnorm((th - s) / sqrt(2)) - w, stats::pnorm((-th - s) / sqrt(2)) - l) }
+  best <- stats::optim(c(0.3, 0.3), function(par) sum(g(par)^2), method = "Nelder-Mead", control = list(reltol = 1e-14, abstol = 1e-16, maxit = 2000))
+  shift <- best$par[1]; thr <- abs(best$par[2])
+  n_each <- ceiling(f$SampleSize / 2)
+  sc <- list(design = list(nTreat = n_each, nControl = n_each, followup = 12), truth = list(death = list(controlRisk = 0.001, hazardRatio = 1), score = list(shift = shift, sd = 1, threshold = thr), correlation = 0),
+             analysis = list(alpha = 0.025, sided = 2))
+  sc$analysis$alpha <- 0.05
+  r <- vcr_job_design_win_ratio(list(scenario = sc, seed = 8761L, replicates = 700L, cores = vcr_cores(NULL), cpuSecondsLimit = 600))
+  pw <- Filter(function(x) identical(x$name, "power"), r$measures)[[1]]
+  cells <- r$diagnostics$winRatio$cells
+  list(pass = abs(cells$win_ratio$value - want_wr) < 0.06 && abs(cells$tie_proportion$value - want_ties) < 0.02 && abs(pw$value - 0.8) < 4 * pw$mcse + 0.1,
+       detail = sprintf("a win ratio of %.2f with %.0f%% ties (one score with a threshold: shift %.3f, threshold %.3f, simulated ratio %.3f, ties %.3f): hce::sizeWR gives %d people for 80%% power at two-sided 0.05; the simulation at that size gives %.3f (error %.3f), a gap of %+.3f from the formula's 0.80",
+                        want_wr, 100 * want_ties, shift, thr, cells$win_ratio$value, cells$tie_proportion$value, as.integer(f$SampleSize), pw$value, pw$mcse, pw$value - 0.8))
+})

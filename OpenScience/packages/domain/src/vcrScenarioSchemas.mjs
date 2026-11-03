@@ -506,6 +506,47 @@ const BAYESIAN_SCHEMA = object({
   }),
 })
 
+/**
+ * A hierarchical composite endpoint compared by win ratio (algorithm round T9, `design.win_ratio` 1.0.0): death first, then recurrent events
+ * (fewer is better) and a score (higher is better, with a threshold below which two people tie) when they are stated. The size of each arm
+ * gives the power; the power wanted, with no size, gives the size. Everybody is followed for the same time (`design.followup`) unless they die or
+ * leave (`dropoutAnnual`). One correlation links the three levels through a shared severity factor. Everything left out is a default the
+ * result lists as an assumption.
+ */
+const WIN_RATIO_SCHEMA = object({
+  design: req(object({
+    nTreat: integer({ min: 10, max: 1500, unit: 'patients', reqWhen: has('analysis.power', false) }),
+    nControl: integer({ min: 10, max: 1500, unit: 'patients', when: has('design.nTreat') }),
+    maxPerArm: gated(integer({ min: 10, max: 1500, default: 1000, unit: 'patients per arm' }), has('analysis.power')),
+    followup: req(number({ gt: 0, unit: 'time units' })),
+    dropoutAnnual: number({ min: 0, lt: 1, default: 0, unit: 'proportion per year' }),
+  })),
+  truth: req(object({
+    death: req(object({
+      hazardRatio: req(number({ gt: 0 })),
+      controlMedian: number({ gt: 0, unit: 'time units' }),
+      controlRisk: number({ gt: 0, lt: 1, unit: 'proportion dying within the follow-up' }),
+    }, { exactlyOne: [['controlMedian', 'controlRisk']] })),
+    events: object({
+      controlRate: req(number({ gt: 0, unit: 'events per person per time unit' })),
+      rateRatio: req(number({ gt: 0 })),
+      overdispersion: number({ min: 0, max: 5, default: 1 }),
+    }),
+    score: object({
+      shift: req(number({ unit: 'score units, treatment minus control, higher is better' })),
+      sd: number({ gt: 0, default: 1, unit: 'score units' }),
+      threshold: number({ min: 0, default: 0, unit: 'score units' }),
+    }),
+    correlation: number({ min: 0, max: 0.95, default: 0.3 }),
+  }, { atLeastOne: [['events', 'score']] })),
+  analysis: object({
+    alpha: ALPHA,
+    sided: integer({ min: 1, max: 2, default: 1 }),
+    power: number({ ...PROBABILITY }),
+  }),
+  timeUnit: string({ values: [...VCR_TIME_UNITS], default: VCR_DEFAULT_TIME_UNIT }),
+})
+
 const SIMULATE_FIELDS = {
   design: req(object(SIMULATED_DESIGN_FIELDS)),
   endpoint: req(ENDPOINT()),
@@ -1233,6 +1274,8 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
   'design.dose': DOSE_SCHEMA,
 
   'design.bayesian': BAYESIAN_SCHEMA,
+
+  'design.win_ratio': WIN_RATIO_SCHEMA,
 
   'design.grid': object({
     ...SIMULATE_FIELDS,
@@ -1995,6 +2038,25 @@ function checkDoseSemantics(scenario, path, ctx) {
 }
 
 /**
+ * The coupled fields of a win-ratio design (mirrored by protocol.R): a size and a power wanted are two ways to ask, never both (the size would be
+ * read and the power ignored), and the events level tracks at most 8 events per person on average.
+ * @param {any} scenario @param {string} path @param {WalkContext} ctx
+ */
+function checkWinRatioSemantics(scenario, path, ctx) {
+  const bad = (/** @type {string} */ field, /** @type {string} */ detail) => raise(ctx, 'scenario_value_invalid', at(path, field), detail)
+  const design = isObject(scenario?.design) ? scenario.design : {}
+  const analysis = isObject(scenario?.analysis) ? scenario.analysis : {}
+  if (design.nTreat !== undefined && design.nTreat !== null && analysis.power !== undefined && analysis.power !== null) {
+    bad('analysis.power', 'State the size of each arm to get the power, or the power wanted to get the size; not both.')
+  }
+  const events = scenario?.truth?.events
+  if (isObject(events) && typeof events.controlRate === 'number' && typeof events.rateRatio === 'number' && typeof design.followup === 'number'
+    && events.controlRate * design.followup * Math.max(1, events.rateRatio) > 8) {
+    bad('truth.events.controlRate', 'More than 8 events per person on average are not tracked by this method.')
+  }
+}
+
+/**
  * The coupled fields of a Bayesian design (mirrored by protocol.R): the alternative response rate is above the null rate, the looks fit the
  * size, a hazard-ratio margin is positive, and the rate a risk-difference margin leads to stays a rate.
  * @param {any} scenario @param {string} path @param {WalkContext} ctx
@@ -2167,6 +2229,7 @@ export function validateScenario(method, scenario, { inputIds = null, path = 'sc
   if (method === 'design.confirmatory') checkConfirmatorySemantics(scenario, path, ctx)
   if (method === 'design.dose') checkDoseSemantics(scenario, path, ctx)
   if (method === 'design.bayesian') checkBayesianSemantics(scenario, path, ctx)
+  if (method === 'design.win_ratio') checkWinRatioSemantics(scenario, path, ctx)
   if (method === 'design.analytic' || method === 'design.assurance') checkNoNonProportionalHazards(scenario, path, ctx)
   if (method === 'comparator.maic') checkMaicSemantics(scenario, path, ctx)
   if (method === 'accrual.poisson_gamma') checkAccrualSemantics(scenario, path, ctx)

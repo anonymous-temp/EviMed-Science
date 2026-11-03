@@ -415,6 +415,19 @@ export const VCR_SCENARIO_EXAMPLES = Object.freeze({
     { label: 'the same for two beta-binomial arms of 60 and a non-inferiority margin of 10 points on the risk difference', scenario: {
       design: { kind: 'threshold_calibration', nTreat: 60, nControl: 60, margin: -0.1 }, endpoint: { type: 'binary' }, truth: { controlRate: 0.3, treatmentRate: 0.3 } } },
   ],
+  'design.win_ratio': [
+    { label: 'death, then hospitalisations, then a score (KCCQ-like, 5 points matter, SD 20): 300 patients per arm followed for 24 months, the power of the win-ratio test', scenario: {
+      design: { nTreat: 300, nControl: 300, followup: 24, dropoutAnnual: 0.05 },
+      truth: { death: { controlRisk: 0.15, hazardRatio: 0.75 }, events: { controlRate: 0.04, rateRatio: 0.8 }, score: { shift: 4, sd: 20, threshold: 5 }, correlation: 0.3 },
+      analysis: { alpha: 0.025, sided: 1 } } },
+    { label: 'the same hierarchy: how many patients per arm for 90% power', scenario: {
+      design: { followup: 24, dropoutAnnual: 0.05 },
+      truth: { death: { controlRisk: 0.15, hazardRatio: 0.75 }, events: { controlRate: 0.04, rateRatio: 0.8 }, score: { shift: 4, sd: 20, threshold: 5 }, correlation: 0.3 },
+      analysis: { alpha: 0.025, power: 0.9 } } },
+    { label: 'death, then a score only, with no treatment effect on death or the score (the type I error)', scenario: {
+      design: { nTreat: 150, nControl: 150, followup: 12 },
+      truth: { death: { controlMedian: 60, hazardRatio: 1 }, score: { shift: 0, sd: 1 } }, analysis: { alpha: 0.025 } } },
+  ],
   'design.simulate': [
     { label: 'two-arm time-to-event with uniform accrual', scenario: {
       design: { kind: 'two_arm_fixed', nTreat: 150, nControl: 150 }, endpoint: { type: 'time_to_event' }, truth: { hazardRatio: 0.7, controlMedian: 12 },
@@ -707,6 +720,11 @@ const METHOD_NOTES = Object.freeze({
     'design.kind: bop2 (Bayesian optimal phase II) and predictive_monitoring are single-arm phase II designs for a response rate (truth.nullRate and truth.alternativeRate, a look every design.lookEvery patients up to design.maxN); threshold_calibration is the success rule "probability that the effect exceeds design.margin is above a threshold" for a two-arm trial under a conjugate prior (endpoint continuous with a known sd, time_to_event from the number of events, or binary with beta priors). Every number is exact: there is no simulation and no Monte-Carlo error.',
     'bop2 and predictive_monitoring return the stopping table (futility when the responses so far are at or below a count; success at the end at a count or more), the type I error, power and expected size under both rates, and Simon\'s optimal and minimax designs at the same alpha and power as the baseline: report the saving as the difference of two numbers the result carries. design.objective is max_power (the published BOP2 choice) or min_expected_n (the fewest expected patients under the null among the designs that keep alpha and reach the power): say which was used. alpha defaults to 0.05 and power to 0.8 for these two; the prior of the response rate is Beta(p0, 1 - p0) unless design.prior states one. State bop2.lambda and bop2.gamma, or predictive.final, to evaluate a design instead of searching. At most 60 looks (maxN / lookEvery); Simon\'s design is searched up to 100 patients, and left out of the result beyond that.',
     'threshold_calibration returns three rows: the threshold you stated (if any), the conventional 1 - alpha, and the calibrated threshold that makes the type I error the level (for a binary endpoint the discrete type I error is a step function, so the calibrated threshold is the smallest that keeps it at or below alpha, with the achieved level). The effect is positive when the treatment is better: a difference of means, a risk difference, or (time to event) a hazard ratio below design.margin (default 1). design.priorEffect is a normal prior on the effect (a log hazard ratio for time to event); left out, the prior is flat. alpha defaults to 0.025.',
+  ]),
+  'design.win_ratio': Object.freeze([
+    'A hierarchical composite compared pair by pair: death first (truth.death: hazardRatio and either controlMedian or controlRisk, the proportion of control patients who die within the follow-up), then the number of events such as hospitalisations (truth.events: controlRate per person per time unit, rateRatio, overdispersion), then a score (truth.score: shift = treatment minus control at the end of follow-up, higher is better, sd, and threshold: a difference up to it is a tie). Death is required and at least one of events and score. The levels are compared in that order and a pair is decided at the first level that separates it; the rest are ties.',
+    'State design.nTreat (and nControl, default equal) to get the power of the win-ratio test, or analysis.power to get the size of each arm (one patient count for both, searched by simulation; design.maxPerArm stops the search, default 1000, at most 1500): not both. The result carries the win ratio (wins over losses, with the range one trial of this size shows), the win difference, the win odds and the proportion of ties, and by level the share of pairs won, lost and left tied. Report the ties and the win difference beside the ratio. Everyone is followed for design.followup unless they die or leave (dropoutAnnual); alpha one-sided 0.025.',
+    'The three levels are linked by one correlation (truth.correlation, default 0.3: a sicker patient dies earlier, has more events and a lower score). The events level takes that link through overdispersion (default 1), so without overdispersion it is independent of the others. Defaults the engine takes are returned in winRatio.assumed: report each one as an assumption. A formula for the power of a win ratio can differ from the simulation by ten points; this is the simulation. A stopped run (the CPU budget) is returned as limited with the trials that ran. Do not recompute any number of the result.',
   ]),
   'design.simulate': Object.freeze([
     HYPOTHESIS_NOTE,

@@ -386,6 +386,17 @@
       ],
       "modelTier": "scenario"
     },
+    "design.win_ratio": {
+      "version": "1.0.0",
+      "endpoints": [],
+      "crossChecks": [
+        "hce (calcWO): the wins, losses, ties and win odds of the same uncensored patients on the single scale of ranks it takes",
+        "exact win, loss and tie probabilities of independent levels (exponential deaths, negative-binomial counts, a normal score with a threshold) against the simulated proportions",
+        "a pair-by-pair loop in plain R, written apart from the engine, on patients who drop out (the three levels, to the last pair)",
+        "the permutation variance of the Finkelstein-Schoenfeld statistic from relabelling the arms in plain R"
+      ],
+      "modelTier": "scenario"
+    },
     "design.grid": {
       "version": "1.4.0",
       "endpoints": [
@@ -712,7 +723,8 @@
     "effect_shrinkage": "evidence.shrinkage",
     "target_trial_emulation": "comparator.target_trial",
     "design_dose": "design.dose",
-    "design_bayesian": "design.bayesian"
+    "design_bayesian": "design.bayesian",
+    "design_win_ratio": "design.win_ratio"
   },
   "patientLevelJobKinds": [
     "fit_survival_model",
@@ -9546,6 +9558,183 @@
         }
       }
     },
+    "design.win_ratio": {
+      "t": "object",
+      "fields": {
+        "design": {
+          "t": "object",
+          "fields": {
+            "nTreat": {
+              "t": "integer",
+              "min": 10,
+              "max": 1500,
+              "unit": "patients",
+              "reqWhen": {
+                "path": "analysis.power",
+                "present": false
+              }
+            },
+            "nControl": {
+              "t": "integer",
+              "min": 10,
+              "max": 1500,
+              "unit": "patients",
+              "when": {
+                "path": "design.nTreat",
+                "present": true
+              }
+            },
+            "maxPerArm": {
+              "t": "integer",
+              "min": 10,
+              "max": 1500,
+              "default": 1000,
+              "unit": "patients per arm",
+              "when": {
+                "path": "analysis.power",
+                "present": true
+              }
+            },
+            "followup": {
+              "t": "number",
+              "gt": 0,
+              "unit": "time units",
+              "req": true
+            },
+            "dropoutAnnual": {
+              "t": "number",
+              "min": 0,
+              "lt": 1,
+              "default": 0,
+              "unit": "proportion per year"
+            }
+          },
+          "req": true
+        },
+        "truth": {
+          "t": "object",
+          "fields": {
+            "death": {
+              "t": "object",
+              "fields": {
+                "hazardRatio": {
+                  "t": "number",
+                  "gt": 0,
+                  "req": true
+                },
+                "controlMedian": {
+                  "t": "number",
+                  "gt": 0,
+                  "unit": "time units"
+                },
+                "controlRisk": {
+                  "t": "number",
+                  "gt": 0,
+                  "lt": 1,
+                  "unit": "proportion dying within the follow-up"
+                }
+              },
+              "exactlyOne": [
+                [
+                  "controlMedian",
+                  "controlRisk"
+                ]
+              ],
+              "req": true
+            },
+            "events": {
+              "t": "object",
+              "fields": {
+                "controlRate": {
+                  "t": "number",
+                  "gt": 0,
+                  "unit": "events per person per time unit",
+                  "req": true
+                },
+                "rateRatio": {
+                  "t": "number",
+                  "gt": 0,
+                  "req": true
+                },
+                "overdispersion": {
+                  "t": "number",
+                  "min": 0,
+                  "max": 5,
+                  "default": 1
+                }
+              }
+            },
+            "score": {
+              "t": "object",
+              "fields": {
+                "shift": {
+                  "t": "number",
+                  "unit": "score units, treatment minus control, higher is better",
+                  "req": true
+                },
+                "sd": {
+                  "t": "number",
+                  "gt": 0,
+                  "default": 1,
+                  "unit": "score units"
+                },
+                "threshold": {
+                  "t": "number",
+                  "min": 0,
+                  "default": 0,
+                  "unit": "score units"
+                }
+              }
+            },
+            "correlation": {
+              "t": "number",
+              "min": 0,
+              "max": 0.95,
+              "default": 0.3
+            }
+          },
+          "atLeastOne": [
+            [
+              "events",
+              "score"
+            ]
+          ],
+          "req": true
+        },
+        "analysis": {
+          "t": "object",
+          "fields": {
+            "alpha": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "default": 0.025
+            },
+            "sided": {
+              "t": "integer",
+              "min": 1,
+              "max": 2,
+              "default": 1
+            },
+            "power": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1
+            }
+          }
+        },
+        "timeUnit": {
+          "t": "string",
+          "values": [
+            "days",
+            "weeks",
+            "months",
+            "years"
+          ],
+          "default": "months"
+        }
+      }
+    },
     "design.grid": {
       "t": "object",
       "fields": {
@@ -12020,7 +12209,8 @@
     "effect_shrinkage",
     "target_trial_emulation",
     "design_dose",
-    "design_bayesian"
+    "design_bayesian",
+    "design_win_ratio"
   ],
   "endpointTypes": [
     "continuous",

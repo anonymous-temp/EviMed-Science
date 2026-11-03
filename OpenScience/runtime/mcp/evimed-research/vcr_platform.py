@@ -117,7 +117,7 @@ JOB_KINDS = ("fit_survival_model", "apply_prognostic_model",
     # target-trial emulation from a person-period table: a sequence of trials and clone-censor-weight (2026-11-03)
     "target_trial_emulation",
     # dose-finding designs and Bayesian designs without MCMC (2026-11-03)
-    "design_dose", "design_bayesian",
+    "design_dose", "design_bayesian", "design_win_ratio",
     # the batch reading of patient records for the criteria's facts (2026-11-01)
     "match_extract",
     "forecast_trajectories", "evaluate_forecast", "compare_forecasts", "benchmark_trial_effect",

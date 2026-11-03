@@ -46,6 +46,7 @@
     "target_trial_emulation": {"method":"comparator.target_trial"},
     "design_dose": {"method":"design.dose"},
     "design_bayesian": {"method":"design.bayesian"},
+    "design_win_ratio": {"method":"design.win_ratio"},
     "match_extract": {"method":"matching.extract","platformBuilt":[]},
     "forecast_trajectories": {"method":"forecast.trajectories"},
     "evaluate_forecast": {"method":"forecast.evaluate"},
@@ -3673,6 +3674,100 @@
         {
           "label": "the same for two beta-binomial arms of 60 and a non-inferiority margin of 10 points on the risk difference",
           "scenario": {"design":{"kind":"threshold_calibration","nTreat":60,"nControl":60,"margin":-0.1},"endpoint":{"type":"binary"},"truth":{"controlRate":0.3,"treatmentRate":0.3}}
+        }
+      ]
+    },
+    "design.win_ratio": {
+      "endpoints": [],
+      "notes": [
+        "A hierarchical composite compared pair by pair: death first (truth.death: hazardRatio and either controlMedian or controlRisk, the proportion of control patients who die within the follow-up), then the number of events such as hospitalisations (truth.events: controlRate per person per time unit, rateRatio, overdispersion), then a score (truth.score: shift = treatment minus control at the end of follow-up, higher is better, sd, and threshold: a difference up to it is a tie). Death is required and at least one of events and score. The levels are compared in that order and a pair is decided at the first level that separates it; the rest are ties.",
+        "State design.nTreat (and nControl, default equal) to get the power of the win-ratio test, or analysis.power to get the size of each arm (one patient count for both, searched by simulation; design.maxPerArm stops the search, default 1000, at most 1500): not both. The result carries the win ratio (wins over losses, with the range one trial of this size shows), the win difference, the win odds and the proportion of ties, and by level the share of pairs won, lost and left tied. Report the ties and the win difference beside the ratio. Everyone is followed for design.followup unless they die or leave (dropoutAnnual); alpha one-sided 0.025.",
+        "The three levels are linked by one correlation (truth.correlation, default 0.3: a sicker patient dies earlier, has more events and a lower score). The events level takes that link through overdispersion (default 1), so without overdispersion it is independent of the others. Defaults the engine takes are returned in winRatio.assumed: report each one as an assumption. A formula for the power of a win ratio can differ from the simulation by ten points; this is the simulation. A stopped run (the CPU budget) is returned as limited with the trials that ran. Do not recompute any number of the result."
+      ],
+      "rows": [
+        {"path":"design","type":"object","required":true},
+        {
+          "path": "design.nTreat",
+          "type": "integer",
+          "min": 10,
+          "max": 1500,
+          "unit": "patients",
+          "requiredWhen": [{"path":"analysis.power","present":false}],
+          "fieldRole": "research_fact"
+        },
+        {"path":"design.nControl","type":"integer","min":10,"max":1500,"unit":"patients","when":[{"path":"design.nTreat","present":true}],"fieldRole":"defaultable"},
+        {
+          "path": "design.maxPerArm",
+          "type": "integer",
+          "min": 10,
+          "max": 1500,
+          "unit": "patients per arm",
+          "default": 1000,
+          "when": [{"path":"analysis.power","present":true}],
+          "fieldRole": "defaultable"
+        },
+        {"path":"design.followup","type":"number","gt":0,"unit":"time units","required":true,"fieldRole":"research_fact"},
+        {"path":"design.dropoutAnnual","type":"number","min":0,"lt":1,"unit":"proportion per year","default":0,"fieldRole":"defaultable"},
+        {"path":"truth","type":"object","required":true},
+        {"path":"truth.death","type":"object","required":true},
+        {"path":"truth.death.hazardRatio","type":"number","gt":0,"required":true,"fieldRole":"research_fact"},
+        {"path":"truth.death.controlMedian","type":"number","gt":0,"unit":"time units","fieldRole":"research_fact"},
+        {"path":"truth.death.controlRisk","type":"number","gt":0,"lt":1,"unit":"proportion dying within the follow-up","fieldRole":"research_fact"},
+        {"path":"truth.events","type":"object"},
+        {
+          "path": "truth.events.controlRate",
+          "type": "number",
+          "gt": 0,
+          "unit": "events per person per time unit",
+          "required": true,
+          "within": "truth.events",
+          "fieldRole": "research_fact"
+        },
+        {"path":"truth.events.rateRatio","type":"number","gt":0,"required":true,"within":"truth.events","fieldRole":"research_fact"},
+        {"path":"truth.events.overdispersion","type":"number","min":0,"max":5,"default":1,"within":"truth.events","fieldRole":"defaultable"},
+        {"path":"truth.score","type":"object"},
+        {
+          "path": "truth.score.shift",
+          "type": "number",
+          "unit": "score units, treatment minus control, higher is better",
+          "required": true,
+          "within": "truth.score",
+          "fieldRole": "research_fact"
+        },
+        {"path":"truth.score.sd","type":"number","gt":0,"unit":"score units","default":1,"within":"truth.score","fieldRole":"defaultable"},
+        {"path":"truth.score.threshold","type":"number","min":0,"unit":"score units","default":0,"within":"truth.score","fieldRole":"defaultable"},
+        {"path":"truth.correlation","type":"number","min":0,"max":0.95,"default":0.3,"fieldRole":"defaultable"},
+        {"path":"analysis","type":"object"},
+        {"path":"analysis.alpha","type":"number","gt":0,"lt":1,"default":0.025,"within":"analysis","fieldRole":"defaultable"},
+        {"path":"analysis.sided","type":"integer","min":1,"max":2,"default":1,"within":"analysis","fieldRole":"defaultable"},
+        {"path":"analysis.power","type":"number","gt":0,"lt":1,"within":"analysis","fieldRole":"defaultable"},
+        {"path":"timeUnit","type":"string","values":["days","weeks","months","years"],"default":"months","fieldRole":"defaultable"}
+      ],
+      "rules": [{"kind":"exactlyOne","keys":["truth.death.controlMedian","truth.death.controlRisk"]},{"kind":"atLeastOne","keys":["truth.events","truth.score"]}],
+      "examples": [
+        {
+          "label": "death, then hospitalisations, then a score (KCCQ-like, 5 points matter, SD 20): 300 patients per arm followed for 24 months, the power of the win-ratio test",
+          "scenario": {
+            "design": {"nTreat":300,"nControl":300,"followup":24,"dropoutAnnual":0.05},
+            "truth": {"death":{"controlRisk":0.15,"hazardRatio":0.75},"events":{"controlRate":0.04,"rateRatio":0.8},"score":{"shift":4,"sd":20,"threshold":5},"correlation":0.3},
+            "analysis": {"alpha":0.025,"sided":1}
+          }
+        },
+        {
+          "label": "the same hierarchy: how many patients per arm for 90% power",
+          "scenario": {
+            "design": {"followup":24,"dropoutAnnual":0.05},
+            "truth": {"death":{"controlRisk":0.15,"hazardRatio":0.75},"events":{"controlRate":0.04,"rateRatio":0.8},"score":{"shift":4,"sd":20,"threshold":5},"correlation":0.3},
+            "analysis": {"alpha":0.025,"power":0.9}
+          }
+        },
+        {
+          "label": "death, then a score only, with no treatment effect on death or the score (the type I error)",
+          "scenario": {
+            "design": {"nTreat":150,"nControl":150,"followup":12},
+            "truth": {"death":{"controlMedian":60,"hazardRatio":1},"score":{"shift":0,"sd":1}},
+            "analysis": {"alpha":0.025}
+          }
         }
       ]
     },
