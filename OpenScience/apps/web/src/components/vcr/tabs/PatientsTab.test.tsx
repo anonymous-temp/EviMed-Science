@@ -257,6 +257,29 @@ describe("虚拟患者 · the charts", () => {
     expect(container.querySelector("[data-vcr-legend-band]")).toHaveTextContent("80% 预测区间");
   });
 
+  it("draws every panel the result carries, not only the first: a longitudinal result's estimand panel stands beside the arms panel", async () => {
+    const raw = fixture("ev201/patients.json");
+    const value = (n: number, unit: string | null) => ({ value: n, text: null, unit, source: "predicted", interval: null, mcse: null, review: "ai_set", precision: null, reason: null, stale: false, detail: null });
+    raw.panels = [
+      { key: "arms", title: "两组的生成结果", kind: "binary", note: "情景仿真生成，非观察", rows: [{ label: "试验组人数", value: value(150, "人") }], series: [], footnote: null },
+      {
+        key: "estimands", title: "按不同的估计目标，末次随访的效应", kind: "binary", note: "两种估计目标的真值是已知的",
+        rows: [
+          { label: "假想策略（假如没有救援药）：末次随访两组均值之差", value: value(-2.4, null) },
+          { label: "假想策略（假如没有救援药）：每组需要的人数（90% 把握，单侧 2.5%）", value: value(412, "人") },
+        ],
+        series: [], footnote: null,
+      },
+    ];
+    installVcrServer(network.productRequest, { [tab("patients")]: raw });
+    const { container } = draw();
+    await found(container, '[data-vcr-panel-row="试验组人数"]');
+    expect(screen.getByRole("heading", { name: "两组的生成结果" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "按不同的估计目标，末次随访的效应" })).toBeInTheDocument();
+    expect(container.querySelector('[data-vcr-panel-row="假想策略（假如没有救援药）：末次随访两组均值之差"]')).toHaveTextContent("-2.4");
+    expect(container.querySelector('[data-vcr-panel-row="假想策略（假如没有救援药）：每组需要的人数（90% 把握，单侧 2.5%）"]')).toHaveTextContent("412人");
+  });
+
   it("draws a spread nobody named as no band at all: an unnamed range is not an interval", async () => {
     const raw = fixture("ev201/patients.json");
     for (const line of raw.trajectories.series) { line.bandKind = null; line.bandLevel = null; }

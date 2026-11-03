@@ -25,7 +25,7 @@ function translateUnit(unit: string | undefined, method: string, root: Root): st
   if (!unit) return undefined;
   const time = timeUnit(method, root);
   return ({ "time units": time, "per time unit": `每${time}`, "outcome units": "结局原单位", "outcome units per time unit": `结局原单位／${time}`,
-    "proportion per year": "每年比例", "probability of leaving before each follow-up visit": "每次随访前退出概率", "log hazard ratio": "对数 HR", "link scale": "链接函数尺度", "the outcome's own scale": "结局原尺度", proportion: "比例", "per month": "每月" } as Record<string, string>)[unit] ?? unit;
+    "proportion per year": "每年比例", "probability of leaving before each follow-up visit": "每次随访前退出概率", "probability of starting rescue before each follow-up visit": "每次随访前开始用药的概率", "change in the log-odds of leaving per standard deviation of the outcome": "对数优势比变化／结局标准差", "change in the log-odds of starting rescue per standard deviation of the previous value": "对数优势比变化／此前值的标准差", "log hazard ratio": "对数 HR", "link scale": "链接函数尺度", "the outcome's own scale": "结局原尺度", proportion: "比例", "per month": "每月" } as Record<string, string>)[unit] ?? unit;
 }
 /** The win-ratio design's own fields: a name the shared vocabulary would leave as a raw key, or give another meaning (`events` here is a level, `correlation` one number). */
 const winRatioFields: Record<string, [label: string, unit?: string]> = {
@@ -43,6 +43,20 @@ const winRatioFields: Record<string, [label: string, unit?: string]> = {
   "truth.score.sd": ["评分标准差", "评分单位"],
   "truth.score.threshold": ["平局阈值（相差不超过它算平局）", "评分单位"],
   "truth.correlation": ["三层之间的相关"],
+};
+/** The longitudinal generator's three optional objects (a curve that bends, a dropout that depends on the outcome, a rescue medication): the shared vocabulary has no words for them. */
+const longitudinalFields: Record<string, string> = {
+  trajectory: "病程曲线形状",
+  "trajectory.kind": "曲线类型",
+  "trajectory.halfTime": "趋平：达到一半变化所需的时间",
+  "trajectory.curvature": "二次项系数",
+  dropoutModel: "脱落与结局的关系",
+  "dropoutModel.mechanism": "脱落看哪个值",
+  "dropoutModel.logOddsPerSd": "结局每高 1 个标准差，脱落的对数优势比变化",
+  rescue: "救援用药",
+  "rescue.perVisit": "每次访视前开始用药的概率",
+  "rescue.effect": "开始用药后结局的变化",
+  "rescue.logOddsPerSd": "此前的值每高 1 个标准差，开始用药的对数优势比变化",
 };
 /** Presentation only: the domain remains the owner of units, ranges, defaults and validation.
  * Symbols get a scientific meaning only where the method and full field path establish it.
@@ -112,6 +126,9 @@ export function methodFieldText(method: string, path: string, field: Field, root
   if (method === "patients.longitudinal" && normalized === "truth.effect") label = "干预对结局变化速率的效应";
   if (method === "patients.longitudinal" && normalized === "truth.sd") label = "纵向结局残差标准差";
   if (normalized === "analysis.sd") label = "Z 检验所用已知总体标准差";
+  if (method === "patients.longitudinal" && Object.hasOwn(longitudinalFields, normalized)) label = longitudinalFields[normalized];
+  // The weight cap of the modestly weighted log-rank test: the weight is 1 / max(S, s*), so s* is the reciprocal of the largest weight.
+  if ((method === "design.simulate" || method === "design.grid") && key === "sStar") label = "权重上限的倒数";
   if (method === "design.win_ratio" && Object.hasOwn(winRatioFields, normalized)) {
     const [name, unit] = winRatioFields[normalized];
     label = name;

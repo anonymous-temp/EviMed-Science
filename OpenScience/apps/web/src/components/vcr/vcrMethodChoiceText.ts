@@ -25,7 +25,7 @@ const labels: Record<string, string> = {
   identity: "原始尺度", log: "对数尺度", logit: "Logit 尺度", km: "Kaplan–Meier 变换", rank: "秩变换",
   hazard_ratio: "瞬时风险比（HR）", odds_ratio: "优势比（OR）", risk_ratio: "风险比值（RR）", risk_difference: "风险差",
   log_hazard_ratio: "对数瞬时风险比（log HR）", log_odds_ratio: "对数优势比（log OR）", log_risk_ratio: "对数风险比值（log RR）",
-  logistic: "Logistic 回归", logrank: "Log-rank 检验", maxcombo: "MaxCombo 检验（四个加权 Log-rank 取最大）", rmst: "限制平均生存时间（RMST）", ttest: "两样本 t 检验",
+  logistic: "Logistic 回归", logrank: "Log-rank 检验", maxcombo: "MaxCombo 检验（四个加权 Log-rank 取最大）", modestly_weighted: "改良加权 Log-rank 检验（延迟起效时的折中选择）", rmst: "限制平均生存时间（RMST）", ttest: "两样本 t 检验",
   one_sample_t: "单样本 t 检验", one_sample_z: "单样本 Z 检验", one_sample_logrank: "单样本 Log-rank 检验",
   simon_boundary: "Simon 两阶段界值", stratified_beta_binomial: "分层 Beta-二项模型", stratified_risk_difference: "分层风险差",
   both_opposite: "两组施加相反方向的倍数", two_arm: "两组比较", subject: "每人一行",
@@ -53,6 +53,11 @@ const ruleLabels: Record<string, string> = {
   all: "满足全部条件", any: "至少满足一项", not: "不满足", compare: "比较", between: "处于范围内", in: "属于指定值", not_in: "不属于指定值", missing: "值缺失", present: "值存在",
   lt: "小于（<）", lte: "小于或等于（≤）", gt: "大于（>）", gte: "大于或等于（≥）", eq: "等于（=）", ne: "不等于（≠）",
 };
+/** Words read only at their own path, because the same short word means something else elsewhere: the shape of a mean curve, and which value a dropout looks at. */
+const pathLabels: Record<string, Record<string, string>> = {
+  "patients.longitudinal:trajectory.kind": { plateau: "逐渐趋平", quadratic: "二次曲线" },
+  "patients.longitudinal:dropoutModel.mechanism": { mar: "随机缺失（看上一次的值）", mnar: "非随机缺失（看这次的值）" },
+};
 const normalize = (path: string) => path.replace(/\[\d+\]/g, "[]");
 const allowed = new Map<string, Set<string>>();
 function collect(method: string, node: Schema, path = "") {
@@ -76,6 +81,8 @@ for (const [method, schema] of Object.entries(VCR_SCENARIO_SCHEMAS)) collect(met
 export function methodChoiceLabel(method: string, path: string, value: string): string {
   const at = normalize(path);
   if (!allowed.get(`${method}:${at}`)?.has(value)) return value;
+  const own = pathLabels[`${method}:${at}`]?.[value];
+  if (own) return own;
   if (at === "accrual.kind") return value === "uniform" ? "匀速入组" : value === "piecewise" ? "分段入组" : labels[value] ?? value;
   if (value === "identity") return at === "phTransform" ? "原始时间" : at === "link" ? "恒等链接" : "原始尺度";
   if (at === "link" && value === "log") return "对数链接";
@@ -119,7 +126,8 @@ const exampleLabels: Record<string, Record<string, string>> = {
     "a time-to-event endpoint with uniform accrual": "生存结局与均匀入组"
   },
   "patients.longitudinal": {
-    "a continuous trajectory over five visits, random intercept and slope, 10% leaving per visit": "五次访视与每次 10% 脱落"
+    "a continuous trajectory over five visits, random intercept and slope, 10% leaving per visit": "五次访视与每次 10% 脱落",
+    "the same, with dropout that depends on the previous value (people doing worse leave sooner), a rescue medication that 6% start before each visit and a trajectory that levels off": "同样的五次访视，再加上与上一次的值有关的脱落（越差越早退出）、每次访视前 6% 的人开始救援用药、病程逐渐趋平"
   },
   "evidence.pool": {
     "two published log hazard ratios": "合并研究的对数 HR",
@@ -200,6 +208,8 @@ const exampleLabels: Record<string, Record<string, string>> = {
     "two-arm time-to-event with uniform accrual": "两组生存结局与均匀入组",
     "two-arm binary: no accrual": "两组二分类结局",
     "a delayed treatment effect (hazard ratio 1 for 6 months, 0.6 after) analysed by MaxCombo: simulation only": "延迟起效（前 6 个月 HR 为 1，之后 0.6）用 MaxCombo 分析，仅仿真",
+    "a delayed treatment effect analysed by MaxCombo at three looks (O'Brien-Fleming spending): the boundaries are found by simulation under no effect": "延迟起效、分三次中期分析，用 MaxCombo 检验（边界用无效应情形的模拟得到）",
+    "a delayed treatment effect (hazard ratio 1 for 6 months, 0.6 after) analysed by the modestly weighted test, the log-rank power reported beside it": "延迟起效（前 6 个月 HR 为 1，之后 0.6）用改良加权 Log-rank 检验分析，并列出普通 Log-rank 的功效",
     "single arm, continuous: 40 patients against a historical mean of 50, one-sample t": "单臂连续：40 人与历史均值 50",
     "single arm, time to event: 60 patients against a benchmark median of 12, one-sample log-rank": "单臂生存：60 人与中位时间 12"
   },

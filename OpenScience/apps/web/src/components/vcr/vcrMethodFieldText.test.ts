@@ -54,6 +54,29 @@ describe("method-context scientific field meanings", () => {
       if (row.path.startsWith("truth.")) expect(text("design.win_ratio", row.path, {}, row.unit).label, row.path).toMatch(/[\u3400-\u9fff]/);
     }
   });
+  it("words the modestly weighted test's weight cap and the longitudinal generator's curve, dropout and rescue objects", () => {
+    for (const method of ["design.simulate", "design.grid"]) {
+      const cap = vcrScenarioRows(method).rows.find((row) => row.path.endsWith("analysis.sStar"));
+      expect(cap, method).toBeDefined();
+      const shown = text(method, cap?.path ?? "", {}, cap?.unit);
+      expect(shown.label).toBe("权重上限的倒数");
+      expect(shown.unit).toBeUndefined();
+    }
+    expect(text("patients.longitudinal", "trajectory").label).toBe("病程曲线形状");
+    expect(text("patients.longitudinal", "dropoutModel").label).toBe("脱落与结局的关系");
+    expect(text("patients.longitudinal", "rescue").label).toBe("救援用药");
+    expect(text("patients.longitudinal", "trajectory.halfTime", {}, "time units")).toMatchObject({ label: "趋平：达到一半变化所需的时间", unit: "所设时间单位" });
+    expect(text("patients.longitudinal", "rescue.perVisit", {}, "probability of starting rescue before each follow-up visit").unit).toBe("每次随访前开始用药的概率");
+    // Every new row has Chinese words and no unit is left in English.
+    for (const row of vcrScenarioRows("patients.longitudinal").rows) {
+      if (!/^(trajectory|dropoutModel|rescue)(\.|$)/.test(row.path)) continue;
+      const shown = text("patients.longitudinal", row.path, {}, row.unit);
+      expect(shown.label, row.path).toMatch(/[\u3400-\u9fff]/);
+      if (shown.unit) expect(shown.unit, row.path).toMatch(/[\u3400-\u9fff]/);
+    }
+    // The same key on another method keeps its own words.
+    expect(text("design.analytic", "rescue").label).toBe("原标签");
+  });
   it("audits every supported schema: significance labels occur only at test-alpha paths and canonical units remain visible", () => {
     for (const method of Object.keys(VCR_SCENARIO_SCHEMAS)) {
       for (const row of vcrScenarioRows(method).rows) {
