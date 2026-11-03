@@ -65,7 +65,7 @@ A single recorded arm is a benchmark, not a comparison. For a receipt containing
 
 先按 ICH E10 的四个条件判断外部对照是否适宜（效应远大于自然变异、终点客观、病程可预测、预后因素已知可得），再逐项过 FDA 外部对照草案的十个可比性维度。估计目标默认 `ATT`；换成 `ATE` 或 `ATO` 必须写明理由——加权改变的是"这个效应是对谁说的"。
 
-外部对照按设计里写明的 `method` 走，平台不替你换：`weighted_cox`（事件时间终点）出加权风险比，自助法与稳健区间并列，附等比例风险检验，不成比例时 RMST 差并排；`aipw`（连续或二分类，只估 `ATT`）出双重稳健效应差；`covariateSets` 写 2–8 组事先声明的协变量集（不再写 `covariates`），逐组重算，给出范围，不可估计的组照实列出。文献对照 `maic` 遇事件时间终点，比较臂由平台重建的伪个体数据提供：非锚定写一条 `curve`，锚定写 `curve` 加 `treatmentArm`，或写已发表的风险比对数 `aggregateEstimate` 与 `aggregateSe`；非锚定的结论永远是"有限制"。
+外部对照按设计里写明的 `method` 走，平台不替你换：`weighted_cox`（事件时间终点）出加权风险比，自助法与稳健区间并列，附等比例风险检验，不成比例时 RMST 差并排；`aipw`（连续、二分类或事件时间终点，只估 `ATT`）出双重稳健效应差；`covariateSets` 写 2–8 组事先声明的协变量集（不再写 `covariates`），逐组重算，给出范围，不可估计的组照实列出。文献对照 `maic` 遇事件时间终点，比较臂由平台重建的伪个体数据提供：非锚定写一条 `curve`，锚定写 `curve` 加 `treatmentArm`，或写已发表的风险比对数 `aggregateEstimate` 与 `aggregateSe`；非锚定的结论永远是"有限制"。
 
 设计里还可以声明三种稳健性分析，平台按声明规划，不按文字猜。`negativeControls` 列出"治疗不可能影响的结局"：每项写 `name` 和 `column`（研究数据表里的 0/1 事件列；自己写的估计值或计数不进研究计划，结果里的数字只来自引擎对授权数据的计算）。每个对照走与主分析同一套加权（可选 `effectScale`：`log_risk_ratio` 或 `log_odds_ratio`），出逐项的偏倚筛查与经验零分布；二分类主终点写了 `outcomeColumn` 时它就是要校准的主要效应；可估计的对照不足 30 个就只列筛查、不校准，也从不给"校准区间"。`tippingPoint` 压力测试缺失结局：二分类写 `design`、`outcomeColumn`、`analysis`，事件时间写 `horizon` 与 `deltas`，报告使结论翻转的最近缺失组合或偏移倍数，翻不翻都照实说。路线 `prognostic_adjustment` 遇二分类或事件时间终点，写 `prognosticScoreColumn`（事先定好的预后评分，连续终点仍是 PROCOVA 的设计期计算），出边际效应；目前没有监管机构认可这种校正用于二分类或事件时间终点，页面会写明这一句，你转述时也要说，不要把它说成已认可的主分析。
 
@@ -78,3 +78,9 @@ A single recorded arm is a benchmark, not a comparison. For a receipt containing
 **结果有四类：可估计、有限制地估计、仅基准、不可估计。** 只重建了一条文献曲线、非锚定的 MAIC 和模型的预测给出的是基准，不是治疗效应的估计，平台标「仅基准」，用途最高到研究设计支持；你转述时不要把它说成疗效。MAIC 的页面会列出目标人群（对方试验已发表的汇总人群）和你没有调整的效应修饰因子，所以 `unadjustedEffectModifiers` 要如实列全；非锚定的页面固定写一句「残余误差大小未知」。
 
 **加权 Cox、二分类的加权风险比和 AIPW 的风险比出来之后，平台自动再算 E 值和它的置信限**，页面列在「未测量的混杂」里。已经有估计值和置信限、只想问「要多强的未测量混杂才能解释掉它」时，直接 `vcr_simulate` start、kind `evalue`，场景里写 `riskRatio`、`confidenceLimit`、`scale`（不必先写对照设计）。转述时说成「未测量的混杂要和处理、结局各有这么强的关联，才能解释掉这个结果」，不要说「没有偏倚」；阴性对照结局为零也只是「未发现偏倚迹象」，不是没有偏倚。凡是有治疗和结局个体数据的估计，在交付里提议加阴性对照结局：这要真实的列，所以问研究者一句有没有「治疗不可能影响」的结局列；没有也照交，E 值照给。
+
+**重叠不足时的修剪（`trim`），和事件时间的双重稳健估计。** 加权、倾向评分加权的加权 Cox 和 `aipw` 都可以在场景里写 `trim`：`{ rule: "crump" }` 用 Crump 的最优规则，不需要你给数；`{ rule: "fixed", lower: 0.1 }` 是研究者自己定的倾向评分界值（上界默认 1 − lower）。修剪换掉的是“结论是对谁说的”：去掉的是没有可比对象的人，结果列出每组去掉多少人、他们和留下的人有什么不同，并标「有限制」。你转述时要说“结论只适用于留下的人”，不要为了让结果显著去挑界值。`aipw` 也接事件时间终点：写 `endpoint.type` 为 `time_to_event`、`tau`（视野）和 `summary`（`rmst` 是到 tau 的限制平均生存时间，`survival` 是 tau 时点的生存率），事件时间照常来自事件表；它假定每组内删失与协变量无关，页面写出这个前提，你转述时也要说。
+
+**偏倚分析（kind `bias_analysis`）回答“未测混杂要造成多大的偏移，结论才翻”。** 已经有一个对照的结果时，`vcr_simulate` start、kind `bias_analysis`，`subjectId` 写这个对照，场景里不写估计值：平台从它的结果里取效应和区间，你不要把数字抄进场景。只有一个已发表的估计时，场景里写 `scale`（`hazard_ratio`、`risk_ratio`、`odds_ratio` 或 `difference`）、`estimate` 和 `lower`、`upper`（或 `se`），它自成一份对照。什么都不加，就得到使区间碰到无效线的偏倚倍数；再按对方想知道的加：`shiftedNull { biases }`（偏倚真有这么大，效应还站得住吗），`confounderTipping`（多不均衡、多强的混杂才能翻；强度默认取 1.5、2、3、5），`probabilistic`（对方给出偏倚或混杂的范围，算校正后的估计和区间，含模拟误差）。偏倚的范围是研究者的或文献里的：向他要，或去读，不要自己编；这里的偏倚一律是“把效应夸大的偏倚”。转述时说“要多大的偏倚才翻”，不说“没有偏倚”。E 值只回答“要多强”，这里是再往上的两层，页面把它们分开写，也和缺失结局的临界点分析分开。
+
+**只有一方有个体数据时，除了 MAIC，还可以做模拟治疗比较（kind `stc_comparator`，G 计算形式）。** 个体数据是一个试验（锚定时是它的两个臂），对方只有汇总：`aggregateCovariates` 每个协变量一行（连续的写 `mean`、`sd`，0/1 的写 `proportion`），`aggregateEstimate`（锚定：对方试验的活性臂对共同对照的对比，在链接尺度上）或 `aggregateOutcome`（非锚定：对方那一臂的结局，原尺度），加上 `aggregateSe`。已知的效应修饰因子写进 `effectModifiers`，没法调整的列进 `unadjustedEffectModifiers`。结果是对方试验人群里的边际效应，常规（条件）STC 并排列出；非锚定的和非锚定的 MAIC 一样是基准，前提是“假定所有预后因子和效应修饰因子都已调整”。

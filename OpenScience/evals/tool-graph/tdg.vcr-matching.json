@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "vcr-matching",
-  "version": "sha256:fd5976fdf2ef9faf7821008f339ddb4a6037332aaa242e3de831d63805a2e809",
+  "version": "sha256:fae2e76c094313e8c0e6a588638abfa48253a522fb5a44c19545af7c2e554594",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 31,
@@ -1710,6 +1710,8 @@
               "generate_patients_longitudinal",
               "population_check",
               "design_confirmatory",
+              "bias_analysis",
+              "stc_comparator",
               "match_extract",
               "forecast_trajectories",
               "evaluate_forecast",
