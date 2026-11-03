@@ -65,6 +65,30 @@ test("candidate_trial is a word the run can write and candidate_trials one it ca
   assert.ok(VCR_READ_WHATS.includes("candidate_trials"));
 });
 
+test("a candidate write asks for the specified frozen collection", async () => {
+  const seam = seams();
+  const item = { registryId: "NCT05000001", collection: "snapshot-1", collectionRevision: "a".repeat(64), criteria: [AGE] };
+  assert.equal((await write(seam, [item])).ok, true);
+  assert.deepEqual(seam.fetched, [{ userId: "u1", registry: "clinicaltrials.gov", registryId: "NCT05000001", collection: "snapshot-1", collectionRevision: "a".repeat(64) }]);
+  assert.equal((await write(seam, [{ ...item, collection: "" }])).ok, false);
+  assert.equal((await write(seam, [{ ...item, collectionRevision: undefined }])).ok, false);
+  assert.equal(seam.fetched.length, 1);
+});
+
+test("an aborted frozen write skips mutation and queued candidate records", async () => {
+  const caller = new AbortController();
+  const seam = seams({ record(input) {
+    assert.equal(input.signal, caller.signal);
+    caller.abort();
+    return record(input.registryId);
+  } });
+  const item = { registryId: "NCT05000001", collection: "snapshot-1", collectionRevision: "a".repeat(64), criteria: [AGE] };
+  const answer = await vcrRuntimeWrite({ ...seam.deps, what: "candidate_trial", items: [item, item], data: null, signal: caller.signal });
+  assert.equal(answer.ok, false);
+  assert.equal(seam.fetched.length, 1);
+  assert.equal(seam.written.length, 0);
+});
+
 test("a trial is written from its registry record: identity from the record, criteria from the run, the original wording located", async () => {
   const seam = seams();
   const outcome = await write(seam, [{ registryId: "NCT05000001", criteria: [AGE, NSCLC, BRAIN], subjectKeys: ["P-0192"] }]);

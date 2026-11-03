@@ -1522,6 +1522,7 @@ function presentPatientTrials(bundle, held) {
     return {
       id: String(entry.id), kind: entry.kind, rank: entry.rank,
       registry: entry.registry ?? null, registryId: entry.registryId ?? null, url: entry.url ? String(entry.url) : null,
+      ...(entry.collection ? { collection: entry.collection } : {}),
       // The registry's status is as of the day its record was read (the study's own protocol has none).
       title: String(entry.title), phase: phaseLabel(entry.phase), status: registryStatusLabel(entry.status),
       statusAsOf: entry.kind === "registry" && entry.retrievedAt ? zhDate(entry.retrievedAt, now) : null,

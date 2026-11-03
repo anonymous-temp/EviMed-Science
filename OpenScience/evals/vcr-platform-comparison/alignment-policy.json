@@ -1,0 +1,15 @@
+{
+  "version": "source-span-overlap-1",
+  "normalization": "character-nfkc-whitespace-v1",
+  "offset_unit": "unicode_code_points",
+  "boundary_difference": "whitespace_and_harmless_punctuation_only",
+  "minimum_gold_coverage": 0.95,
+  "minimum_prediction_precision": 0.95,
+  "guard_numbers_operators_and_logic": true,
+  "prefer_unique_exact_span": true,
+  "split_without_whole_clause": "split_unresolved",
+  "merged_without_subclause_verdict": "merged_unresolved",
+  "ambiguous_tie": "ambiguous_overlap",
+  "unmatched_is_incorrect": false,
+  "denominator_report": "scorable accuracy and all-unit coverage separately"
+}

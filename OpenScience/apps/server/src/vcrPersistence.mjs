@@ -1222,6 +1222,7 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.candidate_trials (
   updated_at       timestamptz NOT NULL DEFAULT now(),
   UNIQUE (study_id, registry, registry_id)
 );
+ALTER TABLE evimed_vcr.candidate_trials ADD COLUMN IF NOT EXISTS source_collection jsonb;
 CREATE INDEX IF NOT EXISTS vcr_candidate_trials_study_idx ON evimed_vcr.candidate_trials (study_id, updated_at DESC);
 
 CREATE TABLE IF NOT EXISTS evimed_vcr.candidate_trial_criteria (

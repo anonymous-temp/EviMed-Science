@@ -28,10 +28,11 @@
  * @module vcrPatientTrials
  */
 
+import { candidateCriteriaHash } from "./vcrCandidateTrialStore.mjs";
 import { HttpError } from "./security.mjs";
 import { CTGOV_STUDY_URL, CTIS_STUDY_URL } from "./trialRegistryClient.mjs";
 import { VCR_MATCHING_GAP_REASON_LABELS_ZH } from "@evimed/domain";
-import { VCR_MATCHING_VOCABULARY_VERSION, assessSubject, decidedShare, frozenAsOf, languageKeysOf, matchingInputDigest, statedRequirement } from "./vcrMatching.mjs";
+import { VCR_MATCHING_VOCABULARY_VERSION, assessSubject, eligibilityCounts, summarizeEligibility, decidedShare, frozenAsOf, languageKeysOf, matchingInputDigest, statedRequirement } from "./vcrMatching.mjs";
 import { matchingVariablesOf, subjectTableFacts } from "./vcrMatchingTable.mjs";
 import { matchingAssessmentEvidence } from "./vcrMatchingEvidence.mjs";
 
@@ -92,6 +93,7 @@ export function candidateTrialFromRecord({ precedent, record = null }) {
       })),
     },
     url: candidateTrialUrl(registry, registryId, text(record?.url) || text(source.url)),
+    collection: record?.collection ?? null,
     recordHash: text(record?.hash) || text(source.recordHash) || null,
     retrievedAt: text(precedent?.fetchedAt) || text(source.retrievedAt) || null,
     eligibilityText,
@@ -262,28 +264,58 @@ export function phaseLabel(phase) {
 /** @param {string} a @param {string} b */
 const order = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
 
+/** Rebuild eligibility from the full current criterion set. @param {any} assessment @param {any[]} criteria @param {any[]} judgments */
+function effectiveAssessment(assessment, criteria, judgments) {
+  if (!assessment) return null;
+  const byId = new Map(judgments.map(j => [j.criterionId, j]));
+  const complete = criteria.map(c => ({ ...(byId.get(c.id) ?? { state: "unknown", applicable: true }), kind: c.kind }));
+  return { ...assessment, storedSummary: assessment.summary, summary: summarizeEligibility(complete), counts: eligibilityCounts(complete), judgments };
+}
+
+/** Score persisted normalized judgments; missing judgments remain unknown.
+ * @param {readonly any[]} criteria @param {readonly any[]} judgments
+ */
+export function criterionRanking(criteria, judgments) {
+  const byId = new Map(judgments.map(j => [String(j.criterionId), j]));
+  const components = { inclusionSatisfied: 0, exclusionSatisfied: 0, decisiveFailures: 0, unknown: 0, pending: 0, notApplicable: 0, applicable: 0 };
+  for (const criterion of criteria) {
+    const judgment = byId.get(String(criterion.id));
+    if (judgment?.applicable === false) { components.notApplicable++; continue; }
+    components.applicable++;
+    if (judgment?.state === "satisfied") {
+      if (criterion.kind === "exclusion") components.exclusionSatisfied++;
+      else components.inclusionSatisfied++;
+    } else if (judgment?.state === "not_satisfied") components.decisiveFailures++;
+    else if (judgment?.state === "pending_recheck") components.pending++;
+    else components.unknown++;
+  }
+  const positive = components.inclusionSatisfied + components.exclusionSatisfied;
+  return { version: "criterion-proportion-v1", ...components,
+    score: components.applicable ? (positive - components.decisiveFailures) / components.applicable : 0 };
+}
+
 /**
  * A patient's trials in the order they are listed: every criterion met first; then the trials the patient is not excluded from, by the
- * share of their criteria that are decided (satisfied or not — an unknown or a date to wait for is undecided and stays in the
+ * versioned criterion score and then the share of their criteria that are decided (satisfied or not — an unknown or a date to wait for is undecided and stays in the
  * denominator), then by how many criteria that is, then by the fewest still to settle; the ones the patient is excluded from after those,
  * the same way; and a trial not yet evaluated last. Ties by where the trial stands in its registry (recruiting first), then its title,
  * then its id. Arithmetic over the evaluator's counts and nothing a model said, so the same verdicts are the same list in any order they
  * arrive.
  *
- * The share is why a trial with two parsed criteria and no answer does not stand above one with ten and seven answered (it used to,
+ * The score uses normalized criterion states, with unknowns in the denominator. It is not a probability. The share is why a trial with two parsed criteria and no answer does not stand above one with ten and seven answered (it used to,
  * on "the fewest still open"): how much of a trial was read is part of how far its verdict can be trusted. It does not make the list a
  * recommendation — 符合 says the stated criteria are met, not that the trial is worth the patient's time (M5).
- * @template {{ id: string, title?: string, status?: string, summary: string | null, counts?: Record<string, number> | null }} T
+ * @template {{ id: string, title?: string, status?: string, summary: string | null, counts?: Record<string, number> | null, ranking?: { score: number, unknown: number, pending: number, applicable: number, decisiveFailures: number } }} T
  * @param {readonly T[]} entries @returns {Array<T & { rank: number }>}
  */
 export function rankPatientTrials(entries) {
-  const tier = (/** @type {T} */ row) => (row.summary === "eligible" ? 0 : row.summary === "ineligible" ? 2 : row.summary ? 1 : 3);
+  const tier = (/** @type {T} */ row) => (row.ranking?.decisiveFailures ? 2 : row.summary === "eligible" ? (row.ranking && (!row.ranking.applicable || row.ranking.unknown || row.ranking.pending) ? 1 : 0) : row.summary === "ineligible" ? 2 : row.summary ? 1 : 3);
   const open = (/** @type {T} */ row) => Number(row.counts?.unknown ?? 0) + Number(row.counts?.pending_recheck ?? 0);
   const settled = (/** @type {T} */ row) => decidedShare(row.counts);
   const ratio = (/** @type {T} */ row) => { const { decided, applicable } = settled(row); return applicable ? decided / applicable : 0; };
   const fold = (/** @type {unknown} */ value) => text(value).toLowerCase();
   return [...entries]
-    .sort((a, b) => tier(a) - tier(b) || ratio(b) - ratio(a) || settled(b).decided - settled(a).decided || open(a) - open(b)
+    .sort((a, b) => tier(a) - tier(b) || ((b.ranking?.score ?? 0) - (a.ranking?.score ?? 0)) || ratio(b) - ratio(a) || settled(b).decided - settled(a).decided || open(a) - open(b)
       || registryStatusRank(a.status) - registryStatusRank(b.status) || order(fold(a.title), fold(b.title)) || order(String(a.id), String(b.id)))
     .map((row, index) => ({ ...row, rank: index + 1 }));
 }
@@ -333,7 +365,7 @@ function trialForRun(trial, criteria, { withCriteria = false } = {}) {
   return {
     id: trial.id, registry: trial.registry, registryId: trial.registryId, title: trial.title, phase: trial.phase, status: trial.status,
     conditions: trial.conditions, locations: { total: trial.locations?.total ?? null, countries: trial.locations?.countries ?? [] },
-    url: trial.url, recordHash: trial.recordHash, retrievedAt: trial.retrievedAt, updatedAt: trial.updatedAt,
+    url: trial.url, collection: trial.collection ?? null, recordHash: trial.recordHash, retrievedAt: trial.retrievedAt, updatedAt: trial.updatedAt,
     eligibilityCoverage: { status: !text(trial.eligibilityText) ? "unavailable" : located < criteria.length ? "partial" : "located",
       providedCriteria: criteria.length, locatedCriteria: located, criterionExtractionCompleteness: "unknown",
       // A record with no original wording (ChiCTR through the evidence API is a listing) gives a criterion nothing to rest on (M6).
@@ -354,13 +386,13 @@ function trialForRun(trial, criteria, { withCriteria = false } = {}) {
  * One line of a patient's list: a registry trial, or a version of the study's own protocol, with the verdict about this patient (`null`
  * until one has been made).
  * @param {{ kind: "registry" | "protocol", id: string, title: string, status?: string, phase?: string, registry?: string | null, registryId?: string | null,
- *   url?: string, conditions?: readonly string[], locations?: any, retrievedAt?:string|null }} about @param {any} assessment
+ *   url?: string, conditions?: readonly string[], locations?: any, collection?: any, retrievedAt?:string|null }} about @param {any} assessment
  */
 function listed(about, assessment) {
   return {
     kind: about.kind, id: about.id, title: about.title, status: about.status ?? "", phase: about.phase ?? "",
     registry: about.registry ?? null, registryId: about.registryId ?? null, url: about.url ?? "",
-    retrievedAt: about.retrievedAt ?? null,
+    retrievedAt: about.retrievedAt ?? null, collection: about.collection ?? null,
     conditions: [...(about.conditions ?? [])], locations: about.locations ?? null,
     summary: assessment ? String(assessment.summary) : null,
     counts: assessment ? assessment.counts ?? {} : null,
@@ -487,6 +519,7 @@ export function createPatientTrials({ candidateStore, matchStore = null, documen
         for (const trial of trials) {
           try {
             const criteria = criteriaOf.get(trial.id) ?? [];
+            if (candidateCriteriaHash(criteria) !== trial.criteriaHash) throw new HttpError(409, "vcr_write_refused", "Trial criteria changed during evaluation; evaluate again.");
             const unlocated = new Set(criteria.filter(criterion => !locateSourceText(criterion.sourceText, trial.eligibilityText)).map(criterion => criterion.id));
             const checkedCriteria = criteria.map(criterion => unlocated.has(criterion.id) ? { ...criterion, applicability: null,
               requirement: { op: "language", key: `unavailable-source:${criterion.id}`, text: "Original trial criterion text is unavailable." } } : criterion);
@@ -511,7 +544,7 @@ export function createPatientTrials({ candidateStore, matchStore = null, documen
             assessment.evidenceGaps = [...assessment.evidenceGaps.filter(gap => !gap.criterionIds.some(id => unlocated.has(id))),
               ...[...unlocated].map(id => ({ variable: id, reason: "criterion_source_unavailable", criterionIds: [id] }))];
             const saved = await candidateStore.saveAssessment({
-              userId: study.userId,
+              userId: study.userId, expectedRecordHash: trial.recordHash, expectedCriteriaHash: trial.criteriaHash,
               assessment: {
                 studyId: study.id, candidateTrialId: trial.id, subjectKey, asOf: assessment.asOf, summary: assessment.summary,
                 counts: { ...assessment.counts, voidedFacts: assessment.voidedFacts.length }, evidenceGaps: assessment.evidenceGaps,
@@ -614,23 +647,56 @@ export function createPatientTrials({ candidateStore, matchStore = null, documen
      * A patient's trials in order: every candidate trial of the study and every version of the study's own protocol that has judged this
      * patient, each with its verdict, ranked by `rankPatientTrials`. A trial that has not judged this patient is not in it — it is not a
      * result about them — and is named by `unjudged`.
-     * @param {any} study @param {{ subjectKey: string }} input
+     * @param {any} study @param {{ subjectKey: string }} input @returns {Promise<any[]>}
      */
     async ranked(study, { subjectKey }) {
-      const [trials, verdicts] = await Promise.all([
-        candidateStore.listCandidateTrials({ studyId: study.id, limit: 1000 }),
-        candidateStore.latestAssessments({ studyId: study.id, subjectKey }),
-      ]);
-      const entries = trials.filter((trial) => verdicts.has(trial.id)).map((trial) => listed({
+      const snapshot = await candidateStore.rankingSnapshot(study.id, subjectKey);
+      const verdicts = new Map(snapshot.assessments.map(a => [a.candidateTrialId, a]));
+      const entries = snapshot.trials.filter(trial => verdicts.has(trial.id)).map(trial => listed({
         kind: "registry", id: trial.id, title: trial.title, status: trial.status, phase: trial.phase, registry: trial.registry,
         registryId: trial.registryId, url: trial.url, conditions: trial.conditions, locations: trial.locations,
-        retrievedAt: trial.retrievedAt,
-      }, verdicts.get(trial.id) ?? null));
+        retrievedAt: trial.retrievedAt, collection: trial.collection,
+      }, verdicts.get(trial.id)));
       const protocols = matchStore ? await matchStore.protocols(study.id) : [];
-      for (const protocol of protocols) {
-        const verdict = await matchStore.latestAssessment({ studyId: study.id, subjectKey, protocolVersionId: protocol.id });
-        if (verdict) entries.push(listed({ kind: "protocol", id: protocol.id, title: protocolTitle(protocol) }, verdict));
+      const [criteriaByTrial, candidateJudgments, protocolVerdicts, protocolCriteria] = await Promise.all([
+        new Map(snapshot.trials.map(trial => [trial.id, snapshot.criteria.filter(c => c.candidateTrialId === trial.id)])),
+        snapshot.judgments,
+        matchStore ? matchStore.latestAssessmentsByProtocol(study.id, subjectKey) : new Map(),
+        matchStore ? matchStore.criteriaOfProtocols(study.id, protocols.map(protocol => protocol.id)) : [],
+      ]);
+      const protocolEntries = protocols.flatMap(protocol => {
+        const verdict = protocolVerdicts.get(protocol.id);
+        return verdict ? [listed({ kind: "protocol", id: protocol.id, title: protocolTitle(protocol) }, verdict)] : [];
+      });
+      const protocolJudgments = matchStore ? await matchStore.judgmentsForAssessments(study.id, protocolEntries.map(row => row.assessmentId).filter(Boolean)) : [];
+      /** @param {any[]} judgments */
+      const groupJudgments = (judgments) => {
+        const grouped = new Map();
+        for (const judgment of judgments) {
+          if (!judgment) continue;
+          const group = grouped.get(judgment.assessmentId) ?? [];
+          group.push(judgment); grouped.set(judgment.assessmentId, group);
+        }
+        return grouped;
+      };
+      const candidateGroups = groupJudgments(candidateJudgments);
+      const protocolGroups = groupJudgments(protocolJudgments);
+      /** @param {any} row @param {any[]} criteria @param {any[]} judgments */
+      const applyJudgments = (row, criteria, judgments) => {
+        const effective = effectiveAssessment(row, criteria, judgments);
+        row.storedSummary = effective.storedSummary;
+        row.summary = effective.summary;
+        row.counts = effective.counts;
+        row.ranking = criterionRanking(criteria, judgments);
+      };
+      for (const row of entries) {
+        const criteria = criteriaByTrial.get(row.id) ?? [];
+        const judgments = candidateGroups.get(row.assessmentId) ?? [];
+        applyJudgments(row, criteria, judgments);
+        row.snapshotHash = matchingInputDigest({ criteria, judgments: judgments.map(j => [j.criterionId, j.state, j.applicable]).sort() });
       }
+      for (const row of protocolEntries) applyJudgments(row, protocolCriteria.filter(c => c?.protocolVersionId === row.id), protocolGroups.get(row.assessmentId) ?? []);
+      entries.push(...protocolEntries);
       return rankPatientTrials(entries);
     },
 
@@ -659,15 +725,19 @@ export function createPatientTrials({ candidateStore, matchStore = null, documen
       const entry = (ranked ?? await self.ranked(study, { subjectKey })).find((row) => row.id === id);
       if (!entry) return null;
       if (entry.kind === "registry") {
-        const criteria = await candidateStore.listCriteria(entry.id);
-        const assessment = entry.assessmentId ? await candidateStore.getAssessment(entry.assessmentId, study.id) : null;
-        const projected = viewer ? await matchingAssessmentEvidence({ documents, study, assessment, subjectKey, viewer }) : assessment;
-        return { entry, criteria, judgments: projected?.judgments ?? [], assessment: projected };
+        const snapshot = await candidateStore.rankingSnapshot(study.id, subjectKey, { id: entry.id, full: true });
+        const assessment = snapshot.assessments[0] ?? null;
+        if (!assessment || assessment.id !== entry.assessmentId || matchingInputDigest({ criteria: snapshot.criteria, judgments: snapshot.judgments.map(j => [j.criterionId, j.state, j.applicable]).sort() }) !== entry.snapshotHash) return null;
+        const effective = effectiveAssessment(assessment, snapshot.criteria, snapshot.judgments);
+        const projected = viewer ? await matchingAssessmentEvidence({ documents, study, assessment: effective, subjectKey, viewer }) : effective;
+        const currentEntry = { ...entry, summary: effective.summary, counts: effective.counts };
+        return { entry: currentEntry, criteria: snapshot.criteria, judgments: projected?.judgments ?? [], assessment: projected };
       }
       const criteria = await matchStore.listCriteria({ studyId: study.id, protocolVersionId: entry.id });
       const assessment = entry.assessmentId ? await matchStore.getAssessment(entry.assessmentId, study.id) : null;
-      const projected = viewer ? await matchingAssessmentEvidence({ documents, study, assessment, subjectKey, viewer }) : assessment;
-      return { entry, criteria, judgments: projected?.judgments ?? [], assessment: projected };
+      const effective = effectiveAssessment(assessment, criteria, assessment?.judgments ?? []);
+      const projected = viewer ? await matchingAssessmentEvidence({ documents, study, assessment: effective, subjectKey, viewer }) : effective;
+      return { entry: { ...entry, summary: effective?.summary, counts: effective?.counts }, criteria, judgments: projected?.judgments ?? [], assessment: projected };
     },
 
     /**
@@ -683,43 +753,55 @@ export function createPatientTrials({ candidateStore, matchStore = null, documen
       }
       const wanted = filter.id || filter.registryId;
       if (wanted) {
-        const trial = await candidateStore.getCandidateTrial({
-          studyId: study.id, id: filter.id ? String(filter.id) : null, registry: filter.registry ? String(filter.registry) : null,
-          registryId: filter.registryId ? String(filter.registryId) : null,
-        });
+        if (subjectKey) {
+          const snapshot = await candidateStore.rankingSnapshot(study.id, subjectKey, { id: filter.id ? String(filter.id) : undefined, registry: filter.registry ? String(filter.registry) : undefined, registryId: filter.registryId ? String(filter.registryId) : undefined, full: true });
+          const trial = snapshot.trials[0];
+          if (!trial) return { trials: [], more: false };
+          const assessment = effectiveAssessment(snapshot.assessments.find(a => a.candidateTrialId === trial.id) ?? null, snapshot.criteria.filter(c => c.candidateTrialId === trial.id), snapshot.judgments);
+          return { trials: [trialForRun(trial, snapshot.criteria, { withCriteria: true })], more: false, subjectKey, assessment: await matchingAssessmentEvidence({ documents, study, assessment, subjectKey }) };
+        }
+        const trial = await candidateStore.getCandidateTrial({ studyId: study.id, id: filter.id ? String(filter.id) : null, registry: filter.registry ? String(filter.registry) : null, registryId: filter.registryId ? String(filter.registryId) : null });
         if (!trial) return { trials: [], more: false };
         const criteria = await candidateStore.listCriteria(trial.id);
-        const answer = { trials: [trialForRun(trial, criteria, { withCriteria: true })], more: false };
-        if (!subjectKey) return answer;
-        const verdict = (await candidateStore.latestAssessments({ studyId: study.id, subjectKey })).get(trial.id) ?? null;
-        const full = verdict ? await candidateStore.getAssessment(verdict.id, study.id) : null;
-        return { ...answer, subjectKey, assessment: await matchingAssessmentEvidence({ documents, study, assessment: full, subjectKey }) };
+        return { trials: [trialForRun(trial, criteria, { withCriteria: true })], more: false };
       }
       if (subjectKey) {
         const ranking = await self.ranked(study, { subjectKey });
+        const offset = Number.isSafeInteger(filter.offset) ? Math.max(0, filter.offset) : 0;
+        const page = ranking.slice(offset, offset + READ_PAGE);
+        const candidateIds = page.filter(entry => entry.kind === "registry").map(entry => entry.id);
+        const current = await candidateStore.rankingSnapshot(study.id, subjectKey);
+        const currentAssessments = new Map(current.assessments.map(a => [a.candidateTrialId, a.id]));
+        if (page.some(row => row.kind === "registry" && (currentAssessments.get(row.id) !== row.assessmentId || matchingInputDigest({
+          criteria: current.criteria.filter(c => c.candidateTrialId === row.id),
+          judgments: current.judgments.filter(j => j.assessmentId === row.assessmentId).map(j => [j.criterionId, j.state, j.applicable]).sort(),
+        }) !== row.snapshotHash))) {
+          throw new HttpError(409, "vcr_read_changed", "Trial assessments changed while reading; retry the list.");
+        }
+        const criteriaOf = new Map(candidateIds.map(id => [id, current.criteria.filter(c => c.candidateTrialId === id)]));
+        const answeredByTrial = await candidateStore.languageAnswersForTrials(study.id, subjectKey, candidateIds, criteriaOf);
+        const protocolCriteria = matchStore ? await matchStore.criteriaOfProtocols(study.id, page.filter(entry => entry.kind === "protocol").map(entry => entry.id)) : [];
         /** @type {Array<{ trialId: string, criterionKey: string, criterionId: string }>} */
         const requests = [];
-        for (const row of ranking.filter((entry) => entry.kind === "registry")) {
-          const answered = new Set(Object.keys(await candidateStore.latestLanguageJudgments({ studyId: study.id, candidateTrialId: row.id, subjectKey })));
-          for (const criterion of await candidateStore.listCriteria(row.id)) {
-            for (const key of languageKeysOf(criterion.requirement, criterion.id)) {
-              if (!answered.has(key)) requests.push({ trialId: row.id, criterionKey: key, criterionId: criterion.id });
-            }
+        for (const row of page.filter(entry => entry.kind === "registry")) {
+          const answered = answeredByTrial.get(row.id) ?? new Set();
+          for (const criterion of criteriaOf.get(row.id) ?? []) for (const key of languageKeysOf(criterion.requirement, criterion.id)) {
+            if (!answered.has(key)) requests.push({ trialId: row.id, criterionKey: key, criterionId: criterion.id });
           }
         }
-        const criteriaOf = await candidateStore.criteriaOfTrials(study.id, ranking.filter((entry) => entry.kind === "registry").map((entry) => entry.id));
         return {
           subjectKey,
           unjudged: await self.unjudged(study, { subjectKey }),
-          ranking: await Promise.all(ranking.map(async (row) => ({
+          total: ranking.length, offset, more: offset + page.length < ranking.length,
+          ranking: await Promise.all(page.map(async (row) => ({
             rank: row.rank, kind: row.kind, id: row.id, registry: row.registry, registryId: row.registryId, title: row.title, phase: row.phase, status: row.status,
             // The registry's word is as of the day its record was read; it says nothing of a site's places today.
-            statusAsOf: row.retrievedAt,
-            eligibility: row.summary, criteriaCounts: row.counts,
+            statusAsOf: row.retrievedAt, collection: row.collection,
+            eligibility: row.summary, criteriaCounts: row.counts, ranking: row.ranking,
             // How much of the trial is settled for this patient, unknowns in the denominator: 7 of 10 is a different verdict from 1 of 1.
             decided: row.counts ? decidedShare(row.counts) : null,
             evidenceGaps: list(row.evidenceGaps).map((gap) => ({ ...gap, label: GAP_LABELS[text(gap.reason)] ?? null })),
-            undecided: undecidedCriteria(row.evidenceGaps, row.kind === "registry" ? criteriaOf.get(row.id) ?? [] : await matchStore.listCriteria({ studyId: study.id, protocolVersionId: row.id })),
+            undecided: undecidedCriteria(row.evidenceGaps, row.kind === "registry" ? criteriaOf.get(row.id) ?? [] : protocolCriteria.filter(c => c?.protocolVersionId === row.id)),
             asOf: row.asOf, retrievedAt: row.retrievedAt,
           }))),
           requests,

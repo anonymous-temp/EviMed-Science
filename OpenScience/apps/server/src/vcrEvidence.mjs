@@ -1202,9 +1202,9 @@ export function poolTargetOf(raw) {
  * client and the job queue (which belongs to another package and may not exist
  * yet — its absence is answered, not assumed).
  *
- * @param {{ store: any, registry?: any, jobs?: any, now?: () => Date, logger?: any }} options
+ * @param {{ store: any, registry?: any, trialCorpus?: ReturnType<typeof import("./vcrTrialCorpus.mjs").createVcrTrialCorpus>, jobs?: any, now?: () => Date, logger?: any }} options
  */
-export function createVcrEvidencePipeline({ store, registry = null, jobs = null, now = () => new Date(), logger = null } = { store: null }) {
+export function createVcrEvidencePipeline({ store, registry = null, trialCorpus = null, jobs = null, now = () => new Date(), logger = null } = { store: null }) {
   if (!store) throw new TypeError("The evidence pipeline needs its store.");
   /** @type {{resolve:Function}|null} */
   let literatureSources = null;
@@ -1231,6 +1231,9 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
   const registryFailure = (fetched, registryName, registryId, fetchedAt) => {
     const notFound = fetched?.status === REGISTRY_NOT_FOUND || fetched?.reason === REGISTRY_NOT_FOUND;
     const reason = String(fetched?.reason ?? fetched?.status ?? "registry_record_unreadable");
+    const message = reason === "trial_collection_revision_mismatch"
+      ? "冻结登记库的版本与候选检索结果不一致。请重新检索并使用返回的版本。"
+      : notFound ? "登记平台没有这个登记号的记录。" : `试验登记读取未成功：${reason}`;
     return {
       available: false,
       status: notFound ? REGISTRY_NOT_FOUND : REGISTRY_UNAVAILABLE,
@@ -1242,16 +1245,30 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
       sources: [],
       fetchedAt,
       issues: [{ code: notFound ? REGISTRY_NOT_FOUND : reason, severity: "advisory",
-        message: notFound ? "登记平台没有这个登记号的记录。" : `试验登记读取未成功：${reason}` }],
+        message }],
     };
   };
 
   /**
    * One registry record, fetched and built — or the failure to. `userId` is whose
    * own EviMed key the ChiCTR seat may fall back to where the deployment has none.
-   * @param {string} registryName @param {string} registryId @param {string} [userId]
+   * @param {string} registryName @param {string} registryId @param {string} [userId] @param {{ collection?: string | null, collectionRevision?: string | null, signal?: AbortSignal }} [options]
    */
-  async function fetchRecord(registryName, registryId, userId = "") {
+  async function fetchRecord(registryName, registryId, userId = "", { collection = null, collectionRevision = null, signal } = {}) {
+    if (collection != null || collectionRevision != null) {
+      if (!trialCorpus || collection !== trialCorpus.id || !["clinicaltrials.gov", "ctgov"].includes(registryName)) {
+        return { failure: { status: REGISTRY_UNAVAILABLE, reason: "trial_collection_unavailable" } };
+      }
+      if (collectionRevision !== trialCorpus.revision) {
+        return { failure: { status: REGISTRY_UNAVAILABLE, reason: "trial_collection_revision_mismatch" } };
+      }
+      try {
+        const built = await trialCorpus.record(registryId, signal);
+        return built ? { built } : { failure: { status: REGISTRY_NOT_FOUND, reason: REGISTRY_NOT_FOUND } };
+      } catch (error) {
+        return { failure: { status: REGISTRY_UNAVAILABLE, reason: String(/** @type {any} */ (error)?.code ?? "trial_collection_read_failed") } };
+      }
+    }
     if (!registry) return { failure: { status: REGISTRY_UNAVAILABLE, reason: "registry_not_configured" } };
     const wanted = String(registryId ?? "").trim().toLowerCase();
     const fetched = registryName === "chictr"
@@ -1271,6 +1288,7 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
   }
 
   const pipeline = {
+    closeTrialCorpus: () => trialCorpus?.close(),
     /** Existing source intake is attached after the shared SourceService is composed. @param {{resolve:Function}} sources */
     attachSources(sources) { literatureSources = sources; },
     /** The reader of preserved publications, attached once the project store is composed. @param {{read:Function}} publications */
@@ -1373,13 +1391,28 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
      * merges and de-duplicates what they answer, leaves out what a record's own stated fields rule out, cuts the list, and says per
      * registry what was asked, what failed and what is not covered at all. A registry that failed costs its own results and no one else's.
      * Nothing here judges the patient against a trial (`vcrCandidateSearch.mjs`).
-     * @param {{ userId?: string, filter?: Record<string, any>, limitMax?: number }} input
+     * @param {{ userId?: string, filter?: Record<string, any>, limitMax?: number, signal?: AbortSignal }} input
      */
-    async patientCandidates({ userId = "", filter = {}, limitMax = 20 }) {
-      const asked = candidateRequest(filter, { limitMax });
+    async patientCandidates({ userId = "", filter = {}, limitMax = 20, signal }) {
+      const frozen = filter.collection != null;
+      const asked = candidateRequest(filter, { limitMax, frozen });
       const asOf = now().toISOString();
       if (asked.ok === false) return { available: false, code: "vcr_read_filter_invalid", message: asked.message };
       const { request } = asked;
+      if (frozen) {
+        if (!trialCorpus || filter.collection !== trialCorpus.id) {
+          return { available: false, code: REGISTRY_UNAVAILABLE, reason: "trial_collection_unavailable", message: "指定的冻结登记库未接入。" };
+        }
+        try {
+          return await trialCorpus.search(request, filter.cursor ?? null, signal);
+        } catch (error) {
+          const reason = String(/** @type {any} */ (error)?.code ?? "trial_collection_read_failed");
+          if (reason === "trial_collection_cursor_invalid") {
+            return { available: false, code: "vcr_read_filter_invalid", reason, message: "分页标记与冻结库或检索参数不匹配。请从第一页重新检索。" };
+          }
+          return { available: false, code: REGISTRY_UNAVAILABLE, reason, message: "冻结登记库暂不可读。请核对登记库的配置和快照。" };
+        }
+      }
       if (!registry) return { available: false, code: "registry_unavailable", message: "试验登记检索未接入：这一步暂不可用，其余步骤照常。" };
       const queries = candidateQueries(request);
       // The registries' own filters narrow what they send where a status is always stated (ClinicalTrials.gov, CTIS); everything else is held
@@ -1457,12 +1490,12 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
      * `issues` are notices only (principle 4): a truncated site list, a record
      * with no results section, a value whose quotation did not check out.
      *
-     * @param {{ userId?: string, studyId?: string | null, registry?: string, registryId: string }} input
+     * @param {{ userId?: string, studyId?: string | null, registry?: string, registryId: string, collection?: string | null, collectionRevision?: string | null, signal?: AbortSignal }} input
      */
-    async readRegistryRecord({ userId = "", studyId = null, registry: registryName = "clinicaltrials.gov", registryId }) {
+    async readRegistryRecord({ userId = "", studyId = null, registry: registryName = "clinicaltrials.gov", registryId, collection = null, collectionRevision = null, signal }) {
       const fetchedAt = now().toISOString();
       try {
-        const { built, failure } = await fetchRecord(registryName, String(registryId ?? ""), userId);
+        const { built, failure } = await fetchRecord(registryName, String(registryId ?? ""), userId, { collection, collectionRevision, signal });
         if (!built) return registryFailure(failure ?? {}, registryName, String(registryId ?? ""), fetchedAt);
 
         const checked = (built.extractions ?? []).map((/** @type {any} */ item) => verifyExtraction({
@@ -1487,6 +1520,7 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
           registryId: built.precedent.registryId,
           record: {
             ...built.precedent,
+            ...(collection ? { description: built.description } : {}),
             // Structure only. `values` are what may be quoted; the refused ones
             // travel as `unknown` so 「查过、没通过」 is distinguishable from
             // 「没查」 on the page as well as in the ledger.
@@ -1513,6 +1547,7 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
             unavailable: built.precedent.unavailable ?? [],
           },
           sources: built.precedent.sources ?? [],
+          ...(collection ? { collection: built.precedent.sources?.[0]?.collection } : {}),
           fetchedAt,
           issues,
         };
@@ -1530,15 +1565,17 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
      * identifies the trial is read out of it in code (`candidateTrialFromRecord`) — the run names a registry and an id, never a
      * status or a site. Nothing is written: a candidate is a lead, not evidence a card may cite, so the precedent library is
      * left alone. A registry that cannot answer is named, and is not a trial that does not exist.
-     * @param {{ userId?: string, registry?: string, registryId: string }} input
+     * @param {{ userId?: string, registry?: string, registryId: string, collection?: string | null, collectionRevision?: string | null, signal?: AbortSignal }} input
      */
-    async candidateRecord({ userId = "", registry: registryName = "clinicaltrials.gov", registryId }) {
-      const { built, failure } = await fetchRecord(registryName, String(registryId ?? ""), userId);
+    async candidateRecord({ userId = "", registry: registryName = "clinicaltrials.gov", registryId, collection = null, collectionRevision = null, signal }) {
+      const { built, failure } = await fetchRecord(registryName, String(registryId ?? ""), userId, { collection, collectionRevision, signal });
       if (!built) {
         const notFound = failure?.status === REGISTRY_NOT_FOUND;
         return { status: notFound ? REGISTRY_NOT_FOUND : (failure?.status ?? REGISTRY_UNAVAILABLE), reason: failure?.reason ?? "registry_record_unreadable", registryId };
       }
-      return { status: "ok", trial: candidateTrialFromRecord(built) };
+      const provenance = collection ? built.precedent.sources?.[0]?.collection : null;
+      return { status: "ok", trial: { ...candidateTrialFromRecord(built), ...(provenance ? { collection: provenance } : {}) },
+        ...(provenance ? { collection: provenance } : {}) };
     },
 
     /**
@@ -1949,18 +1986,21 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
       };
     },
 
-    /** @param {any} study @param {Record<string, any>} [filter] @param {number} [limitMax] */
-    async candidatesFor(study, filter = {}, limitMax = 20) {
-      return pipeline.patientCandidates({ userId: String(study?.userId ?? ""), filter, limitMax });
+    /** @param {any} study @param {Record<string, any>} [filter] @param {number} [limitMax] @param {AbortSignal} [signal] */
+    async candidatesFor(study, filter = {}, limitMax = 20, signal) {
+      return pipeline.patientCandidates({ userId: String(study?.userId ?? ""), filter, limitMax, signal });
     },
 
-    /** @param {any} study @param {Record<string, any>} [filter] */
-    async registryRecord(study, filter = {}) {
+    /** @param {any} study @param {Record<string, any>} [filter] @param {AbortSignal} [signal] */
+    async registryRecord(study, filter = {}, signal) {
       return pipeline.readRegistryRecord({
         userId: String(study?.userId ?? ""),
         studyId: study?.id ?? null,
         registry: String(filter?.registry || "clinicaltrials.gov"),
         registryId: String(filter?.registryId ?? ""),
+        collection: filter?.collection ?? null,
+        collectionRevision: filter?.collectionRevision ?? null,
+        signal,
       });
     },
 

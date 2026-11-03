@@ -8,7 +8,7 @@ import test from "node:test";
 import { ctgovPrecedent } from "../src/trialRegistryClient.mjs";
 import { decidedShare } from "../src/vcrMatching.mjs";
 import {
-  CANDIDATE_TRIAL_LOCATIONS_MAX, candidateTrialFromRecord, candidateTrialUrl, createPatientTrials, locateSourceText, OTHER_TRIAL_MIN_SOURCE_CHARS, phaseLabel, rankPatientTrials,
+  criterionRanking, CANDIDATE_TRIAL_LOCATIONS_MAX, candidateTrialFromRecord, candidateTrialUrl, createPatientTrials, locateSourceText, OTHER_TRIAL_MIN_SOURCE_CHARS, phaseLabel, rankPatientTrials,
   registryStatusLabel, registryStatusRank, sourceTextLength,
 } from "../src/vcrPatientTrials.mjs";
 import { FLAURA } from "./vcrEvidenceFixtures.mjs";
@@ -227,4 +227,49 @@ test("the study's other candidate trials are the held ones less the trial being 
   assert.deepEqual(Object.keys(others[0]).sort(), ["eligibilityText", "id", "registry", "registryId", "title"]);
   const unnamed = await patientTrials.otherTrials({ id: "std_1" }, { registryId: "NCT05000001" });
   assert.deepEqual(unnamed.map((trial) => trial.id), ["ctr_2"], "with no registry named, the id alone identifies the trial being written");
+});
+
+
+test("criterion ranking uses normalized exclusion judgments and retains unknowns", () => {
+  const criteria = [{ id: "i", kind: "inclusion" }, { id: "e", kind: "exclusion" }, { id: "u", kind: "inclusion" }, { id: "n", kind: "exclusion" }];
+  const result = criterionRanking(criteria, [{ criterionId: "i", applicable: true, state: "satisfied" }, { criterionId: "e", applicable: true, state: "not_satisfied" }, { criterionId: "n", applicable: false, state: "not_satisfied" }]);
+  assert.equal(result.inclusionSatisfied, 1);
+  assert.equal(result.decisiveFailures, 1);
+  assert.equal(result.unknown, 1);
+  assert.equal(result.notApplicable, 1);
+  assert.equal(result.score, 0);
+});
+
+test("persisted criterion scores order equal eligibility tiers without changing the verdict", () => {
+  const mk = (id, summary, judgments) => ({ ...entry(id, summary, {}), ranking: criterionRanking(
+    [{ id: "i", kind: "inclusion" }, { id: "e", kind: "exclusion" }], judgments) });
+  const yes = (criterionId) => ({ criterionId, applicable: true, state: "satisfied" });
+  const no = (criterionId) => ({ criterionId, applicable: true, state: "not_satisfied" });
+  const rows = rankPatientTrials([
+    mk("failure", "ineligible", [yes("i"), no("e")]),
+    mk("partial", "eligible", [yes("i")]),
+    mk("complete", "eligible", [yes("i"), yes("e")]),
+  ]);
+  assert.deepEqual(rows.map(row => row.id), ["complete", "partial", "failure"]);
+  assert.equal(rows[1].summary, "eligible");
+  assert.equal(rows[1].ranking.unknown, 1);
+});
+
+test("patient runtime ranking pages retain global rank and language requests on later pages", async () => {
+  const rows = Array.from({ length: 51 }, (_, i) => ({ id: `t${i}`, kind: "registry", rank: i + 1, registryId: `NCT${i}`, summary: "insufficient_evidence", counts: { unknown: 1 }, evidenceGaps: [] }));
+  const { matchingInputDigest } = await import("../src/vcrMatching.mjs");
+  const criteria = rows.map(row => ({ candidateTrialId: row.id, id: `c${row.id}`, ordinal: 1, kind: "inclusion", sourceText: "consent", requirement: { op: "language", key: `key-${row.id}` } }));
+  for (const row of rows) row.snapshotHash = matchingInputDigest({ criteria: criteria.filter(c => c.candidateTrialId === row.id), judgments: [] });
+  const store = {
+    async rankingSnapshot() { return { assessments: rows.map(row => ({ candidateTrialId: row.id, id: row.assessmentId })), criteria, judgments: [] }; },
+    async languageAnswersForTrials(_study, _subject, ids) { return new Map(ids.map(id => [id, new Set()])); },
+  };
+  const service = createPatientTrials({ candidateStore: store });
+  service.ranked = async () => rows;
+  service.unjudged = async () => [];
+  const first = await service.runtimeRead({ id: "study" }, { subjectKey: "P" });
+  const last = await service.runtimeRead({ id: "study" }, { subjectKey: "P", offset: 50 });
+  assert.equal(first.ranking.length, 50); assert.equal(first.more, true); assert.equal(first.total, 51);
+  assert.equal(last.ranking[0].rank, 51); assert.equal(last.more, false);
+  assert.equal(last.requests[0].trialId, "t50");
 });

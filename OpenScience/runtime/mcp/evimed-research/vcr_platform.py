@@ -139,7 +139,6 @@ HELP_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "vcr_scenar
 # name the files (the deployment's own variable, as the guidance's skill roots are, with the image's path as the default).
 SKILLS_ENV = "EVIMED_CAPABILITY_SKILLS_DIR"
 SKILLS_DEFAULT = "/opt/evimed/capability-skills"
-READ_MAX_LIMIT = 50
 WRITE_MAX_ITEMS = 200
 # The one operation whose answer waits on a container: the gateway's budget is the
 # deployment's own intake timeout plus a margin, and this ceiling sits above it.
@@ -230,6 +229,8 @@ def _detailed_tool_definitions():
                             "kind": ID,
                             "registryId": ID,
                             "registry": ID,
+                            "collection": ID,
+                            "collectionRevision": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
                             "snapshotId": ID,
                             "cursor": {"type": "string", "maxLength": 2048},
                             "sourceId": ID,
@@ -237,12 +238,12 @@ def _detailed_tool_definitions():
                             "documentId": ID,
                             "protocolVersionId": ID,
                             "query": {"type": "string", "minLength": 1, "maxLength": 200},
-                            "limit": {"type": "integer", "minimum": 1, "maximum": READ_MAX_LIMIT, "default": 20},
+                            "limit": {"type": "integer", "minimum": 1, "maximum": 500, "default": 20},
                             "beforeSeq": {"type": "integer", "minimum": 0},
                             "offset": {"type": "integer", "minimum": 0, "maximum": 1048576},
                             # what: candidates -- the registry search a run writes and what it knows of the patient.
                             "condition": {"type": "string", "minLength": 1, "maxLength": 200},
-                            "terms": {"type": "array", "items": {"type": "string", "minLength": 1, "maxLength": 200}, "maxItems": 3},
+                            "terms": {"type": "array", "items": {"type": "string", "minLength": 1, "maxLength": 200}, "maxItems": 32},
                             "age": {"type": "number", "minimum": 0, "maximum": 130},
                             "sex": {"type": "string", "enum": ["male", "female"]},
                             "region": {"type": "string", "minLength": 1, "maxLength": 80},
@@ -366,6 +367,8 @@ def _detailed_tool_definitions():
                 "properties": {
                     "registryId": ID,
                     "registry": {"type": "string", "minLength": 1, "maxLength": 40},
+                    "collection": ID,
+                    "collectionRevision": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
                 },
                 "required": ["registryId"],
                 "additionalProperties": False,
@@ -712,7 +715,10 @@ def read(arguments: dict) -> dict:
                             "criterion stays unknown -- do not write it negated, and do not take silence in a hint for silence in the record.")
     if what == "subject_document" and isinstance(data.get("long"), dict):
         next_actions.append("This record is long: ask for the part a criterion bears on by repeating the read with filter.id (a criterion id) or filter.query (a few words) instead of reading every window.")
-    if what == "candidates" and data.get("available") is not False:
+    if what == "candidates" and data.get("collection") and data.get("available") is not False:
+        next_actions.append("Carry each candidate’s collection and collectionRevision into trial_registry_record and candidate_trial items. "
+                            "Use the collection's snapshot date for registry fields, and keep retrieval rank separate from eligibility.")
+    elif what == "candidates" and data.get("available") is not False:
         next_actions.append("Say in the reply what data.coverage says: the registries searched and the day (asOf), any that failed and why, and that CDE and ICTRP are not covered. "
                             "These are listings found by the search you wrote, merged and de-duplicated; their order is not a ranking and none is a judgement about the patient.")
         next_actions.append("A field listed in a candidate's unknown is one the registry did not state, so the candidate was kept, not cleared: ChiCTR gives no sex, age or "
@@ -727,7 +733,10 @@ def read(arguments: dict) -> dict:
         next_actions.append('A prediction_set contains independently evaluable endpoint component ids. Compare changed inputs/models with mode input_sensitivity/model_version, or updated origins with mode update; update comparisons pair equal calendar target dates. Every record.numberPath resolves to its summary in report_model.longitudinal.byId, independent of list order. Incident risk evaluations report prevalent exclusions separately; local calibration separation does not verify provider training independence.')
     if data.get("more") is True:
         warnings.append("More items exist than this answer holds.")
-        next_actions.append("Follow data.nextRead exactly, carrying its filter.cursor; do not use offset for intake." if what == "data_intake" else "Call again with filter.offset to read the next page, or narrow the filter.")
+        if what == "candidates" and data.get("nextCursor"):
+            next_actions.append("Repeat the same candidates filters with filter.cursor set to data.nextCursor.")
+        else:
+            next_actions.append("Follow data.nextRead exactly, carrying its filter.cursor; do not use offset for intake." if what == "data_intake" else "Call again with filter.offset to read the next page, or narrow the filter.")
     if what == 'data_intake' and data.get('sourceRead'):
         next_actions.append('data.sourceRead lists owned knowledge-base upload originals separately; the default upload page lists this root and project-level upload receipts.')
     if data.get("available") is False:
@@ -1465,6 +1474,13 @@ def registry_record(arguments: dict) -> dict:
     registry = arguments.get("registry")
     if isinstance(registry, str) and registry.strip():
         payload["filter"]["registry"] = registry.strip()
+    collection = arguments.get("collection")
+    revision = arguments.get("collectionRevision")
+    if collection is not None or revision is not None:
+        if not isinstance(collection, str) or not collection.strip() or not isinstance(revision, str) or not re.fullmatch(r"[a-f0-9]{64}", revision):
+            raise VcrPlatformError("vcr_request_invalid", "A frozen record needs collection and collectionRevision from candidates.")
+        payload["filter"]["collection"] = collection.strip()
+        payload["filter"]["collectionRevision"] = revision
     try:
         data = _post("read", payload)
     except VcrPlatformError as error:
@@ -1486,6 +1502,7 @@ def registry_record(arguments: dict) -> dict:
                                                      else "The registry channel is not available here (%s)." % (status or "unavailable")))],
             "next_actions": (
                 ["Check the registration number; do not treat a missing record as a trial that did not happen."] if not_found
+                else ["Report that the selected collection could not be read."] if collection
                 else ["Use the literature and clinical-trial search tools instead, and say where each field came from."]
             ),
         }
@@ -1501,7 +1518,7 @@ def registry_record(arguments: dict) -> dict:
     return {
         "status": "success",
         "summary": "Read registry record %s." % registry_id,
-        "data": record,
+        "data": {**record, "collection": data["collection"]} if data.get("collection") else record,
         "warnings": [],
         "next_actions": ["Keep planned and actual enrolment apart; a planned number is not evidence of accrual speed."],
     }

@@ -175,6 +175,7 @@ Report inter-rater agreement and disagreements as properties of that reference s
 - 候选试验先读 `mcp__evimed__vcr_read` `{ "what": "candidates", "filter": { "condition": "…", "terms": ["英文说法", "中文说法"], "age": 63, "sex": "female", "region": "China" } }`：检索词你写（`condition` 必填，`terms` 最多 3 个，中英文都可以），年龄、性别、国家（登记库的英文写法）知道才写。平台同时查 ClinicalTrials.gov、CTIS、ChiCTR，合并、去重，按记录自己写明的状态、年龄、性别、国家筛选并封顶；记录没写的项不排除，列在 `unknown`。回复里照 `coverage` 说查了哪些库、哪些失败、截至哪天，并写明 CDE 和 ICTRP 没有覆盖。列表的顺序不是适合程度。别的问法仍可用 `mcp__evimed__clinical_trial_search`。有希望的用 `mcp__evimed__trial_registry_record` 读登记记录。本研究已经有的候选试验在 `mcp__evimed__vcr_read` `{ "what": "candidate_trials" }` 里，不必重复写。
 - 候选里标 `parsedBefore` 的，本账户结构化过它：只写 `registryId` 和 `subjectKeys`，记录没变就沿用，不必再解析；记录变了才重写 `criteria`。
 - 登记记录没有入排原文的（ChiCTR 只有清单）：条件照写保存，评估时一律按未知，原因是“缺登记原文”；不要补写原文，也不要借别处的记录。
+- 如果任务指定冻结登记库，`candidates` 的 `filter.collection` 写库的编号，`terms` 最多 32 个，`limit` 最多 500。每页最多 50 条，继续时原样携带检索参数并把 `nextCursor` 写入 `filter.cursor`。`retrieval.retrievedIds` 列出此检索窗口的全部登记号。读 `trial_registry_record` 和写 `candidate_trial` 时也传候选条目里的 `collection` 和 `collectionRevision`。来源日期以 `collection.snapshotDate` 为准，登记状态是历史记录。冻结库缺记录或读取失败时，在结果中保留这个缺口。
 - 一个试验写成一项候选试验：`what: "candidate_trial"`，`registryId`、`subjectKeys`（这位患者）和 `criteria`——登记记录里入选和排除标准的原句，一条一条按第一节的写法结构化，`sourceText` 逐字照抄，判不了的写成 `language`。试验的名称、分期、状态和中心由平台从登记记录读，你不写。写入时平台就把这位患者对照这个试验判了，判定在返回值里。条件里的 `variable` 用这位患者已有事实的变量名（`mcp__evimed__vcr_read` 读到的那些，例如已有 `egfr` 就不要另写 `gfr`）：同一个概念一个名字，平台才能拿这条事实判这条条件；单位照登记原句写，年龄、病程这类时间单位平台会换算。没有对应事实的，再按第一节起名。
 
 ```json

@@ -85,7 +85,7 @@ import { checkRegulatoryContact, resolveVisitsRef, visitKey } from "./vcrSchedul
 import { EVIDENCE_ARM_ROLES } from "./vcrEvidenceStore.mjs";
 import { VCR_MATCHING_VOCABULARY_VERSION, settleFactEvidence, storedExclusion } from "./vcrMatching.mjs";
 import { DATE_QUOTE_MAX } from "./vcrClinicalDateEvidence.mjs";
-import { candidateRequest } from "./vcrCandidateSearch.mjs";
+import { candidateRequest, FROZEN_CANDIDATE_LIMIT } from "./vcrCandidateSearch.mjs";
 import { VCR_RECONSTRUCTION_REFERENCE, vcrReconstructionReferenceFor, vcrResultKindFor } from "./vcrJobs.mjs";
 import { vcrPublicationId } from "./vcrPublicationSources.mjs";
 import { assumptionSourceEntry, carrySourceEntries, checkSourceEntries, standingSourceBindings } from "./vcrScenarioSources.mjs";
@@ -111,7 +111,7 @@ const answerBudgetMs = 10_000;
 const REGISTRY_MARGIN_MS = 3_000;
 /** The registry client's default deadline (its own default), when the deployment names none: `OPEN_SCIENCE_VCR_REGISTRY_TIMEOUT_MS`. */
 const REGISTRY_DEADLINE_MS = 20_000;
-const readFilterFields = Object.freeze(["id", "parentId", "kind", "limit", "offset", "registryId", "registry", "snapshotId", "sourceId", "subjectKey", "documentId", "protocolVersionId", "beforeSeq", "query", "cursor",
+const readFilterFields = Object.freeze(["id", "parentId", "kind", "limit", "offset", "registryId", "registry", "snapshotId", "sourceId", "subjectKey", "documentId", "protocolVersionId", "beforeSeq", "query", "cursor", "collection", "collectionRevision",
   // `what: candidates` (M1): the search a run writes and what it knows of the patient. Their shape is `candidateRequest`'s, in `vcrCandidateSearch.mjs`.
   "condition", "terms", "age", "sex", "region", "status"]);
 /** The filter keys only `what: candidates` takes. */
@@ -134,7 +134,7 @@ export const VCR_GATEWAY_ERROR_CODES = Object.freeze([
   ...VCR_LONGITUDINAL_ERROR_CODES,
   "vcr_disabled", "vcr_no_study", "vcr_gateway_token_missing", "vcr_gateway_token_invalid", "vcr_gateway_rate_limited",
   "vcr_gateway_timeout", "vcr_gateway_unavailable", "vcr_request_invalid", "vcr_request_too_large",
-  "vcr_model_version_changed", "vcr_task_context_deleted", "vcr_invocation_unavailable", "vcr_patient_context_invalid", "vcr_read_what_invalid", "vcr_read_filter_invalid", "vcr_write_what_invalid", "vcr_write_payload_invalid",
+  "vcr_model_version_changed", "vcr_task_context_deleted", "vcr_invocation_unavailable", "vcr_patient_context_invalid", "vcr_read_what_invalid", "vcr_read_filter_invalid", "vcr_read_changed", "vcr_write_what_invalid", "vcr_write_payload_invalid",
   "vcr_curve_provenance_unavailable", "vcr_curve_provenance_invalid", "vcr_curve_source_changed",
   "source_changed", "vcr_intake_source_invalid", "vcr_intake_source_changed", "vcr_intake_payload_invalid", "vcr_intake_format_invalid", "vcr_intake_map_changed", "vcr_field_map_changed", "vcr_field_map_unconfirmed", "vcr_source_withdrawn",
   "vcr_curve_calibration_invalid", "vcr_curve_digitizer_unavailable", "vcr_intake_busy", "vcr_intake_timeout", "vcr_intake_failed",
@@ -222,6 +222,7 @@ const object = (value) => (value && typeof value === "object" && !Array.isArray(
 /** @param {unknown} value */
 const list = (value) => (Array.isArray(value) ? value : []);
 const ID = /^[A-Za-z0-9_.:@-]{1,160}$/;
+const COLLECTION_REVISION = /^[a-f0-9]{64}$/;
 
 /** @param {Record<string, any>} body */
 function readRequest(body) {
@@ -236,9 +237,22 @@ function readRequest(body) {
   }
   /** @type {Record<string, any>} */
   const filter = {};
+  if (raw.collection != null) {
+    if (!["candidates", "trial_registry_record"].includes(body.what) || typeof raw.collection !== "string" || !ID.test(raw.collection)) {
+      throw gatewayError(400, "vcr_read_filter_invalid", "filter.collection names a frozen collection for candidates or trial_registry_record.");
+    }
+    filter.collection = raw.collection;
+  }
+  if (raw.collectionRevision != null || (body.what === "trial_registry_record" && filter.collection)) {
+    if (body.what !== "trial_registry_record" || !filter.collection || typeof raw.collectionRevision !== "string" || !COLLECTION_REVISION.test(raw.collectionRevision)) {
+      throw gatewayError(400, "vcr_read_filter_invalid", "A frozen trial_registry_record read requires both collection and collectionRevision from candidates.");
+    }
+    filter.collectionRevision = raw.collectionRevision;
+  }
+  const frozen = body.what === "candidates" && Boolean(filter.collection);
   if (raw.cursor != null) {
-    if (body.what !== 'data_intake' || typeof raw.cursor !== 'string' || !/^[A-Za-z0-9_-]{1,2048}$/.test(raw.cursor)) {
-      throw gatewayError(400, 'vcr_read_filter_invalid', 'cursor is the exact continuation returned by data_intake.');
+    if ((!frozen && body.what !== 'data_intake') || typeof raw.cursor !== 'string' || !/^[A-Za-z0-9_-]{1,2048}$/.test(raw.cursor)) {
+      throw gatewayError(400, 'vcr_read_filter_invalid', 'cursor is the exact continuation returned by the preceding page.');
     }
     filter.cursor = raw.cursor;
   }
@@ -250,7 +264,7 @@ function readRequest(body) {
   if (CANDIDATE_FILTER_FIELDS.some((key) => raw[key] != null)) {
     if (body.what !== "candidates") throw gatewayError(400, "vcr_read_filter_invalid", `filter.${CANDIDATE_FILTER_FIELDS.find((key) => raw[key] != null)} belongs to what: candidates.`);
     // The request's own checks answer in words (`candidateRequest`); this only carries the keys through, bounded.
-    const asked = candidateRequest(raw);
+    const asked = candidateRequest(raw, { frozen });
     if (asked.ok === false) throw gatewayError(400, "vcr_read_filter_invalid", asked.message);
     for (const key of CANDIDATE_FILTER_FIELDS) if (raw[key] != null) filter[key] = raw[key];
   }
@@ -260,8 +274,9 @@ function readRequest(body) {
     filter.query = query;
   }
   if (raw.limit != null) {
-    if (!Number.isSafeInteger(raw.limit) || raw.limit < 1 || raw.limit > VCR_READ_MAX_ITEMS) {
-      throw gatewayError(400, "vcr_read_filter_invalid", `filter.limit must be a whole number from 1 to ${VCR_READ_MAX_ITEMS}.`);
+    const max = frozen ? FROZEN_CANDIDATE_LIMIT : VCR_READ_MAX_ITEMS;
+    if (!Number.isSafeInteger(raw.limit) || raw.limit < 1 || raw.limit > max) {
+      throw gatewayError(400, "vcr_read_filter_invalid", `filter.limit must be a whole number from 1 to ${max}.`);
     }
     filter.limit = raw.limit;
   }
@@ -270,6 +285,7 @@ function readRequest(body) {
     filter.beforeSeq=raw.beforeSeq;
   }
   if (raw.offset != null) {
+    if (frozen) throw gatewayError(400, "vcr_read_filter_invalid", "Use filter.cursor for frozen candidate pagination.");
     if (!Number.isSafeInteger(raw.offset) || raw.offset < 0 || raw.offset > (body.what === "subject_document" ? 1_048_576 : 10_000)) {
       throw gatewayError(400, "vcr_read_filter_invalid", "filter.offset must be a whole number from 0 to 10000.");
     }
@@ -732,7 +748,7 @@ function distributionOf(item, field, value) {
  * runtime is reserved for, when it is a bounded one (`runtimeRunId`).
  * @typedef {{ store: any, service: any, orchestrator: any, study: any, evidence?: any, evidenceStore?: any, matchStore?: any,
  *   matching?: any, patientTrials?: any, seal?: any, dataPlane?: any, documents?: any, report?: (code: string) => void,
- *   caller?: { runtimeRunId?: string | null, provenance?: any } | null, knowledge?: any, afterFreeze?: boolean }} WriteDeps
+ *   caller?: { runtimeRunId?: string | null, provenance?: any } | null, knowledge?: any, afterFreeze?: boolean, signal?: AbortSignal }} WriteDeps
  */
 
 /** The criterion fields a protocol write takes. */
@@ -1207,6 +1223,9 @@ const WRITERS = {
     if (!item.only(VCR_WRITE_FIELDS.candidate_trial)) return null;
     const registry = item.choice("registry", ["clinicaltrials.gov", "chictr", "ctis"], { fallback: "clinicaltrials.gov" });
     const registryId = item.token("registryId", /^[A-Za-z0-9][A-Za-z0-9-]{2,63}$/, "登记号，例如 NCT02296125 或 EU CT 号 2024-513060-26-00", { required: true });
+    const collection = item.token("collection", ID, "冻结登记库的编号，取自 candidates 的 collection.id", { required: item.row.collection != null });
+    const collectionRevision = item.token("collectionRevision", COLLECTION_REVISION, "冻结库版本哈希，取自候选试验的 collectionRevision", { required: Boolean(collection) || item.row.collectionRevision != null });
+    if (collectionRevision && !collection) item.bad("collection", "指定冻结库版本时同时提供库编号。");
     const rows = item.arr("criteria", { max: 200 });
     const asked = item.arr("subjectKeys", { max: 20 }) ?? [];
     for (const [at, key] of asked.entries()) {
@@ -1231,7 +1250,7 @@ const WRITERS = {
     // structuring is read again instead of asked for; a record that changed since, or a trial never structured, needs the criteria written.
     const needCriteria = () => item.bad("criteria", "这个试验本研究里还没有：第一次写它要同时写入它的入排条件（criteria）。账户里没有这份登记记录（同一版本）的解析可沿用。");
     if (newHere && typeof patientTrials.parsedCriteria !== "function") return void needCriteria();
-    const fetched = await evidence.candidateRecord({ userId: study.userId, registry, registryId });
+    const fetched = await evidence.candidateRecord({ userId: study.userId, registry, registryId, ...(collection ? { collection, collectionRevision, ...(deps.signal ? { signal: deps.signal } : {}) } : {}) });
     if (fetched?.status !== "ok") {
       const missing = fetched?.status === "registry_not_found";
       return void item.bad("registryId", missing ? "登记平台没有这个登记号的记录。" : `没能取回这条登记记录（${fetched?.reason ?? fetched?.status ?? "unknown"}）。`,
@@ -1315,10 +1334,12 @@ const WRITERS = {
           message: `本研究里没有编号为「${subjectKey.slice(0, 60)}」的受试者：编号取自 vcr_read what:matching 的受试者清单，不要自拟；试验已保存，其余受试者照常评估。` });
       }
     }
+    if (collection && deps.signal?.aborted) return void item.bad("collection", "冻结库请求已结束，请重试。", "registry_unavailable");
     const saved = await patientTrials.writeTrial(study, { trial, criteria, subjectKeys });
     const unavailable = saved.evaluation?.unavailable ?? [];
     extra.results.push({
       index: item.index, id: saved.trial.id, registryId, created: saved.created, criteria: saved.criteria.length,
+      ...(fetched.collection ? { collection: fetched.collection } : {}),
       ...(reused ? { reused: true, note: "沿用了本账户先前对这条登记记录（同一版本）的解析，没有重新解析；记录一旦有变，需要重新写条件。" } : {}),
       ...(criteria ? { located } : {}), evaluated: saved.evaluation?.evaluated ?? [],
       ...(unavailable.length ? { unavailable } : {}), ...(warnings.length ? { warnings } : {}),
@@ -2181,7 +2202,7 @@ const WRITERS = {
  * @param {WriteDeps & { what: string, items: any[] | null, data: any | null }} input
  */
 export async function vcrRuntimeWrite({ store, service, orchestrator, study, what, items, data, evidence = null, evidenceStore = null,
-  matchStore = null, matching = null, patientTrials = null, seal = null, dataPlane = null, documents = null, report = () => {}, caller = null, knowledge = null }) {
+  matchStore = null, matching = null, patientTrials = null, seal = null, dataPlane = null, documents = null, report = () => {}, caller = null, knowledge = null, signal }) {
   if (["site", "followup"].includes(what)) throw gatewayError(410, "vcr_recruitment_retired", "该运营流程已停用；患者匹配仍可使用，历史观察可在“依据”中只读查看或导出。");
   /** @type {string[]} */
   const ids = [];
@@ -2208,7 +2229,7 @@ export async function vcrRuntimeWrite({ store, service, orchestrator, study, wha
   /** What the writers of one request share: the changed nodes, the answers beside the ids, and the pairs to judge again. @type {{ changed: string[], results: any[], reevaluate?: Set<string> }} */
   const scratch = { changed, results };
   /** @type {WriteDeps} */
-  const deps = { store, service, orchestrator, study, evidence, evidenceStore, matchStore, matching, patientTrials, seal, dataPlane, documents, report, caller, knowledge };
+  const deps = { store, service, orchestrator, study, evidence, evidenceStore, matchStore, matching, patientTrials, seal, dataPlane, documents, report, caller, knowledge, signal };
   // The run the platform sent to take new evidence into a study's cards (flywheel F24) writes its versions beside the frozen one when
   // the study's analysis plan has frozen: the dispatch names the run, and a card a run types never decides it. Any other writer — the
   // researcher's own conversation, an ordinary programme step — writes exactly as before, which for a frozen study is a new freeze.
@@ -2251,6 +2272,7 @@ export async function vcrRuntimeWrite({ store, service, orchestrator, study, wha
   } else {
     const writer = WRITERS[what];
     for (const [index, raw] of rows.entries()) {
+      if (signal?.aborted) break;
       if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
         issues.push(issue(index, "", "vcr_write_value_invalid", "每一项是一个对象。"));
         continue;
@@ -2660,6 +2682,7 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
       /** @type {() => Promise<any>} */
       let work;
       let budget = budgetMs;
+      const requestAbort = new AbortController();
       if (operation === "read") {
         const request = readRequest(body);
         // A registry read waits on a registry: its budget is its client's deadline
@@ -2669,7 +2692,7 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
           ? await vcr.dataIntake?.read(study, request.filter, origin) ?? { available: false, code: 'vcr_gateway_unavailable' }
           : request.what==='patient_context'
           ? origin && vcr.patientContext?.candidates ? await vcr.patientContext.candidates(origin,request.filter) : {candidates:[],nextBeforeSeq:null}
-          : await vcr.service.runtimeRead(study, request.what, request.filter)) });
+          : await vcr.service.runtimeRead(study, request.what, request.filter, { signal: requestAbort.signal })) });
       } else if (operation === "write") {
         const request = writeRequest(body);
         // The token names the runtime, and a runtime reserved for one dispatch names that dispatch: with the
@@ -2703,6 +2726,7 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
           const result = await vcrRuntimeWrite({
             store: vcr.store, service: vcr.service, orchestrator: vcr.orchestrator ?? null, study,
             what: request.what, items: request.items, data: request.data,
+            ...(request.what === "candidate_trial" ? { signal: requestAbort.signal } : {}),
             evidence: vcr.evidence ?? null, evidenceStore: vcr.evidenceStore ?? null, matchStore: vcr.matchStore ?? null,
             matching: vcr.matching ?? null, patientTrials: vcr.patientTrials ?? null, seal: vcr.seal ?? null, dataPlane: vcr.dataPlaneSeam ?? null, documents: vcr.documents ?? null, report,
             knowledge: vcr.knowledge ?? vcr.service?.packages?.knowledge ?? null,
@@ -2717,7 +2741,7 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
           return withWriteEntry(request.what, { what: request.what, ...result }, { study, publicUrl: config?.publicUrl });
         };
         // A write that fetches a registry record waits on the registry too.
-        if (request.what === "precedent") budget = Math.max(budgetMs, registryDeadline + REGISTRY_MARGIN_MS);
+        if (["precedent", "candidate_trial"].includes(request.what)) budget = Math.max(budgetMs, registryDeadline + REGISTRY_MARGIN_MS);
       } else if (operation === "digitize") {
         // The caller states a calibration, which curve and the published risk table; every coordinate is measured by
         // the deterministic digitizer from a figure the study already holds. The container is bounded by its own
@@ -2799,13 +2823,22 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
 
       /** @type {any} */
       let timer;
+      const disconnect = () => requestAbort.abort();
+      res.once?.("close", disconnect);
+      if (res.destroyed) disconnect();
       const result = await Promise.race([
         work(),
         new Promise((_, reject) => {
-          timer = setTimeout(() => reject(gatewayError(504, "vcr_gateway_timeout", "The 虚拟临床研究 gateway timed out.")), budget);
+          timer = setTimeout(() => {
+            reject(gatewayError(504, "vcr_gateway_timeout", "The 虚拟临床研究 gateway timed out."));
+            requestAbort.abort();
+          }, budget);
           timer.unref?.();
         }),
-      ]).finally(() => clearTimeout(timer));
+      ]).finally(() => {
+        clearTimeout(timer);
+        res.off?.("close", disconnect);
+      });
       sendJson(res, 200, { data: result });
     } catch (caught) {
       let error = caught;

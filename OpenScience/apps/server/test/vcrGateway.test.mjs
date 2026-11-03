@@ -5,6 +5,7 @@
 // The last one is the whole of principle 1 at this seam: a model that could
 // write a count or a measure could write a result nobody computed.
 import assert from "node:assert/strict";
+import { EventEmitter } from "node:events";
 import { Readable } from "node:stream";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
@@ -214,6 +215,39 @@ test("the registry search keys belong to what: candidates, are checked in words,
     assert.match(res.json().error, /filter\./);
   }
   assert.equal(calls.length, before, "nothing was read for a request that was refused");
+});
+
+test("frozen candidate pagination and exact reads carry the collection through the gateway", async () => {
+  const { calls, handler } = fixture();
+  const ask = async (what, filter) => {
+    const res = response();
+    await handler(request("/internal/vcr/v1/read", { what, filter }), res);
+    return res;
+  };
+  const filter = { collection: "snapshot-1", condition: "lung cancer", terms: ["nsclc", "egfr", "alk", "adenocarcinoma"], limit: 500, cursor: "opaque-cursor" };
+  assert.equal((await ask("candidates", filter)).status, 200);
+  assert.deepEqual(calls.at(-1), ["read", "candidates", filter]);
+  const exact = { collection: filter.collection, collectionRevision: "a".repeat(64), registry: "clinicaltrials.gov", registryId: "NCT00000001" };
+  assert.equal((await ask("trial_registry_record", exact)).status, 200);
+  assert.deepEqual(calls.at(-1), ["read", "trial_registry_record", exact]);
+  assert.equal((await ask("trial_registry_record", { ...exact, collectionRevision: undefined })).status, 400);
+  assert.equal((await ask("candidates", { ...filter, offset: 50 })).status, 400);
+  assert.equal((await ask("candidates", { ...filter, limit: 501 })).status, 400);
+  assert.equal((await ask("candidates", { condition: "lung cancer", limit: 500 })).status, 400);
+});
+
+test("disconnecting a frozen candidate read aborts the runtime request", async () => {
+  const { handler, vcr } = fixture();
+  const res = Object.assign(new EventEmitter(), response());
+  let observed = false;
+  vcr.service.runtimeRead = async (_study, _what, _filter, { signal }) => {
+    res.emit("close");
+    observed = signal.aborted;
+    return { available: false };
+  };
+  await handler(request("/internal/vcr/v1/read", { what: "candidates", filter: { collection: "snapshot-1", condition: "diabetes" } }), res);
+  assert.equal(observed, true);
+  assert.equal(res.listenerCount("close"), 0);
 });
 
 test("a runtime write may not write a number, a count or an execution record", async () => {
@@ -1695,4 +1729,14 @@ test("a unit the quotation does not print drops the unit and keeps the fact; a b
   // A number the quotation does not print is still refused whole.
   const invented = factWriter({ text });
   assert.equal((await invented.write(item({ variable: "hba1c", value: 7.9, unit: "%", surface: "7.9", quote: "HgbA1c 7.4 last month." }))).ok, false);
+});
+
+test("a changed read remains a retryable 409 at the gateway", async () => {
+  const made = fixture();
+  made.vcr.service.runtimeRead = async () => { throw new HttpError(409, "vcr_read_changed", "Trial assessments changed while reading; retry the list."); };
+  const res = response();
+  await made.handler(request("/internal/vcr/v1/read", { what: "candidate_trials", filter: { subjectKey: "P-1" } }), res);
+  assert.equal(res.status, 409);
+  assert.equal(res.json().code, "vcr_read_changed");
+  assert.match(res.json().error, /retry the list/);
 });

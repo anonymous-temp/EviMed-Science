@@ -40,6 +40,8 @@ export const VCR_WRITE_FIELDS = Object.freeze({
     "biomarker"
   ],
   "candidate_trial": [
+    "collection",
+    "collectionRevision",
     "registry",
     "registryId",
     "criteria",

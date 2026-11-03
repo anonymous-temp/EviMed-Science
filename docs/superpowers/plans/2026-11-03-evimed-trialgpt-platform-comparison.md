@@ -1,22 +1,24 @@
 # EviMed Science versus TrialGPT: platform evaluation protocol
 
-Date: 2026-11-03. Status: researched protocol, not an executed platform benchmark.
+Date: 2026-11-03. Status: integrated implementation under final local verification; paid platform benchmark pending.
 
 Owner execution amendment (2026-11-03): merge `c180ff7b5` with the current integration line (`origin/codex/release-1102`, `3970e4f8f`) first. Implement missing ranking and a usable frozen-corpus retrieval path, verify locally, commit and push before the paid platform baseline. Production remains the owner's reported November 1 version and is not the baseline. Run a real local DSH kernel. This amendment supersedes any earlier instruction here to benchmark the unmerged feature or count alignment failures as incorrect predictions.
 
 ### Execution ledger
 
-- [ ] Merge both lines without losing either line's evidence/date fixes.
-- [ ] Connect explicit trial matching ranking to the product result path.
-- [ ] Support a frozen, versioned trial collection through the same product retrieval/record boundary, with up to 500 candidates and paged reads; preserve live-registry behavior separately.
-- [ ] Implement and freeze source-span alignment with explicit unresolved buckets.
-- [ ] Build the local platform driver with throwaway-account lifecycle, automated attribution, patient-specific projects/sessions, and memory extraction disabled.
+- [x] Merge both lines without losing either line's evidence/date fixes (`faa8d0f28`).
+- [x] Connect explicit trial matching ranking to the product result path, including coherent reads and source-refresh write fencing.
+- [x] Support a frozen, versioned trial collection through the same product retrieval/record boundary, with up to 500 candidates and paged reads; preserve live-registry behavior separately.
+- [x] Implement source-span alignment with explicit unresolved buckets; the executable policy is frozen with each campaign before inference.
+- [x] Build the local platform driver with throwaway-account lifecycle, automated attribution, patient-specific projects/sessions, and memory extraction disabled.
 - [ ] Complete scoped tests and independent code review; commit/push the integrated candidate without deployment.
 - [ ] Run the real local product baseline at that pushed revision, then record findings and any required repair/retest.
 
 ### Mandatory test hygiene
 
 Each campaign registers and deletes its own account using `scripts/ops/throwaway-account.mjs`. Cleanup is required on success, failure and interruption; cancel owned jobs before deletion and retain an explicit cleanup receipt. Each patient gets a different project and conversation because conversations in one project share files. All dispatched/native runs carry verifiable `automated` attribution. Disable memory extraction and benchmark memory read/write/learning, and verify effective configuration rather than merely omitting a memory service. Model-visible workspaces contain no gold labels, prior answers or scorer code. Export needed test artifacts before deleting the account. No production account, production runtime or historical business workspace is used.
+
+Implementation clarification: each patient receives a separate throwaway account as well as a project/session, bounding retained runtime disk usage. All inference uses the supported automated dispatch route; native browser submissions do not expose the automation mark and are not used for paid bulk inference. The actual resolved configuration and live-instance receipt are checked. The real host DSH adapter is not an OS-level container isolation proof; this public regression must not be advertised as a strictly blinded independent clinical study. The durable benchmark budget journal includes every model purpose and survives account deletion; it uses reference-price estimates and preserves uncertain charges.
 
 ### Frozen alignment rule
 

@@ -256,6 +256,12 @@ export class VcrMatchStore extends VcrStoreBase {
     return rows.map(criterionOf);
   }
 
+  /** Criteria for the selected protocol versions in this study. @param {string} studyId @param {readonly string[]} ids */
+  async criteriaOfProtocols(studyId, ids) {
+    if (!ids.length) return [];
+    return (await this.rows(`SELECT * FROM ${VCR_SCHEMA}.criteria WHERE study_id = $1 AND protocol_version_id = ANY($2::text[]) ORDER BY protocol_version_id, ordinal`, [studyId, [...ids]])).map(criterionOf);
+  }
+
   /** @param {string} studyId @param {string|null} [id] */
   async protocols(studyId, id = null) {
     return (await this.rows(`SELECT id,version,title,source_ref FROM ${VCR_SCHEMA}.protocol_versions
@@ -341,6 +347,18 @@ export class VcrMatchStore extends VcrStoreBase {
     const judgments = await this.rows(
       `SELECT * FROM ${VCR_SCHEMA}.criterion_judgments WHERE assessment_id = $1 ORDER BY created_at, id`, [id]);
     return { ...assessmentOf(row), judgments: judgments.map(judgmentOf) };
+  }
+
+  /** @param {string} studyId @param {string} subjectKey */
+  async latestAssessmentsByProtocol(studyId, subjectKey) {
+    const rows = await this.rows(`SELECT DISTINCT ON (protocol_version_id) * FROM ${VCR_SCHEMA}.matching_assessments WHERE study_id = $1 AND subject_key = $2 ORDER BY protocol_version_id, as_of DESC, created_at DESC, id DESC`, [studyId, subjectKey]);
+    return new Map(rows.map(row => [String(row.protocol_version_id), assessmentOf(row)]));
+  }
+
+  /** @param {string} studyId @param {readonly string[]} ids */
+  async judgmentsForAssessments(studyId, ids) {
+    if (!ids.length) return [];
+    return (await this.rows(`SELECT j.assessment_id, j.criterion_id, j.state, j.applicable FROM ${VCR_SCHEMA}.criterion_judgments j JOIN ${VCR_SCHEMA}.matching_assessments a ON a.id = j.assessment_id WHERE a.study_id = $1 AND a.id = ANY($2::text[])`, [studyId, [...ids]])).map(judgmentOf);
   }
 
   /**

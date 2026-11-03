@@ -1241,6 +1241,15 @@ class RegistryRecordTests(_GatewayCase):
         self.assertEqual(result["status"], "success")
         self.assertEqual(_Gateway.seen[0]["body"], {"what": "trial_registry_record", "filter": {"registryId": "NCT01234567", "registry": "ctgov"}})
 
+    def test_exact_frozen_record_keeps_the_collection_on_request_and_readback(self):
+        collection = {"id": "snapshot-1", "sourceVersion": "release-1", "snapshotDate": "2021-04-27"}
+        _Gateway.answers["read"] = (200, {"data": {"record": {"registryId": "NCT01234567"}, "collection": collection}})
+        result = self.server.call_tool("trial_registry_record", {"registryId": "NCT01234567", "collection": "snapshot-1", "collectionRevision": "a" * 64})
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["data"]["collection"], collection)
+        self.assertEqual(_Gateway.seen[0]["body"]["filter"]["collection"], "snapshot-1")
+        self.assertEqual(_Gateway.seen[0]["body"]["filter"]["collectionRevision"], "a" * 64)
+
     def test_no_registry_status_and_no_unavailable_channel_is_ever_a_success(self):
         for answer in (
             {"available": False, "code": "registry_unavailable", "message": "试验登记检索未接入。"},

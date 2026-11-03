@@ -1123,6 +1123,7 @@ function vcrSettings(overrides) {
     // A trial-registry read's deadline: the registry client's and the gateway's budget for it are this one key
     // (vcrComposition, vcrGateway); the client clamps it to 5–60 s. Read since the registry client existed, defined
     // here only on 2026-10-10 — until then the variable reached nothing and the deadline was always 20 s.
+    vcrTrialCorpusManifest: String(read("vcrTrialCorpusManifest", "OPEN_SCIENCE_VCR_TRIAL_CORPUS_MANIFEST", "") ?? "").trim(),
     vcrRegistryTimeoutMs: integer("vcrRegistryTimeoutMs", "OPEN_SCIENCE_VCR_REGISTRY_TIMEOUT_MS", 20_000, 5_000, 60_000),
     // The most candidate trials one study holds (「给患者找试验」, vcrPatientTrials): each one costs an evaluation for every patient the
     // study judges against it, so the count is bounded; a trial the study already holds can always be updated. Counter:

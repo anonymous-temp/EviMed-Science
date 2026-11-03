@@ -45,6 +45,7 @@ const trialOf = (row) => (row ? {
   locations: row.locations && typeof row.locations === "object" ? row.locations : {},
   url: String(row.url ?? ""),
   recordHash: row.record_hash ?? null,
+  collection: row.source_collection ?? null,
   retrievedAt: iso(row.retrieved_at),
   eligibilityText: String(row.eligibility_text ?? ""),
   criteriaHash: String(row.criteria_hash ?? ""),
@@ -126,6 +127,10 @@ export class VcrCandidateTrialStore extends VcrStoreBase {
       const held = (await client.query(
         `SELECT * FROM ${VCR_SCHEMA}.candidate_trials WHERE study_id = $1 AND registry = $2 AND registry_id = $3 FOR UPDATE`,
         [studyId, trial.registry, trial.registryId])).rows[0] ?? null;
+      const sourceChanged = Boolean(held && (held.record_hash ?? null) !== (trial.recordHash ?? null));
+      if (sourceChanged && criteria === null) {
+        throw new HttpError(409, "vcr_write_refused", "试验原文版本已变化，请按新原文重新读取入排条件后保存。");
+      }
       if (!held) {
         const count = Number((await client.query(`SELECT count(*)::int AS n FROM ${VCR_SCHEMA}.candidate_trials WHERE study_id = $1`, [studyId])).rows[0]?.n ?? 0);
         if (count >= max) {
@@ -134,23 +139,23 @@ export class VcrCandidateTrialStore extends VcrStoreBase {
       }
       const row = (await client.query(
         `INSERT INTO ${VCR_SCHEMA}.candidate_trials
-           (id, study_id, user_id, registry, registry_id, title, phase, status, conditions, locations, url, record_hash, retrieved_at, eligibility_text)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, $11, $12, $13, $14)
+           (id, study_id, user_id, registry, registry_id, title, phase, status, conditions, locations, url, record_hash, retrieved_at, eligibility_text, source_collection)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, $11, $12, $13, $14, $15::jsonb)
          ON CONFLICT (study_id, registry, registry_id) DO UPDATE SET
            title = EXCLUDED.title, phase = EXCLUDED.phase, status = EXCLUDED.status, conditions = EXCLUDED.conditions,
            locations = EXCLUDED.locations, url = EXCLUDED.url, record_hash = EXCLUDED.record_hash,
-           retrieved_at = EXCLUDED.retrieved_at, eligibility_text = EXCLUDED.eligibility_text, updated_at = now()
+           retrieved_at = EXCLUDED.retrieved_at, eligibility_text = EXCLUDED.eligibility_text, source_collection = EXCLUDED.source_collection, updated_at = now()
          RETURNING *`,
         [held?.id ?? vcrId("candidateTrial"), studyId, userId, trial.registry, trial.registryId, String(trial.title ?? ""), String(trial.phase ?? ""),
           String(trial.status ?? ""), JSON.stringify(trial.conditions ?? []), JSON.stringify(trial.locations ?? {}), String(trial.url ?? ""),
-          trial.recordHash ?? null, trial.retrievedAt ?? null, String(trial.eligibilityText ?? "")])).rows[0];
+          trial.recordHash ?? null, trial.retrievedAt ?? null, String(trial.eligibilityText ?? ""), JSON.stringify(trial.collection ?? null)])).rows[0];
 
       let criteriaChanged = false;
       /** @type {string[]} */
       let reassess = [];
       if (criteria !== null) {
         const hash = candidateCriteriaHash(criteria);
-        criteriaChanged = !held || held.criteria_hash !== hash;
+        criteriaChanged = !held || sourceChanged || held.criteria_hash !== hash;
         if (criteriaChanged) {
           reassess = (await client.query(
             `SELECT DISTINCT subject_key FROM ${VCR_SCHEMA}.candidate_trial_assessments WHERE candidate_trial_id = $1 ORDER BY subject_key`,
@@ -300,13 +305,14 @@ export class VcrCandidateTrialStore extends VcrStoreBase {
    * One patient's verdict against one candidate trial, with its per-criterion judgments, in one transaction: a judgment that failed to
    * land would read as a finished evaluation with fewer criteria and the same summary. Writing the same instant and inputs again replaces
    * the set. A trial of another study is not found.
-   * @param {{ assessment: any, userId: string }} input
+   * @param {{ assessment: any, userId: string, expectedRecordHash: string | null, expectedCriteriaHash: string }} input
    */
-  async saveAssessment({ assessment, userId }) {
+  async saveAssessment({ assessment, userId, expectedRecordHash, expectedCriteriaHash }) {
     return this.transaction(async (client) => {
       const owned = await client.query(
-        `SELECT 1 FROM ${VCR_SCHEMA}.candidate_trials WHERE id = $1 AND study_id = $2`, [assessment.candidateTrialId, assessment.studyId]);
+        `SELECT record_hash, criteria_hash FROM ${VCR_SCHEMA}.candidate_trials WHERE id = $1 AND study_id = $2 FOR UPDATE`, [assessment.candidateTrialId, assessment.studyId]);
       if (!owned.rowCount) throw new HttpError(404, "vcr_write_refused", "This candidate trial is not the study's.");
+      if (expectedCriteriaHash === undefined || expectedRecordHash === undefined || owned.rows[0].criteria_hash !== expectedCriteriaHash || (owned.rows[0].record_hash ?? null) !== expectedRecordHash) throw new HttpError(409, "vcr_write_refused", "Trial source or criteria changed during evaluation; evaluate again.");
       const row = (await client.query(
         `INSERT INTO ${VCR_SCHEMA}.candidate_trial_assessments
            (id, study_id, candidate_trial_id, user_id, subject_key, as_of, summary, counts, evidence_gaps, provenance, input_snapshot_id)
@@ -359,6 +365,30 @@ export class VcrCandidateTrialStore extends VcrStoreBase {
     return new Map(rows.map((row) => [String(row.candidate_trial_id), /** @type {any} */ (assessmentOf(row))]));
   }
 
+  /** @param {string} studyId @param {readonly string[]} ids */
+  async judgmentsForAssessments(studyId, ids) {
+    if (!ids.length) return [];
+    return (await this.rows(`SELECT j.* FROM ${VCR_SCHEMA}.candidate_trial_judgments j JOIN ${VCR_SCHEMA}.candidate_trial_assessments a ON a.id = j.assessment_id WHERE a.study_id = $1 AND a.id = ANY($2::text[])`, [studyId, [...ids]])).map(judgmentOf);
+  }
+
+  /** A coherent study snapshot for ranking or one detailed read. @param {string} studyId @param {string} subjectKey @param {{id?: string, registry?: string, registryId?: string, full?: boolean}} [filter] */
+  async rankingSnapshot(studyId, subjectKey, filter = {}) {
+    return this.transaction(async client => {
+      await client.query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
+      const exact = Boolean(filter.id || filter.registryId);
+      const trials = (await client.query(`SELECT * FROM ${VCR_SCHEMA}.candidate_trials WHERE study_id=$1 AND
+        ($2::text IS NULL OR id=$2) AND ($2::text IS NOT NULL OR $4::text IS NULL OR registry_id=$4) AND
+        ($2::text IS NOT NULL OR $3::text IS NULL OR registry=$3) ORDER BY updated_at DESC, id LIMIT $5`,
+      [studyId, filter.id ?? null, filter.registry ?? null, filter.registryId ?? null, exact ? 1 : 1000])).rows.map(trialOf);
+      const ids = trials.map(t => t.id);
+      const assessments = (await client.query(`SELECT DISTINCT ON (candidate_trial_id) * FROM ${VCR_SCHEMA}.candidate_trial_assessments WHERE study_id=$1 AND subject_key=$2 AND candidate_trial_id=ANY($3::text[]) ORDER BY candidate_trial_id, as_of DESC, created_at DESC, id DESC`, [studyId, subjectKey, ids])).rows.map(assessmentOf);
+      const criteria = (await client.query(`SELECT * FROM ${VCR_SCHEMA}.candidate_trial_criteria WHERE study_id=$1 AND candidate_trial_id=ANY($2::text[]) ORDER BY candidate_trial_id, ordinal`, [studyId, ids])).rows.map(criterionOf);
+      const columns = filter.full ? "j.*" : "j.assessment_id, j.criterion_id, j.state, j.applicable";
+      const judgments = (await client.query(`SELECT ${columns} FROM ${VCR_SCHEMA}.candidate_trial_judgments j WHERE j.assessment_id=ANY($1::text[])`, [assessments.map(a => a.id)])).rows.map(row => filter.full ? judgmentOf(row) : ({ assessmentId: String(row.assessment_id), criterionId: String(row.criterion_id), state: String(row.state), applicable: row.applicable !== false }));
+      return { trials, assessments, criteria, judgments };
+    });
+  }
+
   // --------------------------------------------- language criteria
 
   /**
@@ -393,6 +423,18 @@ export class VcrCandidateTrialStore extends VcrStoreBase {
         detail: { candidateTrialId, subjectKey, criterionKey, state } });
       return { id: String(row.id), subjectKey, criterionKey, state };
     });
+  }
+
+  /** @param {string} studyId @param {string} subjectKey @param {readonly string[]} ids @param {Map<string, any[]>} criteriaByTrial */
+  async languageAnswersForTrials(studyId, subjectKey, ids, criteriaByTrial) {
+    const result = new Map(ids.map(id => [id, new Set()]));
+    if (!ids.length) return result;
+    const rows = await this.rows(`SELECT DISTINCT ON (candidate_trial_id, criterion_key) candidate_trial_id, criterion_key, criterion_hash FROM ${VCR_SCHEMA}.language_judgments WHERE study_id=$1 AND subject_key=$2 AND candidate_trial_id=ANY($3::text[]) ORDER BY candidate_trial_id, criterion_key, created_at DESC, id DESC`, [studyId, subjectKey, [...ids]]);
+    for (const row of rows) {
+      const bound = (criteriaByTrial.get(String(row.candidate_trial_id)) ?? []).filter(c => languageKeysOf(c.requirement, c.id).includes(row.criterion_key));
+      if (bound.length && row.criterion_hash === languageCriterionHash(bound, row.criterion_key)) result.get(String(row.candidate_trial_id))?.add(String(row.criterion_key));
+    }
+    return result;
   }
 
   /**

@@ -75,6 +75,7 @@ import { VcrErasureStore } from "./vcrErasureStore.mjs";
 import { createVcrEngineClient } from "./vcrEngineClient.mjs";
 import { createVcrEngineProbe } from "./vcrEngineProbe.mjs";
 import { matchingVariablesOf, subjectTableFacts } from "./vcrMatchingTable.mjs";
+import { createVcrTrialCorpus } from "./vcrTrialCorpus.mjs";
 import { createVcrEvidencePipeline } from "./vcrEvidence.mjs";
 import { createVcrCorrectionCases } from "./vcrCorrectionCases.mjs";
 import { createVcrCurveEvidence } from "./vcrCurveEvidence.mjs";
@@ -1138,7 +1139,8 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
     timeoutMs: Number(config.vcrRegistryTimeoutMs) > 0 ? Number(config.vcrRegistryTimeoutMs) : 20_000,
     chictrAdapter: vcrChictrAdapter({ config, fetchImpl: call, connectorCredentials }),
   });
-  const evidence = createVcrEvidencePipeline({ store: evidenceStore, registry, jobs });
+  const trialCorpus = createVcrTrialCorpus(String(config.vcrTrialCorpusManifest ?? ""), { timeoutMs: Number(config.vcrRegistryTimeoutMs) || 20_000 });
+  const evidence = createVcrEvidencePipeline({ store: evidenceStore, registry, jobs, trialCorpus });
   jobs.baselineVerifier = input => evidence.verifyBaselineTable(input);
   // A number a paper reports is held against the text the platform itself read of that paper (a capture in the project's workspace).
   if (projectStore) {

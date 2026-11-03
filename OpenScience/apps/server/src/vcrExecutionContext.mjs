@@ -6,8 +6,17 @@ const unavailable = () => new HttpError(403, 'vcr_invocation_unavailable', 'A cu
 const object = value => value && typeof value === 'object' && !Array.isArray(value);
 
 function projected(tool, operation, actual, body) {
-  if (tool === 'trial_registry_record' && operation === 'read') return { what: 'trial_registry_record', filter: {
-    registryId: actual.registryId?.trim(), ...(actual.registry?.trim() ? { registry: actual.registry.trim() } : {}) } };
+  if (tool === 'trial_registry_record' && operation === 'read') {
+    const registryId = typeof actual.registryId === 'string' ? actual.registryId.trim() : '';
+    if (!registryId) throw unavailable();
+    const registry = typeof actual.registry === 'string' ? actual.registry.trim() : '';
+    const filter = { registryId, ...(registry ? { registry } : {}) };
+    if (actual.collection == null && actual.collectionRevision == null) return { what: 'trial_registry_record', filter };
+    const collection = typeof actual.collection === 'string' ? actual.collection.trim() : '';
+    const { collectionRevision } = actual;
+    if (!collection || typeof collectionRevision !== 'string' || collectionRevision.length !== 64 || !/^[a-f0-9]{64}$/.test(collectionRevision)) throw unavailable();
+    return { what: 'trial_registry_record', filter: { ...filter, collection, collectionRevision } };
+  }
   if (tool === 'curve_digitize' && operation === 'digitize') return Object.fromEntries(Object.entries(actual).filter(([,value]) => value != null));
   if (tool === 'evidence_pool' && operation === 'simulate') return (actual.action ?? 'start') === 'start'
     ? {action:'start',kind:'pool_evidence',subjectId:[...actual.parameter.trim()].slice(0,120).join(''),scenario:{parameter:actual.parameter.trim(),endpointKey:actual.endpointKey,

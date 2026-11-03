@@ -18,6 +18,21 @@ test('native proof follows wrapper null presence and Unicode code point rules',a
  const parameter='𝛽'.repeat(70);
  await proof('evidence_pool',{parameter,endpointKey:'survival'},'simulate',{action:'start',kind:'pool_evidence',subjectId:parameter,scenario:{parameter,endpointKey:'survival'}});
 });
+test('native exact trial reads prove the frozen collection and its revision from the pending tool', async () => {
+  const tool = 'mcp__evimed__trial_registry_record';
+  const input = { registryId: ' NCT01234567 ', registry: ' clinicaltrials.gov ', collection: ' frozen-2021 ', collectionRevision: 'a'.repeat(64) };
+  const filter = { ...input, registryId: 'NCT01234567', registry: 'clinicaltrials.gov', collection: 'frozen-2021' };
+  const body = { what: 'trial_registry_record', filter };
+  assert.equal((await proof(tool, input, 'read', body)).result.runId, 'run');
+  for (const changed of [{ collection: 'another' }, { collectionRevision: 'b'.repeat(64) }, { collectionRevision: undefined },
+    { collection: undefined, collectionRevision: undefined }]) {
+    await assert.rejects(proof(tool, input, 'read', { ...body, filter: { ...filter, ...changed } }), { code: 'vcr_invocation_unavailable' });
+  }
+  await assert.rejects(proof(tool, { ...input, collectionRevision: undefined }, 'read', body), { code: 'vcr_invocation_unavailable' });
+  const invalidRevision = 'a'.repeat(63) + '\n';
+  await assert.rejects(proof(tool, { ...input, collectionRevision: invalidRevision }, 'read', { ...body, filter: { ...filter, collectionRevision: invalidRevision } }), { code: 'vcr_invocation_unavailable' });
+  assert.equal((await proof(tool, { registryId: input.registryId }, 'read', { ...body, filter: { registryId: filter.registryId } })).result.runId, 'run');
+});
 test('native proof asks only for the current open turn',async()=>{
  const {options}=await proof('vcr_read',{what:'study'},'read',{what:'study'});assert.equal(options.currentTurn,true);
 });

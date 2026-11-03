@@ -83,6 +83,7 @@ export const repairableEvidencePackageErrorCodes = new Set([
 // the run. These codes all mean "this document was not obtainable", which the
 // skill already instructs the agent to record in failedSources and work around.
 export const recoverableEvidenceSourceErrorCodes = new Set([
+  "vcr_read_changed",
   ...Object.keys(RESULT_WORKBENCH_ERROR_MESSAGES),
   // The data-semantics checks name why a table could not be checked; the check is
   // reported as not run and every other check, and the analysis, go on.
@@ -1534,6 +1535,7 @@ export const VCR_GATEWAY_ERROR_CODES = Object.freeze([
   'vcr_request_too_large',
   'vcr_read_what_invalid',
   'vcr_read_filter_invalid',
+  'vcr_read_changed',
   'vcr_write_what_invalid',
   'vcr_write_payload_invalid',
   'vcr_simulate_action_invalid',

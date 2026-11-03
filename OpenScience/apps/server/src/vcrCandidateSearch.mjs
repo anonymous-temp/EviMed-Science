@@ -46,6 +46,8 @@ export const CANDIDATES_NOT_COVERED = Object.freeze([
 
 /** The most phrases besides the condition one list is searched with: each is a request to each registry. */
 export const CANDIDATE_TERMS_MAX = 3;
+export const FROZEN_CANDIDATE_TERMS_MAX = 32;
+export const FROZEN_CANDIDATE_LIMIT = 500;
 
 /** ClinicalTrials.gov's statuses of a trial that is open or about to be, and CTIS's public status codes for the same (`CTIS_PUBLIC_STATUS`). */
 const CTGOV_OPEN_STATUSES = Object.freeze(["RECRUITING", "NOT_YET_RECRUITING", "ENROLLING_BY_INVITATION"]);
@@ -64,11 +66,11 @@ const fold = (value) => text(value).normalize("NFKC").replace(/\s+/g, " ").toLow
  * The request as the platform runs it: validated and bounded here as well as at the gateway, because the service is also reached by code.
  * `condition` is required; `terms` are other ways to ask for the same trials (a synonym, the Chinese name, a biomarker) and each is a
  * search of its own, not a narrowing of the condition.
- * @param {Record<string, any>} filter @param {{ limitMax?: number }} [options]
+ * @param {Record<string, any>} filter @param {{ limitMax?: number, frozen?: boolean }} [options]
  * @returns {{ ok: true, request: { condition: string, terms: string[], age: number | null, sex: "male" | "female" | null, region: string | null,
  *   scope: "open" | "any", limit: number } } | { ok: false, message: string }}
  */
-export function candidateRequest(filter, { limitMax = 20 } = {}) {
+export function candidateRequest(filter, { limitMax = 20, frozen = false } = {}) {
   const condition = text(filter?.condition).replace(/\s+/g, " ");
   if (!condition || [...condition].length > 200) return { ok: false, message: "filter.condition 是要找的病情，1 到 200 个字：例如 non-small cell lung cancer。" };
   const given = filter?.terms === undefined || filter?.terms === null ? [] : filter.terms;
@@ -79,7 +81,8 @@ export function candidateRequest(filter, { limitMax = 20 } = {}) {
     if ([...term].length > 200) return { ok: false, message: "filter.terms 里每个检索词最长 200 个字。" };
     if (fold(term) !== fold(condition) && !terms.some((held) => fold(held) === fold(term))) terms.push(term);
   }
-  if (terms.length > CANDIDATE_TERMS_MAX) return { ok: false, message: `filter.terms 最多 ${CANDIDATE_TERMS_MAX} 个：每个都会问遍每个登记库，挑最有区分度的。` };
+  const termsMax = frozen ? FROZEN_CANDIDATE_TERMS_MAX : CANDIDATE_TERMS_MAX;
+  if (terms.length > termsMax) return { ok: false, message: `filter.terms 最多 ${termsMax} 个：每个都会问遍每个登记库，挑最有区分度的。` };
   let age = null;
   if (filter?.age !== undefined && filter?.age !== null) {
     age = Number(filter.age);
@@ -95,8 +98,12 @@ export function candidateRequest(filter, { limitMax = 20 } = {}) {
     region = text(filter.region).replace(/\s+/g, " ");
     if (!region || [...region].length > 80) return { ok: false, message: "filter.region 是国家名，照登记库的英文写法（China, United States）；不知道就不写。" };
   }
-  const scope = filter?.status === undefined || filter?.status === null ? "open" : text(filter.status);
+  const scope = filter?.status === undefined || filter?.status === null ? (frozen ? "any" : "open") : text(filter.status);
   if (scope !== "open" && scope !== "any") return { ok: false, message: "filter.status 写 open（正在或即将招募，默认）或 any（不看状态）。" };
+  if (frozen && filter.limit != null && (!Number.isSafeInteger(filter.limit) || filter.limit < 1 || filter.limit > FROZEN_CANDIDATE_LIMIT)) {
+    return { ok: false, message: `filter.limit 是 1 到 ${FROZEN_CANDIDATE_LIMIT} 的整数。` };
+  }
+  if (frozen) limitMax = FROZEN_CANDIDATE_LIMIT;
   const limit = Math.max(1, Math.min(limitMax, Number.isSafeInteger(filter?.limit) ? filter.limit : limitMax));
   return { ok: true, request: { condition, terms, age, sex: /** @type {any} */ (sex), region, scope: /** @type {any} */ (scope), limit } };
 }

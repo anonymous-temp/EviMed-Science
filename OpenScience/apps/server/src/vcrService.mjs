@@ -1674,9 +1674,9 @@ export class VcrService {
    * the person's own record, so it is judged and audited per read and answers
    * with a pseudonymous key and nothing that names anyone.
    *
-   * @param {any} study @param {string} what @param {Record<string, any>} [filter]
+   * @param {any} study @param {string} what @param {Record<string, any>} [filter] @param {{ signal?: AbortSignal }} [options]
    */
-  async runtimeRead(study, what, filter = {}) {
+  async runtimeRead(study, what, filter = {}, { signal } = {}) {
     if (!VCR_READ_WHATS.includes(what)) {
       throw failure(400, "vcr_read_what_invalid", `what must be one of: ${VCR_READ_WHATS.join(", ")}.`);
     }
@@ -1685,14 +1685,14 @@ export class VcrService {
     if (what === 'data_intake') return { available: false, code: 'vcr_invocation_unavailable', message: 'Original upload intake requires the verified current conversation.' };
     if (!study.id && !['trial_registry_record','models','library','candidates'].includes(what)
       && !(what === 'matching' && ['contract', 'terminology'].includes(filter.kind))) return { available:true,empty:true,study:null,scope:'conversation' };
-    const payload = await this.#runtimeRead(study, what, filter);
+    const payload = await this.#runtimeRead(study, what, filter, signal);
     // This one projection has already verified the entire generated lineage; synthetic counts are not patient disclosure cells.
     if (what === "generated_records") return stripPlaneAddresses(payload);
     return this.forModel(payload, { publishedFigures: VCR_PUBLISHED_FIGURE_READS.includes(what), projection:what });
   }
 
-  /** @param {any} study @param {string} what @param {Record<string, any>} filter */
-  async #runtimeRead(study, what, filter) {
+  /** @param {any} study @param {string} what @param {Record<string, any>} filter @param {AbortSignal} [signal] */
+  async #runtimeRead(study, what, filter, signal) {
     if (what === "followup_history") return this.followupHistoryForRuntime(study);
     // Only the gateway has the verified native root invocation needed to locate a selected patient's context.
     if (what === "patient_context") return { candidates: [], nextBeforeSeq: null };
@@ -1858,9 +1858,9 @@ export class VcrService {
           return { available: false, code: "registry_unavailable", message: "试验登记检索未接入：这一步暂不可用，其余步骤照常。" };
         }
         const max = Number(this.config?.vcrCandidateSearchMax) > 0 ? Number(this.config.vcrCandidateSearchMax) : 20;
-        const answer = await evidence.candidatesFor(study, filter, max);
+        const answer = await evidence.candidatesFor(study, filter, max, signal);
         const trials = this.packages.patientTrials;
-        if (answer?.available && answer.candidates?.length && trials?.parsedHeld && study.userId) {
+        if (answer?.available && !answer.collection && answer.candidates?.length && trials?.parsedHeld && study.userId) {
           // A trial the account has structured before can be written again without its criteria while its record is unchanged (M2).
           const held = await trials.parsedHeld(study, answer.candidates);
           answer.candidates = answer.candidates.map((/** @type {any} */ candidate) => (held.has(`${candidate.registry}\u0000${candidate.registryId}`) ? { ...candidate, parsedBefore: true } : candidate));
@@ -1875,7 +1875,7 @@ export class VcrService {
         if (!evidence?.registryRecord) {
           return { available: false, code: "registry_unavailable", message: "试验登记检索未接入：这一步暂不可用，其余步骤照常。" };
         }
-        return evidence.registryRecord(study, filter);
+        return evidence.registryRecord(study, filter, signal);
       }
       default: throw failure(400, "vcr_read_what_invalid", "This read has no implementation.");
     }

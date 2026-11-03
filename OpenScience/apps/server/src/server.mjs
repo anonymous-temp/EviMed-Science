@@ -9701,6 +9701,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       jevTransport.close();
       await geo?.worker?.close?.();
       await vcr?.worker?.close?.();
+      await vcr?.evidence?.closeTrialCorpus?.();
       await documentExportWorker?.close();
       await resultReplayWorker?.close();
       await availability.close();
