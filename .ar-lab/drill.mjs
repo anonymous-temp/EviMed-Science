@@ -22,6 +22,8 @@ const G_NATURAL = "整理影响咖啡因半衰期的主要因素，给我一份�
 const G_SECOND = "这是一个多轮推进的长期研究目标：评估茶碱清除率的主要影响因素。第一轮只列出三个影响因素并写入 theo-factors.md；之后每一轮只处理一个因素，把说明追加到 theo-notes.md，段落标题写“## 茶碱因素 N”；全部完成后合成 theo-summary.md。不需要联网。每一轮结束后等待自动进入下一轮，不要在同一轮里做完。";
 const G_HEAVY = "这是一个多轮推进的长期研究目标：测试本机能做多大的矩阵运算。第一轮写一个 Python 脚本 big.py：用 numpy 申请一个约 4 GB 的数组并填满，算出它的和，把结果写入 notes.md，然后运行它。如果脚本失败，把错误原文写入 notes.md。第二轮把数组减到 200 MB 再运行一次，把结果追加到 notes.md。第三轮写 summary.md 总结两次结果。不需要联网。每一轮结束后等待自动进入下一轮。";
 
+const G_HEAVY_BIG = "这是一个多轮推进的长期研究目标：测试本机能做多大的矩阵运算。第一轮写一个 Python 脚本 big.py：用 numpy 申请一个约 12 GB 的数组并逐元素填满（不要用稀疏或延迟分配），算出它的和，把结果写入 notes.md，然后运行它。如果脚本失败，把错误原文写入 notes.md。第二轮把数组减到 200 MB 再运行一次，把结果追加到 notes.md。第三轮写 summary.md 总结两次结果。不需要联网。每一轮结束后等待自动进入下一轮。";
+
 let jobSpend = 0;
 const say = (line) => console.log(`${new Date().toISOString().slice(11, 19)} ${line}`);
 const shell = (file, args, { timeoutMs = 120_000, maxBuffer = 40 * 1024 * 1024 } = {}) => new Promise((resolve) => {
@@ -222,6 +224,14 @@ async function personReturns(drill, person, session) {
 }
 const dockerDo = async (drill, what, args) => { const done = await shell("docker", args, { timeoutMs: 120_000 }); drill.note(what, { code: done.code, err: text(done.stderr).slice(0, 200) }); return done.code; };
 
+async function repeatControl(drill) {
+  const person = await drill.person("a");
+  const set = await establish(drill, person, G5);
+  drill.fact("setStatus", set.status);
+  const end = await watch(drill, person, { ms: 30 * 60_000, quietMs: 5 * 60_000, label: "control repeat" });
+  drill.fact("stoppedByItself", end.quiet);
+  await person.close();
+}
 const DRILL = {
   /** A natural goal: does it continue at all, does it stop. */
   async D01(drill) {
@@ -310,6 +320,20 @@ const DRILL = {
     drill.fact("statuses", person.cached.map((run) => [run.status, run.errorCode ?? null]));
     await person.close();
   },
+  /** The same with more memory than the container and its swap together. */
+  async D07B(drill) {
+    const person = await drill.person("a");
+    const set = await establish(drill, person, G_HEAVY_BIG);
+    drill.fact("setStatus", set.status);
+    await watch(drill, person, { ms: 22 * 60_000, quietMs: 5 * 60_000, label: "heavy big" });
+    drill.fact("containerAfter", await person.container());
+    drill.fact("statuses", person.cached.map((run) => [run.status, run.errorCode ?? null]));
+    await person.close();
+  },
+  /** Repeats of the control: how often does a finished goal keep going. */
+  async D21(drill) { await repeatControl(drill); },
+  async D22(drill) { await repeatControl(drill); },
+  async D23(drill) { await repeatControl(drill); },
   /** Stop pressed during a round: does the goal stop, or only the round. */
   async D08(drill) {
     const person = await drill.person("a");

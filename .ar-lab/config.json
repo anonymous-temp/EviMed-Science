@@ -4,39 +4,11 @@
   "imageArtifact": "evimed-core-release-3970e4f8f052fd286a4d4de4de93ebe2d95cf4cd",
   "jobs": [
     {
-      "key": "a",
-      "drills": "D01,D02,D03,D04",
+      "key": "f",
+      "drills": "D07B,D21,D22,D23",
       "parallel": "1",
-      "capCny": 8,
+      "capCny": 6,
       "maxTasks": ""
-    },
-    {
-      "key": "b",
-      "drills": "D05,D06",
-      "parallel": "0",
-      "capCny": 5,
-      "maxTasks": ""
-    },
-    {
-      "key": "c",
-      "drills": "D07,D08,D11,D12",
-      "parallel": "1",
-      "capCny": 7,
-      "maxTasks": ""
-    },
-    {
-      "key": "d",
-      "drills": "D09,D10",
-      "parallel": "1",
-      "capCny": 5,
-      "maxTasks": ""
-    },
-    {
-      "key": "e",
-      "drills": "D13",
-      "parallel": "0",
-      "capCny": 3,
-      "maxTasks": "2"
     }
   ]
 }
