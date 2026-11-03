@@ -5,16 +5,8 @@
   "imageArtifact": "evimed-core-release-3970e4f8f052fd286a4d4de4de93ebe2d95cf4cd",
   "jobs": [
     {
-      "key": "hold",
-      "drills": "D02,D21,D22,D23",
-      "parallel": "1",
-      "capCny": 7,
-      "maxTasks": "",
-      "walk": ""
-    },
-    {
-      "key": "pause",
-      "drills": "D30,D31,D08",
+      "key": "loop1",
+      "drills": "D32,D33,D35,D36",
       "parallel": "1",
       "capCny": 4,
       "maxTasks": "",

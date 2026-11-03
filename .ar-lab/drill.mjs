@@ -404,6 +404,22 @@ async function pageWalk(drill) {
   await person.close();
 }
 
+async function pauseEarly(drill, ranMs) {
+  const person = await drill.person("a");
+  const set = await establish(drill, person, G5);
+  await roundRunning(drill, person, set.session, 2, { ranMs });
+  const t = Date.now();
+  const paused = await person.api("POST", `/api/research-goals/${set.session}/pause?projectId=${person.projectId}`, { body: {} });
+  drill.fact("pause", { status: paused.status, tookMs: Date.now() - t });
+  await watch(drill, person, { ms: 8 * 60_000, label: "after the pause" });
+  await person.goalStates();
+  const state = person.stateOf(set.session);
+  const rest = Date.parse(state?.statusAt ?? 0);
+  const late = person.roundsOf(set.session).filter((run) => Date.parse(run.startedAt) > rest).sort((a, b) => Date.parse(a.startedAt) - Date.parse(b.startedAt));
+  drill.fact("afterPause", { state: state?.status, reason: state?.reason, late: late.map((run) => [run.startedAt?.slice(11, 19), run.status, run.canceledBy ?? null, run.observedToolCalls ?? null]) });
+  await person.close();
+}
+
 const dockerDo = async (drill, what, args) => { const done = await shell("docker", args, { timeoutMs: 120_000 }); drill.note(what, { code: done.code, err: text(done.stderr).slice(0, 200) }); return done.code; };
 
 async function repeatControl(drill) {
@@ -566,6 +582,11 @@ const DRILL = {
     }
     await person.close();
   },
+  /** Pause just after a round began, the moment that leaves LoopX a round it cannot close. Does it loop, and is the loop stopped. */
+  async D32(drill) { await pauseEarly(drill, 8_000); },
+  async D33(drill) { await pauseEarly(drill, 3_000); },
+  async D35(drill) { await pauseEarly(drill, 15_000); },
+  async D36(drill) { await pauseEarly(drill, 1_000); },
   /** A goal that asks to go on for ever and leaves no file: the guard's own case, with no waiting on a model's mood. */
   async D31(drill) {
     const person = await drill.person("a");
