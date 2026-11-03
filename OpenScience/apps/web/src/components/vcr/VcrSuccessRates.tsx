@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { VcrSuccessRate, VcrSuccessRateFigure, VcrSuccessRates } from "@/lib/vcrClient";
 import { ChartCard } from "@/components/ui/ChartCard";
 import { Disclosure } from "@/components/ui/Disclosure";
+import { FactList } from "@/components/ui/FactList";
 import { Select } from "@/components/ui/Input";
 import { BlockHeading } from "@/components/ui/Section";
 import { numberText } from "./vcrText";
@@ -59,7 +60,7 @@ export function VcrSuccessRates({ rates }: { rates: VcrSuccessRates | null | und
     <div data-vcr-success-rates="" className="min-w-0">
       <ChartCard title={rates.title}>
         <div className="flex flex-col gap-4">
-          {rates.note && <p data-vcr-success-note="" className="text-caption text-text-3">{rates.note}</p>}
+          {rates.note && <p data-vcr-success-note="" data-note="" className="text-caption text-text-3">{rates.note}</p>}
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Select label="阶段" value={phaseId} onChange={(event) => setPhase(event.target.value)}>
@@ -88,9 +89,11 @@ export function VcrSuccessRates({ rates }: { rates: VcrSuccessRates | null | und
                     : <p data-vcr-success-missing="" className="py-2 text-ui text-text-3">{NOT_IN_SOURCE}</p>}
                   {(source.endpoint || source.method) && (
                     <Disclosure summary="怎么统计的">
-                      <div data-vcr-success-method="" className="flex flex-col gap-1 text-caption text-text-3">
-                        {source.endpoint && <p>{source.endpoint}</p>}
-                        {source.method && <p>{source.method}</p>}
+                      <div data-vcr-success-method="">
+                        <FactList layout="stacked" rows={[
+                          ...(source.endpoint ? [{ label: "统计到哪一步", value: source.endpoint }] : []),
+                          ...(source.method ? [{ label: "统计方法", value: source.method }] : []),
+                        ]} />
                       </div>
                     </Disclosure>
                   )}
