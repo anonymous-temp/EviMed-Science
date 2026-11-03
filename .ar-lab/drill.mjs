@@ -4,7 +4,9 @@
 // judges language: every check is a count, a status or a file. The logs of this repository are public, so stdout is drill names and
 // counters only; prompts, answers and files go to RESULTS, which the job encrypts.
 import { execFile } from "node:child_process";
-import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import net from "node:net";
+import tls from "node:tls";
 import { pathToFileURL } from "node:url";
 import { setTimeout as sleep } from "node:timers/promises";
 import { randomBytes } from "node:crypto";
@@ -23,6 +25,8 @@ const G_SECOND = "这是一个多轮推进的长期研究目标：评估茶碱�
 const G_HEAVY = "这是一个多轮推进的长期研究目标：测试本机能做多大的矩阵运算。第一轮写一个 Python 脚本 big.py：用 numpy 申请一个约 4 GB 的数组并填满，算出它的和，把结果写入 notes.md，然后运行它。如果脚本失败，把错误原文写入 notes.md。第二轮把数组减到 200 MB 再运行一次，把结果追加到 notes.md。第三轮写 summary.md 总结两次结果。不需要联网。每一轮结束后等待自动进入下一轮。";
 
 const G_HEAVY_BIG = "这是一个多轮推进的长期研究目标：测试本机能做多大的矩阵运算。第一轮写一个 Python 脚本 big.py：用 numpy 申请一个约 12 GB 的数组并逐元素填满（不要用稀疏或延迟分配），算出它的和，把结果写入 notes.md，然后运行它。如果脚本失败，把错误原文写入 notes.md。第二轮把数组减到 200 MB 再运行一次，把结果追加到 notes.md。第三轮写 summary.md 总结两次结果。不需要联网。每一轮结束后等待自动进入下一轮。";
+
+const G_IDLE = "这是一个多轮推进的长期研究目标：持续留意咖啡因半衰期有没有新的线索。不写任何文件，也不需要联网；每一轮只回复一句“本轮没有新发现”，然后等待自动进入下一轮，不要结束这个目标。";
 
 let jobSpend = 0;
 const say = (line) => console.log(`${new Date().toISOString().slice(11, 19)} ${line}`);
@@ -100,7 +104,17 @@ class Person {
     this.drill.note("message", { label: this.label, status: answer.status, code: answer.body?.code ?? answer.body?.error?.code ?? null, run: answer.body?.data?.id ?? null, session, answeredInMs: Date.now() - t });
     return { status: answer.status, session, run: answer.body?.data?.id ?? null, code: answer.body?.code ?? answer.body?.error?.code ?? null, answeredInMs: Date.now() - t };
   }
+  async goalStates() {
+    const answer = await this.api("GET", `/api/research-goals?projectId=${this.projectId}`).catch(() => null);
+    if (answer?.status !== 200) return this.states ?? [];
+    this.states = answer.body?.data?.goals ?? [];
+    const line = JSON.stringify(this.states.map((goal) => [goal.sessionId, goal.status, goal.reason]));
+    if (line !== this.stateLine) { this.stateLine = line; this.drill.note("goal-state", { label: this.label, available: answer.body?.data?.available, goals: this.states }); }
+    return this.states;
+  }
+  stateOf(session) { return (this.states ?? []).find((goal) => goal.sessionId === session) ?? null; }
   async runs() {
+    await this.goalStates();
     const list = await this.api("GET", "/api/agent-runs");
     if (list.status !== 200) { this.drill.note("runs-read", { label: this.label, status: list.status }); return this.cached; }
     const runs = list.body?.data ?? [];
@@ -144,6 +158,8 @@ class Person {
     if (c) {
       const peak = await shell("docker", ["exec", c.id, "sh", "-c", "cat /sys/fs/cgroup/memory.peak 2>/dev/null; cat /sys/fs/cgroup/memory.events 2>/dev/null"], { timeoutMs: 15_000 });
       this.drill.note("container-end", { label: this.label, ...c, memory: text(peak.stdout).slice(0, 300) });
+      const home = await shell("docker", ["exec", c.id, "sh", "-c", "ls -la /runtime/home/.loopx 2>&1 | head -14; ls /runtime/home/.loopx/authority 2>&1 | head -6"], { timeoutMs: 15_000 });
+      this.drill.note("loopx-home", { label: this.label, listing: text(home.stdout).slice(0, 900) });
     } else this.drill.note("container-end", { label: this.label, gone: true });
     const words = await shell("docker", ["exec", web, "sh", "-c", `cd '${found}/workspace' && for f in factors.md notes.md summary.md theo-factors.md theo-notes.md theo-summary.md; do if [ -f "$f" ]; then printf '%s %s ' "$f" "$(wc -c < "$f")"; grep -c '^## ' "$f" || true; fi; done; ls -a | head -40; ls -a .loopx 2>/dev/null | head -12`], { timeoutMs: 30_000 });
     this.drill.note("workspace", { label: this.label, listing: text(words.stdout).slice(0, 1600) });
@@ -208,20 +224,159 @@ async function watch(drill, person, { ms, quietMs = null, label }) {
   drill.note("watch", summary);
   return summary;
 }
-/** A person comes back: opens the page (a read), then the conversation (the runtime starts), then writes one word. */
-async function personReturns(drill, person, session) {
-  const before = person.cached.length;
-  const page = await watch(drill, person, { ms: 3 * 60_000, label: "page open only" });
-  const afterPage = person.cached.length;
-  const started = await person.api("POST", "/api/commands/start_runtime", { body: {}, timeoutMs: 240_000 });
-  drill.note("start-runtime", { status: started.status });
-  await watch(drill, person, { ms: 6 * 60_000, quietMs: 5 * 60_000, label: "runtime started" });
-  const afterOpen = person.cached.length;
-  const words = await person.say_("继续", session);
-  drill.note("said-continue", { status: words.status, code: words.code });
-  await watch(drill, person, { ms: 8 * 60_000, quietMs: 3 * 60_000, label: "said continue" });
-  drill.fact("revival", { roundsBefore: before, afterPageOpen: afterPage, afterRuntimeStart: afterOpen, afterSayingContinue: person.cached.length, pageRead: page.runs, continueStatus: words.status, continueCode: words.code });
+/** Nobody comes back: the control plane is the one to take the goal up. */
+async function nobodyComesBack(drill, person, session) {
+  const before = person.roundsOf(session).length;
+  const end = await watch(drill, person, { ms: 25 * 60_000, quietMs: 7 * 60_000, label: "nobody came back" });
+  await person.goalStates();
+  const after = person.roundsOf(session);
+  drill.fact("revival", { roundsBefore: before, roundsAfter: after.length, resumes: after.filter((run) => /research-goal-(resume|retry)/.test(String(run.effectiveRouteReason))).length, continuations: after.filter((run) => /loopx-continuation/.test(String(run.effectiveRouteReason))).length, quiet: end.quiet, state: person.stateOf(session) });
 }
+/** The kernel's frame origin of the lab (`https://localhost:8443`), which nothing else listens on: TLS ended here, bytes passed to the web container's frame port. */
+async function frameOrigin() {
+  const web = await webContainer();
+  const ip = text((await shell("docker", ["inspect", "-f", "{{range .NetworkSettings.Networks}}{{.IPAddress}} {{end}}", web])).stdout).trim().split(/\s+/)[0];
+  const dir = `${RESULTS}/../tls`;
+  mkdirSync(dir, { recursive: true });
+  await shell("openssl", ["req", "-x509", "-newkey", "rsa:2048", "-nodes", "-subj", "/CN=localhost", "-addext", "subjectAltName=DNS:localhost", "-keyout", `${dir}/k.pem`, "-out", `${dir}/c.pem`, "-days", "2"]);
+  const server = tls.createServer({ key: readFileSync(`${dir}/k.pem`), cert: readFileSync(`${dir}/c.pem`) }, (socket) => {
+    const upstream = net.connect(8788, ip);
+    socket.pipe(upstream); upstream.pipe(socket);
+    socket.on("error", () => upstream.destroy()); upstream.on("error", () => socket.destroy());
+  });
+  await new Promise((resolve) => { server.listen(8443, "127.0.0.1", resolve); });
+  return server;
+}
+/** Every step is written down and none stops the next: a walk that fails half way still says what the other half saw. */
+async function pageWalk(drill) {
+  const person = await drill.person("a");
+  const set = await establish(drill, person, G5);
+  await roundRunning(drill, person, set.session, 2, { ranMs: 5000 });
+  const { chromium } = await import(pathToFileURL(`${process.env.PW_ROOT}/node_modules/playwright-core/index.mjs`).href);
+  const proxy = await frameOrigin();
+  const browser = await chromium.launch({ executablePath: "/usr/bin/google-chrome", headless: true, args: ["--no-sandbox", "--ignore-certificate-errors"] });
+  const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, ignoreHTTPSErrors: true, locale: "zh-CN" });
+  const cookie = person.account.headers.cookie ?? person.account.headers.Cookie ?? "";
+  await context.addCookies(cookie.split(/;\s*/).filter(Boolean).map((pair) => { const at = pair.indexOf("="); return { name: pair.slice(0, at), value: pair.slice(at + 1), url: base }; }));
+  await context.addInitScript((id) => { localStorage.setItem("openScience.projectId", id); sessionStorage.setItem("openScience.projectId", id); }, person.projectId);
+  const page = await context.newPage();
+  const consoleErrors = [];
+  page.on("pageerror", (error) => consoleErrors.push(String(error?.message ?? error).slice(0, 200)));
+  const shot = async (name) => { await page.screenshot({ path: `${drill.dir}/${name}.png` }).catch(() => {}); };
+  const step = async (name, fn) => {
+    const t = Date.now();
+    try { const value = await fn(); drill.fact(`walk:${name}`, { ok: true, tookMs: Date.now() - t, ...(value ?? {}) }); return value; }
+    catch (error) { drill.fact(`walk:${name}`, { ok: false, tookMs: Date.now() - t, why: String(error?.message ?? error).slice(0, 300) }); await shot(`failed-${name}`); return null; }
+  };
+  const frame = () => page.frames().find((one) => /__evimed\/f\//.test(one.url())) ?? null;
+  const pageWords = async () => (await page.locator("main, body").first().innerText()).replace(/\s+/g, " ");
+  const subject = async () => {
+    const words = await page.locator('section[aria-label="当前研究"]').innerText().catch(() => "");
+    return { subject: words.replace(/\s+/g, " ").slice(0, 200) };
+  };
+  const openConversation = async () => {
+    await page.getByRole("button", { name: "打开对话" }).first().click({ timeout: 30_000 });
+    await page.locator('[aria-label="原生研究对话"]').waitFor({ timeout: 30_000 });
+    for (let i = 0; i < 90 && !frame(); i += 1) await sleep(1000);
+    if (!frame()) throw new Error("no kernel frame");
+    await frame().locator("textarea, [contenteditable=true]").first().waitFor({ timeout: 120_000 });
+  };
+  const fit = async () => page.evaluate(() => {
+    const iframe = document.querySelector("iframe[src*='__evimed'], iframe");
+    const box = iframe?.getBoundingClientRect();
+    return { window: innerHeight, frameTop: box ? Math.round(box.top) : null, frameBottom: box ? Math.round(box.bottom) : null };
+  }).then(async (outer) => {
+    const inner = await frame()?.locator("textarea, [contenteditable=true]").first().evaluate((el) => { const box = el.getBoundingClientRect(); return { top: Math.round(box.top), bottom: Math.round(box.bottom), frameHeight: innerHeight }; }).catch(() => null);
+    const bottom = inner && outer.frameTop !== null ? outer.frameTop + inner.bottom : null;
+    return { ...outer, composer: inner, composerBottom: bottom, clippedBy: bottom === null ? null : Math.max(0, bottom - outer.window), frameClippedBy: outer.frameBottom === null ? null : Math.max(0, outer.frameBottom - outer.window) };
+  });
+  const bar = async () => {
+    const section = frame()?.locator('section[aria-busy]').first();
+    if (!section || !(await section.count().catch(() => 0))) return { present: false };
+    const hidden = await section.evaluate((el) => {
+      const shown = (selector) => { const one = el.querySelector(selector); return one ? getComputedStyle(one).display !== "none" : null; };
+      return { brandShown: shown('[class$="_brand"]'), goalIdShown: shown('[class$="_goalId"]'), status: el.querySelector("[data-status]")?.getAttribute("data-status") ?? null };
+    }).catch(() => ({}));
+    return { present: true, words: (await section.innerText().catch(() => "")).replace(/\s+/g, " ").slice(0, 160), ...hidden };
+  };
+
+  await step("open-page", async () => {
+    await page.goto(`${base}/app/active-research`, { waitUntil: "domcontentloaded", timeout: 60_000 });
+    await page.locator('section[aria-label="当前研究"]').waitFor({ timeout: 60_000 });
+    await sleep(3000);
+    await shot("01-page-running");
+    const words = await pageWords();
+    return { ...(await subject()), hasBackOfficeWords: /loopx|workspace-goal|settlement|writeback/i.test(words), hasSpend: words.includes("累计消耗") };
+  });
+  await step("buttons", async () => ({ pause: await page.getByRole("button", { name: "暂停", exact: true }).count(), stop: await page.getByRole("button", { name: "停止本轮" }).count(), resume: await page.getByRole("button", { name: "继续", exact: true }).count() }));
+  await step("conversation", async () => { await openConversation(); await sleep(4000); await shot("02-conversation-1440"); return fit(); });
+  await step("bar", async () => { for (let i = 0; i < 60; i += 1) { const seen = await bar(); if (seen.present) { await shot("03-bar"); return seen; } await sleep(1000); } return bar(); });
+  for (const [width, height] of [[1280, 720], [390, 844]]) {
+    await step(`fit-${width}`, async () => { await page.setViewportSize({ width, height }); await sleep(2500); await shot(`04-fit-${width}`); return fit(); });
+  }
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await step("bar-pause", async () => {
+    const section = frame().locator("section[aria-busy]").first();
+    const button = section.getByRole("button").first();
+    const label = await button.innerText();
+    const t = Date.now();
+    await button.click({ timeout: 10_000 });
+    let last = null;
+    let error = false;
+    for (let i = 0; i < 180; i += 1) {
+      last = await bar();
+      error = error || /暂时连不上|无法连接|刷新后重试/.test(await section.locator("xpath=..").innerText().catch(() => ""));
+      if (last.status === "paused" || last.status === "stopped") break;
+      await sleep(500);
+    }
+    await shot("05-bar-after-pause");
+    return { label, settledMs: Date.now() - t, sawError: error, ...last };
+  });
+  await step("page-catches-up", async () => {
+    await page.reload({ waitUntil: "domcontentloaded" });
+    for (let i = 0; i < 80; i += 1) {
+      const words = await page.locator('section[aria-label="当前研究"]').innerText().catch(() => "");
+      const queue = await pageWords();
+      if (/继续/.test(words) && /已暂停/.test(queue)) { await shot("06-page-paused"); return { afterMs: i * 5000, ...(await subject()) }; }
+      await sleep(5000);
+    }
+    await shot("06-page-not-paused");
+    throw new Error("the page did not come to say paused");
+  });
+  await step("page-resume", async () => {
+    const count = (await person.runs()).length;
+    const t = Date.now();
+    await page.getByRole("button", { name: "继续", exact: true }).first().click({ timeout: 10_000 });
+    const next = await waitFor(drill, person, (runs) => (runs.length > count ? true : null), { capMs: 5 * 60_000, everyMs: 3000, label: "round after 继续" });
+    await sleep(4000);
+    await shot("07-page-resumed");
+    return { newRound: Boolean(next), tookMs: Date.now() - t, ...(await subject()) };
+  });
+  await step("page-pause", async () => {
+    await page.getByRole("button", { name: "暂停", exact: true }).first().click({ timeout: 30_000 });
+    for (let i = 0; i < 60; i += 1) { await person.goalStates(); if (person.stateOf(set.session)?.status === "paused") break; await sleep(1000); }
+    await sleep(2000);
+    await shot("08-page-paused-by-button");
+    return { state: person.stateOf(set.session) };
+  });
+  await step("cold-kernel", async () => {
+    const c = await person.container();
+    if (c) await dockerDo(drill, "kill", ["kill", c.id]);
+    await sleep(20_000);
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.locator('section[aria-label="当前研究"]').waitFor({ timeout: 60_000 });
+    await openConversation();
+    const t = Date.now();
+    for (let i = 0; i < 45; i += 1) { const seen = await bar(); if (seen.present) { await shot("09-cold-kernel-bar"); return { barAfterMs: Date.now() - t, ...seen }; } await sleep(1000); }
+    await shot("09-cold-kernel-no-bar");
+    return { barAfterMs: null, present: false };
+  });
+  drill.fact("pageErrors", consoleErrors.slice(0, 12));
+  await browser.close().catch(() => {});
+  proxy.close();
+  await person.close();
+}
+
 const dockerDo = async (drill, what, args) => { const done = await shell("docker", args, { timeoutMs: 120_000 }); drill.note(what, { code: done.code, err: text(done.stderr).slice(0, 200) }); return done.code; };
 
 async function repeatControl(drill) {
@@ -229,7 +384,9 @@ async function repeatControl(drill) {
   const set = await establish(drill, person, G5);
   drill.fact("setStatus", set.status);
   const end = await watch(drill, person, { ms: 30 * 60_000, quietMs: 5 * 60_000, label: "control repeat" });
+  await person.goalStates();
   drill.fact("stoppedByItself", end.quiet);
+  drill.fact("state", person.stateOf(set.session));
   await person.close();
 }
 const DRILL = {
@@ -239,7 +396,9 @@ const DRILL = {
     const set = await establish(drill, person, G_NATURAL);
     drill.fact("setStatus", set.status);
     const end = await watch(drill, person, { ms: 25 * 60_000, quietMs: 5 * 60_000, label: "natural" });
+    await person.goalStates();
     drill.fact("stoppedByItself", end.quiet);
+    drill.fact("state", person.stateOf(set.session));
     await person.close();
   },
   /** The forced multi-round goal with nothing done to it: the control for everything below, and does it stop after the summary. */
@@ -248,7 +407,9 @@ const DRILL = {
     const set = await establish(drill, person, G5);
     drill.fact("setStatus", set.status);
     const end = await watch(drill, person, { ms: 40 * 60_000, quietMs: 5 * 60_000, label: "control" });
+    await person.goalStates();
     drill.fact("stoppedByItself", end.quiet);
+    drill.fact("state", person.stateOf(set.session));
     await person.close();
   },
   /** The kernel's container dies in the middle of a round. */
@@ -259,10 +420,9 @@ const DRILL = {
     drill.fact("killedDuringRound", live?.id ?? null);
     const c = await person.container();
     if (live && c) await dockerDo(drill, "kill", ["kill", c.id]);
-    await watch(drill, person, { ms: 4 * 60_000, label: "after kill" });
+    await nobodyComesBack(drill, person, set.session);
     drill.fact("containerAfterKill", await person.container());
     drill.fact("killedRunState", person.cached.find((run) => run.id === live?.id)?.status ?? null);
-    await personReturns(drill, person, set.session);
     await person.close();
   },
   /** The kernel's container dies between two rounds. */
@@ -273,9 +433,8 @@ const DRILL = {
     const c = await person.container();
     if (gap && c) await dockerDo(drill, "kill", ["kill", c.id]);
     drill.fact("killedInGapAfterRounds", gap?.rounds ?? null);
-    await watch(drill, person, { ms: 4 * 60_000, label: "after kill" });
+    await nobodyComesBack(drill, person, set.session);
     drill.fact("containerAfterKill", await person.container());
-    await personReturns(drill, person, set.session);
     await person.close();
   },
   /** The control plane restarts while a round runs; the runtime stays up. */
@@ -287,7 +446,9 @@ const DRILL = {
     if (live && web) await dockerDo(drill, "restart-web", ["restart", web]);
     for (let i = 0; i < 60; i += 1) { try { const up = await fetch(`${base}/api/health`, { signal: AbortSignal.timeout(4000) }); if (up.status === 200) break; } catch { /* not yet */ } await sleep(3000); }
     drill.note("web-back");
-    const end = await watch(drill, person, { ms: 15 * 60_000, quietMs: 5 * 60_000, label: "after web restart" });
+    const end = await watch(drill, person, { ms: 25 * 60_000, quietMs: 7 * 60_000, label: "after web restart" });
+    await person.goalStates();
+    drill.fact("state", person.stateOf(set.session));
     drill.fact("restartedDuringRun", live?.id ?? null);
     drill.fact("runStateAfter", person.cached.find((run) => run.id === live?.id)?.status ?? null);
     drill.fact("stoppedByItself", end.quiet);
@@ -304,10 +465,9 @@ const DRILL = {
     if (live && c) await dockerDo(drill, "remove-runtime", ["rm", "-f", c.id]);
     if (live && web) await dockerDo(drill, "restart-web", ["restart", web]);
     for (let i = 0; i < 60; i += 1) { try { const up = await fetch(`${base}/api/health`, { signal: AbortSignal.timeout(4000) }); if (up.status === 200) break; } catch { /* not yet */ } await sleep(3000); }
-    await watch(drill, person, { ms: 4 * 60_000, label: "after release" });
+    await nobodyComesBack(drill, person, set.session);
     drill.fact("runStateAfter", person.cached.find((run) => run.id === live?.id)?.status ?? null);
     drill.fact("containerAfter", await person.container());
-    await personReturns(drill, person, set.session);
     await person.close();
   },
   /** A tool script asks for more memory than the container has. */
@@ -347,9 +507,69 @@ const DRILL = {
     drill.fact("cancelledRunState", stopped?.status ?? null);
     const before = person.cached.length;
     await watch(drill, person, { ms: 6 * 60_000, label: "after cancel" });
-    drill.fact("roundsAfterCancel", { before, after: person.cached.length });
+    await person.goalStates();
+    drill.fact("roundsAfterCancel", { before, after: person.cached.length, state: person.stateOf(set.session) });
     await person.close();
   },
+  /** Pause and 继续 through the page's route, in a round and between rounds: how long each takes, and whether the goal obeys. */
+  async D30(drill) {
+    const person = await drill.person("a");
+    const set = await establish(drill, person, G5);
+    const live = await roundRunning(drill, person, set.session, 2);
+    const route = (act) => `/api/research-goals/${set.session}/${act}?projectId=${person.projectId}`;
+    let t = Date.now();
+    const paused = await person.api("POST", route("pause"), { body: {} });
+    drill.fact("pauseInRound", { status: paused.status, code: paused.body?.code ?? null, state: paused.body?.data?.status ?? null, tookMs: Date.now() - t, live: live?.id ?? null });
+    const before = (await person.runs()).length;
+    await watch(drill, person, { ms: 7 * 60_000, label: "paused" });
+    const running_ = running(person.cached).length;
+    await person.goalStates();
+    drill.fact("afterPause", { roundsBefore: before, roundsAfter: person.cached.length, running: running_, state: person.stateOf(set.session) });
+    t = Date.now();
+    const resumed = await person.api("POST", route("resume"), { body: {} });
+    drill.fact("resume", { status: resumed.status, code: resumed.body?.code ?? null, state: resumed.body?.data?.status ?? null, tookMs: Date.now() - t });
+    const count = person.cached.length;
+    const next = await waitFor(drill, person, (runs) => (runs.length > count ? { after: Date.now() - t } : null), { capMs: 6 * 60_000, everyMs: 3000, label: "round after resume" });
+    drill.fact("firstRoundAfterResumeMs", next?.after ?? null);
+    const gap = await gapAfterRound(drill, person, set.session, count + 1, { capMs: 10 * 60_000 });
+    if (gap) {
+      t = Date.now();
+      const again = await person.api("POST", route("pause"), { body: {} });
+      drill.fact("pauseInGap", { status: again.status, code: again.body?.code ?? null, state: again.body?.data?.status ?? null, tookMs: Date.now() - t });
+    }
+    await person.close();
+  },
+  /** A goal that asks to go on for ever and leaves no file: the guard's own case, with no waiting on a model's mood. */
+  async D31(drill) {
+    const person = await drill.person("a");
+    const set = await establish(drill, person, G_IDLE);
+    const paused = await waitFor(drill, person, () => (person.stateOf(set.session)?.status === "paused" ? person.stateOf(set.session) : null), { capMs: 25 * 60_000, everyMs: 5000, label: "guard paused" });
+    drill.fact("guard", paused ?? null);
+    drill.fact("roundsAtPause", person.roundsOf(set.session).length);
+    const before = person.cached.length;
+    await watch(drill, person, { ms: 6 * 60_000, label: "after the guard" });
+    drill.fact("roundsAfterGuard", { before, after: person.cached.length, running: running(person.cached).length });
+    const words = await person.api("GET", "/api/inbox?limit=20").catch(() => null);
+    drill.fact("inbox", { status: words?.status ?? null, items: (words?.body?.data?.items ?? words?.body?.data ?? []).map?.((item) => item.title ?? item.kind ?? null) ?? null });
+    await person.close();
+  },
+  /** A file arrives in the knowledge base while a round runs. Nothing tells the model but the control plane. */
+  async D34(drill) {
+    const person = await drill.person("a");
+    const set = await establish(drill, person, G5);
+    await roundRunning(drill, person, set.session, 2);
+    const web = await webContainer();
+    const found = text((await shell("docker", ["exec", web, "sh", "-c", `find /data/users -maxdepth 3 -type d -name ${person.projectId} | head -1`])).stdout).trim();
+    const dropped = await shell("docker", ["exec", web, "sh", "-c", `mkdir -p '${found}/workspace/knowledge-base' && printf '%s\\n' '咖啡因代谢的补充资料：吸烟会诱导 CYP1A2。' > '${found}/workspace/knowledge-base/new-note.md'`]);
+    drill.fact("dropped", { code: dropped.code, err: text(dropped.stderr).slice(0, 160) });
+    const t = Date.now();
+    const seen = await waitFor(drill, person, (runs) => (runs.some((run) => Number(run.steerCount ?? run.corrections ?? 0) > 0 || (run.steers ?? []).length > 0) ? { after: Date.now() - t } : null), { capMs: 4 * 60_000, everyMs: 5000, label: "told" });
+    drill.fact("toldAfterMs", seen?.after ?? null);
+    await watch(drill, person, { ms: 15 * 60_000, quietMs: 5 * 60_000, label: "after the new file" });
+    await person.close();
+  },
+  /** The real page and the real kernel frame in a browser. */
+  async D40(drill) { await pageWalk(drill); },
   /** A second goal in the same project while the first is running. */
   async D09(drill) {
     const person = await drill.person("a");

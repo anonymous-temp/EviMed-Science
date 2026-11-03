@@ -24,6 +24,7 @@ jobs:
       imageRunId: ${{ steps.cfg.outputs.imageRunId }}
       imageArtifact: ${{ steps.cfg.outputs.imageArtifact }}
       sourceRef: ${{ steps.cfg.outputs.sourceRef }}
+      patchRef: ${{ steps.cfg.outputs.patchRef }}
     steps:
       - uses: actions/checkout@v4
       - id: cfg
@@ -36,6 +37,7 @@ jobs:
               fh.write(f"imageRunId={int(cfg['imageRunId'])}\n")
               fh.write(f"imageArtifact={cfg['imageArtifact']}\n")
               fh.write(f"sourceRef={cfg['sourceRef']}\n")
+              fh.write(f"patchRef={cfg['patchRef']}\n")
           PY
 
   drill:
@@ -72,6 +74,11 @@ jobs:
           ref: ${{ needs.plan.outputs.sourceRef }}
           path: src
           fetch-depth: 1
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.plan.outputs.patchRef }}
+          path: patch
+          fetch-depth: 1
       - uses: actions/setup-node@v4
         with:
           node-version: 22.22.0
@@ -106,9 +113,34 @@ jobs:
           rm -f "$RUNNER_TEMP/img/images.tar.gz"
           df -h / | tail -1
 
+      - name: Build the candidate runtime image
+        run: |
+          fallocate -l 24G /swap-build && chmod 600 /swap-build && mkswap /swap-build >/dev/null && swapon /swap-build
+          python3 -B "$LAB/stack.py" build-delta --patch-src "$GITHUB_WORKSPACE/patch/OpenScience" --key "${{ matrix.key }}" || status=$?
+          systemctl restart docker
+          for i in $(seq 1 30); do docker info >/dev/null 2>&1 && break; sleep 2; done
+          swapoff /swap-build && rm -f /swap-build
+          free -m | sed -n 2p
+          exit "${status:-0}"
+
+      - name: Build the page
+        if: matrix.walk == '1'
+        working-directory: patch/OpenScience
+        run: |
+          npm install -g pnpm@9.4.0 >/dev/null 2>&1
+          pnpm install --frozen-lockfile --filter @ai4s/web... 2>&1 | tail -1 | cut -c1-120
+          pnpm build:web 2>&1 | tail -1 | cut -c1-120
+          test -s apps/web/dist/index.html
+          install -d /opt/ar-lab/pw
+          npm install --prefix /opt/ar-lab/pw --no-audit --no-fund playwright-core@1.56.1 >/dev/null 2>&1
+          test -f /opt/ar-lab/pw/node_modules/playwright-core/index.mjs
+
+      - name: Build the candidate web image
+        run: python3 -B "$LAB/stack.py" build-web-delta --patch-src "$GITHUB_WORKSPACE/patch/OpenScience" --key "${{ matrix.key }}"
+
       - name: Write the environment and the secret files
         run: |
-          python3 -B "$LAB/stack.py" env --lanes 3
+          python3 -B "$LAB/stack.py" env --lanes 3 --delta --web-delta
           if [ -n "${{ matrix.maxTasks }}" ]; then
             sed -i "s/^OPEN_SCIENCE_MAX_CONCURRENT_TASKS=.*/OPEN_SCIENCE_MAX_CONCURRENT_TASKS=${{ matrix.maxTasks }}/" "$LAB_SRC/deploy/web/.env.lab"
             grep -c '^OPEN_SCIENCE_MAX_CONCURRENT_TASKS=${{ matrix.maxTasks }}$' "$LAB_SRC/deploy/web/.env.lab"
@@ -127,6 +159,8 @@ jobs:
           DRILLS: ${{ matrix.drills }}
           PARALLEL: ${{ matrix.parallel }}
           JOB_CAP_CNY: ${{ matrix.capCny }}
+          DRILL_CAP_CNY: "4"
+          PW_ROOT: /opt/ar-lab/pw
         run: node "$GITHUB_WORKSPACE/.ar-lab/drill.mjs"
 
       - name: Container state

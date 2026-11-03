@@ -325,6 +325,10 @@ def cmd_build_web_delta(args):
         (context / relative).parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source / relative, context / relative)
     shutil.copyfile(HERE / "Dockerfile.web-delta", context / "Dockerfile")
+    if (source / "apps/web/dist").is_dir():
+        shutil.copytree(source / "apps/web/dist", context / "apps/web/dist")
+        with open(context / "Dockerfile", "a") as recipe:
+            recipe.write("RUN rm -rf /app/apps/web/dist\nCOPY apps/web/dist /app/apps/web/dist\n")
     command = ["docker", "build", "--progress=plain", "--build-arg", f"WEB_BASE_IMAGE={base}", "--build-arg", f"PATCH_REVISION={revision}", "-t", tag, str(context)]
     done = run(command, check=False, capture=True, timeout=1200)
     if done.returncode != 0:

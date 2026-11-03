@@ -1,14 +1,24 @@
 {
   "sourceRef": "3970e4f8f052fd286a4d4de4de93ebe2d95cf4cd",
+  "patchRef": "5becd1595955945c179f73edae3698c3a564bf7e",
   "imageRunId": 41463065673,
   "imageArtifact": "evimed-core-release-3970e4f8f052fd286a4d4de4de93ebe2d95cf4cd",
   "jobs": [
     {
-      "key": "f",
-      "drills": "D07B,D21,D22,D23",
+      "key": "walk",
+      "drills": "D40",
+      "parallel": "",
+      "capCny": 4,
+      "maxTasks": "",
+      "walk": "1"
+    },
+    {
+      "key": "pause",
+      "drills": "D08,D30,D31",
       "parallel": "1",
-      "capCny": 6,
-      "maxTasks": ""
+      "capCny": 7,
+      "maxTasks": "",
+      "walk": ""
     }
   ]
 }
