@@ -9,6 +9,7 @@ import {rsiCampaignIssues,rsiCompatibilityIssues} from '../../packages/domain/sr
 import {evaluateStatistics} from './campaign_runner.mjs';
 import {computeRsiDependencyClosure} from '../../apps/server/src/rsiDependencyClosure.mjs';
 import {createCampaignSigner} from './signing.mjs';
+import {UNBOUND_BASELINE_PREFIX} from './frontier_assemble.mjs';
 const fail=reason=>{throw new Error(reason);};
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
 export async function consumerClosure(root, paths) {
@@ -35,6 +36,8 @@ export function authenticateEvaluation(envelope, profile, now) {
 export async function finalizeCampaign({completed,manifest,inputs,files,evidenceEnvelope,profile,currentTarget,root,closurePaths,bundleId,expiresAt,now=new Date().toISOString(),publisher,evaluator,incidentTransport,purpose='production',statisticsPython='python3',closureSettings={},closurePins={},closureRegistry,statisticsModulePath,loadSigners}) {
  const incident=async()=>{if(manifest.data.classification==='authorized-incident'){if(!incidentTransport)fail('campaign_incident_authority_unavailable');await incidentTransport.assertIncidentCurrent(manifest.data.authorization);}};
  await incident();
+ // The export carried no incumbent (an older export script): the month was measured against no policy production serves, so no bundle of it can be imported.
+ if(String(manifest?.target?.baselineRevision).startsWith(UNBOUND_BASELINE_PREFIX))fail('campaign_export_incumbent_missing');
  if(rsiCampaignIssues(manifest).length||completed.status!=='completed'||rsiCompatibilityIssues(manifest.target,currentTarget).length)fail('campaign_finalization_input_invalid');
  const state=completed.checkpoint,binding=rsiDigest({manifest,inputs});
  if(completed.binding!==binding||state.binding!==binding||completed.reportDigest!==rsiDigest(state)||state.campaignId!==manifest.id||rsiDigest(inputs.registration)!==manifest.registration.digest)fail('campaign_checkpoint_changed');
@@ -77,7 +80,9 @@ export async function finalizeCampaign({completed,manifest,inputs,files,evidence
  if(loadSigners)({publisher,evaluator}=await loadSigners());
  if(!publisher||!evaluator||publisher.keyId===evaluator.keyId||(publisher.publicKey instanceof KeyObject?publisher.publicKey:createPublicKey(publisher.publicKey)).export({type:'spki',format:'der'}).equals((evaluator.publicKey instanceof KeyObject?evaluator.publicKey:createPublicKey(evaluator.publicKey)).export({type:'spki',format:'der'})))fail('campaign_evaluator_not_independent');
  const verdict={status:'qualified',scope:manifest.surface,...Object.fromEntries(Object.entries(expected).filter(([k])=>!['binding','frozenPolicyDigest'].includes(k))),measurementDigest:rsiDigest(statistics),evaluatorDigest:rsiDigest(profile),procedureDigest:q.procedureDigest,qualificationDigest:rsiDigest(q)};
- const published={id:bundleId,campaignId:manifest.id,surface:manifest.surface,kind:manifest.candidateKind,target:currentTarget,createdAt:now,expiresAt,verdict};
+ // Design §11: the bundle carries the solver and, separately, the improver and judge identities (an improver is provenance, never the serving solver to compare).
+ const published={id:bundleId,campaignId:manifest.id,surface:manifest.surface,kind:manifest.candidateKind,target:currentTarget,createdAt:now,expiresAt,verdict,
+  models:{solver:manifest.models.solver,improvers:manifest.models.improvers,judges:manifest.models.judges}};
  await incident();
  const finalClosure=await computeRsiDependencyClosure({rootDir:root,surface:manifest.surface,settings:closureSettings,pins:closurePins,...(closureRegistry?{registry:closureRegistry}:{})});
  if(!finalClosure.qualified||finalClosure.dependencyDigest!==consumerDigest)fail('campaign_consumer_changed');

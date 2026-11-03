@@ -1,8 +1,8 @@
-import test from 'node:test';
+import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { createHash, verify } from 'node:crypto';
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -15,6 +15,7 @@ import { STATISTICS_MODULE_PATH, STATISTICS_PYTHON, generateEvaluatorKey, memory
 import { harnessFixture, rebind } from '../profiles/harness_fixture.mjs';
 
 const scratch = await mkdtemp(join(tmpdir(), 'rsi-closure-'));
+after(() => rm(scratch, { recursive: true, force: true }));
 let dirs = 0;
 const nextDir = () => join(scratch, String(dirs += 1));
 const CONF = 'confirmation-2026-11';
@@ -58,7 +59,7 @@ test('the receipt refuses a campaign with runs that have no settled cost, and sa
   assert.throws(() => closureCosts(full.inputs.sources[CONF], closure), { message: 'campaign_cost_closure_not_needed' });
 });
 
-test('the closure recomputes the same scores and the registered statistics with the ledger costs, and records the deviation; the verdict is the one a complete source would have given', async () => {
+test('the closure recomputes the same scores, records the deviation and gives the procedure the ledger costs as what they are, lower bounds: no verdict, where a complete source would have qualified', async () => {
   const { campaign, missing, closure } = await unsettled();
   const store = memoryCampaignStore();
   const { checkpoint } = await awaiting(campaign, store);
@@ -78,14 +79,16 @@ test('the closure recomputes the same scores and the registered statistics with 
   // nothing in the ledger or the opened-corpus records moved
   assert.deepEqual([...store.ledger.entries()], ledgerBefore);
   assert.deepEqual([...store.corpora.entries()], corporaBefore);
-  // the same observations, the same costs, the same procedure: the verdict of a source that had the costs from the start
+  // The same observations and costs in a source that had the costs from the start qualify; the closure's costs are lower bounds, so the
+  // procedure is told the costs are incomplete and refuses before it reads a score (2026-11-03: a closure attested complete costs before).
   const whole = await complete();
   const standard = await runToVerdict(whole, { dir: nextDir() });
   assert.equal(standard.completed.status, 'completed');
-  assert.equal(payload.statistics.decision, standard.completed.qualification);
-  assert.deepEqual(payload.statistics.quantities, standard.completed.checkpoint.evaluation.quantities);
+  assert.equal(standard.completed.qualification, 'qualified');
   assert.equal(payload.observationDigest, digest(standard.checkpoint.stages.confirmation.result.observations));
+  assert.deepEqual([payload.statistics.decision, payload.statistics.reasons, payload.statistics.quantities], ['inconclusive', ['complete cost identity not attested'], {}]);
   assert.equal(payload.statistics.scope, 'registered-population-task-family');
+  assert.match(payload.deviation.effect, /complete_costs false, so the procedure gives no verdict/);
   assert.ok(payload.statistics.costTotals.baseline > 0 && payload.statistics.costTotals.candidate > 0);
 });
 
@@ -123,6 +126,8 @@ test('the closure is signed by the evaluator\'s key over the canonical payload, 
   assert.match(text, /## 偏差/);
   assert.match(text, /成本取账本已结算部分 0\.108506 元（下限）/);
   assert.match(text, /没有任何分数、行、重复或臂被改动/);
+  assert.match(text, /这些成本只是下限，登记的统计程序被如实告知成本不完整，因此不给出判定/);
+  assert.match(text, /结论：未通过（inconclusive），原因 complete cost identity not attested/);
   assert.match(text, /本季度 α 的预留不变/);
 });
 
@@ -156,7 +161,7 @@ test('the closure refuses what is not the campaign, its scores, or exactly its m
   await refused({ manifest: pinned.manifest, inputs: pinned.inputs, checkpoint: { ...checkpoint, binding: digest({ manifest: pinned.manifest, inputs: pinned.inputs }) } }, 'campaign_evaluation_consumer_or_corpus_changed');
 });
 
-test('the closure cannot make a verdict that the procedure refuses: a directional campaign stays inconclusive and an expired budget is the procedure\'s own refusal', async () => {
+test('the closure cannot make a verdict that the procedure refuses: a directional campaign stays inconclusive and so does a late one', async () => {
   const short = await unsettled({ confirmationRows: 12, sliceShareConf: 0.9 });
   const shortCheckpoint = (await awaiting(short.campaign)).checkpoint;
   const directional = await closurePayload({ manifest: short.campaign.manifest, inputs: short.campaign.inputs, checkpoint: shortCheckpoint, closure: short.closure, now: '2026-11-02T08:00:00Z', ...statistics });
@@ -166,8 +171,9 @@ test('the closure cannot make a verdict that the procedure refuses: a directiona
   const { campaign, closure } = await unsettled();
   const { checkpoint } = await awaiting(campaign);
   const late = await closurePayload({ manifest: campaign.manifest, inputs: campaign.inputs, checkpoint, closure, now: '2026-12-02T00:00:00Z', ...statistics });
+  // the procedure stops at the first refusal, and a closure's is always the incomplete cost, before the date is read
   assert.equal(late.statistics.decision, 'inconclusive');
-  assert.ok(late.statistics.reasons.some((reason) => /expiry/.test(reason)), late.statistics.reasons.join(' | '));
+  assert.deepEqual(late.statistics.reasons, ['complete cost identity not attested']);
 });
 
 test('a tool-patch campaign is closed the same way, under its own consumer identity', async () => {
@@ -176,7 +182,7 @@ test('a tool-patch campaign is closed the same way, under its own consumer ident
   const payload = await closurePayload({ manifest: campaign.manifest, inputs: campaign.inputs, checkpoint, closure, now: '2026-11-02T08:00:00Z', ...statistics });
   assert.equal(payload.surface, 'tool-patch');
   assert.equal(payload.consumer.revision, 'tool-patch-arms-v1');
-  assert.equal(payload.statistics.decision, 'qualified');
+  assert.equal(payload.statistics.decision, 'inconclusive', 'lower-bound costs are not complete costs');
   assert.ok(signEnvelope(payload, generateEvaluatorKey().privateKey).signature);
 });
 

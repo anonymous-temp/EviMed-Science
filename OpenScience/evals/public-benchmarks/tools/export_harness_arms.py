@@ -59,8 +59,12 @@ Judged benchmarks (--verdicts FILE..., raw judge JSONL; the pass is the file's `
   pairwise           drb_pairwise.aggregate over --pairwise-order (repeatable) and --pair-map; each pass gives the candidate
                      share (3 + s) / 6 with s the signed preference toward the candidate (-3..+3); the baseline has no record.
 A record is required for exactly each succeeded run (pairwise: each succeeded run of a non-baseline arm); a verdict for a run that
-did not succeed, a missing pass or a judge id that is not --judge-id is an error. A judge id or provider matching /deepseek/i is
-refused. The judge runs under the operator's Claude subscription: `judged.cost.settledCny` is 0 and says so in `note`.
+did not succeed or a missing pass is an error. What judged is bound, never taken on the operator's word: the judge is the one --registration
+(the round registration, register_round.py) names — id, provider anthropic, a pinned claude-* model, its effort, form and passes (every offline
+judge is Claude, owner 2026-11-03) —, every --judge-record (the judge.json of each claude_judge.py parts directory the verdicts come from) must name
+the same id, model and effort, and every verdict line must carry `judge`, `model` and `effort` equal to them (claude_judge.py stamps its parts and
+`remap` carries the stamps). `judged.judge` records that identity and the lab holds it equal to the registration's judge.
+The judge runs under the operator's Claude subscription: `judged.cost.settledCny` is 0 and says so in `note`.
 
 Exit: 0 written, 2 error, 3 incomplete. Python 3.10 compatible; run with `python3 -I`.
 """
@@ -93,10 +97,10 @@ INFRASTRUCTURE_CODES = frozenset({
     'internal_error'})
 UNCERTAIN_COST_NOTE = ('Each listed run carries the ledger\'s settled sum for its calls; the ledger also holds a call it booked uncertain (sent, no provider '
                        'count will arrive) or a reservation still open, so the true cost is that sum or a little more. The figure is a lower bound for these runs only.')
-SKILL_NAME = re.compile(r'^[a-z0-9][a-z0-9-]{0,63}$')
-IMAGE_ID = re.compile(r'^[A-Za-z0-9][A-Za-z0-9_.:-]{0,159}$')
-HEX64 = re.compile(r'^[0-9a-f]{64}$')
-RELATIVE_PATH = re.compile(r'^(?!/)[A-Za-z0-9._@+\-/]{1,200}$')
+SKILL_NAME = re.compile(r'[a-z0-9][a-z0-9-]{0,63}')
+IMAGE_ID = re.compile(r'[A-Za-z0-9][A-Za-z0-9_.:-]{0,159}')
+HEX64 = re.compile(r'[0-9a-f]{64}')
+RELATIVE_PATH = re.compile(r'(?!/)[A-Za-z0-9._@+\-/]{1,200}')
 HARNESS_SURFACE, TOOL_PATCH_SURFACE = 'harness-patch', 'tool-patch'
 DEFAULT_KEY_TEMPLATE = '{bench}/{armtoken}/{row}{rep}'
 DEFAULT_JUDGE_NOTE = "Judge calls run under the operator's Claude subscription; not metered in CNY."
@@ -136,7 +140,7 @@ def normalize_bundle(bundle, allow_empty=False):
         if not isinstance(skill, dict) or set(skill) != {'name', 'description', 'body'}:
             raise ExportError('a skill has exactly the keys name, description and body')
         name = _utf8(skill['name'], 'skill name')
-        if not SKILL_NAME.match(name):
+        if not SKILL_NAME.fullmatch(name):
             raise ExportError(f'skill name {name!r} does not match {SKILL_NAME.pattern}')
         if name in seen:
             raise ExportError(f'skill name {name!r} appears twice')
@@ -148,8 +152,8 @@ def normalize_bundle(bundle, allow_empty=False):
 
 
 def check_image(image):
-    if not isinstance(image, dict) or set(image) != {'id', 'digest'} or not isinstance(image['id'], str) or not IMAGE_ID.match(image['id']) \
-            or not isinstance(image['digest'], str) or not HEX64.match(image['digest']):
+    if not isinstance(image, dict) or set(image) != {'id', 'digest'} or not isinstance(image['id'], str) or not IMAGE_ID.fullmatch(image['id']) \
+            or not isinstance(image['digest'], str) or not HEX64.fullmatch(image['digest']):
         raise ExportError('an image identity is {id: identifier, digest: 64 lowercase hex}')
     return {'id': image['id'], 'digest': image['digest']}
 
@@ -160,7 +164,7 @@ def normalize_code(code):
     if not isinstance(code, dict) or set(code) != {'image', 'patchSha256', 'files', 'toolCatalogueChars'}:
         raise ExportError('code has exactly the keys image, patchSha256, files and toolCatalogueChars')
     image = check_image(code['image'])
-    if not isinstance(code['patchSha256'], str) or not HEX64.match(code['patchSha256']):
+    if not isinstance(code['patchSha256'], str) or not HEX64.fullmatch(code['patchSha256']):
         raise ExportError('code.patchSha256 is 64 lowercase hex')
     chars = code['toolCatalogueChars']
     if not isinstance(chars, int) or isinstance(chars, bool) or chars < 0:
@@ -173,9 +177,9 @@ def normalize_code(code):
         if not isinstance(entry, dict) or set(entry) != {'path', 'sha256'}:
             raise ExportError('a code file is {path, sha256}')
         path = entry['path']
-        if not isinstance(path, str) or not RELATIVE_PATH.match(path) or '..' in path.split('/'):
+        if not isinstance(path, str) or not RELATIVE_PATH.fullmatch(path) or '..' in path.split('/'):
             raise ExportError(f'code file path {path!r} is not a short relative path')
-        if not isinstance(entry['sha256'], str) or not HEX64.match(entry['sha256']):
+        if not isinstance(entry['sha256'], str) or not HEX64.fullmatch(entry['sha256']):
             raise ExportError(f'code file {path}: sha256 is 64 lowercase hex')
         if path in seen:
             raise ExportError(f'code file {path} appears twice')
@@ -467,18 +471,56 @@ def _is_number(value):
     return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
+# The domain's rule for an offline adjudicator (packages/domain/src/rsiCampaign.mjs), in Python, and the Claude CLI's effort levels (claude_judge.py).
+JUDGE_PROVIDER = 'anthropic'
+JUDGE_MODEL = re.compile(r'claude-[a-z0-9-]+')
+JUDGE_EFFORTS = ('low', 'medium', 'high', 'xhigh', 'max')
+JUDGE_ID = re.compile(r'[A-Za-z0-9][A-Za-z0-9_.:-]{0,159}')
+JUDGE_RECORD_SCHEMA = 'claude-judge/2'
+STAMPS = ('judge', 'model', 'effort')
+
+
 def check_judge(args):
-    if re.search('deepseek', f'{args.judge_id} {args.judge_provider}', re.I):
-        raise ExportError('the judge may not be on the solver\'s family (a judge id or provider naming deepseek is refused)')
-    if not args.judge_id or not args.judge_provider:
-        raise ExportError('--judge-id and --judge-provider are required with verdicts')
-    if args.judge_form not in ('absolute', 'pairwise'):
-        raise ExportError('--judge-form is absolute or pairwise')
-    if (args.dialect == 'pairwise') != (args.judge_form == 'pairwise'):
+    """The registered judge (args.judge_*) from --registration, and the same id, model and effort in every --judge-record. Returns the stamps every
+    verdict line must carry ({judge, model, effort})."""
+    if not args.registration or not args.judge_record:
+        raise ExportError('verdicts need --registration (the round registration naming the judge) and --judge-record (the judge.json of each parts directory)')
+    try:
+        judge = json.loads(pathlib.Path(args.registration).read_text(encoding='utf-8')).get('judge')
+    except (OSError, ValueError, AttributeError):
+        raise ExportError(f'--registration {args.registration} cannot be read as a round registration')
+    if not isinstance(judge, dict):
+        raise ExportError(f'--registration {args.registration} names no judge')
+    if judge.get('provider') != JUDGE_PROVIDER or not isinstance(judge.get('model'), str) or not JUDGE_MODEL.fullmatch(judge['model']):
+        raise ExportError(f'every offline judge is Claude: the registration names {judge.get("provider")!r} {judge.get("model")!r}, not {JUDGE_PROVIDER} with a pinned claude-* model')
+    if not isinstance(judge.get('id'), str) or not JUDGE_ID.fullmatch(judge['id']) or judge.get('effort') not in JUDGE_EFFORTS:
+        raise ExportError('the registration\'s judge has no id or no effort (register_round.py --judge-id, --judge-effort)')
+    if judge.get('form') not in ('absolute', 'pairwise'):
+        raise ExportError('the registration\'s judge form is absolute or pairwise')
+    if (args.dialect == 'pairwise') != (judge['form'] == 'pairwise'):
         raise ExportError('the pairwise dialect and the pairwise judge form go together')
-    passes = args.judge_passes
-    if not isinstance(passes, int) or passes < 2 or (args.judge_form == 'pairwise' and passes % 2):
-        raise ExportError('--judge-passes is an integer of at least 2 (even for pairwise: every pair is judged in both orders)')
+    passes = judge.get('passes')
+    if not isinstance(passes, int) or isinstance(passes, bool) or passes < 2 or (judge['form'] == 'pairwise' and passes % 2):
+        raise ExportError('the registration\'s judge passes are an integer of at least 2 (even for pairwise: every pair is judged in both orders)')
+    args.judge_id, args.judge_provider, args.judge_model, args.judge_effort, args.judge_form, args.judge_passes = (
+        judge['id'], judge['provider'], judge['model'], judge['effort'], judge['form'], passes)
+    stamps = {'judge': judge['id'], 'model': judge['model'], 'effort': judge['effort']}
+    for path in args.judge_record:
+        try:
+            record = json.loads(pathlib.Path(path).read_text(encoding='utf-8'))
+        except (OSError, ValueError):
+            raise ExportError(f'--judge-record {path} cannot be read')
+        named = {name: record.get(name) for name in STAMPS} if isinstance(record, dict) else None
+        if not isinstance(record, dict) or record.get('schema') != JUDGE_RECORD_SCHEMA or named != stamps:
+            raise ExportError(f'--judge-record {path} names {named} ({record.get("schema") if isinstance(record, dict) else None}), '
+                              f'not the registered judge {stamps} ({JUDGE_RECORD_SCHEMA})')
+    return stamps
+
+
+def stamp_problems(obj, stamps, where):
+    """What keeps a verdict line from being the registered judge's: each of judge, model and effort present and equal."""
+    wrong = [f'{name} {obj.get(name)!r}' for name in STAMPS if obj.get(name) != stamps[name]]
+    return [f'{where}: {", ".join(wrong)} is not the registered judge ({", ".join(f"{n} {v}" for n, v in stamps.items())})'] if wrong else []
 
 
 def _expected_keys(args, rows, arms):
@@ -490,7 +532,7 @@ def _expected_keys(args, rows, arms):
     return table
 
 
-def absolute_records(args, rows, arms):
+def absolute_records(args, rows, arms, stamps):
     table, found, calls = _expected_keys(args, rows, arms), {}, 0
     problems = []
     for path in args.verdicts:
@@ -512,8 +554,9 @@ def absolute_records(args, rows, arms):
             if 'pass' in obj and obj['pass'] != file_pass:
                 problems.append(f'{where}: pass {obj["pass"]!r} disagrees with the file name (pass {file_pass})')
                 continue
-            if 'judge' in obj and obj['judge'] != args.judge_id:
-                problems.append(f'{where}: judge {obj["judge"]!r} is not {args.judge_id!r}')
+            wrong = stamp_problems(obj, stamps, where)
+            if wrong:
+                problems += wrong
                 continue
             raw = obj.get({'unit': 'score', 'percent': 'score', 'race': 'race'}[args.dialect])
             score = raw / 100 if args.dialect == 'percent' and _is_number(raw) else raw
@@ -531,7 +574,7 @@ def absolute_records(args, rows, arms):
     return found, calls
 
 
-def question_records(args, rows, arms):
+def question_records(args, rows, arms, stamps):
     """The `questions` dialect: per-question verdict lines into one score per (run, pass), the share of the capsule's questions judged correct."""
     table, slots, problems = _expected_keys(args, rows, arms), {}, []
     wanted = args.question_ids_map
@@ -554,8 +597,9 @@ def question_records(args, rows, arms):
             if 'pass' in obj and obj['pass'] != file_pass:
                 problems.append(f'{where}: pass {obj["pass"]!r} disagrees with the file name (pass {file_pass})')
                 continue
-            if 'judge' in obj and obj['judge'] != args.judge_id:
-                problems.append(f'{where}: judge {obj["judge"]!r} is not {args.judge_id!r}')
+            wrong = stamp_problems(obj, stamps, where)
+            if wrong:
+                problems += wrong
                 continue
             if obj.get('verdict') not in ('correct', 'incorrect'):
                 problems.append(f'{where}: a verdict is "correct" or "incorrect"')
@@ -581,13 +625,24 @@ def question_records(args, rows, arms):
     return found, len(slots)
 
 
-def pairwise_records(args, rows):
+def pairwise_records(args, rows, stamps):
     sys.path.insert(0, str(TOOLS))
     import drb_pairwise
     pair_map = json.loads(pathlib.Path(args.pair_map).read_text(encoding='utf-8'))
     if not isinstance(pair_map, dict):
         raise ExportError('--pair-map is {task label: {row, repeat, arm}}')
     found, seen_tasks, problems = {}, set(), []
+    # The parts claude_judge.py wrote, read as they are: every line names what judged it.
+    for path in args.verdicts:
+        for number, line in enumerate(pathlib.Path(path).read_text(encoding='utf-8').splitlines(), 1):
+            if line.strip():
+                try:
+                    obj = json.loads(line)
+                except ValueError:
+                    obj = None
+                problems += stamp_problems(obj, stamps, f'{pathlib.Path(path).name}:{number}') if isinstance(obj, dict) else [f'{pathlib.Path(path).name}:{number}: not a JSON object']
+    if problems:
+        raise ExportError('pairwise verdicts rejected:\n  ' + '\n  '.join(problems[:20]))
     for order_file in args.pairwise_order:
         order = drb_pairwise.load_order(order_file)
         names = order['arms']
@@ -630,10 +685,11 @@ def pairwise_records(args, rows):
 
 def judged_section(args, rows, arms, runs):
     """The verdict records (and the text of their file) once the run set is final; ExportError on any gap or surplus."""
-    check_judge(args)
+    stamps = check_judge(args)
     status = {(r['arm'], r['row'], r['repeat']): r['status'] for r in runs}
     pairwise = args.judge_form == 'pairwise'
-    found, calls = pairwise_records(args, rows) if pairwise else question_records(args, rows, arms) if args.dialect == 'questions' else absolute_records(args, rows, arms)
+    found, calls = (pairwise_records(args, rows, stamps) if pairwise else question_records(args, rows, arms, stamps) if args.dialect == 'questions'
+                    else absolute_records(args, rows, arms, stamps))
     problems = []
     for (arm, row, repeat, k), _ in found.items():
         if status.get((arm, row, repeat)) is None:
@@ -745,7 +801,8 @@ def export(args):
             digest, lines = _digest_file(path)
             files.append({'name': pathlib.Path(path).name, 'sha256': digest, 'lines': lines})
         records_digest = hashlib.sha256(judged['text'].encode('utf-8')).hexdigest()
-        source['judged'] = {'schema': 1, 'judge': {'id': args.judge_id, 'provider': args.judge_provider, 'form': args.judge_form, 'passes': args.judge_passes},
+        source['judged'] = {'schema': 1, 'judge': {'id': args.judge_id, 'provider': args.judge_provider, 'model': args.judge_model, 'effort': args.judge_effort,
+                                                   'form': args.judge_form, 'passes': args.judge_passes},
                             'calls': judged['calls'], 'cost': {'settledCny': 0, 'note': args.judge_cost_note}, 'files': files,
                             'recordsFile': {'name': records_name, 'sha256': records_digest, 'lines': len(judged['records'])}}
     if gold_map:
@@ -789,10 +846,8 @@ def build_parser():
     p.add_argument('--verdicts', nargs='+')
     p.add_argument('--dialect', choices=['unit', 'percent', 'race', 'questions', 'pairwise'])
     p.add_argument('--question-ids', help='the questions dialect: {"<row>": ["<question id>", ...]}')
-    p.add_argument('--judge-id')
-    p.add_argument('--judge-provider')
-    p.add_argument('--judge-form')
-    p.add_argument('--judge-passes', type=int)
+    p.add_argument('--registration', help='verdicts: the round registration (register_round.py) whose judge judged them')
+    p.add_argument('--judge-record', action='append', default=[], help='verdicts: the judge.json of each claude_judge.py parts directory (repeatable)')
     p.add_argument('--pairwise-order', action='append', default=[])
     p.add_argument('--pair-map')
     p.add_argument('--judge-cost-note', default=DEFAULT_JUDGE_NOTE)

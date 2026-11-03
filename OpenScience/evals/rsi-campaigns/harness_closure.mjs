@@ -19,8 +19,10 @@
  *  - the runs without a settled cost are exactly the runs the cost records name (row, arm, repeat, run id, status), each with the ledger's
  *    record of that run (its settled sum, its open reservation and uncertain calls); each takes that settled sum as its cost, a lower
  *    bound, and every other run keeps the cost the source carries;
- *  - the registered statistics (statistics.py, the procedure the registration pins) are recomputed over the same observations with
- *    those costs, with the attestations the evaluator's receipt would have carried, and the verdict is recorded as the procedure gave it;
+ *  - the registered statistics (statistics.py, the procedure the registration pins) are given the same observations with those costs and
+ *    the attestations the evaluator's receipt would have carried, except one: `complete_costs` is false (2026-11-03), because a lower bound
+ *    is not a complete cost. The procedure refuses an incomplete cost before it reads a score (`inconclusive`, "complete cost identity not
+ *    attested"), and that is the verdict recorded: a closure never turns a campaign whose costs are not known into a qualified one;
  *  - the deviation is stated in the signed payload (`deviation`): the closure is not the receipt path, it attests no complete cost, and
  *    the error-budget reservation is untouched: this module reads no ledger and writes none (`alpha.reservation`).
  *
@@ -120,8 +122,8 @@ export async function closurePayload({ manifest, inputs, checkpoint, closure, cl
     return { ...row, cost };
   });
   if (observations.length !== costOf.size) fail('campaign_cost_measurement_missing');
-  // The registered statistics, with the attestations the receipt would have carried.
-  const attestations = { registration_digest: digest(statistics), confirmation_exposed: false, look: 1, complete_costs: true, cost_identity: statistics.cost_identity, expired_budget: Date.parse(now) >= Date.parse(statistics.expires_at) };
+  // The registered statistics, with the attestations the receipt would have carried — but costs that are lower bounds are not complete.
+  const attestations = { registration_digest: digest(statistics), confirmation_exposed: false, look: 1, complete_costs: false, cost_identity: statistics.cost_identity, expired_budget: Date.parse(now) >= Date.parse(statistics.expires_at) };
   const statisticsInput = { registration: statistics, observations, receipt: { ...attestations, deterministic_qualification: null, now: now.replace(/Z$/, '+00:00') } };
   let evaluated = await evaluateStatistics(statisticsInput, { pythonExecutable: statisticsPython, modulePath: statisticsModulePath });
   if (!['qualified', 'not-qualified', 'inconclusive'].includes(evaluated.decision)) fail(evaluated.reason ?? 'campaign_statistics_failed');
@@ -137,7 +139,7 @@ export async function closurePayload({ manifest, inputs, checkpoint, closure, cl
     deviation: {
       code: 'cost_closed_from_ledger_record',
       reason: 'campaign_cost_measurement_missing: the evaluator\'s receipt refuses runs without a settled cost, and a cost cannot be added to a sealed, digested source without making it another corpus',
-      effect: 'each listed run carries the ledger\'s settled sum for its calls, a lower bound (the ledger also held an uncertain call or an open reservation); no score, row, repeat or arm changed; the statistics ran over the recorded observations with these costs',
+      effect: 'each listed run carries the ledger\'s settled sum for its calls, a lower bound (the ledger also held an uncertain call or an open reservation); no score, row, repeat or arm changed; the statistics were given the recorded observations with these costs and complete_costs false, so the procedure gives no verdict on them',
       runs: [...repairs.entries()].sort((a, b) => cmp(a[0], b[0])).map(([, found]) => ({ row: found.entry.row, arm: found.entry.arm, repeat: found.entry.repeat, runId: found.entry.runId, status: found.entry.status,
         usedCost: found.cost, ledger: found.ledger, ...(found.entry.resultSha256 ? { resultSha256: found.entry.resultSha256 } : {}) })),
       costRecords: closureSha256,

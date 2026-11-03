@@ -1,7 +1,7 @@
-import test from 'node:test';
+import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtemp, readFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { rsiDigest as digest } from '../../../apps/server/src/rsiCampaignBundle.mjs';
@@ -13,6 +13,7 @@ import { BENIGN_PROCEDURE, memoryCampaignStore, runToVerdict, runnerEnvironment,
 
 const DEADLINE = '2026-10-31T15:59:59.999Z';
 const scratch = await mkdtemp(join(tmpdir(), 'rsi-scorers-'));
+after(() => rm(scratch, { recursive: true, force: true }));
 let dirs = 0;
 const nextDir = () => join(scratch, String(dirs += 1));
 const vectors = JSON.parse(await readFile(new URL('./fixtures/scorer-vectors.json', import.meta.url), 'utf8'));
@@ -117,6 +118,8 @@ function generator(seed) {
 }
 const skill = (name, chars) => { const value = digest({ name }); return { arm: `cand-${value.slice(0, 12)}`, skill: { digest: value, chars, title: name } }; };
 const GOOD = skill('stepwise-calculator', 900), WEAK = skill('generic-reminder', 400);
+/** Who wrote the candidates: the operator's Claude session (owner 2026-11-03), recorded as the manifest's improvers. */
+const IMPROVERS = [{ role: 'lead', provider: 'anthropic', model: 'claude-opus-5-5' }];
 const BASE = { arm: 'baseline', skill: null };
 const improving = (arm, inSlice) => (arm === GOOD.arm ? (inSlice ? 0.8 : 0.85) : inSlice ? 0.35 : 0.85);
 
@@ -180,9 +183,9 @@ async function fixture(scorerId, { named = true, development: dev = {}, confirma
   const target = { surface: 'capability-skill', dependencyDigest: 'a'.repeat(64), baselineRevision: 'benign-baseline' };
   const sources = { 'development-dev': development, 'confirmation-conf': confirmation };
   const manifest = {
-    schemaVersion: 1, id, surface: 'capability-skill', candidateKind: 'skill', claim: 'targeted-repair', automated: true,
+    schemaVersion: 2, id, surface: 'capability-skill', candidateKind: 'skill', claim: 'targeted-repair', automated: true,
     createdAt: '2026-10-26T00:00:00Z', deadline: DEADLINE, budget: { campaignCny: 1000, monthCny: 30000 },
-    models: { solver: { provider: 'deepseek', model: 'deepseek-flash' }, improver: { provider: 'dashscope', model: 'qwen3.8-max' }, reviewer: { provider: 'dashscope', model: 'qwen3.8-max' } },
+    models: { solver: { provider: 'deepseek', model: 'deepseek-flash' }, improvers: IMPROVERS, judges: [] },
     target, registration: { digest: digest(registration), procedure: BENIGN_PROCEDURE.id, claim: 'targeted-repair' },
     data: { classification: 'public', sources: [
       { id: 'development-dev', digest: digest(development), role: 'development', exposure: 'exposed' },
@@ -333,7 +336,7 @@ test('the assembler builds a campaign for another scorer that the runner takes a
   const { buildSkillCampaign, developmentOnly } = await import('../skill_assemble.mjs');
   const base = await fixture('bixbench-deterministic');
   const [development, confirmation] = Object.values(base.inputs.sources);
-  const candidates = { model: 'qwen3.8-max', candidates: [GOOD, WEAK].map((c) => ({ arm: c.arm, digest: c.skill.digest, chars: c.skill.chars, title: c.skill.title })) };
+  const candidates = { improvers: IMPROVERS, candidates: [GOOD, WEAK].map((c) => ({ arm: c.arm, digest: c.skill.digest, chars: c.skill.chars, title: c.skill.title })) };
   const input = { development, confirmation, candidates, scorer: 'bixbench-deterministic', failureSlice: ['transcriptomics'], month: '2026-11', idPrefix: 'rehearsal-', now: '2026-10-26T00:00:00Z' };
   await assert.rejects(buildSkillCampaign(input), { message: 'campaign_pilot_rationale_missing' });
   const built = await buildSkillCampaign({ ...input, pilotRationale: 'Synthetic rehearsal family; no benefit is claimed.' });

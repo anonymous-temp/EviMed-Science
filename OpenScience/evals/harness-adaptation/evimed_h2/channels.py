@@ -1,10 +1,11 @@
-"""The improver channels: upstream's `claude_cli` Proposer, run on this box's own Claude login and, for one stage, on DeepSeek through
-the same CLI.
+"""The improver channels: upstream's `claude_cli` Proposer, run on this box's own Claude login. Every improver stage is Claude (owner
+2026-11-03): `validate` refuses a stage that is not a `claude_cli` row with a `claude-*` model, and any provider, so no stage can be
+pointed at DeepSeek or another endpoint by configuration. The solver is not configured here; it is always EviMed Science on DeepSeek Flash.
 
 What this module changes about upstream's Proposer, all by subclassing (see PATCHES.md, "overrides"):
 
-  * env()          no Vertex, no inherited ANTHROPIC_* / CLAUDE_CODE_* variables from whatever shell started the round; a provider row adds its
-                   endpoint and key (read from the key file at spawn, never stored, never logged).
+  * env()          no Vertex, no inherited ANTHROPIC_* / CLAUDE_CODE_* / DEEPSEEK_* variables from whatever shell started the round: the session
+                   reaches the box's Claude login and nothing else.
   * _claude_cli()  the session runs `--safe-mode --restricted` with five file tools and `acceptEdits`: no shell, no web, no settings or
                    CLAUDE.md of this box, file access confined to the scratch directory upstream gives each session; one JSON result is
                    parsed for usage; failures are classified (quota / transport / timeout are infrastructure, a spent budget is the stage's own).
@@ -12,7 +13,7 @@ What this module changes about upstream's Proposer, all by subclassing (see PATC
                    does not catch, so it can never become an inherited-harness candidate.
 
 The per-stage model is chosen by `StageRouter` from the label upstream gives each call (inv1, dom1, agg1, select.agg1, experience.agg1).
-Cache identity: upstream keys a cached reply on label, mission and evidence; the router gives each (stage, provider, model, effort) its own
+Cache identity: upstream keys a cached reply on label, mission and evidence; the router gives each (stage, model, effort) its own
 audit directory, so a reply produced by one model is never served as another's.
 """
 
@@ -29,7 +30,7 @@ from pathlib import Path
 
 from . import config, upstream
 from .errors import InfrastructureFailure, QuotaExhausted
-from .ledger import Ledger, deepseek_cny
+from .ledger import Ledger
 
 up = upstream.load()
 Proposer = up.proposer.Proposer
@@ -40,8 +41,10 @@ INFRA_KINDS = {"quota", "auth", "transport", "timeout", "spawn"}
 CLI_TOOLS = "Read,Write,Edit,Glob,Grep"
 
 # Variables a parent shell may carry that would change which account, endpoint or session the CLI uses.
-_SCRUB_PREFIXES = ("ANTHROPIC_", "CLAUDE_CODE_", "CLAUDE_AGENT_", "CLAUDE_CONFIG", "CLAUDE_EFFORT", "CLAUDE_PID", "AWS_BEARER", "GOOGLE_CLOUD_", "VERTEX")
+_SCRUB_PREFIXES = ("ANTHROPIC_", "CLAUDE_CODE_", "CLAUDE_AGENT_", "CLAUDE_CONFIG", "CLAUDE_EFFORT", "CLAUDE_PID", "AWS_BEARER", "GOOGLE_CLOUD_", "VERTEX",
+                   "DEEPSEEK_")
 _SCRUB_EXACT = {"CLAUDECODE", "AI_AGENT", "CLAUDE_CODE_USE_VERTEX", "CLOUD_ML_REGION"}
+_CLAUDE_MODEL = re.compile(r"^claude-[a-z0-9-]+$")
 _QUOTA_TEXT = re.compile(r"usage limit|rate limit|limit reached|quota|credit balance|too many requests|overloaded|resets? at", re.I)
 
 
@@ -52,16 +55,27 @@ def stage_of(label: str) -> str:
     return head
 
 
-def load_channels(path: Path | None = None) -> dict:
-    document = json.loads(Path(path or config.CHANNELS_FILE).read_text(encoding="utf-8"))
-    missing = [s for s in STAGES if s not in document.get("stages", {})]
+def validate(document: dict) -> dict:
+    """The channels document, or ValueError. Improver stages run on Claude (owner 2026-11-03): a Claude CLI row with a claude-* model and
+    no provider, in every stage; the solver's model is not an improver's business and is not configurable here."""
+    stages = document.get("stages", {})
+    missing = [s for s in STAGES if s not in stages]
     if missing:
         raise ValueError(f"channels file has no row for {missing}")
-    for stage, row in document["stages"].items():
+    if "providers" in document:
+        raise ValueError("improver stages run on Claude (owner 2026-11-03): the channels file has a providers block; delete it")
+    for stage, row in stages.items():
+        if "provider" in row:
+            raise ValueError(f"improver stages run on Claude (owner 2026-11-03): stage {stage} names provider {row['provider']!r}")
+        if row.get("kind") != "claude_cli" or not _CLAUDE_MODEL.fullmatch(str(row.get("model", ""))):
+            raise ValueError(f"improver stages run on Claude (owner 2026-11-03): stage {stage} is {row.get('kind')!r} {row.get('model')!r}, "
+                             f"not a claude_cli row with a claude-* model")
         up.spec.ChannelSpec(row["kind"], row["model"], effort=row.get("effort", "high"), timeout=int(row.get("timeout", 2400)))
-        if row.get("provider") and row["provider"] not in document.get("providers", {}):
-            raise ValueError(f"stage {stage} names provider {row['provider']!r} that the file does not define")
     return document
+
+
+def load_channels(path: Path | None = None) -> dict:
+    return validate(json.loads(Path(path or config.CHANNELS_FILE).read_text(encoding="utf-8")))
 
 
 def slug(text: str) -> str:
@@ -69,14 +83,14 @@ def slug(text: str) -> str:
 
 
 class H2Proposer(Proposer):
-    """One stage's session runner. Built by `build_router`; carries its stage row, the ledger and the balance guard."""
+    """One stage's session runner. Built by `build_router`; carries its stage row and the ledger."""
 
-    def __init__(self, stage: str, row: dict, provider: dict | None, *, cli: str = "claude", audit_dir: Path, ledger: Ledger | None = None,
-                 balance=None, domain: str = "", attempts: int = 2):
+    def __init__(self, stage: str, row: dict, *, cli: str = "claude", audit_dir: Path, ledger: Ledger | None = None, domain: str = "",
+                 attempts: int = 2):
         spec = up.spec.ChannelSpec(row["kind"], row["model"], effort=row.get("effort", "high"), timeout=int(row.get("timeout", 2400)))
         super().__init__(spec=spec, audit_dir=Path(audit_dir), attempts=attempts, project="", region="")
-        self.stage, self.row, self.provider, self.cli = stage, row, provider, cli
-        self.ledger, self.balance, self.domain = ledger, balance, domain
+        self.stage, self.row, self.cli = stage, row, cli
+        self.ledger, self.domain = ledger, domain
         self._tls = threading.local()
 
     # -- environment -------------------------------------------------------------------------------------------------------
@@ -85,15 +99,6 @@ class H2Proposer(Proposer):
         env["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] = "1"
         env["DISABLE_TELEMETRY"] = "1"
         env["ANTHROPIC_MODEL"] = self.spec.model
-        if self.provider:
-            key = Path(self.provider["key_file"]).read_text(encoding="utf-8").strip()
-            env["ANTHROPIC_BASE_URL"] = self.provider["base_url"]
-            env["ANTHROPIC_AUTH_TOKEN"] = key
-            small = self.provider.get("small_model") or self.spec.model
-            env["ANTHROPIC_DEFAULT_OPUS_MODEL"] = self.spec.model
-            env["ANTHROPIC_DEFAULT_SONNET_MODEL"] = self.spec.model
-            env["ANTHROPIC_DEFAULT_HAIKU_MODEL"] = small
-            env["CLAUDE_CODE_SUBAGENT_MODEL"] = small
         return env
 
     def argv(self, system: str, stdin_has_system: bool) -> list[str]:
@@ -117,7 +122,7 @@ class H2Proposer(Proposer):
         stdin_has_system = bool(system) and len(system) > up.proposer.SYSTEM_ARG_MAX
         if stdin_has_system:
             stdin = f"# SYSTEM INSTRUCTIONS\n\n{system}\n\n# END\n\n{mission}"
-        record = {"stage": self.stage, "model": self.spec.model, "provider": (self.row.get("provider") or "claude-login")}
+        record = {"stage": self.stage, "model": self.spec.model}
         started = time.time()
         try:
             done = subprocess.run(self.argv(system, stdin_has_system), input=stdin, cwd=cwd, env=self.env(), text=True,
@@ -162,9 +167,6 @@ class H2Proposer(Proposer):
 
     def call(self, mission, context_dir, label, *, system="", timeout=None, max_attempts=None, harvest=None):
         key = up.proposer._call_fingerprint(label, mission, system, context_dir)
-        cached = self._cached(label, key, require_workspace=bool(harvest))
-        if cached is None and self.provider and self.balance is not None:
-            self.balance.ensure(f"the {self.stage} session {label}")
         self._tls.attempts = []
         self._tls.task = task_of(context_dir)
         base = f"improver:{self.domain}:{self.stage}:{label}:{key}"
@@ -182,7 +184,7 @@ class H2Proposer(Proposer):
         if reply.cached:
             if self.ledger:
                 self.ledger.append(f"{base}:cached", kind="improver", cached=True, stage=self.stage, label=label, domain=self.domain,
-                                   task=self._tls.task, model=self.spec.model, cny=0.0)
+                                   task=self._tls.task, model=self.spec.model)
         else:
             self._log_attempts(base, "ok")
         return reply
@@ -191,13 +193,10 @@ class H2Proposer(Proposer):
         if not self.ledger:
             return
         for index, attempt in enumerate(self._tls.attempts, 1):
-            usage = attempt.get("usage") or {}
-            cny = deepseek_cny(self.spec.model, usage) if self.row.get("provider") == "deepseek" else None
             self.ledger.append(
                 f"{base}:a{index}", kind="improver", cached=False, stage=self.stage, domain=self.domain, task=self._tls.task, model=self.spec.model,
-                provider=attempt.get("provider"), outcome=attempt.get("kind"), call_outcome=outcome, attempt=index, usage=usage,
-                usd_reported=attempt.get("usd_reported"), cny=cny, cny_basis=("estimate at the platform reference rate, peak" if cny is not None else None),
-                wall_s=attempt.get("wall_s"), turns=attempt.get("turns"), denials=attempt.get("denials"),
+                outcome=attempt.get("kind"), call_outcome=outcome, attempt=index, usage=attempt.get("usage") or {},
+                usd_reported=attempt.get("usd_reported"), wall_s=attempt.get("wall_s"), turns=attempt.get("turns"), denials=attempt.get("denials"),
             )
 
 
@@ -245,20 +244,19 @@ class StageRouter:
         return self.stages[stage_of(label)].call(mission, context_dir, label, **kwargs)
 
     def identity(self) -> dict:
-        return {s: {"kind": p.spec.kind, "provider": p.row.get("provider"), "model": p.spec.model, "effort": p.spec.effort,
+        return {s: {"kind": p.spec.kind, "model": p.spec.model, "effort": p.spec.effort,
                     "timeout": p.spec.timeout, "max_budget_usd": p.row.get("max_budget_usd")} for s, p in self.stages.items()}
 
 
-def build_router(audit_root: Path, *, domain: str = "", ledger: Ledger | None = None, balance=None, channels: dict | None = None,
+def build_router(audit_root: Path, *, domain: str = "", ledger: Ledger | None = None, channels: dict | None = None,
                  cli: str | None = None) -> StageRouter:
-    document = channels or load_channels()
+    document = validate(channels) if channels else load_channels()
     cli = cli or os.environ.get("RSI1_CLAUDE_BIN") or document.get("cli", "claude")
     if os.sep not in cli:
         cli = shutil.which(cli) or cli
     stages: dict[str, H2Proposer] = {}
     for stage in STAGES:
         row = document["stages"][stage]
-        provider = document["providers"][row["provider"]] if row.get("provider") else None
-        identity = slug(f"{stage}-{row.get('provider') or 'claude'}-{row['model']}-{row.get('effort', 'high')}")
-        stages[stage] = H2Proposer(stage, row, provider, cli=cli, audit_dir=Path(audit_root) / identity, ledger=ledger, balance=balance, domain=domain)
+        identity = slug(f"{stage}-{row['model']}-{row.get('effort', 'high')}")
+        stages[stage] = H2Proposer(stage, row, cli=cli, audit_dir=Path(audit_root) / identity, ledger=ledger, domain=domain)
     return StageRouter(stages, Path(audit_root))

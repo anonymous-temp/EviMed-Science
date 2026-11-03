@@ -3,7 +3,8 @@
 
   register_round.py --round rsi1-2026-11 --family drb --benchmark deepresearchbench --scorer judged-verdicts \\
       --pools pools/drb.json --ppc rsi/ppc-tasks.json --development-rows 12 --confirmation-rows 30 \\
-      --failure-slice "Science & Technology" --judge-id <id> --judge-provider anthropic --judge-form pairwise ... --out rsi/drb.registration.json
+      --failure-slice "Science & Technology" --judge-id <id> --judge-provider anthropic --judge-model claude-sonnet-5-5 --judge-effort medium \\
+      --judge-form pairwise --judge-passes 2 --judge-max-calls N --judge-noise judge-noise.json --judge-noise-key drb --out rsi/drb.registration.json
   register_round.py --check rsi/drb.registration.json [--pools pools/drb.json [--ppc rsi/ppc-tasks.json]]
 
 The file is written before any confirmation run exists and decides nothing about outcomes: it names the rows, how they were
@@ -19,8 +20,15 @@ ordered, and the parameters the lab will hold the campaign to. What it fixes:
   failure slice, margin, cost ratio (the registered procedure's targeted-repair bound is 1.1 and the registration cannot ask
               for another), alpha allocation (0.05 per quarter divided by the campaigns planned in it), K (the most candidates
               the development gate may carry), and the A/A control arm of the development gate
-  judge       judged-verdicts only: the fixed judge identity, its passes and call budget, and its qualification (agreement and the
-              noise band of repeated judging, from judge-noise.txt or given) with the thresholds it must meet. The call budget is
+  judge       judged-verdicts only: the fixed judge identity (an id, provider anthropic, a pinned claude-* --judge-model and the CLI
+              --judge-effort it runs at: every offline judge is Claude, owner 2026-11-03, and the same model at another effort is another
+              judge), its passes and call budget, and its qualification, the measurement noise_sample.py `band` wrote (--judge-noise, a
+              `judge-noise/2` file) for this family (--judge-noise-key) and the registered form, copied as it is: agreement and the noise
+              band of one judging, both computed by the tool on the 0-1 scale of the verdict the lab scores (`scale: verdict-0-1`). A
+              measurement of another form (the RACE band of absolute judging for a pairwise judge), on another scale (rubric points) or
+              without an agreement (a judge that never states a preference) is refused; nothing of it can be typed in. The thresholds are
+              the procedure's, fixed in code and never registered: agreement at least 0.9, and the noise band of the verdict the procedure
+              uses (the mean of the passes: noiseBand95 / sqrt(passes)) within --margin. The call budget is
               computed from the registration itself (rows x repeats x arms x passes, development and confirmation; pairwise judging
               records the arms that are not the baseline) and a maximum below it is refused (`judge.callsRequired` says the figure)
 --exclude-opened FILE (repeatable) takes the rows earlier campaigns opened, so this registration's confirmation rows are fresh. A file is an
@@ -34,7 +42,7 @@ consumer identity); the default is harness-patch and writes no `surface` field.
 `groupsBelowMinimum` states an observation (fewer confirmation rows than the procedure's minimum groups: the report will call
 the result directional and the campaign draws no error budget); it is not a decision. The digest is the sha256 of the canonical JSON (sorted keys, compact, UTF-8) of
 the file without `digest` and `registeredAt`, so the same inputs always give the same digest. An existing --out is never
-overwritten without --force. `--check` recomputes the digest, the hash order and the disjointness of the two lists, and with
+overwritten without --force. `--check` recomputes the digest, the hash order and the disjointness of the two lists, holds a judge to the rule above, and with
 --pools (and --ppc) re-derives the whole row selection from the parameters in the file; exit 1 on any difference.
 
 Python 3.10 compatible; run with `python3 -I`.
@@ -42,6 +50,7 @@ Python 3.10 compatible; run with `python3 -I`.
 import argparse
 import hashlib
 import json
+import math
 import pathlib
 import re
 import sys
@@ -63,8 +72,18 @@ SCORER_BENCHMARKS = {
     'mbc-normalized': {'medbrowsecomp'},
     'judged-verdicts': {'deepresearchbench', 'researchclawbench', 'bixbench'},
 }
-JUDGE_ARGS = ('judge_id', 'judge_provider', 'judge_form', 'judge_passes', 'judge_max_calls', 'judge_agreement', 'judge_noise_sd',
-              'judge_noise_band', 'judge_measured_on', 'judge_min_agreement', 'judge_max_noise_band', 'judge_noise', 'judge_noise_key')
+JUDGE_ARGS = ('judge_id', 'judge_provider', 'judge_model', 'judge_effort', 'judge_form', 'judge_passes', 'judge_max_calls', 'judge_noise', 'judge_noise_key')
+# Every offline judge is Claude (the owner's role policy, 2026-11-03); the domain's rule (packages/domain/src/rsiCampaign.mjs) in Python, and the
+# Claude CLI's effort levels (claude_judge.py EFFORTS).
+JUDGE_PROVIDER = 'anthropic'
+JUDGE_MODEL = re.compile(r'claude-[a-z0-9-]+')
+JUDGE_EFFORTS = ('low', 'medium', 'high', 'xhigh', 'max')
+# The procedure's judge thresholds, the same as harness_campaign.mjs: the registrant records the measurement, never the threshold.
+JUDGE_MINIMUM_AGREEMENT = 0.9
+# The measurement noise_sample.py `band` writes, and the one scale a qualification is read on: the verdict's own, 0 to 1.
+NOISE_SCHEMA = 'judge-noise/2'
+NOISE_SCALE = 'verdict-0-1'
+QUALIFICATION_KEYS = ('measuredOn', 'form', 'scale', 'agreement', 'noiseSd', 'noiseBand95')
 
 
 class RegistrationError(Exception):
@@ -231,32 +250,74 @@ def judge_calls_required(form, passes, development_rows, confirmation_rows, repe
     return (development_rows * repeats_development * development_arms + confirmation_rows * repeats_confirmation * confirmation_arms) * passes
 
 
+def judge_qualification_problems(judge, margin):
+    """What keeps a registered judge from the procedure's rule (empty when it meets it): a Claude identity at a CLI effort, a measurement of its
+    form on the verdict's 0-1 scale, and the measured agreement and the noise band of the averaged verdict against the code's thresholds.
+    `harnessJudgeRegistrationIssue` (harness_campaign.mjs) is the same rule."""
+    problems = []
+    if judge.get('provider') != JUDGE_PROVIDER or not isinstance(judge.get('model'), str) or not JUDGE_MODEL.fullmatch(judge['model']):
+        problems.append(f'the judge must be {JUDGE_PROVIDER} with a pinned claude-* model id (it is {judge.get("provider")!r} {judge.get("model")!r})')
+    if judge.get('effort') not in JUDGE_EFFORTS:
+        problems.append(f'the judge\'s effort {judge.get("effort")!r} is not one of {", ".join(JUDGE_EFFORTS)}')
+    q = judge.get('qualification') if isinstance(judge.get('qualification'), dict) else {}
+    extra = sorted(set(q) - set(QUALIFICATION_KEYS))
+    if extra:
+        problems.append(f'the qualification records the measurement only; {", ".join(extra)} is a threshold the procedure fixes')
+    if q.get('scale') != NOISE_SCALE or q.get('form') != judge.get('form') or not all(_finite(q.get(k)) and 0 <= q[k] <= 1 for k in ('noiseSd', 'noiseBand95')):
+        problems.append(f'the noise record is not on the {NOISE_SCALE} scale of the {judge.get("form")} form (scale {q.get("scale")!r}, form {q.get("form")!r}): '
+                        f'measure it with noise_sample.py band and register it with --judge-noise')
+    if not isinstance(q.get('measuredOn'), str) or not q['measuredOn'].strip():
+        problems.append('the qualification does not say what it was measured on')
+    agreement, band, passes = q.get('agreement'), q.get('noiseBand95'), judge.get('passes')
+    if not _finite(agreement) or agreement < JUDGE_MINIMUM_AGREEMENT:
+        problems.append(f'the judge\'s agreement {agreement} is below the procedure\'s {JUDGE_MINIMUM_AGREEMENT}')
+    verdict_band = band / passes ** 0.5 if _finite(band) and isinstance(passes, int) and passes >= 1 else None
+    if verdict_band is None or not _finite(margin) or verdict_band > margin:
+        shown = 'unknown' if verdict_band is None else f'{verdict_band:.4f}'
+        problems.append(f'the noise band of the averaged verdict (noiseBand95 {band} / sqrt({passes} passes) = {shown}) exceeds the margin {margin}')
+    return problems
+
+
+def _finite(value):
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value)
+
+
+def noise_record(path, key, form):
+    """The qualification of a judge of `form` for family `key`: the measurement noise_sample.py `band` wrote, copied as it is, and where it came from.
+    A file that is not `judge-noise/2` on the verdict-0-1 scale, or that has no record of this family in this form, is refused."""
+    raw = pathlib.Path(path).read_bytes() if pathlib.Path(path).is_file() else None
+    data = read_json(path, 'the judge-noise file')
+    if not isinstance(data, dict) or data.get('schema') != NOISE_SCHEMA or data.get('scale') != NOISE_SCALE or not isinstance(data.get('families'), dict):
+        raise RegistrationError(f'{path} is not a {NOISE_SCHEMA} measurement on the {NOISE_SCALE} scale (noise_sample.py band): '
+                                f'a band in another unit (rubric points, a flip rate) cannot be held to a margin on 0-1')
+    entry = (data['families'].get(key) or {}).get(form)
+    if not isinstance(entry, dict):
+        raise RegistrationError(f'{path} measured no {form} judging of {key!r}: a judge is qualified by a measurement of the form it is registered in')
+    if entry.get('scale') != NOISE_SCALE or entry.get('form') != form:
+        raise RegistrationError(f'{path}: the {key}/{form} record is not a {form} measurement on the {NOISE_SCALE} scale')
+    if not _finite(entry.get('agreement')):
+        raise RegistrationError(f'{path}: the {key}/{form} measurement has no agreement (no comparison free of a tie: a judge that never states a preference)')
+    for name in ('noiseSd', 'noiseBand95'):
+        if not _finite(entry.get(name)) or not 0 <= entry[name] <= 1:
+            raise RegistrationError(f'{path}: the {key}/{form} {name} is not a number on the {NOISE_SCALE} scale')
+    return {'measuredOn': f'{pathlib.Path(path).name} sha256:{sha256_hex(raw)[:16]} {key}/{form}', 'form': form, 'scale': NOISE_SCALE,
+            'agreement': entry['agreement'], 'noiseSd': entry['noiseSd'], 'noiseBand95': entry['noiseBand95']}
+
+
 def judge_block(args):
     given = {name: getattr(args, name) for name in JUDGE_ARGS if getattr(args, name) is not None}
     if args.scorer != 'judged-verdicts':
         if given:
             raise RegistrationError('judge arguments belong to --scorer judged-verdicts only')
         return None
-    sd, band = args.judge_noise_sd, args.judge_noise_band
-    measured = args.judge_measured_on
-    if args.judge_noise:
-        if args.judge_noise_key is None:
-            raise RegistrationError('--judge-noise needs --judge-noise-key (drb, rcb or bixbench)')
-        entry = read_json(args.judge_noise, 'the judge-noise file').get(args.judge_noise_key)
-        if not isinstance(entry, dict):
-            raise RegistrationError(f'{args.judge_noise} has no {args.judge_noise_key!r}')
-        sd = entry.get('sd') if sd is None else sd
-        band = entry.get('band95') if band is None else band
-        measured = measured or f'{pathlib.Path(args.judge_noise).name}:{args.judge_noise_key}'
-    required = {'judge_id': args.judge_id, 'judge_provider': args.judge_provider, 'judge_form': args.judge_form, 'judge_passes': args.judge_passes,
-                'judge_max_calls': args.judge_max_calls, 'judge_agreement': args.judge_agreement, 'judge_noise_sd': sd,
-                'judge_noise_band': band, 'judge_measured_on': measured, 'judge_min_agreement': args.judge_min_agreement,
-                'judge_max_noise_band': args.judge_max_noise_band}
+    required = {name: getattr(args, name) for name in JUDGE_ARGS}
     missing = [name.replace('_', '-') for name, value in required.items() if value is None]
     if missing:
         raise RegistrationError('judged-verdicts needs ' + ', '.join(f'--{m}' for m in missing))
-    if re.search('deepseek', f'{args.judge_id} {args.judge_provider}', re.I):
-        raise RegistrationError('the judge may not be on the solver\'s family (a judge id or provider naming deepseek is refused)')
+    if args.judge_provider != JUDGE_PROVIDER or not JUDGE_MODEL.fullmatch(args.judge_model):
+        raise RegistrationError(f'every offline judge is Claude: --judge-provider {JUDGE_PROVIDER} and a pinned claude-* --judge-model (given {args.judge_provider} {args.judge_model})')
+    if args.judge_effort not in JUDGE_EFFORTS:
+        raise RegistrationError(f'--judge-effort is one of {", ".join(JUDGE_EFFORTS)} (the CLI effort the judge runs at)')
     if args.judge_form not in ('absolute', 'pairwise'):
         raise RegistrationError('--judge-form is absolute or pairwise')
     passes = args.judge_passes
@@ -264,17 +325,12 @@ def judge_block(args):
         raise RegistrationError('--judge-passes is at least 2 (even for pairwise: every pair is judged in both orders)')
     if args.judge_max_calls < 1:
         raise RegistrationError('--judge-max-calls is at least 1')
-    for name, value in (('agreement', args.judge_agreement), ('min-agreement', args.judge_min_agreement)):
-        if not 0 <= value <= 1:
-            raise RegistrationError(f'--judge-{name} is in [0, 1]')
-    for name, value in (('noise-sd', sd), ('noise-band', band)):
-        if not value >= 0 or value == float('inf'):
-            raise RegistrationError(f'--judge-{name} is a finite number of at least 0')
-    if not args.judge_max_noise_band > 0:
-        raise RegistrationError('--judge-max-noise-band is above 0')
-    return {'id': args.judge_id, 'provider': args.judge_provider, 'form': args.judge_form, 'passes': passes, 'maxCalls': args.judge_max_calls,
-            'qualification': {'agreement': args.judge_agreement, 'noiseSd': sd, 'noiseBand95': band, 'measuredOn': measured,
-                              'minimumAgreement': args.judge_min_agreement, 'maximumNoiseBand': args.judge_max_noise_band}}
+    judge = {'id': args.judge_id, 'provider': args.judge_provider, 'model': args.judge_model, 'effort': args.judge_effort, 'form': args.judge_form, 'passes': passes,
+             'maxCalls': args.judge_max_calls, 'qualification': noise_record(args.judge_noise, args.judge_noise_key, args.judge_form)}
+    problems = judge_qualification_problems(judge, args.margin)
+    if problems:
+        raise RegistrationError('the judge does not qualify: ' + '; '.join(problems))
+    return judge
 
 
 # ---------------------------------------------------------------------------------------------------------- registration
@@ -387,6 +443,8 @@ def check(path, pools, pool_name, ppc_path, exclude_opened=(), exclude_ids=()):
             problems.append(f'the judge call maximum {judge["maxCalls"]} is below the {required} verdict records the registration needs')
         if 'callsRequired' in judge and judge['callsRequired'] != required:
             problems.append(f'judge.callsRequired is {judge["callsRequired"]}, the registration needs {required}')
+    if isinstance(judge, dict):
+        problems.extend(judge_qualification_problems(judge, doc.get('margin')))
     if pools:
         pool_file, pool, pool_digest = read_pool(pools, pool_name or doc.get('pool', {}).get('name', 'main'))
         if pool_digest != doc.get('pool', {}).get('digest'):
@@ -449,16 +507,12 @@ def build_parser():
     p.add_argument('--minimum-groups', type=int, default=25)
     p.add_argument('--judge-id')
     p.add_argument('--judge-provider')
+    p.add_argument('--judge-model', help='the pinned claude-* model id the judge calls')
+    p.add_argument('--judge-effort', help='the CLI effort the judge runs at (claude_judge.py --effort)')
     p.add_argument('--judge-form')
     p.add_argument('--judge-passes', type=int)
     p.add_argument('--judge-max-calls', type=int)
-    p.add_argument('--judge-agreement', type=float)
-    p.add_argument('--judge-noise-sd', type=float)
-    p.add_argument('--judge-noise-band', type=float)
-    p.add_argument('--judge-measured-on')
-    p.add_argument('--judge-min-agreement', type=float)
-    p.add_argument('--judge-max-noise-band', type=float)
-    p.add_argument('--judge-noise', help='judge-noise.txt (JSON): sd and band95 of --judge-noise-key; explicit arguments win')
+    p.add_argument('--judge-noise', help='the judge-noise/2 measurement noise_sample.py band wrote: agreement and noise band of --judge-noise-key in --judge-form, on 0-1')
     p.add_argument('--judge-noise-key', choices=['drb', 'rcb', 'bixbench'])
     p.add_argument('--out')
     p.add_argument('--force', action='store_true')

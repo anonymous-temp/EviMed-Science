@@ -46,23 +46,23 @@ def make_bench(root: Path, n: int = 6) -> Path:
     return root
 
 
-def channels(key_file: Path, base_url: str = "http://127.0.0.1:9/anthropic") -> dict:
+def channels() -> dict:
+    """The shipped roles (config/channels.json): Sonnet for the two editors, Opus for the composer, the selector and the reflector."""
     row = {"kind": "claude_cli", "effort": "high", "timeout": 120, "max_budget_usd": 1}
     return {
         "cli": str(FAKE_CLAUDE),
         "stages": {
             "inv": {**row, "model": "claude-sonnet-5-5"},
-            "dom": {**row, "model": "deepseek-v4-pro[1m]", "provider": "deepseek"},
+            "dom": {**row, "model": "claude-sonnet-5-5"},
             "agg": {**row, "model": "claude-opus-5-5"},
             "select": {**row, "model": "claude-opus-5-5"},
             "experience": {**row, "model": "claude-opus-5-5"},
         },
-        "providers": {"deepseek": {"base_url": base_url, "key_file": str(key_file), "small_model": "deepseek-flash"}},
     }
 
 
 class Sandbox:
-    """One temporary world: bench root, runs root, out root, fake broker directory, fake CLI log, key file."""
+    """One temporary world: bench root, runs root, out root, fake broker directory, fake CLI log."""
 
     def __init__(self, test: unittest.TestCase, n_tasks: int = 6):
         ensure_upstream()
@@ -74,16 +74,16 @@ class Sandbox:
         self.broker_dir = self.tmp / "broker"
         self.broker_dir.mkdir()
         self.cli_log = self.tmp / "cli.jsonl"
-        self.key_file = self.tmp / "key"
-        self.key_file.write_text(FAKE_KEY)
         self.tasks_file = self.tmp / "ppc-tasks.json"
         self.channel_file = self.tmp / "channels.json"
-        self.channel_file.write_text(json.dumps(channels(self.key_file)))
+        self.channel_file.write_text(json.dumps(channels()))
         os.environ["FAKE_CLAUDE_LOG"] = str(self.cli_log)
         os.environ["RSI_FAKE_BROKER_DIR"] = str(self.broker_dir)
         os.environ.pop("FAKE_CLAUDE_MODE", None)
         os.environ.pop("FAKE_CLAUDE_FAIL_MODEL", None)
-        test.addCleanup(lambda: [os.environ.pop(k, None) for k in ("FAKE_CLAUDE_LOG", "RSI_FAKE_BROKER_DIR", "FAKE_CLAUDE_MODE", "FAKE_CLAUDE_FAIL_MODEL")])
+        os.environ.pop("FAKE_CLAUDE_FAIL_DIM", None)
+        test.addCleanup(lambda: [os.environ.pop(k, None) for k in ("FAKE_CLAUDE_LOG", "RSI_FAKE_BROKER_DIR", "FAKE_CLAUDE_MODE", "FAKE_CLAUDE_FAIL_MODEL",
+                                                                   "FAKE_CLAUDE_FAIL_DIM")])
         self.write_tasks(["1", "2"])
 
     def write_tasks(self, ids):

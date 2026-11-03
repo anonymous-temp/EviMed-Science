@@ -1,7 +1,7 @@
 /**
- * The frontier jury (2026-10-26): a model of a different family from production's screener (DeepSeek) labels frontier-feed
- * items `pick` (belongs in the daily featured selection), `ok` (relevant, not featured) or `no` (not worth showing) with no
- * human labelling. Two independent passes per item, differing only in the order of the worked examples; agreement stands as
+ * The frontier jury (2026-10-26; Claude since 2026-11-03): a Claude model, an adjudicator the owner admits offline, labels
+ * frontier-feed items `pick` (belongs in the daily featured selection), `ok` (relevant, not featured) or `no` (not worth showing)
+ * with no human labelling. Two independent passes per item, differing only in the order of the worked examples; agreement stands as
  * the label, disagreement abstains (`worth: null`). Before its labels are used the jury is calibrated against the
  * human-adjudicated anchor (`evals/frontier-selection/gold.jsonl`): odd `n` rows are the exemplar pool, even `n` rows the
  * calibration set and never appear in a prompt as an exemplar.
@@ -10,28 +10,41 @@
  * excerpt). Every field the platform's own models wrote (`title_zh`, `summary_zh`, scores, genre, evidence type) is dropped
  * before a prompt is built, so a label never inherits the screener's reading.
  *
- * Money goes through the lab's budget ledger one batch at a time: reserve an upper bound, begin the spend, make the calls,
- * settle the priced actual. Every answer is appended to a JSONL cache the moment it arrives, so an interrupted run resumes
- * without paying twice.
+ * Where it runs: on the operator's box, never on the lab host (the lab has no Anthropic access). A call is the box's `claude` CLI
+ * under the operator's subscription, so it spends no lab cash: no reservation, no price, every record says `costCny: 0` with the
+ * basis `subscription` and the tokens the CLI reported. Every answer is appended to a JSONL cache the moment it arrives, so an
+ * interrupted run (a spent usage window above all) resumes without asking twice.
  *
- *   node frontier_labels.mjs calibrate --gold gold.jsonl --credential key --out calibration.json --cache cache.jsonl --campaign id --config lab.json
- *   node frontier_labels.mjs label --export export.json[.gz] --ids ids.json --credential key --out labels.json --cache cache.jsonl --campaign id --config lab.json
+ *   lab:       node frontier_labels.mjs items --export export.json[.gz] --plan plan.json --phase development|confirmation --out label-items.json
+ *   operator:  node frontier_labels.mjs calibrate --out calibration.json --cache cache.jsonl [--gold gold.jsonl] [--model claude-sonnet-5-5] [--effort medium]
+ *              node frontier_labels.mjs label --items label-items.json --out labels.json --cache cache.jsonl [--model ...] [--effort ...]
  */
+import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { appendFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
-import { dirname } from 'node:path';
+import { appendFile, mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { gunzipSync } from 'node:zlib';
-import { priceListAt, priceUsage } from '../../packages/domain/src/metering.mjs';
+import { RSI_OFFLINE_ROLE_MODEL } from '../../packages/domain/src/rsiCampaign.mjs';
 
 /** Bump on any change to the rubric's meaning; the prompt digest covers its bytes. */
 export const FRONTIER_JURY_VERSION = 'frontier-jury-v1';
-export const FRONTIER_JURY_MODEL = 'qwen3.8-max';
+/** The measured default (2026-11-03, `calibrate` in safe mode on the 124 calibration rows, two passes): sonnet at medium effort, κ 0.621, the best qualifying
+ *  Claude setting (high effort 0.523, opus medium 0.349). */
+export const FRONTIER_JURY_MODEL = 'claude-sonnet-5-5';
+export const FRONTIER_JURY_EFFORT = 'medium';
+export const FRONTIER_JURY_EFFORTS = Object.freeze(['low', 'medium', 'high', 'xhigh', 'max']);
 export const FRONTIER_WORTH = Object.freeze(['pick', 'ok', 'no']);
-const DASHSCOPE_BASE_URL = 'https://dashscope.aliyuncs.com/compatible-mode/v1';
-const MAX_OUTPUT_TOKENS = 200;
+export const FRONTIER_LABEL_ITEMS_SCHEMA = 'rsi-frontier-label-items-v1';
+export const FRONTIER_LABELS_SCHEMA = 'rsi-frontier-jury-labels-v1';
+export const FRONTIER_CALIBRATION_SCHEMA = 'rsi-frontier-jury-calibration-v1';
+/** A call is the operator's subscription: it is not priced, not reserved, and every record says so. */
+export const FRONTIER_JURY_COST_BASIS = 'subscription';
 const MAX_EXCERPT = 1200;
-const MAX_RESERVE_ATTEMPTS = 4;
+const MAX_CLI_OUTPUT = 4_000_000;
+/** The label phases of a month: development decides whether confirmation is labelled at all. */
+export const FRONTIER_LABEL_PHASES = Object.freeze(['development', 'confirmation']);
 
 /** @typedef {{title_raw?:string|null, source_name?:string|null, source_type?:string|null, journal?:string|null, publication_types?:string[]|null, published_at?:string|null, date_precision?:string|null, lang?:string|null, excerpt?:string|null}} FrontierItemText */
 /** @typedef {{n?:number, id?:string, text:FrontierItemText, worth:'pick'|'ok'|'no', why:string}} FrontierExemplar */
@@ -179,83 +192,115 @@ export function parseJuryAnswer(text) {
   return { worth: /** @type {'pick'|'ok'|'no'} */ (worth), why: typeof value.why === 'string' ? value.why.trim().slice(0, 200) : '' };
 }
 
-/** A closed-code failure: never carries a vendor message, which is known to echo credentials. `billed` is false when the provider
- * answered with an error status (nothing generated) and null when a charge cannot be ruled out. */
+/** A closed-code failure: never carries the CLI's text (a vendor message can echo anything). `retryable` is true for a transport hiccup or
+ * a timeout; a spent usage window (`jury_quota`) or a refused login (`jury_auth`) is not retried and stops the run. */
 export class JuryError extends Error {
-  /** @param {string} code @param {{retryable?:boolean, billed?:boolean|null}} [options] */
-  constructor(code, { retryable = false, billed = null } = {}) {
-    super(code); this.name = 'JuryError'; this.code = code; this.retryable = retryable; this.billed = billed;
+  /** @param {string} code @param {{retryable?:boolean}} [options] */
+  constructor(code, { retryable = false } = {}) {
+    super(code); this.name = 'JuryError'; this.code = code; this.retryable = retryable;
   }
 }
+/** What stops a run at once: nothing a retry would change. */
+const HALTING_CODES = new Set(['jury_quota', 'jury_auth', 'jury_cli_unavailable']);
 
-/** The jury's DashScope caller. The key is read from its file once and appears nowhere else.
- * @param {{credentialPath:string, baseUrl?:string, model?:string, timeoutMs?:number, retries?:number, fetchImpl?:typeof fetch, sleep?:(ms:number)=>Promise<void>}} options
- * @returns {JuryCaller} */
-export function dashscopeCaller({ credentialPath, baseUrl = DASHSCOPE_BASE_URL, model = FRONTIER_JURY_MODEL, timeoutMs = 60_000, retries = 3,
-  fetchImpl = globalThis.fetch, sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)) }) {
-  /** @type {string|null} */
-  let key = null;
-  const credential = async () => {
-    if (key) return key;
-    let raw;
-    try { raw = await readFile(credentialPath, 'utf8'); } catch { throw new JuryError('jury_credential_unreadable'); }
-    if (!raw.trim()) throw new JuryError('jury_credential_missing');
-    return (key = raw.trim());
-  };
-  const body = (/** @type {JuryMessage[]} */ messages) => JSON.stringify({
-    model, messages, temperature: 0, max_tokens: MAX_OUTPUT_TOKENS, enable_thinking: false,
-    response_format: { type: 'json_schema', json_schema: { name: 'frontier_label', strict: true, schema: { type: 'object',
-      properties: { worth: { type: 'string', enum: [...FRONTIER_WORTH] }, why: { type: 'string', maxLength: 200 } }, required: ['worth', 'why'], additionalProperties: false } } },
-  });
-  /** @param {JuryMessage[]} messages @param {AbortSignal|undefined} signal @returns {Promise<JuryReply>} */
-  const once = async (messages, signal) => {
-    const timeout = AbortSignal.timeout(timeoutMs);
-    try {
-      const response = await fetchImpl(`${baseUrl.replace(/\/+$/, '')}/chat/completions`, {
-        method: 'POST', headers: { authorization: `Bearer ${await credential()}`, 'content-type': 'application/json' }, body: body(messages),
-        signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
-      });
-      if (!response.ok) throw new JuryError(`jury_http_${response.status}`, { retryable: response.status === 429 || response.status >= 500, billed: false });
-      const data = await response.json();
-      const choice = data?.choices?.[0];
-      if (typeof choice?.message?.content !== 'string') throw new JuryError('jury_bad_response');
-      const u = data.usage, prompt = Number(u?.prompt_tokens), output = Number(u?.completion_tokens);
-      const cached = Math.min(Math.max(Number(u?.prompt_tokens_details?.cached_tokens) || 0, 0), prompt);
-      const usage = Number.isFinite(prompt) && Number.isFinite(output) && prompt >= 0 && output >= 0 ? { cacheHit: cached, cacheMiss: prompt - cached, output } : null;
-      return { text: choice.message.content, usage, requestId: response.headers?.get?.('x-request-id') ?? (typeof data.id === 'string' ? data.id : null), finishReason: choice.finish_reason ?? null };
-    } catch (error) {
-      if (error instanceof JuryError) throw error;
-      if (signal?.aborted) throw new JuryError('jury_aborted');
-      if (timeout.aborted || /** @type {any} */ (error)?.name === 'TimeoutError') throw new JuryError('jury_timeout', { retryable: true });
-      throw new JuryError('jury_network', { retryable: true });
-    }
-  };
-  return async (messages, { signal } = {}) => {
-    for (let attempt = 0; ; attempt++) {
-      try { return await once(messages, signal); } catch (error) {
-        if (!(error instanceof JuryError) || !error.retryable || attempt >= retries) throw error;
-        await sleep(1000 * 2 ** attempt + Math.floor(Math.random() * 250));
-      }
-    }
-  };
+// Variables a parent shell may carry that would change which account, endpoint or session the CLI uses (the improver channels scrub the same
+// list, evals/harness-adaptation/evimed_h2/channels.py), and the keys of the platform's own model providers, which the jury must never see.
+const SCRUB_PREFIXES = ['ANTHROPIC_', 'CLAUDE_CODE_', 'CLAUDE_AGENT_', 'CLAUDE_CONFIG', 'CLAUDE_EFFORT', 'CLAUDE_PID', 'AWS_BEARER', 'GOOGLE_CLOUD_', 'VERTEX', 'DEEPSEEK_', 'DASHSCOPE_'];
+const SCRUB_EXACT = new Set(['CLAUDECODE', 'AI_AGENT', 'CLOUD_ML_REGION']);
+const QUOTA_TEXT = /usage limit|rate limit|limit reached|quota|credit balance|too many requests|resets? at/i;
+const AUTH_TEXT = /invalid api key|please run \/login|not logged in|unauthori[sz]ed|authentication|oauth/i;
+
+/** The CLI's environment: the parent's, without anything that would point it at another account, endpoint or provider.
+ * @param {Record<string, string|undefined>} parent @returns {Record<string, string>} */
+export function claudeCliEnvironment(parent) {
+  /** @type {Record<string, string>} */
+  const env = {};
+  for (const [key, value] of Object.entries(parent)) if (typeof value === 'string' && !SCRUB_EXACT.has(key) && !SCRUB_PREFIXES.some((prefix) => key.startsWith(prefix))) env[key] = value;
+  env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = '1';
+  env.DISABLE_TELEMETRY = '1';
+  return env;
 }
 
-/** @param {number} value CNY rounded up to the ledger's 1e-8 precision */
-const ceilCny = (value) => Math.ceil(value * 1e8 - 1e-6) / 1e8;
-const roundCny = (/** @type {number} */ value) => Math.round(value * 1e8) / 1e8;
+/** @param {any} payload @param {string} text @returns {JuryError} */
+function cliFailure(payload, text) {
+  const status = Number(payload?.api_error_status);
+  if (status === 429 || QUOTA_TEXT.test(text)) return new JuryError('jury_quota');
+  if (status === 401 || status === 403 || AUTH_TEXT.test(text)) return new JuryError('jury_auth');
+  if (status >= 500 || /overloaded/i.test(text)) return new JuryError('jury_transport', { retryable: true });
+  // A CLI that failed without a JSON result never reached the model (a dropped connection, a crash); one that said it failed is an error of its own.
+  return new JuryError(payload ? 'jury_cli_error' : 'jury_transport', { retryable: true });
+}
 
-/** The jury's priced usage at the list in force; an unpriced model refuses the run before any money moves.
- * @param {string} model @param {string} instant */
-function pricing(model, instant) {
-  const list = priceListAt(instant);
-  /** @param {Partial<JuryUsage>} usage */
-  const price = (usage) => {
-    const priced = priceUsage({ resourceType: 'model', model, cacheHit: usage.cacheHit ?? 0, cacheMiss: usage.cacheMiss ?? 0, output: usage.output ?? 0, peak: true }, list);
-    if (!priced.priced) throw new Error('jury_unpriced');
-    return priced.cost;
+/**
+ * The jury's caller: the operator box's `claude` CLI, one print-mode call per message pair, no tools and no session. The system message goes
+ * to a temporary file (`--system-prompt-file`), the user message to stdin; the answer is the JSON result's text and its `usage` is mapped
+ * to the cache-aware token counts. The model must be a pinned `claude-*` id. Nothing the CLI prints reaches an error.
+ * @param {{model?:string, effort?:string, cli?:string, cliArgs?:string[], timeoutMs?:number, retries?:number, env?:Record<string, string|undefined>, scratchRoot?:string,
+ *   spawnImpl?:typeof spawn, sleep?:(ms:number)=>Promise<void>}} [options]
+ * @returns {JuryCaller & {close:()=>Promise<void>}} */
+export function claudeCliCaller({ model = FRONTIER_JURY_MODEL, effort = FRONTIER_JURY_EFFORT, cli = 'claude', cliArgs = [], timeoutMs = 180_000, retries = 2,
+  env = process.env, scratchRoot = tmpdir(), spawnImpl = spawn, sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)) } = {}) {
+  if (!RSI_OFFLINE_ROLE_MODEL.test(model) || !FRONTIER_JURY_EFFORTS.includes(effort)) throw new JuryError('jury_model_invalid');
+  const childEnv = claudeCliEnvironment(env);
+  /** @type {Promise<string>|null} */
+  let scratch = null;
+  let counter = 0;
+  // The CLI runs in an empty directory of its own: no project file of the operator's checkout is its working context.
+  const scratchDir = () => (scratch ??= mkdtemp(join(scratchRoot, 'frontier-jury-')));
+  /** @param {string} systemFile @param {string} user @param {AbortSignal|undefined} signal @returns {Promise<JuryReply>} */
+  const once = async (systemFile, user, signal) => {
+    const cwd = await scratchDir();
+    const argv = [...cliArgs, '-p', '--safe-mode', '--model', model, '--effort', effort, '--output-format', 'json', '--system-prompt-file', systemFile, '--tools', '', '--no-session-persistence'];
+    const { code, stdout, failure } = await new Promise((resolve) => {
+      let out = '', overflow = false, settled = false;
+      /** @type {import('node:child_process').ChildProcess} */
+      let child;
+      const finish = (/** @type {any} */ value) => { if (settled) return; settled = true; clearTimeout(timer); signal?.removeEventListener('abort', onAbort); resolve(value); };
+      const stop = () => { try { child?.kill('SIGKILL'); } catch { /* already gone */ } };
+      const onAbort = () => { stop(); finish({ failure: new JuryError('jury_aborted') }); };
+      const timer = setTimeout(() => { stop(); finish({ failure: new JuryError('jury_timeout', { retryable: true }) }); }, timeoutMs);
+      if (signal?.aborted) { onAbort(); return; }
+      signal?.addEventListener('abort', onAbort, { once: true });
+      try { child = spawnImpl(cli, argv, { cwd, env: childEnv, stdio: ['pipe', 'pipe', 'ignore'] }); } catch { finish({ failure: new JuryError('jury_cli_unavailable') }); return; }
+      child.on('error', () => finish({ failure: new JuryError('jury_cli_unavailable') }));
+      child.stdout?.on('data', (/** @type {Buffer} */ chunk) => { if (out.length < MAX_CLI_OUTPUT) out += chunk; else overflow = true; });
+      child.on('close', (exitCode) => finish(overflow ? { failure: new JuryError('jury_bad_response') } : { code: exitCode, stdout: out }));
+      child.stdin?.on('error', () => {});
+      child.stdin?.end(user);
+    });
+    if (failure) throw failure;
+    /** @type {any} */
+    let payload = null;
+    try { payload = JSON.parse(stdout); } catch { /* a plain-text failure is classified below */ }
+    const text = typeof payload?.result === 'string' ? payload.result : String(stdout ?? '').slice(0, 2000);
+    if (payload?.is_error === true || (typeof payload?.subtype === 'string' && payload.subtype !== 'success')) throw cliFailure(payload, text);
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) throw code === 0 ? new JuryError('jury_bad_response') : cliFailure(null, text);
+    if (code !== 0 && !text.trim()) throw new JuryError('jury_transport', { retryable: true });
+    if (!text.trim()) throw new JuryError('jury_bad_response');
+    const u = payload.usage, count = (/** @type {unknown} */ value) => (Number.isFinite(Number(value)) && Number(value) >= 0 ? Number(value) : null);
+    const input = count(u?.input_tokens), output = count(u?.output_tokens);
+    return {
+      text, usage: input !== null && output !== null ? { cacheHit: count(u.cache_read_input_tokens) ?? 0, cacheMiss: input + (count(u.cache_creation_input_tokens) ?? 0), output } : null,
+      requestId: typeof payload.session_id === 'string' ? payload.session_id : null, finishReason: typeof payload.stop_reason === 'string' ? payload.stop_reason : (payload.subtype ?? null),
+    };
   };
-  price({ output: 1 });
-  return price;
+  /** @type {JuryCaller & {close:()=>Promise<void>}} */
+  const call = async (messages, { signal } = {}) => {
+    const system = messages.find((message) => message.role === 'system'), user = messages.find((message) => message.role === 'user');
+    if (!system || !user) throw new JuryError('jury_messages_invalid');
+    const file = join(await scratchDir(), `system-${++counter}.txt`);
+    await writeFile(file, system.content, { mode: 0o600 });
+    try {
+      for (let attempt = 0; ; attempt++) {
+        try { return await once(file, user.content, signal); } catch (error) {
+          if (!(error instanceof JuryError) || !error.retryable || attempt >= retries) throw error;
+          await sleep(1000 * 2 ** attempt + Math.floor(Math.random() * 250));
+        }
+      }
+    } finally { await rm(file, { force: true }); }
+  };
+  call.close = async () => { if (scratch) await rm(await scratch, { recursive: true, force: true }); scratch = null; };
+  return call;
 }
 
 /** @param {string} cachePath @returns {Promise<Map<string, any>>} */
@@ -267,11 +312,12 @@ async function readCache(cachePath) {
   for (const line of text.split('\n')) {
     let record;
     try { record = JSON.parse(line); } catch { continue; }
-    if (record && typeof record.id === 'string' && (record.pass === 'A' || record.pass === 'B') && typeof record.juryVersion === 'string' && typeof record.model === 'string') cache.set(cacheKey(record), record);
+    if (record && typeof record.id === 'string' && (record.pass === 'A' || record.pass === 'B') && typeof record.juryVersion === 'string' && typeof record.model === 'string' && typeof record.effort === 'string') cache.set(cacheKey(record), record);
   }
   return cache;
 }
-const cacheKey = (/** @type {any} */ { id, pass, juryVersion, model }) => JSON.stringify([id, pass, juryVersion, model]);
+/** The model and its effort are both part of what answered: another effort is another jury. */
+const cacheKey = (/** @type {any} */ { id, pass, juryVersion, model, effort }) => JSON.stringify([id, pass, juryVersion, model, effort]);
 
 /** Run `worker` over `tasks` with at most `limit` in flight; results keep their order. */
 async function runLimited(/** @type {any[]} */ tasks, /** @type {number} */ limit, /** @type {(task:any)=>Promise<any>} */ worker) {
@@ -284,20 +330,19 @@ async function runLimited(/** @type {any[]} */ tasks, /** @type {number} */ limi
 }
 
 /**
- * Label items with two passes each. The first pass reads the exemplars in their order, the second in reverse. Each batch of calls
- * reserves an upper bound (every prompt character as an uncached token, plus the output cap), begins its spend, calls the model,
- * and settles the priced actual; a refusal stops the run and returns what was done. A call that failed after a provider answer
- * may have billed is charged at its upper bound; one the provider rejected by status is not charged.
- * @param {{items:{id:string, text:FrontierItemText, today?:string}[], exemplars:FrontierExemplar[], callModel:JuryCaller,
- *   budget:{reserve:Function, beginSpend:Function, settle:Function}, campaignId:string, stagePrefix?:string, now?:()=>string,
- *   concurrency?:number, batchSize?:number, cachePath?:string, signal?:AbortSignal, model?:string}} options
+ * Label items with two passes each. The first pass reads the exemplars in their order, the second in reverse. A batch of calls runs with
+ * bounded concurrency and every answer is cached as it arrives. A spent usage window or a refused login stops the run at once (what was
+ * answered stays cached); a batch in which half the calls failed stops it as `jury_unavailable`. Nothing is priced or reserved: the model
+ * is a subscription Claude, so `costCny` is 0 with its basis, and the tokens the CLI reported are summed.
+ * @param {{items:{id:string, text:FrontierItemText, today?:string|null}[], exemplars:FrontierExemplar[], callModel:JuryCaller, now?:()=>string,
+ *   concurrency?:number, batchSize?:number, cachePath?:string, signal?:AbortSignal, model?:string, effort?:string}} options
  * @returns {Promise<{labels:{id:string, worth:'pick'|'ok'|'no'|null, basis:'jury-agree'|'jury-disagree'|'jury-invalid', passes:{pass:string, worth:string|null, why:string}[]}[],
- *   costCny:number, calls:number, cachedCalls:number, incomplete:number, stopped:string|null}>}
+ *   tokens:JuryUsage, costCny:0, costBasis:'subscription', calls:number, cachedCalls:number, incomplete:number, stopped:string|null}>}
  */
-export async function labelFrontierItems({ items, exemplars, callModel, budget, campaignId, stagePrefix = 'frontier-jury', now = () => new Date().toISOString(),
-  concurrency = 6, batchSize = 40, cachePath, signal, model = FRONTIER_JURY_MODEL }) {
-  if (typeof callModel !== 'function' || !budget) throw new Error('jury_unconfigured');
-  const price = pricing(model, now());
+export async function labelFrontierItems({ items, exemplars, callModel, now = () => new Date().toISOString(), concurrency = 3, batchSize = 40, cachePath, signal,
+  model = FRONTIER_JURY_MODEL, effort = FRONTIER_JURY_EFFORT }) {
+  if (typeof callModel !== 'function') throw new Error('jury_unconfigured');
+  if (!RSI_OFFLINE_ROLE_MODEL.test(model) || !FRONTIER_JURY_EFFORTS.includes(effort)) throw new Error('jury_model_invalid');
   const juryVersion = frontierJuryVersion(exemplars);
   const orders = { A: exemplars, B: [...exemplars].reverse() };
   const unique = [...new Map(items.map((item) => [item.id, item])).values()];
@@ -307,10 +352,10 @@ export async function labelFrontierItems({ items, exemplars, callModel, budget, 
   let cachedCalls = 0;
   for (const item of unique) {
     for (const pass of /** @type {('A'|'B')[]} */ (['A', 'B'])) {
-      if (cache.has(cacheKey({ id: item.id, pass, juryVersion, model }))) cachedCalls++; else pending.push({ item, pass });
+      if (cache.has(cacheKey({ id: item.id, pass, juryVersion, model, effort }))) cachedCalls++; else pending.push({ item, pass });
     }
   }
-  const dayOf = (/** @type {{today?:string}} */ item) => item.today ?? shanghaiDay(now());
+  const dayOf = (/** @type {{today?:string|null}} */ item) => item.today ?? shanghaiDay(now());
   /** @type {Promise<void>} */
   let writing = Promise.resolve();
   const append = (/** @type {any} */ record) => {
@@ -318,50 +363,34 @@ export async function labelFrontierItems({ items, exemplars, callModel, budget, 
     if (cachePath) writing = writing.then(() => appendFile(cachePath, `${JSON.stringify(record)}\n`));
     return writing;
   };
-  let costCny = 0, calls = 0, stopped = /** @type {string|null} */ (null);
+  const tokens = { cacheHit: 0, cacheMiss: 0, output: 0 };
+  let calls = 0, stopped = /** @type {string|null} */ (null), halted = /** @type {string|null} */ (null);
 
   for (let start = 0; start < pending.length && !stopped; start += batchSize) {
     if (signal?.aborted) { stopped = 'aborted'; break; }
     const batch = pending.slice(start, start + batchSize).map((call) => ({ ...call,
       messages: frontierJuryMessages(call.item.text, { exemplars: orders[call.pass], today: dayOf(call.item) }) }));
-    const upper = batch.map((call) => price({ cacheMiss: call.messages.reduce((sum, message) => sum + message.content.length + 8, 0), output: MAX_OUTPUT_TOKENS }));
-    const reserveCny = ceilCny(upper.reduce((sum, value) => sum + value, 0));
-    const base = `${stagePrefix}:${sha(JSON.stringify([batch.map((call) => [call.item.id, call.pass]), juryVersion, model, reserveCny])).slice(0, 16)}`;
-    let stageKey = base, begun = false;
-    for (let attempt = 0; !begun && !stopped; attempt++) {
-      stageKey = attempt ? `${base}:a${attempt}` : base;
-      const grant = await budget.reserve({ campaignId, stageKey, amountCny: reserveCny });
-      if (!grant?.authorized) {
-        // A held record from an interrupted run keeps its reservation; this attempt reserves again under a fresh key.
-        if (grant?.reason === 'campaign_budget_already_dispatched' && attempt + 1 < MAX_RESERVE_ATTEMPTS) continue;
-        stopped = grant?.reason ?? 'campaign_budget_refused'; break;
-      }
-      const spend = await budget.beginSpend({ campaignId, stageKey });
-      if (!spend?.authorized) { stopped = spend?.reason ?? 'campaign_budget_refused'; break; }
-      begun = true;
-    }
-    if (!begun) break;
-
-    const outcomes = await runLimited(batch.map((call, at) => ({ call, ceiling: upper[at] })), concurrency, async ({ call, ceiling }) => {
-      if (signal?.aborted) return { skipped: true, cost: 0 };
+    const outcomes = await runLimited(batch, concurrency, async (call) => {
+      if (halted || signal?.aborted) return { skipped: true };
       /** @type {JuryReply} */
       let reply;
       try { reply = await callModel(call.messages, { signal }); } catch (error) {
-        return { failed: true, cost: /** @type {any} */ (error)?.billed === false ? 0 : ceiling };
+        const code = /** @type {any} */ (error)?.code;
+        if (HALTING_CODES.has(code)) halted ??= code;
+        return { failed: true };
       }
       const answer = parseJuryAnswer(reply?.text);
       const usage = reply?.usage && Object.values(reply.usage).every((value) => Number.isFinite(value) && value >= 0) ? reply.usage : null;
-      const cost = usage ? price(usage) : ceiling;
-      await append({ id: call.item.id, pass: call.pass, worth: answer?.worth ?? null, why: answer?.why ?? '', juryVersion, model, usage, costCny: cost,
-        requestId: reply?.requestId ?? null, finishReason: reply?.finishReason ?? null, today: dayOf(call.item) });
-      return { cost };
+      if (usage) { tokens.cacheHit += usage.cacheHit; tokens.cacheMiss += usage.cacheMiss; tokens.output += usage.output; }
+      await append({ id: call.item.id, pass: call.pass, worth: answer?.worth ?? null, why: answer?.why ?? '', juryVersion, model, effort, usage,
+        costCny: 0, costBasis: FRONTIER_JURY_COST_BASIS, requestId: reply?.requestId ?? null, finishReason: reply?.finishReason ?? null, today: dayOf(call.item) });
+      return {};
     });
     await writing;
     const executed = outcomes.filter((outcome) => !outcome.skipped), failed = outcomes.filter((outcome) => outcome.failed);
-    const spent = roundCny(outcomes.reduce((sum, outcome) => sum + outcome.cost, 0));
-    await budget.settle({ campaignId, stageKey, outcome: failed.length || executed.length < outcomes.length ? 'failed' : 'success', actualCny: spent });
-    costCny = roundCny(costCny + spent); calls += executed.length;
-    if (executed.length < outcomes.length) stopped = 'aborted';
+    calls += executed.length;
+    if (halted) stopped = halted;
+    else if (executed.length < outcomes.length) stopped = 'aborted';
     else if (failed.length && failed.length * 2 >= executed.length) stopped = 'jury_unavailable';
   }
 
@@ -369,13 +398,13 @@ export async function labelFrontierItems({ items, exemplars, callModel, budget, 
   const labels = [];
   let incomplete = 0;
   for (const item of unique) {
-    const passes = ['A', 'B'].map((pass) => cache.get(cacheKey({ id: item.id, pass, juryVersion, model })));
+    const passes = ['A', 'B'].map((pass) => cache.get(cacheKey({ id: item.id, pass, juryVersion, model, effort })));
     if (passes.some((record) => !record)) { incomplete++; continue; }
     const [a, b] = passes, invalid = !a.worth || !b.worth;
     labels.push({ id: item.id, worth: invalid || a.worth !== b.worth ? null : a.worth, basis: invalid ? 'jury-invalid' : a.worth === b.worth ? 'jury-agree' : 'jury-disagree',
       passes: passes.map((record) => ({ pass: record.pass, worth: record.worth, why: record.why })) });
   }
-  return { labels, costCny, calls, cachedCalls, incomplete, stopped };
+  return { labels, tokens, costCny: 0, costBasis: FRONTIER_JURY_COST_BASIS, calls, cachedCalls, incomplete, stopped };
 }
 
 /** @param {number} numerator @param {number} denominator */
@@ -423,6 +452,78 @@ export function juryQualified(calibration, { minKappa = 0.4, maxAbstention = 0.3
   return { qualified: reasons.length === 0, reasons };
 }
 
+// --- the files a label flow moves -----------------------------------------------------------------------------------------
+
+/** @param {string} path */
+async function readJsonMaybeGzip(path) {
+  const bytes = await readFile(path);
+  return { value: JSON.parse((bytes[0] === 0x1f && bytes[1] === 0x8b ? gunzipSync(bytes) : bytes).toString('utf8')), sha256: sha(bytes) };
+}
+/** @param {string} path @param {unknown} value */
+async function writeJson(path, value) {
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(`${path}.tmp`, `${JSON.stringify(value, null, 2)}\n`);
+  await rename(`${path}.tmp`, path);
+}
+
+/** The calibration set as items: even-`n` anchor rows, each judged on the day it was published. @param {any[]} gold */
+export function calibrationItems(gold) {
+  return gold.filter((row) => row.n % 2 === 0).map((row) => ({ id: row.id, text: goldItemText(row), today: row.published ?? undefined }));
+}
+
+/** The only fields of a source's text a labeller is ever sent: the export keeps the source's own text under these names, and whatever
+ * else a row might carry stays behind. @param {any} text @returns {FrontierItemText} */
+export function labelItemText(text) {
+  const t = text && typeof text === 'object' ? text : {};
+  return { title_raw: t.title_raw ?? null, source_name: t.source_name ?? null, source_type: t.source_type ?? null, journal: t.journal ?? null,
+    publication_types: Array.isArray(t.publication_types) ? t.publication_types : [], published_at: t.published_at ?? null, date_precision: t.date_precision ?? null,
+    lang: t.lang ?? null, excerpt: t.excerpt ?? null };
+}
+
+/** The lab's labelled set from an export (`texts`, `days`) and an id list (`ids`, or a JSON file of them); an id with no text is counted as missing. An item
+ * is judged on the feed day it first appeared, else on its publication day, else on the run's clock.
+ * @param {{exportPath:string, idsPath?:string, ids?:string[]}} input
+ * @returns {Promise<{items:{id:string, text:FrontierItemText, today?:string}[], missing:number, exportSha256:string}>} */
+export async function loadLabelItems({ exportPath, idsPath, ids: given }) {
+  const { value: exported, sha256: exportSha256 } = await readJsonMaybeGzip(exportPath);
+  const ids = given ?? JSON.parse(await readFile(/** @type {string} */ (idsPath), 'utf8'));
+  if (!Array.isArray(ids) || !exported?.texts || typeof exported.texts !== 'object') throw new Error('input_invalid');
+  /** @type {Map<string, string>} */
+  const seen = new Map();
+  for (const day of exported.days ?? []) for (const row of day.rows ?? []) if (!seen.has(String(row.id))) seen.set(String(row.id), day.day);
+  /** @type {{id:string, text:FrontierItemText, today?:string}[]} */
+  const items = [];
+  let missing = 0;
+  for (const id of ids.map(String)) {
+    const text = exported.texts[id];
+    if (!text) { missing++; continue; }
+    items.push({ id, text: labelItemText(text), today: seen.get(id) ?? (Number.isFinite(Date.parse(text.published_at)) ? shanghaiDay(text.published_at) : undefined) });
+  }
+  return { items, missing, exportSha256 };
+}
+
+/**
+ * The file the lab hands the operator for one phase of a month: the ids the plan fixed for it and the source text the jury may read, nothing
+ * the platform's models wrote. It names the export it came from, so labels made from it cannot be applied to another.
+ * @param {{exportPath:string, plan:any, phase:string}} input
+ */
+export async function buildLabelItemsFile({ exportPath, plan, phase }) {
+  const ids = plan?.idsByRole?.[phase];
+  if (!FRONTIER_LABEL_PHASES.includes(phase) || !Array.isArray(ids)) throw new Error('usage_phase');
+  const { items, missing, exportSha256 } = await loadLabelItems({ exportPath, ids });
+  if (exportSha256 !== plan.exportSha256) throw new Error('campaign_export_changed');
+  return { schema: FRONTIER_LABEL_ITEMS_SCHEMA, month: plan.month, idPrefix: plan.idPrefix ?? '', phase, exportSha256,
+    items: items.map((item) => ({ id: item.id, text: item.text, today: item.today ?? null })), missing };
+}
+
+/** @param {string} path */
+async function readLabelItemsFile(path) {
+  const file = JSON.parse(await readFile(path, 'utf8'));
+  if (file?.schema !== FRONTIER_LABEL_ITEMS_SCHEMA || !FRONTIER_LABEL_PHASES.includes(file.phase) || !/^[a-f0-9]{64}$/.test(file.exportSha256 ?? '') || !Array.isArray(file.items)
+    || file.items.some((item) => typeof item?.id !== 'string' || !(item.today === null || /^\d{4}-\d{2}-\d{2}$/.test(item.today)))) throw new Error('label_items_invalid');
+  return { ...file, items: file.items.map((item) => ({ id: item.id, text: labelItemText(item.text), today: item.today ?? undefined })) };
+}
+
 // --- command line -----------------------------------------------------------------------------------------------------
 
 /** @param {string[]} argv */
@@ -438,94 +539,55 @@ function parseArgs(argv) {
 /** @param {Record<string,string>} args @param {string[]} names */
 function required(args, names) { for (const name of names) if (!args[name]) throw new Error(`usage_missing_${name}`); }
 
-/** @param {string} path */
-async function readJsonMaybeGzip(path) {
-  const bytes = await readFile(path);
-  return JSON.parse((bytes[0] === 0x1f && bytes[1] === 0x8b ? gunzipSync(bytes) : bytes).toString('utf8'));
-}
-/** @param {string} path @param {unknown} value */
-async function writeJson(path, value) {
-  await mkdir(dirname(path), { recursive: true });
-  await writeFile(`${path}.tmp`, `${JSON.stringify(value, null, 2)}\n`);
-  await rename(`${path}.tmp`, path);
-}
-
-/** The calibration set as items: even-`n` anchor rows, each judged on the day it was published. @param {any[]} gold */
-export function calibrationItems(gold) {
-  return gold.filter((row) => row.n % 2 === 0).map((row) => ({ id: row.id, text: goldItemText(row), today: row.published ?? undefined }));
-}
-
-/** The lab's labelled set from an export (`texts`, `days`) and the id list; an id with no text is counted as missing. An item is judged on
- * the feed day it first appeared, else on its publication day, else on the run's clock.
- * @param {{exportPath:string, idsPath:string}} paths
- * @returns {Promise<{items:{id:string, text:FrontierItemText, today?:string}[], missing:number}>} */
-export async function loadLabelItems({ exportPath, idsPath }) {
-  const exported = await readJsonMaybeGzip(exportPath), ids = JSON.parse(await readFile(idsPath, 'utf8'));
-  if (!Array.isArray(ids) || !exported?.texts || typeof exported.texts !== 'object') throw new Error('input_invalid');
-  /** @type {Map<string, string>} */
-  const seen = new Map();
-  for (const day of exported.days ?? []) for (const row of day.rows ?? []) if (!seen.has(String(row.id))) seen.set(String(row.id), day.day);
-  /** @type {{id:string, text:FrontierItemText, today?:string}[]} */
-  const items = [];
-  let missing = 0;
-  for (const id of ids.map(String)) {
-    const text = exported.texts[id];
-    if (!text) { missing++; continue; }
-    items.push({ id, text, today: seen.get(id) ?? (Number.isFinite(Date.parse(text.published_at)) ? shanghaiDay(text.published_at) : undefined) });
-  }
-  return { items, missing };
-}
-
-/** @param {string} configPath */
-async function openBudget(configPath) {
-  const url = process.env.RSI_LAB_DATABASE_URL;
-  if (!url) throw new Error('lab_database_url_missing');
-  const configuration = JSON.parse(await readFile(configPath, 'utf8'));
-  const { ControlPlaneDatabase } = await import('../../apps/server/src/controlPlaneDatabase.mjs');
-  const { RsiCampaignBudget } = await import('../../apps/server/src/rsiCampaignBudget.mjs');
-  const database = new ControlPlaneDatabase({ databaseUrl: url, databasePoolMax: 4, databaseConnectionTimeoutMs: 5000 });
-  return { budget: new RsiCampaignBudget({ database, configuration }), close: () => database.close(), model: configuration.providers?.qwenMax?.model ?? FRONTIER_JURY_MODEL };
-}
-
 /** @param {string[]} argv */
 export async function main(argv) {
   const [command, ...rest] = argv;
   const args = parseArgs(rest);
-  required(args, ['credential', 'out', 'cache', 'campaign', 'config']);
-  const goldPath = args.gold ?? new URL('../frontier-selection/gold.jsonl', import.meta.url).pathname;
-  const gold = await loadGoldRows(goldPath);
+  if (command === 'items') {
+    required(args, ['export', 'plan', 'phase', 'out']);
+    const file = await buildLabelItemsFile({ exportPath: args.export, plan: JSON.parse(await readFile(args.plan, 'utf8')), phase: args.phase });
+    await writeJson(args.out, file);
+    console.log(JSON.stringify({ command, phase: file.phase, month: file.month, items: file.items.length, missing: file.missing, out: args.out }));
+    return;
+  }
+  if (command !== 'calibrate' && command !== 'label') throw new Error('usage_command');
+  required(args, ['out', 'cache']);
+  const model = args.model ?? FRONTIER_JURY_MODEL, effort = args.effort ?? FRONTIER_JURY_EFFORT, concurrency = args.concurrency ? Number(args.concurrency) : 3;
+  if (!(Number.isInteger(concurrency) && concurrency >= 1 && concurrency <= 8)) throw new Error('usage_invalid');
+  const gold = await loadGoldRows(args.gold ?? new URL('../frontier-selection/gold.jsonl', import.meta.url).pathname);
   const exemplars = selectFrontierExemplars(gold);
   /** @type {{id:string, text:FrontierItemText, today?:string}[]} */
   let items;
   let missing = 0;
-  if (command === 'calibrate') {
-    required(args, ['gold']);
-    items = calibrationItems(gold);
-  } else if (command === 'label') {
-    required(args, ['export', 'ids']);
-    ({ items, missing } = await loadLabelItems({ exportPath: args.export, idsPath: args.ids }));
-  } else throw new Error('usage_command');
-
-  const lab = await openBudget(args.config);
+  /** @type {Record<string, unknown>} */
+  let bound = {};
+  if (command === 'calibrate') items = calibrationItems(gold);
+  else {
+    required(args, ['items']);
+    const file = await readLabelItemsFile(args.items);
+    items = file.items; missing = file.missing ?? 0;
+    bound = { phase: file.phase, month: file.month, idPrefix: file.idPrefix, exportSha256: file.exportSha256 };
+  }
+  const caller = claudeCliCaller({ model, effort, cli: args.cli ?? 'claude' });
   try {
-    const result = await labelFrontierItems({ items, exemplars, callModel: dashscopeCaller({ credentialPath: args.credential, model: lab.model }),
-      budget: lab.budget, campaignId: args.campaign, cachePath: args.cache, model: lab.model });
-    const juryVersion = frontierJuryVersion(exemplars);
+    const result = await labelFrontierItems({ items, exemplars, callModel: caller, cachePath: args.cache, model, effort, concurrency });
     const labelCounts = { pick: 0, ok: 0, no: 0, abstained: 0 };
     for (const label of result.labels) labelCounts[label.worth ?? 'abstained']++;
-    const summary = { command, juryVersion, model: lab.model, promptDigest: frontierJuryPromptDigest(), items: items.length, missing, labelled: result.labels.length,
-      incomplete: result.incomplete, labelCounts, calls: result.calls, cachedCalls: result.cachedCalls, costCny: result.costCny, stopped: result.stopped, out: args.out };
+    const summary = { command, ...bound, juryVersion: frontierJuryVersion(exemplars), model, effort, promptDigest: frontierJuryPromptDigest(), items: items.length, missing, labelled: result.labels.length,
+      incomplete: result.incomplete, labelCounts, calls: result.calls, cachedCalls: result.cachedCalls, tokens: result.tokens, costCny: result.costCny, costBasis: result.costBasis,
+      stopped: result.stopped, out: args.out };
     if (command === 'calibrate') {
       const calibration = calibrateJury({ gold, labels: result.labels });
       const qualification = juryQualified(calibration);
-      await writeJson(args.out, { schema: 'rsi-frontier-jury-calibration-v1', ...summary, calibration, qualification, labels: result.labels });
-      console.log(JSON.stringify({ ...summary, qualified: qualification.qualified, reasons: qualification.reasons, pickKappa: calibration.pickKappa, abstentionRate: calibration.abstentionRate, pickPrecision: calibration.pickPrecision }));
+      await writeJson(args.out, { schema: FRONTIER_CALIBRATION_SCHEMA, ...summary, calibration, qualification, labels: result.labels });
+      console.log(JSON.stringify({ ...summary, qualified: qualification.qualified, reasons: qualification.reasons, pickKappa: calibration.pickKappa, abstentionRate: calibration.abstentionRate,
+        pickPrecision: calibration.pickPrecision, pickRecall: calibration.pickRecall }));
     } else {
-      await writeJson(args.out, { schema: 'rsi-frontier-jury-labels-v1', ...summary, labels: result.labels });
+      await writeJson(args.out, { schema: FRONTIER_LABELS_SCHEMA, ...summary, labels: result.labels });
       console.log(JSON.stringify(summary));
     }
     if (result.stopped) process.exitCode = 2;
-  } finally { await lab.close(); }
+  } finally { await caller.close(); }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

@@ -4,20 +4,24 @@ Task-level recursion from the pinned upstream Harness2 core (`google-research/ha
 platform's own DSH + DeepSeek runtime as the solver and the round's benchmark domains as adapters. Offline research arm only (docs/superpowers design, sections 7 and 14):
 nothing here ships in the runtime image, the server or the production deployment.
 
+Roles (owner policy, 2026-11-03): the thing being optimised is EviMed Science, DSH + DeepSeek Flash, and it is the solver of every rollout. Every improver stage (editing,
+composing, selecting, reflecting) is Claude on this box's own login: Opus for the composer, the selector and the reflector, Sonnet for the two editors. `channels.load_channels`
+refuses any stage that is not a `claude_cli` row with a `claude-*` model, and any provider; DeepSeek money is rollouts only. Online native learning in production is out of scope.
+
 ```
 setup.sh                    fetch the pinned commit into a work dir, apply patches/, write the setup marker      (PATCHES.md is its manifest)
 run_round.py                the resumable driver (k=1, parallel mode only)
-config/channels.json        per-stage improver models (Sonnet / DeepSeek / Opus) and the DeepSeek endpoint row
+config/channels.json        per-stage improver models (Sonnet / Opus; all Claude, no provider row)
 evimed_h2/surface.py        the DSH SurfaceSpec: guidance.md (<= 4,000 chars) + skills; no plugin, hook, sub-agent, script
 evimed_h2/adapter.py        BenchmarkAdapter over the lab broker (request, digest identity, bundle, cost, isolation)
 evimed_h2/broker.py         brokerctl wrapper + the shared inbox (global fetch, one lock)
 evimed_h2/families.py       the seven domains, task builders, hash-order selection, public fetch lists
 evimed_h2/trajectory.py     DSH transcript -> [ACTION]/[OBSERVATION]/[ERROR]; deliverables = final answer + report-like files
-evimed_h2/channels.py       Proposer subclass per stage on the `claude` CLI; usage, failure classification
+evimed_h2/channels.py       Proposer subclass per stage on the `claude` CLI; the Claude-only rule; usage, failure classification
 evimed_h2/guard.py          request guard (no gold/rubric/score) and tree guard (process text only)
-evimed_h2/ledger.py|balance.py   rsi1-ledger.jsonl; balance floor 500 CNY read at most once a minute, round cap 800 CNY
+evimed_h2/ledger.py|balance.py   rsi1-ledger.jsonl; the solver's DeepSeek balance floor 500 CNY read at most once a minute, round cap 800 CNY of settled rollout cost
 tools/                      snapshot_guidance.mjs, audit_results.py, live_stage_check.py
-tests/                      fake lab (fake_brokerctl.py, uses lab/broker.py's own validation) and fake CLI; 80 tests, no network
+tests/                      fake lab (fake_brokerctl.py, uses lab/broker.py's own validation) and fake CLI; no network
 ```
 
 ## Run
@@ -30,6 +34,8 @@ python3 run_round.py --dry-run              # plan, no side effects
 python3 run_round.py [--domains a,b] [--max-tasks 4] [--concurrency 2]      # resumable: run it again after any stop
 python3 run_round.py --ledger-report
 python3 -m unittest discover -s tests       # (run from this directory; tests/ imports its own support module)
+(cd lab && python3 -m unittest discover -p 'test_*.py')  # the lab's own suites
+# CI runs both, and public-benchmarks/tools, as `pnpm test:rsi-offline` (it runs ./setup.sh first; the web job adds Python 3.12 beside the runner's 3.10)
 ```
 
 Exit codes: 0 every task adopted or honestly excluded, 2 some task failed for a reason of its own, 3 infrastructure stopped it (quota, lab, balance, cap): run again later, 1 usage or identity mismatch.
@@ -38,7 +44,7 @@ Heavy state lives in `/tmp/rsi1-scratch/h2-runs` (`RSI1_SCRATCH`, `H2_RUNS_ROOT`
 ## The round, as built
 
 For each of the four chosen tasks of a domain, in hash order, with the domain's library threaded forward: one base rollout on the unmodified image (no probe text; the router decides) ->
-upstream's `run_parallel(k=1)`: an invariant candidate (Sonnet) and a domain candidate (DeepSeek) each edit the empty base tree and are rolled once as probes; the composer (Opus) writes `agg1`, rolled once ->
+upstream's `run_parallel(k=1)`: an invariant candidate and a domain candidate (both Sonnet) each edit the empty base tree and are rolled once as probes; the composer (Opus) writes `agg1`, rolled once ->
 a blind selector (Opus) chooses between the **base run and `agg1`** (baseline stays in the pool) -> the reflector (Opus) writes the EXPERIENCE entry -> the library of that domain gets the adopted tree + entry.
 Per task: 4 rollouts and 5 improver sessions at most. The method never sees a score; `score()` raises.
 
@@ -48,26 +54,27 @@ Per task: 4 rollouts and 5 improver sessions at most. The method never sees a sc
 * **Tasks** are the registered *development* pools only (`families.Family.tasks()` refuses an id outside the list and never reads the confirmation list), built from raw data exactly as `bench/tools/build_*.py` built the baseline items; `tests/test_families.py` reproduces the baseline queue lines (medcalc 120/120, arb deep 30/30 and wide 15/15, mbc 80/80, bixbench 10/12, rcb 7/8: the other 3 differ only where the baseline queue was edited later for gzipped host copies). Only solver-visible columns are projected at read time.
 * **Selection**: first 4 feasible development ids by `sha256("rsi1-ppc|<id>")` per domain (bixbench: >= 3 questions, <= 250 MB; rcb: not the three ruled out by the baseline builder, <= 300 MB). Written to `bench/rsi/ppc-tasks.json` (never replaced silently; `--force`).
 
-## Improver channels (verified 2026-11-01 on this box, `claude` 2.1.312)
+## Improver channels (verified 2026-11-01 on this box, `claude` 2.1.312; Claude only since 2026-11-03)
 
 | stage | label | model | route |
 |---|---|---|---|
 | invariant editor | `inv*` | `claude-sonnet-5-5` | box login |
-| domain editor | `dom*` | `deepseek-v4-pro[1m]` | `ANTHROPIC_BASE_URL=https://api.deepseek.com/anthropic`, `ANTHROPIC_AUTH_TOKEN` from `deepseek.api-key`, same CLI |
+| domain editor | `dom*` | `claude-sonnet-5-5` | box login |
 | composer / selector / reflector | `agg*`, `select.*`, `experience.*` | `claude-opus-5-5` | box login |
 
-* DeepSeek endpoint and ids, from <https://api-docs.deepseek.com/guides/anthropic_api> and `/quick_start/agent_integrations/claude_code`: base URL `https://api.deepseek.com/anthropic`; ids `deepseek-flash`, `deepseek-v4-pro`; `claude-opus*` maps to v4-pro, `claude-sonnet*`/`claude-haiku*` to flash; other non-`claude` ids are a 400; the Claude Code page uses the `[1m]` suffix. A real call on this box returned `OK` for `deepseek-v4-pro` and, with Read/Write/Edit/Glob/Grep tool use, for `deepseek-v4-pro[1m]` (CLI context window 1,000,000 instead of 200,000).
-* **The CLI prices DeepSeek wrongly** (`costBasis: unknown`, Claude-like rates, about 3.6x the real cost; `total_cost_usd` for 3,747 in / 7,680 cached / 492 out was $0.0264, the DeepSeek table gives about $0.0072). The ledger therefore records tokens for every call and computes DeepSeek cash itself at the platform's reference rates (`packages/domain/src/metering.mjs`, peak; the provider halves it off-peak) and marks it an estimate. Claude stages are subscription usage: tokens and the API-equivalent `usd_reported`, no cash.
+* **Claude only, by code.** `channels.validate` (run by `load_channels` and by `build_router`) raises `ValueError("improver stages run on Claude (owner 2026-11-03) ...")` for a stage whose kind is not `claude_cli`, whose model does not match `^claude-[a-z0-9-]+$`, or that names a `provider`, and for a `providers` block; `test_channels.py::RolesTest` pins each refusal and the shipped file. A DeepSeek credential or endpoint in the starting shell (`DEEPSEEK_*`, `ANTHROPIC_*`) is scrubbed from every session.
+* **Resume.** The channel identity (`identity.json`) no longer carries a provider and names the new models, so a round recorded before 2026-11-03 refuses to resume (`IdentityMismatch`, exit 1, nothing asked of any model): start a new `--runs-root`.
+* **Cost.** Improver sessions are Claude subscription usage: the ledger records tokens and the CLI's API-equivalent `usd_reported` for every call, and no cash. The only cash is the solver's DeepSeek spend, the settled CNY of each rollout from the run's `result.json`; the balance guard (DeepSeek balance floor) and the round cap read it.
 * **Sandbox** (probe: Sonnet session asked to read `/etc/hostname`, `/home/coder/.claude/CLAUDE.md` and run `echo hi`): `--safe-mode --restricted --tools Read,Write,Edit,Glob,Grep --permission-mode acceptEdits --permission-prompts none --no-session-persistence`. Edits inside the scratch cwd worked; both reads outside were denied (`permission_denials` recorded), there is no shell tool, no CLAUDE.md, no MCP, no hooks. `--dangerously-skip-permissions` is not used (`--restricted` refuses it). The session scratch directory is upstream's own `mkdtemp`, moved under the runs root. Each session is bounded by `timeout` and `--max-budget-usd` (upstream's `ChannelSpec.steps` is ignored by its `claude_cli` path).
-* Inherited `ANTHROPIC_*`, `CLAUDE_CODE_*`, Vertex variables of the starting shell are scrubbed; the key is read from its file at spawn, passed in the child's environment only, never stored or logged (`test_secret_key_never_reaches_disk_or_the_cli_log`).
+* Inherited `ANTHROPIC_*`, `CLAUDE_CODE_*`, `DEEPSEEK_*` and Vertex variables of the starting shell are scrubbed, so a session reaches the box's Claude login and nothing else (`test_env_hygiene_of_every_session`, `test_a_credential_of_the_parent_shell_never_reaches_a_session_or_the_disk`).
 
 ## Qualification before any paid run (design section 7)
 
 | # | requirement | how it is met | test |
 |---|---|---|---|
 | a | a dependency or slot failure stays an infrastructure failure; upstream's `fell_back` is visible and excludes the task from the library | lab / broker / driver / quota / transport / timeout / budget raise `InfrastructureFailure` (patch 0001 lets it through `_roll`; the improver wrapper raises it past `_run_stage`); the task is recorded `infra`, nothing around it is adopted, no rollout is spent on a stand-in. A stage that fell back for its own reasons (bad tree twice) is listed in `summary.json` with its error and the task is `excluded` (no library entry, no reflection) | `test_round.py::test_resume_after_an_infrastructure_stop...`, `::test_quota_is_a_transport_failure...`, `::test_a_stage_that_fell_back...`; `test_adapter.py::test_a_run_that_did_not_happen...` |
-| b | cost attribution in one ledger | `rsi1-ledger.jsonl`: one keyed row per rollout (settled CNY from `result.json`), per improver attempt (tokens, API-equivalent USD, DeepSeek CNY estimate); `--ledger-report` totals; the round cap and the balance guard read it | `test_round.py::test_cost_attribution_lands_in_one_ledger`, `test_channels.py::LedgerTest` |
-| c | resume identity includes input digest and channel/model; re-running does not pay twice | rollouts: rid carries the request digest, finished runs are found by marker, fetched bundles by inbox; improver replies: upstream's content key + one cache directory per (stage, provider, model, effort); per-domain `identity.json` (pin, patch digests, channels, surface text, prompt pack, task prompt digests, guard parameters) refuses a resume with anything changed | `test_round.py::test_resume_pays_nothing_twice`, `::test_identity_mismatch_...`, `test_channels.py::test_another_model_is_another_cache`, `test_adapter.py::test_changed_input_is_a_different_request` |
+| b | cost attribution in one ledger | `rsi1-ledger.jsonl`: one keyed row per rollout (settled CNY from `result.json`), per improver attempt (tokens, API-equivalent USD, no cash); `--ledger-report` totals; the round cap and the balance guard read the rollouts' settled cost | `test_round.py::test_cost_attribution_lands_in_one_ledger`, `test_channels.py::LedgerTest` |
+| c | resume identity includes input digest and channel/model; re-running does not pay twice | rollouts: rid carries the request digest, finished runs are found by marker, fetched bundles by inbox; improver replies: upstream's content key + one cache directory per (stage, model, effort); per-domain `identity.json` (pin, patch digests, channels, surface text, prompt pack, task prompt digests, guard parameters) refuses a resume with anything changed | `test_round.py::test_resume_pays_nothing_twice`, `::test_identity_mismatch_...`, `test_channels.py::test_another_model_is_another_cache`, `test_adapter.py::test_changed_input_is_a_different_request` |
 | d | no score reaches a session | requests are whitelisted and scanned (`guard.assert_request_clean`, stricter than the broker's own rule, checked against `lab/broker.py` in a test); bundle reads are limited to answer, transcript, report-like files and cost; any grading-named file in a bundle is deleted and recorded; upstream's `assert_tree_has_no_grader_verdicts` and `assert_no_grader_verdicts` run on every context and tree; `leak_globs` is the tripwire. Audit of the 756 baseline result folders: no grading key and no grading file (`tools/audit_results.py`); DRB: 3 of 30 runs share a 60-character stretch with the reference article, all in tool observations of public pages (run 76 also in its own text), RCB: 0 of 8 with the rubric. That is retrieval of public text, the same exposure the solver had, and it is reported rather than hidden | `test_guard.py`, `test_adapter.py::test_a_grading_file...`, `test_round.py::test_nothing_gold_reaches...`, `test_trajectory.py::RealTranscripts` |
 | e | baseline stays in the selection pool | the pool is `{base1, agg1}`, `pool_kind="mixed"` (the selector is told an unmodified run is a valid pick); upstream's finals-only pool and trivial k=1 selection are not used | `test_round.py::test_one_task_whole_recursion` (`id_map` = agg1 + base1) |
 | f | a tree with task text, numbers or dataset names is refused | `guard.TreeGuard` in `adapter.validate_tree`: a 60-character verbatim stretch of any development prompt of the domain (case and spacing folded), more than 12 numerals (list markers excluded), a benchmark / file / UUID / trial / arXiv / task-id name (what counts as a name is decided in code from data, never from a word list: distinctive by shape, or a plain word that is rare in the domain's own task texts and in the platform's own skill prose; an ordinary word such as `count` or `rules`, the stem of a data file in some tasks, is vocabulary, `guard.candidate_names` / `TreeGuard.vocabulary`); the message names what was found and goes back to the editor as upstream's retry feedback. The `tts` prompt pack ("generalize, do not memorize") is used; the default pack tells editors to write workspace facts into the harness | `test_guard.py::TreeGuard`, `test_adapter.py::test_validate_tree...`, `test_upstream.py::...every_domain` |
@@ -81,9 +88,10 @@ One synthetic task (a fixture patient note, fake lab, a synthetic base run that 
 | stage | model | result | usage |
 |---|---|---|---|
 | `inv1` | `claude-sonnet-5-5`, box login | accepted: `guidance.md`, 965 characters, five process rules (recompute in code, name the calculator first, input/time-point discipline, unit and rounding, the requested final line last); the notes cite the trajectory moment | 14 s, 7 turns, 8 in + 8,018 cache-write + 32,281 cache-read + 1,124 out tokens, 0 denials, API-equivalent $0.047 (no cash) |
-| `dom1` | `deepseek-v4-pro[1m]` via `api.deepseek.com/anthropic` | accepted: `guidance.md` (869 characters) + `skills/missing-input/SKILL.md` with its trigger line in the guidance; no number, name or task wording | 67 s, 16 turns, 8,140 in + 48,512 cached + 5,050 out tokens, 0 denials, about CNY 0.22 at the reference rates |
 
-The first DeepSeek run was refused twice by the tree guard for writing the bare word "MedCalc" (CNY 0.63 for the two sessions, 120 s each): a false positive of the name list (it is also the name of an ordinary calculator site), so the bare word was removed from the list and the benchmark names stay. Round 1 then excluded three tasks (bix-53, bix-9, Material_003) for the words `count` and `rules`, read as data-set names because they are the stems of data files: the class is closed by classifying every candidate name by shape or rarity (2026-11-02), with tests on those two words and a real-looking data-set name. In all, the live checks spent about CNY 0.87 of DeepSeek, more than "a few cents"; the Sonnet session counted against the box's Claude quota only.
+The domain editor's first live check ran on DeepSeek (since moved to Claude, 2026-11-03); it uses the invariant editor's channel now and has not been re-run live.
+
+The first domain-editor run was refused twice by the tree guard for writing the bare word "MedCalc": a false positive of the name list (it is also the name of an ordinary calculator site), so the bare word was removed from the list and the benchmark names stay. Round 1 then excluded three tasks (bix-53, bix-9, Material_003) for the words `count` and `rules`, read as data-set names because they are the stems of data files: the class is closed by classifying every candidate name by shape or rarity (2026-11-02), with tests on those two words and a real-looking data-set name.
 
 ## Limits worth knowing
 

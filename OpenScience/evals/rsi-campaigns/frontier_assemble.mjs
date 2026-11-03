@@ -3,14 +3,32 @@
  *
  * A run on the 1st of month M reads the export of months M-2 and M-1: M-2 is development, M-1 is the sealed confirmation.
  * Each month's confirmation corpus is new items no campaign has opened, so it is never reused; the confirmation ledger
- * (`campaign_runner.mjs`) refuses a second opening and draws the quarter's alpha (0.05 over the quarter's three campaigns).
+ * (`campaign_runner.mjs`) refuses a second opening and draws the quarter's alpha (0.05 over the quarter's three campaigns) — unless
+ * fewer confirmation days are measured than the procedure's minimum (25): such a month is directional and reserves none.
+ *
+ * The manifest's `models` (schema 2): the product's solver, no improver (the candidates are the registered threshold grid), and as the
+ * judge the jury that produced the labels — its model as the labels file names it (and the calibration agrees), held to the same rule as
+ * every offline adjudicator (Anthropic, a pinned claude-* model id). A jury that is not is refused before anything is assembled.
+ *
+ * The baseline is the incumbent policy identity production's own export carries (`incumbent.revisionId`: `default:<sha>` or
+ * `evolution-module-policy-frontier:<revision>`, the serving layer's `baselineRevision`), bound as it is, so a bundle of this campaign
+ * names the baseline production will compare it with. An export without it (an older export script, until the next release is deployed) does
+ * not stop the month's measurement: the plan records `incumbent: null`, the manifest's baseline is `unbound:<releaseId>`, and the campaign is
+ * measured and reported but not publishable — `finalize.mjs` refuses to build a bundle for it (`campaign_export_incumbent_missing`) and the report
+ * says so. An incumbent that is present but malformed, or for another threshold than the export states, is refused (`campaign_export_incumbent_invalid`).
+ *
+ * Labelling happens on the operator's box, in two phases (`frontier_labels.mjs items|label`): development first, then — only when
+ * `decide` finds a candidate from the development labels alone — confirmation. A month whose development finds none never labels
+ * its confirmation month.
  *
  *   node frontier_assemble.mjs plan  --export <frontier-YYYY-MM.json[.gz]> --month YYYY-MM --out <plan.json>
+ *   node frontier_assemble.mjs decide --export <...> --plan <plan.json> --labels <labels-development.json> --calibration <calibration.json> --out <decision.json>
+ *   node frontier_assemble.mjs merge-labels --plan <plan.json> --labels <development.json> --labels <confirmation.json> --out <labels.json>
  *   node frontier_assemble.mjs build --export <...> --plan <plan.json> --labels <labels.json> --calibration <calibration.json>
  *                                    --out-dir <dir> [--now <iso>]
  *
  * `plan` replays every registered threshold on every day, from production's own selector, and lists the rows a labeller
- * must label (the labelled set is fixed here, before any label exists). `build` writes the manifest and inputs the runner
+ * must label, by phase (the labelled set is fixed here, before any label exists). `build` writes the manifest and inputs the runner
  * takes, registering as groups the confirmation days with enough labelled rows (decided from labels, never from outcomes),
  * and reports the supply: days, labelled rows, abstentions, and the minimum detectable effect the registration can see.
  */
@@ -22,8 +40,9 @@ import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import { rsiDigest } from '../../apps/server/src/rsiCampaignBundle.mjs';
 import { computeRsiDependencyClosure } from '../../apps/server/src/rsiDependencyClosure.mjs';
-import { rsiCampaignIssues } from '../../packages/domain/src/rsiCampaign.mjs';
-import { RSI_QUARTER_ALPHA } from './campaign_runner.mjs';
+import { RSI_OFFLINE_ROLE_MODEL, RSI_OFFLINE_ROLE_PROVIDER, rsiCampaignIssues, rsiOfflineRoleIssue } from '../../packages/domain/src/rsiCampaign.mjs';
+import { RSI_QUARTER_ALPHA, frontierJuryIdentity } from './campaign_runner.mjs';
+import { FRONTIER_LABELS_SCHEMA } from './frontier_labels.mjs';
 import { FRONTIER_DAYS_SCHEMA, chooseFrontierCandidate, evaluateFrontierDays, frontierCampaignConsumerIdentity, frontierLabelPlan } from './frontier_campaign.mjs';
 
 /** Registered once, changed only as a new campaign family (a change is visible in the registration digest). */
@@ -34,7 +53,7 @@ export const FRONTIER_CAMPAIGN_REGISTRATION = Object.freeze({
   maxVolumeRatio: 1.1,
   campaignsPerQuarter: 3,
   procedure: Object.freeze({ id: 'rsi-paired-group-v5', digest_codec: 'rfc8785-sha256-v1', test_alpha_fraction: 0.5, minimum_slice_groups: 25 }),
-  pilotRationale: 'Unit is the day: frontierMixSelect shares one day\'s size, group shares, language target and event picks across sources, so days are the independent units. Endpoint: weighted accuracy over a labelled set fixed from replays alone (rows at or above the lowest registered threshold, safety alerts, and every row any registered threshold selects); a pick weighs 3 because a missed pick costs a reader more than an extra adequate item. Labels: a two-pass Qwen jury (a model family other than the DeepSeek screener) calibrated on the 2026-10-25 human anchor; disagreement abstains.',
+  pilotRationale: 'Unit is the day: frontierMixSelect shares one day\'s size, group shares, language target and event picks across sources, so days are the independent units. Endpoint: weighted accuracy over a labelled set fixed from replays alone (rows at or above the lowest registered threshold, safety alerts, and every row any registered threshold selects); a pick weighs 3 because a missed pick costs a reader more than an extra adequate item. Labels: a two-pass jury of a model family other than the DeepSeek screener (the model the registration\'s labelling names), calibrated on the 2026-10-25 human anchor; disagreement abstains.',
 });
 
 const sha256 = (value) => createHash('sha256').update(value).digest('hex');
@@ -86,18 +105,41 @@ export function campaignRegistration(baselineThreshold) {
   return { baselineThreshold, thresholds: [...r.thresholds].filter((t) => t !== baselineThreshold), floor: Math.min(...r.thresholds, baselineThreshold) };
 }
 
+/** The registered forms of the frontier module's incumbent: what the serving layer reports as its `baselineRevision` (`rsiIncumbent`, apps/server/src/rsiServingAdapters.mjs). */
+const INCUMBENT_REVISION = /^(?:default:[a-f0-9]{64}|evolution-module-policy-frontier:[1-9][0-9]{0,8})$/;
+/** The baseline a campaign of an export without an incumbent carries: no policy identity production would accept, so no bundle can be imported against it (`finalize.mjs` refuses it by this prefix). */
+export const UNBOUND_BASELINE_PREFIX = 'unbound:';
+/** @param {string|null|undefined} releaseId */
+export function unboundBaselineRevision(releaseId) {
+  const named = String(releaseId ?? '').replace(/[^A-Za-z0-9_.:-]/g, '-').slice(0, 150);
+  return `${UNBOUND_BASELINE_PREFIX}${named || 'unknown'}`;
+}
+/** The incumbent policy identity an export carries, and the one threshold it stands for; null when the export carries none (it predates the field). @param {any} value @returns {{revisionId:string, threshold:number}|null} */
+export function exportIncumbent(value) {
+  const incumbent = value?.incumbent;
+  if (incumbent === undefined || incumbent === null) return null;
+  if (typeof incumbent !== 'object' || !INCUMBENT_REVISION.test(incumbent.revisionId ?? '') || incumbent.threshold !== value.settings?.threshold) throw new Error('campaign_export_incumbent_invalid');
+  return { revisionId: incumbent.revisionId, threshold: incumbent.threshold };
+}
+
 export async function planCampaign({ exportPath, month, windows = null, idPrefix = '', rehearsalPickWeight = null }) {
   if (!/^\d{4}-\d{2}$/.test(month ?? '') || !/^(?:[a-z][a-z0-9-]{0,30}-)?$/.test(idPrefix)) throw new Error('campaign_plan_arguments_invalid');
   // A rehearsal may exercise the whole chain with another pick weight; a real campaign always takes the registered one.
   if (rehearsalPickWeight !== null && (!idPrefix.startsWith('rehearsal-') || !(rehearsalPickWeight >= 1 && rehearsalPickWeight <= 10))) throw new Error('campaign_plan_arguments_invalid');
   const { value, sha256: exportSha256 } = await readFrontierExport(exportPath);
+  const incumbent = exportIncumbent(value);
   const { development, confirmation, devDays, confirmDays } = splitDays(value, month, windows);
   if (!devDays.length || !confirmDays.length) throw new Error('campaign_export_window_incomplete');
   const registration = campaignRegistration(value.settings.threshold);
   const plan = frontierLabelPlan([...devDays, ...confirmDays], registration, registration.floor);
   if (!plan.eligible) throw new Error('campaign_export_pool_incomplete');
-  return { month, windows, idPrefix, rehearsalPickWeight, development, confirmation, exportSha256, settings: value.settings, releaseId: value.releaseId, registration,
-    devDays: devDays.map((day) => day.day), confirmDays: confirmDays.map((day) => day.day), ids: plan.ids,
+  // The rows a labeller is asked about, by phase: confirmation is labelled only when development finds a candidate, and an id is asked once.
+  const developmentDays = new Set(devDays.map((day) => day.day)), confirmationDays = new Set(confirmDays.map((day) => day.day));
+  const developmentIds = [...new Set(plan.days.filter((day) => developmentDays.has(day.day)).flatMap((day) => day.ids))].sort();
+  const taken = new Set(developmentIds);
+  const confirmationIds = [...new Set(plan.days.filter((day) => confirmationDays.has(day.day)).flatMap((day) => day.ids))].filter((id) => !taken.has(id)).sort();
+  return { month, windows, idPrefix, rehearsalPickWeight, development, confirmation, exportSha256, settings: value.settings, releaseId: value.releaseId, incumbent, registration,
+    devDays: devDays.map((day) => day.day), confirmDays: confirmDays.map((day) => day.day), ids: plan.ids, idsByRole: { development: developmentIds, confirmation: confirmationIds },
     perDay: plan.days.map((day) => ({ day: day.day, labelSet: day.ids.length })), drift: await replayDrift(value) };
 }
 
@@ -119,23 +161,141 @@ export function minimumDetectableEffect(differences, groups, testAlpha) {
   return { sd, mde: (z(1 - testAlpha) + z(0.8)) * sd / Math.sqrt(groups), basis: 'development day differences of the frozen candidate; normal approximation' };
 }
 
-export async function buildCampaign({ exportPath, plan, labels, calibration, now = new Date().toISOString(), rootDir }) {
+/**
+ * The jury a labels file and its calibration name, or the refusal that stops the campaign. The jury is the one the calibration qualified
+ * (same model, effort and rubric version) and an adjudicator the owner admits; a file that names no provider is read by its model: a
+ * claude-* model is Anthropic's, anything else has no admitted provider.
+ * @param {any} labels @param {any} calibration
+ * @returns {{jury:{juryVersion:string|null, provider:string|null, model:string|null, effort?:string}, refusal?:undefined}|{refusal:any}}
+ */
+function juryOf(labels, calibration) {
+  // The jury's calibration file (`frontier_labels.mjs calibrate`): its qualification gates the campaign, its metrics are reported.
+  if (calibration?.qualification?.qualified !== true) return { refusal: { status: 'not-run', reason: 'campaign_labels_unqualified', calibration: { qualification: calibration?.qualification ?? null, metrics: calibration?.calibration ?? null } } };
+  if (labels.model !== calibration.model) return { refusal: { status: 'not-run', reason: 'campaign_labels_jury_changed', jury: { labels: labels.model ?? null, calibration: calibration.model ?? null } } };
+  // The same model at another effort, or under another rubric, is another jury: what the calibration measured is not what labelled.
+  const named = (/** @type {any} */ file) => ({ effort: file.effort ?? null, juryVersion: file.juryVersion ?? null, promptDigest: file.promptDigest ?? null });
+  if (JSON.stringify(named(labels)) !== JSON.stringify(named(calibration))) return { refusal: { status: 'not-run', reason: 'campaign_labels_jury_changed', jury: { labels: named(labels), calibration: named(calibration) } } };
+  const jury = { juryVersion: labels.juryVersion ?? null, provider: labels.provider ?? (RSI_OFFLINE_ROLE_MODEL.test(String(labels.model)) ? RSI_OFFLINE_ROLE_PROVIDER : null), model: labels.model ?? null,
+    ...(labels.effort ? { effort: labels.effort } : {}) };
+  const refused = rsiOfflineRoleIssue('judge', frontierJuryIdentity(jury));
+  if (refused) return { refusal: { status: 'not-run', reason: refused === 'campaign_model_invalid' ? 'campaign_judge_refused' : refused, jury } };
+  return { jury };
+}
+
+/** A labels file is the operator's answer for one export: labels made from another export, or a run that stopped before it finished, are not labels of this plan.
+ * @param {any} labels @param {any} plan */
+function labelsIssue(labels, plan) {
+  if (labels.exportSha256 !== undefined && labels.exportSha256 !== plan.exportSha256) return 'campaign_labels_export_mismatch';
+  if (labels.stopped != null || (labels.incomplete ?? 0) > 0) return 'campaign_labels_incomplete';
+  return null;
+}
+
+/**
+ * The registered grid and the plan's band as the sources and the selection read them. The selection carries every registered parameter
+ * `chooseFrontierCandidate` reads (`maxVolumeRatio` included), so `decide`, `build` and the runner can never choose under different rules.
+ * @param {any} plan @param {any} [registered] the registered family (FRONTIER_CAMPAIGN_REGISTRATION; a test passes another)
+ */
+function registrationOf(plan, registered = FRONTIER_CAMPAIGN_REGISTRATION) {
+  const r = { ...registered, ...(plan.rehearsalPickWeight ? { pickWeight: plan.rehearsalPickWeight } : {}) }, base = plan.registration;
+  return { r, base, selection: { baselineThreshold: base.baselineThreshold, thresholds: base.thresholds, minLabelled: r.minLabelled, maxVolumeRatio: r.maxVolumeRatio } };
+}
+/** One role's source: its days and the labels the plan asked for on them. @param {any[]} days @param {any} plan @param {Map<string, string|null>} labelById @param {any} registered */
+function daysSource(days, plan, labelById, registered) {
+  const { r, base } = registrationOf(plan, registered);
+  const ids = new Set(days.flatMap((day) => day.rows.map((row) => String(row.id))));
+  return { kind: 'frontier-days', schema: FRONTIER_DAYS_SCHEMA, days,
+    labels: plan.ids.filter((id) => ids.has(id) && labelById.has(id)).map((id) => ({ id, worth: labelById.get(id) })),
+    band: { floor: base.floor, pickWeight: r.pickWeight } };
+}
+const labelMap = (/** @type {any} */ labels) => new Map(labels.labels.map((/** @type {any} */ label) => [String(label.id), label.worth ?? null]));
+
+/** What development alone says: the registered choice over the development labels, power read from the leader whether or not it froze. */
+function developmentReading(development, selection) {
+  const evaluation = evaluateFrontierDays(development, selection);
+  const choice = chooseFrontierCandidate(evaluation, selection);
+  const leader = [...choice.candidates].filter((c) => c.meanDifference !== null).sort((a, b) => b.meanDifference - a.meanDifference)[0];
+  const best = choice.frozen ? String(choice.frozen.threshold) : leader ? String(leader.threshold) : null, base = String(selection.baselineThreshold);
+  const differences = best && evaluation.eligible ? evaluation.days.filter((day) => day.measured).map((day) => day.arms[best].quality - day.arms[base].quality) : [];
+  return { evaluation, choice, differences };
+}
+const developmentFacts = (/** @type {any} */ source, /** @type {any[]} */ days, /** @type {any} */ evaluation, /** @type {string} */ month) => ({ month, days: days.length,
+  measuredDays: evaluation.eligible ? evaluation.days.filter((day) => day.measured).length : 0, labelled: source.labels.filter((/** @type {any} */ l) => l.worth).length, abstained: source.labels.filter((/** @type {any} */ l) => !l.worth).length });
+const calibrationFacts = (/** @type {any} */ calibration, /** @type {boolean} */ qualified) => ({ qualified, juryVersion: calibration.juryVersion ?? null, model: calibration.model ?? null, ...(calibration.effort ? { effort: calibration.effort } : {}), metrics: calibration.calibration ?? null });
+
+/**
+ * The development choice from development labels alone, before confirmation is labelled (`decide`). A frozen candidate means the
+ * confirmation phase is worth labelling; none ends the month there, with nothing opened and no alpha reserved. The runner takes the same
+ * source and the same functions, so its own development stage reaches the same choice.
+ * @param {{exportPath:string, plan:any, labels:any, calibration:any}} input
+ */
+export async function decideDevelopment({ exportPath, plan, labels, calibration, registered = FRONTIER_CAMPAIGN_REGISTRATION }) {
   const { value, sha256: exportSha256 } = await readFrontierExport(exportPath);
   if (exportSha256 !== plan.exportSha256) throw new Error('campaign_export_changed');
-  // The jury's calibration file (`frontier_labels.mjs calibrate`): its qualification gates the campaign, its metrics are reported.
-  const juryQualified = calibration?.qualification?.qualified === true;
-  if (!juryQualified) return { status: 'not-run', reason: 'campaign_labels_unqualified', calibration: { qualification: calibration?.qualification ?? null, metrics: calibration?.calibration ?? null } };
+  const gate = juryOf(labels, calibration);
+  if (gate.refusal) return gate.refusal;
+  if (labels.schema !== FRONTIER_LABELS_SCHEMA || labels.phase !== 'development' || labels.exportSha256 !== plan.exportSha256) throw new Error('campaign_labels_phase_invalid');
+  const incomplete = labelsIssue(labels, plan);
+  if (incomplete) throw new Error(incomplete);
+  const allowed = new Set(plan.idsByRole.development);
+  if (labels.labels.some((/** @type {any} */ label) => !allowed.has(String(label.id)))) throw new Error('campaign_labels_outside_plan');
   const { devDays, confirmDays } = splitDays(value, plan.month, plan.windows ?? null);
-  const r = { ...FRONTIER_CAMPAIGN_REGISTRATION, ...(plan.rehearsalPickWeight ? { pickWeight: plan.rehearsalPickWeight } : {}) }, registrationBase = plan.registration;
-  const labelById = new Map(labels.labels.map((label) => [String(label.id), label.worth ?? null]));
-  const source = (days) => {
-    const ids = new Set(days.flatMap((day) => day.rows.map((row) => String(row.id))));
-    return { kind: 'frontier-days', schema: FRONTIER_DAYS_SCHEMA, days,
-      labels: plan.ids.filter((id) => ids.has(id) && labelById.has(id)).map((id) => ({ id, worth: labelById.get(id) })),
-      band: { floor: registrationBase.floor, pickWeight: r.pickWeight } };
+  const { r, selection } = registrationOf(plan, registered);
+  const development = daysSource(devDays, plan, labelMap(labels), registered);
+  const { evaluation, choice, differences } = developmentReading(development, selection);
+  const supply = {
+    exportSha256, releaseId: value.releaseId, settings: value.settings, incumbent: plan.incumbent ?? null, drift: plan.drift,
+    development: developmentFacts(development, devDays, evaluation, plan.development),
+    // Confirmation is not labelled yet: its days are counted, what labels would make of them is not known.
+    confirmation: { month: plan.confirmation, days: confirmDays.length, measuredDays: null, labelled: null, abstained: null },
+    replayFidelity: evaluation.eligible ? evaluation.days.reduce((sum, day) => sum + day.replayFidelity, 0) / Math.max(1, evaluation.days.length) : null,
+    developmentChoice: { frozen: choice.frozen, reason: choice.reason, candidates: choice.candidates },
+    minimumGroups: r.procedure.minimum_slice_groups, calibration: calibrationFacts(calibration, true),
+    power: minimumDetectableEffect(differences, confirmDays.length, RSI_QUARTER_ALPHA / r.campaignsPerQuarter * r.procedure.test_alpha_fraction),
   };
-  const development = source(devDays), confirmation = source(confirmDays);
-  const selection = { baselineThreshold: registrationBase.baselineThreshold, thresholds: registrationBase.thresholds, minLabelled: r.minLabelled };
+  return { status: choice.frozen ? 'confirmation-needed' : 'development-ended', reason: choice.frozen ? null : choice.reason, frozen: choice.frozen, supply };
+}
+
+/**
+ * The two phases' labels files as one labels file: exactly one per phase, from the same jury and the same export, finished, each id inside its phase's plan.
+ * @param {any[]} files @param {any} plan
+ */
+export function mergeLabelFiles(files, plan) {
+  const phases = files.map((file) => file?.phase);
+  if (files.length !== 2 || phases.includes(undefined) || [...new Set(phases)].sort().join() !== 'confirmation,development') throw new Error('campaign_labels_phase_invalid');
+  const [first] = files;
+  const sameJury = (/** @type {any} */ file) => file?.schema === FRONTIER_LABELS_SCHEMA && ['model', 'effort', 'juryVersion', 'promptDigest'].every((key) => file[key] === first[key]);
+  if (!files.every(sameJury)) throw new Error('campaign_labels_jury_changed');
+  const seen = new Set();
+  for (const file of files) {
+    const issue = file.exportSha256 === plan.exportSha256 ? labelsIssue(file, plan) : 'campaign_labels_export_mismatch';
+    if (issue) throw new Error(issue);
+    const allowed = new Set(plan.idsByRole[file.phase]);
+    for (const label of file.labels) {
+      if (!allowed.has(String(label.id)) || seen.has(String(label.id))) throw new Error('campaign_labels_outside_plan');
+      seen.add(String(label.id));
+    }
+  }
+  const sum = (/** @type {(file:any)=>number} */ pick) => files.reduce((total, file) => total + pick(file), 0);
+  const labelCounts = Object.fromEntries(['pick', 'ok', 'no', 'abstained'].map((key) => [key, sum((file) => file.labelCounts?.[key] ?? 0)]));
+  return { schema: FRONTIER_LABELS_SCHEMA, phase: 'all', month: plan.month, idPrefix: plan.idPrefix ?? '', exportSha256: plan.exportSha256, juryVersion: first.juryVersion, model: first.model, effort: first.effort,
+    promptDigest: first.promptDigest, items: sum((file) => file.items ?? 0), missing: sum((file) => file.missing ?? 0), labelled: sum((file) => file.labels.length), incomplete: 0, labelCounts,
+    calls: sum((file) => file.calls ?? 0), cachedCalls: sum((file) => file.cachedCalls ?? 0),
+    tokens: Object.fromEntries(['cacheHit', 'cacheMiss', 'output'].map((key) => [key, sum((file) => file.tokens?.[key] ?? 0)])), costCny: 0, costBasis: first.costBasis, stopped: null,
+    labels: files.flatMap((file) => file.labels) };
+}
+
+export async function buildCampaign({ exportPath, plan, labels, calibration, now = new Date().toISOString(), rootDir, registered = FRONTIER_CAMPAIGN_REGISTRATION }) {
+  const { value, sha256: exportSha256 } = await readFrontierExport(exportPath);
+  if (exportSha256 !== plan.exportSha256) throw new Error('campaign_export_changed');
+  const gate = juryOf(labels, calibration);
+  if (gate.refusal) return gate.refusal;
+  const { jury } = gate;
+  const issue = labelsIssue(labels, plan);
+  if (issue) throw new Error(issue);
+  const { devDays, confirmDays } = splitDays(value, plan.month, plan.windows ?? null);
+  const { r, base: registrationBase, selection } = registrationOf(plan, registered);
+  const labelById = labelMap(labels);
+  const development = daysSource(devDays, plan, labelById, registered), confirmation = daysSource(confirmDays, plan, labelById, registered);
   const confirmEvaluation = evaluateFrontierDays(confirmation, { ...selection, thresholds: [], labelThresholds: selection.thresholds });
   if (!confirmEvaluation.eligible) throw new Error('campaign_export_pool_incomplete');
   const measuredDays = confirmEvaluation.days.filter((day) => day.measured).map((day) => day.day);
@@ -149,16 +309,16 @@ export async function buildCampaign({ exportPath, plan, labels, calibration, now
     families: { 'frontier-days': { repeats: 1, forms: { original: 1 }, score_type: 'bounded-continuous', pilot_rationale: r.pilotRationale } },
     claims: { superiority: alpha }, cost_identity: 'deterministic-no-model-call', expires_at: deadline,
   };
-  const registration = { ...selection, maxVolumeRatio: r.maxVolumeRatio, selection: { objective: 'weighted-accuracy-difference', tieBreak: 'nearest-baseline' },
-    statistics, labelling: { juryVersion: labels.juryVersion ?? null, model: labels.model ?? null, calibrationDigest: rsiDigest({ qualification: calibration.qualification, calibration: calibration.calibration }) } };
+  const registration = { ...selection, selection: { objective: 'weighted-accuracy-difference', tieBreak: 'nearest-baseline' },
+    statistics, labelling: { ...jury, calibrationDigest: rsiDigest({ qualification: calibration.qualification, calibration: calibration.calibration }) } };
   const closure = await computeRsiDependencyClosure({ rootDir, surface: 'frontier-selection', settings: { model: 'deepseek-flash', provider: 'deepseek' } });
   const target = { surface: 'frontier-selection', dependencyDigest: closure.qualified ? closure.dependencyDigest : identity.implementationSha256,
-    baselineRevision: `threshold-${registrationBase.baselineThreshold}-${String(value.releaseId ?? 'unknown').replace(/[^A-Za-z0-9_.:-]/g, '-')}`.slice(0, 160) };
+    baselineRevision: plan.incumbent?.revisionId ?? unboundBaselineRevision(value.releaseId) };
   const sources = { [`development-${plan.development}`]: development, [`confirmation-${plan.confirmation}`]: confirmation };
   const manifest = {
-    schemaVersion: 1, id: `${plan.idPrefix ?? ''}frontier-selection-${plan.month}`, surface: 'frontier-selection', candidateKind: 'policy', claim: 'superiority', automated: true,
+    schemaVersion: 2, id: `${plan.idPrefix ?? ''}frontier-selection-${plan.month}`, surface: 'frontier-selection', candidateKind: 'policy', claim: 'superiority', automated: true,
     createdAt: now, deadline, budget: { campaignCny: 1000, monthCny: 30000 },
-    models: { solver: { provider: 'deepseek', model: 'deepseek-flash' }, improver: { provider: 'none', model: 'registered-grid' }, reviewer: { provider: 'dashscope', model: 'qwen3.8-max' } },
+    models: { solver: { provider: 'deepseek', model: 'deepseek-flash' }, improvers: [], judges: [frontierJuryIdentity(registration.labelling)] },
     target, registration: { digest: rsiDigest(registration), procedure: r.procedure.id, claim: 'superiority' },
     data: { classification: 'public', sources: [
       { id: `development-${plan.development}`, digest: rsiDigest(development), role: 'development', exposure: 'exposed' },
@@ -167,22 +327,17 @@ export async function buildCampaign({ exportPath, plan, labels, calibration, now
   const issues = rsiCampaignIssues(manifest);
   if (issues.length) throw new Error(issues[0]);
   // Supply and power, read before confirmation from development alone.
-  const devEvaluation = evaluateFrontierDays(development, selection);
-  const choice = chooseFrontierCandidate(devEvaluation, selection);
-  // Power is read from the candidate development liked best, frozen or not, so a month with no winner still says what it could see.
-  const leader = [...choice.candidates].filter((c) => c.meanDifference !== null).sort((a, b) => b.meanDifference - a.meanDifference)[0];
-  const best = choice.frozen ? String(choice.frozen.threshold) : leader ? String(leader.threshold) : null, base = String(selection.baselineThreshold);
-  const differences = best && devEvaluation.eligible ? devEvaluation.days.filter((day) => day.measured).map((day) => day.arms[best].quality - day.arms[base].quality) : [];
+  const { evaluation: devEvaluation, choice, differences } = developmentReading(development, selection);
   const supply = {
-    exportSha256, releaseId: value.releaseId, settings: value.settings, drift: plan.drift,
-    development: { month: plan.development, days: devDays.length, measuredDays: devEvaluation.eligible ? devEvaluation.days.filter((day) => day.measured).length : 0, labelled: development.labels.filter((l) => l.worth).length, abstained: development.labels.filter((l) => !l.worth).length },
+    exportSha256, releaseId: value.releaseId, settings: value.settings, incumbent: plan.incumbent ?? null, drift: plan.drift,
+    development: developmentFacts(development, devDays, devEvaluation, plan.development),
     confirmation: { month: plan.confirmation, days: confirmDays.length, measuredDays: measuredDays.length, labelled: confirmation.labels.filter((l) => l.worth).length, abstained: confirmation.labels.filter((l) => !l.worth).length },
     replayFidelity: devEvaluation.eligible ? devEvaluation.days.reduce((sum, day) => sum + day.replayFidelity, 0) / Math.max(1, devEvaluation.days.length) : null,
     developmentChoice: { frozen: choice.frozen, reason: choice.reason, candidates: choice.candidates },
     alpha: { allocated: alpha, testAlpha: alpha * r.procedure.test_alpha_fraction },
     power: minimumDetectableEffect(differences, measuredDays.length, alpha * r.procedure.test_alpha_fraction),
-    minimumGroups: r.procedure.minimum_slice_groups,
-    calibration: { qualified: juryQualified, juryVersion: calibration.juryVersion ?? null, metrics: calibration.calibration ?? null },
+    minimumGroups: r.procedure.minimum_slice_groups, directional: measuredDays.length < r.procedure.minimum_slice_groups,
+    calibration: calibrationFacts(calibration, true),
   };
   return { status: 'assembled', manifest, inputs: { registration, target, sources }, supply };
 }
@@ -190,18 +345,28 @@ export async function buildCampaign({ exportPath, plan, labels, calibration, now
 async function main() {
   const [command] = process.argv.slice(2);
   const { values } = parseArgs({ args: process.argv.slice(3), options: { export: { type: 'string' }, month: { type: 'string' }, out: { type: 'string' }, plan: { type: 'string' },
-    labels: { type: 'string' }, calibration: { type: 'string' }, 'out-dir': { type: 'string' }, now: { type: 'string' }, root: { type: 'string' },
+    labels: { type: 'string', multiple: true }, calibration: { type: 'string' }, 'out-dir': { type: 'string' }, now: { type: 'string' }, root: { type: 'string' },
     'development-days': { type: 'string' }, 'confirmation-days': { type: 'string' }, 'id-prefix': { type: 'string' }, 'rehearsal-pick-weight': { type: 'string' } } });
   const range = (value) => value ? value.split('..') : null;
   const json = async (path) => JSON.parse(await readFile(path, 'utf8'));
+  const oneLabels = () => { if (values.labels?.length !== 1) throw new Error('campaign_labels_phase_invalid'); return values.labels[0]; };
   if (command === 'plan') {
     const windows = values['development-days'] || values['confirmation-days'] ? { development: range(values['development-days']), confirmation: range(values['confirmation-days']) } : null;
     const plan = await planCampaign({ exportPath: values.export, month: values.month, windows, idPrefix: values['id-prefix'] ?? '',
       rehearsalPickWeight: values['rehearsal-pick-weight'] ? Number(values['rehearsal-pick-weight']) : null });
     await writeFile(values.out, `${JSON.stringify(plan)}\n`);
-    console.log(JSON.stringify({ status: 'planned', month: plan.month, devDays: plan.devDays.length, confirmDays: plan.confirmDays.length, toLabel: plan.ids.length, drift: plan.drift }));
+    console.log(JSON.stringify({ status: 'planned', month: plan.month, devDays: plan.devDays.length, confirmDays: plan.confirmDays.length, toLabel: plan.ids.length,
+      byPhase: { development: plan.idsByRole.development.length, confirmation: plan.idsByRole.confirmation.length }, incumbent: plan.incumbent?.revisionId ?? null, drift: plan.drift }));
+  } else if (command === 'decide') {
+    const result = await decideDevelopment({ exportPath: values.export, plan: await json(values.plan), labels: await json(oneLabels()), calibration: await json(values.calibration) });
+    await writeFile(values.out, `${JSON.stringify(result, null, 1)}\n`);
+    console.log(JSON.stringify({ status: result.status, reason: result.reason ?? null, frozen: result.frozen ?? null }));
+  } else if (command === 'merge-labels') {
+    const merged = mergeLabelFiles(await Promise.all(values.labels.map(json)), await json(values.plan));
+    await writeFile(values.out, `${JSON.stringify(merged, null, 1)}\n`);
+    console.log(JSON.stringify({ status: 'merged', labelled: merged.labelled, labelCounts: merged.labelCounts }));
   } else if (command === 'build') {
-    const result = await buildCampaign({ exportPath: values.export, plan: await json(values.plan), labels: await json(values.labels), calibration: await json(values.calibration),
+    const result = await buildCampaign({ exportPath: values.export, plan: await json(values.plan), labels: await json(oneLabels()), calibration: await json(values.calibration),
       now: values.now ?? new Date().toISOString(), rootDir: values.root ?? resolve(new URL('../..', import.meta.url).pathname) });
     await mkdir(values['out-dir'], { recursive: true });
     if (result.status === 'assembled') {
@@ -210,7 +375,7 @@ async function main() {
     }
     await writeFile(join(values['out-dir'], 'supply.json'), `${JSON.stringify(result.supply ?? result, null, 1)}\n`);
     console.log(JSON.stringify({ status: result.status, reason: result.reason ?? null, campaignId: result.manifest?.id ?? null, groups: result.inputs?.registration.statistics.G_target ?? null, mde: result.supply?.power?.mde ?? null }));
-  } else throw new Error('Usage: frontier_assemble.mjs plan|build ...');
+  } else throw new Error('Usage: frontier_assemble.mjs plan|decide|merge-labels|build ...');
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   main().catch((error) => { console.error(JSON.stringify({ status: 'refused', reason: /^campaign_[a-z_]+$/.test(error.message) ? error.message : 'campaign_assembly_failed', detail: /^campaign_/.test(error.message) ? undefined : String(error.message).slice(0, 300) })); process.exitCode = 1; });

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Install or refresh the offline RSI campaign from an operator machine that reaches both hosts (2026-10-26).
 #
-#   rsi-lab-install.sh lab        [--worktree]   build the lab image on the lab host from this checkout, install the launcher,
-#                                                the owner inputs and the monthly timer
+#   rsi-lab-install.sh lab        [--worktree]   build the lab image on the lab host from this checkout, install the launchers,
+#                                                the owner inputs and the monthly timer (the operator's labelling script stays on the dev box)
 #   rsi-lab-install.sh production                install the export, the push script and its timer on the serving host
 #
 # Hosts are ssh aliases: RSI_LAB_SSH (default evimed-test), RSI_PRODUCTION_SSH (default evimed). The lab image is built from
@@ -41,6 +41,8 @@ install -m 0755 rsi-lab-skill.sh /usr/local/lib/evimed-rsi/rsi-lab-skill.sh
 install -m 0755 rsi-lab-harness.sh /usr/local/lib/evimed-rsi/rsi-lab-harness.sh
 install -m 0644 evimed-rsi-campaign.service evimed-rsi-campaign.timer /etc/systemd/system/
 # Owner inputs: the lab configuration, the public trust records, the signers' file paths. Deployment records are 0600 for uid 10001.
+# The lab holds no provider credential and calls no model: every model role runs on the operator's box (deploy/rsi-campaign/operator/), so the
+# configuration names none and a credentials directory is not mounted into any step.
 O=/etc/rsi-lab/owner-inputs
 fp() { openssl pkey -pubin -in "$1" -outform DER | sha256sum | cut -d' ' -f1; }
 EV=$(fp $O/evaluator.pub.pem) PUB=$(fp $O/publisher.pub.pem) INSTANCE=$(curl -s -m 3 http://100.100.100.200/latest/meta-data/instance-id)
@@ -49,8 +51,7 @@ cat > $O/config.json <<JSON
  "transport":{"kind":"none"},
  "signer":{"keyId":"rsi-lab-publisher-2026-10","publicKeySha256":"$PUB"},
  "authority":{"role":"rsi-lab","accountId":"rsi-lab","dataDir":"/srv/rsi-lab","databaseRole":"rsi_lab"},
- "budget":{"campaignCny":1000,"monthCny":30000},
- "providers":{"deepseekFlash":{"provider":"deepseek","model":"deepseek-flash","credentialRef":"lab:deepseek"},"qwenMax":{"provider":"dashscope","model":"qwen3.8-max","credentialRef":"lab:dashscope"}}}
+ "budget":{"campaignCny":1000,"monthCny":30000}}
 JSON
 cat > $O/evaluator-profile.json <<JSON
 {"publicKeyPath":"/run/rsi-lab/evaluator.pub.pem","publicKeySha256":"$EV","receiptPath":"/srv/rsi-lab/state/current/receipt.json"}

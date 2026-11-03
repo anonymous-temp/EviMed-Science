@@ -2,8 +2,8 @@
 
 EviMed Science measured as a product: every item is a new conversation of a throwaway account on the live deployment (one
 lane, runs marked `automated`, so nothing is learnt from them), routed exactly as a user's message would be. The scores are
-internal: where a benchmark needs a model judge, the judge is Claude (judge/PROTOCOL.md), not the benchmark's official judge,
-and no number here is a leaderboard entry.
+internal: where a benchmark needs a model judge, the judge is Claude (judge/PROTOCOL.md; `tools/claude_judge.py` runs it, one blind `claude -p` call per packet
+and pass), not the benchmark's official judge, and no number here is a leaderboard entry.
 
 Benchmarks in v1 (stratified samples, seed 20261028): MedCalc-Bench, MedBrowseComp, AutoResearchBench, DeepResearch Bench,
 BixBench, ResearchClawBench, BioXArena (local held-out split; official scoring is CodaBench). LABBench2 and BiomniBench-DA
@@ -72,7 +72,7 @@ BioXArena data is CC BY-NC). The builders under tools/ recreate them into a work
   | medcalc | 1100 | 235 | 386 | 278 | 201 |
 - `tools/collect.sh` — results back to the work directory, `answers/<queue>.jsonl` for the scorers.
 - `tools/score_*.py` — deterministic scorers (MedCalc official tolerance, AutoResearchBench official deep/wide, short-answer
-  pre-scoring, BioXArena metrics); `tools/judge_packets.py` and `judge/*.md` for the Claude judge passes.
+  pre-scoring, BioXArena metrics); `tools/judge_packets.py` (packets), `tools/claude_judge.py` (the judge) and `judge/*.md`, `judge/briefs/*.md` for the Claude judge passes.
 - `tools/score_bixbench.py` — the benchmark's own verifiers, ported from Future-House/BixBench `bixbench/graders.py`: `str_verifier`
   (letters and digits only, lower-cased: equal, or the answer inside the ideal) and `range_verifier` (`lower <= x <= upper`);
   `llm_verifier` and whatever misses both rules are `needs_judge`. Two deviations, both stated in the file: an answer with no letter or
@@ -83,6 +83,15 @@ BioXArena data is CC BY-NC). The builders under tools/ recreate them into a work
   fraction-versus-percent case (bix-18-q5); the strict deterministic figure is 12/49 (24.5%) against the judge's 22/49 (44.9%) on the
   same questions, because a `str_verifier` answer is a long free-text line, not the value alone (1 of 23 settled correct by code, 9 by the judge).
   The official open-answer harness sends range questions and unmatched str questions to an LLM, so code alone is a floor.
+- `tools/claude_judge.py` — the judge: `judge PACKETS_DIR --model claude-… --effort low|medium|high|xhigh|max --judge-id ID --dialect questions|score|race|pairwise --brief judge/briefs/<dialect>.md --parts DIR`
+  runs one independent `claude -p` call per packet and pass (any packet directory with a `meta.json` key: `judged_packets_round.py`, `drb_pairwise.py`, `judge_packets.py`), blind and confined (a scratch
+  copy of the one packet, `--safe-mode --restricted --tools Read,Glob,Grep`, no session, the environment scrubbed to the box's own Claude login), refuses a model that is not `claude-*`, accepts only a
+  verdict that matches its packet, writes `PARTS/<key>.p<pass>.jsonl` atomically, stamps every line with the judge id, model and effort, and continues where it stopped (a quota stop or a refused
+  login ends the run, exit 3; `overloaded` is retried; the log carries closed codes only, never the CLI's text). `PARTS/judge.json` (`claude-judge/2`) pins model, effort, judge id, dialect and brief,
+  so a resume cannot change judge. `remap --keys operator/keys.json --parts DIR --dialect questions|score|race --bench-key K --repeats N --out STEM` writes `STEM.p<k>.jsonl` in the shape
+  `export_harness_arms.py --verdicts` reads and checks every line's stamps against `judge.json` (pairwise parts go to `drb_pairwise.py aggregate` as they are, one `judge` run per `drb-pair-<k>`
+  directory since each repeats the task keys). The exporter takes the judge from `--registration` and the parts' `--judge-record` files and requires every line to match both. Tests run it against a
+  fake `claude` (`tools/test/fake_claude_judge.py`).
 - `tools/judge_packets.py` — packets per benchmark (`drb`, `bixbench`, `rcb`); `$BENCH_ROOT` is the work directory. A timed-out run with a
   `lastReport` gets a packet that carries it (`delivery: "at-cap"` in meta.json); `--repeats N` writes N independent packet sets
   (p1…pN; large trees linked, no verdict anywhere in them); `--modes llm_verifier` / `--bix-unsettled` limit a BixBench packet to the
@@ -131,7 +140,7 @@ BioXArena data is CC BY-NC). The builders under tools/ recreate them into a work
 ```sh
 cd OpenScience/evals/public-benchmarks
 node tools/test/driver-flows.test.mjs                                    # the driver against a fake control plane (~2 min; TEST_FILTER=<regexp> for a subset)
-python3 -I -m unittest discover -s tools/test -p 'test_*.py'             # scorers, packets, report, noise, pairwise, pools, shards (synthetic fixtures only)
+python3 -I -m unittest discover -s tools/test -p 'test_*.py'             # scorers, packets, judge runner (fake claude), report, noise, pairwise, pools, shards (synthetic fixtures only)
 node --test tools/test/lane.test.mjs                                     # lanes against a fake driver (bash, flock; no docker)
 ```
 

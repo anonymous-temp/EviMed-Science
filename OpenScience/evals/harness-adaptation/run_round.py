@@ -72,7 +72,7 @@ class Round:
         self.fetcher = fetcher or families.Fetcher(self.runs_root / "cache", enabled=not args.offline)
         self.channels = channels or channels_mod.load_channels(args.channels)
         self.ledger = ledger or Ledger(args.ledger)
-        self.balance = balance or balance_mod.BalanceGuard(floor=args.balance_floor, cap_cny=args.cap_cny, spent=lambda: self.ledger.totals()["round_cash_cny"],
+        self.balance = balance or balance_mod.BalanceGuard(floor=args.balance_floor, cap_cny=args.cap_cny, spent=lambda: self.ledger.totals()["solver_cny"],
                                                            clock=clock, sleep=sleep, log=self.log)
         self.client = client or BrokerctlClient(
             [sys.executable, os.environ.get("RSI1_BROKERCTL", str(config.PACKAGE_ROOT / "lab" / "brokerctl.py"))])
@@ -155,7 +155,7 @@ class Round:
 
         up = upstream.load()
         adapter = self.build_adapter(domain, ids)
-        router = self.channels_mod.build_router(self.runs_root / "audit" / domain, domain=domain, ledger=self.ledger, balance=self.balance, channels=self.channels)
+        router = self.channels_mod.build_router(self.runs_root / "audit" / domain, domain=domain, ledger=self.ledger, channels=self.channels)
         self.check_identity(domain, self.identity(domain, adapter, router, ids))
         surface = adapter.substrate.surface()
         library = up.library.Library(root=self.runs_root / "library", domain=domain, surface=surface)
@@ -255,7 +255,6 @@ class Round:
             "rollouts": len([r for r in mine if r.get("kind") == "rollout" and not r.get("cached")]),
             "solver_cny": round(sum(float(r.get("cny") or 0) for r in mine if r.get("kind") == "rollout" and not r.get("cached")), 6),
             "improver_calls": len([r for r in mine if r.get("kind") == "improver" and not r.get("cached")]),
-            "deepseek_cny_estimated": round(sum(float(r.get("cny") or 0) for r in mine if r.get("kind") == "improver" and not r.get("cached")), 6),
             "claude_usd_reported": round(sum(float(r.get("usd_reported") or 0) for r in mine if r.get("kind") == "improver" and not r.get("cached")), 4),
         }
         return {
@@ -345,7 +344,7 @@ def dry_run(rnd: Round) -> int:
     channels = rnd.channels["stages"]
     print(f"# RSI round 1 dry run: parallel mode, k=1, {len(plan)} domain(s)")
     print(f"# runs root   {rnd.runs_root}\n# out         {rnd.out_root}\n# ledger      {rnd.ledger.path}\n# tasks file  {rnd.args.tasks_file}")
-    print("# channels    " + "; ".join(f"{s}={row.get('provider') or 'claude-login'}:{row['model']}" for s, row in channels.items()))
+    print("# channels    " + "; ".join(f"{s}={row['model']}" for s, row in channels.items()) + " (improvers: this box's Claude login; solver: DSH + DeepSeek Flash)")
     print(f"# balance floor {rnd.args.balance_floor} CNY (read at most once a minute), round cap {rnd.args.cap_cny} CNY, concurrency {rnd.args.concurrency}")
     total = 0
     for domain, ids in plan.items():

@@ -1,8 +1,10 @@
 /** Public RSI campaign contracts. Validation checks shape, never grants source or signing authority. */
 export const RSI_CAMPAIGN_LIMITS = Object.freeze({ campaignCny: 1000, monthCny: 30000 })
-export const RSI_CAMPAIGN_SCHEMA_VERSION = 1
+/** 2 (2026-11-03): `models` names every role, `{solver, improvers, judges}`; a version-1 manifest (`{solver, improver, reviewer}`) is refused. */
+export const RSI_CAMPAIGN_SCHEMA_VERSION = 2
 /** `superiority` is for a deterministic consumer whose arms make no model call: quality alone is claimed, cost is not. */
 export const RSI_CAMPAIGN_CLAIMS = Object.freeze(['efficiency', 'targeted-repair', 'superiority', 'absolute-contract'])
+/** `consumer` is also the key of a quarter's error budget (campaign_runner.mjs): surfaces that change one consumer draw on one ledger, and renaming a consumer starts a new one. */
 export const RSI_CAMPAIGN_SURFACES = Object.freeze({
   'frontier-selection': { kind: 'policy', consumer: 'frontier-mix', activation: 'shadow' },
   'frontier-screen': { kind: 'policy', consumer: 'frontier-screen', activation: 'shadow' },
@@ -12,10 +14,21 @@ export const RSI_CAMPAIGN_SURFACES = Object.freeze({
   'capability-skill': { kind: 'skill', consumer: 'dsh-capability', activation: 'cohort' },
   // A patched runtime image (guidance supplement + skills) measured offline on lane runs (2026-11-01). Shadow only: nothing of it is imported into production in this round, a qualified result is a pull-request proposal.
   'harness-patch': { kind: 'harness-patch', consumer: 'dsh-harness', activation: 'shadow' },
-  // The same consumer for a candidate that holds code (a tool, a connector) as well as text, with an error-budget ledger and a consumer identity of its own (2026-11-02).
-  'tool-patch': { kind: 'tool-patch', consumer: 'dsh-tool-patch', activation: 'shadow' },
+  // The same consumer (the runtime image) for a candidate that holds code (a tool, a connector) as well as text, with a consumer identity of its own (2026-11-02);
+  // its error budget is the runtime image's, shared with harness-patch (2026-11-03).
+  'tool-patch': { kind: 'tool-patch', consumer: 'dsh-harness', activation: 'shadow' },
   'isolated-tool': { kind: 'isolated-tool', consumer: 'isolated-executor', activation: 'cohort' },
 })
+/** Surfaces whose candidates come from a registered grid (a threshold sweep) with no model call: the only ones whose manifest may name no improver. */
+export const RSI_REGISTERED_GRID_SURFACES = Object.freeze(['frontier-selection'])
+/**
+ * The owner's role policy (2026-11-03): the solver of every measured arm is DeepSeek (EviMed Science is DSH + DeepSeek Flash); every offline
+ * improver (proposing, editing, composing, selecting, reflecting, distilling, writing candidates) and every adjudicator (judging, labelling,
+ * a jury) is Claude, pinned by its model id. DeepSeek and Qwen are neither improvers nor judges offline.
+ */
+export const RSI_SOLVER_PROVIDER = 'deepseek'
+export const RSI_OFFLINE_ROLE_PROVIDER = 'anthropic'
+export const RSI_OFFLINE_ROLE_MODEL = /^claude-[a-z0-9-]+$/
 
 /** @param {any} value */
 const record = value => value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -29,9 +42,33 @@ const finite = value => typeof value === 'number' && Number.isFinite(value)
 const instant = value => typeof value === 'string' && /(?:Z|[+-]\d{2}:\d{2})$/.test(value) && Number.isFinite(Date.parse(value))
 /** @param {any} value @param {string[]} allowed */
 const keysWithin = (value, allowed) => record(value) && Object.keys(value).every(key => allowed.includes(key))
-/** @param {any} model */
-const modelIdentity = model => keysWithin(model, ['provider', 'model']) && ['deepseek', 'dashscope'].includes(model.provider)
-  && identifier(model.model) && (model.provider === 'deepseek' ? /^deepseek/i.test(model.model) : /^qwen/i.test(model.model))
+/** @param {unknown} value */
+const roleName = value => typeof value === 'string' && /^[a-z][a-z0-9-]{0,63}$/.test(value)
+
+/**
+ * One offline improver (`{role, provider, model}`) or adjudicator (`{role, provider, model, id?}`, `id` the registered judge or jury identity),
+ * or the closed code that refuses it: a malformed record is `campaign_model_invalid`, anything but Anthropic with a pinned claude-* model id is
+ * `campaign_improver_refused` / `campaign_judge_refused`.
+ * @param {'improver'|'judge'} kind @param {any} value @returns {string|null}
+ */
+export function rsiOfflineRoleIssue(kind, value) {
+  if (!keysWithin(value, kind === 'judge' ? ['role', 'provider', 'model', 'id'] : ['role', 'provider', 'model']) || !roleName(value.role) || typeof value.provider !== 'string'
+    || !identifier(value.model) || (value.id !== undefined && !identifier(value.id))) return 'campaign_model_invalid'
+  return value.provider === RSI_OFFLINE_ROLE_PROVIDER && RSI_OFFLINE_ROLE_MODEL.test(value.model) ? null : `campaign_${kind}_refused`
+}
+
+/** The issues of a manifest's `models`: who solved, who wrote the candidates and who adjudicated. @param {any} models @param {string} surface @returns {string[]} */
+function modelIssues(models, surface) {
+  if (!keysWithin(models, ['solver', 'improvers', 'judges']) || !Array.isArray(models.improvers) || !Array.isArray(models.judges) || models.improvers.length > 16 || models.judges.length > 16
+    || !keysWithin(models.solver, ['provider', 'model']) || !identifier(models.solver.model)) return ['campaign_model_invalid']
+  const issues = []
+  if (models.solver.provider !== RSI_SOLVER_PROVIDER || !/^deepseek/i.test(models.solver.model)) issues.push('campaign_solver_refused')
+  for (const improver of models.improvers) { const issue = rsiOfflineRoleIssue('improver', improver); if (issue) issues.push(issue) }
+  for (const judge of models.judges) { const issue = rsiOfflineRoleIssue('judge', judge); if (issue) issues.push(issue) }
+  // An empty `judges` is the consumer's to accept (a deterministic scorer); its validation compares it with the registration.
+  if (!models.improvers.length && !RSI_REGISTERED_GRID_SURFACES.includes(surface)) issues.push('campaign_improver_missing')
+  return issues
+}
 
 /** A manifest is a registration, not evidence that its hypothesis passed. @param {any} value @returns {string[]} */
 export function rsiCampaignIssues(value) {
@@ -47,9 +84,7 @@ export function rsiCampaignIssues(value) {
   const budget = value.budget
   if (!keysWithin(budget, ['campaignCny', 'monthCny']) || !finite(budget.campaignCny) || budget.campaignCny <= 0 || budget.campaignCny > RSI_CAMPAIGN_LIMITS.campaignCny
     || !finite(budget.monthCny) || budget.monthCny <= 0 || budget.monthCny > RSI_CAMPAIGN_LIMITS.monthCny || budget.campaignCny > budget.monthCny) issues.push('campaign_budget_invalid')
-  // A registered grid (a threshold sweep) or a registered set of candidates written outside the lab proposes without a model call of the lab's; only the improver may say so.
-  const gridImprover = keysWithin(value.models?.improver, ['provider', 'model']) && value.models.improver.provider === 'none' && ['registered-grid', 'registered-candidates'].includes(value.models.improver.model)
-  if (!keysWithin(value.models, ['solver', 'improver', 'reviewer']) || !['solver', 'improver', 'reviewer'].every(role => modelIdentity(value.models?.[role]) || (role === 'improver' && gridImprover))) issues.push('campaign_model_invalid')
+  issues.push(...modelIssues(value.models, value.surface))
   if (rsiCompatibilityIssues(value.target, value.target).length || value.target?.surface !== value.surface) issues.push('campaign_target_invalid')
   if (!keysWithin(value.registration, ['digest', 'procedure', 'claim']) || !digest(value.registration.digest) || !identifier(value.registration.procedure)
     || value.registration.claim !== value.claim) issues.push('campaign_registration_invalid')

@@ -4,10 +4,14 @@
  * sources) and a supply report read from development alone — the shapes the runner, the evaluator and the report use.
  *
  *   node harness_assemble.mjs --development dev.json --confirmation conf.json --confirmation-gold conf.gold.json \
- *     --registration registration.json --month 2026-11 --out-dir dir --pilot-rationale "..." \
+ *     --registration registration.json --improvement improvement.json --month 2026-11 --out-dir dir --pilot-rationale "..." \
  *     [--development-verdicts dev.verdicts.jsonl --confirmation-verdicts conf.verdicts.jsonl] [--id-prefix rehearsal-]
- *   node harness_assemble.mjs --development-only --development dev.json --registration registration.json --month 2026-11 --out-dir dir
- *   node harness_assemble.mjs --preview --development dev.json --registration registration.json     (the dev box: the development choice, nothing written)
+ *   node harness_assemble.mjs --development-only --development dev.json --registration registration.json --improvement improvement.json --month 2026-11 --out-dir dir
+ *   node harness_assemble.mjs --preview --development dev.json --registration registration.json --improvement improvement.json   (the dev box: the development choice, nothing written)
+ *
+ * The manifest's `models` (schema 2) are the product's solver, the improvers the round's improvement record names (`improvement.json`,
+ * required: `{improvers: [{role, provider: 'anthropic', model: 'claude-...'}], ...provenance}`, the roles that actually wrote the candidates)
+ * and, for a judged scorer, the registered judge (`registration.judge`); a deterministic scorer has none. No identity is written here by hand.
  *
  * `--preview` and `--development-only` apply to the development source and the registration every refusal the run applies on that side (one function,
  * `harnessDevelopmentIssue` of harness_campaign.mjs, also called by the runner): the control arm, K, the registered rows and repeats, the choice rule, the
@@ -30,15 +34,13 @@ import { RSI_QUARTER_ALPHA } from './campaign_runner.mjs';
 import { beijingMonthEnd } from './frontier_assemble.mjs';
 import { inSkillSlice, skillSlice } from './skill_campaign.mjs';
 import { harnessScorer } from './harness_scorers.mjs';
-import { HARNESS_COST_IDENTITY, HARNESS_SELECTION, HARNESS_SURFACE, TOOL_PATCH_SURFACE, chooseHarnessCandidate, harnessArmsIssues, harnessCampaignConsumerIdentity, harnessDevelopmentIssue, harnessDevelopmentResult, harnessJudgeRegistrationIssue, registrationSurface } from './harness_campaign.mjs';
+import { HARNESS_COST_IDENTITY, HARNESS_SELECTION, HARNESS_SURFACE, TOOL_PATCH_SURFACE, chooseHarnessCandidate, harnessArmsIssues, harnessCampaignConsumerIdentity, harnessDevelopmentIssue, harnessDevelopmentResult, harnessImprovementIssue, harnessJudgeRegistrationIssue, harnessModels, registrationSurface } from './harness_campaign.mjs';
 import { toolPatchCampaignConsumerIdentity } from './tool_patch_campaign.mjs';
 
 const sha = (value) => createHash('sha256').update(value).digest('hex');
 const PROCEDURE = Object.freeze({ id: 'rsi-paired-group-v5', digest_codec: 'rfc8785-sha256-v1', test_alpha_fraction: 0.5, minimum_slice_groups: 25 });
 const round6 = (value) => Math.round(value * 1e6) / 1e6;
 const cmp = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
-/** The solver every harness campaign registers: the product default. */
-const SOLVER = Object.freeze({ provider: 'deepseek', model: 'deepseek-flash' });
 
 /** The digest register_round.py gives a pre-registration: the canonical JSON without `digest` and `registeredAt`. @param {any} round */
 export function roundRegistrationDigest(round) {
@@ -76,18 +78,21 @@ export function judgeCallsRequired(round) {
 
 /**
  * The registration the runner reads, without statistics: the scorer, the failure slice, the registered choice rule, the control,
- * the image, the rows, the repeats, the alpha allocation, K and (judged families) the judge.
- * @param {any} round @param {any} development @param {any} [improvement]
+ * the image, the rows, the repeats, the alpha allocation, K, (judged families) the judge, and the improvement record that names who
+ * wrote the candidates (required: `harnessImprovementIssue`).
+ * @param {any} round @param {any} development @param {any} improvement
  */
 function namedRegistration(round, development, improvement) {
   const scorer = checkRound(round);
+  const refused = harnessImprovementIssue(improvement);
+  if (refused) throw new Error(refused);
   return {
     scorer: scorer.id, family: round.family, [scorer.slice.registration]: [...round.failureSlice].sort((a, b) => (typeof a === 'number' ? a - b : cmp(String(a), String(b)))),
     margin: round.margin, selection: { ...HARNESS_SELECTION }, costRatio: round.costRatio, candidatesMax: round.candidatesMax, control: { arm: round.control.arm, kind: round.control.kind },
     image: development.image, rows: { development: [...round.rows.development], confirmation: [...round.rows.confirmation] }, repeats: { ...round.repeats },
     alpha: { ...round.alpha }, ...(round.judge ? { judge: structuredClone(round.judge) } : {}),
     ...(registrationSurface(round) === HARNESS_SURFACE ? {} : { surface: registrationSurface(round) }),
-    roundRegistration: { round: round.round, digest: round.digest }, ...(improvement ? { improvement } : {}),
+    roundRegistration: { round: round.round, digest: round.digest }, improvement,
   };
 }
 
@@ -133,20 +138,20 @@ function prepareSources({ scorer, development, confirmation, confirmationGold, d
 
 /**
  * @param {{development:any, confirmation:any, registration:any, confirmationGold?:any, developmentVerdicts?:string, confirmationVerdicts?:string,
- *   month:string, pilotRationale?:string, improvement?:any, paidCostBudget?:number, idPrefix?:string, now?:string}} input
+ *   month:string, pilotRationale?:string, improvement:any, paidCostBudget?:number, idPrefix?:string, now?:string}} input
  */
 export async function buildHarnessCampaign({ development: devExport, confirmation: confExport, registration: round, confirmationGold, developmentVerdicts, confirmationVerdicts, month, pilotRationale, improvement, paidCostBudget = 1000, idPrefix = '', now = new Date().toISOString() }) {
   const scorer = checkRound(round);
   if (typeof pilotRationale !== 'string' || !pilotRationale.trim()) throw new Error('campaign_pilot_rationale_missing');
   const { development, confirmation } = prepareSources({ scorer, development: devExport, confirmation: confExport, confirmationGold, developmentVerdicts, confirmationVerdicts });
   const named = namedRegistration(round, development, improvement);
-  if (scorer.judged) { const refused = harnessJudgeRegistrationIssue(named.judge, SOLVER); if (refused) throw new Error(refused); }
+  if (scorer.judged) { const refused = harnessJudgeRegistrationIssue(named.judge, named.margin); if (refused) throw new Error(refused); }
   for (const source of [development, confirmation]) {
     const issues = harnessArmsIssues(source, named);
     if (issues.length) throw new Error(issues[0]);
   }
   // Everything the runner will refuse on the development side is refused here, before a manifest exists.
-  const refusedOnDevelopment = harnessDevelopmentIssue(named, development, SOLVER);
+  const refusedOnDevelopment = harnessDevelopmentIssue(named, development);
   if (refusedOnDevelopment) throw new Error(refusedOnDevelopment);
   const surface = registrationSurface(round);
   const identity = await (surface === TOOL_PATCH_SURFACE ? toolPatchCampaignConsumerIdentity : harnessCampaignConsumerIdentity)(named);
@@ -166,9 +171,9 @@ export async function buildHarnessCampaign({ development: devExport, confirmatio
   const target = { surface, dependencyDigest: identity.implementationSha256, baselineRevision };
   const sources = { [`development-${month}`]: development, [`confirmation-${month}`]: confirmation };
   const manifest = {
-    schemaVersion: 1, id: `${idPrefix}${surface}-${round.family}-${month}`, surface, candidateKind: surface, claim: 'targeted-repair', automated: true,
+    schemaVersion: 2, id: `${idPrefix}${surface}-${round.family}-${month}`, surface, candidateKind: surface, claim: 'targeted-repair', automated: true,
     createdAt: now, deadline, budget: { campaignCny: 1000, monthCny: 30000 },
-    models: { solver: { ...SOLVER }, improver: { provider: 'none', model: 'registered-candidates' }, reviewer: { provider: 'dashscope', model: 'qwen3.8-max' } },
+    models: harnessModels(registration),
     target, registration: { digest: rsiDigest(registration), procedure: PROCEDURE.id, claim: 'targeted-repair' },
     data: { classification: 'public', sources: [
       { id: `development-${month}`, digest: rsiDigest(development), role: 'development', exposure: 'exposed' },
@@ -194,26 +199,26 @@ export async function buildHarnessCampaign({ development: devExport, confirmatio
 
 /** What the judge did, from the sources alone: identity, calls, the CNY it cost (0, said), the qualification it was registered with. */
 function judgeSupply(judge, ...sources) {
-  return { id: judge.id, provider: judge.provider, form: judge.form, passes: judge.passes, maxCalls: judge.maxCalls, qualification: judge.qualification,
+  return { id: judge.id, provider: judge.provider, model: judge.model, effort: judge.effort, form: judge.form, passes: judge.passes, maxCalls: judge.maxCalls, qualification: judge.qualification,
     calls: sources.reduce((total, source) => total + source.judged.calls, 0), costCny: 0, costNote: sources[0].judged.cost.note };
 }
 
 /**
  * Development only: the registered choice over the development source, recomputed here, when no candidate earned a confirmation
  * (or on the dev box, as a preview). Nothing is opened: no confirmation corpus is read, no alpha is reserved.
- * @param {{development:any, registration:any, developmentVerdicts?:string, improvement?:any, month:string}} input
+ * @param {{development:any, registration:any, developmentVerdicts?:string, improvement:any, month:string}} input
  */
 export function developmentOnly({ development: devExport, registration: round, developmentVerdicts, improvement, month }) {
   const scorer = checkRound(round);
   if (devExport?.role !== 'development') throw new Error('harness_confirmation_scored_before_opening');
   const { development } = prepareSources({ scorer, development: devExport, developmentVerdicts });
   const registration = namedRegistration(round, development, improvement);
-  if (scorer.judged) { const refused = harnessJudgeRegistrationIssue(registration.judge, SOLVER); if (refused) throw new Error(refused); }
+  if (scorer.judged) { const refused = harnessJudgeRegistrationIssue(registration.judge, registration.margin); if (refused) throw new Error(refused); }
   const issues = harnessArmsIssues(development, registration);
   if (issues.length) throw new Error(issues[0]);
   // The preview and `--development-only` apply what `run` applies to the development side: the control arm, K, the registered rows and
   // repeats, the choice rule. A preview that says eligible has met every refusal the runner has for a development source.
-  const refusedOnDevelopment = harnessDevelopmentIssue(registration, development, SOLVER);
+  const refusedOnDevelopment = harnessDevelopmentIssue(registration, development);
   if (refusedOnDevelopment) throw new Error(refusedOnDevelopment);
   const choice = chooseHarnessCandidate(development, registration), slice = skillSlice(registration, scorer);
   const sum = (arm) => round6(development.runs.filter((run) => run.arm === arm).reduce((total, run) => total + (run.cost ?? 0), 0));

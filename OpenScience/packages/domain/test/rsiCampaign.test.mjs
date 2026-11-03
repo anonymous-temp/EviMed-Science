@@ -1,12 +1,15 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { RSI_CAMPAIGN_LIMITS, RSI_CAMPAIGN_SURFACES, rsiCampaignIssues, rsiLabBindingIssues, rsiCompatibilityIssues, rsiBudgetAdmission, rsiCampaignMonth } from '../src/rsiCampaign.mjs'
+import { RSI_CAMPAIGN_LIMITS, RSI_CAMPAIGN_SCHEMA_VERSION, RSI_CAMPAIGN_SURFACES, RSI_REGISTERED_GRID_SURFACES, rsiCampaignIssues, rsiLabBindingIssues, rsiCompatibilityIssues, rsiBudgetAdmission, rsiCampaignMonth,
+  rsiOfflineRoleIssue } from '../src/rsiCampaign.mjs'
 
 const digest = 'a'.repeat(64)
-const manifest = () => ({ schemaVersion: 1, id: 'campaign-20261026', surface: 'frontier-selection', candidateKind: 'policy', claim: 'targeted-repair',
+const OPUS = { role: 'writing-candidates', provider: 'anthropic', model: 'claude-opus-5-5' }
+const SONNET_JUDGE = { role: 'judge', provider: 'anthropic', model: 'claude-sonnet-5-5', id: 'claude-sonnet-5-5-drb-pairwise' }
+const manifest = () => ({ schemaVersion: 2, id: 'campaign-20261026', surface: 'frontier-selection', candidateKind: 'policy', claim: 'targeted-repair',
   automated: true, createdAt: '2026-10-26T01:00:00Z', deadline: '2026-10-27T01:00:00Z',
   budget: { campaignCny: 1000, monthCny: 30000 },
-  models: { solver: { provider: 'deepseek', model: 'deepseek-flash' }, improver: { provider: 'deepseek', model: 'deepseek-flash' }, reviewer: { provider: 'dashscope', model: 'qwen3.8-max' } },
+  models: /** @type {{solver:{provider:string,model:string}, improvers:any[], judges:any[]}} */ ({ solver: { provider: 'deepseek', model: 'deepseek-flash' }, improvers: [{ ...OPUS }], judges: [{ ...SONNET_JUDGE }] }),
   target: { surface: 'frontier-selection', dependencyDigest: digest, baselineRevision: 'default:selection-v1' },
   registration: { digest, procedure: 'paired-group-t-fixed-v1', claim: 'targeted-repair' },
   data: /** @type {{ classification: string, sources: { id: string, digest: string, role: string, exposure: string }[], authorization?: { id: string, incidentId: string, incidentDigest: string, sourceRunId: string, sourceRevision: string, purpose: string, minimized: boolean } }} */ ({ classification: 'public', sources: [{ id: 'sealed-pool', digest, role: 'confirmation', exposure: 'sealed' }] }) })
@@ -25,16 +28,58 @@ test('campaign manifests preserve owner budgets and permit preregistered repair 
 test('non-automated, changed claim, hidden raw tenant scope and unknown candidate surfaces are refused', () => {
   /** @type {Array<(m: ReturnType<typeof manifest>) => void>} */
   const mutations = [m => { m.automated = false }, m => { m.registration.claim = 'efficiency' },
-    m => { m.data.classification = 'tenant-database' }, m => { m.candidateKind = 'plugin' }, m => { m.surface = 'root-permissions' },
-    m => { m.models.improver = { provider: 'anthropic', model: 'claude' } }]
+    m => { m.data.classification = 'tenant-database' }, m => { m.candidateKind = 'plugin' }, m => { m.surface = 'root-permissions' }]
   for (const mutate of mutations) {
     const input = manifest(); mutate(input); assert.notEqual(rsiCampaignIssues(input).length, 0)
   }
 })
 
-test('the harness-patch and tool-patch surfaces are two registered shadow surfaces, each with its own kind, and a manifest names the kind of its own surface', () => {
+test('an anthropic improver with a pinned claude model id is admitted, because the owner\'s role policy (2026-11-03) makes every offline improver and judge Claude', () => {
+  assert.equal(RSI_CAMPAIGN_SCHEMA_VERSION, 2)
+  assert.deepEqual(rsiCampaignIssues(manifest()), [])
+  const several = manifest(); several.models.improvers = [{ ...OPUS }, { role: 'selecting', provider: 'anthropic', model: 'claude-sonnet-5-5' }]
+  several.models.judges = [{ role: 'jury', provider: 'anthropic', model: 'claude-sonnet-5-5', id: 'frontier-jury-v1:0123456789ab' }]
+  assert.deepEqual(rsiCampaignIssues(several), [])
+  for (const model of ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-4-5']) assert.equal(rsiOfflineRoleIssue('improver', { ...OPUS, model }), null, model)
+})
+
+test('the solver is DeepSeek; DeepSeek, Qwen or an unpinned model as an improver or a judge is refused by name', () => {
+  /** @type {[(m: ReturnType<typeof manifest>) => void, string][]} */
+  const refusals = [
+    [m => { m.models.solver = { provider: 'dashscope', model: 'qwen3.8-max' } }, 'campaign_solver_refused'],
+    [m => { m.models.solver = { provider: 'anthropic', model: 'claude-opus-5-5' } }, 'campaign_solver_refused'],
+    [m => { m.models.improvers = [{ ...OPUS, provider: 'deepseek', model: 'deepseek-v4-pro' }] }, 'campaign_improver_refused'],
+    [m => { m.models.improvers = [{ ...OPUS, provider: 'dashscope', model: 'qwen3.8-max' }] }, 'campaign_improver_refused'],
+    [m => { m.models.improvers = [{ ...OPUS, model: 'claude' }] }, 'campaign_improver_refused'],
+    [m => { m.models.improvers = [{ ...OPUS, model: 'claude-3.5-sonnet' }] }, 'campaign_improver_refused'],
+    [m => { m.models.improvers = [{ ...OPUS, provider: 'Anthropic' }] }, 'campaign_improver_refused'],
+    [m => { m.models.judges = [{ ...SONNET_JUDGE, provider: 'dashscope', model: 'qwen3.8-max' }] }, 'campaign_judge_refused'],
+    [m => { m.models.judges = [{ ...SONNET_JUDGE, provider: 'deepseek', model: 'deepseek-v4-pro' }] }, 'campaign_judge_refused'],
+    [m => { m.models.improvers = [{ provider: 'anthropic', model: 'claude-opus-5-5' }] }, 'campaign_model_invalid'],
+    [m => { m.models.improvers = [{ ...OPUS, id: 'not-an-improver-field' }] }, 'campaign_model_invalid'],
+    [m => { m.models.judges = [{ ...SONNET_JUDGE, id: '' }] }, 'campaign_model_invalid'],
+    [m => { /** @type {any} */ (m.models).reviewer = { provider: 'dashscope', model: 'qwen3.8-max' } }, 'campaign_model_invalid'],
+  ]
+  for (const [mutate, code] of refusals) {
+    const input = manifest(); mutate(input); assert.ok(rsiCampaignIssues(input).includes(code), `${code}: ${JSON.stringify(input.models)}`)
+  }
+})
+
+test('only a registered-grid surface names no improver; an empty judge list is the consumer\'s to accept, and a version-1 manifest is refused', () => {
+  assert.deepEqual(RSI_REGISTERED_GRID_SURFACES, ['frontier-selection'])
+  const grid = manifest(); grid.models.improvers = []; grid.models.judges = []
+  assert.deepEqual(rsiCampaignIssues(grid), [])
+  const harness = { ...manifest(), surface: 'harness-patch', candidateKind: 'harness-patch', target: { ...manifest().target, surface: 'harness-patch' } }
+  assert.deepEqual(rsiCampaignIssues({ ...harness, models: { ...harness.models, judges: [] } }), [])
+  assert.deepEqual(rsiCampaignIssues({ ...harness, models: { ...harness.models, improvers: [] } }), ['campaign_improver_missing'])
+  // the shape every manifest had before 2026-11-03: its version and its models are both refused, and nothing reads it as a new campaign
+  const old = { ...manifest(), schemaVersion: 1, models: { solver: { provider: 'deepseek', model: 'deepseek-flash' }, improver: { provider: 'none', model: 'registered-grid' }, reviewer: { provider: 'dashscope', model: 'qwen3.8-max' } } }
+  assert.deepEqual(rsiCampaignIssues(old), ['campaign_manifest_invalid', 'campaign_model_invalid'])
+})
+
+test('the harness-patch and tool-patch surfaces are two registered shadow surfaces of one consumer (the runtime image, so one error budget), each with its own kind, and a manifest names the kind of its own surface', () => {
   assert.deepEqual(RSI_CAMPAIGN_SURFACES['harness-patch'], { kind: 'harness-patch', consumer: 'dsh-harness', activation: 'shadow' })
-  assert.deepEqual(RSI_CAMPAIGN_SURFACES['tool-patch'], { kind: 'tool-patch', consumer: 'dsh-tool-patch', activation: 'shadow' })
+  assert.deepEqual(RSI_CAMPAIGN_SURFACES['tool-patch'], { kind: 'tool-patch', consumer: 'dsh-harness', activation: 'shadow' })
   const harness = { ...manifest(), surface: 'harness-patch', candidateKind: 'harness-patch', target: { ...manifest().target, surface: 'harness-patch' } }
   assert.deepEqual(rsiCampaignIssues(harness), [])
   const tool = { ...manifest(), surface: 'tool-patch', candidateKind: 'tool-patch', target: { ...manifest().target, surface: 'tool-patch' } }

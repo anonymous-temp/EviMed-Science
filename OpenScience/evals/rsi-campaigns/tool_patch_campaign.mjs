@@ -6,8 +6,9 @@
  *
  *  - its own consumer identity, which binds the files this surface is made of, so a tool-patch registration pins a consumer that is
  *    not the harness-patch one and the two never certify each other's candidates;
- *  - its own error-budget ledger, `tool-patch:<quarter>` (the runner keys the ledger by the manifest's surface), so tools do not draw
- *    on the quarter's budget of the text surface or the other way round;
+ *  - NOT its own error budget (2026-11-03): the runner keys a quarter's ledger by the consumer, and a tool patch and a harness patch change
+ *    the same one, the runtime image (`dsh-harness`), so they draw on one quarter's 0.05 between them;
+ *  - the same assembly (harness_assemble.mjs): the improvers come from the round's improvement record, the judge from the registration;
  *  - a candidate arm that carries its code (`harness.code`, normalised and digested by harness_campaign.mjs): a registration that
  *    names this surface refuses an arm without code, and a harness-patch registration refuses an arm with it.
  */
