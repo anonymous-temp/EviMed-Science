@@ -595,6 +595,13 @@ class VcrReadWriteTests(_GatewayCase):
         joined = " ".join(result["next_actions"])
         self.assertIn("The value is kept as read either way", joined)
         self.assertNotIn("Correct the refused items", joined)
+        # The second, independent reading of the same passage that read another number is the same kind of advice.
+        _Gateway.answers["write"] = (200, {"data": {"what": "assumption", "ok": True, "ids": ["asm_1"], "issues": [
+            {"index": 0, "field": "evidenceIds", "code": "vcr_evidence_second_read_differs", "message": "风险比：同一段原文读了两次，结果不一致。"}]}})
+        second = self.server.call_tool("vcr_write", {"what": "assumption", "items": [{"key": "control_hr"}]})
+        self.assertIn("1 written, 1 reminder(s)", second["summary"])
+        self.assertNotIn("refused", second["summary"])
+        self.assertIn("The value is kept as read either way", " ".join(second["next_actions"]))
 
     def test_a_matching_write_hands_over_the_link_to_the_matching_page(self):
         entry = {"studyId": "std_conv", "tab": "matching", "label": "在“匹配”页查看", "url": "https://evimed.example/app/virtual-research/std_conv/matching"}

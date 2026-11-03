@@ -95,6 +95,17 @@ test("a card carries the notes of the evidence it cites, and a card made of noth
   assert.doesNotMatch(JSON.stringify(os.valueChecks), /hazard_ratio|evidence_items|ev_bad|vcr_/, "no back-office word reaches a reader");
 });
 
+test("a card whose cited value was read differently the second time carries both numbers; an agreement is not on the page", () => {
+  const card = (/** @type {string} */ key, /** @type {string[]} */ evidenceIds) => ({ id: `a_${key}`, key, name: key, version: 1, pointValue: 0.62, unit: null, reviewState: "ai_set",
+    sourceKind: "external_evidence", valueSource: "extracted", pooling: {}, evidenceIds });
+  const message = "风险比（Drug vs placebo）：同一段原文读了两次，结果不一致——区间上限 第一次读到 0.8，第二次读到 0.95。原文：“HR 0.62 (95% CI 0.48 to 0.80)”。已按第一次读到的保存，请回到原文核对是哪一个。";
+  const data = presentDataTab({ ...emptyBundle(), assumptions: [card("os_hr", ["ev1"]), card("pfs_hr", ["ev2"])],
+    evidence: { available: true, precedents: [], items: [row({ id: "ev1", value: 0.62, ci_low: 0.48, ci_high: 0.8 }), row({ id: "ev2", value: 0.7, ci_low: 0.55, ci_high: 0.89, endpoint_key: "pfs" })],
+      secondReads: [{ evidence_id: "ev1", outcome: "differ", reading: { message } }, { evidence_id: "ev9", outcome: "differ", reading: { message: "another study's" } }] } });
+  assert.deepEqual(data.assumptions[0].valueChecks, [{ kind: "second_read", message }]);
+  assert.equal("valueChecks" in data.assumptions[1], false);
+});
+
 test("the write names the numbers in an advisory issue and keeps the item; a p-value outside 0 to 1 is refused by name", async () => {
   /** @type {any[]} */ const asked = [];
   const evidence = { async addEvidenceItem(/** @type {any} */ call) {
@@ -128,12 +139,17 @@ test("a card made of evidence gets the notes of that evidence in the answer of t
   };
   const store = { async assumptions() { return [{ id: "a1", key: "control_hr", version: 1, evidenceIds: ["ev1"] }]; } };
   /** @type {any[]} */ const asked = [];
-  const evidence = { async valueNotes(/** @type {any} */ call) { asked.push(call); return [{ kind: "consistency", code: "interval_not_symmetric", evidenceIds: ["ev1"], message: "风险比：区间对不上。" }]; } };
+  const evidence = { async valueNotes(/** @type {any} */ call) {
+    asked.push(call);
+    return [{ kind: "consistency", code: "interval_not_symmetric", evidenceIds: ["ev1"], message: "风险比：区间对不上。" },
+      { kind: "second_read", code: "second_read_differs", evidenceIds: ["ev1"], message: "风险比：同一段原文读了两次，结果不一致。" }];
+  } };
   const study = { id: "std_1", userId: "u1", projectId: "prj_1" };
   const written = await vcrRuntimeWrite({ store, service: {}, orchestrator: null, study, what: "assumption", data: null, evidence, evidenceStore,
     items: [{ key: "control_hr", name: "对照风险比", parameter: "hazard_ratio", sourceKind: "external_evidence", evidenceIds: ["ev1"], effectRole: "realistic_expectation" }] });
   assert.equal(written.ok, true);
   assert.equal(saved.length, 1, "the card is saved");
   assert.deepEqual(asked[0].ids, ["ev1"]);
-  assert.deepEqual(written.issues.map((/** @type {any} */ found) => found.code), ["vcr_evidence_values_inconsistent"]);
+  assert.equal(asked[0].wait, true, "the card's answer waits, within the pipeline's limit, for the second readings of what it cites");
+  assert.deepEqual(written.issues.map((/** @type {any} */ found) => found.code), ["vcr_evidence_values_inconsistent", "vcr_evidence_second_read_differs"]);
 });

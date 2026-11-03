@@ -1160,7 +1160,8 @@ test("every column the evidence store writes exists in the migration that create
   // And every table it touches is one the migration creates.
   const tables = new Set([...store.matchAll(/\$\{VCR_SCHEMA\}\.([a-z_]+)/g)].map((match) => match[1]));
   // `audit` is written by `VcrStoreBase`, which every package shares.
-  assert.deepEqual([...tables].sort(), ["assumptions", "evidence_items", "precedent_versions", "precedents", "study_precedents"]);
+  // `evidence_second_reads` is the filing of the second reading of a value's passage (E1), beside the append-only items.
+  assert.deepEqual([...tables].sort(), ["assumptions", "evidence_items", "evidence_second_reads", "precedent_versions", "precedents", "study_precedents"]);
 });
 
 test("times in months, weeks and years are converted to one unit before they are pooled, not pooled as if they were one (D1)", () => {

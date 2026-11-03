@@ -1195,7 +1195,7 @@ const WRITERS = {
       extracted.status === "registry_not_found" ? "registry_not_found" : "registry_unavailable");
     }
     extra.results.push({ index: item.index, registryId, extracted: extracted.counts.extracted, verified: extracted.counts.verified, refused: extracted.counts.refused });
-    for (const note of extracted.notes ?? []) item.issues.push(issue(item.index, "registryId", "vcr_evidence_values_inconsistent", note.message));
+    for (const note of extracted.notes ?? []) item.issues.push(issue(item.index, "registryId", noteCode(note), note.message));
     return extracted.precedent?.id ?? null;
   },
 
@@ -1417,7 +1417,7 @@ const WRITERS = {
     extra.results.push({ index: item.index, id: written.id, verified, state: written.state, ...(notReported ? { notReported: true } : {}),
       ...(written.publication ? { publication: written.publication } : {}) });
     // Numbers of this value that do not agree with each other or with its trial's other values: advice with the numbers named, the value is kept.
-    for (const note of written.notes ?? []) item.issues.push(issue(item.index, "value", "vcr_evidence_values_inconsistent", note.message));
+    for (const note of written.notes ?? []) item.issues.push(issue(item.index, "value", noteCode(note), note.message));
     if (written.pValueNotInQuote) {
       item.issues.push(issue(item.index, "pValue", "vcr_evidence_item_incomplete", "pValue 没有出现在 quote 里，没有用来核对这条的区间；这一条已保存。要核对，把写着 p 值的那句原文也放进 quote。"));
     }
@@ -2168,6 +2168,11 @@ const WRITERS = {
   },
 };
 
+/** The code of a note about the numbers of a value: two numbers of the item disagree (E2), or a second reading of its passage read another number (E1). @param {{ kind?: string }} note */
+function noteCode(note) {
+  return note.kind === "second_read" ? "vcr_evidence_second_read_differs" : "vcr_evidence_values_inconsistent";
+}
+
 // An effect card without its role is reminded and never refused (A13): the card is saved as it stands, and the answer says that the
 // difference worth finding and the difference expected are two numbers.
 {
@@ -2179,8 +2184,9 @@ const WRITERS = {
     if (id && item.ok && typeof deps.evidence?.valueNotes === "function") {
       const stored = (await deps.store.assumptions(deps.study.id).catch(() => [])).find((/** @type {any} */ card) => card.id === id);
       const cited = Array.isArray(stored?.evidenceIds) ? stored.evidenceIds.map(String) : [];
-      const notes = cited.length ? await deps.evidence.valueNotes({ userId: deps.study.userId, studyId: deps.study.id, ids: cited }).catch(() => []) : [];
-      for (const note of notes) item.issues.push(issue(item.index, "evidenceIds", "vcr_evidence_values_inconsistent", note.message));
+      // The reading of the values the card cites by a second model (E1) may still be running: the answer waits for it, within a limit, and the card is already saved.
+      const notes = cited.length ? await deps.evidence.valueNotes({ userId: deps.study.userId, studyId: deps.study.id, ids: cited, wait: true }).catch(() => []) : [];
+      for (const note of notes) item.issues.push(issue(item.index, "evidenceIds", noteCode(note), note.message));
     }
     if (id && item.ok && vcrIsEffectCardKey(key) && !VCR_EFFECT_ROLES.includes(/** @type {any} */ (item.row.effectRole))) {
       const stored = (await deps.store.assumptions(deps.study.id)).find((card) => card.key === key);

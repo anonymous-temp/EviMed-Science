@@ -126,6 +126,11 @@ export const VCR_CALIBRES = Object.freeze(["closest", "overall", "next_closest"]
 export const VCR_STRATUM_KEYS = Object.freeze(["region", "line", "era", "biomarker"]);
 /** How wide one pooled parameter's evidence set may be. The engine takes 500; a card needs nowhere near it. */
 export const VCR_POOL_MAX_STUDIES = 200;
+/**
+ * The longest the write of a card waits for the second readings of the values it cites (E1) before it answers without them. They go on
+ * in the background and are on the card when they finish; a card is never held longer than this for them.
+ */
+export const SECOND_READ_CARD_WAIT_MS = 5_000;
 
 /**
  * What kind of quantity each parameter is, which decides the distribution
@@ -1232,6 +1237,37 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
   const valueChecks = {};
   /** @param {string} key */
   const countCheck = (key) => { valueChecks[key] = (valueChecks[key] ?? 0) + 1; };
+  /**
+   * The second reader of a value's passage (`vcrEvidenceSecondRead.mjs`), attached when the control plane has a model client to give it, and
+   * the readings still in flight by the evidence id they are for (so a card's write can wait for them, within a limit).
+   * @type {{ enabled: boolean, check: Function } | null}
+   */
+  let secondReader = null;
+  /** @type {Map<string, Promise<void>>} */
+  const pendingReads = new Map();
+
+  /**
+   * Start the second reading of one stored value, without waiting for it. What it finds is filed beside the value when it finishes; a
+   * reading that fails, has nothing to read or runs past its limit says nothing, is counted and changes nothing.
+   * @param {{ userId: string, studyId: string, projectId: string, evidenceId: string, item: Record<string, any>, sourceText: string }} input
+   */
+  function startSecondRead({ userId, studyId, projectId, evidenceId, item, sourceText }) {
+    if (!secondReader?.enabled || typeof store.saveSecondRead !== "function") return;
+    const reading = (async () => {
+      try {
+        const result = await secondReader?.check({ userId, projectId, evidenceId, item, sourceText });
+        if (!result) { countCheck("second_read:nothing_to_read"); return; }
+        await store.saveSecondRead({ userId, studyId, evidenceId, outcome: result.outcome, model: result.model,
+          reading: { second: result.second, agreed: result.agreed, differs: result.differs, dropped: result.dropped, message: result.message } });
+        countCheck(`second_read:${result.outcome}`);
+      } catch (error) {
+        countCheck(/timed out/i.test(String(/** @type {any} */ (error)?.message)) ? "second_read:timeout" : "second_read:failed");
+      } finally {
+        pendingReads.delete(evidenceId);
+      }
+    })();
+    pendingReads.set(evidenceId, reading);
+  }
 
   /**
    * A registry read that did not give a record, as the answer the run reads:
@@ -1288,6 +1324,8 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
     attachSources(sources) { literatureSources = sources; },
     /** The reader of preserved publications, attached once the project store is composed. @param {{read:Function}} publications */
     attachPublications(publications) { publicationSources = publications; },
+    /** The second reader of a value's passage (E1), attached when the control plane has a model client. @param {{ enabled: boolean, check: Function }} reader */
+    attachSecondReader(reader) { secondReader = reader; },
     /** @param {{userId:string,studyId:string,baselineTable:any[],bindings:any[]}} input */
     verifyBaselineTable(input) { return verifyLiteratureBaseline({ store, ...input }); },
     /** Review uses the same source reader, never the run's statement that a source exists.
@@ -1742,6 +1780,10 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
         counters.cardCandidates += 1;
         if (checked.verified) counters.cardCandidatesVerified += 1;
       }
+      // A value read out of a text the platform preserved is read a second time by another model, which is never shown the first reading.
+      if (checked.verified && !derived && item.notReported !== true && finite(checked.item.value) !== null) {
+        startSecondRead({ userId, studyId, projectId, evidenceId: appended.ids[0], item: checked.item, sourceText });
+      }
       const notes = item.notReported === true ? [] : await pipeline.valueNotes({ userId, studyId, ids: appended.ids, count: true }).catch(() => []);
       return { status: "ok", id: appended.ids[0], state: checked.state, ...(printedP && !keptP ? { pValueNotInQuote: true } : {}), ...(notes.length ? { notes } : {}), ...(paper ? { publication: { ...paper, read: paperRead?.found === true, ...(paperRead?.found ? { contentRead: paperRead.contentLevel } : {}) },
         ...(checked.state === "reported_unverified" ? { because: checked.item.detail.unverifiedBecause } : {}) } : {}) };
@@ -1751,19 +1793,37 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
      * What is worth a second look in the numbers of some evidence items (E2): the places where the values of one trial do not agree with
      * each other, as sentences. Advice, never a refusal: the items are saved and cited as they were read. Computed from the stored rows
      * each time, so nothing is kept and a corrected value stops being flagged.
-     * @param {{ userId: string, studyId: string, ids: readonly string[], count?: boolean }} input `count`: these are findings of a write, counted once
-     * @returns {Promise<Array<{ kind: "consistency", code: string, evidenceIds: string[], message: string }>>}
+     * Beside them, the places where a second, independent reading of the same passage (E1) read a different number, once it has finished.
+     * @param {{ userId: string, studyId: string, ids: readonly string[], count?: boolean, wait?: boolean }} input `count`: these are findings of a write,
+     *   counted once; `wait`: wait (at most `SECOND_READ_CARD_WAIT_MS`) for the second readings still running for these values
+     * @returns {Promise<Array<{ kind: "consistency" | "second_read", code: string, evidenceIds: string[], message: string }>>}
      */
-    async valueNotes({ userId, studyId, ids, count = false }) {
+    async valueNotes({ userId, studyId, ids, count = false, wait = false }) {
       const wanted = new Set((ids ?? []).map(String));
       if (!wanted.size) return [];
+      // A card's write waits, within a limit, for the second readings of the values it cites; a reading still running is on the card when it ends.
+      if (wait) {
+        const flying = [...wanted].map((id) => pendingReads.get(id)).filter(Boolean);
+        if (flying.length) {
+          /** @type {ReturnType<typeof setTimeout> | undefined} */
+          let timer;
+          await Promise.race([Promise.allSettled(flying), new Promise((resolve) => { timer = setTimeout(resolve, SECOND_READ_CARD_WAIT_MS); })]);
+          clearTimeout(timer);
+        }
+      }
       const rows = [...await store.listEvidenceItems({ userId, studyId, latestOnly: true, limit: 2000 })];
       const held = new Set(rows.map((/** @type {any} */ row) => String(row.id)));
       const missing = [...wanted].filter((id) => !held.has(id));
       if (missing.length && typeof store.itemsById === "function") rows.push(...await store.itemsById({ userId, studyId, ids: missing }));
       const findings = evidenceValueFindings(rows, { only: wanted });
       if (count) for (const finding of findings) countCheck(`consistency:${finding.code}`);
-      return findings.map((finding) => ({ kind: /** @type {const} */ ("consistency"), code: finding.code, evidenceIds: finding.ids, message: finding.message }));
+      /** @type {Array<{ kind: "consistency" | "second_read", code: string, evidenceIds: string[], message: string }>} */
+      const notes = findings.map((finding) => ({ kind: /** @type {const} */ ("consistency"), code: finding.code, evidenceIds: finding.ids, message: finding.message }));
+      const reads = typeof store.secondReads === "function" ? await store.secondReads({ userId, studyId, ids: [...wanted], outcome: "differ" }) : [];
+      for (const read of reads) {
+        if (read.reading?.message) notes.push({ kind: "second_read", code: "second_read_differs", evidenceIds: [String(read.evidence_id)], message: String(read.reading.message) });
+      }
+      return notes;
     },
 
     /**
@@ -2059,9 +2119,16 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
       const rows = await store.listEvidenceItems({ userId, studyId, parameter: filter?.kind ? String(filter.kind) : null, latestOnly: true, limit: 2000 });
       const precedents = new Map((await store.listPrecedents({ userId, studyId, limit: 500 })).map((/** @type {any} */ row) => [String(row.id), row]));
       const page = rows.slice(offset, offset + limit);
+      // What disagrees about a value (E2, E1), said beside it: advice, the value is as it was read.
+      const findings = evidenceValueFindings(rows);
+      const differing = typeof store.secondReads === "function" ? await store.secondReads({ userId, studyId, outcome: "differ" }).catch(() => []) : [];
+      /** @param {string} id */
+      const checksOf = (id) => [...findings.filter((finding) => finding.ids.includes(id)).map((finding) => finding.message),
+        ...differing.filter((/** @type {any} */ read) => String(read.evidence_id) === id).map((/** @type {any} */ read) => String(read.reading?.message ?? "")).filter(Boolean)];
       return {
         items: page.map((/** @type {any} */ row) => ({
           id: row.id, parameter: row.parameter, arm: row.arm, armRole: row.arm_role, endpointKey: row.endpoint_key,
+          ...(checksOf(String(row.id)).length ? { checks: checksOf(String(row.id)) } : {}),
           value: row.value === null ? null : Number(row.value), unit: row.unit,
           ciLow: row.ci_low === null ? null : Number(row.ci_low), ciHigh: row.ci_high === null ? null : Number(row.ci_high),
           sampleSize: row.sample_size, events: row.events, valueSource: row.value_source,

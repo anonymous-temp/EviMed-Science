@@ -1802,7 +1802,12 @@ export function presentDataTab(bundle, query = {}) {
     const items = evidenceFor(card);
     const value = assumptionValue(card, { now, evidence: items });
     const cited = new Set(list(card.evidenceIds).map(String));
-    const valueChecks = consistency.filter((finding) => finding.ids.some((id) => cited.has(id))).map((finding) => ({ kind: "consistency", message: finding.message }));
+    const valueChecks = [
+      ...consistency.filter((finding) => finding.ids.some((id) => cited.has(id))).map((finding) => ({ kind: "consistency", message: finding.message })),
+      // Where a second, independent reading of the passage a cited value was read from read another number (E1): both numbers and the quotation.
+      ...list(evidence?.secondReads).filter((read) => cited.has(String(read.evidence_id)) && text(object(read.reading).message))
+        .map((read) => ({ kind: "second_read", message: text(object(read.reading).message) })),
+    ];
     const pooling = object(card.pooling);
     const versions = (bundle.assumptionVersions?.get?.(card.key) ?? []).map((/** @type {any} */ row) => ({
       version: row.version, at: zhTime(row.createdAt, now), text: text(row.note) ?? `${row.name || row.key}${row.pointValue != null ? ` = ${row.pointValue}` : ""}`,

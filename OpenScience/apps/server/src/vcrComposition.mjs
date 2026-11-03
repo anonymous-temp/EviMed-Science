@@ -107,6 +107,7 @@ import {
 } from "./vcrMatching.mjs";
 import { VCR_JOB_PURPOSE } from "./vcrJobs.mjs";
 import { createFactExtractor, createMatchBatch, createMatchBatchCounters, createMatchExtractExecutor } from "./vcrMatchBatch.mjs";
+import { createSecondReader } from "./vcrEvidenceSecondRead.mjs";
 import { vcrRuntimeWrite } from "./vcrGateway.mjs";
 import { MATCHING_SNAPSHOT_PREFIX, freezeMatchingInputs, hydrateMatchingInputs, matchingSelection, verifyMatchingSnapshot } from "./vcrMatchingSnapshot.mjs";
 
@@ -1139,6 +1140,8 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
     chictrAdapter: vcrChictrAdapter({ config, fetchImpl: call, connectorCredentials }),
   });
   const evidence = createVcrEvidencePipeline({ store: evidenceStore, registry, jobs });
+  // A number read out of a preserved text is read a second time, blind to the first reading, and the two are compared in code (E1).
+  evidence.attachSecondReader(createSecondReader({ config, usageLedger, fetchImpl: call }));
   jobs.baselineVerifier = input => evidence.verifyBaselineTable(input);
   // A number a paper reports is held against the text the platform itself read of that paper (a capture in the project's workspace).
   if (projectStore) {

@@ -795,6 +795,8 @@ export const terminalEvidenceSourceErrorCodes = new Set([
   "vcr_evidence_reported_unverified",
   // The numbers of an extracted value (or of a trial's values) that do not agree with each other: a note on the item, which is saved as read.
   "vcr_evidence_values_inconsistent",
+  // A second, independent reading of the passage a value was read from found another number: a note on the card, the first value stands.
+  "vcr_evidence_second_read_differs",
   // A candidate trial written for a registry record that has no original eligibility wording (ChiCTR is a listing): saved, every criterion
   // unknown for 缺登记原文. A warning on the item the run wrote, not a refusal.
   "registry_text_missing",
@@ -1592,6 +1594,7 @@ export const VCR_WRITE_ISSUE_CODES = Object.freeze([
   'vcr_evidence_item_incomplete',
   'vcr_evidence_reported_unverified',
   'vcr_evidence_values_inconsistent',
+  'vcr_evidence_second_read_differs',
   'registry_text_missing',
   'vcr_report_section_invalid',
 ])
@@ -2449,6 +2452,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_evidence_item_incomplete: '这条抽取值还缺合并要用的项（置信区间或样本量）；已保存，论文里有就补进同一条，论文没有报告就另写一条“未报告”。',
   vcr_evidence_reported_unverified: '这条文献数值已保存，但引文没能对上平台读到的原文，所以标为“未核对”；它仍可作为假设卡的依据，取回原文后再写同一条就会核对。',
   vcr_evidence_values_inconsistent: '这条抽取值的几个数彼此对不上（区间、p 值、事件数或各组人数）；已按读到的保存、照常使用，请回到原文核对是不是抄错了。',
+  vcr_evidence_second_read_differs: '同一段原文被独立读了两次，两次读到的数不一样；已按第一次读到的保存、照常使用，请回到原文核对是哪一个。',
   vcr_model_assessment_incomplete: '这条模型评估记录还有没填的项（关注的问题、使用情境、评级及理由、技术标准等）；已保存，文件里会写「未填写」，补上后再写一个版本。',
   vcr_report_section_invalid: '这份文件的文字只写规定的几节，表格与登记项由平台写；这次提交的文字没有保存，换成允许的节再写。',
   // The trial registry channel.

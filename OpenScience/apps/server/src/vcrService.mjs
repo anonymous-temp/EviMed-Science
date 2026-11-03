@@ -1231,11 +1231,13 @@ export class VcrService {
     if (!evidenceStore) {
       return { available: false, code: "vcr_evidence_unavailable", message: "证据参数化在本部署尚未接入；假设卡仍可手工登记。", precedents: [], items: [] };
     }
-    const [precedents, items] = await Promise.all([
+    const [precedents, items, secondReads] = await Promise.all([
       evidenceStore.listPrecedents({ userId: study.userId, studyId: study.id, limit: 100 }).catch(() => []),
       evidenceStore.listEvidenceItems({ userId: study.userId, studyId: study.id, limit: 1000 }).catch(() => []),
+      // Where a second reading of a value's passage read another number (E1): the disagreements only, for the cards that cite those values.
+      evidenceStore.secondReads?.({ userId: study.userId, studyId: study.id, outcome: "differ" }).catch(() => []) ?? [],
     ]);
-    return { available: true, precedents, items };
+    return { available: true, precedents, items, secondReads };
   }
 
   /**

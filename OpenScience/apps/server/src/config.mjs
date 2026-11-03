@@ -1145,6 +1145,10 @@ function vcrSettings(overrides) {
     vcrMatchBatchMaxSubjects: integer("vcrMatchBatchMaxSubjects", "OPEN_SCIENCE_VCR_MATCH_BATCH_MAX_SUBJECTS", 300, 1, 5_000),
     vcrMatchExtractConcurrency: integer("vcrMatchExtractConcurrency", "OPEN_SCIENCE_VCR_MATCH_EXTRACT_CONCURRENCY", 3, 1, 8),
     vcrMatchExtractTimeoutMs: integer("vcrMatchExtractTimeoutMs", "OPEN_SCIENCE_VCR_MATCH_EXTRACT_TIMEOUT_MS", 90_000, 10_000, 300_000),
+    // A second, independent reading of the passage an extracted number was read from, by Flash through the control plane's model client under the
+    // purpose `vcr`, compared in code (algorithm round E1, vcrEvidenceSecondRead): on by default; a disagreement is a note, the first value stands.
+    vcrEvidenceSecondReadEnabled: overrides.vcrEvidenceSecondReadEnabled ?? boolEnv("OPEN_SCIENCE_VCR_EVIDENCE_SECOND_READ_ENABLED", true),
+    vcrEvidenceSecondReadTimeoutMs: integer("vcrEvidenceSecondReadTimeoutMs", "OPEN_SCIENCE_VCR_EVIDENCE_SECOND_READ_TIMEOUT_MS", 20_000, 3_000, 120_000),
     // The smallest cell a model is shown (vcrService.minCell): a deployment may raise the domain's floor, never lower it.
     vcrMinCellSize: integer("vcrMinCellSize", "OPEN_SCIENCE_VCR_MIN_CELL_SIZE", VCR_MIN_CELL_SIZE, VCR_MIN_CELL_SIZE, 1_000),
     // The largest derived table — reconstructed pseudo-patients, a forecast's probabilities — the control plane stores from an engine job (vcrJobs).

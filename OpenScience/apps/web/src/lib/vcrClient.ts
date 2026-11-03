@@ -1645,9 +1645,10 @@ export interface VcrAssumption {
   } | null;
   /**
    * ⚠ The numbers the card is made of that do not agree with each other (an interval that is not symmetric about its estimate, a p-value
-   * against its interval, events against a rate, arms against a total). Advice naming the numbers: the card's value stands as it was read.
+   * against its interval, events against a rate, arms against a total), or that a second, independent reading of the same passage read
+   * differently. Advice naming the numbers: the card's value stands as it was read.
    */
-  valueChecks?: Array<{ kind: "consistency"; message: string }>;
+  valueChecks?: Array<{ kind: "consistency" | "second_read"; message: string }>;
   /** 「有新证据」: the frontier feed or a source change bears on the card's sources (flywheel F24). */
   newEvidence?: {
     label: string;
@@ -2911,7 +2912,8 @@ export function readVcrData(raw: unknown): VcrDataTab {
     assumptions: arr(value.assumptions).map((card) => ({
       ...(card as unknown as VcrAssumption),
       value: readVcrValue(card.value),
-      valueChecks: arr(card.valueChecks).flatMap((check) => (text(check.message) ? [{ kind: "consistency" as const, message: text(check.message) as string }] : [])),
+      valueChecks: arr(card.valueChecks).flatMap((check) => (text(check.message)
+        ? [{ kind: check.kind === "second_read" ? "second_read" as const : "consistency" as const, message: text(check.message) as string }] : [])),
       detail: card.detail && typeof card.detail === "object" ? {
         ...(card.detail as Loose), stats: arr(obj(card.detail).stats), forest: arr(obj(card.detail).forest),
         usedBy: arr(obj(card.detail).usedBy), versions: arr(obj(card.detail).versions),
