@@ -118,6 +118,8 @@ JOB_KINDS = ("fit_survival_model", "apply_prognostic_model",
     "target_trial_emulation",
     # dose-finding designs and Bayesian designs without MCMC (2026-11-03)
     "design_dose", "design_bayesian", "design_win_ratio",
+    # dynamic borrowing of an external control arm: the power, SAM and elastic priors (2026-11-03)
+    "borrowing_prior",
     # the batch reading of patient records for the criteria's facts (2026-11-01)
     "match_extract",
     "forecast_trajectories", "evaluate_forecast", "compare_forecasts", "benchmark_trial_effect",
@@ -138,7 +140,7 @@ OBJECT_SHAPES = {
     "comparator (configuration)": ("weight_comparator", "propensity_weight_comparator", "weighted_cox_comparator", "aipw_comparator",
                                    "covariate_set_comparator", "maic_comparator", "maic_time_to_event_comparator", "map_prior", "procova",
                                    "prognostic_adjustment_comparator", "negative_control_comparator", "tipping_point", "stc_comparator", "bias_analysis",
-                                   "target_trial_emulation"),
+                                   "target_trial_emulation", "borrowing_prior"),
 }
 # What the platform generates from the domain's scenario schemas (`pnpm generate:vcr-scenario-help`): every key each method's
 # scenario reads. It rides in the image beside this file and is never edited by hand.

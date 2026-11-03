@@ -243,6 +243,30 @@ export const NUMERIC_REFERENCES = {
   N77a: { methods: ['evidence.shrinkage'], anchors: ['rows <- c(d$table2, d$table3)', 's <- .n77_stratum(as.numeric(row$p[[1]]), as.numeric(row$p[[2]]), mix)'] },
   N77b: { methods: ['evidence.shrinkage'], anchors: ['folded_med <- stats::uniroot(', 'sign_int <- stats::integrate(dens, 0, Inf, rel.tol = 1e-11)$value'] },
 
+  // comparator.borrowing (power prior): the definition integrated numerically, RBesT, a closed form for a mean, an enumeration decided by RBesT and a simulation
+  N91a: { methods: ['comparator.borrowing'], anchors: ['ref <- .n91_definition(a0); r <- .n91_rows(a0)[[2L]]', 'worst <- max(worst, d)'] },
+  N91b: { methods: ['comparator.borrowing'], anchors: ['ref <- 1 - RBesT::pmixdiff(mixbeta(c(1, 1 + .n91_trt$x, 1 + .n91_trt$n - .n91_trt$x)), mixbeta(c(1, post$alpha, post$beta)), 0)', 'ess_ref <- RBesT::ess(mixbeta(c(1, pr$mix$alpha, pr$mix$beta)), method = "moment") - 2'] },
+  N91c: { methods: ['comparator.borrowing'], anchors: ['z <- stats::integrate(dens, 5, 15, rel.tol = 1e-13)$value', 'better <- stats::integrate(function(t) dens(t) / z * stats::pnorm((trt$mean - t) / (hist$sd / sqrt(trt$n))), 5, 15, rel.tol = 1e-13)$value'] },
+  N91d: { methods: ['comparator.borrowing'], anchors: ['D[xt + 1L, xc + 1L] <- as.numeric(1 - RBesT::pmixdiff(mixbeta(c(1, 1 + xt, 1 + n_t - xt)), mixbeta(c(1, post$alpha, post$beta)), 0) > 1 - alpha) }', 'sim_null <- mean(Dc[cbind(xt_null + 1L, xc + 1L)])'] },
+  N91e: { methods: ['comparator.borrowing'], anchors: ['mu_mean <- (A * hist$mean + n_c * tc) / (A + n_c)', 'worst <- max(vapply(oc, function(r) max(abs(r$perPrior$chosen$typeOneError - closed(r$controlValue, 0))'] },
+  // comparator.borrowing (SAM prior): SAMprior's weight, prior and exact operating characteristics, RBesT's posterior mixtures
+  N92a: { methods: ['comparator.borrowing'], anchors: ['ref <- suppressMessages(SAM_weight(if.prior = mixbeta(inf = c(1, 1 + xh, 1 + nh - xh)), theta.h = th, method.w = "LRT", n = n, r = x, delta = dl))', 'ref <- suppressMessages(SAM_weight(if.prior = mixnorm(inf = c(1, 0, 1 / sqrt(100)), sigma = 1), theta.h = 0, method.w = "LRT", delta = dl, m = m, n = n, sigma = 1))'] },
+  N92b: { methods: ['comparator.borrowing'], anchors: ['ref_prior <- SAM_prior(if.prior = mixbeta(inf = c(1, 91, 211)), nf.prior = mixbeta(nf = c(1, 1, 1)), weight = pr$weight)', 'p_ref <- 1 - pmixdiff(mixbeta(c(1, 1 + trt$x, 1 + trt$n - trt$x)), ref_post, 0)'] },
+  N92c: { methods: ['comparator.borrowing'], anchors: ['null <- eval_oc_bin_2arm(ifp, nfp, nfp, theta = tc, theta.t = tc, n.t = n_t, n = n_c, delta = dl, method = c("SAM", "NP"), cutoff = 1 - alpha)', 'abs(r$perPrior$chosen$weight - null$mean_weight[1])'] },
+  N92d: { methods: ['comparator.borrowing'], anchors: ['null <- eval_oc_cont_2arm(ifp, nfp, flat, theta = tc, theta.t = tc, n.t = n_t, n = n_c, delta = 2, method = "SAM", cutoff = 1 - alpha, sigma = 4, sigma.t = 4)'] },
+  N92e: { methods: ['comparator.borrowing'], anchors: ['rob <- vcr_robustify(data.frame(weight = 1, mean = 0, sd = 1 / sqrt(100)), 1 - pr$weight, vague_mean = 0, vague_sd = 1)'] },
+  // comparator.borrowing (elastic prior): chisq.test, the paper's closed form for the two constants, simulations of the congruence measure and of the whole procedure
+  N93a: { methods: ['comparator.borrowing'], anchors: ['ref <- suppressWarnings(unname(stats::chisq.test(matrix(c(x, n - x, xh, nh - xh), 2), correct = FALSE)$statistic))', 'sim <- vcr_bw_chisq_binary(stats::rbinom(K, nc, p), nc, .n93_hist$x, .n93_hist$n)'] },
+  N93b: { methods: ['comparator.borrowing'], anchors: ['a_paper <- log((1 - C1) / C1) - L * lq0 / (lq0 - lq1); b_paper <- L / (lq0 - lq1)', 'worst_c <- max(worst_c, abs(g(fit$tq0) - 0.99), abs(g(fit$tq1) - 0.01))'] },
+  N93c: { methods: ['comparator.borrowing'], anchors: ['worst <- max(worst, abs(pr$weight - g), abs(pr$mix$alpha - max(g * (0.1 + hist$x), 0.1)), abs(pr$mix$beta - max(g * (0.1 + hist$n - hist$x), 0.1)))'] },
+  N93d: { methods: ['comparator.borrowing'], anchors: ['D[xt + 1L, xc + 1L] <- as.numeric(1 - RBesT::pmixdiff(mixbeta(c(1, 1 + xt, 1 + n_t - xt)), mixbeta(c(1, post$alpha, post$beta)), 0) > 1 - alpha) }', 'rej <- stats::pnorm((yt - mu) / sqrt(16 / nt2 + 1 / prec)) > 1 - alpha'] },
+  N93e: { methods: ['comparator.borrowing'], anchors: ['fall_up <- all(diff(w[centre:length(w)]) <= 1e-12); fall_down <- all(diff(w[centre:1]) <= 1e-12)'] },
+  // comparator.borrowing as a job: the protocol validators, determinism, exact (non-simulated) measures and the named refusals
+  N94a: { methods: ['comparator.borrowing'], anchors: ['abs(.n94_m(r, "borrowing_weight") - 0.3) < 1e-12 && abs(.n94_m(r, "borrowed_sample_size") - 0.3 * 300) < 1e-9'] },
+  N94b: { methods: ['comparator.borrowing'], anchors: ['abs(.n94_m(r, "type_one_error_worst") - worst_rows) < 1e-15 && length(oc) == 3L'] },
+  N94c: { methods: ['comparator.borrowing'], anchors: ['identical(vcr_output_hash(r1), vcr_output_hash(r2)) && abs(g_chk - 0.99) < 1e-12'] },
+  N94d: { methods: ['comparator.borrowing'], anchors: ['all(c(drift$code, over$code, tiny$code) == "scenario_value_invalid") && identical(schema$code, "scenario_field_missing")'] },
+
   // --- the comparator-effect stream's cases (listed so that merging it needs no edit here; inert until the cases exist) ---
   N33a: { methods: ['comparator.weighted_cox'], anchors: ['Cross-software: the weights are WeightIt', 'rel(m(j_ebal, "hazard_ratio"), r_ebal$hr) < 1e-6'] },
   N34a: { methods: ['comparator.maic_time_to_event'], anchors: ['The unanchored vignette: 500 patients of arm A matched', 'abs(m("hazard_ratio_robust")$value - 0.2834780) < 1e-6'] },

@@ -173,6 +173,10 @@ export const VCR_ENGINE_METHODS = Object.freeze({
   // Target-trial emulation from a person-period table (algorithm round C3, C4, 2026-11-03): a sequence of trials (intention to treat and per
   // protocol with stabilised inverse-probability weights, a pooled logistic outcome model, the standardised risk difference) and clone-censor-weight
   // (a grace period). Written in R; TrialEmulation is the cross-check of the sequence in CI and is never called from the engine.
+  // Dynamic borrowing of an external control arm (algorithm round C10, C11, C12, 2026-11-03): the power prior with a fixed discount, the self-adapting
+  // mixture (SAM) prior and the elastic prior, for a rate or a mean, in closed form: the posterior, the prior effective sample size, and the type I
+  // error and power over drifts of the true control value. Written in R from the papers' formulas; the packages are the checks.
+  'comparator.borrowing': { version: '1.0.0', endpoints: frozen(['binary', 'continuous']), crossChecks: frozen(['SAMprior (SAM_weight, and the exact operating characteristics eval_oc_bin_2arm and eval_oc_cont_2arm: type I error, power, bias and mean weight, binary and normal)', 'RBesT (postmix, pmixdiff, ess): the updated mixture, the probability that the treatment is better and the prior effective sample size', 'the power prior integrated numerically from its definition (the historical likelihood raised to the discount): mean, interval and probability', 'closed-form power-prior operating characteristics for a mean', 'the elastic function\'s two constants from the paper\'s equation and the congruence measure\'s exact law against a simulation']), modelTier: 'literature' },
   'comparator.target_trial': { version: '1.0.0', endpoints: frozen(['time_to_event']), crossChecks: frozen(['TrialEmulation (its trial_example: the expanded person-trial-periods row for row, the intention-to-treat and per-protocol outcome-model coefficients and the standardised risks)', 'known-truth simulation with immortal time: the naive comparison is biased and clone-censor-weight recovers the truth, integrated exactly']), modelTier: 'data' },
   // Evidence synthesis beyond a pairwise pool (algorithm round C5, C6, E8, 2026-11-03). The network and the shrinkage are written in R; the dose-response
   // is dosresmeta's (the runtime library carries it), with the spline basis written here.
@@ -242,6 +246,8 @@ export const VCR_JOB_METHODS = Object.freeze({
   design_bayesian: 'design.bayesian',
   // hierarchical composite endpoints compared by win ratio (2026-11-03)
   design_win_ratio: 'design.win_ratio',
+  // dynamic borrowing of an external control arm (2026-11-03)
+  borrowing_prior: 'comparator.borrowing',
   // The batch reading of patient records (D4): run by the control plane on its slow local lane, never by the R engine.
   ...VCR_MATCH_BATCH_JOBS,
   // The longitudinal forecast kinds, last, in VCR_JOB_KINDS' order (the scenario help lists kinds in this object's order).

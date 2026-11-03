@@ -6297,6 +6297,115 @@
           }
         ]
       }
+    },
+    {
+      "name": "borrowing: a power prior on a rate with the current data and a treatment arm",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "borrowing_prior",
+        "method": "comparator.borrowing",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "binary"
+          },
+          "historical": {
+            "responders": 90,
+            "n": 300
+          },
+          "current": {
+            "responders": 40,
+            "n": 150
+          },
+          "treatment": {
+            "responders": 100,
+            "n": 300
+          },
+          "prior": {
+            "kind": "power",
+            "a0": 0.3
+          }
+        },
+        "inputs": []
+      }
+    },
+    {
+      "name": "borrowing: a self-adapting mixture prior and its operating characteristics over drifts",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "borrowing_prior",
+        "method": "comparator.borrowing",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "binary"
+          },
+          "historical": {
+            "responders": 90,
+            "n": 300
+          },
+          "prior": {
+            "kind": "sam",
+            "delta": 0.1
+          },
+          "operatingCharacteristics": {
+            "nControl": 150,
+            "nTreatment": 300,
+            "drifts": [
+              -0.1,
+              0,
+              0.1
+            ],
+            "effect": 0.1
+          }
+        },
+        "inputs": []
+      }
+    },
+    {
+      "name": "borrowing: an elastic prior on a mean with its function placed by percentiles",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "borrowing_prior",
+        "method": "comparator.borrowing",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "continuous"
+          },
+          "historical": {
+            "mean": 10,
+            "sd": 4,
+            "n": 120
+          },
+          "current": {
+            "mean": 11,
+            "n": 60
+          },
+          "prior": {
+            "kind": "elastic",
+            "delta": 2,
+            "function": "step",
+            "q0": 0.7,
+            "q1": 0.5,
+            "c1": 0.99,
+            "c2": 0.01
+          }
+        },
+        "inputs": []
+      }
     }
   ],
   "invalid": [
@@ -26334,6 +26443,345 @@
       },
       "expected": [
         "method_version_mismatch@methodVersion"
+      ]
+    },
+    {
+      "name": "a power prior states its discount",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "borrowing_prior",
+        "method": "comparator.borrowing",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "binary"
+          },
+          "historical": {
+            "responders": 90,
+            "n": 300
+          },
+          "current": {
+            "responders": 40,
+            "n": 150
+          },
+          "prior": {
+            "kind": "power"
+          }
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_field_missing@scenario.prior.a0"
+      ]
+    },
+    {
+      "name": "a self-adapting mixture prior states the difference beyond which nothing is borrowed",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "borrowing_prior",
+        "method": "comparator.borrowing",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "binary"
+          },
+          "historical": {
+            "responders": 90,
+            "n": 300
+          },
+          "current": {
+            "responders": 40,
+            "n": 150
+          },
+          "prior": {
+            "kind": "sam"
+          }
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_field_missing@scenario.prior.delta"
+      ]
+    },
+    {
+      "name": "borrowing asks for the analysis or the operating characteristics",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "borrowing_prior",
+        "method": "comparator.borrowing",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "binary"
+          },
+          "historical": {
+            "responders": 90,
+            "n": 300
+          },
+          "prior": {
+            "kind": "power",
+            "a0": 0.5
+          }
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_field_missing@scenario.current"
+      ]
+    },
+    {
+      "name": "a treatment arm needs the current control data",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "borrowing_prior",
+        "method": "comparator.borrowing",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "binary"
+          },
+          "historical": {
+            "responders": 90,
+            "n": 300
+          },
+          "treatment": {
+            "responders": 100,
+            "n": 300
+          },
+          "prior": {
+            "kind": "power",
+            "a0": 0.5
+          }
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_field_missing@scenario.current"
+      ]
+    },
+    {
+      "name": "borrowing handles a rate or a mean",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "borrowing_prior",
+        "method": "comparator.borrowing",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "historical": {
+            "responders": 90,
+            "n": 300
+          },
+          "current": {
+            "responders": 40,
+            "n": 150
+          },
+          "prior": {
+            "kind": "power",
+            "a0": 0.5
+          }
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_field_unknown@scenario.historical.responders",
+        "scenario_field_unknown@scenario.current.responders",
+        "endpoint_not_supported@scenario.endpoint.type"
+      ]
+    },
+    {
+      "name": "borrowing has three kinds of prior",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "borrowing_prior",
+        "method": "comparator.borrowing",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "binary"
+          },
+          "historical": {
+            "responders": 90,
+            "n": 300
+          },
+          "current": {
+            "responders": 40,
+            "n": 150
+          },
+          "prior": {
+            "kind": "commensurate",
+            "a0": 0.5
+          }
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_field_unknown@scenario.prior.a0",
+        "scenario_value_invalid@scenario.prior.kind"
+      ]
+    },
+    {
+      "name": "the elastic percentiles belong to the elastic prior",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "borrowing_prior",
+        "method": "comparator.borrowing",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "binary"
+          },
+          "historical": {
+            "responders": 90,
+            "n": 300
+          },
+          "current": {
+            "responders": 40,
+            "n": 150
+          },
+          "prior": {
+            "kind": "power",
+            "a0": 0.5,
+            "q0": 0.5
+          }
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_field_unknown@scenario.prior.q0"
+      ]
+    },
+    {
+      "name": "a mean states the standard deviation it is read with",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "borrowing_prior",
+        "method": "comparator.borrowing",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "continuous"
+          },
+          "historical": {
+            "mean": 10,
+            "n": 120
+          },
+          "current": {
+            "mean": 11,
+            "n": 60
+          },
+          "prior": {
+            "kind": "power",
+            "a0": 0.5
+          }
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_field_missing@scenario.historical.sd"
+      ]
+    },
+    {
+      "name": "a rate is a count of responders, not a mean",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "borrowing_prior",
+        "method": "comparator.borrowing",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "binary"
+          },
+          "historical": {
+            "responders": 90,
+            "n": 300,
+            "mean": 0.3
+          },
+          "current": {
+            "responders": 40,
+            "n": 150
+          },
+          "prior": {
+            "kind": "power",
+            "a0": 0.5
+          }
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_field_unknown@scenario.historical.mean"
+      ]
+    },
+    {
+      "name": "the power-prior discount is a share between 0 and 1",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "borrowing_prior",
+        "method": "comparator.borrowing",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "binary"
+          },
+          "historical": {
+            "responders": 90,
+            "n": 300
+          },
+          "current": {
+            "responders": 40,
+            "n": 150
+          },
+          "prior": {
+            "kind": "power",
+            "a0": 1.5
+          }
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.prior.a0"
       ]
     }
   ],

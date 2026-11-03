@@ -1253,6 +1253,50 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
     }),
   }),
 
+  // Dynamic borrowing of an external control arm (algorithm round C10, C11, C12): one historical control arm (a count of responders or a mean with its
+  // standard deviation, taken as known) and a kind of prior for the CONTROL arm. `power`: the historical likelihood raised to the fixed discount a0.
+  // `sam`: Yang et al. 2023, the informative prior mixed with a vague one at a weight the current data decide, delta being the difference beyond which
+  // nothing should be borrowed. `elastic`: Jiang et al. 2023, the historical posterior with its variance inflated by 1 / g(T), g a function of how far
+  // the current data are from the historical ones (delta, and the two percentiles q0 and q1 that place the function). `current` (and `treatment`) ask for
+  // the analysis, `operatingCharacteristics` for the type I error and power over drifts of the true control value; either or both.
+  'comparator.borrowing': object({
+    endpoint: req(ENDPOINT()),
+    historical: req(object({
+      n: req(integer({ min: 1, max: 100_000_000 })),
+      responders: req(gated(integer({ min: 0, max: 100_000_000 }), BINARY)),
+      mean: req(gated(number(), CONTINUOUS)),
+      sd: req(gated(number({ gt: 0 }), CONTINUOUS)),
+    })),
+    current: object({
+      n: req(integer({ min: 1, max: 100_000_000 })),
+      responders: req(gated(integer({ min: 0, max: 100_000_000 }), BINARY)),
+      mean: req(gated(number(), CONTINUOUS)),
+    }),
+    treatment: object({
+      n: req(integer({ min: 1, max: 100_000_000 })),
+      responders: req(gated(integer({ min: 0, max: 100_000_000 }), BINARY)),
+      mean: req(gated(number(), CONTINUOUS)),
+    }),
+    prior: req(object({
+      kind: req(string({ values: ['power', 'sam', 'elastic'] })),
+      a0: req(gated(number({ min: 0, max: 1 }), is('prior.kind', 'power'))),
+      delta: req(gated(number({ gt: 0 }), is('prior.kind', 'sam', 'elastic'))),
+      vague: gated(object({ alpha: req(number({ gt: 0, max: 1000 })), beta: req(number({ gt: 0, max: 1000 })) }), BINARY),
+      function: gated(string({ values: ['logistic', 'step'] }), is('prior.kind', 'elastic')),
+      q0: gated(number({ gt: 0, lt: 1 }), is('prior.kind', 'elastic')),
+      q1: gated(number({ gt: 0, lt: 1 }), is('prior.kind', 'elastic')),
+      c1: gated(number({ gt: 0.5, lt: 1 }), is('prior.kind', 'elastic')),
+      c2: gated(number({ gt: 0, lt: 0.5 }), is('prior.kind', 'elastic')),
+    })),
+    analysis: object({ alpha: ALPHA }),
+    operatingCharacteristics: object({
+      nControl: req(integer({ min: 2, max: 2000 })),
+      nTreatment: req(integer({ min: 2, max: 2000 })),
+      drifts: req(array(number(), { min: 1, max: 21 })),
+      effect: req(number()),
+    }),
+  }, { atLeastOne: [['current', 'operatingCharacteristics']], requires: { treatment: ['current'] } }),
+
   'design.analytic': object({
     design: req(object({
       kind: req(string({ values: [...VCR_TRIAL_DESIGNS], badValueCode: 'design_unknown' })),

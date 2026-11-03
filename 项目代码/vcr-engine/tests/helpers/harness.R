@@ -367,6 +367,10 @@ vcr_test_handler_jobs <- function() {
                                           probabilistic = list(bias = list(family = "uniform", min = 1, max = 1.3))), NULL, 20000L),
     list("comparator.stc", list(covariates = list("age", "male"), aggregateCovariates = list(list(variable = "age", mean = 58, sd = 8), list(variable = "male", proportion = 0.5)),
                                 treatmentColumn = "arm", outcomeColumn = "y", endpoint = list(type = "continuous"), anchored = FALSE, aggregateOutcome = 1.2, aggregateSe = 0.1, size = 1000L), list(in_subj)),
+    # dynamic borrowing: a self-adapting mixture prior at a small size (exact: no replicates)
+    list("comparator.borrowing", list(endpoint = list(type = "binary"), historical = list(responders = 30, n = 100), current = list(responders = 12, n = 40),
+                                      treatment = list(responders = 18, n = 40), prior = list(kind = "sam", delta = 0.1),
+                                      operatingCharacteristics = list(nControl = 40, nTreatment = 40, drifts = list(0, 0.1), effect = 0.2)), NULL),
     list("comparator.target_trial", list(covariates = list("x"), strategy = list(kind = "clone_censor_weight", gracePeriod = 2L), horizon = 4L), list(in_pp)),
     list("design.assurance", list(design = list(nTreat = 200, nControl = 200), endpoint = list(type = "continuous"), truth = list(sd = 1), designPrior = list(mean = 0.3, sd = 0.15), analysis = list(alpha = 0.025)), NULL),
     list("design.procova", list(design = list(allocation = 0.5), truth = list(effect = 0.3, sd = 1), analysis = list(alpha = 0.025, power = 0.9), prognostic = list(rho = 0.6, lambda = 0.9)), NULL),

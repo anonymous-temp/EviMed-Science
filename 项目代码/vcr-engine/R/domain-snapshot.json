@@ -648,6 +648,21 @@
       ],
       "modelTier": "data"
     },
+    "comparator.borrowing": {
+      "version": "1.0.0",
+      "endpoints": [
+        "binary",
+        "continuous"
+      ],
+      "crossChecks": [
+        "SAMprior (SAM_weight, and the exact operating characteristics eval_oc_bin_2arm and eval_oc_cont_2arm: type I error, power, bias and mean weight, binary and normal)",
+        "RBesT (postmix, pmixdiff, ess): the updated mixture, the probability that the treatment is better and the prior effective sample size",
+        "the power prior integrated numerically from its definition (the historical likelihood raised to the discount): mean, interval and probability",
+        "closed-form power-prior operating characteristics for a mean",
+        "the elastic function's two constants from the paper's equation and the congruence measure's exact law against a simulation"
+      ],
+      "modelTier": "literature"
+    },
     "comparator.target_trial": {
       "version": "1.0.0",
       "endpoints": [
@@ -732,7 +747,8 @@
     "target_trial_emulation": "comparator.target_trial",
     "design_dose": "design.dose",
     "design_bayesian": "design.bayesian",
-    "design_win_ratio": "design.win_ratio"
+    "design_win_ratio": "design.win_ratio",
+    "borrowing_prior": "comparator.borrowing"
   },
   "patientLevelJobKinds": [
     "fit_survival_model",
@@ -6816,6 +6832,309 @@
         }
       }
     },
+    "comparator.borrowing": {
+      "t": "object",
+      "fields": {
+        "endpoint": {
+          "t": "object",
+          "fields": {
+            "type": {
+              "t": "string",
+              "values": [
+                "continuous",
+                "binary",
+                "time_to_event"
+              ],
+              "badValueCode": "endpoint_unknown",
+              "req": true
+            }
+          },
+          "req": true
+        },
+        "historical": {
+          "t": "object",
+          "fields": {
+            "n": {
+              "t": "integer",
+              "min": 1,
+              "max": 100000000,
+              "req": true
+            },
+            "responders": {
+              "t": "integer",
+              "min": 0,
+              "max": 100000000,
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "binary"
+                ]
+              },
+              "req": true
+            },
+            "mean": {
+              "t": "number",
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "continuous"
+                ]
+              },
+              "req": true
+            },
+            "sd": {
+              "t": "number",
+              "gt": 0,
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "continuous"
+                ]
+              },
+              "req": true
+            }
+          },
+          "req": true
+        },
+        "current": {
+          "t": "object",
+          "fields": {
+            "n": {
+              "t": "integer",
+              "min": 1,
+              "max": 100000000,
+              "req": true
+            },
+            "responders": {
+              "t": "integer",
+              "min": 0,
+              "max": 100000000,
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "binary"
+                ]
+              },
+              "req": true
+            },
+            "mean": {
+              "t": "number",
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "continuous"
+                ]
+              },
+              "req": true
+            }
+          }
+        },
+        "treatment": {
+          "t": "object",
+          "fields": {
+            "n": {
+              "t": "integer",
+              "min": 1,
+              "max": 100000000,
+              "req": true
+            },
+            "responders": {
+              "t": "integer",
+              "min": 0,
+              "max": 100000000,
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "binary"
+                ]
+              },
+              "req": true
+            },
+            "mean": {
+              "t": "number",
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "continuous"
+                ]
+              },
+              "req": true
+            }
+          }
+        },
+        "prior": {
+          "t": "object",
+          "fields": {
+            "kind": {
+              "t": "string",
+              "values": [
+                "power",
+                "sam",
+                "elastic"
+              ],
+              "req": true
+            },
+            "a0": {
+              "t": "number",
+              "min": 0,
+              "max": 1,
+              "when": {
+                "path": "prior.kind",
+                "in": [
+                  "power"
+                ]
+              },
+              "req": true
+            },
+            "delta": {
+              "t": "number",
+              "gt": 0,
+              "when": {
+                "path": "prior.kind",
+                "in": [
+                  "sam",
+                  "elastic"
+                ]
+              },
+              "req": true
+            },
+            "vague": {
+              "t": "object",
+              "fields": {
+                "alpha": {
+                  "t": "number",
+                  "gt": 0,
+                  "max": 1000,
+                  "req": true
+                },
+                "beta": {
+                  "t": "number",
+                  "gt": 0,
+                  "max": 1000,
+                  "req": true
+                }
+              },
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "binary"
+                ]
+              }
+            },
+            "function": {
+              "t": "string",
+              "values": [
+                "logistic",
+                "step"
+              ],
+              "when": {
+                "path": "prior.kind",
+                "in": [
+                  "elastic"
+                ]
+              }
+            },
+            "q0": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "when": {
+                "path": "prior.kind",
+                "in": [
+                  "elastic"
+                ]
+              }
+            },
+            "q1": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "when": {
+                "path": "prior.kind",
+                "in": [
+                  "elastic"
+                ]
+              }
+            },
+            "c1": {
+              "t": "number",
+              "gt": 0.5,
+              "lt": 1,
+              "when": {
+                "path": "prior.kind",
+                "in": [
+                  "elastic"
+                ]
+              }
+            },
+            "c2": {
+              "t": "number",
+              "gt": 0,
+              "lt": 0.5,
+              "when": {
+                "path": "prior.kind",
+                "in": [
+                  "elastic"
+                ]
+              }
+            }
+          },
+          "req": true
+        },
+        "analysis": {
+          "t": "object",
+          "fields": {
+            "alpha": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "default": 0.025
+            }
+          }
+        },
+        "operatingCharacteristics": {
+          "t": "object",
+          "fields": {
+            "nControl": {
+              "t": "integer",
+              "min": 2,
+              "max": 2000,
+              "req": true
+            },
+            "nTreatment": {
+              "t": "integer",
+              "min": 2,
+              "max": 2000,
+              "req": true
+            },
+            "drifts": {
+              "t": "array",
+              "items": {
+                "t": "number"
+              },
+              "min": 1,
+              "max": 21,
+              "req": true
+            },
+            "effect": {
+              "t": "number",
+              "req": true
+            }
+          }
+        }
+      },
+      "atLeastOne": [
+        [
+          "current",
+          "operatingCharacteristics"
+        ]
+      ],
+      "requires": {
+        "treatment": [
+          "current"
+        ]
+      }
+    },
     "design.analytic": {
       "t": "object",
       "fields": {
@@ -12325,7 +12644,8 @@
     "target_trial_emulation",
     "design_dose",
     "design_bayesian",
-    "design_win_ratio"
+    "design_win_ratio",
+    "borrowing_prior"
   ],
   "endpointTypes": [
     "continuous",

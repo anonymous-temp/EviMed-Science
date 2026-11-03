@@ -91,6 +91,7 @@ vcr_engine_handlers <- function() list(
   "comparator.covariate_sets" = vcr_job_covariate_sets,
   "comparator.evalue" = vcr_job_evalue,
   "comparator.map_prior" = vcr_job_map_prior,
+  "comparator.borrowing" = vcr_job_comparator_borrowing,
   "design.analytic" = vcr_job_design_analytic,
   "design.simulate" = vcr_job_design_simulate,
   "design.confirmatory" = vcr_job_design_confirmatory,
@@ -155,6 +156,10 @@ VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "evidence_tau_prior", "evi
 # --- single-arm trials of a mean and of a survival time against a benchmark (2026-10-07) ---
 VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "single_arm")
 # --- end single arm ---
+
+# --- dynamic borrowing of an external control arm (algorithm round C10-C12, 2026-11-03): the power, SAM and elastic priors, in their own file ---
+VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "borrowing")
+# --- end dynamic borrowing ---
 
 #' Startup self-check: the local registry and the domain must agree, exactly.
 vcr_engine_self_check <- function() {

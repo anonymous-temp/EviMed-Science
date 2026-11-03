@@ -360,6 +360,15 @@ export const VCR_SCENARIO_EXAMPLES = Object.freeze({
   'comparator.stc': [{ label: 'an anchored comparison on a binary outcome: the aggregate trial\'s log odds ratio against the common comparator is -0.35 (standard error 0.12)', scenario: {
     covariates: ['age', 'male'], effectModifiers: ['age'], aggregateCovariates: [{ variable: 'age', mean: 62, sd: 9 }, { variable: 'male', proportion: 0.55 }],
     endpoint: { type: 'binary' }, anchored: true, aggregateEstimate: -0.35, aggregateSe: 0.12, outcomeColumn: 'response' } }],
+  'comparator.borrowing': [
+    { label: 'the external control counts for 0.3 of a patient each: a power prior on a response rate (90 of 300 historically, 40 of 150 now, 100 of 300 on treatment)', scenario: {
+      endpoint: { type: 'binary' }, historical: { responders: 90, n: 300 }, current: { responders: 40, n: 150 }, treatment: { responders: 100, n: 300 }, prior: { kind: 'power', a0: 0.3 } } },
+    { label: 'borrowing decided by the data: a self-adapting mixture prior, a difference of 0.1 in the response rate being too much to borrow across, and what it does to the type I error and power if the true control rate drifts', scenario: {
+      endpoint: { type: 'binary' }, historical: { responders: 90, n: 300 }, prior: { kind: 'sam', delta: 0.1 },
+      operatingCharacteristics: { nControl: 150, nTreatment: 300, drifts: [-0.1, -0.05, 0, 0.05, 0.1], effect: 0.1 } } },
+    { label: 'how a conflict becomes a level of borrowing: an elastic prior on a mean (historical mean 10, sd 4, 120 patients; 60 now, mean 11), a difference of 2 being a conflict', scenario: {
+      endpoint: { type: 'continuous' }, historical: { mean: 10, sd: 4, n: 120 }, current: { mean: 11, n: 60 }, prior: { kind: 'elastic', delta: 2 } } },
+  ],
   'comparator.map_prior': [{ label: 'a robust MAP prior from three historical control arms', scenario: {
     historical: { events: [12, 15, 9], n: [60, 70, 50] }, tauPrior: { kind: 'half_normal', scale: 0.5 }, components: 2, robustWeight: 0.2 } }],
   'design.analytic': [
@@ -652,6 +661,12 @@ const BIAS_ANALYSIS_NOTES = Object.freeze([
  * The simulated treatment comparison in its G-computation form (algorithm round C9).
  * @type {readonly string[]}
  */
+const BORROWING_NOTES = Object.freeze([
+  'One historical control arm (a count of responders and patients for a rate; the mean, n and the standard deviation for a mean, the standard deviation taken as known and the same in every group) and a prior for the CONTROL arm; the treatment arm is read with a flat prior. prior.kind power: the historical data count at a fixed discount a0 between 0 (nothing) and 1 (as if pooled). sam: the informative prior is mixed with a vague one at a weight the current control data decide; prior.delta is the difference beyond which nothing should be borrowed, in the unit of the rate or the mean, and it is a clinical choice. elastic: the historical posterior is made less certain by the factor 1 / g(T), where T is how far the current control data are from the historical ones; delta, q0 and q1 place the function g, which is a choice rather than a finding.',
+  'current (the control arm\'s own data) with treatment gives the posterior, the prior effective sample size above the vague prior, the probability that the treatment is better, each against no borrowing and against full borrowing (a0 = 1). operatingCharacteristics gives the type I error and the power of the rule "the probability that the treatment is better exceeds 1 - analysis.alpha" when the true control value is the historical one plus each drift (the unit of the rate or the mean), exactly, for nControl and nTreatment patients, beside the same rule with no borrowing; at most 2000 patients an arm. State at least one of current and operatingCharacteristics.',
+  'The weight of a sam prior and the discount of an elastic one are data-dependent: with current they are read from it, and the table of conflict against borrowing (the discount at observed differences of -2 to 2 deltas from the historical value) is returned for both. The elastic function needs q0 (the share of the congruent data it treats as in full agreement) and q1 (the share of data a delta away that it treats as in conflict): they are not searched, and left out they default to 0.5 and 0.5, returned among the assumptions. Several historical studies: pool them first, or use comparator.map_prior.',
+])
+
 const STC_NOTES = Object.freeze([
   'It needs the patients of one trial (the subject table: covariates, the arm column, the outcome) and the published summary of the other: aggregateCovariates, one row per covariate (mean and sd for a continuous one, proportion for a 0/1 one), and the trial\'s result. The outcome model is main effects plus the effect modifiers named in effectModifiers interacting with the arm; name every effect modifier you know of, and the ones you could not use in unadjustedEffectModifiers. The covariate distribution of the published trial is simulated from its margins with the IPD\'s own correlation unless correlation is stated.',
   'Anchored (anchored true): the arm column is 1 for the active arm and 0 for the common comparator, and aggregateEstimate is the other trial\'s contrast of its active arm against the same comparator on the link scale (a log odds ratio for logit, a log risk ratio for log, a difference for identity). Unanchored: only the active arm is modelled (treatmentColumn selects arm 1) and aggregateOutcome is the other trial\'s outcome on its OWN scale with its standard error; ' + UNANCHORED_NOTES[0],
@@ -693,6 +708,7 @@ const METHOD_NOTES = Object.freeze({
   'comparator.aipw': Object.freeze([COMPARATOR_TIME_UNIT_NOTES[0], TRIM_NOTE, AIPW_TIME_TO_EVENT_NOTE, IMPUTATION_NOTE]),
   'comparator.bias_analysis': BIAS_ANALYSIS_NOTES,
   'comparator.stc': STC_NOTES,
+  'comparator.borrowing': BORROWING_NOTES,
   'comparator.target_trial': TARGET_TRIAL_NOTES,
   'evidence.pool': Object.freeze([POOL_PRIOR_NOTE]),
   'evidence.network': NETWORK_NOTES,

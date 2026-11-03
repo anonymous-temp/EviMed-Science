@@ -47,6 +47,7 @@
     "design_dose": {"method":"design.dose"},
     "design_bayesian": {"method":"design.bayesian"},
     "design_win_ratio": {"method":"design.win_ratio"},
+    "borrowing_prior": {"method":"comparator.borrowing"},
     "match_extract": {"method":"matching.extract","platformBuilt":[]},
     "forecast_trajectories": {"method":"forecast.trajectories"},
     "evaluate_forecast": {"method":"forecast.evaluate"},
@@ -5761,6 +5762,136 @@
             "aggregateSe": 0.12,
             "outcomeColumn": "response"
           }
+        }
+      ]
+    },
+    "comparator.borrowing": {
+      "endpoints": ["binary","continuous"],
+      "notes": [
+        "One historical control arm (a count of responders and patients for a rate; the mean, n and the standard deviation for a mean, the standard deviation taken as known and the same in every group) and a prior for the CONTROL arm; the treatment arm is read with a flat prior. prior.kind power: the historical data count at a fixed discount a0 between 0 (nothing) and 1 (as if pooled). sam: the informative prior is mixed with a vague one at a weight the current control data decide; prior.delta is the difference beyond which nothing should be borrowed, in the unit of the rate or the mean, and it is a clinical choice. elastic: the historical posterior is made less certain by the factor 1 / g(T), where T is how far the current control data are from the historical ones; delta, q0 and q1 place the function g, which is a choice rather than a finding.",
+        "current (the control arm's own data) with treatment gives the posterior, the prior effective sample size above the vague prior, the probability that the treatment is better, each against no borrowing and against full borrowing (a0 = 1). operatingCharacteristics gives the type I error and the power of the rule \"the probability that the treatment is better exceeds 1 - analysis.alpha\" when the true control value is the historical one plus each drift (the unit of the rate or the mean), exactly, for nControl and nTreatment patients, beside the same rule with no borrowing; at most 2000 patients an arm. State at least one of current and operatingCharacteristics.",
+        "The weight of a sam prior and the discount of an elastic one are data-dependent: with current they are read from it, and the table of conflict against borrowing (the discount at observed differences of -2 to 2 deltas from the historical value) is returned for both. The elastic function needs q0 (the share of the congruent data it treats as in full agreement) and q1 (the share of data a delta away that it treats as in conflict): they are not searched, and left out they default to 0.5 and 0.5, returned among the assumptions. Several historical studies: pool them first, or use comparator.map_prior."
+      ],
+      "rows": [
+        {"path":"endpoint","type":"object","required":true},
+        {"path":"endpoint.type","type":"string","values":["continuous","binary","time_to_event"],"required":true,"fieldRole":"defaultable"},
+        {"path":"historical","type":"object","required":true},
+        {"path":"historical.n","type":"integer","min":1,"max":100000000,"required":true,"fieldRole":"research_fact"},
+        {
+          "path": "historical.responders",
+          "type": "integer",
+          "min": 0,
+          "max": 100000000,
+          "required": true,
+          "when": [{"path":"endpoint.type","in":["binary"]}],
+          "fieldRole": "research_fact"
+        },
+        {"path":"historical.mean","type":"number","required":true,"when":[{"path":"endpoint.type","in":["continuous"]}],"fieldRole":"research_fact"},
+        {"path":"historical.sd","type":"number","gt":0,"required":true,"when":[{"path":"endpoint.type","in":["continuous"]}],"fieldRole":"research_fact"},
+        {"path":"current","type":"object"},
+        {"path":"current.n","type":"integer","min":1,"max":100000000,"required":true,"within":"current","fieldRole":"research_fact"},
+        {
+          "path": "current.responders",
+          "type": "integer",
+          "min": 0,
+          "max": 100000000,
+          "required": true,
+          "within": "current",
+          "when": [{"path":"endpoint.type","in":["binary"]}],
+          "fieldRole": "research_fact"
+        },
+        {"path":"current.mean","type":"number","required":true,"within":"current","when":[{"path":"endpoint.type","in":["continuous"]}],"fieldRole":"research_fact"},
+        {"path":"treatment","type":"object"},
+        {"path":"treatment.n","type":"integer","min":1,"max":100000000,"required":true,"within":"treatment","fieldRole":"research_fact"},
+        {
+          "path": "treatment.responders",
+          "type": "integer",
+          "min": 0,
+          "max": 100000000,
+          "required": true,
+          "within": "treatment",
+          "when": [{"path":"endpoint.type","in":["binary"]}],
+          "fieldRole": "research_fact"
+        },
+        {"path":"treatment.mean","type":"number","required":true,"within":"treatment","when":[{"path":"endpoint.type","in":["continuous"]}],"fieldRole":"research_fact"},
+        {"path":"prior","type":"object","required":true},
+        {"path":"prior.kind","type":"string","values":["power","sam","elastic"],"required":true,"fieldRole":"defaultable"},
+        {"path":"prior.a0","type":"number","min":0,"max":1,"required":true,"when":[{"path":"prior.kind","in":["power"]}],"fieldRole":"research_fact"},
+        {"path":"prior.delta","type":"number","gt":0,"required":true,"when":[{"path":"prior.kind","in":["sam","elastic"]}],"fieldRole":"research_fact"},
+        {"path":"prior.vague","type":"object","when":[{"path":"endpoint.type","in":["binary"]}]},
+        {
+          "path": "prior.vague.alpha",
+          "type": "number",
+          "max": 1000,
+          "gt": 0,
+          "required": true,
+          "within": "prior.vague",
+          "when": [{"path":"endpoint.type","in":["binary"]}],
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "prior.vague.beta",
+          "type": "number",
+          "max": 1000,
+          "gt": 0,
+          "required": true,
+          "within": "prior.vague",
+          "when": [{"path":"endpoint.type","in":["binary"]}],
+          "fieldRole": "research_fact"
+        },
+        {"path":"prior.function","type":"string","values":["logistic","step"],"when":[{"path":"prior.kind","in":["elastic"]}],"fieldRole":"defaultable"},
+        {"path":"prior.q0","type":"number","gt":0,"lt":1,"when":[{"path":"prior.kind","in":["elastic"]}],"fieldRole":"defaultable"},
+        {"path":"prior.q1","type":"number","gt":0,"lt":1,"when":[{"path":"prior.kind","in":["elastic"]}],"fieldRole":"defaultable"},
+        {"path":"prior.c1","type":"number","gt":0.5,"lt":1,"when":[{"path":"prior.kind","in":["elastic"]}],"fieldRole":"defaultable"},
+        {"path":"prior.c2","type":"number","gt":0,"lt":0.5,"when":[{"path":"prior.kind","in":["elastic"]}],"fieldRole":"defaultable"},
+        {"path":"analysis","type":"object"},
+        {"path":"analysis.alpha","type":"number","gt":0,"lt":1,"default":0.025,"within":"analysis","fieldRole":"defaultable"},
+        {"path":"operatingCharacteristics","type":"object"},
+        {"path":"operatingCharacteristics.nControl","type":"integer","min":2,"max":2000,"required":true,"within":"operatingCharacteristics","fieldRole":"research_fact"},
+        {
+          "path": "operatingCharacteristics.nTreatment",
+          "type": "integer",
+          "min": 2,
+          "max": 2000,
+          "required": true,
+          "within": "operatingCharacteristics",
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "operatingCharacteristics.drifts",
+          "type": "list",
+          "count": {"min":1,"max":21},
+          "items": {"type":"number"},
+          "required": true,
+          "within": "operatingCharacteristics",
+          "fieldRole": "research_fact"
+        },
+        {"path":"operatingCharacteristics.effect","type":"number","required":true,"within":"operatingCharacteristics","fieldRole":"research_fact"}
+      ],
+      "rules": [{"kind":"atLeastOne","keys":["current","operatingCharacteristics"]},{"kind":"requires","key":"treatment","needs":["current"]}],
+      "examples": [
+        {
+          "label": "the external control counts for 0.3 of a patient each: a power prior on a response rate (90 of 300 historically, 40 of 150 now, 100 of 300 on treatment)",
+          "scenario": {
+            "endpoint": {"type":"binary"},
+            "historical": {"responders":90,"n":300},
+            "current": {"responders":40,"n":150},
+            "treatment": {"responders":100,"n":300},
+            "prior": {"kind":"power","a0":0.3}
+          }
+        },
+        {
+          "label": "borrowing decided by the data: a self-adapting mixture prior, a difference of 0.1 in the response rate being too much to borrow across, and what it does to the type I error and power if the true control rate drifts",
+          "scenario": {
+            "endpoint": {"type":"binary"},
+            "historical": {"responders":90,"n":300},
+            "prior": {"kind":"sam","delta":0.1},
+            "operatingCharacteristics": {"nControl":150,"nTreatment":300,"drifts":[-0.1,-0.05,0,0.05,0.1],"effect":0.1}
+          }
+        },
+        {
+          "label": "how a conflict becomes a level of borrowing: an elastic prior on a mean (historical mean 10, sd 4, 120 patients; 60 now, mean 11), a difference of 2 being a conflict",
+          "scenario": {"endpoint":{"type":"continuous"},"historical":{"mean":10,"sd":4,"n":120},"current":{"mean":11,"n":60},"prior":{"kind":"elastic","delta":2}}
         }
       ]
     },
