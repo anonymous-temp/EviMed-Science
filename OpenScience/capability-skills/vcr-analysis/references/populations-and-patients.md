@@ -95,6 +95,8 @@ exploratory assumption or provide the supported computation evidence.
 
 连续终点要看随访轨迹（每次随访的平均变化、两组轨迹的差）时，用纵向模型 `reference-longitudinal`：`scenario` 里写 `visits`（随访时间表，从小到大，至少两个时间点），`truth.effect` 是处理使每个时间单位的变化速度多变化多少（两组起点相同），再写 `truth.intercept`、`truth.slope`、`truth.sd`（残差标准差）、`truth.randomEffects`（`sdIntercept`、`sdSlope`、`correlation`）和 `dropoutPerVisit`（每次随访前退出的概率，完全随机缺失，退出后的随访记为缺失）。没有 `visits` 的连续终点仍是单个终点值。输出是每次随访的观测值、两组的平均轨迹和 95% 范围、同一个人在两种分组下的轨迹，**是情景推演，不是对任何真实人群或个体的预测**。
 
+纵向轨迹还能写三样（模型版本 1.2.0，都可以不写；不写任何一样就和以前逐位相同）：`trajectory`（病程曲线的形状：`plateau` 逐渐趋平，`halfTime` 是走到一半的时间；`quadratic` 二次曲线，`curvature`），`dropoutModel`（脱落与结局有关：`mechanism: "mar"` 看上一次的值、`"mnar"` 看这次的值，`logOddsPerSd` 为正表示值越高越早退出；`dropoutPerVisit` 仍是平均水平上的退出概率，必须写且大于 0），`rescue`（救援用药这种伴发事件：`perVisit` 每次随访前开始的概率，`logOddsPerSd` 上一次的值高时更容易开始，`effect` 开始后结局整体移动多少）。问“15% 的人用了救援药，效应和样本量变成多少”就写 `rescue`：每个虚拟患者在两个组下的完整轨迹都生成了，结果的 `estimands` 里同时给出两种估计目标在末次随访的效应和各自每组要多少人——治疗策略（用了救援药的结果照算）和假想策略（假如没有救援药，等于模型自己的效应乘时间尺度）——以及两组末次随访时在用救援药的比例。回复里说清问的是哪一种，两个数都给，不要自己重算；表里多一列 `rescue`（0/1，开始用后一直是 1）。直接比较末次随访仍在研究内的人，在随机缺失和非随机缺失下都有偏，混合模型只在随机缺失下没有偏，要把这个差别告诉人，不要说“已处理脱落”。
+
 ```json vcr:object:patient_set
 {
   "name": "12 周纵向轨迹",

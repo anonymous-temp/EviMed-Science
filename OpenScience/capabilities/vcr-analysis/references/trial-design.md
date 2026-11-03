@@ -77,7 +77,13 @@ For these paths, zero-effect scenarios state `responseRate == nullRate` or zero 
 - 预测概率监测的最终阈值不是一个数而是一个区间（区间内任一阈值得到同一条规则）；结果给的是区间，回复里照说。
 - 问“用这个先验和阈值，I 类错误多少，校到 0.025 的阈值是多少”：`design.kind: "threshold_calibration"`，`endpoint.type`（连续型要 `truth.sd` 视为已知；事件时间型用 `design.events`；二分类型两组各有 Beta 先验），`design.priorEffect` 是效应的正态先验（不写就是无先验信息），`design.threshold` 是对方给的阈值，`design.margin` 是后验概率要超过的效应界值。结果有三行：对方给的阈值、常规的 1 − α、校准后的阈值（二分类是 I 类错误不超过规定水平的最小阈值，并注明实际达到的水平）。信息性的先验会让同一个阈值的 I 类错误偏离规定水平，这正是要校准的原因。动态借用和需要 MCMC 的模型不在这里。
 
+**分层复合终点的胜率比 `kind: "design_win_ratio"`**：先 `action: "shape"` 看字段。问“死亡、住院次数、KCCQ 三层比较，要多少人，平局占多少”：`truth.death`（`hazardRatio`，加 `controlRisk`——对照组随访期内死亡的比例——或 `controlMedian`）是第一层，`truth.events`（`controlRate` 每人每个时间单位的事件数、`rateRatio`、`overdispersion`）是第二层，少者胜，`truth.score`（`shift` 试验组比对照组在期末高多少、`sd`、`threshold`：相差不超过它算平局）是第三层，高者胜；死亡必写，事件和评分至少写一个。`design.followup` 是每人随访多久，`design.dropoutAnnual` 是每年退出的比例。写 `design.nTreat`（和 `nControl`）得到功效；不写人数而写 `analysis.power` 得到每组所需人数（模拟搜出来，再按这个人数模拟一次验证功效，两个数都在结果里）：二者写一个，不要都写。结果有胜率比（赢的对数除以输的对数，旁边是同样大小的一次试验会落在什么范围）、净胜率、胜算比和平局占多少，以及每一层分出了多少胜负、到这一层还剩多少平局。回复里把平局占比和净胜率一起说，只说一个比值会盖住大量平局。三层之间用一个相关（`truth.correlation`，默认 0.3：病情重的人每一层都更差）连起来，事件层通过 `overdispersion` 接上它；这些默认值结果里都列为前提，照实说。人数是模拟得到的：不要用公式的人数替代，也不要自己把几个结果换算。预算不够时结果会标“只模拟了一部分”，照说。
+
 **MaxCombo 旁边的 log-rank 与强零假设**：`analysis.method: "maxcombo"` 的结果同一批模拟里还给出 log-rank 的功效（`power_logrank`）；并给出强零假设（试验组从不优于对照、早期更差、之后相同，由设计推出）下 MaxCombo 与 log-rank 各自判为更优的概率。这是信息，不是拒绝的理由；回复里把两个数和名义水平一起说。
+
+**改良加权 log-rank（折中）**：人说“既怕延迟效应，又怕假阳性，有没有折中”，才用 `analysis.method: "modestly_weighted"`（Magirr 与 Burman 的检验：晚期事件的权重是早期的 1/`sStar` 倍封顶，`sStar` 默认 0.5；固定两臂和成组序贯都可以）。按它防什么来说：偏重晚期的检验（MaxCombo、晚期加权）在效应晚起时功效好，但试验组前期更差、之后一样时，会把前期的差当成晚期的差而判成更优；改良加权给晚期权重封了顶，所以前期的损害仍然压着结论，晚期的获益也还能被看到。它不是默认，也不是“更稳妥”的选择，没人提这类担心就用 log-rank；结果同一批模拟里给出 log-rank 的功效，并和 MaxCombo 一样给出强零假设下两个检验各自判为更优的概率，回复里把几个数和名义水平一起说。
+
+**成组序贯里用 MaxCombo 或改良加权**（`design.kind: "group_sequential"` 加 `analysis.method: "maxcombo"` 或 `"modestly_weighted"`，延迟起效下想中途看数据）：这类设计的边界没有公式，引擎在“没有效应”的情形下把这个设计（同样的入组、脱落、人数和对照）模拟一遍，每次分析都算这个统计量，按分析次数把计划的 α 逐次花掉来定边界（花多少仍由 `spending` 和各次的信息比例决定）。功效和 I 类错误来自另一轮、另一个种子的模拟，所以零效应情形报告的 I 类错误是对边界的独立核对。结果的 `groupSequentialBoundaries` 说边界依据多少次零效应试验、每次分析的边界、计划和实际花掉的 α，计划花掉的 α 不到一次试验的那次分析不可能停下，也会列出。边界这一轮就要约 20,000 次该设计的模拟，试验大时整个作业可能只跑完一部分，结果标“只模拟了一部分”，照说。log-rank 的功效并排给出（用它自己的渐近边界），强零假设也同固定设计一样报告。不是默认，也不比 log-rank 更稳妥；没人提延迟起效或曲线交叉这类担心，就用 log-rank。
 
 ```json vcr:object:design_grid
 {
@@ -112,7 +118,7 @@ For these paths, zero-effect scenarios state `responseRate == nullRate` or zero 
 }
 ```
 
-**风险比随时间变（只在仿真里）**：延迟起效、曲线交叉的真值写成 `truth.treatmentHazardRatios: {"breaks": [3], "ratios": [1, 0.6]}`（`ratios` 比 `breaks` 多一个，第一段从时间 0 起），不写 `hazardRatio`；只有固定两臂和成组序贯的 `design_simulation`、`design_grid` 接受，`design_analytic` 和 `assurance` 按名拒绝并指向仿真。分析默认仍是 `logrank`，不要替人换；`maxcombo` 不是默认，也不是“更稳妥”的选择，只在人明确提出延迟起效、曲线晚分开或交叉这类假设时，才把 `analysis.method: "maxcombo"`（四个 Fleming–Harrington 加权对数秩统计量取最大，p 值按它们的联合零分布读，只用于固定两臂）作为并排的另一个方案；人没提这类假设就不用。没有单一的真风险比，所以结果里没有偏倚、MSE、覆盖率和解析核对，别替它补。两个方案的功效并排说，不要只说 MaxCombo 更高：它在晚分开或交叉时占优，比例风险下对数秩常常不差。
+**风险比随时间变（只在仿真里）**：延迟起效、曲线交叉的真值写成 `truth.treatmentHazardRatios: {"breaks": [3], "ratios": [1, 0.6]}`（`ratios` 比 `breaks` 多一个，第一段从时间 0 起），不写 `hazardRatio`；只有固定两臂和成组序贯的 `design_simulation`、`design_grid` 接受，`design_analytic` 和 `assurance` 按名拒绝并指向仿真。分析默认仍是 `logrank`，不要替人换；`maxcombo` 不是默认，也不是“更稳妥”的选择，只在人明确提出延迟起效、曲线晚分开或交叉这类假设时，才把 `analysis.method: "maxcombo"`（四个 Fleming–Harrington 加权对数秩统计量取最大，p 值按它们的联合零分布读；固定两臂和成组序贯都可以，见下）作为并排的另一个方案；人没提这类假设就不用。没有单一的真风险比，所以结果里没有偏倚、MSE、覆盖率和解析核对，别替它补。两个方案的功效并排说，不要只说 MaxCombo 更高：它在晚分开或交叉时占优，比例风险下对数秩常常不差。
 
 **设计网格里同一设计的几个真值共用一条随机流**（design.grid 1.3.0，两臂设计）：同一批受试者在每个真值下各走一遍，所以相邻两格功效的差比两次独立仿真的差稳得多（这个引擎上实测，方差降到约 14%（连续终点）和 42%（对数秩））；不同设计之间、单臂设计各格不配对，结果的 `seedPolicy` 说是哪一种。比较相邻真值就读这个差，不必再另跑一遍。
 

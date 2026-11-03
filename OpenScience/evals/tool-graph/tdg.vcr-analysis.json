@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "vcr-analysis",
-  "version": "sha256:e67ba91e8a7755fe36aa3770c7e7020cfdf15c0d1dec2a773a675c12a1e43813",
+  "version": "sha256:eb478ffe70cce32c7dae66b17188eb857194393bb078876765552673dc57db83",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 34,
@@ -1502,6 +1502,7 @@
               "target_trial_emulation",
               "design_dose",
               "design_bayesian",
+              "design_win_ratio",
               "match_extract",
               "forecast_trajectories",
               "evaluate_forecast",
