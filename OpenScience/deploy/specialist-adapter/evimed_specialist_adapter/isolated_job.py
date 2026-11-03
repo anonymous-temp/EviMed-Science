@@ -46,6 +46,11 @@ class ExecutionTimeout(IsolatedJobError):
     """
 
 
+# The process groups of the engines this worker has running (each engine leads its own). The heartbeat ends them when the job's directory is
+# gone, because the group of the worker does not reach them.
+RUNNING_GROUPS: set[int] = set()
+
+
 @contextmanager
 def analysis_group(credentials: dict[str, Any] | None) -> Iterator[None]:
     """Hold the analysis group as the owner's effective group.
@@ -170,10 +175,12 @@ def run(
         command, cwd=cwd, env=env, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
         start_new_session=True, **credentials,
     )
+    RUNNING_GROUPS.add(process.pid)
     exited = True
     try:
         exited = _wait_for_exit(process.pid, timeout)
     finally:
+        RUNNING_GROUPS.discard(process.pid)
         if credentials:
             _as_analysis(credentials, _STOP_GROUP, str(process.pid))
         else:

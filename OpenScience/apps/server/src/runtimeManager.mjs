@@ -8157,6 +8157,27 @@ export class RuntimeManager {
    *   allow-list (`WORKSPACE_BIND_METHOD`): the control plane registering the project's own directory
    * @returns {Promise<any>}
    */
+  /**
+   * LoopX's own goal state and its pause and start, through the door its bar in the kernel's page uses. Not a kernel wire method: the plugin
+   * answers it on the shared API with the payload as it is, without the `args` envelope `callKernel` writes. With no runtime up there is
+   * nobody to ask.
+   * @param {Record<string, any>} project @param {Record<string, any>} payload `loopx_goalbar_request_v2`
+   * @returns {Promise<any>} the bar's response, or `{ result: { kind: "fault", code } }`
+   */
+  async goalBar(project, payload) {
+    const runtime = this.runtimes.get(this.key(project));
+    if (!runtime) return { result: { kind: "fault", code: "runtime_not_running" } };
+    const response = await requestRuntime(runtime, new URL(`${runtime.url}/api/loopx.goalbar`), {
+      method: "POST",
+      headers: { ...(runtime.cookie ? { cookie: runtime.cookie } : {}), "content-type": "application/json" },
+      body: Buffer.from(JSON.stringify({ type: "client-request", rpcId: randomId("rpc_"), method: "loopx.goalbar", payload }), "utf8"),
+      signal: AbortSignal.timeout(60_000),
+    });
+    const answer = await response.json().catch(() => null);
+    if (answer?.result?.ok === true) return answer.result.value;
+    return { result: { kind: "fault", code: typeof answer?.result?.error?.code === "string" ? answer.result.error.code : "goalbar_unreachable" } };
+  }
+
   async callKernel(runtime, project, method, payload, signal, { maxBytes, workspaceBind = false } = {}) {
     if (!isAllowedWireMethod(method) && !(workspaceBind === true && method === WORKSPACE_BIND_METHOD)) {
       throw new HttpError(403, "runtime_method_forbidden", `Kernel method ${method} is not on the allow-list.`);

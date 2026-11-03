@@ -44,3 +44,22 @@ export function foreignDeliverableIds(current, peers) {
   }
   return foreign;
 }
+
+/**
+ * What only the workspace saw, when another conversation was at work in the same workspace at the same time. The workspace cannot say who wrote a
+ * file, but a run that names some of what changed, in a tool's input or output or in its reply, has said which are its own: the others are
+ * taken for the other conversation's. A name is a closed token, not language. A run that names none of them (a script of its own wrote them) says
+ * nothing, and keeps all of them, as before. With nobody else at work nothing is read.
+ *
+ * Two research goals in one project listed each other's files before this (2026-11-03: an SGLT2 goal's round offered the GLP-1 goal's table).
+ * A file written through a program by a run that also names others is lost from its list and stays in the project's files;
+ * `run_concurrent_attribution_uncertain` says as much to the reader.
+ * @param {readonly string[]} files @param {readonly any[]} others runs of other sessions that overlapped this one @param {readonly any[]} assistants
+ * @returns {string[]}
+ */
+export function withoutOtherSessionsFiles(files, others, assistants) {
+  if (others.length === 0 || files.length === 0) return [...files];
+  const said = JSON.stringify(assistants);
+  const named = files.filter((file) => said.includes(file) || said.includes(file.split("/").at(-1) ?? file));
+  return named.length > 0 ? named : [...files];
+}

@@ -41,7 +41,8 @@ import {
 } from "./runNotices.mjs";
 import { describeRunArtifacts, describeRunArtifactRoles, isOrdinaryConversation } from "./runArtifacts.mjs";
 import { withoutOtherRunsJobFiles, workspaceChangedFiles } from "./runWorkspaceChanges.mjs";
-import { foreignDeliverableIds, overlappingRuns } from "./runArtifactAttribution.mjs";
+import { foreignDeliverableIds, overlappingRuns, withoutOtherSessionsFiles } from "./runArtifactAttribution.mjs";
+import { isGoalContinuation } from "./researchGoalState.mjs";
 import { pickMainDocuments } from "./terminalPresentation.mjs";
 import { normalizeRunEstimate } from "./runRoute.mjs";
 import {
@@ -7017,11 +7018,26 @@ export class AgentRunStore {
       const presented = await existingArtifacts(project, allRunAssistants.flatMap(message => presentedCandidates(message, runtimeWorkspaceRoot)));
       const outputStartedAt = Date.parse(run.startedAt);
       const written = await writtenDeliverableFiles(project, Number.isFinite(outputStartedAt) ? outputStartedAt : null, ownEnd?.time ?? null, excludedDeliverableIds).catch(() => []);
-      artifacts = [...new Set([...artifacts, ...await existingArtifacts(project, written, run, ownEnd?.time, true), ...presented])].slice(0, maxArtifacts).sort();
+      // Another conversation of this project was at work in the same workspace: what only the workspace saw is this run's when the run
+      // itself names it (`withoutOtherSessionsFiles`). A receipt and a `present` call are witnesses of their own and are not asked.
+      const others = overlappingRuns({ ...run, finishedAt: ownEnd?.time ? new Date(ownEnd.time).toISOString() : this.now().toISOString() }, await this.list(project))
+        .filter((/** @type {any} */ other) => other.sessionId !== run.sessionId);
+      const ownFiles = (/** @type {string[]} */ files) => withoutOtherSessionsFiles(files, others, allRunAssistants);
+      artifacts = [...new Set([...artifacts, ...await existingArtifacts(project, ownFiles(written), run, ownEnd?.time, true), ...presented])].slice(0, maxArtifacts).sort();
       if (presented.length) terminal.presentedFiles = presented;
       try {
         outputs = await ordinaryConversationOutputs({ project, run, registry: await this.agentRegistry, assistants: allRunAssistants, runtimeWorkspaceRoot, endTime: ownEnd?.time, answered: answeredTurn, excludedDeliverableIds });
+        outputs = { ...outputs, files: ownFiles(outputs.files) };
       } catch { /* isolated: the files stay in the workspace; the record just does not list the ones only the workspace saw */ }
+    }
+    // A turn that ended on its own and left nothing to read: no reply and no file. The kernel took a reply of a single reasoning token for
+    // a finished turn while the provider was answering 503 (2026-11-03, 15 minutes, a research goal that never began), and the page said it
+    // was done. It is a failure, and the provider's rather than the question's. A round of LoopX's own has nothing to say to anyone and is
+    // not held to this.
+    if (terminal.status === "succeeded" && !isGoalContinuation(run) && artifacts.length === 0 && outputs.files.length === 0
+      && outputs.presented.length === 0 && !assistantProse(allRunAssistants).trim()) {
+      terminal.status = "failed";
+      terminal.errorCode = "model_empty_reply";
     }
     return this.finishInternal(project, run.id, { ...terminal,
       // Said to the funnel so it does not look twice: it reads the workspace itself for the paths that did not.

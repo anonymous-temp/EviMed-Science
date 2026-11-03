@@ -102,6 +102,9 @@ export function shellStylesheet(pin, operator = false) {
     // Accessible names in both shipped languages, from the kernel's own
     // dictionaries (`workspace.add`).
     'button[aria-label="Add workspace"],button[aria-label="添加工作区"]{display:none !important}',
+    // LoopX's goal bar writes its product name and the goal's internal id, literally and not through its dictionary. Only its progress, its
+    // state and its button are for a reader. The class names are the pinned plugin's (packages/contracts/loopx/contract.test.mjs holds them).
+    '._xPytW_brand,._xPytW_goalId{display:none !important}',
     // An empty preview badge keeps its pill without this rule.
     '[class$="_previewBadge"]:empty{display:none !important}',
     // The hero's workspace chip. The kernel renders the button itself, outside

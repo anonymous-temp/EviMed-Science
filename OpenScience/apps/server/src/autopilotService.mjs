@@ -10,7 +10,7 @@ import { AGENDA_WINDOW_MS, agendaAllowance, agendaBudget, budgetFreesAt, taskBud
 import { sourceIdFor } from "./sourceService.mjs";
 import { migrateProductStore, productTime } from "./productPersistence.mjs";
 import { HttpError } from "./security.mjs";
-import { AUTOPILOT_BUDGET_ERROR_CODES, AUTOPILOT_VERIFICATION_ROUTE_REASON } from "@evimed/domain";
+import { AUTOPILOT_BUDGET_ERROR_CODES, AUTOPILOT_VERIFICATION_ROUTE_REASON, errorCodeOutcome } from "@evimed/domain";
 
 /**
  * The platform's brief for an execution of a `routine` task: the researcher's instruction, the day, what to hand over, and the
@@ -1416,6 +1416,9 @@ export class AutopilotService {
       completion = {
         runId: input.runId,
         outcomeStatus,
+        // A run the platform or the model provider ended said nothing about the task (the one person's daily study on production stopped itself
+        // for good on two such failures in a row, at no cost, on 2026-10-22). It is an execution that did not happen, like a refused dispatch.
+        platformEnded: !succeeded && input.status === "failed" && errorCodeOutcome(String(input.errorCode ?? "")) === "stopped",
         resultKind: agendaResultKind(input),
         digestId: `digest-${hash(`${episode.id}:${input.runId}`).slice(0, 32)}`,
         // The episode's own day, which is the agenda's local one. This was the
@@ -1472,7 +1475,7 @@ export class AutopilotService {
     }
     const agenda = await this.get(userId, episode.payload.agendaId);
     await this.recordOutcome(userId, agenda.id, {
-      expectedRevision: agenda.revision, episodeId: episode.id, taskType: episode.payload.taskType, status: completion.outcomeStatus,
+      expectedRevision: agenda.revision, episodeId: episode.id, taskType: episode.payload.taskType, status: completion.platformEnded ? "canceled" : completion.outcomeStatus,
       gatedClaims: completion.outcomeStatus === "succeeded" ? completion.claims.length : 0,
     });
     let digest = await this.createDigest(userId, agenda.id, {
