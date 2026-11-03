@@ -25,6 +25,18 @@ BUNDLE_TWO = {'guidanceSupplement': '', 'skills': [{'name': 'conventions', 'desc
 ARM_ONE = f'cand-{eha.harness_patch_digest(BUNDLE_ONE, IMAGE)[:12]}'
 ARM_TWO = f'cand-{eha.harness_patch_digest(BUNDLE_TWO, IMAGE)[:12]}'
 GOLD_MARK = '7.7777'
+STAMPS = {'model': 'claude-sonnet-5-5', 'effort': 'medium'}
+
+
+def judge_args(directory, judge_id, form, passes, record=None, **registered):
+    """--registration (a round registration whose judge is `judge_id`, Claude at medium effort, `registered` overriding) and --judge-record (the
+    judge.json of the parts directory, the same judge unless `record` overrides it)."""
+    judge = {'id': judge_id, 'provider': 'anthropic', **STAMPS, 'form': form, 'passes': passes, 'maxCalls': 9999, **registered}
+    registration = Path(directory) / f'registration-{judge_id}.json'
+    registration.write_text(json.dumps({'schema': 'rsi-round-registration/1', 'judge': judge}))
+    claimed = Path(directory) / f'judge-{judge_id}.json'
+    claimed.write_text(json.dumps({'schema': 'claude-judge/2', 'judge': judge_id, **STAMPS, 'dialect': 'score', 'briefSha256': 'ab' * 32, **(record or {})}))
+    return ['--registration', str(registration), '--judge-record', str(claimed)]
 
 
 def sha(data):
@@ -62,6 +74,8 @@ class Lab:
         record.update(extra)
         if cost is None:
             record['cost'] = {'cost': 0.5, 'openCost': 0.1, 'uncertain': 1}
+        elif cost == 'absent':
+            del record['cost']
         (folder / 'result.json').write_text(json.dumps(record))
         if answer is not None:
             (folder / 'answer.md').write_text(answer)
@@ -216,15 +230,48 @@ class Development(unittest.TestCase):
         ids.write_text(json.dumps({'rows': {'development': ['1', '2'], 'confirmation': ['1']}}))
         self.assertEqual(lab.run(lab.argv(rows=('1', '2'), extra=['--row-ids', str(ids)]))[0], 0)
 
-    def test_an_unsettled_cost_is_null_not_zero(self):
+    def test_an_uncertain_cost_keeps_the_ledger_sum_and_is_listed_beside_the_source(self):
         lab = self.lab
         lab.fill('baseline', ['1', '2'])
-        lab.result('baseline', 'medcalc-rsi/base/2', cost=None)
+        lab.result('baseline', 'medcalc-rsi/base/2', cost=None, costSettle={'waitedMs': 90000, 'reads': 10, 'settled': False})
         code, out, _ = lab.run(lab.argv(rows=('1', '2')))
         self.assertEqual(code, 0)
         runs = lab.load()['runs']
-        self.assertEqual([r['cost'] for r in runs], [0.01, None])
-        self.assertEqual(json.loads(out.splitlines()[-1])['unsettled'], 1)
+        self.assertEqual([r['cost'] for r in runs], [0.01, 0.5], 'the settled sum of the ledger, not null and not the reservation')
+        summary = json.loads(out.splitlines()[-1])
+        self.assertEqual((summary['unsettled'], summary['uncertainCosts']), (0, 1))
+        sidecar = (lab.dir / 'development.json.uncertain-costs.json')
+        self.assertTrue(sidecar.exists() and Path(f'{sidecar}.sha256').exists())
+        note = json.loads(sidecar.read_text())
+        self.assertEqual((note['kind'], note['role'], len(note['runs'])), ('harness-uncertain-costs', 'development', 1))
+        listed = note['runs'][0]
+        self.assertEqual((listed['arm'], listed['row'], listed['repeat'], listed['cost'], listed['openCost'], listed['uncertain']), ('baseline', '2', 0, 0.5, 0.1, 1))
+        self.assertEqual(listed['driverSaw']['waitedMs'], 90000)
+        self.assertIn('lower bound', note['note'])
+        self.assertNotIn('uncertain', json.dumps(lab.load()), 'the source itself carries no new field')
+
+    def test_a_run_with_no_cost_record_is_null_not_zero(self):
+        lab = self.lab
+        lab.fill('baseline', ['1', '2'])
+        lab.result('baseline', 'medcalc-rsi/base/2', cost='absent')
+        code, out, _ = lab.run(lab.argv(rows=('1', '2')))
+        self.assertEqual(code, 0)
+        self.assertEqual([r['cost'] for r in lab.load()['runs']], [0.01, None])
+        summary = json.loads(out.splitlines()[-1])
+        self.assertEqual((summary['unsettled'], summary['uncertainCosts']), (1, 0))
+        self.assertFalse((lab.dir / 'development.json.uncertain-costs.json').exists(), 'nothing uncertain, no sidecar')
+
+    def test_a_record_that_never_says_whether_it_is_closed_is_listed_as_uncertain(self):
+        lab = self.lab
+        lab.fill('baseline', ['1'])
+        folder = lab.result('baseline', 'medcalc-rsi/base/1')
+        record = json.loads((folder / 'result.json').read_text())
+        record['cost'] = {'cost': 0.02}
+        (folder / 'result.json').write_text(json.dumps(record))
+        code, out, _ = lab.run(lab.argv(rows=('1',)))
+        self.assertEqual(code, 0)
+        self.assertEqual(lab.load()['runs'][0]['cost'], 0.02)
+        self.assertEqual(json.loads(out.splitlines()[-1])['uncertainCosts'], 1)
 
     def test_repeats_use_the_hash_suffix_in_keys(self):
         lab = self.lab
@@ -391,15 +438,16 @@ class JudgedAbsolute(unittest.TestCase):
             for (arm, row), key in self.keys().items():
                 if (arm, row) in skip:
                     continue
-                lines.append({'key': key, 'score': score(arm, row, k), 'judge': judge})
-            lines += [dict(l) for l in extra_lines if l.get('_pass', k) == k]
-            path.write_text(''.join(json.dumps({a: b for a, b in l.items() if a != '_pass'}) + '\n' for l in lines))
+                lines.append({'key': key, 'score': score(arm, row, k), 'judge': judge, **STAMPS})
+            lines += [{'judge': judge, **STAMPS, **l} for l in extra_lines if l.get('_pass', k) == k]
+            path.write_text(''.join(json.dumps({a: b for a, b in l.items() if a != '_pass' and b is not None}) + '\n' for l in lines))
             files.append(str(path))
         return files
 
     def argv(self, files, **kw):
-        extra = ['--verdicts', *files, '--dialect', kw.get('dialect', 'percent'), '--judge-id', kw.get('judge_id', 'claude-judge-1'),
-                 '--judge-provider', kw.get('provider', 'anthropic'), '--judge-form', 'absolute', '--judge-passes', str(kw.get('passes', 3))]
+        registered = {key: kw[key] for key in ('provider', 'model', 'effort') if key in kw}
+        extra = ['--verdicts', *files, '--dialect', kw.get('dialect', 'percent'),
+                 *judge_args(self.lab.dir, kw.get('judge_id', 'claude-judge-1'), 'absolute', kw.get('passes', 3), kw.get('record'), **registered)]
         return ['--role', 'development', '--benchmark', 'researchclawbench', '--items', str(self.items_path), '--arm', f'baseline={self.lab.dirof("baseline")}',
                 '--arm', f'{ARM_ONE}={self.lab.dirof(ARM_ONE)}', '--bundles', str(self.lab.bundles), '--image-id', IMAGE_ID, '--image-digest', IMAGE_DIGEST,
                 '--bench-key', 'rcb-rsi', '--repeats', '1', '--out', str(self.lab.dir / 'development.json'), *extra]
@@ -416,7 +464,7 @@ class JudgedAbsolute(unittest.TestCase):
         self.assertEqual(by[('baseline', 'Life_000')]['reportSha256'], sha('# Report of baseline on Life_000\nbody'))
         judged = source['judged']
         self.assertEqual(judged['schema'], 1)
-        self.assertEqual(judged['judge'], {'id': 'claude-judge-1', 'provider': 'anthropic', 'form': 'absolute', 'passes': 3})
+        self.assertEqual(judged['judge'], {'id': 'claude-judge-1', 'provider': 'anthropic', 'model': 'claude-sonnet-5-5', 'effort': 'medium', 'form': 'absolute', 'passes': 3})
         self.assertEqual(judged['cost']['settledCny'], 0)
         self.assertIn('not metered in CNY', judged['cost']['note'])
         self.assertEqual(judged['calls'], 9, '3 succeeded runs x 3 passes')
@@ -436,14 +484,45 @@ class JudgedAbsolute(unittest.TestCase):
         lab.assert_checksum('development.verdicts.jsonl')
         lab.assert_checksum('development.json')
 
-    def test_the_deepseek_family_is_refused_as_a_judge(self):
-        files = self.verdict_files(skip={(ARM_ONE, 'Life_001')}, judge='DeepSeek-V4')
-        code, _, err = self.lab.run(self.argv(files, judge_id='DeepSeek-V4'))
-        self.assertEqual(code, 2)
-        self.assertIn('solver', err)
-        code, _, err = self.lab.run(self.argv(self.verdict_files(skip={(ARM_ONE, 'Life_001')}), provider='deepseek'))
-        self.assertEqual(code, 2)
+    def test_a_judge_that_is_not_claude_is_refused(self):
+        # every offline judge is Claude (owner 2026-11-03): DeepSeek and Qwen are refused, and so is a Claude model id that is not pinned
+        files = self.verdict_files(skip={(ARM_ONE, 'Life_001')})
+        for kw in ({'provider': 'deepseek', 'model': 'deepseek-v4-pro'}, {'provider': 'dashscope', 'model': 'qwen3.8-max'}, {'model': 'qwen3.8-max'},
+                   {'provider': 'deepseek'}, {'model': 'claude'}, {'model': 'claude-3.5-sonnet'}, {'model': 'claude-sonnet-5-5\n'}):
+            code, _, err = self.lab.run(self.argv(files, **kw))
+            self.assertEqual(code, 2, kw)
+            self.assertIn('every offline judge is Claude', err)
+        # the judge is the registration's, never the command line's: without the registration and the judge's own record nothing is exported
+        argv = self.argv(files)
+        for flag in ('--registration', '--judge-record'):
+            at = argv.index(flag)
+            code, _, err = self.lab.run(argv[:at] + argv[at + 2:])
+            self.assertEqual(code, 2, flag)
+            self.assertIn('verdicts need --registration', err)
         self.assertFalse((self.lab.dir / 'development.json').exists())
+
+    def test_what_judged_is_bound_the_registration_the_judges_record_and_every_line_name_one_judge(self):
+        skip = {(ARM_ONE, 'Life_001')}
+        files = self.verdict_files(skip=skip)
+        # the record of the parts directory names another effort, another model, another judge, or is of the old schema that named no effort
+        for record, needle in (({'effort': 'high'}, "'effort': 'high'"), ({'model': 'claude-opus-5-5'}, "'model': 'claude-opus-5-5'"),
+                               ({'judge': 'claude-judge-2'}, "'judge': 'claude-judge-2'"), ({'schema': 'claude-judge/1'}, 'claude-judge/1')):
+            code, _, err = self.lab.run(self.argv(files, record=record))
+            self.assertEqual(code, 2, record)
+            self.assertIn(needle, err)
+        # a registration that names no effort registered no judge this exporter can bind
+        code, _, err = self.lab.run(self.argv(files, effort=None))
+        self.assertEqual(code, 2)
+        self.assertIn('no id or no effort', err)
+        # a line without the stamps, or stamped by the judge at another effort, is not the registered judge's
+        for line in ({'key': 'rcb-rsi/base/Life_000', 'score': 50, '_pass': 1, 'judge': None, 'model': None, 'effort': None},
+                     {'key': 'rcb-rsi/base/Life_000', 'score': 50, '_pass': 1, 'effort': 'high'},
+                     {'key': 'rcb-rsi/base/Life_000', 'score': 50, '_pass': 1, 'model': None}):
+            code, _, err = self.lab.run(self.argv(self.verdict_files(skip=skip, extra_lines=[line])))
+            self.assertEqual(code, 2, line)
+            self.assertIn('is not the registered judge', err)
+        self.assertFalse((self.lab.dir / 'development.json').exists())
+        self.assertEqual(self.lab.run(self.argv(self.verdict_files(skip=skip)))[0], 0)
 
     def test_a_verdict_for_a_run_that_did_not_succeed_is_refused(self):
         code, _, err = self.lab.run(self.argv(self.verdict_files()))
@@ -464,7 +543,7 @@ class JudgedAbsolute(unittest.TestCase):
 
     def test_judge_pass_and_score_must_agree_with_the_registration(self):
         skip = {(ARM_ONE, 'Life_001')}
-        for line, needle in (({'key': 'rcb-rsi/base/Life_000', 'score': 50, 'judge': 'someone-else', '_pass': 1}, 'is not'),
+        for line, needle in (({'key': 'rcb-rsi/base/Life_000', 'score': 50, 'judge': 'someone-else', '_pass': 1}, 'is not the registered judge'),
                              ({'key': 'rcb-rsi/base/Life_000', 'score': 50, 'pass': 2, '_pass': 1}, 'disagrees with the file name'),
                              ({'key': 'rcb-rsi/base/Life_000', 'score': 140, '_pass': 1}, 'no score in [0, 1]'),
                              ({'key': 'rcb-rsi/base/Life_000', 'score': 'high', '_pass': 1}, 'no score in [0, 1]')):
@@ -492,7 +571,7 @@ class JudgedAbsolute(unittest.TestCase):
         race = []
         for path in files:
             lines = [json.loads(l) for l in Path(path).read_text().splitlines()]
-            Path(path).write_text(''.join(json.dumps({'key': l['key'], 'race': l['score'] / 2, 'judge': l['judge']}) + '\n' for l in lines))
+            Path(path).write_text(''.join(json.dumps({'key': l['key'], 'race': l['score'] / 2, 'judge': l['judge'], **STAMPS}) + '\n' for l in lines))
             race.append(path)
         self.assertEqual(self.lab.run(self.argv(race, dialect='race'))[0], 0)
         # verdict files belong to judged benchmarks only
@@ -512,6 +591,106 @@ class JudgedAbsolute(unittest.TestCase):
         summary = json.loads(out.splitlines()[-1])
         self.assertEqual(summary['records'], 9)
         self.assertFalse((lab.dir / 'confirmation.gold.json').exists(), 'a judged benchmark has no gold')
+
+
+def bix_item(row):
+    return {'key': f'bixbench/{row}', 'bench': 'bixbench', 'id': row, 'gold': {'questions': [{'n': 1, 'qid': f'{row}-q1', 'eval_mode': 'llm_verifier', 'ideal': GOLD_MARK}]},
+            'meta': {'topic': 'transcriptomics' if row.endswith('1') else 'imaging'}}
+
+
+class JudgedBixbench(unittest.TestCase):
+    """BixBench scored by a judge (benchmark `bixbench-judged`, source benchmark `bixbench`): per-question verdicts become one score per run and pass."""
+    ROWS = ('bix-1', 'bix-2')
+    QUESTIONS = {'bix-1': ['bix-1-q1', 'bix-1-q2', 'bix-1-q3', 'bix-1-q4'], 'bix-2': ['bix-2-q1', 'bix-2-q2']}
+
+    def setUp(self):
+        self.lab = Lab(self)
+        for arm in ('baseline', ARM_ONE):
+            self.lab.fill(arm, self.ROWS, bench='bix-rsi', answer='Final answers:\n1. 12\n2. yes')
+        self.items_path = self.lab.items(self.ROWS, name='bix.jsonl', make=bix_item)
+        self.ids_path = self.lab.dir / 'question-ids.json'
+        self.ids_path.write_text(json.dumps(self.QUESTIONS))
+
+    def key(self, arm, row):
+        return f'bix-rsi/{"base" if arm == "baseline" else arm}/{row}'
+
+    def verdict_files(self, passes=2, wrong=lambda arm, row, k: (), drop=(), extra=()):
+        files = []
+        for k in range(1, passes + 1):
+            path = self.lab.dir / ('bix.verdicts.jsonl' if k == 1 else f'bix.verdicts.p{k}.jsonl')
+            lines = []
+            for arm in ('baseline', ARM_ONE):
+                for row in self.ROWS:
+                    for q in self.QUESTIONS[row]:
+                        if (arm, row, k, q) in drop:
+                            continue
+                        lines.append({'key': f'{self.key(arm, row)}#{q}', 'verdict': 'incorrect' if q in wrong(arm, row, k) else 'correct', 'judge': 'claude-bix-judge', **STAMPS})
+            lines += [{'judge': 'claude-bix-judge', **STAMPS, **line} for line in extra]
+            path.write_text(''.join(json.dumps(l) + '\n' for l in lines))
+            files.append(str(path))
+        return files
+
+    def argv(self, files, **kw):
+        extra = ['--verdicts', *files, '--dialect', 'questions', *judge_args(self.lab.dir, 'claude-bix-judge', 'absolute', 2)]
+        if kw.get('ids', True):
+            extra += ['--question-ids', str(self.ids_path)]
+        return ['--role', kw.get('role', 'development'), '--benchmark', kw.get('benchmark', 'bixbench-judged'), '--items', str(self.items_path), '--arm', f'baseline={self.lab.dirof("baseline")}',
+                '--arm', f'{ARM_ONE}={self.lab.dirof(ARM_ONE)}', '--bundles', str(self.lab.bundles), '--image-id', IMAGE_ID, '--image-digest', IMAGE_DIGEST,
+                '--bench-key', 'bix-rsi', '--repeats', '1', '--out', str(self.lab.dir / 'conf.json'), *extra]
+
+    def test_the_score_of_a_run_is_the_share_of_its_questions_judged_correct_and_the_rows_carry_no_gold(self):
+        lab = self.lab
+        # bix-1: baseline pass 1 gets one of four wrong, the candidate two in pass 2; bix-2 is all correct
+        wrong = lambda arm, row, k: ('bix-1-q2',) if (arm, row, k) == ('baseline', 'bix-1', 1) else ('bix-1-q1', 'bix-1-q4') if (arm, row, k) == (ARM_ONE, 'bix-1', 2) else ()
+        code, out, err = lab.run(self.argv(self.verdict_files(wrong=wrong), role='confirmation'))
+        self.assertEqual(code, 0, err)
+        source = lab.load('conf.json')
+        self.assertEqual(source['benchmark'], 'bixbench', 'the lab knows the benchmark by its own name; the judged shape is the scorer\'s')
+        self.assertEqual(source['rows'], [{'id': 'bix-1', 'category': 'transcriptomics'}, {'id': 'bix-2', 'category': 'imaging'}])
+        self.assertFalse((lab.dir / 'conf.gold.json').exists(), 'a judged benchmark has no gold file and no gold in a row')
+        self.assertNotIn(GOLD_MARK, json.dumps(source))
+        self.assertEqual(source['judged']['calls'], 8, '4 runs x 2 passes: a judge call is a capsule\'s answer, not a question')
+        records = {(r['row'], r['arm'], r['pass']): r['score'] for r in map(json.loads, (lab.dir / 'conf.verdicts.jsonl').read_text().splitlines())}
+        self.assertEqual(records[('bix-1', 'baseline', 1)], 0.75)
+        self.assertEqual(records[('bix-1', 'baseline', 2)], 1.0)
+        self.assertEqual(records[('bix-1', ARM_ONE, 2)], 0.5)
+        self.assertEqual(records[('bix-2', ARM_ONE, 1)], 1.0)
+        self.assertEqual(len(records), 8)
+        self.assertNotIn('0.75', out + err)
+        lab.assert_checksum('conf.verdicts.jsonl')
+
+    def test_a_missing_or_surplus_question_is_an_error_never_a_half_score(self):
+        lab = self.lab
+        code, _, err = lab.run(self.argv(self.verdict_files(drop={('baseline', 'bix-1', 2, 'bix-1-q3')})))
+        self.assertEqual(code, 2)
+        self.assertIn('pass 2: no verdict for 1 of 4 questions', err)
+        self.assertFalse((lab.dir / 'conf.json').exists())
+        code, _, err = lab.run(self.argv(self.verdict_files(extra=[{'key': f'{self.key("baseline", "bix-2")}#bix-9-q1', 'verdict': 'correct'}])))
+        self.assertEqual(code, 2)
+        self.assertIn('is not a question of bix-2', err)
+        code, _, err = lab.run(self.argv(self.verdict_files(extra=[{'key': 'bix-rsi/base/bix-7#bix-7-q1', 'verdict': 'correct'}])))
+        self.assertEqual(code, 2)
+        self.assertIn('unknown verdict key', err)
+        code, _, err = lab.run(self.argv(self.verdict_files(extra=[{'key': f'{self.key("baseline", "bix-2")}#bix-2-q1', 'verdict': 'maybe'}])))
+        self.assertEqual(code, 2)
+        self.assertIn('"correct" or "incorrect"', err)
+        # a pass with no line at all for a succeeded run is a missing pass
+        code, _, err = lab.run(self.argv(self.verdict_files(passes=1)[:1]))
+        self.assertEqual(code, 2)
+        self.assertIn('lacks pass', err)
+
+    def test_the_question_list_is_required_and_a_code_scored_benchmark_takes_no_verdicts(self):
+        lab = self.lab
+        code, _, err = lab.run(self.argv(self.verdict_files(), ids=False))
+        self.assertEqual(code, 2)
+        self.assertIn('--question-ids', err)
+        self.ids_path.write_text(json.dumps({'bix-1': ['bix-1-q1']}))
+        code, _, err = lab.run(self.argv(self.verdict_files()))
+        self.assertEqual(code, 2)
+        self.assertIn('bix-2', err)
+        code, _, err = lab.run(self.argv(self.verdict_files(), benchmark='bixbench'))
+        self.assertEqual(code, 2)
+        self.assertIn('scored by code', err)
 
 
 class JudgedPairwise(unittest.TestCase):
@@ -543,16 +722,17 @@ class JudgedPairwise(unittest.TestCase):
             first = order['tasks'][task]['passes'][str(k)]['first']
             candidate_first = (first == 'a') == candidate_is_a
             p = candidate_pref if candidate_first else -candidate_pref
-            lines.append({'key': f'drb-pair/{task}/p{k}', 'scores': {'comprehensiveness': [{'idx': 0, 'pref': p}, {'idx': 1, 'pref': p}], 'insight': [{'idx': 0, 'pref': p}]}})
+            lines.append({'key': f'drb-pair/{task}/p{k}', 'scores': {'comprehensiveness': [{'idx': 0, 'pref': p}, {'idx': 1, 'pref': p}], 'insight': [{'idx': 0, 'pref': p}]},
+                          'judge': 'claude-judge-1', **STAMPS})
         return lines
 
-    def argv(self, orders, files, pair_map):
+    def argv(self, orders, files, pair_map, **registered):
         pm = self.lab.dir / 'pair-map.json'
         pm.write_text(json.dumps(pair_map))
         argv = ['--role', 'development', '--benchmark', 'deepresearchbench', '--items', str(self.items_path), '--arm', f'baseline={self.lab.dirof("baseline")}',
                 '--arm', f'{ARM_ONE}={self.lab.dirof(ARM_ONE)}', '--bundles', str(self.lab.bundles), '--image-id', IMAGE_ID, '--image-digest', IMAGE_DIGEST,
                 '--bench-key', 'drb-rsi', '--repeats', '1', '--out', str(self.lab.dir / 'development.json'), '--verdicts', *files, '--dialect', 'pairwise',
-                '--judge-id', 'claude-judge-1', '--judge-provider', 'anthropic', '--judge-form', 'pairwise', '--judge-passes', '2', '--pair-map', str(pm)]
+                *judge_args(self.lab.dir, 'claude-judge-1', registered.pop('form', 'pairwise'), registered.pop('passes', 2), **registered), '--pair-map', str(pm)]
         for order in orders:
             argv += ['--pairwise-order', str(order)]
         return argv
@@ -637,13 +817,90 @@ class JudgedPairwise(unittest.TestCase):
     def test_form_and_dialect_go_together(self):
         order = self.packets('1', 'baseline', ARM_ONE, 'b1', 'c1')
         files = [self.write('pair.jsonl', self.verdicts(order, '1', 2, candidate_is_a=False))]
-        argv = self.argv([self.out / 'order.json'], files, {'1': {'row': '1', 'repeat': 0, 'arm': ARM_ONE}})
-        argv[argv.index('--judge-form') + 1] = 'absolute'
-        code, _, err = self.lab.run(argv)
+        pair_map = {'1': {'row': '1', 'repeat': 0, 'arm': ARM_ONE}}
+        code, _, err = self.lab.run(self.argv([self.out / 'order.json'], files, pair_map, form='absolute'))
         self.assertEqual(code, 2)
-        argv = self.argv([self.out / 'order.json'], files, {'1': {'row': '1', 'repeat': 0, 'arm': ARM_ONE}})
-        argv[argv.index('--judge-passes') + 1] = '3'
-        self.assertEqual(self.lab.run(argv)[0], 2)
+        self.assertIn('go together', err)
+        self.assertEqual(self.lab.run(self.argv([self.out / 'order.json'], files, pair_map, passes=3))[0], 2)
+
+    def test_every_pairwise_line_is_the_registered_judges(self):
+        self.packets('1', 'baseline', ARM_ONE, 'b1', 'c1')
+        order = self.packets('2', 'baseline', ARM_ONE, 'b2', 'c2')
+        lines = self.verdicts(order, '1', 2, candidate_is_a=False) + self.verdicts(order, '2', 1, candidate_is_a=False)
+        pair_map = {'1': {'row': '1', 'repeat': 0, 'arm': ARM_ONE}, '2': {'row': '2', 'repeat': 0, 'arm': ARM_ONE}}
+        for change in ({'effort': 'high'}, {'judge': 'claude-judge-2'}, {'model': None}):
+            stamped = [lines[0], {k: v for k, v in {**lines[1], **change}.items() if v is not None}, *lines[2:]]
+            code, _, err = self.lab.run(self.argv([self.out / 'order.json'], [self.write('pair.jsonl', stamped)], pair_map))
+            self.assertEqual(code, 2, change)
+            self.assertIn('is not the registered judge', err)
+        self.assertEqual(self.lab.run(self.argv([self.out / 'order.json'], [self.write('pair.jsonl', lines)], pair_map))[0], 0)
+
+
+TOOL_CODE = {'image': {'id': 'lane-image-1-delta', 'digest': 'cd' * 32}, 'patchSha256': 'ef' * 32,
+             'files': [{'path': 'runtime/mcp/evimed-research/tool.py', 'sha256': '12' * 32}, {'path': 'runtime/mcp/evimed-research/data/index.json', 'sha256': '34' * 32}],
+             'toolCatalogueChars': 420}
+
+
+class ToolPatchCandidates(unittest.TestCase):
+    """A candidate that holds code: the `tool-patch` surface (the digest binds the code; the two surfaces never share candidates)."""
+
+    def bundles(self, entries):
+        tmp = tempfile.TemporaryDirectory(prefix='tool-patch-test-')
+        self.addCleanup(tmp.cleanup)
+        path = Path(tmp.name) / 'bundles.json'
+        path.write_text(json.dumps({'candidates': entries}))
+        return str(path)
+
+    def test_the_code_is_bound_into_the_digest_and_counted_in_the_always_on_growth(self):
+        text = {'guidanceSupplement': 'Call the scale tool for any named score.', 'skills': []}
+        path = self.bundles([{'title': 'scales', 'bundle': text, 'code': TOOL_CODE}])
+        (arm, record), = eha.candidate_arms(path, IMAGE, 'tool-patch').items()
+        self.assertEqual(record['digest'], eha.harness_patch_digest(text, IMAGE, TOOL_CODE))
+        self.assertNotEqual(record['digest'], eha.harness_patch_digest(text, IMAGE), 'the same text without its code is another candidate')
+        self.assertEqual(arm, f'cand-{record["digest"][:12]}')
+        self.assertEqual(record['alwaysOnChars'], len(text['guidanceSupplement']) + 420)
+        self.assertEqual(record['code']['files'][0]['path'], 'runtime/mcp/evimed-research/data/index.json', 'files are sorted by path')
+        for change in ({'patchSha256': '00' * 32}, {'toolCatalogueChars': 421}, {'image': {'id': 'lane-image-1-delta', 'digest': 'ce' * 32}},
+                       {'files': TOOL_CODE['files'][:1]}):
+            other = eha.harness_patch_digest(text, IMAGE, {**TOOL_CODE, **change})
+            self.assertNotEqual(other, record['digest'], change)
+
+    def test_a_tool_patch_may_have_no_text_a_harness_patch_may_not(self):
+        empty = {'guidanceSupplement': '', 'skills': []}
+        (_, record), = eha.candidate_arms(self.bundles([{'title': 't', 'bundle': empty, 'code': TOOL_CODE}]), IMAGE, 'tool-patch').items()
+        self.assertEqual(record['alwaysOnChars'], 420)
+        with self.assertRaises(eha.ExportError):
+            eha.candidate_arms(self.bundles([{'title': 't', 'bundle': empty}]), IMAGE, 'harness-patch')
+
+    def test_the_surfaces_refuse_each_others_candidates_and_a_malformed_code(self):
+        text = {'guidanceSupplement': 'g', 'skills': []}
+        with self.assertRaisesRegex(eha.ExportError, 'has no code'):
+            eha.candidate_arms(self.bundles([{'title': 't', 'bundle': text}]), IMAGE, 'tool-patch')
+        with self.assertRaisesRegex(eha.ExportError, 'holds code'):
+            eha.candidate_arms(self.bundles([{'title': 't', 'bundle': text, 'code': TOOL_CODE}]), IMAGE, 'harness-patch')
+        for bad in ({**TOOL_CODE, 'extra': 1}, {**TOOL_CODE, 'files': []}, {**TOOL_CODE, 'patchSha256': 'XYZ'}, {**TOOL_CODE, 'toolCatalogueChars': -1},
+                    {**TOOL_CODE, 'files': [{'path': '../etc/passwd', 'sha256': '12' * 32}]}, {**TOOL_CODE, 'files': [{'path': '/abs/x.py', 'sha256': '12' * 32}]},
+                    {**TOOL_CODE, 'files': TOOL_CODE['files'] * 2}):
+            with self.assertRaises(eha.ExportError, msg=str(bad)[:60]):
+                eha.candidate_arms(self.bundles([{'title': 't', 'bundle': text, 'code': bad}]), IMAGE, 'tool-patch')
+
+    def test_the_exported_source_carries_the_code_on_the_arm(self):
+        tmp = tempfile.TemporaryDirectory(prefix='tool-patch-export-')
+        self.addCleanup(tmp.cleanup)
+        lab = Lab(self)
+        text = {'guidanceSupplement': 'Call the scale tool.', 'skills': []}
+        bundles = Path(tmp.name) / 'bundles.json'
+        bundles.write_text(json.dumps({'candidates': [{'title': 'scales', 'bundle': text, 'code': TOOL_CODE}]}))
+        (arm, record), = eha.candidate_arms(str(bundles), IMAGE, 'tool-patch').items()
+        lab.fill('baseline', ['1', '2'])
+        lab.fill(arm, ['1', '2'])
+        code, _, err = lab.run(lab.argv(arms=('baseline', arm), rows=('1', '2'), extra=['--surface', 'tool-patch']) + ['--bundles', str(bundles)])
+        self.assertEqual(code, 0, err)
+        self.assertEqual(lab.load()['arms'][arm]['harness']['code'], record['code'])
+        # the same arm directory exported as a harness patch is refused
+        code, _, err = lab.run(lab.argv(arms=('baseline', arm), rows=('1', '2'), out='again.json') + ['--bundles', str(bundles)])
+        self.assertEqual(code, 2)
+        self.assertIn('holds code', err)
 
 
 if __name__ == '__main__':

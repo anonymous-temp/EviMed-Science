@@ -3251,5 +3251,237 @@
    "chars": 116,
    "alwaysOnChars": 81
   }
+ ],
+ "toolPatchDigest": [
+  {
+   "name": "text-and-code",
+   "bundle": {
+    "guidanceSupplement": "Call the scale tool for any named score.",
+    "skills": []
+   },
+   "image": {
+    "id": "evimed-lane-1",
+    "digest": "abababababababababababababababababababababababababababababababab"
+   },
+   "code": {
+    "image": {
+     "id": "lane-image-1-delta",
+     "digest": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+    },
+    "patchSha256": "efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef",
+    "files": [
+     {
+      "path": "runtime/mcp/evimed-research/tool.py",
+      "sha256": "1212121212121212121212121212121212121212121212121212121212121212"
+     },
+     {
+      "path": "runtime/mcp/evimed-research/data/index.json",
+      "sha256": "3434343434343434343434343434343434343434343434343434343434343434"
+     }
+    ],
+    "toolCatalogueChars": 420
+   },
+   "digest": "67ba6e3d9f45ec7c740ccfcf0d5677945b5150414aba3ad6736369a4f8b3013f",
+   "chars": 460,
+   "alwaysOnChars": 460
+  },
+  {
+   "name": "code-only",
+   "bundle": {
+    "guidanceSupplement": "",
+    "skills": []
+   },
+   "image": {
+    "id": "evimed-lane-1",
+    "digest": "abababababababababababababababababababababababababababababababab"
+   },
+   "code": {
+    "image": {
+     "id": "lane-image-1-delta",
+     "digest": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+    },
+    "patchSha256": "efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef",
+    "files": [
+     {
+      "path": "runtime/mcp/evimed-research/tool.py",
+      "sha256": "1212121212121212121212121212121212121212121212121212121212121212"
+     },
+     {
+      "path": "runtime/mcp/evimed-research/data/index.json",
+      "sha256": "3434343434343434343434343434343434343434343434343434343434343434"
+     }
+    ],
+    "toolCatalogueChars": 420
+   },
+   "digest": "f719ba414b033a785ce1dd52292700f10fc05d42bfea4cce093d17729f25f80f",
+   "chars": 420,
+   "alwaysOnChars": 420
+  },
+  {
+   "name": "code-with-skill",
+   "bundle": {
+    "guidanceSupplement": "g",
+    "skills": [
+     {
+      "name": "scale-notes",
+      "description": "Use with the scale tool.",
+      "body": "Name the scale first."
+     }
+    ]
+   },
+   "image": {
+    "id": "evimed-lane-1",
+    "digest": "abababababababababababababababababababababababababababababababab"
+   },
+   "code": {
+    "image": {
+     "id": "lane-image-1-delta",
+     "digest": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+    },
+    "patchSha256": "efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef",
+    "files": [
+     {
+      "path": "runtime/mcp/evimed-research/tool.py",
+      "sha256": "1212121212121212121212121212121212121212121212121212121212121212"
+     },
+     {
+      "path": "runtime/mcp/evimed-research/data/index.json",
+      "sha256": "3434343434343434343434343434343434343434343434343434343434343434"
+     }
+    ],
+    "toolCatalogueChars": 420
+   },
+   "digest": "4a64667ca12f70cc36398a1477927bbf3a931e152bac2ca2565edb53e5096414",
+   "chars": 477,
+   "alwaysOnChars": 456
+  },
+  {
+   "name": "files-unsorted",
+   "bundle": {
+    "guidanceSupplement": "g",
+    "skills": []
+   },
+   "image": {
+    "id": "evimed-lane-1",
+    "digest": "abababababababababababababababababababababababababababababababab"
+   },
+   "code": {
+    "image": {
+     "id": "lane-image-1-delta",
+     "digest": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+    },
+    "patchSha256": "efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef",
+    "files": [
+     {
+      "path": "runtime/mcp/evimed-research/data/index.json",
+      "sha256": "3434343434343434343434343434343434343434343434343434343434343434"
+     },
+     {
+      "path": "runtime/mcp/evimed-research/tool.py",
+      "sha256": "1212121212121212121212121212121212121212121212121212121212121212"
+     }
+    ],
+    "toolCatalogueChars": 420
+   },
+   "digest": "ce9ef13779f92c739faf429305853972e452affc69c993ae06c025ef7b8127fb",
+   "chars": 421,
+   "alwaysOnChars": 421
+  },
+  {
+   "name": "no-tool-catalogue",
+   "bundle": {
+    "guidanceSupplement": "g",
+    "skills": []
+   },
+   "image": {
+    "id": "evimed-lane-1",
+    "digest": "abababababababababababababababababababababababababababababababab"
+   },
+   "code": {
+    "image": {
+     "id": "lane-image-1-delta",
+     "digest": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+    },
+    "patchSha256": "efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef",
+    "files": [
+     {
+      "path": "runtime/mcp/evimed-research/tool.py",
+      "sha256": "1212121212121212121212121212121212121212121212121212121212121212"
+     },
+     {
+      "path": "runtime/mcp/evimed-research/data/index.json",
+      "sha256": "3434343434343434343434343434343434343434343434343434343434343434"
+     }
+    ],
+    "toolCatalogueChars": 0
+   },
+   "digest": "0a2a957323375651dae0f4a8c5115c931eca48fe205a8c0ec080ea5b0735794e",
+   "chars": 1,
+   "alwaysOnChars": 1
+  },
+  {
+   "name": "same-code-other-image",
+   "bundle": {
+    "guidanceSupplement": "Call the scale tool for any named score.",
+    "skills": []
+   },
+   "image": {
+    "id": "evimed-lane-2",
+    "digest": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+   },
+   "code": {
+    "image": {
+     "id": "lane-image-1-delta",
+     "digest": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+    },
+    "patchSha256": "efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef",
+    "files": [
+     {
+      "path": "runtime/mcp/evimed-research/tool.py",
+      "sha256": "1212121212121212121212121212121212121212121212121212121212121212"
+     },
+     {
+      "path": "runtime/mcp/evimed-research/data/index.json",
+      "sha256": "3434343434343434343434343434343434343434343434343434343434343434"
+     }
+    ],
+    "toolCatalogueChars": 420
+   },
+   "digest": "9d8c1880a39a6d55b603970a62850becb3f8c056d21f85f357fa797972023bc7",
+   "chars": 460,
+   "alwaysOnChars": 460
+  },
+  {
+   "name": "non-ascii",
+   "bundle": {
+    "guidanceSupplement": "使用量表工具 🧪",
+    "skills": []
+   },
+   "image": {
+    "id": "evimed-lane-1",
+    "digest": "abababababababababababababababababababababababababababababababab"
+   },
+   "code": {
+    "image": {
+     "id": "lane-image-1-delta",
+     "digest": "cdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd"
+    },
+    "patchSha256": "efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef",
+    "files": [
+     {
+      "path": "runtime/mcp/evimed-research/tool.py",
+      "sha256": "1212121212121212121212121212121212121212121212121212121212121212"
+     },
+     {
+      "path": "runtime/mcp/evimed-research/data/index.json",
+      "sha256": "3434343434343434343434343434343434343434343434343434343434343434"
+     }
+    ],
+    "toolCatalogueChars": 420
+   },
+   "digest": "9141c2ce4dab7e29dd1095117a07f7ce68ed7dcba7bb1da380058ab82e482f83",
+   "chars": 429,
+   "alwaysOnChars": 429
+  }
  ]
 }

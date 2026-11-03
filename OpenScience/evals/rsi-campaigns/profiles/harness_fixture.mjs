@@ -25,16 +25,34 @@ export function candidate(name, guidance, image = IMAGE) {
   const bundle = bundleOf(name, guidance), digestValue = harnessPatchDigest(bundle, image);
   return { arm: `cand-${digestValue.slice(0, 12)}`, harness: { digest: digestValue, ...harnessPatchSizes(bundle), title: name, bundle } };
 }
+/** The code a tool-patch candidate holds (invented): the patched image, the diff digest, the changed files, the first-request growth. */
+export const toolCodeOf = (name) => ({ image: { id: `evimed-lane-test-${name}`.slice(0, 60), digest: sha256(`delta-image-${name}`) }, patchSha256: sha256(`diff-${name}`),
+  files: [{ path: `runtime/mcp/evimed-research/${name}.py`, sha256: sha256(`code-${name}`) }, { path: `runtime/mcp/evimed-research/data/${name}.json`, sha256: sha256(`data-${name}`) }], toolCatalogueChars: 300 });
+/** A tool-patch candidate arm: text and code, bound together in the digest. */
+export function toolCandidate(name, guidance, image = IMAGE) {
+  const bundle = { guidanceSupplement: guidance, skills: [] }, code = toolCodeOf(name), digestValue = harnessPatchDigest(bundle, image, code);
+  return { arm: `cand-${digestValue.slice(0, 12)}`, harness: { digest: digestValue, ...harnessPatchSizes(bundle, code), title: name, bundle, code } };
+}
 export const BASE = Object.freeze({ arm: 'baseline', harness: null });
 export const AA = Object.freeze({ arm: 'aa', harness: null, control: 'A/A' });
 export const GOOD = candidate('stepwise-closure', 'Deliver a provisional result early and refine it in later turns.');
 export const WEAK = candidate('generic-reminder', 'Remember to be careful.');
+export const TOOL_GOOD = toolCandidate('scale-tool', 'Call the scale tool for any named score before answering.');
+export const TOOL_WEAK = toolCandidate('lookup-tool', 'The lookup tool exists.');
 /** Baseline and control share one distribution; GOOD repairs the failure slice; WEAK changes nothing. */
-export const improving = (arm, inSlice) => (arm === GOOD.arm ? (inSlice ? 0.8 : 0.85) : inSlice ? 0.35 : 0.85);
+export const improving = (arm, inSlice) => (arm === GOOD.arm || arm === TOOL_GOOD.arm ? (inSlice ? 0.8 : 0.85) : inSlice ? 0.35 : 0.85);
 
-const JUDGE = Object.freeze({ id: 'claude-judge-test', provider: 'anthropic', form: 'absolute', passes: 3, maxCalls: 5000,
-  qualification: { agreement: 0.96, noiseSd: 0.0155, noiseBand95: 0.0304, measuredOn: 'judge-noise.txt@2026-10-31 (synthetic)', minimumAgreement: 0.9, maximumNoiseBand: 0.05 } });
-export const judgeOf = (changes = {}) => ({ ...structuredClone(JUDGE), ...changes });
+const JUDGE = Object.freeze({ id: 'claude-judge-test', provider: 'anthropic', model: 'claude-sonnet-5-5', effort: 'medium', form: 'absolute', passes: 3, maxCalls: 5000,
+  qualification: { measuredOn: 'judge-noise.json sha256:0123456789abcdef drb/absolute (synthetic)', form: 'absolute', scale: 'verdict-0-1', agreement: 0.96, noiseSd: 0.0155, noiseBand95: 0.0304 } });
+/** The registered judge with `changes`. A judge registered in another form carries a measurement of that form (unless the test gives its own qualification). */
+export const judgeOf = (changes = {}) => {
+  const judge = { ...structuredClone(JUDGE), ...changes };
+  if (changes.form !== undefined && !Object.hasOwn(changes, 'qualification')) judge.qualification = { ...judge.qualification, form: changes.form };
+  return judge;
+};
+/** The round's improvement record: who wrote the candidates (invented; the fixture's candidates are fixed strings). */
+export const IMPROVEMENT = Object.freeze({ schema: 'rsi-improvement-test/1', writtenBy: 'synthetic fixture', improvers: [{ role: 'writing-candidates', provider: 'anthropic', model: 'claude-opus-5-5' }] });
+export const improvementOf = (changes = {}) => ({ ...structuredClone(IMPROVEMENT), ...changes });
 
 /** What differs between the scorers in a fixture: the row shape, the failure slice, a right answer and a wrong one. */
 export const KITS = {
@@ -74,7 +92,7 @@ function judgedSection({ kit, rows, runs, judge, mean, noise, seed, stem, verdic
   records.sort((a, b) => natural(a.row, b.row) || a.arm.localeCompare(b.arm) || a.repeat - b.repeat || a.pass - b.pass);
   const text = records.map((record) => `${JSON.stringify(record)}\n`).join('');
   return { text, records, section: {
-    schema: 1, judge: { id: judge.id, provider: judge.provider, form: judge.form, passes: judge.passes }, calls: records.length + extraCalls,
+    schema: 1, judge: { id: judge.id, provider: judge.provider, model: judge.model, effort: judge.effort, form: judge.form, passes: judge.passes }, calls: records.length + extraCalls,
     cost: { settledCny: 0, note: "Judge calls run under the operator's Claude subscription; not metered in CNY." },
     files: [{ name: `${stem}.p1.jsonl`, sha256: sha256(`raw-verdicts-${stem}`), lines: records.length }],
     recordsFile: { name: `${stem}.verdicts.jsonl`, sha256: sha256(text), lines: records.length } } };
@@ -131,9 +149,10 @@ export function roundOf(kit, { developmentIds, confirmationIds, judge, campaigns
  * @param {keyof typeof KITS} kitId
  */
 export async function harnessFixture(kitId = 'medcalc', {
-  developmentRows = 30, confirmationRows = 32, sliceShareDev = 0.6, sliceShareConf = 0.85, developmentArms = [BASE, AA, GOOD, WEAK], confirmationArms = [BASE, GOOD],
+  surface = 'harness-patch', developmentRows = 30, confirmationRows = 32, sliceShareDev = 0.6, sliceShareConf = 0.85,
+  developmentArms = surface === 'tool-patch' ? [BASE, AA, TOOL_GOOD, TOOL_WEAK] : [BASE, AA, GOOD, WEAK], confirmationArms = surface === 'tool-patch' ? [BASE, TOOL_GOOD] : [BASE, GOOD],
   p, mean, noise, cost, developmentStatus, confirmationStatus, verdictShape, judge = kitId === 'judged' ? judgeOf() : undefined, mutateRound, mutateExports, month = '2026-11', id = '', developmentIds, confirmationIds,
-  campaignsPerQuarter = 3, candidatesMax = 3, repeatsConfirmation = 3, now = '2026-10-26T00:00:00Z', improvement, seeds = {},
+  campaignsPerQuarter = 3, candidatesMax = 3, repeatsConfirmation = 3, now = '2026-10-26T00:00:00Z', improvement = improvementOf(), seeds = {},
 } = {}) {
   const kit = KITS[kitId];
   const devIds = developmentIds ?? Array.from({ length: developmentRows }, (_, i) => 1000 + i), confIds = confirmationIds ?? Array.from({ length: confirmationRows }, (_, i) => 2000 + i);
@@ -145,7 +164,8 @@ export async function harnessFixture(kitId = 'medcalc', {
     confirmation: exportSource(kit, { ...shared, role: 'confirmation', ids: confIds, sliceShare: sliceShareConf, arms: confirmationArms, repeats: repeatsConfirmation, seed: seedsFor.confirmation, status: confirmationStatus }),
   };
   mutateExports?.(exports);
-  const round = roundOf(kit, { developmentIds: devIds.map((x) => kit.row(x, 0, true).id), confirmationIds: confIds.map((x) => kit.row(x, 0, true).id), judge, campaignsPerQuarter, candidatesMax });
+  const round = roundOf(kit, { developmentIds: devIds.map((x) => kit.row(x, 0, true).id), confirmationIds: confIds.map((x) => kit.row(x, 0, true).id), judge, campaignsPerQuarter, candidatesMax,
+    changes: surface === 'tool-patch' ? { surface } : {} });
   mutateRound?.(round);
   if (mutateRound) round.digest = roundRegistrationDigest(round);
   const built = await buildHarnessCampaign({ development: exports.development.source, confirmation: exports.confirmation.source, registration: round, confirmationGold: exports.confirmation.gold ?? undefined,

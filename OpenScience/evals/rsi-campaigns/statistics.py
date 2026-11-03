@@ -5,7 +5,7 @@ rationale before confirmation. A group is the registered independent sampling un
 (a source group, or a day for a consumer that shares capacity across a day). Rows are complete arm/form/repeat measurements;
 unknown outcomes are never scored zero. Costs include every paid attempt. The
 paired-t scope is approximate, independent source groups with continuous bounded
-scores, >=30 groups per tested population and no influential group. Deterministic
+scores, >=25 groups per tested population (PROCEDURE['minimum_slice_groups']) and no influential group. Deterministic
 mode makes exact claims only about the registered finite corpus, never a population.
 A trusted deterministic consumer permits r1 in paired-t mode, while retaining
 between-source-group sampling uncertainty; finite-corpus mode is diagnostic only.

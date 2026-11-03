@@ -22,6 +22,10 @@
 //      a timeout cancels the run and records status "timeout";
 //   6. the answer (last assistant message of the transcript), the full transcript, the run record, the cost
 //      (`GET /api/runs/:id/usage`) and the text files the run wrote are written to <out>/<key>/…
+//      A usage record that still shows an uncertain call or an open reservation at that moment is read again (every
+//      `--usage-poll-ms`, up to `--usage-settle-s`, default 90 s: a late settlement or the reconciliation sweep can close it);
+//      result.json `costSettle` says what was seen first and last and how long the driver waited — a record that never closes
+//      is kept as the ledger last said it, never guessed.
 //
 // Files (collectFiles): at most 40 are read, and the report-like ones always come first — a document under a `report/` folder, a
 // Markdown/Word/PDF file at any depth (newest, then largest), then the figures of a report, then the rest in the run record's order
@@ -116,7 +120,8 @@ function parseArgs(argv) {
 const args = parseArgs(process.argv.slice(2));
 if (args.help || !args.queue || !args.out) {
   console.log("usage: bench-driver.mjs --queue <file.jsonl> --out <dir> [--base http://127.0.0.1:18887] [--poll-ms 8000] [--limit N]\n"
-    + "       [--min-credits 40] [--skill-warmup-s 180] [--no-skill-warmup] [--no-archive] [--retry-scale 1] [--insecure]");
+    + "       [--min-credits 40] [--skill-warmup-s 180] [--no-skill-warmup] [--no-archive] [--retry-scale 1] [--insecure]\n"
+    + "       [--usage-settle-s 90] [--usage-poll-ms 10000]");
   process.exit(args.help ? 0 : 2);
 }
 const base = String(args.base ?? "http://127.0.0.1:18887").replace(/\/+$/, "");
@@ -127,6 +132,9 @@ const pollMs = Number(args["poll-ms"] ?? 8000);
 const limit = args.limit === undefined ? Infinity : Number(args.limit);
 const minCredits = Number(args["min-credits"] ?? 40);
 const archiveRuns = args["no-archive"] !== true;
+/** How long a usage record that still shows an uncertain call or an open reservation is read again, and how often (0 = read once). */
+const usageSettleS = Number.isFinite(Number(args["usage-settle-s"] ?? 90)) ? Math.max(0, Number(args["usage-settle-s"] ?? 90)) : 90;
+const usagePollMs = Math.max(1, Number(args["usage-poll-ms"] ?? 10_000) || 10_000);
 /** Multiplies every refusal wait (tests use a tiny value; production leaves it at 1). */
 const retryScale = Number(args["retry-scale"] ?? 1);
 const waitFor = (/** @type {number} */ ms) => Math.max(1, Math.round(ms * (Number.isFinite(retryScale) && retryScale > 0 ? retryScale : 1)));
@@ -167,6 +175,11 @@ async function api(method, route, { body, project, timeoutMs = 60_000 } = {}) {
   }
 }
 const said = (/** @type {{ status: number, code: string | null }} */ answer) => `${answer.status}${answer.code ? ` ${answer.code}` : ""}`;
+
+/** A usage record (`GET /api/runs/:id/usage`) that is not closed: it counts an uncertain call, or money still reserved. @param {any} cost */
+const usageOpen = (cost) => Boolean(cost) && (Number(cost.uncertain) > 0 || Number(cost.openCost) > 0);
+/** The figures the settle wait is decided on. @param {any} cost */
+const usageFacts = (cost) => cost ? { cost: cost.cost ?? null, openCost: cost.openCost ?? null, uncertain: cost.uncertain ?? null, calls: cost.calls ?? null } : null;
 
 /** @param {string} key */
 const itemDir = (key) => path.join(outDir, key.replace(/\//g, "__").replace(/[^\w.\-]/g, "_"));
@@ -753,9 +766,24 @@ async function capture(item, group, finished, result, dir) {
     listUsage: run.usage ?? null,
   });
 
-  const usage = await api("GET", `/api/runs/${encodeURIComponent(runId)}/usage`, { project: projectId });
+  let usage = await api("GET", `/api/runs/${encodeURIComponent(runId)}/usage`, { project: projectId });
   result.cost = usage.status === 200 ? usage.body?.data ?? null : null;
   captured.cost = usage.status === 200 ? "ok" : `error ${said(usage)}`;
+  // A call the ledger holds as uncertain, or a reservation still open, is read again for a bounded time: a late settlement or the
+  // reconciliation sweep closes some of them. What was seen first and last is recorded; a record that stays open is kept as it
+  // last read, and the exporter decides what that means for the run.
+  if (usageOpen(result.cost) && usageSettleS > 0) {
+    const first = usageFacts(result.cost), began = Date.now();
+    let reads = 1;
+    while (usageOpen(result.cost) && !shuttingDown && Date.now() - began < usageSettleS * 1000) {
+      await sleep(Math.min(usagePollMs, Math.max(1, usageSettleS * 1000 - (Date.now() - began))));
+      usage = await api("GET", `/api/runs/${encodeURIComponent(runId)}/usage`, { project: projectId });
+      reads += 1;
+      if (usage.status === 200 && usage.body?.data) { result.cost = usage.body.data; captured.cost = "ok"; }
+    }
+    result.costSettle = { waitedMs: Date.now() - began, reads, first, final: usageFacts(result.cost), settled: !usageOpen(result.cost) };
+    log(`item ${item.key}: usage had ${first.uncertain} uncertain / ${first.openCost} open; after ${Math.round((Date.now() - began) / 1000)} s it reads ${result.costSettle.final?.uncertain} uncertain / ${result.costSettle.final?.openCost} open`);
+  }
 
   await recordSkillOutcome(group, item, run, messages, answer, result);
 

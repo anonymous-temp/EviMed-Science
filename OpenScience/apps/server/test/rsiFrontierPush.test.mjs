@@ -82,7 +82,77 @@ test('the unit retries a failure a few times, spaced out, and then stays failed 
   assert.equal(sections.Service.Type, 'oneshot')
 })
 
-test('the export reads only the live module policy row', async () => {
-  const code = await readFile(new URL('../../../scripts/ops/rsi-frontier-export.mjs', import.meta.url), 'utf8')
-  assert.match(code, /evolution-module-policy-frontier' AND payload->>'status' = 'active' AND deleted_at IS NULL/)
+const exportScript = new URL('../../../scripts/ops/rsi-frontier-export.mjs', import.meta.url).pathname
+const repoRoot = new URL('../../../', import.meta.url).pathname
+
+/**
+ * A serving release for the export, as a directory: the real frontier pipeline, editor and domain re-exported, a configuration of `config`, a database
+ * that records every statement and answers the module-policy read with `policyRow`, and — `serving` — the real serving adapters, an older module
+ * without `rsiIncumbent`, or none at all. Returns what the export wrote and the statements it sent.
+ * @param {{config:any, policyRow?:any, serving:'real'|'older'|'absent'}} release
+ */
+async function exportFrom({ config, policyRow = null, serving }) {
+  const app = await mkdtemp(path.join(os.tmpdir(), 'rsi-export-app-'))
+  try {
+    const put = async (/** @type {string} */ file, /** @type {string} */ text) => { await mkdir(path.dirname(path.join(app, file)), { recursive: true }); await writeFile(path.join(app, file), text) }
+    const real = (/** @type {string} */ file) => `export * from ${JSON.stringify(`file://${path.join(repoRoot, file)}`)}\n`
+    await put('apps/server/src/config.mjs', `export const loadConfig = () => (${JSON.stringify(config)})\n`)
+    await put('apps/server/src/controlPlaneDatabase.mjs', `import { appendFileSync } from 'node:fs'
+export class ControlPlaneDatabase {
+  constructor() { this.pool = { connect: async () => ({ release() {}, query: async (sql, params = []) => {
+    appendFileSync(process.env.FAKE_QUERY_LOG, JSON.stringify({ sql, params }) + '\\n')
+    return { rows: /evimed_product\\.documents/.test(sql) ? ${JSON.stringify(policyRow ? [policyRow] : [])} : [] }
+  } }) } }
+  async close() {}
+}
+`)
+    for (const file of ['apps/server/src/frontierPipeline.mjs', 'apps/server/src/frontierEditor.mjs', 'packages/domain/index.mjs']) await put(file, real(file))
+    for (const file of ['packages/domain/src/frontierMix.mjs', 'packages/domain/src/frontierSelection.mjs', 'packages/domain/src/frontier-selection.json', 'packages/domain/src/frontierGenres.mjs',
+      'packages/domain/src/frontierVocabulary.mjs']) await put(file, '// consumer file\n')
+    if (serving === 'real') await put('apps/server/src/rsiServingAdapters.mjs', real('apps/server/src/rsiServingAdapters.mjs'))
+    if (serving === 'older') await put('apps/server/src/rsiServingAdapters.mjs', 'export const createRsiServingAdapters = () => null\n')
+    const log = path.join(app, 'queries.jsonl')
+    const done = spawnSync(process.execPath, ['--input-type=module', '-', '--from', '2026-10-01', '--to', '2026-10-01'], { input: await readFile(exportScript, 'utf8'), encoding: 'utf8',
+      env: { PATH: process.env.PATH, RSI_EXPORT_APP_ROOT: app, FAKE_QUERY_LOG: log, OPEN_SCIENCE_RELEASE_ID: 'release-test.1' }, maxBuffer: 1 << 24 })
+    assert.equal(done.status, 0, done.stderr)
+    const queries = (await readFile(log, 'utf8').catch(() => '')).split('\n').filter(Boolean).map((line) => JSON.parse(line))
+    return { document: JSON.parse(done.stdout), queries }
+  } finally { await rm(app, { recursive: true, force: true }) }
+}
+
+test('the export reads the incumbent policy row by the serving layer\'s own statement, owner included, and names it by the serving layer\'s own function', async () => {
+  const { createRsiServingAdapters, rsiIncumbent, rsiPolicyDefaults } = await import('../src/rsiServingAdapters.mjs')
+  const config = { operatorUsers: ['operator-1', 'operator-2'], frontierSelectThreshold: 64, frontierTimeZone: 'Asia/Shanghai' }
+  const policyRow = { payload: { status: 'active', policy: { selectionThreshold: 70 } }, revision: 7 }
+  const { document, queries } = await exportFrom({ config, policyRow, serving: 'real' })
+  // What the serving layer itself sends for the same module (its `currentTarget`, owner = the evolution service's owner, the first operator).
+  /** @type {{sql:string, params:any[]}[]} */
+  const served = []
+  const adapters = createRsiServingAdapters({ config: { ...config, rootDir: repoRoot }, service: { owner: async () => config.operatorUsers[0] }, database: {}, documents: {},
+    computeClosure: async () => ({ qualified: true, dependencyDigest: 'a'.repeat(64) }) })
+  const target = await adapters.currentTarget('frontier-selection', { query: async (/** @type {string} */ sql, /** @type {any[]} */ params) => { served.push({ sql, params }); return { rows: [policyRow] } } })
+  const reads = (/** @type {{sql:string}[]} */ list) => list.filter((q) => /evimed_product\.documents/.test(q.sql))
+  assert.deepEqual(reads(queries), reads(served), 'the same statement over the same owner and record')
+  assert.deepEqual(reads(queries)[0].params, ['operator-1', 'evolution-module-policy-frontier'])
+  assert.deepEqual(document.incumbent, { revisionId: target.baselineRevision, threshold: 70 })
+  assert.equal(document.incumbent.revisionId, rsiIncumbent('frontier', policyRow, rsiPolicyDefaults('frontier', config)).revisionId)
+  assert.deepEqual([document.settings.threshold, document.settings.thresholdSource], [70, 'module-policy'])
+  const exportCode = await readFile(exportScript, 'utf8')
+  assert.ok(!/\b(INSERT|UPDATE|DELETE)\b/.test(exportCode.replace(/\/\*[\s\S]*?\*\//g, '')), 'the export writes nothing')
+  assert.doesNotMatch(exportCode, /payload->>'status'/, 'the status of the row is not read by a second rule')
+})
+
+test('a release that cannot name its incumbent as the serving layer would still exports the month, without an incumbent, at the configured line', async () => {
+  const config = { operatorUsers: ['operator-1'], frontierSelectThreshold: 64, frontierTimeZone: 'Asia/Shanghai' }
+  const policyRow = { payload: { status: 'active', policy: { selectionThreshold: 70 } }, revision: 7 }
+  for (const [release, why] of [[{ config, policyRow, serving: 'absent' }, 'a release from before the serving adapters'],
+    [{ config, policyRow, serving: 'older' }, 'serving adapters without rsiIncumbent'],
+    [{ config: { ...config, operatorUsers: [] }, policyRow, serving: 'real' }, 'no operator owns the module policy']]) {
+    const { document, queries } = await exportFrom(/** @type {any} */ (release))
+    assert.equal(Object.hasOwn(document, 'incumbent'), false, why)
+    assert.deepEqual([document.settings.threshold, document.settings.thresholdSource], [64, 'config'], why)
+    assert.equal(queries.some((q) => /evimed_product\.documents/.test(q.sql)), false, `${why}: no policy row is read`)
+    assert.equal(document.schema, 'rsi-frontier-export-v1')
+    assert.equal(document.days.length, 1)
+  }
 })

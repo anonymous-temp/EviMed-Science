@@ -20,6 +20,7 @@ import { canonicalRsiJson, rsiDigest } from '../../apps/server/src/rsiCampaignBu
 import { chooseFrontierCandidate, evaluateFrontierDays, frontierCampaignConsumerIdentity, frontierObservations } from './frontier_campaign.mjs';
 import { chooseSkillCandidate, skillCampaignConsumerIdentity, skillObservationCosts, skillObservations } from './skill_campaign.mjs';
 import { HARNESS_COST_IDENTITY, chooseHarnessCandidate, harnessCampaignConsumerIdentity, harnessDevelopmentResult, harnessObservationCosts, harnessObservations } from './harness_campaign.mjs';
+import { toolPatchCampaignConsumerIdentity } from './tool_patch_campaign.mjs';
 
 /** The cost identity of a campaign whose arms ran on production: settled CNY per run from the usage ledger, exported with the runs. */
 export const SKILL_COST_IDENTITY = 'production-usage-ledger-settled-cny';
@@ -45,7 +46,7 @@ export function signEnvelope(payload, key) {
  * @param {{manifest:any, inputs:any, request:any, checkpoint:any, now?:string}} input
  */
 export async function evaluatorReceiptPayload({ manifest, inputs, request, checkpoint, now = new Date().toISOString() }) {
-  if (!['frontier-selection', 'capability-skill', 'harness-patch'].includes(manifest.surface)) fail('campaign_consumer_not_qualified');
+  if (!['frontier-selection', 'capability-skill', 'harness-patch', 'tool-patch'].includes(manifest.surface)) fail('campaign_consumer_not_qualified');
   const binding = rsiDigest({ manifest, inputs });
   if (request.binding !== binding || checkpoint.binding !== binding) fail('campaign_evaluator_binding_changed');
   const registration = inputs.registration, statistics = registration.statistics;
@@ -54,7 +55,7 @@ export async function evaluatorReceiptPayload({ manifest, inputs, request, check
   for (const source of [development, confirmation]) if (rsiDigest(inputs.sources[source.id]) !== source.digest) fail('campaign_source_changed');
   if (request.corpusDigest !== confirmation.digest || request.registrationDigest !== rsiDigest(statistics ?? null)) fail('campaign_evaluator_binding_changed');
   if (manifest.surface === 'capability-skill') return skillReceiptPayload({ manifest, inputs, request, checkpoint, now, development, confirmation });
-  if (manifest.surface === 'harness-patch') return harnessReceiptPayload({ manifest, inputs, request, checkpoint, now, development, confirmation });
+  if (manifest.surface === 'harness-patch' || manifest.surface === 'tool-patch') return harnessReceiptPayload({ manifest, inputs, request, checkpoint, now, development, confirmation });
   const identity = await frontierCampaignConsumerIdentity();
   if (statistics?.consumer_id !== identity.implementationSha256 || statistics?.corpus_digest !== confirmation.digest) fail('campaign_evaluation_consumer_or_corpus_changed');
   // The freeze followed the registered rule on the development source alone.
@@ -144,7 +145,7 @@ async function skillReceiptPayload({ manifest, inputs, request, checkpoint, now,
  */
 async function harnessReceiptPayload({ manifest, inputs, request, checkpoint, now, development, confirmation }) {
   const registration = inputs.registration, statistics = registration.statistics;
-  const identity = await harnessCampaignConsumerIdentity(registration);
+  const identity = manifest.surface === 'tool-patch' ? await toolPatchCampaignConsumerIdentity(registration) : await harnessCampaignConsumerIdentity(registration);
   if (statistics?.consumer_id !== identity.implementationSha256 || statistics?.corpus_digest !== confirmation.digest) fail('campaign_evaluation_consumer_or_corpus_changed');
   const choice = chooseHarnessCandidate(inputs.sources[development.id], registration);
   const frozen = checkpoint.frozenPolicy;

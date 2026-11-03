@@ -4,12 +4,18 @@ image and for the candidate image, `repeats.confirmation` times each. Nothing is
 
   make_confirmation.py --registration rsi/round1/medcalc/registration.json --out-dir rsi/round1/medcalc \\
                        [--prefix cf] [--base-tag base --base-image base] [--candidate-tag cstar --candidate-image cand-cstar] \\
-                       [--bench-root DIR] [--ppc FILE] [--force]
+                       [--bench-root DIR] [--ppc FILE] [--exclude-opened FILE ...] [--exclude-ids FILE ...] [--allow-public-fetch] [--force]
 
 Writes DIR/requests.<tag>.jsonl for each arm: one line per (row, repeat), rid `<prefix>.<family>.<row>.<tag>.r<k>` (k from 0, as the
 development runs and export_harness_arms.py count), the registered image of the arm, the bench-driver queue line of the baseline form
 (`families.Task.queue_line()`: the same line a development row gets, `timeBudgetMinutes` included for every family but medcalc) and an
 empty probe. Only a size per file is printed, never a prompt.
+
+A family whose tasks carry input files (BixBench, ResearchClawBench) also gets DIR/fetch.json: the public-data manifest `brokerctl.py submit --fetch`
+attaches to the requests that name those files (`families.fetch_entries`: the pinned upstream URLs, sizes and sha256 of the registered rows only).
+`--allow-public-fetch` lets the builders read the public task statement and file listing of a row that is not cached (ResearchClawBench's `task_info.json`
+and the Hugging Face tree of the pinned revision, never its checklist); without it a row whose statement is not on the box stops the call.
+`--exclude-opened` and `--exclude-ids` are the files the registration was made with (it re-derives its rows from them).
 
 Why a tool of its own. `families.Family.tasks()` refuses any id outside the development list, on purpose: the development code reads
 no confirmation row. A confirmation request needs the prompt of the registered confirmation rows and nothing else, so this tool calls
@@ -49,7 +55,7 @@ class ConfirmationRefused(Exception):
     """A request set that cannot be built; the message says why. Nothing was written."""
 
 
-def read_registration(path: Path, *, bench_root: Path, ppc_file: Path | None) -> dict:
+def read_registration(path: Path, *, bench_root: Path, ppc_file: Path | None, exclude_opened=(), exclude_ids=()) -> dict:
     """The registration, verified. With the pools file (and the ppc file the registration records) the rows are re-derived as well."""
     document = json.loads(Path(path).read_text(encoding="utf-8"))
     family = document.get("family")
@@ -65,7 +71,7 @@ def read_registration(path: Path, *, bench_root: Path, ppc_file: Path | None) ->
         if hashlib.sha256(Path(ppc_file).read_bytes()).hexdigest() != recorded:
             raise ConfirmationRefused("the ppc file is not the one the registration recorded (sha256 differs)")
         ppc = ppc_file
-    problems = register_round.check(str(path), str(pools) if pools.is_file() else None, pool_name, str(ppc) if ppc else None)
+    problems = register_round.check(str(path), str(pools) if pools.is_file() else None, pool_name, str(ppc) if ppc else None, [str(f) for f in exclude_opened], [str(f) for f in exclude_ids])
     if problems:
         raise ConfirmationRefused("the registration does not verify: " + "; ".join(problems))
     rows = [str(i) for i in (document.get("rows") or {}).get("confirmation") or []]
@@ -108,13 +114,25 @@ def build_requests(document: dict, arms: list[dict], *, bench_root: Path, prefix
     return out
 
 
+def build_fetch(document: dict, *, bench_root: Path, fetcher: families.Fetcher | None = None) -> list[dict]:
+    """The public-data manifest of the registered rows (empty for a family whose tasks carry no input file)."""
+    ids = [str(i) for i in document["rows"]["confirmation"]]
+    try:
+        return families.fetch_entries(document["family"], ids, root=bench_root, fetcher=fetcher or families.Fetcher(enabled=False))
+    except families.DataUnavailable as error:
+        raise ConfirmationRefused(str(error))
+
+
 def serialise(requests: list[dict]) -> bytes:
     return "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in requests).encode("utf-8")
 
 
-def write_all(out_dir: Path, built: dict[str, list[dict]], *, force: bool) -> dict[str, Path]:
+def write_all(out_dir: Path, built: dict[str, list[dict]], *, force: bool, fetch: list[dict] | None = None) -> dict[str, Path]:
     payloads = {tag: serialise(requests) for tag, requests in built.items()}
     paths = {tag: out_dir / f"requests.{tag}.jsonl" for tag in payloads}
+    if fetch:
+        payloads["fetch"] = json.dumps(fetch).encode("utf-8")
+        paths["fetch"] = out_dir / "fetch.json"
     for tag, path in paths.items():
         if path.exists() and not force and path.read_bytes() != payloads[tag]:
             raise ConfirmationRefused(f"{path} exists with other content; it is never replaced without --force")
@@ -135,6 +153,9 @@ def main(argv=None) -> int:
     parser.add_argument("--candidate-image", default="cand-cstar")
     parser.add_argument("--bench-root", default=str(config.BENCH_ROOT))
     parser.add_argument("--ppc", default=str(config.PPC_TASKS_FILE))
+    parser.add_argument("--exclude-opened", action="append", default=[])
+    parser.add_argument("--exclude-ids", action="append", default=[])
+    parser.add_argument("--allow-public-fetch", action="store_true")
     parser.add_argument("--force", action="store_true")
     args = parser.parse_args(argv)
     arms = [{"tag": args.base_tag, "image": args.base_image}, {"tag": args.candidate_tag, "image": args.candidate_image}]
@@ -142,15 +163,21 @@ def main(argv=None) -> int:
         if len({a["tag"] for a in arms}) != 2:
             raise ConfirmationRefused("the two arms need two tags")
         root = Path(args.bench_root)
-        document = read_registration(Path(args.registration), bench_root=root, ppc_file=Path(args.ppc) if args.ppc else None)
-        built = build_requests(document, arms, bench_root=root, prefix=args.prefix)
-        paths = write_all(Path(args.out_dir), built, force=args.force)
+        document = read_registration(Path(args.registration), bench_root=root, ppc_file=Path(args.ppc) if args.ppc else None,
+                                     exclude_opened=args.exclude_opened, exclude_ids=args.exclude_ids)
+        fetcher = families.Fetcher(enabled=args.allow_public_fetch)
+        built = build_requests(document, arms, bench_root=root, prefix=args.prefix, fetcher=fetcher)
+        fetch = build_fetch(document, bench_root=root, fetcher=fetcher)
+        paths = write_all(Path(args.out_dir), built, force=args.force, fetch=fetch)
     except (ConfirmationRefused, register_round.RegistrationError, OSError, ValueError) as error:
         print(f"make_confirmation: {error}", file=sys.stderr)
         return 2
     rows, repeats = len(document["rows"]["confirmation"]), document["repeats"]["confirmation"]
     for tag, path in paths.items():
-        print(f"{path} {path.stat().st_size} bytes, {len(built[tag])} requests ({rows} rows x {repeats} repeats), image {next(a['image'] for a in arms if a['tag'] == tag)}")
+        if tag == "fetch":
+            print(f"{path} {path.stat().st_size} bytes, {len(fetch)} public-data entries")
+        else:
+            print(f"{path} {path.stat().st_size} bytes, {len(built[tag])} requests ({rows} rows x {repeats} repeats), image {next(a['image'] for a in arms if a['tag'] == tag)}")
     return 0
 
 

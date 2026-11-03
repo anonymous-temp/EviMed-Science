@@ -466,6 +466,30 @@ test("a purpose CHECK written for an older vocabulary is replaced, not left refu
   }
 });
 
+test("a purpose CHECK a later release widened is kept on a rollback to this one, with the rows of its newer purpose", options, async () => {
+  // Review of 2026-11-03: the migration replaced any CHECK not named for its own list and validated it in the same transaction, so a
+  // rollback past a release that added a purpose refused to start on that purpose's rows, holding the ledger's lock while it scanned.
+  const wider = "usage_model_requests_purpose_ffffffffffff_check";
+  const list = (/** @type {readonly string[]} */ purposes) => purposes.map((purpose) => `'${purpose}'`).join(",");
+  await database.query(`ALTER TABLE evimed_usage.model_requests DROP CONSTRAINT ${USAGE_PURPOSE_CHECK}`);
+  await database.query(`ALTER TABLE evimed_usage.model_requests ADD CONSTRAINT ${wider} CHECK (purpose IN (${list([...USAGE_PURPOSES, "future-work"])}))`);
+  const row = await ledger.reserveModel(reservation(owner, { now: new Date("2033-03-06T00:00:00.000Z") }));
+  await database.query("UPDATE evimed_usage.model_requests SET purpose='future-work' WHERE id=$1", [row.id]);
+  const fresh = new ControlPlaneDatabase({ databaseUrl, databasePoolMax: 2, databaseConnectionTimeoutMs: 2_000 });
+  try {
+    await migrateUsageLedger(fresh);
+    const held = (await fresh.query(`SELECT conname, convalidated FROM pg_constraint
+      WHERE conrelid='evimed_usage.model_requests'::regclass AND conname LIKE 'usage_model_requests_purpose_%'`)).rows.map((item) => [item.conname, item.convalidated]);
+    assert.deepEqual(held, [[wider, true]]);
+  } finally {
+    // The table as the other tests expect it: this release's CHECK, and no row of a purpose it does not know.
+    await database.query("DELETE FROM evimed_usage.model_requests WHERE id=$1", [row.id]);
+    await database.query(`ALTER TABLE evimed_usage.model_requests DROP CONSTRAINT IF EXISTS ${wider}`);
+    await database.query(`ALTER TABLE evimed_usage.model_requests ADD CONSTRAINT ${USAGE_PURPOSE_CHECK} CHECK (purpose IN (${list(USAGE_PURPOSES)}))`);
+    await fresh.close();
+  }
+});
+
 test("a spend that already happened is recorded settled in one step and lands once", options, async () => {
   // A specialist engine reports what its job spent when the job ends: there is
   // nothing to reserve, and a cap check could only make the ledger wrong.

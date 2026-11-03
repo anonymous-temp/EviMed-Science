@@ -20,6 +20,13 @@ candidate arm.
 
 Writes --out (`{"candidates": [{"title", "bundle"}]}`, the file export_harness_arms.py --bundles reads) and `<out stem>.identity.json`: the
 patch ref and commit, the image, the arm id `cand-<12 hex>`, the digest and the sizes. Python 3.10 compatible; run with `python3 -I`.
+
+A TOOL patch (--tool-patch: a branch that holds code, a tool or a connector, beside the text that tells the model about it; the `tool-patch`
+surface) adds --code-path (repeatable: the code files or directories the branch changes), --tool-catalogue-chars (what its tools add to the first
+request, measured on the patched image) and the patched image (--patched-image-id, --patched-image-digest or the same derivation as above with
+`|delta`). The candidate then carries `code`: the patched image, the sha256 of `git diff <base>...<patch> -- <code paths>`, the changed files with
+the sha256 of each as the branch has it, and the catalogue characters. The guidance may add nothing then; a branch with no change under the code
+paths is refused.
 """
 import argparse
 import hashlib
@@ -77,13 +84,43 @@ def added_guidance(repo, base, patch, path, allow_removals):
     return added, removed
 
 
+def code_of(args, commit):
+    """The `code` entry of a tool patch: the patched image, the digest of the code diff, the changed files as the branch has them."""
+    if not args.code_path:
+        raise BundleError('--tool-patch needs at least one --code-path')
+    names = git(args.repo, 'diff', '--name-only', f'{args.base}...{args.patch}', '--', *args.code_path).split()
+    if not names:
+        raise BundleError('the patch changes nothing under the --code-path given')
+    diff = git(args.repo, 'diff', '--binary', f'{args.base}...{args.patch}', '--', *args.code_path)
+    files = []
+    for name in sorted(names):
+        shown = subprocess.run(['git', '-C', str(args.repo), 'show', f'{commit}:{name}'], capture_output=True)
+        # a file the patch deleted has no content at the patch commit: it is listed with the digest of nothing, and the diff says it was removed
+        files.append({'path': name, 'sha256': hashlib.sha256(shown.stdout if shown.returncode == 0 else b'').hexdigest()})
+    if args.patched_image_digest:
+        digest, source = args.patched_image_digest, 'given'
+    else:
+        digest = hashlib.sha256(f'{args.image_artifact}|{commit}|delta'.encode()).hexdigest()
+        source = f'sha256("{args.image_artifact}|{commit}|delta"): the CI artifact name of the release images and the commit of the patch, for the delta image built from it'
+    image = eha.check_image({'id': args.patched_image_id or f'{args.image_id}-{commit[:8]}', 'digest': digest})
+    code = eha.normalize_code({'image': image, 'patchSha256': hashlib.sha256(diff.encode('utf-8')).hexdigest(), 'files': files, 'toolCatalogueChars': args.tool_catalogue_chars})
+    return code, source
+
+
 def build(args):
     commit = git(args.repo, 'rev-parse', '--verify', f'{args.patch}^{{commit}}').strip()
     base_commit = git(args.repo, 'merge-base', args.base, args.patch).strip()
-    added, removed = added_guidance(args.repo, args.base, args.patch, args.guidance_path, args.allow_removals)
+    try:
+        added, removed = added_guidance(args.repo, args.base, args.patch, args.guidance_path, args.allow_removals)
+    except BundleError as error:
+        # a tool patch may change no guidance at all: its code is the patch; every other refusal stands
+        if not (args.tool_patch and 'adds no line' in str(error)):
+            raise
+        added, removed = [], 0
     note = args.note if args.note is not None else (pathlib.Path(args.note_file).read_text(encoding='utf-8').strip() if args.note_file else '')
     supplement = '\n'.join(added + ([note] if note else []))
-    bundle = eha.normalize_bundle({'guidanceSupplement': supplement, 'skills': []})
+    bundle = eha.normalize_bundle({'guidanceSupplement': supplement, 'skills': []}, allow_empty=args.tool_patch)
+    code, code_source = code_of(args, commit) if args.tool_patch else (None, None)
     if args.image_digest:
         digest, source = args.image_digest, 'given'
     else:
@@ -92,14 +129,17 @@ def build(args):
                   'the CI artifact name of the release images and the commit of the patch')
     image = eha.check_image({'id': args.image_id, 'digest': digest})
     out = pathlib.Path(args.out)
-    document = {'candidates': [{'title': args.title, 'bundle': bundle}]}
+    document = {'candidates': [{'title': args.title, 'bundle': bundle, **({'code': code} if code else {})}]}
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(document, ensure_ascii=False, indent=1) + '\n', encoding='utf-8')
-    (arm, record), = eha.candidate_arms(str(out), image).items()
+    (arm, record), = eha.candidate_arms(str(out), image, eha.TOOL_PATCH_SURFACE if code else eha.HARNESS_SURFACE).items()
     identity = {'patch': {'ref': args.patch, 'commit': commit, 'base': args.base, 'mergeBase': base_commit, 'guidancePath': args.guidance_path,
                           'addedLines': len(added), 'removedLines': removed, 'noteChars': len(note)},
                 'image': {**image, 'digestSource': source}, 'arm': arm, 'harnessDigest': record['digest'], 'chars': record['chars'], 'alwaysOnChars': record['alwaysOnChars'],
                 'title': args.title, 'bundlesSha256': hashlib.sha256(out.read_bytes()).hexdigest()}
+    if code:
+        identity['surface'] = eha.TOOL_PATCH_SURFACE
+        identity['code'] = {**code, 'patchedImageDigestSource': code_source, 'codePaths': list(args.code_path)}
     identity_path = out.with_name(out.stem + '.identity.json')
     identity_path.write_text(json.dumps(identity, ensure_ascii=False, indent=1) + '\n', encoding='utf-8')
     return identity, identity_path
@@ -119,7 +159,15 @@ def main(argv=None):
     p.add_argument('--image-artifact', required=True)
     p.add_argument('--image-digest')
     p.add_argument('--out', required=True)
+    p.add_argument('--tool-patch', action='store_true', help='the branch holds code: record it in the candidate (see above)')
+    p.add_argument('--code-path', action='append', default=[], help='a code file or directory the branch changes (repeatable; --tool-patch)')
+    p.add_argument('--tool-catalogue-chars', type=int, default=0, help='what the tools of the patch add to the first request (--tool-patch)')
+    p.add_argument('--patched-image-id', help='the id of the delta image (--tool-patch; default <image-id>-<commit 8>)')
+    p.add_argument('--patched-image-digest', help='the digest of the delta image when one is known (--tool-patch)')
     args = p.parse_args(argv)
+    if not args.tool_patch and (args.code_path or args.tool_catalogue_chars or args.patched_image_id or args.patched_image_digest):
+        print('make_harness_bundle: --code-path, --tool-catalogue-chars and --patched-image-* belong to --tool-patch', file=sys.stderr)
+        return 2
     if args.note is not None and args.note_file:
         print('make_harness_bundle: give --note or --note-file, not both', file=sys.stderr)
         return 2
