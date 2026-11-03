@@ -30,7 +30,7 @@
       "version": "1.1.0",
       "endpoints": [],
       "crossChecks": [
-        "profile_dataset.py"
+        "every printed figure recomputed from its definition (means, spreads, type-7 quantiles, counts)"
       ],
       "modelTier": null,
       "compatibleVersions": [
@@ -50,7 +50,7 @@
       "version": "1.1.0",
       "endpoints": [],
       "crossChecks": [
-        "simstudy semantics"
+        "truncated-normal moments and a Gauss-Hermite integral of the copula correlation"
       ],
       "modelTier": "scenario",
       "compatibleVersions": [
@@ -70,7 +70,7 @@
       "version": "1.0.0",
       "endpoints": [],
       "crossChecks": [
-        "synthpop"
+        "the training table it was fitted to: marginals, correlations and logistic coefficients"
       ],
       "modelTier": "data"
     },
@@ -116,7 +116,8 @@
         "time_to_event"
       ],
       "crossChecks": [
-        "simsurv"
+        "simsurv (exponential and Weibull event times at the same parameters)",
+        "regression on the output table"
       ],
       "modelTier": "scenario",
       "compatibleVersions": [
@@ -127,8 +128,7 @@
       "version": "1.0.0",
       "endpoints": [],
       "crossChecks": [
-        "metafor",
-        "meta engine"
+        "metafor"
       ],
       "modelTier": "literature"
     },
@@ -138,7 +138,8 @@
         "time_to_event"
       ],
       "crossChecks": [
-        "IPDfromKM"
+        "IPDfromKM (the same digitized curve, risk table and event total: medians and hazard ratio)",
+        "Cox on the original rows"
       ],
       "modelTier": "literature",
       "compatibleVersions": [
@@ -372,7 +373,7 @@
         "time_to_event"
       ],
       "crossChecks": [
-        "O'Hagan 2005",
+        "numerical integration of power over the design prior (the O'Hagan 2005 definition)",
         "independent Monte Carlo of the sequential design under the design prior"
       ],
       "modelTier": "scenario",
@@ -387,7 +388,7 @@
         "continuous"
       ],
       "crossChecks": [
-        "EMA 2022 qualification opinion"
+        "closed-form sample size under the EMA 2022 opinion's correlation and variance discounts"
       ],
       "modelTier": "scenario"
     },
@@ -395,7 +396,7 @@
       "version": "1.0.0",
       "endpoints": [],
       "crossChecks": [
-        "Anisimov & Fedorov 2007"
+        "independent gamma, Poisson and binomial constructions of the Anisimov & Fedorov 2007 model"
       ],
       "modelTier": "scenario"
     },
@@ -480,8 +481,8 @@
       ],
       "crossChecks": [
         "EmpiricalCalibration 3.1.4 (sccs example)",
-        "Lipsitch 2010",
-        "Schuemie 2014"
+        "metafor::rma maximum-likelihood fit of the empirical null",
+        "known-truth simulation of a common systematic bias"
       ],
       "modelTier": "data",
       "compatibleVersions": [
@@ -497,7 +498,7 @@
       "crossChecks": [
         "stats::fisher.test and stats::binom.test",
         "closed-form worst case (censoring as event)",
-        "Jackson et al. 2014"
+        "survival::coxph with Breslow ties"
       ],
       "modelTier": "data"
     },

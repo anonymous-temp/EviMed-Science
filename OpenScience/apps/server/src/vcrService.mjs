@@ -288,7 +288,7 @@ export const VCR_REFERENCE_MODELS = Object.freeze([
       retirement: "当引擎的 patients.time_to_event 方法版本变更时退役并重新发布。",
     }),
     applicability: Object.freeze({ population: "不限，但只作情景推演", region: "不限", endpoints: Object.freeze(["time_to_event"]) }),
-    validation: Object.freeze({ codeVerification: "对照 simsurv 的已知真值", seedReproducible: true }),
+    validation: Object.freeze({ codeVerification: "同参数对照 simsurv 的生存率与风险比，并对照解析真值（指数与 Weibull 分布）", seedReproducible: true }),
     evidence: Object.freeze(["code_verification", "seed_reproducible"]),
   }),
   // The trajectory model (2026-10-07, plan 5.2): a linear mixed model of a continuous outcome over a visit schedule. Its inputs are

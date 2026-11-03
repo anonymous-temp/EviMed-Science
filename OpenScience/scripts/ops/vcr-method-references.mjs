@@ -126,6 +126,13 @@ export const NUMERIC_REFERENCES = {
   N48c: { methods: ['design.simulate'], anchors: ['against an independent simulation written in plain R', 'abs(z) <= 3.5'] },
   N48d: { methods: ['design.grid'], anchors: ['a grid cell equals the single job at the cell\'s own seed', 'identical(cell$value, vcr_measure_value(one, "power"))'] },
 
+  // --- the algorithm round's verification debts (2026-11-03): each held to a cross-check package that the case really calls ---
+  // evidence.reconstruct_km: IPDfromKM::getIPD on the same digitized curve, risk table and event total; medians and the Cox log hazard ratio
+  N17e: { methods: ['evidence.reconstruct_km'], anchors: ['IPDfromKM::getIPD(prep, armID = arm, tot.events = a$totalEvents)$IPD', 'abs(lhr_eng - lhr_pkg) <= 0.02'] },
+  // patients.time_to_event: simsurv::simsurv at the same parameters, Kaplan-Meier survival and the Cox log hazard ratio within their joint error
+  N28h: { methods: ['patients.time_to_event'], anchors: ['simsurv::simsurv(dist = s$dist', 'worst <= 4'] },
+
+
   // --- the comparator-effect stream's cases (listed so that merging it needs no edit here; inert until the cases exist) ---
   N33a: { methods: ['comparator.weighted_cox'], anchors: ['Cross-software: the weights are WeightIt', 'rel(m(j_ebal, "hazard_ratio"), r_ebal$hr) < 1e-6'] },
   N34a: { methods: ['comparator.maic_time_to_event'], anchors: ['The unanchored vignette: 500 patients of arm A matched', 'abs(m("hazard_ratio_robust")$value - 0.2834780) < 1e-6'] },
@@ -195,6 +202,55 @@ export function referenceProblems(methodIds, definitions) {
     for (const method of spec.methods) if (!known.has(method)) problems.push({ caseId, problem: `names ${method}, which the engine does not dispatch` });
     for (const anchor of spec.anchors) {
       if (!definition.lines.some(line => line.includes(anchor))) problems.push({ caseId, problem: `its anchor is no longer in the case: ${JSON.stringify(anchor)}` });
+    }
+  }
+  return problems;
+}
+
+/**
+ * The R package names a free-text label mentions: every word of it (letters, digits and dots) that is, character for
+ * character, the name of a package in a lock. `pkg::fn` and "pkg (a vignette)" both name `pkg`; a word that merely
+ * resembles a name does not, so "meta engine" names `meta` (the package) and has to be true of it or be dropped.
+ * @param {string} label
+ * @param {ReadonlySet<string>} packages
+ * @returns {string[]}
+ */
+export function packagesNamedBy(label, packages) {
+  return [...new Set(String(label).split(/[^A-Za-z0-9.]+/).filter(word => packages.has(word)))];
+}
+
+/**
+ * Whether the numeric cases call a package: `pkg::` (not in a comment line), `library(pkg)` or `requireNamespace("pkg"`.
+ * @param {string} name
+ * @param {string} source the cases' text with whole-line comments removed
+ */
+function callsPackage(name, source) {
+  const escaped = name.replace(/[.]/g, '\\.');
+  return new RegExp(`(?<![A-Za-z0-9._])${escaped}::|library\\(\\s*["']?${escaped}["']?\\s*[,)]|requireNamespace\\(\\s*["']${escaped}["']`).test(source);
+}
+
+/**
+ * Hidden knowledge: a method's `crossChecks` says what its numeric cases are held against, and a label that names a package no
+ * case calls is a claim nothing checks (`patients.time_to_event` said `simsurv` and `evidence.reconstruct_km` said `IPDfromKM`
+ * while no case ran either). A label that names a package in either lock (the runtime one or the cross-check one) is therefore
+ * a problem unless `tests/numeric` calls that package. The rule asks only that the call exists; whether the case compares the
+ * method against it is what the case's own `detail` and the reviewer say. A label that names no package (a closed form, a
+ * published table) is not this rule's business.
+ * @param {Record<string, { crossChecks?: readonly string[] | string }>} methods the registry as the engine's snapshot holds it
+ * @param {Iterable<string>} packages the names of the packages in the locks
+ * @param {{ path: string, bytes: Buffer | string }[]} files the files of `tests/numeric`
+ * @returns {{ method: string, label: string, packageName: string }[]}
+ */
+export function crossCheckLabelProblems(methods, packages, files) {
+  const names = new Set(packages);
+  const source = files.map(file => String(file.bytes).split(/\r?\n/).filter(line => !/^\s*#/.test(line)).join('\n')).join('\n');
+  const problems = [];
+  for (const [method, spec] of Object.entries(methods)) {
+    const labels = Array.isArray(spec?.crossChecks) ? spec.crossChecks : spec?.crossChecks ? [spec.crossChecks] : [];
+    for (const label of labels) {
+      for (const packageName of packagesNamedBy(label, names)) {
+        if (!callsPackage(packageName, source)) problems.push({ method, label, packageName });
+      }
     }
   }
   return problems;

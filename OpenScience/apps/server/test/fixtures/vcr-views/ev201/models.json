@@ -475,7 +475,7 @@
         {
           "label": "代码核对",
           "state": "passed",
-          "detail": "对照 simsurv 的已知真值"
+          "detail": "同参数对照 simsurv 的生存率与风险比，并对照解析真值（指数与 Weibull 分布）"
         },
         {
           "label": "种子可复现",

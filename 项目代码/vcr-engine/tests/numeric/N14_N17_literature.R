@@ -245,6 +245,47 @@ vcr_case("N17c", c("AC-30"), function() {
   list(pass = abs(ours - ref) < 1e-8, detail = sprintf("log HR %.10f vs coxph(breslow) %.10f (|d| %.1e)", ours, ref, abs(ours - ref)))
 })
 
+vcr_case("N17e", c("AC-03", "AC-27"), function() {
+  # The reconstruction against a second, independent implementation of Guyot's algorithm: IPDfromKM::getIPD (Liu, Zhou & Lee 2021),
+  # run on the SAME digitized coordinates, the SAME numbers at risk and the SAME total events as the job. Two simulated trials, an
+  # exponential one and a Weibull one with a longer tail and unequal arms of follow-up. What must agree is what a reader takes from
+  # the reconstruction: each arm's median and the hazard ratio (the Cox log hazard ratio of the pseudo-patients). The package is the
+  # check only; it is not called from R/*.R. Hidden knowledge: IPDfromKM::preprocess() calls dplyr's n() unqualified, so the package
+  # has to be ATTACHED (library), not only loaded -- `IPDfromKM::preprocess` alone fails inside dplyr.
+  if (!requireNamespace("IPDfromKM", quietly = TRUE)) stop("N17e requires the locked IPDfromKM library")
+  suppressMessages(library(IPDfromKM)); suppressMessages(library(survival))
+  km_median <- function(d) unname(summary(survival::survfit(survival::Surv(time, status) ~ 1, d))$table["median"])
+  pkg_ipd <- function(a, arm) {
+    curve <- data.frame(time = vapply(a$curve, function(p) p$time, numeric(1)), surv = vapply(a$curve, function(p) p$surv, numeric(1)))
+    t_risk <- vapply(a$riskTable, function(p) p$time, numeric(1)); n_risk <- vapply(a$riskTable, function(p) p$atRisk, numeric(1))
+    prep <- IPDfromKM::preprocess(dat = as.matrix(cbind(curve$time, curve$surv * 100)), trisk = t_risk, nrisk = n_risk, totalpts = n_risk[1], maxy = 100)
+    IPDfromKM::getIPD(prep, armID = arm, tot.events = a$totalEvents)$IPD
+  }
+  one <- function(tag, dist, n, hr, accrual, followup, t_risk, clicks_to) {
+    set.seed(1717L, kind = VCR_RNG_KIND)
+    dc <- vcr_sim_tte(0L, n, dist, 1, accrual, followup); dt <- vcr_sim_tte(n, 0L, dist, hr, accrual, followup)
+    ac <- .n17_arm(dc, t_risk, clicks_to, noise = 0.004); at <- .n17_arm(dt, t_risk, clicks_to, noise = 0.004)
+    r <- vcr_test_run(vcr_test_job("evidence.reconstruct_km", c(ac, list(treatmentArm = at, provenance = .n17_prov)),
+                                   list(list(kind = "evidence", id = "ev_km@1")), seed = 1L, job_id = paste0("job_n17e_", tag)))
+    ic <- pkg_ipd(ac, 0); it <- pkg_ipd(at, 1)
+    lhr_pkg <- unname(stats::coef(survival::coxph(survival::Surv(time, status) ~ treat, rbind(ic, it))))
+    lhr_true <- vcr_cox_loghr(c(dc$time, dt$time), c(dc$status, dt$status), c(rep(0L, nrow(dc)), rep(1L, nrow(dt))))
+    eng <- c(control = vcr_measure_value(r, "median_survival_control"), treatment = vcr_measure_value(r, "median_survival_treatment"))
+    pkg <- c(control = km_median(ic), treatment = km_median(it))
+    lhr_eng <- vcr_measure_value(r, "log_hazard_ratio")
+    list(status = r$status, eng = eng, pkg = pkg, lhr_eng = lhr_eng, lhr_pkg = lhr_pkg, lhr_true = lhr_true,
+         med_rel = max(abs(eng - pkg) / pkg), d_lhr = abs(lhr_eng - lhr_pkg),
+         ok = identical(r$status, "succeeded") && all(is.finite(c(eng, pkg, lhr_eng, lhr_pkg))) &&
+           max(abs(eng - pkg) / pkg) <= 0.02 && abs(lhr_eng - lhr_pkg) <= 0.02 &&
+           abs(lhr_eng - lhr_true) <= 0.05 && abs(lhr_pkg - lhr_true) <= 0.05)
+  }
+  e <- one("exp", vcr_dist_exponential_from_median(12), 300L, 0.65, list(kind = "uniform", duration = 12), 24, seq(0, 30, by = 6), 36)
+  w <- one("wei", list(kind = "weibull", shape = 1.4, scale = 14), 180L, 0.7, list(kind = "uniform", duration = 18), 30, seq(0, 36, by = 6), 48)
+  line <- function(x) sprintf("medians engine %.2f/%.2f vs IPDfromKM %.2f/%.2f (worst rel %.3f, tol 0.02), log HR engine %.4f vs IPDfromKM %.4f (|d| %.4f, tol 0.02; Cox on the original rows %.4f)",
+                              x$eng[["control"]], x$eng[["treatment"]], x$pkg[["control"]], x$pkg[["treatment"]], x$med_rel, x$lhr_eng, x$lhr_pkg, x$d_lhr, x$lhr_true)
+  list(pass = e$ok && w$ok, detail = sprintf("same digitized curves, risk tables and event totals through both; exponential arms: %s; Weibull arms: %s", line(e), line(w)))
+})
+
 vcr_case("N14b", c("AC-08", "AC-30"), function() {
   # MAIC through the job, on the closed-form case of N14: one binary covariate at
   # 0.4 in the IPD and 0.6 in the aggregate trial, n = 300 -> weight ratio 2.25
