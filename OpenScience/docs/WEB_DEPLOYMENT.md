@@ -1027,7 +1027,9 @@ isolated builder through `release:images`; do not run a Compose build here.
 The image also installs the complete native LoopX bundle and its CLI/workflow
 skills from the digest-bound `loopx` entry in `deps-version.json`. Use `/loopx`
 in a conversation to start goal tracking; its native GoalBar supports pause and
-resume. `OPEN_SCIENCE_LOOPX_ENABLED=false` disables its hosted driver and skill
+resume. The control plane takes up a goal a release or a crash interrupted and
+pauses one that leaves no file or reaches its spend limit (see the runbook's long
+research goals section). `OPEN_SCIENCE_LOOPX_ENABLED=false` disables its hosted driver and skill
 root after recreating the controller and project runtimes. Bootstrap is done
 at build time; `/loopx-init` only verifies the installed tools. The published
 driver needs the recorded DSH tool-result envelope adaptation in

@@ -1572,6 +1572,12 @@ test("a turn that ended with no reply and no file is a failure, not a success, a
     const answered = await store.reconcileSession(project, binding.sessionId);
     assert.equal(answered.status, "succeeded");
     assert.equal(answered.errorCode, null);
+
+    // A turn that did something with no words about it did something.
+    await dispatch("turn_tool_only");
+    appendHistory([{ type: "tool", tool: "bash", state: { status: "completed", input: { command: "true" }, output: "" } }]);
+    const toolOnly = await store.reconcileSession(project, binding.sessionId);
+    assert.equal(toolOnly.status, "succeeded");
   });
 });
 

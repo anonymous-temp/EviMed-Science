@@ -7032,10 +7032,12 @@ export class AgentRunStore {
     }
     // A turn that ended on its own and left nothing to read: no reply and no file. The kernel took a reply of a single reasoning token for
     // a finished turn while the provider was answering 503 (2026-11-03, 15 minutes, a research goal that never began), and the page said it
-    // was done. It is a failure, and the provider's rather than the question's. A round of LoopX's own has nothing to say to anyone and is
-    // not held to this.
+    // was done. It is a failure, and the provider's rather than the question's. Not held to this: a round of LoopX's own, which has nothing
+    // to say to anyone; a turn that called a tool, which did something; and a bare command (`/compact`), which no model answers.
     if (terminal.status === "succeeded" && !isGoalContinuation(run) && artifacts.length === 0 && outputs.files.length === 0
-      && outputs.presented.length === 0 && !assistantProse(allRunAssistants).trim()) {
+      && outputs.presented.length === 0 && !assistantProse(allRunAssistants).trim()
+      && !allRunAssistants.some((message) => message?.parts?.some((/** @type {any} */ part) => part?.type === "tool"))
+      && !/^\/\S+$/.test(String(run.question ?? "").trim())) {
       terminal.status = "failed";
       terminal.errorCode = "model_empty_reply";
     }

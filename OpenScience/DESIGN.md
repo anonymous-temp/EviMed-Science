@@ -1159,3 +1159,12 @@ The owner asked that the process picture of 主动科研 be the page's core and 
   or a command) and 「接入数据」 (into the project's knowledge base). A scheduled study is made in 定时任务 and shown in the queue.
 - **No back office on the page.** Tool names, route reasons, ledger caveats and “what was not observed” sentences stay out;
   operations are named in the reader's words (`callLabel`), and a missing observation is simply absent.
+- **A goal says what it came to (2026-11-03).** A round that ran to its end says nothing of the goal, so the queue reads the control
+  plane's state of the goal between rounds: 进行中 with 下一轮马上开始, 已暂停, 已中断, 等你决定, 已完成, 已停止. The subject row carries
+  长期研究 · 已推进 N 轮 · 累计消耗 X 灵豆 (no spend figure where no round reported any, which is not zero), the three acts 暂停, 停止本轮
+  and 继续 where each can do something, and one sentence where a goal rests for a reason the person did not give. LoopX's own shell calls
+  and reasoning about its task list stay out of the feed, the counts and the 思考 line. With nothing under way and no frame for 90 seconds
+  the status reads 等待模型响应, not 实时. A goal's files are one row per path, the newest.
+- **The conversation pane fits the window.** The kernel's frame is laid over the pane's rectangle and the shell clips at the window's
+  bottom, so the pane is as tall as the window leaves below its top (at least 360 px), measured after the page has scrolled to it and on
+  resize. LoopX's bar in the frame shows its progress, its state and its button, never its product name or the goal's internal id.
