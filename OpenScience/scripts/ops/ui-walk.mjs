@@ -1581,7 +1581,8 @@ export function measureComposition([options] = [{}]) {
     const group = el.closest("form, [data-action-group='selection']");
     const localGroup = group ? { kind: group.tagName.toLowerCase() === "form" ? "form" : "selection", primaries: [...group.querySelectorAll("button.bg-accent, a.bg-accent, [role='button'].bg-accent")].filter(visible).length,
       declared: group.tagName.toLowerCase() === "form" || (group.getAttribute("role") === "toolbar" && Boolean(group.getAttribute("aria-label") || group.getAttribute("aria-labelledby"))) } : null;
-    return { text: nameOf(el), ...at, localGroup, run, markedRun: Boolean(bar), inHeader: el.closest("[data-page-header]") !== null || at.top <= titleBottom + 8, excused: el.closest("[data-empty], [data-step-state], [data-state-screen], form") !== null };
+    // 主动科研's standby observatory is that page's empty state, and its 「发起研究」 is the way forward (the header does not repeat it).
+    return { text: nameOf(el), ...at, localGroup, run, markedRun: Boolean(bar), inHeader: el.closest("[data-page-header]") !== null || at.top <= titleBottom + 8, excused: el.closest("[data-empty], [data-observatory='empty'], [data-step-state], [data-state-screen], form") !== null };
   });
 
   // A tab or a chip that counts nothing (a trailing number that is 0) is a switch to an empty place.
