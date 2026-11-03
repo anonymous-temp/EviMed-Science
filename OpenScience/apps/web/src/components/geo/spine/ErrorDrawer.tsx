@@ -100,7 +100,7 @@ export function ErrorDrawer({
             </p>
           )}
           {basis && <p data-geo-error-basis="" className="mt-1 text-caption text-text-3">{`依据：${basis}`}</p>}
-          {claim.severity && <p className="mt-2 text-caption text-text-3">{`${claim.severity}：${SEVERITY_WORDS[claim.severity]}`}</p>}
+          {claim.severity && <p className="mt-2 text-caption text-text-3">{`潜在临床风险 ${claim.severity}：${SEVERITY_WORDS[claim.severity]}。仅凭回答无法判断患者是否已用药或受伤。`}</p>}
         </Section>
 
         <Section title="各引擎怎么说" count={`${claim.rows.length} 条`} level="sub">

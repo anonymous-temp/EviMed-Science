@@ -119,7 +119,7 @@ export const CITED_ATTRIBUTE_WORDS: Readonly<Record<string, string>> = Object.fr
 export const GEO_SEVERITY_WORDS: Readonly<Record<GeoSeverity, string>> = Object.freeze({
   S0: "几乎无影响",
   S1: "影响轻微",
-  S2: "需监测或干预",
+  S2: "可能需要监测或干预",
   S3: "可致暂时伤害",
   S4: "可致永久伤害或危及生命",
 });

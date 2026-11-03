@@ -84,13 +84,14 @@ function BySeverity({ errors, summary, selection, emptyAssessment }: { errors: r
     .map((engine) => {
       const mine = errors.filter((error) => error.engine === engine);
       const levels: SeverityLevel[] = ["S4", "S3", "S2", "S1", "S0"];
+      const unknown = summary ? summary.byEngineSeverity[`${engine}:unknown`] ?? 0 : mine.filter(error => !levels.includes(error.severity)).length;
       return {
         engine,
         total: summary?.byEngine[engine] ?? mine.length,
         segments: levels.flatMap<ShareSegment>((level) => {
           const count = summary ? summary.byEngineSeverity[`${engine}:${level}`] ?? 0 : mine.filter((error) => error.severity === level).length;
           return count > 0 ? [{ key: `${engine}:${level}`, label: level, value: count, tone: SEVERITY_TONES[level] }] : [];
-        }).concat((summary?.byEngineSeverity[`${engine}:unknown`] ?? 0) > 0 ? [{ key: `${engine}:unknown`, label: "严重度未知", value: summary!.byEngineSeverity[`${engine}:unknown`], tone: "quiet" }] : []) as ShareSegment[],
+        }).concat(unknown > 0 ? [{ key: `${engine}:unknown`, label: "严重度未知", value: unknown, tone: "quiet" }] : []) as ShareSegment[],
       };
     })
     .sort((left, right) => right.total - left.total);
@@ -98,11 +99,14 @@ function BySeverity({ errors, summary, selection, emptyAssessment }: { errors: r
   return (
     <ChartCard
       title={worst ? zh`${engineName(worst.engine)}讲错最多，${worst.total} 条` : emptyAssessment.title}
+      footnote="严重度描述 AI 回答可能造成的临床后果；仅凭回答无法判断患者是否已用药或受伤。"
       legend={(
         <>
+          <SeverityBadge level="S4" label />
           <SeverityBadge level="S3" label />
           <SeverityBadge level="S2" label />
           <SeverityBadge level="S1" label />
+          <SeverityBadge level="S0" label />
         </>
       )}
       state={rows.length === 0 ? "empty" : "content"}
@@ -125,6 +129,7 @@ function BySeverity({ errors, summary, selection, emptyAssessment }: { errors: r
                 <span className="min-w-0 flex-1"><ShareBar label={`${engineName(row.engine)} 的讲错`} segments={row.segments} legend={false} /></span>
                 <span className="w-8 shrink-0 text-right text-ui tabular-nums text-text">{row.total}</span>
               </button>
+              <p className="px-2 text-caption text-text-3">{row.segments.map(segment => `${segment.label} ${segment.value} 条`).join(" · ")}</p>
             </li>
           );
         })}

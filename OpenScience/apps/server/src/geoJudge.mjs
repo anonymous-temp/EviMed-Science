@@ -30,9 +30,9 @@ import { geoClaimApplicability, geoClaimAssessmentIdentity, geoClaimForStatement
  *   sentences and safety terms must be in the answer; red-flag ids must be
  *   the ones offered.
  * - **Severity is 初判** (`severity_basis: 'initial'`) until a pharmacist
- *   calibration set exists: the scale is anchored to NCC MERP (S2 needs
- *   monitoring or intervention, S3 temporary harm, S4 permanent harm or
- *   life-threatening), and S3 and above notify at once (`geoErrors.mjs`).
+ *   calibration set exists: S0–S4 prioritizes potential consequences. It is
+ *   not an NCC MERP patient-outcome category or evidence of actual harm.
+ *   S3 and above notify at once (`geoErrors.mjs`).
  * - **Metered like the frontier editor**: `callModelForControlPlane`, model
  *   `deepseek-flash`, purpose `geo`, thinking off, JSON mode, temperature 0,
  *   an explicit `max_tokens`, its own timeout, the account caps off (`limits`
