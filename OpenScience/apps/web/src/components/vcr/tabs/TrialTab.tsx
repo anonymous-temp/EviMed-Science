@@ -1,5 +1,6 @@
 import { VcrAccrualForecasts } from "../VcrAccrualForecasts";
 import { VcrConfirmatoryDesigns } from "../VcrConfirmatoryDesigns";
+import { VcrSuccessRates } from "../VcrSuccessRates";
 import { VcrScientificBasis } from "../VcrScientificBasis";
 import { VcrVersionComparison } from "../VcrVersionComparison";
 import { useRef, useState } from "react";
@@ -397,6 +398,9 @@ function DesignsView({ studyId, study, data, headline, noneRan, failed, onOpen, 
             ))}
           </div>
         )}
+
+      {/* The base rates of development beside the assurance the table gives: a reference for the phase, in two columns, never this trial's probability. */}
+      {!noneRan && <VcrSuccessRates rates={data.successRates} />}
 
       {/* How the simulation was set up, folded under the comparison it explains: the lines are what a reviewer checks, not what a
           reader of the table needs first. */}

@@ -55,6 +55,7 @@ import { reportSchedule } from "./vcrScheduleView.mjs";
 import { vcrPremises } from "./vcrPremises.mjs";
 import { presentPopulationCheck } from "./vcrPopulationCheck.mjs";
 import { presentConfirmatoryDesigns } from "./vcrConfirmatory.mjs";
+import { presentEvidenceSyntheses, tauPriorWords, vcrSuccessRatesPage } from "./vcrEvidenceSynthesis.mjs";
 import { presentBiasAnalysis } from "./vcrBiasAnalysis.mjs";
 import { presentTrim } from "./vcrTrimView.mjs";
 import { localCalibrationView } from "./vcrLocalCalibration.mjs";
@@ -1166,6 +1167,8 @@ export function presentTrialTab(bundle) {
     } : null,
     forecasts: forecastRows,
     accrualForecasts,
+    // The base rates of development, two sources side by side, beside an assurance (E6): a reference, never this trial's probability.
+    successRates: designs.some((design) => design.measures.assurance) ? vcrSuccessRatesPage() : null,
     // The confirmatory designs the conversation computed (design_confirmatory): a card each, with its own premises and baselines.
     confirmatoryDesigns: presentConfirmatoryDesigns(bundle, { nodeOf: resultNode }),
     milestones,
@@ -1830,6 +1833,8 @@ export function presentDataTab(bundle, query = {}) {
           ...(numeric(pooling.k) !== null ? [{ label: "研究数", value: String(numeric(pooling.k)) }] : []),
           ...(numeric(pooling.i2) !== null ? [{ label: "I²", value: `${roundTo(Number(pooling.i2) <= 1 ? Number(pooling.i2) * 100 : Number(pooling.i2), 0)}%` }] : []),
           ...(numeric(pooling.tau2) !== null ? [{ label: "τ²", value: String(roundTo(Number(pooling.tau2), 3)) }] : []),
+          // A pooling with a reference for the spread between studies (two studies get a prediction interval from it): said, with where the reference is from.
+          ...(text(object(pooling.tauPrior).kind) ? [{ label: "研究之间差异的参照", value: tauPriorWords(object(pooling.tauPrior)) }] : []),
         ],
         forest: forestOf(card, items, precedentById),
         forestNote: text(pooling.calibreReason) ? "汇总口径与理由已记在卡上。" : null,
@@ -1865,6 +1870,8 @@ export function presentDataTab(bundle, query = {}) {
     selectedId: cards.find((card) => card.id === query.card || card.key === query.card)?.id ?? null,
     precedents,
     precedentSources: precedents.length ? `${precedents.length} 项参考试验` : null,
+    // Network meta-analysis, dose-response meta-analysis and the shrinkage of a published effect (the conversation computed them): a card each.
+    ...presentEvidenceSyntheses(bundle, { nodeOf: resultNode }),
     precedentNote: null,
     // Trial events the feed reported for this study's subject: pointers marked as candidates, never precedents (flywheel F24).
     ...(bundle.candidates?.length ? { precedentCandidates: bundle.candidates } : {}),

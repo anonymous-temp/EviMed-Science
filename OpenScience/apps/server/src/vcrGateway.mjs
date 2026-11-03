@@ -81,6 +81,7 @@ import { HttpError } from "./security.mjs";
 import { VCR_READ_WHATS, VCR_READ_MAX_ITEMS, VCR_WRITE_WHATS, vcrRouteOptions } from "./vcrService.mjs";
 import { vcrResultEntry, withJobEntry, withWriteEntry } from "./vcrResultEntry.mjs";
 import { vcrConfirmatorySubjectId } from "./vcrConfirmatory.mjs";
+import { vcrSynthesisSubjectId } from "./vcrEvidenceSynthesis.mjs";
 import { vcrBiasScenarioFromComparison } from "./vcrBiasAnalysis.mjs";
 import { renderVcrNumbers } from "./vcrRender.mjs";
 import { checkRegulatoryContact, resolveVisitsRef, visitKey } from "./vcrScheduleView.mjs";
@@ -2912,10 +2913,14 @@ async function startJob(vcr, study, request) {
     if (scenario.armRole != null && !EVIDENCE_ARM_ROLES.includes(String(scenario.armRole))) {
       throw gatewayError(400, "vcr_simulate_payload_invalid", `armRole 必须是：${EVIDENCE_ARM_ROLES.join("、")}。`);
     }
+    // The heterogeneity prior a run may name is one of the tables the domain holds, each number with its place in the paper: a prior typed in is not offered.
+    if (scenario.tauPrior != null && (typeof scenario.tauPrior !== "object" || !["turner_2015", "turner_2015_generic", "bartos_2023"].includes(String(scenario.tauPrior.kind)))) {
+      throw gatewayError(400, "vcr_simulate_payload_invalid", "tauPrior.kind 是 turner_2015（加 outcome、comparison）、turner_2015_generic 或 bartos_2023（加 effectScale）：先验来自文献里的表，不要自己带数。");
+    }
     const pooled = await vcr.evidence.poolParameter({
       userId: study.userId, studyId: study.id, parameter: scenario.parameter.trim(), endpointKey: scenario.endpointKey,
       armRole: scenario.armRole ?? "", target: poolTargetOf(scenario.target), poolingMethod: scenario.method ?? "random_effects_reml",
-      calibres: scenario.calibres ?? null,
+      calibres: scenario.calibres ?? null, tauPrior: scenario.tauPrior ?? null,
       conversationOrigin: study.completionOrigin ?? null,
     });
     const started = list(pooled.jobs).filter((/** @type {any} */ job) => job.jobId);
@@ -3028,6 +3033,8 @@ async function startJob(vcr, study, request) {
   // filed under the design and the endpoint it is about, so the futility design and the re-estimation of one study sit side by side and a
   // second run of either is its next version. A run that names a subject keeps its own.
   if (request.kind === "design_confirmatory" && !detail.subjectId) detail = { ...detail, subjectId: vcrConfirmatorySubjectId(scenario) };
+  // The same for a network, a dose-response and a shrinkage: they are filed under the label the call gave them, so two analyses of two outcomes stand side by side.
+  if (["network_meta", "dose_response_meta", "effect_shrinkage"].includes(request.kind) && !detail.subjectId) detail = { ...detail, subjectId: vcrSynthesisSubjectId(request.kind, scenario) };
   if (subject) {
     detail = { ...detail, ...subject.detail };
     // The stage in flight is the answer to the scenario it froze, and to no other: a start that states another number is another job.

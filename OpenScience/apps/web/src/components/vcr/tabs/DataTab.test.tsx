@@ -7,6 +7,7 @@ import { EMPTY_STUDY_ID, fixture, installVcrServer, STUDY_ID } from "../__fixtur
 import { fakeRoom, renderTab } from "../__fixtures__/tabFrame";
 import { VCR_NO_DEFINITION } from "../vcrText";
 import { DataTab } from "./DataTab";
+import synthesis from "../__fixtures__/evidenceSynthesisPayloads.json";
 
 /**
  * 定义与证据, the tab that holds what the study is about and what it rests on: the definition, the disease pack, the parameter
@@ -328,4 +329,67 @@ it("can gather evidence for a task that already has a question without requiring
   await userEvent.click(await screen.findByRole("button", { name: "让 AI 找证据、整理假设卡" }));
   expect(spies.openChat).toHaveBeenCalledWith(expect.any(String), { kind: "step", studyId: STUDY_ID, objectId: "evidence" });
   expect(screen.queryByRole("button", { name: "说明研究问题" })).toBeNull();
+});
+
+describe("the meta-analyses the conversation computed", () => {
+  const dataWith = (extra: Record<string, unknown>, set = "ev201") => ({ ...fixture(`${set}/data.json`), ...extra });
+  const serve = (raw: unknown) => installVcrServer(network.productRequest, { [`GET /vcr/studies/${STUDY_ID}/data`]: raw });
+  const section = () => document.querySelector("[data-vcr-syntheses]") as HTMLElement | null;
+  const follows = (earlier: Element, later: Element) => Boolean(earlier.compareDocumentPosition(later) & Node.DOCUMENT_POSITION_FOLLOWING);
+
+  it("is their own section of the evidence, after the cards and the reference trials, with a card for each result", async () => {
+    serve(dataWith({ networkMeta: [synthesis.network], doseResponses: [synthesis["dose-spline"]], effectShrinkages: [synthesis.shrinkage] }));
+    const { container } = draw(<DataTab studyId={STUDY_ID} study={study()} />);
+    await ready();
+    const block = await waitFor(() => { const node = section(); if (!node) throw new Error("no section"); return node; });
+    const heading = within(block).getByRole("heading", { name: "证据综合", level: 2 });
+    expect(heading.parentElement).toHaveTextContent("3");
+    expect(block.querySelector("[data-vcr-network-meta]")).toHaveTextContent("网络荟萃分析：response");
+    expect(block.querySelector("[data-vcr-dose-response]")).toHaveTextContent("剂量反应：alcohol and colorectal cancer");
+    expect(block.querySelector("[data-vcr-effect-shrinkage]")).toHaveTextContent("已发表效应的对照：phase 2 hazard ratio");
+    // the three kinds in that order, one after the other
+    const cards = [...block.querySelectorAll("[data-vcr-network-meta], [data-vcr-dose-response], [data-vcr-effect-shrinkage]")];
+    expect(cards).toHaveLength(3);
+    expect(follows(cards[0], cards[1]) && follows(cards[1], cards[2])).toBe(true);
+    // after the assumption cards and the reference trials, before the links to the libraries
+    expect(follows(container.querySelector("[data-vcr-assumptions]") as Element, block)).toBe(true);
+    expect(follows(container.querySelector("[data-vcr-precedents]") as Element, block)).toBe(true);
+    expect(follows(block, container.querySelector("[data-vcr-libraries]") as Element)).toBe(true);
+  });
+
+  it("is drawn for the kinds that are there, and counts only those", async () => {
+    serve(dataWith({ doseResponses: [synthesis["dose-linear"], synthesis["dose-spline"]] }));
+    draw(<DataTab studyId={STUDY_ID} study={study()} />);
+    await ready();
+    const block = await waitFor(() => { const node = section(); if (!node) throw new Error("no section"); return node; });
+    expect(block.querySelectorAll("[data-vcr-dose-response]")).toHaveLength(2);
+    expect(block.querySelector("[data-vcr-network-meta], [data-vcr-effect-shrinkage]")).toBeNull();
+    expect(within(block).getByRole("heading", { name: "证据综合" }).parentElement).toHaveTextContent("2");
+  });
+
+  it("is not drawn, not even as a title, when the study holds none of them", async () => {
+    draw(<DataTab studyId={STUDY_ID} study={study()} />);
+    await ready();
+    expect(section()).toBeNull();
+    expect(screen.queryByRole("heading", { name: "证据综合" })).toBeNull();
+    expect(document.querySelector("[data-vcr-network-meta], [data-vcr-dose-response], [data-vcr-effect-shrinkage]")).toBeNull();
+  });
+
+  it("is not drawn for an answer without the three lists, or with lists of an unknown shape", async () => {
+    serve(dataWith({ networkMeta: "none", doseResponses: [{ id: "x" }], effectShrinkages: null }));
+    draw(<DataTab studyId={STUDY_ID} study={study()} />);
+    await ready();
+    expect(section()).toBeNull();
+  });
+
+  it("is the evidence of a study that has no card and no reference trial yet, in place of the recipe for the step", async () => {
+    serve(dataWith({ networkMeta: [synthesis["network-chain"]] }, "empty"));
+    draw(<DataTab studyId={STUDY_ID} study={study((s) => { s.steps.evidence = { status: "none", requested: false }; })} />);
+    const block = await waitFor(() => { const node = section(); if (!node) throw new Error("no section"); return node; });
+    // a result the call gave no label is titled by its kind alone
+    expect(within(block).getByRole("heading", { name: "网络荟萃分析" })).toBeInTheDocument();
+    expect(block.querySelector("[data-vcr-network-meta]")).toHaveTextContent("没有环");
+    expect(document.querySelector("[data-vcr-step-empty='evidence']")).toBeNull();
+    expect(document.querySelector("[data-vcr-assumptions]")).toBeNull();
+  });
 });

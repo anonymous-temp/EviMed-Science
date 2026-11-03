@@ -28,7 +28,10 @@ import { Section } from "@/components/ui/Section";
 import { Radio } from "@/components/ui/Radio";
 import { Tag } from "@/components/ui/Tag";
 import type { ToolbarFilter } from "@/components/ui/Toolbar";
+import { VcrDoseResponse } from "../VcrDoseResponse";
+import { VcrEffectShrinkage } from "../VcrEffectShrinkage";
 import { VcrKnowledgeSection } from "../VcrKnowledge";
+import { VcrNetworkMeta } from "../VcrNetworkMeta";
 import { VcrNoDefinition } from "../VcrStates";
 import { hasDefinition } from "../vcrTabs";
 import { intendedUseLabel, numberText } from "../vcrText";
@@ -119,6 +122,8 @@ function DataView({ studyId, study, data, reload, onStudyChanged }: {
   );
   const history = study.abilities.includes("read_patient_level") ? <VcrFollowupHistory studyId={studyId} canExport={study.abilities.includes("export")} /> : null;
   const cards = data.assumptions.length > 0;
+  // The meta-analyses and published-effect comparisons the conversation computed: evidence the study holds even before it has a card.
+  const syntheses = (data.networkMeta?.length ?? 0) + (data.doseResponses?.length ?? 0) + (data.effectShrinkages?.length ?? 0);
   const keyCards = data.assumptions.filter((assumption) => matches(assumption, "key")).length;
   // The filter only means something while some cards are key and some are not.
   const active: Filter = keyCards > 0 && keyCards < data.assumptions.length ? filter : "all";
@@ -138,7 +143,7 @@ function DataView({ studyId, study, data, reload, onStudyChanged }: {
   ];
 
   // The intake is not here: it is one entry of the header's 「⋯」 on every tier (`VcrIntakeDrawer`), where the study's data came from.
-  if (!cards && data.precedents.length === 0) {
+  if (!cards && data.precedents.length === 0 && syntheses === 0) {
     return (
       <div className="flex flex-col gap-6">
         {history}
@@ -239,6 +244,18 @@ function DataView({ studyId, study, data, reload, onStudyChanged }: {
           <Section title="参考试验" count={data.precedents.length}>
             <VcrPrecedentTable rows={data.precedents} withUse />
             <VcrRegistryCoverage sources={data.registryCoverage} />
+          </Section>
+        </div>
+      )}
+
+      {syntheses > 0 && (
+        <div data-vcr-syntheses="">
+          <Section title="证据综合" count={syntheses}>
+            <div className="flex flex-col gap-4">
+              <VcrNetworkMeta cards={data.networkMeta ?? []} />
+              <VcrDoseResponse cards={data.doseResponses ?? []} />
+              <VcrEffectShrinkage cards={data.effectShrinkages ?? []} />
+            </div>
           </Section>
         </div>
       )}

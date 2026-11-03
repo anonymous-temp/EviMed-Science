@@ -6,6 +6,7 @@ import { TrialTab, VCR_ADD_DESIGN_DRAFT, VCR_CHANGE_ASSUMPTION_DRAFT } from "./T
 import { renderTab } from "../__fixtures__/tabFrame";
 import { EMPTY_STUDY_ID, fixture, installVcrServer, STUDY_ID } from "../__fixtures__/serverFixtures";
 import { VCR_NO_DEFINITION } from "../vcrText";
+import synthesis from "../__fixtures__/evidenceSynthesisPayloads.json";
 
 /**
  * 试验 (R19; audit B §4.4): the designs as one table with power as a bar, a row that opens the run behind it, the charts side by
@@ -879,5 +880,65 @@ describe("试验 · a confirmatory design the conversation wrote", () => {
     const table = await trialDrawn();
     const shown = await found(container, '[data-vcr-confirmatory="sample_size_reestimation"]');
     expect(table.compareDocumentPosition(shown) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});
+
+describe("试验 · the historical success rates beside the assurance", () => {
+  const withRates = (rates: unknown) => {
+    const raw = fixture("ev201/trial.json");
+    raw.successRates = rates;
+    installVcrServer(network.productRequest, { [tab("trial")]: raw });
+  };
+  const follows = (earlier: Element, later: Element) => Boolean(earlier.compareDocumentPosition(later) & Node.DOCUMENT_POSITION_FOLLOWING);
+
+  it("stands under the comparison of the designs, in two columns, with the third phase of all indications chosen", async () => {
+    withRates(synthesis.successRates);
+    const { container } = draw();
+    const table = await trialDrawn();
+    const block = await found(container, "[data-vcr-success-rates]");
+    expect(follows(table, block)).toBe(true);
+    expect(within(block).getByRole("heading", { name: "历史上这一阶段的通过率" })).toBeInTheDocument();
+    expect(block).toHaveTextContent("不是这个试验成功的概率");
+    expect(within(block).getByLabelText("阶段")).toHaveValue("phase3");
+    expect(block.querySelectorAll("[data-vcr-success-source]")).toHaveLength(2);
+    expect(block.querySelector("[data-vcr-success-source='bio']")).toHaveTextContent("57.8%");
+    expect(block.querySelector("[data-vcr-success-source='wong']")).toHaveTextContent("59%");
+    // before the setup that explains the table, with the charts after
+    expect(follows(block, container.querySelector("[data-vcr-setup]") as Element)).toBe(true);
+    // the designs table is the one it was
+    expect(container.querySelectorAll("tr[data-vcr-design]")).toHaveLength(4);
+  });
+
+  it("changes with the reader's choice and leaves the designs as they were", async () => {
+    withRates(synthesis.successRates);
+    const { container } = draw();
+    await trialDrawn();
+    const block = await found(container, "[data-vcr-success-rates]");
+    await userEvent.selectOptions(within(block).getByLabelText("阶段"), "phase2");
+    expect(block.querySelector("[data-vcr-success-source='bio']")).toHaveTextContent("28.9%");
+    expect(block.querySelector("[data-vcr-success-source='wong']")).toHaveTextContent("这个来源没有这一栏");
+    expect(container.querySelectorAll("tr[data-vcr-design]")).toHaveLength(4);
+  });
+
+  it("is not drawn when no design has an assurance, which is when the server sends none", async () => {
+    withRates(null);
+    const { container } = draw();
+    await trialDrawn();
+    expect(container.querySelector("[data-vcr-success-rates]")).toBeNull();
+    expect(screen.queryByRole("heading", { name: "历史上这一阶段的通过率" })).toBeNull();
+  });
+
+  it("is not drawn for an answer of an unknown shape, nor for a step that has no design", async () => {
+    withRates({ title: "x" });
+    const first = draw();
+    await trialDrawn();
+    expect(first.container.querySelector("[data-vcr-success-rates]")).toBeNull();
+    first.unmount();
+    const raw = fixture("empty/trial.json");
+    raw.successRates = synthesis.successRates;
+    installVcrServer(network.productRequest, { [tab("trial")]: raw });
+    const second = draw(withStep("trial", { status: "none", requested: false }));
+    await waitFor(() => expect(second.container.querySelector("[data-vcr-loading]")).toBeNull());
+    expect(second.container.querySelector("[data-vcr-success-rates]")).toBeNull();
   });
 });

@@ -1274,9 +1274,108 @@ export interface VcrConfirmatoryCard {
   } | null;
 }
 
+/**
+ * What the evidence tab says of a network meta-analysis the conversation computed: who ranks where, every pair of treatments in a league
+ * table, and whether the direct and the indirect evidence agree. The sentences are the server's; the page places them.
+ */
+export interface VcrNetworkMetaCard {
+  id: string;
+  version: number;
+  title: string;
+  /** The question the card answers, in the reader's words. */
+  question: string;
+  /** Best first, by the P-score. */
+  ranking: Array<{ rank: number; treatment: string; studies: number | null; score: VcrValue | null; isReference: boolean }>;
+  league: {
+    /** Rows and columns, in the same order. */
+    treatments: string[];
+    /** One line on how a cell reads. */
+    meaning: string;
+    /** `cells` has one entry per treatment; the diagonal, and a pair with no estimate, are null. */
+    rows: Array<{ treatment: string; cells: Array<{ value: VcrValue; directStudies: number | null; excludesNull: boolean } | null> }>;
+  } | null;
+  consistency: string | null;
+  heterogeneity: string | null;
+  scoreNote: string | null;
+  premises: VcrPremise[];
+}
+
+/** A dose-response meta-analysis: what a step of dose does, the fitted curve with its band, and where the band first leaves 1. */
+export interface VcrDoseResponseCard {
+  id: string;
+  version: number;
+  title: string;
+  question: string;
+  /** The ratio's name: 「相对危险度」. */
+  ratioWord: string;
+  doseUnit: string | null;
+  referenceDose: number;
+  headline: string | null;
+  /** The sentence for where the band first leaves 1. */
+  firstDose: string | null;
+  predictions: Array<{ dose: number; isReference: boolean; value: VcrValue }>;
+  /** The fitted curve: the ratio and its interval at each dose. */
+  curve: Array<{ dose: number; ratio: number; lower: number; upper: number }>;
+  tests: { overall: string | null; nonlinearity: VcrValue | null };
+  heterogeneity: string | null;
+  /** The studies the model could not take in. */
+  excluded: string[];
+  note: string | null;
+  premises: VcrPremise[];
+}
+
+/**
+ * The value a researcher stated beside how the same estimate reads against the Cochrane trials of its kind. A comparison line only: the
+ * stated value is never replaced, and a degenerate row (an estimate of exactly 0) has no shrunken side.
+ */
+export interface VcrEffectShrinkageCard {
+  id: string;
+  version: number;
+  title: string;
+  question: string;
+  rows: Array<{
+    id: string;
+    stated: VcrValue | null;
+    shrunken: VcrValue | null;
+    degenerate: boolean;
+    sentence: string;
+  }>;
+  note: string | null;
+  premises: VcrPremise[];
+}
+
+/** One historical rate as the source prints it, and the number of transitions or paths it stands on. */
+export interface VcrSuccessRate {
+  text: string;
+  n: number | null;
+}
+
+export type VcrSuccessRateFigure = "toNext" | "toFiling" | "toApproval";
+
+/**
+ * The historical success rates read beside an assurance: two sources, side by side, each counting to its own endpoint. A reference, never
+ * this trial's probability. A source with no figure for an area has none: nothing is filled from the other.
+ */
+export interface VcrSuccessRates {
+  title: string;
+  note: string;
+  sources: Array<{ key: "bio" | "wong"; id: string; label: string; endpoint: string | null; method: string | null }>;
+  phases: Array<{ id: string; label: string }>;
+  areas: Array<{
+    id: string;
+    label: string;
+    /** The group of the area in the Wong table, when it differs from the area's own name. */
+    wongGroup: string | null;
+    /** By phase id; a source's block is null where it has no rows for the area. */
+    phases: Record<string, { bio: Partial<Record<VcrSuccessRateFigure, VcrSuccessRate | null>> | null; wong: Partial<Record<VcrSuccessRateFigure, VcrSuccessRate | null>> | null }>;
+  }>;
+}
+
 export interface VcrTrialTab {
   /** 「这个结论的前提」 of the headline design: at most five decisive, the rest folded by the page. */
   premises?: VcrPremise[];
+  /** The historical success rates beside the assurance; null when no design has one. */
+  successRates?: VcrSuccessRates | null;
   /** What the sample size rests on, one input at a time, largest first, and the power the effect's published shrinkage leaves (C6). */
   sensitivity?: {
     design: string;
@@ -1595,6 +1694,10 @@ export interface VcrPrecedent {
 
 export interface VcrDataTab {
   registryCoverage?: VcrRegistrySource[];
+  /** The network, dose-response and published-effect cards the conversation computed, newest first. */
+  networkMeta?: VcrNetworkMetaCard[];
+  doseResponses?: VcrDoseResponseCard[];
+  effectShrinkages?: VcrEffectShrinkageCard[];
   reviews?: VcrReviewSummary[];
   headline?: string | null;
   /** 「证据截至 9月27日 · 试验先例 23 项 · 假设卡 12 张 · 患者级数据 未接入」. */
@@ -1998,6 +2101,124 @@ function readConfirmatoryDesigns(raw: unknown): VcrConfirmatoryCard[] {
       table: columns.length > 0 && rows.length > 0 ? { columns, rows } : null,
     }];
   });
+}
+
+/** A value that is there, or nothing: a cell with no value object is not a cell. */
+function readPresentValue(raw: unknown): VcrValue | null {
+  return raw && typeof raw === "object" && !Array.isArray(raw) ? readVcrValue(raw) : null;
+}
+
+/** The network meta-analysis cards; a card without an id, a title and a ranking, and anything of an unknown shape, is left out. */
+export function readNetworkMetaCards(raw: unknown): VcrNetworkMetaCard[] {
+  return arr(raw).flatMap((card) => {
+    const id = text(card.id), title = text(card.title);
+    const ranking = arr(card.ranking).flatMap((row) => {
+      const treatment = text(row.treatment), rank = finite(row.rank);
+      return treatment && rank !== null ? [{ rank, treatment, studies: finite(row.studies), score: readPresentValue(row.score), isReference: row.isReference === true }] : [];
+    });
+    if (!id || !title || ranking.length === 0) return [];
+    // Best first, whatever order the rows came in.
+    ranking.sort((a, b) => a.rank - b.rank);
+    const league = obj(card.league), treatments = strings(league.treatments);
+    // A row keeps its place: a treatment is a row and a column by its position, so a short row is padded and a long one cut.
+    const rows = arr(league.rows).flatMap((row) => {
+      const treatment = text(row.treatment);
+      if (!treatment) return [];
+      const cells = Array.isArray(row.cells) ? row.cells : [];
+      return [{
+        treatment,
+        cells: treatments.map((_, index) => {
+          const cell = obj(cells[index]), value = readPresentValue(cell.value);
+          return value ? { value, directStudies: finite(cell.directStudies), excludesNull: cell.excludesNull === true } : null;
+        }),
+      }];
+    });
+    return [{
+      id, version: finite(card.version) ?? 1, title, question: text(card.question) ?? "", ranking,
+      league: treatments.length > 0 && rows.length > 0 ? { treatments, meaning: text(league.meaning) ?? "", rows } : null,
+      consistency: text(obj(card.consistency).sentence), heterogeneity: text(obj(card.heterogeneity).sentence), scoreNote: text(card.scoreNote),
+      premises: readPremises(card.premises),
+    }];
+  });
+}
+
+/** The dose-response cards; a card without an id and a title, and anything of an unknown shape, is left out. */
+export function readDoseResponseCards(raw: unknown): VcrDoseResponseCard[] {
+  return arr(raw).flatMap((card) => {
+    const id = text(card.id), title = text(card.title);
+    if (!id || !title) return [];
+    const tests = obj(card.tests);
+    return [{
+      id, version: finite(card.version) ?? 1, title, question: text(card.question) ?? "", ratioWord: text(card.ratioWord) ?? "", doseUnit: text(card.doseUnit),
+      referenceDose: finite(card.referenceDose) ?? 0, headline: text(card.headline), firstDose: text(obj(card.firstDose).sentence),
+      predictions: arr(card.predictions).flatMap((row) => {
+        const dose = finite(row.dose), value = readPresentValue(row.value);
+        return dose !== null && value ? [{ dose, isReference: row.isReference === true, value }] : [];
+      }),
+      curve: arr(card.curve).flatMap((point) => {
+        const dose = finite(point.dose), ratio = finite(point.ratio), lower = finite(point.lower), upper = finite(point.upper);
+        return dose !== null && ratio !== null && lower !== null && upper !== null ? [{ dose, ratio, lower, upper }] : [];
+      }),
+      tests: { overall: text(obj(tests.overall).sentence), nonlinearity: readPresentValue(obj(tests.nonlinearity).p) },
+      heterogeneity: text(obj(card.heterogeneity).sentence),
+      excluded: arr(card.excluded).flatMap((row) => text(row.studyId) ?? []),
+      note: text(card.note),
+      premises: readPremises(card.premises),
+    }];
+  });
+}
+
+/** The published-effect cards; a card without an id, a title and a row, and anything of an unknown shape, is left out. */
+export function readEffectShrinkageCards(raw: unknown): VcrEffectShrinkageCard[] {
+  return arr(raw).flatMap((card) => {
+    const id = text(card.id), title = text(card.title);
+    const rows = arr(card.rows).flatMap((row) => {
+      const rowId = text(row.id), sentence = text(row.sentence);
+      return rowId && sentence ? [{
+        id: rowId, stated: readPresentValue(obj(row.stated).value), shrunken: readPresentValue(obj(row.shrunken).value),
+        degenerate: row.degenerate === true, sentence,
+      }] : [];
+    });
+    if (!id || !title || rows.length === 0) return [];
+    return [{ id, version: finite(card.version) ?? 1, title, question: text(card.question) ?? "", rows, note: text(card.note), premises: readPremises(card.premises) }];
+  });
+}
+
+const SUCCESS_RATE_FIGURES: readonly VcrSuccessRateFigure[] = ["toNext", "toFiling", "toApproval"];
+
+/** One source's figures for a phase: a figure the source does not have is null, and a source with nothing for the phase is null as a whole. */
+function readSuccessRateBlock(raw: unknown): Partial<Record<VcrSuccessRateFigure, VcrSuccessRate | null>> | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const block = raw as Loose;
+  return Object.fromEntries(SUCCESS_RATE_FIGURES.map((figure): [VcrSuccessRateFigure, VcrSuccessRate | null] => {
+    const rate = obj(block[figure]), rateText = text(rate.text);
+    return [figure, rateText ? { text: rateText, n: finite(rate.n) } : null];
+  }));
+}
+
+/** The success-rate reference; without a title, a phase and an area, and for anything of an unknown shape, there is nothing to show. */
+export function readSuccessRates(raw: unknown): VcrSuccessRates | null {
+  const value = obj(raw), title = text(value.title);
+  const sources = arr(value.sources).flatMap((source) => {
+    const id = text(source.id), label = text(source.label);
+    const key = id?.startsWith("bio") ? "bio" as const : id?.startsWith("wong") ? "wong" as const : null;
+    return id && label && key ? [{ key, id, label, endpoint: text(source.endpoint), method: text(source.method) }] : [];
+  });
+  const phases = arr(value.phases).flatMap((phase) => {
+    const id = text(phase.id), label = text(phase.label);
+    return id && label ? [{ id, label }] : [];
+  });
+  const areas = arr(value.areas).flatMap((area) => {
+    const id = text(area.id), label = text(area.label);
+    if (!id || !label) return [];
+    const byPhase = obj(area.phases);
+    return [{
+      id, label, wongGroup: text(area.wongGroup),
+      phases: Object.fromEntries(Object.keys(byPhase).map((phase) => [phase, { bio: readSuccessRateBlock(obj(byPhase[phase]).bio), wong: readSuccessRateBlock(obj(byPhase[phase]).wong) }])),
+    }];
+  });
+  if (!title || sources.length === 0 || phases.length === 0 || areas.length === 0) return null;
+  return { title, note: text(value.note) ?? "", sources, phases, areas };
 }
 
 function readBiasCell(raw: unknown): VcrBiasConfounderCell | null {
@@ -2573,6 +2794,7 @@ export function readVcrTrial(raw: unknown): VcrTrialTab {
     ademp: arr(value.ademp) as unknown as VcrTrialTab["ademp"],
     accrualForecasts: arr(value.accrualForecasts).map(row => ({ id: text(row.id) ?? "", version: finite(row.version) ?? 1, scenarioId: text(row.scenarioId), scenarioVersion: finite(row.scenarioVersion), design: text(row.design), name: text(row.name) ?? "入组假设模拟", lastPatientIn: row.lastPatientIn ? readVcrValue(row.lastPatientIn) : null, targetEvents: row.targetEvents ? readVcrValue(row.targetEvents) : null, probabilityByMonth: arr(row.probabilityByMonth).filter(point => finite(point.month) !== null && Number(point.month) >= 0 && finite(point.probability) !== null && Number(point.probability) >= 0 && Number(point.probability) <= 1).map(point => ({ month: Number(point.month), probability: Number(point.probability) })) })),
     confirmatoryDesigns: readConfirmatoryDesigns(value.confirmatoryDesigns),
+    successRates: readSuccessRates(value.successRates),
     designs: arr(value.designs).map(readDesign),
     columns: arr(value.columns) as unknown as VcrTrialTab["columns"],
     grid: Object.keys(grid).length ? {
@@ -2691,6 +2913,9 @@ export function readVcrData(raw: unknown): VcrDataTab {
     })),
     precedents: arr(value.precedents) as unknown as VcrPrecedent[],
     precedentCandidates: arr(value.precedentCandidates) as unknown as VcrPrecedentCandidate[],
+    networkMeta: readNetworkMetaCards(value.networkMeta),
+    doseResponses: readDoseResponseCards(value.doseResponses),
+    effectShrinkages: readEffectShrinkageCards(value.effectShrinkages),
     snapshots: arr(value.snapshots).map((snapshot) => ({ ...(snapshot as unknown as VcrDataTab["snapshots"][number]), quality: arr(snapshot.quality) as unknown as NonNullable<VcrDataTab["snapshots"][number]["quality"]> })),
     decisions: arr(value.decisions) as unknown as VcrDataTab["decisions"],
     evidenceNote: text(value.evidenceNote),

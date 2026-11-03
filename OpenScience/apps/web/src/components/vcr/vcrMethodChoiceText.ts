@@ -2,7 +2,7 @@ import {
   VCR_SCENARIO_SCHEMAS, VCR_TRIAL_DESIGN_LABELS_ZH, VCR_ENDPOINT_TYPE_LABELS_ZH, VCR_ESTIMAND_LABELS_ZH,
   VCR_POOLING_METHOD_LABELS_ZH, VCR_SPENDING_FUNCTION_LABELS_ZH, VCR_PERFORMANCE_MEASURE_LABELS_ZH,
   VCR_CRITERION_TYPE_LABELS_ZH, VCR_CRITERION_STATE_LABELS_ZH, VCR_MISSING_REASON_LABELS_ZH,
-  VCR_VALUE_SOURCE_LABELS_ZH, VCR_INTERVAL_KIND_LABELS_ZH,
+  VCR_VALUE_SOURCE_LABELS_ZH, VCR_INTERVAL_KIND_LABELS_ZH, VCR_TURNER_COMPARISON_LABELS_ZH, VCR_TURNER_OUTCOME_LABELS_ZH,
 } from "@evimed/domain";
 import type { Schema } from "./vcrScenarioFieldLabels";
 
@@ -11,7 +11,7 @@ const labels: Record<string, string> = {
   ...VCR_TRIAL_DESIGN_LABELS_ZH, ...VCR_ENDPOINT_TYPE_LABELS_ZH, ...VCR_ESTIMAND_LABELS_ZH,
   ...VCR_POOLING_METHOD_LABELS_ZH, ...VCR_SPENDING_FUNCTION_LABELS_ZH, ...VCR_PERFORMANCE_MEASURE_LABELS_ZH,
   ...VCR_CRITERION_TYPE_LABELS_ZH, ...VCR_CRITERION_STATE_LABELS_ZH, ...VCR_MISSING_REASON_LABELS_ZH,
-  ...VCR_VALUE_SOURCE_LABELS_ZH, ...VCR_INTERVAL_KIND_LABELS_ZH,
+  ...VCR_VALUE_SOURCE_LABELS_ZH, ...VCR_INTERVAL_KIND_LABELS_ZH, ...VCR_TURNER_COMPARISON_LABELS_ZH, ...VCR_TURNER_OUTCOME_LABELS_ZH,
   MAR: "随机缺失（MAR）", MCAR: "完全随机缺失（MCAR）", against_treatment: "不利于干预", in_favour: "有利于干预",
   aipw: "增广逆概率加权（AIPW）", ancova: "协方差分析（ANCOVA）", approximate: "近似对应", exact: "完全对应", cannot: "无法对应",
   bernoulli: "伯努利分布", beta: "Beta 分布", binomial: "二项分布", gamma: "Gamma 分布", categorical: "分类分布",
@@ -35,6 +35,11 @@ const labels: Record<string, string> = {
   superiority: "优效性", non_inferiority: "非劣效", futility_group_sequential: "中期无效性停止的成组序贯", sample_size_reestimation: "样本量再估计",
   multi_arm_selection: "多臂中期选择", enrichment: "人群富集", count_endpoint: "计数终点", hwang_shih_decani: "Hwang-Shih-DeCani 消耗函数", kim_demets: "Kim-DeMets 消耗函数",
   simes: "Simes 检验", bonferroni: "Bonferroni 检验", dunnett: "Dunnett 检验",
+  // the heterogeneity prior of a pooling, the network, the dose-response and the shrinkage (algorithm round E7, C5, C6, E8)
+  log_normal: "对数正态分布（τ² 的先验）", inverse_gamma: "逆 Gamma 分布（τ 的先验）", log_t: "对数 t 分布（τ² 的先验）", turner_2015: "Turner 等（2015）按结局和比较类型给出的先验", turner_2015_generic: "Turner 等（2015）的总体先验",
+  bartos_2023: "Bartoš 等（2023）的先验", mean_difference: "均值差", log_ratio: "对数比值（如对数风险比）", lower_better: "数值越小越好", higher_better: "数值越大越好",
+  random: "随机效应", common: "共同效应", relative_risk: "相对危险度（RR）", cc: "病例对照研究", ci: "累积发病率", ir: "发病率（按人时）", linear: "线性", spline: "限制性立方样条",
+  gl: "Greenland–Longnecker 法（用病例数还原相关性）", h: "Hamling 法", indep: "各水平按相互独立处理",
 };
 /** The selection rule of a multi-arm design: its words are short and ordinary, so they are read only at that path. */
 const selectionRules: Record<string, string> = { best: "只留中期估计最好的臂", rbest: "留最好的几个臂", epsilon: "留与最好的相差不大的臂", all: "全部保留" };
@@ -71,6 +76,9 @@ export function methodChoiceLabel(method: string, path: string, value: string): 
   if (at === "link" && value === "logit") return "Logit 链接";
   if (method === "comparator.tipping_point" && at === "deltaApplies" && value === "treatment") return "仅干预组";
   if (method === "design.confirmatory" && at === "design.selection.rule") return selectionRules[value] ?? value;
+  if (method === "evidence.dose_response" && at === "method") return ({ reml: "限制性最大似然（REML）", ml: "最大似然（ML）", fixed: "固定效应" } as Record<string, string>)[value] ?? value;
+  if (method === "evidence.dose_response" && at === "stage") return value === "one" ? "一步法（所有研究放进一个模型）" : "两步法（先各研究分别拟合，再合并）";
+  if (method === "evidence.dose_response" && at === "ratioKind" && value === "odds_ratio") return "比值比（OR）";
   return labels[value] ?? value;
 }
 export const ruleChoiceLabel = (value: string): string => ruleLabels[value] ?? value;
@@ -108,7 +116,19 @@ const exampleLabels: Record<string, Record<string, string>> = {
     "a continuous trajectory over five visits, random intercept and slope, 10% leaving per visit": "五次访视与每次 10% 脱落"
   },
   "evidence.pool": {
-    "three published log hazard ratios": "合并研究的对数 HR"
+    "two published log hazard ratios": "合并研究的对数 HR",
+    "the same two studies with the Cochrane reference for how much trials of one comparison differ (all-cause mortality, drug against placebo): a prediction interval from two studies": "只有两项研究，用 Cochrane 里同类比较的差异作参照（全因死亡，药物对安慰剂），得到预测区间"
+  },
+  "evidence.network": {
+    "three treatments compared by odds ratio from arm counts, one three-arm study; a higher response is better": "三种治疗按各组事件数比较比值比，含一项三臂研究；应答越高越好",
+    "hazard ratios published as comparisons: a three-arm trial states every pair of its arms": "按已发表的两两比较合并风险比；三臂试验写出每一对"
+  },
+  "evidence.dose_response": {
+    "a log-linear dose-response of two cohorts reporting incidence rates (the reference level states an effect of 0 and no standard error)": "两个队列的发病率，对数线性的剂量反应（参照水平的效应写 0、不写标准误）",
+    "a restricted cubic spline with knots at the 10th, 50th and 90th percentiles of the doses, and the ratios at chosen doses against a dose of 0": "限制性立方样条，节点取剂量的第 10、50、90 百分位，给出各剂量相对 0 的比值"
+  },
+  "evidence.shrinkage": {
+    "a phase 2 hazard ratio of 0.66 (the standard error of its log is 0.19), and a phase 3 that will measure the effect with a standard error of 0.12": "二期风险比 0.66（对数的标准误 0.19），三期的标准误预计 0.12"
   },
   "evidence.reconstruct_km": {
     "one digitized arm and its risk table": "曲线取点与风险集表"

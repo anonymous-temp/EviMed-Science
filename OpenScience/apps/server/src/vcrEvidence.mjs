@@ -742,9 +742,9 @@ export function seedForScenario(scenario) {
  * error.
  *
  * @param {{ studyId: string, parameter: string, endpointKey?: string, armRole?: string, calibre: string,
- *   items: readonly any[], scale?: string, poolingMethod?: string, cpuSecondsLimit?: number }} input
+ *   items: readonly any[], scale?: string, poolingMethod?: string, tauPrior?: Record<string, any> | null, cpuSecondsLimit?: number }} input
  */
-export function poolJob({ studyId, parameter, endpointKey = "", armRole = "", calibre, items, scale = "", poolingMethod = "random_effects_reml", cpuSecondsLimit = 120 }) {
+export function poolJob({ studyId, parameter, endpointKey = "", armRole = "", calibre, items, scale = "", poolingMethod = "random_effects_reml", tauPrior = null, cpuSecondsLimit = 120 }) {
   const kind = parameterKindOf(parameter);
   const method = VCR_JOB_METHODS.pool_evidence;
   const chosenScale = scale || defaultScaleOf(kind);
@@ -782,6 +782,8 @@ export function poolJob({ studyId, parameter, endpointKey = "", armRole = "", ca
     method: VCR_POOLING_METHODS.includes(poolingMethod) ? poolingMethod : "random_effects_reml",
     level: 0.95,
     scale: chosenScale,
+    // An informative prior for the between-study spread (evidence.pool 1.1.0): with it two studies have a prediction interval.
+    ...(tauPrior && typeof tauPrior === "object" ? { tauPrior } : {}),
   };
   const job = {
     jobId: "job_pending",
@@ -799,7 +801,7 @@ export function poolJob({ studyId, parameter, endpointKey = "", armRole = "", ca
   return {
     job, issues, valid: issues.length === 0, excluded, evidenceIds,
     // What the pool is about. It rides in the job's own record, not its scenario.
-    about: { parameter, endpointKey, armRole, calibre, scale: chosenScale, method: scenario.method, ...(timeUnit ? { timeUnit } : {}) },
+    about: { parameter, endpointKey, armRole, calibre, scale: chosenScale, method: scenario.method, ...(scenario.tauPrior ? { tauPrior: scenario.tauPrior } : {}), ...(timeUnit ? { timeUnit } : {}) },
   };
 }
 
@@ -817,7 +819,8 @@ export function poolJob({ studyId, parameter, endpointKey = "", armRole = "", ca
  * @param {any} result
  * @returns {{ ok: boolean, reason?: string, scale?: string, poolingMethod?: string, k?: number | null,
  *   pooled?: number, confidence?: { low: number, high: number } | null,
- *   prediction?: { low: number, high: number } | null, predictionAvailable?: boolean, i2?: number | null, tau2?: number | null }}
+ *   prediction?: { low: number, high: number } | null, predictionAvailable?: boolean, i2?: number | null, tau2?: number | null,
+ *   tauPrior?: { kind: string, setting: Record<string, any>, onlyOneStudy: boolean } }}
  */
 export function readPoolResult(result) {
   if (!result || typeof result !== "object") return { ok: false, reason: "result_missing" };
@@ -834,7 +837,10 @@ export function readPoolResult(result) {
   const low = finite(predictionSource?.low);
   const high = finite(predictionSource?.high);
   const predictionAvailable = low !== null && high !== null && high >= low;
-  const confidenceSource = pooledMeasure?.interval?.kind === "confidence" ? pooledMeasure.interval : measure("confidence")?.interval ?? null;
+  // A pooling with an informative prior for the spread reports a credible interval where the frequentist one has a confidence interval: the same place on the card.
+  const confidenceSource = ["confidence", "credible"].includes(String(pooledMeasure?.interval?.kind)) ? pooledMeasure.interval : measure("confidence")?.interval ?? null;
+  const priorRaw = result.diagnostics?.tauPrior;
+  const prior = priorRaw && typeof priorRaw === "object" && !Array.isArray(priorRaw) ? /** @type {Record<string, any>} */ (priorRaw) : null;
   return {
     ok: true,
     scale: String(result.diagnostics?.scale ?? pooledMeasure?.unit ?? "identity"),
@@ -847,6 +853,7 @@ export function readPoolResult(result) {
     predictionAvailable,
     i2: finite(measure("i_squared")?.value ?? result.diagnostics?.i2),
     tau2: finite(measure("tau_squared")?.value ?? result.diagnostics?.tau2),
+    ...(prior ? { tauPrior: { kind: String(prior.kind), setting: prior.setting && typeof prior.setting === "object" ? prior.setting : {}, onlyOneStudy: prior.onlyOneStudy === true } } : {}),
   };
 }
 
@@ -1019,6 +1026,7 @@ export function assumptionFromPooling({ key, name, parameter, endpoint = "", uni
         k: pool.k ?? null,
         i2: pool.i2 ?? null,
         tau2: pool.tau2 ?? null,
+        ...(pool.tauPrior ? { tauPrior: pool.tauPrior } : {}),
         pooledOnScale: pool.pooled,
         confidenceInterval: pool.confidence ? { kind: "confidence", ...pool.confidence } : null,
         predictionInterval: distribution.predictionInterval,
@@ -1750,9 +1758,9 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
      * in the same arm (CS-26).
      *
      * @param {{ userId: string, studyId: string, parameter: string, endpointKey?: string, armRole?: string,
-     *   target?: any, poolingMethod?: string, calibres?: readonly string[] | null, scale?: string, conversationOrigin?: any }} input
+     *   target?: any, poolingMethod?: string, calibres?: readonly string[] | null, scale?: string, tauPrior?: Record<string, any> | null, conversationOrigin?: any }} input
      */
-    async poolParameter({ userId, studyId, parameter, endpointKey = "", armRole = "", target = {}, poolingMethod = "random_effects_reml", calibres: wanted = null, scale = "", conversationOrigin = null }) {
+    async poolParameter({ userId, studyId, parameter, endpointKey = "", armRole = "", target = {}, poolingMethod = "random_effects_reml", calibres: wanted = null, scale = "", tauPrior = null, conversationOrigin = null }) {
       const role = armRole || defaultArmRoleOf(parameter);
       if (!String(endpointKey ?? "").trim()) {
         return { status: "refused", code: "vcr_pool_endpoint_key_required", parameter,
@@ -1786,7 +1794,7 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
       const excludedByCalibre = {};
       for (const calibre of calibres({ items: withStrata, target })) {
         if (wanted && !wanted.includes(calibre.name)) continue;
-        const built = poolJob({ studyId, parameter, endpointKey, armRole: role, calibre: calibre.name, items: calibre.items, scale, poolingMethod });
+        const built = poolJob({ studyId, parameter, endpointKey, armRole: role, calibre: calibre.name, items: calibre.items, scale, poolingMethod, tauPrior });
         evidenceIdsByCalibre[calibre.name] = built.evidenceIds;
         excludedByCalibre[calibre.name] = built.excluded;
         if (!built.valid) {

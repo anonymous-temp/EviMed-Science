@@ -505,7 +505,7 @@ test("a pool job is exactly the engine's contract: { studyId, estimate, se } on 
   assert.equal(built.valid, true, JSON.stringify(built.issues));
   assert.deepEqual(validateEngineJob(built.job), []);
   assert.equal(built.job.method, "evidence.pool");
-  assert.equal(built.job.methodVersion, "1.0.0");
+  assert.equal(built.job.methodVersion, "1.1.0", "the heterogeneity prior (algorithm round E7) is 1.1.0's; a pool that states none is what it was");
   assert.deepEqual(Object.keys(built.job.scenario).sort(), ["level", "method", "scale", "studies"],
     "a scenario key the engine does not read is a silent parameter change, so there is none");
   assert.deepEqual(Object.keys(built.job.scenario.studies[0]).sort(), ["estimate", "se", "studyId"]);
@@ -521,6 +521,14 @@ test("a pool job is exactly the engine's contract: { studyId, estimate, se } on 
   assert.deepEqual(built.job.inputs, [{ kind: "evidence", id: "evd_0001" }, { kind: "evidence", id: "evd_0002" }],
     "a caller names an input by what it is; a hash is only ever the control plane's");
   assert.deepEqual(built.about, { parameter: "control_event_rate", endpointKey: "orr-recist", armRole: "control", calibre: "closest", scale: "logit", method: "random_effects_reml" });
+  // A reference for the spread between studies rides in the scenario, validates, and changes the seed (it is part of what was asked)
+  const withPrior = poolJob({ studyId: "std_1", parameter: "control_event_rate", endpointKey: "orr-recist", armRole: "control", calibre: "closest", items, tauPrior: { kind: "turner_2015_generic" } });
+  assert.equal(withPrior.valid, true, JSON.stringify(withPrior.issues));
+  assert.deepEqual(withPrior.job.scenario.tauPrior, { kind: "turner_2015_generic" });
+  assert.notEqual(withPrior.job.seed, built.job.seed);
+  assert.deepEqual(withPrior.about.tauPrior, { kind: "turner_2015_generic" });
+  const refused = poolJob({ studyId: "std_1", parameter: "control_event_rate", endpointKey: "orr-recist", armRole: "control", calibre: "closest", items, tauPrior: { kind: "no_such_prior" } });
+  assert.equal(refused.valid, false);
   // The seed follows from the canonical scenario bytes, so the same pool twice
   // is the same run (AC-04) and a changed study changes it.
   assert.equal(built.job.seed, seedForScenario(built.job.scenario));

@@ -1,4 +1,5 @@
 import { vcrContractsRead } from './vcrWriteContracts.mjs';
+import { vcrSuccessRatesRead } from './vcrEvidenceSynthesis.mjs';
 import { followupHistoryCsv, presentFollowupHistory } from './vcrFollowupHistory.mjs';
 import { resolveVcrReplyStudy } from './vcrReplyContext.mjs';
 /**
@@ -78,7 +79,7 @@ export const VCR_READ_WHATS = Object.freeze([
   "study", "definition", "criteria", "assumptions", "evidence", "population", "patients", "comparator", "trial",
   "precedents", "matching", "subject_document", "followup_history", "model_source", "generated_records", "results", "report_model", "snapshot_profile", "models", "jobs",
   "trial_registry_record", "patient_context", "pack", "library", "model_assessments", "longitudinal", "candidate_trials", "soa", "regulatory_contacts",
-  "candidates",
+  "candidates", "success_rates",
 ]);
 
 /**
@@ -1682,6 +1683,8 @@ export class VcrService {
     }
     this.counters.reads += 1;
     if (what === 'contracts') return vcrContractsRead(filter.kind ?? null);
+    // Published base rates of development, two sources side by side: reference data, no study and no patient behind it.
+    if (what === 'success_rates') return vcrSuccessRatesRead(filter);
     if (what === 'data_intake') return { available: false, code: 'vcr_invocation_unavailable', message: 'Original upload intake requires the verified current conversation.' };
     if (!study.id && !['trial_registry_record','models','library','candidates'].includes(what)
       && !(what === 'matching' && ['contract', 'terminology'].includes(filter.kind))) return { available:true,empty:true,study:null,scope:'conversation' };
