@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { parseBackfillArguments } from "../../../scripts/vcr/backfill-result-subjects.mjs";
 import {
-  VCR_SUBJECT_KINDS, vcrBackfillSubjectFor, vcrConversationSubject, vcrCurrentObjects, vcrDesignShare, vcrJobFroze, vcrJobObjectKind, vcrJobStage, vcrMatchTrialScenarios,
+  VCR_SUBJECT_KINDS, resolveJobSubject, vcrBackfillSubjectFor, vcrConversationSubject, vcrCurrentObjects, vcrDesignShare, vcrJobFroze, vcrJobObjectKind, vcrJobStage, vcrMatchTrialScenarios,
 } from "../src/vcrSubjects.mjs";
 
 const fixed21 = { id: "scn_a", version: 1, label: "A 2:1", design: "two_arm_fixed", endpointType: "time_to_event", configuration: { design: { nTreat: 120, nControl: 60 }, truth: { hazardRatio: 0.7 } } };
@@ -133,4 +133,42 @@ test("an explicit subjectId with a scenario that contradicts the design is a new
   assert.equal(saved.length, 1);
   // a study with a page of its own keeps its objects: nothing is written here
   assert.equal(await vcrConversationSubject({ store, study: { ...study, scope: "study" }, userId: "u1", kind: "design_simulation", subjectId: "scn_300", scenario: n500 }), null);
+});
+
+/** A store that holds one comparison of the study (a weighted external control with its own configuration) and writes whatever it is given. */
+function storeHoldingOneComparison() {
+  /** @type {any[]} */
+  const saved = [];
+  const held = { id: "cmp_1", version: 1, name: "对照 1", route: "external_control", estimand: "ATT", resultId: "res_1", configuration: { covariates: ["age"], endpoint: { type: "binary" } } };
+  const rows = () => [held, ...saved.map((input, at) => ({ id: `cmp_new${at}`, version: 2 + at, name: input.name, route: input.route, estimand: input.estimand, configuration: input.configuration }))];
+  return { saved, store: {
+    async comparatorDesigns() { return rows(); },
+    async methodConfigurationObject(/** @type {any} */ _client, /** @type {string} */ _studyId, /** @type {string} */ _kind, /** @type {string | null} */ subjectId) { return subjectId ? rows().find((row) => row.id === subjectId) ?? null : null; },
+    async saveComparatorDesign(/** @type {any} */ input) { saved.push(input); return { id: `cmp_new${saved.length - 1}`, version: 1 + saved.length }; },
+    async transaction(/** @type {(client: any) => Promise<any>} */ run) { return run({ query: async () => ({ rows: [] }) }); },
+  } };
+}
+
+test("a bias analysis that states its estimate is a comparison of its own, filed once; one that names a comparison is a stage of it and files nothing", async () => {
+  const { store, saved } = storeHoldingOneComparison();
+  const study = { id: "std_1", userId: "u1", scope: "conversation" };
+  const stated = { scale: "hazard_ratio", estimate: 0.7, lower: 0.5, upper: 0.98 };
+  const made = await vcrConversationSubject({ store, study, userId: "u1", kind: "bias_analysis", scenario: stated });
+  assert.ok(made, "the estimate it states is not the comparison the study holds");
+  assert.equal(saved.length, 1);
+  assert.equal(saved[0].route, "literature_control", "a stated estimate has no data of the study behind it");
+  assert.deepEqual(saved[0].configuration, stated);
+  // asked again with the same numbers: the one object; another estimate: another object (as an E-value is)
+  assert.equal(await vcrConversationSubject({ store, study, userId: "u1", kind: "bias_analysis", scenario: stated }), "cmp_new0");
+  assert.equal(saved.length, 1);
+  assert.ok(await vcrConversationSubject({ store, study, userId: "u1", kind: "bias_analysis", scenario: { ...stated, estimate: 0.6 } }));
+  assert.equal(saved.length, 2);
+  // naming the comparison and taking its estimate (the gateway has filled the numbers in): the comparison is the subject, nothing is written
+  const before = saved.length;
+  assert.equal(await vcrConversationSubject({ store, study, userId: "u1", kind: "bias_analysis", subjectId: "cmp_1", scenario: { ...stated, probabilistic: { bias: { family: "constant", value: 1.2 } } } }), null);
+  assert.equal(saved.length, before, "a stage of a comparison writes no object");
+  const subject = await resolveJobSubject({ store, study, kind: "bias_analysis", subjectId: "cmp_1", scenario: stated });
+  assert.equal(subject?.objectKind, "comparator");
+  assert.equal(subject?.detail.stage, "bias_analysis", "it lands on the comparison as its own stage, like the tipping-point analysis");
+  assert.equal(subject?.detail.resultKind, "comparator");
 });

@@ -18,10 +18,12 @@ import { MasterDetail } from "@/components/ui/MasterDetail";
 import { Section } from "@/components/ui/Section";
 import { Tag } from "@/components/ui/Tag";
 import { Tooltip } from "@/components/ui/Tooltip";
+import { VcrBiasAnalysis } from "../VcrBiasAnalysis";
 import { VcrSeriesLegend, VcrSurvivalChart } from "../VcrCharts";
 import { ConclusionChip, SourceTag } from "../VcrMarks";
 import { VcrNumber } from "../VcrNumber";
 import { VcrPremises, premiseDraft } from "../VcrPremises";
+import { VcrTrimRestatement } from "../VcrTrimRestatement";
 import { NotEstimableCard, PartialResultNote, Stale, VcrStepFailed, VcrStepPending, VcrTabSkeleton } from "../VcrStates";
 import { BalancePlot } from "../comparator/BalancePlot";
 import { DimensionBand } from "../comparator/DimensionBand";
@@ -81,7 +83,9 @@ function ComparatorView({ studyId, study, data }: { studyId: string; study: VcrS
   // so they do not count as a result.
   const prior = data.prior ?? [];
   const nothing = data.curves.length === 0 && !data.rmst && !data.median && !data.gaps && !data.estimand
-    && data.comparability.length === 0 && data.diagnostics.length === 0 && prior.length === 0 && data.qc.length === 0 && !data.verdict && !data.predictionBenchmark;
+    && data.comparability.length === 0 && data.diagnostics.length === 0 && prior.length === 0 && data.qc.length === 0 && !data.verdict && !data.predictionBenchmark
+    // A bias analysis filed alone, and a trimming restatement, are results of the comparison.
+    && !data.biasAnalysis && !data.trim;
   // The route in view: the one the study uses until the reader presses another. On a narrow page the record replaces the list.
   const used = data.routes.find((route) => route.selected)?.route ?? data.routes[0]?.route ?? null;
   const [looking, setLooking] = useState<string | null>(null);
@@ -144,6 +148,9 @@ function ComparatorView({ studyId, study, data }: { studyId: string; study: VcrS
               {(data.limits ?? []).map((limit) => <li key={limit.key} data-vcr-limit={limit.key}>{limit.text}</li>)}
             </ul>
           )}
+
+          {/* Who the estimate is about when a propensity trimming removed people: said before the premises and the diagnostics. */}
+          <VcrTrimRestatement trim={data.trim} />
 
           {/* What the conclusion stands on, once; the comparator's own premises are listed by the server (`vcrPremises`). */}
           <VcrPremises
@@ -287,6 +294,8 @@ function UsedRoute({ data }: { data: ComparatorData }) {
       )}
 
       {data.operatingCharacteristics && <OperatingCharacteristicsSection table={data.operatingCharacteristics} />}
+
+      <VcrBiasAnalysis card={data.biasAnalysis} />
 
       {data.robustness && (data.robustness.rows.length > 0 || data.robustness.qualification || data.robustness.notes.length > 0) && (
         <RobustnessSection robustness={data.robustness} />

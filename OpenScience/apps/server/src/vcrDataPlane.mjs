@@ -1875,7 +1875,7 @@ export function tablesNeededBy(method, endpointType, derived) {
   const wanted = ["subject"];
   // Methods whose outcome is always an event time, and the weighting methods that read one when the endpoint says so.
   const timeToEvent = ["model.survival_fit", "comparator.rmst", "comparator.weighted_cox", "comparator.maic_time_to_event"].includes(method)
-    || (["comparator.entropy_balance", "comparator.propensity_weight", "comparator.covariate_sets", "comparator.prognostic_adjustment", "comparator.tipping_point"].includes(method)
+    || (["comparator.entropy_balance", "comparator.propensity_weight", "comparator.covariate_sets", "comparator.aipw", "comparator.prognostic_adjustment", "comparator.tipping_point"].includes(method)
       && endpointType === "time_to_event");
   if (timeToEvent) wanted.push("events");
   return wanted.every((shape) => derived.includes(shape)) ? wanted : ["files"];
@@ -3015,7 +3015,7 @@ export class VcrDataPlane {
         // Only the frozen outcome-time mappings can supply the unit of AVAL.
         // A single input-level unit is safe only when every mapped parameter agrees.
         const unitDecision = engineEventTimeUnit(table, entries, typeof input.parameterCode === "string" && input.parameterCode ? input.parameterCode : null);
-        if (unitDecision.conflict && ["comparator.rmst", "comparator.entropy_balance", "comparator.propensity_weight", "comparator.weighted_cox", "comparator.covariate_sets", "comparator.maic_time_to_event"].includes(method))
+        if (unitDecision.conflict && ["comparator.rmst", "comparator.entropy_balance", "comparator.propensity_weight", "comparator.weighted_cox", "comparator.covariate_sets", "comparator.aipw", "comparator.maic_time_to_event"].includes(method))
           throw refuse(422, VCR_DATA_PLANE_CODES.analysisTableInvalid, "Mapped event time columns have inconsistent or partially missing units; resolve them before this analysis.");
         const timeUnit = unitDecision.unit;
         const labels = engineColumnSources(table.derivedFrom?.columnSources, table.columns, table.valueSource);

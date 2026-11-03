@@ -97,7 +97,7 @@ export function vcrJobStage(kind, objectKind) {
   }
   if (objectKind === "comparator") {
     return /** @type {Record<string, string>} */ ({ rmst: "rmst", maic_time_to_event_comparator: "maic",
-      negative_control_comparator: "negative_control", tipping_point: "tipping_point" })[kind] ?? "primary";
+      negative_control_comparator: "negative_control", tipping_point: "tipping_point", bias_analysis: "bias_analysis" })[kind] ?? "primary";
   }
   return null;
 }
@@ -331,7 +331,7 @@ export async function resolveJobSubject({ store, study, kind, subjectId = null, 
 }
 
 /** The computations a conversation may start with nothing written first: what they compute is all in the scenario they send. */
-const VCR_SELF_FILED_KINDS = new Set(["design_analytic", "design_simulation", "design_grid", "generate_population", "literature_population", "evalue"]);
+const VCR_SELF_FILED_KINDS = new Set(["design_analytic", "design_simulation", "design_grid", "generate_population", "literature_population", "evalue", "bias_analysis"]);
 
 /**
  * A conversation's research has no form to fill in. A design or a population the run computes with no object to file it under gets one,
@@ -354,16 +354,17 @@ export async function vcrConversationSubject({ store, study, userId, kind, subje
     const named = rows.find((entry) => entry.id === subjectId);
     const own = named ? configurationOf(objectKind, named) : null;
     if (!named || !own || !Object.keys(scenario).length || !vcrContradiction(own, scenario)) return null;
-    // An E-value is one estimate and not a line of versions: another estimate is another object (below).
-    if (kind !== "evalue") {
+    // An E-value, or a bias analysis of a stated estimate, is one estimate and not a line of versions: another estimate is another object (below).
+    if (kind !== "evalue" && kind !== "bias_analysis") {
       const method = /** @type {Record<string, string>} */ (VCR_JOB_METHODS)[kind];
       return (await prepareVcrMethodConfiguration({ store, study, userId, method, subjectId, name: String(named.label || named.name || ""), scenario })).subjectId;
     }
   }
   const current = vcrCurrentObjects(objectKind, rows);
   // An E-value of a stated estimate and limit is an object of its own: it is never filed under another comparison the study holds, whose
-  // result it would replace. The same estimate asked twice is the one object.
-  if (kind === "evalue") {
+  // result it would replace. The same estimate asked twice is the one object. So is a bias analysis of an estimate the call states; one that
+  // names a comparison (and states no estimate) is a stage of that comparison and is not made here.
+  if (kind === "evalue" || kind === "bias_analysis") {
     const same = current.find((entry) => canonicalScenarioJson(entry.configuration) === canonicalScenarioJson(scenario));
     if (same) return String(same.id);
   } else if (fittingObjects(objectKind, kind, scenario, current, true).length) return null;
@@ -604,7 +605,7 @@ export async function prepareVcrMethodConfiguration({ store, study, userId, meth
     design: object(scenario.design).kind ?? object(object(object(schema.fields).design).fields).kind?.default, endpointType: object(scenario.endpoint).type,
     configuration: scenario, assumptionIds: previous?.assumptionIds ?? [], comparatorId: previous?.comparatorId ?? null }, { client });
   else if (objectKind === "comparator") saved = await store.saveComparatorDesign({ ...base, route: previous?.route ?? (method === "design.procova" || method === "comparator.prognostic_adjustment" ? "prognostic_adjustment"
-      : method === "comparator.map_prior" ? "hybrid_control" : ["comparator.maic", "comparator.evalue", "comparator.maic_time_to_event"].includes(method) ? "literature_control" : "external_control"),
+      : method === "comparator.map_prior" ? "hybrid_control" : ["comparator.maic", "comparator.evalue", "comparator.bias_analysis", "comparator.stc", "comparator.maic_time_to_event"].includes(method) ? "literature_control" : "external_control"),
     estimand: scenario.estimand ?? object(object(schema.fields).estimand).default ?? null, configuration: scenario, targetTrial: previous?.targetTrial ?? {} }, { client });
   else saved = await store.saveDesignGrid({ ...base, dimensions: { base: Object.fromEntries(Object.entries(scenario).filter(([key]) => key !== "designs" && key !== "truths")), designs: scenario.designs ?? [] }, truthScenarios: scenario.truths ?? [], cells: [] }, { client });
   return { subjectId: String(saved.id), objectKind, version: Number(saved.version) };

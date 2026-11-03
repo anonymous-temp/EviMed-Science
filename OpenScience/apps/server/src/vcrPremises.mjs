@@ -26,6 +26,7 @@
 
 import { VCR_EFFECT_DISCOUNT_LABEL_ZH, VCR_EFFECT_DISCOUNT_LIMITS_ZH, VCR_ESTIMAND_LABELS_ZH, VCR_PREMISES_DECISIVE_MAX, VCR_PREMISE_SOURCES } from "@evimed/domain";
 import { TIME_UNIT_WORDS, hazardLawWords, list, numeric, object, text } from "./vcrViewsKit.mjs";
+import { biasEstimatePhrase, biasStatedWords } from "./vcrBiasAnalysis.mjs";
 
 /**
  * @typedef {{ key: string, label: string, value: string, source: 'literature' | 'assumed' | 'default' | 'given', decisive: boolean,
@@ -40,7 +41,9 @@ const PRIORITY = Object.freeze([
   "effect", "control", "dropout", "correlation", "similarity", "sampling", "accrual", "alpha", "assurance",
   // a comparison: how suitable it is, how far the target trial is emulated, what an indirect comparison leaves unadjusted, what a
   // borrowed prior rests on, how strong an unmeasured confounder would have to be
-  "applicability", "targetTrial", "maicTarget", "maicModifiers", "residual", "borrowedHistory", "priorWorth", "unmeasured",
+  "applicability", "targetTrial", "trimmedPopulation", "maicTarget", "maicModifiers", "residual", "borrowedHistory", "priorWorth", "unmeasured",
+  // a bias analysis: the estimate it analyses and the bias that was stated
+  "biasEstimate", "biasStated",
 ]);
 
 /**
@@ -398,6 +401,35 @@ function comparatorPremises(input) {
     rows.push({ key: "unmeasured", label: "未测量的混杂",
       value: `E 值 ${plain(point)}${limit !== null ? `（置信限 ${plain(limit)}）` : ""}：未测量的混杂要和处理、结局各有这么强的关联，才能解释掉这个结果；它只回答“要多强”，是偏倚分析里最简单的一层，不估计偏倚本身`,
       source: "assumed", decisive: true });
+  }
+
+  // The bias analysis of an estimate (C1, C2): which estimate, and the bias the person said, with the grid of associations the engine took
+  // when none was said (a default, not a finding). Only the exaggerating bias is considered, and that is a premise too.
+  const bias = object(diagnostics.biasAnalysis);
+  if (Object.keys(bias).length) {
+    const phrase = biasEstimatePhrase(bias);
+    if (phrase) rows.push({ key: "biasEstimate", label: "被分析的估计", value: phrase, source: "given", decisive: true });
+    const stated = biasStatedWords(bias);
+    if (stated) rows.push({ key: "biasStated", label: "设定的偏倚", value: stated, source: "assumed", decisive: true });
+    const grid = list(bias.assumed).map(object).find((entry) => entry.key === "confounderTipping.associations");
+    if (grid) rows.push({ key: "biasGrid", label: "混杂强度的取值", value: `${list(grid.value).map((entry) => plain(Number(entry))).join("、")}（没有设定，按参考网格算）`, source: "default", decisive: false });
+    rows.push({ key: "biasDirection", label: "偏倚的方向", value: "只考虑把效应夸大的偏倚（去掉它，估计值向无效线靠近）", source: "default", decisive: false });
+  }
+
+  // Who the estimate is about after a propensity trimming: the people with no comparable counterpart are removed, so the conclusion is the
+  // kept people's (EU HTA guideline 6.2). A fixed bound is the person's; Crump's rule is the engine's default.
+  const trim = object(diagnostics.trim);
+  if (Object.keys(trim).length && Number(trim.removedTotal) > 0) {
+    const arms = list(trim.arms).map(object);
+    const removed = (/** @type {string} */ arm) => Number(arms.find((entry) => entry.arm === arm)?.removed ?? 0);
+    rows.push({ key: "trimmedPopulation", label: "修剪后的目标人群",
+      value: `去掉试验组 ${removed("treated")} 例、对照组 ${removed("control")} 例（倾向评分低于 ${plain(Number(trim.lower))} 或高于 ${plain(Number(trim.upper))}）；结论只适用于留下的人`,
+      source: trim.rule === "fixed" ? "assumed" : "default", decisive: true });
+  }
+
+  // A time-to-event doubly robust estimate rests on pseudo-observations, which need censoring not to depend on the covariates within an arm.
+  if (object(diagnostics.timeToEvent).censoring) {
+    rows.push({ key: "censoringIndependent", label: "删失的假定", value: "每一组内，删失与协变量无关（伪观测值法的前提）", source: "default", decisive: false });
   }
 
   // What an external control is estimated for, and what it is adjusted by: stated, and folded.

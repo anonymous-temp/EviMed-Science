@@ -93,6 +93,7 @@ export const JOB_KIND_LABELS = Object.freeze(/** @type {Record<string, string>} 
   forecast_trajectories: '纵向结果预测', evaluate_forecast: '预测与观测验证', compare_forecasts: '预测情景比较', benchmark_trial_effect: '试验效果预测验证',
   profile_snapshot: "数据快照画像", build_cohort: "构建队列", generate_population: "生成情景人群",
   literature_population: "文献人群", synthesize_population: "合成人群", population_quality: "人群质量报告", population_check: "与第二份基线表对照", design_confirmatory: "确认性设计",
+  bias_analysis: "未测混杂的偏倚分析", stc_comparator: "模拟治疗比较（G 计算）",
   generate_patients: "生成虚拟患者", generate_patients_continuous: "生成虚拟患者（连续终点）",
   generate_patients_binary: "生成虚拟患者（二分类终点）", generate_patients_longitudinal: "生成虚拟患者（纵向轨迹）", reconstruct_km: "重建生存曲线", pool_evidence: "合并证据",
   weight_comparator: "熵平衡加权", propensity_weight_comparator: "倾向评分加权", maic_comparator: "匹配调整间接比较",

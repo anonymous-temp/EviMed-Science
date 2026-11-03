@@ -81,6 +81,7 @@ import { HttpError } from "./security.mjs";
 import { VCR_READ_WHATS, VCR_READ_MAX_ITEMS, VCR_WRITE_WHATS, vcrRouteOptions } from "./vcrService.mjs";
 import { vcrResultEntry, withJobEntry, withWriteEntry } from "./vcrResultEntry.mjs";
 import { vcrConfirmatorySubjectId } from "./vcrConfirmatory.mjs";
+import { vcrBiasScenarioFromComparison } from "./vcrBiasAnalysis.mjs";
 import { renderVcrNumbers } from "./vcrRender.mjs";
 import { checkRegulatoryContact, resolveVisitsRef, visitKey } from "./vcrScheduleView.mjs";
 import { EVIDENCE_ARM_ROLES } from "./vcrEvidenceStore.mjs";
@@ -2747,6 +2748,12 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
             }
             // An object named with no scenario is checked as the programme would build it from the object (see `startJob`).
             let scenario = asked.scenario;
+            // and a bias analysis of a saved comparison is checked with the estimate the platform takes from its result
+            if (asked.kind === "bias_analysis") {
+              const taken = await vcrBiasScenarioFromComparison({ store: vcr.store, study, subjectId: asked.subjectId, scenario });
+              if ("refused" in taken) throw gatewayError(400, "vcr_simulate_payload_invalid", taken.refused.message);
+              if (taken.from) scenario = taken.scenario;
+            }
             if (asked.subjectId && !Object.keys(scenario).length && !asked.inputs.length && typeof vcr.orchestrator?.stageScenarioOf === "function") {
               const built = await vcr.orchestrator.stageScenarioOf(study, asked.subjectId, asked.kind);
               if ("refused" in built) throw gatewayError(400, "vcr_simulate_payload_invalid", built.refused.message);
@@ -2980,6 +2987,13 @@ async function startJob(vcr, study, request) {
       notes = { ...(notes ?? {}), visitTimes: { ...times.timeUnit, times: scenario.visits } };
       detail = { ...detail, timeUnitBasis: { ...times.timeUnit } };
     }
+  }
+  // A bias analysis that names a saved comparison and states no estimate takes the comparison's own estimate and interval, by code: the model
+  // never copies a number out of a result into a scenario (the reply that said an E-value of 3.0 where the page read 2.22, 2026-11-02).
+  if (request.kind === "bias_analysis") {
+    const taken = await vcrBiasScenarioFromComparison({ store: vcr.store, study, subjectId: request.subjectId, scenario });
+    if ("refused" in taken) throw gatewayError(400, "vcr_simulate_payload_invalid", taken.refused.message);
+    if (taken.from) { scenario = taken.scenario; detail = { ...detail, biasEstimateFrom: taken.from }; }
   }
   // A start that names an object and sends no scenario computes the object as it was written: the platform builds the stage's scenario
   // from it, as the programme does, instead of asking the engine to run an empty one (2026-11-01: a design written in the conversation

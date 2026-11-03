@@ -850,7 +850,7 @@ function covariateSetAnalysis(configuration, estimand) {
  * Whether the study's declared design supports the comparator job the design chose, as a refusal that
  * says what to change, or null. The checks are the ones the engine would refuse by name later, made
  * here so the study reads one plain sentence at planning time: a Cox model needs an event time, the
- * doubly robust estimate a continuous or binary outcome and the trial's own population (ATT).
+ * doubly robust estimate the trial's own population (ATT).
  * @param {string} jobKind @param {Record<string, any>} configuration @param {string} endpoint @param {string} estimand
  * @returns {{ code: string, message: string } | null}
  */
@@ -863,8 +863,10 @@ function externalControlRefusal(jobKind, configuration, endpoint, estimand) {
   if (jobKind === "weighted_cox_comparator" && endpoint !== "time_to_event") {
     return { code: "vcr_job_scenario_invalid", message: `加权 Cox 只用于事件时间终点，这个研究的终点是 ${endpoint}：连续或二分类终点请用加权估计，或把方法改为 aipw。` };
   }
-  if (wantsAipw && endpoint === "time_to_event") {
-    return { code: "vcr_job_scenario_invalid", message: "双重稳健估计只用于连续或二分类终点；事件时间终点请用 weighted_cox。" };
+  // The doubly robust job reads a time-to-event outcome since 1.3.0 (algorithm round C8: the restricted mean survival time or the survival at tau); the
+  // covariate-set comparison re-runs only the continuous and binary ones.
+  if (sets && wantsAipw && endpoint === "time_to_event") {
+    return { code: "vcr_job_scenario_invalid", message: "协变量集比较里的双重稳健估计只用于连续或二分类终点；事件时间终点请用 weighted_cox 或倾向评分加权。" };
   }
   if (wantsAipw && estimand !== "ATT") {
     return { code: "vcr_job_scenario_invalid", message: "双重稳健估计只估计试验人群自己的效应（ATT）；要别的估计对象请换成倾向评分加权。" };
@@ -1657,6 +1659,7 @@ export function vcrGapsForRule(rule) {
     tau_beyond_followup: { title: "限制平均生存时间的时点超过了随访", detail: "所选时点比某一组最长的随访还长。", answers: "把时点缩到报告里给出的最大可用时点以内，或补充随访更长的数据。" },
     too_few_events: { title: "某一组没有事件，风险比不存在", detail: "有一组一个事件都没有，或 Cox 模型没有收敛，风险比无法估计。", answers: "延长随访或补充事件更多的数据；也可以改看不依赖事件数的指标，如限制平均生存时间的差。" },
     nuisance_model_not_estimable: { title: "倾向性模型或结局模型拟合不出来", detail: "协变量之间高度共线，或外部对照的人数不足以拟合结局模型的全部系数。", answers: "删去重复或共线的协变量，减少结局模型里的项，或补充更多外部对照患者。" },
+    trimmed_population_too_small: { title: "修剪之后某一组剩下的人太少", detail: "按倾向评分去掉没有可比对象的人之后，试验组或对照组不足两个人，没有可以加权的人群。", answers: "放宽修剪的界值（或不修剪，改用重叠加权的估计目标），或补充与试验人群更可比的外部数据。" },
     reconstruction_failed_qc: { title: "重建的曲线没有通过质控", detail: "重建出的风险人数、事件数、中位数或风险比与原文对不上。", answers: "重新数字化曲线并核对风险人数表，或换一篇报告完整的文献。" },
     map_prior_conflict: { title: "历史信息与当前数据冲突", detail: "MAP 先验与当前对照组数据的冲突检验越界。", answers: "检查历史研究与本研究人群是否可比，或降低借用权重。" },
     // The two the control plane derives before any job: they carry the route's
@@ -3256,10 +3259,12 @@ export class VcrOrchestrator {
    *   | { unavailable: true }>} `unavailable`: this is not an object (or a stage) the platform can build a scenario for
    */
   async stageScenarioOf(study, subjectId, jobKind) {
-    // A stand-alone E-value is its own scenario: the comparison it was filed as (`vcrConversationSubject`) holds the estimate and limit.
-    if (jobKind === "evalue") {
+    // A stand-alone E-value is its own scenario: the comparison it was filed as (`vcrConversationSubject`) holds the estimate and limit. So does a
+    // stand-alone bias analysis (it holds its scale and estimate); a comparison that holds none is one a bias analysis is a stage of, built by the gateway.
+    if (jobKind === "evalue" || jobKind === "bias_analysis") {
       const filed = list(await this.store.comparatorDesigns(study.id, 200)).find((entry) => entry.id === subjectId);
-      return filed && Object.keys(object(filed.configuration)).length ? { scenario: structuredClone(object(filed.configuration)), detail: {} } : { unavailable: true };
+      const own = object(filed?.configuration);
+      return filed && Object.keys(own).length && (jobKind === "evalue" || own.estimate !== undefined) ? { scenario: structuredClone(own), detail: {} } : { unavailable: true };
     }
     const kindOfObject = /** @type {Record<string, string>} */ ({ design_analytic: "trial_scenario", design_simulation: "trial_scenario", assurance: "trial_scenario",
       design_grid: "design_grid", generate_population: "population", literature_population: "population" })[jobKind];

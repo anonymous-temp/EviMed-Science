@@ -55,6 +55,8 @@ import { reportSchedule } from "./vcrScheduleView.mjs";
 import { vcrPremises } from "./vcrPremises.mjs";
 import { presentPopulationCheck } from "./vcrPopulationCheck.mjs";
 import { presentConfirmatoryDesigns } from "./vcrConfirmatory.mjs";
+import { presentBiasAnalysis } from "./vcrBiasAnalysis.mjs";
+import { presentTrim } from "./vcrTrimView.mjs";
 import { localCalibrationView } from "./vcrLocalCalibration.mjs";
 import {
   abilitiesOf, assumptionSummary, assumptionValue, designsSentence, nodeLabel, notEstimableDesign, presentDesigns, reviewContextOf,
@@ -740,7 +742,9 @@ export function presentComparatorTab(bundle) {
   const targetTrial = current ? vcrTargetTrial(current.targetTrial, current.configuration?.targetTrial) : null;
   // The owned execution identifies a sensitivity-only run. An E-value measure alongside
   // another method's effect estimate must not relabel that comparison.
-  const sensitivityOnly = execution?.method === "comparator.evalue";
+  // A bias analysis alone is the same (a stand-alone one has no stage beside it); one filed as a stage of a comparison is not that comparison's method.
+  const sensitivityOnly = execution?.method === "comparator.evalue"
+    || (execution?.method === "comparator.bias_analysis" && list(diagnostics.stages).every((/** @type {any} */ stage) => object(stage).stage === "bias_analysis"));
   return {
     versions: comparators.map(row => ({ objectId: row.id, version: row.version, label: row.name || `对照版本 ${row.version}`, ...(row.resultId ? { resultId: row.resultId, resultVersion: resultById(bundle, row.resultId)?.version } : {}) })),
     selection: shown ? { id: shown.id, version: shown.version, resultId: result?.id ?? null, resultVersion: result?.version ?? null, route: shown.route } : null,
@@ -813,6 +817,9 @@ export function presentComparatorTab(bundle) {
     }),
     limits,
     robustness: robustnessView(result, value),
+    // Quantitative bias analysis (C1, C2) and who a propensity trimming left (C14): cards of the comparison, null when the result has neither.
+    biasAnalysis: presentBiasAnalysis(result, value),
+    trim: presentTrim(diagnostics.trim),
     gaps,
     counts: current ? countsView(result?.counts && Object.keys(result.counts).length ? result.counts : {}, { tier: study.dataTier }) : null,
     verdict: shown ? { conclusion: readAs } : null,

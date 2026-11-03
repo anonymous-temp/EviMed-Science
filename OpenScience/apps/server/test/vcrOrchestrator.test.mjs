@@ -938,7 +938,11 @@ test("a design the study's endpoint cannot support is refused in a sentence, not
   };
   const binary = { ...CMP_T2, definition: { ...definition, endpointType: "binary" } };
   refused(planComparator({ covariates: ["age"], method: "weighted_cox", tau: 12 }, {}, binary), "vcr_job_scenario_invalid", /事件时间终点/);
-  refused(planComparator({ covariates: ["age"], method: "aipw", tau: 12 }), "vcr_job_scenario_invalid", /连续或二分类/);
+  // the doubly robust job reads a time-to-event outcome since 1.3.0 (C8): the plan is made, and carries the horizon; only the covariate-set comparison still refuses it
+  const aipwTte = planComparator({ covariates: ["age"], method: "aipw", tau: 12 });
+  assert.equal(aipwTte.ok, true, JSON.stringify(aipwTte));
+  assert.equal(aipwTte.stages[0].jobKind, "aipw_comparator");
+  assert.equal(aipwTte.stages[0].scenario.tau, 12);
   refused(planComparator({ covariates: ["age"], method: "aipw" }, { estimand: "ATE" }, binary), "vcr_job_scenario_invalid", /ATT/);
   refused(planComparator({ covariateSets: [{ name: "a", covariates: ["x"] }, { name: "b", covariates: ["y"] }], method: "aipw", tau: 12 }), "vcr_job_scenario_invalid", /连续或二分类/);
   const noEndpoint = { ...CMP_T2, definition: null };

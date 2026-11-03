@@ -1070,6 +1070,67 @@ export interface VcrOperatingCharacteristics {
   rows: Array<{ drift: number; prior: string; priorLabel: string; scenario: "null" | "alternative"; rejection: number; mcse: number | null; replicates: number | null }>;
 }
 
+/** One side of a confounder that would flip the result: who carries more of it, and whether such a confounder can exist at all. */
+export interface VcrBiasConfounderCell {
+  /** What flips: the estimate or its interval. */
+  what: string;
+  /** The arm that carries more of the confounder. */
+  carrier: string;
+  /** False when the share needed is past 100%: the sentence then says no such confounder exists. */
+  feasible: boolean;
+  carrierPrevalence: VcrValue | null;
+  difference: VcrValue | null;
+  standardized: VcrValue | null;
+  sentence: string;
+}
+
+/**
+ * A quantitative bias analysis of the comparison: how much bias flips the conclusion, and the optional parts the call asked for. A
+ * part the call did not ask for is null, and so is the whole card on a result that holds no bias analysis.
+ */
+export interface VcrBiasAnalysisCard {
+  question: string;
+  /** The estimate that was analysed, in one phrase. */
+  estimate: string | null;
+  /** Which way the bias is taken to push the effect. */
+  direction: string;
+  tipping: { question: string; sentence: string; limit: VcrValue | null; estimate: VcrValue | null; alreadyIncludesNull: boolean };
+  shiftedNull: {
+    question: string;
+    note: string;
+    rows: Array<{ bias: string; adjusted: VcrValue | null; lower: VcrValue | null; upper: VcrValue | null; p: VcrValue | null; holds: boolean; sentence: string }>;
+  } | null;
+  confounder: {
+    question: string;
+    note: string;
+    baseline: VcrValue | null;
+    rows: Array<{ association: VcrValue | null; estimate: VcrBiasConfounderCell | null; limit: VcrBiasConfounderCell | null }>;
+  } | null;
+  probabilistic: {
+    question: string;
+    stated: string | null;
+    adjusted: VcrValue;
+    persists: VcrValue;
+    systematic: { median: VcrValue | null; lower: VcrValue | null; upper: VcrValue | null };
+    draws: number | null;
+    interrupted: string | null;
+    note: string;
+  } | null;
+}
+
+/** Who a propensity trimming removed and who the estimate is therefore about. */
+export interface VcrTrimCard {
+  rule: "fixed" | "crump";
+  lower: number | null;
+  upper: number | null;
+  removed: number;
+  kept: number;
+  sentence: string;
+  arms: Array<{ arm: string; n: number; kept: number; removed: number; share: string }>;
+  /** The removed beside the kept, per covariate; empty when nobody was removed. Values are the server's own text. */
+  covariates: Array<{ covariate: string; treated: { kept: string; removed: string }; control: { kept: string; removed: string } }>;
+}
+
 export interface VcrComparatorTab {
   /** 「这个结论的前提」: at most five decisive, the rest folded by the page. */
   premises?: VcrPremise[];
@@ -1118,6 +1179,10 @@ export interface VcrComparatorTab {
    * could not be computed, and the sentence that no regulator has qualified prognostic adjustment for the endpoint. Null when none.
    */
   robustness?: { rows: Array<{ key: string; label: string; value: VcrValue }>; notes: string[]; qualification: string | null } | null;
+  /** The bias analysis of this result (tipping bias, shifted null, confounder tipping, probabilistic): null when it holds none. */
+  biasAnalysis?: VcrBiasAnalysisCard | null;
+  /** Who the propensity trimming removed and who the estimate is about: null when the result did not trim. */
+  trim?: VcrTrimCard | null;
   /** 「不可估计」 — the gaps, and what each one would answer. */
   gaps: { title?: string | null; needs?: string | null; items: Array<{ title: string; detail?: string | null; answers?: string | null }>; conclusion?: string | null; rule?: string | null } | null;
   counts: VcrCounts | null;
@@ -1935,6 +2000,67 @@ function readConfirmatoryDesigns(raw: unknown): VcrConfirmatoryCard[] {
   });
 }
 
+function readBiasCell(raw: unknown): VcrBiasConfounderCell | null {
+  const cell = obj(raw);
+  const sentence = text(cell.sentence);
+  if (!sentence) return null;
+  return {
+    what: text(cell.what) ?? "", carrier: text(cell.carrier) ?? "", feasible: cell.feasible === true,
+    carrierPrevalence: readOptionalValue(cell.carrierPrevalence), difference: readOptionalValue(cell.difference), standardized: readOptionalValue(cell.standardized),
+    sentence,
+  };
+}
+
+/** The bias-analysis card; a card without its question and tipping sentence, and anything of an unknown shape, reads as nothing. */
+function readBiasAnalysis(raw: unknown): VcrBiasAnalysisCard | null {
+  const card = obj(raw), tipping = obj(card.tipping);
+  const question = text(card.question), sentence = text(tipping.sentence);
+  if (!question || !sentence) return null;
+  const shifted = obj(card.shiftedNull), confounder = obj(card.confounder), probabilistic = obj(card.probabilistic), systematic = obj(probabilistic.systematic);
+  const shiftedRows = arr(shifted.rows).flatMap((row) => {
+    const bias = text(row.bias);
+    return bias ? [{
+      bias, adjusted: readOptionalValue(row.adjusted), lower: readOptionalValue(row.lower), upper: readOptionalValue(row.upper), p: readOptionalValue(row.p),
+      holds: row.holds === true, sentence: text(row.sentence) ?? "",
+    }] : [];
+  });
+  const confounderRows = arr(confounder.rows).map((row) => ({ association: readOptionalValue(row.association), estimate: readBiasCell(row.estimate), limit: readBiasCell(row.limit) }))
+    .filter((row) => row.estimate || row.limit);
+  const hasProbabilistic = probabilistic.adjusted && typeof probabilistic.adjusted === "object" && probabilistic.persists && typeof probabilistic.persists === "object";
+  return {
+    question, estimate: text(card.estimate), direction: text(card.direction) ?? "",
+    tipping: { question: text(tipping.question) ?? question, sentence, limit: readOptionalValue(tipping.limit), estimate: readOptionalValue(tipping.estimate), alreadyIncludesNull: tipping.alreadyIncludesNull === true },
+    shiftedNull: shiftedRows.length > 0 ? { question: text(shifted.question) ?? "", note: text(shifted.note) ?? "", rows: shiftedRows } : null,
+    confounder: confounderRows.length > 0 ? { question: text(confounder.question) ?? "", note: text(confounder.note) ?? "", baseline: readOptionalValue(confounder.baseline), rows: confounderRows } : null,
+    probabilistic: hasProbabilistic ? {
+      question: text(probabilistic.question) ?? "", stated: text(probabilistic.stated),
+      adjusted: readVcrValue(probabilistic.adjusted), persists: readVcrValue(probabilistic.persists),
+      systematic: { median: readOptionalValue(systematic.median), lower: readOptionalValue(systematic.lower), upper: readOptionalValue(systematic.upper) },
+      draws: finite(probabilistic.draws), interrupted: text(probabilistic.interrupted), note: text(probabilistic.note) ?? "",
+    } : null,
+  };
+}
+
+/** The trimming restatement; without its sentence, and for anything of an unknown shape, there is nothing to say. */
+function readTrim(raw: unknown): VcrTrimCard | null {
+  const trim = obj(raw);
+  const sentence = text(trim.sentence);
+  if (!sentence) return null;
+  const side = (value: unknown) => ({ kept: text(obj(value).kept) ?? "—", removed: text(obj(value).removed) ?? "—" });
+  return {
+    rule: trim.rule === "crump" ? "crump" : "fixed", lower: finite(trim.lower), upper: finite(trim.upper),
+    removed: finite(trim.removed) ?? 0, kept: finite(trim.kept) ?? 0, sentence,
+    arms: arr(trim.arms).flatMap((row) => {
+      const arm = text(row.arm), n = finite(row.n), kept = finite(row.kept), removed = finite(row.removed);
+      return arm && n !== null && kept !== null && removed !== null ? [{ arm, n, kept, removed, share: text(row.share) ?? "—" }] : [];
+    }),
+    covariates: arr(trim.covariates).flatMap((row) => {
+      const covariate = text(row.covariate);
+      return covariate ? [{ covariate, treated: side(row.treated), control: side(row.control) }] : [];
+    }),
+  };
+}
+
 function readDesignRecord(raw: unknown): NonNullable<VcrDesign["record"]> | null {
   const value = obj(raw);
   if (!Object.keys(value).length) return null;
@@ -2424,6 +2550,8 @@ export function readVcrComparator(raw: unknown): VcrComparatorTab {
     dimensions: arr(value.dimensions) as unknown as VcrDimension[],
     diagnostics: arr(value.diagnostics).map((row) => ({ key: text(row.key) ?? "", label: text(row.label) ?? "", value: readVcrValue(row.value) })),
     prior: arr(value.prior).map((row) => ({ key: text(row.key) ?? "", label: text(row.label) ?? "", value: readVcrValue(row.value) })),
+    biasAnalysis: readBiasAnalysis(value.biasAnalysis),
+    trim: readTrim(value.trim),
     gaps: Object.keys(gaps).length ? { ...(gaps as Loose), items: arr(gaps.items) } as VcrComparatorTab["gaps"] : null,
     counts: readVcrCounts(value.counts),
     verdict: Object.keys(verdict).length ? verdict as unknown as VcrComparatorTab["verdict"] : null,
