@@ -27,6 +27,8 @@ import {
 } from "@evimed/domain";
 import { coverageKeyOf, roundCoverages } from "./geoCoverage.mjs";
 import { ORDER_SELECT, mapOrder } from "./geoMarketStore.mjs";
+import { GEO_SPINE_INPUT_MAX, requireCompleteSpineRows } from "./geoStore.mjs";
+import { HttpError } from "./security.mjs";
 import { roundAnswers, tallySources } from "./geoSourceAnswers.mjs";
 
 /** A round (aliased `r`) that heard an answer — a valid or refused one, what every number is made of. */
@@ -106,6 +108,17 @@ export class GeoSpine {
    *   group's views list): what a chooser needs of the actions is everything else.
    */
   async load(project, { answers = true } = {}) {
+    try { return await this.#load(project, { answers }); }
+    catch (error) {
+      if (error?.code === "57014" && /statement timeout/i.test(String(error.message ?? ""))) {
+        throw new HttpError(422, "geo_spine_incomplete", "The complete spine read timed out. Contact an administrator before retrying.");
+      }
+      throw error;
+    }
+  }
+
+  /** @param {any} project @param {{answers: boolean}} options */
+  async #load(project, { answers }) {
     const geoId = project.id;
     const sets = await this.store.questionSets(geoId);
     const version = sets[0]?.version ?? null;
@@ -182,7 +195,8 @@ export class GeoSpine {
     const errorRows = (await this.#query(`SELECT e.id, e.fingerprint, e.engine, e.question_id, e.first_snapshot_id, e.last_snapshot_id, e.statement, e.error_type,
         e.severity, e.claim_id, e.cited_source, e.action, e.status, e.materials, e.created_at, q.group_id
       FROM evimed_geo.errors e LEFT JOIN evimed_geo.questions q ON q.id = e.question_id
-      WHERE e.geo_project_id = $1 AND e.judgment_state='active' ORDER BY e.created_at DESC LIMIT 1000`, [geoId])).rows;
+      WHERE e.geo_project_id = $1 AND e.judgment_state='active' ORDER BY e.created_at DESC, e.id LIMIT $2`, [geoId, GEO_SPINE_INPUT_MAX + 1])).rows;
+    requireCompleteSpineRows(errorRows, "errors");
     const errors = errorRows.map((row) => ({
       id: String(row.id), fingerprint: text(row.fingerprint), engine: String(row.engine), questionId: text(row.question_id),
       groupId: row.group_id ? String(currentOf.get(String(row.group_id)) ?? row.group_id) : null,
@@ -192,16 +206,17 @@ export class GeoSpine {
       firstSnapshotId: text(row.first_snapshot_id), createdAt: iso(row.created_at),
     }));
 
-    const [articles, orderRows, ownedLinks, cited, batchRows, choices] = await Promise.all([
-      this.store.listArticles(geoId),
-      this.#query(`SELECT o.*, m.domain AS media_domain, m.name AS media_name FROM (${ORDER_SELECT} WHERE o.geo_project_id = $1 ORDER BY o.created_at DESC LIMIT 500) o
-        LEFT JOIN evimed_geo.media m ON m.media_type = o.media_type AND m.resource_id = o.resource_id ORDER BY o.created_at DESC`, [geoId]),
-      this.store.ownedLinks(geoId),
-      this.store.citedArticles(geoId),
+    const [articles, orderRows, , batchRows, choices, sources] = await Promise.all([
+      this.store.spineArticles(geoId),
+      this.#query(`SELECT o.*, m.domain AS media_domain, m.name AS media_name FROM (${ORDER_SELECT} WHERE o.geo_project_id = $1 ORDER BY o.created_at DESC, o.id LIMIT $2) o
+        LEFT JOIN evimed_geo.media m ON m.media_type = o.media_type AND m.resource_id = o.resource_id ORDER BY o.created_at DESC, o.id`, [geoId, GEO_SPINE_INPUT_MAX + 1]),
+      this.store.ownedLinks(geoId, { complete: true, includeCitations: false }),
       this.#query(`SELECT key, state, detail FROM evimed_geo.schedule_marks WHERE geo_project_id = $1 AND kind = 'run' AND starts_with(key, 'run:content:')`, [geoId]),
-      this.store.actionChoices(geoId),
+      this.store.spineActionChoices(geoId),
+      this.store.spineSources(geoId),
     ]);
-    const orders = orderRows.rows.map((/** @type {any} */ row) => ({ ...mapOrder(row), domain: text(row.media_domain), mediaName: text(row.media_name) }));
+    const orders = requireCompleteSpineRows(orderRows.rows, "orders").map((/** @type {any} */ row) => ({ ...mapOrder(row), domain: text(row.media_domain), mediaName: text(row.media_name) }));
+    const [ownedLinks, cited] = await Promise.all([this.store.ownedLinks(geoId, { complete: true }), this.store.citedArticles(geoId, { complete: true })]);
     const batches = batchRows.rows.map((/** @type {any} */ row) => {
       const detail = row.detail && typeof row.detail === "object" ? row.detail : {};
       return { key: String(row.key), state: String(row.state),
@@ -225,7 +240,6 @@ export class GeoSpine {
         answersByGroup.set(resolved, list);
       }
     }
-    const sources = await this.store.listSources(geoId);
 
     return {
       project, version, locked: sets[0]?.lockedAt != null, groups, currentOf, groupNames, strategy, targets,

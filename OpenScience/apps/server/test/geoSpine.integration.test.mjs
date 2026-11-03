@@ -11,7 +11,7 @@ import { GeoService, compactAction } from "../src/geoService.mjs";
 import { GEO_ACTIONS_READ_CHARS, geoLeanAction } from "@evimed/domain";
 import { GeoMarketStore } from "../src/geoMarketStore.mjs";
 import { previewOutlets } from "../src/geoMarket.mjs";
-import { GeoStore } from "../src/geoStore.mjs";
+import { GEO_SPINE_INPUT_MAX, GeoStore } from "../src/geoStore.mjs";
 import { createGeoRoutes } from "../src/geoRoutes.mjs";
 import { geoRuntimeWrite } from "../src/geoWrites.mjs";
 import { sendError } from "../src/security.mjs";
@@ -647,4 +647,113 @@ test("cluster article pins name the current business head", options, async () =>
     assert.equal(filteredArticle.versionBasis, "current");
     assert.equal(filteredArticle.currentResultVersionId, "rv_current");
   } finally { await q("UPDATE evimed_geo.articles SET current_result_version_id=$2, content_sha256=$3 WHERE id=$1", [geo.a2, before.current_result_version_id, before.content_sha256]); }
+});
+
+test("spine includes linked records past every previous read limit", options, async () => {
+  const geoId=geo.geoId, prefix=id('large-'), article=`${prefix}article-2001`;
+  await q(`INSERT INTO evimed_geo.articles(id,user_id,geo_project_id,path,layer,title,group_id,status,safety,created_at)
+    SELECT $1 || 'article-' || n,$2,$3,'bulk/' || n || '.md','qa','Article ' || n,$4,'draft','clear',now() + n * interval '1 second'
+    FROM generate_series(1,2001) n`,[prefix,ALICE,geoId,id('g2')]);
+  await q(`INSERT INTO evimed_geo.action_choices(geo_project_id,action_key,user_id,skipped,updated_at)
+    SELECT $1,$2 || 'choice-' || n,$3,true,now() - n * interval '1 second' FROM generate_series(1,2001) n`,[geoId,prefix,ALICE]);
+  await q(`INSERT INTO evimed_geo.errors(id,user_id,geo_project_id,fingerprint,engine,question_id,status,created_at)
+    SELECT $1 || 'error-' || n,$2,$3,$1 || n,'deepseek',$4,'open',now() - n * interval '1 second' FROM generate_series(1,1001) n`,[prefix,ALICE,geoId,id('g2q1')]);
+  await q(`INSERT INTO evimed_geo.orders(id,user_id,geo_project_id,article_id,state,created_at)
+    SELECT $1 || 'order-' || n,$2,$3,$4,'cancelled',now() - n * interval '1 second' FROM generate_series(1,501) n`,[prefix,ALICE,geoId,article]);
+  await q(`INSERT INTO evimed_geo.owned_links(id,user_id,geo_project_id,url,url_key,platform,title,published_at,article_id,group_id)
+    SELECT $1 || 'link-' || n,$2,$3,'https://example.org/' || n,'example.org/' || n,'wechat_mp','Link ' || n,
+      now() - n * interval '1 second',$4,$5 FROM generate_series(1,501) n`,[prefix,ALICE,geoId,article,id('g2')]);
+  await q(`INSERT INTO evimed_geo.sources(id,user_id,geo_project_id,domain,icp_matches,news_indexed,medical_vertical,blacklist_reason)
+    SELECT $1 || 'source-' || n,$2,$3,'aaa' || lpad(n::text,5,'0') || '.example.org',true,true,true,NULL FROM generate_series(1,2001) n`,[prefix,ALICE,geoId]);
+  await q(`INSERT INTO evimed_geo.sources(id,user_id,geo_project_id,domain,icp_matches,news_indexed,medical_vertical,blacklist_reason)
+    VALUES ($1,$3,$4,'zz-blocked.example.org',true,true,true,'blocked'),($2,$3,$4,'zz-checked.example.org',true,false,true,NULL)`,[`${prefix}blocked`,`${prefix}checked`,ALICE,geoId]);
+  const project=await store.getProject(ALICE,geoId),spine=await service.spine.load(project,{answers:false});
+  assert.ok(spine.articles.some(row=>row.id===article && row.groupId===id('g2')));
+  assert.ok(spine.choices.some(row=>row.key===`${prefix}choice-2001`));
+  assert.ok(spine.errors.some(row=>row.id===`${prefix}error-1001` && row.groupId===id('g2')));
+  assert.ok(spine.orders.some(row=>row.id===`${prefix}order-501` && row.articleId===article));
+  assert.ok(spine.ownedLinks.some(row=>row.id===`${prefix}link-501` && row.articleId===article));
+  const sourceInfo=service.spine.sourceInfo(spine);
+  assert.equal(sourceInfo['zz-blocked.example.org'].available,false);
+  assert.deepEqual(sourceInfo['zz-checked.example.org'].conditions,{icp:true,newsIndexed:false,medical:true});
+  const selected={...spine,strategy:{...spine.strategy,layout:{layers:{coverage:['zz-blocked.example.org','zz-checked.example.org']}}}};
+  const candidates=await service.spine.candidates(selected);
+  assert.equal(candidates.get(id('g2')).find(row=>row.domain==='zz-blocked.example.org').available,false);
+  assert.equal(candidates.get(id('g2')).find(row=>row.domain==='zz-checked.example.org').conditions.newsIndexed,false);
+  const derived=await service.spine.actions(spine,{candidates:new Map()});
+  assert.ok(derived.actions.some(action=>action.articleIds.includes(article)));
+});
+
+test("each spine input fails explicitly above its complete-read bound", options, async t => {
+  const project=await store.createProject({userId:ALICE,projectId:id('overflow'),engines:['deepseek'],coverageDays:90});
+  const cases=[
+    ['articles',`INSERT INTO evimed_geo.articles(id,user_id,geo_project_id,path,layer,status,safety)
+      SELECT $1 || n,$2,$3,'overflow/' || n,'qa','draft','clear' FROM generate_series(1,$4) n`],
+    ['action_choices',`INSERT INTO evimed_geo.action_choices(action_key,user_id,geo_project_id,skipped)
+      SELECT $1 || n,$2,$3,true FROM generate_series(1,$4) n`],
+    ['errors',`INSERT INTO evimed_geo.errors(id,user_id,geo_project_id,fingerprint,engine)
+      SELECT $1 || n,$2,$3,$1 || n,'deepseek' FROM generate_series(1,$4) n`],
+    ['orders',`INSERT INTO evimed_geo.orders(id,user_id,geo_project_id,state)
+      SELECT $1 || n,$2,$3,'cancelled' FROM generate_series(1,$4) n`],
+    ['owned_links',`INSERT INTO evimed_geo.owned_links(id,user_id,geo_project_id,url,url_key,platform,title,published_at)
+      SELECT $1 || n,$2,$3,'https://example.org/' || n,'example.org/' || n,'wechat_mp','Page',now() FROM generate_series(1,$4) n`],
+    ['sources',`INSERT INTO evimed_geo.sources(id,user_id,geo_project_id,domain)
+      SELECT $1 || n,$2,$3,'overflow' || n || '.example.org' FROM generate_series(1,$4) n`],
+  ];
+  for (const [table,sql] of cases) await t.test(table,async()=>{
+    await q(sql,[id(`${table}-overflow-`),ALICE,project.id,GEO_SPINE_INPUT_MAX+1]);
+    const original=store.citedArticles.bind(store);let citationReads=0;
+    store.citedArticles=async (...args)=>{citationReads+=1;return original(...args);};
+    try {
+      await assert.rejects(service.spine.load(project,{answers:false}),{code:'geo_spine_incomplete'});
+      const response=await call('GET',`/api/geo/projects/${project.id}/actions`);
+      assert.equal(response.status,422);assert.equal(response.payload.code,'geo_spine_incomplete');
+      assert.match(response.payload.error,/Contact an administrator/);assert.equal(response.payload.data,undefined);
+      assert.equal(citationReads,0);
+    }
+    finally { store.citedArticles=original;await q(`DELETE FROM evimed_geo.${table} WHERE geo_project_id=$1`,[project.id]); }
+  });
+});
+
+test("citation reads batch hosts, preserve matches and reject unbounded inputs", options, async t => {
+  const project=await store.createProject({userId:ALICE,projectId:id('citation-scale'),engines:['deepseek'],coverageDays:90});
+  const prefix=id('citation-scale-'), article=`${prefix}article`;
+  await q(`INSERT INTO evimed_geo.articles(id,user_id,geo_project_id,path,layer,status,safety) VALUES($1,$2,$3,'scale.md','qa','draft','clear')`,[article,ALICE,project.id]);
+  await q(`INSERT INTO evimed_geo.owned_links(id,user_id,geo_project_id,url,url_key,platform,title,published_at,article_id)
+    SELECT $1 || 'link-' || n,$2,$3,'https://site' || n || '.example.org/page','site' || n || '.example.org/page','wechat_mp','Page',now(),$4
+    FROM generate_series(1,1024) n`,[prefix,ALICE,project.id,article]);
+  await q(`INSERT INTO evimed_geo.snapshots(id,user_id,geo_project_id,engine,asked_at,status,citations)
+    SELECT $1 || 'snap-' || n,$2,$3,'deepseek',now(),'valid',jsonb_build_array(jsonb_build_object('url','https://site' || ((n-1)%1024+1) || '.example.org/page'))
+    FROM generate_series(1,4096) n`,[prefix,ALICE,project.id]);
+  const started=performance.now(),spine=await service.spine.load(project,{answers:false});
+  t.diagnostic(`1024 hosts and 4096 citation snapshots: ${Math.round(performance.now()-started)} ms on isolated local PostgreSQL`);
+  assert.equal(spine.ownedLinks.length,1024);assert.ok(spine.ownedLinks.every(link=>link.citedBy.some(row=>row.engine==='deepseek')));
+  assert.ok(spine.cited.some(row=>row.articleId===article));
+  await q(`INSERT INTO evimed_geo.owned_links(id,user_id,geo_project_id,url,url_key,platform,title,published_at)
+    SELECT $1 || 'extra-' || n,$2,$3,'https://extra' || n || '.example.org/page','extra' || n || '.example.org/page','wechat_mp','Page',now()
+    FROM generate_series(1,977) n`,[prefix,ALICE,project.id]);
+  const overflow=await call('GET',`/api/geo/projects/${project.id}/actions`);
+  assert.equal(overflow.status,422);assert.equal(overflow.payload.code,'geo_spine_incomplete');
+  await q(`DELETE FROM evimed_geo.owned_links WHERE geo_project_id=$1 AND id LIKE $2`,[project.id,`${prefix}extra-%`]);
+  await q(`INSERT INTO evimed_geo.snapshots(id,user_id,geo_project_id,engine,status,citations)
+    SELECT $1,$2,$3,'deepseek','valid',jsonb_agg(jsonb_build_object('url','https://site1.example.org/page')) FROM generate_series(1,$4)`,
+  [`${prefix}many`,ALICE,project.id,GEO_SPINE_INPUT_MAX+1]);
+  const tooMany=await call('GET',`/api/geo/projects/${project.id}/actions`);
+  assert.equal(tooMany.status,422);assert.equal(tooMany.payload.code,'geo_spine_incomplete');
+});
+
+test("the complete-read API distinguishes PostgreSQL timeout from user cancellation", options, async () => {
+  const project=await store.createProject({userId:ALICE,projectId:id('read-timeout'),engines:['deepseek'],coverageDays:90});
+  const previous=store.spineArticles, timeout=store.statementTimeoutMs;
+  try {
+    store.statementTimeoutMs=30;
+    store.spineArticles=async()=>{await store.query('SELECT pg_sleep(0.25)');return [];};
+    const timed=await call('GET',`/api/geo/projects/${project.id}/actions`);
+    assert.equal(timed.status,422);assert.equal(timed.payload.code,'geo_spine_incomplete');
+    assert.match(timed.payload.error,/timed out/);assert.equal(timed.payload.data,undefined);
+    store.statementTimeoutMs=timeout;
+    store.spineArticles=async()=>{await store.query('SELECT pg_cancel_backend(pg_backend_pid()), pg_sleep(0.25)');return [];};
+    const cancelled=await call('GET',`/api/geo/projects/${project.id}/actions`);
+    assert.equal(cancelled.status,500);assert.equal(cancelled.payload.code,'internal_error');
+  } finally {store.statementTimeoutMs=timeout;store.spineArticles=previous;}
 });
