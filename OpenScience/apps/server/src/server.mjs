@@ -8559,7 +8559,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         // again after the deletion. Not if the same name has registered since; a restart in between leaves it to the operator's audit.
         for (const delay of [60_000, 300_000]) {
           setTimeout(() => {
-            void store.userById(user.id).then((again) => (again ? null : rm(path.join(config.dataDir, "users", user.id), { recursive: true, force: true })))
+            void store.userById(user.id).then((again) => (again ? null : fsp.rm(path.join(config.dataDir, "users", user.id), { recursive: true, force: true })))
               .catch(() => process.stderr.write("account directory sweep failed\n"));
           }, delay).unref();
         }

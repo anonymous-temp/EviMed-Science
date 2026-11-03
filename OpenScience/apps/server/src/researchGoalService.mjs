@@ -58,7 +58,19 @@ export class ResearchGoals {
    */
   constructor({ documents, database, agentRuns, runtimeManager, store, dispatchTurn, steerRound, cancelRound, notify = async () => {}, claimingAllowed = () => true,
     limits, now = () => new Date(), log = () => {} }) {
-    Object.assign(this, { documents, database, agentRuns, runtimeManager, store, dispatchTurn, steerRound, cancelRound, notify, claimingAllowed, limits, now, log });
+    this.documents = documents;
+    this.database = database;
+    this.agentRuns = agentRuns;
+    this.runtimeManager = runtimeManager;
+    this.store = store;
+    this.dispatchTurn = dispatchTurn;
+    this.steerRound = steerRound;
+    this.cancelRound = cancelRound;
+    this.notify = notify;
+    this.claimingAllowed = claimingAllowed;
+    this.limits = limits;
+    this.now = now;
+    this.log = log;
     /** @type {NodeJS.Timeout | null} */ this.timer = null;
     /** @type {Promise<void> | null} */ this.ticking = null;
   }

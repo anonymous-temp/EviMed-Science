@@ -1357,7 +1357,7 @@ export class AutopilotService {
   }
 
   /** Fold an ordinary AgentRun terminal result back into the proactive ledger.
-   * @param {string} userId @param {{projectId:string,runId:string,episodeId?:string|null,sessionId?:string|null,status:string,deltaSchemaVersion?:number|null,deltaErrorCode?:string|null,claims?:any[],artifacts?:string[],unverifiedArtifacts?:string[],artifactRefs?:any[],artifactRoles?:Record<string,string>,costCny?:number}} input */
+   * @param {string} userId @param {{projectId:string,runId:string,episodeId?:string|null,sessionId?:string|null,status:string,errorCode?:string|null,deltaSchemaVersion?:number|null,deltaErrorCode?:string|null,claims?:any[],artifacts?:string[],unverifiedArtifacts?:string[],artifactRefs?:any[],artifactRoles?:Record<string,string>,costCny?:number}} input */
   async completeRun(userId, input) {
     let episode = await this.episodeForRun(userId, input.projectId, input.runId);
     if (!episode && input.episodeId) {

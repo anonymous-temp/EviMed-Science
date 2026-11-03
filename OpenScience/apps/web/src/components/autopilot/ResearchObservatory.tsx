@@ -17,6 +17,8 @@ const AGENT_WORD: Record<ObservedAgent["state"], string> = {
   running: workStateLabel("running"), idle: "待命", done: workStateLabel("done"), failed: workStateLabel("failed"), canceled: workStateLabel("stopped"), unknown: "待命",
 };
 const SAFE_RUN = /^[A-Za-z0-9_-]{1,160}$/;
+/** How long a run that is going, with nothing under way, may be silent before the observatory stops calling it live. */
+const MODEL_SILENCE_MS = 90_000;
 const number = (value: unknown): number | null => (typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null);
 const obj = (value: unknown): Record<string, unknown> | null => (value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null);
 
@@ -140,7 +142,11 @@ function ObservatoryRun({ runId, title, onOpenFile, onObserved }: { runId: strin
   const included = progress && (progress.sources.included > 0 || progress.sources.searched > 0) ? progress.sources : null;
   const claims = progress && progress.claims.total > 0 ? progress.claims : null;
   const live = state === "running";
-  const status = live ? (connected ? "实时" : "重新连接") : state ? RUN_WORD[state] ?? "已结束" : recordRead === "loading" || !connected ? "连接中" : "等待开始";
+  // A stream that is open and a run that is going say nothing of whether the model is answering: with no call under way and no frame for
+  // a while, the run is waiting on it, and "实时" would be a claim about a silence. The clock's own tick is the only thing re-rendering this.
+  const silentSince = model.lastEventAt ?? (Number.isFinite(startedMs) ? startedMs : null);
+  const waitingOnModel = silentSince !== null && now - silentSince >= MODEL_SILENCE_MS && !model.calls.some(call => call.state === "running");
+  const status = live ? (connected ? (waitingOnModel ? "等待模型响应" : "实时") : "重新连接") : state ? RUN_WORD[state] ?? "已结束" : recordRead === "loading" || !connected ? "连接中" : "等待开始";
   const heading = title || run?.title || run?.question || "这次研究";
 
   return <section aria-label="研究观测" className="obs" data-observatory={live ? "live" : ended ? "ended" : "waiting"}>

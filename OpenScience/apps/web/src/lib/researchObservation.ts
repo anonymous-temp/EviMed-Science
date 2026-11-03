@@ -100,6 +100,38 @@ export function callDetail(input: unknown, narration?: unknown): string {
   return "";
 }
 
+/** The shells a model runs commands in (`bash` and its kin); the command is the argument that names it. */
+const SHELL_TOOLS = new Set(["bash", "shell", "exec", "run", "terminal", "sh"]);
+// Closed tokens, never language: LoopX's command or a directory of it, and its environment variables. A boundary is a place a word may start or end in a command line.
+const MACHINERY_COMMAND = /(?:^|[\s/;&|()"'`=.])loopx(?=$|[\s/;&|()"'`])/i;
+const MACHINERY_DIRECTORY = /\.loopx\//i;
+const MACHINERY_ENVIRONMENT = /(?:^|[\s;&|()"'`])LOOPX_[A-Za-z0-9_]*=/;
+
+/**
+ * Whether a call is the long-goal machinery talking to itself — a shell call that runs LoopX's CLI, reads its directory or sets its
+ * variables — and not research. Such a call is not shown, counted or placed on the research line; the person asked for a study and not for
+ * how its rounds are kept. Decided by the command's tokens alone.
+ */
+export function isGoalMachineryCall(tool: string, input: unknown): boolean {
+  if (!SHELL_TOOLS.has(toolBaseName(tool))) return false;
+  const record = obj(input);
+  const raw = record?.command ?? record?.cmd;
+  const command = Array.isArray(raw) ? raw.filter(item => typeof item === "string").join(" ") : typeof raw === "string" ? raw : "";
+  return MACHINERY_COMMAND.test(command) || MACHINERY_DIRECTORY.test(command) || MACHINERY_ENVIRONMENT.test(command);
+}
+
+/**
+ * The words of the goal machinery's own working (its CLI, its task list, its spend limit, its write-back and settlement of a round), which a
+ * model's reasoning uses of itself and which mean nothing to the person watching. Matched without case; one list, here.
+ */
+export const GOAL_MACHINERY_WORDS = ["loopx", "todo_", "quota", "writeback", "settlement"] as const;
+
+/** Whether a stretch of reasoning names the machinery. */
+export function namesGoalMachinery(text: string): boolean {
+  const lower = text.toLowerCase();
+  return GOAL_MACHINERY_WORDS.some(word => lower.includes(word));
+}
+
 export type AgentState = "running" | "idle" | "done" | "failed" | "canceled" | "unknown";
 export interface ObservedAgent {
   id: string;
@@ -132,12 +164,19 @@ export interface Observation {
   calls: ObservedCall[];
   callCount: number;
   rootStage: StageKey | null;
+  /** The reasoning on show: the tail of `reasoning`, empty while that tail names the goal machinery. */
   thought: string;
+  /** The tail of the root's reasoning as it arrived. */
+  reasoning: string;
   progress: WebRunProgress | null;
   progressAt: number;
   state: string | null;
   lastSeq: number;
   firstSeq: number | null;
+  /** When the newest frame happened (ms; the frame's own time, else when it was folded), or null before any frame. */
+  lastEventAt: number | null;
+  /** The calls kept out of `calls`, by key, so their results are kept out too. */
+  machinery: Set<string>;
   /** Bumped by every fold, so a consumer can tell an unchanged model from a new one. */
   version: number;
 }
@@ -145,11 +184,12 @@ export interface Observation {
 export const ROOT_AGENT = "root";
 const CALL_LIMIT = 120;
 const THOUGHT_LIMIT = 280;
+const MACHINERY_LIMIT = 400;
 const SETTLED = new Set(["done", "completed", "succeeded", "failed", "error", "canceled"]);
 
 export function emptyObservation(): Observation {
   return { stageCounts: Object.fromEntries(STAGES.map(stage => [stage.key, 0])) as Record<StageKey, number>, agents: new Map(), calls: [], callCount: 0,
-    rootStage: null, thought: "", progress: null, progressAt: Number.NaN, state: null, lastSeq: 0, firstSeq: null, version: 0 };
+    rootStage: null, thought: "", reasoning: "", progress: null, progressAt: Number.NaN, state: null, lastSeq: 0, firstSeq: null, lastEventAt: null, machinery: new Set(), version: 0 };
 }
 
 function agentState(value: string | undefined): AgentState {
@@ -212,6 +252,8 @@ export function seedObservation(model: Observation, storedProgress: unknown): Ob
 /** Folds one stream frame into the model, in place. */
 export function foldObservation(model: Observation, frame: RunStreamEvent): Observation {
   model.version += 1;
+  const happened = Date.parse(frame.time);
+  model.lastEventAt = Math.max(model.lastEventAt ?? Number.NEGATIVE_INFINITY, Number.isFinite(happened) ? happened : Date.now());
   if (Number.isSafeInteger(frame.seq)) {
     if (model.firstSeq === null) model.firstSeq = frame.seq;
     model.lastSeq = Math.max(model.lastSeq, frame.seq);
@@ -237,8 +279,9 @@ export function foldObservation(model: Observation, frame: RunStreamEvent): Obse
   if (!child && (event.type === "assistant/delta" || event.type === "message/assistant")) {
     const text = event.type === "assistant/delta" ? str(event.text) && String(event.text) : str(event.text) ?? str(event.reasoning);
     if (text) {
-      const joined = event.type === "assistant/delta" ? `${model.thought}${text}` : text;
-      model.thought = joined.replace(/\s+/g, " ").slice(-THOUGHT_LIMIT);
+      const joined = event.type === "assistant/delta" ? `${model.reasoning}${text}` : text;
+      model.reasoning = joined.replace(/\s+/g, " ").slice(-THOUGHT_LIMIT);
+      model.thought = namesGoalMachinery(model.reasoning) ? "" : model.reasoning;
     }
     return model;
   }
@@ -246,6 +289,12 @@ export function foldObservation(model: Observation, frame: RunStreamEvent): Obse
   const callId = str(event.callId);
   if (!callId) return model;
   const key = `${session}:${callId}`;
+  if (event.type === "tool/call" && isGoalMachineryCall(str(event.tool) ?? "", event.input)) {
+    model.machinery.add(key);
+    if (model.machinery.size > MACHINERY_LIMIT) model.machinery.delete(model.machinery.values().next().value as string);
+    return model;
+  }
+  if (model.machinery.has(key)) return model;
   const index = model.calls.findIndex(call => call.id === key);
   const old = index >= 0 ? model.calls[index] : undefined;
   const tool = str(event.tool) ?? old?.tool ?? "";

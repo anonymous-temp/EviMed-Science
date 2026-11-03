@@ -29,12 +29,14 @@ function acquireClient(state,limit,signal){
 function releaseClient(state){const next=state.clients.waiters.shift();if(next)next.grant();else state.clients.held--;}
 export function runtimePromptAdmissionStatus(manager){return{...stateFor(manager).counters};}
 /** @template T @param {any} manager @param {any} project @param {string} sessionId
- * @param {(signal:AbortSignal)=>Promise<T>} operation @returns {Promise<T>} */
-export function withSessionPromptAdmission(manager,project,sessionId,operation) {
+ * @param {(signal:AbortSignal)=>Promise<T>} operation
+ * @param {{timeoutMs?:number}} [options] `timeoutMs` for an operation whose acknowledgement takes longer than a prompt's, up to the same ceiling
+ * @returns {Promise<T>} */
+export function withSessionPromptAdmission(manager,project,sessionId,operation,{timeoutMs}={}) {
  if(typeof sessionId!=='string'||!/^[A-Za-z0-9_-]{1,160}$/.test(sessionId))throw new HttpError(400,'runtime_ui_prompt_invalid','A native prompt must name its session.');
  const key=JSON.stringify([project.userId,project.id,sessionId]),parent=held.getStore();
  if(parent?.manager===manager&&parent.key===key&&parent.open){parent.signal.throwIfAborted();return operation(parent.signal);}
- const state=stateFor(manager),timeout=Number(manager.config?.runtimePromptAdmissionTimeoutMs??30000);
+ const state=stateFor(manager),timeout=Number(timeoutMs??manager.config?.runtimePromptAdmissionTimeoutMs??30000);
  if(!Number.isSafeInteger(timeout)||timeout<1||timeout>60000)throw new HttpError(500,'runtime_prompt_admission_invalid','The prompt admission deadline is invalid.');
  const controller=new AbortController(),deadline=performance.now()+timeout;let entered=false;
  const timeoutError=()=>entered?new HttpError(504,'runtime_prompt_acceptance_unknown','Prompt acceptance could not be confirmed.'):busy();

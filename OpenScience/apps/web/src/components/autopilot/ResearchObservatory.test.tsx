@@ -98,6 +98,68 @@ describe("research observatory", () => {
     expect(within(feed).getByText("文献检索")).toBeInTheDocument();
     expect(within(feed).queryByText("写入文件")).not.toBeInTheDocument();
   });
+  it("keeps the goal machinery out of the feed and out of the thinking line", async () => {
+    mocks.list.mockResolvedValue([record("one", "研究", { status: "running", finishedAt: null, durationMs: null })]);
+    render(<ResearchObservatory runId="one" />);
+    await screen.findByText("研究");
+    await act(async () => { connection(true); });
+    await flush([
+      frame(1, "run/state", { state: "running" }),
+      frame(2, "run/event", { sessionId: "root", event: { type: "tool/call", callId: "m", tool: "bash", input: { command: "loopx --registry /home/user/.loopx/r.json goal status" }, narration: "" } }),
+      frame(3, "run/event", { sessionId: "root", event: { type: "tool/result", callId: "m", tool: "bash", status: "completed", output: "registry ok" } }),
+      frame(4, "run/event", { sessionId: "root", event: { type: "tool/call", callId: "a", tool: "web_search", input: { query: "SGLT2 inhibitors" }, narration: "" } }),
+      frame(5, "run/event", { sessionId: "root", event: { type: "assistant/delta", kind: "reasoning", text: "现在把进度写回 LoopX，再看 quota" } }),
+    ]);
+    const feed = screen.getByRole("region", { name: "实时动态" });
+    expect(feed.querySelectorAll(".obs-line")).toHaveLength(1);
+    expect(within(feed).getByText("网页搜索")).toBeInTheDocument();
+    expect(within(feed).queryByText(/loopx|registry/i)).not.toBeInTheDocument();
+    expect(screen.queryByText("registry ok")).not.toBeInTheDocument();
+    expect(screen.getByText("研究操作").closest("div")).toHaveTextContent("1");
+    expect(screen.queryByText("思考")).not.toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(/loopx/i);
+    await flush([frame(6, "run/event", { sessionId: "root", event: { type: "assistant/delta", kind: "reasoning", text: "。".repeat(300) } })]);
+    expect(screen.getByText("思考")).toBeInTheDocument();
+  });
+  describe("whether a run that is going is live", () => {
+    const status = () => screen.getByRole("status");
+    const at = () => new Date(Date.now()).toISOString();
+    const quiet = async (ms: number) => { await act(async () => { await vi.advanceTimersByTimeAsync(ms); }); };
+    const start = async () => {
+      vi.useFakeTimers({ now: new Date("2026-11-03T10:00:00Z") });
+      mocks.list.mockResolvedValue([record("one", "研究", { status: "running", startedAt: "2026-11-03T09:59:00Z", finishedAt: null, durationMs: null })]);
+      render(<ResearchObservatory runId="one" />);
+      await quiet(10);
+      await act(async () => { connection(true); });
+    };
+    const send = async (...frames: RunStreamEvent[]) => { await act(async () => { emit(frames); await vi.advanceTimersByTimeAsync(200); }); };
+    const delta = (seq: number) => ({ seq, type: "run/event", time: at(), sessionId: "root", event: { type: "assistant/delta", kind: "reasoning", text: "比较终点" } }) as RunStreamEvent;
+    const finishedCall = (seq: number, callId: string) => [
+      { seq, type: "run/event", time: at(), sessionId: "root", event: { type: "tool/call", callId, tool: "web_search", input: { query: "q" }, narration: "" } },
+      { seq: seq + 1, type: "run/event", time: at(), sessionId: "root", event: { type: "tool/result", callId, tool: "web_search", status: "completed", output: "out" } },
+    ] as RunStreamEvent[];
+
+    it("says the run is waiting on the model once ninety seconds pass with no frame and no call under way, and live again at the next frame", async () => {
+      await start();
+      await send({ seq: 1, type: "run/state", time: at(), state: "running" }, ...finishedCall(2, "a"));
+      expect(status()).toHaveTextContent("实时");
+      await quiet(80_000);
+      expect(status()).toHaveTextContent("实时");
+      await quiet(11_000);
+      expect(status()).toHaveTextContent("等待模型响应");
+      expect(status()).not.toHaveTextContent("实时");
+      await send(delta(4));
+      expect(status()).toHaveTextContent("实时");
+    });
+    it("does not call a run that is inside a long call silent, and still says reconnecting when the stream is down", async () => {
+      await start();
+      await send({ seq: 1, type: "run/state", time: at(), state: "running" }, { seq: 2, type: "run/event", time: at(), sessionId: "root", event: { type: "tool/call", callId: "long", tool: "bash", input: { command: "python slow.py" }, narration: "" } } as RunStreamEvent);
+      await quiet(300_000);
+      expect(status()).toHaveTextContent("实时");
+      await act(async () => { connection(false); });
+      expect(status()).toHaveTextContent("重新连接");
+    });
+  });
   it("collapses a long result while keeping its beginning visible", async () => {
     const user = userEvent.setup();
     mocks.list.mockResolvedValue([record("one", "研究")]);

@@ -386,6 +386,27 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
       }).catch(() => {});
     }
   }
+  /**
+   * A conversation opened on a cold kernel asks LoopX's bar before the kernel has taken the session up: the answer is `session_unavailable`,
+   * the bar's client does not ask again, and the conversation shows no bar until the page is reloaded (`deps-version.json` `loopx.notes`). So
+   * that one answer is asked again here while the kernel takes the session up, and the client reads whatever comes of it.
+   * Delete when the plugin retries its first read.
+   * @param {any} project @param {any} payload the bar's `read` request @param {Buffer} body what the kernel answered
+   */
+  async function goalBarReadOnceSessionOpens(project, payload, body) {
+    let answer;
+    try { answer = JSON.parse(body.toString("utf8")); } catch { return body; }
+    if (answer?.result?.value?.result?.code !== "session_unavailable") return body;
+    const deadline = Date.now() + Number(config.runtimeGoalBarReadWaitMs ?? 0);
+    while (Date.now() < deadline) {
+      await new Promise((resolve) => { setTimeout(resolve, Math.min(1000, Math.max(1, deadline - Date.now()))); });
+      const value = await runtimeManager.goalBar(project, payload).catch(() => null);
+      if (value?.v === payload.v.replace("request", "response") && value.result?.code !== "session_unavailable") {
+        return Buffer.from(JSON.stringify({ ...answer, result: { ok: true, value } }), "utf8");
+      }
+    }
+    return body;
+  }
   /** Freeze the route (and the methods) of an input before forwarding the native request, never changing it. A failure refuses nothing,
    * except a selected GEO request whose route could not be preserved (`definitivelyRejected`). */
   async function prepareNativeContext(project, payload) {
@@ -930,7 +951,8 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
       // from the path every project shares; a file whose URL names its
       // content is kept by the browser, across sessions and projects.
       uiAssetPrefix: scoped ? null : SHARED_UI_ASSET_PREFIX,
-      ...(scoped ? { transformResponse: response => scopedCall ? scoped.httpResponse(scopedCall, response) : Promise.resolve(response.body) } : {}),
+      ...(scoped ? { transformResponse: response => scopedCall ? scoped.httpResponse(scopedCall, response) : Promise.resolve(response.body) }
+        : loopxBody?.payload.op === "read" ? { transformResponse: response => goalBarReadOnceSessionOpens(project, loopxBody.payload, response.body) } : {}),
       immutable: isImmutableRuntimeUiAsset(frame.suffix),
       // A composer attachment is a file, not an RPC: held to the deployment's
       // file ceiling rather than the JSON one, and forwarded as bytes.
@@ -1002,7 +1024,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
           admissionSignal=signal;
           await recordNativeActor(current.user,current.project,{args:{request:{sessionId:loopxBody.payload.sessionId}}});
           if(loopxBody.payload.op==='pause')await recordStop(project,{args:{request:{sessionId:loopxBody.payload.sessionId}}});signal.throwIfAborted();return forward();
-        });
+        },{timeoutMs:config.runtimeGoalBarActionTimeoutMs});
       };
       const admitted = () => runtimeManager.pluginService
         ? runtimeManager.pluginService.withAdmission(project, start, { prompt: true }) : start();

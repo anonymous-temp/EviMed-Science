@@ -8149,15 +8149,6 @@ export class RuntimeManager {
   }
 
   /**
-   * One unary call into the DSH kernel over the project's control socket.
-   * The allow-list is checked by the adapter that owns it; this is the carrier.
-   * @param {Record<string, any>} runtime @param {Record<string, any>} project
-   * @param {string} method @param {Record<string, unknown>} payload @param {AbortSignal} signal
-   * @param {{ maxBytes?: number, workspaceBind?: boolean }} [options] `workspaceBind` admits `workspace/create` and nothing else beyond the
-   *   allow-list (`WORKSPACE_BIND_METHOD`): the control plane registering the project's own directory
-   * @returns {Promise<any>}
-   */
-  /**
    * LoopX's own goal state and its pause and start, through the door its bar in the kernel's page uses. Not a kernel wire method: the plugin
    * answers it on the shared API with the payload as it is, without the `args` envelope `callKernel` writes. With no runtime up there is
    * nobody to ask.
@@ -8178,6 +8169,15 @@ export class RuntimeManager {
     return { result: { kind: "fault", code: typeof answer?.result?.error?.code === "string" ? answer.result.error.code : "goalbar_unreachable" } };
   }
 
+  /**
+   * One unary call into the DSH kernel over the project's control socket.
+   * The allow-list is checked by the adapter that owns it; this is the carrier.
+   * @param {Record<string, any>} runtime @param {Record<string, any>} project
+   * @param {string} method @param {Record<string, unknown>} payload @param {AbortSignal} signal
+   * @param {{ maxBytes?: number, workspaceBind?: boolean }} [options] `workspaceBind` admits `workspace/create` and nothing else beyond the
+   *   allow-list (`WORKSPACE_BIND_METHOD`): the control plane registering the project's own directory
+   * @returns {Promise<any>}
+   */
   async callKernel(runtime, project, method, payload, signal, { maxBytes, workspaceBind = false } = {}) {
     if (!isAllowedWireMethod(method) && !(workspaceBind === true && method === WORKSPACE_BIND_METHOD)) {
       throw new HttpError(403, "runtime_method_forbidden", `Kernel method ${method} is not on the allow-list.`);

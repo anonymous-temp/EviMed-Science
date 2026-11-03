@@ -2230,6 +2230,16 @@ export function loadConfig(overrides = {}) {
       if(!Number.isSafeInteger(value) || value<500 || value>60000) throw new Error("OPEN_SCIENCE_RUNTIME_PROMPT_ADMISSION_TIMEOUT_MS must be a whole number from 500 to 60000.");
       return value;
     })(),
+    // LoopX's bar acknowledges a pause or a start only after up to four CLI calls of its own (its mutation alone may take 20 s), and the
+    // action takes effect whether or not anyone is still waiting: cut at a prompt's deadline, the bar read "unreachable" over a goal that had
+    // paused (2026-11-03). The admission's `timedOut` counter counts one that still runs out. Same ceiling as a prompt's, since it holds the same fence.
+    runtimeGoalBarActionTimeoutMs: (()=>{
+      const value=Number(overrides.runtimeGoalBarActionTimeoutMs ?? process.env.OPEN_SCIENCE_RUNTIME_GOALBAR_ACTION_TIMEOUT_MS ?? 60000);
+      if(!Number.isSafeInteger(value) || value<500 || value>60000) throw new Error("OPEN_SCIENCE_RUNTIME_GOALBAR_ACTION_TIMEOUT_MS must be a whole number from 500 to 60000.");
+      return value;
+    })(),
+    // How long the first read of a bar on a cold kernel is asked again while the kernel takes the session up. 0: not asked again.
+    runtimeGoalBarReadWaitMs: Math.max(0, Number(overrides.runtimeGoalBarReadWaitMs ?? process.env.OPEN_SCIENCE_RUNTIME_GOALBAR_READ_WAIT_MS ?? 8000) || 0),
     runtimeProxyRequestTimeoutMs: Number(
       overrides.runtimeProxyRequestTimeoutMs ?? process.env.OPEN_SCIENCE_RUNTIME_PROXY_REQUEST_TIMEOUT_MS ?? 120_000,
     ),
