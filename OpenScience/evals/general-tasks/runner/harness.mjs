@@ -164,7 +164,12 @@ class HostKernelProvider extends rm.DockerRuntimeProvider {
     const result = await super.bootstrap(project, plan, options);
     const patchFile = path.join(plan.dshHomeDir, 'control-plane-patch.yml');
     const text = await fs.readFile(patchFile, 'utf8');
-    await fs.writeFile(patchFile, plan.hostMap.text(text), { mode: 0o600 });
+    // The image's custom Landlock executable is Linux-only. A host-local
+    // macOS run uses the pinned kernel's native Seatbelt implementation,
+    // retaining workspace-write confinement rather than requesting escalation.
+    const nativeSandbox = process.platform === 'darwin'
+      ? '\n- id: sandbox\n  config:\n    runnerCommand: []\n    runnerFailureSignatures: []\n' : '';
+    await fs.writeFile(patchFile, plan.hostMap.text(text) + nativeSandbox, { mode: 0o600 });
     return result;
   }
   async launch(project, plan, { port }) {
@@ -242,7 +247,7 @@ const app = createWebApiApp(overrides, {
   runtimeManagerFactory: (config, hooks) => {
     verifiedConfiguration = Object.fromEntries(['production', 'runtimeMode', 'deepseekModel', 'memoryEnabled', 'memoryRecallEnabled',
       'nativeMemoryTurnCommitEnabled', 'learningEnabled', 'evolutionEnabled', 'autopilotEnabled', 'loopxEnabled',
-      'vcrEnabled', 'vcrTrialCorpusManifest', 'userDailySpendLimit', 'userRunSpendLimit', 'selfRegistrationEnabled', 'devAuth']
+      'vcrEnabled', 'vcrTrialCorpusManifest', 'userDailySpendLimit', 'userRunSpendLimit', 'selfRegistrationEnabled', 'devAuth', 'runtimeUiProxyEnabled']
       .map(key => [key, config[key]]));
     const manager = new rm.RuntimeManager(config, hooks);
     manager.provider = new HostKernelProvider(manager);

@@ -7,6 +7,12 @@ The host-kernel adapter replaces container launch only; it does not certify
 container filesystem isolation. Public regression cases are not an independent
 clinical holdout, and raw internal model reasoning is not a product deliverable.
 
+On macOS the adapter selects the pinned kernel's native Seatbelt backend instead
+of the runtime image's Linux Landlock executable. Hosted `workspace-write` with
+approval policy `never` remains enforced; escalation is never approved. Both
+the main and runtime UI listeners bind loopback. A sandbox startup failure is
+an environment diagnostic, not an eligibility prediction.
+
 The implementation combines `c180ff7b5` and release integration `3970e4f8f` in
 `faa8d0f28`, followed by the frozen-corpus/ranking and evaluation changes here.
 Do not point this suite at the November 1 production deployment.

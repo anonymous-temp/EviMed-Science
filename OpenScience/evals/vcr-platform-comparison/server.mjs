@@ -32,6 +32,7 @@ process.env.LIVE_ENV = JSON.stringify(env);
 process.env.LIVE_OVERRIDES = JSON.stringify({ devAuth: false, authMode: 'local', selfRegistrationEnabled: true,
   databaseUrl:process.env.LIVE_DATABASE_URL,databaseUrlFile:'',deepseekBaseUrl:'https://api.deepseek.com',vcrEngineUrl:'',
   publicUrl: `http://127.0.0.1:${port}`, localAutoConfig: false, deepseekModel: 'deepseek-flash',
+  runtimeUiProxyEnabled:true,host:'127.0.0.1',runtimeUiPort:0,
   maxProjectsPerUser: 100, userDailySpendLimit: 5, userRunSpendLimit: 4,
   nativeMemoryTurnCommitEnabled: false,
   memoryEnabled: false, memoryRecallEnabled: false, learningEnabled: false, evolutionEnabled: false,
@@ -53,7 +54,7 @@ if (process.env.VCR_STARTUP_RECEIPT) {
   const hashes = {};
   for (const module of modules) hashes[module] = createHash('sha256').update(await fs.readFile(path.join(process.env.OS, module))).digest('hex');
   const resolvedConfig = harness.harnessConfiguration();
-  if (!resolvedConfig || resolvedConfig.production || resolvedConfig.runtimeMode !== 'kernel' || resolvedConfig.deepseekModel !== 'deepseek-flash'
+  if (!resolvedConfig || resolvedConfig.production || resolvedConfig.runtimeMode !== 'kernel' || resolvedConfig.deepseekModel !== 'deepseek-flash' || resolvedConfig.runtimeUiProxyEnabled !== true
       || ['memoryEnabled','memoryRecallEnabled','nativeMemoryTurnCommitEnabled','learningEnabled'].some(key => resolvedConfig[key] !== false)) throw new Error('Benchmark isolation configuration did not take effect');
   const stageChecks = [];
   const checkTree = async (source, staged) => {
@@ -72,9 +73,13 @@ if (process.env.VCR_STARTUP_RECEIPT) {
   const version=execFileSync(process.env.DSH_BIN,['--version'],{encoding:'utf8'}).trim();
   const pinned=JSON.parse(await fs.readFile(path.join(process.env.OS,'deps-version.json'),'utf8')).dsh.version;
   if(version!==pinned)throw new Error('Native kernel version differs');
+  if(process.platform==='darwin'){
+    execFileSync('/usr/bin/sandbox-exec',['-p','(version 1) (allow default) (deny file-write*) (allow file-write* (literal "/dev/null"))','--','/usr/bin/true'],{stdio:'pipe'});
+  }
   const receipt = { schema: 1, createdAt: new Date().toISOString(), sourceSha: git('rev-parse', 'HEAD'),
     dirty: Boolean(git('status', '--porcelain')), treeDir: process.env.TREE_DIR, modules: hashes,
     origin:`http://127.0.0.1:${port}`,instance:process.env.VCR_BENCHMARK_INSTANCE,pid:process.pid,
+    sandboxBackend:process.platform==='darwin'?'native-seatbelt':'image-runner',approvalPolicy:'never',
     budget:{file:process.env.VCR_BENCHMARK_BUDGET_FILE,totalLimit:Number(process.env.VCR_BENCHMARK_BUDGET_CNY??200),accountLimit:5,allModelPurposes:true,
       basis:'reference-price estimated reservations, with actual settlement and conservative uncertain retention; not an invoice guarantee'},
     collectionManifestSha256:createHash('sha256').update(await fs.readFile(process.env.VCR_COLLECTION_MANIFEST)).digest('hex'),
