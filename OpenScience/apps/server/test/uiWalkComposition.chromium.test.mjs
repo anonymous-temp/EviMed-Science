@@ -188,6 +188,8 @@ test("the primary action stands on the header's row; one in an empty state, a re
   assert.match(textOf(away, "primary-action")[0], /^geo-plan@desktop: \[primary-action\] the primary action “新建研究” is at \d+ px, below the header's row$/);
   const excused = await compose(framed({ body: section(rows(2)) + '<div data-empty=""><svg width="16" height="16"></svg><p>还没有</p><button class="bg-accent">去添加</button></div><form><button class="bg-accent">保存</button></form>' }));
   assert.deepEqual(textOf(excused, "primary-action"), []);
+  const standby = await compose(framed({ body: '<section data-observatory="empty"><h2>等待研究启动</h2>' + rows(2) + '<button class="bg-accent">发起研究</button></section>' }));
+  assert.deepEqual(textOf(standby, "primary-action"), []);
 });
 
 test("a tab or a chip whose trailing count is 0 is a switch to an empty place; a disabled one and a label that ends in 0 are not", { skip }, async () => {
