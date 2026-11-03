@@ -3269,7 +3269,7 @@
         "cpuSecondsLimit": 600,
         "kind": "design_confirmatory",
         "method": "design.confirmatory",
-        "methodVersion": "1.0.0",
+        "methodVersion": "1.1.0",
         "scenario": {
           "design": {
             "kind": "futility_group_sequential",
@@ -3309,7 +3309,7 @@
         "cpuSecondsLimit": 600,
         "kind": "design_confirmatory",
         "method": "design.confirmatory",
-        "methodVersion": "1.0.0",
+        "methodVersion": "1.1.0",
         "scenario": {
           "design": {
             "kind": "sample_size_reestimation",
@@ -3355,7 +3355,7 @@
         "cpuSecondsLimit": 600,
         "kind": "design_confirmatory",
         "method": "design.confirmatory",
-        "methodVersion": "1.0.0",
+        "methodVersion": "1.1.0",
         "scenario": {
           "design": {
             "kind": "multi_arm_selection",
@@ -3403,7 +3403,7 @@
         "cpuSecondsLimit": 600,
         "kind": "design_confirmatory",
         "method": "design.confirmatory",
-        "methodVersion": "1.0.0",
+        "methodVersion": "1.1.0",
         "scenario": {
           "design": {
             "kind": "enrichment",
@@ -3449,7 +3449,7 @@
         "cpuSecondsLimit": 600,
         "kind": "design_confirmatory",
         "method": "design.confirmatory",
-        "methodVersion": "1.0.0",
+        "methodVersion": "1.1.0",
         "scenario": {
           "design": {
             "kind": "count_endpoint"
@@ -3459,6 +3459,184 @@
             "rateRatio": 0.67,
             "overdispersion": 0.5,
             "exposureTime": 1
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "confirmatory: a re-estimation with a promising zone",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_confirmatory",
+        "method": "design.confirmatory",
+        "methodVersion": "1.1.0",
+        "scenario": {
+          "design": {
+            "kind": "sample_size_reestimation",
+            "informationRates": [
+              0.5,
+              1
+            ],
+            "conditionalPower": 0.8,
+            "maxSampleSizeFactor": 2,
+            "promisingZone": {
+              "lower": 0.36,
+              "upper": 0.8
+            }
+          },
+          "endpoint": {
+            "type": "continuous"
+          },
+          "truth": {
+            "plannedEffect": 0.4,
+            "effects": [
+              0.2,
+              0.3
+            ],
+            "sd": 1
+          },
+          "analysis": {
+            "alpha": 0.025,
+            "power": 0.9
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "confirmatory: three arms and a control for an event-time endpoint",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_confirmatory",
+        "method": "design.confirmatory",
+        "methodVersion": "1.1.0",
+        "scenario": {
+          "design": {
+            "kind": "multi_arm_selection",
+            "informationRates": [
+              0.5,
+              1
+            ],
+            "activeArms": 3,
+            "plannedSize": 240
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "truth": {
+            "effectScenarios": [
+              [
+                0.9,
+                0.75,
+                0.6
+              ]
+            ]
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "confirmatory: a biomarker subset for an event-time endpoint",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_confirmatory",
+        "method": "design.confirmatory",
+        "methodVersion": "1.1.0",
+        "scenario": {
+          "design": {
+            "kind": "enrichment",
+            "informationRates": [
+              0.5,
+              1
+            ],
+            "subsetPrevalence": 0.4,
+            "plannedSize": 240
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "truth": {
+            "subsetEffects": [
+              {
+                "subset": 0.6,
+                "rest": 0.9
+              }
+            ]
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "confirmatory at 1.0.0: a re-estimation of an event-time endpoint replays",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_confirmatory",
+        "method": "design.confirmatory",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "design": {
+            "kind": "sample_size_reestimation",
+            "informationRates": [
+              0.5,
+              1
+            ],
+            "conditionalPower": 0.8,
+            "maxSampleSizeFactor": 1.5
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "truth": {
+            "plannedEffect": 0.7,
+            "effects": [
+              0.8,
+              0.7
+            ],
+            "controlMedian": 12
+          },
+          "accrual": {
+            "duration": 12,
+            "followup": 12,
+            "dropoutAnnual": 0.05
           }
         },
         "inputs": [
@@ -17895,56 +18073,6 @@
       ]
     },
     {
-      "name": "confirmatory: multi-arm for an event-time endpoint is refused by name",
-      "job": {
-        "jobId": "job_1",
-        "studyId": "std_1",
-        "protocolVersion": 1,
-        "seed": 20260929,
-        "cpuSecondsLimit": 600,
-        "kind": "design_confirmatory",
-        "method": "design.confirmatory",
-        "methodVersion": "1.0.0",
-        "scenario": {
-          "design": {
-            "kind": "multi_arm_selection",
-            "informationRates": [
-              0.5,
-              1
-            ],
-            "activeArms": 3,
-            "plannedSize": 80
-          },
-          "endpoint": {
-            "type": "time_to_event"
-          },
-          "truth": {
-            "effectScenarios": [
-              [
-                0.8,
-                0.7,
-                0.6
-              ]
-            ],
-            "controlMedian": 12
-          },
-          "accrual": {
-            "duration": 12,
-            "followup": 12
-          }
-        },
-        "inputs": [
-          {
-            "kind": "assumption",
-            "id": "asm_1@1"
-          }
-        ]
-      },
-      "expected": [
-        "design_not_supported@scenario.endpoint.type"
-      ]
-    },
-    {
       "name": "confirmatory: an adaptive design looks once",
       "job": {
         "jobId": "job_1",
@@ -18097,6 +18225,382 @@
       },
       "expected": [
         "scenario_field_missing@scenario.truth.overdispersion"
+      ]
+    },
+    {
+      "name": "confirmatory at 1.0.0 cannot carry a promising zone",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_confirmatory",
+        "method": "design.confirmatory",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "design": {
+            "kind": "sample_size_reestimation",
+            "informationRates": [
+              0.5,
+              1
+            ],
+            "conditionalPower": 0.8,
+            "maxSampleSizeFactor": 2,
+            "promisingZone": {
+              "lower": 0.36,
+              "upper": 0.8
+            }
+          },
+          "endpoint": {
+            "type": "continuous"
+          },
+          "truth": {
+            "plannedEffect": 0.4,
+            "effects": [
+              0.2,
+              0.3
+            ],
+            "sd": 1
+          },
+          "analysis": {
+            "alpha": 0.025,
+            "power": 0.9
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "method_version_mismatch@methodVersion"
+      ]
+    },
+    {
+      "name": "confirmatory at 1.0.0 cannot run a multi-arm design on an event-time endpoint",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_confirmatory",
+        "method": "design.confirmatory",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "design": {
+            "kind": "multi_arm_selection",
+            "informationRates": [
+              0.5,
+              1
+            ],
+            "activeArms": 3,
+            "plannedSize": 240
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "truth": {
+            "effectScenarios": [
+              [
+                0.9,
+                0.75,
+                0.6
+              ]
+            ]
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "method_version_mismatch@methodVersion"
+      ]
+    },
+    {
+      "name": "confirmatory at 1.0.0 cannot run an enrichment design on an event-time endpoint",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_confirmatory",
+        "method": "design.confirmatory",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "design": {
+            "kind": "enrichment",
+            "informationRates": [
+              0.5,
+              1
+            ],
+            "subsetPrevalence": 0.4,
+            "plannedSize": 240
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "truth": {
+            "subsetEffects": [
+              {
+                "subset": 0.6,
+                "rest": 0.9
+              }
+            ]
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "method_version_mismatch@methodVersion"
+      ]
+    },
+    {
+      "name": "confirmatory: the promising zone runs from the lower conditional power to the higher",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_confirmatory",
+        "method": "design.confirmatory",
+        "methodVersion": "1.1.0",
+        "scenario": {
+          "design": {
+            "kind": "sample_size_reestimation",
+            "informationRates": [
+              0.5,
+              1
+            ],
+            "conditionalPower": 0.8,
+            "maxSampleSizeFactor": 2,
+            "promisingZone": {
+              "lower": 0.8,
+              "upper": 0.36
+            }
+          },
+          "endpoint": {
+            "type": "continuous"
+          },
+          "truth": {
+            "plannedEffect": 0.4,
+            "effects": [
+              0.2,
+              0.3
+            ],
+            "sd": 1
+          },
+          "analysis": {
+            "alpha": 0.025,
+            "power": 0.9
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.design.promisingZone.upper"
+      ]
+    },
+    {
+      "name": "confirmatory: a promising zone states both bounds",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_confirmatory",
+        "method": "design.confirmatory",
+        "methodVersion": "1.1.0",
+        "scenario": {
+          "design": {
+            "kind": "sample_size_reestimation",
+            "informationRates": [
+              0.5,
+              1
+            ],
+            "conditionalPower": 0.8,
+            "maxSampleSizeFactor": 2,
+            "promisingZone": {
+              "lower": 0.4
+            }
+          },
+          "endpoint": {
+            "type": "continuous"
+          },
+          "truth": {
+            "plannedEffect": 0.4,
+            "effects": [
+              0.2,
+              0.3
+            ],
+            "sd": 1
+          },
+          "analysis": {
+            "alpha": 0.025,
+            "power": 0.9
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_missing@scenario.design.promisingZone.upper"
+      ]
+    },
+    {
+      "name": "confirmatory: only a re-estimation has a promising zone",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_confirmatory",
+        "method": "design.confirmatory",
+        "methodVersion": "1.1.0",
+        "scenario": {
+          "design": {
+            "kind": "futility_group_sequential",
+            "informationRates": [
+              0.5,
+              1
+            ],
+            "promisingZone": {
+              "lower": 0.3,
+              "upper": 0.8
+            }
+          },
+          "endpoint": {
+            "type": "continuous"
+          },
+          "truth": {
+            "plannedEffect": 0.4
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_unknown@scenario.design.promisingZone"
+      ]
+    },
+    {
+      "name": "confirmatory: an enrichment design is not tested with Dunnett",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_confirmatory",
+        "method": "design.confirmatory",
+        "methodVersion": "1.1.0",
+        "scenario": {
+          "design": {
+            "kind": "enrichment",
+            "informationRates": [
+              0.5,
+              1
+            ],
+            "subsetPrevalence": 0.4,
+            "plannedSize": 240,
+            "intersectionTest": "dunnett"
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "truth": {
+            "subsetEffects": [
+              {
+                "subset": 0.6,
+                "rest": 0.9
+              }
+            ]
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "design_not_supported@scenario.design.intersectionTest"
+      ]
+    },
+    {
+      "name": "confirmatory: an event-time multi-arm design has no control median (it is simulated on the statistics)",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_confirmatory",
+        "method": "design.confirmatory",
+        "methodVersion": "1.1.0",
+        "scenario": {
+          "design": {
+            "kind": "multi_arm_selection",
+            "informationRates": [
+              0.5,
+              1
+            ],
+            "activeArms": 3,
+            "plannedSize": 240
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "truth": {
+            "effectScenarios": [
+              [
+                0.9,
+                0.75,
+                0.6
+              ]
+            ],
+            "controlMedian": 12
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_unknown@scenario.truth.controlMedian"
       ]
     }
   ],

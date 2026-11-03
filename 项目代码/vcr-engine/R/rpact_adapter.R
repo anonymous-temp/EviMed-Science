@@ -19,6 +19,18 @@
 #   batches: a partial result is reported as limited, with its iterations, never as the whole.
 # - **The Monte-Carlo errors are ours.** rpact reports a probability and no error. Probabilities get the binomial error from the iterations
 #   that ran, expectations the standard error of the per-iteration values (`$.data` keeps one row per iteration and stage).
+# - **A rule of ours is a function we hand to rpact.** The promising zone (a lower and an upper conditional-power bound) is not an argument of
+#   any rpact call; rpact asks for the size of the second stage as a function (`calcSubjectsFunction` for means and rates,
+#   `calcEventsFunction` for event time) and the zone is written here, in the engine's own formulas. With the zone spanning 0 to 1 the three
+#   functions reproduce rpact's own conditional-power rule row for row (tests N67e), which is how the arithmetic around the zone is held
+#   to something outside it. Two conventions of rpact's are easy to get wrong: the event-time function returns the CUMULATED number of
+#   events (the events so far plus the new stage), and its `estimatedTheta` is the hazard ratio turned so that a value above 1 favours the
+#   treatment whatever the direction of the test.
+# - **Event-time selection and enrichment are simulated on the log-rank statistics, not on patients.** `getSimulationMultiArmSurvival` and
+#   `getSimulationEnrichmentSurvival` draw normal log-rank statistics from the planned events (Deng et al. 2019 for the correlation of the
+#   arms sharing a control), assume proportional hazards and the same control hazard everywhere, and know nothing of accrual, follow-up or
+#   dropout; the events a stage collects are split between the arms in proportion to their hazards. The sizes are events, and the result
+#   says so (N68e and N68g hold the selection probability to a patient-level simulation in plain R and to the closed form).
 # - **rpact's text never reaches a person.** A call that fails is `design_not_computable` with a fixed sentence (the message only with
 #   `VCR_ENGINE_DEBUG`, as for any handler error); rpact's start-up notice about installation qualification is swallowed.
 # ---------------------------------------------------------------------------
@@ -211,52 +223,114 @@ vcr_rpact_batches <- function(simulate, iterations, seed, scenarios = 1L, batch 
   c(max(1L, as.integer(round(ratio * 10))), 10L)
 }
 
+#' The promising-zone rule as the stage-size function rpact asks for (`vcr_rpact_zone_function`). At the interim the conditional power of the
+#' PLANNED second stage is read at the interim estimate of the effect (the same estimate the plain conditional-power rule uses): inside the
+#' zone `lower <= CP <= upper` the second stage is sized to reach the target conditional power, within [planned second stage, cap]; outside
+#' it, or when the estimate gives no conditional power to read, the planned second stage is kept. The conditional power of a stage of n
+#' patients (events) under the standardized drift `theta` per unit of root-n is Phi(theta * sqrt(n) - cc), `cc` being the conditional
+#' critical value of the inverse-normal combination, and the size that reaches a target is (cc + z_target)^2 / theta^2: the rule of rpact's
+#' default function with one more condition in front of it.
+.vcr_rpact_zone_stage <- function(zone, theta, planned, cc, target, lowest, highest) {
+  cp <- stats::pnorm(theta * sqrt(planned) - cc)
+  if (!(is.finite(cp) && cp >= zone$lower && cp <= zone$upper)) return(planned)
+  need <- max(0, cc + stats::qnorm(target))^2 / max(1e-12, theta)^2
+  min(max(lowest, need), highest)
+}
+.vcr_rpact_at <- function(x, i) x[min(i, length(x))]
+
+#' The zone function of an endpoint; `zone` is list(lower, upper). The formal arguments are the ones rpact passes by name (it checks them
+#' against its own default function and requires the three dots).
+vcr_rpact_zone_function <- function(endpoint, zone) {
+  switch(endpoint,
+    continuous = function(..., stage, plannedSubjects, allocationRatioPlanned, minNumberOfSubjectsPerStage, maxNumberOfSubjectsPerStage,
+                          thetaH1, stDevH1, conditionalPower, conditionalCriticalValue) {
+      r <- .vcr_rpact_at(allocationRatioPlanned, stage)
+      variance <- stDevH1[1L]^2 * (1 + r) / r + stDevH1[length(stDevH1)]^2 * (1 + r)
+      .vcr_rpact_zone_stage(zone, thetaH1 / sqrt(variance), plannedSubjects[stage] - plannedSubjects[stage - 1L], conditionalCriticalValue,
+                            conditionalPower, minNumberOfSubjectsPerStage[stage], maxNumberOfSubjectsPerStage[stage])
+    },
+    binary = function(..., stage, plannedSubjects, allocationRatioPlanned, minNumberOfSubjectsPerStage, maxNumberOfSubjectsPerStage,
+                      conditionalPower, conditionalCriticalValue, overallRate, farringtonManningValue1, farringtonManningValue2) {
+      r <- .vcr_rpact_at(allocationRatioPlanned, stage); k <- 1 + 1 / r
+      planned <- plannedSubjects[stage] - plannedSubjects[stage - 1L]
+      effect <- overallRate[1L] - overallRate[2L]
+      # the null variance of the stage statistic (Farrington-Manning, the restricted rates) and the variance at the observed rates
+      v0 <- farringtonManningValue1 * (1 - farringtonManningValue1) + farringtonManningValue2 * (1 - farringtonManningValue2) * r
+      v1 <- overallRate[1L] * (1 - overallRate[1L]) + overallRate[2L] * (1 - overallRate[2L]) * r
+      cp <- stats::pnorm((effect * sqrt(planned / k) - conditionalCriticalValue * sqrt(v0)) / sqrt(v1))
+      if (!(is.finite(cp) && cp >= zone$lower && cp <= zone$upper)) return(planned)
+      need <- k * max(0, conditionalCriticalValue * sqrt(v0) + stats::qnorm(conditionalPower) * sqrt(v1))^2 / max(1e-12, effect)^2
+      ceiling(min(max(minNumberOfSubjectsPerStage[stage], need), maxNumberOfSubjectsPerStage[stage]))
+    },
+    time_to_event = function(..., stage, conditionalPower, thetaH0, estimatedTheta, plannedEvents, eventsOverStages, minNumberOfEventsPerStage,
+                             maxNumberOfEventsPerStage, allocationRatioPlanned, conditionalCriticalValue) {
+      r <- .vcr_rpact_at(allocationRatioPlanned, stage)
+      theta <- log(estimatedTheta / thetaH0) * sqrt(r) / (1 + r)
+      done <- eventsOverStages[stage - 1L]
+      # rpact reads the CUMULATED number of events back: what has happened plus the new stage
+      done + .vcr_rpact_zone_stage(zone, theta, plannedEvents[stage] - plannedEvents[stage - 1L], conditionalCriticalValue, conditionalPower,
+                                   minNumberOfEventsPerStage[stage], maxNumberOfEventsPerStage[stage])
+    },
+    stop("endpoint"))
+}
+
 #' One batch of a sample-size re-estimation for one true `effect` (two stages, the second sized from the conditional power at the interim
 #' estimate, within [planned second stage, cap]): the per-iteration rows. `planned` is the cumulative size at each stage (patients, or events
 #' for a time-to-event endpoint), `cap` the largest total, `accrual` list(duration, dropoutAnnual, perYear, maxSubjects) for the event-time case.
+#' With `zone` (list(lower, upper)) the second stage is enlarged only when the conditional power of the planned one lies in the zone.
 vcr_rpact_sim_reestimation <- function(endpoint, design, effect, planned, cap, conditional_power, allocation, take, seed,
-                                       sd = 1, control_rate = NULL, control_median = NULL, accrual = NULL) {
+                                       sd = 1, control_rate = NULL, control_median = NULL, accrual = NULL, zone = NULL) {
   r <- allocation / (1 - allocation)
   second <- c(NA_real_, planned[2L] - planned[1L]); most <- c(NA_real_, cap - planned[1L])
+  rule <- if (is.null(zone)) NULL else vcr_rpact_zone_function(endpoint, zone)
   sim <- switch(endpoint,
     continuous = rpact::getSimulationMeans(design$object, groups = 2L, alternative = effect, stDev = sd, plannedSubjects = planned, directionUpper = TRUE,
       normalApproximation = TRUE, allocationRatioPlanned = r, conditionalPower = conditional_power,
-      minNumberOfSubjectsPerStage = second, maxNumberOfSubjectsPerStage = most, maxNumberOfIterations = take, seed = seed),
+      minNumberOfSubjectsPerStage = second, maxNumberOfSubjectsPerStage = most, maxNumberOfIterations = take, seed = seed, calcSubjectsFunction = rule),
     binary = rpact::getSimulationRates(design$object, groups = 2L, pi1 = control_rate + effect, pi2 = control_rate, plannedSubjects = planned, directionUpper = TRUE,
       allocationRatioPlanned = r, conditionalPower = conditional_power,
-      minNumberOfSubjectsPerStage = second, maxNumberOfSubjectsPerStage = most, maxNumberOfIterations = take, seed = seed),
+      minNumberOfSubjectsPerStage = second, maxNumberOfSubjectsPerStage = most, maxNumberOfIterations = take, seed = seed, calcSubjectsFunction = rule),
     time_to_event = rpact::getSimulationSurvival(design$object, hazardRatio = effect, lambda2 = log(2) / control_median, plannedEvents = planned, directionUpper = FALSE,
       allocation1 = .vcr_rpact_cycle(r)[[1L]], allocation2 = .vcr_rpact_cycle(r)[[2L]], accrualTime = c(0, accrual$duration), maxNumberOfSubjects = accrual$maxSubjects,
       dropoutRate1 = accrual$dropoutAnnual, dropoutRate2 = accrual$dropoutAnnual, dropoutTime = accrual$perYear,
       conditionalPower = conditional_power, minNumberOfEventsPerStage = second, maxNumberOfEventsPerStage = most,
-      maxNumberOfIterations = take, seed = seed))
+      maxNumberOfIterations = take, seed = seed, calcEventsFunction = rule))
   as.data.frame(sim$.data)
 }
 
-#' One batch of a multi-arm selection design for one effect scenario (`effects`: the true effect of each active arm). `planned` is the
-#' cumulative number of patients per arm (the control too) at each stage. Returns the per-iteration rows: an arm has a row at the second
-#' stage when it was selected, and a row says whether its hypothesis was rejected there.
+#' One batch of a multi-arm selection design for one effect scenario (`effects`: the true effect of each active arm; for an event-time endpoint
+#' the hazard ratio of each arm against the control). `planned` is the cumulative number of patients per arm (the control too) at each stage,
+#' or, for an event-time endpoint, the cumulative number of events of the arms still in the trial and the control. Returns the per-iteration
+#' rows: an arm has a row at the second stage when it was selected, and a row says whether its hypothesis was rejected there.
 vcr_rpact_sim_multiarm <- function(endpoint, design, effects, planned, selection, intersection, take, seed, sd = 1, control_rate = NULL) {
-  common <- c(list(design$object, activeArms = length(effects), typeOfShape = "userDefined", effectMatrix = matrix(if (identical(endpoint, "binary")) control_rate + effects else effects, nrow = 1L),
-                   intersectionTest = .vcr_rpact_intersection(intersection), plannedSubjects = planned, maxNumberOfIterations = take, seed = seed),
+  common <- c(list(design$object, activeArms = length(effects), typeOfShape = "userDefined",
+                   effectMatrix = matrix(if (identical(endpoint, "binary")) control_rate + effects else effects, nrow = 1L),
+                   intersectionTest = .vcr_rpact_intersection(intersection), maxNumberOfIterations = take, seed = seed),
               .vcr_rpact_selection(selection))
-  sim <- if (identical(endpoint, "binary")) do.call(rpact::getSimulationMultiArmRates, c(common, list(piControl = control_rate, directionUpper = TRUE)))
-         else do.call(rpact::getSimulationMultiArmMeans, c(common, list(stDev = sd)))
+  sim <- switch(endpoint,
+    binary = do.call(rpact::getSimulationMultiArmRates, c(common, list(plannedSubjects = planned, piControl = control_rate, directionUpper = TRUE))),
+    time_to_event = do.call(rpact::getSimulationMultiArmSurvival, c(common, list(plannedEvents = planned, directionUpper = FALSE))),
+    do.call(rpact::getSimulationMultiArmMeans, c(common, list(plannedSubjects = planned, stDev = sd))))
   as.data.frame(sim$.data)
 }
 
-#' One batch of an enrichment design for one scenario: the effect in the biomarker-positive subset and outside it, the subset's
-#' prevalence, and the selection between the subset and the full population at the interim. `planned` is the cumulative number of
-#' patients per arm at each stage.
+#' One batch of an enrichment design for one scenario: the effect in the biomarker-positive subset and outside it (a hazard ratio for an
+#' event-time endpoint), the subset's prevalence, and the selection between the subset and the full population at the interim. `planned` is
+#' the cumulative number of patients (events, for an event-time endpoint) of both arms at each stage.
 vcr_rpact_sim_enrichment <- function(endpoint, design, subset_effect, rest_effect, prevalence, planned, selection, intersection, take, seed, sd = 1, control_rate = NULL) {
   groups <- c("S", "R")
-  effect_list <- if (identical(endpoint, "binary")) list(subGroups = groups, prevalences = c(prevalence, 1 - prevalence),
-                      piTreatments = matrix(control_rate + c(subset_effect, rest_effect), nrow = 1L, dimnames = list(NULL, groups)), piControls = rep(control_rate, 2L))
-                 else list(subGroups = groups, prevalences = c(prevalence, 1 - prevalence), stDevs = sd, effects = matrix(c(subset_effect, rest_effect), nrow = 1L, dimnames = list(NULL, groups)))
-  common <- c(list(design$object, effectList = effect_list, intersectionTest = .vcr_rpact_intersection(intersection), plannedSubjects = planned,
+  effects <- matrix(c(subset_effect, rest_effect), nrow = 1L, dimnames = list(NULL, groups))
+  effect_list <- switch(endpoint,
+    binary = list(subGroups = groups, prevalences = c(prevalence, 1 - prevalence),
+                  piTreatments = matrix(control_rate + c(subset_effect, rest_effect), nrow = 1L, dimnames = list(NULL, groups)), piControls = rep(control_rate, 2L)),
+    time_to_event = list(subGroups = groups, prevalences = c(prevalence, 1 - prevalence), hazardRatios = effects),
+    list(subGroups = groups, prevalences = c(prevalence, 1 - prevalence), stDevs = sd, effects = effects))
+  common <- c(list(design$object, effectList = effect_list, intersectionTest = .vcr_rpact_intersection(intersection),
                    maxNumberOfIterations = take, seed = seed), .vcr_rpact_selection(selection))
-  sim <- if (identical(endpoint, "binary")) do.call(rpact::getSimulationEnrichmentRates, c(common, list(directionUpper = TRUE)))
-         else do.call(rpact::getSimulationEnrichmentMeans, common)
+  sim <- switch(endpoint,
+    binary = do.call(rpact::getSimulationEnrichmentRates, c(common, list(plannedSubjects = planned, directionUpper = TRUE))),
+    time_to_event = do.call(rpact::getSimulationEnrichmentSurvival, c(common, list(plannedEvents = planned, directionUpper = FALSE))),
+    do.call(rpact::getSimulationEnrichmentMeans, c(common, list(plannedSubjects = planned))))
   as.data.frame(sim$.data)
 }
 

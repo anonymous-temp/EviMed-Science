@@ -351,6 +351,12 @@ const CONFIRMATORY_SCHEMA = object({
       binding: boolean({ default: false }),
     }), CONF_KIND('futility_group_sequential')),
     conditionalPower: gated(number({ ...PROBABILITY, default: 0.8 }), CONF_KIND('sample_size_reestimation')),
+    // the promising zone (design.confirmatory 1.1.0): the size is enlarged only when the conditional power of the planned second stage, read at
+    // the interim estimate, lies between the two bounds; below the lower or above the upper bound the planned size is kept
+    promisingZone: gated(object({
+      lower: req(number({ min: 0, max: 1, unit: 'conditional power' })),
+      upper: req(number({ min: 0, max: 1, unit: 'conditional power' })),
+    }), CONF_KIND('sample_size_reestimation')),
     maxSampleSizeFactor: gated(number({ gt: 1, max: 10, default: 2, unit: 'times the planned size' }), CONF_KIND('sample_size_reestimation')),
     plannedSize: gated(integer({ min: 4, max: 1_000_000, unit: 'patients, or events for a time-to-event endpoint' }), CONF_ADAPTIVE),
     activeArms: req(gated(integer({ min: 2, max: 4 }), CONF_KIND('multi_arm_selection'))),
@@ -366,7 +372,8 @@ const CONFIRMATORY_SCHEMA = object({
     subsetEffects: req(gated(array(object({ subset: req(number()), rest: req(number()) }), { min: 1, max: 8 }), CONF_KIND('enrichment'))),
     sd: gated(number({ gt: 0, default: 1, unit: 'outcome units' }), [CONTINUOUS, isNot('design.kind', 'count_endpoint')]),
     controlRate: req(gated(number({ ...PROBABILITY }), [BINARY, isNot('design.kind', 'count_endpoint')])),
-    controlMedian: req(gated(number({ gt: 0, unit: 'time units' }), [TIME_TO_EVENT, isNot('design.kind', 'count_endpoint')])),
+    // the selection and the enrichment designs are simulated on the log-rank statistics from the planned events: no control median, no accrual
+    controlMedian: req(gated(number({ gt: 0, unit: 'time units' }), [TIME_TO_EVENT, CONF_KIND('futility_group_sequential', 'sample_size_reestimation')])),
     controlEventRate: req(gated(number({ gt: 0, unit: 'events per patient per unit of exposure time' }), CONF_KIND('count_endpoint'))),
     rateRatio: req(gated(number({ gt: 0 }), CONF_KIND('count_endpoint'))),
     overdispersion: req(gated(number({ min: 0, max: 20 }), CONF_KIND('count_endpoint'))),
@@ -380,8 +387,8 @@ const CONFIRMATORY_SCHEMA = object({
     duration: req(number({ min: 0, unit: 'time units' })),
     followup: req(number({ min: 0, unit: 'time units' })),
     dropoutAnnual: number({ min: 0, lt: 1, default: 0, unit: 'proportion per year' }),
-  }), [TIME_TO_EVENT, isNot('design.kind', 'count_endpoint')]),
-  timeUnit: gated(string({ values: [...VCR_TIME_UNITS], default: VCR_DEFAULT_TIME_UNIT }), [TIME_TO_EVENT, isNot('design.kind', 'count_endpoint')]),
+  }), [TIME_TO_EVENT, CONF_KIND('futility_group_sequential', 'sample_size_reestimation')]),
+  timeUnit: gated(string({ values: [...VCR_TIME_UNITS], default: VCR_DEFAULT_TIME_UNIT }), [TIME_TO_EVENT, CONF_KIND('futility_group_sequential', 'sample_size_reestimation')]),
 })
 
 const SIMULATE_FIELDS = {
@@ -1088,14 +1095,15 @@ export const VCR_DESIGN_SUPPORT = deepFreeze({
 })
 
 /**
- * The endpoints each confirmatory design is computed for. A count endpoint is its own design and names none; the event-time versions of
- * the multi-arm and enrichment designs are not implemented and are refused rather than run as something else.
+ * The endpoints each confirmatory design is computed for. A count endpoint is its own design and names none. The event-time multi-arm and
+ * enrichment designs (design.confirmatory 1.1.0) are simulated on the log-rank statistics from the planned events; under the 1.0.0 label
+ * they are refused (`legacyDesignVersionMatches`), because that release did not have them.
  */
 export const VCR_CONFIRMATORY_SUPPORT = deepFreeze({
   futility_group_sequential: Object.freeze(['continuous', 'binary', 'time_to_event']),
   sample_size_reestimation: Object.freeze(['continuous', 'binary', 'time_to_event']),
-  multi_arm_selection: Object.freeze(['continuous', 'binary']),
-  enrichment: Object.freeze(['continuous', 'binary']),
+  multi_arm_selection: Object.freeze(['continuous', 'binary', 'time_to_event']),
+  enrichment: Object.freeze(['continuous', 'binary', 'time_to_event']),
   count_endpoint: Object.freeze([]),
 })
 
@@ -1587,6 +1595,14 @@ function checkConfirmatorySemantics(scenario, path, ctx) {
   }
   if (['sample_size_reestimation', 'multi_arm_selection', 'enrichment'].includes(kind) && Array.isArray(design.informationRates) && design.informationRates.length !== 2) {
     bad('design.informationRates', 'An adaptive design looks once: two information rates, the interim fraction and 1.')
+  }
+  const zone = design.promisingZone
+  if (isObject(zone) && typeof zone.lower === 'number' && typeof zone.upper === 'number' && !(zone.lower < zone.upper)) {
+    bad('design.promisingZone.upper', 'The promising zone runs from a lower conditional power to a higher one.')
+  }
+  // Dunnett's test is for several arms against one control; rpact has no Dunnett test for the subsets of an enrichment design
+  if (kind === 'enrichment' && design.intersectionTest === 'dunnett') {
+    bad('design.intersectionTest', 'An enrichment design tests its subsets with Simes or Bonferroni; Dunnett\'s test is for several arms against one control.', 'design_not_supported')
   }
   const truth = isObject(scenario?.truth) ? scenario.truth : {}
   /** @param {string} field @param {unknown} value */

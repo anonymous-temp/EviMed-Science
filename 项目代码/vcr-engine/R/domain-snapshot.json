@@ -326,7 +326,7 @@
       ]
     },
     "design.confirmatory": {
-      "version": "1.0.0",
+      "version": "1.1.0",
       "endpoints": [
         "continuous",
         "binary",
@@ -334,12 +334,16 @@
       ],
       "crossChecks": [
         "gsDesign::gsDesign (test.type 3 and 4): efficacy and futility boundaries and the inflation over the fixed design",
-        "known-truth simulation of the group-sequential statistic and of the conditional-power rule in plain R",
-        "mvtnorm: the probability that an arm is selected at the interim",
+        "known-truth simulation of the group-sequential statistic, of the conditional-power rule and of the promising-zone rule in plain R",
+        "mvtnorm: the probability that an arm is selected at the interim (continuous, and event time with the correlation of log-rank statistics that share a control)",
+        "patient-level survival simulation in plain R: the probability that an arm, or the biomarker subset, is kept at the event-time interim",
         "closed-form negative-binomial sample size (Zhu & Lakkis 2014)",
         "the engine's own group-sequential recursion (the efficacy boundaries and the non-adaptive limit)"
       ],
-      "modelTier": "scenario"
+      "modelTier": "scenario",
+      "compatibleVersions": [
+        "1.0.0"
+      ]
     },
     "design.grid": {
       "version": "1.4.0",
@@ -6746,6 +6750,31 @@
                 ]
               }
             },
+            "promisingZone": {
+              "t": "object",
+              "fields": {
+                "lower": {
+                  "t": "number",
+                  "min": 0,
+                  "max": 1,
+                  "unit": "conditional power",
+                  "req": true
+                },
+                "upper": {
+                  "t": "number",
+                  "min": 0,
+                  "max": 1,
+                  "unit": "conditional power",
+                  "req": true
+                }
+              },
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "sample_size_reestimation"
+                ]
+              }
+            },
             "maxSampleSizeFactor": {
               "t": "number",
               "gt": 1,
@@ -7012,8 +7041,9 @@
                 },
                 {
                   "path": "design.kind",
-                  "notIn": [
-                    "count_endpoint"
+                  "in": [
+                    "futility_group_sequential",
+                    "sample_size_reestimation"
                   ]
                 }
               ],
@@ -7119,8 +7149,9 @@
             },
             {
               "path": "design.kind",
-              "notIn": [
-                "count_endpoint"
+              "in": [
+                "futility_group_sequential",
+                "sample_size_reestimation"
               ]
             }
           ]
@@ -7143,8 +7174,9 @@
             },
             {
               "path": "design.kind",
-              "notIn": [
-                "count_endpoint"
+              "in": [
+                "futility_group_sequential",
+                "sample_size_reestimation"
               ]
             }
           ]
@@ -9523,11 +9555,13 @@
     ],
     "multi_arm_selection": [
       "continuous",
-      "binary"
+      "binary",
+      "time_to_event"
     ],
     "enrichment": [
       "continuous",
-      "binary"
+      "binary",
+      "time_to_event"
     ],
     "count_endpoint": []
   },

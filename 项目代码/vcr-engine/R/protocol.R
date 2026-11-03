@@ -874,6 +874,13 @@ vcr_pattern_match <- function(pattern, x) {
   if (kind %in% c("sample_size_reestimation", "multi_arm_selection", "enrichment") && is.list(rates) && length(rates) != 2L) {
     bad("design.informationRates", "An adaptive design looks once: two information rates, the interim fraction and 1.")
   }
+  zone <- .vcrp_get(design, "promisingZone")
+  if (.vcrp_named(zone) && .vcrp_num(zone[["lower"]]) && .vcrp_num(zone[["upper"]]) && !(zone[["lower"]] < zone[["upper"]])) {
+    bad("design.promisingZone.upper", "The promising zone runs from a lower conditional power to a higher one.")
+  }
+  if (identical(kind, "enrichment") && identical(.vcrp_get(design, "intersectionTest"), "dunnett")) {
+    bad("design.intersectionTest", "An enrichment design tests its subsets with Simes or Bonferroni; Dunnett's test is for several arms against one control.", "design_not_supported")
+  }
   truth <- .vcrp_get(sc, "truth"); if (!.vcrp_named(truth)) truth <- list()
   type <- if (.vcrp_chr(type)) type else ""
   on_scale <- function(field, value) {
@@ -1149,6 +1156,14 @@ vcr_job_at_least <- function(job, from) {
   any(vapply(truths,function(t).vcrp_named(t) && "treatmentHazardRatios" %in% names(t),logical(1))) || identical(.vcrp_get(.vcrp_get(sc,"analysis"),"method"),"maxcombo")
 }
 
+# Does a confirmatory scenario ask for what design.confirmatory 1.1.0 added? Mirrors usesConfirmatoryBeyond1_0_0 in the domain.
+.vcrp_uses_confirmatory_beyond_1_0_0 <- function(sc) {
+  design <- .vcrp_get(sc, "design")
+  if (!.vcrp_named(design)) return(FALSE)
+  !is.null(.vcrp_get(design, "promisingZone")) ||
+    (isTRUE(.vcrp_get(design, "kind") %in% c("multi_arm_selection", "enrichment")) && identical(.vcrp_get(.vcrp_get(sc, "endpoint"), "type"), "time_to_event"))
+}
+
 .vcrp_legacy_design_version <- function(job,spec) {
   # the hypothesis is 1.4.0's: no older release had it (this function is not asked about a job at the current version)
   if (job[["method"]] %in% c("design.analytic","design.simulate","design.grid") && !is.null(.vcrp_get(job$scenario,"hypothesis"))) return(FALSE)
@@ -1157,6 +1172,8 @@ vcr_job_at_least <- function(job, from) {
     if (job[["method"]] %in% c("design.simulate","design.grid") && .vcrp_uses_nph(job$scenario) && utils::compareVersion(job$methodVersion,"1.3.0")<0) return(FALSE)
     # and model.prognostic_apply 1.1.0 added the local calibration against the outcome the table holds
     if (identical(job[["method"]],"model.prognostic_apply") && !is.null(.vcrp_get(job$scenario,"calibration"))) return(FALSE)
+    # and design.confirmatory 1.1.0 the promising zone and the event-time selection and enrichment designs
+    if (identical(job[["method"]],"design.confirmatory") && .vcrp_uses_confirmatory_beyond_1_0_0(job$scenario)) return(FALSE)
     return(!startsWith(job[["method"]], "patients.") || (is.null(job$scenario$pairing) && is.null(job$scenario$cohortRules)))
   }
   sc<-.vcrp_get(job,"scenario");base<-.vcrp_get(.vcrp_get(sc,"design"),"kind")

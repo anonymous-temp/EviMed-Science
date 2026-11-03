@@ -151,9 +151,18 @@ export const NUMERIC_REFERENCES = {
   N66b: { methods: ['design.confirmatory'], anchors: ['a known-truth simulation: the statistic at look k is N(Delta sqrt(t_k), 1)', 'worst <- max(worst, z_eff, z_size)'] },
   N67a: { methods: ['design.confirmatory'], anchors: ['ref <- vcr_group_sequential_power(gs, drift)', 'power = abs(pw$value - ref$power) <= 3 * pw$mcse + 0.003'] },
   N67b: { methods: ['design.confirmatory'], anchors: ['need <- ifelse(est > 0, (2 * ((c2 - w1 * z1) / w2 + stats::qnorm(0.8)) / pmax(est, 1e-12))^2, Inf)', 'worst <- max(worst, z)'] },
+  // the promising zone (1.1.0): the rule in plain R on the statistic, the level, rpact's own rule as the zone's limit, and the binary and event-time forms
+  N67d: { methods: ['design.confirmatory'], anchors: ['cp_plan <- stats::pnorm(est / 2 * sqrt(n2_plan) - cc)', 'level = abs(t1$value - 0.025) <= 3 * t1$mcse'] },
+  N67e: { methods: ['design.confirmatory'], anchors: ['ok <<- c(ok, identical(plain, wide), grew(plain) > 0, grew(none) == 0L)', 'zone 0..1 %s the plain rule'] },
+  N67f: { methods: ['design.confirmatory'], anchors: ['cp_plan <- stats::pnorm((eff * sqrt(n2_plan / 2) - cc * sqrt(v0)) / sqrt(v1))', 'drift <- -log(hr) / 2'] },
   N68a: { methods: ['design.confirmatory'], anchors: ['mvtnorm::pmvnorm(lower = rep(-Inf, length(others)), upper = rep(0, length(others))', 'ok <- jobs <= selection + 3 * mcse & jobs >= selection - early$value - 3 * mcse'] },
   N68c: { methods: ['design.confirmatory'], anchors: ['closed <- stats::pnorm((s$subset - s$rest) / sqrt(v_s + v_r))', 'worst <- max(worst, z)'] },
   N68d: { methods: ['design.confirmatory'], anchors: ['n0 <- (za + zb)^2 * ((1 / (lambda0 * t) + k) + (1 / (lambda1 * t) + k) / r) / log(lambda1 / lambda0)^2', 'abs(inflation - ref) < 0.01'] },
+  // the event-time selection and enrichment (1.1.0): closed forms and patient-level simulations in plain R
+  N68e: { methods: ['design.confirmatory'], anchors: ['mvtnorm::pmvnorm(lower = rep(0, arms - 1L), upper = rep(Inf, arms - 1L)', 'model = all(abs(plain - closed) <= 4 * plain_se)'] },
+  N68f: { methods: ['design.confirmatory'], anchors: ['ok <- c(ok, t1$value <= alpha + 3 * t1$mcse, arm_max <= alpha + 3 * t1$mcse, null$cells$expected_events$value > 0)'] },
+  N68g: { methods: ['design.confirmatory'], anchors: ['closed <- stats::pnorm((log(s$rest) - log(s$subset)) / sqrt(4 / events[1] + 4 / events[2]))', 'model <- max(model, abs(plain - closed) / plain_se)'] },
+  N68h: { methods: ['design.confirmatory'], anchors: ['pops <- max(null$cells$reject_subset$value, null$cells$reject_full$value)'] },
 
   // --- the comparator-effect stream's cases (listed so that merging it needs no edit here; inert until the cases exist) ---
   N33a: { methods: ['comparator.weighted_cox'], anchors: ['Cross-software: the weights are WeightIt', 'rel(m(j_ebal, "hazard_ratio"), r_ebal$hr) < 1e-6'] },

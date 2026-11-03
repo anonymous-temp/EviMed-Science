@@ -322,10 +322,6 @@
       "version": "1.6-1-1"
     },
     {
-      "package": "MAMS",
-      "version": "3.0.3"
-    },
-    {
       "package": "markdown",
       "version": "2.0"
     },

@@ -123,8 +123,9 @@ export const VCR_ENGINE_METHODS = Object.freeze({
   'design.analytic': { version: '1.4.0', compatibleVersions: frozen(['1.2.0', '1.3.0']), legacyVersion: '1.0.0', legacyDesigns: frozen(['two_arm_fixed', 'group_sequential', 'simon_two_stage']), legacyReleases: ANALYTIC_RELEASES, endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['rpact', 'gsDesign', 'stats::binom.test', 'Simon 1989']), modelTier: 'scenario' },
   'design.simulate': { version: '1.4.0', compatibleVersions: frozen(['1.2.0', '1.3.0']), legacyVersion: '1.0.0', legacyDesigns: frozen(['two_arm_fixed', 'group_sequential']), legacyReleases: SIMULATE_RELEASES, endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['design.analytic', 'independent beta-binomial variance', 'exact non-central t power of the one-sample test', 'independent normal approximation of the one-sample log-rank score']), modelTier: 'scenario' },
   // The confirmatory designs (algorithm round T2-T6, 2026-11-03): rpact does the arithmetic (R/rpact_adapter.R is the one file that calls it), so
-  // the checks are the packages and closed forms that are not rpact: gsDesign, MAMS, a negative-binomial sample size and a simulation in plain R.
-  'design.confirmatory': { version: '1.0.0', endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['gsDesign::gsDesign (test.type 3 and 4): efficacy and futility boundaries and the inflation over the fixed design', 'known-truth simulation of the group-sequential statistic and of the conditional-power rule in plain R', 'mvtnorm: the probability that an arm is selected at the interim', 'closed-form negative-binomial sample size (Zhu & Lakkis 2014)', 'the engine\'s own group-sequential recursion (the efficacy boundaries and the non-adaptive limit)']), modelTier: 'scenario' },
+  // the checks are the packages and closed forms that are not rpact: gsDesign, mvtnorm, a negative-binomial sample size and a simulation in plain R.
+  // 1.1.0 (T3-T5 completed): the promising zone of the re-estimation, and the event-time selection and enrichment designs.
+  'design.confirmatory': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['gsDesign::gsDesign (test.type 3 and 4): efficacy and futility boundaries and the inflation over the fixed design', 'known-truth simulation of the group-sequential statistic, of the conditional-power rule and of the promising-zone rule in plain R', 'mvtnorm: the probability that an arm is selected at the interim (continuous, and event time with the correlation of log-rank statistics that share a control)', 'patient-level survival simulation in plain R: the probability that an arm, or the biomarker subset, is kept at the event-time interim', 'closed-form negative-binomial sample size (Zhu & Lakkis 2014)', 'the engine\'s own group-sequential recursion (the efficacy boundaries and the non-adaptive limit)']), modelTier: 'scenario' },
   'design.grid': { version: '1.4.0', compatibleVersions: frozen(['1.2.0', '1.3.0']), legacyVersion: '1.0.0', legacyDesigns: frozen(['two_arm_fixed', 'group_sequential']), legacyReleases: SIMULATE_RELEASES, endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen([]), modelTier: 'scenario' },
   'design.assurance': { version: '1.1.0', legacyVersion: '1.0.0', legacyDesigns: frozen(['two_arm_fixed']), endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['numerical integration of power over the design prior (the O\'Hagan 2005 definition)', 'independent Monte Carlo of the sequential design under the design prior']), modelTier: 'scenario' },
   'design.procova': { version: '1.0.0', endpoints: frozen(['continuous']), crossChecks: frozen(['closed-form sample size under the EMA 2022 opinion\'s correlation and variance discounts']), modelTier: 'scenario' },
@@ -743,6 +744,18 @@ function usesNonProportionalHazards(scenario) {
   return truths.some((truth) => truth && typeof truth === 'object' && truth.treatmentHazardRatios !== undefined) || scenario?.analysis?.method === 'maxcombo'
 }
 
+/**
+ * Does a confirmatory scenario ask for what design.confirmatory 1.1.0 added: a promising zone, or an event-time multi-arm or enrichment
+ * design? Mirrored by `.vcrp_uses_confirmatory_beyond_1_0_0` in protocol.R.
+ * @param {any} scenario
+ */
+function usesConfirmatoryBeyond1_0_0(scenario) {
+  const design = scenario?.design
+  if (design === null || typeof design !== 'object') return false
+  return design.promisingZone !== undefined
+    || ((design.kind === 'multi_arm_selection' || design.kind === 'enrichment') && scenario?.endpoint?.type === 'time_to_event')
+}
+
 /** Does a design scenario state a hypothesis (1.4.0, T1)? Mirrored by `.vcrp_uses_hypothesis` in protocol.R. @param {any} scenario */
 function usesHypothesis(scenario) {
   return scenario !== null && typeof scenario === 'object' && scenario.hypothesis !== undefined
@@ -776,6 +789,8 @@ function legacyDesignVersionMatches(job) {
     if ((job.method === 'design.simulate' || job.method === 'design.grid') && usesNonProportionalHazards(job.scenario) && !versionAtLeast(job.methodVersion, '1.3.0')) return false
     // and model.prognostic_apply 1.1.0 added the local calibration against the outcome the table holds
     if (job.method === 'model.prognostic_apply' && job.scenario?.calibration !== undefined) return false
+    // and design.confirmatory 1.1.0 the promising zone and the event-time selection and enrichment designs
+    if (job.method === 'design.confirmatory' && usesConfirmatoryBeyond1_0_0(job.scenario)) return false
     return !job.method.startsWith('patients.') || (!job.scenario?.pairing && !job.scenario?.cohortRules)
   }
   const base = job.scenario?.design?.kind
