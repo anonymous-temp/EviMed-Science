@@ -1131,6 +1131,8 @@ The canonical specification's DS23 owns these rules; this is how they are built.
 
 ## Implementation proof
 
+The November 2 paper-and-ink application keeps v3.3/DS23 as its baseline. Brand intensity follows the touchpoint within the existing one-brand-moment budget; work controls and reading stay quiet. It preserves the 24px title, 280px sidebar, star-led memory overview and native-input-led home. Static navigation groups and existing-token surface hierarchy are introduced. The monitoring-page follow-up makes the GEO result composition own sibling spacing, separates metric navigation from folded data filters, gives findings a continuous reading surface and keeps automation scope/stop consequences visible while disclosing accepted settings. Quiet activity/needs presentations retain the existing slots and actions; default presentations elsewhere are preserved. A PageShell with a dock reserves a separate bottom row; its scroll reference and sticky-band measurements belong to the content viewport above that row, so the conversation input never obscures result targets. The implementation and the four real-native checks are recorded in `../docs/superpowers/plans/2026-11-02-paper-ink-visual-adoption.md`; the canonical page inventory remains `scripts/ops/page-templates.json`.
+
 Last updated: 2026-10-26. The [execution ledger](../docs/superpowers/plans/2026-10-26-design-system-v3-execution.md) maps all 21 DS groups and 50 AT scenarios to proof families and unresolved boundaries. Numerical validation is local: the R 4.3.3 suite passed 222/222 across 34 methods with all 158 exact dependency locks. This does not establish production scientific acceptance. Web, server and browser results are recorded in the ledger, not here.
 
 The supported public native locale groups advanced commands under `command.section.commands` (高级命令与诊断). `loopx-init` remains its real command identifier. Theme-body focus lifecycle and identity with the optional theme off use supported seams; there is no private upstream command patch. Actual composer Enter, simulated composition events, reload without resubmission, stream selection/upward reading and theme on/off have local native-fixture evidence. Real hardware IME, screen readers, physical touch, LoopX execution absent from this fixture, external Vue adoption and installed production caches remain explicit boundaries.
@@ -1151,5 +1153,9 @@ The owner asked that the process picture of 主动科研 be the page's core and 
   “—”, never 0. Members move to the stage of their last call; nothing is animated that did not happen.
 - **Motion has an off switch.** Flowing track, packets, rings, ripples, the sweep and blinking cursors stop under reduced
   motion; positions still change, without travel. Under 760 px the line keeps its size and scrolls sideways.
+- **The page opens on the scene (owner, 2026-11-01).** 主动科研 is what the AI is researching, not a form: it opens on the running
+  research's observatory, then the most recent one; a project with none stands by in the same dark scene, with the recipe and both
+  actions inside it. Two things start from here: 「发起研究」 (one sentence, the goal; the run is on screen at once, never a composer
+  or a command) and 「接入数据」 (into the project's knowledge base). A scheduled study is made in 定时任务 and shown in the queue.
 - **No back office on the page.** Tool names, route reasons, ledger caveats and “what was not observed” sentences stay out;
   operations are named in the reader's words (`callLabel`), and a missing observation is simply absent.

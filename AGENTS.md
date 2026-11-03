@@ -409,6 +409,15 @@ The memory capsule after its release (a live check of 2026-10-27; what was built
   method whose author is gone is refused, an operator can withdraw a promoted method for good, and the harm check (J23) is calibrated and on. The
   test-derived weekly-report method promoted on 2026-10-27 was withdrawn from production the same day.
 
+## Owner decisions adopted 2026-11-02
+
+- A patient fact with no date of its own takes the date of the record header above it (`clinicalRecordHeader`, a matter of format: the nearest short line with one complete date; a birth-date line is not one). The risk of dating a fact to the wrong record is accepted; a past event (`temporality: historical`) takes the header only as an upper bound, and the reader sees 「日期取自病历抬头」. Measured in `evals/vcr-matching/n2c2/README.md`, fourth run.
+- General scenes may point at 虚拟临床研究: `vcr_simulate`'s one-line description, `statistical-power` and the open-domain-answer skill send a human clinical trial's sample size, design comparison, synthetic cohort and external control to the module's tools, conditional on the tools being there. No VCR text in the always-on guidance. A number read from a paper is bound where it is used (`sources` on `vcr_simulate` and `vcr_write`).
+- The always-on guidance says one question at a time. A new attended conversation is told once which files earlier conversations left (`earlierFiles.mjs`, data, no gate); conversations of a project keep sharing one workspace, and no per-conversation directory is built.
+- 主动科研 opens on the observatory; its entry is 「发起研究」 (a sentence, `researchGoal` dispatch) and 「接入数据」, and a scheduled study is made in 定时任务 alone.
+- `/api/data-analysis/v1` (account API keys with `analysis.read` / `analysis.write`, `OPEN_SCIENCE_DATA_ANALYSIS_*`) is the external face of the statistical-analysis capability; its `da-` projects are the API's own, outside the project ceiling and the person's lists. A catalogue click on 统计分析 is an ordinary new conversation in the current project.
+- Being off the 科研工具 page is not being off the router: only a module's own packages (GEO, 虚拟临床研究) leave the classifier's candidates (`moduleOfCapability`).
+
 ## Owner decisions adopted 2026-11-03: the two self-improvement loops and their model roles
 
 - Self-improvement has two loops (design §21 of `docs/superpowers/specs/2026-10-26-rsi-harness2-integration-design.md`). The **small loop** is online and native: one account's memory, preferences and learned methods, and the official base tier through its own promotion chain, learnt continuously from the account's own attended work with production's own models (DeepSeek Flash, the Qwen re-check, DashScope embeddings, OpenViking). The **big loop** is offline: platform-wide changes (guidance, skills, tools, policies, the runtime image) measured monthly and on triggers in the RSI lab, the GitHub Actions lanes and the operator's session, on public or synthetic inputs and never on tenant data.

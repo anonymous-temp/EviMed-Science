@@ -88,7 +88,7 @@ starterPrompts:
 display:
   title: "科研选题"
   category: "研究设计与数据"
-  description: "从一个宽泛方向找出证据空白，提出可执行的研究问题。"
+  description: "梳理已有研究和证据缺口，提出有依据、可执行的科研选题。"
   starterPrompts:
   - "围绕重症患者抗菌药精准给药，提出有证据依据且可落地的科研选题。"
   - "老年多重用药与跌倒风险，有哪些值得做、三甲医院能做的研究问题？"

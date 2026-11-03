@@ -17,7 +17,7 @@ const availability: Record<Progress["input"], string> = { available: "可用于�
 /**
  * Component: VcrResearchProgress; owner: VCR; rules: evidence-bound progress.
  * Anatomy: Study facts and a link to population details.
- * Variants: Counts and statistics are shown only when present.
+ * Variants: Counts and statistics are shown only when present; on the overview the card is drawn only for a study that has a population.
  * States: Definition, input and computation are independent.
  * Hit area: The population link uses native link behavior.
  * Keyboard: Link is reachable with the keyboard.
@@ -26,8 +26,13 @@ const availability: Record<Progress["input"], string> = { available: "可用于�
  * Responsive: FactList adapts to narrow widths.
  * Verification: VcrResearchProgress tests and presenter fixtures.
  */
-export function VcrResearchProgress({ progress, studyId, showPopulationLink = true }: { progress: Progress | null | undefined; studyId: string; showPopulationLink?: boolean }) {
+export function VcrResearchProgress({ progress, studyId, showPopulationLink = true, onlyWithPopulation = false }: {
+  progress: Progress | null | undefined; studyId: string; showPopulationLink?: boolean;
+  /** Where the card is not about a population (the overview): a study that never had one says nothing of it, not even that none is saved. */
+  onlyWithPopulation?: boolean;
+}) {
   if (!progress) return null;
+  if (onlyWithPopulation && progress.populationId == null && progress.definition !== "saved") return null;
   const counts = progress.counts;
   const facts: Fact[] = [
     { label: "人群定义", value: progress.definition === "saved" ? "已保存" : "尚未保存" },

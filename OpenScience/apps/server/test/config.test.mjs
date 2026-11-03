@@ -151,10 +151,30 @@ test("the deployment's provider agreements are on unless the deployment says oth
 
 test("the number of candidate trials a study holds has a key, a default and bounds", () => {
   // 「给患者找试验」: each candidate costs an evaluation for every patient the study judges against it.
+  // The registry search for a patient (M1) and the length past which a record is read through the passages that bear on a criterion (M4).
+  assert.deepEqual([loadConfig({ rootDir: repoRoot }).vcrCandidateSearchMax, loadConfig({ rootDir: repoRoot }).vcrPassagesMinChars], [20, 40_000]);
+  assert.equal(loadConfig({ rootDir: repoRoot }).vcrRunAdoptionWaitMs, 20_000);
+  assert.deepEqual([loadConfig({ rootDir: repoRoot, vcrCandidateSearchMax: "30", vcrPassagesMinChars: "60000" }).vcrCandidateSearchMax,
+    loadConfig({ rootDir: repoRoot, vcrCandidateSearchMax: "30", vcrPassagesMinChars: "60000" }).vcrPassagesMinChars], [30, 60_000]);
+  for (const [key, value, name] of [["vcrCandidateSearchMax", "4", "OPEN_SCIENCE_VCR_CANDIDATE_SEARCH_MAX"], ["vcrCandidateSearchMax", "51", "OPEN_SCIENCE_VCR_CANDIDATE_SEARCH_MAX"],
+    ["vcrPassagesMinChars", "1000", "OPEN_SCIENCE_VCR_PASSAGES_MIN_CHARS"], ["vcrPassagesMinChars", "2000000", "OPEN_SCIENCE_VCR_PASSAGES_MIN_CHARS"]]) {
+    assert.throws(() => loadConfig({ rootDir: repoRoot, [key]: value }), new RegExp(name));
+  }
   assert.equal(loadConfig({ rootDir: repoRoot }).vcrCandidateTrialsMax, 60);
   assert.equal(loadConfig({ rootDir: repoRoot, vcrCandidateTrialsMax: "120" }).vcrCandidateTrialsMax, 120);
   for (const value of ["0", "501", "many"]) {
     assert.throws(() => loadConfig({ rootDir: repoRoot, vcrCandidateTrialsMax: value }), /OPEN_SCIENCE_VCR_CANDIDATE_TRIALS_MAX/);
+  }
+});
+
+test("batch matching has a bound on its size, on its concurrency and on one record's call", () => {
+  const config = loadConfig({ rootDir: repoRoot });
+  assert.deepEqual([config.vcrMatchBatchMaxSubjects, config.vcrMatchExtractConcurrency, config.vcrMatchExtractTimeoutMs], [300, 3, 90_000]);
+  const set = loadConfig({ rootDir: repoRoot, vcrMatchBatchMaxSubjects: "50", vcrMatchExtractConcurrency: "1", vcrMatchExtractTimeoutMs: "20000" });
+  assert.deepEqual([set.vcrMatchBatchMaxSubjects, set.vcrMatchExtractConcurrency, set.vcrMatchExtractTimeoutMs], [50, 1, 20_000]);
+  for (const [key, value, name] of [["vcrMatchBatchMaxSubjects", "0", "OPEN_SCIENCE_VCR_MATCH_BATCH_MAX_SUBJECTS"], ["vcrMatchBatchMaxSubjects", "5001", "OPEN_SCIENCE_VCR_MATCH_BATCH_MAX_SUBJECTS"],
+    ["vcrMatchExtractConcurrency", "9", "OPEN_SCIENCE_VCR_MATCH_EXTRACT_CONCURRENCY"], ["vcrMatchExtractTimeoutMs", "5000", "OPEN_SCIENCE_VCR_MATCH_EXTRACT_TIMEOUT_MS"]]) {
+    assert.throws(() => loadConfig({ rootDir: repoRoot, [key]: value }), new RegExp(name));
   }
 });
 

@@ -41,7 +41,7 @@ const list = (value) => (Array.isArray(value) ? value : []);
 const CAUSE_RANK = Object.freeze(Object.fromEntries(["document", "projection", "permission", "withdrawn"].map((cause, index) => [cause, index + 1])));
 
 /**
- * A fact without its words: the quote of its source (kept as a hash), its surface, the date as written, a value that is text, and
+ * A fact without its words: the quote of its source and the quote its date was read from (each kept as a hash), its surface, the date as written, a value that is text, and
  * what its relations and its correction quote of the record. Numbers, units, polarity, times and the locator stay: they describe
  * the record, they do not repeat it.
  * @param {any} row a `matching_facts` row
@@ -50,8 +50,13 @@ export function redactedFactColumns(row) {
   /** @type {Record<string, any> | null} */
   let source = null;
   if (row.source && typeof row.source === "object") {
-    const { quote, ...rest } = row.source;
+    const { quote, dateQuote, ...rest } = row.source;
     source = { ...rest, ...(typeof quote === "string" ? { quoteHash: sha256(quote) } : {}) };
+    // The second quotation that carried the fact's date is the record's words as well: its place stays, its words go.
+    if (dateQuote && typeof dateQuote === "object") {
+      const { quote: dateWords, ...place } = dateQuote;
+      source.dateQuote = { ...place, ...(typeof dateWords === "string" ? { quoteHash: sha256(dateWords) } : {}) };
+    }
   }
   /** @type {Record<string, any> | null} */
   let clinical = null;

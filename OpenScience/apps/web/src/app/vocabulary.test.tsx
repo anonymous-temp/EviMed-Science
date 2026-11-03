@@ -89,7 +89,7 @@ describe("runtime vocabulary never leads a surface", () => {
 
     // Prove the walk happened before asserting what it did not see: an
     // assertion over an empty page passes forever.
-    const row = await screen.findByRole("link", { name: /临床证据深度分析/ });
+    const row = await screen.findByRole("link", { name: /文献综述/ });
     const visible = row.textContent ?? "";
     expect(visible.length).toBeGreaterThan(0);
 
@@ -98,7 +98,7 @@ describe("runtime vocabulary never leads a surface", () => {
         expect(word, `${word} matched ${pattern}`).not.toMatch(pattern);
       }
     }
-    expect(visible).toContain("临床证据深度分析");
+    expect(visible).toContain("文献综述");
   });
 
   it("names the open-domain answer line in words, not by its id", async () => {
@@ -116,7 +116,7 @@ describe("runtime vocabulary never leads a surface", () => {
     mocks.listWebAgentRuns.mockResolvedValue([leakyRun()]);
     renderBrowser();
 
-    await screen.findByRole("link", { name: /临床证据深度分析/ });
+    await screen.findByRole("link", { name: /文献综述/ });
     await userEvent.click(screen.getByRole("button", { name: /的操作$/ }));
     await userEvent.click(await screen.findByRole("menuitem", { name: "复制诊断信息" }));
 
@@ -130,7 +130,7 @@ describe("runtime vocabulary never leads a surface", () => {
     mocks.listWebAgentRuns.mockResolvedValue([leakyRun()]);
     renderBrowser();
 
-    await screen.findByRole("link", { name: /临床证据深度分析/ });
+    await screen.findByRole("link", { name: /文献综述/ });
     await userEvent.click(screen.getByRole("button", { name: /的操作$/ }));
     await screen.findByRole("menuitem", { name: "重命名" });
     expect(screen.queryByRole("menuitem", { name: "复制诊断信息" })).toBeNull();

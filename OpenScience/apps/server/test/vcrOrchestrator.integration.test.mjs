@@ -36,7 +36,7 @@ import { VcrAccess } from "../src/vcrAccess.mjs";
 import { createVcrGatewayHandler, vcrRuntimeWrite } from "../src/vcrGateway.mjs";
 import { backfillResultSubjects } from "../src/vcrSubjects.mjs";
 import { Readable } from "node:stream";
-import { VCR_ENGINE_METHODS, VCR_EXPORT_KINDS, VCR_MODEL_DOCUMENT_KINDS, VCR_MODEL_DOCUMENT_SECTIONS, VCR_STEPS, lineageNode } from "@evimed/domain";
+import { VCR_CHECK_STAGES, VCR_ENGINE_METHODS, VCR_RUN_EXPORT_KINDS, VCR_MODEL_DOCUMENT_KINDS, VCR_MODEL_DOCUMENT_SECTIONS, VCR_STEPS, lineageNode } from "@evimed/domain";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 if (databaseUrl) {
@@ -243,7 +243,9 @@ async function runTurn(module, study, body) {
       store, service: module.service, orchestrator: module.orchestrator, study, evidenceStore: module.evidenceStore,
       what, items: Array.isArray(payload) ? payload : null, data: Array.isArray(payload) ? null : payload,
     });
-    assert.deepEqual(written.issues, [], `${what} was refused: ${JSON.stringify(written.issues)}`);
+    // A reminder (a record the object has not got yet) is not a refusal: the object was saved.
+    const refused = written.issues.filter((/** @type {any} */ issue) => !["vcr_comparator_record_incomplete", "vcr_assumption_role_missing"].includes(issue.code));
+    assert.deepEqual(refused, [], `${what} was refused: ${JSON.stringify(refused)}`);
     return written;
   };
   await body(write);
@@ -333,7 +335,7 @@ test("AC-01 AC-35 a T0 study runs from one sentence to a finished package, and e
     assert.equal(extracted.verified, 1);
     const written = await write("assumption", [
       { key: "control_median_pfs", name: "对照组中位 PFS", unit: "月", parameter: "median_time", sourceKind: "external_evidence", evidenceIds: extracted.verifiedIds },
-      { key: "hazard_ratio", name: "风险比", pointValue: 0.7, sourceKind: "expert_set", valueSource: "assumed",
+      { key: "hazard_ratio", name: "风险比", pointValue: 0.7, sourceKind: "expert_set", valueSource: "assumed", effectRole: "realistic_expectation",
         distribution: { family: "lognormal", params: { meanlog: Math.log(0.7), sdlog: 0.15 } } },
       { key: "dropout_rate", name: "脱落率", pointValue: 0.1, sourceKind: "expert_set", valueSource: "assumed" },
     ]);
@@ -426,7 +428,7 @@ test("an export run fills the export it was sent for, whichever of the six docum
   const study = await makeStudy("exportbind");
   /** @param {Record<string, any>} data */
   const report = (data) => vcrRuntimeWrite({ store, service: module.service, orchestrator: module.orchestrator, study, what: "report", items: null, data });
-  for (const kind of VCR_EXPORT_KINDS) {
+  for (const kind of VCR_RUN_EXPORT_KINDS) {
     const asked = await module.orchestrator.requestExport({ id: study.userId }, study, kind);
     assert.deepEqual([asked.export.kind, asked.export.state], [kind, "queued"]);
     const dispatch = module.dispatched[module.dispatched.length - 1];
@@ -449,12 +451,12 @@ test("an export run fills the export it was sent for, whichever of the six docum
     assert.deepEqual([row.kind, row.state], [kind, "ready"]);
     assert.equal(row.cover.report.rendered, "方法与局限。");
   }
-  assert.deepEqual((await store.exports(study.id)).map((row) => row.kind).sort(), [...VCR_EXPORT_KINDS].sort(), "six documents asked for, six exports, no orphan");
+  assert.deepEqual((await store.exports(study.id)).map((row) => row.kind).sort(), [...VCR_RUN_EXPORT_KINDS].sort(), "six documents asked for, six exports, no orphan");
 
   // With no export run out the write is the researcher's own conversation: it opens a row of the kind it names, as before.
   const own = await report({ kind: "simulation_report", section: "appendix", template: "补充说明。" });
   assert.equal(own.ok, true);
-  assert.equal((await store.exports(study.id)).length, VCR_EXPORT_KINDS.length + 1);
+  assert.equal((await store.exports(study.id)).length, VCR_RUN_EXPORT_KINDS.length + 1);
 });
 
 test("a model document stands on one frozen plan version: asked for again after a newer version is frozen it is a new document, and with none newer it is the same one", options, async () => {
@@ -939,8 +941,359 @@ test("R10 a computation of a step the researcher asked for with 「让 AI 做」
   const before = notices_of(module).length;
   await write("assumption", [{ key: "dropout_rate", name: "脱落率", pointValue: 0.15, sourceKind: "expert_set", valueSource: "assumed" }]);
   await drainJobs(module, study);
-  assert.equal((await store.jobs(study.id)).filter((job) => job.kind === "design_simulation").length, 2, "it was recomputed");
+  const simulated = (await store.jobs(study.id)).filter((job) => job.kind === "design_simulation");
+  assert.equal(simulated.filter((job) => job.checkpoint.stage === "simulation").length, 2, "it was recomputed");
+  assert.equal(simulated.filter((job) => job.checkpoint.stage === "simulation_null").length, 2, "and so was the zero-effect check that follows it, each time");
   assert.equal(notices_of(module).length, before, "and nobody was told");
+});
+
+/** A design's result for the zero-effect law carries the type I error and not a power, as the engine names it. */
+const nullAware = (/** @type {any} */ job) => (job.method === "design.simulate" && job.scenario.truth?.hazardRatio === 1
+  ? engineResult(job, { measures: [{ name: "type_one_error", value: 0.0246, simulated: true, mcse: 0.0011, source: "synthetic" }], diagnostics: { isNullScenario: true } })
+  : engineResult(job));
+
+test("A1 a two-arm design is also run under no effect, after the alternative: the researcher has the power first, the type I error follows, and a check that fails or is cancelled takes nothing back", options, async () => {
+  const module = compose({ resultFor: nullAware });
+  const { study, write } = await computedStudy(module, "nullcheck");
+  const [scenario] = await store.trialScenarios(study.id);
+  const jobs = await store.rows("SELECT id, state, checkpoint, created_at FROM evimed_vcr.jobs WHERE study_id=$1 AND kind='design_simulation' ORDER BY created_at", [study.id]);
+  assert.deepEqual(jobs.map((job) => job.checkpoint.stage), ["simulation", "simulation_null"], "the alternative is queued first and the check after it");
+  assert.ok(jobs.every((job) => job.state === "succeeded"));
+  assert.equal(jobs[1].checkpoint.check, true);
+  assert.equal(jobs[1].scenario ?? null, null);
+  const nullJob = await store.one("SELECT scenario, replicates FROM evimed_vcr.jobs WHERE id=$1", [jobs[1].id]);
+  assert.equal(nullJob.scenario.truth.hazardRatio, 1, "the one key that says no effect");
+  assert.equal(nullJob.scenario.truth.controlMedian, 6, "and the control level is the study's");
+  assert.equal(nullJob.replicates, 20_000, "the null floor of an exploration");
+  const altJob = await store.one("SELECT replicates FROM evimed_vcr.jobs WHERE id=$1", [jobs[0].id]);
+  assert.equal(altJob.replicates, 5_000);
+  // The result is one: the alternative's figures stand, with the check's beside them, the check in its own stage record.
+  const current = await store.currentResultOf(study.id, "trial_scenario", scenario.id);
+  assert.equal(current.measures.find((measure) => measure.name === "power").value, 0.712);
+  assert.equal(current.measures.find((measure) => measure.name === "type_one_error").value, 0.0246);
+  assert.deepEqual(Object.keys(current.diagnostics.stageResults).sort(), ["analytic", "simulation", "simulation_null"]);
+  assert.equal(current.diagnostics.stageResults.simulation_null.diagnostics.replicatePlan.basis, "default");
+  assert.deepEqual(current.diagnostics.stageResults.simulation.diagnostics.appliedDefaults.map((entry) => entry.path).includes("accrual.dropoutAnnual"), false,
+    "the card gave the dropout, so it is not a default");
+  assert.equal(current.diagnostics.isNullScenario, undefined, "the check's summaries are its own");
+  assert.equal(current.conclusion, "estimable");
+  assert.equal((await store.studyById(study.id)).steps.trial.status, "done");
+  // The page reads the check as done, with its error, held against the closed form where one exists.
+  const trial = await module.service.tab({ id: study.userId }, study.id, "trial");
+  assert.equal(trial.designs[0].nullState, "done");
+  assert.equal(trial.designs[0].measures.type_one_error.mcse, 0.11);
+  assert.equal(trial.designs[0].measures.power.value, 71.2);
+  assert.equal(trial.designs[0].crossCheck, null, "this double's engine states no closed form for it");
+  const dropout = trial.premises.find((row) => row.key === "dropout");
+  assert.deepEqual([dropout.value, dropout.source, dropout.decisive], ["10%", "assumed", true], "the dropout is a premise of the page, from the card that gave it");
+  void write;
+});
+
+test("A1 a zero-effect check that fails leaves the design's result as it was and its step done; one that is cancelled does the same", options, async () => {
+  for (const how of /** @type {const} */ (["failed", "canceled"])) {
+    const module = compose({ resultFor: (job) => (job.method === "design.simulate" && job.scenario.truth?.hazardRatio === 1
+      ? engineResult(job, { status: "failed", conclusion: null, measures: [], counts: {}, diagnostics: { issues: [{ code: "handler_error", field: "scenario", detail: "no" }] } })
+      : engineResult(job)) });
+    const study = await makeStudy(`nullcheck-${how}`);
+    const write = (/** @type {string} */ what, /** @type {any} */ data) => vcrRuntimeWrite({ store, service: module.service, orchestrator: module.orchestrator,
+      study, what, items: Array.isArray(data) ? data : null, data: Array.isArray(data) ? null : data });
+    await write("definition", definition);
+    await write("assumption", [
+      { key: "control_median_pfs", name: "对照组中位 PFS", pointValue: 6, sourceKind: "expert_set", valueSource: "assumed" },
+      { key: "hazard_ratio", name: "风险比", pointValue: 0.7, sourceKind: "expert_set", valueSource: "assumed" },
+      { key: "dropout_rate", name: "脱落率", pointValue: 0.1, sourceKind: "expert_set", valueSource: "assumed" },
+    ]);
+    await write("trial_scenario", trialA);
+    await module.orchestrator.advance(study.id);
+    if (how === "canceled") {
+      // Stop the check while it waits in the queue: the alternative has landed, the check has been queued after it.
+      let queued = null;
+      for (let pass = 0; pass < 20 && !queued; pass += 1) {
+        await module.loops.jobs();
+        await module.orchestrator.advance(study.id);
+        queued = (await store.rows("SELECT id FROM evimed_vcr.jobs WHERE study_id=$1 AND checkpoint->>'stage'='simulation_null' AND state='queued'", [study.id]))[0] ?? null;
+      }
+      assert.ok(queued, "the check was queued after the alternative landed");
+      await module.jobs.cancel(study.id, queued.id, { actor: "owner" });
+    }
+    await drainJobs(module, study);
+    const [scenario] = await store.trialScenarios(study.id);
+    const nullJob = await store.one("SELECT state FROM evimed_vcr.jobs WHERE study_id=$1 AND checkpoint->>'stage'='simulation_null'", [study.id]);
+    assert.equal(nullJob?.state, how, `the check ${how}: ${JSON.stringify(await store.rows("SELECT key, state, detail FROM evimed_vcr.schedule_marks WHERE study_id=$1 AND kind='job'", [study.id]))}`);
+    const current = await store.currentResultOf(study.id, "trial_scenario", scenario.id);
+    assert.ok(current, "the design has its result");
+    assert.equal(current.measures.find((measure) => measure.name === "power").value, 0.712, "the power is the alternative's, unchanged");
+    assert.equal(current.measures.some((measure) => measure.name === "type_one_error"), false);
+    assert.equal(current.diagnostics.partial, undefined);
+    assert.ok(current.diagnostics.stageResults.simulation && !current.diagnostics.stageResults.simulation_null);
+    assert.equal(current.conclusion, "estimable");
+    assert.equal((await store.studyById(study.id)).steps.trial.status, "done", "the step is done: what it checks is there");
+    assert.equal((await store.rows("SELECT 1 FROM evimed_vcr.schedule_marks WHERE study_id=$1 AND state='failed' AND key LIKE '%simulation_null'", [study.id])).length, how === "failed" ? 1 : 0,
+      "and a failed check is on record, traceable");
+  }
+});
+
+test("A1 a design a conversation simulated gets its zero-effect check from the platform, and only that: no step was asked for and nothing else of the design's plan is queued; a check that fails or is cancelled takes nothing back", options, async () => {
+  for (const how of /** @type {const} */ (["done", "failed", "canceled"])) {
+    const module = compose({ resultFor: (job) => (how === "failed" && job.method === "design.simulate" && job.scenario.truth?.hazardRatio === 1
+      ? engineResult(job, { status: "failed", conclusion: null, measures: [], counts: {}, diagnostics: { issues: [{ code: "handler_error", field: "scenario", detail: "no" }] } })
+      : nullAware(job)) });
+    const study = await store.taskContext({ userId: `u_convnull_${how}`, projectId: `prj_convnull_${how}`, rootSessionId: "native-fixture" }, { create: true });
+    assert.equal(study.scope, "conversation");
+    const gateway = conversationGateway(module, study);
+    const started = await gateway("simulate", { action: "start", kind: "design_simulation", scenario: engineScenario(1, "design_simulation") });
+    assert.equal(started.status, 200, JSON.stringify(started));
+    if (how === "canceled") {
+      // Stop the check while it waits in the queue: the alternative has landed and the check has been queued behind it.
+      let queued = null;
+      for (let pass = 0; pass < 20 && !queued; pass += 1) {
+        await module.loops.jobs();
+        await module.orchestrator.advance(study.id);
+        queued = (await store.rows("SELECT id FROM evimed_vcr.jobs WHERE study_id=$1 AND checkpoint->>'stage'='simulation_null' AND state='queued'", [study.id]))[0] ?? null;
+      }
+      assert.ok(queued, "the check was queued after the alternative landed");
+      await module.jobs.cancel(study.id, queued.id, { actor: "owner" });
+    }
+    await drainJobs(module, study);
+    const jobs = await store.rows("SELECT id, kind, state, checkpoint, scenario FROM evimed_vcr.jobs WHERE study_id=$1 ORDER BY created_at", [study.id]);
+    assert.deepEqual(jobs.map((job) => `${job.kind}:${job.checkpoint.stage}`), ["design_simulation:simulation", "design_simulation:simulation_null"],
+      "the alternative the conversation asked for, then the check, and no analytic or assurance stage nobody asked for");
+    const check = jobs[1];
+    assert.equal(check.state, how === "done" ? "succeeded" : how);
+    assert.equal(check.checkpoint.check, true);
+    assert.equal(check.scenario.truth.hazardRatio, 1, "the one key that says no effect");
+    assert.equal(check.scenario.truth.controlMedian, 6, "and the control level is the design's");
+    assert.deepEqual([check.scenario.design.nTreat, check.scenario.design.nControl], [90, 90], "on the design that was simulated");
+    const [design] = await store.trialScenarios(study.id);
+    const current = await store.currentResultOf(study.id, "trial_scenario", design.id);
+    assert.equal(current.measures.find((/** @type {any} */ measure) => measure.name === "power").value, 0.712, "the alternative's power stands");
+    assert.equal(current.conclusion, "estimable");
+    if (how === "done") {
+      assert.equal(current.measures.find((/** @type {any} */ measure) => measure.name === "type_one_error").value, 0.0246);
+    } else {
+      assert.equal(current.measures.some((/** @type {any} */ measure) => measure.name === "type_one_error"), false);
+    }
+    const trial = await module.service.tab({ id: study.userId }, study.id, "trial");
+    assert.equal(trial.designs[0].nullState, how === "done" ? "done" : how, "the page says how the check went, beside the figure");
+    // A second pass queues nothing more, and a design the check was refused for is not asked again.
+    await module.orchestrator.advance(study.id);
+    assert.equal((await store.rows("SELECT 1 FROM evimed_vcr.jobs WHERE study_id=$1", [study.id])).length, 2);
+  }
+});
+
+test("A1 the platform adds no check to a conversation's design that is already the zero-effect case", options, async () => {
+  const module = compose({ resultFor: nullAware });
+  const study = await store.taskContext({ userId: "u_convnull_none", projectId: "prj_convnull_none", rootSessionId: "native-fixture" }, { create: true });
+  const gateway = conversationGateway(module, study);
+  const nullCase = engineScenario(1, "design_simulation");
+  nullCase.truth = { ...nullCase.truth, hazardRatio: 1 };
+  const answer = await gateway("simulate", { action: "start", kind: "design_simulation", scenario: nullCase });
+  assert.equal(answer.status, 200, JSON.stringify(answer));
+  await module.orchestrator.advance(study.id);
+  // The simulation is still queued: nothing is queued behind it.
+  assert.equal((await store.rows("SELECT 1 FROM evimed_vcr.jobs WHERE study_id=$1", [study.id])).length, 1);
+  await drainJobs(module, study);
+  assert.deepEqual((await store.rows("SELECT checkpoint->>'stage' AS stage FROM evimed_vcr.jobs WHERE study_id=$1", [study.id])).map((row) => row.stage), ["simulation"],
+    "a scenario that already states no effect needs no second one");
+});
+
+test("REVIEWFIX 1 a conversation that starts the same design with another sample size gets a design and a job of its own, and only the same scenario is answered with the job that is running", options, async () => {
+  const module = compose({ resultFor: nullAware });
+  const study = await store.taskContext({ userId: "u_convsized", projectId: "prj_convsized", rootSessionId: "native-fixture" }, { create: true });
+  const gateway = conversationGateway(module, study);
+  const sized = (/** @type {number} */ each) => { const scenario = engineScenario(1, "design_simulation"); scenario.design = { ...scenario.design, nTreat: each, nControl: each }; return scenario; };
+  const start = (/** @type {number} */ each) => gateway("simulate", { action: "start", kind: "design_simulation", scenario: sized(each) });
+  const n300 = await start(150);
+  assert.equal(n300.status, 200, JSON.stringify(n300));
+  // while n=300 runs, n=500 is not answered with it
+  const n500 = await start(250);
+  assert.equal(n500.status, 200, JSON.stringify(n500));
+  assert.equal(n500.data.alreadyRunning, undefined);
+  assert.notEqual(n500.data.jobId, n300.data.jobId);
+  assert.notEqual(n500.data.subject.id, n300.data.subject.id, "its own design, so its own result");
+  // and the same scenario is the job that is running
+  const again = await start(150);
+  assert.deepEqual([again.data.alreadyRunning, again.data.jobId, again.data.subject.id], [true, n300.data.jobId, n300.data.subject.id]);
+  await drainJobs(module, study);
+  const results = await store.results(study.id, "trial_scenario");
+  assert.deepEqual(results.map((row) => row.subjectId).sort(), [n300.data.subject.id, n500.data.subject.id].sort(), "each design holds the result of its own numbers");
+  const jobs = await store.rows("SELECT scenario, checkpoint FROM evimed_vcr.jobs WHERE study_id=$1 AND checkpoint->>'stage'='simulation_null'", [study.id]);
+  assert.deepEqual(jobs.map((job) => job.scenario.design.nTreat).sort(), [150, 250], "and the zero-effect check of each is of its own numbers");
+});
+
+test("REVIEWFIX 2 the zero-effect check of a conversation's design is the check of the simulation that was run: its frozen scenario, again for each simulation, and a type I error computed under other numbers is never shown beside a power", options, async () => {
+  const module = compose({ resultFor: nullAware });
+  const study = await store.taskContext({ userId: "u_convnull_own", projectId: "prj_convnull_own", rootSessionId: "native-fixture" }, { create: true });
+  const written = await vcrRuntimeWrite({ store, service: module.service, orchestrator: module.orchestrator, study, what: "trial_scenario",
+    items: [{ ...conversationDesigns[1], configuration: { ...conversationDesigns[1].configuration, truth: { hazardRatio: 0.7, controlMedian: 6 } } }], data: null });
+  const [id] = written.ids;
+  const gateway = conversationGateway(module, study);
+  // The run states a dropout the design was not written with: it adds to the design and contradicts nothing it says, so it is the design that is
+  // simulated; what the check must follow is the scenario the simulation froze, which the design does not hold.
+  const sized = (/** @type {number} */ dropout) => { const scenario = engineScenario(1, "design_simulation"); scenario.accrual = { ...scenario.accrual, dropoutAnnual: dropout }; return scenario; };
+  const checksOf = async () => store.rows("SELECT id, state, scenario, checkpoint FROM evimed_vcr.jobs WHERE study_id=$1 AND checkpoint->>'stage'='simulation_null' ORDER BY created_at", [study.id]);
+  const simulationsOf = async () => store.rows("SELECT id, scenario FROM evimed_vcr.jobs WHERE study_id=$1 AND checkpoint->>'stage'='simulation' ORDER BY created_at", [study.id]);
+
+  const first = await gateway("simulate", { action: "start", kind: "design_simulation", subjectId: id, scenario: sized(0.05) });
+  assert.equal(first.status, 200, JSON.stringify(first));
+  await drainJobs(module, study);
+  const [check] = await checksOf();
+  assert.equal(check.scenario.accrual.dropoutAnnual, 0.05, "the check is of the scenario the simulation froze, not of the design as it was written");
+  const [firstSimulation] = await simulationsOf();
+  assert.equal(check.checkpoint.checkOf, firstSimulation.id, "and says which simulation it is the check of");
+  assert.equal(check.scenario.truth.hazardRatio, 1);
+
+  // A second simulation of the same design with another dropout is a second computation, and its check is its own: the first check no
+  // longer stands for it.
+  const second = await gateway("simulate", { action: "start", kind: "design_simulation", subjectId: id, scenario: sized(0.1) });
+  assert.equal(second.status, 200, JSON.stringify(second));
+  assert.notEqual(second.data.jobId, first.data.jobId);
+  assert.equal(second.data.alreadyRunning, undefined);
+  await drainJobs(module, study);
+  const checks = await checksOf();
+  assert.equal(checks.length, 2, "one check for each simulation");
+  assert.equal(checks[1].scenario.accrual.dropoutAnnual, 0.1);
+  const simulations = await simulationsOf();
+  assert.equal(checks[1].checkpoint.checkOf, simulations[1].id);
+  const current = await store.currentResultOf(study.id, "trial_scenario", id);
+  assert.equal(current.diagnostics.stageResults.simulation.jobId, simulations[1].id);
+  assert.equal(current.diagnostics.stageResults.simulation_null.jobId, checks[1].id, "the type I error beside the power is the one computed for it");
+  assert.equal(current.measures.filter((/** @type {any} */ measure) => measure.name === "type_one_error").length, 1);
+  // Nothing more is queued on a pass that has nothing new.
+  await module.orchestrator.advance(study.id);
+  assert.equal((await checksOf()).length, 2);
+});
+
+test("REVIEWFIX 1 a run that names the design and states other numbers than it holds is revising it: the result is filed under a version of its own, in the same line", options, async () => {
+  const module = compose({ resultFor: nullAware });
+  const study = await store.taskContext({ userId: "u_convrevise", projectId: "prj_convrevise", rootSessionId: "native-fixture" }, { create: true });
+  const written = await vcrRuntimeWrite({ store, service: module.service, orchestrator: module.orchestrator, study, what: "trial_scenario",
+    items: [{ ...conversationDesigns[1], configuration: { ...conversationDesigns[1].configuration, truth: { hazardRatio: 0.7, controlMedian: 6 } } }], data: null });
+  const [id] = written.ids;
+  const gateway = conversationGateway(module, study);
+  const bigger = engineScenario(1, "design_simulation");
+  bigger.design = { ...bigger.design, nTreat: 250, nControl: 250 };
+  // the design as it was written is started by its id, and the same numbers named again are still that design
+  const same = await gateway("simulate", { action: "start", kind: "design_simulation", subjectId: id, scenario: engineScenario(1, "design_simulation") });
+  assert.equal(same.status, 200, JSON.stringify(same));
+  assert.equal(same.data.subject.id, id);
+  const revised = await gateway("simulate", { action: "start", kind: "design_simulation", subjectId: id, scenario: bigger });
+  assert.equal(revised.status, 200, JSON.stringify(revised));
+  assert.notEqual(revised.data.subject.id, id, "other numbers than the design holds: not filed under it");
+  assert.equal(revised.data.alreadyRunning, undefined);
+  assert.notEqual(revised.data.jobId, same.data.jobId);
+  const designs = await store.trialScenarios(study.id);
+  assert.equal(designs.length, 2);
+  assert.deepEqual(designs.map((row) => row.label), [conversationDesigns[1].label, conversationDesigns[1].label], "one line of one design");
+  assert.deepEqual(designs.find((row) => row.id === revised.data.subject.id).configuration.design, bigger.design);
+  await drainJobs(module, study);
+  const current = await store.currentResultOf(study.id, "trial_scenario", revised.data.subject.id);
+  assert.equal(current.measures.find((/** @type {any} */ measure) => measure.name === "power").value, 0.712, "the revision's result is the version's");
+  const checks = await store.rows("SELECT scenario FROM evimed_vcr.jobs WHERE study_id=$1 AND checkpoint->>'stage'='simulation_null' ORDER BY created_at", [study.id]);
+  assert.deepEqual(checks.map((row) => row.scenario.design.nTreat), [250], "and the check is of the version's numbers (the version it replaced is no longer the design's current result)");
+});
+
+test("P1-4 a conversation's study is named by the title the model gives its research question, with the identifiers taken out, or for the kind of work and the day; a patient's words are never its name", options, async () => {
+  const module = compose({ resultFor: nullAware });
+  const day = (/** @type {any} */ row) => `${new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", month: "numeric", day: "numeric" }).format(new Date(row.createdAt)).replace("/", "月")}日`;
+
+  // 1. A design the conversation computes names the study for the kind of work: nothing was said that could be a name.
+  const designing = await store.taskContext({ userId: "u_named_a", projectId: "prj_named_a", rootSessionId: "native-fixture" }, { create: true });
+  assert.equal(designing.name, "对话研究");
+  const a = conversationGateway(module, designing);
+  const started = await a("simulate", { action: "start", kind: "design_simulation", scenario: engineScenario(1, "design_simulation") });
+  assert.equal(started.status, 200, JSON.stringify(started));
+  const designed = await store.studyById(designing.id);
+  assert.equal(designed.name, `试验设计 · ${day(designed)}`);
+  assert.equal(designed.nameBasis, "assigned");
+
+  // 2. The title the model gives names it; the answer says the name; the identifiers of closed formats are taken out; a person's name is not undone.
+  const matching = await store.taskContext({ userId: "u_named_b", projectId: "prj_named_b", rootSessionId: "native-fixture" }, { create: true });
+  const b = conversationGateway(module, matching);
+  const titled = await b("write", { what: "task_context", data: { title: "住院号 20260123 患者的二线治疗试验匹配" } });
+  assert.equal(titled.status, 200, JSON.stringify(titled));
+  assert.equal(titled.data.name, "住院号 患者的二线治疗试验匹配");
+  assert.equal((await store.studyById(matching.id)).name, "住院号 患者的二线治疗试验匹配");
+  // A later write that leaves something in the study does not rename it for the kind of work.
+  await b("write", { what: "population", items: [{ name: "情景人群", kind: "scenario", definition: { n: 100 }, allowedUses: ["design"] }] });
+  assert.equal((await store.studyById(matching.id)).name, "住院号 患者的二线治疗试验匹配");
+  // task_context with nothing, with a title that is only an identifier, and with a field it does not take.
+  assert.equal((await b("write", { what: "task_context" })).status, 200);
+  assert.equal((await b("write", { what: "task_context", data: { title: "2026年11月2日" } })).data.name, "住院号 患者的二线治疗试验匹配");
+  const refused = await b("write", { what: "task_context", data: { title: "x", question: "张三，男，58岁" } });
+  assert.equal(refused.status, 400);
+  assert.equal(refused.code, "vcr_write_payload_invalid");
+  assert.equal((await b("write", { what: "task_context", data: { title: 7 } })).status, 400);
+  await store.updateStudy(matching.id, { name: "我自己起的名字" }, "owner");
+  assert.equal((await b("write", { what: "task_context", data: { title: "模型的新标题" } })).data.name, "我自己起的名字");
+  assert.equal((await store.studyById(matching.id)).name, "我自己起的名字");
+});
+
+test("P1-5 on the programme path a design whose hazard ratio changes over time queues its simulation and the zero-effect check, no analytic stage, and the page reads done", options, async () => {
+  const module = compose({ resultFor: nullAware });
+  const study = await makeStudy("nph");
+  const write = (/** @type {string} */ what, /** @type {any} */ data) => vcrRuntimeWrite({ store, service: module.service, orchestrator: module.orchestrator,
+    study, what, items: Array.isArray(data) ? data : null, data: Array.isArray(data) ? null : data });
+  await write("definition", definition);
+  await write("assumption", [
+    { key: "control_median_pfs", name: "对照组中位 PFS", pointValue: 6, sourceKind: "expert_set", valueSource: "assumed" },
+    { key: "hazard_ratio", name: "风险比", pointValue: 0.7, sourceKind: "expert_set", valueSource: "assumed" },
+  ]);
+  const delayed = { label: "延迟起效", design: "two_arm_fixed", endpointType: "time_to_event", assumptionIds: [],
+    configuration: { design: { nTreat: 120, nControl: 120 }, analysis: { method: "maxcombo", alpha: 0.025, sided: 1 },
+      truth: { treatmentHazardRatios: { breaks: [6], ratios: [1, 0.6] }, controlMedian: 8 }, accrual: { kind: "uniform", duration: 12, followup: 12 } } };
+  await write("trial_scenario", delayed);
+  await module.orchestrator.advance(study.id);
+  await drainJobs(module, study);
+  const jobs = await store.rows("SELECT kind, state, checkpoint FROM evimed_vcr.jobs WHERE study_id=$1 ORDER BY created_at", [study.id]);
+  assert.deepEqual(jobs.map((job) => `${job.kind}:${job.checkpoint.stage}:${job.state}`), ["design_simulation:simulation:succeeded", "design_simulation:simulation_null:succeeded"],
+    "the closed form is not asked for, and the check is not refused");
+  const failed = await store.rows("SELECT key, detail FROM evimed_vcr.schedule_marks WHERE study_id=$1 AND state='failed'", [study.id]);
+  assert.deepEqual(failed, [], "no stage is left failed");
+  const nullJob = await store.one("SELECT scenario FROM evimed_vcr.jobs WHERE study_id=$1 AND checkpoint->>'stage'='simulation_null'", [study.id]);
+  assert.equal(nullJob.scenario.truth.hazardRatio, 1);
+  assert.equal(Object.hasOwn(nullJob.scenario.truth, "treatmentHazardRatios"), false);
+  assert.equal(nullJob.scenario.analysis.method, "maxcombo", "the same analysis");
+  assert.equal((await store.studyById(study.id)).steps.trial.status, "done");
+  const trial = await module.service.tab({ id: study.userId }, study.id, "trial");
+  assert.equal(trial.designs[0].nullState, "done");
+  assert.match(trial.designs[0].note, /没有解析结果/);
+});
+
+test("P2-10 a batch reading and a population check that a conversation asked for end in the inbox as well as in the conversation", options, async () => {
+  const module = compose({ dispatch: false });
+  const study = await makeStudy("noticekinds");
+  const finished = (/** @type {string} */ kind, /** @type {string} */ method, /** @type {Record<string, any>} */ result, /** @type {Record<string, any>} */ checkpoint = {}) =>
+    module.orchestrator.onJobFinished({ job: { id: `job_${kind}`, studyId: study.id, kind, method, state: "succeeded", checkpoint: { origin: "runtime", resultKind: kind, ...checkpoint } },
+      result: { id: `res_${kind}`, kind, ...result } });
+  await finished("match_extract", "matching.extract", { conclusion: "estimable", measures: [{ name: "records_read", value: 25 }], diagnostics: { remaining: 0 } });
+  await finished("population_check", "population.check", { conclusion: "estimable", measures: [{ name: "variables_compared", value: 4 }, { name: "variables_apart", value: 1 }] });
+  const titles = notices_of(module).map((notice) => notice.title);
+  assert.ok(titles.includes("病历阅读完成：读完 25 份病历"), titles.join(" | "));
+  assert.ok(titles.includes("人群核对完成：比较了 4 个变量，1 个有差异"), titles.join(" | "));
+  // a computation nobody in a conversation asked for stays quiet, as the programme's own stages do
+  const before = notices_of(module).length;
+  await module.orchestrator.onJobFinished({ job: { id: "job_quiet", studyId: study.id, kind: "match_extract", method: "matching.extract", state: "succeeded", checkpoint: { resultKind: "match_extract" } },
+    result: { id: "res_quiet", kind: "match_extract", measures: [{ name: "records_read", value: 5 }] } });
+  assert.equal(notices_of(module).length, before);
+});
+
+test("a stand-alone E-value is started from a conversation with nothing written first, and lands on a comparison of its own", options, async () => {
+  const module = compose();
+  const study = await store.taskContext({ userId: "u_evalue_gateway", projectId: "prj_evalue_gateway", rootSessionId: "native-fixture" }, { create: true });
+  const gateway = conversationGateway(module, study);
+  const started = await gateway("simulate", { action: "start", kind: "evalue", scenario: { riskRatio: 0.6, confidenceLimit: 0.8, scale: "hazard_ratio", rare: true } });
+  assert.equal(started.status, 200, JSON.stringify(started));
+  assert.equal(started.data.subject.kind, "comparator");
+  await drainJobs(module, study);
+  const jobs = await store.rows("SELECT kind, method, state, checkpoint FROM evimed_vcr.jobs WHERE study_id=$1", [study.id]);
+  assert.deepEqual(jobs.map((job) => [job.kind, job.method, job.state]), [["evalue", "comparator.evalue", "succeeded"]]);
+  const [design] = await store.comparatorDesigns(study.id, 10);
+  assert.equal(design.id, started.data.subject.id);
+  assert.ok(design.resultId, "the result is the comparison's own");
+  // asked again with the same estimate it is the same comparison, not a second one
+  const again = await gateway("simulate", { action: "start", kind: "evalue", scenario: { riskRatio: 0.6, confidenceLimit: 0.8, scale: "hazard_ratio", rare: true } });
+  assert.equal(again.data.subject.id, design.id);
 });
 
 test("AC-33 everything the run set carries the AI-set label until a person countersigns it", options, async () => {
@@ -1036,7 +1389,7 @@ test("TU-4 a design's result says the unit its times were settled in, and the jo
   const median = (/** @type {Record<string, any>} */ extra = {}) => ({ key: "control_median_pfs", name: "对照组中位 PFS", pointValue: 26, sourceKind: "expert_set", valueSource: "assumed", ...extra });
 
   const inWeeks = await run("tuweeks", [hazard, dropout, median({ unit: "weeks" })]);
-  assert.equal(inWeeks.jobs.length, 2, "both stages of the design ran");
+  assert.equal(inWeeks.jobs.length, 3, "the design's sizing, its simulation and the zero-effect check that follows it all ran");
   for (const job of inWeeks.jobs) assert.deepEqual([job.scenario.timeUnit, job.scenario.truth.controlMedian], ["weeks", 26], `${job.kind}: the scenario is in the unit its evidence is in`);
   assert.deepEqual(inWeeks.result.diagnostics.timeUnitBasis, { unit: "weeks", basis: "evidence" }, "and the result says where the unit came from");
 
@@ -1053,7 +1406,7 @@ test("AC-16 a changed assumption marks everything downstream stale, recomputes i
   const [scenario] = await store.trialScenarios(study.id);
   const scenarioNode = vcrObjectNode("trial_scenario", scenario);
   const oldNode = lineageNode("result", before[0].id, before[0].version);
-  const firstJobs = (await store.jobs(study.id)).filter((job) => job.kind === "design_simulation");
+  const firstJobs = (await store.jobs(study.id)).filter((job) => job.kind === "design_simulation" && job.checkpoint.stage === "simulation");
   assert.equal(firstJobs.length, 1);
 
   // 脱落率 from 10% to 15%: a new assumption version, and the plan says what it reaches — the object and the result it made.
@@ -1070,9 +1423,9 @@ test("AC-16 a changed assumption marks everything downstream stale, recomputes i
   // A design's two stages land one after the other, each a new version that supersedes the last: the old result leads, by its chain, to the current one.
   assert.equal(await chainEnd(study.id, before[0].id), after[0].id, "the old one is superseded, not deleted");
   assert.equal((await store.result(study.id, before[0].id)).measures.find((measure) => measure.name === "power").value, 0.712, "and it keeps its numbers");
-  const jobs = (await store.jobs(study.id)).filter((job) => job.kind === "design_simulation");
+  const jobs = (await store.jobs(study.id)).filter((job) => job.kind === "design_simulation" && job.checkpoint.stage === "simulation");
   assert.equal(jobs.length, 2, "a second job, not the first one returned again");
-  const rows = await store.rows("SELECT scenario, idempotency_key, inputs FROM evimed_vcr.jobs WHERE study_id = $1 AND kind = 'design_simulation' ORDER BY created_at", [study.id]);
+  const rows = await store.rows("SELECT scenario, idempotency_key, inputs FROM evimed_vcr.jobs WHERE study_id = $1 AND kind = 'design_simulation' AND checkpoint->>'stage' = 'simulation' ORDER BY created_at", [study.id]);
   assert.notEqual(rows[0].idempotency_key, rows[1].idempotency_key, "a new key per stale generation");
   assert.equal(rows[0].scenario.accrual.dropoutAnnual, 0.1);
   assert.equal(rows[1].scenario.accrual.dropoutAnnual, 0.15, "the new card version is the number the recomputation used");
@@ -1261,7 +1614,9 @@ for (const lastKind of ["design_analytic", "design_simulation"]) {
     const current = await store.currentResultOf(study.id, "trial_scenario", scenario.id);
     const simulation = current.diagnostics.stageResults.simulation;
     assert.notEqual(simulation.jobId, retiredJobId);
-    const root = await store.one("SELECT method FROM evimed_vcr.executions WHERE id=$1", [current.executionId]);
+    // The last stage of the result's own to land: the zero-effect check follows them all, and is not what this arrangement is about.
+    const ownLast = current.diagnostics.stages.filter((/** @type {any} */ entry) => !VCR_CHECK_STAGES.includes(entry.stage)).at(-1);
+    const root = await store.one("SELECT method FROM evimed_vcr.executions WHERE study_id=$1 AND job_id=$2", [study.id, ownLast.jobId]);
     assert.equal(root.method, lastKind === "design_analytic" ? "design.analytic" : "design.simulate");
     await store.query("UPDATE evimed_vcr.executions SET method_version='0.9.0' WHERE study_id=$1 AND job_id=$2", [study.id, retiredJobId]);
     // A superseded job mentioned only in the stage list is not a current
@@ -1735,6 +2090,33 @@ test("a comparator that declares robustness analyses plans them beside the compa
 });
 // --- end robustness methods ---
 
+test("A7 a comparison that is to support non-inferiority is delivered limited with the reason beside it, and the same comparison without the claim is not", options, async () => {
+  const module = compose({ dispatch: false });
+  const study = await makeStudy("noninferiority", { dataTier: "T0" });
+  await vcrRuntimeWrite({ store, service: module.service, orchestrator: module.orchestrator, study, what: "definition", items: null, data: definition });
+  const curve = await module.curves.recordSelection({ studyId: study.id, principal: study.userId,
+    imageArtifactId: "controlled-curve-source.png", points: { ...publishedArm(12), treatmentArm: publishedArm(17) } });
+  /** @param {Record<string, any>} configuration */
+  const compare = async (configuration) => {
+    const written = await vcrRuntimeWrite({ store, service: module.service, orchestrator: module.orchestrator, study, what: "comparator", items: null,
+      data: { route: "literature_control", estimand: "ATT", configuration: { provenance: { receiptId: curve.id }, tau: 18, timeUnit: "months", ...configuration } } });
+    assert.equal(written.ok, true, JSON.stringify(written.issues));
+    await drainJobs(module, study);
+    return (await store.results(study.id, "comparator"))[0];
+  };
+
+  const claimed = await compare({ applicability: { state: "doubtful", claim: "non_inferiority", note: "另一年代的对照" } });
+  assert.equal(claimed.conclusion, "limited", "the engine double says estimable; the claim makes it limited");
+  assert.deepEqual(claimed.diagnostics.applicabilityLimits.map((/** @type {any} */ entry) => entry.code), ["non_inferiority_purpose"]);
+  assert.match(claimed.diagnostics.applicabilityLimits[0].reason, /非劣效/);
+  assert.ok(claimed.measures.some((/** @type {any} */ measure) => measure.name === "rmst_difference"), "and the estimate is delivered");
+
+  const plain = await compare({ applicability: { state: "partly_suitable", claim: "superiority" } });
+  assert.equal(plain.conclusion, "estimable");
+  assert.equal(plain.diagnostics.applicabilityLimits, undefined);
+  assert.notEqual(plain.id, claimed.id, "the comparator is a new version and its result a new one; the first stands, superseded");
+});
+
 test("G12 a patient set naming an event-history model is queued on the longitudinal forecast path; with no provider that one step is skipped in the platform's sentence and the study's other work is queued all the same", options, async () => {
   const { knownErrorCodeMessage } = await import("@evimed/domain");
   /** @type {any[]} */
@@ -1809,4 +2191,485 @@ test("G12 a patient set naming an event-history model is queued on the longitudi
   assert.equal(call.extra.detail.resultKind, undefined, "not filed as the patient set's own table");
   const running = patientMark(await marks());
   assert.deepEqual([running.state, running.job_id], ["running", "job_forecast_1"]);
+});
+
+test("D7 a result is exported as a short record only on request: written from the stored result, ready at once, the same record once, and its document is the record", options, async () => {
+  const module = compose({ dispatch: false });
+  const study = await makeStudy("record");
+  const scenario = { design: { kind: "two_arm_fixed", nTreat: 150, nControl: 150 }, endpoint: { type: "time_to_event" }, truth: { hazardRatio: 0.7, controlMedian: 12 },
+    accrual: { kind: "uniform", duration: 12, followup: 12 }, analysis: { method: "logrank", alpha: 0.025, sided: 1 } };
+  const { job } = await module.jobs.enqueue({ studyId: study.id, userId: study.userId, kind: "design_simulation", scenario, inputs: [], internal: true,
+    idempotencyKey: `record:${Math.random()}`, detail: { subjectId: null, origin: "runtime" } });
+  await store.query(`UPDATE evimed_vcr.jobs SET checkpoint = checkpoint || $2::jsonb WHERE id = $1`, [job.id,
+    JSON.stringify({ appliedDefaults: [{ path: "accrual.dropoutAnnual", value: 0 }], replicatePlan: { floor: 5000, basis: "default", intendedUse: "exploratory", targetMcse: null } })]);
+  const execution = await store.recordExecution({ jobId: job.id, studyId: study.id, userId: study.userId, method: job.method, methodVersion: "1.3.0", scenarioHash: "a1b2c3d4e5f60708".repeat(4),
+    inputs: [{ kind: "assumption", id: "hazard_ratio@2" }], environment: { engineVersion: "1.0.0", rVersion: "4.3.3", packageLockHash: "56edc6432ad4aaaaaaaa" }, seed: 777, replicates: 5000, outputHash: "9f".repeat(32),
+    receipt: {}, cpuSeconds: 3, startedAt: null, finishedAt: null });
+  const result = await store.recordResult({ studyId: study.id, userId: study.userId, executionId: execution.id, kind: "trial_scenario", subjectId: null, conclusion: "estimable", counts: {},
+    measures: [{ name: "power", value: 0.9, simulated: true, mcse: 0.004, source: "synthetic" }],
+    diagnostics: { exampleTrial: { replicate: 1, seed: 777, values: { estimate: -0.3421, se: 0.1, statistic: -3.42, p: 0.0003, reject: 1, events: 201, sampleSize: 300, duration: 24 } } }, tables: [] });
+  const user = { id: study.userId };
+
+  // nothing built a record by itself
+  assert.equal((await store.exports(study.id)).filter((row) => row.kind === "result_record").length, 0);
+  await assert.rejects(module.orchestrator.requestExport(user, study, "result_record", {}), { code: "vcr_payload_invalid" });
+  await assert.rejects(module.orchestrator.requestExport(user, study, "result_record", { resultId: "res_nobody" }), { code: "vcr_result_not_found" });
+
+  const asked = await module.orchestrator.requestExport(user, study, "result_record", { resultId: result.id });
+  assert.equal(asked.export.state, "ready", "no run to wait for");
+  assert.equal(asked.runId, null);
+  const row = await store.exportRow(study.id, asked.export.id);
+  assert.equal(row.kind, "result_record");
+  assert.equal(row.cover.record.resultId, result.id);
+  assert.equal(row.cover.record.hasExampleTrial, true);
+  assert.deepEqual(row.cover.record.sections.map((section) => section.id), ["what", "assumptions", "versions", "example", "links"]);
+  const markdown = row.cover.reports[0].rendered;
+  assert.match(markdown, /^# EV-201 record — 结果记录/);
+  assert.match(markdown, /- truth\.hazardRatio = 0\.7\n/);
+  assert.match(markdown, /- accrual\.dropoutAnnual = 0（默认）/);
+  assert.match(markdown, /- 随机种子：777/);
+  assert.match(markdown, /- 重复次数：5,000（备择情景的默认下限 5,000 次）/);
+  assert.match(markdown, /- 方法版本：design\.simulate 1\.3\.0/);
+  assert.match(markdown, /- 计算引擎：1\.0\.0，R 4\.3\.3，包锁定 56edc6432ad4/);
+  assert.match(markdown, /第 1 次重复（种子 777）/);
+  assert.match(markdown, /- 估计值：-0\.3421/);
+  assert.match(markdown, /- 用到的假设卡和证据：hazard_ratio@2/);
+  assert.match(markdown, new RegExp(`/app/virtual-research/${study.id}/trial`));
+
+  // the same record is the same export; a changed result is another
+  const again = await module.orchestrator.requestExport(user, study, "result_record", { resultId: result.id });
+  assert.equal(again.export.id, asked.export.id);
+  assert.equal((await store.exports(study.id)).filter((entry) => entry.kind === "result_record").length, 1);
+
+  // and its document is the record, not a rendering of the study's package
+  const { canonicalVcrDocument } = await import("../src/vcrDocumentExport.mjs");
+  const document = canonicalVcrDocument(study, row);
+  assert.equal(document.canonicalMarkdown, markdown);
+  assert.equal(document.title, "EV-201 record — 结果记录");
+  assert.doesNotMatch(document.canonicalMarkdown, /未计算/, "no typed number was blanked by the report's number template");
+});
+
+/**
+ * A model's side of the gateway for an account and a project nothing exists for yet: the first write or computation makes the
+ * conversation's study, as it does for a real conversation. Returns the call and the study once it exists.
+ * @param {string} label @param {ReturnType<typeof compose>} module
+ */
+function modelConversation(label, module, extra = {}) {
+  const ids = { userId: `u_${label}`, projectId: "default" };
+  const runtimeManager = { assertActiveModelGatewayToken: () => ids };
+  const origin = { ...ids, rootSessionId: `ses_${label}`, sessionId: `ses_${label}`, callId: `call_${label}`, runId: null };
+  const handler = createVcrGatewayHandler({ vcrEnabled: true, vcrAudience: "all", modelGatewayInternalUrl: "http://127.0.0.1:8788/internal/models/v1" }, runtimeManager,
+    { vcr: { service: module.service, store, jobs: module.jobs, orchestrator: module.orchestrator, ...extra }, resolveInvocation: async () => origin });
+  const call = async (/** @type {string} */ operation, /** @type {Record<string, any>} */ body) => {
+    const req = Object.assign(Readable.from([Buffer.from(JSON.stringify(body))]), { method: "POST", url: `/internal/vcr/v1/${operation}`, headers: { authorization: "Bearer t", "x-evimed-execution-context": "native-fixture" } });
+    const res = { status: 0, body: "", writeHead(/** @type {number} */ status) { this.status = status; return this; }, end(/** @type {string} */ chunk = "") { this.body = String(chunk); } };
+    await handler(req, res);
+    return { status: res.status, ...JSON.parse(res.body) };
+  };
+  return { call, study: async () => store.taskContext(origin, { create: false }) };
+}
+
+/** The shape of the 2026-11-01 design comparison (live run c4b3): the same designs, written once and then started by id alone. */
+const liveDesigns = ["A 固定 1:1", "B 成组序贯 1:1", "C 固定 2:1"].map((label, at) => ({
+  label, design: at === 1 ? "group_sequential" : "two_arm_fixed", endpointType: "time_to_event",
+  configuration: { design: { kind: at === 1 ? "group_sequential" : "two_arm_fixed", allocation: at === 2 ? 0.6667 : 0.5, nTreat: at === 2 ? 639 : 415, nControl: at === 2 ? 320 : 415,
+    ...(at === 1 ? { informationRates: [0.5, 1], spending: "obrien_fleming" } : {}) },
+    endpoint: { type: "time_to_event" }, truth: { hazardRatio: 0.75, controlMedian: 13.5 },
+    analysis: { method: "logrank", alpha: 0.025, sided: 1, power: 0.9 }, accrual: { kind: "uniform", duration: 24, followup: 12, dropoutAnnual: 0.05 }, timeUnit: "months", performance: ["power"] },
+}));
+
+test("a design written in the conversation is validated and started by its id alone: the platform builds the scenario from the object", options, async () => {
+  const module = compose();
+  const model = modelConversation("byid", module);
+  const written = await model.call("write", { what: "trial_scenario", items: liveDesigns });
+  assert.equal(written.data.ok, true, JSON.stringify(written));
+  const [a, b] = written.data.ids;
+  const named = written.data.results.find((/** @type {any} */ entry) => entry.named);
+  assert.deepEqual(named.named.map((/** @type {any} */ entry) => entry.name), ["A 固定 1:1", "B 成组序贯 1:1", "C 固定 2:1"], "the answer gives the names a reply uses, beside the ids");
+  assert.deepEqual(named.named.map((/** @type {any} */ entry) => entry.id), written.data.ids);
+  // validate with a subject and no scenario: the object's own configuration, not the three missing keys of an empty one
+  const checked = await model.call("simulate", { action: "validate", kind: "design_analytic", subjectId: a });
+  assert.equal(checked.status, 200, JSON.stringify(checked));
+  assert.equal(checked.data.valid, true, JSON.stringify(checked.data.issues));
+  assert.equal(checked.data.scenario.truth.hazardRatio, 0.75);
+  assert.equal(checked.data.scenario.analysis.method, undefined, "the analytic stage reads no test name: the object's description of it did not travel");
+  const started = await model.call("simulate", { action: "start", kind: "design_analytic", subjectId: a });
+  assert.equal(started.status, 200, JSON.stringify(started));
+  assert.equal(started.data.subject.id, a);
+  assert.equal(started.data.subject.name, "A 固定 1:1");
+  const frozen = async (/** @type {string} */ id) => (await store.rows("SELECT scenario FROM evimed_vcr.jobs WHERE id = $1", [id]))[0].scenario;
+  const job = { scenario: await frozen(started.data.jobId) };
+  assert.deepEqual(job.scenario.design, { kind: "two_arm_fixed", allocation: 0.5 });
+  assert.deepEqual(job.scenario.truth, { hazardRatio: 0.75, controlMedian: 13.5 });
+  // the simulation of a group-sequential design carries its looks, from the object
+  const simulated = await model.call("simulate", { action: "start", kind: "design_simulation", subjectId: b });
+  assert.equal(simulated.status, 200, JSON.stringify(simulated));
+  assert.deepEqual((await frozen(simulated.data.jobId)).design.informationRates, [0.5, 1]);
+  // a subject the study does not hold is still refused by name, not guessed
+  const unknown = await model.call("simulate", { action: "start", kind: "design_analytic", subjectId: "scn_nobody" });
+  assert.equal(unknown.status, 400);
+  assert.equal(unknown.code, "vcr_simulate_subject_unknown");
+});
+
+test("keys that only describe what design_analytic does are left out and said, a described value the engine would not honour is refused with the reason, and a misspelt key still fails", options, async () => {
+  const module = compose();
+  const model = modelConversation("descriptive", module);
+  const scenario = { design: { kind: "two_arm_fixed", allocation: 0.5 }, endpoint: { type: "time_to_event" }, truth: { hazardRatio: 0.75, controlMedian: 13.5 },
+    analysis: { alpha: 0.025, power: 0.9, sided: 1 }, accrual: { duration: 24, followup: 12, dropoutAnnual: 0.05 }, timeUnit: "months" };
+  const described = { ...scenario, analysis: { ...scenario.analysis, method: "logrank" }, accrual: { ...scenario.accrual, kind: "uniform" } };
+  const checked = await model.call("simulate", { action: "validate", kind: "design_analytic", scenario: described });
+  assert.equal(checked.data.valid, true, JSON.stringify(checked.data.issues));
+  assert.deepEqual(checked.data.normalized.map((/** @type {any} */ entry) => entry.field), ["analysis.method", "accrual.kind"]);
+  assert.deepEqual(checked.data.scenario, scenario, "the frozen scenario is the one without the descriptions");
+  // an analysis the analytic design does not make is not a description
+  const other = await model.call("simulate", { action: "validate", kind: "design_analytic", scenario: { ...scenario, analysis: { ...scenario.analysis, method: "maxcombo" } } });
+  assert.equal(other.data.valid, false);
+  assert.equal(other.data.issues[0].field, "scenario.analysis.method");
+  assert.match(other.data.issues[0].message, /log-rank/);
+  assert.match(other.data.issues[0].message, /maxcombo/);
+  // a key that is not on the list keeps failing: a silent ignore would change the computation
+  const misspelt = await model.call("simulate", { action: "validate", kind: "design_analytic", scenario: { ...scenario, accrual: { duration: 24, followup: 12, dropoutAnual: 0.05 } } });
+  assert.equal(misspelt.data.valid, false);
+  assert.equal(misspelt.data.issues[0].field, "scenario.accrual.dropoutAnual");
+  // started with the descriptions or without them, it is one job
+  const first = await model.call("simulate", { action: "start", kind: "design_analytic", scenario: described });
+  assert.equal(first.status, 200, JSON.stringify(first));
+  assert.deepEqual(first.data.normalized.map((/** @type {any} */ entry) => entry.field), ["analysis.method", "accrual.kind"]);
+  const second = await model.call("simulate", { action: "start", kind: "design_analytic", scenario });
+  assert.equal(second.status, 200, JSON.stringify(second));
+  assert.equal(second.data.jobId, first.data.jobId, "the description is not part of what makes a job the same job");
+});
+
+test("a design grid with labelled designs and truths is computed with nothing written first, labels left out and said; and the grid written as an object is started by its id alone", options, async () => {
+  const module = compose();
+  const model = modelConversation("grid", module);
+  const grid = {
+    accrual: { dropoutAnnual: 0.05, duration: 24, followup: 12 }, design: { kind: "two_arm_fixed", nControl: 415, nTreat: 415 },
+    designs: [{ kind: "two_arm_fixed", label: "A 固定 1:1", nControl: 415, nTreat: 415 },
+      { informationRates: [0.5, 1], kind: "group_sequential", label: "B 成组序贯 1:1", nControl: 416, nTreat: 416, spending: "obrien_fleming" },
+      { kind: "two_arm_fixed", label: "C 固定 2:1", nControl: 320, nTreat: 639 }],
+    endpoint: { type: "time_to_event" }, performance: ["power", "type_one_error"], timeUnit: "months", truth: { controlMedian: 13.5, hazardRatio: 0.75 },
+    truths: [{ hazardRatio: 0.75, label: "HR 0.75" }, { hazardRatio: 0.8, label: "HR 0.80" }, { hazardRatio: 1, label: "零效应", null: true }],
+  };
+  const checked = await model.call("simulate", { action: "validate", kind: "design_grid", scenario: grid });
+  assert.equal(checked.data.valid, true, JSON.stringify(checked.data.issues));
+  assert.deepEqual(checked.data.normalized.map((/** @type {any} */ entry) => entry.field), ["designs[].label", "truths[].label"]);
+  assert.equal(checked.data.scenario.designs.some((/** @type {any} */ design) => "label" in design), false);
+  const started = await model.call("simulate", { action: "start", kind: "design_grid", scenario: grid });
+  assert.equal(started.status, 200, JSON.stringify(started));
+  assert.equal(started.data.subject.kind, "design_grid", "the grid is the object the scenario was filed under");
+  const study = await model.study();
+  const stored = await store.latestDesignGrid(study.id);
+  assert.equal(stored.id, started.data.subject.id);
+  // the same grid again is that grid; started by its id alone it is built from the object
+  const again = await model.call("simulate", { action: "start", kind: "design_grid", scenario: grid });
+  assert.equal(again.status, 200, JSON.stringify(again));
+  assert.equal(again.data.subject.id, stored.id);
+  const byId = await model.call("simulate", { action: "start", kind: "design_grid", subjectId: stored.id });
+  assert.equal(byId.status, 200, JSON.stringify(byId));
+  assert.equal(byId.data.subject.id, stored.id);
+
+  // the grid as the model wrote it as an object (dimensions, truthScenarios, labels, a test name in the base) and started by its id alone
+  const other = modelConversation("grid_object", module);
+  const written = await other.call("write", { what: "design_grid", data: {
+    comparisonGoal: { text: "比较三个方案", measures: [{ name: "power", direction: "higher" }] },
+    dimensions: { base: { accrual: { dropoutAnnual: 0.05, duration: 24, followup: 12 }, analysis: { alpha: 0.025, method: "logrank", sided: 1 }, endpoint: { type: "time_to_event" },
+      performance: ["power", "type_one_error"], timeUnit: "months", truth: { controlMedian: 13.5 } },
+    designs: [{ kind: "two_arm_fixed", label: "A 固定 1:1", nControl: 415, nTreat: 415 }, { kind: "two_arm_fixed", label: "C 固定 2:1", nControl: 320, nTreat: 639 }] },
+    truthScenarios: [{ hazardRatio: 0.75, label: "设计目标 HR 0.75" }, { hazardRatio: 1, label: "零效应", null: true }] } });
+  assert.equal(written.data.ok, true, JSON.stringify(written.data.issues));
+  const checkedGrid = await other.call("simulate", { action: "validate", kind: "design_grid", subjectId: written.data.ids[0] });
+  assert.equal(checkedGrid.data.valid, true, JSON.stringify(checkedGrid.data.issues));
+  const gridStart = await other.call("simulate", { action: "start", kind: "design_grid", subjectId: written.data.ids[0] });
+  assert.equal(gridStart.status, 200, JSON.stringify(gridStart));
+  // a population and an E-value filed by their scenario are started by their ids alone as well
+  const hazard = { riskRatio: 0.6, confidenceLimit: 0.8, scale: "hazard_ratio", rare: true };
+  const evalue = await other.call("simulate", { action: "start", kind: "evalue", scenario: hazard });
+  assert.equal(evalue.status, 200, JSON.stringify(evalue));
+  const evalueAgain = await other.call("simulate", { action: "start", kind: "evalue", subjectId: evalue.data.subject.id });
+  assert.equal(evalueAgain.status, 200, JSON.stringify(evalueAgain));
+  assert.equal(evalueAgain.data.jobId, evalue.data.jobId, "the object's own scenario is the same frozen scenario");
+  const people = { n: 100, population: { variables: [{ name: "age", family: "normal", mean: 60, sd: 10 }] } };
+  const population = await other.call("simulate", { action: "start", kind: "generate_population", scenario: people });
+  assert.equal(population.status, 200, JSON.stringify(population));
+  const populationAgain = await other.call("simulate", { action: "start", kind: "generate_population", subjectId: population.data.subject.id });
+  assert.equal(populationAgain.status, 200, JSON.stringify(populationAgain));
+  const frozenGrid = (await store.rows("SELECT scenario FROM evimed_vcr.jobs WHERE id = $1", [gridStart.data.jobId]))[0].scenario;
+  assert.equal(frozenGrid.designs.length, 2);
+  assert.equal(frozenGrid.truths.length, 2);
+  assert.equal(frozenGrid.designs.some((/** @type {any} */ design) => "label" in design), false);
+});
+
+test("a median OS read from a PubMed abstract is evidence of its paper: verified against the abstract the platform preserved, or kept and marked unchecked, and a card made of either reads as literature on the page", options, async () => {
+  const { createVcrEvidencePipeline } = await import("../src/vcrEvidence.mjs");
+  const { createVcrPublicationSources } = await import("../src/vcrPublicationSources.mjs");
+  const { premiseReasonOfCard, premiseSourceOfCard } = await import("../src/vcrPremises.mjs");
+  const abstract = "# HIMALAYA\n\n- PMID: 37676259\n\n## Abstract\n\nThe median OS was 16.4 months (95% CI, 14.2–19.6) with tremelimumab in combination with durvalumab and 13.8 months (95% CI, 12.3–16.1) with sorafenib.\n";
+  const hashes = { "abstract.md": sha(abstract) };
+  const version = sha(JSON.stringify(hashes));
+  const workspace = await fs.mkdtemp(path.join(os.tmpdir(), "vcr-pubint-"));
+  const captureDir = path.join(workspace, ".evimed-sources/pubmed/PMID37676259", version);
+  await fs.mkdir(captureDir, { recursive: true });
+  await fs.writeFile(path.join(captureDir, "abstract.md"), abstract);
+  await fs.writeFile(path.join(captureDir, "capture.json"), JSON.stringify({ version, artifacts: hashes }));
+
+  const module = compose();
+  const evidenceStore = new VcrEvidenceStore({ database });
+  const evidence = createVcrEvidencePipeline({ store: evidenceStore, jobs: module.jobs });
+  evidence.attachPublications(createVcrPublicationSources({ resolveProject: async () => ({ workspaceDir: workspace }) }));
+  const model = modelConversation("paper", module, { evidence, evidenceStore });
+  const live = (/** @type {Record<string, any>} */ more = {}) => ({ registry: "pubmed", registryId: "37676259", parameter: "control_median_os", arm: "sorafenib", armRole: "control", value: 13.8, unit: "months",
+    ciLow: 12.3, ciHigh: 16.1, sampleSize: 389, valueSource: "reported", quote: "13.8 months (95% CI, 12.3–16.1) with sorafenib", endpointKey: "os", line: "first", evidenceKind: "outcome", ...more });
+
+  // the call the model made, with the words it chose: nothing is refused for a spelling or for the registry it named
+  const read = await model.call("write", { what: "evidence_item", items: [live({ sampleSize: undefined })] });
+  assert.equal(read.status, 200, JSON.stringify(read));
+  assert.equal(read.data.ok, true, JSON.stringify(read.data.issues));
+  const [checkedId] = read.data.ids;
+  // a paper the platform never read: the number is kept, unchecked, and the write says so without refusing it
+  const unread = await model.call("write", { what: "evidence_item", items: [live({ registryId: "11111111", parameter: "control_median_os" })] });
+  assert.equal(unread.data.ok, true, JSON.stringify(unread.data.issues));
+  assert.deepEqual(unread.data.issues.map((/** @type {any} */ entry) => entry.code), ["vcr_evidence_reported_unverified"]);
+  const [uncheckedId] = unread.data.ids;
+  const study = await model.study();
+  const stored = await evidenceStore.itemsById({ userId: study.userId, studyId: study.id, ids: [checkedId, uncheckedId] });
+  const by = new Map(stored.map((/** @type {any} */ row) => [row.id, row]));
+  assert.equal(by.get(checkedId).locator.verification, "verified");
+  assert.equal(Number(by.get(checkedId).value), 13.8);
+  assert.equal(by.get(uncheckedId).locator.verification, "reported_unverified");
+  assert.equal(Number(by.get(uncheckedId).value), 13.8, "an unchecked number is kept as reported");
+  assert.equal(by.get(uncheckedId).arm_role, "control");
+  assert.equal(by.get(checkedId).value_source, "extracted");
+  assert.deepEqual(await evidenceStore.verifiedEvidenceIds({ userId: study.userId, studyId: study.id, parameter: "control_median_os" }), [checkedId], "pooling and baselines read the checked one only");
+
+  // a card that takes either, with the words the model used
+  const card = (/** @type {string} */ id, /** @type {string} */ key) => ({ key, name: "对照组 OS 中位数", parameter: "control_median_os", endpoint: "os", unit: "months", sourceKind: "literature", evidenceIds: [id] });
+  const fromChecked = await model.call("write", { what: "assumption", items: [card(checkedId, "control_median_os")] });
+  assert.equal(fromChecked.data.ok, true, JSON.stringify(fromChecked.data.issues));
+  const fromUnchecked = await model.call("write", { what: "assumption", items: [card(uncheckedId, "control_median_os_unchecked")] });
+  assert.equal(fromUnchecked.data.ok, true, JSON.stringify(fromUnchecked.data.issues));
+  const cards = new Map((await store.assumptions(study.id)).map((/** @type {any} */ entry) => [entry.key, entry]));
+  const first = cards.get("control_median_os");
+  const second = cards.get("control_median_os_unchecked");
+  assert.equal(first.pointValue, 13.8);
+  assert.equal(first.sourceKind, "external_evidence");
+  assert.deepEqual(first.evidenceIds, [checkedId]);
+  assert.equal(premiseSourceOfCard(first), "literature", "the page says 文献, not 假设");
+  assert.equal(premiseReasonOfCard(first), "引自 PMID 37676259");
+  assert.equal(premiseSourceOfCard(second), "literature");
+  assert.match(premiseReasonOfCard(second) ?? "", /未核对/);
+  // the literature value could not be a simulated one: the card is the paper's number as the paper gave it
+  assert.equal(second.pointValue, 13.8);
+  await fs.rm(workspace, { recursive: true, force: true });
+});
+
+/**
+ * The refused calls of the two live conversations of 2026-11-01 (`fixtures/vcr-live-refusals-20261101.json`), replayed without a model through
+ * the gateway as it is now: the recorded arguments in the recorded order, the ids a call refers to mapped to the ones the replay made.
+ * Each call that was refused then is held to what the fixture says it is now (`after`), with the reason: a class of refusal that comes back
+ * fails here by name, and so does a refusal that should stand and does not.
+ */
+test("the 15 refused calls of the two live conversations of 2026-11-01, replayed without a model: what passes now, and what still refuses and should", options, async () => {
+  const fixture = JSON.parse(await fs.readFile(new URL("./fixtures/vcr-live-refusals-20261101.json", import.meta.url), "utf8"));
+  const module = compose();
+  const model = modelConversation("replay", module, { seal: module.seal });
+  /** @type {Map<string, string>} */
+  const ids = new Map();
+  const substitute = (/** @type {any} */ value) => { let text = JSON.stringify(value); for (const [from, to] of ids) text = text.replaceAll(from, to); return JSON.parse(text); };
+  const reminders = new Set(["vcr_evidence_reported_unverified", "vcr_assumption_role_missing", "vcr_comparator_record_incomplete", "vcr_evidence_item_incomplete"]);
+  /** @type {Array<Record<string, any>>} */
+  const table = [];
+  for (const call of fixture.c4b3.calls) {
+    const answer = await model.call(call.op, substitute(call.args));
+    /** @type {{ outcome: string, fields: string[], items: Record<string, string> }} */
+    let seen;
+    if (call.op === "write") {
+      const refusals = (answer.data?.issues ?? []).filter((/** @type {any} */ entry) => !reminders.has(entry.code));
+      const indexes = new Set(refusals.map((/** @type {any} */ entry) => entry.index ?? 0));
+      const count = Array.isArray(call.args.items) ? call.args.items.length : 1;
+      seen = { outcome: !refusals.length ? "passes" : (answer.data?.ids?.length ? "partly" : "refuses"), fields: [...new Set(refusals.map((/** @type {any} */ entry) => String(entry.field)))],
+        items: Object.fromEntries([...Array(count).keys()].map((at) => [String(at), indexes.has(at) ? "refuses" : "passes"])) };
+      for (const [at, id] of (answer.data?.ids ?? []).entries()) if (call.recorded.ids?.[at]) ids.set(call.recorded.ids[at], id);
+    } else if (call.args.action === "validate") {
+      seen = { outcome: answer.status === 200 && answer.data?.valid === true ? "passes" : "refuses", fields: (answer.data?.issues ?? []).map((/** @type {any} */ entry) => String(entry.field)), items: {} };
+    } else {
+      seen = { outcome: answer.status === 200 && answer.data?.jobId ? "passes" : "refuses", fields: (answer.issues ?? []).map((/** @type {any} */ entry) => String(entry.field)), items: {} };
+      if (call.recorded.subjectId && answer.data?.subject?.id) ids.set(call.recorded.subjectId, answer.data.subject.id);
+    }
+    if (!call.recorded.refused) {
+      assert.equal(seen.outcome, "passes", `${call.id}: a call that was accepted then is still accepted: ${JSON.stringify(answer).slice(0, 400)}`);
+      continue;
+    }
+    assert.ok(call.after, `${call.id}: a refused call has an expectation`);
+    assert.equal(seen.outcome, call.after.outcome, `${call.id} (${call.after.why}): ${JSON.stringify(answer).slice(0, 600)}`);
+    if (call.after.fields) assert.deepEqual([...new Set(seen.fields)].sort(), [...call.after.fields].sort(), `${call.id}: what still refuses, and by which field`);
+    if (call.after.items) assert.deepEqual(seen.items, call.after.items, `${call.id}: item by item`);
+    table.push({ id: call.id, was: call.recorded.issues?.length ?? 1, now: seen.outcome, fields: seen.fields });
+  }
+  const tally = { passes: table.filter((row) => row.now === "passes").length, partly: table.filter((row) => row.now === "partly").length, refuses: table.filter((row) => row.now === "refuses").length };
+  console.log(`replay c4b3: ${table.length} refused calls then -> ${tally.passes} pass, ${tally.partly} partly (the refused items still refuse), ${tally.refuses} still refuse`);
+  assert.deepEqual([table.length, tally], [14, { passes: 11, partly: 1, refuses: 2 }]);
+
+  // c1: the matching write that was refused on nineteen lines (the first item's eleven are replayed: the second item's criteria were not recorded)
+  const { vcrRuntimeWrite: write } = await import("../src/vcrGateway.mjs");
+  const item = fixture.c1.item;
+  const trial = { registry: "clinicaltrials.gov", registryId: item.registryId, recordHash: "fixture", eligibilityText: item.criteria.map((/** @type {any} */ criterion) => criterion.sourceText).join("\n") };
+  /** @type {any[]} */ const written = [];
+  const answer = await write({ store: {}, service: {}, orchestrator: null, study: { id: "std_c1", userId: "u_c1", projectId: "default", scope: "conversation" }, what: "candidate_trial", items: [item], data: null,
+    evidence: { async candidateRecord() { return { status: "ok", trial }; } },
+    patientTrials: { async holds() { return true; }, async writeTrial(/** @type {any} */ _study, /** @type {any} */ input) { written.push(input); return { trial: { id: "ctr_1" }, created: true, criteria: input.criteria, evaluation: { evaluated: [] } }; } } });
+  assert.deepEqual(answer.issues.filter((/** @type {any} */ entry) => /criterionType/.test(entry.field)), [], "no line is refused for a type");
+  assert.equal(answer.ok, true, JSON.stringify(answer.issues));
+  assert.equal(written[0].criteria.length, 15, "all fifteen criteria are written");
+  const read = answer.results.find((/** @type {any} */ entry) => entry.applied).applied;
+  assert.equal(read.length, fixture.c1.recorded.issuesInTotal === 19 ? 11 : read.length, "the eleven lines that were refused are the eleven words read");
+  assert.deepEqual(written[0].criteria.map((/** @type {any} */ criterion) => criterion.criterionType), ["demographic", "diagnosis", "prior_treatment", "biomarker", "diagnosis", "performance_status", "lab", "lab", "lab", "lab", "diagnosis", "other", "prior_treatment", "comorbidity", "comorbidity"]);
+  console.log("replay c1: the matching write that was refused on 19 lines (11 of them in the first item, replayed) -> 0 refused; 10 types read as the type they mean, 1 (cns) saved as other");
+});
+
+/** The abstract of HIMALAYA as a literature tool preserves it (the capture `createVcrPublicationSources` reads), in a workspace of its own. */
+async function himalayaWorkspace() {
+  const abstract = "# HIMALAYA\n\n- PMID: 37676259\n\n## Abstract\n\nThe median OS was 16.4 months (95% CI, 14.2–19.6) with tremelimumab in combination with durvalumab and 13.8 months (95% CI, 12.3–16.1) with sorafenib.\n";
+  const hashes = { "abstract.md": sha(abstract) };
+  const version = sha(JSON.stringify(hashes));
+  const workspace = await fs.mkdtemp(path.join(os.tmpdir(), "vcr-srcint-"));
+  const captureDir = path.join(workspace, ".evimed-sources/pubmed/PMID37676259", version);
+  await fs.mkdir(captureDir, { recursive: true });
+  await fs.writeFile(path.join(captureDir, "abstract.md"), abstract);
+  await fs.writeFile(path.join(captureDir, "capture.json"), JSON.stringify({ version, artifacts: hashes }));
+  return workspace;
+}
+
+const SORAFENIB_SENTENCE = "13.8 months (95% CI, 12.3–16.1) with sorafenib";
+const paperDesign = (/** @type {Record<string, any>} */ truth = {}) => ({ endpoint: { type: "time_to_event" }, truth: { hazardRatio: 0.75, controlMedian: 13.8, ...truth },
+  design: { kind: "two_arm_fixed", allocation: 0.5 }, analysis: { alpha: 0.025, power: 0.9, sided: 1 }, accrual: { duration: 24, followup: 12 }, timeUnit: "months" });
+
+test("SOURCES a median the call says it read in a paper is the paper's on the result page: one start carries the evidence item, the card and which card the job took the number from; a number the sentence does not print stays an assumption and the job runs", options, async () => {
+  const { createVcrEvidencePipeline } = await import("../src/vcrEvidence.mjs");
+  const { createVcrPublicationSources } = await import("../src/vcrPublicationSources.mjs");
+  const workspace = await himalayaWorkspace();
+  const module = compose();
+  const evidenceStore = new VcrEvidenceStore({ database });
+  const evidence = createVcrEvidencePipeline({ store: evidenceStore, jobs: module.jobs });
+  evidence.attachPublications(createVcrPublicationSources({ resolveProject: async () => ({ workspaceDir: workspace }) }));
+  const model = modelConversation("sources", module, { evidence, evidenceStore });
+  assert.equal((await model.call("write", { what: "task_context" })).status, 200);
+  const study = await model.study();
+  const sources = [
+    { field: "truth.controlMedian", publication: "PMID 37676259", quote: SORAFENIB_SENTENCE },
+    // the sentence prints no 0.75: the premise stays the run's own, and the computation is not refused for it
+    { field: "truth.hazardRatio", publication: "PMID 37676259", quote: SORAFENIB_SENTENCE },
+    // a field no paper's number can be tied to here
+    { field: "accrual.duration", publication: "PMID 37676259", quote: SORAFENIB_SENTENCE },
+  ];
+
+  // validate reads the shape and writes nothing
+  const checked = await model.call("simulate", { action: "validate", kind: "design_analytic", scenario: paperDesign(), sources });
+  assert.equal(checked.status, 200, JSON.stringify(checked));
+  assert.equal(checked.data.valid, true, JSON.stringify(checked.data));
+  assert.deepEqual(checked.data.sources.map((/** @type {any} */ entry) => [entry.field, entry.state, entry.because ?? null]),
+    [["truth.controlMedian", "ready", null], ["truth.hazardRatio", "ready", null], ["accrual.duration", "assumption", "field_not_supported"]]);
+  assert.deepEqual(await store.assumptions(study.id), [], "validate wrote no card");
+  assert.deepEqual(await store.rows("SELECT id FROM evimed_vcr.evidence_items WHERE study_id = $1", [study.id]), [], "and no evidence");
+
+  const started = await model.call("simulate", { action: "start", kind: "design_analytic", scenario: paperDesign(), sources });
+  assert.equal(started.status, 200, JSON.stringify(started));
+  const said = new Map(started.data.sources.map((/** @type {any} */ entry) => [entry.field, entry]));
+  assert.equal(said.get("truth.controlMedian").state, "carried");
+  assert.equal(said.get("truth.controlMedian").checked, true, "the sentence is in the abstract the platform preserved");
+  assert.equal(said.get("truth.controlMedian").paper, "PMID 37676259");
+  assert.deepEqual([said.get("truth.hazardRatio").state, said.get("truth.hazardRatio").because], ["assumption", "number_not_in_sentence"]);
+  assert.equal(said.get("accrual.duration").because, "field_not_supported");
+
+  const cards = await store.assumptions(study.id);
+  assert.deepEqual(cards.map((card) => card.key), ["control_median_tte"], "one card, for the one number the sentence prints");
+  assert.deepEqual([cards[0].sourceKind, cards[0].pointValue, cards[0].unit, cards[0].valueSource], ["external_evidence", 13.8, "months", "extracted"]);
+  assert.equal(cards[0].pooling.citation, "PMID 37676259");
+  const [job] = await store.jobs(study.id);
+  assert.deepEqual(job.checkpoint.bound, [{ key: "control_median_tte", version: 1, path: "truth.controlMedian", value: 13.8 }]);
+  assert.equal((await store.rows("SELECT scenario FROM evimed_vcr.jobs WHERE id = $1", [job.id]))[0].scenario.truth.controlMedian, 13.8, "the scenario is the run's, as written");
+
+  // the same entries again are the same card, not a second one
+  const again = await model.call("simulate", { action: "start", kind: "design_analytic", scenario: paperDesign({ hazardRatio: 0.7 }), sources: [sources[0]] });
+  assert.equal(again.status, 200, JSON.stringify(again));
+  assert.equal((await store.assumptionVersions(study.id, "control_median_tte")).length, 1);
+  assert.equal((await store.rows("SELECT id FROM evimed_vcr.evidence_items WHERE study_id = $1 AND parameter = 'control_median' AND value IS NOT NULL", [study.id])).length, 1);
+
+  // a median of the run's own is not bound to the paper's card
+  const own = await model.call("simulate", { action: "start", kind: "design_analytic", scenario: paperDesign({ controlMedian: 12 }) });
+  assert.equal((await store.jobs(study.id)).find((row) => row.id === own.data.jobId).checkpoint.bound, undefined);
+  // a later start of a design being compared does not name the paper again: its number is, to the digit, the card's, so the card is its source
+  const unnamed = await model.call("simulate", { action: "start", kind: "design_analytic", scenario: paperDesign({ hazardRatio: 0.8 }) });
+  assert.equal(unnamed.status, 200, JSON.stringify(unnamed));
+  assert.equal(unnamed.data.sources, undefined, "nothing was named, and nothing is said");
+  const unnamedJob = (await store.jobs(study.id)).find((row) => row.id === unnamed.data.jobId);
+  assert.deepEqual(unnamedJob.checkpoint.bound, [{ key: "control_median_tte", version: 1, path: "truth.controlMedian", value: 13.8 }]);
+
+  await drainJobs(module, study);
+  const trial = await module.service.tab({ id: study.userId }, study.id, "trial");
+  const control = trial.premises.find((/** @type {any} */ row) => row.key === "control");
+  assert.deepEqual([control.source, control.reason], ["literature", "引自 PMID 37676259"], "the page says 文献 and names the paper");
+  const effect = trial.premises.find((/** @type {any} */ row) => row.key === "effect");
+  assert.equal(effect.source, "assumed", "the hazard ratio is still the run's own");
+
+  // a paper the platform never read: the number is the paper's as reported, and the page says it was not checked
+  const unread = await model.call("simulate", { action: "start", kind: "design_analytic", scenario: paperDesign({ controlMedian: 10.7 }),
+    sources: [{ field: "truth.controlMedian", publication: "PMID 18650514", quote: "median overall survival was 10.7 months in the sorafenib group" }] });
+  assert.equal(unread.data.sources[0].state, "carried", JSON.stringify(unread.data.sources));
+  assert.equal(unread.data.sources[0].checked, false);
+  const stored = (await store.assumptions(study.id)).find((card) => card.key === "control_median_tte");
+  assert.equal(stored.version, 2, "another number for the key is a new version of the card");
+  assert.equal(stored.pooling.unchecked, true);
+
+  // a kind that states no truth is told so, and still runs
+  const population = await model.call("simulate", { action: "start", kind: "generate_population", scenario: { n: 50, population: { variables: [{ name: "age", family: "normal", mean: 60, sd: 10 }] } },
+    sources: [sources[0]] });
+  assert.equal(population.status, 200, JSON.stringify(population));
+  assert.equal(population.data.sources[0].because, "kind_not_supported");
+  // sources that are not a list are said, never thrown
+  const broken = await model.call("simulate", { action: "validate", kind: "design_analytic", scenario: paperDesign(), sources: "PMID 37676259" });
+  assert.equal(broken.status, 200, JSON.stringify(broken));
+  assert.equal(broken.data.sources[0].because, "sources_not_a_list");
+  await fs.rm(workspace, { recursive: true, force: true });
+});
+
+test("SOURCES a design and an assumption written with their paper carry it in the same call: the design rests on the card, and starting it by its id says 文献; an assumption whose sentence does not print its number is written as the run's own setting", options, async () => {
+  const { createVcrEvidencePipeline } = await import("../src/vcrEvidence.mjs");
+  const { createVcrPublicationSources } = await import("../src/vcrPublicationSources.mjs");
+  const workspace = await himalayaWorkspace();
+  const module = compose();
+  const evidenceStore = new VcrEvidenceStore({ database });
+  const evidence = createVcrEvidencePipeline({ store: evidenceStore, jobs: module.jobs });
+  evidence.attachPublications(createVcrPublicationSources({ resolveProject: async () => ({ workspaceDir: workspace }) }));
+  const model = modelConversation("sourceswrite", module, { evidence, evidenceStore });
+
+  const design = await model.call("write", { what: "trial_scenario", items: [{ label: "A 固定 1:1", design: "two_arm_fixed", endpointType: "time_to_event", configuration: paperDesign(),
+    sources: [{ field: "truth.controlMedian", publication: "PMID 37676259", quote: SORAFENIB_SENTENCE }] }] });
+  assert.equal(design.data.ok, true, JSON.stringify(design.data));
+  const study = await model.study();
+  assert.equal(design.data.results.find((/** @type {any} */ entry) => entry.sources).sources[0].state, "carried");
+  const [designId] = design.data.ids;
+  assert.deepEqual((await store.trialScenarios(study.id)).find((row) => row.id === designId).assumptionIds, ["control_median_tte"]);
+
+  const started = await model.call("simulate", { action: "start", kind: "design_analytic", subjectId: designId });
+  assert.equal(started.status, 200, JSON.stringify(started));
+  const job = (await store.jobs(study.id)).find((row) => row.id === started.data.jobId);
+  assert.deepEqual(job.checkpoint.bound.map((/** @type {any} */ entry) => [entry.key, entry.path]), [["control_median_tte", "truth.controlMedian"]],
+    "a design started by its id records the cards the platform laid over it, as the programme's own jobs do");
+  await drainJobs(module, study);
+  const trial = await module.service.tab({ id: study.userId }, study.id, "trial");
+  assert.equal(trial.premises.find((/** @type {any} */ row) => row.key === "control").source, "literature");
+
+  const own = await model.call("write", { what: "assumption", items: [
+    { key: "control_median_os", name: "对照组中位 OS", endpoint: "os", unit: "months", pointValue: 13.8, sources: [{ publication: "PMID 37676259", quote: SORAFENIB_SENTENCE }] },
+    { key: "hazard_ratio", name: "目标风险比", pointValue: 0.75, sourceKind: "expert_set", valueSource: "assumed", effectRole: "realistic_expectation",
+      sources: [{ publication: "PMID 37676259", quote: SORAFENIB_SENTENCE }] },
+  ] });
+  assert.equal(own.data.ok, true, JSON.stringify(own.data));
+  const cards = new Map((await store.assumptions(study.id)).map((card) => [card.key, card]));
+  assert.deepEqual([cards.get("control_median_os").sourceKind, cards.get("control_median_os").pooling.citation], ["external_evidence", "PMID 37676259"]);
+  assert.deepEqual([cards.get("hazard_ratio").sourceKind, cards.get("hazard_ratio").valueSource], ["expert_set", "assumed"], "a sentence that does not print 0.75 leaves the setting the run's own");
+  const reports = own.data.results.filter((/** @type {any} */ entry) => entry.sources).map((/** @type {any} */ entry) => entry.sources[0].state);
+  assert.deepEqual(reports, ["carried", "assumption"]);
+  await fs.rm(workspace, { recursive: true, force: true });
 });

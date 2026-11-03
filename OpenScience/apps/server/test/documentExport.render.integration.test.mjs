@@ -6,7 +6,7 @@ import { spawnSync } from 'node:child_process';
 import { deflateSync } from 'node:zlib';
 import { createDocumentRenderController, documentExportDirectory } from '../src/documentRenderController.mjs';
 import { exportHash } from '../src/documentExport.mjs';
-import { DOCUMENT_RENDERER_VERSION, VCR_EXPORT_KINDS } from '@evimed/domain';
+import { DOCUMENT_RENDERER_VERSION, VCR_RUN_EXPORT_KINDS as VCR_EXPORT_KINDS } from '@evimed/domain';
 import { canonicalVcrDocument } from '../src/vcrDocumentExport.mjs';
 
 const image = process.env.OPEN_SCIENCE_DOCUMENT_RENDER_TEST_IMAGE;

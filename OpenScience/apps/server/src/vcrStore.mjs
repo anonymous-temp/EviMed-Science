@@ -44,7 +44,8 @@ import {
   normalizeVcrAssessment, roleAllows, useWithin,
 } from "@evimed/domain";
 
-import { DISPLAY_TIME_ZONE, VCR_DRAFT_STUDY_NAME, VCR_LEGACY_DEFAULT_STUDY_NAME, VCR_STUDY_NAME_FROM_QUESTION_MAX } from "@evimed/domain";
+import { VCR_BENCHMARK_ONLY_USE_CEILING, vcrBenchmarkBasis } from "@evimed/domain";
+import { DISPLAY_TIME_ZONE, VCR_CONVERSATION_STUDY_NAME, VCR_CONVERSATION_TASK_NAMES_ZH, VCR_DRAFT_STUDY_NAME, VCR_LEGACY_DEFAULT_STUDY_NAME, VCR_STUDY_NAME_FROM_QUESTION_MAX, maskIdentifierSpans } from "@evimed/domain";
 
 import { HttpError } from "./security.mjs";
 import { VCR_COMPARISON_RESULT_KIND, VCR_SCHEMA } from "./vcrPersistence.mjs";
@@ -72,7 +73,7 @@ const list = (value) => (Array.isArray(value) ? value : []);
  */
 export const VCR_RESULT_KINDS = Object.freeze([
   "population", "patient_set", "comparator", "trial_scenario", "design_grid", "model_fit", "model_prediction",
-  "matching", "accrual_forecast", "evidence_pool", "snapshot_profile", "longitudinal", "population_quality",
+  "matching", "accrual_forecast", "evidence_pool", "snapshot_profile", "longitudinal", "population_quality", "population_check", "match_extract",
 ]);
 
 /** Which lineage node kind each research object is. */
@@ -133,6 +134,8 @@ export function vcrStudyFromRow(row) {
     status: String(row.status ?? "active"),
     purpose: ["calculation", "task"].includes(row.purpose) ? row.purpose : "programme",
     scope: row.scope === "conversation" ? "conversation" : "project",
+    // `assigned`: the model's title or the kind of work gave the name and no person has since, so a title or a definition may name it again.
+    nameBasis: row.name_basis === "assigned" ? "assigned" : null,
     steps: normalizedVcrSteps(row.steps),
     budget: object(row.budget),
     outcomeSeal: object(row.outcome_seal),
@@ -144,6 +147,25 @@ export function vcrStudyFromRow(row) {
     updatedAt: iso(row.updated_at),
   };
 }
+
+/**
+ * The tab each table of a study's objects is read on, in the tabs' order: what makes a conversation's study worth listing, and
+ * where it opens. A table is named once; a result hangs off the object it is a result of, so the objects are the evidence.
+ * @type {ReadonlyArray<readonly [string, readonly string[]]>}
+ */
+const VCR_CONVERSATION_STUDY_CONTENT = Object.freeze([
+  ["population", ["populations"]],
+  ["patients", ["patient_sets"]],
+  ["comparator", ["comparator_designs"]],
+  ["trial", ["trial_scenarios", "design_grids", "forecasts"]],
+  ["matching", ["protocol_versions", "criteria", "matching_candidates", "matching_assessments", "candidate_trials", "candidate_trial_assessments"]],
+  ["data", ["study_definitions", "study_precedents", "evidence_items", "curve_extractions", "assumptions", "sources",
+    "source_files", "snapshots", "analysis_tables", "study_packs"]],
+]);
+
+/** The tabs of the study `s` that hold something: one `EXISTS` per table, an array of the tab names in order. */
+const VCR_HELD_TABS_SQL = `ARRAY_REMOVE(ARRAY[${VCR_CONVERSATION_STUDY_CONTENT.map(([tab, tables]) =>
+  `CASE WHEN ${tables.map((table) => `EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.${table} x WHERE x.study_id = s.id)`).join(" OR ")} THEN '${tab}' END`).join(", ")}], NULL)`;
 
 /** The longest a study's name is, in characters: the project's own limit (`projectDisplayName`), because the project carries the same name. */
 const VCR_STUDY_NAME_MAX = 40;
@@ -177,9 +199,38 @@ export function vcrMonthDay(at) {
   return `${get("month")}月${get("day")}日`;
 }
 
-/** Whether a study still carries a name nobody gave it. @param {{ status?: string, name?: string }} study */
+/**
+ * Whether a study still carries a name nobody gave it: a draft's, the placeholder a conversation's study has until it is named, or a
+ * name the model's title or the kind of work gave it (`name_basis = 'assigned'`). A person's rename clears the basis for good.
+ * @param {{ status?: string, name?: string, scope?: string, nameBasis?: string | null }} study
+ */
 export function vcrStudyIsUnnamed(study) {
-  return study?.status === "draft" || study?.name === VCR_DRAFT_STUDY_NAME || study?.name === VCR_LEGACY_DEFAULT_STUDY_NAME;
+  return study?.status === "draft" || study?.name === VCR_DRAFT_STUDY_NAME || study?.name === VCR_LEGACY_DEFAULT_STUDY_NAME
+    || study?.nameBasis === "assigned" || (study?.scope === "conversation" && study?.name === VCR_CONVERSATION_STUDY_NAME);
+}
+
+/**
+ * The name a title gives a conversation's study: the title the model wrote for the research question, with the identifiers of closed
+ * formats taken out (`maskIdentifierSpans`: a record number, a phone number, an identity number, a full date) and cut as a name is.
+ * Nothing the person typed ever reaches a name by this road or any other: the model chooses the words, and the title's contract says it
+ * names the research question and never a person. Nothing left is `null`.
+ * @param {unknown} title
+ * @returns {string | null}
+ */
+export function vcrTitleName(title) {
+  return typeof title === "string" ? vcrStudyNameFrom({ title: maskIdentifierSpans(title) }) || null : null;
+}
+
+/**
+ * What a conversation's study is called when nobody gave it a title: the kind of work it holds and the day it was made, in code
+ * (`患者匹配 · 11月2日`). A study that holds nothing has no kind of work to name and keeps the placeholder.
+ * @param {readonly string[]} held the tabs that hold something (`heldTabs`) @param {string | Date | null} madeAt
+ * @returns {string | null}
+ */
+export function vcrNeutralStudyName(held, madeAt) {
+  const names = /** @type {Record<string, string>} */ (VCR_CONVERSATION_TASK_NAMES_ZH);
+  const tab = held.find((entry) => Object.hasOwn(names, entry));
+  return tab ? `${names[tab]} · ${vcrMonthDay(madeAt)}` : null;
 }
 
 /**
@@ -233,7 +284,7 @@ function assumptionFromRow(row) {
     valueSource: String(row.value_source ?? "assumed"), poolingMethod: text(row.pooling_method), pooling: object(row.pooling),
     evidenceIds: list(row.evidence_ids).map(String), applicability: object(row.applicability),
     reviewState: String(row.review_state ?? "ai_set"), note: String(row.note ?? ""), createdAt: iso(row.created_at),
-    afterFreeze: row.after_freeze === true,
+    afterFreeze: row.after_freeze === true, effectRole: text(row.effect_role),
   };
 }
 
@@ -423,8 +474,15 @@ export class VcrStore extends VcrStoreBase {
     return rows.length===1 ? vcrStudyFromRow(rows[0]) : null;
   }
 
-  /** The authenticated root conversation has its own idempotent task context.
-   * No project name or session binding is changed. */
+  /**
+   * The authenticated root conversation has its own idempotent task context. No project name or session binding is changed.
+   *
+   * It is made with the placeholder name and is named later, never from what anyone said: by the title the model gives the research
+   * question in a `task_context` write (`nameConversationStudy`), by a definition's title (`saveDefinition`), or, when it holds
+   * something and has neither, by the kind of work and the day (`nameFromWhatItHolds`). A person's rename may not be undone.
+   * @param {{ userId: string, projectId: string, rootSessionId: string }} origin
+   * @param {{ create?: boolean }} [options]
+   */
   async taskContext({ userId, projectId, rootSessionId }, { create = true } = {}) {
     if (![userId, projectId, rootSessionId].every(value => typeof value === 'string' && /^[A-Za-z0-9_-]{1,160}$/.test(value))) {
       throw new TypeError('Invalid conversation research scope.');
@@ -436,15 +494,89 @@ export class VcrStore extends VcrStoreBase {
     return this.transaction(async client => {
       const row = (await client.query(`INSERT INTO ${VCR_SCHEMA}.studies
         (id,user_id,project_id,name,purpose,scope,conversation_session_id)
-        VALUES ($1,$2,$3,'对话研究','task','conversation',$4)
+        VALUES ($1,$2,$3,$4,'task','conversation',$5)
         ON CONFLICT (user_id,project_id,conversation_session_id) WHERE scope='conversation'
         DO UPDATE SET conversation_session_id=EXCLUDED.conversation_session_id WHERE studies.deleted_at IS NULL RETURNING *`,
-      [vcrId('study'),userId,projectId,rootSessionId])).rows[0];
+      [vcrId('study'),userId,projectId,VCR_CONVERSATION_STUDY_NAME,rootSessionId])).rows[0];
       if (!row) throw new HttpError(410,'vcr_task_context_deleted','This conversation research context was deleted.');
       await client.query(`INSERT INTO ${VCR_SCHEMA}.members (study_id,user_id,role,invited_by)
         VALUES ($1,$2,'lead',$2) ON CONFLICT DO NOTHING`,[row.id,userId]);
       return vcrStudyFromRow(row);
     });
+  }
+
+  /**
+   * The title the model gave a conversation's research question becomes the study's name, unless a person named it: the placeholder, a
+   * name the kind of work gave it and an earlier title are all replaced (`name_basis = 'assigned'`); a person's rename is not. The
+   * title is masked and cut as a name is (`vcrTitleName`); with nothing left of it the study keeps its name. The tags the study is
+   * found by follow its name.
+   * @param {{ id?: string | null }} study @param {{ title?: unknown }} input
+   * @returns {Promise<ReturnType<typeof vcrStudyFromRow> | null>} the study as named, or `null` when the title named nothing
+   */
+  async nameConversationStudy(study, { title }) {
+    const proposed = vcrTitleName(title);
+    if (!proposed || !study?.id) return null;
+    const row = await this.one(`UPDATE ${VCR_SCHEMA}.studies SET name = $2, name_basis = 'assigned', updated_at = now()
+      WHERE id = $1 AND scope = 'conversation' AND deleted_at IS NULL AND (name_basis = 'assigned' OR (name_basis IS NULL AND name = $3)) RETURNING *`,
+    [String(study.id), proposed, VCR_CONVERSATION_STUDY_NAME]);
+    return this.#tagged(vcrStudyFromRow(row));
+  }
+
+  /**
+   * A conversation's study that holds something and has no name yet is named for the kind of work and the day (`vcrNeutralStudyName`),
+   * in code and from what it holds, never from anything said. Only the placeholder is replaced, so a title or a person's name that
+   * arrived meanwhile stands.
+   * @param {{ id?: string | null, createdAt?: string | null }} study
+   * @returns {Promise<ReturnType<typeof vcrStudyFromRow> | null>}
+   */
+  async nameFromWhatItHolds(study) {
+    if (!study?.id) return null;
+    const name = vcrNeutralStudyName(await this.heldTabs(String(study.id)), study.createdAt ?? null);
+    if (!name) return null;
+    const row = await this.one(`UPDATE ${VCR_SCHEMA}.studies SET name = $2, name_basis = 'assigned', updated_at = now()
+      WHERE id = $1 AND scope = 'conversation' AND deleted_at IS NULL AND name_basis IS NULL AND name = $3 RETURNING *`,
+    [String(study.id), name, VCR_CONVERSATION_STUDY_NAME]);
+    return this.#tagged(vcrStudyFromRow(row));
+  }
+
+  /**
+   * The study with its entity keys made again from the name it now has; a failure to tag leaves it named.
+   * @param {ReturnType<typeof vcrStudyFromRow>} study
+   */
+  async #tagged(study) {
+    if (!study || !this.entityVocabulary) return study;
+    try {
+      const keys = await this.#entityKeys({ name: study.name, question: study.question }, (await this.latestDefinition(study.id))?.pico);
+      if (keys) await this.query(`UPDATE ${VCR_SCHEMA}.studies SET entity_keys = $2::text[] WHERE id = $1`, [study.id, keys]);
+    } catch { /* the study is named; its tags follow the next edit */ }
+    return study;
+  }
+
+  /**
+   * Studies named from the first sentence of their conversation (`name_basis = 'opening'`, made while that road existed) carry words a
+   * person typed: each is named again for the kind of work and the day, or given the placeholder back when it holds nothing. Idempotent:
+   * a study renamed here is `assigned` and is not read again. Runs once per process, after the schema, and never stops the module.
+   */
+  async #retireOpeningNames() {
+    const rows = (await this.database.query(`SELECT s.id, s.created_at, ${VCR_HELD_TABS_SQL} AS held_tabs FROM ${VCR_SCHEMA}.studies s WHERE s.name_basis = 'opening'`)).rows;
+    for (const row of rows) {
+      const name = vcrNeutralStudyName(Array.isArray(row.held_tabs) ? row.held_tabs.map(String) : [], row.created_at);
+      await this.database.query(`UPDATE ${VCR_SCHEMA}.studies SET name = $2, name_basis = $3 WHERE id = $1 AND name_basis = 'opening'`,
+        [row.id, name ?? VCR_CONVERSATION_STUDY_NAME, name ? "assigned" : null]);
+    }
+    return rows.length;
+  }
+
+  /** @type {ReturnType<VcrStoreBase["ready"]> | null} */
+  #named = null;
+
+  /** The schema, then the one-time retirement of the names the first sentence once gave (a failure of the second never fails the first). */
+  ready() {
+    this.#named ??= super.ready().then(async (schema) => { await this.#retireOpeningNames().catch(() => 0); return schema; }, (error) => {
+      this.#named = null;
+      throw error;
+    });
+    return this.#named;
   }
 
   /**
@@ -553,6 +685,35 @@ export class VcrStore extends VcrStoreBase {
           WHERE m.study_id = s.id AND m.user_id = $1 AND m.role = ANY($2::text[])))
       ORDER BY s.updated_at DESC LIMIT 500`, [String(userId), [...VCR_READING_ROLES]]);
     return rows.map(vcrStudyFromRow);
+  }
+
+  /**
+   * The studies the account's conversations made, newest first, for the module's home alone: a conversation's study is made by the
+   * first thing the assistant saves in it (`taskContext`), lives in the person's own project and is in no other list
+   * (`listStudies` is `scope = 'project'`, and the sidebar, the knowledge base and the pickers read that one). Only a study that
+   * holds something is listed -- a row made by a write that was then refused is nothing to come back to -- and each row says which
+   * tabs hold it, one light query for all of them where the home list asks eleven of every study.
+   * @param {string} userId
+   * @param {number} [limit]
+   * @returns {Promise<Array<ReturnType<typeof vcrStudyFromRow> & { heldTabs: string[] }>>}
+   */
+  async conversationStudies(userId, limit = 50) {
+    const rows = await this.rows(`SELECT * FROM (
+        SELECT s.*, ${VCR_HELD_TABS_SQL} AS held_tabs FROM ${VCR_SCHEMA}.studies s
+        WHERE s.user_id = $1 AND s.scope = 'conversation' AND s.deleted_at IS NULL) listed
+      WHERE cardinality(held_tabs) > 0 ORDER BY updated_at DESC, id LIMIT $2`, [String(userId), Math.max(1, Math.min(200, Math.floor(Number(limit)) || 50))]);
+    return rows.map((row) => ({ .../** @type {NonNullable<ReturnType<typeof vcrStudyFromRow>>} */ (vcrStudyFromRow(row)), heldTabs: Array.isArray(row.held_tabs) ? row.held_tabs.map(String) : [] }));
+  }
+
+  /**
+   * The tabs of one study that hold something saved, in the tabs' order (`VCR_CONVERSATION_STUDY_CONTENT`): where a study opens when
+   * the address names no tab, and what its overview lists when it has nothing of its own to say.
+   * @param {string} studyId
+   * @returns {Promise<string[]>}
+   */
+  async heldTabs(studyId) {
+    const row = await this.one(`SELECT ${VCR_HELD_TABS_SQL} AS held_tabs FROM ${VCR_SCHEMA}.studies s WHERE s.id = $1`, [String(studyId)]);
+    return Array.isArray(row?.held_tabs) ? row.held_tabs.map(String) : [];
   }
 
   /**
@@ -670,7 +831,11 @@ export class VcrStore extends VcrStoreBase {
       values.push(value);
       sets.push(`${column} = $${values.length}${cast}`);
     };
-    if (patch.name !== undefined) put("name", String(patch.name));
+    if (patch.name !== undefined) {
+      put("name", String(patch.name));
+      // A person gave it a name: it is no longer one the model or the kind of work gave, and neither a title nor a definition names it again.
+      sets.push("name_basis = NULL");
+    }
     if (patch.question !== undefined) put("question", String(patch.question));
     if (this.entityVocabulary && (patch.name !== undefined || patch.question !== undefined)) {
       // The keys describe the name and question they were made from: new ones, or none until they can be made.
@@ -774,7 +939,10 @@ export class VcrStore extends VcrStoreBase {
     // The structured population and intervention stand in for a question nobody wrote (a definition always states one of them).
     const pico = object(input.pico);
     const stated = [pico.population, pico.intervention].filter((value) => typeof value === "string" && value.trim()).join(" ");
-    const proposed = unnamed ? vcrStudyNameFrom({ title: input.title, question: question || before?.question || asked || stated }) : null;
+    // A conversation's study is named by a title and by nothing the definition quotes: the title is the model's name for the research
+    // question (identifiers taken out); the question and the population are sentences, and a sentence is not a name there.
+    const proposed = !unnamed ? null : before?.scope === "conversation" ? vcrTitleName(input.title)
+      : vcrStudyNameFrom({ title: input.title, question: question || before?.question || asked || stated });
     // The definition names the disease and the treatment: the study is tagged again from it.
     const entityKeys = before ? await this.#entityKeys({ name: proposed ?? before.name, question: question || before.question }, input.pico) : null;
     const saved = await this.transaction(async (client) => {
@@ -794,7 +962,7 @@ export class VcrStore extends VcrStoreBase {
             for (let n = 2; await taken(name) && n < 50; n += 1) name = `${dated} ${n}`;
           }
         }
-        const row = (await client.query(`UPDATE ${VCR_SCHEMA}.studies SET name = $2, question = CASE WHEN question = '' THEN $3 ELSE question END,
+        const row = (await client.query(`UPDATE ${VCR_SCHEMA}.studies SET name = $2, name_basis = ${proposed ? (before.scope === "conversation" ? "'assigned'" : "NULL") : "name_basis"}, question = CASE WHEN question = '' THEN $3 ELSE question END,
             status = CASE WHEN status = 'draft' THEN 'active' ELSE status END, updated_at = now() WHERE id = $1 RETURNING status`,
         [before.id, name, question])).rows[0];
         named = { name, status: String(row?.status ?? "active") };
@@ -813,8 +981,8 @@ export class VcrStore extends VcrStoreBase {
         object: String(row.id), detail: { version } });
       return { definition: this.#definitionFromRow(row), named };
     });
-    if (saved.named && before) {
-      // The project carries the study's name; a failure to rename it leaves the study named.
+    if (saved.named && before && before.scope !== "conversation") {
+      // The project carries the study's name (a conversation's study sits in the person's own project and never names it); a failure to rename it leaves the study named.
       await Promise.resolve(this.onStudyNamed?.({ study: { ...before, name: saved.named.name, status: saved.named.status }, previousName: before.name }))
         .catch(() => null);
     }
@@ -951,24 +1119,29 @@ export class VcrStore extends VcrStoreBase {
       // is not computed again — never a stale prior silently standing behind a new value.
       // `distribution: {}` says 「none」 in as many words.
       let distribution = input.distribution;
-      if (distribution === undefined && version > 1) {
+      // An effect's role (A13) is a fact about the card, not about its number: an edit that does not say it keeps the one it had.
+      let effectRole = input.effectRole ?? null;
+      if ((distribution === undefined || input.effectRole === undefined) && version > 1) {
         // The card the study has: a version written after the freeze is beside it, not what an edit starts from.
-        const previous = (await client.query(`SELECT point_value, distribution FROM ${VCR_SCHEMA}.assumptions
+        const previous = (await client.query(`SELECT point_value, distribution, effect_role FROM ${VCR_SCHEMA}.assumptions
           WHERE study_id = $1 AND key = $2 AND NOT after_freeze ORDER BY version DESC LIMIT 1`, [input.studyId, String(input.key)])).rows[0];
-        const sameValue = input.pointValue === undefined || input.pointValue === null
-          ? previous?.point_value == null : Number(previous?.point_value) === Number(input.pointValue);
-        distribution = previous && sameValue ? object(previous.distribution) : {};
+        if (input.effectRole === undefined) effectRole = text(previous?.effect_role);
+        if (distribution === undefined) {
+          const sameValue = input.pointValue === undefined || input.pointValue === null
+            ? previous?.point_value == null : Number(previous?.point_value) === Number(input.pointValue);
+          distribution = previous && sameValue ? object(previous.distribution) : {};
+        }
       }
       const row = (await client.query(`INSERT INTO ${VCR_SCHEMA}.assumptions
         (id, study_id, user_id, key, version, name, endpoint, unit, point_value, distribution, sensitivity, source_kind,
-         value_source, pooling_method, pooling, evidence_ids, applicability, review_state, note, after_freeze)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, $12, $13, $14, $15::jsonb, $16::text[], $17::jsonb, $18, $19, $20)
+         value_source, pooling_method, pooling, evidence_ids, applicability, review_state, note, after_freeze, effect_role)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, $12, $13, $14, $15::jsonb, $16::text[], $17::jsonb, $18, $19, $20, $21)
         RETURNING *`,
       [vcrId("assumption"), input.studyId, String(input.userId), String(input.key), version, String(input.name ?? input.key),
         input.endpoint ?? null, input.unit ?? null, input.pointValue ?? null, JSON.stringify(distribution ?? {}),
         JSON.stringify(input.sensitivity ?? {}), String(input.sourceKind ?? "expert_set"), String(input.valueSource ?? "assumed"),
         input.poolingMethod ?? null, JSON.stringify(input.pooling ?? {}), list(input.evidenceIds).map(String),
-        JSON.stringify(input.applicability ?? {}), input.reviewState ?? "ai_set", String(input.note ?? ""), input.afterFreeze === true])).rows[0];
+        JSON.stringify(input.applicability ?? {}), input.reviewState ?? "ai_set", String(input.note ?? ""), input.afterFreeze === true, effectRole])).rows[0];
       await this.audit({ client, studyId: input.studyId, userId: String(input.userId), action: "vcr.assumption.save",
         object: String(row.id), detail: { key: String(input.key), version, ...(input.afterFreeze === true ? { afterFreeze: true } : {}) } });
       return assumptionFromRow(row);
@@ -1239,7 +1412,8 @@ export class VcrStore extends VcrStoreBase {
    *   conclusion?: string | null, notEstimableRule?: string | null, counts?: Record<string, any>, measures?: unknown[],
    *   diagnostics?: Record<string, any>, tables?: unknown[], tiers?: string[],
    *   models?: Array<{ tier?: string, risk?: string, evidence?: string[], name?: string }>,
-   *   supersedesSubjects?: string[], requestedUse?: string }} input
+   *   supersedesSubjects?: string[], requestedUse?: string, method?: string | null }} input
+   *   `method` is the engine method that made the numbers, for the class of the result (a benchmark has a lower ceiling of use).
    *   `supersedesSubjects` are earlier versions of the same object — a new version of a labelled trial
    *   scenario is a new row with its own id, and the result of the version it replaces is no longer current.
    * @param {{ client?: any }} [options] the caller's transaction, when the result has to land with other rows
@@ -1259,11 +1433,18 @@ export class VcrStore extends VcrStoreBase {
     // its declared risk's and what its held evidence supports, and the weakest
     // decides (`intendedUseCeilingFor`). A model short of its evidence is
     // reported by name, whichever of the three set the limit.
-    const ceiling = detail.ceiling;
+    // A benchmark (a curve reconstructed from the literature, an unanchored MAIC, a model's prediction; A8) informs a design and is not an
+    // analysis of an effect: whatever the method's tier would allow, its use is no higher than design support.
+    // (A stage folded into an earlier one carries that one's word in its diagnostics; this result is judged on its own method and numbers.)
+    const { benchmarkBasis: _earlier, ...ownDiagnostics } = object(input.diagnostics);
+    const benchmark = vcrBenchmarkBasis({ method: input.method ?? null, diagnostics: ownDiagnostics, measures: /** @type {any} */ (input.measures ?? null) });
+    const tierCeiling = detail.ceiling;
+    const ceiling = benchmark && !useWithin(tierCeiling, VCR_BENCHMARK_ONLY_USE_CEILING) ? VCR_BENCHMARK_ONLY_USE_CEILING : tierCeiling;
     const intendedUse = useWithin(requested, ceiling) ? requested : ceiling;
     const evidenceLimited = detail.limitedBy.some((entry) => entry.cause === "evidence");
     const downgrade = intendedUse === requested ? null : {
-      requested, ceiling, reason: evidenceLimited || shortfalls.length ? "model_evidence_missing" : "model_tier_ceiling",
+      requested, ceiling,
+      reason: ceiling !== tierCeiling ? "benchmark_only" : evidenceLimited || shortfalls.length ? "model_evidence_missing" : "model_tier_ceiling",
       models: [...list(input.tiers).map((tier) => ({ name: "method", tier: String(tier), risk: "none" })),
         ...models.map((model) => ({ name: String(model?.name ?? "model"), tier: String(model?.tier ?? "scenario"), risk: String(model?.risk ?? "none") }))],
       missingEvidence: shortfalls,
@@ -1283,7 +1464,7 @@ export class VcrStore extends VcrStoreBase {
         // The models a result used travel with it whether or not they lowered
         // its use: a page that read the tiers only off a downgrade would read
         // a result that needed no downgrade as having used no model at all.
-        JSON.stringify({ ...object(input.diagnostics), ...(tiers.length ? { modelsUsed: [
+        JSON.stringify({ ...ownDiagnostics, ...(benchmark ? { benchmarkBasis: benchmark } : {}), ...(tiers.length ? { modelsUsed: [
           ...list(input.tiers).map((tier) => ({ name: "method", tier: String(tier), risk: "none" })), ...models] } : {}) }),
         JSON.stringify(input.tables ?? []),
         intendedUse, downgrade == null ? null : JSON.stringify(downgrade)])).rows[0];

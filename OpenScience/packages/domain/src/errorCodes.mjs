@@ -786,6 +786,16 @@ export const terminalEvidenceSourceErrorCodes = new Set([
   // platform writes itself is refused by name: the run fills what it was told is its own.
   "vcr_model_card_incomplete",
   "vcr_model_assessment_incomplete",
+  // A comparator's records (the target trial, the applicability) and an effect card's role that the run has not written: reminders in
+  // the answer of the write that saved the object. The object is saved and computed as it stands.
+  "vcr_comparator_record_incomplete",
+  "vcr_assumption_role_missing",
+  "vcr_evidence_item_incomplete",
+  // A publication's number the platform could not hold against a text it read: saved as reported and unchecked, a reminder on the item.
+  "vcr_evidence_reported_unverified",
+  // A candidate trial written for a registry record that has no original eligibility wording (ChiCTR is a listing): saved, every criterion
+  // unknown for 缺登记原文. A warning on the item the run wrote, not a refusal.
+  "registry_text_missing",
   "vcr_report_section_invalid",
   // Malformed calls into the specialist workers and the science connectors:
   // a bad action, an id that is not one, a path outside the workspace, an
@@ -1208,6 +1218,9 @@ export function runtimeStartRecovery(code, status) {
  * entirely.
  */
 export const CONTROL_PLANE_ERROR_CODES = Object.freeze([
+  // 2026-11-02: the data-analysis API's own limits (`dataAnalysisRoutes.mjs`, `dataAnalysisService.mjs`).
+  'analysis_input_busy',
+  'analysis_limit_reached',
   // 2026-10-13: memory on OpenViking's native engine. The first four are what a person on the memory page can be answered
   // with; the `memory_gateway_*` ones are what the memory gateway answers a runtime's memory plugin (`memoryGateway.mjs`).
   'memory_engine_unavailable',
@@ -1472,11 +1485,6 @@ export const VCR_ROUTE_ERROR_CODES = Object.freeze([
   'vcr_patient_not_found',
   'vcr_rows_query_invalid',
   'vcr_rows_too_large',
-  'vcr_card_edit_refused',
-  'vcr_card_edit_empty',
-  'vcr_card_edit_unchanged',
-  'vcr_card_not_found',
-  'vcr_card_not_current',
   'vcr_tab_not_found',
   'vcr_job_kind_invalid',
   'vcr_job_scenario_invalid',
@@ -1577,6 +1585,11 @@ export const VCR_WRITE_ISSUE_CODES = Object.freeze([
   'vcr_interval_unnamed',
   'vcr_model_card_incomplete',
   'vcr_model_assessment_incomplete',
+  'vcr_comparator_record_incomplete',
+  'vcr_assumption_role_missing',
+  'vcr_evidence_item_incomplete',
+  'vcr_evidence_reported_unverified',
+  'registry_text_missing',
   'vcr_report_section_invalid',
 ])
 
@@ -1633,9 +1646,11 @@ export const VCR_MODULE_ERROR_CODES = Object.freeze([
   // evidence and matching
   'vcr_asof_invalid', 'vcr_assessment_not_found', 'vcr_criteria_missing', 'vcr_pool_endpoint_key_required',
   'vcr_precedent_not_in_study', 'vcr_protocol_version_not_found',
-  'vcr_assessment_save_failed', 'vcr_evaluation_failed', 'vcr_recheck_failed',
+  'vcr_assessment_save_failed', 'vcr_evaluation_failed', 'vcr_recheck_failed', 'vcr_parsed_criteria_unreadable', 'vcr_parsed_criteria_unsaved',
+  // the batch reading of patient records (vcrMatchBatch.mjs) and the short record of a result (vcrResultRecord.mjs)
+  'vcr_extract_failed', 'vcr_extract_incomplete', 'vcr_extract_timeout', 'vcr_extract_unreadable', 'vcr_result_not_found',
   // jobs, derived tables and the orchestrator's step notes
-  'vcr_derived_table_missing', 'vcr_derived_table_unsupported', 'vcr_engine_table_invalid', 'vcr_job_attempts_exhausted',
+  'vcr_derived_table_missing', 'vcr_population_profile_missing', 'vcr_derived_table_unsupported', 'vcr_engine_table_invalid', 'vcr_job_attempts_exhausted',
   'vcr_object_unknown', 'vcr_scenario_endpoint_missing', 'vcr_scenario_grid_empty', 'vcr_scenario_unknown_fields',
   'vcr_model_not_applicable', 'vcr_model_not_found', 'vcr_model_interface_not_hosted',
   // a computation that is not about the population it is filed under, and one the engine's budget cannot finish (vcrSnapshotBinding.mjs, vcrSynthesisLimits.mjs)
@@ -2129,6 +2144,8 @@ export function turnEndErrorCode(kind, wireCode, wireStatus) {
  * code is visibly untranslated rather than invisibly generic.
  */
 export const ERROR_CODE_MESSAGES = Object.freeze({
+  analysis_input_busy: '这个账户（或服务）同时在接收的数据文件已达上限，稍等片刻再重新发送；已保存的数据不受影响。',
+  analysis_limit_reached: '这个账户保存的分析数量已达上限。先删除不再需要的分析，再新建。',
   // A project's runtime held by the per-project limit of a gateway that spends outside resources (`projectGatewayLimit.mjs`).
   public_source_gateway_project_rate_limited: '这个项目一分钟内读取公共数据源的次数已达上限，稍等片刻再继续；已读到的内容不受影响。',
   public_source_gateway_project_busy: '这个项目同时在读的公共数据源请求过多，等当前的读完再继续。',
@@ -2348,11 +2365,6 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_patient_not_found: '这一批记录里没有这位虚拟患者；回到名单重新选。',
   vcr_rows_query_invalid: '这张表没有这一列，不能按它排序或筛选；换一列再试。',
   vcr_rows_too_large: '这张表太长，不能整表排序；先用筛选缩小范围，或下载后在本地处理。',
-  vcr_card_edit_refused: '这样改不成立，没有保存；按提示改正后再试。',
-  vcr_card_edit_empty: '没有要改的设定。',
-  vcr_card_edit_unchanged: '设定没有变化，没有生成新版本。',
-  vcr_card_not_found: '没有找到要修改的内容；刷新页面后再试。',
-  vcr_card_not_current: '这项内容已经有更新的版本；刷新页面后在新版本上修改。',
   vcr_tab_not_found: '研究页没有这个页签。',
   vcr_job_kind_invalid: '没有这种计算；请在页面上给出的计算类型里选。',
   vcr_job_scenario_invalid: '这项计算的参数不符合引擎的要求，没有排队；按提示的字段修改后再提交。',
@@ -2426,6 +2438,11 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_number_unparsed: '报告里有读不成数字引用的 {{n:…}}；写成 {{n:路径|格式}}，格式用小写。',
   vcr_interval_unnamed: '区间没有写明是哪一种（置信、可信、预测或蒙特卡洛），补上再写。',
   vcr_model_card_incomplete: '这张模型卡缺少它所用接口要求的内容；模型已保存，适用性检查会逐项说明缺什么，补齐后再写一个版本。',
+  vcr_comparator_record_incomplete: '这项对照的记录（目标试验的七个要素、适用性）还有没写的项；这一版已保存并照常计算，补上后再写一个版本。',
+  vcr_assumption_role_missing: '这张效应卡没有写它是“重要差异”还是“现实预期”；已保存，补上后再写一个版本。',
+  registry_text_missing: '这条登记记录没有入排条件原文（ChiCTR 经证据接口只有清单）；条件已保存，评估时一律按未知算，原因是缺登记原文，不会判成满足或不满足。',
+  vcr_evidence_item_incomplete: '这条抽取值还缺合并要用的项（置信区间或样本量）；已保存，论文里有就补进同一条，论文没有报告就另写一条“未报告”。',
+  vcr_evidence_reported_unverified: '这条文献数值已保存，但引文没能对上平台读到的原文，所以标为“未核对”；它仍可作为假设卡的依据，取回原文后再写同一条就会核对。',
   vcr_model_assessment_incomplete: '这条模型评估记录还有没填的项（关注的问题、使用情境、评级及理由、技术标准等）；已保存，文件里会写「未填写」，补上后再写一个版本。',
   vcr_report_section_invalid: '这份文件的文字只写规定的几节，表格与登记项由平台写；这次提交的文字没有保存，换成允许的节再写。',
   // The trial registry channel.
@@ -2552,7 +2569,15 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_assessment_save_failed: '匹配评估没有保存成功，下一轮会重试。',
   vcr_evaluation_failed: '匹配判定在这位受试者上出错，其余照常。',
   vcr_recheck_failed: '到期复评没有完成，下一轮会重试。',
+  vcr_extract_failed: '这份病历没有读成；已读完的保留，没读成的会在下一次启动时再读。',
+  vcr_extract_incomplete: '模型的回答被截断了，这份病历没有读成；下一次启动时会再读它。',
+  vcr_extract_timeout: '读这份病历超时了，没有读成；下一次启动时会再读它。',
+  vcr_extract_unreadable: '模型的回答不是能读的格式，这份病历没有读成；下一次启动时会再读它。',
+  vcr_result_not_found: '这条结果不在这个研究里。',
+  vcr_parsed_criteria_unreadable: '本账户以前对这份登记记录的解析现在读不出来；这次需要重新写入选排除条件，其余照常。',
+  vcr_parsed_criteria_unsaved: '这次写的条件没能记到账户里供下一个研究沿用；这个试验本身已保存，下一个研究需要重新写条件。',
   vcr_derived_table_missing: '这项计算需要的派生数据表不存在。',
+  vcr_population_profile_missing: '这份人群还没有可以对照的生成结果；先生成人群，再和第二份基线表对照。',
   vcr_derived_table_unsupported: '这种派生数据表不能作为这项计算的输入。',
   vcr_engine_table_invalid: '统计引擎返回的数据表与它的记录对不上，已拒绝。',
   vcr_job_attempts_exhausted: '这项计算已重试到上限，不再重跑。',
@@ -3174,6 +3199,8 @@ const ERROR_CODE_OUTCOMES = Object.freeze({
   agent_run_active: 'capped',
   agent_run_limit_reached: 'capped',
   project_limit_reached: 'capped',
+  analysis_input_busy: 'capped',
+  analysis_limit_reached: 'capped',
   default_project_protected: 'capped',
   // Memory on the native engine (2026-10-13): what the page or the gateway refused before asking the engine, and the engine not answering.
   memory_engine_unavailable: 'upstream',

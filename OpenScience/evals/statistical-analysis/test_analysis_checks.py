@@ -402,3 +402,20 @@ def test_predictor_role_checks_use_explicit_roles_not_clinical_name_blacklists()
     }])
     assert not ({"identifier_in_predictors", "split_in_predictors", "probability_in_predictors"} & codes(result))
     assert result["validation"]["status"] == "supported_by_declared_checks"
+
+
+def test_assumption_test_interpretation_never_turns_nonsignificance_into_proof():
+    interpret = checks().interpret_assumption_test
+    for p in (0.05, 0.9, 1.0):
+        result = interpret(p, alpha=0.05)
+        assert result['status'] == 'complete'
+        assert result['conclusion'] == 'not_rejected'
+        assert result['assumptionEstablished'] is False
+        assert 'does not establish' in result['interpretation']
+    result = interpret(0.001, alpha=0.05)
+    assert result['conclusion'] == 'rejected'
+    assert result['assumptionEstablished'] is False
+    for value in (None, float('nan'), -0.1, 1.1, True, '0.5'):
+        assert interpret(value)['status'] == 'unsupported'
+    for alpha in (0, 1, None, float('nan')):
+        assert interpret(0.5, alpha=alpha)['status'] == 'unsupported'

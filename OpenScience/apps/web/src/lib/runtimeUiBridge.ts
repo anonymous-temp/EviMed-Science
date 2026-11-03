@@ -296,14 +296,18 @@ export function useFrameRunBinding({ scope, readRuns, sessionId, enabled, postRu
         if (active && state.runId === runId) posts.current.postEvidence(evidence);
       }).catch(() => { /* the tabs say there is nothing yet; the next change reads again */ if (active) evidenceKey = ""; });
     };
-    let wasRunning = false;
+    const settledRuns = new Set<string>();
     const publish = () => {
       sender.push(state);
       refreshEvidence();
       // A turn that ended may have written to the project the page beside it shows; polling would find out tens of seconds later.
-      const running = state.state === "running";
-      if (wasRunning && !running) window.dispatchEvent(new CustomEvent(CONVERSATION_SETTLED_EVENT, { detail: { sessionId } }));
-      wasRunning = running;
+      const terminal = state.state === "succeeded" || state.state === "failed" || state.state === "canceled";
+      // A short native turn can finish between ledger reads: observing its
+      // terminal record is sufficient, even when its running state was missed.
+      if (state.runId && terminal && !settledRuns.has(state.runId)) {
+        settledRuns.add(state.runId);
+        window.dispatchEvent(new CustomEvent(CONVERSATION_SETTLED_EVENT, { detail: { sessionId } }));
+      }
     };
 
     const bind = (run: WebAgentRun | null) => {

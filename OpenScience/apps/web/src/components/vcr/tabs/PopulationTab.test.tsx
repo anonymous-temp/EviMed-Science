@@ -142,6 +142,24 @@ describe("人群 · a generated population", () => {
     installVcrServer(network.productRequest, { [tab("population")]: raw, ...overrides });
   };
 
+  it("opens with the premises of the generated records: independence is an assumption, the source trial's likeness is not verified", async () => {
+    serve((raw) => {
+      raw.premises = [
+        { key: "correlation", label: "变量之间的相关性", value: "假设相互独立", source: "assumed", decisive: true },
+        { key: "similarity", label: "与来源试验人群的相似性", value: "未验证，只复现来源给出的汇总数", source: "assumed", decisive: true },
+        { key: "sampling", label: "参数的不确定度", value: "没有重抽：参数按给定值固定", source: "default", decisive: true },
+      ];
+    });
+    const { container, spies } = draw();
+    const block = await found(container, "[data-vcr-premises]");
+    expect(block.querySelectorAll("[data-vcr-premises-open] [data-vcr-premise]")).toHaveLength(3);
+    expect(block.querySelector("[data-vcr-premise='correlation']")).toHaveTextContent("假设相互独立");
+    expect(block.querySelector("[data-vcr-premise='sampling']")).toHaveTextContent("默认");
+    await userEvent.click(within(block).getByRole("button", { name: "让 AI 调整：变量之间的相关性" }));
+    expect(spies.openChat).toHaveBeenCalledTimes(1);
+    expect(spies.openChat.mock.calls[0][0]).toContain("改“变量之间的相关性”（现在是 假设相互独立）");
+  });
+
   it("carries a synthetic quality report of values, tagged exploratory, and no verdict", async () => {
     const quality: VcrQualityReport = {
       tag: "合成 · 探索性", trainingRecords: 3412, copies: 1,
@@ -238,7 +256,7 @@ describe("人群 · a generated population", () => {
       web.fetchWithWebAuth.mockResolvedValue(new Response("a,b\n1,2\n", { status: 200, headers: { "content-disposition": 'attachment; filename="synthetic-population.csv"' } }));
       const { container } = draw();
       await screen.findByRole("table", { name: "每个变量设定的分布和生成的结果" });
-      await userEvent.click(within(band(container)).getByRole("button", { name: "下载记录" }));
+      await userEvent.click(within(band(container)).getByRole("button", { name: "下载 CSV" }));
       await waitFor(() => expect(click).toHaveBeenCalled());
       expect(String(web.fetchWithWebAuth.mock.calls[0][0])).toMatch(/\/vcr\/studies\/std_1\/records\/res_9\.csv$/);
       expect((click.mock.contexts[0] as HTMLAnchorElement).download).toBe("synthetic-population.csv");
@@ -249,7 +267,7 @@ describe("人群 · a generated population", () => {
       web.fetchWithWebAuth.mockResolvedValue(new Response(JSON.stringify({ error: "x", code: "vcr_records_not_synthetic" }), { status: 403, headers: { "content-type": "application/json" } }));
       const { container } = draw();
       await screen.findByRole("table", { name: "每个变量设定的分布和生成的结果" });
-      await userEvent.click(within(band(container)).getByRole("button", { name: "下载记录" }));
+      await userEvent.click(within(band(container)).getByRole("button", { name: "下载 CSV" }));
       await waitFor(() => expect(toasts.error).toHaveBeenCalled());
       expect(click).not.toHaveBeenCalled();
     });
@@ -258,7 +276,7 @@ describe("人群 · a generated population", () => {
       serve((raw) => { raw.download = null; });
       const { container } = draw();
       await screen.findByRole("table", { name: "每个变量设定的分布和生成的结果" });
-      expect(within(band(container)).queryByRole("button", { name: "下载记录" })).toBeNull();
+      expect(within(band(container)).queryByRole("button", { name: "下载 CSV" })).toBeNull();
     });
   });
 
@@ -283,7 +301,7 @@ describe("人群 · a generated population", () => {
   it("offers a reader who cannot write the download and nothing that would be refused", async () => {
     serve();
     const { container } = draw(readOnly());
-    await within(await found(container, "[data-page-chrome]")).findByRole("button", { name: "下载记录" });
+    await within(await found(container, "[data-page-chrome]")).findByRole("button", { name: "下载 CSV" });
     expect(within(band(container)).queryByRole("button", { name: "让 AI 生成新版本" })).toBeNull();
     expect(within(band(container)).queryByRole("button", { name: "让 AI 调整设定" })).toBeNull();
   });

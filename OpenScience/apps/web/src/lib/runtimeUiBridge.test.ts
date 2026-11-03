@@ -219,6 +219,23 @@ describe("keeping the frame's run view current", () => {
     expect(mocks.subscribe).toHaveBeenCalledTimes(1);
   });
 
+  it("announces a short completed turn first observed in the ledger", async () => {
+    mocks.subscribe.mockImplementation(() => () => {});
+    mocks.listRuns.mockResolvedValue([run({ status: "succeeded", finishedAt: "2026-09-18T02:00:00.000Z" })]);
+    const settled = vi.fn();
+    window.addEventListener("evimed:conversation-settled", settled);
+    const hook = renderHook(() => useFrameRunBinding({ sessionId: "session-a", enabled: true, postRunState: vi.fn(), postEvidence: vi.fn(), pollMs: 10 }));
+    try {
+      await vi.waitFor(() => expect(settled).toHaveBeenCalledTimes(1));
+      await vi.waitFor(() => expect(mocks.listRuns.mock.calls.length).toBeGreaterThan(1));
+      expect(settled).toHaveBeenCalledTimes(1);
+      expect(settled.mock.calls[0][0].detail).toEqual({ sessionId: "session-a" });
+    } finally {
+      hook.unmount();
+      window.removeEventListener("evimed:conversation-settled", settled);
+    }
+  });
+
   it("does nothing until the frame is listening", () => {
     const postRunState = vi.fn();
     renderHook(() => useFrameRunBinding({ sessionId: "session-a", enabled: false, postRunState, postEvidence: vi.fn() }));

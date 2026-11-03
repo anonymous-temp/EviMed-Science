@@ -79,6 +79,8 @@ and are not current clinical authority. Verify every material rule against the
 current official label, guideline, pharmacopoeia, and local governance policy;
 an unavailable or empty private index is an evidence gap, not a negative finding.
 
+For a material current approval, label, withdrawal or availability claim, compare the exact product and jurisdiction against subsequent regulator decisions and the latest available official label as of the decision date. A dated label or search result is not proof that it remains current; if verification is unavailable, retain it as dated evidence and state that present status is unconfirmed. Never infer product availability from another medicine’s label wording.
+
 The public literature search returns bibliographic metadata unless it explicitly
 includes abstract or full-text fields. Do not assign study design or evidence
 level, summarize findings, or claim an outcome from titles alone.

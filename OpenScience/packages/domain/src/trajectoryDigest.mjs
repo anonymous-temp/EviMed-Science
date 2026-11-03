@@ -62,6 +62,21 @@ function typedText(text) {
   return stripPlatformTags(String(text ?? '').replace(INJECTED_BLOCK, ''))
 }
 
+/**
+ * A research goal is started with the kernel's own gesture for a skill: the control plane sends `/loopx <the person's sentence>`
+ * (`apps/server/src/researchGoal.mjs`, which names the route) and the kernel's transcript holds it as sent. The gesture is the platform's
+ * and the sentence the person's, so on that route the one closed token at the head of the message is not theirs. A token, never language:
+ * the run is told by the route the control plane minted, and the word must stand alone.
+ */
+const RESEARCH_GOAL_ROUTE = 'research-goal'
+const RESEARCH_GOAL_GESTURE = /^\s*\/loopx(?:\s+|$)/
+
+/** @param {any} run @returns {boolean} */
+const startedAsResearchGoal = (run) => {
+  const route = String(run?.effectiveRouteReason ?? '')
+  return route === RESEARCH_GOAL_ROUTE || route.endsWith(`:${RESEARCH_GOAL_ROUTE}`)
+}
+
 /** @param {any} message @returns {string} the text parts of one transcript message, joined */
 export function transcriptMessageText(message) {
   return (message?.parts ?? [])
@@ -193,6 +208,8 @@ export function trajectoryDigest(transcript, run, options = {}) {
   /** @param {string} text */
   const unsafe = (text) => { if (identifierShapesIn(text).length) { sensitive += 1; return true } return false }
 
+  // On a research goal's route the gesture at the head of the message is the platform's, not the person's.
+  const goalGesture = startedAsResearchGoal(run) ? RESEARCH_GOAL_GESTURE : /^$/
   // The first typed message of each own turn.
   /** @type {Map<number, any>} */
   const firstOf = new Map()
@@ -208,7 +225,7 @@ export function trajectoryDigest(transcript, run, options = {}) {
     .map((message) => ({
       sessionId: typeof message.sessionId === 'string' ? message.sessionId : null,
       seq: Number.isSafeInteger(message.seq) ? Number(message.seq) : null,
-      text: bounded(typedText(transcriptMessageText(message)), limits.requestChars),
+      text: bounded(typedText(transcriptMessageText(message)).replace(goalGesture, ''), limits.requestChars),
     }))
     .filter((entry) => entry.text && !unsafe(entry.text))
     .slice(0, limits.requests)

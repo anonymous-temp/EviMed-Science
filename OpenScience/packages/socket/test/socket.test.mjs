@@ -1211,7 +1211,7 @@ test("the guidance offers the capability catalogue as an index of professional w
   const text = buildGuidanceText(capabilities, { askUserEnabled: false, capsuleActive: true, reviewEnabled: false });
   // One line: the id and the contract kind a plan has to name, and the name a
   // reader knows it by. What it is for in detail arrives with the plan.
-  assert.match(text, /^- `clinical-evidence-synthesis`（clinical-evidence-report）临床证据深度分析$/m);
+  assert.match(text, /^- `clinical-evidence-synthesis`（clinical-evidence-report）文献综述$/m);
   assert.doesNotMatch(text, /何时用：|需要证据综述时/, "the long catalogue line rode every request of every conversation");
   // The sentence that made the catalogue a boundary is gone, and the index
   // says what it is not (2026-10-12 review, GA02).
@@ -1226,7 +1226,11 @@ test("the guidance offers the capability catalogue as an index of professional w
   // With the tool mounted, a question is for what changes the next step, never a ceremony (principle 17).
   const asking = buildGuidanceText(capabilities, { askUserEnabled: true, capsuleActive: true, reviewEnabled: false });
   assert.match(asking, /默认不问。按最合理的理解就能做的，直接做完、答完：有几种情形就把几种情形分开说清楚/);
-  assert.match(asking, /只有缺的东西让事情根本没法开始（要处理的文件或数据没给），或者动作不可撤回时，才用 `ask_user_question` 问一次、一次问清/);
+  assert.match(asking, /只有缺的东西让事情根本没法开始（要处理的文件或数据没给），或者动作不可撤回时，才用 `ask_user_question` 问。/);
+  // One question, the one that changes the next step most, and the rest go on as stated assumptions: a card or a closing paragraph
+  // of two to four questions was the shape of an under-specified request's first reply (2026-11-01, 3 of 4 real conversations).
+  assert.match(asking, /要问就只问一个问题：挑最能改变下一步的那个，其余的写明假设往下做；回答末尾想问的也一样，最多问一个/);
+  assert.doesNotMatch(asking, /一次问清/);
   // A question nobody answered is not the reply. On a real session a clinical question (「INR 3.8，今晚这顿还吃不吃」)
   // was answered with two questions and nothing else once the card could not be drawn (2026-10-13).
   assert.match(asking, /提问没有得到回答时，照最合理的理解做完，把还需要用户确认的点写在回答里，不提提问的事/);

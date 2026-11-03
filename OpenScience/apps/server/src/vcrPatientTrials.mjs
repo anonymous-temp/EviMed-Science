@@ -30,7 +30,8 @@
 
 import { HttpError } from "./security.mjs";
 import { CTGOV_STUDY_URL, CTIS_STUDY_URL } from "./trialRegistryClient.mjs";
-import { VCR_MATCHING_VOCABULARY_VERSION, assessSubject, frozenAsOf, languageKeysOf, matchingInputDigest, statedRequirement } from "./vcrMatching.mjs";
+import { VCR_MATCHING_GAP_REASON_LABELS_ZH } from "@evimed/domain";
+import { VCR_MATCHING_VOCABULARY_VERSION, assessSubject, decidedShare, frozenAsOf, languageKeysOf, matchingInputDigest, statedRequirement } from "./vcrMatching.mjs";
 import { matchingVariablesOf, subjectTableFacts } from "./vcrMatchingTable.mjs";
 import { matchingAssessmentEvidence } from "./vcrMatchingEvidence.mjs";
 
@@ -198,7 +199,9 @@ export function locateSourceText(sourceText, eligibilityText) {
  * kept as the registry wrote it and ranked after what is open and before what is closed — it is not read as closed.
  */
 const STATUS_TABLE = Object.freeze([
-  { rank: 0, label: "招募中", words: ["recruiting", "authorisedrecruiting", "ongoingrecruiting"] },
+  // `zh` is a status the evidence API sends for ChiCTR as ChiCTR writes it: only the word its documented example shows. Any other Chinese
+  // status is unknown to this table and is shown as it was written.
+  { rank: 0, label: "招募中", words: ["recruiting", "authorisedrecruiting", "ongoingrecruiting"], zh: ["招募中"] },
   { rank: 1, label: "尚未开始招募", words: ["notyetrecruiting", "authorisedrecruitmentpending", "recruitmentpending"] },
   { rank: 2, label: "邀请入组", words: ["enrollingbyinvitation"] },
   { rank: 3, label: "进行中，不再招募", words: ["activenotrecruiting", "ongoingrecruitmentended", "ongoingnotrecruiting"] },
@@ -213,13 +216,26 @@ const STATUS_OTHER_RANK = 4;
 
 /** @param {unknown} status */
 const statusEntry = (status) => {
-  const word = text(status).toLowerCase().replace(/[^a-z]/g, "");
-  return word ? STATUS_TABLE.find((entry) => entry.words.includes(word)) ?? null : null;
+  const given = text(status);
+  const word = given.toLowerCase().replace(/[^a-z]/g, "");
+  return STATUS_TABLE.find((entry) => (word && entry.words.includes(word)) || (/** @type {{ zh?: string[] }} */ (entry).zh ?? []).includes(given)) ?? null;
 };
 
 /** How soon a patient could join a trial in this status: lower is sooner. @param {unknown} status */
 export function registryStatusRank(status) {
   return statusEntry(status)?.rank ?? STATUS_OTHER_RANK;
+}
+
+/**
+ * Whether a registry status is one of a trial that is open or about to be (recruiting, not yet recruiting, by invitation): `true`, `false`
+ * for the closed ones the table knows (not recruiting any more, suspended, completed, terminated, withdrawn), and `null` for a word it does
+ * not know or an unstated status — which is unknown, not closed.
+ * @param {unknown} status @returns {boolean | null}
+ */
+export function registryStatusOpen(status) {
+  const entry = statusEntry(status);
+  if (!entry || entry.label === "状态未知") return null;
+  return entry.rank <= 2;
 }
 
 /** The reader's word for a registry status; a word the table does not know is shown as the registry wrote it. @param {unknown} status */
@@ -247,25 +263,63 @@ export function phaseLabel(phase) {
 const order = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
 
 /**
- * A patient's trials in the order they are listed: every criterion met first, then by the fewest criteria still to settle (unknown
- * and waiting-for-a-date together), the ones the patient is excluded from after those, and a trial not yet evaluated last; ties by
- * where the trial stands in its registry (recruiting first), then its title, then its id. Arithmetic over the evaluator's counts and
- * nothing a model said, so the same verdicts are the same list in any order they arrive.
+ * A patient's trials in the order they are listed: every criterion met first; then the trials the patient is not excluded from, by the
+ * share of their criteria that are decided (satisfied or not — an unknown or a date to wait for is undecided and stays in the
+ * denominator), then by how many criteria that is, then by the fewest still to settle; the ones the patient is excluded from after those,
+ * the same way; and a trial not yet evaluated last. Ties by where the trial stands in its registry (recruiting first), then its title,
+ * then its id. Arithmetic over the evaluator's counts and nothing a model said, so the same verdicts are the same list in any order they
+ * arrive.
+ *
+ * The share is why a trial with two parsed criteria and no answer does not stand above one with ten and seven answered (it used to,
+ * on "the fewest still open"): how much of a trial was read is part of how far its verdict can be trusted. It does not make the list a
+ * recommendation — 符合 says the stated criteria are met, not that the trial is worth the patient's time (M5).
  * @template {{ id: string, title?: string, status?: string, summary: string | null, counts?: Record<string, number> | null }} T
  * @param {readonly T[]} entries @returns {Array<T & { rank: number }>}
  */
 export function rankPatientTrials(entries) {
   const tier = (/** @type {T} */ row) => (row.summary === "eligible" ? 0 : row.summary === "ineligible" ? 2 : row.summary ? 1 : 3);
   const open = (/** @type {T} */ row) => Number(row.counts?.unknown ?? 0) + Number(row.counts?.pending_recheck ?? 0);
+  const settled = (/** @type {T} */ row) => decidedShare(row.counts);
+  const ratio = (/** @type {T} */ row) => { const { decided, applicable } = settled(row); return applicable ? decided / applicable : 0; };
   const fold = (/** @type {unknown} */ value) => text(value).toLowerCase();
   return [...entries]
-    .sort((a, b) => tier(a) - tier(b) || open(a) - open(b) || registryStatusRank(a.status) - registryStatusRank(b.status)
-      || order(fold(a.title), fold(b.title)) || order(String(a.id), String(b.id)))
+    .sort((a, b) => tier(a) - tier(b) || ratio(b) - ratio(a) || settled(b).decided - settled(a).decided || open(a) - open(b)
+      || registryStatusRank(a.status) - registryStatusRank(b.status) || order(fold(a.title), fold(b.title)) || order(String(a.id), String(b.id)))
     .map((row, index) => ({ ...row, rank: index + 1 }));
 }
 
 /** Trials one runtime read lists at most (the module's page size for a read). */
 const READ_PAGE = 50;
+
+/** The reader's word for why a criterion is unknown (`VCR_MATCHING_GAP_REASON_LABELS_ZH`); a reason it has no word for is shown as its code. */
+const GAP_LABELS = /** @type {Record<string, string>} */ (VCR_MATCHING_GAP_REASON_LABELS_ZH);
+
+/** A criterion's wording cut for a list, whole characters. @param {unknown} sourceText @param {number} [max] */
+const shortText = (sourceText, max = 80) => {
+  const characters = [...text(sourceText).replace(/\s+/g, " ")];
+  return characters.length > max ? `${characters.slice(0, max).join("")}…` : characters.join("");
+};
+
+/**
+ * The criteria a verdict leaves unknown or waiting, each with the reason in the reader's words: what a delivered table needs beside the
+ * counts, from the assessment's own gaps (which name the criteria they came from) and the trial's criteria. No patient text is in it.
+ * @param {readonly any[]} gaps @param {readonly any[]} criteria
+ */
+function undecidedCriteria(gaps, criteria) {
+  const byId = new Map(criteria.map((criterion) => [String(criterion.id), criterion]));
+  /** @type {Map<string, { criterionId: string, ordinal: number, kind: string, text: string, reason: string, label: string }>} */
+  const out = new Map();
+  for (const gap of gaps ?? []) {
+    for (const id of list(gap?.criterionIds).map(String)) {
+      const criterion = byId.get(id);
+      if (!criterion || out.has(id)) continue;
+      const reason = text(gap.reason) || "not_recorded";
+      out.set(id, { criterionId: id, ordinal: Number(criterion.ordinal), kind: String(criterion.kind), text: shortText(criterion.sourceText),
+        reason, label: GAP_LABELS[reason] ?? reason });
+    }
+  }
+  return [...out.values()].sort((a, b) => a.ordinal - b.ordinal);
+}
 
 /** The word for a study's own protocol version in a list of trials. @param {{ title?: string, version?: number }} protocol */
 const protocolTitle = (protocol) => text(protocol.title) || `方案版本 ${protocol.version}`;
@@ -281,7 +335,9 @@ function trialForRun(trial, criteria, { withCriteria = false } = {}) {
     conditions: trial.conditions, locations: { total: trial.locations?.total ?? null, countries: trial.locations?.countries ?? [] },
     url: trial.url, recordHash: trial.recordHash, retrievedAt: trial.retrievedAt, updatedAt: trial.updatedAt,
     eligibilityCoverage: { status: !text(trial.eligibilityText) ? "unavailable" : located < criteria.length ? "partial" : "located",
-      providedCriteria: criteria.length, locatedCriteria: located, criterionExtractionCompleteness: "unknown" },
+      providedCriteria: criteria.length, locatedCriteria: located, criterionExtractionCompleteness: "unknown",
+      // A record with no original wording (ChiCTR through the evidence API is a listing) gives a criterion nothing to rest on (M6).
+      ...(text(trial.eligibilityText) ? {} : { note: `登记记录没有入排条件原文：这个试验的条件一律按未知算，原因是“${GAP_LABELS.criterion_source_unavailable}”，不会判成满足或不满足。` }) },
     criteria: withCriteria
       ? criteria.map((criterion) => ({
         id: criterion.id, ordinal: criterion.ordinal, kind: criterion.kind, criterionType: criterion.criterionType,
@@ -331,7 +387,7 @@ function listed(about, assessment) {
  */
 export function createPatientTrials({ candidateStore, matchStore = null, documents = null, subjectTable = null, config = {}, report = () => {}, now = () => new Date() }) {
   /** What the seam did since this process started (`open_science_vcr_patient_trials_total`). */
-  const counters = { written: 0, updated: 0, refused: 0, capReached: 0, evaluated: 0, evaluationFailed: 0, searches: 0 };
+  const counters = { written: 0, updated: 0, refused: 0, capReached: 0, evaluated: 0, evaluationFailed: 0, searches: 0, parsedReused: 0, parsedKept: 0 };
   /** The most candidate trials one study holds: each costs an evaluation per patient. */
   const max = () => (Number(config.vcrCandidateTrialsMax) > 0 ? Number(config.vcrCandidateTrialsMax) : 60);
 
@@ -492,9 +548,50 @@ export function createPatientTrials({ candidateStore, matchStore = null, documen
         throw error;
       }
       if (saved.created) counters.written += 1; else counters.updated += 1;
+      // The parse is kept for the account against the record it was made from, so the next study that meets this record reads it. A parse
+      // that cannot be kept costs the next study a parse and this one nothing.
+      if (criteria !== null && trial.recordHash) {
+        try {
+          if (await candidateStore.saveParsedCriteria({ userId: study.userId, registry: trial.registry, registryId: trial.registryId, recordHash: trial.recordHash, criteria })) counters.parsedKept += 1;
+        } catch (error) { report(String(/** @type {any} */ (error)?.code ?? "vcr_parsed_criteria_unsaved")); }
+      }
       const who = [...new Set([...subjectKeys, ...(saved.criteriaChanged ? saved.reassess : [])])];
       const evaluation = who.length ? await self.evaluate(study, { subjectKeys: who, trialIds: [saved.trial.id] }) : { evaluated: [], unavailable: [], notes: [] };
       return { ...saved, evaluation };
+    },
+
+    /** A criterion of one of the study's candidate trials, by id (the words a long record is searched for it with, M4). @param {any} study @param {string} id */
+    async criterionById(study, id) {
+      return candidateStore.getCriterion({ studyId: study.id, id });
+    },
+
+    /**
+     * The account's earlier parse of this trial, made from this very record (same registry id, same record hash): what a second study
+     * of the same account reads instead of asking for the parse again. `null` when there is none or the record has changed since — the
+     * run then structures the text again. Never another account's.
+     * @param {any} study @param {{ registry: string, registryId: string, recordHash: string | null }} key
+     * @returns {Promise<any[] | null>}
+     */
+    async parsedCriteria(study, { registry, registryId, recordHash }) {
+      if (!recordHash) return null;
+      try {
+        const held = await candidateStore.parsedCriteriaFor({ userId: study.userId, registry, registryId, recordHash });
+        if (held) counters.parsedReused += 1;
+        return held?.criteria ?? null;
+      } catch (error) {
+        report(String(/** @type {any} */ (error)?.code ?? "vcr_parsed_criteria_unreadable"));
+        return null;
+      }
+    },
+
+    /**
+     * Which of these registry trials the account has already parsed, whatever record the parse came from: a candidate list says so and the
+     * write finds out whether the record is still the same one.
+     * @param {any} study @param {ReadonlyArray<{ registry: string, registryId: string }>} trials @returns {Promise<Set<string>>}
+     */
+    async parsedHeld(study, trials) {
+      try { return await candidateStore.parsedCriteriaHeld({ userId: study.userId, trials }); }
+      catch { return new Set(); }
     },
 
     /** The language keys of a candidate trial's criteria. @param {any} study @param {string} candidateTrialId */
@@ -610,13 +707,21 @@ export function createPatientTrials({ candidateStore, matchStore = null, documen
             }
           }
         }
+        const criteriaOf = await candidateStore.criteriaOfTrials(study.id, ranking.filter((entry) => entry.kind === "registry").map((entry) => entry.id));
         return {
           subjectKey,
           unjudged: await self.unjudged(study, { subjectKey }),
-          ranking: ranking.map((row) => ({
+          ranking: await Promise.all(ranking.map(async (row) => ({
             rank: row.rank, kind: row.kind, id: row.id, registry: row.registry, registryId: row.registryId, title: row.title, phase: row.phase, status: row.status,
-            eligibility: row.summary, criteriaCounts: row.counts, evidenceGaps: row.evidenceGaps, asOf: row.asOf, retrievedAt: row.retrievedAt,
-          })),
+            // The registry's word is as of the day its record was read; it says nothing of a site's places today.
+            statusAsOf: row.retrievedAt,
+            eligibility: row.summary, criteriaCounts: row.counts,
+            // How much of the trial is settled for this patient, unknowns in the denominator: 7 of 10 is a different verdict from 1 of 1.
+            decided: row.counts ? decidedShare(row.counts) : null,
+            evidenceGaps: list(row.evidenceGaps).map((gap) => ({ ...gap, label: GAP_LABELS[text(gap.reason)] ?? null })),
+            undecided: undecidedCriteria(row.evidenceGaps, row.kind === "registry" ? criteriaOf.get(row.id) ?? [] : await matchStore.listCriteria({ studyId: study.id, protocolVersionId: row.id })),
+            asOf: row.asOf, retrievedAt: row.retrievedAt,
+          }))),
           requests,
         };
       }

@@ -17,7 +17,7 @@ import { VCR_NOTICE_KINDS, createVcrNotifier, vcrNoticeHref, vcrStudyName } from
 import {
   VCR_ENGINE_METHODS, VCR_EXPORT_KINDS, VCR_EXPORT_KIND_LABELS_ZH, VCR_JOB_KINDS, VCR_JOB_METHODS, VCR_NOTIFICATION_KINDS, VCR_NOT_ESTIMABLE_RULES,
   VCR_MODEL_DOCUMENT_SECTIONS, VCR_NOT_ESTIMABLE_RULE_LABELS_ZH, VCR_SCENARIO_SCHEMAS, VCR_STEPS, VCR_STEP_CAPABILITIES, VCR_STEP_NEEDS, validateEngineJob,
-  knownErrorCodeMessage, validateLongitudinalScenario, validateScenario,
+  knownErrorCodeMessage, validateLongitudinalScenario, validateScenario, vcrIsNullScenario,
 } from "@evimed/domain";
 
 /** @param {string[]} requested */
@@ -247,8 +247,10 @@ const briefStudy = { name: "EV-201", question: "单臂试验能否用外部对�
 
 test("an export run's brief names the one document it is for, in words and by kind, for each of the four", () => {
   const labels = /** @type {Record<string, string>} */ (VCR_EXPORT_KIND_LABELS_ZH);
-  assert.deepEqual(Object.keys(VCR_EXPORT_OUTLINES).sort(), [...VCR_EXPORT_KINDS].sort(), "every document has an outline, and nothing else does");
-  for (const kind of VCR_EXPORT_KINDS) {
+  // a result record is written by the platform from one result (D7): no run is briefed for it, so it has no outline
+  const written = VCR_EXPORT_KINDS.filter((kind) => kind !== "result_record");
+  assert.deepEqual(Object.keys(VCR_EXPORT_OUTLINES).sort(), [...written].sort(), "every document a run writes has an outline, and nothing else does");
+  for (const kind of written) {
     const brief = vcrDefaultBrief({ study: briefStudy, scope: [], detail: { kind, exportId: "exp_1" } });
     assert.ok(brief.startsWith("研究：EV-201。\n研究问题：单臂试验能否用外部对照？\n数据档位：T0；预期用途：exploratory。\n"), kind);
     assert.ok(brief.includes(`「${labels[kind]}」（kind: ${kind}）`), `the brief says which document (${kind})`);
@@ -256,7 +258,7 @@ test("an export run's brief names the one document it is for, in words and by ki
     assert.ok(brief.includes(`data.kind 写 ${kind}。`), `and the kind its report is written under (${kind})`);
     assert.ok(brief.includes("写成别的 kind 会被拒绝"), "and that another kind is refused, which the gateway holds it to");
     // Every other document's name is absent: a brief that listed all four would not have said which.
-    for (const other of VCR_EXPORT_KINDS.filter((entry) => entry !== kind && entry !== "study_package")) {
+    for (const other of written.filter((entry) => entry !== kind && entry !== "study_package")) {
       assert.equal(brief.includes(labels[other]), false, `${kind} does not mention ${other}`);
     }
     assert.equal(brief.includes("本次要做的步骤"), false, "an export run has no steps to be told");
@@ -545,10 +547,12 @@ test("an assumption card's point value is the number the scenario uses, and a ne
 test("a trial scenario is an analytic stage, a simulation stage and — when the effect card states a prediction distribution — assurance", () => {
   const row = trialRow({ design: { nTreat: 120, nControl: 60 }, analysis: { method: "logrank", alpha: 0.025 }, accrual: { kind: "uniform", duration: 12, followup: 12 } });
   const plan = /** @type {any} */ (vcrBuildStages({ kind: "trial_scenario", row }, context));
-  // The assurance stage needs the events the analytic calculation says the design needs: it is planned once that result exists.
-  assert.deepEqual(plan.stages.map((entry) => entry.jobKind), ["design_analytic", "design_simulation"]);
+  // The assurance stage needs the events the analytic calculation says the design needs: it is planned once that result exists. The
+  // zero-effect simulation follows the stages that deliver the result (A1), so the researcher reads the power without waiting for it.
+  assert.deepEqual(plan.stages.map((entry) => `${entry.stage}:${entry.jobKind}`), ["analytic:design_analytic", "simulation:design_simulation", "simulation_null:design_simulation"]);
   const withEvents = /** @type {any} */ (vcrBuildStages({ kind: "trial_scenario", row }, { ...context, analytic: { measures: [{ name: "required_events", value: 246.2 }] } }));
-  assert.deepEqual(withEvents.stages.map((entry) => `${entry.stage}:${entry.jobKind}`), ["analytic:design_analytic", "simulation:design_simulation", "assurance:assurance"]);
+  assert.deepEqual(withEvents.stages.map((entry) => `${entry.stage}:${entry.jobKind}`),
+    ["analytic:design_analytic", "simulation:design_simulation", "assurance:assurance", "simulation_null:design_simulation"]);
   const assurance = withEvents.stages[2];
   assert.equal(assurance.after, "analytic");
   assert.deepEqual(assurance.scenario.designPrior, { mean: Math.log(0.7), sd: 0.15, kind: "lognormal", basis: "prediction" });
@@ -561,6 +565,91 @@ test("a trial scenario is an analytic stage, a simulation stage and — when the
   assert.equal(vcrDesignPriorFrom([{ key: "hazard_ratio", version: 1, pointValue: 0.7, distribution: { family: "point", params: { point: 0.7 } } }], "time_to_event"), null);
   assert.deepEqual(vcrDesignPriorFrom([{ key: "mean_difference", version: 1, pointValue: 2, distribution: { kind: "normal", mean: 2, sd: 0.5 } }], "continuous")?.prior,
     { mean: 2, sd: 0.5, kind: "normal", basis: "prediction" }, "the flat shape an earlier run wrote is read too");
+});
+
+test("a two-arm design is also run under no effect, after the alternative (A1): the effect cards are not bound into it, the others are, and it is the null case", () => {
+  const plans = /** @type {Array<[string, string, Record<string, any>, Record<string, any>]>} */ ([
+    ["time_to_event", "two_arm_fixed", { design: { nTreat: 120, nControl: 60 }, accrual: { kind: "uniform", duration: 12, followup: 12 }, truth: { hazardRatio: 0.9, controlMedian: 8 } }, { hazardRatio: 1 }],
+    ["binary", "two_arm_fixed", { design: { nTreat: 100, nControl: 100 }, truth: { controlRate: 0.3, treatmentRate: 0.45 } }, { controlRate: 0.3, riskDifference: 0 }],
+    ["continuous", "two_arm_fixed", { design: { nTreat: 100, nControl: 100 }, truth: { effect: 4, sd: 10 } }, { effect: 0, sd: 10 }],
+  ]);
+  for (const [endpoint, design, configuration, expected] of plans) {
+    const plan = /** @type {any} */ (vcrBuildStages({ kind: "trial_scenario", row: trialRow(configuration, { endpointType: endpoint, design }) },
+      { ...context, definition: { ...definition, endpointType: endpoint }, assumptions: endpoint === "time_to_event" ? cards : [] }));
+    assert.equal(plan.ok, true, endpoint);
+    const names = plan.stages.map((entry) => entry.stage);
+    assert.equal(names.at(-1), "simulation_null", `${endpoint}: the check is the last stage`);
+    assert.ok(names.indexOf("simulation") >= 0 && names.indexOf("simulation") < names.indexOf("simulation_null"), `${endpoint}: after the alternative`);
+    const alternative = plan.stages.find((entry) => entry.stage === "simulation");
+    const nullStage = plan.stages.find((entry) => entry.stage === "simulation_null");
+    // The check waits for the stage that delivers the result; it is a check (the page and the notices read that), and a null case.
+    assert.equal(nullStage.after, "simulation", endpoint);
+    assert.equal(nullStage.detail.check, true);
+    assert.equal(nullStage.jobKind, "design_simulation");
+    assert.deepEqual(validateScenario("design.simulate", nullStage.scenario), [], endpoint);
+    assert.equal(vcrIsNullScenario(nullStage.scenario), true, `${endpoint}: the null stage is the null case`);
+    assert.equal(vcrIsNullScenario(alternative.scenario), false, `${endpoint}: the alternative is not`);
+    for (const [key, value] of Object.entries(expected)) assert.equal(nullStage.scenario.truth[key], value, `${endpoint} ${key}`);
+    // The alternative's own effect is not in the null case, and nothing else of the design is changed.
+    assert.deepEqual(nullStage.scenario.design, alternative.scenario.design);
+  }
+  // The effect card (hazard_ratio 0.7) would overwrite the null case's hazard ratio of 1: it is not bound into it; the control median
+  // and the dropout cards still are, and the alternative still takes all three.
+  const survival = /** @type {any} */ (vcrBuildStages({ kind: "trial_scenario", row: trialRow({ design: { nTreat: 120, nControl: 60 }, accrual: { kind: "uniform", duration: 12, followup: 12 } }) }, context));
+  const alt = survival.stages.find((/** @type {any} */ entry) => entry.stage === "simulation");
+  const nul = survival.stages.find((/** @type {any} */ entry) => entry.stage === "simulation_null");
+  assert.equal(alt.scenario.truth.hazardRatio, 0.7);
+  assert.equal(nul.scenario.truth.hazardRatio, 1, "the null case states no effect, whatever the effect card says");
+  assert.equal(nul.scenario.truth.controlMedian, 6);
+  assert.equal(nul.scenario.accrual.dropoutAnnual, 0.1);
+  assert.deepEqual(nul.bound.map((/** @type {any} */ entry) => entry.path).sort(), ["accrual.dropoutAnnual", "truth.controlMedian"]);
+  // A design that already is the null case is not run under it twice, and a single-arm design has no second case of this kind.
+  const alreadyNull = /** @type {any} */ (vcrBuildStages({ kind: "trial_scenario", row: trialRow({ design: { nTreat: 120, nControl: 60 }, truth: { hazardRatio: 1, controlMedian: 6 },
+    accrual: { kind: "uniform", duration: 12, followup: 12 } }) }, { ...context, assumptions: [] }));
+  assert.deepEqual(alreadyNull.stages.map((/** @type {any} */ entry) => entry.stage), ["analytic", "simulation"]);
+  const sizeOnly = /** @type {any} */ (vcrBuildStages({ kind: "trial_scenario", row: trialRow({ design: { nTreat: 120, nControl: 60 } }, { endpointType: "continuous" }) },
+    { ...context, definition: { ...definition, endpointType: "continuous" }, assumptions: [] }));
+  assert.ok(sizeOnly.stages.some((/** @type {any} */ entry) => entry.stage === "simulation_null"), "a design with no truth at all still gets its null case: the one key it adds");
+});
+
+test("P1-5 a hazard ratio that changes over time, or MaxCombo, is sized by its simulation: no analytic stage, no assurance, and a null check the engine accepts", () => {
+  const delayed = { treatmentHazardRatios: { breaks: [6], ratios: [1, 0.6] }, controlMedian: 8 };
+  const accrual = { kind: "uniform", duration: 12, followup: 12 };
+  /** @type {Array<[string, Record<string, any>, string]>} */
+  const designs = [
+    ["a delayed effect", { design: { nTreat: 120, nControl: 120 }, truth: delayed, accrual }, "two_arm_fixed"],
+    ["a delayed effect in a sequential design", { design: { nTreat: 120, nControl: 120, informationRates: [0.5, 1], spending: "obrien_fleming" }, truth: delayed, accrual }, "group_sequential"],
+    ["MaxCombo", { design: { nTreat: 120, nControl: 120 }, truth: { hazardRatio: 0.7, controlMedian: 8 }, analysis: { method: "maxcombo", alpha: 0.025, sided: 1 }, accrual }, "two_arm_fixed"],
+  ];
+  // The effect card (a prediction distribution) and an analytic result are there, as they are for an ordinary design: neither is used.
+  const analytic = { measures: [{ name: "required_events", value: 246.2 }] };
+  for (const [name, configuration, design] of designs) {
+    for (const withCards of [false, true]) {
+      const plan = /** @type {any} */ (vcrBuildStages({ kind: "trial_scenario", row: trialRow(configuration, { design }) }, { ...context, assumptions: withCards ? cards : [], analytic }));
+      const label = `${name}${withCards ? " with the effect card" : ""}`;
+      assert.equal(plan.ok, true, `${label}: ${JSON.stringify(plan.refused)}`);
+      assert.deepEqual(plan.stages.map((/** @type {any} */ entry) => entry.stage), ["simulation", "simulation_null"], label);
+      for (const entry of plan.stages) {
+        assert.deepEqual(validateScenario(VCR_JOB_METHODS[entry.jobKind], entry.scenario), [], `${label} ${entry.stage}: the engine accepts it`);
+      }
+      const alternative = plan.stages[0];
+      const check = plan.stages[1];
+      assert.equal(check.after, "simulation");
+      assert.equal(check.scenario.truth.hazardRatio, 1, `${label}: no effect`);
+      assert.equal(Object.hasOwn(check.scenario.truth, "treatmentHazardRatios"), false, `${label}: one law for one arm`);
+      assert.equal(vcrIsNullScenario(check.scenario), true, label);
+      assert.equal(vcrIsNullScenario(alternative.scenario), false, label);
+      assert.equal(check.scenario.analysis?.method, alternative.scenario.analysis?.method, `${label}: the same analysis`);
+      if (configuration.truth.treatmentHazardRatios) {
+        assert.deepEqual(alternative.scenario.truth.treatmentHazardRatios, delayed.treatmentHazardRatios, `${label}: the design's own law stands`);
+        assert.equal(Object.hasOwn(alternative.scenario.truth, "hazardRatio"), false, `${label}: the card's single ratio is not laid beside it`);
+        assert.equal(alternative.bound.some((/** @type {any} */ entry) => entry.key === "hazard_ratio"), false, `${label}: the job does not claim the card`);
+      }
+    }
+  }
+  // The same designs with a constant ratio keep their analytic stage: nothing else moved.
+  const plain = /** @type {any} */ (vcrBuildStages({ kind: "trial_scenario", row: trialRow({ design: { nTreat: 120, nControl: 120 }, accrual }) }, context));
+  assert.deepEqual(plain.stages.map((/** @type {any} */ entry) => entry.stage), ["analytic", "simulation", "simulation_null"]);
 });
 
 test("a design the engine does not implement is said in a sentence and never run as something else; a key it does not read is refused by its path", () => {
@@ -910,7 +999,12 @@ test("a time-to-event MAIC takes its comparator from the reconstruction result, 
 });
 
 test("every example in the skill is a shape the platform accepts: the objects build, and the direct scenarios validate", () => {
-  const skill = fs.readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../capabilities/vcr-analysis/SKILL.md"), "utf8");
+  // The skill is split by task (C3): the entry and the references it sends the model to are the text its examples live in.
+  const wholeSkill = (/** @type {string} */ tree) => {
+    const dir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..", tree, "vcr-analysis");
+    return [fs.readFileSync(path.join(dir, "SKILL.md"), "utf8"), ...fs.readdirSync(path.join(dir, "references")).filter((name) => name.endsWith(".md")).sort().map((name) => fs.readFileSync(path.join(dir, "references", name), "utf8"))].join("\n");
+  };
+  const skill = wholeSkill("capabilities");
   const blocks = [...skill.matchAll(/```json vcr:(\S+)\n([\s\S]*?)```/g)].map((match) => ({ kind: match[1], body: JSON.parse(match[2]) }));
   assert.ok(blocks.length >= 7, `the skill teaches supported designs by example (${blocks.length} blocks)`);
   const t2 = { ...context, study: { ...seedStudy, dataTier: "T2" },
@@ -955,8 +1049,7 @@ test("every example in the skill is a shape the platform accepts: the objects bu
   assert.doesNotMatch(skill, /§\s?\d|\bAC-\d|\bEB-\d|\bPA-\d/);
   assert.doesNotMatch(skill, /isNull|dropoutRate/);
   assert.match(skill, /mcp__evimed__vcr_write/);
-  assert.equal(fs.readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../capability-skills/vcr-analysis/SKILL.md"), "utf8"), skill,
-    "the capability's skill and the shared copy are one file");
+  assert.equal(wholeSkill("capability-skills"), skill, "the capability's skill and the shared copy are one text");
 });
 
 test("two assumptions that cannot both hold are found by closed-form identities and named with their versions", () => {

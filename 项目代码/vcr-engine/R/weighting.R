@@ -208,6 +208,72 @@ vcr_balance_table <- function(X, treat, weights = NULL, estimand = "ATT") {
              varianceRatio = vr, ksStatistic = ks, stringsAsFactors = FALSE)
 }
 
+#' The calendar year in a date cell, or NA. Only closed spellings are read: `YYYY`, `YYYY-MM[-DD]` (with `-`, `/` or `.`, and an
+#' optional time after a space or `T`) and `D/M/YYYY` or `M/D/YYYY`, where the four-digit token is the year whatever the order of
+#' the other two. Anything else is NA, and so is a year outside 1900-2100; a date is never guessed.
+.vcr_year_of <- function(x) {
+  s <- trimws(as.character(x))
+  year <- rep(NA_integer_, length(s))
+  lead <- grepl("^[0-9]{4}([-/.][0-9]{1,2}([-/.][0-9]{1,2})?)?([ T].*)?$", s)
+  trail <- grepl("^[0-9]{1,2}[-/.][0-9]{1,2}[-/.][0-9]{4}$", s)
+  year[lead] <- as.integer(substr(s[lead], 1L, 4L))
+  year[trail] <- as.integer(substring(s[trail], nchar(s[trail]) - 3L))
+  year[!is.na(year) & (year < 1900L | year > 2100L)] <- NA_integer_
+  year
+}
+
+#' The standardized difference of the calendar year. A trial arm that entered in one year has a standard deviation of 0, which
+#' would make the covariate difference 0 whatever the controls' years are; the pooled standard deviation stands in then.
+.vcr_year_smd <- function(year, treat, weights, estimand) {
+  s1 <- stats::sd(year[treat == 1L])
+  if (is.finite(s1) && s1 > 0) return(vcr_smd(year, treat, weights, estimand))
+  w <- if (is.null(weights)) rep(1, length(year)) else weights
+  pooled <- stats::sd(year)
+  if (!is.finite(pooled) || pooled == 0) return(0)
+  (stats::weighted.mean(year[treat == 1L], w[treat == 1L]) - stats::weighted.mean(year[treat == 0L], w[treat == 0L])) / pooled
+}
+
+#' The enrolment-year row of a comparison (remediation plan D6, 2026-11-01): when the field map named a time-zero date (the event
+#' table's `STARTDT`), the calendar year each person entered, per arm, and how far apart the two arms are in it before and after
+#' the weights. The year is a check on outcome drift, not a covariate: nothing was weighted on it, so the adjusted difference says
+#' whether the weights on the other covariates happened to bring the years together. NULL when the data has no date column; a date
+#' column nobody can read a year from is said as such and is not an error. It rides beside the balance table and is not in the
+#' balance verdict.
+#'
+#' @param subj The table the weights were fitted on (after the cohort rules); `USUBJID` links it to the event table.
+vcr_enrolment_year <- function(subj, tabs, sc, treat, weights, estimand = "ATT") {
+  event <- tabs$event
+  if (is.null(event) || !("STARTDT" %in% names(event)) || !("USUBJID" %in% names(event)) || !("USUBJID" %in% names(subj))) return(NULL)
+  if (!is.null(sc$parameterCode) && "PARAMCD" %in% names(event)) event <- event[!is.na(event$PARAMCD) & as.character(event$PARAMCD) == as.character(sc$parameterCode), , drop = FALSE]
+  at <- match(subj$USUBJID, event$USUBJID)
+  year <- .vcr_year_of(ifelse(is.na(at), NA_character_, as.character(event$STARTDT[at])))
+  have <- !is.na(year)
+  readable <- list(treated = sum(have & treat == 1L), control = sum(have & treat == 0L))
+  arms <- list(treated = sum(treat == 1L), control = sum(treat == 0L))
+  base <- list(column = "STARTDT", unit = "calendar year", people = arms, readable = readable)
+  if (readable$treated < 2L || readable$control < 2L) {
+    return(c(base, list(status = if (sum(have) == 0L) "unreadable" else "too_few")))
+  }
+  y <- as.numeric(year[have]); t <- treat[have]; w <- weights[have]
+  one <- function(arm) {
+    v <- y[t == arm]
+    list(min = min(v), median = stats::median(v), max = max(v), mean = mean(v),
+         weightedMean = stats::weighted.mean(v, w[t == arm]))
+  }
+  tr <- one(1L); co <- one(0L)
+  outside <- y[t == 0L] < tr$min | y[t == 0L] > tr$max
+  years <- sort(unique(y))
+  by_year <- lapply(years, function(yr) list(
+    year = yr, treated = sum(y == yr & t == 1L), control = sum(y == yr & t == 0L),
+    controlWeightShare = sum(w[y == yr & t == 0L]) / sum(w[t == 0L])))
+  c(base, list(
+    status = "computed", treated = tr, control = co,
+    smdUnadjusted = .vcr_year_smd(y, t, NULL, estimand), smdAdjusted = .vcr_year_smd(y, t, w, estimand),
+    controlOutsideTrialYears = list(share = mean(outside), weightedShare = sum(w[t == 0L][outside]) / sum(w[t == 0L])),
+    byYear = by_year,
+    note = "calendar year of the time-zero date; not part of the weighting and not part of the balance verdict"))
+}
+
 vcr_variance_ratio <- function(x, treat, weights = NULL) {
   if (all(x %in% c(0, 1))) return(NA_real_)
   w <- if (is.null(weights)) rep(1, length(x)) else weights
@@ -331,9 +397,17 @@ vcr_bootstrap_pipeline <- function(n_rows, estimate_fn, replicates = 2000L,
 #' Returns the first rule that fires, or NULL. Order matters: the reason a
 #' reader is given should be the earliest thing that went wrong, not the last
 #' check that happened to run.
-vcr_not_estimable_weighting <- function(balance = NULL, ess = NULL, ess_floor = NULL,
-                                        support = NULL, support_ceiling = NULL,
-                                        smd_floor = NULL, ebal = NULL) {
+#'
+#' Covariate balance is not among them since 2026-11-01 (owner decision, remediation
+#' plan section 7 item 2): 0.1 is a convention, not a law, and a comparison that is
+#' unbalanced is still an estimate a reader can weigh when the balance is shown
+#' beside it. `vcr_balance_verdict` reads it and the job says `limited`. A job labelled
+#' with a release from before that (the weighting jobs before 1.2.0, AIPW and the
+#' negative-control analysis before 1.1.0) replays what that release did: its caller
+#' passes `balance` (and a stricter `smd_floor` if it has one), and the rule below
+#' refuses a weighted covariate still apart by the floor. Every other caller passes none.
+vcr_not_estimable_weighting <- function(ess = NULL, ess_floor = NULL, support = NULL, support_ceiling = NULL, ebal = NULL,
+                                        balance = NULL, smd_floor = NULL) {
   # Every threshold is the domain's; a caller may only pass a *stricter* one.
   ess_floor <- max(ess_floor %||% 0, vcr_limit("essFloor", 10))
   support_ceiling <- min(support_ceiling %||% Inf, vcr_limit("supportCeiling", 0.1))
@@ -358,6 +432,32 @@ vcr_not_estimable_weighting <- function(balance = NULL, ess = NULL, ess_floor = 
     }
   }
   NULL
+}
+
+#' What the weighted balance says about the comparison (owner decision 2026-11-01, remediation plan
+#' section 7 item 2). The estimate is delivered in every band and the balance rides beside it:
+#'
+#'   - `balanced`: the worst weighted standardized difference is at most `smdFloor` (0.10);
+#'   - `moderate`: above 0.10 and at most `smdSevere` (0.25) - the estimate is `limited`, and the
+#'     value and the worst variable are said;
+#'   - `severe`: above 0.25 - `limited` as well, and the reason is a severe imbalance.
+#'
+#' Both thresholds are the domain's (`vcr_limit`), never a scenario key. Returns NULL for no table.
+vcr_balance_verdict <- function(balance) {
+  if (is.null(balance) || !nrow(balance)) return(NULL)
+  a <- abs(balance$smdAdjusted)
+  if (!any(is.finite(a))) return(NULL)
+  j <- which.max(replace(a, !is.finite(a), -Inf))
+  floor_ <- vcr_limit("smdFloor", 0.1); severe <- vcr_limit("smdSevere", 0.25)
+  worst <- a[j]
+  list(band = if (worst > severe) "severe" else if (worst > floor_) "moderate" else "balanced",
+       worst = worst, variable = balance$covariate[j], smd = balance$smdAdjusted[j], floor = floor_, severeFloor = severe)
+}
+
+#' The `limitedBy` code a balance verdict adds, or NULL when the covariates are balanced.
+vcr_balance_limit <- function(verdict) {
+  if (is.null(verdict)) return(NULL)
+  switch(verdict$band, severe = "standardized_difference_severe", moderate = "standardized_difference_above_floor", NULL)
 }
 
 `%||%` <- function(a, b) if (is.null(a)) b else a

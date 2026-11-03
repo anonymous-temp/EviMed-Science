@@ -91,7 +91,7 @@
       "id": "clinical-evidence-synthesis",
       "visibility": "public",
       "evalHarness": "evals/clinical-review-quality",
-      "briefCount": 4,
+      "briefCount": 5,
       "realDelivery": {
         "status": "accepted",
         "evidence": "evals/clinical-review-quality/results/2026-09-28-review-001-empa-kidney-report-family/run.json",
@@ -328,7 +328,7 @@
       "id": "meta-analysis",
       "visibility": "public",
       "evalHarness": "evals/meta-analysis",
-      "briefCount": 4,
+      "briefCount": 5,
       "realDelivery": {
         "status": "accepted",
         "evidence": "evals/meta-analysis/results/2026-09-28-ma-001-tranexamic-acid-tka-run3",
@@ -400,7 +400,7 @@
       "id": "peer-review",
       "visibility": "public",
       "evalHarness": "evals/peer-review",
-      "briefCount": 5,
+      "briefCount": 6,
       "realDelivery": {
         "status": "accepted",
         "evidence": "PROGRESS.md@2026-09-27 06:37",
@@ -417,7 +417,7 @@
       "id": "research-grant-development",
       "visibility": "public",
       "evalHarness": "evals/research-grant-development",
-      "briefCount": 3,
+      "briefCount": 4,
       "realDelivery": {
         "status": "accepted",
         "evidence": "evals/research-grant-development/results/2026-09-09-grant-001-nsfc-general",
@@ -471,7 +471,7 @@
       "id": "statistical-analysis",
       "visibility": "public",
       "evalHarness": "evals/statistical-analysis",
-      "briefCount": 8,
+      "briefCount": 9,
       "realDelivery": {
         "status": "accepted",
         "evidence": "evals/statistical-analysis/results/2026-09-30-statistics-001-wdbc-group-comparison-run2/run.json",

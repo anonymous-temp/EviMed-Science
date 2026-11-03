@@ -22,11 +22,30 @@ const MOST_GAP = 6;
 const SYMBOL_UNIT = /[/%^]/;
 
 /**
- * Whether `alias` stands beside the printed number `value` in `text` (whitespace already removed): right after it,
- * across at most {@link MOST_GAP} characters that are neither letters nor digits, or right before it as a header unit.
- * @param {string} text @param {readonly string[]} aliases @param {number} value
+ * The quote with its whitespace removed (so `μmol / L` is one unit and `7.2 %` one token), and for each character left the index it
+ * had in the quote as printed: what stands next to a unit is judged on the printed quote, because once the whitespace is gone the
+ * next word of a sentence looks like part of the unit (`7.2 % this week` became `7.2%thisweek`).
+ * @param {string} quote
  */
-function besideValue(text, aliases, value) {
+function compacted(quote) {
+  const kept = [];
+  /** @type {number[]} */
+  const origin = [];
+  for (let index = 0; index < quote.length; index += 1) {
+    if (!/\s/.test(quote[index])) { kept.push(quote[index]); origin.push(index); }
+  }
+  return { text: kept.join(''), origin, printed: quote };
+}
+
+/**
+ * Whether `alias` stands beside the printed number `value` in `text` (whitespace already removed): right after it,
+ * across at most {@link MOST_GAP} characters that are neither letters nor digits, or right before it as a header unit. The unit
+ * ends where the printed quote shows it ending: a letter right after it makes it another word (`mg/dLx`), a space does not.
+ * @param {ReturnType<typeof compacted>} compact @param {readonly string[]} aliases @param {number} value
+ */
+function besideValue(compact, aliases, value) {
+  const { text, origin, printed } = compact;
+  const afterUnit = (/** @type {number} */ end) => printed[origin[end - 1] + 1] ?? '';
   for (const match of text.matchAll(PRINTED_NUMBER)) {
     if (Math.abs(Number(match[0].replaceAll(',', '')) - Math.abs(value)) > 1e-9) continue;
     const from = /** @type {number} */ (match.index), to = from + match[0].length;
@@ -34,7 +53,7 @@ function besideValue(text, aliases, value) {
       for (let gap = 0; gap <= MOST_GAP; gap += 1) {
         if (gap > 0 && ALNUM.test(text[to + gap - 1] ?? '')) break;
         if (!text.startsWith(alias, to + gap)) continue;
-        if (!LETTER.test(text[to + gap - 1] ?? '') && !LETTER.test(text[to + gap + alias.length] ?? '')) return true;
+        if (!LETTER.test(text[to + gap - 1] ?? '') && !LETTER.test(afterUnit(to + gap + alias.length))) return true;
       }
       for (let gap = 0; gap <= 3; gap += 1) {
         if (gap > 0 && !HEADER_GAP.test(text[from - gap] ?? '')) break;
@@ -68,18 +87,57 @@ export function clinicalUnitInQuote(unit, quote, exactUnknown = false, value = n
     ?? Object.values(table.caseVariants).find(values => values.includes(token));
   const aliases = listed ?? (token && (exactUnknown || SYMBOL_UNIT.test(token)) ? [token] : null);
   if (!aliases) return null;
-  const text = quote.replace(/\s+/g, '');
+  const compact = compacted(quote);
   const spellings = aliases.map(alias => alias.replace(/\s+/g, ''));
-  if (Number.isFinite(value)) return besideValue(text, spellings, /** @type {number} */ (value));
+  if (Number.isFinite(value)) return besideValue(compact, spellings, /** @type {number} */ (value));
+  const { text, origin, printed } = compact;
   return spellings.some(alias => {
     let offset = text.indexOf(alias);
     while (offset >= 0) {
-      const before = text[offset-1] ?? '', after = text[offset+alias.length] ?? '';
+      const before = text[offset-1] ?? '', after = printed[origin[offset+alias.length-1] + 1] ?? '';
       if (!LETTER.test(before) && !LETTER.test(after)) return true;
       offset = text.indexOf(alias,offset+1);
     }
     return false;
   });
+}
+
+/** Every spelling of a unit the table knows, and the percent sign: what a number may be printed beside. */
+const PRINTED_UNITS = [...Object.values(table.aliases).flat(), ...Object.values(table.caseVariants).flat(), '%'];
+
+/**
+ * Whether the quote prints a unit of the closed vocabulary (or a percent sign) beside this number. A number with none beside it is
+ * bare: it may then be read in its analyte's one conventional unit, if the table has one (`clinicalConventionalUnit`).
+ * @param {string} quote @param {number} value
+ */
+export function clinicalUnitPrintedBesideValue(quote, value) {
+  return Number.isFinite(value) && besideValue(compacted(String(quote)), PRINTED_UNITS.map(alias => alias.replace(/\s+/g, '')), value);
+}
+
+/**
+ * A fact's value as the number it is, when it is one: a finite number, or a string that is nothing but a plain number (`"9.9"`,
+ * `" -3 "`). The one read the whole path shares: the writer holds such a value to the quotation like any number, the batch reader
+ * turns it into the number, and the evaluator compares it as the number. A string with a word, a unit or a separator in it is text.
+ * @param {unknown} value @returns {number | null}
+ */
+export function clinicalNumericValue(value) {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value === 'string' && /^\s*-?\d+(?:\.\d+)?\s*$/.test(value)) return Number(value);
+  return null;
+}
+
+/**
+ * The unit a bare number of this analyte is read in, from the closed table of analytes that have exactly one (`conventional`; an
+ * analyte with a conversion row has two and is never listed). A number outside the printed range the table gives is not read in it.
+ * The caller records `unitBasis: conventional` beside the unit: it was not printed.
+ * @param {unknown} variable @param {unknown} value
+ * @returns {{ unit: string, basis: string, version: string } | null}
+ */
+export function clinicalConventionalUnit(variable, value) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return null;
+  const row = table.conventional.find(entry => entry.analyte === String(variable ?? ''));
+  if (!row || value < row.printed.min || value > row.printed.max) return null;
+  return { unit: row.unit, basis: row.basis, version: table.version };
 }
 /** Original values are immutable; the result is a derived comparison value.
  * @param {number} value @param {string} from @param {string} to @param {string} analyte

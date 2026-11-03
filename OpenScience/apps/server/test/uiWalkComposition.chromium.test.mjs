@@ -681,6 +681,17 @@ test("module and route readiness wait through the empty first paint before delay
   await page.unroute('http://readiness.walk/**');
 });
 
+test("a page whose first screen is its introduction is ready with an empty body, and its loading skeleton still holds it", { skip }, async () => {
+  // setContent keeps the address of the page before it, and a module address carries a rule of its own.
+  await page.goto("about:blank");
+  await page.setContent('<main><h1>主动科研</h1><div data-page-introduction><div role="status" aria-label="正在载入研究" class="animate-pulse" style="height:64px"></div></div><div data-page-body><div></div></div></main>');
+  assert.equal(await page.evaluate(routeReady), false);
+  await page.evaluate(() => { globalThis.document.querySelector('[data-page-introduction]').innerHTML = '<section><p>等待研究启动</p><button>发起研究</button></section>'; });
+  assert.equal(await page.evaluate(routeReady), true);
+  await page.setContent('<main><h1>Empty</h1><div data-page-introduction></div><div data-page-body></div></main>');
+  assert.equal(await page.evaluate(routeReady), false);
+});
+
 
 test("a VCR tab's visible controls cannot become unobservable coverage during PendingFeedback's quiet phase", { skip }, async () => {
   await page.setContent('<main><div data-page-body><button>Compare options</button><div id="result"></div></div></main>');

@@ -142,7 +142,7 @@ describe("PageShell slots", () => {
 
   it("publishes the band's height for what sticks below it, makes it the scroll padding, and takes it back with the band", () => {
     const { container, rerender, unmount } = render(<PageShell title="页" tabs={tabs}><p>x</p></PageShell>);
-    const scroller = container.firstElementChild as HTMLElement;
+    const scroller = container.querySelector("[data-page-scroll]") as HTMLElement;
     expect(scroller).toHaveClass("overflow-y-auto", "scroll-pt-[var(--page-chrome-h,0px)]");
     expect(scroller.style.getPropertyValue("--page-chrome-h")).toBe("0px");
     rerender(<PageShell title="页"><p>x</p></PageShell>);
@@ -191,4 +191,63 @@ describe("PageShell slots", () => {
     expect(warn).toHaveBeenCalledWith(expect.stringContaining("one view-switch row"));
     warn.mockRestore();
   });
+});
+
+it("reserves a separate dock viewport so scrolling content never passes behind conversation controls", () => {
+  const { container } = render(<PageShell title="研究" dock={<button>打开对话</button>}><button>查看结果</button></PageShell>);
+  const scroll = container.querySelector('[data-page-scroll]')!;
+  const dock = container.querySelector('[data-page-dock]')!;
+  expect(scroll.contains(screen.getByRole('button', { name: '查看结果' }))).toBe(true);
+  expect(scroll.contains(dock)).toBe(false);
+  expect(scroll.parentElement).toBe(dock.parentElement);
+  expect(scroll.nextElementSibling).toBe(dock);
+  expect(dock.contains(screen.getByRole('button', { name: '打开对话' }))).toBe(true);
+});
+
+it("reattaches chrome observers when adding or removing the dock changes the viewport geometry", () => {
+  const intersections: { root: Element | Document | null | undefined; disconnect: ReturnType<typeof vi.fn>; observe: ReturnType<typeof vi.fn> }[] = [];
+  const sizes: { disconnect: ReturnType<typeof vi.fn>; observe: ReturnType<typeof vi.fn> }[] = [];
+  vi.stubGlobal('IntersectionObserver', class {
+    disconnect = vi.fn(); observe = vi.fn();
+    constructor(_callback: unknown, options: IntersectionObserverInit) { intersections.push({ root: options.root, disconnect: this.disconnect, observe: this.observe }); }
+  });
+  vi.stubGlobal('ResizeObserver', class {
+    disconnect = vi.fn(); observe = vi.fn();
+    constructor() { sizes.push(this); }
+  });
+  try {
+    const tabs = { label: '结果', value: 'one', items: [{ value: 'one', label: '结果' }], onChange: () => {} };
+    const view = (dock?: React.ReactNode) => <PageShell title="页" tabs={tabs} dock={dock}>结果</PageShell>;
+    const { container, rerender } = render(view(<button>对话</button>));
+    for (const dock of [undefined, <button key="dock">对话</button>]) {
+      const previous = intersections.at(-1)!;
+      const oldSize = sizes.at(-1)!;
+      rerender(view(dock));
+      expect(previous.disconnect).toHaveBeenCalledOnce();
+      expect(oldSize.disconnect).toHaveBeenCalledOnce();
+      const scroll = container.querySelector('[data-page-scroll]');
+      const band = container.querySelector('[data-page-chrome]');
+      expect(intersections.at(-1)!.root).toBe(scroll);
+      expect(intersections.at(-1)!.observe).toHaveBeenCalledWith(band);
+      expect(sizes.at(-1)!.observe).toHaveBeenCalledWith(band);
+      expect((scroll as HTMLElement).style.getPropertyValue('--page-chrome-h')).toBe('0px');
+    }
+  } finally { vi.unstubAllGlobals(); }
+});
+
+
+it("preserves child drafts, DOM identity and scroll position while the dock toggles", () => {
+  const view = (dock?: React.ReactNode) => <PageShell title="研究" dock={dock}><input aria-label="草稿" defaultValue="原稿" /></PageShell>;
+  const { container, rerender } = render(view(<button>对话</button>));
+  const input = screen.getByRole('textbox', { name: '草稿' }) as HTMLInputElement;
+  input.value = '未发送的修改';
+  const scroll = container.querySelector('[data-page-scroll]') as HTMLElement;
+  scroll.scrollTop = 120;
+  for (const dock of [undefined, <button key="dock">对话</button>]) {
+    rerender(view(dock));
+    expect(screen.getByRole('textbox', { name: '草稿' })).toBe(input);
+    expect(input.value).toBe('未发送的修改');
+    expect(container.querySelector('[data-page-scroll]')).toBe(scroll);
+    expect(scroll.scrollTop).toBe(120);
+  }
 });

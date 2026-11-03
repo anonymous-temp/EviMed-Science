@@ -2007,12 +2007,13 @@ export async function dispatchWebAgentRun(
   text: string,
   dispatchId: string,
   line?: string,
+  researchGoal?: boolean,
 ): Promise<WebAgentRun> {
   if (!hasWebApi) throw new BackendUnavailableError("agentRuns.dispatch");
   const res = await fetchWithWebAuth(apiUrl("/agent-runs/dispatch"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ sessionId, dispatchId, text, ...(line ? { line } : {}) }),
+    body: JSON.stringify({ sessionId, dispatchId, text, ...(line ? { line } : {}), ...(researchGoal ? { researchGoal } : {}) }),
   });
   return parseApiResponse<WebAgentRun>(res);
 }

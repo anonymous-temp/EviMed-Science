@@ -41,7 +41,7 @@
  * @module runArtifacts
  */
 
-import { FILE_DELIVERABLE_KIND, artifactPresentation, compareArtifacts, deliverableIdOfPath, isProtectedWritePath, normalizeWorkspacePath, workspaceLayout } from "@evimed/domain";
+import { FILE_DELIVERABLE_KIND, PLATFORM_ROOT_DIRECTORIES, SCRATCH_DIRECTORIES, artifactPresentation, compareArtifacts, deliverableIdOfPath, isOrdinaryOutputDirectory, normalizeWorkspacePath, ordinaryOutputPath, workspaceLayout } from "@evimed/domain";
 
 /** @typedef {'deliverable' | 'revision-notes' | 'work' | 'superseded'} ArtifactKind */
 
@@ -62,59 +62,8 @@ function hasDotSegment(path) {
   return path.split("/").some((segment) => segment.startsWith("."));
 }
 
-/**
- * Directories whose files are never a conversation's product: dependencies a package manager unpacked, bytecode and
- * caches, and the scratch places a script writes its intermediate files to. Compared in lower case, by whole name.
- */
-export const SCRATCH_DIRECTORIES = Object.freeze(new Set([
-  "node_modules", "__pycache__", "site-packages", "venv", "tmp", "temp", "cache", "scratch", "work",
-]));
-
-/**
- * The directories a render step writes page images to. The office skills tell the run to look at its own file after it saves
- * it (`render --output-dir preview-1`, `--out-dir page-5`, a new directory each time), so the pictures and the manifest beside
- * them are the run's way of checking its work, not what it was asked for. A whole name, a stem and an optional number: a
- * folder the person named (`pages/`, `site/preview-copy/`) is not matched. A page the run really hands over goes through
- * `present`, which is not filtered.
- * Deletable when the office kit renders under a dot directory.
- */
-const RENDER_DIRECTORY = /^(?:previews?|renders?)(?:[-_]?\d+)?$|^page-\d+$/i;
-
-/**
- * The first-level directories that are not the conversation's: the read-only dataset mount, the project's document library
- * (mounted read-only into the runtime and written by the platform's own intake) and the account's personal library (mounted
- * read-only too). The two names are spelled out because `researchContext.mjs` and `runtimeManager.mjs`, which own the
- * constants, sit in an import cycle with this module; a test holds them equal.
- */
-export const PLATFORM_ROOT_DIRECTORIES = Object.freeze(new Set([workspaceLayout.dataDir, "knowledge-base", "library"]));
-
-/** The platform's own files at the workspace root: the plan, the receipt and the summary a run's gate writes. */
-const PLATFORM_ROOT_FILES = Object.freeze(/** @type {Set<string>} */ (new Set([workspaceLayout.planFile, workspaceLayout.receiptFile, workspaceLayout.deliverySummaryFile])));
-
-/**
- * Whether a directory name can hold an ordinary conversation's outputs.
- * @param {string} name @param {boolean} atRoot whether it sits directly in the workspace
- */
-export function isOrdinaryOutputDirectory(name, atRoot) {
-  if (!name || name.startsWith(".")) return false;
-  if (SCRATCH_DIRECTORIES.has(name.toLowerCase()) || RENDER_DIRECTORY.test(name)) return false;
-  return !(atRoot && PLATFORM_ROOT_DIRECTORIES.has(name));
-}
-
-/**
- * Whether a workspace-relative file path can be an ordinary conversation's output: visible, outside every scratch,
- * dependency and platform directory, not one of the platform's own files, and not a protected write path.
- * @param {string} value
- */
-export function ordinaryOutputPath(value) {
-  const path = normalizeWorkspacePath(value) ?? "";
-  if (!path || hasDotSegment(path)) return false;
-  const segments = path.split("/");
-  const directories = segments.slice(0, -1);
-  if (directories.some((name, index) => !isOrdinaryOutputDirectory(name, index === 0))) return false;
-  if (directories.length === 0 && PLATFORM_ROOT_FILES.has(segments[0])) return false;
-  return !isProtectedWritePath(path);
-}
+// The closed list of what is an ordinary file moved to `@evimed/domain` on 2026-11-02: the run side lists with it too.
+export { PLATFORM_ROOT_DIRECTORIES, SCRATCH_DIRECTORIES, isOrdinaryOutputDirectory, ordinaryOutputPath };
 
 /**
  * One file's kind.

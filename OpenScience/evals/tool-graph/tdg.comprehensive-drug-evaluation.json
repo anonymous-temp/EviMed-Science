@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "comprehensive-drug-evaluation",
-  "version": "sha256:6d389e2aaff2180a8d9e42d32a6e53a90945b1aa000c31c837b5db8f022574c8",
+  "version": "sha256:cf573cb18b3bbb15782c8d0d9f7ac2d7a016ca0a8c981f5c9e1d7dc5a265fc6c",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 36,
@@ -548,6 +548,12 @@
             "type": "integer",
             "minimum": 1,
             "maximum": 50
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 499,
+            "description": "Only for `prospero`: registrations to skip. data.outcome says when more matched and what offset reads on; a topic is not open on a partial read."
           }
         },
         "additionalProperties": false,

@@ -1127,7 +1127,7 @@ A project's conversation is refused while a bounded runtime is reserved for work
 `scheduled-task` (the researcher's own scheduled task — 「这个项目正在执行你设定的定时任务」), `module-step` (a 虚拟临床研究 or 循证 GEO
 step started by the worker while nobody was in the study). A step a **person** starts opens the project's runtime first and runs in it,
 so it holds nothing and the conversation stays open; a person's cancel holds the programme (nothing is taken up again until a step is
-asked for). The study page reads `activity` / `next` / `stepSummaries` from `GET /api/vcr/studies/:id`; a press of a step answers
+asked for). The study page reads `activity` / `stepSummaries` from `GET /api/vcr/studies/:id`; a press of a step answers
 `{ accepted, runId, step, queuedBehind }` and no session to go to.
 
 ### `memory_gateway_unauthenticated` and `evimed_workload_token_invalid` in bursts (2026-10-19)

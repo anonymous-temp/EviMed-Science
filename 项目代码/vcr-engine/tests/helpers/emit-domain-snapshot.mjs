@@ -105,6 +105,7 @@ const snapshot = {
     replicatesNullMin: vocab.VCR_REPLICATES_NULL_MIN,
     replicatesAltMin: vocab.VCR_REPLICATES_ALT_MIN,
     smdFloor: vocab.VCR_SMD_FLOOR,
+    smdSevere: vocab.VCR_SMD_SEVERE,
     // Deployment presets for the deterministic 「不可估计」 rules. A scenario
     // cannot loosen them: the engine reads them here, never from a job.
     essFloor: vocab.VCR_ESS_FLOOR,
@@ -114,6 +115,10 @@ const snapshot = {
     supportCeiling: vocab.VCR_SUPPORT_CEILING,
     conflictBound: vocab.VCR_MAP_CONFLICT_BOUND,
     tolerance: { ...vocab.VCR_RECONSTRUCTION_TOLERANCE },
+    // the published gap between a planned and a measured effect (design.analytic 1.3.0, C6)
+    effectDiscount: JSON.parse(JSON.stringify(vocab.VCR_EFFECT_DISCOUNT)),
+    // what a local calibration of an applied published model needs before it reports a slope (model.prognostic_apply 1.1.0, D3)
+    localCalibration: JSON.parse(JSON.stringify(vocab.VCR_LOCAL_CALIBRATION_MIN)),
   },
 }
 

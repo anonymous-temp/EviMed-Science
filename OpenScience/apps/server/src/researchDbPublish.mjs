@@ -21,7 +21,7 @@ import { researchDbImportFacts, researchDbImportTitle, researchDbLogicalPath, re
  * }} dependencies
  */
 export function createResearchDbPublisher({ sourceService, database, credentials, staging, agenda, store, write, limits = RESEARCH_DB_LIMIT_DEFAULTS, now = () => new Date() }) {
-  /** @param {{user: any, project: any, connectionId: string, target: {host:string,port:number,database:string}, agendaId: string, requestId: string, fingerprint: string, snapshot: any}} request */
+  /** @param {{user: any, project: any, connectionId: string, target: {host:string,port:number,database:string}, agendaId?: string, requestId: string, fingerprint: string, snapshot: any}} request */
   return async function publish({ user, project, connectionId, target, agendaId, requestId, fingerprint, snapshot }) {
     const capturedAt = now().toISOString();
     const logicalPath = researchDbLogicalPath(target, snapshot.schema, snapshot.table);
@@ -41,9 +41,10 @@ export function createResearchDbPublisher({ sourceService, database, credentials
       await staging.lock(user.id, current.id, stageId, stagePath);
       if (previous) { await staging.complete(user.id, current.id, stageId); return previous; }
       await credentials.open(user.id, current.id, connectionId, database, true);
-      const question = await agenda.get(user.id, agendaId);
-      if (question.projectId !== current.id) throw new HttpError(404, 'autopilot_material_not_found', 'The research question was not found.');
-      agenda.assertNotArchived(question);
+      // No study named: the table goes to the project's knowledge base, where every research of the project reads it.
+      const question = agendaId ? await agenda.get(user.id, agendaId) : null;
+      if (question && question.projectId !== current.id) throw new HttpError(404, 'autopilot_material_not_found', 'The research question was not found.');
+      if (question) agenda.assertNotArchived(question);
       const ctx = { user, project: current };
       // The sidecar first, so a CSV is never visible without the note that says what it is. Neither is a source until the
       // CSV registers; a failure before that leaves both under the marker, and recovery removes both.
@@ -53,7 +54,7 @@ export function createResearchDbPublisher({ sourceService, database, credentials
       // durable staging sweep checks the source ledger before deletion.
       const saved = await write(ctx, { root: 'base', rel: logicalPath, buffer: bytes, meta: { title: researchDbImportTitle(facts), snapshot: sourceFacts }, createAlias: false });
       if (!saved?.source?.id) throw new HttpError(503, 'research_db_unavailable', 'The database snapshot could not be published.');
-      await agenda.addMaterials(user.id, question.id, { sourceIds: [saved.source.id] }, { replacingLogicalPath: logicalPath });
+      if (question) await agenda.addMaterials(user.id, question.id, { sourceIds: [saved.source.id] }, { replacingLogicalPath: logicalPath });
       const result = {
         sourceId: saved.source.id, capturedAt, title: researchDbImportTitle(facts), rowCount: snapshot.rows.length, columns: snapshot.columns.length,
         truncated: snapshot.truncated, oversizedValuesWithheld: snapshot.oversizedValuesWithheld,

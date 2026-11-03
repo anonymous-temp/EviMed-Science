@@ -102,7 +102,7 @@ describe("T2 — the list of studies, with a preview beside it", () => {
   });
   afterEach(() => rect.mockRestore());
 
-  it("has the views, the filters and the search in the one toolbar over the list, in the list's column; no tab list, no step rail", async () => {
+  it("has the filters and the search in the one toolbar over the list, in the list's column; no view switch, no tab list, no step rail", async () => {
     const { container } = drawStudy("/app/virtual-research");
     const rows = await screen.findByRole("list", { name: "研究" });
     const facts = compositionFacts(container);
@@ -115,19 +115,19 @@ describe("T2 — the list of studies, with a preview beside it", () => {
     expect(facts.toolbars[0]).toContainElement(screen.getByRole("searchbox", { name: "搜索研究" }));
     expect(column).toContainElement(facts.toolbars[0]);
     expect(precedes(facts.toolbars[0], rows)).toBe(true);
-    // The new-task pane owns the primary; after choosing a study, the list header owns it.
+    // The new-study pane is four equal examples, none of them the page's primary (F5, 2026-11-01); after choosing a study, the list header owns it.
     expect(column).toContainElement(facts.header);
     expect(precedes(facts.header!, facts.toolbars[0])).toBe(true);
     expect(facts.headerPrimaryActions).toHaveLength(0);
-    expect(screen.getByRole("button", { name: "在对话中开始" })).toHaveClass("bg-accent");
-    expect(container.querySelectorAll(".bg-accent")).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "让 AI 匹配患者和试验" })).not.toHaveClass("bg-accent");
+    expect(container.querySelectorAll(".bg-accent")).toHaveLength(0);
     await userEvent.click(screen.getByRole("link", { name: /EV-201 二线/ }));
     expect(screen.getByRole("button", { name: "新研究" })).toHaveClass("bg-accent");
-    expect(screen.queryByRole("button", { name: "在对话中开始" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "让 AI 匹配患者和试验" })).toBeNull();
     expect(container.querySelectorAll(".bg-accent")).toHaveLength(1);
   });
 
-  it("is a page of its own for the other three views: the shell's band over a body, with its one toolbar", async () => {
+  it("is a page of its own for a library at its old address: the shell's band over a body, with its one toolbar", async () => {
     const { container } = drawStudy("/app/virtual-research?tab=models");
     await screen.findByRole("list", { name: "保存的模型与参数" });
     const facts = expectComposed(container, { toolbar: true, tablists: 0, stepRail: false });

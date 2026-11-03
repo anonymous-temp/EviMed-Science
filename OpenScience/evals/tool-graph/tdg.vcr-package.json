@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "vcr-package",
-  "version": "sha256:9485d7d049ec94effb46635567dae6799fa172cad0a2999c979d7d2373d8f904",
+  "version": "sha256:74830558ebbbd96ebcd9adc77d99efe38174dc8ff36eb8f6754b21b53f6a6394",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 27,
@@ -880,7 +880,8 @@
               "longitudinal",
               "candidate_trials",
               "soa",
-              "regulatory_contacts"
+              "regulatory_contacts",
+              "candidates"
             ]
           },
           "filter": {
@@ -943,7 +944,8 @@
               "trial_benchmark",
               "candidate_trial",
               "soa",
-              "regulatory_contact"
+              "regulatory_contact",
+              "result_record"
             ]
           },
           "items": {

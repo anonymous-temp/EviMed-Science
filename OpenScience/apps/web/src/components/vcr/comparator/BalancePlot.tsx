@@ -16,6 +16,7 @@ import { isPlaceholder, valueText } from "../vcrText";
  *    table is not stretched to fill the box.
  *  - The two populations' own levels (「62 岁 / 61 岁」) are in the row's name for a screen reader and, when the server sent them,
  *    under the covariate's name; most covariates carry none and nothing is drawn for those.
+ *  - A row can carry one short note under its name (the enrolment-year row says it was not weighted on); most carry none.
  */
 export function BalancePlot({ rows, floor = 0.1 }: { rows: readonly VcrProfileRow[]; floor?: number }) {
   const weighted = rows.some((row) => row.smdBefore != null);
@@ -58,6 +59,7 @@ export function BalancePlot({ rows, floor = 0.1 }: { rows: readonly VcrProfileRo
               <span className="min-w-0 max-sm:col-span-2">
                 <span className="block truncate text-ui text-text">{row.label}</span>
                 {levels && <span className="block truncate text-caption text-text-3">{levels}</span>}
+                {row.note && <span className="block text-caption text-text-3">{row.note}</span>}
               </span>
               <span role="img" aria-label={name} data-vcr-smd={over ? "over" : "under"} data-forced-colors="preserve" className="relative block h-4">
                 <span className="absolute inset-x-0 top-1/2 h-px bg-border" />

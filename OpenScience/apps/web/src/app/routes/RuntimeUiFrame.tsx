@@ -12,7 +12,7 @@ import { saveToKnowledgeBase } from "@/lib/sourceClient";
 import { listPath } from "@/lib/knowledgeNav";
 import { getWebSessionSourceScope, putWebSessionSourceScope } from "@/lib/apiClient";
 import { toast } from "@/lib/toast";
-import { provideFrameSessionSearch, reportPathOf, searchKnowledgeSources, useFrameRunBinding, type FrameSessionSearchResult } from "@/lib/runtimeUiBridge";
+import { CONVERSATION_SETTLED_EVENT, provideFrameSessionSearch, reportPathOf, searchKnowledgeSources, useFrameRunBinding, type FrameSessionSearchResult } from "@/lib/runtimeUiBridge";
 import { useFrameReplyChecks } from "@/lib/replyChecks";
 import { useResearchBilling } from "@/lib/useResearchBilling";
 import { conversationTitle } from "@/lib/conversationTitles";
@@ -23,6 +23,7 @@ import { useUiStore } from "@/lib/store";
 import { isGeoTab } from "@/components/geo/geoTabs";
 import { geoProjectPath, useFrameGeoOptions } from "@/components/geo/useFrameGeoOptions";
 import { useFrameVcrOptions } from "@/components/vcr/useFrameVcrOptions";
+import { isVcrTab, vcrTabPath } from "@/components/vcr/vcrTabs";
 import { locateSourceQuote } from "@/lib/sourceClient";
 import { PreservedConversation } from "@/components/chat/PreservedConversation";
 import { cancelWebAgentRun } from "@/lib/apiClient";
@@ -817,6 +818,13 @@ export function RuntimeUiFrame({ projectId, origin, scope: scopeInput, scopeOwne
         else toast.error(message.type === "evimed.runtime-ui.save-to-knowledge-base" ? MEMBER_SAVE_TEXT : MEMBER_OPEN_TEXT);
         return;
       }
+      if (message.type === "evimed.runtime-ui.turn-settled") {
+        if (typeof message.sessionId !== "string" || message.sessionId !== frameTask
+          || (scope && message.sessionId !== scope.sessionId)) return;
+        incoming.current = message.seq;
+        window.dispatchEvent(new CustomEvent(CONVERSATION_SETTLED_EVENT, { detail: { sessionId: message.sessionId } }));
+        return;
+      }
       if (message.type === "evimed.runtime-ui.booted") {
         incoming.current = message.seq;
         setBooted(value => value + 1);
@@ -952,6 +960,15 @@ export function RuntimeUiFrame({ projectId, origin, scope: scopeInput, scopeOwne
       } else if (message.type === "evimed.runtime-ui.open-item" && typeof message.itemId === "string" && /^[a-z0-9]{12,32}$/.test(message.itemId)) {
         incoming.current = message.seq;
         navigate(`/app/frontier/items/${encodeURIComponent(message.itemId)}`);
+      } else if (message.type === "evimed.runtime-ui.open-vcr-result"
+        && typeof message.studyId === "string" && /^[A-Za-z0-9_-]{1,160}$/.test(message.studyId) && typeof message.tab === "string" && isVcrTab(message.tab)) {
+        // A 虚拟临床研究 result a reply linked to (the entry a research tool's answer carries): one of the seven tabs of a study. The
+        // frame names the study and the tab from the closed shapes; the address is spelled here, and the page reads the study for the
+        // account itself (a study that is not theirs is not found).
+        incoming.current = message.seq;
+        // The comparison tab opens on the saved comparison the reply cited; the id is of the shape the application puts in an address.
+        const object = message.tab === "comparator" && typeof message.object === "string" && /^[A-Za-z0-9_-]{1,160}$/.test(message.object) ? message.object : null;
+        navigate(`${vcrTabPath(message.studyId, message.tab)}${object ? `?${new URLSearchParams({ object })}` : ""}`);
       } else if (message.type === "evimed.runtime-ui.open-source"
         && typeof message.sourceId === "string" && /^src_[a-f0-9]{32}$/.test(message.sourceId)) {
         incoming.current = message.seq;

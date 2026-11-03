@@ -97,6 +97,20 @@ describe("患者匹配 — choosing a person", () => {
     expect(screen.getByRole("button", { name: "给试验找患者" })).toHaveAttribute("aria-pressed", "true");
   });
 
+  it("a study with a patient and no protocol opens on that patient's trials, once", async () => {
+    const reads: URLSearchParams[] = [];
+    server = installVcrServer(network.productRequest, { [`GET ${MATCHING}`]: ({ query }: { query: URLSearchParams }) => {
+      reads.push(query);
+      return Object.assign(fixture("ev201/matching.json"), { protocols: [], candidateRoster: ["P-0201"], opensOnPatient: "P-0201" });
+    } });
+    drawTab(<MatchingTab studyId={STUDY_ID} study={study()} />);
+    await waitFor(() => expect(reads.some((query) => query.get("direction") === "patient_to_trial" && query.get("candidate") === "P-0201")).toBe(true));
+    await userEvent.click(await screen.findByRole("button", { name: "给试验找患者" }));
+    await waitFor(() => expect(reads.at(-1)?.get("direction")).toBe("trial_to_patient"));
+    await new Promise((done) => setTimeout(done, 50));
+    expect(reads.at(-1)?.get("direction")).toBe("trial_to_patient");
+  });
+
   // The ranking hint orders a coordinator's work; it is never a probability.
   it("carries the clinical priority under its own label, with no number that reads as a probability", async () => {
     drawTab(<MatchingTab studyId={STUDY_ID} study={study()} />);
@@ -475,6 +489,48 @@ describe("患者匹配 — every citation a verdict rests on (E-06)", () => {
     expect(cell).toHaveTextContent("document-aaaa1111.txt · 9 月 26 日");
     expect(cell).toHaveTextContent("“2026-06-01 给予多西他赛”");
     expect(cell).toHaveTextContent("document-bbbb2222.txt · 6 月 1 日");
+  });
+});
+
+describe("患者匹配 — what a citation does not itself print", () => {
+  it("says beside the quotation that a unit was read by convention, and that a date came from another line of the record", async () => {
+    const payload = addressed(fixture("ev201/matching-p0192.json"));
+    const row = payload.selected.criteria.find((entry: any) => entry.code === "E1");
+    const read = { quote: "HgbA1c 7.4 last month.", source: "document-aaaa1111.txt", at: "9 月 26 日", locator: { documentId: "prj_x", start: 0, end: 8 },
+      note: "单位 % 是按惯例读出的，原文没有印；日期取自同一份病历的另一处，不是这句话里印的" };
+    row.evidence = read;
+    row.evidenceItems = [read, { quote: "2026-06-01 给予多西他赛", source: "document-bbbb2222.txt", at: "6 月 1 日", locator: { documentId: "prj_x", start: 40, end: 48 } }];
+    server = installVcrServer(network.productRequest, { [P0192]: payload });
+    drawTab(<MatchingTab studyId={STUDY_ID} study={study()} />);
+    await screen.findByRole("heading", { name: "P-0201" });
+    await userEvent.click(screen.getByRole("button", { name: /^P-0192/ }));
+    await screen.findByRole("heading", { name: "P-0192" });
+    const cell = criterionRow("E1");
+    expect(cell).toHaveTextContent("“HgbA1c 7.4 last month.”");
+    expect(cell).toHaveTextContent("单位 % 是按惯例读出的，原文没有印");
+    expect(cell).toHaveTextContent("日期取自同一份病历的另一处，不是这句话里印的");
+    expect(cell.textContent?.match(/按惯例读出/g)).toHaveLength(1);
+  });
+});
+
+describe("患者匹配 — a date taken from the header of the record", () => {
+  it("says beside the date of a citation, and of a fact in the clinical records, that it is the record's date, and that a past event is no later than it", async () => {
+    const payload = addressed(fixture("ev201/matching-p0192.json"));
+    const row = payload.selected.criteria.find((entry: any) => entry.code === "E1");
+    const headed = { quote: "既往有心肌梗死", source: "document-aaaa1111.txt", at: "3 月 1 日", dateNote: "日期取自病历抬头", locator: { documentId: "prj_x", start: 0, end: 8 } };
+    const bounded = { quote: "曾做过冠脉支架", source: "document-bbbb2222.txt", at: "3 月 1 日", dateNote: "日期取自病历抬头，事件发生不晚于这一天", locator: { documentId: "prj_x", start: 40, end: 48 } };
+    row.evidence = headed;
+    row.evidenceItems = [headed, bounded, { quote: "2026-06-01 给予多西他赛", source: "document-cccc3333.txt", at: "6 月 1 日", locator: { documentId: "prj_x", start: 60, end: 68 } }];
+    server = installVcrServer(network.productRequest, { [P0192]: payload });
+    drawTab(<MatchingTab studyId={STUDY_ID} study={study()} />);
+    await screen.findByRole("heading", { name: "P-0201" });
+    await userEvent.click(screen.getByRole("button", { name: /^P-0192/ }));
+    await screen.findByRole("heading", { name: "P-0192" });
+    const cell = criterionRow("E1");
+    expect(cell).toHaveTextContent("document-aaaa1111.txt · 3 月 1 日 · 日期取自病历抬头");
+    expect(cell).toHaveTextContent("document-bbbb2222.txt · 3 月 1 日 · 日期取自病历抬头，事件发生不晚于这一天");
+    expect(cell.textContent?.match(/日期取自病历抬头/g)).toHaveLength(2);
+    expect(cell).toHaveTextContent("document-cccc3333.txt · 6 月 1 日");
   });
 });
 

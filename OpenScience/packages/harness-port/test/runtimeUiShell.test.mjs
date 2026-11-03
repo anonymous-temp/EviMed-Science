@@ -9,7 +9,7 @@ import test from 'node:test';
 import { colorRole } from '@evimed/design-tokens';
 import { kernelThemeTokens } from '@evimed/design-tokens/kernel';
 
-import { BODY, EVIMED_FAVICON, GEOMETRY_KERNEL_PIN, answerLinkToOpen, apply, inject, shellStylesheet } from '../src/runtimeUiShell.mjs';
+import { BODY, EVIMED_FAVICON, GEOMETRY_KERNEL_PIN, answerLinkClicked, answerLinkToOpen, apply, inject, shellStylesheet, vcrResultOfLink } from '../src/runtimeUiShell.mjs';
 import { fakeCtx, fakeTarget, kernelSlots, kitFor, renderStatic } from './helpers/frameFakes.mjs';
 
 /** @param {{ framed?: boolean, react?: boolean, embedded?: boolean }} [options] */
@@ -353,7 +353,89 @@ test('the answer-link adapter is installed only where a document and a window.op
   bare.target.open = undefined;
   apply(bare.ctx, {}, bare.target, undefined, bare.kit);
   assert.ok(!bare.ctx.effects.some((/** @type {any} */ effect) => effect.label === 'evimed-shell: answer links'));
-  assert.ok(BODY.parts.includes(answerLinkToOpen), 'the page evaluates the body\'s parts, so the decision has to travel with it');
+  for (const part of [answerLinkClicked, answerLinkToOpen, vcrResultOfLink]) assert.ok(BODY.parts.includes(part), 'the page evaluates the body\'s parts, so the decision has to travel with it');
   assert.equal(answerLinkToOpen({ button: 0, target: null }), null);
   assert.equal(answerLinkToOpen(null), null);
+});
+
+// F3 (VCR remediation 2026-11-01): the entry a research tool's answer carries is an absolute address of the application. Clicked in the
+// frame it is the shell's to open, in place, through the bridge's closed `open-vcr-result`; anything that is not exactly that address
+// is an ordinary external link.
+test('the address of a result page is read exactly: the shell\'s origin, a study id, one of the seven tabs, and nothing else', () => {
+  const shell = 'https://evimed.example';
+  assert.deepEqual(vcrResultOfLink('https://evimed.example/app/virtual-research/std_1/matching', shell), { studyId: 'std_1', tab: 'matching' });
+  for (const tab of ['overview', 'population', 'patients', 'comparator', 'trial', 'matching', 'data']) {
+    assert.deepEqual(vcrResultOfLink(`https://evimed.example/app/virtual-research/study-A_9/${tab}`, shell), { studyId: 'study-A_9', tab });
+  }
+  // The comparison tab opens on the saved comparison a reply cited (2026-11-02); no other tab takes a query.
+  assert.deepEqual(vcrResultOfLink('https://evimed.example/app/virtual-research/std_1/comparator?object=cmp_9a-B', shell), { studyId: 'std_1', tab: 'comparator', object: 'cmp_9a-B' });
+  for (const href of [
+    'https://evil.example/app/virtual-research/std_1/matching', 'http://evimed.example/app/virtual-research/std_1/matching',
+    'https://evimed.example:8443/app/virtual-research/std_1/matching', 'https://evimed.example/app/virtual-research/std_1/matching?x=1',
+    'https://evimed.example/app/virtual-research/std_1/matching?object=cmp_1',
+    'https://evimed.example/app/virtual-research/std_1/comparator?x=1', 'https://evimed.example/app/virtual-research/std_1/comparator?object=',
+    'https://evimed.example/app/virtual-research/std_1/comparator?object=a%2Fb', 'https://evimed.example/app/virtual-research/std_1/comparator?object=cmp_1&x=1',
+    'https://evimed.example/app/virtual-research/std_1/comparator?object=cmp_1&object=cmp_2', `https://evimed.example/app/virtual-research/std_1/comparator?object=${'x'.repeat(161)}`,
+    'https://evimed.example/app/virtual-research/std_1/matching#a', 'https://evimed.example/app/virtual-research/std_1/chat',
+    'https://evimed.example/app/virtual-research/std_1', 'https://evimed.example/app/virtual-research/std_1/matching/extra',
+    'https://evimed.example/app/virtual-research/../x/matching', 'https://evimed.example/app/virtual-research/a%2Fb/matching',
+    `https://evimed.example/app/virtual-research/${'x'.repeat(161)}/matching`, 'https://evimed.example/app/geo/std_1/matching',
+    'https://user@evimed.example/app/virtual-research/std_1/matching', 'not a url', '',
+  ]) assert.equal(vcrResultOfLink(href, shell), null, href);
+  assert.equal(vcrResultOfLink('https://evimed.example/app/virtual-research/std_1/matching', undefined), null, 'a frame that does not know its shell opens nothing in place');
+  assert.equal(vcrResultOfLink('https://evimed.example/app/virtual-research/std_1/matching', ''), null);
+});
+
+test('a click on a result link in an answer goes to the shell through the bridge; without a bridge, or for any other link, it is a new tab', async () => {
+  const { createRequire } = await import('node:module');
+  const require = createRequire(new URL('../../../apps/web/package.json', import.meta.url));
+  const { JSDOM } = require('js' + 'dom');
+  const dom = new JSDOM(`<div id="root">
+    <div data-chat-flow-kind="assistant-step">
+      <p><a id="result" href="https://evimed.example/app/virtual-research/std_1/matching">在“匹配”页查看</a>，
+        <a id="query" href="https://evimed.example/app/virtual-research/std_1/matching?x=1">带参数</a>，
+        <a id="other" href="https://evil.example/app/virtual-research/std_1/matching">别处</a>，
+        <a id="paper" href="https://example.org/paper">论文</a></p>
+    </div>
+    <div data-chat-flow-kind="user"><a id="user" href="https://evimed.example/app/virtual-research/std_1/matching">用户</a></div>
+  </div>`, { url: 'https://frame.evimed.example/frame/' });
+  const { document, MouseEvent } = dom.window;
+  const f = fixture();
+  /** @type {any[][]} */ const opened = [];
+  /** @type {any[][]} */ const sent = [];
+  let carried = true;
+  /** @type {any} */ (f.kit).hub = { send: (/** @type {string} */ type, /** @type {any} */ fields) => { sent.push([type, fields]); return carried; } };
+  f.target.document = document;
+  f.target.location = { origin: 'https://frame.evimed.example' };
+  f.target.__EVIMED_FRAME__ = { version: 1, shellOrigin: 'https://evimed.example' };
+  f.target.open = (/** @type {any[]} */ ...args) => { opened.push(args); return null; };
+  apply(f.ctx, {}, f.target, undefined, f.kit);
+  const click = (/** @type {string} */ id) => {
+    const event = new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 });
+    document.getElementById(id).dispatchEvent(event);
+    return event.defaultPrevented;
+  };
+
+  assert.equal(click('result'), true);
+  assert.deepEqual(sent, [['open-vcr-result', { studyId: 'std_1', tab: 'matching' }]], 'the study and the tab, and no address');
+  assert.deepEqual(opened, [], 'the shell opens it in place; no second tab');
+
+  // Anything that is not exactly a result address is the ordinary external link: a new tab, and nothing sent.
+  sent.length = 0;
+  assert.equal(click('query'), true);
+  assert.equal(click('other'), true);
+  assert.equal(click('paper'), true);
+  assert.deepEqual(sent, []);
+  assert.deepEqual(opened.map((args) => args[0]), ['https://evimed.example/app/virtual-research/std_1/matching?x=1', 'https://evil.example/app/virtual-research/std_1/matching', 'https://example.org/paper']);
+
+  // The answer's prose only: the user's turn keeps the kernel's own handling.
+  opened.length = 0;
+  assert.equal(click('user'), false);
+  assert.deepEqual([sent, opened], [[], []]);
+
+  // A bridge that is not there to carry the message: the same link opens in the reader's tab and is never lost.
+  carried = false;
+  assert.equal(click('result'), true);
+  assert.deepEqual(opened, [['https://evimed.example/app/virtual-research/std_1/matching', '_blank', 'noopener,noreferrer']]);
+  dom.window.close();
 });

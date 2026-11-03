@@ -1,7 +1,9 @@
 /**
  * The module names the owner replaced on 2026-10-07 — 「循证传播」 went back to
- * 「循证 GEO」, and 「虚拟临研」 became 「虚拟临床研究」 — and how long the old
- * ones keep finding things.
+ * 「循证 GEO」, and 「虚拟临研」 became 「虚拟临床研究」 — and the task name he
+ * replaced on 2026-11-01 (「合成对照」 became 「对照研究」: the old name was read as
+ * Medidata's historical-data control arm) — and how long the old ones keep
+ * finding things.
  *
  * A researcher who learned the old name types it into a search box. For three
  * months the search boxes over tools, skills and plugins read it as the new
@@ -22,7 +24,8 @@
 
 /**
  * The last day the old names are read as the new ones: 2027-01-07, three
- * months after the rename. Past it {@link searchNeedles} stops adding the
+ * months after the rename of the two modules (the task renamed on 2026-11-01 keeps
+ * the same last day, the shorter of the two promises being kept by the longer). Past it {@link searchNeedles} stops adding the
  * alias; the module can then be deleted with its callers.
  */
 export const RETIRED_NAME_SEARCH_UNTIL = '2027-01-07'
@@ -31,6 +34,19 @@ export const RETIRED_NAME_SEARCH_UNTIL = '2027-01-07'
 export const RETIRED_MODULE_NAMES = Object.freeze([
   Object.freeze({ retired: '循证传播', now: '循证 GEO' }), // retired-word-ok
   Object.freeze({ retired: '虚拟临研', now: '虚拟临床研究' }), // retired-word-ok
+  // 2026-11-01 (remediation plan, decision 6): the task is called 对照研究; the module's name does not change. Same three months.
+  Object.freeze({ retired: '合成对照', now: '对照研究' }), // retired-word-ok
+])
+
+// Research-tool titles changed on 2026-11-01. Keep familiar searches working
+// for three months without changing saved identifiers or historical titles.
+const RESEARCH_TOOL_SEARCH_UNTIL = '2027-02-01'
+const RETIRED_TOOL_NAMES = Object.freeze([
+  Object.freeze({ retired: '临床证据深度分析', now: '文献综述' }),
+  Object.freeze({ retired: '自动化 meta 分析', now: 'meta 分析' }),
+  Object.freeze({ retired: '综合药品评价', now: '药品综合评价' }),
+  Object.freeze({ retired: '药品遴选评价', now: '药品遴选' }),
+  Object.freeze({ retired: '基金申报书开发', now: '基金申报' }),
 ])
 
 /**
@@ -47,11 +63,12 @@ export function searchNeedles(query, now = Date.now()) {
   const typed = String(query ?? '').trim().toLowerCase()
   if (!typed) return []
   const needles = [typed]
-  if (now <= Date.parse(`${RETIRED_NAME_SEARCH_UNTIL}T23:59:59Z`)) {
-    let read = typed
+  let read = typed
+  if (now <= Date.parse(`${RETIRED_NAME_SEARCH_UNTIL}T23:59:59Z`))
     for (const { retired, now: current } of RETIRED_MODULE_NAMES) read = read.split(retired).join(current.toLowerCase())
-    if (read !== typed) needles.push(read)
-  }
+  if (now <= Date.parse(`${RESEARCH_TOOL_SEARCH_UNTIL}T23:59:59Z`))
+    for (const { retired, now: current } of RETIRED_TOOL_NAMES) read = read.split(retired).join(current.toLowerCase())
+  if (read !== typed) needles.push(read)
   return needles
 }
 

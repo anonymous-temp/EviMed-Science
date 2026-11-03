@@ -60,6 +60,7 @@
       "shape": "baseline_to_outcome",
       "shapeLabel": "基线 → 结局分布",
       "shapeMissing": [],
+      "tripod": [],
       "inputs": [
         "中位 PFS",
         "形状参数"
@@ -161,6 +162,7 @@
       "shape": "baseline_to_outcome",
       "shapeLabel": "基线 → 结局分布",
       "shapeMissing": [],
+      "tripod": [],
       "inputs": [
         "同队列的配对模拟标识",
         "两组人数",
@@ -252,6 +254,7 @@
       "shape": "baseline_to_outcome",
       "shapeLabel": "基线 → 结局分布",
       "shapeMissing": [],
+      "tripod": [],
       "inputs": [
         "同队列的配对模拟标识",
         "两组人数",
@@ -350,6 +353,7 @@
       "shape": "baseline_to_outcome",
       "shapeLabel": "基线 → 结局分布",
       "shapeMissing": [],
+      "tripod": [],
       "inputs": [
         "两组人数",
         "随访时间表",
@@ -450,6 +454,7 @@
       "shape": "baseline_to_outcome",
       "shapeLabel": "基线 → 结局分布",
       "shapeMissing": [],
+      "tripod": [],
       "inputs": [
         "同队列的配对模拟标识",
         "两组人数",
@@ -522,7 +527,7 @@
       "id": "mth_3",
       "name": "双重稳健估计（AIPW）",
       "method": "comparator.aipw",
-      "version": "1.0.0",
+      "version": "1.2.0",
       "endpoints": "连续 · 二分类",
       "numeric": null,
       "validation": {
@@ -536,7 +541,7 @@
       "id": "mth_4",
       "name": "协变量集敏感性分析",
       "method": "comparator.covariate_sets",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "endpoints": "连续 · 二分类 · 事件时间",
       "numeric": null,
       "validation": {
@@ -550,7 +555,7 @@
       "id": "mth_5",
       "name": "熵平衡加权",
       "method": "comparator.entropy_balance",
-      "version": "1.1.0",
+      "version": "1.3.0",
       "endpoints": "连续 · 二分类 · 事件时间",
       "numeric": null,
       "validation": {
@@ -606,7 +611,7 @@
       "id": "mth_9",
       "name": "MAP 先验",
       "method": "comparator.map_prior",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "endpoints": "二分类 · 连续",
       "numeric": null,
       "validation": {
@@ -620,7 +625,7 @@
       "id": "mth_10",
       "name": "阴性对照结局",
       "method": "comparator.negative_control",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "endpoints": "二分类 · 事件时间",
       "numeric": null,
       "validation": {
@@ -648,7 +653,7 @@
       "id": "mth_12",
       "name": "倾向评分加权",
       "method": "comparator.propensity_weight",
-      "version": "1.1.0",
+      "version": "1.3.0",
       "endpoints": "连续 · 二分类 · 事件时间",
       "numeric": null,
       "validation": {
@@ -690,7 +695,7 @@
       "id": "mth_15",
       "name": "加权 Cox 风险比",
       "method": "comparator.weighted_cox",
-      "version": "1.1.0",
+      "version": "1.3.0",
       "endpoints": "事件时间",
       "numeric": null,
       "validation": {
@@ -704,7 +709,7 @@
       "id": "mth_16",
       "name": "方案的解析计算",
       "method": "design.analytic",
-      "version": "1.2.0",
+      "version": "1.3.0",
       "endpoints": "连续 · 二分类 · 事件时间",
       "numeric": null,
       "validation": {
@@ -732,7 +737,7 @@
       "id": "mth_18",
       "name": "设计网格",
       "method": "design.grid",
-      "version": "1.2.0",
+      "version": "1.3.0",
       "endpoints": "连续 · 二分类 · 事件时间",
       "numeric": null,
       "validation": {
@@ -760,7 +765,7 @@
       "id": "mth_20",
       "name": "方案的模拟运行",
       "method": "design.simulate",
-      "version": "1.2.0",
+      "version": "1.3.0",
       "endpoints": "连续 · 二分类 · 事件时间",
       "numeric": null,
       "validation": {
@@ -788,7 +793,7 @@
       "id": "mth_22",
       "name": "生存曲线重建（Guyot）",
       "method": "evidence.reconstruct_km",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "endpoints": "事件时间",
       "numeric": null,
       "validation": {
@@ -816,7 +821,7 @@
       "id": "mth_24",
       "name": "应用已发表的预后模型",
       "method": "model.prognostic_apply",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "endpoints": "连续 · 二分类 · 事件时间",
       "numeric": null,
       "validation": {
@@ -898,8 +903,8 @@
     },
     {
       "id": "mth_30",
-      "name": "文献人群",
-      "method": "population.literature",
+      "name": "与第二份基线表对照",
+      "method": "population.check",
       "version": "1.0.0",
       "endpoints": null,
       "numeric": null,
@@ -912,6 +917,20 @@
     },
     {
       "id": "mth_31",
+      "name": "文献人群",
+      "method": "population.literature",
+      "version": "1.1.0",
+      "endpoints": null,
+      "numeric": null,
+      "validation": {
+        "status": "unmeasured",
+        "reason": "not_configured"
+      },
+      "assumptions": [],
+      "usedIn": null
+    },
+    {
+      "id": "mth_32",
       "name": "人群质量报告",
       "method": "population.quality",
       "version": "1.0.0",
@@ -925,10 +944,10 @@
       "usedIn": null
     },
     {
-      "id": "mth_32",
+      "id": "mth_33",
       "name": "情景人群生成",
       "method": "population.scenario",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "endpoints": null,
       "numeric": null,
       "validation": {
@@ -939,7 +958,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_33",
+      "id": "mth_34",
       "name": "经验合成人群",
       "method": "population.synthpop",
       "version": "1.0.0",
@@ -953,7 +972,7 @@
       "usedIn": null
     },
     {
-      "id": "mth_34",
+      "id": "mth_35",
       "name": "数据快照画像",
       "method": "profile.snapshot",
       "version": "1.1.0",
@@ -996,12 +1015,6 @@
   "engineAvailable": false,
   "engineMismatch": null,
   "unsupported": [
-    {
-      "key": "model_comparator",
-      "label": "模型预测比较器",
-      "group": "对照",
-      "note": "暂不支持"
-    },
     {
       "key": "digital_twin",
       "label": "数字孪生与基线条件化预测模型",

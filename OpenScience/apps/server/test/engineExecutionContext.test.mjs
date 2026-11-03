@@ -57,3 +57,168 @@ test('a fresh native child is bound by its real catalogue id before event tracki
   assert.deepEqual(await resolve({ userId: 'u', projectId: 'p' }, ctx('child-1', 'off')),
     { runId: 'run-root', sessionId: 'child-1', reasoningEffort: 'off' });
 });
+
+test('a just-submitted native turn waits for its exact run to be adopted without accepting another session', async () => {
+  const project = { id: 'p', userId: 'u' };
+  let reads = 0;
+  let selections = 0;
+  const resolve = createEngineExecutionContextResolver({
+    config: { deepseekModel: 'deepseek-flash' },
+    store: { userById: async () => ({ id: 'u' }), requireProject: async () => project },
+    agentRuns: {
+      activeRuns: async () => (++reads < 4 ? [{ id: 'other-run', sessionId: 'other' }] : [{ id: 'own-run', sessionId: 'mine', nativeTurn: { startSeq: 10 } }]),
+      runIdForSession: (id, list) => list.find((run) => run.sessionId === id)?.id ?? null,
+    },
+    runtimeManager: { sessionTranscript: async () => ({ sessionId: 'mine', turns: [{ startSeq: 10, end: null }],
+      messages: [{ role: 'tool', turnStartSeq: 10, parts: [{ type: 'tool', callId: 'call-mine', status: 'pending' }] }] }),
+      sessionModelSelection: async (_project, id) => {
+      selections++;
+      assert.equal(id, 'mine');
+      return { lastUsed: { provider: 'deepseek-official', model: 'deepseek-flash', reasoningEffort: 'high' } };
+    } },
+    adoptionPollAttempts: 4, adoptionPollDelayMs: 1, wait: async () => {},
+  });
+  assert.deepEqual(await resolve({ userId: 'u', projectId: 'p' }, ctx('mine', 'high')),
+    { runId: 'own-run', sessionId: 'mine', reasoningEffort: 'high' });
+  assert.equal(selections, 1, 'model policy is read only after the exact session is owned');
+});
+
+test('waiting never turns an unowned session into the only active run', async () => {
+  const project = { id: 'p', userId: 'u' };
+  let reads = 0;
+  const resolve = createEngineExecutionContextResolver({
+    config: { deepseekModel: 'deepseek-flash' },
+    store: { userById: async () => ({ id: 'u' }), requireProject: async () => project },
+    agentRuns: { activeRuns: async () => { reads++; return [{ id: 'other-run', sessionId: 'other' }]; }, runIdForSession: () => null },
+    runtimeManager: { sessionTranscript: async () => ({ sessionId: 'foreign', turns: [{ startSeq: 10, end: null }],
+      messages: [{ role: 'tool', turnStartSeq: 10, parts: [{ type: 'tool', callId: 'call-foreign', status: 'pending' }] }] }),
+      sessionModelSelection: async () => { throw new Error('must not read'); } },
+    adoptionPollAttempts: 2, adoptionPollDelayMs: 1, wait: async () => {},
+  });
+  await assert.rejects(resolve({ userId: 'u', projectId: 'p' }, ctx('foreign', 'high')), { code: 'engine_model_session_unowned' });
+  assert.equal(reads, 3, 'one initial check and two bounded retries');
+});
+
+
+test('an older tool call cannot attach to a newer turn of the same session while waiting', async () => {
+  const project = { id: 'p', userId: 'u' };
+  let reads = 0;
+  const resolve = createEngineExecutionContextResolver({
+    config: { deepseekModel: 'deepseek-flash' },
+    store: { userById: async () => ({ id: 'u' }), requireProject: async () => project },
+    agentRuns: { activeRuns: async () => (++reads === 1 ? [] : [{ id: 'new-run', sessionId: 'mine', nativeTurn: { startSeq: 20 } }]),
+      runIdForSession: (id, runs) => runs.find((run) => run.sessionId === id)?.id ?? null },
+    runtimeManager: { sessionTranscript: async () => ({ sessionId: 'mine', turns: [{ startSeq: 10, end: null }],
+      messages: [{ role: 'tool', turnStartSeq: 10, parts: [{ type: 'tool', callId: 'call-mine', status: 'pending' }] }] }),
+      sessionModelSelection: async () => { throw new Error('must not read'); } },
+    adoptionPollAttempts: 2, adoptionPollDelayMs: 1, wait: async () => {},
+  });
+  await assert.rejects(resolve({ userId: 'u', projectId: 'p' }, ctx('mine', 'high')), { code: 'engine_model_session_unowned' });
+});
+
+
+test('a missing or completed call is never admitted by adoption waiting', async () => {
+  const project = { id: 'p', userId: 'u' };
+  for (const ended of [true, false]) {
+    let reads = 0;
+    const resolve = createEngineExecutionContextResolver({
+      config: { deepseekModel: 'deepseek-flash' },
+      store: { userById: async () => ({ id: 'u' }), requireProject: async () => project },
+      agentRuns: { activeRuns: async () => { reads++; return []; }, runIdForSession: () => null },
+      runtimeManager: { sessionTranscript: async () => ({ sessionId: 'mine', turns: [{ startSeq: 10, end: ended ? { kind: 'completed' } : null }],
+        messages: ended ? [{ role: 'tool', turnStartSeq: 10, parts: [{ type: 'tool', callId: 'call-mine', status: 'pending' }] }] : [] }) },
+      adoptionPollAttempts: 2, adoptionPollDelayMs: 1, wait: async () => {},
+    });
+    await assert.rejects(resolve({ userId: 'u', projectId: 'p' }, ctx('mine', 'high')), { code: 'engine_model_session_unowned' });
+    assert.equal(reads, 1, 'without exact live call evidence there is no adoption wait');
+  }
+});
+
+test('a call that ends during adoption waiting cannot receive a credential', async () => {
+  const project = { id: 'p', userId: 'u' };
+  let reads = 0;
+  let transcriptReads = 0;
+  const resolve = createEngineExecutionContextResolver({
+    config: { deepseekModel: 'deepseek-flash' },
+    store: { userById: async () => ({ id: 'u' }), requireProject: async () => project },
+    agentRuns: { activeRuns: async () => (++reads === 1 ? [] : [{ id: 'own-run', sessionId: 'mine', nativeTurn: { startSeq: 10 } }]),
+      runIdForSession: (id, runs) => runs.find((run) => run.sessionId === id)?.id ?? null },
+    runtimeManager: { sessionTranscript: async () => ({ sessionId: 'mine', turns: [{ startSeq: 10,
+      end: ++transcriptReads === 1 ? null : { kind: 'completed' } }],
+      messages: [{ role: 'tool', turnStartSeq: 10, parts: [{ type: 'tool', callId: 'call-mine', status: 'pending' }] }] }),
+      sessionModelSelection: async () => { throw new Error('must not read'); } },
+    adoptionPollAttempts: 2, adoptionPollDelayMs: 1, wait: async () => {},
+  });
+  await assert.rejects(resolve({ userId: 'u', projectId: 'p' }, ctx('mine', 'high')), { code: 'engine_model_session_unowned' });
+  assert.equal(transcriptReads, 2);
+});
+
+
+test('a completed tool call in an otherwise active turn cannot wait for adoption', async () => {
+  const project = { id: 'p', userId: 'u' };
+  let reads = 0;
+  const resolve = createEngineExecutionContextResolver({
+    config: { deepseekModel: 'deepseek-flash' },
+    store: { userById: async () => ({ id: 'u' }), requireProject: async () => project },
+    agentRuns: { activeRuns: async () => { reads++; return []; }, runIdForSession: () => null },
+    runtimeManager: { sessionTranscript: async () => ({ sessionId: 'mine', turns: [{ startSeq: 10, end: null }],
+      messages: [{ role: 'tool', turnStartSeq: 10, parts: [{ type: 'tool', callId: 'call-mine', status: 'completed' }] }] }) },
+    adoptionPollAttempts: 2, adoptionPollDelayMs: 1, wait: async () => {},
+  });
+  await assert.rejects(resolve({ userId: 'u', projectId: 'p' }, ctx('mine', 'high')), { code: 'engine_model_session_unowned' });
+  assert.equal(reads, 1);
+});
+
+test('a real normalized pending kernel call can bridge delayed run adoption', async () => {
+  const { normalizeTranscript } = await import('../src/dshRuntimeAdapter.mjs');
+  const project = { id: 'p', userId: 'u' };
+  const transcript = normalizeTranscript('mine', [
+    { type: 'turn/start', seq: 10, time: 100, data: { turn: 1 } },
+    { type: 'tool/call', seq: 11, time: 110, data: { turn: 1, name: 'mcp__evimed__bibliometric_analysis',
+      callId: 'call-mine', arguments: { action: 'start' } } },
+  ]);
+  let reads = 0;
+  const resolve = createEngineExecutionContextResolver({
+    config: { deepseekModel: 'deepseek-flash' },
+    store: { userById: async () => ({ id: 'u' }), requireProject: async () => project },
+    agentRuns: { activeRuns: async () => (++reads === 1 ? [] : [{ id: 'own-run', sessionId: 'mine', nativeTurn: { startSeq: 10 } }]),
+      runIdForSession: (id, runs) => runs.find((run) => run.sessionId === id)?.id ?? null },
+    runtimeManager: { sessionTranscript: async () => transcript,
+      sessionModelSelection: async () => ({ lastUsed: { provider: 'deepseek-official', model: 'deepseek-flash', reasoningEffort: 'high' } }) },
+    adoptionPollAttempts: 2, adoptionPollDelayMs: 1, wait: async () => {},
+  });
+  assert.equal((await resolve({ userId: 'u', projectId: 'p' }, ctx('mine', 'high'))).runId, 'own-run');
+});
+
+test('delayed adoption resolves a live call against the actual run ledger projection', async () => {
+  const { AgentRunStore } = await import('../src/agentRuns.mjs');
+  const { mkdtemp, mkdir, rm } = await import('node:fs/promises');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const root = await mkdtemp(path.join(os.tmpdir(), 'evimed-engine-adoption-'));
+  const project = { id: 'project-1', userId: 'user-1', rootDir: root,
+    workspaceDir: path.join(root, 'workspace'), metaDir: path.join(root, '.openscience') };
+  try {
+    await mkdir(project.workspaceDir, { recursive: true });
+    await mkdir(project.metaDir, { recursive: true });
+    const ledger = new AgentRunStore({ get: async () => null }, { model: 'deepseek/deepseek-v4-flash', monitorIntervalMs: 60_000 });
+    ledger.scheduleMonitor = () => {};
+    const binding = { sessionId: 'mine', mode: 'open-domain', agentId: null, agentVersion: null, runtimeAgent: null };
+    const run = (await ledger.reserveRun(project, binding, { baselineCursor: null, nativeTurn: { startSeq: 10, userSeq: 11 } })).run;
+    let checks = 0;
+    const resolve = createEngineExecutionContextResolver({
+      config: { deepseekModel: 'deepseek-flash' },
+      store: { userById: async () => ({ id: 'user-1' }), requireProject: async () => project },
+      agentRuns: { activeRuns: async () => ++checks === 1 ? [] : ledger.activeRuns(project),
+        runIdForSession: (id, runs) => ledger.runIdForSession(id, runs) },
+      runtimeManager: { sessionTranscript: async () => ({ sessionId: 'mine', turns: [{ startSeq: 10, end: null }],
+        messages: [{ role: 'tool', turnStartSeq: 10, parts: [{ type: 'tool', callId: 'call-mine', status: 'pending' }] }] }),
+        sessionModelSelection: async () => ({ lastUsed: { provider: 'deepseek-official', model: 'deepseek-flash', reasoningEffort: 'high' } }) },
+      adoptionPollAttempts: 2, adoptionPollDelayMs: 1, wait: async () => {},
+    });
+    const result = await resolve({ userId: 'user-1', projectId: 'project-1' }, ctx('mine', 'high'));
+    assert.equal(result.runId, run.id);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});

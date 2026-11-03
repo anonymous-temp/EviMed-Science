@@ -150,7 +150,18 @@ export function VcrPrecedentTable({ rows, withUse = false }: {
     { key: "plannedMonths", header: "计划入组月数", align: "right", isEmpty: (row) => row.plannedMonths == null, cell: (row) => <span className="text-text-3">{numberText(row.plannedMonths, 0)}</span> },
     { key: "actualMonths", header: "实际入组月数", align: "right", isEmpty: (row) => row.actualMonths == null, cell: (row) => numberText(row.actualMonths, 0) },
     { key: "rate", header: "每中心每月", align: "right", isEmpty: (row) => row.perSitePerMonth == null, cell: (row) => numberText(row.perSitePerMonth, 2) },
-    ...(withUse ? [{ key: "usedFor", header: "用于", isEmpty: (row: VcrPrecedent) => !row.usedFor, cell: (row: VcrPrecedent) => row.usedFor ?? "—" }] : []),
+    ...(withUse ? [{
+      key: "usedFor",
+      header: "用于",
+      isEmpty: (row: VcrPrecedent) => !row.usedFor && !row.notReported?.length,
+      cell: (row: VcrPrecedent) => (
+        <span className="flex flex-col gap-0.5">
+          <span>{row.usedFor ?? "—"}</span>
+          {/* What the paper was read for and does not report: said, never filled in with a value. */}
+          {row.notReported?.length ? <span data-vcr-not-reported="" className="text-caption text-text-3">{`未取到：${row.notReported.join("、")}`}</span> : null}
+        </span>
+      ),
+    }] : []),
   ];
 
   return (

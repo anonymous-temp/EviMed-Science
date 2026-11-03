@@ -207,6 +207,7 @@
         "evidence": null,
         "evidenceItems": [],
         "request": null,
+        "reason": null,
         "requestNote": null,
         "decidedBy": "code",
         "overridden": false
@@ -221,6 +222,7 @@
         "evidence": null,
         "evidenceItems": [],
         "request": null,
+        "reason": null,
         "requestNote": null,
         "decidedBy": "code",
         "overridden": false
@@ -235,6 +237,7 @@
         "evidence": null,
         "evidenceItems": [],
         "request": null,
+        "reason": null,
         "requestNote": null,
         "decidedBy": "code",
         "overridden": false
@@ -249,6 +252,7 @@
         "evidence": null,
         "evidenceItems": [],
         "request": null,
+        "reason": null,
         "requestNote": null,
         "decidedBy": "code",
         "overridden": false
@@ -263,6 +267,7 @@
         "evidence": null,
         "evidenceItems": [],
         "request": null,
+        "reason": null,
         "requestNote": null,
         "decidedBy": "code",
         "overridden": false
@@ -277,6 +282,7 @@
         "evidence": null,
         "evidenceItems": [],
         "request": null,
+        "reason": null,
         "requestNote": null,
         "decidedBy": "code",
         "overridden": false

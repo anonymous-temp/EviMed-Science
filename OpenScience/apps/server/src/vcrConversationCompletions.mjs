@@ -12,7 +12,9 @@ export function vcrCompletionDispatchId(fingerprint,generation=0) {
   return safeId(`vcr-completion-${fingerprint.slice(0,32)}${generation ? `-retry-${generation}` : ''}`,'agent run dispatch id');
 }
 /** Revalidate the exact original conversation and research scope at each send boundary. */
-export function createVcrCompletionResolver({ accounts,studies,sessions,allows }) {
+/** `adoptSession` answers for a conversation the session store never saw: one typed in the kernel's own composer has runs and no row,
+ * and without this every job that outlived its turn was reported as an unavailable conversation (found live, 2026-11-01). */
+export function createVcrCompletionResolver({ accounts,studies,sessions,allows,adoptSession=null }) {
   return async row => {
     const user=await accounts.userById(row.user_id);if(!user)return null;
     if(row.study_id && !allows(user)) throw new HttpError(503,'vcr_disabled','Research tools are disabled for this account.');
@@ -20,7 +22,7 @@ export function createVcrCompletionResolver({ accounts,studies,sessions,allows }
     const study=row.study_id ? await studies.getStudy(row.user_id,row.study_id) : null;
     if(row.study_id && (!study || study.projectId!==row.project_id || !['active','draft'].includes(study.status)
       || study.scope==='conversation' && study.conversationSessionId!==row.root_session_id)) return {user,project,session:null};
-    return {user,project,session:await sessions.get(project,row.root_session_id)};
+    return {user,project,session:await sessions.get(project,row.root_session_id) ?? await adoptSession?.(project,row.root_session_id) ?? null};
   };
 }
 export class VcrConversationCompletions {

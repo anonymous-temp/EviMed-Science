@@ -477,8 +477,6 @@ const REQUESTS = {
   "GET /studies/of-project/:project": ["GET", "/api/vcr/studies/of-project/prj_1", undefined],
   "GET /studies/:id/:tab": ["GET", "/api/vcr/studies/std_1/overview", undefined],
   "GET /studies/:id/runs": ["GET", "/api/vcr/studies/std_1/runs", undefined],
-  "GET /studies/:id/cards": ["GET", "/api/vcr/studies/std_1/cards?kind=population", undefined],
-  "POST /studies/:id/cards": ["POST", "/api/vcr/studies/std_1/cards", { kind: "population", set: { n: 2000 } }],
   "PATCH /studies/:id name,question,action": ["PATCH", "/api/vcr/studies/std_1", { name: "改名" }],
   "PATCH /studies/:id dataTier,intendedUse,status": ["PATCH", "/api/vcr/studies/std_1", { status: "paused" }],
   "DELETE /studies/:id": ["DELETE", "/api/vcr/studies/std_1", undefined],
@@ -562,7 +560,6 @@ function composedHooks() {
       rows: async () => ({ result: "res_1", rows: [], total: 0, all: 0, columns: [], offset: 0, limit: 100, sort: null, arms: [] }),
       record: async () => ({ result: "res_1", id: "vp_1", baseline: [], outcome: [] }) },
     // The page's own edits of the numbers a study rests on: what the form is built from, and the next version.
-    cards: { read: async () => ({ kind: "population", objectId: "pop_1", title: "人群设定", settings: [] }), apply: async () => ({ kind: "population", id: "pop_2", version: 2, changed: 1 }) },
     // The public 「模拟研究」 column: the lead's publish and withdraw.
     predictions: { file: async () => ({ filed: true, existing: false }) },
     publications: { forStudy: async () => [], publish: async () => ({ id: "sim_1", exportKind: "simulation_report", existing: false }), withdraw: async () => ({ id: "sim_1" }) },
@@ -1239,6 +1236,17 @@ test("paper-source previews use study read authorization before resolving a sour
   await assert.rejects(routes(request("GET", "/api/vcr/studies/std_1/model-sources/http_localhost"), response()), { status: 404 });
 });
 
+
+test("D7: a result record names the result it is of, and no other document does", async () => {
+  const asked = [];
+  const f = fixture({ overrides: { exporter: { requestExport: async (_user, _study, kind, options) => { asked.push({ kind, options }); return { export: { id: "exp_1" } }; } } } });
+  await f.routes(request("POST", "/api/vcr/studies/std_1/export", { kind: "result_record", resultId: "res_1" }), response());
+  assert.deepEqual(asked, [{ kind: "result_record", options: { resultId: "res_1" } }]);
+  await assert.rejects(f.routes(request("POST", "/api/vcr/studies/std_1/export", { kind: "result_record" }), response()), { status: 400, code: "vcr_payload_invalid" });
+  await assert.rejects(f.routes(request("POST", "/api/vcr/studies/std_1/export", { kind: "study_package", resultId: "res_1" }), response()), { status: 400, code: "vcr_payload_invalid" });
+  await assert.rejects(f.routes(request("POST", "/api/vcr/studies/std_1/export", { kind: "result_record", resultId: "../x" }), response()), { status: 400 });
+  assert.equal(asked.length, 1);
+});
 
 test("Start requires run and write; naming also requires the lead and the original brief stays exact", async () => {
   const received = [];

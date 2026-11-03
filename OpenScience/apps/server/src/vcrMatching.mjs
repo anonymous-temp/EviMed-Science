@@ -48,8 +48,8 @@
  * @module vcrMatching
  */
 
-import { clinicalDateInQuote, clinicalIntervalInQuote } from './vcrClinicalDateEvidence.mjs';
-import { CLINICAL_ASSERTIVE_POLARITIES, clinicalFactPolarity, clinicalFactView, clinicalUnitToken, clinicalUnitInQuote, convertClinicalUnit, vcrConvertTime, vcrTimeUnitOf } from "@evimed/domain";
+import { clinicalDateInEvidence, clinicalIntervalInQuote, clinicalRecordHeader } from './vcrClinicalDateEvidence.mjs';
+import { CLINICAL_ASSERTIVE_POLARITIES, clinicalConventionalUnit, clinicalFactPolarity, clinicalFactView, clinicalNumericValue, clinicalUnitToken, clinicalUnitInQuote, clinicalUnitPrintedBesideValue, convertClinicalUnit, vcrConvertTime, vcrTimeUnitOf } from "@evimed/domain";
 import { createHash } from 'node:crypto';
 import {
   canonicalScenarioJson, VCR_CRITERION_STATES, VCR_CRITERION_TYPES, VCR_ELIGIBILITY_SUMMARIES, VCR_MISSING_REASONS, validateRequirement,
@@ -95,7 +95,7 @@ export const VCR_MATCHING_STATES = Object.freeze([SATISFIED, NOT_SATISFIED, UNKN
  */
 export const VCR_FACT_VOID_REASONS = Object.freeze([
   "locator_missing", "document_unavailable", "span_out_of_range", "quote_mismatch",
-  "surface_missing", "value_not_in_span", "date_not_in_span", "not_yet_visible", "polarity_not_assertive",
+  "surface_missing", "value_not_in_span", "date_not_in_span", "date_quote_mismatch", "unit_basis_unsupported", "not_yet_visible", "polarity_not_assertive",
   // The words it was read from were erased on a withdrawal: the fact is still the record it was, and no verdict rests on it.
   "source_withdrawn",
 ]);
@@ -213,6 +213,21 @@ export function windowStart(window, anchor) {
   return at.getTime() - (Number.isFinite(days) ? days : 0) * DAY_MS;
 }
 
+/** The fact's date is the most the platform knows: the event was no later than it (`source.dateBound`, set for a past event dated by its record's header). @param {any} fact */
+export const isBoundedDate = (fact) => fact?.source?.dateBound === "no_later_than";
+
+/**
+ * A fact dated by a record header (`source.dateBasis`) whose date is after the instant: the record it sits in had not been written then, so
+ * an evaluation as of that instant does not see the fact, whatever it asks of it. (A date the fact printed itself can be a planned one.)
+ * @param {any} fact @param {unknown} at
+ */
+function dateFromHeaderIsAfter(fact, at) {
+  if (fact?.source?.dateBasis !== "record_header") return false;
+  const asOf = instant(at);
+  const dated = instant(fact.occurredAt) ?? instant(fact.recordedAt);
+  return asOf !== null && dated !== null && dated > asOf;
+}
+
 /**
  * Is this fact inside the window? `null` means the fact carries no date and the
  * window needs one — which is an `unknown`, never a pass.
@@ -225,6 +240,9 @@ export function withinWindow(fact, window, anchor) {
   if (start === null) return true;
   const at = instant(fact?.occurredAt);
   if (at === null) return null;
+  // A date that is only an upper bound (a past event dated by the record it was read in) puts the event outside the window when the bound
+  // is before the window starts, and says nothing otherwise: the event may be anywhere before the bound.
+  if (isBoundedDate(fact)) return at < start ? false : null;
   const end = Number.isFinite(instant(window.anchorDate)) ? instant(window.anchorDate) : anchor;
   return at >= start && at <= end;
 }
@@ -287,33 +305,172 @@ export function verifyFactEvidence(fact, context = {}) {
   }
   const span = text.slice(source.start, source.end);
   if (typeof source.quote === "string" && source.quote !== span) return { ok: false, reason: "quote_mismatch" };
+  // A date the quotation does not print may rest on a second quotation of the same document that prints it whole (`dateQuote`): found
+  // in the document's own bytes like the first, never anywhere else.
+  /** @type {string | null} */
+  let dateText = null;
+  const dateQuote = source.dateQuote;
+  if (dateQuote !== undefined && dateQuote !== null) {
+    if (typeof dateQuote !== "object" || !Number.isInteger(dateQuote.start) || !Number.isInteger(dateQuote.end)
+      || dateQuote.start < 0 || dateQuote.end > text.length || dateQuote.start >= dateQuote.end) return { ok: false, reason: "date_quote_mismatch" };
+    dateText = text.slice(dateQuote.start, dateQuote.end);
+    if (typeof dateQuote.quote === "string" && dateQuote.quote !== dateText) return { ok: false, reason: "date_quote_mismatch" };
+  }
 
   const surfaces = [fact?.surface, ...(Array.isArray(fact?.surfaceForms) ? fact.surfaceForms : [])]
     .filter((item) => typeof item === "string" && item.trim());
   if (!surfaces.length) return { ok: false, reason: "surface_missing" };
   if (!surfaces.some((surface) => span.includes(surface))) return { ok: false, reason: "value_not_in_span" };
 
-  if (typeof fact?.value === "number" && Number.isFinite(fact.value)) {
-    if (!numeralsIn(span).some((number) => Math.abs(number - fact.value) < 1e-9)) {
+  // A value the evaluator reads as a number is held to the quotation as one, whether it was written as a number or as a plain numeric
+  // string (`"9.9"` beside "HbA1c 8.5%" is a number the record never printed).
+  const stated = clinicalNumericValue(fact?.value);
+  if (stated !== null) {
+    if (!numeralsIn(span).some((number) => Math.abs(number - stated) < 1e-9)) {
       return { ok: false, reason: "value_not_in_span" };
     }
   }
-  if (typeof fact?.dateSurface === "string" && fact.dateSurface.trim() && !span.includes(fact.dateSurface)) {
+  if (typeof fact?.dateSurface === "string" && fact.dateSurface.trim() && !span.includes(fact.dateSurface) && !(dateText ?? "").includes(fact.dateSurface)) {
     return { ok: false, reason: "date_not_in_span" };
   }
   // New source extractions bind dates as literally as numeric values. Legacy records retain their original evidence schema.
-  if (fact?.provenance?.factSchema >= 2 && ([fact.occurredAt, fact.recordedAt].some(date => date != null && !clinicalDateInQuote(date, span))
+  if (fact?.provenance?.factSchema >= 2 && ([fact.occurredAt, fact.recordedAt].some(date => date != null && !clinicalDateInEvidence(date, span, dateText))
       || fact.clinical?.occurredInterval && !clinicalIntervalInQuote(fact.clinical.occurredInterval, span, fact.dateSurface))) {
     return { ok: false, reason: "date_not_in_span" };
   }
   // A unit supports a number only where the quote prints it beside that number: a quote with two units supports each for its own
   // value, not for every value of the fact (E-10). A fact whose value is not a number is held to the older question, unit anywhere.
-  const printedValue = (/** @type {unknown} */ value) => (typeof value === 'number' && Number.isFinite(value) ? value : null);
-  if (clinicalUnitInQuote(fact.unit,span,Boolean(fact.clinical?.laboratory),printedValue(fact.value)) === false) return {ok:false,reason:'unit_not_in_span'};
+  const printedValue = clinicalNumericValue;
+  if (source.unitBasis === 'conventional') {
+    // Read, not printed: allowed for the one unit the domain's closed table gives this variable, for a bare number inside the range it
+    // gives, and never beside a number that has a unit of its own printed next to it.
+    const conventional = clinicalConventionalUnit(fact.variable, stated);
+    if (!conventional || conventional.unit !== fact.unit || clinicalUnitPrintedBesideValue(span, /** @type {number} */ (stated))) return { ok: false, reason: 'unit_basis_unsupported' };
+  } else if (clinicalUnitInQuote(fact.unit,span,Boolean(fact.clinical?.laboratory),printedValue(fact.value)) === false) return {ok:false,reason:'unit_not_in_span'};
   const original = fact.clinical?.laboratory;
   if (original?.originalValue != null && !numeralsIn(span).some(number => Math.abs(number-original.originalValue)<1e-9)) return {ok:false,reason:'value_not_in_span'};
   if (original?.originalUnit && clinicalUnitInQuote(original.originalUnit,span,true,printedValue(original.originalValue)) === false) return {ok:false,reason:'unit_not_in_span'};
   return { ok: true, reason: null };
+}
+
+/**
+ * The same fact without the dates it cannot show: each of `occurredAt` and `recordedAt` stands or falls on whether a quotation of the
+ * document (the fact's own, or its `dateQuote`) prints it whole, with its year; a date label (`dateSurface`) goes when it is not in
+ * either quotation or when no date is left for it to label; a second quotation that no remaining date rests on goes with them.
+ * `null` when the fact still shows a date defect after that (an interval the quotation does not bound is the clinical block's, not a date
+ * of the fact's, and stays refused).
+ * @param {any} fact @param {any} context
+ */
+function withoutUnsupportedDate(fact, context) {
+  const source = fact.source ?? {};
+  const documents = context.documents instanceof Map ? context.documents : new Map(Object.entries(context.documents ?? {}));
+  const text = String(documents.get(String(source.documentId))?.text ?? "");
+  const span = text.slice(source.start, source.end);
+  const given = source.dateQuote;
+  const dateText = given && Number.isInteger(given.start) && Number.isInteger(given.end) ? text.slice(given.start, given.end) : null;
+  /** @type {string[]} */
+  const dropped = [];
+  /** @type {any} */
+  const candidate = { ...fact };
+  for (const field of ["occurredAt", "recordedAt"]) {
+    if (candidate[field] != null && !clinicalDateInEvidence(candidate[field], span, dateText)) { candidate[field] = null; dropped.push(field); }
+  }
+  const stillDated = candidate.occurredAt != null || candidate.recordedAt != null;
+  if (typeof candidate.dateSurface === "string" && candidate.dateSurface.trim()
+    && (!stillDated || (!span.includes(candidate.dateSurface) && !(dateText ?? "").includes(candidate.dateSurface)))) { candidate.dateSurface = null; dropped.push("dateSurface"); }
+  if (!stillDated && source.dateQuote !== undefined) {
+    const { dateQuote: _gone, ...rest } = source;
+    candidate.source = rest;
+  }
+  if (!dropped.length || verifyFactEvidence(candidate, context).reason === "date_not_in_span") return null;
+  return { fact: candidate, dropped };
+}
+
+/**
+ * The same fact dated by the header of the record it sits in, when it has no date of its own (owner ruling 2026-11-02: a patient fact with no
+ * date takes the date of the record header above it, and the risk of dating it to the wrong record is accepted). The header line is the
+ * fact's second quotation (`dateQuote`), so the evaluator's own literal check passes and a withdrawal that erases a date quotation covers it;
+ * `source.dateBasis` says where the date came from. A fact the model marks as a past event (`clinical.temporality: historical`) does not say it
+ * happened on the day of the note, so the header date is only an upper bound for it (`source.dateBound: no_later_than`).
+ * `null` when the fact has a date, is not a document fact, or no header stands above its quotation.
+ * @param {any} fact @param {any} context
+ */
+function datedByRecordHeader(fact, context) {
+  if (fact.occurredAt != null || fact.recordedAt != null || String(fact.extractedBy ?? "model") !== "model" || !(fact.provenance?.factSchema >= 2)) return null;
+  const source = fact.source;
+  if (!source || typeof source !== "object" || !Number.isInteger(source.start) || source.start < 0) return null;
+  const documents = context.documents instanceof Map ? context.documents : new Map(Object.entries(context.documents ?? {}));
+  const document = documents.get(String(source.documentId));
+  const text = document?.text;
+  if (typeof text !== "string") return null;
+  // A line that prints a date later than the moment the document entered the platform (its visible time, or the assessment's own moment
+  // when the caller names one) is a date ahead, not the date of a record: the scan passes over it.
+  const moments = [instant(document?.visibleAt), instant(context.asOf)].filter((at) => at !== null && Number.isFinite(at));
+  const header = clinicalRecordHeader(text, source.start, { notAfter: moments.length ? Math.min(.../** @type {number[]} */ (moments)) : null });
+  if (!header) return null;
+  const candidate = { ...fact, occurredAt: header.date, dateSurface: null,
+    source: { ...source, dateQuote: { start: header.start, end: header.end, quote: header.quote }, dateBasis: "record_header",
+      ...(fact.clinical?.temporality === "historical" ? { dateBound: "no_later_than" } : {}) } };
+  return verifyFactEvidence(candidate, context).ok ? candidate : null;
+}
+
+/**
+ * A fact as it is being written: checked like any other, and settled so that one defect in a unit or a date does not cost the whole fact.
+ *
+ * - A unit the quotation does not print beside the number is dropped, and the fact is kept with the number it printed (`unit_dropped`).
+ *   A criterion that names a unit then reads it as missing; a model that supplies a unit from its own knowledge loses no evidence.
+ * - A date the quotation (or the second quotation, `dateQuote`) does not print whole, with its year, is dropped, and the fact is kept
+ *   without it (`date_dropped`, naming the fields). No date that nothing printed is ever stored, so a criterion that needs the date stays
+ *   unknown for want of it, as it does for any undated fact; the fact itself still counts wherever no date is asked for.
+ * - A bare number of a variable the domain's closed table gives exactly one conventional unit (HbA1c, in percent, inside the range the
+ *   table prints) is read in that unit, and the fact records `source.unitBasis: conventional` (`unit_read_by_convention`). It is
+ *   never presented as printed, and a number with another unit beside it is not read this way.
+ * - A fact left with neither `occurredAt` nor `recordedAt` takes the date of the record header above its quotation, if the document has one
+ *   (`date_from_record_header`; see `datedByRecordHeader`). A date nothing printed was dropped first, so the header never competes with a date.
+ *
+ * Everything else the check refuses stays refused: a number or a quotation the document does not hold. `verifyFactEvidence` itself is
+ * unchanged: it still refuses a fact whose stored date is not shown, which is what the evaluator asks again of every stored fact.
+ *
+ * @param {any} fact a fact with its `source` located (`{ documentId, start, end, quote, dateQuote? }`)
+ * @param {{ documents?: Map<string, any> | Record<string, any>, asOf?: number|string|Date, anyPolarity?: boolean }} [context]
+ * @returns {{ ok: true, fact: any, notes: Array<'unit_dropped' | 'unit_read_by_convention' | 'date_dropped' | 'date_from_record_header'>, droppedDates: string[] } | { ok: false, reason: string }}
+ */
+export function settleFactEvidence(fact, context = {}) {
+  /** @type {Array<'unit_dropped' | 'unit_read_by_convention' | 'date_dropped' | 'date_from_record_header'>} */
+  const notes = [];
+  /** @type {string[]} */
+  const droppedDates = [];
+  let settled = fact;
+  let verdict = verifyFactEvidence(settled, context);
+  // At most one repair of each kind: a date can be dropped, then a unit, and what is still refused after that is refused.
+  for (let step = 0; step < 3 && !verdict.ok; step += 1) {
+    if (verdict.reason === "date_not_in_span" || verdict.reason === "date_quote_mismatch") {
+      const base = verdict.reason === "date_quote_mismatch" && settled.source?.dateQuote !== undefined
+        ? { ...settled, source: (({ dateQuote: _gone, ...rest }) => rest)(settled.source) } : settled;
+      const repaired = verifyFactEvidence(base, context).reason === "date_not_in_span" ? withoutUnsupportedDate(base, context) : { fact: base, dropped: [] };
+      if (!repaired) break;
+      settled = repaired.fact;
+      if (repaired.dropped.length) { notes.push("date_dropped"); droppedDates.push(...repaired.dropped); }
+    } else if (verdict.reason === "unit_not_in_span" && settled.unit) {
+      settled = { ...settled, unit: null };
+      notes.push("unit_dropped");
+    } else break;
+    verdict = verifyFactEvidence(settled, context);
+  }
+  if (!verdict.ok) return { ok: false, reason: String(verdict.reason) };
+  const byHeader = datedByRecordHeader(settled, context);
+  if (byHeader) { settled = byHeader; notes.push("date_from_record_header"); }
+  // A plain numeric string is stored as the number the quotation was checked for, so that what is kept is what was verified.
+  const number = clinicalNumericValue(settled.value);
+  if (typeof settled.value === "string" && number !== null) settled = { ...settled, value: number };
+  if (number !== null && !settled.unit && settled.source) {
+    const conventional = clinicalConventionalUnit(settled.variable, number);
+    if (conventional && !clinicalUnitPrintedBesideValue(String(settled.source.quote ?? ""), number)) {
+      settled = { ...settled, unit: conventional.unit, source: { ...settled.source, unitBasis: "conventional" } };
+      notes.push("unit_read_by_convention");
+    }
+  }
+  return { ok: true, fact: settled, notes, droppedDates };
 }
 
 /**
@@ -343,7 +500,8 @@ export function admissibleFacts(facts, context = {}) {
  * The as-of view: only what the platform could see by `asOf` (AC-15, C2-18).
  * A fact with no `visibleAt` is treated as always visible, which is right for
  * structured rows frozen into a snapshot and is why an extraction without the
- * clock is refused upstream rather than defaulted here.
+ * clock is refused upstream rather than defaulted here. A fact dated by the
+ * header of a record written after `asOf` is not in the view either.
  * @param {readonly any[]} facts @param {number|string|Date} asOf
  */
 export function factsVisibleAt(facts, asOf) {
@@ -351,7 +509,7 @@ export function factsVisibleAt(facts, asOf) {
   if (at === null) return [...(facts ?? [])];
   return (facts ?? []).filter((fact) => {
     const visibleAt = instant(fact?.visibleAt);
-    return visibleAt === null || visibleAt <= at;
+    return (visibleAt === null || visibleAt <= at) && !dateFromHeaderIsAfter(fact, at);
   });
 }
 
@@ -402,6 +560,13 @@ const citation = (fact) => {
     occurredAt: fact?.occurredAt ?? null,
     visibleAt: fact?.visibleAt ?? null,
     polarity: String(fact?.polarity ?? "affirmed"),
+    // What the quotation does not itself say, said apart so that no reader takes it for printed: a unit read by the domain's table, a
+    // date taken from another line of the same document (where, never its words).
+    ...(fact?.source?.unitBasis === "conventional" && fact.unit ? { unitBasis: "conventional", unit: String(fact.unit) } : {}),
+    ...(fact?.source?.dateQuote && Number.isInteger(fact.source.dateQuote.start) ? { dateLocator: { start: fact.source.dateQuote.start, end: fact.source.dateQuote.end } } : {}),
+    // Where the date came from when no quotation of the fact printed it (the header of the record it sits in), and that a past event's date
+    // is only the latest it could be: said beside the date wherever it is shown, so that no reader takes it for the event's own day.
+    ...(fact?.source?.dateBasis === "record_header" ? { dateBasis: "record_header", ...(isBoundedDate(fact) ? { dateBound: "no_later_than" } : {}) } : {}),
   };
 };
 
@@ -460,7 +625,8 @@ function evaluateNode(node, context) {
 
 /** @param {any} context @param {string} variable */
 function factsFor(context, variable) {
-  return (context.facts ?? []).filter((fact) => String(fact?.variable ?? "") === String(variable ?? "")).map(fact => ({ ...fact, polarity: clinicalFactPolarity(fact) }));
+  return (context.facts ?? []).filter((fact) => String(fact?.variable ?? "") === String(variable ?? "") && !dateFromHeaderIsAfter(fact, context.asOf))
+    .map(fact => ({ ...fact, polarity: clinicalFactPolarity(fact) }));
 }
 
 /**
@@ -573,12 +739,8 @@ function convertUnit(value, from, to, variable, custom) {
   return supplied != null && Number.isFinite(supplied) ? supplied : null;
 }
 
-/** A fact's value as a number, when it is one (a plain numeric string is one). @param {unknown} value @returns {number | null} */
-function numericValue(value) {
-  if (typeof value === "number") return Number.isFinite(value) ? value : null;
-  if (typeof value === "string" && /^\s*-?\d+(?:\.\d+)?\s*$/.test(value)) return Number(value);
-  return null;
-}
+/** A fact's value as a number, when it is one (a plain numeric string is one): the writer's read, so a value is checked as the number the evaluator will compare. */
+const numericValue = clinicalNumericValue;
 
 /** @param {any} node @param {any} context @returns {RequirementVerdict} */
 function evaluateCompare(node, context) {
@@ -593,8 +755,10 @@ function evaluateCompare(node, context) {
     return undated.length ? conflictingEvidence(variable, undated) ?? unknownBecause(variable, "undated", undated.map(citation)) : unknownBecause(variable, "not_measured");
   }
   const aggregate = String(node.aggregate ?? "latest");
-  const dated = candidates.filter((fact) => instant(fact?.occurredAt) !== null);
-  const ordered = [...dated].sort((a, b) => (instant(b?.occurredAt) ?? 0) - (instant(a?.occurredAt) ?? 0));
+  // Which reading is the latest rests on the days the readings were taken: a past event's upper bound does not say it.
+  const takenAt = (/** @type {any} */ fact) => (isBoundedDate(fact) ? null : instant(fact?.occurredAt));
+  const dated = candidates.filter((fact) => takenAt(fact) !== null);
+  const ordered = [...dated].sort((a, b) => (takenAt(b) ?? 0) - (takenAt(a) ?? 0));
   if (aggregate === "latest" && !ordered.length && candidates.length > 1) {
     // Several values and none of them dated: which is the latest cannot be said.
     return conflictingEvidence(variable, candidates) ?? unknownBecause(variable, "undated", candidates.map(citation));
@@ -602,11 +766,11 @@ function evaluateCompare(node, context) {
   // The verdict rests on the latest reading (and any other at the same instant), or on every reading in the window when
   // the aggregate is all or any; a disagreement among older readings is not asked about.
   const decisive = aggregate !== "latest" ? candidates
-    : ordered.length ? ordered.filter((fact) => instant(fact.occurredAt) === instant(ordered[0].occurredAt)) : candidates.slice(0, 1);
+    : ordered.length ? ordered.filter((fact) => takenAt(fact) === takenAt(ordered[0])) : candidates.slice(0, 1);
   const blocked = conflictingEvidence(variable, decisive);
   if (blocked) return blocked;
   if (aggregate === 'latest' && ordered.length > 1) {
-    const tied = ordered.filter(fact => instant(fact.occurredAt) === instant(ordered[0].occurredAt));
+    const tied = ordered.filter(fact => takenAt(fact) === takenAt(ordered[0]));
     const compared = tied.map(fact => compareFact(node,fact,context));
     // A timestamp with no finer ordering cannot select whichever row happened
     // to arrive first. Agreement can answer the threshold; disagreement cannot.
@@ -720,14 +884,18 @@ function compareFact(node, fact, context) {
  */
 function evaluateElapsed(node, context) {
   const variable = String(node.variable ?? "");
-  const held = factsFor(context, variable).filter(fact => !fact.clinical?.copiedFrom);
+  const needed = Number(node.days ?? 0);
+  const strict = String(node.comparator ?? "gte") === "gt";
+  const clear = (/** @type {number} */ at) => { const elapsed = daysBetween(at, context.asOf); return strict ? elapsed > needed : elapsed >= needed; };
+  // A past event dated only by an upper bound (`source.dateBound`) happened no later than it: when even the bound leaves the washout clear, so
+  // does the event, and the bound stands for its date; when the bound is still inside the washout the event may be anywhere before it, and the
+  // fact is undated, as any fact that cannot be placed is.
+  const placed = (/** @type {any} */ fact) => (isBoundedDate(fact) && !(instant(fact.occurredAt) !== null && clear(/** @type {number} */ (instant(fact.occurredAt)))) ? { ...fact, occurredAt: null } : fact);
+  const held = factsFor(context, variable).filter(fact => !fact.clinical?.copiedFrom).map(placed);
   const isExposure = (/** @type {any} */ fact) => !fact.clinical?.medication
     || fact.clinical.assertion === 'negated' || ['administered', 'stopped'].includes(fact.clinical.medication.state);
   const everything = held.filter(isExposure);
   const affirmed = everything.filter((fact) => String(fact?.polarity ?? "affirmed") === "affirmed");
-  const needed = Number(node.days ?? 0);
-  const strict = String(node.comparator ?? "gte") === "gt";
-  const clear = (/** @type {number} */ at) => { const elapsed = daysBetween(at, context.asOf); return strict ? elapsed > needed : elapsed >= needed; };
   /** The medication facts that are not exposures, newer than `since` (any when null), that would reopen the washout were they one.
    * @param {number | null} since @returns {any[]} newest first */
   const unresolvedSince = (since) => held.filter((fact) => !isExposure(fact) && String(fact?.polarity ?? "affirmed") === "affirmed")
@@ -929,6 +1097,22 @@ export function eligibilityCounts(judgments) {
     if (state in counts) counts[/** @type {keyof typeof counts} */ (state)] += 1;
   }
   return counts;
+}
+
+/**
+ * How much of what applies to a person has been settled: `decided` is the criteria found satisfied or not satisfied, `applicable` is
+ * every criterion that applies to them. An unknown and a deferral stay in the denominator — they are the undecided part, and a share that
+ * left them out would read a trial with three parsed criteria and no answer as well settled as one with thirty answered. A criterion
+ * proven not applicable is out of both (it asks nobody for anything). Arithmetic over `eligibilityCounts`' keys and nothing a model said;
+ * it is what the patient→trial list ranks by after the verdict (M5) and what the page and the read-back print as 已判 n/m.
+ * @param {Record<string, unknown> | null | undefined} counts
+ * @returns {{ decided: number, applicable: number, percent: number }}
+ */
+export function decidedShare(counts) {
+  const n = (/** @type {string} */ key) => { const value = Number(counts?.[key] ?? 0); return Number.isFinite(value) && value > 0 ? Math.floor(value) : 0; };
+  const decided = n("satisfied") + n("not_satisfied");
+  const applicable = decided + n("unknown") + n("pending_recheck");
+  return { decided, applicable, percent: applicable ? Math.round((decided / applicable) * 100) : 0 };
 }
 
 /**

@@ -226,3 +226,33 @@ vcr_case("N28f", c("AC-04", "AC-11"), function() {
        detail = sprintf("literature population with correlationSource 'assumed' and no matrix -> %s (%s), cor(age, sbp) %.3f; scenario population with correlationScale 'spearman' and no matrix -> %s (%s), cor(age, bmi) %.3f; independence band +-%.3f",
                         lit$status, paste(vcr_test_issue_codes(lit), collapse = ","), r_l, scn$status, paste(vcr_test_issue_codes(scn), collapse = ","), r_s, band))
 })
+
+vcr_case("N28g", c("AC-04", "AC-11"), function() {
+  # A3 (remediation plan): no matrix means independent variables, and that is an assumption the result says, not a silence. A
+  # literature population without a matrix carries a `(correlation)` source row ("assumed") like one with a matrix, and says
+  # `independence_assumed`; with a matrix it says `assumed` (the author's word, not checked against the source), and with a matrix
+  # marked `cited` it says the citation is declared and not verified by the engine. A scenario population says the same of itself.
+  # No sensitivity run exists for independence (it has nothing to be compared with), and one is not invented. A4: the draws the
+  # population took are in the result (1 here, since the draws multiply the table and the default stays a point assumption).
+  tbl <- list(list(variable = "age", mean = 61, sd = 9), list(variable = "sbp", mean = 138, sd = 15))
+  lit <- function(extra) vcr_test_run(vcr_test_job("population.literature", c(list(baselineTable = tbl, n = 400L), extra), seed = 2832L, job_id = "job_n28g"), output_dir = tempfile("n28g"))
+  none <- lit(list()); given <- lit(list(correlation = list(list(1, 0.3), list(0.3, 1)), correlationSource = "assumed"))
+  cited <- lit(list(correlation = list(list(1, 0.3), list(0.3, 1)), correlationSource = "cited"))
+  var2 <- list(list(name = "age", family = "normal", mean = 60, sd = 9), list(name = "bmi", family = "normal", mean = 27, sd = 4))
+  scn <- function(pop) vcr_test_run(vcr_test_job("population.scenario", list(n = 400L, population = pop), seed = 2833L, job_id = "job_n28g_s"), output_dir = tempfile("n28gs"))
+  s_none <- scn(list(variables = var2)); s_given <- scn(list(variables = var2, correlation = list(list(1, 0.2), list(0.2, 1))))
+  src <- function(r) as.character(r$diagnostics$columnSources[["(correlation)"]] %||% "NULL")
+  ok <- identical(none$status, "succeeded") && identical(none$diagnostics$correlationVerification, "independence_assumed") && identical(src(none), "assumed") &&
+    is.null(none$diagnostics$correlationSensitivity) && identical(none$diagnostics$correlationSource, "assumed") &&
+    identical(given$diagnostics$correlationVerification, "assumed") && identical(src(given), "assumed") && !is.null(given$diagnostics$correlationSensitivity) &&
+    identical(cited$diagnostics$correlationVerification, "declared_citation_not_verified_by_engine") && identical(src(cited), "aggregate") &&
+    identical(none$diagnostics$columnSources$age, "aggregate") &&
+    identical(s_none$diagnostics$correlationVerification, "independence_assumed") && identical(s_given$diagnostics$correlationVerification, "assumed") &&
+    identical(as.integer(none$diagnostics$parameterDraws), 1L) && identical(as.integer(s_none$diagnostics$parameterDraws), 1L)
+  list(pass = ok,
+       detail = sprintf("literature, no matrix: %s / source row %s / no sensitivity run %s; with an assumed matrix: %s / %s; cited matrix: %s / %s; scenario population: %s without a matrix, %s with one; draws %s/%s",
+                        none$diagnostics$correlationVerification %||% "NULL", src(none), is.null(none$diagnostics$correlationSensitivity),
+                        given$diagnostics$correlationVerification %||% "NULL", src(given), cited$diagnostics$correlationVerification %||% "NULL", src(cited),
+                        s_none$diagnostics$correlationVerification %||% "NULL", s_given$diagnostics$correlationVerification %||% "NULL",
+                        none$diagnostics$parameterDraws %||% "NULL", s_none$diagnostics$parameterDraws %||% "NULL"))
+})

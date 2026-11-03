@@ -24,13 +24,19 @@
         "Normalize every candidate, freeze the deduplicated sources in evidence-snapshot.json before assessment, and cite nothing outside it.",
         "Compare the candidates domain by domain with status, rationale and evidence ids, and keep the ranking withheld with the reason stated in decision-summary.json.",
         "Label every cross-trial difference as an indirect comparison of trials against warfarin, naming the trials and how their populations differed.",
-        "Report dose adjustment and contraindication by renal function and age from each current label as observed facts for the committee's two subgroups."
+        "Report dose adjustment and contraindication by renal function and age from each current label as observed facts for the committee's two subgroups.",
+        "Preserve the source version and complete renal-function limits for every dosing statement; distinguish absent local labels from foreign-label facts.",
+        "Keep event rates, effect estimates, intervals and analysis populations from the same source version together; disclose version discrepancies in the table and reply.",
+        "Check regulator decisions and latest product-specific labeling for approval, withdrawal and availability; treat conflicting or older labels as dated evidence, not proof of current availability."
       ],
       "mustNotDo": [
         "Invent a rubric, assign equal weights, or produce any total or ordering.",
         "Rank the candidates on hazard ratios taken from different trials.",
         "Enter a price or a cost comparison the committee did not supply.",
-        "Recommend one medicine for the formulary or for any patient group."
+        "Recommend one medicine for the formulary or for any patient group.",
+        "Use a nonsignificant comparison to establish equivalence, or infer between-drug differences from the significance of separate trials.",
+        "Report a renal dose threshold without its lower boundary or mix trial numbers from different source versions as one estimate.",
+        "Infer a current difference in product availability or reversal options solely from asymmetric or stale label text."
       ],
       "gradedOn": "Whether the scorecard is complete per domain and still carries no ranking, and whether every comparative sentence says it is indirect.",
       "generated": {

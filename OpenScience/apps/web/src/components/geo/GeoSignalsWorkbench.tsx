@@ -6,6 +6,7 @@ import { getGeoProject, stageGeoPlanContext, type GeoProject } from '@/lib/geoCl
 import { getGeoSignal, listGeoSignals, setGeoSignalDisposition, getGeoSignalRunRecord, geoSignalResultHref, type GeoSignal, type GeoSignalDetail, type GeoSignalPage, type GeoSignalState, type GeoSignalAttempt } from '@/lib/geoSignalsClient';
 import { webErrorMessage } from '@/lib/apiClient';
 import type { ProgrammeRun } from '@/lib/programmeRuns';
+import { useContainerNarrow } from '@/lib/useContainerNarrow';
 import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Input';
 import { Section } from '@/components/ui/Section';
@@ -31,6 +32,18 @@ const runOf = (attempt: GeoSignalAttempt, label: string): ProgrammeRun => ({ run
   state: ['running', 'queued', 'starting'].includes(attempt.status ?? '') ? 'running' : attempt.status === 'succeeded' ? 'finished' : 'stopped', at: time(attempt.startedAt) });
 
 /** One current-work projection across overview and step pages; the URL addresses detail and preserves back/refresh. */
+/**
+ * Component: GeoSignalsWorkbench; owner: GEO; rules: DS23.
+ * Anatomy: Findings reading surface and selected finding detail with exact handling history.
+ * Variants: Actionable summary, expanded history and selected detail.
+ * States: Initial read, stale read error, empty, paging, handling and read-only actions.
+ * Hit area: Shared controls retain their standard targets.
+ * Keyboard: Native controls preserve Tab and activation behavior.
+ * Long content: Text wraps within the available reading width.
+ * Theme: Shared surface, border and ink tokens.
+ * Responsive: Dates follow metadata below 640px container width and trail rows above it.
+ * Verification: Focused component behavior tests and fixture walkthrough.
+ */
 export function GeoSignalsWorkbench({ geoId, project, step }: { geoId: string; project: GeoProject; step?: string | null }) {
   const [params, setParams] = useSearchParams();
   const signalId = params.get('signal');
@@ -81,17 +94,23 @@ function SignalList({ geoId, step, expanded, filter, setFilter, onOpen, onExpand
     <p className="text-caption text-text-3">{step ? "本阶段暂无待处理发现" : `当前没有待处理发现 · 已保留 ${Object.values(page.counts).reduce((sum, count) => sum + count, 0)} 条发现记录`}</p>
     <Button variant="text" size="sm" onClick={onExpand}>{step ? "查看本阶段发现" : "查看全部发现"}</Button>
   </div>;
-  return <Section title="发现与处理" count={page.total} toolbar={<div className="flex items-center gap-2">
+  return <Section className="!mt-0 rounded border border-border bg-surface p-4 sm:p-5" title="发现与处理" count={page.total} toolbar={<div className="flex items-center gap-2">
     {expanded && <Select aria-label="处理状态" value={filter} onChange={event => setFilter(event.target.value as GeoSignalState | '')}><option value="">全部状态</option>{Object.entries(GEO_SIGNAL_STATE_LABELS_ZH).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</Select>}
     {expanded && <Button variant="text" size="sm" onClick={() => setRound(value => value + 1)}>刷新记录</Button>}
     <Button variant="text" size="sm" onClick={onExpand}>{expanded ? '收起历史' : step ? '查看本阶段发现' : '查看全部发现'}</Button>
   </div>}>
     {error && <Note action={<Button variant="text" size="sm" onClick={() => setRound(value => value + 1)}>重试</Button>}>更新失败，保留已读记录。{error}</Note>}
-    {page.items.length === 0 ? <p className="text-ui text-text-3">当前条件下没有记录。</p> : <List divided label="发现与处理记录">
-      {page.items.map(item => <ListRow key={item.id} title={item.title} onOpen={() => onOpen(item.id)} meta={`${kinds[item.kind]} · ${stateWord(item)} · ${outcomes[item.businessOutcome.state] ?? '查看业务状态'} · ${time(item.observedAt)}`} />)}
-    </List>}
+    {page.items.length === 0 ? <p className="text-ui text-text-3">当前条件下没有记录。</p> : <FindingRows items={page.items} onOpen={onOpen} />}
     {expanded && page.nextCursor && <Button variant="text" size="sm" loading={paging} onClick={() => void more()}>更多记录</Button>}
   </Section>;
+}
+
+function FindingRows({ items, onOpen }: { items: GeoSignal[]; onOpen(id: string): void }) {
+  const reading = useRef<HTMLDivElement>(null);
+  const narrow = useContainerNarrow(reading, 640);
+  return <div ref={reading}><List divided label="发现与处理记录">
+      {items.map(item => <ListRow key={item.id} title={item.title} onOpen={() => onOpen(item.id)} meta={<>{`${kinds[item.kind]} · ${stateWord(item)} · ${outcomes[item.businessOutcome.state] ?? '查看业务状态'}`}{narrow && <span className="block">{time(item.observedAt)}</span>}</>} trailing={narrow ? undefined : time(item.observedAt)} />)}
+    </List></div>;
 }
 
 function SignalDetail({ geoId, project, signalId, onBack }: { geoId: string; project: GeoProject; signalId: string; onBack(): void }) {

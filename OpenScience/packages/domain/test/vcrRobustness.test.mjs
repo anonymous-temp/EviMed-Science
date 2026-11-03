@@ -14,7 +14,7 @@ import {
   ALL_ERROR_CODES,
   VCR_ENGINE_METHODS,
   VCR_JOB_KINDS,
-  VCR_JOB_METHODS, VCR_LONGITUDINAL_METHODS,
+  VCR_JOB_METHODS, VCR_LONGITUDINAL_METHODS, VCR_MATCH_BATCH_METHODS,
   VCR_NEGATIVE_CONTROL_CALIBRATION_MIN,
   VCR_NEGATIVE_CONTROL_VERDICTS,
   VCR_NEGATIVE_CONTROL_VERDICT_LABELS_ZH,
@@ -54,7 +54,9 @@ test("the robustness parity jobs: every valid one is clean, every invalid one na
 
 test("each robustness method is registered once: a method, a kind, a schema, and the sources it reads", () => {
   for (const [method, kind] of METHODS) {
-    assert.equal(/** @type {any} */ (VCR_ENGINE_METHODS)[method].version, "1.0.0", method);
+    // negative controls are at 1.1.0 since the weighted balance became a reading and no longer a refusal (2026-11-01); 1.0.0 replays
+    assert.equal(/** @type {any} */ (VCR_ENGINE_METHODS)[method].version, method === "comparator.negative_control" ? "1.1.0" : "1.0.0", method);
+    if (method === "comparator.negative_control") assert.deepEqual([.../** @type {any} */ (VCR_ENGINE_METHODS)[method].compatibleVersions], ["1.0.0"]);
     assert.equal(/** @type {any} */ (VCR_ENGINE_METHODS)[method].modelTier, "data", method);
     assert.ok(/** @type {any} */ (VCR_ENGINE_METHODS)[method].crossChecks.length > 0, `${method} names what its numeric cases are held against`);
     assert.equal(/** @type {Record<string, string>} */ (VCR_JOB_METHODS)[kind], method, kind);
@@ -109,5 +111,5 @@ test("prognostic adjustment: the word every result carries about regulators is t
 test("the robustness methods are listed once in the dispatch the engine publishes, so a method added later cannot be skipped by the evidence", () => {
   // every method of the domain has a schema and a kind: the evidence generator derives its method list from this registry
   assert.deepEqual(Object.keys(VCR_SCENARIO_SCHEMAS).sort(), Object.keys(VCR_ENGINE_METHODS).sort());
-  assert.deepEqual(new Set(Object.values(VCR_JOB_METHODS)), new Set([...Object.keys(VCR_ENGINE_METHODS),...Object.keys(VCR_LONGITUDINAL_METHODS)]));
+  assert.deepEqual(new Set(Object.values(VCR_JOB_METHODS)), new Set([...Object.keys(VCR_ENGINE_METHODS),...Object.keys(VCR_LONGITUDINAL_METHODS),...Object.keys(VCR_MATCH_BATCH_METHODS)]));
 });

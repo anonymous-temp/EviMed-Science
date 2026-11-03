@@ -1,14 +1,16 @@
 import { VCR_PREDICTION_LIMIT_LABELS_ZH } from "@evimed/domain";
 import { VcrVersionComparison } from "../VcrVersionComparison";
 import { useState, type ReactNode } from "react";
+import { useSearchParams } from "react-router";
 import { ChevronLeft, CircleCheck, Info, PenLine } from "lucide-react";
 import { VCR_COMPARATOR_ROUTE_LABELS_ZH } from "@evimed/domain";
-import { getVcrComparator, type VcrComparatorTab as ComparatorData, type VcrStudy } from "@/lib/vcrClient";
+import { getVcrComparator, type VcrComparatorTab as ComparatorData, type VcrConclusion, type VcrOperatingCharacteristics, type VcrPremise, type VcrStudy } from "@/lib/vcrClient";
 import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui/Button";
 import { ChartCard } from "@/components/ui/ChartCard";
 import { ChartGrid, type ChartGridCell } from "@/components/ui/ChartGrid";
 import { Disclosure } from "@/components/ui/Disclosure";
+import { DataTable, type DataColumn } from "@/components/ui/DataTable";
 import { FactList, type Fact } from "@/components/ui/FactList";
 import { Headline } from "@/components/ui/Headline";
 import { List, ListRow } from "@/components/ui/ListRow";
@@ -19,12 +21,13 @@ import { Tooltip } from "@/components/ui/Tooltip";
 import { VcrSeriesLegend, VcrSurvivalChart } from "../VcrCharts";
 import { ConclusionChip, SourceTag } from "../VcrMarks";
 import { VcrNumber } from "../VcrNumber";
+import { VcrPremises, premiseDraft } from "../VcrPremises";
 import { NotEstimableCard, PartialResultNote, Stale, VcrStepFailed, VcrStepPending, VcrTabSkeleton } from "../VcrStates";
 import { BalancePlot } from "../comparator/BalancePlot";
 import { DimensionBand } from "../comparator/DimensionBand";
 import { useStudyFrame } from "../studyFrameContext";
 import { pairRows, useVcrLoad, VcrTabError } from "../vcrTabKit";
-import { conclusionLabel, intervalText } from "../vcrText";
+import { conclusionLabel, intervalText, numberText } from "../vcrText";
 import { COMPARE_DRAFT_LABEL, INTAKE_LABEL } from "../vcrActionWords";
 
 const ROUTE_LABELS = VCR_COMPARATOR_ROUTE_LABELS_ZH as Record<string, string>;
@@ -36,8 +39,8 @@ const ROUTE_STATE_WORDS: Record<string, string> = {
   design_only: "设计期可用",
 };
 
-/** The routes whose state is a conclusion (a chip of its own); the rest are a word. */
-const CONCLUSIONS = new Set(["estimable", "limited", "not_estimable"]);
+/** The routes whose state is a conclusion or the benchmark class (a chip of its own); the rest are a word. */
+const CONCLUSIONS = new Set(["estimable", "limited", "benchmark_only", "not_estimable"]);
 
 /** What 「评估可比性」 puts in the conversation's composer — never sent. */
 export const VCR_ASSESS_COMPARABILITY_DRAFT = "请评估这项对照在十个可比性维度上能模拟到什么程度：";
@@ -62,13 +65,17 @@ export const VCR_ASSESS_COMPARABILITY_DRAFT = "请评估这项对照在十个可
  *    route (what it is, what it would need) and changes nothing the study computes.
  */
 export function ComparatorTab({ studyId, study }: { studyId: string; study: VcrStudy }) {
-  const { state, reload } = useVcrLoad(`${studyId}:comparator`, () => getVcrComparator(studyId));
+  // The saved comparison a reply's link named (`?object=`) is the headline; without one the newest comparison stays.
+  const [params] = useSearchParams();
+  const object = params.get("object");
+  const { state, reload } = useVcrLoad(`${studyId}:comparator:${object ?? ""}`, () => getVcrComparator(studyId, object ? { object } : undefined));
   if (state.kind === "loading") return <VcrTabSkeleton />;
   if (state.kind === "error") return <VcrTabError message={state.message} onRetry={reload} />;
   return <ComparatorView studyId={studyId} study={study} data={state.data} />;
 }
 
 function ComparatorView({ studyId, study, data }: { studyId: string; study: VcrStudy; data: ComparatorData }) {
+  const frame = useStudyFrame();
   const failed = study.steps.comparator?.status === "failed";
   // The routes and the ten dimensions are what every study has before anything ran — they say what each route could be at this tier —
   // so they do not count as a result.
@@ -99,7 +106,7 @@ function ComparatorView({ studyId, study, data }: { studyId: string; study: VcrS
             titleProps={{ "data-vcr-route": route.route, "data-vcr-route-state": route.state }}
             meta={(
               <span className="flex flex-wrap items-center gap-1.5">
-                {CONCLUSIONS.has(route.state) ? <ConclusionChip state={route.state as "estimable" | "limited" | "not_estimable"} /> : <Tag>{ROUTE_STATE_WORDS[route.state] ?? route.state}</Tag>}
+                {CONCLUSIONS.has(route.state) ? <ConclusionChip state={route.state as VcrConclusion} /> : <Tag>{ROUTE_STATE_WORDS[route.state] ?? route.state}</Tag>}
                 {route.selected && <Tag tone="accent">采用</Tag>}
                 {(route.reason || route.note) && <span className="min-w-0 truncate text-caption text-text-3">{route.reason ?? route.note}</span>}
               </span>
@@ -129,6 +136,22 @@ function ComparatorView({ studyId, study, data }: { studyId: string; study: VcrS
               )}
             </div>
           )}
+
+          {/* Why the result is read with care, in the server's own sentences: the weighted balance beside the estimate, the reasons the
+              comparator's records give, what a benchmark is a benchmark of. The estimate is on the page whatever they say. */}
+          {(data.limits ?? []).length > 0 && (
+            <ul data-vcr-limits="" className="flex flex-col gap-1 text-body text-text-2">
+              {(data.limits ?? []).map((limit) => <li key={limit.key} data-vcr-limit={limit.key}>{limit.text}</li>)}
+            </ul>
+          )}
+
+          {/* What the conclusion stands on, once; the comparator's own premises are listed by the server (`vcrPremises`). */}
+          <VcrPremises
+            premises={data.premises}
+            onChange={frame && study.abilities.includes("write")
+              ? (premise: VcrPremise) => frame.openChat(`${premiseDraft(premise)} 请先检查当前研究的已保存对照，保留原计算结果。`, { kind: "step", studyId, objectId: "comparator" })
+              : null}
+          />
 
           <MasterDetail
             className="h-auto"
@@ -213,7 +236,11 @@ function UsedRoute({ data }: { data: ComparatorData }) {
   }
   const grid = [...cells.map((cell) => [cell]), ...pairRows(second)];
 
-  const estimandRows: Fact[] = estimand ? estimand.rows.map((row) => ({ label: row.label, value: row.value })) : [];
+  // The estimand is its first row; the rest is the target trial, component by component (A6), which the premise block shows only where it
+  // cannot be emulated exactly, so the whole record is folded under the estimand.
+  const [estimandHead, ...targetTrialRows]: Fact[] = estimand ? estimand.rows.map((row) => ({ label: row.label, value: row.value })) : [];
+  const estimandRows: Fact[] = estimandHead ? [estimandHead] : [];
+  if (estimand?.note) targetTrialRows.push({ label: "说明", value: estimand.note });
   const priorRows: Fact[] = prior.map((row) => ({
     label: row.label,
     value: <span data-vcr-prior={row.key} className="tabular-nums"><VcrNumber value={row.value} label={row.label} /></span>,
@@ -227,7 +254,14 @@ function UsedRoute({ data }: { data: ComparatorData }) {
       {data.predictionBenchmark && <PredictionBenchmark data={data.predictionBenchmark} />}
       {estimandRows.length > 0 && (
         <Section title="估计目标" toolbar={estimand?.source ? <SourceTag source={estimand.source} /> : undefined}>
-          <FactList rows={estimandRows} />
+          <div className="flex flex-col gap-3">
+            <FactList rows={estimandRows} />
+            {targetTrialRows.length > 0 && (
+              <Disclosure summary={`目标试验的要素 · ${targetTrialRows.length}`}>
+                <div data-vcr-target-trial=""><FactList max={targetTrialRows.length} rows={targetTrialRows} /></div>
+              </Disclosure>
+            )}
+          </div>
         </Section>
       )}
 
@@ -252,6 +286,8 @@ function UsedRoute({ data }: { data: ComparatorData }) {
         </Section>
       )}
 
+      {data.operatingCharacteristics && <OperatingCharacteristicsSection table={data.operatingCharacteristics} />}
+
       {data.robustness && (data.robustness.rows.length > 0 || data.robustness.qualification || data.robustness.notes.length > 0) && (
         <RobustnessSection robustness={data.robustness} />
       )}
@@ -261,6 +297,19 @@ function UsedRoute({ data }: { data: ComparatorData }) {
       {data.methods && data.methods.length > 0 && <Methods methods={data.methods} />}
     </>
   );
+}
+
+/** The local calibration rows of the prediction benchmark: the ideal is beside each number and a missing one says what it needed. */
+function calibrationRows(calibration: NonNullable<ComparatorData["predictionBenchmark"]>["calibration"]): Fact[] {
+  if (!calibration) return [];
+  const range = (e: { low: number | null; high: number | null }) => (e.low !== null && e.high !== null ? `（${numberText(e.low)}–${numberText(e.high)}）` : "");
+  return [
+    ...(calibration.intercept ? [{ label: "本地校准截距", value: `${numberText(calibration.intercept.value)}${range(calibration.intercept)}，理想值 0` }] : []),
+    ...(calibration.slope ? [{ label: "本地校准斜率", value: `${numberText(calibration.slope.value)}${range(calibration.slope)}，理想值 1` }] : []),
+    ...(calibration.observedRisk !== null && calibration.predictedRisk !== null
+      ? [{ label: "观察到 / 预测", value: `${numberText(calibration.observedRisk)} / ${numberText(calibration.predictedRisk)}${calibration.n !== null ? `，${calibration.n} 人` : ""}` }] : []),
+    ...calibration.notes.map((note) => ({ label: "校准", value: note })),
+  ];
 }
 
 function PredictionBenchmark({ data }: { data: NonNullable<ComparatorData["predictionBenchmark"]> }) {
@@ -276,6 +325,7 @@ function PredictionBenchmark({ data }: { data: NonNullable<ComparatorData["predi
       ...(data.outcomeSd ? [{ label: "预测结局标准差", value: <VcrNumber label="预测结局标准差" value={data.outcomeSd} /> }] : []),
       ...(data.relativeScore ? [{ label: "平均相对预后评分", value: <VcrNumber label="平均相对预后评分" value={data.relativeScore} /> }] : []),
       ...(!data.absoluteRiskAvailable ? [{ label: "绝对风险", value: "未提供适用的基线风险；只报告可支持的相对预测量。" }] : []),
+      ...calibrationRows(data.calibration),
       { label: "解释范围", value: "模型条件下的预测基准，不识别治疗效果。" },
       ...data.limits.map(limit => ({ label: "局限", value: <>{(VCR_PREDICTION_LIMIT_LABELS_ZH as Record<string, string>)[limit.code] ?? VCR_PREDICTION_LIMIT_LABELS_ZH.unknown}{limit.source && <Disclosure summary="查看来源说明"><span data-prose="">{limit.source}</span></Disclosure>}</> })),
     ]} />
@@ -291,7 +341,7 @@ function OtherRoute({ data, route }: { data: ComparatorData; route: ComparatorDa
   const rows: Fact[] = gaps
     ? []
     : [
-      { label: "状态", value: CONCLUSIONS.has(route.state) ? <ConclusionChip state={route.state as "estimable" | "limited" | "not_estimable"} /> : ROUTE_STATE_WORDS[route.state] ?? route.state },
+      { label: "状态", value: CONCLUSIONS.has(route.state) ? <ConclusionChip state={route.state as VcrConclusion} /> : ROUTE_STATE_WORDS[route.state] ?? route.state },
       ...(route.reason ? [{ label: needs ? "需要什么" : "原因", value: route.reason }] : []),
       ...(route.note ? [{ label: "说明", value: route.note }] : []),
     ];
@@ -344,6 +394,41 @@ function Conditions({ conditions }: { conditions: NonNullable<ComparatorData["e1
   );
 }
 
+/**
+ * 借用的运行特征 (A11): what the borrowing design does over the drifts of the true control rate away from history — the rejection
+ * probability under each prior, with the effect absent (the type I error, the row a borrowing design is judged on) and present (the
+ * power), each with its Monte-Carlo error and the replicates behind it. The null rows are held to the borrowing floor; a table the
+ * engine's ceiling held below what was asked says so.
+ */
+function OperatingCharacteristicsSection({ table }: { table: VcrOperatingCharacteristics }) {
+  const columns: Array<DataColumn<VcrOperatingCharacteristics["rows"][number]>> = [
+    { key: "drift", header: "对照率漂移（logit）", rowHeader: true, cell: (row) => <span className="tabular-nums">{row.drift}</span> },
+    { key: "prior", header: "先验", cell: (row) => row.priorLabel },
+    { key: "scenario", header: "情景", cell: (row) => (row.scenario === "null" ? "无效应（I 类错误）" : "有效应（功效）") },
+    {
+      key: "rejection", header: "拒绝零假设的概率", align: "right",
+      cell: (row) => (
+        <span data-vcr-oc-row={`${row.drift}:${row.prior}:${row.scenario}`} className="inline-flex items-baseline gap-1 tabular-nums">
+          {`${row.rejection}%`}
+          {row.mcse !== null && <Tooltip content="蒙特卡洛标准误"><span className="text-meta text-text-3">{`±${row.mcse}`}</span></Tooltip>}
+        </span>
+      ),
+    },
+    { key: "replicates", header: "模拟次数", align: "right", cell: (row) => (row.replicates === null ? "—" : <span className="tabular-nums text-text-2">{row.replicates.toLocaleString("en-US")}</span>) },
+  ];
+  return (
+    <Section title="借用的运行特征">
+      <div data-vcr-oc="" className="flex flex-col gap-2">
+        {table.reason && <p className="text-caption text-text-3">{table.reason}</p>}
+        {table.capped && table.replicates !== null && table.asked !== null && (
+          <p data-vcr-oc-capped="" className="text-caption text-warn-strong">{`引擎的次数上限把这张表限制在 ${table.replicates.toLocaleString("en-US")} 次（要求 ${table.asked.toLocaleString("en-US")} 次），误差比要求的大。`}</p>
+        )}
+        <DataTable label="借用的运行特征" columns={columns} rows={table.rows} rowKey={(row) => `${row.drift}:${row.prior}:${row.scenario}`} />
+      </div>
+    </Section>
+  );
+}
+
 /** 方法与版本: which methods made the numbers, folded — a reviewer checks them, a reader of the curves does not need them first. */
 function Methods({ methods }: { methods: NonNullable<ComparatorData["methods"]> }) {
   return (
@@ -384,22 +469,34 @@ function RobustnessSection({ robustness }: { robustness: NonNullable<ComparatorD
 
 /** The two numbers a comparator page is read for, beside the curves, and the reconstruction's quality check folded under them. */
 function ComparatorNumbers({ data }: { data: ComparatorData }) {
-  const passed = data.qc.filter((check) => check.passed).length;
-  const checks: ReactNode = data.qc.length > 0 && (
-    <Disclosure summary={`重建质控 ${passed} / ${data.qc.length} 通过`}>
-      <FactList
-        max={data.qc.length}
-        rows={data.qc.map((check): Fact => ({
-          label: check.label,
-          value: (
-            <span className="flex flex-wrap items-center gap-2 tabular-nums">
-              {check.passed && <CircleCheck size={16} aria-hidden="true" className="shrink-0 text-ok" />}
-              {check.value}
-              {check.threshold && <span className="text-caption text-text-3">{`界值 ${check.threshold}`}</span>}
-            </span>
-          ),
-        }))}
-      />
+  // A check the paper gave nothing for is listed and is not counted: 2 / 2 passed and 2 / 4 passed are different things to have been told.
+  const held = data.qc.filter((check) => !check.notChecked);
+  const passed = held.filter((check) => check.passed).length;
+  const level = data.reconstruction ?? null;
+  const rows: Fact[] = [
+    ...(level ? [{
+      label: "论文给了什么",
+      value: (
+        <span data-vcr-reconstruction-level={level.key} className="flex flex-col gap-1">
+          <span>{level.arms.length > 0 ? level.arms.map((arm) => `${arm.name}：${arm.label}`).join("；") : level.label}</span>
+          {level.hazardRatio && <span className="text-caption text-text-3">{level.hazardRatio}</span>}
+        </span>
+      ),
+    }] : []),
+    ...data.qc.map((check): Fact => ({
+      label: check.label,
+      value: (
+        <span className={cn("flex flex-wrap items-center gap-2 tabular-nums", check.notChecked && "text-text-3")}>
+          {check.passed && <CircleCheck size={16} aria-hidden="true" className="shrink-0 text-ok" />}
+          {check.value}
+          {check.threshold && <span className="text-caption text-text-3">{`界值 ${check.threshold}`}</span>}
+        </span>
+      ),
+    })),
+  ];
+  const checks: ReactNode = rows.length > 0 && (
+    <Disclosure summary={held.length > 0 ? `重建质控 ${passed} / ${held.length} 通过${data.qc.length > held.length ? `（${data.qc.length - held.length} 项没有核对）` : ""}` : "重建质控"}>
+      <FactList max={rows.length} rows={rows} />
     </Disclosure>
   );
   return (

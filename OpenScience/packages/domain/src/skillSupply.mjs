@@ -553,6 +553,7 @@ export const PYTHON_DISTRIBUTION_MODULES = Object.freeze({
   openpyxl: ['openpyxl', 'et_xmlfile'],
   xlrd: ['xlrd'],
   pandas: ['pandas', 'pytz', 'tzdata'],
+  pyarrow: ['pyarrow'],
   pillow: ['PIL'],
   playwright: ['playwright', 'greenlet', 'pyee'],
   pypdf: ['pypdf'],

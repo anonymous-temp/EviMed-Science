@@ -37,19 +37,19 @@ import { documentExportDigest } from "@evimed/domain";
  */
 
 import {
-  VCR_COMPARATOR_ROUTE_LABELS_ZH, VCR_ENDPOINT_TYPE_LABELS_ZH, VCR_ESTIMAND_LABELS_ZH, VCR_EXPORT_KIND_LABELS_ZH, VCR_INTENDED_USE_LABELS_ZH, VCR_MODEL_RISKS,
+  VCR_CHECK_STAGES, VCR_COMPARATOR_ROUTE_LABELS_ZH, VCR_ENDPOINT_TYPE_LABELS_ZH, VCR_ESTIMAND_LABELS_ZH, VCR_EXPORT_KIND_LABELS_ZH, VCR_INTENDED_USE_LABELS_ZH, VCR_MODEL_RISKS,
   VCR_MODEL_RISK_EVIDENCE, VCR_MODEL_RISK_LABELS_ZH, VCR_MODEL_TIER_LABELS_ZH, VCR_POOLING_METHOD_LABELS_ZH, VCR_MODEL_TIER_USE_CEILING, VCR_MODEL_TIERS,
   VCR_MODEL_INTERFACE_LABELS_ZH, VCR_REGISTRY_ALLOCATION_LABELS_ZH, VCR_REGISTRY_MASKING_LABELS_ZH, VCR_REGISTRY_PHASE_LABELS_ZH, VCR_REVIEW_KIND_LABELS_ZH, VCR_ROLE_ABILITIES, VCR_STALE_REASON_LABELS_ZH,
-  VCR_STEP_LABELS_ZH, VCR_STEPS, VCR_TWIN_LABELS_ZH, VCR_TWIN_EVIDENCE, VCR_VALUE_SOURCE_LABELS_ZH,
-  VCR_TRIAL_DESIGN_LABELS_ZH,
-  allowanceWaitingSentence, workStateLabel, intendedUseCeiling, lineageNode, parseLineageNode, twinLabel, useWithin, vcrModelCardIssues, vcrModelInterfaceOf,
+  VCR_CONVERSATION_STUDY_NAME, VCR_DRAFT_STUDY_NAME, VCR_RESULT_KIND_TABS, VCR_STEP_LABELS_ZH, VCR_STEPS, VCR_TABS, VCR_TWIN_LABELS_ZH, VCR_TWIN_EVIDENCE, VCR_VALUE_SOURCE_LABELS_ZH,
+  VCR_TRIAL_DESIGN_LABELS_ZH, VCR_EFFECT_ROLE_LABELS_ZH, VCR_BENCHMARK_ONLY_BASES, VCR_BENCHMARK_ONLY_USE_CEILING,
+  allowanceWaitingSentence, workStateLabel, intendedUseCeiling, lineageNode, parseLineageNode, twinLabel, useWithin, vcrModelCardIssues, vcrModelInterfaceOf, vcrModelTripod, vcrNoClosedFormFields,
 } from "@evimed/domain";
 
 import { VCR_ENGINE_RETRYABLE_CODES } from "./vcrEngineClient.mjs";
 import { vcrExportHoldsDocument, vcrReportModel, vcrReportReviewRevision } from "./vcrRender.mjs";
 import { modelDocumentReaderSections, renderModelDocument } from "./vcrModelDocuments.mjs";
 import { contactsTable, scheduleTable } from "./vcrScheduleView.mjs";
-import { vcrObjectNode } from "./vcrStore.mjs";
+import { vcrNeutralStudyName, vcrObjectNode } from "./vcrStore.mjs";
 import { vcrStepSummaries } from "./vcrStudyStatus.mjs";
 import {
   allResultsOf, countsView, dominatedScenarioMap, evidenceLabel, finite, MODEL_TYPE_LABELS, VALIDATION_LABELS, intervalView, list, markFor, measureLabel, measureValue, METHOD_LABELS, numeric, object, rangeString, roundTo,
@@ -92,7 +92,7 @@ export const JOB_KIND_LABELS = Object.freeze(/** @type {Record<string, string>} 
   fit_survival_model: "拟合人群生存模型", apply_prognostic_model: "应用已发表的预后模型",
   forecast_trajectories: '纵向结果预测', evaluate_forecast: '预测与观测验证', compare_forecasts: '预测情景比较', benchmark_trial_effect: '试验效果预测验证',
   profile_snapshot: "数据快照画像", build_cohort: "构建队列", generate_population: "生成情景人群",
-  literature_population: "文献人群", synthesize_population: "合成人群", population_quality: "人群质量报告",
+  literature_population: "文献人群", synthesize_population: "合成人群", population_quality: "人群质量报告", population_check: "与第二份基线表对照",
   generate_patients: "生成虚拟患者", generate_patients_continuous: "生成虚拟患者（连续终点）",
   generate_patients_binary: "生成虚拟患者（二分类终点）", generate_patients_longitudinal: "生成虚拟患者（纵向轨迹）", reconstruct_km: "重建生存曲线", pool_evidence: "合并证据",
   weight_comparator: "熵平衡加权", propensity_weight_comparator: "倾向评分加权", maic_comparator: "匹配调整间接比较",
@@ -100,7 +100,7 @@ export const JOB_KIND_LABELS = Object.freeze(/** @type {Record<string, string>} 
   aipw_comparator: "双重稳健估计（AIPW）", covariate_set_comparator: "协变量集敏感性分析",
   evalue: "E 值", rmst: "RMST 比较", design_analytic: "方案的解析计算", design_simulation: "方案的模拟运行",
   design_grid: "设计网格", assurance: "成功把握", procova: "预后协变量调整", accrual_forecast: "入组预测",
-  map_prior: "MAP 先验", match_criteria: "逐条匹配",
+  map_prior: "MAP 先验", match_criteria: "逐条匹配", match_extract: "读病历",
   negative_control_comparator: "阴性对照结局", tipping_point: "缺失数据的临界点分析", prognostic_adjustment_comparator: "预后评分校正（二分类/事件时间）",
 }));
 
@@ -271,12 +271,18 @@ export function useCeilingOf({ study, results }) {
     }
   }
   const modelCeiling = intendedUseCeiling(tiers);
-  const ceiling = modelCeiling;
+  // A benchmark in the study (a literature curve, an unanchored MAIC, a model's prediction; A8) informs a design and analyses no effect:
+  // the weakest result decides, as it does for a model's tier.
+  const benchmark = results.some((result) => VCR_BENCHMARK_ONLY_BASES.includes(object(result.diagnostics).benchmarkBasis));
+  const ceiling = benchmark && !useWithin(modelCeiling, VCR_BENCHMARK_ONLY_USE_CEILING) ? VCR_BENCHMARK_ONLY_USE_CEILING : modelCeiling;
   const word = (/** @type {string} */ use) => (/** @type {Record<string, string>} */ (VCR_INTENDED_USE_LABELS_ZH))[use] ?? use;
   /** @type {Array<{ code: string, detail: string }>} */
   const reasons = [];
   if (modelCeiling !== "submission_preparation") {
     reasons.push({ code: "model_tier", detail: `所用模型的可信度层级最多支持「${word(modelCeiling)}」` });
+  }
+  if (ceiling !== modelCeiling) {
+    reasons.push({ code: "benchmark_only", detail: `有一项结果只作基准（文献曲线、非锚定的比较或模型预测），最多支持「${word(ceiling)}」` });
   }
   return {
     ceiling,
@@ -535,6 +541,30 @@ export function presentSummary({ study, results, allResults, stale, jobs, scenar
 }
 
 /**
+ * One row of the home's 「对话里的研究」: a study a conversation made, as light as a row can be -- its name, the question when it has
+ * one, the tabs that hold something and when it last moved. None of the home list's per-study rows (steps, attention, conclusion)
+ * is read for it. A row that still carries the placeholder name is called for the kind of work it holds and the day it was made (the same name the store gives it
+ * when a write finds it unnamed), never by anything said.
+ * @param {Record<string, any>} study the store's row with `heldTabs` @param {Date} now
+ */
+export function presentConversationStudy(study, now) {
+  const question = text(study.question);
+  const placeholder = study.name === VCR_CONVERSATION_STUDY_NAME;
+  const tabs = list(study.heldTabs).map(String).filter((tab) => /** @type {readonly string[]} */ (VCR_TABS).includes(tab));
+  return {
+    id: study.id,
+    projectId: study.projectId,
+    name: placeholder ? vcrNeutralStudyName(list(study.heldTabs).map(String), study.createdAt) ?? VCR_DRAFT_STUDY_NAME : study.name,
+    question,
+    status: study.status,
+    originatingSessionId: study.conversationSessionId ?? null,
+    tabs,
+    updatedAt: zhTime(study.updatedAt, now) ?? "",
+    createdAt: study.createdAt,
+  };
+}
+
+/**
  * 「最近复核」 across the account's studies.
  * @param {ReadonlyArray<{ study: Record<string, any>, reviews: readonly Record<string, any>[] }>} groups @param {Date} now
  */
@@ -590,10 +620,7 @@ const NODE_KIND_TABS = Object.freeze(/** @type {Record<string, string>} */ ({
   assumption: "data", study_definition: "data", protocol_version: "data", snapshot: "data", population: "population", patient_set: "patients",
   comparator_design: "comparator", trial_scenario: "trial", design_grid: "trial", matching_assessment: "matching",
 }));
-const RESULT_KIND_TABS = Object.freeze(/** @type {Record<string, string>} */ ({
-  population: "population", patient_set: "patients", comparator: "comparator", trial_scenario: "trial", design_grid: "trial",
-  matching: "matching", accrual_forecast: "trial", evidence_pool: "data", snapshot_profile: "data",
-}));
+const RESULT_KIND_TABS = /** @type {Record<string, string>} */ (VCR_RESULT_KIND_TABS);
 
 /** The cards' own names, by key. @param {Record<string, any>} bundle @returns {Map<string, string>} */
 export function assumptionNames(bundle) {
@@ -881,7 +908,10 @@ export function presentDeliverable(row, index, all, now) {
 // --- designs (shared by the overview and the trial tab) ------------------------------------------------------------------
 
 /** The measure names a design's table reads, whichever stage computed them. */
-const DESIGN_MEASURES = Object.freeze(["power", "type_one_error", "assurance", "expected_sample_size", "expected_events", "required_total", "required_events", "duration_months", "cost"]);
+const DESIGN_MEASURES = Object.freeze(["power", "type_one_error", "bias", "coverage", "assurance", "expected_sample_size", "expected_events", "required_total", "required_patients", "max_patients", "required_events", "max_events", "duration_months", "cost"]);
+/** A design's table shows one size. An event-time sizing names its patients `required_patients`, not `required_total`, and a sequential
+ * design's own size is its maximum (its `required_*` are the fixed-sample baseline's, which has a row of its own). Last in the result wins. */
+const DESIGN_MEASURE_COLUMN = Object.freeze(/** @type {Record<string, string>} */ ({ required_total: "sample_size", required_patients: "sample_size", max_patients: "sample_size", max_events: "required_events" }));
 
 /**
  * What a design has been computed with, by stage: the analytic size, the simulated operating characteristics and the success
@@ -936,6 +966,38 @@ function designStages(scenario, results) {
 }
 
 /**
+ * The one line under a design that has no closed form: a hazard ratio that changes over time, or the MaxCombo test, is sized by simulation
+ * only, so there is no analytic row to look for. Null for a design that has one.
+ * @param {Record<string, any>} scenario
+ */
+function simulatedOnlyNote(scenario) {
+  const configuration = object(scenario.configuration);
+  return vcrNoClosedFormFields({ truth: configuration.truth, analysis: configuration.analysis }).length
+    ? "没有解析结果：风险比随时间变化或 MaxCombo 检验没有封闭公式，功效和 I 类错误来自模拟。" : null;
+}
+
+/**
+ * Where the zero-effect check of a design stands: landed (`done`), waiting in the queue (`queued`: planned and not yet taken up, or
+ * taken up and not started), running, failed or cancelled; null when the design has none to wait for. Read from the jobs the study
+ * holds for this design — the check is a stage of its own, and a page that shows the design's result before it must say so.
+ * @param {ReadonlyArray<Record<string, any>> | undefined} jobs @param {Record<string, any>} scenario
+ * @param {ReturnType<typeof designStages>["stages"]} stages
+ * @returns {'done' | 'queued' | 'running' | 'failed' | 'canceled' | null}
+ */
+function nullStateOf(jobs, scenario, stages) {
+  if (stages.simulation_null) return "done";
+  if (!stages.simulation) return null;
+  const mine = list(jobs).map(object).filter((job) => object(job.checkpoint).subjectId === scenario.id);
+  const check = mine.find((job) => VCR_CHECK_STAGES.includes(String(object(job.checkpoint).stage)));
+  if (check) {
+    return check.state === "running" ? "running" : check.state === "failed" ? "failed" : check.state === "canceled" ? "canceled"
+      : check.state === "succeeded" ? "done" : "queued";
+  }
+  const planned = mine.some((job) => list(object(job.checkpoint).plannedStages).some((name) => VCR_CHECK_STAGES.includes(String(name))));
+  return planned ? "queued" : null;
+}
+
+/**
  * What a design's numbers come from, in the reader's words: the closed form, the simulation, or both.
  * @param {ReturnType<typeof designStages>["stages"]} stages
  */
@@ -960,10 +1022,11 @@ function designNote(stages) {
  * The closed form held against the simulation, when the engine computed both for the same size: the analytic value, the simulated
  * one, how far apart they are in percentage points, and whether the engine calls that within what the simulation's own error (plus a
  * first-order approximation's documented bias) allows.
- * @param {ReturnType<typeof designStages>["stages"]} stages
+ * The same held against the zero-effect simulation (`stage: "simulation_null"`): the type I error against its closed form.
+ * @param {ReturnType<typeof designStages>["stages"]} stages @param {string} [stage]
  */
-function crossCheckOf(stages) {
-  const check = object(stages.simulation?.diagnostics?.analyticCheck);
+function crossCheckOf(stages, stage = "simulation") {
+  const check = object(stages[stage]?.diagnostics?.analyticCheck);
   const analytic = finite(check.value);
   const simulated = finite(check.simulated);
   const difference = finite(check.difference);
@@ -974,6 +1037,54 @@ function crossCheckOf(stages) {
   return {
     name, analytic: roundTo(analytic * 100, 1), simulated: roundTo(simulated * 100, 1), differencePoints: points, agrees,
   };
+}
+
+/** A count as a sentence says it: rounded, with thousands separators. @param {unknown} value */
+const countText = (value) => Math.round(Number(value)).toLocaleString("en-US");
+
+/**
+ * The fixed-sample design a sequential or two-stage design is held against, at the same assumptions (C5; ICH E20 asks for the
+ * baseline beside the candidate): the analytic stage computed it with the main result, and this is its row on the page, marked as the
+ * baseline and in the same measures the designs are compared by — what it needs, the power it has, the type I error it spends —
+ * with one sentence putting the sequential design's own sizes beside it. Null when the stage did not compute one (a job from before
+ * the engine did, a design with no fixed-sample counterpart).
+ * @param {{ result: Record<string, any>, diagnostics: Record<string, any> } | undefined} stage
+ * @param {{ execution: Record<string, any> | null, staleMark: Record<string, any> | null }} context
+ */
+function baselineView(stage, { execution, staleMark }) {
+  const base = object(stage?.diagnostics?.baselineDesign);
+  if (!stage || base.kind !== "fixed_sample") return null;
+  const fixed = object(base.fixed);
+  const design = object(base.design);
+  /** @param {string} name @param {unknown} raw */
+  const value = (name, raw) => (finite(raw) === null ? null : measureValue({ name, value: raw, source: "calculated" },
+    { kind: "trial_scenario", result: stage.result, execution, staleMark, tab: "trial" }));
+  /** @type {Record<string, any>} */
+  const measures = {};
+  let note = null;
+  if (base.of === "group_sequential") {
+    const events = finite(fixed.events);
+    if (events === null) return null;
+    measures.required_events = value("required_events", events);
+    const patients = finite(fixed.patients);
+    if (patients !== null) measures.sample_size = value("required_total", patients);
+    const sequential = [finite(design.maxEvents) !== null ? `${countText(design.maxEvents)} 个事件` : null,
+      finite(design.maxPatients) !== null ? `${countText(design.maxPatients)} 名患者` : null].filter(Boolean).join("、");
+    note = `同样的假设下，固定样本设计需要 ${[`${countText(events)} 个事件`, patients !== null ? `${countText(patients)} 名患者` : null].filter(Boolean).join("、")}；`
+      + `成组序贯最多 ${sequential}${finite(design.expectedEventsH1) !== null ? `，效应成立时期望 ${countText(design.expectedEventsH1)} 个事件` : ""}。`;
+    measures.power = value("power", base.targetPower);
+    measures.type_one_error = value("type_one_error", base.alpha);
+  } else if (base.of === "simon_two_stage") {
+    const n = finite(fixed.n);
+    if (n === null) return null;
+    measures.sample_size = value("required_total", n);
+    measures.power = value("power", fixed.power);
+    measures.type_one_error = value("type_one_error", fixed.typeOneError);
+    const optimal = object(object(design).optimal);
+    note = `同样的假设下，单阶段固定样本设计需要 ${countText(n)} 例（应答超过 ${countText(fixed.r)} 例即判有效）；`
+      + `Simon 两阶段${finite(optimal.n) !== null ? `最多 ${countText(optimal.n)} 例` : ""}${finite(optimal.EN0) !== null ? `，零假设下期望 ${Math.round(Number(optimal.EN0) * 10) / 10} 例` : ""}。`;
+  } else return null;
+  return { name: "基准：固定样本设计", note, measures: Object.fromEntries(Object.entries(measures).filter(([, cell]) => cell)) };
 }
 
 /**
@@ -1049,13 +1160,17 @@ export function presentDesigns(bundle) {
     }
     // Analytic first, then the simulation, then the assurance: where two stages state the same measure (the power the closed form
     // gives at the stated size and the one the simulation measures) the simulation's — which carries its error — is the one shown.
-    for (const name of ["analytic", "simulation", "assurance"]) {
+    // The zero-effect simulation is the stage that measures the type I error of a design whose closed form does not state it; where the
+    // closed form does (Simon), its exact figure stays the page's and the simulation is the check on it.
+    for (const name of ["analytic", "simulation", "simulation_null", "assurance"]) {
       const stage = stages[name];
       if (!stage) continue;
       for (const measure of stage.measures) {
         const measureName = String(object(measure).name ?? "");
         if (!DESIGN_MEASURES.includes(measureName) || (measureName === "duration_months" && name !== "simulation")) continue;
-        measures[measureName === "required_total" ? "sample_size" : measureName] = measureValue(measure, {
+        // Only the figure the check is for: the rest of what the null run measured is its stage's, not the design's.
+        if (name === "simulation_null" && (measureName !== "type_one_error" || measures.type_one_error)) continue;
+        measures[DESIGN_MEASURE_COLUMN[measureName] ?? measureName] = measureValue(measure, {
           kind: "trial_scenario", result: stage.result, execution: executionOfStage(name) ?? execution, staleMark, tab: "trial" });
       }
     }
@@ -1079,14 +1194,20 @@ export function presentDesigns(bundle) {
       dominated: Boolean(beaten),
       dominatedBy: beaten ? beaten.code : null,
       chosen: chosenId ? chosenId === scenario.id : chosenCode ? chosenCode === code : false,
-      note: beaten ? `在比较目标的全部指标上都不优于 ${beaten.code}` : designNote(stages),
+      note: beaten ? `在比较目标的全部指标上都不优于 ${beaten.code}` : designNote(stages) ?? simulatedOnlyNote(scenario),
       measures: beaten ? {} : measures,
       method: beaten ? null : designMethod(stages),
       replicates: beaten ? null : (executionOfStage("simulation")?.replicates ?? null),
       crossCheck: beaten ? null : crossCheckOf(stages),
+      // The zero-effect check after the result (`VCR_CHECK_STAGES`): where it stands, and the closed form it was held against.
+      nullState: beaten ? null : nullStateOf(bundle.jobs, scenario, stages),
+      nullCheck: beaten ? null : crossCheckOf(stages, "simulation_null"),
       ...(computationBasis ? { computationBasis } : {}),
+      // The fixed-sample design at the same assumptions, beside a sequential or two-stage one (C5).
+      ...(beaten ? {} : (() => { const baseline = baselineView(stages.analytic, { execution: executionOfStage("analytic") ?? execution, staleMark }); return baseline ? { baseline } : {}; })()),
       _scenario: scenario,
       _result: result,
+      _stages: stages,
       _stale: resultMark ?? designMark,
     };
   });
@@ -1096,7 +1217,7 @@ export function presentDesigns(bundle) {
     if (row.dominated) row.dominatedBy = codeOf.get(dominated.get(row.id)?.id) ?? null;
     if (row.dominated) row.note = row.dominatedBy ? `在比较目标的全部指标上都不优于 ${row.dominatedBy}` : "在比较目标的全部指标上不占优";
   }
-  return { rows, designs: rows.map(({ _scenario, _result, _stale, ...design }) => design) };
+  return { rows, designs: rows.map(({ _scenario, _result, _stages, _stale, ...design }) => design) };
 }
 
 /**
@@ -1114,7 +1235,7 @@ function dominatedOf(scenarios, resultOf, goal) {
 
 // --- assumptions (shared by the overview and the data tab) -----------------------------------------------------------------
 
-/** 「7 项 · 预测区间 3.0–5.6」. @param {Record<string, any>} card */
+/** 「重要差异 · 7 项 · 预测区间 3.0–5.6」: the role of an effect first (A13), when the card states one. @param {Record<string, any>} card */
 export function assumptionSummary(card, { interval = true } = {}) {
   const pooling = object(card.pooling);
   const k = numeric(pooling.k);
@@ -1122,6 +1243,8 @@ export function assumptionSummary(card, { interval = true } = {}) {
   const low = finite(range.low);
   const high = finite(range.high);
   const parts = [];
+  const role = (/** @type {Record<string, string>} */ (VCR_EFFECT_ROLE_LABELS_ZH))[String(card.effectRole)];
+  if (role) parts.push(role);
   if (k !== null) parts.push(`${k} 项`);
   if (interval && low !== null && high !== null) parts.push(`预测区间 ${rangeString(low, high)}`);
   else if (card.sourceKind === "scenario") parts.push("情景假设");
@@ -1220,7 +1343,8 @@ export function presentModels({ models, methods, usedBy, engineAvailable, engine
 
 /** The methods the module's plan names and this version does not compute (R10, plan §8.2): listed in the method library as 暂不支持. */
 export const VCR_UNSUPPORTED = Object.freeze([
-  { key: "model_comparator", label: "模型预测比较器", group: "对照" },
+  // (The model-prediction comparator left this list when it began to run: a saved prognostic equation applied to the chosen population,
+  // filed as a benchmark. `vcrOrchestrator` plans it as `apply_prognostic_model`.)
   { key: "digital_twin", label: "数字孪生与基线条件化预测模型", group: "虚拟患者" },
   { key: "mechanistic", label: "机制模型（QSP、PBPK）", group: "虚拟患者" },
   { key: "non_inferiority", label: "非劣效设计", group: "试验设计" },
@@ -1279,6 +1403,8 @@ export function presentModelCard(model, usedBy) {
     shape,
     shapeLabel: (/** @type {Record<string, string>} */ (VCR_MODEL_INTERFACE_LABELS_ZH))[shape],
     shapeMissing: vcrModelCardIssues(model).map((issue) => issue.text),
+    // the TRIPOD-style words the card holds, in their order; none when it holds none (a card is complete without them)
+    tripod: vcrModelTripod(card),
     ...(shape === "event_history_to_trajectories" ? {
       events: list(object(card.history).eventTypes).map(String),
       horizon: object(applicability.horizon).max ? `${object(applicability.horizon).max} ${object(applicability.horizon).unit}` : null,
@@ -1425,9 +1551,21 @@ export function presentExport(row, bundle) {
           { results: bundle.results, stale: bundle.stale, current: bundle.currentNodes ?? null, exports: [row] }) }, reviewContextOf(bundle))),
       status: coverStatus({ cover, row, bundle, model }),
       // The two model documents read as their own structure (M15's sections, the platform's tables); every other export as the nine parts of §8.3.
-      sections: modelSections(row, cover, model) ?? packageSections({ cover, row, bundle, model }),
+      sections: modelSections(row, cover, model) ?? recordSections(row, cover) ?? packageSections({ cover, row, bundle, model }),
     },
   };
+}
+
+/**
+ * The sections of a result record (D7): the platform's own short lines, one section each; null for any other export.
+ * @param {Record<string, any>} row @param {Record<string, any>} cover
+ */
+function recordSections(row, cover) {
+  if (row.kind !== "result_record") return null;
+  return list(object(cover.record).sections).map((section, index) => ({
+    id: String(object(section).id ?? `section_${index}`), number: String(index + 1), title: String(object(section).title ?? ""),
+    body: list(object(section).lines).map(String).join("\n"),
+  }));
 }
 
 /**

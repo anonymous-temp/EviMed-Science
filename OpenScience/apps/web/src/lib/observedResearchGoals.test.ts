@@ -12,10 +12,26 @@ describe("observed research goals", () => {
     const elsewhere = { id: "start", sessionId: "s9", question: "/loopx 别的对话", startedAt: "2026-10-28T00:00:00Z" } as unknown as WebAgentRun;
     const rounds = [run("a", "s1", "g1", "2026-10-28T01:00:00Z", { goal: { id: "g1", runId: "start" } }), run("b", "s1", "g1", "2026-10-28T02:00:00Z", { goal: { id: "g1", runId: "start" } })];
     const [goal] = observedResearchGoals([elsewhere, ...rounds, anchor]);
-    expect(goal.rounds.map(item => item.id)).toEqual(["b", "a"]);
+    expect(goal.rounds.map(item => item.id)).toEqual(["b", "a", "start"]);
     expect(goal.anchor?.sessionId).toBe("s1");
     expect(goalTitle(goal)).toBe("评估队列的再入院风险");
     const [untitled] = observedResearchGoals([run("c", "s2", "g2", "2026-10-28T03:00:00Z")]);
     expect(goalTitle(untitled)).toBe("长期研究");
+  });
+  it("lists a goal from the turn that set it, and keeps its address when the first continuation arrives", () => {
+    const started = { id: "start", sessionId: "s1", effectiveRouteReason: "research-goal", question: "评估队列的再入院风险", status: "running", startedAt: "2026-10-28T00:00:00Z" } as unknown as WebAgentRun;
+    const [alone] = observedResearchGoals([started]);
+    expect(alone.latest.id).toBe("start");
+    expect(goalTitle(alone)).toBe("评估队列的再入院风险");
+    const round = run("a", "s1", "g1", "2026-10-28T01:00:00Z", { goal: { id: "g1", runId: "start" } });
+    const [later] = observedResearchGoals([round, { ...started, status: "succeeded" } as unknown as WebAgentRun]);
+    expect(later.key).toBe(alone.key);
+    expect(later.goalId).toBe("g1");
+    expect(later.rounds.map(item => item.id)).toEqual(["a", "start"]);
+  });
+  it("does not take an ordinary question, or a question answered by an automatic turn, for a goal", () => {
+    const asked = { id: "q", sessionId: "s1", effectiveRouteReason: "unrouted:open-domain", question: "这个队列有多少人", startedAt: "2026-10-28T00:00:00Z" } as unknown as WebAgentRun;
+    const automatic = { id: "r", sessionId: "s1", automated: true, effectiveRouteReason: "research-goal", question: "x", startedAt: "2026-10-28T00:00:00Z" } as unknown as WebAgentRun;
+    expect(observedResearchGoals([asked, automatic])).toEqual([]);
   });
 });

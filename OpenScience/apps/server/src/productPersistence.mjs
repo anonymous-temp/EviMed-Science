@@ -12,7 +12,7 @@ export const PRODUCT_KINDS = Object.freeze([
   // be on trial in one project and absent from another at the same instant.
   "geo-plan-context", "geo-signal", "method-trial", "document-export", "result-version", "result-impact", "result-revision", "result-replay", ...EXTENSION_PRODUCT_KINDS,
   // What a project's datasets mean: one document per dataset, the recorded interpretation a repeat analysis starts from.
-  "dataset-semantics",
+  "dataset-semantics", "data-analysis",
   // What was published about a work after it was published (a retraction, a correction, an expression of concern, a new
   // version), one document per source identifier. Platform-level: owned by the platform publisher account, holding only
   // public bibliographic facts and never which tenant asked (`sourceChanges.mjs`, plan 2026-10-05 B5).

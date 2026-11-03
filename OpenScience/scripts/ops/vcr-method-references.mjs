@@ -49,6 +49,8 @@ export const REQUIRED_CURRENT_REFERENCES = {
 };
 export const NUMERIC_REFERENCES = {
   N53e: { methods: ['design.analytic'], anchors: ['Independently integrate arm event probabilities', 'abs(at$y-checked)<1e-10'] },
+  N60a: { methods: ['model.prognostic_apply'], anchors: ['full <- stats::optim(c(0, 1), nll, method = "BFGS", hessian = TRUE', 'abs(cal[["intercept"]]$value - off$par) < 2e-5'] },
+  N57a: { methods: ['population.check'], anchors: ['smd_age <- (g_age$mean - 61.5) / 10', 'abs(row("age")$standardizedDifference - smd_age) < 1e-12'] },
   N52b: { methods: ['model.survival_fit'], anchors: ['Independent likelihood optimized from base-R density/survival functions', 'reference$convergence != 0', 'all(errors < 2e-4)'] },
   N52k: { methods: ['model.survival_fit'], anchors: ['Mandatory locked flexsurv oracle: transformations, median, survival, AIC and delta spread.', 'flexsurv::flexsurvreg', 'numDeriv::grad', 'all(errors < 2e-3)'] },
   N53a: { methods: ['design.analytic'], anchors: ['Reference: noncentral t, not the normal quantiles', 'abs(basis$powerAtAllocatedN - exact_t) < 1e-12'] },

@@ -1,7 +1,7 @@
 import { workStateLabel } from "@evimed/domain";
 import "./ResearchObservatory.css";
 
-export type QueueMode = "running" | "queued" | "done" | "failed" | "paused" | "waiting" | "ended";
+export type QueueMode = "running" | "queued" | "done" | "failed" | "paused" | "waiting" | "ended" | "between";
 export interface QueueEntry {
   key: string;
   title: string;
@@ -13,13 +13,13 @@ export interface QueueEntry {
 /** The words of a state, for the queue's cards and for the same state wherever else the page names it. */
 export const QUEUE_MODE_WORD: Record<QueueMode, string> = {
   running: workStateLabel("running"), queued: workStateLabel("queued"), done: workStateLabel("done"), failed: workStateLabel("failed"),
-  paused: workStateLabel("paused"), waiting: workStateLabel("todo"), ended: workStateLabel("stopped"),
+  paused: workStateLabel("paused"), waiting: workStateLabel("todo"), ended: workStateLabel("stopped"), between: "本轮完成",
 };
 
 /**
  * Anatomy: the research queue over the observatory — every research of the project as a card: its state (a dot, a
  * word), its kind and its schedule or last round. Selecting a card puts it in the observatory.
- * States: empty (a recipe with both ways to start), populated; running cards first.
+ * States: populated only (the page starts the first research from the standby scene); running cards first.
  * Keyboard: each card is a button; the selected one is pressed.
  * Theme: the observatory's fixed dark ground, so queue and scene read as one console.
  */

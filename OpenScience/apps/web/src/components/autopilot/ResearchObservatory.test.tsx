@@ -27,6 +27,7 @@ describe("research observatory", () => {
     mocks.list.mockResolvedValue([record("one", "第一项研究"), record("two", "第二项研究")]);
     const view = render(<ResearchObservatory runId={null} />);
     expect(screen.getByText("等待研究启动")).toBeInTheDocument();
+    expect(screen.queryByText(/写下研究目标/)).not.toBeInTheDocument();
     view.rerender(<ResearchObservatory runId="one" />);
     expect(await screen.findByText("第一项研究")).toBeInTheDocument();
     view.rerender(<ResearchObservatory runId="two" />);

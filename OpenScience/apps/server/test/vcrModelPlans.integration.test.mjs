@@ -5,7 +5,7 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 
-import { VCR_EXPORT_KINDS } from "@evimed/domain";
+import { VCR_RUN_EXPORT_KINDS as VCR_EXPORT_KINDS } from "@evimed/domain";
 
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { VcrService } from "../src/vcrService.mjs";

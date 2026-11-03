@@ -28,7 +28,7 @@ test("the capabilities that answered the researcher's own conversations, by thei
     run("d1", "peer-review", { deleted: true }),
   ];
   const use = capabilityUse(runs, (agent) => agent === "source-understanding");
-  assert.deepEqual(use.map((row) => [row.title, row.count]), [["统计分析", 3], ["综合药品评价", 2], ["普通问答", 1]]);
+  assert.deepEqual(use.map((row) => [row.title, row.count]), [["统计分析", 3], ["药品综合评价", 2], ["普通问答", 1]]);
   assert.deepEqual(capabilityUse([]), []);
 });
 

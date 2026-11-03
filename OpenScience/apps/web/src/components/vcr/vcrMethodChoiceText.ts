@@ -25,7 +25,7 @@ const labels: Record<string, string> = {
   identity: "原始尺度", log: "对数尺度", logit: "Logit 尺度", km: "Kaplan–Meier 变换", rank: "秩变换",
   hazard_ratio: "瞬时风险比（HR）", odds_ratio: "优势比（OR）", risk_ratio: "风险比值（RR）", risk_difference: "风险差",
   log_hazard_ratio: "对数瞬时风险比（log HR）", log_odds_ratio: "对数优势比（log OR）", log_risk_ratio: "对数风险比值（log RR）",
-  logistic: "Logistic 回归", logrank: "Log-rank 检验", rmst: "限制平均生存时间（RMST）", ttest: "两样本 t 检验",
+  logistic: "Logistic 回归", logrank: "Log-rank 检验", maxcombo: "MaxCombo 检验（四个加权 Log-rank 取最大）", rmst: "限制平均生存时间（RMST）", ttest: "两样本 t 检验",
   one_sample_t: "单样本 t 检验", one_sample_z: "单样本 Z 检验", one_sample_logrank: "单样本 Log-rank 检验",
   simon_boundary: "Simon 两阶段界值", stratified_beta_binomial: "分层 Beta-二项模型", stratified_risk_difference: "分层风险差",
   both_opposite: "两组施加相反方向的倍数", two_arm: "两组比较", subject: "每人一行",
@@ -129,8 +129,12 @@ const exampleLabels: Record<string, Record<string, string>> = {
   "design.simulate": {
     "two-arm time-to-event with uniform accrual": "两组生存结局与均匀入组",
     "two-arm binary: no accrual": "两组二分类结局",
+    "a delayed treatment effect (hazard ratio 1 for 6 months, 0.6 after) analysed by MaxCombo: simulation only": "延迟起效（前 6 个月 HR 为 1，之后 0.6）用 MaxCombo 分析，仅仿真",
     "single arm, continuous: 40 patients against a historical mean of 50, one-sample t": "单臂连续：40 人与历史均值 50",
     "single arm, time to event: 60 patients against a benchmark median of 12, one-sample log-rank": "单臂生存：60 人与中位时间 12"
+  },
+  "population.check": {
+    "a generated population against a second, independent baseline table (the platform fills `generated` from the population subjectId names)": "生成的人群与第二份基线表对照"
   },
   "design.grid": {
     "two sample sizes against three true effects, binary": "两种样本量与三种二分类效应情景"

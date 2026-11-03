@@ -1,4 +1,5 @@
 import { clinicalContentTriggerPattern } from "@evimed/domain";
+import { moduleOfCapability } from "./capabilityModules.mjs";
 
 // The default open-domain handler. It is not a routable specialist: unrouted
 // open-domain dispatches fall back to it in server.mjs, and it must be
@@ -137,7 +138,11 @@ export function routeSafetyMedicine(query, agents) {
 export async function routeOpenDomain({ query, agents, classifier = null, consultModel = true, trace = {}, owner = null }) {
   const structured = routeSlashCommand(query, agents);
   if (structured) return { specialist: structured, decidedBy: "named", modelConsulted: false };
-  agents = agents.filter(agent => agent.listed !== false);
+  // Whether 科研工具 lists a package is the catalogue's question (`display.listed`), not routing's: the four taken off that page on 2026-10-26
+  // are still the answer to a request for a dataset-first study, an appraisal, an expression-dataset series or a manuscript. What an ordinary
+  // request can never reach is a module's own package (`moduleOfCapability` names the module, or null), which is opened from its module; inside
+  // it the control plane marks the verified selection's agents `listed: true` for that request.
+  agents = agents.filter(agent => agent.listed !== false || moduleOfCapability(agent.id) === null);
   const modelConsulted = consultModel && classifier != null;
   if (modelConsulted) {
     let verdict = null;

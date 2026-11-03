@@ -170,3 +170,18 @@ test("a shape is cleaned and bounded where it enters the ledger", () => {
   assert.ok(shapes[0].labels.length <= 16);
   assert.ok(shapes[0].labels.every((label) => label.length <= 40));
 });
+
+test("REVIEWFIX 9 a research goal's request is the person's sentence: the gesture that started it, the kernel's own /loopx, is not part of it", () => {
+  const goal = "评估心衰队列的再入院风险";
+  // the kernel returns the message as it was sent: the gesture, a space and the goal (the real transcript of a goal run: r19lx140)
+  const transcript = { messages: [user(2, `/loopx ${goal}`), call(3, "read")] };
+  const started = { ...run, effectiveRouteReason: "research-goal" };
+  assert.deepEqual(trajectoryDigest(transcript, started).requests.map((entry) => entry.text), [goal]);
+  assert.deepEqual(trajectoryDigest(transcript, { ...started, effectiveRouteReason: "adopted:research-goal" }).requests.map((entry) => entry.text), [goal]);
+  // the gesture alone and a goal that merely begins with the word
+  assert.deepEqual(trajectoryDigest({ messages: [user(2, "  /loopx   "), call(3, "read")] }, started).requests, [], "nothing is left of a gesture on its own");
+  assert.deepEqual(trajectoryDigest({ messages: [user(2, "/loopxy 评估")] }, started).requests.map((entry) => entry.text), ["/loopxy 评估"], "a longer word is not the gesture");
+  // another route keeps what was typed: a person who types /loopx into their own conversation said it
+  assert.deepEqual(trajectoryDigest(transcript, run).requests.map((entry) => entry.text), [`/loopx ${goal}`]);
+  assert.deepEqual(trajectoryDigest(transcript, { ...run, effectiveRouteReason: "loopx-continuation" }).requests.map((entry) => entry.text), [`/loopx ${goal}`]);
+});

@@ -385,7 +385,7 @@ const VCR_OPTIONS = {
   starters: [
     { label: '患者匹配', draft: '帮我匹配患者：', requirement: '需要原始病例或真实患者数据', minimumFields: '诊断、治疗与检查时间' },
     { label: '人群与患者', draft: '帮我研究人群：', requirement: '合成人群可先用文献' },
-    { label: '合成对照', draft: '帮我评估对照：', requirement: '效果分析需结局数据' },
+    { label: '对照研究', draft: '帮我评估对照：', requirement: '效果分析需结局数据' },
     { label: '虚拟试验', draft: '帮我比较试验设计：', requirement: '可先用文献参数' },
   ],
 };
@@ -427,7 +427,7 @@ test('the 虚拟临床研究 chip carries 起点 and 预期用途 in its menu on
   const blank = renderStatic(hero.component);
   assert.match(blank, /虚拟临床研究/);
   const labels = [...blank.matchAll(/<button type="button" title="[^"]+"[^>]*><span[^>]*>([^<]+)<\/span><\/button>/g)].map((match) => match[1]);
-  assert.deepEqual(labels, ['患者匹配', '人群与患者', '合成对照', '虚拟试验']);
+  assert.deepEqual(labels, ['患者匹配', '人群与患者', '对照研究', '虚拟试验']);
   assert.doesNotMatch(blank, /需要原始病例或真实患者数据/);
 
   // A reader who may neither write nor lead has no menu at all: the settings

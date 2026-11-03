@@ -66,7 +66,7 @@ export const RULES = [
   },
   {
     kind: "provenance",
-    where: /^OpenScience\/evals\/(method-quality|vcr-matching|statistical-analysis)\/(reports|results)\//,
+    where: /^OpenScience\/evals\/(method-quality|vcr-matching|statistical-analysis(?:\/api)?)\/(reports|results)\//,
     why: "an evaluation report records the kernel a measurement was taken on; re-dating it claims the number came from a version that never produced it",
   },
   {
@@ -198,6 +198,7 @@ export const RULES = [
   { kind: "pin", where: /^OpenScience\/packages\/harness-port\/test\//, why: "the lockfile-pin tests assert the tree installs exactly one release" },
   { kind: "pin", where: /^OpenScience\/deploy\/runtime-dsh\//, why: "the image builds this version" },
   { kind: "pin", where: /^OpenScience\/deploy\/web\//, why: "the deployed stack runs this version" },
+  { kind: "provenance", where: /^OpenScience\/evals\/statistical-analysis\/api\/README\.md$/, why: "the API acceptance record names the kernel its receipts came from" },
   { kind: "pin", where: /^OpenScience\/evals\/general-tasks\/runner\/seed\.sh$/, why: "the general-task baseline seeds its kernel profile the way the image does, at the version the image builds" },
   { kind: "pin", where: /^OpenScience\/docs\/WEB_DEPLOYMENT\.md$/, why: "operator instructions must name the version being deployed" },
   { kind: "pin", where: /^OpenScience\/apps\/server\/src\/config\.mjs$/, why: "the control plane refuses a runtime that is not this version" },

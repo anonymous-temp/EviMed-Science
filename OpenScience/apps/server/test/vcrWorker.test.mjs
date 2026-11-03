@@ -7,7 +7,7 @@ import test from "node:test";
 import { VCR_WORKER_LOOPS, VcrWorker, createVcrWorkerLoops, withVcrWorkerWarnings } from "../src/vcrWorker.mjs";
 
 test("the seven loops, their cadences and which of them are leased", () => {
-  assert.deepEqual(VCR_WORKER_LOOPS.map((loop) => loop.name), ["jobs", "localJobs", "completions", "orchestrator", "recompute", "recheck", "frontierEvents", "packSources", "drafts"]);
+  assert.deepEqual(VCR_WORKER_LOOPS.map((loop) => loop.name), ["jobs", "localJobs", "slowJobs", "completions", "orchestrator", "recompute", "recheck", "frontierEvents", "packSources", "drafts"]);
   const packs = VCR_WORKER_LOOPS.find((loop) => loop.name === "packSources");
   assert.deepEqual([packs?.leased, packs?.optional], [true, true], "a platform pack is watched once, by whichever control plane sees it first, and only while the switch is on");
   const events = VCR_WORKER_LOOPS.find((loop) => loop.name === "frontierEvents");
@@ -94,4 +94,66 @@ test("a tick starts the loops that are due, a loop that throws leaves the others
 
 test("a loop the worker does not know is refused when it is built", () => {
   assert.throws(() => new VcrWorker({ loops: { nothing: async () => null } }), /Unknown VCR worker loop/);
+});
+
+test("P2-9 the slow lane starts a batch and does not wait for it: another account's batch is taken while the first is out, and a batch in flight is not advanced twice", async () => {
+  /** @type {Map<string, () => void>} */ const release = new Map();
+  /** @type {string[]} */ const advanced = [];
+  /** @type {string[]} */ const finishedHooks = [];
+  const queue = [[{ id: "job_a" }], [{ id: "job_b" }], [], []];
+  const jobs = {
+    owner: "me", config: { vcrLocalConcurrency: 2 }, localExecutors: { "matching.extract": () => null },
+    async claim() { return queue.shift() ?? []; },
+    advance(/** @type {{ id: string }} */ job) {
+      advanced.push(job.id);
+      return new Promise((resolve) => release.set(job.id, () => resolve({ action: "finished", job })));
+    },
+    takeReaped() { return []; },
+  };
+  // the store reports what this process holds as running, as the database does while a batch is out
+  const store = { async rows() { return [...release.keys()].map((id) => ({ id, method: "matching.extract", kind: "match_extract" })); } };
+  const orchestrator = { async onJobFinished(/** @type {{ job: { id: string } }} */ outcome) { finishedHooks.push(outcome.job.id); } };
+  const loops = createVcrWorkerLoops({ jobs, orchestrator, store });
+  const slow = /** @type {() => Promise<any>} */ (loops.slowJobs);
+
+  const first = await slow();
+  assert.deepEqual([first.claimed, first.advanced, first.inFlight], [1, 1, 1], "the tick returned with the batch out");
+  const second = await slow();
+  assert.deepEqual([second.claimed, second.advanced, second.inFlight], [1, 1, 2], "another account's batch was taken while the first is out");
+  const third = await slow();
+  assert.deepEqual([third.claimed, third.advanced, third.inFlight], [0, 0, 2], "a batch in flight is not advanced again");
+  assert.deepEqual(advanced, ["job_a", "job_b"]);
+
+  // a batch that ends is finished once: the orchestrator hears of it, and the next tick says so
+  /** @type {() => void} */ (release.get("job_a"))();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(finishedHooks, ["job_a"]);
+  release.delete("job_a");
+  const fourth = await slow();
+  assert.deepEqual([fourth.finished, fourth.inFlight], [1, 1]);
+  /** @type {() => void} */ (release.get("job_b"))();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(finishedHooks, ["job_a", "job_b"]);
+
+  // a batch that throws leaves the lane running and is reported, not lost in a rejected promise
+  /** @type {string[]} */ const reports = [];
+  const failing = { ...jobs, report: (/** @type {string} */ code) => reports.push(code), async claim() { return [{ id: "job_x" }]; }, advance() { return Promise.reject(Object.assign(new Error("x"), { code: "vcr_job_failed_here" })); } };
+  const lane = /** @type {() => Promise<any>} */ (createVcrWorkerLoops({ jobs: failing, orchestrator, store: { async rows() { return []; } } }).slowJobs);
+  await lane();
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(reports, ["vcr_job_failed_here"]);
+});
+
+test("P2-9 the engine and the local lanes still wait for the jobs they start", async () => {
+  /** @type {string[]} */ const order = [];
+  const jobs = {
+    owner: "me", config: { vcrLocalConcurrency: 2 }, localExecutors: {}, maxConcurrent: 1,
+    async claim() { return [{ id: "job_e" }]; },
+    async advance() { await new Promise((resolve) => setTimeout(resolve, 5)); order.push("advanced"); return { action: "finished" }; },
+    takeReaped() { return []; },
+  };
+  const loops = createVcrWorkerLoops({ jobs, orchestrator: { async onJobFinished() { order.push("hook"); } }, store: { async rows() { return []; } } });
+  const result = await /** @type {() => Promise<any>} */ (loops.jobs)();
+  assert.deepEqual(order, ["advanced", "hook"], "the tick returned after the job did");
+  assert.equal(result.finished, 1);
 });
