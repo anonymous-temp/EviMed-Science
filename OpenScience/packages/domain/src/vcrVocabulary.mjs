@@ -718,6 +718,9 @@ export const VCR_NOT_ESTIMABLE_RULES = frozen([
   'nuisance_model_not_estimable',
   // Propensity trimming (algorithm round C14) removed so many people that a group has fewer than two left: nothing is weighted.
   'trimmed_population_too_small',
+  // Target-trial emulation (algorithm round C3, C4): nobody is eligible, a treatment arm has no eligible start, the horizon is longer than anyone was
+  // followed, or the outcome model (or the model of starting treatment) cannot be fitted on the expanded data.
+  'no_eligible_person_trials', 'arm_without_person_trials', 'horizon_beyond_followup', 'outcome_model_not_estimable',
   // --- robustness methods (2026-10-04): negative controls, tipping point, prognostic adjustment ---
   // No negative control produced an estimate (every one has an arm with no event, or none was supplied in a usable form).
   'negative_controls_not_estimable',
@@ -741,6 +744,10 @@ export const VCR_NOT_ESTIMABLE_RULE_LABELS_ZH = Object.freeze({
   too_few_events: '某一组没有事件，或 Cox 模型没有收敛（事件太少，风险比不存在）',
   nuisance_model_not_estimable: '倾向性模型或结局模型拟合不出来（协变量共线，或外部对照的人数不足以拟合结局模型）',
   trimmed_population_too_small: '按倾向评分修剪之后，某一组剩下不到两个人，没有可以加权的人群',
+  no_eligible_person_trials: '表里没有符合条件的人，或记录截断之后剩下的人不足两个，没有可以模拟的试验',
+  arm_without_person_trials: '某一个治疗组在任何一期都没有符合条件的起点，两组没法比较',
+  horizon_beyond_followup: '所选的随访期数超过了任何一个人被随访到的时间',
+  outcome_model_not_estimable: '结局模型（或开始治疗的模型）在这些数据上拟合不出来，或某一组在终点之前已经没有人留在风险集里',
   negative_controls_not_estimable: '没有一个阴性对照结局能得出估计（每个都有一组没有事件，或没有提供可用的数据）',
   primary_analysis_not_estimable: '这项分析本身的主要估计不存在（某一组没有事件或没有人、模型没有收敛、预后评分没有变异）',
   data_tier_insufficient: '现有数据档位不足以走这条对照路线',
@@ -874,6 +881,8 @@ export const VCR_JOB_KINDS = frozen([
   'bias_analysis', 'stc_comparator',
   // --- appended (2026-11-03): frequentist network meta-analysis, dose-response meta-analysis and the empirical shrinkage of a published effect (algorithm round C5, C6, E8) ---
   'network_meta', 'dose_response_meta', 'effect_shrinkage',
+  // --- appended (2026-11-03): target-trial emulation from a person-period table: a sequence of trials and clone-censor-weight (algorithm round C3, C4) ---
+  'target_trial_emulation',
   // --- appended (2026-11-01): the batch reading of patient records for the criteria's facts (remediation plan D4) ---
   'match_extract',
   'forecast_trajectories', 'evaluate_forecast', 'compare_forecasts', 'benchmark_trial_effect',
@@ -894,7 +903,7 @@ export const VCR_JOB_KIND_STEPS = Object.freeze({
   weight_comparator: 'comparator', propensity_weight_comparator: 'comparator', maic_comparator: 'comparator', evalue: 'comparator',
   rmst: 'comparator', weighted_cox_comparator: 'comparator', maic_time_to_event_comparator: 'comparator', aipw_comparator: 'comparator',
   covariate_set_comparator: 'comparator', negative_control_comparator: 'comparator', tipping_point: 'comparator',
-  prognostic_adjustment_comparator: 'comparator', bias_analysis: 'comparator', stc_comparator: 'comparator',
+  prognostic_adjustment_comparator: 'comparator', bias_analysis: 'comparator', stc_comparator: 'comparator', target_trial_emulation: 'comparator',
   design_analytic: 'trial', design_simulation: 'trial', design_confirmatory: 'trial', design_grid: 'trial', assurance: 'trial', procova: 'trial', accrual_forecast: 'trial',
   match_criteria: 'matching', match_extract: 'matching',
 })

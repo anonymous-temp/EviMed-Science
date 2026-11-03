@@ -5004,6 +5004,131 @@
           }
         ]
       }
+    },
+    {
+      "name": "a sequence of trials: intention to treat and per protocol with stabilised weights",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "target_trial_emulation",
+        "method": "comparator.target_trial",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "covariates": [
+            "age",
+            "ecog"
+          ],
+          "strategy": {
+            "kind": "sequential",
+            "estimand": "both",
+            "weights": {
+              "numerator": [
+                "age"
+              ],
+              "denominator": [
+                "age",
+                "ecog"
+              ]
+            }
+          },
+          "horizon": 24,
+          "timeUnit": "months",
+          "outcomeModel": {
+            "followupDegree": 2,
+            "trialPeriodDegree": 1,
+            "armByFollowup": true
+          }
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:longitudinal",
+            "shape": "longitudinal",
+            "location": "std_1/snp_1/longitudinal.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      }
+    },
+    {
+      "name": "a sequence of trials limited to a window and to eight follow-up periods",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "target_trial_emulation",
+        "method": "comparator.target_trial",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "parameters": {
+            "treatment": "TRT",
+            "outcome": "EVT",
+            "eligible": "ELIG"
+          },
+          "covariates": [
+            "age"
+          ],
+          "strategy": {
+            "kind": "sequential",
+            "estimand": "itt"
+          },
+          "horizon": 6,
+          "firstPeriod": 10,
+          "lastPeriod": 40,
+          "followUpLimit": 8
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:longitudinal",
+            "shape": "longitudinal",
+            "location": "std_1/snp_1/longitudinal.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      }
+    },
+    {
+      "name": "clone-censor-weight with a grace period of three periods",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "target_trial_emulation",
+        "method": "comparator.target_trial",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "covariates": [
+            "age",
+            "ecog"
+          ],
+          "strategy": {
+            "kind": "clone_censor_weight",
+            "gracePeriod": 3
+          },
+          "horizon": 12,
+          "timeUnit": "weeks"
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:longitudinal",
+            "shape": "longitudinal",
+            "location": "std_1/snp_1/longitudinal.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      }
     }
   ],
   "invalid": [
@@ -22242,6 +22367,399 @@
       },
       "expected": [
         "scenario_field_unknown@scenario.imputation"
+      ]
+    },
+    {
+      "name": "a target-trial emulation without a strategy",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "target_trial_emulation",
+        "method": "comparator.target_trial",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "horizon": 12
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:longitudinal",
+            "shape": "longitudinal",
+            "location": "std_1/snp_1/longitudinal.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_missing@scenario.strategy"
+      ]
+    },
+    {
+      "name": "a strategy kind the engine does not have",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "target_trial_emulation",
+        "method": "comparator.target_trial",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "strategy": {
+            "kind": "g_formula"
+          },
+          "horizon": 12
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:longitudinal",
+            "shape": "longitudinal",
+            "location": "std_1/snp_1/longitudinal.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.strategy.kind"
+      ]
+    },
+    {
+      "name": "clone-censor-weight without its grace period",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "target_trial_emulation",
+        "method": "comparator.target_trial",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "strategy": {
+            "kind": "clone_censor_weight"
+          },
+          "horizon": 12
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:longitudinal",
+            "shape": "longitudinal",
+            "location": "std_1/snp_1/longitudinal.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_missing@scenario.strategy.gracePeriod"
+      ]
+    },
+    {
+      "name": "a grace period on a sequence of trials",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "target_trial_emulation",
+        "method": "comparator.target_trial",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "strategy": {
+            "kind": "sequential",
+            "gracePeriod": 3
+          },
+          "horizon": 12
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:longitudinal",
+            "shape": "longitudinal",
+            "location": "std_1/snp_1/longitudinal.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_unknown@scenario.strategy.gracePeriod"
+      ]
+    },
+    {
+      "name": "an estimand on clone-censor-weight",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "target_trial_emulation",
+        "method": "comparator.target_trial",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "strategy": {
+            "kind": "clone_censor_weight",
+            "gracePeriod": 3,
+            "estimand": "itt"
+          },
+          "horizon": 12
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:longitudinal",
+            "shape": "longitudinal",
+            "location": "std_1/snp_1/longitudinal.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_unknown@scenario.strategy.estimand"
+      ]
+    },
+    {
+      "name": "no horizon",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "target_trial_emulation",
+        "method": "comparator.target_trial",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "strategy": {
+            "kind": "sequential"
+          }
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:longitudinal",
+            "shape": "longitudinal",
+            "location": "std_1/snp_1/longitudinal.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_missing@scenario.horizon"
+      ]
+    },
+    {
+      "name": "a horizon of zero periods",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "target_trial_emulation",
+        "method": "comparator.target_trial",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "strategy": {
+            "kind": "sequential"
+          },
+          "horizon": 0
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:longitudinal",
+            "shape": "longitudinal",
+            "location": "std_1/snp_1/longitudinal.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.horizon"
+      ]
+    },
+    {
+      "name": "an outcome model on clone-censor-weight",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "target_trial_emulation",
+        "method": "comparator.target_trial",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "strategy": {
+            "kind": "clone_censor_weight",
+            "gracePeriod": 1
+          },
+          "horizon": 6,
+          "outcomeModel": {
+            "followupDegree": 2
+          }
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:longitudinal",
+            "shape": "longitudinal",
+            "location": "std_1/snp_1/longitudinal.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_unknown@scenario.outcomeModel"
+      ]
+    },
+    {
+      "name": "a follow-up degree of four",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "target_trial_emulation",
+        "method": "comparator.target_trial",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "strategy": {
+            "kind": "sequential"
+          },
+          "horizon": 6,
+          "outcomeModel": {
+            "followupDegree": 4
+          }
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:longitudinal",
+            "shape": "longitudinal",
+            "location": "std_1/snp_1/longitudinal.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.outcomeModel.followupDegree"
+      ]
+    },
+    {
+      "name": "a window on clone-censor-weight",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "target_trial_emulation",
+        "method": "comparator.target_trial",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "strategy": {
+            "kind": "clone_censor_weight",
+            "gracePeriod": 1
+          },
+          "horizon": 6,
+          "firstPeriod": 3
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:longitudinal",
+            "shape": "longitudinal",
+            "location": "std_1/snp_1/longitudinal.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_unknown@scenario.firstPeriod"
+      ]
+    },
+    {
+      "name": "a key the method does not read",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "target_trial_emulation",
+        "method": "comparator.target_trial",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "strategy": {
+            "kind": "sequential"
+          },
+          "horizon": 6,
+          "tau": 12
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:longitudinal",
+            "shape": "longitudinal",
+            "location": "std_1/snp_1/longitudinal.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_unknown@scenario.tau"
+      ]
+    },
+    {
+      "name": "an input that is not a patient-level table",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "target_trial_emulation",
+        "method": "comparator.target_trial",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "strategy": {
+            "kind": "sequential"
+          },
+          "horizon": 6
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:longitudinal",
+            "shape": "longitudinal",
+            "location": "std_1/snp_1/longitudinal.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "synthetic"
+          }
+        ]
+      },
+      "expected": [
+        "input_source_not_individual@inputs[0].valueSource"
       ]
     }
   ],

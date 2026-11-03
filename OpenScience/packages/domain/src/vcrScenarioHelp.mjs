@@ -349,6 +349,10 @@ export const VCR_SCENARIO_EXAMPLES = Object.freeze({
       probabilistic: { confounder: { exposedPrevalence: { family: 'triangular', min: 0.3, mode: 0.4, max: 0.5 },
         unexposedPrevalence: { family: 'triangular', min: 0.1, mode: 0.2, max: 0.3 }, association: { family: 'lognormal', median: 1.8, sdlog: 0.2 } } } } },
   ],
+  'comparator.target_trial': [
+    { label: 'a sequence of emulated trials from a person-period table: the intention-to-treat and per-protocol risk difference after 24 months, with stabilised weights for the treatment received', scenario: { covariates: ['age', 'ecog'], strategy: { kind: 'sequential', estimand: 'both' }, horizon: 24, timeUnit: 'months' } },
+    { label: 'clone-censor-weight for starting treatment within three periods of diagnosis against never starting, after twelve periods', scenario: { covariates: ['age', 'ecog'], strategy: { kind: 'clone_censor_weight', gracePeriod: 3 }, horizon: 12 } },
+  ],
   'comparator.stc': [{ label: 'an anchored comparison on a binary outcome: the aggregate trial\'s log odds ratio against the common comparator is -0.35 (standard error 0.12)', scenario: {
     covariates: ['age', 'male'], effectModifiers: ['age'], aggregateCovariates: [{ variable: 'age', mean: 62, sd: 9 }, { variable: 'male', proportion: 0.55 }],
     endpoint: { type: 'binary' }, anchored: true, aggregateEstimate: -0.35, aggregateSe: 0.12, outcomeColumn: 'response' } }],
@@ -576,6 +580,17 @@ const IMPUTATION_NOTE = 'imputation (entropy balancing, propensity weighting, we
 const AIPW_TIME_TO_EVENT_NOTE = 'For endpoint time_to_event, tau is the horizon and summary says what is read at it: rmst (the default) is the restricted mean survival time up to tau, survival the survival probability at tau; the effect is the trial arm\'s Kaplan-Meier value minus the augmented estimate of what the trial\'s patients would have had on the external control. The event times come from the events table (AVAL, CNSR) as in the other time-to-event comparisons. Each person enters as a Kaplan-Meier pseudo-observation of his arm, so the estimate assumes censoring does not depend on the covariates within an arm (the result states that as a premise); a tau beyond the follow-up of either arm is a not-estimable result.'
 
 /**
+ * Target-trial emulation (algorithm round C3, C4), said to the run that writes it: what the table must look like, which question each strategy answers and
+ * which estimand the result is.
+ * @type {readonly string[]}
+ */
+const TARGET_TRIAL_NOTES = Object.freeze([
+  'It answers "in a cohort whose treatment starts at different times, what is the effect of starting against not starting, without immortal-time bias". The input is a longitudinal table with one row per person, period and parameter (USUBJID, PARAMCD, AVAL, and ADT = the period number, a whole number): a file with one row per person-period and a visit column is mapped to it by marking the visit column visit_date and the treatment, outcome, eligibility and covariates as measurements. parameters names the parameter codes of the treatment, the outcome (an event in the period, 0/1) and the eligibility (1 in a period the person could enter a trial; default treatment, outcome, eligible); covariates names the others, as they stand in each period. A record ends at the first event, the first period with a missing required value and the first gap in the periods: the follow-up stops there and the result counts it.',
+  'strategy.kind sequential is a sequence of emulated trials, one for every period a person is eligible, the arm being the treatment in that period (Danaei 2013; Hernan & Robins 2016): estimand itt ignores what happens after the start, per_protocol censors a person when the treatment leaves the arm and weights by the stabilised inverse probability of the treatment received (weights.numerator is the stabilising set, default none, weights.denominator the full set, default all covariates), both (the default) reports the two. horizon is the number of follow-up periods the risk is read at, counted from each trial\'s start. The result is a risk difference at that horizon with both arms\' risks, standardised over everyone eligible at any trial start; it says which estimand it is. firstPeriod, lastPeriod and followUpLimit only make the expanded table smaller; a design too large for the memory of a job is refused by name (too_many_person_periods) and the refusal says which of them to use.',
+  'strategy.kind clone_censor_weight is the grace-period strategy a sequence of trials cannot ask: "start treatment within gracePeriod periods of the first eligible period" against "do not start". Every person is in both arms from time zero; the first arm is censored at the end of the grace period if treatment has not started, the second when it does; the censoring is undone by weights from one model of starting treatment on the covariates at time zero and the period since. The risk difference at the horizon is a per-protocol one. The result also shows the naive comparison of those who ever started with those who never did, only so that the waiting time of the first can be seen: it is not an estimate. Do not choose the grace period after looking at the result.',
+]);
+
+/**
  * Quantitative bias analysis (algorithm round C1, C2): said to the run that writes it, so that the person\'s question, the direction of a bias
  * and who supplies the numbers are the same in the conversation and on the page.
  * @type {readonly string[]}
@@ -631,6 +646,7 @@ const METHOD_NOTES = Object.freeze({
   'comparator.aipw': Object.freeze([COMPARATOR_TIME_UNIT_NOTES[0], TRIM_NOTE, AIPW_TIME_TO_EVENT_NOTE, IMPUTATION_NOTE]),
   'comparator.bias_analysis': BIAS_ANALYSIS_NOTES,
   'comparator.stc': STC_NOTES,
+  'comparator.target_trial': TARGET_TRIAL_NOTES,
   'evidence.pool': Object.freeze([POOL_PRIOR_NOTE]),
   'evidence.network': NETWORK_NOTES,
   'evidence.dose_response': DOSE_RESPONSE_NOTES,

@@ -96,6 +96,7 @@ vcr_engine_handlers <- function() list(
   "design.confirmatory" = vcr_job_design_confirmatory,
   "comparator.bias_analysis" = vcr_job_bias_analysis,
   "comparator.stc" = vcr_job_stc,
+  "comparator.target_trial" = vcr_job_target_trial,
   "design.grid" = vcr_job_design_grid,
   "design.assurance" = vcr_job_assurance,
   "design.procova" = vcr_job_procova,
@@ -131,6 +132,10 @@ VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "bias_analysis", "stc")
 # --- multiple imputation of missing covariates for the weighting comparators (C7), 2026-11-03; sourced after them, wraps their handlers ---
 VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "imputation")
 # --- end imputation ---
+
+# --- target-trial emulation from a person-period table (C3, C4), 2026-11-03 ---
+VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "target_trial")
+# --- end target trial ---
 
 # --- evidence synthesis beyond a pairwise pool (algorithm round C5, C6, E7, E8, 2026-11-03): a prior for tau, a network, a dose-response, a shrinkage ---
 VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "evidence_tau_prior", "evidence_network", "dose_response", "effect_shrinkage")
@@ -219,7 +224,7 @@ VCR_ENGINE_OWN_ISSUE_CODES <- c(
   "model_card_field_missing", "model_risk_unknown", "performance_measure_unsupported", "replicates_all_failed",
   "twin_label_inconsistent", "uncertainty_and_variability_conflated",
   "dose_response_not_computable", "network_not_connected", "network_not_computable",
-  "imputation_not_possible")
+  "imputation_not_possible", "too_many_person_periods")
 
 #' A column named by one string, or a named refusal (a number, an empty array
 #' or an object in its place used to reach `subj[[...]]` and end as an R error).

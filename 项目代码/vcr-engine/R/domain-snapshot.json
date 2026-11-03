@@ -601,6 +601,17 @@
       ],
       "modelTier": "data"
     },
+    "comparator.target_trial": {
+      "version": "1.0.0",
+      "endpoints": [
+        "time_to_event"
+      ],
+      "crossChecks": [
+        "TrialEmulation (its trial_example: the expanded person-trial-periods row for row, the intention-to-treat and per-protocol outcome-model coefficients and the standardised risks)",
+        "known-truth simulation with immortal time: the naive comparison is biased and clone-censor-weight recovers the truth, integrated exactly"
+      ],
+      "modelTier": "data"
+    },
     "evidence.network": {
       "version": "1.0.0",
       "endpoints": [],
@@ -670,7 +681,8 @@
     "stc_comparator": "comparator.stc",
     "network_meta": "evidence.network",
     "dose_response_meta": "evidence.dose_response",
-    "effect_shrinkage": "evidence.shrinkage"
+    "effect_shrinkage": "evidence.shrinkage",
+    "target_trial_emulation": "comparator.target_trial"
   },
   "patientLevelJobKinds": [
     "fit_survival_model",
@@ -688,6 +700,7 @@
     "aipw_comparator",
     "covariate_set_comparator",
     "stc_comparator",
+    "target_trial_emulation",
     "prognostic_adjustment_comparator"
   ],
   "observedOnlyMethods": [
@@ -698,6 +711,7 @@
     "comparator.propensity_weight",
     "comparator.maic",
     "comparator.stc",
+    "comparator.target_trial",
     "comparator.weighted_cox",
     "comparator.aipw",
     "comparator.covariate_sets",
@@ -763,6 +777,12 @@
       "imputed"
     ],
     "comparator.stc": [
+      "observed",
+      "extracted",
+      "calculated",
+      "imputed"
+    ],
+    "comparator.target_trial": [
       "observed",
       "extracted",
       "calculated",
@@ -6315,6 +6335,196 @@
         }
       }
     },
+    "comparator.target_trial": {
+      "t": "object",
+      "fields": {
+        "parameters": {
+          "t": "object",
+          "fields": {
+            "treatment": {
+              "t": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "default": "treatment"
+            },
+            "outcome": {
+              "t": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "default": "outcome"
+            },
+            "eligible": {
+              "t": "string",
+              "minLength": 1,
+              "maxLength": 64,
+              "default": "eligible"
+            }
+          }
+        },
+        "covariates": {
+          "t": "array",
+          "items": {
+            "t": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "max": 50,
+          "unique": true
+        },
+        "strategy": {
+          "t": "object",
+          "fields": {
+            "kind": {
+              "t": "string",
+              "values": [
+                "sequential",
+                "clone_censor_weight"
+              ],
+              "req": true
+            },
+            "estimand": {
+              "t": "string",
+              "values": [
+                "itt",
+                "per_protocol",
+                "both"
+              ],
+              "default": "both",
+              "when": {
+                "path": "strategy.kind",
+                "in": [
+                  "sequential"
+                ]
+              }
+            },
+            "weights": {
+              "t": "object",
+              "fields": {
+                "numerator": {
+                  "t": "array",
+                  "items": {
+                    "t": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "max": 50,
+                  "unique": true
+                },
+                "denominator": {
+                  "t": "array",
+                  "items": {
+                    "t": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  },
+                  "max": 50,
+                  "unique": true
+                }
+              },
+              "when": {
+                "path": "strategy.kind",
+                "in": [
+                  "sequential"
+                ]
+              }
+            },
+            "gracePeriod": {
+              "t": "integer",
+              "min": 0,
+              "max": 1000,
+              "unit": "periods",
+              "when": {
+                "path": "strategy.kind",
+                "in": [
+                  "clone_censor_weight"
+                ]
+              },
+              "req": true
+            }
+          },
+          "req": true
+        },
+        "horizon": {
+          "t": "integer",
+          "min": 1,
+          "max": 5000,
+          "unit": "periods",
+          "req": true
+        },
+        "outcomeModel": {
+          "t": "object",
+          "fields": {
+            "followupDegree": {
+              "t": "integer",
+              "min": 1,
+              "max": 3,
+              "default": 2
+            },
+            "trialPeriodDegree": {
+              "t": "integer",
+              "min": 0,
+              "max": 3,
+              "default": 2
+            },
+            "armByFollowup": {
+              "t": "boolean",
+              "default": false
+            }
+          },
+          "when": {
+            "path": "strategy.kind",
+            "in": [
+              "sequential"
+            ]
+          }
+        },
+        "firstPeriod": {
+          "t": "integer",
+          "min": -100000,
+          "max": 100000,
+          "unit": "periods",
+          "when": {
+            "path": "strategy.kind",
+            "in": [
+              "sequential"
+            ]
+          }
+        },
+        "lastPeriod": {
+          "t": "integer",
+          "min": -100000,
+          "max": 100000,
+          "unit": "periods",
+          "when": {
+            "path": "strategy.kind",
+            "in": [
+              "sequential"
+            ]
+          }
+        },
+        "followUpLimit": {
+          "t": "integer",
+          "min": 1,
+          "max": 5000,
+          "unit": "periods",
+          "when": {
+            "path": "strategy.kind",
+            "in": [
+              "sequential"
+            ]
+          }
+        },
+        "timeUnit": {
+          "t": "string",
+          "values": [
+            "days",
+            "weeks",
+            "months",
+            "years"
+          ]
+        }
+      }
+    },
     "comparator.map_prior": {
       "t": "object",
       "fields": {
@@ -10978,7 +11188,8 @@
     "stc_comparator",
     "network_meta",
     "dose_response_meta",
-    "effect_shrinkage"
+    "effect_shrinkage",
+    "target_trial_emulation"
   ],
   "endpointTypes": [
     "continuous",
@@ -11029,6 +11240,10 @@
     "too_few_events",
     "nuisance_model_not_estimable",
     "trimmed_population_too_small",
+    "no_eligible_person_trials",
+    "arm_without_person_trials",
+    "horizon_beyond_followup",
+    "outcome_model_not_estimable",
     "negative_controls_not_estimable",
     "primary_analysis_not_estimable",
     "data_tier_insufficient",

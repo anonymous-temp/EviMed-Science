@@ -259,6 +259,25 @@ vcr_test_apply_schema_additions <- function(root) {
 #' One valid job for each of the engine's methods (every handler), as
 #' `list(method, scenario, inputs, replicates)`. E05 runs them as they are; E10
 #' breaks them one field at a time.
+#' A small person-period table as the data plane files it (one row per person, period and parameter): treatment starts at a hazard that rises with the
+#' covariate, the event hazard falls after it starts, eligibility is the first period. Returns the long table and the wide one.
+vcr_test_person_period <- function(n, periods, seed = 1L, effect = -0.7) {
+  set.seed(seed, kind = VCR_RNG_KIND)
+  rows <- list()
+  for (i in seq_len(n)) {
+    x <- stats::rnorm(1L); started <- FALSE
+    for (u in 0:(periods - 1L)) {
+      if (!started && stats::runif(1L) < stats::plogis(-1.6 + 0.5 * x)) started <- TRUE
+      ev <- stats::runif(1L) < stats::plogis(-3 + 0.6 * x + (if (started) effect else 0))
+      rows[[length(rows) + 1L]] <- data.frame(id = sprintf("P%03d", i), period = u, treatment = as.integer(started), outcome = as.integer(ev), eligible = as.integer(u == 0L), x = x)
+      if (ev) break
+    }
+  }
+  wide <- do.call(rbind, rows)
+  long <- do.call(rbind, lapply(c("treatment", "outcome", "eligible", "x"), function(p) data.frame(USUBJID = wide$id, PARAMCD = p, AVAL = wide[[p]], ADT = wide$period)))
+  list(long = long, wide = wide)
+}
+
 vcr_test_handler_jobs <- function() {
   set.seed(5L, kind = VCR_RNG_KIND)
   n <- 120L
@@ -280,6 +299,9 @@ vcr_test_handler_jobs <- function() {
   in_cmp_ev <- vcr_test_input(cmp_ev, "snp_e05c:events", "event")
   # a time-to-event MAIC: the study's patients (covariates centred on the aggregate means) and a reconstruction's pseudo-patients
   in_pseudo <- vcr_test_input(data.frame(time = stats::rexp(50L, 0.1) + 0.5, status = stats::rbinom(50L, 1L, 0.7)), "rec_e05c:1", source = "reconstructed")
+  # a small person-period table in the data plane's longitudinal shape (USUBJID, PARAMCD, AVAL, ADT = the period) for the target-trial emulation
+  pp <- vcr_test_person_period(40L, 7L, seed = 11L)
+  in_pp <- vcr_test_input(pp$long, "snp_e05t:longitudinal", "long")
   sites <- lapply(1:8, function(i) list(id = sprintf("s%d", i), alpha = 2, beta = 2.5, startTime = 0))
   curve_arm <- function(med) {
     t <- seq(0, 24, by = 0.5); tr <- c(0, 6, 12, 18, 24)
@@ -341,6 +363,7 @@ vcr_test_handler_jobs <- function() {
                                           probabilistic = list(bias = list(family = "uniform", min = 1, max = 1.3))), NULL, 20000L),
     list("comparator.stc", list(covariates = list("age", "male"), aggregateCovariates = list(list(variable = "age", mean = 58, sd = 8), list(variable = "male", proportion = 0.5)),
                                 treatmentColumn = "arm", outcomeColumn = "y", endpoint = list(type = "continuous"), anchored = FALSE, aggregateOutcome = 1.2, aggregateSe = 0.1, size = 1000L), list(in_subj)),
+    list("comparator.target_trial", list(covariates = list("x"), strategy = list(kind = "clone_censor_weight", gracePeriod = 2L), horizon = 4L), list(in_pp)),
     list("design.assurance", list(design = list(nTreat = 200, nControl = 200), endpoint = list(type = "continuous"), truth = list(sd = 1), designPrior = list(mean = 0.3, sd = 0.15), analysis = list(alpha = 0.025)), NULL),
     list("design.procova", list(design = list(allocation = 0.5), truth = list(effect = 0.3, sd = 1), analysis = list(alpha = 0.025, power = 0.9), prognostic = list(rho = 0.6, lambda = 0.9)), NULL),
     list("accrual.poisson_gamma", list(sites = sites, target = 60L), NULL, 500L),

@@ -1033,6 +1033,40 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
     unadjustedEffectModifiers: array(string({ maxLength: 80 }), { min: 0, max: 50 }),
   }),
 
+  // Target-trial emulation from a person-period table (algorithm round C3, C4). The table is the data plane's longitudinal shape (USUBJID, PARAMCD, AVAL
+  // and ADT = the period number); `parameters` name the PARAMCDs of the treatment, the outcome and the eligibility, `covariates` those of the covariates
+  // (as they stand at each period; the baseline value of a trial is the value at its first period). A sequence of trials (`sequential`) asks for the
+  // intention-to-treat and per-protocol risk difference at `horizon` periods; `clone_censor_weight` asks for a strategy with a grace period: start within
+  // `gracePeriod` periods of time zero (the first eligible period) against never start.
+  'comparator.target_trial': object({
+    parameters: object({
+      treatment: string({ minLength: 1, maxLength: 64, default: 'treatment' }),
+      outcome: string({ minLength: 1, maxLength: 64, default: 'outcome' }),
+      eligible: string({ minLength: 1, maxLength: 64, default: 'eligible' }),
+    }),
+    covariates: array(string({ minLength: 1, maxLength: 64 }), { max: 50, unique: true }),
+    strategy: req(object({
+      kind: req(string({ values: ['sequential', 'clone_censor_weight'] })),
+      estimand: gated(string({ values: ['itt', 'per_protocol', 'both'], default: 'both' }), is('strategy.kind', 'sequential')),
+      weights: gated(object({
+        numerator: array(string({ minLength: 1, maxLength: 64 }), { max: 50, unique: true }),
+        denominator: array(string({ minLength: 1, maxLength: 64 }), { max: 50, unique: true }),
+      }), is('strategy.kind', 'sequential')),
+      gracePeriod: req(gated(integer({ min: 0, max: 1000, unit: 'periods' }), is('strategy.kind', 'clone_censor_weight'))),
+    })),
+    horizon: req(integer({ min: 1, max: 5000, unit: 'periods' })),
+    outcomeModel: gated(object({
+      followupDegree: integer({ min: 1, max: 3, default: 2 }),
+      trialPeriodDegree: integer({ min: 0, max: 3, default: 2 }),
+      armByFollowup: boolean({ default: false }),
+    }), is('strategy.kind', 'sequential')),
+    // the periods trials may start in, and how many follow-up periods of each trial are used: both only make the expanded table smaller
+    firstPeriod: gated(integer({ min: -100000, max: 100000, unit: 'periods' }), is('strategy.kind', 'sequential')),
+    lastPeriod: gated(integer({ min: -100000, max: 100000, unit: 'periods' }), is('strategy.kind', 'sequential')),
+    followUpLimit: gated(integer({ min: 1, max: 5000, unit: 'periods' }), is('strategy.kind', 'sequential')),
+    timeUnit: string({ values: [...VCR_TIME_UNITS] }),
+  }),
+
   'comparator.map_prior': object({
     historical: req(object({
       events: array(integer({ min: 0 }), { min: 2, max: 200 }),
