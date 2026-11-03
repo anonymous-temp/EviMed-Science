@@ -81,13 +81,13 @@ vcr_engine_handlers <- function() list(
   "evidence.dose_response" = vcr_job_dose_response,
   "evidence.shrinkage" = vcr_job_effect_shrinkage,
   "evidence.reconstruct_km" = vcr_job_reconstruct_km,
-  "comparator.entropy_balance" = vcr_job_weight_comparator,
-  "comparator.propensity_weight" = vcr_job_weight_comparator,
+  "comparator.entropy_balance" = vcr_with_imputation(vcr_job_weight_comparator),
+  "comparator.propensity_weight" = vcr_with_imputation(vcr_job_weight_comparator),
   "comparator.rmst" = vcr_job_rmst,
   "comparator.maic" = vcr_job_maic,
-  "comparator.weighted_cox" = vcr_job_weighted_cox,
+  "comparator.weighted_cox" = vcr_with_imputation(vcr_job_weighted_cox),
   "comparator.maic_time_to_event" = vcr_job_maic_tte,
-  "comparator.aipw" = vcr_job_aipw,
+  "comparator.aipw" = vcr_with_imputation(vcr_job_aipw),
   "comparator.covariate_sets" = vcr_job_covariate_sets,
   "comparator.evalue" = vcr_job_evalue,
   "comparator.map_prior" = vcr_job_map_prior,
@@ -127,6 +127,10 @@ VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "rpact_adapter", "design_c
 # --- quantitative bias analysis of an estimate (C1, C2) and the G-computation simulated treatment comparison (C9), 2026-11-03 ---
 VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "bias_analysis", "stc")
 # --- end bias analysis and STC ---
+
+# --- multiple imputation of missing covariates for the weighting comparators (C7), 2026-11-03; sourced after them, wraps their handlers ---
+VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "imputation")
+# --- end imputation ---
 
 # --- evidence synthesis beyond a pairwise pool (algorithm round C5, C6, E7, E8, 2026-11-03): a prior for tau, a network, a dose-response, a shrinkage ---
 VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "evidence_tau_prior", "evidence_network", "dose_response", "effect_shrinkage")
@@ -214,7 +218,8 @@ VCR_ENGINE_OWN_ISSUE_CODES <- c(
   "job_invalid", "mechanistic_engine_unknown", "mechanistic_field_missing", "missing_covariate",
   "model_card_field_missing", "model_risk_unknown", "performance_measure_unsupported", "replicates_all_failed",
   "twin_label_inconsistent", "uncertainty_and_variability_conflated",
-  "dose_response_not_computable", "network_not_connected", "network_not_computable")
+  "dose_response_not_computable", "network_not_connected", "network_not_computable",
+  "imputation_not_possible")
 
 #' A column named by one string, or a named refusal (a number, an empty array
 #' or an object in its place used to reach `subj[[...]]` and end as an R error).
@@ -1265,7 +1270,7 @@ vcr_job_weight_comparator <- function(job, output_dir = NULL, cancel_file = NULL
   X <- as.matrix(subj[, covs, drop = FALSE])
   if (!is.numeric(X)) vcr_abort("input_shape_invalid", "scenario.covariates", "Covariates are numeric (code categories as indicators).")
   miss <- which(colSums(is.na(X)) > 0L)
-  if (length(miss)) vcr_abort("missing_covariate", "scenario.covariates", sprintf("Covariate '%s' has missing values; weights are not estimated on incomplete rows.", covs[miss[1]]))
+  if (length(miss)) vcr_abort("missing_covariate", "scenario.covariates", sprintf("Covariate '%s' has missing values; weights are not estimated on incomplete rows (state `imputation` to impute them).", covs[miss[1]]))
   if (sum(treat == 1L) < 2L || sum(treat == 0L) < 2L) vcr_abort("input_shape_invalid", "scenario.treatmentColumn", "Both groups need at least two people.")
 
   endpoint <- as.character(sc$endpoint$type %||% (if (!is.null(sc$tau) || !is.null(tabs$event)) "time_to_event" else "continuous"))
@@ -1364,7 +1369,9 @@ vcr_job_weight_comparator <- function(job, output_dir = NULL, cancel_file = NULL
     f <- fit_weights(X[idx, , drop = FALSE], treat[idx])
     if (is.null(f$allWeights)) return(rep(NA_real_, length(est)))
     est_of(f$allWeights, idx)
-  }, replicates = B, seed = job$seed, strata = treat, cores = vcr_cores(job$cores))
+  }, replicates = B, seed = job$seed, strata = treat, cores = vcr_cores(job$cores),
+  components = if (identical(endpoint, "time_to_event")) c("rmst_difference", "rmst_treatment", "rmst_control", "survival_difference_at_tau")
+               else if (identical(endpoint, "binary")) c("weighted_difference", "weighted_risk_ratio", "weighted_odds_ratio") else "weighted_difference")
   if (identical(boot$interrupted, "canceled")) {
     return(list(status = "canceled", measures = list(), counts = vcr_counts(realPatients = nrow(subj)),
                 diagnostics = list(bootstrapCompleted = boot$replicates, bootstrapRequested = B)))

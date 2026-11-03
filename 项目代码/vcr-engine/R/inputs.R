@@ -114,6 +114,11 @@ vcr_max_replicates <- function() .vcr_env_num("VCR_ENGINE_MAX_REPLICATES", 20000
 .vcr_ctx$cancel_file <- NULL
 .vcr_ctx$budget <- Inf
 .vcr_ctx$cpu_base <- 0
+# set only while an imputed comparison runs one of its completed tables (imputation.R): the table the handler reads, the bootstrap
+# floor it shares, and the reader of the bootstrap's components
+.vcr_ctx$tables_hook <- NULL
+.vcr_ctx$bootstrap_floor <- NULL
+.vcr_ctx$boot_sink <- NULL
 
 vcr_cpu_seconds <- function() sum(proc.time()[c("user.self", "sys.self", "user.child", "sys.child")], na.rm = TRUE)
 
@@ -133,6 +138,7 @@ vcr_ctx_begin <- function(cancel_file = NULL, cpu_seconds_limit = Inf) {
 
 vcr_ctx_end <- function() {
   .vcr_ctx$cancel_file <- NULL; .vcr_ctx$budget <- Inf; .vcr_ctx$cpu_base <- 0
+  .vcr_ctx$tables_hook <- NULL; .vcr_ctx$bootstrap_floor <- NULL; .vcr_ctx$boot_sink <- NULL
   invisible(TRUE)
 }
 
@@ -432,6 +438,7 @@ vcr_job_tables <- function(job) {
       out$files[[length(out$files) + 1L]] <- df
     }
   }
+  if (is.function(.vcr_ctx$tables_hook)) out <- .vcr_ctx$tables_hook(out)
   out
 }
 

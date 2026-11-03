@@ -116,9 +116,11 @@ export const VCR_ENGINE_METHODS = Object.freeze({
   // with the Bayesian pooling as the headline and a prediction interval for two studies.
   'evidence.pool': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen([]), crossChecks: frozen(['metafor', 'bayesmeta (a stated log-normal, inverse-gamma and half-normal prior for the heterogeneity: the pooled effect\'s mean and credible interval and the median heterogeneity, with two and four studies)']), modelTier: 'literature' },
   'evidence.reconstruct_km': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['time_to_event']), crossChecks: frozen(['IPDfromKM (the same digitized curve, risk table and event total: medians and hazard ratio)', 'Cox on the original rows']), modelTier: 'literature' },
-  'comparator.entropy_balance': { version: '1.3.0', compatibleVersions: frozen(['1.0.0', '1.1.0', '1.2.0']), endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['WeightIt', 'cobalt']), modelTier: 'data' },
+  // 1.4.0 (algorithm round C7): `imputation`, the comparison run on completed tables and read by Rubin's rules (also on propensity_weight 1.5.0,
+  // weighted_cox 1.5.0 and aipw 1.4.0).
+  'comparator.entropy_balance': { version: '1.4.0', compatibleVersions: frozen(['1.0.0', '1.1.0', '1.2.0', '1.3.0']), endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['WeightIt', 'cobalt', 'mice (the same incomplete table imputed 100 times by mice and by the engine: the means, proportions and regression coefficients of the completed tables agree within Monte-Carlo error; Rubin\'s rules with their Barnard-Rubin degrees of freedom and the Nelson-Aalen estimate equal mice\'s)', 'known-truth simulation with outcome-dependent missingness: the complete-case slope is biased and the pooled imputed slope is not']), modelTier: 'data' },
   // 1.4.0 (algorithm round C14): propensity trimming (a fixed bound or Crump's rule) that restates the population the estimate is about.
-  'comparator.propensity_weight': { version: '1.4.0', compatibleVersions: frozen(['1.0.0', '1.1.0', '1.2.0', '1.3.0']), endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['WeightIt', 'closed-form Crump et al. (2009) trimming bound on a uniform score', 'the estimate recomputed by hand on the kept people']), modelTier: 'data' },
+  'comparator.propensity_weight': { version: '1.5.0', compatibleVersions: frozen(['1.0.0', '1.1.0', '1.2.0', '1.3.0', '1.4.0']), endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['WeightIt', 'closed-form Crump et al. (2009) trimming bound on a uniform score', 'the estimate recomputed by hand on the kept people', 'mice (the same incomplete table imputed 100 times by mice and by the engine: the means, proportions and regression coefficients of the completed tables agree within Monte-Carlo error; Rubin\'s rules with their Barnard-Rubin degrees of freedom and the Nelson-Aalen estimate equal mice\'s)', 'known-truth simulation with outcome-dependent missingness: the complete-case slope is biased and the pooled imputed slope is not']), modelTier: 'data' },
   'comparator.rmst': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['time_to_event']), crossChecks: frozen(['survRM2']), modelTier: 'data' },
   'comparator.maic': { version: '1.0.0', endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['NICE DSU TSD 18']), modelTier: 'data' },
   'comparator.evalue': { version: '1.0.0', endpoints: frozen(['binary', 'time_to_event']), crossChecks: frozen(['EValue']), modelTier: 'scenario' },
@@ -136,11 +138,11 @@ export const VCR_ENGINE_METHODS = Object.freeze({
   'matching.evaluate': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['Kleene truth table']), modelTier: null },
   // The comparator-effect methods (2026-10-04). A new method is a new entry here, a job kind, a schema and a handler; none of the
   // methods above changed.
-  'comparator.weighted_cox': { version: '1.4.0', compatibleVersions: frozen(['1.0.0', '1.1.0', '1.2.0', '1.3.0']), endpoints: frozen(['time_to_event']), crossChecks: frozen(['survival::coxph on WeightIt weights', 'independent score test for non-proportional hazards']), modelTier: 'data' },
+  'comparator.weighted_cox': { version: '1.5.0', compatibleVersions: frozen(['1.0.0', '1.1.0', '1.2.0', '1.3.0', '1.4.0']), endpoints: frozen(['time_to_event']), crossChecks: frozen(['survival::coxph on WeightIt weights', 'independent score test for non-proportional hazards', 'mice (the same incomplete table imputed 100 times by mice and by the engine: the means, proportions and regression coefficients of the completed tables agree within Monte-Carlo error; Rubin\'s rules with their Barnard-Rubin degrees of freedom and the Nelson-Aalen estimate equal mice\'s)', 'known-truth simulation with outcome-dependent missingness: the complete-case slope is biased and the pooled imputed slope is not']), modelTier: 'data' },
   'comparator.maic_time_to_event': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['time_to_event']), crossChecks: frozen(['maicplus 0.1.2 vignette (Apache-2.0)', 'NICE DSU TSD 18', 'simulated target-population hazard ratio']), modelTier: 'data' },
   // 1.3.0 (algorithm round C8, C14): a time-to-event outcome (the restricted mean survival time or the survival at tau, by Kaplan-Meier pseudo-observations)
   // and propensity trimming.
-  'comparator.aipw': { version: '1.3.0', compatibleVersions: frozen(['1.0.0', '1.1.0', '1.2.0']), endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['closed-form AIPW (Bang & Robins 2005) on WeightIt weights', 'simulation with a known ATT: double robustness', 'survRM2::rmst2 (the Kaplan-Meier restricted mean of each arm, which the pseudo-observations average to)', 'exact leave-one-out jackknife pseudo-observations', 'simulation with a known restricted-mean ATT (exponential times): double robustness']), modelTier: 'data' },
+  'comparator.aipw': { version: '1.4.0', compatibleVersions: frozen(['1.0.0', '1.1.0', '1.2.0', '1.3.0']), endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['closed-form AIPW (Bang & Robins 2005) on WeightIt weights', 'simulation with a known ATT: double robustness', 'survRM2::rmst2 (the Kaplan-Meier restricted mean of each arm, which the pseudo-observations average to)', 'exact leave-one-out jackknife pseudo-observations', 'simulation with a known restricted-mean ATT (exponential times): double robustness', 'mice (the same incomplete table imputed 100 times by mice and by the engine: the means, proportions and regression coefficients of the completed tables agree within Monte-Carlo error; Rubin\'s rules with their Barnard-Rubin degrees of freedom and the Nelson-Aalen estimate equal mice\'s)', 'known-truth simulation with outcome-dependent missingness: the complete-case slope is biased and the pooled imputed slope is not']), modelTier: 'data' },
   'comparator.covariate_sets': { version: '1.2.0', compatibleVersions: frozen(['1.0.0', '1.1.0']), endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['comparator.entropy_balance', 'comparator.propensity_weight', 'comparator.aipw']), modelTier: 'data' },
   // --- robustness methods (2026-10-04). A new method is a new entry here, a job kind, a schema and a handler; none of the methods above changed. ---
   'comparator.negative_control': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['binary', 'time_to_event']), crossChecks: frozen(['EmpiricalCalibration 3.1.4 (sccs example)', 'metafor::rma maximum-likelihood fit of the empirical null', 'known-truth simulation of a common systematic bias']), modelTier: 'data' },
@@ -782,7 +784,10 @@ function usesConfirmatoryBeyond1_0_0(scenario) {
 }
 
 /** The comparators that read `scenario.trim` (propensity trimming, algorithm round C14). Mirrored by `.vcrp_legacy_design_version` in protocol.R. */
-const TRIMMING_METHODS = frozen(['comparator.propensity_weight', 'comparator.weighted_cox', 'comparator.aipw'])
+const TRIMMING_SINCE = Object.freeze({ 'comparator.propensity_weight': '1.4.0', 'comparator.weighted_cox': '1.4.0', 'comparator.aipw': '1.3.0' })
+
+/** The comparators that read `scenario.imputation` (algorithm round C7), and the release that began to. Mirrored in protocol.R. */
+const IMPUTATION_SINCE = Object.freeze({ 'comparator.entropy_balance': '1.4.0', 'comparator.propensity_weight': '1.5.0', 'comparator.weighted_cox': '1.5.0', 'comparator.aipw': '1.4.0' })
 
 /** Does a design scenario state a hypothesis (1.4.0, T1)? Mirrored by `.vcrp_uses_hypothesis` in protocol.R. @param {any} scenario */
 function usesHypothesis(scenario) {
@@ -822,8 +827,12 @@ function legacyDesignVersionMatches(job) {
     // and evidence.pool 1.1.0 the informative prior for the heterogeneity
     if (job.method === 'evidence.pool' && job.scenario?.tauPrior !== undefined) return false
     // and the weighting comparators 1.4.0 (AIPW 1.3.0) the propensity trimming, and AIPW 1.3.0 the time-to-event outcome
-    if (TRIMMING_METHODS.includes(job.method) && job.scenario?.trim !== undefined) return false
-    if (job.method === 'comparator.aipw' && job.scenario?.endpoint?.type === 'time_to_event') return false
+    const trimSince = /** @type {Record<string, string>} */ (TRIMMING_SINCE)[job.method]
+    if (trimSince && job.scenario?.trim !== undefined && !versionAtLeast(job.methodVersion, trimSince)) return false
+    if (job.method === 'comparator.aipw' && job.scenario?.endpoint?.type === 'time_to_event' && !versionAtLeast(job.methodVersion, '1.3.0')) return false
+    // and the four weighting comparators one release later the imputation of missing covariates
+    const imputationSince = /** @type {Record<string, string>} */ (IMPUTATION_SINCE)[job.method]
+    if (imputationSince && job.scenario?.imputation !== undefined && !versionAtLeast(job.methodVersion, imputationSince)) return false
     return !job.method.startsWith('patients.') || (!job.scenario?.pairing && !job.scenario?.cohortRules)
   }
   const base = job.scenario?.design?.kind

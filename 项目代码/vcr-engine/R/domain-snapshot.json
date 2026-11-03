@@ -151,24 +151,6 @@
       ]
     },
     "comparator.entropy_balance": {
-      "version": "1.3.0",
-      "endpoints": [
-        "continuous",
-        "binary",
-        "time_to_event"
-      ],
-      "crossChecks": [
-        "WeightIt",
-        "cobalt"
-      ],
-      "modelTier": "data",
-      "compatibleVersions": [
-        "1.0.0",
-        "1.1.0",
-        "1.2.0"
-      ]
-    },
-    "comparator.propensity_weight": {
       "version": "1.4.0",
       "endpoints": [
         "continuous",
@@ -177,8 +159,9 @@
       ],
       "crossChecks": [
         "WeightIt",
-        "closed-form Crump et al. (2009) trimming bound on a uniform score",
-        "the estimate recomputed by hand on the kept people"
+        "cobalt",
+        "mice (the same incomplete table imputed 100 times by mice and by the engine: the means, proportions and regression coefficients of the completed tables agree within Monte-Carlo error; Rubin's rules with their Barnard-Rubin degrees of freedom and the Nelson-Aalen estimate equal mice's)",
+        "known-truth simulation with outcome-dependent missingness: the complete-case slope is biased and the pooled imputed slope is not"
       ],
       "modelTier": "data",
       "compatibleVersions": [
@@ -186,6 +169,29 @@
         "1.1.0",
         "1.2.0",
         "1.3.0"
+      ]
+    },
+    "comparator.propensity_weight": {
+      "version": "1.5.0",
+      "endpoints": [
+        "continuous",
+        "binary",
+        "time_to_event"
+      ],
+      "crossChecks": [
+        "WeightIt",
+        "closed-form Crump et al. (2009) trimming bound on a uniform score",
+        "the estimate recomputed by hand on the kept people",
+        "mice (the same incomplete table imputed 100 times by mice and by the engine: the means, proportions and regression coefficients of the completed tables agree within Monte-Carlo error; Rubin's rules with their Barnard-Rubin degrees of freedom and the Nelson-Aalen estimate equal mice's)",
+        "known-truth simulation with outcome-dependent missingness: the complete-case slope is biased and the pooled imputed slope is not"
+      ],
+      "modelTier": "data",
+      "compatibleVersions": [
+        "1.0.0",
+        "1.1.0",
+        "1.2.0",
+        "1.3.0",
+        "1.4.0"
       ]
     },
     "comparator.rmst": {
@@ -439,20 +445,23 @@
       "modelTier": null
     },
     "comparator.weighted_cox": {
-      "version": "1.4.0",
+      "version": "1.5.0",
       "endpoints": [
         "time_to_event"
       ],
       "crossChecks": [
         "survival::coxph on WeightIt weights",
-        "independent score test for non-proportional hazards"
+        "independent score test for non-proportional hazards",
+        "mice (the same incomplete table imputed 100 times by mice and by the engine: the means, proportions and regression coefficients of the completed tables agree within Monte-Carlo error; Rubin's rules with their Barnard-Rubin degrees of freedom and the Nelson-Aalen estimate equal mice's)",
+        "known-truth simulation with outcome-dependent missingness: the complete-case slope is biased and the pooled imputed slope is not"
       ],
       "modelTier": "data",
       "compatibleVersions": [
         "1.0.0",
         "1.1.0",
         "1.2.0",
-        "1.3.0"
+        "1.3.0",
+        "1.4.0"
       ]
     },
     "comparator.maic_time_to_event": {
@@ -471,7 +480,7 @@
       ]
     },
     "comparator.aipw": {
-      "version": "1.3.0",
+      "version": "1.4.0",
       "endpoints": [
         "continuous",
         "binary",
@@ -482,13 +491,16 @@
         "simulation with a known ATT: double robustness",
         "survRM2::rmst2 (the Kaplan-Meier restricted mean of each arm, which the pseudo-observations average to)",
         "exact leave-one-out jackknife pseudo-observations",
-        "simulation with a known restricted-mean ATT (exponential times): double robustness"
+        "simulation with a known restricted-mean ATT (exponential times): double robustness",
+        "mice (the same incomplete table imputed 100 times by mice and by the engine: the means, proportions and regression coefficients of the completed tables agree within Monte-Carlo error; Rubin's rules with their Barnard-Rubin degrees of freedom and the Nelson-Aalen estimate equal mice's)",
+        "known-truth simulation with outcome-dependent missingness: the complete-case slope is biased and the pooled imputed slope is not"
       ],
       "modelTier": "data",
       "compatibleVersions": [
         "1.0.0",
         "1.1.0",
-        "1.2.0"
+        "1.2.0",
+        "1.3.0"
       ]
     },
     "comparator.covariate_sets": {
@@ -4524,6 +4536,34 @@
           ],
           "default": "ATT"
         },
+        "imputation": {
+          "t": "object",
+          "fields": {
+            "m": {
+              "t": "integer",
+              "min": 2,
+              "max": 50,
+              "req": true
+            },
+            "maxIterations": {
+              "t": "integer",
+              "min": 1,
+              "max": 30,
+              "default": 10
+            },
+            "categorical": {
+              "t": "array",
+              "items": {
+                "t": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                "maxLength": 64
+              },
+              "min": 1,
+              "max": 20,
+              "unique": true
+            }
+          }
+        },
         "endpoint": {
           "t": "object",
           "fields": {
@@ -4682,6 +4722,34 @@
                   "fixed"
                 ]
               }
+            }
+          }
+        },
+        "imputation": {
+          "t": "object",
+          "fields": {
+            "m": {
+              "t": "integer",
+              "min": 2,
+              "max": 50,
+              "req": true
+            },
+            "maxIterations": {
+              "t": "integer",
+              "min": 1,
+              "max": 30,
+              "default": 10
+            },
+            "categorical": {
+              "t": "array",
+              "items": {
+                "t": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                "maxLength": 64
+              },
+              "min": 1,
+              "max": 20,
+              "unique": true
             }
           }
         },
@@ -4864,6 +4932,34 @@
             "in": [
               "propensity"
             ]
+          }
+        },
+        "imputation": {
+          "t": "object",
+          "fields": {
+            "m": {
+              "t": "integer",
+              "min": 2,
+              "max": 50,
+              "req": true
+            },
+            "maxIterations": {
+              "t": "integer",
+              "min": 1,
+              "max": 30,
+              "default": 10
+            },
+            "categorical": {
+              "t": "array",
+              "items": {
+                "t": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                "maxLength": 64
+              },
+              "min": 1,
+              "max": 20,
+              "unique": true
+            }
           }
         },
         "tau": {
@@ -5293,6 +5389,34 @@
                   "fixed"
                 ]
               }
+            }
+          }
+        },
+        "imputation": {
+          "t": "object",
+          "fields": {
+            "m": {
+              "t": "integer",
+              "min": 2,
+              "max": 50,
+              "req": true
+            },
+            "maxIterations": {
+              "t": "integer",
+              "min": 1,
+              "max": 30,
+              "default": 10
+            },
+            "categorical": {
+              "t": "array",
+              "items": {
+                "t": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                "maxLength": 64
+              },
+              "min": 1,
+              "max": 20,
+              "unique": true
             }
           }
         },

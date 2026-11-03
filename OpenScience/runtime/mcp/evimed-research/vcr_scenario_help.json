@@ -1516,7 +1516,8 @@
     "comparator.entropy_balance": {
       "endpoints": ["continuous","binary","time_to_event"],
       "notes": [
-        "timeUnit is days, weeks, months or years. The usual spellings (day, d, 天, month, 个月, yr, 年 …) are written as these when the job is queued, so one request is one job in any spelling; text that names no unit is refused before queueing. A table that carries its own unit (the event times of a mapped snapshot, a reconstruction calibrated in one) must agree with it, and a scenario that states none takes the table's; a time-to-event analysis with neither is refused rather than assume months. Nothing is converted between units."
+        "timeUnit is days, weeks, months or years. The usual spellings (day, d, 天, month, 个月, yr, 年 …) are written as these when the job is queued, so one request is one job in any spelling; text that names no unit is refused before queueing. A table that carries its own unit (the event times of a mapped snapshot, a reconstruction calibrated in one) must agree with it, and a scenario that states none takes the table's; a time-to-event analysis with neither is refused rather than assume months. Nothing is converted between units.",
+        "imputation (entropy balancing, propensity weighting, weighted Cox, doubly robust) is for a table in which a covariate has missing values; without it a missing covariate refuses the job by name. { m: 20 } imputes the missing covariates 20 times by chained equations (a number by predictive mean matching, a 0/1 column by a logistic draw, a column named in categorical by a multinomial draw; the other covariates, the arm and the outcome are in each model), runs the analysis on each completed table and pools the answers by Rubin's rules; the complete-case answer is reported beside it. Take m at least the percentage of people with a missing value (the result says when it is not). The assumption is missing at random given the other covariates, the arm and the outcome, and the result states it as a premise. A covariate coded as several indicator columns is imputed column by column and can give a person two categories at once: give a categorical covariate as one coded column and name it in categorical. The interval is Rubin's, from a bootstrap whose draws are shared among the imputations, so asking for more imputations does not make the job slower."
       ],
       "rows": [
         {
@@ -1532,6 +1533,18 @@
         {"path":"outcomeColumn","type":"string","maxLength":64,"role":"column","default":"y","fieldRole":"defaultable"},
         {"path":"moments","type":"integer","min":1,"max":3,"default":1,"fieldRole":"defaultable"},
         {"path":"estimand","type":"string","values":["ATT"],"default":"ATT","fieldRole":"defaultable"},
+        {"path":"imputation","type":"object"},
+        {"path":"imputation.m","type":"integer","min":2,"max":50,"required":true,"within":"imputation","fieldRole":"research_fact"},
+        {"path":"imputation.maxIterations","type":"integer","min":1,"max":30,"default":10,"within":"imputation","fieldRole":"defaultable"},
+        {
+          "path": "imputation.categorical",
+          "type": "list",
+          "count": {"min":1,"max":20},
+          "items": {"type":"string","maxLength":64,"role":"column"},
+          "unique": true,
+          "within": "imputation",
+          "fieldRole": "defaultable"
+        },
         {"path":"endpoint","type":"object"},
         {"path":"endpoint.type","type":"string","values":["continuous","binary","time_to_event"],"required":true,"within":"endpoint","fieldRole":"defaultable"},
         {"path":"tau","type":"number","gt":0,"unit":"time units","required":true,"when":[{"path":"endpoint.type","in":["time_to_event"]}],"fieldRole":"research_fact"},
@@ -1552,7 +1565,8 @@
       "endpoints": ["continuous","binary","time_to_event"],
       "notes": [
         "timeUnit is days, weeks, months or years. The usual spellings (day, d, 天, month, 个月, yr, 年 …) are written as these when the job is queued, so one request is one job in any spelling; text that names no unit is refused before queueing. A table that carries its own unit (the event times of a mapped snapshot, a reconstruction calibrated in one) must agree with it, and a scenario that states none takes the table's; a time-to-event analysis with neither is refused rather than assume months. Nothing is converted between units.",
-        "trim (propensity weighting, weighted Cox with propensity weights, doubly robust) removes the people who have no comparable counterpart before the weights are fitted: { rule: \"crump\" } is the optimal rule of Crump et al. (2009) and needs no number; { rule: \"fixed\", lower: 0.1 } removes whoever has a propensity score below lower or above upper (1 - lower unless stated), and the bound is the person's own choice. The result is then about the people who were kept, not about everyone: it lists how many were removed in each arm and how they differ from the kept people (the target population is the trimmed one, EU HTA guideline 6.2), and says it is limited by that. Leave trim out unless overlap is the problem; do not pick a bound to make a result significant."
+        "trim (propensity weighting, weighted Cox with propensity weights, doubly robust) removes the people who have no comparable counterpart before the weights are fitted: { rule: \"crump\" } is the optimal rule of Crump et al. (2009) and needs no number; { rule: \"fixed\", lower: 0.1 } removes whoever has a propensity score below lower or above upper (1 - lower unless stated), and the bound is the person's own choice. The result is then about the people who were kept, not about everyone: it lists how many were removed in each arm and how they differ from the kept people (the target population is the trimmed one, EU HTA guideline 6.2), and says it is limited by that. Leave trim out unless overlap is the problem; do not pick a bound to make a result significant.",
+        "imputation (entropy balancing, propensity weighting, weighted Cox, doubly robust) is for a table in which a covariate has missing values; without it a missing covariate refuses the job by name. { m: 20 } imputes the missing covariates 20 times by chained equations (a number by predictive mean matching, a 0/1 column by a logistic draw, a column named in categorical by a multinomial draw; the other covariates, the arm and the outcome are in each model), runs the analysis on each completed table and pools the answers by Rubin's rules; the complete-case answer is reported beside it. Take m at least the percentage of people with a missing value (the result says when it is not). The assumption is missing at random given the other covariates, the arm and the outcome, and the result states it as a premise. A covariate coded as several indicator columns is imputed column by column and can give a person two categories at once: give a categorical covariate as one coded column and name it in categorical. The interval is Rubin's, from a bootstrap whose draws are shared among the imputations, so asking for more imputations does not make the job slower."
       ],
       "rows": [
         {
@@ -1571,6 +1585,18 @@
         {"path":"trim.rule","type":"string","values":["fixed","crump"],"required":true,"within":"trim","fieldRole":"defaultable"},
         {"path":"trim.lower","type":"number","gt":0,"lt":0.5,"required":true,"within":"trim","when":[{"path":"trim.rule","in":["fixed"]}],"fieldRole":"research_fact"},
         {"path":"trim.upper","type":"number","gt":0.5,"lt":1,"within":"trim","when":[{"path":"trim.rule","in":["fixed"]}],"fieldRole":"defaultable"},
+        {"path":"imputation","type":"object"},
+        {"path":"imputation.m","type":"integer","min":2,"max":50,"required":true,"within":"imputation","fieldRole":"research_fact"},
+        {"path":"imputation.maxIterations","type":"integer","min":1,"max":30,"default":10,"within":"imputation","fieldRole":"defaultable"},
+        {
+          "path": "imputation.categorical",
+          "type": "list",
+          "count": {"min":1,"max":20},
+          "items": {"type":"string","maxLength":64,"role":"column"},
+          "unique": true,
+          "within": "imputation",
+          "fieldRole": "defaultable"
+        },
         {"path":"endpoint","type":"object"},
         {"path":"endpoint.type","type":"string","values":["continuous","binary","time_to_event"],"required":true,"within":"endpoint","fieldRole":"defaultable"},
         {"path":"tau","type":"number","gt":0,"unit":"time units","required":true,"when":[{"path":"endpoint.type","in":["time_to_event"]}],"fieldRole":"research_fact"},
@@ -1589,6 +1615,10 @@
         {
           "label": "the same weights after removing the people with no comparable counterpart (Crump's rule: no bound to choose)",
           "scenario": {"covariates":["age","ecog"],"endpoint":{"type":"binary"},"trim":{"rule":"crump"}}
+        },
+        {
+          "label": "the same weights when some covariates are missing: impute them 20 times and read the answer by Rubin's rules, the complete-case answer beside it",
+          "scenario": {"covariates":["age","ecog"],"endpoint":{"type":"binary"},"imputation":{"m":20}}
         }
       ]
     },
@@ -3985,7 +4015,8 @@
       "endpoints": ["time_to_event"],
       "notes": [
         "timeUnit is days, weeks, months or years. The usual spellings (day, d, 天, month, 个月, yr, 年 …) are written as these when the job is queued, so one request is one job in any spelling; text that names no unit is refused before queueing. A table that carries its own unit (the event times of a mapped snapshot, a reconstruction calibrated in one) must agree with it, and a scenario that states none takes the table's; a time-to-event analysis with neither is refused rather than assume months. Nothing is converted between units.",
-        "trim (propensity weighting, weighted Cox with propensity weights, doubly robust) removes the people who have no comparable counterpart before the weights are fitted: { rule: \"crump\" } is the optimal rule of Crump et al. (2009) and needs no number; { rule: \"fixed\", lower: 0.1 } removes whoever has a propensity score below lower or above upper (1 - lower unless stated), and the bound is the person's own choice. The result is then about the people who were kept, not about everyone: it lists how many were removed in each arm and how they differ from the kept people (the target population is the trimmed one, EU HTA guideline 6.2), and says it is limited by that. Leave trim out unless overlap is the problem; do not pick a bound to make a result significant."
+        "trim (propensity weighting, weighted Cox with propensity weights, doubly robust) removes the people who have no comparable counterpart before the weights are fitted: { rule: \"crump\" } is the optimal rule of Crump et al. (2009) and needs no number; { rule: \"fixed\", lower: 0.1 } removes whoever has a propensity score below lower or above upper (1 - lower unless stated), and the bound is the person's own choice. The result is then about the people who were kept, not about everyone: it lists how many were removed in each arm and how they differ from the kept people (the target population is the trimmed one, EU HTA guideline 6.2), and says it is limited by that. Leave trim out unless overlap is the problem; do not pick a bound to make a result significant.",
+        "imputation (entropy balancing, propensity weighting, weighted Cox, doubly robust) is for a table in which a covariate has missing values; without it a missing covariate refuses the job by name. { m: 20 } imputes the missing covariates 20 times by chained equations (a number by predictive mean matching, a 0/1 column by a logistic draw, a column named in categorical by a multinomial draw; the other covariates, the arm and the outcome are in each model), runs the analysis on each completed table and pools the answers by Rubin's rules; the complete-case answer is reported beside it. Take m at least the percentage of people with a missing value (the result says when it is not). The assumption is missing at random given the other covariates, the arm and the outcome, and the result states it as a premise. A covariate coded as several indicator columns is imputed column by column and can give a person two categories at once: give a categorical covariate as one coded column and name it in categorical. The interval is Rubin's, from a bootstrap whose draws are shared among the imputations, so asking for more imputations does not make the job slower."
       ],
       "rows": [
         {
@@ -4028,6 +4059,18 @@
           "lt": 1,
           "within": "trim",
           "when": [{"path":"weighting","in":["propensity"]},{"path":"trim.rule","in":["fixed"]}],
+          "fieldRole": "defaultable"
+        },
+        {"path":"imputation","type":"object"},
+        {"path":"imputation.m","type":"integer","min":2,"max":50,"required":true,"within":"imputation","fieldRole":"research_fact"},
+        {"path":"imputation.maxIterations","type":"integer","min":1,"max":30,"default":10,"within":"imputation","fieldRole":"defaultable"},
+        {
+          "path": "imputation.categorical",
+          "type": "list",
+          "count": {"min":1,"max":20},
+          "items": {"type":"string","maxLength":64,"role":"column"},
+          "unique": true,
+          "within": "imputation",
           "fieldRole": "defaultable"
         },
         {"path":"tau","type":"number","gt":0,"unit":"time units","required":true,"fieldRole":"research_fact"},
@@ -4115,7 +4158,8 @@
       "notes": [
         "timeUnit is days, weeks, months or years. The usual spellings (day, d, 天, month, 个月, yr, 年 …) are written as these when the job is queued, so one request is one job in any spelling; text that names no unit is refused before queueing. A table that carries its own unit (the event times of a mapped snapshot, a reconstruction calibrated in one) must agree with it, and a scenario that states none takes the table's; a time-to-event analysis with neither is refused rather than assume months. Nothing is converted between units.",
         "trim (propensity weighting, weighted Cox with propensity weights, doubly robust) removes the people who have no comparable counterpart before the weights are fitted: { rule: \"crump\" } is the optimal rule of Crump et al. (2009) and needs no number; { rule: \"fixed\", lower: 0.1 } removes whoever has a propensity score below lower or above upper (1 - lower unless stated), and the bound is the person's own choice. The result is then about the people who were kept, not about everyone: it lists how many were removed in each arm and how they differ from the kept people (the target population is the trimmed one, EU HTA guideline 6.2), and says it is limited by that. Leave trim out unless overlap is the problem; do not pick a bound to make a result significant.",
-        "For endpoint time_to_event, tau is the horizon and summary says what is read at it: rmst (the default) is the restricted mean survival time up to tau, survival the survival probability at tau; the effect is the trial arm's Kaplan-Meier value minus the augmented estimate of what the trial's patients would have had on the external control. The event times come from the events table (AVAL, CNSR) as in the other time-to-event comparisons. Each person enters as a Kaplan-Meier pseudo-observation of his arm, so the estimate assumes censoring does not depend on the covariates within an arm (the result states that as a premise); a tau beyond the follow-up of either arm is a not-estimable result."
+        "For endpoint time_to_event, tau is the horizon and summary says what is read at it: rmst (the default) is the restricted mean survival time up to tau, survival the survival probability at tau; the effect is the trial arm's Kaplan-Meier value minus the augmented estimate of what the trial's patients would have had on the external control. The event times come from the events table (AVAL, CNSR) as in the other time-to-event comparisons. Each person enters as a Kaplan-Meier pseudo-observation of his arm, so the estimate assumes censoring does not depend on the covariates within an arm (the result states that as a premise); a tau beyond the follow-up of either arm is a not-estimable result.",
+        "imputation (entropy balancing, propensity weighting, weighted Cox, doubly robust) is for a table in which a covariate has missing values; without it a missing covariate refuses the job by name. { m: 20 } imputes the missing covariates 20 times by chained equations (a number by predictive mean matching, a 0/1 column by a logistic draw, a column named in categorical by a multinomial draw; the other covariates, the arm and the outcome are in each model), runs the analysis on each completed table and pools the answers by Rubin's rules; the complete-case answer is reported beside it. Take m at least the percentage of people with a missing value (the result says when it is not). The assumption is missing at random given the other covariates, the arm and the outcome, and the result states it as a premise. A covariate coded as several indicator columns is imputed column by column and can give a person two categories at once: give a categorical covariate as one coded column and name it in categorical. The interval is Rubin's, from a bootstrap whose draws are shared among the imputations, so asking for more imputations does not make the job slower."
       ],
       "rows": [
         {
@@ -4170,6 +4214,18 @@
         {"path":"trim.rule","type":"string","values":["fixed","crump"],"required":true,"within":"trim","fieldRole":"defaultable"},
         {"path":"trim.lower","type":"number","gt":0,"lt":0.5,"required":true,"within":"trim","when":[{"path":"trim.rule","in":["fixed"]}],"fieldRole":"research_fact"},
         {"path":"trim.upper","type":"number","gt":0.5,"lt":1,"within":"trim","when":[{"path":"trim.rule","in":["fixed"]}],"fieldRole":"defaultable"},
+        {"path":"imputation","type":"object"},
+        {"path":"imputation.m","type":"integer","min":2,"max":50,"required":true,"within":"imputation","fieldRole":"research_fact"},
+        {"path":"imputation.maxIterations","type":"integer","min":1,"max":30,"default":10,"within":"imputation","fieldRole":"defaultable"},
+        {
+          "path": "imputation.categorical",
+          "type": "list",
+          "count": {"min":1,"max":20},
+          "items": {"type":"string","maxLength":64,"role":"column"},
+          "unique": true,
+          "within": "imputation",
+          "fieldRole": "defaultable"
+        },
         {"path":"cohortRules","type":"list","count":{"min":1,"max":100},"items":{"type":"object"},"fieldRole":"defaultable"},
         {"path":"cohortRules[].name","type":"string","minLength":1,"maxLength":80,"required":true,"within":"cohortRules","fieldRole":"research_fact"},
         {"path":"cohortRules[].rule","type":"rule","required":true,"within":"cohortRules","fieldRole":"research_fact"},

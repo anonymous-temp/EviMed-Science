@@ -190,7 +190,8 @@ vcr_job_weighted_cox <- function(job, output_dir = NULL, cancel_file = NULL, ...
     f <- fit_weights(X[idx, , drop = FALSE], treat[idx])
     if (is.null(f$allWeights)) return(rep(NA_real_, length(est)))
     est_of(f$allWeights, idx)
-  }, replicates = B, seed = job$seed, strata = treat, cores = vcr_cores(job$cores))
+  }, replicates = B, seed = job$seed, strata = treat, cores = vcr_cores(job$cores),
+  components = c("hazard_ratio", if (with_rmst) c("rmst_difference", "rmst_treatment", "rmst_control", "survival_difference_at_tau")))
   if (identical(boot$interrupted, "canceled")) {
     return(list(status = "canceled", measures = list(), counts = vcr_counts(realPatients = nrow(subj)),
                 diagnostics = list(bootstrapCompleted = boot$replicates, bootstrapRequested = B)))

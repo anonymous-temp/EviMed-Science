@@ -91,6 +91,19 @@ export function vcrResultLimits({ conclusion = null, method = null, route = null
   // A propensity trimming removed the people with no comparable counterpart: the estimate is about the people who were kept (EU HTA guideline 6.2).
   const trimmed = Number(object(found.trim).removedTotal)
   if (Number.isFinite(trimmed) && trimmed > 0) limits.push({ key: 'trim', text: '结论只适用于修剪后留下的人：没有可比对象的人已被去掉，他们的情况不在这个结果里。' })
+  // Missing covariates that were imputed (algorithm round C7): what the pooled answer rests on beyond the data, when it is thinner than asked.
+  const imputation = object(found.imputation)
+  if (imputation.performed === true) {
+    const completed = Number(imputation.completed)
+    const requested = Number(imputation.requested)
+    const share = Number(imputation.shareIncomplete)
+    if (imputation.stoppedBy) limits.push({ key: 'imputations_stopped_early', text: `计算时间用完，只合并了 ${completed} 份补齐数据（计划 ${requested} 份），区间比计划的粗。` })
+    if (Number.isFinite(share) && Number.isFinite(requested) && requested < Math.ceil(share * 100)) {
+      limits.push({ key: 'few_imputations', text: `补齐的份数（${requested}）少于有缺失的人所占的百分比（${Math.ceil(share * 100)}），份数偏少，合并后的区间可能不稳。` })
+    }
+    const dropped = Array.isArray(imputation.droppedImputations) ? imputation.droppedImputations.length : 0
+    if (dropped > 0) limits.push({ key: 'imputations_not_estimable', text: `有 ${dropped} 份补齐数据上的分析算不出结果，合并时没有用它们。` })
+  }
   const labels = /** @type {Record<string, string>} */ (VCR_APPLICABILITY_LIMIT_LABELS_ZH)
   for (const entry of (Array.isArray(found.applicabilityLimits) ? found.applicabilityLimits : []).map(object)) {
     const sentence = labels[String(entry.code)] ?? text(entry.reason)

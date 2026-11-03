@@ -266,7 +266,8 @@ vcr_job_aipw <- function(job, output_dir = NULL, cancel_file = NULL, ...) {
     r <- analyse(idx, with_if = FALSE)
     if (!isTRUE(r$ok)) return(rep(NA_real_, k))
     r$estimates
-  }, replicates = B, seed = job$seed, strata = treat, cores = vcr_cores(job$cores))
+  }, replicates = B, seed = job$seed, strata = treat, cores = vcr_cores(job$cores),
+  components = c("aipw_difference", "aipw_risk_ratio", "aipw_odds_ratio")[seq_len(k)])
   if (identical(boot$interrupted, "canceled")) {
     return(list(status = "canceled", measures = list(), counts = vcr_counts(realPatients = n),
                 diagnostics = list(bootstrapCompleted = boot$replicates, bootstrapRequested = B)))

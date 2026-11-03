@@ -1177,8 +1177,12 @@ vcr_job_at_least <- function(job, from) {
     # and evidence.pool 1.1.0 the informative prior for the heterogeneity
     if (identical(job[["method"]],"evidence.pool") && !is.null(.vcrp_get(job$scenario,"tauPrior"))) return(FALSE)
     # and the weighting comparators 1.4.0 (AIPW 1.3.0) the propensity trimming, and AIPW 1.3.0 the time-to-event outcome
-    if (job[["method"]] %in% c("comparator.propensity_weight","comparator.weighted_cox","comparator.aipw") && !is.null(.vcrp_get(job$scenario,"trim"))) return(FALSE)
-    if (identical(job[["method"]],"comparator.aipw") && identical(.vcrp_get(.vcrp_get(job$scenario,"endpoint"),"type"),"time_to_event")) return(FALSE)
+    trim_since <- c("comparator.propensity_weight" = "1.4.0", "comparator.weighted_cox" = "1.4.0", "comparator.aipw" = "1.3.0")[job[["method"]]]
+    if (!is.na(trim_since) && !is.null(.vcrp_get(job$scenario,"trim")) && utils::compareVersion(job$methodVersion, trim_since) < 0) return(FALSE)
+    if (identical(job[["method"]],"comparator.aipw") && identical(.vcrp_get(.vcrp_get(job$scenario,"endpoint"),"type"),"time_to_event") && utils::compareVersion(job$methodVersion,"1.3.0") < 0) return(FALSE)
+    # and the four weighting comparators one release later the imputation of missing covariates
+    imputation_since <- c("comparator.entropy_balance" = "1.4.0", "comparator.propensity_weight" = "1.5.0", "comparator.weighted_cox" = "1.5.0", "comparator.aipw" = "1.4.0")[job[["method"]]]
+    if (!is.na(imputation_since) && !is.null(.vcrp_get(job$scenario,"imputation")) && utils::compareVersion(job$methodVersion, imputation_since) < 0) return(FALSE)
     return(!startsWith(job[["method"]], "patients.") || (is.null(job$scenario$pairing) && is.null(job$scenario$cohortRules)))
   }
   sc<-.vcrp_get(job,"scenario");base<-.vcrp_get(.vcrp_get(sc,"design"),"kind")

@@ -532,6 +532,17 @@ const TRIM = object({
   upper: gated(number({ gt: 0.5, lt: 1 }), is('trim.rule', 'fixed')),
 })
 
+/**
+ * Missing covariates (algorithm round C7): the comparison is run on `m` tables completed by chained equations (predictive mean matching
+ * for a number, a logistic draw for a 0/1 column, a multinomial draw for a column declared in `categorical`) and read by Rubin's rules,
+ * with the complete-case answer beside it. Without the key a missing covariate still refuses the job by name.
+ */
+const IMPUTATION = object({
+  m: req(integer({ min: 2, max: 50 })),
+  maxIterations: integer({ min: 1, max: 30, default: 10 }),
+  categorical: array(COLUMN, { min: 1, max: 20, unique: true }),
+})
+
 const WEIGHTING_CONTEXT = {
   endpoint: ENDPOINT(),
   tau: req(gated(number({ gt: 0, unit: 'time units' }), TIME_TO_EVENT)),
@@ -839,6 +850,7 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
     outcomeColumn: { ...COLUMN, default: 'y' },
     moments: integer({ min: 1, max: 3, default: 1 }),
     estimand: string({ values: ['ATT'], default: 'ATT' }),
+    imputation: IMPUTATION,
     ...WEIGHTING_CONTEXT,
   }),
 
@@ -848,6 +860,7 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
     outcomeColumn: { ...COLUMN, default: 'y' },
     estimand: string({ values: ['ATT', 'ATE', 'ATO'], default: 'ATT' }),
     trim: TRIM,
+    imputation: IMPUTATION,
     ...WEIGHTING_CONTEXT,
   }),
 
@@ -862,6 +875,7 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
     moments: gated(integer({ min: 1, max: 3, default: 1 }), isNot('weighting', 'propensity')),
     estimand: string({ values: ['ATT', 'ATE', 'ATO'], default: 'ATT' }),
     trim: gated(TRIM, is('weighting', 'propensity')),
+    imputation: IMPUTATION,
     tau: req(number({ gt: 0, unit: 'time units' })),
     ties: string({ values: ['efron', 'breslow'], default: 'efron' }),
     phAlpha: number({ gt: 0, lt: 1, default: 0.05 }),
@@ -907,6 +921,7 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
     timeUnit: gated(string({ maxLength: 20 }), TIME_TO_EVENT),
     parameterCode: gated(string({ maxLength: 64 }), TIME_TO_EVENT),
     trim: TRIM,
+    imputation: IMPUTATION,
     cohortRules: COHORT_STEPS,
     targetTrial: TARGET_TRIAL,
   }, { atLeastOne: [['covariates', 'propensityCovariates'], ['covariates', 'outcomeCovariates']] }),

@@ -424,9 +424,10 @@ test("the comparator-effect methods are appended, read patients, and every rule 
     // 1.2.0: the weighted balance is read, not a rule (owner decision 2026-11-01) and the E-value follows the estimate; 1.3.0: the enrolment-year
     // row when the field map has a time-zero date (D6). AIPW is at 1.2.0 for the same row; older results replay.
     // 1.4.0 (weighted Cox) and 1.3.0 (AIPW, which also takes a time-to-event outcome): propensity trimming (algorithm round C14, C8).
-    const version = { "comparator.weighted_cox": "1.4.0", "comparator.covariate_sets": "1.2.0", "comparator.aipw": "1.3.0", "comparator.maic_time_to_event": "1.1.0" };
+    // 1.5.0 (weighted Cox) and 1.4.0 (AIPW): the imputation of missing covariates (algorithm round C7).
+    const version = { "comparator.weighted_cox": "1.5.0", "comparator.covariate_sets": "1.2.0", "comparator.aipw": "1.4.0", "comparator.maic_time_to_event": "1.1.0" };
     assert.equal(/** @type {any} */ (VCR_ENGINE_METHODS)[method].version, /** @type {Record<string, string>} */ (version)[method] ?? "1.0.0", method);
-    const older = { "1.2.0": ["1.0.0", "1.1.0"], "1.3.0": ["1.0.0", "1.1.0", "1.2.0"], "1.4.0": ["1.0.0", "1.1.0", "1.2.0", "1.3.0"] }[/** @type {Record<string, string>} */ (version)[method]];
+    const older = { "1.2.0": ["1.0.0", "1.1.0"], "1.3.0": ["1.0.0", "1.1.0", "1.2.0"], "1.4.0": ["1.0.0", "1.1.0", "1.2.0", "1.3.0"], "1.5.0": ["1.0.0", "1.1.0", "1.2.0", "1.3.0", "1.4.0"] }[/** @type {Record<string, string>} */ (version)[method]];
     if (older) assert.deepEqual([.../** @type {any} */ (VCR_ENGINE_METHODS)[method].compatibleVersions], older, `${method}: older results replay`);
     assert.equal(/** @type {any} */ (VCR_ENGINE_METHODS)[method].modelTier, "data", method);
     assert.ok(/** @type {any} */ (VCR_ENGINE_METHODS)[method].crossChecks.length > 0, `${method} names what its numeric cases are held against`);

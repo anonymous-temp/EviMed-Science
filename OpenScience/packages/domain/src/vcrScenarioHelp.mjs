@@ -335,6 +335,7 @@ export const VCR_SCENARIO_EXAMPLES = Object.freeze({
   'comparator.propensity_weight': [
     { label: 'propensity weights for a binary endpoint', scenario: { covariates: ['age'], endpoint: { type: 'binary' }, estimand: 'ATO' } },
     { label: 'the same weights after removing the people with no comparable counterpart (Crump\'s rule: no bound to choose)', scenario: { covariates: ['age', 'ecog'], endpoint: { type: 'binary' }, trim: { rule: 'crump' } } },
+    { label: 'the same weights when some covariates are missing: impute them 20 times and read the answer by Rubin\'s rules, the complete-case answer beside it', scenario: { covariates: ['age', 'ecog'], endpoint: { type: 'binary' }, imputation: { m: 20 } } },
   ],
   'comparator.rmst': [{ label: 'restricted mean survival time to 24 months', scenario: { tau: 24, treatmentColumn: 'arm', timeUnit: 'months' } }],
   'comparator.maic': [{ label: 'an unanchored indirect comparison on a binary outcome: the aggregate trial\'s response rate is 0.42 (standard error 0.05), on the logit link', scenario: {
@@ -566,6 +567,11 @@ const UNANCHORED_NOTES = Object.freeze(["anchored false (the default) has no com
  * @type {string}
  */
 const TRIM_NOTE = 'trim (propensity weighting, weighted Cox with propensity weights, doubly robust) removes the people who have no comparable counterpart before the weights are fitted: { rule: "crump" } is the optimal rule of Crump et al. (2009) and needs no number; { rule: "fixed", lower: 0.1 } removes whoever has a propensity score below lower or above upper (1 - lower unless stated), and the bound is the person\'s own choice. The result is then about the people who were kept, not about everyone: it lists how many were removed in each arm and how they differ from the kept people (the target population is the trimmed one, EU HTA guideline 6.2), and says it is limited by that. Leave trim out unless overlap is the problem; do not pick a bound to make a result significant.'
+/**
+ * Missing covariates (algorithm round C7), said to the run that writes it: what the key does, what it assumes, and what the result shows beside it.
+ * @type {string}
+ */
+const IMPUTATION_NOTE = 'imputation (entropy balancing, propensity weighting, weighted Cox, doubly robust) is for a table in which a covariate has missing values; without it a missing covariate refuses the job by name. { m: 20 } imputes the missing covariates 20 times by chained equations (a number by predictive mean matching, a 0/1 column by a logistic draw, a column named in categorical by a multinomial draw; the other covariates, the arm and the outcome are in each model), runs the analysis on each completed table and pools the answers by Rubin\'s rules; the complete-case answer is reported beside it. Take m at least the percentage of people with a missing value (the result says when it is not). The assumption is missing at random given the other covariates, the arm and the outcome, and the result states it as a premise. A covariate coded as several indicator columns is imputed column by column and can give a person two categories at once: give a categorical covariate as one coded column and name it in categorical. The interval is Rubin\'s, from a bootstrap whose draws are shared among the imputations, so asking for more imputations does not make the job slower.'
 /** The time-to-event doubly robust comparison (algorithm round C8). @type {string} */
 const AIPW_TIME_TO_EVENT_NOTE = 'For endpoint time_to_event, tau is the horizon and summary says what is read at it: rmst (the default) is the restricted mean survival time up to tau, survival the survival probability at tau; the effect is the trial arm\'s Kaplan-Meier value minus the augmented estimate of what the trial\'s patients would have had on the external control. The event times come from the events table (AVAL, CNSR) as in the other time-to-event comparisons. Each person enters as a Kaplan-Meier pseudo-observation of his arm, so the estimate assumes censoring does not depend on the covariates within an arm (the result states that as a premise); a tau beyond the follow-up of either arm is a not-estimable result.'
 
@@ -618,11 +624,11 @@ const SHRINKAGE_NOTES = Object.freeze([
 
 /** @type {Readonly<Record<string, readonly string[]>>} */
 const METHOD_NOTES = Object.freeze({
-  'comparator.entropy_balance': COMPARATOR_TIME_UNIT_NOTES,
-  'comparator.propensity_weight': Object.freeze([...COMPARATOR_TIME_UNIT_NOTES, TRIM_NOTE]),
+  'comparator.entropy_balance': Object.freeze([...COMPARATOR_TIME_UNIT_NOTES, IMPUTATION_NOTE]),
+  'comparator.propensity_weight': Object.freeze([...COMPARATOR_TIME_UNIT_NOTES, TRIM_NOTE, IMPUTATION_NOTE]),
   'comparator.covariate_sets': COMPARATOR_TIME_UNIT_NOTES,
-  'comparator.weighted_cox': Object.freeze([...COMPARATOR_TIME_UNIT_NOTES, TRIM_NOTE]),
-  'comparator.aipw': Object.freeze([COMPARATOR_TIME_UNIT_NOTES[0], TRIM_NOTE, AIPW_TIME_TO_EVENT_NOTE]),
+  'comparator.weighted_cox': Object.freeze([...COMPARATOR_TIME_UNIT_NOTES, TRIM_NOTE, IMPUTATION_NOTE]),
+  'comparator.aipw': Object.freeze([COMPARATOR_TIME_UNIT_NOTES[0], TRIM_NOTE, AIPW_TIME_TO_EVENT_NOTE, IMPUTATION_NOTE]),
   'comparator.bias_analysis': BIAS_ANALYSIS_NOTES,
   'comparator.stc': STC_NOTES,
   'evidence.pool': Object.freeze([POOL_PRIOR_NOTE]),

@@ -425,7 +425,8 @@ vcr_weight_diagnostics <- function(w, treat) {
 #' said 20 draws used to get 20 draws and a 95% interval from twenty points
 #' (EB-5). The number used is echoed in the result.
 vcr_bootstrap_replicates <- function(requested = NULL) {
-  floor_ <- as.integer(vcr_limit("bootstrapMin", 2000L))
+  # an imputed comparison (R/imputation.R) shares the floor among its imputations and states the share in its result; nothing else lowers it
+  floor_ <- as.integer(.vcr_ctx$bootstrap_floor %||% vcr_limit("bootstrapMin", 2000L))
   as.integer(max(floor_, requested %||% floor_))
 }
 
@@ -438,9 +439,13 @@ vcr_bootstrap_replicates <- function(requested = NULL) {
 #'
 #' The draws run in batches so a cancel or a spent CPU budget stops the loop
 #' between batches with what has finished (`interrupted` says which).
+#'
+#' `components` names the entries of the estimate vector (the measure each one is the estimate of). An imputed comparison installs
+#' `.vcr_ctx$boot_sink` to read their bootstrap standard deviations (the within-imputation variances of Rubin's rules); a call that
+#' names none is read by nobody.
 vcr_bootstrap_pipeline <- function(n_rows, estimate_fn, replicates = 2000L,
                                    seed = 1L, strata = NULL, cores = 1L,
-                                   level = 0.95, batch_size = 200L) {
+                                   level = 0.95, batch_size = 200L, components = NULL) {
   bank <- vcr_stream_bank(seed)
   rows <- list(); done <- 0L; interrupted <- NULL
   while (done < replicates) {
@@ -469,6 +474,11 @@ vcr_bootstrap_pipeline <- function(n_rows, estimate_fn, replicates = 2000L,
     as.numeric(stats::quantile(col, c(a, 1 - a), names = FALSE, type = 7))
   }, numeric(2)))
   prim <- is.finite(est[, 1])
+  if (is.function(.vcr_ctx$boot_sink) && length(components)) {
+    k <- min(width, length(components))
+    .vcr_ctx$boot_sink(list(components = components[seq_len(k)], replicates = done,
+                            sd = vapply(seq_len(k), function(j) { col <- est[is.finite(est[, j]), j]; if (length(col) >= 2L) stats::sd(col) else NA_real_ }, numeric(1))))
+  }
   list(
     estimates = est[, 1],
     estimatesMatrix = est,
