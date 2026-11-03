@@ -55,14 +55,15 @@ test("D1: a hazard ratio that changes over time is a null case only when every r
   assert.ok(codes(validateScenario("design.grid", { ...grid, truths: [{ treatmentHazardRatios: { breaks: [6], ratios: [1] } }] })).includes("scenario_value_invalid@truths[0]"));
 });
 
-test("D1/D5: design.simulate and design.grid are 1.3.0; 1.2.0 results replay, unless the scenario asks for what 1.3.0 added", () => {
+test("D1/D5: design.simulate and design.grid are 1.4.0 (1.3.0 added this); 1.2.0 results replay, unless the scenario asks for what 1.3.0 added", () => {
   for (const method of ["design.simulate", "design.grid"]) {
-    assert.equal(/** @type {any} */ (VCR_ENGINE_METHODS)[method].version, "1.3.0");
-    assert.deepEqual([.../** @type {any} */ (VCR_ENGINE_METHODS)[method].compatibleVersions], ["1.2.0"]);
+    assert.equal(/** @type {any} */ (VCR_ENGINE_METHODS)[method].version, "1.4.0");
+    assert.deepEqual([.../** @type {any} */ (VCR_ENGINE_METHODS)[method].compatibleVersions], ["1.2.0", "1.3.0"]);
   }
   const ph = simulate({ truth: { hazardRatio: 0.7, controlMedian: 12 }, analysis: { method: "logrank", alpha: 0.025, sided: 1 } });
   assert.deepEqual(validateEngineJob(job("design.simulate", "design_simulation", "1.2.0", ph)), [], "proportional hazards replay under 1.2.0");
-  assert.deepEqual(validateEngineJob(job("design.simulate", "design_simulation", "1.3.0", simulate())), []);
+  assert.deepEqual(validateEngineJob(job("design.simulate", "design_simulation", "1.3.0", simulate())), [], "1.3.0 has the hazard ratio that changes over time and replays");
+  assert.deepEqual(validateEngineJob(job("design.simulate", "design_simulation", "1.4.0", simulate())), []);
   assert.ok(codes(validateEngineJob(job("design.simulate", "design_simulation", "1.2.0", simulate()))).includes("method_version_mismatch@methodVersion"));
   assert.ok(codes(validateEngineJob(job("design.simulate", "design_simulation", "1.2.0", simulate({ truth: { hazardRatio: 0.7, controlMedian: 12 } })))).includes("method_version_mismatch@methodVersion"), "MaxCombo is 1.3.0's");
   const grid = { ...ph, designs: [{ nTreat: 100 }], truths: [{ treatmentHazardRatios: NPH }] };

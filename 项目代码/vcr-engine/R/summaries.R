@@ -166,29 +166,32 @@ vcr_power_curve <- function(scenario, alpha, sided) {
   n1 <- vcr_scalar(d$nTreat, NULL); n0 <- vcr_scalar(d$nControl, n1)
   if (is.null(n1) || is.null(n0)) return(NULL)
   m <- seq(0, 1.6, by = 0.1)
+  hyp <- vcr_hypothesis(scenario)
+  nl <- if (is.null(hyp)) 0 else hyp$null
+  nh <- if (is.null(hyp)) 1 else hyp$nullHr
   if (identical(e, "continuous")) {
-    eff <- vcr_scalar(tr$effect, NULL); if (is.null(eff) || eff == 0) return(NULL)
-    x <- m * eff
-    y <- vapply(x, function(v) vcr_power_means(v, vcr_scalar(tr$sd, 1), n1, n0, alpha, sided), numeric(1))
+    eff <- vcr_scalar(tr$effect, NULL); if (is.null(eff) || eff == nl) return(NULL)
+    x <- nl + m * (eff - nl)     # from the null (zero, or the margin) to 1.6 times the stated distance from it
+    y <- vapply(x, function(v) vcr_power_means(v, vcr_scalar(tr$sd, 1), n1, n0, alpha, sided, nl), numeric(1))
     return(list(xLabel = "真实效应（均值差）", x = x, y = y))
   }
   if (identical(e, "binary")) {
     p0 <- vcr_scalar(tr[["controlRate"]], NULL)
     p1 <- tryCatch(vcr_binary_treatment_rate(p0, vcr_scalar(tr[["treatmentRate"]], NULL), vcr_scalar(tr$riskDifference, NULL), vcr_scalar(tr$oddsRatio, NULL)),
                    error = function(e) NULL)
-    if (is.null(p0) || is.null(p1) || p1 == p0) return(NULL)
-    x <- pmin(pmax(p0 + m * (p1 - p0), 1e-6), 1 - 1e-6)
-    y <- vapply(x, function(v) vcr_power_proportions(p0, v, n1, n0, alpha, sided), numeric(1))
+    if (is.null(p0) || is.null(p1) || p1 - p0 == nl) return(NULL)
+    x <- pmin(pmax(p0 + nl + m * (p1 - p0 - nl), 1e-6), 1 - 1e-6)
+    y <- vapply(x, function(v) vcr_power_proportions(p0, v, n1, n0, alpha, sided, nl), numeric(1))
     return(list(xLabel = "真实效应（试验组事件率）", x = x, y = y))
   }
   if (identical(e, "time_to_event")) {
-    hr <- vcr_scalar(tr$hazardRatio, NULL); if (is.null(hr) || !(hr > 0) || hr == 1) return(NULL)
+    hr <- vcr_scalar(tr$hazardRatio, NULL); if (is.null(hr) || !(hr > 0) || hr == nh) return(NULL)
     dist <- tryCatch(vcr_control_distribution(tr), error = function(e) NULL); if (is.null(dist)) return(NULL)
     acc <- scenario$accrual %||% list()
-    x <- exp(m * log(hr))
+    x <- exp(log(nh) + m * (log(hr) - log(nh)))
     y <- vapply(x, function(h) tryCatch(vcr_logrank_power(h, dist, n1, n0, vcr_scalar(acc$duration, 0), vcr_scalar(acc$followup, Inf),
                                                          vcr_dropout_hazard(vcr_scalar(acc$dropoutAnnual, 0), vcr_time_unit(scenario)$perYear), alpha, vcr_scalar(acc$maxFollowup, Inf),
-                                                         sided = sided)$power, error = function(e) NA_real_), numeric(1))
+                                                         sided = sided, null_hr = nh)$power, error = function(e) NA_real_), numeric(1))
     return(list(xLabel = "真实效应（风险比）", x = x, y = y))
   }
   NULL

@@ -361,8 +361,25 @@ vcr_replicate_floor <- function(is_null, target_mcse = NULL, p = NULL, alpha = 0
     q<-.vcrp_get(.vcrp_get(scenario,"external"),"targetPrevalence")
     return(length(p0)==2L && length(p1)==2L && is.numeric(p0) && is.numeric(p1) && .vcrp_num(q) && all(is.finite(c(p0,p1))) && abs(sum(c(1-q,q)*(p1-p0)))<1e-12)
   }
-  if (.vcrp_lgl(truth[["null"]])) return(truth[["null"]])
   type <- .vcrp_get(.vcrp_get(scenario, "endpoint"), "type")
+  # A non-inferiority design is at its null on the margin, not at an effect of zero (T1).
+  hyp <- .vcrp_get(scenario, "hypothesis")
+  margin <- if (.vcrp_named(hyp) && identical(hyp[["kind"]], "non_inferiority") && .vcrp_num(hyp[["margin"]])) hyp[["margin"]] else NULL
+  if (!is.null(margin) && .vcrp_chr(type)) {
+    tiny <- function(x) abs(x) < 1e-12
+    if (type == "continuous") return(.vcrp_num(truth[["effect"]]) && tiny(truth[["effect"]] + margin))
+    if (type == "time_to_event") { hr <- truth[["hazardRatio"]]; return(.vcrp_num(hr) && hr > 0 && tiny(log(hr / margin))) }
+    if (type == "binary") {
+      p0 <- truth[["controlRate"]]
+      if (!.vcrp_num(p0)) return(FALSE)
+      if (.vcrp_num(truth[["treatmentRate"]])) return(tiny(truth[["treatmentRate"]] - p0 + margin))
+      if (.vcrp_num(truth[["riskDifference"]])) return(tiny(truth[["riskDifference"]] + margin))
+      orr <- truth[["oddsRatio"]]
+      if (.vcrp_num(orr) && p0 > 0 && p0 < 1) { odds <- orr * p0 / (1 - p0); return(tiny(odds / (1 + odds) - p0 + margin)) }
+    }
+    return(FALSE)
+  }
+  if (.vcrp_lgl(truth[["null"]])) return(truth[["null"]])
   if (!.vcrp_chr(type)) return(FALSE)
   tiny <- function(x) abs(x) < 1e-12
   if (type == "continuous") return(.vcrp_num(truth[["effect"]]) && tiny(truth[["effect"]]))
@@ -798,6 +815,21 @@ vcr_pattern_match <- function(pattern, x) {
   kind<-.vcrp_get(d,"kind") %||% "";method<-an$method;endpoint<-.vcrp_get(.vcrp_get(sc,"endpoint"),"type")
   if(!.vcrp_chr(kind))kind<-""
   bad<-function(field,detail)ctx$raise("scenario_value_invalid",.vcrp_at(path,field),detail)
+  # what a non-inferiority margin may be asked of (T1); mirrors checkHypothesis in the domain
+  hyp<-.vcrp_get(sc,"hypothesis")
+  if (.vcrp_named(hyp) && identical(hyp[["kind"]],"non_inferiority")) {
+    if (kind %in% c("single_arm","single_arm_external","simon_two_stage")) bad("hypothesis.kind","A non-inferiority margin compares two arms; a single-arm design states its benchmark instead.")
+    else {
+      tests<-c(continuous="ttest",binary="risk_difference",time_to_event="logrank")
+      if (!is.null(method) && .vcrp_chr(endpoint) && !is.na(tests[endpoint]) && !identical(method,unname(tests[endpoint]))) bad("analysis.method",sprintf("A non-inferiority margin is tested with %s for a %s endpoint.",tests[endpoint],endpoint))
+      if ("treatmentHazardRatios" %in% names(tr)) bad("truth.treatmentHazardRatios","A margin on the hazard ratio assumes one hazard ratio; a ratio that changes over time has none to compare with it.")
+      m<-hyp[["margin"]]
+      if (.vcrp_num(m) && .vcrp_chr(endpoint)) {
+        if (endpoint=="binary" && !(m<1)) bad("hypothesis.margin","The margin of a risk difference is below 1.")
+        if (endpoint=="time_to_event" && !(m>1)) bad("hypothesis.margin","The margin of a hazard ratio is above 1: the largest hazard ratio at which the new treatment still counts as not worse.")
+      }
+    }
+  }
   if (!(kind %in% c("single_arm","single_arm_external","simon_two_stage"))) {
     methods<-list(continuous=c("ttest","ancova"),binary=c("risk_difference","logistic"),time_to_event=c("logrank","rmst","maxcombo"))
     allowed<-if(.vcrp_chr(endpoint))methods[[endpoint]] else character(0)
@@ -824,6 +856,56 @@ vcr_pattern_match <- function(pattern, x) {
     if (.vcrp_num(tr$alternativeRate) && .vcrp_num(tr$nullRate) && tr$alternativeRate<=tr$nullRate) bad("truth.alternativeRate","The alternative rate exceeds the null rate.")
   }
   if (.vcrp_lgl(tr[["null"]]) && !identical(tr[["null"]],.vcrp_is_null_scenario(sc))) bad("truth.null","The null label must agree with the generating estimand.")
+  invisible(NULL)
+}
+
+# The coupled fields of a confirmatory design (design.confirmatory): the endpoint the design is computed for, the looks of an adaptive design,
+# the effects on the scale of the endpoint, and an effect the size is planned for that is not the null. Mirrors checkConfirmatorySemantics.
+.vcrp_check_confirmatory <- function(sc, path, ctx) {
+  design <- .vcrp_get(sc, "design"); kind <- .vcrp_get(design, "kind")
+  if (!.vcrp_named(design) || !.vcrp_chr(kind) || !(kind %in% unlist(vcr_domain()$confirmatoryDesigns))) return(invisible(NULL))
+  bad <- function(field, detail, code = "scenario_value_invalid") ctx$raise(code, .vcrp_at(path, field), detail)
+  type <- .vcrp_get(.vcrp_get(sc, "endpoint"), "type")
+  support <- unlist(vcr_domain()$confirmatorySupport[[kind]])
+  if (!identical(kind, "count_endpoint") && .vcrp_chr(type) && type %in% unlist(vcr_domain()$endpointTypes) && !(type %in% support)) {
+    bad("endpoint.type", sprintf("A %s design is computed for a %s endpoint; a %s endpoint is refused rather than run as something else.", kind, paste(support, collapse = " or "), type), "design_not_supported")
+  }
+  rates <- .vcrp_get(design, "informationRates")
+  if (kind %in% c("sample_size_reestimation", "multi_arm_selection", "enrichment") && is.list(rates) && length(rates) != 2L) {
+    bad("design.informationRates", "An adaptive design looks once: two information rates, the interim fraction and 1.")
+  }
+  truth <- .vcrp_get(sc, "truth"); if (!.vcrp_named(truth)) truth <- list()
+  type <- if (.vcrp_chr(type)) type else ""
+  on_scale <- function(field, value) {
+    if (!.vcrp_num(value)) return(invisible(NULL))
+    if (type == "time_to_event" && !(value > 0)) bad(field, "A hazard ratio is positive.")
+    if (type == "binary") {
+      rate <- truth[["controlRate"]]
+      if (.vcrp_num(rate) && !(rate + value > 0 && rate + value < 1)) bad(field, "The control rate plus the risk difference is a rate strictly between 0 and 1.")
+    }
+  }
+  null_value <- if (type == "time_to_event") 1 else 0
+  if (.vcrp_num(truth[["plannedEffect"]])) {
+    on_scale("truth.plannedEffect", truth[["plannedEffect"]])
+    if (truth[["plannedEffect"]] == null_value) bad("truth.plannedEffect", "A size is planned for an effect, not for no effect.", "design_effect_null")
+  }
+  eff <- truth[["effects"]]
+  if (is.list(eff)) for (i in seq_along(eff)) on_scale(sprintf("truth.effects[%d]", i - 1L), eff[[i]])
+  sce <- truth[["effectScenarios"]]
+  if (is.list(sce)) for (i in seq_along(sce)) {
+    row <- sce[[i]]; if (!is.list(row)) next
+    arms <- design[["activeArms"]]
+    if (.vcrp_num(arms) && length(row) != arms) bad(sprintf("truth.effectScenarios[%d]", i - 1L), sprintf("A scenario states one effect per active arm: %d.", as.integer(arms)))
+    for (j in seq_along(row)) on_scale(sprintf("truth.effectScenarios[%d][%d]", i - 1L, j - 1L), row[[j]])
+  }
+  sub <- truth[["subsetEffects"]]
+  if (is.list(sub)) for (i in seq_along(sub)) {
+    on_scale(sprintf("truth.subsetEffects[%d].subset", i - 1L), .vcrp_get(sub[[i]], "subset"))
+    on_scale(sprintf("truth.subsetEffects[%d].rest", i - 1L), .vcrp_get(sub[[i]], "rest"))
+  }
+  if (identical(kind, "count_endpoint") && .vcrp_num(truth[["rateRatio"]]) && truth[["rateRatio"]] == 1) bad("truth.rateRatio", "A size is planned for a rate ratio other than 1.", "design_effect_null")
+  alpha <- .vcrp_get(.vcrp_get(sc, "analysis"), "alpha")
+  if (.vcrp_num(alpha) && alpha >= 0.5) bad("analysis.alpha", "The level is one-sided: below one half.")
   invisible(NULL)
 }
 
@@ -867,6 +949,7 @@ vcr_validate_scenario <- function(method, scenario, input_ids = NULL, path = "sc
   }
   .vcrp_check_object(schema, scenario, path, ctx)
   if (method %in% c("design.simulate","design.grid","design.analytic")) .vcrp_check_design_semantics(scenario,path,ctx)
+  if (identical(method,"design.confirmatory")) .vcrp_check_confirmatory(scenario,path,ctx)
   if (method %in% c("design.analytic","design.assurance")) .vcrp_check_no_nph(scenario,path,ctx)
   if (identical(method, "comparator.maic")) .vcrp_check_maic_semantics(scenario, path, ctx)
   if (identical(method, "accrual.poisson_gamma")) .vcrp_check_accrual_semantics(scenario, path, ctx)
@@ -1067,9 +1150,11 @@ vcr_job_at_least <- function(job, from) {
 }
 
 .vcrp_legacy_design_version <- function(job,spec) {
+  # the hypothesis is 1.4.0's: no older release had it (this function is not asked about a job at the current version)
+  if (job[["method"]] %in% c("design.analytic","design.simulate","design.grid") && !is.null(.vcrp_get(job$scenario,"hypothesis"))) return(FALSE)
   if (job$methodVersion %in% unlist(spec$compatibleVersions)) {
     # a design is never labelled with a version that did not have it: 1.3.0 added the hazard ratio that changes over time and MaxCombo
-    if (job[["method"]] %in% c("design.simulate","design.grid") && .vcrp_uses_nph(job$scenario)) return(FALSE)
+    if (job[["method"]] %in% c("design.simulate","design.grid") && .vcrp_uses_nph(job$scenario) && utils::compareVersion(job$methodVersion,"1.3.0")<0) return(FALSE)
     # and model.prognostic_apply 1.1.0 added the local calibration against the outcome the table holds
     if (identical(job[["method"]],"model.prognostic_apply") && !is.null(.vcrp_get(job$scenario,"calibration"))) return(FALSE)
     return(!startsWith(job[["method"]], "patients.") || (is.null(job$scenario$pairing) && is.null(job$scenario$cohortRules)))

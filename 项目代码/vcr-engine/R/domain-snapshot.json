@@ -232,7 +232,7 @@
       ]
     },
     "design.analytic": {
-      "version": "1.3.0",
+      "version": "1.4.0",
       "endpoints": [
         "continuous",
         "binary",
@@ -246,7 +246,8 @@
       ],
       "modelTier": "scenario",
       "compatibleVersions": [
-        "1.2.0"
+        "1.2.0",
+        "1.3.0"
       ],
       "legacyVersion": "1.0.0",
       "legacyDesigns": [
@@ -277,7 +278,7 @@
       ]
     },
     "design.simulate": {
-      "version": "1.3.0",
+      "version": "1.4.0",
       "endpoints": [
         "continuous",
         "binary",
@@ -291,7 +292,8 @@
       ],
       "modelTier": "scenario",
       "compatibleVersions": [
-        "1.2.0"
+        "1.2.0",
+        "1.3.0"
       ],
       "legacyVersion": "1.0.0",
       "legacyDesigns": [
@@ -323,8 +325,24 @@
         }
       ]
     },
+    "design.confirmatory": {
+      "version": "1.0.0",
+      "endpoints": [
+        "continuous",
+        "binary",
+        "time_to_event"
+      ],
+      "crossChecks": [
+        "gsDesign::gsDesign (test.type 3 and 4): efficacy and futility boundaries and the inflation over the fixed design",
+        "known-truth simulation of the group-sequential statistic and of the conditional-power rule in plain R",
+        "mvtnorm: the probability that an arm is selected at the interim",
+        "closed-form negative-binomial sample size (Zhu & Lakkis 2014)",
+        "the engine's own group-sequential recursion (the efficacy boundaries and the non-adaptive limit)"
+      ],
+      "modelTier": "scenario"
+    },
     "design.grid": {
-      "version": "1.3.0",
+      "version": "1.4.0",
       "endpoints": [
         "continuous",
         "binary",
@@ -333,7 +351,8 @@
       "crossChecks": [],
       "modelTier": "scenario",
       "compatibleVersions": [
-        "1.2.0"
+        "1.2.0",
+        "1.3.0"
       ],
       "legacyVersion": "1.0.0",
       "legacyDesigns": [
@@ -565,7 +584,8 @@
     "tipping_point": "comparator.tipping_point",
     "prognostic_adjustment_comparator": "comparator.prognostic_adjustment",
     "generate_patients_longitudinal": "patients.longitudinal",
-    "population_check": "population.check"
+    "population_check": "population.check",
+    "design_confirmatory": "design.confirmatory"
   },
   "patientLevelJobKinds": [
     "fit_survival_model",
@@ -5618,6 +5638,31 @@
               "time_to_event"
             ]
           }
+        },
+        "hypothesis": {
+          "t": "object",
+          "fields": {
+            "kind": {
+              "t": "string",
+              "values": [
+                "superiority",
+                "non_inferiority"
+              ],
+              "req": true
+            },
+            "margin": {
+              "t": "number",
+              "gt": 0,
+              "unit": "the endpoint's own scale: outcome units, risk difference, or hazard ratio",
+              "when": {
+                "path": "hypothesis.kind",
+                "in": [
+                  "non_inferiority"
+                ]
+              },
+              "req": true
+            }
+          }
         }
       }
     },
@@ -6506,6 +6551,31 @@
             ]
           }
         },
+        "hypothesis": {
+          "t": "object",
+          "fields": {
+            "kind": {
+              "t": "string",
+              "values": [
+                "superiority",
+                "non_inferiority"
+              ],
+              "req": true
+            },
+            "margin": {
+              "t": "number",
+              "gt": 0,
+              "unit": "the endpoint's own scale: outcome units, risk difference, or hazard ratio",
+              "when": {
+                "path": "hypothesis.kind",
+                "in": [
+                  "non_inferiority"
+                ]
+              },
+              "req": true
+            }
+          }
+        },
         "performance": {
           "t": "array",
           "items": {
@@ -6550,6 +6620,534 @@
               "min": 0
             }
           }
+        }
+      }
+    },
+    "design.confirmatory": {
+      "t": "object",
+      "fields": {
+        "design": {
+          "t": "object",
+          "fields": {
+            "kind": {
+              "t": "string",
+              "values": [
+                "futility_group_sequential",
+                "sample_size_reestimation",
+                "multi_arm_selection",
+                "enrichment",
+                "count_endpoint"
+              ],
+              "badValueCode": "design_unknown",
+              "req": true
+            },
+            "informationRates": {
+              "t": "array",
+              "items": {
+                "t": "number",
+                "gt": 0,
+                "max": 1
+              },
+              "min": 2,
+              "max": 8,
+              "increasing": true,
+              "last": 1,
+              "reqWhen": {
+                "path": "design.kind",
+                "notIn": [
+                  "count_endpoint"
+                ]
+              }
+            },
+            "spending": {
+              "t": "string",
+              "values": [
+                "obrien_fleming",
+                "pocock",
+                "hwang_shih_decani",
+                "kim_demets"
+              ],
+              "default": "obrien_fleming"
+            },
+            "spendingGamma": {
+              "t": "number",
+              "min": -10,
+              "max": 10,
+              "when": {
+                "path": "design.spending",
+                "in": [
+                  "hwang_shih_decani",
+                  "kim_demets"
+                ]
+              },
+              "req": true
+            },
+            "allocation": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "default": 0.5,
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "futility_group_sequential",
+                  "sample_size_reestimation",
+                  "count_endpoint"
+                ]
+              }
+            },
+            "futility": {
+              "t": "object",
+              "fields": {
+                "spending": {
+                  "t": "string",
+                  "values": [
+                    "obrien_fleming",
+                    "pocock",
+                    "hwang_shih_decani",
+                    "kim_demets"
+                  ],
+                  "default": "obrien_fleming"
+                },
+                "gamma": {
+                  "t": "number",
+                  "min": -10,
+                  "max": 10,
+                  "when": {
+                    "path": "design.futility.spending",
+                    "in": [
+                      "hwang_shih_decani",
+                      "kim_demets"
+                    ]
+                  },
+                  "req": true
+                },
+                "binding": {
+                  "t": "boolean",
+                  "default": false
+                }
+              },
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "futility_group_sequential"
+                ]
+              }
+            },
+            "conditionalPower": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "default": 0.8,
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "sample_size_reestimation"
+                ]
+              }
+            },
+            "maxSampleSizeFactor": {
+              "t": "number",
+              "gt": 1,
+              "max": 10,
+              "default": 2,
+              "unit": "times the planned size",
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "sample_size_reestimation"
+                ]
+              }
+            },
+            "plannedSize": {
+              "t": "integer",
+              "min": 4,
+              "max": 1000000,
+              "unit": "patients, or events for a time-to-event endpoint",
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "sample_size_reestimation",
+                  "multi_arm_selection",
+                  "enrichment"
+                ]
+              }
+            },
+            "activeArms": {
+              "t": "integer",
+              "min": 2,
+              "max": 4,
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "multi_arm_selection"
+                ]
+              },
+              "req": true
+            },
+            "selection": {
+              "t": "object",
+              "fields": {
+                "rule": {
+                  "t": "string",
+                  "values": [
+                    "best",
+                    "rbest",
+                    "epsilon",
+                    "all"
+                  ],
+                  "default": "best"
+                },
+                "r": {
+                  "t": "integer",
+                  "min": 1,
+                  "max": 3,
+                  "when": {
+                    "path": "design.selection.rule",
+                    "in": [
+                      "rbest"
+                    ]
+                  },
+                  "req": true
+                },
+                "epsilon": {
+                  "t": "number",
+                  "gt": 0,
+                  "max": 5,
+                  "when": {
+                    "path": "design.selection.rule",
+                    "in": [
+                      "epsilon"
+                    ]
+                  },
+                  "req": true
+                }
+              },
+              "when": [
+                {
+                  "path": "design.kind",
+                  "in": [
+                    "multi_arm_selection",
+                    "enrichment"
+                  ]
+                }
+              ]
+            },
+            "intersectionTest": {
+              "t": "string",
+              "values": [
+                "simes",
+                "bonferroni",
+                "dunnett"
+              ],
+              "default": "simes",
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "multi_arm_selection",
+                  "enrichment"
+                ]
+              }
+            },
+            "subsetPrevalence": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "enrichment"
+                ]
+              },
+              "req": true
+            }
+          },
+          "req": true
+        },
+        "endpoint": {
+          "t": "object",
+          "fields": {
+            "type": {
+              "t": "string",
+              "values": [
+                "continuous",
+                "binary",
+                "time_to_event"
+              ],
+              "badValueCode": "endpoint_unknown",
+              "req": true
+            }
+          },
+          "when": {
+            "path": "design.kind",
+            "notIn": [
+              "count_endpoint"
+            ]
+          },
+          "req": true
+        },
+        "truth": {
+          "t": "object",
+          "fields": {
+            "plannedEffect": {
+              "t": "number",
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "futility_group_sequential",
+                  "sample_size_reestimation"
+                ]
+              },
+              "req": true
+            },
+            "effects": {
+              "t": "array",
+              "items": {
+                "t": "number"
+              },
+              "min": 1,
+              "max": 8,
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "sample_size_reestimation"
+                ]
+              }
+            },
+            "effectScenarios": {
+              "t": "array",
+              "items": {
+                "t": "array",
+                "items": {
+                  "t": "number"
+                },
+                "min": 2,
+                "max": 4
+              },
+              "min": 1,
+              "max": 8,
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "multi_arm_selection"
+                ]
+              },
+              "req": true
+            },
+            "subsetEffects": {
+              "t": "array",
+              "items": {
+                "t": "object",
+                "fields": {
+                  "subset": {
+                    "t": "number",
+                    "req": true
+                  },
+                  "rest": {
+                    "t": "number",
+                    "req": true
+                  }
+                }
+              },
+              "min": 1,
+              "max": 8,
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "enrichment"
+                ]
+              },
+              "req": true
+            },
+            "sd": {
+              "t": "number",
+              "gt": 0,
+              "default": 1,
+              "unit": "outcome units",
+              "when": [
+                {
+                  "path": "endpoint.type",
+                  "in": [
+                    "continuous"
+                  ]
+                },
+                {
+                  "path": "design.kind",
+                  "notIn": [
+                    "count_endpoint"
+                  ]
+                }
+              ]
+            },
+            "controlRate": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "when": [
+                {
+                  "path": "endpoint.type",
+                  "in": [
+                    "binary"
+                  ]
+                },
+                {
+                  "path": "design.kind",
+                  "notIn": [
+                    "count_endpoint"
+                  ]
+                }
+              ],
+              "req": true
+            },
+            "controlMedian": {
+              "t": "number",
+              "gt": 0,
+              "unit": "time units",
+              "when": [
+                {
+                  "path": "endpoint.type",
+                  "in": [
+                    "time_to_event"
+                  ]
+                },
+                {
+                  "path": "design.kind",
+                  "notIn": [
+                    "count_endpoint"
+                  ]
+                }
+              ],
+              "req": true
+            },
+            "controlEventRate": {
+              "t": "number",
+              "gt": 0,
+              "unit": "events per patient per unit of exposure time",
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "count_endpoint"
+                ]
+              },
+              "req": true
+            },
+            "rateRatio": {
+              "t": "number",
+              "gt": 0,
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "count_endpoint"
+                ]
+              },
+              "req": true
+            },
+            "overdispersion": {
+              "t": "number",
+              "min": 0,
+              "max": 20,
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "count_endpoint"
+                ]
+              },
+              "req": true
+            },
+            "exposureTime": {
+              "t": "number",
+              "gt": 0,
+              "default": 1,
+              "unit": "unit of exposure time",
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "count_endpoint"
+                ]
+              }
+            }
+          },
+          "req": true
+        },
+        "analysis": {
+          "t": "object",
+          "fields": {
+            "alpha": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "default": 0.025,
+              "unit": "one-sided level"
+            },
+            "power": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "default": 0.9
+            }
+          }
+        },
+        "accrual": {
+          "t": "object",
+          "fields": {
+            "duration": {
+              "t": "number",
+              "min": 0,
+              "unit": "time units",
+              "req": true
+            },
+            "followup": {
+              "t": "number",
+              "min": 0,
+              "unit": "time units",
+              "req": true
+            },
+            "dropoutAnnual": {
+              "t": "number",
+              "min": 0,
+              "lt": 1,
+              "default": 0,
+              "unit": "proportion per year"
+            }
+          },
+          "when": [
+            {
+              "path": "endpoint.type",
+              "in": [
+                "time_to_event"
+              ]
+            },
+            {
+              "path": "design.kind",
+              "notIn": [
+                "count_endpoint"
+              ]
+            }
+          ]
+        },
+        "timeUnit": {
+          "t": "string",
+          "values": [
+            "days",
+            "weeks",
+            "months",
+            "years"
+          ],
+          "default": "months",
+          "when": [
+            {
+              "path": "endpoint.type",
+              "in": [
+                "time_to_event"
+              ]
+            },
+            {
+              "path": "design.kind",
+              "notIn": [
+                "count_endpoint"
+              ]
+            }
+          ]
         }
       }
     },
@@ -7436,6 +8034,31 @@
             "in": [
               "time_to_event"
             ]
+          }
+        },
+        "hypothesis": {
+          "t": "object",
+          "fields": {
+            "kind": {
+              "t": "string",
+              "values": [
+                "superiority",
+                "non_inferiority"
+              ],
+              "req": true
+            },
+            "margin": {
+              "t": "number",
+              "gt": 0,
+              "unit": "the endpoint's own scale: outcome units, risk difference, or hazard ratio",
+              "when": {
+                "path": "hypothesis.kind",
+                "in": [
+                  "non_inferiority"
+                ]
+              },
+              "req": true
+            }
           }
         },
         "performance": {
@@ -8887,6 +9510,27 @@
       ]
     }
   },
+  "confirmatorySupport": {
+    "futility_group_sequential": [
+      "continuous",
+      "binary",
+      "time_to_event"
+    ],
+    "sample_size_reestimation": [
+      "continuous",
+      "binary",
+      "time_to_event"
+    ],
+    "multi_arm_selection": [
+      "continuous",
+      "binary"
+    ],
+    "enrichment": [
+      "continuous",
+      "binary"
+    ],
+    "count_endpoint": []
+  },
   "rules": {
     "rowRule": {
       "ops": [
@@ -8970,7 +9614,8 @@
     "tipping_point",
     "prognostic_adjustment_comparator",
     "generate_patients_longitudinal",
-    "population_check"
+    "population_check",
+    "design_confirmatory"
   ],
   "endpointTypes": [
     "continuous",
@@ -8996,6 +9641,19 @@
   "spendingFunctions": [
     "obrien_fleming",
     "pocock"
+  ],
+  "confirmatoryDesigns": [
+    "futility_group_sequential",
+    "sample_size_reestimation",
+    "multi_arm_selection",
+    "enrichment",
+    "count_endpoint"
+  ],
+  "confirmatorySpending": [
+    "obrien_fleming",
+    "pocock",
+    "hwang_shih_decani",
+    "kim_demets"
   ],
   "notEstimableRules": [
     "entropy_balance_infeasible",

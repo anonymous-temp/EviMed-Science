@@ -1,0 +1,104 @@
+# N68 — multi-arm selection, enrichment and counts (algorithm round T4, T5, T6, 2026-11-03): design.confirmatory,
+# design.kind multi_arm_selection, enrichment and count_endpoint.
+#
+# rpact simulates the selection designs and sizes the count endpoint, so the checks are not rpact:
+#
+#   a  the probability that each arm is the one selected at the interim: the arm with the largest estimate wins, the statistics of the
+#      arms are correlated 1/2 through the shared control, and the probability is a multivariate normal rectangle (mvtnorm, the
+#      engine's own integration library), against the job's simulated "selected" cell of every arm, within three Monte-Carlo errors and
+#      the probability that the trial stopped before the selection
+#   b  the familywise type I error under the global null is at most alpha (the multiplicity is the closing of the intersection tests)
+#      and no arm's own hypothesis is rejected more often than that
+#   c  the biomarker subset is the population kept when its interim estimate exceeds the rest's: Phi((effect_S - effect_R) / sqrt(v_S + v_R)),
+#      v_g = 4 sd^2 / (patients of the group at the interim), against the job's "selected subset" cell
+#   d  the negative-binomial sample size of a rate ratio against the closed form of Zhu & Lakkis (2014), and a group-sequential count
+#      design against gsDesign's inflation over the fixed design
+
+.n68_run <- function(sc, seed, id) vcr_test_run(vcr_test_job("design.confirmatory", sc, seed = seed, job_id = id))
+.n68_row <- function(r, match) {
+  for (e in r$diagnostics$confirmatory$effects) if (match(e)) return(e)
+  NULL
+}
+
+vcr_case("N68a", c("AC-29", "AC-30"), function() {
+  if (!requireNamespace("mvtnorm", quietly = TRUE)) stop("N68 requires the locked mvtnorm library")
+  arms <- 3L; per_arm <- 80L; n1 <- 40L
+  effects <- c(0.05, 0.1, 0.2)
+  r <- .n68_run(list(design = list(kind = "multi_arm_selection", informationRates = c(0.5, 1), activeArms = arms, plannedSize = per_arm),
+                     endpoint = list(type = "continuous"), truth = list(effectScenarios = list(as.list(effects)), sd = 1)), 6801L, "job_n68a")
+  row <- .n68_row(r, function(e) identical(e$role, "assumed"))
+  mu <- effects * sqrt(n1 / 2)                              # the mean of each arm's statistic against the shared control
+  selection <- vapply(seq_len(arms), function(j) {
+    others <- setdiff(seq_len(arms), j)
+    corr <- matrix(0.5, length(others), length(others)); diag(corr) <- 1
+    mvtnorm::pmvnorm(lower = rep(-Inf, length(others)), upper = rep(0, length(others)), mean = mu[others] - mu[j], corr = corr)[1]
+  }, numeric(1))
+  early <- row$cells$early_stop_probability
+  jobs <- vapply(seq_len(arms), function(j) row$cells[[sprintf("selected_arm_%d", j)]]$value, numeric(1))
+  mcse <- vapply(seq_len(arms), function(j) row$cells[[sprintf("selected_arm_%d", j)]]$mcse, numeric(1))
+  # the job counts an arm as selected only when the trial went on to the second stage: at most the closed-form probability, and short of
+  # it by no more than the probability of having stopped at the interim
+  ok <- jobs <= selection + 3 * mcse & jobs >= selection - early$value - 3 * mcse
+  list(pass = all(ok) && abs(sum(selection) - 1) < 1e-6,
+       detail = sprintf("effects %s, %d per arm at the interim: probability each arm is selected, job %s vs mvtnorm %s (stopped at the interim %.3f); iterations %d",
+                        paste(effects, collapse = "/"), n1, paste(sprintf("%.3f", jobs), collapse = "/"), paste(sprintf("%.3f", selection), collapse = "/"), early$value, row$iterations))
+})
+
+vcr_case("N68b", c("AC-29"), function() {
+  alpha <- 0.025
+  out <- character(); ok <- logical()
+  for (test in c("simes", "bonferroni")) {
+    r <- .n68_run(list(design = list(kind = "multi_arm_selection", informationRates = c(0.5, 1), activeArms = 3, plannedSize = 60, intersectionTest = test),
+                       endpoint = list(type = "continuous"), truth = list(effectScenarios = list(list(0.4, 0.4, 0.4)), sd = 1)), 6802L, "job_n68b")
+    null <- .n68_row(r, function(e) identical(e$role, "null"))
+    t1 <- null$cells$type_one_error
+    arm_max <- max(vapply(1:3, function(j) null$cells[[sprintf("reject_arm_%d", j)]]$value, numeric(1)))
+    ok <- c(ok, t1$value <= alpha + 3 * t1$mcse, arm_max <= alpha + 3 * t1$mcse)
+    out <- c(out, sprintf("%s: familywise %.4f (+-%.4f), largest single arm %.4f", test, t1$value, t1$mcse, arm_max))
+  }
+  list(pass = all(ok), detail = sprintf("global null, %s (limit alpha %.3f + 3 errors)", paste(out, collapse = "; "), alpha))
+})
+
+vcr_case("N68c", c("AC-29", "AC-30"), function() {
+  p <- 0.4; total <- 100L; n1 <- total / 2
+  scen <- list(list(subset = 0.6, rest = 0), list(subset = 0.4, rest = 0.4), list(subset = 0.5, rest = 0.2))
+  r <- .n68_run(list(design = list(kind = "enrichment", informationRates = c(0.5, 1), subsetPrevalence = p, plannedSize = total),
+                     endpoint = list(type = "continuous"), truth = list(subsetEffects = scen, sd = 1)), 6803L, "job_n68c")
+  worst <- 0; text <- character()
+  for (s in scen) {
+    row <- .n68_row(r, function(e) identical(e$role, "assumed") && isTRUE(all.equal(unlist(e$effect), c(subset = s$subset, rest = s$rest))))
+    v_s <- 4 / (p * n1); v_r <- 4 / ((1 - p) * n1)
+    closed <- stats::pnorm((s$subset - s$rest) / sqrt(v_s + v_r))
+    cell <- row$cells$selected_subset; early <- row$cells$early_stop_probability$value
+    # a subset that was kept and the trial then went on, so the job's cell is at most the closed form and short of it by the early stops
+    z <- max(0, cell$value - closed, closed - early - cell$value) / cell$mcse
+    worst <- max(worst, z)
+    text <- c(text, sprintf("(%.1f, %.1f): subset kept %.3f vs closed form %.3f (stopped early %.3f)", s$subset, s$rest, cell$value, closed, early))
+  }
+  null <- .n68_row(r, function(e) identical(e$role, "null"))
+  fam <- null$cells$type_one_error
+  list(pass = worst < 3.5 && fam$value <= 0.025 + 3 * fam$mcse, detail = sprintf("%s; worst %.2f errors outside the closed-form band (tol 3.5); familywise type I error %.4f (+-%.4f)", paste(text, collapse = "; "), worst, fam$value, fam$mcse))
+})
+
+vcr_case("N68d", c("AC-29", "AC-30"), function() {
+  if (!requireNamespace("gsDesign", quietly = TRUE)) stop("N68 requires the locked gsDesign library")
+  za <- stats::qnorm(0.975); zb <- stats::qnorm(0.9)
+  closed <- function(lambda1, lambda0, k, t = 1, r = 1) {
+    n0 <- (za + zb)^2 * ((1 / (lambda0 * t) + k) + (1 / (lambda1 * t) + k) / r) / log(lambda1 / lambda0)^2
+    c(control = ceiling(n0), treatment = ceiling(r * n0))
+  }
+  worst <- 0; text <- character()
+  for (case in list(c(0.4, 0.6, 0.5), c(1.2, 1.8, 0.8), c(0.25, 0.5, 1.5))) {
+    lambda1 <- case[1]; lambda0 <- case[2]; k <- case[3]
+    r <- .n68_run(list(design = list(kind = "count_endpoint"), truth = list(controlEventRate = lambda0, rateRatio = lambda1 / lambda0, overdispersion = k, exposureTime = 1)), 6804L, "job_n68d")
+    got <- c(control = vcr_measure_value(r, "required_control"), treatment = vcr_measure_value(r, "required_treatment"))
+    want <- closed(lambda1, lambda0, k)
+    worst <- max(worst, abs(got - want))
+    text <- c(text, sprintf("rates %.2f vs %.2f, dispersion %.1f: %d per arm (closed form %d)", lambda1, lambda0, k, got[["control"]], want[["control"]]))
+  }
+  seq_ <- .n68_run(list(design = list(kind = "count_endpoint", informationRates = c(0.5, 1)), truth = list(controlEventRate = 0.6, rateRatio = 0.4 / 0.6, overdispersion = 0.5, exposureTime = 1)), 6805L, "job_n68d2")
+  inflation <- vcr_measure_value(seq_, "max_patients") / vcr_measure_value(seq_, "required_total")
+  ref <- gsDesign::gsDesign(k = 2, test.type = 1, alpha = 0.025, beta = 0.1, timing = c(0.5, 1), sfu = gsDesign::sfLDOF, n.fix = 1)$n.I[2]
+  list(pass = worst <= 1 && abs(inflation - ref) < 0.01,
+       detail = sprintf("%s; largest difference %d patient; group sequential size / fixed size %.4f vs gsDesign inflation %.4f", paste(text, collapse = "; "), worst, inflation, ref))
+})

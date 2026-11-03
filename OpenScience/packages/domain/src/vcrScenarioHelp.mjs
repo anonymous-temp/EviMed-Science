@@ -314,6 +314,24 @@ export const VCR_SCENARIO_EXAMPLES = Object.freeze({
       analysis: { alpha: 0.025, power: 0.9, sided: 1 }, accrual: { duration: 12, followup: 12, dropoutAnnual: 0.05 } } },
     { label: 'two-arm binary: no accrual', scenario: {
       design: { kind: 'two_arm_fixed' }, endpoint: { type: 'binary' }, truth: { controlRate: 0.3, treatmentRate: 0.45 }, analysis: { alpha: 0.025, power: 0.9 } } },
+    { label: 'non-inferiority: the treatment is expected to be as good as the control (hazard ratio 1) and must not be worse than a hazard ratio of 1.3', scenario: {
+      design: { kind: 'two_arm_fixed' }, endpoint: { type: 'time_to_event' }, truth: { hazardRatio: 1, controlMedian: 12 }, hypothesis: { kind: 'non_inferiority', margin: 1.3 },
+      analysis: { alpha: 0.025, power: 0.9 }, accrual: { duration: 12, followup: 24 } } },
+  ],
+  'design.confirmatory': [
+    { label: 'stop for futility: three looks, efficacy and futility boundaries for a mean difference of 0.4 standard deviations', scenario: {
+      design: { kind: 'futility_group_sequential', informationRates: [0.4, 0.7, 1] }, endpoint: { type: 'continuous' }, truth: { plannedEffect: 0.4, sd: 1 }, analysis: { alpha: 0.025, power: 0.9 } } },
+    { label: 're-estimate the sample size at an interim look when the effect is uncertain: planned for a hazard ratio of 0.7, reported at 0.8 and 0.7 (the null is added)', scenario: {
+      design: { kind: 'sample_size_reestimation', informationRates: [0.5, 1], conditionalPower: 0.8, maxSampleSizeFactor: 1.5 }, endpoint: { type: 'time_to_event' },
+      truth: { plannedEffect: 0.7, effects: [0.8, 0.7], controlMedian: 12 }, accrual: { duration: 12, followup: 12, dropoutAnnual: 0.05 } } },
+    { label: 'three doses against one control, the best dose kept at the interim (80 patients per arm planned)', scenario: {
+      design: { kind: 'multi_arm_selection', informationRates: [0.5, 1], activeArms: 3, plannedSize: 80 }, endpoint: { type: 'continuous' },
+      truth: { effectScenarios: [[0.2, 0.4, 0.6], [0.3, 0.3, 0.3]], sd: 1 } } },
+    { label: 'a biomarker-positive subset of 40%: enrol everyone, keep the subset or everyone at the interim (200 patients planned)', scenario: {
+      design: { kind: 'enrichment', informationRates: [0.5, 1], subsetPrevalence: 0.4, plannedSize: 200 }, endpoint: { type: 'binary' },
+      truth: { subsetEffects: [{ subset: 0.25, rest: 0 }, { subset: 0.15, rest: 0.15 }], controlRate: 0.3 } } },
+    { label: 'a count endpoint (attacks per patient-year): rate ratio 0.67 on a control rate of 0.6, overdispersion 0.5', scenario: {
+      design: { kind: 'count_endpoint' }, truth: { controlEventRate: 0.6, rateRatio: 0.67, overdispersion: 0.5, exposureTime: 1 } } },
   ],
   'design.simulate': [
     { label: 'two-arm time-to-event with uniform accrual', scenario: {
@@ -485,6 +503,12 @@ const ROBUSTNESS_TIME_UNIT_NOTES = Object.freeze(["timeUnit is days, weeks, mont
  */
 const UNANCHORED_NOTES = Object.freeze(["anchored false (the default) has no common comparator, so the comparison is unbiased only if every prognostic factor and every effect modifier is among the matched covariates; the result states that as its premise (无锚定：假定所有预后因子和效应修饰因子都已调整). Name the effect modifiers you could not match on in unadjustedEffectModifiers instead of leaving it empty, and report the number as an unanchored comparison, never as an adjusted treatment effect."])
 
+/**
+ * The hypothesis of a two-arm design (T1): said to the run that writes it, so that a margin is the person's own choice and a design
+ * without one is read as a superiority design.
+ */
+const HYPOTHESIS_NOTE = 'hypothesis is for a two-arm design and is left out for superiority (the default). { kind: "non_inferiority", margin } tests that the treatment is not worse than the control by more than the margin: margin is a positive number in the outcome\'s units for a mean, a risk difference below 1 for a binary endpoint (the treatment rate may be this far below the control\'s), and a hazard ratio above 1 for an event-time endpoint (the largest ratio still counted as not worse). The margin is a clinical choice: ask for it, never invent one. truth then states the effect the treatment is EXPECTED to have (often 0, or a hazard ratio of 1), not the margin; design.simulate measures the type I error by putting the truth on the margin itself. The test is one-sided; analysis.method is the t-test, the risk difference or the log-rank test.'
+
 /** @type {Readonly<Record<string, readonly string[]>>} */
 const METHOD_NOTES = Object.freeze({
   'comparator.entropy_balance': COMPARATOR_TIME_UNIT_NOTES,
@@ -505,7 +529,17 @@ const METHOD_NOTES = Object.freeze({
   'accrual.poisson_gamma': Object.freeze([
     'eventTarget counts events among every patient the forecast follows: the patients still to enrol and the patients already enrolled (the sum of explicitly supplied sites[].enrolled design assumptions; no operational ledger is read), so it is at most the target, or the patients already enrolled if there are more (scenario_value_invalid at eventTarget above that). The events of the enrolled patients are simulated, not read: the engine is given no observed event count, so it draws how long each enrolled patient has been followed from how long the site has been open (sites[].exposureTime) and an event time after enrolment from eventHazard; diagnostics.eventForecast says how many events that drew as already happened. With every patient already enrolled, last_patient_in_months is 0 and target_events_months is still forecast. Write eventHazard with eventTarget.',
   ]),
+  'design.analytic': Object.freeze([
+    HYPOTHESIS_NOTE,
+  ]),
+  'design.confirmatory': Object.freeze([
+    'design.kind picks the question. futility_group_sequential: efficacy and futility boundaries for an interim-look design (the size, the expected size under the null and the alternative, the chance of stopping at each look). sample_size_reestimation: one interim look, the second stage sized so that the conditional power at the interim estimate reaches conditionalPower, between the planned second stage and maxSampleSizeFactor times the plan, reported for each assumed effect beside the fixed and the group-sequential design with the same alpha and power. multi_arm_selection: activeArms against one control, the arm(s) kept at the interim by selection.rule, closed testing with intersectionTest. enrichment: a biomarker-positive subset (subsetPrevalence of the patients) and the full population, one of them kept at the interim. count_endpoint: the sample size of a rate ratio for a count (negative binomial), fixed, or group sequential when informationRates is given.',
+    'Effects are on the endpoint\'s own scale: a difference of means (continuous), a risk difference (binary: truth.controlRate plus the effect is the treatment rate), a hazard ratio (time to event, with truth.controlMedian and an accrual). truth.plannedEffect is the effect the size is planned for; truth.effects (re-estimation) lists the true effects to report. The null is ALWAYS added as a row (an effect of 0, a hazard ratio of 1, every arm at 0) so the type I error is shown; say nothing about it.',
+    'alpha is one-sided (0.025 by default) and power 0.9 unless analysis states them. design.plannedSize: patients in total (events for a time-to-event re-estimation) for re-estimation and enrichment, patients PER ARM (the control too) for multi-arm; re-estimation takes the size of the group-sequential design with the same looks when it is not stated. Every default the engine takes is returned in confirmatory.assumed: report each one to the person as an assumption.',
+    'A stopped run (the CPU budget) is returned as limited with the iterations each effect ran. Multi-arm and enrichment are computed for continuous and binary endpoints; an event-time endpoint there is refused by name. The result is read on the trial page; do not recompute any number of it.',
+  ]),
   'design.simulate': Object.freeze([
+    HYPOTHESIS_NOTE,
     'A hazard ratio that changes over time is simulation-only: truth.treatmentHazardRatios = { breaks, ratios } gives the treatment arm\'s hazard as ratios[j] times the control\'s on the j-th interval of breaks (ratios has one more value than breaks, the last runs on), so a delayed effect is breaks [6], ratios [1, 0.6] and a crossing of the curves [6], [1.4, 0.6]. State it INSTEAD of truth.hazardRatio, not beside it; the analytic design (design_analytic) and the assurance refuse it by name. There is then no single true hazard ratio, so bias, mean squared error and coverage are not computed for the log-rank family, and no closed form is drawn for the power; an RMST analysis keeps its bias, against the RMST difference integrated from the two survival curves.',
     'analysis.method maxcombo (time-to-event, two-arm, fixed design only) is the most favourable of the four Fleming-Harrington weighted log-rank statistics G(0,0), G(0,1), G(1,0), G(1,1), its p-value read from their joint null distribution. It is never a default: the analysis is the log-rank unless you say otherwise, because the log-rank is often as good (it loses to MaxCombo mainly when the curves separate late or cross), and the choice is made before the data. Use it only for a hypothesis the person has stated (an effect that starts late, curves that separate late or cross), and run the log-rank beside it. A group-sequential design looks with the log-rank and refuses maxcombo.',
   ]),

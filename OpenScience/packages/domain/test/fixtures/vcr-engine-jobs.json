@@ -3098,6 +3098,376 @@
           }
         ]
       }
+    },
+    {
+      "name": "analytic: a non-inferiority margin on a mean",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_analytic",
+        "method": "design.analytic",
+        "methodVersion": "1.4.0",
+        "scenario": {
+          "design": {
+            "kind": "two_arm_fixed"
+          },
+          "endpoint": {
+            "type": "continuous"
+          },
+          "truth": {
+            "effect": 0,
+            "sd": 1
+          },
+          "analysis": {
+            "alpha": 0.025,
+            "power": 0.9
+          },
+          "hypothesis": {
+            "kind": "non_inferiority",
+            "margin": 0.3
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "analytic: a non-inferiority margin on a hazard ratio",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_analytic",
+        "method": "design.analytic",
+        "methodVersion": "1.4.0",
+        "scenario": {
+          "design": {
+            "kind": "two_arm_fixed"
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "truth": {
+            "hazardRatio": 1,
+            "controlMedian": 12
+          },
+          "accrual": {
+            "duration": 12,
+            "followup": 24,
+            "dropoutAnnual": 0.05
+          },
+          "analysis": {
+            "alpha": 0.025,
+            "power": 0.9
+          },
+          "hypothesis": {
+            "kind": "non_inferiority",
+            "margin": 1.3
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "simulate: a non-inferiority margin on a risk difference, truth on the margin",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.4.0",
+        "scenario": {
+          "design": {
+            "kind": "two_arm_fixed",
+            "nTreat": 100,
+            "nControl": 100
+          },
+          "endpoint": {
+            "type": "binary"
+          },
+          "truth": {
+            "controlRate": 0.8,
+            "riskDifference": -0.1
+          },
+          "analysis": {
+            "method": "risk_difference",
+            "alpha": 0.025
+          },
+          "hypothesis": {
+            "kind": "non_inferiority",
+            "margin": 0.1
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ],
+        "replicates": 5000
+      }
+    },
+    {
+      "name": "analytic at 1.3.0: a superiority design replays",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_analytic",
+        "method": "design.analytic",
+        "methodVersion": "1.3.0",
+        "scenario": {
+          "design": {
+            "kind": "two_arm_fixed"
+          },
+          "endpoint": {
+            "type": "continuous"
+          },
+          "truth": {
+            "effect": 0,
+            "sd": 1
+          },
+          "analysis": {
+            "alpha": 0.025,
+            "power": 0.9
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "confirmatory: a futility boundary for a mean difference",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_confirmatory",
+        "method": "design.confirmatory",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "design": {
+            "kind": "futility_group_sequential",
+            "informationRates": [
+              0.4,
+              0.7,
+              1
+            ]
+          },
+          "endpoint": {
+            "type": "continuous"
+          },
+          "truth": {
+            "plannedEffect": 0.4,
+            "sd": 1
+          },
+          "analysis": {
+            "alpha": 0.025,
+            "power": 0.9
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "confirmatory: sample-size re-estimation of an event-time endpoint",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_confirmatory",
+        "method": "design.confirmatory",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "design": {
+            "kind": "sample_size_reestimation",
+            "informationRates": [
+              0.5,
+              1
+            ],
+            "conditionalPower": 0.8,
+            "maxSampleSizeFactor": 1.5
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "truth": {
+            "plannedEffect": 0.7,
+            "effects": [
+              0.8,
+              0.7
+            ],
+            "controlMedian": 12
+          },
+          "accrual": {
+            "duration": 12,
+            "followup": 12,
+            "dropoutAnnual": 0.05
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "confirmatory: three arms and a control, the best kept",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_confirmatory",
+        "method": "design.confirmatory",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "design": {
+            "kind": "multi_arm_selection",
+            "informationRates": [
+              0.5,
+              1
+            ],
+            "activeArms": 3,
+            "plannedSize": 80
+          },
+          "endpoint": {
+            "type": "continuous"
+          },
+          "truth": {
+            "effectScenarios": [
+              [
+                0.2,
+                0.4,
+                0.6
+              ],
+              [
+                0.3,
+                0.3,
+                0.3
+              ]
+            ],
+            "sd": 1
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "confirmatory: a biomarker subset",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_confirmatory",
+        "method": "design.confirmatory",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "design": {
+            "kind": "enrichment",
+            "informationRates": [
+              0.5,
+              1
+            ],
+            "subsetPrevalence": 0.4,
+            "plannedSize": 200
+          },
+          "endpoint": {
+            "type": "binary"
+          },
+          "truth": {
+            "subsetEffects": [
+              {
+                "subset": 0.25,
+                "rest": 0
+              },
+              {
+                "subset": 0.15,
+                "rest": 0.15
+              }
+            ],
+            "controlRate": 0.3
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "confirmatory: a count endpoint",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_confirmatory",
+        "method": "design.confirmatory",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "design": {
+            "kind": "count_endpoint"
+          },
+          "truth": {
+            "controlEventRate": 0.6,
+            "rateRatio": 0.67,
+            "overdispersion": 0.5,
+            "exposureTime": 1
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      }
     }
   ],
   "invalid": [
@@ -17303,6 +17673,430 @@
       },
       "expected": [
         "method_version_mismatch@methodVersion"
+      ]
+    },
+    {
+      "name": "analytic at 1.3.0 cannot carry a hypothesis",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_analytic",
+        "method": "design.analytic",
+        "methodVersion": "1.3.0",
+        "scenario": {
+          "design": {
+            "kind": "two_arm_fixed"
+          },
+          "endpoint": {
+            "type": "continuous"
+          },
+          "truth": {
+            "effect": 0,
+            "sd": 1
+          },
+          "analysis": {
+            "alpha": 0.025,
+            "power": 0.9
+          },
+          "hypothesis": {
+            "kind": "non_inferiority",
+            "margin": 0.3
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "method_version_mismatch@methodVersion"
+      ]
+    },
+    {
+      "name": "a margin on a single-arm design",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.4.0",
+        "scenario": {
+          "design": {
+            "kind": "single_arm",
+            "n": 40
+          },
+          "endpoint": {
+            "type": "binary"
+          },
+          "truth": {
+            "nullRate": 0.2,
+            "responseRate": 0.3
+          },
+          "analysis": {
+            "method": "exact_binomial",
+            "alternative": "greater",
+            "alpha": 0.05
+          },
+          "hypothesis": {
+            "kind": "non_inferiority",
+            "margin": 0.1
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ],
+        "replicates": 5000
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.hypothesis.kind"
+      ]
+    },
+    {
+      "name": "a hazard-ratio margin below 1",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_analytic",
+        "method": "design.analytic",
+        "methodVersion": "1.4.0",
+        "scenario": {
+          "design": {
+            "kind": "two_arm_fixed"
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "truth": {
+            "hazardRatio": 1,
+            "controlMedian": 12
+          },
+          "accrual": {
+            "duration": 12,
+            "followup": 24,
+            "dropoutAnnual": 0.05
+          },
+          "analysis": {
+            "alpha": 0.025,
+            "power": 0.9
+          },
+          "hypothesis": {
+            "kind": "non_inferiority",
+            "margin": 0.8
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.hypothesis.margin"
+      ]
+    },
+    {
+      "name": "a non-inferiority margin tested with ANCOVA",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.4.0",
+        "scenario": {
+          "design": {
+            "kind": "two_arm_fixed",
+            "nTreat": 100,
+            "nControl": 100
+          },
+          "endpoint": {
+            "type": "continuous"
+          },
+          "truth": {
+            "effect": 0,
+            "sd": 1
+          },
+          "analysis": {
+            "method": "ancova"
+          },
+          "hypothesis": {
+            "kind": "non_inferiority",
+            "margin": 0.3
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ],
+        "replicates": 5000
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.analysis.method"
+      ]
+    },
+    {
+      "name": "a non-inferiority hypothesis with no margin",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_analytic",
+        "method": "design.analytic",
+        "methodVersion": "1.4.0",
+        "scenario": {
+          "design": {
+            "kind": "two_arm_fixed"
+          },
+          "endpoint": {
+            "type": "continuous"
+          },
+          "truth": {
+            "effect": 0,
+            "sd": 1
+          },
+          "analysis": {
+            "alpha": 0.025,
+            "power": 0.9
+          },
+          "hypothesis": {
+            "kind": "non_inferiority"
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_missing@scenario.hypothesis.margin"
+      ]
+    },
+    {
+      "name": "confirmatory: multi-arm for an event-time endpoint is refused by name",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_confirmatory",
+        "method": "design.confirmatory",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "design": {
+            "kind": "multi_arm_selection",
+            "informationRates": [
+              0.5,
+              1
+            ],
+            "activeArms": 3,
+            "plannedSize": 80
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "truth": {
+            "effectScenarios": [
+              [
+                0.8,
+                0.7,
+                0.6
+              ]
+            ],
+            "controlMedian": 12
+          },
+          "accrual": {
+            "duration": 12,
+            "followup": 12
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "design_not_supported@scenario.endpoint.type"
+      ]
+    },
+    {
+      "name": "confirmatory: an adaptive design looks once",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_confirmatory",
+        "method": "design.confirmatory",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "design": {
+            "kind": "sample_size_reestimation",
+            "informationRates": [
+              0.3,
+              0.6,
+              1
+            ]
+          },
+          "endpoint": {
+            "type": "continuous"
+          },
+          "truth": {
+            "plannedEffect": 0.4
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.design.informationRates"
+      ]
+    },
+    {
+      "name": "confirmatory: a size is not planned for no effect",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_confirmatory",
+        "method": "design.confirmatory",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "design": {
+            "kind": "futility_group_sequential",
+            "informationRates": [
+              0.5,
+              1
+            ]
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "truth": {
+            "plannedEffect": 1,
+            "controlMedian": 12
+          },
+          "accrual": {
+            "duration": 12,
+            "followup": 12
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "design_effect_null@scenario.truth.plannedEffect"
+      ]
+    },
+    {
+      "name": "confirmatory: a scenario states one effect per arm",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_confirmatory",
+        "method": "design.confirmatory",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "design": {
+            "kind": "multi_arm_selection",
+            "informationRates": [
+              0.5,
+              1
+            ],
+            "activeArms": 3,
+            "plannedSize": 80
+          },
+          "endpoint": {
+            "type": "continuous"
+          },
+          "truth": {
+            "effectScenarios": [
+              [
+                0.2,
+                0.4
+              ]
+            ]
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.truth.effectScenarios[0]"
+      ]
+    },
+    {
+      "name": "confirmatory: a count endpoint states its overdispersion",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_confirmatory",
+        "method": "design.confirmatory",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "design": {
+            "kind": "count_endpoint"
+          },
+          "truth": {
+            "controlEventRate": 0.6,
+            "rateRatio": 0.67
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_missing@scenario.truth.overdispersion"
       ]
     }
   ],

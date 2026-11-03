@@ -78,19 +78,21 @@ vcr_sim_continuous <- function(n_treat, n_control, delta, sd = 1, rho = 0,
 #' reference DGM is homoscedastic and the analytic power formula this is
 #' checked against is the pooled one). `alpha` is the total; the interval and
 #' the decision spend `alpha / sided` per tail.
-vcr_analyse_ttest <- function(data, alpha = 0.025, sided = 1) {
+#' `null` (T1) is the difference the null hypothesis states: 0, or minus the margin of a non-inferiority test, which rejects on the upper
+#' tail only (a margin has no lower tail).
+vcr_analyse_ttest <- function(data, alpha = 0.025, sided = 1, null = 0) {
   sided <- vcr_check_sided(sided)
   y1 <- data$y[data$arm == 1L]; y0 <- data$y[data$arm == 0L]
   n1 <- length(y1); n0 <- length(y0)
   est <- mean(y1) - mean(y0)
   sp2 <- ((n1 - 1) * var(y1) + (n0 - 1) * var(y0)) / (n1 + n0 - 2)
   se <- sqrt(sp2 * (1 / n1 + 1 / n0))
-  tstat <- est / se
+  tstat <- (est - null) / se
   df <- n1 + n0 - 2
-  p <- if (sided == 1) pt(tstat, df, lower.tail = FALSE) else 2 * pt(-abs(tstat), df)
+  p <- if (sided == 1 || null != 0) pt(tstat, df, lower.tail = FALSE) else 2 * pt(-abs(tstat), df)
   crit <- qt(1 - alpha / sided, df)
   c(estimate = est, se = se, statistic = tstat, p = p,
-    reject = as.numeric(if (sided == 1) tstat > crit else abs(tstat) > crit),
+    reject = as.numeric(if (sided == 1 || null != 0) tstat > crit else abs(tstat) > crit),
     ci_low = est - crit * se, ci_high = est + crit * se)
 }
 
@@ -159,20 +161,28 @@ vcr_binary_treatment_rate <- function(p_control, p_treat = NULL, risk_difference
 #' Risk difference with a Wald interval on the unpooled variance, and the
 #' pooled-variance score test for the hypothesis (the test the two-proportion
 #' sample-size formula is derived from).
-vcr_analyse_risk_difference <- function(data, alpha = 0.025, sided = 1) {
+#' `null` (T1): minus the margin of a non-inferiority test, whose standard error under the null is Farrington & Manning's, from the rates
+#' restricted to that difference (`vcr_fm_restricted`); one-sided, as `vcr_analyse_ttest`.
+vcr_analyse_risk_difference <- function(data, alpha = 0.025, sided = 1, null = 0) {
   sided <- vcr_check_sided(sided)
   y1 <- data$y[data$arm == 1L]; y0 <- data$y[data$arm == 0L]
   n1 <- length(y1); n0 <- length(y0)
   p1 <- mean(y1); p0 <- mean(y0)
   est <- p1 - p0
   se <- sqrt(p1 * (1 - p1) / n1 + p0 * (1 - p0) / n0)
-  pbar <- (sum(y1) + sum(y0)) / (n1 + n0)
-  se0 <- sqrt(pbar * (1 - pbar) * (1 / n1 + 1 / n0))
-  z <- if (se0 > 0) est / se0 else 0
-  p <- if (sided == 1) pnorm(z, lower.tail = FALSE) else 2 * pnorm(-abs(z))
+  if (null != 0) {
+    tilde <- vcr_fm_restricted(p1, p0, n1, n0, null)
+    se0 <- sqrt(tilde[["treat"]] * (1 - tilde[["treat"]]) / n1 + tilde[["control"]] * (1 - tilde[["control"]]) / n0)
+    z <- if (se0 > 0) (est - null) / se0 else if (est > null) Inf else 0
+  } else {
+    pbar <- (sum(y1) + sum(y0)) / (n1 + n0)
+    se0 <- sqrt(pbar * (1 - pbar) * (1 / n1 + 1 / n0))
+    z <- if (se0 > 0) est / se0 else 0
+  }
+  p <- if (sided == 1 || null != 0) pnorm(z, lower.tail = FALSE) else 2 * pnorm(-abs(z))
   crit <- qnorm(1 - alpha / sided)
   c(estimate = est, se = se, statistic = z, p = p,
-    reject = as.numeric(if (sided == 1) z > crit else abs(z) > crit),
+    reject = as.numeric(if (sided == 1 || null != 0) z > crit else abs(z) > crit),
     ci_low = est - crit * se, ci_high = est + crit * se)
 }
 
@@ -398,24 +408,30 @@ vcr_accrual_times <- function(n, accrual) .vcr_accrual_from_u(runif(n), accrual)
 #' the engine does not depend on `survival`'s tie handling changing under it;
 #' `tests/numeric/N02` cross-checks the operating characteristics against the
 #' analytic Schoenfeld number.
-vcr_analyse_logrank <- function(data, alpha = 0.025, sided = 1) {
+#' `null_hr` (T1): the margin of a non-inferiority test. The statistic is then the score test of that hazard ratio (the observed events of
+#' the treated arm against what the margin predicts from the at-risk counts), one-sided like the margin; `estimate` and `se` are the
+#' one-step estimate of the log hazard ratio as ever.
+vcr_analyse_logrank <- function(data, alpha = 0.025, sided = 1, null_hr = 1) {
   sided <- vcr_check_sided(sided)
   ord <- order(data$time, -data$status)
   time <- data$time[ord]; status <- data$status[ord]; arm <- data$arm[ord]
   n <- length(time)
   at_risk1 <- sum(arm == 1L); at_risk <- n
-  O1 <- 0; E1 <- 0; V <- 0
+  O1 <- 0; E1 <- 0; V <- 0; Ep <- 0; Vp <- 0   # Ep, Vp: the expectation and variance at a hazard ratio of 1, for the estimate beside a margin test
   i <- 1L
   while (i <= n) {
     j <- i
     while (j < n && time[j + 1L] == time[i]) j <- j + 1L
     d <- sum(status[i:j]); d1 <- sum(status[i:j] & arm[i:j] == 1L)
     if (d > 0 && at_risk > 1 && at_risk1 > 0 && at_risk1 < at_risk) {
-      e <- d * at_risk1 / at_risk
-      v <- d * (at_risk1 / at_risk) * (1 - at_risk1 / at_risk) * (at_risk - d) / (at_risk - 1)
+      share <- if (null_hr == 1) at_risk1 / at_risk else null_hr * at_risk1 / (null_hr * at_risk1 + at_risk - at_risk1)
+      e <- if (null_hr == 1) d * at_risk1 / at_risk else d * share   # (the superiority arithmetic is kept to the bit)
+      v <- d * share * (1 - share) * (at_risk - d) / (at_risk - 1)
       O1 <- O1 + d1; E1 <- E1 + e; V <- V + v
+      if (null_hr != 1) { Ep <- Ep + d * at_risk1 / at_risk; Vp <- Vp + d * (at_risk1 / at_risk) * (1 - at_risk1 / at_risk) * (at_risk - d) / (at_risk - 1) }
     } else if (d > 0) {
       O1 <- O1 + d1; E1 <- E1 + d * at_risk1 / max(at_risk, 1)
+      if (null_hr != 1) Ep <- Ep + d * at_risk1 / max(at_risk, 1)
     }
     removed <- j - i + 1L
     at_risk1 <- at_risk1 - sum(arm[i:j] == 1L)
@@ -425,12 +441,13 @@ vcr_analyse_logrank <- function(data, alpha = 0.025, sided = 1) {
   z <- if (V > 0) (O1 - E1) / sqrt(V) else 0
   # log HR by the one-step (Peto) estimate; the sign convention is treatment
   # relative to control, so a protective effect is negative.
-  loghr <- if (V > 0) (O1 - E1) / V else 0
-  se <- if (V > 0) 1 / sqrt(V) else Inf
-  p <- if (sided == 1) pnorm(z, lower.tail = TRUE) else 2 * pnorm(-abs(z))
+  if (null_hr == 1) { Ep <- E1; Vp <- V }
+  loghr <- if (Vp > 0) (O1 - Ep) / Vp else 0
+  se <- if (Vp > 0) 1 / sqrt(Vp) else Inf
+  p <- if (sided == 1 || null_hr != 1) pnorm(z, lower.tail = TRUE) else 2 * pnorm(-abs(z))
   crit <- qnorm(1 - alpha / sided)
   c(estimate = loghr, se = se, statistic = z, p = p,
-    reject = as.numeric(if (sided == 1) z < -crit else abs(z) > crit),
+    reject = as.numeric(if (sided == 1 || null_hr != 1) z < -crit else abs(z) > crit),
     events = sum(status), events_treat = O1,
     ci_low = loghr - crit * se, ci_high = loghr + crit * se)
 }

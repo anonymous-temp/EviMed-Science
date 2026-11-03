@@ -321,6 +321,8 @@ vcr_test_handler_jobs <- function() {
     list("design.simulate", list(design = list(kind = "two_arm_fixed", nTreat = 50, nControl = 50), endpoint = list(type = "continuous"), truth = list(effect = 0.4, sd = 1), analysis = list(method = "ttest", alpha = 0.025, sided = 1), performance = list("power")), NULL, 400L),
     list("design.grid", list(design = list(kind = "two_arm_fixed", nTreat = 30, nControl = 30), endpoint = list(type = "continuous"), analysis = list(method = "ttest", alpha = 0.025, sided = 1), performance = list("power"), truth = list(effect = 0.4, sd = 1),
                              designs = list(list(nTreat = 30, nControl = 30), list(nTreat = 60, nControl = 60)), truths = list(list(effect = 0.4))), NULL, 300L),
+    # the confirmatory designs: the futility boundary is the cheap one (an analytic design); the simulated kinds have their own cases (N65-N68)
+    list("design.confirmatory", list(design = list(kind = "futility_group_sequential", informationRates = c(0.5, 1)), endpoint = list(type = "continuous"), truth = list(plannedEffect = 0.4, sd = 1), analysis = list(alpha = 0.025, power = 0.9)), NULL),
     list("design.assurance", list(design = list(nTreat = 200, nControl = 200), endpoint = list(type = "continuous"), truth = list(sd = 1), designPrior = list(mean = 0.3, sd = 0.15), analysis = list(alpha = 0.025)), NULL),
     list("design.procova", list(design = list(allocation = 0.5), truth = list(effect = 0.3, sd = 1), analysis = list(alpha = 0.025, power = 0.9), prognostic = list(rho = 0.6, lambda = 0.9)), NULL),
     list("accrual.poisson_gamma", list(sites = sites, target = 60L), NULL, 500L),

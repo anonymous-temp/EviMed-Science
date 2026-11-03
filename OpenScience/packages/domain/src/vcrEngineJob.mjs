@@ -58,7 +58,7 @@ import { VCR_MATCH_BATCH_JOBS } from './vcrMatchBatch.mjs'
 
 // The schemas live in their own module (they are the file most likely to be
 // edited); the protocol's callers find them here, beside the validators.
-export { VCR_DESIGN_SUPPORT, VCR_SCENARIO_SCHEMAS, vcrIsNullScenario } from './vcrScenarioSchemas.mjs'
+export { VCR_CONFIRMATORY_SUPPORT, VCR_DESIGN_SUPPORT, VCR_SCENARIO_SCHEMAS, vcrIsNullScenario } from './vcrScenarioSchemas.mjs'
 
 /** @template T @param {readonly T[]} list @returns {readonly T[]} */
 const frozen = (list) => Object.freeze([...list])
@@ -120,9 +120,12 @@ export const VCR_ENGINE_METHODS = Object.freeze({
   'comparator.maic': { version: '1.0.0', endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['NICE DSU TSD 18']), modelTier: 'data' },
   'comparator.evalue': { version: '1.0.0', endpoints: frozen(['binary', 'time_to_event']), crossChecks: frozen(['EValue']), modelTier: 'scenario' },
   'comparator.map_prior': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['binary', 'continuous']), crossChecks: frozen(['RBesT']), modelTier: 'literature' },
-  'design.analytic': { version: '1.3.0', compatibleVersions: frozen(['1.2.0']), legacyVersion: '1.0.0', legacyDesigns: frozen(['two_arm_fixed', 'group_sequential', 'simon_two_stage']), legacyReleases: ANALYTIC_RELEASES, endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['rpact', 'gsDesign', 'stats::binom.test', 'Simon 1989']), modelTier: 'scenario' },
-  'design.simulate': { version: '1.3.0', compatibleVersions: frozen(['1.2.0']), legacyVersion: '1.0.0', legacyDesigns: frozen(['two_arm_fixed', 'group_sequential']), legacyReleases: SIMULATE_RELEASES, endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['design.analytic', 'independent beta-binomial variance', 'exact non-central t power of the one-sample test', 'independent normal approximation of the one-sample log-rank score']), modelTier: 'scenario' },
-  'design.grid': { version: '1.3.0', compatibleVersions: frozen(['1.2.0']), legacyVersion: '1.0.0', legacyDesigns: frozen(['two_arm_fixed', 'group_sequential']), legacyReleases: SIMULATE_RELEASES, endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen([]), modelTier: 'scenario' },
+  'design.analytic': { version: '1.4.0', compatibleVersions: frozen(['1.2.0', '1.3.0']), legacyVersion: '1.0.0', legacyDesigns: frozen(['two_arm_fixed', 'group_sequential', 'simon_two_stage']), legacyReleases: ANALYTIC_RELEASES, endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['rpact', 'gsDesign', 'stats::binom.test', 'Simon 1989']), modelTier: 'scenario' },
+  'design.simulate': { version: '1.4.0', compatibleVersions: frozen(['1.2.0', '1.3.0']), legacyVersion: '1.0.0', legacyDesigns: frozen(['two_arm_fixed', 'group_sequential']), legacyReleases: SIMULATE_RELEASES, endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['design.analytic', 'independent beta-binomial variance', 'exact non-central t power of the one-sample test', 'independent normal approximation of the one-sample log-rank score']), modelTier: 'scenario' },
+  // The confirmatory designs (algorithm round T2-T6, 2026-11-03): rpact does the arithmetic (R/rpact_adapter.R is the one file that calls it), so
+  // the checks are the packages and closed forms that are not rpact: gsDesign, MAMS, a negative-binomial sample size and a simulation in plain R.
+  'design.confirmatory': { version: '1.0.0', endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['gsDesign::gsDesign (test.type 3 and 4): efficacy and futility boundaries and the inflation over the fixed design', 'known-truth simulation of the group-sequential statistic and of the conditional-power rule in plain R', 'mvtnorm: the probability that an arm is selected at the interim', 'closed-form negative-binomial sample size (Zhu & Lakkis 2014)', 'the engine\'s own group-sequential recursion (the efficacy boundaries and the non-adaptive limit)']), modelTier: 'scenario' },
+  'design.grid': { version: '1.4.0', compatibleVersions: frozen(['1.2.0', '1.3.0']), legacyVersion: '1.0.0', legacyDesigns: frozen(['two_arm_fixed', 'group_sequential']), legacyReleases: SIMULATE_RELEASES, endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen([]), modelTier: 'scenario' },
   'design.assurance': { version: '1.1.0', legacyVersion: '1.0.0', legacyDesigns: frozen(['two_arm_fixed']), endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['numerical integration of power over the design prior (the O\'Hagan 2005 definition)', 'independent Monte Carlo of the sequential design under the design prior']), modelTier: 'scenario' },
   'design.procova': { version: '1.0.0', endpoints: frozen(['continuous']), crossChecks: frozen(['closed-form sample size under the EMA 2022 opinion\'s correlation and variance discounts']), modelTier: 'scenario' },
   'accrual.poisson_gamma': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['independent gamma, Poisson and binomial constructions of the Anisimov & Fedorov 2007 model']), modelTier: 'scenario' },
@@ -188,6 +191,8 @@ export const VCR_JOB_METHODS = Object.freeze({
   // --- end robustness methods ---
   generate_patients_longitudinal: 'patients.longitudinal',
   population_check: 'population.check',
+  // the confirmatory designs (2026-11-03)
+  design_confirmatory: 'design.confirmatory',
   // The batch reading of patient records (D4): run by the control plane on its slow local lane, never by the R engine.
   ...VCR_MATCH_BATCH_JOBS,
   // The longitudinal forecast kinds, last, in VCR_JOB_KINDS' order (the scenario help lists kinds in this object's order).
@@ -738,6 +743,23 @@ function usesNonProportionalHazards(scenario) {
   return truths.some((truth) => truth && typeof truth === 'object' && truth.treatmentHazardRatios !== undefined) || scenario?.analysis?.method === 'maxcombo'
 }
 
+/** Does a design scenario state a hypothesis (1.4.0, T1)? Mirrored by `.vcrp_uses_hypothesis` in protocol.R. @param {any} scenario */
+function usesHypothesis(scenario) {
+  return scenario !== null && typeof scenario === 'object' && scenario.hypothesis !== undefined
+}
+
+/** @param {string} version @param {string} from */
+function versionAtLeast(version, from) {
+  const a = String(version).split('.').map(Number)
+  const b = from.split('.').map(Number)
+  for (let i = 0; i < Math.max(a.length, b.length); i += 1) {
+    const x = a[i] ?? 0
+    const y = b[i] ?? 0
+    if (x !== y) return x > y
+  }
+  return true
+}
+
 /**
  * Replay prior supported designs under their recorded version; never label new designs as old. Two kinds of record: the oldest
  * (`legacyVersion`) is by design, and a later release (`legacyReleases`) is by design and endpoint.
@@ -746,9 +768,12 @@ function usesNonProportionalHazards(scenario) {
 function legacyDesignVersionMatches(job) {
   const spec = /** @type {any} */ (VCR_ENGINE_METHODS)[job.method]
   if (!spec) return false
+  // the oldest releases did not have the hypothesis either (a design is never labelled with a version that did not have it)
+  if (['design.analytic', 'design.simulate', 'design.grid'].includes(job.method) && usesHypothesis(job.scenario)) return false
   if ((spec.compatibleVersions ?? []).includes(job.methodVersion)) {
-    // a design is never labelled with a version that did not have it: 1.3.0 added the hazard ratio that changes over time and MaxCombo
-    if ((job.method === 'design.simulate' || job.method === 'design.grid') && usesNonProportionalHazards(job.scenario)) return false
+    // a design is never labelled with a version that did not have it: 1.3.0 added the hazard ratio that changes over time and MaxCombo,
+    // and 1.4.0 the hypothesis (this function is not asked about a job at the current version)
+    if ((job.method === 'design.simulate' || job.method === 'design.grid') && usesNonProportionalHazards(job.scenario) && !versionAtLeast(job.methodVersion, '1.3.0')) return false
     // and model.prognostic_apply 1.1.0 added the local calibration against the outcome the table holds
     if (job.method === 'model.prognostic_apply' && job.scenario?.calibration !== undefined) return false
     return !job.method.startsWith('patients.') || (!job.scenario?.pairing && !job.scenario?.cohortRules)

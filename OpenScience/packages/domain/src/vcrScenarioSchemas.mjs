@@ -57,7 +57,7 @@
 
 import {
   VCR_CRITERION_STATES, VCR_CRITERION_TYPES, VCR_ENDPOINT_TYPES, VCR_MISSING_REASONS, VCR_PERFORMANCE_MEASURES,
-  VCR_POOLING_METHODS, VCR_SPENDING_FUNCTIONS, VCR_TRIAL_DESIGNS,
+  VCR_CONFIRMATORY_DESIGNS, VCR_CONFIRMATORY_SPENDING, VCR_POOLING_METHODS, VCR_SPENDING_FUNCTIONS, VCR_TRIAL_DESIGNS,
 } from './vcrVocabulary.mjs'
 import {
   VCR_ROW_RULE_COLUMN_PATTERN, findExpressionFields, validateNamedRules, validateRowRule,
@@ -311,6 +311,79 @@ const SIMULATED_DESIGN_FIELDS = {
   spending: gated(string({ values: [...VCR_SPENDING_FUNCTIONS], default: 'obrien_fleming' }), is('design.kind', 'group_sequential')),
 }
 
+/**
+ * The hypothesis a two-arm design tests (T1, design.analytic and design.simulate 1.4.0). Without it a design tests superiority, as every
+ * design did; `non_inferiority` states the margin the new treatment may fall short of the control by: a mean difference in the outcome's
+ * units, a risk difference, or (for an event-time endpoint) a hazard ratio above 1. The margin is a clinical choice and is never filled
+ * in: a design that states none is a superiority design, and the result says so.
+ */
+const HYPOTHESIS = object({
+  kind: req(string({ values: ['superiority', 'non_inferiority'] })),
+  margin: req(gated(number({ gt: 0, unit: 'the endpoint\'s own scale: outcome units, risk difference, or hazard ratio' }), is('hypothesis.kind', 'non_inferiority'))),
+})
+
+/**
+ * A confirmatory design (algorithm round T2-T6, `design.confirmatory` 1.0.0): the group-sequential design with a futility boundary, the
+ * sample-size re-estimation, the multi-arm selection, the enrichment and the count endpoint. The effect keys are on the endpoint's own
+ * scale (continuous: the difference of means; binary: the risk difference; time to event: the hazard ratio; a count: the rate ratio),
+ * the control-side keys are the same ones the other design methods read, and everything the person leaves out that the design needs is a
+ * default the result lists as an assumption.
+ */
+const CONF_KIND = (/** @type {string[]} */ ...kinds) => is('design.kind', ...kinds)
+const CONF_ADAPTIVE = CONF_KIND('sample_size_reestimation', 'multi_arm_selection', 'enrichment')
+const CONF_SELECTION = object({
+  rule: string({ values: ['best', 'rbest', 'epsilon', 'all'], default: 'best' }),
+  r: req(gated(integer({ min: 1, max: 3 }), is('design.selection.rule', 'rbest'))),
+  epsilon: req(gated(number({ gt: 0, max: 5 }), is('design.selection.rule', 'epsilon'))),
+})
+
+const CONFIRMATORY_SCHEMA = object({
+  design: req(object({
+    kind: req(string({ values: [...VCR_CONFIRMATORY_DESIGNS], badValueCode: 'design_unknown' })),
+    // the looks, as cumulative information fractions ending at 1; the adaptive designs look once (two entries), a count endpoint may have none
+    informationRates: { ...array(number({ gt: 0, max: 1 }), { min: 2, max: 8, increasing: true, last: 1 }), reqWhen: isNot('design.kind', 'count_endpoint') },
+    spending: string({ values: [...VCR_CONFIRMATORY_SPENDING], default: 'obrien_fleming' }),
+    spendingGamma: req(gated(number({ min: -10, max: 10 }), is('design.spending', 'hwang_shih_decani', 'kim_demets'))),
+    allocation: gated(number({ ...PROBABILITY, default: 0.5 }), CONF_KIND('futility_group_sequential', 'sample_size_reestimation', 'count_endpoint')),
+    futility: gated(object({
+      spending: string({ values: [...VCR_CONFIRMATORY_SPENDING], default: 'obrien_fleming' }),
+      gamma: req(gated(number({ min: -10, max: 10 }), is('design.futility.spending', 'hwang_shih_decani', 'kim_demets'))),
+      binding: boolean({ default: false }),
+    }), CONF_KIND('futility_group_sequential')),
+    conditionalPower: gated(number({ ...PROBABILITY, default: 0.8 }), CONF_KIND('sample_size_reestimation')),
+    maxSampleSizeFactor: gated(number({ gt: 1, max: 10, default: 2, unit: 'times the planned size' }), CONF_KIND('sample_size_reestimation')),
+    plannedSize: gated(integer({ min: 4, max: 1_000_000, unit: 'patients, or events for a time-to-event endpoint' }), CONF_ADAPTIVE),
+    activeArms: req(gated(integer({ min: 2, max: 4 }), CONF_KIND('multi_arm_selection'))),
+    selection: gated(CONF_SELECTION, [CONF_KIND('multi_arm_selection', 'enrichment')]),
+    intersectionTest: gated(string({ values: ['simes', 'bonferroni', 'dunnett'], default: 'simes' }), CONF_KIND('multi_arm_selection', 'enrichment')),
+    subsetPrevalence: req(gated(number({ ...PROBABILITY }), CONF_KIND('enrichment'))),
+  })),
+  endpoint: req(gated(ENDPOINT(), isNot('design.kind', 'count_endpoint'))),
+  truth: req(object({
+    plannedEffect: req(gated(number(), CONF_KIND('futility_group_sequential', 'sample_size_reestimation'))),
+    effects: gated(array(number(), { min: 1, max: 8 }), CONF_KIND('sample_size_reestimation')),
+    effectScenarios: req(gated(array(array(number(), { min: 2, max: 4 }), { min: 1, max: 8 }), CONF_KIND('multi_arm_selection'))),
+    subsetEffects: req(gated(array(object({ subset: req(number()), rest: req(number()) }), { min: 1, max: 8 }), CONF_KIND('enrichment'))),
+    sd: gated(number({ gt: 0, default: 1, unit: 'outcome units' }), [CONTINUOUS, isNot('design.kind', 'count_endpoint')]),
+    controlRate: req(gated(number({ ...PROBABILITY }), [BINARY, isNot('design.kind', 'count_endpoint')])),
+    controlMedian: req(gated(number({ gt: 0, unit: 'time units' }), [TIME_TO_EVENT, isNot('design.kind', 'count_endpoint')])),
+    controlEventRate: req(gated(number({ gt: 0, unit: 'events per patient per unit of exposure time' }), CONF_KIND('count_endpoint'))),
+    rateRatio: req(gated(number({ gt: 0 }), CONF_KIND('count_endpoint'))),
+    overdispersion: req(gated(number({ min: 0, max: 20 }), CONF_KIND('count_endpoint'))),
+    exposureTime: gated(number({ gt: 0, default: 1, unit: 'unit of exposure time' }), CONF_KIND('count_endpoint')),
+  })),
+  analysis: object({
+    alpha: number({ ...PROBABILITY, default: 0.025, unit: 'one-sided level' }),
+    power: number({ ...PROBABILITY, default: 0.9 }),
+  }),
+  accrual: gated(object({
+    duration: req(number({ min: 0, unit: 'time units' })),
+    followup: req(number({ min: 0, unit: 'time units' })),
+    dropoutAnnual: number({ min: 0, lt: 1, default: 0, unit: 'proportion per year' }),
+  }), [TIME_TO_EVENT, isNot('design.kind', 'count_endpoint')]),
+  timeUnit: gated(string({ values: [...VCR_TIME_UNITS], default: VCR_DEFAULT_TIME_UNIT }), [TIME_TO_EVENT, isNot('design.kind', 'count_endpoint')]),
+})
+
 const SIMULATE_FIELDS = {
   design: req(object(SIMULATED_DESIGN_FIELDS)),
   endpoint: req(ENDPOINT()),
@@ -328,6 +401,7 @@ const SIMULATE_FIELDS = {
   external: req(gated(EXTERNAL_MODEL, SINGLE_EXTERNAL)),
   accrual: SIMULATED_ACCRUAL,
   timeUnit: TIME_UNIT(),
+  hypothesis: HYPOTHESIS,
   performance: PERFORMANCE,
   targetMcse: TARGET_MCSE,
   costs: COSTS,
@@ -824,9 +898,12 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
       dropoutAnnual: number({ min: 0, lt: 1, default: 0, unit: 'proportion per year' }),
     }), TIME_TO_EVENT),
     timeUnit: TIME_UNIT(),
+    hypothesis: HYPOTHESIS,
   }),
 
   'design.simulate': object({ ...SIMULATE_FIELDS }),
+
+  'design.confirmatory': CONFIRMATORY_SCHEMA,
 
   'design.grid': object({
     ...SIMULATE_FIELDS,
@@ -1010,6 +1087,18 @@ export const VCR_DESIGN_SUPPORT = deepFreeze({
   }),
 })
 
+/**
+ * The endpoints each confirmatory design is computed for. A count endpoint is its own design and names none; the event-time versions of
+ * the multi-arm and enrichment designs are not implemented and are refused rather than run as something else.
+ */
+export const VCR_CONFIRMATORY_SUPPORT = deepFreeze({
+  futility_group_sequential: Object.freeze(['continuous', 'binary', 'time_to_event']),
+  sample_size_reestimation: Object.freeze(['continuous', 'binary', 'time_to_event']),
+  multi_arm_selection: Object.freeze(['continuous', 'binary']),
+  enrichment: Object.freeze(['continuous', 'binary']),
+  count_endpoint: Object.freeze([]),
+})
+
 // ---------------------------------------------------------------------------
 // The null scenario
 // ---------------------------------------------------------------------------
@@ -1041,10 +1130,27 @@ export function vcrIsNullScenario(scenario) {
     const validRates = truth.controlRates.length === 2 && truth.treatmentRates.length === 2 && [...truth.controlRates, ...truth.treatmentRates].every(Number.isFinite)
     return validRates && Number.isFinite(q) && Math.abs((1 - q) * (truth.treatmentRates[0] - truth.controlRates[0]) + q * (truth.treatmentRates[1] - truth.controlRates[1])) < 1e-12
   }
-  if (typeof truth.null === 'boolean') return truth.null
   const type = scenario?.endpoint?.type
   const tiny = (/** @type {number} */ x) => Math.abs(x) < 1e-12
   const finite = (/** @type {unknown} */ x) => typeof x === 'number' && Number.isFinite(x)
+  // A non-inferiority design is at its null on the margin, not at an effect of zero: the type I error is the rejection probability there.
+  const margin = scenario?.hypothesis?.kind === 'non_inferiority' && finite(scenario.hypothesis.margin) ? /** @type {number} */ (scenario.hypothesis.margin) : null
+  if (margin !== null) {
+    if (type === 'continuous') return finite(truth.effect) && tiny(truth.effect + margin)
+    if (type === 'time_to_event') return finite(truth.hazardRatio) && truth.hazardRatio > 0 && tiny(Math.log(truth.hazardRatio / margin))
+    if (type === 'binary') {
+      const p0 = truth.controlRate
+      if (!finite(p0)) return false
+      if (finite(truth.treatmentRate)) return tiny(truth.treatmentRate - p0 + margin)
+      if (finite(truth.riskDifference)) return tiny(truth.riskDifference + margin)
+      if (finite(truth.oddsRatio) && p0 > 0 && p0 < 1) {
+        const odds = truth.oddsRatio * p0 / (1 - p0)
+        return tiny(odds / (1 + odds) - p0 + margin)
+      }
+    }
+    return false
+  }
+  if (typeof truth.null === 'boolean') return truth.null
   if (type === 'continuous') return finite(truth.effect) && tiny(truth.effect)
   if (type === 'time_to_event') {
     // a hazard ratio that changes over time is null only when every ratio is 1
@@ -1083,10 +1189,12 @@ export function vcrNullTruth(scenario) {
   // The hazard ratio that changes over time is the alternative's law too: the null case states one key for no effect, and two laws for one
   // arm are refused (`Give only one of`).
   const { null: _label, effect: _effect, hazardRatio: _hazardRatio, treatmentHazardRatios: _treatmentHazardRatios, treatmentRate: _treatmentRate, riskDifference: _riskDifference, oddsRatio: _oddsRatio, ...rest } = truth
+  // For a non-inferiority design "no effect" is the margin itself: the case where the new treatment is exactly as much worse as is allowed.
+  const margin = scenario?.hypothesis?.kind === 'non_inferiority' && typeof scenario.hypothesis.margin === 'number' && scenario.hypothesis.margin > 0 ? scenario.hypothesis.margin : null
   switch (scenario?.endpoint?.type) {
-    case 'continuous': return { ...rest, effect: 0 }
-    case 'time_to_event': return { ...rest, hazardRatio: 1 }
-    case 'binary': return { ...rest, riskDifference: 0 }
+    case 'continuous': return { ...rest, effect: margin === null ? 0 : -margin }
+    case 'time_to_event': return { ...rest, hazardRatio: margin === null ? 1 : margin }
+    case 'binary': return { ...rest, riskDifference: margin === null ? 0 : -margin }
     default: return null
   }
 }
@@ -1461,11 +1569,94 @@ export const VCR_SINGLE_ARM_ANALYSIS_METHODS = deepFreeze({
   simon_two_stage: { binary: ['simon_boundary'] },
 })
 
+/**
+ * The coupled fields of a confirmatory design (mirrored by protocol.R): the endpoint the design is computed for, the looks of an adaptive
+ * design (one interim, two entries), the effects on the scale of the endpoint (a hazard ratio is positive, a risk difference leaves the
+ * rate inside 0 and 1), and an effect the size is planned for that is not the null (a size cannot be planned against nothing).
+ * @param {any} scenario @param {string} path @param {WalkContext} ctx
+ */
+function checkConfirmatorySemantics(scenario, path, ctx) {
+  const bad = (/** @type {string} */ field, /** @type {string} */ detail, /** @type {string} */ code = 'scenario_value_invalid') => raise(ctx, code, at(path, field), detail)
+  const design = scenario?.design
+  const kind = design?.kind
+  if (!isObject(design) || !VCR_CONFIRMATORY_DESIGNS.includes(kind)) return
+  const type = scenario?.endpoint?.type
+  const support = /** @type {Record<string, readonly string[]>} */ (VCR_CONFIRMATORY_SUPPORT)[kind]
+  if (kind !== 'count_endpoint' && VCR_ENDPOINT_TYPES.includes(type) && !support.includes(type)) {
+    bad('endpoint.type', `A ${kind} design is computed for a ${support.join(' or ')} endpoint; a ${type} endpoint is refused rather than run as something else.`, 'design_not_supported')
+  }
+  if (['sample_size_reestimation', 'multi_arm_selection', 'enrichment'].includes(kind) && Array.isArray(design.informationRates) && design.informationRates.length !== 2) {
+    bad('design.informationRates', 'An adaptive design looks once: two information rates, the interim fraction and 1.')
+  }
+  const truth = isObject(scenario?.truth) ? scenario.truth : {}
+  /** @param {string} field @param {unknown} value */
+  const onScale = (field, value) => {
+    if (typeof value !== 'number' || !Number.isFinite(value)) return
+    if (type === 'time_to_event' && !(value > 0)) bad(field, 'A hazard ratio is positive.')
+    if (type === 'binary') {
+      const rate = truth.controlRate + value
+      if (Number.isFinite(rate) && !(rate > 0 && rate < 1)) bad(field, 'The control rate plus the risk difference is a rate strictly between 0 and 1.')
+    }
+  }
+  const nullValue = type === 'time_to_event' ? 1 : 0
+  if (typeof truth.plannedEffect === 'number') {
+    onScale('truth.plannedEffect', truth.plannedEffect)
+    if (truth.plannedEffect === nullValue) bad('truth.plannedEffect', 'A size is planned for an effect, not for no effect.', 'design_effect_null')
+  }
+  if (Array.isArray(truth.effects)) truth.effects.forEach((/** @type {unknown} */ value, /** @type {number} */ i) => onScale(`truth.effects[${i}]`, value))
+  if (Array.isArray(truth.effectScenarios)) {
+    truth.effectScenarios.forEach((/** @type {unknown} */ row, /** @type {number} */ i) => {
+      if (!Array.isArray(row)) return
+      if (Number.isInteger(design.activeArms) && row.length !== design.activeArms) bad(`truth.effectScenarios[${i}]`, `A scenario states one effect per active arm: ${design.activeArms}.`)
+      row.forEach((value, j) => onScale(`truth.effectScenarios[${i}][${j}]`, value))
+    })
+  }
+  if (Array.isArray(truth.subsetEffects)) {
+    truth.subsetEffects.forEach((/** @type {any} */ row, /** @type {number} */ i) => {
+      onScale(`truth.subsetEffects[${i}].subset`, row?.subset)
+      onScale(`truth.subsetEffects[${i}].rest`, row?.rest)
+    })
+  }
+  if (kind === 'count_endpoint' && truth.rateRatio === 1) bad('truth.rateRatio', 'A size is planned for a rate ratio other than 1.', 'design_effect_null')
+  if (Number.isFinite(scenario?.analysis?.alpha) && scenario.analysis.alpha >= 0.5) bad('analysis.alpha', 'The level is one-sided: below one half.')
+}
+
+/**
+ * What a non-inferiority margin may be asked of (T1): a comparison of two arms, run by the test the margin is defined for, with the
+ * margin on the scale of its endpoint. Mirrored by protocol.R.
+ * @param {any} scenario @param {string} path @param {WalkContext} ctx
+ */
+function checkHypothesis(scenario, path, ctx) {
+  const hypothesis = scenario?.hypothesis
+  if (!isObject(hypothesis) || hypothesis.kind !== 'non_inferiority') return
+  const bad = (/** @type {string} */ field, /** @type {string} */ detail) => raise(ctx, 'scenario_value_invalid', at(path, field), detail)
+  const kind = scenario?.design?.kind
+  const type = scenario?.endpoint?.type
+  const method = scenario?.analysis?.method
+  if (['single_arm', 'single_arm_external', 'simon_two_stage'].includes(kind)) {
+    bad('hypothesis.kind', 'A non-inferiority margin compares two arms; a single-arm design states its benchmark instead.')
+    return
+  }
+  const tests = /** @type {Record<string, string>} */ ({ continuous: 'ttest', binary: 'risk_difference', time_to_event: 'logrank' })
+  if (method !== undefined && tests[type] !== undefined && method !== tests[type]) {
+    bad('analysis.method', `A non-inferiority margin is tested with ${tests[type]} for a ${type} endpoint.`)
+  }
+  if (scenario?.truth && Object.hasOwn(scenario.truth, 'treatmentHazardRatios')) {
+    bad('truth.treatmentHazardRatios', 'A margin on the hazard ratio assumes one hazard ratio; a ratio that changes over time has none to compare with it.')
+  }
+  const margin = hypothesis.margin
+  if (typeof margin === 'number' && Number.isFinite(margin)) {
+    if (type === 'binary' && !(margin < 1)) bad('hypothesis.margin', 'The margin of a risk difference is below 1.')
+    if (type === 'time_to_event' && !(margin > 1)) bad('hypothesis.margin', 'The margin of a hazard ratio is above 1: the largest hazard ratio at which the new treatment still counts as not worse.')
+  }
+}
+
 /** Coupled design fields, mirrored by protocol.R. @param {any} scenario @param {string} path @param {WalkContext} ctx */
 function checkDesignSemantics(scenario, path, ctx) {
   const kind = scenario?.design?.kind
   const method = scenario.analysis?.method
   const bad = (/** @type {string} */ field, /** @type {string} */ detail) => raise(ctx, 'scenario_value_invalid', at(path, field), detail)
+  checkHypothesis(scenario, path, ctx)
   if (!['single_arm', 'single_arm_external', 'simon_two_stage'].includes(kind)) {
     const methods = /** @type {Record<string, readonly string[]>} */ (VCR_TWO_ARM_ANALYSIS_METHODS)
     if (method && !(methods[/** @type {string} */ (scenario.endpoint?.type)] ?? []).includes(method)) bad('analysis.method', 'The analysis must match the endpoint.')
@@ -1575,6 +1766,7 @@ export function validateScenario(method, scenario, { inputIds = null, path = 'sc
   }
   checkObject(schema, scenario, path, ctx)
   if (method === 'design.simulate' || method === 'design.grid' || method === 'design.analytic') checkDesignSemantics(scenario, path, ctx)
+  if (method === 'design.confirmatory') checkConfirmatorySemantics(scenario, path, ctx)
   if (method === 'design.analytic' || method === 'design.assurance') checkNoNonProportionalHazards(scenario, path, ctx)
   if (method === 'comparator.maic') checkMaicSemantics(scenario, path, ctx)
   if (method === 'accrual.poisson_gamma') checkAccrualSemantics(scenario, path, ctx)

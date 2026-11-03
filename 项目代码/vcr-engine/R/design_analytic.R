@@ -154,6 +154,34 @@ vcr_gs_inflation <- function(design, power = 0.9, nodes = 4001L) {
   (drift / fixed)^2
 }
 
+# --- the hypothesis a design tests (T1) ------------------------------------
+
+#' The non-inferiority hypothesis of a scenario, or NULL for the superiority test every design had before.
+#'
+#' Hidden knowledge: a non-inferiority test moves the null, not the sizing formulas: the null difference of a mean or a risk is minus the
+#' margin and the null hazard ratio is the margin, and every sample size, power and test in this file takes that value as an argument
+#' that defaults to the superiority null, so a scenario that states no hypothesis computes exactly what it computed before. A two-sided
+#' `sided` means the confidence interval's level: the test of a margin is one-sided at `alpha / sided`, in the engine's one convention.
+#' `null` is on the scale of the difference (mean or risk), `nullHr` on the hazard ratio's; the other is the superiority value.
+vcr_hypothesis <- function(sc) {
+  h <- sc[["hypothesis"]]
+  if (!is.list(h) || !identical(h[["kind"]], "non_inferiority")) return(NULL)
+  m <- vcr_scalar(h[["margin"]], NULL)
+  if (is.null(m)) vcr_abort("scenario_field_missing", "scenario.hypothesis.margin", "A non-inferiority hypothesis states its margin.")
+  e <- as.character(sc$endpoint$type %||% "")
+  list(kind = "non_inferiority", margin = m, endpoint = e,
+       null = if (e %in% c("continuous", "binary")) -m else 0,
+       nullHr = if (identical(e, "time_to_event")) m else 1)
+}
+
+#' What the result says of the hypothesis it tested: the margin, the scale it is on and the line of the null (the difference or the hazard
+#' ratio the effect is measured against), so a reader sees the question the sample size answers.
+vcr_hypothesis_note <- function(h) list(
+  kind = h$kind, margin = h$margin,
+  scale = switch(h$endpoint, continuous = "mean_difference", binary = "risk_difference", time_to_event = "hazard_ratio", NA_character_),
+  nullValue = if (identical(h$endpoint, "time_to_event")) h$nullHr else h$null,
+  test = switch(h$endpoint, continuous = "t_test_against_margin", binary = "farrington_manning_score", time_to_event = "logrank_score_at_margin", NA_character_))
+
 # --- a design is sized for an effect ---------------------------------------
 
 #' Refuse a closed-form sample size for a scenario whose effect is exactly null.
@@ -177,8 +205,23 @@ vcr_gs_inflation <- function(design, power = 0.9, nodes = 4001L) {
 #' Returns the scenario's treatment-arm rate for a binary two-arm design (so the
 #' caller resolves it once), otherwise NULL. Aborts with `design_effect_null`
 #' naming the field the scenario states its effect in.
-vcr_analytic_effect_guard <- function(kind, endpoint, truth) {
+vcr_analytic_effect_guard <- function(kind, endpoint, truth, hypothesis = NULL) {
   tiny <- function(x) is.finite(x) && abs(x) < 1e-12
+  if (!is.null(hypothesis)) {
+    # the effect that leaves nothing to resolve is the margin itself
+    on_margin <- switch(hypothesis$endpoint,
+      continuous = { e <- vcr_scalar(truth$effect, NULL); !is.null(e) && tiny(e - hypothesis$null) },
+      time_to_event = { h <- vcr_scalar(truth$hazardRatio, NULL); !is.null(h) && h > 0 && tiny(log(h / hypothesis$nullHr)) },
+      binary = { p0 <- vcr_scalar(truth[["controlRate"]], NULL)
+        p1 <- vcr_binary_treatment_rate(p0, vcr_scalar(truth[["treatmentRate"]], NULL), vcr_scalar(truth$riskDifference, NULL), vcr_scalar(truth$oddsRatio, NULL))
+        tiny(p1 - p0 - hypothesis$null) },
+      FALSE)
+    if (on_margin) vcr_abort("design_effect_null", "scenario.hypothesis.margin", paste(
+      "The effect the design is meant to show equals the non-inferiority margin, so there is no sample size to compute:",
+      "the margin is the largest difference the design is meant to rule out. Give the effect the treatment is expected to have;",
+      "the type I error of a non-inferiority design is design.simulate's measure with the effect set at the margin."))
+    return(if (identical(hypothesis$endpoint, "binary")) invisible(vcr_binary_treatment_rate(vcr_scalar(truth[["controlRate"]], NULL), vcr_scalar(truth[["treatmentRate"]], NULL), vcr_scalar(truth$riskDifference, NULL), vcr_scalar(truth$oddsRatio, NULL))) else invisible(NULL))
+  }
   refuse <- function(field, what) {
     vcr_abort("design_effect_null", field, sprintf(
       "The scenario has no effect (%s), so there is no sample size to compute. The type I error of a design is design.simulate's measure on this same scenario; give design.analytic the effect the design is meant to detect.", what))
@@ -224,16 +267,23 @@ vcr_analytic_finite_or_refuse <- function(measures) {
 
 #' Schoenfeld's required number of events.
 #' `allocation` is the proportion allocated to the treatment arm.
+#' `null_hr` is the hazard ratio of the null hypothesis: 1 for a superiority test, the margin for a non-inferiority test (T1), where
+#' the log-rank score is tested against `log(null_hr)` and the requirement is (z_a + z_b)^2 / (p (1 - p) log(hr / null_hr)^2).
 vcr_events_schoenfeld <- function(hazard_ratio, alpha = 0.025, power = 0.9,
-                                  allocation = 0.5, sided = 1) {
+                                  allocation = 0.5, sided = 1, null_hr = 1) {
   za <- qnorm(1 - if (sided == 1) alpha else alpha / 2)
   zb <- qnorm(power)
-  (za + zb)^2 / (allocation * (1 - allocation) * log(hazard_ratio)^2)
+  (za + zb)^2 / (allocation * (1 - allocation) * log(hazard_ratio / null_hr)^2)
 }
 
 #' Power of the event-driven log-rank test at a number of events: the same formula as `vcr_events_schoenfeld`, solved for power.
 #' A two-sided test spends `alpha / 2` per tail and both tails count.
-vcr_power_schoenfeld <- function(events, hazard_ratio, alpha = 0.025, allocation = 0.5, sided = 1) {
+vcr_power_schoenfeld <- function(events, hazard_ratio, alpha = 0.025, allocation = 0.5, sided = 1, null_hr = 1) {
+  # a non-inferiority test is one-sided and signed: the same distance on the wrong side of the margin has a power below alpha
+  if (null_hr != 1) {
+    ncp <- sqrt(events * allocation * (1 - allocation)) * (log(null_hr) - log(hazard_ratio))
+    return(pnorm(ncp - qnorm(1 - if (sided == 1) alpha else alpha / 2)))
+  }
   ncp <- sqrt(events * allocation * (1 - allocation)) * abs(log(hazard_ratio))
   z <- qnorm(1 - if (sided == 1) alpha else alpha / 2)
   pnorm(ncp - z) + if (sided == 2) pnorm(-ncp - z) else 0
@@ -299,10 +349,11 @@ vcr_event_probability_dist <- function(dist, hazard_ratio, accrual_duration, fol
 #' (the exact t power at this N is slightly below the target), and that gap is
 #' shown by the `analyticCheck` against `vcr_power_means`, not hidden here.
 vcr_n_means <- function(delta, sd = 1, alpha = 0.025, power = 0.9,
-                        allocation = 0.5, sided = 1) {
+                        allocation = 0.5, sided = 1, null = 0) {
   za <- qnorm(1 - if (sided == 1) alpha else alpha / 2)
   zb <- qnorm(power)
-  n_total <- (za + zb)^2 * sd^2 / (allocation * (1 - allocation) * delta^2)
+  # `null` is the difference the null hypothesis states: 0, or minus the margin of a non-inferiority test (T1)
+  n_total <- (za + zb)^2 * sd^2 / (allocation * (1 - allocation) * (delta - null)^2)
   list(total = n_total, treat = n_total * allocation, control = n_total * (1 - allocation))
 }
 
@@ -313,22 +364,62 @@ vcr_integer_allocation <- function(n) {
   list(treatment = treatment, control = control, total = treatment + control)
 }
 
-vcr_power_means <- function(delta, sd, n_treat, n_control, alpha = 0.025, sided = 1) {
+vcr_power_means <- function(delta, sd, n_treat, n_control, alpha = 0.025, sided = 1, null = 0) {
   se <- sd * sqrt(1 / n_treat + 1 / n_control)
   df <- n_treat + n_control - 2
   crit <- qt(1 - if (sided == 1) alpha else alpha / 2, df)
-  ncp <- delta / se
+  ncp <- (delta - null) / se
   pt(crit, df, ncp = ncp, lower.tail = FALSE) +
-    (if (sided == 2) pt(-crit, df, ncp = ncp) else 0)
+    (if (sided == 2 && null == 0) pt(-crit, df, ncp = ncp) else 0)
+}
+
+#' The maximum-likelihood rates of two proportions under the restriction p_treat - p_control = delta (Miettinen & Nurminen 1985, the cubic
+#' of Farrington & Manning 1990). The non-inferiority test of a risk difference takes its variance from these rates, not from the observed
+#' ones: that is what keeps the test's size at alpha on the margin. At delta = 0 they are the pooled rate. `p_treat` and `p_control` are the
+#' observed (or, at design time, the expected) rates and `n_treat`, `n_control` their sizes. A cubic that gives a rate outside the
+#' admissible interval (a boundary count) is replaced by the maximum of the likelihood on that interval.
+vcr_fm_restricted <- function(p_treat, p_control, n_treat, n_control, delta) {
+  lo <- max(0, -delta); hi <- min(1, 1 - delta)
+  theta <- n_control / n_treat
+  a <- 1 + theta
+  b <- -(1 + theta + p_treat + theta * p_control + delta * (theta + 2))
+  c <- delta^2 + delta * (2 * p_treat + theta + 1) + p_treat + theta * p_control
+  d <- -p_treat * delta * (1 + delta)
+  v <- b^3 / (27 * a^3) - b * c / (6 * a^2) + d / (2 * a)
+  u <- (if (v > 0) 1 else -1) * sqrt(max(b^2 / (9 * a^2) - c / (3 * a), 0))
+  pt_ <- if (u > 0 || u < 0) {
+    w <- (pi + acos(max(-1, min(1, v / u^3)))) / 3
+    2 * u * cos(w) - b / (3 * a)
+  } else NA_real_
+  if (!is.finite(pt_) || pt_ < lo - 1e-9 || pt_ > hi + 1e-9 || abs((pt_ - delta) - min(max(pt_ - delta, 0), 1)) > 1e-9) {
+    # the likelihood in the control rate q, with the treatment rate q + delta, on the admissible interval
+    ll <- function(q) {
+      x1 <- n_treat * p_treat; x2 <- n_control * p_control
+      term <- function(x, n, p) if (x == 0) n * log1p(-p) else if (x == n) n * log(p) else x * log(p) + (n - x) * log1p(-p)
+      term(x1, n_treat, q + delta) + term(x2, n_control, q)
+    }
+    q <- stats::optimize(ll, c(lo + 1e-12, hi - 1e-12), maximum = TRUE, tol = 1e-13)$maximum
+    return(c(treat = q + delta, control = q))
+  }
+  c(treat = min(max(pt_, 0), 1), control = min(max(pt_ - delta, 0), 1))
 }
 
 #' Two-proportion sample size, normal approximation with the pooled variance
 #' under the null (the test `vcr_analyse_risk_difference` actually performs).
+#' With a non-inferiority `null` (minus the margin, T1) the variance under the null is Farrington & Manning's, from the rates restricted to
+#' that difference, and the distance the design has to resolve is `p_treat - p_control - null`.
 vcr_n_proportions <- function(p_control, p_treat, alpha = 0.025, power = 0.9,
-                              allocation = 0.5, sided = 1) {
+                              allocation = 0.5, sided = 1, null = 0) {
   za <- qnorm(1 - if (sided == 1) alpha else alpha / 2)
   zb <- qnorm(power)
   r <- allocation / (1 - allocation)
+  if (null != 0) {
+    tilde <- vcr_fm_restricted(p_treat, p_control, r, 1, null)
+    v0 <- tilde[["treat"]] * (1 - tilde[["treat"]]) / r + tilde[["control"]] * (1 - tilde[["control"]])
+    v1 <- p_treat * (1 - p_treat) / r + p_control * (1 - p_control)
+    n_control <- ((za * sqrt(v0) + zb * sqrt(v1)) / (p_treat - p_control - null))^2
+    return(list(control = n_control, treat = n_control * r, total = n_control * (1 + r)))
+  }
   pbar <- (r * p_treat + p_control) / (r + 1)
   num <- za * sqrt((1 + 1 / r) * pbar * (1 - pbar)) +
          zb * sqrt(p_treat * (1 - p_treat) / r + p_control * (1 - p_control))
@@ -337,12 +428,17 @@ vcr_n_proportions <- function(p_control, p_treat, alpha = 0.025, power = 0.9,
 }
 
 vcr_power_proportions <- function(p_control, p_treat, n_treat, n_control,
-                                  alpha = 0.025, sided = 1) {
+                                  alpha = 0.025, sided = 1, null = 0) {
   za <- qnorm(1 - if (sided == 1) alpha else alpha / 2)
+  d <- p_treat - p_control
+  se1 <- sqrt(p_treat * (1 - p_treat) / n_treat + p_control * (1 - p_control) / n_control)
+  if (null != 0) {
+    tilde <- vcr_fm_restricted(p_treat, p_control, n_treat, n_control, null)
+    se0 <- sqrt(tilde[["treat"]] * (1 - tilde[["treat"]]) / n_treat + tilde[["control"]] * (1 - tilde[["control"]]) / n_control)
+    return(pnorm((d - null - za * se0) / se1))
+  }
   pbar <- (n_treat * p_treat + n_control * p_control) / (n_treat + n_control)
   se0 <- sqrt(pbar * (1 - pbar) * (1 / n_treat + 1 / n_control))
-  se1 <- sqrt(p_treat * (1 - p_treat) / n_treat + p_control * (1 - p_control) / n_control)
-  d <- p_treat - p_control
   # Signed: a one-sided test rejects only when the treated arm is better, so a
   # treatment that is worse has power near zero, not the power of the same
   # benefit (the absolute value belongs to the two-sided test, whose second
@@ -508,7 +604,7 @@ vcr_at_risk_fraction <- function(t, accrual_duration, followup_duration, dropout
 vcr_logrank_power <- function(hazard_ratio, control_dist, n_treat, n_control,
                               accrual_duration = 0, followup_duration = Inf,
                               dropout_rate = 0, alpha = 0.025, max_followup = Inf,
-                              nodes = 4001L, sided = 1) {
+                              nodes = 4001L, sided = 1, null_hr = 1) {
   sided <- vcr_check_sided(sided)
   theta <- hazard_ratio
   Tt <- min(if (is.finite(followup_duration)) accrual_duration + followup_duration else Inf, max_followup)
@@ -527,6 +623,14 @@ vcr_logrank_power <- function(hazard_ratio, control_dist, n_treat, n_control,
   common <- phi * (1 - phi) * tot * h0
   drift <- sum(w * common * (theta - 1))
   variance <- sum(w * common * (phi * theta + 1 - phi))
+  if (null_hr != 1) {
+    # A non-inferiority test (T1) is the score test of a hazard ratio at the margin: the expected treated share of the events at the
+    # margin is phi0 = margin p1 / (margin p1 + p0), the score's mean is what the true ratio leaves over that share, and the variance
+    # is taken at the margin's share with the events the true ratio produces (the reduction to the lines above at a margin of 1).
+    phi0 <- ifelse(tot > 0, null_hr * p1 / (null_hr * p1 + p0), 0)
+    drift <- sum(w * h0 * (p1 * theta - (p1 * theta + p0) * phi0))
+    variance <- sum(w * h0 * (p1 * theta + p0) * phi0 * (1 - phi0))
+  }
   d1 <- sum(w * p1 * theta * h0)
   d0 <- sum(w * p0 * h0)
   events <- d1 + d0
@@ -534,8 +638,10 @@ vcr_logrank_power <- function(hazard_ratio, control_dist, n_treat, n_control,
   # U is negative under benefit (theta < 1): the test rejects on Z < -crit.
   mean_z <- if (variance > 0) drift / sqrt(variance) else 0
   power <- stats::pnorm(-crit - mean_z)
-  if (sided == 2) power <- power + stats::pnorm(-crit + mean_z)
-  schoenfeld <- if (events > 0) {
+  if (sided == 2 && null_hr == 1) power <- power + stats::pnorm(-crit + mean_z)
+  schoenfeld <- if (events > 0 && null_hr != 1) {
+    stats::pnorm((log(null_hr) - log(theta)) * sqrt(d1 * d0 / events) - crit)
+  } else if (events > 0) {
     ncp <- abs(log(theta)) * sqrt(d1 * d0 / events)
     stats::pnorm(ncp - crit) + if (sided == 2) stats::pnorm(-ncp - crit) else 0
   } else 0
@@ -589,8 +695,8 @@ vcr_scale_dist <- function(dist, k) {
 #' Patients an event-time design needs when the events are fixed by the effect (Schoenfeld) and the patients by how many of them have
 #' an event before the analysis: the quantity the analytic stage reports as `required_patients` (and, inflated by the group-sequential
 #' factor, `max_patients`), computed in one place so that a sweep of one input at a time moves the same number.
-vcr_tte_patients <- function(hr, dist, accrual_duration, followup, dropout_hazard, alpha, power, alloc, sided, inflation = 1, integer_allocation = TRUE) {
-  ev <- vcr_events_schoenfeld(hr, alpha, power, alloc, sided) * inflation
+vcr_tte_patients <- function(hr, dist, accrual_duration, followup, dropout_hazard, alpha, power, alloc, sided, inflation = 1, integer_allocation = TRUE, null_hr = 1) {
+  ev <- vcr_events_schoenfeld(hr, alpha, power, alloc, sided, null_hr) * inflation
   if (identical(dist$kind %||% "exponential", "exponential")) {
     p0 <- vcr_event_probability(dist$rate, accrual_duration, followup, dropout_hazard)
     p1 <- vcr_event_probability(dist$rate * hr, accrual_duration, followup, dropout_hazard)
@@ -614,6 +720,9 @@ vcr_tte_patients <- function(hr, dist, accrual_duration, followup, dropout_hazar
 #' row is then absent, not zero.
 vcr_analytic_sweep <- function(sc, e, alpha, power, alloc, sided, inflation = 1, integer_allocation = TRUE, gs = NULL) {
   tr <- sc$truth
+  hyp <- vcr_hypothesis(sc)
+  nl <- if (is.null(hyp)) 0 else hyp$null      # the null difference of a non-inferiority test (T1); 0 for superiority
+  nh <- if (is.null(hyp)) 1 else hyp$nullHr    # and its null hazard ratio
   wiggle <- c(0.8, 1.2)
   rows <- list()
   push <- function(parameter, label, range, values) {
@@ -627,15 +736,15 @@ vcr_analytic_sweep <- function(sc, e, alpha, power, alloc, sided, inflation = 1,
     hr <- vcr_scalar(tr$hazardRatio, NULL); if (is.null(hr)) return(NULL)
     dist <- vcr_control_distribution(tr)
     has_accrual <- !is.null(sc$accrual) && !is.na(vcr_scalar(sc$accrual$followup, NA_real_))
-    base_events <- ceiling(vcr_events_schoenfeld(hr, alpha, power, alloc, sided) * inflation)
+    base_events <- ceiling(vcr_events_schoenfeld(hr, alpha, power, alloc, sided, nh) * inflation)
     if (has_accrual) {
       perYear <- vcr_time_unit(sc)$perYear
       annual <- vcr_scalar(sc$accrual$dropoutAnnual, 0)
       A <- vcr_scalar(sc$accrual$duration, 0); Fu <- vcr_scalar(sc$accrual$followup)
       eta <- vcr_dropout_hazard(annual, perYear)
-      patients <- function(hr_ = hr, dist_ = dist, A_ = A, eta_ = eta) vcr_tte_patients(hr_, dist_, A_, Fu, eta_, alpha, power, alloc, sided, inflation, integer_allocation)
+      patients <- function(hr_ = hr, dist_ = dist, A_ = A, eta_ = eta) vcr_tte_patients(hr_, dist_, A_, Fu, eta_, alpha, power, alloc, sided, inflation, integer_allocation, null_hr = nh)
       base <- patients()
-      push("effect", "效应（log 风险比）", sprintf("HR %.3g–%.3g", min(exp(c(0.8, 1.2) * log(hr))), max(exp(c(0.8, 1.2) * log(hr)))), vapply(wiggle, function(k) patients(hr_ = exp(k * log(hr))), numeric(1)))
+      push("effect", "效应（log 风险比）", sprintf("HR %.3g–%.3g", min(exp(log(nh) + c(0.8, 1.2) * (log(hr) - log(nh)))), max(exp(log(nh) + c(0.8, 1.2) * (log(hr) - log(nh))))), vapply(wiggle, function(k) patients(hr_ = exp(log(nh) + k * (log(hr) - log(nh)))), numeric(1)))
       push("control", "对照组中位时间", sprintf("%.3g–%.3g", vcr_dist_median(dist) * 0.8, vcr_dist_median(dist) * 1.2), vapply(wiggle, function(k) patients(dist_ = vcr_scale_dist(dist, k)), numeric(1)))
       low <- max(0, annual - 0.05); high <- min(0.95, annual + 0.05)
       push("dropout", "每年脱落率", sprintf("%.0f%%–%.0f%%", low * 100, high * 100), vapply(c(low, high), function(d) patients(eta_ = vcr_dropout_hazard(d, perYear)), numeric(1)))
@@ -643,15 +752,15 @@ vcr_analytic_sweep <- function(sc, e, alpha, power, alloc, sided, inflation = 1,
       measure <- "所需总样本量"
     } else {
       base <- base_events
-      push("effect", "效应（log 风险比）", sprintf("HR %.3g–%.3g", min(exp(c(0.8, 1.2) * log(hr))), max(exp(c(0.8, 1.2) * log(hr)))),
-           vapply(wiggle, function(k) ceiling(vcr_events_schoenfeld(exp(k * log(hr)), alpha, power, alloc, sided) * inflation), numeric(1)))
+      push("effect", "效应（log 风险比）", sprintf("HR %.3g–%.3g", min(exp(log(nh) + c(0.8, 1.2) * (log(hr) - log(nh)))), max(exp(log(nh) + c(0.8, 1.2) * (log(hr) - log(nh))))),
+           vapply(wiggle, function(k) ceiling(vcr_events_schoenfeld(exp(log(nh) + k * (log(hr) - log(nh))), alpha, power, alloc, sided, nh) * inflation), numeric(1)))
       measure <- "所需事件数"
     }
     # The published gap, applied to the effect of the design: the retained share of the log hazard ratio is what the trials measured
     # divided by what they planned for. It applies to an effect in favour of the treatment only.
     gap <- vcr_limit("effectDiscount", NULL)
     gap <- if (is.null(gap)) NULL else gap[["time_to_event"]]
-    if (!is.null(gap) && hr > 0 && hr < 1) {
+    if (!is.null(gap) && hr > 0 && hr < 1 && nh == 1) {
       retained <- log(gap$observed) / log(gap$planned)
       hr_discounted <- exp(retained * log(hr))
       # The events the design was sized to (a group-sequential design: its maximum), and the power they give at the reduced effect by the
@@ -666,20 +775,20 @@ vcr_analytic_sweep <- function(sc, e, alpha, power, alloc, sided, inflation = 1,
   } else if (identical(e, "continuous")) {
     eff <- vcr_scalar(tr$effect, NULL); if (is.null(eff)) return(NULL)
     sd <- vcr_scalar(tr$sd, 1)
-    base <- total_of(vcr_n_means(eff, sd, alpha, power, alloc, sided))
-    push("effect", "效应", sprintf("%.3g–%.3g", eff * 0.8, eff * 1.2), vapply(wiggle, function(k) total_of(vcr_n_means(eff * k, sd, alpha, power, alloc, sided)), numeric(1)))
-    push("sd", "标准差", sprintf("%.3g–%.3g", sd * 0.8, sd * 1.2), vapply(wiggle, function(k) total_of(vcr_n_means(eff, sd * k, alpha, power, alloc, sided)), numeric(1)))
+    base <- total_of(vcr_n_means(eff, sd, alpha, power, alloc, sided, nl))
+    push("effect", "效应", sprintf("%.3g–%.3g", nl + (eff - nl) * 0.8, nl + (eff - nl) * 1.2), vapply(wiggle, function(k) total_of(vcr_n_means(nl + (eff - nl) * k, sd, alpha, power, alloc, sided, nl)), numeric(1)))
+    push("sd", "标准差", sprintf("%.3g–%.3g", sd * 0.8, sd * 1.2), vapply(wiggle, function(k) total_of(vcr_n_means(eff, sd * k, alpha, power, alloc, sided, nl)), numeric(1)))
     measure <- "所需总样本量"
   } else {
     p0 <- vcr_scalar(tr[["controlRate"]], NULL)
     p1 <- vcr_binary_treatment_rate(p0, vcr_scalar(tr[["treatmentRate"]], NULL), vcr_scalar(tr$riskDifference, NULL), vcr_scalar(tr$oddsRatio, NULL))
     d <- p1 - p0
-    base <- total_of(vcr_n_proportions(p0, p1, alpha, power, alloc, sided))
-    push("effect", "两组事件率之差", sprintf("%.3g–%.3g", 0.8 * d, 1.2 * d),
-         vapply(wiggle, function(k) total_of(vcr_n_proportions(p0, clip(p0 + k * d), alpha, power, alloc, sided)), numeric(1)))
+    base <- total_of(vcr_n_proportions(p0, p1, alpha, power, alloc, sided, nl))
+    push("effect", "两组事件率之差", sprintf("%.3g–%.3g", nl + 0.8 * (d - nl), nl + 1.2 * (d - nl)),
+         vapply(wiggle, function(k) total_of(vcr_n_proportions(p0, clip(p0 + nl + k * (d - nl)), alpha, power, alloc, sided, nl)), numeric(1)))
     # The control level moves and the difference the treatment makes stays the size it was stated at.
     push("control", "对照组事件率", sprintf("%.3g–%.3g", 0.8 * p0, 1.2 * p0),
-         vapply(wiggle, function(k) { p0k <- clip(p0 * k); total_of(vcr_n_proportions(p0k, clip(p0k + d), alpha, power, alloc, sided)) }, numeric(1)))
+         vapply(wiggle, function(k) { p0k <- clip(p0 * k); total_of(vcr_n_proportions(p0k, clip(p0k + d), alpha, power, alloc, sided, nl)) }, numeric(1)))
     measure <- "所需总样本量"
   }
   ordered <- rows[order(-vapply(rows, function(row) row$moved, numeric(1)))]

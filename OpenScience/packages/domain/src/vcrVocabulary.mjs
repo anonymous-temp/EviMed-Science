@@ -522,7 +522,7 @@ export const VCR_TAB_LABELS_ZH = Object.freeze({
  */
 export const VCR_RESULT_KIND_TABS = Object.freeze({
   population: 'population', patient_set: 'patients', comparator: 'comparator', trial_scenario: 'trial', design_grid: 'trial',
-  accrual_forecast: 'trial', matching: 'matching', match_extract: 'matching', evidence_pool: 'data', snapshot_profile: 'data', population_check: 'population',
+  accrual_forecast: 'trial', design_confirmatory: 'trial', matching: 'matching', match_extract: 'matching', evidence_pool: 'data', snapshot_profile: 'data', population_check: 'population',
 })
 /**
  * The writes that put a patient's matching on the matching tab. A matching is judged at the write -- there is no job to finish -- so
@@ -774,6 +774,15 @@ export const VCR_PERFORMANCE_MEASURE_LABELS_ZH = Object.freeze({
 })
 /** Alpha-spending functions available for a group-sequential design. */
 export const VCR_SPENDING_FUNCTIONS = frozen(['obrien_fleming', 'pocock'])
+/**
+ * The confirmatory designs `design.confirmatory` computes (algorithm round T2-T6, 2026-11-03): a group-sequential design with a futility
+ * boundary, a sample-size re-estimation at an interim look, a multi-arm design that selects at the interim, an enrichment design that
+ * narrows the population at the interim, and a sample size for a count endpoint. They are not in `VCR_TRIAL_DESIGNS`: that list is the
+ * designs `design.analytic` and `design.simulate` take, and a design here is a different question with a different result.
+ */
+export const VCR_CONFIRMATORY_DESIGNS = frozen(['futility_group_sequential', 'sample_size_reestimation', 'multi_arm_selection', 'enrichment', 'count_endpoint'])
+/** The alpha- and beta-spending functions of a confirmatory group-sequential design (the Lan-DeMets O'Brien-Fleming and Pocock types, Hwang-Shih-DeCani and Kim-DeMets with their gamma). */
+export const VCR_CONFIRMATORY_SPENDING = frozen(['obrien_fleming', 'pocock', 'hwang_shih_decani', 'kim_demets'])
 export const VCR_SPENDING_FUNCTION_LABELS_ZH = Object.freeze({ obrien_fleming: "O'Brien-Fleming", pocock: 'Pocock' })
 
 /** Named interval kinds. A report never writes a bare 「区间」 (§8.3). */
@@ -855,6 +864,8 @@ export const VCR_JOB_KINDS = frozen([
   // --- end longitudinal ---
   // --- appended (2026-11-01): a generated population against a second baseline table (remediation plan D2) ---
   'population_check',
+  // --- appended (2026-11-03): the confirmatory designs (algorithm round T2-T6) ---
+  'design_confirmatory',
   // --- appended (2026-11-01): the batch reading of patient records for the criteria's facts (remediation plan D4) ---
   'match_extract',
   'forecast_trajectories', 'evaluate_forecast', 'compare_forecasts', 'benchmark_trial_effect',
@@ -875,7 +886,7 @@ export const VCR_JOB_KIND_STEPS = Object.freeze({
   rmst: 'comparator', weighted_cox_comparator: 'comparator', maic_time_to_event_comparator: 'comparator', aipw_comparator: 'comparator',
   covariate_set_comparator: 'comparator', negative_control_comparator: 'comparator', tipping_point: 'comparator',
   prognostic_adjustment_comparator: 'comparator',
-  design_analytic: 'trial', design_simulation: 'trial', design_grid: 'trial', assurance: 'trial', procova: 'trial', accrual_forecast: 'trial',
+  design_analytic: 'trial', design_simulation: 'trial', design_confirmatory: 'trial', design_grid: 'trial', assurance: 'trial', procova: 'trial', accrual_forecast: 'trial',
   match_criteria: 'matching', match_extract: 'matching',
 })
 export const VCR_JOB_STATES = frozen(['queued', 'running', 'succeeded', 'failed', 'canceled', 'awaiting_budget'])

@@ -108,6 +108,8 @@ JOB_KINDS = ("fit_survival_model", "apply_prognostic_model",
     "generate_patients_longitudinal",
     # a generated population against a second baseline table (2026-11-01)
     "population_check",
+    # the confirmatory designs: futility boundaries, sample-size re-estimation, multi-arm, enrichment, counts (2026-11-03)
+    "design_confirmatory",
     # the batch reading of patient records for the criteria's facts (2026-11-01)
     "match_extract",
     "forecast_trajectories", "evaluate_forecast", "compare_forecasts", "benchmark_trial_effect",

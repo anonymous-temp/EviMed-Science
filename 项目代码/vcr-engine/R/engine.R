@@ -90,6 +90,7 @@ vcr_engine_handlers <- function() list(
   "comparator.map_prior" = vcr_job_map_prior,
   "design.analytic" = vcr_job_design_analytic,
   "design.simulate" = vcr_job_design_simulate,
+  "design.confirmatory" = vcr_job_design_confirmatory,
   "design.grid" = vcr_job_design_grid,
   "design.assurance" = vcr_job_assurance,
   "design.procova" = vcr_job_procova,
@@ -113,6 +114,10 @@ VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "longitudinal")
 # --- the population check (2026-11-01, remediation plan D2): a generated population against a second baseline table ---
 VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "population_check")
 # --- end population check ---
+
+# --- the confirmatory designs (algorithm round T2-T6, 2026-11-03): rpact behind its adapter, the five designs in their own file ---
+VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "rpact_adapter", "design_confirmatory")
+# --- end confirmatory designs ---
 
 # --- single-arm trials of a mean and of a survival time against a benchmark (2026-10-07) ---
 VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "single_arm")
@@ -191,7 +196,7 @@ vcr_default_measure_source <- function(method) {
 #' sources and fails when a literal code is in neither list, because a code that
 #' is misspelt here is a refusal nobody has a message for.
 VCR_ENGINE_OWN_ISSUE_CODES <- c(
-  "constraint_unsatisfiable", "cpu_budget_exhausted", "design_effect_null", "grid_cell_failed", "handler_error",
+  "constraint_unsatisfiable", "cpu_budget_exhausted", "design_effect_null", "design_not_computable", "grid_cell_failed", "handler_error",
   "input_format_unsupported", "input_hash_mismatch", "input_parse_failed", "input_source_not_reconstructed", "input_too_large",
   "job_invalid", "mechanistic_engine_unknown", "mechanistic_field_missing", "missing_covariate",
   "model_card_field_missing", "model_risk_unknown", "performance_measure_unsupported", "replicates_all_failed",
@@ -1696,7 +1701,10 @@ vcr_job_design_analytic <- function(job, ...) {
   alloc <- vcr_scalar(d$allocation, 0.5)
   tr <- sc$truth
   # A closed-form size needs an effect to size for; a null one is refused by name here, never as a non-finite measure below
-  vcr_analytic_effect_guard(kind, e, tr)
+  hyp <- vcr_hypothesis(sc)   # 1.4.0: a non-inferiority margin moves the null every formula below is measured from
+  nl <- if (is.null(hyp)) 0 else hyp$null
+  nh <- if (is.null(hyp)) 1 else hyp$nullHr
+  vcr_analytic_effect_guard(kind, e, tr, hyp)
   if(identical(kind,"single_arm")) {
     if(!identical(e,"binary"))vcr_abort("design_not_supported","scenario.endpoint.type","Exact single-arm analysis requires a binary endpoint.")
     ex<-vcr_exact_binomial(vcr_scalar(d$n),vcr_scalar(tr$nullRate),vcr_scalar(tr$responseRate),alpha,sc$analysis$alternative)
@@ -1705,11 +1713,14 @@ vcr_job_design_analytic <- function(job, ...) {
       vcr_measure("sample_size",ex$n,source="calculated"))),diagnostics=list(exactBinomial=ex)))
   }
   measures <- list(); diag <- list()
+  if (!is.null(hyp)) diag$hypothesis <- vcr_hypothesis_note(hyp)
   # 1.0/1.1 replay the historical totals and aliases unchanged. Version 1.2 sizes each integer arm first.
-  integer_allocation <- job$methodVersion %in% c("1.2.0", "1.3.0")
+  # (a job with no label, a handler called directly, replays the oldest release: only a labelled job is counted as having a later one)
+  labelled_at_least <- function(from) { mv <- job[["methodVersion"]]; is.character(mv) && length(mv) == 1L && nzchar(mv) && utils::compareVersion(mv, from) >= 0L }
+  integer_allocation <- labelled_at_least("1.2.0")
   # 1.3.0 adds what the sample size rests on: the fixed-sample baseline of a sequential design, the sweep of one input at a time and
   # the effect discounted by the published gap (C5, C6). A job labelled 1.2.0 replays without them.
-  extras <- identical(job$methodVersion, "1.3.0")
+  extras <- labelled_at_least("1.3.0")
   allocated <- NULL
   add <- function(name, value, ...) measures[[length(measures) + 1L]] <<- vcr_measure(name, value, source = "calculated", ...)
   gs <- NULL; inflation <- 1
@@ -1730,7 +1741,7 @@ vcr_job_design_analytic <- function(job, ...) {
   }
   if (identical(e, "time_to_event")) {
     hr <- .vcr_need(tr$hazardRatio, "scenario.truth.hazardRatio", "A time-to-event design states the hazard ratio.")
-    ev <- vcr_events_schoenfeld(hr, alpha, power, alloc, sided)
+    ev <- vcr_events_schoenfeld(hr, alpha, power, alloc, sided, nh)
     add("required_events", ceiling(ev)); add("required_events_exact", ev)
     if (!is.null(gs)) {
       add("max_events", ceiling(ev * inflation))
@@ -1766,13 +1777,13 @@ vcr_job_design_analytic <- function(job, ...) {
         allocated <- vcr_integer_allocation(raw)
         add("required_patients", allocated$total); add("required_treatment", allocated$treatment); add("required_control", allocated$control)
         expected_events <- allocated$treatment * p1 + allocated$control * p0
-        delta <- abs(log(hr)) * sqrt(expected_events * allocated$treatment / allocated$total * allocated$control / allocated$total)
+        delta <- (if (nh == 1) abs(log(hr)) else log(nh) - log(hr)) * sqrt(expected_events * allocated$treatment / allocated$total * allocated$control / allocated$total)
         diag$sampleSize <- list(basis = "schoenfeld_event_probability", formula = "schoenfeld_lachin_foulkes",
           rounding = "ceiling_each_arm_then_sum", unrounded = raw, targetPower = power,
           nTreatment = allocated$treatment, nControl = allocated$control, total = allocated$total,
           allocationRequested = alloc, allocationAchieved = allocated$treatment / allocated$total,
-          powerCheckBasis = "logrank_martingale_integral", powerAtAllocatedN = vcr_logrank_power(hr, dist, allocated$treatment, allocated$control, A, Fu, eta, alpha, vcr_scalar(sc$accrual$maxFollowup, Inf), sided = sided)$power,
-          schoenfeldPowerAtAllocatedN = pnorm(delta - qnorm(1 - alpha / sided)) + if (sided == 2) pnorm(-delta - qnorm(1 - alpha / sided)) else 0,
+          powerCheckBasis = "logrank_martingale_integral", powerAtAllocatedN = vcr_logrank_power(hr, dist, allocated$treatment, allocated$control, A, Fu, eta, alpha, vcr_scalar(sc$accrual$maxFollowup, Inf), sided = sided, null_hr = nh)$power,
+          schoenfeldPowerAtAllocatedN = pnorm(delta - qnorm(1 - alpha / sided)) + if (sided == 2 && nh == 1) pnorm(-delta - qnorm(1 - alpha / sided)) else 0,
           expectedEventsAtAllocatedN = expected_events)
         if (!is.null(gs)) {
           max_allocated <- vcr_integer_allocation(list(treat = raw$treat * inflation, control = raw$control * inflation, total = raw$total * inflation))
@@ -1785,7 +1796,7 @@ vcr_job_design_analytic <- function(job, ...) {
     }
   } else if (identical(e, "continuous")) {
     eff <- .vcr_need(tr$effect, "scenario.truth.effect", "A continuous design states the effect to detect.")
-    n <- vcr_n_means(eff, vcr_scalar(tr$sd, 1), alpha, power, alloc, sided)
+    n <- vcr_n_means(eff, vcr_scalar(tr$sd, 1), alpha, power, alloc, sided, nl)
     if (integer_allocation) {
       allocated <- vcr_integer_allocation(n)
       add("required_total", allocated$total); add("required_treatment", allocated$treatment); add("required_control", allocated$control)
@@ -1794,12 +1805,12 @@ vcr_job_design_analytic <- function(job, ...) {
         rounding = "ceiling_each_arm_then_sum", unrounded = n, targetPower = power,
         nTreatment = allocated$treatment, nControl = allocated$control, total = allocated$total,
         allocationRequested = alloc, allocationAchieved = allocated$treatment / allocated$total,
-        powerCheckBasis = "pooled_two_sample_t", powerAtAllocatedN = vcr_power_means(eff, vcr_scalar(tr$sd, 1), allocated$treatment, allocated$control, alpha, sided))
+        powerCheckBasis = "pooled_two_sample_t", powerAtAllocatedN = vcr_power_means(eff, vcr_scalar(tr$sd, 1), allocated$treatment, allocated$control, alpha, sided, nl))
     } else { add("required_total", ceiling(n$total)); add("required_per_arm", ceiling(n$total * alloc)) }
   } else if (identical(e, "binary") && identical(kind, "two_arm_fixed")) {
     p0 <- vcr_scalar(tr[["controlRate"]], NULL)
     p1 <- vcr_binary_treatment_rate(p0, vcr_scalar(tr[["treatmentRate"]], NULL), vcr_scalar(tr$riskDifference, NULL), vcr_scalar(tr$oddsRatio, NULL))
-    n <- vcr_n_proportions(p0, p1, alpha, power, alloc, sided)
+    n <- vcr_n_proportions(p0, p1, alpha, power, alloc, sided, nl)
     if (integer_allocation) {
       allocated <- vcr_integer_allocation(n)
       add("required_total", allocated$total); add("required_treatment", allocated$treatment); add("required_control", allocated$control)
@@ -1808,7 +1819,7 @@ vcr_job_design_analytic <- function(job, ...) {
         rounding = "ceiling_each_arm_then_sum", unrounded = n, targetPower = power,
         nTreatment = allocated$treatment, nControl = allocated$control, total = allocated$total,
         allocationRequested = alloc, allocationAchieved = allocated$treatment / allocated$total,
-        powerCheckBasis = "two_proportion_normal_approximation", powerAtAllocatedN = vcr_power_proportions(p0, p1, allocated$treatment, allocated$control, alpha, sided))
+        powerCheckBasis = if (is.null(hyp)) "two_proportion_normal_approximation" else "farrington_manning_score_test", powerAtAllocatedN = vcr_power_proportions(p0, p1, allocated$treatment, allocated$control, alpha, sided, nl))
     } else { add("required_total", ceiling(n$total)); add("required_control", ceiling(n$control)) }
   }
   if (identical(kind, "simon_two_stage")) {
@@ -1841,10 +1852,10 @@ vcr_job_design_analytic <- function(job, ...) {
   # the required size moves if the stated effect is off by a fifth
   if (identical(kind, "two_arm_fixed")) {
     n_total <- if (identical(e, "time_to_event")) NULL else if (identical(e, "continuous")) ceiling(vcr_n_means(
-      vcr_scalar(tr$effect, NA_real_), vcr_scalar(tr$sd, 1), alpha, power, alloc, sided)$total) else {
+      vcr_scalar(tr$effect, NA_real_), vcr_scalar(tr$sd, 1), alpha, power, alloc, sided, nl)$total) else {
       p0 <- vcr_scalar(tr[["controlRate"]], NULL)
       p1 <- vcr_binary_treatment_rate(p0, vcr_scalar(tr[["treatmentRate"]], NULL), vcr_scalar(tr$riskDifference, NULL), vcr_scalar(tr$oddsRatio, NULL))
-      ceiling(vcr_n_proportions(p0, p1, alpha, power, alloc, sided)$total)
+      ceiling(vcr_n_proportions(p0, p1, alpha, power, alloc, sided, nl)$total)
     }
     diag$powerCurve <- tryCatch({
       sc2 <- sc
@@ -1916,10 +1927,14 @@ vcr_job_design_simulate <- function(job, output_dir = NULL, cancel_file = NULL, 
   cp <- if (is.null(output_dir)) NULL else file.path(output_dir, "checkpoint.rds")
   if (!is.null(output_dir)) dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
   sc <- job$scenario
+  # 1.4.0 (T13): a MaxCombo analysis also reports the log-rank test on the same replicates, and the strong null beside it
+  maxcombo <- identical(sc$analysis$method, "maxcombo") && identical(sc$design$kind %||% "two_arm_fixed", "two_arm_fixed") && is.character(job[["methodVersion"]]) && vcr_job_at_least(job, "1.4.0")
   res <- vcr_run_simulation(sc, job$seed, job$replicates, vcr_cores(job$cores),
                             checkpoint = cp, cancel_file = cancel_file,
                             batch_size = vcr_scalar(job$batchSize, 500L), progress = progress,
-                            cpu_seconds_limit = vcr_scalar(job$cpuSecondsLimit, Inf))
+                            cpu_seconds_limit = vcr_scalar(job$cpuSecondsLimit, Inf), extras = list(logrank = maxcombo))
+  strong <- if (maxcombo && identical(res$status, "succeeded")) tryCatch(vcr_maxcombo_strong_null(job, sc, cancel_file), error = function(e) NULL) else NULL
+  if (!is.null(strong)) { res$measures <- c(res$measures, strong$measures); res$diagnostics$strongNull <- strong$diagnostics }
   check <- tryCatch(vcr_analytic_check(sc, res$measures), error = function(e) NULL)
   tables <- if (!is.null(output_dir) && !is.null(res$values) && nrow(res$values)) {
     .vcr_tables_of(list(vcr_write_table(as.data.frame(res$values), "replicates", output_dir)))

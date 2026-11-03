@@ -51,6 +51,7 @@ const snapshot = {
   // trees, and an array of arrays would otherwise become a matrix.
   scenarioSchemas: job.VCR_SCENARIO_SCHEMAS,
   designSupport: job.VCR_DESIGN_SUPPORT,
+  confirmatorySupport: job.VCR_CONFIRMATORY_SUPPORT,
   rules: {
     rowRule: {
       ops: [...rules.VCR_ROW_RULE_OPS],
@@ -68,6 +69,8 @@ const snapshot = {
   trialDesigns: [...vocab.VCR_TRIAL_DESIGNS],
   performanceMeasures: [...vocab.VCR_PERFORMANCE_MEASURES],
   spendingFunctions: [...vocab.VCR_SPENDING_FUNCTIONS],
+  confirmatoryDesigns: [...vocab.VCR_CONFIRMATORY_DESIGNS],
+  confirmatorySpending: [...vocab.VCR_CONFIRMATORY_SPENDING],
   notEstimableRules: [...vocab.VCR_NOT_ESTIMABLE_RULES],
   countKeys: [...vocab.VCR_COUNT_KEYS],
   optionalCountKeys: [...vocab.VCR_OPTIONAL_COUNT_KEYS],

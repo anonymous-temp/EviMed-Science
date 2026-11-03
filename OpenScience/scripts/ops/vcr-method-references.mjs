@@ -139,6 +139,22 @@ export const NUMERIC_REFERENCES = {
   // design.simulate: every simulated measure and its Monte-Carlo error (power, type I error, bias, empirical SE, mse, coverage) against rsimsum::simsum on the job's own replicate table
   N63: { methods: ['design.simulate'], anchors: ['vs rsimsum::simsum on the replicate table the job summarised', 'r$worst < 1e-9'] },
 
+  // --- the algorithm round's confirmatory designs (2026-11-03) ---
+  // design.analytic (non-inferiority, T1): sample sizes of a margin against rpact's thetaH0 for means, rates (Farrington-Manning) and events
+  N64a: { methods: ['design.analytic'], anchors: ['rpact::getSampleSizeRates(alpha = 0.025, beta = 0.1, sided = 1, pi1 = 0.8, pi2 = 0.8, thetaH0 = -0.1)$numberOfSubjects', 'all(d < 1e-6)'] },
+  // design.simulate (non-inferiority): the simulated power equals the closed form and the rejection probability on the margin is alpha
+  N64c: { methods: ['design.simulate'], anchors: ['power vs closed form: continuous', 'b_t1 = within(t1(b_t1), alpha)'] },
+  N64e: { methods: ['design.simulate'], anchors: ['g_t1 = within(t1(g_t1), alpha)', 'isTRUE(t_pow$diagnostics$analyticCheck$withinTolerance)'] },
+
+  // design.confirmatory (T2-T6): rpact computes, so every anchor is a reference that is not rpact
+  N66a: { methods: ['design.confirmatory'], anchors: ['ref <- gsDesign::gsDesign(k = 3, test.type = if (binding) 3 else 4', 'd_infl <- abs(r$diagnostics$confirmatory$inflation - ref$n.I[3])'] },
+  N66b: { methods: ['design.confirmatory'], anchors: ['a known-truth simulation: the statistic at look k is N(Delta sqrt(t_k), 1)', 'worst <- max(worst, z_eff, z_size)'] },
+  N67a: { methods: ['design.confirmatory'], anchors: ['ref <- vcr_group_sequential_power(gs, drift)', 'power = abs(pw$value - ref$power) <= 3 * pw$mcse + 0.003'] },
+  N67b: { methods: ['design.confirmatory'], anchors: ['need <- ifelse(est > 0, (2 * ((c2 - w1 * z1) / w2 + stats::qnorm(0.8)) / pmax(est, 1e-12))^2, Inf)', 'worst <- max(worst, z)'] },
+  N68a: { methods: ['design.confirmatory'], anchors: ['mvtnorm::pmvnorm(lower = rep(-Inf, length(others)), upper = rep(0, length(others))', 'ok <- jobs <= selection + 3 * mcse & jobs >= selection - early$value - 3 * mcse'] },
+  N68c: { methods: ['design.confirmatory'], anchors: ['closed <- stats::pnorm((s$subset - s$rest) / sqrt(v_s + v_r))', 'worst <- max(worst, z)'] },
+  N68d: { methods: ['design.confirmatory'], anchors: ['n0 <- (za + zb)^2 * ((1 / (lambda0 * t) + k) + (1 / (lambda1 * t) + k) / r) / log(lambda1 / lambda0)^2', 'abs(inflation - ref) < 0.01'] },
+
   // --- the comparator-effect stream's cases (listed so that merging it needs no edit here; inert until the cases exist) ---
   N33a: { methods: ['comparator.weighted_cox'], anchors: ['Cross-software: the weights are WeightIt', 'rel(m(j_ebal, "hazard_ratio"), r_ebal$hr) < 1e-6'] },
   N34a: { methods: ['comparator.maic_time_to_event'], anchors: ['The unanchored vignette: 500 patients of arm A matched', 'abs(m("hazard_ratio_robust")$value - 0.2834780) < 1e-6'] },

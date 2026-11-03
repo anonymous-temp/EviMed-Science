@@ -1735,7 +1735,7 @@ export const VCR_PROTOCOL_ISSUE_CODES = Object.freeze([
  * result's reason.
  */
 export const VCR_ENGINE_ISSUE_CODES = Object.freeze([
-  'constraint_unsatisfiable', 'cpu_budget_exhausted', 'design_effect_null', 'grid_cell_failed', 'handler_error',
+  'constraint_unsatisfiable', 'cpu_budget_exhausted', 'design_effect_null', 'design_not_computable', 'grid_cell_failed', 'handler_error',
   'input_format_unsupported', 'input_hash_mismatch', 'input_out_of_range', 'input_parse_failed', 'input_source_not_reconstructed',
   'input_too_large',
   'job_invalid', 'mechanistic_engine_unknown', 'mechanistic_field_missing', 'missing_covariate',
@@ -2593,6 +2593,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   constraint_unsatisfiable: '人群的约束条件在重抽 200 轮后仍无法同时满足；放宽或改写约束。',
   cpu_budget_exhausted: '这项计算用完了它的计算时间上限；已完成的部分作为有限结果保留。',
   design_effect_null: '这个情景没有效应，解析法给不出样本量；方案的 I 类错误请用同一情景的模拟来测。',
+  design_not_computable: '这个设计在这些设定下算不出来；换一组设定（样本量、效应、期中分析的时点）再试，其余结果不受影响。',
   grid_cell_failed: '方案网格里有一个格子没有算出来；其余格子照常给出。',
   handler_error: '统计引擎在这项计算里遇到了意外错误，没有给出任何数字。',
   input_format_unsupported: '数据文件的格式不受支持：请用 CSV、TSV、JSON 或 Excel（.xlsx）；Parquet 请先转成 CSV。',

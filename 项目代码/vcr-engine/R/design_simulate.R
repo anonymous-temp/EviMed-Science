@@ -62,6 +62,8 @@
 vcr_plan_replicates <- function(scenario, requested = NULL, estimand = NULL) {
   flag <- scenario$truth[["null"]]
   is_null_case <- if (is.logical(flag) && length(flag) == 1L && !is.na(flag)) flag
+                  # a non-inferiority design is at its null on the margin, not at an effect of zero (T1)
+                  else if (!is.null(vcr_hypothesis(scenario))) vcr_is_null_scenario(scenario)
                   else if (!is.null(estimand) && length(estimand) == 1L && is.finite(estimand)) abs(estimand) < 1e-12
                   else vcr_is_null_scenario(scenario)
   target <- vcr_scalar(scenario$targetMcse, NULL)
@@ -241,7 +243,7 @@ VCR_ANALYSIS_METHODS <- list(continuous = c("ttest", "ancova"), binary = c("risk
 #'   truth:    the data-generating parameters (the effect is required)
 #'   analysis: list(method, alpha, sided, tau, covariates)
 #'   accrual:  list(kind, duration, followup, dropoutAnnual)
-vcr_scenario_runner <- function(scenario) {
+vcr_scenario_runner <- function(scenario, extras = list()) {
   method <- .vcr_check_design(scenario)
   endpoint <- scenario$endpoint$type
   design <- scenario$design
@@ -255,6 +257,9 @@ vcr_scenario_runner <- function(scenario) {
   n1 <- .vcr_need(design$nTreat, "scenario.design.nTreat", "A simulated design states its treatment-arm size.")
   n0 <- vcr_scalar(design$nControl, n1)
   gs <- identical(design$kind, "group_sequential")
+  hyp <- vcr_hypothesis(scenario)     # 1.4.0: a non-inferiority test is run against its margin
+  nl <- if (is.null(hyp)) 0 else hyp$null
+  nh <- if (is.null(hyp)) 1 else hyp$nullHr
   gs_design <- if (gs) vcr_group_sequential(vcr_num(design$informationRates), alpha / sided,
                                             design$spending %||% "obrien_fleming") else NULL
   acc <- scenario$accrual
@@ -268,7 +273,7 @@ vcr_scenario_runner <- function(scenario) {
     rho <- vcr_scalar(truth$baselineCorrelation, 0)
     return(list(estimand = effect, run = function(i) {
       d <- vcr_sim_continuous(n1, n0, effect, sd, rho)
-      r <- if (identical(method, "ancova")) vcr_analyse_ancova(d, alpha, sided) else vcr_analyse_ttest(d, alpha, sided)
+      r <- if (identical(method, "ancova")) vcr_analyse_ancova(d, alpha, sided) else vcr_analyse_ttest(d, alpha, sided, nl)
       c(r, sampleSize = n1 + n0, duration = duration_fixed)
     }))
   }
@@ -281,7 +286,7 @@ vcr_scenario_runner <- function(scenario) {
     estimand <- if (identical(method, "logistic")) log((p1 / (1 - p1)) / (p0 / (1 - p0))) else p1 - p0
     return(list(estimand = estimand, run = function(i) {
       d <- vcr_sim_binary(n1, n0, p0, p_treat = p1, covariate_logit = cl)
-      r <- if (identical(method, "logistic")) vcr_analyse_logistic(d, alpha, sided) else vcr_analyse_risk_difference(d, alpha, sided)
+      r <- if (identical(method, "logistic")) vcr_analyse_logistic(d, alpha, sided) else vcr_analyse_risk_difference(d, alpha, sided, nl)
       c(r, sampleSize = n1 + n0, duration = duration_fixed)
     }))
   }
@@ -322,9 +327,12 @@ vcr_scenario_runner <- function(scenario) {
                ci_low = r$estimate - crit * r$se, ci_high = r$estimate + crit * r$se,
                events = sum(d$status), sampleSize = n1 + n0, duration = dur))
     }
-    if (gs) return(.vcr_run_group_sequential(d, gs_design, alpha, sided))
-    r <- if (identical(method, "maxcombo")) vcr_analyse_maxcombo(d, alpha, sided) else vcr_analyse_logrank(d, alpha, sided)
-    c(r, sampleSize = n1 + n0, duration = dur)
+    if (gs) return(.vcr_run_group_sequential(d, gs_design, alpha, sided, nh))
+    r <- if (identical(method, "maxcombo")) vcr_analyse_maxcombo(d, alpha, sided) else vcr_analyse_logrank(d, alpha, sided, nh)
+    out <- c(r, sampleSize = n1 + n0, duration = dur)
+    # 1.4.0 (T13): the log-rank test on the same data, so that the two tests are read on the same replicates
+    if (isTRUE(extras$logrank) && identical(method, "maxcombo")) out <- c(out, logrankReject = unname(vcr_analyse_logrank(d, alpha, sided)["reject"]))
+    out
   })
 }
 
@@ -371,7 +379,7 @@ vcr_dist_normalize <- function(d) {
 #' look uses all the data. The trial stops at the first crossing, and the
 #' replicate reports the events and the sample size *at that look* (with the
 #' calendar time), which is what the design's expected values are averages of.
-.vcr_run_group_sequential <- function(d, gs, alpha, sided) {
+.vcr_run_group_sequential <- function(d, gs, alpha, sided, null_hr = 1) {
   cal <- d$entry + d$time
   ev_cal <- sort(cal[d$status == 1L])
   total_events <- length(ev_cal)
@@ -390,7 +398,7 @@ vcr_dist_normalize <- function(d) {
     } else {
       cutoff <- max(cal); dk <- d
     }
-    r <- vcr_analyse_logrank(dk, alpha, sided)
+    r <- vcr_analyse_logrank(dk, alpha, sided, null_hr)
     z <- -as.numeric(r["statistic"])        # upper-tail convention: benefit is positive
     est <- as.numeric(r["estimate"]); se <- as.numeric(r["se"])
     hit <- is.finite(z) && (if (sided == 1) z > gs$criticalValues[k] else abs(z) > gs$criticalValues[k])
@@ -412,8 +420,8 @@ vcr_dist_normalize <- function(d) {
 vcr_run_simulation <- function(scenario, seed, replicates = NULL, cores = 1L,
                                checkpoint = NULL, cancel_file = NULL,
                                batch_size = 500L, progress = NULL,
-                               cpu_seconds_limit = Inf) {
-  runner <- vcr_scenario_runner(scenario)
+                               cpu_seconds_limit = Inf, extras = list()) {
+  runner <- vcr_scenario_runner(scenario, extras)
   if(!is.null(runner$notEstimableRule))return(list(status="not_estimable",notEstimableRule=runner$notEstimableRule,measures=list(),issues=list(),values=NULL,
     scenarioHash=vcr_scenario_hash(scenario),diagnostics=list(conclusion="not_estimable",replicatesCompleted=0,replicatesUsable=0,externalControl=runner$externalControl)))
   plan <- vcr_plan_replicates(scenario, replicates, runner$estimand)
@@ -544,6 +552,13 @@ vcr_summarize_replicates <- function(values, estimand, scenario, done) {
     add(vcr_measure(name, p, simulated = TRUE, mcse = mcse, source = src,
                     interval = vcr_interval("monte_carlo", max(0, p - 1.96 * mcse), min(1, p + 1.96 * mcse))))
   }
+  # the log-rank test beside MaxCombo on the same replicates (design.simulate 1.4.0, T13); a failed replicate did not reject, as above
+  if ("logrankReject" %in% colnames(values) && any(c("power", "type_one_error") %in% wanted) && any(is.finite(values[, "logrankReject"]))) {
+    pl <- sum(values[is.finite(values[, "logrankReject"]), "logrankReject"]) / total
+    mcl <- vcr_mcse_proportion(pl, total)
+    add(vcr_measure(if (is_null) "type_one_error_logrank" else "power_logrank", pl, simulated = TRUE, mcse = mcl, source = src,
+                    interval = vcr_interval("monte_carlo", max(0, pl - 1.96 * mcl), min(1, pl + 1.96 * mcl))))
+  }
   defined <- length(estimand) == 1L && is.finite(estimand)
   if (!defined && any(c("bias", "coverage") %in% wanted)) {
     notes[[length(notes) + 1L]] <- vcr_issue("performance_measure_unsupported", "performance",
@@ -661,17 +676,20 @@ vcr_analytic_check <- function(scenario, measures) {
   }
   n1 <- vcr_scalar(design$nTreat, NA_real_); n0 <- vcr_scalar(design$nControl, n1)
   fixed <- identical(design$kind %||% "two_arm_fixed", "two_arm_fixed")
+  hyp <- vcr_hypothesis(scenario)
+  nl <- if (is.null(hyp)) 0 else hyp$null
+  nh <- if (is.null(hyp)) 1 else hyp$nullHr
   method <- scenario$analysis$method %||% NULL
   if (identical(endpoint, "continuous") && fixed && !identical(method, "ancova")) {
     analytic <- list(name = if (is_null) "type_one_error" else "power",
                      value = if (is_null) alpha
-                             else vcr_power_means(vcr_scalar(truth$effect), vcr_scalar(truth$sd, 1), n1, n0, alpha, sided))
+                             else vcr_power_means(vcr_scalar(truth$effect), vcr_scalar(truth$sd, 1), n1, n0, alpha, sided, nl))
   }
   if (identical(endpoint, "binary") && fixed && !identical(method, "logistic")) {
     p0 <- vcr_scalar(truth[["controlRate"]])
     p1 <- vcr_binary_treatment_rate(p0, vcr_scalar(truth[["treatmentRate"]], NULL), vcr_scalar(truth$riskDifference, NULL), vcr_scalar(truth$oddsRatio, NULL))
     analytic <- list(name = if (is_null) "type_one_error" else "power",
-                     value = if (is_null) alpha else vcr_power_proportions(p0, p1, n1, n0, alpha, sided))
+                     value = if (is_null) alpha else vcr_power_proportions(p0, p1, n1, n0, alpha, sided, nl))
   }
   if (identical(endpoint, "time_to_event") && fixed && !(method %||% "logrank") %in% c("rmst", "maxcombo") && is.null(truth$treatmentHazardRatios)) {
     hr <- vcr_scalar(truth$hazardRatio, 1)
@@ -688,7 +706,7 @@ vcr_analytic_check <- function(scenario, measures) {
                                  vcr_scalar(accrual$duration, 0),
                                  vcr_scalar(accrual$followup, Inf),
                                  vcr_dropout_hazard(vcr_scalar(accrual$dropoutAnnual, 0), vcr_time_unit(scenario)$perYear),
-                                 alpha, vcr_scalar(accrual$maxFollowup, Inf), sided = sided)
+                                 alpha, vcr_scalar(accrual$maxFollowup, Inf), sided = sided, null_hr = nh)
       analytic <- list(name = "power", value = exact$power,
                        basis = "asymptotic_logrank_score",
                        schoenfeld = exact$schoenfeldPower,
@@ -813,6 +831,46 @@ vcr_dominated_designs <- function(rows, maximize = character(), minimize = chara
     if (ge && gt) { dominated[i] <- TRUE; break }
   }
   dominated
+}
+
+#' The strong null of a MaxCombo design (T13): a world in which the treatment is never better than the control and is worse early on.
+#'
+#' Hidden knowledge: MaxCombo takes the most favourable of four weighted log-rank statistics, and a test that picks its own best
+#' statistic can reject more often than its level when the treatment is worse early and equal after, because the statistic that weights
+#' the late follow-up sees the early harm as a late difference. The log-rank test rejects less than it in such a world, and a person who
+#' chose MaxCombo for a delayed effect should see both numbers. The case is derived from the design, never typed: the early hazard
+#' ratio is the design's own if it states one above 1 (a crossing), else the mirror of its benefit (1 / the smallest ratio), from the
+#' design's first break (or half the control median for a proportional-hazards design), and 1 after. It is information, not a gate: a
+#' CPU budget spent by the main run leaves it out, and the result says it was not computed.
+vcr_maxcombo_strong_law <- function(sc) {
+  tr <- sc$truth
+  nph <- if (is.list(tr$treatmentHazardRatios)) tr$treatmentHazardRatios else NULL
+  ratios <- if (!is.null(nph)) vcr_num(nph$ratios) else vcr_scalar(tr$hazardRatio)
+  breaks <- if (!is.null(nph)) vcr_num(nph$breaks) else vcr_dist_median(vcr_control_distribution(tr)) / 2
+  harm <- if (any(ratios > 1 + 1e-12)) max(ratios[ratios > 1]) else 1 / min(ratios)
+  basis <- if (any(ratios > 1 + 1e-12)) "the design's own early harm, then equal" else "the design's benefit mirrored as an early harm, then equal"
+  list(breaks = breaks[1], ratios = c(harm, 1), basis = basis)
+}
+
+vcr_maxcombo_strong_null <- function(job, sc, cancel_file = NULL) {
+  law <- vcr_maxcombo_strong_law(sc)
+  breaks <- law$breaks; harm <- law$ratios[1]; basis <- law$basis
+  sc2 <- sc
+  sc2$truth[["hazardRatio"]] <- NULL; sc2$truth[["null"]] <- NULL
+  sc2$truth$treatmentHazardRatios <- list(breaks = breaks, ratios = c(harm, 1))
+  reps <- as.integer(max(vcr_scalar(job$replicates, 0), vcr_domain()$limits$replicatesNullMin))
+  res <- vcr_run_simulation(sc2, as.integer((as.numeric(job$seed) + 104729) %% 2147483647), reps, vcr_cores(job$cores), cancel_file = cancel_file,
+                            batch_size = vcr_scalar(job$batchSize, 500L), cpu_seconds_limit = vcr_scalar(job$cpuSecondsLimit, Inf), extras = list(logrank = TRUE))
+  if (!identical(res$status, "succeeded") || is.null(res$values)) return(list(measures = list(), diagnostics = list(computed = FALSE, reason = "the CPU budget or a cancel ended the run first")))
+  total <- nrow(res$values)
+  one <- function(name, column) {
+    p <- sum(res$values[is.finite(res$values[, column]), column]) / total
+    vcr_measure(name, p, simulated = TRUE, mcse = vcr_mcse_proportion(p, total), source = "synthetic",
+                interval = vcr_interval("monte_carlo", max(0, p - 1.96 * vcr_mcse_proportion(p, total)), min(1, p + 1.96 * vcr_mcse_proportion(p, total))))
+  }
+  list(measures = list(one("type_one_error_strong_null", "reject"), one("type_one_error_strong_null_logrank", "logrankReject")),
+       diagnostics = list(computed = TRUE, breaks = breaks[1], ratios = c(harm, 1), basis = basis, replicates = total, alpha = vcr_scalar(sc$analysis$alpha, 0.025),
+                          timeUnit = as.character(sc$timeUnit %||% vcr_domain()$timeUnits$default)))
 }
 
 `%||%` <- function(a, b) if (is.null(a)) b else a
