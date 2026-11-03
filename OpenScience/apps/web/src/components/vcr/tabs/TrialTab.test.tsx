@@ -838,3 +838,46 @@ describe("试验 · what the sample size rests on, the baseline and the objectiv
     expect(container.querySelector("[data-vcr-scatter-reference]")).toBeNull();
   });
 });
+
+describe("试验 · a confirmatory design the conversation wrote", () => {
+  const value = (n: number, unit: string, source: string, extra: Record<string, unknown> = {}) => ({ value: n, text: null, unit, source, interval: null, mcse: null, review: "ai_set", precision: 1, reason: null, stale: false, detail: null, ...extra });
+  const card = () => ({
+    id: "res_ssr", version: 1, design: "sample_size_reestimation", title: "样本量再估计", question: "效应没把握，中期加样，功效和平均要多少人", endpoint: "事件时间终点",
+    headline: [{ key: "power", label: "功效（拒绝零假设的概率）", value: value(94.98, "%", "synthetic", { mcse: 0.31 }) }],
+    premises: [{ key: "effect", label: "计划的效应（风险比）", value: "0.7", source: "assumed", decisive: true, reason: null }],
+    looks: [],
+    baselines: [{ key: "fixed", label: "固定设计所需事件数", text: "331 个事件" }],
+    limited: null,
+    table: {
+      columns: [{ key: "power", label: "功效 / I 类错误", group: "本设计" }, { key: "fixed_power", label: "功效 / I 类错误", group: "固定设计" }],
+      rows: [{ role: "planned", label: "计划的效应", effect: "风险比 0.7", iterations: 5000, cells: { power: value(94.98, "%", "synthetic", { mcse: 0.31 }), fixed_power: value(90.05, "%", "calculated") } }],
+    },
+  });
+
+  it("shows as a card of its own when it is the only result of the step: no lettered designs, no 「还没算」, no pending step", async () => {
+    const raw = fixture("empty/trial.json");
+    raw.confirmatoryDesigns = [card()];
+    installVcrServer(network.productRequest, { [tab("trial")]: raw });
+    const { container } = draw(withStep("trial", { status: "none", requested: false }));
+    const shown = await found(container, '[data-vcr-confirmatory="sample_size_reestimation"]');
+    expect(within(shown).getByRole("heading", { name: "样本量再估计" })).toBeInTheDocument();
+    expect(shown).toHaveTextContent("效应没把握，中期加样，功效和平均要多少人");
+    expect(within(shown).getByRole("columnheader", { name: "固定设计 · 功效 / I 类错误" })).toBeInTheDocument();
+    expect(shown).toHaveTextContent("模拟 5,000 次");
+    expect(screen.queryByText("还没算")).toBeNull();
+    expect(screen.queryByRole("table", { name: "方案的对比" })).toBeNull();
+    expect(container.querySelector("[data-vcr-not-computed]")).toBeNull();
+    expect(container.querySelector("[data-vcr-step-waiting], [data-vcr-step-running]")).toBeNull();
+    expect(screen.queryByRole("button", { name: /选定方案|改选方案/ })).toBeNull();
+  });
+
+  it("stands under the lettered designs and the accrual forecasts when the step has them", async () => {
+    const raw = fixture("ev201/trial.json");
+    raw.confirmatoryDesigns = [card()];
+    installVcrServer(network.productRequest, { [tab("trial")]: raw });
+    const { container } = draw();
+    const table = await trialDrawn();
+    const shown = await found(container, '[data-vcr-confirmatory="sample_size_reestimation"]');
+    expect(table.compareDocumentPosition(shown) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});

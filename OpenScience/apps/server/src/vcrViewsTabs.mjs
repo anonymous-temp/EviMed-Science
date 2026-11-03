@@ -54,6 +54,7 @@ import { phaseLabel, registryStatusLabel } from "./vcrPatientTrials.mjs";
 import { reportSchedule } from "./vcrScheduleView.mjs";
 import { vcrPremises } from "./vcrPremises.mjs";
 import { presentPopulationCheck } from "./vcrPopulationCheck.mjs";
+import { presentConfirmatoryDesigns } from "./vcrConfirmatory.mjs";
 import { localCalibrationView } from "./vcrLocalCalibration.mjs";
 import {
   abilitiesOf, assumptionSummary, assumptionValue, designsSentence, nodeLabel, notEstimableDesign, presentDesigns, reviewContextOf,
@@ -1143,7 +1144,7 @@ export function presentTrialTab(bundle) {
     designs: recorded,
     columns,
     grid: grids.heat,
-    footnotes: notRerunNotes(designRows),
+    footnotes: [...notRerunNotes(designRows), ...maxComboNotes(designRows)],
     powerCurve: powerSeries.length ? {
       xLabel: text(powerRaw.xLabel) ?? "真实效应", yLabel: text(powerRaw.yLabel) ?? "功效", unit: "%", series: powerSeries,
       markers: markersOf(headlineRow?._scenario), prior: list(powerRaw.prior).map(object).filter((point) => finite(point.x) !== null && finite(point.y) !== null).map((point) => ({ x: Number(point.x), y: Number(point.y) })),
@@ -1158,6 +1159,8 @@ export function presentTrialTab(bundle) {
     } : null,
     forecasts: forecastRows,
     accrualForecasts,
+    // The confirmatory designs the conversation computed (design_confirmatory): a card each, with its own premises and baselines.
+    confirmatoryDesigns: presentConfirmatoryDesigns(bundle, { nodeOf: resultNode }),
     milestones,
     // The protocol's visit schedule (「访视日程」) and the study's regulatory contacts (「监管沟通记录」): records, not results.
     schedule: reportSchedule(bundle.schedule),
@@ -1317,6 +1320,39 @@ function notRerunNotes(designRows) {
   }
   return notes;
 }
+
+/**
+ * What a MaxCombo run says beside its own power (T13): the log-rank power of the same replicates and the strong null — a world in which the
+ * treatment is never better and is worse early on — where both tests are asked how often they call the treatment better. Information in
+ * the table's notes, not a verdict.
+ * @param {ReadonlyArray<Record<string, any>>} designRows
+ */
+export function maxComboNotes(designRows) {
+  /** @type {string[]} */
+  const notes = [];
+  for (const row of designRows) {
+    if (row.dominated) continue;
+    const measures = list(row._stages?.simulation?.measures).map(object);
+    const find = (/** @type {string} */ name) => measures.find((entry) => entry.name === name) ?? null;
+    // three significant digits: a rejection probability of 0.03% is not "0%"
+    const percent = (/** @type {Record<string, any> | null} */ entry) => (entry && numeric(entry.value) !== null
+      ? `${plainNumber(Number(entry.value) * 100)}%${numeric(entry.mcse) !== null ? `（±${plainNumber(Number(entry.mcse) * 100)}）` : ""}` : null);
+    const logrank = percent(find("power_logrank") ?? find("type_one_error_logrank"));
+    if (logrank) notes.push(`方案 ${row.code}：同样的模拟里，log-rank 检验的${find("power_logrank") ? "功效" : "I 类错误"}是 ${logrank}。`);
+    const strong = percent(find("type_one_error_strong_null"));
+    const strongLogrank = percent(find("type_one_error_strong_null_logrank"));
+    if (strong && strongLogrank) {
+      const law = object(row._stages?.simulation?.diagnostics?.strongNull);
+      const ratios = list(law.ratios).map(Number).filter(Number.isFinite);
+      const when = ratios.length === 2 && numeric(law.breaks) !== null ? `试验组前 ${plainNumber(Number(law.breaks))} ${TIME_UNIT_WORDS[String(law.timeUnit)]?.after ?? "个月"}的风险比为 ${plainNumber(ratios[0])}、之后与对照相同` : "试验组从不优于对照";
+      notes.push(`方案 ${row.code}：在“${when}”的情形里（试验组从未更好），MaxCombo 判为试验组更优的概率是 ${strong}，log-rank 是 ${strongLogrank}；名义水平 ${plainNumber(Number(law.alpha ?? 0.025) * 100)}%。`);
+    }
+  }
+  return notes;
+}
+
+/** @param {number} value */
+const plainNumber = (value) => String(Number(value.toPrecision(3)));
 
 /** The vertical markers of a power curve: the assumed effect, which is a setting and not an estimate. @param {Record<string, any> | null | undefined} scenario */
 function markersOf(scenario) {

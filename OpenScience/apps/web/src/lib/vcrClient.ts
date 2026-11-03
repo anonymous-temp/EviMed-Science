@@ -1169,6 +1169,46 @@ export interface VcrRegulatoryContact {
   recordedAt: string | null;
 }
 
+/**
+ * A confirmatory design a conversation wrote (a futility boundary, a sample-size re-estimation, a multi-arm selection, an enrichment, a
+ * count endpoint): the server presents it as a card of its own, never as one of the page's lettered designs.
+ */
+export interface VcrConfirmatoryLook {
+  look: number;
+  informationRate: number | null;
+  size: number | null;
+  efficacyBound: number | null;
+  futilityBound: number | null;
+  efficacyStop: VcrValue | null;
+  futilityStop: VcrValue | null;
+  nullFutilityStop: VcrValue | null;
+}
+
+export interface VcrConfirmatoryCard {
+  id: string;
+  version: number;
+  /** The design's kind: `futility_group_sequential`, `sample_size_reestimation`, `multi_arm_selection`, `enrichment` or `count_endpoint`. */
+  design: string;
+  title: string;
+  /** What the card counts: `events` for an event-time design, else `patients`. */
+  unit?: string;
+  /** The question the card answers, in the reader's words. */
+  question: string;
+  endpoint: string;
+  headline: Array<{ key: string; label: string; value: VcrValue }>;
+  premises: VcrPremise[];
+  looks: VcrConfirmatoryLook[];
+  baselines: Array<{ key: string; label: string; text: string }>;
+  /** A sentence when the simulation was stopped early. */
+  limited: string | null;
+  table: {
+    /** `group` names who the column belongs to (「本设计」「固定设计」); null when the card has one kind of column. */
+    columns: Array<{ key: string; label: string; group: string | null }>;
+    /** One row per assumed true effect; a null cell is 「not applicable」. */
+    rows: Array<{ role: string; label: string; effect: string; iterations: number | null; cells: Record<string, VcrValue | null> }>;
+  } | null;
+}
+
 export interface VcrTrialTab {
   /** 「这个结论的前提」 of the headline design: at most five decisive, the rest folded by the page. */
   premises?: VcrPremise[];
@@ -1183,6 +1223,8 @@ export interface VcrTrialTab {
   /** The yardstick the trade-off is drawn against: the researcher's own goal, else alpha and the target power (C7). Percentages. */
   objective?: { source: "default" | "stated"; alpha: number | null; power: number | null; sided: number | null; text: string } | null;
   accrualForecasts?: Array<{ id: string; version: number; scenarioId: string | null; scenarioVersion: number | null; design: string | null; name: string; lastPatientIn: VcrValue | null; targetEvents: VcrValue | null; probabilityByMonth: Array<{ month: number; probability: number }> }>;
+  /** The confirmatory designs the conversation wrote, each a card of its own on the page. */
+  confirmatoryDesigns?: VcrConfirmatoryCard[];
   headline?: string | null;
   /** ADEMP, one line each. */
   ademp: Array<{ key: string; label: string; text: string }>;
@@ -1843,6 +1885,56 @@ export function readPremises(raw: unknown): VcrPremise[] {
   });
 }
 
+/** A value, or nothing: an absent or malformed cell is 「not applicable」, never a zero. */
+function readOptionalValue(raw: unknown): VcrValue | null {
+  return raw && typeof raw === "object" ? readVcrValue(raw) : null;
+}
+
+/** The confirmatory design cards; a card without a name or a kind, and anything of an unknown shape, is left out. */
+function readConfirmatoryDesigns(raw: unknown): VcrConfirmatoryCard[] {
+  return arr(raw).flatMap((card) => {
+    const id = text(card.id), design = text(card.design), title = text(card.title);
+    if (!id || !design || !title) return [];
+    const table = obj(card.table);
+    const columns = arr(table.columns).flatMap((column) => {
+      const key = text(column.key), label = text(column.label);
+      return key && label ? [{ key, label, group: text(column.group) }] : [];
+    });
+    const rows = arr(table.rows).flatMap((row) => {
+      const label = text(row.label);
+      if (!label) return [];
+      const cells = obj(row.cells);
+      return [{
+        role: text(row.role) ?? "", label, effect: text(row.effect) ?? "", iterations: finite(row.iterations),
+        cells: Object.fromEntries(Object.keys(cells).map((key) => [key, readOptionalValue(cells[key])])),
+      }];
+    });
+    return [{
+      id, version: finite(card.version) ?? 1, design, title,
+      unit: text(card.unit) ?? undefined, question: text(card.question) ?? "", endpoint: text(card.endpoint) ?? "",
+      headline: arr(card.headline).flatMap((item) => {
+        const key = text(item.key), label = text(item.label);
+        return key && label ? [{ key, label, value: readVcrValue(item.value) }] : [];
+      }),
+      premises: readPremises(card.premises),
+      looks: arr(card.looks).flatMap((look) => {
+        const number = finite(look.look);
+        return number === null ? [] : [{
+          look: number, informationRate: finite(look.informationRate), size: finite(look.size),
+          efficacyBound: finite(look.efficacyBound), futilityBound: finite(look.futilityBound),
+          efficacyStop: readOptionalValue(look.efficacyStop), futilityStop: readOptionalValue(look.futilityStop), nullFutilityStop: readOptionalValue(look.nullFutilityStop),
+        }];
+      }),
+      baselines: arr(card.baselines).flatMap((line) => {
+        const key = text(line.key), label = text(line.label), lineText = text(line.text);
+        return key && label && lineText ? [{ key, label, text: lineText }] : [];
+      }),
+      limited: text(card.limited),
+      table: columns.length > 0 && rows.length > 0 ? { columns, rows } : null,
+    }];
+  });
+}
+
 function readDesignRecord(raw: unknown): NonNullable<VcrDesign["record"]> | null {
   const value = obj(raw);
   if (!Object.keys(value).length) return null;
@@ -2352,6 +2444,7 @@ export function readVcrTrial(raw: unknown): VcrTrialTab {
     objective: readTrialObjective(value.objective),
     ademp: arr(value.ademp) as unknown as VcrTrialTab["ademp"],
     accrualForecasts: arr(value.accrualForecasts).map(row => ({ id: text(row.id) ?? "", version: finite(row.version) ?? 1, scenarioId: text(row.scenarioId), scenarioVersion: finite(row.scenarioVersion), design: text(row.design), name: text(row.name) ?? "入组假设模拟", lastPatientIn: row.lastPatientIn ? readVcrValue(row.lastPatientIn) : null, targetEvents: row.targetEvents ? readVcrValue(row.targetEvents) : null, probabilityByMonth: arr(row.probabilityByMonth).filter(point => finite(point.month) !== null && Number(point.month) >= 0 && finite(point.probability) !== null && Number(point.probability) >= 0 && Number(point.probability) <= 1).map(point => ({ month: Number(point.month), probability: Number(point.probability) })) })),
+    confirmatoryDesigns: readConfirmatoryDesigns(value.confirmatoryDesigns),
     designs: arr(value.designs).map(readDesign),
     columns: arr(value.columns) as unknown as VcrTrialTab["columns"],
     grid: Object.keys(grid).length ? {

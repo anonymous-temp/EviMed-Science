@@ -80,6 +80,7 @@ import {
 import { HttpError } from "./security.mjs";
 import { VCR_READ_WHATS, VCR_READ_MAX_ITEMS, VCR_WRITE_WHATS, vcrRouteOptions } from "./vcrService.mjs";
 import { vcrResultEntry, withJobEntry, withWriteEntry } from "./vcrResultEntry.mjs";
+import { vcrConfirmatorySubjectId } from "./vcrConfirmatory.mjs";
 import { renderVcrNumbers } from "./vcrRender.mjs";
 import { checkRegulatoryContact, resolveVisitsRef, visitKey } from "./vcrScheduleView.mjs";
 import { EVIDENCE_ARM_ROLES } from "./vcrEvidenceStore.mjs";
@@ -3009,6 +3010,10 @@ async function startJob(vcr, study, request) {
   const designBinding = await prepareVcrModelDesign({ store: vcr.store, study, subject, scenario: population.scenario, inputs: population.inputs });
   scenario = designBinding.scenario; inputs = designBinding.inputs; derived = [...derived, ...population.derived];
   detail = { ...detail, ...population.detail, ...designBinding.detail };
+  // A confirmatory design belongs to no object of the study, and a result with no subject would replace the last one of its kind: it is
+  // filed under the design and the endpoint it is about, so the futility design and the re-estimation of one study sit side by side and a
+  // second run of either is its next version. A run that names a subject keeps its own.
+  if (request.kind === "design_confirmatory" && !detail.subjectId) detail = { ...detail, subjectId: vcrConfirmatorySubjectId(scenario) };
   if (subject) {
     detail = { ...detail, ...subject.detail };
     // The stage in flight is the answer to the scenario it froze, and to no other: a start that states another number is another job.

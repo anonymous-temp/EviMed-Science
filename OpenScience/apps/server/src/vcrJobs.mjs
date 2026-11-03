@@ -544,6 +544,8 @@ export function vcrResultKindFor(kind) {
   // The batch reading of patient records leaves a record of what was read, not a matching: its own kind, read by nothing that lists matchings.
   if (kind === "match_extract") return "match_extract";
   if (kind === "accrual_forecast") return "accrual_forecast";
+  // A confirmatory design is its own result, not a stage of a trial scenario: it is not a design of the page's table (A, B, C) and has its own card.
+  if (kind === "design_confirmatory") return "design_confirmatory";
   if (["pool_evidence", "reconstruct_km"].includes(kind)) return "evidence_pool";
   return "snapshot_profile";
 }

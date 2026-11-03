@@ -1,4 +1,5 @@
 import { VcrAccrualForecasts } from "../VcrAccrualForecasts";
+import { VcrConfirmatoryDesigns } from "../VcrConfirmatoryDesigns";
 import { VcrScientificBasis } from "../VcrScientificBasis";
 import { VcrVersionComparison } from "../VcrVersionComparison";
 import { useRef, useState } from "react";
@@ -114,7 +115,7 @@ function TrialView({ studyId, study, data, reload }: { studyId: string; study: V
   const failed = study.steps.trial?.status === "failed";
   const canWrite = study.abilities.includes("write");
   // The protocol's visit schedule and the regulatory log are records of the study, not results of this step: a study that has either is not empty.
-  const hasDesigns = data.designs.length > 0 || data.ademp.length > 0 || data.forecasts.length > 0 || data.milestones.length > 0 || Boolean(data.accrualForecasts?.length);
+  const hasDesigns = data.designs.length > 0 || data.ademp.length > 0 || data.forecasts.length > 0 || data.milestones.length > 0 || Boolean(data.accrualForecasts?.length) || Boolean(data.confirmatoryDesigns?.length);
   const nothing = !hasDesigns && !data.schedule && data.regulatory.length === 0;
   const noneRan = !data.designs.some(designRan);
   const decided = Boolean(data.decision?.chosen);
@@ -427,6 +428,7 @@ function DesignsView({ studyId, study, data, headline, noneRan, failed, onOpen, 
 
       {cells.length > 0 && <ChartGrid rows={pairRows(cells)} />}
       {data.accrualForecasts?.length ? <VcrAccrualForecasts forecasts={data.accrualForecasts} /> : null}
+      <VcrConfirmatoryDesigns designs={data.confirmatoryDesigns ?? []} />
     </div>
   );
 }

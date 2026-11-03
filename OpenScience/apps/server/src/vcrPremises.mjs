@@ -170,6 +170,13 @@ function trialPremises(input) {
   // A single-arm binary design (exact, Simon) has no control arm: it is held to a response rate it must beat and sized for the one it is
   // expected to have.
   const single = ["single_arm", "simon_two_stage"].includes(String(input.designKind ?? object(configuration.design).kind)) && type === "binary";
+  // A non-inferiority margin (design.analytic / design.simulate 1.4.0): what the design has to rule out, as large a premise as the effect.
+  const hypothesis = object(configuration.hypothesis);
+  if (hypothesis.kind === "non_inferiority" && numeric(hypothesis.margin) !== null) {
+    const margin = Number(hypothesis.margin);
+    const words = type === "time_to_event" ? `风险比不超过 ${plain(margin)}` : type === "binary" ? `率差不低于 −${percent(margin)}` : `均数差不低于 −${plain(margin)}`;
+    rows.push({ key: "margin", label: "非劣效界值", value: words, source: "assumed", decisive: true });
+  }
   // The effect the design is sized for.
   if (single) {
     const alternative = stand("truth.alternativeRate", truth.alternativeRate ?? truth.responseRate);

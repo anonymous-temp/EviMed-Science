@@ -354,6 +354,26 @@ export const MEASURE_META = Object.freeze({
   mse: { label: "均方误差" },
   expected_sample_size: { label: VCR_PERFORMANCE_MEASURE_LABELS_ZH.expected_sample_size, unit: "例" },
   expected_events: { label: "期望事件数", unit: "个" },
+  // the confirmatory designs (design_confirmatory): the cells of the per-effect table and the headline numbers
+  expected_sample_size_h0: { label: "无效应时的期望样本量", unit: "例" },
+  expected_events_h0: { label: "无效应时的期望事件数", unit: "个" },
+  expected_patients: { label: "期望入组人数", unit: "例" },
+  power_logrank: { label: "同一批模拟里 log-rank 检验的功效", unit: "%", percent: true },
+  type_one_error_logrank: { label: "同一批模拟里 log-rank 检验的 I 类错误", unit: "%", percent: true },
+  type_one_error_strong_null: { label: "强零假设下 MaxCombo 判为更优的概率", unit: "%", percent: true },
+  type_one_error_strong_null_logrank: { label: "强零假设下 log-rank 判为更优的概率", unit: "%", percent: true },
+  futility_stop_probability: { label: "中途因无效停止的概率", unit: "%", percent: true },
+  futility_stop_probability_h0: { label: "无效应时中途停止的概率", unit: "%", percent: true },
+  early_stop_probability: { label: "中期就达标而停止的概率", unit: "%", percent: true },
+  increase_probability: { label: "中期加样的概率", unit: "%", percent: true },
+  correct_selection_probability: { label: "选中真正最好的臂的概率", unit: "%", percent: true },
+  selected_subset: { label: "保留标志物阳性亚组的概率", unit: "%", percent: true },
+  selected_full: { label: "保留全人群的概率", unit: "%", percent: true },
+  reject_subset: { label: "亚组结论成立的概率", unit: "%", percent: true },
+  reject_full: { label: "全人群结论成立的概率", unit: "%", percent: true },
+  planned_total: { label: "计划样本量", unit: "例" },
+  planned_events: { label: "计划事件数", unit: "个" },
+  separate_trials_size: { label: "每臂各做一个试验的总例数", unit: "例" },
   expected_analyses: { label: "期望分析次数" },
   required_total: { label: "所需样本量", unit: "例" },
   required_per_arm: { label: "每组所需样本量", unit: "例" },
@@ -454,7 +474,10 @@ const UNIT_WORDS = Object.freeze(/** @type {Record<string, string>} */ ({
 export const zhUnit = (unit) => (unit === null ? null : UNIT_WORDS[unit] ?? unit);
 
 /** @param {string} name */
-const isProportionName = (name) => MEASURE_META[name]?.percent === true || name.startsWith("probability_by_");
+const isProportionName = (name) => MEASURE_META[name]?.percent === true || name.startsWith("probability_by_") || INDEXED_PROBABILITY.test(name);
+
+/** The probabilities a confirmatory design reports per look or per arm: `stop_efficacy_2`, `selected_arm_1` ... */
+const INDEXED_PROBABILITY = /^(stop_efficacy|stop_futility|selected_arm|reject_arm)_(\d+)$/;
 
 /** @param {string} name */
 export function measureLabel(name) {
@@ -464,6 +487,11 @@ export function measureLabel(name) {
   if (by) return `${by[1].replace(/_/g, "-")} 前完成的概率`;
   const set = /^covariate_set_estimate_(\d+)$/.exec(name);
   if (set) return `第 ${set[1]} 个协变量集的估计`;
+  const indexed = INDEXED_PROBABILITY.exec(name);
+  if (indexed) {
+    const words = /** @type {Record<string, string>} */ ({ stop_efficacy: "次分析达标而停止的概率", stop_futility: "次分析因无效而停止的概率", selected_arm: "臂被保留的概率", reject_arm: "臂的结论成立的概率" });
+    return `第 ${indexed[2]} ${words[indexed[1]]}`;
+  }
   return name;
 }
 
@@ -782,7 +810,7 @@ export const allResultsOf = (bundle) => bundle.allResults ?? bundle.results ?? [
 export const METHOD_LABELS = Object.freeze(/** @type {Record<string, string>} */ ({
   "model.survival_fit": "拟合人群生存模型", "model.prognostic_apply": "应用已发表的预后模型",
   "profile.snapshot": "数据快照画像", "cohort.build": "构建队列", "population.scenario": "情景人群生成", "population.literature": "文献人群",
-  "population.synthpop": "经验合成人群", "population.quality": "人群质量报告", "population.check": "与第二份基线表对照", "patients.continuous": "虚拟患者（连续终点）",
+  "population.synthpop": "经验合成人群", "population.quality": "人群质量报告", "population.check": "与第二份基线表对照", "design.confirmatory": "确认性设计", "patients.continuous": "虚拟患者（连续终点）",
   "patients.binary": "虚拟患者（二分类终点）", "patients.time_to_event": "虚拟患者（事件时间终点）", "patients.longitudinal": "虚拟患者（纵向轨迹）", "evidence.pool": "证据合并",
   "evidence.reconstruct_km": "生存曲线重建（Guyot）", "comparator.entropy_balance": "熵平衡加权", "comparator.propensity_weight": "倾向评分加权",
   "comparator.rmst": "RMST 比较", "comparator.maic": "匹配调整间接比较", "comparator.evalue": "E 值", "comparator.map_prior": "MAP 先验",
