@@ -2,35 +2,34 @@
 # The monthly frontier-selection campaign on the RSI lab host (2026-10-26). Run by evimed-rsi-campaign.service on the 1st at
 # 02:00 Asia/Shanghai, or by hand: `rsi-lab-monthly.sh [YYYY-MM] [--rehearsal ...assemble window flags]`.
 #
-# The lab never labels (owner 2026-11-03: every adjudicator is Claude, and the lab has no Anthropic access). The unattended run does the
-# deterministic steps and stops at a named wait, exit 0:
+# The whole month runs unattended, with no operator in it (owner 2026-11-03: the frontier jury alone stays Qwen 3.8 Max, which the lab calls itself):
 #
-#   export check -> bootstrap -> plan -> label-items (development) -> "wait labels-development"
-#
-# The operator's box (deploy/rsi-campaign/operator/rsi-frontier-label.sh) fetches $OUTBOX/<month>/label-items-<phase>.json (with its sha256),
-# calibrates and labels it with Claude, uploads calibration.json and labels-<phase>.json with their sha256 into
-# $INBOX/frontier-labels-<month>/ and starts this script again. It verifies the digests and goes on:
-#
-#   decide (does development alone find a candidate?) -> label-items (confirmation) -> "wait labels-confirmation" -> merge -> build
-#   -> run -> receipt -> statistics -> report (-> evidence -> finalize when qualified)
+#   export check -> bootstrap -> plan -> calibrate -> label development -> decide (does development alone find a candidate?)
+#   -> (only when one froze) label confirmation -> merge -> build -> run -> receipt -> resume -> statistics -> report (-> evidence -> finalize when qualified)
 #
 # A month whose development finds no candidate ends at decide: its confirmation month is never labelled, never opened, no alpha is drawn.
 # An export without the incumbent identity (production runs an older export script until its next release) does not stop the month: it is
 # measured against an `unbound:` baseline and reported as not importable, and finalize refuses it (campaign_export_incumbent_missing).
 #
-# Resumable: every finished step appends "<step> ok <time>" to $RUN/STATUS and is skipped on the next start, so an interrupted run continues
-# where it stopped; a wait is "wait <name> <time> <month>" (the last line says what the run is waiting for). One run at a time, months and
-# rehearsals alike: the lock ($STATE/monthly.lock) is taken before anything changes, and a second start exits 75 having changed nothing (they share
-# `current`, the evaluator's receipt path). A resume that fails ends the run with exit 9 and no report (start again once the cause is fixed); a run
-# directory begun before 2026-11-03 (steps ids, calibrate, label; a plan without idsByRole) is refused as it is, exit 5
-# (campaign_run_directory_legacy), nothing in it changed. A rehearsal is named by `--id-prefix rehearsal-[<a-z0-9->-]`, checked before it names a
-# path; any other prefix is refused (exit 2). Steps run in the lab image as uid
-# 10001 with a read-only root; only the database steps have a network, the evaluator and signer steps have none and are the only ones that
-# see a key, and no step has a provider credential. The lab never connects to production: production pushes its export into the write-only inbox.
+# The jury is the only step that spends: `calibrate` and `label` mount the lab's one provider credential ($ETC/credentials/dashscope.key, read-only, network
+# rsi-lab-net) and go through the lab's budget ledger one batch at a time; every answer is cached, the labelling's in $STATE/jury-cache.jsonl and the calibration's in the month's own
+# $RUN/calibration-cache.jsonl (so the jury is measured afresh each month), and a month that stopped is resumed without paying twice. What ends a month, each with a named outcome (`outcome.json`), a report and no build: the key missing
+# (campaign_jury_credential_missing), a calibration that does not qualify (campaign_labels_unqualified: it stops the campaign instead of lowering the
+# bar), a calibration or a labelling that stopped (the budget's own code, e.g. campaign_budget_exceeded, else campaign_jury_unavailable /
+# campaign_labelling_incomplete; exit 5). Start the month again once the cause is gone: finished steps are skipped and the cache serves what was answered.
 #
-# RSI_LAB_ROOT (/srv/rsi-lab), RSI_LAB_ETC (/etc/rsi-lab), RSI_LAB_DOCKER (docker), RSI_LAB_OWNER (10001:10001) and RSI_LAB_POLL_SECONDS (300)
-# move the host layout and the docker binary: the tests run this script against a stand-in docker. RSI_LAB_DRY_RUN=1 runs it with a docker that
-# only prints the command, which shows the steps up to the first wait: it reads the inbox and configuration of the tree it is given (a scratch tree of its own when RSI_LAB_ROOT is
+# Resumable: every finished step appends "<step> ok <time>" to $RUN/STATUS and is skipped on the next start, so an interrupted run continues
+# where it stopped. One run at a time, months and rehearsals alike: the lock ($STATE/monthly.lock) is taken before anything changes, and a second
+# start exits 75 having changed nothing (they share `current`, the evaluator's receipt path). A resume that fails ends the run with exit 9 and no
+# report (start again once the cause is fixed); a run directory begun before 2026-11-03 (a plan without idsByRole, or the legacy step `ids`) is
+# refused as it is, exit 5 (campaign_run_directory_legacy), nothing in it changed. A rehearsal is named by `--id-prefix rehearsal-[<a-z0-9->-]`, checked
+# before it names a path; any other prefix is refused (exit 2). Steps run in the lab image as uid 10001 with a read-only root; the jury and the database
+# steps have a network, the evaluator and signer steps have none and are the only ones that see a signing key, and only the jury steps see the provider
+# credential. The lab never connects to production: production pushes its export into the write-only inbox.
+#
+# RSI_LAB_ROOT (/srv/rsi-lab), RSI_LAB_ETC (/etc/rsi-lab), RSI_LAB_DOCKER (docker), RSI_LAB_OWNER (10001:10001) and RSI_LAB_POLL_SECONDS (300) move the host layout and the docker
+# binary: the tests run this script against a stand-in docker. RSI_LAB_DRY_RUN=1 runs it with a docker that only prints the command, which shows the steps up to the
+# first one that needs what a real step wrote: it reads the inbox and configuration of the tree it is given (a scratch tree of its own when RSI_LAB_ROOT is
 # unset) and writes only into scratch directories it removes at exit — no STATUS, outcome, log, report, lock or link of the tree it reads.
 set -euo pipefail
 umask 027
@@ -64,17 +63,17 @@ if [ -n "$DRY" ] && [ ! -s "$ETC/image" ]; then IMAGE=dry-run-image; else IMAGE=
 STATE=$ROOT/state INBOX=$ROOT/inbox OUTBOX=$ROOT/outbox
 KEY=${PREFIX}$MONTH
 RUN=$STATE/$KEY C=/srv/rsi-lab/state/$KEY
-LABELS=$INBOX/frontier-labels-$KEY LABELS_IN=/srv/rsi-lab/inbox/frontier-labels-$KEY
+JURY_KEY=$ETC/credentials/dashscope.key CACHE=/srv/rsi-lab/state/jury-cache.jsonl CAMPAIGN=${PREFIX}frontier-selection-$MONTH
 if [ -z "$DRY" ]; then
-  # One run at a time, months and rehearsals alike (the timer, the operator's restart, a rehearsal): the lock comes before anything changes.
+  # One run at a time, months and rehearsals alike (the timer, a start by hand, a rehearsal): the lock comes before anything changes.
   mkdir -p "$STATE"
   exec 8> "$STATE/monthly.lock"
   flock -n 8 || { echo "another run holds $STATE/monthly.lock; $KEY changed nothing" >&2; exit 75; }
 fi
-# A month begun before 2026-11-03, when the lab labelled (steps ids, calibrate, label; a plan without idsByRole), has a signed report a run of this
-# script would overwrite before failing at the items step: it is refused as it is.
-if grep -qE '^(ids|calibrate|label) ok' "$RUN/STATUS" 2>/dev/null || { [ -s "$RUN/plan.json" ] && ! grep -q '"idsByRole"' "$RUN/plan.json"; }; then
-  echo "campaign_run_directory_legacy: $RUN was begun before 2026-11-03 (steps ids, calibrate, label; a plan without idsByRole); nothing in it was changed" >&2; exit 5
+# A month begun before 2026-11-03 has a signed report that a run of this script would overwrite before it failed: it is refused as it is. What identifies
+# it is its plan, which lists no phases (no idsByRole), and the step `ids` only its script had; not `calibrate`, which is a step of this script too.
+if grep -q '^ids ok' "$RUN/STATUS" 2>/dev/null || { [ -s "$RUN/plan.json" ] && ! grep -q '"idsByRole"' "$RUN/plan.json"; }; then
+  echo "campaign_run_directory_legacy: $RUN was begun before 2026-11-03 (a plan without idsByRole, or the step ids); nothing in it was changed" >&2; exit 5
 fi
 if [ -n "$DRY" ]; then
   # What a dry run writes goes to a scratch directory removed at exit; it reads nothing of the run's own state.
@@ -88,10 +87,11 @@ done_step() { grep -q "^$1 ok" "$RUN/STATUS" 2>/dev/null; }
 mark() { echo "$1 ok $(date -u +%FT%TZ) ${2:-}" >> "$RUN/STATUS"; }
 outcome() { printf '{"outcome":"%s","reason":"%s"}\n' "$1" "$2" > "$RUN/outcome.json"; chown "$OWNER" "$RUN/outcome.json"; }
 jsonfield() { python3 -c 'import json,sys;d=json.load(open(sys.argv[1]));print(d.get(sys.argv[2]) or "")' "$1" "$2" 2>/dev/null || true; }
-# One containerised step. --network is the caller's; nothing else is shared with the host.
+# One containerised step. --network is the caller's; nothing else is shared with the host. --init because node as PID 1 ignores SIGTERM: a stopped month's container would go on
+# calling the provider after the lock is released.
 lab() {
   local network=$1; shift
-  "$DOCKER" run --rm --network "$network" --read-only --tmpfs /tmp:size=256m,noexec,nosuid --cap-drop ALL --security-opt no-new-privileges \
+  "$DOCKER" run --rm --init --network "$network" --read-only --tmpfs /tmp:size=256m,noexec,nosuid --cap-drop ALL --security-opt no-new-privileges \
     --pids-limit 256 --memory 3g --user "$OWNER" --env-file "$ETC/secrets/lab.env" -e HOME=/tmp \
     -e NODE_OPTIONS=--network-family-autoselection-attempt-timeout=2500 \
     -v "$ETC/owner-inputs":/run/rsi-lab:ro -v "$STATE":/srv/rsi-lab/state -v "$INBOX":/srv/rsi-lab/inbox:ro "$@"
@@ -110,40 +110,22 @@ sign_report() {
 step() { local name=$1; shift; if done_step "$name"; then return 0; fi; log "step $name"; if "$@" > "$RUN/$name.out" 2> "$RUN/$name.err"; then mark "$name"; else log "step $name failed: $(tail -c 400 "$RUN/$name.err")"; return 1; fi; }
 reason_of() { grep -o 'campaign_[a-z_]*' "$RUN/$1.err" 2>/dev/null | head -1 || true; }
 
-# A named wait: nothing more can happen until the operator supplies the labels of a phase. STATUS says so once; the run ends with exit 0 and no report.
-wait_labels() {
-  grep -q "^wait labels-$1 .* $KEY\$" "$RUN/STATUS" 2>/dev/null || echo "wait labels-$1 $(date -u +%FT%TZ) $KEY" >> "$RUN/STATUS"
-  outcome waiting "labels-$1"
-  log "wait labels-$1: fetch $OUTBOX/$KEY/label-items-$1.json, label it on the operator's box and upload the labels to $LABELS/ (deploy/rsi-campaign/operator/rsi-frontier-label.sh $MONTH)"
-  exit 0
-}
-# The label-items of a phase: written by the lab image from the export and the plan, published to the outbox with its sha256 (idempotent).
-publish_items() {
-  [ -z "${RSI_LAB_DRY_RUN:-}" ] || { log "[dry-run] would publish label-items-$1.json (+ sha256) to $OUTBOX/$KEY"; return 0; }
-  step "items-$1" lab none "$IMAGE" evals/rsi-campaigns/frontier_labels.mjs items --export "/srv/rsi-lab/inbox/$EXPORT" --plan "$C/plan.json" --phase "$1" --out "$C/label-items-$1.json" \
-    || { outcome not-run campaign_label_items_failed; finish 4; }
-  cp -f "$RUN/label-items-$1.json" "$OUTBOX/$KEY/label-items-$1.json"
-  (cd "$OUTBOX/$KEY" && sha256sum "label-items-$1.json" > "label-items-$1.json.sha256")
-}
-# ready | missing (the operator has not finished uploading: the data first, the digest last) | bad (the digest does not match the bytes)
-labels_state() {
-  local f
-  for f in "$@"; do [ -s "$LABELS/$f" ] && [ -s "$LABELS/$f.sha256" ] || { echo missing; return; }; done
-  (cd "$LABELS" && for f in "$@"; do sha256sum -c --status "$f.sha256" || exit 1; done) && echo ready || echo bad
-}
-# Verified files are copied into the run's own directory and the copies are what the steps read.
-adopt_labels() {
-  local f
-  for f in "$@"; do cp -f "$LABELS/$f" "$RUN/$f"; chown "$OWNER" "$RUN/$f"; done
-}
-# The labels of a phase (and the calibration, with the first): wait for them, refuse bytes that do not match their digest.
-require_labels() {
-  local phase=$1; shift
-  case "$(labels_state "$@")" in
-    ready) adopt_labels "$@" ;;
-    bad) outcome waiting labels-checksum; log "labels checksum mismatch in $LABELS: upload again"; exit 3 ;;
-    *) wait_labels "$phase" ;;
-  esac
+# A step that calls the jury: the only steps that mount the provider credential. The key is checked first (docker would create a directory at a missing bind-mount source),
+# and a step that did not finish ends the month with a named reason: the stop its output file records when it is a campaign code (the budget's), else the code the
+# command named on its error output, else the step's own. A step that wrote to its error output crashed, and the output file it left is an earlier start's.
+JURY=(-v "$JURY_KEY":/run/rsi-credentials/dashscope.key:ro)
+jury_step() {
+  local name=$1 fallback=$2 out=$3 cache=$4 reason=""; shift 4
+  done_step "$name" && return 0
+  if [ -z "$DRY" ] && ! { [ -r "$JURY_KEY" ] && grep -q '[^[:space:]]' "$JURY_KEY"; }; then
+    log "the jury's key $JURY_KEY is missing or empty"; outcome not-run campaign_jury_credential_missing; finish 5
+  fi
+  step "$name" lab rsi-lab-net "${JURY[@]}" "$IMAGE" evals/rsi-campaigns/frontier_labels.mjs "$@" --credential /run/rsi-credentials/dashscope.key --cache "$cache" --campaign "$CAMPAIGN" --config /run/rsi-lab/config.json \
+    --out "$C/$out" && return 0
+  [ -s "$RUN/$name.err" ] || reason=$(jsonfield "$RUN/$out" stopped)
+  [[ $reason == campaign_* ]] || reason=$(reason_of "$name")
+  [[ $reason == campaign_* ]] || reason=$fallback
+  log "the jury's work stopped ($reason): the answers are cached; start the month again to continue"; outcome not-run "$reason"; finish 5
 }
 
 log "campaign $KEY image $IMAGE"
@@ -158,22 +140,24 @@ step bootstrap lab rsi-lab-net "$IMAGE" evals/rsi-campaigns/lab_bootstrap.mjs /r
 step plan lab none "$IMAGE" evals/rsi-campaigns/frontier_assemble.mjs plan --export "/srv/rsi-lab/inbox/$EXPORT" --month "$MONTH" --out "$C/plan.json" "${ASSEMBLE_EXTRA[@]}" \
   || { REASON=$(reason_of plan); outcome not-run "${REASON:-campaign_plan_failed}"; finish 4; }
 
-# 2. Development: label-items out, labels in, then the registered choice from development alone.
-publish_items development
-if ! done_step decide; then
-  # A calibration that does not qualify ends the campaign (the operator uploads it alone, without spending a label on a month that will not run).
-  if [ "$(labels_state calibration.json)" = ready ]; then
-    adopt_labels calibration.json
-    if ! python3 -c 'import json,sys;sys.exit(0 if json.load(open(sys.argv[1])).get("qualification",{}).get("qualified") is True else 1)' "$RUN/calibration.json" 2>/dev/null; then
-      python3 -c 'import json,sys;d=json.load(open(sys.argv[1]));json.dump({"status":"not-run","reason":"campaign_labels_unqualified","calibration":{"qualification":d.get("qualification"),"metrics":d.get("calibration")}},open(sys.argv[2],"w"),indent=1)' "$RUN/calibration.json" "$RUN/refusal.json"
-      chown "$OWNER" "$RUN/refusal.json"; outcome not-run campaign_labels_unqualified; finish 0
-    fi
-  fi
-  require_labels development calibration.json labels-development.json
-  step decide lab none "$IMAGE" evals/rsi-campaigns/frontier_assemble.mjs decide --export "/srv/rsi-lab/inbox/$EXPORT" --plan "$C/plan.json" --labels "$C/labels-development.json" \
-    --calibration "$C/calibration.json" --out "$C/decision.json" \
-    || { outcome waiting "$(reason_of decide || true)"; log "development labels refused: $(reason_of decide) — upload corrected labels and start again"; exit 3; }
+# 2. The jury is calibrated on the human anchor every month (about ¥5, from a cache of the month's own: a resume pays nothing twice, the next month asks the provider again, so a moved model
+# alias shows here), and a calibration that does not qualify ends the campaign before a single item of the month is labelled.
+jury_step calibrate campaign_jury_unavailable calibration.json "$C/calibration-cache.jsonl" calibrate --gold evals/frontier-selection/gold.jsonl
+if [ -z "$DRY" ] && ! python3 -c 'import json,sys;sys.exit(0 if json.load(open(sys.argv[1])).get("qualification",{}).get("qualified") is True else 1)' "$RUN/calibration.json" 2>/dev/null; then
+  python3 -c 'import json,sys
+try: d=json.load(open(sys.argv[1]))
+except Exception: d={}
+json.dump({"status":"not-run","reason":"campaign_labels_unqualified","calibration":{"qualification":d.get("qualification"),"metrics":d.get("calibration")}},open(sys.argv[2],"w"),indent=1)' "$RUN/calibration.json" "$RUN/refusal.json"
+  chown "$OWNER" "$RUN/refusal.json"; outcome not-run campaign_labels_unqualified; finish 0
 fi
+
+# 3. Development: its rows are labelled, then the registered choice is made from development alone.
+jury_step label-development campaign_labelling_incomplete labels-development.json "$CACHE" label --export "/srv/rsi-lab/inbox/$EXPORT" --plan "$C/plan.json" --phase development
+# A dry run writes none of what the next steps read: it ends with the commands it has shown.
+[ -z "$DRY" ] || { log "[dry-run] the steps from decide on read files that only a real run writes: stop"; exit 0; }
+step decide lab none "$IMAGE" evals/rsi-campaigns/frontier_assemble.mjs decide --export "/srv/rsi-lab/inbox/$EXPORT" --plan "$C/plan.json" --labels "$C/labels-development.json" \
+  --calibration "$C/calibration.json" --out "$C/decision.json" \
+  || { REASON=$(reason_of decide); outcome not-run "${REASON:-campaign_decide_failed}"; log "development labels refused: ${REASON:-unknown}"; finish 6; }
 DECISION=$(jsonfield "$RUN/decision.json" status)
 if [ "$DECISION" != confirmation-needed ]; then
   # The month ends here: a calibration that does not qualify, a jury that is not admitted, or no candidate from development. Confirmation was never labelled or opened.
@@ -189,13 +173,10 @@ if [ "$DECISION" != confirmation-needed ]; then
   finish 0
 fi
 
-# 3. Confirmation: only now are its rows labelled.
-publish_items confirmation
-if ! done_step merge; then
-  require_labels confirmation labels-confirmation.json
-  step merge lab none "$IMAGE" evals/rsi-campaigns/frontier_assemble.mjs merge-labels --plan "$C/plan.json" --labels "$C/labels-development.json" --labels "$C/labels-confirmation.json" --out "$C/labels.json" \
-    || { outcome waiting "$(reason_of merge || true)"; log "confirmation labels refused: $(reason_of merge) — upload corrected labels and start again"; exit 3; }
-fi
+# 4. Confirmation: only now are its rows labelled; the two phases are joined into the one labels file the build reads.
+jury_step label-confirmation campaign_labelling_incomplete labels-confirmation.json "$CACHE" label --export "/srv/rsi-lab/inbox/$EXPORT" --plan "$C/plan.json" --phase confirmation
+step merge lab none "$IMAGE" evals/rsi-campaigns/frontier_assemble.mjs merge-labels --plan "$C/plan.json" --labels "$C/labels-development.json" --labels "$C/labels-confirmation.json" --out "$C/labels.json" \
+  || { REASON=$(reason_of merge); outcome not-run "${REASON:-campaign_merge_failed}"; log "the phases' labels were refused: ${REASON:-unknown}"; finish 6; }
 step build lab none "$IMAGE" evals/rsi-campaigns/frontier_assemble.mjs build --export "/srv/rsi-lab/inbox/$EXPORT" --plan "$C/plan.json" --labels "$C/labels.json" \
   --calibration "$C/calibration.json" --out-dir "$C" || { outcome not-run campaign_assembly_failed; finish 6; }
 [ -s "$RUN/manifest.json" ] || { REASON=$(jsonfield "$RUN/supply.json" reason); mv -f "$RUN/supply.json" "$RUN/refusal.json" 2>/dev/null || true; outcome not-run "${REASON:-campaign_not_assembled}"; finish 0; }

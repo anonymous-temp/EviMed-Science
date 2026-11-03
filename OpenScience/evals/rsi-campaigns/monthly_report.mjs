@@ -6,11 +6,15 @@
  */
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { RSI_OFFLINE_ROLE_MODEL } from '../../packages/domain/src/rsiCampaign.mjs';
 
 const [dir, month] = process.argv.slice(2);
 const read = async (name) => { try { return JSON.parse(await readFile(join(dir, name), 'utf8')); } catch { return null; } };
-const [supplyFile, plan, calibration, labels, run, resume, status] = await Promise.all(['supply.json', 'plan.json', 'calibration.json', 'labels.json', 'run/run.json', 'run/resume.json', 'outcome.json'].map(read));
+const [supplyFile, plan, calibration, labelsFile, developmentLabels, confirmationLabels, run, resume, status] = await Promise.all(['supply.json', 'plan.json', 'calibration.json', 'labels.json', 'labels-development.json', 'labels-confirmation.json', 'run/run.json', 'run/resume.json', 'outcome.json'].map(read));
+// The month's labels: the merged file (or the development's, when development ended the month); a month that stopped part-way has only its phases' files, and they are summed.
+const phased = [developmentLabels, confirmationLabels].filter(Boolean);
+const sum = (key) => phased.reduce((total, file) => total + (file[key] ?? 0), 0);
+const labels = labelsFile ?? (phased.length ? { items: sum('items'), labelled: sum('labelled'), costCny: Math.round(sum('costCny') * 1e8) / 1e8, stopped: phased.find((file) => file.stopped)?.stopped ?? null,
+  labelCounts: Object.fromEntries(['pick', 'ok', 'no', 'abstained', 'refused'].map((key) => [key, phased.reduce((total, file) => total + (file.labelCounts?.[key] ?? 0), 0)])) } : null);
 // A supply is what a development that ran measured; a refusal-shaped or absent file is no supply.
 const supply = supplyFile?.development ? supplyFile : null;
 // The plan records `incumbent: null` for an export that carried no baseline identity (an older export script): the month is measured, and cannot be imported.
@@ -38,16 +42,20 @@ const report = {
   confirmation: quantities ? { meanDifference: quantities.mean, lowerBound: quantities.lower, groups: quantities.n_groups, testAlpha: evaluation.quantities.superiority.test_alpha, volumeRatio: evaluation.volumeRatio ?? null } : null,
   confirmationObserved: observed, statisticsReasons: evaluation?.reasons ?? [], directional,
   supply: supply ? { development: supply.development, confirmation: supply.confirmation, replayFidelity: supply.replayFidelity, drift: supply.drift, power: supply.power, minimumGroups: supply.minimumGroups, releaseId: supply.releaseId } : null,
-  jury: calibration ? { version: calibration.juryVersion, model: calibration.model, qualified: calibration.qualification?.qualified ?? null, metrics: calibration.calibration ?? null, costCny: calibration.costCny ?? null, costBasis: calibration.costBasis ?? null } : null,
-  labelling: labels ? { items: labels.items ?? null, labelled: labels.labelled ?? null, labelCounts: labels.labelCounts ?? null, costCny: labels.costCny ?? null, costBasis: labels.costBasis ?? null, stopped: labels.stopped ?? null } : null,
+  jury: calibration ? { version: calibration.juryVersion, provider: calibration.provider ?? null, model: calibration.model, qualified: calibration.qualification?.qualified ?? null, metrics: calibration.calibration ?? null, costCny: calibration.costCny ?? null } : null,
+  labelling: labels ? { items: labels.items ?? null, labelled: labels.labelled ?? null, labelCounts: labels.labelCounts ?? null, costCny: labels.costCny ?? null, stopped: labels.stopped ?? null } : null,
+  // A month whose development found no candidate never labels its confirmation month (`decide` records its counts as null); null here is not known, false is "not labelled (yet)".
+  confirmationLabelled: supply ? supply.confirmation?.labelled != null : null,
   baselineBound, releaseEligible: false,
   note: 'Lab-only trial: no bundle is imported into production in this phase.',
 };
 const pct = (value) => value == null ? '—' : `${(value * 100).toFixed(1)}%`;
 /** A count the run did not measure or label is unknown, not zero and not `null`. */
 const count = (value) => value == null ? '未标注' : String(value);
-// The operator's Claude jury runs on a subscription: its records say `costBasis: "subscription"` and no cash was spent.
-const subscription = [report.jury?.costBasis, report.labelling?.costBasis].includes('subscription') || RSI_OFFLINE_ROLE_MODEL.test(String(report.jury?.model ?? labels?.model ?? ''));
+/** The month's labels by kind; a total would count an abstention as a label. A file from before refusals were counted apart has none. */
+const labelled = (counts) => counts ? `精选 ${counts.pick ?? 0}、普通 ${counts.ok ?? 0}、不展示 ${counts.no ?? 0}、弃权 ${counts.abstained ?? 0}、内容审查拒答 ${counts.refused ?? 0}` : '未标注';
+/** What the jury cost this month in CNY: its calibration and its labelling, at the priced usage, over every start of the month. */
+const juryCost = (report.jury?.costCny ?? 0) + (report.labelling?.costCny ?? 0);
 const lines = [
   `# 前沿精选阈值战役 · ${month}`, '',
   `- 结论：**${directional ? `方向性参考，不是合格结论（确认期可测 ${directional.groups} 天，低于登记统计程序的 ${directional.minimum} 天下限，本季度 α 未动用）`
@@ -58,8 +66,9 @@ const lines = [
     : observed ? `- 确认期：测了 ${observed.groups} 天，候选比基线平均 ${pct(observed.meanDifference)}（${observed.better} 天更好、${observed.worse} 天更差）；统计未下结论：${report.statisticsReasons.join('；') || report.reason || '—'}`
       : '- 确认期：未进行',
   supply ? `- 供给：开发期 ${supply.development.days} 天（可测 ${count(supply.development.measuredDays)}），确认期 ${supply.confirmation?.days} 天（可测 ${count(supply.confirmation?.measuredDays)}，最少 ${supply.minimumGroups}），最小可检出差 ${pct(supply.power?.mde)}；基线重放与生产实际入选的重合度 ${pct(supply.replayFidelity)}` : '- 供给：无',
+  ...(report.confirmationLabelled === false && !supply.developmentChoice?.frozen ? ['- 确认期未标注：开发期没有选出候选，确认月未被标注、未被打开，本季度 α 未动用'] : []),
   supply?.drift?.length ? `- 实验机选择器与生产不一致的文件：${supply.drift.join('、')}` : '- 实验机选择器与生产一致',
-  report.jury ? `- 标注：${report.jury.model ?? '未记录模型'} 双盲评审，校准 κ=${report.jury.metrics?.pickKappa?.toFixed(3) ?? '—'}、精选精确率 ${pct(report.jury.metrics?.pickPrecision)}、召回率 ${pct(report.jury.metrics?.pickRecall)}、弃权 ${pct(report.jury.metrics?.abstentionRate)}；本月标注 ${report.labelling?.labelled == null ? '未标注' : `${report.labelling.labelled} 条`}，${subscription ? '花费：订阅，不计现金' : `花费约 ¥${((report.jury.costCny ?? 0) + (report.labelling?.costCny ?? 0)).toFixed(2)}`}` : '- 标注：未进行',
+  report.jury ? `- 标注：${report.jury.model ?? '未记录模型'} 双盲评审，校准 κ=${report.jury.metrics?.pickKappa?.toFixed(3) ?? '—'}、精选精确率 ${pct(report.jury.metrics?.pickPrecision)}、召回率 ${pct(report.jury.metrics?.pickRecall)}、弃权 ${pct(report.jury.metrics?.abstentionRate)}；本月标注 ${report.labelling?.labelled == null ? '未标注' : labelled(report.labelling.labelCounts)}${report.labelling?.stopped ? `（已中止：${report.labelling.stopped}）` : ''}，花费约 ¥${juryCost.toFixed(2)}` : '- 标注：未进行',
   '', '本阶段只在实验机运行，不向生产导入任何候选。',
 ];
 await writeFile(join(dir, 'report.json'), `${JSON.stringify(report, null, 1)}\n`);

@@ -52,7 +52,7 @@ export const HARNESS_SELECTION = Object.freeze({ objective: 'failure-slice-gain'
 export const HARNESS_COST_RATIO = 1.1;
 /** The judge's qualification thresholds are the procedure's, fixed here (2026-11-03), never the registrant's: the measured agreement must reach this. */
 export const HARNESS_JUDGE_MINIMUM_AGREEMENT = 0.9;
-/** The Claude CLI's effort levels a registered judge runs at (claude_judge.py `EFFORTS`, the frontier jury's FRONTIER_JURY_EFFORTS). */
+/** The Claude CLI's effort levels a registered judge runs at (claude_judge.py `EFFORTS`). */
 export const HARNESS_JUDGE_EFFORTS = Object.freeze(['low', 'medium', 'high', 'xhigh', 'max']);
 /** The one scale a judge's measurement is read on: the verdict's own, 0 to 1 (noise_sample.py `band`, `judge-noise/2`). */
 export const HARNESS_JUDGE_NOISE_SCALE = 'verdict-0-1';

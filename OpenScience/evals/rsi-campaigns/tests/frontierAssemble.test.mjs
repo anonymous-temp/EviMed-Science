@@ -38,18 +38,19 @@ function exportDocument() {
   };
 }
 const allRows = (document) => document.days.flatMap((day) => day.rows);
-/** The model the jury's files name (frontier_labels.mjs writes `model` in both the labels and the calibration). */
-const JURY_MODEL = 'claude-sonnet-5-5';
+/** The provider and model the jury's files name (frontier_labels.mjs writes both in the labels and in the calibration): the frontier jury, the one Qwen adjudicator the domain admits. */
+const JURY_PROVIDER = 'dashscope';
+const JURY_MODEL = 'qwen3.8-max';
 /** What a labeller would say: a pick from 72 up, an alert is always a pick, every seventeenth row is left unlabelled. */
 function labelsFor(ids, document) {
   const byId = new Map(allRows(document).map((row) => [String(row.id), row]));
-  return { juryVersion: 'test-jury-1', model: JURY_MODEL, labels: ids.map((id, i) => {
+  return { juryVersion: 'test-jury-1', provider: JURY_PROVIDER, model: JURY_MODEL, labels: ids.map((id, i) => {
     const row = byId.get(id);
     return { id, worth: i % 17 === 16 ? null : row.safety_alert === true || row.score_total >= 72 ? 'pick' : row.score_total >= 68 ? 'ok' : 'no' };
   }) };
 }
 /** The jury's calibration file as `frontier_labels.mjs calibrate` writes it: metrics under `calibration`, the gate under `qualification`. */
-const CALIBRATION = { schema: 'rsi-frontier-jury-calibration-v1', juryVersion: 'test-jury-1', model: JURY_MODEL, calibration: { pickKappa: 0.81, abstentionRate: 0.05, pickPrecision: 0.8 }, qualification: { qualified: true, reasons: [] } };
+const CALIBRATION = { schema: 'rsi-frontier-jury-calibration-v1', juryVersion: 'test-jury-1', provider: JURY_PROVIDER, model: JURY_MODEL, calibration: { pickKappa: 0.81, abstentionRate: 0.05, pickPrecision: 0.8 }, qualification: { qualified: true, reasons: [] } };
 
 async function withExport(fn, document = exportDocument()) {
   const dir = await mkdtemp(join(tmpdir(), 'rsi-assemble-'));
@@ -229,7 +230,7 @@ test('an assembled campaign passes the manifest contract and registers the measu
     assert.deepEqual([manifest.id, manifest.surface, manifest.candidateKind, manifest.claim, manifest.automated, manifest.deadline],
       ['frontier-selection-2026-10', 'frontier-selection', 'policy', 'superiority', true, '2026-10-31T16:00:00.000Z']);
     // No improver (the registered grid) and, as the judge, the jury the labels file names.
-    assert.deepEqual(manifest.models, { solver: { provider: 'deepseek', model: 'deepseek-flash' }, improvers: [], judges: [{ role: 'jury', provider: 'anthropic', model: JURY_MODEL, id: 'test-jury-1' }] });
+    assert.deepEqual(manifest.models, { solver: { provider: 'deepseek', model: 'deepseek-flash' }, improvers: [], judges: [{ role: 'jury', provider: JURY_PROVIDER, model: JURY_MODEL, id: 'test-jury-1' }] });
     assert.deepEqual([manifest.data.classification, manifest.data.sources.map((row) => [row.id, row.role, row.exposure])],
       ['public', [['development-2026-08', 'development', 'exposed'], ['confirmation-2026-09', 'confirmation', 'sealed']]]);
     // Every digest the manifest carries is the digest of what the inputs hold.
@@ -269,7 +270,7 @@ test('an assembled campaign passes the manifest contract and registers the measu
     // The selection registration and the labelling record.
     assert.deepEqual([inputs.registration.baselineThreshold, inputs.registration.maxVolumeRatio, inputs.registration.minLabelled], [BASELINE, 1.1, 20]);
     assert.deepEqual(inputs.registration.selection, { objective: 'weighted-accuracy-difference', tieBreak: 'nearest-baseline' });
-    assert.deepEqual(inputs.registration.labelling, { juryVersion: 'test-jury-1', provider: 'anthropic', model: JURY_MODEL, calibrationDigest: rsiDigest({ qualification: CALIBRATION.qualification, calibration: CALIBRATION.calibration }) });
+    assert.deepEqual(inputs.registration.labelling, { juryVersion: 'test-jury-1', provider: JURY_PROVIDER, model: JURY_MODEL, calibrationDigest: rsiDigest({ qualification: CALIBRATION.qualification, calibration: CALIBRATION.calibration }) });
     // The supply report reads development alone.
     assert.equal(supply.development.days, 31);
     assert.equal(supply.confirmation.measuredDays, expectedDays.length);
@@ -350,20 +351,28 @@ test('windows and an id prefix make a rehearsal campaign with its own ids and de
   });
 });
 
-test('the judge is the jury that produced the labels, held to the owner\'s rule: a Qwen or unnamed jury, or labels from another model than the calibrated one, assemble nothing', async () => {
+test('the judge is the jury that produced the labels, held to the domain\'s rule: the frontier jury (Qwen, role jury) or a pinned Claude model; any other jury, or labels from another jury than the calibrated one, assemble nothing', async () => {
   await withExport(async ({ gz, document }) => {
     const plan = await planCampaign({ exportPath: gz, month: '2026-10' });
     const labels = labelsFor(plan.ids, document);
     const build = (labelsFile, calibration = CALIBRATION) => buildCampaign({ exportPath: gz, plan, labels: labelsFile, calibration, now: NOW, rootDir: root });
-    for (const model of ['qwen3.8-max', 'deepseek-v4-pro', undefined]) {
-      const refused = await build({ ...labels, model }, { ...CALIBRATION, model });
-      assert.deepEqual([refused.status, refused.reason, refused.manifest], ['not-run', 'campaign_judge_refused', undefined], String(model));
+    // The jury of the lab: admitted, and the manifest says so in the form the domain admits on this surface.
+    const built = await build(labels);
+    assert.equal(built.status, 'assembled');
+    assert.deepEqual(built.manifest.models.judges, [{ role: 'jury', provider: 'dashscope', model: 'qwen3.8-max', id: 'test-jury-1' }]);
+    // A pinned Claude model is still an admitted adjudicator everywhere, this surface included.
+    assert.equal((await build({ ...labels, provider: 'anthropic', model: 'claude-sonnet-5-5' }, { ...CALIBRATION, provider: 'anthropic', model: 'claude-sonnet-5-5' })).status, 'assembled');
+    // Anything else is refused by name, before anything is assembled: a file that names no provider, another Qwen, a DeepSeek model, a provider that does not match the model.
+    for (const [provider, model] of [[undefined, JURY_MODEL], [undefined, 'claude-sonnet-5-5'], ['dashscope', 'qwen3.8-plus'], ['dashscope', 'qwen-max'], ['deepseek', 'deepseek-flash'], ['deepseek', 'deepseek-v4-pro'],
+      ['anthropic', 'qwen3.8-max'], ['dashscope', 'claude-sonnet-5-5'], ['openai', 'gpt-5'], ['dashscope', undefined]]) {
+      const refused = await build({ ...labels, provider, model }, { ...CALIBRATION, provider, model });
+      assert.deepEqual([refused.status, refused.reason, refused.manifest], ['not-run', 'campaign_judge_refused', undefined], `${provider}/${model}`);
     }
-    // A file that says its provider is held to it; one that says another provider for a claude model is refused.
-    assert.equal((await build({ ...labels, provider: 'anthropic' })).status, 'assembled');
-    assert.equal((await build({ ...labels, provider: 'dashscope' })).reason, 'campaign_judge_refused');
-    const changed = await build({ ...labels, model: 'claude-opus-5-5' });
+    // Labels from another model or another provider than the calibration qualified are another jury.
+    const changed = await build({ ...labels, provider: 'anthropic', model: 'claude-opus-5-5' });
     assert.deepEqual([changed.status, changed.reason, changed.jury], ['not-run', 'campaign_labels_jury_changed', { labels: 'claude-opus-5-5', calibration: JURY_MODEL }]);
+    const provider = await build({ ...labels, provider: 'anthropic' });
+    assert.deepEqual([provider.status, provider.reason], ['not-run', 'campaign_labels_jury_changed']);
   });
 });
 
@@ -502,11 +511,11 @@ const PROMPT_DIGEST = 'f'.repeat(64);
 /** A labels file as `frontier_labels.mjs label` writes it for one phase of a plan (the calibration it was qualified by names the same jury). */
 function phaseLabels(plan, document, phase, over = {}) {
   const ids = plan.idsByRole[phase], file = labelsFor(ids, document);
-  return { schema: 'rsi-frontier-jury-labels-v1', phase, month: plan.month, idPrefix: '', exportSha256: plan.exportSha256, juryVersion: file.juryVersion, model: JURY_MODEL, effort: 'medium', promptDigest: PROMPT_DIGEST,
-    items: ids.length, missing: 0, labelled: file.labels.length, incomplete: 0, labelCounts: { pick: 1, ok: 2, no: 3, abstained: 4 }, calls: 2 * ids.length, cachedCalls: 0,
-    tokens: { cacheHit: 10, cacheMiss: 20, output: 5 }, costCny: 0, costBasis: 'subscription', stopped: null, labels: file.labels, ...over };
+  return { schema: 'rsi-frontier-jury-labels-v1', phase, month: plan.month, idPrefix: '', exportSha256: plan.exportSha256, juryVersion: file.juryVersion, provider: JURY_PROVIDER, model: JURY_MODEL, promptDigest: PROMPT_DIGEST,
+    items: ids.length, missing: 0, labelled: file.labels.length, incomplete: 0, labelCounts: { pick: 1, ok: 2, no: 3, abstained: 4, refused: 5 }, calls: 2 * ids.length, cachedCalls: 0,
+    costCny: phase === 'development' ? 1.25 : 0.5, stopped: null, labels: file.labels, ...over };
 }
-const CALIBRATED = { ...CALIBRATION, effort: 'medium', promptDigest: PROMPT_DIGEST };
+const CALIBRATED = { ...CALIBRATION, promptDigest: PROMPT_DIGEST };
 /** Labels that make the baseline perfect on every day: a row is a pick exactly when the baseline selects it, so no threshold can beat it. */
 function baselineIsPerfect(plan, document, phase) {
   const selected = new Set(document.days.filter((day) => day.complete).flatMap((day) => replayFrontierPool(day, plan.registration.baselineThreshold).selectedIds.map(String)));
@@ -537,15 +546,15 @@ test('decide: development labels alone freeze a candidate, so confirmation is wo
     assert.equal(decision.supply.development.days, 31);
     assert.equal(decision.supply.confirmation.days, 29);
     assert.deepEqual([decision.supply.confirmation.measuredDays, decision.supply.confirmation.labelled], [null, null], 'what confirmation labels would make of its days is not known yet');
-    assert.deepEqual(decision.supply.calibration, { qualified: true, juryVersion: 'test-jury-1', model: JURY_MODEL, effort: 'medium', metrics: CALIBRATION.calibration });
+    assert.deepEqual(decision.supply.calibration, { qualified: true, juryVersion: 'test-jury-1', model: JURY_MODEL, metrics: CALIBRATION.calibration });
     assert.deepEqual(decision.supply.incumbent, INCUMBENT);
     // The same labels, both phases merged, build the same development choice.
     const merged = mergeLabelFiles([phaseLabels(plan, document, 'development'), phaseLabels(plan, document, 'confirmation')], plan);
     const built = await buildCampaign({ exportPath: gz, plan, labels: merged, calibration: CALIBRATED, now: NOW, rootDir: root });
     assert.equal(built.status, 'assembled');
     assert.deepEqual(built.supply.developmentChoice, decision.supply.developmentChoice);
-    assert.deepEqual(built.inputs.registration.labelling.effort, 'medium');
-    assert.deepEqual(built.manifest.models.judges, [{ role: 'jury', provider: 'anthropic', model: JURY_MODEL, id: 'test-jury-1' }]);
+    assert.deepEqual(built.inputs.registration.labelling, { juryVersion: 'test-jury-1', provider: JURY_PROVIDER, model: JURY_MODEL, calibrationDigest: rsiDigest({ qualification: CALIBRATION.qualification, calibration: CALIBRATION.calibration }) });
+    assert.deepEqual(built.manifest.models.judges, [{ role: 'jury', provider: JURY_PROVIDER, model: JURY_MODEL, id: 'test-jury-1' }]);
     assert.equal(decision.supply.replayFidelity, built.supply.replayFidelity);
   });
 });
@@ -590,8 +599,9 @@ test('decide refuses what is not the development labels of this plan, and an unq
     const labels = phaseLabels(plan, document, 'development');
     const decide = (over = {}, calibration = CALIBRATED, file = labels) => decideDevelopment({ exportPath: gz, plan, labels: { ...file, ...over }, calibration });
     assert.deepEqual(Object.values(await decide({}, { ...CALIBRATED, qualification: { qualified: false, reasons: ['kappa_below_minimum'] } })).slice(0, 2), ['not-run', 'campaign_labels_unqualified']);
-    for (const [over, calibration, reason] of [[{ model: 'claude-opus-5-5' }, CALIBRATED, 'campaign_labels_jury_changed'], [{ effort: 'low' }, CALIBRATED, 'campaign_labels_jury_changed'],
-      [{}, { ...CALIBRATED, juryVersion: 'other' }, 'campaign_labels_jury_changed'], [{ model: 'qwen3.8-max' }, { ...CALIBRATED, model: 'qwen3.8-max' }, 'campaign_judge_refused']]) {
+    for (const [over, calibration, reason] of [[{ model: 'claude-opus-5-5' }, CALIBRATED, 'campaign_labels_jury_changed'], [{ provider: 'anthropic' }, CALIBRATED, 'campaign_labels_jury_changed'],
+      [{ promptDigest: 'e'.repeat(64) }, CALIBRATED, 'campaign_labels_jury_changed'], [{}, { ...CALIBRATED, juryVersion: 'other' }, 'campaign_labels_jury_changed'],
+      [{ model: 'qwen3.8-plus' }, { ...CALIBRATED, model: 'qwen3.8-plus' }, 'campaign_judge_refused'], [{ provider: 'deepseek', model: 'deepseek-flash' }, { ...CALIBRATED, provider: 'deepseek', model: 'deepseek-flash' }, 'campaign_judge_refused']]) {
       const refused = await decide(over, calibration);
       assert.deepEqual([refused.status, refused.reason, refused.frozen], ['not-run', reason, undefined], JSON.stringify(over));
     }
@@ -609,17 +619,17 @@ test('merge-labels takes exactly the two phases of one jury, one export and one 
     const plan = await planCampaign({ exportPath: gz, month: '2026-10' });
     const dev = phaseLabels(plan, document, 'development'), conf = phaseLabels(plan, document, 'confirmation');
     const merged = mergeLabelFiles([dev, conf], plan);
-    assert.deepEqual([merged.schema, merged.phase, merged.model, merged.effort, merged.juryVersion, merged.exportSha256, merged.stopped, merged.incomplete, merged.costCny, merged.costBasis],
-      ['rsi-frontier-jury-labels-v1', 'all', JURY_MODEL, 'medium', 'test-jury-1', plan.exportSha256, null, 0, 0, 'subscription']);
+    assert.deepEqual([merged.schema, merged.phase, merged.provider, merged.model, merged.juryVersion, merged.promptDigest, merged.exportSha256, merged.stopped, merged.incomplete, merged.costCny],
+      ['rsi-frontier-jury-labels-v1', 'all', JURY_PROVIDER, JURY_MODEL, 'test-jury-1', PROMPT_DIGEST, plan.exportSha256, null, 0, 1.75]);
+    assert.ok(!('effort' in merged) && !('tokens' in merged) && !('costBasis' in merged), 'nothing of the retired Claude-CLI form');
     assert.equal(merged.labels.length, plan.ids.length);
-    assert.deepEqual(merged.tokens, { cacheHit: 20, cacheMiss: 40, output: 10 });
-    assert.deepEqual(merged.labelCounts, { pick: 2, ok: 4, no: 6, abstained: 8 });
+    assert.deepEqual(merged.labelCounts, { pick: 2, ok: 4, no: 6, abstained: 8, refused: 10 });
     assert.deepEqual([merged.calls, merged.labelled], [dev.calls + conf.calls, plan.ids.length]);
     // The merge is a labels file: the build takes it and sees one jury.
     assert.equal((await buildCampaign({ exportPath: gz, plan, labels: merged, calibration: CALIBRATED, now: NOW, rootDir: root })).status, 'assembled');
     for (const [files, message] of [
       [[dev], 'campaign_labels_phase_invalid'], [[dev, dev], 'campaign_labels_phase_invalid'], [[dev, conf, conf], 'campaign_labels_phase_invalid'], [[dev, { ...conf, phase: undefined }], 'campaign_labels_phase_invalid'],
-      [[dev, { ...conf, model: 'claude-opus-5-5' }], 'campaign_labels_jury_changed'], [[dev, { ...conf, effort: 'low' }], 'campaign_labels_jury_changed'], [[dev, { ...conf, juryVersion: 'v2' }], 'campaign_labels_jury_changed'],
+      [[dev, { ...conf, model: 'claude-opus-5-5' }], 'campaign_labels_jury_changed'], [[dev, { ...conf, provider: 'anthropic' }], 'campaign_labels_jury_changed'], [[dev, { ...conf, juryVersion: 'v2' }], 'campaign_labels_jury_changed'],
       [[dev, { ...conf, exportSha256: 'e'.repeat(64) }], 'campaign_labels_export_mismatch'], [[{ ...dev, stopped: 'jury_quota' }, conf], 'campaign_labels_incomplete'], [[dev, { ...conf, incomplete: 1 }], 'campaign_labels_incomplete'],
       [[dev, { ...conf, labels: [dev.labels[0], ...conf.labels] }], 'campaign_labels_outside_plan'], [[{ ...dev, labels: [...dev.labels, dev.labels[0]] }, conf], 'campaign_labels_outside_plan'],
     ]) assert.throws(() => mergeLabelFiles(files, plan), { message }, message);
@@ -629,13 +639,13 @@ test('merge-labels takes exactly the two phases of one jury, one export and one 
 test('a build refuses labels made from another export or from a run that did not finish', async () => {
   await withExport(async ({ gz, document }) => {
     const plan = await planCampaign({ exportPath: gz, month: '2026-10' });
-    const labels = { ...labelsFor(plan.ids, document), effort: 'medium', promptDigest: PROMPT_DIGEST };
+    const labels = { ...labelsFor(plan.ids, document), promptDigest: PROMPT_DIGEST };
     const build = (over) => buildCampaign({ exportPath: gz, plan, labels: { ...labels, ...over }, calibration: CALIBRATED, now: NOW, rootDir: root });
     assert.equal((await build({})).status, 'assembled');
     await assert.rejects(build({ exportSha256: 'e'.repeat(64) }), { message: 'campaign_labels_export_mismatch' });
     await assert.rejects(build({ stopped: 'jury_quota' }), { message: 'campaign_labels_incomplete' });
     await assert.rejects(build({ incomplete: 2 }), { message: 'campaign_labels_incomplete' });
-    assert.equal((await build({ effort: 'low' })).reason, 'campaign_labels_jury_changed');
+    assert.equal((await build({ provider: 'anthropic' })).reason, 'campaign_labels_jury_changed');
   });
 });
 

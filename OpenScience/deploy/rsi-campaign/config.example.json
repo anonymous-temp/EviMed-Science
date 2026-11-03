@@ -3,5 +3,8 @@
   "transport": {"endpoint": "", "region": "", "incidentBucket": "", "bundleBucket": ""},
   "signer": {"keyId": "", "publicKeySha256": ""},
   "authority": {"role": "rsi-lab", "accountId": "", "dataDir": "", "databaseRole": ""},
-  "budget": {"campaignCny": 1000, "monthCny": 30000}
+  "budget": {"campaignCny": 1000, "monthCny": 30000},
+  "providers": {
+    "qwenMax": {"provider": "dashscope", "model": "qwen3.8-max", "credentialRef": ""}
+  }
 }

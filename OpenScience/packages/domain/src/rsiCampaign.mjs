@@ -24,11 +24,19 @@ export const RSI_REGISTERED_GRID_SURFACES = Object.freeze(['frontier-selection']
 /**
  * The owner's role policy (2026-11-03): the solver of every measured arm is DeepSeek (EviMed Science is DSH + DeepSeek Flash); every offline
  * improver (proposing, editing, composing, selecting, reflecting, distilling, writing candidates) and every adjudicator (judging, labelling,
- * a jury) is Claude, pinned by its model id. DeepSeek and Qwen are neither improvers nor judges offline.
+ * a jury) is Claude, pinned by its model id. DeepSeek and Qwen are neither improvers nor judges offline, with the one exception below.
  */
 export const RSI_SOLVER_PROVIDER = 'deepseek'
 export const RSI_OFFLINE_ROLE_PROVIDER = 'anthropic'
 export const RSI_OFFLINE_ROLE_MODEL = /^claude-[a-z0-9-]+$/
+/**
+ * The one adjudicator that is not Claude (owner ruling 2026-11-03, the second one, after a measurement): the jury of the frontier-selection campaign.
+ * On the same 124 anchor rows Qwen 3.8 Max scored pick kappa 0.875 (precision 0.944, recall 0.85, abstention 2.4%) against the best Claude setting's
+ * 0.686 (claude-sonnet-5-5, low effort, rubric v2; paired difference 0.189, 95% CI [0.011, 0.391], McNemar p 0.035), so this jury alone stays Qwen.
+ * It is admitted as a judge with role `jury`, this provider and this model, on this surface and nowhere else: not on another surface, not as another
+ * role, not as another Qwen or a DeepSeek model, and never as an improver.
+ */
+export const RSI_FRONTIER_JURY = Object.freeze({ role: 'jury', provider: 'dashscope', model: 'qwen3.8-max', surface: 'frontier-selection' })
 
 /** @param {any} value */
 const record = value => value !== null && typeof value === 'object' && !Array.isArray(value)
@@ -48,12 +56,14 @@ const roleName = value => typeof value === 'string' && /^[a-z][a-z0-9-]{0,63}$/.
 /**
  * One offline improver (`{role, provider, model}`) or adjudicator (`{role, provider, model, id?}`, `id` the registered judge or jury identity),
  * or the closed code that refuses it: a malformed record is `campaign_model_invalid`, anything but Anthropic with a pinned claude-* model id is
- * `campaign_improver_refused` / `campaign_judge_refused`.
- * @param {'improver'|'judge'} kind @param {any} value @returns {string|null}
+ * `campaign_improver_refused` / `campaign_judge_refused` — except the frontier jury (`RSI_FRONTIER_JURY`) as a judge on its own surface, which `surface` names.
+ * @param {'improver'|'judge'} kind @param {any} value @param {string} [surface] the campaign surface the role serves
+ * @returns {string|null}
  */
-export function rsiOfflineRoleIssue(kind, value) {
+export function rsiOfflineRoleIssue(kind, value, surface) {
   if (!keysWithin(value, kind === 'judge' ? ['role', 'provider', 'model', 'id'] : ['role', 'provider', 'model']) || !roleName(value.role) || typeof value.provider !== 'string'
     || !identifier(value.model) || (value.id !== undefined && !identifier(value.id))) return 'campaign_model_invalid'
+  if (kind === 'judge' && surface === RSI_FRONTIER_JURY.surface && value.role === RSI_FRONTIER_JURY.role && value.provider === RSI_FRONTIER_JURY.provider && value.model === RSI_FRONTIER_JURY.model) return null
   return value.provider === RSI_OFFLINE_ROLE_PROVIDER && RSI_OFFLINE_ROLE_MODEL.test(value.model) ? null : `campaign_${kind}_refused`
 }
 
@@ -64,7 +74,7 @@ function modelIssues(models, surface) {
   const issues = []
   if (models.solver.provider !== RSI_SOLVER_PROVIDER || !/^deepseek/i.test(models.solver.model)) issues.push('campaign_solver_refused')
   for (const improver of models.improvers) { const issue = rsiOfflineRoleIssue('improver', improver); if (issue) issues.push(issue) }
-  for (const judge of models.judges) { const issue = rsiOfflineRoleIssue('judge', judge); if (issue) issues.push(issue) }
+  for (const judge of models.judges) { const issue = rsiOfflineRoleIssue('judge', judge, surface); if (issue) issues.push(issue) }
   // An empty `judges` is the consumer's to accept (a deterministic scorer); its validation compares it with the registration.
   if (!models.improvers.length && !RSI_REGISTERED_GRID_SURFACES.includes(surface)) issues.push('campaign_improver_missing')
   return issues

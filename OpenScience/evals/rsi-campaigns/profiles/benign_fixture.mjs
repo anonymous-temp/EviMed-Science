@@ -27,8 +27,8 @@ export const BENIGN_PROCEDURE = Object.freeze({ id: 'rsi-paired-group-v5', diges
 export const BENIGN_CLAIM_ALPHA = 0.05 / 3;
 export const BENIGN_DEADLINE = '2026-10-31T16:00:00.000Z';
 export const BENIGN_CLOCK_START = '2026-10-26T01:00:00.000Z';
-/** The jury a synthetic frontier campaign's labels are said to come from (a seeded rule wrote them; no model did). */
-export const BENIGN_JURY = Object.freeze({ juryVersion: 'frontier-jury-test', provider: 'anthropic', model: 'claude-sonnet-5-5' });
+/** The jury a synthetic frontier campaign's labels are said to come from (a seeded rule wrote them; no model did): the frontier jury, the one Qwen adjudicator the domain admits. */
+export const BENIGN_JURY = Object.freeze({ juryVersion: 'frontier-jury-test', provider: 'dashscope', model: 'qwen3.8-max' });
 /** The pinned numpy / scipy / rfc8785 the statistics process imports. */
 export const STATISTICS_PYTHON = process.env.RSI_TEST_PYTHON ?? 'python3';
 // Where `pnpm test:rsi`'s CI step installs them (`pip install --target ../.evimed-local/toolchains/rsi-python`, relative to
@@ -206,6 +206,7 @@ export const labConfiguration = Object.freeze({
   signer: { keyId: 'kms-lab', publicKeySha256: 'a'.repeat(64) },
   authority: { role: 'rsi-lab', accountId: 'lab-test', dataDir: '/srv/rsi-lab', databaseRole: 'rsi_lab' },
   budget: { campaignCny: 1000, monthCny: 30000 },
+  providers: { qwenMax: { provider: 'dashscope', model: 'qwen3.8-max', credentialRef: 'lab:qwen' } },
 });
 export const labAttest = async () => ({ role: 'rsi_lab', database: 'evimed_rsi_lab', hostInstanceId: 'i-lab', hostPurpose: 'rsi-lab' });
 

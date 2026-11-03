@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The capability-skill campaign on the RSI lab host (2026-10-28): a personal skill measured on MedCalc-Bench rows that ran on
-# production (one lane, automated, throwaway accounts). The lab has no improver and calls no model (owner 2026-11-03: every improver is Claude, and Claude runs
-# on the operator's box): the candidates are written there, by the operator's Claude session, registered with
+# production (one lane, automated, throwaway accounts). The lab has no improver and this script mounts no provider credential (owner 2026-11-03: every improver is
+# Claude, and Claude runs on the operator's box; the one model the lab calls is the frontier jury's, in rsi-lab-monthly.sh): the candidates are written there, by the operator's Claude session, registered with
 # `skill_assemble.mjs --register` (content-addressed, the improvers named) and arrive with the runs. The operator copies the exported runs and the
 # candidates into the lab inbox under skill-<month>/; the lab never connects to production. One command, resumable through $RUN/STATUS:
 #
@@ -49,9 +49,10 @@ install -d -o "${OWNER%%:*}" -g "${OWNER##*:}" -m 0750 "$RUN" "$RUN/run" "$OUTBO
 log() { echo "$(date -u +%FT%TZ) $*" | tee -a "$RUN/launcher.log" >&2; }
 done_step() { grep -q "^$1 ok" "$RUN/STATUS" 2>/dev/null; }
 mark() { echo "$1 ok $(date -u +%FT%TZ) ${2:-}" >> "$RUN/STATUS"; }
+# --init: node as PID 1 ignores SIGTERM, and a stopped run's container would go on working after the lock is released.
 lab() {
   local network=$1; shift
-  "$DOCKER" run --rm --network "$network" --read-only --tmpfs /tmp:size=256m,noexec,nosuid --cap-drop ALL --security-opt no-new-privileges \
+  "$DOCKER" run --rm --init --network "$network" --read-only --tmpfs /tmp:size=256m,noexec,nosuid --cap-drop ALL --security-opt no-new-privileges \
     --pids-limit 256 --memory 3g --user "$OWNER" --env-file "$ETC/secrets/lab.env" -e HOME=/tmp \
     -e NODE_OPTIONS=--network-family-autoselection-attempt-timeout=2500 \
     -v "$ETC/owner-inputs":/run/rsi-lab:ro -v "$STATE":/srv/rsi-lab/state -v "$INBOX":/srv/rsi-lab/inbox:ro "$@"

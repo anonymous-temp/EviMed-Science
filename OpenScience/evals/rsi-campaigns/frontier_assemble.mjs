@@ -7,8 +7,9 @@
  * fewer confirmation days are measured than the procedure's minimum (25): such a month is directional and reserves none.
  *
  * The manifest's `models` (schema 2): the product's solver, no improver (the candidates are the registered threshold grid), and as the
- * judge the jury that produced the labels — its model as the labels file names it (and the calibration agrees), held to the same rule as
- * every offline adjudicator (Anthropic, a pinned claude-* model id). A jury that is not is refused before anything is assembled.
+ * judge the jury that produced the labels — its provider and model as the labels file names them (and the calibration agrees), held to the
+ * domain's rule for an offline adjudicator: a pinned Claude model, or the one exception, the frontier jury (Qwen 3.8 Max, role `jury`, on this
+ * surface; `RSI_FRONTIER_JURY`, owner 2026-11-03). Any other jury is refused before anything is assembled.
  *
  * The baseline is the incumbent policy identity production's own export carries (`incumbent.revisionId`: `default:<sha>` or
  * `evolution-module-policy-frontier:<revision>`, the serving layer's `baselineRevision`), bound as it is, so a bundle of this campaign
@@ -17,9 +18,8 @@
  * measured and reported but not publishable — `finalize.mjs` refuses to build a bundle for it (`campaign_export_incumbent_missing`) and the report
  * says so. An incumbent that is present but malformed, or for another threshold than the export states, is refused (`campaign_export_incumbent_invalid`).
  *
- * Labelling happens on the operator's box, in two phases (`frontier_labels.mjs items|label`): development first, then — only when
- * `decide` finds a candidate from the development labels alone — confirmation. A month whose development finds none never labels
- * its confirmation month.
+ * Labelling happens in two phases (`frontier_labels.mjs label --phase`): development first, then — only when `decide` finds a candidate from
+ * the development labels alone — confirmation. A month whose development finds none never labels its confirmation month.
  *
  *   node frontier_assemble.mjs plan  --export <frontier-YYYY-MM.json[.gz]> --month YYYY-MM --out <plan.json>
  *   node frontier_assemble.mjs decide --export <...> --plan <plan.json> --labels <labels-development.json> --calibration <calibration.json> --out <decision.json>
@@ -33,14 +33,14 @@
  * and reports the supply: days, labelled rows, abstentions, and the minimum detectable effect the registration can see.
  */
 import { createHash } from 'node:crypto';
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { readFile, rename, writeFile, mkdir } from 'node:fs/promises';
 import { gunzipSync } from 'node:zlib';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import { rsiDigest } from '../../apps/server/src/rsiCampaignBundle.mjs';
 import { computeRsiDependencyClosure } from '../../apps/server/src/rsiDependencyClosure.mjs';
-import { RSI_OFFLINE_ROLE_MODEL, RSI_OFFLINE_ROLE_PROVIDER, rsiCampaignIssues, rsiOfflineRoleIssue } from '../../packages/domain/src/rsiCampaign.mjs';
+import { RSI_FRONTIER_JURY, rsiCampaignIssues, rsiOfflineRoleIssue } from '../../packages/domain/src/rsiCampaign.mjs';
 import { RSI_QUARTER_ALPHA, frontierJuryIdentity } from './campaign_runner.mjs';
 import { FRONTIER_LABELS_SCHEMA } from './frontier_labels.mjs';
 import { FRONTIER_DAYS_SCHEMA, chooseFrontierCandidate, evaluateFrontierDays, frontierCampaignConsumerIdentity, frontierLabelPlan } from './frontier_campaign.mjs';
@@ -163,26 +163,24 @@ export function minimumDetectableEffect(differences, groups, testAlpha) {
 
 /**
  * The jury a labels file and its calibration name, or the refusal that stops the campaign. The jury is the one the calibration qualified
- * (same model, effort and rubric version) and an adjudicator the owner admits; a file that names no provider is read by its model: a
- * claude-* model is Anthropic's, anything else has no admitted provider.
+ * (same provider, model and rubric) and an adjudicator the domain admits on this surface (`rsiOfflineRoleIssue`); a file that names no provider has none.
  * @param {any} labels @param {any} calibration
- * @returns {{jury:{juryVersion:string|null, provider:string|null, model:string|null, effort?:string}, refusal?:undefined}|{refusal:any}}
+ * @returns {{jury:{juryVersion:string|null, provider:string|null, model:string|null}, refusal?:undefined}|{refusal:any}}
  */
 function juryOf(labels, calibration) {
   // The jury's calibration file (`frontier_labels.mjs calibrate`): its qualification gates the campaign, its metrics are reported.
   if (calibration?.qualification?.qualified !== true) return { refusal: { status: 'not-run', reason: 'campaign_labels_unqualified', calibration: { qualification: calibration?.qualification ?? null, metrics: calibration?.calibration ?? null } } };
   if (labels.model !== calibration.model) return { refusal: { status: 'not-run', reason: 'campaign_labels_jury_changed', jury: { labels: labels.model ?? null, calibration: calibration.model ?? null } } };
-  // The same model at another effort, or under another rubric, is another jury: what the calibration measured is not what labelled.
-  const named = (/** @type {any} */ file) => ({ effort: file.effort ?? null, juryVersion: file.juryVersion ?? null, promptDigest: file.promptDigest ?? null });
+  // Another provider or another rubric is another jury: what the calibration measured is not what labelled.
+  const named = (/** @type {any} */ file) => ({ provider: file.provider ?? null, juryVersion: file.juryVersion ?? null, promptDigest: file.promptDigest ?? null });
   if (JSON.stringify(named(labels)) !== JSON.stringify(named(calibration))) return { refusal: { status: 'not-run', reason: 'campaign_labels_jury_changed', jury: { labels: named(labels), calibration: named(calibration) } } };
-  const jury = { juryVersion: labels.juryVersion ?? null, provider: labels.provider ?? (RSI_OFFLINE_ROLE_MODEL.test(String(labels.model)) ? RSI_OFFLINE_ROLE_PROVIDER : null), model: labels.model ?? null,
-    ...(labels.effort ? { effort: labels.effort } : {}) };
-  const refused = rsiOfflineRoleIssue('judge', frontierJuryIdentity(jury));
+  const jury = { juryVersion: labels.juryVersion ?? null, provider: labels.provider ?? null, model: labels.model ?? null };
+  const refused = rsiOfflineRoleIssue('judge', frontierJuryIdentity(jury), RSI_FRONTIER_JURY.surface);
   if (refused) return { refusal: { status: 'not-run', reason: refused === 'campaign_model_invalid' ? 'campaign_judge_refused' : refused, jury } };
   return { jury };
 }
 
-/** A labels file is the operator's answer for one export: labels made from another export, or a run that stopped before it finished, are not labels of this plan.
+/** A labels file is the jury's answer for one export: labels made from another export, or a run that stopped before it finished, are not labels of this plan.
  * @param {any} labels @param {any} plan */
 function labelsIssue(labels, plan) {
   if (labels.exportSha256 !== undefined && labels.exportSha256 !== plan.exportSha256) return 'campaign_labels_export_mismatch';
@@ -220,7 +218,7 @@ function developmentReading(development, selection) {
 }
 const developmentFacts = (/** @type {any} */ source, /** @type {any[]} */ days, /** @type {any} */ evaluation, /** @type {string} */ month) => ({ month, days: days.length,
   measuredDays: evaluation.eligible ? evaluation.days.filter((day) => day.measured).length : 0, labelled: source.labels.filter((/** @type {any} */ l) => l.worth).length, abstained: source.labels.filter((/** @type {any} */ l) => !l.worth).length });
-const calibrationFacts = (/** @type {any} */ calibration, /** @type {boolean} */ qualified) => ({ qualified, juryVersion: calibration.juryVersion ?? null, model: calibration.model ?? null, ...(calibration.effort ? { effort: calibration.effort } : {}), metrics: calibration.calibration ?? null });
+const calibrationFacts = (/** @type {any} */ calibration, /** @type {boolean} */ qualified) => ({ qualified, juryVersion: calibration.juryVersion ?? null, model: calibration.model ?? null, metrics: calibration.calibration ?? null });
 
 /**
  * The development choice from development labels alone, before confirmation is labelled (`decide`). A frozen candidate means the
@@ -263,7 +261,7 @@ export function mergeLabelFiles(files, plan) {
   const phases = files.map((file) => file?.phase);
   if (files.length !== 2 || phases.includes(undefined) || [...new Set(phases)].sort().join() !== 'confirmation,development') throw new Error('campaign_labels_phase_invalid');
   const [first] = files;
-  const sameJury = (/** @type {any} */ file) => file?.schema === FRONTIER_LABELS_SCHEMA && ['model', 'effort', 'juryVersion', 'promptDigest'].every((key) => file[key] === first[key]);
+  const sameJury = (/** @type {any} */ file) => file?.schema === FRONTIER_LABELS_SCHEMA && ['provider', 'model', 'juryVersion', 'promptDigest'].every((key) => file[key] === first[key]);
   if (!files.every(sameJury)) throw new Error('campaign_labels_jury_changed');
   const seen = new Set();
   for (const file of files) {
@@ -276,11 +274,10 @@ export function mergeLabelFiles(files, plan) {
     }
   }
   const sum = (/** @type {(file:any)=>number} */ pick) => files.reduce((total, file) => total + pick(file), 0);
-  const labelCounts = Object.fromEntries(['pick', 'ok', 'no', 'abstained'].map((key) => [key, sum((file) => file.labelCounts?.[key] ?? 0)]));
-  return { schema: FRONTIER_LABELS_SCHEMA, phase: 'all', month: plan.month, idPrefix: plan.idPrefix ?? '', exportSha256: plan.exportSha256, juryVersion: first.juryVersion, model: first.model, effort: first.effort,
+  const labelCounts = Object.fromEntries(['pick', 'ok', 'no', 'abstained', 'refused'].map((key) => [key, sum((file) => file.labelCounts?.[key] ?? 0)]));
+  return { schema: FRONTIER_LABELS_SCHEMA, phase: 'all', month: plan.month, idPrefix: plan.idPrefix ?? '', exportSha256: plan.exportSha256, juryVersion: first.juryVersion, provider: first.provider, model: first.model,
     promptDigest: first.promptDigest, items: sum((file) => file.items ?? 0), missing: sum((file) => file.missing ?? 0), labelled: sum((file) => file.labels.length), incomplete: 0, labelCounts,
-    calls: sum((file) => file.calls ?? 0), cachedCalls: sum((file) => file.cachedCalls ?? 0),
-    tokens: Object.fromEntries(['cacheHit', 'cacheMiss', 'output'].map((key) => [key, sum((file) => file.tokens?.[key] ?? 0)])), costCny: 0, costBasis: first.costBasis, stopped: null,
+    calls: sum((file) => file.calls ?? 0), cachedCalls: sum((file) => file.cachedCalls ?? 0), costCny: Math.round(sum((file) => file.costCny ?? 0) * 1e8) / 1e8, stopped: null,
     labels: files.flatMap((file) => file.labels) };
 }
 
@@ -354,7 +351,9 @@ async function main() {
     const windows = values['development-days'] || values['confirmation-days'] ? { development: range(values['development-days']), confirmation: range(values['confirmation-days']) } : null;
     const plan = await planCampaign({ exportPath: values.export, month: values.month, windows, idPrefix: values['id-prefix'] ?? '',
       rehearsalPickWeight: values['rehearsal-pick-weight'] ? Number(values['rehearsal-pick-weight']) : null });
-    await writeFile(values.out, `${JSON.stringify(plan)}\n`);
+    // Whole or not at all: a truncated plan has no idsByRole, which the lab reads as a month begun before 2026-11-03 and refuses for good.
+    await writeFile(`${values.out}.tmp`, `${JSON.stringify(plan)}\n`);
+    await rename(`${values.out}.tmp`, values.out);
     console.log(JSON.stringify({ status: 'planned', month: plan.month, devDays: plan.devDays.length, confirmDays: plan.confirmDays.length, toLabel: plan.ids.length,
       byPhase: { development: plan.idsByRole.development.length, confirmation: plan.idsByRole.confirmation.length }, incumbent: plan.incumbent?.revisionId ?? null, drift: plan.drift }));
   } else if (command === 'decide') {

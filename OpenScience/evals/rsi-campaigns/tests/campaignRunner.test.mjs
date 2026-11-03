@@ -59,8 +59,13 @@ test('the lab must prove its isolation before anything runs', async () => {
   assert.equal((await labPreflight(labConfiguration, async () => { throw new Error('connection refused'); })).reason, 'campaign_isolation_unverified');
   const { host, ...withoutHost } = labConfiguration;
   assert.equal((await labPreflight(withoutHost, labAttest)).reason, 'campaign_host_unavailable');
-  // The lab names no provider (every model role runs on the operator's box): a configuration that still carries a providers block is refused.
-  assert.equal((await labPreflight({ ...labConfiguration, providers: {} }, labAttest)).reason, 'campaign_lab_configuration_invalid');
+  // The lab holds the one provider credential of the frontier jury (Qwen 3.8 Max): a configuration without that row, or with any other provider, is refused.
+  const { providers, ...withoutProviders } = labConfiguration;
+  for (const [configuration, reason] of [[withoutProviders, 'campaign_lab_configuration_invalid'], [{ ...labConfiguration, providers: {} }, 'campaign_lab_provider_unavailable'],
+    [{ ...labConfiguration, providers: { qwenMax: { ...providers.qwenMax, model: 'qwen3.8-plus' } } }, 'campaign_lab_provider_unavailable'],
+    [{ ...labConfiguration, providers: { ...providers, deepseekFlash: { provider: 'deepseek', model: 'deepseek-flash', credentialRef: 'lab:deepseek' } } }, 'campaign_lab_configuration_invalid']]) {
+    assert.equal((await labPreflight(configuration, labAttest)).reason, reason, reason);
+  }
   // Through the runner: a store that was never touched, nothing written.
   const fixture = await registeredCampaignFixture();
   const store = memoryCampaignStore();
@@ -762,6 +767,9 @@ test('only a registered consumer is run, and the manifest contract is checked fi
   other.manifest.models.improvers = [{ role: 'proposing', provider: 'anthropic', model: 'claude-opus-5-5' }];
   other.inputs.target = other.manifest.target;
   const store = memoryCampaignStore();
+  // The frontier jury (Qwen) is admitted on frontier-selection only: on this surface the contract refuses it before the registry is asked.
+  assert.deepEqual(await runCampaign({ ...other, ...runnerEnvironment({ store }) }), { status: 'not-qualified', reason: 'campaign_judge_refused' });
+  other.manifest.models.judges = [{ role: 'judge', provider: 'anthropic', model: 'claude-sonnet-5-5' }];
   assert.deepEqual(await runCampaign({ ...other, ...runnerEnvironment({ store }) }), { status: 'not-qualified', reason: 'campaign_consumer_not_qualified' });
   assert.equal(store.writes(), 0);
   assert.deepEqual(campaignPlan(other.manifest), { campaignId: ID, automated: true, stages: ['development', 'confirmation', 'evaluation'], unsupported: true });
@@ -771,8 +779,15 @@ test('only a registered consumer is run, and the manifest contract is checked fi
     [(m) => { m.automated = false; }, 'campaign_automated_required'],
     [(m) => { m.deadline = m.createdAt; }, 'campaign_time_invalid'],
     [(m) => { m.models.improvers = [{ role: 'proposing', provider: 'dashscope', model: 'qwen3.8-max' }]; }, 'campaign_improver_refused'],
-    [(m) => { m.models.judges = [{ ...m.models.judges[0], provider: 'dashscope', model: 'qwen3.8-max' }]; }, 'campaign_judge_refused'],
-    [(m) => { m.models.judges = [{ ...m.models.judges[0], model: 'claude-opus-5-5' }]; }, 'campaign_models_registration_mismatch'],
+    // The frontier jury is the one Qwen judge the contract admits (domain: RSI_FRONTIER_JURY); anything but exactly that judge is refused by the same rule the assembly applies.
+    [(m) => { m.models.judges = [{ ...m.models.judges[0], model: 'qwen3.8-plus' }]; }, 'campaign_judge_refused'],
+    [(m) => { m.models.judges = [{ ...m.models.judges[0], role: 'judge' }]; }, 'campaign_judge_refused'],
+    [(m) => { m.models.judges = [{ ...m.models.judges[0], provider: 'deepseek', model: 'deepseek-flash' }]; }, 'campaign_judge_refused'],
+    [(m) => { m.models.judges = [{ ...m.models.judges[0], model: 'claude-opus-5-5' }]; }, 'campaign_judge_refused'],
+    // An admitted judge that is not the one the registration names is a manifest that does not match its registration.
+    [(m) => { m.models.judges = [{ ...m.models.judges[0], provider: 'anthropic', model: 'claude-opus-5-5' }]; }, 'campaign_models_registration_mismatch'],
+    [(m) => { m.models.judges = [{ ...m.models.judges[0], id: 'frontier-jury-other' }]; }, 'campaign_models_registration_mismatch'],
+    [(m) => { m.models.judges = []; }, 'campaign_models_registration_mismatch'],
     [(m) => { m.models.improvers = [{ role: 'proposing', provider: 'anthropic', model: 'claude-opus-5-5' }]; }, 'campaign_models_registration_mismatch'],
     [(m) => { m.registration.claim = 'efficiency'; }, 'campaign_registration_invalid'],
   ]) {

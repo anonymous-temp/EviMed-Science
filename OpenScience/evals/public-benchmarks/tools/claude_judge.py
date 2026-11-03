@@ -60,11 +60,11 @@ import drb_pairwise as dp  # noqa: E402
 import export_harness_arms as eha  # noqa: E402
 
 MODEL = re.compile(r'claude-[a-z0-9-]+')
-# The Claude CLI's effort levels (the frontier jury's FRONTIER_JURY_EFFORTS, evals/rsi-campaigns/frontier_labels.mjs).
+# The Claude CLI's effort levels.
 EFFORTS = ('low', 'medium', 'high', 'xhigh', 'max')
 JUDGE_ID = re.compile(r'[A-Za-z0-9][A-Za-z0-9_.:-]{0,159}')
 CLI_TOOLS = 'Read,Glob,Grep'
-# The frontier jury's list (frontier_labels.mjs claudeCliEnvironment): what would point the CLI at another account, endpoint or provider.
+# What would point the CLI at another account, endpoint or provider.
 SCRUB_PREFIXES = ('ANTHROPIC_', 'CLAUDE_CODE_', 'CLAUDE_AGENT_', 'CLAUDE_CONFIG', 'CLAUDE_EFFORT', 'CLAUDE_PID', 'AWS_BEARER', 'GOOGLE_CLOUD_', 'VERTEX', 'DEEPSEEK_',
                   'DASHSCOPE_')
 SCRUB_EXACT = {'CLAUDECODE', 'AI_AGENT', 'CLOUD_ML_REGION'}

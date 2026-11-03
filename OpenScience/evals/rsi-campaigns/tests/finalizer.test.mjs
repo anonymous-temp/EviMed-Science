@@ -213,7 +213,7 @@ test('a qualified day-group campaign signs a bundle whose publisher and evaluato
   assert.deepEqual(result.files, c.files);
   // Design §11: the signed bundle names the solver and, separately, who improved (a registered grid: no one) and who judged (the labelling jury).
   assert.deepEqual(result.manifest.models, { solver: { provider: 'deepseek', model: 'deepseek-flash' }, improvers: [],
-    judges: [{ role: 'jury', provider: 'anthropic', model: 'claude-sonnet-5-5', id: 'frontier-jury-test' }] });
+    judges: [{ role: 'jury', provider: 'dashscope', model: 'qwen3.8-max', id: 'frontier-jury-test' }] });
   assert.deepEqual(result.manifest.models, c.manifest.models);
 });
 
