@@ -248,7 +248,7 @@ function scientificCarried(scientific, digest) {
 /**
  * The record within its limit: the result versions whose reading settled first go, whole — every entry of a version together, so a
  * version is never half read — until the entries fit, and each one's reading and key are appended to its revision's carried part.
- * @param {{ entries: any[], carried?: any }} record
+ * @param {{ schemaVersion?: number, entries: any[], carried?: any }} record
  */
 function withinLimit(record) {
   if (record.entries.length <= METHOD_FEEDBACK_LIMIT) return record
@@ -295,7 +295,8 @@ function withinLimit(record) {
  * @param {any} scientific @param {unknown} entry
  */
 export function foldMethodFeedback(scientific, entry) {
-  const current = isRecord(scientific) && Array.isArray(scientific.entries) ? scientific : emptyScientific()
+  /** @type {{ schemaVersion?: number, entries: any[], carried?: any }} */
+  const current = isRecord(scientific) && Array.isArray(scientific.entries) ? /** @type {any} */ (scientific) : emptyScientific()
   const cleaned = projectMethodFeedback(entry)
   if (hasMethodFeedback(current, cleaned.id) || scientificCarried(current, cleaned.digest).versions.includes(carriedVersionKey(cleaned.result.versionId))) {
     return scientific ?? current

@@ -586,7 +586,7 @@ export function methodHarmTest(learning, options = {}) {
  * the first run from `minRuns` on whose sum reached the upper boundary with the rejected runs so far from `minAccounts` accounts
  * (`crossed`), if one did, and the accounts of the rejected runs read, as many as `minAccounts` asks for (`by`).
  * @param {MethodLearning['harmCarried']} carried @param {readonly MethodObservation[] | undefined} observations
- * @param {typeof METHOD_SCIENTIFIC_HARM_TEST & { minAccounts?: number }} bounds
+ * @param {{ baseRate: number, harmRate: number, alpha: number, beta: number, minRuns: number, minAccounts?: number }} bounds
  * @returns {{ runs: number, bad: number, llr: number, by: string[], crossed: { runs: number, bad: number, llr: number } | null }}
  */
 function harmPath(carried, observations, { baseRate, harmRate, alpha, beta, minRuns, minAccounts = 0 }) {
