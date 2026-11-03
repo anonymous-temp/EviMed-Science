@@ -929,6 +929,50 @@ describe("试验 · a dose-finding or a Bayesian design the conversation compute
     expect(table.compareDocumentPosition(doseCard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(doseCard.compareDocumentPosition(bayesCard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
+
+  describe("and a win-ratio design after them", () => {
+    const winValue = (n: number, unit: string | null, extra: Record<string, unknown> = {}) => ({ value: n, text: null, unit, source: "synthetic", interval: null, mcse: 0.2, review: "ai_set", precision: 1, reason: null, stale: false, detail: null, ...extra });
+    const winRatio = () => ({
+      id: "res_wr", version: 1, form: "win_ratio", title: "死亡、评分的分层比较（胜率比）", question: "这么多人的试验，判出有效的把握有多大；比较的对子里平局占多少",
+      levels: [{ key: "death", label: "死亡" }, { key: "score", label: "评分" }],
+      headline: [{ key: "power", label: "判出有效的把握（检验功效）", value: winValue(72.5, "%") }],
+      size: null, arms: { treat: 120, control: 120 },
+      table: {
+        columns: [{ key: "win_proportion", label: "试验组赢的对数占比" }],
+        rows: [{ key: "death", label: "第 1 层：死亡", cells: { win_proportion: winValue(14.2, "%") } }, { key: "total", label: "合计", cells: { win_proportion: winValue(41.3, "%") } }],
+      },
+      trials: 600, premises: [], limited: null,
+    });
+
+    it("shows as a card of its own when it is the only result of the step: not 「还没算」, not a pending step, no pick", async () => {
+      const raw = fixture("empty/trial.json");
+      raw.winRatioDesigns = [winRatio()];
+      installVcrServer(network.productRequest, { [tab("trial")]: raw });
+      const { container } = draw(withStep("trial", { status: "none", requested: false }));
+      const shown = await found(container, '[data-vcr-winratio="win_ratio"]');
+      expect(within(shown).getByRole("heading", { name: "死亡、评分的分层比较（胜率比）" })).toBeInTheDocument();
+      expect(shown).toHaveTextContent("72.5%");
+      expect(within(shown).getByRole("table", { name: "死亡、评分的分层比较（胜率比）：各层分出胜负的情况" })).toBeInTheDocument();
+      expect(screen.queryByText("还没算")).toBeNull();
+      expect(screen.queryByRole("table", { name: "方案的对比" })).toBeNull();
+      expect(container.querySelector("[data-vcr-not-computed]")).toBeNull();
+      expect(container.querySelector("[data-vcr-step-waiting], [data-vcr-step-running]")).toBeNull();
+      expect(screen.queryByRole("button", { name: /选定方案|改选方案/ })).toBeNull();
+    });
+
+    it("stands under the dose-finding and the Bayesian cards, last of the computed designs", async () => {
+      const raw = fixture("ev201/trial.json");
+      raw.doseDesigns = [dose()];
+      raw.bayesianDesigns = [bayes()];
+      raw.winRatioDesigns = [winRatio()];
+      installVcrServer(network.productRequest, { [tab("trial")]: raw });
+      const { container } = draw();
+      await trialDrawn();
+      const bayesCard = await found(container, '[data-vcr-bayes="calibration"]');
+      const winCard = await found(container, '[data-vcr-winratio="win_ratio"]');
+      expect(bayesCard.compareDocumentPosition(winCard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+  });
 });
 
 describe("试验 · the historical success rates beside the assurance", () => {

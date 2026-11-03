@@ -42,6 +42,18 @@ describe("method-context scientific field meanings", () => {
     expect(text("comparator.rmst", "tau", { timeUnit: "cycles" }).unit).toBe("cycles（自定义单位，未换算）");
     expect(text("patients.longitudinal", "truth.effect", {}, "outcome units per time unit")).toMatchObject({ label: "干预对结局变化速率的效应", unit: "结局原单位／所设时间单位" });
   });
+  it("words the win-ratio design's levels and parameters in its own terms, not as raw keys or another method's meaning", () => {
+    expect(text("design.win_ratio", "truth.events").label).toBe("事件次数层");
+    expect(text("design.win_ratio", "truth.correlation").label).toBe("三层之间的相关");
+    expect(text("design.win_ratio", "truth.death.controlRisk")).toMatchObject({ label: "对照组随访期内的死亡比例", unit: "比例" });
+    expect(text("design.win_ratio", "truth.score.threshold")).toMatchObject({ label: "平局阈值（相差不超过它算平局）", unit: "评分单位" });
+    expect(text("design.win_ratio", "design.maxPerArm").unit).toBe("人／组");
+    // Another method's field of the same name keeps its own words.
+    expect(text("design.analytic", "truth.correlation").label).toBe("原标签");
+    for (const row of vcrScenarioRows("design.win_ratio").rows) {
+      if (row.path.startsWith("truth.")) expect(text("design.win_ratio", row.path, {}, row.unit).label, row.path).toMatch(/[\u3400-\u9fff]/);
+    }
+  });
   it("audits every supported schema: significance labels occur only at test-alpha paths and canonical units remain visible", () => {
     for (const method of Object.keys(VCR_SCENARIO_SCHEMAS)) {
       for (const row of vcrScenarioRows(method).rows) {

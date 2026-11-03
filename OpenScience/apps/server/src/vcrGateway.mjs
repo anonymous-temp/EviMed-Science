@@ -83,6 +83,7 @@ import { vcrResultEntry, withJobEntry, withWriteEntry } from "./vcrResultEntry.m
 import { vcrConfirmatorySubjectId } from "./vcrConfirmatory.mjs";
 import { vcrDoseSubjectId } from "./vcrDoseFinding.mjs";
 import { vcrBayesianSubjectId } from "./vcrBayesianDesign.mjs";
+import { vcrWinRatioSubjectId } from "./vcrWinRatio.mjs";
 import { vcrSynthesisSubjectId } from "./vcrEvidenceSynthesis.mjs";
 import { vcrBiasScenarioFromComparison } from "./vcrBiasAnalysis.mjs";
 import { renderVcrNumbers } from "./vcrRender.mjs";
@@ -3061,6 +3062,8 @@ async function startJob(vcr, study, request) {
   // The same for the dose-finding designs (the designs compared and the curve) and the Bayesian designs (the design and what it was asked about).
   if (request.kind === "design_dose" && !detail.subjectId) detail = { ...detail, subjectId: vcrDoseSubjectId(scenario) };
   if (request.kind === "design_bayesian" && !detail.subjectId) detail = { ...detail, subjectId: vcrBayesianSubjectId(scenario) };
+  // and a hierarchical composite compared by win ratio (the scenario it was asked on)
+  if (request.kind === "design_win_ratio" && !detail.subjectId) detail = { ...detail, subjectId: vcrWinRatioSubjectId(scenario) };
   // The same for a network, a dose-response and a shrinkage: they are filed under the label the call gave them, so two analyses of two outcomes stand side by side.
   if (["network_meta", "dose_response_meta", "effect_shrinkage"].includes(request.kind) && !detail.subjectId) detail = { ...detail, subjectId: vcrSynthesisSubjectId(request.kind, scenario) };
   if (subject) {

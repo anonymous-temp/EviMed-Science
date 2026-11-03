@@ -93,7 +93,7 @@ export function vcrJobNoticeText({ resultKind, stage = null, label = null, state
   const what = resultKind === "trial_scenario"
     ? (/** @type {Record<string, string>} */ ({ analytic: "方案计算", simulation: "方案模拟", assurance: "成功把握计算" })[String(stage)] ?? "方案模拟")
     : (/** @type {Record<string, string>} */ ({ population: "人群生成", patient_set: "虚拟患者生成", comparator: "对照分析", design_grid: "设计网格",
-      accrual_forecast: "入组预测", matching: "匹配评估", match_extract: "病历阅读", population_check: "人群核对", design_confirmatory: "确认性设计", design_dose: "剂量探索设计", design_bayesian: "贝叶斯设计",
+      accrual_forecast: "入组预测", matching: "匹配评估", match_extract: "病历阅读", population_check: "人群核对", design_confirmatory: "确认性设计", design_dose: "剂量探索设计", design_bayesian: "贝叶斯设计", design_win_ratio: "胜率比设计",
       network_meta: "网络荟萃分析", dose_response_meta: "剂量反应荟萃分析", effect_shrinkage: "已发表效应的收缩" })[resultKind] ?? "计算");
   const name = clip(String(label ?? "").replace(/^[A-Z]\d*\s+/, ""), 24);
   if (state === "failed") {

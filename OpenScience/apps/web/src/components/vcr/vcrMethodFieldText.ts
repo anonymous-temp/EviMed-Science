@@ -27,6 +27,23 @@ function translateUnit(unit: string | undefined, method: string, root: Root): st
   return ({ "time units": time, "per time unit": `每${time}`, "outcome units": "结局原单位", "outcome units per time unit": `结局原单位／${time}`,
     "proportion per year": "每年比例", "probability of leaving before each follow-up visit": "每次随访前退出概率", "log hazard ratio": "对数 HR", "link scale": "链接函数尺度", "the outcome's own scale": "结局原尺度", proportion: "比例", "per month": "每月" } as Record<string, string>)[unit] ?? unit;
 }
+/** The win-ratio design's own fields: a name the shared vocabulary would leave as a raw key, or give another meaning (`events` here is a level, `correlation` one number). */
+const winRatioFields: Record<string, [label: string, unit?: string]> = {
+  "design.maxPerArm": ["搜索样本量的上限", "人／组"],
+  "truth.death": ["死亡层"],
+  "truth.death.hazardRatio": ["死亡风险比（试验组对对照组）"],
+  "truth.death.controlMedian": ["对照组中位生存时间"],
+  "truth.death.controlRisk": ["对照组随访期内的死亡比例", "比例"],
+  "truth.events": ["事件次数层"],
+  "truth.events.controlRate": ["对照组事件率", "每人每个时间单位的次数"],
+  "truth.events.rateRatio": ["事件率比（试验组对对照组）"],
+  "truth.events.overdispersion": ["人与人之间的差异（过度离散）"],
+  "truth.score": ["评分层"],
+  "truth.score.shift": ["试验组比对照组高多少", "评分单位（越高越好）"],
+  "truth.score.sd": ["评分标准差", "评分单位"],
+  "truth.score.threshold": ["平局阈值（相差不超过它算平局）", "评分单位"],
+  "truth.correlation": ["三层之间的相关"],
+};
 /** Presentation only: the domain remains the owner of units, ranges, defaults and validation.
  * Symbols get a scientific meaning only where the method and full field path establish it.
  */
@@ -95,6 +112,11 @@ export function methodFieldText(method: string, path: string, field: Field, root
   if (method === "patients.longitudinal" && normalized === "truth.effect") label = "干预对结局变化速率的效应";
   if (method === "patients.longitudinal" && normalized === "truth.sd") label = "纵向结局残差标准差";
   if (normalized === "analysis.sd") label = "Z 检验所用已知总体标准差";
+  if (method === "design.win_ratio" && Object.hasOwn(winRatioFields, normalized)) {
+    const [name, unit] = winRatioFields[normalized];
+    label = name;
+    if (unit) result.unit = unit;
+  }
   if (label) result.label = `${label}${/\[(\d+)\]$/.test(path) ? ` ${Number(/\[(\d+)\]$/.exec(path)?.[1]) + 1}` : ""}`;
   return result;
 }

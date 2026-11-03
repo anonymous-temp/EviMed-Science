@@ -57,6 +57,7 @@ import { presentPopulationCheck } from "./vcrPopulationCheck.mjs";
 import { presentConfirmatoryDesigns } from "./vcrConfirmatory.mjs";
 import { presentDoseDesigns } from "./vcrDoseFinding.mjs";
 import { presentBayesianDesigns } from "./vcrBayesianDesign.mjs";
+import { presentWinRatioDesigns } from "./vcrWinRatio.mjs";
 import { presentEvidenceSyntheses, tauPriorWords, vcrSuccessRatesPage } from "./vcrEvidenceSynthesis.mjs";
 import { presentBiasAnalysis } from "./vcrBiasAnalysis.mjs";
 import { evidenceValueFindings } from "./vcrValueChecks.mjs";
@@ -1183,6 +1184,8 @@ export function presentTrialTab(bundle) {
     // The dose-finding designs (design_dose) and the Bayesian designs without MCMC (design_bayesian) the conversation computed: a card each.
     doseDesigns: presentDoseDesigns(bundle, { nodeOf: resultNode }),
     bayesianDesigns: presentBayesianDesigns(bundle, { nodeOf: resultNode }),
+    // The hierarchical composite endpoints compared by win ratio (design_win_ratio) the conversation computed: a card each.
+    winRatioDesigns: presentWinRatioDesigns(bundle, { nodeOf: resultNode }),
     milestones,
     // The protocol's visit schedule (「访视日程」) and the study's regulatory contacts (「监管沟通记录」): records, not results.
     schedule: reportSchedule(bundle.schedule),

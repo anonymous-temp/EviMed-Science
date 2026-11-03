@@ -383,6 +383,13 @@ export const MEASURE_META = Object.freeze({
   per_arm: { label: "每个剂量的患者数", unit: "例" },
   total_patients: { label: "患者总数", unit: "例" },
   worst_correct_selection_probability: { label: "各情形里选对的概率的最小值", unit: "%", percent: true },
+  // the win-ratio design (design_win_ratio)
+  win_ratio: { label: "胜率比（赢的对数 ÷ 输的对数）" },
+  win_difference: { label: "净胜率（赢的对数占比 − 输的对数占比）", unit: "%", percent: true },
+  win_odds: { label: "胜算比（平局各算一半）" },
+  win_proportion: { label: "赢的对数占比", unit: "%", percent: true },
+  loss_proportion: { label: "输的对数占比", unit: "%", percent: true },
+  tie_proportion: { label: "平局的对数占比", unit: "%", percent: true },
   early_stop_efficacy_probability: { label: "中途提前宣布成功的概率", unit: "%", percent: true },
   stop_futility_probability: { label: "在这次分析因无效停止的概率", unit: "%", percent: true },
   stop_efficacy_probability: { label: "在这次分析提前宣布成功的概率", unit: "%", percent: true },
@@ -881,7 +888,7 @@ export const allResultsOf = (bundle) => bundle.allResults ?? bundle.results ?? [
 export const METHOD_LABELS = Object.freeze(/** @type {Record<string, string>} */ ({
   "model.survival_fit": "拟合人群生存模型", "model.prognostic_apply": "应用已发表的预后模型",
   "profile.snapshot": "数据快照画像", "cohort.build": "构建队列", "population.scenario": "情景人群生成", "population.literature": "文献人群",
-  "population.synthpop": "经验合成人群", "population.quality": "人群质量报告", "population.check": "与第二份基线表对照", "design.confirmatory": "确认性设计", "design.dose": "剂量探索设计", "design.bayesian": "贝叶斯设计（无需 MCMC）", "patients.continuous": "虚拟患者（连续终点）",
+  "population.synthpop": "经验合成人群", "population.quality": "人群质量报告", "population.check": "与第二份基线表对照", "design.confirmatory": "确认性设计", "design.dose": "剂量探索设计", "design.bayesian": "贝叶斯设计（无需 MCMC）", "design.win_ratio": "分层复合终点的胜率比设计", "patients.continuous": "虚拟患者（连续终点）",
   "patients.binary": "虚拟患者（二分类终点）", "patients.time_to_event": "虚拟患者（事件时间终点）", "patients.longitudinal": "虚拟患者（纵向轨迹）", "evidence.pool": "证据合并", "evidence.network": "网络荟萃分析", "evidence.dose_response": "剂量反应荟萃分析", "evidence.shrinkage": "已发表效应的经验收缩",
   "evidence.reconstruct_km": "生存曲线重建（Guyot）", "comparator.entropy_balance": "熵平衡加权", "comparator.propensity_weight": "倾向评分加权",
   "comparator.rmst": "RMST 比较", "comparator.maic": "匹配调整间接比较", "comparator.evalue": "E 值", "comparator.bias_analysis": "未测混杂的偏倚分析", "comparator.stc": "模拟治疗比较（G 计算）", "comparator.target_trial": "目标试验模拟", "comparator.map_prior": "MAP 先验",

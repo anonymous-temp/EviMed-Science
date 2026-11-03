@@ -1428,6 +1428,33 @@ export interface VcrBayesianCard {
 }
 
 /**
+ * A hierarchical composite endpoint compared by win ratio (death, then the number of events, then a score; pair by pair): one card
+ * for the result of a conversation's simulation. Percentages arrive scaled (12.7, not 0.127) and a cell the engine did not compute is
+ * null, never a zero. The win ratio carries the range one trial of this size shows (a prediction interval), which is not its error.
+ */
+export interface VcrWinRatioCard {
+  id: string;
+  version: number;
+  form: "win_ratio";
+  title: string;
+  question: string;
+  /** The levels in the order they are compared. */
+  levels: Array<{ key: string; label: string }>;
+  headline: Array<{ key: string; label: string; value: VcrValue }>;
+  /** Present when the question was how many people per arm; the power at that size was simulated. `powerWanted` is a percent. */
+  size: { perArm: number; total: number; powerWanted: number | null; verified: boolean } | null;
+  /** The people per arm the simulation used; null where the engine did not say. */
+  arms: { treat: number | null; control: number | null };
+  /** One row per level, then the total; a cell can be null. */
+  table: { columns: VcrDoseColumn[]; rows: Array<{ key: string; label: string; cells: Record<string, VcrValue | null> }> } | null;
+  /** Simulated trials the numbers rest on. */
+  trials: number | null;
+  premises: VcrPremise[];
+  /** A sentence when the simulation stopped early or the size was not checked. */
+  limited: string | null;
+}
+
+/**
  * What the evidence tab says of a network meta-analysis the conversation computed: who ranks where, every pair of treatments in a league
  * table, and whether the direct and the indirect evidence agree. The sentences are the server's; the page places them.
  */
@@ -1546,6 +1573,8 @@ export interface VcrTrialTab {
   doseDesigns?: VcrDoseCard[];
   /** The Bayesian designs without MCMC the conversation computed, each a card of its own. */
   bayesianDesigns?: VcrBayesianCard[];
+  /** The win-ratio (hierarchical composite endpoint) designs the conversation computed, each a card of its own. */
+  winRatioDesigns?: VcrWinRatioCard[];
   headline?: string | null;
   /** ADEMP, one line each. */
   ademp: Array<{ key: string; label: string; text: string }>;
@@ -2395,6 +2424,35 @@ function readBayesianDesigns(raw: unknown): VcrBayesianCard[] {
   });
 }
 
+/** The win-ratio cards; a card without a name or the known form, and anything of an unknown shape, is left out. */
+function readWinRatioDesigns(raw: unknown): VcrWinRatioCard[] {
+  return arr(raw).flatMap((card) => {
+    const id = text(card.id), title = text(card.title);
+    if (!id || !title || card.form !== "win_ratio") return [];
+    const table = obj(card.table), size = obj(card.size), arms = obj(card.arms);
+    const columns = readColumnList(table.columns);
+    const rows = arr(table.rows).flatMap((row) => {
+      const label = text(row.label);
+      return label ? [{ key: text(row.key) ?? label, label, cells: readValueCells(row.cells) }] : [];
+    });
+    const perArm = finite(size.perArm);
+    return [{
+      id, version: finite(card.version) ?? 1, form: "win_ratio" as const, title, question: text(card.question) ?? "",
+      levels: arr(card.levels).flatMap((level) => {
+        const key = text(level.key), label = text(level.label);
+        return key && label ? [{ key, label }] : [];
+      }),
+      headline: readHeadlineLines(card.headline),
+      size: perArm === null ? null : { perArm, total: finite(size.total) ?? perArm * 2, powerWanted: finite(size.powerWanted), verified: size.verified !== false },
+      arms: { treat: finite(arms.treat), control: finite(arms.control) },
+      table: columns.length > 0 && rows.length > 0 ? { columns, rows } : null,
+      trials: finite(card.trials),
+      premises: readPremises(card.premises),
+      limited: text(card.limited),
+    }];
+  });
+}
+
 /** The network meta-analysis cards; a card without an id, a title and a ranking, and anything of an unknown shape, is left out. */
 export function readNetworkMetaCards(raw: unknown): VcrNetworkMetaCard[] {
   return arr(raw).flatMap((card) => {
@@ -3147,6 +3205,7 @@ export function readVcrTrial(raw: unknown): VcrTrialTab {
     confirmatoryDesigns: readConfirmatoryDesigns(value.confirmatoryDesigns),
     doseDesigns: readDoseDesigns(value.doseDesigns),
     bayesianDesigns: readBayesianDesigns(value.bayesianDesigns),
+    winRatioDesigns: readWinRatioDesigns(value.winRatioDesigns),
     successRates: readSuccessRates(value.successRates),
     designs: arr(value.designs).map(readDesign),
     columns: arr(value.columns) as unknown as VcrTrialTab["columns"],

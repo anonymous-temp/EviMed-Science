@@ -191,6 +191,11 @@ const exampleLabels: Record<string, Record<string, string>> = {
     "the same for a hazard ratio from 200 events (the log hazard ratio under a normal prior)": "同样的问题，用于 200 个事件的风险比（对数风险比取正态先验）",
     "the same for two beta-binomial arms of 60 and a non-inferiority margin of 10 points on the risk difference": "同样的问题，用于两组各 60 人的 Beta-二项模型，风险差的非劣效界值为 10 个百分点"
   },
+  "design.win_ratio": {
+    "death, then hospitalisations, then a score (KCCQ-like, 5 points matter, SD 20): 300 patients per arm followed for 24 months, the power of the win-ratio test": "先比死亡，再比住院次数，最后比评分（类似 KCCQ，相差不到 5 分算平局，标准差 20）：每组 300 人随访 24 个月，求胜率比检验的功效",
+    "the same hierarchy: how many patients per arm for 90% power": "同样的三层比较：功效要达到 90%，每组需要多少人",
+    "death, then a score only, with no treatment effect on death or the score (the type I error)": "先比死亡，再只比评分，治疗对死亡和评分都没有效应（看 I 类错误）"
+  },
   "design.simulate": {
     "two-arm time-to-event with uniform accrual": "两组生存结局与均匀入组",
     "two-arm binary: no accrual": "两组二分类结局",

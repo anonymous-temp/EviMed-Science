@@ -710,6 +710,13 @@ test("a dose-finding design and a Bayesian design start through the gateway, fil
   const bayes = await start({ kind: "design_bayesian", scenario: { design: { kind: "bop2", maxN: 40, lookEvery: 10 }, truth: { nullRate: 0.1, alternativeRate: 0.3 } } });
   assert.equal(bayes.status, 200, bayes.body);
   assert.equal(queued.at(-1).detail.subjectId, "bayes:bop2:0.1-0.3-40");
+  const winRatio = { design: { nTreat: 250, followup: 24 }, truth: { death: { controlRisk: 0.15, hazardRatio: 0.75 }, score: { shift: 4, sd: 20 } } };
+  const wr = await start({ kind: "design_win_ratio", scenario: winRatio });
+  assert.equal(wr.status, 200, wr.body);
+  assert.equal(queued.at(-1).kind, "design_win_ratio");
+  assert.match(queued.at(-1).detail.subjectId, /^wr:[0-9a-f]{10}$/);
+  await start({ kind: "design_win_ratio", scenario: { ...winRatio, design: { nTreat: 300, followup: 24 } } });
+  assert.notEqual(queued.at(-1).detail.subjectId, queued.at(-2).detail.subjectId, "another size is another question");
 });
 
 test("the comparator-effect kinds start through the gateway; a time-to-event MAIC names its comparator by a reconstruction result, never by rows", async () => {

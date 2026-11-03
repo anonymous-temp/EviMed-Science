@@ -5,6 +5,7 @@ import { VcrDoseDesigns } from "../VcrDoseDesigns";
 import { VcrSuccessRates } from "../VcrSuccessRates";
 import { VcrScientificBasis } from "../VcrScientificBasis";
 import { VcrVersionComparison } from "../VcrVersionComparison";
+import { VcrWinRatioDesigns } from "../VcrWinRatioDesigns";
 import { useRef, useState } from "react";
 import { CircleCheck, PenLine, TriangleAlert } from "lucide-react";
 import { getVcrTrial, recordVcrDecision, type VcrDesign, type VcrPremise, type VcrStudy, type VcrTrialTab as TrialData } from "@/lib/vcrClient";
@@ -118,7 +119,7 @@ function TrialView({ studyId, study, data, reload }: { studyId: string; study: V
   const failed = study.steps.trial?.status === "failed";
   const canWrite = study.abilities.includes("write");
   // The protocol's visit schedule and the regulatory log are records of the study, not results of this step: a study that has either is not empty.
-  const hasDesigns = data.designs.length > 0 || data.ademp.length > 0 || data.forecasts.length > 0 || data.milestones.length > 0 || Boolean(data.accrualForecasts?.length) || Boolean(data.confirmatoryDesigns?.length) || Boolean(data.doseDesigns?.length) || Boolean(data.bayesianDesigns?.length);
+  const hasDesigns = data.designs.length > 0 || data.ademp.length > 0 || data.forecasts.length > 0 || data.milestones.length > 0 || Boolean(data.accrualForecasts?.length) || Boolean(data.confirmatoryDesigns?.length) || Boolean(data.doseDesigns?.length) || Boolean(data.bayesianDesigns?.length) || Boolean(data.winRatioDesigns?.length);
   const nothing = !hasDesigns && !data.schedule && data.regulatory.length === 0;
   const noneRan = !data.designs.some(designRan);
   const decided = Boolean(data.decision?.chosen);
@@ -437,6 +438,7 @@ function DesignsView({ studyId, study, data, headline, noneRan, failed, onOpen, 
       <VcrConfirmatoryDesigns designs={data.confirmatoryDesigns ?? []} />
       <VcrDoseDesigns designs={data.doseDesigns ?? []} />
       <VcrBayesianDesigns designs={data.bayesianDesigns ?? []} />
+      <VcrWinRatioDesigns designs={data.winRatioDesigns ?? []} />
     </div>
   );
 }
