@@ -494,7 +494,7 @@
   },
   "design.analytic": {
    "id": "design.analytic",
-   "version": "1.3.0",
+   "version": "1.4.0",
    "engine": "vcr-engine",
    "title": "Closed-form trial design calculation: sample size, events, power, group-sequential boundaries, exact single-arm and Simon designs",
    "estimand": "The sample size or event count a stated design needs, or the power it has, under the scenario's assumed truth; not a forecast of the trial.",
@@ -512,6 +512,11 @@
     {
      "id": "independent_observations",
      "text": "Participants are independent; clustering, repeated measurements and dropout beyond the stated rate are not modelled.",
+     "checkedBy": "none"
+    },
+    {
+     "id": "stated_margin",
+     "text": "A non-inferiority margin is the largest loss the researcher accepts, a stated assumption and not an estimate. Sizes, events and power are then measured from the null the margin sets: minus the margin for a mean or a risk difference, the margin itself for a hazard ratio. Without a margin a design tests superiority, as in 1.3.",
      "checkedBy": "none"
     }
    ],
@@ -568,6 +573,13 @@
      "source": "Independent normal-quantile formulas, per-arm ceiling arithmetic and base-R noncentral-t power for balanced and unequal allocation; versions 1.0/1.1 replay their original outputs.",
      "tolerance": "1e-10 for unrounded size, integer totals exact and 1e-12 for pooled-t power",
      "test": "项目代码/vcr-engine/tests/numeric/N53_integer_allocation.R"
+    },
+    {
+     "id": "n64_non_inferiority_margin",
+     "kind": "other-implementation",
+     "source": "Sample sizes and events against a non-inferiority margin compared with rpact's thetaH0 for means, two proportions (Farrington and Manning, equal and 2:1 allocation) and a hazard ratio; the restricted rates of the score test against a numerical maximum of the likelihood (N64a, N64b).",
+     "tolerance": "1e-6 on the sample size and the events; restricted rates to 1e-6",
+     "test": "项目代码/vcr-engine/tests/numeric/N64_non_inferiority.R"
     }
    ]
   },
@@ -644,7 +656,7 @@
   },
   "design.simulate": {
    "id": "design.simulate",
-   "version": "1.3.0",
+   "version": "1.4.0",
    "engine": "vcr-engine",
    "title": "Trial operating characteristics under fixed scenario assumptions",
    "estimand": "Monte Carlo power, bias and duration with simulation uncertainty. Scenario parameters are assumptions, not observations.",
@@ -661,8 +673,13 @@
     },
     {
      "id": "hazard_law",
-     "text": "A treatment-arm hazard ratio that changes over time is a stated assumption about how the effect evolves, not an estimate. Under it the log-rank family has no single true hazard ratio, so bias and coverage are not computed; the MaxCombo analysis is the most favourable of four weighted log-rank statistics read against their joint null distribution, never a default.",
+     "text": "A treatment-arm hazard ratio that changes over time is a stated assumption about how the effect evolves, not an estimate. Under it the log-rank family has no single true hazard ratio, so bias and coverage are not computed; the MaxCombo analysis is the most favourable of four weighted log-rank statistics read against their joint null distribution, never a default. A MaxCombo result also reports the log-rank power on the same replicates and the rejection probability of both tests under a strong null derived from the design; it is information, and a spent budget leaves it out and says so.",
      "checkedBy": "output:diagnostics"
+    },
+    {
+     "id": "stated_margin",
+     "text": "A non-inferiority margin is the largest loss the researcher accepts, a stated assumption and not an estimate. Power is the probability of rejecting the null the margin sets, and the type I error is measured with the truth on the margin. Without a margin a design tests superiority, as in 1.3.",
+     "checkedBy": "none"
     }
    ],
    "inputs": [
@@ -717,6 +734,20 @@
      "source": "Variance of the difference between the estimated powers of two neighbouring truths, over independent job seeds, with and without the shared stream of design.grid 1.3.0 (N59a, N59b); a cell equals the design.simulate job at its own seed (N06d, N59c); a grid replayed at 1.2.0 keeps its per-cell seeds (N06d).",
      "tolerance": "The shared stream's variance is at most half (continuous) or 0.8 (time-to-event) of the independent seeds'; replay at 1.2.0 is bit for bit.",
      "test": "项目代码/vcr-engine/tests/numeric/N59_grid_common_random_numbers.R"
+    },
+    {
+     "id": "n64_non_inferiority_operating_characteristics",
+     "kind": "other-implementation",
+     "source": "Simulated power at the designed size against the closed form, and the rejection probability with the truth on the margin against alpha, for a continuous, a binary and a time-to-event design and a group-sequential event-time design (N64c, N64e).",
+     "tolerance": "Within three Monte Carlo standard errors of the closed form and of alpha",
+     "test": "项目代码/vcr-engine/tests/numeric/N64_non_inferiority.R"
+    },
+    {
+     "id": "n69_maxcombo_strong_null",
+     "kind": "other-implementation",
+     "source": "The log-rank power reported beside a MaxCombo power against the power of a log-rank job at the same seed (N69a); the log-rank rejection probability under the strong null the design derives against a separate simulation in plain R tested with survival::survdiff (N69c).",
+     "tolerance": "Equal to the bit (N69a); within 3.5 combined Monte Carlo standard errors (N69c)",
+     "test": "项目代码/vcr-engine/tests/numeric/N69_maxcombo_strong_null.R"
     }
    ]
   },
