@@ -8,7 +8,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { METHOD_COUNT_KINDS, METHOD_UNUSED_RETIRE_LOADS } from "../index.mjs";
+import { METHOD_COUNT_KINDS, METHOD_SCIENTIFIC_HARM_TEST, METHOD_UNUSED_RETIRE_LOADS } from "../index.mjs";
 import {
   METHOD_GRAPH_ISSUE_CODES,
   METHOD_RELATION_TYPES,
@@ -36,6 +36,7 @@ import {
   storedEvidenceQuotes,
   METHOD_EVIDENCE_QUOTE_LENGTH,
   successfulFamilies,
+  trimObservations,
   unresolvedConflicts,
   validateMethodGraph,
   withoutRetiredLearningKeys,
@@ -362,19 +363,27 @@ const runs = (pattern, digest = DIGEST_A, { invoked = true } = {}) => {
   return learning;
 };
 
-test("the harm test reads the runs in order and stops at a boundary", () => {
+test("the harm test reads the whole record in order: harm is decided where the upper boundary is reached, clear is where the record stands", () => {
   // The bounds are the scientific axis's (a correction is ordinary work): three rejections in a row cannot decide, four can.
   assert.equal(methodHarmTest(runs("rr")).state, "watching");
   assert.equal(methodHarmTest(runs("rrr")).state, "watching");
   assert.deepEqual({ ...methodHarmTest(runs("rrrr")), llr: undefined }, { state: "harm", reason: "upper-boundary", runs: 4, bad: 4, llr: undefined });
+  // Harm is a decision: the runs after it do not take it back, and it is reported where it was reached.
+  assert.deepEqual({ ...methodHarmTest(runs("rrrraaaaaaaa")), llr: undefined }, { state: "harm", reason: "upper-boundary", runs: 4, bad: 4, llr: undefined });
   // Two early rejections, then work that holds up: not harm.
   assert.equal(methodHarmTest(runs("rra")).state, "watching");
-  // Three accepted runs are enough to call it clear, and later runs are not read.
-  assert.deepEqual({ ...methodHarmTest(runs("aaaarrrr")), llr: undefined }, { state: "clear", reason: "lower-boundary", runs: 3, bad: 0, llr: undefined });
-  // A background-rate mix that never crosses is clear at the cap.
+  // Three accepted runs are enough to call it clear, but clear is a standing, not a verdict: the runs after it are read
+  // (until 2026-11-03 they were not, and three clean first runs cleared a method for good, audit D3).
+  assert.deepEqual({ ...methodHarmTest(runs("aaa")), llr: undefined }, { state: "clear", reason: "lower-boundary", runs: 3, bad: 0, llr: undefined });
+  assert.deepEqual({ ...methodHarmTest(runs("aaaarrrr")), llr: undefined }, { state: "watching", reason: "accumulating", runs: 8, bad: 4, llr: undefined });
+  assert.deepEqual({ ...methodHarmTest(runs("aaarrrrrr")), llr: undefined }, { state: "harm", reason: "upper-boundary", runs: 9, bad: 6, llr: undefined },
+    "corrections after early clean runs still make a method harmful");
+  assert.equal(methodHarmTest(runs("aaarrrrr")).state, "watching", "one short of it");
+  // A mix that never reaches the upper boundary is clear: at the lower one, or at the cap when it stays between them.
   const mixed = "aaaaaaaaar".repeat(5);
   const capped = methodHarmTest(runs(mixed), { minRuns: 3 });
   assert.equal(capped.state, "clear");
+  assert.deepEqual([methodHarmTest(runs("aarar".repeat(8))).state, methodHarmTest(runs("aarar".repeat(8))).reason], ["clear", "window-exhausted"]);
   // A 60% rate is caught well before the cap; a coin-flip rate is not harm.
   const harmful = methodHarmTest(runs("rrarrarrr"));
   assert.equal(harmful.state, "harm");
@@ -382,6 +391,203 @@ test("the harm test reads the runs in order and stops at a boundary", () => {
   assert.notEqual(methodHarmTest(runs("aarararrar")).state, "harm");
   assert.equal(methodHarmTest(emptyLearning(DIGEST_A)).state, "watching");
   assert.equal(methodHarmTest(/** @type {any} */ (undefined)).state, "watching");
+});
+
+/** Seeded generator: every rate below is reproducible. @param {number} seed */
+const mulberry32 = (seed) => () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+/** A record of runs that used the method, in order: `true` a rejected one. @param {readonly boolean[]} outcomes */
+const history = (outcomes) => ({ ...emptyLearning(DIGEST_A), observations: outcomes.map((rejected, index) => ({
+  runId: `run_${index}`, family: `fam_${index}`, outcome: rejected ? "rejected" : "accepted", at: new Date(NOW + index * 60_000).toISOString(), invoked: true })) });
+
+test("read over the whole record, a harmless method's chance of ever reading harm is the test's own and does not grow with use", () => {
+  // Exact, by dynamic programming over (runs, rejected) with the upper boundary absorbing from the fourth run: 4.31% by run 100
+  // and 4.31% by run 3,000 at the 25% background rate (3.63% for the test that stopped at its first boundary); Ville's
+  // inequality bounds it by alpha / (1 - beta) = 6.25% however long the record grows.
+  const exact = 0.0431;
+  assert.ok(exact <= METHOD_SCIENTIFIC_HARM_TEST.alpha / (1 - METHOD_SCIENTIFIC_HARM_TEST.beta));
+  const random = mulberry32(20261103);
+  const histories = 3000;
+  let by100 = 0, by300 = 0;
+  for (let index = 0; index < histories; index += 1) {
+    const outcomes = Array.from({ length: 300 }, () => random() < METHOD_SCIENTIFIC_HARM_TEST.baseRate);
+    // Harm, once reached, stays: the reading at the end is the reading after every run.
+    if (methodHarmTest(history(outcomes.slice(0, 100))).state === "harm") by100 += 1;
+    if (methodHarmTest(history(outcomes)).state === "harm") by300 += 1;
+  }
+  const standardError = Math.sqrt(exact * (1 - exact) / histories);
+  assert.ok(Math.abs(by300 / histories - exact) < 3.5 * standardError, `simulated ${by300 / histories} against exact ${exact}`);
+  assert.ok(by300 - by100 <= 3, `harm first read between runs 101 and 300 in ${by300 - by100} of ${histories} histories`);
+});
+
+test("a harmful method behind three clean first runs is still found, which the stopped test never did", () => {
+  // Exact: 95.2% within the 40 runs after three clean ones at a 60% correction rate; the stopped test read clear at run 3, for good.
+  const exact = 0.952;
+  const random = mulberry32(7);
+  const histories = 1000;
+  let found = 0;
+  for (let index = 0; index < histories; index += 1) {
+    const outcomes = [false, false, false, ...Array.from({ length: 40 }, () => random() < METHOD_SCIENTIFIC_HARM_TEST.harmRate)];
+    assert.equal(methodHarmTest(history(outcomes.slice(0, 3))).state, "clear");
+    if (methodHarmTest(history(outcomes)).state === "harm") found += 1;
+  }
+  assert.ok(Math.abs(found / histories - exact) < 3.5 * Math.sqrt(exact * (1 - exact) / histories), `found ${found / histories} against exact ${exact}`);
+});
+
+/** A reading with its sum rounded: the carried part's sum is a product, the whole record's a running total. @param {ReturnType<typeof methodHarmTest>} read */
+const rounded = (read) => ({ ...read, llr: Math.round(read.llr * 1e9) / 1e9 });
+
+test("a record kept to its newest runs carries what it dropped, so the test reads the whole record and a moving window raises no alarm of its own", () => {
+  const keep = 30;
+  const random = mulberry32(5);
+  let windowAlarms = 0, carriedAlarms = 0, wholeAlarms = 0;
+  for (let index = 0; index < 200; index += 1) {
+    let carried = emptyLearning(DIGEST_A), windowed = emptyLearning(DIGEST_A), whole = emptyLearning(DIGEST_A);
+    let alarms = { window: false, carried: false, whole: false };
+    for (let run = 0; run < 240; run += 1) {
+      const applied = { runId: `run_${run}`, outcome: /** @type {"corrected" | "clean"} */ (random() < METHOD_SCIENTIFIC_HARM_TEST.baseRate ? "corrected" : "clean"), at: new Date(NOW + run * 60_000).toISOString() };
+      whole = foldApplied(whole, applied);
+      carried = trimObservations(foldApplied(carried, applied), keep);
+      // What the official packs' record did until 2026-11-03: the last N, and nothing of the rest.
+      windowed = foldApplied(windowed, applied);
+      windowed = { ...windowed, observations: windowed.observations.slice(-keep) };
+      const read = methodHarmTest(carried);
+      assert.deepEqual(rounded(read), rounded(methodHarmTest(whole)), `history ${index}, run ${run}`);
+      assert.ok(carried.observations.length <= keep);
+      alarms = { window: alarms.window || methodHarmTest(windowed).state === "harm", carried: alarms.carried || read.state === "harm", whole: alarms.whole || methodHarmTest(whole).state === "harm" };
+    }
+    windowAlarms += Number(alarms.window); carriedAlarms += Number(alarms.carried); wholeAlarms += Number(alarms.whole);
+  }
+  assert.equal(carriedAlarms, wholeAlarms);
+  assert.ok(wholeAlarms <= 20, `${wholeAlarms} of 200 harmless histories read harm on the whole record`);
+  assert.ok(windowAlarms > 3 * Math.max(1, wholeAlarms), `the moving window raised ${windowAlarms} against ${wholeAlarms}`);
+  // A harm reached inside the dropped part is still the verdict, with the numbers it was reached on.
+  const decided = trimObservations(history([true, true, true, true, false, false, false, false, false, false]), 2);
+  assert.deepEqual(decided.harmCarried, { runs: 8, bad: 4, through: new Date(NOW + 7 * 60_000).toISOString(), crossed: { runs: 4, bad: 4 } });
+  assert.deepEqual({ ...methodHarmTest(decided), llr: undefined }, { state: "harm", reason: "upper-boundary", runs: 4, bad: 4, llr: undefined });
+  // Nothing to drop leaves the record as it was, and a body that changed starts the test again with nothing carried.
+  const short = history([true, false]);
+  assert.equal(trimObservations(short, 5), short);
+  assert.equal(resetLearningForDigest(decided, DIGEST_B).harmCarried, undefined);
+});
+
+test("the verdict is the whole-record rule's on every history of up to twelve runs, and that rule's false alarm stays the test's own", () => {
+  // Supplements the seeded guard above, which the test stopped at its first boundary passes too (3.63% against 4.31% is within its
+  // tolerance): here the rule is stated, held against methodHarmTest on every history exhaustively, and its operating
+  // characteristic computed exactly.
+  const { baseRate, harmRate, alpha, beta, minRuns, maxRuns } = METHOD_SCIENTIFIC_HARM_TEST;
+  const upper = Math.log((1 - beta) / alpha), lower = Math.log(beta / (1 - alpha));
+  const badStep = Math.log(harmRate / baseRate), goodStep = Math.log((1 - harmRate) / (1 - baseRate));
+  /** @param {readonly boolean[]} outcomes */
+  const rule = (outcomes) => {
+    let llr = 0, bad = 0;
+    for (const [index, rejected] of outcomes.entries()) {
+      bad += Number(rejected);
+      llr += rejected ? badStep : goodStep;
+      if (index + 1 >= minRuns && llr >= upper - 1e-9) return { state: "harm", runs: index + 1, bad };
+    }
+    return { state: llr <= lower + 1e-9 || outcomes.length >= maxRuns ? "clear" : "watching", runs: outcomes.length, bad };
+  };
+  for (let length = 1; length <= 12; length += 1) {
+    for (let mask = 0; mask < 2 ** length; mask += 1) {
+      const outcomes = Array.from({ length }, (_, index) => Boolean(mask >> index & 1));
+      const read = methodHarmTest(history(outcomes));
+      assert.deepEqual({ state: read.state, runs: read.runs, bad: read.bad }, rule(outcomes), outcomes.map((rejected) => (rejected ? "r" : "a")).join(""));
+    }
+  }
+  /** The probability the rule ever reads harm within `runs` runs at a rate, by dynamic programming over (runs, rejected). @param {number} rate @param {number} runs */
+  const everHarm = (rate, runs) => {
+    let open = new Map([[0, 1]]), harm = 0;
+    for (let n = 1; n <= runs; n += 1) {
+      const next = new Map();
+      for (const [bad, mass] of open) for (const [count, probability] of [[bad + 1, rate], [bad, 1 - rate]]) {
+        if (n >= minRuns && count * badStep + (n - count) * goodStep >= upper - 1e-9) harm += mass * probability;
+        else next.set(count, (next.get(count) ?? 0) + mass * probability);
+      }
+      open = next;
+    }
+    return harm;
+  };
+  // The figures methodHarmTest's comment states: 4.31% at the 25% background rate however long the record, 0.06% at 10%, both under alpha / (1 - beta).
+  assert.ok(Math.abs(everHarm(baseRate, 100) - 0.0431) < 0.0001 && Math.abs(everHarm(baseRate, 1000) - 0.0431) < 0.0001);
+  assert.ok(everHarm(baseRate, 1000) - everHarm(baseRate, 100) < 1e-5, "it does not grow with use");
+  assert.ok(Math.abs(everHarm(0.1, 300) - 0.0006) < 0.0001);
+  assert.ok(everHarm(baseRate, 1000) < alpha / (1 - beta));
+});
+
+/** A researcher's reaction to one run, a minute apart from the run before, the run having begun a minute before it. @param {number} index @param {"corrected" | "clean"} [outcome] */
+const reaction = (index, outcome = "clean") => ({ runId: `run_${index}`, outcome, at: new Date(NOW + index * 60_000).toISOString(), since: new Date(NOW + (index - 1) * 60_000).toISOString() });
+
+test("a run a bounded record let go of is never counted again, and a run the settlement may still read again is never let go of", () => {
+  let learning = emptyLearning(DIGEST_A);
+  for (let index = 0; index < 10; index += 1) learning = foldApplied(learning, reaction(index, index === 2 ? "corrected" : "clean"));
+  const trimmed = trimObservations(learning, 4);
+  assert.deepEqual(trimmed.observations.map((observation) => observation.runId), ["run_6", "run_7", "run_8", "run_9"]);
+  assert.equal(trimmed.harmCarried?.through, reaction(5).at, "the newest reaction it let go of");
+  // The hourly settlement reads its whole window again: every run it let go of comes back, as it was or corrected since, and changes nothing.
+  for (let index = 0; index < 6; index += 1) {
+    assert.equal(foldApplied(trimmed, reaction(index)), trimmed, `run_${index} again`);
+    assert.equal(foldApplied(trimmed, { ...reaction(index, "corrected"), at: new Date(NOW + 3_600_000).toISOString() }), trimmed, `run_${index} corrected later`);
+  }
+  assert.deepEqual(rounded(methodHarmTest(trimmed)), rounded(methodHarmTest(learning)));
+  assert.deepEqual(trimmed.counts, learning.counts);
+  // A run that began after it is new, and is counted; without a start, its reaction's own time stands for one.
+  assert.equal(foldApplied(trimmed, reaction(10)).observations.length, 5);
+  assert.equal(foldApplied(trimmed, { runId: "run_late", outcome: "clean", at: reaction(4).at }), trimmed);
+  // A record that never let anything go counts whatever it does not hold (an account's own methods are never trimmed).
+  assert.equal(foldApplied(learning, { runId: "run_x", outcome: "clean", at: reaction(0).at, since: reaction(0).since }).observations.length, 11);
+  // Inside the window nothing is let go of however many there are, and a reaction to a held run is folded into it, once.
+  const held = trimObservations(learning, 4, { keepSince: reaction(3).at });
+  assert.deepEqual(held.observations.map((observation) => observation.runId), ["run_3", "run_4", "run_5", "run_6", "run_7", "run_8", "run_9"]);
+  assert.equal(held.harmCarried?.through, reaction(2).at);
+  const corrected = foldApplied(held, { ...reaction(5, "corrected"), at: new Date(NOW + 3_600_000).toISOString() });
+  assert.deepEqual([corrected.observations.length, corrected.counts.appliedCorrected, corrected.counts.appliedClean], [7, 2, 8]);
+  assert.equal(foldApplied(corrected, { ...reaction(5, "corrected"), at: new Date(NOW + 7_200_000).toISOString() }), corrected);
+  // Nothing old enough to let go of leaves the record as it was.
+  assert.equal(trimObservations(learning, 4, { keepSince: reaction(0).at }), learning);
+});
+
+test("an hourly settlement that reads its whole window again counts each run once, on a record bounded below the window's traffic", () => {
+  // Review of 2026-11-03: 300 reactions in the 72-hour window and a record of 200 read 300, 400, 500, 600, 700 runs over five passes.
+  const reactions = Array.from({ length: 300 }, (_, index) => reaction(index, index % 4 === 0 ? "corrected" : "clean"));
+  let whole = emptyLearning(DIGEST_A);
+  for (const applied of reactions) whole = foldApplied(whole, applied);
+  for (const keepSince of [undefined, reactions[50].at]) {
+    let learning = emptyLearning(DIGEST_A);
+    for (let pass = 0; pass < 5; pass += 1) {
+      for (const applied of reactions) learning = trimObservations(foldApplied(learning, applied), 200, keepSince ? { keepSince } : {});
+      const read = methodHarmTest(learning);
+      assert.deepEqual([read.runs, read.bad, learning.counts.appliedClean, learning.counts.appliedCorrected], [300, 75, 225, 75], `pass ${pass + 1}, keepSince ${keepSince}`);
+      assert.deepEqual(rounded(read), rounded(methodHarmTest(whole)));
+      assert.equal(learning.observations.length, keepSince ? 250 : 200, "what the window may still read again is held");
+    }
+  }
+});
+
+test("on a record every account adds to, harm needs corrections from two accounts up to the boundary, and the accounts are carried with what is let go of", () => {
+  const two = { minAccounts: 2 };
+  /** @param {readonly [string, boolean][]} steps account and whether the run was corrected, in order */
+  const shared = (steps) => {
+    let learning = emptyLearning(DIGEST_A);
+    steps.forEach(([by, corrected], index) => { learning = foldApplied(learning, { ...reaction(index, corrected ? "corrected" : "clean"), by }); });
+    return learning;
+  };
+  const alone = /** @type {[string, boolean][]} */ (Array.from({ length: 6 }, () => ["acct_a", true]));
+  assert.equal(methodHarmTest(shared(alone)).state, "harm", "one account's corrections are harm for a method of its own");
+  assert.notEqual(methodHarmTest(shared(alone), two).state, "harm", "and not for a body every account is given");
+  // Four corrections by one account, five hundred clean runs, then one correction by another: the second account does not stop it.
+  const late = /** @type {[string, boolean][]} */ ([...Array.from({ length: 4 }, () => ["acct_a", true]), ...Array.from({ length: 500 }, (_, index) => [index % 2 ? "acct_a" : "acct_c", false]), ["acct_b", true]]);
+  assert.notEqual(methodHarmTest(shared(late), two).state, "harm");
+  // Corrections from two accounts while the sum is up: harm, at the run the second account's correction was.
+  const both = /** @type {[string, boolean][]} */ ([["acct_a", true], ["acct_a", true], ["acct_a", true], ["acct_a", true], ["acct_b", true]]);
+  assert.deepEqual({ ...methodHarmTest(shared(both), two), llr: undefined }, { state: "harm", reason: "upper-boundary", runs: 5, bad: 5, llr: undefined });
+  // The same when the first account's corrections were let go of before the second's arrived.
+  const trimmed = trimObservations(shared(both.slice(0, 4)), 1, two);
+  assert.deepEqual(trimmed.harmCarried?.by, ["acct_a"]);
+  const after = foldApplied(trimmed, { ...reaction(4, "corrected"), by: "acct_b" });
+  assert.deepEqual({ ...methodHarmTest(after, two), llr: undefined }, { state: "harm", reason: "upper-boundary", runs: 5, bad: 5, llr: undefined });
+  // A clean run corrected later keeps the account it was first recorded with.
+  const upgraded = foldApplied(foldApplied(emptyLearning(DIGEST_A), { ...reaction(0), by: "acct_a" }), { ...reaction(0, "corrected"), by: "acct_z" });
+  assert.equal(upgraded.observations[0].by, "acct_a");
 });
 
 test("a harmful revision is retired now; a stated one is only proposed; another revision's runs do not count", () => {
@@ -546,6 +752,16 @@ test("an unproven merge is one a pass built and the harm test has not cleared", 
   assert.equal(isUnprovenMerge(merged({ learning: runs("aaaa") })), false, "runs that opened it and held up clear it");
   assert.equal(isUnprovenMerge(merged({ status: "candidate", learning: runs("aaaa") })), true, "one that is not in force is not cleared");
   assert.equal(isUnprovenMerge(merged({ digest: DIGEST_B, learning: runs("aaaa", DIGEST_A) })), true, "another body's runs prove nothing about this one");
+});
+
+test("clear is where the record stands, not a verdict: a merge that read clear is unproven again after a correction, and cleared again after clean runs", () => {
+  // Intended since 2026-11-03 (clear is no longer final): a merge's originals and its group's build wait while it reads watching
+  // (`methodConsolidation.mjs`, `mergeCleared`, `unprovenMerge`). Before, three clean runs cleared a merge for good.
+  assert.equal(methodHarmTest(runs("aaa")).state, "clear");
+  assert.equal(isUnprovenMerge(merged({ learning: runs("aaa") })), false);
+  assert.equal(methodHarmTest(runs("aaar")).state, "watching");
+  assert.equal(isUnprovenMerge(merged({ learning: runs("aaar") })), true, "one correction after it cleared, and it holds its group's build again");
+  assert.equal(isUnprovenMerge(merged({ learning: runs("aaara") })), false, "one more clean run and it is cleared again");
 });
 
 test("an unproven merge that its runs never opened expires, by carried runs or by age, and says so", () => {

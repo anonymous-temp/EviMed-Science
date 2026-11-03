@@ -304,6 +304,19 @@ test("the worker reads a moved lesson's run from the copy kept for it, and the h
   assert.match(schedule, /await ensureLearningProject\(store, user\);/);
 });
 
+test("the hourly pass settles every account with evidence and consolidates every library, past the first 200", () => {
+  // Audit 2026-11-03, D3 and D9: it read `ORDER BY user_id LIMIT 200` of the accounts holding a learned method and settled only those, so an
+  // account with no method of its own never had its reactions to an official method counted, and the 201st account was never visited.
+  const schedule = serverSource.slice(serverSource.indexOf("const scheduleConsolidation = async () => {"), serverSource.indexOf("consolidationScheduleRun = maintenanceMutation(schedule)"));
+  assert.ok(schedule.length > 500, "the scheduler moved; this test now checks nothing");
+  assert.doesNotMatch(schedule, /LIMIT 200/);
+  assert.match(schedule, /for await \(const account of learningPassAccounts\(productDatabase\)\)/);
+  const settle = schedule.indexOf("await methodApplied?.settleUser(account.userId)");
+  const libraryOnly = schedule.indexOf("if (!account.library) continue;");
+  const enqueue = schedule.indexOf('productJobs.enqueue(account.userId, "consolidate"');
+  assert.ok(settle > 0 && settle < libraryOnly && libraryOnly < enqueue, "every account is settled; only a library is consolidated, after its settlement");
+});
+
 test("a stop reads the bounded run it releases, and the counters reach the metrics page", () => {
   // L-G6: a bounded run's finish released its runtime before writing the
   // transcript, so every one of them recorded `history_unavailable`.

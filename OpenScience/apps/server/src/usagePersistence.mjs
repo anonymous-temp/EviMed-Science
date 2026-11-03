@@ -7,7 +7,8 @@ const migrations = new WeakMap();
 // member is checked for shape rather than trusted, and the constraint is named
 // for the exact list it enforces: when the vocabulary grows, the old name no
 // longer matches, and the migration replaces the constraint instead of leaving
-// one that refuses the new purpose on insert.
+// one that refuses the new purpose on insert — unless the one it finds already
+// admits every purpose of this list (`purposeCheckPlan`).
 for (const purpose of USAGE_PURPOSES) {
   if (!/^[a-z][a-z-]*$/.test(purpose)) throw new Error(`usage purpose ${JSON.stringify(purpose)} cannot be written into SQL`);
 }
@@ -137,24 +138,6 @@ END $$;
 -- so every older row stays 'other' — a guessed purpose would read in the report
 -- exactly like a recorded one.
 ALTER TABLE evimed_usage.model_requests ADD COLUMN IF NOT EXISTS purpose text NOT NULL DEFAULT 'other';
-DO $purpose$
-DECLARE stale record;
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_constraint
-    WHERE conrelid='evimed_usage.model_requests'::regclass AND conname='${purposeCheck}'
-  ) THEN
-    FOR stale IN SELECT conname FROM pg_constraint
-      WHERE conrelid='evimed_usage.model_requests'::regclass
-        AND conname ~ '^usage_model_requests_purpose_[0-9a-f]+_check$'
-    LOOP
-      EXECUTE format('ALTER TABLE evimed_usage.model_requests DROP CONSTRAINT %I', stale.conname);
-    END LOOP;
-    ALTER TABLE evimed_usage.model_requests ADD CONSTRAINT ${purposeCheck}
-      CHECK (purpose IN (${USAGE_PURPOSES.map((purpose) => `'${purpose}'`).join(",")})) NOT VALID;
-    ALTER TABLE evimed_usage.model_requests VALIDATE CONSTRAINT ${purposeCheck};
-  END IF;
-END $purpose$;
 -- The cost report reads one window across every account. The account-leading
 -- index above cannot seek on time alone, so without this the report reads the
 -- whole ledger, which grows by every model request the platform makes.
@@ -190,13 +173,56 @@ CREATE INDEX IF NOT EXISTS model_requests_operation_time_idx ON evimed_usage.mod
 /** The purpose CHECK's current name, for the tests that pin the migration. */
 export const USAGE_PURPOSE_CHECK = purposeCheck;
 
+/** The names a purpose CHECK has had: one per list it enforced. */
+const PURPOSE_CHECK_NAME = /^usage_model_requests_purpose_[0-9a-f]+_check$/;
+
+/**
+ * What the migration does about the purpose CHECK, from the ones the table holds (`pg_get_constraintdef`, `convalidated`).
+ *
+ * Nothing, when one of them already admits every purpose this release writes: its own, or a later release's wider list, which a
+ * rollback to this release must keep — swapping it for this release's would refuse the rows of the newer purposes, and the validation
+ * would fail the start. Otherwise the others are dropped and this release's is added NOT VALID. Whichever is kept or added is
+ * validated when it is not yet (`validate`), in a transaction of its own (`migrateUsageLedger`): a VALIDATE in the transaction
+ * that added the constraint scans the ledger under the ACCESS EXCLUSIVE lock the ADD took, and every reservation waits for it.
+ * @param {readonly { name: string, definition: string, validated: boolean }[]} constraints
+ * @param {readonly string[]} [purposes]
+ * @returns {{ drop: string[], add: boolean, validate: string | null }}
+ */
+export function purposeCheckPlan(constraints, purposes = USAGE_PURPOSES) {
+  const held = constraints.filter((constraint) => PURPOSE_CHECK_NAME.test(constraint.name));
+  /** @param {string} definition the purposes a CHECK admits, as PostgreSQL writes its list back */
+  const admitted = (definition) => new Set([...String(definition).matchAll(/'([a-z][a-z-]*)'::text/g)].map((match) => match[1]));
+  const kept = held.find((constraint) => constraint.name === purposeCheck)
+    ?? held.find((constraint) => { const admits = admitted(constraint.definition); return purposes.every((purpose) => admits.has(purpose)); });
+  if (kept) return { drop: held.filter((constraint) => constraint !== kept).map((constraint) => constraint.name), add: false, validate: kept.validated ? null : kept.name };
+  return { drop: held.map((constraint) => constraint.name), add: true, validate: purposeCheck };
+}
+
 /** @param {any} database */
 export async function migrateUsageLedger(database) {
   if (migrations.has(database)) return migrations.get(database);
-  const attempt = database.transaction(async (client) => {
-    await client.query("SELECT pg_advisory_xact_lock(hashtext('evimed-usage-v1'))");
-    await client.query(sql);
-  });
+  const attempt = (async () => {
+    const plan = await database.transaction(async (/** @type {any} */ client) => {
+      await client.query("SELECT pg_advisory_xact_lock(hashtext('evimed-usage-v1'))");
+      await client.query(sql);
+      const held = await client.query(`SELECT conname AS name, pg_get_constraintdef(oid) AS definition, convalidated AS validated FROM pg_constraint
+        WHERE conrelid='evimed_usage.model_requests'::regclass AND contype='c' AND conname ~ '^usage_model_requests_purpose_[0-9a-f]+_check$'`);
+      const decided = purposeCheckPlan(held.rows.map((/** @type {any} */ row) => ({ name: String(row.name), definition: String(row.definition), validated: row.validated === true })));
+      // Names read from the catalogue and matched against the one shape above, so they are spliced as identifiers.
+      for (const name of decided.drop) await client.query(`ALTER TABLE evimed_usage.model_requests DROP CONSTRAINT ${name}`);
+      if (decided.add) {
+        await client.query(`ALTER TABLE evimed_usage.model_requests ADD CONSTRAINT ${purposeCheck}
+          CHECK (purpose IN (${USAGE_PURPOSES.map((purpose) => `'${purpose}'`).join(",")})) NOT VALID`);
+      }
+      return decided;
+    });
+    if (!plan.validate) return;
+    // Its own transaction: VALIDATE takes SHARE UPDATE EXCLUSIVE, which lets reservations write while the ledger is scanned.
+    await database.transaction(async (/** @type {any} */ client) => {
+      const pending = await client.query(`SELECT 1 FROM pg_constraint WHERE conrelid='evimed_usage.model_requests'::regclass AND conname=$1 AND NOT convalidated`, [plan.validate]);
+      if (pending.rowCount) await client.query(`ALTER TABLE evimed_usage.model_requests VALIDATE CONSTRAINT ${plan.validate}`);
+    });
+  })();
   migrations.set(database, attempt);
   try { await attempt; }
   catch (error) { migrations.delete(database); throw error; }

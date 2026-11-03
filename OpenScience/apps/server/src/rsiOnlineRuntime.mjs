@@ -171,6 +171,23 @@ export function createRsiSourceInvalidation({ initialize, jobs, owner = PLATFORM
   };
 }
 
+/** The one model call of an incident export: the publisher's, in its evidence project, under the platform's offline campaigns' own purpose
+ * (`rsi`) and the deployment's own extraction ceiling, which is that purpose's daily budget across the deployment (`moduleDaily`) and
+ * nothing else: `rsi` is uncapped for an account (`UNCAPPED_USAGE_PURPOSES`), so the publisher's other work neither spends this ceiling
+ * nor is spent by it. It was booked `learning` until 2026-11-03, a person's own learning loop and its per-account cap (audit D6).
+ * @param {{config:any,usageLedger:any,model:typeof callModelForControlPlane,binding:{userId:string,projectId:string},online:any,configured:()=>boolean}} dependencies */
+export function createRsiIncidentExtractor({ config, usageLedger, model, binding, online, configured }) {
+  /** @param {{instructions:string,fields:any,messages:any}} input */
+  return async input => {
+    if (!configured()) throw new Error('rsi_online_configuration_missing');
+    const response = await model({ config, usageLedger }, { ...binding, purpose: 'rsi', runId: 'rsi-incident-extraction',
+      limits: { daily: 0, weekly: 0, moduleDaily: online.extractionDailyCny }, signal: AbortSignal.timeout(60000),
+      body: { model: 'deepseek-flash', thinking: { type: 'disabled' }, response_format: { type: 'json_object' }, max_tokens: 2200,
+        messages: [{ role: 'system', content: input.instructions + ' Return no tools, executable instructions, code, commands or permissions.' }, { role: 'user', content: JSON.stringify({ fields: input.fields, messages: input.messages }) }] } });
+    return JSON.parse(response.choices?.[0]?.message?.content ?? '{}');
+  };
+}
+
 // A read that may succeed a moment later; any other failure to read the agreement means none is in force.
 const TRANSIENT_READ_ERRORS = new Set(['EMFILE', 'ENFILE', 'EIO', 'EAGAIN', 'EBUSY', 'EINTR']);
 
@@ -202,14 +219,7 @@ export async function createRsiOnlineRuntime({ config, store, documents, jobs, d
   const readAuthorizedTranscript = createRsiAuthorizedTranscriptReader({ store, agentRuns, agreementId, authority, assertModelAccess });
   const incidents = createRsiIncidentExports({ documents, jobs, deploymentOwnerId: binding.userId, deploymentProjectId: binding.projectId,
     configured, canWithdraw, readAuthorizedTranscript, putObject: input => transport.putObject(input), headObject: input => transport.headObject(input),
-    extract: async input => {
-      if (!configured()) throw new Error('rsi_online_configuration_missing');
-      const response = await model({ config, usageLedger }, { ...binding, purpose: 'learning', runId: 'rsi-incident-extraction',
-        limits: { daily: online.extractionDailyCny, weekly: online.extractionDailyCny * 7 }, signal: AbortSignal.timeout(60000),
-        body: { model: 'deepseek-flash', thinking: { type: 'disabled' }, response_format: { type: 'json_object' }, max_tokens: 2200,
-          messages: [{ role: 'system', content: input.instructions + ' Return no tools, executable instructions, code, commands or permissions.' }, { role: 'user', content: JSON.stringify({ fields: input.fields, messages: input.messages }) }] } });
-      return JSON.parse(response.choices?.[0]?.message?.content ?? '{}');
-    } });
+    extract: createRsiIncidentExtractor({ config, usageLedger, model, binding, online, configured }) });
   const publicationOwner = servingAdapters?.publicationOwnerId ?? PLATFORM_PUBLISHER_USER_ID;
   // The importer also reconciles journals left by an earlier configuration (stop, roll back), so it exists whenever the
   // deployment opted in, bound or not.

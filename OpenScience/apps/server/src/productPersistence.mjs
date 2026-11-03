@@ -565,6 +565,9 @@ CREATE INDEX IF NOT EXISTS feedback_events_subject_idx ON evimed_product.feedbac
 CREATE INDEX IF NOT EXISTS feedback_events_owner_idx ON evimed_product.feedback_events(user_id,occurred_at DESC,id);
 CREATE INDEX IF NOT EXISTS feedback_events_project_fk_idx ON evimed_product.feedback_events(user_id,project_id);
 CREATE INDEX IF NOT EXISTS feedback_events_rejected_key_idx ON evimed_product.feedback_events(user_id,(detail->>'key')) WHERE trigger_kind='memory-rejected';
+-- The hourly learning pass lists every account with learning evidence in the settlement window, a page at a time
+-- (learningPassAccounts): each page reads that window of that one kind, not every account's whole ledger.
+CREATE INDEX IF NOT EXISTS feedback_events_learning_evidence_time_idx ON evimed_product.feedback_events(occurred_at,user_id) WHERE trigger_kind='learning-evidence';
 INSERT INTO evimed_product.schema_migrations(name) VALUES ('2026-09-07-feedback-events-v1') ON CONFLICT DO NOTHING;
 DO $feedback_vocabulary$
 BEGIN

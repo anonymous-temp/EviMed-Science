@@ -910,6 +910,7 @@ export {
   methodHarmTest,
   scientificRegression,
   successfulFamilies,
+  trimObservations,
   unresolvedConflicts,
   validateMethodGraph,
   withoutRetiredLearningKeys,

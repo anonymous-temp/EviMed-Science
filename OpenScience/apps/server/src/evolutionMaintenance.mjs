@@ -8,8 +8,11 @@ import { EVOLUTION_PROJECT_ID } from './internalProjects.mjs';
 /**
  * Retirement evidence for a published tool: the platform's existing sequential harm test, applied the
  * way the learned-methods loop applies it (`retirementProposal` in the domain's `methodGraph.mjs`):
- * `methodHarmTest` read over the revision's own history, in the order it happened, each run at its
- * latest outcome, stopped at its verdict. Not a second sequential test, and never restarted.
+ * `methodHarmTest` read over the revision's own trials, in the order they happened, each at its
+ * latest outcome. Not a second sequential test, and never restarted. `methodHarmTest` itself reads a
+ * whole record and stops only at `harm` (since 2026-11-03 a `clear` is where a record stands, not a
+ * verdict); what stops this test at its first verdict is this module, which takes no new trial once
+ * the trials read `clear` or `harm` or number 40 (`foldHarmTrial`).
  *
  * What was wrong before (scientific finding B3): every concluded test was followed by a fresh one
  * ("epochs"), each with its own false-alarm chance, and any of them reaching `harm` retired the tool. A
@@ -48,9 +51,10 @@ const WRITE_ATTEMPTS = 8;
 const usageQueues = new WeakMap();
 
 /**
- * Exact operating characteristics of the capped sequential test `methodHarmTest` implements, by dynamic
- * programming over (trials, bad): the probability it ends in `harm`, in `clear`, and the mean number of
- * trials it reads, when each trial is bad independently with probability `rate`.
+ * Exact operating characteristics of the capped sequential test this module runs (`methodHarmTest` over
+ * trials that stop at its first verdict, `foldHarmTrial`), by dynamic programming over (trials, bad): the
+ * probability it ends in `harm`, in `clear`, and the mean number of trials it reads, when each trial is
+ * bad independently with probability `rate`.
  * @param {{baseRate:number,harmRate:number,alpha:number,beta:number,minRuns:number,maxRuns:number}} parameters @param {number} rate
  */
 export function harmTestOperatingCharacteristics(parameters, rate) {
