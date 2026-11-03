@@ -60,6 +60,7 @@ import { presentBiasAnalysis } from "./vcrBiasAnalysis.mjs";
 import { evidenceValueFindings } from "./vcrValueChecks.mjs";
 import { presentTrim } from "./vcrTrimView.mjs";
 import { presentImputation } from "./vcrImputationView.mjs";
+import { presentTargetTrial } from "./vcrTargetTrialView.mjs";
 import { localCalibrationView } from "./vcrLocalCalibration.mjs";
 import {
   abilitiesOf, assumptionSummary, assumptionValue, designsSentence, nodeLabel, notEstimableDesign, presentDesigns, reviewContextOf,
@@ -825,6 +826,8 @@ export function presentComparatorTab(bundle) {
     trim: presentTrim(diagnostics.trim),
     // Missing covariates that were imputed (C7): the pooled answer beside the complete-case one, and what it assumed.
     imputation: presentImputation(result, value),
+    // A target-trial emulation (C3, C4): the question, which estimand was computed, and the two arms' risks beside the difference.
+    targetTrialEmulation: presentTargetTrial(result, value),
     gaps,
     counts: current ? countsView(result?.counts && Object.keys(result.counts).length ? result.counts : {}, { tier: study.dataTier }) : null,
     verdict: shown ? { conclusion: readAs } : null,

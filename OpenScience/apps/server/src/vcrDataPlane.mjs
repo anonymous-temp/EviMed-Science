@@ -1871,6 +1871,8 @@ export async function removeStudyDirectory(root, studyId) {
  */
 export function tablesNeededBy(method, endpointType, derived) {
   if (method === "profile.snapshot") return ["files"];
+  // A target-trial emulation reads the person-period table: the longitudinal shape (one row per person, period and parameter) and nothing else.
+  if (method === "comparator.target_trial") return derived.includes("longitudinal") ? ["longitudinal"] : ["files"];
   /** @type {("subject" | "events")[]} */
   const wanted = ["subject"];
   // Methods whose outcome is always an event time, and the weighting methods that read one when the endpoint says so.

@@ -104,6 +104,16 @@ export function vcrResultLimits({ conclusion = null, method = null, route = null
     const dropped = Array.isArray(imputation.droppedImputations) ? imputation.droppedImputations.length : 0
     if (dropped > 0) limits.push({ key: 'imputations_not_estimable', text: `有 ${dropped} 份补齐数据上的分析算不出结果，合并时没有用它们。` })
   }
+  // A target-trial emulation (algorithm round C3, C4): an interval from fewer resamples than planned, and weights that a few people carry.
+  const trialLimits = Array.isArray(found.limitedBy) ? found.limitedBy : []
+  if (Object.keys(object(found.targetTrial)).length) {
+    if (trialLimits.includes('bootstrap_stopped_early')) {
+      limits.push({ key: 'bootstrap_stopped_early', text: `计算时间用完，区间只来自对人重抽样的 ${Number(found.bootstrapReplicates)} 次，比计划的粗。` })
+    }
+    if (trialLimits.includes('weights_not_stable')) {
+      limits.push({ key: 'weights_not_stable', text: '补回删失的权重平均值离 1 太远，或有极大的权重：少数人撑起了结果，读的时候要谨慎。' })
+    }
+  }
   const labels = /** @type {Record<string, string>} */ (VCR_APPLICABILITY_LIMIT_LABELS_ZH)
   for (const entry of (Array.isArray(found.applicabilityLimits) ? found.applicabilityLimits : []).map(object)) {
     const sentence = labels[String(entry.code)] ?? text(entry.reason)

@@ -26,6 +26,7 @@
 
 import { VCR_EFFECT_DISCOUNT_LABEL_ZH, VCR_EFFECT_DISCOUNT_LIMITS_ZH, VCR_ESTIMAND_LABELS_ZH, VCR_PREMISES_DECISIVE_MAX, VCR_PREMISE_SOURCES } from "@evimed/domain";
 import { imputationPremise } from "./vcrImputationView.mjs";
+import { targetTrialPremises } from "./vcrTargetTrialView.mjs";
 import { TIME_UNIT_WORDS, hazardLawWords, list, numeric, object, text } from "./vcrViewsKit.mjs";
 import { biasEstimatePhrase, biasStatedWords } from "./vcrBiasAnalysis.mjs";
 
@@ -42,7 +43,7 @@ const PRIORITY = Object.freeze([
   "effect", "control", "dropout", "correlation", "similarity", "sampling", "accrual", "alpha", "assurance",
   // a comparison: how suitable it is, how far the target trial is emulated, what an indirect comparison leaves unadjusted, what a
   // borrowed prior rests on, how strong an unmeasured confounder would have to be
-  "applicability", "targetTrial", "trimmedPopulation", "missingAtRandom", "maicTarget", "maicModifiers", "residual", "borrowedHistory", "priorWorth", "unmeasured",
+  "applicability", "targetTrial", "trimmedPopulation", "missingAtRandom", "trialStrategy", "trialWeights", "maicTarget", "maicModifiers", "residual", "borrowedHistory", "priorWorth", "unmeasured",
   // a bias analysis: the estimate it analyses and the bias that was stated
   "biasEstimate", "biasStated",
 ]);
@@ -427,6 +428,9 @@ function comparatorPremises(input) {
       value: `去掉试验组 ${removed("treated")} 例、对照组 ${removed("control")} 例（倾向评分低于 ${plain(Number(trim.lower))} 或高于 ${plain(Number(trim.upper))}）；结论只适用于留下的人`,
       source: trim.rule === "fixed" ? "assumed" : "default", decisive: true });
   }
+
+  // A target-trial emulation: the two strategies compared, what the weights that make up for the censoring assume, and what follow-up means.
+  rows.push(...targetTrialPremises(diagnostics));
 
   // Missing covariates that were imputed: how much, how often, and the assumption about why (missing at random given what was seen).
   const imputed = imputationPremise(diagnostics);

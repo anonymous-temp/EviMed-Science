@@ -35,6 +35,8 @@ const labels: Record<string, string> = {
   superiority: "优效性", non_inferiority: "非劣效", futility_group_sequential: "中期无效性停止的成组序贯", sample_size_reestimation: "样本量再估计",
   multi_arm_selection: "多臂中期选择", enrichment: "人群富集", count_endpoint: "计数终点", hwang_shih_decani: "Hwang-Shih-DeCani 消耗函数", kim_demets: "Kim-DeMets 消耗函数",
   simes: "Simes 检验", bonferroni: "Bonferroni 检验", dunnett: "Dunnett 检验",
+  // target-trial emulation (algorithm round C3, C4): the two strategies and the estimands of a sequence of trials
+  sequential: "一串模拟试验（每个符合条件的期开一个）", clone_censor_weight: "克隆—删失—加权（有宽限期的策略）", itt: "意向治疗", per_protocol: "按方案", both: "意向治疗和按方案都给",
   // the heterogeneity prior of a pooling, the network, the dose-response and the shrinkage (algorithm round E7, C5, C6, E8)
   log_normal: "对数正态分布（τ² 的先验）", inverse_gamma: "逆 Gamma 分布（τ 的先验）", log_t: "对数 t 分布（τ² 的先验）", turner_2015: "Turner 等（2015）按结局和比较类型给出的先验", turner_2015_generic: "Turner 等（2015）的总体先验",
   bartos_2023: "Bartoš 等（2023）的先验", mean_difference: "均值差", log_ratio: "对数比值（如对数风险比）", lower_better: "数值越小越好", higher_better: "数值越大越好",
@@ -140,6 +142,10 @@ const exampleLabels: Record<string, Record<string, string>> = {
     "propensity weights for a binary endpoint": "二分类结局的倾向评分加权",
     "the same weights after removing the people with no comparable counterpart (Crump's rule: no bound to choose)": "去掉没有可比对象的人之后再加权（Crump 规则，不必选界值）",
     "the same weights when some covariates are missing: impute them 20 times and read the answer by Rubin's rules, the complete-case answer beside it": "有协变量缺失时：补齐 20 次，按 Rubin 规则合并，旁边是只用完整病例的结果"
+  },
+  "comparator.target_trial": {
+    "a sequence of emulated trials from a person-period table: the intention-to-treat and per-protocol risk difference after 24 months, with stabilised weights for the treatment received": "由人-期表模拟一串试验：24 个月后意向治疗和按方案的风险差，按实际接受的治疗做稳定化加权",
+    "clone-censor-weight for starting treatment within three periods of diagnosis against never starting, after twelve periods": "克隆—删失—加权：确诊后三期内开始治疗，对比始终不开始，十二期后的风险差"
   },
   "comparator.rmst": {
     "restricted mean survival time to 24 months": "比较 24 个月的 RMST"

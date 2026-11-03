@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import test from "node:test";
 
-import { analysisTableIssues, deriveAnalysisShapes, normalizeFieldMap, toCsv, validateFieldMap } from "../src/vcrDataPlane.mjs";
+import { analysisTableIssues, deriveAnalysisShapes, normalizeFieldMap, tablesNeededBy, toCsv, validateFieldMap } from "../src/vcrDataPlane.mjs";
 
 const FIXTURE = new URL("./fixtures/vcr-person-period/longitudinal.csv", import.meta.url);
 
@@ -62,4 +62,10 @@ test("a file with one row per person and period is filed as the longitudinal sha
   const csv = toCsv(long.header, long.rows);
   if (!existsSync(FIXTURE) || process.env.UPDATE_PERSON_PERIOD_FIXTURE === "1") writeFileSync(FIXTURE, csv);
   assert.equal(csv, readFileSync(FIXTURE, "utf8"), "the engine's fixture is what the data plane derives from the file");
+});
+
+test("a job of the target-trial method is given the longitudinal table, and a project without one gets its raw files (which the engine refuses by name)", () => {
+  assert.deepEqual(tablesNeededBy("comparator.target_trial", null, ["subject", "longitudinal", "events"]), ["longitudinal"]);
+  assert.deepEqual(tablesNeededBy("comparator.target_trial", null, ["subject"]), ["files"]);
+  assert.deepEqual(tablesNeededBy("comparator.propensity_weight", "binary", ["subject", "longitudinal"]), ["subject"], "the other comparators still read the subject table");
 });

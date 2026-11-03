@@ -1660,6 +1660,10 @@ export function vcrGapsForRule(rule) {
     too_few_events: { title: "某一组没有事件，风险比不存在", detail: "有一组一个事件都没有，或 Cox 模型没有收敛，风险比无法估计。", answers: "延长随访或补充事件更多的数据；也可以改看不依赖事件数的指标，如限制平均生存时间的差。" },
     nuisance_model_not_estimable: { title: "倾向性模型或结局模型拟合不出来", detail: "协变量之间高度共线，或外部对照的人数不足以拟合结局模型的全部系数。", answers: "删去重复或共线的协变量，减少结局模型里的项，或补充更多外部对照患者。" },
     trimmed_population_too_small: { title: "修剪之后某一组剩下的人太少", detail: "按倾向评分去掉没有可比对象的人之后，试验组或对照组不足两个人，没有可以加权的人群。", answers: "放宽修剪的界值（或不修剪，改用重叠加权的估计目标），或补充与试验人群更可比的外部数据。" },
+    no_eligible_person_trials: { title: "表里没有可以模拟的试验", detail: "没有人在任何一期符合条件，或者记录在事件、缺失值或间断处截断之后，剩下的人不足两个。", answers: "检查“符合条件”那一列是否标对了，补全缺失的期，或者放宽试验可以开始的期的范围。" },
+    arm_without_person_trials: { title: "有一个治疗组没有任何起点", detail: "符合条件的人-期里，试验组或对照组一个都没有，两组没法比较。", answers: "检查治疗那一列：它是每一期是否在用药的 0/1；如果所有人都没用过药，这个问题问不了。" },
+    horizon_beyond_followup: { title: "所选的随访期数超过了任何人被随访到的时间", detail: "要读的那一期之前，已经没有人在随访。", answers: "把随访期数缩到数据里最长的随访以内。" },
+    outcome_model_not_estimable: { title: "结局模型拟合不出来", detail: "展开之后的数据上结局模型没有收敛，或者某一组在要读的那一期之前已经没有人留在风险集里。", answers: "减少协变量或降低随访时间的多项式阶数；事件太少时，延长随访或合并更多的人。" },
     reconstruction_failed_qc: { title: "重建的曲线没有通过质控", detail: "重建出的风险人数、事件数、中位数或风险比与原文对不上。", answers: "重新数字化曲线并核对风险人数表，或换一篇报告完整的文献。" },
     map_prior_conflict: { title: "历史信息与当前数据冲突", detail: "MAP 先验与当前对照组数据的冲突检验越界。", answers: "检查历史研究与本研究人群是否可比，或降低借用权重。" },
     // The two the control plane derives before any job: they carry the route's

@@ -21,6 +21,7 @@ import { Tooltip } from "@/components/ui/Tooltip";
 import { VcrBiasAnalysis } from "../VcrBiasAnalysis";
 import { VcrSeriesLegend, VcrSurvivalChart } from "../VcrCharts";
 import { VcrImputation } from "../VcrImputation";
+import { VcrTargetTrial } from "../VcrTargetTrial";
 import { ConclusionChip, SourceTag } from "../VcrMarks";
 import { VcrNumber } from "../VcrNumber";
 import { VcrPremises, premiseDraft } from "../VcrPremises";
@@ -85,8 +86,8 @@ function ComparatorView({ studyId, study, data }: { studyId: string; study: VcrS
   const prior = data.prior ?? [];
   const nothing = data.curves.length === 0 && !data.rmst && !data.median && !data.gaps && !data.estimand
     && data.comparability.length === 0 && data.diagnostics.length === 0 && prior.length === 0 && data.qc.length === 0 && !data.verdict && !data.predictionBenchmark
-    // A bias analysis filed alone, a trimming restatement and an imputation card are results of the comparison.
-    && !data.biasAnalysis && !data.trim && !data.imputation;
+    // A bias analysis filed alone, a trimming restatement, an imputation card and a target-trial emulation are results of the comparison.
+    && !data.biasAnalysis && !data.trim && !data.imputation && !data.targetTrialEmulation;
   // The route in view: the one the study uses until the reader presses another. On a narrow page the record replaces the list.
   const used = data.routes.find((route) => route.selected)?.route ?? data.routes[0]?.route ?? null;
   const [looking, setLooking] = useState<string | null>(null);
@@ -155,6 +156,9 @@ function ComparatorView({ studyId, study, data }: { studyId: string; study: VcrS
 
           {/* What filling in missing covariate values did to the answer, beside the complete-case one. */}
           <VcrImputation card={data.imputation} />
+
+          {/* The target-trial emulation: the question, the effect of each estimand and the naive number set apart. */}
+          <VcrTargetTrial card={data.targetTrialEmulation} />
 
           {/* What the conclusion stands on, once; the comparator's own premises are listed by the server (`vcrPremises`). */}
           <VcrPremises

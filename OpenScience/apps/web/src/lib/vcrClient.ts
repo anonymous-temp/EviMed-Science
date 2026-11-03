@@ -1156,6 +1156,36 @@ export interface VcrImputationCard {
   note: string | null;
 }
 
+/**
+ * The target-trial emulation of a comparison (the question, how the emulated trial was made, and the effects of the two estimands
+ * beside what a naive grouping would have said). Every string is the server's; every number is a value with its unit and interval.
+ */
+export interface VcrTargetTrialCard {
+  question: string;
+  sentence: string;
+  strategy: "sequential" | "clone_censor_weight" | null;
+  /** The follow-up time the risks are read at, as the server counted it; null where it did not say. */
+  horizon: number | null;
+  estimands: Array<{
+    kind: "itt" | "pp";
+    label: string;
+    /** What the estimand holds fixed and what it ignores, in the server's words. */
+    meaning: string | null;
+    /** The estimand and the horizon said as one sentence. */
+    answers: string | null;
+    riskTreated: VcrValue | null;
+    riskControl: VcrValue | null;
+    riskDifference: VcrValue;
+    riskRatio: VcrValue | null;
+  }>;
+  checks: string[];
+  /** The naive risk difference (grouping by "ever treated") and the sentence that says what it is for; both or neither. */
+  naive: VcrValue | null;
+  naiveSentence: string | null;
+  weights: string | null;
+  bootstrap: string | null;
+}
+
 export interface VcrComparatorTab {
   /** 「这个结论的前提」: at most five decisive, the rest folded by the page. */
   premises?: VcrPremise[];
@@ -1210,6 +1240,8 @@ export interface VcrComparatorTab {
   trim?: VcrTrimCard | null;
   /** What filling in missing covariate values did to the answer: null when the result did not impute. */
   imputation?: VcrImputationCard | null;
+  /** The target-trial emulation of this comparison: null when the result is not one. */
+  targetTrialEmulation?: VcrTargetTrialCard | null;
   /** 「不可估计」 — the gaps, and what each one would answer. */
   gaps: { title?: string | null; needs?: string | null; items: Array<{ title: string; detail?: string | null; answers?: string | null }>; conclusion?: string | null; rule?: string | null } | null;
   counts: VcrCounts | null;
@@ -2344,6 +2376,39 @@ function readImputation(raw: unknown): VcrImputationCard | null {
   };
 }
 
+/**
+ * The target-trial emulation card; without its question and sentence, and for anything of an unknown shape, there is nothing to say.
+ * An estimand whose kind is not one of the two words, or whose risk difference cannot be read, is dropped (it would be a row with no
+ * answer); a card left with no estimand is nothing. The naive number is kept only with the sentence that says what it is.
+ */
+export function readTargetTrial(raw: unknown): VcrTargetTrialCard | null {
+  const card = obj(raw);
+  const question = text(card.question), sentence = text(card.sentence);
+  if (!question || !sentence) return null;
+  const readable = (value: VcrValue | null) => (value && (value.value !== null || value.text) ? value : null);
+  const estimands = arr(card.estimands).flatMap((row) => {
+    const kind: "itt" | "pp" | null = row.kind === "itt" ? "itt" : row.kind === "pp" ? "pp" : null;
+    const riskDifference = readable(readOptionalValue(row.riskDifference));
+    if (!kind || !riskDifference) return [];
+    return [{
+      kind, label: text(row.label) ?? (kind === "itt" ? "意向治疗" : "按方案"), meaning: text(row.meaning), answers: text(row.answers),
+      riskTreated: readable(readOptionalValue(row.riskTreated)), riskControl: readable(readOptionalValue(row.riskControl)),
+      riskDifference, riskRatio: readable(readOptionalValue(row.riskRatio)),
+    }];
+  });
+  if (estimands.length === 0) return null;
+  const naiveSentence = text(card.naiveSentence);
+  const naive = naiveSentence ? readable(readOptionalValue(card.naive)) : null;
+  return {
+    question, sentence,
+    strategy: card.strategy === "sequential" || card.strategy === "clone_censor_weight" ? card.strategy : null,
+    horizon: finite(card.horizon), estimands,
+    checks: strings(card.checks),
+    naive, naiveSentence: naive ? naiveSentence : null,
+    weights: text(card.weights), bootstrap: text(card.bootstrap),
+  };
+}
+
 function readDesignRecord(raw: unknown): NonNullable<VcrDesign["record"]> | null {
   const value = obj(raw);
   if (!Object.keys(value).length) return null;
@@ -2836,6 +2901,7 @@ export function readVcrComparator(raw: unknown): VcrComparatorTab {
     biasAnalysis: readBiasAnalysis(value.biasAnalysis),
     trim: readTrim(value.trim),
     imputation: readImputation(value.imputation),
+    targetTrialEmulation: readTargetTrial(value.targetTrialEmulation),
     gaps: Object.keys(gaps).length ? { ...(gaps as Loose), items: arr(gaps.items) } as VcrComparatorTab["gaps"] : null,
     counts: readVcrCounts(value.counts),
     verdict: Object.keys(verdict).length ? verdict as unknown as VcrComparatorTab["verdict"] : null,
