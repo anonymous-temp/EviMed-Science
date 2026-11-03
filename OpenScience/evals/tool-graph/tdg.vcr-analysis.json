@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "vcr-analysis",
-  "version": "sha256:9284b56749179a8b921ee9e95d3deeccf237776271b1f23f146dfdaf5ef74b1c",
+  "version": "sha256:7354852064744467f2054c523da31c18c493a5bd1e9f4c337274b8ad2cee7aa6",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 34,
@@ -1499,6 +1499,7 @@
               "network_meta",
               "dose_response_meta",
               "effect_shrinkage",
+              "target_trial_emulation",
               "match_extract",
               "forecast_trajectories",
               "evaluate_forecast",
