@@ -655,6 +655,41 @@ test("D4: a batch reading starts with a selection and no scenario, and the answe
   assert.equal(res.status, 503);
 });
 
+test("a network, a dose-response and a shrinkage start through the gateway, filed under the label the call gave them; a pooled reference for the spread is a table, never typed numbers", async () => {
+  /** @type {any[]} */
+  const queued = [];
+  const jobs = {
+    async enqueue(/** @type {any} */ input) { queued.push(input); return { job: { id: "job_n", state: "queued", progress: {} }, created: true }; },
+    async get() { return null; }, async cancel() { return { job: { id: "job_n", state: "canceled" }, canceled: true }; },
+  };
+  const { handler } = fixture({ jobs });
+  const start = async (/** @type {Record<string, any>} */ body) => { const res = response(); await handler(request("/internal/vcr/v1/simulate", { action: "start", ...body }), res); return res; };
+  const network = { label: "response", measure: "log_ratio", direction: "lower_better", studies: [
+    { studyId: "H1", contrasts: [{ treatment: "B", comparator: "A", effect: -0.3, se: 0.12 }] }, { studyId: "H2", contrasts: [{ treatment: "C", comparator: "B", effect: -0.15, se: 0.18 }] }] };
+  for (const [kind, scenario, subject] of /** @type {Array<[string, any, string]>} */ ([
+    ["network_meta", network, "nm:response"],
+    ["effect_shrinkage", { label: "phase 2", scale: "log", values: [{ estimate: -0.4, se: 0.19 }] }, "es:phase 2"],
+    ["dose_response_meta", { studies: [{ studyId: "K1", type: "ir", rows: [{ dose: 0, effect: 0 }, { dose: 10, effect: 0.1, se: 0.1 }] }], model: { kind: "linear" } }, "dr:default"],
+  ])) {
+    const res = await start({ kind, scenario });
+    assert.equal(res.status, 200, `${kind}: ${res.body}`);
+    assert.equal(queued.at(-1).kind, kind);
+    assert.equal(queued.at(-1).detail.subjectId, subject, `${kind} is filed under what it is about`);
+  }
+  // the pooled reference: a table kind reaches the pooling; a prior typed in is refused, and a number is never the run's
+  /** @type {any[]} */
+  const pooledCalls = [];
+  const pooling = fixture({ evidence: { async poolParameter(/** @type {any} */ input) { pooledCalls.push(input); return { status: "queued", jobs: [{ jobId: "job_p", status: "queued" }], refused: [] }; } } });
+  const call = async (/** @type {any} */ tauPrior) => { const res = response(); await pooling.handler(request("/internal/vcr/v1/simulate", { action: "start", kind: "pool_evidence", scenario: { parameter: "median_time", endpointKey: "pfs", tauPrior } }), res); return res; };
+  const pooled = await call({ kind: "turner_2015_generic" });
+  assert.equal(pooled.status, 200, pooled.body);
+  assert.deepEqual(pooledCalls.at(-1).tauPrior, { kind: "turner_2015_generic" });
+  const typed = await call({ kind: "log_normal", meanLog: -3, sdLog: 1 });
+  assert.equal(typed.status, 400, typed.body);
+  assert.match(typed.body, /先验来自文献里的表/);
+  assert.equal(pooledCalls.length, 1, "a prior typed in never reaches the pooling");
+});
+
 test("the comparator-effect kinds start through the gateway; a time-to-event MAIC names its comparator by a reconstruction result, never by rows", async () => {
   /** @type {any[]} */
   const queued = [];
