@@ -3,13 +3,20 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Sidebar } from "./Sidebar";
+import { GEO_SUMMARIES } from "@/components/geo/__fixtures__/geoProjects";
 
 const mocks = vi.hoisted(() => ({
   finishedToasts: vi.fn(),
   fetchInboxUnreadCount: vi.fn(),
   fetchWebConnectors: vi.fn(),
   fetchWebMe: vi.fn(),
+  listGeoProjects: vi.fn(),
 }));
+
+vi.mock("@/lib/geoClient", async (importOriginal) => {
+  const original = await importOriginal<typeof import("@/lib/geoClient")>();
+  return { ...original, listGeoProjects: mocks.listGeoProjects };
+});
 
 vi.mock("@/lib/apiClient", () => ({
   fetchWebConnectors: mocks.fetchWebConnectors,
@@ -60,7 +67,7 @@ vi.mock("@/components/sidebar/ProjectBrowser", async () => {
 
 function LocationProbe() {
   const location = useLocation();
-  return <div data-testid="location">{location.pathname}<span data-testid="intent">{JSON.stringify(location.state?.runtimeUiIntent)}</span></div>;
+  return <div data-testid="location">{location.pathname}<span data-testid="intent">{JSON.stringify(location.state?.runtimeUiIntent)}</span><span data-testid="query">{location.search}</span></div>;
 }
 
 function renderSidebar(initialPath = "/app/chat") {
@@ -88,6 +95,7 @@ beforeEach(() => {
   projectModule.current = null;
   mocks.fetchInboxUnreadCount.mockResolvedValue({ unreadTotal: 0, safetyUnread: 0 });
   mocks.fetchWebConnectors.mockResolvedValue([]);
+  mocks.listGeoProjects.mockResolvedValue([]);
   // A control plane that says nothing about 前沿动态 has not got it.
   mocks.fetchWebMe.mockResolvedValue({ user: { id: "u", name: "u" }, project: { id: "default", name: "我的研究" }, projects: [] });
 });
@@ -310,14 +318,43 @@ describe("Sidebar navigation", () => {
     expect(screen.getByRole("link", { name: "虚拟临床研究" })).not.toHaveAttribute("aria-current");
   });
 
-  it("marks a module's row on its own pages whatever the project, and only the one row", async () => {
+  it("shows the GEO work areas inside the existing sidebar on a GEO project", async () => {
     mocks.fetchWebMe.mockResolvedValue({ user: { id: "u", name: "u" }, project: { id: "default", name: "我的研究" }, projects: [], features: { vcr: true, geo: true } });
     projectModule.current = "vcr";
     renderSidebar("/app/geo/geo_1/visibility");
-    const geoRow = await screen.findByRole("link", { name: "循证 GEO" });
-    expect(geoRow).toHaveAttribute("aria-current", "page");
-    expect(screen.getByRole("link", { name: "虚拟临床研究" })).not.toHaveAttribute("aria-current");
-    expect(screen.getByRole("link", { name: "新对话" })).not.toHaveAttribute("aria-current");
+    const nav = await screen.findByRole("navigation", { name: "循证 GEO 工作区" });
+    expect(within(nav).getByRole("link", { name: "AI 表现" })).toHaveAttribute("aria-current", "page");
+    expect(within(nav).getByRole("link", { name: "项目工作" })).toHaveAttribute("href", "/app/geo/geo_1");
+    expect(within(nav).getByRole("link", { name: "内容与发布" })).toHaveAttribute("href", "/app/geo/geo_1/actions");
+    expect(within(nav).getByRole("link", { name: "产品与资料" })).toHaveAttribute("href", "/app/geo/geo_1/evidence");
+    expect(within(nav).getByRole("link", { name: "返回平台" })).toHaveAttribute("href", "/app/home");
+    expect(screen.queryByRole("link", { name: "新对话" })).not.toBeInTheDocument();
+  });
+
+  it("keeps the current project's scope and session in work-area links", async () => {
+    mocks.fetchWebMe.mockResolvedValue({ user: { id: "u", name: "u" }, project: { id: "default", name: "我的研究" }, projects: [], features: { geo: true } });
+    renderSidebar("/app/geo/geo_1/accuracy?engines=kimi&session=ses_1");
+    const nav = await screen.findByRole("navigation", { name: "循证 GEO 工作区" });
+    const link = within(nav).getByRole("link", { name: "AI 表现" });
+    const target = new URL(link.getAttribute("href")!, "https://example.invalid");
+    expect(target.pathname).toBe("/app/geo/geo_1/visibility");
+    expect(target.searchParams.get("engines")).toBe("kimi");
+    expect(target.searchParams.get("session")).toBe("ses_1");
+  });
+
+  it("does not discard scope when reselecting the same project, but clears it when switching projects", async () => {
+    mocks.fetchWebMe.mockResolvedValue({ user: { id: "u", name: "u" }, project: { id: "default", name: "我的研究" }, projects: [], features: { geo: true } });
+    mocks.listGeoProjects.mockResolvedValue(GEO_SUMMARIES);
+    renderSidebar("/app/geo/geo_masi/accuracy?engines=kimi&session=ses_1");
+    const selector = await screen.findByRole("button", { name: "选择项目：玛仕度肽注射液" });
+    await userEvent.click(selector);
+    await userEvent.click(screen.getByRole("menuitemradio", { name: "玛仕度肽注射液" }));
+    expect(screen.getByTestId("location")).toHaveTextContent("/app/geo/geo_masi/accuracy");
+    expect(screen.getByTestId("query")).toHaveTextContent("engines=kimi&session=ses_1");
+    await userEvent.click(selector);
+    await userEvent.click(screen.getByRole("menuitemradio", { name: "米曲菌胰酶片" }));
+    expect(screen.getByTestId("location")).toHaveTextContent("/app/geo/geo_mitiao");
+    expect(screen.getByTestId("query")).toBeEmptyDOMElement();
   });
 
   // One board offered and the other not: the one that is there keeps its place

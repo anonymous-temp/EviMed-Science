@@ -1,11 +1,11 @@
+import { sessionOwner } from "@/lib/sessionLifecycle";
 import { useCallback, useEffect, useRef } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { webErrorMessage } from "@/lib/apiClient";
 import { listGeoProjects } from "@/lib/geoClient";
-import { geoChatPath, geoSessionIdFromChatPath } from "@/lib/geoLocation";
+import { geoChatPath, geoIdFromChatPath, geoPanePath, geoSessionIdFromChatPath } from "@/lib/geoLocation";
 import { openGeoConversation } from "@/lib/geoNativeClient";
-import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
-import { resolveGeoTab } from "./geoTabs";
+import { prepareRuntimeUiIntent, newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { toast } from "@/lib/toast";
 
 /** Where a GEO conversation opens: the control-plane project and, when there is one, its conversation. */
@@ -37,9 +37,10 @@ export function useOpenGeoConversation() {
   useEffect(() => { live.current = true; return () => { live.current = false; generation.current += 1; }; }, []);
   return useCallback(async (target: GeoConversationTarget, draft?: string): Promise<boolean> => {
     if (!live.current || arrival.current !== location.key) return false;
+    const owner = sessionOwner();
     const request = ++generation.current;
     const from = location.key;
-    const current = () => live.current && generation.current === request && arrival.current === from;
+    const current = () => live.current && owner === sessionOwner() && generation.current === request && arrival.current === from;
     try {
       if (target.exactSession && !target.sessionId) throw new Error("The selected GEO conversation is unavailable.");
       const matches = target.geoId ? [] : (await listGeoProjects()).filter(project => project.projectId === target.projectId);
@@ -59,21 +60,17 @@ export function useOpenGeoConversation() {
       intent.kind = "open";
       if (target.geoPlanContext) intent.geoPlanContext = target.geoPlanContext;
       if (target.resultRevision) intent.resultRevision = target.resultRevision;
-        const params = new URLSearchParams(sameProject ? location.search : "");
-        if (sameProject && !location.pathname.includes("/chat")) {
-          const part = location.pathname.split("/")[4];
-          params.set("result", part === "answers" ? "questions" : resolveGeoTab(part).tab);
-        }
-        const search = params.toString();
-        navigate(`${geoChatPath(geoId, intent.sessionId)}${search ? `?${search}` : ""}`, {
-          state: { runtimeUiIntent: intent },
-          flushSync: true,
-        });
+      const legacyChat = sameProject && geoIdFromChatPath(location.pathname) === geoId;
+      const path = legacyChat
+        ? `${geoChatPath(geoId, intent.sessionId)}${location.search}${location.hash}`
+        : geoPanePath(sameProject ? location.pathname : `/app/geo/${encodeURIComponent(geoId)}`, sameProject ? location.search : "", sameProject ? location.hash : "", intent.sessionId);
+      // Opening a pane is not a new answer/list visit: Back should leave the object, not just close its conversation.
+      navigate(path, { replace: sameProject && (!legacyChat || !geoSessionIdFromChatPath(location.pathname)), state: { runtimeUiIntent: prepareRuntimeUiIntent(intent) }, flushSync: true });
       return true;
     } catch (error: unknown) {
       if (!current()) return false;
       toast.error(webErrorMessage(error, { fallback: "对话暂时无法打开，请稍后重试。" }));
       return false;
     }
-  }, [navigate, location.key, location.pathname, location.search]);
+  }, [navigate, location.key, location.pathname, location.search, location.hash]);
 }

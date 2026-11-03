@@ -1,3 +1,4 @@
+import { sanitizeRuntimeUiHistoryState } from "@/lib/runtimeUiNavigation";
 import { GeoAnalysisEntry } from "../GeoAnalysisEntry";
 import { useCallback, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
@@ -231,7 +232,7 @@ export function ActionsTab({ geoId, project, mode = "all" }: { geoId: string; pr
       const query = new URLSearchParams(location.search);
       query.set("step", target === "acted" ? "distribution" : "content");
       query.set("focus", target);
-      navigate(geoDestinationPath(geoId, { tab: "actions" }, query));
+      navigate(geoDestinationPath(geoId, { tab: "actions" }, query), { state: sanitizeRuntimeUiHistoryState(location.state) });
       return;
     }
     setFocus(target);
@@ -372,7 +373,7 @@ export function ActionsTab({ geoId, project, mode = "all" }: { geoId: string; pr
       )}
       {drawer.action && !openAction && (
         <Drawer title="这条行动已经不在了" onClose={drawer.close}>
-          <Note action={<Button variant="secondary" size="sm" onClick={() => { drawer.close(); navigate(`/app/geo/${encodeURIComponent(geoId)}/actions`, { replace: true }); }}>回到行动</Button>}>
+          <Note action={<Button variant="secondary" size="sm" onClick={drawer.close}>回到行动</Button>}>
             新的策略替换了它；它做过的稿件和订单仍在对应的问题群里。
           </Note>
         </Drawer>

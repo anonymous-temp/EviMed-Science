@@ -167,7 +167,7 @@ import { contextTransport, openThrowawayAccount } from "./throwaway-account.mjs"
 const WALK_TABLES = {
   "pageTemplates": {
     "version": 1,
-    "about": ["The one table of the pages the UI walk visits (R19, plan §3 S9, audit D §3.2 and §4 S5): which router pattern a view belongs to, which of the six page templates it is built on, the style budget it is held to, the kinds of section it may stack, and whether its first row is clicked.","scripts/ops/ui-walk.mjs reads it (embedded: the release switch mounts that one file only, `node scripts/ops/embed-walk-tables.mjs` writes the copy and a test holds it equal), apps/server/test/uiWalk.test.mjs and apps/web/src/app/pageTemplates.test.ts read it for the router coverage, and apps/web/src/test/pageComposition.test.tsx reads the templates' slots.","A view is a name the walk's report uses (`vcr-trial@2` is the second study's trial tab and is the view `vcr-trial`). `route` is the address the walk opens; a view without one is found from the deployment's own lists (`discovered`) or is a tab of a module page (`module`, `tab`).","`budget` names a row of `budgets` (the reading page's 8 / 5 / 3 when absent) and `budgetOverride` changes single numbers of it, each with the measure and the reason in `budgetNote`. There is no list of pages excused from their budget: a page that has to spend more says so here, with the measurement behind it, and a debt that is not a budget is an entry of ui-walk-baseline.json with an owner and a day.","`family` is the set of pages that share one tab strip (or one route): their titles start on one left edge; a page of its own kind (a record: a zone, a card, an author, an event, a document) is a family of one. A module's views (`module`) keep the same visible workflow rail and one contextual view selector; both 虚拟临床研究 and 循证 GEO retain their step states during conversation, including on a phone (owner, 2026-10-20). `workflow` says how a module navigates: `compact`, the steps folded beside one pinned 「查看：」 result selector; `rail`, 循证 GEO since its V3 plan (2026-10-23, §一.1 and §3.1, written at the owner's request), the eight steps are the one business navigation, a step's own views are a contextual 「分析视图」 select, and no project-level 「查看：」 selector is drawn; a module row without one keeps the rail and one pinned selector (虚拟临床研究).","`templates` says what each template may hold: `tablist`, `toolbar` and `stepRail` are `allowed`, `none` or (for the rail) `every-tab`; a reading page may carry the switch of its own document (a GEO answer's date, a document's 内容 / 原文 on a phone), which DESIGN.md does not forbid it. `orphans: content` marks a page made of text (a reading page): a sentence standing alone on it is its content, so the orphan-sentence budget does not apply there. `longViewports` is how many windows tall a page of the template may be before it needs contents: a reading page needs them from six, anything else contents or a list read a page at a time from twelve."],
+    "about": ["The one table of the pages the UI walk visits (R19, plan §3 S9, audit D §3.2 and §4 S5): which router pattern a view belongs to, which of the six page templates it is built on, the style budget it is held to, the kinds of section it may stack, and whether its first row is clicked.","scripts/ops/ui-walk.mjs reads it (embedded: the release switch mounts that one file only, `node scripts/ops/embed-walk-tables.mjs` writes the copy and a test holds it equal), apps/server/test/uiWalk.test.mjs and apps/web/src/app/pageTemplates.test.ts read it for the router coverage, and apps/web/src/test/pageComposition.test.tsx reads the templates' slots.","A view is a name the walk's report uses (`vcr-trial@2` is the second study's trial tab and is the view `vcr-trial`). `route` is the address the walk opens; a view without one is found from the deployment's own lists (`discovered`) or is a tab of a module page (`module`, `tab`).","`budget` names a row of `budgets` (the reading page's 8 / 5 / 3 when absent) and `budgetOverride` changes single numbers of it, each with the measure and the reason in `budgetNote`. There is no list of pages excused from their budget: a page that has to spend more says so here, with the measurement behind it, and a debt that is not a budget is an entry of ui-walk-baseline.json with an owner and a day.","`family` groups pages with the same title edge. GEO uses `geo-areas`: four project destinations in the sidebar, one tab strip for the current area, and task progress in project work.","`templates` says what each template may hold: `tablist`, `toolbar` and `stepRail` are `allowed`, `none` or (for the rail) `every-tab`; a reading page may carry the switch of its own document (a GEO answer's date, a document's 内容 / 原文 on a phone), which DESIGN.md does not forbid it. `orphans: content` marks a page made of text (a reading page): a sentence standing alone on it is its content, so the orphan-sentence budget does not apply there. `longViewports` is how many windows tall a page of the template may be before it needs contents: a reading page needs them from six, anything else contents or a list read a page at a time from twelve."],
     "templates": {
       "T1": {"name":"list page","tablist":"allowed","toolbar":"allowed","stepRail":"none","outline":"none","longViewports":12},
       "T2": {"name":"master-detail page","tablist":"none","toolbar":"allowed","stepRail":"none","outline":"none","longViewports":12},
@@ -207,7 +207,7 @@ const WALK_TABLES = {
       {"view":"capabilities","route":"/app/capabilities","pattern":"/app/capabilities","family":"capabilities","template":"T1","shapes":2,"rows":false},
       {"view":"method-workbench","route":"/app/capabilities/methods/comparator.evalue","pattern":"/app/capabilities/methods/:methodId","family":"data","template":"T4","budget":"data","rows":false},
       {"view":"calculation-history","discovered":true,"pattern":"/app/capabilities/calculations/:studyId/:tab?","family":"calculation-workbench","template":"T1","rows":true},
-      {"view":"geo","route":"/app/geo","pattern":"/app/geo","family":"geo-home","template":"T2","budget":"data","shapes":2,"rows":true},
+      {"view":"geo","route":"/app/geo","pattern":"/app/geo","family":"geo-home","template":"T1","collection":"geo-project-cards","budget":"data","shapes":2,"rows":true},
       {"view":"virtual-research","route":"/app/virtual-research","pattern":"/app/virtual-research","family":"vcr-home","template":"T2","budget":"data","shapes":2,"rows":true},
       {"view":"virtual-research-precedents","route":"/app/virtual-research?tab=precedents","pattern":"/app/virtual-research","family":"vcr-home","template":"T1","budget":"data","rows":false},
       {"view":"virtual-research-definitions","route":"/app/virtual-research?tab=definitions","pattern":"/app/virtual-research","family":"vcr-home","template":"T1","budget":"data","rows":false},
@@ -238,15 +238,15 @@ const WALK_TABLES = {
       {"view":"extensions-plugin-missing","route":"/app/extensions/plugins/impeccable-audit-missing","pattern":"/app/extensions/:tab/:itemId?","family":"extensions","template":"T1","budget":"extension","rows":false},
       {"view":"extensions-skill-missing","route":"/app/extensions/skills/impeccable-audit-missing","pattern":"/app/extensions/:tab/:itemId?","family":"extensions","template":"T1","budget":"extension","rows":false},
       {"view":"not-found","route":"/app/does-not-exist","pattern":"/app/*","family":"screen","template":"screen","rows":false},
-      {"view":"geo-overview","module":"geo","tab":"","pattern":"/app/geo/:geoId","family":"geo","template":"T3","workflow":"rail","budget":"geo","rows":false},
-      {"view":"geo-visibility","module":"geo","tab":"/visibility","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","workflow":"rail","budget":"geo","rows":false},
-      {"view":"geo-accuracy","module":"geo","tab":"/accuracy","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","workflow":"rail","budget":"geo","rows":true},
-      {"view":"geo-questions","module":"geo","tab":"/questions","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","workflow":"rail","budget":"geo","rows":true},
-      {"view":"geo-sources","module":"geo","tab":"/sources","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","workflow":"rail","budget":"geo","rows":true},
-      {"view":"geo-actions","module":"geo","tab":"/actions","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","workflow":"rail","budget":"geo","rows":false},
-      {"view":"geo-plan","module":"geo","tab":"/plan","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","workflow":"rail","budget":"geo","rows":false},
-      {"view":"geo-evidence","module":"geo","tab":"/evidence","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","workflow":"rail","budget":"geo","rows":false},
-      {"view":"geo-answer","discovered":true,"pattern":"/app/geo/:geoId/answers/:snapshotId","family":"geo-record","band":"geo","template":"T3","workflow":"rail","templateNote":"one answer is read inside the module band, under 问题与回答 (router.tsx; pageComposition.test.tsx holds it there with the eight-step rail): a module page (`band`: held to the module tabs' band by module-chrome), not a reader of its own — r19-guards2, from the fixture walk","budget":"geo","rows":false},
+      {"view":"geo-overview","module":"geo","tab":"","pattern":"/app/geo/:geoId","family":"geo","template":"T3","workflow":"geo-areas","area":"work","budget":"geo","rows":false},
+      {"view":"geo-visibility","module":"geo","tab":"/visibility","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","workflow":"geo-areas","area":"analytics","budget":"geo","rows":false},
+      {"view":"geo-accuracy","module":"geo","tab":"/accuracy","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","workflow":"geo-areas","area":"analytics","budget":"geo","rows":true},
+      {"view":"geo-questions","module":"geo","tab":"/questions","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","workflow":"geo-areas","area":"analytics","budget":"geo","rows":true},
+      {"view":"geo-sources","module":"geo","tab":"/sources","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","workflow":"geo-areas","area":"analytics","budget":"geo","rows":true},
+      {"view":"geo-actions","module":"geo","tab":"/actions","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","workflow":"geo-areas","area":"content","budget":"geo","rows":false},
+      {"view":"geo-plan","module":"geo","tab":"/plan","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","workflow":"geo-areas","area":"work","budget":"geo","rows":false},
+      {"view":"geo-evidence","module":"geo","tab":"/evidence","pattern":"/app/geo/:geoId/:tab","family":"geo","template":"T3","workflow":"geo-areas","area":"context","budget":"geo","rows":false},
+      {"view":"geo-answer","discovered":true,"pattern":"/app/geo/:geoId/answers/:snapshotId","family":"geo-record","band":"geo","template":"T3","workflow":"geo-areas","area":"analytics","budget":"geo","rows":false},
       {"view":"vcr-overview","module":"vcr","workflow":"objects","tab":"","pattern":"/app/virtual-research/:studyId/:tab?","family":"vcr","template":"T3","budget":"geo","shapes":3,"rows":false},
       {"view":"vcr-population","module":"vcr","workflow":"objects","tab":"/population","pattern":"/app/virtual-research/:studyId/:tab?","family":"vcr","template":"T3","budget":"geo","shapes":3,"rows":false},
       {"view":"vcr-patients","module":"vcr","workflow":"objects","variant":"population","tab":"/population?level=individual","pattern":"/app/virtual-research/:studyId/:tab?","family":"vcr","template":"T3","budget":"geo","shapes":3,"rows":false},
@@ -1042,7 +1042,7 @@ export const EXPECTED_REFUSALS = {
 };
 
 /** The pages that open a conversation of the kernel as they land. */
-const LANDING_CONVERSATION_PAGES = new Set(["autopilot"]);
+const LANDING_CONVERSATION_PAGES = new Set(["autopilot", "geo-overview"]);
 
 /**
  * The topic suggestions of the search home: a read the control plane answers by starting the project's runtime (`searchTopicsFor`),
@@ -1065,7 +1065,7 @@ export function unexpectedRefusals(name, httpErrors) {
   }
   const allowed = EXPECTED_REFUSALS[/** @type {keyof typeof EXPECTED_REFUSALS} */ (budgetKey(name))] ?? [];
   // A page that opens a conversation on landing asks for the kernel's frame, and the walk starts no runtime: that one call is refused by
-  // design (定时任务 opens its first task beside the list, owner 2026-10-28); any other refusal on the page still fails it.
+  // design. 定时任务 opens its first task, and GEO project work resumes its addressed conversation. Any other refusal still fails.
   const frame = LANDING_CONVERSATION_PAGES.has(budgetKey(name)) ? /^503 \/api\/runtime-ui\/frames(?:[/?#]|$)/ : null;
   // The report keeps the first 60 characters of a path, which a project id of 36 characters leaves ending in `/evimed-se`.
   const topics = TOPICS_UNAVAILABLE_BY_DESIGN.has(budgetKey(name)) ? /^503 \/api\/projects\/[^/]+\/evimed-/ : null;
@@ -1619,11 +1619,25 @@ export function measureComposition([options] = [{}]) {
   const read = {
     viewport: { width: window.innerWidth, height: window.innerHeight }, height, title, chrome, introduction, stepRail,
     workbenchActions: { workbenches: live("[data-vcr-method-workbench]").length, bars: live("[data-vcr-method-workbench] [data-vcr-run-actions]").length },
-    geoContext: (() => {
-      const header = live("[data-page-header] button");
-      const current = live("[data-page-chrome] [data-rail-step]").filter(el => el.querySelector("[aria-current='step']"));
-      const step = current.length === 1 ? current[0].getAttribute("data-rail-step") : null;
-      return { adopted: header.some(el => nameOf(el) === "项目总览"), step, requestedStep: new URL(location.href).searchParams.get("step"), selectors: live("[data-page-chrome] button[aria-label]").filter(el => /^分析视图：/.test(el.getAttribute("aria-label") ?? "")).length };
+    geoAreas: (() => {
+      const details = live("main [data-geo-work] aside[aria-label='项目资料'] summary")
+        .filter(el => /^任务进度/u.test(el.textContent?.trim() ?? ""));
+      const cards = live("main ul[aria-label='循证 GEO 项目']");
+      return {
+        work: live("main [data-geo-work]").length,
+        progress: details.length,
+        execution: live("main [data-geo-work] aside button").filter(el => nameOf(el) === "执行详情").length,
+        dock: live("main [data-page-dock] [data-conversation-bar], main [data-page-dock] textarea, main [data-page-dock] [contenteditable='true']").length,
+        conversation: live("main [data-workspace-conversation], main [data-geo-work] [aria-label='项目对话']").length,
+        selected: live("[data-page-chrome] [role='tab'][aria-selected='true']").map(el => nameOf(el)),
+        labels: live("[data-page-chrome] [role='tab']").map(el => nameOf(el)),
+        collections: cards.length,
+        grid: cards.length === 1 && getComputedStyle(cards[0]).display === "grid",
+        cards: cards.flatMap(list => [...list.querySelectorAll(":scope > li")].map(item => ({
+          links: [...item.querySelectorAll("a[href]")].filter(visible).map(link => ({ name: nameOf(link), href: link.getAttribute("href") })),
+          status: Boolean([...item.querySelectorAll("[data-geo-subline]")].find(el => visible(el) && el.textContent?.trim())),
+        }))),
+      };
     })(),
     viewSelector: (() => {
       const choices = live("[data-page-chrome] button[aria-label]").filter((el) => /^查看：/.test(el.getAttribute("aria-label") ?? ""));
@@ -1754,15 +1768,6 @@ export function moduleViewAddressHolds(module, label, initial, before, after, { 
   return to.searchParams.get("view") === (key === previous ? from.searchParams.get("view") : null);
 }
 
-/** The adopted GEO workflow exposes only the analysis siblings of its selected step. */
-export function geoContextViewLabels(step) {
-  return ({ diagnosis: ["可见度", "准确与安全"], sources: ["信源", "方案"], monitoring: ["趋势", "执行记录"] })[step] ?? [];
-}
-
-/**
- * Exercise the visible rail and pinned result selector; navigation only, never a workflow Start action. `views: false` is a module whose
- * steps are its navigation (循证 GEO's `rail`, page table): every step is clicked and read, and there is no selector to go through.
- */
 /**
  * What a module's page says about its work, in the words DS23 fixes: read from the page, judged apart so a test can hold the judgement.
  * The composition checks above measure how a page looks; these are the ones that notice when its words and its buttons disagree.
@@ -1789,7 +1794,7 @@ const ACTION_WORDS = { draft: /^(让 AI|打开对话|放进对话|在对话中|�
  * @param {ReturnType<typeof readWorkspaceFacts>} facts
  * @returns {string[]}
  */
-export function workspaceFindings(view, facts) {
+export function workspaceFindings(view, facts, { geo = false } = {}) {
   /** @type {string[]} */
   const found = [];
   // A page that gave no answer has said nothing against these: the page's own failure is reported where it loads.
@@ -1799,12 +1804,203 @@ export function workspaceFindings(view, facts) {
   for (const word of facts.railWords) counts.set(word, (counts.get(word) ?? 0) + 1);
   for (const [word, count] of counts) if (word !== "已完成" && count > 3) found.push(`${view}: the rail says “${word}” ${count} times, which tells the reader nothing (DS23.2)`);
   if (facts.primary.includes("对话")) found.push(`${view}: “对话” is the header's primary: the primary is the next step (DS23.3)`);
-  if (facts.dock === 0 && facts.split === null) found.push(`${view}: no conversation on this view, neither a bar nor a column (DS23.5)`);
+  if (!geo && facts.dock === 0 && facts.split === null) found.push(`${view}: no conversation on this view, neither a bar nor a column (DS23.5)`);
   for (const action of facts.actions) {
     const words = /** @type {Record<string, RegExp>} */ (ACTION_WORDS)[action.kind ?? ""];
     if (words && !words.test(action.label)) found.push(`${view}: “${action.label}” is a ${action.kind} action and does not say so (DS23.4)`);
   }
   return found;
+}
+
+const GEO_AREAS = {
+  work: { label: "项目工作", path: "", tabs: [["项目对话", ""], ["方案", "/plan"]] },
+  analytics: { label: "AI 表现", path: "/visibility", tabs: [["可见度", "/visibility"], ["医学核查", "/accuracy"], ["引用来源", "/sources"], ["问题与回答", "/questions"]] },
+  content: { label: "内容与发布", path: "/actions", tabs: [["稿件", "/actions"], ["发布记录", "/actions#geo-delivery"]] },
+  context: { label: "产品与资料", path: "/evidence", tabs: [["产品依据", "/evidence"], ["人群与旅程", "/questions?view=journey"]] },
+};
+
+const GEO_VIEW_TABS = {
+  "geo-overview": "项目对话", "geo-plan": "方案", "geo-visibility": "可见度", "geo-accuracy": "医学核查",
+  "geo-sources": "引用来源", "geo-questions": "问题与回答", "geo-answer": "问题与回答", "geo-actions": "稿件", "geo-evidence": "产品依据",
+};
+
+const GEO_TASKS = {
+  "证据": "/evidence", "旅程": "/questions?view=journey", "问题": "/questions", "诊断": "/accuracy#geo-errors",
+  "信源": "/sources", "内容": "/actions", "投放": "/actions#geo-delivery", "监测": "/visibility#geo-trend",
+};
+
+/** Compare destinations independently of the clicked control's href and keep the active project's scope. */
+export function geoAreaAddressHolds(initial, suffix, actual, scope = {}) {
+  const start = new URL(initial);
+  const root = start.pathname.match(/^\/app\/geo\/[^/]+/u)?.[0];
+  if (!root) return false;
+  const expected = new URL(root + suffix, start);
+  const target = new URL(actual);
+  return target.origin === expected.origin && target.pathname.replace(/\/$/u, "") === expected.pathname
+    && target.hash === expected.hash
+    && [...expected.searchParams, ...Object.entries(scope)].every(([key, value]) =>
+      target.searchParams.getAll(key).length === 1 && target.searchParams.get(key) === value)
+    && (!target.searchParams.has("view") || expected.searchParams.has("view"));
+}
+
+/** Read task progress only after the disclosure was opened. All visible rows need a known step and a visible state. */
+export function geoTaskProgressFindings(initial, facts, scope) {
+  const rows = facts.rows ?? [];
+  if (!rows.length) return facts.empty ? [] : ["GEO task progress is empty without its empty state"];
+  const declared = Number(facts.label?.match(/（(\d+)）$/u)?.[1]);
+  if (declared !== rows.length || new Set(rows.map(row => row.label)).size !== rows.length) {
+    return ["GEO task progress has an inconsistent count or repeated step"];
+  }
+  return rows.flatMap(({ label, state, href }) => {
+    if (!Object.hasOwn(GEO_TASKS, label) || !href || !geoAreaAddressHolds(initial, GEO_TASKS[label], href, scope)) return [`GEO task ${label}: invalid destination`];
+    if (!/^(?:待开始|排队中|进行中|等你.*|简版已完成|已完成|未完成|已过期|已停止|已暂停|已关闭)$/u.test(state)) return [`GEO task ${label}: no recognized visible state`];
+    return [];
+  });
+}
+
+export function readGeoTaskProgress(el) {
+  return {
+    label: el.querySelector("summary")?.textContent?.trim(),
+    empty: [...el.querySelectorAll("p")].some(p => p.getClientRects().length && p.textContent?.trim() === "暂无任务进度。"),
+    rows: [...el.querySelectorAll("li")].map(row => ({
+      label: row.querySelector("a")?.textContent?.trim(),
+      href: row.querySelector("a")?.href,
+      state: [...row.querySelectorAll(":scope > span")].find(span => span.getClientRects().length && span.checkVisibility?.() !== false)?.textContent?.trim(),
+    })),
+  };
+}
+
+/** Read the committed route's current marker even if its sidebar automatically closed. */
+export function geoAreaCurrent(label) {
+  const nav = document.querySelector("nav[aria-label='循证 GEO 工作区']");
+  const current = nav?.querySelectorAll("a[aria-current='page']");
+  return current?.length === 1 && current[0].textContent?.trim() === label;
+}
+
+/** Click actual links, tabs and disclosures at both widths. Opening a conversation does not send a prompt. */
+export async function verifyGeoAreas(page) {
+  const initial = page.url();
+  await page.waitForFunction(moduleReady, undefined, { timeout: 30_000 });
+  const sidebar = page.getByRole("navigation", { name: "循证 GEO 工作区", exact: true });
+  const openSidebar = page.getByRole("button", { name: "展开侧边栏", exact: true });
+  const main = page.getByRole("main");
+  const details = main.getByRole("complementary", { name: "项目资料", exact: true });
+  const progress = details.locator("details").filter({ has: page.locator("summary").filter({ hasText: /^任务进度/u }) });
+  const summary = progress.locator("summary");
+  const readTabs = area => main.getByRole("tablist", { name: area.label, exact: true });
+  const expectAddress = (label, suffix, kept = {}) => {
+    if (!geoAreaAddressHolds(initial, suffix, page.url(), kept)) throw new Error(`GEO ${label}: wrong project, destination or scope (${new URL(page.url()).pathname + new URL(page.url()).search})`);
+  };
+  const openNavigation = async () => {
+    if (await openSidebar.isVisible()) await openSidebar.click({ timeout: 5_000 });
+    await sidebar.waitFor({ state: "visible", timeout: 5_000 });
+  };
+  const closeDrawer = async () => {
+    const close = page.getByRole("button", { name: "关闭侧边栏", exact: true });
+    // A committed route already closes the mobile drawer. Escape also covers a same-route click.
+    if (await close.isVisible()) await page.keyboard.press("Escape");
+    await close.waitFor({ state: "hidden", timeout: 5_000 });
+  };
+  const pane = main.locator("[data-workspace-conversation]");
+  const closeResultConversation = async () => {
+    if (new URL(page.url()).searchParams.get("conversation") !== "open") return;
+    // Project work resumes its held conversation. Following a task or a result tab can carry it into a result.
+    await pane.getByRole("link", { name: /^(收起对话|回到结果)$/u }).click({ timeout: 5_000 });
+    await pane.waitFor({ state: "hidden", timeout: 5_000 });
+    if (new URL(page.url()).searchParams.has("conversation")) throw new Error("GEO result did not close its conversation");
+  };
+  const waitSelected = async (area, label) => {
+    await readTabs(area).getByRole("tab", { name: label, exact: true, selected: true }).waitFor({ state: "visible", timeout: 10_000 });
+  };
+  const destinations = [];
+  const views = [];
+  const notices = [];
+  const record = async (list, label, suffix) => {
+    const result = await readModuleResult(page, `GEO ${label}`);
+    if (result.coverage) {
+      const key = new URL(suffix, initial).pathname.split("/").at(-1);
+      await main.locator(`[data-page-body] [data-geo-tab="${key}"]`).waitFor({ state: "visible", timeout: 5_000 });
+    }
+    if (["empty", "unobservable"].includes(result.status)) notices.push(`not observable: GEO ${label} reached ${result.status} content`);
+    list.push({ label, address: page.url(), result });
+  };
+  if (await progress.getAttribute("open", { timeout: 5_000 }) !== null) throw new Error("GEO task progress starts expanded");
+  await summary.click({ timeout: 5_000 });
+  const tasks = await progress.evaluate(readGeoTaskProgress);
+  const taskFailures = geoTaskProgressFindings(initial, tasks, {});
+  if (taskFailures.length) throw new Error(taskFailures.join("; "));
+  for (const { label } of tasks.rows) {
+    await progress.getByRole("link", { name: label, exact: true }).click({ timeout: 5_000 });
+    expectAddress(label, GEO_TASKS[label]);
+    await closeResultConversation();
+    await record(destinations, label, GEO_TASKS[label]);
+    await page.goto(initial, { waitUntil: "domcontentloaded" });
+    await summary.click({ timeout: 5_000 });
+  }
+  await summary.click({ timeout: 5_000 });
+  await details.getByRole("button", { name: "执行详情", exact: true }).click({ timeout: 5_000 });
+  const runs = page.getByRole("dialog", { name: "AI 运行", exact: true });
+  await runs.waitFor({ state: "visible", timeout: 5_000 });
+  await page.keyboard.press("Escape");
+  await runs.waitFor({ state: "hidden", timeout: 5_000 });
+
+  for (const area of Object.values(GEO_AREAS)) {
+    await openNavigation();
+    const link = sidebar.getByRole("link", { name: area.label, exact: true });
+    await link.click({ timeout: 5_000 });
+    try {
+      await page.waitForURL(target => geoAreaAddressHolds(initial, area.path, target.href), { timeout: 5_000 });
+      // Read the current marker after commit, including when the sidebar is inert on the phone.
+      await page.waitForFunction(geoAreaCurrent, area.label, { timeout: 5_000 });
+    } catch (error) {
+      throw new Error(`GEO ${area.label}: expected its project address and one current sidebar area, reached ${new URL(page.url()).pathname + new URL(page.url()).search}`, { cause: error });
+    }
+    await closeDrawer();
+    if (area.path) await closeResultConversation();
+    for (const [label, suffix] of area.tabs) {
+      await readTabs(area).getByRole("tab", { name: label, exact: true }).click({ timeout: 5_000 });
+      if (suffix) await closeResultConversation();
+      await waitSelected(area, label);
+      expectAddress(label, suffix);
+      if (label !== "项目对话") await record(views, label, suffix);
+    }
+  }
+
+  const analytics = GEO_AREAS.analytics;
+  const scope = { engines: "deepseek" };
+  const scoped = new URL(initial);
+  scoped.pathname = scoped.pathname.replace(/\/$/u, "") + analytics.path;
+  scoped.searchParams.delete("conversation");
+  scoped.searchParams.delete("session");
+  for (const [key, value] of Object.entries(scope)) scoped.searchParams.set(key, value);
+  await page.goto(scoped.href, { waitUntil: "domcontentloaded" });
+  await page.waitForFunction(moduleReady, undefined, { timeout: 30_000 });
+  await readTabs(analytics).getByRole("tab", { name: "引用来源", exact: true }).click({ timeout: 5_000 });
+  await waitSelected(analytics, "引用来源");
+  expectAddress("引用来源", "/sources", scope);
+  await main.getByRole("button", { name: "分析范围 · 已筛选", exact: true }).click({ timeout: 5_000 });
+  const scopeDialog = page.getByRole("dialog", { name: "分析范围", exact: true });
+  await scopeDialog.waitFor({ state: "visible", timeout: 5_000 });
+  await scopeDialog.getByRole("button", { name: "DeepSeek", exact: true, pressed: true }).waitFor({ state: "visible", timeout: 5_000 });
+  await page.keyboard.press("Escape");
+  await scopeDialog.waitFor({ state: "hidden", timeout: 5_000 });
+  await main.getByRole("button", { name: "询问 AI", exact: true }).click({ timeout: 5_000 });
+  await pane.waitFor({ state: "visible", timeout: 15_000 });
+  const session = new URL(page.url()).searchParams.get("session");
+  if (!session || await pane.count() !== 1) throw new Error("GEO results did not open one addressed conversation");
+  expectAddress("conversation", "/sources", { ...scope, session, conversation: "open" });
+  if (await readTabs(analytics).isVisible()) {
+    await readTabs(analytics).getByRole("tab", { name: "医学核查", exact: true }).click({ timeout: 5_000 });
+    await waitSelected(analytics, "医学核查");
+    expectAddress("conversation on another result", "/accuracy", { ...scope, session, conversation: "open" });
+    if (await pane.count() !== 1) throw new Error("GEO result tab switch duplicated or removed the conversation");
+  }
+  // The route walk blocks runtime starts. A mounted pane is evidence of navigation only.
+  const conversation = { addressed: true, runtimeVerified: false, boundary: "runtime starts are blocked during the route walk" };
+  await closeResultConversation();
+  await page.goto(initial, { waitUntil: "domcontentloaded" });
+  await page.waitForFunction(moduleReady, undefined, { timeout: 30_000 });
+  return { destinations, views, notices, conversation };
 }
 
 export async function verifyModuleNavigation(page, module, { programme = true, canonical = false, views: selector = true } = {}) {
@@ -1840,39 +2036,6 @@ export async function verifyModuleNavigation(page, module, { programme = true, c
     const result = await readModuleResult(page, `${module} step ${id}`);
     recordCoverage(`step ${id}`, result);
     destinations.push({ id, state, address: actual.pathname + actual.search + actual.hash, result });
-  }
-  if (module === "geo" && await page.locator("[data-page-header]").getByRole("button", { name: "项目总览", exact: true }).count() === 1) {
-    const views = [];
-    for (const entry of destinations) {
-      await page.goto(new URL(entry.address, initial).href, { waitUntil: "domcontentloaded" });
-      await page.waitForFunction(moduleReady, undefined, { timeout: 30_000 });
-      const expectedLabels = geoContextViewLabels(entry.id);
-      const selector = page.locator("[data-page-chrome]").getByRole("button", { name: /^分析视图：/ });
-      if (await selector.count() !== (expectedLabels.length ? 1 : 0)) throw new Error(`GEO step ${entry.id}: contextual analysis selector does not match its workflow`);
-      for (const label of expectedLabels) {
-        await selector.click();
-        const choices = page.getByRole("menuitemradio");
-        const shown = (await choices.allTextContents()).map(text => text.trim());
-        if (shown.length !== expectedLabels.length || expectedLabels.some(choice => !shown.includes(choice))) throw new Error(`GEO step ${entry.id}: unexpected contextual destinations: ${shown.join(", ")}`);
-        const before = page.url();
-        await choices.filter({ hasText: new RegExp(`^${label}$`, "u") }).click();
-        await page.waitForFunction(moduleReady, undefined, { timeout: 30_000 });
-        const canonicalLabel = label === "趋势" ? "可见度" : label === "执行记录" ? "行动" : label;
-        if (!moduleViewAddressHolds(module, canonicalLabel, initial, before, page.url(), { programme })) throw new Error(`GEO step ${entry.id}: ${label} did not reach its canonical destination`);
-        const result = await readModuleResult(page, `geo step ${entry.id} view ${label}`);
-        recordCoverage(`step ${entry.id} view ${label}`, result);
-        views.push({ label, step: entry.id, address: new URL(page.url()).pathname + new URL(page.url()).search, result });
-      }
-    }
-    const header = page.locator("[data-page-header]");
-    await header.getByRole("button", { name: "项目总览", exact: true }).click();
-    await page.waitForFunction(moduleReady, undefined, { timeout: 30_000 });
-    if (!/^\/app\/geo\/[^/]+\/?$/u.test(new URL(page.url()).pathname)) throw new Error("GEO header overview did not reach the project overview");
-    await page.locator("[data-page-dock] [data-conversation-bar] button").click();
-    await page.waitForFunction(() => /\/chat(?:\/|$)/u.test(location.pathname), undefined, { timeout: 15_000 });
-    await page.goto(initial, { waitUntil: "domcontentloaded" });
-    await page.waitForFunction(moduleReady, undefined, { timeout: 30_000 });
-    return { destinations, views, notices };
   }
   const labels = selector ? moduleViewLabels(module, programme, canonical) : [];
   const views = [];
@@ -1976,31 +2139,31 @@ export function compositionFindings(name, viewportName, c) {
   for (const list of tablists) if (c.chrome && !list.inChrome && !list.inToolbar) add("chrome", `the tab list “${list.label}” is outside the band, so it scrolls away`);
   if (c.stepRail && !c.stepRail.inChrome) add("chrome", "the step rail is outside the band, so it scrolls away");
   if (template) {
-    if ((view?.module || view?.band) && c.viewSelector && view?.workflow !== "objects") {
-      const expected = (view.module ?? view.band) === "vcr" ? 7 : 8;
-      if (!c.stepRail || c.stepRail.folded || c.stepRail.count !== expected) add("step-rail", `the module must show all ${expected} workflow steps`);
-      if (c.stepRail?.steps?.some((step) => !step.state || !step.href || !step.stateVisible)) add("step-rail", "a workflow step has no visible state or destination");
-      // 循证 GEO's steps are its one business navigation since its V3 plan (2026-10-23, §一.1 and §3.1, written at the owner's request):
-      // a step's own views are a contextual 「分析视图」 select, and a second, project-level 「查看：」 selector of the eight result views is
-      // what the plan removed. 虚拟临床研究 keeps its pinned selector.
-      if (view.workflow === "rail") {
-        if (c.viewSelector.count !== 0) add("chrome", "the module's steps are its navigation: a second, project-level result selector (「查看：…」) stands beside them");
-        // A step's own analysis views are one contextual 「分析视图」 choice, and only on the steps that have siblings (geoContextViewLabels).
-        if (c.geoContext?.adopted) {
-          const wanted = geoContextViewLabels(c.geoContext.step).length ? 1 : 0;
-          if (c.geoContext.selectors !== wanted || (c.geoContext.requestedStep && c.geoContext.requestedStep !== c.geoContext.step)) add("chrome", "GEO must expose only the selected step’s contextual analysis choices");
-        }
-      } else if (c.viewSelector.count !== 1) add("chrome", "the module must expose exactly one pinned result-view selector");
-    }
-    // 虚拟临床研究's tab row is its step bar (a dot of state on every tab but the overview, which is not a step).
     const dotted = tablists.some((list) => list.dots >= 2 && list.dots >= list.tabs - 1);
     if (view?.workflow === "objects") {
       if (c.stepRail || tablists.length > 0) add("step-rail", "the research workspace must not restore retired step navigation");
       if (!c.chrome || c.viewSelector?.count !== 1) add("chrome", "the research workspace must expose one pinned result-view selector");
-    }
-    if (template.stepRail === "every-tab" && view?.workflow !== "objects") {
+    } else if (view?.workflow === "geo-areas") {
+      const facts = c.geoAreas;
+      const area = GEO_AREAS[view.area];
+      const selected = GEO_VIEW_TABS[view.view];
+      if (!c.chrome || c.viewSelector?.count || c.stepRail || c.compactWorkflow) add("chrome", "GEO requires the workspace band without a workflow rail or pinned result selector");
+      if (!facts || tablists.length !== 1 || tablists[0].label !== area.label || tablists[0].tabs !== area.tabs.length
+        || JSON.stringify(facts.labels) !== JSON.stringify(area.tabs.map(([label]) => label))
+        || facts.selected.length !== 1 || facts.selected[0] !== selected) add("geo-areas", "GEO must expose the current area's named tabs and one correct selection");
+      const workHome = view.view === "geo-overview";
+      if (!facts || facts.work !== Number(workHome) || facts.progress !== Number(workHome) || facts.execution !== Number(workHome)) add("geo-areas", "GEO task progress and execution details belong in project work");
+      if (facts && (facts.dock || facts.conversation > 1)) add("geo-areas", "GEO requires at most one conversation and no full-width input dock");
+    } else if (template.stepRail === "every-tab") {
       if (!c.chrome) add("chrome", "a module page has no band ([data-page-chrome]) for its steps and tabs");
       if (!c.stepRail && !dotted && view?.workflow !== "compact") add("step-rail", "a module page shows no steps: no [data-step-rail], and no tab row whose tabs carry a state dot");
+    }
+    if (view?.collection === "geo-project-cards" && (!c.geoAreas || c.geoAreas.collections > 1
+      || (c.geoAreas.collections === 0 && c.empties.length === 0)
+      || (c.geoAreas.collections === 1 && (!c.geoAreas.grid || !c.geoAreas.cards.length
+        || c.geoAreas.cards.some(card => card.links.length !== 1 || !card.links[0].name || !/^\/app\/geo\/[^/?#]+$/u.test(card.links[0].href) || !card.status)
+        || new Set(c.geoAreas.cards.map(card => card.links[0]?.href)).size !== c.geoAreas.cards.length)))) {
+      add("geo-areas", "GEO collection must render one grid of named project links with status, or an empty state");
     }
     if (view?.workflow === "compact" && !c.stepRail) {
       if (c.compactWorkflow?.count !== 8) add("step-rail", "the compact workflow does not expose all eight steps");
@@ -2075,7 +2238,8 @@ export function familyFindings(pages) {
     const study = /@\d+$/.test(name) ? name.slice(name.lastIndexOf("@")) : "";
     // A record read inside a module's band (`band`: one 循证 GEO answer) is held to the band of the module's tabs.
     if (row.module || row.band) {
-      const key = `${row.module ?? row.band}${study}@${viewport}`;
+      const area = row.workflow === "geo-areas" ? `-${row.view === "geo-overview" ? "work-home" : row.area}` : "";
+      const key = `${row.module ?? row.band}${area}${study}@${viewport}`;
       modules.set(key, [...(modules.get(key) ?? []), { view, name, c, row }]);
     }
     if (viewport === "desktop" && c.title) {
@@ -2090,7 +2254,7 @@ export function familyFindings(pages) {
     const steps = (/** @type {any} */ c) => (c.stepRail ? c.stepRail.count : c.compactWorkflow?.count ?? (c.tablists.find((/** @type {any} */ list) => !list.inSection)?.tabs ?? 0));
     const counts = tabs.map((tab) => steps(tab.c));
     if (new Set(counts).size > 1) found.push(finding("module-steps", key, `${key}: the steps are not the same on every tab: ${tabs.map((tab, index) => `${tab.name} ${counts[index]}`).join(", ")}`, Math.max(...counts) - Math.min(...counts)));
-    const tops = tabs.map((tab) => tab.c.viewSelector ? tab.c.viewSelector.top ?? tab.c.stepRail?.top ?? null : tab.c.tablists.find((/** @type {any} */ list) => list.inChrome)?.top ?? null);
+    const tops = tabs.map((tab) => tab.c.viewSelector?.count ? tab.c.viewSelector.top ?? tab.c.stepRail?.top ?? null : tab.c.tablists.find((/** @type {any} */ list) => list.inChrome)?.top ?? null);
     const known = tops.filter((top) => top !== null);
     if (known.length > 1 && Math.max(...known) - Math.min(...known) > BAND_TOLERANCE_PX) {
       found.push(finding("module-chrome", key, `${key}: the tab row stands at a different height on some tabs: ${tabs.map((tab, index) => `${tab.name} ${tops[index]} px`).join(", ")}`, Math.max(...known) - Math.min(...known)));
@@ -3400,11 +3564,16 @@ export function measure([leakSources, backOfficeSources, retiredSources = [], op
   // A page with a band (R19: steps, tabs and toolbar in one sticky row set under the header) has the band after its header and the body after
   // the band: the body is `[data-page-body]`, and the band's rows are blocks of the page too (the band itself is wider than the column).
   const band = document.querySelector("[data-page-chrome]");
-  const body = document.querySelector("[data-page-body]") ?? (at >= 0 ? siblings[at + 1] ?? null : null);
+  const explicitBody = document.querySelector("[data-page-body]");
+  const fallbackBody = at >= 0 ? siblings[at + 1] ?? null : null;
+  // A standalone toolbar is a top-level block. Its controls have their own padding, and the result list is its sibling.
+  const bodyBlocks = !explicitBody && fallbackBody?.matches("[data-toolbar]")
+    ? siblings.slice(at + 1)
+    : [...(explicitBody ?? fallbackBody)?.children ?? []];
   // A block that is laid over the page (a drawer's backdrop, a dialog's) is not a block of the page: it starts at the window's edge. Nor
   // is a title the header keeps for a screen reader alone (`headerVisibility="sr-only"`, the search home): it is one pixel, a pixel
   // to the left of where its page begins, and nobody sees an edge there.
-  const blocks = [title, ...lead.flatMap((el) => [...el.children]), ...(band ? [...band.children] : []), ...(body ? [...body.children] : [])]
+  const blocks = [title, ...lead.flatMap((el) => [...el.children]), ...(band ? [...band.children] : []), ...bodyBlocks]
     .filter((el) => el && visible(el) && !el.closest(".sr-only") && !["fixed", "absolute"].includes(getComputedStyle(el).position));
   const pageLefts = [...new Set(blocks.map((el) => Math.round(el.getBoundingClientRect().left)))];
   const rowTitleLefts = [];
@@ -3520,7 +3689,8 @@ export function rowProbe([action, index = 0]) {
   const targets = [];
   for (const list of document.querySelectorAll("main ul, main ol")) {
     if (!visible(list) || list.closest("[role='dialog'], nav, aside")) continue;
-    const title = [...list.querySelectorAll(":scope > li [data-row-title]")].find(visible);
+    const title = [...list.querySelectorAll(list.getAttribute("aria-label") === "循证 GEO 项目"
+      ? ":scope > li > a[href]" : ":scope > li [data-row-title]")].find(visible);
     if (!title) continue;
     const control = title.matches("a, button, [role='button']") ? title : title.querySelector("a, button, [role='button']");
     // A list that holds another list (问题与回答's groups hold their questions) finds the inner list's first row as its own: one row, one target.
@@ -4230,9 +4400,20 @@ async function main() {
           if (templateOf(name).view?.workflow === "compact" && composition.compactWorkflow?.folded) {
             composition.compactWorkflow.views = await verifyCompactWorkflowViews(page);
           }
-          if (templateOf(name).view?.module) failures.push(...workspaceFindings(current, await page.evaluate(readWorkspaceFacts)));
-          if (composition.viewSelector && /^(?:geo|vcr)-overview(?:@\d+)?$/.test(name)) {
-            const navigation = await verifyModuleNavigation(page, name.startsWith("geo-") ? "geo" : "vcr", { views: templateOf(name).view?.workflow !== "rail" });
+          if (templateOf(name).view?.module) failures.push(...workspaceFindings(current, await page.evaluate(readWorkspaceFacts), { geo: templateOf(name).view.module === "geo" }));
+          if (name === "geo-overview") {
+            const initial = page.url();
+            try {
+              const navigation = await verifyGeoAreas(page);
+              report.pages[current].navigation = navigation;
+              notices.push(...navigation.notices.map((notice) => `${current}: ${notice}`));
+            } catch (error) {
+              failures.push(`${current}: GEO navigation failed (${String(error).replace(/\s+/g, " ").slice(0, 360)})`);
+              await page.goto(initial, { waitUntil: "domcontentloaded" });
+              await page.waitForFunction(moduleReady, undefined, { timeout: 30_000 });
+            }
+          } else if (composition.viewSelector && /^vcr-overview(?:@\d+)?$/u.test(name)) {
+            const navigation = await verifyModuleNavigation(page, "vcr");
             report.pages[current].navigation = navigation;
             notices.push(...navigation.notices.map((notice) => `${current}: ${notice}`));
           }
@@ -4963,9 +5144,8 @@ async function walkAddressState(page, base) {
 }
 
 /**
- * The event page's 「深入研究」 (A01): the draft that goes to the conversation. The click is a route change whose state (React Router's
- * `history.state.usr`) holds the hand-off; read there, it is the event's title, a link to its sources and a draft that is never sent (the
- * hand-off has no field that sends). `["event"]` reads the page before; `["intent"]` reads the address and the hand-off after.
+ * The event page's 「深入研究」 (A01): the committed route holds an opaque locator, never draft or reference text.
+ * `["event"]` reads the page before; `["intent"]` reads only the address and locator after.
  * @param {["event" | "intent"]} args
  */
 export function handoffProbe([action]) {
@@ -4987,21 +5167,17 @@ export function handoffProbe([action]) {
   return {
     path: `${location.pathname}${location.search}`,
     intent: intent && typeof intent === "object"
-      ? { keys: Object.keys(intent).sort(), kind: intent.kind ?? null, draft: typeof intent.draft === "string" ? intent.draft : null, requestId: typeof intent.requestId === "string" ? intent.requestId : null }
+      ? { keys: Object.keys(intent).sort(), kind: intent.kind ?? null, projectId: typeof intent.projectId === "string" ? intent.projectId : null, requestId: typeof intent.requestId === "string" ? intent.requestId : null, sessionId: typeof intent.sessionId === "string" ? intent.sessionId : null }
       : null,
   };
 }
 
-/**
- * The fields a hand-off to the conversation may carry — those of `RuntimeUiIntent` (apps/web/src/lib/runtimeUiNavigation.ts; a test holds
- * the two equal): none of them sends. `originReference` (where the conversation came from) was added there and not here, and every
- * event page's 深入研究 read as carrying a field a draft does not need (r19-guards2).
- */
-export const HANDOFF_FIELDS = ["draft", "geoPlanContext", "kind", "originReference", "projectId", "references", "requestId", "restoreDraft", "resultRevision", "scope", "sessionId", "vcrReference"];
+/** The only non-sensitive locator fields allowed in browser history. */
+export const HANDOFF_FIELDS = ["kind", "projectId", "requestId", "sessionId"];
 
 /**
  * The event page's hand-off, judged (A01). `before` is the event page, `after` the address and state once 「深入研究」 was pressed, and
- * `back` the address after Back. Notices only (new in R13); an account with no event, or a page without the button, says so.
+ * `back` the address after Back. Missing coverage is a notice; private fields in browser history are a failure.
  * @param {any} before @param {any} after @param {string | null} back
  * @returns {{ failures: string[], notices: string[] }}
  */
@@ -5023,19 +5199,14 @@ export function handoffFindings(before, after, back) {
     return { failures, notices };
   }
   if (intent.kind !== "create") notices.push(`${current}: the hand-off is a “${intent.kind}” intent (create: a new conversation)`);
-  if (!intent.draft) notices.push(`${current}: the hand-off carries no draft`);
-  else {
-    if (before.title && !intent.draft.includes(before.title)) notices.push(`${current}: the draft does not hold the event's title “${before.title.slice(0, 30)}”`);
-    if (!/https?:\/\/\S+/.test(intent.draft)) notices.push(`${current}: the draft holds no link to a source`);
-  }
-  if (!intent.requestId) notices.push(`${current}: the hand-off has no request id, so a reload cannot tell it from a new one`);
+  if (!intent.requestId || !intent.projectId || !intent.sessionId) notices.push(`${current}: the hand-off locator is incomplete`);
   const extra = intent.keys.filter((key) => !HANDOFF_FIELDS.includes(key));
-  if (extra.length) notices.push(`${current}: the hand-off carries fields a draft does not need: ${extra.join(", ")}`);
+  if (extra.length) failures.push(`${current}: browser history contains disallowed intent fields: ${extra.join(", ")}`);
   if (back !== null && back !== before.path) notices.push(`${current}: Back from the conversation leaves the address at ${back} and the event page was ${before.path}`);
   return { failures, notices };
 }
 
-/** A01: the event page's 「深入研究」, read at the hand-off, and Back to the event page. Nothing is sent: the draft is in the address's state. */
+/** A01: the event page's hand-off marker and Back. Native draft delivery is checked separately. */
 async function walkEventHandoff(page, base, route) {
   await openRoute(page, base, route);
   const before = await page.evaluate(handoffProbe, ["event"]);
@@ -5049,7 +5220,7 @@ async function walkEventHandoff(page, base, route) {
     await page.waitForTimeout(1_500);
     back = await page.evaluate(() => `${location.pathname}${location.search}`);
   }
-  return { ...handoffFindings(before, after, back), read: { before, after, back } };
+  return { ...handoffFindings(before, after, back), read: { before, after, back, nativeDraftVerified: false } };
 }
 
 /* ------------------------------------------------------------------------- R13: the composer */

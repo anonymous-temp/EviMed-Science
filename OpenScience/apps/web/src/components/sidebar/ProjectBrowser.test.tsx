@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getWebProjectId, setWebProjectId, WebApiError, type WebAgentRun } from "@/lib/apiClient";
 import { useProjectStore } from "@/lib/projects";
 import { RUNS_CHANGED_EVENT } from "@/lib/runPresentation";
-import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
+import { newRuntimeUiIntent, prepareRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { provideFrameSessionSearch } from "@/lib/runtimeUiBridge";
 import { hintVcrDraftProject } from "@/components/vcr/useVcrProjectIds";
 import { announceOpenStudy } from "@/lib/studyPresence";
@@ -1123,7 +1123,7 @@ describe("ProjectBrowser — a study of the 虚拟临床研究 group", () => {
     mocks.runs.default = [run({ id: "old", question: "之前的对话" })];
     const intent = newRuntimeUiIntent();
     render(
-      <MemoryRouter initialEntries={[{ pathname: "/app/chat", state: { runtimeUiIntent: intent } }]}>
+      <MemoryRouter initialEntries={[{ pathname: "/app/chat", state: { runtimeUiIntent: prepareRuntimeUiIntent(intent) } }]}>
         <ProjectBrowser />
       </MemoryRouter>,
     );

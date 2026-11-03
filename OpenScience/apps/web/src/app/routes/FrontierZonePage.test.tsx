@@ -1,3 +1,4 @@
+import { optionalOpaqueRuntimeUiIntent } from "@/test/runtimeUiIntentAssertions";
 import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
@@ -35,7 +36,7 @@ vi.mock("@/lib/projects", () => {
 
 function Where() {
   const location = useLocation();
-  const intent = (location.state as { runtimeUiIntent?: { draft?: string } } | null)?.runtimeUiIntent;
+  const intent = optionalOpaqueRuntimeUiIntent(location.state);
   return <div data-testid="where" data-draft={intent?.draft}>{location.pathname + location.search}</div>;
 }
 const where = () => screen.getByTestId("where").textContent ?? "";

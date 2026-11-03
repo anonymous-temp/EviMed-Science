@@ -160,9 +160,13 @@ function AnalysisPage({
     reference: string;
     digest: string;
   } | null>(null);
-  const [members, setMembers] = useState<
-    GeoMetricMembers | GeoAnalysisMembers | null
-  >(null);
+  const [memberSelection, setMemberSelection] = useState<{
+    members: GeoMetricMembers | GeoAnalysisMembers;
+    activation: number;
+  } | null>(null);
+  const selectMembers = (members: GeoMetricMembers | GeoAnalysisMembers | null | undefined) => {
+    if (members) setMemberSelection(previous => ({ members, activation: (previous?.activation ?? 0) + 1 }));
+  };
   const location = useLocation(),
     open = useOpenGeoConversation();
   const [busy, setBusy] = useState(false),
@@ -192,7 +196,7 @@ function AnalysisPage({
   const [searchText, setSearchText] = useState(view.sourceSearch ?? "");
   useEffect(() => { setSearchText(view.sourceSearch ?? ""); }, [view.sourceSearch]);
   const resultsLocked = Boolean(data) && (state.kind !== "ready" || searchText !== (view.sourceSearch ?? "") || dataIdentity !== requestIdentity);
-  useEffect(() => { setMembers(null); setRelationshipUrl(null); }, [requestIdentity, resultsLocked]);
+  useEffect(() => { setMemberSelection(null); setRelationshipUrl(null); }, [requestIdentity, resultsLocked]);
   const latestView = useRef(view);
   latestView.current = view;
   const searchTimer = useRef<number | undefined>(undefined);
@@ -406,9 +410,9 @@ function AnalysisPage({
         onClickCapture={event => { if (resultsLocked) { event.preventDefault(); event.stopPropagation(); } }}>
       {data && <GeoAnalysisVisual data={data} onSelect={cell => {
         if (resultsLocked) return;
-        if (cell.members) { setMembers(cell.members); return; }
+        if (cell.members) { selectMembers(cell.members); return; }
         const row = data.rows.find(item => item.key === cell.rowKey);
-        if (row?.values[cell.columnKey]?.members) setMembers(row.values[cell.columnKey].members);
+        if (row?.values[cell.columnKey]?.members) selectMembers(row.values[cell.columnKey].members);
         else setPage({identity: dataIdentity!, offset: 0, reference: data.selection.reference, digest: data.digest});
       }} />}
       <DataTable<GeoAnalysisRow>
@@ -493,7 +497,7 @@ function AnalysisPage({
                     <Button
                       size="sm"
                       variant="text"
-                      onClick={() => setMembers(value.members)}
+                      onClick={() => selectMembers(value.members)}
                     >
                       {word}
                     </Button>
@@ -569,19 +573,21 @@ function AnalysisPage({
       )}
       </fieldset>
       {relationshipUrl && <SourceRelationship geoId={geoId} target={{kind:"page",value:relationshipUrl}} canEdit={!project.access || project.access.abilities.includes('edit')} onChanged={refresh}/> }
-      {members &&
-        ("rowKey" in members ? (
+      {memberSelection &&
+        ("rowKey" in memberSelection.members ? (
           <GeoAnalysisMembersDrawer
+            key={memberSelection.activation}
             geoId={geoId}
-            members={members}
+            members={memberSelection.members}
             project={project}
-            onClose={() => setMembers(null)}
+            onClose={() => setMemberSelection(null)}
           />
         ) : (
           <GeoMetricMembersDrawer
+            key={memberSelection.activation}
             geoId={geoId}
-            members={members}
-            onClose={() => setMembers(null)}
+            members={memberSelection.members}
+            onClose={() => setMemberSelection(null)}
           />
         ))}
     </div>

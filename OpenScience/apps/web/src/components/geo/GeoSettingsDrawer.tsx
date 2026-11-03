@@ -10,6 +10,7 @@ import { Drawer } from "@/components/ui/Drawer";
 import { FilterChip } from "@/components/ui/FilterChips";
 import type { GeoPanel } from "./geoFrame";
 import { coverageText, engineName, GEO_COVERAGE_DAYS, GEO_DEFAULT_ENGINES, GEO_OPTIONAL_ENGINES } from "./geoText";
+import { GeoMonitoringAutomation } from "./GeoMonitoringAutomation";
 import { marketConnected } from "./geoOverviewModel";
 import { yuan } from "./tabs/geoTabText";
 
@@ -69,6 +70,7 @@ export function GeoSettingsDrawer({
   return (
     <Drawer title="项目设置" onClose={onClose}>
       <div data-geo-settings="" className="flex flex-col divide-y divide-faint">
+        <div className="py-4"><GeoMonitoringAutomation project={project} onHandoff={onClose} /></div>
         <Row label="测量的 AI 引擎">
           <div role="group" aria-label="测量的 AI 引擎" className="flex flex-wrap items-center gap-1 -ml-3">
             {offered.map((engine) => (

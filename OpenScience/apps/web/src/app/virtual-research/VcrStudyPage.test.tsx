@@ -1,6 +1,12 @@
+import { prepareVcrPendingDraft } from "@/lib/vcrPendingDraft";
+import { RouterProvider } from "react-router/dom";
+import { sessionOwner, WEB_SESSION_STARTED_EVENT } from "@/lib/sessionLifecycle";
+import { pendingRuntimeUiIntent, prepareRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
+import { VCR_STUDY_REFRESH_EVENT } from "@/components/vcr/useStudy";
+import { expectOpaqueRuntimeUiIntent } from "@/test/runtimeUiIntentAssertions";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes, useLocation, useNavigate } from "react-router";
+import { createMemoryRouter, MemoryRouter, Route, Routes, useBlocker, useLocation, useNavigate } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WebApiError } from "@/lib/apiClient";
 import { announceVcrStudyRefresh, forgetStudies } from "@/components/vcr/useStudy";
@@ -1112,13 +1118,152 @@ describe("调整 on a study a conversation made", () => {
         <Routes><Route path="/app/virtual-research/:studyId/:tab?" element={<><VcrStudyPage /><State /></>} /></Routes>
       </MemoryRouter>,
     );
-    await userEvent.click((await screen.findAllByRole("button", { name: /^让 AI 调整：方案/ }))[0]);
+    await userEvent.click(await screen.findByRole("button", { name: "让 AI 调整：方案 A" }));
     const { path, state } = JSON.parse(screen.getByTestId("state").textContent!);
     expect(path).toBe(`/app/virtual-research/${STUDY_ID}/chat?result=trial`);
-    expect(state.runtimeUiIntent).toMatchObject({ kind: "open", projectId: "prj_ev201", sessionId: "sess_orig" });
-    expect(state.runtimeUiIntent.draft).toMatch(/^调整试验方案/);
-    expect(state.runtimeUiIntent.vcrReference).toMatchObject({ kind: "trial_scenario", studyId: STUDY_ID });
+    const intent = expectOpaqueRuntimeUiIntent(state, "prj_ev201");
+    expect(intent).toMatchObject({ kind: "open", sessionId: "sess_orig" });
+    expect(intent.draft).toMatch(/^调整试验方案/);
+    expect(intent.vcrReference).toEqual({ kind: "trial_scenario", studyId: STUDY_ID, objectId: "scn_1", version: 1, resultId: "res_1", resultVersion: 1 });
     // Nothing is sent from here: the draft waits in that conversation's composer.
     expect(server.calls.filter((call) => call.method === "POST")).toEqual([]);
   });
+});
+
+it("keeps a committed study draft while its native pane is locked, then makes it available when the same pane unlocks", async () => {
+  const media = vi.spyOn(window, "matchMedia").mockImplementation((query: string) => ({
+    matches: query.includes("1180"), media: query, onchange: null, addListener: () => undefined, removeListener: () => undefined,
+    addEventListener: () => undefined, removeEventListener: () => undefined, dispatchEvent: () => false,
+  }));
+  try {
+    const sessionId = "vcr-locked-session";
+    const draft = { kind: "open", owner: sessionOwner(), projectId: "prj_ev201", sessionId, requestId: "vcr-locked-draft", draft: "Draft during locked research" } as const;
+    const state = { runtimeUiIntent: prepareRuntimeUiIntent(draft) };
+    let locked = true;
+    const readStudy = () => studyWith(locked ? { run: { ...RUN, locked: true }, jobs: [], queue: [], last: null } : null, study => {
+      study.conversation = { sessionId, exists: true };
+    });
+    const other = studyWith({ run: { ...RUN, locked: true }, jobs: [], queue: [], last: null }, study => {
+      study.id = "std_2"; study.projectId = "prj_empty"; study.conversation = { sessionId, exists: true };
+    });
+    installVcrServer(network.productRequest, { [`GET /vcr/studies/${STUDY_ID}`]: readStudy, "GET /vcr/studies/std_2": other });
+    const State = () => {
+      const location = useLocation();
+      const navigate = useNavigate();
+      return <>
+        <output data-testid="locked-study-address">{location.pathname}{location.search}</output>
+        <output data-testid="locked-study-state">{JSON.stringify(location.state)}</output>
+        <button onClick={() => { void navigate("/app/virtual-research/std_2/chat?result=trial", { state }); }}>Open another locked study</button>
+      </>;
+    };
+    render(<MemoryRouter initialEntries={[{ pathname: `/app/virtual-research/${STUDY_ID}/chat`, search: "?result=trial", state }]}>
+      <Routes><Route path="/app/virtual-research/:studyId/:tab?" element={<><VcrStudyPage /><State /></>} /></Routes>
+    </MemoryRouter>);
+    expect(await screen.findByText("结束后可以在这里继续")).toBeInTheDocument();
+    expect(pane.requests).toHaveLength(0);
+    expect(pendingRuntimeUiIntent(draft.projectId, sessionId)).toEqual(draft);
+    await userEvent.click(screen.getByRole("button", { name: "查看：试验" }));
+    await userEvent.click(screen.getByRole("menuitemradio", { name: /人群/ }));
+    expect(screen.getByTestId("locked-study-address")).toHaveTextContent("result=population");
+    expect(JSON.parse(screen.getByTestId("locked-study-state").textContent ?? "{}")).toEqual(state);
+    expect(pane.requests).toHaveLength(0);
+    locked = false;
+    await act(async () => { window.dispatchEvent(new CustomEvent(VCR_STUDY_REFRESH_EVENT, { detail: { studyId: STUDY_ID } })); });
+    await waitFor(() => expect(pane.requests.at(-1)).toMatchObject({ projectId: draft.projectId, sessionId }));
+    expect(pendingRuntimeUiIntent(draft.projectId, sessionId)).toEqual(draft);
+
+    await userEvent.click(screen.getByRole("button", { name: "Open another locked study" }));
+    await screen.findByText("结束后可以在这里继续");
+    expect(pendingRuntimeUiIntent("prj_empty", sessionId)).toBeNull();
+  } finally { media.mockRestore(); }
+});
+
+it("does not reopen a cancelled VCR draft when the study session arrives later", async () => {
+  let sessionId: string | null = null;
+  installVcrServer(network.productRequest, { [`GET /vcr/studies/${STUDY_ID}`]: () => studyWith(null, study => {
+    study.conversation = { sessionId, exists: Boolean(sessionId) };
+  }) });
+  function GuardedStudy() {
+    const blocker = useBlocker(({ nextLocation }) => nextLocation.pathname.endsWith("/chat"));
+    return <>
+      <VcrStudyPage />
+      {blocker.state === "blocked" && <button onClick={() => blocker.reset()}>Stay with the results</button>}
+    </>;
+  }
+  const NativeRequest = globalThis.Request;
+  vi.stubGlobal("Request", class extends NativeRequest {
+    constructor(input: RequestInfo | URL, init?: RequestInit) {
+      super(input, init ? { ...init, signal: undefined } : init);
+    }
+  });
+  try {
+    const router = createMemoryRouter([{ path: "/app/virtual-research/:studyId/:tab?", element: <GuardedStudy /> }], { initialEntries: [`/app/virtual-research/${STUDY_ID}/trial`] });
+    render(<RouterProvider router={router} />);
+    await userEvent.click(await screen.findByRole("button", { name: "让 AI 调整：方案 A" }));
+    await userEvent.click(screen.getByRole("button", { name: "Stay with the results" }));
+    expect(router.state.location.pathname).toContain("/trial");
+    expect(router.state.location.state).toBeNull();
+    sessionId = "vcr-cancelled-provisioned";
+    await act(async () => { window.dispatchEvent(new CustomEvent(VCR_STUDY_REFRESH_EVENT, { detail: { studyId: STUDY_ID } })); });
+    expect(router.state.location.pathname).toContain("/trial");
+    expect(screen.queryByRole("button", { name: "Stay with the results" })).not.toBeInTheDocument();
+    expect(pendingRuntimeUiIntent("prj_ev201", sessionId)).toBeNull();
+  } finally {
+    vi.stubGlobal("Request", NativeRequest);
+  }
+});
+
+it("restores an accepted provisional draft after leaving the study and coming back before its session exists", async () => {
+  let sessionId: string | null = null;
+  installVcrServer(network.productRequest, { [`GET /vcr/studies/${STUDY_ID}`]: () => studyWith(null, study => {
+    study.conversation = { sessionId, exists: Boolean(sessionId) };
+  }) });
+  function Navigation() {
+    const navigate = useNavigate();
+    const location = useLocation();
+    return <>
+      <output data-testid="provisional-state">{JSON.stringify(location.state)}</output>
+      <button onClick={() => { void navigate("/outside-study"); }}>Leave study</button>
+      <button onClick={() => { void navigate(-1); }}>Return through history</button>
+    </>;
+  }
+  render(<MemoryRouter initialEntries={[`/app/virtual-research/${STUDY_ID}/trial`]}>
+    <Routes><Route path="/app/virtual-research/:studyId/:tab?" element={<VcrStudyPage />} /><Route path="/outside-study" element={<p>Outside the study</p>} /></Routes>
+    <Navigation />
+  </MemoryRouter>);
+  await userEvent.click(await screen.findByRole("button", { name: "让 AI 调整：方案 A" }));
+  await screen.findByText(/请求已保留/);
+  const provisional = JSON.parse(screen.getByTestId("provisional-state").textContent ?? "{}");
+  expect(provisional).toEqual({ vcrPendingDraft: { version: 1, studyId: STUDY_ID, requestId: expect.any(String) } });
+  await userEvent.click(screen.getByRole("button", { name: "Leave study" }));
+  expect(screen.getByText("Outside the study")).toBeInTheDocument();
+  await userEvent.click(screen.getByRole("button", { name: "Return through history" }));
+  await screen.findByText(/请求已保留/);
+  sessionId = "vcr-return-provisioned";
+  await act(async () => { announceVcrStudyRefresh(STUDY_ID); });
+  await waitFor(() => expect(pane.requests.at(-1)).toMatchObject({ projectId: "prj_ev201", sessionId }));
+  const state = JSON.parse(screen.getByTestId("provisional-state").textContent ?? "{}");
+  expect(state).not.toHaveProperty("vcrPendingDraft");
+  const intent = expectOpaqueRuntimeUiIntent(state, "prj_ev201");
+  expect(intent.draft).toMatch(/^调整试验方案/);
+  expect(intent.sessionId).toBe(sessionId);
+  expect(pendingRuntimeUiIntent("prj_ev201", sessionId)).toEqual(intent);
+});
+
+it.each(["new document", "new account"])("shows a generic recovery prompt after a %s cannot resolve a provisional marker", async (boundary) => {
+  const sessionId = `vcr-${boundary.replace(" ", "-")}`;
+  installVcrServer(network.productRequest, { [`GET /vcr/studies/${STUDY_ID}`]: studyWith(null, study => {
+    study.conversation = { sessionId, exists: true };
+  }) });
+  const oldText = "Previous account private provisional draft";
+  const marker = boundary === "new account"
+    ? prepareVcrPendingDraft(STUDY_ID, "prj_ev201", { draft: oldText, restoreDraft: false })
+    : { version: 1, studyId: STUDY_ID, requestId: "old-document-marker" };
+  if (boundary === "new account") window.dispatchEvent(new Event(WEB_SESSION_STARTED_EVENT));
+  render(<MemoryRouter initialEntries={[{
+    pathname: `/app/virtual-research/${STUDY_ID}/chat`, search: "?result=trial", state: { vcrPendingDraft: marker },
+  }]}><Routes><Route path="/app/virtual-research/:studyId/:tab?" element={<VcrStudyPage />} /></Routes></MemoryRouter>);
+  expect(await screen.findByText("先前等待连接的草稿未恢复。请重新输入。")).toBeVisible();
+  expect(screen.queryByText(oldText)).not.toBeInTheDocument();
+  expect(pendingRuntimeUiIntent("prj_ev201", sessionId)).toBeNull();
 });

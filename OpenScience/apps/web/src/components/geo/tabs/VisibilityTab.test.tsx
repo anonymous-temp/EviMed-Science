@@ -1,9 +1,10 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes, useLocation } from "react-router";
+import { Link, MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { GeoEngine, GeoProject } from "@/lib/geoClient";
-import { cell, diagnosisFilled, geoProject, monitoringFilled } from "../__fixtures__/geoTabs";
+import { GEO_PROJECT } from "../__fixtures__/geoProjects";
+import { cell, diagnosisFilled, diagnosisWith, geoProject, monitoringFilled, strategyFilled } from "../__fixtures__/geoTabs";
 import { clustersFilled, clusterViewFixture, G_BRAND, G_CONTROL, G_EFFECT, G_SAFETY } from "../__fixtures__/geoSpine";
 import { GeoFrameHarness } from "../__fixtures__/geoFrameHarness";
 import { VisibilityTab } from "./VisibilityTab";
@@ -11,6 +12,7 @@ import { VisibilityTab } from "./VisibilityTab";
 const client = vi.hoisted(() => ({
   getGeoDiagnosis: vi.fn(),
   getGeoMonitoring: vi.fn(),
+  getGeoStrategy: vi.fn(),
   getGeoClusters: vi.fn(),
   getGeoCluster: vi.fn(),
   getGeoQuestions: vi.fn(),
@@ -63,6 +65,7 @@ beforeEach(() => {
   for (const fn of Object.values(client)) fn.mockReset();
   client.getGeoDiagnosis.mockResolvedValue(withEngines);
   client.getGeoMonitoring.mockResolvedValue(monitoring);
+  client.getGeoStrategy.mockResolvedValue(strategyFilled);
   client.getGeoClusters.mockResolvedValue(clustersFilled);
   client.getGeoQuestions.mockResolvedValue({ sets: [], groups: clustersFilled.groups, version: 1 });
   client.getGeoCluster.mockImplementation(async (_geoId: string, id: string) => clusterViewFixture(id));
@@ -73,6 +76,22 @@ const groupRow = (id: string) => document.querySelector(`[data-cluster-row='${id
 const toolbar = () => document.querySelector("[data-toolbar]") as HTMLElement;
 
 describe("可见度: the order of what it shows", () => {
+  it("retains the original baseline and target alongside the current reading", async () => {
+    const project = geoProject();
+    renderTab({ ...project, overview: { ...project.overview, metrics: project.overview.metrics.map((metric) => metric.key === "gvi" ? { ...metric, trend: [{ date: "2026-09-25", value: 31 }, { date: "2026-10-12", value: 38 }] } : metric) } });
+    const band = await screen.findByRole("group", { name: "综合可见度指数" });
+    await waitFor(() => expect(band).toHaveTextContent("基线 31"));
+    expect(band).toHaveTextContent("目标 55");
+    expect(band).toHaveTextContent("38");
+  });
+  it("does not present unjudged answers as zero serious errors in the relocated metrics", async () => {
+    const zero = { ...withEngines.failureModes.correct, status: "ok" as const, numerator: 0, denominator: 40, value: 0 };
+    client.getGeoDiagnosis.mockResolvedValue({ ...withEngines, errorCounts: { ...withEngines.errorCounts!, severe: 0 }, failureModes: { ...withEngines.failureModes, correct: zero, wrongOurs: zero, unknown: { ...zero, numerator: 40, value: 100 } } });
+    renderTab();
+    const safety = await screen.findByRole("group", { name: "用药安全" });
+    expect(safety).toHaveTextContent("核查不足");
+    expect(safety).not.toHaveTextContent("0条严重讲错");
+  });
   it("retains platform, pool and group choices after the measured rows have been narrowed", async () => {
     const group = clustersFilled.groups.find(row => row.id === G_EFFECT)!;
     client.getGeoClusters.mockResolvedValue({ ...clustersFilled, engines: ["deepseek"], groups: [group] });
@@ -240,4 +259,96 @@ describe("可见度: what is not measured is said, not drawn", () => {
     await screen.findByRole("heading", { name: /综合可见度指数/ });
     expect(document.querySelector("[data-cluster-grid]")).toBeNull();
   });
+});
+
+
+it("keeps monitoring settings reachable while data is loading and shows the true configured status", async () => {
+  client.getGeoMonitoring.mockReturnValue(new Promise(() => undefined));
+  client.getGeoDiagnosis.mockReturnValue(new Promise(() => undefined));
+  const project = geoProject();
+  project.steps.monitoring = { status: "running", requested: true, automation: { state: "confirmed", actorId: "a", at: "2026-10-01T00:00:00Z", engines: [...project.engines], coverageDays: project.coverageDays } };
+  const openPanel = vi.fn();
+  render(<MemoryRouter initialEntries={["/app/geo/geo_1/visibility"]}><GeoFrameHarness project={project} tab="visibility" openPanel={openPanel}><VisibilityTab geoId="geo_1" project={project} /></GeoFrameHarness></MemoryRouter>);
+  expect(screen.getByText("已开启自动监测")).toBeVisible();
+  await userEvent.click(screen.getByRole("link", { name: "监测设置" }));
+  expect(openPanel).toHaveBeenCalledWith("settings");
+  expect(screen.queryByRole("button", { name: "停止自动监测" })).toBeNull();
+});
+
+it("places the existing trend and same-scope ranking in one responsive area", async () => {
+  renderTab();
+  const ranking = await screen.findByRole("table", { name: "同类药提及率" });
+  const area = document.querySelector("[data-geo-trend-ranking]")!;
+  expect(area).toHaveClass("grid", "lg:grid-cols-2");
+  expect(area).toContainElement(ranking);
+  expect(area.querySelector("[data-chart='trend']")).not.toBeNull();
+});
+
+it("opens settings from the automation anchor even when both reads fail", async () => {
+  client.getGeoMonitoring.mockRejectedValue(new Error("unavailable"));
+  client.getGeoDiagnosis.mockRejectedValue(new Error("unavailable"));
+  const project = geoProject();
+  const openPanel = vi.fn();
+  render(<MemoryRouter initialEntries={["/app/geo/geo_1/visibility#geo-automation"]}><GeoFrameHarness project={project} tab="visibility" openPanel={openPanel}><VisibilityTab geoId="geo_1" project={project} /></GeoFrameHarness></MemoryRouter>);
+  await waitFor(() => expect(openPanel).toHaveBeenCalledWith("settings"));
+  await screen.findByRole("button", { name: /重试/ });
+  expect(screen.getByRole("link", { name: "监测设置" })).toBeVisible();
+});
+
+
+it("opens the monitoring deep link once per hash visit and still allows explicit reopening", async () => {
+  const project = geoProject();
+  const openPanel = vi.fn();
+  render(<MemoryRouter initialEntries={["/app/geo/geo_1/visibility#geo-automation"]}>
+    <Link to="?metric=mention#geo-automation">Change metric</Link>
+    <Link to="?metric=mention">Leave automation link</Link>
+    <Link to="?metric=mention#geo-automation">Reenter automation link</Link>
+    <GeoFrameHarness project={project} tab="visibility" openPanel={openPanel}><VisibilityTab geoId="geo_1" project={project} /></GeoFrameHarness>
+  </MemoryRouter>);
+  expect(openPanel).toHaveBeenCalledTimes(1);
+  await userEvent.click(screen.getByRole("link", { name: "Change metric" }));
+  expect(openPanel).toHaveBeenCalledTimes(1);
+  await userEvent.click(screen.getByRole("link", { name: "监测设置" }));
+  expect(openPanel).toHaveBeenCalledTimes(2);
+  await userEvent.click(screen.getByRole("link", { name: "Leave automation link" }));
+  expect(openPanel).toHaveBeenCalledTimes(2);
+  await userEvent.click(screen.getByRole("link", { name: "Reenter automation link" }));
+  expect(openPanel).toHaveBeenCalledTimes(3);
+});
+
+
+it("preserves measured metrics, comparison, denominator and insufficient sample on visibility", async () => {
+  const severe = diagnosisWith([{ ...diagnosisFilled.errors[0], severity: "S3", status: "open" }]);
+  client.getGeoDiagnosis.mockResolvedValue(severe);
+  renderTab(GEO_PROJECT);
+  const gvi = await screen.findByRole("group", { name: "综合可见度指数" });
+  await waitFor(() => expect(gvi).toHaveTextContent("38"));
+  expect(gvi).toHaveTextContent("目标 55");
+  expect(gvi).toHaveTextContent("提及率第 2 / 2");
+  expect(gvi).toHaveTextContent("司美格鲁肽 提及率 48%");
+  const mention = screen.getByRole("group", { name: "品类问题可见率" });
+  expect(mention).toHaveTextContent("18");
+  expect(mention).toHaveTextContent("目标 35%");
+  const citation = screen.getByRole("group", { name: "引用命中率" });
+  expect(citation).toHaveTextContent("样本不足");
+  expect(citation).not.toHaveTextContent("6%");
+  expect(screen.getByRole("group", { name: "用药安全" })).toHaveTextContent("1");
+  const stats = screen.getByRole("region", { name: "本轮指标" });
+  expect(within(stats).getAllByText(/按 3 个引擎、310 次有效回答计算/)).toHaveLength(1);
+});
+
+it("does not show unmeasured project metrics as measured zero", async () => {
+  const project = geoProject();
+  const metrics = project.overview.metrics.map(metric => ({ ...metric, cell: { ...metric.cell, value: null, numerator: null, denominator: null, status: "not_measurable" as const }, trend: [] }));
+  client.getGeoDiagnosis.mockResolvedValue({ ...diagnosisFilled, round: null, errors: [], errorCounts: undefined, failureModes: {}, byEngine: [], byPool: [], more: [] });
+  client.getGeoMonitoring.mockResolvedValue({ ...monitoringFilled, series: [], byEngine: [], next: null });
+  renderTab({ ...project, overview: { ...project.overview, metrics } });
+  const stats = await screen.findByRole("region", { name: "本轮指标" });
+  await waitFor(() => expect(within(stats).getByRole("group", { name: "综合可见度指数" })).toHaveTextContent(/未测|—/));
+  for (const label of ["综合可见度指数", "品类问题可见率", "引用命中率"]) {
+    const tile = within(stats).getByRole("group", { name: label });
+    expect(tile.querySelector("[data-stat-value]")).not.toHaveTextContent(/^0(?:%|条|$)/);
+  }
+  expect(within(stats).getByRole("group", { name: "用药安全" })).not.toHaveTextContent("0条严重讲错");
+  expect(stats).not.toHaveTextContent(/次有效回答计算/);
 });

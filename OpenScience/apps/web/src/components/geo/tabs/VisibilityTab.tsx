@@ -1,6 +1,7 @@
-import { GeoMonitoringAutomation } from "../GeoMonitoringAutomation";
+import { geoAutomationEnabled } from "@evimed/domain";
+import { useLocation } from "react-router";
 import { GeoAnalysisEntry } from "../GeoAnalysisEntry";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   readGeoCell,
   type GeoDiagnosis,
@@ -18,9 +19,10 @@ import { TrendChart } from "@/components/charts/TrendChart";
 import { OWN_COLOR, TARGET_COLOR } from "@/components/charts/trendModel";
 import { GeoSparkline } from "../GeoSparkline";
 import { GeoComparison } from "../GeoComparison";
-import { useGeoToolbar } from "../geoFrame";
+import { useGeoFrame, useGeoToolbar } from "../geoFrame";
 import { nextMeasurement } from "../geoBand";
-import { readFailure, useGeoDiagnosis, useGeoMonitoring, type ReadFailure } from "../geoProjectData";
+import { readFailure, useGeoDiagnosis, useGeoMonitoring, useGeoStrategy, type ReadFailure } from "../geoProjectData";
+import { GeoOverviewMetrics } from "../GeoOverviewMetrics";
 import { ClusterDrawerHost } from "../spine/ClusterDrawerHost";
 import { clusterName } from "../spine/clusterModel";
 import { GEO_CLUSTER_FILTER_PARAM, GEO_ENGINE_PARAM, GEO_POOL_PARAM, useGeoDrawerAddress, useGeoSearchChange, useGeoSearchParam } from "../spine/drawerParams";
@@ -69,8 +71,22 @@ import { ClusterMatrixCard, EngineHeatCard, EngineMetricCard, isEngineBarMetric,
  * Verification: Focused component behavior tests and fixture walkthrough.
  */
 export function VisibilityTab({ geoId, project }: { geoId: string; project: GeoProject }) {
+  const frame = useGeoFrame();
+  const { hash } = useLocation();
+  const openedForProject = useRef<string | null>(null);
+  useEffect(() => {
+    if (hash !== "#geo-automation") {
+      openedForProject.current = null;
+    } else if (frame && openedForProject.current !== geoId) {
+      openedForProject.current = geoId;
+      frame.openPanel("settings");
+    }
+  }, [hash, geoId, frame]);
+  const automationStatus = project.status === "paused" ? (geoAutomationEnabled(project) ? "项目已暂停 · 自动监测已配置" : "项目已暂停 · 自动监测未开启") : geoAutomationEnabled(project) ? "已开启自动监测" : project.steps.monitoring?.automation?.state === "confirmed" ? "监测范围已变更，自动监测未开启" : project.steps.monitoring?.automation?.state === "declined" ? "自动监测已关闭" : "自动监测未开启";
+  const automation = <div className="flex flex-wrap items-center gap-3 text-ui"><span>{automationStatus}</span><a href="#geo-automation" className="text-link hover:underline" onClick={(event) => { if (frame) { event.preventDefault(); frame.openPanel("settings"); } }}>监测设置</a></div>;
   const monitoring = useGeoMonitoring(geoId);
   const diagnosis = useGeoDiagnosis(geoId);
+  const strategy = useGeoStrategy(geoId);
   const clusters = useGeoClusters(geoId);
   const catalog = useGeoQuestionCatalog(geoId);
   const drawer = useGeoDrawerAddress();
@@ -136,9 +152,9 @@ export function VisibilityTab({ geoId, project }: { geoId: string; project: GeoP
     onClear: narrowed ? () => change({ [GEO_ENGINE_PARAM]: null, [GEO_POOL_PARAM]: null, [GEO_CLUSTER_FILTER_PARAM]: null }) : undefined,
   } : null);
 
-  if (monitoring.state.kind === "loading" && diagnosis.state.kind === "loading") return <><GeoMonitoringAutomation project={project} /><TabSkeleton /></>;
+  if (monitoring.state.kind === "loading" && diagnosis.state.kind === "loading") return <>{automation}<TabSkeleton /></>;
   if (monitoring.state.kind === "error" && diagnosis.state.kind === "error") {
-    return <><GeoMonitoringAutomation project={project} /><TabError message={monitoring.state.message} onRetry={() => { monitoring.reload(); diagnosis.reload(); }} /></>;
+    return <>{automation}<TabError message={monitoring.state.message} onRetry={() => { monitoring.reload(); diagnosis.reload(); }} /></>;
   }
 
   const denominator = denominatorLine(project, diag);
@@ -149,9 +165,13 @@ export function VisibilityTab({ geoId, project }: { geoId: string; project: GeoP
 
   return (
     <div data-geo-tab="visibility" className="flex flex-col gap-6">
-      <GeoMonitoringAutomation project={project} />
+      {automation}
       <GeoComparison geoId={geoId} view={project} />
+      <GeoOverviewMetrics geoId={geoId} project={project} diagnosis={diagnosis} strategy={strategy} compact />
+      {strategy.state.kind === "error" && <TabError message={`目标信息没有读到：${strategy.state.message}`} onRetry={strategy.reload} />}
+      {strategy.state.kind === "ready" && strategy.state.refreshError && <TabError message={`目标信息更新失败，仍显示上次结果：${strategy.state.refreshError}`} onRetry={strategy.reload} />}
       <GeoAnalysisEntry geoId={geoId} project={project} initialView="V02" />
+      <div data-geo-trend-ranking="" className="grid grid-cols-1 gap-6 lg:grid-cols-2">
       <MetricTrend
         project={project}
         watch={watch}
@@ -162,6 +182,8 @@ export function VisibilityTab({ geoId, project }: { geoId: string; project: GeoP
         loading={monitoring.state.kind === "loading"}
         error={monitoringFailed}
       />
+      <Ranking ranking={ranking} loading={diagnosis.state.kind === "loading"} error={diagnosisFailed} />
+      </div>
       <PoolRivalTrends project={project} rivals={watch?.rivals} />
       <EngineHeatCard project={project} diagnosis={diag} loading={diagnosis.state.kind === "loading"} metric={metric} engine={engine} error={diagnosisFailed} />
       {isEngineBarMetric(metric)
@@ -175,7 +197,6 @@ export function VisibilityTab({ geoId, project }: { geoId: string; project: GeoP
         error={readFailure(clusters)}
       />
       <ByPool geoId={geoId} diagnosis={diag} loading={diagnosis.state.kind === "loading"} pool={pool} error={diagnosisFailed} />
-      <Ranking ranking={ranking} loading={diagnosis.state.kind === "loading"} error={diagnosisFailed} />
       <MoreMetrics geoId={geoId} diagnosis={diag} />
       <ClusterDrawerHost geoId={geoId} project={project} />
     </div>

@@ -16,6 +16,7 @@ import {
   overviewTiles,
   readingChange,
   rivalRanking,
+  safetyReading,
   severeOpenErrors,
   shownDelta,
   statedValue,
@@ -31,6 +32,17 @@ import {
  */
 
 const project = (overrides: Partial<GeoProject> = {}): GeoProject => geoProject({}, overrides);
+
+it("does not turn unknown or insufficient medical judgment into a zero severe-error reading", () => {
+  const diagnosis = diagnosisWith([]);
+  const zero = { ...diagnosis.failureModes.correct, status: "ok" as const, numerator: 0, denominator: 40, value: 0 };
+  const unknown = { ...diagnosis, failureModes: { ...diagnosis.failureModes, correct: zero, wrongOurs: zero, unknown: { ...zero, numerator: 40, value: 100 } } };
+  expect(safetyReading(unknown)).toMatchObject({ kind: "unmeasured", reason: "核查不足" });
+  const enough = { ...unknown, failureModes: { ...unknown.failureModes, correct: { ...zero, numerator: 30, value: 75 } } };
+  expect(safetyReading(enough)).toMatchObject({ kind: "measured", value: 0 });
+  const withRisk = { ...unknown, errorCounts: { ...unknown.errorCounts!, severe: 2 } };
+  expect(safetyReading(withRisk)).toMatchObject({ kind: "measured", value: 2 });
+});
 
 describe("the denominator", () => {
   it("is the round's own, and names every engine it does not cover", () => {

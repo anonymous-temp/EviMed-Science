@@ -1,16 +1,19 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router';
+import userEvent from '@testing-library/user-event';
+import { MemoryRouter, useLocation, useNavigate } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { WorkspaceSplit } from '@/components/workspace/WorkspaceSplit';
 import { GeoAnalysisWorkbench } from './GeoAnalysisWorkbench';
 import { normalizeGeoAnalysisView } from '../../../../server/src/geoAnalysisRegistry.mjs';
 const read=vi.hoisted(()=>vi.fn());
 const memberRead=vi.hoisted(()=>vi.fn());
+const observations=vi.hoisted(()=>vi.fn());
 const navigation=vi.hoisted(()=>({open:vi.fn(),create:vi.fn(),current:vi.fn(),stage:vi.fn(),scope:vi.fn(),publication:vi.fn()}));
 vi.mock('@/lib/geoAnalysisClient',()=>({getGeoAnalysis:read,getGeoAnalysisMembers:memberRead}));
 vi.mock('./spine/useOpenPublication',()=>({useOpenPublication:()=>navigation.publication}));
 vi.mock('./useOpenGeoConversation',()=>({useOpenGeoConversation:()=>navigation.open}));
 vi.mock('@/lib/geoNativeClient',async original=>({...await original<typeof import('@/lib/geoNativeClient')>(),openGeoConversation:navigation.create}));
-vi.mock('@/lib/geoClient',async original=>({...await original<typeof import('@/lib/geoClient')>(),getGeoProject:navigation.current,stageGeoPlanContext:navigation.stage}));
+vi.mock('@/lib/geoClient',async original=>({...await original<typeof import('@/lib/geoClient')>(),getGeoProject:navigation.current,stageGeoPlanContext:navigation.stage,getGeoObservations:observations}));
 vi.mock('@/components/document/DocumentExportActions',()=>({DocumentExportActions:({source}:{source:unknown})=><div data-testid="export">{JSON.stringify(source)}</div>}));
 vi.mock('./geoFrame',async original=>({...await original<typeof import('./geoFrame')>(),useGeoReadScope:()=>({round:'old'}),useGeoFrame:()=>({openAnalysisScope:navigation.scope})}));
 const project={projectId:'control',sessionId:'session'};
@@ -415,4 +418,64 @@ describe('the workbench\'s own view switch', () => {
     await waitFor(() => expect(read).toHaveBeenLastCalledWith('geo', { round: 'old' }, { viewId: 'V04', dimension: 'engine' }, 0, undefined));
     expect(await screen.findByRole('button', { name: /^分析：平台指标比较/ })).toBeTruthy();
   });
+});
+
+
+function AnalysisWithConversation() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const params = new URLSearchParams(location.search);
+  return <>
+    <button onClick={() => { params.set('conversation', 'open'); void navigate({ search: params.toString() }); }}>Open AI</button>
+    <output aria-label="Analysis address">{location.search}</output>
+    <WorkspaceSplit open={params.get('conversation') === 'open'} retainResults splitOverride collapseTo="?session=analysis-session"
+      results={<GeoAnalysisWorkbench geoId="geo" project={project as never} initialView="V12" />}
+      conversation={<input aria-label="Analysis draft" />} />
+  </>;
+}
+
+it.each([
+  { unit: 'statements', selected: 0 },
+  { unit: 'statements', selected: 1 },
+  { unit: 'answers', selected: 0 },
+  { unit: 'answers', selected: 1 },
+] as const)('opens $unit row $selected while another detail is hidden by the wide conversation', async ({ unit, selected }) => {
+  const view = { viewId: 'V12', dimension: 'project' };
+  const selectionRef = 'gsel_clinical';
+  const columns = [{ key: 'current', label: '所选实测' }];
+  const rows = [21, 22].map((total, index) => {
+    const rowKey = `row-${index}`;
+    const members = unit === 'statements'
+      ? { selectionRef, view, rowKey, columnKey: 'current', expectedDigest: 'clinical-digest', unit, total, exact: true }
+      : { selectionRef, metric: { groupId: rowKey }, digest: 'clinical-digest', unit, total, exact: true };
+    return { key: rowKey, label: `Result ${index}`, metricId: null, dimensions: {}, values: { current: { value: total, state: 'known', unit, metric: null, members } } };
+  });
+  read.mockResolvedValue({ view, selection: { reference: selectionRef }, digest: 'clinical-digest', columns, rows, page: { total: 2, shown: 2, nextOffset: null }, availability: { status: 'ready' } });
+  memberRead.mockImplementation(async (_id, member) => ({
+    unit, total: 1, items: [{ id: member.rowKey, unit, statement: { text: `Member ${member.rowKey}`, verdict: 'wrong' } }], nextOffset: null,
+  }));
+  observations.mockImplementation(async (_id, _reference, metric) => ({
+    total: 1, items: [{ id: metric.groupId, question: `Member ${metric.groupId}`, engine: 'kimi' }], nextOffset: null,
+  }));
+  render(<MemoryRouter initialEntries={['/app/geo/geo/accuracy?session=analysis-session']}><AnalysisWithConversation /></MemoryRouter>);
+  const user = userEvent.setup();
+  await user.click(screen.getByText('所选数据分析'));
+  const first = await screen.findByRole('button', { name: /^21 / });
+  const second = screen.getByRole('button', { name: /^22 / });
+  await user.click(first);
+  await screen.findByText('Member row-0');
+  fireEvent.click(screen.getByRole('button', { name: 'Open AI' }));
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  const draft = screen.getByRole('textbox', { name: 'Analysis draft' });
+  await user.type(draft, 'Same session');
+  const trigger = selected === 0 ? first : second;
+  await user.click(trigger);
+  const details = await screen.findByRole('dialog');
+  expect(details).toBeVisible();
+  expect(details).toHaveFocus();
+  await screen.findByText(`Member row-${selected}`);
+  expect(draft).toHaveValue('Same session');
+  expect(screen.getByLabelText('Analysis address')).toHaveTextContent('session=analysis-session');
+  await user.keyboard('{Escape}');
+  expect(trigger).toHaveFocus();
 });

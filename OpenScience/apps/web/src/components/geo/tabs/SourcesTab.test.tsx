@@ -1,11 +1,16 @@
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { sessionOwner } from "@/lib/sessionLifecycle";
+import { prepareRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes, useLocation } from "react-router";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { createMemoryRouter, MemoryRouter, Route, Routes, useBlocker, useLocation, useNavigate } from "react-router";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { RouterProvider } from "react-router/dom";
 import type { GeoAction, GeoActionSource, GeoProject, GeoSourceRow } from "@/lib/geoClient";
 import { geoProject, sourceDetailOf, sourcesFilled } from "../__fixtures__/geoTabs";
 import { actionFixture, actionsFilled, clustersFilled, clusterViewFixture, G_BRAND, G_EFFECT, G_SAFETY } from "../__fixtures__/geoSpine";
 import { GeoFrameHarness } from "../__fixtures__/geoFrameHarness";
+import { geoResultDrawerProps } from "../spine/drawerParams";
+import { WorkspaceSplit } from "@/components/workspace/WorkspaceSplit";
 import { SourcesTab } from "./SourcesTab";
 
 const client = vi.hoisted(() => ({
@@ -337,4 +342,116 @@ it('clears the platform the analysis scope set in the cited view — the filter 
  expect(params.has('engines')).toBe(false);expect(params.has('selectionRef')).toBe(false);
  expect(params.get('questionVersion')).toBe('3');expect(params.get('session')).toBe('s1');
  expect(within(toolbar()).queryByRole('button',{name:'清除筛选'})).toBeNull();
+});
+
+
+const pendingSourceDraft = prepareRuntimeUiIntent({ kind: "open", projectId: "prj_geo_1", sessionId: "ses_geo_1", requestId: "source-request", draft: "Pending source draft", owner: sessionOwner() });
+function SourcesBesideConversation() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const params = new URLSearchParams(location.search);
+  return <>
+    <button onClick={() => {
+      params.set("conversation", "open"); params.set("session", "ses_geo_1");
+      void navigate({ search: params.toString() }, { state: { runtimeUiIntent: pendingSourceDraft, other: "retained" } });
+    }}>Commit source handoff</button>
+    <button onClick={() => { void navigate(-1); }}>Source history back</button>
+    <output aria-label="Source navigation state">{JSON.stringify(location.state)}</output>
+    <output aria-label="Source address">{location.search}</output>
+    <WorkspaceSplit open={params.get("conversation") === "open"} retainResults splitOverride collapseTo={location.pathname}
+      {...geoResultDrawerProps(params, location.state, "sources", { analysis: false, distribution: false })}
+      conversation={<input aria-label="Source composer" />}
+      results={<GeoFrameHarness project={geoProject()} tab="sources"><SourcesTab geoId="geo_1" project={geoProject()} /></GeoFrameHarness>} />
+  </>;
+}
+
+it("reopens a selected source by keyboard and preserves its pending conversation on history return", async () => {
+  render(<MemoryRouter initialEntries={["/app/geo/geo_1/sources?source=dxy.com"]}><SourcesBesideConversation /></MemoryRouter>);
+  const original = await screen.findByRole("dialog", { name: "丁香医生" });
+  fireEvent.click(screen.getByRole("button", { name: "Commit source handoff" }));
+  expect(original).not.toBeVisible();
+  const trigger = within(rowOf("dxy.com")!).getByRole("button", { name: /丁香医生/ });
+  trigger.focus();
+  const user = userEvent.setup();
+  await user.keyboard("{Enter}");
+  expect(await screen.findByRole("dialog", { name: "丁香医生" })).toBe(original);
+  expect(original).toHaveFocus();
+  expect(JSON.parse(screen.getByLabelText("Source navigation state").textContent ?? "{}")).toMatchObject({ runtimeUiIntent: pendingSourceDraft, other: "retained" });
+  fireEvent.click(screen.getByRole("button", { name: "Source history back" }));
+  expect(original).not.toBeVisible();
+  expect(screen.getByRole("textbox", { name: "Source composer" })).toBeVisible();
+});
+
+
+it("switches from a source to its group, then from the held group to a source beside the same AI conversation", async () => {
+  render(<MemoryRouter initialEntries={["/app/geo/geo_1/sources?source=dxy.com&engine=deepseek"]}><SourcesBesideConversation /></MemoryRouter>);
+  const user = userEvent.setup();
+  const source = await screen.findByRole("dialog", { name: "丁香医生" });
+  const groupLink = source.querySelector<HTMLAnchorElement>(`[data-geo-cluster-link="${G_EFFECT}"]`)!;
+  groupLink.focus();
+  await user.keyboard("{Enter}");
+  const group = await screen.findByRole("dialog");
+  expect(group.querySelector(`[data-geo-cluster-drawer="${G_EFFECT}"]`)).not.toBeNull();
+  expect(screen.getAllByRole("dialog")).toHaveLength(1);
+  expect(screen.getByLabelText("Source address")).not.toHaveTextContent("source=");
+  expect(screen.getByLabelText("Source address")).toHaveTextContent("engine=deepseek");
+
+  fireEvent.click(screen.getByRole("button", { name: "Commit source handoff" }));
+  expect(group).not.toBeVisible();
+  const trigger = within(rowOf("dxy.com")!).getByRole("button", { name: /丁香医生/ });
+  await user.click(trigger);
+  expect(await screen.findByRole("dialog", { name: "丁香医生" })).toHaveFocus();
+  expect(screen.getAllByRole("dialog")).toHaveLength(1);
+  expect(screen.getByLabelText("Source address")).toHaveTextContent("source=dxy.com");
+  expect(screen.getByLabelText("Source address")).not.toHaveTextContent("group=");
+  expect(new URLSearchParams(screen.getByLabelText("Source address").textContent ?? "").has("on")).toBe(false);
+  expect(JSON.parse(screen.getByLabelText("Source navigation state").textContent ?? "{}").runtimeUiIntent).toEqual(pendingSourceDraft);
+  fireEvent.click(screen.getByRole("button", { name: "Source history back" }));
+  expect(screen.getByLabelText("Source address")).toHaveTextContent(`group=${G_EFFECT}`);
+  expect(screen.getByLabelText("Source address")).not.toHaveTextContent("source=");
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  expect(JSON.parse(screen.getByLabelText("Source navigation state").textContent ?? "{}").runtimeUiIntent).toEqual(pendingSourceDraft);
+});
+
+const NativeRequest = globalThis.Request;
+beforeAll(() => {
+  globalThis.Request = class extends NativeRequest {
+    constructor(input: RequestInfo | URL, init?: RequestInit) {
+      super(input, init ? { ...init, signal: undefined } : init);
+    }
+  };
+});
+afterAll(() => { globalThis.Request = NativeRequest; });
+
+function GuardedSources() {
+  const blocker = useBlocker(({ nextLocation }) => new URLSearchParams(nextLocation.search).has("group"));
+  return <>
+    <SourcesBesideConversation />
+    {blocker.state === "blocked" && <button onClick={() => blocker.reset()}>Keep source detail</button>}
+    {blocker.state === "blocked" && <button onClick={() => blocker.proceed()}>Continue to group</button>}
+  </>;
+}
+
+it("keeps the source detail and pending draft when a group navigation is blocked or cancelled", async () => {
+  const router = createMemoryRouter([{ path: "*", element: <GuardedSources /> }], { initialEntries: [{
+    pathname: "/app/geo/geo_1/sources",
+    search: "?source=dxy.com",
+    state: { runtimeUiIntent: pendingSourceDraft },
+  }] });
+  render(<RouterProvider router={router} />);
+  const source = await screen.findByRole("dialog", { name: "丁香医生" });
+  const link = source.querySelector<HTMLAnchorElement>(`[data-geo-cluster-link="${G_EFFECT}"]`)!;
+  const user = userEvent.setup();
+  await user.click(link);
+  expect(source).toBeVisible();
+  expect(router.state.location.state.runtimeUiIntent).toEqual(pendingSourceDraft);
+  await user.click(screen.getByRole("button", { name: "Keep source detail" }));
+  expect(source).toBeVisible();
+  expect(router.state.location.search).toBe("?source=dxy.com");
+  await user.click(link);
+  await user.click(screen.getByRole("button", { name: "Continue to group" }));
+  expect(await screen.findByRole("dialog")).not.toBe(source);
+  expect(router.state.location.search).toContain(`group=${G_EFFECT}`);
+  expect(router.state.location.search).not.toContain("source=");
+  expect(router.state.location.state.runtimeUiIntent).toEqual(pendingSourceDraft);
 });

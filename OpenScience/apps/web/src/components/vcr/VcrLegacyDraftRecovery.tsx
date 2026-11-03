@@ -1,3 +1,5 @@
+import { prepareRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
+import { sessionOwner } from "@/lib/sessionLifecycle";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import { fetchWebMe, webErrorMessage } from "@/lib/apiClient";
@@ -32,10 +34,17 @@ export function VcrLegacyDraftRecovery() {
   if (!drafts.length || !account) return null;
   const restore = (draft: LegacyVcrDraft) => {
     if (!draft.studyId) { ask(draft.text, undefined, true); return; }
+    const owner = sessionOwner();
     setBusy(draft.key);
     void getVcrStudy(draft.studyId).then(study => {
-      if (!study.conversation.sessionId) throw new Error("The original conversation is not available.");
-      return select(study.projectId, () => navigate(vcrChatPath(study.id), { state: { runtimeUiIntent: { kind: "open", projectId: study.projectId, sessionId: study.conversation.sessionId, requestId: crypto.randomUUID(), draft: draft.text, restoreDraft: true } } }));
+      if (owner !== sessionOwner()) return;
+      const sessionId = study.conversation.sessionId;
+      if (!sessionId) throw new Error("The original conversation is not available.");
+      return select(study.projectId, () => {
+        if (owner !== sessionOwner()) return;
+        const intent = prepareRuntimeUiIntent({ kind: "open", projectId: study.projectId, sessionId, requestId: crypto.randomUUID(), owner, draft: draft.text, restoreDraft: true });
+        navigate(vcrChatPath(study.id), { state: { runtimeUiIntent: intent } });
+      });
     }).catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "原研究对话暂时无法读取，草稿已保留，请稍后重试。" }))).finally(() => setBusy(null));
   };
   return <Disclosure summary={`旧版未发送草稿 · ${drafts.length}`}><List label="可恢复的旧草稿" divided>{drafts.map(draft => <li key={draft.key} className="flex flex-col gap-3 py-4">

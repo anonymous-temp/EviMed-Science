@@ -22,6 +22,7 @@ export interface MenuItem {
   /** A destination retains native link semantics, including modified-click navigation. */
   to?: string;
   state?: unknown;
+  replace?: boolean;
   onSelect: () => void;
   icon?: LucideIcon;
   /** Red text: deletes or discards something. */
@@ -61,9 +62,9 @@ export type MenuEntry = MenuItem | MenuHeading | "separator";
  * Responsive: No layout policy.
  * Verification: HeaderActions.test.tsx; browser context-menu/focus checks remain separate.
  */
-export function ActionLink({ to, state, inert, onClick, children, ...props }: AnchorHTMLAttributes<HTMLAnchorElement> & { to: string; state?: unknown; inert?: boolean }) {
+export function ActionLink({ to, state, replace, inert, onClick, children, ...props }: AnchorHTMLAttributes<HTMLAnchorElement> & { to: string; state?: unknown; replace?: boolean; inert?: boolean }) {
   const href = useHref(to);
-  const click = useLinkClickHandler<HTMLAnchorElement>(to, { state, target: props.target });
+  const click = useLinkClickHandler<HTMLAnchorElement>(to, { state, replace, target: props.target });
   return <a {...props} role={props.role ?? 'link'} tabIndex={props.tabIndex ?? 0} href={inert ? undefined : href}
     onClick={event => { if (inert) { event.preventDefault(); return; } onClick?.(event); if (!event.defaultPrevented) click(event); }}
     onAuxClick={event => { if (inert) event.preventDefault(); else props.onAuxClick?.(event); }}>{children}</a>;
@@ -150,7 +151,7 @@ export function Menu({
             ) : "heading" in item ? (
               <div key={`heading-${index}`} role="presentation" className="px-2 pb-1 pt-2 text-meta text-text-3">{item.heading}</div>
             ) : item.to !== undefined ? (
-              <ActionLink key={`${item.label}-${index}`} to={item.to} state={item.state} inert={item.disabled || item.loading} role={item.toggle ? "menuitemcheckbox" : single ? "menuitemradio" : "menuitem"} aria-checked={item.toggle || single ? Boolean(item.checked) : undefined} aria-disabled={item.disabled || item.loading || undefined} aria-busy={item.loading || undefined}
+              <ActionLink key={`${item.label}-${index}`} to={item.to} state={item.state} replace={item.replace} inert={item.disabled || item.loading} role={item.toggle ? "menuitemcheckbox" : single ? "menuitemradio" : "menuitem"} aria-checked={item.toggle || single ? Boolean(item.checked) : undefined} aria-disabled={item.disabled || item.loading || undefined} aria-busy={item.loading || undefined}
                 onAuxClick={event => { if (item.disabled || item.loading) event.preventDefault(); }}
                 onClick={event => { if (item.disabled || item.loading) { event.preventDefault(); return; } setOpen(false); item.onSelect(); }}
                 className={cn("flex min-h-8 items-center rounded px-2 text-ui text-text outline-none hover:bg-surface-2 focus-visible:bg-surface-2", item.disabled && "opacity-disabled", item.destructive && "text-danger")}>{item.loading && <Loader2 size={16} aria-hidden="true" className="shrink-0 animate-spin" />}{item.icon && <item.icon size={16} aria-hidden="true" />}{item.label}{(single || item.toggle) && item.checked && <Check size={16} aria-hidden="true" />}</ActionLink>

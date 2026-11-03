@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useSearchParams } from 'react-router';
+import { useLocation, useSearchParams } from 'react-router';
 import { cancelGeoOrder, type GeoProject } from '@/lib/geoClient';
 import { getGeoExecutionOrders, getGeoOrderDetail, getGeoProjectLedger, getGeoOwnedPublications, getGeoOwnedPublication, confirmGeoOwnedPublication, type GeoExecutionOrder } from '@/lib/geoDistributionClient';
 import { webErrorMessage } from '@/lib/apiClient';
@@ -14,7 +14,7 @@ import { EmptyState } from '@/components/cards/EmptyState';
 import { Input } from '@/components/ui/Input';
 import { useSharedGeoLoad } from '../geoProjectData';
 import { useGeoFrame } from '../geoFrame';
-import { searchWith } from '../spine/drawerParams';
+import { geoDrawerActivation, geoDrawerSearch, geoDrawerSelectionState, searchWith } from '../spine/drawerParams';
 import { useOpenPublication } from '../spine/useOpenPublication';
 import { orderStateWord } from '../geoText';
 import { yuan } from './geoTabText';
@@ -26,21 +26,37 @@ const versionWords: Record<string, string> = { update_needed: '稿件已有新�
 const versionWord = (state: string | null | undefined) => (state && versionWords[state]) || '与当前稿件一致';
 const phaseNames: Record<string, string> = { send_started: '正在提交', late_send_result: '补回提交结果', price_changed: '价格变化', url_changed: '发布地址更新', refund_seen: '退款到账', refund_escalated: '退款待核对', auto_cancel: '自动撤单', check: '检查页面', cited: '发现引用' };
 
+type DistributionDetail = { kind: 'order' | 'publication'; id: string };
+
+export function geoDistributionDetail(params: URLSearchParams, state?: unknown) {
+  const order = params.get('order');
+  const publication = params.get('publication');
+  const detail: DistributionDetail | null = order ? { kind: 'order', id: order } : publication ? { kind: 'publication', id: publication } : null;
+  const activation = detail ? geoDrawerActivation(params, state, [detail.kind]) : null;
+  return { detail, activation };
+}
+
 /** Execution history is independent of the current strategy's action list. */
 export function DistributionWorkbench({ geoId, project }: { geoId: string; project: GeoProject }) {
   const [tab, setTab] = useState<'orders' | 'owned' | 'ledger'>('orders');
   const [params, setParams] = useSearchParams();
-  const orderId = params.get('order');
-  const publicationId = params.get('publication');
-  const change = (values: Record<string, string | null>) => setParams(previous => new URLSearchParams(searchWith(previous.toString(), values)));
-  const openOrder = (id: string) => change({ order: id, action: null, group: null, error: null, source: null, publication: null });
+  const { state } = useLocation();
+  const { detail } = geoDistributionDetail(params);
+  const orderId = detail?.kind === 'order' ? detail.id : null;
+  const publicationId = detail?.kind === 'publication' ? detail.id : null;
+  const change = (values: Record<string, string | null>) => setParams(previous => new URLSearchParams(searchWith(previous.toString(), values)), { state: geoDrawerSelectionState(state, null) });
+  const openDetail = (kind: DistributionDetail['kind'], id: string) => {
+    const selection = { kind, id };
+    setParams(previous => geoDrawerSearch(previous.toString(), selection), { state: geoDrawerSelectionState(state, selection) });
+  };
+  const openOrder = (id: string) => openDetail('order', id);
   return <section aria-label="投放执行记录" className="flex flex-col gap-3">
     <div className="flex flex-wrap items-center gap-2">
       <Button variant={tab === 'orders' ? 'secondary' : 'text'} aria-pressed={tab === 'orders'} onClick={() => setTab('orders')}>订单与发布</Button>
       <Button variant={tab === 'owned' ? 'secondary' : 'text'} aria-pressed={tab === 'owned'} onClick={() => setTab('owned')}>自主发布</Button>
       <Button variant={tab === 'ledger' ? 'secondary' : 'text'} aria-pressed={tab === 'ledger'} onClick={() => setTab('ledger')}>费用流水</Button>
     </div>
-    {tab === 'orders' ? <OrderPage key={geoId} geoId={geoId} onOpen={openOrder} /> : tab === 'owned' ? <OwnedPage key={geoId} geoId={geoId} onOpen={id => change({ publication: id, order: null, action: null, group: null, error: null, source: null })} /> : <LedgerPage key={geoId} geoId={geoId} onOpen={openOrder} />}
+    {tab === 'orders' ? <OrderPage key={geoId} geoId={geoId} onOpen={openOrder} /> : tab === 'owned' ? <OwnedPage key={geoId} geoId={geoId} onOpen={id => openDetail('publication', id)} /> : <LedgerPage key={geoId} geoId={geoId} onOpen={openOrder} />}
     {orderId && <OrderDetail key={`${geoId}:${orderId}`} geoId={geoId} project={project} orderId={orderId} onClose={() => change({ order: null })} />}
     {!orderId && publicationId && <OwnedDetail key={`${geoId}:${publicationId}`} geoId={geoId} project={project} linkId={publicationId} onClose={() => change({ publication: null })} />}
   </section>;

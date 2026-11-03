@@ -218,7 +218,7 @@ Import/sharing explains what is included, recipient scope, activation and revoca
 
 ## DS15 GEO product-policy boundary
 
-Owner **B**. DS23 governs how the module's work is presented. The maintained product scope and workflow live in the [GEO iteration plan](../../docs/superpowers/plans/2026-10-23-geo-profound-pureblue-todo.md), including its dated UI acceptance handoff. This design system governs truthful missingness, typed metrics, navigation discoverability, shared components and task/result identity; it does not maintain a second copy of GEO product sequencing. AT07/20 plus that plan's journeys are the acceptance contract.
+Owner **B**. DS23 governs how the module's work is presented. The maintained product scope and workflow live in the [GEO iteration plan](../../docs/superpowers/plans/2026-10-23-geo-profound-pureblue-todo.md); the [2026-11-03 GEO workspace design](../../docs/superpowers/specs/2026-11-03-geo-experience-redesign.md) supersedes its persistent step-rail and bottom-dock placement for GEO only. This design system governs truthful missingness, typed metrics, navigation discoverability, shared components and task/result identity; it does not maintain a second copy of GEO product sequencing. AT07/20 plus that plan's journeys are the acceptance contract.
 
 ## DS16 VCR product-policy boundary
 
@@ -407,7 +407,7 @@ Verify **L/T**, AT60. A work state is one of `@evimed/domain` `WORK_STATES`, in 
 
 ### DS23.3 One 现在
 
-Verify **T/W**, AT61. The header's primary action is the next step and nothing else. It is never “对话”, which has its own place in DS23.5. Already standing where the next step is, or with nothing to do, the header has no primary. A long-running stage does not invent one: the strip says what is going on.
+Verify **T/W**, AT61. Except for the GEO result-page conversation entry described below, the header's primary action is the next step and nothing else. It is never “对话”, which has its own place in DS23.5. Already standing where the next step is, or with nothing to do, the header has no primary. A long-running stage does not invent one: the strip says what is going on.
 
 ### DS23.4 Four kinds of action
 
@@ -424,16 +424,22 @@ A button named for a piece of work must do that work. Only filling a draft is ne
 
 ### DS23.5 One conversation, two forms
 
-Verify **T/W/M**, AT63. The conversation is one native composer in two forms, on every view of the work.
+Verify **T/W/M**, AT63. Except for the GEO workspace below, the conversation is one native composer in two forms, on every view of the work.
 
 - **Collapsed:** a bar in PageShell's `dock`, at the window's bottom. It occupies its own layout space below the results' scroll viewport; it must not cover a result's text or click target. It is drawn by the host and starts no runtime, because a person has two at a time and a cold one takes as long as it takes. What is typed goes unsent into the native composer when the conversation opens. Nothing sends from the bar.
 - **Open:** from 1180 px a 432 px column on the right, results beside it (`WorkspaceSplit`), its composer at the column's foot and in the window always. Under 1180 px it covers the results, with a way back. The address says it is open and which result is beside it (`…/chat/<session>?result=<tab>`), so it can be linked and reloaded. A press in the results changes what is beside the conversation and leaves it open. Collapsing is leaving that address; the resident frame stays alive.
 
 A blank module conversation has no greeting and no project card, because the page beside it says where the work stands; it offers the module's ways to begin as small pills that fill the composer, and its composer is at the bottom, where it will stay. A role that reads and does not run has a link to the kept conversation and nothing to type into. Entering a module does not open the conversation by itself, for the same reason the bar starts no runtime.
 
+### GEO workspace adoption (owner, 2026-11-03)
+
+The approved [GEO workspace design](../../docs/superpowers/specs/2026-11-03-geo-experience-redesign.md) replaces GEO's persistent eight-step rail and full-width conversation dock, while the eight execution stages, their true states and run records remain reachable in project work and execution detail. The project collection opens a project directly. Within a project, the existing platform sidebar becomes the GEO navigation, with project work, AI performance, content and publication, and product and evidence; the ordinary platform navigation and saved sidebar width remain intact. AI performance uses visibility, medical review, citations and questions/answers tabs with contextual filters and analysis.
+
+Project work hosts the single native conversation beside product context. Result pages offer “询问 AI” or a read-only conversation link and keep the exact result, scope, version and session; a wide page shows a 432 px column, while a narrow page covers but retains the result state. The resident frame is never duplicated. Legacy chat and result URLs remain valid. An explicit action opens or repairs a session; passive recovery must address the kept session exactly and may not create a replacement. Missing measurements, failed reads and insufficient medical judgment remain distinct from measured zero. The `geo-areas` walk checks this module-specific composition without weakening general page budgets. Local verification, real native/model runs and deployment remain distinct evidence.
+
 ### Paper-and-ink visual application (owner review, 2026-11-02)
 
-DS23 remains the structure: its projection, next action, dock, result linkage and native column are not redesigned by a visual refresh. Use the existing page-ground and surface roles to distinguish work from navigation; align existing spacing, ink and weak boundaries before adding containers. Static cards gain no shadow or new palette. The native conversation's usable 432px column and its right-side panel remain acceptance requirements.
+DS23 remains the structure: its projection, next action, dock, result linkage and native column are not redesigned by a visual refresh. The subsequent 2026-11-03 GEO workspace adoption above changes GEO's navigation and dock placement alone. Use the existing page-ground and surface roles to distinguish work from navigation; align existing spacing, ink and weak boundaries before adding containers. Static cards gain no shadow or new palette. The native conversation's usable 432px column and its right-side panel remain acceptance requirements.
 
 Brand expression varies with the touchpoint within the existing one-brand-moment rule: entry and welcome surfaces may carry the established brand moment; workbench controls stay quiet; reading and data surfaces give priority to content. This does not add a welcome banner to each module, a new safety/source status panel, or an explanation of page value. Empty states say how to proceed. Keep the 24px page-title role and the kernel's 280px sidebar constant, including legitimate saved widths.
 
@@ -483,7 +489,7 @@ Verify **T/W/M**, AT66. Work is described to its person in three tiers: **自动
 | AT17 | Touch interrupted/canceled | No stuck drag, swallowed scroll or missing state cleanup |
 | AT18 | Mobile navigation to another module | Menu closes, focus/context identifies destination |
 | AT19 | Long similar project names | Distinguishable without hover; actions do not crowd identity |
-| AT20 | GEO eight steps at 390px | All reachable with explicit overflow cue; waits separated |
+| AT20 | GEO task detail at 390px | Requested execution steps and their states remain reachable; contextual navigation, narrow conversation return, scope and waits remain distinct |
 | AT21 | Sparse memory graph | Real labels/selection/list, no fabricated links |
 | AT22 | Article and source reading | Distinct content roles, source access, return position, no hidden essential title |
 | AT23 | Upload complete but parsing pending | Transferred and ready are different |

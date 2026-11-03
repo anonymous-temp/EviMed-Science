@@ -1,3 +1,4 @@
+import { sessionOwner } from "@/lib/sessionLifecycle";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { Share2 } from "lucide-react";
@@ -18,7 +19,7 @@ import {
 import { capsuleEntryPreview, fromSender, takenEntries } from "@/lib/capsuleText";
 import { announceMemoryChanged, enableReceivedCapsule, startCapsuleTrial } from "@/lib/memoryClient";
 import { productErrorMessage, type CapsuleRecord } from "@/lib/productClient";
-import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
+import { prepareRuntimeUiIntent, newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 
 /** Why a delivery that was closed can no longer be taken in, in the recipient's words. */
 const CLOSED_TEXT: Record<string, string> = {
@@ -147,7 +148,8 @@ export function SharedCapsulePage() {
                   // The conversation's id is chosen here so it can be marked as the trial before the frame opens it.
                   const intent = newRuntimeUiIntent();
                   await startCapsuleTrial(imported.id, intent.sessionId);
-                  navigate("/app/chat", { state: { runtimeUiIntent: intent } });
+                  if (intent.owner !== sessionOwner()) return;
+                  navigate("/app/chat", { state: { runtimeUiIntent: prepareRuntimeUiIntent(intent) } });
                 })}>试用一次</Button>
                 <Button variant="secondary" actionKind="set" disabled={busy} onClick={() => void perform(async () => {
                   await enableReceivedCapsule(imported.id); announceMemoryChanged(); navigate("/app/memory");

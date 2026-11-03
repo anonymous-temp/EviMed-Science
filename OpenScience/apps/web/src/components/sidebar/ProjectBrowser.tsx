@@ -15,7 +15,7 @@ import { vcrCalculationPath } from "@/lib/vcrMethodLocation";
 import { vcrChatPath } from "@/lib/studyLocation";
 import { useOpenStudy } from "@/lib/studyPresence";
 import { isRunUnseen, markRunSeen, useRunsSeenVersion } from "@/lib/runSeen";
-import { scopedConversationPath, conversationNavigationState, newRuntimeUiIntent, runtimeUiIntentFromState, type RuntimeUiIntent } from "@/lib/runtimeUiNavigation";
+import { prepareRuntimeUiIntent, scopedConversationPath, conversationNavigationState, newRuntimeUiIntent, runtimeUiIntentFromState, type RuntimeUiIntentMarker } from "@/lib/runtimeUiNavigation";
 import { warmWebRuntime } from "@/lib/runtimeWarm";
 import { ConversationMatches } from "@/components/sidebar/ConversationMatches";
 import { ConversationMenu } from "@/components/sidebar/ConversationMenu";
@@ -106,7 +106,7 @@ function taskKey(projectId: string, run: WebAgentRun): string {
 }
 
 /** Where a click is going: a path, and router state minted at the moment of arrival. */
-type Destination = () => { to: string; state?: { runtimeUiIntent: RuntimeUiIntent } };
+type Destination = () => { to: string; state?: { runtimeUiIntent: RuntimeUiIntentMarker } };
 
 /**
  * The sidebar's 「项目」 section: every project as a group, its conversations inside.
@@ -306,7 +306,7 @@ export function ProjectBrowser({ geo = false, vcr = false, onCurrentModule }: {
     go(projectId, () => {
       const intent = newRuntimeUiIntent();
       const geoId = geoProjectAssociation(projectId)?.id;
-      return { to: geoId ? geoChatPath(geoId, intent.sessionId) : "/app/chat", state: { runtimeUiIntent: intent } };
+      return { to: geoId ? geoChatPath(geoId, intent.sessionId) : "/app/chat", state: { runtimeUiIntent: prepareRuntimeUiIntent(intent) } };
     });
   };
 

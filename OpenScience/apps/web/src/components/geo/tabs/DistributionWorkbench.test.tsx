@@ -1,12 +1,15 @@
+import { sessionOwner } from "@/lib/sessionLifecycle";
+import { prepareRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { GeoFrameContext } from '../geoFrame';
 import { GeoDataCache } from '../geoProjectData';
-import { render, screen, within, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, within, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, useLocation, useNavigate } from 'react-router';
 import { beforeEach, expect, it, vi } from 'vitest';
-import { DistributionWorkbench } from './DistributionWorkbench';
+import { DistributionWorkbench, geoDistributionDetail } from './DistributionWorkbench';
 import { firstPublishedDay } from '../spine/ActionsParts';
 import { distributionFilled, geoProject } from '../__fixtures__/geoTabs';
+import { WorkspaceSplit } from '@/components/workspace/WorkspaceSplit';
 import type { GeoExecutionOrder } from '@/lib/geoDistributionClient';
 
 const api = vi.hoisted(() => ({ getGeoExecutionOrders: vi.fn(), getGeoOrderDetail: vi.fn(), getGeoProjectLedger: vi.fn(), getGeoOwnedPublications: vi.fn(), getGeoOwnedPublication: vi.fn(), confirmGeoOwnedPublication: vi.fn(), cancel: vi.fn(), result: vi.fn(), select: vi.fn(), open: vi.fn() }));
@@ -125,4 +128,61 @@ it('an owned publication direct address remains readable by a viewer without upd
   await screen.findByText('此前没有记录完整的发布稿件版本。');
   expect(screen.queryByRole('button', { name: '登记线上已更新为当前稿件' })).not.toBeInTheDocument();
   expect(api.confirmGeoOwnedPublication).not.toHaveBeenCalled();
+});
+
+
+const pendingDistributionDraft = prepareRuntimeUiIntent({ kind: 'open', projectId: 'prj_geo_1', sessionId: 'session-a', requestId: 'distribution-pending', draft: 'Pending distribution draft', owner: sessionOwner() });
+function DistributionWithConversation() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const params = new URLSearchParams(location.search);
+  const { detail, activation } = geoDistributionDetail(params, location.state);
+  const open = params.get('conversation') === 'open';
+  return <>
+    <button onClick={() => { params.set('conversation', 'open'); params.set('session', 'session-a'); void navigate({ search: params.toString() }, { state: { runtimeUiIntent: pendingDistributionDraft, other: 'kept' } }); }}>Open AI</button>
+    <button onClick={() => { params.set('engines', 'kimi'); void navigate({ search: params.toString() }, { replace: true, state: location.state }); }}>Filter results</button>
+    <WorkspaceSplit open={open} retainResults splitOverride collapseTo="/app/geo/geo_1/actions?step=distribution"
+      resultDetailKey={detail ? JSON.stringify(detail) : null} resultDetailActivation={activation}
+      conversation={<input aria-label="Conversation draft" />} results={<DistributionWorkbench geoId="geo_1" project={geoProject()} />} />
+    <output aria-label="Distribution state">{JSON.stringify(location.state)}</output>
+    <NavigationProbe />
+  </>;
+}
+
+it.each(['order', 'publication'] as const)('reopens the explicitly selected %s while retaining the wide conversation and its session', async (kind) => {
+  const link = { id: 'owned-a', title: 'Owned page', url: 'https://example.org/page', status: 'active', publishedAt: null, versionState: 'unknown' };
+  api.getGeoOwnedPublications.mockResolvedValue({ items: [link], nextCursor: null, total: 1 });
+  api.getGeoOwnedPublication.mockResolvedValue({ link, revision: 0, history: { items: [], nextBeforeRevision: null } });
+  const id = kind === 'order' ? 'order-a' : link.id;
+  const row = kind === 'order' ? /Frozen article ·/ : link.title;
+  const title = kind === 'order' ? 'Frozen article' : link.title;
+  render(<MemoryRouter initialEntries={[`/app/geo/geo_1/actions?step=distribution&${kind}=${id}`]}><DistributionWithConversation /></MemoryRouter>);
+  const user = userEvent.setup();
+  const original = await screen.findByRole('dialog', { name: title });
+  // A route commit can arrive while the detail is active.
+  fireEvent.click(screen.getByRole('button', { name: 'Open AI' }));
+  expect(original).not.toBeVisible();
+  await user.click(screen.getByRole('button', { name: 'Filter results' }));
+  expect(original).not.toBeVisible();
+  const draft = screen.getByRole('textbox', { name: 'Conversation draft' });
+  await user.type(draft, 'Keep my draft');
+  if (kind === 'publication') await user.click(screen.getByRole('button', { name: '自主发布' }));
+  const trigger = await screen.findByRole('button', { name: row });
+  await user.click(trigger);
+  expect(await screen.findByRole('dialog', { name: title })).toBe(original);
+  expect(original).toHaveFocus();
+  expect(JSON.parse(screen.getByLabelText('Distribution state').textContent ?? '{}')).toMatchObject({ runtimeUiIntent: pendingDistributionDraft, other: 'kept' });
+  expect(draft).toHaveValue('Keep my draft');
+  expect(screen.getByLabelText('address')).toHaveTextContent('session=session-a');
+  fireEvent.click(screen.getByRole('button', { name: 'Browser back' }));
+  expect(original).not.toBeVisible();
+  expect(screen.getByLabelText('address')).toHaveTextContent(`${kind}=${id}`);
+  await user.click(trigger);
+  expect(original).toBeVisible();
+  await user.keyboard('{Escape}');
+  expect(screen.queryByRole('dialog', { name: title })).not.toBeInTheDocument();
+  expect(trigger).toHaveFocus();
+  expect(JSON.parse(screen.getByLabelText('Distribution state').textContent ?? '{}').runtimeUiIntent).toEqual(pendingDistributionDraft);
+  expect(draft).toHaveValue('Keep my draft');
+  expect(screen.getByLabelText('address')).toHaveTextContent('session=session-a');
 });

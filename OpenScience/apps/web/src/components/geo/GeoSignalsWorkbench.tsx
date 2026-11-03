@@ -5,6 +5,7 @@ import { GEO_SIGNAL_STATE_LABELS_ZH } from '@evimed/domain';
 import { getGeoProject, stageGeoPlanContext, type GeoProject } from '@/lib/geoClient';
 import { getGeoSignal, listGeoSignals, setGeoSignalDisposition, getGeoSignalRunRecord, geoSignalResultHref, type GeoSignal, type GeoSignalDetail, type GeoSignalPage, type GeoSignalState, type GeoSignalAttempt } from '@/lib/geoSignalsClient';
 import { webErrorMessage } from '@/lib/apiClient';
+import { sanitizeRuntimeUiHistoryState } from '@/lib/runtimeUiNavigation';
 import type { ProgrammeRun } from '@/lib/programmeRuns';
 import { useContainerNarrow } from '@/lib/useContainerNarrow';
 import { Button } from '@/components/ui/Button';
@@ -44,8 +45,9 @@ const runOf = (attempt: GeoSignalAttempt, label: string): ProgrammeRun => ({ run
  * Responsive: Dates follow metadata below 640px container width and trail rows above it.
  * Verification: Focused component behavior tests and fixture walkthrough.
  */
-export function GeoSignalsWorkbench({ geoId, project, step }: { geoId: string; project: GeoProject; step?: string | null }) {
+export function GeoSignalsWorkbench({ geoId, project, step, compact = false }: { geoId: string; project: GeoProject; step?: string | null; compact?: boolean }) {
   const [params, setParams] = useSearchParams();
+  const location = useLocation();
   const signalId = params.get('signal');
   const expanded = params.get('signals') === 'all';
   const [filter, setFilter] = useState<GeoSignalState | ''>('');
@@ -55,13 +57,13 @@ export function GeoSignalsWorkbench({ geoId, project, step }: { geoId: string; p
     if (id) next.set('signal', id); else next.delete('signal');
     if (all) next.set('signals', 'all'); else next.delete('signals');
     return next;
-  });
+  }, { state: sanitizeRuntimeUiHistoryState(location.state) });
   return signalId ? <SignalDetail key={identity} geoId={geoId} project={project} signalId={signalId} onBack={() => address(null, true)} />
-    : <SignalList key={identity} geoId={geoId} step={step} expanded={expanded} filter={filter} setFilter={setFilter} onOpen={id => address(id)} onExpand={() => address(null, !expanded)} />;
+    : <SignalList key={identity} geoId={geoId} step={step} compact={compact} expanded={expanded} filter={filter} setFilter={setFilter} onOpen={id => address(id)} onExpand={() => address(null, !expanded)} />;
 }
 
-function SignalList({ geoId, step, expanded, filter, setFilter, onOpen, onExpand }: {
-  geoId: string; step?: string | null; expanded: boolean; filter: GeoSignalState | ''; setFilter(value: GeoSignalState | ''): void; onOpen(id: string): void; onExpand(): void;
+function SignalList({ geoId, step, compact, expanded, filter, setFilter, onOpen, onExpand }: {
+  geoId: string; step?: string | null; compact: boolean; expanded: boolean; filter: GeoSignalState | ''; setFilter(value: GeoSignalState | ''): void; onOpen(id: string): void; onExpand(): void;
 }) {
   const [page, setPage] = useState<GeoSignalPage | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -69,7 +71,7 @@ function SignalList({ geoId, step, expanded, filter, setFilter, onOpen, onExpand
   const [paging, setPaging] = useState(false);
   const alive = useRef(true);
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
-  const query = { limit: expanded ? 20 : step ? 3 : 5, ...(step ? { step } : {}), ...(filter ? { state: filter } : {}), ...(!expanded ? { actionable: true } : {}) };
+  const query = { limit: expanded ? 20 : step ? 3 : 5, ...(step ? { step } : {}), ...(expanded && filter ? { state: filter } : {}), ...(!expanded ? { actionable: true } : {}) };
   useEffect(() => {
     let current = true;
     void listGeoSignals(geoId, query).then(value => { if (current) { setPage(value); setError(null); } }, failure => { if (current) setError(webErrorMessage(failure, { fallback: '发现与处理暂时读不到，请稍后重试。' })); });
@@ -93,6 +95,10 @@ function SignalList({ geoId, step, expanded, filter, setFilter, onOpen, onExpand
   if (!expanded && page.total === 0 && page.items.length === 0 && !error) return <div data-geo-signals-summary="" className="flex flex-wrap items-center gap-x-3 gap-y-1">
     <p className="text-caption text-text-3">{step ? "本阶段暂无待处理发现" : `当前没有待处理发现 · 已保留 ${Object.values(page.counts).reduce((sum, count) => sum + count, 0)} 条发现记录`}</p>
     <Button variant="text" size="sm" onClick={onExpand}>{step ? "查看本阶段发现" : "查看全部发现"}</Button>
+  </div>;
+  if (compact && !expanded && !error) return <div data-geo-signals-summary="" className="flex flex-wrap items-center gap-x-3 gap-y-1 text-ui">
+    <span>{`${step ? '本阶段' : '当前'}有 ${page.total} 条待处理发现`}</span>
+    <Button variant="text" size="sm" onClick={onExpand}>{step ? '查看本阶段发现' : '查看全部发现'}</Button>
   </div>;
   return <Section className="!mt-0 rounded border border-border bg-surface p-4 sm:p-5" title="发现与处理" count={page.total} toolbar={<div className="flex items-center gap-2">
     {expanded && <Select aria-label="处理状态" value={filter} onChange={event => setFilter(event.target.value as GeoSignalState | '')}><option value="">全部状态</option>{Object.entries(GEO_SIGNAL_STATE_LABELS_ZH).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</Select>}
@@ -141,7 +147,7 @@ function SignalDetail({ geoId, project, signalId, onBack }: { geoId: string; pro
   }, [geoId, signalId, round]);
   const keyFor = (signature: string) => { if (!keys.current.has(signature)) keys.current.set(signature, crypto.randomUUID()); return keys.current.get(signature)!; };
   const canEdit = !project.access?.abilities || project.access.abilities.includes('edit');
-  if (!signal && error) return <LoadError message={error} onRetry={() => setRound(value => value + 1)} />;
+  if (!signal && error) return <div className="flex flex-col gap-3"><Button variant="text" size="sm" onClick={onBack}>返回记录</Button><LoadError message={error} onRetry={() => setRound(value => value + 1)} /></div>;
   if (!signal) return <p role="status" className="py-2 text-ui text-text-3">正在读取这条发现</p>;
   const targets = signal.targets ?? signal.basis.targets ?? [];
   const reviews = new Map((signal.sourceReview?.records ?? []).map(record => [record.targetKey, record]));

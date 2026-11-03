@@ -1,4 +1,5 @@
 import type { GeoAnalysisDescriptor, GeoAnalysisId } from "@/lib/geoAnalysisClient";
+import type { GeoTabKey } from "./geoTabs";
 
 /** Component contract: GEO analysis mode; URL owns identity, scope and return context. */
 export const GEO_ANALYSIS_OPTIONS: ReadonlyArray<{ value: GeoAnalysisId; label: string }> = [
@@ -30,6 +31,37 @@ export const GEO_ANALYSIS_OPTIONS: ReadonlyArray<{ value: GeoAnalysisId; label: 
               { value: "V21", label: "问题群提及与自有引用" },
               { value: "V22", label: "页面引用观察历史" },
             ];
+
+/** Each analytical view has one business home; the registry remains the source of its data and validation. */
+export const GEO_ANALYSIS_GROUPS = {
+  work: ['V26'],
+  visibility: ['V01', 'V02', 'V03', 'V04', 'V05', 'V06', 'V08', 'V09', 'V21', 'V27'],
+  accuracy: ['V11', 'V12', 'V13', 'V14', 'V15'],
+  sources: ['V17', 'V18', 'V19', 'V20', 'V22'],
+  questions: ['V07'],
+  context: ['V10', 'V16'],
+  content: ['V23', 'V24', 'V25'],
+} as const satisfies Record<string, readonly GeoAnalysisId[]>;
+
+/** A bookmarked analysis is presented under its own area, even when its old address named another tab. */
+export function geoAnalysisTabForView(viewId: GeoAnalysisId): GeoTabKey {
+  if ((GEO_ANALYSIS_GROUPS.visibility as readonly GeoAnalysisId[]).includes(viewId)) return 'visibility';
+  if ((GEO_ANALYSIS_GROUPS.accuracy as readonly GeoAnalysisId[]).includes(viewId)) return 'accuracy';
+  if ((GEO_ANALYSIS_GROUPS.sources as readonly GeoAnalysisId[]).includes(viewId)) return 'sources';
+  if ((GEO_ANALYSIS_GROUPS.questions as readonly GeoAnalysisId[]).includes(viewId)) return 'questions';
+  if ((GEO_ANALYSIS_GROUPS.context as readonly GeoAnalysisId[]).includes(viewId)) return 'evidence';
+  if ((GEO_ANALYSIS_GROUPS.content as readonly GeoAnalysisId[]).includes(viewId)) return 'actions';
+  return 'plan';
+}
+
+/** A direct older link remains selectable even when its analysis was opened from another work area. */
+export function geoAnalysisOptionsForTab(tab: GeoTabKey, view?: string | null, current?: GeoAnalysisId | null) {
+  const group = tab === 'overview' || tab === 'plan' ? 'work'
+    : tab === 'evidence' || tab === 'questions' && view === 'journey' ? 'context'
+      : tab === 'actions' ? 'content' : tab;
+  const ids: readonly GeoAnalysisId[] = GEO_ANALYSIS_GROUPS[group];
+  return GEO_ANALYSIS_OPTIONS.filter((item) => ids.includes(item.value) || item.value === current);
+}
 const descriptorKeys = ['errorFacet','errorView','metricId','dimension','timeGrain','entityKind','entityKey','sourceType','sourceSearch','sourceRelationship','sourceLevel','sourceFacet','topN','ownedMetricId','categoryMode','financeFacet','strategyVersion','targetVersion','publicationFacet','evidenceKind'] as const;
 
 type DescriptorKey = typeof descriptorKeys[number];

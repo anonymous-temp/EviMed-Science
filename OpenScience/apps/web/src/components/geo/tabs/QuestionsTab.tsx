@@ -1,10 +1,11 @@
+import { sanitizeRuntimeUiHistoryState } from "@/lib/runtimeUiNavigation";
 import { GeoAnalysisEntry } from "../GeoAnalysisEntry";
 import { GeoQuestionWorkbench } from "../GeoQuestionWorkbench";
 import { geoCanEditQuestions, geoQuestionMode } from "../geoQuestionMode";
 import { useGeoPath } from "../useGeoPath";
 import { useGeoDestinationPath } from "../useGeoPath";
 import { useMemo } from "react";
-import { useNavigate, useSearchParams } from "react-router";
+import { useLocation, useNavigate, useSearchParams } from "react-router";
 import { webErrorMessage } from "@/lib/apiClient";
 import {
   getGeoQuestions,
@@ -80,6 +81,7 @@ const COLUMNS: ReadonlyArray<ListColumn & { key: SortKey }> = [
 export function QuestionsTab({ geoId, project }: { geoId: string; project: GeoProject }) {
   const frame = useGeoFrame();
   const [params, setParams] = useSearchParams();
+  const { state: navigationState } = useLocation();
   const version = params.has("questionVersion") ? Number(params.get("questionVersion")) : null;
   const scope = frame?.scope;
   const questions = useSharedGeoLoad<GeoQuestions>(scope
@@ -91,7 +93,7 @@ export function QuestionsTab({ geoId, project }: { geoId: string; project: GeoPr
     if (next == null) copy.delete("questionVersion"); else copy.set("questionVersion", String(next));
     copy.delete("selectionRef"); copy.delete("groupIds"); copy.delete("cluster");
     return copy;
-  }, { replace: true });
+  }, { replace: true, state: sanitizeRuntimeUiHistoryState(navigationState) });
   // A view-only member reads the list: the mode in a copied address is not theirs to be in.
   const editingMode = geoQuestionMode(params, geoCanEditQuestions(project)) !== null;
   const view = geoQuestionsView(params.get(GEO_VIEW_PARAM));
@@ -104,7 +106,7 @@ export function QuestionsTab({ geoId, project }: { geoId: string; project: GeoPr
       const copy = new URLSearchParams(previous);
       if (next === "pools") copy.delete(GEO_VIEW_PARAM); else copy.set(GEO_VIEW_PARAM, next);
       return copy;
-    }, { replace: true }),
+    }, { replace: true, state: sanitizeRuntimeUiHistoryState(navigationState) }),
   };
   const rows = clusters.state.kind === "ready" ? clusters.state.data.groups : [];
 

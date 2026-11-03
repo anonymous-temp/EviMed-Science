@@ -684,10 +684,22 @@ function compositionRead(pathname) {
     notes: [], headline: 0, activity: 0, stepStates: [] };
   if (geo || vcr) {
     read.chrome = { ...box(60, 124, 272, 1200), position: "sticky", sticky: true, held: mode === "band" && pathname.endsWith("/plan") ? { scrolled: 400, before: 60, after: -340, scrollerTop: 0 } : null };
-    read.tablists = geo ? [{ label: "视图", tabs: 8, dots: 0, inChrome: true, inToolbar: false, inSection: false, ...box(100, 40) }] : [];
     if (vcr) read.viewSelector = { count: 1, top: 100 };
-    if (geo) read.stepRail = { ...box(60, 40), folded: false, count: mode === "steps" && pathname.endsWith("/visibility") ? 7 : 8, inChrome: true, steps: [] };
+    if (geo) {
+      const key = pathname.split("/")[4] || "overview";
+      const labels = {
+        overview: "项目对话", plan: "方案", visibility: "可见度", accuracy: "医学核查", sources: "引用来源",
+        questions: "问题与回答", answers: "问题与回答", actions: "稿件", evidence: "产品依据"
+      };
+      const area = key === "overview" || key === "plan" ? ["项目工作", ["项目对话", "方案"]]
+        : key === "actions" ? ["内容与发布", ["稿件", "发布记录"]] : key === "evidence" ? ["产品与资料", ["产品依据", "人群与旅程"]]
+          : ["AI 表现", ["可见度", "医学核查", "引用来源", "问题与回答"]];
+      const work = Number(key === "overview");
+      read.geoAreas = { work, progress: work, execution: work, dock: 0, conversation: 0, selected: [labels[key]], labels: area[1] };
+      read.tablists = mode === "steps" && key === "visibility" ? [] : [{ label: area[0], tabs: area[1].length, dots: 0, inChrome: true, inToolbar: false, inSection: false, ...box(100, 40) }];
+    }
   }
+  if (pathname === "/app/geo") read.geoAreas = { collections: 1, grid: true, cards: [{ status: true, links: [{ name: "项目", href: "/app/geo/geo_1" }] }] };
   if (mode === "orphans" && pathname === "/app/files") read.orphans = [1, 2].map((n) => ({ text: "第" + n + "句话单独站在页面上没有动作", tag: "p", ...box(300 + n * 40, 24) }));
   if (mode === "empty" && pathname === "/app/inbox") read.empties = [{ title: "暂无消息", icon: false, hasTitle: true, action: false, reason: false, ...box(300, 200) }];
   if (mode === "layers" && pathname === "/app/memory") read.toolbars = [1, 2].map((n) => ({ label: "工具条" + n, inChrome: n === 1, inSection: false, ...box(60 + n * 60, 28), controls: {} }));
@@ -740,6 +752,36 @@ function context() {
       first: () => ({ click: async () => { retried = true; log({ click: name }); } }),
       fill: async (value) => log({ fill: name, value }),
     });
+    const geoDestinations = {
+      "项目工作": "", "AI 表现": "/visibility", "内容与发布": "/actions", "产品与资料": "/evidence",
+      "项目对话": "", "方案": "/plan", "可见度": "/visibility", "医学核查": "/accuracy", "引用来源": "/sources", "问题与回答": "/questions",
+      "稿件": "/actions", "发布记录": "/actions#geo-delivery", "产品依据": "/evidence", "人群与旅程": "/questions?view=journey",
+    };
+    const geoLocator = (name) => ({
+      getByRole: (_role, options) => geoLocator(options?.name),
+      locator: () => geoLocator(),
+      filter: () => geoLocator(),
+      getAttribute: async (attribute) => attribute === "aria-current" ? "page" : null,
+      count: async () => 1,
+      isVisible: async () => typeof name === "string" && Object.hasOwn(geoDestinations, name),
+      waitFor: async () => {},
+      evaluate: async () => ({ empty: true, rows: [] }),
+      click: async () => {
+        const from = target();
+        if (typeof name === "string" && Object.hasOwn(geoDestinations, name)) {
+          const destination = new URL("/app/geo/geo_1" + geoDestinations[name], from);
+          for (const [key, value] of from.searchParams) if (key !== "view") destination.searchParams.set(key, value);
+          url = destination.href;
+        } else if (name === "询问 AI") {
+          from.searchParams.set("session", "ses_fake");
+          from.searchParams.set("conversation", "open");
+          url = from.href;
+        } else if (String(name).includes("回到结果")) {
+          from.searchParams.delete("conversation");
+          url = from.href;
+        }
+      },
+    });
     return {
       keyboard: { press: async (key) => log({ key, at: target().pathname }) },
       mouse: { move: async () => {} },
@@ -749,6 +791,7 @@ function context() {
       async goBack() { dialogOpen = false; log({ goBack: true }); if (previousUrl) { url = previousUrl; previousUrl = null; } },
       async route(pattern, handler) { pageRoutes.push([pattern, handler]); log({ route: String(pattern) }); },
       async unroute() { pageRoutes.length = 0; log({ unroute: true }); },
+      async waitForURL() {},
       async waitForFunction() {
         if (process.env.FAKE_SLOW_ROUTE === "never" && new URL(url).pathname === "/app/account") throw Error("route still loading after 30000ms");
         if (process.env.FAKE_NO_MATRIX && url.endsWith("clinical-evidence-matrix.json")) throw Error("no matrix");
@@ -763,7 +806,7 @@ function context() {
           return { composer: !chatFailing(), stats: [] };
         },
       }],
-      getByRole: (role, { name } = {}) => role === "menuitemradio" ? {
+      getByRole: (role, { name } = {}) => /^\/app\/geo\/geo_1(?:\/|$)/u.test(target().pathname) ? geoLocator(name) : role === "menuitemradio" ? {
         allTextContents: async () => ["总览", "匹配", "人群与患者", "对照", "试验", "依据"],
         click: async () => {
           const base = target().pathname.match(/^\/app\/virtual-research\/[^/]+/)[0];
@@ -771,7 +814,7 @@ function context() {
           url = new URL(base + (keys[name] ? "/" + keys[name] : ""), url).href;
         },
       } : ({ ...locator(role, name), waitFor: async () => {} }),
-      locator: () => ({
+      locator: () => /^\/app\/geo\/geo_1(?:\/|$)/u.test(target().pathname) ? geoLocator() : ({
         count: async () => 0,
         click: async () => {},
         allTextContents: async () => [],
@@ -803,6 +846,7 @@ function context() {
           const bad = process.env.FAKE_ROUTE_LOAD && phone && url.endsWith("/std_a/comparator") && (process.env.FAKE_ROUTE_LOAD === "persistent" || loadAttempts < 2);
           return { failed: Boolean(bad), message: bad ? "研究暂时无法读取。重试" : null };
         }
+        if (typeof fn === "function" && fn.name === "moduleResultProbe") return { status: "content", coverage: true };
         if (typeof fn === "function" && fn.name === "measureComposition") return compositionRead(target().pathname);
         if (typeof fn === "function" && fn.name === "moduleResultProbe") return { status: "content", coverage: true, retained: 1, errors: [], warnings: [], empty: [] };
         // FAKE_SCROLL=stretch|tall|taller: a page two windows tall (photographed whole), nine, and fifty (photographed in slices, and cut off).
@@ -920,12 +964,11 @@ function context() {
           if (n === 5) return { path: "/app/memory", search: process.env.FAKE_ADDRESS === "open" ? search + "&open=r1" : search, dialog: process.env.FAKE_ADDRESS === "open", found: true, selected: "做法 5", query: "探针" };
           return { path: "/app/memory", search: lost ? "" : search, dialog: false, found: true, selected: lost ? "关于你" : "做法 5", query: lost ? "" : "探针" };
         }
-        // FAKE_HANDOFF=bad: a draft with no link to a source and a field that would send; FAKE_HANDOFF=nobutton: an event page without 深入研究.
+        // FAKE_HANDOFF=bad puts a sensitive field in browser history; no draft bytes are collected by the observer.
         if (typeof fn === "function" && fn.name === "handoffProbe") {
           if (arg[0] === "event") return { path: new URL(url).pathname, title: "某事件", button: process.env.FAKE_HANDOFF !== "nobutton" };
           const bad = process.env.FAKE_HANDOFF === "bad";
-          return { path: "/app/chat", intent: { keys: ["draft", "kind", "projectId", "requestId", "sessionId"].concat(bad ? ["send"] : []), kind: "create",
-            draft: bad ? "请深入研究" : "请围绕这个事件做一次深入研究。\n\n事件：某事件\n一手来源：\n- 官方：标题（https://example.org/a）", requestId: "req_1" } };
+          return { path: "/app/chat", intent: { keys: ["kind", "projectId", "requestId", "sessionId"].concat(bad ? ["draft"] : []), kind: "create", projectId: "p", requestId: "req_1", sessionId: "s" } };
         }
         if (typeof fn === "function" && fn.name === "pdfProbe") return { width: process.env.FAKE_PDF === "narrow" ? 559 : 896, src: "blob:x#view=FitH&navpanes=0" };
         // FAKE_KB=lost: the way back does not find the list as it was left.
@@ -1149,7 +1192,7 @@ test("a probe that throws in the page fails the walk and says what it did not re
 test("the walk judges the composition of every page view it reads and hands what it finds to the baseline", async () => {
   const fine = await walk();
   assert.equal(fine.code, 0, fine.stdout + fine.stderr);
-  assert.ok(fine.report.pages["geo-plan@desktop"].composition.stepRail.count === 8, "the composition is in the report, page by page");
+  assert.ok(fine.report.pages["geo-plan@desktop"].composition.geoAreas.selected.includes("方案"), "the composition is in the report, page by page");
   assert.deepEqual(fine.report.findings.filter((entry) => ["orphan-sentence", "step-rail", "chrome", "module-steps", "empty-state", "toggle-layers", "template-slot"].includes(entry.rule)), []);
   // A page with two sentences standing alone, a tab with seven steps among eight, a band that does not hold, an empty state with no way
   // forward and a second toolbar are each a finding of their rule, named by their page: strict, they fail the walk.
@@ -1157,7 +1200,7 @@ test("the walk judges the composition of every page view it reads and hands what
   const orphans = await walk({ FAKE_COMPOSITION: "orphans", ...strict });
   assert.ok(orphans.report.failures.some((line) => /^files@desktop: \[orphan-sentence\] 2 sentences stand alone.*\[orphan-sentence; no baseline entry accepts it\]$/.test(line)), orphans.report.failures.filter((line) => line.includes("orphan")).join("\n"));
   const steps = await walk({ FAKE_COMPOSITION: "steps", ...strict });
-  assert.ok(steps.report.failures.some((line) => line.startsWith("geo@desktop: the steps are not the same on every tab: geo-overview 8, geo-visibility 7")), steps.report.failures.join("\n"));
+  assert.ok(steps.report.failures.some((line) => line.startsWith("geo-visibility@desktop: [geo-areas] GEO must expose the current area")), steps.report.failures.join("\n"));
   const band = await walk({ FAKE_COMPOSITION: "band", ...strict });
   assert.ok(band.report.failures.some((line) => /^geo-plan@desktop: \[chrome\] the band is at -340 px after the page moved 400 px/.test(line)));
   const empty = await walk({ FAKE_COMPOSITION: "empty", ...strict });
@@ -1625,6 +1668,7 @@ test("the refusals a page is walked to meet are not failures, and any other refu
   // The kernel's frame of a conversation that opens on landing is refused because the walk starts no runtime; nothing else on that page, and not on any other page.
   assert.deepEqual(unexpectedRefusals("autopilot", ["503 /api/runtime-ui/frames", "503 /api/agendas", "500 /api/runtime-ui/frames"]), ["503 /api/agendas", "500 /api/runtime-ui/frames"]);
   assert.deepEqual(unexpectedRefusals("geo", ["503 /api/runtime-ui/frames"]), ["503 /api/runtime-ui/frames"]);
+  assert.deepEqual(unexpectedRefusals("geo-overview", ["503 /api/runtime-ui/frames", "503 /api/geo/projects/g1", "500 /api/runtime-ui/frames"]), ["503 /api/geo/projects/g1", "500 /api/runtime-ui/frames"]);
   // 医学检索: an account with no EviMed login is refused (403) and a deployment without the service answers 503, and the results page is walked to say
   // which; the home's topic read is answered by the walk itself (it starts no runtime) and refused by design there, on the home alone.
   assert.deepEqual(unexpectedRefusals("search-results", ["403 /api/evimed-search/literature/search", "503 /api/evimed-search/literature/facets", "500 /api/evimed-search/literature/search"]), ["500 /api/evimed-search/literature/search"]);
@@ -2339,7 +2383,7 @@ test("the walk opens the pages whose ids the deployment's lists name: both studi
   // Each view's structure is in the report; the phone's two Tab presses are the only keys the walk sends outside the matrix.
   assert.equal(report.pages["files@desktop"].structure.sidebar.landmarks, 1);
   assert.equal(log.filter((entry) => entry.key === "Tab").length, 2 * Object.keys(report.pages).filter((view) => view.endsWith("@phone")).length);
-  assert.equal(log.filter((entry) => entry.key === "Escape").length, 2, "Escape once per width in the matrix");
+  assert.equal(log.filter((entry) => entry.key === "Escape" && !entry.at?.startsWith("/app/geo/")).length, 2, "Escape once per width in the matrix");
   assert.deepEqual(report.pages["files@desktop"].tabStops, undefined);
   assert.deepEqual(report.pages["files@phone"].tabStops.map((stop) => stop.text), ["跳到主要内容", "跳到主要内容"]);
   // The probes of a page that is right pass quietly, and the missing records went back to their lists by a click.
@@ -2681,37 +2725,29 @@ test("where a list page keeps its place is read from the address and from what i
   assert.deepEqual(addressOpenFindings("memory", { rows: 1, opened, closed: null }).notices, ["memory@desktop: not observable: Back was not taken"]);
 });
 
-test("the event page's 深入研究 is read at the hand-off: the title, a link to a source, a create intent that cannot send, and Back to the event", async () => {
+test("the event hand-off keeps only an opaque locator in history and Back reaches the event", async () => {
   const eventPage = (button = true) => node("body", {}, [node("main", {}, [node("header", {}, [node("h1", { text: "某事件" })]), ...(button ? [node("button", { text: "让 AI 深入研究" })] : [])])]);
   assert.deepEqual(inPage(eventPage(), () => handoffProbe(["event"]), { path: "/app/frontier/events/ev_1" }), { path: "/app/frontier/events/ev_1", title: "某事件", button: true });
-  assert.equal(inPage(eventPage(false), () => handoffProbe(["event"])).button, false);
   const withState = (usr) => inPage(eventPage(), () => { globalThis.window.history = { state: usr === undefined ? null : { usr, key: "k", idx: 2 } }; return handoffProbe(["intent"]); }, { path: "/app/chat" });
-  const draft = "请围绕这个事件做一次深入研究。\n\n事件：某事件\n一手来源：\n- 官方：标题（https://example.org/a）";
-  const intent = { kind: "create", projectId: "p", requestId: "req_1", sessionId: "s", draft };
-  assert.deepEqual(withState({ runtimeUiIntent: intent }), { path: "/app/chat", intent: { keys: ["draft", "kind", "projectId", "requestId", "sessionId"], kind: "create", draft, requestId: "req_1" } });
+  const marker = { kind: "create", projectId: "p", requestId: "req_1", sessionId: "s" };
+  const observed = { path: "/app/chat", intent: { keys: ["kind", "projectId", "requestId", "sessionId"], ...marker } };
+  assert.deepEqual(withState({ runtimeUiIntent: marker }), observed);
   assert.deepEqual(withState({}), { path: "/app/chat", intent: null });
   assert.deepEqual(withState(undefined), { path: "/app/chat", intent: null });
-  // The fields of the web's `RuntimeUiIntent`, read from its declaration: a field added there is a field the walk accepts.
-  const declared = (await readFile(path.join(repoRoot, "apps/web/src/lib/runtimeUiNavigation.ts"), "utf8")).match(/export interface RuntimeUiIntent \{([\s\S]*?)\n\}/)?.[1] ?? "";
+  const declared = (await readFile(path.join(repoRoot, "apps/web/src/lib/runtimeUiNavigation.ts"), "utf8")).match(/export interface RuntimeUiIntentMarker \{([\s\S]*?)\n\}/)?.[1] ?? "";
   assert.deepEqual(HANDOFF_FIELDS, [...declared.matchAll(/^\s+(\w+)\??:/gm)].map((match) => match[1]).sort());
-
   const before = { path: "/app/frontier/events/ev_1", title: "某事件", button: true };
-  const after = { path: "/app/chat", intent: { keys: ["draft", "kind", "projectId", "requestId", "sessionId"], kind: "create", draft, requestId: "req_1" } };
-  assert.deepEqual(handoffFindings(before, after, before.path), { failures: [], notices: [] });
-  const selected = withState({ runtimeUiIntent: { ...intent, scope: { kind: "geo", geoProjectId: "geo", sessionId: "s" }, geoPlanContext: { referenceId: "gpc_selected" } } });
-  assert.deepEqual(selected.intent.keys, [...after.intent.keys, "geoPlanContext", "scope"].sort());
-  assert.deepEqual(handoffFindings(before, selected, before.path), { failures: [], notices: [] });
-  assert.equal(selected.intent.draft, draft, "the observer preserves the unsent draft without treating its context reference as a send");
+  assert.deepEqual(handoffFindings(before, observed, before.path), { failures: [], notices: [] });
+  const unsafe = withState({ runtimeUiIntent: { ...marker, draft: "private draft", owner: "private owner" } });
+  assert.deepEqual(unsafe.intent.keys, [...HANDOFF_FIELDS, "draft", "owner"].sort());
+  assert.equal("draft" in unsafe.intent, false, "the observer must never retain private draft text");
+  assert.deepEqual(handoffFindings(before, unsafe, before.path).failures, ["frontier-event@desktop: browser history contains disallowed intent fields: draft, owner"]);
   assert.deepEqual(handoffFindings({ ...before, button: false }, null, null).notices, ["frontier-event@desktop: not observable: the event page has no 深入研究 button, so the hand-off to the conversation was not read"]);
-  assert.deepEqual(handoffFindings(null, null, null).notices.length, 1);
-  assert.deepEqual(handoffFindings(before, { path: "/app/frontier/events/ev_1", intent: null }, null).notices, ["frontier-event@desktop: not observable: 深入研究 did not go to the conversation (/app/frontier/events/ev_1), so its draft was not read"]);
-  assert.deepEqual(handoffFindings(before, { path: "/app/chat", intent: null }, null).notices, ["frontier-event@desktop: the hand-off to the conversation carries no intent in the address's state"]);
-  assert.deepEqual(handoffFindings(before, { ...after, intent: { ...after.intent, kind: "open", draft: null, requestId: null, keys: [...after.intent.keys, "send"] } }, before.path).notices, [
-    "frontier-event@desktop: the hand-off is a “open” intent (create: a new conversation)", "frontier-event@desktop: the hand-off carries no draft",
-    "frontier-event@desktop: the hand-off has no request id, so a reload cannot tell it from a new one", "frontier-event@desktop: the hand-off carries fields a draft does not need: send"]);
-  assert.deepEqual(handoffFindings(before, { ...after, intent: { ...after.intent, draft: "请深入研究" } }, before.path).notices, [
-    "frontier-event@desktop: the draft does not hold the event's title “某事件”", "frontier-event@desktop: the draft holds no link to a source"]);
-  assert.deepEqual(handoffFindings(before, after, "/app/chat").notices, ["frontier-event@desktop: Back from the conversation leaves the address at /app/chat and the event page was /app/frontier/events/ev_1"]);
+  assert.equal(handoffFindings(null, null, null).notices.length, 1);
+  assert.equal(handoffFindings(before, { path: "/app/chat", intent: null }, null).notices.length, 1);
+  assert.deepEqual(handoffFindings(before, { ...observed, intent: { ...observed.intent, kind: "open", requestId: null } }, before.path).notices, [
+    "frontier-event@desktop: the hand-off is a “open” intent (create: a new conversation)", "frontier-event@desktop: the hand-off locator is incomplete"]);
+  assert.deepEqual(handoffFindings(before, observed, "/app/chat").notices, ["frontier-event@desktop: Back from the conversation leaves the address at /app/chat and the event page was /app/frontier/events/ev_1"]);
 });
 
 test("the walk tries the address of the inbox and the memory page, the event's hand-off and a day nobody published; what it cannot try it says", async () => {
@@ -2737,10 +2773,10 @@ test("the walk tries the address of the inbox and the memory page, the event's h
   assert.ok(lost.report.notices.some((notice) => notice.startsWith("memory@desktop: after loading the address again the address is “”")));
   const open = await walk({ FAKE_ADDRESS: "open" });
   assert.ok(open.report.notices.includes("memory@desktop: Back leaves the drawer open"));
-  // The hand-off with no link, and an event page without the button; no event at all.
+  // Sensitive hand-off fields fail the walk; an absent button remains a coverage notice.
   const bad = await walk({ FAKE_HANDOFF: "bad" });
-  assert.equal(bad.code, 0);
-  assert.ok(bad.report.notices.includes("frontier-event@desktop: the draft holds no link to a source"));
+  assert.equal(bad.code, 1);
+  assert.ok(bad.report.failures.includes("frontier-event@desktop: browser history contains disallowed intent fields: draft"));
   assert.ok((await walk({ FAKE_HANDOFF: "nobutton" })).report.notices.some((notice) => notice.includes("the event page has no 深入研究 button")));
   const empty = await walk({ FAKE_EMPTY_LISTS: "1" });
   assert.equal(empty.code, 0, empty.stdout + empty.stderr);

@@ -1,13 +1,11 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { WebApiError } from "@/lib/apiClient";
+import { WEB_SESSION_STARTED_EVENT, WEB_SESSION_SYNC_STORAGE_KEY, WebApiError } from "@/lib/apiClient";
 import { GEO_SUMMARIES } from "@/components/geo/__fixtures__/geoProjects";
 import { GEO_OFF_SENTENCE } from "@/components/geo/GeoStates";
-import { GEO_STEP_EMPTY, GEO_STEP_WAITING } from "@/components/geo/geoText";
 import { GeoHomePage } from "./GeoHomePage";
-import { compositionFacts, precedes } from "@/test/compositionFixtures";
 
 const client = vi.hoisted(() => ({
   useGeoFeature: vi.fn(),
@@ -15,7 +13,10 @@ const client = vi.hoisted(() => ({
   createGeoProject: vi.fn(),
   patchGeoProject: vi.fn(),
   open: vi.fn(),
+  me: vi.fn(),
 }));
+
+vi.mock("@/lib/apiClient", async (original) => ({ ...(await original<typeof import("@/lib/apiClient")>()), fetchWebMe: client.me }));
 
 vi.mock("@/lib/geoClient", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/geoClient")>()),
@@ -44,17 +45,18 @@ function renderHome(path = "/app/geo") {
 
 const where = () => screen.getByTestId("where").textContent;
 const list = () => screen.findByRole("list", { name: "循证 GEO 项目" });
-const preview = () => screen.getByRole("region", { name: "项目预览" });
 
 beforeEach(() => {
   vi.clearAllMocks();
+  localStorage.clear();
+  client.me.mockResolvedValue({ user: { id: "alice", name: "Alice" }, tenant: { id: "tenant" } });
   width = 1100;
   rect = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
     return { width: this.hasAttribute("data-master-detail") ? width : 0, height: 0, top: 0, left: 0, right: 0, bottom: 0, x: 0, y: 0, toJSON: () => ({}) };
   });
   client.useGeoFeature.mockReturnValue("on");
   client.listGeoProjects.mockResolvedValue(GEO_SUMMARIES);
-  client.open.mockResolvedValue(undefined);
+  client.open.mockResolvedValue(true);
 });
 afterEach(() => rect.mockRestore());
 
@@ -67,22 +69,21 @@ describe("循证 GEO home — the list", () => {
 
     // A project with something open says that under its name; the badge carries the red, never the sentence (F-G10).
     const masi = rows[0];
-    expect(within(masi).getByRole("link", { name: "玛仕度肽注射液" })).toHaveAttribute("href", "/app/geo?project=geo_masi");
-    expect(masi).toHaveTextContent("可见度38");
-    const alert = within(masi).getByText("2 条讲错待处理");
-    expect(alert).not.toHaveClass("text-danger");
+    expect(within(masi).getByRole("link", { name: "玛仕度肽注射液" })).toHaveAttribute("href", "/app/geo/geo_masi");
+
+    expect(masi).toHaveTextContent("2 条讲错待处理");
     expect(masi.querySelector(".text-danger")).toBeNull();
 
     // Otherwise it says where the project is: the window and the week.
     const mitiao = rows[1];
-    expect(mitiao.querySelector("[data-geo-subline]")).toHaveTextContent(/^9月1日～11月30日/);
-    expect(mitiao).toHaveTextContent("可见度61");
+    expect(mitiao.querySelector("[data-geo-subline]")).toHaveTextContent("等你开启自动监测");
+
     expect(mitiao.querySelector(".text-danger")).toBeNull();
 
     // A project that did one step is in the list all the same, with “—”.
     const xinli = rows[2];
-    expect(xinli).toHaveTextContent("只做了信源分析");
-    expect(within(xinli).getAllByText("—")).toHaveLength(1);
+    expect(xinli).toHaveTextContent("待开始：问题清单");
+
 
     // The sample and the trend are the preview's; a row is not a table.
     expect(within(await list()).queryByText("310 次里 56 次")).toBeNull();
@@ -99,6 +100,14 @@ describe("循证 GEO home — the list", () => {
     expect(subline).not.toHaveTextContent("正在做");
   });
 
+  it("does not describe a queued project as already running", async () => {
+    client.listGeoProjects.mockResolvedValue([{ ...GEO_SUMMARIES[2], steps: { questions: { status: "queued", requested: true } } }]);
+    renderHome();
+    const row = within(await list()).getByRole("listitem");
+    expect(row).toHaveTextContent("排队中");
+    expect(row).not.toHaveTextContent("正在做");
+  });
+
   it("says the severe errors in its own words beside their badge — never an engine's sentence", async () => {
     client.listGeoProjects.mockResolvedValue([
       { ...GEO_SUMMARIES[0], alert: { wrongOurs: 13, severe: 11, safety: 0, severity: "S3" } },
@@ -108,9 +117,8 @@ describe("循证 GEO home — the list", () => {
     renderHome();
     const rows = await list();
     const sentence = within(rows).getByText("11 条严重讲错待处理");
-    expect(sentence).toHaveClass("text-text-2");
     expect(sentence).not.toHaveClass("text-danger");
-    expect(rows.querySelectorAll("[data-severity]")).toHaveLength(1);
+
     expect(within(rows).getByText("3 条讲错待处理")).toBeInTheDocument();
     expect(within(rows).getByText("1 篇稿件等你放行")).toBeInTheDocument();
   });
@@ -123,8 +131,8 @@ describe("循证 GEO home — the list", () => {
     ]);
     renderHome();
     const rows = await list();
-    expect(within(rows).getByRole("link", { name: "波立维 · 9月29日" })).toHaveAttribute("href", "/app/geo?project=geo_a");
-    expect(within(rows).getByRole("link", { name: "波立维 · 10月7日" })).toHaveAttribute("href", "/app/geo?project=geo_b");
+    expect(within(rows).getByRole("link", { name: "波立维 · 9月29日" })).toHaveAttribute("href", "/app/geo/geo_a");
+    expect(within(rows).getByRole("link", { name: "波立维 · 10月7日" })).toHaveAttribute("href", "/app/geo/geo_b");
     expect(within(rows).getByRole("link", { name: "玛仕度肽注射液" })).toBeInTheDocument();
   });
 
@@ -135,7 +143,7 @@ describe("循证 GEO home — the list", () => {
       { ...GEO_SUMMARIES[0], id: "geo_c", name: "停了的项目", status: "paused", updatedAt: "2026-10-13T00:00:00Z", alert: { wrongOurs: 0, severe: 0, safety: 0 } },
     ]);
     const { unmount } = renderHome("/app/geo?project=geo_b");
-    const names = () => within(screen.getByRole("list", { name: "循证 GEO 项目" })).getAllByRole("link").filter(link => link.textContent !== "继续工作").map((link) => link.textContent);
+    const names = () => within(screen.getByRole("list", { name: "循证 GEO 项目" })).getAllByRole("link").filter(link => link.textContent !== "继续工作").map((link) => link.getAttribute("aria-label"));
     await list();
     expect(names()).toEqual(["停了的项目", "安静的项目", "有严重讲错的项目"]);
     const toolbar = screen.getByRole("group", { name: "项目排序" });
@@ -148,183 +156,7 @@ describe("循证 GEO home — the list", () => {
     client.listGeoProjects.mockResolvedValue([GEO_SUMMARIES[0]]);
     renderHome();
     await list();
-    expect(screen.queryByRole("group", { name: "项目排序" })).not.toBeInTheDocument();
-  });
-});
-
-describe("循证 GEO home — the preview beside the list", () => {
-  it("splits at desktop width and shows the first project of the order, chosen by nothing", async () => {
-    const { container } = renderHome();
-    const rows = await list();
-    expect(container.querySelector("[data-master-detail]")).toHaveAttribute("data-master-detail", "split");
-    expect(within(preview()).getByRole("heading", { level: 2, name: "玛仕度肽注射液" })).toBeInTheDocument();
-    // The one shown is marked in the list, and the address says nothing until a row is pressed.
-    expect(within(rows).getByRole("link", { name: "玛仕度肽注射液" })).toHaveAttribute("aria-current", "true");
-    expect(within(rows).getByRole("link", { name: "米曲菌胰酶片" })).not.toHaveAttribute("aria-current");
-    expect(where()).toBe("/app/geo");
-  });
-
-  it("shows the two numbers with the sample each rests on, the trend against the target, the eight steps and the window", async () => {
-    renderHome();
-    await list();
-    const view = within(preview());
-    const index = view.getByRole("group", { name: "综合可见度指数" });
-    expect(index).toHaveTextContent("38");
-    expect(index.querySelector("[data-geo-sparkline] [data-geo-target]")).not.toBeNull();
-    const mention = view.getByRole("group", { name: "品牌提及率" });
-    expect(mention).toHaveTextContent("18");
-    expect(mention).toHaveTextContent("310 次里 56 次");
-
-    const steps = view.getByRole("list", { name: "八步进度" });
-    expect(within(steps).getAllByRole("listitem")).toHaveLength(8);
-    expect(steps.querySelector("[data-geo-step=evidence]")).toHaveTextContent("已完成");
-    expect(steps.querySelector("[data-geo-step=content]")).toHaveTextContent("进行中");
-
-    expect(view.getByText("豆包、千问、DeepSeek、元宝、Kimi")).toBeInTheDocument();
-    expect(view.getByText("覆盖窗口")).toBeInTheDocument();
-    expect(view.getByText("最近活动")).toBeInTheDocument();
-    // What is open is a note with its way on, in body text and not in red.
-    const note = view.getByText("2 条讲错待处理").closest("[data-note]")!;
-    expect(within(note as HTMLElement).getByRole("link", { name: "去处理" })).toHaveAttribute("href", "/app/geo/geo_masi/accuracy");
-    expect(note.querySelector(".text-danger")).toBeNull();
-  });
-
-  it("says a number that does not exist yet as such, and what measures it — once, and only while it has not been measured", async () => {
-    client.listGeoProjects.mockResolvedValue([
-      { ...GEO_SUMMARIES[2], id: "geo_none", name: "没开始的项目", steps: {} },
-      { ...GEO_SUMMARIES[2], id: "geo_asked", name: "已排上诊断的项目", steps: { diagnosis: { status: "queued", requested: true } } },
-      GEO_SUMMARIES[2],
-    ]);
-    renderHome();
-    await list();
-    const view = within(preview());
-    expect(view.queryByRole("group", { name: "综合可见度指数" })).toBeNull();
-    // Nothing was asked for, so the section says what to do and not that nothing has been done.
-    expect(view.getByRole("region",{name:"当前工作"})).toHaveTextContent("选择本次任务");
-    expect(view.getByRole("region",{name:"当前工作"})).not.toHaveTextContent(/尚未提交工作|未请求/);
-    await userEvent.click(screen.getByRole("link", { name: "已排上诊断的项目" }));
-    expect(view.getByRole("region",{name:"当前工作"})).toHaveTextContent("排队中");
-    expect(view.queryByText(GEO_STEP_EMPTY.diagnosis)).toBeNull();
-    // A project whose diagnosis has run is not told to wait for it: the number's own word is the reason.
-    await userEvent.click(screen.getByRole("link", { name: "注射用重组人脑利钠肽" }));
-    expect(view.queryByText(GEO_STEP_EMPTY.diagnosis)).toBeNull();
-    expect(view.queryByText(GEO_STEP_WAITING.diagnosis)).toBeNull();
-  });
-
-  // Under the sample floor the sample is the words, and nobody is told to wait for a measurement that has happened.
-  it("says under 30 answers as 样本不足 with how few there were, and never as the number", async () => {
-    renderHome("/app/geo?project=geo_mitiao");
-    await list();
-    const mention = within(preview()).getByRole("group", { name: "品牌提及率" });
-    expect(mention).toHaveTextContent("样本不足");
-    expect(mention).toHaveTextContent("12 次回答");
-    expect(mention).not.toHaveTextContent("44");
-    expect(within(preview()).queryByText(GEO_STEP_EMPTY.diagnosis)).toBeNull();
-  });
-
-  it("chooses a project by a press on its row — the address says which, and it survives a reload", async () => {
-    const { unmount } = renderHome();
-    await list();
-    await userEvent.click(screen.getByRole("link", { name: "注射用重组人脑利钠肽" }));
-    expect(where()).toBe("/app/geo?project=geo_xinli");
-    expect(within(preview()).getByRole("heading", { level: 2, name: "注射用重组人脑利钠肽" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "注射用重组人脑利钠肽" })).toHaveAttribute("aria-current", "true");
-    unmount();
-    renderHome("/app/geo?project=geo_mitiao");
-    await list();
-    expect(within(preview()).getByRole("heading", { level: 2, name: "米曲菌胰酶片" })).toBeInTheDocument();
-  });
-
-  it("reads a project the address does not know as none chosen: the first of the order is shown", async () => {
-    renderHome("/app/geo?project=geo_gone");
-    await list();
-    expect(within(preview()).getByRole("heading", { level: 2, name: "玛仕度肽注射液" })).toBeInTheDocument();
-  });
-
-  it("opens the project from 打开项目, and its conversation from 继续对话", async () => {
-    renderHome("/app/geo?project=geo_mitiao");
-    await list();
-    const open = within(preview()).getByRole("link", { name: "打开项目" });
-    expect(open).toHaveAttribute("href", "/app/geo/geo_mitiao");
-    await userEvent.click(within(preview()).getByRole("button", { name: "在对话中继续" }));
-    await waitFor(() => expect(client.open).toHaveBeenCalledWith({ geoId: "geo_mitiao", projectId: "p-mitiao" }));
-    await userEvent.click(open);
-    expect(where()).toBe("/app/geo/geo_mitiao");
-  });
-
-  it("offers 继续 on a paused project's preview only, and sets it going again where the reader is looking", async () => {
-    client.listGeoProjects.mockResolvedValue([
-      { ...GEO_SUMMARIES[0], id: "geo_a", status: "paused" },
-      { ...GEO_SUMMARIES[1], id: "geo_b", status: "active" },
-    ]);
-    client.patchGeoProject.mockResolvedValue({});
-    renderHome();
-    const rows = within(await list()).getAllByRole("listitem");
-    // The row says the state and carries no control; the preview carries the one thing to do about it.
-    expect(rows[0]).toHaveTextContent("已暂停");
-    expect(within(rows[0]).queryByRole("button")).not.toBeInTheDocument();
-    expect(within(preview()).getByText("项目已暂停。")).toBeInTheDocument();
-    await userEvent.click(within(preview()).getByRole("button", { name: "继续“玛仕度肽注射液”" }));
-    await waitFor(() => expect(client.patchGeoProject).toHaveBeenCalledWith("geo_a", { status: "active" }));
-    // Neither the row nor the preview says paused any more; the list was not re-read.
-    await waitFor(() => expect(within(preview()).queryByText("项目已暂停。")).not.toBeInTheDocument());
-    expect(within(preview()).queryByRole("button", { name: /^继续“/ })).not.toBeInTheDocument();
-    expect(rows[0]).not.toHaveTextContent("已暂停");
-    expect(client.listGeoProjects).toHaveBeenCalledTimes(1);
-    // An active project has none to offer.
-    await userEvent.click(screen.getByRole("link", { name: "米曲菌胰酶片" }));
-    expect(within(preview()).queryByRole("button", { name: /^继续“/ })).not.toBeInTheDocument();
-  });
-
-  it("keeps 继续 when the project cannot be set going, and says so", async () => {
-    client.listGeoProjects.mockResolvedValue([{ ...GEO_SUMMARIES[0], id: "geo_a", status: "paused" }]);
-    client.patchGeoProject.mockRejectedValue(new WebApiError("no", { status: 403, code: "geo_forbidden" }));
-    renderHome();
-    await userEvent.click(await screen.findByRole("button", { name: "继续“玛仕度肽注射液”" }));
-    await waitFor(() => expect(client.patchGeoProject).toHaveBeenCalled());
-    expect(await screen.findByRole("button", { name: "继续“玛仕度肽注射液”" })).toBeInTheDocument();
-  });
-});
-
-describe("循证 GEO home — below the room for both", () => {
-  beforeEach(() => { width = 600; });
-
-  it("is the list alone, with nothing chosen and no drawer", async () => {
-    const { container } = renderHome();
-    await list();
-    expect(container.querySelector("[data-master-detail]")).toHaveAttribute("data-master-detail", "single");
-    expect(screen.queryByRole("region", { name: "项目预览" })).toBeNull();
-    expect(screen.queryByRole("dialog")).toBeNull();
-    expect(screen.getByRole("heading", { level: 1, name: "循证 GEO" })).toBeInTheDocument();
-  });
-
-  it("opens the preview in the drawer over the list on a press, and closing it is the address's", async () => {
-    renderHome();
-    await list();
-    await userEvent.click(screen.getByRole("link", { name: "米曲菌胰酶片" }));
-    expect(where()).toBe("/app/geo?project=geo_mitiao");
-    const drawer = await screen.findByRole("dialog", { name: "米曲菌胰酶片" });
-    // The drawer's own title names the project; the preview does not say it twice.
-    expect(within(drawer).getAllByRole("heading", { name: "米曲菌胰酶片" })).toHaveLength(1);
-    expect(within(drawer).getByRole("link", { name: "打开项目" })).toHaveAttribute("href", "/app/geo/geo_mitiao");
-    expect(within(drawer).getByRole("group", { name: "综合可见度指数" })).toHaveTextContent("61");
-    // The list stays the page behind it.
-    expect(screen.getByRole("list", { name: "循证 GEO 项目" })).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "关闭" }));
-    expect(where()).toBe("/app/geo");
-    expect(screen.queryByRole("dialog")).toBeNull();
-  });
-
-  it("opens the drawer for the project the address names, as it loads", async () => {
-    renderHome("/app/geo?project=geo_xinli");
-    expect(await screen.findByRole("dialog", { name: "注射用重组人脑利钠肽" })).toBeInTheDocument();
-  });
-
-  it("says the first-run recipe in the page itself — one sentence and one button", async () => {
-    client.listGeoProjects.mockResolvedValue([]);
-    renderHome();
-    expect(await screen.findByText("还没有循证 GEO 项目")).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "新建项目" })).toHaveLength(1);
+    expect(screen.getByRole("searchbox", { name: "搜索项目" })).toBeInTheDocument();
   });
 });
 
@@ -337,23 +169,6 @@ describe("循证 GEO home — creating, empty, and failing", () => {
     await waitFor(() => expect(client.open).toHaveBeenCalledWith({ geoId: "geo_new", projectId: "p-new", sessionId: "ses_new" }));
     expect(client.createGeoProject).toHaveBeenCalledWith({});
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
-  });
-
-  it("is split with no project too: the list's column has the title, and the pane says what the module is for and offers 新建项目 once", async () => {
-    client.listGeoProjects.mockResolvedValue([]);
-    const { container } = renderHome();
-    const title = await screen.findByText("还没有循证 GEO 项目");
-    expect(container.querySelector("[data-master-detail]")).toHaveAttribute("data-master-detail", "split");
-    expect(within(preview()).getByText(title.textContent!)).toBeInTheDocument();
-    const sentence = screen.getByText("药企和医生在这里研究并传播自己产品的循证依据，也能看到各家 AI 是怎么表达的。");
-    const buttons = screen.getAllByRole("button", { name: "新建项目" });
-    expect(buttons).toHaveLength(1);
-    expect(sentence.parentElement).toContainElement(buttons[0]);
-    expect(preview()).toContainElement(buttons[0]);
-    expect(buttons[0]).toBeEnabled();
-    // The header is the title alone: the page has one solid button, and it is the one in the empty state.
-    expect(within(container.querySelector<HTMLElement>("[data-page-header]")!).queryByRole("button")).not.toBeInTheDocument();
-    expect(screen.queryByRole("group", { name: "项目排序" })).not.toBeInTheDocument();
   });
 
   it("creates the first project from the empty state and lands in its conversation", async () => {
@@ -378,7 +193,6 @@ describe("循证 GEO home — creating, empty, and failing", () => {
     client.listGeoProjects.mockRejectedValueOnce(new WebApiError("down", { status: 503, code: "geo_unavailable" }));
     renderHome();
     const retry = await screen.findByRole("button", { name: /重试/ });
-    expect(preview()).toContainElement(retry);
     await userEvent.click(retry);
     expect(await list()).toBeInTheDocument();
   });
@@ -399,27 +213,156 @@ describe("循证 GEO home — creating, empty, and failing", () => {
   });
 });
 
-describe("the GEO home's composition", () => {
-  it("is a list and a preview: the header with the one solid button over the list, the order's toolbar in the list's column, no tab list, no step rail", async () => {
-    client.listGeoProjects.mockResolvedValue([{ ...GEO_SUMMARIES[0], status: "paused" }, GEO_SUMMARIES[1]]);
-    const { container } = renderHome();
-    const rows = await list();
-    const facts = compositionFacts(container);
-    const listPane = screen.getByRole("region", { name: "项目列表" });
-    expect(container.querySelector("[data-master-detail]")).toHaveAttribute("data-master-detail", "split");
-    expect(facts.tablists).toHaveLength(0);
-    expect(facts.stepRails).toHaveLength(0);
-    expect(facts.clickableTags).toEqual([]);
-    // One toolbar, in the list's column and before the rows it orders.
-    expect(facts.toolbars).toHaveLength(1);
-    expect(listPane).toContainElement(facts.toolbars[0]);
-    expect(precedes(facts.toolbars[0], rows)).toBe(true);
-    // One solid button on the page — the header's 新建项目; the preview's ways on are secondary.
-    expect(facts.header).not.toBeNull();
-    expect(listPane).toContainElement(facts.header!);
-    expect(facts.headerPrimaryActions).toHaveLength(1);
-    expect(container.querySelectorAll(".bg-accent")).toHaveLength(1);
-    // A row is a link and says its state; the values are text, and no button stands among them.
-    for (const row of within(rows).getAllByRole("listitem")) expect(within(row).queryByRole("button")).toBeNull();
+
+it("opens a selected project card directly and preserves old selection links", async () => {
+  renderHome("/app/geo?project=geo_mitiao"); await list();
+  const card = screen.getByRole("link", { name: "米曲菌胰酶片" });
+  expect(card).toHaveAttribute("aria-current", "true");
+  await userEvent.click(card);
+  expect(where()).toBe("/app/geo/geo_mitiao");
+});
+
+it.each([false, "reject"])("recovers the created project when opening fails: %s", async (result) => {
+  client.createGeoProject.mockResolvedValue({ id: "geo_new", projectId: "p-new", sessionId: "ses_new" });
+  if (result === "reject") client.open.mockRejectedValue(new Error("unavailable")); else client.open.mockResolvedValue(false);
+  renderHome(); await list(); await userEvent.click(screen.getByRole("button", { name: "新建项目" }));
+  const recovery = await screen.findByRole("link", { name: "打开已创建的项目" });
+  expect(recovery).toHaveAttribute("href", "/app/geo/geo_new");
+  expect(screen.getByRole("button", { name: "新建项目" })).toBeDisabled();
+  expect(client.createGeoProject).toHaveBeenCalledTimes(1);
+});
+
+it("does not expose mutation controls for a viewer", async () => {
+  client.listGeoProjects.mockResolvedValue([{ ...GEO_SUMMARIES[0], status: "paused", access: { owner: false, roles: ["viewer"], abilities: ["view"] } }]);
+  renderHome(); const cards = await list();
+  expect(cards).toHaveTextContent("已暂停");
+  expect(within(cards).queryByRole("button")).toBeNull();
+});
+
+it("filters the collection by product and reports no matches", async () => {
+  renderHome(); await list();
+  const search = screen.getByRole("searchbox", { name: "搜索项目" });
+  await userEvent.type(search, "米曲菌");
+  expect(within(await list()).getAllByRole("listitem")).toHaveLength(1);
+  await userEvent.clear(search);
+  await userEvent.type(search, "没有这个项目");
+  expect(screen.getByText("没有符合的项目。")).toBeInTheDocument();
+});
+
+
+it("retains an unknown outcome across reload and never retries POST without an explicit reset", async () => {
+  client.createGeoProject.mockRejectedValue(new TypeError("connection lost"));
+  const view = renderHome(); await list();
+  await userEvent.click(screen.getByRole("button", { name: "新建项目" }));
+  expect(await screen.findByText(/项目创建结果未知/)).toBeVisible();
+  await waitFor(() => expect(client.listGeoProjects).toHaveBeenCalledTimes(2));
+  view.unmount();
+  renderHome();
+  expect(await screen.findByText(/项目创建结果未知/)).toBeVisible();
+  await list();
+  expect(screen.getByRole("button", { name: "新建项目" })).toBeDisabled();
+  expect(client.createGeoProject).toHaveBeenCalledTimes(1);
+  expect(screen.getByText(/再次新建可能产生重复项目/)).toBeVisible();
+  await userEvent.click(screen.getByRole("button", { name: "已检查列表，仍要新建" }));
+  expect(screen.getByRole("button", { name: "新建项目" })).toBeEnabled();
+});
+
+it("isolates pending markers across accounts", async () => {
+  client.createGeoProject.mockRejectedValue(new Error("timeout"));
+  const first = renderHome(); await list(); await userEvent.click(screen.getByRole("button", { name: "新建项目" }));
+  await screen.findByText(/项目创建结果未知/); first.unmount();
+  client.me.mockResolvedValue({ user: { id: "bob", name: "Bob" }, tenant: { id: "tenant" } });
+  renderHome(); await list();
+  expect(screen.queryByText(/项目创建结果未知/)).toBeNull();
+  expect(screen.getByRole("button", { name: "新建项目" })).toBeEnabled();
+});
+
+it("keeps an unknown outcome when list refresh fails and retries only the read", async () => {
+  client.createGeoProject.mockRejectedValue(new Error("timeout"));
+  client.listGeoProjects.mockResolvedValueOnce(GEO_SUMMARIES).mockRejectedValueOnce(new Error("list unavailable")).mockResolvedValueOnce(GEO_SUMMARIES);
+  renderHome(); await list(); await userEvent.click(screen.getByRole("button", { name: "新建项目" }));
+  const retry = await screen.findByRole("button", { name: /重试/ });
+  expect(screen.getByText(/项目创建结果未知/)).toBeVisible();
+  expect(screen.queryByRole("button", { name: "已检查列表，仍要新建" })).toBeNull();
+  await userEvent.click(retry); await list();
+  expect(screen.getByText(/项目创建结果未知/)).toBeVisible();
+  expect(client.createGeoProject).toHaveBeenCalledTimes(1);
+});
+
+it("clears the marker for a confirmed pre-creation limit refusal", async () => {
+  client.createGeoProject.mockRejectedValue(new WebApiError("limit", { status: 409, code: "project_limit_reached" }));
+  renderHome(); await list(); await userEvent.click(screen.getByRole("button", { name: "新建项目" }));
+  await waitFor(() => expect(screen.getByRole("button", { name: "新建项目" })).toBeEnabled());
+  expect(screen.queryByText(/项目创建结果未知/)).toBeNull();
+});
+
+
+it("persists the marker before a request resolves and restores a known created ID", async () => {
+  let finish: (value: { id: string; projectId: string; sessionId: null }) => void = () => {};
+  client.createGeoProject.mockReturnValue(new Promise(resolve => { finish = resolve; }));
+  const first = renderHome(); await list(); await userEvent.click(screen.getByRole("button", { name: "新建项目" }));
+  first.unmount();
+  finish({ id: "geo_exact", projectId: "p-exact", sessionId: null });
+  await waitFor(() => expect(localStorage.getItem("evimed.geo.create.v1:tenant:alice")).toContain("geo_exact"));
+  renderHome();
+  expect(await screen.findByRole("link", { name: "打开已创建的项目" })).toHaveAttribute("href", "/app/geo/geo_exact");
+  expect(client.open).not.toHaveBeenCalled();
+});
+
+it("unblocks later creation after the person opens the known recovered project", async () => {
+  localStorage.setItem("evimed.geo.create.v1:tenant:alice", JSON.stringify({ kind: "created", id: "geo_exact" }));
+  const view = renderHome();
+  await userEvent.click(await screen.findByRole("link", { name: "打开已创建的项目" }));
+  expect(where()).toBe("/app/geo/geo_exact");
+  expect(localStorage.getItem("evimed.geo.create.v1:tenant:alice")).toBeNull();
+  view.unmount();
+  renderHome(); await list();
+  expect(screen.getByRole("button", { name: "新建项目" })).toBeEnabled();
+});
+
+it("does not allow creation if identity cannot be verified", async () => {
+  client.me.mockRejectedValue(new Error("offline"));
+  renderHome();
+  expect(await screen.findByText(/无法确认账号或保存创建状态/)).toBeVisible();
+  expect(await list()).toHaveTextContent("玛仕度肽注射液");
+  expect(screen.getByRole("button", { name: "新建项目" })).toBeDisabled();
+  expect(client.createGeoProject).not.toHaveBeenCalled();
+});
+
+it("keeps existing projects readable when the creation marker is unavailable", async () => {
+  const original = Storage.prototype.getItem;
+  const storage = vi.spyOn(Storage.prototype, "getItem").mockImplementation(function (this: Storage, key) { if (key.startsWith("evimed.geo.create.v1:")) throw new Error("storage disabled"); return original.call(this, key); });
+  try {
+    renderHome();
+    expect(await screen.findByText(/无法确认账号或保存创建状态/)).toBeVisible();
+    expect(await list()).toHaveTextContent("玛仕度肽注射液");
+    expect(screen.getByRole("button", { name: "新建项目" })).toBeDisabled();
+  } finally { storage.mockRestore(); }
+});
+
+it.each([WEB_SESSION_SYNC_STORAGE_KEY, null])("drops a delayed former-account response on cross-tab session boundary %s", async (key) => {
+  let finishOld: (rows: typeof GEO_SUMMARIES) => void = () => {};
+  client.listGeoProjects.mockReturnValueOnce(new Promise((resolve) => { finishOld = resolve; })).mockResolvedValueOnce([GEO_SUMMARIES[1]]);
+  renderHome();
+  await waitFor(() => expect(client.listGeoProjects).toHaveBeenCalledTimes(1));
+  client.me.mockResolvedValue({ user: { id: "bob", name: "Bob" }, tenant: { id: "tenant" } });
+  await act(async () => {
+    window.dispatchEvent(new StorageEvent("storage", { key, newValue: key ? '{"kind":"started"}' : null }));
+    finishOld(GEO_SUMMARIES);
+    await Promise.resolve();
   });
+  expect(await list()).toHaveTextContent("米曲菌胰酶片");
+  expect(screen.queryByText("玛仕度肽注射液")).toBeNull();
+});
+
+it("discards the former account's delayed project list after a session switch", async () => {
+  let finishOld: (rows: typeof GEO_SUMMARIES) => void = () => {};
+  client.listGeoProjects.mockReturnValueOnce(new Promise((resolve) => { finishOld = resolve; })).mockResolvedValueOnce([GEO_SUMMARIES[1]]);
+  renderHome();
+  await waitFor(() => expect(client.listGeoProjects).toHaveBeenCalledTimes(1));
+  client.me.mockResolvedValue({ user: { id: "bob", name: "Bob" }, tenant: { id: "tenant" } });
+  act(() => window.dispatchEvent(new Event(WEB_SESSION_STARTED_EVENT)));
+  expect(await list()).toHaveTextContent("米曲菌胰酶片");
+  await act(async () => { finishOld(GEO_SUMMARIES); await Promise.resolve(); });
+  expect(screen.queryByText("玛仕度肽注射液")).toBeNull();
 });

@@ -16,6 +16,7 @@ export function geoPathWithContext(path: string, from: { pathname: string; searc
   const kept = new URLSearchParams(target.searchParams.has("selectionRef") ? "" : geoReadScopeQuery(geoReadScopeFromSearch(from.search)));
   const session = geoSessionIdFromChatPath(from.pathname) || new URLSearchParams(from.search).get("session");
   if (session) kept.set("session", session);
+  if (new URLSearchParams(from.search).get("conversation") === "open" && session) kept.set("conversation", "open");
   for (const [alias, canonical] of [["engine", "engines"], ["cluster", "groupIds"], ["pool", "pools"]]) {
     if (target.searchParams.has(alias) || target.searchParams.has(canonical)) { kept.delete(alias); kept.delete(canonical); kept.delete("selectionRef"); }
   }

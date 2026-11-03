@@ -53,3 +53,13 @@ it("still maps malformed bodies and service refusals to the existing API error",
   mocks.fetch.mockResolvedValue(new Response(JSON.stringify({ error: "Unavailable", code: "product_unavailable" }), { status: 503, headers: { "Retry-After": "12" } }));
   await expect(productRequest("/example")).rejects.toMatchObject({ status: 503, code: "product_unavailable", retryAfterSeconds: 12 });
 });
+
+it("rejects an old account's delayed response body after a session boundary", async () => {
+  let finish: ((value: unknown) => void) | null = null;
+  mocks.fetch.mockResolvedValue({ ok: true, status: 200, json: () => new Promise(resolve => { finish = resolve; }) });
+  const pending = productRequest("/geo/projects");
+  await vi.waitFor(() => expect(finish).not.toBeNull());
+  window.dispatchEvent(new StorageEvent("storage", { key: "open-science:web-session-sync", newValue: "changed" }));
+  (finish as unknown as (value: unknown) => void)({ data: { name: "old private project" } });
+  await expect(pending).rejects.toMatchObject({ name: "StaleSessionError" });
+});

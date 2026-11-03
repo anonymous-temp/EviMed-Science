@@ -1,6 +1,6 @@
 import { useGeoDestinationPath } from "../useGeoPath";
-import { useMemo, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router";
+import { useMemo } from "react";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router";
 import { getGeoCluster, type GeoAction, type GeoClusterView, type GeoSourceRow, type GeoProject } from "@/lib/geoClient";
 import { GeoAnalysisEntry } from "../GeoAnalysisEntry";
 import { Button } from "@/components/ui/Button";
@@ -17,7 +17,7 @@ import { GEO_VIEW_PARAM } from "../geoTabs";
 import { clusterName } from "../spine/clusterModel";
 import { ClusterLink } from "../spine/ClusterLink";
 import { ClusterDrawerHost } from "../spine/ClusterDrawerHost";
-import { GEO_CLUSTER_FILTER_PARAM, GEO_ENGINE_PARAM, GEO_SOURCE_PARAM, useGeoSearchChange, useGeoSearchParam, useGeoFilterReset } from "../spine/drawerParams";
+import { GEO_CLUSTER_FILTER_PARAM, GEO_ENGINE_PARAM, GEO_SOURCE_PARAM, geoDrawerActivation, geoDrawerSearch, geoDrawerSelectionState, useGeoSearchChange, useGeoSearchParam, useGeoFilterReset } from "../spine/drawerParams";
 import { routeWord, unavailableWords } from "../spine/actionModel";
 import {
   candidatesOf,
@@ -211,9 +211,10 @@ function SourceList({
   const setQuery = (value: string) => setQueryValue(value || null);
   const sortKey: SortKey = ["cited", "wrong", "mentions"].includes(params.get("sourceSort") ?? "") ? params.get("sourceSort") as SortKey : "cited";
   const sort = useMemo(() => ({ key: sortKey, descending: params.get("sourceOrder") !== "asc" }), [sortKey, params]);
-  const [opened, setOpened] = useState<Opened | null>(null);
+  const { state } = useLocation();
   const scopeKey = geoReadScopeQuery(useGeoReadScope());
-  const currentOpened = opened?.scopeKey === scopeKey ? opened : null;
+  const opened = (state as { geoSourceDetail?: Opened } | null)?.geoSourceDetail;
+  const currentOpened = opened?.scopeKey === scopeKey && geoDrawerActivation(params, state, ["source"]) ? opened : null;
   const addressed = params.get(GEO_SOURCE_PARAM);
 
   const cited = useMemo(() => new Set(sources.flatMap((source) => Object.keys(source.cited ?? {}))), [sources]);
@@ -256,20 +257,19 @@ function SourceList({
   const activeKey = currentOpened?.key ?? addressed;
   const drawerRow = activeKey ? sources.find((source) => source.domain === activeKey || (source.id || source.domain) === activeKey) ?? null : null;
   const openSource = (source: GeoSourceRow, engine: string, focus: "wrong" | null) => {
-    setOpened({ key: source.id || source.domain, engine, focus, scopeKey });
-    setParams((previous) => {
-      const copy = new URLSearchParams(previous);
-      copy.set(GEO_SOURCE_PARAM, source.domain);
-      return copy;
-    });
+    const detail: Opened = { key: source.id || source.domain, engine, focus, scopeKey };
+    const selection = { kind: "source" as const, id: source.domain };
+    const next = geoDrawerSelectionState(state, selection);
+    setParams(previous => geoDrawerSearch(previous.toString(), selection), { state: { ...next, geoSourceDetail: detail } });
   };
   const closeSource = () => {
-    setOpened(null);
+    const next = geoDrawerSelectionState(state, null);
+    delete next.geoSourceDetail;
     setParams((previous) => {
       const copy = new URLSearchParams(previous);
       copy.delete(GEO_SOURCE_PARAM);
       return copy;
-    }, { replace: true });
+    }, { replace: true, state: next });
   };
   // Pressing the sorted column again turns it over; another column starts from the most.
   const sortBy = (key: string) => change({ sourceSort: key, sourceOrder: sort.key === key && sort.descending ? "asc" : "desc" });

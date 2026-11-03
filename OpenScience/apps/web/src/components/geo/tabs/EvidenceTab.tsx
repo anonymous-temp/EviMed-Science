@@ -1,5 +1,6 @@
+import { sanitizeRuntimeUiHistoryState } from "@/lib/runtimeUiNavigation";
 import { useMemo, useState } from "react";
-import { useSearchParams } from "react-router";
+import { useLocation, useSearchParams } from "react-router";
 import type { GeoClaim, GeoEvidence, GeoProject } from "@/lib/geoClient";
 import type { FilterOption } from "@/components/ui/FilterChips";
 import { Drawer } from "@/components/ui/Drawer";
@@ -42,6 +43,7 @@ const VIEW_OPTIONS: ReadonlyArray<FilterOption<GeoEvidenceView>> = [
 export function EvidenceTab({ geoId, project }: { geoId: string; project: GeoProject }) {
   const { state, reload } = useGeoEvidence(geoId);
   const [params, setParams] = useSearchParams();
+  const { state: navigationState } = useLocation();
   const view = geoEvidenceView(params.get(GEO_VIEW_PARAM));
   const [kind, setKind] = useState<KindFilter>("all");
   const [query, setQuery] = useState("");
@@ -71,7 +73,7 @@ export function EvidenceTab({ geoId, project }: { geoId: string; project: GeoPro
     const copy = new URLSearchParams(previous);
     if (next === "claims") copy.delete(GEO_VIEW_PARAM); else copy.set(GEO_VIEW_PARAM, next);
     return copy;
-  }, { replace: true });
+  }, { replace: true, state: sanitizeRuntimeUiHistoryState(navigationState) });
   const switcher = { kind: "chips" as const, label: "视图", options: VIEW_OPTIONS, value: view, onChange: setView };
   useGeoToolbar(view !== "claims" || claims.length === 0
     ? { navigation: [switcher] }

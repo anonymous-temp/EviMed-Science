@@ -1,3 +1,4 @@
+import { sessionOwner } from "@/lib/sessionLifecycle";
 import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router";
 import { UsersRound } from "lucide-react";
@@ -17,7 +18,8 @@ import { useProjectStore } from "@/lib/projects";
 import { vcrChatPath } from "@/lib/studyLocation";
 import { announceOpenStudy } from "@/lib/studyPresence";
 import { toast } from "@/lib/toast";
-import type { RuntimeUiIntent, VcrObjectSelection } from "@/lib/runtimeUiNavigation";
+import { acceptVcrPendingDraft, prepareVcrPendingDraft, promoteVcrPendingDraft, retireVcrPendingDraft, vcrPendingDraftStatus } from "@/lib/vcrPendingDraft";
+import { prepareRuntimeUiIntent, registerPendingRuntimeUiIntent, runtimeUiIntentFromState, sanitizeRuntimeUiHistoryState, type RuntimeUiIntent, type VcrObjectSelection } from "@/lib/runtimeUiNavigation";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { LoadError } from "@/components/cards/LoadError";
 import { PageShell } from "@/components/layout/PageShell";
@@ -278,38 +280,73 @@ function StudyView({ studyId, study, view, tab, reload, refreshError }: { studyI
 
   // --- the way into the conversation, and out of it ------------------------------------------------------------------
   const sessionId = study.conversation.sessionId;
-  const pendingChat = useRef<{ draft: string; reference?: VcrObjectSelection } | null>(null);
-  const [waitingDraft, setWaitingDraft] = useState(false);
+  const hasProvisionalDraft = Boolean(location.state && typeof location.state === "object" && "vcrPendingDraft" in location.state);
+  const provisionalDraft = view === "chat" && study.id === studyId ? vcrPendingDraftStatus(location.state, studyId, study.projectId) : null;
   const openChat = useCallback((draft?: string, reference?: VcrObjectSelection, restoreDraft = false) => {
-    if (draft && !sessionId) { pendingChat.current = { draft, reference }; setWaitingDraft(true); }
-    // A draft waits in the composer of the study's own conversation and is never sent; with no conversation yet there is no
-    // composer to hold it, and the view says so.
-    const intent: RuntimeUiIntent | null = draft && sessionId
-      ? { kind: "open", projectId: study.projectId, requestId: crypto.randomUUID(), sessionId, draft, ...(restoreDraft ? { restoreDraft: true } : {}), ...(reference ? { vcrReference: reference } : {}) }
-      : null;
     // Whatever is being read stays beside the conversation.
     const beside = new URLSearchParams(params);
     beside.set("result", tab);
-    navigate(`${vcrChatPath(studyId)}?${beside}`, intent ? { state: { runtimeUiIntent: intent } } : undefined);
-  }, [navigate, sessionId, study.projectId, studyId, tab, params]);
+    const path = `${vcrChatPath(studyId)}?${beside}`;
+    const owner = sessionOwner();
+    const state = { ...sanitizeRuntimeUiHistoryState(location.state) as Record<string, unknown> };
+    if (draft && !sessionId) {
+      const marker = prepareVcrPendingDraft(studyId, study.projectId, { draft, reference, restoreDraft });
+      delete state.runtimeUiIntent;
+      navigate(path, { state: { ...state, vcrPendingDraft: marker } });
+      return;
+    }
+    if (draft && sessionId) {
+      const intent: RuntimeUiIntent = {
+        kind: "open", projectId: study.projectId, requestId: crypto.randomUUID(), owner, sessionId, draft,
+        ...(restoreDraft ? { restoreDraft: true } : {}), ...(reference ? { vcrReference: reference } : {}),
+      };
+      delete state.vcrPendingDraft;
+      state.runtimeUiIntent = prepareRuntimeUiIntent(intent);
+    }
+    navigate(path, { state });
+  }, [navigate, sessionId, study.projectId, studyId, tab, params, location.state]);
   useEffect(() => {
-    if (!sessionId || !pendingChat.current) return;
-    const saved = pendingChat.current;
-    pendingChat.current = null; setWaitingDraft(false);
-    openChat(saved.draft, saved.reference);
-  }, [sessionId, openChat]);
+    if (view !== "chat" || !sessionId) return;
+    const intent = runtimeUiIntentFromState(location.state, study.projectId);
+    // The verified study owns the session even while its pane is locked or unreachable.
+    if (intent?.kind === "open" && !intent.scope && intent.sessionId === sessionId
+      && (!intent.vcrReference?.studyId || intent.vcrReference.studyId === studyId)) {
+      registerPendingRuntimeUiIntent(intent);
+      retireVcrPendingDraft(studyId, study.projectId, intent);
+    }
+  }, [location.state, sessionId, study.projectId, studyId, view]);
+  useEffect(() => {
+    if (view === "chat" && study.id === studyId) acceptVcrPendingDraft(location.state, studyId, study.projectId);
+  }, [location.state, study.id, study.projectId, studyId, view]);
+  const promoteDraft = useCallback(() => {
+    if (view !== "chat" || study.id !== studyId || !sessionId) return;
+    const marker = promoteVcrPendingDraft(location.state, studyId, study.projectId, sessionId);
+    if (!marker) return;
+    const state = { ...sanitizeRuntimeUiHistoryState(location.state) as Record<string, unknown> };
+    delete state.vcrPendingDraft;
+    navigate({ pathname: location.pathname, search: location.search, hash: location.hash }, { replace: true, state: { ...state, runtimeUiIntent: marker } });
+  }, [location.pathname, location.search, location.hash, location.state, navigate, sessionId, study.id, study.projectId, studyId, view]);
+  const attemptedPromotion = useRef<string | null>(null);
+  useEffect(() => {
+    if (!sessionId || provisionalDraft !== "waiting") return;
+    const attempt = `${location.key}:${sessionId}`;
+    if (attemptedPromotion.current === attempt) return;
+    attemptedPromotion.current = attempt;
+    promoteDraft();
+  }, [location.key, promoteDraft, provisionalDraft, sessionId]);
   const restoredRemoteDraft = useRef<string | null>(null);
   useEffect(() => {
-    if (view !== "chat" || study.status !== "draft" || !study.question || !sessionId || restoredRemoteDraft.current === studyId) return;
+    if (view !== "chat" || study.status !== "draft" || !study.question || !sessionId || restoredRemoteDraft.current === studyId
+      || hasProvisionalDraft || runtimeUiIntentFromState(location.state, study.projectId)) return;
     restoredRemoteDraft.current = studyId;
     openChat(study.question, undefined, true);
-  }, [view, study.status, study.question, sessionId, studyId, openChat]);
+  }, [view, study.status, study.question, sessionId, study.projectId, studyId, openChat, location.state, hasProvisionalDraft]);
   const openView = useCallback((next: StudyView) => {
     if (next === "chat") openChat();
     // With the conversation open, a destination changes what is beside it and leaves the conversation where it is.
-    else if (view === "chat") navigate(`${vcrChatPath(studyId)}?result=${next}`);
+    else if (view === "chat") navigate(`${vcrChatPath(studyId)}?result=${next}`, { state: sanitizeRuntimeUiHistoryState(location.state) });
     else navigate(study.purpose === "calculation" ? vcrCalculationViewPath(studyId, next) : vcrTabPath(studyId, next));
-  }, [navigate, openChat, studyId, study.purpose, view]);
+  }, [navigate, openChat, studyId, study.purpose, view, location.state]);
 
   const stop = () => { void cancelVcrStudy(studyId).then(reload).catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "暂时无法停止，请稍后重试。" }))); };
 
@@ -373,7 +410,8 @@ function StudyView({ studyId, study, view, tab, reload, refreshError }: { studyI
     <StudyFrame studyId={studyId} study={study} view={view} tab={tab} reload={reload} menu={menu} onChat={openChat} onPanel={setPanel} onView={openView}>
       <VcrRefreshContext.Provider value={reportFailure}>
       {(refreshError !== null || Object.keys(failures).length > 0) && <VcrRefreshNote message={refreshFailed} onRetry={retryFailed} />}
-      {waitingDraft && !sessionId && <Note action={<Button size="sm" variant="text" onClick={reload}>重试连接研究对话</Button>}>请求已保留。研究对话连接后会恢复到输入框，由你发送。</Note>}
+      {provisionalDraft === "waiting" && <Note action={<Button size="sm" variant="text" onClick={sessionId ? promoteDraft : reload}>重试连接研究对话</Button>}>请求已保留。研究对话连接后会恢复到输入框，由你发送。</Note>}
+      {provisionalDraft === "lost" && <Note tone="warn" action={null}>先前等待连接的草稿未恢复。请重新输入。</Note>}
       {view === "chat" ? (
         <WorkspaceSplit
           collapseTo={collapseTo}

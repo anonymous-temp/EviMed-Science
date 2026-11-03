@@ -6,7 +6,7 @@
  * branch is gone with it rather than staying as a constant that is always
  * false and a code path nothing can reach.
  */
-import { assertSessionGeneration, sessionGeneration, StaleSessionError, WEB_SESSION_ENDED_EVENT, WEB_SESSION_STARTED_EVENT } from "./sessionLifecycle";
+import { assertSessionGeneration, sessionGeneration, StaleSessionError, subscribeSessionBoundary, WEB_SESSION_EXTERNAL_EVENT, WEB_SESSION_SYNC_STORAGE_KEY, WEB_SESSION_ENDED_EVENT, WEB_SESSION_STARTED_EVENT } from "./sessionLifecycle";
 export { WEB_SESSION_ENDED_EVENT, WEB_SESSION_STARTED_EVENT } from "./sessionLifecycle";
 import { formatDuration } from "./format";
 import { ERROR_DETAIL_FIELDS, knownErrorCodeMessage, personAvailability, safeAppReturnPath } from "@evimed/domain";
@@ -18,7 +18,7 @@ export const webApiBase = rawWebApiBase.replace(/\/+$/, "");
 const PROJECT_KEY = "openScience.projectId";
 const CSRF_HEADER = "X-Open-Science-CSRF";
 /** Cross-tab invalidation signal only; never a stored session or account identity. */
-export const WEB_SESSION_SYNC_STORAGE_KEY = "open-science:web-session-sync";
+export { WEB_SESSION_SYNC_STORAGE_KEY } from "./sessionLifecycle";
 let webCsrfToken: string | null = null;
 let webCsrfRefresh: Promise<string | null> | null = null;
 
@@ -1153,8 +1153,12 @@ export interface EvimedCaptcha {
   blockHeight: number;
 }
 
+let volatileProjectId: string | null = null;
+
 export function getWebProjectId(): string {
   if (typeof window === "undefined") return "default";
+  if (volatileProjectId) return volatileProjectId;
+  try {
   const bound = window.sessionStorage.getItem(PROJECT_KEY);
   if (bound) return bound;
   // The remembered default initializes a new tab once. Another tab's project
@@ -1162,25 +1166,29 @@ export function getWebProjectId(): string {
   const selected = window.localStorage.getItem(PROJECT_KEY) || "default";
   window.sessionStorage.setItem(PROJECT_KEY, selected);
   return selected;
+  } catch { return "default"; }
 }
 
 export function setWebProjectId(projectId: string): void {
   if (typeof window === "undefined") return;
-  window.sessionStorage.setItem(PROJECT_KEY, projectId);
-  window.localStorage.setItem(PROJECT_KEY, projectId);
+  try { window.sessionStorage.setItem(PROJECT_KEY, projectId); window.localStorage.setItem(PROJECT_KEY, projectId); volatileProjectId = null; } catch { volatileProjectId = projectId; }
 }
 
 function clearWebSessionState(): void {
+  volatileProjectId = null;
   webMeShared = null;
+  verifiedWebActor = null;
   webCsrfToken = null;
   webCsrfRefresh = null;
   // A ceiling belongs to the account that hit it, so it leaves with the session.
   lastUsageBudgetRefusal = null;
   if (typeof window !== "undefined") {
-    window.sessionStorage.removeItem(PROJECT_KEY);
-    window.localStorage.removeItem(PROJECT_KEY);
+    try { window.sessionStorage.removeItem(PROJECT_KEY); } catch { volatileProjectId = "default"; }
+    try { window.localStorage.removeItem(PROJECT_KEY); } catch { volatileProjectId = "default"; }
   }
 }
+
+if (typeof window !== "undefined") window.addEventListener(WEB_SESSION_EXTERNAL_EVENT, () => { clearWebSessionState(); runtimeProfile = { uiOrigin: "" }; });
 
 /** Notify other tabs to forget private caches, without publishing a session or its owner. */
 function signalWebSessionChange(kind: "started" | "ended"): void {
@@ -1246,7 +1254,9 @@ export function getWebApiRequestHeaders(): Record<string, string> {
   };
 }
 
-export async function fetchWithWebAuth(input: RequestInfo | URL, init: RequestInit = {}, isCurrent?: () => boolean): Promise<Response> {
+const responseOwners = new WeakMap<Response, number>();
+
+export async function fetchWithWebAuth(input: RequestInfo | URL, init: RequestInit = {}, isCurrent?: () => boolean, silentUnauthorized = false): Promise<Response> {
   const owner = sessionGeneration();
   const method = (init.method ?? "GET").toUpperCase();
   const headers = new Headers(init.headers);
@@ -1271,7 +1281,8 @@ export async function fetchWithWebAuth(input: RequestInfo | URL, init: RequestIn
     throw error;
   }
   assertSessionGeneration(owner);
-  if (response.status === 401) notifyWebSessionEnded();
+  if (response.status === 401) { if (silentUnauthorized) clearWebSessionState(); else notifyWebSessionEnded(); }
+  else responseOwners.set(response, owner);
   return response;
 }
 
@@ -1285,7 +1296,7 @@ function apiUrl(path: string): string {
 }
 
 async function parseApiResponse<T>(res: Response): Promise<T> {
-  const owner = sessionGeneration();
+  const owner = responseOwners.get(res) ?? sessionGeneration();
   const contentType = res.headers.get("content-type") ?? "";
   const body = contentType.includes("application/json")
     ? await res.json()
@@ -1589,6 +1600,17 @@ export interface WebMe {
   lastSessionId?: string | null;
 }
 
+/** In-memory identity established by a successful /me for this document's cookie session. */
+export type VerifiedWebActor = Readonly<{ generation: number; userId: string; tenantId: string; csrf: string }>;
+let verifiedWebActor: VerifiedWebActor | null = null;
+let webMeRead = 0;
+let latestPublishedMeRead = 0;
+subscribeSessionBoundary(() => { verifiedWebActor = null; });
+
+export function getVerifiedWebActor(): VerifiedWebActor | null {
+  return verifiedWebActor?.generation === sessionGeneration() && verifiedWebActor.csrf === webCsrfToken ? verifiedWebActor : null;
+}
+
 /** How long one answer to `/api/me` serves every caller that asks for the same project. */
 const WEB_ME_REUSE_MS = 2_000;
 let webMeShared: { projectId: string; at: number; value: Promise<WebMe | null> } | null = null;
@@ -1611,9 +1633,10 @@ export function invalidateWebMe(): void {
  * only: a project switch proves its target resolves before the tab moves, so
  * the page still on screen never sends the new project's header meanwhile.
  */
-export async function fetchWebMe({ projectId: requested }: { projectId?: string } = {}): Promise<WebMe | null> {
+export async function fetchWebMe({ projectId: requested, silentUnauthorized = false }: { projectId?: string; silentUnauthorized?: boolean } = {}): Promise<WebMe | null> {
   if (!hasWebApi) return null;
   const projectId = requested ?? getWebProjectId();
+  if (silentUnauthorized) return readWebMe(projectId, true);
   const now = Date.now();
   if (webMeShared && webMeShared.projectId === projectId && now - webMeShared.at < WEB_ME_REUSE_MS) {
     return webMeShared.value;
@@ -1625,19 +1648,31 @@ export async function fetchWebMe({ projectId: requested }: { projectId?: string 
   return value;
 }
 
-async function readWebMe(projectId: string): Promise<WebMe | null> {
+async function readWebMe(projectId: string, silentUnauthorized = false): Promise<WebMe | null> {
+  const owner = sessionGeneration();
+  const read = ++webMeRead;
   const res = await fetchWithWebAuth(apiUrl("/me"), {
     credentials: "include",
     headers: { "X-Open-Science-Project": projectId },
-  });
-  if (res.status === 401) {
-    clearWebSessionState();
-    return null;
-  }
+  }, undefined, silentUnauthorized);
+  // fetchWithWebAuth fenced and ended the session for its own 401 before returning.
+  if (res.status === 401) return null;
+  assertSessionGeneration(owner);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   const body = (await res.json()) as { data: WebMe };
-  rememberCsrfToken(body.data);
-  rememberRuntimeProfile(body.data.runtime);
+  assertSessionGeneration(owner);
+  if (read > latestPublishedMeRead) {
+    latestPublishedMeRead = read;
+    const me = body.data;
+    const userId = me.user?.id;
+    const tenantId = me.tenant?.id ?? me.user?.tenantId;
+    const csrf = me.csrfToken;
+    verifiedWebActor = typeof userId === "string" && userId && typeof tenantId === "string" && tenantId
+      && typeof csrf === "string" && csrf && (me.user.tenantId === undefined || me.user.tenantId === tenantId)
+      ? Object.freeze({ generation: owner, userId, tenantId, csrf }) : null;
+    rememberCsrfToken(me);
+    rememberRuntimeProfile(me.runtime);
+  }
   return body.data;
 }
 

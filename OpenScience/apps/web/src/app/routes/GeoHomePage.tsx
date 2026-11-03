@@ -1,40 +1,39 @@
-import { Link } from "react-router";
-import { geoJourney } from "@/components/geo/geoJourney";
-import { GEO_STEP_HOME, geoDestinationPath } from "@/components/geo/geoTabs";
-import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router";
+import { Link, useSearchParams } from "react-router";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, Radar } from "lucide-react";
-import { webErrorMessage } from "@/lib/apiClient";
-import { cn } from "@/lib/cn";
-import { createGeoProject, isGeoOff, listGeoProjects, patchGeoProject, useGeoFeature, type GeoProjectSummary } from "@/lib/geoClient";
+import { fetchWebMe, invalidateWebMe, WebApiError, WEB_SESSION_ENDED_EVENT, WEB_SESSION_STARTED_EVENT, WEB_SESSION_SYNC_STORAGE_KEY, webErrorMessage } from "@/lib/apiClient";
+import { createGeoProject, isGeoOff, listGeoProjects, useGeoFeature, type GeoProjectSummary } from "@/lib/geoClient";
 import { toast } from "@/lib/toast";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { LoadError } from "@/components/cards/LoadError";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/Button";
-import { List, ListRow } from "@/components/ui/ListRow";
-import { MasterDetail, type MasterDetailState } from "@/components/ui/MasterDetail";
-import { SeverityBadge } from "@/components/ui/SeverityBadge";
 import { Toolbar } from "@/components/ui/Toolbar";
-import { GeoCellText } from "@/components/geo/GeoCellText";
-import { alertText, GeoProjectPreview, progressLine } from "@/components/geo/GeoHomePreview";
-import { GeoListSkeleton, GeoOffPage, GeoPreviewSkeleton } from "@/components/geo/GeoStates";
+import { alertText, progressLine } from "@/components/geo/GeoHomePreview";
+import { geoJourney } from "@/components/geo/geoJourney";
+import { GeoListSkeleton, GeoOffPage } from "@/components/geo/GeoStates";
 import { withStartDate } from "@/components/geo/geoText";
 import { useOpenGeoConversation } from "@/components/geo/useOpenGeoConversation";
 
-/** What the module is for, said to a pharma company or a doctor who has not started: the work, and what they get to see. */
 const EMPTY_SENTENCE = "药企和医生在这里研究并传播自己产品的循证依据，也能看到各家 AI 是怎么表达的。";
-
-/**
- * The room the preview is given beside the 340 px list. The two figures sit side by side in it and the eight steps in four columns,
- * so the page splits from 340 + 520 = 860 px of its own width — a laptop window with the sidebar open — and below that the list is the
- * page and a press opens the preview in the drawer.
- */
-const PREVIEW_MIN = 520;
-
 type Sort = "recent" | "state";
+type Listing = { kind: "loading" } | { kind: "off" } | { kind: "error"; message: string } | { kind: "ready"; projects: GeoProjectSummary[] };
+const NO_PROJECTS: GeoProjectSummary[] = [];
+type Pending = { kind: "unknown" } | { kind: "created"; id: string };
+const pendingKey = (tenant: string, user: string) => `evimed.geo.create.v1:${encodeURIComponent(tenant)}:${encodeURIComponent(user)}`;
+function readPending(key: string): Pending | null {
+  const raw = localStorage.getItem(key);
+  if (!raw) return null;
+  try {
+    const value = JSON.parse(raw) as Pending;
+    return value.kind === "created" && typeof value.id === "string" && /^[A-Za-z0-9_-]{1,160}$/.test(value.id) ? value : { kind: "unknown" };
+  } catch { return { kind: "unknown" }; }
+}
+// These are emitted before the control project is created, not after a partial write.
+function knownRejection(error: unknown): boolean {
+  return error instanceof WebApiError && ((error.status === 400 && error.code === "geo_payload_invalid") || (error.status === 409 && error.code === "project_limit_reached") || isGeoOff(error));
+}
 
-/** What needs the reader first: a severe error, then an open one, then a stopped article, then the rest; a paused project last. */
 function stateRank(project: GeoProjectSummary): number {
   if (project.status === "paused") return 4;
   if (project.alert.severe > 0) return 0;
@@ -43,234 +42,152 @@ function stateRank(project: GeoProjectSummary): number {
   return 3;
 }
 
-const sortProjects = (projects: GeoProjectSummary[], sort: Sort): GeoProjectSummary[] =>
-  [...projects].sort((a, b) => (sort === "state" ? stateRank(a) - stateRank(b) : 0) || Date.parse(b.updatedAt) - Date.parse(a.updatedAt));
-
-type Listing =
-  | { kind: "loading" }
-  | { kind: "off" }
-  | { kind: "error"; message: string }
-  | { kind: "ready"; projects: GeoProjectSummary[] };
-
-const NO_PROJECTS: GeoProjectSummary[] = [];
-
-/**
- * “循证 GEO”'s home (plan §5.1, mockup g01), a list with a peek beside it (T2, 2026-10-28): the projects on the left, one row each —
- * its name (with its start date after it when another project has the same name), one line under it (what is open on it, else where it
- * is: the coverage window and the week, or the single step it has done) and the 综合可见度指数 — and the chosen project on the right:
- * both numbers with the sample each rests on, the eight steps, the window and the last activity, with 打开项目 and 继续对话. A press on a
- * row chooses it (`?project=`, so the choice survives a reload and Back); with none chosen, the first row of the order is the one
- * shown. A paused project says 已暂停 in its row and carries 继续 in its preview — a note's action, not a cell among the values (R19,
- * audit D C4). Two or more projects are ordered by the latest activity, or by what needs the reader first (`?sort=state`).
- *
- * Below the room for both (the page's own width, not the window's) the list is the page, a row opens the preview in the drawer over it,
- * and 打开项目 is one press further. A number that does not exist yet is “未测” in the row and in the preview says what measures it; a
- * project that has only done one step is in the list all the same.
- *
- * “新建项目” creates the project and lands in its conversation, where the composer already carries the “循证 GEO” chip: no form. With
- * no project yet the preview pane is the empty state — one sentence for what the module is for and that one button; the header has
- * none then, so the page has one solid button.
- */
 export function GeoHomePage() {
   const feature = useGeoFeature();
   const openConversation = useOpenGeoConversation();
   const [listing, setListing] = useState<Listing>({ kind: "loading" });
   const [reloads, setReloads] = useState(0);
   const [creating, setCreating] = useState(false);
-  const [resuming, setResuming] = useState<string | null>(null);
+  const [accountKey, setAccountKey] = useState<string | null>(null);
+  const [identityFailed, setIdentityFailed] = useState(false);
+  const [pending, setPending] = useState<Pending | null>(null);
+  const [accountRevision, setAccountRevision] = useState(0);
+  const accountRef = useRef<string | null>(null);
+  const inFlight = useRef(false);
+  const generation = useRef(0);
+  const createdId = pending?.kind === "created" ? pending.id : null;
+
+  useEffect(() => {
+    const reset = () => { generation.current += 1; inFlight.current = false; accountRef.current = null; setAccountKey(null); setPending(null); setCreating(false); setListing({ kind: "loading" }); setAccountRevision((n) => n + 1); };
+    const sync = (event: StorageEvent) => {
+      if (event.key !== WEB_SESSION_SYNC_STORAGE_KEY && event.key !== null) return;
+      invalidateWebMe();
+      reset();
+    };
+    window.addEventListener(WEB_SESSION_STARTED_EVENT, reset);
+    window.addEventListener(WEB_SESSION_ENDED_EVENT, reset);
+    window.addEventListener("storage", sync);
+    return () => { generation.current += 1; accountRef.current = null; window.removeEventListener(WEB_SESSION_STARTED_EVENT, reset); window.removeEventListener(WEB_SESSION_ENDED_EVENT, reset); window.removeEventListener("storage", sync); };
+  }, []);
+  useEffect(() => {
+    const epoch = generation.current;
+    let live = true;
+    setIdentityFailed(false);
+    void fetchWebMe().then((me) => {
+      if (!live || generation.current !== epoch) return;
+      if (!me?.user?.id) { setIdentityFailed(true); return; }
+      const key = pendingKey(me.tenant?.id ?? me.user.tenantId ?? me.user.id, me.user.id);
+      try { const value = readPending(key); accountRef.current = key; setPending(value); setAccountKey(key); }
+      catch { setIdentityFailed(true); }
+    }).catch(() => { if (live && generation.current === epoch) setIdentityFailed(true); });
+    return () => { live = false; };
+  }, [accountRevision]);
+  useEffect(() => {
+    if (!accountKey) return undefined;
+    const changed = (event: StorageEvent) => { if (event.key === accountKey && accountRef.current === accountKey) { try { setPending(readPending(accountKey)); } catch { setIdentityFailed(true); } } };
+    window.addEventListener("storage", changed);
+    return () => window.removeEventListener("storage", changed);
+  }, [accountKey]);
+  const [query, setQuery] = useState("");
   const [params, setParams] = useSearchParams();
   const sort: Sort = params.get("sort") === "state" ? "state" : "recent";
   const asked = params.get("project");
 
   useEffect(() => {
-    // `error`: `/api/me` could not be read. The list is asked anyway — the
-    // route answers for itself, `geo_not_enabled` included.
     if (feature === "loading" || feature === "off") return undefined;
     let live = true;
+    const epoch = generation.current;
     setListing({ kind: "loading" });
     void listGeoProjects().then(
-      (projects) => { if (live) setListing({ kind: "ready", projects }); },
+      (projects) => { if (live && generation.current === epoch) setListing({ kind: "ready", projects }); },
       (error: unknown) => {
-        if (!live) return;
+        if (!live || generation.current !== epoch) return;
         setListing(isGeoOff(error) ? { kind: "off" } : { kind: "error", message: webErrorMessage(error, { fallback: "项目列表暂时无法读取。" }) });
       },
     );
     return () => { live = false; };
-  }, [feature, reloads]);
+  }, [feature, reloads, accountRevision]);
 
   const projects = listing.kind === "ready" ? listing.projects : NO_PROJECTS;
-  // Two projects of one name are told apart by the day they started.
   const labels = useMemo(() => withStartDate(projects), [projects]);
-  const ordered = useMemo(() => sortProjects(projects, sort), [projects, sort]);
+  const ordered = useMemo(() => [...projects]
+    .filter((project) => `${project.name} ${project.product?.brandName ?? ""} ${project.product?.genericName ?? ""}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
+    .sort((a, b) => (sort === "state" ? stateRank(a) - stateRank(b) : 0) || Date.parse(b.updatedAt) - Date.parse(a.updatedAt)), [projects, query, sort]);
 
   if (feature === "off" || listing.kind === "off") return <GeoOffPage />;
 
-  const create = () => {
-    if (creating) return;
+  const create = async () => {
+    const key = accountRef.current;
+    if (!key || inFlight.current || pending) return;
+    try {
+      if (readPending(key)) { setPending(readPending(key)); return; }
+      localStorage.setItem(key, JSON.stringify({ kind: "unknown" }));
+    } catch { setIdentityFailed(true); return; }
+    inFlight.current = true;
+    const epoch = generation.current;
+    const current = () => generation.current === epoch && accountRef.current === key;
+    setPending({ kind: "unknown" });
     setCreating(true);
-    void createGeoProject({})
-      .then((created) => openConversation({ geoId: created.id, projectId: created.projectId, sessionId: created.sessionId }))
-      .catch((error: unknown) => {
-        if (isGeoOff(error)) setListing({ kind: "off" });
-        else toast.error(webErrorMessage(error, { fallback: "无法新建项目，请稍后重试。" }));
-      })
-      .finally(() => setCreating(false));
+    try {
+      const created = await createGeoProject({});
+      const known: Pending = { kind: "created", id: created.id };
+      try { localStorage.setItem(key, JSON.stringify(known)); } catch { /* The existing unknown marker remains. */ }
+      if (!current()) return;
+      setPending(known);
+      try {
+        const opened = await openConversation({ geoId: created.id, projectId: created.projectId, sessionId: created.sessionId });
+        if (current() && !opened) setReloads((value) => value + 1);
+        if (opened) { try { localStorage.removeItem(key); } catch { /* A retained marker is safer than a duplicate. */ } }
+      } catch { if (current()) setReloads((value) => value + 1); }
+    } catch (error: unknown) {
+      if (knownRejection(error)) {
+        try { localStorage.removeItem(key); } catch { /* Keep the conservative marker. */ }
+        if (current()) { try { setPending(readPending(key)); } catch { setIdentityFailed(true); } if (isGeoOff(error)) setListing({ kind: "off" }); else toast.error(webErrorMessage(error, { fallback: "无法新建项目，请稍后重试。" })); }
+      } else if (current()) { setQuery(""); setReloads((value) => value + 1); }
+    } finally { if (current()) { inFlight.current = false; setCreating(false); } }
   };
-
-  /** A paused project was set going again: its row and its preview say so without re-reading the list. */
-  const resume = (project: GeoProjectSummary) => {
-    setResuming(project.id);
-    void patchGeoProject(project.id, { status: "active" })
-      .then(() => {
-        toast.success("已继续。");
-        setListing((previous) => (previous.kind === "ready"
-          ? { kind: "ready", projects: previous.projects.map((entry) => (entry.id === project.id ? { ...entry, status: "active" } : entry)) }
-          : previous));
-      })
-      .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "项目无法继续，请稍后重试。" })))
-      .finally(() => setResuming(null));
+  const clearPending = () => {
+    if (!accountKey || listing.kind !== "ready" || creating) return;
+    try { localStorage.removeItem(accountKey); setPending(null); } catch { setIdentityFailed(true); }
+  };
+  const acknowledgeCreated = () => {
+    if (!accountKey || pending?.kind !== "created") return;
+    try { localStorage.removeItem(accountKey); setPending(null); } catch { setIdentityFailed(true); }
   };
 
   const loading = feature === "loading" || listing.kind === "loading";
-  const none = listing.kind === "ready" && listing.projects.length === 0;
-  const newProject = (
-    <Button actionKind="set" onClick={create} loading={creating} disabled={listing.kind !== "ready"}>
-      <Plus size={16} aria-hidden="true" />
-      新建项目
-    </Button>
-  );
-  const recipe = <EmptyState icon={Radar} title="还没有循证 GEO 项目" description={EMPTY_SENTENCE} action={newProject} className="min-h-0 flex-1" />;
-  const retry = listing.kind === "error" ? <LoadError message={listing.message} onRetry={() => setReloads((value) => value + 1)} /> : null;
-
-  // The project the address names; one it does not know (deleted since) names none.
-  const chosen = ordered.find((project) => project.id === asked) ?? null;
-  const choose = (id: string) => {
-    const next = new URLSearchParams(params);
-    next.set("project", id);
-    return `?${next.toString()}`;
-  };
-  const closePreview = () => setParams((current) => {
-    const next = new URLSearchParams(current);
-    next.delete("project");
-    return next;
-  }, { replace: true });
-
-  const list = ({ split }: MasterDetailState) => {
-    const shown = chosen ?? (split ? ordered[0] ?? null : null);
-    const rows = ordered.length > 0 && (
-      <List label="循证 GEO 项目">
-        {ordered.map((project) => <ProjectRow key={project.id} project={project} label={labels.get(project.id) ?? project.name} selected={project.id === shown?.id} to={choose(project.id)} />)}
-      </List>
-    );
-    return (
-      // Where the list is the page it keeps the page's column and gutter (`PageShell`'s); beside the preview it is a column of its own.
-      <div className={cn("flex min-h-0 flex-1 flex-col", !split && "mx-auto w-full max-w-page px-4 md:px-6")}>
-        <PageHeader title="循证 GEO" actions={none ? undefined : newProject} className={cn("shrink-0 pb-3 pt-5", split && "px-4")} />
-        {/* The one row of controls, over the list: how it is ordered, and how many there are. With one project there is nothing to order. */}
-        {ordered.length > 1 && (
-          <div className={cn("shrink-0 pb-2", split && "px-4")}>
-            <Toolbar
-              label="项目排序"
-              filters={[{
-                kind: "chips", label: "排序", value: sort, neutral: "recent",
-                options: [{ value: "recent", label: "最近活动" }, { value: "state", label: "需要处理的在前" }],
-                onChange: (next) => setParams((current) => {
-                  const updated = new URLSearchParams(current);
-                  if (next === "recent") updated.delete("sort"); else updated.set("sort", next);
-                  return updated;
-                }, { replace: true }),
-              }]}
-              summary={`${ordered.length} 个项目`}
-            />
-          </div>
+  const none = listing.kind === "ready" && projects.length === 0;
+  const newProject = <Button actionKind="set" onClick={() => void create()} loading={creating} disabled={listing.kind !== "ready" || pending !== null || !accountKey || identityFailed}><Plus size={16} aria-hidden="true" />新建项目</Button>;
+  return (
+    <div className="mx-auto flex min-h-0 w-full max-w-page flex-1 flex-col px-4 md:px-6">
+      <PageHeader title="循证 GEO" actions={none && !pending ? undefined : newProject} className="shrink-0 pb-3 pt-5" />
+      {identityFailed && <div role="alert" className="mb-4 text-ui">无法确认账号或保存创建状态，请重试后再新建。<Button variant="secondary" size="sm" onClick={() => setAccountRevision((n) => n + 1)}>重试账号读取</Button></div>}
+      {pending?.kind === "unknown" && <div role="status" className="mb-4 rounded border border-border p-4 text-ui"><p>项目创建结果未知，项目可能仍在创建，稍后才出现在列表中；再次新建可能产生重复项目。</p>{listing.kind === "ready" && !creating && <Button variant="secondary" size="sm" onClick={clearPending}>已检查列表，仍要新建</Button>}</div>}
+      {createdId && <div role="status" className="mb-4 rounded border border-border p-4 text-ui">项目已创建，但对话未能打开。<Link className="ml-2 text-link underline" to={`/app/geo/${encodeURIComponent(createdId)}`} onClick={acknowledgeCreated}>打开已创建的项目</Link></div>}
+      {projects.length > 0 && <Toolbar label="项目排序" filters={[{
+        kind: "chips", label: "排序", value: sort, neutral: "recent",
+        options: [{ value: "recent", label: "最近活动" }, { value: "state", label: "需要处理的在前" }],
+        onChange: (next) => setParams((current) => { const updated = new URLSearchParams(current); if (next === "recent") updated.delete("sort"); else updated.set("sort", next); return updated; }, { replace: true }),
+      }]} search={{ label: "搜索项目", value: query, onChange: setQuery, onClear: () => setQuery("") }} summary={`${ordered.length} 个项目`} />}
+      <div className="min-h-0 flex-1 overflow-y-auto pb-6">
+        {loading ? <GeoListSkeleton /> : listing.kind === "error" ? <LoadError message={listing.message} onRetry={() => setReloads((value) => value + 1)} /> : none ? <EmptyState icon={Radar} title="还没有循证 GEO 项目" description={EMPTY_SENTENCE} action={pending ? undefined : newProject} className="min-h-0 flex-1" /> : ordered.length === 0 ? <p className="py-6 text-ui text-text-2">没有符合的项目。</p> : (
+          <ul aria-label="循证 GEO 项目" className="grid grid-cols-1 gap-4 py-4 sm:grid-cols-2 xl:grid-cols-3">
+            {ordered.map((project) => {
+              const label = labels.get(project.id) || project.name || "待命名项目";
+              const product = [project.product?.brandName, project.product?.genericName].filter((value, index, values) => value && values.indexOf(value) === index).join(" · ");
+              const activity = Number.isNaN(Date.parse(project.updatedAt)) ? "最近活动时间未知" : `最近活动 ${new Date(project.updatedAt).toLocaleDateString("zh-CN")}`;
+              const journey = geoJourney(project);
+              const progress = journey.stage === "queued" || journey.stage === "blocked" ? journey.title : progressLine(project);
+              return <li key={project.id}><Link aria-label={label} aria-current={asked === project.id ? "true" : undefined} to={`/app/geo/${encodeURIComponent(project.id)}`} className={`flex h-full min-h-40 flex-col gap-3 rounded-lg border p-5 transition-colors hover:bg-surface-2 ${asked === project.id ? "border-accent" : "border-border"}`}>
+                <span className="font-semibold text-text">{label}</span>
+                {product && product !== project.name && <span className="text-ui text-text-2">{product}</span>}
+                <span data-geo-subline="" className="text-ui text-text-2">{project.status === "paused" ? "已暂停" : project.status === "archived" ? "已归档" : alertText(project) || progress || "暂无工作"}</span>
+                <span className="mt-auto text-caption text-text-3">{activity}</span>
+              </Link></li>;
+            })}
+          </ul>
         )}
-        <div className={cn("min-h-0 flex-1 overflow-y-auto pb-6", split && "px-2")}>
-          {/* Beside the preview, what is not a list (a failed read, the first-run recipe) is said in the preview's pane. */}
-          {loading ? <GeoListSkeleton /> : split ? rows : retry ?? (none ? recipe : rows)}
-        </div>
       </div>
-    );
-  };
-
-  const detail = ({ split }: MasterDetailState) => {
-    if (!split) {
-      // The drawer holds the chosen project and nothing else.
-      return chosen && (
-        <GeoProjectPreview
-          project={chosen}
-          label={labels.get(chosen.id) ?? chosen.name}
-          heading={false}
-          resuming={resuming === chosen.id}
-          onResume={() => resume(chosen)}
-          onConversation={() => void openConversation({ geoId: chosen.id, projectId: chosen.projectId })}
-        />
-      );
-    }
-    const shown = chosen ?? ordered[0] ?? null;
-    if (loading) return <div className="px-6 py-6"><GeoPreviewSkeleton /></div>;
-    if (retry) return <div className="px-6 py-6">{retry}</div>;
-    if (none) return recipe;
-    return shown && (
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-2xl px-6 py-6">
-          <GeoProjectPreview
-            project={shown}
-            label={labels.get(shown.id) ?? shown.name}
-            heading
-            resuming={resuming === shown.id}
-            onResume={() => resume(shown)}
-            onConversation={() => void openConversation({ geoId: shown.id, projectId: shown.projectId })}
-          />
-        </div>
-      </div>
-    );
-  };
-
-  return (
-    <MasterDetail
-      list={list}
-      detail={detail}
-      selected={chosen !== null}
-      listLabel="项目列表"
-      detailLabel="项目预览"
-      detailMin={PREVIEW_MIN}
-      narrow="drawer"
-      detailTitle={chosen ? labels.get(chosen.id) ?? chosen.name : "项目"}
-      onCloseDetail={closePreview}
-    />
-  );
-}
-
-/**
- * One project in the list: its name, one quiet line under it and one number. The row chooses the project (the preview shows it); the
- * way into the project is the preview's.
- */
-function ProjectRow({ project, label, selected, to }: { project: GeoProjectSummary; label: string; selected: boolean; to: string }) {
-  const alert = project.status === "paused" ? null : alertText(project);
-  const journey = geoJourney(project);
-  return (
-    <ListRow
-      to={to}
-      selected={selected}
-      title={<span className="block truncate">{label}</span>}
-      meta={project.status === "paused" || alert || progressLine(project) ? (
-        <span data-geo-subline="" className="block truncate">
-          {project.status === "paused" ? "已暂停" : alert ? (
-            <>
-              {/* The badge carries the red; the sentence is body text (F-G10). */}
-              {project.alert.severe > 0 && project.alert.severity && <SeverityBadge level={project.alert.severity} className="mr-1.5 align-middle" />}
-              <span data-geo-alert="" className="text-text-2">{alert}</span>
-            </>
-          ) : progressLine(project)}
-        </span>
-      ) : undefined}
-      actions={<Link className="rounded text-ui text-link hover:underline" to={journey.next.step ? geoDestinationPath(project.id, GEO_STEP_HOME[journey.next.step]) : `/app/geo/${encodeURIComponent(project.id)}`}>继续工作</Link>}
-      trailing={(
-        <span className="flex items-baseline gap-1.5 text-ui">
-          <span className="text-caption text-text-3">可见度</span>
-          <GeoCellText cell={project.headline.gvi} unit="index" hideSample />
-        </span>
-      )}
-    />
+    </div>
   );
 }

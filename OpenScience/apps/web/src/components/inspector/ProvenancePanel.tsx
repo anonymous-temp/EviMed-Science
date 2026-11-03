@@ -1,3 +1,4 @@
+import { sessionOwner } from "@/lib/sessionLifecycle";
 import { ResultVersionInspector } from "./ResultVersionInspector";
 import { useEffect, useState } from "react";
 import { ChevronDown, ChevronRight, Loader2, MessageSquare, Package, RotateCcw } from "lucide-react";
@@ -5,7 +6,7 @@ import { useNavigate } from "react-router";
 import type { ProvenanceRecord } from "@ai4s/shared";
 import { listProvenance, readEnvLockfile } from "@/lib/provenance";
 import { getWebProjectId } from "@/lib/apiClient";
-import type { RuntimeUiIntent } from "@/lib/runtimeUiNavigation";
+import { prepareRuntimeUiIntent, type RuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { CodeViewer } from "@/components/code-viewer/CodeViewer";
 import { Button } from "@/components/ui/Button";
 import { Tooltip } from "@/components/ui/Tooltip";
@@ -87,11 +88,11 @@ export function LegacyProvenancePanel({ path, language }: { path: string; langua
     const intent: RuntimeUiIntent = {
       kind: sessionId ? "open" : "create",
       projectId: getWebProjectId(),
-      requestId: crypto.randomUUID(),
+      requestId: crypto.randomUUID(), owner: sessionOwner(),
       sessionId: sessionId ?? crypto.randomUUID(),
       draft: reproducePrompt(r),
     };
-    navigate(sessionId ? `/app/chat/${sessionId}` : "/app/chat", { state: { runtimeUiIntent: intent } });
+    navigate(sessionId ? `/app/chat/${sessionId}` : "/app/chat", { state: { runtimeUiIntent: prepareRuntimeUiIntent(intent) } });
   };
 
   useEffect(() => {

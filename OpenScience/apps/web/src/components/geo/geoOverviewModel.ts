@@ -261,12 +261,24 @@ function extraMetric(diagnosis: GeoDiagnosis | null, ids: readonly string[]): { 
  * Live wrong statements about us that would reach a patient (S3/S4): the safety tile's number. The server's count is over every
  * error of the project; a list is only what it carried.
  */
+export function hasJudgedZeroSample(diagnosis: GeoDiagnosis | null): boolean {
+  const correct = readGeoCell(diagnosis?.failureModes?.correct);
+  const wrong = readGeoCell(diagnosis?.failureModes?.wrongOurs);
+  return Boolean(diagnosis?.round && (diagnosis.round.done ?? 0) > 0
+    && correct.status === "ok" && wrong.status === "ok"
+    && Number.isSafeInteger(correct.numerator) && (correct.numerator ?? 0) >= 30
+    && wrong.numerator === 0 && correct.denominator === wrong.denominator
+    && (correct.denominator ?? 0) >= (correct.numerator ?? 0));
+}
+
 export function safetyReading(diagnosis: GeoDiagnosis | null): MetricReading {
   const round = diagnosis?.round;
   const count = diagnosis?.errorCounts?.severe;
   // A diagnosis envelope and a truncated error list are not proof of a counted zero.
   const covered = round && typeof round.done === "number" && round.done > 0;
-  return covered ? measurement(count, "条严重讲错", `本轮 ${round.done} 次有效回答`, round.sampleDate ?? null) : { kind: "unmeasured", reason: "未测" };
+  if (!covered) return { kind: "unmeasured", reason: "未测" };
+  if (count === 0 && !hasJudgedZeroSample(diagnosis)) return { kind: "unmeasured", reason: "核查不足" };
+  return measurement(count, "条严重讲错", `项目当前待处理记录；最近一轮 ${round.done} 次有效回答`, round.sampleDate ?? null);
 }
 
 export function severeOpenErrors(diagnosis: GeoDiagnosis | null): number {

@@ -1,9 +1,10 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { createMemoryRouter, RouterProvider } from "react-router";
+import { createMemoryRouter, RouterProvider, useLocation } from "react-router";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { useUiStore } from "@/lib/store";
 import { AppShell } from "./AppShell";
+import { Drawer } from "@/components/ui/Drawer";
 
 /**
  * Where keyboard focus goes as the sidebar opens and closes, and what is reachable while it is a drawer (2026-10-07 audit B-02,
@@ -95,6 +96,11 @@ async function renderShell() {
 
 const main = () => document.getElementById("main") as HTMLElement;
 
+function GeoSettingsPage() {
+  const location = useLocation();
+  return <><h1>GEO</h1>{new URLSearchParams(location.search).get("panel") === "settings" && <Drawer title="项目设置" onClose={() => {}}>设置内容</Drawer>}</>;
+}
+
 describe("the sidebar's focus and the page behind it", () => {
   beforeAll(() => { vi.stubGlobal("Request", SignalCompatibleRequest); });
   afterAll(() => { vi.unstubAllGlobals(); });
@@ -151,6 +157,18 @@ describe("the sidebar's focus and the page behind it", () => {
 
   describe("below lg, where it is a drawer over the page", () => {
     beforeEach(() => { viewport(true); });
+
+    it("closes the mobile sidebar when a GEO settings destination opens on the same path", async () => {
+      mocks.fetchWebMe.mockResolvedValue({ user: { id: "alice", name: "Alice" } });
+      const router = createMemoryRouter([{ path: "/app", element: <AppShell />, children: [{ path: "geo/:geoId/:tab?", element: <GeoSettingsPage /> }] }], { initialEntries: ["/app/geo/geo_1/visibility"] });
+      render(<RouterProvider router={router} />);
+      await screen.findByRole("heading", { name: "GEO" });
+      await userEvent.click(await screen.findByRole("button", { name: "展开侧边栏" }));
+      expect(main()).toHaveAttribute("inert");
+      await act(() => router.navigate("/app/geo/geo_1/visibility?panel=settings"));
+      expect(main()).not.toHaveAttribute("inert");
+      expect(screen.getByRole("dialog", { name: "项目设置" })).toHaveFocus();
+    });
 
     it("makes the page behind an open drawer inert, and the page live again when it closes", async () => {
       // The shell opens a narrow viewport closed; the reader opens it.

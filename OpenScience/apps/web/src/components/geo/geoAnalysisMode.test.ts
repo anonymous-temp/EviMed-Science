@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { GeoAnalysisDescriptor, GeoAnalysisId } from '@/lib/geoAnalysisClient';
 import { normalizeGeoAnalysisView } from '../../../../server/src/geoAnalysisRegistry.mjs';
-import { GEO_ANALYSIS_OPTIONS, GEO_ANALYSIS_VIEW_FIELDS, geoAnalysisChangeReplaces, geoAnalysisDescriptor, geoAnalysisDescriptorForView, geoAnalysisSearch } from './geoAnalysisMode';
+import { GEO_ANALYSIS_GROUPS, GEO_ANALYSIS_OPTIONS, GEO_ANALYSIS_VIEW_FIELDS, geoAnalysisChangeReplaces, geoAnalysisDescriptor, geoAnalysisDescriptorForView, geoAnalysisOptionsForTab, geoAnalysisSearch, geoAnalysisTabForView } from './geoAnalysisMode';
 
 describe('GEO main area analysis address', () => {
   it('names all 27 views separately from the business view', () => {
@@ -16,6 +16,24 @@ describe('GEO main area analysis address', () => {
     const returned = new URLSearchParams(geoAnalysisSearch(query, null));
     for (const [key, value] of new URLSearchParams(original)) expect(returned.get(key)).toBe(value);
     expect(returned.has('analysis')).toBe(false);
+  });
+});
+
+describe('GEO analysis destinations', () => {
+  it('assigns every available analysis exactly once to a work area', () => {
+    const assigned = Object.values(GEO_ANALYSIS_GROUPS).flat();
+    expect(new Set(assigned).size).toBe(assigned.length);
+    expect(new Set(assigned)).toEqual(new Set(GEO_ANALYSIS_OPTIONS.map((item) => item.value)));
+  });
+
+  it('offers only the current result area, while retaining a direct legacy analysis', () => {
+    expect(geoAnalysisOptionsForTab('accuracy').map((item) => item.value)).toEqual(['V13', 'V15', 'V11', 'V12', 'V14']);
+    expect(geoAnalysisOptionsForTab('questions', 'journey').map((item) => item.value)).toEqual(['V10', 'V16']);
+    expect(geoAnalysisOptionsForTab('accuracy', null, 'V26').map((item) => item.value)).toContain('V26');
+    expect(geoAnalysisOptionsForTab('accuracy').map((item) => item.value)).not.toContain('V26');
+    expect(geoAnalysisTabForView('V01')).toBe('visibility');
+    expect(geoAnalysisTabForView('V26')).toBe('plan');
+    expect(geoAnalysisTabForView('V10')).toBe('evidence');
   });
 });
 

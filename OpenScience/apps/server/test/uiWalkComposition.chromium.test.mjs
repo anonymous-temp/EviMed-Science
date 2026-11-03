@@ -8,7 +8,7 @@
 import assert from "node:assert/strict";
 import test, { after, before } from "node:test";
 import { chromium } from "playwright-core";
-import { ADDRESS_CASES, PAGE_TEMPLATES, addressProbe, addressStateFindings, compositionFindings, familyFindings, forgetProjectChoice, measure, measureComposition, memoryReady, moduleReady, moduleResultProbe, moduleViewAddressHolds, moduleViewLabels, pageFindings, readModuleResult, routeReady, rowClickShown, scrollPage, verifyCompactWorkflowViews, verifyModuleNavigation, waitMemory, walkCalculationHistory, walkMemoryOverview } from "../../../scripts/ops/ui-walk.mjs";
+import { ADDRESS_CASES, PAGE_TEMPLATES, addressProbe, addressStateFindings, compositionFindings, familyFindings, forgetProjectChoice, measure, measureComposition, memoryReady, moduleReady, moduleResultProbe, moduleViewAddressHolds, moduleViewLabels, pageFindings, readModuleResult, routeReady, rowClickShown, scrollPage, verifyCompactWorkflowViews, verifyModuleNavigation, verifyGeoAreas, waitMemory, walkCalculationHistory, walkMemoryOverview } from "../../../scripts/ops/ui-walk.mjs";
 
 const executable = process.env.OPEN_SCIENCE_MANAGED_BROWSER_TEST_CHROME;
 const skip = !executable && "An explicit disposable Chromium executable is required; missing is not pass";
@@ -65,14 +65,14 @@ const rulesOf = (read) => [...new Set(read.findings.map((entry) => entry.rule))]
 const textOf = (read, rule) => read.findings.filter((entry) => entry.rule === rule).map((entry) => entry.text);
 
 test("a framework page that is right is read as one and has nothing to say", { skip }, async () => {
-  // A 循证 GEO page as its V3 plan draws it: the eight steps, the views and the toolbar, and no project-level 「查看：」 selector.
-  const read = await compose(framed({ band: rail() + tabs(TABS) + toolbar("筛选与操作", ""), body: section(rows(4)) + LONG }));
+  const band = tabs(["方案", "项目对话"], { label: "项目工作" }).replace('aria-selected="true">方案', 'aria-selected="false">方案').replace('aria-selected="false">项目对话', 'aria-selected="true">项目对话');
+  const read = await compose(framed({ band: band + toolbar("筛选与操作", ""), body: section(rows(4)) + LONG }), { name: "memory-map" });
   assert.deepEqual(read.findings, []);
   const { facts } = read;
-  assert.deepEqual([facts.chrome.sticky, facts.chrome.position, facts.stepRail.count, facts.stepRail.inChrome], [true, "sticky", 8, true]);
+  assert.deepEqual([facts.chrome.sticky, facts.chrome.position, facts.stepRail], [true, "sticky", null]);
   assert.equal(facts.chrome.held.scrolled > 100, true, "the page moved");
   assert.equal(facts.chrome.held.after, facts.chrome.held.scrollerTop, "and the band stayed where the scroll area starts");
-  assert.deepEqual(facts.tablists.map((entry) => [entry.label, entry.tabs, entry.inChrome]), [["项目视图", 8, true]]);
+  assert.deepEqual(facts.tablists.map((entry) => [entry.label, entry.tabs, entry.inChrome]), [["项目工作", 2, true]]);
   assert.deepEqual(facts.toolbars.map((entry) => [entry.label, entry.inChrome, entry.controls.pressed]), [["筛选与操作", true, 1]]);
   assert.deepEqual(facts.title.text, "测试页面");
   // The page is where the measure left it.
@@ -81,7 +81,7 @@ test("a framework page that is right is read as one and has nothing to say", { s
 
 test("control after content: a toolbar below the table it filters and a chip group below the chart it switches are named", { skip }, async () => {
   const below = await compose(framed({ band: rail() + tabs(TABS) + toolbar("筛选与操作", ""), body: section(`${rows(5)}${toolbar("试验先例的检索")}`) }));
-  assert.deepEqual(rulesOf(below), ["control-after-content", "toggle-layers"].filter((rule) => rule !== "toggle-layers"));
+  assert.deepEqual(rulesOf(below), ["control-after-content", "chrome", "geo-areas"]);
   assert.match(textOf(below, "control-after-content")[0], /^geo-plan@desktop: \[control-after-content\] “试验先例的检索” \(at \d+ px\) stands after the table it controls \(at \d+ px\)$/);
   const chips = await compose(framed({ body: section(`<canvas></canvas><div role="group" aria-label="地图的视图"><button aria-pressed="true">关系</button><button aria-pressed="false">主题</button></div>`) }));
   assert.match(textOf(chips, "control-after-content")[0], /“地图的视图” .* stands after the canvas it controls/);
@@ -125,7 +125,7 @@ test("the band: sticky in its parent and held when the page moves; a band that s
 
 test("a module page without its steps is named; a rail on the page's own tab row of dots is steps", { skip }, async () => {
   const none = await compose(framed({ band: tabs(TABS) + toolbar(), body: section(rows(3)) }));
-  assert.match(textOf(none, "step-rail")[0], /^geo-plan@desktop: \[step-rail\] the module must show all 8 workflow steps/);
+  assert.match(textOf(none, "geo-areas")[0], /current area/);
   const dotted = await compose(framed({ band: tabs(["总览", "人群", "患者", "对照", "试验", "匹配", "数据"], { dots: true, label: "研究视图" }) + toolbar(), body: section(rows(3)) }), { name: "vcr-trial" });
   assert.ok(textOf(dotted, "step-rail").length > 0, "the research workspace does not restore retired step navigation");
   assert.deepEqual(dotted.facts.tablists.map((entry) => [entry.tabs, entry.dots]), [[7, 6]]);
@@ -228,18 +228,31 @@ test("an empty state has a mark, a title and an action or the reason there is no
     "the empty state “暂无证据专区” has no a mark and no an action or the reason there is none", "the empty state “暂无热点” has no an action or the reason there is none"]);
 });
 
-test("a module's tabs read in the browser show the same steps at the same height, and a tab that differs is named by the family judge", { skip }, async () => {
-  const tab = async (name, { count = 8, band = true } = {}) => {
-    const html = framed({ band: rail(count) + tabs(TABS) + (band ? toolbar() : ""), body: section(rows(2)) });
-    const { facts } = await compose(html, { name });
+test("a collection's toolbar and result list share the page edge, independently of inset controls", { skip }, async () => {
+  for (const offset of [0, 20]) {
+    await page.setViewportSize({ width: 1512, height: 945 });
+    await page.setContent(`<meta charset="utf-8"><main><div style="margin-left:300px">
+      <header><h1>循证 GEO</h1></header>
+      <div data-toolbar style="display:flex"><div style="margin-left:-12px"><button>最近活动</button></div></div>
+      <div style="margin-left:${offset}px"><ul aria-label="循证 GEO 项目"><li><a href="/app/geo/g1">项目</a></li></ul></div>
+    </div></main>`);
+    const facts = await page.evaluate(measure, [[], []]);
+    assert.equal(facts.pageLefts.length, offset ? 2 : 1);
+    assert.equal(facts.pageLefts[0], facts.pageLefts.at(-1) - offset);
+  }
+});
+
+test("GEO result siblings share a band height, while other areas have their own composition", { skip }, async () => {
+  const tab = async (name, height = 40) => {
+    const band = `<div style="height:${height}px">${tabs(["可见度", "医学核查", "引用来源", "问题与回答"], { label: "AI 表现" })}</div>`;
+    const { facts } = await compose(framed({ band, body: section(rows(2)) }), { name });
     return [`${name}@desktop`, { composition: facts }];
   };
-  const same = Object.fromEntries([await tab("geo-overview"), await tab("geo-visibility"), await tab("geo-plan")]);
-  assert.deepEqual(familyFindings(same), []);
-  const fewer = Object.fromEntries([await tab("geo-overview"), await tab("geo-visibility", { count: 7 }), await tab("geo-plan")]);
-  assert.equal(familyFindings(fewer)[0].text, "geo@desktop: the steps are not the same on every tab: geo-overview 8, geo-visibility 7, geo-plan 8");
-  const lower = Object.fromEntries([await tab("geo-overview"), await tab("geo-visibility"), ["geo-plan@desktop", { composition: (await compose(framed({ band: rail() + tabs(TABS), body: section(rows(2)) }).replace("[data-step-rail]{height:40px}", "[data-step-rail]{height:88px}"), { name: "geo-plan" })).facts }]]);
-  assert.match(familyFindings(lower).map((entry) => entry.text).join("\n"), /geo@desktop: the band is not the same height on every tab:/);
+  const visibility = await tab("geo-visibility");
+  const accuracy = await tab("geo-accuracy");
+  assert.deepEqual(familyFindings(Object.fromEntries([visibility, accuracy, await tab("geo-plan", 88)])), []);
+  const lower = Object.fromEntries([visibility, accuracy, await tab("geo-sources", 88)]);
+  assert.match(familyFindings(lower).map(entry => entry.text).join("\n"), /geo-analytics@desktop: the band is not the same height on every tab:/);
 });
 
 test("a page that scrolled itself on load is read from its top and put back where it was", { skip }, async () => {
@@ -295,17 +308,16 @@ test("the compact workflow collector reads the progress menu and result selector
   for (const viewport of ["desktop", "phone"]) {
     const read = await compose(framed({ actions: '<button aria-label="进度，已完成 3/8 步">进度</button>', band: toolbar("查看", '<button aria-label="查看：总览">总览</button>'), body: section(rows(3)) + LONG }), { viewport });
     assert.deepEqual(read.facts.compactWorkflow, { count: 8, views: true, folded: false, inChrome: true });
-    assert.ok(rulesOf(read).includes("step-rail"), "compact progress cannot replace the visible rail");
+    assert.ok(rulesOf(read).includes("geo-areas"), "compact progress does not provide area tabs");
     // 循证 GEO's steps are its navigation (V3 plan, 2026-10-23): a project-level 「查看：」 selector beside them is what the plan removed.
     assert.ok(rulesOf(read).includes("chrome"), "a second, project-level result selector");
     if (viewport === "phone") {
       const folded = await compose(framed({ actions: '<button aria-label="进度，已完成 3/8 步">进度</button>', band: toolbar("查看", '<button aria-label="筛选，已选 1 项">筛选</button>'), body: section(rows(3)) + LONG }), { viewport });
       assert.deepEqual(folded.facts.compactWorkflow, { count: 8, views: false, folded: true, inChrome: true });
-      assert.ok(rulesOf(folded).includes("step-rail"), "a folded progress chip does not replace the visible rail");
+      assert.ok(rulesOf(folded).includes("geo-areas"), "the folded control does not provide area tabs");
     }
     const absent = await compose(framed({ actions: '<button aria-label="进度，已完成 3/8 步">进度</button>', band: toolbar("查看", ""), body: section(rows(3)) + LONG }), { viewport });
-    assert.ok(rulesOf(absent).includes("step-rail"));
-    assert.ok(!rulesOf(absent).includes("chrome"), "no selector is what a module whose steps are its navigation draws");
+    assert.ok(rulesOf(absent).includes("chrome"), "project work owns the progress disclosure");
   }
 });
 
@@ -592,20 +604,6 @@ test("discovery and calculation workspaces have separate width families while ge
 });
 
 
-test("GEO contextual analysis choices are measured from their own pinned band", { skip }, async () => {
-  await page.setViewportSize({ width: 1512, height: 945 });
-  for (const [step, label, wanted] of [["diagnosis", "分析视图：可见度", 1], ["evidence", "", 0]]) {
-    await page.route("http://context.walk/**", route => route.fulfill({ contentType: "text/html; charset=utf-8", body: `<style>${CSS}</style><main><header data-page-header><h1>Project</h1><button>项目总览</button></header><div data-page-chrome><nav data-step-rail><ol>${Array.from({length:8}, (_, i) => `<li data-rail-step="${i === 0 ? step : `s${i}`}" data-rail-state="todo"><a ${i === 0 ? 'aria-current="step"' : ''} href="?step=${i === 0 ? step : `s${i}`}">Step ${i}</a><span>未开始</span></li>`).join("")}</ol></nav>${label ? `<button aria-label="${label}">Analysis</button>` : ""}</div><div data-page-body>Result</div></main>` }));
-    await page.goto(`http://context.walk/app/geo/study?step=${step}`);
-    const facts = await page.evaluate(measureComposition);
-    assert.deepEqual(facts.geoContext, { adopted: true, step, requestedStep: step, selectors: wanted });
-    assert.equal(facts.viewSelector.count, 0);
-    assert.ok(!compositionFindings("geo-plan", "desktop", facts).notices.some(entry => entry.rule === "chrome"));
-    await page.unroute("http://context.walk/**");
-  }
-});
-
-
 test("only a named selection toolbar or form can establish a local primary group", { skip }, async () => {
   for (const [attrs, count, valid] of [[`data-action-group="selection" role="toolbar" aria-label="Selected messages"`, 1, true], [`data-action-group="selection" role="toolbar" aria-label="Selected messages"`, 2, false], [`data-action-group="row"`, 1, false]]) {
     await page.setContent(`<style>${CSS}</style><main><header data-page-header><h1>Inbox</h1></header><div data-page-body><div ${attrs}>${Array.from({length:count}, () => '<button class="bg-accent">Mark read</button>').join("")}</div></div></main>`);
@@ -614,24 +612,60 @@ test("only a named selection toolbar or form can establish a local primary group
   }
 });
 
-test("adopted GEO walks eight steps, contextual siblings and both header destinations", { skip }, async () => {
-  await page.route("http://geo-context.walk/**", route => {
-    const url = new URL(route.request().url());
-    const step = url.searchParams.get("step");
-    const pairs = { diagnosis: [["可见度", "visibility"], ["准确与安全", "accuracy"]], sources: [["信源", "sources"], ["方案", "plan"]], monitoring: [["趋势", "visibility"], ["执行记录", "actions"]] };
-    const options = pairs[step] ?? [];
-    const current = url.pathname.split("/").at(-1);
-    const label = options.find(([, key]) => key === current)?.[0] ?? options[0]?.[0];
-    const steps = ["evidence", "journey", "questions", "diagnosis", "sources", "content", "distribution", "monitoring"];
-    const body = `<div data-page-dock><div data-conversation-bar><button onclick="location.href='/app/geo/study/chat/session?result=overview'">打开对话</button></div></div><main><header data-page-header><button onclick="location.href='/app/geo/study'">项目总览</button></header><div data-page-chrome><nav data-step-rail>${steps.map(id => `<div data-rail-step="${id}" data-rail-state="todo"><a ${id === step ? 'aria-current="step"' : ''} href="/app/geo/study/${id === 'diagnosis' || id === 'monitoring' ? 'visibility' : id === 'sources' ? 'sources' : 'evidence'}?step=${id}">${id}</a></div>`).join("")}</nav>${options.length ? `<button aria-label="分析视图：${label}" onclick="globalThis.document.querySelector('[role=menu]').hidden=false">分析视图</button><div role="menu" hidden>${options.map(([name,key]) => `<button role="menuitemradio" onclick="location.href='/app/geo/study/${key}?step=${step}'">${name}</button>`).join("")}</div>` : ""}</div><div data-page-body><table><tr><td>Result</td></tr></table></div></main>`;
-    route.fulfill({ contentType: "text/html; charset=utf-8", body });
-  });
-  await page.goto("http://geo-context.walk/app/geo/study");
-  const result = await verifyModuleNavigation(page, "geo");
-  assert.equal(result.destinations.length, 8);
-  assert.equal(result.views.length, 6);
-  assert.equal(page.url(), "http://geo-context.walk/app/geo/study");
-  await page.unroute("http://geo-context.walk/**");
+function geoAreasFixture(url, defect) {
+  const root = "/app/geo/study";
+  const key = url.pathname.slice(root.length);
+  const journey = url.searchParams.get("view") === "journey";
+  const published = url.searchParams.has("published");
+  const conversation = url.searchParams.get("conversation") === "open";
+  const phone = url.searchParams.has("phone");
+  const areas = [
+    ["项目工作", "", [["项目对话", ""], ["方案", "/plan"]]],
+    ["AI 表现", "/visibility", [["可见度", "/visibility"], ["医学核查", "/accuracy"], ["引用来源", "/sources"], ["问题与回答", "/questions"]]],
+    ["内容与发布", "/actions", [["稿件", "/actions"], ["发布记录", "/actions#geo-delivery"]]],
+    ["产品与资料", "/evidence", [["产品依据", "/evidence"], ["人群与旅程", "/questions?view=journey"]]],
+  ];
+  const selected = journey ? "/questions?view=journey" : published ? "/actions#geo-delivery" : key;
+  const area = areas.find((entry) => entry[2].some(([, suffix]) => suffix === selected)) ?? areas[0];
+  const path = (suffix, { dropScope = false, open = false, close = false } = {}) => {
+    const target = new URL(root + suffix, url);
+    for (const [k, v] of url.searchParams) if (k !== "view" && !(dropScope && k === "engines")) target.searchParams.set(k, v);
+    if (target.hash === "#geo-delivery") target.searchParams.set("published", "1"); else target.searchParams.delete("published");
+    if (open) { target.searchParams.set("session", "ses-fixed"); target.searchParams.set("conversation", "open"); }
+    if (close) target.searchParams.delete("conversation");
+    return target.pathname + target.search + target.hash;
+  };
+  const sidebar = `<button id="expand" ${phone ? "" : "hidden"} onclick="document.querySelector('nav').hidden=false;document.querySelector('#scrim').hidden=false;this.hidden=true">展开侧边栏</button><button id="scrim" hidden>关闭侧边栏</button><nav aria-label="循证 GEO 工作区" ${phone ? "hidden" : ""}>${areas.filter(([name]) => defect !== "missing-area" || name !== "产品与资料").map(([name, suffix]) => `<a onclick="event.preventDefault();const destination=this.href;setTimeout(()=>location.href=destination,120)" href="${path(suffix)}" ${area[0] === name || defect === "multiple-current" && name === "产品与资料" ? 'aria-current="page"' : ''}>${name}</a>`).join(" ")}</nav>
+    <script>addEventListener('keydown',event=>{if(event.key==='Escape'&&!document.querySelector('#scrim').hidden){document.querySelector('#scrim').hidden=true;document.querySelector('nav').hidden=true;document.querySelector('#expand').hidden=false}})</script>`;
+  const strip = `<div role="tablist" aria-label="${area[0]}">${area[2].map(([name, suffix]) => `<a role="tab" aria-selected="${selected === suffix}" href="${path(suffix, { dropScope: defect === "scope" && suffix === "/sources" })}">${name}</a>`).join(" ")}</div>`;
+  const progress = key ? "" : `<div data-geo-work><aside aria-label="项目资料"><details><summary>任务进度（1）</summary><ul><li><a href="${path('/accuracy#geo-errors')}">诊断</a><span>${defect === "state" ? "" : "已完成"}</span></li></ul></details><button onclick="document.querySelector('#runs').showModal()">执行详情</button></aside></div>`;
+  const panes = conversation && key ? `<section data-workspace-conversation><a href="${path(selected, { close: true })}">${phone ? "回到结果" : "收起对话"}</a></section>${defect === "duplicate" ? '<section data-workspace-conversation>Duplicate</section>' : ""}` : "";
+  return `<meta charset="utf-8"><style>${CSS}</style>${sidebar}<main><header data-page-header><h1>Brand</h1></header><div data-page-chrome>${conversation && phone && key ? "" : strip}<button onclick="document.querySelector('#scope').showModal()">分析范围 · 已筛选</button><button onclick="location.href='${path(selected, { open: true })}'">询问 AI</button></div><div data-page-body>${progress}<div data-geo-tab="${defect === "wrong-result" ? "other" : key.slice(1)}">${rows(2)}</div>${panes}</div><dialog id="runs" aria-label="AI 运行">Run details</dialog><dialog id="scope" aria-label="分析范围"><button aria-pressed="true">DeepSeek</button></dialog></main>`;
+}
+
+test("GEO area navigation follows real controls at desktop and phone widths", { skip }, async () => {
+  for (const width of [1512, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.route("http://geo-areas.walk/**", route => route.fulfill({ contentType: "text/html; charset=utf-8", body: geoAreasFixture(new URL(route.request().url())) }));
+    const address = `http://geo-areas.walk/app/geo/study${width === 390 ? "?phone=1&conversation=open&session=ses-fixed" : ""}`;
+    await page.goto(address);
+    const read = await verifyGeoAreas(page);
+    assert.equal(read.destinations.length, 1);
+    assert.equal(read.views.length, 9);
+    assert.deepEqual(read.notices, []);
+    assert.equal(read.conversation.runtimeVerified, false);
+    assert.equal(page.url(), address);
+    await page.unroute("http://geo-areas.walk/**");
+  }
+});
+
+test("GEO area navigation rejects missing destinations, hidden states, lost scope and duplicate conversation panes", { skip }, async () => {
+  for (const [defect, reason] of [["missing-area", /产品与资料/], ["state", /recognized visible state/], ["scope", /wrong project, destination or scope/], ["multiple-current", /one current sidebar area/], ["wrong-result", /data-geo-tab/], ["duplicate", /strict mode violation|one addressed conversation/]]) {
+    await page.route("http://geo-areas.walk/**", route => route.fulfill({ contentType: "text/html; charset=utf-8", body: geoAreasFixture(new URL(route.request().url()), defect) }));
+    await page.goto("http://geo-areas.walk/app/geo/study");
+    await assert.rejects(verifyGeoAreas(page), reason);
+    await page.unroute("http://geo-areas.walk/**");
+  }
 });
 
 

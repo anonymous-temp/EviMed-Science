@@ -1,5 +1,7 @@
+import { sanitizeRuntimeUiHistoryState } from "@/lib/runtimeUiNavigation";
 import { useCallback } from "react";
-import { useSearchParams } from "react-router";
+import { useLocation, useSearchParams } from "react-router";
+import type { GeoTabKey } from "../geoTabs";
 
 /**
  * The address of the two records of a project that open in a drawer over whatever page the person is on (page-structure rule 2:
@@ -28,6 +30,56 @@ export const GEO_SOURCE_PARAM = "source";
 /** One article named on 行动 (a 「本周」 line about it): its row is marked where it waits for a person. Not a drawer. */
 export const GEO_ARTICLE_PARAM = "article";
 
+type GeoDrawerKind = "group" | "action" | "error" | "source" | "order" | "publication";
+type GeoDrawerSelection = { kind: GeoDrawerKind; id: string; engine?: string | null };
+
+export function geoDrawerSelectionState(state: unknown, selection: GeoDrawerSelection | null, activation?: string) {
+  const clean = sanitizeRuntimeUiHistoryState(state);
+  const next = { ...(clean && typeof clean === "object" ? clean : {}) } as Record<string, unknown>;
+  delete next.geoDrawerSelection;
+  if (selection) next.geoDrawerSelection = { ...selection, activation: activation ?? crypto.randomUUID() };
+  return next;
+}
+
+export function geoDrawerActivation(params: URLSearchParams, state: unknown, allowed: readonly GeoDrawerKind[]): string | null {
+  if (!state || typeof state !== "object" || !("geoDrawerSelection" in state)) return null;
+  const marker = state.geoDrawerSelection as (Partial<GeoDrawerSelection> & { activation?: unknown }) | null;
+  if (!marker?.kind || !allowed.includes(marker.kind) || !marker.id || params.get(marker.kind) !== marker.id
+    || (marker.kind === "group" && params.get(GEO_DRAWER_ENGINE_PARAM) !== (marker.engine ?? null))) return null;
+  return typeof marker.activation === "string" ? marker.activation : null;
+}
+
+const GROUP_DRAWER_TABS: ReadonlySet<GeoTabKey> = new Set(["visibility", "accuracy", "questions", "sources", "actions"]);
+
+/** The object hosted by the result pane. Scope, filters and the article row marker are independent of detail selection. */
+export function geoResultDrawerProps(params: URLSearchParams, state: unknown, tab: GeoTabKey, options: {
+  snapshotId?: string;
+  analysis: boolean;
+  distribution: boolean;
+}) {
+  const { snapshotId, analysis, distribution } = options;
+  const allowed: GeoDrawerKind[] = [];
+  if (snapshotId) allowed.push("error", "group");
+  else if (!analysis) {
+    if (GROUP_DRAWER_TABS.has(tab)) allowed.push("group");
+    if (tab === "accuracy") allowed.push("error");
+    if (tab === "sources") allowed.push("source");
+    if (tab === "actions") {
+      allowed.push("action");
+      if (distribution) allowed.push(params.get("order") ? "order" : "publication");
+    }
+  }
+  const addressed = allowed.flatMap(kind => {
+    const id = params.get(kind);
+    if (!id) return [];
+    return [[kind, id, kind === "group" ? params.get(GEO_DRAWER_ENGINE_PARAM) : null]];
+  });
+  return {
+    resultDetailKey: addressed.length ? JSON.stringify([tab, snapshotId ?? null, addressed]) : null,
+    resultDetailActivation: geoDrawerActivation(params, state, allowed),
+  };
+}
+
 const SCOPE_ALIASES: Readonly<Record<string, string>> = { engine: "engines", cluster: "groupIds", pool: "pools" };
 
 function setParameter(params: URLSearchParams, name: string, value: string | null | undefined) {
@@ -47,29 +99,29 @@ export function searchWith(search: string, changes: Readonly<Record<string, stri
   return text ? `?${text}` : "";
 }
 
+/** Selecting a different result detail replaces the previous one and keeps the surrounding result scope. */
+export function geoDrawerSearch(search: string, selection: GeoDrawerSelection | null): string {
+  return searchWith(search, {
+    [GEO_GROUP_PARAM]: null, [GEO_ACTION_PARAM]: null, [GEO_ERROR_PARAM]: null,
+    [GEO_SOURCE_PARAM]: null, order: null, publication: null, [GEO_DRAWER_ENGINE_PARAM]: null,
+    ...(selection && { [selection.kind]: selection.id }),
+    ...(selection?.kind === "group" && selection.engine && { [GEO_DRAWER_ENGINE_PARAM]: selection.engine }),
+  });
+}
+
 /** The drawer a page is showing and the ways to open and close it. Opening one closes the other: there is one drawer. */
 export function useGeoDrawerAddress() {
   const [params, setParams] = useSearchParams();
+  const { state } = useLocation();
   const group = params.get(GEO_GROUP_PARAM);
   const action = params.get(GEO_ACTION_PARAM);
   const error = params.get(GEO_ERROR_PARAM);
   const engine = params.get(GEO_DRAWER_ENGINE_PARAM);
   const open = useCallback((next: { group?: string | null; action?: string | null; error?: string | null; engine?: string | null }) => {
-    setParams((previous) => {
-      const copy = new URLSearchParams(previous);
-      copy.delete(GEO_GROUP_PARAM);
-      copy.delete(GEO_ACTION_PARAM);
-      copy.delete(GEO_ERROR_PARAM);
-      copy.delete(GEO_DRAWER_ENGINE_PARAM);
-      copy.delete('order');
-      copy.delete('publication');
-      if (next.engine) copy.set(GEO_DRAWER_ENGINE_PARAM, next.engine);
-      if (next.group) copy.set(GEO_GROUP_PARAM, next.group);
-      if (next.action) copy.set(GEO_ACTION_PARAM, next.action);
-      if (next.error) copy.set(GEO_ERROR_PARAM, next.error);
-      return copy;
-    });
-  }, [setParams]);
+    const selection: GeoDrawerSelection | null = next.group ? { kind: "group", id: next.group, engine: next.engine || null }
+      : next.action ? { kind: "action", id: next.action } : next.error ? { kind: "error", id: next.error } : null;
+    setParams(previous => geoDrawerSearch(previous.toString(), selection), { state: geoDrawerSelectionState(state, selection) });
+  }, [setParams, state]);
   const close = useCallback(() => {
     setParams((previous) => {
       const copy = new URLSearchParams(previous);
@@ -78,14 +130,15 @@ export function useGeoDrawerAddress() {
       copy.delete(GEO_ERROR_PARAM);
       copy.delete(GEO_DRAWER_ENGINE_PARAM);
       return copy;
-    }, { replace: true });
-  }, [setParams]);
+    }, { replace: true, state: geoDrawerSelectionState(state, null) });
+  }, [setParams, state]);
   return { group, action, error, engine, open, close };
 }
 
 /** One parameter of the address as state: read, and written in place (a filter is not a step in the history). */
 export function useGeoSearchParam(name: string): [string | null, (value: string | null) => void] {
   const [params, setParams] = useSearchParams();
+  const { state } = useLocation();
   const canonical = SCOPE_ALIASES[name];
   const choices = canonical ? params.getAll(canonical).flatMap(value => value.split(",")) : [];
   const value = params.get(name) ?? (choices.length === 1 ? choices[0] : null);
@@ -94,8 +147,8 @@ export function useGeoSearchParam(name: string): [string | null, (value: string 
       const copy = new URLSearchParams(previous);
       setParameter(copy, name, next);
       return copy;
-    }, { replace: true });
-  }, [name, setParams]);
+    }, { replace: true, state: sanitizeRuntimeUiHistoryState(state) });
+  }, [name, setParams, state]);
   return [value, set];
 }
 
@@ -106,6 +159,7 @@ export function useGeoSearchParam(name: string): [string | null, (value: string 
  */
 export function useGeoSearchChange(): (changes: Readonly<Record<string, string | null | undefined>>) => void {
   const [, setParams] = useSearchParams();
+  const { state } = useLocation();
   return useCallback((changes) => {
     setParams((previous) => {
       const copy = new URLSearchParams(previous);
@@ -113,8 +167,8 @@ export function useGeoSearchChange(): (changes: Readonly<Record<string, string |
         setParameter(copy, name, value);
       }
       return copy;
-    }, { replace: true });
-  }, [setParams]);
+    }, { replace: true, state: sanitizeRuntimeUiHistoryState(state) });
+  }, [setParams, state]);
 }
 
 /**
@@ -126,6 +180,7 @@ export function useGeoSearchChange(): (changes: Readonly<Record<string, string |
  */
 export function useGeoFilterReset(names: readonly string[]): () => void {
   const [, setParams] = useSearchParams();
+  const { state } = useLocation();
   const key = names.join('\u0000');
   return useCallback(() => setParams(previous => {
     const copy = new URLSearchParams(previous);
@@ -135,5 +190,5 @@ export function useGeoFilterReset(names: readonly string[]): () => void {
       if (shownFromScope) setParameter(copy, name, null); else copy.delete(name);
     }
     return copy;
-  }, { replace: true }), [key, setParams]);
+  }, { replace: true, state: sanitizeRuntimeUiHistoryState(state) }), [key, setParams, state]);
 }

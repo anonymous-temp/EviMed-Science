@@ -1,3 +1,4 @@
+import { optionalOpaqueRuntimeUiIntent } from "@/test/runtimeUiIntentAssertions";
 import type { ReactElement } from "react";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -112,9 +113,12 @@ function renderTab(tab: ReactElement) {
 }
 
 function expectUnsentProjectDraft(text: string) {
-  expect(screen.getByTestId("location")).toHaveTextContent("/app/geo/geo_1/chat/ses_geo_1");
+  expect(screen.getByTestId("location")).toHaveTextContent("/app/geo/geo_1/");
+  const params = new URLSearchParams(screen.getByTestId("search").textContent ?? "");
+  expect(params.get("conversation")).toBe("open");
+  expect(params.get("session")).toBe("ses_geo_1");
   const state = JSON.parse(screen.getByTestId("state").textContent ?? "null");
-  expect(state.runtimeUiIntent).toMatchObject({
+  expect(optionalOpaqueRuntimeUiIntent(state)).toMatchObject({
     kind: "open", projectId: "prj_geo_1", sessionId: "ses_geo_1", draft: expect.stringContaining(text), scope: descriptor().scope,
   });
   expect(state.runtimeUiIntent).not.toHaveProperty("send");
@@ -479,10 +483,10 @@ describe("信源", () => {
     const dialog = await screen.findByRole("dialog", { name: "百度百科" });
     await within(dialog).findByRole("region", { name: "讲错的回答" });
     await userEvent.click(within(dialog).getByRole("button", { name: "让 AI 处理这个信源" }));
-    await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/app/geo/geo_1/chat/ses_geo_1"));
+    await waitFor(() => expect(screen.getByTestId("search")).toHaveTextContent("conversation=open"));
     // The draft waits in the composer: the intent carries it, and nothing asks the model.
     const state = JSON.parse(screen.getByTestId("state").textContent ?? "null") as { runtimeUiIntent?: { draft?: string } } | null;
-    const draft = state?.runtimeUiIntent?.draft ?? "";
+    const draft = optionalOpaqueRuntimeUiIntent(state)?.draft ?? "";
     expect(draft).toContain("baike.baidu.com");
     expect(draft).toContain("第 1 句讲错的话");
     expect(draft).toContain("1 个讲错了信尔美");
@@ -870,7 +874,7 @@ describe("总览", () => {
     expect(heading.compareDocumentPosition(trend) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     // The wrong statement carries its correction, with the sentence in the draft; the project's conversation is opened with it unsent.
     await userEvent.click(within(list).getByRole("button", { name: "让 AI 写纠错稿" }));
-    await waitFor(() => expect(screen.getByTestId("state")).toHaveTextContent("每天注射一次"));
+    await waitFor(() => expect(screen.getByTestId("state")).toHaveTextContent("runtimeUiIntent"));
     expectUnsentProjectDraft("每天注射一次");
   });
 
@@ -1216,7 +1220,7 @@ describe("药品价值分析只在依据里", () => {
     expect(screen.getByRole("link", { name: "结论库" })).toHaveAttribute("href", "/app/geo/geo_1/evidence");
     expect(screen.getByText("得到 这个药的获益、风险、适用性、费用与可及性")).toBeInTheDocument();
     await userEvent.click(start[0]);
-    await waitFor(() => expect(screen.getByTestId("state")).toHaveTextContent("请结合现有资料开始药品价值分析"));
+    await waitFor(() => expect(screen.getByTestId("state")).toHaveTextContent("runtimeUiIntent"));
     expectUnsentProjectDraft("请结合现有资料开始药品价值分析");
     // Opened with the brief in the composer; nothing was sent.
     expect(screen.getByTestId("state")).not.toHaveTextContent("\"send\":true");
