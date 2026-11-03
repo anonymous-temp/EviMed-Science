@@ -131,8 +131,9 @@ export function roundStoppedByPerson(run) {
 export function statusFromGoalBar(read) {
   if (read.kind === "hidden") return { status: "finished" };
   if (read.kind !== "present") return null;
-  if (read.activation === "stopped") return { status: "paused", reason: "person" };
+  // Work all done first: LoopX stops a goal itself when it finishes it (D22, 2026-11-03), and that is no one's pause.
   if (Number(read.total) > 0 && Number(read.remaining) === 0) return { status: "finished" };
+  if (read.activation === "stopped") return { status: "paused", reason: "person" };
   return { status: "waiting" };
 }
 
@@ -150,6 +151,7 @@ export function goalBarState(value) {
     goalId: String(snapshot.goalId ?? ""),
     loopxAgentId: String(snapshot.loopxAgentId ?? ""),
     activation: typeof snapshot.goalActivation === "string" ? snapshot.goalActivation : String(snapshot.goalActivation?.state ?? ""),
+    agentStatus: typeof snapshot.agentStatus === "string" ? snapshot.agentStatus : "",
     processed: Number(snapshot.progress?.processed ?? 0),
     remaining: Number(snapshot.progress?.remaining ?? 0),
     total: Number(snapshot.progress?.total ?? 0),

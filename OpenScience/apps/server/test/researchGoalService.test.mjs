@@ -29,7 +29,7 @@ async function world({ runs = [], limits = {}, bar = {}, runtime = { running: tr
   };
   const goals = new ResearchGoals({
     documents,
-    database: { query: async () => ({ rows: [...docs.values()].filter((doc) => doc.payload.status === "active" || doc.payload.pauseUnconfirmed === true).map((doc) => ({ user_id: "u", project_id: "p", session_id: doc.payload.sessionId })) }) },
+    database: { query: async () => ({ rows: [...docs.values()].filter((doc) => doc.payload.status === "active" || doc.payload.status === "paused" || doc.payload.pauseUnconfirmed === true).map((doc) => ({ user_id: "u", project_id: "p", session_id: doc.payload.sessionId })) }) },
     agentRuns: { list: async () => state.runs },
     runtimeManager: {
       goalBar: async (_, payload) => { calls.bar.push(payload); return payload.op === "read" ? state.bar.read : state.bar.action; },
@@ -62,7 +62,7 @@ test("a third round without a file pauses the goal on LoopX's bar, and the perso
     assert.equal(w.calls.notify[0].title, "研究已暂停");
     assert.match(w.calls.notify[0].body, /连续 3 轮没有新的产出/);
     assert.match(w.calls.notify[0].body, /评估 SGLT2/);
-    assert.equal(w.calls.notify[0].groupKey, "goal:s");
+    assert.equal(w.calls.notify[0].groupKey, "goal-state:s", "its own item: the next round's notice must not overwrite it");
   } finally { await w.close(); }
 });
 
@@ -241,6 +241,70 @@ test("a file connected while a round runs is said to that round, once, by name",
   } finally { await w.close(); }
 });
 
+test("a round LoopX starts after a pause is stopped and does not count as the goal going again; one going when the pause came is let finish", async () => {
+  const going = round(1, { status: "running", finishedAt: null, startedAt: new Date(T0 - 60_000).toISOString() });
+  const w = await world({ runs: [setting(), going], bar: { read: { result: { kind: "present", snapshot: { goalId: "g", loopxAgentId: "a", goalActivation: "stopped", agentStatus: "running", progress: {} } } } } });
+  try {
+    w.state.now = T0;
+    await w.goals.noteBarAction(w.project, "s", "pause");
+    assert.equal(w.docs.get("goal-s").payload.status, "paused");
+    await w.goals.tick();
+    assert.equal(w.calls.cancel.length, 0, "the round going when the pause came finishes");
+
+    const recovery = round(2, { status: "running", finishedAt: null, startedAt: new Date(T0 + 30_000).toISOString() });
+    w.state.runs = [setting(), { ...going, status: "succeeded", finishedAt: new Date(T0 + 10_000).toISOString() }, recovery];
+    w.state.now = T0 + 40_000;
+    await w.goals.tick();
+    assert.deepEqual(w.calls.cancel, ["c2"]);
+    assert.equal(w.docs.get("goal-s").payload.status, "paused");
+
+    await w.goals.observeRound(w.project, { ...recovery, status: "canceled", canceledBy: "platform", errorCode: "runtime_canceled", finishedAt: new Date(T0 + 45_000).toISOString() });
+    assert.equal(w.docs.get("goal-s").payload.status, "paused", "LoopX's own round is not someone taking the goal up");
+  } finally { await w.close(); }
+});
+
+test("a goal someone started on the bar is not held: the bar's word is asked before a round is stopped, and a person's message takes a paused goal up", async () => {
+  const w = await world({ runs: [setting(), round(1)], bar: { read: { result: { kind: "present", snapshot: { goalId: "g", loopxAgentId: "a", goalActivation: "active", agentStatus: "running", progress: {} } } } } });
+  try {
+    w.state.now = T0;
+    await w.goals.noteBarAction(w.project, "s", "pause");
+    w.state.runs = [setting(), round(1), round(2, { status: "running", finishedAt: null, startedAt: new Date(T0 + 30_000).toISOString() })];
+    w.state.now = T0 + 40_000;
+    await w.goals.tick();
+    assert.equal(w.calls.cancel.length, 0);
+    assert.equal(w.docs.get("goal-s").payload.status, "active");
+
+    await w.goals.noteBarAction(w.project, "s", "pause");
+    const mine = { ...round(3), id: "p1", automated: false, effectiveRouteReason: "default", startedAt: new Date(T0 + 60_000).toISOString(), finishedAt: new Date(T0 + 70_000).toISOString() };
+    await w.goals.observeRound(w.project, mine);
+    assert.equal(w.docs.get("goal-s").payload.status, "active");
+  } finally { await w.close(); }
+});
+
+test("a bar action in a session with no goal is no concern of the goal's", async () => {
+  const w = await world({ runs: [] });
+  try {
+    await w.goals.noteBarAction(w.project, "s", "pause");
+    assert.equal(w.docs.size, 0);
+  } finally { await w.close(); }
+});
+
+test("a goal just taken up has not been quiet since the round before: no state is read off it until it has been, and a kernel at a turn is no resting goal", async () => {
+  const present = (agentStatus) => ({ read: { result: { kind: "present", snapshot: { goalId: "g", loopxAgentId: "a", goalActivation: "active", agentStatus, progress: { total: 3, remaining: 1, processed: 2 } } } } });
+  const w = await world({ runs: [setting(), round(1)], bar: present("running") });
+  try {
+    await w.goals.observeRound(w.project, w.state.runs.at(-1));
+    await w.goals.noteBarAction(w.project, "s", "start");
+    const started = Date.parse(w.docs.get("goal-s").payload.statusAt);
+    w.state.now = started + 60_000;
+    await w.goals.tick();
+    assert.equal(w.docs.get("goal-s").payload.status, "active", "a minute after 继续, whatever the last round's age");
+    w.state.now = started + 200_000;
+    await w.goals.tick();
+    assert.equal(w.docs.get("goal-s").payload.status, "active", "the bar says a turn is going, the ledger has not seen it yet");
+  } finally { await w.close(); }
+});
+
 test("a file connected while a person's own turn runs is not written into it: that would read as their statement, so the next unattended round is told", async () => {
   const mine = { ...round(1, { status: "running", finishedAt: null }), id: "p1", automated: false, effectiveRouteReason: "default" };
   const w = await world({ runs: [setting(), mine] });
@@ -307,8 +371,16 @@ test("a round that began after a goal came to rest means someone took it up", as
     await w.goals.pause(w.project, "s");
     assert.equal(w.docs.get("goal-s").payload.status, "paused");
     w.state.now = T0 + 10_000;
-    const next = round(2, { artifacts: ["m.md"], startedAt: iso(T0 + 5000), finishedAt: iso(T0 + 8000) });
-    w.state.runs = [...w.state.runs, next];
+    const mine = { ...round(2), id: "p1", automated: false, effectiveRouteReason: "default", startedAt: iso(T0 + 5000), finishedAt: iso(T0 + 8000) };
+    w.state.runs = [...w.state.runs, mine];
+    await w.goals.observeRound(w.project, mine);
+    assert.equal(w.docs.get("goal-s").payload.status, "active");
+
+    // A goal that was only waiting: LoopX going on is as good as anyone taking it up.
+    await w.goals.observeRound(w.project, round(3, { artifacts: ["m.md"] }));
+    const waiting = w.docs.get("goal-s");
+    w.docs.set("goal-s", { ...waiting, payload: { ...waiting.payload, status: "waiting", statusAt: iso(T0 + 9000) } });
+    const next = round(4, { artifacts: ["k.md"], startedAt: iso(T0 + 9500), finishedAt: iso(T0 + 9800) });
     await w.goals.observeRound(w.project, next);
     assert.equal(w.docs.get("goal-s").payload.status, "active");
     assert.equal(w.docs.get("goal-s").payload.goalId, "g");

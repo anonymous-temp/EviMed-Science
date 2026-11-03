@@ -183,3 +183,27 @@ describe("research observation", () => {
     expect(model.lastEventAt).toBeLessThanOrEqual(Date.now());
   });
 });
+
+describe("what reads LoopX's own output", () => {
+  const event = (seq: number, fields: Record<string, unknown>) => frame(seq, "run/event", { sessionId: "s1", event: fields });
+  it("takes a script reading the CLI's JSON out of the feed and the counts once its result shows it, and keeps a script reading research", () => {
+    const model = emptyObservation();
+    foldObservation(model, event(1, { type: "tool/call", callId: "a", tool: "bash", input: { command: "python3 -c \"import json;print(json.load(open('/tmp/guard1.json')))\"" } }));
+    foldObservation(model, event(2, { type: "tool/call", callId: "b", tool: "bash", input: { command: "python3 analyse.py" } }));
+    expect(model.callCount).toBe(2);
+    foldObservation(model, event(3, { type: "tool/result", callId: "a", tool: "bash", status: "completed", output: "{\"interaction_contract\": {\"must_attempt\": true}}" }));
+    foldObservation(model, event(4, { type: "tool/result", callId: "b", tool: "bash", status: "completed", output: "half-life 5.7 h" }));
+    expect(model.callCount).toBe(1);
+    expect(model.calls).toHaveLength(1);
+    expect(model.calls[0].id).toContain("b");
+    // A late copy of the same result does not bring it back.
+    foldObservation(model, event(5, { type: "tool/result", callId: "a", tool: "bash", status: "completed", output: "x" }));
+    expect(model.calls).toHaveLength(1);
+  });
+  it("leaves a research tool's result alone, whatever it says", () => {
+    const model = emptyObservation();
+    foldObservation(model, event(1, { type: "tool/call", callId: "w", tool: "web_read", input: { url: "https://example.org/loopx" } }));
+    foldObservation(model, event(2, { type: "tool/result", callId: "w", tool: "web_read", status: "completed", output: "loopx is a word on this page" }));
+    expect(model.calls).toHaveLength(1);
+  });
+});

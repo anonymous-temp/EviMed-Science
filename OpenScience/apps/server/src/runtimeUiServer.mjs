@@ -274,7 +274,7 @@ function assertNativeModelSelection(config, payload) {
 /**
  * `agentRuns` is the run ledger a message steered into a running turn is
  * counted on (`recordSteer`); `audit` reports a count that could not be written.
- * @param {{ config: Record<string, any>, store: any, runtimeManager: any, agentRegistry?: any, usageLedger?: any, balanceGate?:((project:any,payload:any)=>Promise<void>)|null, authorizePrompt?:(project:any,sessionId:string)=>Promise<void>, preparePrompt?:((project:any,request:any)=>Promise<any>)|null, recordPromptActor?:((user:any,project:any,request:any)=>Promise<any>)|null, recordPromptAttendance?:((user:any,project:any,request:any)=>Promise<any>)|null, bindResultRevision?:((user:any,project:any,request:any)=>Promise<any>)|null, bindVcrReference?:((user:any,project:any,request:any)=>Promise<any>)|null, bindGeoPlan?:((user:any,project:any,request:any)=>Promise<any>)|null, prepareGeoPlan?:((user:any,project:any,request:any)=>Promise<any>)|null, prepareSelections?:((user:any,project:any,request:any)=>Promise<any>)|null, authorizeMutation?:((operation:()=>Promise<any>)=>Promise<any>)|null,
+ * @param {{ config: Record<string, any>, store: any, runtimeManager: any, onGoalBarAction?: ((project: any, sessionId: string, op: "pause" | "start") => Promise<void>) | null, agentRegistry?: any, usageLedger?: any, balanceGate?:((project:any,payload:any)=>Promise<void>)|null, authorizePrompt?:(project:any,sessionId:string)=>Promise<void>, preparePrompt?:((project:any,request:any)=>Promise<any>)|null, recordPromptActor?:((user:any,project:any,request:any)=>Promise<any>)|null, recordPromptAttendance?:((user:any,project:any,request:any)=>Promise<any>)|null, bindResultRevision?:((user:any,project:any,request:any)=>Promise<any>)|null, bindVcrReference?:((user:any,project:any,request:any)=>Promise<any>)|null, bindGeoPlan?:((user:any,project:any,request:any)=>Promise<any>)|null, prepareGeoPlan?:((user:any,project:any,request:any)=>Promise<any>)|null, prepareSelections?:((user:any,project:any,request:any)=>Promise<any>)|null, authorizeMutation?:((operation:()=>Promise<any>)=>Promise<any>)|null,
  *   recordUploadSuccess?: ((project:any,upload:any)=>Promise<any>)|null,
  *   recordUploadAttempt?: ((project: any) => Promise<void>) | null, managedBrowser?: any, authorizeOpenSession?:((user:any,project:any,sessionId:string)=>Promise<void>)|null,
  *   resolveDelegatedFrame?:((user:any,delegation:any,options?:{recheck?:any})=>Promise<{project:any,principal:any}>)|null,
@@ -284,7 +284,7 @@ function assertNativeModelSelection(config, payload) {
  *   audit?: (event: string, detail: Record<string, any>) => Promise<void> }} deps
  * @returns {{ server: import('node:http').Server, releaseFrame: (frameId: string, userId: string) => Promise<number>, refreshFrameBinding: (renewed: any) => number, listen: (port?: number, host?: string) => Promise<any>, address: () => any, close: () => Promise<void> }}
  */
-export function createRuntimeUiServer({ config, store, runtimeManager, agentRegistry = null, usageLedger = null, balanceGate = null, authorizePrompt = null, preparePrompt = null, recordPromptActor = null, recordPromptAttendance = null, bindResultRevision = null, bindVcrReference = null, bindGeoPlan = null, prepareGeoPlan = null, prepareSelections = null, authorizeMutation = null,
+export function createRuntimeUiServer({ config, store, runtimeManager, onGoalBarAction = null, agentRegistry = null, usageLedger = null, balanceGate = null, authorizePrompt = null, preparePrompt = null, recordPromptActor = null, recordPromptAttendance = null, bindResultRevision = null, bindVcrReference = null, bindGeoPlan = null, prepareGeoPlan = null, prepareSelections = null, authorizeMutation = null,
   agentRuns = null, managedBrowser = null, authorizeOpenSession = null, recordUploadAttempt = null, recordUploadSuccess = null, noteFileRead = null, resolveDelegatedFrame = null, createDelegatedPolicy = null, audit = async () => {} }) {
   // The original bytes of a native upload are kept for the study's data intake beside the kernel's own copy. A failed
   // copy (the project's capacity, the ledger) is that copy's failure: the upload the kernel already stored stands.
@@ -958,6 +958,12 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
       // file ceiling rather than the JSON one, and forwarded as bytes.
       ...(method === RUNTIME_UI_UPLOAD_METHOD ? { fileBody: true } : {}),
       ...(req.method === "POST" && [RUNTIME_UI_UPLOAD_METHOD, "fileUploads/upload"].includes(method) && recordUploadAttempt ? { beforeForward: () => recordUploadAttempt(project) } : {}),
+      ...(onGoalBarAction && ["start", "pause"].includes(loopxBody?.payload.op) ? { observeResponse: async response => {
+        let answer = null;
+        try { answer = JSON.parse(response.body.toString("utf8")); } catch { /* said nothing */ }
+        const kind = answer?.result?.value?.result?.kind;
+        if (kind === "succeeded" || kind === "applied_with_warning") await onGoalBarAction(project, loopxBody.payload.sessionId, loopxBody.payload.op);
+      } } : {}),
       ...(originalUpload ? { observeResponse: async response => {
         if (response.status < 200 || response.status >= 300) return;
         let answer;

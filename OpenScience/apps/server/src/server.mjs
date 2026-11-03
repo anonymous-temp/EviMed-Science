@@ -9057,6 +9057,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   }
   const geoNativeSelectionRequests = new WeakSet();
   const runtimeUi = createRuntimeUiServer({
+    onGoalBarAction: (project, sessionId, op) => researchGoals?.noteBarAction(project, sessionId, op) ?? Promise.resolve(),
     resolveDelegatedFrame: (user, delegation, options) => resolveGeoFrame(user, { kind: "geo", geoProjectId: delegation.geoProjectId, sessionId: delegation.rootSessionId }, delegation, options),
     createDelegatedPolicy: async ({ user, project, claims }) => new GeoNativeFramePolicy({ authority: geoNativeAuthority,
       runtimeManager, config, user, project, claims, acceptInput: null, nativeInputs: geoNativeInputs }),

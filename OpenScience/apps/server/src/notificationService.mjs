@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { DISPLAY_TIME_ZONE, NOTICE_PRIORITY, NOTICE_TYPES, agendaLocalDate, connectorCredentialSpec, errorCodeMessage, runOutcomeKind, summarizeGateNotices } from "@evimed/domain";
 import { describedQualityNotices } from "./runNotices.mjs";
+import { isResearchGoalRun } from "./researchGoal.mjs";
 import { HttpError } from "./security.mjs";
 import { migrateNotifications } from "./notificationPersistence.mjs";
 import { productId, productInteger } from "./productPersistence.mjs";
@@ -372,7 +373,9 @@ export function isGoalContinuation(run) {
  */
 function goalContinuationNotifies(run) {
   if (run?.dispatchStatus === "rejected") return false;
-  return !(run?.status === "canceled" && run?.canceledBy !== "platform");
+  // A round stopped by a person is their act. One the platform stopped was either the goal's pause holding (nothing to tell) or a runtime going
+  // away (the goal is taken up again, and if it cannot be, `researchGoalService` says that in its own item).
+  return run?.status !== "canceled";
 }
 
 /** @param {{ outcome: string, severity: string }} notice */
@@ -417,7 +420,8 @@ export function runFinishedInboxItem(project, run, { peers = [] } = {}) {
   // A goal's automatic turns keep one item per conversation, brought back
   // unread by each turn, instead of joining the day's count of questions asked.
   // A turn that did not finish, or found a safety issue, says so in its title.
-  if (isGoalContinuation(run) && typeof run.sessionId === "string" && run.sessionId) {
+  // The turn that set a goal is its first: it finishing is no more the goal being done than any other's.
+  if ((isGoalContinuation(run) || isResearchGoalRun(run)) && typeof run.sessionId === "string" && run.sessionId) {
     return routineCompletion(notice)
       ? { ...base, groupKey: `goal:${run.sessionId}`, title: "长任务有新进展", body: runLabel(run) }
       : { ...base, groupKey: `goal:${run.sessionId}`, title: notice.title, body: notice.body };

@@ -662,10 +662,13 @@ function NativeResearchPane({ projectId, sessionId, onClose }: { projectId: stri
       setHeight(old => (old === next ? old : next));
     };
     fit();
-    // Once more after the first layout, where the scroll to the pane may have settled somewhere else than the first read saw.
+    // Once more after the first layout, where the scroll to the pane may have settled somewhere else than the first read saw; and a window
+    // that changes size moves what is above the pane a moment after the event, so it is read again then.
     const settle = window.requestAnimationFrame?.(fit);
-    window.addEventListener("resize", fit);
-    return () => { withdraw(); window.removeEventListener("resize", fit); if (settle !== undefined) window.cancelAnimationFrame?.(settle); };
+    let settling: ReturnType<typeof setTimeout> | undefined;
+    const resized = () => { fit(); clearTimeout(settling); settling = setTimeout(fit, 300); };
+    window.addEventListener("resize", resized);
+    return () => { withdraw(); window.removeEventListener("resize", resized); clearTimeout(settling); if (settle !== undefined) window.cancelAnimationFrame?.(settle); };
   }, [projectId, sessionId]);
   return <section aria-label="研究对话" className="space-y-2">
     <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-ui font-semibold text-text">研究对话</h2><Button variant="secondary" onClick={onClose}>收起对话</Button></div>

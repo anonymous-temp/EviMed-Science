@@ -85,6 +85,8 @@ test("what LoopX's bar says becomes a state: all work done, stopped, no goal, or
   assert.deepEqual(statusFromGoalBar(goalBarState(present("active", 0, 0))), { status: "waiting" });
   assert.deepEqual(statusFromGoalBar(goalBarState({ result: { kind: "hidden", reason: "binding_missing" } })), { status: "finished" });
   assert.equal(statusFromGoalBar(goalBarState({ result: { kind: "fault", code: "session_unavailable" } })), null);
+  // LoopX stops a goal itself when it finishes it: all work done reads finished even with the goal stopped.
+  assert.deepEqual(statusFromGoalBar({ kind: "present", activation: "stopped", total: 3, remaining: 0, processed: 3 }), { status: "finished" });
   assert.equal(statusFromGoalBar(goalBarState(null)), null);
   assert.equal(goalBarState({ result: { kind: "fault", code: "session_unavailable" } }).code, "session_unavailable");
 });

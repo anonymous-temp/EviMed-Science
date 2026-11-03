@@ -143,8 +143,10 @@ export class ResearchGoals {
       const document = await this.#update(project, run.sessionId, (payload) => {
         const taken = run.goal?.id && payload.goalId !== run.goal.id ? { goalId: run.goal.id } : {};
         if (roundStoppedByPerson(run)) return { ...payload, ...taken, status: "stopped", reason: "person", statusAt: at };
-        // A round that began after a goal came to rest means someone took it up (a person's message, LoopX's bar): it is going again.
-        const resumed = payload.status !== "active" && Date.parse(run.startedAt ?? 0) >= Date.parse(payload.statusAt ?? 0);
+        // A round that began after a goal came to rest means someone took it up (a person's message, LoopX's bar): it is going again. Except a
+        // round of LoopX's own on a goal someone paused or stopped: its driver goes on trying to close a round the pause left open.
+        const held = payload.status === "paused" || payload.status === "stopped";
+        const resumed = payload.status !== "active" && !(held && isGoalContinuation(run)) && Date.parse(run.startedAt ?? 0) >= Date.parse(payload.statusAt ?? 0);
         const revive = run.status === "succeeded" ? { attempts: 0, lastAt: null } : payload.revive;
         return { ...payload, ...taken, ...(resumed ? { status: "active", reason: null, statusAt: at, pauseUnconfirmed: false } : {}), revive };
       });
@@ -174,7 +176,7 @@ export class ResearchGoals {
   /** @param {any} project @param {string} sessionId @param {readonly any[]} rounds @param {string} title @param {string} body @param {string} key */
   async #tell(project, sessionId, rounds, title, body, key) {
     const last = rounds.at(-1);
-    await this.notify(project.userId, { noticeType: "notify", projectId: project.id, title, body, groupKey: `goal:${sessionId}`, idempotencyKey: key,
+    await this.notify(project.userId, { noticeType: "notify", projectId: project.id, title, body, groupKey: `goal-state:${sessionId}`, idempotencyKey: key,
       severity: "info", actions: [{ id: "open", label: "打开对话", style: "primary" }], ...(last ? { source: { type: "run", id: last.id } } : {}) }).catch(() => {});
   }
 
@@ -210,6 +212,25 @@ export class ResearchGoals {
   }
 
   /**
+   * LoopX's own bar, in the kernel's page, paused or started a goal: the same state as the page's buttons, at once. Never throws, and a
+   * session with no goal is no concern of this.
+   * @param {any} project @param {string} sessionId @param {"pause" | "start"} op
+   */
+  async noteBarAction(project, sessionId, op) {
+    try {
+      if (goalRounds(await this.agentRuns.list(project), sessionId).length === 0) return;
+      const at = this.now().toISOString();
+      recordResearchGoalEvent(op === "pause" ? "paused_person" : "resumed_person");
+      await this.#update(project, sessionId, (payload) => (op === "pause"
+        ? { ...payload, status: "paused", reason: "person", statusAt: at, pauseUnconfirmed: false }
+        : { ...payload, status: "active", reason: null, statusAt: at, guardSince: at, pauseUnconfirmed: false, startOnBar: false, revive: { attempts: 0, lastAt: null } }));
+    } catch (error) {
+      recordResearchGoalEvent("observe_failed");
+      this.log(`research goal: bar action not noted: ${/** @type {any} */ (error)?.code ?? "research_goal_failed"}`);
+    }
+  }
+
+  /**
    * The page's 继续, from any state a goal can rest in. A goal LoopX has stopped is started again on its bar, which is what brings its rounds
    * back; any other is told to go on, which arms the driver in the kernel that is up now. A person asked, so the limits count from here.
    * @param {any} project @param {string} sessionId
@@ -230,8 +251,8 @@ export class ResearchGoals {
     }
     recordResearchGoalEvent("resumed_person");
     await this.#update(project, sessionId, (payload) => ({ ...payload, status: "active", reason: null, statusAt: at, guardSince: at, pauseUnconfirmed: false,
-      // The kernel had no session loaded, so its bar could not say: the goal is started on it as soon as it can.
-      startOnBar: !started && read.kind !== "present", revive: { attempts: 0, lastAt: null } }));
+      // The bar could not say (no session loaded yet) or could not start it (a turn was going): it is started there as soon as it can be.
+      startOnBar: !started, revive: { attempts: 0, lastAt: null } }));
     return { sessionId, status: "active" };
   }
 
@@ -256,7 +277,8 @@ export class ResearchGoals {
 
   async #pass() {
     const { rows } = await this.database.query(`SELECT user_id, project_id, payload->>'sessionId' AS session_id FROM evimed_product.documents
-      WHERE kind = 'research-goal' AND deleted_at IS NULL AND (payload->>'status' = 'active' OR payload->>'pauseUnconfirmed' = 'true')
+      WHERE kind = 'research-goal' AND deleted_at IS NULL AND (payload->>'status' = 'active' OR payload->>'pauseUnconfirmed' = 'true'
+        OR (payload->>'status' = 'paused' AND (payload->>'statusAt')::timestamptz > now() - interval '6 hours'))
       ORDER BY updated_at LIMIT 200`);
     for (const row of rows) {
       try {
@@ -277,13 +299,15 @@ export class ResearchGoals {
     const payload = document.payload;
     const rounds = goalRounds(await this.agentRuns.list(project), sessionId);
     if (rounds.length === 0) return;
-    if (payload.status === "paused" && payload.pauseUnconfirmed) { await this.#enforcePause(project, sessionId, rounds); return; }
+    if (payload.status === "paused") { await this.#enforcePause(project, sessionId, payload, rounds); return; }
+    if (payload.status !== "active" && !payload.pauseUnconfirmed) return;
     if (payload.startOnBar) await this.#startOnBar(project, sessionId);
     const live = rounds.find(isLive);
     // Only a turn nobody is at: what is written into a person's own turn reads as their statement to memory and to the learning loop.
     if (live) { if (live.automated === true) await this.#noteNewSources(project, sessionId, payload, live); return; }
     const last = rounds.at(-1);
-    const quiet = this.now().getTime() - endOf(last);
+    // From the later of the last round and a person taking the goal up: one just started has not been quiet since a round of an hour ago.
+    const quiet = this.now().getTime() - Math.max(endOf(last), Date.parse(payload.guardSince ?? 0) || 0);
     if (roundWasInterrupted(last)) { await this.#takeUp(project, sessionId, payload, rounds, quiet); return; }
     if (last.status !== "succeeded") {
       // A failure that going on would not mend: no credits, a refused start. It waits for a person.
@@ -307,6 +331,8 @@ export class ResearchGoals {
 
   /** @param {any} project @param {string} sessionId @param {readonly any[]} rounds @param {any} read */
   async #settle(project, sessionId, rounds, read) {
+    // The kernel is at a turn the ledger has not caught up with.
+    if (read.kind === "present" && read.agentStatus === "running") return;
     const said = statusFromGoalBar(read);
     const faults = said ? 0 : Number((await this.#read(project, sessionId))?.payload.barFaults ?? 0) + 1;
     if (!said && faults < 5) {
@@ -353,19 +379,38 @@ export class ResearchGoals {
     }
   }
 
-  /** A pause the bar did not confirm: asked again, and until it holds the next automatic round is stopped instead. */
-  async #enforcePause(/** @type {any} */ project, /** @type {string} */ sessionId, /** @type {readonly any[]} */ rounds) {
+  /**
+   * What holds a paused goal. A round that was going when the pause came is let finish. But a pause can leave a round LoopX cannot close, because
+   * a stopped goal may not spend, and its driver then starts a round every half a minute to close it, for ever (the walk of 2026-11-03: five
+   * rounds in three minutes saying the goal is paused); and a pause the bar did not confirm has nothing holding it at all. Stopping such a round
+   * ends the driver's turn until someone starts the goal, so it costs one short round and is not a loop of its own.
+   */
+  async #enforcePause(/** @type {any} */ project, /** @type {string} */ sessionId, /** @type {any} */ payload, /** @type {readonly any[]} */ rounds) {
     const live = rounds.find(isLive);
-    if (live && isGoalContinuation(live)) await this.cancelRound(project, live).catch(() => {});
     if (live && !isGoalContinuation(live)) return;
-    if (await this.#pauseOnBar(project, sessionId)) await this.#update(project, sessionId, (payload) => ({ ...payload, pauseUnconfirmed: false }));
+    if (live && (payload.pauseUnconfirmed || Date.parse(live.startedAt ?? 0) > Date.parse(payload.statusAt ?? 0))) {
+      // Unless someone started it on the bar and the news did not reach here.
+      if (!payload.pauseUnconfirmed) {
+        const read = await this.#readBar(project, sessionId);
+        if (read.kind === "present" && read.activation === "active") {
+          await this.noteBarAction(project, sessionId, "start");
+          return;
+        }
+      }
+      await this.cancelRound(project, live).catch(() => {});
+    }
+    if (payload.pauseUnconfirmed && await this.#pauseOnBar(project, sessionId)) await this.#update(project, sessionId, (current) => ({ ...current, pauseUnconfirmed: false }));
   }
 
   /** @param {any} project @param {string} sessionId */
   async #startOnBar(project, sessionId) {
     const read = await this.#readBar(project, sessionId);
     if (read.kind !== "present") return;
-    if (read.activation === "stopped") await this.#bar(project, { op: "start", sessionId, expected: { goalId: read.goalId, loopxAgentId: read.loopxAgentId } });
+    if (read.activation === "stopped") {
+      const answer = await this.#bar(project, { op: "start", sessionId, expected: { goalId: read.goalId, loopxAgentId: read.loopxAgentId } });
+      // A turn is going: the next pass asks again.
+      if (answer?.result?.kind !== "succeeded" && answer?.result?.kind !== "applied_with_warning") return;
+    }
     await this.#update(project, sessionId, (payload) => ({ ...payload, startOnBar: false }));
   }
 
