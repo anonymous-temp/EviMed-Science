@@ -24196,6 +24196,43 @@
       "expected": [
         "scenario_field_unknown@scenario.design.priorEffect"
       ]
+    },
+    {
+      "name": "Bayesian phase II: more than sixty looks",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_bayesian",
+        "method": "design.bayesian",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "design": {
+            "kind": "bop2",
+            "maxN": 300,
+            "lookEvery": 2
+          },
+          "truth": {
+            "nullRate": 0.1,
+            "alternativeRate": 0.3
+          },
+          "analysis": {
+            "alpha": 0.05,
+            "power": 0.8
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.design.lookEvery"
+      ]
     }
   ],
   "validResults": [

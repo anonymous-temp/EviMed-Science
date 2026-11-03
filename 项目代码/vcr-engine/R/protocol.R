@@ -957,6 +957,7 @@ vcr_pattern_match <- function(pattern, x) {
   if (!identical(kind, "threshold_calibration")) {
     if (.vcrp_num(truth[["nullRate"]]) && .vcrp_num(truth[["alternativeRate"]]) && !(truth[["alternativeRate"]] > truth[["nullRate"]])) bad("truth.alternativeRate", "The alternative response rate is above the null rate.")
     if (.vcrp_int(design[["lookEvery"]]) && .vcrp_int(design[["maxN"]]) && design[["lookEvery"]] > design[["maxN"]]) bad("design.lookEvery", "The first look comes at or before the largest size.")
+    else if (.vcrp_int(design[["lookEvery"]]) && .vcrp_int(design[["maxN"]]) && ceiling(design[["maxN"]] / design[["lookEvery"]]) > 60) bad("design.lookEvery", "A phase II design has at most 60 looks: look less often.")
     return(invisible(NULL))
   }
   type <- .vcrp_get(.vcrp_get(sc, "endpoint"), "type")

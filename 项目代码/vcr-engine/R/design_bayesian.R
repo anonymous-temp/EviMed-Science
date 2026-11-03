@@ -40,6 +40,8 @@
 
 VCR_BD_LAMBDA_GRID <- seq(0.02, 0.99, by = 0.005)
 VCR_BD_GAMMA_GRID <- seq(0.05, 2, by = 0.05)
+#' The largest total size Simon's design is searched up to (the engine's own default for a Simon design): the search costs about 4 s at 100 and grows with the fourth power.
+VCR_BD_SIMON_MAX <- 100L
 
 .vcr_bd_assume <- function(p, key, value, basis = "default") {
   p$assumed[[length(p$assumed) + 1L]] <- list(key = key, value = value, basis = basis)
@@ -136,7 +138,8 @@ vcr_bop2_boundaries <- function(pp, looks, lambda, gamma, eta = NULL) {
          futility = .vcr_bd_cell("stop_futility_probability", oc$byLook$futility[i]), efficacy = .vcr_bd_cell("stop_efficacy_probability", oc$byLook$efficacy[i]))))
 }
 
-#' Simon's optimal and minimax designs at the same alpha and power, with their expected sizes under both rates; NULL when none exists up to `n_max`.
+#' Simon's optimal and minimax designs at the same alpha and power, with their expected sizes under both rates; NULL when none exists up to `n_max`
+#' (the baseline is then left out of the result, not replaced by a search that would take minutes).
 .vcr_bd_simon <- function(p0, p1, alpha, power, n_max) {
   s <- tryCatch(vcr_simon_two_stage(p0, p1, alpha = alpha, beta = 1 - power, n_max = n_max), error = function(e) NULL)
   if (is.null(s) || (is.null(s$optimal) && is.null(s$minimax))) return(NULL)
@@ -208,7 +211,7 @@ vcr_bop2_boundaries <- function(pp, looks, lambda, gamma, eta = NULL) {
     # the smallest lambda that gives the chosen rule is reported; a larger one in the same interval would give the same boundaries
   }
   bd <- chosen$bounds
-  simon <- .vcr_bd_simon(p$p0, p$p1, p$alpha, p$power, p$max_n)
+  simon <- .vcr_bd_simon(p$p0, p$p1, p$alpha, p$power, min(p$max_n, VCR_BD_SIMON_MAX))
   looks_out <- lapply(seq_len(L), function(i) list(look = i, size = looks[i],
     futilityAtOrBelow = if (i < L && bd$fut[i] >= 0) bd$fut[i] else NULL,
     efficacyAtOrAbove = if (i < L && is.finite(bd$eff[i]) && bd$eff[i] <= looks[i]) bd$eff[i] else NULL,
@@ -278,7 +281,7 @@ vcr_bop2_boundaries <- function(pp, looks, lambda, gamma, eta = NULL) {
   lowest <- if (s >= 1L && s <= N + 1L) pp_final[s] else NULL
   highest <- if (s <= N) pp_final[s + 1L] else NULL
   bd <- chosen$bounds
-  simon <- .vcr_bd_simon(p$p0, p$p1, p$alpha, p$power, p$max_n)
+  simon <- .vcr_bd_simon(p$p0, p$p1, p$alpha, p$power, min(p$max_n, VCR_BD_SIMON_MAX))
   looks_out <- lapply(seq_len(L), function(i) list(look = i, size = looks[i],
     futilityAtOrBelow = if (i < L && bd$fut[i] >= 0) bd$fut[i] else NULL,
     efficacyAtOrAbove = if (i < L && is.finite(bd$eff[i]) && bd$eff[i] <= looks[i]) bd$eff[i] else NULL,
@@ -423,8 +426,13 @@ vcr_bd_normal_rule <- function(se, m0, s0, margin, null_effect, alt_effect, alph
     w0 <- pmf(treat_null, control); w1 <- pmf(treat_alt, control)
     at <- function(c) { win <- post > c; list(typeOneError = sum(w0[win]), power = sum(w1[win])) }
     # the discrete type I error is a step function of the threshold: the smallest threshold that keeps it at or below alpha
-    values <- sort(unique(as.vector(post)), decreasing = TRUE)
-    region_error <- vapply(values, function(c) sum(w0[post > c]), numeric(1))
+    # (the pairs in order of their posterior probability, the null probability of the pairs that share a value added up: the type I error of
+    # "greater than the k-th value" is the total of the groups before it)
+    ord <- order(as.vector(post), decreasing = TRUE)
+    ps <- as.vector(post)[ord]; ms <- as.vector(w0)[ord]
+    first <- c(TRUE, ps[-1L] != ps[-length(ps)])
+    values <- ps[first]
+    region_error <- c(0, cumsum(as.vector(rowsum(ms, cumsum(first)))))[seq_along(values)]
     ok <- which(region_error <= alpha + 1e-12)
     c_star <- if (length(ok)) values[max(ok)] else max(values)
     r_star <- at(c_star)

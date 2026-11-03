@@ -2008,6 +2008,7 @@ function checkBayesianSemantics(scenario, path, ctx) {
   if (kind !== 'threshold_calibration') {
     if (typeof truth.nullRate === 'number' && typeof truth.alternativeRate === 'number' && !(truth.alternativeRate > truth.nullRate)) bad('truth.alternativeRate', 'The alternative response rate is above the null rate.')
     if (Number.isInteger(design.lookEvery) && Number.isInteger(design.maxN) && design.lookEvery > design.maxN) bad('design.lookEvery', 'The first look comes at or before the largest size.')
+    else if (Number.isInteger(design.lookEvery) && Number.isInteger(design.maxN) && Math.ceil(design.maxN / design.lookEvery) > 60) bad('design.lookEvery', 'A phase II design has at most 60 looks: look less often.')
     return
   }
   const type = scenario?.endpoint?.type

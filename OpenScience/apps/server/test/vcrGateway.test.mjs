@@ -690,6 +690,28 @@ test("a network, a dose-response and a shrinkage start through the gateway, file
   assert.equal(pooledCalls.length, 1, "a prior typed in never reaches the pooling");
 });
 
+test("a dose-finding design and a Bayesian design start through the gateway, filed under what they are about", async () => {
+  /** @type {any[]} */
+  const queued = [];
+  const jobs = {
+    async enqueue(/** @type {any} */ input) { queued.push(input); return { job: { id: "job_d", state: "queued", progress: {} }, created: true }; },
+    async get() { return null; }, async cancel() { return { job: { id: "job_d", state: "canceled" }, canceled: true }; },
+  };
+  const { handler } = fixture({ jobs });
+  const start = async (/** @type {Record<string, any>} */ body) => { const res = response(); await handler(request("/internal/vcr/v1/simulate", { action: "start", ...body }), res); return res; };
+  const curve = [0.05, 0.1, 0.2, 0.3, 0.45, 0.6];
+  const first = await start({ kind: "design_dose", scenario: { design: { kind: "boin", compare: ["three_plus_three"] }, truth: { toxicity: curve } } });
+  assert.equal(first.status, 200, first.body);
+  assert.equal(queued.at(-1).kind, "design_dose");
+  assert.match(queued.at(-1).detail.subjectId, /^dose:boin\+three_plus_three:[0-9a-f]{10}$/);
+  const again = await start({ kind: "design_dose", scenario: { design: { kind: "three_plus_three", compare: ["boin"] }, truth: { toxicity: curve } } });
+  assert.equal(again.status, 200, again.body);
+  assert.equal(queued.at(-1).detail.subjectId, queued.at(-2).detail.subjectId, "the same two designs on the same curve are one question, whichever is asked about");
+  const bayes = await start({ kind: "design_bayesian", scenario: { design: { kind: "bop2", maxN: 40, lookEvery: 10 }, truth: { nullRate: 0.1, alternativeRate: 0.3 } } });
+  assert.equal(bayes.status, 200, bayes.body);
+  assert.equal(queued.at(-1).detail.subjectId, "bayes:bop2:0.1-0.3-40");
+});
+
 test("the comparator-effect kinds start through the gateway; a time-to-event MAIC names its comparator by a reconstruction result, never by rows", async () => {
   /** @type {any[]} */
   const queued = [];

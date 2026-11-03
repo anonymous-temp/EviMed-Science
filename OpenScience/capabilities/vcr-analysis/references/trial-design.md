@@ -67,6 +67,16 @@ For these paths, zero-effect scenarios state `responseRate == nullRate` or zero 
 - 每年发作次数这类计数终点：`count_endpoint`（负二项，率比 `truth.rateRatio`，过度离散 `truth.overdispersion`；不知道过度离散就问，0 表示泊松，会把样本量算少；写了 `design.informationRates` 就是成组序贯）。
 结果里的 `confirmatory.assumed` 是平台没得到说明而采用的值（消耗函数、条件功效、取自成组序贯设计的计划样本量、补的零效应行等），回复里逐条说明，不要略去。
 
+**剂量探索设计 `kind: "design_dose"`**：先 `action: "shape"` 看字段。问“这条毒性曲线下，3+3 和 BOIN 选对剂量的概率、超量人数差多少”：`design.kind` 写所问的设计（`three_plus_three`、`boin`、`keyboard`、`crm`），`design.compare` 写要并排比的其他设计，`truth.toxicity` 是各剂量的真实毒性率（按剂量从低到高，向对方要，不要编）。几种设计用同一条曲线、同一批随机数，结果并排给出，并给出各设计与所问设计的差和它自己的误差；在回复里报这些数，不要自己重算。结果在“试验”页。
+- 目标毒性率（默认 0.3）、每组人数（3）、最多人数（30）、起始剂量（1）、CRM 的先验骨架、BOIN 和 Keyboard 的区间宽度，对方没说就用默认；结果里的 `doseFinding.assumed` 逐条列出，回复里逐条说，尤其是 CRM 的骨架（取自“先验认为最大耐受剂量在起始剂量”，对结果影响很大，对方有就问他要）。3+3 的人数由规则决定，不受“最多人数”限制。
+- “选对”指选到真实毒性最接近目标的剂量（并列取较低的）；“超量”指给到比它更高剂量的患者数。结果里没有任何一种设计被说成“获认可”或“已认定”，你也不要这样说：BOIN 在这里只是局部（local）边界、无信息先验的版本，联合用药和迟发毒性不在其中，这一条回复里要带上。
+- 两个或三个剂量随机分组、问“每个剂量各多少人，才有 90% 概率选到更低而不差的剂量”：`design.kind: "randomized_selection"`，`design.margin` 是更高剂量要比候选剂量好多少才被选中（临床上的选择，向对方要），`truth.responseScenarios` 是几组各剂量的真实缓解率（至少一组“更高剂量并不更好”，一组“更高剂量确实更好”）。不写 `design.perArm` 就搜索满足 `design.targetProbability`（默认 0.9）的人数，结果给出第一次达到的人数和此后一直达到的人数——判定是整数个数，概率会随人数上下起伏，两个数都要说。这是精确计算，没有模拟误差。
+
+**贝叶斯设计 `kind: "design_bayesian"`**：先 `action: "shape"` 看字段，每个数都是精确算出的（没有蒙特卡洛误差）。
+- 问“单臂每 10 人看一次，何时停，比 Simon 少多少人”：`design.kind: "bop2"`（或 `predictive_monitoring`），`design.maxN`、`design.lookEvery`，`truth.nullRate` 和 `truth.alternativeRate`，`analysis.alpha`（默认 0.05）和 `analysis.power`（默认 0.8）。结果给出每次分析的停止规则、两种有效率下的 I 类错误、功效、期望样本量，并把 Simon 最优和最小最大设计放在旁边，节省的人数是结果里两个数的差。问“比 Simon 少多少人”时用 `design.objective: "min_expected_n"`（在 I 类错误不超过规定水平、功效达到要求的设计里取无效应时期望样本量最少的）；默认的 `max_power` 取功效最大的，通常更大，两者节省的含义不同，回复里说用了哪一个。有效率的先验默认是均值落在零假设有效率上、信息量相当于一个人的 Beta；没说就按默认并说明。
+- 预测概率监测的最终阈值不是一个数而是一个区间（区间内任一阈值得到同一条规则）；结果给的是区间，回复里照说。
+- 问“用这个先验和阈值，I 类错误多少，校到 0.025 的阈值是多少”：`design.kind: "threshold_calibration"`，`endpoint.type`（连续型要 `truth.sd` 视为已知；事件时间型用 `design.events`；二分类型两组各有 Beta 先验），`design.priorEffect` 是效应的正态先验（不写就是无先验信息），`design.threshold` 是对方给的阈值，`design.margin` 是后验概率要超过的效应界值。结果有三行：对方给的阈值、常规的 1 − α、校准后的阈值（二分类是 I 类错误不超过规定水平的最小阈值，并注明实际达到的水平）。信息性的先验会让同一个阈值的 I 类错误偏离规定水平，这正是要校准的原因。动态借用和需要 MCMC 的模型不在这里。
+
 **MaxCombo 旁边的 log-rank 与强零假设**：`analysis.method: "maxcombo"` 的结果同一批模拟里还给出 log-rank 的功效（`power_logrank`）；并给出强零假设（试验组从不优于对照、早期更差、之后相同，由设计推出）下 MaxCombo 与 log-rank 各自判为更优的概率。这是信息，不是拒绝的理由；回复里把两个数和名义水平一起说。
 
 ```json vcr:object:design_grid

@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "vcr-evidence",
-  "version": "sha256:b17b33ce12964da39008b4ef5bdb61aad0130c413f35142cc5c979c19814ab5a",
+  "version": "sha256:abbf9b34cf0d50a4bc9ed159624bc91ccbf299407fcd50062807c1560a3d12d6",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 37,
@@ -1780,6 +1780,8 @@
               "dose_response_meta",
               "effect_shrinkage",
               "target_trial_emulation",
+              "design_dose",
+              "design_bayesian",
               "match_extract",
               "forecast_trajectories",
               "evaluate_forecast",
