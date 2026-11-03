@@ -87,11 +87,13 @@ done_step() { grep -q "^$1 ok" "$RUN/STATUS" 2>/dev/null; }
 mark() { echo "$1 ok $(date -u +%FT%TZ) ${2:-}" >> "$RUN/STATUS"; }
 outcome() { printf '{"outcome":"%s","reason":"%s"}\n' "$1" "$2" > "$RUN/outcome.json"; chown "$OWNER" "$RUN/outcome.json"; }
 jsonfield() { python3 -c 'import json,sys;d=json.load(open(sys.argv[1]));print(d.get(sys.argv[2]) or "")' "$1" "$2" 2>/dev/null || true; }
-# One containerised step. --network is the caller's; nothing else is shared with the host. --init because node as PID 1 ignores SIGTERM: a stopped month's container would go on
+# One containerised step. --network is the caller's; nothing else is shared with the host. --cpu-shares 256 yields to the products sharing this host whenever it is
+# contended (a 4-vCPU economy instance, 2026-11-03: a plan at the evening peak took the top of the host for over 30 minutes and rxai-delivery's health checks timed
+# out); it limits nothing on an idle host. --init because node as PID 1 ignores SIGTERM: a stopped month's container would go on
 # calling the provider after the lock is released.
 lab() {
   local network=$1; shift
-  "$DOCKER" run --rm --init --network "$network" --read-only --tmpfs /tmp:size=256m,noexec,nosuid --cap-drop ALL --security-opt no-new-privileges \
+  "$DOCKER" run --rm --init --cpu-shares 256 --network "$network" --read-only --tmpfs /tmp:size=256m,noexec,nosuid --cap-drop ALL --security-opt no-new-privileges \
     --pids-limit 256 --memory 3g --user "$OWNER" --env-file "$ETC/secrets/lab.env" -e HOME=/tmp \
     -e NODE_OPTIONS=--network-family-autoselection-attempt-timeout=2500 \
     -v "$ETC/owner-inputs":/run/rsi-lab:ro -v "$STATE":/srv/rsi-lab/state -v "$INBOX":/srv/rsi-lab/inbox:ro "$@"

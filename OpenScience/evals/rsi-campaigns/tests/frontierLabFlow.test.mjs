@@ -409,7 +409,7 @@ test('a crash is not reported as the stop an earlier start left in the output fi
   assert.deepEqual(await t.read('state', CURRENT, 'outcome.json'), { outcome: 'not-run', reason: 'campaign_labelling_incomplete' });
 });
 
-test('every lab step runs under an init in all three scripts, so stopping a run stops its container (node as PID 1 ignores SIGTERM)', async () => {
+test('every lab step runs under an init and yields CPU in all three scripts: stopping a run stops its container (node as PID 1 ignores SIGTERM), and a contended shared host goes to its other products first', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'rsi-init-'));
   scratch.push(dir);
   const root = join(dir, 'lab'), etc = join(dir, 'etc');
@@ -427,7 +427,7 @@ test('every lab step runs under an init in all three scripts, so stopping a run 
     const done = await execFileAsync('bash', [join(repo, 'deploy/rsi-campaign', script), ...args], { cwd: dir, env: { PATH: process.env.PATH, HOME: dir, TMPDIR: dir, RSI_LAB_DRY_RUN: '1', RSI_LAB_ROOT: root, RSI_LAB_ETC: etc } }).catch((error) => error);
     const steps = done.stderr.split('\n').filter((line) => line.includes('[dry-run] docker run') && line.includes('--env-file'));
     assert.ok(steps.length > 0, `${script}: ${done.stderr}`);
-    for (const line of steps) assert.match(line, /^\[dry-run\] docker run --rm --init /, script);
+    for (const line of steps) assert.match(line, /^\[dry-run\] docker run --rm --init --cpu-shares 256 /, script);
   }
 });
 

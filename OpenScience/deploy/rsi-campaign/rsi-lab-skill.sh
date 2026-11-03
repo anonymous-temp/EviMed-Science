@@ -50,9 +50,10 @@ log() { echo "$(date -u +%FT%TZ) $*" | tee -a "$RUN/launcher.log" >&2; }
 done_step() { grep -q "^$1 ok" "$RUN/STATUS" 2>/dev/null; }
 mark() { echo "$1 ok $(date -u +%FT%TZ) ${2:-}" >> "$RUN/STATUS"; }
 # --init: node as PID 1 ignores SIGTERM, and a stopped run's container would go on working after the lock is released.
+# --cpu-shares 256: yields to the products sharing this host whenever it is contended (see rsi-lab-monthly.sh).
 lab() {
   local network=$1; shift
-  "$DOCKER" run --rm --init --network "$network" --read-only --tmpfs /tmp:size=256m,noexec,nosuid --cap-drop ALL --security-opt no-new-privileges \
+  "$DOCKER" run --rm --init --cpu-shares 256 --network "$network" --read-only --tmpfs /tmp:size=256m,noexec,nosuid --cap-drop ALL --security-opt no-new-privileges \
     --pids-limit 256 --memory 3g --user "$OWNER" --env-file "$ETC/secrets/lab.env" -e HOME=/tmp \
     -e NODE_OPTIONS=--network-family-autoselection-attempt-timeout=2500 \
     -v "$ETC/owner-inputs":/run/rsi-lab:ro -v "$STATE":/srv/rsi-lab/state -v "$INBOX":/srv/rsi-lab/inbox:ro "$@"
