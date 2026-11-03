@@ -15,8 +15,8 @@ function good(over = {}) {
     viewport: { width: 1512, height: 945 }, height: 1800, title: { text: "测试品牌", ...box(26, 32) },
     chrome: { ...box(60, 124, 272, 1200), position: "sticky", sticky: true, held: { scrolled: 480, before: 60, after: 0, scrollerTop: 0 } },
     stepRail: null,
-    geoAreas: { labels: ["项目对话", "方案"], selected: ["方案"], work: 0, progress: 0, execution: 0, dock: 0, conversation: 0 },
-    tablists: [{ label: "项目工作", tabs: 2, dots: 0, inChrome: true, inToolbar: false, inSection: false, ...box(100) }],
+    geoAreas: { labels: ["项目对话", "任务与成果", "方案"], selected: ["方案"], work: 0, progress: 0, execution: 0, dock: 0, conversation: 0 },
+    tablists: [{ label: "项目工作", tabs: 3, dots: 0, inChrome: true, inToolbar: false, inSection: false, ...box(100) }],
     viewGroups: [], toolbars: [{ label: "筛选与操作", inChrome: true, inSection: false, ...box(148, 28), controls: {} }],
     controlsAfterContent: [], orphans: [], tags: [], tagLike: [], words: [], primaries: [], zeroCounts: [], outline: { outlines: 0, showMore: 0 },
     chartGrids: [], empties: [], notes: [], headline: 1, activity: 0, stepStates: [], ...over,
@@ -71,7 +71,7 @@ test("toggle layers: one tab list, one view switch written as radios, one toolba
   assert.match(texts("geo-plan", "desktop", good({ viewGroups: [{ label: "图表视图", inSection: false, ...box(300) }, { label: "显示切换", inSection: false, ...box(340) }] }))[0], /^geo-plan@desktop: \[toggle-layers\] 2 view switches written as radio groups \(one\): “图表视图”、“显示切换”$/);
   assert.match(texts("geo-plan", "desktop", good({ toolbars: [bar("筛选与操作", { inChrome: true }), bar("试验先例的检索")] }))[0], /\[toggle-layers\] 2 toolbars on the page \(one in the band\): “筛选与操作 at 400 px”、“试验先例的检索 at 400 px”/);
   // A toolbar of a section (Section's `toolbar` slot) and a tab list inside a card are not a second layer of the page.
-  assert.deepEqual(rules("geo-plan", "desktop", good({ toolbars: [bar("筛选与操作", { inChrome: true }), bar("本节", { inSection: true })], tablists: [list("项目工作", { inChrome: true, tabs: 2 }), list("本节", { inSection: true })] })), []);
+  assert.deepEqual(rules("geo-plan", "desktop", good({ toolbars: [bar("筛选与操作", { inChrome: true }), bar("本节", { inSection: true })], tablists: [list("项目工作", { inChrome: true, tabs: 3 }), list("本节", { inSection: true })] })), []);
 });
 
 test("the band holds: it is sticky, it is where the scroll area starts after the page moved, and a module's steps are in it", () => {
@@ -225,6 +225,7 @@ test("GEO area tabs, task progress, result dock, and project collection are stru
     assert.deepEqual(rules("geo-sources", viewport, sources()), []);
     assert.ok(rules("geo-sources", viewport, sources({ tablists: [] })).includes("geo-areas"));
     assert.ok(rules("geo-sources", viewport, sources({ geoAreas: { ...sources().geoAreas, selected: ["可见度"] } })).includes("geo-areas"));
+    assert.ok(rules("geo-plan", viewport, good({ geoAreas: { ...good().geoAreas, labels: ["项目对话", "方案"] } })).includes("geo-areas"));
     assert.ok(rules("geo-plan", viewport, good({ viewSelector: { count: 1 } })).includes("chrome"));
     const work = { ...good().geoAreas, selected: ["项目对话"], work: 1, progress: 1, execution: 1 };
     assert.deepEqual(rules("geo-overview", viewport, good({ geoAreas: work })), []);
