@@ -880,6 +880,24 @@ const planComparator = (configuration, row = {}, ctx = CMP_T2) => /** @type {any
 const stageIssues = (stage) => validateScenario(VCR_JOB_METHODS[stage.jobKind],
   stage.derived.some((/** @type {any} */ entry) => entry.bindTo) ? { ...stage.scenario, pseudoIpdInputId: "res_x:reconstructed-ipd" } : stage.scenario);
 
+test("a design's propensity trimming and a time-to-event doubly robust design reach the engine's stage as the schema reads them", () => {
+  // trim is the weighting jobs' key (algorithm round C14): the plan keeps it where the method reads it and nowhere else
+  const weighted = planComparator({ covariates: ["age"], method: "propensity", tau: 12, trim: { rule: "crump" } }, { estimand: "ATE" });
+  assert.equal(weighted.ok, true, JSON.stringify(weighted));
+  assert.equal(weighted.stages[0].jobKind, "propensity_weight_comparator");
+  assert.deepEqual(weighted.stages[0].scenario.trim, { rule: "crump" });
+  assert.deepEqual(stageIssues(weighted.stages[0]), [], "and the engine's schema accepts it");
+  const cox = planComparator({ covariates: ["age"], method: "weighted_cox", weighting: "propensity", tau: 12, trim: { rule: "fixed", lower: 0.1 } });
+  assert.equal(cox.ok, true, JSON.stringify(cox));
+  assert.deepEqual(cox.stages[0].scenario.trim, { rule: "fixed", lower: 0.1 });
+  assert.deepEqual(stageIssues(cox.stages[0]), []);
+  const aipw = planComparator({ covariates: ["age"], method: "aipw", tau: 12, summary: "survival", trim: { rule: "crump" } });
+  assert.equal(aipw.ok, true, JSON.stringify(aipw));
+  assert.equal(aipw.stages[0].scenario.summary, "survival");
+  assert.deepEqual(aipw.stages[0].scenario.trim, { rule: "crump" });
+  assert.deepEqual(stageIssues(aipw.stages[0]), []);
+});
+
 test("a study's declared design reaches the comparator-effect methods: weighted Cox, doubly robust, covariate sets", () => {
   const base = { covariates: ["age", "ecog"], tau: 12, parameterCode: "OS", snapshotId: "snp_1" };
   // the declared method and endpoint decide; nothing is read from a word of prose
