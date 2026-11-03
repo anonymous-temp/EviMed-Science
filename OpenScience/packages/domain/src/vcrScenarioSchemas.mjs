@@ -63,6 +63,7 @@ import {
   VCR_ROW_RULE_COLUMN_PATTERN, findExpressionFields, validateNamedRules, validateRowRule,
 } from './vcrRules.mjs'
 import { VCR_DEFAULT_TIME_UNIT, VCR_TIME_UNITS } from './vcrTimeUnits.mjs'
+import { VCR_BARTOS_2023_EFFECT_SCALES, VCR_TURNER_COMPARISONS, VCR_TURNER_OUTCOMES } from './vcrEvidencePriors.mjs'
 
 /** @typedef {{ code: string, field: string, detail: string }} VcrScenarioIssue */
 
@@ -190,6 +191,23 @@ const ANALYSES = array({
 
 /** Which parameters of a variable are uncertain, and by how much (per-variable parameter uncertainty). */
 const PARAM_SD = { t: 'map', values: number({ min: 0 }), min: 1, max: 4 }
+
+/**
+ * The prior for a pooling's between-study standard deviation (`evidence.pool`, 1.1.0). A stated family keeps its own parametrization (a half-normal
+ * and an inverse-gamma on tau; a log-normal and a log-t on tau-squared); the empirical ones are looked up in `vcrEvidencePriors.mjs`.
+ */
+const TAU_PRIOR = {
+  t: 'variant', on: 'kind',
+  variants: {
+    half_normal: { scale: req(number({ gt: 0 })) },
+    log_normal: { meanLog: req(number()), sdLog: req(number({ gt: 0 })) },
+    inverse_gamma: { shape: req(number({ gt: 0 })), scale: req(number({ gt: 0 })) },
+    log_t: { location: req(number()), scale: req(number({ gt: 0 })), df: req(number({ gt: 0 })) },
+    turner_2015: { outcome: req(string({ values: [...VCR_TURNER_OUTCOMES] })), comparison: req(string({ values: [...VCR_TURNER_COMPARISONS] })) },
+    turner_2015_generic: {},
+    bartos_2023: { effectScale: req(string({ values: [...VCR_BARTOS_2023_EFFECT_SCALES] })) },
+  },
+}
 
 /** The names a covariate effect is keyed by: columns of the generated data. */
 const COVARIATE_EFFECTS = { t: 'map', values: number(), min: 1, max: 100 }
@@ -714,6 +732,76 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
     method: string({ values: [...VCR_POOLING_METHODS], default: 'random_effects_dl' }),
     level: number({ gt: 0, lt: 1, default: 0.95 }),
     scale: string({ values: ['identity', 'log', 'logit'], default: 'identity' }),
+    // An informative prior for the between-study standard deviation (1.1.0, algorithm round E7): a stated half-normal on tau, log-normal or log-t
+    // on tau-squared, inverse-gamma on tau, or an empirical one from a table the domain holds with the place in the paper each number was read at.
+    tauPrior: TAU_PRIOR,
+  }),
+
+  // Frequentist network meta-analysis (algorithm round C5). A study states its arms (events and n for a binary outcome, mean, sd and n for a
+  // continuous one) or its contrasts (every pair of its arms: treatment, comparator, effect and standard error, the effect on the log scale
+  // for a ratio). The treatment names are the person's own words and are matched as written.
+  'evidence.network': object({
+    label: string({ maxLength: 120 }),
+    measure: req(string({ values: ['odds_ratio', 'risk_ratio', 'mean_difference', 'log_ratio', 'difference'] })),
+    direction: req(string({ values: ['lower_better', 'higher_better'] })),
+    studies: req(array(object({
+      studyId: req(string({ minLength: 1, maxLength: 121 })),
+      arms: array(object({
+        treatment: req(string({ minLength: 1, maxLength: 80 })),
+        events: integer({ min: 0 }), n: integer({ min: 1 }), mean: number(), sd: number({ gt: 0 }),
+      }), { min: 2, max: 12 }),
+      contrasts: array(object({
+        treatment: req(string({ minLength: 1, maxLength: 80 })),
+        comparator: req(string({ minLength: 1, maxLength: 80 })),
+        effect: req(number()), se: req(number({ gt: 0 })),
+      }), { min: 1, max: 66 }),
+    }, { exactlyOne: [['arms', 'contrasts']] }), { min: 2, max: 500 })),
+    reference: string({ minLength: 1, maxLength: 80 }),
+    model: string({ values: ['random', 'common'], default: 'random' }),
+    level: number({ gt: 0, lt: 1, default: 0.95 }),
+    continuityCorrection: number({ gt: 0, max: 1, default: 0.5 }),
+  }),
+
+  // Dose-response meta-analysis of grouped data (algorithm round C6). One reference row per study (an effect of 0 and no standard error), the
+  // other levels with their dose, effect on the log scale and standard error; the counts rebuild the covariance of the contrasts (cases and n:
+  // the number at risk, the controls plus cases, or the person-years).
+  'evidence.dose_response': object({
+    label: string({ maxLength: 120 }),
+    doseUnit: string({ maxLength: 40 }),
+    ratioKind: string({ values: ['relative_risk', 'odds_ratio', 'hazard_ratio'], default: 'relative_risk' }),
+    studies: req(array(object({
+      studyId: req(string({ minLength: 1, maxLength: 121 })),
+      type: req(string({ values: ['cc', 'ci', 'ir'] })),
+      rows: req(array(object({
+        dose: req(number()), effect: req(number()), se: number({ gt: 0 }), cases: number({ min: 0 }), n: number({ gt: 0 }),
+      }), { min: 2, max: 60 })),
+    }), { min: 1, max: 500 })),
+    model: object({
+      kind: req(string({ values: ['linear', 'spline'] })),
+      knots: gated(array(number(), { min: 3, max: 5, increasing: true }), is('model.kind', 'spline')),
+      knotPercentiles: gated(array(number({ gt: 0, lt: 1 }), { min: 3, max: 5, increasing: true }), is('model.kind', 'spline')),
+    }),
+    stage: string({ values: ['one', 'two'], default: 'two' }),
+    method: string({ values: ['reml', 'ml', 'fixed'], default: 'reml' }),
+    covariance: string({ values: ['gl', 'h', 'indep'], default: 'gl' }),
+    referenceDose: number(),
+    predictAt: array(number(), { min: 1, max: 50 }),
+    perDose: number({ gt: 0 }),
+    level: number({ gt: 0, lt: 1, default: 0.95 }),
+  }),
+
+  // The empirical shrinkage of a published effect against the trials of the Cochrane Database (algorithm round E8; van Zwet et al. 2023). The
+  // estimate is on a scale whose null is 0: a difference, or the log of a ratio.
+  'evidence.shrinkage': object({
+    label: string({ maxLength: 120 }),
+    scale: req(string({ values: ['identity', 'log'] })),
+    values: req(array(object({
+      id: string({ minLength: 1, maxLength: 80 }),
+      estimate: req(number()), se: req(number({ gt: 0 })),
+      futureSe: number({ gt: 0 }),
+    }), { min: 1, max: 20 })),
+    level: number({ gt: 0, lt: 1, default: 0.95 }),
+    alpha: number({ gt: 0, lt: 1, default: 0.05 }),
   }),
 
   // The published numbers at risk are the best information a reconstruction can have, not a condition of having one: a paper that

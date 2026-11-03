@@ -83,7 +83,7 @@ READ_WHATS = (
     "study", "definition", "criteria", "assumptions", "evidence", "population", "patients", "comparator", "trial",
     "precedents", "matching", "subject_document", "followup_history", "model_source", "generated_records", "results", "report_model", "snapshot_profile", "models", "jobs",
     "trial_registry_record", "patient_context", "pack", "library", "model_assessments", "longitudinal", "candidate_trials", "soa", "regulatory_contacts",
-    "candidates",
+    "candidates", "success_rates",
 )
 WRITE_WHATS = ("data_intake", "task_context", "patient_context",
     "definition", "protocol", "criteria", "assumption", "evidence_item", "precedent", "population", "patient_set",
@@ -112,12 +112,16 @@ JOB_KINDS = ("fit_survival_model", "apply_prognostic_model",
     "design_confirmatory",
     # quantitative bias analysis of an estimate and the G-computation simulated treatment comparison (2026-11-03)
     "bias_analysis", "stc_comparator",
+    # network and dose-response meta-analysis and the empirical shrinkage of a published effect (2026-11-03)
+    "network_meta", "dose_response_meta", "effect_shrinkage",
     # the batch reading of patient records for the criteria's facts (2026-11-01)
     "match_extract",
     "forecast_trajectories", "evaluate_forecast", "compare_forecasts", "benchmark_trial_effect",
 )
 POOLING_METHODS = ("single_study", "random_effects_dl", "random_effects_reml", "random_effects_hksj", "fixed_effect")
 POOLING_CALIBRES = ("closest", "overall", "next_closest")
+# The empirical priors for the between-study spread a pooling may name (`packages/domain/src/vcrEvidencePriors.mjs`); a prior the run types in is not offered here.
+TAU_PRIOR_KINDS = ("turner_2015", "turner_2015_generic", "bartos_2023")
 SIMULATE_ACTIONS = ("start", "status", "cancel", "shape", "validate")
 # The objects `vcr_write` takes whose configuration, scenario or definition carries the keys of a job kind's scenario (the
 # platform projects the object onto that kind's schema and refuses what it does not read): where to look a shape up before
@@ -502,6 +506,18 @@ def _detailed_tool_definitions():
                     "endpointKey": {"type": "string", "minLength": 1, "maxLength": 80, "pattern": r"^[A-Za-z0-9][A-Za-z0-9_.:-]{0,79}$"},
                     "calibres": {"type": "array", "minItems": 1, "maxItems": 3, "items": {"type": "string", "enum": list(POOLING_CALIBRES)}},
                     "method": {"type": "string", "enum": list(POOLING_METHODS), "default": "random_effects_reml"},
+                    "tauPrior": {
+                        "type": "object",
+                        "description": "Optional Cochrane reference for the spread between studies; gives two studies a prediction interval. Its shape is in vcr_simulate action=shape.",
+                        "properties": {
+                            "kind": {"type": "string", "enum": list(TAU_PRIOR_KINDS)},
+                            "outcome": {"type": "string", "maxLength": 60},
+                            "comparison": {"type": "string", "maxLength": 60},
+                            "effectScale": {"type": "string", "maxLength": 40},
+                        },
+                        "required": ["kind"],
+                        "additionalProperties": False,
+                    },
                     "jobId": ID,
                 },
                 "required": ["action"],
@@ -1084,12 +1100,16 @@ def shape(arguments: dict) -> dict:
         data["endpoints"] = list(method["endpoints"])
     if platform is not None:
         # The platform freezes this scenario itself; the run states only the keys named here.
-        keys = [_row_line(by_path[name], by_path) for name in platform if name in by_path]
+        # an object row (tauPrior) is only its keys; the note below says what it takes
+        keys = [_row_line(by_path[name], by_path) for name in platform if name in by_path and by_path[name].get("type") != "object"]
         data["builtByPlatform"] = True
         data["runStates"] = list(platform)
         data["keys"] = keys
         if kind == "pool_evidence":
             notes.append("Use the evidence_pool tool: you name the parameter and the endpoint definition, never the numbers; the pooled values are this study's verified extractions.")
+            notes.append("tauPrior (optional) is the Cochrane reference for how much studies of one comparison differ, so that two studies get a prediction interval: {kind: turner_2015, outcome, comparison} "
+                         "for a binary outcome on the log odds ratio scale, {kind: turner_2015_generic}, or {kind: bartos_2023, effectScale: log_odds_ratio | log_risk_ratio | risk_difference | log_hazard_ratio}. "
+                         "Say which prior you used and why that setting fits, and that it is a reference for such comparisons in general, not for this drug.")
         elif kind == "match_criteria":
             notes.append("Start it with an empty scenario: the platform freezes the newest protocol version's criteria and the facts written for the study.")
         else:
@@ -1581,6 +1601,11 @@ def evidence_pool(arguments: dict) -> dict:
         if method not in POOLING_METHODS:
             raise VcrPlatformError("vcr_simulate_payload_invalid", "method must be one of: %s." % ", ".join(POOLING_METHODS))
         scenario["method"] = method
+    tau_prior = arguments.get("tauPrior")
+    if tau_prior is not None:
+        if not isinstance(tau_prior, dict) or tau_prior.get("kind") not in TAU_PRIOR_KINDS:
+            raise VcrPlatformError("vcr_simulate_payload_invalid", "tauPrior.kind is one of: %s." % ", ".join(TAU_PRIOR_KINDS))
+        scenario["tauPrior"] = tau_prior
     return simulate({
         "action": "start",
         "kind": "pool_evidence",

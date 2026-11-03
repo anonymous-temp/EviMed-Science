@@ -302,6 +302,19 @@ vcr_test_handler_jobs <- function() {
     list("patients.binary", list(design = list(nTreat = 40, nControl = 40), endpoint = list(type = "binary"), truth = list(controlRate = 0.3, treatmentRate = 0.45)), NULL),
     list("patients.time_to_event", list(design = list(nTreat = 40, nControl = 40), endpoint = list(type = "time_to_event"), truth = list(controlMedian = 12, hazardRatio = 0.7), accrual = list(kind = "uniform", duration = 6, followup = 12)), NULL),
     list("evidence.pool", list(studies = list(list(studyId = "a", estimate = -0.4, se = 0.2), list(studyId = "b", estimate = -0.6, se = 0.15), list(studyId = "c", estimate = -0.3, se = 0.25)), method = "random_effects_dl", scale = "log"), NULL),
+    # the evidence methods of the algorithm round: a network, a dose-response (the package's small data in the scenario's own form) and a shrinkage
+    list("evidence.network", list(measure = "log_ratio", direction = "lower_better", studies = list(
+           list(studyId = "s1", contrasts = list(list(treatment = "B", comparator = "A", effect = -0.30, se = 0.15))),
+           list(studyId = "s2", contrasts = list(list(treatment = "C", comparator = "A", effect = -0.50, se = 0.20))),
+           list(studyId = "s3", contrasts = list(list(treatment = "C", comparator = "B", effect = -0.15, se = 0.18))),
+           list(studyId = "s4", contrasts = list(list(treatment = "B", comparator = "A", effect = -0.25, se = 0.22)))), reference = "A"), NULL),
+    list("evidence.dose_response", list(studies = list(
+           list(studyId = "d1", type = "ir", rows = list(list(dose = 0, effect = 0, cases = 28, n = 22186), list(dose = 9, effect = -0.40, se = 0.25, cases = 43, n = 53089),
+                                                          list(dose = 23, effect = -0.49, se = 0.26, cases = 32, n = 45348), list(dose = 36, effect = -0.28, se = 0.32, cases = 16, n = 19791))),
+           list(studyId = "d2", type = "ir", rows = list(list(dose = 0, effect = 0, cases = 100, n = 80000), list(dose = 10, effect = 0.05, se = 0.18, cases = 65, n = 60000),
+                                                          list(dose = 25, effect = 0.20, se = 0.20, cases = 104, n = 70000), list(dose = 40, effect = 0.30, se = 0.22, cases = 63, n = 40000)))),
+         model = list(kind = "linear")), NULL),
+    list("evidence.shrinkage", list(scale = "log", values = list(list(id = "phase2", estimate = log(0.66), se = 0.19, futureSe = 0.12))), NULL),
     list("evidence.reconstruct_km", list(curve = curve_arm(12)$curve, riskTable = curve_arm(12)$riskTable, provenance = list(kind = "digitizer", tool = "e05-digitizer")), list(list(kind = "evidence", id = "ev_e05@1"))),
     list("comparator.entropy_balance", list(covariates = list("age", "male"), treatmentColumn = "arm", outcomeColumn = "y", endpoint = list(type = "continuous")), list(in_subj)),
     list("comparator.propensity_weight", list(covariates = list("age", "male"), treatmentColumn = "arm", outcomeColumn = "y", endpoint = list(type = "continuous")), list(in_subj)),

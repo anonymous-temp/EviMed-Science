@@ -77,6 +77,9 @@ vcr_engine_handlers <- function() list(
   "patients.time_to_event" = vcr_job_generate_patients,
   "patients.longitudinal" = vcr_job_generate_patients_longitudinal,
   "evidence.pool" = vcr_job_pool_evidence,
+  "evidence.network" = vcr_job_network_meta,
+  "evidence.dose_response" = vcr_job_dose_response,
+  "evidence.shrinkage" = vcr_job_effect_shrinkage,
   "evidence.reconstruct_km" = vcr_job_reconstruct_km,
   "comparator.entropy_balance" = vcr_job_weight_comparator,
   "comparator.propensity_weight" = vcr_job_weight_comparator,
@@ -124,6 +127,10 @@ VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "rpact_adapter", "design_c
 # --- quantitative bias analysis of an estimate (C1, C2) and the G-computation simulated treatment comparison (C9), 2026-11-03 ---
 VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "bias_analysis", "stc")
 # --- end bias analysis and STC ---
+
+# --- evidence synthesis beyond a pairwise pool (algorithm round C5, C6, E7, E8, 2026-11-03): a prior for tau, a network, a dose-response, a shrinkage ---
+VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "evidence_tau_prior", "evidence_network", "dose_response", "effect_shrinkage")
+# --- end evidence synthesis ---
 
 # --- single-arm trials of a mean and of a survival time against a benchmark (2026-10-07) ---
 VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "single_arm")
@@ -206,7 +213,8 @@ VCR_ENGINE_OWN_ISSUE_CODES <- c(
   "input_format_unsupported", "input_hash_mismatch", "input_parse_failed", "input_source_not_reconstructed", "input_too_large",
   "job_invalid", "mechanistic_engine_unknown", "mechanistic_field_missing", "missing_covariate",
   "model_card_field_missing", "model_risk_unknown", "performance_measure_unsupported", "replicates_all_failed",
-  "twin_label_inconsistent", "uncertainty_and_variability_conflated")
+  "twin_label_inconsistent", "uncertainty_and_variability_conflated",
+  "dose_response_not_computable", "network_not_connected", "network_not_computable")
 
 #' A column named by one string, or a named refusal (a number, an empty array
 #' or an object in its place used to reach `subj[[...]]` and end as an R error).
@@ -937,6 +945,10 @@ vcr_job_pool_evidence <- function(job, output_dir = NULL, ...) {
   if (!(scale %in% c("identity", "log", "logit"))) vcr_abort("scenario_value_invalid", "scenario.scale", "The analysis scale is identity, log or logit.")
   pool <- vcr_pool(yi, se^2, method, level)
   family <- switch(scale, logit = "beta", log = "lognormal", "normal")
+  # An informative prior for tau (algorithm round E7, evidence.pool 1.1.0): the headline becomes the Bayesian pooling, the frequentist one stays
+  # beside it in `diagnostics.frequentist`, and a pooling of two studies (or one) has a prediction interval.
+  tp <- if (is.null(sc$tauPrior)) NULL else vcr_tau_prior_resolve(sc$tauPrior)
+  if (!is.null(tp)) return(.vcr_pool_with_tau_prior(sc, yi, se, scale, family, method, level, pool, tp))
   dist <- vcr_pool_to_distribution(pool, family)
   has_pi <- is.finite(pool$predictionInterval[1]) && is.finite(pool$predictionInterval[2])
   measures <- list(
@@ -963,6 +975,46 @@ vcr_job_pool_evidence <- function(job, output_dir = NULL, ...) {
            else "a Higgins-Thompson-Spiegelhalter prediction interval needs at least three studies (t on k - 2 df)",
          heterogeneity = list(Q = pool$Q, df = pool$df, pQ = pool$pQ, h2 = pool$h2),
          distribution = dist, weights = pool$weights))
+}
+
+#' The pooling with an informative prior for tau (E7). The measures are the Bayesian ones (posterior mean and credible interval of the pooled
+#' effect, the posterior-predictive interval for a new study, the posterior median of tau); the frequentist numbers are kept beside them.
+.vcr_pool_with_tau_prior <- function(sc, yi, se, scale, family, method, level, pool, tp) {
+  b <- vcr_pool_bayes(yi, se^2, tp, level)
+  # the distribution a simulation samples from: the posterior predictive, moment-matched (the same `vcr_pool_to_distribution` the frequentist
+  # route uses, with the pooled effect's posterior sd and the heterogeneity that makes up the rest of the predictive variance)
+  pred_var <- b$predictionSd^2
+  as_pool <- list(estimate = b$estimate, se = b$sd, tau2 = max(0, pred_var - b$sd^2), tau = sqrt(max(0, pred_var - b$sd^2)), k = max(pool$k, 3L))
+  dist <- vcr_pool_to_distribution(as_pool, family)
+  dist$basis <- "prediction"
+  prior_kind <- as.character(sc$tauPrior$kind)
+  measures <- list(
+    vcr_measure("pooled_estimate", b$estimate, unit = scale, source = "aggregate", interval = vcr_interval("credible", b$interval[1], b$interval[2], level)),
+    vcr_measure("prediction_interval", b$estimate, unit = scale, source = "aggregate", interval = vcr_interval("prediction", b$predictionInterval[1], b$predictionInterval[2], level)),
+    vcr_measure("i_squared", pool$i2, source = "aggregate"),
+    vcr_measure("tau_squared", b$tau2, unit = scale, source = "aggregate", interval = vcr_interval("credible", b$tau2Interval[1], b$tau2Interval[2], level)),
+    vcr_measure("tau", b$tau, unit = scale, source = "aggregate", interval = vcr_interval("credible", b$tauInterval[1], b$tauInterval[2], level)),
+    vcr_measure("k", pool$k, source = "aggregate"))
+  fr_pi <- is.finite(pool$predictionInterval[1]) && is.finite(pool$predictionInterval[2])
+  list(status = "succeeded", measures = measures,
+       counts = vcr_counts(realPatients = NULL, generatedRecords = 0),
+       diagnostics = list(
+         scale = scale, poolingMethod = method, poolingMethodApplied = pool$method,
+         k = pool$k, i2 = pool$i2, tau2 = b$tau2,
+         predictionDf = NULL,
+         predictionIntervalAvailable = TRUE, predictionIntervalReason = NULL,
+         heterogeneity = list(Q = pool$Q, df = pool$df, pQ = pool$pQ, h2 = pool$h2),
+         distribution = dist, weights = pool$weights,
+         tauPrior = list(kind = prior_kind, source = tp$source, params = tp$params,
+                         priorMedianTau = tp$medianTau, priorTauInterval = b$priorTauInterval,
+                         posteriorMedianTau = b$tau, posteriorTauInterval = b$tauInterval, posteriorTau2Mean = b$tau2Mean,
+                         family = tp$kind, onlyOneStudy = pool$k == 1L,
+                         setting = if (identical(prior_kind, "turner_2015")) list(outcome = sc$tauPrior$outcome, comparison = sc$tauPrior$comparison)
+                                   else if (identical(prior_kind, "bartos_2023")) list(effectScale = sc$tauPrior$effectScale) else NULL),
+         frequentist = list(method = method, methodApplied = pool$method, estimate = pool$estimate, interval = pool$interval,
+                            predictionInterval = if (fr_pi) pool$predictionInterval else NULL, tau2 = pool$tau2, tau = pool$tau,
+                            predictionIntervalAvailable = fr_pi),
+         posterior = list(sd = b$sd, predictionSd = b$predictionSd, gridNodes = b$nodes, tauRange = b$tauRange)))
 }
 
 .VCR_CURVE_PROVENANCE <- c("digitizer", "human_click")

@@ -386,7 +386,7 @@ class VcrToolDefinitionTests(unittest.TestCase):
     def test_the_kinds_the_platform_builds_say_what_a_run_states_and_where_the_rest_comes_from(self):
         pool = vcr_platform.shape({"kind": "pool_evidence"})["data"]
         self.assertTrue(pool["builtByPlatform"])
-        self.assertEqual(pool["runStates"], ["parameter", "endpointKey", "calibres", "armRole", "target", "method"])
+        self.assertEqual(pool["runStates"], ["parameter", "endpointKey", "calibres", "armRole", "target", "method", "tauPrior"])
         self.assertTrue(any("evidence_pool" in note for note in pool["notes"]))
         self.assertNotIn("examples", pool)
         match = vcr_platform.shape({"kind": "match_criteria"})["data"]
@@ -424,7 +424,7 @@ class VcrToolDefinitionTests(unittest.TestCase):
 
     def test_evidence_pool_names_a_parameter_and_never_takes_numbers(self):
         properties = {tool["name"]: tool for tool in vcr_platform.tool_definitions()}["evidence_pool"]["inputSchema"]["properties"]
-        self.assertEqual(set(properties), {"action", "parameter", "endpointKey", "calibres", "method", "jobId"})
+        self.assertEqual(set(properties), {"action", "parameter", "endpointKey", "calibres", "method", "tauPrior", "jobId"})
         self.assertNotIn("studies", properties)
 
     def test_the_response_cap_is_four_mebibytes(self):

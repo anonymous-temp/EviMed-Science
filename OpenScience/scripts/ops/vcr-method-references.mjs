@@ -179,6 +179,17 @@ export const NUMERIC_REFERENCES = {
   N73a: { methods: ['comparator.stc'], anchors: ['fit <- stats::glm(y ~ x1 + x2 + arm + arm:x1, data = d, family = stats::binomial())', 'abs(v(r, "marginal_contrast_ipd") - hand) < 1e-9'] },
   N73b: { methods: ['comparator.stc'], anchors: ['tr <- .n73_truth(TRUE)', 'ok <- abs(bias[["g"]]) < 3.5 * mcse[["g"]] && abs(bias[["cv"]]) > 8 * mcse[["cv"]] && abs(bias[["cv"]]) > 0.04'] },
   N73c: { methods: ['comparator.stc'], anchors: ['maic <- vcr_test_run(vcr_test_job("comparator.maic"', 'abs(e_s$value - e_m$value) < sqrt(se_s^2 + se_m^2)'] },
+  N74a: { methods: ['evidence.pool'], anchors: ['bm <- suppressWarnings(bayesmeta(y = yy, sigma = ss, tau.prior = bm_prior, delta = 1e-5, epsilon = 1e-5))', 'identical(pe$interval$kind, "credible") && identical(pr$interval$kind, "prediction") && max(d) < 6e-5'] },
+  N74b: { methods: ['evidence.pool'], anchors: ['cdf <- function(q) stats::integrate(function(u) stats::pnorm((q - y1) / sqrt(v1 + 2 * u)) * stats::dlnorm(u, m, sg), 0, Inf, rel.tol = 1e-10, subdivisions = 2000L)$value', 'abs(pe$value - fe)'] },
+  N74c: { methods: ['evidence.pool'], anchors: ['want <- list(all_cause_mortality = c(0.019, 0.76, 1.31), surgical_device_success = c(0.12, 0.51, 1.97), biological_markers = c(0.17, 0.45, 2.24))', 'b$log_odds_ratio$shape == 1.77 && b$log_odds_ratio$scale == 0.55'] },
+  N75a: { methods: ['evidence.network'], anchors: ['net <- netmeta(TE, seTE, treat1, treat2, studlab, data = Senn2013, sm = "MD", reference.group = "plac", common = TRUE, random = TRUE)', 'cmp <- .n75_compare(r$diagnostics$network, net, rownames(net$TE.random), "good")'] },
+  N75b: { methods: ['evidence.network'], anchors: ['pw <- pairwise(list(treat1, treat2, treat3), event = list(event1, event2, event3), n = list(n1, n2, n3), data = sm, sm = "OR")', 'cmp <- .n75_compare(dn, net, rownames(net$TE.random), "bad")'] },
+  N75c: { methods: ['evidence.network'], anchors: ['tau2 <- max(0, (Q - df) / (sum(w) - sum(w^2) / sum(w)))', 'abs(cl_r$estimate - re)'] },
+  N76a: { methods: ['evidence.dose_response'], anchors: ['want <- c(coef = 0.0064, se = 0.0014, Q = 4.7797, ratio = 1.080313, lo = 1.0465, hi = 1.115218)'] },
+  N76b: { methods: ['evidence.dose_response'], anchors: ['d_est <- max(abs(est - c(-0.0097, 0.1274, -0.2144)))', 'abs(ov$chi2 - 28.3632) < 6e-5'] },
+  N76c: { methods: ['evidence.dose_response'], anchors: ['S <- matrix(1 / a[1] + 1 / b[1], k - 1L, k - 1L) + diag(1 / a[-1] + 1 / b[-1], k - 1L)', 'v <- 1 / as.numeric(t(x) %*% solve(S) %*% x); beta <- v * as.numeric(t(x) %*% solve(S) %*% lor)'] },
+  N77a: { methods: ['evidence.shrinkage'], anchors: ['rows <- c(d$table2, d$table3)', 's <- .n77_stratum(as.numeric(row$p[[1]]), as.numeric(row$p[[2]]), mix)'] },
+  N77b: { methods: ['evidence.shrinkage'], anchors: ['folded_med <- stats::uniroot(', 'sign_int <- stats::integrate(dens, 0, Inf, rel.tol = 1e-11)$value'] },
 
   // --- the comparator-effect stream's cases (listed so that merging it needs no edit here; inert until the cases exist) ---
   N33a: { methods: ['comparator.weighted_cox'], anchors: ['Cross-software: the weights are WeightIt', 'rel(m(j_ebal, "hazard_ratio"), r_ebal$hr) < 1e-6'] },

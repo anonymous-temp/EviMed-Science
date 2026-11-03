@@ -52,7 +52,7 @@ export const VCR_SCENARIO_HELP_VERSION = 1
  * @type {Readonly<Record<string, readonly string[]>>}
  */
 export const VCR_RUN_SCENARIO_FIELDS = Object.freeze({
-  pool_evidence: Object.freeze(['parameter', 'endpointKey', 'calibres', 'armRole', 'target', 'method']),
+  pool_evidence: Object.freeze(['parameter', 'endpointKey', 'calibres', 'armRole', 'target', 'method', 'tauPrior']),
   match_criteria: Object.freeze([]),
   // The batch reading of records takes a selection and no scenario: the platform freezes the roster, the questions and the estimate.
   match_extract: Object.freeze([]),
@@ -294,8 +294,39 @@ export const VCR_SCENARIO_EXAMPLES = Object.freeze({
     design: { nTreat: 150, nControl: 150 }, endpoint: { type: 'continuous' }, visits: [0, 3, 6, 9, 12],
     truth: { intercept: 50, slope: -0.4, effect: -0.2, sd: 3, randomEffects: { sdIntercept: 6, sdSlope: 0.3, correlation: -0.2 } },
     dropoutPerVisit: 0.1 } }],
-  'evidence.pool': [{ label: 'three published log hazard ratios', scenario: {
-    studies: [{ studyId: 'NCT001', estimate: -0.35, se: 0.12 }, { studyId: 'NCT002', estimate: -0.2, se: 0.15 }], method: 'random_effects_reml', scale: 'log' } }],
+  'evidence.pool': [
+    { label: 'two published log hazard ratios', scenario: {
+      studies: [{ studyId: 'NCT001', estimate: -0.35, se: 0.12 }, { studyId: 'NCT002', estimate: -0.2, se: 0.15 }], method: 'random_effects_reml', scale: 'log' } },
+    { label: 'the same two studies with the Cochrane reference for how much trials of one comparison differ (all-cause mortality, drug against placebo): a prediction interval from two studies', scenario: {
+      studies: [{ studyId: 'NCT001', estimate: -0.35, se: 0.12 }, { studyId: 'NCT002', estimate: -0.2, se: 0.15 }], method: 'random_effects_reml', scale: 'log',
+      tauPrior: { kind: 'turner_2015', outcome: 'all_cause_mortality', comparison: 'pharmacological_vs_placebo' } } },
+  ],
+  'evidence.network': [
+    { label: 'three treatments compared by odds ratio from arm counts, one three-arm study; a higher response is better', scenario: {
+      label: 'response', measure: 'odds_ratio', direction: 'higher_better', reference: 'A', studies: [
+        { studyId: 'S1', arms: [{ treatment: 'A', events: 12, n: 100 }, { treatment: 'B', events: 20, n: 98 }] },
+        { studyId: 'S2', arms: [{ treatment: 'A', events: 9, n: 80 }, { treatment: 'C', events: 18, n: 82 }, { treatment: 'B', events: 15, n: 79 }] },
+        { studyId: 'S3', arms: [{ treatment: 'B', events: 22, n: 110 }, { treatment: 'C', events: 30, n: 112 }] }] } },
+    { label: 'hazard ratios published as comparisons: a three-arm trial states every pair of its arms', scenario: {
+      measure: 'log_ratio', direction: 'lower_better', studies: [
+        { studyId: 'H1', contrasts: [{ treatment: 'B', comparator: 'A', effect: -0.3, se: 0.12 }] },
+        { studyId: 'H2', contrasts: [{ treatment: 'C', comparator: 'A', effect: -0.5, se: 0.2 }, { treatment: 'C', comparator: 'B', effect: -0.2, se: 0.2 }, { treatment: 'B', comparator: 'A', effect: -0.3, se: 0.15 }] },
+        { studyId: 'H3', contrasts: [{ treatment: 'C', comparator: 'B', effect: -0.15, se: 0.18 }] }] } },
+  ],
+  'evidence.dose_response': [
+    { label: 'a log-linear dose-response of two cohorts reporting incidence rates (the reference level states an effect of 0 and no standard error)', scenario: {
+      label: 'alcohol and colorectal cancer', doseUnit: 'g/day', ratioKind: 'relative_risk', model: { kind: 'linear' }, perDose: 12, studies: [
+        { studyId: 'K1', type: 'ir', rows: [{ dose: 0, effect: 0, cases: 120, n: 40000 }, { dose: 10, effect: 0.10, se: 0.12, cases: 80, n: 25000 }, { dose: 25, effect: 0.30, se: 0.14, cases: 60, n: 15000 }] },
+        { studyId: 'K2', type: 'ir', rows: [{ dose: 0, effect: 0, cases: 90, n: 30000 }, { dose: 12, effect: 0.05, se: 0.15, cases: 70, n: 22000 }, { dose: 30, effect: 0.35, se: 0.17, cases: 45, n: 12000 }] }] } },
+    { label: 'a restricted cubic spline with knots at the 10th, 50th and 90th percentiles of the doses, and the ratios at chosen doses against a dose of 0', scenario: {
+      model: { kind: 'spline', knotPercentiles: [0.1, 0.5, 0.9] }, predictAt: [0, 10, 20, 30], referenceDose: 0, studies: [
+        { studyId: 'K1', type: 'ir', rows: [{ dose: 0, effect: 0, cases: 120, n: 40000 }, { dose: 10, effect: 0.10, se: 0.12, cases: 80, n: 25000 }, { dose: 25, effect: 0.30, se: 0.14, cases: 60, n: 15000 }, { dose: 40, effect: 0.5, se: 0.2, cases: 30, n: 6000 }] },
+        { studyId: 'K2', type: 'ir', rows: [{ dose: 0, effect: 0, cases: 90, n: 30000 }, { dose: 12, effect: 0.05, se: 0.15, cases: 70, n: 22000 }, { dose: 30, effect: 0.35, se: 0.17, cases: 45, n: 12000 }, { dose: 45, effect: 0.6, se: 0.22, cases: 25, n: 5000 }] }] } },
+  ],
+  'evidence.shrinkage': [
+    { label: 'a phase 2 hazard ratio of 0.66 (the standard error of its log is 0.19), and a phase 3 that will measure the effect with a standard error of 0.12', scenario: {
+      label: 'phase 2 hazard ratio', scale: 'log', values: [{ id: 'phase2', estimate: -0.4155, se: 0.19, futureSe: 0.12 }] } },
+  ],
   'evidence.reconstruct_km': [{ label: 'one digitized arm and its risk table', scenario: {
     curve: [{ time: 0, surv: 1 }, { time: 12, surv: 0.55 }, { time: 24, surv: 0.3 }],
     riskTable: [{ time: 0, atRisk: 150 }, { time: 12, atRisk: 70 }, { time: 24, atRisk: 20 }],
@@ -565,6 +596,26 @@ const STC_NOTES = Object.freeze([
  */
 const HYPOTHESIS_NOTE = 'hypothesis is for a two-arm design and is left out for superiority (the default). { kind: "non_inferiority", margin } tests that the treatment is not worse than the control by more than the margin: margin is a positive number in the outcome\'s units for a mean, a risk difference below 1 for a binary endpoint (the treatment rate may be this far below the control\'s), and a hazard ratio above 1 for an event-time endpoint (the largest ratio still counted as not worse). The margin is a clinical choice: ask for it, never invent one. truth then states the effect the treatment is EXPECTED to have (often 0, or a hazard ratio of 1), not the margin; design.simulate measures the type I error by putting the truth on the margin itself. The test is one-sided; analysis.method is the t-test, the risk difference or the log-rank test.'
 
+/**
+ * Evidence synthesis beyond a pairwise pool (algorithm round C5, C6, E7, E8): said to the run that writes it, so that what each result is a reference for
+ * is the same in the conversation and on the page.
+ */
+const POOL_PRIOR_NOTE = 'tauPrior (optional) gives the between-study standard deviation an informative prior, so that two studies (or one) have a prediction interval: the pooled value becomes the Bayesian one (posterior mean and credible interval), and the frequentist pooling is kept beside it. kind turner_2015 (outcome, comparison) takes the prior of Turner et al. (2015) for binary outcomes on the log odds ratio scale from their table of 80 settings, turner_2015_generic their overall one, bartos_2023 (effectScale: log_odds_ratio, log_risk_ratio, risk_difference or log_hazard_ratio) the priors of Bartos et al. (2023) from the Cochrane database; half_normal (scale, on tau), log_normal (meanLog, sdLog, on tau-squared), inverse_gamma (shape, scale, on tau) and log_t (location, scale, df, on tau-squared) state your own. These describe how much trials of one comparison typically differ, not the drug in front of you: say which prior was used and why that setting fits, and state the pooled value beside the one without it.'
+const NETWORK_NOTES = Object.freeze([
+  'It compares every treatment of a connected set of studies with every other, through the studies that join them, and says how well the direct and the indirect evidence agree. A study states arms (events and n for odds_ratio or risk_ratio; mean, sd and n for mean_difference) or contrasts (every pair of its arms: treatment, comparator, effect on the log scale for log_ratio or the measure\'s own scale for difference, and standard error); a study with three or more arms in contrast form must state every pair. Treatment names are matched as written, so write each one the same way in every study.',
+  'direction says which side is better (lower_better: a smaller effect is better), and it is yours to state, not the engine\'s: it only orders the P-scores. The result has the league table (every pair, with the number of studies that compared them directly), the effects against a reference (reference, or the treatment in most studies), tau-squared and I-squared, the heterogeneity test, and the inconsistency test that splits Q into within and between designs (of the common-effect fit). model random (the default) or common chooses the headline; both are in the result. A zero cell is corrected as continuityCorrection says and the studies are named. A network in separate parts is refused with the parts listed.',
+  'The P-score is a ranking of point estimates weighted by their precision (the mean probability of being better than each other treatment); it is not the probability of being best, and treatments with few studies rank on thin evidence. Report the league table and the consistency test with it, and do not recompute any number.',
+])
+const DOSE_RESPONSE_NOTES = Object.freeze([
+  'It pools grouped dose-response data (the reference level and the others against it, as a paper prints them): per study type cc (case-control, n = cases plus controls), ci (cumulative incidence, n = the number at risk) or ir (incidence rate, n = person-years), and rows of dose, effect (the log ratio; 0 for the reference row, which has no se), se, cases and n. Cases and n rebuild the correlation between the levels of one study (Greenland and Longnecker); a level without them makes the levels count as independent, and the result says so.',
+  'model.kind linear gives the change in the log ratio per unit of dose (perDose turns it into a ratio for a step you choose, such as one standard drink); spline fits a restricted cubic spline with knots at doses (knots) or at percentiles of the pooled doses (knotPercentiles, default 10th, 50th, 90th), tests non-linearity, and returns the ratios at predictAt against referenceDose (default the smallest dose). stage two (default) fits each study first and needs at least as many non-reference levels as coefficients, leaving smaller studies out and naming them; one stage keeps them.',
+  '"From what dose does it work" is answered with the predicted ratios and the first dose on a fine grid at which the interval leaves 1; that is a pointwise reading of the fitted curve, not a threshold the data establish, and a dose-response across studies is not a statement about one person.',
+])
+const SHRINKAGE_NOTES = Object.freeze([
+  'It reads a published effect (a difference, or the log of a ratio; the estimate and its standard error) against the primary efficacy results of 23,551 randomized trials of the Cochrane Database (van Zwet et al. 2023): the effect shrunk toward no effect, how much larger the estimate probably is than the truth (the exaggeration, median and quartiles), the probability that its sign is right, and the probability that an exact replication of the same precision reaches two-sided significance in the same direction. futureSe asks the last for a later trial with another standard error (the true effect held).',
+  'It is a comparison beside the stated value and never replaces it: the reference is every kind of trial in the database, so it describes a typical trial with this z statistic, not this drug, and it may shrink a trial of a drug with a strong mechanism more than it deserves. Say that when you report it.',
+])
+
 /** @type {Readonly<Record<string, readonly string[]>>} */
 const METHOD_NOTES = Object.freeze({
   'comparator.entropy_balance': COMPARATOR_TIME_UNIT_NOTES,
@@ -574,6 +625,10 @@ const METHOD_NOTES = Object.freeze({
   'comparator.aipw': Object.freeze([COMPARATOR_TIME_UNIT_NOTES[0], TRIM_NOTE, AIPW_TIME_TO_EVENT_NOTE]),
   'comparator.bias_analysis': BIAS_ANALYSIS_NOTES,
   'comparator.stc': STC_NOTES,
+  'evidence.pool': Object.freeze([POOL_PRIOR_NOTE]),
+  'evidence.network': NETWORK_NOTES,
+  'evidence.dose_response': DOSE_RESPONSE_NOTES,
+  'evidence.shrinkage': SHRINKAGE_NOTES,
   'comparator.maic_time_to_event': Object.freeze([...COMPARATOR_TIME_UNIT_NOTES, ...UNANCHORED_NOTES]),
   'comparator.rmst': COMPARATOR_TIME_UNIT_NOTES,
   'comparator.tipping_point': ROBUSTNESS_TIME_UNIT_NOTES,

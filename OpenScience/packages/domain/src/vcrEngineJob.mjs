@@ -112,7 +112,9 @@ export const VCR_ENGINE_METHODS = Object.freeze({
   'patients.continuous': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['continuous']), crossChecks: frozen([]), modelTier: 'scenario' },
   'patients.binary': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['binary']), crossChecks: frozen([]), modelTier: 'scenario' },
   'patients.time_to_event': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['time_to_event']), crossChecks: frozen(['simsurv (exponential and Weibull event times at the same parameters)', 'regression on the output table']), modelTier: 'scenario' },
-  'evidence.pool': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['metafor']), modelTier: 'literature' },
+  // 1.1.0 (algorithm round E7): an informative prior for the between-study heterogeneity (Turner et al. 2015, Bartos et al. 2023, or a stated one),
+  // with the Bayesian pooling as the headline and a prediction interval for two studies.
+  'evidence.pool': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen([]), crossChecks: frozen(['metafor', 'bayesmeta (a stated log-normal, inverse-gamma and half-normal prior for the heterogeneity: the pooled effect\'s mean and credible interval and the median heterogeneity, with two and four studies)']), modelTier: 'literature' },
   'evidence.reconstruct_km': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['time_to_event']), crossChecks: frozen(['IPDfromKM (the same digitized curve, risk table and event total: medians and hazard ratio)', 'Cox on the original rows']), modelTier: 'literature' },
   'comparator.entropy_balance': { version: '1.3.0', compatibleVersions: frozen(['1.0.0', '1.1.0', '1.2.0']), endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['WeightIt', 'cobalt']), modelTier: 'data' },
   // 1.4.0 (algorithm round C14): propensity trimming (a fixed bound or Crump's rule) that restates the population the estimate is about.
@@ -155,6 +157,11 @@ export const VCR_ENGINE_METHODS = Object.freeze({
   // The G-computation form of the simulated treatment comparison (algorithm round C9, 2026-11-03): the IPD outcome model averaged over the aggregate
   // trial's covariate distribution (the engine's Gaussian copula), anchored and unanchored, with the IPD bootstrapped.
   'comparator.stc': { version: '1.0.0', endpoints: frozen(['continuous', 'binary']), crossChecks: frozen(['known-truth simulation of two trials with different covariate means: the marginal effect in the aggregate trial\'s population', 'comparator.maic on the same case (the identity link without a modifier, where the two estimate the same number)', 'stats::glm predictions averaged by hand over the same covariate sample']), modelTier: 'data' },
+  // Evidence synthesis beyond a pairwise pool (algorithm round C5, C6, E8, 2026-11-03). The network and the shrinkage are written in R; the dose-response
+  // is dosresmeta's (the runtime library carries it), with the spline basis written here.
+  'evidence.network': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['netmeta (Senn2013 in contrast form with a three-arm study, and smokingcessation in arm form with multi-arm studies: effects, standard errors, tau-squared, Q and its split between designs, P-scores)', 'closed-form pairwise DerSimonian-Laird pooling of a network of two treatments']), modelTier: 'literature' },
+  'evidence.dose_response': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['the package\'s own article (Crippa & Orsini 2016): the linear and the four-knot spline fit of the colorectal-cancer data, the test of non-linearity and the table of ratios', 'a hand Greenland-Longnecker generalized-least-squares slope on counts whose variances are exact']), modelTier: 'literature' },
+  'evidence.shrinkage': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['van Zwet et al. (2023), Tables 2 and 3: the quantities of the Cochrane reference population by P value, integrated over the strata', 'a numerical integral of the mixture distribution given the data']), modelTier: 'literature' },
 })
 
 export const VCR_ENGINE_METHOD_IDS = frozen(Object.keys(VCR_ENGINE_METHODS))
@@ -207,6 +214,10 @@ export const VCR_JOB_METHODS = Object.freeze({
   // quantitative bias analysis and the G-computation simulated treatment comparison (2026-11-03)
   bias_analysis: 'comparator.bias_analysis',
   stc_comparator: 'comparator.stc',
+  // network and dose-response meta-analysis, and the empirical shrinkage of a published effect (2026-11-03)
+  network_meta: 'evidence.network',
+  dose_response_meta: 'evidence.dose_response',
+  effect_shrinkage: 'evidence.shrinkage',
   // The batch reading of patient records (D4): run by the control plane on its slow local lane, never by the R engine.
   ...VCR_MATCH_BATCH_JOBS,
   // The longitudinal forecast kinds, last, in VCR_JOB_KINDS' order (the scenario help lists kinds in this object's order).
@@ -808,6 +819,8 @@ function legacyDesignVersionMatches(job) {
     if (job.method === 'model.prognostic_apply' && job.scenario?.calibration !== undefined) return false
     // and design.confirmatory 1.1.0 the promising zone and the event-time selection and enrichment designs
     if (job.method === 'design.confirmatory' && usesConfirmatoryBeyond1_0_0(job.scenario)) return false
+    // and evidence.pool 1.1.0 the informative prior for the heterogeneity
+    if (job.method === 'evidence.pool' && job.scenario?.tauPrior !== undefined) return false
     // and the weighting comparators 1.4.0 (AIPW 1.3.0) the propensity trimming, and AIPW 1.3.0 the time-to-event outcome
     if (TRIMMING_METHODS.includes(job.method) && job.scenario?.trim !== undefined) return false
     if (job.method === 'comparator.aipw' && job.scenario?.endpoint?.type === 'time_to_event') return false

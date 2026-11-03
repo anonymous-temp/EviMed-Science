@@ -2255,6 +2255,38 @@ export {
   vcrResultOutputPayload,
 } from './src/vcrEngineJob.mjs'
 
+// vcrEvidencePriors — empirical priors for the heterogeneity of a pooling and the reference mixture of the trials of the Cochrane Database,
+// with the place in each paper every number was read at (algorithm round E7, E8)
+export {
+  VCR_BARTOS_2023_EFFECT_SCALES,
+  VCR_BARTOS_2023_EFFECT_SCALE_LABELS_ZH,
+  VCR_BARTOS_2023_PRIORS,
+  VCR_BARTOS_2023_SOURCE,
+  VCR_TURNER_2015_GENERIC,
+  VCR_TURNER_2015_PRIORS,
+  VCR_TURNER_2015_SOURCE,
+  VCR_TURNER_COMPARISONS,
+  VCR_TURNER_COMPARISON_LABELS_ZH,
+  VCR_TURNER_OUTCOMES,
+  VCR_TURNER_OUTCOME_LABELS_ZH,
+  VCR_VAN_ZWET_2023_MIXTURE,
+  VCR_VAN_ZWET_2023_SOURCE,
+  VCR_VAN_ZWET_2023_TABLE_2,
+  VCR_VAN_ZWET_2023_TABLE_3,
+} from './src/vcrEvidencePriors.mjs'
+
+// vcrSuccessRates — historical success rates of clinical development, BIO 2011-2020 and Wong 2019 side by side (algorithm round E6)
+export {
+  VCR_BIO_2011_2020,
+  VCR_SUCCESS_RATE_AREAS,
+  VCR_SUCCESS_RATE_PHASES,
+  VCR_SUCCESS_RATE_PHASE_LABELS_ZH,
+  VCR_SUCCESS_RATE_SOURCES,
+  VCR_WONG_2019,
+  VCR_WONG_2019_GROUP_LABELS_ZH,
+  vcrSuccessRates,
+} from './src/vcrSuccessRates.mjs'
+
 // vcrScenarioSchemas — 4 exports: the walker that checks a scenario against its method's schema, and the two tables of
 // which analysis a design may run
 export {

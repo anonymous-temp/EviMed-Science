@@ -14,7 +14,7 @@
     "generate_patients_continuous": {"method":"patients.continuous"},
     "generate_patients_binary": {"method":"patients.binary"},
     "reconstruct_km": {"method":"evidence.reconstruct_km"},
-    "pool_evidence": {"method":"evidence.pool","platformBuilt":["parameter","endpointKey","calibres","armRole","target","method"]},
+    "pool_evidence": {"method":"evidence.pool","platformBuilt":["parameter","endpointKey","calibres","armRole","target","method","tauPrior"]},
     "weight_comparator": {"method":"comparator.entropy_balance"},
     "propensity_weight_comparator": {"method":"comparator.propensity_weight"},
     "maic_comparator": {"method":"comparator.maic"},
@@ -40,6 +40,9 @@
     "design_confirmatory": {"method":"design.confirmatory"},
     "bias_analysis": {"method":"comparator.bias_analysis"},
     "stc_comparator": {"method":"comparator.stc"},
+    "network_meta": {"method":"evidence.network"},
+    "dose_response_meta": {"method":"evidence.dose_response"},
+    "effect_shrinkage": {"method":"evidence.shrinkage"},
     "match_extract": {"method":"matching.extract","platformBuilt":[]},
     "forecast_trajectories": {"method":"forecast.trajectories"},
     "evaluate_forecast": {"method":"forecast.evaluate"},
@@ -1339,6 +1342,9 @@
     },
     "evidence.pool": {
       "endpoints": [],
+      "notes": [
+        "tauPrior (optional) gives the between-study standard deviation an informative prior, so that two studies (or one) have a prediction interval: the pooled value becomes the Bayesian one (posterior mean and credible interval), and the frequentist pooling is kept beside it. kind turner_2015 (outcome, comparison) takes the prior of Turner et al. (2015) for binary outcomes on the log odds ratio scale from their table of 80 settings, turner_2015_generic their overall one, bartos_2023 (effectScale: log_odds_ratio, log_risk_ratio, risk_difference or log_hazard_ratio) the priors of Bartos et al. (2023) from the Cochrane database; half_normal (scale, on tau), log_normal (meanLog, sdLog, on tau-squared), inverse_gamma (shape, scale, on tau) and log_t (location, scale, df, on tau-squared) state your own. These describe how much trials of one comparison typically differ, not the drug in front of you: say which prior was used and why that setting fits, and state the pooled value beside the one without it."
+      ],
       "rows": [
         {"path":"studies","type":"list","count":{"min":1,"max":500},"items":{"type":"object"},"required":true,"fieldRole":"research_fact"},
         {"path":"studies[].studyId","type":"string","minLength":1,"maxLength":121,"required":true,"fieldRole":"research_fact"},
@@ -1352,12 +1358,110 @@
           "fieldRole": "defaultable"
         },
         {"path":"level","type":"number","gt":0,"lt":1,"default":0.95,"fieldRole":"defaultable"},
-        {"path":"scale","type":"string","values":["identity","log","logit"],"default":"identity","fieldRole":"defaultable"}
+        {"path":"scale","type":"string","values":["identity","log","logit"],"default":"identity","fieldRole":"defaultable"},
+        {"path":"tauPrior","type":"object"},
+        {
+          "path": "tauPrior.kind",
+          "type": "string",
+          "values": ["half_normal","log_normal","inverse_gamma","log_t","turner_2015","turner_2015_generic","bartos_2023"],
+          "required": true,
+          "within": "tauPrior",
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "tauPrior.scale",
+          "type": "number",
+          "gt": 0,
+          "required": true,
+          "within": "tauPrior",
+          "variant": {"on":"tauPrior.kind","is":["half_normal","inverse_gamma","log_t"]},
+          "fieldRole": "research_fact"
+        },
+        {"path":"tauPrior.meanLog","type":"number","required":true,"within":"tauPrior","variant":{"on":"tauPrior.kind","is":["log_normal"]},"fieldRole":"research_fact"},
+        {
+          "path": "tauPrior.sdLog",
+          "type": "number",
+          "gt": 0,
+          "required": true,
+          "within": "tauPrior",
+          "variant": {"on":"tauPrior.kind","is":["log_normal"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "tauPrior.shape",
+          "type": "number",
+          "gt": 0,
+          "required": true,
+          "within": "tauPrior",
+          "variant": {"on":"tauPrior.kind","is":["inverse_gamma"]},
+          "fieldRole": "research_fact"
+        },
+        {"path":"tauPrior.location","type":"number","required":true,"within":"tauPrior","variant":{"on":"tauPrior.kind","is":["log_t"]},"fieldRole":"research_fact"},
+        {"path":"tauPrior.df","type":"number","gt":0,"required":true,"within":"tauPrior","variant":{"on":"tauPrior.kind","is":["log_t"]},"fieldRole":"research_fact"},
+        {
+          "path": "tauPrior.outcome",
+          "type": "string",
+          "values": [
+            "all_cause_mortality",
+            "obstetric",
+            "cause_specific_mortality_or_morbidity",
+            "resource_use",
+            "surgical_device_success",
+            "withdrawals",
+            "structure_related",
+            "general_physical_health",
+            "adverse_events",
+            "infection_new_disease",
+            "signs_symptoms",
+            "pain",
+            "quality_of_life",
+            "mental_health",
+            "biological_markers",
+            "subjective_various"
+          ],
+          "required": true,
+          "within": "tauPrior",
+          "variant": {"on":"tauPrior.kind","is":["turner_2015"]},
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "tauPrior.comparison",
+          "type": "string",
+          "values": [
+            "pharmacological_vs_placebo",
+            "pharmacological_vs_pharmacological",
+            "non_pharmacological_vs_placebo",
+            "non_pharmacological_vs_pharmacological",
+            "non_pharmacological_vs_non_pharmacological"
+          ],
+          "required": true,
+          "within": "tauPrior",
+          "variant": {"on":"tauPrior.kind","is":["turner_2015"]},
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "tauPrior.effectScale",
+          "type": "string",
+          "values": ["log_odds_ratio","log_risk_ratio","risk_difference","log_hazard_ratio"],
+          "required": true,
+          "within": "tauPrior",
+          "variant": {"on":"tauPrior.kind","is":["bartos_2023"]},
+          "fieldRole": "defaultable"
+        }
       ],
       "examples": [
         {
-          "label": "three published log hazard ratios",
+          "label": "two published log hazard ratios",
           "scenario": {"studies":[{"studyId":"NCT001","estimate":-0.35,"se":0.12},{"studyId":"NCT002","estimate":-0.2,"se":0.15}],"method":"random_effects_reml","scale":"log"}
+        },
+        {
+          "label": "the same two studies with the Cochrane reference for how much trials of one comparison differ (all-cause mortality, drug against placebo): a prediction interval from two studies",
+          "scenario": {
+            "studies": [{"studyId":"NCT001","estimate":-0.35,"se":0.12},{"studyId":"NCT002","estimate":-0.2,"se":0.15}],
+            "method": "random_effects_reml",
+            "scale": "log",
+            "tauPrior": {"kind":"turner_2015","outcome":"all_cause_mortality","comparison":"pharmacological_vs_placebo"}
+          }
         }
       ]
     },
@@ -4823,6 +4927,217 @@
             "aggregateSe": 0.12,
             "outcomeColumn": "response"
           }
+        }
+      ]
+    },
+    "evidence.network": {
+      "endpoints": [],
+      "notes": [
+        "It compares every treatment of a connected set of studies with every other, through the studies that join them, and says how well the direct and the indirect evidence agree. A study states arms (events and n for odds_ratio or risk_ratio; mean, sd and n for mean_difference) or contrasts (every pair of its arms: treatment, comparator, effect on the log scale for log_ratio or the measure's own scale for difference, and standard error); a study with three or more arms in contrast form must state every pair. Treatment names are matched as written, so write each one the same way in every study.",
+        "direction says which side is better (lower_better: a smaller effect is better), and it is yours to state, not the engine's: it only orders the P-scores. The result has the league table (every pair, with the number of studies that compared them directly), the effects against a reference (reference, or the treatment in most studies), tau-squared and I-squared, the heterogeneity test, and the inconsistency test that splits Q into within and between designs (of the common-effect fit). model random (the default) or common chooses the headline; both are in the result. A zero cell is corrected as continuityCorrection says and the studies are named. A network in separate parts is refused with the parts listed.",
+        "The P-score is a ranking of point estimates weighted by their precision (the mean probability of being better than each other treatment); it is not the probability of being best, and treatments with few studies rank on thin evidence. Report the league table and the consistency test with it, and do not recompute any number."
+      ],
+      "rows": [
+        {"path":"label","type":"string","maxLength":120,"fieldRole":"defaultable"},
+        {"path":"measure","type":"string","values":["odds_ratio","risk_ratio","mean_difference","log_ratio","difference"],"required":true,"fieldRole":"defaultable"},
+        {"path":"direction","type":"string","values":["lower_better","higher_better"],"required":true,"fieldRole":"defaultable"},
+        {"path":"studies","type":"list","count":{"min":2,"max":500},"items":{"type":"object"},"required":true,"fieldRole":"research_fact"},
+        {"path":"studies[].studyId","type":"string","minLength":1,"maxLength":121,"required":true,"fieldRole":"research_fact"},
+        {"path":"studies[].arms","type":"list","count":{"min":2,"max":12},"items":{"type":"object"},"fieldRole":"research_fact"},
+        {"path":"studies[].arms[].treatment","type":"string","minLength":1,"maxLength":80,"required":true,"within":"studies[].arms","fieldRole":"research_fact"},
+        {"path":"studies[].arms[].events","type":"integer","min":0,"within":"studies[].arms","fieldRole":"defaultable"},
+        {"path":"studies[].arms[].n","type":"integer","min":1,"within":"studies[].arms","fieldRole":"defaultable"},
+        {"path":"studies[].arms[].mean","type":"number","within":"studies[].arms","fieldRole":"defaultable"},
+        {"path":"studies[].arms[].sd","type":"number","gt":0,"within":"studies[].arms","fieldRole":"defaultable"},
+        {"path":"studies[].contrasts","type":"list","count":{"min":1,"max":66},"items":{"type":"object"},"fieldRole":"research_fact"},
+        {
+          "path": "studies[].contrasts[].treatment",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "required": true,
+          "within": "studies[].contrasts",
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "studies[].contrasts[].comparator",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "required": true,
+          "within": "studies[].contrasts",
+          "fieldRole": "research_fact"
+        },
+        {"path":"studies[].contrasts[].effect","type":"number","required":true,"within":"studies[].contrasts","fieldRole":"research_fact"},
+        {"path":"studies[].contrasts[].se","type":"number","gt":0,"required":true,"within":"studies[].contrasts","fieldRole":"research_fact"},
+        {"path":"reference","type":"string","minLength":1,"maxLength":80,"fieldRole":"defaultable"},
+        {"path":"model","type":"string","values":["random","common"],"default":"random","fieldRole":"defaultable"},
+        {"path":"level","type":"number","gt":0,"lt":1,"default":0.95,"fieldRole":"defaultable"},
+        {"path":"continuityCorrection","type":"number","max":1,"gt":0,"default":0.5,"fieldRole":"defaultable"}
+      ],
+      "rules": [{"kind":"exactlyOne","keys":["studies[].arms","studies[].contrasts"]}],
+      "examples": [
+        {
+          "label": "three treatments compared by odds ratio from arm counts, one three-arm study; a higher response is better",
+          "scenario": {
+            "label": "response",
+            "measure": "odds_ratio",
+            "direction": "higher_better",
+            "reference": "A",
+            "studies": [
+              {"studyId":"S1","arms":[{"treatment":"A","events":12,"n":100},{"treatment":"B","events":20,"n":98}]},
+              {"studyId":"S2","arms":[{"treatment":"A","events":9,"n":80},{"treatment":"C","events":18,"n":82},{"treatment":"B","events":15,"n":79}]},
+              {"studyId":"S3","arms":[{"treatment":"B","events":22,"n":110},{"treatment":"C","events":30,"n":112}]}
+            ]
+          }
+        },
+        {
+          "label": "hazard ratios published as comparisons: a three-arm trial states every pair of its arms",
+          "scenario": {
+            "measure": "log_ratio",
+            "direction": "lower_better",
+            "studies": [
+              {"studyId":"H1","contrasts":[{"treatment":"B","comparator":"A","effect":-0.3,"se":0.12}]},
+              {
+                "studyId": "H2",
+                "contrasts": [
+                  {"treatment":"C","comparator":"A","effect":-0.5,"se":0.2},
+                  {"treatment":"C","comparator":"B","effect":-0.2,"se":0.2},
+                  {"treatment":"B","comparator":"A","effect":-0.3,"se":0.15}
+                ]
+              },
+              {"studyId":"H3","contrasts":[{"treatment":"C","comparator":"B","effect":-0.15,"se":0.18}]}
+            ]
+          }
+        }
+      ]
+    },
+    "evidence.dose_response": {
+      "endpoints": [],
+      "notes": [
+        "It pools grouped dose-response data (the reference level and the others against it, as a paper prints them): per study type cc (case-control, n = cases plus controls), ci (cumulative incidence, n = the number at risk) or ir (incidence rate, n = person-years), and rows of dose, effect (the log ratio; 0 for the reference row, which has no se), se, cases and n. Cases and n rebuild the correlation between the levels of one study (Greenland and Longnecker); a level without them makes the levels count as independent, and the result says so.",
+        "model.kind linear gives the change in the log ratio per unit of dose (perDose turns it into a ratio for a step you choose, such as one standard drink); spline fits a restricted cubic spline with knots at doses (knots) or at percentiles of the pooled doses (knotPercentiles, default 10th, 50th, 90th), tests non-linearity, and returns the ratios at predictAt against referenceDose (default the smallest dose). stage two (default) fits each study first and needs at least as many non-reference levels as coefficients, leaving smaller studies out and naming them; one stage keeps them.",
+        "\"From what dose does it work\" is answered with the predicted ratios and the first dose on a fine grid at which the interval leaves 1; that is a pointwise reading of the fitted curve, not a threshold the data establish, and a dose-response across studies is not a statement about one person."
+      ],
+      "rows": [
+        {"path":"label","type":"string","maxLength":120,"fieldRole":"defaultable"},
+        {"path":"doseUnit","type":"string","maxLength":40,"fieldRole":"defaultable"},
+        {"path":"ratioKind","type":"string","values":["relative_risk","odds_ratio","hazard_ratio"],"default":"relative_risk","fieldRole":"defaultable"},
+        {"path":"studies","type":"list","count":{"min":1,"max":500},"items":{"type":"object"},"required":true,"fieldRole":"research_fact"},
+        {"path":"studies[].studyId","type":"string","minLength":1,"maxLength":121,"required":true,"fieldRole":"research_fact"},
+        {"path":"studies[].type","type":"string","values":["cc","ci","ir"],"required":true,"fieldRole":"defaultable"},
+        {"path":"studies[].rows","type":"list","count":{"min":2,"max":60},"items":{"type":"object"},"required":true,"fieldRole":"research_fact"},
+        {"path":"studies[].rows[].dose","type":"number","required":true,"fieldRole":"research_fact"},
+        {"path":"studies[].rows[].effect","type":"number","required":true,"fieldRole":"research_fact"},
+        {"path":"studies[].rows[].se","type":"number","gt":0,"fieldRole":"defaultable"},
+        {"path":"studies[].rows[].cases","type":"number","min":0,"fieldRole":"defaultable"},
+        {"path":"studies[].rows[].n","type":"number","gt":0,"fieldRole":"defaultable"},
+        {"path":"model","type":"object"},
+        {"path":"model.kind","type":"string","values":["linear","spline"],"required":true,"within":"model","fieldRole":"defaultable"},
+        {
+          "path": "model.knots",
+          "type": "list",
+          "count": {"min":3,"max":5},
+          "items": {"type":"number"},
+          "increasing": true,
+          "within": "model",
+          "when": [{"path":"model.kind","in":["spline"]}],
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "model.knotPercentiles",
+          "type": "list",
+          "count": {"min":3,"max":5},
+          "items": {"type":"number","gt":0,"lt":1},
+          "increasing": true,
+          "within": "model",
+          "when": [{"path":"model.kind","in":["spline"]}],
+          "fieldRole": "defaultable"
+        },
+        {"path":"stage","type":"string","values":["one","two"],"default":"two","fieldRole":"defaultable"},
+        {"path":"method","type":"string","values":["reml","ml","fixed"],"default":"reml","fieldRole":"defaultable"},
+        {"path":"covariance","type":"string","values":["gl","h","indep"],"default":"gl","fieldRole":"defaultable"},
+        {"path":"referenceDose","type":"number","fieldRole":"defaultable"},
+        {"path":"predictAt","type":"list","count":{"min":1,"max":50},"items":{"type":"number"},"fieldRole":"defaultable"},
+        {"path":"perDose","type":"number","gt":0,"fieldRole":"defaultable"},
+        {"path":"level","type":"number","gt":0,"lt":1,"default":0.95,"fieldRole":"defaultable"}
+      ],
+      "examples": [
+        {
+          "label": "a log-linear dose-response of two cohorts reporting incidence rates (the reference level states an effect of 0 and no standard error)",
+          "scenario": {
+            "label": "alcohol and colorectal cancer",
+            "doseUnit": "g/day",
+            "ratioKind": "relative_risk",
+            "model": {"kind":"linear"},
+            "perDose": 12,
+            "studies": [
+              {
+                "studyId": "K1",
+                "type": "ir",
+                "rows": [{"dose":0,"effect":0,"cases":120,"n":40000},{"dose":10,"effect":0.1,"se":0.12,"cases":80,"n":25000},{"dose":25,"effect":0.3,"se":0.14,"cases":60,"n":15000}]
+              },
+              {
+                "studyId": "K2",
+                "type": "ir",
+                "rows": [{"dose":0,"effect":0,"cases":90,"n":30000},{"dose":12,"effect":0.05,"se":0.15,"cases":70,"n":22000},{"dose":30,"effect":0.35,"se":0.17,"cases":45,"n":12000}]
+              }
+            ]
+          }
+        },
+        {
+          "label": "a restricted cubic spline with knots at the 10th, 50th and 90th percentiles of the doses, and the ratios at chosen doses against a dose of 0",
+          "scenario": {
+            "model": {"kind":"spline","knotPercentiles":[0.1,0.5,0.9]},
+            "predictAt": [0,10,20,30],
+            "referenceDose": 0,
+            "studies": [
+              {
+                "studyId": "K1",
+                "type": "ir",
+                "rows": [
+                  {"dose":0,"effect":0,"cases":120,"n":40000},
+                  {"dose":10,"effect":0.1,"se":0.12,"cases":80,"n":25000},
+                  {"dose":25,"effect":0.3,"se":0.14,"cases":60,"n":15000},
+                  {"dose":40,"effect":0.5,"se":0.2,"cases":30,"n":6000}
+                ]
+              },
+              {
+                "studyId": "K2",
+                "type": "ir",
+                "rows": [
+                  {"dose":0,"effect":0,"cases":90,"n":30000},
+                  {"dose":12,"effect":0.05,"se":0.15,"cases":70,"n":22000},
+                  {"dose":30,"effect":0.35,"se":0.17,"cases":45,"n":12000},
+                  {"dose":45,"effect":0.6,"se":0.22,"cases":25,"n":5000}
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "evidence.shrinkage": {
+      "endpoints": [],
+      "notes": [
+        "It reads a published effect (a difference, or the log of a ratio; the estimate and its standard error) against the primary efficacy results of 23,551 randomized trials of the Cochrane Database (van Zwet et al. 2023): the effect shrunk toward no effect, how much larger the estimate probably is than the truth (the exaggeration, median and quartiles), the probability that its sign is right, and the probability that an exact replication of the same precision reaches two-sided significance in the same direction. futureSe asks the last for a later trial with another standard error (the true effect held).",
+        "It is a comparison beside the stated value and never replaces it: the reference is every kind of trial in the database, so it describes a typical trial with this z statistic, not this drug, and it may shrink a trial of a drug with a strong mechanism more than it deserves. Say that when you report it."
+      ],
+      "rows": [
+        {"path":"label","type":"string","maxLength":120,"fieldRole":"defaultable"},
+        {"path":"scale","type":"string","values":["identity","log"],"required":true,"fieldRole":"defaultable"},
+        {"path":"values","type":"list","count":{"min":1,"max":20},"items":{"type":"object"},"required":true,"fieldRole":"research_fact"},
+        {"path":"values[].id","type":"string","minLength":1,"maxLength":80,"fieldRole":"defaultable"},
+        {"path":"values[].estimate","type":"number","required":true,"fieldRole":"research_fact"},
+        {"path":"values[].se","type":"number","gt":0,"required":true,"fieldRole":"research_fact"},
+        {"path":"values[].futureSe","type":"number","gt":0,"fieldRole":"defaultable"},
+        {"path":"level","type":"number","gt":0,"lt":1,"default":0.95,"fieldRole":"defaultable"},
+        {"path":"alpha","type":"number","gt":0,"lt":1,"default":0.05,"fieldRole":"defaultable"}
+      ],
+      "examples": [
+        {
+          "label": "a phase 2 hazard ratio of 0.66 (the standard error of its log is 0.19), and a phase 3 that will measure the effect with a standard error of 0.12",
+          "scenario": {"label":"phase 2 hazard ratio","scale":"log","values":[{"id":"phase2","estimate":-0.4155,"se":0.19,"futureSe":0.12}]}
         }
       ]
     }

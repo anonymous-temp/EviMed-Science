@@ -4226,6 +4226,629 @@
           }
         ]
       }
+    },
+    {
+      "name": "evidence.pool with a Turner et al. (2015) prior for the heterogeneity",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "pool_evidence",
+        "method": "evidence.pool",
+        "methodVersion": "1.1.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "studies": [
+            {
+              "studyId": "NCT001",
+              "estimate": -0.35,
+              "se": 0.12
+            },
+            {
+              "studyId": "NCT002",
+              "estimate": -0.2,
+              "se": 0.15
+            }
+          ],
+          "method": "random_effects_reml",
+          "level": 0.95,
+          "scale": "log",
+          "tauPrior": {
+            "kind": "turner_2015",
+            "outcome": "all_cause_mortality",
+            "comparison": "pharmacological_vs_placebo"
+          }
+        },
+        "inputs": [
+          {
+            "kind": "evidence",
+            "id": "evd_1",
+            "hash": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "evidence.pool with the generic Turner prior",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "pool_evidence",
+        "method": "evidence.pool",
+        "methodVersion": "1.1.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "studies": [
+            {
+              "studyId": "NCT001",
+              "estimate": -0.35,
+              "se": 0.12
+            },
+            {
+              "studyId": "NCT002",
+              "estimate": -0.2,
+              "se": 0.15
+            }
+          ],
+          "method": "random_effects_reml",
+          "level": 0.95,
+          "scale": "log",
+          "tauPrior": {
+            "kind": "turner_2015_generic"
+          }
+        },
+        "inputs": [
+          {
+            "kind": "evidence",
+            "id": "evd_1",
+            "hash": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "evidence.pool with a Bartos et al. (2023) prior",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "pool_evidence",
+        "method": "evidence.pool",
+        "methodVersion": "1.1.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "studies": [
+            {
+              "studyId": "NCT001",
+              "estimate": -0.35,
+              "se": 0.12
+            },
+            {
+              "studyId": "NCT002",
+              "estimate": -0.2,
+              "se": 0.15
+            }
+          ],
+          "method": "random_effects_reml",
+          "level": 0.95,
+          "scale": "log",
+          "tauPrior": {
+            "kind": "bartos_2023",
+            "effectScale": "log_hazard_ratio"
+          }
+        },
+        "inputs": [
+          {
+            "kind": "evidence",
+            "id": "evd_1",
+            "hash": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "evidence.pool with a stated inverse-gamma prior for tau",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "pool_evidence",
+        "method": "evidence.pool",
+        "methodVersion": "1.1.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "studies": [
+            {
+              "studyId": "NCT001",
+              "estimate": -0.35,
+              "se": 0.12
+            },
+            {
+              "studyId": "NCT002",
+              "estimate": -0.2,
+              "se": 0.15
+            }
+          ],
+          "method": "random_effects_reml",
+          "level": 0.95,
+          "scale": "log",
+          "tauPrior": {
+            "kind": "inverse_gamma",
+            "shape": 1.77,
+            "scale": 0.55
+          }
+        },
+        "inputs": [
+          {
+            "kind": "evidence",
+            "id": "evd_1",
+            "hash": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "evidence.pool with a stated log-t prior for tau-squared",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "pool_evidence",
+        "method": "evidence.pool",
+        "methodVersion": "1.1.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "studies": [
+            {
+              "studyId": "NCT001",
+              "estimate": -0.35,
+              "se": 0.12
+            },
+            {
+              "studyId": "NCT002",
+              "estimate": -0.2,
+              "se": 0.15
+            }
+          ],
+          "method": "random_effects_reml",
+          "level": 0.95,
+          "scale": "log",
+          "tauPrior": {
+            "kind": "log_t",
+            "location": -3.4,
+            "scale": 2,
+            "df": 5
+          }
+        },
+        "inputs": [
+          {
+            "kind": "evidence",
+            "id": "evd_1",
+            "hash": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "evidence.pool with a half-normal prior for tau",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "pool_evidence",
+        "method": "evidence.pool",
+        "methodVersion": "1.1.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "studies": [
+            {
+              "studyId": "NCT001",
+              "estimate": -0.35,
+              "se": 0.12
+            },
+            {
+              "studyId": "NCT002",
+              "estimate": -0.2,
+              "se": 0.15
+            }
+          ],
+          "method": "random_effects_reml",
+          "level": 0.95,
+          "scale": "log",
+          "tauPrior": {
+            "kind": "half_normal",
+            "scale": 0.3
+          }
+        },
+        "inputs": [
+          {
+            "kind": "evidence",
+            "id": "evd_1",
+            "hash": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "evidence.pool replayed under its first label (no prior)",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "pool_evidence",
+        "method": "evidence.pool",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "studies": [
+            {
+              "studyId": "NCT001",
+              "estimate": -0.35,
+              "se": 0.12
+            },
+            {
+              "studyId": "NCT002",
+              "estimate": -0.2,
+              "se": 0.15
+            }
+          ],
+          "method": "random_effects_reml",
+          "level": 0.95,
+          "scale": "log"
+        },
+        "inputs": [
+          {
+            "kind": "evidence",
+            "id": "evd_1",
+            "hash": null
+          }
+        ]
+      }
+    },
+    {
+      "name": "network_meta from arm data with a three-arm study",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "network_meta",
+        "method": "evidence.network",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "label": "response",
+          "measure": "odds_ratio",
+          "direction": "higher_better",
+          "studies": [
+            {
+              "studyId": "S1",
+              "arms": [
+                {
+                  "treatment": "A",
+                  "events": 12,
+                  "n": 100
+                },
+                {
+                  "treatment": "B",
+                  "events": 20,
+                  "n": 98
+                }
+              ]
+            },
+            {
+              "studyId": "S2",
+              "arms": [
+                {
+                  "treatment": "A",
+                  "events": 9,
+                  "n": 80
+                },
+                {
+                  "treatment": "C",
+                  "events": 18,
+                  "n": 82
+                },
+                {
+                  "treatment": "B",
+                  "events": 15,
+                  "n": 79
+                }
+              ]
+            }
+          ],
+          "reference": "A"
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "network_meta from contrasts with a three-arm study stating every pair",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "network_meta",
+        "method": "evidence.network",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "measure": "log_ratio",
+          "direction": "lower_better",
+          "studies": [
+            {
+              "studyId": "H1",
+              "contrasts": [
+                {
+                  "treatment": "B",
+                  "comparator": "A",
+                  "effect": -0.3,
+                  "se": 0.12
+                }
+              ]
+            },
+            {
+              "studyId": "H2",
+              "contrasts": [
+                {
+                  "treatment": "C",
+                  "comparator": "A",
+                  "effect": -0.5,
+                  "se": 0.2
+                },
+                {
+                  "treatment": "C",
+                  "comparator": "B",
+                  "effect": -0.2,
+                  "se": 0.2
+                },
+                {
+                  "treatment": "B",
+                  "comparator": "A",
+                  "effect": -0.3,
+                  "se": 0.15
+                }
+              ]
+            }
+          ]
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "dose_response_meta with a spline at percentile knots",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "dose_response_meta",
+        "method": "evidence.dose_response",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "label": "alcohol and colorectal cancer",
+          "doseUnit": "g/day",
+          "ratioKind": "relative_risk",
+          "studies": [
+            {
+              "studyId": "K1",
+              "type": "ir",
+              "rows": [
+                {
+                  "dose": 0,
+                  "effect": 0,
+                  "cases": 120,
+                  "n": 4000
+                },
+                {
+                  "dose": 10,
+                  "effect": 0.1,
+                  "se": 0.12,
+                  "cases": 80,
+                  "n": 2500
+                },
+                {
+                  "dose": 25,
+                  "effect": 0.3,
+                  "se": 0.14,
+                  "cases": 60,
+                  "n": 1500
+                }
+              ]
+            },
+            {
+              "studyId": "K2",
+              "type": "ir",
+              "rows": [
+                {
+                  "dose": 0,
+                  "effect": 0,
+                  "cases": 120,
+                  "n": 4000
+                },
+                {
+                  "dose": 10,
+                  "effect": 0.1,
+                  "se": 0.12,
+                  "cases": 80,
+                  "n": 2500
+                },
+                {
+                  "dose": 25,
+                  "effect": 0.3,
+                  "se": 0.14,
+                  "cases": 60,
+                  "n": 1500
+                }
+              ]
+            }
+          ],
+          "model": {
+            "kind": "spline",
+            "knotPercentiles": [
+              0.1,
+              0.5,
+              0.9
+            ]
+          },
+          "stage": "two",
+          "method": "reml",
+          "covariance": "gl",
+          "predictAt": [
+            0,
+            10,
+            20
+          ],
+          "referenceDose": 0,
+          "level": 0.95
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "dose_response_meta linear, one stage, a stated step",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "dose_response_meta",
+        "method": "evidence.dose_response",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "label": "alcohol and colorectal cancer",
+          "doseUnit": "g/day",
+          "ratioKind": "relative_risk",
+          "studies": [
+            {
+              "studyId": "K1",
+              "type": "ir",
+              "rows": [
+                {
+                  "dose": 0,
+                  "effect": 0,
+                  "cases": 120,
+                  "n": 4000
+                },
+                {
+                  "dose": 10,
+                  "effect": 0.1,
+                  "se": 0.12,
+                  "cases": 80,
+                  "n": 2500
+                },
+                {
+                  "dose": 25,
+                  "effect": 0.3,
+                  "se": 0.14,
+                  "cases": 60,
+                  "n": 1500
+                }
+              ]
+            },
+            {
+              "studyId": "K2",
+              "type": "ir",
+              "rows": [
+                {
+                  "dose": 0,
+                  "effect": 0,
+                  "cases": 120,
+                  "n": 4000
+                },
+                {
+                  "dose": 10,
+                  "effect": 0.1,
+                  "se": 0.12,
+                  "cases": 80,
+                  "n": 2500
+                },
+                {
+                  "dose": 25,
+                  "effect": 0.3,
+                  "se": 0.14,
+                  "cases": 60,
+                  "n": 1500
+                }
+              ]
+            }
+          ],
+          "stage": "one",
+          "method": "reml",
+          "covariance": "gl",
+          "referenceDose": 0,
+          "level": 0.95,
+          "model": {
+            "kind": "linear"
+          },
+          "perDose": 12
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "effect_shrinkage of a hazard ratio with a later trial's precision",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "effect_shrinkage",
+        "method": "evidence.shrinkage",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "label": "phase 2 hazard ratio",
+          "scale": "log",
+          "values": [
+            {
+              "id": "phase2",
+              "estimate": -0.4155,
+              "se": 0.19,
+              "futureSe": 0.12
+            }
+          ],
+          "level": 0.95,
+          "alpha": 0.05
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      }
     }
   ],
   "invalid": [
@@ -20130,6 +20753,996 @@
       },
       "expected": [
         "endpoint_not_supported@scenario.endpoint.type"
+      ]
+    },
+    {
+      "name": "a heterogeneity prior needs a label that has it",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "pool_evidence",
+        "method": "evidence.pool",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "studies": [
+            {
+              "studyId": "NCT001",
+              "estimate": -0.35,
+              "se": 0.12
+            },
+            {
+              "studyId": "NCT002",
+              "estimate": -0.2,
+              "se": 0.15
+            }
+          ],
+          "method": "random_effects_reml",
+          "level": 0.95,
+          "scale": "log",
+          "tauPrior": {
+            "kind": "half_normal",
+            "scale": 0.3
+          }
+        },
+        "inputs": [
+          {
+            "kind": "evidence",
+            "id": "evd_1",
+            "hash": null
+          }
+        ]
+      },
+      "expected": [
+        "method_version_mismatch@methodVersion"
+      ]
+    },
+    {
+      "name": "an unknown heterogeneity prior",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "pool_evidence",
+        "method": "evidence.pool",
+        "methodVersion": "1.1.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "studies": [
+            {
+              "studyId": "NCT001",
+              "estimate": -0.35,
+              "se": 0.12
+            },
+            {
+              "studyId": "NCT002",
+              "estimate": -0.2,
+              "se": 0.15
+            }
+          ],
+          "method": "random_effects_reml",
+          "level": 0.95,
+          "scale": "log",
+          "tauPrior": {
+            "kind": "gamma",
+            "shape": 1
+          }
+        },
+        "inputs": [
+          {
+            "kind": "evidence",
+            "id": "evd_1",
+            "hash": null
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.tauPrior.kind"
+      ]
+    },
+    {
+      "name": "a log-normal prior states the spread of the log",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "pool_evidence",
+        "method": "evidence.pool",
+        "methodVersion": "1.1.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "studies": [
+            {
+              "studyId": "NCT001",
+              "estimate": -0.35,
+              "se": 0.12
+            },
+            {
+              "studyId": "NCT002",
+              "estimate": -0.2,
+              "se": 0.15
+            }
+          ],
+          "method": "random_effects_reml",
+          "level": 0.95,
+          "scale": "log",
+          "tauPrior": {
+            "kind": "log_normal",
+            "meanLog": -3.95
+          }
+        },
+        "inputs": [
+          {
+            "kind": "evidence",
+            "id": "evd_1",
+            "hash": null
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_missing@scenario.tauPrior.sdLog"
+      ]
+    },
+    {
+      "name": "an unknown outcome type in the Turner table",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "pool_evidence",
+        "method": "evidence.pool",
+        "methodVersion": "1.1.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "studies": [
+            {
+              "studyId": "NCT001",
+              "estimate": -0.35,
+              "se": 0.12
+            },
+            {
+              "studyId": "NCT002",
+              "estimate": -0.2,
+              "se": 0.15
+            }
+          ],
+          "method": "random_effects_reml",
+          "level": 0.95,
+          "scale": "log",
+          "tauPrior": {
+            "kind": "turner_2015",
+            "outcome": "nonsense",
+            "comparison": "pain"
+          }
+        },
+        "inputs": [
+          {
+            "kind": "evidence",
+            "id": "evd_1",
+            "hash": null
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.tauPrior.outcome",
+        "scenario_value_invalid@scenario.tauPrior.comparison"
+      ]
+    },
+    {
+      "name": "a Bartos prior names its effect scale from the table",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "pool_evidence",
+        "method": "evidence.pool",
+        "methodVersion": "1.1.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "studies": [
+            {
+              "studyId": "NCT001",
+              "estimate": -0.35,
+              "se": 0.12
+            },
+            {
+              "studyId": "NCT002",
+              "estimate": -0.2,
+              "se": 0.15
+            }
+          ],
+          "method": "random_effects_reml",
+          "level": 0.95,
+          "scale": "log",
+          "tauPrior": {
+            "kind": "bartos_2023",
+            "effectScale": "mean_difference"
+          }
+        },
+        "inputs": [
+          {
+            "kind": "evidence",
+            "id": "evd_1",
+            "hash": null
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.tauPrior.effectScale"
+      ]
+    },
+    {
+      "name": "a network study states arms or contrasts, not both",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "network_meta",
+        "method": "evidence.network",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "label": "response",
+          "measure": "odds_ratio",
+          "direction": "higher_better",
+          "studies": [
+            {
+              "studyId": "S1",
+              "arms": [
+                {
+                  "treatment": "A",
+                  "events": 12,
+                  "n": 100
+                },
+                {
+                  "treatment": "B",
+                  "events": 20,
+                  "n": 98
+                }
+              ],
+              "contrasts": [
+                {
+                  "treatment": "B",
+                  "comparator": "A",
+                  "effect": -0.3,
+                  "se": 0.12
+                }
+              ]
+            },
+            {
+              "studyId": "S2",
+              "arms": [
+                {
+                  "treatment": "A",
+                  "events": 9,
+                  "n": 80
+                },
+                {
+                  "treatment": "C",
+                  "events": 18,
+                  "n": 82
+                },
+                {
+                  "treatment": "B",
+                  "events": 15,
+                  "n": 79
+                }
+              ]
+            }
+          ],
+          "reference": "A"
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.studies[0].contrasts"
+      ]
+    },
+    {
+      "name": "a network study states arms or contrasts",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "network_meta",
+        "method": "evidence.network",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "label": "response",
+          "measure": "odds_ratio",
+          "direction": "higher_better",
+          "studies": [
+            {
+              "studyId": "S1"
+            },
+            {
+              "studyId": "S2",
+              "arms": [
+                {
+                  "treatment": "A",
+                  "events": 9,
+                  "n": 80
+                },
+                {
+                  "treatment": "C",
+                  "events": 18,
+                  "n": 82
+                },
+                {
+                  "treatment": "B",
+                  "events": 15,
+                  "n": 79
+                }
+              ]
+            }
+          ],
+          "reference": "A"
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_missing@scenario.studies[0].arms"
+      ]
+    },
+    {
+      "name": "a network states which direction is better",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "network_meta",
+        "method": "evidence.network",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "label": "response",
+          "measure": "odds_ratio",
+          "studies": [
+            {
+              "studyId": "S1",
+              "arms": [
+                {
+                  "treatment": "A",
+                  "events": 12,
+                  "n": 100
+                },
+                {
+                  "treatment": "B",
+                  "events": 20,
+                  "n": 98
+                }
+              ]
+            },
+            {
+              "studyId": "S2",
+              "arms": [
+                {
+                  "treatment": "A",
+                  "events": 9,
+                  "n": 80
+                },
+                {
+                  "treatment": "C",
+                  "events": 18,
+                  "n": 82
+                },
+                {
+                  "treatment": "B",
+                  "events": 15,
+                  "n": 79
+                }
+              ]
+            }
+          ],
+          "reference": "A"
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_missing@scenario.direction"
+      ]
+    },
+    {
+      "name": "an unknown network measure",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "network_meta",
+        "method": "evidence.network",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "label": "response",
+          "measure": "hazard_ratio",
+          "direction": "higher_better",
+          "studies": [
+            {
+              "studyId": "S1",
+              "arms": [
+                {
+                  "treatment": "A",
+                  "events": 12,
+                  "n": 100
+                },
+                {
+                  "treatment": "B",
+                  "events": 20,
+                  "n": 98
+                }
+              ]
+            },
+            {
+              "studyId": "S2",
+              "arms": [
+                {
+                  "treatment": "A",
+                  "events": 9,
+                  "n": 80
+                },
+                {
+                  "treatment": "C",
+                  "events": 18,
+                  "n": 82
+                },
+                {
+                  "treatment": "B",
+                  "events": 15,
+                  "n": 79
+                }
+              ]
+            }
+          ],
+          "reference": "A"
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.measure"
+      ]
+    },
+    {
+      "name": "a network has at least two studies",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "network_meta",
+        "method": "evidence.network",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "label": "response",
+          "measure": "odds_ratio",
+          "direction": "higher_better",
+          "studies": [
+            {
+              "studyId": "S1",
+              "arms": [
+                {
+                  "treatment": "A",
+                  "events": 12,
+                  "n": 100
+                },
+                {
+                  "treatment": "B",
+                  "events": 20,
+                  "n": 98
+                }
+              ]
+            }
+          ],
+          "reference": "A"
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.studies"
+      ]
+    },
+    {
+      "name": "spline knots belong to a spline model",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "dose_response_meta",
+        "method": "evidence.dose_response",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "label": "alcohol and colorectal cancer",
+          "doseUnit": "g/day",
+          "ratioKind": "relative_risk",
+          "studies": [
+            {
+              "studyId": "K1",
+              "type": "ir",
+              "rows": [
+                {
+                  "dose": 0,
+                  "effect": 0,
+                  "cases": 120,
+                  "n": 4000
+                },
+                {
+                  "dose": 10,
+                  "effect": 0.1,
+                  "se": 0.12,
+                  "cases": 80,
+                  "n": 2500
+                },
+                {
+                  "dose": 25,
+                  "effect": 0.3,
+                  "se": 0.14,
+                  "cases": 60,
+                  "n": 1500
+                }
+              ]
+            },
+            {
+              "studyId": "K2",
+              "type": "ir",
+              "rows": [
+                {
+                  "dose": 0,
+                  "effect": 0,
+                  "cases": 120,
+                  "n": 4000
+                },
+                {
+                  "dose": 10,
+                  "effect": 0.1,
+                  "se": 0.12,
+                  "cases": 80,
+                  "n": 2500
+                },
+                {
+                  "dose": 25,
+                  "effect": 0.3,
+                  "se": 0.14,
+                  "cases": 60,
+                  "n": 1500
+                }
+              ]
+            }
+          ],
+          "model": {
+            "kind": "linear",
+            "knots": [
+              1,
+              5,
+              9
+            ]
+          },
+          "stage": "two",
+          "method": "reml",
+          "covariance": "gl",
+          "predictAt": [
+            0,
+            10,
+            20
+          ],
+          "referenceDose": 0,
+          "level": 0.95
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_unknown@scenario.model.knots"
+      ]
+    },
+    {
+      "name": "a spline has at least three knots",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "dose_response_meta",
+        "method": "evidence.dose_response",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "label": "alcohol and colorectal cancer",
+          "doseUnit": "g/day",
+          "ratioKind": "relative_risk",
+          "studies": [
+            {
+              "studyId": "K1",
+              "type": "ir",
+              "rows": [
+                {
+                  "dose": 0,
+                  "effect": 0,
+                  "cases": 120,
+                  "n": 4000
+                },
+                {
+                  "dose": 10,
+                  "effect": 0.1,
+                  "se": 0.12,
+                  "cases": 80,
+                  "n": 2500
+                },
+                {
+                  "dose": 25,
+                  "effect": 0.3,
+                  "se": 0.14,
+                  "cases": 60,
+                  "n": 1500
+                }
+              ]
+            },
+            {
+              "studyId": "K2",
+              "type": "ir",
+              "rows": [
+                {
+                  "dose": 0,
+                  "effect": 0,
+                  "cases": 120,
+                  "n": 4000
+                },
+                {
+                  "dose": 10,
+                  "effect": 0.1,
+                  "se": 0.12,
+                  "cases": 80,
+                  "n": 2500
+                },
+                {
+                  "dose": 25,
+                  "effect": 0.3,
+                  "se": 0.14,
+                  "cases": 60,
+                  "n": 1500
+                }
+              ]
+            }
+          ],
+          "model": {
+            "kind": "spline",
+            "knots": [
+              1,
+              5
+            ]
+          },
+          "stage": "two",
+          "method": "reml",
+          "covariance": "gl",
+          "predictAt": [
+            0,
+            10,
+            20
+          ],
+          "referenceDose": 0,
+          "level": 0.95
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.model.knots"
+      ]
+    },
+    {
+      "name": "a dose-response study has a type",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "dose_response_meta",
+        "method": "evidence.dose_response",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "label": "alcohol and colorectal cancer",
+          "doseUnit": "g/day",
+          "ratioKind": "relative_risk",
+          "studies": [
+            {
+              "studyId": "K1",
+              "rows": [
+                {
+                  "dose": 0,
+                  "effect": 0,
+                  "cases": 120,
+                  "n": 4000
+                },
+                {
+                  "dose": 10,
+                  "effect": 0.1,
+                  "se": 0.12,
+                  "cases": 80,
+                  "n": 2500
+                },
+                {
+                  "dose": 25,
+                  "effect": 0.3,
+                  "se": 0.14,
+                  "cases": 60,
+                  "n": 1500
+                }
+              ]
+            }
+          ],
+          "model": {
+            "kind": "spline",
+            "knotPercentiles": [
+              0.1,
+              0.5,
+              0.9
+            ]
+          },
+          "stage": "two",
+          "method": "reml",
+          "covariance": "gl",
+          "predictAt": [
+            0,
+            10,
+            20
+          ],
+          "referenceDose": 0,
+          "level": 0.95
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_missing@scenario.studies[0].type"
+      ]
+    },
+    {
+      "name": "an unknown dose-response covariance",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "dose_response_meta",
+        "method": "evidence.dose_response",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "label": "alcohol and colorectal cancer",
+          "doseUnit": "g/day",
+          "ratioKind": "relative_risk",
+          "studies": [
+            {
+              "studyId": "K1",
+              "type": "ir",
+              "rows": [
+                {
+                  "dose": 0,
+                  "effect": 0,
+                  "cases": 120,
+                  "n": 4000
+                },
+                {
+                  "dose": 10,
+                  "effect": 0.1,
+                  "se": 0.12,
+                  "cases": 80,
+                  "n": 2500
+                },
+                {
+                  "dose": 25,
+                  "effect": 0.3,
+                  "se": 0.14,
+                  "cases": 60,
+                  "n": 1500
+                }
+              ]
+            },
+            {
+              "studyId": "K2",
+              "type": "ir",
+              "rows": [
+                {
+                  "dose": 0,
+                  "effect": 0,
+                  "cases": 120,
+                  "n": 4000
+                },
+                {
+                  "dose": 10,
+                  "effect": 0.1,
+                  "se": 0.12,
+                  "cases": 80,
+                  "n": 2500
+                },
+                {
+                  "dose": 25,
+                  "effect": 0.3,
+                  "se": 0.14,
+                  "cases": 60,
+                  "n": 1500
+                }
+              ]
+            }
+          ],
+          "model": {
+            "kind": "spline",
+            "knotPercentiles": [
+              0.1,
+              0.5,
+              0.9
+            ]
+          },
+          "stage": "two",
+          "method": "reml",
+          "covariance": "exact",
+          "predictAt": [
+            0,
+            10,
+            20
+          ],
+          "referenceDose": 0,
+          "level": 0.95
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.covariance"
+      ]
+    },
+    {
+      "name": "a shrinkage scale has its null at 0",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "effect_shrinkage",
+        "method": "evidence.shrinkage",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "label": "phase 2 hazard ratio",
+          "scale": "logit",
+          "values": [
+            {
+              "id": "phase2",
+              "estimate": -0.4155,
+              "se": 0.19,
+              "futureSe": 0.12
+            }
+          ],
+          "level": 0.95,
+          "alpha": 0.05
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.scale"
+      ]
+    },
+    {
+      "name": "a shrinkage value has a positive standard error",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "effect_shrinkage",
+        "method": "evidence.shrinkage",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "label": "phase 2 hazard ratio",
+          "scale": "log",
+          "values": [
+            {
+              "id": "x",
+              "estimate": -0.4,
+              "se": 0
+            }
+          ],
+          "level": 0.95,
+          "alpha": 0.05
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.values[0].se"
+      ]
+    },
+    {
+      "name": "a shrinkage states at least one value",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "effect_shrinkage",
+        "method": "evidence.shrinkage",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "label": "phase 2 hazard ratio",
+          "scale": "log",
+          "values": [],
+          "level": 0.95,
+          "alpha": 0.05
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.values"
       ]
     }
   ],

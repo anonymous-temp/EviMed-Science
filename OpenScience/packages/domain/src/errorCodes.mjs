@@ -1741,6 +1741,8 @@ export const VCR_ENGINE_ISSUE_CODES = Object.freeze([
   'job_invalid', 'mechanistic_engine_unknown', 'mechanistic_field_missing', 'missing_covariate',
   'model_card_field_missing', 'model_risk_unknown', 'performance_measure_unsupported', 'replicates_all_failed',
   'required_field_missing', 'twin_label_inconsistent', 'uncertainty_and_variability_conflated',
+  // evidence synthesis beyond a pairwise pool (algorithm round C5, C6)
+  'dose_response_not_computable', 'network_not_connected', 'network_not_computable',
 ])
 
 export const GEO_ROUTE_ERROR_CODES = Object.freeze([
@@ -2594,6 +2596,9 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   cpu_budget_exhausted: '这项计算用完了它的计算时间上限；已完成的部分作为有限结果保留。',
   design_effect_null: '这个情景没有效应，解析法给不出样本量；方案的 I 类错误请用同一情景的模拟来测。',
   design_not_computable: '这个设计在这些设定下算不出来；换一组设定（样本量、效应、期中分析的时点）再试，其余结果不受影响。',
+  dose_response_not_computable: '这些研究的剂量水平太少，或水平之间太接近，拟合不出所选的剂量反应模型；改用线性模型，或补上研究的水平和病例数再试，其余结果不受影响。',
+  network_not_connected: '这些研究连不成一张网：有的治疗与其余治疗之间没有任何研究相连，无法比较；补上连接它们的研究，或把不相连的治疗分开分析，其余结果不受影响。',
+  network_not_computable: '这张网络在这些数据下算不出来；检查每项研究的结局数据和治疗名称是否写全、是否一致，其余结果不受影响。',
   grid_cell_failed: '方案网格里有一个格子没有算出来；其余格子照常给出。',
   handler_error: '统计引擎在这项计算里遇到了意外错误，没有给出任何数字。',
   input_format_unsupported: '数据文件的格式不受支持：请用 CSV、TSV、JSON 或 Excel（.xlsx）；Parquet 请先转成 CSV。',

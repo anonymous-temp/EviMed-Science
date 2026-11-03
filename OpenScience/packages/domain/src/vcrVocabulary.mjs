@@ -523,6 +523,7 @@ export const VCR_TAB_LABELS_ZH = Object.freeze({
 export const VCR_RESULT_KIND_TABS = Object.freeze({
   population: 'population', patient_set: 'patients', comparator: 'comparator', trial_scenario: 'trial', design_grid: 'trial',
   accrual_forecast: 'trial', design_confirmatory: 'trial', matching: 'matching', match_extract: 'matching', evidence_pool: 'data', snapshot_profile: 'data', population_check: 'population',
+  network_meta: 'data', dose_response_meta: 'data', effect_shrinkage: 'data',
 })
 /**
  * The writes that put a patient's matching on the matching tab. A matching is judged at the write -- there is no job to finish -- so
@@ -871,6 +872,8 @@ export const VCR_JOB_KINDS = frozen([
   'design_confirmatory',
   // --- appended (2026-11-03): quantitative bias analysis of an estimate and the G-computation form of the simulated treatment comparison (algorithm round C1, C2, C9) ---
   'bias_analysis', 'stc_comparator',
+  // --- appended (2026-11-03): frequentist network meta-analysis, dose-response meta-analysis and the empirical shrinkage of a published effect (algorithm round C5, C6, E8) ---
+  'network_meta', 'dose_response_meta', 'effect_shrinkage',
   // --- appended (2026-11-01): the batch reading of patient records for the criteria's facts (remediation plan D4) ---
   'match_extract',
   'forecast_trajectories', 'evaluate_forecast', 'compare_forecasts', 'benchmark_trial_effect',
@@ -883,6 +886,7 @@ export const VCR_JOB_KINDS = frozen([
 export const VCR_JOB_KIND_STEPS = Object.freeze({
   fit_survival_model: 'patients', apply_prognostic_model: 'patients',
   pool_evidence: 'evidence', reconstruct_km: 'evidence', map_prior: 'evidence',
+  network_meta: 'evidence', dose_response_meta: 'evidence', effect_shrinkage: 'evidence',
   profile_snapshot: 'population', build_cohort: 'population', generate_population: 'population', literature_population: 'population',
   synthesize_population: 'population', population_quality: 'population', population_check: 'population',
   generate_patients: 'patients', generate_patients_continuous: 'patients', generate_patients_binary: 'patients',

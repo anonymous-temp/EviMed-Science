@@ -22,6 +22,7 @@ const vocab = await import(`${domain}/vcrVocabulary.mjs`)
 const rules = await import(`${domain}/vcrRules.mjs`)
 const units = await import(`${domain}/vcrTimeUnits.mjs`)
 const interfaces = await import(`${domain}/vcrModelInterfaces.mjs`)
+const priors = await import(`${domain}/vcrEvidencePriors.mjs`)
 
 const snapshot = {
   protocolVersion: job.VCR_ENGINE_PROTOCOL_VERSION,
@@ -90,6 +91,17 @@ const snapshot = {
   estimands: [...vocab.VCR_ESTIMANDS],
   defaultEstimand: vocab.VCR_DEFAULT_ESTIMAND,
   poolingMethods: [...vocab.VCR_POOLING_METHODS],
+  // The empirical priors and the reference mixture of the evidence methods (algorithm round E7, E8): data with the place in the paper each number was read at.
+  heterogeneityPriors: {
+    turner2015: { generic: [...priors.VCR_TURNER_2015_GENERIC], priors: Object.fromEntries(Object.entries(priors.VCR_TURNER_2015_PRIORS).map(([outcome, row]) => [outcome, Object.fromEntries(Object.entries(row).map(([comparison, cell]) => [comparison, [...cell]]))])) },
+    bartos2023: { priors: Object.fromEntries(Object.entries(priors.VCR_BARTOS_2023_PRIORS).map(([scale, prior]) => [scale, { ...prior }])) },
+  },
+  vanZwet2023: {
+    source: { ...priors.VCR_VAN_ZWET_2023_SOURCE },
+    table2: priors.VCR_VAN_ZWET_2023_TABLE_2.map((row) => ({ ...row, p: [...row.p], exaggeration: [...row.exaggeration] })),
+    table3: priors.VCR_VAN_ZWET_2023_TABLE_3.map((row) => ({ ...row, p: [...row.p], exaggeration: [...row.exaggeration] })),
+    mixture: { trials: priors.VCR_VAN_ZWET_2023_MIXTURE.trials, proportion: [...priors.VCR_VAN_ZWET_2023_MIXTURE.proportion], sdZ: [...priors.VCR_VAN_ZWET_2023_MIXTURE.sdZ], sdSnr: [...priors.VCR_VAN_ZWET_2023_MIXTURE.sdSnr] },
+  },
   distributions: [...vocab.VCR_DISTRIBUTIONS],
   intervalKinds: [...vocab.VCR_INTERVAL_KINDS],
   qualityCategories: [...vocab.VCR_QUALITY_CATEGORIES],
