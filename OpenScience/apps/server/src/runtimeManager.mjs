@@ -8164,7 +8164,9 @@ export class RuntimeManager {
       body: Buffer.from(JSON.stringify({ type: "client-request", rpcId: randomId("rpc_"), method: "loopx.goalbar", payload }), "utf8"),
       signal: AbortSignal.timeout(60_000),
     });
-    const answer = await response.json().catch(() => null);
+    const bytes = await readRuntimeResponseBody(response.body, this.config.maxJsonBytes ?? 1_000_000);
+    let answer = null;
+    try { answer = JSON.parse(bytes.toString("utf8")); } catch { /* the fault below */ }
     if (answer?.result?.ok === true) return answer.result.value;
     return { result: { kind: "fault", code: typeof answer?.result?.error?.code === "string" ? answer.result.error.code : "goalbar_unreachable" } };
   }

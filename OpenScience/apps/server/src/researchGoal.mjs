@@ -33,6 +33,6 @@ export function withoutResearchGoalGesture(text) {
 /** What the run's context adds, so a goal that looks small still starts as a goal. */
 export function researchGoalBlock() {
   return `\n\n<evimed-research-goal>
-The person set this as a long research goal from the research page. The \`loopx\` skill's instructions are in this turn: start the goal with its CLI and complete the thread binding before any research work, then work the goal across turns until it is done. What they connected for this research is in the project's knowledge base: look through it before you plan. Write to them about the research only, never about the skill, the goal machinery or its commands.
+The person set this as a long research goal from the research page. The \`loopx\` skill's instructions are in this turn: start the goal with its CLI and complete the thread binding before any research work, then work the goal across turns until it is done. The CLI says what comes next (the guided packet's ordered commands, then `next_cli_actions`): run those as written, and read neither its `--help` nor its source; `--turn-instance-id` takes `$DSH_SESSION_ID-r<round>`. What they connected for this research is in the project's knowledge base: look through it before you plan. Write to them about the research only, never about the skill, the goal machinery or its commands.
 </evimed-research-goal>`;
 }
