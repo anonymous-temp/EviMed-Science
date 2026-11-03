@@ -89,6 +89,43 @@ test("a multi-arm design is read against a trial per arm, and the arm it kept is
   assert.ok(Math.max(...kept) === kept[2], "the arm with the largest effect is kept most often");
 });
 
+test("a promising zone is a premise of the card, in the words of the page, and the table still sits beside both baselines", () => {
+  const each = card("ssr-zone");
+  const zone = each.premises.find((row) => row.key === "zone");
+  assert.ok(zone, "the zone is a premise");
+  assert.equal(zone.value, "36% 到 80%（区间之外按原计划样本量继续）");
+  assert.equal(zone.source, "assumed");
+  assert.ok(each.premises.filter((row) => row.decisive).length <= 5);
+  assert.deepEqual([...new Set(each.table.columns.map((column) => column.group))], ["本设计", "固定设计", "成组序贯"]);
+  const nullRow = each.table.rows[0];
+  const enlarged = nullRow.cells.increase_probability;
+  assert.ok(enlarged.mcse > 0 && enlarged.value < 30, "with the zone few null trials are enlarged (the plain rule enlarges nearly all of them)");
+  assert.ok(each.premises.every((row) => !/design\.|truth\.|analysis\./.test(`${row.label}${row.value}`)), "no key reaches a premise");
+  assert.equal(card("ssr").premises.find((row) => row.key === "zone"), undefined, "a design with no zone has no such premise");
+});
+
+test("an event-time selection and an event-time enrichment are sized in events, and say how they were simulated", () => {
+  for (const [name, columnKey] of [["multi-events", "expected_events"], ["enrichment-events", "expected_events"]]) {
+    const each = card(name);
+    assert.equal(each.unit, "events", name);
+    assert.equal(each.endpoint, "事件时间终点");
+    const column = each.table.columns.find((entry) => entry.key === columnKey);
+    assert.equal(column?.label, "期望事件数", name);
+    assert.ok(each.table.rows.every((row) => row.cells[columnKey]?.value > 0), `${name}: every row has an expected number of events`);
+    const how = each.premises.find((row) => row.label === "事件时间终点的模拟方式");
+    assert.ok(how && /对数秩统计量/.test(how.value) && /比例风险/.test(how.value), `${name}: the premise says what the simulation assumes`);
+    assert.ok(each.headline.some((entry) => entry.key === "max_events"), `${name}: the cap is in events`);
+    assert.ok(!each.headline.some((entry) => entry.key === "max_patients"), `${name}: no patient count`);
+  }
+  const multi = card("multi-events");
+  assert.deepEqual(multi.baselines, [], "an event-time selection has no patient-count baseline");
+  const row = multi.table.rows.find((entry) => entry.label === "设想的效应");
+  assert.match(row.effect, /风险比/);
+  const kept = [1, 2, 3].map((arm) => row.cells[`selected_arm_${arm}`].value);
+  assert.ok(Math.max(...kept) === kept[2], "the arm with the smallest hazard ratio is kept most often");
+  assert.ok(row.cells.fixed_power.value > 0 && row.cells.fixed_power.mcse === null, "the baseline is the best arm in a two-arm trial of its own, closed form");
+});
+
 test("a stopped run says so and keeps its numbers", () => {
   const stopped = fixture("ssr");
   stopped.conclusion = "limited";

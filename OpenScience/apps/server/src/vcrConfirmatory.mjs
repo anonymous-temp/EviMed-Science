@@ -114,6 +114,7 @@ function assumptionRow(key, raw) {
     "design.futility.spending": (v) => ["无效性边界的 β 消耗", SPENDING_WORDS[String(v)] ?? String(v)],
     "design.futility.binding": (v) => ["无效性边界是否具约束力", v === true ? "具约束力" : "不具约束力"],
     "design.conditionalPower": (v) => ["再估计的目标条件功效", `${plain(Number(v) * 100)}%`],
+    "design.eventDriven": () => ["事件时间终点的模拟方式", "按计划的事件数直接模拟各组的对数秩统计量，假定比例风险、各组对照风险相同；不模拟入组、随访和脱落"],
     "design.maxSampleSizeFactor": (v) => ["样本量最多可增加到计划的", `${plain(Number(v))} 倍`],
     "design.plannedSize": (v) => ["计划样本量", `${plain(Number(v))}（取同样分析次数的成组序贯设计的样本量）`],
     "design.selection.rule": (v) => ["中期的选择规则", SELECTION_WORDS[String(v)] ?? String(v)],
@@ -154,6 +155,10 @@ function premisesOf(confirmatory) {
   if (numeric(given.subsetPrevalence) !== null) rows.push({ key: "prevalence", label: "标志物阳性所占比例", value: `${plain(Number(given.subsetPrevalence) * 100)}%`, source: "assumed", decisive: true });
   const dropout = numeric(given.dropoutAnnual);
   if (dropout !== null) rows.push({ key: "dropout", label: "每年脱落率", value: `${plain(dropout * 100)}%`, source: "assumed", decisive: false });
+  const zone = object(given.promisingZone);
+  if (numeric(zone.lower) !== null && numeric(zone.upper) !== null) {
+    rows.push({ key: "zone", label: "只在中期条件功效落在这个区间时加样", value: `${plain(Number(zone.lower) * 100)}% 到 ${plain(Number(zone.upper) * 100)}%（区间之外按原计划样本量继续）`, source: "assumed", decisive: true });
+  }
   for (const entry of list(confirmatory.assumed).map(object)) {
     const row = assumptionRow(String(entry.key), entry.value);
     if (row) rows.push(row);
@@ -184,12 +189,12 @@ function columnsFor(kind, confirmatory) {
         { key: "gs_power", cell: null, label: "功效 / I 类错误", group: "成组序贯", baseline: "groupSequential.power" },
         { key: "gs_size", cell: null, label: events ? "期望事件数" : "期望样本量", group: "成组序贯", baseline: "groupSequential.expectedSize", name: size }];
     case "multi_arm_selection":
-      return [{ key: "power", cell: "power", label: "功效 / I 类错误", group: "本设计" }, { key: "expected_sample_size", cell: "expected_sample_size", label: "期望样本量", group: "本设计" },
+      return [{ key: "power", cell: "power", label: "功效 / I 类错误", group: "本设计" }, { key: size, cell: size, label: events ? "期望事件数" : "期望样本量", group: "本设计" },
         { key: "correct_selection_probability", cell: "correct_selection_probability", label: "选中最好臂的概率", group: "本设计" },
         ...Array.from({ length: Number(object(confirmatory.plan).arms ?? 0) }, (_, index) => ({ key: `selected_arm_${index + 1}`, cell: `selected_arm_${index + 1}`, label: `第 ${index + 1} 臂被保留`, group: "本设计" })),
         { key: "fixed_power", cell: null, label: "功效 / I 类错误", group: "最好的臂单独做试验", baseline: "fixed.power" }];
     case "enrichment":
-      return [{ key: "power", cell: "power", label: "功效 / I 类错误", group: "本设计" }, { key: "expected_sample_size", cell: "expected_sample_size", label: "期望样本量", group: "本设计" },
+      return [{ key: "power", cell: "power", label: "功效 / I 类错误", group: "本设计" }, { key: size, cell: size, label: events ? "期望事件数" : "期望样本量", group: "本设计" },
         { key: "selected_subset", cell: "selected_subset", label: "保留亚组的概率", group: "本设计" },
         { key: "fixed_power", cell: null, label: "功效 / I 类错误", group: "不做中期、全人群固定设计", baseline: "fixed.power" }];
     default: return [];
