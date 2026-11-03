@@ -4,6 +4,17 @@ The 2026-11-02 experiment did not match historical TrialGPT GPT-4 label agreemen
 It identified and repaired engineering defects in the actual matching path.
 [Aggregate results](results/2026-11-02-summary.json) contain no patient notes or keys.
 
+Interpretation update, 2026-11-03: every Flash arm below explicitly disabled
+thinking and called the provider directly, without DSH. These results do not
+measure Flash reasoning, Flash with DSH, or general superiority to GPT-4.
+The legacy Flash request alias returned `deepseek-flash`; current official
+documentation maps that alias to V4.1 Flash. The [Flash-only remediation plan](../../../docs/superpowers/plans/2026-11-03-vcr-flash-matching-remediation.md)
+re-analyzes the preserved errors and defines the missing controlled experiments.
+Pro rows remain historical records, not a recommendation to use Pro.
+The [platform comparison protocol](../../../docs/superpowers/plans/2026-11-03-evimed-trialgpt-platform-comparison.md)
+now owns the main benchmark: measure EviMed's actual feature before and after
+remediation. Direct API experiments are component diagnostics only.
+
 | Arm | All 1,015 annotations | 837 evaluation annotations |
 |---|---:|---:|
 | Historical cached GPT-4 | 87.29% | See aggregate |
