@@ -477,13 +477,21 @@ const COMPARATOR_TIME_UNIT_NOTES = Object.freeze(["timeUnit is days, weeks, mont
 /** The two robustness analyses that take the declared unit as it is and default it to months. @type {readonly string[]} */
 const ROBUSTNESS_TIME_UNIT_NOTES = Object.freeze(["timeUnit is days, weeks, months or years (the usual spellings are written as these when the job is queued; text that names no unit is refused before queueing); months when none is stated. It labels the horizon and the times in the result; nothing is converted."])
 
+/**
+ * What an unanchored indirect comparison (`anchored: false`, the default) rests on, said to the run that writes it so that it says the same to the
+ * person: the result lists the premise itself ("无锚定：假定所有预后因子和效应修饰因子都已调整"), and what was not adjusted belongs in
+ * `unadjustedEffectModifiers` rather than being left out.
+ * @type {readonly string[]}
+ */
+const UNANCHORED_NOTES = Object.freeze(["anchored false (the default) has no common comparator, so the comparison is unbiased only if every prognostic factor and every effect modifier is among the matched covariates; the result states that as its premise (无锚定：假定所有预后因子和效应修饰因子都已调整). Name the effect modifiers you could not match on in unadjustedEffectModifiers instead of leaving it empty, and report the number as an unanchored comparison, never as an adjusted treatment effect."])
+
 /** @type {Readonly<Record<string, readonly string[]>>} */
 const METHOD_NOTES = Object.freeze({
   'comparator.entropy_balance': COMPARATOR_TIME_UNIT_NOTES,
   'comparator.propensity_weight': COMPARATOR_TIME_UNIT_NOTES,
   'comparator.covariate_sets': COMPARATOR_TIME_UNIT_NOTES,
   'comparator.weighted_cox': COMPARATOR_TIME_UNIT_NOTES,
-  'comparator.maic_time_to_event': COMPARATOR_TIME_UNIT_NOTES,
+  'comparator.maic_time_to_event': Object.freeze([...COMPARATOR_TIME_UNIT_NOTES, ...UNANCHORED_NOTES]),
   'comparator.rmst': COMPARATOR_TIME_UNIT_NOTES,
   'comparator.tipping_point': ROBUSTNESS_TIME_UNIT_NOTES,
   'comparator.prognostic_adjustment': ROBUSTNESS_TIME_UNIT_NOTES,
@@ -499,7 +507,7 @@ const METHOD_NOTES = Object.freeze({
   ]),
   'design.simulate': Object.freeze([
     'A hazard ratio that changes over time is simulation-only: truth.treatmentHazardRatios = { breaks, ratios } gives the treatment arm\'s hazard as ratios[j] times the control\'s on the j-th interval of breaks (ratios has one more value than breaks, the last runs on), so a delayed effect is breaks [6], ratios [1, 0.6] and a crossing of the curves [6], [1.4, 0.6]. State it INSTEAD of truth.hazardRatio, not beside it; the analytic design (design_analytic) and the assurance refuse it by name. There is then no single true hazard ratio, so bias, mean squared error and coverage are not computed for the log-rank family, and no closed form is drawn for the power; an RMST analysis keeps its bias, against the RMST difference integrated from the two survival curves.',
-    'analysis.method maxcombo (time-to-event, two-arm, fixed design only) is the most favourable of the four Fleming-Harrington weighted log-rank statistics G(0,0), G(0,1), G(1,0), G(1,1), its p-value read from their joint null distribution. It is never a default: the analysis is the log-rank unless you say otherwise, because the log-rank is often as good (it loses to MaxCombo mainly when the curves separate late or cross), and the choice is made before the data. A group-sequential design looks with the log-rank and refuses maxcombo.',
+    'analysis.method maxcombo (time-to-event, two-arm, fixed design only) is the most favourable of the four Fleming-Harrington weighted log-rank statistics G(0,0), G(0,1), G(1,0), G(1,1), its p-value read from their joint null distribution. It is never a default: the analysis is the log-rank unless you say otherwise, because the log-rank is often as good (it loses to MaxCombo mainly when the curves separate late or cross), and the choice is made before the data. Use it only for a hypothesis the person has stated (an effect that starts late, curves that separate late or cross), and run the log-rank beside it. A group-sequential design looks with the log-rank and refuses maxcombo.',
   ]),
   'design.grid': Object.freeze([
     'From design.grid 1.3.0 the truth scenarios of one design share that design\'s random stream (common random numbers), where the generator makes that an honest pairing (two-arm designs); designs are never paired with each other and single-arm designs keep independent seeds. A difference between two truths of a design is then a cleaner comparison; each cell is still one immutable run, equal to the design.simulate job at its own seed. A truth that states treatmentHazardRatios replaces the base truth\'s hazardRatio (and the other way round).',
@@ -517,6 +525,7 @@ const METHOD_NOTES = Object.freeze({
   'comparator.maic': Object.freeze([
     'Arms. Anchored: treatmentColumn is the arm column of the IPD trial (1 = the active arm, 0 = the common comparator) and outcomeColumn the outcome the arms\' weighted means are taken of. Unanchored: the IPD patients are the active arm; naming treatmentColumn selects the rows of arm 1 (a table that holds both arms of a trial), without it every row is the active arm. A treatmentColumn the table cannot honour (not in the table, not a complete 1/0 column, no row in arm 1) is reported in diagnostics.notApplied with the reason and every row is used.',
     'Scales. Unanchored: aggregateOutcome and aggregateSe are the aggregate trial\'s outcome and its standard error on the outcome\'s OWN scale (a proportion for link logit, a positive mean or rate for link log, any number for identity), the scale of the outcomeColumn\'s mean; the engine applies the link to the level and the delta method to the standard error. A level outside the link\'s domain (a proportion not strictly between 0 and 1 on logit, a mean not above 0 on log) is refused (scenario_value_invalid). Anchored: aggregateEstimate and aggregateSe are already the aggregate trial\'s contrast and its standard error on the link scale (a log odds ratio, a log risk ratio, a mean difference).',
+    ...UNANCHORED_NOTES,
   ]),
 })
 

@@ -1,8 +1,9 @@
 // A hazard ratio that changes over time and the MaxCombo analysis (remediation plan D1): the schema, the refusals by name, the replay
 // rule for older versions, and the null case. The numbers are held by the engine's cases N58 and the verdicts' parity with the engine by N00.
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
-import { VCR_ENGINE_METHODS, VCR_TWO_ARM_ANALYSIS_METHODS, validateEngineJob, validateScenario, vcrIsNullScenario } from "../index.mjs";
+import { VCR_ENGINE_METHODS, VCR_SCENARIO_EXAMPLES, VCR_TWO_ARM_ANALYSIS_METHODS, validateEngineJob, validateScenario, vcrIsNullScenario, vcrScenarioHelp } from "../index.mjs";
 
 const NPH = { breaks: [6], ratios: [1, 0.6] };
 const simulate = (/** @type {Record<string, any>} */ over = {}) => ({
@@ -69,4 +70,34 @@ test("D1/D5: design.simulate and design.grid are 1.3.0; 1.2.0 results replay, un
   assert.deepEqual(validateEngineJob(job("design.grid", "design_grid", "1.2.0", { ...ph, designs: [{ nTreat: 100 }], truths: [{ hazardRatio: 0.8 }] })), []);
   // the 1.0.0 and 1.1.0 records keep their own rule
   assert.deepEqual(validateEngineJob(job("design.simulate", "design_simulation", "1.1.0", ph)), []);
+});
+
+test("MaxCombo is never a default: no schema default, no example outside a stated delayed or crossing law, and the skill and the help say when", () => {
+  // the analysis row has no default, and the table's first analysis (the engine's default) is the log-rank
+  const row = vcrScenarioHelp().methods["design.simulate"].rows.find((/** @type {any} */ entry) => entry.path === "analysis.method");
+  assert.ok(row && !("default" in row), "analysis.method states no default");
+  assert.equal(VCR_TWO_ARM_ANALYSIS_METHODS.time_to_event[0], "logrank");
+  // an example that analyses by MaxCombo states a hazard ratio that changes over time
+  for (const [method, examples] of Object.entries(VCR_SCENARIO_EXAMPLES)) {
+    for (const example of /** @type {any[]} */ (examples)) {
+      if (example.scenario?.analysis?.method !== "maxcombo") continue;
+      assert.ok(example.scenario.truth?.treatmentHazardRatios, `${method}: the MaxCombo example "${example.label}" states a delayed or crossing hazard law`);
+    }
+  }
+  const notes = vcrScenarioHelp().methods["design.simulate"].notes.join("\n");
+  assert.match(notes, /never a default/);
+  assert.match(notes, /only for a hypothesis the person has stated/);
+  // the skill says it in both copies: not a default, not a safer choice, only for a hypothesis the person stated
+  for (const root of ["capabilities", "capability-skills"]) {
+    const text = readFileSync(new URL(`../../../${root}/vcr-analysis/references/trial-design.md`, import.meta.url), "utf8");
+    assert.match(text, /`maxcombo` 不是默认[^。]*只在人明确提出延迟起效、曲线晚分开或交叉这类假设时/, root);
+    assert.match(text, /人没提这类假设就不用/, root);
+  }
+});
+
+test("an unanchored indirect comparison is told to its run as the premise the result will show", () => {
+  const help = vcrScenarioHelp();
+  for (const method of ["comparator.maic", "comparator.maic_time_to_event"]) {
+    assert.match(help.methods[method].notes.join("\n"), /无锚定：假定所有预后因子和效应修饰因子都已调整/, method);
+  }
 });

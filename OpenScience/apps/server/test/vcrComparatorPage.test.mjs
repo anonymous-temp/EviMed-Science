@@ -74,14 +74,16 @@ test("A8: a result that is a benchmark is read as 仅基准; the conclusion the 
   assert.equal(page({ route: "literature_control", method: "comparator.maic", result: { conclusion: "not_estimable", diagnostics: { anchored: false } } }).verdict.conclusion, "not_estimable");
 });
 
-test("A9: an indirect comparison shows its target population and the effect modifiers it did not adjust; unanchored adds the fixed line", () => {
+test("A9: an indirect comparison shows its target population and the effect modifiers it did not adjust; unanchored adds its premise", () => {
   const diagnostics = { anchored: false, targetPopulation: "aggregate_data_trial", unadjustedEffectModifiers: ["ECOG", "LDH"] };
   const tab = page({ route: "literature_control", method: "comparator.maic", result: { conclusion: "limited", diagnostics } });
   const rows = Object.fromEntries(tab.premises.map((row) => [row.key, row]));
   assert.equal(rows.maicTarget.value, "对方试验已发表的人群（只有汇总数）");
   assert.equal(rows.maicTarget.source, "literature");
   assert.equal(rows.maicModifiers.value, "ECOG、LDH");
-  assert.equal(rows.residual.value, "残余误差大小未知", "the fixed line");
+  assert.equal(rows.residual.label, "无锚定");
+  assert.equal(rows.residual.value, "假定所有预后因子和效应修饰因子都已调整", "the premise itself, with its value");
+  assert.equal(rows.residual.decisive, true);
   assert.ok(tab.premises.filter((row) => row.decisive).length <= VCR_PREMISES_DECISIVE_MAX);
 
   const anchored = page({ route: "literature_control", method: "comparator.maic", result: { conclusion: "limited", diagnostics: { ...diagnostics, anchored: true, unadjustedEffectModifiers: [] } } });
@@ -95,7 +97,7 @@ test("A5: the E-value stands in the premises, worded as a strength and never as 
     { name: "hazard_ratio", value: 0.62, source: "calculated" }, { name: "e_value", value: 2.12, source: "calculated" }, { name: "e_value_confidence_limit", value: 1.63, source: "calculated" }] } });
   const row = tab.premises.find((entry) => entry.key === "unmeasured");
   assert.equal(row.label, "未测量的混杂");
-  assert.match(row.value, /^E 值 2\.12（置信限 1\.63）：未测量的混杂要和处理、结局各有这么强的关联，才能解释掉这个结果$/);
+  assert.match(row.value, /^E 值 2\.12（置信限 1\.63）：未测量的混杂要和处理、结局各有这么强的关联，才能解释掉这个结果；它只回答“要多强”，是偏倚分析里最简单的一层，不估计偏倚本身$/);
   assert.doesNotMatch(row.value, /没有偏倚|无偏倚/);
   assert.equal(row.decisive, true);
   assert.equal(row.source, "assumed");

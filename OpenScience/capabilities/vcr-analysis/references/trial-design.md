@@ -88,7 +88,7 @@ For these paths, zero-effect scenarios state `responseRate == nullRate` or zero 
 }
 ```
 
-**风险比随时间变（只在仿真里）**：延迟起效、曲线交叉的真值写成 `truth.treatmentHazardRatios: {"breaks": [3], "ratios": [1, 0.6]}`（`ratios` 比 `breaks` 多一个，第一段从时间 0 起），不写 `hazardRatio`；只有固定两臂和成组序贯的 `design_simulation`、`design_grid` 接受，`design_analytic` 和 `assurance` 按名拒绝并指向仿真。分析默认仍是 `logrank`，不要替人换；要比较时把 `analysis.method: "maxcombo"`（四个 Fleming–Harrington 加权对数秩统计量取最大，p 值按它们的联合零分布读，只用于固定两臂）作为并排的另一个方案。没有单一的真风险比，所以结果里没有偏倚、MSE、覆盖率和解析核对，别替它补。两个方案的功效并排说，不要只说 MaxCombo 更高：它在晚分开或交叉时占优，比例风险下对数秩常常不差。
+**风险比随时间变（只在仿真里）**：延迟起效、曲线交叉的真值写成 `truth.treatmentHazardRatios: {"breaks": [3], "ratios": [1, 0.6]}`（`ratios` 比 `breaks` 多一个，第一段从时间 0 起），不写 `hazardRatio`；只有固定两臂和成组序贯的 `design_simulation`、`design_grid` 接受，`design_analytic` 和 `assurance` 按名拒绝并指向仿真。分析默认仍是 `logrank`，不要替人换；`maxcombo` 不是默认，也不是“更稳妥”的选择，只在人明确提出延迟起效、曲线晚分开或交叉这类假设时，才把 `analysis.method: "maxcombo"`（四个 Fleming–Harrington 加权对数秩统计量取最大，p 值按它们的联合零分布读，只用于固定两臂）作为并排的另一个方案；人没提这类假设就不用。没有单一的真风险比，所以结果里没有偏倚、MSE、覆盖率和解析核对，别替它补。两个方案的功效并排说，不要只说 MaxCombo 更高：它在晚分开或交叉时占优，比例风险下对数秩常常不差。
 
 **设计网格里同一设计的几个真值共用一条随机流**（design.grid 1.3.0，两臂设计）：同一批受试者在每个真值下各走一遍，所以相邻两格功效的差比两次独立仿真的差稳得多（这个引擎上实测，方差降到约 14%（连续终点）和 42%（对数秩））；不同设计之间、单臂设计各格不配对，结果的 `seedPolicy` 说是哪一种。比较相邻真值就读这个差，不必再另跑一遍。
 

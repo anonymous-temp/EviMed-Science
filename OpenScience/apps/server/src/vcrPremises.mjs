@@ -327,8 +327,8 @@ function populationPremises(input) {
  * A record the run has not written is not a premise (no row has a value to show); the run is reminded of it in the answer of the
  * write, and what it costs the result is on the page as a limit.
  *
- * What an E-value is: how strong an unmeasured confounder would have to be to explain the estimate away. It is worded that way and
- * never as the absence of bias, which no number from the data can show.
+ * What an E-value is: how strong an unmeasured confounder would have to be to explain the estimate away. It is worded that way, as
+ * the simplest level of bias analysis (it estimates no bias), and never as the absence of bias, which no number from the data can show.
  *
  * @param {{ route?: string | null, estimand?: string | null, estimandStated?: boolean, diagnostics?: Record<string, any>,
  *   measures?: Record<string, number | null>, applicability?: Record<string, any> | null,
@@ -370,7 +370,9 @@ function comparatorPremises(input) {
     }
     const modifiers = list(diagnostics.unadjustedEffectModifiers).map(String).filter(Boolean);
     rows.push({ key: "maicModifiers", label: "未调整的效应修饰因子", value: modifiers.length ? modifiers.join("、") : "没有列出", source: "assumed", decisive: true });
-    if (input.anchored === false) rows.push({ key: "residual", label: "非锚定比较", value: "残余误差大小未知", source: "default", decisive: true });
+    // Without a common comparator the comparison is unbiased only if every prognostic factor and effect modifier was adjusted: that is the
+    // premise itself, said once with its value, and not a caveat about error of an unknown size.
+    if (input.anchored === false) rows.push({ key: "residual", label: "无锚定", value: "假定所有预后因子和效应修饰因子都已调整", source: "default", decisive: true });
   }
 
   // A borrowed prior rests on the historical numbers it was built from, and is worth some number of this study's patients.
@@ -387,7 +389,7 @@ function comparatorPremises(input) {
   if (point !== null) {
     const limit = numeric(measures.e_value_confidence_limit);
     rows.push({ key: "unmeasured", label: "未测量的混杂",
-      value: `E 值 ${plain(point)}${limit !== null ? `（置信限 ${plain(limit)}）` : ""}：未测量的混杂要和处理、结局各有这么强的关联，才能解释掉这个结果`,
+      value: `E 值 ${plain(point)}${limit !== null ? `（置信限 ${plain(limit)}）` : ""}：未测量的混杂要和处理、结局各有这么强的关联，才能解释掉这个结果；它只回答“要多强”，是偏倚分析里最简单的一层，不估计偏倚本身`,
       source: "assumed", decisive: true });
   }
 
