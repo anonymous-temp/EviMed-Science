@@ -119,6 +119,10 @@ keep earlier useful outputs and show their specific limitation.
 
 `historicalBaseline: true` 只在这个值确实是历史基线时写；`enrollmentKind` 用 `estimated` 或 `actual`。不写 `verification`：核对结果是平台的，你写不了。
 
+论文把这个数的 p 值印在同一句引文里时，可以再写 `pValue`（数）和 `pRelation`（`=`、`<` 或 `>`，照论文怎么印的），平台用它检查 p 值和区间有没有互相矛盾；p 值不在引文里就不会被用，答复里会说。
+
+写入和写卡的答复里可能带两种提醒，都是建议：数已按你写的保存，照常能用。`vcr_evidence_values_inconsistent` 说这条的几个数彼此对不上（区间不以估计值为中心、p 值和区间的结论相反、事件数和率对不上、各组人数比总人数还多）；`vcr_evidence_second_read_differs` 说平台让另一个模型把同一段原文独立读了一遍，两次读到的数不一样。回到原文再读那几个数：抄错了就写一条改好的，没抄错就不用管（论文用了不对称的区间算法也会这样）。不要为了消掉提醒去改引文，也不要因此放弃这项研究；卡上会带一个 ⚠，读的人看得到。
+
 三条硬规矩：
 
 - **「预计」和「实际」分开。** ClinicalTrials.gov 的 `ESTIMATED` 是申办方的计划，`ACTUAL` 是真的发生了。
