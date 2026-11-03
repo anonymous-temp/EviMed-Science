@@ -70,3 +70,22 @@ it('keeps the addressed conversation and analysis context when opening an accept
  expect(target.searchParams.get('engines')).toBe('kimi');
  expect(target.searchParams.get('diagnosisRound')).toBe('round_weekly_2');
 });
+it('keeps confirmed schedule optional while scope and stop consequences stay visible',async()=>{
+  const p=geoProject({monitoring:'done'});
+  p.steps.monitoring!.automation={state:'confirmed',actorId:'actor',at:'2026-10-31T10:00:00Z',engines:[...p.engines],coverageDays:p.coverageDays};
+  render(<GeoMonitoringAutomation project={p}/>);
+  const summary=screen.getByText('监测安排与额度');
+  const details=summary.closest('details')!;
+  expect(details).not.toHaveAttribute('open');
+  expect(screen.getByText('监测范围')).toBeVisible();
+  expect(screen.getByText('停止后不再创建新任务，已经受理的任务会继续。')).toBeVisible();
+  const control=summary.closest('summary')!;
+  control.focus();
+  await userEvent.keyboard('{Enter}');
+  // jsdom does not implement native summary keyboard activation; the native
+  // summary remains focusable and clicking exercises the same disclosure.
+  expect(control).toHaveFocus();
+  await userEvent.click(control);
+  expect(details).toHaveAttribute('open');
+  expect(screen.getByText('这些任务均按实际调用使用项目额度')).toBeVisible();
+});

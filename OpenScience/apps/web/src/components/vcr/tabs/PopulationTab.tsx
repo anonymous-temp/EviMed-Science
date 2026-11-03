@@ -119,7 +119,7 @@ function PopulationView({ studyId, study, data, reload, onStudyChanged }: {
   if (frame) actions.push({ key: "sources", label: INTAKE_LABEL, quiet: true, onSelect: () => frame.openPanel("intake") });
   if (!nothing) {
     if (generated) {
-      if (data.download) actions.push({ key: "download", label: "下载记录", icon: Download, loading: busy === "download", onSelect: download });
+      if (data.download) actions.push({ key: "download", label: "下载 CSV", icon: Download, loading: busy === "download", onSelect: download });
       if (mayWrite) {
         actions.push({ key: "settings", label: `${DRAFT_PREFIX}调整设定`, kind: "draft", quiet: true, onSelect: () => ask("调整人群设定") });
         actions.push({ key: "regenerate", label: `${DRAFT_PREFIX}生成新版本`, kind: "draft", onSelect: () => ask("按当前证据生成一个可比较的新队列版本") });

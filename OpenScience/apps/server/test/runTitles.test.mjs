@@ -134,7 +134,7 @@ test("a card's naming line never reaches the question, and every run has a title
     const runs = new Map((await store.list(project)).map((run) => [run.id, run]));
     assert.equal(runs.get("run_old").question, "原来的问题");
     assert.equal(runs.get("run_long").title, `${"长".repeat(39)}…`);
-    assert.equal(runs.get("run_routed").title, "临床证据深度分析", "no question: the capability it was routed to");
+    assert.equal(runs.get("run_routed").title, "文献综述", "no question: the capability it was routed to");
     assert.equal(runs.get("run_blank").title, "未命名的任务");
     for (const run of runs.values()) assert.equal(run.titleSource, "question");
   });

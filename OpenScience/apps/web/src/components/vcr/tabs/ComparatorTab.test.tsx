@@ -116,6 +116,20 @@ describe("对照 · the routes and the record in use", () => {
   });
 });
 
+describe("对照 · which saved comparison is the headline", () => {
+  it("opens on the comparison a reply's link named, and on the newest without one", async () => {
+    const named = draw();
+    void named;
+    await screen.findByRole("list", { name: "对照路线" });
+    expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/comparator`);
+    expect(network.productRequest.mock.calls.every(([path]) => !String(path).includes("object="))).toBe(true);
+    const calls = network.productRequest.mock.calls.length;
+    renderTab(<ComparatorTab studyId={STUDY_ID} study={ev201()} />, { route: "/?object=cmp_3a" });
+    await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/comparator?object=cmp_3a`));
+    expect(network.productRequest.mock.calls.length).toBeGreaterThan(calls);
+  });
+});
+
 describe("对照 · the record of the route in use", () => {
   it("says the class of the result in the sentence, and nothing of who set it or whether it was reviewed", async () => {
     const { container } = draw();

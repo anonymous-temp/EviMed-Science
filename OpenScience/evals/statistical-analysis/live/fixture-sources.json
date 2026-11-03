@@ -2,7 +2,8 @@
   "synthetic": [
     "cohort.csv",
     "supplement.csv",
-    "coding-correction.csv"
+    "coding-correction.csv",
+    "diagnostic.csv"
   ],
   "public": [
     "breast-cancer.csv"
@@ -17,6 +18,7 @@
     "breast-cancer.csv": "30c0edd07dac8c886b9ad11627caed4eb92d91756aaeddd23921bdafc2582971",
     "coding-correction.csv": "a6aebffe6ee6269cfdbef4083fa4603aead1d9279fc9ab2846e1872d49c98afc",
     "cohort.csv": "2318b4fc60b2c8c1cd0c78ec1e44600fbe5880240da208132585ca1d98fda90d",
+    "diagnostic.csv": "8d967a798368f89dc3be212ba894a70b8507148e164df293091827a57246f8f5",
     "dictionary.md": "2698d1824e5361f47f287e628302a6d03cea2a027531658b376532e5d156367c",
     "prior-analysis-results.json": "b24289ab0134a516c94f51ac817e58ec7a89d634647b17ecc8ff61d60016fe98",
     "prior-analysis.zip": "75fcb77e34ab72215b9df09df61542ef0760964d5fe8ea29d35dbbf24b42fe94",

@@ -45,7 +45,7 @@ import { VCR_SCHEMA } from "./vcrPersistence.mjs";
 import { VcrStoreBase, vcrId } from "./vcrStoreBase.mjs";
 
 /** How a stored extraction reports its quote check. Written into `locator.verification`. */
-export const EVIDENCE_VERIFICATION_STATES = Object.freeze(["verified", "quote_not_found", "source_unavailable", "no_quote"]);
+export const EVIDENCE_VERIFICATION_STATES = Object.freeze(["verified", "quote_not_found", "source_unavailable", "no_quote", "reported_unverified"]);
 
 /** Which arm of a trial a value describes; pooling names the one it pools (review CS-26). */
 export const EVIDENCE_ARM_ROLES = Object.freeze(["control", "treatment", "contrast", "single_arm", "overall", "unknown"]);
@@ -218,7 +218,11 @@ export class VcrEvidenceStore extends VcrStoreBase {
       for (const item of rows) {
         const id = vcrId("evidence");
         const verification = String(item?.locator?.verification ?? "no_quote");
-        const accepted = verification === "verified";
+        // A publication's number the platform could not hold against a text it read keeps its number, marked as the paper is said to
+        // report it (`reported_unverified`): the number is stored so it can be used with that standing, and no reader of verified
+        // evidence reads it (`verified` is the only state they take).
+        const reported = verification === "reported_unverified";
+        const accepted = verification === "verified" || reported;
         // A paper that does not report a parameter (C8) is an answer, not a refusal: it keeps no number and is not counted against the run.
         const notReported = verification === "not_reported";
         if (!accepted && !notReported) refused += 1;
@@ -250,7 +254,7 @@ export class VcrEvidenceStore extends VcrStoreBase {
           ],
         );
         ids.push(id);
-        if (accepted) verifiedIds.push(id);
+        if (accepted && !reported) verifiedIds.push(id);
       }
       await this.audit({
         client: handle, studyId, userId, actor: "system", action: "vcr.evidence.extract",
@@ -320,6 +324,36 @@ export class VcrEvidenceStore extends VcrStoreBase {
   }
 
   /**
+   * The ids a single-study assumption card may cite: the verified ones, and a publication's number the platform could not check
+   * (`reported_unverified`), which the card carries as unchecked. Nothing else reads the second kind.
+   * @param {{ userId: string, studyId: string, parameter: string }} query
+   */
+  async citableEvidenceIds({ userId, studyId, parameter }) {
+    const rows = await this.rows(
+      `SELECT id FROM ${VCR_SCHEMA}.evidence_items
+       WHERE user_id = $1 AND study_id = $2 AND parameter = $3
+         AND value IS NOT NULL AND locator->>'verification' IN ('verified', 'reported_unverified')
+       ORDER BY created_at ASC, id`,
+      [userId, studyId, parameter],
+    );
+    return rows.map((row) => String(row.id));
+  }
+
+  /**
+   * The citable rows of some ids (see `citableEvidenceIds`).
+   * @param {{ userId: string, studyId: string, ids: readonly string[] }} query
+   */
+  async citableItemsById({ userId, studyId, ids }) {
+    const wanted = [...new Set((ids ?? []).map(String))];
+    if (!wanted.length) return [];
+    return this.rows(
+      `SELECT * FROM ${VCR_SCHEMA}.evidence_items
+        WHERE user_id = $1 AND study_id = $2 AND id = ANY($3::text[])
+          AND value IS NOT NULL AND locator->>'verification' IN ('verified', 'reported_unverified')`,
+      [userId, studyId, wanted]);
+  }
+
+  /**
    * The verified rows of some ids, for the study — an id of another study, or
    * one that failed its check, is simply absent.
    * @param {{ userId: string, studyId: string, ids: readonly string[] }} query
@@ -350,7 +384,7 @@ export class VcrEvidenceStore extends VcrStoreBase {
       `SELECT parameter,
               COUNT(*)::int AS extracted,
               COUNT(*) FILTER (WHERE value IS NOT NULL AND locator->>'verification' = 'verified')::int AS verified,
-              COUNT(*) FILTER (WHERE locator->>'verification' NOT IN ('verified', 'not_reported'))::int AS refused,
+              COUNT(*) FILTER (WHERE locator->>'verification' NOT IN ('verified', 'not_reported', 'reported_unverified'))::int AS refused,
               COUNT(*) FILTER (WHERE locator->>'verification' = 'not_reported')::int AS not_reported,
               COUNT(DISTINCT precedent_id)::int AS precedents
        FROM ${VCR_SCHEMA}.evidence_items

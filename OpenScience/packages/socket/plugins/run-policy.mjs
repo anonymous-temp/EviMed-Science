@@ -165,6 +165,7 @@ const QUOTE_LOCATOR = 'locate_quote'
 import { concurrentWriteNotice } from '../src/runPolicy.mjs'
 import { sha256Hex, skillBodyDigestAsync } from '../src/digest.mjs'
 import { ChildAttendance } from '../src/childAttendance.mjs'
+import { earlierFilesText, listEarlierFiles } from '../src/earlierFiles.mjs'
 import { unreadableSubmission } from '@evimed/domain'
 
 /**
@@ -788,6 +789,8 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
     if (!agent?.session || isSubagentSession(agent)) return false
     const entry = sessionState(String(agent.session.id ?? ''))
     entry.assembled = true
+    // What the first message names, for the earlier-files block: a file the person attached to it is not an earlier conversation's.
+    entry.claimedInputText = claimed.inputs.map((input) => String(input.text ?? '')).join('\n')
     let changed = false
     if (entry.nativeRouteNeedsReset || claimed.turn > 0 && entry.nativeRouteTurn !== claimed.turn) {
       entry.nativeRouteNeedsReset = false
@@ -1188,6 +1191,29 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
           entry.pathContextRunId = entry.runId
         }
       }
+      // The files earlier conversations of the project left in the shared workspace, said once at a conversation's first step and only
+      // to a person's: an automated, scheduled or programme turn has nobody to ask and a child is told by its parent. The names are
+      // data the model could have listed itself; what they are and are not is one sentence (`earlierFiles.mjs`). Bounded, and a
+      // failure is a diagnostic, never a step lost.
+      if (step.root && !entry.earlierFilesTold && Number(payload?.turn ?? 0) <= 1 && Number(payload?.step ?? 0) <= 1 && entry.unattended !== true && entry.cwd) {
+        entry.earlierFilesTold = true
+        const filesAgent = ctx.get('agents')?.get?.(step.agentId)
+        if (filesAgent) {
+          /** @type {unknown[]} */
+          const unreadable = []
+          try {
+            const named = String(entry.claimedInputText ?? '')
+            const text = earlierFilesText(await listEarlierFiles(
+              (relative) => listDirAt(ctx, entry.cwd, relative || '.', payload?.signal, (error) => unreadable.push(error)),
+              { exclude: (path) => named.includes(path) || named.includes(path.split('/').pop() ?? path) },
+            ))
+            if (text) injectContext(filesAgent, text, name)
+          } catch (error) {
+            unreadable.push(error)
+          }
+          if (unreadable.length) diagnostics(step.sessionId)?.degrade?.(`the earlier-files listing met ${unreadable.length} unreadable director${unreadable.length === 1 ? 'y' : 'ies'}: ${errorMessage(unreadable[0])}`)
+        }
+      }
       // What the root needs to know about the `subagent` children it started, once per child, in the step that follows
       // the call: they work on, and each one's result arrives in this turn by itself. Without it a model waiting for
       // them slept in the shell (`sleep 30`, seen on a live 0.2.1-rc.2 kernel) while the results sat in its inbox.
@@ -1426,7 +1452,10 @@ export async function apply(/** @type {any} */ ctx, /** @type {any} */ config) {
       entry.answerSubmissions.add(id)
       return undefined
     }
-    return `交付物「${id}」已提交 ${attempts} 次，达到本部署上限。写出的文件会连同未通过的核验项一起交付；把结论写给用户，本轮到此为止。`
+    // True of the bytes on disk: at the end of the turn the control plane runs the same gate over them
+    // (`specialistCompletionOutcome`). "Delivered with the failed checks" sent a run on 2026-11-02 to tell its reader that
+    // its last repair had not been re-checked, while the ledger's verdict on those files was a pass.
+    return `交付物「${id}」本轮的提交次数已用完，文件已写好的部分不会丢。平台会在本轮结束时再核一遍当前文件，有问题会标在交付物上。把结论写给用户，不要提提交次数、门禁或复核，本轮到此为止。`
   }))
 
   // ---- one retry for a recoverable source failure, inside the run ---------

@@ -98,3 +98,19 @@ test("P2-10 the two computations whose completion only the conversation heard ha
   assert.deepEqual([check?.title, check?.tab], ["人群核对完成：比较了 6 个变量，2 个有差异", "population"]);
   assert.equal(vcrJobNoticeText({ resultKind: "population_check", state: "succeeded", result: { measures: [{ name: "variables_compared", value: 6 }, { name: "variables_apart", value: 0 }] } })?.title, "人群核对完成：比较了 6 个变量，都接近");
 });
+
+// 2026-11-02: a reply said an E-value of 3.0 and the page 2.22, the newest comparison of the study. The comparison tab opens on the saved
+// comparison its link names; no other tab reads a name.
+test("the link to the comparison tab names the saved comparison the answer is about, and no other tab names one", () => {
+  const entry = vcrResultEntry({ studyId: "std_conv", tab: "comparator", publicUrl: PUBLIC, object: "cmp_3a" });
+  assert.deepEqual(entry, { studyId: "std_conv", tab: "comparator", label: "在“对照”页查看", object: "cmp_3a", url: "https://evimed.example/app/virtual-research/std_conv/comparator?object=cmp_3a" });
+  assert.deepEqual(vcrResultEntry({ studyId: "std_conv", tab: "comparator", publicUrl: "" , object: "cmp_3a" }), { studyId: "std_conv", tab: "comparator", label: "在“对照”页查看", object: "cmp_3a" });
+  assert.equal(vcrResultEntry({ studyId: "std_conv", tab: "trial", publicUrl: PUBLIC, object: "scn_1" }).url, "https://evimed.example/app/virtual-research/std_conv/trial");
+  for (const object of ["", "../x", "a/b", "x".repeat(161), null, 5]) assert.equal(vcrResultEntry({ studyId: "std_conv", tab: "comparator", publicUrl: PUBLIC, object }).url, "https://evimed.example/app/virtual-research/std_conv/comparator", String(object));
+  // a start's answer names the comparison it filed the job under; a status answer is given the job's own record of it
+  const started = { jobId: "job_1", state: "queued", subject: { kind: "comparator", id: "cmp_3a", version: 1 } };
+  assert.equal(withJobEntry(started, { study: conversation, resultKind: "comparator", publicUrl: PUBLIC }).resultEntry.object, "cmp_3a");
+  assert.equal(withJobEntry({ jobId: "job_1", state: "succeeded" }, { study: conversation, resultKind: "comparator", publicUrl: PUBLIC, object: "cmp_9" }).resultEntry.url,
+    "https://evimed.example/app/virtual-research/std_conv/comparator?object=cmp_9");
+  assert.equal(withJobEntry({ jobId: "job_1", state: "queued" }, { study: conversation, resultKind: "comparator", publicUrl: PUBLIC }).resultEntry.object, undefined);
+});

@@ -6,6 +6,7 @@ import { ProductDocuments } from '../../apps/server/src/productStore.mjs';
 import {canonicalRsiJson,rsiDigest} from '../../apps/server/src/rsiCampaignBundle.mjs';
 import { chooseFrontierCandidate, evaluateFrontierDays, frontierCampaignConsumerIdentity, frontierDaysIssues, frontierObservations } from './frontier_campaign.mjs';
 import { chooseSkillCandidate, inSkillSlice, skillArmsIssues, skillCampaignConsumerIdentity, skillObservations, skillScorer, skillSlice, SKILL_BASELINE_ARM } from './skill_campaign.mjs';
+import { chooseHarnessCandidate, harnessCampaignConsumerIdentity, harnessCampaignIssue, harnessDevelopmentResult, harnessObservations } from './harness_campaign.mjs';
 export const digest = rsiDigest;
 const stop = reason => ({status:'not-qualified',reason});
 /** Statistics answers that are a verdict on the evidence; anything else (authority, receipt, process failure) is retried. */
@@ -138,6 +139,26 @@ const consumers = Object.freeze({
   freeze:(frozen)=>({arm:frozen.arm,skillDigest:frozen.skillDigest}),
   confirm(source, registration, frozen) {
    const measured=skillObservations(source,registration,frozen);
+   return {result:{observations:measured.observations,scores:measured.scores ?? null},reason:measured.reason};
+  },
+ },
+ /**
+  * A patched runtime image (guidance supplement and skills) measured on recorded lane runs (harness_campaign.mjs), with an A/A
+  * control arm in development and a scorer of harness_scorers.mjs (judged families included: their verdict records are part of
+  * the source). Paid and stochastic like capability-skill; nothing of a qualified result is imported into production.
+  */
+ 'harness-patch': {
+  deterministic:true,
+  paidMeasurement:true,
+  identity:harnessCampaignConsumerIdentity,
+  validate:(manifest,inputs,dev,confirm)=>harnessCampaignIssue(manifest,inputs,dev,confirm),
+  develop(source, registration) {
+   const choice=chooseHarnessCandidate(source,registration);
+   return {result:harnessDevelopmentResult(choice),frozen:choice.frozen,reason:choice.reason};
+  },
+  freeze:(frozen)=>({arm:frozen.arm,harnessDigest:frozen.harnessDigest,imageDigest:frozen.imageDigest}),
+  confirm(source, registration, frozen) {
+   const measured=harnessObservations(source,registration,frozen);
    return {result:{observations:measured.observations,scores:measured.scores ?? null},reason:measured.reason};
   },
  },

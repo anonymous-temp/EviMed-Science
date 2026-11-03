@@ -129,6 +129,10 @@ OBJECT_SHAPES = {
 }
 # What the platform generates from the domain's scenario schemas (`pnpm generate:vcr-scenario-help`): every key each method's
 # scenario reads. It rides in the image beside this file and is never edited by hand.
+# The kinds whose result is a table of generated rows (`vcr_read what generated_records` reads it back).
+RECORD_KINDS = tuple(OBJECT_SHAPES["population (definition)"] + OBJECT_SHAPES["patient_set (scenario)"])
+# The kinds whose scenario states the truth a design assumes: a number read in a paper can be tied to its field there (`sources`).
+SOURCE_KINDS = ("design_analytic", "design_simulation", "design_grid", "assurance", "procova")
 HELP_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "vcr_scenario_help.json")
 # Where the VCR methods are in the runtime image. They are capability skill bodies, which delegation injects into a planned
 # capability's run; a plain conversation in a study uses these tools too and its skill catalogue does not list them, so the tools
@@ -339,6 +343,11 @@ def _detailed_tool_definitions():
                     }, "additionalProperties": False},
                     "reconstructionResultId": ID,
                     "jobId": ID,
+                    "sources": {"type": "array", "maxItems": 8, "description": (
+                        "A number you read in a paper and wrote into the scenario: [{field: its path in the scenario, e.g. truth.controlMedian, "
+                        "publication: PMID or DOI, quote: the sentence that prints it}]. The platform records the paper, and the result page names it."),
+                        "items": {"type": "object", "properties": {"field": {"type": "string"}, "publication": {"type": "string"}, "quote": {"type": "string"}},
+                                  "required": ["field", "publication", "quote"], "additionalProperties": False}},
                 },
                 "required": ["action"],
                 "additionalProperties": False,
@@ -510,7 +519,7 @@ def tool_definitions():
     descriptions = {
         "vcr_read": "Read this conversation's research. what=study opens compact context and enables specialist tools. patient_context lists authenticated human-message references (filter beforeSeq/limit); use messageSeq to preserve an earlier case. subject_document reads permitted original material. trial_registry_record reads one registry (filter registryId). contracts gives write syntax before any task exists; data_intake lists original upload handles; matching filter.kind=contract gives write syntax; candidate_trials reads patient trial matches. Any eligibility verdict you deliver (reply, table or file) is copied from the saved read-back (matching or candidate_trials with filter.subjectKey), never retyped.",
         "vcr_write": "Save a research object; data_intake imports an owned original upload then maps/freezes it (read contracts first). candidate_trial stores registry-linked eligibility. Never write calculated results. patient_context data={messageSeq} preserves a listed original human case, or {sourceId} an owned human upload; no model-written prose. task_context opens an independent hidden task. A fact states only what its quote says: what the text does not mention is unknown, never negated, and age, sex or a diagnosis do not imply pregnancy, menopause or a negative result. A candidate_trial's criteria are that one trial's own eligibility lines. Use the VCR workflow skill for object contracts (read %s/vcr-matching/SKILL.md before writing facts, criteria or trials; vcr-protocol, vcr-evidence, vcr-analysis and vcr-package sit beside it; none is in the skill catalogue) and vcr_simulate action=shape for numerical inputs." % root,
-        "vcr_simulate": "Trial sample size, comparing designs, a synthetic population from a paper's baseline, comparators: calculate here. No study needed; the first start opens its page. action=shape with kind gives exact fields and examples; do not guess keys. Long jobs resume here if they outlive this turn. Failures stay explicit. modelId requires modelVersion.",
+        "vcr_simulate": "A human trial's sample size, power or events, comparing designs, a synthetic population from a paper's baseline, an external control: calculate here, not in a script of your own. No study needed; the first start opens a result page with versions and premises. action=shape with kind gives exact fields; do not guess keys. Long jobs resume here if they outlive this turn. modelId requires modelVersion.",
     }
     tools = _detailed_tool_definitions()
     for tool in tools:
@@ -786,6 +795,12 @@ def write(arguments: dict) -> dict:
                             "(at most 40 characters; the question's name, never a person or an identifier).")
     if refused:
         next_actions.append("Correct the refused items and write only those again.")
+    for result in data.get("results") or []:
+        # Words the platform read as the closed ones, and the names to call the saved objects by: said once, in the answer that has them.
+        if isinstance(result, dict) and result.get("applied"):
+            next_actions.append("data.results[].applied lists words the platform read as the vocabulary's own (field: what you wrote, what it took); write the closed word next time.")
+        if isinstance(result, dict) and result.get("named"):
+            next_actions.append("Refer to the saved objects in your reply by data.results[].named[].name, never by id.")
     if reminders:
         next_actions.append("The warnings that name a record or a role are reminders: the object is saved and its result is delivered as it "
                             "stands. Add what they name by writing the same object again (a new version), without waiting for anyone.")
@@ -800,7 +815,7 @@ def write(arguments: dict) -> dict:
 
 
 # The write issues that are reminders of a record the object has not got yet, not refusals (the object is saved).
-_REMINDER_CODES = frozenset({"vcr_comparator_record_incomplete", "vcr_assumption_role_missing", "vcr_evidence_item_incomplete"})
+_REMINDER_CODES = frozenset({"vcr_comparator_record_incomplete", "vcr_assumption_role_missing", "vcr_evidence_item_incomplete", "vcr_evidence_reported_unverified"})
 
 
 def _issue_line(issue: dict) -> str:
@@ -1102,22 +1117,61 @@ def shape(arguments: dict) -> dict:
                       "question at a time, and otherwise go on with a stated assumption. role defaultable: settle it yourself (a default is filled "
                       "and listed in applied, an optional key may be left out, a choice among words follows from the question) and say which "
                       "value you took; do not ask. An object has no role: its keys do.")
+    next_actions = [
+        "Write exactly these keys and no others; a number the engine computes (a result, a count, a measure) is never a key.",
+        "Check a filled scenario without queueing it with vcr_simulate action validate (kind and scenario): it answers the defaults the platform "
+        "would fill, the replicate count and any refusal by path, and does not wait, so you may start in the same turn.",
+        "Then queue it with vcr_simulate action start, or write it as the object's configuration with vcr_write.",
+    ]
+    if kind in SOURCE_KINDS:
+        # A median read in a paper went straight into the scenario in 6 of 6 live designs and the result page called it an assumption: the paper
+        # rides on the same call.
+        next_actions.append("A number you read in a paper (a control median, a hazard ratio, a rate) is tied to it in the same call, beside the scenario: "
+                            'sources [{"field": "truth.controlMedian", "publication": "PMID 18650514", "quote": "<the sentence that prints the number>"}]. '
+                            "The number is the one in the scenario; the result page then says it comes from the paper. A number of your own stays an assumption.")
+    if kind in RECORD_KINDS:
+        # Three of the four live conversations that did not enter the module for a cohort wrote their own script because they could not tell whether its rows could be handed to
+        # the person as a file (2026-11-02: "I don't know if it writes a CSV I can access"). They can be read back.
+        next_actions.append("The result keeps the generated rows. For a file the person asks for, the result page has 下载 CSV for the whole table: "
+                            "give the page link the answer's resultEntry carries and say so. vcr_read what generated_records with filter.id = the "
+                            "result's id returns the rows, at most 50 per call, for working with them yourself.")
     return {
         "status": "success",
         "summary": summary,
         "data": data,
         "warnings": [],
-        "next_actions": [
-            "Write exactly these keys and no others; a number the engine computes (a result, a count, a measure) is never a key.",
-            "Check a filled scenario without queueing it with vcr_simulate action validate (kind and scenario): it answers the defaults the platform "
-            "would fill, the replicate count and any refusal by path, and does not wait, so you may start in the same turn.",
-            "Then queue it with vcr_simulate action start, or write it as the object's configuration with vcr_write.",
-        ],
+        "next_actions": next_actions,
     }
 
 
+# The kinds whose complete example a conversation has been given, once: (session, kind). A refusal that is the first of its kind in a
+# conversation carries one valid scenario to copy; the later ones carry the keys of the place they were refused and nothing more.
+_EXAMPLED = set()
+
+
+def _first_example(kind, method) -> str:
+    """One complete, valid scenario of the kind (from the generated help), the first time a refusal of it is answered in this conversation."""
+    context = _EXECUTION_CONTEXT.get()
+    session = context.get("sessionId", "") if isinstance(context, dict) else ""
+    if (session, kind) in _EXAMPLED:
+        return ""
+    examples = method.get("examples") if isinstance(method, dict) else None
+    scenario = examples[0].get("scenario") if isinstance(examples, list) and examples and isinstance(examples[0], dict) else None
+    if not isinstance(scenario, dict) or not scenario:
+        return ""
+    if len(_EXAMPLED) > 2000:
+        _EXAMPLED.clear()
+    _EXAMPLED.add((session, kind))
+    return " A complete valid scenario of %s, to copy and change to this study's own numbers: %s" % (
+        kind, json.dumps(scenario, ensure_ascii=False, separators=(",", ":")))
+
+
 def refusal_hint(kind, issues: list) -> str:
-    """The keys of the place a job was refused, from the same generated help, so the repair needs no second lookup."""
+    """The keys of the place a job was refused, from the same generated help, so the repair needs no second lookup.
+
+    The first refusal of a kind in a conversation also carries a whole valid example of it: on 2026-11-01 a design comparison spent
+    fourteen refused calls learning, key by key, what one example would have shown.
+    """
     if not isinstance(kind, str) or not issues:
         return ""
     try:
@@ -1144,8 +1198,8 @@ def refusal_hint(kind, issues: list) -> str:
             lines.append(line)
     if not lines:
         return ""
-    return "From the engine's schema for %s (method %s) -- %s. Every key, its range and an example: vcr_simulate action shape, kind %s." % (
-        kind, method_id, " | ".join(lines), kind)
+    return "From the engine's schema for %s (method %s) -- %s. Every key and its range: vcr_simulate action shape, kind %s.%s" % (
+        kind, method_id, " | ".join(lines), kind, _first_example(kind, method))
 
 
 def simulate(arguments: dict) -> dict:
@@ -1160,7 +1214,7 @@ def simulate(arguments: dict) -> dict:
         if kind not in JOB_KINDS:
             raise VcrPlatformError("vcr_simulate_payload_invalid", "kind must be one of: %s." % ", ".join(JOB_KINDS))
         payload["kind"] = kind
-        for key in ("scenario", "inputs", "seed", "replicates", "cpuSecondsLimit", "subjectId", "reconstructionResultId", "selection", "modelId", "modelVersion"):
+        for key in ("scenario", "inputs", "seed", "replicates", "cpuSecondsLimit", "subjectId", "reconstructionResultId", "selection", "modelId", "modelVersion", "sources"):
             if arguments.get(key) is not None:
                 payload[key] = arguments[key]
     else:
@@ -1214,9 +1268,12 @@ def _validate_answer(data: dict, kind) -> dict:
             ) if line],
         }
     actions = ["Nothing was queued and nothing was waited on: start with the same scenario in this turn when it is what the study intends."]
+    actions.extend(_source_lines(data))
     if isinstance(data.get("applied"), list) and data["applied"]:
         actions.append("data.applied lists what the platform will fill in because the scenario states none of it. Say each with its value in your reply; "
                        "one that is not what the study intends is stated in the scenario before it is started.")
+    if isinstance(data.get("normalized"), list) and data["normalized"]:
+        actions.append("data.normalized lists keys that only described what the method does anyway; the platform leaves them out and they change nothing.")
     return {
         "status": "success",
         "summary": "The scenario is valid; nothing was queued.",
@@ -1277,11 +1334,28 @@ def _with_applied(answer: dict, data: dict) -> dict:
     study intends is stated in the scenario and the job queued again.
     """
     applied = data.get("applied") if isinstance(data, dict) else None
-    if not isinstance(applied, list) or not applied:
-        return answer
-    line = ("data.applied lists what the platform filled in because the scenario did not state it. Say each with its value in your "
-            "reply; one that is not what the study intends is stated in the scenario and the job queued again.")
-    return {**answer, "next_actions": [*answer.get("next_actions", []), line]}
+    lines = []
+    if isinstance(applied, list) and applied:
+        lines.append("data.applied lists what the platform filled in because the scenario did not state it. Say each with its value in your "
+                     "reply; one that is not what the study intends is stated in the scenario and the job queued again.")
+    if isinstance(data, dict) and isinstance(data.get("normalized"), list) and data["normalized"]:
+        lines.append("data.normalized lists keys of your scenario that only described what the method does anyway; the platform left them out and "
+                     "they changed nothing. Leave them out next time.")
+    lines.extend(_source_lines(data))
+    return {**answer, "next_actions": [*answer.get("next_actions", []), *lines]} if lines else answer
+
+
+def _source_lines(data: dict) -> list:
+    """What became of the papers the call named: a premise the platform tied to its paper, and one that stays the researcher's assumption."""
+    sources = data.get("sources") if isinstance(data, dict) else None
+    if not isinstance(sources, list) or not sources:
+        return []
+    kept = [entry for entry in sources if isinstance(entry, dict) and entry.get("state") == "assumption"]
+    line = ("data.sources says, for each paper you named, whether its number is now tied to the paper (carried) or stays an assumption, and why. "
+            "In the reply, say which premises come from which paper and which are assumptions.")
+    if kept:
+        line += " Fix the entries that stayed assumptions by their reason and send them again with the next start, or leave the paper out."
+    return [line]
 
 
 def _with_entry(answer: dict, data: dict) -> dict:

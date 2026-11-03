@@ -11,6 +11,8 @@ The expected values are produced by code that is not the JS port:
                        (Future-House/BixBench bixbench/graders.py, read 2026-10-31) over score_bixbench.py's answer parsing.
 tests/test_scorer_vectors.py rebuilds the vectors from these functions and fails when the file or either scorer has drifted;
 tests/skillScorers.test.mjs asserts the JS ports reproduce the file.
+The `mbc` section (score_shortanswer.py) and the `harnessDigest` section (export_harness_arms.py) belong to the harness-patch
+campaigns (evals/rsi-campaigns/harness_scorers.mjs, harness_campaign.mjs).
 """
 import difflib
 import importlib.util
@@ -183,6 +185,134 @@ WIDE_CASES = [
 ]
 
 
+# ---------------------------------------------------------------------------------------------------- MedBrowseComp-style
+# Invented molecules, companies and dates; the expected values are produced by score_shortanswer.score itself.
+def _gold(task, answer):
+    return {'task_name': task, 'answer': answer}
+
+
+NOV = 'Nov 17, 2026'
+FILLER = ' '.join(['The registry lists several unrelated filings and I kept reading further down the page.'] * 8)
+MBC_CASES = [
+    # Ingredient
+    ('ing-exact', 'Searched the label.\nINGREDIENT: ZORVALINIB', 'Ingredient', 'ZORVALINIB'),
+    ('ing-case-markdown', '**INGREDIENT:** Zorvalinib', 'Ingredient', 'ZORVALINIB'),
+    ('ing-bullet-trailing-period', '- **Ingredient**: zorvalinib.', 'Ingredient', 'ZORVALINIB'),
+    ('ing-active-label', 'notes\nACTIVE INGREDIENT: KELDAMAB', 'Ingredient', 'KELDAMAB'),
+    ('ing-numbered-label', '1. INGREDIENT: ZORVALINIB', 'Ingredient', 'ZORVALINIB'),
+    ('ing-quoted', 'INGREDIENT: "ZORVALINIB"', 'Ingredient', 'ZORVALINIB'),
+    ('ing-salt-answer-shorter', 'INGREDIENT: ZORVALINIB', 'Ingredient', 'ZORVALINIB MESYLATE'),
+    ('ing-salt-answer-longer', 'INGREDIENT: ZORVALINIB MESYLATE', 'Ingredient', 'ZORVALINIB'),
+    ('ing-near-typo', 'INGREDIENT: ZORVALINAB', 'Ingredient', 'ZORVALINIB'),
+    ('ing-wrong', 'INGREDIENT: KELDAMAB', 'Ingredient', 'ZORVALINIB'),
+    ('ing-unknown', 'INGREDIENT: UNKNOWN', 'Ingredient', 'ZORVALINIB'),
+    ('ing-none', 'INGREDIENT: none', 'Ingredient', 'ZORVALINIB'),
+    ('ing-last-label-wins', 'INGREDIENT: KELDAMAB\nrechecked the filing\nINGREDIENT: ZORVALINIB', 'Ingredient', 'ZORVALINIB'),
+    ('ing-token-order-and-ampersand', 'INGREDIENT: BETA & ALPHA', 'Ingredient', 'ALPHA AND BETA'),
+    ('ing-crlf', 'Reasoning\r\nINGREDIENT: ZORVALINIB\r\n', 'Ingredient', 'ZORVALINIB'),
+    ('ing-empty-text', '', 'Ingredient', 'ZORVALINIB'),
+    ('ing-nolabel-gold-in-tail', 'The ingredient is zorvalinib.', 'Ingredient', 'ZORVALINIB'),
+    ('ing-nolabel-miss', 'I could not determine it.', 'Ingredient', 'ZORVALINIB'),
+    ('ing-nolabel-last-line-only', 'Probably zorvalinib\nbut I am unsure', 'Ingredient', 'ZORVALINIB'),
+    # Applicant_Full_Name
+    ('co-legal-form-dropped', 'COMPANY: Brellton Myers Co.', 'Applicant_Full_Name', 'BRELLTON MYERS'),
+    ('co-us-inc-dropped', 'COMPANY: ASTELLO PHARMA INC', 'Applicant_Full_Name', 'ASTELLO PHARMA US INC'),
+    ('co-applicant-label', 'APPLICANT: Quillon Labs LLC', 'Applicant_Full_Name', 'QUILLON LABS'),
+    ('co-article-dropped', 'COMPANY: Orbis Group', 'Applicant_Full_Name', 'THE ORBIS GROUP'),
+    ('co-wrong', 'COMPANY: Vantora Inc', 'Applicant_Full_Name', 'ASTELLO PHARMA US INC'),
+    ('co-partial', 'COMPANY: NORVEX', 'Applicant_Full_Name', 'NORVEX PHARMACEUTICALS CORP'),
+    ('co-unknown', 'COMPANY: UNKNOWN', 'Applicant_Full_Name', 'NORVEX PHARMACEUTICALS CORP'),
+    ('co-nolabel-gold-in-tail', 'The applicant is Norvex Pharmaceuticals Corporation', 'Applicant_Full_Name', 'NORVEX PHARMACEUTICALS CORP'),
+    ('co-nolabel-miss', 'No applicant could be found.', 'Applicant_Full_Name', 'NORVEX PHARMACEUTICALS CORP'),
+    # Patent_Expire_Date_Text (a year is asked, the gold is a date)
+    ('pat-year-only', 'date: 2027', 'Patent_Expire_Date_Text', 'Aug 13, 2027'),
+    ('pat-full-date', 'DATE: Aug 13, 2027', 'Patent_Expire_Date_Text', 'Aug 13, 2027'),
+    ('pat-wrong-year', 'date: 2029', 'Patent_Expire_Date_Text', 'Aug 13, 2027'),
+    ('pat-yyyy-label', 'YYYY: 2027', 'Patent_Expire_Date_Text', 'Aug 13, 2027'),
+    ('pat-iso-gold', 'date: 2027', 'Patent_Expire_Date_Text', '2027-08-13'),
+    ('pat-slash-gold-and-label', 'Patent expiration date: 08/13/2027', 'Patent_Expire_Date_Text', '08/13/2027'),
+    ('pat-two-years-first-wins', 'date: 2027 (extended to 2029)', 'Patent_Expire_Date_Text', 'Aug 13, 2027'),
+    ('pat-label-without-year', 'date: unknown', 'Patent_Expire_Date_Text', 'Aug 13, 2027'),
+    ('pat-nolabel-gold-year-in-tail', 'The patent expires in 2027.', 'Patent_Expire_Date_Text', 'Aug 13, 2027'),
+    ('pat-nolabel-other-year', 'The patent expires in 2031.', 'Patent_Expire_Date_Text', 'Aug 13, 2027'),
+    # Exclusivity_Date
+    ('exc-mdy-dashes', 'date: 11-17-2026', 'Exclusivity_Date', NOV),
+    ('exc-month-name', 'DATE: Nov 17, 2026', 'Exclusivity_Date', NOV),
+    ('exc-iso', 'date: 2026-11-17', 'Exclusivity_Date', NOV),
+    ('exc-mdy-slashes', 'date: 11/17/2026', 'Exclusivity_Date', NOV),
+    ('exc-day-month-year', 'date: 17 Nov 2026', 'Exclusivity_Date', NOV),
+    ('exc-wrong-day', 'date: 11-18-2026', 'Exclusivity_Date', NOV),
+    ('exc-na-for-dated-gold', 'date: N/A', 'Exclusivity_Date', NOV),
+    ('exc-no-date-at-all', 'date: soon', 'Exclusivity_Date', NOV),
+    ('exc-nolabel-date-in-tail', 'Exclusivity runs until Nov 17, 2026.', 'Exclusivity_Date', NOV),
+    ('exc-crlf', 'Lookup done\r\ndate: 11-17-2026\r\n', 'Exclusivity_Date', NOV),
+    ('exc-gold-empty-na', 'DATE: NA', 'Exclusivity_Date', ''),
+    ('exc-gold-empty-none', 'date: none', 'Exclusivity_Date', ''),
+    ('exc-gold-empty-na-with-words', 'date: NA - not applicable', 'Exclusivity_Date', ''),
+    ('exc-gold-empty-but-dated', 'date: 11-17-2026', 'Exclusivity_Date', ''),
+    ('exc-gold-empty-nolabel-na', 'There is no exclusivity listed, N/A.', 'Exclusivity_Date', ''),
+    ('exc-gold-empty-nolabel-nothing', 'I do not know.', 'Exclusivity_Date', ''),
+    # Open_on_Approval
+    ('open-not-listed', 'The company is not listed.\nNOT LISTED', 'Open_on_Approval', 'Not_Listed'),
+    ('open-not-listed-underscore', 'NOT_LISTED', 'Open_on_Approval', 'Not_Listed'),
+    ('open-not-listed-with-price', 'NOT LISTED (though in 2019 it traded at $12.40)', 'Open_on_Approval', 'Not_Listed'),
+    ('open-gold-not-listed-but-priced', 'ticker ABC, $20.10', 'Open_on_Approval', 'Not_Listed'),
+    ('open-gold-not-listed-nothing-clear', 'I could not find anything.', 'Open_on_Approval', 'Not_Listed'),
+    ('open-price-exact', 'Ticker: QZX\nOpening price on approval date: $157.02', 'Open_on_Approval', '157.02000427246094'),
+    ('open-price-rounded', 'ticker ZZZ, opening price 15.99', 'Open_on_Approval', '15.989999771118164'),
+    ('open-price-wrong', 'ticker ZZZ, opening price $16.80', 'Open_on_Approval', '15.989999771118164'),
+    ('open-price-thousands-separator', 'opening price: 1,234.50', 'Open_on_Approval', '1234.5'),
+    ('open-answered-not-listed-for-priced-gold', 'NOT LISTED', 'Open_on_Approval', '15.989999771118164'),
+    ('open-price-earlier-than-tail', 'Opening price on approval was $42.10.\n' + FILLER + '\nI could not confirm the rest.', 'Open_on_Approval', '42.1'),
+    ('open-price-only-in-tail', FILLER + '\nOpening price on approval was $42.10.', 'Open_on_Approval', '42.1'),
+    ('open-empty-text', '', 'Open_on_Approval', '12.5'),
+]
+
+
+def mbc_cases():
+    ss = _load('score_shortanswer')
+    rows = []
+    for name, text, task, answer in MBC_CASES:
+        gold = _gold(task, answer)
+        got = ss.score(text, gold)
+        rows.append({'name': name, 'text': text, 'gold': gold, 'verdict': got['verdict'], 'extraction': got['extraction'], 'extracted': got['extracted'],
+                     'score': 1 if got['verdict'] == 'correct' else 0})
+    return rows
+
+
+# --------------------------------------------------------------------------------------------------- harness patch digests
+IMAGE = {'id': 'evimed-lane-1', 'digest': 'ab' * 32}
+OTHER_IMAGE = {'id': 'evimed-lane-2', 'digest': 'cd' * 32}
+
+
+def skill(name, description, body):
+    return {'name': name, 'description': description, 'body': body}
+
+
+HARNESS_CASES = [
+    ('ascii', {'guidanceSupplement': 'Give a first answer early, then refine it.', 'skills': [skill('closure', 'Use when a task has a long tail.', 'Deliver a provisional result first.')]}, IMAGE),
+    ('cjk', {'guidanceSupplement': '先给出暂定答案，再迭代改进。', 'skills': [skill('baogao-guifan', '长报告的交付规格', '逐项覆盖子问题，并说明依据。')]}, IMAGE),
+    ('emoji-astral', {'guidanceSupplement': 'Mark progress \u2705 \U0001F680 and \U0001F9EA tests.', 'skills': [skill('progress-marks', 'Use \U0001F4DD notes', 'Body with \U0001F600\U0001F600 pairs.')]}, IMAGE),
+    ('control-characters', {'guidanceSupplement': 'bell\u0007 unit\u001f del\u007f sep\u2028 end\ttab\nnewline\rcr', 'skills': [skill('ctrl', 'desc\u0001', 'body\u001e')]}, IMAGE),
+    ('quotes-and-backslashes', {'guidanceSupplement': 'say "hi" \\ back\\slash \\n and \'single\'', 'skills': [skill('quoting', 'a "quoted" description', 'C:\\path\\to\\"file"')]}, IMAGE),
+    ('empty-guidance-one-skill', {'guidanceSupplement': '', 'skills': [skill('only-skill', 'The single skill.', 'Its body.')]}, IMAGE),
+    ('no-skills-guidance-only', {'guidanceSupplement': 'Only a guidance supplement.', 'skills': []}, IMAGE),
+    ('unsorted-skills', {'guidanceSupplement': 'g', 'skills': [skill('zeta-notes', 'z', 'zb'), skill('alpha-notes', 'a', 'ab'), skill('mid-1', 'm', 'mb')]}, IMAGE),
+    ('long-body', {'guidanceSupplement': 'g', 'skills': [skill('long-one', 'A long skill.', ('Step one \u00e9\u00e8 \u4e2d\u6587 \U0001F9EA. ' * 400))]}, IMAGE),
+    ('same-patch-other-image', {'guidanceSupplement': 'Give a first answer early, then refine it.', 'skills': [skill('closure', 'Use when a task has a long tail.', 'Deliver a provisional result first.')]}, OTHER_IMAGE),
+]
+
+
+def harness_digest_cases():
+    mod = _load('export_harness_arms')
+    rows = []
+    for name, bundle, image in HARNESS_CASES:
+        chars, always = mod.harness_patch_sizes(bundle)
+        rows.append({'name': name, 'bundle': bundle, 'image': image, 'digest': mod.harness_patch_digest(bundle, image), 'chars': chars, 'alwaysOnChars': always})
+    return rows
+
+
+
 def ratio_pairs():
     """Pairs of strings (a seeded generator): small alphabets and repeats, short and past the autojunk threshold of 200."""
     rng = random.Random(20261031)
@@ -220,6 +350,11 @@ def build():
                     for name, text, gold in DEEP_CASES],
         'arbWide': [{'name': name, 'text': text, 'gold': gold, 'iou': arb.score_wide(text, gold)['iou']} for name, text, gold in WIDE_CASES],
         'bixbench': [{'name': name, 'text': text, 'gold': gold, **bixbench_reference(text, gold)} for name, text, gold in BIX_CASES],
+        'roundOneNote': ('mbc: expected values come from score_shortanswer.score (needs_judge counts as not correct); harnessDigest: from '
+                         'export_harness_arms.harness_patch_digest / harness_patch_sizes (RFC 8785 canonical JSON of the bundle and the image, sha256; '
+                         'sizes in UTF-16 code units). Both are invented inputs.'),
+        'mbc': mbc_cases(),
+        'harnessDigest': harness_digest_cases(),
     }
 
 

@@ -255,6 +255,10 @@ export function acceptExtractedFacts(answer, variables) {
     if (typeof row.dateSurface === 'string' && row.dateSurface.trim() && row.dateSurface.length <= 80) item.dateSurface = row.dateSurface.trim()
     // A second quotation of the same record that prints the date whole: kept as written, because the writer finds it word for word.
     if (typeof row.dateQuote === 'string' && row.dateQuote.trim() && row.dateQuote.length <= 200) item.dateQuote = row.dateQuote
+    // A past event ("history of", "previously") does not say it happened on the day of the note: the model says so, and the writer then
+    // reads the date of the record's header as the latest the event could be, not as its day. Only the one word the domain's clinical
+    // block already has; a patient's finding that is affirmed is the only kind a date bears on.
+    if ((row.temporality ?? object(row.clinical).temporality) === 'historical' && polarity === 'affirmed') item.clinical = { schema: 1, assertion: 'affirmed', experiencer: 'patient', temporality: 'historical' }
     facts.push(item)
   }
   return { facts, dropped }

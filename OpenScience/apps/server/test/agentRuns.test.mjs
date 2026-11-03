@@ -20,6 +20,7 @@ import {
   readDelegatedAssistantMessagesForTest,
   requiredSpecialistArtifactsForTest,
   MAX_RUN_CORRECTIONS,
+  nativeWorkflowEvidenceForTest,
   scopeNativeProjectionForTest, scopeNativeReceiptForTest,
   snapshotAcceptedPackageForRepairForTest,
   recoverableEvidenceSourceErrorCodes,
@@ -9015,6 +9016,34 @@ test("a runtime that stopped after its answer keeps the file the conversation wr
   }
 });
 
+test("a conversation stopped halfway keeps the job files and loop output it wrote, since nothing shows they are another run's", async () => {
+  // REVIEWFIX2 8: the stop path reads no transcript, and the filter that drops another run's job files took a cancelled conversation's own
+  // `research-topic-runs/<job>/…` and a loop-written `cv-runs/fold3/x.csv` as foreign.
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-stop-jobs-"));
+  try {
+    const project = { id: "project-1", userId: "user-1", rootDir: root, workspaceDir: path.join(root, "workspace"), metaDir: path.join(root, ".openscience") };
+    await mkdir(path.join(project.workspaceDir, workspaceLayout.runStateDir), { recursive: true });
+    await mkdir(project.metaDir, { recursive: true });
+    const binding = { sessionId: "ses_stop_jobs", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null };
+    const store = new AgentRunStore({ get: async () => binding }, { model: "deepseek/deepseek-v4-pro", readSessionHistory: async () => [], monitorIntervalMs: 60_000 });
+    store.scheduleMonitor = () => {};
+    const started = await store.start(project, { sessionId: binding.sessionId });
+    await relabelReceipt(project, started.id);
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    const files = { "research-topic-runs/topic-20261102010101-a1b2c3d4e5f6/output/request.json": "{}", "cv-runs/fold3/x.csv": "a,b\n1,2\n", "notes.md": "# 一\n" };
+    for (const [name, text] of Object.entries(files)) {
+      await mkdir(path.dirname(path.join(project.workspaceDir, name)), { recursive: true });
+      await writeFile(path.join(project.workspaceDir, name), text);
+    }
+    await store.finishInternal(project, started.id, { status: "canceled", errorCode: "runtime_canceled", artifacts: [], canceledBy: "user" });
+    const finished = (await store.list(project)).find((item) => item.id === started.id);
+    await store.closeAll();
+    assert.deepEqual([...(finished?.unverifiedArtifacts ?? [])].sort(), Object.keys(files).sort());
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("what a run recorded as its outputs is what a reader is shown, whatever the registry says on the day it is read", async () => {
   await withAnswerModeRun(async ({ project, binding, dispatch, appendHistory, skillLoadedPart, store }) => {
     await dispatch("turn_recorded_outputs");
@@ -9136,4 +9165,95 @@ test('durable stop intent invalidates existing work across restart and leaves a 
   const human=(await restarted.reserveRun(project,session,{baselineCursor:null,nativeTurn:{startSeq:300,userSeq:301},kernelRequestIds:['req_new_human']})).run;
   assert.equal(await restarted.promptStopRequested(project,'root',human.id),false);assert.equal(await restarted.promptStopRequested(project,'other',original.id),false);
  }finally{await first.closeProject(project);await restarted.closeProject(project);await rm(root,{recursive:true,force:true});}
+});
+
+test("concurrent deliverables with independent ownership are not attributed to the other run", async () => {
+  await withAnswerModeRun(async ({ project, binding, dispatch, appendHistory, store }) => {
+    const started = await dispatch("concurrent-artifacts");
+    const originalList = store.list.bind(store);
+    const peer = { id: "peer-run", sessionId: "other-session", startedAt: started.startedAt, finishedAt: null,
+      nativeWorkflow: { plan: { written: true, items: [{ id: "peer" }] }, submissions: [], delegates: [] } };
+    store.list = async (projectArg) => [...await originalList(projectArg), peer];
+    for (const id of ["own", "peer"]) {
+      await mkdir(path.join(project.workspaceDir, "deliverables", id), { recursive: true });
+      await writeFile(path.join(project.workspaceDir, "deliverables", id, "report.md"), id);
+    }
+    appendHistory([bashPart("python3 report.py"), { type: "text", text: "Done." }]);
+    const run = await store.reconcileSession(project, binding.sessionId);
+    assert.ok(run.artifacts.includes("deliverables/own/report.md"));
+    assert.ok(!run.artifacts.includes("deliverables/peer/report.md"));
+    assert.ok(run.qualityNotices.some((notice) => notice.code === "run_concurrent_attribution_uncertain"));
+  });
+});
+
+test("a canceled run retains its own partial files but not a concurrent run's files", async () => {
+  await withAnswerModeRun(async ({ project, dispatch, store }) => {
+    const started = await dispatch("concurrent-cancel");
+    const originalList = store.list.bind(store);
+    const peer = { id: "peer-run", sessionId: "other-session", startedAt: started.startedAt, finishedAt: null,
+      nativeWorkflow: { plan: { written: true, items: [{ id: "peer" }] }, submissions: [], delegates: [] } };
+    store.list = async (projectArg) => [...await originalList(projectArg), peer];
+    for (const id of ["own", "peer"]) {
+      await mkdir(path.join(project.workspaceDir, "deliverables", id), { recursive: true });
+      await writeFile(path.join(project.workspaceDir, "deliverables", id, "partial.md"), id);
+    }
+    const run = await store.finishInternal(project, started.id, { status: "canceled", errorCode: "runtime_canceled", artifacts: [] });
+    assert.ok(run.unverifiedArtifacts.includes("deliverables/own/partial.md"));
+    assert.ok(!run.unverifiedArtifacts.includes("deliverables/peer/partial.md"));
+    assert.ok(run.qualityNotices.some((notice) => notice.code === "run_concurrent_attribution_uncertain"));
+  });
+});
+
+
+test("a later plan status does not erase this turn's witnessed plan write", () => {
+  const item = { id: "adr", contractKind: "adr-analysis-report", capability: "adr-analysis" };
+  const message = (id, action, data, input) => ({ info: { id, role: "assistant", time: { created: 100 } },
+    parts: [{ type: "tool", tool: "evimed_plan", state: { status: "completed", completedAt: 120,
+      input: { action, ...input }, output: kernelToolText({ ok: true, data }) } }] });
+  const history = [message("seq_2", "write", { runId: "native-1", revision: 1, deliverables: [item] }, { deliverables: [item] }),
+    message("seq_3", "status", { runId: "native-1", revision: 1, items: [item] }, {})];
+  const evidence = nativeWorkflowEvidenceForTest({ nativeTurn: { startSeq: 1 } }, history);
+  assert.equal(evidence.plan.written, false, "status remains a read for projection scoping");
+  assert.deepEqual(evidence.writtenPlanIds, ["adr"], "the earlier write remains ownership evidence");
+});
+
+test("two independently ledgered overlapping runs retain only their own planned folders on cancellation", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "os-concurrent-run-provenance-"));
+  const project = { id: "project-1", userId: "user-1", rootDir: root,
+    workspaceDir: path.join(root, "workspace"), metaDir: path.join(root, ".openscience") };
+  await mkdir(project.workspaceDir, { recursive: true });
+  await mkdir(project.metaDir, { recursive: true });
+  const store = new AgentRunStore({ get: async () => null }, { model: "deepseek/deepseek-v4-flash", monitorIntervalMs: 60_000 });
+  store.scheduleMonitor = () => {};
+  const binding = (id) => ({ sessionId: id, mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null });
+  const startedAt = new Date(Date.now() - 1000).toISOString();
+  const planHistory = (id, kind, capability, nativeId) => {
+    const item = { id, contractKind: kind, capability };
+    const part = (action, data, input) => ({ type: "tool", tool: "evimed_plan", state: { status: "completed", completedAt: 120,
+      input: { action, ...input }, output: kernelToolText({ ok: true, data }) } });
+    return [{ info: { id: "seq_2", role: "assistant", time: { created: 100 } }, parts: [
+      part("write", { runId: nativeId, revision: 1, deliverables: [item] }, { deliverables: [item] }),
+      part("status", { runId: nativeId, revision: 1, items: [item] }, {}),
+    ] }];
+  };
+  try {
+    const a = (await store.reserveRun(project, binding("session-a"), { baselineCursor: null, nativeTurn: { startSeq: 1, userSeq: 2 }, startedAt })).run;
+    const b = (await store.reserveRun(project, binding("session-b"), { baselineCursor: null, nativeTurn: { startSeq: 1, userSeq: 2 }, startedAt })).run;
+    await store.recordNativeWorkflow(project, a, planHistory("statistics", "statistical-analysis-package", "statistical-analysis", "native-a"));
+    await store.recordNativeWorkflow(project, b, planHistory("adr", "adr-analysis-report", "adr-analysis", "native-b"));
+    await Promise.all(["statistics", "adr"].map(async (id) => {
+      const dir = path.join(project.workspaceDir, "deliverables", id);
+      await mkdir(dir, { recursive: true });
+      await writeFile(path.join(dir, "report.md"), id);
+    }));
+    const first = await store.finishInternal(project, a.id, { status: "canceled", errorCode: "runtime_canceled", artifacts: [] });
+    const second = await store.finishInternal(project, b.id, { status: "canceled", errorCode: "runtime_canceled", artifacts: [] });
+    assert.deepEqual(first.unverifiedArtifacts, ["deliverables/statistics/report.md"]);
+    assert.deepEqual(second.unverifiedArtifacts, ["deliverables/adr/report.md"]);
+    assert.ok(first.qualityNotices.some((notice) => notice.code === "run_concurrent_attribution_uncertain"));
+    assert.ok(second.qualityNotices.some((notice) => notice.code === "run_concurrent_attribution_uncertain"));
+  } finally {
+    await store.closeProject(project);
+    await rm(root, { recursive: true, force: true });
+  }
 });

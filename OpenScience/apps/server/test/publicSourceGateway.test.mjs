@@ -463,6 +463,47 @@ test("EviMed evidence POST requests are fixed, read-only, and schema bounded", a
   }
 });
 
+test("PROSPERO: its public search is approved with the page's own request shape and header, and nothing else on that host is", async (t) => {
+  const upstream = [];
+  const server = createServer(createPublicSourceGatewayHandler({}, runtimeManager(), {
+    fetchImpl: async (url, init) => {
+      upstream.push({ url: String(url), method: init.method, body: JSON.parse(init.body), headers: init.headers });
+      return new Response(JSON.stringify([{ hits: 0, retvals: { hits: { hits: [] } } }]), { headers: { "content-type": "application/json" } });
+    },
+  }));
+  const base = await listen(server);
+  t.after(() => close(server));
+  const url = "https://www.crd.york.ac.uk/PROSPERO/api/search";
+  const good = { term: "gout AND colchicine", actual: "gout AND colchicine", line: 1, page: 1, nperpage: 10, sort: "score", sortorder: "desc", filters: [], download: false };
+  const answered = await gatewayRequest(base, { url, accept: ["application/json"], method: "POST", body: good });
+  assert.equal(answered.status, 200);
+  assert.deepEqual(upstream[0].body, good);
+  assert.ok(Number(Buffer.from(upstream[0].headers["prospero-auth-token"], "base64").toString()) > 0, "the header its own page sends");
+  assert.equal(upstream[0].headers.authorization, undefined);
+  // The registry is read page by page, up to the tenth (the connector's `PROSPERO_REACHABLE` of 500 at 50 a page).
+  const later = await gatewayRequest(base, { url, accept: ["application/json"], method: "POST", body: { ...good, page: 10, nperpage: 50 } });
+  assert.equal(later.status, 200);
+  assert.deepEqual(upstream[1].body, { ...good, page: 10, nperpage: 50 });
+  /** @type {[string, Record<string, unknown>, number][]} */
+  const refused = [
+    ["another path", { url: "https://www.crd.york.ac.uk/PROSPERO/api/record/dashboardcounts", method: "POST", body: good }, 403],
+    ["GET on the search", { url }, 403],
+    ["a download of the result", { url, method: "POST", body: { ...good, download: true } }, 400],
+    ["an unknown field", { url, method: "POST", body: { ...good, command: "x" } }, 400],
+    ["a page size over the bound", { url, method: "POST", body: { ...good, nperpage: 500 } }, 400],
+    ["a page past the tenth", { url, method: "POST", body: { ...good, page: 11 } }, 400],
+    ["page zero", { url, method: "POST", body: { ...good, page: 0 } }, 400],
+    ["a second result line", { url, method: "POST", body: { ...good, line: 2 } }, 400],
+    ["a line break in the term", { url, method: "POST", body: { ...good, term: "a\nb", actual: "a\nb" } }, 400],
+  ];
+  for (const [label, request, status] of refused) {
+    const before = upstream.length;
+    const response = await gatewayRequest(base, { accept: ["application/json"], ...request });
+    assert.equal(response.status, status, label);
+    assert.equal(upstream.length, before, `${label}: nothing reached the site`);
+  }
+});
+
 test("the EU CTIS portal: the registry client's own search and retrieve are approved, and nothing else on that host is", async (t) => {
   // The requests are the ones the registry client really builds, replayed through the gateway: a client whose body drifts from
   // the approved shape would be refused here, and a gateway that stopped approving it would be caught.
@@ -487,6 +528,7 @@ test("the EU CTIS portal: the registry client's own search and retrieve are appr
   const base = await listen(server);
   t.after(() => close(server));
   assert.equal(PUBLIC_SOURCE_ALLOWED_HOSTS.has("euclinicaltrials.eu"), true);
+  assert.equal(PUBLIC_SOURCE_ALLOWED_HOSTS.has("www.crd.york.ac.uk"), true);
 
   for (const call of built) {
     const answered = await gatewayRequest(base, { url: call.url, accept: ["application/json"], method: call.method, ...(call.body ? { body: call.body } : {}) });

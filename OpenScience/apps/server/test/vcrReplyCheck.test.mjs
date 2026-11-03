@@ -222,3 +222,22 @@ test("the number check asks the privacy hook before the reviewer sees the reply,
   const [check] = await review.replyChecksForSession(identity, "chat-vcr-7");
   assert.equal(check.status, "queued", "the check is tried again; it never held the reply");
 });
+
+test("an id the platform filed an object under is a back-office word in a reply: found by its closed shape, never the address of the platform's own link, never code", async () => {
+  const { replyInternalIds } = await import("../src/vcrReplyCheck.mjs");
+  const { vcrId, VCR_ID_PREFIXES } = await import("../src/vcrStoreBase.mjs");
+  // every id the module makes is of the shape
+  for (const kind of /** @type {Array<keyof typeof VCR_ID_PREFIXES>} */ (Object.keys(VCR_ID_PREFIXES))) {
+    const id = vcrId(kind);
+    assert.deepEqual(replyInternalIds(`方案 ${id} 的结果`), [id], kind);
+  }
+  assert.deepEqual(replyInternalIds("设计 scn_e7ff9c25083f44b68fc3ef 与 pop_0123456789abcdef012345，再提一次 scn_e7ff9c25083f44b68fc3ef。"), ["scn_e7ff9c25083f44b68fc3ef", "pop_0123456789abcdef012345"]);
+  // the link the platform hands over is an address, not prose
+  assert.deepEqual(replyInternalIds("[在“试验”页查看](http://127.0.0.1:48831/app/virtual-research/std_b7c9a39f908f4e13bb13cd/trial)"), []);
+  assert.deepEqual(replyInternalIds("```\nscn_e7ff9c25083f44b68fc3ef\n```"), []);
+  // words that merely look like one: a registry number, a hash of another length, an identifier with letters past hex, a path
+  for (const text of ["NCT03434379", "src_a1b2", "my_variable_name_that_is_long", "scn_zzzzzzzzzzzzzzzzzzzzzz", "/data/scn_e7ff9c25083f44b68fc3ef/x", "abc_e7ff9c25083f44b68fc3ef0"]) {
+    assert.deepEqual(replyInternalIds(text), [], text);
+  }
+  assert.deepEqual(replyInternalIds(null), []);
+});

@@ -1,6 +1,6 @@
 ---
 name: vcr-analysis
-description: 「虚拟临床研究」的人群、虚拟患者、对照与试验四步：按数据档位选路，把每个对象按引擎认识的字段写下来，平台交引擎算，读回来讲清楚。
+description: 「虚拟临床研究」的计算：临床试验的样本量与设计比较，按基线表生成合成人群与虚拟患者，外部对照与加权比较。每个对象按引擎认识的字段写下，平台交引擎算，结果页保留版本和前提，读回来讲清楚。
 ---
 
 # Population, patient, comparator and trial research

@@ -234,7 +234,7 @@ CREATE TABLE IF NOT EXISTS evimed_knowledge.meta (
 -- Automatic source discovery and the source lifecycle (discovery.py, lifecycle.py). Candidates found by the candidate
 -- lines are validated (reachable, robots, an adapter reads them, fresh items, medical), put on a seven-day trial as
 -- ordinary registry rows at a low rate, then admitted or not; any source — file, discovered or dynamic — is retired by
--- rule (robots refusal, 401/403 for seven days, silence past its own rhythm, off-topic by the platform's screen) and
+-- rule (robots refusal, 401/403 for seven days, 90 days of silence, off-topic by the platform's screen) and
 -- keeps its row and history, so it can come back.
 
 -- One row per thing a line found: a site, a feed, a journal (ISSN), a social account, a requested row, a retired
@@ -442,3 +442,10 @@ CREATE TABLE IF NOT EXISTS evimed_knowledge.hot_list_boards (
   last_ok_at      timestamptz(3),
   last_error      text CHECK (char_length(last_error) <= 200)
 );
+
+-- A silence retirement decided by the rhythm rule (its evidence names evidence_days) does not stand under the 90 days of
+-- 2026-11-02: the source returns at the next registry sync. Idempotent, and deletable once production has started on it.
+UPDATE evimed_knowledge.source_candidates c SET state = 'admitted', state_reason = NULL
+  FROM evimed_knowledge.source_lifecycle l
+ WHERE c.source_id = l.source_id AND c.state = 'retired' AND l.reason = 'silent' AND l.evidence ? 'evidence_days';
+DELETE FROM evimed_knowledge.source_lifecycle WHERE reason = 'silent' AND evidence ? 'evidence_days';

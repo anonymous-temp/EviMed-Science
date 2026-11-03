@@ -7,11 +7,12 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { capabilityBrief } from "@evimed/domain";
+import { capabilityBrief, PLATFORM_CONTEXT_TAGS } from "@evimed/domain";
 import { AgentRunStore } from "../src/agentRuns.mjs";
 import { runFinishedNotifies } from "../src/notificationService.mjs";
 import * as runRoute from "../src/runRoute.mjs";
 import { RUN_ESTIMATE_FALLBACKS, normalizeRunEstimate, runEstimate } from "../src/runRoute.mjs";
+import { isResearchGoalRun, researchGoalBlock, researchGoalPrompt, withoutResearchGoalGesture } from "../src/researchGoal.mjs";
 import { createWebApiApp } from "../src/server.mjs";
 import { HttpError } from "../src/security.mjs";
 import { SpecialistClassifier } from "../src/specialistClassifier.mjs";
@@ -323,8 +324,63 @@ test("a line the researcher chose replaces the router and is recorded as theirs"
     assert.equal((await put("ses_bound", { mode: "specialist", agentId: "adr-analysis", agentVersion: adr.version })).status, 200);
     const bound = await dispatch({ sessionId: "ses_bound", dispatchId: "line_bound", text: "问题", line: "answer" });
     assert.equal(bound.status, 400);
+
+    // 「发起研究」: the person's sentence on the answer line, the router asked nothing, and the route names the turn that set the goal.
+    const before = classifications;
+    assert.equal((await put("ses_goal", { mode: "open-domain" })).status, 200);
+    const started = await dispatch({ sessionId: "ses_goal", dispatchId: "goal_one", text: "评估心衰队列的再入院风险", researchGoal: true });
+    assert.equal(started.status, 202, await started.clone().text());
+    const goal = (await started.json()).data;
+    assert.equal(goal.effectiveAgentId, "open-domain-answer");
+    assert.equal(goal.effectiveRouteReason, "research-goal");
+    assert.equal(goal.question, "评估心衰队列的再入院风险", "what they read of the run is their own sentence");
+    assert.equal(goal.sessionId, "ses_goal");
+    assert.equal(classifications, before, "a research goal asked the classifier nothing");
+    for (const [field, value] of [["researchGoal", "yes"], ["line", "answer"]]) {
+      const refused = await dispatch({ sessionId: "ses_goal", dispatchId: `goal_bad_${field}`, text: "问题", researchGoal: true, [field]: value });
+      assert.equal(refused.status, 400, `${field} ${value}`);
+    }
+    const onBound = await dispatch({ sessionId: "ses_bound", dispatchId: "goal_bound", text: "问题", researchGoal: true });
+    assert.equal(onBound.status, 400, "a conversation bound to a capability sets no research goal");
   } finally {
     await app.close();
     await rm(dataDir, { recursive: true, force: true });
   }
+});
+
+test("a research goal is refused by name where the deployment has LoopX off", async () => {
+  const dataDir = await mkdtemp(path.join(tmpdir(), "open-science-research-goal-off-"));
+  const app = createWebApiApp({ dataDir, port: 0, runtimeMode: "mock", devAuth: true, runTitlesEnabled: false, loopxEnabled: false });
+  const address = await app.listen(0, "127.0.0.1");
+  const base = `http://127.0.0.1:${address.port}`;
+  const headers = { "X-Open-Science-Project": "default", "Content-Type": "application/json" };
+  try {
+    await fetch(`${base}/api/research-sessions/ses_off`, { method: "PUT", headers, body: JSON.stringify({ mode: "open-domain" }) });
+    const refused = await fetch(`${base}/api/agent-runs/dispatch`, { method: "POST", headers, body: JSON.stringify({ sessionId: "ses_off", dispatchId: "goal_off", text: "问题", researchGoal: true }) });
+    assert.equal(refused.status, 409);
+    assert.equal((await refused.json()).code, "research_goal_unavailable");
+  } finally {
+    await app.close();
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
+
+test("a research goal's context asks for the skill, in a tag no reader takes for the person's words", () => {
+  const block = researchGoalBlock();
+  assert.match(block, /`loopx` skill/);
+  // The kernel's gesture: at byte zero or after whitespace, then whitespace (`SKILL_GESTURE` in dsh-tool-skill).
+  assert.match(researchGoalPrompt("评估队列的再入院风险"), /^\/loopx \S/);
+  assert.ok(PLATFORM_CONTEXT_TAGS.some(item => item.tag === "evimed-research-goal"), "the block's tag is a platform tag");
+  assert.match(block, /^\s*<evimed-research-goal>[\s\S]*<\/evimed-research-goal>$/);
+});
+
+test("the gesture a research goal is started with is taken out of the person's sentence, and nothing else is", () => {
+  for (const goal of ["评估队列的再入院风险", "/loopx 在句子里的词不动", "a\nb"]) {
+    assert.equal(withoutResearchGoalGesture(researchGoalPrompt(goal)), goal, "what the dispatch made, the strip undoes");
+  }
+  assert.equal(withoutResearchGoalGesture("/loopx"), "");
+  assert.equal(withoutResearchGoalGesture("/loopxy 评估"), "/loopxy 评估", "a longer word is not the gesture");
+  assert.equal(withoutResearchGoalGesture("评估 /loopx 队列"), "评估 /loopx 队列");
+  assert.deepEqual(["research-goal", "adopted:research-goal", "choice:answer", "loopx-continuation", undefined].map((effectiveRouteReason) => isResearchGoalRun({ effectiveRouteReason })),
+    [true, true, false, false, false]);
 });

@@ -513,6 +513,27 @@ describe("患者匹配 — what a citation does not itself print", () => {
   });
 });
 
+describe("患者匹配 — a date taken from the header of the record", () => {
+  it("says beside the date of a citation, and of a fact in the clinical records, that it is the record's date, and that a past event is no later than it", async () => {
+    const payload = addressed(fixture("ev201/matching-p0192.json"));
+    const row = payload.selected.criteria.find((entry: any) => entry.code === "E1");
+    const headed = { quote: "既往有心肌梗死", source: "document-aaaa1111.txt", at: "3 月 1 日", dateNote: "日期取自病历抬头", locator: { documentId: "prj_x", start: 0, end: 8 } };
+    const bounded = { quote: "曾做过冠脉支架", source: "document-bbbb2222.txt", at: "3 月 1 日", dateNote: "日期取自病历抬头，事件发生不晚于这一天", locator: { documentId: "prj_x", start: 40, end: 48 } };
+    row.evidence = headed;
+    row.evidenceItems = [headed, bounded, { quote: "2026-06-01 给予多西他赛", source: "document-cccc3333.txt", at: "6 月 1 日", locator: { documentId: "prj_x", start: 60, end: 68 } }];
+    server = installVcrServer(network.productRequest, { [P0192]: payload });
+    drawTab(<MatchingTab studyId={STUDY_ID} study={study()} />);
+    await screen.findByRole("heading", { name: "P-0201" });
+    await userEvent.click(screen.getByRole("button", { name: /^P-0192/ }));
+    await screen.findByRole("heading", { name: "P-0192" });
+    const cell = criterionRow("E1");
+    expect(cell).toHaveTextContent("document-aaaa1111.txt · 3 月 1 日 · 日期取自病历抬头");
+    expect(cell).toHaveTextContent("document-bbbb2222.txt · 3 月 1 日 · 日期取自病历抬头，事件发生不晚于这一天");
+    expect(cell.textContent?.match(/日期取自病历抬头/g)).toHaveLength(2);
+    expect(cell).toHaveTextContent("document-cccc3333.txt · 6 月 1 日");
+  });
+});
+
 describe("患者匹配 — what the evidence of a rule has been through", () => {
   // Review V-M8: negation, a correction and a conflict were told only in the folded timeline at the foot of the tab, so a 满足 or 不满足
   // on a rule's own row said nothing of its evidence having been denied, corrected or contradicted, nor whose records the fold held.

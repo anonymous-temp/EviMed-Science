@@ -709,7 +709,7 @@ async def apply_retirements(conn, now: datetime, day: str, curated_ids: set[str]
         "SELECT source_id, line, state FROM evimed_knowledge.source_candidates WHERE source_id IS NOT NULL")).fetchall()
     lines = {row["source_id"]: row["line"] for row in candidates}
     on_trial = {row["source_id"] for row in candidates if row["state"] == "trial"}
-    for decision in await retirement_plan(conn, now, curated_ids):
+    for decision in await retirement_plan(conn, now):
         if decision.source_id in on_trial:
             continue
         line = "registry" if decision.source_id in curated_ids else lines.get(decision.source_id, "dynamic")
@@ -747,7 +747,7 @@ async def decide_trials(conn, now: datetime, day: str) -> list[dict]:
     screening = await screening_of(conn, now)
     decided = []
     for row in rows:
-        screened, off_topic = screening.get(row["source_id"], (None, None))
+        screened, off_topic, _selected = screening.get(row["source_id"], (None, None, None))
         verdict, reason = trial_verdict(TrialFacts(
             trial_until=row["trial_until"], medical_basis=row["medical_basis"], ok_polls=int(row["ok_polls"] or 0),
             new_entries=int(row["new_entries"] or 0), screened=screened, off_topic=off_topic), now)

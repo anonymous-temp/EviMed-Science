@@ -4,6 +4,7 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { loadAgentRegistry } from "../src/agentRegistry.mjs";
+import { moduleOfCapability } from "../src/capabilityModules.mjs";
 import {
   classifierFailureReason,
   namedSpecialistIds,
@@ -79,13 +80,23 @@ test("the model's answer is final, and it is asked first", async () => {
     // ...and with the model's none there is no rule left to overrule it.
     assert.equal((await routeOpenDomain({ query, agents, classifier: classifier("none") })).specialist, null);
   }
-  // An unlisted package (module-only, or off 科研工具 since 2026-10-26) is no candidate: the stub answers only from the candidates it
-  // is handed, so a null here is the package missing from them; its leading slash command still names it.
-  const unlisted = agents.find((agent) => agent.id === "dataset-research-scoping");
-  assert.equal(unlisted?.listed, false);
-  const offered = classifier("dataset-research-scoping");
-  assert.equal((await routeOpenDomain({ query: "我手上有一份住院数据，能做什么研究？", agents, classifier: offered })).specialist?.agentId ?? null, null);
-  assert.equal((await routeOpenDomain({ query: "/dataset-research-scoping 我手上有一份住院数据", agents, classifier: offered })).specialist?.agentId, "dataset-research-scoping");
+  // Whether 科研工具 lists a package is the catalogue's question, not routing's (REVIEWFIX2 13): the four taken off that page on 2026-10-26 stay
+  // candidates of an ordinary request, so what the workspace rules promise ("a dataset in hand → dataset-research-scoping") is still true.
+  for (const id of ["dataset-research-scoping", "evidence-appraisal", "gene-expression-analysis", "manuscript-support"]) {
+    assert.equal(agents.find((agent) => agent.id === id)?.listed, false, `${id} is off the catalogue`);
+    const routed = await routeOpenDomain({ query: "请帮我处理这个任务", agents, classifier: classifier(id) });
+    assert.equal(routed.specialist?.agentId, id, `${id} is still offered to the classifier`);
+  }
+  // A module's own packages (循证 GEO, 虚拟临床研究) are reachable only from their module: no candidate of an ordinary request, though
+  // a leading slash command still names them.
+  for (const id of ["geo-insight", "geo-strategy", "geo-content", "geo-proposal", "vcr-protocol", "vcr-evidence", "vcr-analysis", "vcr-matching", "vcr-package"]) {
+    assert.equal(agents.find((agent) => agent.id === id)?.listed, false, `${id} is unlisted`);
+    assert.equal((await routeOpenDomain({ query: "请帮我处理这个任务", agents, classifier: classifier(id) })).specialist?.agentId ?? null, null, `${id} is no candidate`);
+    assert.equal((await routeOpenDomain({ query: `/${id} 请帮我处理这个任务`, agents, classifier: classifier("none") })).specialist?.agentId, id);
+  }
+  // Inside the module (the control plane marks a verified selection's agents as listed for that request) they are candidates again.
+  const inside = agents.map((agent) => (agent.id === "geo-content" ? { ...agent, listed: true } : agent));
+  assert.equal((await routeOpenDomain({ query: "请帮我处理这个任务", agents: inside, classifier: classifier("geo-content") })).specialist?.agentId, "geo-content");
   // The rules that used to correct a model's none are gone with the net: FAERS vocabulary included.
   assert.equal((await routeOpenDomain({ query: "分析奥希替尼的 FAERS 药物警戒信号", agents, classifier: classifier("none") })).specialist, null);
   // A request is classified once, and a request that a structured choice names is never put to the model.
@@ -195,7 +206,8 @@ test('module-only workflows are excluded from classifier candidates while explic
  let seen;
  const model={classify:async(_query,candidates)=>{seen=candidates;return null;}};
  const routed=await routeOpenDomain({query:'为这位患者匹配研究',agents,classifier:model});assert.equal(routed.specialist,null);
- assert.ok(seen.every(agent=>agent.listed!==false));assert.ok(!seen.some(agent=>agent.id==='vcr-protocol'));
+ assert.ok(seen.every(agent=>agent.listed!==false||moduleOfCapability(agent.id)===null),'only a module\'s own packages are withheld');assert.ok(!seen.some(agent=>agent.id==='vcr-protocol'));
+ assert.ok(['dataset-research-scoping','evidence-appraisal','gene-expression-analysis','manuscript-support'].every(id=>seen.some(agent=>agent.id===id)),'the packages 科研工具 does not list are offered');
  const command=await routeOpenDomain({query:'/vcr-protocol 整理方案',agents,classifier:model});assert.equal(command.specialist.agentId,'vcr-protocol');
  const geo=await routeOpenDomain({query:'/geo-content 生成内容',agents,classifier:model});assert.equal(geo.specialist.agentId,'geo-content');
 });

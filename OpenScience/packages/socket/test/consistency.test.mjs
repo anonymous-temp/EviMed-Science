@@ -803,8 +803,8 @@ test("a root session is shown only its own research tools, in its own scope, onc
   assert.ok(degraded.some((line) => /found no research tools registered/.test(line)), `an empty narrowing is said out loud: ${JSON.stringify(degraded)}`);
 });
 
-/** @param {{ briefId?: string|null, child?: boolean, capabilities?: any[]|null, subagentStart?: ((...args: any[]) => any)|null, revisionAuthorizeUrl?: string, deliveryAttemptLimit?: number, structuralAttemptAllowance?: number, knowledge?: string[]|null, skills?: Record<string, string>|null, registered?: string[]|null, reviewEnabled?: boolean, reviewWaitMs?: number, capsuleMounted?: boolean, attendanceEnabled?: boolean, now?: (() => number) | null }} [options] */
-async function nativePolicyFixture({ briefId = null, child = false, capabilities = null, subagentStart = null, revisionAuthorizeUrl = "", deliveryAttemptLimit = 3, structuralAttemptAllowance = 2, knowledge = null, skills = null, registered = null, reviewEnabled = false, reviewWaitMs = 3000, capsuleMounted = true, attendanceEnabled = true, now = null } = {}) {
+/** @param {{ briefId?: string|null, child?: boolean, capabilities?: any[]|null, subagentStart?: ((...args: any[]) => any)|null, revisionAuthorizeUrl?: string, deliveryAttemptLimit?: number, structuralAttemptAllowance?: number, knowledge?: string[]|null, skills?: Record<string, string>|null, registered?: string[]|null, reviewEnabled?: boolean, reviewWaitMs?: number, capsuleMounted?: boolean, attendanceEnabled?: boolean, now?: (() => number) | null, tree?: Record<string, any> | null }} [options] */
+async function nativePolicyFixture({ briefId = null, child = false, capabilities = null, subagentStart = null, revisionAuthorizeUrl = "", deliveryAttemptLimit = 3, structuralAttemptAllowance = 2, knowledge = null, skills = null, registered = null, reviewEnabled = false, reviewWaitMs = 3000, capsuleMounted = true, attendanceEnabled = true, now = null, tree = null } = {}) {
   const { apply: applyRunPolicy } = await import("../plugins/run-policy.mjs");
   const ctx = harness();
   const rows = new Map();
@@ -854,7 +854,17 @@ async function nativePolicyFixture({ briefId = null, child = false, capabilities
       return files.get(target) ?? null;
     },
     writeText: async (/** @type {string} */ target, /** @type {string} */ text) => { files.set(target, text); },
-    listDir: async (/** @type {string} */ target) => (target === `/workspace/${workspaceLayout.knowledgeDir}` && knowledge ? knowledge.map((/** @type {string} */ name) => ({ name })) : []),
+    listDir: async (/** @type {string} */ target) => {
+      // `tree`: the workspace's directories by workspace-relative path ('' is the root), each a list of { name, type }; a directory
+      // named `!` throws, the way an unreadable one does.
+      if (tree) {
+        const relative = target.replace(/^\/workspace\/?/, "").replace(/^\.$/, "");
+        const listed = tree[relative];
+        if (listed === "!") throw new Error("EACCES");
+        return listed ?? [];
+      }
+      return target === `/workspace/${workspaceLayout.knowledgeDir}` && knowledge ? knowledge.map((/** @type {string} */ name) => ({ name })) : [];
+    },
   });
   /**
    * What one scope sees, as the registry resolves it: every registered tool,
@@ -879,9 +889,9 @@ async function nativePolicyFixture({ briefId = null, child = false, capabilities
    * waterfall runs, and only then is the step admitted and handed its
    * messages. `assemblyTick` lets the timers run between the two, as the
    * kernel's own awaits do.
-   * @param {number} turn @param {{ assemblyTick?: boolean, inputs?: any[], signal?: AbortSignal }} [options]
+   * @param {number} turn @param {{ assemblyTick?: boolean, inputs?: any[], signal?: AbortSignal, stepNumber?: number }} [options]
    */
-  const step = async (turn, { assemblyTick = false, inputs = [], signal = undefined } = {}) => {
+  const step = async (turn, { assemblyTick = false, inputs = [], signal = undefined, stepNumber = 1 } = {}) => {
     for (const message of inputs) for (const handler of ctx.listeners.get(SEAMS.events.inputClaimed) ?? []) handler({ agent, message, turn });
     // Sorted by code-unit name, as the kernel orders tools no `toolOrder` lists.
     const tools = registered ? /** @type {any[]} */ (/** @type {any} */ (ctx.tools).schemas(agent)).sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0)) : [];
@@ -893,7 +903,7 @@ async function nativePolicyFixture({ briefId = null, child = false, capabilities
     /** @type {any[]} */
     const messages = [];
     for (const handler of ctx.listeners.get(SEAMS.events.preStep) ?? []) {
-      const decision = await handler({ agent, turn, messages: inputs, step: 1, signal: AbortSignal.timeout(2000) }, async () => ({ kind: "enter", messages: [] }));
+      const decision = await handler({ agent, turn, messages: inputs, step: stepNumber, signal: AbortSignal.timeout(2000) }, async () => ({ kind: "enter", messages: [] }));
       if (decision?.kind === "enter") messages.push(...(decision.messages ?? []));
     }
     injected.push(...messages);
@@ -3990,6 +4000,97 @@ function proveNativeAttendance(fixture, requestIds) {
 }
 
 
+// ---- the files earlier conversations left in the shared workspace (2026-11-02) -------------------------------------------------
+const earlierTree = () => ({
+  "": [{ name: "designs", type: "directory" }, { name: "notes.md", type: "file" }, { name: ".evimed-run", type: "directory" }, { name: "knowledge-base", type: "directory" },
+    { name: "node_modules", type: "directory" }, { name: "__pycache__", type: "directory" }, { name: workspaceLayout.planFile, type: "file" }],
+  designs: [{ name: "B_gs.json", type: "file" }, { name: "A_fixed.json", type: "file" }, { name: ".hidden", type: "file" }],
+  "knowledge-base": [{ name: "paper.pdf", type: "file" }],
+  node_modules: [{ name: "dep.js", type: "file" }],
+});
+const earlierBlocks = (/** @type {any} */ f) => f.injected.filter((/** @type {any} */ message) => String(message.content?.[0]?.text ?? "").includes("<evimed-earlier-files>"));
+
+test("a person's new conversation is told once which files earlier conversations left, and only the ordinary ones", async () => {
+  const f = await nativePolicyFixture({ tree: earlierTree() });
+  await f.step(1);
+  const blocks = earlierBlocks(f);
+  assert.equal(blocks.length, 1);
+  assert.equal(blocks[0].source.kind, "plugin:evimed-run-policy");
+  const text = blocks[0].content[0].text;
+  assert.match(text, /notes\.md/);
+  assert.match(text, /designs\/A_fixed\.json、designs\/B_gs\.json/, "sorted, with the directory");
+  assert.doesNotMatch(text, /knowledge-base|paper\.pdf|node_modules|dep\.js|\.evimed|\.hidden|__pycache__|plan\.json/, "the platform's directories, scratch, hidden names and the plan file are not an earlier conversation's files");
+  assert.match(text, /没有点到其中任何一份时，不要打开/);
+  assert.match(text, /先问清楚再动手/);
+  // Once: neither the same first step again nor a later one says it twice.
+  await f.step(1);
+  await f.step(1, { stepNumber: 2 });
+  assert.equal(earlierBlocks(f).length, 1);
+  assert.equal(f.requests.at(-1)?.messages.some((/** @type {any} */ message) => String(message.content?.[0]?.text ?? "").includes("earlier-files")), false, "no text on a later step");
+});
+
+test("an empty workspace, a later turn, an unattended turn and a child are told nothing about earlier files", async () => {
+  const empty = await nativePolicyFixture({ tree: { "": [{ name: "knowledge-base", type: "directory" }, { name: ".evimed-run", type: "directory" }], "knowledge-base": [{ name: "a.pdf", type: "file" }] } });
+  await empty.step(1);
+  assert.equal(earlierBlocks(empty).length, 0, "nothing to say, nothing said");
+
+  const later = await nativePolicyFixture({ tree: earlierTree() });
+  await later.step(2);
+  assert.equal(earlierBlocks(later).length, 0, "a conversation's first step only");
+  const laterStep = await nativePolicyFixture({ tree: earlierTree() });
+  await laterStep.step(1, { stepNumber: 2 });
+  assert.equal(earlierBlocks(laterStep).length, 0);
+
+  const unattended = await nativePolicyFixture({ tree: earlierTree() });
+  unattended.files.set("/workspace/.evimed-brief/sessions/native-session/index.json", JSON.stringify(unattendedIndex()));
+  await unattended.step(1, { inputs: [claimedUser("scheduled-request")] });
+  assert.equal(earlierBlocks(unattended).length, 0, "nobody is there to ask: an automated, scheduled or programme turn");
+
+  const child = await nativePolicyFixture({ tree: earlierTree(), child: true });
+  await child.step(1);
+  assert.equal(earlierBlocks(child).length, 0, "a child is told by its parent");
+});
+
+test("a person's attended first message gets the block, and a file that message names is not an earlier conversation's", async () => {
+  const f = await nativePolicyFixture({ tree: earlierTree() });
+  proveNativeAttendance(f, ["human-first"]);
+  writeAttendanceReceipt(f, "human-first", false, { text: "帮我看看 notes.md 里的数据" });
+  await f.step(1, { inputs: [claimedUser("human-first", "帮我看看 notes.md 里的数据")] });
+  const blocks = earlierBlocks(f);
+  assert.equal(blocks.length, 1, "attended by receipt");
+  assert.doesNotMatch(blocks[0].content[0].text, /notes\.md/, "named by the person's own message");
+  assert.match(blocks[0].content[0].text, /designs\/A_fixed\.json/);
+});
+
+test("the earlier-files listing is bounded, and an unreadable directory is a diagnostic, never a lost step", async () => {
+  const { listEarlierFiles, earlierFilesText, EARLIER_FILES_NAMES } = await import("../src/earlierFiles.mjs");
+  // Entries: more files than the block names, and a count of what was left out.
+  const many = /** @type {Record<string, { name: string, directory: boolean }[]>} */ ({ "": Array.from({ length: 30 }, (_, index) => ({ name: `f${String(index).padStart(2, "0")}.txt`, directory: false })) });
+  const listed = await listEarlierFiles(async (relative) => many[relative] ?? []);
+  assert.equal(listed.names.length, EARLIER_FILES_NAMES);
+  assert.equal(listed.more, 30 - EARLIER_FILES_NAMES);
+  assert.match(earlierFilesText(listed), /另有 18 个/);
+  // Depth, entries and time each stop the walk and say so.
+  const deep = async () => [{ name: "d", directory: true }, { name: "x.txt", directory: false }];
+  const shallow = await listEarlierFiles(deep, { depth: 2 });
+  assert.equal(shallow.names.length, 3, "root, d and d/d are read; d/d/d is not");
+  const capped = await listEarlierFiles(deep, { entries: 5 });
+  assert.equal(capped.truncated, true);
+  let clock = 0;
+  const slow = await listEarlierFiles(async () => { clock += 100; return [{ name: "d", directory: true }]; }, { now: () => clock, ms: 250 });
+  assert.equal(slow.truncated, true);
+  assert.equal(earlierFilesText({ names: [], more: 0, truncated: false }), "");
+
+  // An unreadable directory: the step goes on, no block of a listing nobody could read, and the diagnostic says so.
+  const lines = /** @type {string[]} */ ([]);
+  const f = await nativePolicyFixture({ tree: { "": "!" } });
+  f.ctx.provide("evimedDiagnostics", { degrade: (/** @type {string} */ line) => lines.push(line), notice() {} });
+  await f.step(1);
+  assert.equal(earlierBlocks(f).length, 0);
+  assert.equal(f.requests.length, 1, "the step was entered");
+  assert.equal(lines.filter((line) => /earlier-files listing/.test(line)).length, 1);
+});
+
 test('unattended dispatch refuses blocking questions and recursive schedules at the real policy seam', async () => {
   const f = await nativePolicyFixture();
   const called = watchedUnattendedTools(f);
@@ -4185,7 +4286,7 @@ test('an attended receipt proves only the exact words it signed: a request id us
 // ---- the wall-clock budget a dispatch states ----------------------------------------------------------------------------------------
 //
 // `timeBudgetMinutes` on a dispatch reaches the run policy in the session's index, and the policy says the clock to the model: at the
-// turn's first step and on crossing 50%, 75% and 90% of the budget, each once, measured on its own clock from the turn's own start. It
+// turn's first step and each time another 5% of the budget has passed, measured on its own clock from the turn's own start. It
 // is a line of context. Nothing is refused for it, no turn ends at it, and a turn without a budget reads exactly what it read before.
 
 const CLOCK_MINUTE = 60_000;
@@ -4208,37 +4309,29 @@ async function clockFixture({ child = false } = {}) {
 }
 const clockLine = (/** @type {number} */ budget, /** @type {number} */ used) => `<evimed-run>本轮时间预算 ${budget} 分钟，已用 ${used} 分钟，剩余 ${budget - used} 分钟。时间用完之前，要有一份完整的可交付成果。</evimed-run>`;
 
-test("a turn with a wall-clock budget is told the clock at its first step and on crossing 50%, 75% and 90%, each once", async () => {
+test("a turn with a wall-clock budget is told the clock at its first step and each time another 5% has passed, once each", async () => {
   const { f, dispatch, advance, clock } = await clockFixture();
   dispatch("run_clock", "req_clock", { timeBudgetMinutes: 60 });
   await f.step(1);
   assert.deepEqual(clock(), [clockLine(60, 0)], "the first step");
   await f.step(1);
-  advance(29);
+  advance(2);
   await f.step(1);
-  assert.equal(clock().length, 1, "29 of 60 minutes is not yet half");
+  assert.equal(clock().length, 1, "2 of 60 minutes is not yet 5%");
   advance(1);
   await f.step(1);
   await f.step(1);
-  assert.deepEqual(clock().slice(1), [clockLine(60, 30)], "half, once");
-  advance(14);
+  assert.deepEqual(clock().slice(1), [clockLine(60, 3)], "5%, once");
+  advance(27);
   await f.step(1);
-  assert.equal(clock().length, 2, "44 minutes is not three quarters");
-  advance(1);
+  assert.deepEqual(clock().slice(2), [clockLine(60, 30)], "one long step is told once, the latest");
+  advance(30);
   await f.step(1);
-  assert.deepEqual(clock().slice(2), [clockLine(60, 45)], "three quarters");
-  advance(8);
-  await f.step(1);
-  assert.equal(clock().length, 3, "53 minutes is not nine tenths");
-  advance(1);
-  await f.step(1);
-  assert.deepEqual(clock().slice(3), [clockLine(60, 54)], "nine tenths");
-  advance(5);
-  await f.step(1);
+  assert.deepEqual(clock().slice(3), [clockLine(60, 60)], "the budget is spent");
   advance(600);
   await f.step(1);
   await f.step(1);
-  assert.equal(clock().length, 4, "four lines in all: nothing more is said once the last has been, however long the turn runs");
+  assert.equal(clock().length, 4, "nothing more is said once the budget is spent, however long the turn runs");
 
   const line = f.injected.find((/** @type {any} */ message) => String(message.content?.[0]?.text).includes("本轮时间预算"));
   assert.equal(line.role, "user");
@@ -4327,13 +4420,13 @@ test("each dispatch's turn has its own clock, and a turn typed in later has none
   const { f, dispatch, advance, clock } = await clockFixture();
   dispatch("run_a", "req_a", { timeBudgetMinutes: 60 });
   await f.step(1);
-  advance(20);
+  advance(2);
   await f.step(1);
   assert.deepEqual(clock(), [clockLine(60, 0)]);
   await f.endTurn();
 
   // The next dispatch in the conversation: a new run, a new turn, its own budget and its own start.
-  advance(100);
+  advance(118);
   dispatch("run_b", "req_b", { timeBudgetMinutes: 30 });
   await f.step(2);
   assert.deepEqual(clock().slice(1), [clockLine(30, 0)], "the new turn's first step, from the new turn's own start (not 120 minutes in)");

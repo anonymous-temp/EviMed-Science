@@ -830,6 +830,14 @@ test("matching presentation exposes scientific assessment and no recruitment act
  assert.equal(view.candidates[0].eligibility,"insufficient_evidence");
 });
 
+test("a fact of the clinical records says beside its date that the date is its record header\'s, and for a past event that it is the latest it could be", () => {
+  const base = matchingBundle([]);
+  const fact = (/** @type {string} */ id, /** @type {any} */ source) => ({ id, variable: "myocardial_infarction", value: null, unit: null, occurredAt: "2100-03-01T00:00:00.000Z", polarity: "affirmed",
+    source: { documentId: "d", start: 0, end: 7, quote: "history", ...source } });
+  const view = presentMatchingTab({ ...base, match: { ...base.match, timeline: [fact("a", {}), fact("b", { dateBasis: "record_header" }), fact("c", { dateBasis: "record_header", dateBound: "no_later_than" })] } });
+  assert.deepEqual(view.timeline.map((/** @type {any} */ entry) => entry.dateNote), [null, "日期取自病历抬头", "日期取自病历抬头，事件发生不晚于这一天"]);
+});
+
 test("a person is shown by name and never by account id: the name when the account is there, a neutral label when it is gone, the platform's own label for its own hand, and nothing where no name was resolved", () => {
   const events = [
     { toState: "candidate", occurredAt: "2026-09-27T09:40:00.000Z", actor: "control-plane", note: "" },
@@ -900,6 +908,12 @@ test("a criterion's evidence shows every citation the verdict rests on, each wit
   assert.equal(judged([read], names).evidence.note, "单位 % 是按惯例读出的，原文没有印；日期取自同一份病历的另一处，不是这句话里印的");
   assert.equal(judged([{ ...read, dateLocator: undefined }], names).evidence.note, "单位 % 是按惯例读出的，原文没有印");
   assert.equal(judged([{ ...read, unitBasis: undefined, unit: undefined }], names).evidence.note, "日期取自同一份病历的另一处，不是这句话里印的");
+  // A date taken from the header of the record says so beside the date, in its own words; a past event\'s says it is the latest the event could be.
+  const headed = { ...later, dateLocator: { start: 0, end: 23 }, dateBasis: "record_header" };
+  assert.deepEqual([judged([headed], names).evidence.dateNote, judged([headed], names).evidence.note], ["日期取自病历抬头", null], "the older sentence about another line is not said as well");
+  assert.equal(judged([{ ...headed, dateBound: "no_later_than" }], names).evidence.dateNote, "日期取自病历抬头，事件发生不晚于这一天");
+  assert.equal(judged([later], names).evidence.dateNote, null, "a date the fact printed has no such words");
+  assert.equal(judged([{ ...later, dateBound: "no_later_than" }], names).evidence.dateNote, null, "a bound with no header basis is not a header date");
   // No name resolved (a document the viewer cannot name, or an evidence kind with none): the older label, and nothing invented.
   assert.equal(judged([later]).evidence.source, "病历原文");
   // Only what is quoted is shown, and no more than three citations.

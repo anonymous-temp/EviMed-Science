@@ -373,7 +373,7 @@ test("D4: what the reading proposes goes through the ordinary fact writer: posit
   assert.equal(store.rows.length, 1, "the record is read even though one of its facts was refused");
 });
 
-test("D4 / V2: a date the record does not show costs the batch reading the date and not the fact", async () => {
+test("D4 / V2: a date the record does not show costs the batch reading the date and not the fact; the fact takes the date of its record's header", async () => {
   const records = { d1: "记录日期：2100-03-01\n患者每日口服多种维生素。肌酐 1.1 mg/dL。" };
   /** @type {any[]} */
   const saved = [];
@@ -389,7 +389,7 @@ test("D4 / V2: a date the record does not show costs the batch reading the date 
     return { answer: { facts: [
       // the date is printed by the second quotation: kept with its date
       { variable: "supplement", surface: "多种维生素", quote: "患者每日口服多种维生素。", occurredAt: "2100-03-01", dateSurface: "2100-03-01", dateQuote: "记录日期：2100-03-01" },
-      // the second quotation is not in the record, and the quotation prints no date: kept, undated
+      // the second quotation is not in the record, and the quotation prints no date: kept, at the date of the record's header (2026-11-02 ruling)
       { variable: "creatinine", value: 1.1, unit: "mg/dL", surface: "1.1", quote: "肌酐 1.1 mg/dL", occurredAt: "2100-03-05", dateQuote: "记录日期：2100-03-05" },
     ] }, inputTokens: 10, outputTokens: 5 };
   } };
@@ -403,5 +403,39 @@ test("D4 / V2: a date the record does not show costs the batch reading the date 
   assert.equal(result.diagnostics.factsRefused, 0);
   const [dated, undated] = saved;
   assert.deepEqual([dated.variable, dated.occurredAt, dated.source.dateQuote.quote], ["supplement", "2100-03-01", "记录日期：2100-03-01"]);
-  assert.deepEqual([undated.variable, undated.value, undated.occurredAt, undated.source.dateQuote], ["creatinine", 1.1, null, undefined]);
+  assert.deepEqual([undated.variable, undated.value, undated.occurredAt, undated.source.dateQuote?.quote, undated.source.dateBasis], ["creatinine", 1.1, "2100-03-01", "记录日期：2100-03-01", "record_header"]);
+  assert.equal(dated.source.dateBasis, undefined, "a date the fact's own quotations print is not said to come from a header");
+});
+
+test("D4 / 2026-11-02: a past event the model marks as historical takes the record header's date as the latest it could be, through the ordinary fact writer", async () => {
+  const records = { d1: "Record date: 2100-03-01\n\nHistory of myocardial infarction.\nTakes aspirin daily.\nNo stroke." };
+  /** @type {any[]} */
+  const saved = [];
+  const matchStore = matchStoreDouble({
+    async matchingFactsByIds() { return []; },
+    async saveFact({ fact }) { saved.push(fact); return { id: `fact_${saved.length}` }; },
+  });
+  const documents = {
+    async roster() { return [{ id: "d1", subjectKey: "P-001", chars: records.d1.length }]; },
+    async runtimeRead(_study, { subjectKey, documentId }) { return { id: documentId, text: records[documentId], subjectKey, visibleAt: "2100-03-02T00:00:00.000Z" }; },
+  };
+  const extractor = { model: "deepseek-flash", async extract() {
+    return { answer: { facts: [
+      { variable: "myocardial_infarction", surface: "myocardial infarction", quote: "History of myocardial infarction.", temporality: "historical" },
+      { variable: "aspirin", surface: "aspirin", quote: "Takes aspirin daily." },
+      // a negated finding is not an event that happened: the word is not carried
+      { variable: "stroke", polarity: "negated", surface: "stroke", quote: "No stroke.", temporality: "historical" },
+    ] }, inputTokens: 10, outputTokens: 5 };
+  } };
+  const run = createMatchExtractExecutor({
+    store: { async studyById() { return STUDY; }, async one() { return { checkpoint: {} }; } }, matchStore, documents, extractor, config: { vcrMatchExtractConcurrency: 1 },
+    writeFacts: ({ study, items, documents: held, caller }) => vcrRuntimeWrite({ store: {}, service: null, orchestrator: null, study, what: "fact", items, data: null, matchStore, documents: held, report: () => {}, caller }),
+  });
+  const scenario = { protocolVersionId: "pv_1", asOf: "2100-03-05T00:00:00.000Z", subjects: ["P-001"], variables: ["myocardial_infarction", "aspirin", "stroke"], ...frozenReading(["myocardial_infarction", "aspirin", "stroke"], [{ id: "d1", subjectKey: "P-001", chars: records.d1.length }]), chain: "c" };
+  const result = await run({ job: { id: "job_h", jobId: "job_h", studyId: STUDY.id, scenario, scenarioHash: "d".repeat(64), seed: 1 }, async onProgress() {}, isCanceled: async () => false });
+  assert.equal(result.diagnostics.factsKept, 3);
+  const [past, current, denied] = saved;
+  assert.deepEqual([past.occurredAt, past.source.dateBasis, past.source.dateBound, past.clinical.temporality, past.polarity], ["2100-03-01", "record_header", "no_later_than", "historical", "affirmed"]);
+  assert.deepEqual([current.occurredAt, current.source.dateBasis, current.source.dateBound, current.clinical ?? null], ["2100-03-01", "record_header", undefined, null]);
+  assert.deepEqual([denied.polarity, denied.source.dateBound, denied.clinical ?? null], ["negated", undefined, null]);
 });

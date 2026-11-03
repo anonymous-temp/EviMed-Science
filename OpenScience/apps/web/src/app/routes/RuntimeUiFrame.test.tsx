@@ -1422,6 +1422,20 @@ describe("the run behind the task, in the frame", () => {
     });
   });
 
+  it("refreshes the adjacent project on a validated native same-session settlement", async () => {
+    const { frame } = await openTask();
+    const settled = vi.fn();
+    window.addEventListener("evimed:conversation-settled", settled);
+    try {
+      emit(frame, { type: "evimed.runtime-ui.turn-settled", seq: 3, sessionId: "session-other" });
+      expect(settled).not.toHaveBeenCalled();
+      emit(frame, { type: "evimed.runtime-ui.turn-settled", seq: 4, sessionId: "session-a" });
+      expect(settled).toHaveBeenCalledTimes(1);
+      emit(frame, { type: "evimed.runtime-ui.turn-settled", seq: 4, sessionId: "session-a" });
+      expect(settled).toHaveBeenCalledTimes(1);
+    } finally { window.removeEventListener("evimed:conversation-settled", settled); }
+  });
+
   it("keeps the task when the reader opens a delegated child's view inside the frame", async () => {
     mocks.listRuns.mockResolvedValue([run]);
     const { frame } = await openTask();
@@ -1500,6 +1514,20 @@ describe("the run behind the task, in the frame", () => {
     await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent(/^\/app\/virtual-research\/std_1$/));
     emit(frame, { type: "evimed.runtime-ui.open-vcr-result", seq: 15, studyId: "std_2", tab: "patients" });
     await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent("/app/virtual-research/std_2/patients"));
+  });
+
+  // 2026-11-02: the reply said an E-value of 3.0 and the page 2.22, the newest comparison of the study; the link now names the comparison.
+  it("opens the comparison tab on the saved comparison the reply cited, and names one for no other tab", async () => {
+    const { frame } = await openTask();
+    emit(frame, { type: "evimed.runtime-ui.open-vcr-result", seq: 3, studyId: "std_1", tab: "comparator", object: "cmp_3a" });
+    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent(/^\/app\/virtual-research\/std_1\/comparator$/));
+    expect(screen.getByTestId("search")).toHaveTextContent("?object=cmp_3a");
+    emit(frame, { type: "evimed.runtime-ui.open-vcr-result", seq: 4, studyId: "std_1", tab: "trial", object: "cmp_3a" });
+    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent(/^\/app\/virtual-research\/std_1\/trial$/));
+    expect(screen.getByTestId("search")).toBeEmptyDOMElement();
+    emit(frame, { type: "evimed.runtime-ui.open-vcr-result", seq: 5, studyId: "std_1", tab: "comparator", object: "../x" });
+    await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent(/^\/app\/virtual-research\/std_1\/comparator$/));
+    expect(screen.getByTestId("search")).toBeEmptyDOMElement();
   });
 
   it("opens a file the frame names in the shell's reader, and nothing it could spell as an escape", async () => {

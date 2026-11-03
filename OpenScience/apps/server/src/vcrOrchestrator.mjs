@@ -77,7 +77,7 @@ import { isModelDocumentKind } from "./vcrModelDocuments.mjs";
 import { VCR_COMPARISON_RESULT_KIND, VCR_SCHEMA } from "./vcrPersistence.mjs";
 import { vcrSealRequired } from "./vcrSeal.mjs";
 import { VCR_SUBJECT_KINDS, vcrResultKindFor } from "./vcrJobs.mjs";
-import { vcrObjectLine } from "./vcrSubjects.mjs";
+import { vcrJobStage, vcrObjectLine } from "./vcrSubjects.mjs";
 import { vcrRequestedSteps, vcrRouteOptions } from "./vcrService.mjs";
 import { vcrObjectNode } from "./vcrStore.mjs";
 import { vcrCurrentNodes, vcrInputDigest, vcrReviewIsCurrent } from "./vcrViews.mjs";
@@ -2714,17 +2714,45 @@ export class VcrOrchestrator {
    * The zero-effect check of a design a conversation simulated. A conversation computes its designs itself (`vcr_simulate`) and the
    * programme queues none of them, so the check the skill promises ("the platform adds it") is queued here, once the alternative's
    * simulation has landed on the design and only for that design: nothing else of the design's plan is run. It is the same stage as
-   * the programme's (`vcrBuildStages` builds it, `#enqueueStage` queues it), so the result, the page and a failed or cancelled check
-   * read as they do there: a check that does not finish never touches the result.
+   * the programme's (`vcrBuildStages` says whether the design has one, and `#enqueueStage` queues it), so the result, the page and a
+   * failed or cancelled check read as they do there: a check that does not finish never touches the result.
+   * The check is of the simulation that was run: the scenario that job froze, with the one key that says no effect, and not the design
+   * as it was written (a run states its own numbers and the design may hold others, or none). A later simulation of the same design with
+   * other numbers is another computation, and gets a check of its own; the figure of the earlier one leaves the result when it lands
+   * (`vcrMergeStageResult`).
    * @param {any} study @param {VcrRead} read @param {{ enqueued: string[] }} result
    */
   async #enqueueConversationChecks(study, read, result) {
     if (study.scope !== "conversation") return;
+    /** @type {Map<string, any> | null} */
+    let simulations = null;
+    /** @type {Map<string, any>} */
+    let checks = new Map();
     for (const row of read.scenarios) {
       const node = vcrObjectNode("trial_scenario", row);
       const marks = read.marksByNode.get(node) ?? [];
-      if (marks.find((mark) => mark.key === `job:${node}#simulation`)?.state !== "done"
-        || marks.some((mark) => mark.key === `job:${node}#simulation_null`)) continue;
+      if (marks.find((mark) => mark.key === `job:${node}#simulation`)?.state !== "done") continue;
+      const held = marks.find((mark) => mark.key === `job:${node}#simulation_null`);
+      if (!simulations) {
+        simulations = new Map((await this.store.rows(`SELECT DISTINCT ON (checkpoint ->> 'node') checkpoint ->> 'node' AS node, id, scenario, checkpoint
+          FROM ${VCR_SCHEMA}.jobs WHERE study_id = $1 AND kind = 'design_simulation' AND checkpoint ->> 'stage' = 'simulation' AND state = 'succeeded'
+          ORDER BY checkpoint ->> 'node', finished_at DESC NULLS LAST, created_at DESC`, [study.id])).map((each) => [String(each.node), each]));
+        checks = new Map((await this.store.rows(`SELECT DISTINCT ON (checkpoint ->> 'node') checkpoint ->> 'node' AS node, checkpoint ->> 'checkOf' AS check_of
+          FROM ${VCR_SCHEMA}.jobs WHERE study_id = $1 AND kind = 'design_simulation' AND checkpoint ->> 'stage' = 'simulation_null'
+          ORDER BY checkpoint ->> 'node', created_at DESC`, [study.id])).map((each) => [String(each.node), each]));
+      }
+      const simulation = simulations.get(node);
+      if (!simulation) continue;
+      // The check that is there stands when it is of this simulation, or names none (one made before a check followed its simulation).
+      // A check of an earlier simulation is replaced: its mark goes, and the pass below queues the one for this.
+      if (held) {
+        const checkOf = checks.get(node)?.check_of;
+        if (!checkOf || checkOf === simulation.id) continue;
+        await this.store.query(`DELETE FROM ${VCR_SCHEMA}.schedule_marks WHERE study_id = $1 AND kind = 'job' AND key = $2`, [study.id, `job:${node}#simulation_null`]);
+      }
+      const frozen = object(simulation.scenario);
+      const truth = vcrNullTruth(frozen);
+      if (!truth || vcrIsNullScenario(frozen)) continue;
       const item = { step: "trial", kind: "trial_scenario", row };
       let modelResult = null;
       const modelResultId = object(row.configuration).modelResultId;
@@ -2735,8 +2763,11 @@ export class VcrOrchestrator {
       const plan = vcrBuildStages(item, { study, definition: read.definition, assumptions: read.assumptions, populations: read.populations,
         scenarios: read.scenarios, grid: read.grid, analytic: null, analyticJob: null, models: read.models, forecast: read.forecast, modelResult });
       if (plan.ok === false) continue;
-      const check = plan.stages.find((entry) => entry.stage === "simulation_null");
-      if (!check) continue;
+      const planned = plan.stages.find((entry) => entry.stage === "simulation_null");
+      if (!planned) continue;
+      const used = object(simulation.checkpoint);
+      const check = { ...planned, scenario: { ...frozen, truth }, bound: list(used.bound),
+        detail: { check: true, ...Object.fromEntries(["timeUnitBasis", "modelDesign"].filter((key) => used[key] !== undefined).map((key) => [key, used[key]])), checkOf: String(simulation.id) } };
       const generation = Number((await this.store.one(`SELECT count(*)::integer AS n FROM ${VCR_SCHEMA}.jobs
         WHERE study_id = $1 AND checkpoint ->> 'node' = $2`, [study.id, node]))?.n ?? 0);
       const outcome = await this.#enqueueStage(study, item, node, check, read, generation, plan.stages.map((entry) => String(entry.stage)), [check]);
@@ -3199,14 +3230,66 @@ export class VcrOrchestrator {
    * The job that is computing this stage of this object right now, when the programme has one out: a design written in the
    * conversation is picked up by the next pass, so the run that then asks for its simulation has already been answered by it.
    * The run is given that job to read, not a second one beside it (five thousand replicates are minutes of the study's compute).
+   * The job comes with the scenario it froze, so the caller can tell whether it is the answer to the start in hand.
    * @param {string} studyId @param {{ node: string, stage?: string | null }} subject
-   * @returns {Promise<any | null>}
+   * @returns {Promise<(Record<string, any> & { scenario: Record<string, any> }) | null>}
    */
   async inFlightStage(studyId, subject) {
     const mark = await this.#mark(studyId, subject.stage ? `job:${subject.node}#${subject.stage}` : `job:${subject.node}`);
     if (!mark || !["claimed", "running"].includes(String(mark.state)) || !mark.job_id) return null;
     const job = await this.store.job(studyId, String(mark.job_id));
-    return job && ["queued", "running", "awaiting_budget"].includes(String(job.state)) ? job : null;
+    if (!job || !["queued", "running", "awaiting_budget"].includes(String(job.state))) return null;
+    const frozen = await this.store.one(`SELECT scenario FROM ${VCR_SCHEMA}.jobs WHERE study_id = $1 AND id = $2`, [studyId, job.id]);
+    return { ...job, scenario: object(frozen?.scenario) };
+  }
+
+  /**
+   * The scenario of one stage of an object the study already holds, built the way the programme builds it: the object's own
+   * configuration with the assumption cards that bind into it laid over a copy, and cut to the keys that stage's method reads.
+   * A conversation that wrote a design and then starts it by naming the object sends no scenario (`vcr_simulate start` with a
+   * `subjectId`); the engine used to be asked for an empty one and refused it key by key. Only a stage that reads nothing but the
+   * object and its cards is built here (a design's analytic, simulation and assurance, a design grid, a stated population, an E-value): one
+   * that waits on another result, a table or a snapshot is the programme's and answers `{ unavailable: true }`.
+   *
+   * @param {any} study @param {string} subjectId @param {string} jobKind
+   * @returns {Promise<{ scenario: Record<string, any>, detail: Record<string, any> } | { refused: { code: string, message: string, paths?: string[] } }
+   *   | { unavailable: true }>} `unavailable`: this is not an object (or a stage) the platform can build a scenario for
+   */
+  async stageScenarioOf(study, subjectId, jobKind) {
+    // A stand-alone E-value is its own scenario: the comparison it was filed as (`vcrConversationSubject`) holds the estimate and limit.
+    if (jobKind === "evalue") {
+      const filed = list(await this.store.comparatorDesigns(study.id, 200)).find((entry) => entry.id === subjectId);
+      return filed && Object.keys(object(filed.configuration)).length ? { scenario: structuredClone(object(filed.configuration)), detail: {} } : { unavailable: true };
+    }
+    const kindOfObject = /** @type {Record<string, string>} */ ({ design_analytic: "trial_scenario", design_simulation: "trial_scenario", assurance: "trial_scenario",
+      design_grid: "design_grid", generate_population: "population", literature_population: "population" })[jobKind];
+    if (!kindOfObject) return { unavailable: true };
+    const read = await this.#read(study);
+    const row = kindOfObject === "trial_scenario" ? list(await this.store.trialScenarios(study.id, 200)).find((entry) => entry.id === subjectId)
+      : kindOfObject === "design_grid" ? (read.grid && read.grid.id === subjectId ? read.grid : null)
+        : list(await this.store.populations(study.id, 200)).find((entry) => entry.id === subjectId);
+    if (!row) return { unavailable: true };
+    let modelResult = null;
+    const modelResultId = object(row.configuration).modelResultId ?? object(row.dimensions?.base).modelResultId;
+    if (modelResultId) {
+      try { modelResult = await readVcrModelDesignResult(this.store, study.id, String(modelResultId)); }
+      catch (error) { return { refused: { code: codeOf(error), message: String(error.message) } }; }
+    }
+    const plan = vcrBuildStages({ kind: kindOfObject, row }, { study,
+      definition: read.definition, assumptions: read.assumptions, populations: read.populations, scenarios: read.scenarios, grid: read.grid,
+      analytic: null, analyticJob: null, models: read.models, forecast: read.forecast, modelResult });
+    if (plan.ok === false) {
+      if ("refused" in plan) return { refused: plan.refused };
+      if ("waiting" in plan) return { unavailable: true };
+      const gap = list(object(plan.unavailable).gaps)[0];
+      return { refused: { code: "vcr_job_scenario_invalid", message: gap ? `${gap.title}。${gap.answers ?? ""}`.trim() : "引擎暂不支持这个对象的这一步。" } };
+    }
+    const wanted = vcrJobStage(jobKind, kindOfObject);
+    const found = plan.stages.find((entry) => entry.jobKind === jobKind && (wanted ? entry.stage === wanted : !String(entry.stage ?? "").endsWith("_null")));
+    if (!found || found.snapshot || list(found.derived).length || found.after) return { unavailable: true };
+    // The cards the stage laid over the object's own numbers are the job's record of where they came from, as in the programme's own jobs:
+    // the result page reads them to say 文献 and name the paper.
+    return { scenario: found.scenario, detail: { ...object(found.detail), ...(list(found.bound).length ? { bound: found.bound } : {}) } };
   }
 
   /**

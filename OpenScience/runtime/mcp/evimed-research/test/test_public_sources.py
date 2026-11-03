@@ -1187,10 +1187,11 @@ class PublicSourceConnectorTests(unittest.TestCase):
             "sources": [{"id": "PMID:1"}],
         }
         with mock.patch.object(sources, "_pubmed", return_value=result):
-            output = sources.literature({"query": "observed", "limit": 1})
-        self.assertEqual(output["status"], "warning")
+            output = sources.literature({"query": "observed", "limit": 1, "databases": ["pubmed"]})
         self.assertEqual(output["data"], result["data"])
-        self.assertTrue(any("bibliographic metadata only" in item for item in output["warnings"]))
+        self.assertEqual(output["status"], "success", "a standing fact of the page is not a warning about this call")
+        self.assertNotIn("warnings", output)
+        self.assertTrue(any("bibliographic metadata only" in item for item in output["next_actions"]))
         self.assertTrue(any("abstract or full text" in item for item in output["next_actions"]))
 
     def test_an_empty_evimed_answer_says_whether_concepts_or_the_query_emptied_it(self):
@@ -1466,6 +1467,186 @@ class PublicSourceConnectorTests(unittest.TestCase):
         self.assertTrue(any("not calculated" in item for item in result["warnings"]))
 
 
+
+class TrialRegistryAskedByName(unittest.TestCase):
+    """2026-11-02: registry 0 returned ClinicalTrials.gov records without a word, and multi-word queries failed."""
+
+    def setUp(self):
+        patcher = mock.patch.object(sources, "evimed_evidence_configured", return_value=True)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def ask(self, answer, **arguments):
+        asked = []
+
+        def post(url, **kwargs):
+            asked.append(kwargs["json_body"]["query"])
+            return answer(kwargs["json_body"]["query"])
+
+        with mock.patch.object(sources, "_get_json", side_effect=post), \
+             mock.patch.object(sources, "_trials_registry", side_effect=AssertionError("another registry was asked")):
+            return sources.trials({"registry": 0, **arguments}), asked
+
+    @staticmethod
+    def page(*records):
+        return {"code": 200, "data": {"list": list(records), "total": len(records)}}
+
+    def test_nothing_in_chictr_stays_nothing_in_chictr(self):
+        result, asked = self.ask(lambda query: self.page(), query="gout")
+        self.assertEqual(asked, ["gout"])
+        self.assertEqual(result["data"]["items"], [])
+        self.assertEqual(result["data"]["registry"], 0)
+        self.assertEqual(result["data"]["outcome"]["state"], "no_results")
+        self.assertIn("ChiCTR", result["data"]["outcome"]["how"])
+        self.assertIn("no other registry was asked", result["warnings"][0])
+
+    def test_a_refused_multi_word_query_is_asked_word_by_word_and_compared(self):
+        records = {
+            "痛风": [{"registrationNo": "ChiCTR1", "title": "痛风的降尿酸治疗"}, {"registrationNo": "ChiCTR2", "title": "痛风秋水仙碱预防"}],
+            "秋水仙碱": [{"registrationNo": "ChiCTR2", "title": "痛风秋水仙碱预防"}, {"registrationNo": "ChiCTR3", "title": "秋水仙碱与心梗"}],
+        }
+
+        def answer(query):
+            if query not in records:
+                raise sources.PublicSourceError("public_source_http_error", "refused", False)
+            return self.page(*records[query])
+
+        result, asked = self.ask(answer, query="痛风 秋水仙碱")
+        self.assertEqual(asked, ["痛风 秋水仙碱", "秋水仙碱", "痛风"])
+        items = result["data"]["items"]
+        self.assertEqual(items[0]["id"], "ChiCTR2", "the record holding both words leads")
+        self.assertEqual(items[0]["queryTermsFound"], "2/2")
+        self.assertEqual({item["id"] for item in items}, {"ChiCTR1", "ChiCTR2", "ChiCTR3"})
+        self.assertEqual(result["data"]["queryMatch"]["allTerms"], 1)
+        self.assertIn("word", result["summary"])
+        self.assertEqual(len(result["sources"]), 3)
+
+    def test_a_whole_query_that_answers_is_not_split(self):
+        result, asked = self.ask(lambda query: self.page({"cochraneId": "CN-1", "title": "Colchicine in gout"}), query="gout colchicine", registry=2)
+        self.assertEqual(asked, ["gout colchicine"])
+        self.assertEqual(result["data"]["items"][0]["id"], "CN-1")
+
+    def test_a_refusal_of_one_word_stays_an_error(self):
+        def refuse(url, **kwargs):
+            raise sources.PublicSourceError("public_source_http_error", "refused", False)
+
+        with mock.patch.object(sources, "_get_json", side_effect=refuse), \
+             mock.patch.object(sources, "_trials_registry", side_effect=AssertionError("another registry was asked")):
+            with self.assertRaises(sources.PublicSourceError):
+                sources.trials({"registry": 0, "query": "痛风"})
+
+    def test_an_outage_on_every_word_is_an_outage_and_retryable_not_a_refusal_of_the_query(self):
+        """REVIEWFIX2 11: the whole query came back empty and every word answered 503; the run was told the registry refused the query."""
+        def answer(query):
+            if query == "痛风 秋水仙碱":
+                return self.page()
+            raise sources.PublicSourceError("public_source_http_error", "Public source returned HTTP 503.", True)
+
+        with self.assertRaises(sources.PublicSourceError) as caught:
+            self.ask(answer, query="痛风 秋水仙碱")
+        error = caught.exception
+        self.assertTrue(error.retryable, "an outage is for trying again, not for rewording")
+        self.assertNotIn("refused", str(error))
+        self.assertIn("HTTP 503", str(error), "the plain cause")
+        self.assertIn("ChiCTR", str(error))
+
+    def test_words_the_registry_refused_are_still_a_refusal(self):
+        def answer(query):
+            if query == "痛风 秋水仙碱":
+                return self.page()
+            raise sources.PublicSourceError("public_source_http_error", "Public source returned HTTP 400.", False)
+
+        with self.assertRaises(sources.PublicSourceError) as caught:
+            self.ask(answer, query="痛风 秋水仙碱")
+        self.assertFalse(caught.exception.retryable)
+        self.assertIn("refused this query", str(caught.exception))
+
+    def test_the_default_registry_says_what_it_did_not_ask(self):
+        with mock.patch.object(sources, "_get_json", return_value=self.page({"registrationNo": "NCT1", "title": "t"})):
+            result = sources.trials({"query": "gout"})
+        self.assertTrue(any("registry 0 is ChiCTR" in action for action in result["next_actions"]))
+
+
+class ProsperoConnector(unittest.TestCase):
+    def test_words_are_joined_and_a_written_query_is_left_alone(self):
+        self.assertEqual(sources._prospero_term("gout  colchicine"), "gout AND colchicine")
+        self.assertEqual(sources._prospero_term('gout OR "uric acid"'), 'gout OR "uric acid"')
+
+    def test_a_registered_review_reads_as_its_number_title_status_and_link(self):
+        answer = [{"linenumber": 1, "hits": 101, "retvals": {"hits": {"hits": [{"_source": {
+            "accessionnumber": "CRD42024589149", "title": "<p>Colchicine &amp; gout</p>", "reviewstatus": "Ongoing",
+            "yearfirstpublished": "2024", "isliving": "standard",
+        }}]}}}]
+        with mock.patch.object(sources, "_get_json_value", return_value=answer) as call:
+            result = sources.biomedical_search({"source": "prospero", "query": "gout colchicine", "limit": 3})
+        body = call.call_args.kwargs["json_body"]
+        self.assertEqual((body["term"], body["page"], body["nperpage"]), ("gout AND colchicine", 1, 50), "the registry's own page size, so pages line up")
+        item = result["data"]["items"][0]
+        self.assertEqual(item, {
+            "id": "CRD42024589149", "title": "Colchicine & gout", "url": "https://www.crd.york.ac.uk/PROSPERO/view/CRD42024589149",
+            "reviewStatus": "Ongoing", "year": "2024",
+        })
+        self.assertEqual(result["data"]["total"], 101)
+        self.assertEqual(result["sources"][0]["source"], "prospero")
+
+    @staticmethod
+    def register(total):
+        """A registry holding `total` reviews, paged as its own page does."""
+        def answer(url, **kwargs):
+            body = kwargs["json_body"]
+            first = (body["page"] - 1) * body["nperpage"]
+            hits = [{"_source": {"accessionnumber": "CRD42%06d" % number, "title": "Review %d" % number, "reviewstatus": "Ongoing"}}
+                    for number in range(first, min(first + body["nperpage"], total))]
+            return [{"linenumber": 1, "hits": total, "retvals": {"hits": {"hits": hits}}}]
+        return answer
+
+    def test_a_partial_read_says_how_much_was_read_of_how_many_and_how_to_read_on(self):
+        """REVIEWFIX2 9: 101 hits at limit 10 read "Retrieved 10" with only data.total, and a topic could be called open on a partial read."""
+        with mock.patch.object(sources, "_get_json_value", side_effect=self.register(101)):
+            result = sources.biomedical_search({"source": "prospero", "query": "gout colchicine", "limit": 10})
+        self.assertEqual(len(result["data"]["items"]), 10)
+        outcome = result["data"]["outcome"]
+        self.assertEqual((outcome["state"], outcome["returned"], outcome["total"], outcome["remaining"]), ("more_available", 10, 101, 91))
+        self.assertEqual(outcome["next"]["arguments"], {"offset": 10})
+        self.assertIn("10 of 101", result["summary"])
+        self.assertIn("partial", result["summary"].lower())
+        self.assertTrue(any("do not conclude" in warning.lower() for warning in result["warnings"]))
+
+    def test_the_register_is_paged_through_to_the_asked_records_and_a_whole_read_is_complete(self):
+        asked = []
+        register = self.register(101)
+
+        def recorded(url, **kwargs):
+            asked.append(kwargs["json_body"]["page"])
+            return register(url, **kwargs)
+
+        with mock.patch.object(sources, "_get_json_value", side_effect=recorded):
+            result = sources.biomedical_search({"source": "prospero", "query": "gout", "limit": 10, "offset": 95})
+        self.assertEqual(asked, [2, 3], "records 95..104 sit on the second and third pages")
+        self.assertEqual([item["title"] for item in result["data"]["items"]], ["Review %d" % number for number in range(95, 101)])
+        self.assertEqual(result["data"]["outcome"]["state"], "complete")
+        self.assertEqual(result["data"]["outcome"]["returned"], 101)
+
+    def test_how_far_one_query_can_be_read_is_stated_and_a_larger_ask_is_refused(self):
+        with mock.patch.object(sources, "_get_json_value", side_effect=self.register(2000)):
+            result = sources.biomedical_search({"source": "prospero", "query": "review", "limit": 5, "offset": 495})
+            self.assertEqual(result["data"]["outcome"]["state"], "truncated")
+            self.assertEqual(result["data"]["outcome"]["limit"], sources.PROSPERO_REACHABLE)
+            with self.assertRaises(sources.PublicSourceError) as caught:
+                sources.biomedical_search({"source": "prospero", "query": "review", "limit": 10, "offset": 495})
+        self.assertEqual(caught.exception.code, "public_source_query_invalid")
+
+    def test_an_offset_is_for_the_register_that_pages_and_no_other_source(self):
+        with self.assertRaises(sources.PublicSourceError) as caught:
+            sources.biomedical_search({"source": "isrctn", "query": "gout", "limit": 3, "offset": 10})
+        self.assertEqual(caught.exception.code, "public_source_query_invalid")
+
+    def test_an_error_answer_is_not_an_empty_register(self):
+        with mock.patch.object(sources, "_get_json_value", return_value={"errormessage": "Nothing to search for"}):
+            with self.assertRaises(sources.PublicSourceError):
+                sources.biomedical_search({"source": "prospero", "query": "gout", "limit": 3})
+
+
 if __name__ == "__main__":
     unittest.main()
 
@@ -1677,11 +1858,11 @@ class LiteratureDefaultMergesPubMedAndTheIndex(unittest.TestCase):
         self.assertEqual(result["data"]["total"], 500)
         self.assertEqual(result["data"]["outcome"]["state"], "more_available")
         # How many came from each, said once, plus how to read an index record whole.
-        self.assertIn("2 records from PubMed", result["warnings"][0])
-        self.assertIn("2 from the EviMed index", result["warnings"][0])
-        self.assertIn("0 index records already returned by PubMed", result["warnings"][0])
-        self.assertTrue(any("literature_search pmids" in warning and 'databases: ["internal"]' in warning for warning in result["warnings"]))
-        self.assertTrue(any("bibliographic metadata only" in warning for warning in result["warnings"]))
+        self.assertIn("2 PubMed records", result["summary"])
+        self.assertIn("2 more from the EviMed index", result["summary"])
+        self.assertIn("0 index records PubMed also returned", result["summary"])
+        self.assertTrue(any("literature_search pmids" in action and 'databases: ["internal"]' in action for action in result["next_actions"]))
+        self.assertTrue(any("bibliographic metadata only" in action for action in result["next_actions"]))
 
     def test_an_index_record_pubmed_already_returned_is_dropped_by_doi_by_pmid_and_by_title(self):
         result = self.search(
@@ -1704,7 +1885,7 @@ class LiteratureDefaultMergesPubMedAndTheIndex(unittest.TestCase):
         )
         ids = [item["id"] for item in result["data"]["items"]]
         self.assertEqual(ids, ["PMID:1", "PMID:2", "PMID:3", "EVIMED-LITERATURE:other-doi", "EVIMED-LITERATURE:kept"])
-        self.assertIn("3 index records already returned by PubMed were dropped as duplicates", result["warnings"][0])
+        self.assertIn("3 index records PubMed also returned were dropped as duplicates", result["summary"])
         self.assertEqual([source["id"] for source in result["sources"]], ids, "a dropped record leaves no source behind")
 
     def test_an_index_record_is_compact_and_says_how_to_get_the_whole_record(self):
@@ -1720,19 +1901,68 @@ class LiteratureDefaultMergesPubMedAndTheIndex(unittest.TestCase):
         self.assertEqual(item["abstract"], "A" * 800 + "\u2026")
         self.assertNotIn("aiSummary", item)
         self.assertEqual((item["journal"], item["year"], item["url"]), ("J", 2024, "https://pubmed.ncbi.nlm.nih.gov/9/"))
-        self.assertTrue(any("cut to 800 characters" in warning and "url" in warning for warning in result["warnings"]))
+        self.assertTrue(any("cut to 800 characters" in action and "url" in action for action in result["next_actions"]))
         # An abstract that fits is not marked as cut.
         short = self.search(_pubmed_result(("1", "t", None)), _index_payload({"id": "s", "title": "Short", "abstract": "B" * 800}))
         self.assertEqual(short["data"]["items"][1]["abstract"], "B" * 800)
 
-    def test_the_index_alone_keeps_its_full_payload(self):
-        payload = _index_payload({"id": "ix", "title": "Index paper", "abstract": "A" * 5000, "aiSummary": "S" * 500})
+    def index_alone(self, *records, **arguments):
+        payload = _index_payload(*records)
         with mock.patch.object(sources, "evimed_evidence_configured", return_value=True), \
              mock.patch.object(sources, "_pubmed", side_effect=AssertionError("PubMed is not asked when the index answers alone")), \
              mock.patch.object(sources, "_get_json", return_value=payload):
-            result = sources.literature({"query": "q", "limit": 5, "databases": ["internal"]})
-        item = result["data"]["items"][0]
-        self.assertEqual((len(item["abstract"]), item["aiSummary"]), (5000, "S" * 500))
+            return sources.literature({"query": "q", "limit": 5, "databases": ["internal"], **arguments})
+
+    def test_the_index_alone_is_compact_and_gives_its_whole_payload_when_asked(self):
+        record = {"id": "ix", "title": "Index paper", "abstract": "A" * 5000, "aiSummary": "S" * 500}
+        compact = self.index_alone(record)["data"]["items"][0]
+        self.assertEqual(compact["abstract"], "A" * 800 + "\u2026")
+        self.assertNotIn("aiSummary", compact)
+        whole = self.index_alone(record, fullRecords=True)["data"]["items"][0]
+        self.assertEqual((len(whole["abstract"]), whole["aiSummary"]), (5000, "S" * 500))
+
+    def test_an_index_record_says_how_many_query_words_it_holds_and_those_holding_all_lead(self):
+        # 2026-11-02: an "eGFR" query led with EGFR lung-cancer papers; casefolding would have called them matches.
+        result = self.index_alone(
+            {"id": "noise", "title": "Osimertinib in EGFR-mutant lung cancer"},
+            {"id": "some", "title": "RASi discontinuation in advanced CKD"},
+            {"id": "both", "title": "RASi after eGFR decline"},
+            query="RASi eGFR",
+        )
+        self.assertEqual([item["id"] for item in result["data"]["items"]],
+                         ["EVIMED-LITERATURE:both", "EVIMED-LITERATURE:some", "EVIMED-LITERATURE:noise"])
+        self.assertEqual([item["queryTermsFound"] for item in result["data"]["items"]], ["2/2", "1/2", "0/2"])
+        self.assertEqual(result["data"]["queryMatch"], {"terms": ["RASi", "eGFR"], "allTerms": 1, "someTerms": 1, "noTerm": 1})
+        self.assertEqual(result["status"], "warning")
+        self.assertIn("1 of these records hold none of the query's words", result["warnings"][0])
+        clean = self.index_alone({"id": "both", "title": "RASi after eGFR decline"}, query="RASi eGFR")
+        self.assertEqual(clean["status"], "success", "nothing to say about this call")
+
+    def test_the_index_alone_names_the_database_drops_repeats_and_the_wrong_script(self):
+        result = self.index_alone(
+            {"id": "a", "title": "痛风的 Meta 分析", "url": "https://d.wanfangdata.com.cn/periodical/x", "journal": "unknown"},
+            {"id": "b", "title": "痛风的 Meta 分析", "url": "https://kns.cnki.net/kcms/x"},
+            {"id": "c", "title": "An English paper in the foreign-literature mirror", "url": "https://chkdx.cnki.net/x"},
+            {"id": "d", "title": "秋水仙碱预防", "url": "https://qikan.cqvip.com/x"},
+            query="痛风", language="zh",
+        )
+        items = result["data"]["items"]
+        self.assertEqual({item["id"] for item in items}, {"EVIMED-LITERATURE:a", "EVIMED-LITERATURE:d"})
+        self.assertEqual({item["database"] for item in items}, {"Wanfang", "VIP"})
+        self.assertNotIn("journal", next(item for item in items if item["id"].endswith(":a")), "unknown is not a journal")
+        self.assertEqual((result["data"]["excludedForLanguage"], result["data"]["duplicatesDropped"]), (1, 1))
+
+    def test_the_index_alone_pages_within_what_one_query_reaches(self):
+        records = [{"id": str(index), "title": "Paper number %d on q" % index} for index in range(12)]
+        first = self.index_alone(*records, limit=5)
+        self.assertEqual(len(first["data"]["items"]), 5)
+        self.assertEqual(first["data"]["outcome"]["state"], "more_available")
+        self.assertEqual(first["data"]["outcome"]["next"]["arguments"], {"offset": 5, "databases": ["internal"]})
+        second = self.index_alone(*records, limit=5, offset=5)
+        self.assertEqual(second["data"]["items"][0]["id"], "EVIMED-LITERATURE:5")
+        last = self.index_alone(*records, limit=5, offset=10)
+        self.assertEqual(len(last["data"]["items"]), 2)
+        self.assertEqual(last["data"]["outcome"]["state"], "complete")
 
     def test_pubmed_alone_keeps_the_pubmed_only_path_and_naming_both_is_the_default(self):
         with mock.patch.object(sources, "_evimed_literature_records", side_effect=AssertionError("the index is not asked")), \

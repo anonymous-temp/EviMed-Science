@@ -477,6 +477,12 @@ test('a 虚拟临床研究 result is opened by naming a study id and one of the 
   ]) hub.send('open-vcr-result', fields);
   const opened = f.sent.filter((row) => row.message.type === 'evimed.runtime-ui.open-vcr-result').map((row) => row.message);
   assert.deepEqual(opened.map((message) => [message.studyId, message.tab]), VCR_TABS.map((tab) => ['std_1', tab]));
+  // The comparison tab, and only it, may name which saved comparison it opens on; an id that is not an application id is dropped, not the message.
+  hub.send('open-vcr-result', { studyId: 'std_1', tab: 'comparator', object: 'cmp_1' });
+  hub.send('open-vcr-result', { studyId: 'std_1', tab: 'trial', object: 'cmp_1' });
+  hub.send('open-vcr-result', { studyId: 'std_1', tab: 'comparator', object: '../x' });
+  const named = f.sent.filter((row) => row.message.type === 'evimed.runtime-ui.open-vcr-result').map((row) => row.message).slice(VCR_TABS.length);
+  assert.deepEqual(named.map((message) => [message.tab, message.object ?? null]), [['comparator', 'cmp_1'], ['trial', null], ['comparator', null]]);
   // Only the two fields travel: the frame names a place, never an address.
   for (const message of opened) assert.deepEqual(Object.keys(message).sort(), ['frameId', 'projectId', 'seq', 'studyId', 'tab', 'type', 'version'].sort());
   assert.equal(opened[0].projectId, f.sent[0].message.projectId, 'the frame\'s own project, not the one the body named');
@@ -761,4 +767,22 @@ test('the frame takes no account of where a GEO project stands: the page beside 
   hub.on('geo',data=>delivered.push(data));apply(f.ctx,{},f.target,undefined,{hub});await settle();
   shellSends(f,{type:'evimed.runtime-ui.geo',seq:1,sessionId:'session-a',journey:{title:'t',nextStep:'https://evil.test'}});
   assert.equal(delivered[0].journey,undefined);
+});
+
+test('the same native session announces a settled turn only after observed host running', async () => {
+  const f = fixture();
+  let running = false;
+  let changed = () => {};
+  f.ctx.sessions.list.getSnapshot = () => mainView('session-new', { 'session-new': { running } });
+  f.ctx.sessions.list.subscribe = (/** @type {() => void} */ listener) => { changed = listener; return () => {}; };
+  apply(f.ctx, {}, f.target);
+  await settle(); f.navigate(); await settle();
+  const notifications = () => f.sent.filter(row => row.message.type === 'evimed.runtime-ui.turn-settled');
+  assert.equal(notifications().length, 0);
+  running = true; changed();
+  assert.equal(notifications().length, 0);
+  running = false; changed(); changed();
+  assert.equal(notifications().length, 1);
+  assert.equal(notifications()[0].message.sessionId, 'session-new');
+  f.ctx.dispose();
 });

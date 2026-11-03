@@ -2,6 +2,30 @@
 
 Date: 2026-11-03. Status: researched protocol, not an executed platform benchmark.
 
+Owner execution amendment (2026-11-03): merge `c180ff7b5` with the current integration line (`origin/codex/release-1102`, `3970e4f8f`) first. Implement missing ranking and a usable frozen-corpus retrieval path, verify locally, commit and push before the paid platform baseline. Production remains the owner's reported November 1 version and is not the baseline. Run a real local DSH kernel. This amendment supersedes any earlier instruction here to benchmark the unmerged feature or count alignment failures as incorrect predictions.
+
+### Execution ledger
+
+- [ ] Merge both lines without losing either line's evidence/date fixes.
+- [ ] Connect explicit trial matching ranking to the product result path.
+- [ ] Support a frozen, versioned trial collection through the same product retrieval/record boundary, with up to 500 candidates and paged reads; preserve live-registry behavior separately.
+- [ ] Implement and freeze source-span alignment with explicit unresolved buckets.
+- [ ] Build the local platform driver with throwaway-account lifecycle, automated attribution, patient-specific projects/sessions, and memory extraction disabled.
+- [ ] Complete scoped tests and independent code review; commit/push the integrated candidate without deployment.
+- [ ] Run the real local product baseline at that pushed revision, then record findings and any required repair/retest.
+
+### Mandatory test hygiene
+
+Each campaign registers and deletes its own account using `scripts/ops/throwaway-account.mjs`. Cleanup is required on success, failure and interruption; cancel owned jobs before deletion and retain an explicit cleanup receipt. Each patient gets a different project and conversation because conversations in one project share files. All dispatched/native runs carry verifiable `automated` attribution. Disable memory extraction and benchmark memory read/write/learning, and verify effective configuration rather than merely omitting a memory service. Model-visible workspaces contain no gold labels, prior answers or scorer code. Export needed test artifacts before deleting the account. No production account, production runtime or historical business workspace is used.
+
+### Frozen alignment rule
+
+Align only within the same patient/trial, criterion kind, frozen source document and source version. Normalize Unicode/whitespace conservatively while retaining a mapping to original character positions; preserve numbers, units, negation and logical operators. Locate literal annotation and platform source fragments first. Repeated occurrences without a unique location are ambiguous. Compare overlap of anchored source intervals, not embeddings or answer labels. Fixed thresholds and tie-breaking must be versioned and hashed before scoring.
+
+Prefer an exact whole-clause judgment. A split/merge relation must not copy a parent verdict onto every child. Score a fragment group only when the original clause's judgment or an explicitly preserved, supported composition makes the result unambiguous. Otherwise retain it as `split_unresolved`, `merged_unresolved`, `source_unlocated` or `ambiguous_overlap`. Do not have an LLM invent a mapping or use the gold answer to select one.
+
+Report `N=1015`, aligned/scorable M, correct C among M, C/M, M/N, and every unresolved bucket. Recompute historical GPT-4 agreement on the same scorable IDs for the paired comparison. Unaligned rows are neither incorrect nor dropped; they remain in the manifest and coverage report. Inference failures on an already aligned criterion remain failures. A low-coverage result cannot establish superiority even when its conditional accuracy is high.
+
 This document takes precedence over the experiment order in `2026-11-03-vcr-flash-matching-remediation.md`. That document remains the component diagnostic and remediation backlog. The primary treatment is EviMed Science's patient-matching feature, running on its normal DeepSeek + DSH foundation. Direct API and isolated DSH experiments are diagnostic controls only.
 
 ## 1. Decision to be made

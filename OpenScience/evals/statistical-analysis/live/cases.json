@@ -93,6 +93,17 @@
           "text": "保持刚才同一批数据、分组和已经算好的估计，现在把报告单位从毫米改成厘米。请只做必要的换算和报告更新，原始结果保留，告诉我均值差、95%区间和哪些量不变。"
         }
       ]
+    },
+    {
+      "id": "diagnostic-interpretation",
+      "turns": [
+        {
+          "inputs": [
+            "diagnostic.csv"
+          ],
+          "text": "这是模拟数据 data/diagnostic.csv，A、B 两组各是独立对象。请比较 B 相对 A 的 measurement 均值差及其 95% 区间，解释方法选择和你实际检查的假设，交付可复现报告。"
+        }
+      ]
     }
   ]
 }

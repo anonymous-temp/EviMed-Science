@@ -4,7 +4,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import test from 'node:test'
 
-import { MCP_TOOL_BASE_NAMES } from '../index.mjs'
+import { MCP_TOOL_BASE_NAMES, CAPABILITY_DISPLAY } from '../index.mjs'
 import { RESEARCH_TOOL_DISPLAY, RESEARCH_TOOL_GROUPS, RESEARCH_TOOL_GROUP_MODULES, researchToolGroups, researchToolsOfModule } from '../src/researchToolDisplay.mjs'
 import { SKILL_DISPLAY, SKILL_DISPLAY_GEO_GROUP, SKILL_DISPLAY_GROUPS, SKILL_DISPLAY_LOOPX_GROUP, skillDisplay } from '../src/skillDisplay.mjs'
 import { SKILL_PACKAGES } from '../src/skillPackages.mjs'
@@ -13,6 +13,12 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../.
 const CJK = /[㐀-鿿]/
 /** The origins the runtime image mounts as skill roots a model can see: what a researcher is offered. */
 const MODEL_VISIBLE = new Set(['core', 'curated', 'office', 'community', 'evimed'])
+
+test('the combined extensions catalogue distinguishes shipped skills from listed research tools', () => {
+  const tools = new Set(Object.values(CAPABILITY_DISPLAY).filter((row) => row.listed !== false).map((row) => row.title))
+  const duplicateTitles = Object.values(SKILL_DISPLAY).map((row) => row.title).filter((title) => tools.has(title))
+  assert.deepEqual(duplicateTitles, [])
+})
 
 /** Skill folders in a root, by name (a folder holding a SKILL.md). @param {string} relative */
 function skillFolders(relative) {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import {
   Bot,
@@ -63,11 +63,11 @@ interface NavItem {
 const NAV: NavItem[] = [
   { to: "/app/home", label: "新对话", icon: <SquarePen size={16} aria-hidden="true" /> },
   { to: "/app/capabilities", label: "科研工具", icon: <Bot size={16} aria-hidden="true" /> },
+  { to: "/app/active-research", label: "主动科研", icon: <Telescope size={16} aria-hidden="true" /> },
   { to: "/app/files", label: "知识库", icon: <FolderTree size={16} aria-hidden="true" /> },
   { to: "/app/memory", label: "记忆胶囊", icon: <Brain size={16} aria-hidden="true" /> },
   { to: "/app/autopilot", label: "定时任务", icon: <Orbit size={16} aria-hidden="true" /> },
   { to: "/app/extensions/discover", label: "插件与技能", icon: <Plug size={16} aria-hidden="true" /> },
-  { to: "/app/active-research", label: "主动科研", icon: <Telescope size={16} aria-hidden="true" /> },
 ];
 
 /**
@@ -80,7 +80,7 @@ const FRONTIER_NAV: NavItem = { to: "/app/frontier", label: "前沿动态", icon
 const SEARCH_NAV: NavItem = { to: "/app/search", label: "医学检索", icon: <Search size={16} aria-hidden="true" /> };
 
 /**
- * 「虚拟临床研究」 and 「循证 GEO」, in that order directly below 「科研工具」 — and,
+ * 「虚拟临床研究」 and 「循证 GEO」, in that order below 「主动科研」 — and,
  * like the frontier feed, only where `/api/me` offers the module to this
  * account (`features.vcr`, `features.geo`). A row that led to 「还没有开放」
  * would be a destination that is not one.
@@ -90,7 +90,7 @@ const GEO_NAV: NavItem = { to: "/app/geo", label: "循证 GEO", icon: <Radar siz
 
 /**
  * The rows in order: the frontier feed after 「新对话」, then 「虚拟临床研究」 and
- * 「循证 GEO」 after 「科研工具」, in that order — the two boards sit together,
+ * 「循证 GEO」 after 「科研工具」 and 「主动科研」, in that order — the two boards sit together,
  * and the one this account may not have simply is not there.
  */
 function navRows({ frontier, vcr, geo, search }: { frontier: boolean; vcr: boolean; geo: boolean; search: boolean }): NavItem[] {
@@ -98,7 +98,7 @@ function navRows({ frontier, vcr, geo, search }: { frontier: boolean; vcr: boole
     item,
     ...(frontier && item.to === "/app/home" ? [FRONTIER_NAV] : []),
     ...(search && item.to === "/app/home" ? [SEARCH_NAV] : []),
-    ...(item.to === "/app/capabilities" ? [...(vcr ? [VCR_NAV] : []), ...(geo ? [GEO_NAV] : [])] : []),
+    ...(item.to === "/app/active-research" ? [...(vcr ? [VCR_NAV] : []), ...(geo ? [GEO_NAV] : [])] : []),
   ]);
 }
 
@@ -117,6 +117,17 @@ export function isCurrent(to: string, pathname: string, projectModule: "geo" | "
   return pathname.startsWith(to);
 }
 
+/**
+ * Anatomy: Brand header, grouped destinations and project tree in a scrollable body, account footer and resize divider.
+ * Variants: Persistent desktop column or narrow-screen overlay; expanded or collapsed.
+ * States: Feature availability, current destination, project module, account and transient resize state.
+ * Hit area: Destination rows are links; footer controls and the divider retain their existing targets.
+ * Keyboard: Native links and buttons; divider arrows resize, Home/End select limits and Enter collapses.
+ * Long content: Row labels truncate; the shared body scrolls on short windows while the tree retains its own viewport.
+ * Theme: Existing surface-1 ground, ink labels and neutral group metadata; selection comes from NavItem.
+ * Responsive: Resizable desktop width; overlay below lg; project area retains a minimum height in the scrolling body.
+ * Verification: Sidebar.test.tsx covers routing, groups and controls. Browser geometry, native integration and real AT require separate checks.
+ */
 export function Sidebar() {
   const location = useLocation();
   const { sidebarCollapsed, sidebarWidth, setSidebarCollapsed, setSidebarWidth, toggleSidebar } = useUiStore();
@@ -204,16 +215,25 @@ export function Sidebar() {
           </div>
         </div>
 
-        <nav aria-label="工作台" className="flex flex-col px-3">
+        {/* Navigation and the project tree share a scroll fallback on short windows;
+          * the tree keeps its own viewport and mounted state, and the account stays outside. */}
+        <div data-sidebar-body="" className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+        <nav aria-label="工作台" className="flex shrink-0 flex-col px-3">
           {rows.map((item) => (
+            <Fragment key={item.to}>
+            {(item.to === "/app/home" || item.to === "/app/capabilities" || item.to === "/app/files" || item.to === "/app/autopilot") && (
+              <h2 className={cn("px-2 pb-1 text-meta font-normal text-text-3", item.to === "/app/home" ? "pt-1" : "pt-3")}>
+                {item.to === "/app/home" ? "工作台" : item.to === "/app/capabilities" ? "研究" : item.to === "/app/files" ? "资料与记忆" : "自动化与扩展"}
+              </h2>
+            )}
             <NavRow
-              key={item.to}
               to={item.to}
               icon={item.icon}
               label={item.label}
               active={isCurrent(item.to, location.pathname, projectModule)}
               freshState={item.to === "/app/home" ? () => ({ globalEntry: crypto.randomUUID() }) : undefined}
             />
+            </Fragment>
           ))}
         </nav>
 
@@ -221,13 +241,16 @@ export function Sidebar() {
           * project a group, its conversations inside, any of them one click
           * away and opened in place. It replaced a project dropdown here and a
           * list of the current project's recent work below the rows above. */}
-        <ProjectBrowser geo={geo} vcr={vcr} onCurrentModule={setProjectModule} />
+        <div className="flex min-h-48 flex-1 flex-col">
+          <ProjectBrowser geo={geo} vcr={vcr} onCurrentModule={setProjectModule} />
+        </div>
+        </div>
 
         {/* Account identity above its utilities keeps every action reachable at
           * the minimum width. The count of data sources without a credential used to
           * sit here — a standing fact about the deployment, not the reader's
           * work; 设置 → 数据源 lists what needs setting. */}
-        <div className="px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
+        <div className="shrink-0 px-4 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
           <div className="flex items-center gap-2">
             <span
               aria-hidden="true"

@@ -153,11 +153,16 @@ test("a fact written with a second quotation for its date and a unit read by con
   ]);
   assert.equal(done.issues.length, 0, "the date nobody printed is dropped, not the fact");
   assert.equal(done.ids.length, 3);
+  // Since the owner's ruling of 2026-11-02 a fact left with no date takes its record header's: the third write, once the date nobody printed
+  // is dropped, is the second one (same fact, same id), and the answer says which date it took.
+  assert.equal(done.ids[2], done.ids[1]);
+  assert.deepEqual(done.results[2].warnings.map((warning) => warning.code), ["date_not_shown"]);
+  assert.match(done.results[2].warnings[0].message, /2100-03-01/);
 
   const stored = await matchStore.listFacts({ studyId: study.id, subjectKey: "P-001" });
   const supplements = stored.filter((fact) => fact.variable === "dietary_supplement");
-  assert.deepEqual(supplements.map((fact) => fact.occurredAt).sort((a, b) => String(a).localeCompare(String(b))), ["2100-03-01T00:00:00.000Z", null], "the second row is stored without the date nobody printed");
-  assert.equal(supplements.find((fact) => fact.occurredAt === null).source.dateQuote, undefined);
+  assert.deepEqual(supplements.map((fact) => fact.occurredAt), ["2100-03-01T00:00:00.000Z"], "the date nobody printed (2100-03-02) is stored nowhere: the one row has the date the record's header prints");
+  assert.equal(supplements[0].source.dateQuote.quote, "Record date: 2100-03-01");
   const a1c = stored.find((fact) => fact.variable === "hba1c");
   assert.deepEqual([a1c.unit, a1c.value, a1c.source.unitBasis, a1c.source.dateQuote.quote, a1c.occurredAt], ["%", 7.4, "conventional", "Record date: 2100-03-01", "2100-03-01T00:00:00.000Z"]);
   assert.equal(text.slice(a1c.source.dateQuote.start, a1c.source.dateQuote.end), "Record date: 2100-03-01", "the row holds where the date was read, in the document's own bytes");

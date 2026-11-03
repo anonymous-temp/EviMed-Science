@@ -371,6 +371,10 @@ class AnalysisPipeline:
             "searched_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "total_fetched": len(self.articles),
             "search_strategy": getattr(self, "search_strategy", {}),
+            "record_field_semantics": {
+                "raw_records.json.country": "pubmed_journal_publication_country",
+                "cleaned_records.csv.countries": "countries_inferred_from_author_affiliations",
+            },
         }
         path = self.output_dir / "data" / "search_metadata.json"
         with open(path, "w", encoding="utf-8") as f:

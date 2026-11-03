@@ -7,7 +7,7 @@
 # child is) and `produces` (which contract validates the result) are
 # required. `tools` uses the model-visible names.
 id: clinical-evidence-synthesis
-version: 3.0.0
+version: 3.0.1
 title: Clinical Evidence Synthesis
 category: Clinical Evidence
 description: Transform an open-domain clinical question into a publication-grade deep evidence analysis
@@ -100,9 +100,9 @@ starterPrompts:
 # orchestrator (the fields above). The generator derives the shell's and the
 # frame's capability table from this block, and adds what evals/ measured.
 display:
-  title: "临床证据深度分析"
+  title: "文献综述"
   category: "临床证据"
-  description: "把一个临床问题做成可复现的检索，逐条核对引文，写成证据报告。"
+  description: "检索并综合研究文献，撰写有来源依据的叙述性或范围综述。"
   starterPrompts:
   - "≥70 岁人群阿司匹林一级预防的获益与出血风险。"
   - "分析急性胸闷胸痛的鉴别诊断，以及速效救心丸在其中的合理定位。"

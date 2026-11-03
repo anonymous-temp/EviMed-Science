@@ -151,7 +151,12 @@ Neither denominator establishes exact ancestry shares in the analyzed variants.
 this does not measure overlapping participants, independence, or the direction
 or magnitude of bias. Discuss directional mechanisms only conditionally with
 explicit assumptions and actual overlap evidence. F>10 is a diagnostic heuristic,
-not proof of instrument validity; skipped Egger/PRESSO remains skipped.
+not proof of instrument validity; skipped Egger/PRESSO remains skipped. Use the
+same qualified wording in the final reply: instrument strength supports, but does
+not prove, the relevance assumption. An Egger intercept that is not significant
+does not rule out pleiotropy, and a significant PRESSO result does not on its
+own prove which assumption failed. Unknown overlap does not by itself establish
+narrower confidence intervals or any specific bias direction.
 
 A failed managed job may return top-level `artifacts` with `partial-research.json`,
 `partial-research.md` and bounded scientific CSV projections. Keep the original

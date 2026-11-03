@@ -147,9 +147,11 @@ export function researchTopicPortfolioFindings(input) {
     notice(issues, 'topic-portfolio-schema', `${PORTFOLIO_FILE} must declare schemaVersion 1.0.0, researchDirection, researchContext, and candidates[].`)
     return { issues, metrics: baseMetrics }
   }
+  // Said and gone on from. It used to end the reading here, so a submission answered `ok` with `schemaValid: false` and
+  // `candidates: 0`, and the requirements below first appeared on the next one: a real run spent two of its three
+  // submissions learning one list (2026-11-02).
   if (portfolioContext === null) {
-    notice(issues, 'topic-research-context', `${PORTFOLIO_FILE}.researchContext must use the bounded fields accepted by the specialist transport.`)
-    return { issues, metrics: baseMetrics }
+    notice(issues, 'topic-research-context-fields', `${PORTFOLIO_FILE}.researchContext must use the bounded fields accepted by the specialist transport.`)
   }
 
   const evidenceValue = parsed(input.files, EVIDENCE_FILE)
@@ -214,17 +216,18 @@ export function researchTopicPortfolioFindings(input) {
     for (const id of candidate.sourceEvidenceIds) {
       const evidence = evidenceById.get(id)
       if (!evidence) continue
+      // A retraction a lookup reported withholds; a status nobody recorded is advice. Requiring the three fields on every
+      // record measured nothing: the 2026-11-02 run filled them in by hand with one timestamp to clear the gate, and it
+      // cost that run its last submission (the ruling of 2026-09-17 on the package's own bookkeeping).
       const status = evidence.publicationStatus
       const checked = isoTimestamp(evidence.statusCheckedAt) && nonEmpty(evidence.statusSource)
-      if (!checked || !['active', 'corrected', 'retracted', 'unknown'].includes(status)) {
-        requirement(issues, 'topic-publication-status', `${label} uses ${id} without a current, source-attributed publication-status check.`)
-        evidenceFilesConsistent = false
-      } else if (status === 'retracted') {
+      if (status === 'retracted') {
         requirement(issues, 'topic-publication-status', `${label} uses retracted evidence ${id}; exclude it from candidate support or explicitly replace it with active evidence.`)
         evidenceFilesConsistent = false
+      } else if (!checked || !['active', 'corrected', 'unknown'].includes(status)) {
+        notice(issues, 'topic-publication-status', `${label} uses ${id} with no recorded publication-status check.`, EVIDENCE_FILE)
       } else if (status === 'unknown') {
-        requirement(issues, 'topic-publication-status', `${label} uses ${id} whose publication status remains unknown; it cannot support a recommended topic.`)
-        evidenceFilesConsistent = false
+        notice(issues, 'topic-publication-status', `${label} uses ${id} whose publication status remains unknown.`, EVIDENCE_FILE)
       }
     }
     const preservedPmids = candidate.sourceEvidenceIds
@@ -251,9 +254,9 @@ export function researchTopicPortfolioFindings(input) {
   }
 
   const runValue = parsed(input.files, RUN_FILE)
-  const contextFilesConsistent = record(runValue)
+  const contextFilesConsistent = portfolioContext !== null && record(runValue)
     && sameContext(portfolioContext, runValue.researchContext)
-  if (!contextFilesConsistent) {
+  if (portfolioContext !== null && !contextFilesConsistent) {
     notice(issues, 'topic-research-context', `${PORTFOLIO_FILE}.researchContext and ${RUN_FILE}.researchContext are not internally consistent; authoritative request preservation is established by the transport receipt, not this file comparison.`, RUN_FILE)
   }
 
@@ -262,7 +265,7 @@ export function researchTopicPortfolioFindings(input) {
     metrics: {
       topicPortfolio: {
         present: true,
-        schemaValid: !issues.some((item) => item.check === 'topic-portfolio-schema'),
+        schemaValid: !issues.some((item) => item.check === 'topic-portfolio-schema' || item.check === 'topic-research-context-fields'),
         candidates: candidateIds.size,
         structurallyCompleteCandidates,
         unresolvedDesignFields,

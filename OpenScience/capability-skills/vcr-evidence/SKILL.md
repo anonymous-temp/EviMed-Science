@@ -23,7 +23,14 @@ planned enrollment is not completed outcome evidence. Preserve source/fetch date
 and actual coverage. Do not re-enable CDE or ICTRP integrations or invent unavailable
 registry text. Similarity ranks leads; it does not establish comparability.
 
-For preserved articles/abstracts/tables use `mcp__evimed__vcr_write` what `evidence_item` with
+A number a paper reports is bound to the paper: `mcp__evimed__vcr_write` what `evidence_item` with
+`publication: {pmid}` (or `{doi}`) and the paper's exact sentence as `quote`. Fetch the abstract first
+(`mcp__evimed__literature_search` with `pmids`, which preserves it): the platform holds the quote against the text it read.
+A number it cannot check (no text read, the sentence not in it) is saved as 未核对, not refused, and an
+`external_evidence` card takes it with that mark on the result page; a number you only choose as a design
+target is an `expert_set` card with the papers named in `note`.
+
+For preserved articles/abstracts/tables in the knowledge base use `mcp__evimed__vcr_write` what `evidence_item` with
 `literatureSource: {sourceId,generation,textSha256}` rather than a registry source,
 plus `evidenceKind: "baseline"|"outcome"|"design"`, exact `quote` and
 `locator: {start,end,parts?}`. Parts can locate CI bounds, n, events and units in

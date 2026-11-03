@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { parseBackfillArguments } from "../../../scripts/vcr/backfill-result-subjects.mjs";
 import {
-  VCR_SUBJECT_KINDS, vcrBackfillSubjectFor, vcrCurrentObjects, vcrDesignShare, vcrJobObjectKind, vcrJobStage, vcrMatchTrialScenarios,
+  VCR_SUBJECT_KINDS, vcrBackfillSubjectFor, vcrConversationSubject, vcrCurrentObjects, vcrDesignShare, vcrJobFroze, vcrJobObjectKind, vcrJobStage, vcrMatchTrialScenarios,
 } from "../src/vcrSubjects.mjs";
 
 const fixed21 = { id: "scn_a", version: 1, label: "A 2:1", design: "two_arm_fixed", endpointType: "time_to_event", configuration: { design: { nTreat: 120, nControl: 60 }, truth: { hazardRatio: 0.7 } } };
@@ -68,4 +68,69 @@ test("the backfill's command line takes a study and --apply and nothing else", (
   assert.throws(() => parseBackfillArguments(["--study"]), /needs a study id/);
   assert.throws(() => parseBackfillArguments(["--study", "../x"]), /study id/);
   assert.throws(() => parseBackfillArguments(["--force"]), /unknown argument/);
+});
+
+// A conversation's second design is a second design: the numbers it states decide whether the study's object is the one it means.
+const design300 = { design: { kind: "two_arm_fixed", nTreat: 150, nControl: 150 }, endpoint: { type: "time_to_event" }, truth: { hazardRatio: 0.7, controlMedian: 12 },
+  analysis: { method: "logrank", alpha: 0.025, sided: 1 }, accrual: { kind: "uniform", duration: 12, followup: 12 } };
+
+/** A store that holds one design (n=300) and writes whatever it is given, as the real one would. */
+function storeHoldingOneDesign() {
+  /** @type {any[]} */
+  const saved = [];
+  const held = { id: "scn_300", version: 1, label: "设计 1", design: "two_arm_fixed", endpointType: "time_to_event", configuration: design300 };
+  const rows = () => [held, ...saved.map((input, at) => ({ id: `scn_new${at}`, version: 2 + at, label: input.label, design: input.design, endpointType: input.endpointType, configuration: input.configuration }))];
+  return { saved, store: {
+    async trialScenarios() { return rows(); },
+    async methodConfigurationObject(/** @type {any} */ _client, /** @type {string} */ _studyId, /** @type {string} */ _kind, /** @type {string | null} */ subjectId) { return subjectId ? rows().find((row) => row.id === subjectId) ?? null : null; },
+    async saveTrialScenario(/** @type {any} */ input) { saved.push(input); return { id: `scn_new${saved.length - 1}`, version: 1 + saved.length }; },
+    async transaction(/** @type {(client: any) => Promise<any>} */ run) { return run({ query: async () => ({ rows: [] }) }); },
+  } };
+}
+
+test("a conversation that states other numbers than the design the study holds files a design of its own, and the same numbers are the one it holds", async () => {
+  const { store, saved } = storeHoldingOneDesign();
+  const study = { id: "std_1", userId: "u1", scope: "conversation" };
+  const n500 = { ...design300, design: { kind: "two_arm_fixed", nTreat: 250, nControl: 250 } };
+  assert.equal(await vcrConversationSubject({ store, study, userId: "u1", kind: "design_simulation", scenario: design300 }), null, "the same numbers are the design the study holds");
+  const made = await vcrConversationSubject({ store, study, userId: "u1", kind: "design_simulation", scenario: n500 });
+  assert.ok(made, "n=500 is not the n=300 design");
+  assert.equal(saved.length, 1);
+  assert.deepEqual(saved[0].configuration.design, { kind: "two_arm_fixed", nTreat: 250, nControl: 250 });
+  // the n=500 design is now the one that scenario fits, and with no number said both designs fit (the resolver then names them)
+  assert.equal(await vcrConversationSubject({ store, study, userId: "u1", kind: "design_simulation", scenario: n500 }), null);
+  assert.equal(saved.length, 1, "asking again for n=500 files nothing");
+});
+
+test("a running job froze a scenario when every value the scenario states is its own, and it may hold more", () => {
+  const frozen = { design: { kind: "two_arm_fixed", nTreat: 150, nControl: 150, informationRates: [0.5, 1] }, truth: { hazardRatio: 0.7 }, seedless: true };
+  assert.equal(vcrJobFroze(frozen, { design: { nTreat: 150 }, truth: { hazardRatio: 0.7 } }), true);
+  assert.equal(vcrJobFroze(frozen, {}), true);
+  assert.equal(vcrJobFroze(frozen, { design: { nTreat: 250 } }), false, "another number is another scenario");
+  assert.equal(vcrJobFroze(frozen, { design: { informationRates: [0.5, 1] } }), true);
+  assert.equal(vcrJobFroze(frozen, { design: { informationRates: [0.3, 1] } }), false);
+  assert.equal(vcrJobFroze(frozen, { accrual: { duration: 12 } }), false, "a value the job never held is not one it froze");
+  assert.equal(vcrJobFroze(undefined, { truth: { hazardRatio: 0.7 } }), false);
+});
+
+test("an explicit subjectId with a scenario that contradicts the design is a new version of that design, written like the browser's method configurations; one that only adds is the design as it is", async () => {
+  const { store, saved } = storeHoldingOneDesign();
+  const study = { id: "std_1", userId: "u1", scope: "conversation" };
+  const ask = (/** @type {Record<string, any>} */ scenario, /** @type {string} */ subjectId = "scn_300") => vcrConversationSubject({ store, study, userId: "u1", kind: "design_simulation", subjectId, scenario });
+  assert.equal(await ask({}), null, "no scenario: the object as it was written is started");
+  assert.equal(await ask(design300), null, "the same numbers");
+  assert.equal(await ask({ ...design300, accrual: { ...design300.accrual, dropoutAnnual: 0.05 } }), null, "a key the design does not state contradicts nothing");
+  assert.equal(saved.length, 0);
+  const n500 = { ...design300, design: { kind: "two_arm_fixed", nTreat: 250, nControl: 250 } };
+  const made = await ask(n500);
+  assert.ok(made && made !== "scn_300", "the numbers it sent are not the design's: a version of its own");
+  assert.equal(saved.length, 1);
+  assert.equal(saved[0].label, "设计 1", "the same line of the same design, so the version replaces the earlier result and nothing else");
+  assert.deepEqual(saved[0].configuration.design, { kind: "two_arm_fixed", nTreat: 250, nControl: 250 });
+  assert.deepEqual(saved[0].configuration, n500, "the scenario it sent is the version's configuration, as it is for a design made from a scenario");
+  // a scenario the engine would refuse is refused by what is wrong with it, and no version is written
+  await assert.rejects(ask({ ...n500, truth: { hazardRatio: -1 } }), { code: "vcr_job_scenario_invalid" });
+  assert.equal(saved.length, 1);
+  // a study with a page of its own keeps its objects: nothing is written here
+  assert.equal(await vcrConversationSubject({ store, study: { ...study, scope: "study" }, userId: "u1", kind: "design_simulation", subjectId: "scn_300", scenario: n500 }), null);
 });

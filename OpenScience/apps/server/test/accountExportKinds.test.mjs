@@ -673,6 +673,33 @@ test("a settled revision leaves with what the run left, in the domain's own clos
   assert.equal(JSON.stringify(settled).includes("secret"), false);
 });
 
+test("an analysis through the data-analysis API leaves as what the person asked and got, its bytes named by path and digest, and nothing of its dispatch", () => {
+  const analysis = { id: `ana_${"a".repeat(40)}`, projectId: `da-${"a".repeat(40)}`, name: "Trial arm comparison", requestId: "client-key", phase: "ready", sessionId: "runtime-session",
+    active: { kind: "turn", id: `turn_${"b".repeat(40)}`, dispatchId: "da_private", token: "private-token" }, turnIds: [`turn_${"b".repeat(40)}`],
+    inputs: [{ id: "in_1", filename: "trial.csv", sha256: "c".repeat(64), bytes: 120, path: "analysis-inputs/in_1/trial.csv", provenance: { kind: "url", origin: "https://data.example", pathname: "/trial.csv", acquiredAt: "2026-11-01T10:00:00.000Z", secret: "x" } }] };
+  const carried = exportDocumentRow({ id: analysis.id, kind: "data-analysis", payload: analysis }).payload;
+  assert.deepEqual(carried, { id: analysis.id, projectId: analysis.projectId, name: "Trial arm comparison", phase: "ready", turnIds: analysis.turnIds,
+    inputs: [{ id: "in_1", filename: "trial.csv", sha256: "c".repeat(64), bytes: 120, path: "analysis-inputs/in_1/trial.csv",
+      provenance: { kind: "url", origin: "https://data.example", pathname: "/trial.csv", acquiredAt: "2026-11-01T10:00:00.000Z" } }] });
+  const turn = { id: analysis.turnIds[0], analysisId: analysis.id, projectId: analysis.projectId, requestId: "client-key", question: "Compare the arms.", fingerprint: "f".repeat(64), dispatchId: "da_private",
+    status: "succeeded", runId: "run-1", result: { summary: "Arm B is higher.", structuredResults: { schemaVersion: 1, analyses: [] }, frozenAt: "2026-11-01T11:00:00.000Z",
+      primaryOutput: { directory: "out", manifestPath: "out/analysis-output.json", resultsPath: null, reportPath: "out/statistical-report.md", internal: "x" },
+      artifacts: [{ id: "art_1", filename: "table.csv", path: "out/table.csv", sha256: "d".repeat(64), bytes: 40, role: "table", mediaType: "text/csv", verification: "verified",
+        downloadUrl: `/api/data-analysis/v1/analyses/${analysis.id}/artifacts/art_1` }],
+      notices: [{ code: "artifact_unavailable", path: "out/big.bin", reason: "too_large", detail: "x" }] } };
+  const answer = exportDocumentRow({ id: turn.id, kind: "data-analysis", payload: turn }).payload;
+  assert.deepEqual(answer, { id: turn.id, analysisId: analysis.id, projectId: analysis.projectId, question: "Compare the arms.", status: "succeeded", runId: "run-1",
+    result: { summary: "Arm B is higher.", structuredResults: { schemaVersion: 1, analyses: [] }, frozenAt: "2026-11-01T11:00:00.000Z",
+      primaryOutput: { directory: "out", manifestPath: "out/analysis-output.json", resultsPath: null, reportPath: "out/statistical-report.md" },
+      artifacts: [{ id: "art_1", filename: "table.csv", path: "out/table.csv", sha256: "d".repeat(64), bytes: 40, role: "table", mediaType: "text/csv", verification: "verified" }],
+      notices: [{ code: "artifact_unavailable", path: "out/big.bin", reason: "too_large" }] } });
+  // A turn that has not returned yet leaves without a result, and a record that is neither shape is left out and counted, not carried as stored.
+  assert.equal(Object.hasOwn(exportDocumentRow({ id: turn.id, kind: "data-analysis", payload: { ...turn, result: undefined, status: "dispatching" } }).payload, "result"), false);
+  assert.equal(exportDocumentRow({ id: "x", kind: "data-analysis", payload: { body: "unreadable" } }), null);
+  const serialized = JSON.stringify([carried, answer]);
+  for (const behind of ["client-key", "runtime-session", "da_private", "private-token", "downloadUrl", "fingerprint"]) assert.equal(serialized.includes(behind), false, behind);
+});
+
 /** One stored document for a kind whose own export rule refuses a plain
  * record. A kind absent here is seeded with a plain record, which is what
  * every kind without a projection is exported as. */
@@ -681,6 +708,7 @@ const SEEDS = {
   skill: { id: "skill:one", payload: { title: "Review", description: "Review sources", instructions: "Use these sources.", resources: [], invocation: { userInvocable: true, modelInvocable: true } } },
   "extension-installation": { id: "extension:one", payload: { catalogueId: "one", coordinate: { kind: "npm", name: "example-tool", version: "1.0.0" } } },
   "extension-defaults": { id: "skills:defaults", payload: { skills: [] } },
+  "data-analysis": { id: `ana_${"a".repeat(40)}`, projectId: "one", payload: { id: `ana_${"a".repeat(40)}`, projectId: "one", name: "data-analysis record", phase: "ready", turnIds: [], inputs: [], canary: "canary-of-data-analysis" } },
 };
 
 test("an account holding a document of every declared kind exports, each kind carried or left out as declared", async (t) => {

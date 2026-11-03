@@ -12,6 +12,7 @@ import test from "node:test";
 
 import { METHOD_SKILL_SCHEMA, SOCKET_TOOL_NAME_LIST } from "@evimed/domain";
 
+import { researchGoalPrompt } from "../src/researchGoal.mjs";
 import { LEARNING_PROJECT_ID } from "../src/internalProjects.mjs";
 import {
   MethodDistillationRuns, buildDistillationInput, evidenceCorpus, lessonQueryText, reactionCorpus, reactionsOf, unionEvidence, verifiedEvidence,
@@ -70,6 +71,24 @@ test("the first request and the intervention survive a long delegated run, and n
   const text = JSON.stringify(input);
   for (const name of [...SOCKET_TOOL_NAME_LIST, "present"]) assert.ok(!text.includes(`"${name}"`), `${name} is not in what the model reads`);
   assert.ok(!text.includes("锚点与回执"), "the closing summary of the platform's submit is not in it either");
+});
+
+test("REVIEWFIX 9 the excerpts of a research goal's run show the person's sentence, without the gesture that started it, and no other run's message is touched", () => {
+  const goal = "评估心衰队列的再入院风险";
+  const messages = [user(2, researchGoalPrompt(goal)), said(3, "我先看已有资料。"), user(4, "只看近五年的", { sourceRequestId: "req_2" }), said(5, "好的。")];
+  const transcript = { header: { completeness: "complete", sessions: [{ sessionId: ROOT, parentSessionId: null }] }, messages };
+  const started = { id: "run_g", sessionId: ROOT, kernelRequestIds: ["req_1"], status: "succeeded", effectiveRouteReason: "research-goal" };
+  const input = buildDistillationInput({ run: started, trigger: "correction", transcript });
+  const shown = input.transcriptExcerpts.flatMap((excerpt) => excerpt.messages).filter((message) => message.role === "user").map((message) => message.parts[0].text);
+  assert.deepEqual(shown, [goal, "只看近五年的"], "the person's sentence and their correction");
+  assert.ok(!JSON.stringify(input.transcriptExcerpts).includes("/loopx"), "the gesture is nowhere in what the model reads of the excerpts");
+  assert.equal(JSON.stringify(input.corrections).includes("/loopx"), false);
+  assert.ok(![...evidenceCorpus(input).values()].some((text) => text.includes("/loopx")), "and the quotations the model may give are held against the same text");
+  // the transcript the caller holds is not edited
+  assert.equal(messages[0].parts[0].text, researchGoalPrompt(goal));
+  // a person who types /loopx into a conversation of their own said it
+  const own = buildDistillationInput({ run: { ...started, effectiveRouteReason: "choice:answer" }, trigger: "correction", transcript });
+  assert.ok(JSON.stringify(own.transcriptExcerpts).includes(researchGoalPrompt(goal)));
 });
 
 test("a trigger that points at an edit still reads a tail, without the choreography in it", () => {

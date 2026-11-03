@@ -23,7 +23,8 @@
         "Check the closest completed and relevant ongoing or registered studies, with unavailable overlap checks explicit",
         "Distinguish proposed hypotheses and registered plans from established findings",
         "Answer every review finding marked 需回应 in the submission's responses (fixed, or declined with a one-sentence reason); none is delivered unanswered, and no answer lives only in revision-notes.md (2026-09-27: 32 declines written there, 0 recorded)",
-        "Put each literature figure in the same sentence as the [n] of the work it comes from, copy any figure from the specialist job at the precision its output states, and state design choices and projections as the proposal's own"
+        "Put each literature figure in the same sentence as the [n] of the work it comes from, copy any figure from the specialist job at the precision its output states, and state design choices and projections as the proposal's own",
+        "The final reply preserves the bounded novelty claim and identifies adjacent studies and the exact remaining difference."
       ],
       "generated": {
         "authoredAt": "2026-09-05",
@@ -90,6 +91,19 @@
         "authoredAt": "2026-09-05",
         "authoredAtSource": "first-commit"
       }
+    },
+    {
+      "id": "meta-topics-casual",
+      "inputs": {
+        "researchDirection": "找几个meta选题不，痛风这块的找几个 肾病的找几个"
+      },
+      "checks": [
+        "Reaches this capability from the free-text request (evals/routing case topic-meta-1) and does not start the topic engine",
+        "Every candidate names the closest existing review and any PROSPERO registration found, and how many comparable primary studies a pooling would rest on, by name",
+        "Searches PROSPERO, the EviMed index in Chinese and all three trial registries, and states exactly which sources were searched",
+        "No candidate is called open on the strength of an empty or noisy result; known occupied questions such as ERA with SGLT2 inhibitors are reported as occupied",
+        "Three to five short candidates per direction, with no protocol, timetable or scoring table, and no sentence about jobs, gates or submissions"
+      ]
     }
   ]
 }

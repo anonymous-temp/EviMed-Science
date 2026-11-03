@@ -48,7 +48,17 @@ bookkeeping notices never justify discarding supported work.
    remains a question, not a confirmed major defect.
 3. Keep methodological, statistical, reporting, integrity, and narrative issues
    distinct. Consolidate duplicates and calibrate severity to the effect on
-   validity, reproducibility, or interpretation.
+   validity, reproducibility, or interpretation. Recheck every finding in the
+   final reply as well as the report against the actual manuscript: do not say
+   an abstract or section contains a claim it does not contain. Describe an
+   outcome used as its own predictor as outcome leakage; do not call it collider
+   adjustment without a justified causal structure. Describe time-zero and
+   survival-selection biases with their assumptions instead of asserting a
+   direction that the supplied data do not establish. For observational,
+   confounded comparisons, report the observed absolute risk difference without
+   presenting its reciprocal as a causal number needed to treat. A numerical
+   consistency check of an estimate, confidence interval and p value must name
+   its assumptions and cannot establish what the original analysis actually did.
 4. If the pipeline fails, report a failed job. Do not turn an exception into a
    synthetic completed review or a default recommendation.
 

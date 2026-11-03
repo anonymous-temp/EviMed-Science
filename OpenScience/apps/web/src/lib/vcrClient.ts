@@ -1248,6 +1248,8 @@ export interface VcrCriterionCitation {
   quote: string;
   source?: string | null;
   at?: string | null;
+  /** Said beside the date when it is the header of the record the fact sits in, not a date the fact printed (「日期取自病历抬头」). */
+  dateNote?: string | null;
   /** What the quotation does not itself print (a unit read by convention, a date taken from another line of the record). */
   note?: string | null;
   locator?: { documentId?: string; start?: number | null; end?: number | null; snapshotId?: string; field?: string } | null;
@@ -1324,6 +1326,8 @@ export interface VcrPatientTrials {
 }
 export interface VcrClinicalTimelineEntry {
   id: string; variable: string; value: unknown; unit: string | null; at: string | null; assertion: string; experiencer: string | null;
+  /** 「日期取自病历抬头」 when `at` is the header of the record the fact sits in. */
+  dateNote?: string | null;
   medicationState: string | null; correctionOf: string | null; quote: string | null;
   /** The document the fact is in, by the name the data tab lists it under. */
   document?: string | null;

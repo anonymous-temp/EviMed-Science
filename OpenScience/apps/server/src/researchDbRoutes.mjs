@@ -111,9 +111,10 @@ export function createResearchDbRoutes({ store, credentials, agenda, policy, caD
         const input = { ...posted, columns: posted.columns ?? [] };
         assertClientProject(input.projectId);
         const project = await store.requireProject(user, input.projectId);
-        const question = await agenda.get(user.id, input.agendaId);
-        if (question.projectId !== project.id) throw new HttpError(404, 'autopilot_material_not_found', 'The research question was not found.');
-        agenda.assertNotArchived(question);
+        // A study is optional: without one the table is imported to the project's knowledge base.
+        const question = input.agendaId ? await agenda.get(user.id, input.agendaId) : null;
+        if (question && question.projectId !== project.id) throw new HttpError(404, 'autopilot_material_not_found', 'The research question was not found.');
+        if (question) agenda.assertNotArchived(question);
         const fingerprint = researchDbSnapshotFingerprint({ connectionId: parts[0], ...input });
         const previous = await credentials.snapshotResult(user.id, project.id, input.requestId, fingerprint);
         if (previous) { recordResearchDbImport('replayed'); sendJson(res, 200, { data: previous }); return true; }
@@ -122,14 +123,14 @@ export function createResearchDbRoutes({ store, credentials, agenda, policy, caD
         const result = await guarded(user, project, 'research_db.import', `${input.schema}.${input.table}`, async () => {
           // A full list of material refuses a new document BEFORE the remote database is read; a new version of a table
           // the question already holds takes that one's place and needs no room.
-          await agenda.assertMaterialRoom(user.id, question.id, researchDbLogicalPath(target, String(input.schema), String(input.table)));
+          if (question) await agenda.assertMaterialRoom(user.id, question.id, researchDbLogicalPath(target, String(input.schema), String(input.table)));
           const snapshot = await capacity.run(user.id, async () => {
             const transport = await open(connection, policy, { caDir, limits });
             try { return await snapshotResearchTable(transport.client, { schema: input.schema, table: input.table, columns: input.columns }, { limits }); }
             catch (error) { if (error instanceof HttpError) throw error; throw new HttpError(503, 'research_db_unavailable', 'The database snapshot could not be read.'); }
             finally { await transport.close(); }
           });
-          return publish({ user, project, connectionId: parts[0], target, agendaId: question.id, requestId: input.requestId, fingerprint, snapshot });
+          return publish({ user, project, connectionId: parts[0], target, ...(question ? { agendaId: question.id } : {}), requestId: input.requestId, fingerprint, snapshot });
         });
         recordResearchDbImport(result.partial ? 'partial' : 'complete');
         if (result.truncated) recordResearchDbRefusal('truncated');

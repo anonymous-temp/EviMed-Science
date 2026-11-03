@@ -156,7 +156,7 @@ per-project workspace + JSONL provenance.
   fails on a stale artifact and `apps/web/src/app/designTokens.test.ts` regenerates and compares, so
   editing a consumer instead of the table is a red test. Contrast is recomputed at build time and a
   shortfall fails the build. The shell conforms to the kernel, not the other way around. Token
-  **3.0.0** is the implemented token set and the current specification is **3.2**: DS22 has scoped
+  **3.0.0** is the implemented token set and the current specification is **3.3**: DS22 has scoped
   local implementation and evidence, and the remaining route, state, native-runtime and accessibility
   acceptance is recorded in `../docs/superpowers/plans/2026-10-27-page-composition-v3.2.md`. The
   earlier main 2.2.0 and warm-brand 2.3.0 reads are historical baselines. This brand and status

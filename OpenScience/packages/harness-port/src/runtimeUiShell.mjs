@@ -322,18 +322,23 @@ export function answerLinkToOpen(event, origin) {
  * The 虚拟临床研究 result an answer's link names, or null: the application's own address for one tab of one study, and nothing
  * else. The origin must be the shell's (the one this frame is embedded by: what the control plane built the link from), the path
  * exactly `/app/virtual-research/:studyId/:tab` with the study id of the shape the application puts in an address and a tab of the
- * study page, and no query or fragment rides along. A link that is not exactly that is an ordinary external link.
+ * study page, and no fragment rides along. The one query a link may carry is `?object=<id>` on the comparison tab: which saved
+ * comparison that tab opens on (2026-11-02), an id of the shape the application puts in an address. A link that is not exactly that is an
+ * ordinary external link.
  *
  * @param {string} href @param {string | undefined} shellOrigin
- * @returns {{ studyId: string, tab: string } | null}
+ * @returns {{ studyId: string, tab: string, object?: string } | null}
  */
 export function vcrResultOfLink(href, shellOrigin) {
   if (!shellOrigin) return null;
   let url;
   try { url = new URL(href); } catch { return null; }
-  if (url.origin !== shellOrigin || url.search || url.hash || url.username || url.password) return null;
+  if (url.origin !== shellOrigin || url.hash || url.username || url.password) return null;
   const match = /^\/app\/virtual-research\/([A-Za-z0-9_-]{1,160})\/(overview|population|patients|comparator|trial|matching|data)$/.exec(url.pathname);
-  return match ? { studyId: match[1], tab: match[2] } : null;
+  if (!match) return null;
+  if (!url.search) return { studyId: match[1], tab: match[2] };
+  const object = match[2] === 'comparator' ? /^\?object=([A-Za-z0-9_-]{1,160})$/.exec(url.search) : null;
+  return object ? { studyId: match[1], tab: match[2], object: object[1] } : null;
 }
 
 /**

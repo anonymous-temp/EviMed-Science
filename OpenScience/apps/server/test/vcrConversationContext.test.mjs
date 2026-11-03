@@ -33,6 +33,23 @@ test('a validate call is proved by the scenario it carries, as a start is', asyn
   assert.equal(result.runId, 'run');
   await assert.rejects(verifyVcrInvocation({ ...f, header: header('root'), operation: 'simulate', body: { ...input, kind: 'design_simulation' } }), { code: 'vcr_invocation_unavailable' });
 });
+test('a start or a validate that names the papers of its numbers is proved by them too, and a forged list is refused', async () => {
+  // Found on a real kernel (2026-11-02): the proof compared the pending call with a closed list of keys that did not hold `sources`, so every start
+  // that named a paper answered vcr_invocation_unavailable while the same start without the list was queued. The list rides the proof like the scenario.
+  const input = { action: 'start', kind: 'design_analytic', scenario: { endpoint: { type: 'time_to_event' }, truth: { controlMedian: 13.8 } },
+    sources: [{ field: 'truth.controlMedian', publication: 'PMID 37676259', quote: '13.8 months with sorafenib' }] };
+  const f = fixture({ input });
+  f.runtimeManager.sessionTranscript = async (_project, sessionId) => ({ sessionId, truncated: false, turns: [{ startSeq: 1, end: null }],
+    messages: [{ turnStartSeq: 1, role: 'assistant', parts: [{ type: 'tool', callId: 'call', status: 'pending', tool: 'mcp__evimed__vcr_simulate', input }] }] });
+  for (const action of ['start', 'validate']) {
+    const named = { ...input, action };
+    f.runtimeManager.sessionTranscript = async (_project, sessionId) => ({ sessionId, truncated: false, turns: [{ startSeq: 1, end: null }],
+      messages: [{ turnStartSeq: 1, role: 'assistant', parts: [{ type: 'tool', callId: 'call', status: 'pending', tool: 'mcp__evimed__vcr_simulate', input: named }] }] });
+    assert.equal((await verifyVcrInvocation({ ...f, header: header('root'), operation: 'simulate', body: named })).runId, 'run', action);
+    await assert.rejects(verifyVcrInvocation({ ...f, header: header('root'), operation: 'simulate', body: { ...named, sources: [{ ...named.sources[0], quote: 'another sentence' }] } }), { code: 'vcr_invocation_unavailable' });
+    await assert.rejects(verifyVcrInvocation({ ...f, header: header('root'), operation: 'simulate', body: { ...named, sources: undefined } }), { code: 'vcr_invocation_unavailable' });
+  }
+});
 test('a first call waits for its turn to reach the ledger, and a turn that never does is refused', async () => {
   // Found on a real kernel: the first vcr_read went out 2.6 s into a composer turn, whose run was written at 8.6 s.
   let asked = 0;

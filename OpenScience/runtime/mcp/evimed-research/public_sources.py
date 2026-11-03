@@ -1,7 +1,9 @@
 """Traceable public research connectors used when no private EviMed adapter is configured."""
 
+import base64
 import gzip
 import hashlib
+import html
 import io
 import concurrent.futures
 import json
@@ -359,6 +361,7 @@ def _open_remote(url, accepted, method="GET", json_body=None, timeout_seconds=No
                 "accept": ", ".join(accepted),
                 **({"content-type": "application/json"} if encoded_body is not None else {}),
                 **(_credential_header(credential_profile, direct_credential) if direct_credential else {}),
+                **({"prospero-auth-token": base64.b64encode(str(int(time.time() * 1000)).encode()).decode()} if url == PROSPERO_SEARCH_URL else {}),
                 "user-agent": "EviMed-Research/1.2 (research connector)",
             },
             method=method,
@@ -479,7 +482,7 @@ def _get_json_value(
             raise not_configured from error
         raise PublicSourceError(
             "public_source_http_error",
-            "Public source returned HTTP %d." % error.code,
+            _http_error_message(url, error.code),
             error.code == 429 or error.code >= 500,
         )
     except (urllib.error.URLError, TimeoutError, OSError) as error:
@@ -490,6 +493,18 @@ def _get_json_value(
         )
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
         raise PublicSourceError("public_source_invalid_response", "Public source returned invalid JSON: %s." % error)
+
+
+def _http_error_message(url, code):
+    """A source's HTTP failure with the source named: 2026-11-02, the EviMed index refusing a multi-word ChiCTR query
+    read "Public source returned HTTP 400", which said neither whose answer it was nor that the query was what it refused."""
+    host = urllib.parse.urlsplit(str(url or "")).hostname or "Public source"
+    # The index's address is internal; a run must not carry it into anything it writes.
+    if str(url or "").startswith(EVIMED_EVIDENCE_BASE_URL):
+        host = "The EviMed index"
+    if 400 <= code < 500 and code != 429:
+        return "%s refused this request with HTTP %d; asking again unchanged gets the same answer. Change the request (shorter terms, fewer filters)." % (host, code)
+    return "%s returned HTTP %d." % (host, code)
 
 
 def _get_json(
@@ -674,7 +689,7 @@ def _pubmed_outcome(returned, offset, total, limit):
     if returned == 0:
         return no_results(
             reason="no_match" if offset == 0 else "past_the_end",
-            how="PubMed matched nothing for this query%s. That is not evidence that no study exists: broaden the terms or use the MeSH entry terms (term_normalize mesh=true)."
+            how="PubMed matched nothing for this query%s. That is not evidence that no study exists: PubMed needs every word to match, so drop to the two or three core terms, or use the MeSH entry terms (term_normalize mesh=true)."
             % ("" if offset == 0 else " beyond offset %d" % offset),
         )
     seen = offset + returned
@@ -1183,11 +1198,102 @@ def _evimed_evidence_records(query, limit, compact=False):
     }
 
 
+# Where an index record really lives, read off its link: the index does not name its source, and "which database did this
+# come from" is what a search report has to state. A closed table of hosts; a host not in it stays unnamed.
+INDEX_DATABASE_HOSTS = (
+    ("cnki.net", "CNKI"), ("cnki.com", "CNKI"), ("wanfangdata.com", "Wanfang"), ("wanfangdata.com.cn", "Wanfang"), ("cqvip.com", "VIP"),
+    ("sinomed.ac.cn", "SinoMed"), ("embase.com", "Embase"), ("cochranelibrary.com", "Cochrane Library"),
+    ("ncbi.nlm.nih.gov", "PubMed"),
+)
+# The most one EviMed index query returns: the API has no offset, so `offset` pages within this many.
+INDEX_REACHABLE_RESULTS = 100
+_CJK_RE = re.compile(r"[\u4e00-\u9fff]")
+
+
+def _index_database(url):
+    host = (urllib.parse.urlsplit(str(url or "")).hostname or "").casefold()
+    return next((name for suffix, name in INDEX_DATABASE_HOSTS if host == suffix or host.endswith("." + suffix)), None)
+
+
+def _query_terms(query):
+    """The words of a query, by its whitespace: a quoted phrase is one, boolean operators and brackets are none."""
+    terms = []
+    for quoted, bare in re.findall(r'"([^"]+)"|(\S+)', str(query or "")):
+        term = (quoted or bare).strip("()[]{}")
+        if term and term.upper() not in ("AND", "OR", "NOT"):
+            terms.append(term)
+    return terms
+
+
+def _term_is_present(term, text, folded):
+    """Whether one query word is in a record. A word with its own inner capitals (eGFR, HbA1c) is matched as written:
+    case is the only thing telling eGFR from EGFR, and an "eGFR" search returned osimertinib papers (2026-11-02)."""
+    if any(character.isupper() for character in term[1:]) and any(character.islower() for character in term):
+        return term in text
+    return term.casefold() in folded
+
+
+def _terms_found(terms, record):
+    text = " ".join(str(_dict(record).get(key) or "") for key in (
+        "title", "abstract", "summary", "aiSummary", "conditions", "interventions", "keywords", "journal"
+    ))
+    folded = text.casefold()
+    return sum(1 for term in terms if _term_is_present(term, text, folded))
+
+
+def _with_query_match(items, query, records):
+    """Items (and the records they were cut from, which is what is read) labelled by how many of the query's words each holds, those holding all first, and the tally.
+
+    The index ranks by meaning, so an unrelated record can lead (an "eGFR" query: EGFR lung-cancer papers; a gout query:
+    an intrauterine-device trial, 2026-11-02). A translation or a synonym legitimately holds no query word, so nothing
+    is dropped: code states what it can check, and the reader of the list judges the rest.
+    """
+    terms = _query_terms(query)
+    if not terms:
+        return items, None
+    for item, record in zip(items, records):
+        item["queryTermsFound"] = "%d/%d" % (_terms_found(terms, record), len(terms))
+    ranked = sorted(items, key=lambda item: -int(item["queryTermsFound"].split("/")[0]))
+    counts = [int(item["queryTermsFound"].split("/")[0]) for item in ranked]
+    return ranked, {
+        "terms": terms,
+        "allTerms": sum(1 for count in counts if count == len(terms)),
+        "someTerms": sum(1 for count in counts if 0 < count < len(terms)),
+        "noTerm": sum(1 for count in counts if count == 0),
+    }
+
+
+def _index_noise_warning(match):
+    if not match or not match["noTerm"]:
+        return None
+    return (
+        "%d of these records hold none of the query's words. The index ranks by meaning: each may be a translation or a synonym, "
+        "or simply off topic, so read its title before counting it, and do not read a list of them as coverage of the question."
+        % match["noTerm"]
+    )
+
+
+def _language_mismatch(record, language):
+    """A record the index labelled with a language its title is not in: `language: "zh"` also returned English records
+    from CNKI's foreign-literature mirror (2026-11-02). The title's script is the check; no words are judged."""
+    title = _first_text(_dict(record).get("title"))
+    if language == "zh":
+        return bool(title) and not _CJK_RE.search(title)
+    if language == "en":
+        return bool(_CJK_RE.search(title or ""))
+    return False
+
+
 def _evimed_literature_records(arguments, compact=False):
-    """The EviMed index's literature records. `compact` is the merged default of literature_search: abstracts cut to
-    COMPACT_ABSTRACT_CHARS, no AI summary, and the record's own DOI/PMID when it carries them (what the merge matches on)."""
+    """The EviMed index's literature records. `compact` (the merged default of literature_search, and `databases:
+    ["internal"]` unless `fullRecords` is set): abstracts cut to COMPACT_ABSTRACT_CHARS, no AI summary, and the record's own
+    DOI/PMID when it carries them (what the merge matches on). `offset` pages within what the one query can return."""
     limit = min(arguments.get("limit", 10), 100)
-    body = {"query": arguments["query"][:512], "count": _evimed_candidate_limit(arguments, limit)}
+    offset = int(arguments.get("offset") or 0)
+    candidate_count = _evimed_candidate_limit(arguments, limit)
+    if offset:
+        candidate_count = min(max(candidate_count, offset + limit + 1), INDEX_REACHABLE_RESULTS)
+    body = {"query": arguments["query"][:512], "count": candidate_count}
     field_map = {
         "articleTypes": "articleTypes",
         "hasPdf": "hasPdf",
@@ -1205,25 +1311,37 @@ def _evimed_literature_records(arguments, compact=False):
         if isinstance(value, str) and len(value) >= 4:
             body[target_name] = int(value[:4])
     data, endpoint = _evimed_post("review/api/literature", body)
-    records, filtered_count = _filter_evimed_records(
-        _list(data.get("list")), arguments.get("requiredConcepts")
-    )
+    answered = _list(data.get("list"))
+    records, filtered_count = _filter_evimed_records(answered, arguments.get("requiredConcepts"))
     records, title_filtered_count = _filter_evimed_title_records(
         records, arguments.get("requiredTitleConcepts")
     )
+    wrong_language = [record for record in records if _language_mismatch(record, arguments.get("language"))]
+    records = [record for record in records if not _language_mismatch(record, arguments.get("language"))]
+    distinct, duplicates = [], 0
+    for record in records:
+        identity = _record_identity({**_dict(record), "url": _evimed_record_url(_dict(record).get("url"))})
+        if any(_same_record(identity, held) for held, _ in distinct):
+            duplicates += 1
+        else:
+            distinct.append((identity, record))
+    records = [record for _, record in distinct]
+    page = records[offset:offset + limit]
     items, sources = [], []
-    for index, value in enumerate(records[:limit]):
+    for index, value in enumerate(page):
         record = _dict(value)
         title = _first_text(record.get("title"))
-        identifier = str(record.get("id") or index).strip()
+        identifier = str(record.get("id") or index + offset).strip()
         record_url = _evimed_record_url(record.get("url"))
+        journal = record.get("journal")
         item = {
             "id": "EVIMED-LITERATURE:%s" % identifier,
             "title": title,
             "url": record_url,
+            "database": _index_database(record_url),
             "authors": record.get("authors"),
             "abstract": _compact_text(record.get("abstract")) if compact else str(record.get("abstract") or "")[:12000],
-            "journal": record.get("journal"),
+            "journal": None if str(journal or "").strip().casefold() == "unknown" else journal,
             "year": record.get("year"),
             "impactFactor": record.get("impactFactor"),
             "studyType": record.get("studyType"),
@@ -1237,18 +1355,45 @@ def _evimed_literature_records(arguments, compact=False):
                     item[key] = str(record.get(key)).strip()
         items.append({key: value for key, value in item.items() if value not in (None, "", [])})
         sources.append(_source(item["id"], title, record_url, "evimed-literature"))
+    items, match = _with_query_match(items, arguments["query"], page)
+    noise = _index_noise_warning(match)
     return {
         "status": "warning",
         "summary": "Retrieved %d traceable EviMed literature records." % len(items),
-        "data": {"items": items, "total": data.get("total"), "excludedByRequiredConcepts": filtered_count + title_filtered_count},
+        "data": {
+            "items": items, "total": data.get("total"), "excludedByRequiredConcepts": filtered_count + title_filtered_count,
+            **({"queryMatch": match} if match else {}),
+            **({"excludedForLanguage": len(wrong_language)} if wrong_language else {}),
+            **({"duplicatesDropped": duplicates} if duplicates else {}),
+            "outcome": _index_outcome(len(items), offset, limit, len(records), len(answered) >= candidate_count),
+        },
         "sources": sources,
         "warnings": [
-            "AI summaries and indexed metadata are discovery aids; verify material claims against the primary record.",
+            *([noise] if noise else []),
             *(["Excluded %d EviMed literature candidates that did not match every required concept." % filtered_count] if filtered_count else []),
             *(["Excluded %d additional literature candidates whose titles did not identify the required medicine." % title_filtered_count] if title_filtered_count else []),
         ],
-        "next_actions": ["Open the primary record and verify the study design, population, outcomes, and effect estimates."],
+        "next_actions": [
+            "AI summaries and indexed metadata are discovery aids. Open the primary record and verify the study design, population, outcomes, and effect estimates.",
+        ],
     }
+
+
+def _index_outcome(returned, offset, limit, held, source_had_more):
+    """How a page of the index ended. It states no total, so "more" is what this query can still reach."""
+    from source_outcome import complete, more_available, no_results  # lazy: it imports this module
+    if returned == 0:
+        return no_results(
+            reason="no_match" if offset == 0 else "past_the_end",
+            how="The EviMed index returned nothing here. That is not evidence that no study exists: try one or two core words, or the other language.",
+        )
+    seen = offset + returned
+    if held > seen or (source_had_more and seen < INDEX_REACHABLE_RESULTS):
+        return more_available(
+            returned=seen, total=None, next_arguments={"offset": seen, "databases": ["internal"]},
+            how="%d records read; call again with offset=%d and databases [\"internal\"] for the next ones, up to the first %d this query can reach." % (seen, seen, INDEX_REACHABLE_RESULTS),
+        )
+    return complete(returned=seen)
 
 
 
@@ -1571,17 +1716,37 @@ def _evimed_instruction_records(arguments):
 
 
 def _bibliographic_metadata_only(result):
+    """A public literature page: what a title cannot establish is a standing fact of the page, not a warning.
+
+    Every successful PubMed search used to carry `status: "warning"` for it (64 of 64 calls in one run, 2026-11-02), so
+    the status said nothing; a warning here now means something happened to this call. The sentence is a next action.
+    """
     return {
-        "status": "warning",
         **result,
-        "warnings": [
-            "Public literature results contain bibliographic metadata only; titles do not establish study design, evidence level, outcomes, effect estimates, or causality."
-        ],
+        "status": "warning",
+        "warnings": _list(result.get("warnings")),
         "next_actions": [
+            BIBLIOGRAPHIC_LIMIT,
             "Retrieve and review the abstract or full text before classifying study design or summarizing findings: "
-            "literature_search with pmids=[...] returns and preserves the abstracts of the PubMed records you keep."
+            "literature_search with pmids=[...] returns and preserves the abstracts of the PubMed records you keep.",
         ],
     }
+
+
+def _settled(result):
+    """A result's status from what it holds: `warning` only when something was said about this call."""
+    if isinstance(result, dict) and result.get("status") in ("success", "warning") and "warnings" in result:
+        if _list(result.get("warnings")):
+            result["status"] = "warning"
+        else:
+            result.pop("warnings")
+            result["status"] = "success"
+    return result
+
+
+BIBLIOGRAPHIC_LIMIT = (
+    "Public literature results contain bibliographic metadata only; titles do not establish study design, evidence level, outcomes, effect estimates, or causality."
+)
 
 
 def _note_left_out(result, left_out):
@@ -1612,7 +1777,7 @@ def _note_left_out(result, left_out):
 
 def literature(arguments):
     left_out = []
-    return _note_left_out(_literature(arguments, left_out), left_out)
+    return _note_left_out(_settled(_literature(arguments, left_out)), left_out)
 
 
 def _literature(arguments, left_out):
@@ -1647,19 +1812,22 @@ def _literature(arguments, left_out):
         return result
     databases = arguments.get("databases") or ["internal", "pubmed"]
     offset = int(arguments.get("offset") or 0)
-    if offset and "internal" in databases:
-        # A continuation pages PubMed's own list: the EviMed index has no offset, and
-        # answering page two from another ranking would repeat or skip records.
+    if offset and "internal" in databases and "pubmed" in databases:
+        # A continuation of the merged default pages PubMed's own list: answering page two from another
+        # ranking would repeat or skip records. The index alone pages itself (below).
         databases = [name for name in databases if name != "internal"] or ["pubmed"]
-        paging_note = "offset pages PubMed's own result list; the EviMed index was not asked."
+        paging_note = "offset pages PubMed's own result list; the EviMed index was not asked. databases [\"internal\"] pages the index."
     else:
         paging_note = None
     if "internal" in databases and "pubmed" in databases:
         # The default, and the same as asking for both by name.
         return _literature_merged(arguments, left_out, query, limit)
     if "internal" in databases:
-        # The EviMed index alone, with its whole payload; PubMed only when the index cannot answer.
-        result, evimed_warning = _evimed_index_literature(arguments, left_out, query, limit)
+        # The EviMed index alone; PubMed only when the index cannot answer. Compact unless the whole
+        # payload is asked for: twenty full records were about 50 KB, past what a tool result keeps inline.
+        result, evimed_warning = _evimed_index_literature(
+            arguments, left_out, query, limit, compact=not arguments.get("fullRecords")
+        )
         if result is not None:
             return result
         fallback = _pubmed(query, limit, arguments.get("dateFrom"), arguments.get("dateTo"))
@@ -1766,9 +1934,9 @@ def _literature_merged(arguments, left_out, query, limit):
             left_out.append(pubmed_error)
         index["warnings"] = [
             "PubMed was unavailable: %s Only the EviMed index's records are returned." % pubmed_error,
-            _COMPACT_INDEX_WARNING,
             *_list(index.get("warnings")),
         ]
+        index["next_actions"] = [_COMPACT_INDEX_WARNING, *_list(index.get("next_actions"))]
         return index
     result = _filter_bibliographic_title_result(
         _bibliographic_metadata_only(pubmed), arguments.get("requiredTitleConcepts")
@@ -1793,15 +1961,17 @@ def _literature_merged(arguments, left_out, query, limit):
     result["sources"] = _list(result.get("sources")) + [
         source for source in _list(index.get("sources")) if str(_dict(source).get("id")) in kept_ids
     ]
-    result["summary"] = "Retrieved %d PubMed records and %d more from the EviMed index." % (len(pubmed_items), len(kept))
+    if index["data"].get("queryMatch"):
+        result["data"]["indexQueryMatch"] = index["data"]["queryMatch"]
+    result["summary"] = (
+        "Retrieved %d PubMed records (Best Match, listed first) and %d more from the EviMed index; %d index records PubMed also returned were dropped as duplicates."
+        % (len(pubmed_items), len(kept), dropped)
+    )
     result["warnings"] = [
-        "%d records from PubMed (Best Match, listed first) and %d from the EviMed index; %d index records already returned by PubMed were dropped as duplicates."
-        % (len(pubmed_items), len(kept), dropped),
-        _COMPACT_INDEX_WARNING,
         *result["warnings"],
         *(warning_text for warning_text in _list(index.get("warnings")) if warning_text not in result["warnings"]),
     ]
-    result["next_actions"] = result["next_actions"] + [
+    result["next_actions"] = [_COMPACT_INDEX_WARNING] + result["next_actions"] + [
         action for action in _list(index.get("next_actions")) if action not in result["next_actions"]
     ]
     return result
@@ -1810,7 +1980,7 @@ def _literature_merged(arguments, left_out, query, limit):
 _COMPACT_INDEX_WARNING = (
     "EviMed index records here are compact: the abstract is cut to %d characters and the AI summary is left out. "
     "Read a record whole from its url, or fetch the abstracts of the PubMed records you keep with literature_search pmids=[...] "
-    "(preserved and quotable); databases: [\"internal\"] returns the index's full payload." % COMPACT_ABSTRACT_CHARS
+    "(preserved and quotable); databases: [\"internal\"] with fullRecords: true returns the index's whole payload." % COMPACT_ABSTRACT_CHARS
 )
 
 
@@ -1847,13 +2017,153 @@ def trials(arguments):
     return _note_left_out(_trials(arguments, left_out), left_out)
 
 
+TRIAL_REGISTRY_NAMES = {0: "ChiCTR", 1: "ClinicalTrials.gov", 2: "Cochrane CENTRAL"}
+_OTHER_REGISTRIES = "This asked ClinicalTrials.gov only. registry 0 is ChiCTR (Chinese words); registry 2 is Cochrane CENTRAL (English words)."
+# How many words of a query a named registry is asked one at a time, and how many records each word brings back.
+TRIAL_TERM_FANOUT = 4
+TRIAL_TERM_CANDIDATES = 50
+
+
+def _trial_terms_to_ask(query):
+    """The longest words of a query, at most TRIAL_TERM_FANOUT; the rest still count when the records are compared."""
+    terms = _query_terms(query)
+    return sorted(terms, key=len, reverse=True)[:TRIAL_TERM_FANOUT], terms
+
+
+def _named_registry_records(arguments, registry):
+    """A registry asked by name: the whole query, then word by word when it refused or found nothing.
+
+    Measured through the platform on 2026-11-02: ChiCTR answered eight multi-word Chinese queries with HTTP 400 six times
+    and nothing twice, while 「痛风」 alone returned ten records; CENTRAL returned nothing for five of eight long English
+    queries with records in it. So the words are asked one by one and compared here. A record holding every word comes
+    first, the ones holding some follow, and each says which it is.
+    """
+    whole_error, whole = None, None
+    try:
+        whole = _evimed_trial_records(arguments)
+        if whole.get("data", {}).get("items"):
+            return whole
+    except SourceNotConfigured:
+        raise
+    except PublicSourceError as error:
+        if error.retryable:
+            raise
+        whole_error = error
+    asked, terms = _trial_terms_to_ask(arguments["query"])
+    if len(terms) < 2:
+        if whole_error is not None:
+            raise whole_error
+        return whole
+    merged, order, failures, outage = {}, [], [], False
+    for term in asked:
+        try:
+            page = _evimed_trial_records({**arguments, "query": term, "limit": TRIAL_TERM_CANDIDATES})
+        except SourceNotConfigured:
+            raise
+        except PublicSourceError as error:
+            failures.append("%s: %s" % (term, error))
+            outage = outage or error.retryable
+            continue
+        for item, source in zip(page["data"]["items"], page["sources"]):
+            if item["id"] not in merged:
+                merged[item["id"]] = (item, source)
+                order.append(item["id"])
+    if not merged and failures:
+        if outage:
+            # The registry did not answer (HTTP 5xx, a timeout, a rate limit): that says nothing about the words, and nothing was found
+            # or ruled out. Rewording will not help; asking again later may.
+            raise PublicSourceError(
+                "public_source_unavailable",
+                "%s did not answer for any word of this query, so nothing is known about it yet: %s. This is the registry being unavailable, not a refusal of the query; ask again later."
+                % (TRIAL_REGISTRY_NAMES[registry], "; ".join(failures)),
+                True,
+            )
+        raise whole_error or PublicSourceError(
+            "public_source_http_error", "%s could not be asked for any word of this query: %s" % (TRIAL_REGISTRY_NAMES[registry], "; ".join(failures)),
+        )
+    if not merged:
+        return {"data": {"items": []}}
+    records = [merged[identifier] for identifier in order]
+    for item, _ in records:
+        item["queryTermsFound"] = "%d/%d" % (_terms_found(terms, item), len(terms))
+    records.sort(key=lambda pair: -int(pair[0]["queryTermsFound"].split("/")[0]))
+    limit = min(arguments.get("limit", 10), 100)
+    kept = records[:limit]
+    return {
+        "status": "warning",
+        "summary": "Retrieved %d %s records, asked word by word." % (len(kept), TRIAL_REGISTRY_NAMES[registry]),
+        "data": {
+            "items": [item for item, _ in kept], "registry": registry,
+            "queryMatch": {
+                "terms": terms, "asked": asked,
+                "allTerms": sum(1 for item, _ in records if item["queryTermsFound"] == "%d/%d" % (len(terms), len(terms))),
+                "held": len(records),
+            },
+        },
+        "sources": [source for _, source in kept],
+        "warnings": [
+            "%s answered nothing usable for the whole query, so it was asked for each of: %s. Records are in order of how many of the words they hold (queryTermsFound)."
+            % (TRIAL_REGISTRY_NAMES[registry], "、".join(asked)),
+            *(["Not asked: %s." % "; ".join(failures)] if failures else []),
+        ],
+        "next_actions": ["Verify the current registry record and protocol before using trial fields in an assessment."],
+    }
+
+
+def _trials_in_named_registry(arguments, registry):
+    """ChiCTR or CENTRAL, asked by name, and only that.
+
+    This used to fall through to ClinicalTrials.gov whenever the index had nothing: a run that asked ChiCTR received NCT
+    records, listed them as ClinicalTrials.gov and never saw ChiCTR (2026-11-02). Another registry's records are not an
+    answer about this one, so the answer here is these records or what stopped them, and the caller decides what to ask next.
+    """
+    from source_outcome import no_results, unavailable  # lazy: it imports this module
+    name = TRIAL_REGISTRY_NAMES[registry]
+    hint = {
+        0: "ChiCTR records are in Chinese: ask in Chinese, one or two words (「痛风」).",
+        2: "CENTRAL matches words strictly: ask one to three English words, then narrow with source if needed.",
+    }[registry]
+    try:
+        result = _named_registry_records(arguments, registry)
+    except SourceNotConfigured:
+        raise
+    except PublicSourceError as error:
+        if error.code == "public_source_http_error" and not error.retryable:
+            raise PublicSourceError(error.code, "%s refused this query. %s" % (name, hint), False)
+        if error.code == "evimed_evidence_unconfigured":
+            raise unavailable(
+                "%s is reached through the EviMed index, which this deployment does not have." % name,
+                scope=name, reason="index_unconfigured", retryable=False,
+                how="Say that %s was not searched. ClinicalTrials.gov (registry 1) is separate and can still be asked." % name,
+            )
+        raise
+    if result.get("data", {}).get("items"):
+        return result
+    return {
+        "status": "warning",
+        "summary": "%s returned no records for this query." % name,
+        "data": {
+            "items": [], "registry": registry,
+            "outcome": no_results(reason="no_match", how="%s matched nothing. That is not evidence that no trial exists. %s" % (name, hint)),
+        },
+        "sources": [],
+        "warnings": ["%s returned no records for this query; no other registry was asked in its place." % name],
+        "next_actions": [hint, "ClinicalTrials.gov is registry 1; ask it separately if it is also relevant."],
+    }
+
+
 def _trials(arguments, left_out):
+    registry = arguments.get("registry", 1)
+    if registry in (0, 2) and not arguments.get("pageToken"):
+        return _trials_in_named_registry(arguments, registry)
     if arguments.get("pageToken"):
         # A page token belongs to ClinicalTrials.gov's own list; the EviMed index cannot continue it.
         return _trials_registry(arguments, "pageToken continues ClinicalTrials.gov's own result list; the EviMed index was not asked.")
     try:
         result = _evimed_trial_records(arguments)
         if result.get("data", {}).get("items"):
+            result.setdefault("status", "success")
+            result["next_actions"] = [*_list(result.get("next_actions")), _OTHER_REGISTRIES]
             return result
         evimed_warning = _evimed_empty_warning("clinical-trial", result)
     except PublicSourceError as error:
@@ -2529,6 +2839,7 @@ def _clean_abstract(value):
 # way a paper would gets nothing back from them, so the empty result has to say
 # which shape would have worked.
 SOURCE_QUERY_HINTS = {
+    "prospero": "searches registered reviews by the words of their record; use two or three core English terms ('gout colchicine'), which are joined with AND for you.",
     "cbioportal": "searches study names in the study catalogue, not mutations; query a cancer type such as 'glioma' rather than a gene symbol.",
     "gdc-tcga": "matches project and case identifiers; query a project id such as 'TCGA-LGG' on its own.",
     "string": "resolves protein identifiers; pass gene symbols only, and several are fine ('APP PSEN1 APOE').",
@@ -3473,6 +3784,98 @@ def _simple_json_source(source_id, query, limit):
     if metadata_resolution is not None:
         result["data"]["resolution"] = metadata_resolution
         result["warnings"].append("The filtered WHO endpoint was unavailable; matching used its complete official indicator-name index. These are indicator metadata, not observation values.")
+    return result
+
+
+PROSPERO_SEARCH_URL = "https://www.crd.york.ac.uk/PROSPERO/api/search"
+# The registry's own page size, so that a record's position names its page; and how far one query can be read: ten pages, the most the
+# gateway admits (`PROSPERO_MAX_PAGE`, publicSourceGateway.mjs). Both are said in the answer, never left to be guessed from a count.
+PROSPERO_PAGE_SIZE = 50
+PROSPERO_REACHABLE = 500
+
+
+def _prospero_term(query):
+    """PROSPERO reads a bare `gout colchicine` as one phrase (1 hit, against 101 for `gout AND colchicine`, 2026-11-02),
+    so words with no operator of their own are joined with AND. A query that already has operators or quotes goes as written."""
+    text = " ".join(str(query or "").split())
+    if '"' in text or re.search(r"\b(?:AND|OR|NOT)\b|:[A-Z]{2,}\b", text):
+        return text
+    return " AND ".join(text.split(" "))
+
+
+def _prospero(query, limit, offset=0):
+    """Registered systematic reviews: what a new Meta would collide with before anything is published.
+
+    The search the registry's own public page sends (recorded 2026-11-02), anonymous; the request's token header is the
+    gateway's to add (`publicSourceGateway.mjs`). Without this connector a duplicate check had no way to see a review in
+    progress, and in one real test (2026-11-02) that was where most of the false gaps came from.
+
+    The registry reports how many registrations match, and a read of ten of 101 is not an answer about the other ninety-one: a topic was
+    called open on it. So the answer states how many were read of how many, says it is partial when it is, and names the `offset` that
+    reads on; the registry is paged through (its own pages of 50) to reach the records asked for, up to `PROSPERO_REACHABLE`.
+    """
+    from source_outcome import complete, more_available, truncated  # lazy: it imports this module
+    if offset + limit > PROSPERO_REACHABLE:
+        raise PublicSourceError(
+            "public_source_query_invalid",
+            "PROSPERO can be read as far as its first %d registrations for one query; offset %d with limit %d goes past that. Narrow the query instead." % (PROSPERO_REACHABLE, offset, limit),
+        )
+    term = _prospero_term(query)
+    first_page, last_page = offset // PROSPERO_PAGE_SIZE + 1, (offset + limit - 1) // PROSPERO_PAGE_SIZE + 1
+    hits, total = [], None
+    for page in range(first_page, last_page + 1):
+        body = {"term": term, "actual": term, "line": 1, "page": page, "nperpage": PROSPERO_PAGE_SIZE, "sort": "score", "sortorder": "desc", "filters": [], "download": False}
+        answer = _get_json_value(PROSPERO_SEARCH_URL, method="POST", json_body=body)
+        line = answer[0] if isinstance(answer, list) and answer else {}
+        if not isinstance(line, dict) or "retvals" not in line:
+            message = _dict(answer).get("errormessage") if isinstance(answer, dict) else None
+            raise PublicSourceError("public_source_invalid_response", "PROSPERO did not return a search result%s." % (": %s" % message if isinstance(message, str) else ""))
+        total = line.get("hits") if isinstance(line.get("hits"), int) else total
+        page_hits = _list(_dict(_dict(line.get("retvals")).get("hits")).get("hits"))
+        hits.extend(page_hits)
+        if len(page_hits) < PROSPERO_PAGE_SIZE:
+            break
+    asked = hits[offset - (first_page - 1) * PROSPERO_PAGE_SIZE:][:limit]
+    items, sources = [], []
+    for value in asked:
+        record = _dict(_dict(value).get("_source"))
+        identifier = str(record.get("accessionnumber") or "").strip()
+        if not identifier:
+            continue
+        title = " ".join(re.sub(r"<[^>]+>", " ", html.unescape(str(record.get("title") or identifier))).split())
+        record_url = "https://www.crd.york.ac.uk/PROSPERO/view/%s" % urllib.parse.quote(identifier)
+        item = {
+            "id": identifier, "title": title, "url": record_url, "reviewStatus": record.get("reviewstatus"),
+            "year": record.get("yearfirstpublished"),
+        }
+        items.append({key: field for key, field in item.items() if field not in (None, "", [])})
+        sources.append(_source(identifier, title, record_url, "prospero"))
+    result = _metadata_result(
+        "prospero", items, sources,
+        "A registration records a planned review, not a finding; open the record for its question, status and dates.",
+    )
+    result["data"]["total"] = total
+    result["data"]["term"] = term
+    read = offset + len(asked)
+    if items and isinstance(total, int) and read < total:
+        if read >= PROSPERO_REACHABLE:
+            outcome = truncated(
+                kept=read, limit=PROSPERO_REACHABLE, unit="registrations", total=total,
+                how="Only the first %d of %d matching registrations can be read for one query: narrow the query (a more specific condition or intervention) to see the rest." % (PROSPERO_REACHABLE, total),
+            )
+        else:
+            outcome = more_available(
+                returned=read, total=total, next_arguments={"offset": read},
+                how="%d of %d matching registrations have been read; call again with offset=%d for the next ones." % (read, total, read),
+            )
+        result["data"]["outcome"] = outcome
+        result["summary"] = "Read %d of %d matching PROSPERO registrations (a partial read; the rest have not been seen)." % (read, total)
+        result["warnings"].append(
+            "Do not conclude that no registered review covers this topic from a partial read: %d of %d registrations were read. %s"
+            % (read, total, outcome["how"] if outcome["state"] == "truncated" else "Read on with offset=%d, or narrow the query." % read)
+        )
+    elif items:
+        result["data"]["outcome"] = complete(returned=read, total=total)
     return result
 
 
@@ -4460,6 +4863,7 @@ BIOMEDICAL_SOURCE_IDS = (
     "human-cell-atlas", "1000-genomes-project", "archs4",
     "rummageo-geo-gene-set-enrichment-search",
     "sider",
+    "prospero",
 )
 BUNDLED_DATASET_SOURCE_IDS = ("sider",)
 CONDITIONAL_BIOMEDICAL_SOURCE_IDS = (
@@ -4474,6 +4878,9 @@ def biomedical_search(arguments):
     source_id = arguments["source"]
     query = arguments["query"]
     limit = min(arguments.get("limit", 10), 50)
+    offset = arguments.get("offset", 0)
+    if offset and source_id != "prospero":
+        raise PublicSourceError("public_source_query_invalid", "offset is read only for prospero, the register that pages; %s answers its first %d records." % (source_id, limit))
     credentialed_connectors = {
         "core": _core,
         "semantic-scholar": _semantic_scholar,
@@ -4516,6 +4923,8 @@ def biomedical_search(arguments):
         return _ols("hpo", query, limit, "hp")
     if source_id == "isrctn":
         return _isrctn(query, limit)
+    if source_id == "prospero":
+        return _prospero(query, limit, offset)
     if source_id in {"biorxiv", "medrxiv"}:
         return _preprint(source_id, query, limit)
     if source_id == "bindingdb":

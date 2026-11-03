@@ -90,6 +90,7 @@ def test_briefs_keep_goldens_outside_model_input():
         'statistics-003-lung-native-r', 'statistics-004-goal-driven-comparison',
         'statistics-005-goal-driven-prediction', 'statistics-006-followup-unit-correction',
         'statistics-007-resume-cached-analysis', 'statistics-008-report-population-reconciliation',
+        'statistics-009-censored-biomarker-comparison',
     }
     for brief in briefs:
         assert set(['id', 'title', 'why', 'inputs', 'mustDo', 'mustNotDo', 'gradedOn']) <= brief.keys()

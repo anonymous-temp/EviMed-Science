@@ -76,20 +76,42 @@ test("portfolio PMIDs must match the preserved records behind their source ids",
   assert.ok(result.issues.some((item) => item.check === "topic-evidence-lineage"));
 });
 
-test("retracted and unchecked evidence cannot silently support a recommended topic", () => {
-  for (const update of [
-    (row) => { row.publicationStatus = "retracted"; row.statusNote = "Retracted by the publisher."; },
-    (row) => { delete row.statusCheckedAt; },
-    (row) => { row.publicationStatus = "unknown"; },
-  ]) {
+test("a retraction withholds; a status nobody recorded is advice", () => {
+  const withEvidence = (update) => {
     const files = packageFiles();
     const evidence = JSON.parse(files.get("evidence-records.json"));
     update(evidence[0]);
     files.set("evidence-records.json", JSON.stringify(evidence));
-    const result = run(files);
-    assert.equal(result.ok, false);
-    assert.ok(result.issues.some((item) => item.check === "topic-publication-status" && item.severity === "required"));
+    return run(files);
+  };
+  const retracted = withEvidence((row) => { row.publicationStatus = "retracted"; row.statusNote = "Retracted by the publisher."; });
+  assert.equal(retracted.ok, false);
+  assert.ok(retracted.issues.some((item) => item.check === "topic-publication-status" && item.severity === "required"));
+  for (const update of [
+    (row) => { delete row.statusCheckedAt; },
+    (row) => { row.publicationStatus = "unknown"; },
+    (row) => { delete row.publicationStatus; delete row.statusCheckedAt; delete row.statusSource; },
+  ]) {
+    const result = withEvidence(update);
+    assert.equal(result.ok, true);
+    assert.ok(result.issues.some((item) => item.check === "topic-publication-status" && item.severity === "advisory"));
   }
+});
+
+test("one submission says everything: a malformed research context does not hide what the rest of the package needs", () => {
+  // 2026-11-02: this returned `ok` with candidates 0, and the retraction below first surfaced on the next submission.
+  const files = packageFiles();
+  changePortfolio(files, (value) => { value.researchContext = "free text"; });
+  const evidence = JSON.parse(files.get("evidence-records.json"));
+  evidence[0].publicationStatus = "retracted";
+  files.set("evidence-records.json", JSON.stringify(evidence));
+  const result = run(files);
+  assert.equal(result.ok, false);
+  assert.ok(result.issues.some((item) => item.check === "topic-research-context-fields" && item.severity === "advisory"));
+  assert.ok(result.issues.some((item) => item.check === "topic-publication-status" && item.severity === "required"));
+  assert.equal(result.metrics.topicPortfolio?.candidates > 0, true);
+  assert.equal(result.metrics.topicPortfolio?.schemaValid, false);
+  assert.equal(result.issues.some((item) => item.check === "topic-research-context"), false, "the two files are not compared when one has no context");
 });
 
 test("a missing source artifact is unreconciled, not verified by omission", () => {
@@ -209,7 +231,7 @@ test("deep optional context cannot escape the topic advisory validator", () => {
   assert.doesNotThrow(() => { result = run(files); });
   assert.equal(result.ok, true);
   assert.equal(result.metrics.topicPortfolio?.contextFilesConsistent, false);
-  assert.ok(result.issues.some((item) => item.check === "topic-research-context"));
+  assert.ok(result.issues.some((item) => item.check === "topic-research-context-fields"));
 });
 
 test("a malformed optional portfolio has a specific repair notice", () => {

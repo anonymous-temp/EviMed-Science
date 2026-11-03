@@ -108,6 +108,7 @@ import { EVIDENCE_ARM_ROLES } from "./vcrEvidenceStore.mjs";
 import { candidateTrialFromRecord } from "./vcrPatientTrials.mjs";
 import { verifyLiteratureBaseline } from "./vcrEvidenceSources.mjs";
 import { bindEvidenceTrialIdentity, independentTrialItems } from "./vcrTrialIdentity.mjs";
+import { paperAddress } from "./vcrPublicationSources.mjs";
 import { numericLiteralInSpan } from "./vcrNumericLiterals.mjs";
 
 /** The two-sided 95% normal quantile every interval here is read with. */
@@ -314,7 +315,8 @@ export function numberIsInQuote(quote, value, { unit = "" } = {}) {
   if (target === null) return false;
   const percent = /%|percent|百分/i.test(String(unit ?? ""));
   const candidates = percent ? [target, target * 100, target / 100] : [target];
-  const text = String(quote ?? "").replace(/\[\d+\]/g, "");
+  // The Lancet family prints a decimal point as a raised dot (「15·2 months」, 「0·62」): between two digits it is the point of the same number.
+  const text = String(quote ?? "").replace(/\[\d+\]/g, "").replace(/(?<=\d)[·⋅∙](?=\d)/g, ".");
   for (const match of text.matchAll(NUMBER_TOKEN)) {
     const token = match[0].replace(/,/g, "");
     const parsed = Number(token);
@@ -342,6 +344,12 @@ function decimalsOf(value) {
   if (written.includes("e") || written.includes("E")) return Number.MAX_SAFE_INTEGER;
   return (written.split(".")[1] ?? "").length;
 }
+
+/**
+ * The `valueSource` words of a number the analyst computed rather than a source reporting it. Its inputs can be held against a text, its
+ * answer cannot: a card is never made of one (the inputs are the evidence, not the figure).
+ */
+export const EVIDENCE_DERIVED_VALUE_SOURCES = Object.freeze(["calculated", "imputed", "predicted"]);
 
 /** The numeric fields of an extraction that a quotation must anchor, besides the value. */
 const COMPANION_NUMBERS = Object.freeze(["ciLow", "ciHigh", "sampleSize", "events"]);
@@ -372,7 +380,7 @@ export function verifyExtraction({ extraction, sourceText = "", checkedAt = "" }
   // derived value the check is therefore that every input it names is in the
   // preserved text, not that its own answer is. This is the same distinction
   // the clinical gate draws between a `direct` claim and a `derived` one.
-  const derived = ["calculated", "imputed", "predicted"].includes(String(extraction?.valueSource ?? ""));
+  const derived = EVIDENCE_DERIVED_VALUE_SOURCES.includes(String(extraction?.valueSource ?? ""));
   const inputs = Array.isArray(extraction?.locator?.inputs) ? extraction.locator.inputs : [];
   /** @type {string[]} */
   const unanchored = [];
@@ -1200,6 +1208,8 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
   if (!store) throw new TypeError("The evidence pipeline needs its store.");
   /** @type {{resolve:Function}|null} */
   let literatureSources = null;
+  /** What the platform itself read of a publication (`vcrPublicationSources.mjs`), attached when the project's workspace can be reached. @type {{read:Function}|null} */
+  let publicationSources = null;
 
   /** @param {string} message @param {Record<string, unknown>} detail */
   const note = (message, detail) => { logger?.info?.(message, detail); };
@@ -1263,6 +1273,8 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
   const pipeline = {
     /** Existing source intake is attached after the shared SourceService is composed. @param {{resolve:Function}} sources */
     attachSources(sources) { literatureSources = sources; },
+    /** The reader of preserved publications, attached once the project store is composed. @param {{read:Function}} publications */
+    attachPublications(publications) { publicationSources = publications; },
     /** @param {{userId:string,studyId:string,baselineTable:any[],bindings:any[]}} input */
     verifyBaselineTable(input) { return verifyLiteratureBaseline({ store, ...input }); },
     /** Review uses the same source reader, never the run's statement that a source exists.
@@ -1613,16 +1625,27 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
       const literature = item.literatureSource ? await literatureSources?.resolve({ userId, projectId,
         source: item.literatureSource, quote: String(item.quote ?? ""), locator: item.locator, unit: String(item.unit ?? ""), identityOnly: item.notReported === true }) : null;
       if (item.literatureSource && !literature) return { status: "refused", code: "vcr_evidence_unverified", message: "Preserved literature sources are unavailable." };
-      const precedent = literature ? null : await store.precedentOfStudy({ userId, studyId, registry: registryName, registryId, recordHash: item.locator?.recordHash ?? null });
-      if (!literature && !precedent) {
+      // A number a publication reports, bound to the paper by its PMID or DOI: the quotation is held against the text the platform itself
+      // read of that paper (a capture a literature tool preserved), and a paper it has not read is not a reason to refuse the number.
+      const paper = !literature && item.publication && typeof item.publication === "object" ? /** @type {{ kind: "pmid" | "doi", id: string }} */ (item.publication) : null;
+      const paperReads = paper ? await publicationSources?.read({ userId, projectId, publication: paper }).catch(() => null) ?? { found: false } : null;
+      // The platform may have read more than one text of the paper (the whole article and its abstract): the sentence is held against the one
+      // that holds it, and when none does, against the most that was read.
+      const paperRead = paperReads?.found
+        ? { ...([paperReads, ...(paperReads.others ?? [])].find((read) => quoteIsPresent(read.text, String(item.quote ?? "").trim())) ?? paperReads), found: true } : paperReads;
+      const precedent = literature || paper ? null : await store.precedentOfStudy({ userId, studyId, registry: registryName, registryId, recordHash: item.locator?.recordHash ?? null });
+      if (!literature && !paper && !precedent) {
         return { status: "refused", code: "vcr_precedent_not_in_study",
           message: `${registryId} 还不在本研究的先例里；先用 vcr_write what:"precedent" 取回这条登记记录。` };
       }
-      const derived = ["calculated", "imputed", "predicted"].includes(String(item.valueSource ?? ""));
-      const sourceText = literature?.text ?? String(precedent?.record_text ?? "");
-      const sourceHash = literature?.locator.sourceHash ?? precedent?.record_hash ?? null;
+      const derived = EVIDENCE_DERIVED_VALUE_SOURCES.includes(String(item.valueSource ?? ""));
+      const sourceText = literature?.text ?? paperRead?.text ?? String(precedent?.record_text ?? "");
+      const sourceHash = literature?.locator.sourceHash ?? paperRead?.sha256 ?? precedent?.record_hash ?? null;
+      const sourceRef = literature?.sourceRef ?? (paper ? paperAddress(paper) : `${registryName}:${registryId}`);
+      /** @type {string | null} */
       let trialIdentity;
-      try { trialIdentity = bindEvidenceTrialIdentity({ asked: item.trialIdentity, registry: registryName, registryId, literature }); }
+      // A publication's trial is not named by its PMID, and two papers of one trial must not be two trials: a publication's number is never pooled.
+      try { trialIdentity = paper ? null : bindEvidenceTrialIdentity({ asked: item.trialIdentity, registry: registryName, registryId, literature }); }
       catch { return { status: "refused", code: "vcr_evidence_unverified", message: "Name the trial in an exact preserved trialIdentity span before pooling literature." }; }
       const checkedAt = now().toISOString();
       const timepoint = item.timepoint;
@@ -1635,14 +1658,14 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
         && !!item.arm && quoteIsPresent(String(timepoint.quote),String(item.arm));
       // 「论文未报告」 is a state of its own (C8): the source was read and the parameter is not in it. It carries no number and nothing
       // to check one against, so it is stored as it was said, can never be pooled, and is read back as 未取到.
-      const checked = item.notReported === true ? {
+      let checked = item.notReported === true ? {
         state: "not_reported", verified: false,
         item: {
           parameter: String(item.parameter), arm: item.arm ?? null,
           armRole: EVIDENCE_ARM_ROLES.includes(String(item.armRole)) ? item.armRole : "unknown",
           value: null, valueText: "not_reported", unit: "", ciLow: null, ciHigh: null, sampleSize: null, events: null, valueSource: "extracted",
-          quote: String(item.quote ?? ""), sourceRef: literature?.sourceRef ?? `${registryName}:${registryId}`,
-          locator: { ...(literature?.locator ?? { kind: "registry_field", recordHash: precedent?.record_hash ?? null }), authoredBy: "run",
+          quote: String(item.quote ?? ""), sourceRef,
+          locator: { ...(literature?.locator ?? (paper ? paperLocator(paper, paperRead) : { kind: "registry_field", recordHash: precedent?.record_hash ?? null })), authoredBy: "run",
             verification: "not_reported", checkedAt },
           endpointKey: String(item.endpointKey ?? ""), enrollmentKind: item.enrollmentKind ?? null, historicalBaseline: false,
           applicability: { line: item.line, biomarker: item.biomarker, endpointKey: String(item.endpointKey ?? "") },
@@ -1655,12 +1678,12 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
           value: item.value ?? null, valueText: item.valueText ?? "", unit: item.unit ?? "",
           ciLow: item.ciLow ?? null, ciHigh: item.ciHigh ?? null, sampleSize: item.sampleSize ?? null, events: item.events ?? null,
           valueSource: derived ? String(item.valueSource) : "extracted",
-          quote: String(item.quote ?? ""), sourceRef: literature?.sourceRef ?? `${registryName}:${registryId}`,
-          locator: { ...(literature?.locator ?? { kind: "registry_field", ...(item.locator && typeof item.locator === "object" ? {
+          quote: String(item.quote ?? ""), sourceRef,
+          locator: { ...(literature?.locator ?? (paper ? { ...paperLocator(paper, paperRead), ...(item.locator && typeof item.locator === "object" && Array.isArray(item.locator.inputs) ? { inputs: item.locator.inputs.map(String) } : {}) } : { kind: "registry_field", ...(item.locator && typeof item.locator === "object" ? {
             path: typeof item.locator.path === "string" ? item.locator.path : undefined,
             inputs: Array.isArray(item.locator.inputs) ? item.locator.inputs.map(String) : undefined,
             parts: item.locator.parts,
-          } : {}), recordHash: precedent?.record_hash ?? null }), authoredBy: "run" },
+          } : {}), recordHash: precedent?.record_hash ?? null })), authoredBy: "run" },
           endpointKey: String(item.endpointKey ?? ""),
           enrollmentKind: item.enrollmentKind ?? null,
           historicalBaseline: !derived && item.enrollmentKind !== "estimated" && item.historicalBaseline === true,
@@ -1668,7 +1691,7 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
           // `candidateFrom` and `source` are the run's own statements, kept beside the verdict and read by nothing that decides it.
           detail: { outcome: item.outcome ?? null, note: item.note ?? null, trialIdentity,
             evidenceKind: ["baseline", "outcome", "design"].includes(item.evidenceKind) ? item.evidenceKind : "outcome",
-            sourceStanding: literature ? (derived ? "article_derived" : "article_reported")
+            sourceStanding: literature || paper ? (derived ? "article_derived" : "article_reported")
               : (derived ? "registry_derived" : item.enrollmentKind === "estimated" ? "registry_planned" : "registry_reported"),
             verificationScope: derived ? "quoted_inputs_only" : "quotation_and_numbers",
             ...(item.candidateFrom ? { candidateFrom: item.candidateFrom } : {}), ...(item.source ? { source: String(item.source) } : {}),
@@ -1679,12 +1702,30 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
         sourceText,
         checkedAt,
       });
+      // A publication's number that the platform could not hold against a text it read — no text read, the quotation not in it, a
+      // value computed from a paper's numbers — is kept as the paper is said to report it, and says it is unchecked. It is not refused
+      // (the number is the researcher's to use, with its standing on it) and it is never called verified: every reader of verified
+      // evidence (pooling, baselines, an expert setting) still passes it over (`citableEvidenceIds` is the one reader that does not).
+      // A number its own quotation does not contain (the sentence is in the text, the number is not in the sentence) is a transcription the
+      // source contradicts, not a number to use: that stays refused, as a registry's does.
+      if (paper && item.notReported !== true && (derived || ["source_unavailable", "quote_not_found"].includes(checked.state))) {
+        const why = derived ? "calculated_from_publication" : !paperRead?.found ? "publication_not_read" : String(checked.state);
+        checked = { state: "reported_unverified", verified: false, item: {
+          ...checked.item,
+          value: finite(item.value), valueText: String(item.valueText ?? ""), ciLow: finite(item.ciLow), ciHigh: finite(item.ciHigh),
+          sampleSize: finite(item.sampleSize), events: finite(item.events),
+          locator: { ...checked.item.locator, verification: "reported_unverified", verificationDetail: why },
+          detail: { ...checked.item.detail, sourceStanding: "article_reported_unverified", verificationScope: "none", unverifiedBecause: why,
+            ...(paperRead?.found ? { contentRead: paperRead.contentLevel } : {}) },
+        } };
+      }
       const appended = await store.appendEvidenceItems({ userId, studyId, precedentId: precedent?.id ?? null, items: [checked.item] });
       if (item.candidateFrom && !item.notReported) {
         counters.cardCandidates += 1;
         if (checked.verified) counters.cardCandidatesVerified += 1;
       }
-      return { status: "ok", id: appended.ids[0], state: checked.state };
+      return { status: "ok", id: appended.ids[0], state: checked.state, ...(paper ? { publication: { ...paper, read: paperRead?.found === true, ...(paperRead?.found ? { contentRead: paperRead.contentLevel } : {}) },
+        ...(checked.state === "reported_unverified" ? { because: checked.item.detail.unverifiedBecause } : {}) } : {}) };
     },
 
     /**
@@ -2021,3 +2062,13 @@ export const VCR_EVIDENCE_WRITES = Object.freeze({
   poolingMethods: VCR_POOLING_METHODS,
   assumptionKey: VCR_ASSUMPTION_KEY,
 });
+
+/**
+ * Where a publication's number was held: the paper by the identifier the run named, and the capture of its text the platform read
+ * when it had read one.
+ * @param {{ kind: "pmid" | "doi", id: string }} paper @param {any} read
+ */
+function paperLocator(paper, read) {
+  return { kind: "publication_text", publication: { kind: paper.kind, id: paper.id },
+    ...(read?.found ? { sourceHash: read.sha256, path: read.path, contentLevel: read.contentLevel } : {}) };
+}

@@ -314,3 +314,79 @@ test('the two skills that describe abilities we do not offer are registered clos
     for (const name of [...Object.keys(OPENVIKING_PLUGIN_ENVIRONMENT), 'OPENVIKING_API_KEY']) { if (env[name] === undefined) delete process.env[name]; else process.env[name] = env[name] }
   }
 })
+
+test('the notice needs the service to have not answered for the whole window, asked at both ends: one failure and then silence tells no one', async () => {
+  const env = { ...process.env }
+  /** @type {(() => unknown)[]} */ const disposers = []
+  /** @type {string[]} */ const degraded = []
+  const gatewayPort = await freePort()
+  const port = await freePort()
+  const wait = (/** @type {number} */ ms) => new Promise((resolve) => setTimeout(resolve, ms))
+  const ask = () => globalThis.fetch(`http://127.0.0.1:${port}/health`, { headers: { authorization: `Bearer ${process.env.OPENVIKING_API_KEY}` } })
+  /** @type {http.Server | null} */ let gateway = null
+  const gatewayUp = async () => {
+    gateway = http.createServer((_req, res) => { res.writeHead(200, { 'content-type': 'application/json' }); res.end('{}') })
+    await new Promise((resolve) => /** @type {http.Server} */ (gateway).listen(gatewayPort, '127.0.0.1', () => resolve(undefined)))
+  }
+  const gatewayDown = async () => {
+    const server = /** @type {http.Server} */ (gateway)
+    server.closeAllConnections?.()
+    await new Promise((resolve) => server.close(() => resolve(undefined)))
+  }
+  try {
+    await registerMemoryBridge({
+      get: (/** @type {string} */ name) => ({
+        evimedDiagnostics: { degrade: (/** @type {string} */ line) => degraded.push(line) },
+        skills: { register: () => () => {} },
+      })[name],
+      effect: (/** @type {() => () => unknown} */ install) => { disposers.push(install()) },
+      provide: () => {},
+      logger: { warn: () => {} },
+    }, { enabled: true, gatewayUrl: `http://127.0.0.1:${gatewayPort}`, tokenFile: '', port, outageNoticeMs: 120, cooldownMs: 0 })
+    assert.equal((await ask()).status, 503)
+    assert.deepEqual(degraded, [], 'not on the failure itself')
+    await wait(250)
+    assert.deepEqual(degraded, [], 'nobody asked the service for the window after it failed once: that is silence, not an outage')
+    assert.equal((await ask()).status, 503)
+    assert.equal(degraded.length, 1, 'asked again after the window and it still did not answer')
+    assert.match(degraded[0], /did not answer/)
+    assert.equal((await ask()).status, 503)
+    assert.equal(degraded.length, 1, 'one notice for one outage')
+
+    await gatewayUp()
+    assert.equal((await ask()).status, 200)
+    await gatewayDown()
+    assert.equal((await ask()).status, 503)
+    await wait(250)
+    assert.equal(degraded.length, 1, 'a new failure after an answer starts a new window, and no one asked in it')
+
+    await gatewayUp()
+    assert.equal((await ask()).status, 200)
+    await gatewayDown()
+    assert.equal((await ask()).status, 503)
+    await gatewayUp()
+    await wait(150)
+    assert.equal((await ask()).status, 200)
+    await gatewayDown()
+    assert.equal((await ask()).status, 503)
+    assert.equal(degraded.length, 1, 'an answer in between: the earlier failure no longer counts towards the window')
+  } finally {
+    for (const dispose of disposers) await dispose?.()
+    for (const name of [...Object.keys(OPENVIKING_PLUGIN_ENVIRONMENT), 'OPENVIKING_API_KEY']) { if (env[name] === undefined) delete process.env[name]; else process.env[name] = env[name] }
+  }
+})
+
+test('a single forward that hangs for the whole window and then fails is an outage, since it was asked and did not answer', async () => {
+  /** @type {string[]} */ const outages = []
+  const gateway = await fakeGateway(() => ({ hang: true }))
+  const { bridge, call } = await startBridge({ gatewayUrl: gateway.url, tokenFile: '/run/token', readToken: async () => 'token', cooldownMs: 0,
+    deadlines: { healthMs: 200, requestMs: 200, toolCallMs: 200 }, outageMs: 150, onOutage: (/** @type {string} */ detail) => outages.push(detail) })
+  try {
+    assert.equal((await call('/health')).status, 503)
+    assert.equal(outages.length, 1)
+    assert.match(outages[0], /no answer in 200 ms/)
+  } finally {
+    await bridge.close()
+    await gateway.close()
+  }
+})

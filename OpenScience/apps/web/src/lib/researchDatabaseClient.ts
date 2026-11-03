@@ -52,8 +52,8 @@ export function saveResearchDatabase(input: { projectId: string; requestId: stri
 export function listResearchDatabaseTables(id: string, projectId: string) {
   return productRequest<ResearchDatabaseTables>(`/research-databases/${encodeURIComponent(id)}/tables?projectId=${encodeURIComponent(projectId)}`);
 }
-/** `columns` empty or omitted imports every supported column of the table (up to the column limit). */
-export function snapshotResearchDatabase(id: string, input: { projectId: string; requestId: string; agendaId: string; schema: string; table: string; columns: string[] }) {
+/** `columns` empty or omitted imports every supported column of the table (up to the column limit). No `agendaId`: to the project's knowledge base. */
+export function snapshotResearchDatabase(id: string, input: { projectId: string; requestId: string; agendaId?: string; schema: string; table: string; columns: string[] }) {
   return productRequest<ResearchDatabaseSnapshot>(`/research-databases/${encodeURIComponent(id)}/snapshot`, "POST", input);
 }
 export function removeResearchDatabase(id: string, projectId: string) {

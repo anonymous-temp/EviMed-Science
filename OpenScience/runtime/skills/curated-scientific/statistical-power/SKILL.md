@@ -1,6 +1,6 @@
 ---
 name: statistical-power
-description: Calculates sample sizes and statistical power for study planning. Applies when someone asks "how many subjects/samples/replicates do I need", wants an a priori power analysis, a minimum detectable effect (MDE), a power curve, or needs to justify a sample size for a grant, IRB protocol, or pre-registration. Covers closed-form power for t-tests, ANOVA, proportions, correlations, chi-square, and regression, plus simulation-based (Monte Carlo) power for complex designs — logistic/Poisson regression, mixed models, cluster-randomized trials, survival, and interactions. Also handles requests that only mention an effect size, alpha, or "80% power" without saying "power analysis" explicitly. For laying out the study (randomization, blocking, factorial/DOE, crossover, sequential designs) use experimental-design; for analyzing data already collected and reporting it use statistical-analysis.
+description: Sample size and statistical power for animal, laboratory, survey, A/B and other general experiments ("how many subjects/samples/replicates do I need", a power analysis, an MDE, a power curve). A human clinical trial's sample size, power, events or comparison of trial designs goes to mcp__evimed__vcr_simulate when it is among your tools, not here. Covers closed-form power for t-tests, ANOVA, proportions, correlations, chi-square, and regression, plus simulation-based (Monte Carlo) power for complex designs — logistic/Poisson regression, mixed models, cluster-randomized trials, survival, and interactions. Also handles requests that only mention an effect size, alpha, or "80% power" without saying "power analysis" explicitly, and the sample-size justification a grant, IRB protocol or pre-registration needs. For laying out the study (randomization, blocking, factorial/DOE, crossover, sequential designs) use experimental-design; for analyzing data already collected and reporting it use statistical-analysis.
 allowed-tools: Read Write Edit Bash
 compatibility: Runs on the runtime's own Python, where statsmodels, SciPy, NumPy, pandas, matplotlib and lifelines are installed. Nothing is installed at run time and there is no network access. pingouin is not installed and the bundled scripts do not use it.
 license: MIT license
@@ -11,6 +11,10 @@ metadata:
 ---
 
 # Statistical Power & Sample Size
+
+## A human clinical trial goes to the VCR tools when you have them
+
+If `mcp__evimed__vcr_simulate` is among your tools and the question is a human clinical trial — the sample size, power or events of a drug or device trial, a phase II or III design, a comparison of trial designs, a synthetic cohort from a paper's baseline table, an external control — do not write your own script. Call `mcp__evimed__vcr_simulate` with `action: shape` and the job kind, then `start`: no study has to exist first, the engine's numbers come back on a result page that keeps its versions and the premises the person can change by a sentence ("a more cautious dropout rate"). This skill stays for animal, laboratory, survey, A/B and other general experiments, and for a human-trial question the tools cannot take (say what they could not).
 
 ## Overview
 

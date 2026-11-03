@@ -101,6 +101,24 @@ export function premiseSourceOfCard(card) {
 }
 
 /**
+ * Where a figure that came from one paper comes from, in the words the page prints beside it: the paper by its identifier and, when
+ * the platform could not hold the number against a text it read of that paper, that it did not. A card made of a registry record or a
+ * pool says nothing here.
+ * @param {Record<string, any> | null | undefined} card @returns {string | null}
+ */
+export function premiseReasonOfCard(card) {
+  const pooling = object(card?.pooling);
+  if (typeof pooling.citation !== "string" || !pooling.citation) return null;
+  if (pooling.unchecked !== true) return `引自 ${pooling.citation}`;
+  // A value computed from the paper's numbers has no quotation to find: the paper is where its inputs came from.
+  return ["calculated", "imputed", "predicted"].includes(String(card?.valueSource ?? "")) ? `引自 ${pooling.citation}，由论文里的数算出，数值未核对`
+    : `引自 ${pooling.citation}，引文没有在平台读到的原文里找到，数值未核对`;
+}
+
+/** The row's `reason` when the figure has one. @param {{ reason?: string | null } | null | undefined} stood */
+const reasonOf = (stood) => (stood?.reason ? { reason: stood.reason } : {});
+
+/**
  * The unit a time quantity is stated in: the scenario's, else months, which is the unit the engine always assumed.
  * @param {Record<string, any>} configuration @param {Record<string, any>} diagnostics
  */
@@ -129,14 +147,19 @@ function trialPremises(input) {
   const accrual = object(configuration.accrual);
   const analysis = object(configuration.analysis);
   const defaults = new Map(list(input.appliedDefaults).map(object).map((entry) => [String(entry.path), entry.value]));
-  const cardByPath = new Map(list(input.bound).map(object).map((entry) => [String(entry.path), list(input.cards).map(object).find((card) => card.key === entry.key) ?? null]));
+  // A job that recorded the number it took from a card (a conversation's own start) is read through that card only while the card still states
+  // it: a later version with another number is not this job's premise.
+  const cardByPath = new Map(list(input.bound).map(object).map((entry) => {
+    const card = list(input.cards).map(object).find((candidate) => candidate.key === entry.key) ?? null;
+    return [String(entry.path), card && (numeric(entry.value) === null || numeric(card.pointValue) === numeric(entry.value)) ? card : null];
+  }));
   /**
    * The value a path has in the run — the card's when one was laid over it, else what the scenario states — and where it came from.
-   * @param {string} path @param {unknown} stated @returns {{ value: unknown, source: VcrPremise["source"] } | null}
+   * @param {string} path @param {unknown} stated @returns {{ value: unknown, source: VcrPremise["source"], reason?: string | null } | null}
    */
   const stand = (path, stated) => {
     const card = cardByPath.get(path);
-    if (card && numeric(card.pointValue) !== null) return { value: numeric(card.pointValue), source: premiseSourceOfCard(card) };
+    if (card && numeric(card.pointValue) !== null) return { value: numeric(card.pointValue), source: premiseSourceOfCard(card), reason: premiseReasonOfCard(card) };
     if (defaults.has(path)) return { value: defaults.get(path), source: "default" };
     return stated === undefined || stated === null ? null : { value: stated, source: "assumed" };
   };
@@ -151,17 +174,17 @@ function trialPremises(input) {
   if (single) {
     const alternative = stand("truth.alternativeRate", truth.alternativeRate ?? truth.responseRate);
     const nullRate = stand("truth.nullRate", truth.nullRate);
-    if (alternative && numeric(alternative.value) !== null) rows.push({ key: "effect", label: "预期应答率（备择）", value: percent(Number(alternative.value)), source: alternative.source, decisive: true });
+    if (alternative && numeric(alternative.value) !== null) rows.push({ key: "effect", label: "预期应答率（备择）", value: percent(Number(alternative.value)), source: alternative.source, ...reasonOf(alternative), decisive: true });
     if (nullRate && numeric(nullRate.value) !== null) rows.push({ key: "control", label: "要超过的应答率（零假设）", value: percent(Number(nullRate.value)), source: nullRate.source, decisive: true });
   } else if (type === "time_to_event") {
     const hr = stand("truth.hazardRatio", truth.hazardRatio);
     const law = hazardLawWords(truth.treatmentHazardRatios, time);
-    if (hr && numeric(hr.value) !== null) rows.push({ key: "effect", label: "真实效应（风险比）", value: plain(Number(hr.value)), source: hr.source, decisive: true });
+    if (hr && numeric(hr.value) !== null) rows.push({ key: "effect", label: "真实效应（风险比）", value: plain(Number(hr.value)), source: hr.source, ...reasonOf(hr), decisive: true });
     // a hazard ratio that changes over time has no single number to state; it is the effect, in the words it was written in
     else if (law) rows.push({ key: "effect", label: "真实效应（风险比随时间变化）", value: law, source: stand("truth.treatmentHazardRatios", truth.treatmentHazardRatios)?.source ?? "assumed", decisive: true });
   } else if (type === "continuous") {
     const effect = stand("truth.effect", truth.effect);
-    if (effect && numeric(effect.value) !== null) rows.push({ key: "effect", label: "真实效应（均数差）", value: plain(Number(effect.value)), source: effect.source, decisive: true });
+    if (effect && numeric(effect.value) !== null) rows.push({ key: "effect", label: "真实效应（均数差）", value: plain(Number(effect.value)), source: effect.source, ...reasonOf(effect), decisive: true });
   } else if (type === "binary") {
     const control = stand("truth.controlRate", truth.controlRate);
     const treatment = stand("truth.treatmentRate", truth.treatmentRate);
@@ -169,13 +192,13 @@ function trialPremises(input) {
     const odds = stand("truth.oddsRatio", truth.oddsRatio);
     const given = treatment ?? difference ?? odds;
     if (treatment && control && numeric(treatment.value) !== null && numeric(control.value) !== null) {
-      rows.push({ key: "effect", label: "真实效应（试验组事件率）", value: percent(Number(treatment.value)), source: treatment.source, decisive: true });
+      rows.push({ key: "effect", label: "真实效应（试验组事件率）", value: percent(Number(treatment.value)), source: treatment.source, ...reasonOf(treatment), decisive: true });
     } else if (difference && numeric(difference.value) !== null) {
-      rows.push({ key: "effect", label: "真实效应（风险差）", value: plain(Number(difference.value)), source: difference.source, decisive: true });
+      rows.push({ key: "effect", label: "真实效应（风险差）", value: plain(Number(difference.value)), source: difference.source, ...reasonOf(difference), decisive: true });
     } else if (odds && numeric(odds.value) !== null) {
-      rows.push({ key: "effect", label: "真实效应（优势比）", value: plain(Number(odds.value)), source: odds.source, decisive: true });
+      rows.push({ key: "effect", label: "真实效应（优势比）", value: plain(Number(odds.value)), source: odds.source, ...reasonOf(odds), decisive: true });
     } else if (given && numeric(given.value) !== null) {
-      rows.push({ key: "effect", label: "真实效应", value: plain(Number(given.value)), source: given.source, decisive: true });
+      rows.push({ key: "effect", label: "真实效应", value: plain(Number(given.value)), source: given.source, ...reasonOf(given), decisive: true });
     }
   }
 
@@ -184,22 +207,22 @@ function trialPremises(input) {
     // stated above
   } else if (type === "time_to_event") {
     const median = stand("truth.controlMedian", truth.controlMedian);
-    if (median && numeric(median.value) !== null) rows.push({ key: "control", label: "对照组中位时间", value: `${plain(Number(median.value))} ${time}`, source: median.source, decisive: true });
+    if (median && numeric(median.value) !== null) rows.push({ key: "control", label: "对照组中位时间", value: `${plain(Number(median.value))} ${time}`, source: median.source, ...reasonOf(median), decisive: true });
     const shape = defaults.has("truth.controlDistribution.kind") ? "指数分布" : null;
     if (shape) rows.push({ key: "controlDistribution", label: "对照组生存分布", value: shape, source: "default", decisive: false });
   } else if (type === "binary") {
     const rate = stand("truth.controlRate", truth.controlRate);
-    if (rate && numeric(rate.value) !== null) rows.push({ key: "control", label: "对照组事件率", value: percent(Number(rate.value)), source: rate.source, decisive: true });
+    if (rate && numeric(rate.value) !== null) rows.push({ key: "control", label: "对照组事件率", value: percent(Number(rate.value)), source: rate.source, ...reasonOf(rate), decisive: true });
   } else if (type === "continuous") {
     const sd = stand("truth.sd", truth.sd);
-    if (sd && numeric(sd.value) !== null) rows.push({ key: "control", label: "结局的标准差", value: plain(Number(sd.value)), source: sd.source, decisive: true });
+    if (sd && numeric(sd.value) !== null) rows.push({ key: "control", label: "结局的标准差", value: plain(Number(sd.value)), source: sd.source, ...reasonOf(sd), decisive: true });
   }
 
   // Dropout: a survival design loses a proportion each year, and when nothing says how many it loses none. The other endpoints have no
   // dropout in the simulation at all, which is the same silent assumption said once.
   if (type === "time_to_event") {
     const dropout = stand("accrual.dropoutAnnual", accrual.dropoutAnnual);
-    if (dropout && numeric(dropout.value) !== null) rows.push({ key: "dropout", label: "每年脱落率", value: percent(Number(dropout.value)), source: dropout.source, decisive: true });
+    if (dropout && numeric(dropout.value) !== null) rows.push({ key: "dropout", label: "每年脱落率", value: percent(Number(dropout.value)), source: dropout.source, ...reasonOf(dropout), decisive: true });
   } else if (type === "binary" || type === "continuous") {
     rows.push({ key: "dropout", label: "脱落", value: "不模拟，每位受试者都有结局", source: "default", decisive: true });
   }

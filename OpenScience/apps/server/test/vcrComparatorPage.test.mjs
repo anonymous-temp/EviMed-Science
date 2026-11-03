@@ -233,3 +233,23 @@ test("D6: the enrolment year is a row beside the balance when the engine compute
   assert.deepEqual(unreadable.comparability.map((item) => item.key), ["age"]);
   assert.match(unreadable.comparabilityNote, /入组年份没有算：日期列里读不出年份。/);
 });
+
+test("the headline is the saved comparison the link named when it is one of the study's, and the newest otherwise (2026-11-02: the reply said 3.0 and the page 2.22)", () => {
+  const row = (/** @type {string} */ id, /** @type {number} */ version, /** @type {number} */ value) => {
+    const comparator = { id, version, route: "external_control", estimand: "ATT", resultId: `res_${id}`, conclusion: "estimable", gapList: [], createdAt: AT, targetTrial: {}, configuration: {} };
+    const result = { id: `res_${id}`, version: 1, kind: "comparator", conclusion: "estimable", counts: {}, createdAt: AT, executionId: `ex_${id}`, diagnostics: {},
+      measures: [{ name: "e_value", value, source: "calculated" }] };
+    return { comparator, result };
+  };
+  const first = row("cmp_old", 1, 3.0);
+  const second = row("cmp_new", 2, 2.22);
+  const bundle = (/** @type {Record<string, any>} */ more = {}) => bundleOf({ comparators: [second.comparator, first.comparator], comparator: second.comparator,
+    results: [second.result, first.result], allResults: [second.result, first.result], executions: new Map([["ex_cmp_old", { id: "ex_cmp_old", jobId: "job_1", method: "comparator.evalue", methodVersion: "1.0.0" }],
+      ["ex_cmp_new", { id: "ex_cmp_new", jobId: "job_2", method: "comparator.evalue", methodVersion: "1.0.0" }]]), ...more });
+  assert.equal(presentComparatorTab(bundle()).selection.id, "cmp_new", "without a name the newest stays");
+  const named = presentComparatorTab(bundle({ askedComparator: "cmp_old" }));
+  assert.equal(named.selection.id, "cmp_old");
+  assert.equal(named.selection.resultId, "res_cmp_old", "and its result is what the headline is made of");
+  assert.deepEqual(named.versions.map((version) => version.objectId), ["cmp_new", "cmp_old"], "the list of versions is the study's, in the same order");
+  assert.equal(presentComparatorTab(bundle({ askedComparator: "cmp_not_here" })).selection.id, "cmp_new", "a name the study does not hold is the newest");
+});

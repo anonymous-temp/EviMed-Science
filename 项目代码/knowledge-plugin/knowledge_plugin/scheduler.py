@@ -892,8 +892,13 @@ class Crawler:
         host = urlsplit(url).hostname
         if not host or urlsplit(url).scheme != "https":
             return {"status": "deferred", "reason": "https_required"}
-        result = await self._fetcher.fetch(RequestSpec(url=url), source_id="evimed-source-requests",
-                                           egress="direct", allowed_hosts=[host])
+        # An API of our own platform, not a page to crawl: its robots.txt closes /evolution/ to crawlers (2026-10-29), which refused
+        # this read on every pull until it was marked as what it is.
+        try:
+            result = await self._fetcher.fetch(RequestSpec(url=url, conditional=False, api=True), source_id="evimed-source-requests",
+                                               egress="direct", allowed_hosts=[host])
+        except FetchError as error:
+            return {"status": "deferred", "reason": f"manifest_unreachable:{error.outcome}"}
         if result.status != 200 or len(result.body) > 262144:
             return {"status": "deferred", "reason": "manifest_unavailable"}
         from .source_requests import admitted_requests

@@ -1,6 +1,6 @@
 ---
 name: vcr-matching
-description: Two-way eligibility matching for a 「虚拟临床研究」 study — structure a protocol's criteria, locate every patient fact in its source text with a character span and a visibility time, answer the language-only criteria with a quote, and hand back the computed four-state judgment set with its evidence gaps. Matching ends at scientific assessment.
+description: Matching one patient to trials, or a trial's criteria to patients, for 「虚拟临床研究」 — structure a protocol's criteria, locate every patient fact in its source text with a character span and a visibility time, answer the language-only criteria with a quote, and hand back the computed four-state judgment set with its evidence gaps. Matching ends at scientific assessment.
 metadata:
   evimed-agent: vcr-matching
 ---
@@ -45,7 +45,7 @@ Keep three questions separate for every criterion: does the criterion apply, is 
 
 A fact states only what its quotation says. What the text does not mention is unknown, never `negated`: use `negated` (or assertion `negated`) only when the quotation itself denies the finding, for example 「否认妊娠」 or "denies pregnancy". A sex, an age or a diagnosis is a fact about itself, not a quotation for pregnancy, lactation, menopause, fertility, a procedure or a negative result; leave such a fact unwritten and the criterion stays unknown. Two facts about different variables should not rest on the same words unless the words state both (「未绝经」 does). A fact write that answers with a `negated_on_words_of_another_fact` notice names both facts: if the text does not deny the finding, correct the negated fact with `clinical.correctionOf` and assertion `unknown`.
 
-A registry publication date, dataset year, file modification time and upload time are source metadata, not patient encounter or event dates. Do not derive a birth year or washout interval from an undated reported age or from benchmark metadata. Only a clinical encounter/event anchor in the source supports calendar arithmetic. For a new exact `occurredAt` or `recordedAt`, the stated calendar date, with its year, must be in its source quotation or in `dateQuote`, a second verbatim line of the same document that prints it (a current state takes the stated date of the record it is read in; a past event with no date of its own stays undated); otherwise omit that timestamp and retain the corresponding uncertainty.
+A registry publication date, dataset year, file modification time and upload time are source metadata, not patient encounter or event dates. Do not derive a birth year or washout interval from an undated reported age or from benchmark metadata. Only a clinical encounter/event anchor in the source supports calendar arithmetic. For a new exact `occurredAt` or `recordedAt`, the stated calendar date, with its year, must be in its source quotation or in `dateQuote`, a second verbatim line of the same document that prints the date of that very fact; otherwise omit that timestamp. You do not write the date of the record a fact sits in: a fact with no date of its own is dated by the platform from the header of its record, and the assessment says so beside the date.
 
 Do not mark a person eligible while your own explanation says a required fact remains unconfirmed. Read the evaluator's assessment back; preserve its `applicable` and `state` separately. If protected subject intake or evaluation could not complete, deliver any useful file-based interpretation as provisional and explicitly state that a persisted patient assessment was not produced. Never replace the evaluator's unknown with a confident statement in an exported file.
 
@@ -103,15 +103,17 @@ Every eligibility verdict you deliver, whether a sentence in the reply, a table 
   "occurredAt": "2026-06-28", "surface": "急性心梗",
   "documentId": "<文档 id>", "quote": "2026-06-28 因急性心梗入院" },
   { "subjectKey": "P-001", "variable": "dietary_supplement", "polarity": "affirmed",
-    "occurredAt": "2026-07-01", "dateQuote": "记录日期：2026-07-01", "surface": "多种维生素",
-    "documentId": "<文档 id>", "quote": "每日口服多种维生素" } ] }
+    "surface": "多种维生素", "documentId": "<文档 id>", "quote": "每日口服多种维生素" },
+  { "subjectKey": "P-001", "variable": "myocardial_infarction", "polarity": "affirmed",
+    "clinical": { "schema": 1, "assertion": "affirmed", "experiencer": "patient", "temporality": "historical" },
+    "surface": "心梗", "documentId": "<文档 id>", "quote": "既往心梗病史" } ] }
 ```
 
 - `variable`：小写英文加下划线，**与入排条件里的 `variable` 完全一致**（性别写 `sex`，值 `女` / `female` 平台都认得；不认得的编码，条件按「未知」处理）。
 - `polarity`：`affirmed`（确有）、`negated`（明确否认，否认史是 `negated`，不是「没有这个事实」）、`hypothetical`（拟行、不除外、可能）、`family`（家族史）。**只有 `affirmed` 才是这位患者的事实。**
 - `value` 和 `unit`：数值型的事实要写，`value` 必须是引文里印着的数；`unit` 只在引文里紧挨着数值印着单位时才写，没印就不写（事实照样保存）。条件要单位而病历没印时判「未知」；只有领域表里只有一个惯例单位的指标（`hba1c`，%）例外：没印单位的数按这个单位读，并标明是读出的、不是印出的。
-- 时间：`occurredAt` 是事情发生的日期（缺日期的事实，时间窗类条件判「未知」）；`recordedAt` 是写入病历的时间；`visibleAt` 平台默认取文档的可见时间，**你写的不能早于文档进入平台的时间**。日期要整个印在 quote 里，含年份（3/14 这样缺年份的不算）。
-- `dateQuote`：日期不在 quote 里时，另引同一份病历里印着它的那一句，逐字照抄。正在用的药、本次就诊的事自己没有日期，`occurredAt` 就写它所在那条记录的日期，`dateQuote` 引那条记录抬头的日期行（如“记录日期：2026-07-01”）；既往发生的事自己没有日期，就不填。
+- 时间：`occurredAt` 是事情发生的日期，**只在病历为这个事实印出了日期时才写**，日期要整个印在 quote 里，含年份（3/14 这样缺年份的不算）；没印就不写，不要把所在记录的日期补进来。`recordedAt` 是写入病历的时间；`visibleAt` 平台默认取文档的可见时间，**你写的不能早于文档进入平台的时间**。
+- `dateQuote`：日期不在 quote 里、病历却在别处为这一条事实印了完整日期时（如这一节的标题行），另引那一句，逐字照抄。事实自己没有日期时不要引记录抬头：平台取它上面最近的一行记录抬头（只有标签和一个完整日期的短行，如“记录日期：2026-07-01”）的日期作它的 `occurredAt`，评估里标明“日期取自病历抬头”。既往发生的事（既往史、做过的手术）要在 `clinical` 里写 `temporality: "historical"`：它的日期只算“不晚于抬头这一天”，时间窗条件在抬头日已经落在窗外时判不满足，抬头日在窗内时仍是“未知”。
 - `surface`：你实际读到的词；`quote`：包含 `surface` 的原句，**逐字照抄**。`documentId` 是上面读到的文档 id。
 - `start` 和 `end`：引文在文档里的字符位置（要写就一起写）。**不会数字数就不写**：引文在文档里只出现一次时平台自己定位；出现不止一次会回告起点，你再写上 `start` 和 `end` 指明是哪一处。
 
@@ -208,7 +210,7 @@ The internal sex-code mapping is pinned as `evimed-internal-sex-1`. Optional `vo
 
 ## Evidence-preserving cloud extraction
 
-When `matching.factContract` is null, keep the existing fact/polarity contract and omit optional `clinical` enrichment. When supplied, use its exact schema before writing facts. For each criterion variable, preserve the exact source quotation and the patient's context. Start with the smallest supported fact; extra fields are optional. Keep the criterion variable unchanged.
+When `matching.factContract` is null, keep the existing fact/polarity contract and omit optional `clinical` enrichment, except `temporality: "historical"` for a past event. When supplied, use its exact schema before writing facts. For each criterion variable, preserve the exact source quotation and the patient's context. Start with the smallest supported fact; extra fields are optional. Keep the criterion variable unchanged.
 
 Place context only inside `clinical`, for example `"clinical": {"schema": 1, "assertion": "affirmed", "experiencer": "patient"}`. Choose assertion and experiencer independently from the tool's enums. Missing or unrecorded history is unknown, never an explicit denial. A planned treatment uses hypothetical assertion and planned temporality; family events belong to family. Do not guess dates, section offsets, coding editions, or existing fact IDs. Numeric values remain numbers. Omit uncertain optional metadata instead of filling every schema field.
 

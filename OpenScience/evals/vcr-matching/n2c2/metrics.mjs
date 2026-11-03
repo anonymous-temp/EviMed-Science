@@ -232,7 +232,9 @@ export function labelsFor(states, reading) {
 /** The statistics a paired comparison reports a difference for: the overall ones and the accuracy of each criterion. */
 const PAIRED_NAMES = Object.freeze([
   'ALL.accuracyA', 'ALL.accuracyB', 'ALL.accuracyC', 'ALL.unknownShare', 'ALL.f1MicroB', 'ALL.f1MicroC', 'ALL.f1MacroB', 'ALL.f1MacroC',
-  ...TAGS.flatMap((tag) => [`${tag}.accuracyA`, `${tag}.unknownShare`]),
+  // Not met read as met: the error that dating a fact to the wrong record can cause.
+  'ALL.notMetToMet', 'ALL.notMetToMetC',
+  ...TAGS.flatMap((tag) => [`${tag}.accuracyA`, `${tag}.unknownShare`, `${tag}.notMetToMet`]),
 ]);
 
 /**

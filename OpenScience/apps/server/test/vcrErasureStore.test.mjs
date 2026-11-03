@@ -50,3 +50,12 @@ test('the second quotation a fact\'s date was read from goes with the first: its
   assert.ok(!JSON.stringify(words).includes('Record date') && !JSON.stringify(words).includes('HgbA1c'));
 });
 
+test('a date the record header gave goes the same way: the header\'s words become a hash, and where the date came from stays', () => {
+  const row = { value: null, surface: '心梗', date_surface: null, clinical: { schema: 1, assertion: 'affirmed', experiencer: 'patient', temporality: 'historical' },
+    source: { documentId: 'sfl_1', start: 30, end: 36, quote: '既往心梗病史', dateBasis: 'record_header', dateBound: 'no_later_than', dateQuote: { start: 0, end: 20, quote: '记录日期：2100-03-01' } } };
+  const words = redactedFactColumns(row);
+  assert.deepEqual(words.source.dateQuote, { start: 0, end: 20, quoteHash: sha('记录日期：2100-03-01') });
+  assert.deepEqual([words.source.dateBasis, words.source.dateBound], ['record_header', 'no_later_than'], 'how the date was read describes the record and stays');
+  assert.ok(!JSON.stringify(words).includes('记录日期') && !JSON.stringify(words).includes('心梗病史'));
+});
+

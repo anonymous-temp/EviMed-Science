@@ -92,6 +92,7 @@ export const GATE_CHECK_IDS = Object.freeze([
   'topic-evidence-lineage',
   'topic-study-plan',
   'topic-research-context',
+  'topic-research-context-fields',
   // Raised by `requirement(issues, 'topic-publication-status', …)` and missed
   // by every earlier reading of this file, because `researchTopicContract.mjs`
   // passes its id positionally rather than as a `check:` key. The walking test
@@ -630,6 +631,9 @@ function structuredOutputIssues(input) {
         { severity: 'advisory', path, check: 'structured-output' }))
       continue
     }
+    // A run that had no reason to start the engine says so, and there is then nothing to tie the package to: a Meta topic
+    // search does not start the topic engine, which designs primary studies (research-topic-selection 1.5.0).
+    if (receipt.jobStarted === false && typeof receipt.reason === 'string' && receipt.reason.trim()) continue
     // The three fields that make a receipt traceable to something that
     // happened. Without a job id there is nothing to check the package
     // against, ever — the receipt is a sentence the model wrote about itself.
