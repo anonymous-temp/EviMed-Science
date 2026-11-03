@@ -111,6 +111,7 @@ import { bindEvidenceTrialIdentity, independentTrialItems } from "./vcrTrialIden
 import { paperAddress } from "./vcrPublicationSources.mjs";
 import { numericLiteralInSpan } from "./vcrNumericLiterals.mjs";
 import { evidenceValueFindings, parsePrintedP } from "./vcrValueChecks.mjs";
+import { rankPrecedentCandidates } from "./vcrPrecedentRanking.mjs";
 
 /** The two-sided 95% normal quantile every interval here is read with. */
 export const Z_95 = 1.959963984540054;
@@ -458,8 +459,9 @@ export function verifyExtraction({ extraction, sourceText = "", checkedAt = "" }
 }
 
 /**
- * How close a candidate precedent is to this study. Used to order candidates
- * and for nothing else: a high score never authorizes pooling (plan §6.4).
+ * How close a candidate precedent is to this study, by the words it shares: the lexical floor of the ranking. Used to order candidates
+ * and for nothing else: a high score never authorizes pooling (plan §6.4). `findPrecedents` re-ranks with the words weighted by BM25 and
+ * the meaning read by the embedder where one is configured (`vcrPrecedentRanking.mjs`); this stays the answer when none is.
  *
  * @param {any} precedent @param {any} target
  * @returns {{ score: number, parts: Record<string, number> }}
@@ -487,11 +489,10 @@ export function precedentSimilarity(precedent, target) {
   const design = target?.allocation
     ? (String(precedent?.design?.allocation ?? "").toUpperCase() === String(target.allocation).toUpperCase() ? 1 : 0)
     : 0.5;
-  const hasResults = precedent?.design?.hasResults || precedent?.results?.hasResults ? 1 : 0;
-  const parts = { condition, intervention, phase, design, hasResults };
-  // The weights say what a candidate list is for: the disease and the drug
-  // first, then whether the record even carries results to extract.
-  const score = 0.35 * condition + 0.3 * intervention + 0.1 * phase + 0.1 * design + 0.15 * hasResults;
+  const parts = { condition, intervention, phase, design };
+  // The weights say what a candidate list is for: the disease and the drug first, then the phase and the design. Whether the record carries
+  // results is not how like the question it is: it stays a field of the candidate and breaks a tie (`rankPrecedentCandidates`).
+  const score = 0.4 * condition + 0.35 * intervention + 0.125 * phase + 0.125 * design;
   return { score: Math.round(score * 1000) / 1000, parts };
 }
 
@@ -1245,6 +1246,8 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
   let secondReader = null;
   /** @type {Map<string, Promise<void>>} */
   const pendingReads = new Map();
+  /** The knowledge base's embedder, when this deployment has one: what ranks the precedents found by meaning (E5). @type {{ configured?: boolean, modelKey?: string, embedDocuments: (texts: string[]) => Promise<number[][]> } | null} */
+  let embedder = null;
 
   /**
    * Start the second reading of one stored value, without waiting for it. What it finds is filed beside the value when it finishes; a
@@ -1324,6 +1327,9 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
     attachSources(sources) { literatureSources = sources; },
     /** The reader of preserved publications, attached once the project store is composed. @param {{read:Function}} publications */
     attachPublications(publications) { publicationSources = publications; },
+    /** The knowledge base's embedder (E5), attached when the control plane has one; without it the precedents are ranked by their words and the answer says so. @param {NonNullable<typeof embedder>} client */
+    attachEmbedder(client) { embedder = client; },
+
     /** The second reader of a value's passage (E1), attached when the control plane has a model client. @param {{ enabled: boolean, check: Function }} reader */
     attachSecondReader(reader) { secondReader = reader; },
     /** @param {{userId:string,studyId:string,baselineTable:any[],bindings:any[]}} input */
@@ -1409,12 +1415,16 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
         }
       }
 
-      candidates.sort((a, b) => b.similarity.score - a.similarity.score);
-      note("vcr.evidence.candidates", { userId, studyId, found: candidates.length });
+      // BM25 over the trials' words and the embedder over their meaning, fused by a weight that follows the question's language (E5); the
+      // answer names how it was ranked, and why not by meaning when it was not.
+      const { candidates: ranked, ranking } = await rankPrecedentCandidates({ candidates, target, embedder });
+      countCheck(`precedent_ranking:${ranking.mode}${ranking.fallback ? `_${ranking.fallback}` : ""}`);
+      note("vcr.evidence.candidates", { userId, studyId, found: ranked.length, ranking: ranking.mode });
       return {
         status: registries.some((entry) => entry.status === "ok") ? "ok" : REGISTRY_UNAVAILABLE,
         registries,
-        candidates: candidates.slice(0, limit),
+        ranking,
+        candidates: ranked.slice(0, limit),
       };
     },
 

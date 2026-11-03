@@ -320,7 +320,10 @@ test("similarity ranks candidates and authorizes nothing", () => {
   const near = precedentSimilarity(RECORD.precedent, target);
   const far = precedentSimilarity({ pico: { conditions: ["Type 2 Diabetes"], interventions: [{ name: "metformin" }] }, design: { phases: ["PHASE4"], allocation: "NA", hasResults: false } }, target);
   assert.ok(near.score > far.score, `${near.score} should beat ${far.score}`);
-  assert.ok(near.parts.condition > 0 && near.parts.hasResults === 1);
+  // Whether the record has results is a fact about its data, not how like the question it is (E5): no part of the score, whatever the record holds.
+  assert.ok(near.parts.condition > 0 && !("hasResults" in near.parts));
+  const withoutResults = precedentSimilarity({ ...RECORD.precedent, design: { ...RECORD.precedent.design, hasResults: false }, results: { hasResults: false } }, target);
+  assert.deepEqual(withoutResults, near, "the same trial with and without results is exactly as like the question");
   // Similarity is not an input to pooling: the eligibility check never reads it.
   const scored = poolEligibility({ items: [{ value: 1, locator: { verification: "verified" }, similarity: near }], endpointKey: "pfs-investigator" });
   assert.ok(scored.refused[0].reasons.includes("endpoint_key_missing"));
