@@ -29,7 +29,15 @@ const labels: Record<string, string> = {
   one_sample_t: "单样本 t 检验", one_sample_z: "单样本 Z 检验", one_sample_logrank: "单样本 Log-rank 检验",
   simon_boundary: "Simon 两阶段界值", stratified_beta_binomial: "分层 Beta-二项模型", stratified_risk_difference: "分层风险差",
   both_opposite: "两组施加相反方向的倍数", two_arm: "两组比较", subject: "每人一行",
+  // propensity trimming, the time-to-event doubly robust summary, the bias analysis (algorithm round C14, C8, C1, C2)
+  fixed: "固定界值", crump: "Crump 最优规则", survival: "某一时点的生存率", difference: "差值", constant: "固定值", triangular: "三角分布",
+  // the hypothesis of a design (T1) and the confirmatory designs (T2-T6)
+  superiority: "优效性", non_inferiority: "非劣效", futility_group_sequential: "中期无效性停止的成组序贯", sample_size_reestimation: "样本量再估计",
+  multi_arm_selection: "多臂中期选择", enrichment: "人群富集", count_endpoint: "计数终点", hwang_shih_decani: "Hwang-Shih-DeCani 消耗函数", kim_demets: "Kim-DeMets 消耗函数",
+  simes: "Simes 检验", bonferroni: "Bonferroni 检验", dunnett: "Dunnett 检验",
 };
+/** The selection rule of a multi-arm design: its words are short and ordinary, so they are read only at that path. */
+const selectionRules: Record<string, string> = { best: "只留中期估计最好的臂", rbest: "留最好的几个臂", epsilon: "留与最好的相差不大的臂", all: "全部保留" };
 const ruleLabels: Record<string, string> = {
   all: "满足全部条件", any: "至少满足一项", not: "不满足", compare: "比较", between: "处于范围内", in: "属于指定值", not_in: "不属于指定值", missing: "值缺失", present: "值存在",
   lt: "小于（<）", lte: "小于或等于（≤）", gt: "大于（>）", gte: "大于或等于（≥）", eq: "等于（=）", ne: "不等于（≠）",
@@ -62,6 +70,7 @@ export function methodChoiceLabel(method: string, path: string, value: string): 
   if (at === "link" && value === "log") return "对数链接";
   if (at === "link" && value === "logit") return "Logit 链接";
   if (method === "comparator.tipping_point" && at === "deltaApplies" && value === "treatment") return "仅干预组";
+  if (method === "design.confirmatory" && at === "design.selection.rule") return selectionRules[value] ?? value;
   return labels[value] ?? value;
 }
 export const ruleChoiceLabel = (value: string): string => ruleLabels[value] ?? value;
@@ -108,7 +117,8 @@ const exampleLabels: Record<string, Record<string, string>> = {
     "entropy balancing on three covariates": "平衡三个协变量"
   },
   "comparator.propensity_weight": {
-    "propensity weights for a binary endpoint": "二分类结局的倾向评分加权"
+    "propensity weights for a binary endpoint": "二分类结局的倾向评分加权",
+    "the same weights after removing the people with no comparable counterpart (Crump's rule: no bound to choose)": "去掉没有可比对象的人之后再加权（Crump 规则，不必选界值）"
   },
   "comparator.rmst": {
     "restricted mean survival time to 24 months": "比较 24 个月的 RMST"
@@ -124,7 +134,18 @@ const exampleLabels: Record<string, Record<string, string>> = {
   },
   "design.analytic": {
     "two-arm time-to-event: accrual is an object of duration, followup and dropoutAnnual": "两组生存结局：入组、随访与脱落",
-    "two-arm binary: no accrual": "两组二分类结局"
+    "two-arm binary: no accrual": "两组二分类结局",
+    "non-inferiority: the treatment is expected to be as good as the control (hazard ratio 1) and must not be worse than a hazard ratio of 1.3": "非劣效：预期与对照相当（风险比 1），不能比对照差过 1.3"
+  },
+  "design.confirmatory": {
+    "stop for futility: three looks, efficacy and futility boundaries for a mean difference of 0.4 standard deviations": "中期无效性停止：三次分析，均值差 0.4 个标准差",
+    "re-estimate the sample size at an interim look when the effect is uncertain: planned for a hazard ratio of 0.7, reported at 0.8 and 0.7 (the null is added)": "效应没把握，中期再估计样本量：计划风险比 0.7，报告 0.8 和 0.7（另加无效应）",
+    "the same re-estimation with a promising zone: enlarge only when the conditional power at the interim is between 36% and 80% (the null is added)": "带“有希望区间”的再估计：中期条件功效在 36% 到 80% 之间才加样（另加无效应）",
+    "three doses against one control, the best dose kept at the interim (80 patients per arm planned)": "三个剂量对一个对照，中期只留最好的（每臂计划 80 人）",
+    "three doses against one control for an event-time endpoint: hazard ratios 0.9, 0.75 and 0.6, the best dose kept at the interim (240 events planned in all, no accrual or control median needed)": "事件时间终点的三个剂量对一个对照：风险比 0.9、0.75、0.6，中期只留最好的（共计划 240 个事件）",
+    "a biomarker-positive subset of 40% for an event-time endpoint: hazard ratio 0.6 in the subset and 0.9 outside it (240 events planned)": "事件时间终点，标志物阳性占 40%：亚组风险比 0.6，其余 0.9（计划 240 个事件）",
+    "a biomarker-positive subset of 40%: enrol everyone, keep the subset or everyone at the interim (200 patients planned)": "标志物阳性占 40%：全部入组，中期留亚组或留全人群（计划 200 人）",
+    "a count endpoint (attacks per patient-year): rate ratio 0.67 on a control rate of 0.6, overdispersion 0.5": "计数终点（每患者年发作次数）：对照率 0.6，率比 0.67，过度离散 0.5"
   },
   "design.simulate": {
     "two-arm time-to-event with uniform accrual": "两组生存结局与均匀入组",
@@ -159,7 +180,15 @@ const exampleLabels: Record<string, Record<string, string>> = {
     "unanchored, against a reconstruction": "利用曲线重建结果进行非锚定比较"
   },
   "comparator.aipw": {
-    "doubly robust, binary outcome": "二分类结局的双重稳健估计"
+    "doubly robust, binary outcome": "二分类结局的双重稳健估计",
+    "doubly robust, restricted mean survival time to 24 months": "24 个月限制平均生存时间的双重稳健估计"
+  },
+  "comparator.bias_analysis": {
+    "how large a bias, and what confounder, turns a hazard ratio of 0.70 (95% interval 0.50 to 0.98): the tipping bias and the tipping confounder": "风险比 0.70（95% 区间 0.50–0.98）要多大的偏倚、什么样的混杂才会翻转",
+    "the same estimate tested against stated biases (the shifted null), with a probabilistic analysis of a confounder that is twice as common in the treated": "设定偏倚后的检验，并按混杂因素在试验组更常见做概率性分析"
+  },
+  "comparator.stc": {
+    "an anchored comparison on a binary outcome: the aggregate trial's log odds ratio against the common comparator is -0.35 (standard error 0.12)": "锚定的二分类比较：对方试验相对共同对照的对数优势比为 -0.35（标准误 0.12）"
   },
   "comparator.covariate_sets": {
     "two covariate sets under entropy balancing": "两套协变量的熵平衡比较"
