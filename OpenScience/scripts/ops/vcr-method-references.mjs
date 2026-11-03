@@ -131,6 +131,10 @@ export const NUMERIC_REFERENCES = {
   N17e: { methods: ['evidence.reconstruct_km'], anchors: ['IPDfromKM::getIPD(prep, armID = arm, tot.events = a$totalEvents)$IPD', 'abs(lhr_eng - lhr_pkg) <= 0.02'] },
   // patients.time_to_event: simsurv::simsurv at the same parameters, Kaplan-Meier survival and the Cox log hazard ratio within their joint error
   N28h: { methods: ['patients.time_to_event'], anchors: ['simsurv::simsurv(dist = s$dist', 'worst <= 4'] },
+  // design.simulate (MaxCombo): simtrial's four statistics, their correlation and the p-value on the same data
+  N58e: { methods: ['design.simulate'], anchors: ['simtrial::maxcombo(st, rho = c(0, 0, 1, 1), gamma = c(0, 1, 0, 1), return_corr = TRUE)', 'abs(r$p - r$p_pkg) < 1e-4'] },
+  // design.simulate (delayed effect): gsDesign2's asymptotic MaxCombo power and expected events against the simulated ones, in Monte-Carlo errors
+  N58f: { methods: ['design.simulate'], anchors: ['gsDesign2::fixed_design_maxcombo(alpha = 0.025', 'abs(pw$value - ref_power) <= 3 * pw$mcse'] },
 
 
   // --- the comparator-effect stream's cases (listed so that merging it needs no edit here; inert until the cases exist) ---
