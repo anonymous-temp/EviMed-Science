@@ -798,12 +798,12 @@ vcr_pattern_match <- function(pattern, x) {
 .vcrp_check_no_nph <- function(sc,path,ctx) {
   tr<-.vcrp_get(sc,"truth");an<-.vcrp_get(sc,"analysis")
   where<-c(if(.vcrp_named(tr) && "treatmentHazardRatios" %in% names(tr))"truth.treatmentHazardRatios",
-           if(.vcrp_named(an) && identical(an[["method"]],"maxcombo"))"analysis.method")
+           if(.vcrp_named(an) && isTRUE(an[["method"]] %in% c("maxcombo","modestly_weighted")))"analysis.method")
   if(!length(where))return(invisible(NULL))
   drop<-vapply(ctx$issues,function(i)identical(i$code,"scenario_field_unknown") && i$field %in% vapply(where,function(w).vcrp_at(path,w),character(1)),logical(1))
   ctx$issues<-ctx$issues[!drop]
   for(w in where)ctx$raise("scenario_value_invalid",.vcrp_at(path,w),
-    "A hazard ratio that changes over time and the MaxCombo analysis are simulated, not sized by a formula: ask for design_simulation (design.simulate) with this truth and analysis.")
+    "A hazard ratio that changes over time, the MaxCombo analysis and the modestly weighted test are simulated, not sized by a formula: ask for design_simulation (design.simulate) with this truth and analysis.")
   invisible(NULL)
 }
 
@@ -831,10 +831,9 @@ vcr_pattern_match <- function(pattern, x) {
     }
   }
   if (!(kind %in% c("single_arm","single_arm_external","simon_two_stage"))) {
-    methods<-list(continuous=c("ttest","ancova"),binary=c("risk_difference","logistic"),time_to_event=c("logrank","rmst","maxcombo"))
+    methods<-list(continuous=c("ttest","ancova"),binary=c("risk_difference","logistic"),time_to_event=c("logrank","rmst","maxcombo","modestly_weighted"))
     allowed<-if(.vcrp_chr(endpoint))methods[[endpoint]] else character(0)
     if (!is.null(method) && !(method %in% allowed)) bad("analysis.method","The analysis must match the endpoint.")
-    if (identical(method,"maxcombo") && identical(kind,"group_sequential")) bad("analysis.method","MaxCombo is a fixed-design analysis: a group-sequential design looks with the log-rank statistic.")
     return(invisible(NULL))
   }
   # the analyses a single-arm design runs, by endpoint (VCR_SINGLE_ARM_ANALYSIS_METHODS in the domain)
@@ -947,6 +946,15 @@ vcr_pattern_match <- function(pattern, x) {
   invisible(NULL)
 }
 
+# The coupled fields of a longitudinal virtual-patient scenario: a dropout that depends on the outcome starts from a probability of leaving, so dropoutPerVisit
+# is stated and above 0. Mirrors checkLongitudinalSemantics.
+.vcrp_check_longitudinal <- function(sc, path, ctx) {
+  if (!.vcrp_named(.vcrp_get(sc, "dropoutModel"))) return(invisible(NULL))
+  drop <- .vcrp_get(sc, "dropoutPerVisit")
+  if (!(.vcrp_num(drop) && drop > 0)) ctx$raise("scenario_value_invalid", .vcrp_at(path, "dropoutPerVisit"), "A dropout that depends on the outcome starts from the probability of leaving at an average outcome: state dropoutPerVisit above 0.")
+  invisible(NULL)
+}
+
 # The coupled fields of a win-ratio design (design.win_ratio): a size and a power wanted are two ways to ask, never both, and the events level tracks at
 # most 8 events per person on average. Mirrors checkWinRatioSemantics.
 .vcrp_check_win_ratio <- function(sc, path, ctx) {
@@ -1027,6 +1035,7 @@ vcr_validate_scenario <- function(method, scenario, input_ids = NULL, path = "sc
   if (identical(method,"design.dose")) .vcrp_check_dose(scenario,path,ctx)
   if (identical(method,"design.bayesian")) .vcrp_check_bayesian(scenario,path,ctx)
   if (identical(method,"design.win_ratio")) .vcrp_check_win_ratio(scenario,path,ctx)
+  if (identical(method,"patients.longitudinal")) .vcrp_check_longitudinal(scenario,path,ctx)
   if (method %in% c("design.analytic","design.assurance")) .vcrp_check_no_nph(scenario,path,ctx)
   if (identical(method, "comparator.maic")) .vcrp_check_maic_semantics(scenario, path, ctx)
   if (identical(method, "accrual.poisson_gamma")) .vcrp_check_accrual_semantics(scenario, path, ctx)
@@ -1234,12 +1243,29 @@ vcr_job_at_least <- function(job, from) {
     (isTRUE(.vcrp_get(design, "kind") %in% c("multi_arm_selection", "enrichment")) && identical(.vcrp_get(.vcrp_get(sc, "endpoint"), "type"), "time_to_event"))
 }
 
+# Does a longitudinal scenario ask for what patients.longitudinal 1.2.0 added? Mirrors usesLongitudinalBeyond1_1_0 in the domain.
+.vcrp_uses_longitudinal_beyond_1_1_0 <- function(sc) !is.null(.vcrp_get(sc,"trajectory")) || !is.null(.vcrp_get(sc,"dropoutModel")) || !is.null(.vcrp_get(sc,"rescue"))
+
+# Does a simulation scenario ask for what design.simulate and design.grid 1.5.0 added (the modestly weighted test, MaxCombo in a group-sequential design)? Mirrors usesWeightedBeyond1_4_0.
+.vcrp_uses_weighted_beyond_1_4_0 <- function(sc) {
+  method <- .vcrp_get(.vcrp_get(sc,"analysis"),"method")
+  if (identical(method,"modestly_weighted")) return(TRUE)
+  if (!identical(method,"maxcombo")) return(FALSE)
+  designs <- .vcrp_get(sc,"designs")
+  kinds <- c(.vcrp_get(.vcrp_get(sc,"design"),"kind"), if (is.list(designs)) vapply(designs, function(d) { k <- .vcrp_get(d,"kind"); if (.vcrp_chr(k)) k else "" }, character(1)))
+  "group_sequential" %in% kinds
+}
+
 .vcrp_legacy_design_version <- function(job,spec) {
   # the hypothesis is 1.4.0's: no older release had it (this function is not asked about a job at the current version)
-  if (job[["method"]] %in% c("design.analytic","design.simulate","design.grid") && !is.null(.vcrp_get(job$scenario,"hypothesis"))) return(FALSE)
+  if (job[["method"]] %in% c("design.analytic","design.simulate","design.grid") && !is.null(.vcrp_get(job$scenario,"hypothesis")) && utils::compareVersion(job$methodVersion,"1.4.0")<0) return(FALSE)
   if (job$methodVersion %in% unlist(spec$compatibleVersions)) {
     # a design is never labelled with a version that did not have it: 1.3.0 added the hazard ratio that changes over time and MaxCombo
     if (job[["method"]] %in% c("design.simulate","design.grid") && .vcrp_uses_nph(job$scenario) && utils::compareVersion(job$methodVersion,"1.3.0")<0) return(FALSE)
+    # and patients.longitudinal 1.2.0 the curved trajectory, the dropout that depends on the outcome and the rescue medication
+    if (identical(job[["method"]],"patients.longitudinal") && .vcrp_uses_longitudinal_beyond_1_1_0(job$scenario) && utils::compareVersion(job$methodVersion,"1.2.0")<0) return(FALSE)
+    # and 1.5.0 the modestly weighted test
+    if (job[["method"]] %in% c("design.simulate","design.grid") && .vcrp_uses_weighted_beyond_1_4_0(job$scenario) && utils::compareVersion(job$methodVersion,"1.5.0")<0) return(FALSE)
     # and model.prognostic_apply 1.1.0 added the local calibration against the outcome the table holds
     if (identical(job[["method"]],"model.prognostic_apply") && !is.null(.vcrp_get(job$scenario,"calibration"))) return(FALSE)
     # and design.confirmatory 1.1.0 the promising zone and the event-time selection and enrichment designs
@@ -1253,7 +1279,8 @@ vcr_job_at_least <- function(job, from) {
     # and the four weighting comparators one release later the imputation of missing covariates
     imputation_since <- c("comparator.entropy_balance" = "1.4.0", "comparator.propensity_weight" = "1.5.0", "comparator.weighted_cox" = "1.5.0", "comparator.aipw" = "1.4.0")[job[["method"]]]
     if (!is.na(imputation_since) && !is.null(.vcrp_get(job$scenario,"imputation")) && utils::compareVersion(job$methodVersion, imputation_since) < 0) return(FALSE)
-    return(!startsWith(job[["method"]], "patients.") || (is.null(job$scenario$pairing) && is.null(job$scenario$cohortRules)))
+    # (pairing and cohort rules are 1.1.0's: only the 1.0.0 label of a virtual-patient method cannot carry them)
+    return(!startsWith(job[["method"]], "patients.") || !identical(job$methodVersion, "1.0.0") || (is.null(job$scenario$pairing) && is.null(job$scenario$cohortRules)))
   }
   sc<-.vcrp_get(job,"scenario");base<-.vcrp_get(.vcrp_get(sc,"design"),"kind")
   if(!.vcrp_chr(base))base<-""

@@ -5755,6 +5755,548 @@
           }
         ]
       }
+    },
+    {
+      "name": "modestly weighted: a delayed effect at the current version, the weight cap stated",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.5.0",
+        "scenario": {
+          "design": {
+            "kind": "two_arm_fixed",
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "truth": {
+            "treatmentHazardRatios": {
+              "breaks": [
+                6
+              ],
+              "ratios": [
+                1,
+                0.6
+              ]
+            },
+            "controlMedian": 12
+          },
+          "accrual": {
+            "kind": "uniform",
+            "duration": 12,
+            "followup": 18
+          },
+          "analysis": {
+            "method": "modestly_weighted",
+            "sStar": 0.5,
+            "alpha": 0.025,
+            "sided": 1
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "modestly weighted: a grid of designs under the same analysis",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_grid",
+        "method": "design.grid",
+        "methodVersion": "1.5.0",
+        "scenario": {
+          "design": {
+            "kind": "two_arm_fixed",
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "truth": {
+            "treatmentHazardRatios": {
+              "breaks": [
+                6
+              ],
+              "ratios": [
+                1,
+                0.6
+              ]
+            },
+            "controlMedian": 12
+          },
+          "accrual": {
+            "kind": "uniform",
+            "duration": 12,
+            "followup": 18
+          },
+          "analysis": {
+            "method": "modestly_weighted"
+          },
+          "designs": [
+            {
+              "nTreat": 100,
+              "nControl": 100
+            },
+            {
+              "nTreat": 200,
+              "nControl": 200
+            }
+          ],
+          "truths": [
+            {
+              "treatmentHazardRatios": {
+                "breaks": [
+                  6
+                ],
+                "ratios": [
+                  1,
+                  0.6
+                ]
+              }
+            },
+            {
+              "hazardRatio": 0.8
+            }
+          ]
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "longitudinal 1.2.0: a dropout that depends on the previous value, a rescue medication and a plateau",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "generate_patients_longitudinal",
+        "method": "patients.longitudinal",
+        "methodVersion": "1.2.0",
+        "scenario": {
+          "design": {
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "endpoint": {
+            "type": "continuous"
+          },
+          "visits": [
+            0,
+            3,
+            6,
+            9,
+            12
+          ],
+          "truth": {
+            "intercept": 50,
+            "slope": -0.4,
+            "effect": -0.2,
+            "sd": 3,
+            "randomEffects": {
+              "sdIntercept": 6,
+              "sdSlope": 0.3,
+              "correlation": -0.2
+            }
+          },
+          "dropoutPerVisit": 0.1,
+          "trajectory": {
+            "kind": "plateau",
+            "halfTime": 4
+          },
+          "dropoutModel": {
+            "mechanism": "mar",
+            "logOddsPerSd": 0.8
+          },
+          "rescue": {
+            "perVisit": 0.05,
+            "effect": -2,
+            "logOddsPerSd": 0.5
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "longitudinal 1.2.0: a dropout that depends on the value at the visit, a quadratic mean",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "generate_patients_longitudinal",
+        "method": "patients.longitudinal",
+        "methodVersion": "1.2.0",
+        "scenario": {
+          "design": {
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "endpoint": {
+            "type": "continuous"
+          },
+          "visits": [
+            0,
+            3,
+            6,
+            9,
+            12
+          ],
+          "truth": {
+            "intercept": 50,
+            "slope": -0.4,
+            "effect": -0.2,
+            "sd": 3,
+            "randomEffects": {
+              "sdIntercept": 6,
+              "sdSlope": 0.3,
+              "correlation": -0.2
+            }
+          },
+          "dropoutPerVisit": 0.1,
+          "trajectory": {
+            "kind": "quadratic",
+            "curvature": 0.01
+          },
+          "dropoutModel": {
+            "mechanism": "mnar",
+            "logOddsPerSd": 1
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "longitudinal 1.2.0: a scenario with none of it replays under the 1.1.0 label",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "generate_patients_longitudinal",
+        "method": "patients.longitudinal",
+        "methodVersion": "1.1.0",
+        "scenario": {
+          "design": {
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "endpoint": {
+            "type": "continuous"
+          },
+          "visits": [
+            0,
+            3,
+            6,
+            9,
+            12
+          ],
+          "truth": {
+            "intercept": 50,
+            "slope": -0.4,
+            "effect": -0.2,
+            "sd": 3,
+            "randomEffects": {
+              "sdIntercept": 6,
+              "sdSlope": 0.3,
+              "correlation": -0.2
+            }
+          },
+          "dropoutPerVisit": 0.1
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "longitudinal 1.2.0: pairing is 1.1.0's and a 1.1.0 job may carry it",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "generate_patients_longitudinal",
+        "method": "patients.longitudinal",
+        "methodVersion": "1.1.0",
+        "scenario": {
+          "design": {
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "endpoint": {
+            "type": "continuous"
+          },
+          "visits": [
+            0,
+            3,
+            6,
+            9,
+            12
+          ],
+          "truth": {
+            "intercept": 50,
+            "slope": -0.4,
+            "effect": -0.2,
+            "sd": 3,
+            "randomEffects": {
+              "sdIntercept": 6,
+              "sdSlope": 0.3,
+              "correlation": -0.2
+            }
+          },
+          "dropoutPerVisit": 0.1,
+          "pairing": {
+            "key": "case-1",
+            "replicate": 1
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "group-sequential weighted: MaxCombo at three looks",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.5.0",
+        "scenario": {
+          "design": {
+            "kind": "group_sequential",
+            "nTreat": 150,
+            "nControl": 150,
+            "informationRates": [
+              0.5,
+              0.8,
+              1
+            ],
+            "spending": "obrien_fleming"
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "truth": {
+            "treatmentHazardRatios": {
+              "breaks": [
+                4
+              ],
+              "ratios": [
+                1,
+                0.6
+              ]
+            },
+            "controlMedian": 12
+          },
+          "accrual": {
+            "kind": "uniform",
+            "duration": 12,
+            "followup": 30,
+            "dropoutAnnual": 0.05
+          },
+          "analysis": {
+            "method": "maxcombo",
+            "alpha": 0.025,
+            "sided": 1
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "group-sequential weighted: the modestly weighted test at two looks, two-sided",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.5.0",
+        "scenario": {
+          "design": {
+            "kind": "group_sequential",
+            "nTreat": 150,
+            "nControl": 150,
+            "informationRates": [
+              0.6,
+              1
+            ],
+            "spending": "obrien_fleming"
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "truth": {
+            "treatmentHazardRatios": {
+              "breaks": [
+                4
+              ],
+              "ratios": [
+                1,
+                0.6
+              ]
+            },
+            "controlMedian": 12
+          },
+          "accrual": {
+            "kind": "uniform",
+            "duration": 12,
+            "followup": 30,
+            "dropoutAnnual": 0.05
+          },
+          "analysis": {
+            "method": "modestly_weighted",
+            "sStar": 0.5,
+            "alpha": 0.05,
+            "sided": 2
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      }
+    },
+    {
+      "name": "group-sequential weighted: a grid of group-sequential designs under MaxCombo",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_grid",
+        "method": "design.grid",
+        "methodVersion": "1.5.0",
+        "scenario": {
+          "design": {
+            "kind": "group_sequential",
+            "nTreat": 150,
+            "nControl": 150,
+            "informationRates": [
+              0.5,
+              0.8,
+              1
+            ],
+            "spending": "obrien_fleming"
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "truth": {
+            "treatmentHazardRatios": {
+              "breaks": [
+                4
+              ],
+              "ratios": [
+                1,
+                0.6
+              ]
+            },
+            "controlMedian": 12
+          },
+          "accrual": {
+            "kind": "uniform",
+            "duration": 12,
+            "followup": 30,
+            "dropoutAnnual": 0.05
+          },
+          "analysis": {
+            "method": "maxcombo"
+          },
+          "designs": [
+            {
+              "nTreat": 100,
+              "nControl": 100
+            },
+            {
+              "nTreat": 150,
+              "nControl": 150,
+              "informationRates": [
+                0.4,
+                1
+              ]
+            }
+          ],
+          "truths": [
+            {
+              "hazardRatio": 1
+            },
+            {
+              "treatmentHazardRatios": {
+                "breaks": [
+                  4
+                ],
+                "ratios": [
+                  1,
+                  0.6
+                ]
+              }
+            }
+          ]
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      }
     }
   ],
   "invalid": [
@@ -19625,7 +20167,7 @@
         "inputs": []
       },
       "expected": [
-        "scenario_value_invalid@scenario.analysis.method"
+        "method_version_mismatch@methodVersion"
       ]
     },
     {
@@ -24918,6 +25460,880 @@
       },
       "expected": [
         "scenario_field_unknown@scenario.truth.recurrence"
+      ]
+    },
+    {
+      "name": "modestly weighted: recorded at 1.4.0, which did not have it",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.4.0",
+        "scenario": {
+          "design": {
+            "kind": "two_arm_fixed",
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "truth": {
+            "treatmentHazardRatios": {
+              "breaks": [
+                6
+              ],
+              "ratios": [
+                1,
+                0.6
+              ]
+            },
+            "controlMedian": 12
+          },
+          "accrual": {
+            "kind": "uniform",
+            "duration": 12,
+            "followup": 18
+          },
+          "analysis": {
+            "method": "modestly_weighted"
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "method_version_mismatch@methodVersion"
+      ]
+    },
+    {
+      "name": "modestly weighted: a grid recorded at 1.3.0, which did not have it",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_grid",
+        "method": "design.grid",
+        "methodVersion": "1.3.0",
+        "scenario": {
+          "design": {
+            "kind": "two_arm_fixed",
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "truth": {
+            "treatmentHazardRatios": {
+              "breaks": [
+                6
+              ],
+              "ratios": [
+                1,
+                0.6
+              ]
+            },
+            "controlMedian": 12
+          },
+          "accrual": {
+            "kind": "uniform",
+            "duration": 12,
+            "followup": 18
+          },
+          "analysis": {
+            "method": "modestly_weighted"
+          },
+          "designs": [
+            {
+              "nTreat": 100
+            }
+          ],
+          "truths": [
+            {
+              "hazardRatio": 0.8
+            }
+          ]
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "method_version_mismatch@methodVersion"
+      ]
+    },
+    {
+      "name": "modestly weighted: the weight cap without the test",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.5.0",
+        "scenario": {
+          "design": {
+            "kind": "two_arm_fixed",
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "truth": {
+            "treatmentHazardRatios": {
+              "breaks": [
+                6
+              ],
+              "ratios": [
+                1,
+                0.6
+              ]
+            },
+            "controlMedian": 12
+          },
+          "accrual": {
+            "kind": "uniform",
+            "duration": 12,
+            "followup": 18
+          },
+          "analysis": {
+            "method": "logrank",
+            "sStar": 0.5
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_unknown@scenario.analysis.sStar"
+      ]
+    },
+    {
+      "name": "modestly weighted: a weight cap of zero",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.5.0",
+        "scenario": {
+          "design": {
+            "kind": "two_arm_fixed",
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "truth": {
+            "treatmentHazardRatios": {
+              "breaks": [
+                6
+              ],
+              "ratios": [
+                1,
+                0.6
+              ]
+            },
+            "controlMedian": 12
+          },
+          "accrual": {
+            "kind": "uniform",
+            "duration": 12,
+            "followup": 18
+          },
+          "analysis": {
+            "method": "modestly_weighted",
+            "sStar": 0
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.analysis.sStar"
+      ]
+    },
+    {
+      "name": "modestly weighted: a weight cap above one",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.5.0",
+        "scenario": {
+          "design": {
+            "kind": "two_arm_fixed",
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "truth": {
+            "treatmentHazardRatios": {
+              "breaks": [
+                6
+              ],
+              "ratios": [
+                1,
+                0.6
+              ]
+            },
+            "controlMedian": 12
+          },
+          "accrual": {
+            "kind": "uniform",
+            "duration": 12,
+            "followup": 18
+          },
+          "analysis": {
+            "method": "modestly_weighted",
+            "sStar": 1.5
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.analysis.sStar"
+      ]
+    },
+    {
+      "name": "modestly weighted: the analytic design does not size it",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_analytic",
+        "method": "design.analytic",
+        "methodVersion": "1.4.0",
+        "scenario": {
+          "design": {
+            "kind": "two_arm_fixed"
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "truth": {
+            "hazardRatio": 0.7,
+            "controlMedian": 12
+          },
+          "accrual": {
+            "duration": 12,
+            "followup": 18
+          },
+          "analysis": {
+            "method": "modestly_weighted"
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.analysis.method"
+      ]
+    },
+    {
+      "name": "longitudinal 1.2.0: a rescue medication under the 1.1.0 label",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "generate_patients_longitudinal",
+        "method": "patients.longitudinal",
+        "methodVersion": "1.1.0",
+        "scenario": {
+          "design": {
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "endpoint": {
+            "type": "continuous"
+          },
+          "visits": [
+            0,
+            3,
+            6,
+            9,
+            12
+          ],
+          "truth": {
+            "intercept": 50,
+            "slope": -0.4,
+            "effect": -0.2,
+            "sd": 3,
+            "randomEffects": {
+              "sdIntercept": 6,
+              "sdSlope": 0.3,
+              "correlation": -0.2
+            }
+          },
+          "dropoutPerVisit": 0.1,
+          "rescue": {
+            "perVisit": 0.05,
+            "effect": -2
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "method_version_mismatch@methodVersion"
+      ]
+    },
+    {
+      "name": "longitudinal 1.2.0: a curved trajectory under the 1.0.0 label",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "generate_patients_longitudinal",
+        "method": "patients.longitudinal",
+        "methodVersion": "1.0.0",
+        "scenario": {
+          "design": {
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "endpoint": {
+            "type": "continuous"
+          },
+          "visits": [
+            0,
+            3,
+            6,
+            9,
+            12
+          ],
+          "truth": {
+            "intercept": 50,
+            "slope": -0.4,
+            "effect": -0.2,
+            "sd": 3,
+            "randomEffects": {
+              "sdIntercept": 6,
+              "sdSlope": 0.3,
+              "correlation": -0.2
+            }
+          },
+          "dropoutPerVisit": 0.1,
+          "trajectory": {
+            "kind": "plateau",
+            "halfTime": 4
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "method_version_mismatch@methodVersion"
+      ]
+    },
+    {
+      "name": "longitudinal 1.2.0: a dropout model under the 1.1.0 label",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "generate_patients_longitudinal",
+        "method": "patients.longitudinal",
+        "methodVersion": "1.1.0",
+        "scenario": {
+          "design": {
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "endpoint": {
+            "type": "continuous"
+          },
+          "visits": [
+            0,
+            3,
+            6,
+            9,
+            12
+          ],
+          "truth": {
+            "intercept": 50,
+            "slope": -0.4,
+            "effect": -0.2,
+            "sd": 3,
+            "randomEffects": {
+              "sdIntercept": 6,
+              "sdSlope": 0.3,
+              "correlation": -0.2
+            }
+          },
+          "dropoutPerVisit": 0.1,
+          "dropoutModel": {
+            "mechanism": "mar",
+            "logOddsPerSd": 0.8
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "method_version_mismatch@methodVersion"
+      ]
+    },
+    {
+      "name": "longitudinal 1.2.0: a dropout model with no probability of leaving to start from",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "generate_patients_longitudinal",
+        "method": "patients.longitudinal",
+        "methodVersion": "1.2.0",
+        "scenario": {
+          "design": {
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "endpoint": {
+            "type": "continuous"
+          },
+          "visits": [
+            0,
+            3,
+            6,
+            9,
+            12
+          ],
+          "truth": {
+            "intercept": 50,
+            "slope": -0.4,
+            "effect": -0.2,
+            "sd": 3,
+            "randomEffects": {
+              "sdIntercept": 6,
+              "sdSlope": 0.3,
+              "correlation": -0.2
+            }
+          },
+          "dropoutPerVisit": 0,
+          "dropoutModel": {
+            "mechanism": "mar",
+            "logOddsPerSd": 0.8
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.dropoutPerVisit"
+      ]
+    },
+    {
+      "name": "longitudinal 1.2.0: a plateau without its half time",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "generate_patients_longitudinal",
+        "method": "patients.longitudinal",
+        "methodVersion": "1.2.0",
+        "scenario": {
+          "design": {
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "endpoint": {
+            "type": "continuous"
+          },
+          "visits": [
+            0,
+            3,
+            6,
+            9,
+            12
+          ],
+          "truth": {
+            "intercept": 50,
+            "slope": -0.4,
+            "effect": -0.2,
+            "sd": 3,
+            "randomEffects": {
+              "sdIntercept": 6,
+              "sdSlope": 0.3,
+              "correlation": -0.2
+            }
+          },
+          "dropoutPerVisit": 0.1,
+          "trajectory": {
+            "kind": "plateau"
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_missing@scenario.trajectory.halfTime"
+      ]
+    },
+    {
+      "name": "longitudinal 1.2.0: a half time on a quadratic trajectory",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "generate_patients_longitudinal",
+        "method": "patients.longitudinal",
+        "methodVersion": "1.2.0",
+        "scenario": {
+          "design": {
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "endpoint": {
+            "type": "continuous"
+          },
+          "visits": [
+            0,
+            3,
+            6,
+            9,
+            12
+          ],
+          "truth": {
+            "intercept": 50,
+            "slope": -0.4,
+            "effect": -0.2,
+            "sd": 3,
+            "randomEffects": {
+              "sdIntercept": 6,
+              "sdSlope": 0.3,
+              "correlation": -0.2
+            }
+          },
+          "dropoutPerVisit": 0.1,
+          "trajectory": {
+            "kind": "quadratic",
+            "curvature": 0.01,
+            "halfTime": 4
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_unknown@scenario.trajectory.halfTime"
+      ]
+    },
+    {
+      "name": "longitudinal 1.2.0: an unknown mechanism",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "generate_patients_longitudinal",
+        "method": "patients.longitudinal",
+        "methodVersion": "1.2.0",
+        "scenario": {
+          "design": {
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "endpoint": {
+            "type": "continuous"
+          },
+          "visits": [
+            0,
+            3,
+            6,
+            9,
+            12
+          ],
+          "truth": {
+            "intercept": 50,
+            "slope": -0.4,
+            "effect": -0.2,
+            "sd": 3,
+            "randomEffects": {
+              "sdIntercept": 6,
+              "sdSlope": 0.3,
+              "correlation": -0.2
+            }
+          },
+          "dropoutPerVisit": 0.1,
+          "dropoutModel": {
+            "mechanism": "mcar",
+            "logOddsPerSd": 0.8
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.dropoutModel.mechanism"
+      ]
+    },
+    {
+      "name": "longitudinal 1.2.0: a rescue probability of one",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "generate_patients_longitudinal",
+        "method": "patients.longitudinal",
+        "methodVersion": "1.2.0",
+        "scenario": {
+          "design": {
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "endpoint": {
+            "type": "continuous"
+          },
+          "visits": [
+            0,
+            3,
+            6,
+            9,
+            12
+          ],
+          "truth": {
+            "intercept": 50,
+            "slope": -0.4,
+            "effect": -0.2,
+            "sd": 3,
+            "randomEffects": {
+              "sdIntercept": 6,
+              "sdSlope": 0.3,
+              "correlation": -0.2
+            }
+          },
+          "dropoutPerVisit": 0.1,
+          "rescue": {
+            "perVisit": 1,
+            "effect": -2
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.rescue.perVisit"
+      ]
+    },
+    {
+      "name": "group-sequential weighted: MaxCombo at three looks under the 1.4.0 label, which refused it",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.4.0",
+        "scenario": {
+          "design": {
+            "kind": "group_sequential",
+            "nTreat": 150,
+            "nControl": 150,
+            "informationRates": [
+              0.5,
+              0.8,
+              1
+            ],
+            "spending": "obrien_fleming"
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "truth": {
+            "treatmentHazardRatios": {
+              "breaks": [
+                4
+              ],
+              "ratios": [
+                1,
+                0.6
+              ]
+            },
+            "controlMedian": 12
+          },
+          "accrual": {
+            "kind": "uniform",
+            "duration": 12,
+            "followup": 30,
+            "dropoutAnnual": 0.05
+          },
+          "analysis": {
+            "method": "maxcombo"
+          }
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "method_version_mismatch@methodVersion"
+      ]
+    },
+    {
+      "name": "group-sequential weighted: a grid with a group-sequential design under MaxCombo under the 1.3.0 label",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "kind": "design_grid",
+        "method": "design.grid",
+        "methodVersion": "1.3.0",
+        "scenario": {
+          "design": {
+            "kind": "group_sequential",
+            "nTreat": 150,
+            "nControl": 150,
+            "informationRates": [
+              0.5,
+              0.8,
+              1
+            ],
+            "spending": "obrien_fleming"
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "truth": {
+            "treatmentHazardRatios": {
+              "breaks": [
+                4
+              ],
+              "ratios": [
+                1,
+                0.6
+              ]
+            },
+            "controlMedian": 12
+          },
+          "accrual": {
+            "kind": "uniform",
+            "duration": 12,
+            "followup": 30,
+            "dropoutAnnual": 0.05
+          },
+          "analysis": {
+            "method": "maxcombo"
+          },
+          "designs": [
+            {
+              "nTreat": 100
+            }
+          ],
+          "truths": [
+            {
+              "hazardRatio": 1
+            }
+          ]
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "method_version_mismatch@methodVersion"
       ]
     }
   ],

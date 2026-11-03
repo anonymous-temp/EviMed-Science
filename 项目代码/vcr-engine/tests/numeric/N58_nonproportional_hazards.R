@@ -171,7 +171,7 @@ vcr_case("N58d", c("AC-04", "AC-13"), function() {
     truth = list(hazardRatio = 0.7, controlMedian = 12, treatmentHazardRatios = nph), accrual = list(duration = 12, followup = 18),
     analysis = list(alpha = 0.025, power = 0.9, sided = 1)), job_id = "job_n58d_a")
   gs_mc <- vcr_test_job("design.simulate", .n58_two_arm(150, hr = 0.7, analysis = "maxcombo", kind = "group_sequential",
-    extra = list(design = list(kind = "group_sequential", nTreat = 150, nControl = 150, informationRates = list(0.5, 1)))), job_id = "job_n58d_gs")
+    extra = list(design = list(kind = "group_sequential", nTreat = 150, nControl = 150, informationRates = list(0.5, 1)))), job_id = "job_n58d_gs", extra = list(methodVersion = "1.4.0"))
   both_sc <- .n58_two_arm(150, nph = nph); both_sc$truth$hazardRatio <- 0.7
   both <- vcr_test_job("design.simulate", both_sc, job_id = "job_n58d_both")
   none_sc <- .n58_two_arm(150, nph = nph); none_sc$truth <- list(controlMedian = 12)
@@ -189,7 +189,7 @@ vcr_case("N58d", c("AC-04", "AC-13"), function() {
   has <- function(job, code) code %in% codes(job)
   ok <- has(analytic, "scenario_value_invalid@scenario.truth.treatmentHazardRatios") &&
     !any(grepl("^scenario_field_unknown@scenario.truth.treatmentHazardRatios", codes(analytic))) &&
-    has(gs_mc, "scenario_value_invalid@scenario.analysis.method") &&
+    has(gs_mc, "method_version_mismatch@methodVersion") &&   # (T14, design.simulate 1.5.0: MaxCombo in a group-sequential design is no longer refused at the current version; the 1.4.0 label, which refused it, cannot carry it)
     has(both, "scenario_value_invalid@scenario.truth.treatmentHazardRatios") && has(none, "scenario_field_missing@scenario.truth.hazardRatio") &&
     has(short, "scenario_value_invalid@scenario.truth.treatmentHazardRatios.ratios") &&
     has(old_nph, "method_version_mismatch@methodVersion") && has(old_mc, "method_version_mismatch@methodVersion") && !length(issues(old_ph)) &&
@@ -197,8 +197,8 @@ vcr_case("N58d", c("AC-04", "AC-13"), function() {
   # a refused analysis is a failed job with the same name, not a number
   run <- vcr_test_run(gs_mc)
   ok <- ok && identical(run$status, "failed")
-  list(pass = ok, detail = sprintf("analytic + NPH -> %s; group-sequential MaxCombo -> %s; both laws / neither / one ratio too few refused; 1.2.0 + NPH/MaxCombo/grid NPH -> method_version_mismatch, 1.2.0 + proportional hazards valid; a grid cell that states its own hazard law replaces the base's",
-                                   paste(grep("treatmentHazardRatios", codes(analytic), value = TRUE), collapse = ","), paste(grep("analysis.method", codes(gs_mc), value = TRUE), collapse = ",")))
+  list(pass = ok, detail = sprintf("analytic + NPH -> %s; group-sequential MaxCombo under the 1.4.0 label -> %s; both laws / neither / one ratio too few refused; 1.2.0 + NPH/MaxCombo/grid NPH -> method_version_mismatch, 1.2.0 + proportional hazards valid; a grid cell that states its own hazard law replaces the base's",
+                                   paste(grep("treatmentHazardRatios", codes(analytic), value = TRUE), collapse = ","), paste(grep("methodVersion", codes(gs_mc), value = TRUE), collapse = ",")))
 })
 
 # --- (e) the test against simtrial, (f) the power against gsDesign2 -----------------------------------------------------------------

@@ -211,6 +211,18 @@ export const NUMERIC_REFERENCES = {
   N87d: { methods: ['design.win_ratio'], anchors: ['perm <- vapply(seq_len(40000L), function(i) sum(u[sample.int(N, 70L)]), numeric(1))', 'v_formula <- 70 * 70 / (N * (N - 1)) * sum(u^2)'] },
   N87e: { methods: ['design.win_ratio'], anchors: ['need <- Filter(function(x) identical(x$name, "required_per_arm"), sr$measures)[[1]]$value', 'abs(pw$value - 0.8) < 4 * pw$mcse + 0.03'] },
   N87f: { methods: ['design.win_ratio'], anchors: ['f <- hce::sizeWR(WR = want_wr, power = 0.8, Pties = want_ties, alpha = 0.05)', 'abs(pw$value - 0.8) < 4 * pw$mcse + 0.1'] },
+  // design.simulate (the modestly weighted log-rank test): simtrial's statistic to the last bit, its own generator and test, and the middle road against a late-weighted test and the log-rank test
+  N88a: { methods: ['design.simulate'], anchors: ['ref <- simtrial::wlr(data.frame(tte = d$time, event = d$status, treatment = ifelse(d$arm == 1L, "experimental", "control")), weight = simtrial::mb(delay = Inf, w_max = 1 / s))', 'worst <- max(worst, abs(mine + ref$z)); checked <- checked + 1L'] },
+  N88b: { methods: ['design.simulate'], anchors: ['z[i] <- simtrial::wlr(cut, weight = simtrial::mb(delay = Inf, w_max = 2))$z', 'gap <- abs(m$value - p_ref) / sqrt(m$mcse^2 + se_ref^2)'] },
+  // design.simulate (group-sequential MaxCombo and modestly weighted designs): the simulated boundaries against the analytic Lan-DeMets ones, a separate run's type I error, gsDesign2::gs_power_combo
+  N90a: { methods: ['design.simulate'], anchors: ['gs <- vcr_group_sequential(rates, 0.025, "obrien_fleming")', 'z <- (b$bounds - gs$criticalValues) / se'] },
+  N90b: { methods: ['design.simulate'], anchors: ['v <- .n90_trials(sc, 9003L, 6000L, list(bounds = b$bounds, logrank = TRUE))', 'same <- identical(one$bounds, two$bounds)'] },
+  N90c: { methods: ['design.simulate'], anchors: ['ref <- suppressMessages(gsDesign2::gs_power_combo(enroll_rate = enroll, fail_rate = fail, fh_test = fh, ratio = 1, binding = FALSE,', 'gap <- abs(mine - ups$probability)'] },
+  // patients.longitudinal 1.2.0: output hashes of the previous release, a mixed model and a plain comparison against the known effect under MCAR, MAR and MNAR dropout, the two estimands of a rescue medication
+  N89a: { methods: ['patients.longitudinal'], anchors: ['recorded <- c("1.0.0|0" = "230ba3da3e3b6117b1f8c73757f74b7dd1ca5ccc4da00575dbf6771b583fc97a"', 'same <- same && identical(fp, recorded[[key]])'] },
+  N89b: { methods: ['patients.longitudinal'], anchors: ['fit <- .n89_lme(d); co <- summary(fit)$tTable["time:arm", ]', 'abs(z(rows$mnar)) > 4 && rows$mnar$lme > truth_slope'] },
+  N89c: { methods: ['patients.longitudinal'], anchors: ['hyp_truth <- -0.6 * 8', 'abs(hyp_hat - hyp_truth) < 3.5 * hyp_se && abs(est$treatmentPolicy$effect - hyp_truth) > 5 * all_se'] },
+  N89e: { methods: ['patients.longitudinal'], anchors: ['mean_ref <- 20 + (-0.5 + -0.25 * zz) * g[j]', 'worst <- max(worst, abs(mean(v) - mean_ref) / (sd_ref / sqrt(length(v)))'] },
   N72a: { methods: ['comparator.bias_analysis'], anchors: ['want_limit <- if (lim > 0) back(lim) else if (ratio) 1 else 0', 'abs(rows[[i]]$z - zz) < 1e-12 && abs(rows[[i]]$p - (1 - stats::pnorm(zz))) < 1e-12'] },
   N72b: { methods: ['comparator.bias_analysis'], anchors: ['tip_bin <- function(b, g, p_other) tipr::tip_with_binary(', 'tn <- tipr::tip_rr(1.6, confounder_outcome_effect = 2, verbose = FALSE)$exposure_confounder_effect'] },
   N72c: { methods: ['comparator.bias_analysis'], anchors: ['abs(row1$carrierPrevalence / 0.05 - 9) < 1e-4'] },

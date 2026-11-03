@@ -126,7 +126,7 @@ export const VCR_ENGINE_METHODS = Object.freeze({
   'comparator.evalue': { version: '1.0.0', endpoints: frozen(['binary', 'time_to_event']), crossChecks: frozen(['EValue']), modelTier: 'scenario' },
   'comparator.map_prior': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['binary', 'continuous']), crossChecks: frozen(['RBesT']), modelTier: 'literature' },
   'design.analytic': { version: '1.4.0', compatibleVersions: frozen(['1.2.0', '1.3.0']), legacyVersion: '1.0.0', legacyDesigns: frozen(['two_arm_fixed', 'group_sequential', 'simon_two_stage']), legacyReleases: ANALYTIC_RELEASES, endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['rpact', 'gsDesign', 'stats::binom.test', 'Simon 1989']), modelTier: 'scenario' },
-  'design.simulate': { version: '1.4.0', compatibleVersions: frozen(['1.2.0', '1.3.0']), legacyVersion: '1.0.0', legacyDesigns: frozen(['two_arm_fixed', 'group_sequential']), legacyReleases: SIMULATE_RELEASES, endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['design.analytic', 'independent beta-binomial variance', 'exact non-central t power of the one-sample test', 'independent normal approximation of the one-sample log-rank score']), modelTier: 'scenario' },
+  'design.simulate': { version: '1.5.0', compatibleVersions: frozen(['1.2.0', '1.3.0', '1.4.0']), legacyVersion: '1.0.0', legacyDesigns: frozen(['two_arm_fixed', 'group_sequential']), legacyReleases: SIMULATE_RELEASES, endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['design.analytic', 'independent beta-binomial variance', 'exact non-central t power of the one-sample test', 'independent normal approximation of the one-sample log-rank score', 'simtrial (wlr with mb): the modestly weighted statistic of the same patients to 1e-9, and its rejection probability against the package\'s own generator and test', 'gsDesign2 (gs_power_combo): the power of a group-sequential MaxCombo design with its spending, against the simulation with boundaries found under the null']), modelTier: 'scenario' },
   // The confirmatory designs (algorithm round T2-T6, 2026-11-03): rpact does the arithmetic (R/rpact_adapter.R is the one file that calls it), so
   // the checks are the packages and closed forms that are not rpact: gsDesign, mvtnorm, a negative-binomial sample size and a simulation in plain R.
   // 1.1.0 (T3-T5 completed): the promising zone of the re-estimation, and the event-time selection and enrichment designs.
@@ -142,7 +142,7 @@ export const VCR_ENGINE_METHODS = Object.freeze({
   // (the win ratio, the win difference, the win odds and the share of ties), tested by the Finkelstein-Schoenfeld permutation test and sized by simulation. Written
   // in R: winratiosim takes 0.4 s a trial and hce compares on one ordinal scale with no censoring; hce is the check.
   'design.win_ratio': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['hce (calcWO): the wins, losses, ties and win odds of the same uncensored patients on the single scale of ranks it takes', 'exact win, loss and tie probabilities of independent levels (exponential deaths, negative-binomial counts, a normal score with a threshold) against the simulated proportions', 'a pair-by-pair loop in plain R, written apart from the engine, on patients who drop out (the three levels, to the last pair)', 'the permutation variance of the Finkelstein-Schoenfeld statistic from relabelling the arms in plain R']), modelTier: 'scenario' },
-  'design.grid': { version: '1.4.0', compatibleVersions: frozen(['1.2.0', '1.3.0']), legacyVersion: '1.0.0', legacyDesigns: frozen(['two_arm_fixed', 'group_sequential']), legacyReleases: SIMULATE_RELEASES, endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen([]), modelTier: 'scenario' },
+  'design.grid': { version: '1.5.0', compatibleVersions: frozen(['1.2.0', '1.3.0', '1.4.0']), legacyVersion: '1.0.0', legacyDesigns: frozen(['two_arm_fixed', 'group_sequential']), legacyReleases: SIMULATE_RELEASES, endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen([]), modelTier: 'scenario' },
   'design.assurance': { version: '1.1.0', legacyVersion: '1.0.0', legacyDesigns: frozen(['two_arm_fixed']), endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['numerical integration of power over the design prior (the O\'Hagan 2005 definition)', 'independent Monte Carlo of the sequential design under the design prior']), modelTier: 'scenario' },
   'design.procova': { version: '1.0.0', endpoints: frozen(['continuous']), crossChecks: frozen(['closed-form sample size under the EMA 2022 opinion\'s correlation and variance discounts']), modelTier: 'scenario' },
   'accrual.poisson_gamma': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['independent gamma, Poisson and binomial constructions of the Anisimov & Fedorov 2007 model']), modelTier: 'scenario' },
@@ -161,7 +161,7 @@ export const VCR_ENGINE_METHODS = Object.freeze({
   'comparator.prognostic_adjustment': { version: '1.0.0', endpoints: frozen(['binary', 'time_to_event']), crossChecks: frozen(['FDA 2023 covariate-adjustment guidance, Table 1', 'M-estimation sandwich by numerical Jacobians', 'survival::coxph and survfit(newdata)']), modelTier: 'data' },
   // --- end robustness methods ---
   // --- longitudinal virtual patients (2026-10-07, plan 5.2): a linear mixed model of a continuous trajectory ---
-  'patients.longitudinal': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['continuous']), crossChecks: frozen(['nlme::lme on the output table', 'closed-form model-implied mean and variance']), modelTier: 'scenario' },
+  'patients.longitudinal': { version: '1.2.0', compatibleVersions: frozen(['1.0.0', '1.1.0']), endpoints: frozen(['continuous']), crossChecks: frozen(['nlme::lme on the output table', 'closed-form model-implied mean and variance', 'output hashes recorded from the previous release\'s code (a scenario that states none of the new keys replays byte for byte)', 'a mixed model and a plain comparison of the people still in, against the known effect under completely random, random and not random dropout', 'the treatment-policy and hypothetical effects of a rescue medication, from the potential outcomes of every generated person']), modelTier: 'scenario' },
   // --- end longitudinal ---
   // Quantitative bias analysis of an estimate (algorithm round C1, C2, 2026-11-03): the tipping bias, the shifted null, the tipping confounder
   // (tipr-style closed forms) and a probabilistic analysis. The input is an estimate and its interval, stated or taken from a saved comparison;
@@ -795,6 +795,27 @@ function usesNonProportionalHazards(scenario) {
 }
 
 /**
+ * Does a simulation scenario ask for what design.simulate and design.grid 1.5.0 added: the modestly weighted test (algorithm round T12) or a
+ * MaxCombo analysis of a group-sequential design (T14)? Mirrored by `.vcrp_uses_weighted_beyond_1_4_0` in protocol.R.
+ * @param {any} scenario
+ */
+function usesWeightedBeyond1_4_0(scenario) {
+  if (scenario?.analysis?.method === 'modestly_weighted') return true
+  if (scenario?.analysis?.method !== 'maxcombo') return false
+  const kinds = [scenario?.design?.kind, ...(Array.isArray(scenario?.designs) ? scenario.designs.map((/** @type {any} */ design) => design?.kind) : [])]
+  return kinds.includes('group_sequential')
+}
+
+/**
+ * Does a longitudinal scenario ask for what patients.longitudinal 1.2.0 added: a curved trajectory, a dropout that depends on the outcome or a
+ * rescue medication (algorithm round T11)? Mirrored by `.vcrp_uses_longitudinal_beyond_1_1_0` in protocol.R.
+ * @param {any} scenario
+ */
+function usesLongitudinalBeyond1_1_0(scenario) {
+  return scenario?.trajectory !== undefined || scenario?.dropoutModel !== undefined || scenario?.rescue !== undefined
+}
+
+/**
  * Does a confirmatory scenario ask for what design.confirmatory 1.1.0 added: a promising zone, or an event-time multi-arm or enrichment
  * design? Mirrored by `.vcrp_uses_confirmatory_beyond_1_0_0` in protocol.R.
  * @param {any} scenario
@@ -838,11 +859,15 @@ function legacyDesignVersionMatches(job) {
   const spec = /** @type {any} */ (VCR_ENGINE_METHODS)[job.method]
   if (!spec) return false
   // the oldest releases did not have the hypothesis either (a design is never labelled with a version that did not have it)
-  if (['design.analytic', 'design.simulate', 'design.grid'].includes(job.method) && usesHypothesis(job.scenario)) return false
+  if (['design.analytic', 'design.simulate', 'design.grid'].includes(job.method) && usesHypothesis(job.scenario) && !versionAtLeast(job.methodVersion, '1.4.0')) return false
   if ((spec.compatibleVersions ?? []).includes(job.methodVersion)) {
     // a design is never labelled with a version that did not have it: 1.3.0 added the hazard ratio that changes over time and MaxCombo,
     // and 1.4.0 the hypothesis (this function is not asked about a job at the current version)
     if ((job.method === 'design.simulate' || job.method === 'design.grid') && usesNonProportionalHazards(job.scenario) && !versionAtLeast(job.methodVersion, '1.3.0')) return false
+    // and patients.longitudinal 1.2.0 the curved trajectory, the dropout that depends on the outcome and the rescue medication
+    if (job.method === 'patients.longitudinal' && usesLongitudinalBeyond1_1_0(job.scenario) && !versionAtLeast(job.methodVersion, '1.2.0')) return false
+    // and 1.5.0 the modestly weighted test
+    if ((job.method === 'design.simulate' || job.method === 'design.grid') && usesWeightedBeyond1_4_0(job.scenario) && !versionAtLeast(job.methodVersion, '1.5.0')) return false
     // and model.prognostic_apply 1.1.0 added the local calibration against the outcome the table holds
     if (job.method === 'model.prognostic_apply' && job.scenario?.calibration !== undefined) return false
     // and design.confirmatory 1.1.0 the promising zone and the event-time selection and enrichment designs
@@ -856,7 +881,8 @@ function legacyDesignVersionMatches(job) {
     // and the four weighting comparators one release later the imputation of missing covariates
     const imputationSince = /** @type {Record<string, string>} */ (IMPUTATION_SINCE)[job.method]
     if (imputationSince && job.scenario?.imputation !== undefined && !versionAtLeast(job.methodVersion, imputationSince)) return false
-    return !job.method.startsWith('patients.') || (!job.scenario?.pairing && !job.scenario?.cohortRules)
+    // (pairing and cohort rules are 1.1.0's: only the 1.0.0 label of a virtual-patient method cannot carry them)
+    return !job.method.startsWith('patients.') || job.methodVersion !== '1.0.0' || (!job.scenario?.pairing && !job.scenario?.cohortRules)
   }
   const base = job.scenario?.design?.kind
   const kinds = job.method === 'design.grid' && Array.isArray(job.scenario?.designs)

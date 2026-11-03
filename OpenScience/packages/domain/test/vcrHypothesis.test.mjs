@@ -52,7 +52,8 @@ test("the null of a non-inferiority design is the margin, not an effect of zero"
 
 test("the hypothesis is 1.4.0's: an older label replays what it had and cannot carry one", () => {
   for (const method of ["design.analytic", "design.simulate", "design.grid"]) {
-    assert.equal(/** @type {any} */ (VCR_ENGINE_METHODS)[method].version, "1.4.0", method);
+    // (design.simulate and design.grid went on to 1.5.0 with the modestly weighted test, T12; the hypothesis stays theirs from 1.4.0)
+    assert.equal(/** @type {any} */ (VCR_ENGINE_METHODS)[method].version, method === "design.analytic" ? "1.4.0" : "1.5.0", method);
     assert.ok(/** @type {any} */ (VCR_ENGINE_METHODS)[method].compatibleVersions.includes("1.3.0"), method);
   }
   assert.deepEqual(validateEngineJob(job("design.analytic", "design_analytic", "1.4.0", analytic({ hypothesis: ni(0.3) }))), []);

@@ -94,7 +94,7 @@ VCR_SIMULATED_DESIGNS <- c("two_arm_fixed", "group_sequential", "single_arm", "s
 #' correct approximation would read as disagreeing with a correct simulation.
 VCR_LOGRANK_APPROXIMATION_BIAS <- 0.015
 VCR_ANALYSIS_METHODS <- list(continuous = c("ttest", "ancova"), binary = c("risk_difference", "logistic"),
-                             time_to_event = c("logrank", "rmst", "maxcombo"))
+                             time_to_event = c("logrank", "rmst", "maxcombo", "modestly_weighted"))
 
 .vcr_check_design <- function(scenario) {
   kind <- scenario$design$kind %||% "two_arm_fixed"
@@ -124,9 +124,9 @@ VCR_ANALYSIS_METHODS <- list(continuous = c("ttest", "ancova"), binary = c("risk
               sprintf("A %s endpoint is analysed by %s.", endpoint, paste(VCR_ANALYSIS_METHODS[[endpoint]], collapse = " or ")))
   }
   if (identical(kind, "group_sequential")) {
-    if (!identical(endpoint, "time_to_event") || !identical(method, "logrank")) {
+    if (!identical(endpoint, "time_to_event") || !(method %in% c("logrank", "maxcombo", "modestly_weighted"))) {
       vcr_abort("design_not_supported", "scenario.design.kind",
-                "A group-sequential design is simulated for a time-to-event endpoint analysed by the log-rank test; other endpoints are not run as a fixed design.")
+                "A group-sequential design is simulated for a time-to-event endpoint analysed by the log-rank test, MaxCombo or the modestly weighted test; other endpoints are not run as a fixed design.")
     }
     rates <- vcr_num(scenario$design$informationRates)
     if (length(rates) < 2L) vcr_abort("scenario_field_missing", "scenario.design.informationRates", "A group-sequential design lists at least two information rates.")
@@ -295,14 +295,12 @@ vcr_scenario_runner <- function(scenario, extras = list()) {
   dist <- vcr_control_distribution(truth)
   nph <- if (is.list(truth$treatmentHazardRatios)) .vcr_nph_spec(truth$treatmentHazardRatios, dist) else NULL
   hr <- if (is.null(nph)) .vcr_need(truth$hazardRatio, "scenario.truth.hazardRatio", "A time-to-event scenario states the hazard ratio (1 for the null), or a hazard ratio that changes over time (treatmentHazardRatios).") else nph
-  if (identical(method, "maxcombo") && gs) {
-    vcr_abort("scenario_value_invalid", "scenario.analysis.method", "MaxCombo is a fixed-design analysis: a group-sequential design looks with the log-rank statistic.")
-  }
   accrual <- acc %||% list(kind = "uniform", duration = 0)
   followup <- vcr_scalar(acc$followup, Inf)
   dropout <- vcr_scalar(acc$dropoutAnnual, 0)
   max_fu <- vcr_scalar(acc$maxFollowup, Inf)
   tau <- vcr_scalar(analysis$tau, NULL)
+  s_star <- vcr_scalar(analysis[["sStar"]], 0.5)      # modestly weighted (1.5.0): the weight is 1 / max(S, s_star)
   if (identical(method, "rmst") && is.null(tau)) vcr_abort("scenario_field_missing", "scenario.analysis.tau", "An RMST analysis states its horizon tau.")
   # Under a hazard ratio that changes over time there is no single true log hazard ratio for the log-rank family to be biased
   # against; the RMST difference still has a true value, integrated from the two survival curves.
@@ -327,11 +325,14 @@ vcr_scenario_runner <- function(scenario, extras = list()) {
                ci_low = r$estimate - crit * r$se, ci_high = r$estimate + crit * r$se,
                events = sum(d$status), sampleSize = n1 + n0, duration = dur))
     }
+    if (gs && method %in% c("maxcombo", "modestly_weighted")) return(.vcr_run_gs_weighted(d, gs_design, alpha, sided, method, s_star, extras[["bounds"]], isTRUE(extras$logrank)))
     if (gs) return(.vcr_run_group_sequential(d, gs_design, alpha, sided, nh))
-    r <- if (identical(method, "maxcombo")) vcr_analyse_maxcombo(d, alpha, sided) else vcr_analyse_logrank(d, alpha, sided, nh)
+    r <- if (identical(method, "maxcombo")) vcr_analyse_maxcombo(d, alpha, sided)
+         else if (identical(method, "modestly_weighted")) vcr_analyse_modestly_weighted(d, alpha, sided, s_star)
+         else vcr_analyse_logrank(d, alpha, sided, nh)
     out <- c(r, sampleSize = n1 + n0, duration = dur)
-    # 1.4.0 (T13): the log-rank test on the same data, so that the two tests are read on the same replicates
-    if (isTRUE(extras$logrank) && identical(method, "maxcombo")) out <- c(out, logrankReject = unname(vcr_analyse_logrank(d, alpha, sided)["reject"]))
+    # 1.4.0 (T13): the log-rank test on the same data, so that the two tests are read on the same replicates (1.5.0: beside the modestly weighted test too)
+    if (isTRUE(extras$logrank) && method %in% c("maxcombo", "modestly_weighted")) out <- c(out, logrankReject = unname(vcr_analyse_logrank(d, alpha, sided)["reject"]))
     out
   })
 }
@@ -413,6 +414,126 @@ vcr_dist_normalize <- function(d) {
   c(estimate = est, se = se, statistic = NA_real_, p = NA_real_,
     reject = rejected, ci_low = est - crit * se, ci_high = est + crit * se,
     events = events_at, look = look, sampleSize = n_at, duration = dur_at)
+}
+
+# --- group-sequential MaxCombo and modestly weighted designs (algorithm round T14) ---------------------------------------------------------
+#
+# Hidden knowledge:
+#
+# - **The boundaries of these designs are found by simulation under the null, with the alpha the spending function allows.** The null
+#   distribution of the most favourable of four correlated weighted statistics, at several looks that share patients, has no closed form the
+#   engine writes; the null world is simulated (the same accrual, dropout, size and control law with no treatment effect), the statistic is
+#   computed at every look of every trial, and look k's boundary is the value that exactly the planned share of ALL the null trials crosses
+#   there while not having crossed earlier (the spending function's increment at the look's information fraction). The boundaries come from one
+#   run and the power from another with another seed, so the type I error the main run reports under a null scenario is an independent check
+#   of the boundaries and not a number they were built to give. A look whose planned spend is smaller than one trial of the boundary run
+#   cannot stop the trial, and the result says which.
+# - **A statistic is read in the upper-tail convention** (a large value favours the treatment; the largest absolute value for a two-sided
+#   analysis), whatever the sign of the weighted statistic, so one boundary vector serves both and the log-rank test beside it keeps its own
+#   asymptotic boundaries.
+# - **The looks are the log-rank design's**: the k-th target event's own calendar time decides who has entered and who has been observed
+#   (`.vcr_run_group_sequential`), so events, sample size and duration at the stopping look mean the same thing for every analysis.
+
+.vcr_gs_look_data <- function(d, gs, k, cal, ev_cal, total_events, targets) {
+  K <- length(gs$informationRates)
+  if (targets[k] < 2) return(NULL)
+  if (k < K) {
+    cutoff <- ev_cal[min(targets[k], total_events)]
+    dk <- d[d$entry <= cutoff, , drop = FALSE]
+    dk$status <- as.integer(dk$status == 1L & (dk$entry + dk$time) <= cutoff)
+    dk$time <- pmin(dk$time, cutoff - dk$entry)
+  } else {
+    cutoff <- max(cal); dk <- d
+  }
+  list(data = dk, cutoff = cutoff)
+}
+
+#' The upper-tail statistic of the weighted analysis at one look: MaxCombo (the largest of the four Fleming-Harrington statistics) or the
+#' modestly weighted one; NA when the look has nothing to compare.
+.vcr_gs_weighted_stat <- function(dk, method, s_star, sided) {
+  if (identical(method, "maxcombo")) {
+    fh <- vcr_fh_statistics(dk$time, dk$status, dk$arm)
+    if (!length(fh$z)) return(NA_real_)
+    return(if (sided == 1) -min(fh$z) else max(abs(fh$z)))
+  }
+  z <- vcr_mw_statistic(dk$time, dk$status, dk$arm, s_star)
+  if (!is.finite(z)) NA_real_ else if (sided == 1) -z else abs(z)
+}
+
+#' One group-sequential trial analysed by a weighted test. Without `bounds` it returns the statistic of every look (the boundary run's
+#' record); with them it stops at the first look whose statistic is beyond its boundary, like `.vcr_run_group_sequential`, and with `logrank`
+#' also gives the log-rank test's decision on the same trial under its own asymptotic boundaries.
+.vcr_run_gs_weighted <- function(d, gs, alpha, sided, method, s_star, bounds = NULL, logrank = FALSE) {
+  cal <- d$entry + d$time
+  ev_cal <- sort(cal[d$status == 1L]); total_events <- length(ev_cal)
+  K <- length(gs$informationRates)
+  targets <- ceiling(gs$informationRates * total_events)
+  stat <- rep(NA_real_, K); events_k <- rep(NA_real_, K); n_k <- rep(NA_real_, K); dur_k <- rep(NA_real_, K)
+  rejected <- 0; look <- K
+  for (k in seq_len(K)) {
+    ld <- .vcr_gs_look_data(d, gs, k, cal, ev_cal, total_events, targets)
+    if (is.null(ld)) next
+    stat[k] <- .vcr_gs_weighted_stat(ld$data, method, s_star, sided)
+    events_k[k] <- sum(ld$data$status); n_k[k] <- nrow(ld$data); dur_k[k] <- ld$cutoff
+    if (!is.null(bounds) && is.finite(stat[k]) && stat[k] > bounds[k]) { rejected <- 1; look <- k; break }
+  }
+  if (is.null(bounds)) return(stats::setNames(c(stat[1L], 0, stat), c("estimate", "reject", paste0("stat", seq_len(K)))))
+  lr <- if (logrank) .vcr_run_group_sequential(d, gs, alpha, sided, 1) else NULL
+  base <- vcr_analyse_logrank(d, alpha, sided, 1)
+  out <- c(estimate = unname(base["estimate"]), se = unname(base["se"]), statistic = NA_real_, p = NA_real_, reject = rejected,
+           ci_low = unname(base["ci_low"]), ci_high = unname(base["ci_high"]),
+           events = if (rejected == 1) events_k[look] else total_events, look = look,
+           sampleSize = if (rejected == 1) n_k[look] else nrow(d), duration = if (rejected == 1) dur_k[look] else max(cal))
+  if (!is.null(lr)) out <- c(out, logrankReject = unname(lr["reject"]))
+  out
+}
+
+#' The boundaries of a group-sequential weighted design from the statistics of the null trials (one row a trial, one column a look, NA where a
+#' look had nothing to compare): look k's boundary is the value that the planned share of ALL the trials crosses at that look while not
+#' having crossed before. A look whose planned count is below one trial gets Inf (it cannot stop the trial), and the result says so.
+vcr_gs_simulated_bounds <- function(stats_matrix, spend) {
+  R <- nrow(stats_matrix); K <- ncol(stats_matrix)
+  alive <- rep(TRUE, R); bounds <- numeric(K); counts <- integer(K); unresolved <- logical(K)
+  for (k in seq_len(K)) {
+    s <- stats_matrix[, k]
+    pool <- which(alive & is.finite(s))
+    want <- as.integer(round(spend[k] * R))
+    if (want < 1L || length(pool) <= want) { bounds[k] <- Inf; unresolved[k] <- TRUE; counts[k] <- 0L; next }
+    ranked <- sort(s[pool], decreasing = TRUE)
+    bounds[k] <- (ranked[want] + ranked[want + 1L]) / 2
+    crossed <- pool[s[pool] > bounds[k]]
+    counts[k] <- length(crossed)
+    alive[crossed] <- FALSE
+  }
+  list(bounds = bounds, crossed = counts, trials = R, spendPlanned = spend, spendRealized = counts / R, unresolved = unresolved)
+}
+
+#' The boundaries of a job's group-sequential weighted design: the null world of the design is simulated (its own accrual, dropout and size, the
+#' hazard ratio 1) on a seed derived from the job's, within the first 45% of the job's CPU budget, and `vcr_gs_simulated_bounds` reads them off.
+#' Fewer than 2,000 null trials is no boundary at all and a named refusal; fewer than planned is `limited`, and the record says how many ran.
+vcr_gs_boundaries_job <- function(job, sc, cancel_file = NULL) {
+  analysis <- sc$analysis %||% list()
+  alpha <- vcr_scalar(analysis$alpha, 0.025); sided <- vcr_check_sided(analysis$sided)
+  gs <- vcr_group_sequential(vcr_num(sc$design$informationRates), alpha / sided, sc$design[["spending"]] %||% "obrien_fleming")
+  spend <- gs$alphaSpent * sided
+  null_sc <- sc
+  null_sc$truth[["hazardRatio"]] <- 1; null_sc$truth[["treatmentHazardRatios"]] <- NULL; null_sc$truth[["null"]] <- NULL
+  limit <- vcr_scalar(job$cpuSecondsLimit, Inf)
+  res <- vcr_run_simulation(null_sc, as.integer((as.numeric(job$seed) + 15485863) %% 2147483647), NULL, vcr_cores(job$cores), cancel_file = cancel_file,
+                            batch_size = vcr_scalar(job$batchSize, 500L), cpu_seconds_limit = if (is.finite(limit)) 0.45 * limit else Inf)
+  vals <- res$values
+  cols <- if (is.null(vals)) character(0) else paste0("stat", seq_along(spend))
+  if (is.null(vals) || nrow(vals) < 2000L || !all(cols %in% colnames(vals))) {
+    vcr_abort("cpu_budget_exhausted", "cpuSecondsLimit", "The CPU budget ran out before the boundary run had 2,000 trials of the design under the null; there are no boundaries and no result.")
+  }
+  b <- vcr_gs_simulated_bounds(vals[, cols, drop = FALSE], spend)
+  planned <- vcr_plan_replicates(null_sc, NULL, 0)$replicates
+  finite <- function(x) lapply(x, function(v) if (is.finite(v)) v else NULL)
+  list(bounds = b$bounds, planned = planned, trials = nrow(vals), cpuSeconds = res$diagnostics$cpuSeconds,
+       info = list(basis = "simulated under the null with the planned alpha spent look by look", nullTrials = nrow(vals), nullTrialsPlanned = planned,
+                   informationRates = vcr_num(sc$design$informationRates), spending = as.character(sc$design[["spending"]] %||% "obrien_fleming"), alpha = alpha, sided = sided,
+                   criticalValues = finite(b$bounds), spendPlanned = as.list(b$spendPlanned), spendRealized = as.list(b$spendRealized),
+                   lookCannotStop = which(b$unresolved)))
 }
 
 #' Run a scenario. Returns the result's `measures`, `diagnostics` and the raw
@@ -691,7 +812,7 @@ vcr_analytic_check <- function(scenario, measures) {
     analytic <- list(name = if (is_null) "type_one_error" else "power",
                      value = if (is_null) alpha else vcr_power_proportions(p0, p1, n1, n0, alpha, sided, nl))
   }
-  if (identical(endpoint, "time_to_event") && fixed && !(method %||% "logrank") %in% c("rmst", "maxcombo") && is.null(truth$treatmentHazardRatios)) {
+  if (identical(endpoint, "time_to_event") && fixed && !(method %||% "logrank") %in% c("rmst", "maxcombo", "modestly_weighted") && is.null(truth$treatmentHazardRatios)) {
     hr <- vcr_scalar(truth$hazardRatio, 1)
     if (is_null) {
       analytic <- list(name = "type_one_error", value = alpha, basis = "nominal_alpha")
@@ -865,7 +986,7 @@ vcr_strong_null_plan <- function(spent, completed, replicates, limit = Inf, runn
   list(run = is.infinite(remaining) || (remaining > 0 && needed <= remaining), remaining = remaining, needed = needed)
 }
 
-vcr_maxcombo_strong_null <- function(job, sc, cancel_file = NULL, spent = 0, completed = 0) {
+vcr_maxcombo_strong_null <- function(job, sc, cancel_file = NULL, spent = 0, completed = 0, bounds = NULL) {
   law <- vcr_maxcombo_strong_law(sc)
   breaks <- law$breaks; harm <- law$ratios[1]; basis <- law[["basis"]]
   sc2 <- sc
@@ -875,7 +996,7 @@ vcr_maxcombo_strong_null <- function(job, sc, cancel_file = NULL, spent = 0, com
   plan <- vcr_strong_null_plan(spent, completed, reps, vcr_scalar(job$cpuSecondsLimit, Inf), vcr_cpu_remaining())
   if (!plan$run) return(list(measures = list(), diagnostics = list(computed = FALSE, reason = "what the design's own replicates left of the CPU budget would not finish it")))
   res <- vcr_run_simulation(sc2, as.integer((as.numeric(job$seed) + 104729) %% 2147483647), reps, vcr_cores(job$cores), cancel_file = cancel_file,
-                            batch_size = vcr_scalar(job$batchSize, 500L), cpu_seconds_limit = plan$remaining, extras = list(logrank = TRUE))
+                            batch_size = vcr_scalar(job$batchSize, 500L), cpu_seconds_limit = plan$remaining, extras = list(logrank = TRUE, bounds = bounds))
   if (!identical(res$status, "succeeded") || is.null(res$values)) return(list(measures = list(), diagnostics = list(computed = FALSE, reason = "the CPU budget or a cancel ended the run first")))
   total <- nrow(res$values)
   one <- function(name, column) {

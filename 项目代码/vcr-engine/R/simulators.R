@@ -528,4 +528,47 @@ vcr_analyse_maxcombo <- function(data, alpha = 0.025, sided = 1) {
   base
 }
 
+# --- the modestly weighted log-rank test (algorithm round T12) ----------------------------------------------------------------------
+#
+# Hidden knowledge:
+#
+# - **The weight is 1 / max(S(t-), s*) of the pooled Kaplan-Meier curve S, and s* is the one parameter (Magirr and Burman 2019).** Early
+#   differences count as in the log-rank test (weight 1 while S is above s*) and later ones count more, up to 1 / s* times as much: for the
+#   default s* = 0.5 the weight at most doubles. That is what it protects against: a test that weights the late follow-up heavily (a
+#   Fleming-Harrington (0,1) weight, MaxCombo) gains power when the effect starts late, and rejects too often when the treatment is WORSE early
+#   and equal later, because it reads the early harm as a late difference. The cap on the weight is the guard. Where the effect does not start
+#   late it loses little against the log-rank test; it is not a replacement for it and is never a default.
+# - **The statistic has the log-rank's sign and shape**: negative is protective, `statistic` is the standardized weighted sum of observed
+#   minus expected events of the treated arm, `estimate` is the log-rank test's one-step log hazard ratio and is only descriptive.
+
+#' The standardized modestly weighted statistic from event times and arms: one z, negative in favour of the treatment arm.
+vcr_mw_statistic <- function(time, status, arm, s_star = 0.5) {
+  ts <- sort(unique(time[status == 1L]))
+  if (!length(ts)) return(NA_real_)
+  tm1 <- sort(time[arm == 1L]); tm <- sort(time)
+  n <- length(tm) - findInterval(ts, tm, left.open = TRUE)
+  n1 <- length(tm1) - findInterval(ts, tm1, left.open = TRUE)
+  at <- match(time[status == 1L], ts)
+  d <- tabulate(at, length(ts))
+  d1 <- tabulate(at[arm[status == 1L] == 1L], length(ts))
+  s_minus <- c(1, cumprod(1 - d / n))[seq_along(ts)]
+  e1 <- d * n1 / n
+  v <- ifelse(n > 1, d * (n1 / n) * (1 - n1 / n) * (n - d) / pmax(n - 1, 1), 0)
+  w <- 1 / pmax(s_minus, s_star)
+  sig2 <- sum(w^2 * v)
+  if (!(sig2 > 0)) return(NA_real_)
+  sum(w * (d1 - e1)) / sqrt(sig2)
+}
+
+#' The modestly weighted test of a two-arm time-to-event trial, in the log-rank's own return shape.
+vcr_analyse_modestly_weighted <- function(data, alpha = 0.025, sided = 1, s_star = 0.5) {
+  sided <- vcr_check_sided(sided)
+  base <- vcr_analyse_logrank(data, alpha, sided)
+  z <- vcr_mw_statistic(data$time, data$status, data$arm, s_star)
+  if (!is.finite(z)) { base[c("statistic", "p", "reject")] <- c(0, 1, 0); return(base) }
+  p <- if (sided == 1) stats::pnorm(z) else 2 * stats::pnorm(-abs(z))
+  base[c("statistic", "p", "reject")] <- c(z, p, as.numeric(p < alpha))
+  base
+}
+
 `%||%` <- function(a, b) if (is.null(a)) b else a

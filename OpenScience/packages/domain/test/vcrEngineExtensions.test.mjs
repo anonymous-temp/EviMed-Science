@@ -44,8 +44,8 @@ test("the extension parity jobs: every valid one is clean, every invalid one nam
 
 test("the trajectory method is registered once: a method, a kind, a schema, a tier, and the references its cases are held to", () => {
   const spec = /** @type {any} */ (VCR_ENGINE_METHODS)["patients.longitudinal"];
-  assert.equal(spec.version, "1.1.0");
-  assert.deepEqual([...spec.compatibleVersions], ["1.0.0"]);
+  assert.equal(spec.version, "1.2.0");
+  assert.deepEqual([...spec.compatibleVersions], ["1.0.0", "1.1.0"]);
   assert.equal(spec.modelTier, "scenario");
   assert.deepEqual([...spec.endpoints], ["continuous"]);
   assert.ok(spec.crossChecks.length > 0);
@@ -96,8 +96,8 @@ test("single-arm designs state their analysis by endpoint, and the version recor
   assert.deepEqual(Object.keys(VCR_SINGLE_ARM_ANALYSIS_METHODS.single_arm_external), ["binary"]);
   for (const method of ["design.simulate", "design.grid"]) {
     const spec = /** @type {any} */ (VCR_ENGINE_METHODS)[method];
-    assert.equal(spec.version, "1.4.0", method);
-    assert.deepEqual([...spec.compatibleVersions], ["1.2.0", "1.3.0"], method);
+    assert.equal(spec.version, "1.5.0", method);
+    assert.deepEqual([...spec.compatibleVersions], ["1.2.0", "1.3.0", "1.4.0"], method);
     assert.deepEqual(spec.legacyReleases.map((/** @type {any} */ release) => release.version), ["1.1.0"], method);
     assert.deepEqual([...spec.legacyReleases[0].support.single_arm], ["binary"], "what 1.1.0 ran: the binary single arm only");
     assert.deepEqual([...VCR_DESIGN_SUPPORT[/** @type {"design.simulate"} */ (method)].single_arm], ["binary", "continuous", "time_to_event"]);

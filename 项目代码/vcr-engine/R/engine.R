@@ -2026,13 +2026,21 @@ vcr_job_design_simulate <- function(job, output_dir = NULL, cancel_file = NULL, 
   cp <- if (is.null(output_dir)) NULL else file.path(output_dir, "checkpoint.rds")
   if (!is.null(output_dir)) dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
   sc <- job$scenario
-  # 1.4.0 (T13): a MaxCombo analysis also reports the log-rank test on the same replicates, and the strong null beside it
-  maxcombo <- identical(sc$analysis$method, "maxcombo") && identical(sc$design$kind %||% "two_arm_fixed", "two_arm_fixed") && is.character(job[["methodVersion"]]) && vcr_job_at_least(job, "1.4.0")
+  # 1.4.0 (T13): a MaxCombo analysis also reports the log-rank test on the same replicates, and the strong null beside it (1.5.0: the modestly weighted test too)
+  weighted <- isTRUE(sc$analysis$method %in% c("maxcombo", "modestly_weighted"))
+  sequential <- identical(sc$design$kind, "group_sequential")
+  maxcombo <- weighted && (sequential || identical(sc$design$kind %||% "two_arm_fixed", "two_arm_fixed")) && is.character(job[["methodVersion"]]) && vcr_job_at_least(job, "1.4.0")
+  # 1.5.0 (T14): a group-sequential design analysed by a weighted test has boundaries found by simulation under the null, from another seed than the power run
+  edges <- if (weighted && sequential) vcr_gs_boundaries_job(job, sc, cancel_file) else NULL
   res <- vcr_run_simulation(sc, job$seed, job$replicates, vcr_cores(job$cores),
                             checkpoint = cp, cancel_file = cancel_file,
                             batch_size = vcr_scalar(job$batchSize, 500L), progress = progress,
-                            cpu_seconds_limit = vcr_scalar(job$cpuSecondsLimit, Inf), extras = list(logrank = maxcombo))
-  strong <- if (maxcombo && identical(res$status, "succeeded")) tryCatch(vcr_maxcombo_strong_null(job, sc, cancel_file, spent = res$diagnostics$cpuSeconds, completed = res$diagnostics$replicatesCompleted), error = function(e) NULL) else NULL
+                            cpu_seconds_limit = vcr_scalar(job$cpuSecondsLimit, Inf), extras = list(logrank = maxcombo, bounds = edges$bounds))
+  if (!is.null(edges)) {
+    res$diagnostics$groupSequentialBoundaries <- edges$info
+    if (edges$trials < edges$planned) res$diagnostics$conclusion <- "limited"
+  }
+  strong <- if (maxcombo && identical(res$status, "succeeded")) tryCatch(vcr_maxcombo_strong_null(job, sc, cancel_file, spent = res$diagnostics$cpuSeconds, completed = res$diagnostics$replicatesCompleted, bounds = edges$bounds), error = function(e) NULL) else NULL
   if (!is.null(strong)) { res$measures <- c(res$measures, strong$measures); res$diagnostics$strongNull <- strong$diagnostics }
   check <- tryCatch(vcr_analytic_check(sc, res$measures), error = function(e) NULL)
   tables <- if (!is.null(output_dir) && !is.null(res$values) && nrow(res$values)) {
@@ -2045,8 +2053,8 @@ vcr_job_design_simulate <- function(job, output_dir = NULL, cancel_file = NULL, 
   generated<-if(!is.null(res$values) && "generatedRecords" %in% colnames(res$values))sum(res$values[,"generatedRecords"],na.rm=TRUE) else res$diagnostics$replicatesCompleted*n_per
   # the analytic power curve at this size with the simulated point on it: analytic first, the simulation as the check
   simulated <- Filter(function(m) identical(m$name, "power"), res$measures)
-  # the analytic curve is the log-rank's: a MaxCombo analysis has no closed form to draw it from
-  curve <- if (identical(sc$analysis$method, "maxcombo")) NULL else tryCatch(vcr_power_curve_summary(sc, vcr_scalar(sc$analysis$alpha, 0.025), vcr_check_sided(sc$analysis$sided),
+  # the analytic curve is the log-rank's: a MaxCombo or modestly weighted analysis has no closed form to draw it from
+  curve <- if (isTRUE(sc$analysis$method %in% c("maxcombo", "modestly_weighted"))) NULL else tryCatch(vcr_power_curve_summary(sc, vcr_scalar(sc$analysis$alpha, 0.025), vcr_check_sided(sc$analysis$sided),
                                             if (length(simulated)) list(value = simulated[[1]]$value, mcse = simulated[[1]]$mcse %||% NA_real_) else NULL),
                     error = function(e) NULL)
   list(status = res$status, measures = res$measures, issues = res$issues,

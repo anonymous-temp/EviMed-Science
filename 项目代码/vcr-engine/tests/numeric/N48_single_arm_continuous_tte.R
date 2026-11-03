@@ -195,7 +195,7 @@ vcr_case("N48e", c("AC-04", "AC-30", "AC-26"), function() {
   v_ok <- !length(version(binary_sc, "1.1.0")) && !length(version(.n48_mean(), "1.2.0")) && "method_version_mismatch@methodVersion" %in% version(.n48_mean(), "1.1.0") &&
     "method_version_mismatch@methodVersion" %in% version(.n48_surv(), "1.1.0") && !length(version(list(design = list(kind = "two_arm_fixed", nTreat = 50, nControl = 50), endpoint = list(type = "continuous"), truth = list(effect = 0.4, sd = 1),
       analysis = list(method = "ttest")), "1.0.0"))
-  list(pass = all_failed && named && v_ok && identical(d$methods[["design.simulate"]]$version, "1.4.0") && identical(d$methods[["design.grid"]]$version, "1.4.0"),
+  list(pass = all_failed && named && v_ok && identical(d$methods[["design.simulate"]]$version, "1.5.0") && identical(d$methods[["design.grid"]]$version, "1.5.0"),
        detail = sprintf("%d of 11 malformed single-arm scenarios refused by name (%s); version %s: a continuous or survival job labelled 1.1.0 is refused, the binary single-arm job at 1.1.0 and a two-arm job at 1.0.0 stay valid",
                         sum(vapply(got, function(g) g$failed, logical(1))), paste(vapply(got, function(g) paste0(g$what, ": ", paste(unique(g$codes), collapse = "+")), character(1)), collapse = "; "), d$methods[["design.simulate"]]$version))
 })

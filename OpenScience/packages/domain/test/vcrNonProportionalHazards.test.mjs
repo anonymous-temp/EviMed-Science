@@ -14,23 +14,22 @@ const job = (/** @type {string} */ method, /** @type {string} */ kind, /** @type
   ({ jobId: "job_1", studyId: "std_1", kind, method, methodVersion: version, protocolVersion: 1, seed: 1, cpuSecondsLimit: 60, scenario, inputs: [] });
 const codes = (/** @type {readonly { code: string, field: string }[]} */ issues) => issues.map((issue) => `${issue.code}@${issue.field}`);
 
-test("D1: a simulation states one hazard law, either one ratio or one that changes over time, and MaxCombo is an analysis of a fixed design", () => {
+test("D1: a simulation states one hazard law, either one ratio or one that changes over time, and MaxCombo is an analysis of a fixed or a group-sequential design", () => {
   assert.deepEqual(validateScenario("design.simulate", simulate()), []);
   assert.deepEqual(validateScenario("design.simulate", simulate({ truth: { hazardRatio: 0.7, controlMedian: 12 }, analysis: { method: "maxcombo" } })), []);
   assert.deepEqual(codes(validateScenario("design.simulate", simulate({ truth: { hazardRatio: 0.7, treatmentHazardRatios: NPH, controlMedian: 12 } }))), ["scenario_value_invalid@scenario.truth.treatmentHazardRatios"]);
   assert.deepEqual(codes(validateScenario("design.simulate", simulate({ truth: { controlMedian: 12 } }))), ["scenario_field_missing@scenario.truth.hazardRatio"]);
   assert.deepEqual(codes(validateScenario("design.simulate", simulate({ truth: { treatmentHazardRatios: { breaks: [6, 12], ratios: [1, 0.6] }, controlMedian: 12 } }))), ["scenario_value_invalid@scenario.truth.treatmentHazardRatios.ratios"]);
   assert.deepEqual(codes(validateScenario("design.simulate", simulate({ truth: { treatmentHazardRatios: { breaks: [12, 6], ratios: [1, 0.6, 0.5] }, controlMedian: 12 } }))).length, 1, "breaks increase");
-  // MaxCombo is not for a group-sequential design, which looks with the log-rank
-  assert.deepEqual(codes(validateScenario("design.simulate", simulate({ design: { kind: "group_sequential", nTreat: 150, nControl: 150, informationRates: [0.5, 1] }, truth: { hazardRatio: 0.7, controlMedian: 12 } }))),
-    ["scenario_value_invalid@scenario.analysis.method"]);
+  // MaxCombo in a group-sequential design is 1.5.0's (T14): the current release takes it, and simulates its boundaries
+  assert.deepEqual(codes(validateScenario("design.simulate", simulate({ design: { kind: "group_sequential", nTreat: 150, nControl: 150, informationRates: [0.5, 1] }, truth: { hazardRatio: 0.7, controlMedian: 12 }, analysis: { method: "maxcombo" } }))), []);
   // a single-arm trial against its benchmark still states its one ratio, and has no law that changes over time
   assert.deepEqual(codes(validateScenario("design.simulate", { design: { kind: "single_arm", n: 60 }, endpoint: { type: "time_to_event" }, truth: { controlMedian: 12 }, analysis: { method: "one_sample_logrank", alternative: "less", sided: 1, alpha: 0.025 }, accrual: { duration: 12, followup: 12 } })),
     ["scenario_field_missing@scenario.truth.hazardRatio"]);
   assert.ok(validateScenario("design.simulate", { design: { kind: "single_arm", n: 60 }, endpoint: { type: "time_to_event" }, truth: { hazardRatio: 0.7, treatmentHazardRatios: NPH, controlMedian: 12 }, analysis: { method: "one_sample_logrank", alternative: "less", sided: 1, alpha: 0.025 }, accrual: { duration: 12, followup: 12 } })
     .some((issue) => issue.code === "scenario_field_unknown"));
   // the log-rank stays the first (and so the default) analysis of the table
-  assert.deepEqual([...VCR_TWO_ARM_ANALYSIS_METHODS.time_to_event], ["logrank", "rmst", "maxcombo"]);
+  assert.deepEqual([...VCR_TWO_ARM_ANALYSIS_METHODS.time_to_event], ["logrank", "rmst", "maxcombo", "modestly_weighted"]);
 });
 
 test("D1: the analytic design and the assurance refuse both by name and point to the simulation", () => {
@@ -55,10 +54,10 @@ test("D1: a hazard ratio that changes over time is a null case only when every r
   assert.ok(codes(validateScenario("design.grid", { ...grid, truths: [{ treatmentHazardRatios: { breaks: [6], ratios: [1] } }] })).includes("scenario_value_invalid@truths[0]"));
 });
 
-test("D1/D5: design.simulate and design.grid are 1.4.0 (1.3.0 added this); 1.2.0 results replay, unless the scenario asks for what 1.3.0 added", () => {
+test("D1/D5: design.simulate and design.grid are 1.5.0 (1.3.0 added this); 1.2.0 results replay, unless the scenario asks for what 1.3.0 added", () => {
   for (const method of ["design.simulate", "design.grid"]) {
-    assert.equal(/** @type {any} */ (VCR_ENGINE_METHODS)[method].version, "1.4.0");
-    assert.deepEqual([.../** @type {any} */ (VCR_ENGINE_METHODS)[method].compatibleVersions], ["1.2.0", "1.3.0"]);
+    assert.equal(/** @type {any} */ (VCR_ENGINE_METHODS)[method].version, "1.5.0");
+    assert.deepEqual([.../** @type {any} */ (VCR_ENGINE_METHODS)[method].compatibleVersions], ["1.2.0", "1.3.0", "1.4.0"]);
   }
   const ph = simulate({ truth: { hazardRatio: 0.7, controlMedian: 12 }, analysis: { method: "logrank", alpha: 0.025, sided: 1 } });
   assert.deepEqual(validateEngineJob(job("design.simulate", "design_simulation", "1.2.0", ph)), [], "proportional hazards replay under 1.2.0");

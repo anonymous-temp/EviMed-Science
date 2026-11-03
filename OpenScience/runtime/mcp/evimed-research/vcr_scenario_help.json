@@ -2093,14 +2093,16 @@
       },
       "notes": [
         "design.kind × endpoint.type this method implements: single_arm (binary|continuous|time_to_event); single_arm_external (binary); simon_two_stage (binary); two_arm_fixed (continuous|binary|time_to_event); group_sequential (time_to_event). Any other pairing is refused (design_not_supported).",
-        "analysis.method for a two-arm design follows the endpoint: continuous ttest|ancova; binary risk_difference|logistic; time_to_event logrank|rmst|maxcombo.",
+        "analysis.method for a two-arm design follows the endpoint: continuous ttest|ancova; binary risk_difference|logistic; time_to_event logrank|rmst|maxcombo|modestly_weighted.",
         "A single-arm design runs the analysis of its endpoint: single_arm binary exact_binomial, continuous one_sample_t|one_sample_z, time_to_event one_sample_logrank; single_arm_external binary stratified_risk_difference; simon_two_stage binary simon_boundary.",
         "A single-arm trial of a mean or a survival time is compared with a fixed benchmark: truth.benchmark is the historical mean (continuous), truth.controlMedian or truth.controlDistribution the benchmark survival, and truth.effect (the true mean minus the benchmark) or truth.hazardRatio (the trial's hazard over the benchmark's) is the effect, 0 or 1 for the null. analysis.alternative describes that parameter: for a time-to-event endpoint less is a benefit (a hazard below the benchmark's) and greater is harm.",
         "costs: the cost measure is perPatient x N + perSite x sites + perMonth x duration. A duration exists only for a time-to-event design with an accrual block, so a continuous or binary design gets its cost from perPatient and perSite, and a perMonth cost there is declined with its reason (diagnostics.performanceNotComputed).",
         "A frozen Simon two-stage design (simon_two_stage) is simulated at truth.responseRate with its given boundaries n1, r1, n, r. truth.alternativeRate and analysis.alpha do not change that; they are what the result reports the frozen design against: diagnostics.frozenDesign holds its exact rejection probability, early-stop probability and expected sample size at truth.nullRate and at truth.alternativeRate, and, when analysis.alpha is written, whether its type I error is within it.",
         "hypothesis is for a two-arm design and is left out for superiority (the default). { kind: \"non_inferiority\", margin } tests that the treatment is not worse than the control by more than the margin: margin is a positive number in the outcome's units for a mean, a risk difference below 1 for a binary endpoint (the treatment rate may be this far below the control's), and a hazard ratio above 1 for an event-time endpoint (the largest ratio still counted as not worse). The margin is a clinical choice: ask for it, never invent one. truth then states the effect the treatment is EXPECTED to have (often 0, or a hazard ratio of 1), not the margin; design.simulate measures the type I error by putting the truth on the margin itself. The test is one-sided; analysis.method is the t-test, the risk difference or the log-rank test.",
         "A hazard ratio that changes over time is simulation-only: truth.treatmentHazardRatios = { breaks, ratios } gives the treatment arm's hazard as ratios[j] times the control's on the j-th interval of breaks (ratios has one more value than breaks, the last runs on), so a delayed effect is breaks [6], ratios [1, 0.6] and a crossing of the curves [6], [1.4, 0.6]. State it INSTEAD of truth.hazardRatio, not beside it; the analytic design (design_analytic) and the assurance refuse it by name. There is then no single true hazard ratio, so bias, mean squared error and coverage are not computed for the log-rank family, and no closed form is drawn for the power; an RMST analysis keeps its bias, against the RMST difference integrated from the two survival curves.",
-        "analysis.method maxcombo (time-to-event, two-arm, fixed design only) is the most favourable of the four Fleming-Harrington weighted log-rank statistics G(0,0), G(0,1), G(1,0), G(1,1), its p-value read from their joint null distribution. It is never a default: the analysis is the log-rank unless you say otherwise, because the log-rank is often as good (it loses to MaxCombo mainly when the curves separate late or cross), and the choice is made before the data. Use it only for a hypothesis the person has stated (an effect that starts late, curves that separate late or cross), and run the log-rank beside it. A group-sequential design looks with the log-rank and refuses maxcombo."
+        "analysis.method maxcombo (time-to-event, two-arm) is the most favourable of the four Fleming-Harrington weighted log-rank statistics G(0,0), G(0,1), G(1,0), G(1,1), its p-value read from their joint null distribution. It is never a default: the analysis is the log-rank unless you say otherwise, because the log-rank is often as good (it loses to MaxCombo mainly when the curves separate late or cross), and the choice is made before the data. Use it only for a hypothesis the person has stated (an effect that starts late, curves that separate late or cross), and run the log-rank beside it. A group-sequential design may analyse by maxcombo too (see below).",
+        "analysis.method modestly_weighted (time-to-event, two-arm; the weight is 1 / max(S, sStar) of the pooled survival curve, sStar 0.5 unless stated, so a late event counts at most 1 / sStar times an early one) is the middle road between the log-rank test and a late-weighted test: it keeps most of the power of a late-weighted test when the effect starts late, and it protects against the false positives a late-weighted test gives when the treatment is worse early and equal later. Describe it by that protection, and run the log-rank beside it. It is never a default. The result carries the log-rank power on the same replicates and, for a design with an effect, the rejection probability of both tests under a strong null derived from the design (the treatment worse early, then equal), as MaxCombo does. A group-sequential design may use it too (see below).",
+        "A group-sequential design (design.kind group_sequential, informationRates, spending) may analyse by maxcombo or modestly_weighted. Its boundaries have no closed form: the engine simulates the design under no effect (the same accrual, dropout and size, from another seed than the power run), takes the statistic at every look, and sets look k's boundary so that exactly the planned share of all those trials stops there (the spending function's increment at the look's information fraction, the events so far over the final events). The power and the type I error come from a separate run, so a null scenario's type I error is an independent check of the boundaries. The result says how many null trials the boundaries rest on; a look whose planned spend is below one trial cannot stop the trial and is listed. The log-rank power is reported beside it on the same trials, with its own asymptotic boundaries, as for the fixed design; the cost of the boundary run is real (about 20,000 trials of the design), so a large trial may end limited. Like maxcombo in a fixed design, it is not a default."
       ],
       "rows": [
         {"path":"design","type":"object","required":true},
@@ -2378,6 +2380,7 @@
             "logrank",
             "rmst",
             "maxcombo",
+            "modestly_weighted",
             "exact_binomial",
             "simon_boundary",
             "stratified_risk_difference",
@@ -2428,6 +2431,16 @@
           "within": "analysis",
           "when": [{"path":"analysis.method","in":["rmst"]}],
           "fieldRole": "research_fact"
+        },
+        {
+          "path": "analysis.sStar",
+          "type": "number",
+          "max": 1,
+          "gt": 0,
+          "default": 0.5,
+          "within": "analysis",
+          "when": [{"path":"analysis.method","in":["modestly_weighted"]}],
+          "fieldRole": "defaultable"
         },
         {"path":"external","type":"object","required":true,"when":[{"path":"design.kind","in":["single_arm_external"]}]},
         {
@@ -2694,6 +2707,26 @@
             "endpoint": {"type":"time_to_event"},
             "truth": {"treatmentHazardRatios":{"breaks":[6],"ratios":[1,0.6]},"controlMedian":12},
             "accrual": {"kind":"uniform","duration":12,"followup":18},
+            "analysis": {"method":"maxcombo","alpha":0.025,"sided":1}
+          }
+        },
+        {
+          "label": "a delayed treatment effect (hazard ratio 1 for 6 months, 0.6 after) analysed by the modestly weighted test, the log-rank power reported beside it",
+          "scenario": {
+            "design": {"kind":"two_arm_fixed","nTreat":150,"nControl":150},
+            "endpoint": {"type":"time_to_event"},
+            "truth": {"treatmentHazardRatios":{"breaks":[6],"ratios":[1,0.6]},"controlMedian":12},
+            "accrual": {"kind":"uniform","duration":12,"followup":18},
+            "analysis": {"method":"modestly_weighted","sStar":0.5,"alpha":0.025,"sided":1}
+          }
+        },
+        {
+          "label": "a delayed treatment effect analysed by MaxCombo at three looks (O'Brien-Fleming spending): the boundaries are found by simulation under no effect",
+          "scenario": {
+            "design": {"kind":"group_sequential","nTreat":150,"nControl":150,"informationRates":[0.5,0.8,1],"spending":"obrien_fleming"},
+            "endpoint": {"type":"time_to_event"},
+            "truth": {"treatmentHazardRatios":{"breaks":[4],"ratios":[1,0.6]},"controlMedian":12},
+            "accrual": {"kind":"uniform","duration":12,"followup":30,"dropoutAnnual":0.05},
             "analysis": {"method":"maxcombo","alpha":0.025,"sided":1}
           }
         },
@@ -3783,7 +3816,7 @@
       "gridCells": 400,
       "notes": [
         "design.kind × endpoint.type this method implements: single_arm (binary|continuous|time_to_event); single_arm_external (binary); simon_two_stage (binary); two_arm_fixed (continuous|binary|time_to_event); group_sequential (time_to_event). Any other pairing is refused (design_not_supported).",
-        "analysis.method for a two-arm design follows the endpoint: continuous ttest|ancova; binary risk_difference|logistic; time_to_event logrank|rmst|maxcombo.",
+        "analysis.method for a two-arm design follows the endpoint: continuous ttest|ancova; binary risk_difference|logistic; time_to_event logrank|rmst|maxcombo|modestly_weighted.",
         "A single-arm design runs the analysis of its endpoint: single_arm binary exact_binomial, continuous one_sample_t|one_sample_z, time_to_event one_sample_logrank; single_arm_external binary stratified_risk_difference; simon_two_stage binary simon_boundary.",
         "A single-arm trial of a mean or a survival time is compared with a fixed benchmark: truth.benchmark is the historical mean (continuous), truth.controlMedian or truth.controlDistribution the benchmark survival, and truth.effect (the true mean minus the benchmark) or truth.hazardRatio (the trial's hazard over the benchmark's) is the effect, 0 or 1 for the null. analysis.alternative describes that parameter: for a time-to-event endpoint less is a benefit (a hazard below the benchmark's) and greater is harm.",
         "costs: the cost measure is perPatient x N + perSite x sites + perMonth x duration. A duration exists only for a time-to-event design with an accrual block, so a continuous or binary design gets its cost from perPatient and perSite, and a perMonth cost there is declined with its reason (diagnostics.performanceNotComputed).",
@@ -4066,6 +4099,7 @@
             "logrank",
             "rmst",
             "maxcombo",
+            "modestly_weighted",
             "exact_binomial",
             "simon_boundary",
             "stratified_risk_difference",
@@ -4116,6 +4150,16 @@
           "within": "analysis",
           "when": [{"path":"analysis.method","in":["rmst"]}],
           "fieldRole": "research_fact"
+        },
+        {
+          "path": "analysis.sStar",
+          "type": "number",
+          "max": 1,
+          "gt": 0,
+          "default": 0.5,
+          "within": "analysis",
+          "when": [{"path":"analysis.method","in":["modestly_weighted"]}],
+          "fieldRole": "defaultable"
         },
         {"path":"external","type":"object","required":true,"when":[{"path":"design.kind","in":["single_arm_external"]}]},
         {
@@ -5214,7 +5258,10 @@
     "patients.longitudinal": {
       "endpoints": ["continuous"],
       "notes": [
-        "A selected immutable population uses a stable cohort pairing key by default. Explicit pairing.key and pairing.replicate select the comparison group and an independent L'Ecuyer-CMRG replicate stream. Common random numbers require the same key, seed, method and member ordering; changing the replicate changes random draws, while member identity stays fixed. A paired synthetic scenario does not identify an individual causal effect."
+        "A selected immutable population uses a stable cohort pairing key by default. Explicit pairing.key and pairing.replicate select the comparison group and an independent L'Ecuyer-CMRG replicate stream. Common random numbers require the same key, seed, method and member ordering; changing the replicate changes random draws, while member identity stays fixed. A paired synthetic scenario does not identify an individual causal effect.",
+        "dropoutPerVisit is the probability of leaving before each follow-up visit at an average outcome (missing completely at random unless dropoutModel says otherwise). dropoutModel makes the outcome decide who leaves: mechanism \"mar\" reads the previous value (what is missing is explained by what was seen), \"mnar\" the value at the visit itself (the missing value is the cause); logOddsPerSd is the change in the log-odds of leaving per standard deviation of the outcome, positive when people with higher values leave sooner. It needs dropoutPerVisit above 0. Say which mechanism was assumed: an analysis that ignores the dropout is biased under both, and a mixed model is right under \"mar\" and not under \"mnar\".",
+        "rescue is an intercurrent event: before each follow-up visit a person not yet on rescue medication starts it with probability perVisit at an average previous value (logOddsPerSd makes it more likely after a high previous value, the usual case when rescue is given to people who are doing badly), and from that visit on the outcome is shifted by effect (negative lowers it). Every generated person is run through all the visits under both arms, so the result carries the two estimands as known truths (estimands): the treatment-policy effect at the last visit (the outcome as it comes, whatever was taken) and the hypothetical one (had there been no rescue; it is the model's own effect times the time scale), the share on rescue in each arm at the last visit, the plain comparison of those still in, and the people per arm each estimand needs for 80% and 90% power (one-sided 2.5%, a two-sample comparison of the last visit). Report the two estimands and say which one the question is about; never recompute them. The table gains a 0/1 column rescue.",
+        "trajectory bends the mean: \"plateau\" (the change per time unit slows; halfTime is when the person is half way to the plateau) or \"quadratic\" (curvature); time enters as g(t) in place of t, g(0) = 0, so the arms start alike and the effect is the difference in the rate on that scale. A scenario that states none of dropoutModel, rescue and trajectory is the 1.1.0 generator to the bit."
       ],
       "rows": [
         {"path":"cohortRules","type":"list","count":{"min":1,"max":100},"items":{"type":"object"},"fieldRole":"defaultable"},
@@ -5256,7 +5303,62 @@
         },
         {"path":"truth.randomEffects.correlation","type":"number","gt":-1,"lt":1,"default":0,"within":"truth.randomEffects","fieldRole":"defaultable"},
         {"path":"truth.covariateEffects","type":"map","of":{"type":"number"},"count":{"min":1,"max":100},"fieldRole":"defaultable"},
-        {"path":"dropoutPerVisit","type":"number","min":0,"lt":1,"unit":"probability of leaving before each follow-up visit","default":0,"fieldRole":"defaultable"}
+        {"path":"dropoutPerVisit","type":"number","min":0,"lt":1,"unit":"probability of leaving before each follow-up visit","default":0,"fieldRole":"defaultable"},
+        {"path":"trajectory","type":"object"},
+        {"path":"trajectory.kind","type":"string","values":["linear","plateau","quadratic"],"required":true,"within":"trajectory","fieldRole":"defaultable"},
+        {
+          "path": "trajectory.halfTime",
+          "type": "number",
+          "gt": 0,
+          "unit": "time units",
+          "required": true,
+          "within": "trajectory",
+          "when": [{"path":"trajectory.kind","in":["plateau"]}],
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "trajectory.curvature",
+          "type": "number",
+          "unit": "per time unit",
+          "required": true,
+          "within": "trajectory",
+          "when": [{"path":"trajectory.kind","in":["quadratic"]}],
+          "fieldRole": "research_fact"
+        },
+        {"path":"dropoutModel","type":"object"},
+        {"path":"dropoutModel.mechanism","type":"string","values":["mar","mnar"],"required":true,"within":"dropoutModel","fieldRole":"defaultable"},
+        {
+          "path": "dropoutModel.logOddsPerSd",
+          "type": "number",
+          "min": -5,
+          "max": 5,
+          "unit": "change in the log-odds of leaving per standard deviation of the outcome",
+          "required": true,
+          "within": "dropoutModel",
+          "fieldRole": "research_fact"
+        },
+        {"path":"rescue","type":"object"},
+        {
+          "path": "rescue.perVisit",
+          "type": "number",
+          "gt": 0,
+          "lt": 1,
+          "unit": "probability of starting rescue before each follow-up visit",
+          "required": true,
+          "within": "rescue",
+          "fieldRole": "research_fact"
+        },
+        {"path":"rescue.effect","type":"number","unit":"outcome units","required":true,"within":"rescue","fieldRole":"research_fact"},
+        {
+          "path": "rescue.logOddsPerSd",
+          "type": "number",
+          "min": -5,
+          "max": 5,
+          "unit": "change in the log-odds of starting rescue per standard deviation of the previous value",
+          "default": 0,
+          "within": "rescue",
+          "fieldRole": "defaultable"
+        }
       ],
       "examples": [
         {
@@ -5267,6 +5369,19 @@
             "visits": [0,3,6,9,12],
             "truth": {"intercept":50,"slope":-0.4,"effect":-0.2,"sd":3,"randomEffects":{"sdIntercept":6,"sdSlope":0.3,"correlation":-0.2}},
             "dropoutPerVisit": 0.1
+          }
+        },
+        {
+          "label": "the same, with dropout that depends on the previous value (people doing worse leave sooner), a rescue medication that 6% start before each visit and a trajectory that levels off",
+          "scenario": {
+            "design": {"nTreat":150,"nControl":150},
+            "endpoint": {"type":"continuous"},
+            "visits": [0,3,6,9,12],
+            "truth": {"intercept":50,"slope":-0.4,"effect":-0.2,"sd":3,"randomEffects":{"sdIntercept":6,"sdSlope":0.3,"correlation":-0.2}},
+            "dropoutPerVisit": 0.1,
+            "dropoutModel": {"mechanism":"mar","logOddsPerSd":1},
+            "rescue": {"perVisit":0.06,"effect":-3,"logOddsPerSd":1},
+            "trajectory": {"kind":"plateau","halfTime":4}
           }
         }
       ]

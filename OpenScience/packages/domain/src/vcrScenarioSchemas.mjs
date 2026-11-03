@@ -308,7 +308,7 @@ const SIMULATED_ACCRUAL = gated({
 }, TIME_TO_EVENT)
 
 const SIMULATED_ANALYSIS = object({
-  method: string({ values: ['ttest', 'ancova', 'risk_difference', 'logistic', 'logrank', 'rmst', 'maxcombo', 'exact_binomial', 'simon_boundary', 'stratified_risk_difference', 'one_sample_t', 'one_sample_z', 'one_sample_logrank'], reqWhen: is('design.kind', 'single_arm', 'single_arm_external', 'simon_two_stage') }),
+  method: string({ values: ['ttest', 'ancova', 'risk_difference', 'logistic', 'logrank', 'rmst', 'maxcombo', 'modestly_weighted', 'exact_binomial', 'simon_boundary', 'stratified_risk_difference', 'one_sample_t', 'one_sample_z', 'one_sample_logrank'], reqWhen: is('design.kind', 'single_arm', 'single_arm_external', 'simon_two_stage') }),
   // the standard deviation a one-sample z analysis takes as known (it need not be the generator's)
   sd: req(gated(number({ gt: 0, unit: 'outcome units' }), is('analysis.method', 'one_sample_z'))),
   alternative: req(gated(string({ values: ['greater', 'less', 'two.sided'] }), is('design.kind', 'single_arm'))),
@@ -316,6 +316,8 @@ const SIMULATED_ANALYSIS = object({
   alpha: ALPHA,
   sided: integer({ min: 1, max: 2, default: 1 }),
   tau: req(gated(number({ gt: 0, unit: 'time units' }), is('analysis.method', 'rmst'))),
+  // the modestly weighted log-rank test (1.5.0): the weight is 1 / max(S, sStar) of the pooled survival curve, so at most 1 / sStar times the earliest
+  sStar: gated(number({ gt: 0, max: 1, default: 0.5 }), is('analysis.method', 'modestly_weighted')),
 })
 
 const SIMULATED_DESIGN_FIELDS = {
@@ -870,6 +872,25 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
       covariateEffects: COVARIATE_EFFECTS,
     })),
     dropoutPerVisit: number({ min: 0, lt: 1, default: 0, unit: 'probability of leaving before each follow-up visit' }),
+    // 1.2.0 (algorithm round T11). A mean that bends: time enters as g(t), a plateau (half way to it at halfTime) or t + curvature t^2.
+    trajectory: object({
+      kind: req(string({ values: ['linear', 'plateau', 'quadratic'] })),
+      halfTime: req(gated(number({ gt: 0, unit: 'time units' }), is('trajectory.kind', 'plateau'))),
+      curvature: req(gated(number({ unit: 'per time unit' }), is('trajectory.kind', 'quadratic'))),
+    }),
+    // Dropout that depends on the outcome: from dropoutPerVisit at an average outcome, the log-odds of leaving before a visit change by logOddsPerSd per
+    // standard deviation of the outcome (a positive number: people with higher values leave sooner). "mar" reads the previous value, "mnar" the value at the visit.
+    dropoutModel: object({
+      mechanism: req(string({ values: ['mar', 'mnar'] })),
+      logOddsPerSd: req(number({ min: -5, max: 5, unit: 'change in the log-odds of leaving per standard deviation of the outcome' })),
+    }),
+    // A rescue medication, an intercurrent event: before each visit a person not yet on it starts it with probability perVisit at an average previous value
+    // (more or less as logOddsPerSd says), and from that visit the outcome is shifted by effect.
+    rescue: object({
+      perVisit: req(number({ ...PROBABILITY, unit: 'probability of starting rescue before each follow-up visit' })),
+      effect: req(number({ unit: 'outcome units' })),
+      logOddsPerSd: number({ min: -5, max: 5, default: 0, unit: 'change in the log-odds of starting rescue per standard deviation of the previous value' }),
+    }),
   }),
 
   'evidence.pool': object({
@@ -1935,7 +1956,7 @@ function checkGrid(schema, scenario, ctx) {
  * The analyses a two-arm simulation may run, by endpoint, and the one analysis each single-arm design runs. The coupled
  * check below reads them, and so does the help a model is given (`vcrScenarioHelp.mjs`): one table, not a sentence kept beside it.
  */
-export const VCR_TWO_ARM_ANALYSIS_METHODS = deepFreeze({ continuous: ['ttest', 'ancova'], binary: ['risk_difference', 'logistic'], time_to_event: ['logrank', 'rmst', 'maxcombo'] })
+export const VCR_TWO_ARM_ANALYSIS_METHODS = deepFreeze({ continuous: ['ttest', 'ancova'], binary: ['risk_difference', 'logistic'], time_to_event: ['logrank', 'rmst', 'maxcombo', 'modestly_weighted'] })
 export const VCR_SINGLE_ARM_ANALYSIS_METHODS = deepFreeze({
   single_arm: { binary: ['exact_binomial'], continuous: ['one_sample_t', 'one_sample_z'], time_to_event: ['one_sample_logrank'] },
   single_arm_external: { binary: ['stratified_risk_difference'] },
@@ -2038,6 +2059,18 @@ function checkDoseSemantics(scenario, path, ctx) {
 }
 
 /**
+ * The coupled fields of a longitudinal virtual-patient scenario (mirrored by protocol.R): a dropout that depends on the outcome starts from a
+ * probability of leaving, so dropoutPerVisit is stated and above 0.
+ * @param {any} scenario @param {string} path @param {WalkContext} ctx
+ */
+function checkLongitudinalSemantics(scenario, path, ctx) {
+  if (!isObject(scenario?.dropoutModel)) return
+  if (!(typeof scenario.dropoutPerVisit === 'number' && scenario.dropoutPerVisit > 0)) {
+    raise(ctx, 'scenario_value_invalid', at(path, 'dropoutPerVisit'), 'A dropout that depends on the outcome starts from the probability of leaving at an average outcome: state dropoutPerVisit above 0.')
+  }
+}
+
+/**
  * The coupled fields of a win-ratio design (mirrored by protocol.R): a size and a power wanted are two ways to ask, never both (the size would be
  * read and the power ignored), and the events level tracks at most 8 events per person on average.
  * @param {any} scenario @param {string} path @param {WalkContext} ctx
@@ -2120,7 +2153,6 @@ function checkDesignSemantics(scenario, path, ctx) {
   if (!['single_arm', 'single_arm_external', 'simon_two_stage'].includes(kind)) {
     const methods = /** @type {Record<string, readonly string[]>} */ (VCR_TWO_ARM_ANALYSIS_METHODS)
     if (method && !(methods[/** @type {string} */ (scenario.endpoint?.type)] ?? []).includes(method)) bad('analysis.method', 'The analysis must match the endpoint.')
-    if (method === 'maxcombo' && kind === 'group_sequential') bad('analysis.method', 'MaxCombo is a fixed-design analysis: a group-sequential design looks with the log-rank statistic.')
     return
   }
   // the analyses a single-arm design runs, by endpoint: the external-control and Simon designs are binary-endpoint designs only
@@ -2151,7 +2183,7 @@ function checkDesignSemantics(scenario, path, ctx) {
 export function vcrNoClosedFormFields(scenario) {
   return [
     scenario?.truth && typeof scenario.truth === 'object' && Object.hasOwn(scenario.truth, 'treatmentHazardRatios') ? 'truth.treatmentHazardRatios' : null,
-    scenario?.analysis?.method === 'maxcombo' ? 'analysis.method' : null,
+    scenario?.analysis?.method === 'maxcombo' || scenario?.analysis?.method === 'modestly_weighted' ? 'analysis.method' : null,
   ].filter((field) => field !== null)
 }
 
@@ -2167,7 +2199,7 @@ function checkNoNonProportionalHazards(scenario, path, ctx) {
   ctx.issues = ctx.issues.filter((issue) => !(issue.code === 'scenario_field_unknown' && where.some((field) => issue.field === at(path, /** @type {string} */ (field)))))
   for (const field of where) {
     raise(ctx, 'scenario_value_invalid', at(path, /** @type {string} */ (field)),
-      'A hazard ratio that changes over time and the MaxCombo analysis are simulated, not sized by a formula: ask for design_simulation (design.simulate) with this truth and analysis.')
+      'A hazard ratio that changes over time, the MaxCombo analysis and the modestly weighted test are simulated, not sized by a formula: ask for design_simulation (design.simulate) with this truth and analysis.')
   }
 }
 
@@ -2230,6 +2262,7 @@ export function validateScenario(method, scenario, { inputIds = null, path = 'sc
   if (method === 'design.dose') checkDoseSemantics(scenario, path, ctx)
   if (method === 'design.bayesian') checkBayesianSemantics(scenario, path, ctx)
   if (method === 'design.win_ratio') checkWinRatioSemantics(scenario, path, ctx)
+  if (method === 'patients.longitudinal') checkLongitudinalSemantics(scenario, path, ctx)
   if (method === 'design.analytic' || method === 'design.assurance') checkNoNonProportionalHazards(scenario, path, ctx)
   if (method === 'comparator.maic') checkMaicSemantics(scenario, path, ctx)
   if (method === 'accrual.poisson_gamma') checkAccrualSemantics(scenario, path, ctx)
