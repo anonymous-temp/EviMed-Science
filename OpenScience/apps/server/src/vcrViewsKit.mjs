@@ -371,6 +371,28 @@ export const MEASURE_META = Object.freeze({
   selected_full: { label: "保留全人群的概率", unit: "%", percent: true },
   reject_subset: { label: "亚组结论成立的概率", unit: "%", percent: true },
   reject_full: { label: "全人群结论成立的概率", unit: "%", percent: true },
+  // the dose-finding designs (design_dose) and the Bayesian designs (design_bayesian)
+  correct_dose_probability: { label: "选对最大耐受剂量的概率", unit: "%", percent: true },
+  select_above_mtd_probability: { label: "选到比最大耐受剂量更高的剂量的概率", unit: "%", percent: true },
+  select_below_mtd_probability: { label: "选到比最大耐受剂量更低的剂量的概率", unit: "%", percent: true },
+  select_none_probability: { label: "没有选出任何剂量的概率", unit: "%", percent: true },
+  expected_dlt: { label: "出现毒性反应的患者数（平均）", unit: "例" },
+  patients_above_mtd: { label: "超过最大耐受剂量的患者数（平均）", unit: "例" },
+  patients_at_mtd: { label: "在最大耐受剂量上的患者数（平均）", unit: "例" },
+  patients_below_mtd: { label: "低于最大耐受剂量的患者数（平均）", unit: "例" },
+  per_arm: { label: "每个剂量的患者数", unit: "例" },
+  total_patients: { label: "患者总数", unit: "例" },
+  worst_correct_selection_probability: { label: "各情形里选对的概率的最小值", unit: "%", percent: true },
+  early_stop_efficacy_probability: { label: "中途提前宣布成功的概率", unit: "%", percent: true },
+  stop_futility_probability: { label: "在这次分析因无效停止的概率", unit: "%", percent: true },
+  stop_efficacy_probability: { label: "在这次分析提前宣布成功的概率", unit: "%", percent: true },
+  expected_sample_size_null: { label: "无效应时的期望样本量", unit: "例" },
+  simon_expected_sample_size_null: { label: "Simon 最优设计无效应时的期望样本量", unit: "例" },
+  expected_sample_size_saving_null: { label: "无效应时比 Simon 最优设计少的期望样本量", unit: "例" },
+  success_threshold: { label: "成功阈值（后验概率）", unit: "%", percent: true },
+  calibrated_threshold: { label: "校准后的成功阈值", unit: "%", percent: true },
+  type_one_error_stated: { label: "你给的阈值下的 I 类错误", unit: "%", percent: true },
+  power_stated: { label: "你给的阈值下的功效", unit: "%", percent: true },
   planned_total: { label: "计划样本量", unit: "例" },
   planned_events: { label: "计划事件数", unit: "个" },
   separate_trials_size: { label: "每臂各做一个试验的总例数", unit: "例" },
@@ -524,7 +546,7 @@ export const zhUnit = (unit) => (unit === null ? null : UNIT_WORDS[unit] ?? unit
 const isProportionName = (name) => MEASURE_META[name]?.percent === true || name.startsWith("probability_by_") || INDEXED_PROBABILITY.test(name);
 
 /** The probabilities a confirmatory design reports per look or per arm: `stop_efficacy_2`, `selected_arm_1` ... */
-const INDEXED_PROBABILITY = /^(stop_efficacy|stop_futility|selected_arm|reject_arm)_(\d+)$/;
+const INDEXED_PROBABILITY = /^(stop_efficacy|stop_futility|selected_arm|reject_arm|select_dose)_(\d+)$/;
 
 /** @param {string} name */
 export function measureLabel(name) {
@@ -536,9 +558,11 @@ export function measureLabel(name) {
   if (set) return `第 ${set[1]} 个协变量集的估计`;
   const indexed = INDEXED_PROBABILITY.exec(name);
   if (indexed) {
-    const words = /** @type {Record<string, string>} */ ({ stop_efficacy: "次分析达标而停止的概率", stop_futility: "次分析因无效而停止的概率", selected_arm: "臂被保留的概率", reject_arm: "臂的结论成立的概率" });
+    const words = /** @type {Record<string, string>} */ ({ stop_efficacy: "次分析达标而停止的概率", stop_futility: "次分析因无效而停止的概率", selected_arm: "臂被保留的概率", reject_arm: "臂的结论成立的概率", select_dose: "剂量被选中的概率" });
     return `第 ${indexed[2]} ${words[indexed[1]]}`;
   }
+  const doseCount = /^patients_dose_(\d+)$/.exec(name);
+  if (doseCount) return `第 ${doseCount[1]} 剂量的患者数（平均）`;
   return name;
 }
 
@@ -857,7 +881,7 @@ export const allResultsOf = (bundle) => bundle.allResults ?? bundle.results ?? [
 export const METHOD_LABELS = Object.freeze(/** @type {Record<string, string>} */ ({
   "model.survival_fit": "拟合人群生存模型", "model.prognostic_apply": "应用已发表的预后模型",
   "profile.snapshot": "数据快照画像", "cohort.build": "构建队列", "population.scenario": "情景人群生成", "population.literature": "文献人群",
-  "population.synthpop": "经验合成人群", "population.quality": "人群质量报告", "population.check": "与第二份基线表对照", "design.confirmatory": "确认性设计", "patients.continuous": "虚拟患者（连续终点）",
+  "population.synthpop": "经验合成人群", "population.quality": "人群质量报告", "population.check": "与第二份基线表对照", "design.confirmatory": "确认性设计", "design.dose": "剂量探索设计", "design.bayesian": "贝叶斯设计（无需 MCMC）", "patients.continuous": "虚拟患者（连续终点）",
   "patients.binary": "虚拟患者（二分类终点）", "patients.time_to_event": "虚拟患者（事件时间终点）", "patients.longitudinal": "虚拟患者（纵向轨迹）", "evidence.pool": "证据合并", "evidence.network": "网络荟萃分析", "evidence.dose_response": "剂量反应荟萃分析", "evidence.shrinkage": "已发表效应的经验收缩",
   "evidence.reconstruct_km": "生存曲线重建（Guyot）", "comparator.entropy_balance": "熵平衡加权", "comparator.propensity_weight": "倾向评分加权",
   "comparator.rmst": "RMST 比较", "comparator.maic": "匹配调整间接比较", "comparator.evalue": "E 值", "comparator.bias_analysis": "未测混杂的偏倚分析", "comparator.stc": "模拟治疗比较（G 计算）", "comparator.target_trial": "目标试验模拟", "comparator.map_prior": "MAP 先验",

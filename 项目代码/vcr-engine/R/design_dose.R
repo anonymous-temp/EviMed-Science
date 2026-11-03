@@ -420,7 +420,7 @@ vcr_dose_select_isotonic <- function(N, Y, target, cutoff) {
 }
 
 .vcr_dose_cells <- function(run, v, K) {
-  cells <- list(.vcr_dose_prob("correct_selection_probability", v$correct), .vcr_dose_prob("select_above_mtd_probability", v$above_sel),
+  cells <- list(.vcr_dose_prob("correct_dose_probability", v$correct), .vcr_dose_prob("select_above_mtd_probability", v$above_sel),
                 .vcr_dose_prob("select_below_mtd_probability", v$below_sel), .vcr_dose_prob("select_none_probability", v$none),
                 .vcr_dose_mean("expected_sample_size", v$size), .vcr_dose_mean("expected_dlt", v$dlt),
                 .vcr_dose_mean("patients_above_mtd", v$above), .vcr_dose_mean("patients_at_mtd", v$at), .vcr_dose_mean("patients_below_mtd", v$below))
@@ -466,13 +466,13 @@ vcr_dose_select_isotonic <- function(N, Y, target, cutoff) {
   differences <- list()
   for (kind in setdiff(p$kinds, p$kind)) {
     differences[[length(differences) + 1L]] <- list(kind = kind, against = p$kind, trials = done, cells = list(
-      correct_selection_probability = .vcr_dose_paired("correct_selection_probability", vec[[kind]]$correct, vec[[p$kind]]$correct),
+      correct_dose_probability = .vcr_dose_paired("correct_dose_probability", vec[[kind]]$correct, vec[[p$kind]]$correct),
       patients_above_mtd = .vcr_dose_paired("patients_above_mtd", vec[[kind]]$above, vec[[p$kind]]$above),
       expected_sample_size = .vcr_dose_paired("expected_sample_size", vec[[kind]]$size, vec[[p$kind]]$size),
       expected_dlt = .vcr_dose_paired("expected_dlt", vec[[kind]]$dlt, vec[[p$kind]]$dlt)))
   }
   head <- designs[[1L]]$cells
-  measures <- unname(head[c("correct_selection_probability", "patients_above_mtd", "expected_sample_size", "expected_dlt", "select_none_probability")])
+  measures <- unname(head[c("correct_dose_probability", "patients_above_mtd", "expected_sample_size", "expected_dlt", "select_none_probability")])
   stop_state <- if (is.null(stopped)) NULL else list(status = if (identical(stopped, "canceled")) "canceled" else "failed",
     issues = if (identical(stopped, "cpu_budget")) list(vcr_issue("cpu_budget_exhausted", "cpuSecondsLimit",
       "The CPU budget ran out before every trial ran; the numbers use the trials that finished.")) else list())
@@ -545,11 +545,11 @@ vcr_dose_right_dose <- function(rates, margin) min(which(rates > max(rates) - ma
   n_per_arm <- as.integer(asked %||% (if (is.na(first)) max_per_arm else first))
   res <- at(n_per_arm)
   rows <- lapply(seq_along(scenarios), function(i) list(rates = scenarios[[i]], rightDose = right[i],
-    cells = c(list(correct_selection_probability = vcr_measure("correct_selection_probability", res$correct[i], source = "calculated")),
+    cells = c(list(correct_dose_probability = vcr_measure("correct_dose_probability", res$correct[i], source = "calculated")),
               stats::setNames(lapply(seq_along(res$select[[i]]), function(j) vcr_measure(sprintf("select_dose_%d", j), res$select[[i]][j], source = "calculated")),
                               sprintf("select_dose_%d", seq_along(res$select[[i]]))))))
   measures <- list(vcr_measure("per_arm", n_per_arm, source = "calculated"), vcr_measure("total_patients", n_per_arm * k, source = "calculated"),
-                   vcr_measure("worst_correct_selection_probability", min(res$correct), source = "calculated"))
+                   vcr_measure("worst_correct_dose_probability", min(res$correct), source = "calculated"))
   if (is.null(asked) && !is.na(first)) measures <- c(measures, list(vcr_measure("required_per_arm", first, source = "calculated")))
   if (is.null(asked) && is.na(first)) {
     issues <- list(vcr_issue("design_not_computable", "scenario.design.maxPerArm", sprintf("No size up to %d patients per arm gives every scenario a probability of %.2f; the table is for %d per arm.", max_per_arm, target, n_per_arm)))

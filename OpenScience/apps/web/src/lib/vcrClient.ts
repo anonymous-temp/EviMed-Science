@@ -1333,6 +1333,100 @@ export interface VcrConfirmatoryCard {
   } | null;
 }
 
+/** One column of a dose-finding table: the engine's measure and the words for it. */
+export interface VcrDoseColumn {
+  key: string;
+  label: string;
+}
+
+/**
+ * A dose-finding result a conversation computed: 3+3, BOIN, Keyboard and CRM compared on one toxicity curve (`dose_finding`), or the
+ * exact choice among randomised doses (`dose_selection`). A card of its own, never one of the page's lettered designs. Percentages
+ * arrive scaled (44.8, not 0.448), and a cell the engine did not compute is null, never a zero.
+ */
+export interface VcrDoseCard {
+  id: string;
+  version: number;
+  form: "dose_finding" | "dose_selection";
+  /** The design the question was about (`boin`), or `randomized_selection`. */
+  design: string;
+  title: string;
+  question: string;
+  /** Trials simulated per design; a randomised selection is exact and has none. */
+  trials: number | null;
+  /** The asked design's own name (「BOIN」); empty for a randomised selection. */
+  askedLabel: string;
+  /** The target toxicity rate, in percent. */
+  target: number | null;
+  /** The doses, lowest first, with the true toxicity (percent) each carries and which one is the maximum tolerated dose. */
+  doses: Array<{ dose: number; toxicity: number; mtd: boolean }>;
+  /** The asked design's own numbers. */
+  headline: Array<{ key: string; label: string; value: VcrValue }>;
+  /** One row per design; the asked one has the role `asked`. */
+  table: { columns: VcrDoseColumn[]; rows: Array<{ kind: string; label: string; role: string; cells: Record<string, VcrValue | null> }> } | null;
+  /** The asked design minus each of the others, on the same simulated patients. */
+  differences: { columns: VcrDoseColumn[]; rows: Array<{ kind: string; label: string; cells: Record<string, VcrValue | null> }>; note: string | null } | null;
+  /** Per design and dose: the probability the dose is chosen and the patients given it, in the order of `doses`. */
+  perDose: Array<{ kind: string; label: string; select: Array<VcrValue | null>; patients: Array<VcrValue | null> }>;
+  premises: VcrPremise[];
+  /** A sentence when the simulation was stopped early. */
+  limited: string | null;
+  selection: {
+    perArm: number | null;
+    totalPatients: number | null;
+    doses: number;
+    /** Percent. */
+    margin: number | null;
+    targetProbability: number | null;
+    requiredFirst: number | null;
+    requiredStable: number | null;
+    note: string | null;
+    scenarios: Array<{ label: string; /** Percent, one per dose. */ rates: number[]; rightDose: number | null; correct: VcrValue | null; select: Array<VcrValue | null> }>;
+  } | null;
+}
+
+/** Simon's two-stage design read beside a Bayesian one: the rule in words and its four exact numbers. */
+export interface VcrSimonDesign {
+  rule: string;
+  typeOneError: VcrValue | null;
+  power: VcrValue | null;
+  expectedNull: VcrValue | null;
+  expectedAlt: VcrValue | null;
+}
+
+/**
+ * A Bayesian design without MCMC: the optimal phase II design (`bop2`), predictive-probability monitoring (`predictive`), or the
+ * calibration of a posterior-probability success threshold (`calibration`). Every number is exact; none carries a Monte-Carlo error.
+ */
+export interface VcrBayesianCard {
+  id: string;
+  version: number;
+  form: "bop2" | "predictive" | "calibration";
+  design: string;
+  title: string;
+  question: string;
+  headline: Array<{ key: string; label: string; value: VcrValue }>;
+  /** What each analysis does, in words (phase II forms). */
+  looks: Array<{ look: number; size: number | null; rule: string }>;
+  operating: {
+    rows: Array<{ role: string; label: string; cells: { success: VcrValue | null; expected: VcrValue | null; futility: VcrValue | null; efficacy: VcrValue | null } }>;
+    stops: Array<{ look: number; size: number | null; nullFutility: VcrValue | null; alternativeFutility: VcrValue | null }>;
+  } | null;
+  /** The parameters or the final rule the search ended with, as a phrase. */
+  found: string | null;
+  /** False when no design that keeps the type I error reached the power asked. */
+  reachedPower: boolean;
+  simon: { optimal: VcrSimonDesign | null; minimax: VcrSimonDesign | null; saving: VcrValue | null } | null;
+  calibration: {
+    endpoint: string;
+    rows: Array<{ kind: string; label: string; threshold: VcrValue | null; typeOneError: VcrValue | null; power: VcrValue | null }>;
+    discrete: boolean;
+    note: string;
+  } | null;
+  premises: VcrPremise[];
+  limited: string | null;
+}
+
 /**
  * What the evidence tab says of a network meta-analysis the conversation computed: who ranks where, every pair of treatments in a league
  * table, and whether the direct and the indirect evidence agree. The sentences are the server's; the page places them.
@@ -1448,6 +1542,10 @@ export interface VcrTrialTab {
   accrualForecasts?: Array<{ id: string; version: number; scenarioId: string | null; scenarioVersion: number | null; design: string | null; name: string; lastPatientIn: VcrValue | null; targetEvents: VcrValue | null; probabilityByMonth: Array<{ month: number; probability: number }> }>;
   /** The confirmatory designs the conversation wrote, each a card of its own on the page. */
   confirmatoryDesigns?: VcrConfirmatoryCard[];
+  /** The dose-finding designs (and randomised dose selections) the conversation computed, each a card of its own. */
+  doseDesigns?: VcrDoseCard[];
+  /** The Bayesian designs without MCMC the conversation computed, each a card of its own. */
+  bayesianDesigns?: VcrBayesianCard[];
   headline?: string | null;
   /** ADEMP, one line each. */
   ademp: Array<{ key: string; label: string; text: string }>;
@@ -2171,6 +2269,130 @@ function readConfirmatoryDesigns(raw: unknown): VcrConfirmatoryCard[] {
 /** A value that is there, or nothing: a cell with no value object is not a cell. */
 function readPresentValue(raw: unknown): VcrValue | null {
   return raw && typeof raw === "object" && !Array.isArray(raw) ? readVcrValue(raw) : null;
+}
+
+/** The numbers a card leads with: only lines that have a name; a value that is missing reads as 「no number」, never a zero. */
+function readHeadlineLines(raw: unknown): Array<{ key: string; label: string; value: VcrValue }> {
+  return arr(raw).flatMap((item) => {
+    const key = text(item.key), label = text(item.label);
+    return key && label ? [{ key, label, value: readVcrValue(item.value) }] : [];
+  });
+}
+
+/** A row's cells by measure; a cell with no value object is null. */
+function readValueCells(raw: unknown): Record<string, VcrValue | null> {
+  const cells = obj(raw);
+  return Object.fromEntries(Object.keys(cells).map((key) => [key, readPresentValue(cells[key])]));
+}
+
+/** Values that keep their place: position is the dose, so a missing one is a null, not a gap. */
+function readValueList(raw: unknown): Array<VcrValue | null> {
+  return Array.isArray(raw) ? raw.map(readPresentValue) : [];
+}
+
+function readColumnList(raw: unknown): VcrDoseColumn[] {
+  return arr(raw).flatMap((column) => {
+    const key = text(column.key), label = text(column.label);
+    return key && label ? [{ key, label }] : [];
+  });
+}
+
+/** The dose-finding cards; a card without a name or a known form, and anything of an unknown shape, is left out. */
+function readDoseDesigns(raw: unknown): VcrDoseCard[] {
+  return arr(raw).flatMap((card) => {
+    const id = text(card.id), title = text(card.title);
+    const form = (["dose_finding", "dose_selection"] as const).find((entry) => entry === card.form);
+    if (!id || !title || !form) return [];
+    const table = obj(card.table), differences = obj(card.differences), selection = obj(card.selection);
+    const tableColumns = readColumnList(table.columns);
+    const tableRows = arr(table.rows).flatMap((row) => {
+      const label = text(row.label);
+      return label ? [{ kind: text(row.kind) ?? "", label, role: text(row.role) ?? "", cells: readValueCells(row.cells) }] : [];
+    });
+    const differenceColumns = readColumnList(differences.columns);
+    const differenceRows = arr(differences.rows).flatMap((row) => {
+      const label = text(row.label);
+      return label ? [{ kind: text(row.kind) ?? "", label, cells: readValueCells(row.cells) }] : [];
+    });
+    return [{
+      id, version: finite(card.version) ?? 1, form, design: text(card.design) ?? "", title, question: text(card.question) ?? "",
+      trials: finite(card.trials), askedLabel: text(card.askedLabel) ?? "", target: finite(card.target),
+      doses: arr(card.doses).flatMap((entry) => {
+        const dose = finite(entry.dose), toxicity = finite(entry.toxicity);
+        return dose === null || toxicity === null ? [] : [{ dose, toxicity, mtd: entry.mtd === true }];
+      }),
+      headline: readHeadlineLines(card.headline),
+      table: tableColumns.length > 0 && tableRows.length > 0 ? { columns: tableColumns, rows: tableRows } : null,
+      differences: differenceColumns.length > 0 && differenceRows.length > 0 ? { columns: differenceColumns, rows: differenceRows, note: text(differences.note) } : null,
+      perDose: arr(card.perDose).flatMap((row) => {
+        const label = text(row.label);
+        return label ? [{ kind: text(row.kind) ?? "", label, select: readValueList(row.select), patients: readValueList(row.patients) }] : [];
+      }),
+      premises: readPremises(card.premises),
+      limited: text(card.limited),
+      selection: Object.keys(selection).length === 0 ? null : {
+        perArm: finite(selection.perArm), totalPatients: finite(selection.totalPatients), doses: finite(selection.doses) ?? 0,
+        margin: finite(selection.margin), targetProbability: finite(selection.targetProbability),
+        requiredFirst: finite(selection.requiredFirst), requiredStable: finite(selection.requiredStable), note: text(selection.note),
+        scenarios: arr(selection.scenarios).flatMap((row) => {
+          const label = text(row.label);
+          return label ? [{
+            label, rates: (Array.isArray(row.rates) ? row.rates : []).filter((rate): rate is number => finite(rate) !== null),
+            rightDose: finite(row.rightDose), correct: readPresentValue(row.correct), select: readValueList(row.select),
+          }] : [];
+        }),
+      },
+    }];
+  });
+}
+
+function readSimonDesign(raw: unknown): VcrSimonDesign | null {
+  const value = obj(raw), rule = text(value.rule);
+  return rule ? {
+    rule, typeOneError: readPresentValue(value.typeOneError), power: readPresentValue(value.power),
+    expectedNull: readPresentValue(value.expectedNull), expectedAlt: readPresentValue(value.expectedAlt),
+  } : null;
+}
+
+/** The Bayesian design cards; a card without a name or a known form, and anything of an unknown shape, is left out. */
+function readBayesianDesigns(raw: unknown): VcrBayesianCard[] {
+  return arr(raw).flatMap((card) => {
+    const id = text(card.id), title = text(card.title);
+    const form = (["bop2", "predictive", "calibration"] as const).find((entry) => entry === card.form);
+    if (!id || !title || !form) return [];
+    const operating = obj(card.operating), simon = obj(card.simon), calibration = obj(card.calibration);
+    const operatingRows = arr(operating.rows).flatMap((row) => {
+      const label = text(row.label);
+      if (!label) return [];
+      const cells = obj(row.cells);
+      return [{ role: text(row.role) ?? "", label, cells: { success: readPresentValue(cells.success), expected: readPresentValue(cells.expected), futility: readPresentValue(cells.futility), efficacy: readPresentValue(cells.efficacy) } }];
+    });
+    const stops = arr(operating.stops).flatMap((stop) => {
+      const look = finite(stop.look);
+      return look === null ? [] : [{ look, size: finite(stop.size), nullFutility: readPresentValue(stop.nullFutility), alternativeFutility: readPresentValue(stop.alternativeFutility) }];
+    });
+    const optimal = readSimonDesign(simon.optimal), minimax = readSimonDesign(simon.minimax);
+    const calibrationRows = arr(calibration.rows).flatMap((row) => {
+      const label = text(row.label);
+      return label ? [{ kind: text(row.kind) ?? "", label, threshold: readPresentValue(row.threshold), typeOneError: readPresentValue(row.typeOneError), power: readPresentValue(row.power) }] : [];
+    });
+    return [{
+      id, version: finite(card.version) ?? 1, form, design: text(card.design) ?? "", title, question: text(card.question) ?? "",
+      headline: readHeadlineLines(card.headline),
+      looks: arr(card.looks).flatMap((look) => {
+        const number = finite(look.look);
+        return number === null ? [] : [{ look: number, size: finite(look.size), rule: text(look.rule) ?? "" }];
+      }),
+      operating: operatingRows.length > 0 || stops.length > 0 ? { rows: operatingRows, stops } : null,
+      found: text(card.found),
+      // Only an explicit false is 「not reached」: a card that says nothing makes no such claim.
+      reachedPower: card.reachedPower !== false,
+      simon: optimal || minimax ? { optimal, minimax, saving: readPresentValue(simon.saving) } : null,
+      calibration: calibrationRows.length > 0 ? { endpoint: text(calibration.endpoint) ?? "", rows: calibrationRows, discrete: calibration.discrete === true, note: text(calibration.note) ?? "" } : null,
+      premises: readPremises(card.premises),
+      limited: text(card.limited),
+    }];
+  });
 }
 
 /** The network meta-analysis cards; a card without an id, a title and a ranking, and anything of an unknown shape, is left out. */
@@ -2923,6 +3145,8 @@ export function readVcrTrial(raw: unknown): VcrTrialTab {
     ademp: arr(value.ademp) as unknown as VcrTrialTab["ademp"],
     accrualForecasts: arr(value.accrualForecasts).map(row => ({ id: text(row.id) ?? "", version: finite(row.version) ?? 1, scenarioId: text(row.scenarioId), scenarioVersion: finite(row.scenarioVersion), design: text(row.design), name: text(row.name) ?? "入组假设模拟", lastPatientIn: row.lastPatientIn ? readVcrValue(row.lastPatientIn) : null, targetEvents: row.targetEvents ? readVcrValue(row.targetEvents) : null, probabilityByMonth: arr(row.probabilityByMonth).filter(point => finite(point.month) !== null && Number(point.month) >= 0 && finite(point.probability) !== null && Number(point.probability) >= 0 && Number(point.probability) <= 1).map(point => ({ month: Number(point.month), probability: Number(point.probability) })) })),
     confirmatoryDesigns: readConfirmatoryDesigns(value.confirmatoryDesigns),
+    doseDesigns: readDoseDesigns(value.doseDesigns),
+    bayesianDesigns: readBayesianDesigns(value.bayesianDesigns),
     successRates: readSuccessRates(value.successRates),
     designs: arr(value.designs).map(readDesign),
     columns: arr(value.columns) as unknown as VcrTrialTab["columns"],

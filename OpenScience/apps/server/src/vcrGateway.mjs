@@ -81,6 +81,8 @@ import { HttpError } from "./security.mjs";
 import { VCR_READ_WHATS, VCR_READ_MAX_ITEMS, VCR_WRITE_WHATS, vcrRouteOptions } from "./vcrService.mjs";
 import { vcrResultEntry, withJobEntry, withWriteEntry } from "./vcrResultEntry.mjs";
 import { vcrConfirmatorySubjectId } from "./vcrConfirmatory.mjs";
+import { vcrDoseSubjectId } from "./vcrDoseFinding.mjs";
+import { vcrBayesianSubjectId } from "./vcrBayesianDesign.mjs";
 import { vcrSynthesisSubjectId } from "./vcrEvidenceSynthesis.mjs";
 import { vcrBiasScenarioFromComparison } from "./vcrBiasAnalysis.mjs";
 import { renderVcrNumbers } from "./vcrRender.mjs";
@@ -3056,6 +3058,9 @@ async function startJob(vcr, study, request) {
   // filed under the design and the endpoint it is about, so the futility design and the re-estimation of one study sit side by side and a
   // second run of either is its next version. A run that names a subject keeps its own.
   if (request.kind === "design_confirmatory" && !detail.subjectId) detail = { ...detail, subjectId: vcrConfirmatorySubjectId(scenario) };
+  // The same for the dose-finding designs (the designs compared and the curve) and the Bayesian designs (the design and what it was asked about).
+  if (request.kind === "design_dose" && !detail.subjectId) detail = { ...detail, subjectId: vcrDoseSubjectId(scenario) };
+  if (request.kind === "design_bayesian" && !detail.subjectId) detail = { ...detail, subjectId: vcrBayesianSubjectId(scenario) };
   // The same for a network, a dose-response and a shrinkage: they are filed under the label the call gave them, so two analyses of two outcomes stand side by side.
   if (["network_meta", "dose_response_meta", "effect_shrinkage"].includes(request.kind) && !detail.subjectId) detail = { ...detail, subjectId: vcrSynthesisSubjectId(request.kind, scenario) };
   if (subject) {

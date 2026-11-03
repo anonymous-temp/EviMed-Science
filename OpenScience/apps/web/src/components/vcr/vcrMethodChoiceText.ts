@@ -42,6 +42,10 @@ const labels: Record<string, string> = {
   bartos_2023: "Bartoš 等（2023）的先验", mean_difference: "均值差", log_ratio: "对数比值（如对数风险比）", lower_better: "数值越小越好", higher_better: "数值越大越好",
   random: "随机效应", common: "共同效应", relative_risk: "相对危险度（RR）", cc: "病例对照研究", ci: "累积发病率", ir: "发病率（按人时）", linear: "线性", spline: "限制性立方样条",
   gl: "Greenland–Longnecker 法（用病例数还原相关性）", h: "Hamling 法", indep: "各水平按相互独立处理",
+  // dose-finding designs and Bayesian designs without MCMC (algorithm round T7, T15, T8, T10): the names are the cards' own words
+  three_plus_three: "3+3", boin: "BOIN", keyboard: "Keyboard", crm: "CRM", randomized_selection: "随机分组的剂量选择",
+  bop2: "贝叶斯最优 II 期设计（BOP2）", predictive_monitoring: "预测概率监测", threshold_calibration: "成功阈值的校准",
+  max_power: "功效最大", min_expected_n: "期望样本量最少",
 };
 /** The selection rule of a multi-arm design: its words are short and ordinary, so they are read only at that path. */
 const selectionRules: Record<string, string> = { best: "只留中期估计最好的臂", rbest: "留最好的几个臂", epsilon: "留与最好的相差不大的臂", all: "全部保留" };
@@ -173,6 +177,19 @@ const exampleLabels: Record<string, Record<string, string>> = {
     "a biomarker-positive subset of 40% for an event-time endpoint: hazard ratio 0.6 in the subset and 0.9 outside it (240 events planned)": "事件时间终点，标志物阳性占 40%：亚组风险比 0.6，其余 0.9（计划 240 个事件）",
     "a biomarker-positive subset of 40%: enrol everyone, keep the subset or everyone at the interim (200 patients planned)": "标志物阳性占 40%：全部入组，中期留亚组或留全人群（计划 200 人）",
     "a count endpoint (attacks per patient-year): rate ratio 0.67 on a control rate of 0.6, overdispersion 0.5": "计数终点（每患者年发作次数）：对照率 0.6，率比 0.67，过度离散 0.5"
+  },
+  "design.dose": {
+    "BOIN against 3+3 on a six-dose toxicity curve, target 0.30, 30 patients in cohorts of 3 (the same curve and the same random numbers for both)": "BOIN 与 3+3 在六个剂量的毒性曲线上对比：目标毒性率 30%，30 人、每组 3 人（两者用同一条曲线和同一批随机数）",
+    "four designs side by side on one curve: CRM with a stated skeleton, BOIN, the keyboard design and 3+3": "四种设计在同一条曲线上并排比较：给定先验骨架的 CRM、BOIN、Keyboard 和 3+3",
+    "how many patients per dose to choose the lower of two doses with probability 0.9 when it is not worse (the higher dose must look 10 points better to be chosen)": "每个剂量需要多少患者，才有 90% 的把握在较低剂量不差时选中它（较高剂量要好出 10 个百分点才会被选）"
+  },
+  "design.bayesian": {
+    "Bayesian optimal phase II: a look every 10 patients up to 40, response rate 0.1 against 0.3, searched for the largest power at one-sided 0.05; Simon's design is the baseline": "贝叶斯最优 II 期设计：每 10 人分析一次、最多 40 人，有效率 10% 对 30%，在单侧 5% 下搜索功效最大的设计，以 Simon 设计为基准",
+    "the same trial searched for the fewest expected patients under the null among the designs that keep alpha and reach 80% power": "同一个试验，改为在保住 I 类错误且功效达到 80% 的设计里，找无效应时期望样本量最少的",
+    "predictive-probability monitoring: stop when the chance of a successful final analysis is below 5%": "预测概率监测：预测最终分析成功的概率低于 5% 时停止",
+    "the type I error and power of a posterior-probability success rule (0.975) for a mean difference under a normal prior, and the threshold that gives 0.025": "均值差在正态先验下，后验概率成功规则（阈值 0.975）的 I 类错误和功效，以及把 I 类错误校到 0.025 的阈值",
+    "the same for a hazard ratio from 200 events (the log hazard ratio under a normal prior)": "同样的问题，用于 200 个事件的风险比（对数风险比取正态先验）",
+    "the same for two beta-binomial arms of 60 and a non-inferiority margin of 10 points on the risk difference": "同样的问题，用于两组各 60 人的 Beta-二项模型，风险差的非劣效界值为 10 个百分点"
   },
   "design.simulate": {
     "two-arm time-to-event with uniform accrual": "两组生存结局与均匀入组",

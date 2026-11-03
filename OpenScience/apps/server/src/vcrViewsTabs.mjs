@@ -55,6 +55,8 @@ import { reportSchedule } from "./vcrScheduleView.mjs";
 import { vcrPremises } from "./vcrPremises.mjs";
 import { presentPopulationCheck } from "./vcrPopulationCheck.mjs";
 import { presentConfirmatoryDesigns } from "./vcrConfirmatory.mjs";
+import { presentDoseDesigns } from "./vcrDoseFinding.mjs";
+import { presentBayesianDesigns } from "./vcrBayesianDesign.mjs";
 import { presentEvidenceSyntheses, tauPriorWords, vcrSuccessRatesPage } from "./vcrEvidenceSynthesis.mjs";
 import { presentBiasAnalysis } from "./vcrBiasAnalysis.mjs";
 import { evidenceValueFindings } from "./vcrValueChecks.mjs";
@@ -1178,6 +1180,9 @@ export function presentTrialTab(bundle) {
     successRates: designs.some((design) => design.measures.assurance) ? vcrSuccessRatesPage() : null,
     // The confirmatory designs the conversation computed (design_confirmatory): a card each, with its own premises and baselines.
     confirmatoryDesigns: presentConfirmatoryDesigns(bundle, { nodeOf: resultNode }),
+    // The dose-finding designs (design_dose) and the Bayesian designs without MCMC (design_bayesian) the conversation computed: a card each.
+    doseDesigns: presentDoseDesigns(bundle, { nodeOf: resultNode }),
+    bayesianDesigns: presentBayesianDesigns(bundle, { nodeOf: resultNode }),
     milestones,
     // The protocol's visit schedule (「访视日程」) and the study's regulatory contacts (「监管沟通记录」): records, not results.
     schedule: reportSchedule(bundle.schedule),

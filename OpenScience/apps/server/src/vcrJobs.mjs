@@ -546,6 +546,8 @@ export function vcrResultKindFor(kind) {
   if (kind === "accrual_forecast") return "accrual_forecast";
   // A confirmatory design is its own result, not a stage of a trial scenario: it is not a design of the page's table (A, B, C) and has its own card.
   if (kind === "design_confirmatory") return "design_confirmatory";
+  // The dose-finding designs and the Bayesian designs without MCMC (algorithm round T7, T15, T8, T10): each its own result, filed under what it is about.
+  if (kind === "design_dose" || kind === "design_bayesian") return kind;
   // Evidence synthesis beyond a pairwise pool (algorithm round C5, C6, E8): each its own result, filed under what it is about, read on the evidence tab.
   if (["network_meta", "dose_response_meta", "effect_shrinkage"].includes(kind)) return kind;
   if (["pool_evidence", "reconstruct_km"].includes(kind)) return "evidence_pool";

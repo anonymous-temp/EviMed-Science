@@ -883,6 +883,54 @@ describe("试验 · a confirmatory design the conversation wrote", () => {
   });
 });
 
+describe("试验 · a dose-finding or a Bayesian design the conversation computed", () => {
+  const value = (n: number, unit: string, source: string, extra: Record<string, unknown> = {}) => ({ value: n, text: null, unit, source, interval: null, mcse: null, review: "ai_set", precision: 1, reason: null, stale: false, detail: null, ...extra });
+  const dose = () => ({
+    id: "res_dose", version: 1, form: "dose_finding", design: "boin", title: "BOIN 与 3+3 的对比", question: "几种设计选对最大耐受剂量的概率差多少",
+    trials: 4000, askedLabel: "BOIN", target: 30, doses: [{ dose: 1, toxicity: 10, mtd: false }, { dose: 2, toxicity: 30, mtd: true }],
+    headline: [{ key: "correct_dose_probability", label: "选对最大耐受剂量的概率", value: value(44.8, "%", "synthetic", { mcse: 0.8 }) }],
+    table: { columns: [{ key: "correct_dose_probability", label: "选对最大耐受剂量的概率" }], rows: [{ kind: "boin", label: "BOIN", role: "asked", cells: { correct_dose_probability: value(44.8, "%", "synthetic", { mcse: 0.8 }) } }] },
+    differences: null, perDose: [], premises: [], limited: null, selection: null,
+  });
+  const bayes = () => ({
+    id: "res_bayes", version: 1, form: "calibration", design: "threshold_calibration", title: "成功阈值的校准", question: "阈值应取多少",
+    headline: [{ key: "calibrated_threshold", label: "校准后的成功阈值", value: value(97.4, "%", "calculated") }],
+    looks: [], operating: null, found: null, reachedPower: false, simon: null,
+    calibration: { endpoint: "二分类终点（率差）", discrete: false, note: "阈值是后验概率的界限。", rows: [{ kind: "calibrated", label: "校准后的阈值", threshold: value(97.4, "%", "calculated"), typeOneError: value(2.4, "%", "calculated"), power: value(66, "%", "calculated") }] },
+    premises: [], limited: null,
+  });
+
+  it("each shows as a card of its own when it is the only result of the step: not 「还没算」, not a pending step, no pick", async () => {
+    for (const [key, selector, name] of [["doseDesigns", '[data-vcr-dose="dose_finding"]', "BOIN 与 3+3 的对比"], ["bayesianDesigns", '[data-vcr-bayes="calibration"]', "成功阈值的校准"]] as const) {
+      const raw = fixture("empty/trial.json");
+      raw[key] = [key === "doseDesigns" ? dose() : bayes()];
+      installVcrServer(network.productRequest, { [tab("trial")]: raw });
+      const { container, unmount } = draw(withStep("trial", { status: "none", requested: false }));
+      const shown = await found(container, selector);
+      expect(within(shown).getByRole("heading", { name })).toBeInTheDocument();
+      expect(screen.queryByText("还没算")).toBeNull();
+      expect(screen.queryByRole("table", { name: "方案的对比" })).toBeNull();
+      expect(container.querySelector("[data-vcr-not-computed]")).toBeNull();
+      expect(container.querySelector("[data-vcr-step-waiting], [data-vcr-step-running]")).toBeNull();
+      expect(screen.queryByRole("button", { name: /选定方案|改选方案/ })).toBeNull();
+      unmount();
+    }
+  });
+
+  it("stand under the confirmatory designs, the dose-finding first and the Bayesian after it", async () => {
+    const raw = fixture("ev201/trial.json");
+    raw.doseDesigns = [dose()];
+    raw.bayesianDesigns = [bayes()];
+    installVcrServer(network.productRequest, { [tab("trial")]: raw });
+    const { container } = draw();
+    const table = await trialDrawn();
+    const doseCard = await found(container, '[data-vcr-dose="dose_finding"]');
+    const bayesCard = await found(container, '[data-vcr-bayes="calibration"]');
+    expect(table.compareDocumentPosition(doseCard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(doseCard.compareDocumentPosition(bayesCard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});
+
 describe("试验 · the historical success rates beside the assurance", () => {
   const withRates = (rates: unknown) => {
     const raw = fixture("ev201/trial.json");

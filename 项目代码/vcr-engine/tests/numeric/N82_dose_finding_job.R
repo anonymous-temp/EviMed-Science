@@ -31,7 +31,7 @@ vcr_case("N82a", c("AC-28", "AC-29"), function() {
     parts <- .n82_cell(r, i, "patients_below_mtd")$value + .n82_cell(r, i, "patients_at_mtd")$value + .n82_cell(r, i, "patients_above_mtd")$value
     sel_parts <- .n82_cell(r, i, "select_below_mtd_probability")$value + sel[mtd] + .n82_cell(r, i, "select_above_mtd_probability")$value
     worst <- max(worst, abs(sum(sel) + .n82_cell(r, i, "select_none_probability")$value - 1), abs(sum(pats) - size), abs(parts - size),
-                 abs(sel[mtd] - .n82_cell(r, i, "correct_selection_probability")$value), abs(sel_parts + .n82_cell(r, i, "select_none_probability")$value - 1))
+                 abs(sel[mtd] - .n82_cell(r, i, "correct_dose_probability")$value), abs(sel_parts + .n82_cell(r, i, "select_none_probability")$value - 1))
   }
   list(pass = identical(r$status, "succeeded") && worst < 1e-9 && mtd == 4L && length(r$diagnostics$doseFinding$designs) == 4L,
        detail = sprintf("4 designs on one curve (MTD = dose %d): selection + none = 1, patients per dose = the size, below + at + above = the size, correct = selection of the MTD; worst gap %.1e (tol 1e-9)", mtd, worst))
@@ -44,12 +44,12 @@ vcr_case("N82b", c("AC-31"), function() {
   identical_cells <- all(vapply(names_, function(n) identical(.n82_cell(alone, 1L, n)$value, .n82_cell(with, 1L, n)$value), logical(1)))
   # the difference of the paired designs
   d <- with$diagnostics$doseFinding$differences[[1]]   # three_plus_three against boin
-  want <- .n82_cell(with, 2L, "correct_selection_probability")$value - .n82_cell(with, 1L, "correct_selection_probability")$value
-  got <- d$cells$correct_selection_probability
-  combined <- sqrt(.n82_cell(with, 2L, "correct_selection_probability")$mcse^2 + .n82_cell(with, 1L, "correct_selection_probability")$mcse^2)
+  want <- .n82_cell(with, 2L, "correct_dose_probability")$value - .n82_cell(with, 1L, "correct_dose_probability")$value
+  got <- d$cells$correct_dose_probability
+  combined <- sqrt(.n82_cell(with, 2L, "correct_dose_probability")$mcse^2 + .n82_cell(with, 1L, "correct_dose_probability")$mcse^2)
   list(pass = identical_cells && abs(got$value - want) < 1e-12 && got$mcse < combined && identical(d$kind, "three_plus_three") && identical(d$against, "boin"),
        detail = sprintf("%d cells of BOIN identical alone and with two comparisons; 3+3 minus BOIN in correct selection %.4f (= %.4f - %.4f), paired error %.4f against the %.4f the two errors give", length(names_), got$value,
-                        .n82_cell(with, 2L, "correct_selection_probability")$value, .n82_cell(with, 1L, "correct_selection_probability")$value, got$mcse, combined))
+                        .n82_cell(with, 2L, "correct_dose_probability")$value, .n82_cell(with, 1L, "correct_dose_probability")$value, got$mcse, combined))
 })
 
 vcr_case("N82c", c("AC-31"), function() {
