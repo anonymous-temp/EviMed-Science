@@ -494,10 +494,10 @@ test("the verdict is the whole-record rule's on every history of up to twelve ru
       assert.deepEqual({ state: read.state, runs: read.runs, bad: read.bad }, rule(outcomes), outcomes.map((rejected) => (rejected ? "r" : "a")).join(""));
     }
   }
-  /** The probability the rule ever reads harm within `runs` runs at a rate, by dynamic programming over (runs, rejected). @param {number} rate @param {number} runs */
-  const everHarm = (rate, runs) => {
+  /** The probability the rule ever reads harm within `horizon` runs at a rate, by dynamic programming over (runs, rejected). @param {number} rate @param {number} horizon */
+  const everHarm = (rate, horizon) => {
     let open = new Map([[0, 1]]), harm = 0;
-    for (let n = 1; n <= runs; n += 1) {
+    for (let n = 1; n <= horizon; n += 1) {
       const next = new Map();
       for (const [bad, mass] of open) for (const [count, probability] of [[bad + 1, rate], [bad, 1 - rate]]) {
         if (n >= minRuns && count * badStep + (n - count) * goodStep >= upper - 1e-9) harm += mass * probability;
