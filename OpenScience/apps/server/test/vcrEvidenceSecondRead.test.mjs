@@ -235,7 +235,7 @@ test("an agreement is filed and silent; a reading that fails, finds nothing or i
   assert.equal(nothing.f.pipeline.counters.valueChecks["second_read:nothing_to_read"], 1);
 
   const off = await outcome({ enabled: false, check: async () => { throw new Error("must not be called"); } });
-  assert.deepEqual([off.f.filed.length, off.f.pipeline.counters.valueChecks["second_read:failed"]], [0, undefined]);
+  assert.deepEqual([off.f.filed.length, off.f.pipeline.counters.valueChecks?.["second_read:failed"]], [0, undefined]);
   const none = await outcome(null);
   assert.deepEqual([none.written.state, none.notes], ["verified", []]);
 });

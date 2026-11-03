@@ -1233,11 +1233,17 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
    * Items a run wrote as candidates it found through an evidence card (flywheel F23), and how many of them passed the check every item
    * passes: the share that verified is what says whether the cards are worth reading as leads.
    */
+  /** @type {{ cardCandidates: number, cardCandidatesVerified: number, valueChecks?: Record<string, number> }} */
   const counters = { cardCandidates: 0, cardCandidatesVerified: 0 };
-  /** What the checks on extracted values said, by `check:outcome` (E2: the consistency findings by their code), since this process started. @type {Record<string, number>} */
-  const valueChecks = {};
-  /** @param {string} key */
-  const countCheck = (key) => { valueChecks[key] = (valueChecks[key] ?? 0) + 1; };
+  /**
+   * What the checks on extracted values said, by `check:outcome` (E2: the consistency findings by their code), since this process started.
+   * `counters.valueChecks` appears with the first one counted: until then the counters keep the two numbers above and nothing else.
+   * @param {string} key
+   */
+  const countCheck = (key) => {
+    const checks = counters.valueChecks ??= {};
+    checks[key] = (checks[key] ?? 0) + 1;
+  };
   /**
    * The second reader of a value's passage (`vcrEvidenceSecondRead.mjs`), attached when the control plane has a model client to give it, and
    * the readings still in flight by the evidence id they are for (so a card's write can wait for them, within a limit).
@@ -2164,7 +2170,7 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
      */
     verifiedEvidenceIds(input) { return store.verifiedEvidenceIds(input); },
 
-    counters: Object.assign(counters, { valueChecks }),
+    counters,
   };
   return pipeline;
 }
