@@ -180,7 +180,7 @@ export function GeoHomePage() {
         if (error instanceof WebApiError && error.status === 410 && error.code === "geo_project_deleted") {
           const gone: Pending = { kind: "gone", requestKey };
           if (await replace("active", gone) && current()) setPending(gone);
-        } else if (error instanceof WebApiError && error.status === 409 && error.code === "geo_request_key_conflict") {
+        } else if (error instanceof WebApiError && error.status === 409 && error.code === "geo_project_create_key_conflict") {
           const conflict: Pending = { kind: "conflict", requestKey };
           if (await replace("unknown", conflict) && current()) setPending(conflict);
         } else if (error instanceof WebApiError && error.code === "geo_account_changed") {

@@ -507,7 +507,7 @@ it("keeps the project list available when an old server omits account generation
 
 it("keeps a key conflict terminal across reload and lets the user start another request", async () => {
   client.createGeoProject.mockRejectedValueOnce(new Error("lost response"))
-    .mockRejectedValueOnce(new WebApiError("key conflict", { status: 409, code: "geo_request_key_conflict" }))
+    .mockRejectedValueOnce(new WebApiError("key conflict", { status: 409, code: "geo_project_create_key_conflict" }))
     .mockResolvedValueOnce({ id: "geo_next", projectId: "p-next", sessionId: null });
   const first = renderHome(); await list();
   await userEvent.click(screen.getByRole("button", { name: "新建项目" }));

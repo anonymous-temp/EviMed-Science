@@ -71,7 +71,8 @@ test('GEO creation request replay is atomic and account scoped', { skip: !databa
     const events = (await readFile(securityLog, 'utf8')).trim().split('\n').map(JSON.parse);
     const statuses = events.filter(event => event.action === 'geo.project.create' && event.code === first.id).map(event => event.status);
     assert.deepEqual(statuses.sort(), ['completed', 'replayed', 'replayed', 'replayed', 'replayed']);
-    assert.equal((await call(ha,'POST','/api/geo/projects',{...input,brandName:'Different'})).status,409);
+    const conflict = await call(ha,'POST','/api/geo/projects',{...input,brandName:'Different'});
+    assert.equal(conflict.status,409); assert.equal(conflict.body.code,'geo_project_create_key_conflict');
     const freshInput = { ...input, requestKey: randomUUID() };
     const simultaneous = await Promise.all(Array.from({length:4}, () => call(ha,'POST','/api/geo/projects',freshInput)));
     assert.deepEqual(simultaneous.map(result => result.status), [201,201,201,201]);

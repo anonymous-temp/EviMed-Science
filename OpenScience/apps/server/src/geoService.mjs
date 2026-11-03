@@ -709,7 +709,7 @@ export class GeoService {
         WHERE r.user_id=$1 AND r.request_key=$2`, [String(user.id), input.requestKey]);
       const receipt = result.rows[0];
       if (receipt) {
-        if (receipt.payload_hash !== digest) throw failure(409, "geo_request_key_conflict", "Request key already names a different creation request.");
+        if (receipt.payload_hash !== digest) throw failure(409, "geo_project_create_key_conflict", "Request key already names a different creation request.");
         // One MVCC snapshot establishes whether both rows existed, without reversing deletion's lock order.
         if (!receipt.live_geo || !receipt.live_control) throw failure(410, "geo_project_deleted", "The project for this request is no longer available.");
         return { project: { id: receipt.geo_id, projectId: receipt.project_id, sessionId: receipt.session_id, bound: receipt.bound }, replayed: true };
