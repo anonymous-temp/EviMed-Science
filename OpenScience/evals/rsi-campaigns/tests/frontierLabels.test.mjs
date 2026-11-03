@@ -477,7 +477,7 @@ test('the commands: the lab writes the items, the operator calibrates and labels
   const labelled = JSON.parse((await run(['label', '--items', join(dir, 'items-development.json'), '--out', join(dir, 'labels-development.json'), '--cache', join(dir, 'cache.jsonl'), '--cli', FAKE_CLI])).stdout);
   assert.deepEqual([labelled.phase, labelled.model, labelled.effort, labelled.labelled, labelled.costCny, labelled.costBasis, labelled.stopped, labelled.incomplete], ['development', 'claude-sonnet-5-5', 'medium', 2, 0, 'subscription', null, 0]);
   const file = JSON.parse(await readFile(join(dir, 'labels-development.json'), 'utf8'));
-  assert.deepEqual([file.schema, file.phase, file.month, file.exportSha256, file.juryVersion.startsWith('frontier-jury-v1:'), file.promptDigest], ['rsi-frontier-jury-labels-v1', 'development', '2026-11', file.exportSha256, true, frontierJuryPromptDigest()]);
+  assert.deepEqual([file.schema, file.phase, file.month, file.exportSha256, file.juryVersion.startsWith('frontier-jury-v2:'), file.promptDigest], ['rsi-frontier-jury-labels-v1', 'development', '2026-11', file.exportSha256, true, frontierJuryPromptDigest()]);
   assert.deepEqual(file.labels.map((label) => [label.id, label.worth]), [['101', 'pick'], ['102', 'pick']]);
   assert.deepEqual(file.tokens, { cacheHit: 4800, cacheMiss: 2960, output: 132 }, 'the tokens the CLI reported, summed over the four calls');
   const argv = (await readFile(log, 'utf8')).trim().split('\n').map((line) => JSON.parse(line)).map((call) => call.argv);

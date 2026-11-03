@@ -29,9 +29,9 @@ import { gunzipSync } from 'node:zlib';
 import { RSI_OFFLINE_ROLE_MODEL } from '../../packages/domain/src/rsiCampaign.mjs';
 
 /** Bump on any change to the rubric's meaning; the prompt digest covers its bytes. */
-export const FRONTIER_JURY_VERSION = 'frontier-jury-v1';
-/** The measured default (2026-11-03, `calibrate` in safe mode on the 124 calibration rows, two passes): sonnet at medium effort, κ 0.621, the best qualifying
- *  Claude setting (high effort 0.523, opus medium 0.349). */
+export const FRONTIER_JURY_VERSION = 'frontier-jury-v2';
+/** The measured default (2026-11-03, `calibrate` in safe mode on the 124 calibration rows, two passes): sonnet at medium effort, κ 0.656, precision 0.75, recall 0.667
+ *  on rubric v2 (v1: 0.621 / 0.833 / 0.556; v1 at high effort 0.523, opus medium 0.349). */
 export const FRONTIER_JURY_MODEL = 'claude-sonnet-5-5';
 export const FRONTIER_JURY_EFFORT = 'medium';
 export const FRONTIER_JURY_EFFORTS = Object.freeze(['low', 'medium', 'high', 'xhigh', 'max']);
@@ -61,8 +61,8 @@ const RUBRIC = `你是「循证医学前沿动态」的内容审核员。You are
 The reader is a clinician or medical researcher who scans the feed for a few minutes a day. The only question is whether such a reader should see this item today.
 
 任务 / Task
-只根据给出的来源文本（标题、来源、期刊、文献类型、日期、正文摘录）给这条内容打标签。不要补充文本里没有的事实：不要凭记忆写结果、数字、批准情况或样本量。标题听起来重要、但正文里看不到结果时，不能给 pick。
-Judge only from the source text you are given. Do not assume facts it does not state: no results, numbers, approvals or sample sizes from memory. An important-sounding title whose text shows no result is not a pick.
+只根据给出的来源文本（标题、来源、期刊、文献类型、日期、正文摘录）给这条内容打标签。不要补充文本里没有的事实：不要凭记忆写结果、数字、批准情况或样本量。新闻稿、媒体报道和社交帖子标题听起来重要、但正文里看不到结果时，不能给 pick。
+Judge only from the source text you are given. Do not assume facts it does not state: no results, numbers, approvals or sample sizes from memory. A press release, news story or social post with an important-sounding title and no visible result is not a pick.
 
 标签 / Labels
 pick（精选）：这位读者今天应该看到的内容。
@@ -80,10 +80,12 @@ Not worth showing: not medical, not news (evergreen guides, stale lists resurfac
 
 判断要点 / Guidance
 1. pick 是少数；多数医学相关内容是 ok。Most medically relevant items are ok; pick is the minority.
-2. 实践意义比刊物名气重要：刊物名望本身不使一项窄研究成为 pick，仅涉及狭小范围的监管通知通常是 ok。Practical weight outranks venue prestige.
+2. 实践意义比刊物名气重要：刊物名望本身不使一项窄研究成为 pick。Practical weight outranks venue prestige.
 3. 给出了「今天」的日期。按该日期看明显过时、文本里又没有新内容的条目不是新闻。An item that is old by the given date and shows nothing new is not news.
 4. 语言和来源类型不决定标签，内容决定：外文或非期刊来源也可能是 pick，期刊论文也可能是 ok 或 no。Content decides, not language or source type.
-5. 正文为空时只能依据标题和来源，结果通常是 ok 或 no，很少是 pick。With no text, judge from title and source; rarely a pick.
+5. 正文摘录最多只有 1200 个字符，论文摘要的结果部分常常被截掉。期刊论文或注册研究的摘录没显示结果时，不要只因此判 ok：按研究设计、规模、期刊和题目写明的终点判断，但不要编造结果。The excerpt is cut at 1200 characters, so a journal abstract often loses its results. Do not mark a journal paper or registered trial down for that alone: judge its design, size, venue and the endpoint its title names, without inventing results.
+6. 监管决定按决定本身判断：批准（包括新适应症的效力补充申请、创新器械、国内首个）、撤市和说明书安全性修订是 pick，即使只涉及一款产品或正文为空。只影响个别批次或延续已有召回的跟进通知、没有临床后果的消费品召回是 ok。Judge a regulatory decision by the decision: approvals (efficacy supplements for a new indication, innovative devices, national firsts), withdrawals and safety label revisions are picks even for one product or with no text; follow-ups limited to some lots or an existing recall, and consumer recalls with no clinical consequence, are ok.
+7. 正文为空且不是监管决定时只能依据标题和来源，结果通常是 ok 或 no，很少是 pick。With no text and no regulatory decision, judge from title and source; rarely a pick.
 
 输出 / Output
 只输出一个 JSON 对象：{"worth":"pick|ok|no","why":"一句简短的依据，不超过 200 个字符"}。Output a single JSON object and nothing else.
