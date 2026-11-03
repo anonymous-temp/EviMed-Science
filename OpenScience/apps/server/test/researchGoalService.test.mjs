@@ -241,6 +241,22 @@ test("a file connected while a round runs is said to that round, once, by name",
   } finally { await w.close(); }
 });
 
+test("a file connected while a person's own turn runs is not written into it: that would read as their statement, so the next unattended round is told", async () => {
+  const mine = { ...round(1, { status: "running", finishedAt: null }), id: "p1", automated: false, effectiveRouteReason: "default" };
+  const w = await world({ runs: [setting(), mine] });
+  try {
+    await w.goals.register(w.project, { sessionId: "s" });
+    await writeFile(path.join(w.dir, "knowledge-base", "trial-list.csv"), "b");
+    await w.goals.tick();
+    assert.equal(w.calls.steer.length, 0);
+    w.state.runs = [setting(), { ...mine, status: "succeeded", finishedAt: new Date(T0).toISOString() }, round(2, { status: "running", finishedAt: null })];
+    await w.goals.tick();
+    assert.equal(w.calls.steer.length, 1);
+    assert.equal(w.calls.steer[0].run, "c2");
+    assert.match(w.calls.steer[0].text, /trial-list\.csv/);
+  } finally { await w.close(); }
+});
+
 test("继续 starts a goal LoopX stopped on its bar, and the limits count from there", async () => {
   const w = await world({ runs: [setting(), round(1), round(2), round(3)], bar: { read: { result: { kind: "present", snapshot: { goalId: "g", loopxAgentId: "a", goalActivation: "stopped", progress: { processed: 1, remaining: 1, total: 2 } } } } } });
   try {

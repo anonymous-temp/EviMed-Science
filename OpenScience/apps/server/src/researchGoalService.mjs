@@ -280,7 +280,8 @@ export class ResearchGoals {
     if (payload.status === "paused" && payload.pauseUnconfirmed) { await this.#enforcePause(project, sessionId, rounds); return; }
     if (payload.startOnBar) await this.#startOnBar(project, sessionId);
     const live = rounds.find(isLive);
-    if (live) { await this.#noteNewSources(project, sessionId, payload, live); return; }
+    // Only a turn nobody is at: what is written into a person's own turn reads as their statement to memory and to the learning loop.
+    if (live) { if (live.automated === true) await this.#noteNewSources(project, sessionId, payload, live); return; }
     const last = rounds.at(-1);
     const quiet = this.now().getTime() - endOf(last);
     if (roundWasInterrupted(last)) { await this.#takeUp(project, sessionId, payload, rounds, quiet); return; }
