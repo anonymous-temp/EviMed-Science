@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 
 const argv = process.argv.slice(2);
 if (argv[0] !== 'run') process.exit(0);
-const withValue = new Set(['--network', '--tmpfs', '--cap-drop', '--security-opt', '--pids-limit', '--memory', '--user', '--ENVFILE', '-e', '-v', '--entrypoint']);
+const withValue = new Set(['--network', '--tmpfs', '--cap-drop', '--security-opt', '--pids-limit', '--memory', '--cpu-shares', '--user', '--ENVFILE', '-e', '-v', '--entrypoint']);
 const mounts = [], flags = {};
 let at = 1;
 for (; at < argv.length && argv[at].startsWith('-'); at++) {
