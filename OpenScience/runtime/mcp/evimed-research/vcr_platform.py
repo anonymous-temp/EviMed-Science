@@ -110,6 +110,8 @@ JOB_KINDS = ("fit_survival_model", "apply_prognostic_model",
     "population_check",
     # the confirmatory designs: futility boundaries, sample-size re-estimation, multi-arm, enrichment, counts (2026-11-03)
     "design_confirmatory",
+    # quantitative bias analysis of an estimate and the G-computation simulated treatment comparison (2026-11-03)
+    "bias_analysis", "stc_comparator",
     # the batch reading of patient records for the criteria's facts (2026-11-01)
     "match_extract",
     "forecast_trajectories", "evaluate_forecast", "compare_forecasts", "benchmark_trial_effect",
@@ -127,7 +129,7 @@ OBJECT_SHAPES = {
     "population (definition)": ("generate_population", "literature_population", "synthesize_population"),
     "comparator (configuration)": ("weight_comparator", "propensity_weight_comparator", "weighted_cox_comparator", "aipw_comparator",
                                    "covariate_set_comparator", "maic_comparator", "maic_time_to_event_comparator", "map_prior", "procova",
-                                   "prognostic_adjustment_comparator", "negative_control_comparator", "tipping_point"),
+                                   "prognostic_adjustment_comparator", "negative_control_comparator", "tipping_point", "stc_comparator", "bias_analysis"),
 }
 # What the platform generates from the domain's scenario schemas (`pnpm generate:vcr-scenario-help`): every key each method's
 # scenario reads. It rides in the image beside this file and is never edited by hand.

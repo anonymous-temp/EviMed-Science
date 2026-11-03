@@ -323,6 +323,11 @@ vcr_test_handler_jobs <- function() {
                              designs = list(list(nTreat = 30, nControl = 30), list(nTreat = 60, nControl = 60)), truths = list(list(effect = 0.4))), NULL, 300L),
     # the confirmatory designs: the futility boundary is the cheap one (an analytic design); the simulated kinds have their own cases (N65-N68)
     list("design.confirmatory", list(design = list(kind = "futility_group_sequential", informationRates = c(0.5, 1)), endpoint = list(type = "continuous"), truth = list(plannedEffect = 0.4, sd = 1), analysis = list(alpha = 0.025, power = 0.9)), NULL),
+    # quantitative bias analysis (a stated estimate; the probabilistic part simulates, at the domain's floor of draws) and the G-computation simulated treatment comparison
+    list("comparator.bias_analysis", list(scale = "hazard_ratio", estimate = 0.7, lower = 0.5, upper = 0.98, shiftedNull = list(biases = list(1.1, 1.25)),
+                                          probabilistic = list(bias = list(family = "uniform", min = 1, max = 1.3))), NULL, 20000L),
+    list("comparator.stc", list(covariates = list("age", "male"), aggregateCovariates = list(list(variable = "age", mean = 58, sd = 8), list(variable = "male", proportion = 0.5)),
+                                treatmentColumn = "arm", outcomeColumn = "y", endpoint = list(type = "continuous"), anchored = FALSE, aggregateOutcome = 1.2, aggregateSe = 0.1, size = 1000L), list(in_subj)),
     list("design.assurance", list(design = list(nTreat = 200, nControl = 200), endpoint = list(type = "continuous"), truth = list(sd = 1), designPrior = list(mean = 0.3, sd = 0.15), analysis = list(alpha = 0.025)), NULL),
     list("design.procova", list(design = list(allocation = 0.5), truth = list(effect = 0.3, sd = 1), analysis = list(alpha = 0.025, power = 0.9), prognostic = list(rho = 0.6, lambda = 0.9)), NULL),
     list("accrual.poisson_gamma", list(sites = sites, target = 60L), NULL, 500L),

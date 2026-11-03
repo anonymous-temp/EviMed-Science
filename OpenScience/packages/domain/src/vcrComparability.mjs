@@ -51,7 +51,7 @@ export function vcrBenchmarkBasis({ method = null, route = null, diagnostics = n
   const stored = object(diagnostics).benchmarkBasis
   if (/** @type {readonly string[]} */ (VCR_BENCHMARK_ONLY_BASES).includes(stored)) return /** @type {'literature_curve' | 'unanchored_maic' | 'model_prediction'} */ (stored)
   if (method === 'model.prognostic_apply' || route === 'model_comparator') return 'model_prediction'
-  if ((method === 'comparator.maic' || method === 'comparator.maic_time_to_event') && object(diagnostics).anchored === false) return 'unanchored_maic'
+  if ((method === 'comparator.maic' || method === 'comparator.maic_time_to_event' || method === 'comparator.stc') && object(diagnostics).anchored === false) return 'unanchored_maic'
   if (method === 'evidence.reconstruct_km' && (route === null || route === 'literature_control')
     && !(measures ?? []).some((measure) => object(measure).name === 'rmst_difference')) return 'literature_curve'
   return null
@@ -88,6 +88,9 @@ export function vcrResultLimits({ conclusion = null, method = null, route = null
     : vcrBalanceVerdictOf((Array.isArray(found.balance) ? found.balance : []).map(object))
   const balance = vcrBalanceSentence(verdict)
   if (balance) limits.push({ key: 'balance', text: balance })
+  // A propensity trimming removed the people with no comparable counterpart: the estimate is about the people who were kept (EU HTA guideline 6.2).
+  const trimmed = Number(object(found.trim).removedTotal)
+  if (Number.isFinite(trimmed) && trimmed > 0) limits.push({ key: 'trim', text: '结论只适用于修剪后留下的人：没有可比对象的人已被去掉，他们的情况不在这个结果里。' })
   const labels = /** @type {Record<string, string>} */ (VCR_APPLICABILITY_LIMIT_LABELS_ZH)
   for (const entry of (Array.isArray(found.applicabilityLimits) ? found.applicabilityLimits : []).map(object)) {
     const sentence = labels[String(entry.code)] ?? text(entry.reason)

@@ -301,11 +301,25 @@ export const VCR_SCENARIO_EXAMPLES = Object.freeze({
     riskTable: [{ time: 0, atRisk: 150 }, { time: 12, atRisk: 70 }, { time: 24, atRisk: 20 }],
     provenance: { kind: 'digitizer', tool: 'WebPlotDigitizer' } } }],
   'comparator.entropy_balance': [{ label: 'entropy balancing on three covariates', scenario: { covariates: ['age', 'ecog', 'ldh'], estimand: 'ATT' } }],
-  'comparator.propensity_weight': [{ label: 'propensity weights for a binary endpoint', scenario: { covariates: ['age'], endpoint: { type: 'binary' }, estimand: 'ATO' } }],
+  'comparator.propensity_weight': [
+    { label: 'propensity weights for a binary endpoint', scenario: { covariates: ['age'], endpoint: { type: 'binary' }, estimand: 'ATO' } },
+    { label: 'the same weights after removing the people with no comparable counterpart (Crump\'s rule: no bound to choose)', scenario: { covariates: ['age', 'ecog'], endpoint: { type: 'binary' }, trim: { rule: 'crump' } } },
+  ],
   'comparator.rmst': [{ label: 'restricted mean survival time to 24 months', scenario: { tau: 24, treatmentColumn: 'arm', timeUnit: 'months' } }],
   'comparator.maic': [{ label: 'an unanchored indirect comparison on a binary outcome: the aggregate trial\'s response rate is 0.42 (standard error 0.05), on the logit link', scenario: {
     covariates: ['age', 'male'], targets: { age: 60, male: 0.5 }, endpoint: { type: 'binary' }, aggregateOutcome: 0.42, aggregateSe: 0.05, link: 'logit', outcomeColumn: 'response' } }],
   'comparator.evalue': [{ label: 'the E-value of a hazard ratio', scenario: { riskRatio: 0.6, confidenceLimit: 0.8, scale: 'hazard_ratio', rare: true } }],
+  'comparator.bias_analysis': [
+    { label: 'how large a bias, and what confounder, turns a hazard ratio of 0.70 (95% interval 0.50 to 0.98): the tipping bias and the tipping confounder', scenario: {
+      scale: 'hazard_ratio', estimate: 0.7, lower: 0.5, upper: 0.98 } },
+    { label: 'the same estimate tested against stated biases (the shifted null), with a probabilistic analysis of a confounder that is twice as common in the treated', scenario: {
+      scale: 'hazard_ratio', estimate: 0.7, lower: 0.5, upper: 0.98, shiftedNull: { biases: [1.1, 1.25, 1.5] },
+      probabilistic: { confounder: { exposedPrevalence: { family: 'triangular', min: 0.3, mode: 0.4, max: 0.5 },
+        unexposedPrevalence: { family: 'triangular', min: 0.1, mode: 0.2, max: 0.3 }, association: { family: 'lognormal', median: 1.8, sdlog: 0.2 } } } } },
+  ],
+  'comparator.stc': [{ label: 'an anchored comparison on a binary outcome: the aggregate trial\'s log odds ratio against the common comparator is -0.35 (standard error 0.12)', scenario: {
+    covariates: ['age', 'male'], effectModifiers: ['age'], aggregateCovariates: [{ variable: 'age', mean: 62, sd: 9 }, { variable: 'male', proportion: 0.55 }],
+    endpoint: { type: 'binary' }, anchored: true, aggregateEstimate: -0.35, aggregateSe: 0.12, outcomeColumn: 'response' } }],
   'comparator.map_prior': [{ label: 'a robust MAP prior from three historical control arms', scenario: {
     historical: { events: [12, 15, 9], n: [60, 70, 50] }, tauPrior: { kind: 'half_normal', scale: 0.5 }, components: 2, robustWeight: 0.2 } }],
   'design.analytic': [
@@ -382,8 +396,12 @@ export const VCR_SCENARIO_EXAMPLES = Object.freeze({
     covariates: ['age', 'male'], treatmentColumn: 'arm', tau: 24, timeUnit: 'months', endpoint: { type: 'time_to_event' }, cohortRules: ADULT } }],
   'comparator.maic_time_to_event': [{ label: 'unanchored, against a reconstruction', scenario: {
     covariates: ['age', 'male'], targets: { age: 60, male: 0.5 }, timeUnit: 'months', pseudoIpdInputId: 'rec_1:1' } }],
-  'comparator.aipw': [{ label: 'doubly robust, binary outcome', scenario: {
-    covariates: ['age', 'male'], treatmentColumn: 'arm', outcomeColumn: 'response', endpoint: { type: 'binary' } } }],
+  'comparator.aipw': [
+    { label: 'doubly robust, binary outcome', scenario: {
+      covariates: ['age', 'male'], treatmentColumn: 'arm', outcomeColumn: 'response', endpoint: { type: 'binary' } } },
+    { label: 'doubly robust, restricted mean survival time to 24 months', scenario: {
+      covariates: ['age', 'male'], treatmentColumn: 'arm', endpoint: { type: 'time_to_event' }, tau: 24, summary: 'rmst', timeUnit: 'months' } },
+  ],
   'comparator.covariate_sets': [{ label: 'two covariate sets under entropy balancing', scenario: {
     covariateSets: [{ name: 'primary', covariates: ['age', 'male'] }, { name: 'without sex', covariates: ['age'] }], endpoint: { type: 'binary' } } }],
   'comparator.negative_control': [{ label: 'two negative-control outcomes that are columns', scenario: {
@@ -513,6 +531,35 @@ const ROBUSTNESS_TIME_UNIT_NOTES = Object.freeze(["timeUnit is days, weeks, mont
 const UNANCHORED_NOTES = Object.freeze(["anchored false (the default) has no common comparator, so the comparison is unbiased only if every prognostic factor and every effect modifier is among the matched covariates; the result states that as its premise (无锚定：假定所有预后因子和效应修饰因子都已调整). Name the effect modifiers you could not match on in unadjustedEffectModifiers instead of leaving it empty, and report the number as an unanchored comparison, never as an adjusted treatment effect."])
 
 /**
+ * Trimming (algorithm round C14), said to the run that writes it: it changes who the estimate is about, and the result says so.
+ * @type {string}
+ */
+const TRIM_NOTE = 'trim (propensity weighting, weighted Cox with propensity weights, doubly robust) removes the people who have no comparable counterpart before the weights are fitted: { rule: "crump" } is the optimal rule of Crump et al. (2009) and needs no number; { rule: "fixed", lower: 0.1 } removes whoever has a propensity score below lower or above upper (1 - lower unless stated), and the bound is the person\'s own choice. The result is then about the people who were kept, not about everyone: it lists how many were removed in each arm and how they differ from the kept people (the target population is the trimmed one, EU HTA guideline 6.2), and says it is limited by that. Leave trim out unless overlap is the problem; do not pick a bound to make a result significant.'
+/** The time-to-event doubly robust comparison (algorithm round C8). @type {string} */
+const AIPW_TIME_TO_EVENT_NOTE = 'For endpoint time_to_event, tau is the horizon and summary says what is read at it: rmst (the default) is the restricted mean survival time up to tau, survival the survival probability at tau; the effect is the trial arm\'s Kaplan-Meier value minus the augmented estimate of what the trial\'s patients would have had on the external control. The event times come from the events table (AVAL, CNSR) as in the other time-to-event comparisons. Each person enters as a Kaplan-Meier pseudo-observation of his arm, so the estimate assumes censoring does not depend on the covariates within an arm (the result states that as a premise); a tau beyond the follow-up of either arm is a not-estimable result.'
+
+/**
+ * Quantitative bias analysis (algorithm round C1, C2): said to the run that writes it, so that the person\'s question, the direction of a bias
+ * and who supplies the numbers are the same in the conversation and on the page.
+ * @type {readonly string[]}
+ */
+const BIAS_ANALYSIS_NOTES = Object.freeze([
+  'It answers "how large a shift from an unmeasured confounder would turn this conclusion, and what would the effect be if the bias is what I believe". The input is an estimate and its interval: scale (hazard_ratio, risk_ratio, odds_ratio or difference), estimate, and either lower and upper (the limits as published) or se (the standard error of the log ratio, or of the difference). On a saved comparison, name it (subjectId) and leave the estimate out: the platform takes the estimate and interval from its result; never copy a number from a result into the scenario.',
+  'Every bias is the one that exaggerates the observed effect: a ratio of at least 1 (an amount of at least 0 on the difference scale) that moves the estimate toward the null when removed, on whichever side of the null the estimate is. The tipping bias (the bias that brings the interval\'s nearer limit to the null, and the one that brings the estimate there) is always computed. shiftedNull { biases: [...] } tests the effect against stated biases (the EU HTA guideline\'s shifted null hypothesis). The tipping confounder is a binary confounder with outcome association gamma (confounderTipping.associations, default 1.5, 2, 3, 5 on a ratio scale; there is no default on the difference scale) that is rarer in one arm, with prevalence baselinePrevalence there (default 0: the smallest prevalence difference that can tip the estimate); the result names the arm that carries more of it and the prevalence it needs, and gives the standardised mean difference of a normal confounder.',
+  'probabilistic is the analysis with stated distributions: either bias (the exaggerating bias itself: constant, uniform, triangular, normal on the log scale of a ratio, lognormal with a median and sdlog) or confounder (exposedPrevalence, unexposedPrevalence, association: constant, uniform, triangular, and lognormal for the association). The ranges are the person\'s or the literature\'s: ask for them or read them from a source, never invent them. Each draw removes its bias from the estimate (systematic error only), and a second pass adds the sampling error (combined uncertainty). Defaults are 100000 draws (replicates raises it); the median and the 2.5 and 97.5 percentiles carry their Monte-Carlo error. A stand-alone call (no subjectId) with a stated estimate files its own comparison.',
+])
+
+/**
+ * The simulated treatment comparison in its G-computation form (algorithm round C9).
+ * @type {readonly string[]}
+ */
+const STC_NOTES = Object.freeze([
+  'It needs the patients of one trial (the subject table: covariates, the arm column, the outcome) and the published summary of the other: aggregateCovariates, one row per covariate (mean and sd for a continuous one, proportion for a 0/1 one), and the trial\'s result. The outcome model is main effects plus the effect modifiers named in effectModifiers interacting with the arm; name every effect modifier you know of, and the ones you could not use in unadjustedEffectModifiers. The covariate distribution of the published trial is simulated from its margins with the IPD\'s own correlation unless correlation is stated.',
+  'Anchored (anchored true): the arm column is 1 for the active arm and 0 for the common comparator, and aggregateEstimate is the other trial\'s contrast of its active arm against the same comparator on the link scale (a log odds ratio for logit, a log risk ratio for log, a difference for identity). Unanchored: only the active arm is modelled (treatmentColumn selects arm 1) and aggregateOutcome is the other trial\'s outcome on its OWN scale with its standard error; ' + UNANCHORED_NOTES[0],
+  'link defaults to identity for a continuous outcome and logit for a binary one. The result is the marginal effect in the published trial\'s population; the conventional STC (conditional, covariates centred at the published means) is reported beside it.',
+])
+
+/**
  * The hypothesis of a two-arm design (T1): said to the run that writes it, so that a margin is the person's own choice and a design
  * without one is read as a superiority design.
  */
@@ -521,9 +568,12 @@ const HYPOTHESIS_NOTE = 'hypothesis is for a two-arm design and is left out for 
 /** @type {Readonly<Record<string, readonly string[]>>} */
 const METHOD_NOTES = Object.freeze({
   'comparator.entropy_balance': COMPARATOR_TIME_UNIT_NOTES,
-  'comparator.propensity_weight': COMPARATOR_TIME_UNIT_NOTES,
+  'comparator.propensity_weight': Object.freeze([...COMPARATOR_TIME_UNIT_NOTES, TRIM_NOTE]),
   'comparator.covariate_sets': COMPARATOR_TIME_UNIT_NOTES,
-  'comparator.weighted_cox': COMPARATOR_TIME_UNIT_NOTES,
+  'comparator.weighted_cox': Object.freeze([...COMPARATOR_TIME_UNIT_NOTES, TRIM_NOTE]),
+  'comparator.aipw': Object.freeze([COMPARATOR_TIME_UNIT_NOTES[0], TRIM_NOTE, AIPW_TIME_TO_EVENT_NOTE]),
+  'comparator.bias_analysis': BIAS_ANALYSIS_NOTES,
+  'comparator.stc': STC_NOTES,
   'comparator.maic_time_to_event': Object.freeze([...COMPARATOR_TIME_UNIT_NOTES, ...UNANCHORED_NOTES]),
   'comparator.rmst': COMPARATOR_TIME_UNIT_NOTES,
   'comparator.tipping_point': ROBUSTNESS_TIME_UNIT_NOTES,

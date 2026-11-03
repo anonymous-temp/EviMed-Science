@@ -91,6 +91,8 @@ vcr_engine_handlers <- function() list(
   "design.analytic" = vcr_job_design_analytic,
   "design.simulate" = vcr_job_design_simulate,
   "design.confirmatory" = vcr_job_design_confirmatory,
+  "comparator.bias_analysis" = vcr_job_bias_analysis,
+  "comparator.stc" = vcr_job_stc,
   "design.grid" = vcr_job_design_grid,
   "design.assurance" = vcr_job_assurance,
   "design.procova" = vcr_job_procova,
@@ -118,6 +120,10 @@ VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "population_check")
 # --- the confirmatory designs (algorithm round T2-T6, 2026-11-03): rpact behind its adapter, the five designs in their own file ---
 VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "rpact_adapter", "design_confirmatory")
 # --- end confirmatory designs ---
+
+# --- quantitative bias analysis of an estimate (C1, C2) and the G-computation simulated treatment comparison (C9), 2026-11-03 ---
+VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "bias_analysis", "stc")
+# --- end bias analysis and STC ---
 
 # --- single-arm trials of a mean and of a survival time against a benchmark (2026-10-07) ---
 VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "single_arm")
@@ -1233,26 +1239,35 @@ vcr_job_weight_comparator <- function(job, output_dir = NULL, cancel_file = NULL
     }
   }
 
+  # Propensity trimming (1.4.0): who has no comparable counterpart is removed, the weights are fitted on who is left, and the result says
+  # who was removed. A removed person has weight 0 here, so every vector stays the length of the table; what is computed about the
+  # analysis sample (balance, overlap, curves) reads the kept people (`kp`).
+  trim <- sc$trim
+  if (!is.null(trim) && !identical(method, "propensity")) vcr_abort("scenario_field_unknown", "scenario.trim", "Trimming is by the propensity score; entropy balancing has none.")
   fit_weights <- function(Xb, tb) {
     if (identical(method, "entropy_balance")) vcr_att_entropy_weights(Xb, tb, vcr_scalar(sc$moments, 1L))
+    else if (!is.null(trim)) vcr_trimmed_weights(Xb, tb, estimand, trim)
     else list(allWeights = vcr_propensity_weights(Xb, tb, estimand)$weights)
   }
-  fit <- if (identical(method, "entropy_balance")) fit_weights(X, treat)
+  fit <- if (identical(method, "entropy_balance") || !is.null(trim)) fit_weights(X, treat)
          else { p <- vcr_propensity_weights(X, treat, estimand); list(allWeights = p$weights, converged = TRUE, propensity = p$propensity, rule = NULL) }
   if (is.null(fit$allWeights)) {
     return(list(status = "not_estimable", notEstimableRule = fit$rule %||% "entropy_balance_infeasible",
                 measures = list(),
                 counts = vcr_counts(realPatients = nrow(subj)),
-                diagnostics = list(detail = fit$detail, method = method, cohort = cohort$info)))
+                diagnostics = c(list(detail = fit$detail, method = method, cohort = cohort$info),
+                                if (!is.null(trim)) list(trim = vcr_trim_restatement(X, treat, fit$keep, fit$trim)))))
   }
   w <- fit$allWeights
+  kp <- if (is.null(trim)) rep(TRUE, length(treat)) else fit$keep
+  trim_info <- if (is.null(trim)) NULL else vcr_trim_restatement(X, treat, kp, fit$trim)
   # What a release added runs only for the jobs labelled with it (replay): 1.2.0 reads the weighted balance and never refuses on it, and
   # adds the E-value; 1.3.0 adds the enrolment-year row. An older label gets the refusal on the balance and none of the rest.
   reads_balance <- vcr_job_at_least(job, "1.2.0"); with_year <- vcr_job_at_least(job, "1.3.0")
-  balance <- vcr_balance_table(X, treat, w, estimand)
-  enrolment <- if (with_year) vcr_enrolment_year(subj, tabs, sc, treat, w, estimand) else NULL
-  ps <- vcr_propensity_weights(X, treat, "ATT")$propensity
-  support <- vcr_common_support(ps, treat)
+  balance <- vcr_balance_table(X[kp, , drop = FALSE], treat[kp], w[kp], estimand)
+  enrolment <- if (with_year) vcr_enrolment_year(subj[kp, , drop = FALSE], tabs, sc, treat[kp], w[kp], estimand) else NULL
+  ps <- vcr_propensity_weights(X[kp, , drop = FALSE], treat[kp], "ATT")$propensity
+  support <- vcr_common_support(ps, treat[kp])
   ess <- vcr_ess(w[treat == 0L])
   # Every threshold that decides "not estimable" is the domain's: a scenario is
   # written by the run and may not loosen (or set) them (EB-5).
@@ -1266,11 +1281,13 @@ vcr_job_weight_comparator <- function(job, output_dir = NULL, cancel_file = NULL
                 counts = vcr_counts(realPatients = nrow(subj), effectiveSampleSize = ess,
                                     events = if (identical(endpoint, "time_to_event")) sum(outcome$status) else NULL),
                 diagnostics = c(list(detail = rule$detail, balance = balance), if (with_year) list(enrolmentYear = enrolment),
-                                list(support = support, weights = wdiag, thresholds = limits_used, cohort = cohort$info))))
+                                list(support = support, weights = wdiag, thresholds = limits_used, cohort = cohort$info),
+                                if (!is.null(trim_info)) list(trim = trim_info))))
   }
 
   # one function of (weights, rows) -> the primary estimate followed by its secondaries
   est_of <- function(wv, idx) {
+    if (!is.null(trim)) { k <- wv > 0; idx <- idx[k]; wv <- wv[k] }   # the people who were trimmed are not in the estimate
     tb <- treat[idx]; wb <- wv
     if (identical(endpoint, "time_to_event")) {
       tm <- outcome$time[idx]; st <- outcome$status[idx]
@@ -1329,16 +1346,21 @@ vcr_job_weight_comparator <- function(job, output_dir = NULL, cancel_file = NULL
   } else NULL
   if (!is.null(evalue)) measures <- c(measures, evalue$measures)
   # weight truncation as a sensitivity analysis only (plan 5.3)
-  cap <- stats::quantile(w[treat == 0L], 0.99, names = FALSE)
-  wt <- w; wt[treat == 0L] <- pmin(wt[treat == 0L], cap)
-  if (identical(estimand, "ATT")) wt[treat == 0L] <- wt[treat == 0L] * sum(treat == 1L) / sum(wt[treat == 0L])
+  cap <- stats::quantile(w[treat == 0L & kp], 0.99, names = FALSE)
+  wt <- w; wt[treat == 0L & kp] <- pmin(wt[treat == 0L & kp], cap)
+  if (identical(estimand, "ATT")) wt[treat == 0L & kp] <- wt[treat == 0L & kp] * sum(treat[kp] == 1L) / sum(wt[treat == 0L & kp])
   trunc_est <- tryCatch(est_of(wt, all_idx)[1], error = function(e) NA_real_)
   tt_limits <- .vcr_target_trial_limits(sc)
   changed <- !identical(estimand, "ATT")
+  trimmed_someone <- !is.null(trim_info) && trim_info$removedTotal > 0L
   # the balance is read, not judged: a weighted covariate still apart limits the estimate and rides beside it (2026-11-01)
   verdict <- if (reads_balance) vcr_balance_verdict(balance) else NULL
   imbalance <- vcr_balance_limit(verdict)
-  limited <- boot$failureShare > 0.01 || changed || length(tt_limits) > 0L || !is.null(imbalance)
+  limited <- boot$failureShare > 0.01 || changed || length(tt_limits) > 0L || !is.null(imbalance) || trimmed_someone
+  # how many people the trimming removed, as numbers of their own beside the estimate (the baseline of who they are is in `trim`)
+  if (!is.null(trim_info)) measures <- c(measures, list(
+    vcr_measure("trimmed_treated", trim_info$arms[[1]]$removed, unit = "例", source = "calculated"),
+    vcr_measure("trimmed_control", trim_info$arms[[2]]$removed, unit = "例", source = "calculated")))
   list(status = "succeeded", measures = measures,
        conclusion = if (limited) "limited" else "estimable",
        counts = vcr_counts(realPatients = nrow(subj), effectiveSampleSize = ess,
@@ -1346,11 +1368,12 @@ vcr_job_weight_comparator <- function(job, output_dir = NULL, cancel_file = NULL
        diagnostics = c(list(method = method, estimand = estimand, endpoint = endpoint, timeUnit = time_unit,
                             tau = if (identical(endpoint, "time_to_event")) tau else NULL,
                             curves = if (identical(endpoint, "time_to_event"))
-                              vcr_arm_curves(outcome$time, outcome$status, treat, weights = w, source = data_src, tau = tau)
+                              vcr_arm_curves(outcome$time[kp], outcome$status[kp], treat[kp], weights = w[kp], source = data_src, tau = tau)
                             else NULL,
                             valueSourcesUsed = vcr_value_sources_used(used),
                             estimandChanged = changed,
                             balance = balance),
+                       if (!is.null(trim_info)) list(trim = trim_info),
                        if (with_year) list(enrolmentYear = enrolment),
                        list(support = support, weights = wdiag,
                             thresholds = limits_used,
@@ -1361,6 +1384,7 @@ vcr_job_weight_comparator <- function(job, output_dir = NULL, cancel_file = NULL
                                                  if (identical(endpoint, "binary")) "no_risk_ratio" else if (identical(endpoint, "time_to_event")) "rmst_difference_has_no_ratio" else "continuous_outcome")),
                        list(limitedBy = as.list(c(if (boot$failureShare > 0.01) "bootstrap_failure_share",
                                                   if (changed) "estimand_changed_from_att",
+                                                  if (trimmed_someone) "target_population_trimmed",
                                                   if (length(tt_limits)) "target_trial_item_cannot_be_emulated",
                                                   imbalance)),
                             targetTrialCannot = as.list(tt_limits), cohort = cohort$info,

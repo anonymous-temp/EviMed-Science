@@ -115,7 +115,8 @@ export const VCR_ENGINE_METHODS = Object.freeze({
   'evidence.pool': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['metafor']), modelTier: 'literature' },
   'evidence.reconstruct_km': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['time_to_event']), crossChecks: frozen(['IPDfromKM (the same digitized curve, risk table and event total: medians and hazard ratio)', 'Cox on the original rows']), modelTier: 'literature' },
   'comparator.entropy_balance': { version: '1.3.0', compatibleVersions: frozen(['1.0.0', '1.1.0', '1.2.0']), endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['WeightIt', 'cobalt']), modelTier: 'data' },
-  'comparator.propensity_weight': { version: '1.3.0', compatibleVersions: frozen(['1.0.0', '1.1.0', '1.2.0']), endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['WeightIt']), modelTier: 'data' },
+  // 1.4.0 (algorithm round C14): propensity trimming (a fixed bound or Crump's rule) that restates the population the estimate is about.
+  'comparator.propensity_weight': { version: '1.4.0', compatibleVersions: frozen(['1.0.0', '1.1.0', '1.2.0', '1.3.0']), endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['WeightIt', 'closed-form Crump et al. (2009) trimming bound on a uniform score', 'the estimate recomputed by hand on the kept people']), modelTier: 'data' },
   'comparator.rmst': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['time_to_event']), crossChecks: frozen(['survRM2']), modelTier: 'data' },
   'comparator.maic': { version: '1.0.0', endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['NICE DSU TSD 18']), modelTier: 'data' },
   'comparator.evalue': { version: '1.0.0', endpoints: frozen(['binary', 'time_to_event']), crossChecks: frozen(['EValue']), modelTier: 'scenario' },
@@ -133,9 +134,11 @@ export const VCR_ENGINE_METHODS = Object.freeze({
   'matching.evaluate': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['Kleene truth table']), modelTier: null },
   // The comparator-effect methods (2026-10-04). A new method is a new entry here, a job kind, a schema and a handler; none of the
   // methods above changed.
-  'comparator.weighted_cox': { version: '1.3.0', compatibleVersions: frozen(['1.0.0', '1.1.0', '1.2.0']), endpoints: frozen(['time_to_event']), crossChecks: frozen(['survival::coxph on WeightIt weights', 'independent score test for non-proportional hazards']), modelTier: 'data' },
+  'comparator.weighted_cox': { version: '1.4.0', compatibleVersions: frozen(['1.0.0', '1.1.0', '1.2.0', '1.3.0']), endpoints: frozen(['time_to_event']), crossChecks: frozen(['survival::coxph on WeightIt weights', 'independent score test for non-proportional hazards']), modelTier: 'data' },
   'comparator.maic_time_to_event': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['time_to_event']), crossChecks: frozen(['maicplus 0.1.2 vignette (Apache-2.0)', 'NICE DSU TSD 18', 'simulated target-population hazard ratio']), modelTier: 'data' },
-  'comparator.aipw': { version: '1.2.0', compatibleVersions: frozen(['1.0.0', '1.1.0']), endpoints: frozen(['continuous', 'binary']), crossChecks: frozen(['closed-form AIPW (Bang & Robins 2005) on WeightIt weights', 'simulation with a known ATT: double robustness']), modelTier: 'data' },
+  // 1.3.0 (algorithm round C8, C14): a time-to-event outcome (the restricted mean survival time or the survival at tau, by Kaplan-Meier pseudo-observations)
+  // and propensity trimming.
+  'comparator.aipw': { version: '1.3.0', compatibleVersions: frozen(['1.0.0', '1.1.0', '1.2.0']), endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['closed-form AIPW (Bang & Robins 2005) on WeightIt weights', 'simulation with a known ATT: double robustness', 'survRM2::rmst2 (the Kaplan-Meier restricted mean of each arm, which the pseudo-observations average to)', 'exact leave-one-out jackknife pseudo-observations', 'simulation with a known restricted-mean ATT (exponential times): double robustness']), modelTier: 'data' },
   'comparator.covariate_sets': { version: '1.2.0', compatibleVersions: frozen(['1.0.0', '1.1.0']), endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['comparator.entropy_balance', 'comparator.propensity_weight', 'comparator.aipw']), modelTier: 'data' },
   // --- robustness methods (2026-10-04). A new method is a new entry here, a job kind, a schema and a handler; none of the methods above changed. ---
   'comparator.negative_control': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['binary', 'time_to_event']), crossChecks: frozen(['EmpiricalCalibration 3.1.4 (sccs example)', 'metafor::rma maximum-likelihood fit of the empirical null', 'known-truth simulation of a common systematic bias']), modelTier: 'data' },
@@ -145,6 +148,13 @@ export const VCR_ENGINE_METHODS = Object.freeze({
   // --- longitudinal virtual patients (2026-10-07, plan 5.2): a linear mixed model of a continuous trajectory ---
   'patients.longitudinal': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['continuous']), crossChecks: frozen(['nlme::lme on the output table', 'closed-form model-implied mean and variance']), modelTier: 'scenario' },
   // --- end longitudinal ---
+  // Quantitative bias analysis of an estimate (algorithm round C1, C2, 2026-11-03): the tipping bias, the shifted null, the tipping confounder
+  // (tipr-style closed forms) and a probabilistic analysis. The input is an estimate and its interval, stated or taken from a saved comparison;
+  // no patient rows are read. Kept apart from comparator.tipping_point, which is about missing outcomes.
+  'comparator.bias_analysis': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['tipr (the tipping confounder: binary and normal confounders, ratio and difference measures)', 'closed-form shifted-null and tipping bias', 'known-truth simulation of a confounded study: the probabilistic adjustment recovers the truth', 'published worked example (Fox, MacLehose & Lash, probabilistic bias analysis)']), modelTier: 'scenario' },
+  // The G-computation form of the simulated treatment comparison (algorithm round C9, 2026-11-03): the IPD outcome model averaged over the aggregate
+  // trial's covariate distribution (the engine's Gaussian copula), anchored and unanchored, with the IPD bootstrapped.
+  'comparator.stc': { version: '1.0.0', endpoints: frozen(['continuous', 'binary']), crossChecks: frozen(['known-truth simulation of two trials with different covariate means: the marginal effect in the aggregate trial\'s population', 'comparator.maic on the same case (the identity link without a modifier, where the two estimate the same number)', 'stats::glm predictions averaged by hand over the same covariate sample']), modelTier: 'data' },
 })
 
 export const VCR_ENGINE_METHOD_IDS = frozen(Object.keys(VCR_ENGINE_METHODS))
@@ -194,6 +204,9 @@ export const VCR_JOB_METHODS = Object.freeze({
   population_check: 'population.check',
   // the confirmatory designs (2026-11-03)
   design_confirmatory: 'design.confirmatory',
+  // quantitative bias analysis and the G-computation simulated treatment comparison (2026-11-03)
+  bias_analysis: 'comparator.bias_analysis',
+  stc_comparator: 'comparator.stc',
   // The batch reading of patient records (D4): run by the control plane on its slow local lane, never by the R engine.
   ...VCR_MATCH_BATCH_JOBS,
   // The longitudinal forecast kinds, last, in VCR_JOB_KINDS' order (the scenario help lists kinds in this object's order).
@@ -205,7 +218,7 @@ export const VCR_PATIENT_LEVEL_JOB_KINDS = frozen([
   'fit_survival_model', 'apply_prognostic_model',
   'profile_snapshot', 'build_cohort', 'synthesize_population', 'population_quality',
   'weight_comparator', 'propensity_weight_comparator', 'rmst', 'match_criteria', 'weighted_cox_comparator',
-  'maic_time_to_event_comparator', 'aipw_comparator', 'covariate_set_comparator',
+  'maic_time_to_event_comparator', 'aipw_comparator', 'covariate_set_comparator', 'stc_comparator',
   // robustness methods
   'prognostic_adjustment_comparator',
 ])
@@ -228,6 +241,7 @@ export const VCR_INDIVIDUAL_INPUT_SOURCES = Object.freeze({
   'comparator.entropy_balance': VCR_REAL_PATIENT_SOURCES,
   'comparator.propensity_weight': VCR_REAL_PATIENT_SOURCES,
   'comparator.maic': VCR_REAL_PATIENT_SOURCES,
+  'comparator.stc': VCR_REAL_PATIENT_SOURCES,
   'comparator.weighted_cox': VCR_REAL_PATIENT_SOURCES,
   'comparator.aipw': VCR_REAL_PATIENT_SOURCES,
   'comparator.covariate_sets': VCR_REAL_PATIENT_SOURCES,
@@ -756,6 +770,9 @@ function usesConfirmatoryBeyond1_0_0(scenario) {
     || ((design.kind === 'multi_arm_selection' || design.kind === 'enrichment') && scenario?.endpoint?.type === 'time_to_event')
 }
 
+/** The comparators that read `scenario.trim` (propensity trimming, algorithm round C14). Mirrored by `.vcrp_legacy_design_version` in protocol.R. */
+const TRIMMING_METHODS = frozen(['comparator.propensity_weight', 'comparator.weighted_cox', 'comparator.aipw'])
+
 /** Does a design scenario state a hypothesis (1.4.0, T1)? Mirrored by `.vcrp_uses_hypothesis` in protocol.R. @param {any} scenario */
 function usesHypothesis(scenario) {
   return scenario !== null && typeof scenario === 'object' && scenario.hypothesis !== undefined
@@ -791,6 +808,9 @@ function legacyDesignVersionMatches(job) {
     if (job.method === 'model.prognostic_apply' && job.scenario?.calibration !== undefined) return false
     // and design.confirmatory 1.1.0 the promising zone and the event-time selection and enrichment designs
     if (job.method === 'design.confirmatory' && usesConfirmatoryBeyond1_0_0(job.scenario)) return false
+    // and the weighting comparators 1.4.0 (AIPW 1.3.0) the propensity trimming, and AIPW 1.3.0 the time-to-event outcome
+    if (TRIMMING_METHODS.includes(job.method) && job.scenario?.trim !== undefined) return false
+    if (job.method === 'comparator.aipw' && job.scenario?.endpoint?.type === 'time_to_event') return false
     return !job.method.startsWith('patients.') || (!job.scenario?.pairing && !job.scenario?.cohortRules)
   }
   const base = job.scenario?.design?.kind

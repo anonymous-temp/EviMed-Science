@@ -486,6 +486,34 @@ const MISSINGNESS = array({
  * parameter of the analysis table it reads, the rules that made the control
  * cohort, and how closely the control emulates the target trial.
  */
+/**
+ * A distribution of a bias parameter (algorithm round C1, C2): a discriminated object on `family`. Which families a parameter may use
+ * is the engine's check (`.vcr_bias_check_dist`: a prevalence is inside [0, 1], a ratio is above 0, the minimum is below the maximum), so
+ * the schema holds only the shape of each family.
+ * @param {readonly string[]} families
+ */
+const BIAS_DISTRIBUTION = (families) => {
+  const all = {
+    constant: { value: req(number()) },
+    uniform: { min: req(number()), max: req(number()) },
+    triangular: { min: req(number()), mode: req(number()), max: req(number()) },
+    normal: { mean: req(number()), sd: req(number({ gt: 0 })) },
+    lognormal: { median: req(number({ gt: 0 })), sdlog: req(number({ gt: 0 })) },
+  }
+  return { t: 'variant', on: 'family', variants: Object.fromEntries(families.map((family) => [family, all[/** @type {keyof typeof all} */ (family)]])) }
+}
+
+/**
+ * Propensity trimming (algorithm round C14): the people with no comparable counterpart are removed before the weights are fitted, and
+ * the result restates who they were. `fixed` removes whoever has a score outside [lower, upper] (upper is 1 - lower unless stated);
+ * `crump` is the optimal rule of Crump, Hotz, Imbens & Mitnik (2009), which needs no number from the person.
+ */
+const TRIM = object({
+  rule: req(string({ values: ['fixed', 'crump'] })),
+  lower: req(gated(number({ gt: 0, lt: 0.5 }), is('trim.rule', 'fixed'))),
+  upper: gated(number({ gt: 0.5, lt: 1 }), is('trim.rule', 'fixed')),
+})
+
 const WEIGHTING_CONTEXT = {
   endpoint: ENDPOINT(),
   tau: req(gated(number({ gt: 0, unit: 'time units' }), TIME_TO_EVENT)),
@@ -731,6 +759,7 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
     treatmentColumn: { ...COLUMN, default: 'arm' },
     outcomeColumn: { ...COLUMN, default: 'y' },
     estimand: string({ values: ['ATT', 'ATE', 'ATO'], default: 'ATT' }),
+    trim: TRIM,
     ...WEIGHTING_CONTEXT,
   }),
 
@@ -744,6 +773,7 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
     weighting: string({ values: ['entropy_balance', 'propensity'], default: 'entropy_balance' }),
     moments: gated(integer({ min: 1, max: 3, default: 1 }), isNot('weighting', 'propensity')),
     estimand: string({ values: ['ATT', 'ATE', 'ATO'], default: 'ATT' }),
+    trim: gated(TRIM, is('weighting', 'propensity')),
     tau: req(number({ gt: 0, unit: 'time units' })),
     ties: string({ values: ['efron', 'breslow'], default: 'efron' }),
     phAlpha: number({ gt: 0, lt: 1, default: 0.05 }),
@@ -780,9 +810,15 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
     propensityCovariates: array(COLUMN, { min: 1, max: 100, unique: true }),
     outcomeCovariates: array(COLUMN, { min: 1, max: 100, unique: true }),
     treatmentColumn: { ...COLUMN, default: 'arm' },
-    outcomeColumn: { ...COLUMN, default: 'y' },
+    outcomeColumn: gated({ ...COLUMN, default: 'y' }, isNot('endpoint.type', 'time_to_event')),
     endpoint: req(ENDPOINT()),
     estimand: string({ values: ['ATT'], default: 'ATT' }),
+    // A time-to-event outcome (1.3.0): the horizon, and what is read at it - the restricted mean survival time up to tau or the survival at tau.
+    tau: req(gated(number({ gt: 0, unit: 'time units' }), TIME_TO_EVENT)),
+    summary: gated(string({ values: ['rmst', 'survival'], default: 'rmst' }), TIME_TO_EVENT),
+    timeUnit: gated(string({ maxLength: 20 }), TIME_TO_EVENT),
+    parameterCode: gated(string({ maxLength: 64 }), TIME_TO_EVENT),
+    trim: TRIM,
     cohortRules: COHORT_STEPS,
     targetTrial: TARGET_TRIAL,
   }, { atLeastOne: [['covariates', 'propensityCovariates'], ['covariates', 'outcomeCovariates']] }),
@@ -844,6 +880,54 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
     confidenceLimit: number({ gt: 0 }),
     scale: string({ values: ['risk_ratio', 'odds_ratio', 'hazard_ratio'], default: 'risk_ratio' }),
     rare: boolean(),
+  }),
+
+  // Quantitative bias analysis of an estimate (algorithm round C1, C2): the estimate and its interval (or its standard error) are the input -
+  // stated, or taken from a saved comparison by the platform. Every bias is the one that exaggerates the observed effect: a ratio of at least 1
+  // (an amount of at least 0 on the difference scale). The tipping bias is always computed; the other parts when their parameters are stated
+  // (the tipping confounder has a default grid of associations on a ratio scale).
+  'comparator.bias_analysis': object({
+    scale: req(string({ values: ['hazard_ratio', 'risk_ratio', 'odds_ratio', 'difference'] })),
+    estimate: req(number()),
+    lower: number(),
+    upper: number(),
+    se: number({ gt: 0 }),
+    confidenceLevel: number({ gt: 0.5, lt: 1, default: 0.95 }),
+    shiftedNull: object({ biases: req(array(number({ min: 0 }), { min: 1, max: 20 })) }),
+    confounderTipping: object({
+      associations: array(number(), { min: 1, max: 20 }),
+      baselinePrevalence: number({ min: 0, lt: 1 }),
+    }),
+    probabilistic: object({
+      bias: BIAS_DISTRIBUTION(['constant', 'uniform', 'triangular', 'normal', 'lognormal']),
+      confounder: object({
+        exposedPrevalence: req(BIAS_DISTRIBUTION(['constant', 'uniform', 'triangular'])),
+        unexposedPrevalence: req(BIAS_DISTRIBUTION(['constant', 'uniform', 'triangular'])),
+        association: req(BIAS_DISTRIBUTION(['constant', 'uniform', 'triangular', 'normal', 'lognormal'])),
+      }),
+    }, { exactlyOne: [['bias', 'confounder']] }),
+  }, { exactlyOne: [['lower', 'se']], requires: { lower: ['upper'], upper: ['lower'] } }),
+
+  // The G-computation form of the simulated treatment comparison (algorithm round C9): the IPD outcome model (main effects, and the declared
+  // effect modifiers interacting with the arm) averaged over the aggregate trial's covariate distribution, which the engine builds from the
+  // published margins (`aggregateCovariates`, a baseline table) with the IPD's correlation unless `correlation` is stated. Anchored: the IPD trial has
+  // two arms and the aggregate trial's contrast against the common comparator is `aggregateEstimate` on the link scale; unanchored: only the IPD
+  // active arm is modelled, set against the aggregate arm's outcome on its own scale.
+  'comparator.stc': object({
+    covariates: req(COLUMN_LIST),
+    effectModifiers: array(COLUMN, { min: 1, max: 100, unique: true }),
+    aggregateCovariates: BASELINE_TABLE,
+    correlation: { t: 'matrix', min: -1, max: 1, size: 'covariates' },
+    treatmentColumn: { ...COLUMN, default: 'arm' },
+    outcomeColumn: { ...COLUMN, default: 'y' },
+    endpoint: req(ENDPOINT()),
+    anchored: boolean({ default: false }),
+    link: string({ values: ['identity', 'log', 'logit'] }),
+    aggregateEstimate: req(gated(number({ unit: 'link scale' }), is('anchored', 'true'))),
+    aggregateOutcome: req(gated(number({ unit: 'the outcome\'s own scale' }), isNot('anchored', 'true'))),
+    aggregateSe: req(number({ gt: 0 })),
+    size: integer({ min: 1000, max: 200000, default: 10000 }),
+    unadjustedEffectModifiers: array(string({ maxLength: 80 }), { min: 0, max: 50 }),
   }),
 
   'comparator.map_prior': object({

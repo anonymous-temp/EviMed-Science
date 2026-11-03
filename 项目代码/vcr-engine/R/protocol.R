@@ -1174,6 +1174,9 @@ vcr_job_at_least <- function(job, from) {
     if (identical(job[["method"]],"model.prognostic_apply") && !is.null(.vcrp_get(job$scenario,"calibration"))) return(FALSE)
     # and design.confirmatory 1.1.0 the promising zone and the event-time selection and enrichment designs
     if (identical(job[["method"]],"design.confirmatory") && .vcrp_uses_confirmatory_beyond_1_0_0(job$scenario)) return(FALSE)
+    # and the weighting comparators 1.4.0 (AIPW 1.3.0) the propensity trimming, and AIPW 1.3.0 the time-to-event outcome
+    if (job[["method"]] %in% c("comparator.propensity_weight","comparator.weighted_cox","comparator.aipw") && !is.null(.vcrp_get(job$scenario,"trim"))) return(FALSE)
+    if (identical(job[["method"]],"comparator.aipw") && identical(.vcrp_get(.vcrp_get(job$scenario,"endpoint"),"type"),"time_to_event")) return(FALSE)
     return(!startsWith(job[["method"]], "patients.") || (is.null(job$scenario$pairing) && is.null(job$scenario$cohortRules)))
   }
   sc<-.vcrp_get(job,"scenario");base<-.vcrp_get(.vcrp_get(sc,"design"),"kind")

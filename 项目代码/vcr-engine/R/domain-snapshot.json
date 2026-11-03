@@ -165,20 +165,23 @@
       ]
     },
     "comparator.propensity_weight": {
-      "version": "1.3.0",
+      "version": "1.4.0",
       "endpoints": [
         "continuous",
         "binary",
         "time_to_event"
       ],
       "crossChecks": [
-        "WeightIt"
+        "WeightIt",
+        "closed-form Crump et al. (2009) trimming bound on a uniform score",
+        "the estimate recomputed by hand on the kept people"
       ],
       "modelTier": "data",
       "compatibleVersions": [
         "1.0.0",
         "1.1.0",
-        "1.2.0"
+        "1.2.0",
+        "1.3.0"
       ]
     },
     "comparator.rmst": {
@@ -432,7 +435,7 @@
       "modelTier": null
     },
     "comparator.weighted_cox": {
-      "version": "1.3.0",
+      "version": "1.4.0",
       "endpoints": [
         "time_to_event"
       ],
@@ -444,7 +447,8 @@
       "compatibleVersions": [
         "1.0.0",
         "1.1.0",
-        "1.2.0"
+        "1.2.0",
+        "1.3.0"
       ]
     },
     "comparator.maic_time_to_event": {
@@ -463,19 +467,24 @@
       ]
     },
     "comparator.aipw": {
-      "version": "1.2.0",
+      "version": "1.3.0",
       "endpoints": [
         "continuous",
-        "binary"
+        "binary",
+        "time_to_event"
       ],
       "crossChecks": [
         "closed-form AIPW (Bang & Robins 2005) on WeightIt weights",
-        "simulation with a known ATT: double robustness"
+        "simulation with a known ATT: double robustness",
+        "survRM2::rmst2 (the Kaplan-Meier restricted mean of each arm, which the pseudo-observations average to)",
+        "exact leave-one-out jackknife pseudo-observations",
+        "simulation with a known restricted-mean ATT (exponential times): double robustness"
       ],
       "modelTier": "data",
       "compatibleVersions": [
         "1.0.0",
-        "1.1.0"
+        "1.1.0",
+        "1.2.0"
       ]
     },
     "comparator.covariate_sets": {
@@ -551,6 +560,30 @@
       "compatibleVersions": [
         "1.0.0"
       ]
+    },
+    "comparator.bias_analysis": {
+      "version": "1.0.0",
+      "endpoints": [],
+      "crossChecks": [
+        "tipr (the tipping confounder: binary and normal confounders, ratio and difference measures)",
+        "closed-form shifted-null and tipping bias",
+        "known-truth simulation of a confounded study: the probabilistic adjustment recovers the truth",
+        "published worked example (Fox, MacLehose & Lash, probabilistic bias analysis)"
+      ],
+      "modelTier": "scenario"
+    },
+    "comparator.stc": {
+      "version": "1.0.0",
+      "endpoints": [
+        "continuous",
+        "binary"
+      ],
+      "crossChecks": [
+        "known-truth simulation of two trials with different covariate means: the marginal effect in the aggregate trial's population",
+        "comparator.maic on the same case (the identity link without a modifier, where the two estimate the same number)",
+        "stats::glm predictions averaged by hand over the same covariate sample"
+      ],
+      "modelTier": "data"
     }
   },
   "jobMethods": {
@@ -589,7 +622,9 @@
     "prognostic_adjustment_comparator": "comparator.prognostic_adjustment",
     "generate_patients_longitudinal": "patients.longitudinal",
     "population_check": "population.check",
-    "design_confirmatory": "design.confirmatory"
+    "design_confirmatory": "design.confirmatory",
+    "bias_analysis": "comparator.bias_analysis",
+    "stc_comparator": "comparator.stc"
   },
   "patientLevelJobKinds": [
     "fit_survival_model",
@@ -606,6 +641,7 @@
     "maic_time_to_event_comparator",
     "aipw_comparator",
     "covariate_set_comparator",
+    "stc_comparator",
     "prognostic_adjustment_comparator"
   ],
   "observedOnlyMethods": [
@@ -615,6 +651,7 @@
     "comparator.entropy_balance",
     "comparator.propensity_weight",
     "comparator.maic",
+    "comparator.stc",
     "comparator.weighted_cox",
     "comparator.aipw",
     "comparator.covariate_sets",
@@ -674,6 +711,12 @@
       "imputed"
     ],
     "comparator.maic": [
+      "observed",
+      "extracted",
+      "calculated",
+      "imputed"
+    ],
+    "comparator.stc": [
       "observed",
       "extracted",
       "calculated",
@@ -4105,6 +4148,42 @@
           ],
           "default": "ATT"
         },
+        "trim": {
+          "t": "object",
+          "fields": {
+            "rule": {
+              "t": "string",
+              "values": [
+                "fixed",
+                "crump"
+              ],
+              "req": true
+            },
+            "lower": {
+              "t": "number",
+              "gt": 0,
+              "lt": 0.5,
+              "when": {
+                "path": "trim.rule",
+                "in": [
+                  "fixed"
+                ]
+              },
+              "req": true
+            },
+            "upper": {
+              "t": "number",
+              "gt": 0.5,
+              "lt": 1,
+              "when": {
+                "path": "trim.rule",
+                "in": [
+                  "fixed"
+                ]
+              }
+            }
+          }
+        },
         "endpoint": {
           "t": "object",
           "fields": {
@@ -4243,6 +4322,48 @@
             "ATO"
           ],
           "default": "ATT"
+        },
+        "trim": {
+          "t": "object",
+          "fields": {
+            "rule": {
+              "t": "string",
+              "values": [
+                "fixed",
+                "crump"
+              ],
+              "req": true
+            },
+            "lower": {
+              "t": "number",
+              "gt": 0,
+              "lt": 0.5,
+              "when": {
+                "path": "trim.rule",
+                "in": [
+                  "fixed"
+                ]
+              },
+              "req": true
+            },
+            "upper": {
+              "t": "number",
+              "gt": 0.5,
+              "lt": 1,
+              "when": {
+                "path": "trim.rule",
+                "in": [
+                  "fixed"
+                ]
+              }
+            }
+          },
+          "when": {
+            "path": "weighting",
+            "in": [
+              "propensity"
+            ]
+          }
         },
         "tau": {
           "t": "number",
@@ -4561,7 +4682,13 @@
           "t": "string",
           "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
           "maxLength": 64,
-          "default": "y"
+          "default": "y",
+          "when": {
+            "path": "endpoint.type",
+            "notIn": [
+              "time_to_event"
+            ]
+          }
         },
         "endpoint": {
           "t": "object",
@@ -4585,6 +4712,88 @@
             "ATT"
           ],
           "default": "ATT"
+        },
+        "tau": {
+          "t": "number",
+          "gt": 0,
+          "unit": "time units",
+          "when": {
+            "path": "endpoint.type",
+            "in": [
+              "time_to_event"
+            ]
+          },
+          "req": true
+        },
+        "summary": {
+          "t": "string",
+          "values": [
+            "rmst",
+            "survival"
+          ],
+          "default": "rmst",
+          "when": {
+            "path": "endpoint.type",
+            "in": [
+              "time_to_event"
+            ]
+          }
+        },
+        "timeUnit": {
+          "t": "string",
+          "maxLength": 20,
+          "when": {
+            "path": "endpoint.type",
+            "in": [
+              "time_to_event"
+            ]
+          }
+        },
+        "parameterCode": {
+          "t": "string",
+          "maxLength": 64,
+          "when": {
+            "path": "endpoint.type",
+            "in": [
+              "time_to_event"
+            ]
+          }
+        },
+        "trim": {
+          "t": "object",
+          "fields": {
+            "rule": {
+              "t": "string",
+              "values": [
+                "fixed",
+                "crump"
+              ],
+              "req": true
+            },
+            "lower": {
+              "t": "number",
+              "gt": 0,
+              "lt": 0.5,
+              "when": {
+                "path": "trim.rule",
+                "in": [
+                  "fixed"
+                ]
+              },
+              "req": true
+            },
+            "upper": {
+              "t": "number",
+              "gt": 0.5,
+              "lt": 1,
+              "when": {
+                "path": "trim.rule",
+                "in": [
+                  "fixed"
+                ]
+              }
+            }
+          }
         },
         "cohortRules": {
           "t": "array",
@@ -4988,6 +5197,496 @@
         },
         "rare": {
           "t": "boolean"
+        }
+      }
+    },
+    "comparator.bias_analysis": {
+      "t": "object",
+      "fields": {
+        "scale": {
+          "t": "string",
+          "values": [
+            "hazard_ratio",
+            "risk_ratio",
+            "odds_ratio",
+            "difference"
+          ],
+          "req": true
+        },
+        "estimate": {
+          "t": "number",
+          "req": true
+        },
+        "lower": {
+          "t": "number"
+        },
+        "upper": {
+          "t": "number"
+        },
+        "se": {
+          "t": "number",
+          "gt": 0
+        },
+        "confidenceLevel": {
+          "t": "number",
+          "gt": 0.5,
+          "lt": 1,
+          "default": 0.95
+        },
+        "shiftedNull": {
+          "t": "object",
+          "fields": {
+            "biases": {
+              "t": "array",
+              "items": {
+                "t": "number",
+                "min": 0
+              },
+              "min": 1,
+              "max": 20,
+              "req": true
+            }
+          }
+        },
+        "confounderTipping": {
+          "t": "object",
+          "fields": {
+            "associations": {
+              "t": "array",
+              "items": {
+                "t": "number"
+              },
+              "min": 1,
+              "max": 20
+            },
+            "baselinePrevalence": {
+              "t": "number",
+              "min": 0,
+              "lt": 1
+            }
+          }
+        },
+        "probabilistic": {
+          "t": "object",
+          "fields": {
+            "bias": {
+              "t": "variant",
+              "on": "family",
+              "variants": {
+                "constant": {
+                  "value": {
+                    "t": "number",
+                    "req": true
+                  }
+                },
+                "uniform": {
+                  "min": {
+                    "t": "number",
+                    "req": true
+                  },
+                  "max": {
+                    "t": "number",
+                    "req": true
+                  }
+                },
+                "triangular": {
+                  "min": {
+                    "t": "number",
+                    "req": true
+                  },
+                  "mode": {
+                    "t": "number",
+                    "req": true
+                  },
+                  "max": {
+                    "t": "number",
+                    "req": true
+                  }
+                },
+                "normal": {
+                  "mean": {
+                    "t": "number",
+                    "req": true
+                  },
+                  "sd": {
+                    "t": "number",
+                    "gt": 0,
+                    "req": true
+                  }
+                },
+                "lognormal": {
+                  "median": {
+                    "t": "number",
+                    "gt": 0,
+                    "req": true
+                  },
+                  "sdlog": {
+                    "t": "number",
+                    "gt": 0,
+                    "req": true
+                  }
+                }
+              }
+            },
+            "confounder": {
+              "t": "object",
+              "fields": {
+                "exposedPrevalence": {
+                  "t": "variant",
+                  "on": "family",
+                  "variants": {
+                    "constant": {
+                      "value": {
+                        "t": "number",
+                        "req": true
+                      }
+                    },
+                    "uniform": {
+                      "min": {
+                        "t": "number",
+                        "req": true
+                      },
+                      "max": {
+                        "t": "number",
+                        "req": true
+                      }
+                    },
+                    "triangular": {
+                      "min": {
+                        "t": "number",
+                        "req": true
+                      },
+                      "mode": {
+                        "t": "number",
+                        "req": true
+                      },
+                      "max": {
+                        "t": "number",
+                        "req": true
+                      }
+                    }
+                  },
+                  "req": true
+                },
+                "unexposedPrevalence": {
+                  "t": "variant",
+                  "on": "family",
+                  "variants": {
+                    "constant": {
+                      "value": {
+                        "t": "number",
+                        "req": true
+                      }
+                    },
+                    "uniform": {
+                      "min": {
+                        "t": "number",
+                        "req": true
+                      },
+                      "max": {
+                        "t": "number",
+                        "req": true
+                      }
+                    },
+                    "triangular": {
+                      "min": {
+                        "t": "number",
+                        "req": true
+                      },
+                      "mode": {
+                        "t": "number",
+                        "req": true
+                      },
+                      "max": {
+                        "t": "number",
+                        "req": true
+                      }
+                    }
+                  },
+                  "req": true
+                },
+                "association": {
+                  "t": "variant",
+                  "on": "family",
+                  "variants": {
+                    "constant": {
+                      "value": {
+                        "t": "number",
+                        "req": true
+                      }
+                    },
+                    "uniform": {
+                      "min": {
+                        "t": "number",
+                        "req": true
+                      },
+                      "max": {
+                        "t": "number",
+                        "req": true
+                      }
+                    },
+                    "triangular": {
+                      "min": {
+                        "t": "number",
+                        "req": true
+                      },
+                      "mode": {
+                        "t": "number",
+                        "req": true
+                      },
+                      "max": {
+                        "t": "number",
+                        "req": true
+                      }
+                    },
+                    "normal": {
+                      "mean": {
+                        "t": "number",
+                        "req": true
+                      },
+                      "sd": {
+                        "t": "number",
+                        "gt": 0,
+                        "req": true
+                      }
+                    },
+                    "lognormal": {
+                      "median": {
+                        "t": "number",
+                        "gt": 0,
+                        "req": true
+                      },
+                      "sdlog": {
+                        "t": "number",
+                        "gt": 0,
+                        "req": true
+                      }
+                    }
+                  },
+                  "req": true
+                }
+              }
+            }
+          },
+          "exactlyOne": [
+            [
+              "bias",
+              "confounder"
+            ]
+          ]
+        }
+      },
+      "exactlyOne": [
+        [
+          "lower",
+          "se"
+        ]
+      ],
+      "requires": {
+        "lower": [
+          "upper"
+        ],
+        "upper": [
+          "lower"
+        ]
+      }
+    },
+    "comparator.stc": {
+      "t": "object",
+      "fields": {
+        "covariates": {
+          "t": "array",
+          "items": {
+            "t": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+            "maxLength": 64
+          },
+          "min": 1,
+          "max": 100,
+          "unique": true,
+          "req": true
+        },
+        "effectModifiers": {
+          "t": "array",
+          "items": {
+            "t": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+            "maxLength": 64
+          },
+          "min": 1,
+          "max": 100,
+          "unique": true
+        },
+        "aggregateCovariates": {
+          "t": "array",
+          "items": {
+            "t": "object",
+            "fields": {
+              "variable": {
+                "t": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                "maxLength": 64,
+                "req": true
+              },
+              "label": {
+                "t": "string",
+                "maxLength": 80
+              },
+              "mean": {
+                "t": "number"
+              },
+              "sd": {
+                "t": "number",
+                "gt": 0
+              },
+              "proportion": {
+                "t": "number",
+                "min": 0,
+                "max": 1
+              },
+              "proportions": {
+                "t": "array",
+                "items": {
+                  "t": "number",
+                  "min": 0,
+                  "max": 1
+                },
+                "min": 2,
+                "max": 50
+              },
+              "levels": {
+                "t": "array",
+                "items": {
+                  "t": "string",
+                  "maxLength": 64
+                },
+                "min": 2,
+                "max": 50
+              },
+              "min": {
+                "t": "number",
+                "nullable": true
+              },
+              "max": {
+                "t": "number",
+                "nullable": true
+              },
+              "distribution": {
+                "t": "string",
+                "values": [
+                  "normal",
+                  "lognormal"
+                ],
+                "default": "normal"
+              }
+            },
+            "exactlyOne": [
+              [
+                "proportion",
+                "mean",
+                "proportions"
+              ]
+            ],
+            "requires": {
+              "mean": [
+                "sd"
+              ],
+              "levels": [
+                "proportions"
+              ]
+            }
+          },
+          "min": 1,
+          "max": 100,
+          "req": true
+        },
+        "correlation": {
+          "t": "matrix",
+          "min": -1,
+          "max": 1,
+          "size": "covariates"
+        },
+        "treatmentColumn": {
+          "t": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+          "maxLength": 64,
+          "default": "arm"
+        },
+        "outcomeColumn": {
+          "t": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+          "maxLength": 64,
+          "default": "y"
+        },
+        "endpoint": {
+          "t": "object",
+          "fields": {
+            "type": {
+              "t": "string",
+              "values": [
+                "continuous",
+                "binary",
+                "time_to_event"
+              ],
+              "badValueCode": "endpoint_unknown",
+              "req": true
+            }
+          },
+          "req": true
+        },
+        "anchored": {
+          "t": "boolean",
+          "default": false
+        },
+        "link": {
+          "t": "string",
+          "values": [
+            "identity",
+            "log",
+            "logit"
+          ]
+        },
+        "aggregateEstimate": {
+          "t": "number",
+          "unit": "link scale",
+          "when": {
+            "path": "anchored",
+            "in": [
+              "true"
+            ]
+          },
+          "req": true
+        },
+        "aggregateOutcome": {
+          "t": "number",
+          "unit": "the outcome's own scale",
+          "when": {
+            "path": "anchored",
+            "notIn": [
+              "true"
+            ]
+          },
+          "req": true
+        },
+        "aggregateSe": {
+          "t": "number",
+          "gt": 0,
+          "req": true
+        },
+        "size": {
+          "t": "integer",
+          "min": 1000,
+          "max": 200000,
+          "default": 10000
+        },
+        "unadjustedEffectModifiers": {
+          "t": "array",
+          "items": {
+            "t": "string",
+            "maxLength": 80
+          },
+          "min": 0,
+          "max": 50
         }
       }
     },
@@ -9649,7 +10348,9 @@
     "prognostic_adjustment_comparator",
     "generate_patients_longitudinal",
     "population_check",
-    "design_confirmatory"
+    "design_confirmatory",
+    "bias_analysis",
+    "stc_comparator"
   ],
   "endpointTypes": [
     "continuous",
@@ -9699,6 +10400,7 @@
     "map_prior_conflict",
     "too_few_events",
     "nuisance_model_not_estimable",
+    "trimmed_population_too_small",
     "negative_controls_not_estimable",
     "primary_analysis_not_estimable",
     "data_tier_insufficient",

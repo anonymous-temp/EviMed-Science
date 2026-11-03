@@ -163,6 +163,22 @@ export const NUMERIC_REFERENCES = {
   N68f: { methods: ['design.confirmatory'], anchors: ['ok <- c(ok, t1$value <= alpha + 3 * t1$mcse, arm_max <= alpha + 3 * t1$mcse, null$cells$expected_events$value > 0)'] },
   N68g: { methods: ['design.confirmatory'], anchors: ['closed <- stats::pnorm((log(s$rest) - log(s$subset)) / sqrt(4 / events[1] + 4 / events[2]))', 'model <- max(model, abs(plain - closed) / plain_se)'] },
   N68h: { methods: ['design.confirmatory'], anchors: ['pops <- max(null$cells$reject_subset$value, null$cells$reject_full$value)'] },
+  // the comparator patches (algorithm round C14, C8, C1, C2, C9): trimming, the time-to-event doubly robust estimate, bias analysis, the G-computation STC
+  N70a: { methods: ['comparator.propensity_weight'], anchors: ['hb <- .n70_by_hand(d, 0.1)', 'abs(v("weighted_difference") - hb$est) < 1e-10'] },
+  N70b: { methods: ['comparator.propensity_weight'], anchors: ['root <- stats::uniroot(function(a) 1 / (a * (1 - a)) - 4 * log((1 - a) / a) / (1 - 2 * a), c(1e-4, 0.3), tol = 1e-13)$root', 'abs(alpha - root) < 2e-5'] },
+  N70c: { methods: ['comparator.propensity_weight'], anchors: ['truth_kept <- mean(0.5 + 0.6 * d$x1[tr_kept])', 'abs(e1 - truth_kept) < 3 * se1'] },
+  N70d: { methods: ['comparator.weighted_cox', 'comparator.aipw'], anchors: ['fit <- survival::coxph(survival::Surv(time, status) ~ arm, data = k, weights = w, ties = "efron")', 'abs(vcr_measure_value(ra, "aipw_difference") - aipw_hand) < 1e-10'] },
+  N71a: { methods: ['comparator.aipw'], anchors: ['r2 <- survRM2::rmst2(c(s1$time, s1$time + 1)', 'jk <- vapply(seq_len(n), function(i) n * full - (n - 1) * est(s$time[-i], s$status[-i]), numeric(1))'] },
+  N71b: { methods: ['comparator.aipw'], anchors: ['rm <- survRM2::rmst2(d$time, d$status, d$arm, tau = tau)', 'abs(v(r, "aipw_difference") - hand) < 1e-10'] },
+  N71c: { methods: ['comparator.aipw'], anchors: ['truth <- sum(w * pt * (Rm(0.6 * .n71_p(x1, x2)) - Rm(.n71_p(x1, x2)))) / sum(w * pt)', 'ok <- all(abs(z[c("rr", "rw", "wr")]) < 3.5) && abs(z[["ww"]]) > 5 && abs(bias[["ww"]]) > 0.04'] },
+  N72a: { methods: ['comparator.bias_analysis'], anchors: ['want_limit <- if (lim > 0) back(lim) else if (ratio) 1 else 0', 'abs(rows[[i]]$z - zz) < 1e-12 && abs(rows[[i]]$p - (1 - stats::pnorm(zz))) < 1e-12'] },
+  N72b: { methods: ['comparator.bias_analysis'], anchors: ['tip_bin <- function(b, g, p_other) tipr::tip_with_binary(', 'tn <- tipr::tip_rr(1.6, confounder_outcome_effect = 2, verbose = FALSE)$exposure_confounder_effect'] },
+  N72c: { methods: ['comparator.bias_analysis'], anchors: ['abs(row1$carrierPrevalence / 0.05 - 9) < 1e-4'] },
+  N72d: { methods: ['comparator.bias_analysis'], anchors: ['cdf_comb <- function(x) stats::integrate(', 'abs(m$value - want_med) < 3 * m$mcse'] },
+  N72e: { methods: ['comparator.bias_analysis'], anchors: ['bf <- (g * p1 + 1 - p1) / (g * p0 + 1 - p0)', 'abs(pa$systematic$median - 1) < 1e-12'] },
+  N73a: { methods: ['comparator.stc'], anchors: ['fit <- stats::glm(y ~ x1 + x2 + arm + arm:x1, data = d, family = stats::binomial())', 'abs(v(r, "marginal_contrast_ipd") - hand) < 1e-9'] },
+  N73b: { methods: ['comparator.stc'], anchors: ['tr <- .n73_truth(TRUE)', 'ok <- abs(bias[["g"]]) < 3.5 * mcse[["g"]] && abs(bias[["cv"]]) > 8 * mcse[["cv"]] && abs(bias[["cv"]]) > 0.04'] },
+  N73c: { methods: ['comparator.stc'], anchors: ['maic <- vcr_test_run(vcr_test_job("comparator.maic"', 'abs(e_s$value - e_m$value) < sqrt(se_s^2 + se_m^2)'] },
 
   // --- the comparator-effect stream's cases (listed so that merging it needs no edit here; inert until the cases exist) ---
   N33a: { methods: ['comparator.weighted_cox'], anchors: ['Cross-software: the weights are WeightIt', 'rel(m(j_ebal, "hazard_ratio"), r_ebal$hr) < 1e-6'] },

@@ -118,25 +118,33 @@ vcr_job_weighted_cox <- function(job, output_dir = NULL, cancel_file = NULL, ...
                                    eventsByArm = as.list(events_by_arm), cohort = cohort$info, valueSourcesUsed = sources_used)))
   }
 
+  # Propensity trimming (1.4.0), as in the weighting job: the people with no comparable counterpart are removed (weight 0 here), the
+  # weights are fitted on who is left, and what is computed about the analysis sample reads the kept people (`kp`).
+  trim <- sc$trim
+  if (!is.null(trim) && !identical(weighting, "propensity")) vcr_abort("scenario_field_unknown", "scenario.trim", "Trimming is by the propensity score; entropy balancing has none.")
   fit_weights <- function(Xb, tb) {
     if (identical(weighting, "entropy_balance")) vcr_att_entropy_weights(Xb, tb, vcr_scalar(sc$moments, 1L))
+    else if (!is.null(trim)) vcr_trimmed_weights(Xb, tb, estimand, trim)
     else list(allWeights = vcr_propensity_weights(Xb, tb, estimand)$weights)
   }
-  fit <- if (identical(weighting, "entropy_balance")) fit_weights(X, treat)
+  fit <- if (identical(weighting, "entropy_balance") || !is.null(trim)) fit_weights(X, treat)
          else { p <- vcr_propensity_weights(X, treat, estimand); list(allWeights = p$weights, converged = TRUE, propensity = p$propensity, rule = NULL) }
   if (is.null(fit$allWeights)) {
     return(list(status = "not_estimable", notEstimableRule = fit$rule %||% "entropy_balance_infeasible", measures = list(),
                 counts = vcr_counts(realPatients = nrow(subj), events = sum(status)),
-                diagnostics = list(detail = fit$detail, method = weighting, cohort = cohort$info, valueSourcesUsed = sources_used)))
+                diagnostics = c(list(detail = fit$detail, method = weighting, cohort = cohort$info, valueSourcesUsed = sources_used),
+                                if (!is.null(trim)) list(trim = vcr_trim_restatement(X, treat, fit$keep, fit$trim)))))
   }
   w <- fit$allWeights
+  kp <- if (is.null(trim)) rep(TRUE, length(treat)) else fit$keep
+  trim_info <- if (is.null(trim)) NULL else vcr_trim_restatement(X, treat, kp, fit$trim)
   # What a release added runs only for the jobs labelled with it (replay): 1.2.0 reads the weighted balance and never refuses on it, and
   # adds the E-value; 1.3.0 adds the enrolment-year row. An older label gets the refusal on the balance and none of the rest.
   reads_balance <- vcr_job_at_least(job, "1.2.0"); with_year <- vcr_job_at_least(job, "1.3.0")
-  balance <- vcr_balance_table(X, treat, w, estimand)
-  enrolment <- if (with_year) vcr_enrolment_year(subj, tabs, sc, treat, w, estimand) else NULL
-  ps <- vcr_propensity_weights(X, treat, "ATT")$propensity
-  support <- vcr_common_support(ps, treat)
+  balance <- vcr_balance_table(X[kp, , drop = FALSE], treat[kp], w[kp], estimand)
+  enrolment <- if (with_year) vcr_enrolment_year(subj[kp, , drop = FALSE], tabs, sc, treat[kp], w[kp], estimand) else NULL
+  ps <- vcr_propensity_weights(X[kp, , drop = FALSE], treat[kp], "ATT")$propensity
+  support <- vcr_common_support(ps, treat[kp])
   ess <- vcr_ess(w[treat == 0L])
   rule <- vcr_not_estimable_weighting(balance = if (reads_balance) NULL else balance, ess = ess, support = support,
                                       ebal = if (identical(weighting, "entropy_balance")) fit else NULL)
@@ -148,10 +156,11 @@ vcr_job_weighted_cox <- function(job, output_dir = NULL, cancel_file = NULL, ...
     return(list(status = "not_estimable", notEstimableRule = rule$rule, measures = list(),
                 counts = vcr_counts(realPatients = nrow(subj), effectiveSampleSize = ess, events = sum(status)),
                 diagnostics = c(list(detail = rule$detail, balance = balance), if (with_year) list(enrolmentYear = enrolment),
-                                list(support = support, weights = wdiag, thresholds = limits_used, cohort = cohort$info, valueSourcesUsed = sources_used))))
+                                list(support = support, weights = wdiag, thresholds = limits_used, cohort = cohort$info, valueSourcesUsed = sources_used),
+                                if (!is.null(trim_info)) list(trim = trim_info))))
   }
 
-  primary <- vcr_cox_primary(time, status, treat, w, ties, ph_transform)
+  primary <- vcr_cox_primary(time[kp], status[kp], treat[kp], w[kp], ties, ph_transform)
   if (!isTRUE(primary$ok)) {
     return(list(status = "not_estimable", notEstimableRule = "too_few_events", measures = list(),
                 counts = vcr_counts(realPatients = nrow(subj), effectiveSampleSize = ess, events = sum(status)),
@@ -160,12 +169,13 @@ vcr_job_weighted_cox <- function(job, output_dir = NULL, cancel_file = NULL, ...
                                    cohort = cohort$info, valueSourcesUsed = sources_used)))
   }
   beta <- primary$beta
-  tau_rule <- vcr_tau_rule(time, status, treat, tau)
+  tau_rule <- vcr_tau_rule(time[kp], status[kp], treat[kp], tau)
   with_rmst <- is.null(tau_rule)
 
   # the log hazard ratio first, then (when tau is usable) the RMST battery the weighting job reports; every
   # component shares the resamples, and every resample re-estimates the weights
   est_of <- function(wv, idx) {
+    if (!is.null(trim)) { k <- wv > 0; idx <- idx[k]; wv <- wv[k] }   # the people who were trimmed are not in the estimate
     tb <- treat[idx]; tm <- time[idx]; st <- status[idx]
     b <- vcr_cox_beta(tm, st, tb, wv, ties)
     if (!with_rmst) return(b)
@@ -215,7 +225,9 @@ vcr_job_weighted_cox <- function(job, output_dir = NULL, cancel_file = NULL, ...
       vcr_measure("rmst_control", est[4], unit = unit, interval = ci(4), source = est_src),
       vcr_measure("survival_difference_at_tau", est[5], interval = ci(5), source = est_src)),
     list(vcr_measure("effective_sample_size", ess, source = est_src),
-         vcr_measure("worst_standardized_difference", max(abs(balance$smdAdjusted)), source = est_src)))
+         vcr_measure("worst_standardized_difference", max(abs(balance$smdAdjusted)), source = est_src)),
+    if (!is.null(trim_info)) list(vcr_measure("trimmed_treated", trim_info$arms[[1]]$removed, unit = "例", source = "calculated"),
+                                  vcr_measure("trimmed_control", trim_info$arms[[2]]$removed, unit = "例", source = "calculated")))
 
   # the E-value of the hazard ratio and of the limit of its interval nearer the null, after the estimate and beside it (A5); a hazard
   # ratio stands for a risk ratio only when the outcome is rare (under 15 percent), and the approximation for a common one is the
@@ -224,10 +236,11 @@ vcr_job_weighted_cox <- function(job, output_dir = NULL, cancel_file = NULL, ...
   evalue <- if (reads_balance) vcr_evalue_after(exp(beta), hr_iv[1], hr_iv[2], "hazard_ratio", mean(status) < 0.15, est_src) else NULL
   if (!is.null(evalue)) measures <- c(measures, evalue$measures)
   # weight truncation as a sensitivity analysis only, as in the weighting job (plan 5.3)
-  cap <- stats::quantile(w[treat == 0L], 0.99, names = FALSE)
-  wt <- w; wt[treat == 0L] <- pmin(wt[treat == 0L], cap)
-  if (identical(estimand, "ATT")) wt[treat == 0L] <- wt[treat == 0L] * sum(treat == 1L) / sum(wt[treat == 0L])
-  trunc_beta <- vcr_cox_beta(time, status, treat, wt, ties)
+  cap <- stats::quantile(w[treat == 0L & kp], 0.99, names = FALSE)
+  wt <- w; wt[treat == 0L & kp] <- pmin(wt[treat == 0L & kp], cap)
+  if (identical(estimand, "ATT")) wt[treat == 0L & kp] <- wt[treat == 0L & kp] * sum(treat[kp] == 1L) / sum(wt[treat == 0L & kp])
+  trunc_beta <- vcr_cox_beta(time[kp], status[kp], treat[kp], wt[kp], ties)
+  trimmed_someone <- !is.null(trim_info) && trim_info$removedTotal > 0L
 
   tt_limits <- .vcr_target_trial_limits(sc)
   changed <- !identical(estimand, "ATT")
@@ -236,6 +249,7 @@ vcr_job_weighted_cox <- function(job, output_dir = NULL, cancel_file = NULL, ...
   verdict <- if (reads_balance) vcr_balance_verdict(balance) else NULL
   limited_by <- c(if (bs$failureShare > 0.01) "bootstrap_failure_share",
                   if (changed) "estimand_changed_from_att",
+                  if (trimmed_someone) "target_population_trimmed",
                   if (length(tt_limits)) "target_trial_item_cannot_be_emulated",
                   vcr_balance_limit(verdict),
                   if (ph_rejected) "proportional_hazards_rejected",
@@ -264,7 +278,8 @@ vcr_job_weighted_cox <- function(job, output_dir = NULL, cancel_file = NULL, ...
          proportionalHazards = ph_block,
          rmstCompanion = if (with_rmst) list(available = TRUE, tau = tau, source = "calculated")
                          else c(list(available = FALSE), tau_rule),
-         curves = vcr_arm_curves(time, status, treat, weights = w, source = data_src, tau = if (with_rmst) tau else NULL)),
+         curves = vcr_arm_curves(time[kp], status[kp], treat[kp], weights = w[kp], source = data_src, tau = if (with_rmst) tau else NULL)),
+         if (!is.null(trim_info)) list(trim = trim_info),
          if (reads_balance) list(eValue = if (!is.null(evalue)) evalue$diagnostics else .vcr_evalue_absent("no_hazard_ratio")),
          list(estimandChanged = changed, balance = balance),
          if (with_year) list(enrolmentYear = enrolment),

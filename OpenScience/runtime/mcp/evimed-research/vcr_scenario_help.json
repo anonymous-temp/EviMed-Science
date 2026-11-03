@@ -38,6 +38,8 @@
     "generate_patients_longitudinal": {"method":"patients.longitudinal"},
     "population_check": {"method":"population.check"},
     "design_confirmatory": {"method":"design.confirmatory"},
+    "bias_analysis": {"method":"comparator.bias_analysis"},
+    "stc_comparator": {"method":"comparator.stc"},
     "match_extract": {"method":"matching.extract","platformBuilt":[]},
     "forecast_trajectories": {"method":"forecast.trajectories"},
     "evaluate_forecast": {"method":"forecast.evaluate"},
@@ -1445,7 +1447,8 @@
     "comparator.propensity_weight": {
       "endpoints": ["continuous","binary","time_to_event"],
       "notes": [
-        "timeUnit is days, weeks, months or years. The usual spellings (day, d, 天, month, 个月, yr, 年 …) are written as these when the job is queued, so one request is one job in any spelling; text that names no unit is refused before queueing. A table that carries its own unit (the event times of a mapped snapshot, a reconstruction calibrated in one) must agree with it, and a scenario that states none takes the table's; a time-to-event analysis with neither is refused rather than assume months. Nothing is converted between units."
+        "timeUnit is days, weeks, months or years. The usual spellings (day, d, 天, month, 个月, yr, 年 …) are written as these when the job is queued, so one request is one job in any spelling; text that names no unit is refused before queueing. A table that carries its own unit (the event times of a mapped snapshot, a reconstruction calibrated in one) must agree with it, and a scenario that states none takes the table's; a time-to-event analysis with neither is refused rather than assume months. Nothing is converted between units.",
+        "trim (propensity weighting, weighted Cox with propensity weights, doubly robust) removes the people who have no comparable counterpart before the weights are fitted: { rule: \"crump\" } is the optimal rule of Crump et al. (2009) and needs no number; { rule: \"fixed\", lower: 0.1 } removes whoever has a propensity score below lower or above upper (1 - lower unless stated), and the bound is the person's own choice. The result is then about the people who were kept, not about everyone: it lists how many were removed in each arm and how they differ from the kept people (the target population is the trimmed one, EU HTA guideline 6.2), and says it is limited by that. Leave trim out unless overlap is the problem; do not pick a bound to make a result significant."
       ],
       "rows": [
         {
@@ -1460,6 +1463,10 @@
         {"path":"treatmentColumn","type":"string","maxLength":64,"role":"column","default":"arm","fieldRole":"defaultable"},
         {"path":"outcomeColumn","type":"string","maxLength":64,"role":"column","default":"y","fieldRole":"defaultable"},
         {"path":"estimand","type":"string","values":["ATT","ATE","ATO"],"default":"ATT","fieldRole":"defaultable"},
+        {"path":"trim","type":"object"},
+        {"path":"trim.rule","type":"string","values":["fixed","crump"],"required":true,"within":"trim","fieldRole":"defaultable"},
+        {"path":"trim.lower","type":"number","gt":0,"lt":0.5,"required":true,"within":"trim","when":[{"path":"trim.rule","in":["fixed"]}],"fieldRole":"research_fact"},
+        {"path":"trim.upper","type":"number","gt":0.5,"lt":1,"within":"trim","when":[{"path":"trim.rule","in":["fixed"]}],"fieldRole":"defaultable"},
         {"path":"endpoint","type":"object"},
         {"path":"endpoint.type","type":"string","values":["continuous","binary","time_to_event"],"required":true,"within":"endpoint","fieldRole":"defaultable"},
         {"path":"tau","type":"number","gt":0,"unit":"time units","required":true,"when":[{"path":"endpoint.type","in":["time_to_event"]}],"fieldRole":"research_fact"},
@@ -1473,7 +1480,13 @@
         {"path":"targetTrial[].item","type":"string","maxLength":80,"required":true,"within":"targetTrial","fieldRole":"research_fact"},
         {"path":"targetTrial[].emulation","type":"string","values":["exact","approximate","cannot"],"required":true,"within":"targetTrial","fieldRole":"defaultable"}
       ],
-      "examples": [{"label":"propensity weights for a binary endpoint","scenario":{"covariates":["age"],"endpoint":{"type":"binary"},"estimand":"ATO"}}]
+      "examples": [
+        {"label":"propensity weights for a binary endpoint","scenario":{"covariates":["age"],"endpoint":{"type":"binary"},"estimand":"ATO"}},
+        {
+          "label": "the same weights after removing the people with no comparable counterpart (Crump's rule: no bound to choose)",
+          "scenario": {"covariates":["age","ecog"],"endpoint":{"type":"binary"},"trim":{"rule":"crump"}}
+        }
+      ]
     },
     "comparator.rmst": {
       "endpoints": ["time_to_event"],
@@ -3867,7 +3880,8 @@
     "comparator.weighted_cox": {
       "endpoints": ["time_to_event"],
       "notes": [
-        "timeUnit is days, weeks, months or years. The usual spellings (day, d, 天, month, 个月, yr, 年 …) are written as these when the job is queued, so one request is one job in any spelling; text that names no unit is refused before queueing. A table that carries its own unit (the event times of a mapped snapshot, a reconstruction calibrated in one) must agree with it, and a scenario that states none takes the table's; a time-to-event analysis with neither is refused rather than assume months. Nothing is converted between units."
+        "timeUnit is days, weeks, months or years. The usual spellings (day, d, 天, month, 个月, yr, 年 …) are written as these when the job is queued, so one request is one job in any spelling; text that names no unit is refused before queueing. A table that carries its own unit (the event times of a mapped snapshot, a reconstruction calibrated in one) must agree with it, and a scenario that states none takes the table's; a time-to-event analysis with neither is refused rather than assume months. Nothing is converted between units.",
+        "trim (propensity weighting, weighted Cox with propensity weights, doubly robust) removes the people who have no comparable counterpart before the weights are fitted: { rule: \"crump\" } is the optimal rule of Crump et al. (2009) and needs no number; { rule: \"fixed\", lower: 0.1 } removes whoever has a propensity score below lower or above upper (1 - lower unless stated), and the bound is the person's own choice. The result is then about the people who were kept, not about everyone: it lists how many were removed in each arm and how they differ from the kept people (the target population is the trimmed one, EU HTA guideline 6.2), and says it is limited by that. Leave trim out unless overlap is the problem; do not pick a bound to make a result significant."
       ],
       "rows": [
         {
@@ -3883,6 +3897,35 @@
         {"path":"weighting","type":"string","values":["entropy_balance","propensity"],"default":"entropy_balance","fieldRole":"defaultable"},
         {"path":"moments","type":"integer","min":1,"max":3,"default":1,"when":[{"path":"weighting","notIn":["propensity"]}],"fieldRole":"defaultable"},
         {"path":"estimand","type":"string","values":["ATT","ATE","ATO"],"default":"ATT","fieldRole":"defaultable"},
+        {"path":"trim","type":"object","when":[{"path":"weighting","in":["propensity"]}]},
+        {
+          "path": "trim.rule",
+          "type": "string",
+          "values": ["fixed","crump"],
+          "required": true,
+          "within": "trim",
+          "when": [{"path":"weighting","in":["propensity"]}],
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "trim.lower",
+          "type": "number",
+          "gt": 0,
+          "lt": 0.5,
+          "required": true,
+          "within": "trim",
+          "when": [{"path":"weighting","in":["propensity"]},{"path":"trim.rule","in":["fixed"]}],
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "trim.upper",
+          "type": "number",
+          "gt": 0.5,
+          "lt": 1,
+          "within": "trim",
+          "when": [{"path":"weighting","in":["propensity"]},{"path":"trim.rule","in":["fixed"]}],
+          "fieldRole": "defaultable"
+        },
         {"path":"tau","type":"number","gt":0,"unit":"time units","required":true,"fieldRole":"research_fact"},
         {"path":"ties","type":"string","values":["efron","breslow"],"default":"efron","fieldRole":"defaultable"},
         {"path":"phAlpha","type":"number","gt":0,"lt":1,"default":0.05,"fieldRole":"defaultable"},
@@ -3964,7 +4007,12 @@
       ]
     },
     "comparator.aipw": {
-      "endpoints": ["continuous","binary"],
+      "endpoints": ["continuous","binary","time_to_event"],
+      "notes": [
+        "timeUnit is days, weeks, months or years. The usual spellings (day, d, 天, month, 个月, yr, 年 …) are written as these when the job is queued, so one request is one job in any spelling; text that names no unit is refused before queueing. A table that carries its own unit (the event times of a mapped snapshot, a reconstruction calibrated in one) must agree with it, and a scenario that states none takes the table's; a time-to-event analysis with neither is refused rather than assume months. Nothing is converted between units.",
+        "trim (propensity weighting, weighted Cox with propensity weights, doubly robust) removes the people who have no comparable counterpart before the weights are fitted: { rule: \"crump\" } is the optimal rule of Crump et al. (2009) and needs no number; { rule: \"fixed\", lower: 0.1 } removes whoever has a propensity score below lower or above upper (1 - lower unless stated), and the bound is the person's own choice. The result is then about the people who were kept, not about everyone: it lists how many were removed in each arm and how they differ from the kept people (the target population is the trimmed one, EU HTA guideline 6.2), and says it is limited by that. Leave trim out unless overlap is the problem; do not pick a bound to make a result significant.",
+        "For endpoint time_to_event, tau is the horizon and summary says what is read at it: rmst (the default) is the restricted mean survival time up to tau, survival the survival probability at tau; the effect is the trial arm's Kaplan-Meier value minus the augmented estimate of what the trial's patients would have had on the external control. The event times come from the events table (AVAL, CNSR) as in the other time-to-event comparisons. Each person enters as a Kaplan-Meier pseudo-observation of his arm, so the estimate assumes censoring does not depend on the covariates within an arm (the result states that as a premise); a tau beyond the follow-up of either arm is a not-estimable result."
+      ],
       "rows": [
         {
           "path": "covariates",
@@ -3991,10 +4039,33 @@
           "fieldRole": "research_fact"
         },
         {"path":"treatmentColumn","type":"string","maxLength":64,"role":"column","default":"arm","fieldRole":"defaultable"},
-        {"path":"outcomeColumn","type":"string","maxLength":64,"role":"column","default":"y","fieldRole":"defaultable"},
+        {
+          "path": "outcomeColumn",
+          "type": "string",
+          "maxLength": 64,
+          "role": "column",
+          "default": "y",
+          "when": [{"path":"endpoint.type","notIn":["time_to_event"]}],
+          "fieldRole": "defaultable"
+        },
         {"path":"endpoint","type":"object","required":true},
         {"path":"endpoint.type","type":"string","values":["continuous","binary","time_to_event"],"required":true,"fieldRole":"defaultable"},
         {"path":"estimand","type":"string","values":["ATT"],"default":"ATT","fieldRole":"defaultable"},
+        {"path":"tau","type":"number","gt":0,"unit":"time units","required":true,"when":[{"path":"endpoint.type","in":["time_to_event"]}],"fieldRole":"research_fact"},
+        {
+          "path": "summary",
+          "type": "string",
+          "values": ["rmst","survival"],
+          "default": "rmst",
+          "when": [{"path":"endpoint.type","in":["time_to_event"]}],
+          "fieldRole": "defaultable"
+        },
+        {"path":"timeUnit","type":"string","maxLength":20,"when":[{"path":"endpoint.type","in":["time_to_event"]}],"fieldRole":"defaultable"},
+        {"path":"parameterCode","type":"string","maxLength":64,"when":[{"path":"endpoint.type","in":["time_to_event"]}],"fieldRole":"defaultable"},
+        {"path":"trim","type":"object"},
+        {"path":"trim.rule","type":"string","values":["fixed","crump"],"required":true,"within":"trim","fieldRole":"defaultable"},
+        {"path":"trim.lower","type":"number","gt":0,"lt":0.5,"required":true,"within":"trim","when":[{"path":"trim.rule","in":["fixed"]}],"fieldRole":"research_fact"},
+        {"path":"trim.upper","type":"number","gt":0.5,"lt":1,"within":"trim","when":[{"path":"trim.rule","in":["fixed"]}],"fieldRole":"defaultable"},
         {"path":"cohortRules","type":"list","count":{"min":1,"max":100},"items":{"type":"object"},"fieldRole":"defaultable"},
         {"path":"cohortRules[].name","type":"string","minLength":1,"maxLength":80,"required":true,"within":"cohortRules","fieldRole":"research_fact"},
         {"path":"cohortRules[].rule","type":"rule","required":true,"within":"cohortRules","fieldRole":"research_fact"},
@@ -4008,6 +4079,10 @@
         {
           "label": "doubly robust, binary outcome",
           "scenario": {"covariates":["age","male"],"treatmentColumn":"arm","outcomeColumn":"response","endpoint":{"type":"binary"}}
+        },
+        {
+          "label": "doubly robust, restricted mean survival time to 24 months",
+          "scenario": {"covariates":["age","male"],"treatmentColumn":"arm","endpoint":{"type":"time_to_event"},"tau":24,"summary":"rmst","timeUnit":"months"}
         }
       ]
     },
@@ -4369,6 +4444,384 @@
             "visits": [0,3,6,9,12],
             "truth": {"intercept":50,"slope":-0.4,"effect":-0.2,"sd":3,"randomEffects":{"sdIntercept":6,"sdSlope":0.3,"correlation":-0.2}},
             "dropoutPerVisit": 0.1
+          }
+        }
+      ]
+    },
+    "comparator.bias_analysis": {
+      "endpoints": [],
+      "notes": [
+        "It answers \"how large a shift from an unmeasured confounder would turn this conclusion, and what would the effect be if the bias is what I believe\". The input is an estimate and its interval: scale (hazard_ratio, risk_ratio, odds_ratio or difference), estimate, and either lower and upper (the limits as published) or se (the standard error of the log ratio, or of the difference). On a saved comparison, name it (subjectId) and leave the estimate out: the platform takes the estimate and interval from its result; never copy a number from a result into the scenario.",
+        "Every bias is the one that exaggerates the observed effect: a ratio of at least 1 (an amount of at least 0 on the difference scale) that moves the estimate toward the null when removed, on whichever side of the null the estimate is. The tipping bias (the bias that brings the interval's nearer limit to the null, and the one that brings the estimate there) is always computed. shiftedNull { biases: [...] } tests the effect against stated biases (the EU HTA guideline's shifted null hypothesis). The tipping confounder is a binary confounder with outcome association gamma (confounderTipping.associations, default 1.5, 2, 3, 5 on a ratio scale; there is no default on the difference scale) that is rarer in one arm, with prevalence baselinePrevalence there (default 0: the smallest prevalence difference that can tip the estimate); the result names the arm that carries more of it and the prevalence it needs, and gives the standardised mean difference of a normal confounder.",
+        "probabilistic is the analysis with stated distributions: either bias (the exaggerating bias itself: constant, uniform, triangular, normal on the log scale of a ratio, lognormal with a median and sdlog) or confounder (exposedPrevalence, unexposedPrevalence, association: constant, uniform, triangular, and lognormal for the association). The ranges are the person's or the literature's: ask for them or read them from a source, never invent them. Each draw removes its bias from the estimate (systematic error only), and a second pass adds the sampling error (combined uncertainty). Defaults are 100000 draws (replicates raises it); the median and the 2.5 and 97.5 percentiles carry their Monte-Carlo error. A stand-alone call (no subjectId) with a stated estimate files its own comparison."
+      ],
+      "rows": [
+        {"path":"scale","type":"string","values":["hazard_ratio","risk_ratio","odds_ratio","difference"],"required":true,"fieldRole":"defaultable"},
+        {"path":"estimate","type":"number","required":true,"fieldRole":"research_fact"},
+        {"path":"lower","type":"number","fieldRole":"research_fact"},
+        {"path":"upper","type":"number","fieldRole":"research_fact"},
+        {"path":"se","type":"number","gt":0,"fieldRole":"research_fact"},
+        {"path":"confidenceLevel","type":"number","gt":0.5,"lt":1,"default":0.95,"fieldRole":"defaultable"},
+        {"path":"shiftedNull","type":"object"},
+        {
+          "path": "shiftedNull.biases",
+          "type": "list",
+          "count": {"min":1,"max":20},
+          "items": {"type":"number","min":0},
+          "required": true,
+          "within": "shiftedNull",
+          "fieldRole": "research_fact"
+        },
+        {"path":"confounderTipping","type":"object"},
+        {
+          "path": "confounderTipping.associations",
+          "type": "list",
+          "count": {"min":1,"max":20},
+          "items": {"type":"number"},
+          "within": "confounderTipping",
+          "fieldRole": "defaultable"
+        },
+        {"path":"confounderTipping.baselinePrevalence","type":"number","min":0,"lt":1,"within":"confounderTipping","fieldRole":"defaultable"},
+        {"path":"probabilistic","type":"object"},
+        {"path":"probabilistic.bias","type":"object","within":"probabilistic"},
+        {
+          "path": "probabilistic.bias.family",
+          "type": "string",
+          "values": ["constant","uniform","triangular","normal","lognormal"],
+          "required": true,
+          "within": "probabilistic.bias",
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "probabilistic.bias.value",
+          "type": "number",
+          "required": true,
+          "within": "probabilistic.bias",
+          "variant": {"on":"probabilistic.bias.family","is":["constant"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "probabilistic.bias.min",
+          "type": "number",
+          "required": true,
+          "within": "probabilistic.bias",
+          "variant": {"on":"probabilistic.bias.family","is":["uniform","triangular"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "probabilistic.bias.max",
+          "type": "number",
+          "required": true,
+          "within": "probabilistic.bias",
+          "variant": {"on":"probabilistic.bias.family","is":["uniform","triangular"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "probabilistic.bias.mode",
+          "type": "number",
+          "required": true,
+          "within": "probabilistic.bias",
+          "variant": {"on":"probabilistic.bias.family","is":["triangular"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "probabilistic.bias.mean",
+          "type": "number",
+          "required": true,
+          "within": "probabilistic.bias",
+          "variant": {"on":"probabilistic.bias.family","is":["normal"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "probabilistic.bias.sd",
+          "type": "number",
+          "gt": 0,
+          "required": true,
+          "within": "probabilistic.bias",
+          "variant": {"on":"probabilistic.bias.family","is":["normal"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "probabilistic.bias.median",
+          "type": "number",
+          "gt": 0,
+          "required": true,
+          "within": "probabilistic.bias",
+          "variant": {"on":"probabilistic.bias.family","is":["lognormal"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "probabilistic.bias.sdlog",
+          "type": "number",
+          "gt": 0,
+          "required": true,
+          "within": "probabilistic.bias",
+          "variant": {"on":"probabilistic.bias.family","is":["lognormal"]},
+          "fieldRole": "research_fact"
+        },
+        {"path":"probabilistic.confounder","type":"object","within":"probabilistic"},
+        {"path":"probabilistic.confounder.exposedPrevalence","type":"object","required":true,"within":"probabilistic.confounder"},
+        {
+          "path": "probabilistic.confounder.exposedPrevalence.family",
+          "type": "string",
+          "values": ["constant","uniform","triangular"],
+          "required": true,
+          "within": "probabilistic.confounder",
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "probabilistic.confounder.exposedPrevalence.value",
+          "type": "number",
+          "required": true,
+          "within": "probabilistic.confounder",
+          "variant": {"on":"probabilistic.confounder.exposedPrevalence.family","is":["constant"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "probabilistic.confounder.exposedPrevalence.min",
+          "type": "number",
+          "required": true,
+          "within": "probabilistic.confounder",
+          "variant": {"on":"probabilistic.confounder.exposedPrevalence.family","is":["uniform","triangular"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "probabilistic.confounder.exposedPrevalence.max",
+          "type": "number",
+          "required": true,
+          "within": "probabilistic.confounder",
+          "variant": {"on":"probabilistic.confounder.exposedPrevalence.family","is":["uniform","triangular"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "probabilistic.confounder.exposedPrevalence.mode",
+          "type": "number",
+          "required": true,
+          "within": "probabilistic.confounder",
+          "variant": {"on":"probabilistic.confounder.exposedPrevalence.family","is":["triangular"]},
+          "fieldRole": "research_fact"
+        },
+        {"path":"probabilistic.confounder.unexposedPrevalence","type":"object","required":true,"within":"probabilistic.confounder"},
+        {
+          "path": "probabilistic.confounder.unexposedPrevalence.family",
+          "type": "string",
+          "values": ["constant","uniform","triangular"],
+          "required": true,
+          "within": "probabilistic.confounder",
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "probabilistic.confounder.unexposedPrevalence.value",
+          "type": "number",
+          "required": true,
+          "within": "probabilistic.confounder",
+          "variant": {"on":"probabilistic.confounder.unexposedPrevalence.family","is":["constant"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "probabilistic.confounder.unexposedPrevalence.min",
+          "type": "number",
+          "required": true,
+          "within": "probabilistic.confounder",
+          "variant": {"on":"probabilistic.confounder.unexposedPrevalence.family","is":["uniform","triangular"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "probabilistic.confounder.unexposedPrevalence.max",
+          "type": "number",
+          "required": true,
+          "within": "probabilistic.confounder",
+          "variant": {"on":"probabilistic.confounder.unexposedPrevalence.family","is":["uniform","triangular"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "probabilistic.confounder.unexposedPrevalence.mode",
+          "type": "number",
+          "required": true,
+          "within": "probabilistic.confounder",
+          "variant": {"on":"probabilistic.confounder.unexposedPrevalence.family","is":["triangular"]},
+          "fieldRole": "research_fact"
+        },
+        {"path":"probabilistic.confounder.association","type":"object","required":true,"within":"probabilistic.confounder"},
+        {
+          "path": "probabilistic.confounder.association.family",
+          "type": "string",
+          "values": ["constant","uniform","triangular","normal","lognormal"],
+          "required": true,
+          "within": "probabilistic.confounder",
+          "fieldRole": "defaultable"
+        },
+        {
+          "path": "probabilistic.confounder.association.value",
+          "type": "number",
+          "required": true,
+          "within": "probabilistic.confounder",
+          "variant": {"on":"probabilistic.confounder.association.family","is":["constant"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "probabilistic.confounder.association.min",
+          "type": "number",
+          "required": true,
+          "within": "probabilistic.confounder",
+          "variant": {"on":"probabilistic.confounder.association.family","is":["uniform","triangular"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "probabilistic.confounder.association.max",
+          "type": "number",
+          "required": true,
+          "within": "probabilistic.confounder",
+          "variant": {"on":"probabilistic.confounder.association.family","is":["uniform","triangular"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "probabilistic.confounder.association.mode",
+          "type": "number",
+          "required": true,
+          "within": "probabilistic.confounder",
+          "variant": {"on":"probabilistic.confounder.association.family","is":["triangular"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "probabilistic.confounder.association.mean",
+          "type": "number",
+          "required": true,
+          "within": "probabilistic.confounder",
+          "variant": {"on":"probabilistic.confounder.association.family","is":["normal"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "probabilistic.confounder.association.sd",
+          "type": "number",
+          "gt": 0,
+          "required": true,
+          "within": "probabilistic.confounder",
+          "variant": {"on":"probabilistic.confounder.association.family","is":["normal"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "probabilistic.confounder.association.median",
+          "type": "number",
+          "gt": 0,
+          "required": true,
+          "within": "probabilistic.confounder",
+          "variant": {"on":"probabilistic.confounder.association.family","is":["lognormal"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "probabilistic.confounder.association.sdlog",
+          "type": "number",
+          "gt": 0,
+          "required": true,
+          "within": "probabilistic.confounder",
+          "variant": {"on":"probabilistic.confounder.association.family","is":["lognormal"]},
+          "fieldRole": "research_fact"
+        }
+      ],
+      "rules": [
+        {"kind":"exactlyOne","keys":["probabilistic.bias","probabilistic.confounder"]},
+        {"kind":"exactlyOne","keys":["lower","se"]},
+        {"kind":"requires","key":"lower","needs":["upper"]},
+        {"kind":"requires","key":"upper","needs":["lower"]}
+      ],
+      "examples": [
+        {
+          "label": "how large a bias, and what confounder, turns a hazard ratio of 0.70 (95% interval 0.50 to 0.98): the tipping bias and the tipping confounder",
+          "scenario": {"scale":"hazard_ratio","estimate":0.7,"lower":0.5,"upper":0.98}
+        },
+        {
+          "label": "the same estimate tested against stated biases (the shifted null), with a probabilistic analysis of a confounder that is twice as common in the treated",
+          "scenario": {
+            "scale": "hazard_ratio",
+            "estimate": 0.7,
+            "lower": 0.5,
+            "upper": 0.98,
+            "shiftedNull": {"biases":[1.1,1.25,1.5]},
+            "probabilistic": {
+              "confounder": {
+                "exposedPrevalence": {"family":"triangular","min":0.3,"mode":0.4,"max":0.5},
+                "unexposedPrevalence": {"family":"triangular","min":0.1,"mode":0.2,"max":0.3},
+                "association": {"family":"lognormal","median":1.8,"sdlog":0.2}
+              }
+            }
+          }
+        }
+      ]
+    },
+    "comparator.stc": {
+      "endpoints": ["continuous","binary"],
+      "notes": [
+        "It needs the patients of one trial (the subject table: covariates, the arm column, the outcome) and the published summary of the other: aggregateCovariates, one row per covariate (mean and sd for a continuous one, proportion for a 0/1 one), and the trial's result. The outcome model is main effects plus the effect modifiers named in effectModifiers interacting with the arm; name every effect modifier you know of, and the ones you could not use in unadjustedEffectModifiers. The covariate distribution of the published trial is simulated from its margins with the IPD's own correlation unless correlation is stated.",
+        "Anchored (anchored true): the arm column is 1 for the active arm and 0 for the common comparator, and aggregateEstimate is the other trial's contrast of its active arm against the same comparator on the link scale (a log odds ratio for logit, a log risk ratio for log, a difference for identity). Unanchored: only the active arm is modelled (treatmentColumn selects arm 1) and aggregateOutcome is the other trial's outcome on its OWN scale with its standard error; anchored false (the default) has no common comparator, so the comparison is unbiased only if every prognostic factor and every effect modifier is among the matched covariates; the result states that as its premise (无锚定：假定所有预后因子和效应修饰因子都已调整). Name the effect modifiers you could not match on in unadjustedEffectModifiers instead of leaving it empty, and report the number as an unanchored comparison, never as an adjusted treatment effect.",
+        "link defaults to identity for a continuous outcome and logit for a binary one. The result is the marginal effect in the published trial's population; the conventional STC (conditional, covariates centred at the published means) is reported beside it."
+      ],
+      "rows": [
+        {
+          "path": "covariates",
+          "type": "list",
+          "count": {"min":1,"max":100},
+          "items": {"type":"string","maxLength":64,"role":"column"},
+          "unique": true,
+          "required": true,
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "effectModifiers",
+          "type": "list",
+          "count": {"min":1,"max":100},
+          "items": {"type":"string","maxLength":64,"role":"column"},
+          "unique": true,
+          "fieldRole": "defaultable"
+        },
+        {"path":"aggregateCovariates","type":"list","count":{"min":1,"max":100},"items":{"type":"object"},"required":true,"fieldRole":"research_fact"},
+        {"path":"aggregateCovariates[].variable","type":"string","maxLength":64,"role":"column","required":true,"fieldRole":"research_fact"},
+        {"path":"aggregateCovariates[].label","type":"string","maxLength":80,"fieldRole":"defaultable"},
+        {"path":"aggregateCovariates[].mean","type":"number","fieldRole":"research_fact"},
+        {"path":"aggregateCovariates[].sd","type":"number","gt":0,"fieldRole":"research_fact"},
+        {"path":"aggregateCovariates[].proportion","type":"number","min":0,"max":1,"fieldRole":"research_fact"},
+        {"path":"aggregateCovariates[].proportions","type":"list","count":{"min":2,"max":50},"items":{"type":"number","min":0,"max":1},"fieldRole":"research_fact"},
+        {"path":"aggregateCovariates[].levels","type":"list","count":{"min":2,"max":50},"items":{"type":"string","maxLength":64},"fieldRole":"defaultable"},
+        {"path":"aggregateCovariates[].min","type":"number","nullable":true,"fieldRole":"defaultable"},
+        {"path":"aggregateCovariates[].max","type":"number","nullable":true,"fieldRole":"defaultable"},
+        {"path":"aggregateCovariates[].distribution","type":"string","values":["normal","lognormal"],"default":"normal","fieldRole":"defaultable"},
+        {"path":"correlation","type":"matrix","min":-1,"max":1,"size":"covariates","fieldRole":"defaultable"},
+        {"path":"treatmentColumn","type":"string","maxLength":64,"role":"column","default":"arm","fieldRole":"defaultable"},
+        {"path":"outcomeColumn","type":"string","maxLength":64,"role":"column","default":"y","fieldRole":"defaultable"},
+        {"path":"endpoint","type":"object","required":true},
+        {"path":"endpoint.type","type":"string","values":["continuous","binary","time_to_event"],"required":true,"fieldRole":"defaultable"},
+        {"path":"anchored","type":"boolean","default":false,"fieldRole":"defaultable"},
+        {"path":"link","type":"string","values":["identity","log","logit"],"fieldRole":"defaultable"},
+        {"path":"aggregateEstimate","type":"number","unit":"link scale","required":true,"when":[{"path":"anchored","in":["true"]}],"fieldRole":"research_fact"},
+        {
+          "path": "aggregateOutcome",
+          "type": "number",
+          "unit": "the outcome's own scale",
+          "required": true,
+          "when": [{"path":"anchored","notIn":["true"]}],
+          "fieldRole": "research_fact"
+        },
+        {"path":"aggregateSe","type":"number","gt":0,"required":true,"fieldRole":"research_fact"},
+        {"path":"size","type":"integer","min":1000,"max":200000,"default":10000,"fieldRole":"defaultable"},
+        {"path":"unadjustedEffectModifiers","type":"list","count":{"min":0,"max":50},"items":{"type":"string","maxLength":80},"fieldRole":"defaultable"}
+      ],
+      "rules": [
+        {"kind":"exactlyOne","keys":["aggregateCovariates[].proportion","aggregateCovariates[].mean","aggregateCovariates[].proportions"]},
+        {"kind":"requires","key":"aggregateCovariates[].mean","needs":["aggregateCovariates[].sd"]},
+        {"kind":"requires","key":"aggregateCovariates[].levels","needs":["aggregateCovariates[].proportions"]}
+      ],
+      "examples": [
+        {
+          "label": "an anchored comparison on a binary outcome: the aggregate trial's log odds ratio against the common comparator is -0.35 (standard error 0.12)",
+          "scenario": {
+            "covariates": ["age","male"],
+            "effectModifiers": ["age"],
+            "aggregateCovariates": [{"variable":"age","mean":62,"sd":9},{"variable":"male","proportion":0.55}],
+            "endpoint": {"type":"binary"},
+            "anchored": true,
+            "aggregateEstimate": -0.35,
+            "aggregateSe": 0.12,
+            "outcomeColumn": "response"
           }
         }
       ]

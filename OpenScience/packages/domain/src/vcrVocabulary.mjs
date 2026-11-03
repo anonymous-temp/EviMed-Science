@@ -715,6 +715,8 @@ export const VCR_NOT_ESTIMABLE_RULES = frozen([
   // model fitted on the external controls. When either cannot be fitted (collinear covariates, fewer controls than the
   // model has coefficients) there is no estimate.
   'nuisance_model_not_estimable',
+  // Propensity trimming (algorithm round C14) removed so many people that a group has fewer than two left: nothing is weighted.
+  'trimmed_population_too_small',
   // --- robustness methods (2026-10-04): negative controls, tipping point, prognostic adjustment ---
   // No negative control produced an estimate (every one has an arm with no event, or none was supplied in a usable form).
   'negative_controls_not_estimable',
@@ -737,6 +739,7 @@ export const VCR_NOT_ESTIMABLE_RULE_LABELS_ZH = Object.freeze({
   map_prior_conflict: 'MAP 先验与当前数据冲突检验越界',
   too_few_events: '某一组没有事件，或 Cox 模型没有收敛（事件太少，风险比不存在）',
   nuisance_model_not_estimable: '倾向性模型或结局模型拟合不出来（协变量共线，或外部对照的人数不足以拟合结局模型）',
+  trimmed_population_too_small: '按倾向评分修剪之后，某一组剩下不到两个人，没有可以加权的人群',
   negative_controls_not_estimable: '没有一个阴性对照结局能得出估计（每个都有一组没有事件，或没有提供可用的数据）',
   primary_analysis_not_estimable: '这项分析本身的主要估计不存在（某一组没有事件或没有人、模型没有收敛、预后评分没有变异）',
   data_tier_insufficient: '现有数据档位不足以走这条对照路线',
@@ -866,6 +869,8 @@ export const VCR_JOB_KINDS = frozen([
   'population_check',
   // --- appended (2026-11-03): the confirmatory designs (algorithm round T2-T6) ---
   'design_confirmatory',
+  // --- appended (2026-11-03): quantitative bias analysis of an estimate and the G-computation form of the simulated treatment comparison (algorithm round C1, C2, C9) ---
+  'bias_analysis', 'stc_comparator',
   // --- appended (2026-11-01): the batch reading of patient records for the criteria's facts (remediation plan D4) ---
   'match_extract',
   'forecast_trajectories', 'evaluate_forecast', 'compare_forecasts', 'benchmark_trial_effect',
@@ -885,7 +890,7 @@ export const VCR_JOB_KIND_STEPS = Object.freeze({
   weight_comparator: 'comparator', propensity_weight_comparator: 'comparator', maic_comparator: 'comparator', evalue: 'comparator',
   rmst: 'comparator', weighted_cox_comparator: 'comparator', maic_time_to_event_comparator: 'comparator', aipw_comparator: 'comparator',
   covariate_set_comparator: 'comparator', negative_control_comparator: 'comparator', tipping_point: 'comparator',
-  prognostic_adjustment_comparator: 'comparator',
+  prognostic_adjustment_comparator: 'comparator', bias_analysis: 'comparator', stc_comparator: 'comparator',
   design_analytic: 'trial', design_simulation: 'trial', design_confirmatory: 'trial', design_grid: 'trial', assurance: 'trial', procova: 'trial', accrual_forecast: 'trial',
   match_criteria: 'matching', match_extract: 'matching',
 })
@@ -1173,8 +1178,8 @@ export const VCR_PROGNOSTIC_QUALIFICATION_LABEL_ZH = '二分类和事件时间�
  * the missing outcomes. A stress test that cannot be computed (no control has an estimate) leaves the comparison as estimable as it was
  * but limited, and says which analysis is missing; the stage's own result stays whole under `diagnostics.stageResults`.
  */
-export const VCR_ROBUSTNESS_STAGES = frozen(['negative_control', 'tipping_point'])
-export const VCR_ROBUSTNESS_STAGE_LABELS_ZH = Object.freeze({ negative_control: '阴性对照结局', tipping_point: '缺失结局的临界点分析' })
+export const VCR_ROBUSTNESS_STAGES = frozen(['negative_control', 'tipping_point', 'bias_analysis'])
+export const VCR_ROBUSTNESS_STAGE_LABELS_ZH = Object.freeze({ negative_control: '阴性对照结局', tipping_point: '缺失结局的临界点分析', bias_analysis: '未测混杂的偏倚分析' })
 // --- end robustness methods ---
 export const VCR_MAP_CONFLICT_BOUND = 0.01
 export const VCR_RECONSTRUCTION_TOLERANCE = Object.freeze({
