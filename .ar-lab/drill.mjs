@@ -134,7 +134,7 @@ class Person {
     if (!web) { this.drill.note("capture", { label: this.label, ok: false, why: "no web container" }); return; }
     const found = text((await shell("docker", ["exec", web, "sh", "-c", `find /data/users -maxdepth 3 -type d -name ${this.projectId} | head -1`])).stdout).trim();
     if (!found) { this.drill.note("capture", { label: this.label, ok: false, why: "no project dir" }); return; }
-    const packed = await shell("docker", ["exec", web, "sh", "-c", `cd '${found}' && find . -type f -size -2048k -not -path './.dsh*' -not -path '*/node_modules/*' -not -path './.cache/*' | head -600 | tar -cf - -T -`], { timeoutMs: 180_000 });
+    const packed = await shell("docker", ["exec", web, "sh", "-c", `cd '${found}' && find ./.openscience ./workspace -type f -size -2048k -not -path '*/node_modules/*' -not -name '*.token' -not -name '.credentials*' | head -600 | tar -cf - -T -`], { timeoutMs: 180_000 });
     writeFileSync(`${this.drill.dir}/${this.label}-project.tar`, packed.stdout);
     const list = await this.api("GET", "/api/agent-runs").catch(() => null);
     writeFileSync(`${this.drill.dir}/${this.label}-runs.json`, JSON.stringify({ runs: list?.body?.data ?? null, costs: [...this.costs.entries()] }, null, 1));
@@ -143,13 +143,32 @@ class Person {
       const peak = await shell("docker", ["exec", c.id, "sh", "-c", "cat /sys/fs/cgroup/memory.peak 2>/dev/null; cat /sys/fs/cgroup/memory.events 2>/dev/null"], { timeoutMs: 15_000 });
       this.drill.note("container-end", { label: this.label, ...c, memory: text(peak.stdout).slice(0, 300) });
     } else this.drill.note("container-end", { label: this.label, gone: true });
-    const words = await shell("docker", ["exec", web, "sh", "-c", `cd '${found}' && for f in factors.md notes.md summary.md theo-factors.md theo-notes.md theo-summary.md; do if [ -f "$f" ]; then printf '%s %s ' "$f" "$(wc -c < "$f")"; grep -c '^## ' "$f" || true; fi; done; grep -c . .openscience/runs.jsonl 2>/dev/null; ls -a | head -40`], { timeoutMs: 30_000 });
+    const words = await shell("docker", ["exec", web, "sh", "-c", `cd '${found}/workspace' && for f in factors.md notes.md summary.md theo-factors.md theo-notes.md theo-summary.md; do if [ -f "$f" ]; then printf '%s %s ' "$f" "$(wc -c < "$f")"; grep -c '^## ' "$f" || true; fi; done; ls -a | head -40; ls -a .loopx 2>/dev/null | head -12`], { timeoutMs: 30_000 });
     this.drill.note("workspace", { label: this.label, listing: text(words.stdout).slice(0, 1600) });
   }
-  async close() { await this.capture().catch((error) => this.drill.note("capture-failed", { label: this.label, why: String(error?.message ?? error).slice(0, 200) })); const verdict = await this.account.close(); this.drill.note("account", { label: this.label, ...verdict }); return verdict; }
+  async close() { if (this.closed) return null; this.closed = true; await this.capture().catch((error) => this.drill.note("capture-failed", { label: this.label, why: String(error?.message ?? error).slice(0, 200) })); const verdict = await this.account.close(); this.drill.note("account", { label: this.label, ...verdict }); return verdict; }
 }
 
 const running = (runs) => runs.filter((run) => run.status === "running" || run.status === "queued");
+/** Set a goal; when its first round ends without a tool call (the provider was busy), the goal never began, so set it again and count that. */
+async function establish(drill, person, goal, { tries = 3 } = {}) {
+  let set;
+  const lost = [];
+  for (let attempt = 0; attempt < tries; attempt += 1) {
+    set = await person.setGoal(goal);
+    if (!set.run) break;
+    const ended = await waitFor(drill, person, (runs) => {
+      const row = runs.find((run) => run.id === set.run);
+      if (!row) return null;
+      if (Number(row.observedToolCalls ?? 0) >= 6) return { live: true };
+      return ["running", "queued"].includes(row.status) ? null : { row };
+    }, { capMs: 12 * 60_000, everyMs: 5000, label: "first round began" });
+    if (!ended?.row || Number(ended.row.observedToolCalls ?? 0) >= 6) break;
+    lost.push({ status: ended.row.status, err: ended.row.errorCode ?? null, tools: ended.row.observedToolCalls ?? null });
+  }
+  drill.fact("firstRoundsLost", lost);
+  return set;
+}
 async function waitFor(drill, person, test, { capMs, everyMs = 5000, label }) {
   const end = Date.now() + capMs;
   for (;;) {
@@ -207,7 +226,7 @@ const DRILL = {
   /** A natural goal: does it continue at all, does it stop. */
   async D01(drill) {
     const person = await drill.person("a");
-    const set = await person.setGoal(G_NATURAL);
+    const set = await establish(drill, person, G_NATURAL);
     drill.fact("setStatus", set.status);
     const end = await watch(drill, person, { ms: 25 * 60_000, quietMs: 5 * 60_000, label: "natural" });
     drill.fact("stoppedByItself", end.quiet);
@@ -216,7 +235,7 @@ const DRILL = {
   /** The forced multi-round goal with nothing done to it: the control for everything below, and does it stop after the summary. */
   async D02(drill) {
     const person = await drill.person("a");
-    const set = await person.setGoal(G5);
+    const set = await establish(drill, person, G5);
     drill.fact("setStatus", set.status);
     const end = await watch(drill, person, { ms: 40 * 60_000, quietMs: 5 * 60_000, label: "control" });
     drill.fact("stoppedByItself", end.quiet);
@@ -225,7 +244,7 @@ const DRILL = {
   /** The kernel's container dies in the middle of a round. */
   async D03(drill) {
     const person = await drill.person("a");
-    const set = await person.setGoal(G5);
+    const set = await establish(drill, person, G5);
     const live = await roundRunning(drill, person, set.session, 2);
     drill.fact("killedDuringRound", live?.id ?? null);
     const c = await person.container();
@@ -239,7 +258,7 @@ const DRILL = {
   /** The kernel's container dies between two rounds. */
   async D04(drill) {
     const person = await drill.person("a");
-    const set = await person.setGoal(G5);
+    const set = await establish(drill, person, G5);
     const gap = await gapAfterRound(drill, person, set.session, 2);
     const c = await person.container();
     if (gap && c) await dockerDo(drill, "kill", ["kill", c.id]);
@@ -252,7 +271,7 @@ const DRILL = {
   /** The control plane restarts while a round runs; the runtime stays up. */
   async D05(drill) {
     const person = await drill.person("a");
-    const set = await person.setGoal(G5);
+    const set = await establish(drill, person, G5);
     const live = await roundRunning(drill, person, set.session, 2);
     const web = await webContainer();
     if (live && web) await dockerDo(drill, "restart-web", ["restart", web]);
@@ -268,7 +287,7 @@ const DRILL = {
   /** What a release does: the runtime removed while a round runs, the control plane restarted. */
   async D06(drill) {
     const person = await drill.person("a");
-    const set = await person.setGoal(G5);
+    const set = await establish(drill, person, G5);
     const live = await roundRunning(drill, person, set.session, 2);
     const c = await person.container();
     const web = await webContainer();
@@ -284,7 +303,7 @@ const DRILL = {
   /** A tool script asks for more memory than the container has. */
   async D07(drill) {
     const person = await drill.person("a");
-    const set = await person.setGoal(G_HEAVY);
+    const set = await establish(drill, person, G_HEAVY);
     drill.fact("setStatus", set.status);
     await watch(drill, person, { ms: 25 * 60_000, quietMs: 5 * 60_000, label: "heavy" });
     drill.fact("containerAfter", await person.container());
@@ -294,7 +313,7 @@ const DRILL = {
   /** Stop pressed during a round: does the goal stop, or only the round. */
   async D08(drill) {
     const person = await drill.person("a");
-    const set = await person.setGoal(G5);
+    const set = await establish(drill, person, G5);
     const live = await roundRunning(drill, person, set.session, 2);
     const t = Date.now();
     const answer = live ? await person.api("POST", `/api/agent-runs/${live.id}/cancel`, { body: {} }) : null;
@@ -310,7 +329,7 @@ const DRILL = {
   /** A second goal in the same project while the first is running. */
   async D09(drill) {
     const person = await drill.person("a");
-    const first = await person.setGoal(G5);
+    const first = await establish(drill, person, G5);
     await roundRunning(drill, person, first.session, 2);
     const second = await person.setGoal(G_SECOND);
     drill.fact("secondSet", { status: second.status, code: second.code });
@@ -322,7 +341,7 @@ const DRILL = {
   /** A second goal in the same project after the first has gone quiet. */
   async D10(drill) {
     const person = await drill.person("a");
-    const first = await person.setGoal(G_NATURAL);
+    const first = await establish(drill, person, G_NATURAL);
     await watch(drill, person, { ms: 12 * 60_000, quietMs: 3 * 60_000, label: "first goal" });
     const second = await person.setGoal(G_SECOND);
     drill.fact("secondSet", { status: second.status, code: second.code });
@@ -334,7 +353,7 @@ const DRILL = {
   /** A direction during a round, through the route the page's 补充 uses. */
   async D11(drill) {
     const person = await drill.person("a");
-    const set = await person.setGoal(G5);
+    const set = await establish(drill, person, G5);
     const live = await roundRunning(drill, person, set.session, 2);
     const answer = live ? await person.api("POST", `/api/agent-runs/${live.id}/steer`, { body: { text: "再加一个因素：口服避孕药对咖啡因半衰期的影响，也要写进 notes.md。" } }) : null;
     drill.fact("steer", { status: answer?.status ?? null, code: answer?.body?.code ?? null });
@@ -344,7 +363,7 @@ const DRILL = {
   /** A message typed in the gap between rounds. */
   async D12(drill) {
     const person = await drill.person("a");
-    const set = await person.setGoal(G5);
+    const set = await establish(drill, person, G5);
     const gap = await gapAfterRound(drill, person, set.session, 2);
     const words = gap ? await person.say_("顺便把 summary.md 写成英文。", set.session) : null;
     drill.fact("message", { status: words?.status ?? null, code: words?.code ?? null, tookMs: words?.answeredInMs ?? null });
@@ -355,8 +374,7 @@ const DRILL = {
   async D13(drill) {
     const a = await drill.person("a");
     const b = await drill.person("b");
-    const goalA = await a.setGoal(G5);
-    const goalB = await b.setGoal(G5);
+    const [goalA, goalB] = await Promise.all([establish(drill, a, G5), establish(drill, b, G5)]);
     drill.fact("goals", [goalA.status, goalB.status]);
     await roundRunning(drill, a, goalA.session, 2);
     await b.runs();
@@ -386,7 +404,7 @@ async function runDrill(name) {
     drill.facts.outcome = error instanceof CapReached ? "cap" : "error";
     drill.note("drill-stopped", { why: String(error?.message ?? error).slice(0, 400) });
   }
-  for (const person of drill.people) if (!person.closed) { person.closed = true; await person.close().catch(() => {}); }
+  for (const person of drill.people) await person.close().catch(() => {});
   drill.facts.spend = drill.spend();
   drill.facts.finishedAt = new Date().toISOString();
   writeFileSync(`${drill.dir}/facts.json`, JSON.stringify(drill.facts, null, 1));
