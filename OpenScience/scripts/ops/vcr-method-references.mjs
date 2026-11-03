@@ -267,6 +267,13 @@ export const NUMERIC_REFERENCES = {
   N94c: { methods: ['comparator.borrowing'], anchors: ['identical(vcr_output_hash(r1), vcr_output_hash(r2)) && abs(g_chk - 0.99) < 1e-12'] },
   N94d: { methods: ['comparator.borrowing'], anchors: ['all(c(drift$code, over$code, tiny$code) == "scenario_value_invalid") && identical(schema$code, "scenario_field_missing")'] },
 
+  // model.survival_fit (spline): flexsurv::flexsurvspline for the fit, flexsurv's own survival, quantile and restricted-mean functions and numDeriv's Jacobian for the delta-method errors, a known log-logistic truth
+  N95a: { methods: ['model.survival_fit'], anchors: ['ref <- flexsurv::flexsurvspline(survival::Surv(time, status) ~ 1, data = d, k = k, scale = "hazard")', 'above <- above && mine$logLikelihood >= ref$loglik - 1e-9'] },
+  N95b: { methods: ['model.survival_fit'], anchors: ['surv_ref <- flexsurv::psurvspline(horizons, gamma = g, knots = kn, scale = "hazard", lower.tail = FALSE)', 'J <- numDeriv::jacobian(lh, g); se_h <- sqrt(rowSums((J %*% V) * J)); z <- stats::qnorm(0.975)'] },
+  N95c: { methods: ['model.survival_fit'], anchors: ['truth_s <- function(t) flexsurv::pllogis(t, shape = 2.2, scale = 10, lower.tail = FALSE)', 'err(sp) < 0.01 && err(w) > 0.03'] },
+  N95d: { methods: ['model.survival_fit'], anchors: ['identical(unname(est), c(TRUE, TRUE, FALSE, FALSE, FALSE)) && all(rules == "nuisance_model_not_estimable")'] },
+  N95e: { methods: ['model.survival_fit'], anchors: ['identical(vcr_output_hash(r1), vcr_output_hash(r2))', 'identical(r_old$status, "failed") && "method_version_mismatch" %in% vcr_test_issue_codes(r_old)'] },
+
   // --- the comparator-effect stream's cases (listed so that merging it needs no edit here; inert until the cases exist) ---
   N33a: { methods: ['comparator.weighted_cox'], anchors: ['Cross-software: the weights are WeightIt', 'rel(m(j_ebal, "hazard_ratio"), r_ebal$hr) < 1e-6'] },
   N34a: { methods: ['comparator.maic_time_to_event'], anchors: ['The unanchored vignette: 500 patients of arm A matched', 'abs(m("hazard_ratio_robust")$value - 0.2834780) < 1e-6'] },

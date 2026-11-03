@@ -58,7 +58,8 @@
     "model.survival_fit": {
       "endpoints": [],
       "notes": [
-        "Uses survival::survreg with a fixed intercept-only formula and four closed distributions. It fits a population baseline, not an individual digital twin.",
+        "Uses survival::survreg with a fixed intercept-only formula and four closed distributions, or distribution spline: a Royston-Parmar model of the log cumulative hazard with knots interior knots (0 to 4, default 2; 0 is a Weibull). It fits a population baseline, not an individual digital twin.",
+        "The spline family returns the median, the survival at each horizon and the restricted mean survival time to the LAST horizon, each with a delta-method interval, how many times the longest follow-up each horizon is (a horizon beyond it is an extrapolation along the Weibull-like tail the model implies, not an observation) and the same numbers for 0 to 3 knots: the spread between them is the model-form uncertainty of an extrapolation, which the interval does not include. It fits at least 5 events per parameter; a curve whose hazard would fall is not estimable. It has no design adapter: a spline fit is not a control distribution a trial scenario can use.",
         "Declare and select the source treatment group before using a fit as a control baseline. Never infer exposure across an unobserved trial period. Select exactly one time/event row per observed patient; CNSR is a censor indicator and must use statusEncoding=censor. Reconstructed pseudo-IPD retains its source and omitted reconstruction uncertainty.",
         "Median P10/P50/P90 describe delta-method parameter uncertainty, not patient-time percentiles or trial success probabilities. Baseline scenarios hold fitted shape fixed. Only exponential and Weibull currently have patient/design adapters; other fitted curves remain available. Observed survival-time units must agree with the frozen field map."
       ],
@@ -68,7 +69,8 @@
         {"path":"statusColumn","type":"string","maxLength":64,"role":"column","required":true,"fieldRole":"research_fact"},
         {"path":"statusEncoding","type":"string","values":["event","censor"],"required":true,"fieldRole":"defaultable"},
         {"path":"idColumn","type":"string","maxLength":64,"role":"column","fieldRole":"defaultable"},
-        {"path":"distribution","type":"string","values":["exponential","weibull","lognormal","loglogistic"],"required":true,"fieldRole":"defaultable"},
+        {"path":"distribution","type":"string","values":["exponential","weibull","lognormal","loglogistic","spline"],"required":true,"fieldRole":"defaultable"},
+        {"path":"knots","type":"integer","min":0,"max":4,"default":2,"when":[{"path":"distribution","in":["spline"]}],"fieldRole":"defaultable"},
         {"path":"timeUnit","type":"string","values":["days","weeks","months","years"],"required":true,"fieldRole":"defaultable"},
         {"path":"horizons","type":"list","count":{"min":1,"max":100},"items":{"type":"number","gt":0},"increasing":true,"required":true,"fieldRole":"research_fact"},
         {

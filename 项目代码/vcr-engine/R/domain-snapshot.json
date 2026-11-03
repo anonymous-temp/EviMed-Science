@@ -2,14 +2,18 @@
   "protocolVersion": 1,
   "methods": {
     "model.survival_fit": {
-      "version": "1.0.0",
+      "version": "1.1.0",
       "endpoints": [],
       "crossChecks": [
         "independent base-R likelihood optimization",
         "flexsurv distribution and delta-method output oracle",
-        "closed-form censored exponential likelihood"
+        "closed-form censored exponential likelihood",
+        "flexsurv::flexsurvspline (the spline family: knots, log likelihood, AIC, coefficients, the survival, median and restricted mean beyond the data, and their delta-method errors from the package's own covariance)"
       ],
-      "modelTier": "literature"
+      "modelTier": "literature",
+      "compatibleVersions": [
+        "1.0.0"
+      ]
     },
     "model.prognostic_apply": {
       "version": "1.1.0",
@@ -995,9 +999,22 @@
             "exponential",
             "weibull",
             "lognormal",
-            "loglogistic"
+            "loglogistic",
+            "spline"
           ],
           "req": true
+        },
+        "knots": {
+          "t": "integer",
+          "min": 0,
+          "max": 4,
+          "default": 2,
+          "when": {
+            "path": "distribution",
+            "in": [
+              "spline"
+            ]
+          }
         },
         "timeUnit": {
           "t": "string",

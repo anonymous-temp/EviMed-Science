@@ -744,7 +744,9 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
   'model.survival_fit': object({
     inputId: req(INPUT_REF), timeColumn: req(COLUMN), statusColumn: req(COLUMN),
     statusEncoding: req(string({ values: ['event', 'censor'] })), idColumn: COLUMN,
-    distribution: req(string({ values: ['exponential', 'weibull', 'lognormal', 'loglogistic'] })),
+    distribution: req(string({ values: ['exponential', 'weibull', 'lognormal', 'loglogistic', 'spline'] })),
+    // spline (1.1.0): the Royston-Parmar model of the log cumulative hazard with this many interior knots (0 is a Weibull)
+    knots: gated(integer({ min: 0, max: 4, default: 2 }), is('distribution', 'spline')),
     timeUnit: req(string({ values: [...VCR_TIME_UNITS] })),
     horizons: req(array(number({ gt: 0 }), { min: 1, max: 100, increasing: true })),
     sourceCondition: string({ values: ['unspecified', 'control', 'natural_history', 'standard_care'], default: 'unspecified' }),

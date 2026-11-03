@@ -1266,6 +1266,8 @@ vcr_job_at_least <- function(job, from) {
     if (identical(job[["method"]],"patients.longitudinal") && .vcrp_uses_longitudinal_beyond_1_1_0(job$scenario) && utils::compareVersion(job$methodVersion,"1.2.0")<0) return(FALSE)
     # and 1.5.0 the modestly weighted test
     if (job[["method"]] %in% c("design.simulate","design.grid") && .vcrp_uses_weighted_beyond_1_4_0(job$scenario) && utils::compareVersion(job$methodVersion,"1.5.0")<0) return(FALSE)
+    # and model.survival_fit 1.1.0 the spline family
+    if (identical(job[["method"]], "model.survival_fit") && (identical(.vcrp_get(job$scenario, "distribution"), "spline") || !is.null(.vcrp_get(job$scenario, "knots")))) return(FALSE)
     # and model.prognostic_apply 1.1.0 added the local calibration against the outcome the table holds
     if (identical(job[["method"]],"model.prognostic_apply") && !is.null(.vcrp_get(job$scenario,"calibration"))) return(FALSE)
     # and design.confirmatory 1.1.0 the promising zone and the event-time selection and enrichment designs

@@ -99,7 +99,9 @@ const SIMULATE_RELEASES = Object.freeze([Object.freeze({
  * itself, and `intendedUseCeilingFor` reads it.
  */
 export const VCR_ENGINE_METHODS = Object.freeze({
-  'model.survival_fit': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['independent base-R likelihood optimization', 'flexsurv distribution and delta-method output oracle', 'closed-form censored exponential likelihood']), modelTier: 'literature' },
+  // 1.1.0 (algorithm round C13): the `spline` family, a Royston-Parmar model of the log cumulative hazard written in R, with the median, the restricted mean and the
+  // survival beyond the data, and how far beyond the data each lies. flexsurv is the check in CI and is never called from the engine.
+  'model.survival_fit': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen([]), crossChecks: frozen(['independent base-R likelihood optimization', 'flexsurv distribution and delta-method output oracle', 'closed-form censored exponential likelihood', 'flexsurv::flexsurvspline (the spline family: knots, log likelihood, AIC, coefficients, the survival, median and restricted mean beyond the data, and their delta-method errors from the package\'s own covariance)']), modelTier: 'literature' },
   'model.prognostic_apply': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['continuous', 'binary', 'time_to_event']), crossChecks: frozen(['closed-form published equation evaluation']), modelTier: 'literature' },
   'profile.snapshot': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen([]), crossChecks: frozen(['every printed figure recomputed from its definition (means, spreads, type-7 quantiles, counts)']), modelTier: null },
   'cohort.build': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen([]), crossChecks: frozen([]), modelTier: null },
@@ -874,6 +876,8 @@ function legacyDesignVersionMatches(job) {
     if (job.method === 'patients.longitudinal' && usesLongitudinalBeyond1_1_0(job.scenario) && !versionAtLeast(job.methodVersion, '1.2.0')) return false
     // and 1.5.0 the modestly weighted test
     if ((job.method === 'design.simulate' || job.method === 'design.grid') && usesWeightedBeyond1_4_0(job.scenario) && !versionAtLeast(job.methodVersion, '1.5.0')) return false
+    // and model.survival_fit 1.1.0 the spline family
+    if (job.method === 'model.survival_fit' && (job.scenario?.distribution === 'spline' || job.scenario?.knots !== undefined)) return false
     // and model.prognostic_apply 1.1.0 added the local calibration against the outcome the table holds
     if (job.method === 'model.prognostic_apply' && job.scenario?.calibration !== undefined) return false
     // and design.confirmatory 1.1.0 the promising zone and the event-time selection and enrichment designs

@@ -6406,6 +6406,43 @@
         },
         "inputs": []
       }
+    },
+    {
+      "name": "fit_survival_model: a Royston-Parmar spline with two interior knots and a horizon beyond the data",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "fit_survival_model",
+        "method": "model.survival_fit",
+        "methodVersion": "1.1.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "inputId": "snp_1:1",
+          "idColumn": "USUBJID",
+          "timeColumn": "AVAL",
+          "statusColumn": "CNSR",
+          "statusEncoding": "censor",
+          "timeUnit": "months",
+          "horizons": [
+            6,
+            12,
+            36
+          ],
+          "distribution": "spline",
+          "knots": 2
+        },
+        "inputs": [
+          {
+            "kind": "snapshot_file",
+            "id": "snp_1:1",
+            "location": "std_1/snp_1/raw1.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      }
     }
   ],
   "invalid": [
@@ -26782,6 +26819,126 @@
       },
       "expected": [
         "scenario_value_invalid@scenario.prior.a0"
+      ]
+    },
+    {
+      "name": "a spline fit is labelled with the release that has it",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "fit_survival_model",
+        "method": "model.survival_fit",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "inputId": "snp_1:1",
+          "idColumn": "USUBJID",
+          "timeColumn": "AVAL",
+          "statusColumn": "CNSR",
+          "statusEncoding": "censor",
+          "timeUnit": "months",
+          "horizons": [
+            6,
+            12,
+            36
+          ],
+          "distribution": "spline",
+          "knots": 2
+        },
+        "inputs": [
+          {
+            "kind": "snapshot_file",
+            "id": "snp_1:1",
+            "location": "std_1/snp_1/raw1.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "method_version_mismatch@methodVersion"
+      ]
+    },
+    {
+      "name": "knots belong to the spline family",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "fit_survival_model",
+        "method": "model.survival_fit",
+        "methodVersion": "1.1.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "inputId": "snp_1:1",
+          "idColumn": "USUBJID",
+          "timeColumn": "AVAL",
+          "statusColumn": "CNSR",
+          "statusEncoding": "censor",
+          "timeUnit": "months",
+          "horizons": [
+            6,
+            12,
+            36
+          ],
+          "distribution": "weibull",
+          "knots": 2
+        },
+        "inputs": [
+          {
+            "kind": "snapshot_file",
+            "id": "snp_1:1",
+            "location": "std_1/snp_1/raw1.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_unknown@scenario.knots"
+      ]
+    },
+    {
+      "name": "a spline has at most four interior knots",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "fit_survival_model",
+        "method": "model.survival_fit",
+        "methodVersion": "1.1.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "inputId": "snp_1:1",
+          "idColumn": "USUBJID",
+          "timeColumn": "AVAL",
+          "statusColumn": "CNSR",
+          "statusEncoding": "censor",
+          "timeUnit": "months",
+          "horizons": [
+            6,
+            12,
+            36
+          ],
+          "distribution": "spline",
+          "knots": 9
+        },
+        "inputs": [
+          {
+            "kind": "snapshot_file",
+            "id": "snp_1:1",
+            "location": "std_1/snp_1/raw1.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.knots"
       ]
     }
   ],
