@@ -46,7 +46,9 @@ Use `container-launch.mjs` with `--name`, `--state`, `--collection`,
 `--docker-client`, and `--budget-dir`. A formal launch additionally requires
 `--paid` and `--deepseek-key-file`; use `--seed-budget` only once to carry earlier
 costs into a fresh durable journal. State, corpus, budget and secret paths must
-remain private. The launcher builds an overlay from an explicit tracked-source
+remain private. The Docker launcher requires an explicit `sourceFormat` on the
+collection manifest. Use `clinicaltrials-xml` for TREC indexes and
+`trialgpt-json` for the prepared SIGIR collection. The launcher builds an overlay from an explicit tracked-source
 allowlist and records the exact image ID. It does not deploy the platform.
 
 The control plane uses a fresh PostgreSQL database and named data volume. It

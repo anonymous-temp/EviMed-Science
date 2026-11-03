@@ -1,6 +1,6 @@
 # EviMed Science versus TrialGPT: platform evaluation protocol
 
-Date: 2026-11-03. Status: integrated product changes committed and pushed; isolated Docker harness under final verification; formal platform benchmark pending.
+Date 2026-11-03. The integrated product and Docker harness were pushed and the first-attempt matching baseline is recorded. The TREC operational probes encountered upstream model failures. See the [baseline results](2026-11-03-evimed-trialgpt-platform-baseline-results.md).
 
 Owner execution amendment (2026-11-03): merge `c180ff7b5` with the current integration line (`origin/codex/release-1102`, `3970e4f8f`) first. Implement missing ranking and a usable frozen-corpus retrieval path, verify locally, commit and push before the paid platform baseline. Production remains the owner's reported November 1 version and is not the baseline. Run a real local DSH kernel. This amendment supersedes any earlier instruction here to benchmark the unmerged feature or count alignment failures as incorrect predictions.
 
@@ -12,8 +12,10 @@ Owner execution amendment (2026-11-03): merge `c180ff7b5` with the current integ
 - [x] Implement source-span alignment with explicit unresolved buckets; the executable policy is frozen with each campaign before inference.
 - [x] Build the local platform driver with throwaway-account lifecycle, automated attribution, patient-specific projects/sessions, and memory extraction disabled.
 - [x] Complete scoped product tests and independent review; commit/push the integrated product candidate without deployment (`3434ff107`, followed by intake fix `aa17e0d66`).
-- [ ] Close the Docker benchmark environment review, commit/push its harness, and verify the exact live instance before formal inference.
-- [ ] Run the real local product baseline at that pushed revision, then record findings and any required repair/retest.
+- [x] Close the Docker environment review and push the harness in `3eee7f765`. Verify the live isolated instance before inference.
+- [x] Record all 53 first attempts and score the 603 aligned conditions. Preserve failed and interrupted attempts and publish the [baseline findings](2026-11-03-evimed-trialgpt-platform-baseline-results.md).
+- [ ] Restore a repeatable TREC end-to-end path and measure all frozen topics. The three initial topics failed before producing a retrieval receipt or saved order.
+- [ ] Fix the semantic and product-completion findings and run a paired comparison on the frozen inputs.
 
 ### Mandatory test hygiene
 
@@ -189,7 +191,7 @@ Prioritize fixes that restore the actual journey: normal intake and routing, ful
 
 Do not introduce benchmark-only reasoning rules into production, prefill expected facts, or flatten all unknown cases into favorable labels to improve the headline. Report reference-policy disagreements without silently altering the score. A higher benchmark score still needs the separate real-record and product-completion evidence.
 
-The integrated candidate and ordinary-text source-intake repair have been committed and pushed. Host operational probes exposed environment, intake and criterion-compilation problems; none is a formal comparative performance result. The next valid E0 must run on the isolated Docker platform path. Clinical-semantic issues observed in diagnostics remain in the remediation backlog and require paired isolated evidence before any E1 claim. Local verification, review, commit and push remain distinct from deployment; deployment is not authorized by this protocol.
+The integrated candidate and ordinary-text source-intake repair have been committed and pushed. Host operational probes exposed environment, intake and criterion-compilation problems; none is a formal comparative performance result. The reported E0 uses the isolated Docker platform path at `3eee7f765`. Clinical-semantic issues observed in diagnostics remain in the remediation backlog and require paired isolated evidence before any E1 claim. Local verification, review, commit and push remain distinct from deployment; deployment is not authorized by this protocol.
 
 ## Sources
 
