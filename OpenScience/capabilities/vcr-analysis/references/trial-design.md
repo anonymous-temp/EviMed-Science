@@ -55,6 +55,18 @@ For these paths, zero-effect scenarios state `responseRate == nullRate` or zero 
 
 **零效应情景平台会自己补**：两臂设计（固定样本或成组序贯）的备择模拟结果出来之后，自动再按“没有真实效应”跑一次，I 类错误和它的蒙特卡洛误差随后补进结果——你在对话里自己排的 `design_simulation` 也一样，你不必为此另写一个设计，也不要等它。单臂、Simon 设计和设计网格不补：要它们的 I 类错误，自己排一个零效应情景的模拟（网格里放一列 `truth.null: true`）。风险比随时间变化或 MaxCombo 的设计没有解析结果（不排 `design_analytic` 和成功把握），功效和 I 类错误都来自模拟，页面上会注明。比较设计和真值的组合用设计网格，`dimensions.designs` 列出设计，`truthScenarios` 列出真值情景，每一格的数字是引擎填的：
 
+**非劣效设计**：问“界值 −10%，要多少人才能说不比老药差”用 `design_analytic` 和 `design_simulation`，在场景里加 `hypothesis: {"kind": "non_inferiority", "margin": 界值}`。界值是临床上的选择，向对方要，不要自己编；连续终点是结局单位里的差，二分类终点是小于 1 的率差，事件时间终点是大于 1 的风险比。`truth` 写的是预期的真实效应（常常是 0 或风险比 1），不是界值；检验是单侧的。要看 I 类错误，把 `truth` 放在界值上（均值差 −界值、率差 −界值、风险比 = 界值），这正是平台补跑的零效应情形。成组序贯设计同样可以带界值。
+
+**确认性设计 `kind: "design_confirmatory"`**：下面这些问题各用一种 `design.kind`，先 `action: "shape"` 看字段。结果在“试验”页，答案里的 `resultEntry` 给了去处；每个数都是引擎算的，不要自己重算，也不要重新排版。
+- 中期发现没戏就停，能省多少人：`futility_group_sequential`（有效性和无效性边界、期望样本量、每次分析的停止概率）。无效性边界默认不具约束力，要具约束力要在 `design.futility.binding` 里写明。
+- 效应没把握，中期加样：`sample_size_reestimation`（中期按条件功效重定样本量，上限 `maxSampleSizeFactor` 倍；结果把固定设计和同样分析次数的成组序贯设计并排放在每个设想的效应旁边）。`truth.plannedEffect` 是计划按它定样本量的效应，`truth.effects` 是想看的真实效应。无效应一行平台自己补，I 类错误和无效应时的平均样本量都要在回复里说，这类设计在无效应时常常加样很多。
+- 几个剂量加一个对照，中期只留一个：`multi_arm_selection`（连续和二分类终点；`plannedSize` 是每组的例数）。回答比“每个剂量各做一个试验”省多少、选中真正最好的臂的概率。
+- 标志物阳性只占一部分，中期收窄入组：`enrichment`（连续和二分类终点；`plannedSize` 是全人群的总例数，`subsetPrevalence` 是阳性所占比例）。
+- 每年发作次数这类计数终点：`count_endpoint`（负二项，率比 `truth.rateRatio`，过度离散 `truth.overdispersion`；不知道过度离散就问，0 表示泊松，会把样本量算少；写了 `design.informationRates` 就是成组序贯）。
+结果里的 `confirmatory.assumed` 是平台没得到说明而采用的值（消耗函数、条件功效、取自成组序贯设计的计划样本量、补的零效应行等），回复里逐条说明，不要略去。
+
+**MaxCombo 旁边的 log-rank 与强零假设**：`analysis.method: "maxcombo"` 的结果同一批模拟里还给出 log-rank 的功效（`power_logrank`）；并给出强零假设（试验组从不优于对照、早期更差、之后相同，由设计推出）下 MaxCombo 与 log-rank 各自判为更优的概率。这是信息，不是拒绝的理由；回复里把两个数和名义水平一起说。
+
 ```json vcr:object:design_grid
 {
   "dimensions": {

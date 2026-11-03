@@ -1595,6 +1595,11 @@ test("Web CI includes a Linux Docker Compose release and real runtime smoke job"
   assert.match(workflow, /--profile runtime-image --profile vcr build/);
   assert.match(workflow, /docker-compose\.result-replay\.yml/);
   assert.match(workflow, /Qualify isolated VCR candidate image without enabling the module/);
+  // (algorithm round G6) the runtime image runs a confirmatory design through service/run_job.R under the compose limits, and fails on a non-success
+  assert.match(workflow, /Run a confirmatory design inside the isolated VCR candidate image/);
+  assert.match(workflow, /--cpus 2 --ulimit as=3221225472/);
+  assert.match(workflow, /service\/run_job\.R \/in\/job\.json \/out/);
+  assert.match(workflow, /library\(dosresmeta\)/);
   assert.match(workflow, /pnpm release:manifest/);
   assert.match(workflow, /pnpm verify:release-manifest/);
   assert.match(workflow, /pnpm configure:monitoring/);

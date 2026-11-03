@@ -1220,6 +1220,36 @@ jobs:
           console.log(JSON.stringify({ image, imageId: inspected.Id, imageSize: inspected.Size, codeDigest, ready: true, moduleEnabled: false }));
           JS
 
+      # (algorithm round G6, 2026-11-03) The lean image is the runtime the engine ships: it holds rpact and dosresmeta and nothing of the test lock.
+      # One confirmatory design (a sample-size re-estimation: rpact's simulation in batches) runs inside it through `service/run_job.R`, under
+      # the limits of the compose file (2 CPUs, 4 GB, 3 GiB of address space), offline and read-only, and the step fails on any result that is
+      # not a success. dosresmeta, the other runtime package of the algorithm round, is loaded in the same way.
+      - name: Run a confirmatory design inside the isolated VCR candidate image
+        run: |
+          dir="$RUNNER_TEMP/vcr-confirmatory"
+          rm -rf "$dir"; mkdir -p "$dir/in" "$dir/out"; chmod 0777 "$dir/out"
+          cat > "$dir/in/job.json" <<'JSON'
+          {"jobId": "job_ci_confirmatory", "studyId": "std_ci", "kind": "design_confirmatory", "method": "design.confirmatory", "methodVersion": "1.0.0",
+           "protocolVersion": 1, "seed": 20261103, "cpuSecondsLimit": 600, "cores": 2, "inputs": [{"kind": "assumption", "id": "asm_ci@1"}],
+           "scenario": {"design": {"kind": "sample_size_reestimation", "informationRates": [0.5, 1], "conditionalPower": 0.8, "maxSampleSizeFactor": 1.5},
+                        "endpoint": {"type": "continuous"}, "truth": {"plannedEffect": 0.4, "effects": [0.3], "sd": 1}, "analysis": {"alpha": 0.025, "power": 0.9}}}
+          JSON
+          limits=(--rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges:true --pids-limit 128 --memory 4g --cpus 2 --ulimit as=3221225472 --tmpfs /tmp:size=512m,mode=1777)
+          timeout 900 docker run "${limits[@]}" -v "$dir/in:/in:ro" -v "$dir/out:/out" --entrypoint Rscript "$EVIMED_VCR_ENGINE_IMAGE" /opt/vcr-engine/service/run_job.R /in/job.json /out
+          timeout 120 docker run "${limits[@]}" --entrypoint Rscript "$EVIMED_VCR_ENGINE_IMAGE" -e 'library(dosresmeta); cat("dosresmeta", as.character(packageVersion("dosresmeta")), "\n")'
+          DIR="$dir" node --input-type=module <<'JS'
+          import assert from 'node:assert/strict';
+          import fs from 'node:fs';
+          import path from 'node:path';
+          const result = JSON.parse(fs.readFileSync(path.join(process.env.DIR, 'out', 'result.json'), 'utf8'));
+          assert.equal(result.status, 'succeeded', JSON.stringify(result.diagnostics?.issues ?? result.status));
+          assert.equal(result.method, 'design.confirmatory');
+          assert.equal(result.conclusion, 'estimable');
+          assert.ok(result.measures.length > 0 && result.measures.every(measure => Number.isFinite(measure.value)));
+          assert.match(result.manifest.outputHash, /^[a-f0-9]{64}$/);
+          console.log(JSON.stringify({ status: result.status, cpuSeconds: result.manifest.cpuSeconds, replicates: result.replicates, measures: result.measures.length }));
+          JS
+
       - name: Preserve isolated VCR candidate image qualification
         if: always()
         uses: actions/upload-artifact@v4
