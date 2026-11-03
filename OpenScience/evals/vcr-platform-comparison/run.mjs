@@ -159,7 +159,7 @@ export async function runCase({base,example,manifest,out,timeoutMs=900000,instan
       const bytes=await fs.readFile(file.path);
       if(hash(bytes)!==file.sha256)throw new Error('Frozen input changed');
       const uploaded=await api('POST','/api/files/upload',{root:'workspace',path:'inputs/'+file.name,data:bytes.toString('base64'),encoding:'base64'});
-      record.uploads.push({name:file.name,sha256:file.sha256,sourceId:uploaded?.source?.id??null,vcrInput:uploaded?.vcrInput??null});
+      record.uploads.push({name:file.name,sha256:file.sha256,sourceId:uploaded?.source?.id??null,vcrInput:uploaded?.vcrInput??null,vcrInputWarning:uploaded?.vcrInputWarning??null});
     }
     sessionId=(await api('POST','/api/runtime/sessions',{})).id;record.sessionId=sessionId;
     await api('PUT',`/api/research-sessions/${sessionId}`,{mode:'open-domain'});

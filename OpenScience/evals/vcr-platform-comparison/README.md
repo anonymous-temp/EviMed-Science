@@ -72,6 +72,12 @@ accuracy result; no limit schedules every manifest case. Use a new output
 directory per immutable campaign. The driver does not choose successful retries.
 
 Each patient gets a new throwaway account, project and kernel-created session.
+
+Plain `.txt` and `.md` patient uploads now receive authenticated immutable
+original receipts, discoverable through `patient_context`. The exact handle
+contains `sourceId`, `generation` and `sha256`. It is the same product intake
+available to ordinary uploads, not a benchmark-only patient/fact seed. Retention
+warnings are preserved separately from successful workspace uploads.
 Runs are marked `automated: true`; the browser composer itself does not support
 that mark, so the supported dispatch route exercises the ordinary conversation
 and verified VCR context. Saved-object composer selection is a separate browser

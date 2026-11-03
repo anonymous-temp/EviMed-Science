@@ -67,7 +67,8 @@ test('contracts and matching schemas are available before a task exists and pers
 test('ordinary authenticated file API persists an immutable original receipt without publishing or learning a knowledge source', options, async () => {
   const app = createWebApiApp({ dataDir: path.join(dir, 'http-app'), runtimeMode: 'mock', devAuth: false, authMode: 'local',
     bootstrapUser: '', bootstrapPassword: '', stateStore: 'postgres', requireSharedStateStore: true, databaseUrl: isolated.url,
-    vcrEnabled: true, vcrAudience: 'all', vcrDataPlaneDir: path.join(dir, 'http-plane'), vcrPollMs: 3_600_000 });
+    vcrEnabled: true, vcrAudience: 'all', vcrDataPlaneDir: path.join(dir, 'http-plane'), vcrPollMs: 3_600_000,
+    vcrProviderAgreements: true, vcrProviderAgreementReference: 'Local synthetic fixture', deepseekBaseUrl: 'https://model.invalid' });
   try {
     await app.store.createUser('http_uploader', 'test-only-password', 'Uploader');
     const address = await app.listen(0, '127.0.0.1');
@@ -101,7 +102,84 @@ test('ordinary authenticated file API persists an immutable original receipt wit
     const sourceImport = await app.vcr.dataIntake(study, { action: 'import', sourceId: source.id,
       generation: source.payload.generation, sha256: source.payload.fingerprint.sha256 }, nativeOrigin);
     assert.equal(sourceImport.state, 'uploaded');
+
+    const patientText = 'Synthetic case aged 62. No prior infarction.';
+    const uploadPatient = () => fetch(`${base}/api/files/upload`, { method: 'POST', headers,
+      body: JSON.stringify({ path: 'inputs/patient.txt', data: patientText }) });
+    const patientUpload = await uploadPatient();
+    assert.equal(patientUpload.status, 200);
+    const { data: { vcrInput: handle } } = await patientUpload.json();
+    assert.match(handle.sourceId, /^upl_/);
+    assert.equal((await documents.list(user.id, 'source', { projectId: owned.id, limit: 20 })).items.length, 1);
+    app.runtimeManager.sessionTranscript = async (_project, sessionId) => ({ sessionId, exhausted: true, messages: [
+      { role: 'user', source: 'user', seq: 1, turnStartSeq: 0, parts: [{ type: 'text', text: 'Automated instruction with fabricated age 99.' }] },
+    ] });
+    const candidates = await app.vcr.patientContext.candidates(nativeOrigin);
+    assert.deepEqual(candidates.candidates, []);
+    assert.deepEqual(candidates.uploads, [{ ...handle, name: 'patient.txt' }]);
+    assert.ok(!(await app.vcr.dataIntake.read(study, {}, nativeOrigin)).uploads.some(row => row.sourceId === handle.sourceId));
+    await assert.rejects(app.vcr.dataIntake(study, { action: 'import', ...handle }, nativeOrigin), { code: 'vcr_intake_source_invalid' });
+    study.cloudContext = { runId: nativeOrigin.runId, sessionId: nativeOrigin.rootSessionId };
+    const admitted = await app.vcr.patientContext(study, handle, nativeOrigin);
+    assert.ok(admitted.subjectKey);
+    assert.equal(admitted.basis, 'owned_upload');
+    const held = await app.vcr.documents.runtimeRead(study, { subjectKey: admitted.subjectKey, documentId: admitted.documentId });
+    assert.equal(held.text, patientText);
+    const original = (await app.vcr.dataStore.listSourceFilesForStudy(study.id)).find(file => file.id === admitted.documentId);
+    assert.deepEqual(original.detail.import, { kind: 'owned_upload', ...handle });
+    assert.equal(original.detail.originalSha256, handle.sha256);
+    const again = await app.vcr.patientContext(study, handle, nativeOrigin);
+    assert.equal(again.subjectKey, admitted.subjectKey);
+    assert.equal(again.documentId, admitted.documentId);
+
+    const receipt = await documents.get(user.id, 'preferences', handle.sourceId);
+    const keptPath = path.join(owned.baseDir, receipt.payload.paths[0]);
+    const rejected = input => assert.rejects(app.vcr.patientContext(study, input, nativeOrigin), { code: 'vcr_patient_context_invalid' });
+    await rejected({ messageSeq: 1 });
+    await rejected({ sourceId: 'inputs/model-written.txt' });
+    await rejected({ ...handle, sourceId: 'upl_' + 'f'.repeat(40) });
+    await rejected({ ...handle, generation: 2 });
+    await rejected({ ...handle, sha256: 'f'.repeat(64) });
+    await fs.writeFile(keptPath, Buffer.alloc(Buffer.byteLength(patientText), 65));
+    await rejected(handle);
+    const repaired = await uploadPatient();
+    assert.equal(repaired.status, 200);
+    assert.deepEqual((await repaired.json()).data.vcrInput, handle);
+    assert.equal(await fs.readFile(keptPath, 'utf8'), patientText);
+    await fs.rm(keptPath);
+    await rejected(handle);
+    const restored = await uploadPatient();
+    assert.equal(restored.status, 200);
+    assert.deepEqual((await restored.json()).data.vcrInput, handle);
+    assert.equal(await fs.readFile(keptPath, 'utf8'), patientText);
+    await fs.rm(keptPath);
+    const outside = path.join(dir, 'foreign-original.txt');
+    await fs.writeFile(outside, 'Foreign content');
+    await fs.symlink(outside, keptPath);
+    await rejected(handle);
+    const generalOnly = await uploadPatient();
+    assert.equal(generalOnly.status, 200);
+    const general = (await generalOnly.json()).data;
+    assert.equal(general.path, 'inputs/patient.txt');
+    assert.equal(general.vcrInput, undefined);
+    assert.equal(general.vcrInputWarning.code, 'vcr_upload_original_unavailable');
+    assert.equal(await fs.readFile(outside, 'utf8'), 'Foreign content');
+    assert.ok((await fs.lstat(keptPath)).isSymbolicLink());
   } finally { await app.close(); }
+});
+test('plain-text receipt selection excludes other accounts, projects and native roots', options, async () => {
+  const patientReceipts = createVcrUploadReceipts({ documents, sources: null, resolveProject: async () => project });
+  const bytes = Buffer.from('A synthetic original patient case.');
+  const handle = await patientReceipts.record(project, { name: 'selected.md', bytes, sessionId: origin.rootSessionId });
+  const otherRoot = { ...origin, rootSessionId: 'sibling_root' };
+  const otherProject = { ...origin, projectId: 'sibling_project' };
+  const otherAccount = { ...origin, userId: 'other' };
+  for (const scope of [otherRoot, otherProject, otherAccount]) {
+    assert.deepEqual((await patientReceipts.patientCandidates(scope, {})).uploads, []);
+    assert.equal(await patientReceipts.readPatientOriginal(scope, handle), null);
+  }
+  assert.deepEqual((await patientReceipts.patientCandidates(origin, {})).uploads, [{ ...handle, name: 'selected.md' }]);
+  assert.deepEqual((await patientReceipts.readPatientOriginal(origin, handle)).bytes, bytes);
 });
 test('authenticated upload -> real map -> frozen snapshot -> population binds exact saved ids, with no cloud grant', options, async () => {
   const handle = await receipts.record(project, { name: 'baseline.csv', bytes: Buffer.from(csv) });

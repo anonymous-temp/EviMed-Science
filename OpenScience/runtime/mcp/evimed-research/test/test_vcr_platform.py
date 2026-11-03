@@ -422,6 +422,20 @@ class VcrToolDefinitionTests(unittest.TestCase):
         self.assertIn("patient_context", description)
         self.assertIn("messageSeq", description)
 
+    def test_patient_context_explains_exact_upload_handles_and_continuations(self):
+        definitions = {tool["name"]: tool for tool in vcr_platform.tool_definitions()}
+        self.assertIn("{sourceId,generation,sha256}", definitions["vcr_write"]["description"])
+        self.assertIn("{sourceId} for a knowledge-base original", definitions["vcr_write"]["description"])
+        self.assertIn("nextUploadRead", definitions["vcr_read"]["description"])
+        data = {"uploads": [{"sourceId": "upl_fixture", "generation": 1, "sha256": "a" * 64}],
+                "candidates": [{"messageSeq": 8}], "nextBeforeSeq": 8,
+                "nextUploadRead": {"what": "patient_context", "filter": {"cursor": "more"}}}
+        with mock.patch.object(vcr_platform, "_post", return_value=data):
+            result = vcr_platform.read({"what": "patient_context"})
+        actions = " ".join(result["next_actions"])
+        for instruction in ("{sourceId,generation,sha256}", "data.nextUploadRead", "{messageSeq}", "data.nextBeforeSeq"):
+            self.assertIn(instruction, actions)
+
     def test_evidence_pool_names_a_parameter_and_never_takes_numbers(self):
         properties = {tool["name"]: tool for tool in vcr_platform.tool_definitions()}["evidence_pool"]["inputSchema"]["properties"]
         self.assertEqual(set(properties), {"action", "parameter", "endpointKey", "calibres", "method", "jobId"})

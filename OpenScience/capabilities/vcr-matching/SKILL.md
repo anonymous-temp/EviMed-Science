@@ -17,7 +17,7 @@ Read [../vcr-protocol/references/operating-contract.md](../vcr-protocol/referenc
 
 ## Start from an original case
 
-Use `mcp__evimed__vcr_read` what `patient_context` to inspect bounded authenticated human message candidates (`filter.beforeSeq`, `filter.limit`); select the actual case with `mcp__evimed__vcr_write` what `patient_context`, data `{messageSeq}`. Do not infer that the latest instruction is the case. An owned human-upload original can use data `{sourceId}`; compiled knowledge pages, saved assistant outputs and platform-produced sources are not human uploads. Reuse the
+Read `mcp__evimed__vcr_read` what `patient_context` for authenticated human message candidates and original plain-text attachments. Select the actual case with `mcp__evimed__vcr_write` what `patient_context`. For an attachment in `uploads`, pass its exact `{sourceId,generation,sha256}` in `data`; follow `nextUploadRead` for more attachments. For a human message, pass `{messageSeq}` and use `nextBeforeSeq` to search earlier messages. For an owned uploaded knowledge-base source, pass `{sourceId}`. Use the original case and reuse the
 returned `subjectKey`/`documentId`. Do not invent patient facts, original text,
 patient identifiers, source times or a source-processing permission. For a patient
 looking for trials, search and read the dated registry record, then register

@@ -18,6 +18,13 @@ test('static discovery exposes every validator operation and every example valid
   assert.match(shape.dataIntake.mutability, /frozen snapshot is immutable/);
 });
 
+test('patient intake discovery distinguishes exact receipt fields, KB sources and human messages', () => {
+  const contract = vcrContractsRead().writes.patient_context;
+  assert.deepEqual(contract.fields, ['messageSeq', 'sourceId', 'generation', 'sha256']);
+  assert.deepEqual(contract.oneOf.map(shape => shape.required), [['messageSeq'], ['sourceId', 'generation', 'sha256'], ['sourceId']]);
+  assert.match(contract.discovery, /nextUploadRead/);
+});
+
 test('discovered scalar/list/interval comparators and nested applicability have complete field shapes', () => {
   for (const comparator of VCR_REQUIREMENT_CONTRACT.compare.comparators) {
     const node = { op: 'compare', variable: 'age', comparator,

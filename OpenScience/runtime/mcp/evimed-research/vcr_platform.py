@@ -520,8 +520,8 @@ def tool_definitions():
     """Compact root catalogue; the workflow skill and shape action carry detail."""
     root = skills_root()
     descriptions = {
-        "vcr_read": "Read this conversation's research. what=study opens compact context and enables specialist tools. patient_context lists authenticated human-message references (filter beforeSeq/limit); use messageSeq to preserve an earlier case. subject_document reads permitted original material. trial_registry_record reads one registry (filter registryId). contracts gives write syntax before any task exists; data_intake lists original upload handles; matching filter.kind=contract gives write syntax; candidate_trials reads patient trial matches. Any eligibility verdict you deliver (reply, table or file) is copied from the saved read-back (matching or candidate_trials with filter.subjectKey), never retyped.",
-        "vcr_write": "Save a research object; data_intake imports an owned original upload then maps/freezes it (read contracts first). candidate_trial stores registry-linked eligibility. Never write calculated results. patient_context data={messageSeq} preserves a listed original human case, or {sourceId} an owned human upload; no model-written prose. task_context opens an independent hidden task. A fact states only what its quote says: what the text does not mention is unknown, never negated, and age, sex or a diagnosis do not imply pregnancy, menopause or a negative result. A candidate_trial's criteria are that one trial's own eligibility lines. Use the VCR workflow skill for object contracts (read %s/vcr-matching/SKILL.md before writing facts, criteria or trials; vcr-protocol, vcr-evidence, vcr-analysis and vcr-package sit beside it; none is in the skill catalogue) and vcr_simulate action=shape for numerical inputs." % root,
+        "vcr_read": "Read this conversation's research. what=study opens compact context and enables specialist tools. patient_context lists original text uploads and authenticated human messages (messageSeq); follow nextUploadRead for more uploads. subject_document reads permitted original material. trial_registry_record reads one registry (filter registryId). contracts gives write syntax before any task exists; data_intake lists original upload handles; matching filter.kind=contract gives write syntax; candidate_trials reads patient trial matches. Any eligibility verdict you deliver (reply, table or file) is copied from the saved read-back (matching or candidate_trials with filter.subjectKey), never retyped.",
+        "vcr_write": "Save research objects, never calculated results. data_intake imports/maps/freezes uploads (read contracts). patient_context takes data={sourceId,generation,sha256} from uploads, {sourceId} for a knowledge-base original, or {messageSeq} for a human case. task_context opens a task. A fact states only what its quote says: what the text does not mention is unknown, never negated, and age, sex or a diagnosis do not imply pregnancy, menopause or a negative result. A candidate_trial's criteria are that one trial's own eligibility lines. Use the VCR workflow skill for object contracts (read %s/vcr-matching/SKILL.md before writing facts, criteria or trials; vcr-protocol, vcr-evidence, vcr-analysis and vcr-package sit beside it; none is in the skill catalogue) and vcr_simulate action=shape for numerical inputs." % root,
         "vcr_simulate": "A human trial's sample size, power or events, comparing designs, a synthetic population from a paper's baseline, an external control: calculate here, not in a script of your own. No study needed; the first start opens a result page with versions and premises. action=shape with kind gives exact fields; do not guess keys. Long jobs resume here if they outlive this turn. modelId requires modelVersion.",
     }
     tools = _detailed_tool_definitions()
@@ -696,8 +696,17 @@ def read(arguments: dict) -> dict:
         raise
     warnings = []
     next_actions = []
+    if what == "patient_context":
+        if data.get("uploads"):
+            next_actions.append("Choose the original attachment in uploads and call vcr_write what=patient_context with its exact data={sourceId,generation,sha256}.")
+        if data.get("nextUploadRead"):
+            next_actions.append("Follow data.nextUploadRead exactly to see more original attachments.")
+        if data.get("candidates"):
+            next_actions.append("To preserve an authenticated human case, call vcr_write what=patient_context with data={messageSeq}.")
+        if data.get("nextBeforeSeq") is not None:
+            next_actions.append("To see earlier human messages, repeat patient_context with filter.beforeSeq set to data.nextBeforeSeq.")
     if what == "matching" and (arguments.get("filter") or {}).get("kind") not in ("contract", "terminology"):
-        next_actions.append("Read matching filter.kind=contract for exact protocol/fact write envelopes; vcr_read what=patient_context lists authenticated human cases; preserve the chosen messageSeq rather than guessing it.")
+        next_actions.append("Read matching filter.kind=contract for exact protocol/fact write envelopes; vcr_read what=patient_context lists original text uploads and authenticated human cases.")
         if data.get("subjectKey"):
             if data.get("assessment") is None:
                 next_actions.append("No computed assessment is saved yet. Start vcr_simulate action=start kind=match_criteria, then read matching with this subjectKey when it completes. Do not invent judgments.")

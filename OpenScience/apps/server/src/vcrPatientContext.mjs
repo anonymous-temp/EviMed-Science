@@ -3,25 +3,39 @@
 import { createHash } from 'node:crypto';
 import { canonicalJson, sourceOriginOf } from '@evimed/domain';
 import { HttpError } from './security.mjs';
+import { VCR_PATIENT_CONTEXT_MAX_BYTES, VCR_UPLOAD_ORIGINALS_DIR } from './vcrUploadReceipts.mjs';
 const invalid = () => new HttpError(400,'vcr_patient_context_invalid','Select an original user message or an owned uploaded source.');
 const digest = text => createHash('sha256').update(text).digest('hex');
-export function createVcrPatientContext({ store, dataStore, dataPlane, documents, transcript, isHumanMessage, sources = null }) {
+export function createVcrPatientContext({ store, dataStore, dataPlane, documents, transcript, isHumanMessage, sources = null, uploadReceipts = null }) {
   const intake = async (study, input, origin) => {
-    if (!dataPlane || !input || typeof input !== 'object' || Array.isArray(input)
-      || Object.keys(input).some(key => !['messageSeq','sourceId'].includes(key))
+    if (!dataPlane || !origin || study?.userId !== origin.userId || study.projectId !== origin.projectId
+      || !input || typeof input !== 'object' || Array.isArray(input)
+      || Object.keys(input).some(key => !['messageSeq','sourceId','generation','sha256'].includes(key))
       || input.messageSeq != null && !Number.isSafeInteger(input.messageSeq)
       || input.messageSeq != null && input.sourceId != null) throw invalid();
-    let text, provenance;
-    if (input.sourceId != null) {
-      if (typeof input.sourceId !== 'string' || !sources) throw invalid();
-      const source = await sources.get(origin.userId,input.sourceId);
-      if (source.userId !== origin.userId || source.projectId !== origin.projectId || source.payload?.connector?.type !== 'upload'
-        || !source.payload?.paths?.length || source.payload.paths.some(path => sourceOriginOf({connectorType:source.payload.connector.type,path}) !== 'upload')) throw invalid();
+    const { sourceId, generation, sha256 } = input;
+    if (sourceId != null && (typeof sourceId !== 'string' || !/^[A-Za-z0-9_.:@-]{1,160}$/.test(sourceId))) throw invalid();
+    let text, provenance, bytes;
+    if (sourceId?.startsWith('upl_')) {
+      const original = await uploadReceipts?.readPatientOriginal(origin, { sourceId, generation, sha256 });
+      if (!original) throw invalid();
+      ({ bytes, provenance } = original);
+    } else if (sourceId != null) {
+      if (!sources || generation != null || sha256 != null) throw invalid();
+      const source = await sources.get(origin.userId, sourceId).catch(error => {
+        if (error?.code === 'source_not_found') throw invalid();
+        throw error;
+      });
+      if (source?.userId !== origin.userId || source.projectId !== origin.projectId || source.payload?.connector?.type !== 'upload'
+        || source.payload.publication?.current === false || !source.payload.paths?.length
+        || source.payload.paths.some(path => path.startsWith(`${VCR_UPLOAD_ORIGINALS_DIR}/`)
+          || sourceOriginOf({connectorType:source.payload.connector.type,path}) !== 'upload')) throw invalid();
       const capture = await sources.loadCapture(origin.userId,source);
       if (!capture?.input?.text) throw invalid();
       text = capture.input.text;
       provenance = { kind:'owned_upload',sourceId:source.id,generation:source.payload.generation,sha256:source.payload.analysis.textSha256 };
     } else {
+      if (generation != null || sha256 != null) throw invalid();
       const page = await transcript(origin, { maxPages:4, ...(input.messageSeq != null ? {beforeSeq:input.messageSeq+1} : {}) });
       if (page?.sessionId !== origin.rootSessionId) throw invalid();
       const messages = page.messages.filter(message => message.role === 'user' && message.source === 'user'
@@ -33,7 +47,10 @@ export function createVcrPatientContext({ store, dataStore, dataPlane, documents
       text = message.parts.filter(part => part.type === 'text').map(part => part.text).join('\n');
       provenance = { kind:'authenticated_user_message',sessionId:origin.rootSessionId,messageSeq:message.seq,sha256:digest(text) };
     }
-    if (typeof text !== 'string' || !text.trim() || Buffer.byteLength(text)>400*1024) throw invalid();
+    if (!bytes) {
+      if (typeof text !== 'string' || !text.trim() || Buffer.byteLength(text) > VCR_PATIENT_CONTEXT_MAX_BYTES) throw invalid();
+      bytes = Buffer.from(text, 'utf8');
+    }
     const identity = digest(canonicalJson(provenance));
     const name = '对话病例';
     // One native source request is one protected source even under repeated tool calls.
@@ -44,7 +61,7 @@ export function createVcrPatientContext({ store, dataStore, dataPlane, documents
       const source = existing ?? await dataPlane.registerSource({userId:origin.userId,studyId:study.id,name,
         allowedUses:['vcr','matching'],valueSource:'extracted',actor:origin.userId});
       const upload = await dataPlane.storeUpload({actor:origin.userId,studyId:study.id,sourceId:source.id,name:'patient-context.txt',role:'document',
-        subject:`conversation-case:${identity}`,importedFrom:provenance,stream:(async function*(){yield Buffer.from(text,'utf8');})()});
+        subject:`conversation-case:${identity}`,importedFrom:provenance,stream:(async function*(){yield bytes;})()});
       const subjectKey = upload.file.detail.subjectKey;
       // The same judged read/projection and recorded quote window used by all patient evidence.
       const material = await documents.subjectDocuments(study,{subjectKey,documentId:upload.file.id});
@@ -52,7 +69,7 @@ export function createVcrPatientContext({ store, dataStore, dataPlane, documents
         basis:provenance.kind,valueSource:'extracted'};
     }));
   };
-  intake.candidates = async (origin, {beforeSeq=undefined,limit=20} = {}) => {
+  intake.candidates = async (origin, {beforeSeq=undefined,limit=20,cursor=undefined} = {}) => {
     if(beforeSeq!=null && !Number.isSafeInteger(beforeSeq) || !Number.isSafeInteger(limit) || limit<1 || limit>20) throw invalid();
     const page = await transcript(origin,{maxPages:4,...(beforeSeq == null ? {} : {beforeSeq})});
     if (page?.sessionId !== origin.rootSessionId) throw invalid();
@@ -66,7 +83,10 @@ export function createVcrPatientContext({ store, dataStore, dataPlane, documents
       if (candidates.length >= limit) {limited=true;break;}
     }
     const oldest=page.messages.reduce((minimum,message)=>Number.isSafeInteger(message.seq) ? Math.min(minimum,message.seq) : minimum,Infinity);
-    return {candidates,nextBeforeSeq:limited ? candidates.at(-1).messageSeq : page.exhausted === true || !Number.isFinite(oldest) ? null : oldest};
+    const uploads = await uploadReceipts?.patientCandidates(origin, { limit, cursor });
+    return { candidates, nextBeforeSeq:limited ? candidates.at(-1).messageSeq : page.exhausted === true || !Number.isFinite(oldest) ? null : oldest,
+      ...(uploads ? { uploads: uploads.uploads, ...(uploads.nextCursor ? { nextUploadRead: { what: 'patient_context', filter: { limit, cursor: uploads.nextCursor } } } : {}),
+        ...(uploads.uploads.length ? { uploadWrite: { what: 'patient_context', dataFields: ['sourceId', 'generation', 'sha256'] } } : {}) } : {}) };
   };
   return intake;
 }

@@ -5995,7 +5995,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // 「虚拟临床研究」's runtime channel: the token decides the account and the study,
   // a read answers aggregates and structure only, and a write refuses item by
   // item (build plan §11.2 layer 3).
-  const vcrUploadReceipts = vcr && productDocuments ? createVcrUploadReceipts({ documents: productDocuments, sources: sourceService,
+  const vcrUploadReceipts = vcr && productDocuments ? createVcrUploadReceipts({ documents: productDocuments, sources: sourceService, resolveProject: sourceProject,
     write: (project, relative, bytes) => withProjectStorageMutation(project, async () => {
       const full = resolveScopedPath(project.baseDir, relative);
       await assertProjectCapacity(project, full, bytes.length, config);
@@ -6005,7 +6005,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     sources: vcrUploadReceipts, resolveProject: sourceProject,
     sourceScope: origin => conversationSourceScope(origin, origin.rootSessionId) });
   if (vcr) vcr.patientContext = createVcrPatientContext({ store:vcr.store,dataStore:vcr.dataStore,dataPlane:vcr.dataPlane,documents:vcr.documents,
-    sources:sourceService,
+    sources:sourceService, uploadReceipts:vcrUploadReceipts,
     isHumanMessage: async (origin,message) => (await agentRuns.list(await sourceProject(origin))).some(run => run.sessionId === origin.rootSessionId
       && run.automated !== true && (Number.isSafeInteger(message.turnStartSeq) && run.nativeTurn?.startSeq === message.turnStartSeq
         || message.sourceRequestId && run.kernelRequestIds?.includes(message.sourceRequestId))),
@@ -8937,8 +8937,13 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         const encoding = args.encoding === "base64" ? "base64" : "utf8";
         const buffer = encoding === "base64" ? Buffer.from(data, "base64") : Buffer.from(data, "utf8");
         const registered = await writeProjectUpload(ctx, { root, rel, buffer });
-        const vcrInput = !registered ? await vcrUploadReceipts?.record(ctx.project, { name: rel, bytes: buffer }) : null;
-        sendJson(res, 200, { data: { path: rel, ...(vcrInput ? { vcrInput } : {}), ...(registered
+        let vcrInputWarning;
+        const vcrInput = !registered ? await vcrUploadReceipts?.record(ctx.project, { name: rel, bytes: buffer }).catch(async error => {
+          vcrInputWarning = { code: 'vcr_upload_original_unavailable', message: 'The file was uploaded. Virtual clinical research could not retain its original; upload it again to retry.' };
+          await audit(ctx, 'vcr.upload_original.record', 'failed', { error: error?.code ?? vcrInputWarning.code }).catch(() => {});
+          return null;
+        }) : null;
+        sendJson(res, 200, { data: { path: rel, ...(vcrInput ? { vcrInput } : {}), ...(vcrInputWarning ? { vcrInputWarning } : {}), ...(registered
           ? { ...registered, source: projectSourceManifestRecord(registered.source) } : {}) } });
         return;
       }

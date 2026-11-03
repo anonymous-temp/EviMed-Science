@@ -251,7 +251,7 @@ function readRequest(body) {
   }
   const frozen = body.what === "candidates" && Boolean(filter.collection);
   if (raw.cursor != null) {
-    if ((!frozen && body.what !== 'data_intake') || typeof raw.cursor !== 'string' || !/^[A-Za-z0-9_-]{1,2048}$/.test(raw.cursor)) {
+    if ((!frozen && !['data_intake', 'patient_context'].includes(body.what)) || typeof raw.cursor !== 'string' || !/^[A-Za-z0-9_-]{1,2048}$/.test(raw.cursor)) {
       throw gatewayError(400, 'vcr_read_filter_invalid', 'cursor is the exact continuation returned by the preceding page.');
     }
     filter.cursor = raw.cursor;

@@ -17,7 +17,7 @@ function receipts() {
 
 const project = { id: 'p1', userId: 'u1', baseDir: '/nonexistent' };
 
-test('only a file the data intake can import is kept as an original upload', async () => {
+test('only supported tables and valid UTF-8 patient text are kept as original uploads', async () => {
   const { kept, writes, puts } = receipts();
   const table = await kept.record(project, { name: 'cases/baseline.CSV', bytes: Buffer.from('id,age\n1,62\n'), sessionId: 's1' });
   assert.match(table?.sourceId ?? '', /^upl_/);
@@ -25,10 +25,16 @@ test('only a file the data intake can import is kept as an original upload', asy
   assert.match(writes[0].relative, /^\.evimed-upload-originals\/[0-9a-f]{64}\/baseline\.CSV$/);
   assert.equal(puts.length, 1);
 
-  for (const name of ['report.pdf', 'slides.pptx', 'photo.png', 'notes.txt', 'no-extension']) {
+  for (const name of ['report.pdf', 'slides.pptx', 'photo.png', 'no-extension']) {
     assert.equal(await kept.record(project, { name, bytes: Buffer.from('x'), sessionId: 's1' }), null, name);
   }
   assert.equal(writes.length, 1, 'an attachment the intake cannot read is not copied a second time');
+  assert.equal(await kept.record(project, { name: 'invalid.txt', bytes: Buffer.from([0xc3, 0x28]) }), null);
+  assert.equal(await kept.record(project, { name: 'empty.md', bytes: Buffer.from('   ') }), null);
+  assert.equal(await kept.record(project, { name: 'large.txt', bytes: Buffer.alloc(400 * 1024 + 1, 0x61) }), null);
+  const patient = await kept.record(project, { name: 'notes.MD', bytes: Buffer.from('Patient text'), sessionId: 's1' });
+  assert.match(patient?.sourceId ?? '', /^upl_/);
+  assert.equal(puts[1].payload.intake, 'patient_context');
 });
 
 test('an upload larger than the intake reads is not kept', async () => {
