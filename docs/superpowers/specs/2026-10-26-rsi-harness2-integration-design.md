@@ -108,7 +108,7 @@ The lab has its own accounts, jobs, artifacts and currency budget ledger. Runtim
 Solver/consumer parity and improver choice are separate:
 
 - The execution/evaluation arm uses the target production solver/provider/runtime identities.
-- Initial improvers are DeepSeek Flash and Qwen 3.8 Max. Claude is not configured in this baseline. Its identity, permissions and costs are recorded. Changing improver is an experimental factor, not evidence of benefit from the optimizer alone.
+- ~~Initial improvers are DeepSeek Flash and Qwen 3.8 Max. Claude is not configured in this baseline.~~ Superseded by the owner on 2026-11-03: every offline improver and adjudicator is Claude, see §21. Identities, permissions and costs are recorded. Changing improver is an experimental factor, not evidence of benefit from the optimizer alone.
 - Provider credentials are lab-owned gateway credentials. No production key is copied into the lab, candidate tree or generated script. Do not install an unnecessary credential-bearing upstream proxy extra.
 
 ### Campaign cadence
@@ -443,3 +443,63 @@ Implemented components are under `apps/server/src/rsi*.mjs`, `packages/domain/sr
 The first executable campaign surface is frontier selection. The runner invokes the production mapper and `frontierMixSelect`, freezes one development winner and confirms only it against the incumbent. A real synthetic runner-to-finalizer test and PostgreSQL importer-to-shadow-to-global-to-rollback test exercise that path. Mathematical qualification runs 20,000 simulations per scenario for each of two seeds; it does not qualify real task labels, the frontier population or an LLM evaluator. Historical 248-row gold remains exposed calibration material, with its unverifiable raw-rater kappa claim documented by the inventory.
 
 **Open qualification gates are explicit:** Alibaba host/network/IAM/KMS bindings, a fresh independently calibrated label supply, a real frontier campaign, paid DSH/control-plane consumer adapters and per-surface skill/tool activation qualification, and a full production night-window retirement observation. Unsupported surfaces refuse instead of importing an unmeasured implementation. Harness2/GEPA research admission remains downstream of those measurement/supply gates. These are not reported as deployed, empirically beneficial or operationally accepted by local tests. The owner requested code commit/push only; no deployment is included in this implementation handoff.
+
+
+## 21. Operating model and model roles (owner ruling 2026-11-03)
+
+This section supersedes the improver line of §6 ("Initial improvers are DeepSeek Flash and Qwen 3.8 Max. Claude is not configured") and the plan's matching input. It records how the two loops actually run after the first two offline rounds, and which model holds which role.
+
+### Two loops
+
+| | Small loop: online, native | Big loop: offline, platform |
+|---|---|---|
+| What changes | one account's memory, preferences and learned methods; the official base tier through its own five-stage chain (§3) | what every account runs on: guidance, skills, tools, policies, the runtime image |
+| Cadence | continuous: each turn, the next message, an hourly sweep, weekly consolidation | a monthly campaign (lab timer on the 1st) plus the §6 triggers; a model-driven round is started by the operator |
+| Where | production | the lab host `evimed-test` (deterministic steps, statistics, receipts, signing), GitHub Actions lanes (the solver on the real Compose stack), the operator's box (every model role) |
+| Inputs | the account's own attended work; automated, internal and lab runs teach nothing | public benchmarks, public frontier items, synthetic tasks; an authorized incident reproduction (§5); never tenant data |
+| Models | production's own: DeepSeek Flash (follow-up judge, distillation, extraction), Qwen (the independent re-check of a promotion), DashScope (embeddings), OpenViking's engine | the solver is EviMed Science itself; every improver and every adjudicator is Claude (below) |
+| Output | effective at once, undoable, demoted by its own counters | a signed report whatever the verdict; a qualified candidate becomes a PR and a release (text, skills, tools, code) or a signed bundle for the thin importer (policies) |
+
+The two loops do not feed each other directly. A lab run, a probe or a Harness2 reflection is never a user correction (§13); a production incident reaches the lab only as an authorized reproduction (§5); a lab result reaches production only through a reviewed release or a signed bundle (§11).
+
+### Roles in the big loop
+
+| Role | Model | Why |
+|---|---|---|
+| Solver of every measured arm | EviMed Science: DSH + DeepSeek Flash, as production configures it | it is what is being improved |
+| Lead: failure analysis, candidate design and distillation, development reading, freeze, report | Claude Opus (the operator session) | the decisions that set what is tested |
+| Harness2 invariant and domain editors | Claude Sonnet | two parallel proposers: the invariant editor owns procedure (tool guidance, always-on rules, scripts), the domain editor owns field knowledge (facts true for every task of the domain, situation-scoped skills); neither decides anything |
+| Harness2 composer, selector, reflector | Claude Opus | the composer writes what is adopted, the selector chooses between the base run and the composed one, the reflector writes the lesson the lead distills |
+| Builders (tools, patches, scorers, exporters) | Claude Sonnet agents, reviewed by the lead | execution |
+| Judge of a judged family | one registered Claude model id per family (Sonnet today) | admitted only with measured agreement ≥ 0.9 and `noiseBand95 / sqrt(passes)` no wider than the registered margin, both constants in code, not in the registration |
+| Frontier jury | Claude Sonnet at medium effort, safe mode, two passes, calibrated each month on the human anchor | the labels are the campaign's truth; see the measured gap below |
+| Statistics, receipts, signatures | lab code | no model |
+
+DeepSeek and Qwen hold no improver or adjudicator role offline. The manifest (schema version 2) records `models: {solver, improvers[], judges[]}` from the round's improvement record and its registered judge or jury; the domain refuses a solver that is not DeepSeek and an improver or judge that is not a pinned Claude model (`rsiOfflineRoleIssue`), and the Harness2 channels file refuses any stage that is not a Claude CLI row. Manifests signed before 2026-11-03 record `improver: none` and `reviewer: qwen3.8-max`, which never ran: they are historical files and are not rewritten.
+
+### What runs unattended
+
+The lab has no Anthropic access, so every model role runs on the operator's box. The lab's monthly timer runs the deterministic steps (export check, plan, build, run, receipt, statistics, report) and stops at a named wait in its `STATUS` when it needs an operator input (the month's labels, a round's sources); the operator's session supplies the input and resumes the same steps. A timer never substitutes another model for a missing Claude input.
+
+### Known limits of this arrangement
+
+- **Claude writes the candidates and Claude judges the judged families.** Blind packets, swapped order and code-side aggregation remove what the judge can see, not what it prefers. Deterministic scorers decide wherever a family has one; a judged-family win is not stated outside the lab before the benchmark's official judge has scored a sample.
+- **The Claude jury agrees clearly less with the human frontier anchor than the Qwen jury did.** Measured 2026-11-03 through the jury's own code (`frontier_labels.mjs calibrate`, the production rubric and exemplars, 124 calibration rows, two passes, `--safe-mode` so nothing of the operator's box reaches the context): Claude Sonnet at medium effort κ 0.621, pick precision 0.833, recall 0.556, abstention 3–4% (two runs, 97% of calls identical); Sonnet at high effort κ 0.523; Opus at medium effort κ 0.349 with 21% abstention, which does not qualify; Qwen 3.8 Max had κ 0.875, 0.944, 0.85, 2.4%. Claude is the more conservative reader (12 picks against the anchor's 21). An earlier run that scored κ 0.83 had the operator box's own CLAUDE.md and memory in its context and is not a valid configuration. The campaign uses Sonnet at medium effort, which qualifies, and reports the month's calibration; weaker labels cost the campaign power, not validity, because both arms are scored on the same labels.
+- **Money is metered in three places.** The lab ledger reserves what the lab spends; lane solver runs spend the shared production DeepSeek key under the operator's balance floor and round cap and are settled per run; Claude is subscription usage, recorded in tokens. A round's report states all three.
+- **One error budget per consumer and quarter** (`rsi-alpha:<consumer>:<quarter>`). Surfaces that change the same consumer (harness-patch and tool-patch both change the runtime image, consumer `dsh-harness`) draw from one ledger, so a new surface name never buys a fresh α; the legacy per-surface rows still count. The runtime image's 2026-Q4 budget was spent by round 1, so its next confirmation reserves α in 2027-Q1. A frontier month with fewer than 25 measured days, like a family below 25 groups, is directional and reserves none.
+- **A confirmation corpus read outside the runner is exposed for good** (`run.mjs record-exposure`), so a later campaign cannot confirm on it as unseen.
+
+## 22. Evidence to date (2026-11-03)
+
+| When | What | Outcome |
+|---|---|---|
+| 2026-10-04 → 10-26 | 循证进化, the online experiment core | 28 development tasks, zero candidate verdicts, ~96% of its spend on scouting; paused 2026-10-26 (§15), no model spend since 10-26; the serving-only cutover (WP6) is not applied |
+| 2026-10-26 | frontier-selection rehearsal (lab) | with the registered pick weight 3 no threshold beat 64 |
+| 2026-10-28 | capability-skill, MedCalc (Qwen improver, production arms) | 4 candidates in 2 rounds, all worse than the baseline (−5.6 to −13.9 points); development only |
+| 2026-10-28 → 10-30 | public-benchmark baseline v1 (production, Claude judges) | the reference point for every later comparison (`bench/report/BASELINE-V1.md`) |
+| 2026-11-01 | frontier-selection 2026-11 (lab timer, unattended) | not qualified: the development month (September) had 4 of 30 measurable days; 4,377 items labelled (¥106.59, Qwen), 3,919 of them for a confirmation month that was never opened |
+| 2026-11-01 → 11-02 | round 1, harness-patch (Harness2 + lead distillation, lanes) | zero qualified: MedCalc −2.9, AutoResearchBench deep −0.8, DeepResearch Bench +4.4 inconclusive (one group 47% of the variance); found and fixed the visible-clock defect |
+| 2026-11-02 | round 2, tool-patch and directional families | no tool cleared its development gate (`drug_approval_records` +7.5, `clinical_score` +3.0 inside the A/A band); BixBench and ResearchClawBench flat at higher cost; full-text search stopped at feasibility |
+| 2026-11-03 | small loop in production, 14 days | one account produced learning evidence (silent and used only), no learned method exists, consolidation idle: the loop is wired and starved of real corrections |
+
+Under the judge rule now fixed in code, measured on the 0–1 scale of each verdict and form (`noise_sample.py band`, agreement as sign agreement between repeated judgings with ties excluded), the Claude Sonnet judges of rounds 1 and 2 qualify for ResearchClawBench only (band 0.044, agreement 1.0). DeepResearch Bench falls just short (absolute 0.895, pairwise 0.896 against 0.9) and BixBench's per-capsule band (0.358) is far wider than any margin worth registering. Round 1's DeepResearch Bench +4.4 and round 2's BixBench and ResearchClawBench figures therefore stay descriptive, as reported, and a judged family needs a better-measured judge (more passes on pairs that really differ, or a demanding Opus judge measured the same way) before it can carry a confirmation.

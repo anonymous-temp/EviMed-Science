@@ -12,7 +12,7 @@
 
 - Base: origin/main `9614de895`, containing production `dc459da49`; v2 spec cherry-picked as `7d8a64063`.
 - Budget: CNY 1,000 per campaign, CNY 30,000 per Asia/Shanghai calendar month. Reserve before spend, include retries and failed calls, no rolling-window/calendar ambiguity.
-- Improvers: configured DeepSeek Flash and Qwen 3.8 Max through lab-owned gateways; no Claude in the initial profiles.
+- Improvers: configured DeepSeek Flash and Qwen 3.8 Max through lab-owned gateways; no Claude in the initial profiles. Superseded 2026-11-03: every offline improver and adjudicator is Claude (design §21).
 - Provider/resource bindings are empty by owner choice. Unbound lab/transport/signing fails with an explicit actionable code, never production fallback or automatic provisioning.
 - Latest owner request authorizes implementation, commit and push, and explicitly prohibits deployment.
 - Withdraw the previous five-account-only signal rule. Authorized incident conversations may be read by the existing approved model and converted into bounded, traceable reproductions for the configured lab; do not export credentials or unrelated histories. Preserve source rights, deletion/invalidation and purpose scope.
@@ -27,7 +27,7 @@
 - [x] WP4 (core and first policy consumer; skill/tool activation not yet qualified): signed campaign bundle, deterministic importer, compatible baseline CAS, surface-specific shadow/cohort/global activation and rollback receipts.
 - [x] WP5 (local lifecycle only): complete local synthetic/benign lifecycle and historical-gold analysis, without claiming live lab or fresh-confirmation acceptance.
 - [~] WP6: serving composition separated and its review regressions fixed (2026-10-26); physical deletion of the old experimental implementation still waits for the first accepted live campaign and a production cutover window.
-- [ ] WP7: offline-only optimizer interfaces and recorded stop rules; no upstream model experiment when unconfigured.
+- [~] WP7: offline-only optimizer interfaces and recorded stop rules. The Harness2 arm ran in rounds 1 and 2 (2026-11-01/02, `evals/harness-adaptation`, Claude improvers since 2026-11-03); the design's matched-budget best-of-n comparison has not been run, so no generator has qualified.
 
 ## WP0 build sequence
 
