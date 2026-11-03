@@ -136,6 +136,8 @@ export const NUMERIC_REFERENCES = {
   // design.simulate (delayed effect): gsDesign2's asymptotic MaxCombo power and expected events against the simulated ones, in Monte-Carlo errors
   N58f: { methods: ['design.simulate'], anchors: ['gsDesign2::fixed_design_maxcombo(alpha = 0.025', 'abs(pw$value - ref_power) <= 3 * pw$mcse'] },
 
+  // design.simulate: every simulated measure and its Monte-Carlo error (power, type I error, bias, empirical SE, mse, coverage) against rsimsum::simsum on the job's own replicate table
+  N63: { methods: ['design.simulate'], anchors: ['vs rsimsum::simsum on the replicate table the job summarised', 'r$worst < 1e-9'] },
 
   // --- the comparator-effect stream's cases (listed so that merging it needs no edit here; inert until the cases exist) ---
   N33a: { methods: ['comparator.weighted_cox'], anchors: ['Cross-software: the weights are WeightIt', 'rel(m(j_ebal, "hazard_ratio"), r_ebal$hr) < 1e-6'] },
