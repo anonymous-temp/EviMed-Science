@@ -36,6 +36,8 @@ const geo = vi.hoisted(() => ({
   getGeoJourney: vi.fn(),
   getGeoSources: vi.fn(),
   getGeoArticles: vi.fn(),
+  getGeoArticleCatalog: vi.fn(),
+  getGeoArticle: vi.fn(),
   getGeoDistribution: vi.fn(),
   getGeoActions: vi.fn(),
   getGeoClusters: vi.fn(),
@@ -43,6 +45,14 @@ const geo = vi.hoisted(() => ({
   getGeoAnswer: vi.fn(),
 }));
 vi.mock("@/lib/geoClient", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/geoClient")>()), ...geo }));
+
+function seedArticleCatalog() {
+  geo.getGeoArticleCatalog.mockImplementation(async (_geoId: string, input: { review?: boolean; limit: number; offset: number }) => {
+    const rows = articlesFilled.articles.filter(article => !input.review || article.safety === "open" && article.status !== "withdrawn");
+    return { articles: rows.slice(input.offset, input.offset + input.limit), total: rows.length, snapshot: "a".repeat(32), limit: input.limit, offset: input.offset };
+  });
+  geo.getGeoArticle.mockImplementation(async (_geoId: string, id: string) => articlesFilled.articles.find(article => article.id === id));
+}
 vi.mock("@/lib/geoAnalysisClient", async (original) => ({
   ...(await original<typeof import("@/lib/geoAnalysisClient")>()),
   getGeoAnalysis: vi.fn().mockRejectedValue(new Error("analysis unavailable")),
@@ -217,6 +227,7 @@ describe("the GEO project page, as a module page (T3) and its overview as a data
     geo.getGeoJourney.mockResolvedValue(journeyFilled);
     geo.getGeoSources.mockResolvedValue(sourcesFilled);
     geo.getGeoArticles.mockResolvedValue(articlesFilled);
+    seedArticleCatalog();
     geo.getGeoDistribution.mockResolvedValue(distributionFilled);
     geo.getGeoActions.mockResolvedValue(actionsFilled);
     geo.getGeoClusters.mockResolvedValue(clustersFilled);
@@ -275,8 +286,7 @@ describe("the GEO project page, as a module page (T3) and its overview as a data
     expect(address.searchParams.get("selectionRef")).toBe("gsel_exact");
     expect(address.searchParams.get("questionVersion")).toBe("4");
     expect(address.searchParams.get("session")).toBe("ses_keep");
-    await userEvent.click(screen.getByRole("button", { name: "深入分析" }));
-    await userEvent.click(screen.getByRole("menuitemradio", { name: "来源类型覆盖" }));
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "分析视角" }), "V17");
     expect(await screen.findByRole("heading", { name: "来源类型覆盖" })).toBeInTheDocument();
     expect(screen.queryByRole("list", { name: "信源" })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "返回信源" }));
@@ -325,6 +335,7 @@ describe("the GEO content and monitoring workbenches", () => {
     geo.getGeoEvidence.mockResolvedValue(evidenceFilled);
     geo.getGeoValue.mockResolvedValue(valueFilled);
     geo.getGeoArticles.mockResolvedValue(articlesFilled);
+    seedArticleCatalog();
     geo.getGeoDistribution.mockResolvedValue({ ...distributionFilled, market: { configured: false }, budget: null, orders: [] });
     geo.getGeoActions.mockResolvedValue(actionsFilled);
     geo.getGeoClusters.mockResolvedValue(clustersFilled);
@@ -388,6 +399,7 @@ describe("the GEO lists, data pages and reading page, each by its template", () 
     geo.getGeoJourney.mockResolvedValue(journeyFilled);
     geo.getGeoSources.mockResolvedValue(sourcesFilled);
     geo.getGeoArticles.mockResolvedValue(articlesFilled);
+    seedArticleCatalog();
     geo.getGeoDistribution.mockResolvedValue({ ...distributionFilled, market: { configured: false }, budget: null, orders: [] });
     geo.getGeoActions.mockResolvedValue(actionsFilled);
     geo.getGeoClusters.mockResolvedValue(clustersFilled);

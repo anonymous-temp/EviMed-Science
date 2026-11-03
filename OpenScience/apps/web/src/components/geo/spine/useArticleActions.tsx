@@ -1,12 +1,13 @@
-import { useState, type ReactNode } from "react";
+import { useState, useSyncExternalStore, type ReactNode } from "react";
 import { webErrorMessage } from "@/lib/apiClient";
-import { releaseGeoArticle, withdrawGeoArticle, type GeoArticle, type GeoProject } from "@/lib/geoClient";
+import { releaseGeoArticle, withdrawGeoArticle, stageGeoArticleRevision, type GeoArticle, type GeoProject } from "@/lib/geoClient";
 import { toast } from "@/lib/toast";
+import { sessionGeneration, subscribeSessionBoundary } from "@/lib/sessionLifecycle";
+import { GeoScopedVersionPreview } from "../GeoScopedVersionPreview";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { ArticleTextDialog } from "../ArticleTextDialog";
 import { useOpenArticle } from "./useOpenArticle";
 import { useOpenGeoConversation } from "../useOpenGeoConversation";
-import { getResultVersion, requestResultRevision } from "@/lib/resultProvenance";
 
 /** What the page needs of an article to act on it: its identity and where its text is. */
 export type ArticleRef = Pick<GeoArticle, "id" | "title" | "runId" | "path" | "currentResultVersionId" | "contentSha256"> & { cardId?: string | null };
@@ -22,6 +23,8 @@ export function useArticleActions(geoId: string, project: GeoProject, onChanged:
   const openConversation = useOpenGeoConversation();
   const [pending, setPending] = useState<{ kind: "withdraw" | "release"; article: ArticleRef } | null>(null);
   const [reading, setReading] = useState<ArticleRef | null>(null);
+  const generation = useSyncExternalStore(subscribeSessionBoundary, sessionGeneration, sessionGeneration);
+  const [versionReading, setVersionReading] = useState<{ generation: number; article: ArticleRef } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
   const act = () => {
@@ -41,6 +44,7 @@ export function useArticleActions(geoId: string, project: GeoProject, onChanged:
 
   const dialogs: ReactNode = (
     <>
+      {versionReading?.generation === generation && versionReading.article.currentResultVersionId && versionReading.article.contentSha256 && <GeoScopedVersionPreview geoId={geoId} target={{ kind: "article", recordId: versionReading.article.id, versionId: versionReading.article.currentResultVersionId, digest: versionReading.article.contentSha256 }} onClose={() => setVersionReading(null)} />}
       {reading && <ArticleTextDialog geoId={geoId} articleId={reading.id} title={reading.title || "证据卡片"} onClose={() => setReading(null)} />}
       {pending?.kind === "withdraw" && (
         <ConfirmDialog
@@ -65,21 +69,20 @@ export function useArticleActions(geoId: string, project: GeoProject, onChanged:
   );
 
   const reviseArticle = async (article: ArticleRef, instruction?: string) => {
-      if (!article.currentResultVersionId) return;
+      if (!article.currentResultVersionId || !article.contentSha256) return;
+      const ownerGeneration = sessionGeneration();
       try {
-        const version = await getResultVersion(article.currentResultVersionId);
-        if (version.projectId !== project.projectId || article.contentSha256 && version.digest !== article.contentSha256) throw new Error("The selected article version changed.");
-        const sessionId = version.producer.sessionId;
-        if (!sessionId) throw new Error("Article conversation unavailable");
-        const prepared = await requestResultRevision(version, { kind: "file", elementId: "file", selectedText: "" }, sessionId);
-        await openConversation({ projectId: project.projectId, geoId, sessionId, resultRevision: { referenceId: prepared.referenceId } }, instruction);
-      } catch (error: unknown) { toast.error(webErrorMessage(error, { fallback: "稿件对话暂时无法打开，请稍后重试。" })); }
+        const prepared = await stageGeoArticleRevision(geoId, article.id, article.currentResultVersionId, article.contentSha256);
+        if (ownerGeneration !== sessionGeneration()) return;
+        await openConversation({ projectId: project.projectId, geoId, sessionId: prepared.sessionId, exactSession: true, resultRevision: { referenceId: prepared.referenceId } }, instruction);
+      } catch (error: unknown) { if (ownerGeneration === sessionGeneration()) toast.error(webErrorMessage(error, { fallback: "稿件对话暂时无法打开，请稍后重试。" })); }
     };
 
   return {
     /** Whether the article has anything to open, and the word for the button that opens it. */
     reachable: (article: ArticleRef): { label: string } | null => (article.runId && article.path ? { label: "打开稿件" } : article.cardId ? { label: "查看稿件" } : null),
     open: (article: ArticleRef) => {
+      if (article.currentResultVersionId && article.contentSha256) { setVersionReading({ generation: sessionGeneration(), article }); return; }
       if (openFile(article)) return;
       if (article.cardId) setReading(article);
     },

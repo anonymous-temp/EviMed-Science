@@ -1,9 +1,23 @@
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
-import { expect, it, vi } from "vitest";
+import { beforeEach, expect, it, vi } from "vitest";
 import { geoProject } from "./__fixtures__/geoTabs";
 import { GeoWorkDetails } from "./GeoWorkDetails";
+import { WEB_SESSION_STARTED_EVENT } from "@/lib/sessionLifecycle";
+import { CONVERSATION_SETTLED_EVENT } from "@/lib/runtimeUiBridge";
+
+const files = vi.hoisted(() => ({ pick: vi.fn(), upload: vi.fn() }));
+vi.mock("@/lib/backend", () => ({ pickFiles: files.pick, uploadFilesToWorkspace: files.upload }));
+const native = vi.hoisted(() => ({ sources: vi.fn(), scope: vi.fn(), history: vi.fn() }));
+vi.mock("@/lib/geoNativeClient", () => ({ geoConversationSources: native.sources, geoConversationSourceScope: native.scope, geoConversationHistory: native.history }));
+beforeEach(() => {
+  vi.clearAllMocks();
+  files.pick.mockResolvedValue([]); files.upload.mockResolvedValue([]);
+  native.sources.mockResolvedValue([{ id: "s1", title: "说明书" }, { id: "s2", title: "研究" }]);
+  native.scope.mockResolvedValue({ sourceScope: null });
+  native.history.mockResolvedValue({ sessionId: "one", partial: true, capturedAt: null, messages: [{ seq: 1, role: "user", text: "先核对说明书" }] });
+});
 
 function renderDetails(project = geoProject()) {
   const onOpenRuns = vi.fn(), onOpenSettings = vi.fn();
@@ -51,4 +65,123 @@ it("keeps recent activity linked to its exact answer and current scope", async (
   expect(event).toHaveAttribute("href", expect.stringContaining("/app/geo/geo_1/answers/snap_2"));
   expect(event).toHaveAttribute("href", expect.stringContaining("round=r1"));
   expect(event).toHaveAttribute("href", expect.stringContaining("session=ses1"));
+});
+
+
+it("reads the exact session and reports selection and partial history to members", async () => {
+  native.scope.mockResolvedValue({ sourceScope: ["s1"] });
+  const project = geoProject({}, { access: { owner: false, roles: ["viewer"], abilities: ["view"] } });
+  render(<MemoryRouter><GeoWorkDetails project={project} sessionId="one" onOpenRuns={vi.fn()} onOpenSettings={vi.fn()} /></MemoryRouter>);
+  expect(await screen.findByText("当前范围：已选择 1 份资料")).toBeInTheDocument();
+  expect(screen.getByText("先核对说明书")).toBeInTheDocument();
+  expect(screen.getByText(/历史记录不完整/)).toBeInTheDocument();
+  expect(native.sources).toHaveBeenCalledWith({ kind: "geo", geoProjectId: project.id, sessionId: "one" });
+  expect(screen.queryByRole("button", { name: /上传/ })).not.toBeInTheDocument();
+});
+
+it("distinguishes explicit empty scope and retries failed reads", async () => {
+  native.scope.mockRejectedValueOnce(new Error("offline")).mockResolvedValue({ sourceScope: [] });
+  render(<MemoryRouter><GeoWorkDetails project={geoProject()} sessionId="one" onOpenRuns={vi.fn()} onOpenSettings={vi.fn()} /></MemoryRouter>);
+  expect(await screen.findByRole("alert")).toHaveTextContent("未能读取");
+  await userEvent.click(screen.getByRole("button", { name: "重试" }));
+  expect(await screen.findByText("当前范围：不使用资料")).toBeInTheDocument();
+});
+
+it("discards a late response from the previous session", async () => {
+  let finish!: (value: unknown) => void;
+  native.history.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; })).mockResolvedValue({ sessionId: "two", partial: false, capturedAt: null, messages: [{ seq: 2, role: "user", text: "新会话" }] });
+  const project = geoProject();
+  const view = render(<MemoryRouter><GeoWorkDetails project={project} sessionId="one" onOpenRuns={vi.fn()} onOpenSettings={vi.fn()} /></MemoryRouter>);
+  view.rerender(<MemoryRouter><GeoWorkDetails project={project} sessionId="two" onOpenRuns={vi.fn()} onOpenSettings={vi.fn()} /></MemoryRouter>);
+  expect(await screen.findByText("新会话")).toBeInTheDocument();
+  finish({ sessionId: "one", partial: false, messages: [{ seq: 1, role: "user", text: "旧会话" }] });
+  expect(screen.queryByText("旧会话")).not.toBeInTheDocument();
+});
+
+it("does not read without a confirmed session and labels project default distinctly", async () => {
+  const project = geoProject();
+  const view = render(<MemoryRouter><GeoWorkDetails project={project} onOpenRuns={vi.fn()} onOpenSettings={vi.fn()} /></MemoryRouter>);
+  expect(native.sources).not.toHaveBeenCalled();
+  expect(screen.getByText("打开对话后查看。")).toBeInTheDocument();
+  view.rerender(<MemoryRouter><GeoWorkDetails project={project} sessionId="one" onOpenRuns={vi.fn()} onOpenSettings={vi.fn()} /></MemoryRouter>);
+  expect(await screen.findByText("当前范围：项目默认资料")).toBeInTheDocument();
+});
+
+
+const ownerProject = () => geoProject({}, { access: { owner: true, roles: ["owner"], abilities: ["view", "edit"] } });
+it("refreshes only after the displayed conversation settles", async () => {
+  render(<MemoryRouter><GeoWorkDetails project={ownerProject()} sessionId="one" onOpenRuns={vi.fn()} onOpenSettings={vi.fn()} /></MemoryRouter>);
+  await screen.findByText("当前范围：项目默认资料");
+  act(() => window.dispatchEvent(new CustomEvent(CONVERSATION_SETTLED_EVENT, { detail: { sessionId: "other" } })));
+  expect(native.sources).toHaveBeenCalledTimes(1);
+  act(() => window.dispatchEvent(new CustomEvent(CONVERSATION_SETTLED_EVENT, { detail: { sessionId: "one" } })));
+  await waitFor(() => expect(native.sources).toHaveBeenCalledTimes(2));
+});
+it("discards a file selection started under a previous login even if the project and session match", async () => {
+  let finish!: (picked: File[]) => void;
+  files.pick.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+  render(<MemoryRouter><GeoWorkDetails project={ownerProject()} sessionId="one" onOpenRuns={vi.fn()} onOpenSettings={vi.fn()} /></MemoryRouter>);
+  await userEvent.click(screen.getByRole("button", { name: "添加项目资料" }));
+  act(() => window.dispatchEvent(new Event(WEB_SESSION_STARTED_EVENT)));
+  await act(async () => { finish([new File(["data"], "private.txt")]); });
+  expect(files.upload).not.toHaveBeenCalled();
+  expect(screen.getByRole("button", { name: "添加项目资料" })).toBeEnabled();
+});
+it("uploads to the exact owner project and refreshes session sources", async () => {
+  const file = new File(["data"], "input.txt");
+  files.pick.mockResolvedValue([file]); files.upload.mockResolvedValue(["knowledge-base/input.txt"]);
+  const project = ownerProject();
+  render(<MemoryRouter><GeoWorkDetails project={project} sessionId="one" onOpenRuns={vi.fn()} onOpenSettings={vi.fn()} /></MemoryRouter>);
+  await screen.findByText("当前范围：项目默认资料");
+  await userEvent.click(screen.getByRole("button", { name: "添加项目资料" }));
+  expect(await screen.findByText(/已上传 1 个文件，待解析/)).toBeInTheDocument();
+  expect(files.upload).toHaveBeenCalledWith([file], "knowledge-base", "base", project.projectId, expect.any(Function));
+  await waitFor(() => expect(native.sources).toHaveBeenCalledTimes(2));
+});
+
+it("allows cancellation without upload and reports failure without claiming success", async () => {
+  const file = new File(["data"], "input.txt");
+  files.pick.mockResolvedValueOnce([]).mockResolvedValueOnce([file]); files.upload.mockRejectedValue(new Error("offline"));
+  render(<MemoryRouter><GeoWorkDetails project={ownerProject()} onOpenRuns={vi.fn()} onOpenSettings={vi.fn()} /></MemoryRouter>);
+  const user = userEvent.setup();
+  await user.click(screen.getByRole("button", { name: "添加项目资料" }));
+  expect(files.upload).not.toHaveBeenCalled();
+  await user.click(screen.getByRole("button", { name: "添加项目资料" }));
+  expect(await screen.findByText(/上传未完成/)).toBeInTheDocument();
+  expect(screen.queryByText(/已上传 1 个文件/)).not.toBeInTheDocument();
+});
+
+it("does not offer member uploads or upload a selection after switching projects", async () => {
+  let finish!: (files: File[]) => void;
+  files.pick.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+  const first = ownerProject();
+  const view = render(<MemoryRouter><GeoWorkDetails project={first} sessionId="one" onOpenRuns={vi.fn()} onOpenSettings={vi.fn()} /></MemoryRouter>);
+  await userEvent.click(screen.getByRole("button", { name: "添加项目资料" }));
+  const member = geoProject({}, { access: { owner: false, roles: ["viewer"], abilities: ["view"] } });
+  view.rerender(<MemoryRouter><GeoWorkDetails project={{ ...member, id: "geo-other", projectId: "other" }} sessionId="two" onOpenRuns={vi.fn()} onOpenSettings={vi.fn()} /></MemoryRouter>);
+  finish([new File(["data"], "input.txt")]);
+  await waitFor(() => expect(files.upload).not.toHaveBeenCalled());
+  expect(screen.queryByRole("button", { name: "添加项目资料" })).not.toBeInTheDocument();
+});
+
+it("invalidates an in-flight upload when the session changes", async () => {
+  let finish!: (names: string[]) => void;
+  files.pick.mockResolvedValue([new File(["data"], "input.txt")]);
+  files.upload.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+  const project = ownerProject();
+  const view = render(<MemoryRouter><GeoWorkDetails project={project} sessionId="one" onOpenRuns={vi.fn()} onOpenSettings={vi.fn()} /></MemoryRouter>);
+  await userEvent.click(screen.getByRole("button", { name: "添加项目资料" }));
+  await waitFor(() => expect(files.upload).toHaveBeenCalled());
+  const valid = files.upload.mock.calls[0][4] as () => boolean;
+  expect(valid()).toBe(true);
+  view.rerender(<MemoryRouter><GeoWorkDetails project={project} sessionId="two" onOpenRuns={vi.fn()} onOpenSettings={vi.fn()} /></MemoryRouter>);
+  expect(valid()).toBe(false);
+  await act(async () => { finish(["knowledge-base/input.txt"]); });
+  expect(screen.queryByText(/已上传 1 个文件/)).not.toBeInTheDocument();
+});
+
+it("does not show upload to an owner without edit ability", async () => {
+  const project = geoProject({}, { access: { owner: true, roles: ["owner"], abilities: ["view"] } });
+  render(<MemoryRouter><GeoWorkDetails project={project} onOpenRuns={vi.fn()} onOpenSettings={vi.fn()} /></MemoryRouter>);
+  expect(screen.queryByRole("button", { name: "添加项目资料" })).not.toBeInTheDocument();
 });

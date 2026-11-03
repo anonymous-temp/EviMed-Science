@@ -761,7 +761,7 @@ describe("总览", () => {
     expect(tile.querySelector("[data-delta='down']")).toHaveTextContent("2");
     const title = await screen.findByRole("heading", { name: "综合可见度指数 44，比上次低 2" });
     // The chart says which readings it compares and when the next is.
-    expect(title.parentElement).toHaveTextContent("上次 9月25日 · 下次 10月19日");
+    expect(title.parentElement).toHaveTextContent(/上次 9月25日 · (?:计划|计划已到期) 10月19日/);
     // The mention rate moved two points inside its measured band of ±3: flat, on its tile.
     expect(screen.getByRole("group", { name: "品类问题可见率" }).querySelector("[data-delta='flat']")).not.toBeNull();
     overview.unmount();
@@ -769,7 +769,7 @@ describe("总览", () => {
     renderTab(<VisibilityTab {...props(fallingProject())} />);
     const same = await screen.findByRole("heading", { name: /综合可见度指数 44，/ });
     expect(same).toHaveTextContent("综合可见度指数 44，比上次低 2");
-    expect(same.parentElement).toHaveTextContent("上次 9月25日 · 下次 10月19日");
+    expect(same.parentElement).toHaveTextContent(/上次 9月25日 · (?:计划|计划已到期) 10月19日/);
   });
 
   it("an engine-set change shows no ▲ or ▼ anywhere on 总览: not on a tile, not in the sentence, the chart or the band — one plain statement instead", async () => {
@@ -796,9 +796,8 @@ describe("总览", () => {
     renderTab(<VisibilityTab {...props(enginesChangedProject())} />);
     const title = await screen.findByRole("heading", { name: /综合可见度指数 44，/ });
     expect(title).toHaveTextContent(`综合可见度指数 44，${NOT_COMPARED}`);
-    expect(title.parentElement).toHaveTextContent("上次 9月25日 · 下次 10月19日");
-    await userEvent.click(screen.getByRole("button", { name: /^指标：/ }));
-    await userEvent.click(await screen.findByRole("menuitemradio", { name: "品类问题可见率" }));
+    expect(title.parentElement).toHaveTextContent(/上次 9月25日 · (?:计划|计划已到期) 10月19日/);
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "分析指标" }), "mention");
     expect(await screen.findByRole("heading", { name: `品类问题可见率 23%，${NOT_COMPARED}` })).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/[▲▼]/);
   });
@@ -819,8 +818,7 @@ describe("总览", () => {
     client.getGeoMonitoring.mockResolvedValue(fallingMonitoring);
     renderTab(<VisibilityTab {...props(fallingProject())} />);
     await screen.findByRole("heading", { name: /综合可见度指数 44/ });
-    await userEvent.click(screen.getByRole("button", { name: /^指标：/ }));
-    await userEvent.click(await screen.findByRole("menuitemradio", { name: "品类问题可见率" }));
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "分析指标" }), "mention");
     expect(await screen.findByRole("heading", { name: "品类问题可见率 23%，与上次持平" })).toBeInTheDocument();
   });
 
@@ -1086,7 +1084,7 @@ describe("可见度", () => {
     client.getGeoMonitoring.mockResolvedValue({ ...monitoringFilled, series: [], byEngine: [] });
     client.getGeoDiagnosis.mockResolvedValue(diagnosisFilled);
     renderTab(<VisibilityTab {...props()} />);
-    expect(await screen.findByText("还没有开始持续监测，第一次复测后这里会画出趋势。")).toBeInTheDocument();
+    expect(await screen.findByText("所选范围还没有可用的趋势记录。")).toBeInTheDocument();
   });
 });
 

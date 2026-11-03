@@ -1,7 +1,6 @@
 import { geoAutomationEnabled } from "@evimed/domain";
 import { useLocation } from "react-router";
-import { GeoAnalysisEntry } from "../GeoAnalysisEntry";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, type ReactNode } from "react";
 import {
   readGeoCell,
   type GeoDiagnosis,
@@ -14,6 +13,7 @@ import {
 import { ChartCard, LegendMark } from "@/components/ui/ChartCard";
 import { DataTable, InlineBar } from "@/components/ui/DataTable";
 import { Disclosure } from "@/components/ui/Disclosure";
+import { Select } from "@/components/ui/Input";
 import type { FilterOption } from "@/components/ui/FilterChips";
 import { TrendChart } from "@/components/charts/TrendChart";
 import { OWN_COLOR, TARGET_COLOR } from "@/components/charts/trendModel";
@@ -37,6 +37,7 @@ import {
   pointCell,
   readingChange,
   rivalRanking,
+  scheduledAfterObservations,
   statedValue,
   trendConclusion,
   withCoverageMarker,
@@ -55,13 +56,13 @@ import { ClusterMatrixCard, EngineHeatCard, EngineMetricCard, isEngineBarMetric,
  * same metric is the ringed column of the engine grid under it and the bars of the engines' card. Under those, the engines against
  * the rates, which question groups each engine names us in (counts), the pools, and the rivals.
  *
- * The choices are the band's toolbar: the metric, and the engine, the question pool and the question group the page is narrowed
- * to (`?engine=` `?pool=` `?cluster=`, so a link means what it says). Nothing on the page filters from below.
+ * The metric and supported comparison stay with the trend; the shared toolbar carries the observation scope. Their URL state keeps
+ * the reader's choice across navigation (`trendMetric`, `compareBy`, `engine`, `pool` and `cluster`).
  */
 /**
  * Component: VisibilityTab; owner: GEO; rules: DS23.
  * Anatomy: Metric trend, engine and group readings, pools, rivals and monitoring.
- * Variants: Metric navigation with folded engine, pool and group filters; active tokens and clear.
+ * Variants: Metric and eligible competitor comparison beside the trend; scoped engine, pool and group filters.
  * States: Independent diagnosis/monitoring loading, partial failure/retry and unmeasured baselines.
  * Hit area: Shared controls retain their standard targets.
  * Keyboard: Native controls preserve Tab and activation behavior.
@@ -70,7 +71,7 @@ import { ClusterMatrixCard, EngineHeatCard, EngineMetricCard, isEngineBarMetric,
  * Responsive: Content follows the parent workspace width.
  * Verification: Focused component behavior tests and fixture walkthrough.
  */
-export function VisibilityTab({ geoId, project }: { geoId: string; project: GeoProject }) {
+export function VisibilityTab({ geoId, project, analysisSelector }: { geoId: string; project: GeoProject; analysisSelector?: ReactNode }) {
   const frame = useGeoFrame();
   const { hash } = useLocation();
   const openedForProject = useRef<string | null>(null);
@@ -97,7 +98,8 @@ export function VisibilityTab({ geoId, project }: { geoId: string; project: GeoP
   const watch = monitoring.state.kind === "ready" ? monitoring.state.data : null;
   const diag = diagnosis.state.kind === "ready" ? diagnosis.state.data : null;
   const series = (Array.isArray(watch?.series) ? watch.series : []).filter((line) => line && metricName(line.key) && Array.isArray(line.points) && line.points.length > 0);
-  const [key, setKey] = useState<string | null>(null);
+  const [key, setKey] = useGeoSearchParam("trendMetric");
+  const [compareBy, setCompareBy] = useGeoSearchParam("compareBy");
   const line = series.find((item) => item.key === key) ?? series[0] ?? null;
   const options: FilterOption<string>[] = series.map((item) => ({ value: item.key, label: metricName(item.key) ?? "" }));
 
@@ -120,8 +122,7 @@ export function VisibilityTab({ geoId, project }: { geoId: string; project: GeoP
   const narrowed = engine !== null || pool !== null || cluster !== null;
   const metric = line ? line.key : null;
 
-  useGeoToolbar(options.length > 1 || engines.length > 1 || pools.length > 1 || groupOptions.length > 1 ? {
-    navigation: options.length > 1 ? [{ kind: "select" as const, label: "指标", options, value: metric ?? options[0].value, onChange: (value: string | null) => { if (value) setKey(value); } }] : [],
+  useGeoToolbar(engines.length > 1 || pools.length > 1 || groupOptions.length > 1 ? {
     filters: [
       ...(engines.length > 1 ? [{
         kind: "select" as const, folded: true,
@@ -152,9 +153,9 @@ export function VisibilityTab({ geoId, project }: { geoId: string; project: GeoP
     onClear: narrowed ? () => change({ [GEO_ENGINE_PARAM]: null, [GEO_POOL_PARAM]: null, [GEO_CLUSTER_FILTER_PARAM]: null }) : undefined,
   } : null);
 
-  if (monitoring.state.kind === "loading" && diagnosis.state.kind === "loading") return <>{automation}<TabSkeleton /></>;
+  if (monitoring.state.kind === "loading" && diagnosis.state.kind === "loading") return <>{analysisSelector}{automation}<TabSkeleton /></>;
   if (monitoring.state.kind === "error" && diagnosis.state.kind === "error") {
-    return <>{automation}<TabError message={monitoring.state.message} onRetry={() => { monitoring.reload(); diagnosis.reload(); }} /></>;
+    return <>{analysisSelector}{automation}<TabError message={monitoring.state.message} onRetry={() => { monitoring.reload(); diagnosis.reload(); }} /></>;
   }
 
   const denominator = denominatorLine(project, diag);
@@ -162,28 +163,41 @@ export function VisibilityTab({ geoId, project }: { geoId: string; project: GeoP
   // One read failing leaves the others on the page; each block that reads it says so, with 重试, instead of its empty sentence.
   const monitoringFailed = readFailure(monitoring);
   const diagnosisFailed = readFailure(diagnosis);
+  // Competitor measurements are on mention rate only. Do not imply a ranking belongs to another metric.
+  const compareRivals = metric === "mention" && compareBy !== "none";
+  const canCompareRivals = metric === "mention" && (ranking.length > 1 || Boolean(watch?.rivals?.length));
+  const showRanking = compareRivals && (ranking.length > 0 || diagnosis.state.kind === "loading" || diagnosisFailed !== null);
 
   return (
     <div data-geo-tab="visibility" className="flex flex-col gap-6">
-      {automation}
-      <GeoComparison geoId={geoId} view={project} />
-      <GeoOverviewMetrics geoId={geoId} project={project} diagnosis={diagnosis} strategy={strategy} compact />
-      {strategy.state.kind === "error" && <TabError message={`目标信息没有读到：${strategy.state.message}`} onRetry={strategy.reload} />}
-      {strategy.state.kind === "ready" && strategy.state.refreshError && <TabError message={`目标信息更新失败，仍显示上次结果：${strategy.state.refreshError}`} onRetry={strategy.reload} />}
-      <GeoAnalysisEntry geoId={geoId} project={project} initialView="V02" />
-      <div data-geo-trend-ranking="" className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+      {(analysisSelector || options.length > 1 || canCompareRivals) && <div className="flex flex-wrap items-end gap-3">
+        {analysisSelector}
+        {options.length > 1 && <div className="w-full max-w-64"><Select label="分析指标" value={metric ?? options[0].value} onChange={(event) => setKey(event.target.value)}>
+          {options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+        </Select></div>}
+        {canCompareRivals && <div className="w-full max-w-48"><Select label="比较" value={compareRivals ? "rivals" : "none"} onChange={event => setCompareBy(event.target.value === "none" ? "none" : null)}>
+          <option value="rivals">同类药</option><option value="none">不比较</option>
+        </Select></div>}
+      </div>}
+      <div data-geo-trend-ranking="" className={showRanking ? "grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]" : "grid grid-cols-1 gap-6"}>
       <MetricTrend
         project={project}
         watch={watch}
         line={line}
         denominator={denominator}
+        compareRivals={compareRivals}
         // The fluctuation band was measured on the mention rate and belongs to it alone.
         noise={line?.key === "mention" && typeof diag?.noise?.band === "number" ? diag.noise.band : null}
         loading={monitoring.state.kind === "loading"}
         error={monitoringFailed}
       />
-      <Ranking ranking={ranking} loading={diagnosis.state.kind === "loading"} error={diagnosisFailed} />
+      {showRanking && <Ranking ranking={ranking} loading={diagnosis.state.kind === "loading"} error={diagnosisFailed} />}
       </div>
+      <GeoOverviewMetrics geoId={geoId} project={project} diagnosis={diagnosis} strategy={strategy} compact />
+      {strategy.state.kind === "error" && <TabError message={`目标信息没有读到：${strategy.state.message}`} onRetry={strategy.reload} />}
+      {strategy.state.kind === "ready" && strategy.state.refreshError && <TabError message={`目标信息更新失败，仍显示上次结果：${strategy.state.refreshError}`} onRetry={strategy.reload} />}
+      <GeoComparison geoId={geoId} view={project} />
+      {diagnosisFailed && metric !== "mention" && <TabError message={`同类药的提及率没有读到：${diagnosisFailed.message}`} onRetry={diagnosisFailed.retry} />}
       <PoolRivalTrends project={project} rivals={watch?.rivals} />
       <EngineHeatCard project={project} diagnosis={diag} loading={diagnosis.state.kind === "loading"} metric={metric} engine={engine} error={diagnosisFailed} />
       {isEngineBarMetric(metric)
@@ -198,6 +212,7 @@ export function VisibilityTab({ geoId, project }: { geoId: string; project: GeoP
       />
       <ByPool geoId={geoId} diagnosis={diag} loading={diagnosis.state.kind === "loading"} pool={pool} error={diagnosisFailed} />
       <MoreMetrics geoId={geoId} diagnosis={diag} />
+      {automation}
       <ClusterDrawerHost geoId={geoId} project={project} />
     </div>
   );
@@ -210,6 +225,7 @@ function MetricTrend({
   watch,
   line,
   denominator,
+  compareRivals,
   noise,
   loading,
   error,
@@ -218,6 +234,7 @@ function MetricTrend({
   watch: GeoMonitoring | null;
   line: { key: string; points: GeoSeriesPoint[] } | null;
   denominator: string | null;
+  compareRivals: boolean;
   noise: number | null;
   loading: boolean;
   /** The monitoring did not come: the card says so, never 「还没有开始持续监测」. */
@@ -234,13 +251,13 @@ function MetricTrend({
     own: { name: project.product?.brandName || project.name, values: points.map(statedValue) },
     // Rivals are measured on our mention rate's own questions (M-16 beside
     // M-01S), so they are drawn on that chart and on no other.
-    rivals: line?.key === "mention" ? rivalLines(watch?.rivals?.filter(rival => !rival.pool), points.map((point) => point.date)) : [],
+    rivals: compareRivals ? rivalLines(watch?.rivals?.filter(rival => !rival.pool), points.map((point) => point.date)) : [],
     target,
     targetLabel: target === null ? null : `目标 ${format(target)}`,
     markers: withCoverageMarker(actionMarkers(points.map((point) => point.date), watch), points),
-    nextLabel: next ? `${monthDay(next.date)} ${roundKindWord(next.kind) ?? "复测"}` : null,
+    nextLabel: next && scheduledAfterObservations(next.date, points.map(point => point.date)) ? `${monthDay(next.date)} 计划${roundKindWord(next.kind) ?? "复测"}` : null,
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [line, watch, next, target, project.name]);
+  }), [line, watch, next, target, project.name, compareRivals]);
   const latest = pointCell(points[points.length - 1]);
   // The same rule as 总览 states the same change by.
   const change = readingChange(points, { noise });
@@ -249,18 +266,18 @@ function MetricTrend({
     // The block the rail's 「监测」 scrolls to (`GEO_TAB_SECTIONS`).
     <div id={geoSectionId("trend")}>
       <ChartCard
-        title={trendConclusion(name, points.length ? latest : null, change, unit)}
-        legend={(
+        title={loading && points.length === 0 ? "正在读取趋势" : error && points.length === 0 ? `${name}趋势暂时无法读取` : points.length === 0 ? `${name}暂无趋势记录` : trendConclusion(name, latest, change, unit)}
+        legend={points.length > 0 ? (
           <>
             <LegendMark series="own" color={OWN_COLOR}>{project.product?.brandName || project.name}</LegendMark>
             {target !== null && <LegendMark series="target" shape="dash" color={TARGET_COLOR}>目标</LegendMark>}
           </>
-        )}
+        ) : undefined}
         meta={chartDates(change, next?.date)}
         state={loading ? "loading" : error && points.length === 0 ? "error" : points.length === 0 ? "empty" : "content"}
         errorMessage={error ? `测量趋势没有读到：${error.message}` : undefined}
         onRetry={error?.retry}
-        emptyText="还没有开始持续监测，第一次复测后这里会画出趋势。"
+        emptyText="所选范围还没有可用的趋势记录。"
         footnote={denominator}
         height={260}
       >

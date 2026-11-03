@@ -1262,6 +1262,29 @@ export class GeoStore {
     return result.rows.map(geoArticleFromRow);
   }
 
+  /** A bounded page over the whole project's article catalogue, not a filter over the legacy first 2,000 rows.
+   * @param {string} geoId @param {{search:string,status:string,sort:'title'|'status'|'updated',limit:number,offset:number,review:boolean,snapshot:string|null}} input */
+  async articleCatalog(geoId, input) {
+    const orders = {
+      title: [`COALESCE(a.title,'') ASC, a.id ASC`, `COALESCE(p.title,'') ASC, p.id ASC`],
+      status: [`a.status ASC, a.id ASC`, `p.status ASC, p.id ASC`],
+      updated: [`a.updated_at DESC NULLS LAST, a.id ASC`, `p.updated_at DESC NULLS LAST, p.id ASC`],
+    };
+    const order = orders[input.sort];
+    if (!order) throw new Error('Invalid article catalogue sort');
+    const result = await this.query(`WITH matching AS MATERIALIZED (
+      SELECT a.*, COALESCE(g.typical_question,'') AS catalog_question FROM evimed_geo.articles a
+      LEFT JOIN evimed_geo.question_groups g ON g.id=a.group_id AND g.geo_project_id=a.geo_project_id
+      WHERE a.geo_project_id=$1 AND ($2='' OR strpos(lower(COALESCE(a.title,'')),lower($2))>0
+        OR strpos(lower(COALESCE(g.typical_question,'')),lower($2))>0)
+        AND ($3='all' OR a.status=$3) AND (NOT $6::boolean OR (a.safety='open' AND a.status<>'withdrawn'))
+    ) SELECT totals.total, totals.snapshot, p.* FROM (SELECT count(*)::integer AS total,
+      md5(COALESCE(string_agg(md5(to_jsonb(m)::text),'' ORDER BY m.id),'')) AS snapshot FROM matching m) totals
+      LEFT JOIN LATERAL (SELECT a.* FROM matching a ORDER BY ${order[0]} LIMIT $4 OFFSET $5) p ON TRUE
+      ORDER BY ${order[1]}`, [geoId, input.search, input.status, input.limit, input.offset, input.review]);
+    return { total: Number(result.rows[0]?.total ?? 0), snapshot: String(result.rows[0]?.snapshot ?? ''), articles: result.rows.filter(row => row.id != null).map(geoArticleFromRow) };
+  }
+
   /** @param {string} geoId @param {string} articleId */
   async getArticle(geoId, articleId) {
     const result = await this.query(`SELECT * FROM evimed_geo.articles WHERE geo_project_id = $1 AND id = $2`, [geoId, articleId]);

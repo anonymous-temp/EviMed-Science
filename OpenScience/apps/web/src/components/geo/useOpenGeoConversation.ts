@@ -24,6 +24,8 @@ export interface GeoConversationTarget {
   geoPlanContext?: { referenceId: string };
   /** A versioned handling attempt resumes its own native session even while another is selected in the page URL. */
   exactSession?: boolean;
+  /** The project work surface is reopening its default session, rather than an explicitly addressed historical one. */
+  implicitPrimary?: boolean;
 }
 
 /** Open an exact module descriptor in the existing native composer. Drafts remain unsent. */
@@ -65,7 +67,9 @@ export function useOpenGeoConversation() {
         ? `${geoChatPath(geoId, intent.sessionId)}${location.search}${location.hash}`
         : geoPanePath(sameProject ? location.pathname : `/app/geo/${encodeURIComponent(geoId)}`, sameProject ? location.search : "", sameProject ? location.hash : "", intent.sessionId);
       // Opening a pane is not a new answer/list visit: Back should leave the object, not just close its conversation.
-      navigate(path, { replace: sameProject && (!legacyChat || !geoSessionIdFromChatPath(location.pathname)), state: { runtimeUiIntent: prepareRuntimeUiIntent(intent) }, flushSync: true });
+      navigate(path, { replace: sameProject && (!legacyChat || !geoSessionIdFromChatPath(location.pathname)), state: {
+        runtimeUiIntent: prepareRuntimeUiIntent(intent), ...(target.implicitPrimary ? { geoImplicitPrimary: descriptor.sessionId } : {}),
+      }, flushSync: true });
       return true;
     } catch (error: unknown) {
       if (!current()) return false;

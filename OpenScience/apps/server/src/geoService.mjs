@@ -1877,6 +1877,22 @@ export class GeoService {
   /** `GET …/:id/articles`. @param {{ id: string }} user @param {string} id */
   async articles(user, id) { return this.articlesOf(await this.requireProject(user, id)); }
 
+  /** @param {{id:string}} user @param {string} id @param {{search:string,status:string,sort:'title'|'status'|'updated',limit:number,offset:number,review:boolean,snapshot:string|null}} input */
+  async articleCatalog(user, id, input) {
+    const project = await this.requireProject(user, id);
+    const page = await this.store.articleCatalog(project.id, input);
+    if (input.snapshot && input.snapshot !== page.snapshot) throw failure(409, 'geo_article_catalog_changed', 'The article catalogue changed. Reload from its first page.');
+    return { ...(await this.articlesOf(project, page.articles)), total: page.total, snapshot: page.snapshot, limit: input.limit, offset: input.offset };
+  }
+
+  /** @param {{id:string}} user @param {string} id @param {string} articleId */
+  async article(user, id, articleId) {
+    const project = await this.requireProject(user, id);
+    const row = await this.store.getArticle(project.id, articleId);
+    if (!row) throw failure(404, 'geo_article_not_found', 'Article not found.');
+    return (await this.articlesOf(project, [row])).articles[0];
+  }
+
   /** Immutable business associations beside shared result versions. */
   async articleVersions(user, id, articleId) {
     const project = await this.requireProject(user, id);
@@ -1887,10 +1903,10 @@ export class GeoService {
       versions: await this.store.articleVersions(project.id, articleId) };
   }
 
-  /** @param {Awaited<ReturnType<GeoService["requireProject"]>>} project */
-  async articlesOf(project) {
+  /** @param {Awaited<ReturnType<GeoService["requireProject"]>>} project @param {Awaited<ReturnType<GeoService['store']['listArticles']>> | null} [selectedArticles] */
+  async articlesOf(project, selectedArticles = null) {
     const planningLinks = await this.planContexts?.outputLinks(project) ?? [];
-    const articles = await this.store.listArticles(project.id);
+    const articles = selectedArticles ?? await this.store.listArticles(project.id);
     const [groups, placements, cited] = await Promise.all([
       this.store.query(`SELECT id, typical_question, is_control FROM evimed_geo.question_groups WHERE geo_project_id = $1`, [project.id]),
       this.store.query(`SELECT article_id, count(*)::integer AS n FROM evimed_geo.orders WHERE geo_project_id = $1
@@ -1914,6 +1930,7 @@ export class GeoService {
         // Written for a control group: it is out of the control arm, and the platform never places for it (said once when registered).
         groupIsControl: Boolean(article.groupId && controlGroups.has(article.groupId)),
         status: article.status, gate: article.gate, currentResultVersionId: article.currentResultVersionId, onlineUpdateNeeded: article.onlineUpdateNeeded,
+        updatedAt: article.updatedAt,
         safety: article.safety, contentSha256: article.contentSha256, path: article.path, runId: article.runId, claimCount: article.claimIds.length,
         placements: counts.get(article.id) ?? 0, cited: citedIds.has(article.id),
         // The evidence chain: the card a card-layer article is made from, whether the claim references the platform read in the

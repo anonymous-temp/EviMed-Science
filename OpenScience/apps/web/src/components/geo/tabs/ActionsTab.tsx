@@ -1,11 +1,13 @@
 import { sanitizeRuntimeUiHistoryState } from "@/lib/runtimeUiNavigation";
 import { GeoAnalysisEntry } from "../GeoAnalysisEntry";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { webErrorMessage } from "@/lib/apiClient";
 import {
   chooseGeoActionSource,
   getGeoArticles,
+  getGeoArticle,
+  getGeoArticleCatalog,
   getGeoDistribution,
   skipGeoAction,
   type GeoAction,
@@ -19,9 +21,12 @@ import type { FilterOption } from "@/components/ui/FilterChips";
 import { List } from "@/components/ui/ListRow";
 import { Note } from "@/components/ui/Note";
 import { Button } from "@/components/ui/Button";
+import { DataTable } from "@/components/ui/DataTable";
+import { Input, Select } from "@/components/ui/Input";
 import { geoMayConverse, useGeoFrame, useGeoToolbar } from "../geoFrame";
+import { geoVersionLabel } from "../geoVersionLabel";
 import { LoadError } from "@/components/cards/LoadError";
-import { readFailure, useGeoMonitoring, useSharedGeoLoad } from "../geoProjectData";
+import { readFailure, useGeoLoad, useGeoMonitoring, useSharedGeoLoad } from "../geoProjectData";
 import { marketConnected } from "../geoOverviewModel";
 import { scrollBlockToTop } from "../geoScroll";
 import { geoDestinationPath, geoSectionId } from "../geoTabs";
@@ -57,6 +62,9 @@ const ROWS_STEP = 20;
 /** The page's own filter on the stage, in the address so a link (and Back) means it. */
 const STAGE_PARAM = "show";
 const PROJECT_LEVEL = "-";
+const ARTICLE_STATUS: Record<GeoArticle["status"], string> = { draft: "草稿", publishable: "可发布", placed: "已投放", published: "已发布", withdrawn: "已撤回" };
+const articleUpdate = (value: string | null | undefined) => value && Number.isFinite(Date.parse(value))
+  ? new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(value)) : "未记录";
 
 const KINDS: readonly GeoActionKind[] = ["correct_error", "fill_gap", "win_cluster", "maintain"];
 
@@ -110,10 +118,38 @@ export function ActionsTab({ geoId, project, mode = "all" }: { geoId: string; pr
   const [query, setQuery] = useState("");
   const [focusParam, setFocus] = useGeoSearchParam("focus");
   const focus = focusParam === "acted" || focusParam === "waiting" ? focusParam : null;
+  const [articleQuery, setArticleQuery] = useState("");
+  const [catalogSearch, setCatalogSearch] = useState("");
+  const [articleStatus, setArticleStatus] = useState("all");
+  const [articleSort, setArticleSort] = useState("title");
+  const [articlePage, setArticlePage] = useState(0);
+  const [reviewPage, setReviewPage] = useState(0);
+  const [articleSnapshot, setArticleSnapshot] = useState<string | null>(null);
+  const [reviewSnapshot, setReviewSnapshot] = useState<string | null>(null);
+  const [catalogEpoch, setCatalogEpoch] = useState(0);
   const [busyKey, setBusyKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (articleQuery.trim() === catalogSearch) return undefined;
+    const timer = window.setTimeout(() => { setArticlePage(0); setArticleSnapshot(null); setCatalogSearch(articleQuery.trim()); }, 250);
+    return () => window.clearTimeout(timer);
+  }, [articleQuery, catalogSearch]);
+  const catalogInput = { search: catalogSearch, status: articleStatus, sort: articleSort, limit: 20, offset: articlePage * 20, ...(articleSnapshot ? { snapshot: articleSnapshot } : {}) };
+  const catalog = useGeoLoad(`article-catalog:${geoId}:${mode}:${catalogEpoch}:${JSON.stringify(catalogInput)}`,
+    () => mode === "content" ? getGeoArticleCatalog(geoId, catalogInput) : Promise.resolve(null));
+  const reviewInput = { search: "", status: "all", sort: "updated", limit: 20, offset: reviewPage * 20, review: true, ...(reviewSnapshot ? { snapshot: reviewSnapshot } : {}) };
+  const review = useGeoLoad(`article-review:${geoId}:${mode}:${catalogEpoch}:${JSON.stringify(reviewInput)}`,
+    () => mode === "content" ? getGeoArticleCatalog(geoId, reviewInput) : Promise.resolve(null));
+  const addressed = useGeoLoad(`article-address:${geoId}:${mode}:${catalogEpoch}:${addressedArticle ?? ""}`,
+    () => mode === "content" && addressedArticle ? getGeoArticle(geoId, addressedArticle) : Promise.resolve(null));
 
   const view = actions.state.kind === "ready" ? actions.state.data : null;
   const articleList = useMemo(() => (articles.state.kind === "ready" && Array.isArray(articles.state.data?.articles) ? articles.state.data.articles : []).filter((article) => article && article.id), [articles.state]);
+  const articleRows = useMemo(() => mode === "content" && catalog.state.kind === "ready" ? catalog.state.data?.articles ?? [] : [], [mode, catalog.state]);
+  const visibleVersionIds = useMemo(() => [...articleList, ...articleRows].map(article => article.currentResultVersionId), [articleList, articleRows]);
+  const versionLabel = (id: string) => geoVersionLabel(id, visibleVersionIds);
+  const catalogPending = articleQuery.trim() !== catalogSearch;
+  const catalogData = catalog.state.kind === "ready" ? catalog.state.data : null;
   const distributionData = distribution.state.kind === "ready" ? distribution.state.data : null;
   const clusterRows = clusters.state.kind === "ready" ? clusters.state.data.groups : [];
   const abilities = project.access?.abilities;
@@ -122,6 +158,7 @@ export function ActionsTab({ geoId, project, mode = "all" }: { geoId: string; pr
   const reloadAll = useCallback(() => {
     actions.reload();
     articles.reload();
+    setArticlePage(0); setReviewPage(0); setArticleSnapshot(null); setReviewSnapshot(null); setCatalogEpoch(value => value + 1);
     distribution.reload();
     clusters.reload();
     frame?.reload();
@@ -157,7 +194,7 @@ export function ActionsTab({ geoId, project, mode = "all" }: { geoId: string; pr
     return [...seen.entries()].map(([value, label]) => ({ value, label }));
   }, [all]);
   const narrowed = stage !== "all" || kind !== null || cluster !== null || query.trim() !== "" || focus !== null;
-  useGeoToolbar(mode !== "monitoring" && view && all.length > 0
+  useGeoToolbar(mode === "all" && view && all.length > 0
     ? {
       filters: [
         { kind: "chips", label: "进展", options: stageOptions, value: stage, onChange: (value) => setStageParam(value === "all" ? null : value) },
@@ -239,18 +276,22 @@ export function ActionsTab({ geoId, project, mode = "all" }: { geoId: string; pr
   };
 
   // ---- what the page says first
-  if (actions.state.kind === "loading") return <TabSkeleton />;
-  if (actions.state.kind === "error") return <TabError message={actions.state.message} onRetry={actions.reload} />;
-  if (!view) return null;
+  if (actions.state.kind === "loading" && (mode === "all" || mode === "monitoring")) return <TabSkeleton />;
+  if (actions.state.kind === "error" && (mode === "all" || mode === "monitoring")) return <TabError message={actions.state.message} onRetry={actions.reload} />;
 
-  const held = articleList.filter((article) => article.safety === "open" && article.status !== "withdrawn");
   const listed = new Set(all.flatMap((action) => action.articleIds));
   const others = articleList.filter((article) => !listed.has(article.id) && article.status !== "withdrawn" && article.safety !== "open");
+  const reviewData = review.state.kind === "ready" ? review.state.data : null;
+  const addressedData = addressed.state.kind === "ready" ? addressed.state.data : null;
+  const selectedReview = addressedData && addressedData.safety === "open" && addressedData.status !== "withdrawn" ? addressedData : null;
+  const reviewRows = reviewData?.articles ?? [];
+  const held = mode === "content" ? selectedReview && !reviewRows.some(article => article.id === selectedReview.id) ? [selectedReview, ...reviewRows] : reviewRows
+    : articleList.filter((article) => article.safety === "open" && article.status !== "withdrawn");
   // 「还没有稿件」 is said only once the articles were read: a read still on its way, or one that failed, is not an empty list.
   const articlesFailed = readFailure(articles);
-  const nothing = all.length === 0 && articleList.length === 0 && view.control.length === 0;
-  if (nothing && articles.state.kind === "loading") return <TabSkeleton />;
-  if (nothing && !articlesFailed && mode !== "monitoring" && mode !== "distribution") {
+  const nothing = all.length === 0 && articleList.length === 0 && (view?.control.length ?? 0) === 0;
+  if (nothing && articles.state.kind === "loading" && mode !== "distribution") return <TabSkeleton />;
+  if (nothing && !articlesFailed && mode === "all") {
     return <><StepPending geoId={geoId} project={project} step="content" /><GeoAnalysisEntry geoId={geoId} project={project} initialView="V23" embedded titleLevel="section" /></>;
   }
   // The other reads of the page, each said where it failed with its own 重试; the articles' stands where 「需要你」 sends a person
@@ -260,13 +301,14 @@ export function ActionsTab({ geoId, project, mode = "all" }: { geoId: string; pr
 
   const openAction = drawer.action ? all.find((action) => action.key === drawer.action) ?? null : null;
   const input = netEffectInput(monitoring.state.kind === "ready" ? monitoring.state.data : null, distributionData);
-  const parts = headlineParts(view.headline);
+  const parts = view ? headlineParts(view.headline) : null;
 
   return (
-    <div data-geo-tab="actions" className="flex flex-col gap-6">
-      {(mode === "all" || mode === "monitoring") && (
+    <div data-geo-tab="actions" aria-busy={location.hash === `#${geoSectionId("delivery")}` && actions.state.kind === "loading" || undefined} className="flex flex-col gap-6">
+      {(mode === "all" || mode === "monitoring") && parts && (
         <EffectCard parts={parts} input={input} loading={monitoring.state.kind === "loading"} onOpen={headlineTarget} error={readFailure(monitoring)} />
       )}
+      {actions.state.kind === "error" && mode !== "all" && mode !== "monitoring" && <LoadError message={`行动计划没有读到：${actions.state.message}`} onRetry={actions.reload} />}
       {articlesFailed && (mode === "all" || mode === "content") && (
         <section id={geoSectionId("review")} aria-label="稿件">
           <LoadError message={`稿件没有读到：${articlesFailed.message}`} onRetry={articlesFailed.retry} />
@@ -276,8 +318,42 @@ export function ActionsTab({ geoId, project, mode = "all" }: { geoId: string; pr
         <LoadError message={`投放记录没有读到：${distributionFailed.message}`} onRetry={distributionFailed.retry} />
       )}
       {clustersFailed && mode !== "monitoring" && <LoadError message={`问题群没有读到：${clustersFailed.message}`} onRetry={clustersFailed.retry} />}
+      {mode === "content" && <section aria-label="稿件列表" className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-end gap-2">
+          <Input label="搜索稿件" maxLength={200} value={articleQuery} onChange={(event) => setArticleQuery(event.target.value)} />
+          <Select label="状态" value={articleStatus} onChange={(event) => { setArticlePage(0); setArticleSnapshot(null); setArticleStatus(event.target.value); }}><option value="all">全部状态</option>{Object.entries(ARTICLE_STATUS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</Select>
+          <Select label="排序" value={articleSort} onChange={(event) => { setArticlePage(0); setArticleSnapshot(null); setArticleSort(event.target.value); }}><option value="title">标题</option><option value="status">状态</option><option value="updated">最近更新</option></Select>
+          {!catalogPending && catalogData && <span className="text-caption text-text-3">{catalogData.total} 篇稿件</span>}
+        </div>
+        {(catalogPending || catalog.state.kind === "loading") && <TabSkeleton />}
+        {!catalogPending && catalog.state.kind === "error" && <LoadError message={`稿件列表没有读到：${catalog.state.message}`} onRetry={() => { setArticlePage(0); setArticleSnapshot(null); setCatalogEpoch(value => value + 1); }} />}
+        {!catalogPending && catalog.state.kind === "ready" && catalogData && <>
+          {catalog.state.refreshError && <Note tone="warn" action={<Button size="sm" onClick={catalog.reload}>重试</Button>}>{catalog.state.refreshError}</Note>}
+          <DataTable<GeoArticle> label="稿件列表" rowKey={article => article.id} minWidth="min-w-[52rem]"
+            rows={articleRows}
+            emptyText={articleQuery.trim() || articleStatus !== "all" ? "没有符合筛选条件的稿件，请调整搜索或状态。" : articlePage > 0 ? "这一页没有稿件，请返回上一页。" : "还没有稿件。行动计划中的待写事项不计入稿件。"}
+            columns={[
+              { key: "title", header: "稿件", rowHeader: true, cell: article => <>{articleActions.reachable(article) ? <Button size="sm" variant="text" onClick={() => articleActions.open(article)}>{article.title || "未命名稿件"}</Button> : article.title || "未命名稿件"}{article.safety === "open" && <span className="ml-2 text-text-3">待安全审核</span>}</> },
+              { key: "status", header: "状态", cell: article => ARTICLE_STATUS[article.status] },
+              { key: "question", header: "关联问题", cell: article => article.question || (groupOf(article) ? clusterName(groupOf(article)!) : "未记录") },
+              { key: "version", header: "版本", cell: article => article.layer === "card" ? (article.cardRevision != null ? `卡片修订 ${article.cardRevision}` : "未记录") : article.currentResultVersionId ? versionLabel(article.currentResultVersionId) : "未记录" },
+              { key: "updated", header: "记录更新", cell: article => articleUpdate(article.updatedAt), isEmpty: article => !article.updatedAt || !Number.isFinite(Date.parse(article.updatedAt)) },
+              { key: "actions", header: "操作", cell: article => <div className="flex flex-wrap gap-1">{geoMayConverse(project) && article.currentResultVersionId && article.contentSha256 && <><Button size="sm" variant="text" onClick={() => articleActions.continueInConversation(article)}>在对话中修改</Button><Button size="sm" variant="text" onClick={() => articleActions.humanizeInConversation(article)}>润色语言</Button></>}{can("edit") && article.status !== "withdrawn" && <Button size="sm" variant="text" onClick={() => articleActions.withdraw(article)}>撤回</Button>}</div> },
+            ]} />
+          {(catalogData.total > catalogInput.limit || articlePage > 0) && <div className="flex items-center gap-2" aria-label="稿件分页">
+            <Button size="sm" variant="secondary" disabled={articlePage === 0} onClick={() => setArticlePage(value => Math.max(0, value - 1))}>上一页</Button>
+            <span className="text-caption text-text-2">第 {articlePage + 1} 页</span>
+            <Button size="sm" variant="secondary" disabled={catalogInput.offset + articleRows.length >= catalogData.total} onClick={() => { setArticleSnapshot(catalogData.snapshot); setArticlePage(value => value + 1); }}>下一页</Button>
+          </div>}
+        </>}
+      </section>}
+      {mode === "content" && review.state.kind === "loading" && <TabSkeleton rows={2} />}
+      {mode === "content" && review.state.kind === "error" && <LoadError message={`待复核稿件没有读到：${review.state.message}`} onRetry={() => { setReviewPage(0); setReviewSnapshot(null); setCatalogEpoch(value => value + 1); }} />}
+      {mode === "content" && addressedArticle && addressed.state.kind === "error" && <LoadError message={`指定稿件没有读到：${addressed.state.message}`} onRetry={addressed.reload} />}
+      {mode === "content" && addressedData && !selectedReview && <Note action={null}>指定稿件当前不在待复核列表中。</Note>}
       {(mode === "all" || mode === "content") && <ReviewBlock
         articles={held}
+        total={mode === "content" ? reviewData?.total ?? null : undefined}
         groupOf={groupOf}
         canReview={can("review")}
         busy={articleActions.busy}
@@ -286,9 +362,14 @@ export function ActionsTab({ geoId, project, mode = "all" }: { geoId: string; pr
         onRelease={articleActions.release}
         addressed={addressedArticle}
       />}
+      {mode === "content" && reviewData && (reviewData.total > reviewInput.limit || reviewPage > 0) && <div className="flex items-center gap-2" aria-label="待复核稿件分页">
+        <Button size="sm" variant="secondary" disabled={reviewPage === 0} onClick={() => setReviewPage(value => Math.max(0, value - 1))}>上一页待复核</Button>
+        <span className="text-caption text-text-2">第 {reviewPage + 1} 页</span>
+        <Button size="sm" variant="secondary" disabled={reviewInput.offset + reviewRows.length >= reviewData.total} onClick={() => { setReviewSnapshot(reviewData.snapshot); setReviewPage(value => value + 1); }}>下一页待复核</Button>
+      </div>}
       {(mode === "all" || mode === "distribution") && <BudgetLine distribution={marketConnected(project) || distributionData?.budget ? distributionData : null} canManage={can("manage_money")} onEdit={() => frame?.openPanel("budget")} />}
       {mode === "distribution" && <DistributionWorkbench key={geoId} geoId={geoId} project={project} />}
-      {mode!=="monitoring"&&<GeoAnalysisEntry key={`${geoId}:${mode}`} geoId={geoId} project={project} initialView={mode==="distribution"?"V25":"V23"} embedded titleLevel="section"/>}
+      {mode==="all"&&<GeoAnalysisEntry key={`${geoId}:${mode}`} geoId={geoId} project={project} initialView="V23" embedded titleLevel="section"/>}
       {(mode === "all" || mode === "content") && project.cards?.blockedBy && can("edit") && (
         <Note action={<Button variant="secondary" size="sm" onClick={() => frame?.openPanel(CARDS_WAIT[project.cards?.blockedBy as "producer" | "reviewer"].panel)}>{CARDS_WAIT[project.cards.blockedBy].verb}</Button>}>
           {CARDS_WAIT[project.cards.blockedBy].sentence}
@@ -296,7 +377,7 @@ export function ActionsTab({ geoId, project, mode = "all" }: { geoId: string; pr
       )}
 
       {mode !== "monitoring" && all.length > 0 && (
-        // The rail's 「投放」 lands here (`GEO_TAB_SECTIONS`): where each piece of work goes, and how far it got, is a row of this list.
+        <details open={mode === "all" || Boolean(drawer.action) || Boolean(focus) || location.hash === `#${geoSectionId("delivery")}`}><summary className="cursor-pointer text-ui">行动计划 · {all.length} 条行动</summary>
         <section id={geoSectionId("delivery")} aria-label="行动" data-geo-actions="">
           {rows === 0 ? (
             <Note action={<Button variant="secondary" size="sm" onClick={() => { change({ [STAGE_PARAM]: null, [GEO_CLUSTER_FILTER_PARAM]: null, focus: null }); setKind(null); setQuery(""); }}>清除筛选</Button>}>
@@ -344,19 +425,13 @@ export function ActionsTab({ geoId, project, mode = "all" }: { geoId: string; pr
             </>
           )}
         </section>
+        </details>
       )}
 
-      {(mode === "all" || mode === "monitoring") && <ControlGroups view={view} clusters={clusterRows} />}
-      {(mode === "all" || mode === "content") && <OtherArticles
-        articles={others}
-        groupOf={groupOf}
-        reachable={articleActions.reachable}
-        onOpen={articleActions.open}
-        onWithdraw={articleActions.withdraw}
-        onContinue={geoMayConverse(project) ? articleActions.continueInConversation : undefined}
-        onHumanize={geoMayConverse(project) ? articleActions.humanizeInConversation : undefined}
-        canEdit={can("edit")}
-      />}
+      {(mode === "all" || mode === "monitoring") && view && <ControlGroups view={view} clusters={clusterRows} />}
+
+
+      {mode === "all" && <OtherArticles articles={others} groupOf={groupOf} reachable={articleActions.reachable} onOpen={articleActions.open} onWithdraw={articleActions.withdraw} onContinue={geoMayConverse(project) ? articleActions.continueInConversation : undefined} onHumanize={geoMayConverse(project) ? articleActions.humanizeInConversation : undefined} canEdit={can("edit")} />}
 
       {openAction && (
         <ActionDrawer

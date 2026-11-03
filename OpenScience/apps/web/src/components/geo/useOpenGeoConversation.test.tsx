@@ -17,7 +17,7 @@ function Opener({target,draft}:{target:GeoConversationTarget;draft?:string}) {
   const open=useOpenGeoConversation(),location=useLocation();
   const [result,setResult]=useState("");
   return <><button type="button" onClick={()=>{void open(target,draft).then(value=>setResult(String(value)));}}>open</button>
-    <pre data-testid="location">{JSON.stringify({path:location.pathname,search:location.search,hash:location.hash,intent:optionalOpaqueRuntimeUiIntent(location.state)})}</pre><span data-testid="result">{result}</span></>;
+    <pre data-testid="location">{JSON.stringify({path:location.pathname,search:location.search,hash:location.hash,intent:optionalOpaqueRuntimeUiIntent(location.state),implicitPrimary:location.state?.geoImplicitPrimary})}</pre><span data-testid="result">{result}</span></>;
 }
 const target={geoId:"geo-owned",projectId:"same-id",sessionId:null};
 const descriptor=(sessionId="native-root")=>({projectId:"same-id",projectName:"Shared project",sessionId,scope:{kind:"geo",geoProjectId:"geo-owned",sessionId}});
@@ -29,6 +29,11 @@ beforeEach(()=>{vi.clearAllMocks();useProjectStore.setState({currentId:"default"
 afterEach(()=>useProjectStore.getState().clear());
 
 describe("opening the exact GEO native descriptor",()=>{
+  it("marks an implicitly opened primary with the confirmed session identity",async()=>{
+    setup({...target,implicitPrimary:true});
+    await userEvent.click(screen.getByRole("button",{name:"open"}));
+    await waitFor(()=>expect(current().implicitPrimary).toBe("native-root"));
+  });
   it("keeps actor project selection while opening owner scope with an unsent draft",async()=>{
     setup(target,"Preserve the denominator");await userEvent.click(screen.getByRole("button",{name:"open"}));
     await waitFor(()=>expect(current().search).toContain("session=native-root"));

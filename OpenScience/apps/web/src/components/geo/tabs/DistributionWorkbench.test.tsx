@@ -1,4 +1,4 @@
-import { sessionOwner } from "@/lib/sessionLifecycle";
+import { sessionOwner, WEB_SESSION_STARTED_EVENT } from "@/lib/sessionLifecycle";
 import { prepareRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { GeoFrameContext } from '../geoFrame';
 import { GeoDataCache } from '../geoProjectData';
@@ -12,9 +12,9 @@ import { distributionFilled, geoProject } from '../__fixtures__/geoTabs';
 import { WorkspaceSplit } from '@/components/workspace/WorkspaceSplit';
 import type { GeoExecutionOrder } from '@/lib/geoDistributionClient';
 
-const api = vi.hoisted(() => ({ getGeoExecutionOrders: vi.fn(), getGeoOrderDetail: vi.fn(), getGeoProjectLedger: vi.fn(), getGeoOwnedPublications: vi.fn(), getGeoOwnedPublication: vi.fn(), confirmGeoOwnedPublication: vi.fn(), cancel: vi.fn(), result: vi.fn(), select: vi.fn(), open: vi.fn() }));
+const api = vi.hoisted(() => ({ getGeoExecutionOrders: vi.fn(), getGeoOrderDetail: vi.fn(), getGeoProjectLedger: vi.fn(), getGeoOwnedPublications: vi.fn(), getGeoOwnedPublication: vi.fn(), confirmGeoOwnedPublication: vi.fn(), readPublication: vi.fn(), cancel: vi.fn(), result: vi.fn(), select: vi.fn(), open: vi.fn() }));
 vi.mock('@/lib/geoDistributionClient', () => ({ getGeoExecutionOrders: api.getGeoExecutionOrders, getGeoOrderDetail: api.getGeoOrderDetail, getGeoProjectLedger: api.getGeoProjectLedger, getGeoOwnedPublications: api.getGeoOwnedPublications, getGeoOwnedPublication: api.getGeoOwnedPublication, confirmGeoOwnedPublication: api.confirmGeoOwnedPublication }));
-vi.mock('@/lib/geoClient', async original => ({ ...await original<typeof import('@/lib/geoClient')>(), cancelGeoOrder: api.cancel }));
+vi.mock('@/lib/geoClient', async original => ({ ...await original<typeof import('@/lib/geoClient')>(), cancelGeoOrder: api.cancel, readGeoPublicationVersion: api.readPublication }));
 vi.mock('@/lib/resultProvenance', () => ({ getResultVersion: api.result }));
 vi.mock('@/lib/projects', () => ({ useProjectStore: { getState: () => ({ select: api.select }) } }));
 vi.mock('../spine/useOpenArticle', () => ({ useOpenArticle: () => api.open }));
@@ -24,6 +24,16 @@ const order = (extra = {}): GeoExecutionOrder => ({ id: 'order-a', articleId: 'a
 const details = (entry = order()) => ({ order: entry, events: { items: [{ id: 'event-a', at: entry.publishedAt, fromState: 'accepted', toState: 'published', phase: null, amountCny: null }], nextCursor: null, total: 1 } });
 beforeEach(() => { vi.clearAllMocks(); api.getGeoExecutionOrders.mockResolvedValue({ items: [order()], nextCursor: null, total: 1 }); api.getGeoOrderDetail.mockResolvedValue(details()); api.select.mockResolvedValue(undefined); api.open.mockReturnValue(true); });
 const mount = (project = geoProject()) => render(<MemoryRouter><DistributionWorkbench geoId="geo_1" project={project} /></MemoryRouter>);
+
+it('shows the published version and never describes an unknown version as current', async () => {
+  api.getGeoExecutionOrders.mockResolvedValue({ items: [order(), order({ id: 'unknown', articleTitle: 'Unknown version', articleResultVersionId: null, versionState: null })], nextCursor: null, total: 2 });
+  mount();
+  const table = await screen.findByRole('table', { name: '投放订单' });
+  expect(within(table).getByText(/v1 · 稿件已有新版本/)).toBeVisible();
+  const unknown = within(table).getByRole('row', { name: /Unknown version/ });
+  expect(within(unknown).getByText('未记录')).toBeVisible();
+  expect(unknown).not.toHaveTextContent('与当前稿件一致');
+});
 
 function NavigationProbe() {
   const location = useLocation(), navigate = useNavigate();
@@ -43,27 +53,29 @@ it('a direct order address restores detail and browser back returns to the prece
 it('orders page independently with complete totals and authoritative cancellation for the actual member', async () => {
   api.getGeoExecutionOrders.mockResolvedValueOnce({ items: [order()], nextCursor: 'page-2', total: 31 }).mockResolvedValueOnce({ items: [order({ id: 'last', articleTitle: 'Last article' })], nextCursor: null, total: 31 });
   mount(); const user = userEvent.setup();
-  await screen.findByText(/Frozen article ·/); expect(screen.getByText('共 31 条 · 第 1 页')).toBeInTheDocument();
-  await user.click(screen.getByRole('button', { name: '下一页' })); await screen.findByText(/Last article ·/);
+  await screen.findByText(/Frozen article/); expect(screen.getByText('共 31 条 · 第 1 页')).toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: '下一页' })); await screen.findByText(/Last article/);
   expect(api.getGeoExecutionOrders).toHaveBeenLastCalledWith('geo_1', { cursor: 'page-2', limit: 30 });
-  await user.click(screen.getByRole('button', { name: /Last article ·/ })); await screen.findByRole('list', { name: '订单时间线' });
+  await user.click(screen.getByRole('button', { name: /Last article/ })); await screen.findByRole('list', { name: '订单时间线' });
   expect(screen.queryByRole('button', { name: '撤单' })).not.toBeInTheDocument();
   expect(screen.getByText(/线上页面仍关联当时发布的版本/)).toBeInTheDocument();
 });
 it('an editor cannot cancel even when the server says the order state is cancellable', async () => {
   api.getGeoOrderDetail.mockResolvedValue(details(order({ cancellable: true })));
   const project = geoProject(); project.access = { owner: false, roles: ['editor'], abilities: ['read', 'edit', 'run'] };
-  mount(project); await userEvent.click(await screen.findByRole('button', { name: /Frozen article ·/ }));
+  mount(project); await userEvent.click(await screen.findByRole('button', { name: /Frozen article/ }));
   await screen.findByRole('list', { name: '订单时间线' }); expect(screen.queryByRole('button', { name: '撤单' })).not.toBeInTheDocument();
 });
-it('publication opens its immutable version and refuses a digest mismatch instead of opening the current draft', async () => {
-  const project = geoProject(); api.result.mockResolvedValue({ projectId: project.projectId, versionId: 'v1', digest: 'one', path: 'article.md', producer: { runId: 'run-v1' } });
-  mount(project); const user = userEvent.setup(); await user.click(await screen.findByRole('button', { name: /Frozen article ·/ }));
+it('publication reads the pinned version through its GEO order and does not substitute another on refusal', async () => {
+  api.readPublication.mockResolvedValueOnce({ versionId: 'v1', digest: 'one', text: 'Frozen bytes' }).mockRejectedValueOnce(new Error('stale'));
+  mount(); const user = userEvent.setup(); await user.click(await screen.findByRole('button', { name: /Frozen article/ }));
   await user.click(await screen.findByRole('button', { name: '查看当时稿件' }));
-  await waitFor(() => expect(api.open).toHaveBeenCalledWith({ runId: 'run-v1', path: 'article.md', currentResultVersionId: 'v1' }));
-  expect(api.select).toHaveBeenCalledWith(project.projectId);
-  api.result.mockResolvedValue({ projectId: project.projectId, versionId: 'v1', digest: 'changed', path: 'article.md', producer: { runId: 'run-v1' } });
-  await user.click(screen.getByRole('button', { name: '查看当时稿件' })); await waitFor(() => expect(api.result).toHaveBeenCalledTimes(2)); expect(api.open).toHaveBeenCalledTimes(1);
+  expect(await screen.findByText('Frozen bytes')).toBeInTheDocument();
+  expect(api.readPublication).toHaveBeenCalledWith('geo_1', 'orders', 'order-a', 'v1', 'one', undefined);
+  expect(api.select).not.toHaveBeenCalled();
+  await user.click(within(screen.getByRole('dialog', { name: '查看内容版本' })).getByRole('button', { name: /关闭/ }));
+  await user.click(screen.getByRole('button', { name: '查看当时稿件' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('所选版本暂时无法读取');
 });
 it('ledger shows net spend, refunds and unknown historic balance separately', async () => {
   const money = { budgetCny: 500, dailyCny: 100, reservedCny: 20, settledCny: 80, refundedCny: 30, spentCny: 50, availableCny: 430 };
@@ -87,19 +99,19 @@ it('refreshing from page two refreshes the first-page key and preserves older pa
   const frame = { data } as NonNullable<React.ContextType<typeof GeoFrameContext>>;
   render(<MemoryRouter><GeoFrameContext.Provider value={frame}><DistributionWorkbench geoId="geo_1" project={geoProject()} /></GeoFrameContext.Provider></MemoryRouter>);
   const user = userEvent.setup();
-  await screen.findByText(/Original first page ·/);
+  await screen.findByText(/Original first page/);
   await user.click(screen.getByRole('button', { name: '下一页' }));
-  await screen.findByText(/Older article ·/);
+  await screen.findByText(/Older article/);
   api.getGeoExecutionOrders.mockImplementation(async (_id, input) => input.cursor
     ? { items: [order({ id: 'older', articleTitle: 'Older article' })], nextCursor: null, total: 32 }
     : { items: [order({ articleTitle: 'New first page' })], nextCursor: 'page-two', total: 32 });
   await user.click(screen.getByRole('button', { name: '刷新记录' }));
   await waitFor(() => expect(api.getGeoExecutionOrders).toHaveBeenLastCalledWith('geo_1', { cursor: null, limit: 30 }));
-  expect(await screen.findByText(/New first page ·/)).toBeInTheDocument();
+  expect(await screen.findByText(/New first page/)).toBeInTheDocument();
   expect(screen.getByText('共 32 条 · 第 1 页')).toBeInTheDocument();
   data.reload('distribution-orders:geo_1:page-two');
   await waitFor(() => expect(api.getGeoExecutionOrders).toHaveBeenLastCalledWith('geo_1', { cursor: 'page-two', limit: 30 }));
-  expect(screen.getByText(/New first page ·/)).toBeInTheDocument();
+  expect(screen.getByText(/New first page/)).toBeInTheDocument();
 });
 
 it('an explicit owned-page update captures both pins and retries the same request after uncertain delivery', async () => {
@@ -154,7 +166,7 @@ it.each(['order', 'publication'] as const)('reopens the explicitly selected %s w
   api.getGeoOwnedPublications.mockResolvedValue({ items: [link], nextCursor: null, total: 1 });
   api.getGeoOwnedPublication.mockResolvedValue({ link, revision: 0, history: { items: [], nextBeforeRevision: null } });
   const id = kind === 'order' ? 'order-a' : link.id;
-  const row = kind === 'order' ? /Frozen article ·/ : link.title;
+  const row = kind === 'order' ? /Frozen article/ : link.title;
   const title = kind === 'order' ? 'Frozen article' : link.title;
   render(<MemoryRouter initialEntries={[`/app/geo/geo_1/actions?step=distribution&${kind}=${id}`]}><DistributionWithConversation /></MemoryRouter>);
   const user = userEvent.setup();
@@ -185,4 +197,51 @@ it.each(['order', 'publication'] as const)('reopens the explicitly selected %s w
   expect(JSON.parse(screen.getByLabelText('Distribution state').textContent ?? '{}').runtimeUiIntent).toEqual(pendingDistributionDraft);
   expect(draft).toHaveValue('Keep my draft');
   expect(screen.getByLabelText('address')).toHaveTextContent('session=session-a');
+});
+
+it('searches only the loaded page and keeps pagination explicit', async () => {
+  api.getGeoExecutionOrders.mockResolvedValueOnce({ items: [order()], nextCursor: 'page-2', total: 31 }).mockResolvedValueOnce({ items: [order({ id: 'last', articleTitle: 'Last article' })], nextCursor: null, total: 31 });
+  mount(); const user = userEvent.setup();
+  await screen.findByText(/Frozen article/);
+  await user.type(screen.getByLabelText('搜索本页'), 'Last');
+  expect(screen.queryByText(/Frozen article/)).not.toBeInTheDocument();
+  expect(screen.getByText('共 31 条 · 第 1 页')).toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: '下一页' }));
+  await screen.findByText(/Last article/);
+  await user.selectOptions(screen.getByLabelText('本页排序'), 'title');
+  expect(screen.getByText('共 31 条 · 第 2 页')).toBeInTheDocument();
+});
+
+it('a viewer opens an owned publication history using its exact receipt identity', async () => {
+  const project = geoProject(); project.access = { owner: false, roles: ['viewer'], abilities: ['read'] };
+  api.getGeoOwnedPublication.mockResolvedValue({ link: { id: 'owned-a', title: 'Recorded page', url: 'https://example.org/page', status: 'active', publishedAt: null, articleResultVersionId: 'v2', articleDigest: 'digest2', currentResultVersionId: 'v2', currentDigest: 'digest2', versionState: 'current' }, revision: 2,
+    history: { items: [{ revision: 1, basis: 'legacy_record', publishedAt: null, resultVersionId: 'v1', digest: 'digest1' }], nextBeforeRevision: null } });
+  api.readPublication.mockResolvedValue({ versionId: 'v1', digest: 'digest1', text: 'Historical text' });
+  render(<MemoryRouter initialEntries={['/actions?step=distribution&publication=owned-a']}><DistributionWorkbench geoId="geo_1" project={project} /></MemoryRouter>);
+  await userEvent.click(await screen.findByRole('button', { name: '查看这版稿件' }));
+  expect(await screen.findByText('Historical text')).toBeInTheDocument();
+  expect(api.readPublication).toHaveBeenCalledWith('geo_1', 'owned-links', 'owned-a', 'v1', 'digest1', 1);
+  expect(api.select).not.toHaveBeenCalled();
+});
+
+it('closes the publication preview on account switch and ignores the previous read', async () => {
+  let finish!: (value: {versionId:string;digest:string;text:string}) => void;
+  api.readPublication.mockImplementationOnce(()=>new Promise(resolve=>{finish=resolve;}));
+  mount(); const user=userEvent.setup();
+  await user.click(await screen.findByRole('button', { name: /Frozen article/ }));
+  await user.click(await screen.findByRole('button', { name: '查看当时稿件' }));
+  fireEvent(window,new Event(WEB_SESSION_STARTED_EVENT));
+  finish({versionId:'v1',digest:'one',text:'Previous account text'});
+  await waitFor(()=>expect(screen.queryByText('Previous account text')).not.toBeInTheDocument());
+  expect(screen.queryByRole('dialog',{name:'查看内容版本'})).not.toBeInTheDocument();
+});
+
+it('removes an already displayed publication text on account switch', async () => {
+  api.readPublication.mockResolvedValue({ versionId: 'v1', digest: 'one', text: 'Visible before switch' });
+  mount(); const user=userEvent.setup();
+  await user.click(await screen.findByRole('button', { name: /Frozen article/ }));
+  await user.click(await screen.findByRole('button', { name: '查看当时稿件' }));
+  expect(await screen.findByText('Visible before switch')).toBeInTheDocument();
+  fireEvent(window,new Event(WEB_SESSION_STARTED_EVENT));
+  expect(screen.queryByText('Visible before switch')).not.toBeInTheDocument();
 });

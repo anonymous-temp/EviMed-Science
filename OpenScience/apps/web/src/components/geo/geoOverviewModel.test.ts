@@ -4,6 +4,7 @@ import { cell, diagnosisFilled, diagnosisWith, geoProject } from "./__fixtures__
 import {
   actionMarkers,
   changeWord,
+  chartDates,
   comparableRun,
   coverageMarker,
   coverageNotice,
@@ -16,6 +17,7 @@ import {
   overviewTiles,
   readingChange,
   rivalRanking,
+  scheduledAfterObservations,
   safetyReading,
   severeOpenErrors,
   shownDelta,
@@ -32,6 +34,16 @@ import {
  */
 
 const project = (overrides: Partial<GeoProject> = {}): GeoProject => geoProject({}, overrides);
+
+it("does not put an overdue planned date after a later observation on the chart", () => {
+  const now = new Date("2026-11-03T04:00:00Z");
+  expect(scheduledAfterObservations("2026-11-02", ["2026-10-27", "2026-11-03"], now)).toBe(false);
+  expect(scheduledAfterObservations("2026-11-02", ["2026-10-27"], now)).toBe(false);
+  expect(scheduledAfterObservations("2026-11-10", ["2026-11-03", "2026-10-27"], now)).toBe(true);
+  expect(scheduledAfterObservations("invalid", ["2026-11-03"], now)).toBe(false);
+  expect(chartDates(null, "2026-11-02", now)).toBe("计划已到期 11月2日");
+  expect(chartDates(null, "2026-11-10", now)).toBe("计划 11月10日");
+});
 
 it("does not turn unknown or insufficient medical judgment into a zero severe-error reading", () => {
   const diagnosis = diagnosisWith([]);

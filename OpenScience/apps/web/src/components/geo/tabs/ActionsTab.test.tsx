@@ -30,6 +30,8 @@ const client = vi.hoisted(() => ({
   chooseGeoActionSource: vi.fn(),
   createGeoOwnedLink: vi.fn(),
   getGeoArticles: vi.fn(),
+  getGeoArticle: vi.fn(),
+  getGeoArticleCatalog: vi.fn(),
   getGeoArticleText: vi.fn(),
   withdrawGeoArticle: vi.fn(),
   releaseGeoArticle: vi.fn(),
@@ -153,6 +155,20 @@ beforeEach(() => {
   client.getGeoCluster.mockImplementation(async (_geoId: string, id: string) => clusterViewFixture(id));
   client.getGeoArticles.mockResolvedValue({
     articles: ARTICLES.map((entry) => (entry.id === "art_effect" ? { ...entry } : entry)),
+  });
+  client.getGeoArticle.mockImplementation(async (_geoId: string, id: string) => {
+    const source = await client.getGeoArticles(_geoId);
+    const result = source.articles.find((entry: GeoArticle) => entry.id === id);
+    if (!result) throw new Error("Article not found");
+    return result;
+  });
+  client.getGeoArticleCatalog.mockImplementation(async (_geoId: string, input: { search: string; status: string; sort: string; offset: number; limit: number; review?: boolean }) => {
+    const source = await client.getGeoArticles(_geoId);
+    const rows: GeoArticle[] = source.articles.filter((entry: GeoArticle) => (!input.review || entry.safety === "open" && entry.status !== "withdrawn") && (input.status === "all" || entry.status === input.status)
+      && `${entry.title} ${entry.question ?? ""}`.toLowerCase().includes(input.search.toLowerCase()));
+    rows.sort((a, b) => input.sort === "status" ? a.status.localeCompare(b.status) : input.sort === "updated"
+      ? (Date.parse(b.updatedAt ?? "") || 0) - (Date.parse(a.updatedAt ?? "") || 0) : a.title.localeCompare(b.title, "zh-CN"));
+    return { articles: rows.slice(input.offset, input.offset + input.limit), total: rows.length, snapshot: "a".repeat(32), limit: input.limit, offset: input.offset };
   });
   client.getGeoDistribution.mockResolvedValue({ ...distributionFilled, market: { configured: false }, budget: null, orders: [], ownedLinks: [] });
   client.getGeoMonitoring.mockResolvedValue(monitoringFilled);
@@ -617,3 +633,113 @@ describe("行动: states", () => {
 
 // A fixture factory outside the suite keeps the typed shapes honest for the rest of the package's tests.
 void actionFixture;
+
+it("shows actual articles even when actions fail and filters only articles", async () => {
+  client.getGeoActions.mockRejectedValue(new Error("actions unavailable"));
+  renderTab(geoProject(), "/app/geo/geo_1/actions?step=content", "content");
+  const table = await screen.findByRole("table");
+  expect(within(table).getAllByRole("row")).toHaveLength(6);
+  expect(screen.getByText("5 篇稿件")).toBeInTheDocument();
+  const user = userEvent.setup();
+  await user.type(screen.getByLabelText("搜索稿件"), "禁忌");
+  await waitFor(() => expect(within(screen.getByRole("table", { name: "稿件列表" })).getAllByRole("row")).toHaveLength(2));
+  await user.selectOptions(screen.getByLabelText("状态"), "draft");
+  expect(await screen.findByText(/没有符合筛选条件的稿件/)).toBeInTheDocument();
+  await user.clear(screen.getByLabelText("搜索稿件"));
+  await user.selectOptions(screen.getByLabelText("状态"), "all");
+  await user.selectOptions(screen.getByLabelText("排序"), "status");
+  await waitFor(() => expect(within(screen.getByRole("table")).getAllByRole("row")).toHaveLength(6));
+  expect(await screen.findByText(/行动计划没有读到/)).toBeInTheDocument();
+});
+
+it("opens the action queue for the delivery anchor", async () => {
+  renderTab(geoProject(), "/app/geo/geo_1/actions?step=content#geo-delivery", "content");
+  await findRow(ACTION_BRAND.key);
+  expect(screen.getByText(/行动计划 ·/).closest("details")).toHaveAttribute("open");
+});
+
+it("shows distinct real versions and version-scoped revision actions", async () => {
+  client.getGeoArticles.mockResolvedValue({ articles: [article("one", { currentResultVersionId: "version-abcdefgh-1234567890", contentSha256: "a".repeat(64), updatedAt: "2026-11-03T04:00:00Z" }), article("two", { currentResultVersionId: "version-abcdefgh-0987654321", contentSha256: "b".repeat(64) }), article("card", { layer: "card", cardRevision: 7 })] });
+  renderTab(geoProject(), "/app/geo/geo_1/actions?step=content", "content");
+  const table = await screen.findByRole("table");
+  expect(within(table).getByText("version-…34567890")).toBeVisible();
+  expect(within(table).getByText("version-…87654321")).toBeVisible();
+  expect(within(table).getByText("卡片修订 7")).toBeInTheDocument();
+  expect(within(table).getByRole("columnheader", { name: "记录更新" })).toBeVisible();
+  expect(within(table).getByText(/2026\/11\/03/)).toBeVisible();
+  expect(within(table).getAllByText("未记录").length).toBeGreaterThan(0);
+  expect(within(table).getAllByRole("button", { name: "润色语言" })).toHaveLength(2);
+});
+
+it("renders a server page of real articles and can navigate to the remainder", async () => {
+  client.getGeoArticles.mockResolvedValue({ articles: Array.from({ length: 25 }, (_, index) => article(`article-${index}`, { title: `Article ${String(index).padStart(2, "0")}` })) });
+  renderTab(geoProject(), "/app/geo/geo_1/actions?step=content", "content");
+  const table = await screen.findByRole("table", { name: "稿件列表" });
+  expect(within(table).getAllByRole("row")).toHaveLength(21);
+  await userEvent.click(screen.getByRole("button", { name: "下一页" }));
+  await waitFor(() => expect(within(screen.getByRole("table", { name: "稿件列表" })).getAllByRole("row")).toHaveLength(6));
+  expect(client.getGeoArticleCatalog).toHaveBeenCalledWith("geo_1", expect.objectContaining({ offset: 20, limit: 20, search: "" }));
+  expect(screen.getByText("第 2 页")).toBeVisible();
+  await userEvent.click(screen.getByRole("button", { name: "上一页" }));
+  await waitFor(() => expect(within(screen.getByRole("table", { name: "稿件列表" })).getAllByRole("row")).toHaveLength(21));
+});
+
+it("pages all pending safety reviews independently of the article search", async () => {
+  client.getGeoArticles.mockResolvedValue({ articles: Array.from({ length: 25 }, (_, index) => article(`held-${index}`, { safety: "open" })) });
+  renderTab(geoProject(), "/app/geo/geo_1/actions?step=content", "content");
+  const review = await screen.findByRole("region", { name: "等你放行的稿件" });
+  expect(within(review).getByText(/25/)).toBeVisible();
+  expect(within(review).getAllByRole("button", { name: "放行" })).toHaveLength(20);
+  await userEvent.type(screen.getByLabelText("搜索稿件"), "no-match");
+  expect(within(review).getByText(/25/)).toBeVisible();
+  await userEvent.click(screen.getByRole("button", { name: "下一页待复核" }));
+  await waitFor(() => expect(within(screen.getByRole("region", { name: "等你放行的稿件" })).getAllByRole("button", { name: "放行" })).toHaveLength(5));
+  expect(client.getGeoArticleCatalog).toHaveBeenCalledWith("geo_1", expect.objectContaining({ review: true, offset: 20 }));
+});
+
+it("restarts both article pages after a review changes the collection", async () => {
+  let items = Array.from({ length: 25 }, (_, index) => article(`review-${String(index).padStart(2, "0")}`, { safety: "open" }));
+  client.getGeoArticles.mockImplementation(async () => ({ articles: items }));
+  client.releaseGeoArticle.mockImplementation(async (_geoId, id) => { items = items.map(entry => entry.id === id ? { ...entry, safety: "clear" } : entry); return {}; });
+  renderTab(geoProject(), "/app/geo/geo_1/actions?step=content", "content");
+  await screen.findByRole("region", { name: "等你放行的稿件" });
+  await userEvent.click(screen.getByRole("button", { name: "下一页待复核" }));
+  await screen.findByText("稿件 review-20");
+  await userEvent.click(screen.getByRole("button", { name: "上一页待复核" }));
+  const review = await screen.findByRole("region", { name: "等你放行的稿件" });
+  await userEvent.click(within(review).getAllByRole("button", { name: "放行" })[0]);
+  await userEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "放行" }));
+  await waitFor(() => expect(within(screen.getByRole("region", { name: "等你放行的稿件" })).getByText(/24/)).toBeVisible());
+  expect(within(screen.getByRole("region", { name: "等你放行的稿件" })).getByText("稿件 review-20")).toBeVisible();
+  await userEvent.click(screen.getByRole("button", { name: "下一页待复核" }));
+  await waitFor(() => expect(within(screen.getByRole("region", { name: "等你放行的稿件" })).getAllByRole("button", { name: "放行" })).toHaveLength(4));
+});
+
+it("loads the exact addressed review even when it is outside the first catalogue page", async () => {
+  client.getGeoArticles.mockResolvedValue({ articles: Array.from({ length: 25 }, (_, index) => article(`held-${index}`, { safety: "open" })) });
+  client.getGeoArticle.mockResolvedValue(article("held-outside-2000", { title: "深链指定的待复核稿件", safety: "open" }));
+  renderTab(geoProject(), "/app/geo/geo_1/actions?step=content&article=held-outside-2000#geo-review", "content");
+  const review = await screen.findByRole("region", { name: "等你放行的稿件" });
+  expect(await within(review).findByText("深链指定的待复核稿件")).toBeVisible();
+  expect(client.getGeoArticle).toHaveBeenCalledWith("geo_1", "held-outside-2000");
+});
+
+it.each(["pending", "failed"])("does not invent a review total when the list is %s but the addressed article loaded", async state => {
+  client.getGeoArticle.mockResolvedValue(article("addressed", { title: "指定待复核稿件", safety: "open" }));
+  client.getGeoArticleCatalog.mockImplementation(async (_geoId: string, input: { review?: boolean; limit: number; offset: number }) => {
+    if (input.review) return state === "pending" ? new Promise(() => {}) : Promise.reject(new Error("unavailable"));
+    return { articles: [], total: 0, snapshot: "a".repeat(32), limit: input.limit, offset: input.offset };
+  });
+  renderTab(geoProject(), "/app/geo/geo_1/actions?step=content&article=addressed#geo-review", "content");
+  const review = await screen.findByRole("region", { name: "等你放行的稿件" });
+  expect(within(review).getByText("指定稿件仍待安全复核，其他待复核数量暂不可用。")).toBeVisible();
+  expect(within(review).queryByText(/1 篇稿件有安全问题/)).not.toBeInTheDocument();
+});
+
+it("does not offer version-scoped revision when the content digest is unknown", async () => {
+  client.getGeoArticles.mockResolvedValue({ articles: [article("one", { currentResultVersionId: "version-one", contentSha256: null })] });
+  renderTab(geoProject(), "/app/geo/geo_1/actions?step=content", "content");
+  await screen.findByRole("table", { name: "稿件列表" });
+  expect(screen.queryByRole("button", { name: "在对话中修改" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "润色语言" })).not.toBeInTheDocument();
+});

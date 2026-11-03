@@ -13,7 +13,7 @@ vi.mock('@/lib/geoAnalysisClient',()=>({getGeoAnalysis:read,getGeoAnalysisMember
 vi.mock('./spine/useOpenPublication',()=>({useOpenPublication:()=>navigation.publication}));
 vi.mock('./useOpenGeoConversation',()=>({useOpenGeoConversation:()=>navigation.open}));
 vi.mock('@/lib/geoNativeClient',async original=>({...await original<typeof import('@/lib/geoNativeClient')>(),openGeoConversation:navigation.create}));
-vi.mock('@/lib/geoClient',async original=>({...await original<typeof import('@/lib/geoClient')>(),getGeoProject:navigation.current,stageGeoPlanContext:navigation.stage,getGeoObservations:observations}));
+vi.mock('@/lib/geoClient',async original=>({...await original<typeof import('@/lib/geoClient')>(),getGeoProject:navigation.current,stageGeoPlanContext:navigation.stage,getGeoObservations:observations,readGeoArticleVersion:navigation.publication}));
 vi.mock('@/components/document/DocumentExportActions',()=>({DocumentExportActions:({source}:{source:unknown})=><div data-testid="export">{JSON.stringify(source)}</div>}));
 vi.mock('./geoFrame',async original=>({...await original<typeof import('./geoFrame')>(),useGeoReadScope:()=>({round:'old'}),useGeoFrame:()=>({openAnalysisScope:navigation.scope})}));
 const project={projectId:'control',sessionId:'session'};
@@ -196,7 +196,7 @@ it('keeps source type, actual URL search and cooccurrence filters in the exact s
  fireEvent.click(screen.getByText('所选数据分析'));
  fireEvent.click(await screen.findByRole('button',{name:'来源类型'}));fireEvent.click(screen.getByRole('menuitemradio',{name:'forum'}));
  await waitFor(()=>expect(read).toHaveBeenLastCalledWith('geo',{round:'old'},expect.objectContaining({viewId:'V18',sourceType:'forum'}),0,undefined));
- fireEvent.click(screen.getByRole('button',{name:'共同出现：全部引用回答'}));fireEvent.click(screen.getByRole('menuitemradio',{name:'共同出现我方错误'}));
+ fireEvent.click(screen.getByRole('button',{name:'共同出现'}));fireEvent.click(screen.getByRole('menuitemradio',{name:'共同出现我方错误'}));
  fireEvent.click(screen.getByRole('button',{name:'排名对象：域名'}));fireEvent.click(screen.getByRole('menuitemradio',{name:'页面'}));
  const search=screen.getByRole('searchbox',{name:'搜索引用来源'});
  fireEvent.change(search,{target:{value:'s?id=251'}});
@@ -243,7 +243,11 @@ it('V21 stages an unsent next-steps draft with exact row, metric and frozen gaps
  expect(navigation.open).toHaveBeenCalledWith(expect.objectContaining({geoPlanContext:{referenceId:'gpc_opportunity'}}),'Unsent exact group plan');
  expect(screen.getByRole('link',{name:'登记自有发布地址'})).toBeTruthy();
  expect(screen.getByRole('link',{name:'https://shared.example/a?id=1'})).toHaveAttribute('href','https://shared.example/a?id=1');
- fireEvent.click(screen.getByRole('button',{name:/稿件 1 · 查看发布版本/}));expect(navigation.publication).toHaveBeenCalledWith('001','a'.repeat(64));
+ navigation.publication.mockResolvedValue({text:'Preserved article'});
+ fireEvent.click(screen.getByRole('button',{name:/稿件 1 · 查看稿件版本/}));
+ await waitFor(()=>expect(navigation.publication).toHaveBeenCalledWith('geo','article-old','001','a'.repeat(64)));
+ expect(await screen.findByText('Preserved article')).toBeVisible();
+ fireEvent.click(screen.getByRole('button',{name:'关闭'}));
  fireEvent.click(screen.getByText('依据 1 · 第 1 版'));expect(screen.getByText('Preserved source quote')).toBeTruthy();
 });
 

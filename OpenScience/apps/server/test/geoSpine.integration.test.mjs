@@ -98,6 +98,37 @@ async function call(method, route, { user = ALICE, body } = {}) {
 /** @param {string} sql @param {unknown[]} values */
 const q = (sql, values = []) => database.query(sql, values);
 
+test('article catalogue searches and pages beyond the first 2000 rows within the authorized project', options, async () => {
+  const project = await store.createProject({ userId: ALICE, projectId: id('catalog'), engines: ['deepseek'], coverageDays: 90, product: { brandName: 'Catalogue fixture' } });
+  await q(`INSERT INTO evimed_geo.articles (id,user_id,geo_project_id,path,title,layer,status,safety,created_at,updated_at)
+    SELECT $1 || n::text,$2,$3,'articles/' || n::text || '.md',
+      CASE WHEN n=2005 THEN 'ZZZ unique-catalog-match' ELSE 'A-' || lpad(n::text,5,'0') END,
+      'popular',CASE WHEN n=2005 THEN 'published' ELSE 'draft' END,CASE WHEN n=2005 THEN 'open' ELSE 'clear' END,
+      now() + n * interval '1 second',now() + n * interval '1 second'
+    FROM generate_series(1,2005) n`, [id('article-'), ALICE, project.id]);
+  const root = `/api/geo/projects/${project.id}/articles?catalog=1`;
+  const first = await call('GET', `${root}&sort=title&limit=20&offset=0`);
+  const snapshot = first.payload.data.snapshot;
+  assert.match(snapshot, /^[a-f0-9]{32}$/);
+  const last = await call('GET', `${root}&sort=title&limit=20&offset=2000&snapshot=${snapshot}`);
+  assert.equal(last.status, 200); assert.equal(last.payload.data.total, 2005); assert.equal(last.payload.data.articles.length, 5);
+  assert.ok(last.payload.data.articles.some(article => article.title === 'ZZZ unique-catalog-match'));
+  const found = await call('GET', `${root}&search=unique-catalog-match&status=published&limit=20&offset=0`);
+  assert.equal(found.payload.data.total, 1); assert.equal(found.payload.data.articles[0].title, 'ZZZ unique-catalog-match');
+  const none = await call('GET', `${root}&search=unique-catalog-match&status=draft&limit=20&offset=0`);
+  assert.equal(none.payload.data.total, 0); assert.deepEqual(none.payload.data.articles, []);
+  const review = await call('GET', `${root}&review=1`);
+  assert.equal(review.payload.data.total, 1); assert.equal(review.payload.data.articles[0].title, 'ZZZ unique-catalog-match');
+  const articlePath = `/api/geo/projects/${project.id}/articles/${id('article-')}2005`;
+  assert.equal((await call('GET', articlePath)).payload.data.title, 'ZZZ unique-catalog-match');
+  assert.equal((await call('GET', articlePath, { user: MALLORY })).status, 404);
+  await q(`UPDATE evimed_geo.articles SET status='withdrawn' WHERE geo_project_id=$1 AND title='A-00001'`, [project.id]);
+  assert.equal((await call('GET', `${root}&sort=title&limit=20&offset=20&snapshot=${snapshot}`)).status, 409);
+  assert.equal((await call('GET', `${root}&sort=title&limit=20&offset=20`)).status, 400);
+  assert.equal((await call('GET', `${root}&sort=invalid`)).status, 400);
+  assert.equal((await call('GET', root, { user: MALLORY })).status, 404);
+});
+
 /**
  * The scenario. Groups: G1 (P2, no articles), G2 (P4, one article published 70 days ago and never cited), G3 (P1, an owned link an
  * engine cited), C1 (P2, a control group). Two rounds of the same set: a baseline and a weekly one.
@@ -600,4 +631,20 @@ test("narrative-only strategy tiers survive DTO and runtime reads with empty fro
   assert.deepEqual(minimal.payload.data.tiers.map(tier => tier.tier), ["1", "2"]);
   assert.deepEqual(minimal.payload.data.tiers[0].targetNotes, []); assert.equal(minimal.payload.data.tiers[1].targetNotes[0].pool, null);
   assert.equal(minimal.payload.data.tiers[1].targetNotes[0].metricId, "M-09");
+});
+
+test("cluster article pins name the current business head", options, async () => {
+  const before = (await q("SELECT current_result_version_id, content_sha256 FROM evimed_geo.articles WHERE id=$1", [geo.a2])).rows[0];
+  await q("UPDATE evimed_geo.articles SET current_result_version_id=$2, content_sha256=$3 WHERE id=$1", [geo.a2, "rv_current", "a".repeat(64)]);
+  try {
+    const { payload } = await call("GET", `/api/geo/projects/${geo.geoId}/clusters/${id("g2")}`);
+    const article = payload.data.articles.find((item) => item.id === geo.a2);
+    assert.equal(article.currentResultVersionId, "rv_current");
+    assert.equal(article.contentSha256, "a".repeat(64));
+    assert.equal(article.versionBasis, "current");
+    const filtered = await call("GET", `/api/geo/projects/${geo.geoId}/clusters/${id("g2")}?engines=deepseek`);
+    const filteredArticle = filtered.payload.data.articles.find((item) => item.id === geo.a2);
+    assert.equal(filteredArticle.versionBasis, "current");
+    assert.equal(filteredArticle.currentResultVersionId, "rv_current");
+  } finally { await q("UPDATE evimed_geo.articles SET current_result_version_id=$2, content_sha256=$3 WHERE id=$1", [geo.a2, before.current_result_version_id, before.content_sha256]); }
 });

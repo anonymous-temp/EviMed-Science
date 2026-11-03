@@ -271,6 +271,7 @@ import { createCapsuleRoutes } from "./capsuleRoutes.mjs";
 import { createVcrModelSources } from "./vcrModelSources.mjs";
 import { createVcrEvidenceSources } from "./vcrEvidenceSources.mjs";
 import { SourceService, projectSourceManifestRecord, sourceIndexDocument, sourceReadable } from "./sourceService.mjs";
+import { sourceDisplayOf } from "./sourceDisplay.mjs";
 import { createKnowledgeBaseEntries } from "./knowledgeBaseEntries.mjs";
 import { verifySourceMetadata } from "./sourceMetadata.mjs";
 // Knowledge-base search (2026-09-20): the index, its embedder and its gateway.
@@ -3026,6 +3027,18 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         return { root: (await stopRunForUser(project, run)).root };
       },
       openConversation: async (user, geoId, target) => geoNativeAuthority.descriptor(user, geoId, target),
+      readPublicationVersion: async (user, geoId, kind, recordId, versionId, digest, revision) => {
+        if (!geoNativeAuthority || !geoArticleResults) throw new HttpError(404, "geo_not_enabled", "The GEO article is unavailable.");
+        return geoArticleResults.readPublicationVersion(user, geoId, kind, recordId, versionId, digest, revision, geoNativeAuthority);
+      },
+      readArticleVersion: async (user, geoId, articleId, versionId, digest) => {
+        if (!geoNativeAuthority || !geoArticleResults) throw new HttpError(404, "geo_not_enabled", "The GEO article is unavailable.");
+        return geoArticleResults.readArticleVersion(user, geoId, articleId, versionId, digest, geoNativeAuthority);
+      },
+      stageArticleRevision: async (user, geoId, articleId, input) => {
+        if (!geoNativeAuthority || !geoArticleResults) throw new HttpError(404, "geo_not_enabled", "The GEO conversation is unavailable.");
+        return geoArticleResults.stageSelected(user, geoId, articleId, input, geoNativeAuthority);
+      },
       conversationRead: async (user, geoId, sessionId, action, body = undefined) => {
         const resolved = await geoNativeAuthority.resolve(user, { kind: "geo", geoProjectId: geoId, sessionId }, { ability: action === "start" || body ? "run" : "read" });
         const project = resolved.project;
@@ -3065,7 +3078,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             const items = []; let cursor = null;
             do {
               const page = await sourceService.list(project.userId, { projectId: project.id, state: "ready", limit: 100, cursor });
-              for (const item of page.items) if (!shared || await knowledge.acceptSource(item)) items.push({ id: item.id, title: item.title ?? item.name ?? item.id });
+              for (const item of page.items) if (!shared || await knowledge.acceptSource(item)) items.push({ id: item.id, title: sourceDisplayOf(item).title });
               cursor = page.nextCursor;
             } while (cursor);
             return { items };

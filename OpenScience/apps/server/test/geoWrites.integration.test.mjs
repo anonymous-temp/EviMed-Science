@@ -540,6 +540,7 @@ test("an article written for a control group is registered with a notice: the gr
   // What the page reads says the same, so a person is told where they look.
   const service = new GeoService({ store, config: { geoEnabled: true, geoAudience: "all", operatorUsers: [], geoPreviewUsers: [] } });
   const view = await service.articlesOf(project);
+  assert.deepEqual(view.articles.map(article => article.updatedAt), (await store.listArticles(project.id)).map(article => article.updatedAt));
   assert.deepEqual(view.articles.map((/** @type {any} */ article) => [article.groupId === control.id, article.groupIsControl]).sort(), [[false, false], [true, true]]);
 });
 

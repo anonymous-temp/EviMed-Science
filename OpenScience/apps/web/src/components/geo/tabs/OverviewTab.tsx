@@ -18,6 +18,7 @@ import { readFailure, useGeoDiagnosis, useGeoMonitoring, useGeoStrategy, type Ge
 import {
   actionMarkers,
   chartDates,
+  scheduledAfterObservations,
   headlineSentence,
   readingChange,
   rivalRanking,
@@ -148,7 +149,7 @@ function TrendCard({
     targetLabel: metric?.target == null ? null : `目标 ${formatGeoValue(metric.target, "index")}`,
     band: null,
     markers: withCoverageMarker(actionMarkers(dates, watch), points),
-    nextLabel: next ? `${monthDay(next.date)} ${roundKindWord(next.kind) ?? "复测"}` : null,
+    nextLabel: next && scheduledAfterObservations(next.date, dates) ? `${monthDay(next.date)} 计划${roundKindWord(next.kind) ?? "复测"}` : null,
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [watch, next, metric?.target, project.name]);
 

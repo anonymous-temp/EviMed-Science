@@ -3,7 +3,7 @@ import { GEO_SOURCE_PAGE_FIELDS, geoReadPage, normalizeGeoMember, geoScopeFromQu
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import {
-  GEO_COVERAGE_DAYS_MAX, GEO_COVERAGE_DAYS_MIN, GEO_ENGINES, GEO_EXPORT_KINDS, GEO_ORDER_CANCELLABLE_STATES, GEO_PROJECT_STATUSES, GEO_STEPS,
+  GEO_ARTICLE_STATUSES, GEO_COVERAGE_DAYS_MAX, GEO_COVERAGE_DAYS_MIN, GEO_ENGINES, GEO_EXPORT_KINDS, GEO_ORDER_CANCELLABLE_STATES, GEO_PROJECT_STATUSES, GEO_STEPS,
   GEO_TIERS, geoProducerSettingsIssues, geoVisibleQuestionOfReason, normalizeGeoProducerSettings,
 } from "@evimed/domain";
 import { GEO_ANALYSIS_FIELDS } from "./geoAnalysis.mjs";
@@ -184,6 +184,9 @@ function money(value, field, zero = false) {
  *     bindSession: (user: any, projectId: string, geoProject?: any) => Promise<{ sessionId: string | null, bound: boolean }>,
  *     conversationSessionId?: (user: any, geoId: string) => Promise<string | null>,
  *     openConversation?: (user: any, geoId: string, target: any) => Promise<any>,
+ *     readPublicationVersion?: (user: any, geoId: string, kind: string, recordId: string, versionId: string, digest: string, revision: number | null) => Promise<any>,
+ *     readArticleVersion?: (user: any, geoId: string, articleId: string, versionId: string, digest: string) => Promise<any>,
+ *     stageArticleRevision?: (user: any, geoId: string, articleId: string, input: any) => Promise<any>,
  *     conversationRead?: (user: any, geoId: string, sessionId: string, action: string, body?: any) => Promise<any>,
  *     stopProgrammeRun?: (ownerId: string, projectId: string, runId: string) => Promise<{ root: string }>,
  *     programmeRuns?: (ownerId: string, projectId: string) => Promise<Array<{ sessionId: string, runId: string, reason: string | null, status: string,
@@ -529,7 +532,19 @@ export function createGeoRoutes(dependencies) {
       if (tab === "clusters") return reply(await service.clusters(user, id, geoScopeFromQuery(url.searchParams, [])));
       if (tab === "actions") return reply(await service.actions(user, id));
       if (tab === "strategy") return reply(await service.strategy(user, id, geoScopeFromQuery(url.searchParams, ["strategyVersion", "planContextRef", "sourceId", "url"])));
-      if (tab === "articles") return reply(await service.articles(user, id));
+      if (tab === "articles") {
+        if (!url.searchParams.has("catalog")) return reply(await service.articles(user, id));
+        for (const key of url.searchParams.keys()) if (!["catalog", "search", "status", "sort", "limit", "offset", "review", "snapshot"].includes(key)
+          || url.searchParams.getAll(key).length !== 1) throw new HttpError(400, "geo_payload_invalid", "Invalid article catalogue.");
+        const search = url.searchParams.get("search") ?? "", status = url.searchParams.get("status") ?? "all", sort = url.searchParams.get("sort") ?? "title";
+        const limit = Number(url.searchParams.get("limit") ?? 20), offset = Number(url.searchParams.get("offset") ?? 0);
+        const snapshot = url.searchParams.get("snapshot");
+        if (url.searchParams.get("catalog") !== "1" || url.searchParams.has("review") && url.searchParams.get("review") !== "1" || search.length > 200 || !["all", ...GEO_ARTICLE_STATUSES].includes(status)
+          || !["title", "status", "updated"].includes(sort) || !Number.isSafeInteger(limit) || limit < 1 || limit > 100
+          || !Number.isSafeInteger(offset) || offset < 0 || offset > 1_000_000 || snapshot !== null && !/^[a-f0-9]{32}$/.test(snapshot)
+          || offset > 0 && snapshot === null) throw new HttpError(400, "geo_payload_invalid", "Invalid article catalogue.");
+        return reply(await service.articleCatalog(user, id, { search: search.trim(), status, sort: /** @type {'title'|'status'|'updated'} */ (sort), limit, offset, review: url.searchParams.has("review"), snapshot }));
+      }
       if (tab === "distribution") {
         const configured = typeof hooks.market?.configured === "function" ? Boolean(hooks.market.configured()) : undefined;
         return reply(await service.distribution(user, id, configured === undefined ? {} : { marketConfigured: configured }));
@@ -593,6 +608,12 @@ export function createGeoRoutes(dependencies) {
     // answered 404 there). The service holds the read ability and the digest check.
     if (parts.length === 4 && method === "GET" && tab === "analysis" && parts[3] === "members") {
       return reply(await service.analysisMembers(user, id, geoScopeFromQuery(url.searchParams, GEO_ANALYSIS_FIELDS)));
+    }
+    if (parts.length === 5 && method === "GET" && (tab === "orders" || tab === "owned-links") && parts[4] === "version-text") {
+      if (!dependencies.projects?.readPublicationVersion) throw UNAVAILABLE();
+      const revision = url.searchParams.has("revision") ? Number(url.searchParams.get("revision")) : null;
+      if (revision !== null && (!Number.isSafeInteger(revision) || revision < 1)) throw new HttpError(400, "geo_payload_invalid", "Invalid revision.");
+      return reply(await dependencies.projects.readPublicationVersion(user, id, tab, parts[3], url.searchParams.get("versionId") ?? "", url.searchParams.get("digest") ?? "", revision));
     }
     if (parts.length === 4 && method === "GET" && tab === "orders") return reply(await service.distributionOrder(user, id, parts[3], Object.fromEntries(url.searchParams)));
     if (parts.length === 4 && method === "POST" && tab === "source-ownership" && parts[3] === "read") {
@@ -672,6 +693,16 @@ export function createGeoRoutes(dependencies) {
     if (parts.length === 3 && method === "POST" && tab === "tier") {
       const body = await bodyOf(req, maxJsonBytes, ["tier"]);
       return reply(await service.setTier(user, id, tier(body.tier)));
+    }
+    if (parts.length === 4 && method === "GET" && tab === "articles") return reply(await service.article(user, id, parts[3]));
+    if (parts.length === 5 && method === "GET" && tab === "articles" && parts[4] === "version-text") {
+      if (!dependencies.projects?.readArticleVersion) throw UNAVAILABLE();
+      return reply(await dependencies.projects.readArticleVersion(user, id, parts[3], url.searchParams.get("versionId") ?? "", url.searchParams.get("digest") ?? ""));
+    }
+    if (parts.length === 5 && method === "POST" && tab === "articles" && parts[4] === "revision") {
+      const body = await bodyOf(req, maxJsonBytes, ["versionId", "digest", "requestId"]);
+      if (!dependencies.projects?.stageArticleRevision) throw UNAVAILABLE();
+      return reply(await dependencies.projects.stageArticleRevision(user, id, parts[3], body));
     }
     if (parts.length === 5 && method === "GET" && tab === "articles" && parts[4] === "versions") {
       return reply(await service.articleVersions(user, id, parts[3]));

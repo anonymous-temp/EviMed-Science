@@ -1680,6 +1680,8 @@ export function moduleReady() {
   const visible = (el) => el.getBoundingClientRect().width > 0 && el.getBoundingClientRect().height > 0;
   const body = main?.querySelector("[data-page-body]");
   const content = body && Boolean(body.textContent?.trim() || [...body.querySelectorAll("canvas, svg, img, iframe, video, [data-study-pane='conversation'], [data-frame-skeleton]")].some(visible));
+  // GEO delays the visible skeleton for 300 ms. The pending marker exists throughout that quiet period, even at zero height.
+  if (body && [...body.querySelectorAll('[data-geo-tab-pending]')].some(el => !el.closest('[hidden]'))) return false;
   return Boolean(content) && ![...body.querySelectorAll(".animate-pulse:not([data-forced-colors='preserve']), [aria-busy='true'], [role='status']")].some((el) => visible(el) && (el.getAttribute("role") !== "status" || el.textContent?.trim() === "正在载入"));
 }
 
@@ -1814,7 +1816,7 @@ export function workspaceFindings(view, facts, { geo = false } = {}) {
 }
 
 const GEO_AREAS = {
-  work: { label: "项目工作", path: "", tabs: [["项目对话", ""], ["方案", "/plan"]] },
+  work: { label: "项目工作", path: "", tabs: [["项目对话", ""], ["任务与成果", "?work=tasks"], ["方案", "/plan"]] },
   analytics: { label: "AI 表现", path: "/visibility", tabs: [["可见度", "/visibility"], ["医学核查", "/accuracy"], ["引用来源", "/sources"], ["问题与回答", "/questions"]] },
   content: { label: "内容与发布", path: "/actions", tabs: [["稿件", "/actions"], ["发布记录", "/actions#geo-delivery"]] },
   context: { label: "产品与资料", path: "/evidence", tabs: [["产品依据", "/evidence"], ["人群与旅程", "/questions?view=journey"]] },
@@ -1919,8 +1921,11 @@ export async function verifyGeoAreas(page) {
   const record = async (list, label, suffix) => {
     const result = await readModuleResult(page, `GEO ${label}`);
     if (result.coverage) {
-      const key = new URL(suffix, initial).pathname.split("/").at(-1);
-      await main.locator(`[data-page-body] [data-geo-tab="${key}"]`).waitFor({ state: "visible", timeout: 5_000 });
+      if (label === "任务与成果") await main.locator("[data-page-body] [data-programme-runs]").waitFor({ state: "visible", timeout: 5_000 });
+      else {
+        const key = new URL(suffix, initial).pathname.split("/").at(-1);
+        await main.locator(`[data-page-body] [data-geo-tab="${key}"]`).waitFor({ state: "visible", timeout: 5_000 });
+      }
     }
     if (["empty", "unobservable"].includes(result.status)) notices.push(`not observable: GEO ${label} reached ${result.status} content`);
     list.push({ label, address: page.url(), result });
@@ -1936,7 +1941,8 @@ export async function verifyGeoAreas(page) {
     await closeResultConversation();
     await record(destinations, label, GEO_TASKS[label]);
     await page.goto(initial, { waitUntil: "domcontentloaded" });
-    await summary.click({ timeout: 5_000 });
+    await page.waitForFunction(moduleReady, undefined, { timeout: 30_000 });
+    await summary.click({ timeout: 15_000 });
   }
   await summary.click({ timeout: 5_000 });
   await details.getByRole("button", { name: "执行详情", exact: true }).click({ timeout: 5_000 });
@@ -3654,6 +3660,7 @@ export function routeReady() {
   // has an empty body and is loaded; its loading state is the skeleton below, which still holds the walk (2026-11-03).
   if (body && !filled(body) && !filled(routeMain.querySelector("[data-page-introduction]"))) return false;
   if (/^\/app\/(?:geo|virtual-research)\/[^/]+(?:\/|$)/u.test(location.pathname) && !routeMain.querySelector("[data-page-chrome], [data-state-screen], [role='alert']")) return false;
+  if ([...routeMain.querySelectorAll('[data-geo-tab-pending]')].some(el => !el.closest('[hidden]'))) return false;
   return ![...routeMain.querySelectorAll('[role="status"], .animate-pulse:not([data-forced-colors="preserve"]), [data-geo-tab-loading], [data-vcr-loading]')].some((node) => {
     const rect = node.getBoundingClientRect();
     return (node.getAttribute("role") !== "status" || node.textContent?.trim() === "正在载入") && rect.width > 0 && rect.height > 0

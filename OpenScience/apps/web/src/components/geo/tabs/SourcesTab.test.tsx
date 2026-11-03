@@ -132,9 +132,7 @@ describe("信源: two views in the band", () => {
   it("switches between who the engines cite and where an article could go, in the address", async () => {
     renderTab();
     await screen.findByText("3 个信源");
-    const view = within(toolbar()).getByRole("group", { name: "视图" });
-    expect(within(view).getByRole("button", { name: "AI 引用谁" })).toHaveAttribute("aria-pressed", "true");
-    await userEvent.click(within(view).getByRole("button", { name: "可投放" }));
+    await userEvent.click(screen.getByRole("button", { name: "查看可投放渠道" }));
     expect(screen.getByTestId("search")).toHaveTextContent("view=placeable");
     expect(await screen.findByRole("list", { name: "可投放的信源" })).toBeInTheDocument();
     expect(document.querySelector("[data-geo-source]")).toBeNull();
@@ -308,13 +306,13 @@ it('navigates source planning to the plan main area with exact source and select
 it('keeps the selected destination and exact analytical scope when clearing a source-list query',async()=>{
  renderTab(geoProject(),'/app/geo/geo_1/sources?selectionRef=gsel_keep&engines=kimi&questionVersion=3&session=s1');
  await screen.findByLabelText('搜索信源');
- await userEvent.click(screen.getByRole('button',{name:'可投放'}));
+ await userEvent.click(screen.getByRole('button',{name:'查看可投放渠道'}));
  await userEvent.type(screen.getByLabelText('搜索信源'),'丁香');
  await userEvent.click(within(toolbar()).getByRole('button',{name:'清除筛选'}));
  const params=new URLSearchParams(screen.getByTestId('search').textContent!);
  expect(params.get('view')).toBe('placeable');expect(params.get('selectionRef')).toBe('gsel_keep');
  expect(params.get('engines')).toBe('kimi');expect(params.get('questionVersion')).toBe('3');expect(params.get('session')).toBe('s1');
- expect(params.has('sourceSearch')).toBe(false);expect(screen.getByRole('button',{name:'可投放'})).toHaveAttribute('aria-pressed','true');
+ expect(params.has('sourceSearch')).toBe(false);expect(screen.getByRole('button',{name:'返回引用来源'})).toBeVisible();
 });
 
 it.each(['explicit','selected','empty'] as const)('preserves the original %s source-to-plan context in the named main-area entry',async mode=>{

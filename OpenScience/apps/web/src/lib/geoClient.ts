@@ -644,6 +644,8 @@ export interface GeoPlanOutputLink {
 }
 export interface GeoArticle {
   planningLinks?: GeoPlanOutputLink[];
+  /** When the article record last changed, not necessarily the time its content was revised. */
+  updatedAt?: string | null;
   currentResultVersionId?: string | null;
   contentSha256?: string | null;
   onlineUpdateNeeded?: boolean;
@@ -681,6 +683,7 @@ export interface GeoArticle {
 export interface GeoArticles {
   articles: GeoArticle[];
 }
+export interface GeoArticleCatalog extends GeoArticles { total: number; snapshot: string; limit: number; offset: number }
 
 export interface GeoOrderCheck {
   at?: string | null;
@@ -983,7 +986,7 @@ export interface GeoClusterView extends GeoScopedView {
   }>;
   claims: Record<string, { id: string; claimKey?: string | null; statement: string; sourceLabel?: string | null; sourceKind?: string | null; status?: string }>;
   actions: GeoAction[];
-  articles: Array<{ id: string; layer: GeoArticleLayer; title: string; status: GeoArticleStatus; gate: string | null; safety: string | null; channel: string | null; channelNote: string | null; audience: string | null; audienceNote: string | null; path: string | null; runId: string | null }>;
+  articles: Array<{ id: string; layer: GeoArticleLayer; title: string; status: GeoArticleStatus; gate: string | null; safety: string | null; channel: string | null; channelNote: string | null; audience: string | null; audienceNote: string | null; path: string | null; runId: string | null; currentResultVersionId?: string | null; contentSha256?: string | null; versionBasis?: "current" }>;
   orders: Array<{ id: string; articleId: string | null; state: GeoOrderState; domain: string | null; publishedUrl: string | null; publishedAt: string | null; priceCny: number | null }>;
   ownedLinks: Array<{ id: string; articleId: string | null; platform: string; url: string; title: string; publishedAt: string | null; status: "active" | "retired"; citedBy: Array<{ engine: GeoEngine; firstSeen: string | null }> }>;
   errors: Array<{ id: string; fingerprint: string | null; engine: GeoEngine; statement: string | null; severity: GeoSeverity | null; status: GeoErrorStatus; snapshotId: string | null; claimId: string | null; action: GeoErrorAction | null; createdAt: string | null }>;
@@ -1471,6 +1474,22 @@ export function getGeoStrategy(geoId: string, scope?: GeoReadScope & {strategyVe
 export function getGeoArticles(geoId: string) {
   return productRequest<GeoArticles>(`${project(geoId)}/articles`);
 }
+export function getGeoArticle(geoId: string, articleId: string) {
+  return productRequest<GeoArticle>(`${project(geoId)}/articles/${id(articleId)}`);
+}
+
+/** A filtered page from the complete project catalogue; the legacy article read remains unchanged. */
+export async function getGeoArticleCatalog(geoId: string, input: { search: string; status: string; sort: string; limit: number; offset: number; review?: boolean; snapshot?: string }) {
+  const { review, ...paging } = input;
+  const query = new URLSearchParams({ catalog: "1", ...Object.fromEntries(Object.entries(paging).map(([key, value]) => [key, String(value)])) });
+  if (review) query.set("review", "1");
+  const page = await productRequest<GeoArticleCatalog>(`${project(geoId)}/articles?${query}`);
+  if (!Array.isArray(page.articles) || !Number.isSafeInteger(page.total) || page.total < 0 || !/^[a-f0-9]{32}$/.test(page.snapshot)
+    || input.snapshot && page.snapshot !== input.snapshot || page.limit !== input.limit || page.offset !== input.offset) {
+    throw new Error("The article catalogue is unavailable on this server.");
+  }
+  return page;
+}
 
 export function withdrawGeoArticle(geoId: string, articleId: string) {
   return productRequest<unknown>(`${project(geoId)}/articles/${id(articleId)}/withdraw`, "POST", {});
@@ -1646,4 +1665,19 @@ export const clearGeoMarketStop = (note: string) => productRequest<{ cleared: bo
 
 export function stageGeoPlanContext(geoId: string, input: {requestKey:string;sessionId:string;mode:"strategy"|"content"|"analysis"|"signal";view?:import("./geoAnalysisClient").GeoAnalysisDescriptor;expectedDigest?:string;focus?:{rowKey:string;columnKey:string};intent?:"explain"|"compare"|"next_steps"|"analyse"|"review"|"correct";selectionRef?:string;strategyVersion?:number;sourceId?:string;url?:string;groupIds?:string[];errorIds?:string[];actionKeys?:string[];signalId?:string;expectedSignalRevision?:number;focusRefs?:string[];previousContextRef?:string}) {
   return productRequest<{referenceId:string;sessionId:string;draft:string;state?:"staged"|"bound";requestId?:string|null}>(`${project(geoId)}/strategy/context`, "POST", input);
+}
+
+/** Stage only the selected current article under GEO authority; the server chooses its producer session. */
+export function stageGeoArticleRevision(geoId: string, articleId: string, versionId: string, digest: string) {
+  return productRequest<{ referenceId: string; sessionId: string; draft: string }>(`${project(geoId)}/articles/${id(articleId)}/revision`, "POST", { versionId, digest, requestId: crypto.randomUUID() });
+}
+
+/** Read text only for a preserved version linked to the named GEO article. */
+export function readGeoArticleVersion(geoId: string, articleId: string, versionId: string, digest: string) {
+  return productRequest<{ versionId: string; digest: string; text: string }>(`${project(geoId)}/articles/${id(articleId)}/version-text?${new URLSearchParams({ versionId, digest })}`);
+}
+
+export function readGeoPublicationVersion(geoId: string, kind: "orders" | "owned-links", recordId: string, versionId: string, digest: string, revision?: number) {
+  const params = new URLSearchParams({ versionId, digest, ...(revision == null ? {} : { revision: String(revision) }) });
+  return productRequest<{ versionId: string; digest: string; text: string }>(`${project(geoId)}/${kind}/${id(recordId)}/version-text?${params}`);
 }

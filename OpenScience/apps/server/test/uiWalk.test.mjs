@@ -691,7 +691,7 @@ function compositionRead(pathname) {
         overview: "项目对话", plan: "方案", visibility: "可见度", accuracy: "医学核查", sources: "引用来源",
         questions: "问题与回答", answers: "问题与回答", actions: "稿件", evidence: "产品依据"
       };
-      const area = key === "overview" || key === "plan" ? ["项目工作", ["项目对话", "方案"]]
+      const area = key === "overview" || key === "plan" ? ["项目工作", ["项目对话", "任务与成果", "方案"]]
         : key === "actions" ? ["内容与发布", ["稿件", "发布记录"]] : key === "evidence" ? ["产品与资料", ["产品依据", "人群与旅程"]]
           : ["AI 表现", ["可见度", "医学核查", "引用来源", "问题与回答"]];
       const work = Number(key === "overview");
@@ -754,7 +754,7 @@ function context() {
     });
     const geoDestinations = {
       "项目工作": "", "AI 表现": "/visibility", "内容与发布": "/actions", "产品与资料": "/evidence",
-      "项目对话": "", "方案": "/plan", "可见度": "/visibility", "医学核查": "/accuracy", "引用来源": "/sources", "问题与回答": "/questions",
+      "项目对话": "", "任务与成果": "?work=tasks", "方案": "/plan", "可见度": "/visibility", "医学核查": "/accuracy", "引用来源": "/sources", "问题与回答": "/questions",
       "稿件": "/actions", "发布记录": "/actions#geo-delivery", "产品依据": "/evidence", "人群与旅程": "/questions?view=journey",
     };
     const geoLocator = (name) => ({

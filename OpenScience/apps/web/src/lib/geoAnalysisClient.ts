@@ -198,10 +198,10 @@ export interface GeoAnalysisView {
   availability: { status: string; reasons?: string[] };
 }
 export interface GeoAnalysisMemberItem {
-  receipt?:{kind?:string;snapshotId?:string;previousAssessmentVersion?:string|null;assessmentVersion?:string|null;claimVersion?:number|null;changedAt?:string;recordedAt?:string;previousStatus?:string};
+  receipt?:{kind?:string;revision?:number;snapshotId?:string;previousAssessmentVersion?:string|null;assessmentVersion?:string|null;claimVersion?:number|null;changedAt?:string;recordedAt?:string;previousStatus?:string};
   eventId?:string;signalId?:string;errorId?:string|null;currentStatus?:string|null;currentJudgmentState?:string|null;
   currentDisposition?:string|null;currentExecutionState?:string|null;executionState?:string;recordedAt?:string|null;detectedAt?:string|null;
-  publicationId?:string;linkId?:string;basisDigest?:string;side?:string;preservedSelectionRef?:string|null;
+  publicationId?:string;linkId?:string;revision?:number;basisDigest?:string;side?:string;preservedSelectionRef?:string|null;
   preservedQuestion?:{text?:string};preservedAnswer?:{text?:string};facts?:{statements?:Array<{text:string;verdict?:string}>};
   targetId?:string;type?:string;label?:string|null;materialVersion?:string|number|null;
   preservedMemberLinks?:{before:number;after:number;targets:number};

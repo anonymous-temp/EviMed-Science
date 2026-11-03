@@ -186,24 +186,23 @@ describe("可见度: the groups against the engines", () => {
 });
 
 describe("可见度: the band's toolbar drives every block", () => {
-  it("holds the metric, the engine, the pool and the group; nothing filters from under a block", async () => {
+  it("places the metric with the trend and keeps scope filters in the toolbar", async () => {
     renderTab();
     await screen.findByRole("heading", { name: /综合可见度指数/ });
     await waitFor(() => expect(document.querySelector("[data-cluster-grid]")).not.toBeNull());
-    expect(within(toolbar()).getByRole("button", { name: /^指标：/ })).toBeVisible();
+    expect(screen.getByRole("combobox", { name: "分析指标" })).toBeVisible();
     expect(screen.queryByRole("group", { name: "引擎" })).toBeNull();
     await userEvent.click(within(toolbar()).getByRole("button", { name: /^筛选/ }));
     for (const name of ["引擎", "问句池", "问题群"]) expect(screen.getByRole("group", { name })).toBeVisible();
   });
 
-  it("a metric chip moves the trend, rings the grid's column and swaps the engines' card for that rate's bars", async () => {
+  it("a metric choice moves the trend, rings the grid's column and swaps the engines' card for that rate's bars", async () => {
     renderTab();
     await screen.findByRole("heading", { name: /综合可见度指数/ });
     // the index has no column of its own: nothing is ringed, and the engines' card is the mention trend
     expect(document.querySelector("th[data-heat-emphasis]")).toBeNull();
     expect(document.querySelector("[data-geo-engine-trend]")).not.toBeNull();
-    await userEvent.click(within(toolbar()).getByRole("button", { name: /^指标：/ }));
-    await userEvent.click(await screen.findByRole("menuitemradio", { name: "事实准确率" }));
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "分析指标" }), "accuracy");
     await screen.findByRole("heading", { name: /^事实准确率 94%/ });
     expect(document.querySelector("th[data-heat-emphasis]")).toHaveTextContent("事实准确率");
     expect(document.querySelector("[data-geo-engine-trend]")).toBeNull();
@@ -275,13 +274,21 @@ it("keeps monitoring settings reachable while data is loading and shows the true
   expect(screen.queryByRole("button", { name: "停止自动监测" })).toBeNull();
 });
 
-it("places the existing trend and same-scope ranking in one responsive area", async () => {
+it("shows the ranking only for the matching metric and expands other trends", async () => {
   renderTab();
-  const ranking = await screen.findByRole("table", { name: "同类药提及率" });
+  const choice = await screen.findByRole("combobox", { name: "分析指标" });
   const area = document.querySelector("[data-geo-trend-ranking]")!;
-  expect(area).toHaveClass("grid", "lg:grid-cols-2");
+  expect(screen.queryByRole("table", { name: "同类药提及率" })).not.toBeInTheDocument();
+  expect(area).not.toHaveClass("lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]");
+  await userEvent.selectOptions(choice, "mention");
+  const ranking = await screen.findByRole("table", { name: "同类药提及率" });
+  expect(area).toHaveClass("grid", "lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]");
   expect(area).toContainElement(ranking);
   expect(area.querySelector("[data-chart='trend']")).not.toBeNull();
+  expect(screen.getByTestId("search")).toHaveTextContent("trendMetric=mention");
+  await userEvent.selectOptions(screen.getByRole("combobox", { name: "比较" }), "none");
+  expect(screen.queryByRole("table", { name: "同类药提及率" })).not.toBeInTheDocument();
+  expect(screen.getByTestId("search")).toHaveTextContent("compareBy=none");
 });
 
 it("opens settings from the automation anchor even when both reads fail", async () => {

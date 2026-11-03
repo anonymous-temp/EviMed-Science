@@ -10,12 +10,14 @@ import { Drawer } from '@/components/ui/Drawer';
 import { Note } from '@/components/ui/Note';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { List, ListRow } from '@/components/ui/ListRow';
+import { DataTable } from '@/components/ui/DataTable';
 import { EmptyState } from '@/components/cards/EmptyState';
-import { Input } from '@/components/ui/Input';
+import { Input, Select } from '@/components/ui/Input';
 import { useSharedGeoLoad } from '../geoProjectData';
 import { useGeoFrame } from '../geoFrame';
+import { geoVersionLabel } from '../geoVersionLabel';
 import { geoDrawerActivation, geoDrawerSearch, geoDrawerSelectionState, searchWith } from '../spine/drawerParams';
-import { useOpenPublication } from '../spine/useOpenPublication';
+import { useOpenGeoPublication } from '../spine/useOpenPublication';
 import { orderStateWord } from '../geoText';
 import { yuan } from './geoTabText';
 import { TabError, TabSkeleton } from './geoTabKit';
@@ -23,7 +25,7 @@ import { TabError, TabSkeleton } from './geoTabKit';
 const when = (value: string | null) => value ? new Date(value).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }) : '未记录';
 const ledgerNames: Record<string, string> = { budget_set: '设置预算', reserve: '预留', release: '释放预留', settle: '支付', refund: '退款到账' };
 const versionWords: Record<string, string> = { update_needed: '稿件已有新版本', unknown: '发布版本未记录' };
-const versionWord = (state: string | null | undefined) => (state && versionWords[state]) || '与当前稿件一致';
+const versionWord = (state: string | null | undefined) => state === 'current' ? '与当前稿件一致' : (state && versionWords[state]) || '发布版本未记录';
 const phaseNames: Record<string, string> = { send_started: '正在提交', late_send_result: '补回提交结果', price_changed: '价格变化', url_changed: '发布地址更新', refund_seen: '退款到账', refund_escalated: '退款待核对', auto_cancel: '自动撤单', check: '检查页面', cited: '发现引用' };
 
 type DistributionDetail = { kind: 'order' | 'publication'; id: string };
@@ -78,15 +80,23 @@ function PageControls({ pager, nextCursor, total, refresh, firstKey }: { pager: 
 }
 function OrderPage({ geoId, onOpen }: { geoId: string; onOpen(id: string): void }) {
   const pager = usePages();
+  const [query, setQuery] = useState('');
+  const [sort, setSort] = useState('recent');
   const { state, reload } = useSharedGeoLoad(`distribution-orders:${geoId}:${pager.cursor ?? ''}`, () => getGeoExecutionOrders(geoId, { cursor: pager.cursor, limit: 30 }));
   if (state.kind === 'loading') return <TabSkeleton />;
   if (state.kind === 'error') return <TabError message={state.message} onRetry={reload} />;
+  const rows = state.data.items.filter(order => `${order.articleTitle || ""} ${order.media || ""} ${order.domain || ""}`.toLowerCase().includes(query.trim().toLowerCase())).slice().sort((a, b) => sort === "title" ? (a.articleTitle || "").localeCompare(b.articleTitle || "", "zh-CN") : 0);
   return <div className="flex flex-col gap-3">
     {state.refreshError && <Note tone="warn" action={<Button size="sm" onClick={reload}>重试</Button>}>{state.refreshError}</Note>}
-    {state.data.items.length === 0 ? <EmptyState title="还没有投放订单" reason="自主发布的页面见“自主发布”。" /> : <List label="投放订单" divided>
-      {state.data.items.map(order => <ListRow key={order.id} title={`${order.articleTitle || '未关联稿件'} · ${order.media || order.domain || '媒体未记录'}`} onOpen={() => onOpen(order.id)}
-        meta={[orderStateWord(order.state), yuan(order.priceCny), versionWord(order.versionState), order.publishedAt ? `发布于 ${when(order.publishedAt)}` : '尚无发布记录'].join(' · ')} />)}
-    </List>}
+    <div className="flex flex-wrap gap-2 text-ui"><Input label="搜索本页" value={query} onChange={event => setQuery(event.target.value)} /><Select label="本页排序" value={sort} onChange={event => setSort(event.target.value)}><option value="recent">最近登记</option><option value="title">稿件标题</option></Select></div>
+    {state.data.items.length === 0 ? <EmptyState title="还没有投放订单" reason="自主发布的页面见“自主发布”。" /> : <DataTable label="投放订单" rows={rows} rowKey={row => row.id} onRowOpen={row => onOpen(row.id)} state={rows.length ? 'content' : 'empty'} emptyText="本页没有匹配的订单，请调整搜索。" columns={[
+      { key: 'article', header: '稿件', rowHeader: true, cell: row => <Button variant="text" size="sm" onClick={() => onOpen(row.id)}>{row.articleTitle || '未关联稿件'}</Button> },
+      { key: 'media', header: '渠道', cell: row => row.media || row.domain || '未记录' },
+      { key: 'state', header: '状态', cell: row => orderStateWord(row.state) },
+      { key: 'version', header: '发布版本', cell: row => row.articleResultVersionId ? `${geoVersionLabel(row.articleResultVersionId, state.data.items.map(item => item.articleResultVersionId))} · ${versionWord(row.versionState)}` : '未记录' },
+      { key: 'date', header: '发布时间', cell: row => when(row.publishedAt) },
+      { key: 'price', header: '费用', align: 'right', cell: row => yuan(row.priceCny) },
+    ]} />}
     <PageControls pager={pager} nextCursor={state.data.nextCursor} total={state.data.total} refresh={reload} firstKey={`distribution-orders:${geoId}:`} />
   </div>;
 }
@@ -114,10 +124,10 @@ function OrderDetail({ geoId, project, orderId, onClose }: { geoId: string; proj
   const pager = usePages();
   const { state, reload } = useSharedGeoLoad(`distribution-order:${geoId}:${orderId}:${pager.cursor ?? ''}`, () => getGeoOrderDetail(geoId, orderId, { cursor: pager.cursor, limit: 30 }));
   const [confirm, setConfirm] = useState(false), [busy, setBusy] = useState(false);
-  const openPublication = useOpenPublication(project);
+  const publication = useOpenGeoPublication(geoId, "orders", orderId);
   const openVersion = async (order: GeoExecutionOrder) => {
     if (!order.articleResultVersionId || !order.articleDigest) return;
-    await openPublication(order.articleResultVersionId, order.articleDigest);
+    await publication.open(order.articleResultVersionId, order.articleDigest);
   };
   const cancel = async () => {
     setConfirm(false); setBusy(true);
@@ -131,7 +141,7 @@ function OrderDetail({ geoId, project, orderId, onClose }: { geoId: string; proj
   // The button that opens the version the page was published from: beside the sentence that says there is a newer one, else in the row of actions.
   const versionButton = order && order.articleResultVersionId && order.articleDigest ? <Button variant="text" size="sm" onClick={() => void openVersion(order)}>查看当时稿件</Button> : null;
   const newerVersion = order?.versionState === 'update_needed' && versionButton !== null;
-  return <Drawer title={order?.articleTitle || '投放订单'} onClose={onClose}>
+  return <><Drawer title={order?.articleTitle || '投放订单'} onClose={onClose}>
     {state.kind === 'loading' && <TabSkeleton />}
     {state.kind === 'error' && <TabError message={state.message} onRetry={reload} />}
     {order && state.kind === 'ready' && <div className="flex flex-col gap-4">
@@ -151,20 +161,27 @@ function OrderDetail({ geoId, project, orderId, onClose }: { geoId: string; proj
       <PageControls pager={pager} nextCursor={state.data.events.nextCursor} total={state.data.events.total} refresh={reload} firstKey={`distribution-order:${geoId}:${orderId}:`} />
     </div>}
     {confirm && <ConfirmDialog title="提交撤单请求？" body="媒体处理结果会更新到订单；预留释放和退款以实际费用流水为准。" confirmLabel="撤单" onConfirm={() => void cancel()} onCancel={() => setConfirm(false)} />}
-  </Drawer>;
+  </Drawer>{publication.dialog}</>;
 }
 
 function OwnedPage({ geoId, onOpen }: { geoId: string; onOpen(id: string): void }) {
   const pager = usePages();
+  const [query, setQuery] = useState('');
+  const [sort, setSort] = useState('recent');
   const { state, reload } = useSharedGeoLoad(`owned-publications:${geoId}:${pager.cursor ?? ''}`, () => getGeoOwnedPublications(geoId, { cursor: pager.cursor, limit: 30 }));
   if (state.kind === 'loading') return <TabSkeleton />;
   if (state.kind === 'error') return <TabError message={state.message} onRetry={reload} />;
+  const rows = state.data.items.filter(link => `${link.title || ""} ${link.url}`.toLowerCase().includes(query.trim().toLowerCase())).slice().sort((a, b) => sort === "title" ? (a.title || a.url).localeCompare(b.title || b.url, "zh-CN") : 0);
   return <div className="flex flex-col gap-3">
     {state.refreshError && <Note tone="warn" action={<Button size="sm" onClick={reload}>重试</Button>}>{state.refreshError}</Note>}
-    {state.data.items.length === 0 ? <EmptyState title="还没有登记自主发布的页面" reason="发布地址可在对应行动中添加。" /> : <List label="自主发布页面" divided>
-      {state.data.items.map(link => <ListRow key={link.id} title={link.title || link.url} onOpen={() => onOpen(link.id)}
-        meta={[link.status === 'retired' ? '已下线' : '已登记发布', versionWord(link.versionState), when(link.publishedAt)].join(' · ')} />)}
-    </List>}
+    <div className="flex flex-wrap gap-2 text-ui"><Input label="搜索本页" value={query} onChange={event => setQuery(event.target.value)} /><Select label="本页排序" value={sort} onChange={event => setSort(event.target.value)}><option value="recent">最近登记</option><option value="title">标题</option></Select></div>
+    {state.data.items.length === 0 ? <EmptyState title="还没有登记自主发布的页面" reason="发布地址可在对应行动中添加。" /> : <DataTable label="自主发布页面" rows={rows} rowKey={row => row.id} onRowOpen={row => onOpen(row.id)} state={rows.length ? 'content' : 'empty'} emptyText="本页没有匹配的发布记录，请调整搜索。" columns={[
+      { key: 'title', header: '页面', rowHeader: true, cell: row => <Button variant="text" size="sm" onClick={() => onOpen(row.id)}>{row.title || row.url}</Button> },
+      { key: 'article', header: '关联稿件', cell: row => row.articleTitle || '未记录' },
+      { key: 'state', header: '状态', cell: row => row.status === 'retired' ? '已下线' : '已登记发布' },
+      { key: 'version', header: '发布版本', cell: row => row.articleResultVersionId ? `${geoVersionLabel(row.articleResultVersionId, state.data.items.map(item => item.articleResultVersionId))} · ${versionWord(row.versionState)}` : '未记录' },
+      { key: 'date', header: '发布时间', cell: row => when(row.publishedAt) },
+    ]} />}
     <PageControls pager={pager} nextCursor={state.data.nextCursor} total={state.data.total} refresh={reload} firstKey={`owned-publications:${geoId}:`} />
   </div>;
 }
@@ -172,7 +189,7 @@ const localPublicationTime = () => new Intl.DateTimeFormat('sv-SE', { timeZone: 
 function OwnedDetail({ geoId, project, linkId, onClose }: { geoId: string; project: GeoProject; linkId: string; onClose(): void }) {
   const [before, setBefore] = useState<number | undefined>();
   const { state, reload } = useSharedGeoLoad(`owned-publication:${geoId}:${linkId}:${before ?? ''}`, () => getGeoOwnedPublication(geoId, linkId, before));
-  const frame = useGeoFrame(), openPublication = useOpenPublication(project);
+  const frame = useGeoFrame(), publication = useOpenGeoPublication(geoId, "owned-links", linkId);
   const [publishedAt, setPublishedAt] = useState(localPublicationTime), [confirm, setConfirm] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState('');
   const [pending, setPending] = useState<Parameters<typeof confirmGeoOwnedPublication>[2] | null>(null);
   const data = state.kind === 'ready' ? state.data : null, link = data?.link;
@@ -195,14 +212,14 @@ function OwnedDetail({ geoId, project, linkId, onClose }: { geoId: string; proje
     catch (failure) { setConfirm(false); setError(webErrorMessage(failure, { fallback: '登记结果尚未确认，可以重试同一次登记或刷新查看。' })); }
     finally { setBusy(false); }
   };
-  return <Drawer title={link?.title || '自主发布页面'} onClose={onClose}>
+  return <><Drawer title={link?.title || '自主发布页面'} onClose={onClose}>
     {state.kind === 'loading' && <TabSkeleton />}
     {state.kind === 'error' && <TabError message={state.message} onRetry={reload} />}
     {data && link && <div className="flex flex-col gap-4 text-ui">
       {href && <a href={href} target="_blank" rel="noreferrer" className="break-all text-link hover:underline">{link.url}</a>}
       <p>{link.status === 'retired' ? '已登记下线' : '已登记发布'} · {when(link.publishedAt)}</p>
       <p className="text-text-3">{link.versionState === 'update_needed' ? '稿件已有新版本。编辑稿件不会自动更新这个线上页面。' : link.versionState === 'unknown' ? '此前没有记录完整的发布稿件版本。' : '登记的发布版本与当前稿件一致。'}</p>
-      {link.articleResultVersionId && link.articleDigest && <Button variant="text" size="sm" onClick={() => void openPublication(link.articleResultVersionId!, link.articleDigest!)}>查看已登记稿件</Button>}
+      {link.articleResultVersionId && link.articleDigest && <Button variant="text" size="sm" onClick={() => void publication.open(link.articleResultVersionId!, link.articleDigest!)}>查看已登记稿件</Button>}
       {canEdit && link.currentResultVersionId && link.currentDigest && <div className="flex flex-col gap-2">
         <Input type="datetime-local" label="实际更新时间（北京时间）" value={publishedAt} onChange={event => setPublishedAt(event.target.value)} disabled={busy} />
         <Button size="sm" actionKind="external" onClick={prepare} disabled={busy}>登记线上已更新为当前稿件</Button>
@@ -211,11 +228,11 @@ function OwnedDetail({ geoId, project, linkId, onClose }: { geoId: string; proje
       <List label="发布版本记录" divided>
         {data.history.items.map(receipt => <ListRow key={receipt.revision} title={`${receipt.basis === 'legacy_record' ? '此前登记' : '登记线上更新'} · ${when(receipt.publishedAt)}`}
           meta={receipt.resultVersionId && receipt.digest ? undefined : '稿件版本未记录'}
-          actions={receipt.resultVersionId && receipt.digest ? <Button size="sm" variant="text" onClick={() => void openPublication(receipt.resultVersionId!, receipt.digest!)}>查看这版稿件</Button> : undefined} />)}
+          actions={receipt.resultVersionId && receipt.digest ? <Button size="sm" variant="text" onClick={() => void publication.open(receipt.resultVersionId!, receipt.digest!, receipt.revision)}>查看这版稿件</Button> : undefined} />)}
       </List>
       {data.history.items.length === 0 && <p className="text-caption text-text-3">还没有版本更新记录。</p>}
       <div className="flex gap-2">{data.history.nextBeforeRevision != null && <Button size="sm" variant="text" onClick={() => setBefore(data.history.nextBeforeRevision!)}>更早记录</Button>}{before !== undefined && <Button size="sm" variant="text" onClick={() => setBefore(undefined)}>最新记录</Button>}</div>
     </div>}
     {confirm && <ConfirmDialog tone="primary" title="该页面已更新为当前稿件？" body="此操作登记你已完成的线上更新，不会代你发布。原稿件版本与此前登记会继续保留。" confirmLabel="确认登记" busy={busy} onConfirm={() => void save()} onCancel={() => setConfirm(false)} />}
-  </Drawer>;
+  </Drawer>{publication.dialog}</>;
 }

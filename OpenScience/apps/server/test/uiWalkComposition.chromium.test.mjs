@@ -473,6 +473,14 @@ test("module readiness ignores a running-status dot in chrome but waits for sele
   assert.equal(await page.evaluate(moduleReady), true);
 });
 
+test("GEO readiness waits even during the zero-height quiet phase of a pending result", { skip }, async () => {
+  await page.setContent('<main><div data-page-chrome>GEO</div><div data-page-body><label>分析视角</label><div data-geo-tab-pending aria-busy="true"></div></div></main>');
+  assert.equal(await page.evaluate(moduleReady), false);
+  assert.equal(await page.evaluate(routeReady), false);
+  await page.evaluate(() => globalThis.document.querySelector('[data-geo-tab-pending]').remove());
+  assert.equal(await page.evaluate(moduleReady), true);
+});
+
 
 test("a selected result error, including a late failure after loading, never becomes navigation coverage", { skip }, async () => {
   for (const late of [false, true]) {
@@ -618,20 +626,22 @@ function geoAreasFixture(url, defect) {
   const root = "/app/geo/study";
   const key = url.pathname.slice(root.length);
   const journey = url.searchParams.get("view") === "journey";
+  const tasks = !key && url.searchParams.get("work") === "tasks";
   const published = url.searchParams.has("published");
   const conversation = url.searchParams.get("conversation") === "open";
   const phone = url.searchParams.has("phone");
   const areas = [
-    ["项目工作", "", [["项目对话", ""], ["方案", "/plan"]]],
+    ["项目工作", "", [["项目对话", ""], ["任务与成果", "?work=tasks"], ["方案", "/plan"]]],
     ["AI 表现", "/visibility", [["可见度", "/visibility"], ["医学核查", "/accuracy"], ["引用来源", "/sources"], ["问题与回答", "/questions"]]],
     ["内容与发布", "/actions", [["稿件", "/actions"], ["发布记录", "/actions#geo-delivery"]]],
     ["产品与资料", "/evidence", [["产品依据", "/evidence"], ["人群与旅程", "/questions?view=journey"]]],
   ];
-  const selected = journey ? "/questions?view=journey" : published ? "/actions#geo-delivery" : key;
+  const selected = tasks ? "?work=tasks" : journey ? "/questions?view=journey" : published ? "/actions#geo-delivery" : key;
   const area = areas.find((entry) => entry[2].some(([, suffix]) => suffix === selected)) ?? areas[0];
   const path = (suffix, { dropScope = false, open = false, close = false } = {}) => {
     const target = new URL(root + suffix, url);
-    for (const [k, v] of url.searchParams) if (k !== "view" && !(dropScope && k === "engines")) target.searchParams.set(k, v);
+    for (const [k, v] of url.searchParams) if (k !== "view" && k !== "work" && !(dropScope && k === "engines")) target.searchParams.set(k, v);
+    if (suffix === "?work=tasks") target.searchParams.delete("conversation");
     if (target.hash === "#geo-delivery") target.searchParams.set("published", "1"); else target.searchParams.delete("published");
     if (open) { target.searchParams.set("session", "ses-fixed"); target.searchParams.set("conversation", "open"); }
     if (close) target.searchParams.delete("conversation");
@@ -642,7 +652,7 @@ function geoAreasFixture(url, defect) {
   const strip = `<div role="tablist" aria-label="${area[0]}">${area[2].map(([name, suffix]) => `<a role="tab" aria-selected="${selected === suffix}" href="${path(suffix, { dropScope: defect === "scope" && suffix === "/sources" })}">${name}</a>`).join(" ")}</div>`;
   const progress = key ? "" : `<div data-geo-work><aside aria-label="项目资料"><details><summary>任务进度（1）</summary><ul><li><a href="${path('/accuracy#geo-errors')}">诊断</a><span>${defect === "state" ? "" : "已完成"}</span></li></ul></details><button onclick="document.querySelector('#runs').showModal()">执行详情</button></aside></div>`;
   const panes = conversation && key ? `<section data-workspace-conversation><a href="${path(selected, { close: true })}">${phone ? "回到结果" : "收起对话"}</a></section>${defect === "duplicate" ? '<section data-workspace-conversation>Duplicate</section>' : ""}` : "";
-  return `<meta charset="utf-8"><style>${CSS}</style>${sidebar}<main><header data-page-header><h1>Brand</h1></header><div data-page-chrome>${conversation && phone && key ? "" : strip}<button onclick="document.querySelector('#scope').showModal()">分析范围 · 已筛选</button><button onclick="location.href='${path(selected, { open: true })}'">询问 AI</button></div><div data-page-body>${progress}<div data-geo-tab="${defect === "wrong-result" ? "other" : key.slice(1)}">${rows(2)}</div>${panes}</div><dialog id="runs" aria-label="AI 运行">Run details</dialog><dialog id="scope" aria-label="分析范围"><button aria-pressed="true">DeepSeek</button></dialog></main>`;
+  return `<meta charset="utf-8"><style>${CSS}</style>${sidebar}<main><header data-page-header><h1>Brand</h1></header><div data-page-chrome>${conversation && phone && key ? "" : strip}<button onclick="document.querySelector('#scope').showModal()">分析范围 · 已筛选</button><button onclick="location.href='${path(selected, { open: true })}'">询问 AI</button></div><div data-page-body>${progress}${tasks ? `<div data-programme-runs>${rows(2)}</div>` : `<div data-geo-tab="${defect === "wrong-result" ? "other" : key.slice(1)}">${rows(2)}</div>`}${panes}</div><dialog id="runs" aria-label="AI 运行">Run details</dialog><dialog id="scope" aria-label="分析范围"><button aria-pressed="true">DeepSeek</button></dialog></main>`;
 }
 
 test("GEO area navigation follows real controls at desktop and phone widths", { skip }, async () => {
@@ -653,7 +663,8 @@ test("GEO area navigation follows real controls at desktop and phone widths", { 
     await page.goto(address);
     const read = await verifyGeoAreas(page);
     assert.equal(read.destinations.length, 1);
-    assert.equal(read.views.length, 9);
+    assert.equal(read.views.length, 10);
+    assert.ok(read.views.some(view => view.label === "任务与成果"));
     assert.deepEqual(read.notices, []);
     assert.equal(read.conversation.runtimeVerified, false);
     assert.equal(page.url(), address);

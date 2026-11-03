@@ -552,9 +552,8 @@ pages after every release.
      assistant made (a spreadsheet, a deck, a script, shown by the kernel's own preview) — opens on a page of
      its own that has an address, and going back restores the list as it was; the knowledge base reads its
      source in the pane beside its list where the page has room (`/app/files/:sourceId`, one route with the list).
-   - a **project of a module home** — a 循证 GEO project, a 虚拟临床研究 study — is previewed in the pane beside the
-     list (`?project=` / `?study=`, written by a press; the first one shown, not written, when none is chosen) and
-     opens its workspace from there (owner, 2026-10-28: no stacked pages).
+   - a **study of the VCR home** is previewed beside the list before its workspace is opened. A GEO project instead opens its
+     workspace directly from the project collection, under the owner's 2026-11-03 GEO-specific decision below.
    A drawer never holds a conversation and never holds a second input box (the kernel's composer is
    the only one). A form whose submit is a structured act is a setting and not a conversation's input: 调整研究方向 sends a direction with
    a request id to a live run or schedules one, and a zone editor's 生成 calls its own generator.
@@ -587,8 +586,8 @@ page framework — the components above, `PageShell`'s slots, `layoutRules.test.
    heading; there is no grey line for how a thing was made, what it may be used for, what the engine
    did — those are the model's context, a log or an operator's view. `layoutRules.test.ts` counts the
    hand-written ones and lets the count only fall.
-9. **A module that has a step rail shows it on every tab, sticky** (循证 GEO; 虚拟临床研究 has none since the
-   2026-10-25/26 reset). The rail, the tabs and the toolbar row are one
+9. **A module that has a step rail shows it on every tab, sticky.** GEO's 2026-11-03 workspace keeps its steps in task detail;
+   VCR has no rail since the 2026-10-25/26 reset. Where a rail remains, the rail, the tabs and the toolbar row are one
    band at the top whose height does not depend on the tab (a tab without a toolbar reserves its row);
    the steps the open tab is built from are underlined. The page never loses where the program is by
    switching a tab. A click on a step, and a to-do, goes to the step's block (`#geo-errors`): the page's
@@ -621,8 +620,8 @@ fills them. `compositionFixtures.tsx` holds a sample of each, `pageComposition.t
 | Template | For | Slots, top to bottom | One kind of body | A record opens |
 |---|---|---|---|---|
 | T1 列表页 | 前沿动态, 收件箱, 科研工具, 插件与技能, the study home's library views | header · `toolbar` (views at the left; filters, search, count at the right) · `List` / `DataTable` · `ShowMore` | a list or a table | a drawer (a record), a page (a document), the main area (a conversation) |
-| T2 主从页 | 定时任务, 知识库, 记忆胶囊 (a navigation column beside its sections), the 循证 GEO and 虚拟临床研究 homes, 方法库, 假设卡 | `MasterDetail`: the list column carries the page's header (title, the one primary button) and at most one toolbar; the record, preview or form beside it; below the room for both, a `Drawer`, or the page swaps for a conversation or a form | a list and one record | the right-hand column |
-| T3 模块页 | 循证 GEO (including its addressed answer); VCR uses the conversation/result variant below; both are held to 模块工作台 | header (the primary action is the next step, or none) · `steps` on every GEO tab · `activity` while working · `tabs` · `toolbar` · one tab's body beside the open conversation · `dock` (the collapsed conversation) | one kind per tab: a T1 list, a T2 split, a T4 chart grid, a settings panel | as T1 |
+| T2 主从页 | 定时任务, 知识库, 记忆胶囊 (a navigation column beside its sections), the 虚拟临床研究 home, 方法库, 假设卡 | `MasterDetail`: the list column carries the page's header (title, the one primary button) and at most one toolbar; the record, preview or form beside it; below the room for both, a `Drawer`, or the page swaps for a conversation or a form | a list and one record | the right-hand column |
+| T3 模块页 | 循证 GEO (including its addressed answer); VCR uses the conversation/result variant below | GEO: header · active work when present · result tabs · scoped controls · current result, with the native conversation beside it when opened. The earlier rail and dock are superseded by the GEO workspace below. | a chart and details, an object list, or project work | as T1 |
 | T4 数据页 | 记忆总览, GEO 总览 / 可见度, 研究的对照 / 试验, 知识图谱 | header · `toolbar` · `headline` · 记忆总览 only: 记忆星图 · `StatBand` (only the numbers that exist) · `ChartGrid` (full rows) · the table behind the charts | charts and one table | a drawer; a mark is a row |
 | T5 阅读页 | a knowledge-base document, a report, an evidence card, an event | back · document title · the primary action · `Outline` (from four sections) · the text · one 「来源与核对」 fold | a document; a long list is a table with a toolbar | — |
 | T6 设置页 | account, appearance, notifications, allowance, data sources, projects | header · a left rail of **settings sections only** · `Panel` groups | `Panel` | — |
@@ -1132,6 +1131,8 @@ The canonical specification's DS23 owns these rules; this is how they are built.
 ## GEO workspace (owner, 2026-11-03)
 
 The [approved GEO design](../docs/superpowers/specs/2026-11-03-geo-experience-redesign.md) is a GEO-only exception to the persistent rail and dock described in the earlier module-workspace history above. Project cards open directly; the existing platform sidebar carries the four project areas and project settings. Project work contains the native conversation and actual project context, including requested execution steps and recent event links. Results use contextual tabs and filters, and “询问 AI” opens the resident native conversation beside the same addressed object. Under the split width, the conversation covers retained results and returns to their local state. A read-only member may view a kept conversation without opening or creating one. Unknown project-creation outcomes retain their account-scoped request key for a safe same-key retry; a deleted result remains deleted. Old-server, mixed-tab and cross-key boundaries stay explicit in the implementation plan. Historic addresses, actual workflow states, scoped results, native session identity and task/run records remain authoritative. Use the shared metric calculation and surface unavailable or insufficient assessment without turning it into zero.
+
+GEO result pages show the resolved time, comparison, platform and question-group scope above the main result. Each result offers its own relevant analysis views in the result area, never a global 27-item menu; visibility keeps that choice, its metric and a supported competitor comparison with the trend. A ranking names only the metric it measures, and an overdue scheduled date is not a future chart point. Legacy direct analysis addresses remain valid. Citations distinguish domains and pages and disclose a cleared domain-only filter. The content table counts actual articles, keeps version-specific native revision, and separates draft actions from articles; publication rows name their actual status and version relation. Project work places actual programme records and their results on a switchable main surface. It lists authorized, ready project materials, the session's saved knowledge scope and recent requests; a permitted owner can add project materials. These do not assert a separately stored project goal or that an uploaded file has finished parsing. Entering project work may initialize a primary only when none was kept. Passive recovery addresses a kept session exactly; only an explicit owner retry may repair a missing default primary, and a specifically addressed session is never replaced.
 
 ## Implementation proof
 

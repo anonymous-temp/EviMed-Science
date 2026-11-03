@@ -108,8 +108,8 @@ export function listRelatedResultVersions(versionId: string, cursor?: string | n
 export function directlyRelatedResults(left: ResultVersion, right: ResultVersion): boolean {
   return left.projectId === right.projectId && (left.supersedesVersionId === right.versionId || right.supersedesVersionId === left.versionId);
 }
-export function getResultVersion(versionId: string) {
-  return resultJson<ResultVersion>(`/${encodeURIComponent(versionId)}`);
+export function getResultVersion(versionId: string, projectId?: string) {
+  return resultJson<ResultVersion>(`/${encodeURIComponent(versionId)}`, undefined, projectId ? { projectId } : undefined);
 }
 /** From a number to its calculation and from a calculation to the numbers printed from it. */
 export function getResultLineage(versionId: string) {
@@ -170,7 +170,7 @@ export function requestResultRevision(version: ResultVersion, anchor: ResultAnch
   const request: ResultRevisionRequest = { projectId: version.projectId, digest: version.digest,
     anchor: { ...anchor }, sessionId, requestId: crypto.randomUUID() };
   return resultJson<{ sessionId?: string; draft: string; referenceId: string }>(`/${encodeURIComponent(version.versionId)}/revisions`,
-    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(request) });
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(request) }, { projectId: version.projectId });
 }
 /** What a recalculation ran on, against what the original recorded. `differs` names the parts that moved. */
 export interface ReplayEnvironment { status: "same" | "differs"; changed: Array<"code" | "environment" | "method"> }

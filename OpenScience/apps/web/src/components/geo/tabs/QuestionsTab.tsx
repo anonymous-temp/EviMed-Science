@@ -141,7 +141,7 @@ export function QuestionsTab({ geoId, project }: { geoId: string; project: GeoPr
         questions.reload();
         clusters.reload();
       }}
-    />}{!editingMode && <GeoAnalysisEntry embedded geoId={geoId} project={project} initialView="V06"/>}</>
+    />}{!editingMode && <GeoAnalysisEntry embedded geoId={geoId} project={project} initialView="V07"/>}</>
   );
 }
 

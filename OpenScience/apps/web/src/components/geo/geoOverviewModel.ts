@@ -692,9 +692,22 @@ export function trendConclusion(name: string, cell: GeoCell | null, change: Read
 }
 
 /** “上次 9月25日 · 下次 10月12日”: the date a change is measured from, and the next measurement's. */
-export function chartDates(change: ReadingChange | null, next: string | null | undefined): string | undefined {
-  const parts = [change?.from ? `上次 ${monthDay(change.from)}` : null, next ? `下次 ${monthDay(next)}` : null].filter((part): part is string => !!part);
+export function chartDates(change: ReadingChange | null, next: string | null | undefined, now = new Date()): string | undefined {
+  const today = agendaLocalDate(DISPLAY_TIME_ZONE, now.toISOString());
+  const planned = next ? `${next.slice(0, 10) <= today ? "计划已到期" : "计划"} ${monthDay(next)}` : null;
+  const parts = [change?.from ? `上次 ${monthDay(change.from)}` : null, planned].filter((part): part is string => !!part);
   return parts.length ? parts.join(" · ") : undefined;
+}
+
+/** A planned reading can occupy the final chart slot only after every observed date. */
+export function scheduledAfterObservations(next: string | null | undefined, dates: readonly string[], now = new Date()): boolean {
+  const day = next?.slice(0, 10);
+  if (!day || !/^\d{4}-\d{2}-\d{2}$/.test(day) || !Number.isFinite(Date.parse(day))) return false;
+  if (day <= agendaLocalDate(DISPLAY_TIME_ZONE, now.toISOString())) return false;
+  return dates.every(value => {
+    const observed = value.slice(0, 10);
+    return /^\d{4}-\d{2}-\d{2}$/.test(observed) && Number.isFinite(Date.parse(observed)) && day > observed;
+  });
 }
 
 /** “元宝对信尔美提及最多” — the matrix's own conclusion, or why there is none. */

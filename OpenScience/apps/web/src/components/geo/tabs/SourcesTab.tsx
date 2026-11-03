@@ -53,10 +53,6 @@ const ONLY_OPTIONS: ReadonlyArray<FilterOption<Only>> = [
 ];
 
 type SourcesView = "cited" | "placeable";
-const VIEW_OPTIONS: ReadonlyArray<FilterOption<SourcesView>> = [
-  { value: "cited", label: "AI 引用谁" },
-  { value: "placeable", label: "可投放" },
-];
 
 type SortKey = "cited" | "wrong" | "mentions";
 
@@ -281,7 +277,6 @@ function SourceList({
     : `${needle ? "匹配 " : ""}${places.length.toLocaleString("zh-CN")} 个可投放的地方`;
 
   useGeoToolbar({
-    navigation: [{ kind: "chips", label: "视图", options: VIEW_OPTIONS, value: view, onChange: (value) => change({ [GEO_VIEW_PARAM]: value === "cited" ? null : value }) }],
     filters: [
       ...(view === "cited" ? [
         // A menu and not a chip for each engine: five chips are most of the band's row, and a row that wraps when a choice adds its
@@ -311,9 +306,9 @@ function SourceList({
 
   return (
     <section aria-label="信源" className="flex flex-col gap-6">
+      {view === "placeable" && <Button variant="text" size="sm" className="self-start" onClick={() => change({ [GEO_VIEW_PARAM]: null })}>返回引用来源</Button>}
       {view === "cited" && (
         <>
-          <GeoAnalysisEntry geoId={geoId} project={project} initialView="V17" title="信源引用分析" embedded />
           {rows.length === 0 ? (
             <Note action={narrowed || needle ? <Button variant="secondary" size="sm" onClick={clearFilters}>清除筛选</Button> : undefined}>
               {needle ? `没有包含“${query.trim()}”的信源。` : "没有符合的信源。"}
@@ -359,6 +354,8 @@ function SourceList({
               </ul>
             </Disclosure>
           )}
+          <GeoAnalysisEntry geoId={geoId} project={project} initialView="V17" title="信源引用分析" embedded />
+          <Button variant="text" size="sm" className="self-start" onClick={() => change({ [GEO_VIEW_PARAM]: "placeable" })}>查看可投放渠道</Button>
         </>
       )}
       {view === "placeable" && (
