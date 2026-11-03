@@ -274,6 +274,22 @@ export const NUMERIC_REFERENCES = {
   N95d: { methods: ['model.survival_fit'], anchors: ['identical(unname(est), c(TRUE, TRUE, FALSE, FALSE, FALSE)) && all(rules == "nuisance_model_not_estimable")'] },
   N95e: { methods: ['model.survival_fit'], anchors: ['identical(vcr_output_hash(r1), vcr_output_hash(r2))', 'identical(r_old$status, "failed") && "method_version_mismatch" %in% vcr_test_issue_codes(r_old)'] },
 
+  // population.synthpop / population.quality 1.1.0 (P1): the combining rules of Raab, Nowok and Dibben against synthpop's own summary of a fit to five copies, the closed-form false-positive rate of an uncorrected analysis, the log-rank / Cox / restricted-mean analyses against survival and survRM2
+  N96a: { methods: ['population.synthpop', 'population.quality'], anchors: ['ref <- summary(synthpop::lm.synds(y ~ x1 + x2, data = sds), population.inference = TRUE)$coefficients["x2", ]', 'max(worst) < 1e-9'] },
+  N96b: { methods: ['population.synthpop', 'population.quality'], anchors: ['closed <- 2 * (1 - stats::pnorm(stats::qnorm(0.975) / sqrt(2)))', 'within(nc$syntheticNaive, closed, 0.006)'] },
+  N96c: { methods: ['population.synthpop', 'population.quality'], anchors: ['closed_simple <- 2 * (1 - stats::pnorm(stats::qnorm(0.975) / sqrt(1.4 / 1.2)))'] },
+  N96d: { methods: ['population.synthpop', 'population.quality'], anchors: ['rm_ref <- survRM2::rmst2(d$time, d$status, as.numeric(d$arm == "b"), tau = 15)$unadjusted.result[1, ]', 'abs(lr$estimate - unname(stats::coef(one))) < 1e-8'] },
+  N96e: { methods: ['population.synthpop'], anchors: ['fits <- lapply(copies, function(cp) summary(survival::coxph(survival::Surv(os, death) ~ arm + age, data = cp))$coefficients["arm", ])', 'abs(sp$hr$combined$estimate - h$estimate) < 1e-9'] },
+  N96f: { methods: ['population.synthpop', 'population.quality'], anchors: ['identical(r$diagnostics$quality$inference$nullCalibration$reason, "generator_not_rerunnable")'] },
+  N96g: { methods: ['population.synthpop', 'population.quality'], anchors: ['want_syn <- "5ba6c6cefec2d3d215748c4922dba1d9f1e0f87268b866acff927382577a4ef2"'] },
+  // per-record privacy and attribute inference (P2): the closed form of a copied record's risk, the independent nearest-neighbour search, prop.test's Wilson interval
+  N97a: { methods: ['population.synthpop', 'population.quality'], anchors: ['closed <- (copied + 1) / (copied + 2)', 'all(abs(r_tr[m_tr$dcr == 0] - closed) < 1e-12)'] },
+  N97b: { methods: ['population.synthpop', 'population.quality'], anchors: ['share_tr(0.9) >= copied / n && share_tr(0.9) < copied / n + 0.03'] },
+  N97c: { methods: ['population.synthpop', 'population.quality'], anchors: ['!grepl("1234.5678", json, fixed = TRUE)'] },
+  N97d: { methods: ['population.synthpop', 'population.quality'], anchors: ['wil <- stats::prop.test(round(one$successControl * one$attacksControl), one$attacksControl, correct = FALSE)$conf.int', 'abs(one$successControl - control_hand) < 1e-12'] },
+  N97e: { methods: ['population.synthpop', 'population.quality'], anchors: ['identical(rep_copy$bands$inferenceRisk, "red") && identical(rep_fresh$bands$inferenceRisk, "green")'] },
+  N97f: { methods: ['population.quality'], anchors: ['identical(vcr_output_hash(r1), vcr_output_hash(r2)) && q$release$copies == 5L'] },
+
   // --- the comparator-effect stream's cases (listed so that merging it needs no edit here; inert until the cases exist) ---
   N33a: { methods: ['comparator.weighted_cox'], anchors: ['Cross-software: the weights are WeightIt', 'rel(m(j_ebal, "hazard_ratio"), r_ebal$hr) < 1e-6'] },
   N34a: { methods: ['comparator.maic_time_to_event'], anchors: ['The unanchored vignette: 500 patients of arm A matched', 'abs(m("hazard_ratio_robust")$value - 0.2834780) < 1e-6'] },

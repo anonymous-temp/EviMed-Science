@@ -2111,6 +2111,8 @@ export {
   VCR_SYNTHPOP_COST,
   vcrSynthpopBudgetSeconds,
   vcrSynthpopEstimateSeconds,
+  vcrSynthpopCalibrationSeconds,
+  VCR_SYNTHPOP_CALIBRATION_COST,
   vcrSynthpopFeasibility,
   vcrSynthpopHelpNotes,
 } from './src/vcrSynthesisLimits.mjs'

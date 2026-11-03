@@ -279,8 +279,14 @@ export const VCR_SCENARIO_EXAMPLES = Object.freeze({
     n: 500 } }],
   'population.literature': [{ label: 'a published baseline table', scenario: {
     baselineTable: [{ variable: 'age', label: '年龄', mean: 62, sd: 9 }, { variable: 'male', proportion: 0.55 }, { variable: 'ecog', proportions: [0.4, 0.5, 0.1], levels: ['0', '1', '2'] }], n: 400 } }],
-  'population.synthpop': [{ label: 'a synthetic copy of the study table', scenario: { holdoutShare: 0.2, m: 5, constraints: [{ name: 'age', rule: { op: 'between', column: 'age', low: 18, high: 100 } }] } }],
-  'population.quality': [{ label: 'a synthetic table against its training table', scenario: { trainingInputId: 'snp_1:subject', syntheticInputId: 'pop_synth@1' } }],
+  'population.synthpop': [{ label: 'a synthetic copy of the study table', scenario: { holdoutShare: 0.2, m: 5, constraints: [{ name: 'age', rule: { op: 'between', column: 'age', low: 18, high: 100 } }] } },
+    { label: 'a synthetic copy that is asked how often its hazard ratio is a false positive, and which records are easiest to recognise', scenario: { holdoutShare: 0.2, m: 5,
+      analyses: [{ name: 'hazard ratio of the arm', kind: 'cox', time: 'os_months', status: 'death', predictors: ['arm', 'age'], target: 'arm' }],
+      inference: { nullCalibration: { analysis: 'hazard ratio of the arm', replicates: 100 } }, privacy: { membershipRiskBound: 0.75 } } }],
+  'population.quality': [{ label: 'a synthetic table against its training table', scenario: { trainingInputId: 'snp_1:subject', syntheticInputId: 'pop_synth@1' } },
+    { label: 'a synthetic table with a survival analysis combined over its copies, and the per-record privacy', scenario: { trainingInputId: 'snp_1:subject', syntheticInputId: 'pop_synth@1', holdoutInputId: 'snp_1:holdout',
+      analyses: [{ name: 'log-rank of the arm', kind: 'logrank', time: 'os_months', status: 'death', group: 'arm' }, { name: 'restricted mean at 24 months', kind: 'rmst', time: 'os_months', status: 'death', group: 'arm', tau: 24 }],
+      privacy: { membershipRiskBound: 0.75, secrets: ['sex'] } } }],
   'population.check': [{ label: 'a generated population against a second, independent baseline table (the platform fills `generated` from the population subjectId names)', scenario: {
     baselineTable: [{ variable: 'age', mean: 63, sd: 10 }, { variable: 'male', proportion: 0.58 }], referenceN: 412 } }],
   'patients.continuous': [{ label: 'a continuous endpoint', scenario: {
@@ -700,6 +706,13 @@ const SHRINKAGE_NOTES = Object.freeze([
 ])
 
 /** @type {Readonly<Record<string, readonly string[]>>} */
+/** What a synthesis or a quality job reports beyond 1.0.0 (algorithm round P1, P2), for the model that writes the scenario. */
+const SYNTHETIC_REPORT_NOTES = Object.freeze([
+  'Every declared analysis is run on the real table and on every synthetic copy, and the copies are combined by the rules for synthetic data (Raab, Nowok and Dibben 2016, as synthpop prints them): the variance is (k / n) ubar (1 + n / (k m)) for n real rows, k rows a copy, m copies, the parameters not redrawn per copy. A table with a `copy` column is read as its copies. Kinds: mean, glm, cox (the log hazard ratio of target), logrank (the Peto log hazard ratio of the second group against the first, with the log-rank p-value) and rmst (the difference of the restricted mean survival times up to tau, second group less first); status is 1 for an event.',
+  'inference.nullCalibration permutes the arm labels of the REAL table (the analysis needs a target or a group), makes copies from it the way the job makes them (synthpop CART; population.quality only when generator.family is "synthpop_cart"), runs the analysis and returns how often its interval excludes no effect when there is none: on the permuted real table, on the first copy read as if it were real data, and on the copies combined; each is simulated and carries its Monte Carlo error. replicates 20 to 1000 (default 100); a CPU budget that runs out keeps the finished ones.',
+  'privacy needs a holdout: the share of real records whose membership risk (from the distance to the closest synthetic record, against the holdout) is above membershipRiskBound (default 0.75), beside the holdout\'s share, which is what chance alone gives; the kind of person the at-risk group is (a count of 1 to 9 people is never shown, and no row ever is); and attribute inference for the secret columns (default up to five categorical ones): an attacker who knows a person\'s other columns reads the closest synthetic record\'s value, and the success is held against the same attack on holdout people.',
+])
+
 const METHOD_NOTES = Object.freeze({
   'comparator.entropy_balance': Object.freeze([...COMPARATOR_TIME_UNIT_NOTES, IMPUTATION_NOTE]),
   'comparator.propensity_weight': Object.freeze([...COMPARATOR_TIME_UNIT_NOTES, TRIM_NOTE, IMPUTATION_NOTE]),
@@ -718,7 +731,8 @@ const METHOD_NOTES = Object.freeze({
   'comparator.rmst': COMPARATOR_TIME_UNIT_NOTES,
   'comparator.tipping_point': ROBUSTNESS_TIME_UNIT_NOTES,
   'comparator.prognostic_adjustment': ROBUSTNESS_TIME_UNIT_NOTES,
-  'population.synthpop': vcrSynthpopHelpNotes(),
+  'population.synthpop': Object.freeze([...vcrSynthpopHelpNotes(), ...SYNTHETIC_REPORT_NOTES]),
+  'population.quality': SYNTHETIC_REPORT_NOTES,
   'patients.continuous': PATIENT_PAIRING_NOTES,
   'patients.binary': PATIENT_PAIRING_NOTES,
   'patients.time_to_event': PATIENT_PAIRING_NOTES,

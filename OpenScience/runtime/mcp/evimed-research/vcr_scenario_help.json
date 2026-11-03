@@ -504,7 +504,10 @@
         "m is the number of synthetic copies, 5 to 50: fewer than 5 cannot support inference on synthetic data and the engine refuses them. Every copy costs the same again.",
         "Size limit. The copies and their quality scores are made in one R process whose CPU budget is the job's cpuSecondsLimit (the platform's default is 600 s, of which 90% can be used); a job that reaches it fails with no table and no copy kept. The cost grows with the square of the columns for the copies, with the fourth power for the quality score (a logistic model of every pair of columns) and with the square of the rows for its nearest-neighbour check, so a wide table is the expensive one, not a long one. The queue estimates the CPU seconds from the table it will read (rows × columns × m, the subject key not counted) and refuses before queueing a synthesis whose estimate, even divided by the model's worst over-prediction (1.18×), exceeds the budget. A synthesis estimated, with a 1.35× margin, to exceed the budget but not that is queued, and the start says it may not finish and what to reduce.",
         "At the default budget and 5 copies the model allows about 41 columns at 1,000 rows, 35 at 4,000 and 13 at 12,000. The estimate is for numeric, count and 0/1 columns; a text column with many levels costs more.",
-        "A refusal, or the notice of a synthesis that may not finish, names what to change: fewer columns (keep only the variables the analysis needs when the field map is built, then freeze a new snapshot), fewer rows (a smaller snapshot), fewer copies down to the minimum, or the job's cpuSecondsLimit where the platform allows more. The engine does not sample rows and does not drop columns, and neither does the queue."
+        "A refusal, or the notice of a synthesis that may not finish, names what to change: fewer columns (keep only the variables the analysis needs when the field map is built, then freeze a new snapshot), fewer rows (a smaller snapshot), fewer copies down to the minimum, or the job's cpuSecondsLimit where the platform allows more. The engine does not sample rows and does not drop columns, and neither does the queue.",
+        "Every declared analysis is run on the real table and on every synthetic copy, and the copies are combined by the rules for synthetic data (Raab, Nowok and Dibben 2016, as synthpop prints them): the variance is (k / n) ubar (1 + n / (k m)) for n real rows, k rows a copy, m copies, the parameters not redrawn per copy. A table with a `copy` column is read as its copies. Kinds: mean, glm, cox (the log hazard ratio of target), logrank (the Peto log hazard ratio of the second group against the first, with the log-rank p-value) and rmst (the difference of the restricted mean survival times up to tau, second group less first); status is 1 for an event.",
+        "inference.nullCalibration permutes the arm labels of the REAL table (the analysis needs a target or a group), makes copies from it the way the job makes them (synthpop CART; population.quality only when generator.family is \"synthpop_cart\"), runs the analysis and returns how often its interval excludes no effect when there is none: on the permuted real table, on the first copy read as if it were real data, and on the copies combined; each is simulated and carries its Monte Carlo error. replicates 20 to 1000 (default 100); a CPU budget that runs out keeps the finished ones.",
+        "privacy needs a holdout: the share of real records whose membership risk (from the distance to the closest synthetic record, against the holdout) is above membershipRiskBound (default 0.75), beside the holdout's share, which is what chance alone gives; the kind of person the at-risk group is (a count of 1 to 9 people is never shown, and no row ever is); and attribute inference for the secret columns (default up to five categorical ones): an attacker who knows a person's other columns reads the closest synthetic record's value, and the success is held against the same attack on holdout people."
       ],
       "rows": [
         {"path":"holdoutShare","type":"number","min":0,"lt":1,"default":0.2,"fieldRole":"defaultable"},
@@ -512,7 +515,7 @@
         {"path":"constraints","type":"rules","fieldRole":"defaultable"},
         {"path":"criteria","type":"rules","fieldRole":"defaultable"},
         {"path":"analyses","type":"list","count":{"min":1,"max":20},"items":{"type":"object"},"fieldRole":"defaultable"},
-        {"path":"analyses[].kind","type":"string","values":["mean","glm"],"required":true,"within":"analyses","fieldRole":"defaultable"},
+        {"path":"analyses[].kind","type":"string","values":["mean","glm","cox","logrank","rmst"],"required":true,"within":"analyses","fieldRole":"defaultable"},
         {"path":"analyses[].name","type":"string","minLength":1,"maxLength":80,"within":"analyses","fieldRole":"defaultable"},
         {
           "path": "analyses[].column",
@@ -541,7 +544,7 @@
           "items": {"type":"string","maxLength":64,"role":"column"},
           "required": true,
           "within": "analyses",
-          "variant": {"on":"analyses[].kind","is":["glm"]},
+          "variant": {"on":"analyses[].kind","is":["glm","cox"]},
           "fieldRole": "research_fact"
         },
         {
@@ -551,7 +554,7 @@
           "role": "column",
           "required": true,
           "within": "analyses",
-          "variant": {"on":"analyses[].kind","is":["glm"]},
+          "variant": {"on":"analyses[].kind","is":["glm","cox"]},
           "fieldRole": "research_fact"
         },
         {
@@ -563,17 +566,104 @@
           "variant": {"on":"analyses[].kind","is":["glm"]},
           "fieldRole": "defaultable"
         },
-        {"path":"tstrOutcome","type":"string","maxLength":64,"role":"column","fieldRole":"defaultable"}
+        {
+          "path": "analyses[].time",
+          "type": "string",
+          "maxLength": 64,
+          "role": "column",
+          "required": true,
+          "within": "analyses",
+          "variant": {"on":"analyses[].kind","is":["cox","logrank","rmst"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "analyses[].status",
+          "type": "string",
+          "maxLength": 64,
+          "role": "column",
+          "required": true,
+          "within": "analyses",
+          "variant": {"on":"analyses[].kind","is":["cox","logrank","rmst"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "analyses[].group",
+          "type": "string",
+          "maxLength": 64,
+          "role": "column",
+          "required": true,
+          "within": "analyses",
+          "variant": {"on":"analyses[].kind","is":["logrank","rmst"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "analyses[].tau",
+          "type": "number",
+          "gt": 0,
+          "required": true,
+          "within": "analyses",
+          "variant": {"on":"analyses[].kind","is":["rmst"]},
+          "fieldRole": "research_fact"
+        },
+        {"path":"tstrOutcome","type":"string","maxLength":64,"role":"column","fieldRole":"defaultable"},
+        {"path":"inference","type":"object"},
+        {"path":"inference.nullCalibration","type":"object","within":"inference"},
+        {
+          "path": "inference.nullCalibration.analysis",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "required": true,
+          "within": "inference.nullCalibration",
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "inference.nullCalibration.replicates",
+          "type": "integer",
+          "min": 20,
+          "max": 1000,
+          "default": 100,
+          "within": "inference.nullCalibration",
+          "fieldRole": "defaultable"
+        },
+        {"path":"inference.nullCalibration.copies","type":"integer","min":1,"max":5,"default":1,"within":"inference.nullCalibration","fieldRole":"defaultable"},
+        {"path":"privacy","type":"object"},
+        {"path":"privacy.membershipRiskBound","type":"number","gt":0.5,"lt":1,"default":0.75,"within":"privacy","fieldRole":"defaultable"},
+        {
+          "path": "privacy.secrets",
+          "type": "list",
+          "count": {"min":1,"max":10},
+          "items": {"type":"string","maxLength":64,"role":"column"},
+          "unique": true,
+          "within": "privacy",
+          "fieldRole": "defaultable"
+        },
+        {"path":"privacy.attacks","type":"integer","min":50,"max":2000,"default":500,"within":"privacy","fieldRole":"defaultable"}
       ],
       "examples": [
         {
           "label": "a synthetic copy of the study table",
           "scenario": {"holdoutShare":0.2,"m":5,"constraints":[{"name":"age","rule":{"op":"between","column":"age","low":18,"high":100}}]}
+        },
+        {
+          "label": "a synthetic copy that is asked how often its hazard ratio is a false positive, and which records are easiest to recognise",
+          "scenario": {
+            "holdoutShare": 0.2,
+            "m": 5,
+            "analyses": [{"name":"hazard ratio of the arm","kind":"cox","time":"os_months","status":"death","predictors":["arm","age"],"target":"arm"}],
+            "inference": {"nullCalibration":{"analysis":"hazard ratio of the arm","replicates":100}},
+            "privacy": {"membershipRiskBound":0.75}
+          }
         }
       ]
     },
     "population.quality": {
       "endpoints": [],
+      "notes": [
+        "Every declared analysis is run on the real table and on every synthetic copy, and the copies are combined by the rules for synthetic data (Raab, Nowok and Dibben 2016, as synthpop prints them): the variance is (k / n) ubar (1 + n / (k m)) for n real rows, k rows a copy, m copies, the parameters not redrawn per copy. A table with a `copy` column is read as its copies. Kinds: mean, glm, cox (the log hazard ratio of target), logrank (the Peto log hazard ratio of the second group against the first, with the log-rank p-value) and rmst (the difference of the restricted mean survival times up to tau, second group less first); status is 1 for an event.",
+        "inference.nullCalibration permutes the arm labels of the REAL table (the analysis needs a target or a group), makes copies from it the way the job makes them (synthpop CART; population.quality only when generator.family is \"synthpop_cart\"), runs the analysis and returns how often its interval excludes no effect when there is none: on the permuted real table, on the first copy read as if it were real data, and on the copies combined; each is simulated and carries its Monte Carlo error. replicates 20 to 1000 (default 100); a CPU budget that runs out keeps the finished ones.",
+        "privacy needs a holdout: the share of real records whose membership risk (from the distance to the closest synthetic record, against the holdout) is above membershipRiskBound (default 0.75), beside the holdout's share, which is what chance alone gives; the kind of person the at-risk group is (a count of 1 to 9 people is never shown, and no row ever is); and attribute inference for the secret columns (default up to five categorical ones): an attacker who knows a person's other columns reads the closest synthetic record's value, and the success is held against the same attack on holdout people."
+      ],
       "rows": [
         {"path":"trainingInputId","type":"string","maxLength":141,"role":"input id","required":true,"fieldRole":"research_fact"},
         {"path":"syntheticInputId","type":"string","maxLength":141,"role":"input id","required":true,"fieldRole":"research_fact"},
@@ -581,7 +671,7 @@
         {"path":"constraints","type":"rules","fieldRole":"defaultable"},
         {"path":"criteria","type":"rules","fieldRole":"defaultable"},
         {"path":"analyses","type":"list","count":{"min":1,"max":20},"items":{"type":"object"},"fieldRole":"defaultable"},
-        {"path":"analyses[].kind","type":"string","values":["mean","glm"],"required":true,"within":"analyses","fieldRole":"defaultable"},
+        {"path":"analyses[].kind","type":"string","values":["mean","glm","cox","logrank","rmst"],"required":true,"within":"analyses","fieldRole":"defaultable"},
         {"path":"analyses[].name","type":"string","minLength":1,"maxLength":80,"within":"analyses","fieldRole":"defaultable"},
         {
           "path": "analyses[].column",
@@ -610,7 +700,7 @@
           "items": {"type":"string","maxLength":64,"role":"column"},
           "required": true,
           "within": "analyses",
-          "variant": {"on":"analyses[].kind","is":["glm"]},
+          "variant": {"on":"analyses[].kind","is":["glm","cox"]},
           "fieldRole": "research_fact"
         },
         {
@@ -620,7 +710,7 @@
           "role": "column",
           "required": true,
           "within": "analyses",
-          "variant": {"on":"analyses[].kind","is":["glm"]},
+          "variant": {"on":"analyses[].kind","is":["glm","cox"]},
           "fieldRole": "research_fact"
         },
         {
@@ -632,14 +722,101 @@
           "variant": {"on":"analyses[].kind","is":["glm"]},
           "fieldRole": "defaultable"
         },
+        {
+          "path": "analyses[].time",
+          "type": "string",
+          "maxLength": 64,
+          "role": "column",
+          "required": true,
+          "within": "analyses",
+          "variant": {"on":"analyses[].kind","is":["cox","logrank","rmst"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "analyses[].status",
+          "type": "string",
+          "maxLength": 64,
+          "role": "column",
+          "required": true,
+          "within": "analyses",
+          "variant": {"on":"analyses[].kind","is":["cox","logrank","rmst"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "analyses[].group",
+          "type": "string",
+          "maxLength": 64,
+          "role": "column",
+          "required": true,
+          "within": "analyses",
+          "variant": {"on":"analyses[].kind","is":["logrank","rmst"]},
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "analyses[].tau",
+          "type": "number",
+          "gt": 0,
+          "required": true,
+          "within": "analyses",
+          "variant": {"on":"analyses[].kind","is":["rmst"]},
+          "fieldRole": "research_fact"
+        },
         {"path":"tstrOutcome","type":"string","maxLength":64,"role":"column","fieldRole":"defaultable"},
         {"path":"generator","type":"object"},
         {"path":"generator.family","type":"string","maxLength":40,"within":"generator","fieldRole":"defaultable"},
         {"path":"generator.m","type":"integer","min":1,"max":50,"within":"generator","fieldRole":"defaultable"},
         {"path":"generator.smoothing","type":"string","maxLength":40,"within":"generator","fieldRole":"defaultable"},
-        {"path":"generator.seed","type":"integer","min":0,"max":2147483647,"within":"generator","fieldRole":"defaultable"}
+        {"path":"generator.seed","type":"integer","min":0,"max":2147483647,"within":"generator","fieldRole":"defaultable"},
+        {"path":"inference","type":"object"},
+        {"path":"inference.nullCalibration","type":"object","within":"inference"},
+        {
+          "path": "inference.nullCalibration.analysis",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "required": true,
+          "within": "inference.nullCalibration",
+          "fieldRole": "research_fact"
+        },
+        {
+          "path": "inference.nullCalibration.replicates",
+          "type": "integer",
+          "min": 20,
+          "max": 1000,
+          "default": 100,
+          "within": "inference.nullCalibration",
+          "fieldRole": "defaultable"
+        },
+        {"path":"inference.nullCalibration.copies","type":"integer","min":1,"max":5,"default":1,"within":"inference.nullCalibration","fieldRole":"defaultable"},
+        {"path":"privacy","type":"object"},
+        {"path":"privacy.membershipRiskBound","type":"number","gt":0.5,"lt":1,"default":0.75,"within":"privacy","fieldRole":"defaultable"},
+        {
+          "path": "privacy.secrets",
+          "type": "list",
+          "count": {"min":1,"max":10},
+          "items": {"type":"string","maxLength":64,"role":"column"},
+          "unique": true,
+          "within": "privacy",
+          "fieldRole": "defaultable"
+        },
+        {"path":"privacy.attacks","type":"integer","min":50,"max":2000,"default":500,"within":"privacy","fieldRole":"defaultable"}
       ],
-      "examples": [{"label":"a synthetic table against its training table","scenario":{"trainingInputId":"snp_1:subject","syntheticInputId":"pop_synth@1"}}]
+      "examples": [
+        {"label":"a synthetic table against its training table","scenario":{"trainingInputId":"snp_1:subject","syntheticInputId":"pop_synth@1"}},
+        {
+          "label": "a synthetic table with a survival analysis combined over its copies, and the per-record privacy",
+          "scenario": {
+            "trainingInputId": "snp_1:subject",
+            "syntheticInputId": "pop_synth@1",
+            "holdoutInputId": "snp_1:holdout",
+            "analyses": [
+              {"name":"log-rank of the arm","kind":"logrank","time":"os_months","status":"death","group":"arm"},
+              {"name":"restricted mean at 24 months","kind":"rmst","time":"os_months","status":"death","group":"arm","tau":24}
+            ],
+            "privacy": {"membershipRiskBound":0.75,"secrets":["sex"]}
+          }
+        }
+      ]
     },
     "population.check": {
       "endpoints": [],

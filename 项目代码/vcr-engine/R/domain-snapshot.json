@@ -71,18 +71,29 @@
       ]
     },
     "population.synthpop": {
-      "version": "1.0.0",
+      "version": "1.1.0",
       "endpoints": [],
       "crossChecks": [
-        "the training table it was fitted to: marginals, correlations and logistic coefficients"
+        "the training table it was fitted to: marginals, correlations and logistic coefficients",
+        "synthpop summary of a fit to m copies (the combining rules of Raab, Nowok and Dibben)"
       ],
-      "modelTier": "data"
+      "modelTier": "data",
+      "compatibleVersions": [
+        "1.0.0"
+      ]
     },
     "population.quality": {
-      "version": "1.0.0",
+      "version": "1.1.0",
       "endpoints": [],
-      "crossChecks": [],
-      "modelTier": "data"
+      "crossChecks": [
+        "synthpop summary of a fit to m copies (the combining rules)",
+        "survRM2 restricted mean difference",
+        "closed-form false-positive rate of an uncorrected analysis"
+      ],
+      "modelTier": "data",
+      "compatibleVersions": [
+        "1.0.0"
+      ]
     },
     "population.check": {
       "version": "1.0.0",
@@ -2357,6 +2368,97 @@
                   ],
                   "req": true
                 }
+              },
+              "cox": {
+                "name": {
+                  "t": "string",
+                  "minLength": 1,
+                  "maxLength": 80
+                },
+                "time": {
+                  "t": "string",
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                  "maxLength": 64,
+                  "req": true
+                },
+                "status": {
+                  "t": "string",
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                  "maxLength": 64,
+                  "req": true
+                },
+                "predictors": {
+                  "t": "array",
+                  "items": {
+                    "t": "string",
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                    "maxLength": 64
+                  },
+                  "min": 1,
+                  "max": 50,
+                  "req": true
+                },
+                "target": {
+                  "t": "string",
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                  "maxLength": 64,
+                  "req": true
+                }
+              },
+              "logrank": {
+                "name": {
+                  "t": "string",
+                  "minLength": 1,
+                  "maxLength": 80
+                },
+                "time": {
+                  "t": "string",
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                  "maxLength": 64,
+                  "req": true
+                },
+                "status": {
+                  "t": "string",
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                  "maxLength": 64,
+                  "req": true
+                },
+                "group": {
+                  "t": "string",
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                  "maxLength": 64,
+                  "req": true
+                }
+              },
+              "rmst": {
+                "name": {
+                  "t": "string",
+                  "minLength": 1,
+                  "maxLength": 80
+                },
+                "time": {
+                  "t": "string",
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                  "maxLength": 64,
+                  "req": true
+                },
+                "status": {
+                  "t": "string",
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                  "maxLength": 64,
+                  "req": true
+                },
+                "group": {
+                  "t": "string",
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                  "maxLength": 64,
+                  "req": true
+                },
+                "tau": {
+                  "t": "number",
+                  "gt": 0,
+                  "req": true
+                }
               }
             }
           },
@@ -2367,6 +2469,62 @@
           "t": "string",
           "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
           "maxLength": 64
+        },
+        "inference": {
+          "t": "object",
+          "fields": {
+            "nullCalibration": {
+              "t": "object",
+              "fields": {
+                "analysis": {
+                  "t": "string",
+                  "minLength": 1,
+                  "maxLength": 80,
+                  "req": true
+                },
+                "replicates": {
+                  "t": "integer",
+                  "min": 20,
+                  "max": 1000,
+                  "default": 100
+                },
+                "copies": {
+                  "t": "integer",
+                  "min": 1,
+                  "max": 5,
+                  "default": 1
+                }
+              }
+            }
+          }
+        },
+        "privacy": {
+          "t": "object",
+          "fields": {
+            "membershipRiskBound": {
+              "t": "number",
+              "gt": 0.5,
+              "lt": 1,
+              "default": 0.75
+            },
+            "secrets": {
+              "t": "array",
+              "items": {
+                "t": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                "maxLength": 64
+              },
+              "min": 1,
+              "max": 10,
+              "unique": true
+            },
+            "attacks": {
+              "t": "integer",
+              "min": 50,
+              "max": 2000,
+              "default": 500
+            }
+          }
         }
       }
     },
@@ -2454,6 +2612,97 @@
                   ],
                   "req": true
                 }
+              },
+              "cox": {
+                "name": {
+                  "t": "string",
+                  "minLength": 1,
+                  "maxLength": 80
+                },
+                "time": {
+                  "t": "string",
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                  "maxLength": 64,
+                  "req": true
+                },
+                "status": {
+                  "t": "string",
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                  "maxLength": 64,
+                  "req": true
+                },
+                "predictors": {
+                  "t": "array",
+                  "items": {
+                    "t": "string",
+                    "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                    "maxLength": 64
+                  },
+                  "min": 1,
+                  "max": 50,
+                  "req": true
+                },
+                "target": {
+                  "t": "string",
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                  "maxLength": 64,
+                  "req": true
+                }
+              },
+              "logrank": {
+                "name": {
+                  "t": "string",
+                  "minLength": 1,
+                  "maxLength": 80
+                },
+                "time": {
+                  "t": "string",
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                  "maxLength": 64,
+                  "req": true
+                },
+                "status": {
+                  "t": "string",
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                  "maxLength": 64,
+                  "req": true
+                },
+                "group": {
+                  "t": "string",
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                  "maxLength": 64,
+                  "req": true
+                }
+              },
+              "rmst": {
+                "name": {
+                  "t": "string",
+                  "minLength": 1,
+                  "maxLength": 80
+                },
+                "time": {
+                  "t": "string",
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                  "maxLength": 64,
+                  "req": true
+                },
+                "status": {
+                  "t": "string",
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                  "maxLength": 64,
+                  "req": true
+                },
+                "group": {
+                  "t": "string",
+                  "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                  "maxLength": 64,
+                  "req": true
+                },
+                "tau": {
+                  "t": "number",
+                  "gt": 0,
+                  "req": true
+                }
               }
             }
           },
@@ -2485,6 +2734,62 @@
               "t": "integer",
               "min": 0,
               "max": 2147483647
+            }
+          }
+        },
+        "inference": {
+          "t": "object",
+          "fields": {
+            "nullCalibration": {
+              "t": "object",
+              "fields": {
+                "analysis": {
+                  "t": "string",
+                  "minLength": 1,
+                  "maxLength": 80,
+                  "req": true
+                },
+                "replicates": {
+                  "t": "integer",
+                  "min": 20,
+                  "max": 1000,
+                  "default": 100
+                },
+                "copies": {
+                  "t": "integer",
+                  "min": 1,
+                  "max": 5,
+                  "default": 1
+                }
+              }
+            }
+          }
+        },
+        "privacy": {
+          "t": "object",
+          "fields": {
+            "membershipRiskBound": {
+              "t": "number",
+              "gt": 0.5,
+              "lt": 1,
+              "default": 0.75
+            },
+            "secrets": {
+              "t": "array",
+              "items": {
+                "t": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                "maxLength": 64
+              },
+              "min": 1,
+              "max": 10,
+              "unique": true
+            },
+            "attacks": {
+              "t": "integer",
+              "min": 50,
+              "max": 2000,
+              "default": 500
             }
           }
         }

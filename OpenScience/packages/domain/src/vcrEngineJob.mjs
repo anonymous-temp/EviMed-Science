@@ -107,8 +107,10 @@ export const VCR_ENGINE_METHODS = Object.freeze({
   'cohort.build': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen([]), crossChecks: frozen([]), modelTier: null },
   'population.scenario': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen([]), crossChecks: frozen(['truncated-normal moments and a Gauss-Hermite integral of the copula correlation']), modelTier: 'scenario' },
   'population.literature': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen([]), crossChecks: frozen([]), modelTier: 'literature' },
-  'population.synthpop': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['the training table it was fitted to: marginals, correlations and logistic coefficients']), modelTier: 'data' },
-  'population.quality': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen([]), modelTier: 'data' },
+  // 1.1.0 (algorithm round P1, P2): the m copies combined by the rules for synthetic data, Cox / log-rank / restricted-mean analyses, the false-positive rate of an
+  // analysis on the generator's copies when the arm labels are permuted, and per-record privacy (distance, membership risk, attribute inference).
+  'population.synthpop': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen([]), crossChecks: frozen(['the training table it was fitted to: marginals, correlations and logistic coefficients', 'synthpop summary of a fit to m copies (the combining rules of Raab, Nowok and Dibben)']), modelTier: 'data' },
+  'population.quality': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen([]), crossChecks: frozen(['synthpop summary of a fit to m copies (the combining rules)', 'survRM2 restricted mean difference', 'closed-form false-positive rate of an uncorrected analysis']), modelTier: 'data' },
   // A generated population held against a second baseline table (remediation plan D2): margins only, no model, so no tier.
   'population.check': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['base-R recomputation of the standardized differences']), modelTier: null },
   'patients.continuous': { version: '1.1.0', compatibleVersions: frozen(['1.0.0']), endpoints: frozen(['continuous']), crossChecks: frozen([]), modelTier: 'scenario' },
@@ -835,6 +837,17 @@ function usesConfirmatoryBeyond1_0_0(scenario) {
     || ((design.kind === 'multi_arm_selection' || design.kind === 'enrichment') && scenario?.endpoint?.type === 'time_to_event')
 }
 
+/**
+ * Does a synthesis or a quality scenario ask for what population.synthpop and population.quality 1.1.0 added: a Cox, log-rank or restricted-mean analysis,
+ * the permuted-arm calibration or the privacy measures (algorithm round P1, P2)? Mirrored by `.vcrp_uses_quality_beyond_1_0_0` in protocol.R.
+ * @param {any} scenario
+ */
+function usesQualityBeyond1_0_0(scenario) {
+  if (scenario === null || typeof scenario !== 'object') return false
+  return scenario.inference !== undefined || scenario.privacy !== undefined
+    || (Array.isArray(scenario.analyses) && scenario.analyses.some((/** @type {any} */ a) => ['cox', 'logrank', 'rmst'].includes(a?.kind)))
+}
+
 /** The comparators that read `scenario.trim` (propensity trimming, algorithm round C14). Mirrored by `.vcrp_legacy_design_version` in protocol.R. */
 const TRIMMING_SINCE = Object.freeze({ 'comparator.propensity_weight': '1.4.0', 'comparator.weighted_cox': '1.4.0', 'comparator.aipw': '1.3.0' })
 
@@ -882,6 +895,8 @@ function legacyDesignVersionMatches(job) {
     if (job.method === 'model.prognostic_apply' && job.scenario?.calibration !== undefined) return false
     // and design.confirmatory 1.1.0 the promising zone and the event-time selection and enrichment designs
     if (job.method === 'design.confirmatory' && usesConfirmatoryBeyond1_0_0(job.scenario)) return false
+    // and population.synthpop / population.quality 1.1.0 the survival analyses, the permuted-arm calibration and the privacy measures
+    if ((job.method === 'population.synthpop' || job.method === 'population.quality') && usesQualityBeyond1_0_0(job.scenario) && !versionAtLeast(job.methodVersion, '1.1.0')) return false
     // and evidence.pool 1.1.0 the informative prior for the heterogeneity
     if (job.method === 'evidence.pool' && job.scenario?.tauPrior !== undefined) return false
     // and the weighting comparators 1.4.0 (AIPW 1.3.0) the propensity trimming, and AIPW 1.3.0 the time-to-event outcome

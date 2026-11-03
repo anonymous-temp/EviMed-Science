@@ -161,6 +161,10 @@ VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "single_arm")
 VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "borrowing")
 # --- end dynamic borrowing ---
 
+# --- inference validity and per-record privacy of a synthetic population (algorithm round P1, P2, 2026-11-03) ---
+VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "quality_inference")
+# --- end quality inference ---
+
 #' Startup self-check: the local registry and the domain must agree, exactly.
 vcr_engine_self_check <- function() {
   d <- vcr_domain()
@@ -766,6 +770,67 @@ vcr_job_population_literature <- function(job, output_dir = NULL, ...) {
        issues = list(vcr_issue("cpu_budget_exhausted", "cpuSecondsLimit", sprintf("The CPU budget ran out: %s.", detail))))
 }
 
+# --- the 1.1.0 report of a synthetic population (P1, P2): combined inference, the permuted-arm type I error, per-record privacy ---
+
+#' The scenario's `privacy` block as the disclosure report reads it.
+.vcr_privacy_from_scenario <- function(p) list(bound = vcr_scalar(p[["membershipRiskBound"]], 0.75), secrets = if (length(p[["secrets"]])) vcr_chr(p[["secrets"]]) else NULL,
+                                              attacks = as.integer(vcr_scalar(p[["attacks"]], 500L)))
+
+#' The permuted-arm calibration the scenario asked for, against the analysis it names, or the reason there is none. `regenerate` is the
+#' job's own generator (table, seed -> copies); a generator that cannot be re-run gives no calibration and says why.
+.vcr_null_calibration_job <- function(nc, specs, train, regenerate, seed, can_regenerate = TRUE) {
+  nm <- as.character(nc[["analysis"]])
+  names_ <- vapply(seq_along(specs), function(i) as.character(specs[[i]]$name %||% sprintf("analysis_%d", i)), character(1))
+  i <- match(nm, names_)
+  if (is.na(i)) vcr_abort("scenario_value_invalid", "scenario.inference.nullCalibration.analysis", "The calibration names a declared analysis.")
+  arm <- vcr_analysis_arm_column(specs[[i]])
+  if (is.null(arm)) vcr_abort("scenario_value_invalid", "scenario.inference.nullCalibration.analysis", "A calibration permutes the arm labels: the analysis must have a target, or a group.")
+  if (!(arm %in% names(train))) vcr_abort("scenario_value_invalid", "scenario.inference.nullCalibration.analysis", "The analysis's arm column is not in the training table.")
+  if (!can_regenerate) return(list(available = FALSE, reason = "generator_not_rerunnable", analysis = nm, arm = arm))
+  f <- vcr_analysis_from_spec(specs[[i]])
+  r <- as.integer(vcr_scalar(nc[["replicates"]], 100L))
+  out <- vcr_null_calibration(train, f, arm, regenerate, r, seed)
+  c(out, list(analysis = nm, arm = arm, copiesPerReplicate = as.integer(vcr_scalar(nc[["copies"]], 1L))))
+}
+
+#' Headline numbers of the 1.1.0 report, each through `vcr_measure`: the three false-positive rates are simulated and carry their error.
+.vcr_inference_measures <- function(q) {
+  out <- list()
+  nc <- q$inference$nullCalibration
+  if (isTRUE(nc$available)) {
+    one <- function(name, x) vcr_measure(name, x$value, simulated = TRUE, mcse = x$mcse, source = "synthetic")
+    out <- c(out, list(one("false_positive_rate_real_permuted", nc$realPermuted), one("false_positive_rate_synthetic_naive", nc$syntheticNaive),
+                       one("false_positive_rate_synthetic_combined", nc$syntheticCombined)))
+  }
+  pr <- q$disclosure$perRecord
+  if (isTRUE(pr$available)) {
+    stated <- Filter(function(x) isTRUE(x$stated), pr$riskShares)
+    if (length(stated) && !is.null(stated[[1]]$trainingShare)) out <- c(out, list(vcr_measure("records_above_risk_bound", stated[[1]]$trainingShare, source = "calculated")))
+  }
+  ai <- q$disclosure$attributeInference
+  if (isTRUE(ai$available)) {
+    w <- ai$secrets[[which.max(vapply(ai$secrets, function(x) x$riskLow, numeric(1)))]]
+    out <- c(out, list(vcr_measure("attribute_inference_risk", max(0, w$risk), source = "calculated", interval = vcr_interval("confidence", max(0, w$riskLow), max(0, w$riskHigh)))))
+  }
+  out
+}
+
+#' Every copy scored on its own (the table of `qualityByCopy`).
+.vcr_quality_by_copy <- function(train, copies, holdout, constraints) {
+  do.call(rbind, lapply(seq_along(copies), function(k) {
+    uni <- vcr_fidelity_univariate(train, copies[[k]])
+    pr <- tryCatch(vcr_utility_propensity(train, copies[[k]]), error = function(e) list(sPMSE = NA_real_, propensityAuc = NA_real_))
+    viol <- vcr_constraint_violations(copies[[k]], constraints)
+    dis <- tryCatch(vcr_disclosure_report(train, copies[[k]], holdout), error = function(e) list(available = FALSE))
+    got <- function(key) if (isTRUE(dis$available) && !is.na(dis[[key]])) dis[[key]] else NA_real_
+    data.frame(copy = k, worstKsD = suppressWarnings(max(uni$value[uni$statistic == "ks_d"], -Inf)),
+               worstTvd = suppressWarnings(max(uni$value[uni$statistic == "tvd"], -Inf)),
+               sPMSE = pr$sPMSE, propensityAuc = pr$propensityAuc,
+               constraintViolations = if (nrow(viol)) sum(viol$violations) else 0,
+               replicationRatio = got("replicationRatio"), nearestNeighbourInTrainShare = got("nearestNeighbourInTrainShare"), membershipAuc = got("membershipAuc"))
+  }))
+}
+
 vcr_job_synthesize_population <- function(job, output_dir = NULL, ...) {
   sc <- job$scenario
   df <- .vcr_main_table(vcr_job_tables(job))
@@ -796,6 +861,11 @@ vcr_job_synthesize_population <- function(job, output_dir = NULL, ...) {
   if (!is.null(syn$interrupted)) return(.vcr_interrupted_result(syn$interrupted, sprintf("%d of %d synthetic copies were made", length(syn$data), as.integer(m))))
   copies <- do.call(rbind, lapply(seq_along(syn$data), function(k) cbind(copy = k, syn$data[[k]])))
   analyses <- .vcr_analyses_from_scenario(sc$analyses)
+  # 1.1.0 (P1, P2): the copies are combined by the rules for synthetic data, the per-record and attribute risks are measured, and the type I
+  # error of an analysis on this generator's copies can be calibrated. A job labelled 1.0.0 replays without any of it.
+  mv <- job[["methodVersion"]]
+  v11 <- is.character(mv) && length(mv) == 1L && nzchar(mv) && utils::compareVersion(mv, "1.1.0") >= 0L
+  infer <- if (v11) list(proper = FALSE, privacy = .vcr_privacy_from_scenario(sc[["privacy"]])) else NULL
   # The table that ships holds every copy, so the hard constraints and the leakage check read all of them stacked (`copies`); the
   # fidelity and utility axes describe the first copy and the others are scored one by one below.
   report <- vcr_quality_report(train, syn$data[[1]], holdout,
@@ -803,24 +873,22 @@ vcr_job_synthesize_population <- function(job, output_dir = NULL, ...) {
                                criteria = sc$criteria,
                                generator = list(family = "synthpop_cart", m = syn$m,
                                                 smoothing = syn$smoothing, seed = job$seed),
-                               tstr_outcome = sc$tstrOutcome, copies = syn$data)
-  by_copy <- do.call(rbind, lapply(seq_along(syn$data), function(k) {
-    uni <- vcr_fidelity_univariate(train, syn$data[[k]])
-    pr <- tryCatch(vcr_utility_propensity(train, syn$data[[k]]), error = function(e) list(sPMSE = NA_real_, propensityAuc = NA_real_))
-    viol <- vcr_constraint_violations(syn$data[[k]], sc$constraints)
-    dis <- tryCatch(vcr_disclosure_report(train, syn$data[[k]], holdout), error = function(e) list(available = FALSE))
-    got <- function(key) if (isTRUE(dis$available) && !is.na(dis[[key]])) dis[[key]] else NA_real_
-    data.frame(copy = k, worstKsD = suppressWarnings(max(uni$value[uni$statistic == "ks_d"], -Inf)),
-               worstTvd = suppressWarnings(max(uni$value[uni$statistic == "tvd"], -Inf)),
-               sPMSE = pr$sPMSE, propensityAuc = pr$propensityAuc,
-               constraintViolations = if (nrow(viol)) sum(viol$violations) else 0,
-               replicationRatio = got("replicationRatio"), nearestNeighbourInTrainShare = got("nearestNeighbourInTrainShare"), membershipAuc = got("membershipAuc"))
-  }))
+                               tstr_outcome = sc$tstrOutcome, copies = syn$data, inference = infer)
+  by_copy <- .vcr_quality_by_copy(train, syn$data, holdout, sc$constraints)
   worst <- which.max(ifelse(is.finite(by_copy$sPMSE), by_copy$sPMSE, -Inf))
-  list(status = "succeeded",
-       measures = list(vcr_measure("generated_records", syn$generatedRecords, source = "synthetic"),
-                       vcr_measure("training_observations", syn$trainingObservations, source = used_train$source %||% "observed"),
-                       vcr_measure("synthetic_copies", syn$m, source = "synthetic")),
+  stopped <- NULL
+  if (v11 && !is.null(sc[["inference"]][["nullCalibration"]])) {
+    nc <- sc[["inference"]][["nullCalibration"]]
+    k_per <- as.integer(vcr_scalar(nc[["copies"]], 1L))
+    regenerate <- function(tbl, seed) { r <- vcr_population_synthpop(tbl, m = k_per, seed = seed); if (!is.null(r$interrupted)) r["interrupted"] else r$data }
+    report$inference$nullCalibration <- .vcr_null_calibration_job(nc, sc$analyses, train, regenerate, job$seed)
+    stopped <- report$inference$nullCalibration$stopped
+  }
+  result <- list(status = "succeeded",
+       measures = c(list(vcr_measure("generated_records", syn$generatedRecords, source = "synthetic"),
+                         vcr_measure("training_observations", syn$trainingObservations, source = used_train$source %||% "observed"),
+                         vcr_measure("synthetic_copies", syn$m, source = "synthetic")),
+                    if (v11) .vcr_inference_measures(report)),
        counts = vcr_counts(realPatients = 0, generatedRecords = syn$generatedRecords),
        diagnostics = list(quality = report, qualityByCopy = by_copy, worstCopy = if (length(worst)) worst else NA_integer_,
                           lowSampleWarning = syn$lowSampleWarning,
@@ -833,6 +901,13 @@ vcr_job_synthesize_population <- function(job, output_dir = NULL, ...) {
                           profile = tryCatch(vcr_population_profile(syn$data[[1]], empirical = TRUE), error = function(e) NULL), profileCopy = 1L,
                           allowedUses = vcr_domain()$syntheticUses),
        tables = .vcr_tables_of(list(vcr_write_table(copies, "synthetic-population", output_dir))))
+  if (identical(stopped, "cpu_budget")) {
+    nc <- report$inference$nullCalibration
+    result$conclusion <- "limited"
+    result$issues <- list(vcr_issue("cpu_budget_exhausted", "cpuSecondsLimit",
+      sprintf("The CPU budget ran out after %s of the %s permuted tables; the false-positive rates are those of the finished ones.", nc$replicates %||% 0L, nc$replicatesPlanned)))
+  }
+  result
 }
 
 vcr_job_population_quality <- function(job, output_dir = NULL, ...) {
@@ -849,18 +924,49 @@ vcr_job_population_quality <- function(job, output_dir = NULL, ...) {
   }
   train <- read("trainingInputId"); synth <- read("syntheticInputId"); holdout <- read("holdoutInputId", FALSE)
   analyses <- .vcr_analyses_from_scenario(sc$analyses)
+  mv <- job[["methodVersion"]]
+  v11 <- is.character(mv) && length(mv) == 1L && nzchar(mv) && utils::compareVersion(mv, "1.1.0") >= 0L
+  copies <- NULL; by_copy <- NULL; stopped <- NULL
+  if (v11) {
+    # a table that carries a `copy` column is the engine's own stacked release: its copies are read one by one, and the analyses are combined
+    if ("copy" %in% names(synth) && length(unique(synth[["copy"]])) > 1L) {
+      copies <- lapply(split(seq_len(nrow(synth)), synth[["copy"]]), function(i) synth[i, setdiff(names(synth), "copy"), drop = FALSE])
+      names(copies) <- NULL
+      synth <- copies[[1L]]
+    } else if ("copy" %in% names(synth)) synth <- synth[, setdiff(names(synth), "copy"), drop = FALSE]
+  }
+  infer <- if (v11) list(proper = FALSE, privacy = .vcr_privacy_from_scenario(sc[["privacy"]])) else NULL
   report <- vcr_quality_report(train, synth, holdout, constraints = sc$constraints, analyses = analyses,
-                               criteria = sc$criteria, generator = sc$generator %||% list(), tstr_outcome = sc$tstrOutcome)
+                               criteria = sc$criteria, generator = sc$generator %||% list(), tstr_outcome = sc$tstrOutcome,
+                               copies = copies, inference = infer)
+  if (v11 && length(copies) > 1L && !is.null(holdout) && nrow(holdout)) by_copy <- .vcr_quality_by_copy(train, copies, holdout, sc$constraints)
+  if (v11 && !is.null(sc[["inference"]][["nullCalibration"]])) {
+    nc <- sc[["inference"]][["nullCalibration"]]
+    k_per <- as.integer(vcr_scalar(nc[["copies"]], 1L))
+    learn <- intersect(names(train), names(synth))
+    regenerate <- function(tbl, seed) { r <- vcr_population_synthpop(tbl[, learn, drop = FALSE], m = k_per, seed = seed); if (!is.null(r$interrupted)) r["interrupted"] else r$data }
+    can <- identical(as.character(sc$generator$family %||% ""), "synthpop_cart")
+    report$inference$nullCalibration <- .vcr_null_calibration_job(nc, sc$analyses, train, regenerate, job$seed, can_regenerate = can)
+    stopped <- report$inference$nullCalibration$stopped
+  }
   finite <- function(x) is.numeric(x) && length(x) == 1L && is.finite(x)
   measures <- list()
   if (finite(report$fidelity$global$sPMSE)) measures <- c(measures, list(vcr_measure("s_pmse", report$fidelity$global$sPMSE, source = "synthetic")))
   if (finite(report$fidelity$global$propensityAuc)) measures <- c(measures, list(vcr_measure("propensity_auc", report$fidelity$global$propensityAuc, source = "synthetic")))
-  list(status = "succeeded", measures = measures,
-       counts = vcr_counts(realPatients = 0, generatedRecords = nrow(synth)),
-       diagnostics = list(quality = report),
+  if (v11) measures <- c(measures, .vcr_inference_measures(report))
+  result <- list(status = "succeeded", measures = measures,
+       counts = vcr_counts(realPatients = 0, generatedRecords = if (length(copies)) sum(vapply(copies, nrow, numeric(1))) else nrow(synth)),
+       diagnostics = c(list(quality = report), if (!is.null(by_copy)) list(qualityByCopy = by_copy)),
        tables = .vcr_tables_of(list(
          vcr_write_table(report$fidelity$univariate, "fidelity-univariate", output_dir),
          vcr_write_table(report$fidelity$pairwise, "fidelity-pairwise", output_dir))))
+  if (identical(stopped, "cpu_budget")) {
+    nc <- report$inference$nullCalibration
+    result$conclusion <- "limited"
+    result$issues <- list(vcr_issue("cpu_budget_exhausted", "cpuSecondsLimit",
+      sprintf("The CPU budget ran out after %s of the %s permuted tables; the false-positive rates are those of the finished ones.", nc$replicates %||% 0L, nc$replicatesPlanned)))
+  }
+  result
 }
 
 # --- virtual patients ----------------------------------------------------------

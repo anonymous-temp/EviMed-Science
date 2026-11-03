@@ -224,7 +224,10 @@ vcr_gower_nearest <- function(x, reference, ranges = NULL, k = 2L) {
 #' training and holdout sets is subsampled to the size of the smaller for the
 #' replication, distance and nearest-neighbour comparisons. The subsample is
 #' drawn from the caller's RNG stream, so a seeded job repeats it.
-vcr_disclosure_report <- function(train, synth, holdout = NULL, subsamples = 3L) {
+#'
+#' `privacy` (1.1.0; `list(bound, secrets, attacks)`) adds the per-record risk and the attribute inference of `quality_inference.R`: it
+#' draws from the caller's stream AFTER everything above, so a job without it is unchanged to the last digit.
+vcr_disclosure_report <- function(train, synth, holdout = NULL, subsamples = 3L, privacy = NULL) {
   if (is.null(holdout) || !nrow(holdout)) {
     return(list(available = FALSE,
                 reason = "no_holdout_reserved",
@@ -267,7 +270,11 @@ vcr_disclosure_report <- function(train, synth, holdout = NULL, subsamples = 3L)
   thresh <- stats::quantile(score[label == 0L], 0.99, names = FALSE)
   tpr_at_1 <- mean(score[label == 1L] > thresh)
 
-  list(available = TRUE,
+  extra <- if (is.null(privacy)) list() else list(
+    perRecord = vcr_record_privacy(train[vars], holdout[vars], m_train, m_hold, bound = privacy$bound %||% 0.75),
+    attributeInference = vcr_attribute_inference(train, holdout, synth, vars, ranges, privacy$secrets, privacy$attacks %||% 500L))
+
+  c(list(available = TRUE,
        sizeCorrected = nrow(train) != nrow(holdout), referenceSize = m, referenceSubsamples = k,
        exactReplicationRate = repl_train,
        exactReplicationRateHoldout = repl_hold,
@@ -279,7 +286,7 @@ vcr_disclosure_report <- function(train, synth, holdout = NULL, subsamples = 3L)
        nndrPercentile5Holdout = agg[["nndrHold"]],
        nearestNeighbourInTrainShare = agg[["nn"]],
        membershipAuc = auc, membershipTprAtFpr1 = tpr_at_1,
-       note = "Measured attacks and their values. This is not a statement that the data are anonymous.")
+       note = "Measured attacks and their values. This is not a statement that the data are anonymous."), extra)
 }
 
 #' Rare combinations: of the two-way category combinations a real table has at
@@ -343,15 +350,26 @@ vcr_tstr <- function(train, synth, holdout, outcome) {
 #' predictor whose coefficient is reported, and a `family` (gaussian or
 #' binomial). Column names must be plain identifiers; the formula is built from
 #' them with `vcr_model_formula` (symbols, never parsed text).
+#'
+#' The survival kinds (1.1.0) name a `time` and a `status` column (1 = event): `cox` the `predictors` and the `target` whose log hazard
+#' ratio is reported; `logrank` a two-level `group`, reporting the Peto log hazard ratio (O - E) / V of the second level against the
+#' first, whose standard error 1 / sqrt(V) is the log-rank test's own, and the test; `rmst` a two-level `group` and a `tau`, reporting
+#' the difference of the restricted mean survival times (second level minus first) with the Greenwood-type error of `vcr_rmst`.
+#' Every analysis answers `estimate`, `se` (of the estimate), `interval` (95%, normal) and `pValue`, and `NA` with a `reason` when it
+#' cannot be computed on the table it was given (a `tau` past the follow-up, a group with no one in it).
 vcr_analysis_from_spec <- function(spec) {
   ident <- function(x) is.character(x) && length(x) >= 1L && all(grepl(.VCR_ROW_COL_RE, x))
   kind <- as.character(spec$kind %||% "")
+  z <- stats::qnorm(0.975)
+  answer <- function(est, se, extra = list()) c(list(estimate = est, se = se, interval = est + c(-1, 1) * z * se,
+                                                   pValue = 2 * stats::pnorm(-abs(est / se))), extra)
+  none <- function(reason) list(estimate = NA_real_, se = NA_real_, interval = c(NA_real_, NA_real_), pValue = NA_real_, reason = reason)
   if (identical(kind, "mean")) {
     col <- as.character(spec$column %||% "")
     if (!ident(col)) vcr_abort("scenario_value_invalid", "scenario.analyses", "A mean analysis names one column.")
     return(function(d) {
       x <- stats::na.omit(as.numeric(d[[col]])); se <- stats::sd(x) / sqrt(length(x))
-      list(estimate = mean(x), interval = mean(x) + c(-1, 1) * 1.96 * se)
+      list(estimate = mean(x), interval = mean(x) + c(-1, 1) * 1.96 * se, se = se)
     })
   }
   if (identical(kind, "glm")) {
@@ -366,10 +384,68 @@ vcr_analysis_from_spec <- function(spec) {
       co <- summary(fit)$coefficients
       nm <- if (target %in% rownames(co)) target else rownames(co)[grep(paste0("^", target), rownames(co))[1]]
       est <- co[nm, "Estimate"]; se <- co[nm, "Std. Error"]
-      list(estimate = est, interval = est + c(-1, 1) * 1.96 * se)
+      list(estimate = est, interval = est + c(-1, 1) * 1.96 * se, se = se)
     })
   }
-  vcr_abort("scenario_value_invalid", "scenario.analyses", "An analysis is kind 'mean' or 'glm'.")
+  if (kind %in% c("cox", "logrank", "rmst")) {
+    time <- as.character(spec$time %||% ""); status <- as.character(spec$status %||% "")
+    group <- as.character(spec$group %||% ""); preds <- vcr_chr(spec$predictors); target <- as.character(spec$target %||% preds[1])
+    tau <- vcr_scalar(spec$tau, NA_real_)
+    bad <- !ident(time) || !ident(status) ||
+      (identical(kind, "cox") && (!ident(preds) || !(target %in% preds))) ||
+      (kind %in% c("logrank", "rmst") && !ident(group)) || (identical(kind, "rmst") && !(is.finite(tau) && tau > 0))
+    if (bad) vcr_abort("scenario_value_invalid", "scenario.analyses", "A cox analysis names a time, a status, its predictors and a target; a logrank a time, a status and a group; an rmst the same and a positive tau.")
+    # synthpop returns a 0/1 column it treated as a factor as a factor: read the label, never the level's code
+    as01 <- function(x) {
+      if (is.logical(x)) return(as.numeric(x))
+      if (is.factor(x) || is.character(x)) { ch <- as.character(x); out <- suppressWarnings(as.numeric(ch)); out[tolower(ch) == "true"] <- 1; out[tolower(ch) == "false"] <- 0; return(out) }
+      suppressWarnings(as.numeric(x))
+    }
+    surv <- function(d) {
+      tm <- suppressWarnings(as.numeric(d[[time]])); st <- as01(d[[status]])
+      ok <- is.finite(tm) & is.finite(st) & tm > 0 & st %in% c(0, 1)
+      list(time = tm, status = st, ok = ok)
+    }
+    if (identical(kind, "cox")) {
+      return(function(d) {
+        sv <- surv(d); d <- d[sv$ok, , drop = FALSE]
+        if (sum(sv$status[sv$ok]) < 2L) return(none("too_few_events"))
+        lhs <- as.call(list(call("::", as.name("survival"), as.name("Surv")), as.name(time), as.name(status)))
+        rhs <- .vcr_term_sum(preds)
+        fit <- tryCatch(suppressWarnings(survival::coxph(stats::as.formula(call("~", lhs, rhs), env = new.env(parent = baseenv())), data = d)), error = function(e) NULL)
+        if (is.null(fit)) return(none("model_did_not_converge"))
+        co <- summary(fit)$coefficients
+        nm <- if (target %in% rownames(co)) target else rownames(co)[grep(paste0("^", target), rownames(co))[1]]
+        if (is.na(nm) || !is.finite(co[nm, "coef"]) || !is.finite(co[nm, "se(coef)"])) return(none("model_did_not_converge"))
+        answer(co[nm, "coef"], co[nm, "se(coef)"], list(scale = "log hazard ratio"))
+      })
+    }
+    if (identical(kind, "logrank")) {
+      return(function(d) {
+        sv <- surv(d); g <- as.character(d[[group]]); keep <- sv$ok & !is.na(g)
+        lv <- sort(unique(g[keep]))
+        if (length(lv) != 2L) return(none("group_not_two_levels"))
+        gg <- factor(g[keep], lv); tm <- sv$time[keep]; st <- sv$status[keep]
+        sd_ <- tryCatch(survival::survdiff(survival::Surv(tm, st) ~ gg), error = function(e) NULL)
+        if (is.null(sd_) || !is.finite(sd_$var[2, 2]) || sd_$var[2, 2] <= 0) return(none("too_few_events"))
+        v <- sd_$var[2, 2]; est <- (sd_$obs[2] - sd_$exp[2]) / v
+        out <- answer(est, 1 / sqrt(v), list(scale = "Peto log hazard ratio", levels = lv))
+        out$pValue <- stats::pchisq(sd_$chisq, 1, lower.tail = FALSE)
+        out
+      })
+    }
+    return(function(d) {
+      sv <- surv(d); g <- as.character(d[[group]]); keep <- sv$ok & !is.na(g)
+      lv <- sort(unique(g[keep]))
+      if (length(lv) != 2L) return(none("group_not_two_levels"))
+      tm <- sv$time[keep]; st <- sv$status[keep]; gg <- g[keep]
+      last <- vapply(lv, function(l) max(tm[gg == l]), numeric(1))
+      if (tau > min(last) + 1e-12) return(none("tau_beyond_followup"))
+      a <- vcr_rmst(tm[gg == lv[1]], st[gg == lv[1]], tau); b <- vcr_rmst(tm[gg == lv[2]], st[gg == lv[2]], tau)
+      answer(b$rmst - a$rmst, sqrt(a$variance + b$variance), list(scale = "difference of restricted mean survival times", levels = lv, tau = tau))
+    })
+  }
+  vcr_abort("scenario_value_invalid", "scenario.analyses", "An analysis is kind 'mean', 'glm', 'cox', 'logrank' or 'rmst'.")
 }
 
 #' The whole suite. `analyses` is a list of declared estimands, each a
@@ -383,9 +459,14 @@ vcr_analysis_from_spec <- function(spec) {
 #' `synth` is the copy the fidelity and utility axes describe (the others are scored one
 #' by one by the caller), and `release` says so. The first version measured all of it on
 #' the first copy while the table that was shipped held every copy.
+#'
+#' `inference` (1.1.0): `list(proper = FALSE, privacy = list(bound, secrets, attacks))`. With it each declared analysis is also run on
+#' every copy and the copies are combined by the rules of Raab, Nowok & Dibben (`utility.specific[[name]]$combined`, the
+#' interval overlap taken on the combined interval), the disclosure axis adds the per-record and attribute-inference measures, and the
+#' `inferenceRisk` band is the worst attribute's lower confidence limit on the risk.
 vcr_quality_report <- function(train, synth, holdout = NULL, constraints = NULL,
                                analyses = list(), criteria = NULL,
-                               generator = list(), tstr_outcome = NULL, copies = NULL) {
+                               generator = list(), tstr_outcome = NULL, copies = NULL, inference = NULL) {
   bands <- vcr_quality_bands()
   release <- if (length(copies) > 1L) do.call(rbind, copies) else synth
   uni <- vcr_fidelity_univariate(train, synth)
@@ -397,8 +478,14 @@ vcr_quality_report <- function(train, synth, holdout = NULL, constraints = NULL,
   specific <- lapply(names(analyses), function(nm) {
     f <- analyses[[nm]]
     a <- f(train); b <- f(synth)
-    list(analysis = nm, realEstimate = a$estimate, syntheticEstimate = b$estimate,
-         confidenceIntervalOverlap = vcr_ci_overlap(a$interval, b$interval))
+    out <- list(analysis = nm, realEstimate = a$estimate, syntheticEstimate = b$estimate,
+                confidenceIntervalOverlap = if (all(is.finite(c(a$interval, b$interval)))) vcr_ci_overlap(a$interval, b$interval) else NA_real_)
+    if (!is.null(inference)) {
+      out$scale <- a$scale %||% "estimate"
+      out$realInterval <- a$interval; out$realSe <- a$se %||% NA_real_; out$realReason <- a$reason
+      out$combined <- vcr_synthetic_inference(f, a, if (length(copies)) copies else list(synth), nrow(train), isTRUE(inference$proper))
+    }
+    out
   })
   names(specific) <- names(analyses)
 
@@ -418,7 +505,7 @@ vcr_quality_report <- function(train, synth, holdout = NULL, constraints = NULL,
                         jointPassRateRelativeDifference = if (is.finite(joint_r) && joint_r > 0) abs(joint_s - joint_r) / joint_r else NA_real_)
   }
 
-  disclosure <- vcr_disclosure_report(train, release, holdout)
+  disclosure <- vcr_disclosure_report(train, release, holdout, privacy = inference$privacy)
   tstr <- if (!is.null(tstr_outcome) && !is.null(holdout) && nrow(holdout)) vcr_tstr(train, synth, holdout, tstr_outcome) else NULL
 
   bandsOut <- list(
@@ -433,13 +520,14 @@ vcr_quality_report <- function(train, synth, holdout = NULL, constraints = NULL,
     bandsOut$replication <- vcr_band(disclosure$replicationRatio, bands$replicationRate)
     bandsOut$nearestNeighbourInTrainShare <- vcr_band(disclosure$nearestNeighbourInTrainShare, bands$nearestNeighbourInTrainShare)
     bandsOut$membershipAuc <- vcr_band(disclosure$membershipAuc, bands$membershipAuc)
+    if (isTRUE(disclosure$attributeInference$available)) bandsOut$inferenceRisk <- vcr_band(disclosure$attributeInference$worstRiskLowerLimit, bands$inferenceRisk)
   }
   if (!is.null(tstr) && isTRUE(tstr$available)) bandsOut$tstrRatio <- vcr_band(tstr$ratio, bands$tstrRatio)
   if (!is.null(feasibility)) {
     bandsOut$jointPassRate <- vcr_band(feasibility$jointPassRateRelativeDifference, bands$jointPassRateRelativeDifference)
   }
 
-  list(
+  c(list(
     fidelity = list(univariate = uni, pairwise = pair, global = prop, rareCombinations = rare),
     constraints = viol,
     constraintsPass = all(viol$violations == 0),
@@ -453,7 +541,10 @@ vcr_quality_report <- function(train, synth, holdout = NULL, constraints = NULL,
                    fidelityAndUtilityOn = if (length(copies) > 1L) "copy 1 (the other copies are scored one by one in qualityByCopy)" else "the table"),
     advisory = TRUE,
     note = "Every band is a notice. Only the declared hard constraints are an invariant."
-  )
+  ), if (!is.null(inference)) list(inference = list(
+    rule = if (isTRUE(inference$proper)) "proper_synthesis" else "simple_synthesis", proper = isTRUE(inference$proper),
+    observedRows = nrow(train), syntheticRows = nrow(synth), copies = max(1L, length(copies)),
+    ruleSource = "Raab, Nowok & Dibben (2016), as synthpop::summary.fit.synds with population.inference = TRUE")))
 }
 
 `%||%` <- function(a, b) if (is.null(a)) b else a

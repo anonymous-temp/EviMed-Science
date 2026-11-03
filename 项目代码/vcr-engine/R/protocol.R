@@ -1243,6 +1243,14 @@ vcr_job_at_least <- function(job, from) {
     (isTRUE(.vcrp_get(design, "kind") %in% c("multi_arm_selection", "enrichment")) && identical(.vcrp_get(.vcrp_get(sc, "endpoint"), "type"), "time_to_event"))
 }
 
+# Does a synthesis or quality scenario ask for what population.synthpop / population.quality 1.1.0 added? Mirrors usesQualityBeyond1_0_0 in the domain.
+.vcrp_uses_quality_beyond_1_0_0 <- function(sc) {
+  if (!.vcrp_named(sc)) return(FALSE)
+  if (!is.null(.vcrp_get(sc, "inference")) || !is.null(.vcrp_get(sc, "privacy"))) return(TRUE)
+  an <- .vcrp_get(sc, "analyses")
+  is.list(an) && any(vapply(an, function(a) .vcrp_named(a) && isTRUE(.vcrp_get(a, "kind") %in% c("cox", "logrank", "rmst")), logical(1)))
+}
+
 # Does a longitudinal scenario ask for what patients.longitudinal 1.2.0 added? Mirrors usesLongitudinalBeyond1_1_0 in the domain.
 .vcrp_uses_longitudinal_beyond_1_1_0 <- function(sc) !is.null(.vcrp_get(sc,"trajectory")) || !is.null(.vcrp_get(sc,"dropoutModel")) || !is.null(.vcrp_get(sc,"rescue"))
 
@@ -1272,6 +1280,8 @@ vcr_job_at_least <- function(job, from) {
     if (identical(job[["method"]],"model.prognostic_apply") && !is.null(.vcrp_get(job$scenario,"calibration"))) return(FALSE)
     # and design.confirmatory 1.1.0 the promising zone and the event-time selection and enrichment designs
     if (identical(job[["method"]],"design.confirmatory") && .vcrp_uses_confirmatory_beyond_1_0_0(job$scenario)) return(FALSE)
+    # and population.synthpop / population.quality 1.1.0 the survival analyses, the permuted-arm calibration and the privacy measures
+    if (job[["method"]] %in% c("population.synthpop","population.quality") && .vcrp_uses_quality_beyond_1_0_0(job$scenario) && utils::compareVersion(job$methodVersion,"1.1.0")<0) return(FALSE)
     # and evidence.pool 1.1.0 the informative prior for the heterogeneity
     if (identical(job[["method"]],"evidence.pool") && !is.null(.vcrp_get(job$scenario,"tauPrior"))) return(FALSE)
     # and the weighting comparators 1.4.0 (AIPW 1.3.0) the propensity trimming, and AIPW 1.3.0 the time-to-event outcome

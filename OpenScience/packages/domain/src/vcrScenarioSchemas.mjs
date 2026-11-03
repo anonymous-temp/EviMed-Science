@@ -187,8 +187,32 @@ const ANALYSES = array({
       name: string(CRITERION_NAME), outcome: req(COLUMN), predictors: req(array(COLUMN, { min: 1, max: 50 })), target: req(COLUMN),
       family: req(string({ values: ['gaussian', 'binomial'] })),
     },
+    // the time-to-event analyses a study actually runs (population.synthpop / population.quality 1.1.0, algorithm round P1): `status` is 1 for an event;
+    // a Cox model reports the log hazard ratio of its target, the log-rank test the Peto log hazard ratio of the second group against the first,
+    // and the restricted mean survival time the difference of the second group's less the first's up to `tau`
+    cox: { name: string(CRITERION_NAME), time: req(COLUMN), status: req(COLUMN), predictors: req(array(COLUMN, { min: 1, max: 50 })), target: req(COLUMN) },
+    logrank: { name: string(CRITERION_NAME), time: req(COLUMN), status: req(COLUMN), group: req(COLUMN) },
+    rmst: { name: string(CRITERION_NAME), time: req(COLUMN), status: req(COLUMN), group: req(COLUMN), tau: req(number({ gt: 0 })) },
   },
 }, { min: 1, max: 20 })
+
+/**
+ * What a synthesis or a quality report may be asked beyond 1.0.0 (algorithm round P1, P2): the false-positive rate of one declared analysis
+ * on the generator's own copies when the arm labels of the real table are permuted (`inference`), and the per-record and attribute-inference
+ * measures of the disclosure axis (`privacy`).
+ */
+const SYNTHETIC_INFERENCE = object({
+  nullCalibration: object({
+    analysis: req(string(CRITERION_NAME)),
+    replicates: integer({ min: 20, max: 1000, default: 100 }),
+    copies: integer({ min: 1, max: 5, default: 1 }),
+  }),
+})
+const SYNTHETIC_PRIVACY = object({
+  membershipRiskBound: number({ gt: 0.5, lt: 1, default: 0.75 }),
+  secrets: array(COLUMN, { min: 1, max: 10, unique: true }),
+  attacks: integer({ min: 50, max: 2000, default: 500 }),
+})
 
 /** Which parameters of a variable are uncertain, and by how much (per-variable parameter uncertainty). */
 const PARAM_SD = { t: 'map', values: number({ min: 0 }), min: 1, max: 4 }
@@ -829,6 +853,8 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
     criteria: { t: 'rules', allowEmpty: true },
     analyses: ANALYSES,
     tstrOutcome: COLUMN,
+    inference: SYNTHETIC_INFERENCE,
+    privacy: SYNTHETIC_PRIVACY,
   }),
 
   'population.quality': object({
@@ -842,6 +868,8 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
     generator: object({
       family: string({ maxLength: 40 }), m: integer({ min: 1, max: 50 }), smoothing: string({ maxLength: 40 }), seed: integer({ min: 0, max: 2_147_483_647 }),
     }),
+    inference: SYNTHETIC_INFERENCE,
+    privacy: SYNTHETIC_PRIVACY,
   }),
 
   'patients.continuous': object(patientsFields()),

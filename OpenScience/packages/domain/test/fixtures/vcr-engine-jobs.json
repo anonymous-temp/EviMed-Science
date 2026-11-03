@@ -6443,6 +6443,186 @@
           }
         ]
       }
+    },
+    {
+      "name": "synthesize_population #6: survival analyses, the permuted-arm calibration and the privacy measures",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "synthesize_population",
+        "method": "population.synthpop",
+        "methodVersion": "1.1.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "holdoutShare": 0,
+          "m": 5,
+          "constraints": [
+            {
+              "name": "age",
+              "rule": {
+                "op": "between",
+                "column": "age",
+                "low": 18,
+                "high": 100
+              }
+            }
+          ],
+          "criteria": [
+            {
+              "name": "older",
+              "rule": {
+                "op": "compare",
+                "column": "age",
+                "comparator": "gt",
+                "value": 65
+              }
+            }
+          ],
+          "analyses": [
+            {
+              "name": "hazard ratio of the arm",
+              "kind": "cox",
+              "time": "os_months",
+              "status": "death",
+              "predictors": [
+                "arm",
+                "age"
+              ],
+              "target": "arm"
+            },
+            {
+              "name": "log-rank of the arm",
+              "kind": "logrank",
+              "time": "os_months",
+              "status": "death",
+              "group": "arm"
+            },
+            {
+              "name": "restricted mean at 24 months",
+              "kind": "rmst",
+              "time": "os_months",
+              "status": "death",
+              "group": "arm",
+              "tau": 24
+            }
+          ],
+          "inference": {
+            "nullCalibration": {
+              "analysis": "hazard ratio of the arm",
+              "replicates": 100,
+              "copies": 1
+            }
+          },
+          "privacy": {
+            "membershipRiskBound": 0.75,
+            "secrets": [
+              "sex"
+            ],
+            "attacks": 500
+          }
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      }
+    },
+    {
+      "name": "population_quality #7: a restricted-mean analysis and the privacy measures on a table with its copies",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "population_quality",
+        "method": "population.quality",
+        "methodVersion": "1.1.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "trainingInputId": "snp_1:subject",
+          "syntheticInputId": "pop_synth@1",
+          "holdoutInputId": "snp_1:subject2",
+          "criteria": [
+            {
+              "name": "older",
+              "rule": {
+                "op": "in",
+                "column": "stage",
+                "values": [
+                  "I",
+                  "II"
+                ]
+              }
+            }
+          ],
+          "generator": {
+            "family": "synthpop_cart",
+            "m": 5,
+            "smoothing": "density",
+            "seed": 7
+          },
+          "analyses": [
+            {
+              "name": "restricted mean at 24 months",
+              "kind": "rmst",
+              "time": "os_months",
+              "status": "death",
+              "group": "arm",
+              "tau": 24
+            },
+            {
+              "name": "log-rank of the arm",
+              "kind": "logrank",
+              "time": "os_months",
+              "status": "death",
+              "group": "arm"
+            }
+          ],
+          "inference": {
+            "nullCalibration": {
+              "analysis": "log-rank of the arm"
+            }
+          },
+          "privacy": {
+            "secrets": [
+              "stage"
+            ]
+          }
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          },
+          {
+            "kind": "snapshot_file",
+            "id": "pop_synth@1",
+            "location": "std_1/pop_synth/v1.csv",
+            "hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "valueSource": "synthetic"
+          },
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject2",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject2.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      }
     }
   ],
   "invalid": [
@@ -26939,6 +27119,652 @@
       },
       "expected": [
         "scenario_value_invalid@scenario.knots"
+      ]
+    },
+    {
+      "name": "a cox analysis without its target, under 1.1.0",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "synthesize_population",
+        "method": "population.synthpop",
+        "methodVersion": "1.1.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "holdoutShare": 0,
+          "m": 5,
+          "constraints": [
+            {
+              "name": "age",
+              "rule": {
+                "op": "between",
+                "column": "age",
+                "low": 18,
+                "high": 100
+              }
+            }
+          ],
+          "criteria": [
+            {
+              "name": "older",
+              "rule": {
+                "op": "compare",
+                "column": "age",
+                "comparator": "gt",
+                "value": 65
+              }
+            }
+          ],
+          "analyses": [
+            {
+              "name": "hazard ratio of the arm",
+              "kind": "cox",
+              "time": "os_months",
+              "status": "death",
+              "predictors": [
+                "arm",
+                "age"
+              ]
+            }
+          ],
+          "tstrOutcome": "response"
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_missing@scenario.analyses[0].target"
+      ]
+    },
+    {
+      "name": "a restricted-mean analysis without its horizon",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "population_quality",
+        "method": "population.quality",
+        "methodVersion": "1.1.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "trainingInputId": "snp_1:subject",
+          "syntheticInputId": "pop_synth@1",
+          "holdoutInputId": "snp_1:subject2",
+          "criteria": [
+            {
+              "name": "older",
+              "rule": {
+                "op": "in",
+                "column": "stage",
+                "values": [
+                  "I",
+                  "II"
+                ]
+              }
+            }
+          ],
+          "generator": {
+            "family": "synthpop_cart",
+            "m": 5,
+            "smoothing": "density",
+            "seed": 7
+          },
+          "analyses": [
+            {
+              "name": "restricted mean at 24 months",
+              "kind": "rmst",
+              "time": "os_months",
+              "status": "death",
+              "group": "arm"
+            }
+          ]
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          },
+          {
+            "kind": "snapshot_file",
+            "id": "pop_synth@1",
+            "location": "std_1/pop_synth/v1.csv",
+            "hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "valueSource": "synthetic"
+          },
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject2",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject2.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_missing@scenario.analyses[0].tau"
+      ]
+    },
+    {
+      "name": "a log-rank analysis that names a predictor list",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "population_quality",
+        "method": "population.quality",
+        "methodVersion": "1.1.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "trainingInputId": "snp_1:subject",
+          "syntheticInputId": "pop_synth@1",
+          "holdoutInputId": "snp_1:subject2",
+          "criteria": [
+            {
+              "name": "older",
+              "rule": {
+                "op": "in",
+                "column": "stage",
+                "values": [
+                  "I",
+                  "II"
+                ]
+              }
+            }
+          ],
+          "generator": {
+            "family": "synthpop_cart",
+            "m": 5,
+            "smoothing": "density",
+            "seed": 7
+          },
+          "analyses": [
+            {
+              "name": "log-rank of the arm",
+              "kind": "logrank",
+              "time": "os_months",
+              "status": "death",
+              "group": "arm",
+              "predictors": [
+                "arm"
+              ]
+            }
+          ]
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          },
+          {
+            "kind": "snapshot_file",
+            "id": "pop_synth@1",
+            "location": "std_1/pop_synth/v1.csv",
+            "hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "valueSource": "synthetic"
+          },
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject2",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject2.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_unknown@scenario.analyses[0].predictors"
+      ]
+    },
+    {
+      "name": "a calibration with fewer than twenty permuted tables",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "synthesize_population",
+        "method": "population.synthpop",
+        "methodVersion": "1.1.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "holdoutShare": 0,
+          "m": 5,
+          "constraints": [
+            {
+              "name": "age",
+              "rule": {
+                "op": "between",
+                "column": "age",
+                "low": 18,
+                "high": 100
+              }
+            }
+          ],
+          "criteria": [
+            {
+              "name": "older",
+              "rule": {
+                "op": "compare",
+                "column": "age",
+                "comparator": "gt",
+                "value": 65
+              }
+            }
+          ],
+          "analyses": [
+            {
+              "name": "mean age",
+              "kind": "mean",
+              "column": "age"
+            },
+            {
+              "kind": "glm",
+              "outcome": "response",
+              "predictors": [
+                "age",
+                "sex"
+              ],
+              "target": "age",
+              "family": "binomial"
+            }
+          ],
+          "tstrOutcome": "response",
+          "inference": {
+            "nullCalibration": {
+              "analysis": "a",
+              "replicates": 5
+            }
+          }
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.inference.nullCalibration.replicates"
+      ]
+    },
+    {
+      "name": "a calibration that names no analysis",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "synthesize_population",
+        "method": "population.synthpop",
+        "methodVersion": "1.1.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "holdoutShare": 0,
+          "m": 5,
+          "constraints": [
+            {
+              "name": "age",
+              "rule": {
+                "op": "between",
+                "column": "age",
+                "low": 18,
+                "high": 100
+              }
+            }
+          ],
+          "criteria": [
+            {
+              "name": "older",
+              "rule": {
+                "op": "compare",
+                "column": "age",
+                "comparator": "gt",
+                "value": 65
+              }
+            }
+          ],
+          "analyses": [
+            {
+              "name": "mean age",
+              "kind": "mean",
+              "column": "age"
+            },
+            {
+              "kind": "glm",
+              "outcome": "response",
+              "predictors": [
+                "age",
+                "sex"
+              ],
+              "target": "age",
+              "family": "binomial"
+            }
+          ],
+          "tstrOutcome": "response",
+          "inference": {
+            "nullCalibration": {
+              "replicates": 100
+            }
+          }
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_missing@scenario.inference.nullCalibration.analysis"
+      ]
+    },
+    {
+      "name": "a membership risk bound at or below a coin",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "population_quality",
+        "method": "population.quality",
+        "methodVersion": "1.1.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "trainingInputId": "snp_1:subject",
+          "syntheticInputId": "pop_synth@1",
+          "holdoutInputId": "snp_1:subject2",
+          "criteria": [
+            {
+              "name": "older",
+              "rule": {
+                "op": "in",
+                "column": "stage",
+                "values": [
+                  "I",
+                  "II"
+                ]
+              }
+            }
+          ],
+          "generator": {
+            "family": "synthpop_cart",
+            "m": 5,
+            "smoothing": "density",
+            "seed": 7
+          },
+          "privacy": {
+            "membershipRiskBound": 0.5
+          }
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          },
+          {
+            "kind": "snapshot_file",
+            "id": "pop_synth@1",
+            "location": "std_1/pop_synth/v1.csv",
+            "hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "valueSource": "synthetic"
+          },
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject2",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject2.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.privacy.membershipRiskBound"
+      ]
+    },
+    {
+      "name": "a survival analysis under the 1.0.0 label",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "synthesize_population",
+        "method": "population.synthpop",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "holdoutShare": 0,
+          "m": 5,
+          "constraints": [
+            {
+              "name": "age",
+              "rule": {
+                "op": "between",
+                "column": "age",
+                "low": 18,
+                "high": 100
+              }
+            }
+          ],
+          "criteria": [
+            {
+              "name": "older",
+              "rule": {
+                "op": "compare",
+                "column": "age",
+                "comparator": "gt",
+                "value": 65
+              }
+            }
+          ],
+          "analyses": [
+            {
+              "name": "hazard ratio of the arm",
+              "kind": "cox",
+              "time": "os_months",
+              "status": "death",
+              "predictors": [
+                "arm",
+                "age"
+              ],
+              "target": "arm"
+            }
+          ],
+          "tstrOutcome": "response"
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "method_version_mismatch@methodVersion"
+      ]
+    },
+    {
+      "name": "the permuted-arm calibration under the 1.0.0 label",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "synthesize_population",
+        "method": "population.synthpop",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "holdoutShare": 0,
+          "m": 5,
+          "constraints": [
+            {
+              "name": "age",
+              "rule": {
+                "op": "between",
+                "column": "age",
+                "low": 18,
+                "high": 100
+              }
+            }
+          ],
+          "criteria": [
+            {
+              "name": "older",
+              "rule": {
+                "op": "compare",
+                "column": "age",
+                "comparator": "gt",
+                "value": 65
+              }
+            }
+          ],
+          "analyses": [
+            {
+              "name": "mean age",
+              "kind": "mean",
+              "column": "age"
+            },
+            {
+              "kind": "glm",
+              "outcome": "response",
+              "predictors": [
+                "age",
+                "sex"
+              ],
+              "target": "age",
+              "family": "binomial"
+            }
+          ],
+          "tstrOutcome": "response",
+          "inference": {
+            "nullCalibration": {
+              "analysis": "x"
+            }
+          }
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "method_version_mismatch@methodVersion"
+      ]
+    },
+    {
+      "name": "the privacy measures under the 1.0.0 label",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "population_quality",
+        "method": "population.quality",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "trainingInputId": "snp_1:subject",
+          "syntheticInputId": "pop_synth@1",
+          "holdoutInputId": "snp_1:subject2",
+          "criteria": [
+            {
+              "name": "older",
+              "rule": {
+                "op": "in",
+                "column": "stage",
+                "values": [
+                  "I",
+                  "II"
+                ]
+              }
+            }
+          ],
+          "generator": {
+            "family": "synthpop_cart",
+            "m": 5,
+            "smoothing": "density",
+            "seed": 7
+          },
+          "privacy": {
+            "secrets": [
+              "sex"
+            ]
+          }
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          },
+          {
+            "kind": "snapshot_file",
+            "id": "pop_synth@1",
+            "location": "std_1/pop_synth/v1.csv",
+            "hash": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "valueSource": "synthetic"
+          },
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject2",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject2.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "method_version_mismatch@methodVersion"
       ]
     }
   ],
