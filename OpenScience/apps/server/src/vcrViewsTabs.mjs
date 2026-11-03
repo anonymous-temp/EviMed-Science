@@ -59,6 +59,7 @@ import { presentEvidenceSyntheses, tauPriorWords, vcrSuccessRatesPage } from "./
 import { presentBiasAnalysis } from "./vcrBiasAnalysis.mjs";
 import { evidenceValueFindings } from "./vcrValueChecks.mjs";
 import { presentTrim } from "./vcrTrimView.mjs";
+import { presentImputation } from "./vcrImputationView.mjs";
 import { localCalibrationView } from "./vcrLocalCalibration.mjs";
 import {
   abilitiesOf, assumptionSummary, assumptionValue, designsSentence, nodeLabel, notEstimableDesign, presentDesigns, reviewContextOf,
@@ -822,6 +823,8 @@ export function presentComparatorTab(bundle) {
     // Quantitative bias analysis (C1, C2) and who a propensity trimming left (C14): cards of the comparison, null when the result has neither.
     biasAnalysis: presentBiasAnalysis(result, value),
     trim: presentTrim(diagnostics.trim),
+    // Missing covariates that were imputed (C7): the pooled answer beside the complete-case one, and what it assumed.
+    imputation: presentImputation(result, value),
     gaps,
     counts: current ? countsView(result?.counts && Object.keys(result.counts).length ? result.counts : {}, { tier: study.dataTier }) : null,
     verdict: shown ? { conclusion: readAs } : null,

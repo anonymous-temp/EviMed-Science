@@ -393,6 +393,8 @@ export const MEASURE_META = Object.freeze({
   rmst_control: { label: "对照组 RMST" },
   survival_difference_at_tau: { label: "τ 时的生存率差", unit: "%", percent: true },
   weighted_difference: { label: "加权后的效应差" },
+  weighted_risk_ratio: { label: "加权后的相对危险度（RR）" },
+  weighted_odds_ratio: { label: "加权后的比值比（OR）" },
   effective_sample_size: { label: "有效样本量", unit: "例" },
   worst_standardized_difference: { label: "加权后最大标准化差异" },
   indirect_estimate: { label: "间接比较估计" },

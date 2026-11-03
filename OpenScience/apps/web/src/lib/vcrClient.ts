@@ -1131,6 +1131,31 @@ export interface VcrTrimCard {
   covariates: Array<{ covariate: string; treated: { kept: string; removed: string }; control: { kept: string; removed: string } }>;
 }
 
+/** What filling in the missing covariate values did to the answer, beside the answer from the complete cases alone. Every string is the server's. */
+export interface VcrImputationCard {
+  question: string;
+  sentence: string;
+  /** The premise the filled-in answer rests on (missing at random), as the server words it. */
+  assumption: string | null;
+  covariates: Array<{ name: string; missing: number; share: string; method: string }>;
+  rows: Array<{
+    key: string;
+    label: string;
+    imputed: VcrValue;
+    completeCase: VcrValue | null;
+    /** Whether the two answers reach the same conclusion; null where the server did not say. */
+    agreement: "same" | "different" | null;
+    loss: string | null;
+  }>;
+  completeCase: { rows: number; dropped: number; sentence: string } | null;
+  budget: string | null;
+  /** Said when the computation budget ended the imputation early. */
+  stopped: string | null;
+  /** Said when the number of filled-in copies is small beside the share of people with a gap. */
+  few: string | null;
+  note: string | null;
+}
+
 export interface VcrComparatorTab {
   /** 「这个结论的前提」: at most five decisive, the rest folded by the page. */
   premises?: VcrPremise[];
@@ -1183,6 +1208,8 @@ export interface VcrComparatorTab {
   biasAnalysis?: VcrBiasAnalysisCard | null;
   /** Who the propensity trimming removed and who the estimate is about: null when the result did not trim. */
   trim?: VcrTrimCard | null;
+  /** What filling in missing covariate values did to the answer: null when the result did not impute. */
+  imputation?: VcrImputationCard | null;
   /** 「不可估计」 — the gaps, and what each one would answer. */
   gaps: { title?: string | null; needs?: string | null; items: Array<{ title: string; detail?: string | null; answers?: string | null }>; conclusion?: string | null; rule?: string | null } | null;
   counts: VcrCounts | null;
@@ -2288,6 +2315,35 @@ function readTrim(raw: unknown): VcrTrimCard | null {
   };
 }
 
+/**
+ * The imputation card; without its question and sentence, and for anything of an unknown shape, there is nothing to say. A row whose
+ * filled-in value cannot be read is dropped (it would be a row with no answer), and an agreement that is not one of the two words is none.
+ */
+function readImputation(raw: unknown): VcrImputationCard | null {
+  const card = obj(raw);
+  const question = text(card.question), sentence = text(card.sentence);
+  if (!question || !sentence) return null;
+  const completeCase = obj(card.completeCase), completeSentence = text(completeCase.sentence);
+  return {
+    question, sentence, assumption: text(card.assumption),
+    covariates: arr(card.covariates).flatMap((row) => {
+      const name = text(row.name);
+      return name ? [{ name, missing: finite(row.missing) ?? 0, share: text(row.share) ?? "—", method: text(row.method) ?? "—" }] : [];
+    }),
+    rows: arr(card.rows).flatMap((row, index) => {
+      const label = text(row.label);
+      const imputed = readOptionalValue(row.imputed);
+      if (!label || !imputed || (imputed.value === null && !imputed.text)) return [];
+      return [{
+        key: text(row.key) ?? `${index}`, label, imputed, completeCase: readOptionalValue(row.completeCase),
+        agreement: row.agreement === "same" || row.agreement === "different" ? row.agreement : null, loss: text(row.loss),
+      }];
+    }),
+    completeCase: completeSentence ? { rows: finite(completeCase.rows) ?? 0, dropped: finite(completeCase.dropped) ?? 0, sentence: completeSentence } : null,
+    budget: text(card.budget), stopped: text(card.stopped), few: text(card.few), note: text(card.note),
+  };
+}
+
 function readDesignRecord(raw: unknown): NonNullable<VcrDesign["record"]> | null {
   const value = obj(raw);
   if (!Object.keys(value).length) return null;
@@ -2779,6 +2835,7 @@ export function readVcrComparator(raw: unknown): VcrComparatorTab {
     prior: arr(value.prior).map((row) => ({ key: text(row.key) ?? "", label: text(row.label) ?? "", value: readVcrValue(row.value) })),
     biasAnalysis: readBiasAnalysis(value.biasAnalysis),
     trim: readTrim(value.trim),
+    imputation: readImputation(value.imputation),
     gaps: Object.keys(gaps).length ? { ...(gaps as Loose), items: arr(gaps.items) } as VcrComparatorTab["gaps"] : null,
     counts: readVcrCounts(value.counts),
     verdict: Object.keys(verdict).length ? verdict as unknown as VcrComparatorTab["verdict"] : null,

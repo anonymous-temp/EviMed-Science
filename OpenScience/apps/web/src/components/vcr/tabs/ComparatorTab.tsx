@@ -20,6 +20,7 @@ import { Tag } from "@/components/ui/Tag";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { VcrBiasAnalysis } from "../VcrBiasAnalysis";
 import { VcrSeriesLegend, VcrSurvivalChart } from "../VcrCharts";
+import { VcrImputation } from "../VcrImputation";
 import { ConclusionChip, SourceTag } from "../VcrMarks";
 import { VcrNumber } from "../VcrNumber";
 import { VcrPremises, premiseDraft } from "../VcrPremises";
@@ -84,8 +85,8 @@ function ComparatorView({ studyId, study, data }: { studyId: string; study: VcrS
   const prior = data.prior ?? [];
   const nothing = data.curves.length === 0 && !data.rmst && !data.median && !data.gaps && !data.estimand
     && data.comparability.length === 0 && data.diagnostics.length === 0 && prior.length === 0 && data.qc.length === 0 && !data.verdict && !data.predictionBenchmark
-    // A bias analysis filed alone, and a trimming restatement, are results of the comparison.
-    && !data.biasAnalysis && !data.trim;
+    // A bias analysis filed alone, a trimming restatement and an imputation card are results of the comparison.
+    && !data.biasAnalysis && !data.trim && !data.imputation;
   // The route in view: the one the study uses until the reader presses another. On a narrow page the record replaces the list.
   const used = data.routes.find((route) => route.selected)?.route ?? data.routes[0]?.route ?? null;
   const [looking, setLooking] = useState<string | null>(null);
@@ -151,6 +152,9 @@ function ComparatorView({ studyId, study, data }: { studyId: string; study: VcrS
 
           {/* Who the estimate is about when a propensity trimming removed people: said before the premises and the diagnostics. */}
           <VcrTrimRestatement trim={data.trim} />
+
+          {/* What filling in missing covariate values did to the answer, beside the complete-case one. */}
+          <VcrImputation card={data.imputation} />
 
           {/* What the conclusion stands on, once; the comparator's own premises are listed by the server (`vcrPremises`). */}
           <VcrPremises

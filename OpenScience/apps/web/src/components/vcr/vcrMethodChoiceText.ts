@@ -138,7 +138,8 @@ const exampleLabels: Record<string, Record<string, string>> = {
   },
   "comparator.propensity_weight": {
     "propensity weights for a binary endpoint": "二分类结局的倾向评分加权",
-    "the same weights after removing the people with no comparable counterpart (Crump's rule: no bound to choose)": "去掉没有可比对象的人之后再加权（Crump 规则，不必选界值）"
+    "the same weights after removing the people with no comparable counterpart (Crump's rule: no bound to choose)": "去掉没有可比对象的人之后再加权（Crump 规则，不必选界值）",
+    "the same weights when some covariates are missing: impute them 20 times and read the answer by Rubin's rules, the complete-case answer beside it": "有协变量缺失时：补齐 20 次，按 Rubin 规则合并，旁边是只用完整病例的结果"
   },
   "comparator.rmst": {
     "restricted mean survival time to 24 months": "比较 24 个月的 RMST"
