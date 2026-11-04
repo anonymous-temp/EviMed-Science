@@ -1,0 +1,14 @@
+{
+  "inhouse": {
+    "ran": false,
+    "reason": "The configured parsing server answers /health with 200, but both document routes the platform's client calls (/api/v1/extract/text/file and /api/v1/parse/file) answer HTTP 404 with a Tornado traceback, from this machine, with no token sent and with the repo's own DocumentParserClient (source_parser_rejected, HTTP 404). No number is reported for it.",
+    "checkedOn": "2026-11-04",
+    "tokenUsed": false
+  },
+  "docling": {
+    "ran": true,
+    "version": "docling 2.146.0 on torch 2.15.0+cpu, CPU only, OCR off, layout model and TableFormer",
+    "scratch": "virtual environment 1.6 GB plus models 0.5 GB: about 2.1 GB, just over the 2 GB the brief allowed; the disk had room and it was deleted afterwards",
+    "seconds": "629 s for 20 papers on 2 threads, 10 to 127 s a paper; the one-paper trial before it took 38 s including loading the models"
+  }
+}
