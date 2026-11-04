@@ -1,0 +1,564 @@
+{
+ "schema": "vcr-km-rig/1",
+ "digitizer": {
+  "name": "evimed-km-digitizer",
+  "version": "1.0.1"
+ },
+ "reconstruction": {
+  "method": "evidence.reconstruct_km",
+  "version": "1.1.0"
+ },
+ "trials": [
+  {
+   "id": "T1",
+   "label": "exponential, 300 per arm, well separated",
+   "n": 300,
+   "axisMax": 36,
+   "riskTimes": [
+    0,
+    6,
+    12,
+    18,
+    24,
+    30
+   ],
+   "medians": [
+    11.11,
+    18.7,
+    13.16
+   ],
+   "events": [
+    245,
+    199,
+    225
+   ],
+   "logHrSample": [
+    -0.4576,
+    -0.1847
+   ],
+   "logHrPopulation": [
+    -0.4308,
+    -0.2231
+   ]
+  },
+  {
+   "id": "T2",
+   "label": "Weibull, 180 per arm, longer tail",
+   "n": 180,
+   "axisMax": 48,
+   "riskTimes": [
+    0,
+    12,
+    24,
+    36
+   ],
+   "medians": [
+    11.19,
+    13.01,
+    13.78
+   ],
+   "events": [
+    176,
+    170,
+    176
+   ],
+   "logHrSample": [
+    -0.2054,
+    -0.1468
+   ],
+   "logHrPopulation": [
+    -0.3567,
+    -0.1054
+   ]
+  },
+  {
+   "id": "T3",
+   "label": "exponential, 120 per arm, curves close together, 10% a year lost",
+   "n": 120,
+   "axisMax": 36,
+   "riskTimes": [
+    0,
+    6,
+    12,
+    18,
+    24,
+    30
+   ],
+   "medians": [
+    20.13,
+    18.61,
+    23.1
+   ],
+   "events": [
+    79,
+    72,
+    63
+   ],
+   "logHrSample": [
+    0.0901,
+    -0.2434
+   ],
+   "logHrPopulation": [
+    -0.1625,
+    -0.3567
+   ]
+  },
+  {
+   "id": "T4",
+   "label": "exponential, 60 per arm, few large steps",
+   "n": 60,
+   "axisMax": 24,
+   "riskTimes": [
+    0,
+    3,
+    6,
+    9,
+    12,
+    15,
+    18
+   ],
+   "medians": [
+    8.66,
+    15.27,
+    9.68
+   ],
+   "events": [
+    51,
+    41,
+    46
+   ],
+   "logHrSample": [
+    -0.6034,
+    -0.2539
+   ],
+   "logHrPopulation": [
+    -0.5978,
+    -0.2231
+   ]
+  },
+  {
+   "id": "T5",
+   "label": "Weibull with falling hazard, 600 per arm, many small steps",
+   "n": 600,
+   "axisMax": 60,
+   "riskTimes": [
+    0,
+    12,
+    24,
+    36,
+    48
+   ],
+   "medians": [
+    13.41,
+    16.56,
+    23.65
+   ],
+   "events": [
+    519,
+    482,
+    416
+   ],
+   "logHrSample": [
+    -0.2276,
+    -0.509
+   ],
+   "logHrPopulation": [
+    -0.2877,
+    -0.5108
+   ]
+  }
+ ],
+ "levels": {
+  "1": {
+   "riskTable": true,
+   "totalEvents": true,
+   "key": "risk_table_and_events"
+  },
+  "2": {
+   "riskTable": true,
+   "totalEvents": false,
+   "key": "risk_table"
+  },
+  "3": {
+   "riskTable": false,
+   "totalEvents": true,
+   "key": "events_only"
+  },
+  "4": {
+   "riskTable": false,
+   "totalEvents": false,
+   "key": "curve_only"
+  }
+ },
+ "checks": {
+  "pythonKmMatchesEngine": 2.220446049250313e-15,
+  "batchRunnerEqualsServiceEntry": [
+   true,
+   true,
+   true,
+   true
+  ]
+ },
+ "pooledExact": {
+  "1": {
+   "key": "risk_table_and_events",
+   "styles": 32,
+   "jobs": 161,
+   "qcFailed": 5,
+   "curveRmse": {
+    "mean": 0.005,
+    "median": 0.0042,
+    "worst": 0.0155
+   },
+   "medianRelErr": {
+    "mean": 0.0066,
+    "median": 0.0059,
+    "worst": 0.0178
+   },
+   "logHrAbsErr": {
+    "mean": 0.0067,
+    "median": 0.0049,
+    "worst": 0.0279
+   },
+   "atRiskMaePct": {
+    "mean": 0.21,
+    "median": 0.23,
+    "worst": 0.26
+   }
+  },
+  "2": {
+   "key": "risk_table",
+   "styles": 32,
+   "jobs": 161,
+   "qcFailed": 2,
+   "curveRmse": {
+    "mean": 0.005,
+    "median": 0.0037,
+    "worst": 0.0282
+   },
+   "medianRelErr": {
+    "mean": 0.0077,
+    "median": 0.0059,
+    "worst": 0.0532
+   },
+   "logHrAbsErr": {
+    "mean": 0.0197,
+    "median": 0.0161,
+    "worst": 0.0552
+   },
+   "atRiskMaePct": {
+    "mean": 0.21,
+    "median": 0.23,
+    "worst": 0.26
+   }
+  },
+  "3": {
+   "key": "events_only",
+   "styles": 32,
+   "jobs": 161,
+   "qcFailed": 0,
+   "curveRmse": {
+    "mean": 0.0083,
+    "median": 0.0067,
+    "worst": 0.0386
+   },
+   "medianRelErr": {
+    "mean": 0.0178,
+    "median": 0.014,
+    "worst": 0.0847
+   },
+   "logHrAbsErr": {
+    "mean": 0.0391,
+    "median": 0.0367,
+    "worst": 0.0675
+   },
+   "atRiskMaePct": {
+    "mean": 2.75,
+    "median": 2.76,
+    "worst": 4.28
+   }
+  },
+  "4": {
+   "key": "curve_only",
+   "styles": 32,
+   "jobs": 161,
+   "qcFailed": 0,
+   "curveRmse": {
+    "mean": 0.0048,
+    "median": 0.0036,
+    "worst": 0.0278
+   },
+   "medianRelErr": {
+    "mean": 0.0095,
+    "median": 0.0059,
+    "worst": 0.0477
+   },
+   "logHrAbsErr": {
+    "mean": null,
+    "median": null,
+    "worst": null
+   },
+   "atRiskMaePct": {
+    "mean": 2.5,
+    "median": 2.37,
+    "worst": 6.33
+   }
+  }
+ },
+ "byTrial": {
+  "T1": {
+   "1": {
+    "figures": 31,
+    "qcFailed": 1,
+    "medianRelErr": 0.0054,
+    "logHrAbsErr": 0.0061,
+    "curveRmse": 0.0036,
+    "atRiskMaePct": 0.12
+   },
+   "2": {
+    "figures": 32,
+    "qcFailed": 0,
+    "medianRelErr": 0.006,
+    "logHrAbsErr": 0.0323,
+    "curveRmse": 0.0035,
+    "atRiskMaePct": 0.12
+   },
+   "3": {
+    "figures": 32,
+    "qcFailed": 0,
+    "medianRelErr": 0.0109,
+    "logHrAbsErr": 0.0629,
+    "curveRmse": 0.0049,
+    "atRiskMaePct": 3.82
+   },
+   "4": {
+    "figures": 32,
+    "qcFailed": 0,
+    "medianRelErr": 0.0077,
+    "logHrAbsErr": null,
+    "curveRmse": 0.0034,
+    "atRiskMaePct": 2.38
+   }
+  },
+  "T2": {
+   "1": {
+    "figures": 31,
+    "qcFailed": 1,
+    "medianRelErr": 0.0091,
+    "logHrAbsErr": 0.0031,
+    "curveRmse": 0.004,
+    "atRiskMaePct": 0.12
+   },
+   "2": {
+    "figures": 32,
+    "qcFailed": 0,
+    "medianRelErr": 0.0113,
+    "logHrAbsErr": 0.0058,
+    "curveRmse": 0.005,
+    "atRiskMaePct": 0.11
+   },
+   "3": {
+    "figures": 32,
+    "qcFailed": 0,
+    "medianRelErr": 0.0124,
+    "logHrAbsErr": 0.0077,
+    "curveRmse": 0.0055,
+    "atRiskMaePct": 0.69
+   },
+   "4": {
+    "figures": 32,
+    "qcFailed": 0,
+    "medianRelErr": 0.0155,
+    "logHrAbsErr": null,
+    "curveRmse": 0.0049,
+    "atRiskMaePct": 0.72
+   }
+  },
+  "T3": {
+   "1": {
+    "figures": 33,
+    "qcFailed": 0,
+    "medianRelErr": 0.007,
+    "logHrAbsErr": 0.0085,
+    "curveRmse": 0.0051,
+    "atRiskMaePct": 0.12
+   },
+   "2": {
+    "figures": 33,
+    "qcFailed": 0,
+    "medianRelErr": 0.007,
+    "logHrAbsErr": 0.0135,
+    "curveRmse": 0.0048,
+    "atRiskMaePct": 0.12
+   },
+   "3": {
+    "figures": 33,
+    "qcFailed": 0,
+    "medianRelErr": 0.0078,
+    "logHrAbsErr": 0.0163,
+    "curveRmse": 0.0064,
+    "atRiskMaePct": 2.73
+   },
+   "4": {
+    "figures": 33,
+    "qcFailed": 0,
+    "medianRelErr": 0.0092,
+    "logHrAbsErr": null,
+    "curveRmse": 0.0049,
+    "atRiskMaePct": 6.64
+   }
+  },
+  "T4": {
+   "1": {
+    "figures": 30,
+    "qcFailed": 2,
+    "medianRelErr": 0.0028,
+    "logHrAbsErr": 0.0083,
+    "curveRmse": 0.007,
+    "atRiskMaePct": 0.65
+   },
+   "2": {
+    "figures": 30,
+    "qcFailed": 2,
+    "medianRelErr": 0.0028,
+    "logHrAbsErr": 0.037,
+    "curveRmse": 0.0062,
+    "atRiskMaePct": 0.65
+   },
+   "3": {
+    "figures": 32,
+    "qcFailed": 0,
+    "medianRelErr": 0.0233,
+    "logHrAbsErr": 0.0816,
+    "curveRmse": 0.0134,
+    "atRiskMaePct": 3.86
+   },
+   "4": {
+    "figures": 32,
+    "qcFailed": 0,
+    "medianRelErr": 0.002,
+    "logHrAbsErr": null,
+    "curveRmse": 0.0061,
+    "atRiskMaePct": 0.07
+   }
+  },
+  "T5": {
+   "1": {
+    "figures": 31,
+    "qcFailed": 1,
+    "medianRelErr": 0.0062,
+    "logHrAbsErr": 0.0037,
+    "curveRmse": 0.0027,
+    "atRiskMaePct": 0.09
+   },
+   "2": {
+    "figures": 32,
+    "qcFailed": 0,
+    "medianRelErr": 0.0088,
+    "logHrAbsErr": 0.0045,
+    "curveRmse": 0.0036,
+    "atRiskMaePct": 0.09
+   },
+   "3": {
+    "figures": 32,
+    "qcFailed": 0,
+    "medianRelErr": 0.0373,
+    "logHrAbsErr": 0.0283,
+    "curveRmse": 0.0111,
+    "atRiskMaePct": 2.63
+   },
+   "4": {
+    "figures": 32,
+    "qcFailed": 0,
+    "medianRelErr": 0.0088,
+    "logHrAbsErr": null,
+    "curveRmse": 0.0034,
+    "atRiskMaePct": 2.15
+   }
+  }
+ },
+ "styles": [
+  {"style":"base","group":"base","note":"两条曲线蓝/红，线宽 1.5，无网格，无风险表，竖线删失标记，实线，分数坐标，150 dpi，PNG，L 形坐标轴"},
+  {"style":"lw_1.0","group":"线宽","note":"线宽 1.0"},
+  {"style":"lw_2.5","group":"线宽","note":"线宽 2.5"},
+  {"style":"lw_4.0","group":"线宽","note":"线宽 4.0"},
+  {"style":"col_green_purple","group":"颜色","note":"绿/紫"},
+  {"style":"col_orange_teal","group":"颜色","note":"橙/青"},
+  {"style":"col_black_grey","group":"颜色","note":"黑/灰（黑白印刷）"},
+  {"style":"col_black_dashed","group":"颜色","note":"两条都是黑色，一实一虚（黑白印刷常见）"},
+  {"style":"grid_light","group":"网格","note":"浅灰网格"},
+  {"style":"grid_dark","group":"网格","note":"深灰网格"},
+  {"style":"risk_text","group":"风险表","note":"图下方一行行数字（无独立坐标轴）"},
+  {"style":"risk_axes","group":"风险表","note":"图下方有自己的坐标轴和边框的风险表面板"},
+  {"style":"cens_none","group":"删失标记","note":"没有删失标记"},
+  {"style":"cens_plus","group":"删失标记","note":"十字删失标记"},
+  {"style":"cens_big","group":"删失标记","note":"大号竖线删失标记"},
+  {"style":"dash_treat","group":"线型","note":"第二条曲线虚线（颜色不同）"},
+  {"style":"dash_dotted","group":"线型","note":"点线 / 点划线（颜色不同）"},
+  {"style":"arms_1","group":"组数","note":"只有一条曲线"},
+  {"style":"arms_3","group":"组数","note":"三条曲线（按两两对照组分别数字化）"},
+  {"style":"y_percent","group":"纵轴","note":"纵轴为百分数 0–100"},
+  {"style":"dpi_72","group":"分辨率与格式","note":"72 dpi（网页截图）"},
+  {"style":"dpi_100","group":"分辨率与格式","note":"100 dpi"},
+  {"style":"dpi_300","group":"分辨率与格式","note":"300 dpi（印刷）"},
+  {"style":"jpeg_q75","group":"分辨率与格式","note":"JPEG，质量 75"},
+  {"style":"jpeg_q40","group":"分辨率与格式","note":"JPEG，质量 40，100 dpi（压得很狠的网页图）"},
+  {"style":"box_axes","group":"坐标轴","note":"四边封闭的坐标框"},
+  {"style":"axes_padded","group":"坐标轴","note":"坐标轴比首末刻度各长出一截（ggplot 风格）"},
+  {"style":"ticks_in","group":"坐标轴","note":"刻度朝内"},
+  {"style":"ticks_in_padded","group":"坐标轴","note":"刻度朝内且坐标轴长出一截"},
+  {"style":"ci_band","group":"置信带","note":"曲线外有 95% 置信带阴影"},
+  {"style":"combo_journal","group":"组合","note":"黑白期刊：黑/灰，细线，十字删失，风险表，300 dpi，坐标框"},
+  {"style":"combo_web","group":"组合","note":"网页图：绿/紫，粗线，网格，72 dpi，JPEG 质量 60"},
+  {"style":"combo_survminer","group":"组合","note":"survminer 风格：黄/蓝，风险表面板，坐标轴长出一截，浅网格，十字删失"}
+ ],
+ "perStyle": [
+  {"style":"base","variant":"exact","group":"base","digitizer":{"attempts":5,"refusedFirstPass":0,"refusalReasonsFirstPass":{},"retriedWithPlotArea":0,"refusedAfterRetry":0,"refusalReasonsFinal":{},"rejectedByControlPlane":0,"warnings":{"curve_start_not_one":3},"curves":10,"rmse":0.003,"rmseMedian":0.0032,"rmseMax":0.0052,"anchorPlotArea":0,"seconds":0.27},"levels":{"1":{"key":"risk_table_and_events","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.004,"medianRelErr":0.0054,"medianRelErrBias":-0.0028,"medianAbsErrMonths":0.081,"medianNotReached":0,"logHrAbsErr":0.0049,"logHrBias":0.0014,"logHrWorst":0.0088,"logHrNotEstimable":0,"atRiskMaePatients":0.35,"atRiskMaePct":0.25,"atRiskMaxPatients":2.0,"eventsRelErr":0.0012},"2":{"key":"risk_table","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0036,"medianRelErr":0.0054,"medianRelErrBias":-0.0028,"medianAbsErrMonths":0.081,"medianNotReached":0,"logHrAbsErr":0.0161,"logHrBias":0.0101,"logHrWorst":0.0308,"logHrNotEstimable":0,"atRiskMaePatients":0.35,"atRiskMaePct":0.25,"atRiskMaxPatients":2.0,"eventsRelErr":0.0301},"3":{"key":"events_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0067,"medianRelErr":0.014,"medianRelErrBias":0.0101,"medianAbsErrMonths":0.181,"medianNotReached":0,"logHrAbsErr":0.0366,"logHrBias":0.0366,"logHrWorst":0.0816,"logHrNotEstimable":0,"atRiskMaePatients":6.7,"atRiskMaePct":2.76,"atRiskMaxPatients":35.0,"eventsRelErr":0.0},"4":{"key":"curve_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0034,"medianRelErr":0.0059,"medianRelErrBias":-0.0033,"medianAbsErrMonths":0.08,"medianNotReached":0,"logHrAbsErr":null,"logHrBias":null,"logHrWorst":null,"logHrNotEstimable":5,"atRiskMaePatients":5.74,"atRiskMaePct":2.37,"atRiskMaxPatients":61.0,"eventsRelErr":0.0877}}},
+  {"style":"lw_1.0","variant":"exact","group":"线宽","digitizer":{"attempts":5,"refusedFirstPass":0,"refusalReasonsFirstPass":{},"retriedWithPlotArea":0,"refusedAfterRetry":0,"refusalReasonsFinal":{},"rejectedByControlPlane":0,"warnings":{"curve_start_not_one":5},"curves":10,"rmse":0.0028,"rmseMedian":0.0027,"rmseMax":0.0052,"anchorPlotArea":0,"seconds":0.2},"levels":{"1":{"key":"risk_table_and_events","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0037,"medianRelErr":0.0066,"medianRelErrBias":-0.0026,"medianAbsErrMonths":0.084,"medianNotReached":0,"logHrAbsErr":0.0045,"logHrBias":0.0017,"logHrWorst":0.009,"logHrNotEstimable":0,"atRiskMaePatients":0.31,"atRiskMaePct":0.19,"atRiskMaxPatients":2.0,"eventsRelErr":0.0},"2":{"key":"risk_table","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0033,"medianRelErr":0.0066,"medianRelErrBias":-0.0026,"medianAbsErrMonths":0.084,"medianNotReached":0,"logHrAbsErr":0.016,"logHrBias":0.0106,"logHrWorst":0.0323,"logHrNotEstimable":0,"atRiskMaePatients":0.31,"atRiskMaePct":0.19,"atRiskMaxPatients":2.0,"eventsRelErr":0.0293},"3":{"key":"events_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0068,"medianRelErr":0.0147,"medianRelErrBias":0.0093,"medianAbsErrMonths":0.189,"medianNotReached":0,"logHrAbsErr":0.0393,"logHrBias":0.0393,"logHrWorst":0.0784,"logHrNotEstimable":0,"atRiskMaePatients":6.48,"atRiskMaePct":2.67,"atRiskMaxPatients":35.0,"eventsRelErr":0.0},"4":{"key":"curve_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0031,"medianRelErr":0.0063,"medianRelErrBias":-0.0028,"medianAbsErrMonths":0.081,"medianNotReached":0,"logHrAbsErr":null,"logHrBias":null,"logHrWorst":null,"logHrNotEstimable":5,"atRiskMaePatients":5.68,"atRiskMaePct":2.32,"atRiskMaxPatients":60.0,"eventsRelErr":0.0858}}},
+  {"style":"lw_2.5","variant":"exact","group":"线宽","digitizer":{"attempts":5,"refusedFirstPass":0,"refusalReasonsFirstPass":{},"retriedWithPlotArea":0,"refusedAfterRetry":0,"refusalReasonsFinal":{},"rejectedByControlPlane":0,"warnings":{"curve_start_not_one":4},"curves":10,"rmse":0.0031,"rmseMedian":0.0031,"rmseMax":0.0055,"anchorPlotArea":0,"seconds":0.21},"levels":{"1":{"key":"risk_table_and_events","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0041,"medianRelErr":0.004,"medianRelErrBias":-0.001,"medianAbsErrMonths":0.059,"medianNotReached":0,"logHrAbsErr":0.0038,"logHrBias":0.0011,"logHrWorst":0.0069,"logHrNotEstimable":0,"atRiskMaePatients":0.31,"atRiskMaePct":0.22,"atRiskMaxPatients":1.0,"eventsRelErr":0.0},"2":{"key":"risk_table","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0037,"medianRelErr":0.004,"medianRelErrBias":-0.001,"medianAbsErrMonths":0.059,"medianNotReached":0,"logHrAbsErr":0.0152,"logHrBias":0.0101,"logHrWorst":0.0322,"logHrNotEstimable":0,"atRiskMaePatients":0.31,"atRiskMaePct":0.22,"atRiskMaxPatients":1.0,"eventsRelErr":0.0295},"3":{"key":"events_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.008,"medianRelErr":0.0187,"medianRelErrBias":0.0154,"medianAbsErrMonths":0.242,"medianNotReached":0,"logHrAbsErr":0.0406,"logHrBias":0.0406,"logHrWorst":0.0854,"logHrNotEstimable":0,"atRiskMaePatients":6.62,"atRiskMaePct":2.72,"atRiskMaxPatients":37.0,"eventsRelErr":0.0},"4":{"key":"curve_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0035,"medianRelErr":0.007,"medianRelErrBias":0.0028,"medianAbsErrMonths":0.114,"medianNotReached":0,"logHrAbsErr":null,"logHrBias":null,"logHrWorst":null,"logHrNotEstimable":5,"atRiskMaePatients":5.69,"atRiskMaePct":2.32,"atRiskMaxPatients":63.0,"eventsRelErr":0.0871}}},
+  {"style":"lw_4.0","variant":"exact","group":"线宽","digitizer":{"attempts":5,"refusedFirstPass":0,"refusalReasonsFirstPass":{},"retriedWithPlotArea":0,"refusedAfterRetry":0,"refusalReasonsFinal":{},"rejectedByControlPlane":0,"warnings":{"curve_start_not_one":5},"curves":10,"rmse":0.004,"rmseMedian":0.0038,"rmseMax":0.0071,"anchorPlotArea":0,"seconds":0.21},"levels":{"1":{"key":"risk_table_and_events","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0049,"medianRelErr":0.0062,"medianRelErrBias":0.0032,"medianAbsErrMonths":0.09,"medianNotReached":0,"logHrAbsErr":0.007,"logHrBias":0.0049,"logHrWorst":0.0255,"logHrNotEstimable":0,"atRiskMaePatients":0.29,"atRiskMaePct":0.11,"atRiskMaxPatients":4.0,"eventsRelErr":0.0},"2":{"key":"risk_table","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0045,"medianRelErr":0.0062,"medianRelErrBias":0.0032,"medianAbsErrMonths":0.09,"medianNotReached":0,"logHrAbsErr":0.0189,"logHrBias":0.0147,"logHrWorst":0.0523,"logHrNotEstimable":0,"atRiskMaePatients":0.29,"atRiskMaePct":0.11,"atRiskMaxPatients":4.0,"eventsRelErr":0.0299},"3":{"key":"events_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0098,"medianRelErr":0.0274,"medianRelErrBias":0.0245,"medianAbsErrMonths":0.389,"medianNotReached":0,"logHrAbsErr":0.0488,"logHrBias":0.0488,"logHrWorst":0.0896,"logHrNotEstimable":0,"atRiskMaePatients":6.4,"atRiskMaePct":2.61,"atRiskMaxPatients":38.0,"eventsRelErr":0.0},"4":{"key":"curve_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0043,"medianRelErr":0.0067,"medianRelErrBias":0.0049,"medianAbsErrMonths":0.109,"medianNotReached":0,"logHrAbsErr":null,"logHrBias":null,"logHrWorst":null,"logHrNotEstimable":5,"atRiskMaePatients":5.7,"atRiskMaePct":2.3,"atRiskMaxPatients":63.0,"eventsRelErr":0.0852}}},
+  {"style":"col_green_purple","variant":"exact","group":"颜色","digitizer":{"attempts":5,"refusedFirstPass":0,"refusalReasonsFirstPass":{},"retriedWithPlotArea":0,"refusedAfterRetry":0,"refusalReasonsFinal":{},"rejectedByControlPlane":0,"warnings":{"curve_start_not_one":3},"curves":10,"rmse":0.003,"rmseMedian":0.0032,"rmseMax":0.0052,"anchorPlotArea":0,"seconds":0.21},"levels":{"1":{"key":"risk_table_and_events","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.004,"medianRelErr":0.0054,"medianRelErrBias":-0.0028,"medianAbsErrMonths":0.081,"medianNotReached":0,"logHrAbsErr":0.0049,"logHrBias":0.0014,"logHrWorst":0.0088,"logHrNotEstimable":0,"atRiskMaePatients":0.35,"atRiskMaePct":0.25,"atRiskMaxPatients":2.0,"eventsRelErr":0.0012},"2":{"key":"risk_table","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0036,"medianRelErr":0.0054,"medianRelErrBias":-0.0028,"medianAbsErrMonths":0.081,"medianNotReached":0,"logHrAbsErr":0.0161,"logHrBias":0.0101,"logHrWorst":0.0308,"logHrNotEstimable":0,"atRiskMaePatients":0.35,"atRiskMaePct":0.25,"atRiskMaxPatients":2.0,"eventsRelErr":0.0301},"3":{"key":"events_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0067,"medianRelErr":0.014,"medianRelErrBias":0.0101,"medianAbsErrMonths":0.181,"medianNotReached":0,"logHrAbsErr":0.036,"logHrBias":0.036,"logHrWorst":0.0816,"logHrNotEstimable":0,"atRiskMaePatients":6.67,"atRiskMaePct":2.75,"atRiskMaxPatients":36.0,"eventsRelErr":0.0},"4":{"key":"curve_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0034,"medianRelErr":0.0059,"medianRelErrBias":-0.0033,"medianAbsErrMonths":0.08,"medianNotReached":0,"logHrAbsErr":null,"logHrBias":null,"logHrWorst":null,"logHrNotEstimable":5,"atRiskMaePatients":5.74,"atRiskMaePct":2.37,"atRiskMaxPatients":61.0,"eventsRelErr":0.0877}}},
+  {"style":"col_orange_teal","variant":"exact","group":"颜色","digitizer":{"attempts":5,"refusedFirstPass":0,"refusalReasonsFirstPass":{},"retriedWithPlotArea":0,"refusedAfterRetry":0,"refusalReasonsFinal":{},"rejectedByControlPlane":0,"warnings":{"curve_start_not_one":3},"curves":10,"rmse":0.003,"rmseMedian":0.0032,"rmseMax":0.0052,"anchorPlotArea":0,"seconds":0.2},"levels":{"1":{"key":"risk_table_and_events","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.004,"medianRelErr":0.0054,"medianRelErrBias":-0.0028,"medianAbsErrMonths":0.081,"medianNotReached":0,"logHrAbsErr":0.0049,"logHrBias":0.0014,"logHrWorst":0.0088,"logHrNotEstimable":0,"atRiskMaePatients":0.35,"atRiskMaePct":0.25,"atRiskMaxPatients":2.0,"eventsRelErr":0.0012},"2":{"key":"risk_table","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0036,"medianRelErr":0.0054,"medianRelErrBias":-0.0028,"medianAbsErrMonths":0.081,"medianNotReached":0,"logHrAbsErr":0.0161,"logHrBias":0.0101,"logHrWorst":0.0308,"logHrNotEstimable":0,"atRiskMaePatients":0.35,"atRiskMaePct":0.25,"atRiskMaxPatients":2.0,"eventsRelErr":0.0301},"3":{"key":"events_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0067,"medianRelErr":0.014,"medianRelErrBias":0.0101,"medianAbsErrMonths":0.181,"medianNotReached":0,"logHrAbsErr":0.0366,"logHrBias":0.0366,"logHrWorst":0.0816,"logHrNotEstimable":0,"atRiskMaePatients":6.7,"atRiskMaePct":2.76,"atRiskMaxPatients":35.0,"eventsRelErr":0.0},"4":{"key":"curve_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0034,"medianRelErr":0.0059,"medianRelErrBias":-0.0033,"medianAbsErrMonths":0.08,"medianNotReached":0,"logHrAbsErr":null,"logHrBias":null,"logHrWorst":null,"logHrNotEstimable":5,"atRiskMaePatients":5.74,"atRiskMaePct":2.37,"atRiskMaxPatients":61.0,"eventsRelErr":0.0877}}},
+  {"style":"col_black_grey","variant":"exact","group":"颜色","digitizer":{"attempts":5,"refusedFirstPass":0,"refusalReasonsFirstPass":{},"retriedWithPlotArea":0,"refusedAfterRetry":0,"refusalReasonsFinal":{},"rejectedByControlPlane":0,"warnings":{"curve_start_not_one":2},"curves":10,"rmse":0.0032,"rmseMedian":0.0032,"rmseMax":0.0051,"anchorPlotArea":0,"seconds":0.2},"levels":{"1":{"key":"risk_table_and_events","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0042,"medianRelErr":0.0051,"medianRelErrBias":-0.0031,"medianAbsErrMonths":0.075,"medianNotReached":0,"logHrAbsErr":0.0123,"logHrBias":0.011,"logHrWorst":0.0372,"logHrNotEstimable":0,"atRiskMaePatients":0.3,"atRiskMaePct":0.24,"atRiskMaxPatients":2.0,"eventsRelErr":0.0006},"2":{"key":"risk_table","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0038,"medianRelErr":0.0051,"medianRelErrBias":-0.0031,"medianAbsErrMonths":0.075,"medianNotReached":0,"logHrAbsErr":0.0349,"logHrBias":0.0349,"logHrWorst":0.1336,"logHrNotEstimable":0,"atRiskMaePatients":0.3,"atRiskMaePct":0.24,"atRiskMaxPatients":2.0,"eventsRelErr":0.0311},"3":{"key":"events_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0062,"medianRelErr":0.0108,"medianRelErrBias":0.007,"medianAbsErrMonths":0.129,"medianNotReached":0,"logHrAbsErr":0.0621,"logHrBias":0.0621,"logHrWorst":0.1812,"logHrNotEstimable":0,"atRiskMaePatients":7.06,"atRiskMaePct":2.88,"atRiskMaxPatients":32.0,"eventsRelErr":0.0},"4":{"key":"curve_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0035,"medianRelErr":0.0056,"medianRelErrBias":-0.0027,"medianAbsErrMonths":0.075,"medianNotReached":0,"logHrAbsErr":null,"logHrBias":null,"logHrWorst":null,"logHrNotEstimable":5,"atRiskMaePatients":5.68,"atRiskMaePct":2.35,"atRiskMaxPatients":60.0,"eventsRelErr":0.0877}}},
+  {"style":"col_black_dashed","variant":"exact","group":"颜色","digitizer":{"attempts":5,"refusedFirstPass":5,"refusalReasonsFirstPass":{"colour_ambiguous":5},"retriedWithPlotArea":0,"refusedAfterRetry":5,"refusalReasonsFinal":{"colour_ambiguous":5},"rejectedByControlPlane":0,"warnings":{},"curves":0,"rmse":null,"rmseMedian":null,"rmseMax":null,"anchorPlotArea":0,"seconds":0.06},"levels":{"1":{"key":"risk_table_and_events","jobs":0,"succeeded":0,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":null,"medianRelErr":null,"medianRelErrBias":null,"medianAbsErrMonths":null,"medianNotReached":0,"logHrAbsErr":null,"logHrBias":null,"logHrWorst":null,"logHrNotEstimable":0,"atRiskMaePatients":null,"atRiskMaePct":null,"atRiskMaxPatients":null,"eventsRelErr":null},"2":{"key":"risk_table","jobs":0,"succeeded":0,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":null,"medianRelErr":null,"medianRelErrBias":null,"medianAbsErrMonths":null,"medianNotReached":0,"logHrAbsErr":null,"logHrBias":null,"logHrWorst":null,"logHrNotEstimable":0,"atRiskMaePatients":null,"atRiskMaePct":null,"atRiskMaxPatients":null,"eventsRelErr":null},"3":{"key":"events_only","jobs":0,"succeeded":0,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":null,"medianRelErr":null,"medianRelErrBias":null,"medianAbsErrMonths":null,"medianNotReached":0,"logHrAbsErr":null,"logHrBias":null,"logHrWorst":null,"logHrNotEstimable":0,"atRiskMaePatients":null,"atRiskMaePct":null,"atRiskMaxPatients":null,"eventsRelErr":null},"4":{"key":"curve_only","jobs":0,"succeeded":0,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":null,"medianRelErr":null,"medianRelErrBias":null,"medianAbsErrMonths":null,"medianNotReached":0,"logHrAbsErr":null,"logHrBias":null,"logHrWorst":null,"logHrNotEstimable":0,"atRiskMaePatients":null,"atRiskMaePct":null,"atRiskMaxPatients":null,"eventsRelErr":null}}},
+  {"style":"grid_light","variant":"exact","group":"网格","digitizer":{"attempts":5,"refusedFirstPass":0,"refusalReasonsFirstPass":{},"retriedWithPlotArea":0,"refusedAfterRetry":0,"refusalReasonsFinal":{},"rejectedByControlPlane":0,"warnings":{"curve_start_not_one":3},"curves":10,"rmse":0.003,"rmseMedian":0.0032,"rmseMax":0.0052,"anchorPlotArea":0,"seconds":0.19},"levels":{"1":{"key":"risk_table_and_events","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.004,"medianRelErr":0.0054,"medianRelErrBias":-0.0028,"medianAbsErrMonths":0.081,"medianNotReached":0,"logHrAbsErr":0.0049,"logHrBias":0.0014,"logHrWorst":0.0088,"logHrNotEstimable":0,"atRiskMaePatients":0.35,"atRiskMaePct":0.25,"atRiskMaxPatients":2.0,"eventsRelErr":0.0012},"2":{"key":"risk_table","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0036,"medianRelErr":0.0054,"medianRelErrBias":-0.0028,"medianAbsErrMonths":0.081,"medianNotReached":0,"logHrAbsErr":0.0161,"logHrBias":0.0101,"logHrWorst":0.0308,"logHrNotEstimable":0,"atRiskMaePatients":0.35,"atRiskMaePct":0.25,"atRiskMaxPatients":2.0,"eventsRelErr":0.0301},"3":{"key":"events_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0067,"medianRelErr":0.014,"medianRelErrBias":0.0101,"medianAbsErrMonths":0.181,"medianNotReached":0,"logHrAbsErr":0.0366,"logHrBias":0.0366,"logHrWorst":0.0816,"logHrNotEstimable":0,"atRiskMaePatients":6.7,"atRiskMaePct":2.76,"atRiskMaxPatients":35.0,"eventsRelErr":0.0},"4":{"key":"curve_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0034,"medianRelErr":0.0059,"medianRelErrBias":-0.0033,"medianAbsErrMonths":0.08,"medianNotReached":0,"logHrAbsErr":null,"logHrBias":null,"logHrWorst":null,"logHrNotEstimable":5,"atRiskMaePatients":5.74,"atRiskMaePct":2.37,"atRiskMaxPatients":61.0,"eventsRelErr":0.0877}}},
+  {"style":"grid_dark","variant":"exact","group":"网格","digitizer":{"attempts":5,"refusedFirstPass":0,"refusalReasonsFirstPass":{},"retriedWithPlotArea":0,"refusedAfterRetry":0,"refusalReasonsFinal":{},"rejectedByControlPlane":0,"warnings":{"curve_start_not_one":3},"curves":10,"rmse":0.003,"rmseMedian":0.0032,"rmseMax":0.0052,"anchorPlotArea":0,"seconds":0.19},"levels":{"1":{"key":"risk_table_and_events","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.004,"medianRelErr":0.0054,"medianRelErrBias":-0.0028,"medianAbsErrMonths":0.081,"medianNotReached":0,"logHrAbsErr":0.0049,"logHrBias":0.0014,"logHrWorst":0.0088,"logHrNotEstimable":0,"atRiskMaePatients":0.33,"atRiskMaePct":0.24,"atRiskMaxPatients":2.0,"eventsRelErr":0.0012},"2":{"key":"risk_table","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0036,"medianRelErr":0.0054,"medianRelErrBias":-0.0028,"medianAbsErrMonths":0.081,"medianNotReached":0,"logHrAbsErr":0.0161,"logHrBias":0.0101,"logHrWorst":0.0308,"logHrNotEstimable":0,"atRiskMaePatients":0.33,"atRiskMaePct":0.24,"atRiskMaxPatients":2.0,"eventsRelErr":0.0301},"3":{"key":"events_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0067,"medianRelErr":0.014,"medianRelErrBias":0.0101,"medianAbsErrMonths":0.181,"medianNotReached":0,"logHrAbsErr":0.0365,"logHrBias":0.0365,"logHrWorst":0.0816,"logHrNotEstimable":0,"atRiskMaePatients":6.75,"atRiskMaePct":2.76,"atRiskMaxPatients":35.0,"eventsRelErr":0.0},"4":{"key":"curve_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0034,"medianRelErr":0.0059,"medianRelErrBias":-0.0033,"medianAbsErrMonths":0.08,"medianNotReached":0,"logHrAbsErr":null,"logHrBias":null,"logHrWorst":null,"logHrNotEstimable":5,"atRiskMaePatients":5.74,"atRiskMaePct":2.37,"atRiskMaxPatients":61.0,"eventsRelErr":0.0877}}},
+  {"style":"risk_text","variant":"exact","group":"风险表","digitizer":{"attempts":5,"refusedFirstPass":0,"refusalReasonsFirstPass":{},"retriedWithPlotArea":0,"refusedAfterRetry":0,"refusalReasonsFinal":{},"rejectedByControlPlane":0,"warnings":{"curve_start_not_one":3},"curves":10,"rmse":0.0038,"rmseMedian":0.0034,"rmseMax":0.0061,"anchorPlotArea":0,"seconds":0.17},"levels":{"1":{"key":"risk_table_and_events","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0046,"medianRelErr":0.0065,"medianRelErrBias":-0.0028,"medianAbsErrMonths":0.103,"medianNotReached":0,"logHrAbsErr":0.0041,"logHrBias":0.0012,"logHrWorst":0.0072,"logHrNotEstimable":0,"atRiskMaePatients":0.22,"atRiskMaePct":0.2,"atRiskMaxPatients":1.0,"eventsRelErr":0.0006},"2":{"key":"risk_table","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0043,"medianRelErr":0.0065,"medianRelErrBias":-0.0028,"medianAbsErrMonths":0.103,"medianNotReached":0,"logHrAbsErr":0.0144,"logHrBias":0.0124,"logHrWorst":0.0316,"logHrNotEstimable":0,"atRiskMaePatients":0.22,"atRiskMaePct":0.2,"atRiskMaxPatients":1.0,"eventsRelErr":0.0274},"3":{"key":"events_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0073,"medianRelErr":0.0147,"medianRelErrBias":0.0101,"medianAbsErrMonths":0.192,"medianNotReached":0,"logHrAbsErr":0.0382,"logHrBias":0.0382,"logHrWorst":0.082,"logHrNotEstimable":0,"atRiskMaePatients":6.57,"atRiskMaePct":2.71,"atRiskMaxPatients":35.0,"eventsRelErr":0.0},"4":{"key":"curve_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0041,"medianRelErr":0.013,"medianRelErrBias":0.0066,"medianAbsErrMonths":0.222,"medianNotReached":0,"logHrAbsErr":null,"logHrBias":null,"logHrWorst":null,"logHrNotEstimable":5,"atRiskMaePatients":5.77,"atRiskMaePct":2.37,"atRiskMaxPatients":61.0,"eventsRelErr":0.0858}}},
+  {"style":"risk_axes","variant":"exact","group":"风险表","digitizer":{"attempts":5,"refusedFirstPass":0,"refusalReasonsFirstPass":{},"retriedWithPlotArea":0,"refusedAfterRetry":0,"refusalReasonsFinal":{},"rejectedByControlPlane":0,"warnings":{"curve_start_not_one":3},"curves":10,"rmse":0.0037,"rmseMedian":0.0034,"rmseMax":0.0061,"anchorPlotArea":0,"seconds":0.17},"levels":{"1":{"key":"risk_table_and_events","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0044,"medianRelErr":0.0061,"medianRelErrBias":-0.0033,"medianAbsErrMonths":0.095,"medianNotReached":0,"logHrAbsErr":0.0035,"logHrBias":0.0009,"logHrWorst":0.0066,"logHrNotEstimable":0,"atRiskMaePatients":0.31,"atRiskMaePct":0.23,"atRiskMaxPatients":2.0,"eventsRelErr":0.0006},"2":{"key":"risk_table","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0041,"medianRelErr":0.0061,"medianRelErrBias":-0.0033,"medianAbsErrMonths":0.095,"medianNotReached":0,"logHrAbsErr":0.0148,"logHrBias":0.0125,"logHrWorst":0.0306,"logHrNotEstimable":0,"atRiskMaePatients":0.31,"atRiskMaePct":0.23,"atRiskMaxPatients":2.0,"eventsRelErr":0.0276},"3":{"key":"events_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0072,"medianRelErr":0.0147,"medianRelErrBias":0.0101,"medianAbsErrMonths":0.192,"medianNotReached":0,"logHrAbsErr":0.0373,"logHrBias":0.0373,"logHrWorst":0.0817,"logHrNotEstimable":0,"atRiskMaePatients":6.65,"atRiskMaePct":2.72,"atRiskMaxPatients":35.0,"eventsRelErr":0.0},"4":{"key":"curve_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.004,"medianRelErr":0.0139,"medianRelErrBias":0.0057,"medianAbsErrMonths":0.233,"medianNotReached":0,"logHrAbsErr":null,"logHrBias":null,"logHrWorst":null,"logHrNotEstimable":5,"atRiskMaePatients":5.73,"atRiskMaePct":2.36,"atRiskMaxPatients":61.0,"eventsRelErr":0.0852}}},
+  {"style":"cens_none","variant":"exact","group":"删失标记","digitizer":{"attempts":5,"refusedFirstPass":0,"refusalReasonsFirstPass":{},"retriedWithPlotArea":0,"refusedAfterRetry":0,"refusalReasonsFinal":{},"rejectedByControlPlane":0,"warnings":{"curve_start_not_one":3},"curves":10,"rmse":0.0031,"rmseMedian":0.0031,"rmseMax":0.0051,"anchorPlotArea":0,"seconds":0.21},"levels":{"1":{"key":"risk_table_and_events","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0044,"medianRelErr":0.0048,"medianRelErrBias":-0.0021,"medianAbsErrMonths":0.074,"medianNotReached":0,"logHrAbsErr":0.0043,"logHrBias":-0.0012,"logHrWorst":0.0108,"logHrNotEstimable":0,"atRiskMaePatients":0.35,"atRiskMaePct":0.25,"atRiskMaxPatients":2.0,"eventsRelErr":0.0012},"2":{"key":"risk_table","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0037,"medianRelErr":0.0048,"medianRelErrBias":-0.0021,"medianAbsErrMonths":0.074,"medianNotReached":0,"logHrAbsErr":0.0167,"logHrBias":0.0105,"logHrWorst":0.0325,"logHrNotEstimable":0,"atRiskMaePatients":0.35,"atRiskMaePct":0.25,"atRiskMaxPatients":2.0,"eventsRelErr":0.0302},"3":{"key":"events_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0067,"medianRelErr":0.0135,"medianRelErrBias":0.0094,"medianAbsErrMonths":0.173,"medianNotReached":0,"logHrAbsErr":0.0366,"logHrBias":0.0366,"logHrWorst":0.0816,"logHrNotEstimable":0,"atRiskMaePatients":6.68,"atRiskMaePct":2.75,"atRiskMaxPatients":35.0,"eventsRelErr":0.0},"4":{"key":"curve_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0034,"medianRelErr":0.0044,"medianRelErrBias":-0.0027,"medianAbsErrMonths":0.059,"medianNotReached":0,"logHrAbsErr":null,"logHrBias":null,"logHrWorst":null,"logHrNotEstimable":5,"atRiskMaePatients":5.74,"atRiskMaePct":2.37,"atRiskMaxPatients":61.0,"eventsRelErr":0.0877}}},
+  {"style":"cens_plus","variant":"exact","group":"删失标记","digitizer":{"attempts":5,"refusedFirstPass":0,"refusalReasonsFirstPass":{},"retriedWithPlotArea":0,"refusedAfterRetry":0,"refusalReasonsFinal":{},"rejectedByControlPlane":0,"warnings":{"curve_start_not_one":3},"curves":10,"rmse":0.0032,"rmseMedian":0.0033,"rmseMax":0.0052,"anchorPlotArea":0,"seconds":0.2},"levels":{"1":{"key":"risk_table_and_events","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0041,"medianRelErr":0.004,"medianRelErrBias":-0.0015,"medianAbsErrMonths":0.054,"medianNotReached":0,"logHrAbsErr":0.0049,"logHrBias":0.0012,"logHrWorst":0.009,"logHrNotEstimable":0,"atRiskMaePatients":0.42,"atRiskMaePct":0.26,"atRiskMaxPatients":2.0,"eventsRelErr":0.0012},"2":{"key":"risk_table","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0037,"medianRelErr":0.004,"medianRelErrBias":-0.0015,"medianAbsErrMonths":0.054,"medianNotReached":0,"logHrAbsErr":0.0159,"logHrBias":0.0105,"logHrWorst":0.0312,"logHrNotEstimable":0,"atRiskMaePatients":0.42,"atRiskMaePct":0.26,"atRiskMaxPatients":2.0,"eventsRelErr":0.0301},"3":{"key":"events_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0068,"medianRelErr":0.014,"medianRelErrBias":0.0101,"medianAbsErrMonths":0.181,"medianNotReached":0,"logHrAbsErr":0.0363,"logHrBias":0.0363,"logHrWorst":0.0816,"logHrNotEstimable":0,"atRiskMaePatients":6.72,"atRiskMaePct":2.75,"atRiskMaxPatients":35.0,"eventsRelErr":0.0},"4":{"key":"curve_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0036,"medianRelErr":0.0059,"medianRelErrBias":-0.0033,"medianAbsErrMonths":0.08,"medianNotReached":0,"logHrAbsErr":null,"logHrBias":null,"logHrWorst":null,"logHrNotEstimable":5,"atRiskMaePatients":5.78,"atRiskMaePct":2.37,"atRiskMaxPatients":61.0,"eventsRelErr":0.0877}}},
+  {"style":"cens_big","variant":"exact","group":"删失标记","digitizer":{"attempts":5,"refusedFirstPass":0,"refusalReasonsFirstPass":{},"retriedWithPlotArea":0,"refusedAfterRetry":0,"refusalReasonsFinal":{},"rejectedByControlPlane":0,"warnings":{"curve_start_not_one":4},"curves":10,"rmse":0.0031,"rmseMedian":0.0032,"rmseMax":0.0052,"anchorPlotArea":0,"seconds":0.2},"levels":{"1":{"key":"risk_table_and_events","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.004,"medianRelErr":0.006,"medianRelErrBias":-0.0035,"medianAbsErrMonths":0.095,"medianNotReached":0,"logHrAbsErr":0.0052,"logHrBias":0.0011,"logHrWorst":0.0102,"logHrNotEstimable":0,"atRiskMaePatients":0.35,"atRiskMaePct":0.25,"atRiskMaxPatients":2.0,"eventsRelErr":0.0012},"2":{"key":"risk_table","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0036,"medianRelErr":0.006,"medianRelErrBias":-0.0035,"medianAbsErrMonths":0.095,"medianNotReached":0,"logHrAbsErr":0.0163,"logHrBias":0.0098,"logHrWorst":0.0308,"logHrNotEstimable":0,"atRiskMaePatients":0.35,"atRiskMaePct":0.25,"atRiskMaxPatients":2.0,"eventsRelErr":0.0301},"3":{"key":"events_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0069,"medianRelErr":0.014,"medianRelErrBias":0.0101,"medianAbsErrMonths":0.181,"medianNotReached":0,"logHrAbsErr":0.0386,"logHrBias":0.0386,"logHrWorst":0.0816,"logHrNotEstimable":0,"atRiskMaePatients":6.68,"atRiskMaePct":2.74,"atRiskMaxPatients":35.0,"eventsRelErr":0.0},"4":{"key":"curve_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0034,"medianRelErr":0.0059,"medianRelErrBias":-0.0033,"medianAbsErrMonths":0.08,"medianNotReached":0,"logHrAbsErr":null,"logHrBias":null,"logHrWorst":null,"logHrNotEstimable":5,"atRiskMaePatients":5.71,"atRiskMaePct":2.37,"atRiskMaxPatients":60.0,"eventsRelErr":0.0877}}},
+  {"style":"dash_treat","variant":"exact","group":"线型","digitizer":{"attempts":5,"refusedFirstPass":0,"refusalReasonsFirstPass":{},"retriedWithPlotArea":0,"refusedAfterRetry":0,"refusalReasonsFinal":{},"rejectedByControlPlane":0,"warnings":{"curve_start_not_one":3},"curves":10,"rmse":0.0039,"rmseMedian":0.0033,"rmseMax":0.0087,"anchorPlotArea":0,"seconds":0.19},"levels":{"1":{"key":"risk_table_and_events","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0047,"medianRelErr":0.0074,"medianRelErrBias":-0.0056,"medianAbsErrMonths":0.113,"medianNotReached":0,"logHrAbsErr":0.0057,"logHrBias":0.0015,"logHrWorst":0.0106,"logHrNotEstimable":0,"atRiskMaePatients":0.35,"atRiskMaePct":0.15,"atRiskMaxPatients":3.0,"eventsRelErr":0.0},"2":{"key":"risk_table","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0043,"medianRelErr":0.0074,"medianRelErrBias":-0.0056,"medianAbsErrMonths":0.113,"medianNotReached":0,"logHrAbsErr":0.0141,"logHrBias":0.0071,"logHrWorst":0.029,"logHrNotEstimable":0,"atRiskMaePatients":0.35,"atRiskMaePct":0.15,"atRiskMaxPatients":3.0,"eventsRelErr":0.0318},"3":{"key":"events_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.005,"medianRelErr":0.0089,"medianRelErrBias":0.0058,"medianAbsErrMonths":0.142,"medianNotReached":0,"logHrAbsErr":0.0202,"logHrBias":0.0202,"logHrWorst":0.0619,"logHrNotEstimable":0,"atRiskMaePatients":6.93,"atRiskMaePct":2.79,"atRiskMaxPatients":34.0,"eventsRelErr":0.0},"4":{"key":"curve_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0042,"medianRelErr":0.0076,"medianRelErrBias":-0.0011,"medianAbsErrMonths":0.113,"medianNotReached":0,"logHrAbsErr":null,"logHrBias":null,"logHrWorst":null,"logHrNotEstimable":5,"atRiskMaePatients":5.65,"atRiskMaePct":2.31,"atRiskMaxPatients":60.0,"eventsRelErr":0.0877}}},
+  {"style":"dash_dotted","variant":"exact","group":"线型","digitizer":{"attempts":5,"refusedFirstPass":0,"refusalReasonsFirstPass":{},"retriedWithPlotArea":0,"refusedAfterRetry":0,"refusalReasonsFinal":{},"rejectedByControlPlane":0,"warnings":{"curve_start_not_one":3},"curves":10,"rmse":0.004,"rmseMedian":0.0036,"rmseMax":0.0099,"anchorPlotArea":0,"seconds":0.19},"levels":{"1":{"key":"risk_table_and_events","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.005,"medianRelErr":0.0069,"medianRelErrBias":-0.0041,"medianAbsErrMonths":0.108,"medianNotReached":0,"logHrAbsErr":0.0074,"logHrBias":0.0014,"logHrWorst":0.0158,"logHrNotEstimable":0,"atRiskMaePatients":0.46,"atRiskMaePct":0.22,"atRiskMaxPatients":4.0,"eventsRelErr":0.0},"2":{"key":"risk_table","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0045,"medianRelErr":0.0069,"medianRelErrBias":-0.0041,"medianAbsErrMonths":0.108,"medianNotReached":0,"logHrAbsErr":0.0164,"logHrBias":0.0099,"logHrWorst":0.0321,"logHrNotEstimable":0,"atRiskMaePatients":0.46,"atRiskMaePct":0.22,"atRiskMaxPatients":4.0,"eventsRelErr":0.0303},"3":{"key":"events_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0054,"medianRelErr":0.009,"medianRelErrBias":0.0044,"medianAbsErrMonths":0.137,"medianNotReached":0,"logHrAbsErr":0.0205,"logHrBias":0.0189,"logHrWorst":0.069,"logHrNotEstimable":0,"atRiskMaePatients":6.87,"atRiskMaePct":2.77,"atRiskMaxPatients":36.0,"eventsRelErr":0.0},"4":{"key":"curve_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0043,"medianRelErr":0.0075,"medianRelErrBias":-0.0001,"medianAbsErrMonths":0.113,"medianNotReached":0,"logHrAbsErr":null,"logHrBias":null,"logHrWorst":null,"logHrNotEstimable":5,"atRiskMaePatients":5.65,"atRiskMaePct":2.33,"atRiskMaxPatients":60.0,"eventsRelErr":0.0877}}},
+  {"style":"arms_1","variant":"exact","group":"组数","digitizer":{"attempts":5,"refusedFirstPass":0,"refusalReasonsFirstPass":{},"retriedWithPlotArea":0,"refusedAfterRetry":0,"refusalReasonsFinal":{},"rejectedByControlPlane":0,"warnings":{"curve_start_not_one":1},"curves":5,"rmse":0.0028,"rmseMedian":0.0029,"rmseMax":0.004,"anchorPlotArea":0,"seconds":0.13},"levels":{"1":{"key":"risk_table_and_events","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0037,"medianRelErr":0.0077,"medianRelErrBias":-0.0063,"medianAbsErrMonths":0.124,"medianNotReached":0,"logHrAbsErr":null,"logHrBias":null,"logHrWorst":null,"logHrNotEstimable":0,"atRiskMaePatients":0.25,"atRiskMaePct":0.19,"atRiskMaxPatients":2.0,"eventsRelErr":0.0},"2":{"key":"risk_table","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0033,"medianRelErr":0.0077,"medianRelErrBias":-0.0063,"medianAbsErrMonths":0.124,"medianNotReached":0,"logHrAbsErr":null,"logHrBias":null,"logHrWorst":null,"logHrNotEstimable":0,"atRiskMaePatients":0.25,"atRiskMaePct":0.19,"atRiskMaxPatients":2.0,"eventsRelErr":0.0125},"3":{"key":"events_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0051,"medianRelErr":0.0058,"medianRelErrBias":0.003,"medianAbsErrMonths":0.073,"medianNotReached":0,"logHrAbsErr":null,"logHrBias":null,"logHrWorst":null,"logHrNotEstimable":0,"atRiskMaePatients":4.09,"atRiskMaePct":1.48,"atRiskMaxPatients":23.0,"eventsRelErr":0.0},"4":{"key":"curve_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0031,"medianRelErr":0.0036,"medianRelErrBias":-0.0023,"medianAbsErrMonths":0.043,"medianNotReached":0,"logHrAbsErr":null,"logHrBias":null,"logHrWorst":null,"logHrNotEstimable":0,"atRiskMaePatients":3.78,"atRiskMaePct":1.46,"atRiskMaxPatients":37.0,"eventsRelErr":0.0413}}},
+  {"style":"arms_3","variant":"exact","group":"组数","digitizer":{"attempts":10,"refusedFirstPass":0,"refusalReasonsFirstPass":{},"retriedWithPlotArea":0,"refusedAfterRetry":0,"refusalReasonsFinal":{},"rejectedByControlPlane":0,"warnings":{"curve_start_not_one":9},"curves":20,"rmse":0.0032,"rmseMedian":0.0032,"rmseMax":0.0064,"anchorPlotArea":0,"seconds":0.2},"levels":{"1":{"key":"risk_table_and_events","jobs":10,"succeeded":10,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0041,"medianRelErr":0.0042,"medianRelErrBias":-0.0025,"medianAbsErrMonths":0.066,"medianNotReached":0,"logHrAbsErr":0.0057,"logHrBias":-0.0011,"logHrWorst":0.0132,"logHrNotEstimable":0,"atRiskMaePatients":0.38,"atRiskMaePct":0.24,"atRiskMaxPatients":2.0,"eventsRelErr":0.0},"2":{"key":"risk_table","jobs":10,"succeeded":10,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0039,"medianRelErr":0.0042,"medianRelErrBias":-0.0025,"medianAbsErrMonths":0.066,"medianNotReached":0,"logHrAbsErr":0.0105,"logHrBias":0.0049,"logHrWorst":0.0321,"logHrNotEstimable":0,"atRiskMaePatients":0.38,"atRiskMaePct":0.24,"atRiskMaxPatients":2.0,"eventsRelErr":0.0217},"3":{"key":"events_only","jobs":10,"succeeded":10,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0083,"medianRelErr":0.0204,"medianRelErrBias":0.0138,"medianAbsErrMonths":0.282,"medianNotReached":0,"logHrAbsErr":0.0351,"logHrBias":0.0258,"logHrWorst":0.083,"logHrNotEstimable":0,"atRiskMaePatients":6.29,"atRiskMaePct":2.35,"atRiskMaxPatients":55.0,"eventsRelErr":0.0},"4":{"key":"curve_only","jobs":10,"succeeded":10,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0036,"medianRelErr":0.0042,"medianRelErrBias":-0.0025,"medianAbsErrMonths":0.056,"medianNotReached":0,"logHrAbsErr":null,"logHrBias":null,"logHrWorst":null,"logHrNotEstimable":10,"atRiskMaePatients":5.75,"atRiskMaePct":2.28,"atRiskMaxPatients":82.0,"eventsRelErr":0.0719}}},
+  {"style":"y_percent","variant":"exact","group":"纵轴","digitizer":{"attempts":5,"refusedFirstPass":0,"refusalReasonsFirstPass":{},"retriedWithPlotArea":0,"refusedAfterRetry":0,"refusalReasonsFinal":{},"rejectedByControlPlane":0,"warnings":{"curve_start_not_one":3},"curves":10,"rmse":0.003,"rmseMedian":0.0032,"rmseMax":0.0052,"anchorPlotArea":0,"seconds":0.2},"levels":{"1":{"key":"risk_table_and_events","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.004,"medianRelErr":0.0054,"medianRelErrBias":-0.0028,"medianAbsErrMonths":0.081,"medianNotReached":0,"logHrAbsErr":0.0049,"logHrBias":0.0014,"logHrWorst":0.0088,"logHrNotEstimable":0,"atRiskMaePatients":0.35,"atRiskMaePct":0.25,"atRiskMaxPatients":2.0,"eventsRelErr":0.0012},"2":{"key":"risk_table","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0036,"medianRelErr":0.0054,"medianRelErrBias":-0.0028,"medianAbsErrMonths":0.081,"medianNotReached":0,"logHrAbsErr":0.0161,"logHrBias":0.0101,"logHrWorst":0.0308,"logHrNotEstimable":0,"atRiskMaePatients":0.35,"atRiskMaePct":0.25,"atRiskMaxPatients":2.0,"eventsRelErr":0.0301},"3":{"key":"events_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0067,"medianRelErr":0.014,"medianRelErrBias":0.0101,"medianAbsErrMonths":0.181,"medianNotReached":0,"logHrAbsErr":0.0366,"logHrBias":0.0366,"logHrWorst":0.0816,"logHrNotEstimable":0,"atRiskMaePatients":6.7,"atRiskMaePct":2.76,"atRiskMaxPatients":35.0,"eventsRelErr":0.0},"4":{"key":"curve_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0034,"medianRelErr":0.0059,"medianRelErrBias":-0.0033,"medianAbsErrMonths":0.08,"medianNotReached":0,"logHrAbsErr":null,"logHrBias":null,"logHrWorst":null,"logHrNotEstimable":5,"atRiskMaePatients":5.74,"atRiskMaePct":2.37,"atRiskMaxPatients":61.0,"eventsRelErr":0.0877}}},
+  {"style":"dpi_72","variant":"exact","group":"分辨率与格式","digitizer":{"attempts":5,"refusedFirstPass":0,"refusalReasonsFirstPass":{},"retriedWithPlotArea":0,"refusedAfterRetry":0,"refusalReasonsFinal":{},"rejectedByControlPlane":0,"warnings":{"curve_start_not_one":7},"curves":10,"rmse":0.0047,"rmseMedian":0.0045,"rmseMax":0.0063,"anchorPlotArea":0,"seconds":0.05},"levels":{"1":{"key":"risk_table_and_events","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0055,"medianRelErr":0.0124,"medianRelErrBias":0.0059,"medianAbsErrMonths":0.163,"medianNotReached":0,"logHrAbsErr":0.0063,"logHrBias":0.0031,"logHrWorst":0.0122,"logHrNotEstimable":0,"atRiskMaePatients":0.13,"atRiskMaePct":0.14,"atRiskMaxPatients":1.0,"eventsRelErr":0.0014},"2":{"key":"risk_table","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0052,"medianRelErr":0.0124,"medianRelErrBias":0.0059,"medianAbsErrMonths":0.163,"medianNotReached":0,"logHrAbsErr":0.0162,"logHrBias":0.0127,"logHrWorst":0.0331,"logHrNotEstimable":0,"atRiskMaePatients":0.13,"atRiskMaePct":0.14,"atRiskMaxPatients":1.0,"eventsRelErr":0.0272},"3":{"key":"events_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0123,"medianRelErr":0.0391,"medianRelErrBias":0.0378,"medianAbsErrMonths":0.598,"medianNotReached":0,"logHrAbsErr":0.0483,"logHrBias":0.0483,"logHrWorst":0.0875,"logHrNotEstimable":0,"atRiskMaePatients":6.1,"atRiskMaePct":2.43,"atRiskMaxPatients":45.0,"eventsRelErr":0.0},"4":{"key":"curve_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0049,"medianRelErr":0.0142,"medianRelErrBias":0.0077,"medianAbsErrMonths":0.248,"medianNotReached":0,"logHrAbsErr":null,"logHrBias":null,"logHrWorst":null,"logHrNotEstimable":5,"atRiskMaePatients":6.23,"atRiskMaePct":2.46,"atRiskMaxPatients":67.0,"eventsRelErr":0.0806}}},
+  {"style":"dpi_100","variant":"exact","group":"分辨率与格式","digitizer":{"attempts":5,"refusedFirstPass":0,"refusalReasonsFirstPass":{},"retriedWithPlotArea":0,"refusedAfterRetry":0,"refusalReasonsFinal":{},"rejectedByControlPlane":0,"warnings":{"curve_start_not_one":5},"curves":10,"rmse":0.0039,"rmseMedian":0.0039,"rmseMax":0.0057,"anchorPlotArea":0,"seconds":0.09},"levels":{"1":{"key":"risk_table_and_events","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0047,"medianRelErr":0.0058,"medianRelErrBias":0.0012,"medianAbsErrMonths":0.083,"medianNotReached":0,"logHrAbsErr":0.0061,"logHrBias":0.0037,"logHrWorst":0.0115,"logHrNotEstimable":0,"atRiskMaePatients":0.29,"atRiskMaePct":0.22,"atRiskMaxPatients":2.0,"eventsRelErr":0.0022},"2":{"key":"risk_table","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0044,"medianRelErr":0.0058,"medianRelErrBias":0.0012,"medianAbsErrMonths":0.083,"medianNotReached":0,"logHrAbsErr":0.0157,"logHrBias":0.0141,"logHrWorst":0.0326,"logHrNotEstimable":0,"atRiskMaePatients":0.29,"atRiskMaePct":0.22,"atRiskMaxPatients":2.0,"eventsRelErr":0.0287},"3":{"key":"events_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0087,"medianRelErr":0.0225,"medianRelErrBias":0.0182,"medianAbsErrMonths":0.306,"medianNotReached":0,"logHrAbsErr":0.0418,"logHrBias":0.0418,"logHrWorst":0.0884,"logHrNotEstimable":0,"atRiskMaePatients":6.24,"atRiskMaePct":2.57,"atRiskMaxPatients":38.0,"eventsRelErr":0.0},"4":{"key":"curve_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0042,"medianRelErr":0.0127,"medianRelErrBias":0.0048,"medianAbsErrMonths":0.213,"medianNotReached":0,"logHrAbsErr":null,"logHrBias":null,"logHrWorst":null,"logHrNotEstimable":5,"atRiskMaePatients":6.08,"atRiskMaePct":2.48,"atRiskMaxPatients":61.0,"eventsRelErr":0.0832}}},
+  {"style":"dpi_300","variant":"exact","group":"分辨率与格式","digitizer":{"attempts":5,"refusedFirstPass":0,"refusalReasonsFirstPass":{},"retriedWithPlotArea":0,"refusedAfterRetry":0,"refusalReasonsFinal":{},"rejectedByControlPlane":0,"warnings":{"curve_start_not_one":2},"curves":10,"rmse":0.003,"rmseMedian":0.0029,"rmseMax":0.0055,"anchorPlotArea":0,"seconds":1.08},"levels":{"1":{"key":"risk_table_and_events","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0039,"medianRelErr":0.0056,"medianRelErrBias":-0.0042,"medianAbsErrMonths":0.073,"medianNotReached":0,"logHrAbsErr":0.0042,"logHrBias":0.0017,"logHrWorst":0.0063,"logHrNotEstimable":0,"atRiskMaePatients":0.24,"atRiskMaePct":0.18,"atRiskMaxPatients":1.0,"eventsRelErr":0.0},"2":{"key":"risk_table","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0035,"medianRelErr":0.0056,"medianRelErrBias":-0.0042,"medianAbsErrMonths":0.073,"medianNotReached":0,"logHrAbsErr":0.0151,"logHrBias":0.0107,"logHrWorst":0.031,"logHrNotEstimable":0,"atRiskMaePatients":0.24,"atRiskMaePct":0.18,"atRiskMaxPatients":1.0,"eventsRelErr":0.0297},"3":{"key":"events_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0059,"medianRelErr":0.0171,"medianRelErrBias":0.0101,"medianAbsErrMonths":0.223,"medianNotReached":0,"logHrAbsErr":0.0414,"logHrBias":0.0414,"logHrWorst":0.0926,"logHrNotEstimable":0,"atRiskMaePatients":6.85,"atRiskMaePct":2.73,"atRiskMaxPatients":34.0,"eventsRelErr":0.0},"4":{"key":"curve_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0034,"medianRelErr":0.0063,"medianRelErrBias":-0.0043,"medianAbsErrMonths":0.082,"medianNotReached":0,"logHrAbsErr":null,"logHrBias":null,"logHrWorst":null,"logHrNotEstimable":5,"atRiskMaePatients":5.67,"atRiskMaePct":2.3,"atRiskMaxPatients":61.0,"eventsRelErr":0.0862}}},
+  {"style":"jpeg_q75","variant":"exact","group":"分辨率与格式","digitizer":{"attempts":5,"refusedFirstPass":0,"refusalReasonsFirstPass":{},"retriedWithPlotArea":0,"refusedAfterRetry":0,"refusalReasonsFinal":{},"rejectedByControlPlane":0,"warnings":{"curve_start_not_one":5},"curves":10,"rmse":0.0044,"rmseMedian":0.0035,"rmseMax":0.012,"anchorPlotArea":0,"seconds":0.21},"levels":{"1":{"key":"risk_table_and_events","jobs":5,"succeeded":4,"qcFailed":1,"failed":0,"qcFailedChecks":{"numbers at risk":1},"curveRmse":0.0054,"medianRelErr":0.0062,"medianRelErrBias":-0.0038,"medianAbsErrMonths":0.08,"medianNotReached":0,"logHrAbsErr":0.0035,"logHrBias":0.0035,"logHrWorst":0.006,"logHrNotEstimable":0,"atRiskMaePatients":0.53,"atRiskMaePct":0.22,"atRiskMaxPatients":2.0,"eventsRelErr":0.0022},"2":{"key":"risk_table","jobs":5,"succeeded":4,"qcFailed":1,"failed":0,"qcFailedChecks":{"numbers at risk":1},"curveRmse":0.0048,"medianRelErr":0.0062,"medianRelErrBias":-0.0038,"medianAbsErrMonths":0.08,"medianNotReached":0,"logHrAbsErr":0.0134,"logHrBias":0.013,"logHrWorst":0.0334,"logHrNotEstimable":0,"atRiskMaePatients":0.53,"atRiskMaePct":0.22,"atRiskMaxPatients":2.0,"eventsRelErr":0.0152},"3":{"key":"events_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.012,"medianRelErr":0.0276,"medianRelErrBias":0.025,"medianAbsErrMonths":0.335,"medianNotReached":0,"logHrAbsErr":0.0578,"logHrBias":0.0578,"logHrWorst":0.0893,"logHrNotEstimable":0,"atRiskMaePatients":6.96,"atRiskMaePct":2.93,"atRiskMaxPatients":33.0,"eventsRelErr":0.0006},"4":{"key":"curve_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0047,"medianRelErr":0.0063,"medianRelErrBias":-0.0022,"medianAbsErrMonths":0.084,"medianNotReached":0,"logHrAbsErr":null,"logHrBias":null,"logHrWorst":null,"logHrNotEstimable":5,"atRiskMaePatients":5.67,"atRiskMaePct":2.34,"atRiskMaxPatients":60.0,"eventsRelErr":0.0891}}},
+  {"style":"jpeg_q40","variant":"exact","group":"分辨率与格式","digitizer":{"attempts":5,"refusedFirstPass":0,"refusalReasonsFirstPass":{},"retriedWithPlotArea":0,"refusedAfterRetry":0,"refusalReasonsFinal":{},"rejectedByControlPlane":0,"warnings":{"curve_start_not_one":5},"curves":10,"rmse":0.0045,"rmseMedian":0.0043,"rmseMax":0.0056,"anchorPlotArea":0,"seconds":0.1},"levels":{"1":{"key":"risk_table_and_events","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0053,"medianRelErr":0.0099,"medianRelErrBias":0.0054,"medianAbsErrMonths":0.119,"medianNotReached":0,"logHrAbsErr":0.0137,"logHrBias":0.0137,"logHrWorst":0.0497,"logHrNotEstimable":0,"atRiskMaePatients":0.33,"atRiskMaePct":0.25,"atRiskMaxPatients":2.0,"eventsRelErr":0.0018},"2":{"key":"risk_table","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0051,"medianRelErr":0.0099,"medianRelErrBias":0.0054,"medianAbsErrMonths":0.119,"medianNotReached":0,"logHrAbsErr":0.0423,"logHrBias":0.0423,"logHrWorst":0.1409,"logHrNotEstimable":0,"atRiskMaePatients":0.33,"atRiskMaePct":0.25,"atRiskMaxPatients":2.0,"eventsRelErr":0.0315},"3":{"key":"events_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0086,"medianRelErr":0.0264,"medianRelErrBias":0.021,"medianAbsErrMonths":0.39,"medianNotReached":0,"logHrAbsErr":0.0675,"logHrBias":0.0675,"logHrWorst":0.1653,"logHrNotEstimable":0,"atRiskMaePatients":6.69,"atRiskMaePct":2.72,"atRiskMaxPatients":32.0,"eventsRelErr":0.0},"4":{"key":"curve_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0047,"medianRelErr":0.0171,"medianRelErrBias":0.0099,"medianAbsErrMonths":0.294,"medianNotReached":0,"logHrAbsErr":null,"logHrBias":null,"logHrWorst":null,"logHrNotEstimable":5,"atRiskMaePatients":6.03,"atRiskMaePct":2.45,"atRiskMaxPatients":61.0,"eventsRelErr":0.0906}}},
+  {"style":"box_axes","variant":"exact","group":"坐标轴","digitizer":{"attempts":5,"refusedFirstPass":0,"refusalReasonsFirstPass":{},"retriedWithPlotArea":0,"refusedAfterRetry":0,"refusalReasonsFinal":{},"rejectedByControlPlane":0,"warnings":{"curve_start_not_one":3},"curves":10,"rmse":0.003,"rmseMedian":0.0031,"rmseMax":0.0052,"anchorPlotArea":0,"seconds":0.2},"levels":{"1":{"key":"risk_table_and_events","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.004,"medianRelErr":0.0054,"medianRelErrBias":-0.0028,"medianAbsErrMonths":0.081,"medianNotReached":0,"logHrAbsErr":0.0049,"logHrBias":0.0013,"logHrWorst":0.0088,"logHrNotEstimable":0,"atRiskMaePatients":0.35,"atRiskMaePct":0.25,"atRiskMaxPatients":2.0,"eventsRelErr":0.0012},"2":{"key":"risk_table","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0036,"medianRelErr":0.0054,"medianRelErrBias":-0.0028,"medianAbsErrMonths":0.081,"medianNotReached":0,"logHrAbsErr":0.0161,"logHrBias":0.0101,"logHrWorst":0.0308,"logHrNotEstimable":0,"atRiskMaePatients":0.35,"atRiskMaePct":0.25,"atRiskMaxPatients":2.0,"eventsRelErr":0.0301},"3":{"key":"events_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0066,"medianRelErr":0.014,"medianRelErrBias":0.0101,"medianAbsErrMonths":0.181,"medianNotReached":0,"logHrAbsErr":0.0367,"logHrBias":0.0367,"logHrWorst":0.0816,"logHrNotEstimable":0,"atRiskMaePatients":6.7,"atRiskMaePct":2.76,"atRiskMaxPatients":35.0,"eventsRelErr":0.0},"4":{"key":"curve_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0034,"medianRelErr":0.0059,"medianRelErrBias":-0.0033,"medianAbsErrMonths":0.08,"medianNotReached":0,"logHrAbsErr":null,"logHrBias":null,"logHrWorst":null,"logHrNotEstimable":5,"atRiskMaePatients":5.74,"atRiskMaePct":2.37,"atRiskMaxPatients":61.0,"eventsRelErr":0.0877}}},
+  {"style":"axes_padded","variant":"exact","group":"坐标轴","digitizer":{"attempts":5,"refusedFirstPass":0,"refusalReasonsFirstPass":{},"retriedWithPlotArea":0,"refusedAfterRetry":0,"refusalReasonsFinal":{},"rejectedByControlPlane":0,"warnings":{"curve_start_not_one":1},"curves":10,"rmse":0.0036,"rmseMedian":0.0037,"rmseMax":0.0062,"anchorPlotArea":0,"seconds":0.18},"levels":{"1":{"key":"risk_table_and_events","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0044,"medianRelErr":0.0039,"medianRelErrBias":-0.0019,"medianAbsErrMonths":0.051,"medianNotReached":0,"logHrAbsErr":0.0068,"logHrBias":0.0027,"logHrWorst":0.0105,"logHrNotEstimable":0,"atRiskMaePatients":0.14,"atRiskMaePct":0.17,"atRiskMaxPatients":1.0,"eventsRelErr":0.0},"2":{"key":"risk_table","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.004,"medianRelErr":0.0039,"medianRelErrBias":-0.0019,"medianAbsErrMonths":0.051,"medianNotReached":0,"logHrAbsErr":0.0162,"logHrBias":0.0097,"logHrWorst":0.0307,"logHrNotEstimable":0,"atRiskMaePatients":0.14,"atRiskMaePct":0.17,"atRiskMaxPatients":1.0,"eventsRelErr":0.0311},"3":{"key":"events_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0055,"medianRelErr":0.009,"medianRelErrBias":0.0031,"medianAbsErrMonths":0.103,"medianNotReached":0,"logHrAbsErr":0.0338,"logHrBias":0.0338,"logHrWorst":0.0805,"logHrNotEstimable":0,"atRiskMaePatients":7.13,"atRiskMaePct":2.81,"atRiskMaxPatients":32.0,"eventsRelErr":0.0},"4":{"key":"curve_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0039,"medianRelErr":0.0042,"medianRelErrBias":-0.0016,"medianAbsErrMonths":0.056,"medianNotReached":0,"logHrAbsErr":null,"logHrBias":null,"logHrWorst":null,"logHrNotEstimable":5,"atRiskMaePatients":5.56,"atRiskMaePct":2.28,"atRiskMaxPatients":60.0,"eventsRelErr":0.0886}}},
+  {"style":"ticks_in","variant":"exact","group":"坐标轴","digitizer":{"attempts":5,"refusedFirstPass":0,"refusalReasonsFirstPass":{},"retriedWithPlotArea":0,"refusedAfterRetry":0,"refusalReasonsFinal":{},"rejectedByControlPlane":0,"warnings":{"no_tick_marks_found":5,"curve_start_not_one":3},"curves":10,"rmse":0.0034,"rmseMedian":0.0034,"rmseMax":0.0056,"anchorPlotArea":5,"seconds":0.18},"levels":{"1":{"key":"risk_table_and_events","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0047,"medianRelErr":0.007,"medianRelErrBias":-0.005,"medianAbsErrMonths":0.107,"medianNotReached":0,"logHrAbsErr":0.0094,"logHrBias":0.0048,"logHrWorst":0.026,"logHrNotEstimable":0,"atRiskMaePatients":0.53,"atRiskMaePct":0.25,"atRiskMaxPatients":4.0,"eventsRelErr":0.0012},"2":{"key":"risk_table","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.004,"medianRelErr":0.007,"medianRelErrBias":-0.005,"medianAbsErrMonths":0.107,"medianNotReached":0,"logHrAbsErr":0.0231,"logHrBias":0.016,"logHrWorst":0.0556,"logHrNotEstimable":0,"atRiskMaePatients":0.53,"atRiskMaePct":0.25,"atRiskMaxPatients":4.0,"eventsRelErr":0.0304},"3":{"key":"events_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0067,"medianRelErr":0.0133,"medianRelErrBias":0.0084,"medianAbsErrMonths":0.17,"medianNotReached":0,"logHrAbsErr":0.0365,"logHrBias":0.0365,"logHrWorst":0.0804,"logHrNotEstimable":0,"atRiskMaePatients":6.76,"atRiskMaePct":2.77,"atRiskMaxPatients":35.0,"eventsRelErr":0.0},"4":{"key":"curve_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0037,"medianRelErr":0.0036,"medianRelErrBias":-0.0016,"medianAbsErrMonths":0.049,"medianNotReached":0,"logHrAbsErr":null,"logHrBias":null,"logHrWorst":null,"logHrNotEstimable":5,"atRiskMaePatients":5.85,"atRiskMaePct":2.42,"atRiskMaxPatients":60.0,"eventsRelErr":0.0881}}},
+  {"style":"ticks_in_padded","variant":"exact","group":"坐标轴","digitizer":{"attempts":5,"refusedFirstPass":0,"refusalReasonsFirstPass":{},"retriedWithPlotArea":0,"refusedAfterRetry":0,"refusalReasonsFinal":{},"rejectedByControlPlane":0,"warnings":{"no_tick_marks_found":5,"curve_start_not_one":10},"curves":10,"rmse":0.0277,"rmseMedian":0.0308,"rmseMax":0.0421,"anchorPlotArea":5,"seconds":0.18},"levels":{"1":{"key":"risk_table_and_events","jobs":5,"succeeded":1,"qcFailed":4,"failed":0,"qcFailedChecks":{"total events":4,"numbers at risk":1},"curveRmse":0.0155,"medianRelErr":0.0178,"medianRelErrBias":-0.0178,"medianAbsErrMonths":0.355,"medianNotReached":0,"logHrAbsErr":0.0119,"logHrBias":-0.0119,"logHrWorst":0.0119,"logHrNotEstimable":0,"atRiskMaePatients":0.0,"atRiskMaePct":0.0,"atRiskMaxPatients":0.0,"eventsRelErr":0.0},"2":{"key":"risk_table","jobs":5,"succeeded":4,"qcFailed":1,"failed":0,"qcFailedChecks":{"numbers at risk":1},"curveRmse":0.0282,"medianRelErr":0.0532,"medianRelErrBias":0.043,"medianAbsErrMonths":0.734,"medianNotReached":0,"logHrAbsErr":0.0495,"logHrBias":0.0382,"logHrWorst":0.084,"logHrNotEstimable":0,"atRiskMaePatients":0.21,"atRiskMaePct":0.06,"atRiskMaxPatients":2.0,"eventsRelErr":0.0588},"3":{"key":"events_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0386,"medianRelErr":0.0847,"medianRelErrBias":0.0847,"medianAbsErrMonths":1.293,"medianNotReached":0,"logHrAbsErr":0.0367,"logHrBias":0.0367,"logHrWorst":0.0594,"logHrNotEstimable":0,"atRiskMaePatients":11.69,"atRiskMaePct":4.28,"atRiskMaxPatients":68.0,"eventsRelErr":0.0074},"4":{"key":"curve_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0278,"medianRelErr":0.0477,"medianRelErrBias":0.0406,"medianAbsErrMonths":0.636,"medianNotReached":0,"logHrAbsErr":null,"logHrBias":null,"logHrWorst":null,"logHrNotEstimable":5,"atRiskMaePatients":10.25,"atRiskMaePct":4.0,"atRiskMaxPatients":71.0,"eventsRelErr":0.0614}}},
+  {"style":"ci_band","variant":"exact","group":"置信带","digitizer":{"attempts":5,"refusedFirstPass":0,"refusalReasonsFirstPass":{},"retriedWithPlotArea":0,"refusedAfterRetry":0,"refusalReasonsFinal":{},"rejectedByControlPlane":0,"warnings":{"curve_start_not_one":3},"curves":10,"rmse":0.0031,"rmseMedian":0.0032,"rmseMax":0.0052,"anchorPlotArea":0,"seconds":0.2},"levels":{"1":{"key":"risk_table_and_events","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.004,"medianRelErr":0.006,"medianRelErrBias":-0.0035,"medianAbsErrMonths":0.095,"medianNotReached":0,"logHrAbsErr":0.005,"logHrBias":0.0013,"logHrWorst":0.0095,"logHrNotEstimable":0,"atRiskMaePatients":0.35,"atRiskMaePct":0.25,"atRiskMaxPatients":2.0,"eventsRelErr":0.0012},"2":{"key":"risk_table","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0036,"medianRelErr":0.006,"medianRelErrBias":-0.0035,"medianAbsErrMonths":0.095,"medianNotReached":0,"logHrAbsErr":0.0162,"logHrBias":0.01,"logHrWorst":0.0308,"logHrNotEstimable":0,"atRiskMaePatients":0.35,"atRiskMaePct":0.25,"atRiskMaxPatients":2.0,"eventsRelErr":0.0301},"3":{"key":"events_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0067,"medianRelErr":0.014,"medianRelErrBias":0.0101,"medianAbsErrMonths":0.181,"medianNotReached":0,"logHrAbsErr":0.0367,"logHrBias":0.0367,"logHrWorst":0.0816,"logHrNotEstimable":0,"atRiskMaePatients":6.7,"atRiskMaePct":2.76,"atRiskMaxPatients":35.0,"eventsRelErr":0.0},"4":{"key":"curve_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0034,"medianRelErr":0.0059,"medianRelErrBias":-0.0033,"medianAbsErrMonths":0.08,"medianNotReached":0,"logHrAbsErr":null,"logHrBias":null,"logHrWorst":null,"logHrNotEstimable":5,"atRiskMaePatients":5.71,"atRiskMaePct":2.37,"atRiskMaxPatients":60.0,"eventsRelErr":0.0871}}},
+  {"style":"combo_journal","variant":"exact","group":"组合","digitizer":{"attempts":5,"refusedFirstPass":0,"refusalReasonsFirstPass":{},"retriedWithPlotArea":0,"refusedAfterRetry":0,"refusalReasonsFinal":{},"rejectedByControlPlane":0,"warnings":{"curve_start_not_one":2},"curves":10,"rmse":0.0031,"rmseMedian":0.0029,"rmseMax":0.0052,"anchorPlotArea":0,"seconds":0.8},"levels":{"1":{"key":"risk_table_and_events","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0039,"medianRelErr":0.0084,"medianRelErrBias":-0.0011,"medianAbsErrMonths":0.117,"medianNotReached":0,"logHrAbsErr":0.0036,"logHrBias":0.0036,"logHrWorst":0.0039,"logHrNotEstimable":0,"atRiskMaePatients":0.38,"atRiskMaePct":0.21,"atRiskMaxPatients":5.0,"eventsRelErr":0.0014},"2":{"key":"risk_table","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0036,"medianRelErr":0.0084,"medianRelErrBias":-0.0011,"medianAbsErrMonths":0.117,"medianNotReached":0,"logHrAbsErr":0.016,"logHrBias":0.016,"logHrWorst":0.0318,"logHrNotEstimable":0,"atRiskMaePatients":0.38,"atRiskMaePct":0.21,"atRiskMaxPatients":5.0,"eventsRelErr":0.0297},"3":{"key":"events_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0059,"medianRelErr":0.0151,"medianRelErrBias":0.0084,"medianAbsErrMonths":0.201,"medianNotReached":0,"logHrAbsErr":0.0387,"logHrBias":0.0387,"logHrWorst":0.0782,"logHrNotEstimable":0,"atRiskMaePatients":7.01,"atRiskMaePct":2.79,"atRiskMaxPatients":34.0,"eventsRelErr":0.0},"4":{"key":"curve_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0034,"medianRelErr":0.0078,"medianRelErrBias":0.0,"medianAbsErrMonths":0.112,"medianNotReached":0,"logHrAbsErr":null,"logHrBias":null,"logHrWorst":null,"logHrNotEstimable":5,"atRiskMaePatients":5.8,"atRiskMaePct":2.32,"atRiskMaxPatients":63.0,"eventsRelErr":0.0808}}},
+  {"style":"combo_web","variant":"exact","group":"组合","digitizer":{"attempts":5,"refusedFirstPass":4,"refusalReasonsFirstPass":{"colour_not_found":3,"curve_ambiguous":1},"retriedWithPlotArea":0,"refusedAfterRetry":4,"refusalReasonsFinal":{"colour_not_found":3,"curve_ambiguous":1},"rejectedByControlPlane":0,"warnings":{"curve_start_not_one":1},"curves":2,"rmse":0.0118,"rmseMedian":0.0118,"rmseMax":0.0181,"anchorPlotArea":0,"seconds":0.03},"levels":{"1":{"key":"risk_table_and_events","jobs":1,"succeeded":1,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0128,"medianRelErr":0.0095,"medianRelErrBias":0.0095,"medianAbsErrMonths":0.185,"medianNotReached":0,"logHrAbsErr":0.0279,"logHrBias":-0.0279,"logHrWorst":0.0279,"logHrNotEstimable":0,"atRiskMaePatients":0.0,"atRiskMaePct":0.0,"atRiskMaxPatients":0.0,"eventsRelErr":0.0},"2":{"key":"risk_table","jobs":1,"succeeded":1,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0125,"medianRelErr":0.0095,"medianRelErrBias":0.0095,"medianAbsErrMonths":0.185,"medianNotReached":0,"logHrAbsErr":0.0552,"logHrBias":-0.0552,"logHrWorst":0.0552,"logHrNotEstimable":0,"atRiskMaePatients":0.0,"atRiskMaePct":0.0,"atRiskMaxPatients":0.0,"eventsRelErr":0.0386},"3":{"key":"events_only","jobs":1,"succeeded":1,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0124,"medianRelErr":0.0099,"medianRelErrBias":-0.0022,"medianAbsErrMonths":0.194,"medianNotReached":0,"logHrAbsErr":0.0294,"logHrBias":-0.0294,"logHrWorst":0.0294,"logHrNotEstimable":0,"atRiskMaePatients":3.7,"atRiskMaePct":3.08,"atRiskMaxPatients":8.0,"eventsRelErr":0.0},"4":{"key":"curve_only","jobs":1,"succeeded":1,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0123,"medianRelErr":0.0407,"medianRelErrBias":0.0407,"medianAbsErrMonths":0.797,"medianNotReached":0,"logHrAbsErr":null,"logHrBias":null,"logHrWorst":null,"logHrNotEstimable":1,"atRiskMaePatients":7.6,"atRiskMaePct":6.33,"atRiskMaxPatients":16.0,"eventsRelErr":0.1744}}},
+  {"style":"combo_survminer","variant":"exact","group":"组合","digitizer":{"attempts":5,"refusedFirstPass":0,"refusalReasonsFirstPass":{},"retriedWithPlotArea":0,"refusedAfterRetry":0,"refusalReasonsFinal":{},"rejectedByControlPlane":0,"warnings":{"curve_start_not_one":2},"curves":10,"rmse":0.0038,"rmseMedian":0.0037,"rmseMax":0.0062,"anchorPlotArea":0,"seconds":0.19},"levels":{"1":{"key":"risk_table_and_events","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0045,"medianRelErr":0.0045,"medianRelErrBias":-0.0008,"medianAbsErrMonths":0.061,"medianNotReached":0,"logHrAbsErr":0.0054,"logHrBias":0.0028,"logHrWorst":0.0113,"logHrNotEstimable":0,"atRiskMaePatients":0.36,"atRiskMaePct":0.2,"atRiskMaxPatients":2.0,"eventsRelErr":0.0},"2":{"key":"risk_table","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0043,"medianRelErr":0.0045,"medianRelErrBias":-0.0008,"medianAbsErrMonths":0.061,"medianNotReached":0,"logHrAbsErr":0.0158,"logHrBias":0.0158,"logHrWorst":0.0336,"logHrNotEstimable":0,"atRiskMaePatients":0.36,"atRiskMaePct":0.2,"atRiskMaxPatients":2.0,"eventsRelErr":0.0337},"3":{"key":"events_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0056,"medianRelErr":0.0074,"medianRelErrBias":0.0041,"medianAbsErrMonths":0.083,"medianNotReached":0,"logHrAbsErr":0.034,"logHrBias":0.034,"logHrWorst":0.0787,"logHrNotEstimable":0,"atRiskMaePatients":7.32,"atRiskMaePct":2.83,"atRiskMaxPatients":33.0,"eventsRelErr":0.0},"4":{"key":"curve_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0041,"medianRelErr":0.0054,"medianRelErrBias":0.0003,"medianAbsErrMonths":0.079,"medianNotReached":0,"logHrAbsErr":null,"logHrBias":null,"logHrWorst":null,"logHrNotEstimable":5,"atRiskMaePatients":5.75,"atRiskMaePct":2.29,"atRiskMaxPatients":62.0,"eventsRelErr":0.0886}}}
+ ],
+ "wrongCalibration": [
+  {"style":"base","variant":"x110","group":"base","digitizer":{"attempts":5,"refusedFirstPass":0,"refusalReasonsFirstPass":{},"retriedWithPlotArea":0,"refusedAfterRetry":0,"refusalReasonsFinal":{},"rejectedByControlPlane":0,"warnings":{"x_tick_spacing_unusual":5,"curve_start_not_one":3},"curves":10,"rmse":0.0329,"rmseMedian":0.0335,"rmseMax":0.0428,"anchorPlotArea":0,"seconds":0.19},"levels":{"1":{"key":"risk_table_and_events","jobs":5,"succeeded":2,"qcFailed":3,"failed":0,"qcFailedChecks":{"total events":3},"curveRmse":0.0372,"medianRelErr":0.1206,"medianRelErrBias":0.1206,"medianAbsErrMonths":1.905,"medianNotReached":0,"logHrAbsErr":0.0219,"logHrBias":0.0146,"logHrWorst":0.0365,"logHrNotEstimable":0,"atRiskMaePatients":0.22,"atRiskMaePct":0.29,"atRiskMaxPatients":2.0,"eventsRelErr":0.0265},"2":{"key":"risk_table","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.033,"medianRelErr":0.1075,"medianRelErrBias":0.1075,"medianAbsErrMonths":1.6,"medianNotReached":0,"logHrAbsErr":0.0145,"logHrBias":0.0145,"logHrWorst":0.0313,"logHrNotEstimable":0,"atRiskMaePatients":0.11,"atRiskMaePct":0.12,"atRiskMaxPatients":2.0,"eventsRelErr":0.0729},"3":{"key":"events_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.036,"medianRelErr":0.1111,"medianRelErrBias":0.1111,"medianAbsErrMonths":1.613,"medianNotReached":0,"logHrAbsErr":0.0366,"logHrBias":0.0366,"logHrWorst":0.0816,"logHrNotEstimable":0,"atRiskMaePatients":8.38,"atRiskMaePct":3.51,"atRiskMaxPatients":59.0,"eventsRelErr":0.0},"4":{"key":"curve_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.033,"medianRelErr":0.0964,"medianRelErrBias":0.0964,"medianAbsErrMonths":1.426,"medianNotReached":0,"logHrAbsErr":null,"logHrBias":null,"logHrWorst":null,"logHrNotEstimable":5,"atRiskMaePatients":12.79,"atRiskMaePct":5.17,"atRiskMaxPatients":85.0,"eventsRelErr":0.0877}}},
+  {"style":"base","variant":"x90","group":"base","digitizer":{"attempts":5,"refusedFirstPass":0,"refusalReasonsFirstPass":{},"retriedWithPlotArea":0,"refusedAfterRetry":0,"refusalReasonsFinal":{},"rejectedByControlPlane":0,"warnings":{"x_tick_spacing_unusual":5,"curve_start_not_one":3},"curves":10,"rmse":0.0365,"rmseMedian":0.0375,"rmseMax":0.048,"anchorPlotArea":0,"seconds":0.19},"levels":{"1":{"key":"risk_table_and_events","jobs":5,"succeeded":0,"qcFailed":5,"failed":0,"qcFailedChecks":{"numbers at risk":4,"numbers at risk; total events":1,"total events":1},"curveRmse":null,"medianRelErr":null,"medianRelErrBias":null,"medianAbsErrMonths":null,"medianNotReached":0,"logHrAbsErr":null,"logHrBias":null,"logHrWorst":null,"logHrNotEstimable":0,"atRiskMaePatients":null,"atRiskMaePct":null,"atRiskMaxPatients":null,"eventsRelErr":null},"2":{"key":"risk_table","jobs":5,"succeeded":0,"qcFailed":5,"failed":0,"qcFailedChecks":{"numbers at risk":5},"curveRmse":null,"medianRelErr":null,"medianRelErrBias":null,"medianAbsErrMonths":null,"medianNotReached":0,"logHrAbsErr":null,"logHrBias":null,"logHrWorst":null,"logHrNotEstimable":0,"atRiskMaePatients":null,"atRiskMaePct":null,"atRiskMaxPatients":null,"eventsRelErr":null},"3":{"key":"events_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0343,"medianRelErr":0.0909,"medianRelErrBias":-0.0909,"medianAbsErrMonths":1.347,"medianNotReached":0,"logHrAbsErr":0.0366,"logHrBias":0.0366,"logHrWorst":0.0816,"logHrNotEstimable":0,"atRiskMaePatients":12.09,"atRiskMaePct":5.48,"atRiskMaxPatients":42.0,"eventsRelErr":0.0},"4":{"key":"curve_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0365,"medianRelErr":0.103,"medianRelErrBias":-0.103,"medianAbsErrMonths":1.5,"medianNotReached":0,"logHrAbsErr":null,"logHrBias":null,"logHrWorst":null,"logHrNotEstimable":5,"atRiskMaePatients":9.26,"atRiskMaePct":3.68,"atRiskMaxPatients":41.0,"eventsRelErr":0.0877}}},
+  {"style":"base","variant":"y110","group":"base","digitizer":{"attempts":5,"refusedFirstPass":0,"refusalReasonsFirstPass":{},"retriedWithPlotArea":0,"refusedAfterRetry":0,"refusalReasonsFinal":{},"rejectedByControlPlane":0,"warnings":{"y_tick_spacing_unusual":5,"curve_start_not_one":10},"curves":10,"rmse":0.0476,"rmseMedian":0.0454,"rmseMax":0.0585,"anchorPlotArea":0,"seconds":0.2},"levels":{"1":{"key":"risk_table_and_events","jobs":5,"succeeded":0,"qcFailed":5,"failed":0,"qcFailedChecks":{"total events":5},"curveRmse":null,"medianRelErr":null,"medianRelErrBias":null,"medianAbsErrMonths":null,"medianNotReached":0,"logHrAbsErr":null,"logHrBias":null,"logHrWorst":null,"logHrNotEstimable":0,"atRiskMaePatients":null,"atRiskMaePct":null,"atRiskMaxPatients":null,"eventsRelErr":null},"2":{"key":"risk_table","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0472,"medianRelErr":0.1272,"medianRelErrBias":0.1272,"medianAbsErrMonths":1.917,"medianNotReached":0,"logHrAbsErr":0.0279,"logHrBias":-0.0235,"logHrWorst":0.049,"logHrNotEstimable":0,"atRiskMaePatients":0.27,"atRiskMaePct":0.16,"atRiskMaxPatients":2.0,"eventsRelErr":0.0895},"3":{"key":"events_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0479,"medianRelErr":0.1219,"medianRelErrBias":0.1219,"medianAbsErrMonths":1.8,"medianNotReached":0,"logHrAbsErr":0.0164,"logHrBias":-0.0019,"logHrWorst":0.0287,"logHrNotEstimable":0,"atRiskMaePatients":9.96,"atRiskMaePct":4.32,"atRiskMaxPatients":50.0,"eventsRelErr":0.0},"4":{"key":"curve_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0555,"medianRelErr":0.1454,"medianRelErrBias":0.0903,"medianAbsErrMonths":2.186,"medianNotReached":0,"logHrAbsErr":null,"logHrBias":null,"logHrWorst":null,"logHrNotEstimable":5,"atRiskMaePatients":15.57,"atRiskMaePct":7.25,"atRiskMaxPatients":72.0,"eventsRelErr":0.0938}}},
+  {"style":"base","variant":"y90","group":"base","digitizer":{"attempts":5,"refusedFirstPass":0,"refusalReasonsFirstPass":{},"retriedWithPlotArea":0,"refusedAfterRetry":0,"refusalReasonsFinal":{},"rejectedByControlPlane":0,"warnings":{"y_tick_spacing_unusual":5,"curve_start_not_one":10},"curves":10,"rmse":0.0507,"rmseMedian":0.0466,"rmseMax":0.0631,"anchorPlotArea":0,"seconds":0.19},"levels":{"1":{"key":"risk_table_and_events","jobs":5,"succeeded":0,"qcFailed":5,"failed":0,"qcFailedChecks":{"numbers at risk":5,"numbers at risk; total events":1},"curveRmse":null,"medianRelErr":null,"medianRelErrBias":null,"medianAbsErrMonths":null,"medianNotReached":0,"logHrAbsErr":null,"logHrBias":null,"logHrWorst":null,"logHrNotEstimable":0,"atRiskMaePatients":null,"atRiskMaePct":null,"atRiskMaxPatients":null,"eventsRelErr":null},"2":{"key":"risk_table","jobs":5,"succeeded":0,"qcFailed":5,"failed":0,"qcFailedChecks":{"numbers at risk":5},"curveRmse":null,"medianRelErr":null,"medianRelErrBias":null,"medianAbsErrMonths":null,"medianNotReached":0,"logHrAbsErr":null,"logHrBias":null,"logHrWorst":null,"logHrNotEstimable":0,"atRiskMaePatients":null,"atRiskMaePct":null,"atRiskMaxPatients":null,"eventsRelErr":null},"3":{"key":"events_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.007,"medianRelErr":0.0143,"medianRelErrBias":0.0132,"medianAbsErrMonths":0.197,"medianNotReached":0,"logHrAbsErr":0.0317,"logHrBias":0.0287,"logHrWorst":0.0493,"logHrNotEstimable":0,"atRiskMaePatients":6.46,"atRiskMaePct":2.64,"atRiskMaxPatients":35.0,"eventsRelErr":0.0},"4":{"key":"curve_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0508,"medianRelErr":0.1549,"medianRelErrBias":-0.1549,"medianAbsErrMonths":2.211,"medianNotReached":0,"logHrAbsErr":null,"logHrBias":null,"logHrWorst":null,"logHrNotEstimable":5,"atRiskMaePatients":11.39,"atRiskMaePct":4.39,"atRiskMaxPatients":49.0,"eventsRelErr":0.1082}}},
+  {"style":"axes_padded","variant":"x110","group":"坐标轴","digitizer":{"attempts":5,"refusedFirstPass":0,"refusalReasonsFirstPass":{},"retriedWithPlotArea":0,"refusedAfterRetry":0,"refusalReasonsFinal":{},"rejectedByControlPlane":0,"warnings":{"x_tick_spacing_unusual":5,"curve_start_not_one":1},"curves":10,"rmse":0.0334,"rmseMedian":0.0341,"rmseMax":0.0433,"anchorPlotArea":0,"seconds":0.2},"levels":{"1":{"key":"risk_table_and_events","jobs":5,"succeeded":2,"qcFailed":3,"failed":0,"qcFailedChecks":{"total events":3},"curveRmse":0.0379,"medianRelErr":0.1218,"medianRelErrBias":0.1218,"medianAbsErrMonths":1.926,"medianNotReached":0,"logHrAbsErr":0.0146,"logHrBias":0.0005,"logHrWorst":0.0151,"logHrNotEstimable":0,"atRiskMaePatients":0.22,"atRiskMaePct":0.29,"atRiskMaxPatients":2.0,"eventsRelErr":0.0265},"2":{"key":"risk_table","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0334,"medianRelErr":0.1055,"medianRelErrBias":0.1055,"medianAbsErrMonths":1.577,"medianNotReached":0,"logHrAbsErr":0.0148,"logHrBias":0.0107,"logHrWorst":0.035,"logHrNotEstimable":0,"atRiskMaePatients":0.11,"atRiskMaePct":0.12,"atRiskMaxPatients":2.0,"eventsRelErr":0.0748},"3":{"key":"events_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0349,"medianRelErr":0.1034,"medianRelErrBias":0.1034,"medianAbsErrMonths":1.502,"medianNotReached":0,"logHrAbsErr":0.0338,"logHrBias":0.0338,"logHrWorst":0.0805,"logHrNotEstimable":0,"atRiskMaePatients":7.5,"atRiskMaePct":3.34,"atRiskMaxPatients":56.0,"eventsRelErr":0.0},"4":{"key":"curve_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0336,"medianRelErr":0.0982,"medianRelErrBias":0.0982,"medianAbsErrMonths":1.455,"medianNotReached":0,"logHrAbsErr":null,"logHrBias":null,"logHrWorst":null,"logHrNotEstimable":5,"atRiskMaePatients":12.67,"atRiskMaePct":5.12,"atRiskMaxPatients":85.0,"eventsRelErr":0.0886}}},
+  {"style":"axes_padded","variant":"x90","group":"坐标轴","digitizer":{"attempts":5,"refusedFirstPass":0,"refusalReasonsFirstPass":{},"retriedWithPlotArea":0,"refusedAfterRetry":0,"refusalReasonsFinal":{},"rejectedByControlPlane":0,"warnings":{"x_tick_spacing_unusual":5,"curve_start_not_one":1},"curves":10,"rmse":0.0361,"rmseMedian":0.037,"rmseMax":0.0473,"anchorPlotArea":0,"seconds":0.18},"levels":{"1":{"key":"risk_table_and_events","jobs":5,"succeeded":0,"qcFailed":5,"failed":0,"qcFailedChecks":{"numbers at risk":4,"total events":1},"curveRmse":null,"medianRelErr":null,"medianRelErrBias":null,"medianAbsErrMonths":null,"medianNotReached":0,"logHrAbsErr":null,"logHrBias":null,"logHrWorst":null,"logHrNotEstimable":0,"atRiskMaePatients":null,"atRiskMaePct":null,"atRiskMaxPatients":null,"eventsRelErr":null},"2":{"key":"risk_table","jobs":5,"succeeded":1,"qcFailed":4,"failed":0,"qcFailedChecks":{"numbers at risk":4},"curveRmse":0.0369,"medianRelErr":0.099,"medianRelErrBias":-0.099,"medianAbsErrMonths":1.917,"medianNotReached":0,"logHrAbsErr":0.0103,"logHrBias":-0.0103,"logHrWorst":0.0103,"logHrNotEstimable":0,"atRiskMaePatients":1.0,"atRiskMaePct":0.83,"atRiskMaxPatients":3.0,"eventsRelErr":0.0803},"3":{"key":"events_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0351,"medianRelErr":0.098,"medianRelErrBias":-0.098,"medianAbsErrMonths":1.451,"medianNotReached":0,"logHrAbsErr":0.0338,"logHrBias":0.0338,"logHrWorst":0.0805,"logHrNotEstimable":0,"atRiskMaePatients":12.55,"atRiskMaePct":5.49,"atRiskMaxPatients":44.0,"eventsRelErr":0.0},"4":{"key":"curve_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.036,"medianRelErr":0.1014,"medianRelErrBias":-0.1014,"medianAbsErrMonths":1.476,"medianNotReached":0,"logHrAbsErr":null,"logHrBias":null,"logHrWorst":null,"logHrNotEstimable":5,"atRiskMaePatients":9.13,"atRiskMaePct":3.6,"atRiskMaxPatients":41.0,"eventsRelErr":0.0886}}},
+  {"style":"axes_padded","variant":"y110","group":"坐标轴","digitizer":{"attempts":5,"refusedFirstPass":0,"refusalReasonsFirstPass":{},"retriedWithPlotArea":0,"refusedAfterRetry":0,"refusalReasonsFinal":{},"rejectedByControlPlane":0,"warnings":{"y_tick_spacing_unusual":5,"curve_start_not_one":10},"curves":10,"rmse":0.0483,"rmseMedian":0.0461,"rmseMax":0.0591,"anchorPlotArea":0,"seconds":0.2},"levels":{"1":{"key":"risk_table_and_events","jobs":5,"succeeded":0,"qcFailed":5,"failed":0,"qcFailedChecks":{"total events":5},"curveRmse":null,"medianRelErr":null,"medianRelErrBias":null,"medianAbsErrMonths":null,"medianNotReached":0,"logHrAbsErr":null,"logHrBias":null,"logHrWorst":null,"logHrNotEstimable":0,"atRiskMaePatients":null,"atRiskMaePct":null,"atRiskMaxPatients":null,"eventsRelErr":null},"2":{"key":"risk_table","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0478,"medianRelErr":0.1251,"medianRelErrBias":0.1251,"medianAbsErrMonths":1.852,"medianNotReached":0,"logHrAbsErr":0.0276,"logHrBias":-0.0226,"logHrWorst":0.0495,"logHrNotEstimable":0,"atRiskMaePatients":0.11,"atRiskMaePct":0.09,"atRiskMaxPatients":1.0,"eventsRelErr":0.0866},"3":{"key":"events_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0485,"medianRelErr":0.1241,"medianRelErrBias":0.1241,"medianAbsErrMonths":1.834,"medianNotReached":0,"logHrAbsErr":0.0201,"logHrBias":-0.007,"logHrWorst":0.0322,"logHrNotEstimable":0,"atRiskMaePatients":9.69,"atRiskMaePct":4.16,"atRiskMaxPatients":50.0,"eventsRelErr":0.0},"4":{"key":"curve_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0483,"medianRelErr":0.1265,"medianRelErrBias":0.1265,"medianAbsErrMonths":1.866,"medianNotReached":0,"logHrAbsErr":null,"logHrBias":null,"logHrWorst":null,"logHrNotEstimable":5,"atRiskMaePatients":15.02,"atRiskMaePct":6.52,"atRiskMaxPatients":72.0,"eventsRelErr":0.066}}},
+  {"style":"axes_padded","variant":"y90","group":"坐标轴","digitizer":{"attempts":5,"refusedFirstPass":0,"refusalReasonsFirstPass":{},"retriedWithPlotArea":0,"refusedAfterRetry":0,"refusalReasonsFinal":{},"rejectedByControlPlane":0,"warnings":{"y_tick_spacing_unusual":5,"curve_start_not_one":10},"curves":10,"rmse":0.0505,"rmseMedian":0.0461,"rmseMax":0.0633,"anchorPlotArea":0,"seconds":0.18},"levels":{"1":{"key":"risk_table_and_events","jobs":5,"succeeded":0,"qcFailed":5,"failed":0,"qcFailedChecks":{"numbers at risk":5,"numbers at risk; total events":1},"curveRmse":null,"medianRelErr":null,"medianRelErrBias":null,"medianAbsErrMonths":null,"medianNotReached":0,"logHrAbsErr":null,"logHrBias":null,"logHrWorst":null,"logHrNotEstimable":0,"atRiskMaePatients":null,"atRiskMaePct":null,"atRiskMaxPatients":null,"eventsRelErr":null},"2":{"key":"risk_table","jobs":5,"succeeded":0,"qcFailed":5,"failed":0,"qcFailedChecks":{"numbers at risk":5},"curveRmse":null,"medianRelErr":null,"medianRelErrBias":null,"medianAbsErrMonths":null,"medianNotReached":0,"logHrAbsErr":null,"logHrBias":null,"logHrWorst":null,"logHrNotEstimable":0,"atRiskMaePatients":null,"atRiskMaePct":null,"atRiskMaxPatients":null,"eventsRelErr":null},"3":{"key":"events_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0054,"medianRelErr":0.0065,"medianRelErrBias":0.0006,"medianAbsErrMonths":0.094,"medianNotReached":0,"logHrAbsErr":0.0197,"logHrBias":0.0172,"logHrWorst":0.054,"logHrNotEstimable":0,"atRiskMaePatients":7.06,"atRiskMaePct":2.83,"atRiskMaxPatients":33.0,"eventsRelErr":0.002},"4":{"key":"curve_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0506,"medianRelErr":0.1496,"medianRelErrBias":-0.1496,"medianAbsErrMonths":2.137,"medianNotReached":0,"logHrAbsErr":null,"logHrBias":null,"logHrWorst":null,"logHrNotEstimable":5,"atRiskMaePatients":11.43,"atRiskMaePct":4.42,"atRiskMaxPatients":48.0,"eventsRelErr":0.1093}}},
+  {"style":"ticks_in","variant":"x110","group":"坐标轴","digitizer":{"attempts":5,"refusedFirstPass":0,"refusalReasonsFirstPass":{},"retriedWithPlotArea":0,"refusedAfterRetry":0,"refusalReasonsFinal":{},"rejectedByControlPlane":0,"warnings":{"no_tick_marks_found":5,"curve_start_not_one":3},"curves":10,"rmse":0.0319,"rmseMedian":0.0324,"rmseMax":0.0417,"anchorPlotArea":5,"seconds":0.18},"levels":{"1":{"key":"risk_table_and_events","jobs":5,"succeeded":0,"qcFailed":5,"failed":0,"qcFailedChecks":{"total events":4,"numbers at risk":1},"curveRmse":null,"medianRelErr":null,"medianRelErrBias":null,"medianAbsErrMonths":null,"medianNotReached":0,"logHrAbsErr":null,"logHrBias":null,"logHrWorst":null,"logHrNotEstimable":0,"atRiskMaePatients":null,"atRiskMaePct":null,"atRiskMaxPatients":null,"eventsRelErr":null},"2":{"key":"risk_table","jobs":5,"succeeded":4,"qcFailed":1,"failed":0,"qcFailedChecks":{"numbers at risk":1},"curveRmse":0.0319,"medianRelErr":0.098,"medianRelErrBias":0.098,"medianAbsErrMonths":1.35,"medianNotReached":0,"logHrAbsErr":0.0195,"logHrBias":0.0195,"logHrWorst":0.0478,"logHrNotEstimable":0,"atRiskMaePatients":0.11,"atRiskMaePct":0.15,"atRiskMaxPatients":1.0,"eventsRelErr":0.0807},"3":{"key":"events_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0354,"medianRelErr":0.1092,"medianRelErrBias":0.1092,"medianAbsErrMonths":1.583,"medianNotReached":0,"logHrAbsErr":0.0365,"logHrBias":0.0365,"logHrWorst":0.0804,"logHrNotEstimable":0,"atRiskMaePatients":8.28,"atRiskMaePct":3.47,"atRiskMaxPatients":59.0,"eventsRelErr":0.0},"4":{"key":"curve_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0321,"medianRelErr":0.0983,"medianRelErrBias":0.0983,"medianAbsErrMonths":1.449,"medianNotReached":0,"logHrAbsErr":null,"logHrBias":null,"logHrWorst":null,"logHrNotEstimable":5,"atRiskMaePatients":12.53,"atRiskMaePct":5.09,"atRiskMaxPatients":85.0,"eventsRelErr":0.0881}}},
+  {"style":"ticks_in","variant":"x90","group":"坐标轴","digitizer":{"attempts":5,"refusedFirstPass":0,"refusalReasonsFirstPass":{},"retriedWithPlotArea":0,"refusedAfterRetry":0,"refusalReasonsFinal":{},"rejectedByControlPlane":0,"warnings":{"no_tick_marks_found":5,"curve_start_not_one":3},"curves":10,"rmse":0.0375,"rmseMedian":0.0385,"rmseMax":0.0491,"anchorPlotArea":5,"seconds":0.18},"levels":{"1":{"key":"risk_table_and_events","jobs":5,"succeeded":0,"qcFailed":5,"failed":0,"qcFailedChecks":{"numbers at risk":4,"numbers at risk; total events":1,"total events":1},"curveRmse":null,"medianRelErr":null,"medianRelErrBias":null,"medianAbsErrMonths":null,"medianNotReached":0,"logHrAbsErr":null,"logHrBias":null,"logHrWorst":null,"logHrNotEstimable":0,"atRiskMaePatients":null,"atRiskMaePct":null,"atRiskMaxPatients":null,"eventsRelErr":null},"2":{"key":"risk_table","jobs":5,"succeeded":0,"qcFailed":5,"failed":0,"qcFailedChecks":{"numbers at risk":5},"curveRmse":null,"medianRelErr":null,"medianRelErrBias":null,"medianAbsErrMonths":null,"medianNotReached":0,"logHrAbsErr":null,"logHrBias":null,"logHrWorst":null,"logHrNotEstimable":0,"atRiskMaePatients":null,"atRiskMaePct":null,"atRiskMaxPatients":null,"eventsRelErr":null},"3":{"key":"events_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0349,"medianRelErr":0.0925,"medianRelErrBias":-0.0925,"medianAbsErrMonths":1.372,"medianNotReached":0,"logHrAbsErr":0.0365,"logHrBias":0.0365,"logHrWorst":0.0804,"logHrNotEstimable":0,"atRiskMaePatients":12.13,"atRiskMaePct":5.48,"atRiskMaxPatients":42.0,"eventsRelErr":0.0},"4":{"key":"curve_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0373,"medianRelErr":0.1014,"medianRelErrBias":-0.1014,"medianAbsErrMonths":1.481,"medianNotReached":0,"logHrAbsErr":null,"logHrBias":null,"logHrWorst":null,"logHrNotEstimable":5,"atRiskMaePatients":9.4,"atRiskMaePct":3.71,"atRiskMaxPatients":41.0,"eventsRelErr":0.0881}}},
+  {"style":"ticks_in","variant":"y110","group":"坐标轴","digitizer":{"attempts":5,"refusedFirstPass":0,"refusalReasonsFirstPass":{},"retriedWithPlotArea":0,"refusedAfterRetry":0,"refusalReasonsFinal":{},"rejectedByControlPlane":0,"warnings":{"no_tick_marks_found":5,"curve_start_not_one":10},"curves":10,"rmse":0.0465,"rmseMedian":0.0444,"rmseMax":0.057,"anchorPlotArea":5,"seconds":0.18},"levels":{"1":{"key":"risk_table_and_events","jobs":5,"succeeded":0,"qcFailed":5,"failed":0,"qcFailedChecks":{"total events":5},"curveRmse":null,"medianRelErr":null,"medianRelErrBias":null,"medianAbsErrMonths":null,"medianNotReached":0,"logHrAbsErr":null,"logHrBias":null,"logHrWorst":null,"logHrNotEstimable":0,"atRiskMaePatients":null,"atRiskMaePct":null,"atRiskMaxPatients":null,"eventsRelErr":null},"2":{"key":"risk_table","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0464,"medianRelErr":0.1261,"medianRelErrBias":0.1261,"medianAbsErrMonths":1.89,"medianNotReached":0,"logHrAbsErr":0.0211,"logHrBias":-0.0166,"logHrWorst":0.0341,"logHrNotEstimable":0,"atRiskMaePatients":0.17,"atRiskMaePct":0.11,"atRiskMaxPatients":2.0,"eventsRelErr":0.0878},"3":{"key":"events_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0467,"medianRelErr":0.1192,"medianRelErrBias":0.1192,"medianAbsErrMonths":1.763,"medianNotReached":0,"logHrAbsErr":0.0157,"logHrBias":-0.003,"logHrWorst":0.0264,"logHrNotEstimable":0,"atRiskMaePatients":9.73,"atRiskMaePct":4.2,"atRiskMaxPatients":50.0,"eventsRelErr":0.0},"4":{"key":"curve_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0466,"medianRelErr":0.1268,"medianRelErrBias":0.1268,"medianAbsErrMonths":1.902,"medianNotReached":0,"logHrAbsErr":null,"logHrBias":null,"logHrWorst":null,"logHrNotEstimable":5,"atRiskMaePatients":14.94,"atRiskMaePct":6.46,"atRiskMaxPatients":72.0,"eventsRelErr":0.0649}}},
+  {"style":"ticks_in","variant":"y90","group":"坐标轴","digitizer":{"attempts":5,"refusedFirstPass":0,"refusalReasonsFirstPass":{},"retriedWithPlotArea":0,"refusedAfterRetry":0,"refusalReasonsFinal":{},"rejectedByControlPlane":0,"warnings":{"no_tick_marks_found":5,"curve_start_not_one":10},"curves":10,"rmse":0.0518,"rmseMedian":0.0475,"rmseMax":0.0646,"anchorPlotArea":5,"seconds":0.18},"levels":{"1":{"key":"risk_table_and_events","jobs":5,"succeeded":0,"qcFailed":5,"failed":0,"qcFailedChecks":{"numbers at risk":5,"numbers at risk; total events":1},"curveRmse":null,"medianRelErr":null,"medianRelErrBias":null,"medianAbsErrMonths":null,"medianNotReached":0,"logHrAbsErr":null,"logHrBias":null,"logHrWorst":null,"logHrNotEstimable":0,"atRiskMaePatients":null,"atRiskMaePct":null,"atRiskMaxPatients":null,"eventsRelErr":null},"2":{"key":"risk_table","jobs":5,"succeeded":0,"qcFailed":5,"failed":0,"qcFailedChecks":{"numbers at risk":5},"curveRmse":null,"medianRelErr":null,"medianRelErrBias":null,"medianAbsErrMonths":null,"medianNotReached":0,"logHrAbsErr":null,"logHrBias":null,"logHrWorst":null,"logHrNotEstimable":0,"atRiskMaePatients":null,"atRiskMaePct":null,"atRiskMaxPatients":null,"eventsRelErr":null},"3":{"key":"events_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0075,"medianRelErr":0.0156,"medianRelErrBias":0.0095,"medianAbsErrMonths":0.208,"medianNotReached":0,"logHrAbsErr":0.0378,"logHrBias":0.0231,"logHrWorst":0.0562,"logHrNotEstimable":0,"atRiskMaePatients":6.67,"atRiskMaePct":2.8,"atRiskMaxPatients":35.0,"eventsRelErr":0.0006},"4":{"key":"curve_only","jobs":5,"succeeded":5,"qcFailed":0,"failed":0,"qcFailedChecks":{},"curveRmse":0.0518,"medianRelErr":0.1579,"medianRelErrBias":-0.1579,"medianAbsErrMonths":2.252,"medianNotReached":0,"logHrAbsErr":null,"logHrBias":null,"logHrWorst":null,"logHrNotEstimable":5,"atRiskMaePatients":11.52,"atRiskMaePct":4.46,"atRiskMaxPatients":48.0,"eventsRelErr":0.1082}}}
+ ]
+}
