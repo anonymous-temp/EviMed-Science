@@ -145,10 +145,15 @@ export const NUMERIC_REFERENCES = {
   // design.simulate (non-inferiority): the simulated power equals the closed form and the rejection probability on the margin is alpha
   N64c: { methods: ['design.simulate'], anchors: ['power vs closed form: continuous', 'b_t1 = within(t1(b_t1), alpha)'] },
   N64e: { methods: ['design.simulate'], anchors: ['g_t1 = within(t1(g_t1), alpha)', 'isTRUE(t_pow$diagnostics$analyticCheck$withinTolerance)'] },
+  N64f: { methods: ['design.analytic', 'design.simulate'], anchors: ['ref <- rpact::getSampleSizeRates(alpha = 0.025, beta = 0.1, sided = 1, pi1 = cfg$p1, pi2 = cfg$p0, thetaH0 = null, allocationRatioPlanned = cfg$a / (1 - cfg$a))$numberOfSubjects', 'ref_low <- rpact::getPowerRates(alpha = 0.025, sided = 1, pi1 = 0.08, pi2 = 0.1, thetaH0 = 0.03, directionUpper = FALSE'] },
+  N64g: { methods: ['design.analytic'], anchors: ['refused <- c(', '"non_inferiority_effect_beyond_margin", "scenario.truth.effect"'] },
+  N64h: { methods: ['design.simulate'], anchors: ['g_far <- run("g_far", gsd("group_sequential", 130, 1.8, 2), 5000L, 6431L)', 'g_t1 = within(m(g_t1), 0.025)'] },
 
   // design.confirmatory (T2-T6): rpact computes, so every anchor is a reference that is not rpact
   N66a: { methods: ['design.confirmatory'], anchors: ['ref <- gsDesign::gsDesign(k = 3, test.type = if (binding) 3 else 4', 'd_infl <- abs(r$diagnostics$confirmatory$inflation - ref$n.I[3])'] },
   N66b: { methods: ['design.confirmatory'], anchors: ['a known-truth simulation: the statistic at look k is N(Delta sqrt(t_k), 1)', 'worst <- max(worst, z_eff, z_size)'] },
+  N66h: { methods: ['design.confirmatory'], anchors: ['bit_cont <- c(multi = identical(ma("lower_better", c(-0.3, -0.5)), ma("higher_better", c(0.3, 0.5)))', 'z_bin <- c(multi = gap(power_of(ma("lower_better", c(-0.1, -0.15), 0.7, "binary"))'] },
+  N66i: { methods: ['design.confirmatory'], anchors: ['infl <- gsDesign::gsDesign(k = 2, test.type = 4, alpha = 0.025, beta = 0.1, timing = c(0.5, 1), sfu = gsDesign::sfLDOF, sfl = gsDesign::sfLDOF, n.fix = 1)$n.I[2]', 'all(abs(got - want) <= 1)'] },
   N67a: { methods: ['design.confirmatory'], anchors: ['ref <- vcr_group_sequential_power(gs, drift)', 'power = abs(pw$value - ref$power) <= 3 * pw$mcse + 0.003'] },
   N67b: { methods: ['design.confirmatory'], anchors: ['need <- ifelse(est > 0, (2 * ((c2 - w1 * z1) / w2 + stats::qnorm(0.8)) / pmax(est, 1e-12))^2, Inf)', 'worst <- max(worst, z)'] },
   // the promising zone (1.1.0): the rule in plain R on the statistic, the level, rpact's own rule as the zone's limit, and the binary and event-time forms

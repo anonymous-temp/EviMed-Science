@@ -188,7 +188,11 @@ function trialPremises(input) {
   const hypothesis = object(configuration.hypothesis);
   if (hypothesis.kind === "non_inferiority" && numeric(hypothesis.margin) !== null) {
     const margin = Number(hypothesis.margin);
-    const words = type === "time_to_event" ? `风险比不超过 ${plain(margin)}` : type === "binary" ? `率差不低于 −${percent(margin)}` : `均数差不低于 −${plain(margin)}`;
+    // (a result recorded before the direction existed read a higher value as the better one)
+    const lower = hypothesis.direction === "lower_better";
+    const words = type === "time_to_event" ? `风险比不超过 ${plain(margin)}`
+      : type === "binary" ? (lower ? `率差不高于 +${percent(margin)}` : `率差不低于 −${percent(margin)}`)
+      : lower ? `均数差不高于 ${plain(margin)}` : `均数差不低于 −${plain(margin)}`;
     rows.push({ key: "margin", label: "非劣效界值", value: words, source: "assumed", decisive: true });
   }
   // The effect the design is sized for.

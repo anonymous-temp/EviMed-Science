@@ -181,6 +181,7 @@ const exampleLabels: Record<string, Record<string, string>> = {
   "design.analytic": {
     "two-arm time-to-event: accrual is an object of duration, followup and dropoutAnnual": "两组生存结局：入组、随访与脱落",
     "two-arm binary: no accrual": "两组二分类结局",
+    "non-inferiority on an adverse-event rate, where lower is better: expected 8% against 10% on the control and allowed to be at most 3 points higher (the same numbers with higher_better ask for 25 times the patients)": "不良事件率的非劣效（越低越好）：预期 8%，对照 10%，最多允许高出 3 个百分点（同样的数字若按越高越好算，要多 25 倍的人）",
     "non-inferiority: the treatment is expected to be as good as the control (hazard ratio 1) and must not be worse than a hazard ratio of 1.3": "非劣效：预期与对照相当（风险比 1），不能比对照差过 1.3"
   },
   "design.confirmatory": {
@@ -191,6 +192,7 @@ const exampleLabels: Record<string, Record<string, string>> = {
     "three doses against one control for an event-time endpoint: hazard ratios 0.9, 0.75 and 0.6, the best dose kept at the interim (240 events planned in all, no accrual or control median needed)": "事件时间终点的三个剂量对一个对照：风险比 0.9、0.75、0.6，中期只留最好的（共计划 240 个事件）",
     "a biomarker-positive subset of 40% for an event-time endpoint: hazard ratio 0.6 in the subset and 0.9 outside it (240 events planned)": "事件时间终点，标志物阳性占 40%：亚组风险比 0.6，其余 0.9（计划 240 个事件）",
     "a biomarker-positive subset of 40%: enrol everyone, keep the subset or everyone at the interim (200 patients planned)": "标志物阳性占 40%：全部入组，中期留亚组或留全人群（计划 200 人）",
+    "stop for futility where LOWER is better: an adverse-event rate that should fall from 30% to 20% (the effect is -0.1, the direction says a negative difference is the benefit)": "越低越好时的中期无效性停止：不良事件率要从 30% 降到 20%（效应取 −0.1，方向写“越低越好”）",
     "a count endpoint (attacks per patient-year): rate ratio 0.67 on a control rate of 0.6, overdispersion 0.5": "计数终点（每患者年发作次数）：对照率 0.6，率比 0.67，过度离散 0.5"
   },
   "design.dose": {

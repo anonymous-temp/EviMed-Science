@@ -159,25 +159,34 @@ vcr_gs_inflation <- function(design, power = 0.9, nodes = 4001L) {
 #' The non-inferiority hypothesis of a scenario, or NULL for the superiority test every design had before.
 #'
 #' Hidden knowledge: a non-inferiority test moves the null, not the sizing formulas: the null difference of a mean or a risk is minus the
-#' margin and the null hazard ratio is the margin, and every sample size, power and test in this file takes that value as an argument
-#' that defaults to the superiority null, so a scenario that states no hypothesis computes exactly what it computed before. A two-sided
-#' `sided` means the confidence interval's level: the test of a margin is one-sided at `alpha / sided`, in the engine's one convention.
-#' `null` is on the scale of the difference (mean or risk), `nullHr` on the hazard ratio's; the other is the superiority value.
+#' margin when a higher value is better and PLUS the margin when a lower one is (an adverse-event rate, a blood pressure), and the null hazard
+#' ratio is the margin, and every sample size, power and test in this file takes that value as an argument that defaults to the superiority
+#' null, so a scenario that states no hypothesis computes exactly what it computed before. **The sign of `null` is the direction**: a
+#' negative null is tested on the upper tail (the treatment may not be lower than the control by more than the margin), a positive one on
+#' the lower tail (the treatment may not be higher by more than the margin), and every function below reads it that way. The direction is
+#' never defaulted for a mean or a risk: a default silently changes the question (a size of 34,504 against 1,404 for the same two event
+#' rates of 0.08 and 0.10 and a margin of 0.03, 2026-11-04). A hazard ratio has its direction already, a lower ratio is the benefit.
+#' A two-sided `sided` means the confidence interval's level: the test of a margin is one-sided at `alpha / sided`, in the engine's one
+#' convention. `null` is on the scale of the difference (mean or risk), `nullHr` on the hazard ratio's; the other is the superiority value.
 vcr_hypothesis <- function(sc) {
   h <- sc[["hypothesis"]]
   if (!is.list(h) || !identical(h[["kind"]], "non_inferiority")) return(NULL)
   m <- vcr_scalar(h[["margin"]], NULL)
   if (is.null(m)) vcr_abort("scenario_field_missing", "scenario.hypothesis.margin", "A non-inferiority hypothesis states its margin.")
   e <- as.character(sc$endpoint$type %||% "")
-  list(kind = "non_inferiority", margin = m, endpoint = e,
-       null = if (e %in% c("continuous", "binary")) -m else 0,
+  direction <- if (identical(e, "time_to_event")) "lower_better" else as.character(h[["direction"]] %||% "")
+  if (!identical(e, "time_to_event") && !(direction %in% c("higher_better", "lower_better"))) {
+    vcr_abort("scenario_field_missing", "scenario.hypothesis.direction", "A non-inferiority hypothesis on a mean or a risk states which direction is better (higher_better or lower_better): the same margin asks a different question the other way.")
+  }
+  list(kind = "non_inferiority", margin = m, endpoint = e, direction = direction,
+       null = if (e %in% c("continuous", "binary")) (if (identical(direction, "lower_better")) m else -m) else 0,
        nullHr = if (identical(e, "time_to_event")) m else 1)
 }
 
 #' What the result says of the hypothesis it tested: the margin, the scale it is on and the line of the null (the difference or the hazard
 #' ratio the effect is measured against), so a reader sees the question the sample size answers.
 vcr_hypothesis_note <- function(h) list(
-  kind = h$kind, margin = h$margin,
+  kind = h$kind, margin = h$margin, direction = h$direction,
   scale = switch(h$endpoint, continuous = "mean_difference", binary = "risk_difference", time_to_event = "hazard_ratio", NA_character_),
   nullValue = if (identical(h$endpoint, "time_to_event")) h$nullHr else h[["null"]],
   test = switch(h$endpoint, continuous = "t_test_against_margin", binary = "farrington_manning_score", time_to_event = "logrank_score_at_margin", NA_character_))
@@ -216,6 +225,26 @@ vcr_analytic_effect_guard <- function(kind, endpoint, truth, hypothesis = NULL) 
         p1 <- vcr_binary_treatment_rate(p0, vcr_scalar(truth[["treatmentRate"]], NULL), vcr_scalar(truth$riskDifference, NULL), vcr_scalar(truth$oddsRatio, NULL))
         tiny(p1 - p0 - hypothesis[["null"]]) },
       FALSE)
+    # An effect on the wrong side of the margin has no size: the formulas square the distance, so they would give a finite number, but the
+    # power FALLS as patients are added (9.9e-08 at the 1,052 patients the first version reported for a difference of -0.5 against a margin of
+    # 0.3), and "no size exists" is the answer. The side is the sign of the null: a negative null needs an effect above it, a positive one
+    # an effect below it; a hazard ratio needs to be below the margin.
+    beyond <- function(distance_from_null_towards_benefit, field) {
+      if (is.finite(distance_from_null_towards_benefit) && distance_from_null_towards_benefit < -1e-12) {
+        vcr_abort("non_inferiority_effect_beyond_margin", field, paste(
+          "The effect the design is meant to show is worse than the non-inferiority margin, so power falls as patients are added and there is no sample size to compute.",
+          "Give the effect the treatment is expected to have (it should lie on the better side of the margin); the power at a stated size is design.simulate's measure."))
+      }
+    }
+    side <- if (identical(hypothesis$endpoint, "time_to_event")) -1 else if (hypothesis[["null"]] < 0) 1 else -1
+    switch(hypothesis$endpoint,
+      continuous = { e <- vcr_scalar(truth$effect, NULL); if (!is.null(e)) beyond(side * (e - hypothesis[["null"]]), "scenario.truth.effect") },
+      time_to_event = { h <- vcr_scalar(truth$hazardRatio, NULL); if (!is.null(h) && h > 0) beyond(side * log(h / hypothesis$nullHr), "scenario.truth.hazardRatio") },
+      binary = { p0 <- vcr_scalar(truth[["controlRate"]], NULL)
+        p1 <- vcr_binary_treatment_rate(p0, vcr_scalar(truth[["treatmentRate"]], NULL), vcr_scalar(truth$riskDifference, NULL), vcr_scalar(truth$oddsRatio, NULL))
+        beyond(side * (p1 - p0 - hypothesis[["null"]]),
+               if (!is.null(truth[["treatmentRate"]])) "scenario.truth.treatmentRate" else if (!is.null(truth$riskDifference)) "scenario.truth.riskDifference" else "scenario.truth.oddsRatio") },
+      NULL)
     if (on_margin) vcr_abort("design_effect_null", "scenario.hypothesis.margin", paste(
       "The effect the design is meant to show equals the non-inferiority margin, so there is no sample size to compute:",
       "the margin is the largest difference the design is meant to rule out. Give the effect the treatment is expected to have;",
@@ -368,7 +397,8 @@ vcr_power_means <- function(delta, sd, n_treat, n_control, alpha = 0.025, sided 
   se <- sd * sqrt(1 / n_treat + 1 / n_control)
   df <- n_treat + n_control - 2
   crit <- qt(1 - if (sided == 1) alpha else alpha / 2, df)
-  ncp <- (delta - null) / se
+  # a positive null is a "lower is better" margin: the test rejects when the difference is far enough BELOW it
+  ncp <- (if (null > 0) null - delta else delta - null) / se
   pt(crit, df, ncp = ncp, lower.tail = FALSE) +
     (if (sided == 2 && null == 0) pt(-crit, df, ncp = ncp) else 0)
 }
@@ -435,7 +465,7 @@ vcr_power_proportions <- function(p_control, p_treat, n_treat, n_control,
   if (null != 0) {
     tilde <- vcr_fm_restricted(p_treat, p_control, n_treat, n_control, null)
     se0 <- sqrt(tilde[["treat"]] * (1 - tilde[["treat"]]) / n_treat + tilde[["control"]] * (1 - tilde[["control"]]) / n_control)
-    return(pnorm((d - null - za * se0) / se1))
+    return(pnorm(((if (null > 0) null - d else d - null) - za * se0) / se1))   # a positive null: lower is better, the test is on the lower tail
   }
   pbar <- (n_treat * p_treat + n_control * p_control) / (n_treat + n_control)
   se0 <- sqrt(pbar * (1 - pbar) * (1 / n_treat + 1 / n_control))

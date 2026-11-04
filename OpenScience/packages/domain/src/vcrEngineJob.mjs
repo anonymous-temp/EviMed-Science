@@ -835,14 +835,14 @@ function usesLongitudinalBeyond1_1_0(scenario) {
 }
 
 /**
- * Does a confirmatory scenario ask for what design.confirmatory 1.1.0 added: a promising zone, or an event-time multi-arm or enrichment
- * design? Mirrored by `.vcrp_uses_confirmatory_beyond_1_0_0` in protocol.R.
+ * Does a confirmatory scenario ask for what design.confirmatory 1.1.0 added: a promising zone, an event-time multi-arm or enrichment
+ * design, or the direction of a mean or risk difference (`hypothesis`)? Mirrored by `.vcrp_uses_confirmatory_beyond_1_0_0` in protocol.R.
  * @param {any} scenario
  */
 function usesConfirmatoryBeyond1_0_0(scenario) {
   const design = scenario?.design
   if (design === null || typeof design !== 'object') return false
-  return design.promisingZone !== undefined
+  return design.promisingZone !== undefined || scenario?.hypothesis !== undefined
     || ((design.kind === 'multi_arm_selection' || design.kind === 'enrichment') && scenario?.endpoint?.type === 'time_to_event')
 }
 

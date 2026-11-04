@@ -11,10 +11,18 @@
 #      gsDesign's (Hwang-Shih-DeCani and Kim-DeMets with their gamma); a non-binding futility boundary leaves them unchanged
 #   d  the fixed-design size beside it is the engine's closed form, and an event-time design carries events and, with an accrual,
 #      the patients that many events take
+#   h  ONE table of signs for the five kinds of design.confirmatory (2026-11-04): a mean or a risk difference is read through
+#      `hypothesis.direction`, a hazard ratio and a rate ratio are a benefit below 1; the effect a size is planned for must be a benefit
+#      (`effect_against_direction` otherwise, for every kind that plans one), the effects of a selection or an enrichment scenario may be harm;
+#      the simulated kinds read the direction the same way (a lower-is-better problem is the higher-is-better one with the sign turned,
+#      bit for bit for a mean, and the complementary rates for a risk, within the error)
+#   i  an event-time design is not refused for a reason the person has no setting for: HR 0.82 to 0.9 were `design_not_computable` because
+#      rpact was handed a fixed cap of 1,000 subjects; the events are Schoenfeld's times the inflation of gsDesign's design, the same for
+#      the group-sequential and the re-estimation kinds
 
 .n66_job <- function(design, endpoint = "continuous", truth = list(plannedEffect = 0.5, sd = 1), id = "job_n66", extra = list()) {
   sc <- c(list(design = design, endpoint = list(type = endpoint), truth = truth, analysis = list(alpha = 0.025, power = 0.9)), extra)
-  vcr_test_run(vcr_test_job("design.confirmatory", sc, job_id = id))
+  vcr_test_run(vcr_test_job("design.confirmatory", vcr_test_conf_scenario(sc), job_id = id))
 }
 .n66_looks <- function(r) r$diagnostics$confirmatory$looks
 .n66_vec <- function(looks, field) vapply(looks, function(l) if (is.null(l[[field]])) NA_real_ else as.numeric(l[[field]]), numeric(1))
@@ -113,4 +121,77 @@ vcr_case("N66d", c("AC-29", "AC-10"), function() {
   list(pass = all(ok), detail = sprintf("fixed size beside the design: continuous %s (closed form %s), binary %s (%s), events %s (%s); patients for %s events %s vs %s; null expected size under the maximum%s",
                                         vcr_measure_value(cont, "required_total"), fixed_cont, vcr_measure_value(bin, "required_total"), fixed_bin, vcr_measure_value(tte, "required_events"), fixed_events,
                                         events, patients, ceiling(events / p_ev), if (all(ok)) "" else paste0("; FAILED: ", paste(names(ok)[!ok], collapse = ","))))
+})
+
+
+# --- the one table of signs (h) --------------------------------------------------------------------------------------
+
+vcr_case("N66h", c("AC-29", "AC-26"), function() {
+  conf <- function(design, endpoint, hyp, truth, extra = list()) {
+    sc <- c(list(design = design, endpoint = list(type = endpoint), truth = truth, analysis = list(alpha = 0.025, power = 0.9)), if (!is.null(hyp)) list(hypothesis = list(direction = hyp)), extra)
+    vcr_test_run(vcr_test_job("design.confirmatory", sc, job_id = "job_n66h", replicates = 200L))
+  }
+  refused <- function(r) identical(r$status, "failed") && "effect_against_direction" %in% vcr_test_issue_codes(r) && any(vapply(r$diagnostics$issues, function(i) i$field %in% c("scenario.truth.plannedEffect", "scenario.truth.rateRatio"), logical(1)))
+  fut <- list(kind = "futility_group_sequential", informationRates = c(0.5, 1)); ssr <- list(kind = "sample_size_reestimation", informationRates = c(0.5, 1))
+  tte_extra <- list(accrual = list(duration = 12, followup = 24))
+  # the planned effect: the benefit side is sized, the harm side is refused by name, for both kinds that plan one
+  table <- list(
+    fut_cont_hi_ok = !refused(conf(fut, "continuous", "higher_better", list(plannedEffect = 0.4, sd = 1))),    fut_cont_hi_bad = refused(conf(fut, "continuous", "higher_better", list(plannedEffect = -0.4, sd = 1))),
+    fut_cont_lo_ok = !refused(conf(fut, "continuous", "lower_better", list(plannedEffect = -0.4, sd = 1))),    fut_cont_lo_bad = refused(conf(fut, "continuous", "lower_better", list(plannedEffect = 0.4, sd = 1))),
+    fut_bin_hi_ok = !refused(conf(fut, "binary", "higher_better", list(plannedEffect = 0.1, controlRate = 0.3))), fut_bin_hi_bad = refused(conf(fut, "binary", "higher_better", list(plannedEffect = -0.1, controlRate = 0.3))),
+    fut_bin_lo_ok = !refused(conf(fut, "binary", "lower_better", list(plannedEffect = -0.1, controlRate = 0.3))),  fut_bin_lo_bad = refused(conf(fut, "binary", "lower_better", list(plannedEffect = 0.1, controlRate = 0.3))),
+    fut_tte_ok = !refused(conf(fut, "time_to_event", NULL, list(plannedEffect = 0.7, controlMedian = 12), tte_extra)), fut_tte_bad = refused(conf(fut, "time_to_event", NULL, list(plannedEffect = 1.4, controlMedian = 12), tte_extra)),
+    ssr_cont_hi_bad = refused(conf(ssr, "continuous", "higher_better", list(plannedEffect = -0.3, effects = list(-0.3), sd = 1))), ssr_cont_lo_bad = refused(conf(ssr, "continuous", "lower_better", list(plannedEffect = 0.3, effects = list(0.3), sd = 1))),
+    ssr_bin_hi_bad = refused(conf(ssr, "binary", "higher_better", list(plannedEffect = -0.1, effects = list(-0.1), controlRate = 0.3))), ssr_bin_lo_bad = refused(conf(ssr, "binary", "lower_better", list(plannedEffect = 0.1, effects = list(0.1), controlRate = 0.3))),
+    ssr_tte_bad = refused(conf(ssr, "time_to_event", NULL, list(plannedEffect = 1.4, effects = list(1.4), controlMedian = 12), tte_extra)),
+    count_ok = !refused(conf(list(kind = "count_endpoint"), NULL, NULL, list(controlEventRate = 1, rateRatio = 0.7, overdispersion = 0.5))), count_bad = refused(conf(list(kind = "count_endpoint"), NULL, NULL, list(controlEventRate = 1, rateRatio = 1.4, overdispersion = 0.5))),
+    # and a mean or a risk with no direction is refused by name, never read as higher-is-better
+    no_direction = { r <- conf(fut, "continuous", NULL, list(plannedEffect = 0.4, sd = 1)); identical(r$status, "failed") && "scenario_field_missing" %in% vcr_test_issue_codes(r) })
+  # the same size from the benefit of either direction: a lower-is-better mean of -0.4 and a higher-is-better one of +0.4 are the one design
+  a <- conf(fut, "continuous", "lower_better", list(plannedEffect = -0.4, sd = 1)); b <- conf(fut, "continuous", "higher_better", list(plannedEffect = 0.4, sd = 1))
+  same_cont <- identical(a$status, "succeeded") && identical(vcr_measure_value(a, "max_patients"), vcr_measure_value(b, "max_patients")) && identical(vcr_measure_value(a, "power"), vcr_measure_value(b, "power"))
+  # a risk: 0.2 against 0.3 (lower is better) is 0.3 against 0.2 (higher is better), and 0.4 against 0.3 is another design altogether
+  a <- conf(fut, "binary", "lower_better", list(plannedEffect = -0.1, controlRate = 0.3)); b <- conf(fut, "binary", "higher_better", list(plannedEffect = 0.1, controlRate = 0.2)); c3 <- conf(fut, "binary", "higher_better", list(plannedEffect = 0.1, controlRate = 0.3))
+  same_bin <- identical(vcr_measure_value(a, "max_patients"), vcr_measure_value(b, "max_patients")) && !identical(vcr_measure_value(a, "max_patients"), vcr_measure_value(c3, "max_patients"))
+  # the simulated kinds, through the adapter: continuous bit for bit, a risk against its complement within the error
+  inv <- vcr_rpact_inverse_normal(c(0.5, 1), 0.025)
+  ma <- function(dir, eff, cr = NULL, endpoint = "continuous", its = 3000L) vcr_rpact_sim_multiarm(endpoint, inv, eff, c(40, 80), list(rule = "best"), "simes", its, 6651L, sd = 1, control_rate = cr, direction = dir)
+  en <- function(dir, s, r, cr = NULL, endpoint = "continuous", its = 3000L) vcr_rpact_sim_enrichment(endpoint, inv, s, r, 0.5, c(100, 200), list(rule = "best"), "simes", its, 6652L, sd = 1, control_rate = cr, direction = dir)
+  ss <- function(dir, e, cr = NULL, endpoint = "continuous", its = 3000L) vcr_rpact_sim_reestimation(endpoint, inv, e, c(100, 200), 300, 0.8, 0.5, its, 6653L, sd = 1, control_rate = cr, direction = dir)
+  bit_cont <- c(multi = identical(ma("lower_better", c(-0.3, -0.5)), ma("higher_better", c(0.3, 0.5))), enrich = identical(en("lower_better", -0.5, -0.1), en("higher_better", 0.5, 0.1)),
+                ssr = identical(ss("lower_better", -0.3), ss("higher_better", 0.3)))
+  power_of <- function(rows) { it <- .vcr_conf_iterations(rows, "stageNumber"); p <- mean(it$reject); c(p, sqrt(p * (1 - p) / it$n)) }
+  gap <- function(x, y) abs(x[1] - y[1]) / sqrt(x[2]^2 + y[2]^2)
+  z_bin <- c(multi = gap(power_of(ma("lower_better", c(-0.1, -0.15), 0.7, "binary")), power_of(ma("higher_better", c(0.1, 0.15), 0.3, "binary"))),
+             enrich = gap(power_of(en("lower_better", -0.15, -0.05, 0.7, "binary")), power_of(en("higher_better", 0.15, 0.05, 0.3, "binary"))),
+             ssr = gap(power_of(ss("lower_better", -0.15, 0.7, "binary")), power_of(ss("higher_better", 0.15, 0.3, "binary"))))
+  # and a harm is a harm: the same differences against the direction reject almost never
+  harm <- power_of(ma("higher_better", c(-0.1, -0.15), 0.3, "binary"))[1]
+  ok <- c(unlist(table), same_cont = same_cont, same_bin = same_bin, bit_cont, bin_complement = all(z_bin < 4), harm = harm < 0.02)
+  list(pass = all(ok), detail = sprintf("%d cells of the table of signs (planned effect on the benefit side sized, on the harm side refused as effect_against_direction, for futility, re-estimation and the count rate ratio; no direction refused); a lower-is-better mean equals the higher-is-better one with the sign turned in the design sizes and bit for bit in the multi-arm, enrichment and re-estimation simulations; a lower-is-better risk of 0.7 against 0.6/0.55 is its complement 0.3 against 0.4/0.45 within %.2f errors (multi-arm %.2f, enrichment %.2f, re-estimation %.2f); effects against the direction reject %.4f of the trials%s",
+                                        length(table), max(z_bin), z_bin[["multi"]], z_bin[["enrich"]], z_bin[["ssr"]], harm, if (all(ok)) "" else paste0("; FAILED: ", paste(names(ok)[!ok], collapse = ","))))
+})
+
+# --- the event-time cap (i) ------------------------------------------------------------------------------------------------
+
+vcr_case("N66i", c("AC-29", "AC-30"), function() {
+  if (!requireNamespace("gsDesign", quietly = TRUE)) stop("N66 requires the locked gsDesign library")
+  infl <- gsDesign::gsDesign(k = 2, test.type = 4, alpha = 0.025, beta = 0.1, timing = c(0.5, 1), sfu = gsDesign::sfLDOF, sfl = gsDesign::sfLDOF, n.fix = 1)$n.I[2]
+  hrs <- c(0.75, 0.82, 0.85, 0.88, 0.9, 0.93)
+  got <- vapply(hrs, function(hr) {
+    r <- .n66_job(list(kind = "futility_group_sequential", informationRates = c(0.5, 1)), "time_to_event", list(plannedEffect = hr, controlMedian = 12), id = "job_n66i",
+                  extra = list(accrual = list(duration = 12, followup = 24)))
+    if (identical(r$status, "succeeded")) vcr_measure_value(r, "max_events") else NA_real_
+  }, numeric(1))
+  want <- ceiling(vapply(hrs, function(hr) vcr_events_schoenfeld(hr, 0.025, 0.9, 0.5, 1), numeric(1)) * infl)
+  # re-estimation sizes its planned design with the same call, so it was refused at the same hazard ratios
+  r <- vcr_test_run(vcr_test_job("design.confirmatory", list(design = list(kind = "sample_size_reestimation", informationRates = c(0.5, 1)), endpoint = list(type = "time_to_event"),
+    truth = list(plannedEffect = 0.85, effects = list(0.85), controlMedian = 12), accrual = list(duration = 12, followup = 24), analysis = list(alpha = 0.025, power = 0.9)), job_id = "job_n66i2"))
+  ssr_planned <- if (identical(r$status, "succeeded")) vcr_measure_value(r, "planned_events") else NA_real_
+  # (its planned design has no futility boundary: Schoenfeld's events times the inflation of the efficacy-only O'Brien-Fleming design)
+  infl_efficacy <- gsDesign::gsDesign(k = 2, test.type = 1, alpha = 0.025, timing = c(0.5, 1), sfu = gsDesign::sfLDOF, n.fix = 1)$n.I[2]
+  want_ssr <- ceiling(vcr_events_schoenfeld(0.85, 0.025, 0.9, 0.5, 1) * infl_efficacy)
+  list(pass = all(is.finite(got)) && all(abs(got - want) <= 1) && is.finite(ssr_planned) && abs(ssr_planned - want_ssr) <= 1,
+       detail = sprintf("maximum events of the futility design at hazard ratios %s: %s; Schoenfeld's events times gsDesign's inflation (%.4f): %s; re-estimation at 0.85 plans %s events (gsDesign's efficacy-only inflation %.4f gives %d); the same calls were refused above hazard ratio 0.81 by a fixed cap of 1,000 subjects",
+                        paste(hrs, collapse = "/"), paste(got, collapse = "/"), infl, paste(want, collapse = "/"), format(ssr_planned), infl_efficacy, as.integer(want_ssr)))
 })

@@ -111,14 +111,41 @@ vcr_rpact_operating <- function(design) {
   })
 }
 
+# --- the direction of an effect, and the subject cap rpact asks for ---------------------------------------
+
+#' A problem stated in the person's direction, put as rpact reads it (a positive effect is the benefit, treated arm first). `direction` is
+#' `hypothesis.direction`; a hazard ratio needs none (below 1 is the benefit). For a mean the effect changes sign. For a risk the treated arm
+#' and the control swap labels: a treated rate of 0.20 against a control of 0.30 (lower is better) is the same problem as a treated 0.30
+#' against a control of 0.20 (higher is better) with the allocation reversed, a test of the difference of two rates not caring which arm
+#' carries which label. One effect at a time; a design that shares one control among several arms (selection, enrichment) cannot swap and
+#' uses rpact's own `directionUpper` for rates.
+.vcr_rpact_orient <- function(endpoint, effect, control_rate, allocation, direction) {
+  if (!identical(direction, "lower_better")) return(list(effect = effect, control_rate = control_rate, allocation = allocation))
+  switch(endpoint,
+    continuous = list(effect = -effect, control_rate = control_rate, allocation = allocation),
+    binary = list(effect = -effect, control_rate = control_rate + effect, allocation = 1 - allocation),
+    list(effect = effect, control_rate = control_rate, allocation = allocation))
+}
+
+#' The number of subjects rpact is allowed to enrol when a time-to-event design is sized by the Schoenfeld formula. The events a design needs
+#' do not depend on it (the sample size returned for 10 times the events and for 1,000 times are the same to the last digit); rpact only
+#' refuses a design whose events exceed it, which a fixed 1,000 did from a hazard ratio of about 0.81 up (HR 0.85 needs 1,600 events) with a
+#' message the person has no setting to answer. So it is derived: ten times the events the fixed design needs, which the longest
+#' group-sequential design (a few percent more) never reaches.
+.vcr_rpact_subject_cap <- function(events_fixed) as.numeric(max(1000, ceiling(10 * events_fixed)))
+
 # --- sample size and power of a design, one function for the three endpoints ---------------------------
 
 #' The sample size (patients, or events for a time-to-event endpoint) of a design at a planned effect, with the probabilities of stopping
 #' per look and the expected size under the alternative and the null. `design` is a `vcr_rpact_design` (NULL: the fixed design).
 #' `endpoint`: "continuous" (effect = difference of means, `sd`), "binary" (`effect` = risk difference, `control_rate`), "time_to_event"
 #' (`effect` = hazard ratio, `control_median`).
-vcr_rpact_sample_size <- function(endpoint, design, effect, alpha, power, allocation = 0.5, sd = 1, control_rate = NULL, control_median = NULL) {
+vcr_rpact_sample_size <- function(endpoint, design, effect, alpha, power, allocation = 0.5, sd = 1, control_rate = NULL, control_median = NULL,
+                                  direction = "higher_better") {
   .vcr_rpact_guard(function() {
+    o <- .vcr_rpact_orient(endpoint, effect, control_rate, allocation, direction)
+    effect <- o$effect; control_rate <- o$control_rate; allocation <- o$allocation
+    cap <- if (identical(endpoint, "time_to_event")) .vcr_rpact_subject_cap(vcr_events_schoenfeld(effect, alpha, power, allocation)) else NULL
     r <- allocation / (1 - allocation)
     d <- if (is.null(design)) rpact::getDesignGroupSequential(kMax = 1L, alpha = alpha, beta = 1 - power, sided = 1L) else design$object
     if (is.null(design)) d <- NULL
@@ -128,9 +155,9 @@ vcr_rpact_sample_size <- function(endpoint, design, effect, alpha, power, alloca
       binary = if (is.null(d)) rpact::getSampleSizeRates(alpha = alpha, beta = 1 - power, sided = 1L, pi1 = control_rate + effect, pi2 = control_rate, allocationRatioPlanned = r)
                else rpact::getSampleSizeRates(d, pi1 = control_rate + effect, pi2 = control_rate, allocationRatioPlanned = r),
       time_to_event = if (is.null(d)) rpact::getSampleSizeSurvival(alpha = alpha, beta = 1 - power, sided = 1L, hazardRatio = effect, lambda2 = log(2) / control_median,
-                                                                    allocationRatioPlanned = r, accrualTime = c(0, 12), maxNumberOfSubjects = 1000, typeOfComputation = "Schoenfeld")
+                                                                    allocationRatioPlanned = r, accrualTime = c(0, 12), maxNumberOfSubjects = cap, typeOfComputation = "Schoenfeld")
                       else rpact::getSampleSizeSurvival(d, hazardRatio = effect, lambda2 = log(2) / control_median, allocationRatioPlanned = r,
-                                                         accrualTime = c(0, 12), maxNumberOfSubjects = 1000, typeOfComputation = "Schoenfeld"),
+                                                         accrualTime = c(0, 12), maxNumberOfSubjects = cap, typeOfComputation = "Schoenfeld"),
       stop("endpoint"))
     if (identical(endpoint, "time_to_event")) {
       list(max = as.numeric(res$maxNumberOfEvents), expected_h1 = as.numeric(res$expectedEventsH1 %||% res$maxNumberOfEvents),
@@ -146,17 +173,19 @@ vcr_rpact_sample_size <- function(endpoint, design, effect, alpha, power, alloca
 
 #' The analytic power, the probability of stopping early and the expected size of a design of a stated maximum size at each of several
 #' true effects (the baselines an adaptive design is shown beside). `size` is the maximum number of patients (events for time to event).
-vcr_rpact_power <- function(endpoint, design, size, effects, alpha, allocation = 0.5, sd = 1, control_rate = NULL, control_median = NULL) {
+vcr_rpact_power <- function(endpoint, design, size, effects, alpha, allocation = 0.5, sd = 1, control_rate = NULL, control_median = NULL,
+                            direction = "higher_better") {
   .vcr_rpact_guard(function() {
-    r <- allocation / (1 - allocation)
     d <- if (is.null(design)) rpact::getDesignGroupSequential(kMax = 1L, alpha = alpha, sided = 1L) else design$object
     pick <- function(x, field) { v <- x[[field]]; if (is.null(v)) NA_real_ else as.numeric(v) }
     one <- function(e) {
+      o <- .vcr_rpact_orient(endpoint, e, control_rate, allocation, direction)
+      r <- o$allocation / (1 - o$allocation)
       p <- switch(endpoint,
-        continuous = rpact::getPowerMeans(d, alternative = e, stDev = sd, maxNumberOfSubjects = size, allocationRatioPlanned = r, normalApproximation = TRUE),
-        binary = rpact::getPowerRates(d, pi1 = control_rate + e, pi2 = control_rate, maxNumberOfSubjects = size, allocationRatioPlanned = r),
+        continuous = rpact::getPowerMeans(d, alternative = o$effect, stDev = sd, maxNumberOfSubjects = size, allocationRatioPlanned = r, normalApproximation = TRUE),
+        binary = rpact::getPowerRates(d, pi1 = o$control_rate + o$effect, pi2 = o$control_rate, maxNumberOfSubjects = size, allocationRatioPlanned = r),
         time_to_event = rpact::getPowerSurvival(d, hazardRatio = e, lambda2 = log(2) / control_median, maxNumberOfEvents = size, allocationRatioPlanned = r,
-                                                directionUpper = FALSE, accrualTime = c(0, 12), maxNumberOfSubjects = 100000, typeOfComputation = "Schoenfeld"))
+                                                directionUpper = FALSE, accrualTime = c(0, 12), maxNumberOfSubjects = .vcr_rpact_subject_cap(size), typeOfComputation = "Schoenfeld"))
       list(power = pick(p, "overallReject"), early_stop = sum(pick(p, "earlyStop"), na.rm = TRUE),
            expected = if (identical(endpoint, "time_to_event")) pick(p, "expectedNumberOfEvents") else pick(p, "expectedNumberOfSubjects"))
     }
@@ -279,7 +308,9 @@ vcr_rpact_zone_function <- function(endpoint, zone) {
 #' for a time-to-event endpoint), `cap` the largest total, `accrual` list(duration, dropoutAnnual, perYear, maxSubjects) for the event-time case.
 #' With `zone` (list(lower, upper)) the second stage is enlarged only when the conditional power of the planned one lies in the zone.
 vcr_rpact_sim_reestimation <- function(endpoint, design, effect, planned, cap, conditional_power, allocation, take, seed,
-                                       sd = 1, control_rate = NULL, control_median = NULL, accrual = NULL, zone = NULL) {
+                                       sd = 1, control_rate = NULL, control_median = NULL, accrual = NULL, zone = NULL, direction = "higher_better") {
+  o <- .vcr_rpact_orient(endpoint, effect, control_rate, allocation, direction)
+  effect <- o$effect; control_rate <- o$control_rate; allocation <- o$allocation
   r <- allocation / (1 - allocation)
   second <- c(NA_real_, planned[2L] - planned[1L]); most <- c(NA_real_, cap - planned[1L])
   rule <- if (is.null(zone)) NULL else vcr_rpact_zone_function(endpoint, zone)
@@ -302,13 +333,15 @@ vcr_rpact_sim_reestimation <- function(endpoint, design, effect, planned, cap, c
 #' the hazard ratio of each arm against the control). `planned` is the cumulative number of patients per arm (the control too) at each stage,
 #' or, for an event-time endpoint, the cumulative number of events of the arms still in the trial and the control. Returns the per-iteration
 #' rows: an arm has a row at the second stage when it was selected, and a row says whether its hypothesis was rejected there.
-vcr_rpact_sim_multiarm <- function(endpoint, design, effects, planned, selection, intersection, take, seed, sd = 1, control_rate = NULL) {
+vcr_rpact_sim_multiarm <- function(endpoint, design, effects, planned, selection, intersection, take, seed, sd = 1, control_rate = NULL, direction = "higher_better") {
+  lower <- identical(direction, "lower_better")
+  if (lower && identical(endpoint, "continuous")) effects <- -effects     # (the means simulation has no direction of its own; the rates one has)
   common <- c(list(design$object, activeArms = length(effects), typeOfShape = "userDefined",
                    effectMatrix = matrix(if (identical(endpoint, "binary")) control_rate + effects else effects, nrow = 1L),
                    intersectionTest = .vcr_rpact_intersection(intersection), maxNumberOfIterations = take, seed = seed),
               .vcr_rpact_selection(selection))
   sim <- switch(endpoint,
-    binary = do.call(rpact::getSimulationMultiArmRates, c(common, list(plannedSubjects = planned, piControl = control_rate, directionUpper = TRUE))),
+    binary = do.call(rpact::getSimulationMultiArmRates, c(common, list(plannedSubjects = planned, piControl = control_rate, directionUpper = !lower))),
     time_to_event = do.call(rpact::getSimulationMultiArmSurvival, c(common, list(plannedEvents = planned, directionUpper = FALSE))),
     do.call(rpact::getSimulationMultiArmMeans, c(common, list(plannedSubjects = planned, stDev = sd))))
   as.data.frame(sim$.data)
@@ -317,7 +350,10 @@ vcr_rpact_sim_multiarm <- function(endpoint, design, effects, planned, selection
 #' One batch of an enrichment design for one scenario: the effect in the biomarker-positive subset and outside it (a hazard ratio for an
 #' event-time endpoint), the subset's prevalence, and the selection between the subset and the full population at the interim. `planned` is
 #' the cumulative number of patients (events, for an event-time endpoint) of both arms at each stage.
-vcr_rpact_sim_enrichment <- function(endpoint, design, subset_effect, rest_effect, prevalence, planned, selection, intersection, take, seed, sd = 1, control_rate = NULL) {
+vcr_rpact_sim_enrichment <- function(endpoint, design, subset_effect, rest_effect, prevalence, planned, selection, intersection, take, seed, sd = 1, control_rate = NULL,
+                                     direction = "higher_better") {
+  lower <- identical(direction, "lower_better")
+  if (lower && identical(endpoint, "continuous")) { subset_effect <- -subset_effect; rest_effect <- -rest_effect }
   groups <- c("S", "R")
   effects <- matrix(c(subset_effect, rest_effect), nrow = 1L, dimnames = list(NULL, groups))
   effect_list <- switch(endpoint,
@@ -328,7 +364,7 @@ vcr_rpact_sim_enrichment <- function(endpoint, design, subset_effect, rest_effec
   common <- c(list(design$object, effectList = effect_list, intersectionTest = .vcr_rpact_intersection(intersection),
                    maxNumberOfIterations = take, seed = seed), .vcr_rpact_selection(selection))
   sim <- switch(endpoint,
-    binary = do.call(rpact::getSimulationEnrichmentRates, c(common, list(plannedSubjects = planned, directionUpper = TRUE))),
+    binary = do.call(rpact::getSimulationEnrichmentRates, c(common, list(plannedSubjects = planned, directionUpper = !lower))),
     time_to_event = do.call(rpact::getSimulationEnrichmentSurvival, c(common, list(plannedEvents = planned, directionUpper = FALSE))),
     do.call(rpact::getSimulationEnrichmentMeans, c(common, list(plannedSubjects = planned))))
   as.data.frame(sim$.data)

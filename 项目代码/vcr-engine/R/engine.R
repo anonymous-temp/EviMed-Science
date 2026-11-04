@@ -248,10 +248,10 @@ vcr_default_measure_source <- function(method) {
 #' sources and fails when a literal code is in neither list, because a code that
 #' is misspelt here is a refusal nobody has a message for.
 VCR_ENGINE_OWN_ISSUE_CODES <- c(
-  "constraint_unsatisfiable", "cpu_budget_exhausted", "design_effect_null", "design_not_computable", "grid_cell_failed", "handler_error",
+  "constraint_unsatisfiable", "cpu_budget_exhausted", "design_effect_null", "design_not_computable", "effect_against_direction", "grid_cell_failed", "handler_error",
   "input_format_unsupported", "input_hash_mismatch", "input_parse_failed", "input_source_not_reconstructed", "input_too_large",
   "job_invalid", "mechanistic_engine_unknown", "mechanistic_field_missing", "missing_covariate",
-  "model_card_field_missing", "model_risk_unknown", "performance_measure_unsupported", "replicates_all_failed",
+  "model_card_field_missing", "model_risk_unknown", "non_inferiority_effect_beyond_margin", "performance_measure_unsupported", "replicates_all_failed",
   "twin_label_inconsistent", "uncertainty_and_variability_conflated",
   "dose_response_not_computable", "network_not_connected", "network_not_computable",
   "imputation_not_possible", "too_many_person_periods")

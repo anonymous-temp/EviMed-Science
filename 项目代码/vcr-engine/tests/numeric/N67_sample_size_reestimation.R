@@ -23,7 +23,7 @@
   design = c(list(kind = "sample_size_reestimation", informationRates = rates, conditionalPower = cp, maxSampleSizeFactor = factor),
              if (!is.null(zone)) list(promisingZone = zone)),
   endpoint = list(type = "continuous"), truth = list(plannedEffect = planned, effects = effects, sd = 1), analysis = list(alpha = 0.025, power = 0.9))
-.n67_run <- function(sc, seed, id) vcr_test_run(vcr_test_job("design.confirmatory", sc, seed = seed, job_id = id))
+.n67_run <- function(sc, seed, id) vcr_test_run(vcr_test_job("design.confirmatory", vcr_test_conf_scenario(sc), seed = seed, job_id = id))
 .n67_row <- function(r, role_or_effect) {
   for (e in r$diagnostics$confirmatory$effects) if (isTRUE(all.equal(e$effect, role_or_effect)) || identical(e$role, role_or_effect)) return(e)
   NULL

@@ -45,7 +45,14 @@ VCR_CONFIRMATORY_NULL_RATE_RATIO <- 1
 .vcr_conf_common <- function(sc) {
   d <- sc$design; an <- sc$analysis %||% list(); tr <- sc$truth %||% list()
   spending <- as.character(d[["spending"]] %||% "obrien_fleming")
-  list(kind = as.character(d$kind), endpoint = as.character(sc$endpoint$type %||% ""),
+  endpoint <- as.character(sc$endpoint$type %||% "")
+  # which way a mean or a risk difference is better (hypothesis.direction): the one sign convention of the five kinds. A hazard ratio and a
+  # rate ratio have theirs (below 1); the key is not read for them.
+  direction <- if (endpoint %in% c("continuous", "binary")) as.character(sc[["hypothesis"]][["direction"]] %||% "") else "higher_better"
+  if (!(direction %in% c("higher_better", "lower_better"))) {
+    vcr_abort("scenario_field_missing", "scenario.hypothesis.direction", "A confirmatory design on a mean or a risk states which direction is better (higher_better or lower_better): the same sign is a benefit one way and a harm the other.")
+  }
+  list(kind = as.character(d$kind), endpoint = endpoint, direction = direction,
        alpha = vcr_scalar(an$alpha, 0.025), power = vcr_scalar(an$power, 0.9), allocation = vcr_scalar(d$allocation, 0.5),
        rates = vcr_num(d$informationRates), spending = spending, gamma = vcr_scalar(d$spendingGamma, NULL),
        sd = vcr_scalar(tr$sd, 1), control_rate = vcr_scalar(tr[["controlRate"]], NULL), control_median = vcr_scalar(tr$controlMedian, NULL),
@@ -96,9 +103,12 @@ VCR_CONFIRMATORY_NULL_RATE_RATIO <- 1
 
 #' The analytic power of a fixed two-arm comparison with `n_treat` and `n_control` patients at a true effect, the engine's own closed form.
 .vcr_conf_fixed_power <- function(p, effect, n_treat, n_control, alpha) {
+  lower <- identical(p$direction, "lower_better")
   switch(p$endpoint,
-    continuous = vcr_power_means(effect, p$sd, n_treat, n_control, alpha, 1),
-    binary = vcr_power_proportions(p$control_rate, p$control_rate + effect, n_treat, n_control, alpha, 1))
+    continuous = vcr_power_means(if (lower) -effect else effect, p$sd, n_treat, n_control, alpha, 1),
+    # a lower rate is better: the arms swap labels (the test of two rates does not care which carries which)
+    binary = if (lower) vcr_power_proportions(p$control_rate + effect, p$control_rate, n_control, n_treat, alpha, 1)
+             else vcr_power_proportions(p$control_rate, p$control_rate + effect, n_treat, n_control, alpha, 1))
 }
 
 #' What the scenario stated that the answer turns on, echoed with the result so that a page can word the premises without the job: the
@@ -106,7 +116,8 @@ VCR_CONFIRMATORY_NULL_RATE_RATIO <- 1
 .vcr_conf_given <- function(sc) {
   tr <- sc$truth %||% list(); d <- sc$design %||% list()
   zone <- d$promisingZone
-  keep <- list(plannedEffect = vcr_scalar(tr$plannedEffect, NULL), controlRate = vcr_scalar(tr[["controlRate"]], NULL), controlMedian = vcr_scalar(tr$controlMedian, NULL),
+  hy <- sc[["hypothesis"]][["direction"]]
+  keep <- list(direction = if (is.character(hy)) hy, plannedEffect = vcr_scalar(tr$plannedEffect, NULL), controlRate = vcr_scalar(tr[["controlRate"]], NULL), controlMedian = vcr_scalar(tr$controlMedian, NULL),
                controlEventRate = vcr_scalar(tr$controlEventRate, NULL), rateRatio = vcr_scalar(tr$rateRatio, NULL), overdispersion = vcr_scalar(tr$overdispersion, NULL),
                subsetPrevalence = vcr_scalar(d$subsetPrevalence, NULL), dropoutAnnual = vcr_scalar(sc$accrual$dropoutAnnual, NULL),
                effectScenarios = if (!is.null(tr$effectScenarios)) length(tr$effectScenarios), subsetScenarios = if (!is.null(tr$subsetEffects)) length(tr$subsetEffects),
@@ -151,7 +162,7 @@ VCR_CONFIRMATORY_NULL_RATE_RATIO <- 1
   k <- length(p$rates)
   gs <- vcr_rpact_design(p$rates, p$alpha, p$power, p[["spending"]], p$gamma, futility)
   op <- vcr_rpact_operating(gs)
-  size <- vcr_rpact_sample_size(p$endpoint, gs, effect, p$alpha, p$power, p$allocation, p$sd, p$control_rate, p$control_median)
+  size <- vcr_rpact_sample_size(p$endpoint, gs, effect, p$alpha, p$power, p$allocation, p$sd, p$control_rate, p$control_median, direction = p$direction)
   # the fixed design it is read against: the engine's own closed form, not rpact's
   fixed <- switch(p$endpoint,
     continuous = vcr_n_means(effect, p$sd, p$alpha, p$power, p$allocation, 1)$total,
@@ -244,8 +255,8 @@ VCR_CONFIRMATORY_NULL_RATE_RATIO <- 1
   if (!has_null) p <- .vcr_conf_assume(p, "truth.effects", null_value, basis = "added: the null, to show the type I error")
   # the group-sequential design the same looks make (efficacy only), and the fixed one; both sized for the planned effect
   gs <- vcr_rpact_design(p$rates, p$alpha, p$power, p[["spending"]], p$gamma, NULL)
-  gs_size <- vcr_rpact_sample_size(p$endpoint, gs, planned_effect, p$alpha, p$power, p$allocation, p$sd, p$control_rate, p$control_median)
-  fx_size <- vcr_rpact_sample_size(p$endpoint, NULL, planned_effect, p$alpha, p$power, p$allocation, p$sd, p$control_rate, p$control_median)
+  gs_size <- vcr_rpact_sample_size(p$endpoint, gs, planned_effect, p$alpha, p$power, p$allocation, p$sd, p$control_rate, p$control_median, direction = p$direction)
+  fx_size <- vcr_rpact_sample_size(p$endpoint, NULL, planned_effect, p$alpha, p$power, p$allocation, p$sd, p$control_rate, p$control_median, direction = p$direction)
   plan_total <- if (!is.null(d$plannedSize)) vcr_scalar(d$plannedSize) else .vcr_conf_ceiling(gs_size$max)
   if (is.null(d$plannedSize)) p <- .vcr_conf_assume(p, "design.plannedSize", plan_total, basis = "derived: the size of the group-sequential design with these looks, for the planned effect")
   plan <- c(ceiling(p$rates[1L] * plan_total), plan_total)
@@ -261,11 +272,11 @@ VCR_CONFIRMATORY_NULL_RATE_RATIO <- 1
   is_null <- abs(effects - null_value) < 1e-12
   iters <- .vcr_conf_iterations_planned(job, NULL, NULL, is_null)
   batches <- vcr_rpact_batches(function(take, seed, s) vcr_rpact_sim_reestimation(p$endpoint, inv, effects[s], plan, cap, cp, p$allocation, take, seed,
-                                 sd = p$sd, control_rate = p$control_rate, control_median = p$control_median, accrual = accrual, zone = zone),
+                                 sd = p$sd, control_rate = p$control_rate, control_median = p$control_median, accrual = accrual, zone = zone, direction = p$direction),
                                iters, vcr_scalar(job$seed, 1), scenarios = length(effects), progress = progress)
   size_col <- if (events) "numberOfSubjects" else "numberOfCumulatedSubjects"
-  fixed_pw <- vcr_rpact_power(p$endpoint, NULL, .vcr_conf_ceiling(fx_size$max), effects, p$alpha, p$allocation, p$sd, p$control_rate, p$control_median)
-  gs_pw <- vcr_rpact_power(p$endpoint, gs, .vcr_conf_ceiling(gs_size$max), effects, p$alpha, p$allocation, p$sd, p$control_rate, p$control_median)
+  fixed_pw <- vcr_rpact_power(p$endpoint, NULL, .vcr_conf_ceiling(fx_size$max), effects, p$alpha, p$allocation, p$sd, p$control_rate, p$control_median, direction = p$direction)
+  gs_pw <- vcr_rpact_power(p$endpoint, gs, .vcr_conf_ceiling(gs_size$max), effects, p$alpha, p$allocation, p$sd, p$control_rate, p$control_median, direction = p$direction)
   rows_out <- list(); issues <- list()
   for (s in seq_along(effects)) {
     r <- batches$rows[[s]]
@@ -337,15 +348,17 @@ VCR_CONFIRMATORY_NULL_RATE_RATIO <- 1
   inv <- vcr_rpact_inverse_normal(p$rates, p$alpha, p[["spending"]], p$gamma)
   iters <- .vcr_conf_iterations_planned(job, NULL, NULL, is_null)
   batches <- vcr_rpact_batches(function(take, seed, s) vcr_rpact_sim_multiarm(p$endpoint, inv, scenarios[[s]], planned, selection, intersection, take, seed,
-                                 sd = p$sd, control_rate = p$control_rate),
+                                 sd = p$sd, control_rate = p$control_rate, direction = p$direction),
                                iters, vcr_scalar(job$seed, 1), scenarios = length(scenarios), progress = progress)
   size_name <- if (events) "expected_events" else "expected_sample_size"
   rows_out <- list()
+  # (the benefit of an arm: the hazard ratio below 1, the difference on the side the direction names)
+  benefit <- function(e) if (events) -e else if (identical(p$direction, "lower_better")) -e else e
   for (s in seq_along(scenarios)) {
     r <- batches$rows[[s]]; if (is.null(r)) next
     it <- .vcr_conf_iterations(r)
-    # the best arm is the one with the better effect: the larger difference, the smaller hazard ratio
-    best <- which(scenarios[[s]] == if (events) min(scenarios[[s]]) else max(scenarios[[s]]))
+    # the best arm is the one with the better effect: the larger benefit
+    best <- which(benefit(scenarios[[s]]) == max(benefit(scenarios[[s]])))
     # an event-time trial costs the events planned for the stage it stopped at
     if (events) it$size <- ifelse(it$stage == 2L, planned[2L], planned[1L])
     # an arm is selected when it has a row at the second stage; one that stopped at the first stage for success has none
@@ -369,7 +382,7 @@ VCR_CONFIRMATORY_NULL_RATE_RATIO <- 1
                      best_hr <- min(scenarios[[s]])
                      own_events <- planned[1L] * (1 + best_hr) / (1 + sum(scenarios[[s]])) + (planned[2L] - planned[1L])
                      .vcr_conf_events_power(own_events, best_hr, p$alpha / arms)
-                   } else .vcr_conf_fixed_power(p, max(scenarios[[s]]), per_arm, per_arm, p$alpha / arms)
+                   } else .vcr_conf_fixed_power(p, scenarios[[s]][best[1L]], per_arm, per_arm, p$alpha / arms)
     rows_out[[length(rows_out) + 1L]] <- list(role = if (is_null[s]) "null" else "assumed", effect = scenarios[[s]], iterations = n_it, cells = cells,
       fixed = list(power = split_power, alpha = p$alpha / arms))
   }
@@ -413,7 +426,7 @@ VCR_CONFIRMATORY_NULL_RATE_RATIO <- 1
   inv <- vcr_rpact_inverse_normal(p$rates, p$alpha, p[["spending"]], p$gamma)
   iters <- .vcr_conf_iterations_planned(job, NULL, NULL, is_null)
   batches <- vcr_rpact_batches(function(take, seed, s) vcr_rpact_sim_enrichment(p$endpoint, inv, scenarios[[s]][["subset"]], scenarios[[s]][["rest"]], prevalence, planned,
-                                 selection, intersection, take, seed, sd = p$sd, control_rate = p$control_rate),
+                                 selection, intersection, take, seed, sd = p$sd, control_rate = p$control_rate, direction = p$direction),
                                iters, vcr_scalar(job$seed, 1), scenarios = length(scenarios), progress = progress)
   size_name <- if (events) "expected_events" else "expected_sample_size"
   rows_out <- list()

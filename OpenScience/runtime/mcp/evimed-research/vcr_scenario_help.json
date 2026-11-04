@@ -2203,7 +2203,7 @@
       "designs": {"two_arm_fixed":["continuous","binary","time_to_event"],"group_sequential":["time_to_event"],"simon_two_stage":["binary"],"single_arm":["binary"]},
       "notes": [
         "design.kind × endpoint.type this method implements: two_arm_fixed (continuous|binary|time_to_event); group_sequential (time_to_event); simon_two_stage (binary); single_arm (binary). Any other pairing is refused (design_not_supported).",
-        "hypothesis is for a two-arm design and is left out for superiority (the default). { kind: \"non_inferiority\", margin } tests that the treatment is not worse than the control by more than the margin: margin is a positive number in the outcome's units for a mean, a risk difference below 1 for a binary endpoint (the treatment rate may be this far below the control's), and a hazard ratio above 1 for an event-time endpoint (the largest ratio still counted as not worse). The margin is a clinical choice: ask for it, never invent one. truth then states the effect the treatment is EXPECTED to have (often 0, or a hazard ratio of 1), not the margin; design.simulate measures the type I error by putting the truth on the margin itself. The test is one-sided; analysis.method is the t-test, the risk difference or the log-rank test."
+        "hypothesis is for a two-arm design and is left out for superiority (the default). { kind: \"non_inferiority\", margin, direction } tests that the treatment is not worse than the control by more than the margin: margin is a positive number in the outcome's units for a mean, a risk difference below 1 for a binary endpoint, and a hazard ratio above 1 for an event-time endpoint (the largest ratio still counted as not worse). direction (a mean or a risk only; a hazard ratio is always better below 1) says which way is better: higher_better for a response rate or a score that should not fall by more than the margin, lower_better for an adverse-event rate, a blood pressure or a symptom score that should not rise by more than it. It is never defaulted, because the same margin asks a different question the other way (34,504 patients against 1,404 for event rates of 8% and 10% and a margin of 3 points): ask which way is better, do not guess. The margin is a clinical choice: ask for it, never invent one. An expected effect on the wrong side of the margin has no sample size (the power falls as patients are added): design_analytic refuses it by name, and design_simulation shows the power at a stated size. truth then states the effect the treatment is EXPECTED to have (often 0, or a hazard ratio of 1), not the margin; design.simulate measures the type I error by putting the truth on the margin itself. The test is one-sided (at alpha / sided, group-sequential designs included); analysis.method is the t-test, the risk difference or the log-rank test."
       ],
       "rows": [
         {"path":"design","type":"object","required":true},
@@ -2441,6 +2441,15 @@
           "within": "hypothesis",
           "when": [{"path":"hypothesis.kind","in":["non_inferiority"]}],
           "fieldRole": "research_fact"
+        },
+        {
+          "path": "hypothesis.direction",
+          "type": "string",
+          "values": ["higher_better","lower_better"],
+          "required": true,
+          "within": "hypothesis",
+          "when": [{"path":"hypothesis.kind","in":["non_inferiority"]},{"path":"endpoint.type","notIn":["time_to_event"]}],
+          "fieldRole": "defaultable"
         }
       ],
       "rules": [
@@ -2492,6 +2501,16 @@
           "scenario": {"design":{"kind":"two_arm_fixed"},"endpoint":{"type":"binary"},"truth":{"controlRate":0.3,"treatmentRate":0.45},"analysis":{"alpha":0.025,"power":0.9}}
         },
         {
+          "label": "non-inferiority on an adverse-event rate, where lower is better: expected 8% against 10% on the control and allowed to be at most 3 points higher (the same numbers with higher_better ask for 25 times the patients)",
+          "scenario": {
+            "design": {"kind":"two_arm_fixed"},
+            "endpoint": {"type":"binary"},
+            "truth": {"controlRate":0.1,"treatmentRate":0.08},
+            "hypothesis": {"kind":"non_inferiority","margin":0.03,"direction":"lower_better"},
+            "analysis": {"alpha":0.025,"power":0.9}
+          }
+        },
+        {
           "label": "non-inferiority: the treatment is expected to be as good as the control (hazard ratio 1) and must not be worse than a hazard ratio of 1.3",
           "scenario": {
             "design": {"kind":"two_arm_fixed"},
@@ -2520,7 +2539,7 @@
         "A single-arm trial of a mean or a survival time is compared with a fixed benchmark: truth.benchmark is the historical mean (continuous), truth.controlMedian or truth.controlDistribution the benchmark survival, and truth.effect (the true mean minus the benchmark) or truth.hazardRatio (the trial's hazard over the benchmark's) is the effect, 0 or 1 for the null. analysis.alternative describes that parameter: for a time-to-event endpoint less is a benefit (a hazard below the benchmark's) and greater is harm.",
         "costs: the cost measure is perPatient x N + perSite x sites + perMonth x duration. A duration exists only for a time-to-event design with an accrual block, so a continuous or binary design gets its cost from perPatient and perSite, and a perMonth cost there is declined with its reason (diagnostics.performanceNotComputed).",
         "A frozen Simon two-stage design (simon_two_stage) is simulated at truth.responseRate with its given boundaries n1, r1, n, r. truth.alternativeRate and analysis.alpha do not change that; they are what the result reports the frozen design against: diagnostics.frozenDesign holds its exact rejection probability, early-stop probability and expected sample size at truth.nullRate and at truth.alternativeRate, and, when analysis.alpha is written, whether its type I error is within it.",
-        "hypothesis is for a two-arm design and is left out for superiority (the default). { kind: \"non_inferiority\", margin } tests that the treatment is not worse than the control by more than the margin: margin is a positive number in the outcome's units for a mean, a risk difference below 1 for a binary endpoint (the treatment rate may be this far below the control's), and a hazard ratio above 1 for an event-time endpoint (the largest ratio still counted as not worse). The margin is a clinical choice: ask for it, never invent one. truth then states the effect the treatment is EXPECTED to have (often 0, or a hazard ratio of 1), not the margin; design.simulate measures the type I error by putting the truth on the margin itself. The test is one-sided; analysis.method is the t-test, the risk difference or the log-rank test.",
+        "hypothesis is for a two-arm design and is left out for superiority (the default). { kind: \"non_inferiority\", margin, direction } tests that the treatment is not worse than the control by more than the margin: margin is a positive number in the outcome's units for a mean, a risk difference below 1 for a binary endpoint, and a hazard ratio above 1 for an event-time endpoint (the largest ratio still counted as not worse). direction (a mean or a risk only; a hazard ratio is always better below 1) says which way is better: higher_better for a response rate or a score that should not fall by more than the margin, lower_better for an adverse-event rate, a blood pressure or a symptom score that should not rise by more than it. It is never defaulted, because the same margin asks a different question the other way (34,504 patients against 1,404 for event rates of 8% and 10% and a margin of 3 points): ask which way is better, do not guess. The margin is a clinical choice: ask for it, never invent one. An expected effect on the wrong side of the margin has no sample size (the power falls as patients are added): design_analytic refuses it by name, and design_simulation shows the power at a stated size. truth then states the effect the treatment is EXPECTED to have (often 0, or a hazard ratio of 1), not the margin; design.simulate measures the type I error by putting the truth on the margin itself. The test is one-sided (at alpha / sided, group-sequential designs included); analysis.method is the t-test, the risk difference or the log-rank test.",
         "A hazard ratio that changes over time is simulation-only: truth.treatmentHazardRatios = { breaks, ratios } gives the treatment arm's hazard as ratios[j] times the control's on the j-th interval of breaks (ratios has one more value than breaks, the last runs on), so a delayed effect is breaks [6], ratios [1, 0.6] and a crossing of the curves [6], [1.4, 0.6]. State it INSTEAD of truth.hazardRatio, not beside it; the analytic design (design_analytic) and the assurance refuse it by name. There is then no single true hazard ratio, so bias, mean squared error and coverage are not computed for the log-rank family, and no closed form is drawn for the power; an RMST analysis keeps its bias, against the RMST difference integrated from the two survival curves.",
         "analysis.method maxcombo (time-to-event, two-arm) is the most favourable of the four Fleming-Harrington weighted log-rank statistics G(0,0), G(0,1), G(1,0), G(1,1), its p-value read from their joint null distribution. It is never a default: the analysis is the log-rank unless you say otherwise, because the log-rank is often as good (it loses to MaxCombo mainly when the curves separate late or cross), and the choice is made before the data. Use it only for a hypothesis the person has stated (an effect that starts late, curves that separate late or cross), and run the log-rank beside it. A group-sequential design may analyse by maxcombo too (see below).",
         "analysis.method modestly_weighted (time-to-event, two-arm; the weight is 1 / max(S, sStar) of the pooled survival curve, sStar 0.5 unless stated, so a late event counts at most 1 / sStar times an early one) is the middle road between the log-rank test and a late-weighted test: it keeps most of the power of a late-weighted test when the effect starts late, and it protects against the false positives a late-weighted test gives when the treatment is worse early and equal later. Describe it by that protection, and run the log-rank beside it. It is never a default. The result carries the log-rank power on the same replicates and, for a design with an effect, the rejection probability of both tests under a strong null derived from the design (the treatment worse early, then equal), as MaxCombo does. A group-sequential design may use it too (see below).",
@@ -3033,6 +3052,15 @@
           "fieldRole": "research_fact"
         },
         {
+          "path": "hypothesis.direction",
+          "type": "string",
+          "values": ["higher_better","lower_better"],
+          "required": true,
+          "within": "hypothesis",
+          "when": [{"path":"hypothesis.kind","in":["non_inferiority"]},{"path":"endpoint.type","notIn":["time_to_event"]}],
+          "fieldRole": "defaultable"
+        },
+        {
           "path": "performance",
           "type": "list",
           "count": {"min":0,"max":7},
@@ -3179,7 +3207,7 @@
       "endpoints": ["continuous","binary","time_to_event"],
       "notes": [
         "design.kind picks the question. futility_group_sequential: efficacy and futility boundaries for an interim-look design (the size, the expected size under the null and the alternative, the chance of stopping at each look). sample_size_reestimation: one interim look, the second stage sized so that the conditional power at the interim estimate reaches conditionalPower, between the planned second stage and maxSampleSizeFactor times the plan, reported for each assumed effect beside the fixed and the group-sequential design with the same alpha and power. design.promisingZone {lower, upper} (re-estimation only, optional) limits the enlargement to the trials whose conditional power at the interim, read at the interim estimate for the planned second stage, lies between the two bounds: below the lower bound or above the upper the planned size is kept, which stops the rule from enlarging the trials that have no effect; without it the second stage is sized at every interim estimate. multi_arm_selection: activeArms against one control, the arm(s) kept at the interim by selection.rule, closed testing with intersectionTest. enrichment: a biomarker-positive subset (subsetPrevalence of the patients) and the full population, one of them kept at the interim. count_endpoint: the sample size of a rate ratio for a count (negative binomial), fixed, or group sequential when informationRates is given.",
-        "Effects are on the endpoint's own scale: a difference of means (continuous), a risk difference (binary: truth.controlRate plus the effect is the treatment rate), a hazard ratio (time to event, with truth.controlMedian and an accrual). truth.plannedEffect is the effect the size is planned for; truth.effects (re-estimation) lists the true effects to report. The null is ALWAYS added as a row (an effect of 0, a hazard ratio of 1, every arm at 0) so the type I error is shown; say nothing about it.",
+        "Effects are on the endpoint's own scale: a difference of means (continuous), a risk difference (binary: truth.controlRate plus the effect is the treatment rate), a hazard ratio (time to event, with truth.controlMedian and an accrual). ONE sign convention holds for all five kinds: for a mean or a risk, hypothesis.direction (required, never defaulted: ask which way is better) says whether a positive difference (higher_better) or a negative one (lower_better) is the benefit, and an adverse-event rate that should fall is lower_better with a negative effect; a hazard ratio and a rate ratio are a benefit below 1 and take no direction. truth.plannedEffect is the effect the size is planned for and must be a benefit: on the wrong side (a hazard ratio above 1, a difference against the direction) it is refused by name (effect_against_direction); the other effects (truth.effects, effectScenarios, subsetEffects) may be harm, to show what the design does there. truth.effects (re-estimation) lists the true effects to report. The null is ALWAYS added as a row (an effect of 0, a hazard ratio of 1, every arm at 0) so the type I error is shown; say nothing about it.",
         "alpha is one-sided (0.025 by default) and power 0.9 unless analysis states them. design.plannedSize: patients in total (events for a time-to-event design) for re-estimation and enrichment, patients PER ARM (the control too) for multi-arm and, for an event-time multi-arm design, the events in all at the final analysis (the arms still in the trial and the control); re-estimation takes the size of the group-sequential design with the same looks when it is not stated. Every default the engine takes is returned in confirmatory.assumed: report each one to the person as an assumption.",
         "A stopped run (the CPU budget) is returned as limited with the iterations each effect ran. Multi-arm and enrichment take continuous, binary and event-time endpoints; the event-time ones are simulated on the log-rank statistics from the planned events (proportional hazards, the same control hazard in every group, no accrual, follow-up or dropout), so they need no truth.controlMedian or accrual, their sizes are events, and the effects are hazard ratios. An enrichment design tests with simes or bonferroni (dunnett is refused by name). The result is read on the trial page; do not recompute any number of it."
       ],
@@ -3363,6 +3391,16 @@
           "when": [{"path":"design.kind","notIn":["count_endpoint"]}],
           "fieldRole": "defaultable"
         },
+        {"path":"hypothesis","type":"object","required":true,"when":[{"path":"endpoint.type","in":["continuous","binary"]}]},
+        {"path":"hypothesis.kind","type":"string","values":["superiority"],"when":[{"path":"endpoint.type","in":["continuous","binary"]}],"fieldRole":"defaultable"},
+        {
+          "path": "hypothesis.direction",
+          "type": "string",
+          "values": ["higher_better","lower_better"],
+          "required": true,
+          "when": [{"path":"endpoint.type","in":["continuous","binary"]}],
+          "fieldRole": "defaultable"
+        },
         {"path":"truth","type":"object","required":true},
         {
           "path": "truth.plannedEffect",
@@ -3508,6 +3546,7 @@
           "scenario": {
             "design": {"kind":"futility_group_sequential","informationRates":[0.4,0.7,1]},
             "endpoint": {"type":"continuous"},
+            "hypothesis": {"direction":"higher_better"},
             "truth": {"plannedEffect":0.4,"sd":1},
             "analysis": {"alpha":0.025,"power":0.9}
           }
@@ -3526,6 +3565,7 @@
           "scenario": {
             "design": {"kind":"sample_size_reestimation","informationRates":[0.5,1],"conditionalPower":0.8,"maxSampleSizeFactor":2,"promisingZone":{"lower":0.36,"upper":0.8}},
             "endpoint": {"type":"continuous"},
+            "hypothesis": {"direction":"higher_better"},
             "truth": {"plannedEffect":0.4,"effects":[0.2,0.3],"sd":1}
           }
         },
@@ -3534,6 +3574,7 @@
           "scenario": {
             "design": {"kind":"multi_arm_selection","informationRates":[0.5,1],"activeArms":3,"plannedSize":80},
             "endpoint": {"type":"continuous"},
+            "hypothesis": {"direction":"higher_better"},
             "truth": {"effectScenarios":[[0.2,0.4,0.6],[0.3,0.3,0.3]],"sd":1}
           }
         },
@@ -3558,7 +3599,18 @@
           "scenario": {
             "design": {"kind":"enrichment","informationRates":[0.5,1],"subsetPrevalence":0.4,"plannedSize":200},
             "endpoint": {"type":"binary"},
+            "hypothesis": {"direction":"higher_better"},
             "truth": {"subsetEffects":[{"subset":0.25,"rest":0},{"subset":0.15,"rest":0.15}],"controlRate":0.3}
+          }
+        },
+        {
+          "label": "stop for futility where LOWER is better: an adverse-event rate that should fall from 30% to 20% (the effect is -0.1, the direction says a negative difference is the benefit)",
+          "scenario": {
+            "design": {"kind":"futility_group_sequential","informationRates":[0.5,1]},
+            "endpoint": {"type":"binary"},
+            "hypothesis": {"direction":"lower_better"},
+            "truth": {"plannedEffect":-0.1,"controlRate":0.3},
+            "analysis": {"alpha":0.025,"power":0.9}
           }
         },
         {
@@ -4750,6 +4802,15 @@
           "within": "hypothesis",
           "when": [{"path":"hypothesis.kind","in":["non_inferiority"]}],
           "fieldRole": "research_fact"
+        },
+        {
+          "path": "hypothesis.direction",
+          "type": "string",
+          "values": ["higher_better","lower_better"],
+          "required": true,
+          "within": "hypothesis",
+          "when": [{"path":"hypothesis.kind","in":["non_inferiority"]},{"path":"endpoint.type","notIn":["time_to_event"]}],
+          "fieldRole": "defaultable"
         },
         {
           "path": "performance",

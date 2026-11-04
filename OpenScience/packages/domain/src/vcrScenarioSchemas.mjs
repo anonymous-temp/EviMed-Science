@@ -365,6 +365,10 @@ const SIMULATED_DESIGN_FIELDS = {
 const HYPOTHESIS = object({
   kind: req(string({ values: ['superiority', 'non_inferiority'] })),
   margin: req(gated(number({ gt: 0, unit: 'the endpoint\'s own scale: outcome units, risk difference, or hazard ratio' }), is('hypothesis.kind', 'non_inferiority'))),
+  // which way the margin points (2026-11-04): a mean or a risk difference of "not worse than the margin" is a different question for an outcome
+  // where higher is better (a response rate) and one where lower is (an adverse event), 34,504 patients against 1,404 for the same two rates, so
+  // it is never defaulted. A hazard ratio's direction is known (a lower ratio is the benefit) and the key is not read for it.
+  direction: req(gated(string({ values: ['higher_better', 'lower_better'] }), [is('hypothesis.kind', 'non_inferiority'), isNot('endpoint.type', 'time_to_event')])),
 })
 
 /**
@@ -410,6 +414,14 @@ const CONFIRMATORY_SCHEMA = object({
     subsetPrevalence: req(gated(number({ ...PROBABILITY }), CONF_KIND('enrichment'))),
   })),
   endpoint: req(gated(ENDPOINT(), isNot('design.kind', 'count_endpoint'))),
+  // which way a mean difference or a risk difference is better (2026-11-04). It orients every effect of the scenario the same way in all five
+  // kinds: higher_better reads a positive difference as the benefit, lower_better a negative one. A hazard ratio and a rate ratio have their
+  // direction already (below 1 is the benefit) and the key is not read for them. Never defaulted: the same -0.1 is a benefit of ten points
+  // or a harm of ten points, and a size planned for the wrong one is power 0.
+  hypothesis: req(gated(object({
+    kind: string({ values: ['superiority'] }),
+    direction: req(string({ values: ['higher_better', 'lower_better'] })),
+  }), is('endpoint.type', 'continuous', 'binary'))),
   truth: req(object({
     plannedEffect: req(gated(number(), CONF_KIND('futility_group_sequential', 'sample_size_reestimation'))),
     effects: gated(array(number(), { min: 1, max: 8 }), CONF_KIND('sample_size_reestimation')),
@@ -1663,16 +1675,18 @@ export function vcrIsNullScenario(scenario) {
   // A non-inferiority design is at its null on the margin, not at an effect of zero: the type I error is the rejection probability there.
   const margin = scenario?.hypothesis?.kind === 'non_inferiority' && finite(scenario.hypothesis.margin) ? /** @type {number} */ (scenario.hypothesis.margin) : null
   if (margin !== null) {
-    if (type === 'continuous') return finite(truth.effect) && tiny(truth.effect + margin)
+    // the null difference is minus the margin when higher is better and plus the margin when lower is (`hypothesis.direction`)
+    const shift = scenario.hypothesis.direction === 'lower_better' ? -margin : margin
+    if (type === 'continuous') return finite(truth.effect) && tiny(truth.effect + shift)
     if (type === 'time_to_event') return finite(truth.hazardRatio) && truth.hazardRatio > 0 && tiny(Math.log(truth.hazardRatio / margin))
     if (type === 'binary') {
       const p0 = truth.controlRate
       if (!finite(p0)) return false
-      if (finite(truth.treatmentRate)) return tiny(truth.treatmentRate - p0 + margin)
-      if (finite(truth.riskDifference)) return tiny(truth.riskDifference + margin)
+      if (finite(truth.treatmentRate)) return tiny(truth.treatmentRate - p0 + shift)
+      if (finite(truth.riskDifference)) return tiny(truth.riskDifference + shift)
       if (finite(truth.oddsRatio) && p0 > 0 && p0 < 1) {
         const odds = truth.oddsRatio * p0 / (1 - p0)
-        return tiny(odds / (1 + odds) - p0 + margin)
+        return tiny(odds / (1 + odds) - p0 + shift)
       }
     }
     return false
@@ -1718,10 +1732,12 @@ export function vcrNullTruth(scenario) {
   const { null: _label, effect: _effect, hazardRatio: _hazardRatio, treatmentHazardRatios: _treatmentHazardRatios, treatmentRate: _treatmentRate, riskDifference: _riskDifference, oddsRatio: _oddsRatio, ...rest } = truth
   // For a non-inferiority design "no effect" is the margin itself: the case where the new treatment is exactly as much worse as is allowed.
   const margin = scenario?.hypothesis?.kind === 'non_inferiority' && typeof scenario.hypothesis.margin === 'number' && scenario.hypothesis.margin > 0 ? scenario.hypothesis.margin : null
+  // (and on the side the direction names: minus the margin when higher is better, plus it when lower is)
+  const nullDifference = margin === null ? 0 : scenario.hypothesis.direction === 'lower_better' ? margin : -margin
   switch (scenario?.endpoint?.type) {
-    case 'continuous': return { ...rest, effect: margin === null ? 0 : -margin }
+    case 'continuous': return { ...rest, effect: nullDifference }
     case 'time_to_event': return { ...rest, hazardRatio: margin === null ? 1 : margin }
-    case 'binary': return { ...rest, riskDifference: margin === null ? 0 : -margin }
+    case 'binary': return { ...rest, riskDifference: nullDifference }
     default: return null
   }
 }
@@ -2137,6 +2153,13 @@ function checkConfirmatorySemantics(scenario, path, ctx) {
   if (typeof truth.plannedEffect === 'number') {
     onScale('truth.plannedEffect', truth.plannedEffect)
     if (truth.plannedEffect === nullValue) bad('truth.plannedEffect', 'A size is planned for an effect, not for no effect.', 'design_effect_null')
+    // ONE sign convention for the five kinds: the effect a size is planned for is a benefit. A hazard ratio is a benefit below 1, a mean or a
+    // risk difference on the side hypothesis.direction names. (The other effects of a scenario may be harm: they show what the design does there.)
+    else if (type === 'time_to_event' ? truth.plannedEffect > 1 : scenario?.hypothesis?.direction === 'higher_better' ? truth.plannedEffect < 0 : scenario?.hypothesis?.direction === 'lower_better' && truth.plannedEffect > 0) {
+      bad('truth.plannedEffect', type === 'time_to_event'
+        ? 'A size is planned for a benefit, and a hazard ratio above 1 is a harm: a design cannot be sized to reach power for it. Give a hazard ratio below 1.'
+        : `A size is planned for a benefit, and this effect is on the wrong side of hypothesis.direction (${scenario.hypothesis.direction}): a design cannot be sized to reach power for it. Change the sign of the effect or the direction.`, 'effect_against_direction')
+    }
   }
   if (Array.isArray(truth.effects)) truth.effects.forEach((/** @type {unknown} */ value, /** @type {number} */ i) => onScale(`truth.effects[${i}]`, value))
   if (Array.isArray(truth.effectScenarios)) {
@@ -2153,6 +2176,9 @@ function checkConfirmatorySemantics(scenario, path, ctx) {
     })
   }
   if (kind === 'count_endpoint' && truth.rateRatio === 1) bad('truth.rateRatio', 'A size is planned for a rate ratio other than 1.', 'design_effect_null')
+  if (kind === 'count_endpoint' && typeof truth.rateRatio === 'number' && truth.rateRatio > 1) {
+    bad('truth.rateRatio', 'A size is planned for a benefit, and a rate ratio above 1 is more events: a design cannot be sized to reach power for it. Give a rate ratio below 1.', 'effect_against_direction')
+  }
   if (Number.isFinite(scenario?.analysis?.alpha) && scenario.analysis.alpha >= 0.5) bad('analysis.alpha', 'The level is one-sided: below one half.')
 }
 

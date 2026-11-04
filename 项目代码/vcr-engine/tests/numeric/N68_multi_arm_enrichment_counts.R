@@ -34,7 +34,7 @@
 # closure of Dunnett or Simes tests), so at one design it could agree with these designs only where both equal alpha. The closed forms
 # above and the simulation in plain R are what hold the selection designs; N68a/N68e are the quantities that distinguish them.
 
-.n68_run <- function(sc, seed, id) vcr_test_run(vcr_test_job("design.confirmatory", sc, seed = seed, job_id = id))
+.n68_run <- function(sc, seed, id) vcr_test_run(vcr_test_job("design.confirmatory", vcr_test_conf_scenario(sc), seed = seed, job_id = id))
 .n68_row <- function(r, match) {
   for (e in r$diagnostics$confirmatory$effects) if (match(e)) return(e)
   NULL

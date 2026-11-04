@@ -8637,6 +8637,28 @@
                 ]
               },
               "req": true
+            },
+            "direction": {
+              "t": "string",
+              "values": [
+                "higher_better",
+                "lower_better"
+              ],
+              "when": [
+                {
+                  "path": "hypothesis.kind",
+                  "in": [
+                    "non_inferiority"
+                  ]
+                },
+                {
+                  "path": "endpoint.type",
+                  "notIn": [
+                    "time_to_event"
+                  ]
+                }
+              ],
+              "req": true
             }
           }
         }
@@ -9562,6 +9584,28 @@
                 ]
               },
               "req": true
+            },
+            "direction": {
+              "t": "string",
+              "values": [
+                "higher_better",
+                "lower_better"
+              ],
+              "when": [
+                {
+                  "path": "hypothesis.kind",
+                  "in": [
+                    "non_inferiority"
+                  ]
+                },
+                {
+                  "path": "endpoint.type",
+                  "notIn": [
+                    "time_to_event"
+                  ]
+                }
+              ],
+              "req": true
             }
           }
         },
@@ -9896,6 +9940,33 @@
             "path": "design.kind",
             "notIn": [
               "count_endpoint"
+            ]
+          },
+          "req": true
+        },
+        "hypothesis": {
+          "t": "object",
+          "fields": {
+            "kind": {
+              "t": "string",
+              "values": [
+                "superiority"
+              ]
+            },
+            "direction": {
+              "t": "string",
+              "values": [
+                "higher_better",
+                "lower_better"
+              ],
+              "req": true
+            }
+          },
+          "when": {
+            "path": "endpoint.type",
+            "in": [
+              "continuous",
+              "binary"
             ]
           },
           "req": true
@@ -12063,6 +12134,28 @@
                   "non_inferiority"
                 ]
               },
+              "req": true
+            },
+            "direction": {
+              "t": "string",
+              "values": [
+                "higher_better",
+                "lower_better"
+              ],
+              "when": [
+                {
+                  "path": "hypothesis.kind",
+                  "in": [
+                    "non_inferiority"
+                  ]
+                },
+                {
+                  "path": "endpoint.type",
+                  "notIn": [
+                    "time_to_event"
+                  ]
+                }
+              ],
               "req": true
             }
           }

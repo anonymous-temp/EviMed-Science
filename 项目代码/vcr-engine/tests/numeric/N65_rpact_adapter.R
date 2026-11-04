@@ -11,9 +11,9 @@
 #      each scenario ran (a whole number of batches), never the planned count
 #   e  rpact's own error text never reaches the person: a call that fails is the named refusal with the fixed sentence
 
-.n65_job <- function(cores, seed = 6501L, extra = list()) vcr_test_job("design.confirmatory", list(
+.n65_job <- function(cores, seed = 6501L, extra = list()) vcr_test_job("design.confirmatory", vcr_test_conf_scenario(list(
   design = list(kind = "sample_size_reestimation", informationRates = c(0.5, 1), conditionalPower = 0.8, maxSampleSizeFactor = 1.5),
-  endpoint = list(type = "continuous"), truth = list(plannedEffect = 0.4, effects = list(0.3), sd = 1)), seed = seed, cores = cores, extra = extra)
+  endpoint = list(type = "continuous"), truth = list(plannedEffect = 0.4, effects = list(0.3), sd = 1))), seed = seed, cores = cores, extra = extra)
 
 vcr_case("N65a", c("AC-10"), function() {
   files <- list.files(file.path(VCR_ROOT, "R"), pattern = "\\.R$", full.names = TRUE)
@@ -62,7 +62,7 @@ vcr_case("N65d", c("AC-38"), function() {
   # a CPU budget of one second is spent inside the first batches of a multi-arm run (20,000 iterations of the null and 5,000 of each alternative)
   sc <- list(design = list(kind = "multi_arm_selection", informationRates = c(0.5, 1), activeArms = 3, plannedSize = 80), endpoint = list(type = "continuous"),
              truth = list(effectScenarios = list(list(0.2, 0.4, 0.6)), sd = 1))
-  r <- vcr_test_run(vcr_test_job("design.confirmatory", sc, seed = 6504L, extra = list(cpuSecondsLimit = 1L)))
+  r <- vcr_test_run(vcr_test_job("design.confirmatory", vcr_test_conf_scenario(sc), seed = 6504L, extra = list(cpuSecondsLimit = 1L)))
   done <- unlist(r$diagnostics$confirmatory$iterations)
   planned <- c(20000L, 5000L)
   codes <- vcr_test_issue_codes(r)

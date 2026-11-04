@@ -363,7 +363,7 @@ vcr_test_handler_jobs <- function() {
     list("design.grid", list(design = list(kind = "two_arm_fixed", nTreat = 30, nControl = 30), endpoint = list(type = "continuous"), analysis = list(method = "ttest", alpha = 0.025, sided = 1), performance = list("power"), truth = list(effect = 0.4, sd = 1),
                              designs = list(list(nTreat = 30, nControl = 30), list(nTreat = 60, nControl = 60)), truths = list(list(effect = 0.4))), NULL, 300L),
     # the confirmatory designs: the futility boundary is the cheap one (an analytic design); the simulated kinds have their own cases (N65-N68)
-    list("design.confirmatory", list(design = list(kind = "futility_group_sequential", informationRates = c(0.5, 1)), endpoint = list(type = "continuous"), truth = list(plannedEffect = 0.4, sd = 1), analysis = list(alpha = 0.025, power = 0.9)), NULL),
+    list("design.confirmatory", list(design = list(kind = "futility_group_sequential", informationRates = c(0.5, 1)), endpoint = list(type = "continuous"), hypothesis = list(direction = "higher_better"), truth = list(plannedEffect = 0.4, sd = 1), analysis = list(alpha = 0.025, power = 0.9)), NULL),
     # dose-finding and Bayesian designs: small trials, the exact phase II search at a small size (the simulated curves have their own cases, N81-N83)
     list("design.dose", list(design = list(kind = "boin", compare = list("three_plus_three"), maxPatients = 12), truth = list(toxicity = c(0.1, 0.3, 0.5))), NULL, 200L),
     list("design.bayesian", list(design = list(kind = "bop2", maxN = 20, lookEvery = 10), truth = list(nullRate = 0.1, alternativeRate = 0.4), analysis = list(alpha = 0.1, power = 0.8)), NULL),
@@ -393,4 +393,13 @@ vcr_test_handler_jobs <- function() {
   cases <- c(cases, vcr_test_extension_handler_jobs())
   # --- end extensions ---
   cases
+}
+
+
+#' A confirmatory scenario with the direction its tests do not care about stated (a mean or a risk is better when it is higher): the five
+#' kinds REQUIRE `hypothesis.direction` for a mean or a risk (the same sign is a benefit one way and a harm the other), and the cases that
+#' hold something else to a reference say it once here. A case about the direction builds its scenario without this.
+vcr_test_conf_scenario <- function(sc, direction = "higher_better") {
+  if (is.null(sc[["hypothesis"]]) && isTRUE(sc$endpoint$type %in% c("continuous", "binary"))) sc$hypothesis <- list(direction = direction)
+  sc
 }

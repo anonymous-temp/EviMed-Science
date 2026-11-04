@@ -146,11 +146,27 @@ test("a superseded result is not a card, and the newest of a key comes first", (
   assert.deepEqual(cards.map((each) => each.id), ["new", "other"]);
 });
 
+test("which way is better is a premise of a design on a mean or a risk, because it decides how the sign of every effect is read", () => {
+  const withDirection = (name, direction) => {
+    const base = fixture(name);
+    return card(name, { diagnostics: { ...base.diagnostics, confirmatory: { ...base.diagnostics.confirmatory, given: { ...base.diagnostics.confirmatory.given, direction } } } });
+  };
+  const low = withDirection("futility", "lower_better").premises.find((row) => row.key === "direction");
+  const high = withDirection("futility", "higher_better").premises.find((row) => row.key === "direction");
+  assert.equal(low.value, "越低越好（效应为负是有利）");
+  assert.equal(high.value, "越高越好（效应为正是有利）");
+  assert.ok(low.decisive && withDirection("futility", "lower_better").premises.filter((row) => row.decisive).length <= 5);
+  assert.equal(card("count").premises.find((row) => row.key === "direction"), undefined, "a rate ratio has its direction already");
+});
+
 test("a non-inferiority margin is a premise of the trial page, in the words of its endpoint", () => {
   const row = (endpointType, configuration) => vcrPremises("trial", { endpointType, designKind: "two_arm_fixed", configuration, diagnostics: {}, cards: [], bound: [], appliedDefaults: [] }).find((premise) => premise.key === "margin");
   assert.equal(row("time_to_event", { hypothesis: { kind: "non_inferiority", margin: 1.3 }, truth: { hazardRatio: 1, controlMedian: 12 } }).value, "风险比不超过 1.3");
-  assert.equal(row("binary", { hypothesis: { kind: "non_inferiority", margin: 0.1 }, truth: { controlRate: 0.8, treatmentRate: 0.8 } }).value, "率差不低于 −10%");
-  assert.equal(row("continuous", { hypothesis: { kind: "non_inferiority", margin: 0.3 }, truth: { effect: 0 } }).value, "均数差不低于 −0.3");
+  assert.equal(row("binary", { hypothesis: { kind: "non_inferiority", margin: 0.1, direction: "higher_better" }, truth: { controlRate: 0.8, treatmentRate: 0.8 } }).value, "率差不低于 −10%");
+  assert.equal(row("continuous", { hypothesis: { kind: "non_inferiority", margin: 0.3, direction: "higher_better" }, truth: { effect: 0 } }).value, "均数差不低于 −0.3");
+  // where lower is better the margin points the other way: the treatment may be this much HIGHER
+  assert.equal(row("binary", { hypothesis: { kind: "non_inferiority", margin: 0.03, direction: "lower_better" }, truth: { controlRate: 0.1, treatmentRate: 0.08 } }).value, "率差不高于 +3%");
+  assert.equal(row("continuous", { hypothesis: { kind: "non_inferiority", margin: 0.3, direction: "lower_better" }, truth: { effect: 0 } }).value, "均数差不高于 0.3");
   assert.equal(row("continuous", { truth: { effect: 0.3 } }), undefined, "a superiority design has none");
 });
 

@@ -142,6 +142,10 @@ function premisesOf(confirmatory) {
   /** @type {Array<Record<string, any>>} */
   const rows = [];
   const planned = numeric(given.plannedEffect);
+  // which way is better decides how the sign of every effect below is read (a reduction of 0.1 is a benefit where lower is better)
+  if (given.direction === "lower_better" || given.direction === "higher_better") {
+    rows.push({ key: "direction", label: "哪个方向更好", value: given.direction === "lower_better" ? "越低越好（效应为负是有利）" : "越高越好（效应为正是有利）", source: "assumed", decisive: true });
+  }
   if (planned !== null) rows.push({ key: "effect", label: `计划的效应（${EFFECT_WORDS[endpoint] ?? "效应"}）`, value: plain(planned), source: "assumed", decisive: true });
   const scenarios = numeric(given.effectScenarios);
   if (scenarios) rows.push({ key: "effect", label: "设想的效应情形", value: `${scenarios} 种，每种给出各臂的${EFFECT_WORDS[endpoint] ?? "效应"}`, source: "assumed", decisive: true });

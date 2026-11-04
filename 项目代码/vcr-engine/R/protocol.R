@@ -367,15 +367,17 @@ vcr_replicate_floor <- function(is_null, target_mcse = NULL, p = NULL, alpha = 0
   margin <- if (.vcrp_named(hyp) && identical(hyp[["kind"]], "non_inferiority") && .vcrp_num(hyp[["margin"]])) hyp[["margin"]] else NULL
   if (!is.null(margin) && .vcrp_chr(type)) {
     tiny <- function(x) abs(x) < 1e-12
-    if (type == "continuous") return(.vcrp_num(truth[["effect"]]) && tiny(truth[["effect"]] + margin))
+    # the null difference is minus the margin when higher is better and plus the margin when lower is (hypothesis.direction)
+    shift <- if (identical(hyp[["direction"]], "lower_better")) -margin else margin
+    if (type == "continuous") return(.vcrp_num(truth[["effect"]]) && tiny(truth[["effect"]] + shift))
     if (type == "time_to_event") { hr <- truth[["hazardRatio"]]; return(.vcrp_num(hr) && hr > 0 && tiny(log(hr / margin))) }
     if (type == "binary") {
       p0 <- truth[["controlRate"]]
       if (!.vcrp_num(p0)) return(FALSE)
-      if (.vcrp_num(truth[["treatmentRate"]])) return(tiny(truth[["treatmentRate"]] - p0 + margin))
-      if (.vcrp_num(truth[["riskDifference"]])) return(tiny(truth[["riskDifference"]] + margin))
+      if (.vcrp_num(truth[["treatmentRate"]])) return(tiny(truth[["treatmentRate"]] - p0 + shift))
+      if (.vcrp_num(truth[["riskDifference"]])) return(tiny(truth[["riskDifference"]] + shift))
       orr <- truth[["oddsRatio"]]
-      if (.vcrp_num(orr) && p0 > 0 && p0 < 1) { odds <- orr * p0 / (1 - p0); return(tiny(odds / (1 + odds) - p0 + margin)) }
+      if (.vcrp_num(orr) && p0 > 0 && p0 < 1) { odds <- orr * p0 / (1 - p0); return(tiny(odds / (1 + odds) - p0 + shift)) }
     }
     return(FALSE)
   }
@@ -894,6 +896,19 @@ vcr_pattern_match <- function(pattern, x) {
   if (.vcrp_num(truth[["plannedEffect"]])) {
     on_scale("truth.plannedEffect", truth[["plannedEffect"]])
     if (truth[["plannedEffect"]] == null_value) bad("truth.plannedEffect", "A size is planned for an effect, not for no effect.", "design_effect_null")
+    else {
+      # ONE sign convention for the five kinds (mirrors the domain): the effect a size is planned for is a benefit, a hazard ratio below 1 or a
+      # difference on the side hypothesis.direction names; the other effects of a scenario may be harm
+      direction <- .vcrp_get(.vcrp_get(sc, "hypothesis"), "direction")
+      planned <- truth[["plannedEffect"]]
+      against <- if (type == "time_to_event") planned > 1
+                 else if (identical(direction, "higher_better")) planned < 0
+                 else identical(direction, "lower_better") && planned > 0
+      if (against) bad("truth.plannedEffect", if (type == "time_to_event")
+        "A size is planned for a benefit, and a hazard ratio above 1 is a harm: a design cannot be sized to reach power for it. Give a hazard ratio below 1."
+        else sprintf("A size is planned for a benefit, and this effect is on the wrong side of hypothesis.direction (%s): a design cannot be sized to reach power for it. Change the sign of the effect or the direction.", direction),
+        "effect_against_direction")
+    }
   }
   eff <- truth[["effects"]]
   if (is.list(eff)) for (i in seq_along(eff)) on_scale(sprintf("truth.effects[%d]", i - 1L), eff[[i]])
@@ -910,6 +925,9 @@ vcr_pattern_match <- function(pattern, x) {
     on_scale(sprintf("truth.subsetEffects[%d].rest", i - 1L), .vcrp_get(sub[[i]], "rest"))
   }
   if (identical(kind, "count_endpoint") && .vcrp_num(truth[["rateRatio"]]) && truth[["rateRatio"]] == 1) bad("truth.rateRatio", "A size is planned for a rate ratio other than 1.", "design_effect_null")
+  if (identical(kind, "count_endpoint") && .vcrp_num(truth[["rateRatio"]]) && truth[["rateRatio"]] > 1) {
+    bad("truth.rateRatio", "A size is planned for a benefit, and a rate ratio above 1 is more events: a design cannot be sized to reach power for it. Give a rate ratio below 1.", "effect_against_direction")
+  }
   alpha <- .vcrp_get(.vcrp_get(sc, "analysis"), "alpha")
   if (.vcrp_num(alpha) && alpha >= 0.5) bad("analysis.alpha", "The level is one-sided: below one half.")
   invisible(NULL)
@@ -1239,7 +1257,7 @@ vcr_job_at_least <- function(job, from) {
 .vcrp_uses_confirmatory_beyond_1_0_0 <- function(sc) {
   design <- .vcrp_get(sc, "design")
   if (!.vcrp_named(design)) return(FALSE)
-  !is.null(.vcrp_get(design, "promisingZone")) ||
+  !is.null(.vcrp_get(design, "promisingZone")) || !is.null(.vcrp_get(sc, "hypothesis")) ||
     (isTRUE(.vcrp_get(design, "kind") %in% c("multi_arm_selection", "enrichment")) && identical(.vcrp_get(.vcrp_get(sc, "endpoint"), "type"), "time_to_event"))
 }
 

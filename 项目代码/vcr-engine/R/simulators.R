@@ -79,7 +79,8 @@ vcr_sim_continuous <- function(n_treat, n_control, delta, sd = 1, rho = 0,
 #' checked against is the pooled one). `alpha` is the total; the interval and
 #' the decision spend `alpha / sided` per tail.
 #' `null` (T1) is the difference the null hypothesis states: 0, or minus the margin of a non-inferiority test, which rejects on the upper
-#' tail only (a margin has no lower tail).
+#' tail only (a margin has no lower tail), or PLUS the margin when a lower value is better, which rejects on the lower tail only. The
+#' statistic is oriented either way: positive favours the treatment against the margin.
 vcr_analyse_ttest <- function(data, alpha = 0.025, sided = 1, null = 0) {
   sided <- vcr_check_sided(sided)
   y1 <- data$y[data$arm == 1L]; y0 <- data$y[data$arm == 0L]
@@ -87,7 +88,7 @@ vcr_analyse_ttest <- function(data, alpha = 0.025, sided = 1, null = 0) {
   est <- mean(y1) - mean(y0)
   sp2 <- ((n1 - 1) * var(y1) + (n0 - 1) * var(y0)) / (n1 + n0 - 2)
   se <- sqrt(sp2 * (1 / n1 + 1 / n0))
-  tstat <- (est - null) / se
+  tstat <- (if (null > 0) null - est else est - null) / se
   df <- n1 + n0 - 2
   p <- if (sided == 1 || null != 0) pt(tstat, df, lower.tail = FALSE) else 2 * pt(-abs(tstat), df)
   crit <- qt(1 - alpha / sided, df)
@@ -161,8 +162,8 @@ vcr_binary_treatment_rate <- function(p_control, p_treat = NULL, risk_difference
 #' Risk difference with a Wald interval on the unpooled variance, and the
 #' pooled-variance score test for the hypothesis (the test the two-proportion
 #' sample-size formula is derived from).
-#' `null` (T1): minus the margin of a non-inferiority test, whose standard error under the null is Farrington & Manning's, from the rates
-#' restricted to that difference (`vcr_fm_restricted`); one-sided, as `vcr_analyse_ttest`.
+#' `null` (T1): minus the margin of a non-inferiority test (plus the margin when a lower rate is better), whose standard error under the null
+#' is Farrington & Manning's, from the rates restricted to that difference (`vcr_fm_restricted`); one-sided, as `vcr_analyse_ttest`.
 vcr_analyse_risk_difference <- function(data, alpha = 0.025, sided = 1, null = 0) {
   sided <- vcr_check_sided(sided)
   y1 <- data$y[data$arm == 1L]; y0 <- data$y[data$arm == 0L]
@@ -173,7 +174,8 @@ vcr_analyse_risk_difference <- function(data, alpha = 0.025, sided = 1, null = 0
   if (null != 0) {
     tilde <- vcr_fm_restricted(p1, p0, n1, n0, null)
     se0 <- sqrt(tilde[["treat"]] * (1 - tilde[["treat"]]) / n1 + tilde[["control"]] * (1 - tilde[["control"]]) / n0)
-    z <- if (se0 > 0) (est - null) / se0 else if (est > null) Inf else 0
+    away <- if (null > 0) null - est else est - null     # a positive null (a lower rate is better) is tested on the lower tail
+    z <- if (se0 > 0) away / se0 else if (away > 0) Inf else 0
   } else {
     pbar <- (sum(y1) + sum(y0)) / (n1 + n0)
     se0 <- sqrt(pbar * (1 - pbar) * (1 / n1 + 1 / n0))

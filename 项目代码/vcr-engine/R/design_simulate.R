@@ -402,7 +402,9 @@ vcr_dist_normalize <- function(d) {
     r <- vcr_analyse_logrank(dk, alpha, sided, null_hr)
     z <- -as.numeric(r["statistic"])        # upper-tail convention: benefit is positive
     est <- as.numeric(r["estimate"]); se <- as.numeric(r["se"])
-    hit <- is.finite(z) && (if (sided == 1) z > gs$criticalValues[k] else abs(z) > gs$criticalValues[k])
+    # a test against a margin is one-sided at alpha / sided whatever `sided` says (the fixed test and the analytic code read it so): the
+    # two-tailed rule counted a treatment far worse than the margin as a success (power 0.988 at HR 1.8 against a margin of 1.3, 2026-11-04)
+    hit <- is.finite(z) && (if (sided == 1 || null_hr != 1) z > gs$criticalValues[k] else abs(z) > gs$criticalValues[k])
     if (hit) {
       rejected <- 1; look <- k
       events_at <- sum(dk$status); n_at <- nrow(dk); dur_at <- cutoff
@@ -801,21 +803,23 @@ vcr_analytic_check <- function(scenario, measures) {
   nl <- if (is.null(hyp)) 0 else hyp[["null"]]
   nh <- if (is.null(hyp)) 1 else hyp$nullHr
   method <- scenario$analysis$method %||% NULL
+  # on the margin a non-inferiority test rejects at alpha / sided (one tail), where a superiority test spends alpha over both tails
+  null_alpha <- if (is.null(hyp)) alpha else alpha / sided
   if (identical(endpoint, "continuous") && fixed && !identical(method, "ancova")) {
     analytic <- list(name = if (is_null) "type_one_error" else "power",
-                     value = if (is_null) alpha
+                     value = if (is_null) null_alpha
                              else vcr_power_means(vcr_scalar(truth$effect), vcr_scalar(truth$sd, 1), n1, n0, alpha, sided, nl))
   }
   if (identical(endpoint, "binary") && fixed && !identical(method, "logistic")) {
     p0 <- vcr_scalar(truth[["controlRate"]])
     p1 <- vcr_binary_treatment_rate(p0, vcr_scalar(truth[["treatmentRate"]], NULL), vcr_scalar(truth$riskDifference, NULL), vcr_scalar(truth$oddsRatio, NULL))
     analytic <- list(name = if (is_null) "type_one_error" else "power",
-                     value = if (is_null) alpha else vcr_power_proportions(p0, p1, n1, n0, alpha, sided, nl))
+                     value = if (is_null) null_alpha else vcr_power_proportions(p0, p1, n1, n0, alpha, sided, nl))
   }
   if (identical(endpoint, "time_to_event") && fixed && !(method %||% "logrank") %in% c("rmst", "maxcombo", "modestly_weighted") && is.null(truth$treatmentHazardRatios)) {
     hr <- vcr_scalar(truth$hazardRatio, 1)
     if (is_null) {
-      analytic <- list(name = "type_one_error", value = alpha, basis = "nominal_alpha")
+      analytic <- list(name = "type_one_error", value = null_alpha, basis = "nominal_alpha")
     } else {
       dist <- vcr_control_distribution(truth)
       accrual <- scenario$accrual %||% list()
