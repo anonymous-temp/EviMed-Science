@@ -9394,10 +9394,13 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   let legacyMemoryRetired = false;
   let handbookArmRetired = false;
   // A turn the control plane starts on a research goal: to take it up again, or to set it again. Automated (it teaches nothing and nobody is
-  // waiting on it), on the answer line the goal was set on, kept under the goal's first question like LoopX's own rounds.
-  const dispatchResearchGoalTurn = async (/** @type {any} */ project, /** @type {{ sessionId: string, text: string, route: string, question: string, system?: string }} */ turn) => {
+  // waiting on it), on the answer line the goal was set on, kept under the goal's first question like LoopX's own rounds. It is charged to the
+  // researcher, so the allowance is asked first: a refusal is the page's answer to 继续, and costs a taken-up goal one of its attempts.
+  /** @param {any} project @param {{ sessionId: string, text: string, route: string, question: string, system?: string }} turn */
+  async function dispatchResearchGoalTurn(project, turn) {
     const user = await store.userById(project.userId);
     const answerAgent = (await agentRegistry).get(OPEN_DOMAIN_ANSWER_AGENT_ID);
+    if (credits) await credits.service.assertBalanceForStart(project.userId, answerAgent?.id ?? null, { unattended: true });
     const dispatch = () => agentRuns.dispatch(project, {
       sessionId: turn.sessionId, dispatchId: randomId("goal_"), waitForRoom: true, automated: true, question: turn.question,
       effectiveAgentId: answerAgent?.id ?? null, effectiveAgentVersion: answerAgent?.version ?? null,
@@ -9422,18 +9425,19 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       await resident.delivered();
     });
     return pluginService ? pluginService.withAdmission(project, dispatch) : dispatch();
-  };
+  }
   researchGoals = productDocuments && productDatabase && config.loopxEnabled !== false && config.researchGoalWatchEnabled !== false ? new ResearchGoals({
     documents: productDocuments, database: productDatabase, agentRuns, runtimeManager, store,
     dispatchTurn: dispatchResearchGoalTurn,
-    // A note to a round at work, the way a person's correction reaches it. The round is LoopX's, so nobody is attending it.
+    // A note to a round at work, by the road a person's correction takes. The round is LoopX's, so nobody is attending it, and the words are the
+    // platform's: under its own tag, so memory never reads them as the person's.
     steerRound: async (project, run, text) => {
       const requestId = randomId("req_");
       await agentRuns.recordCorrection(project, run.id, requestId, text);
       const user = await store.userById(project.userId);
       await runtimeManager.dispatchPrompt(project, run.sessionId, {
         recordPromptActor: (/** @type {any} */ request) => recordExtensionPromptActor(user, project, request),
-        text: `<evimed-correction>${text}</evimed-correction>`, runId: run.id, requestId, mode: "steer", strictContext: true, unattended: true,
+        text: `<evimed-research-goal>${text}</evimed-research-goal>`, runId: run.id, requestId, mode: "steer", strictContext: true, unattended: true,
       });
     },
     // The next automatic round of a goal whose pause did not hold: stopped by the platform, so it is not charged to anyone's decision.

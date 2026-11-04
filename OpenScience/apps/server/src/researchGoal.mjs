@@ -36,3 +36,16 @@ export function researchGoalBlock() {
 The person set this as a long research goal from the research page. The \`loopx\` skill's instructions are in this turn: start the goal with its CLI and complete the thread binding before any research work, then work the goal across turns until it is done. What they connected for this research is in the project's knowledge base: look through it before you plan. Write to them about the research only, never about the skill, the goal machinery or its commands.
 </evimed-research-goal>`;
 }
+
+/**
+ * What a turn that takes a goal up again says in the person's conversation. It reads as theirs to memory and they see it there, so it only says to
+ * go on; what the model is to do about it rides in the run's context (`researchGoalResumeBlock`).
+ */
+export const RESEARCH_GOAL_RESUME_TEXT = "继续这项研究。";
+
+/** The instruction of such a turn, in the run's context. @param {{ interrupted: boolean }} input whether the platform ended the round before it */
+export function researchGoalResumeBlock({ interrupted }) {
+  return `\n\n<evimed-research-goal>
+${interrupted ? "The last round of this goal was interrupted by the platform, not by the person. " : ""}Look at what it has already produced and do only what is left: do not start again from the beginning.
+</evimed-research-goal>`;
+}

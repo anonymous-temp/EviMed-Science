@@ -24,7 +24,7 @@ import path from "node:path";
 import { HttpError } from "./security.mjs";
 import { GOAL_RESUME_ROUTE, GOAL_RETRY_ROUTE, goalBarState, goalRounds, goalSpendCny, guardVerdict, isGoalContinuation, roundProducedFiles,
   roundStoppedByPerson, roundWasInterrupted, roundsWithoutProgress, setsResearchGoal, statusFromGoalBar } from "./researchGoalState.mjs";
-import { researchGoalBlock, researchGoalPrompt } from "./researchGoal.mjs";
+import { RESEARCH_GOAL_RESUME_TEXT, researchGoalBlock, researchGoalPrompt, researchGoalResumeBlock } from "./researchGoal.mjs";
 import { recordResearchGoalEvent } from "./researchGoalMetrics.mjs";
 
 const KIND = "research-goal";
@@ -34,9 +34,6 @@ const NOTE_NAMES = 5;
 const KNOWN_SOURCES = 500;
 /** How long after a round of LoopX's that began after a pause its driver is taken to be still trying: well past its 18-second cycle, and no longer. */
 const LATE_ROUND_WINDOW_MS = 120_000;
-/** What a goal that has been taken up again is told. It reads as the platform's, because it is. */
-const RESUME_TEXT = "请接着做这项研究：上一轮被中断了。先看已有的产出，只做没做完的部分，不要从头重做。";
-const PERSON_RESUME_TEXT = "继续这项研究。先看已有的产出，只做没做完的部分。";
 
 /** @param {string} sessionId */
 const documentId = (sessionId) => `goal-${sessionId}`;
@@ -250,7 +247,7 @@ export class ResearchGoals {
       started = answer?.result?.kind === "succeeded" || answer?.result?.kind === "applied_with_warning";
     }
     if (!started) {
-      await this.dispatchTurn(project, { sessionId, text: PERSON_RESUME_TEXT, route: GOAL_RESUME_ROUTE, question: goalQuestion(rounds.find(setsResearchGoal) ?? rounds[0]) });
+      await this.dispatchTurn(project, { sessionId, text: RESEARCH_GOAL_RESUME_TEXT, system: researchGoalResumeBlock({ interrupted: false }), route: GOAL_RESUME_ROUTE, question: goalQuestion(rounds.find(setsResearchGoal) ?? rounds[0]) });
     }
     recordResearchGoalEvent("resumed_person");
     await this.#update(project, sessionId, (payload) => ({ ...payload, status: "active", reason: null, statusAt: at, guardSince: at, pauseUnconfirmed: false,
@@ -374,7 +371,7 @@ export class ResearchGoals {
     await this.#update(project, sessionId, (current) => ({ ...current, revive: { attempts: attempts + 1, lastAt: at } }));
     try {
       await this.dispatchTurn(project, begun
-        ? { sessionId, text: RESUME_TEXT, route: GOAL_RESUME_ROUTE, question }
+        ? { sessionId, text: RESEARCH_GOAL_RESUME_TEXT, system: researchGoalResumeBlock({ interrupted: true }), route: GOAL_RESUME_ROUTE, question }
         : { sessionId, text: researchGoalPrompt(question), route: GOAL_RETRY_ROUTE, question, system: researchGoalBlock() });
       recordResearchGoalEvent(begun ? "revived" : "retried");
     } catch (error) {

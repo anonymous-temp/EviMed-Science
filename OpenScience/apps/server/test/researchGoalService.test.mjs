@@ -104,6 +104,17 @@ test("a person's stop is a stop: the goal rests, and is not taken up again", asy
   } finally { await w.close(); }
 });
 
+test("a turn that takes a goal up says only to go on: the instruction is in the run's context, where memory never reads it as the person's", async () => {
+  const w = await world({ runs: [setting(), round(1, { artifacts: ["n.md"], status: "failed", errorCode: "runtime_stopped", finishedAt: iso(T0 - 120_000) })] });
+  try {
+    await w.goals.observeRound(w.project, w.state.runs.at(-1));
+    await w.goals.tick();
+    const [turn] = w.calls.dispatch;
+    assert.equal(turn.text, "继续这项研究。");
+    assert.match(turn.system, /<evimed-research-goal>[\s\S]*interrupted[\s\S]*<\/evimed-research-goal>/);
+  } finally { await w.close(); }
+});
+
 test("a person's stop after a pause the bar could not confirm stays a stop: it is not read as an interruption", async () => {
   const w = await world({ runs: [setting(), round(1, { artifacts: ["n.md"] })], bar: { read: { result: { kind: "fault", code: "runtime_not_running" } } } });
   try {
