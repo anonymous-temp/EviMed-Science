@@ -39,6 +39,7 @@
     "population_check": {"method":"population.check"},
     "match_extract": {"method":"matching.extract","platformBuilt":[]},
     "match_judge": {"method":"matching.judge","platformBuilt":[]},
+    "records_import": {"method":"matching.import_records","platformBuilt":[]},
     "forecast_trajectories": {"method":"forecast.trajectories"},
     "evaluate_forecast": {"method":"forecast.evaluate"},
     "compare_forecasts": {"method":"forecast.compare"},

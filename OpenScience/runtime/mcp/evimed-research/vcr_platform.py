@@ -113,6 +113,8 @@ JOB_KINDS = ("fit_survival_model", "apply_prognostic_model",
     "match_extract",
     # patient and trial judged by the model, pair by pair (2026-11-04)
     "match_judge",
+    # many patients' records taken in as a job (2026-11-04)
+    "records_import",
     "forecast_trajectories", "evaluate_forecast", "compare_forecasts", "benchmark_trial_effect",
 )
 POOLING_METHODS = ("single_study", "random_effects_dl", "random_effects_reml", "random_effects_hksj", "fixed_effect")
@@ -549,8 +551,8 @@ def tool_definitions():
     """Compact root catalogue; the workflow skill and shape action carry detail."""
     root = skills_root()
     descriptions = {
-        "vcr_read": "Read this conversation's research. what=study opens compact context and enables specialist tools. patient_context lists original uploads (text, PDF, Word, scans), knowledge-base documents, this study's patients and authenticated human messages (messageSeq); follow nextUploadRead for more uploads. subject_document reads original material; kind=sentences numbers it. trial_registry_record reads one registry (filter registryId). contracts gives write syntax before any task exists; data_intake lists upload handles; candidate_trials reads patient trial matches. Any eligibility verdict you deliver is copied from the saved read-back (matching or candidate_trials with filter.subjectKey), never retyped.",
-        "vcr_write": "Save research objects, never calculated results. data_intake imports/maps/freezes uploads (read contracts). patient_context takes data={sourceId,generation,sha256} from uploads, {sourceId} for a knowledge-base original, or {messageSeq} for a human case; add subjectKey when it is about a patient already here, and their trials are re-judged. task_context opens a task. A fact for structured screening states only what its quote says: what the text does not mention is unknown, never negated. trial_judgment saves your own judgment of a patient against a trial or protocol, with sentence ids as evidence. A candidate_trial's criteria are that one trial's own eligibility lines. Use the VCR workflow skill for object contracts (read %s/vcr-matching/SKILL.md before matching a patient to trials; vcr-protocol, vcr-evidence, vcr-analysis and vcr-package sit beside it; none is in the skill catalogue) and vcr_simulate action=shape for numerical inputs." % root,
+        "vcr_read": "Read this conversation's research. what=study opens compact context and enables specialist tools. patient_context lists uploads (text, PDF, Word, scans), knowledge-base documents, this study's patients and authenticated human messages (messageSeq); follow nextUploadRead for more uploads. subject_document reads original material; kind=sentences numbers it. trial_registry_record reads one registry (filter registryId). contracts gives write syntax before any task exists; data_intake lists upload handles; candidate_trials reads patient trial matches. Any eligibility verdict you deliver is copied from the saved read-back (matching or candidate_trials with filter.subjectKey), never retyped.",
+        "vcr_write": "Save research objects, never calculated results. data_intake imports/maps/freezes uploads (read contracts). patient_context takes data={sourceId,generation,sha256} from uploads, {sourceId} for a knowledge-base original, or {messageSeq} for a human case; add subjectKey for a patient already here; their trials are re-judged. task_context opens a task. A fact for structured screening states only what its quote says: what the text does not mention is unknown, never negated. trial_judgment saves your judgment of a patient against a trial or protocol, with sentence ids as evidence. A candidate_trial's criteria are that one trial's own eligibility lines. For object contracts use the workflow skill (read %s/vcr-matching/SKILL.md before matching trials; vcr-protocol, vcr-evidence, vcr-analysis and vcr-package sit beside it; none is in the catalogue) and vcr_simulate action=shape for numerical inputs." % root,
         "vcr_simulate": "A human trial's sample size, power or events, comparing designs, a synthetic population from a paper's baseline, an external control: calculate here, not in a script of your own. No study needed; the first start opens a result page. action=shape with kind gives exact fields; do not guess keys. Patients to trials: kind match_judge. Long jobs resume here if they outlive this turn. modelId requires modelVersion.",
     }
     tools = _detailed_tool_definitions()
@@ -1137,6 +1139,17 @@ def shape(arguments: dict) -> dict:
                                "Read the result back: vcr_read what candidate_trials with filter.subjectKey, or what matching with filter.protocolVersionId."]},
             "warnings": [],
             "next_actions": ["Start it with vcr_simulate action start, kind match_judge and a selection."],
+        }
+    if kind == "records_import":
+        # Not an engine method and not started from a run: the platform takes uploads in when data_intake asks it to.
+        return {
+            "status": "success",
+            "summary": "records_import is the platform's own job: it takes an upload in when vcr_write data_intake asks, and states no scenario.",
+            "data": {"kind": kind, "method": "matching.import_records", "builtByPlatform": True, "runStates": [], "keys": [],
+                     "notes": ["Many notes, a hospital's export, PDF and scans are taken in as records; what was taken in, skipped and why is in its receipt. "
+                               "Read progress with vcr_read what=data_intake."]},
+            "warnings": [],
+            "next_actions": ["Use vcr_write what=data_intake (read contracts first); the import job is queued for you."],
         }
     if kind == "match_extract":
         # Not an engine method and not a stored-record scenario: the platform plans the reading from the study and takes a selection only.
