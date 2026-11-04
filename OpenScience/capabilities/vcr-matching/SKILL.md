@@ -21,6 +21,13 @@ fails. Read the saved results back before reporting completion.
 Preserve each complete source clause, including its alternatives, qualifiers,
 negation and applicability. A language requirement accepts up to 4,000 Unicode
 characters; do not truncate an oversized clause to fit: report it as unprocessed.
+Use a typed rule only when its variables and operators preserve every material
+part of that clause. If a subtype, event relationship, plan, qualification or
+clinical expression cannot be represented faithfully, write the complete
+independently meaningful clause as one `language` requirement with its original
+wording. Do not replace it with broader presence variables. For an independently
+specified measurement or time interval, retain exact calculation on the
+source-supported inputs; do not guess a missing numeric value or date.
 Use distinct language keys for applicability and requirement, and never reuse
 one key for different language questions. A verbatim quotation establishes its
 source, not the correctness of an interpretation. Explain a supported clinical

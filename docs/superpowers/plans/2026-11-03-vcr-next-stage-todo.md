@@ -32,6 +32,14 @@ The model gateway can record redacted provider status and optional per-call meta
 
 The background language job is not enabled. Safe implementation still requires a common authorization fence at body handoff and at atomic result commit, with a leased job identity, source and judgment revision checks, all input-document dependencies, erasure/revocation handling and concurrency tests. Existing fact-extraction caching is not a sufficient authority for those writes. Full candidate/protocol background automation, paired E1, TREC and n2c2 remain open.
 
+## Six-patient paired pilot — 2026-11-04
+
+The real DSH recovery candidate `64e415ac3` completed all six preselected patients. The control and candidate aligned 94 and 98 of the same 107 reference units respectively. On their common 93 units, the control agreed on 39, the candidate on 38, and historical TrialGPT on 72. Both current arms kept 46 `not excluded` reference labels as unknown. These are previously inspected development cases, and the control's effective per-call thinking settings were not captured. The completed integration repair has not demonstrated a matching accuracy improvement on this panel.
+
+Gateway receipts for the recovery run record the normalized Flash alias, reasoning setting and output cap for calls through the HTTP model gateway. They do not cover direct control-plane model calls. The protected language background job remains unavailable.
+
+A further isolated candidate changes only the matching skill's guidance: use a full language clause when the typed grammar cannot retain a material qualifier, while retaining exact calculations for specified values and dates. It does not change the missing-information policy. Repeat the identical six-person panel and retain every attempt, coverage outcome and source-bound judgment. Compare its common aligned units with the `64e415ac3` treatment as well as the merged-main control. Do not infer clinical superiority from this small public panel.
+
 ## Execution order
 
 1. Run Tasks 1 and 2 together. Error adjudication can proceed while request stability is repaired.

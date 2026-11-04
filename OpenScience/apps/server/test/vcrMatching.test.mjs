@@ -896,6 +896,8 @@ test("the skill says the two things a run must not get wrong, and names its requ
   assert.match(operating, /No contact, referral, site CRM/);
   assert.match(operating, /Unknown eligibility is never exclusion, a negative finding or zero/);
   assert.match(authored, /unknown coverage, not an eligible verdict/);
+  assert.match(authored, /cannot be represented faithfully, write the complete\s+independently meaningful clause as one `language` requirement/);
+  assert.match(authored, /do not guess a missing numeric value or date/);
   for (const name of ["matching-assessment.md", "matching.json"]) assert.ok(authored.includes(name), name);
 });
 
