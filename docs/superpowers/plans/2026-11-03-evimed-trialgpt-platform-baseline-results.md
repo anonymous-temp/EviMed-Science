@@ -1,5 +1,7 @@
 # EviMed VCR platform baseline, November 3, 2026
 
+> **A baseline of the replaced path, 2026-11-04.** These figures measure the rule-grammar path. The current results are in [the matching delivery plan](2026-11-04-vcr-matching-delivery-plan.md).
+
 The local benchmark ran the pushed product at `3eee7f7653462c760db303c0234bbb3f96dd9705` using the real DSH 0.2.1-rc.5 Docker runtime and DeepSeek Flash through the product model gateway. The product integrates the two development lines in `faa8d0f28`, source-bound retrieval and persisted ranking in `3434ff107`, and original text attachment intake in `aa17e0d66`. Deployment was outside the execution scope.
 
 ## Known-candidate criterion matching

@@ -1,5 +1,7 @@
 # VCR baseline diagnostic audit
 
+> **An audit of the replaced path, 2026-11-04.** Its finding that silence set the ceiling led to [the matching delivery plan](2026-11-04-vcr-matching-delivery-plan.md).
+
 The frozen November 3 TrialGPT platform baseline reconciles to **1,015 units: 256 label agreements, 347 disagreements and 412 unresolved alignments**. The audit replayed the retained first-attempt case files using the pinned alignment implementation and reproduced the saved geometry and product rows. It did not modify the scorer, substitute later attempts, or make new inference calls.
 
 Of 53 attempts, 31 saved a completed feature result, 12 failed, five timed out, three were interrupted and two ended without a saved feature result. Of 105 requested patient–trial pairs, 72 returned at least one criterion row and 33 returned none. The latter account for all 312 units in the scorer’s `no_overlap` bucket. Some incomplete attempts still returned usable rows.

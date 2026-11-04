@@ -1,5 +1,7 @@
 # VCR patient-matching checkpoint — November 4, 2026
 
+> **A checkpoint of the replaced path, 2026-11-04.** The work it lists continued under [the matching delivery plan](2026-11-04-vcr-matching-delivery-plan.md).
+
 This is a checkpoint, not a claim that full-data evaluation or clinical
 acceptance is complete. The user requested the current results and remaining
 work before further experiments. Nothing here authorizes or records deployment.

@@ -1,5 +1,7 @@
 # VCR Matching Recovery Implementation Plan
 
+> **Superseded on 2026-11-04** by [the matching delivery plan](2026-11-04-vcr-matching-delivery-plan.md). Its rule-grammar recovery tasks were not carried out: the free-text path no longer compiles clauses into rules.
+
 > **For agentic workers:** Use `executing-plans` for the sequenced work below. If work is delegated, use `subagent-driven-development`, assign explicit file ownership and review each change before integration. Checkbox items are acceptance-driven work packages. Code-level changes follow the frozen diagnostic decisions in Tasks 1 and 2.
 
 **Goal:** Make the EviMed patient-matching workflow complete reliably, preserve the clinical meaning of each condition and demonstrate its performance through the same product path.

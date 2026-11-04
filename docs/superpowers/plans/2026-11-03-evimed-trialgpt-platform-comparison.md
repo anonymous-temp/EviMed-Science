@@ -1,5 +1,7 @@
 # EviMed Science versus TrialGPT: platform evaluation protocol
 
+> **Superseded on 2026-11-04** by [the matching delivery plan](2026-11-04-vcr-matching-delivery-plan.md), which scores the feature on the upstream data with the upstream scripts (`OpenScience/evals/vcr-matching-boards/`). The harness this protocol describes belongs to the path that was replaced.
+
 Date 2026-11-03. The integrated product and Docker harness were pushed and the first-attempt matching baseline is recorded. The TREC operational probes encountered upstream model failures. See the [baseline results](2026-11-03-evimed-trialgpt-platform-baseline-results.md).
 
 Owner execution amendment (2026-11-03): merge `c180ff7b5` with the current integration line (`origin/codex/release-1102`, `3970e4f8f`) first. Implement missing ranking and a usable frozen-corpus retrieval path, verify locally, commit and push before the paid platform baseline. Production remains the owner's reported November 1 version and is not the baseline. Run a real local DSH kernel. This amendment supersedes any earlier instruction here to benchmark the unmerged feature or count alignment failures as incorrect predictions.

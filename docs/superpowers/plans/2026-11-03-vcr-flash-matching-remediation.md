@@ -1,5 +1,7 @@
 # VCR patient matching: Flash-only diagnosis and remediation
 
+> **Superseded on 2026-11-04** by [the matching delivery plan](2026-11-04-vcr-matching-delivery-plan.md). Kept as the record of the diagnosis. Its goal of reaching the historical 87.3% was withdrawn: that gold was labelled while reading GPT-4's output, so it is reported beside other figures and is not a target.
+
 Date: 2026-11-03, Asia/Shanghai.
 
 Status: proposed implementation and evaluation plan. This review made no new inference calls, changed no product behavior, and deployed nothing. It re-analyzed retained public benchmark responses and inspected source at `c180ff7b53d2e9527c9dcdb9ff76bb1c6ec72226`. It does not certify the running production revision.

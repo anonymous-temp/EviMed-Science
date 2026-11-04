@@ -1,5 +1,7 @@
 # VCR TREC operational probes, November 4, 2026
 
+> **Probes of the replaced path, 2026-11-04.** Three topics on a pool of their own; not comparable with the published figures. Board E in [the matching delivery plan](2026-11-04-vcr-matching-delivery-plan.md) replaces them.
+
 The first preselected topic from each TREC year ran through the local EviMed
 patient-matching product at pushed revision `87d0774369c06aa6813c28fca96de6eef39fb3aa`.
 Each used a separate automated conversation, throwaway account and project, with
