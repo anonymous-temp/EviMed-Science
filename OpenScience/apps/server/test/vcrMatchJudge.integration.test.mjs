@@ -32,7 +32,7 @@ after(async () => { await database?.close(); await isolated?.drop(); if (directo
 
 let sequence = 0;
 const head = (studyId, extra = {}) => ({ studyId, userId: "owner", subjectKey: "P-1", targetKind: "candidate_trial", targetId: "NCT00000001", targetHash: "t1", documentHash: "d1", mode: "fit",
-  promptVersion: "fit-1", model: "deepseek-flash", thinking: "high", producer: "job", status: "done", fit: 70, confidence: 0.5, verdict: "possible", answer: { reasons: { eligible: ["x"] } }, usage: { calls: 1 }, documentIds: ["doc_1"], ...extra });
+  promptVersion: "fit-2", model: "deepseek-flash", thinking: "high", producer: "job", status: "done", fit: 70, confidence: 0.5, verdict: "possible", answer: { reasons: { eligible: ["x"] } }, usage: { calls: 1 }, documentIds: ["doc_1"], ...extra });
 const newStudy = (userId = "owner", projectId = `prj_${++sequence}`) => studies.createStudy({ userId, projectId, name: `Judge ${sequence}`, question: "q", dataTier: "T0" });
 const count = async (studyId) => Number((await studies.one("SELECT count(*)::int AS n FROM evimed_vcr.match_judgments WHERE study_id=$1", [studyId])).n);
 
@@ -65,7 +65,7 @@ test("a failed row is replaced by the next try, a conversation's later answer re
   const spoken = await judgments.save(head(study.id, { producer: "conversation", promptVersion: "conversation", model: "", thinking: "", fit: 40 }));
   const changed = await judgments.save(head(study.id, { producer: "conversation", promptVersion: "conversation", model: "", thinking: "", fit: 20 }));
   assert.deepEqual([changed.id, changed.fit], [spoken.id, 20]);
-  const found = await judgments.doneFor({ studyId: study.id, promptVersions: ["fit-1"], model: "deepseek-flash", thinking: "high" });
+  const found = await judgments.doneFor({ studyId: study.id, promptVersions: ["fit-2"], model: "deepseek-flash", thinking: "high" });
   assert.equal(found.size, 1, "the ledger a job resumes from is its own rows under these settings");
   assert.equal([...found.values()][0].fit, 70);
 });

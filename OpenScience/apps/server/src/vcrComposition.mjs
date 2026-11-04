@@ -112,6 +112,7 @@ import {
 import { VCR_JOB_PURPOSE } from "./vcrJobs.mjs";
 import { createFactExtractor, createMatchBatch, createMatchBatchCounters, createMatchExtractExecutor, matchBatchMinCell } from "./vcrMatchBatch.mjs";
 import { createRecordsImport, createRecordsImportExecutor } from "./vcrRecordsImport.mjs";
+import { createPatientDocumentRead } from "./vcrPatientContext.mjs";
 import { createLongTableReader } from "./vcrLongTables.mjs";
 import { VcrCandidateRerank, createRerankMeter } from "./vcrCandidateRerank.mjs";
 import { VcrCandidateSearchStore } from "./vcrCandidateSearchStore.mjs";
@@ -1290,12 +1291,16 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
     judge: pairJudge,
   });
   const matchJudge = createMatchJudge({ jobs, matchStore, documents, subjectTable, judgments: matchJudgments, config, counters: matchJudgeCounters });
+  /** @type {ReturnType<typeof createPatientDocumentRead> | null} */
+  const patientDocuments = dataPlane ? createPatientDocumentRead({ store, dataStore, dataPlane, jobs, receipts: () => recordsOriginals.receipts, rejudge: (target, input) => matchJudge.rejudge(target, input) }) : null;
   // Many patients' records taken in as a job. The originals are the upload receipts', which the server builds after this module: until it says so, nothing can be located.
   const recordsOriginals = { receipts: /** @type {any} */ (null) };
   if (dataPlane) {
     dataPlane.attach({ originals: { forget: (/** @type {{ userId: string, projectId: string }} */ owner, /** @type {readonly string[]} */ digests) => recordsOriginals.receipts?.forgetOriginals?.(owner, digests) ?? 0 } });
-    jobs.localExecutors["matching.import_records"] = createRecordsImportExecutor({ store, dataStore, dataPlane, config, usageLedger, fetchImpl: call, report,
+    const importRecords = createRecordsImportExecutor({ store, dataStore, dataPlane, config, usageLedger, fetchImpl: call, report,
       locate: async (owner, handle) => recordsOriginals.receipts?.locate(owner, handle) ?? null });
+    // One conversation's attachment rides the same job kind: same queue, same notice, same way back to the conversation.
+    jobs.localExecutors["matching.import_records"] = (/** @type {any} */ work) => (work?.job?.scenario?.mode === "document" ? patientDocuments?.run(work) : importRecords(work));
   }
   const recordsImport = dataPlane ? createRecordsImport({ jobs, receipts: () => recordsOriginals.receipts }) : null;
   // Whether a pseudonym is a person of this study who may be added to: a document, a table row or a judgment says they are, and a withdrawal says they are not any more.
@@ -1355,7 +1360,7 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   service.attach({ records });
   composed = {
     publications, simulations, frontierEvents, predictions, records,
-    store, dataStore, matchStore, erasure, candidateStore, candidateSearches, candidateReranker, clauseDefinitionCounters, patientTrials, evidenceStore, corrections, knowledge, knowledgeStore, longitudinal, matchBatch, matchBatchCounters, matchJudge, matchJudgeCounters, matchJudgments, matchJudgmentReads, matchResults, registryWatch, registryWatchCounters, registryPages, registryPageCounters, subjectKnown, recordsImport, recordsOriginals,
+    store, dataStore, matchStore, erasure, candidateStore, candidateSearches, candidateReranker, clauseDefinitionCounters, patientTrials, evidenceStore, corrections, knowledge, knowledgeStore, longitudinal, matchBatch, matchBatchCounters, matchJudge, matchJudgeCounters, matchJudgments, matchJudgmentReads, matchResults, registryWatch, registryWatchCounters, registryPages, registryPageCounters, subjectKnown, recordsImport, recordsOriginals, patientDocuments,
     access, members, dataPlane, dataPlaneSeam, documents, engine, engineProbe, engineStatus, removeEngineJob, jobs, seal, evidence, matching, registry, service,
     intake: { counters: intakeCounters, extractor, importer, digitizer },
     // Composed later, beside the other modules' workers (server.mjs).

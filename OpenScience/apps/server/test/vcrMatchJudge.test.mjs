@@ -93,12 +93,12 @@ function fixture({ script, config = {}, roster = ROSTER, registry = null, withdr
   const subjectTable = tableCells ? { async read() { return { available: true, snapshotId: "snp_1", header: ["USUBJID", ...Object.keys(tableCells)], rows: [["P-1", ...Object.values(tableCells)]], columns: Object.keys(tableCells).map((name) => ({ name })) }; } } : null;
   const run = createMatchJudgeExecutor({ store: { async studyById() { return STUDY; }, async one() { return { checkpoint: {} }; } }, matchStore, judgments, documents, subjectTable, targets, judge, config, report: (code) => reported.push(code), counters });
   const reads_ = createMatchJudgmentReads({ judgments, documents, subjectTable, targets, matchStore });
-  const toA = { direction: "patient_to_trial", subjects: ["P-1"], trials: ["NCT00000001", "NCT00000002", "NCT00000003"].map((registryId) => ({ registry: "clinicaltrials.gov", registryId })), fit: true, topK: 2, thinking: "high", model: "deepseek-flash", promptVersions: { fit: "fit-1", criteria: "criteria-3" }, estimate: { pairs: 3 }, chain: "c1" };
+  const toA = { direction: "patient_to_trial", subjects: ["P-1"], trials: ["NCT00000001", "NCT00000002", "NCT00000003"].map((registryId) => ({ registry: "clinicaltrials.gov", registryId })), fit: true, topK: 2, thinking: "high", model: "deepseek-flash", promptVersions: { fit: "fit-2", criteria: "criteria-4" }, estimate: { pairs: 3 }, chain: "c1" };
   const job = (extra = {}, isCanceled = async () => false) => ({ job: { id: "job_1", jobId: "job_1", studyId: STUDY.id, scenario: { ...(scenario ?? toA), ...extra }, scenarioHash: "a".repeat(64), seed: 0 }, async onProgress() {}, isCanceled });
   return { provider, judgments, counters, reported, reads, documents, matchStore, subjectTable, targets, judge, run, job, reads_, toA };
 }
 
-const toB = { direction: "trial_to_patient", protocolVersionId: "pv_1", subjects: ["P-1", "P-2", "P-3"], fit: true, topK: 20, thinking: "high", thinkingCriteria: "high", model: "deepseek-flash", promptVersions: { fit: "fit-1", criteria: "criteria-3" }, estimate: { pairs: 3 }, chain: "c2" };
+const toB = { direction: "trial_to_patient", protocolVersionId: "pv_1", subjects: ["P-1", "P-2", "P-3"], fit: true, topK: 20, thinking: "high", thinkingCriteria: "high", model: "deepseek-flash", promptVersions: { fit: "fit-2", criteria: "criteria-4" }, estimate: { pairs: 3 }, chain: "c2" };
 
 test("a selection names one direction, and nothing else is accepted", () => {
   assert.equal(judgeSelection({ subjectKey: "P-1", registryIds: ["NCT00000001"] }).direction, "patient_to_trial");

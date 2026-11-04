@@ -143,7 +143,7 @@ test("B2: a row that survived with a sentence whose record has since changed is 
   const text = "患者王五，身份证号 110101199003078888，肌酐 9.9。";
   const up = await plane.storeUpload({ actor: accounts.owner, studyId: seeded.study.id, sourceId: source.id, name: "n.txt", role: "document", subject: "SYNTHETIC-F5", stream: Readable.from([Buffer.from(text)]) });
   const key = String(up.file.detail.subjectKey);
-  await vcr.matchJudgments.save({ studyId: seeded.study.id, userId: accounts.owner, subjectKey: key, targetKind: "candidate_trial", targetId: "NCT08888888", targetHash: "t", documentHash: "d", mode: "criteria", promptVersion: "criteria-3", model: "m", thinking: "off", producer: "job", status: "done", verdict: "possible", documentIds: [up.file.id],
+  await vcr.matchJudgments.save({ studyId: seeded.study.id, userId: accounts.owner, subjectKey: key, targetKind: "candidate_trial", targetId: "NCT08888888", targetHash: "t", documentHash: "d", mode: "criteria", promptVersion: "criteria-4", model: "m", thinking: "off", producer: "job", status: "done", verdict: "possible", documentIds: [up.file.id],
     answer: { target: { kind: "candidate_trial", id: "NCT08888888", registry: "clinicaltrials.gov", registryId: "NCT08888888", title: "t" }, rows: [{ number: 1, kind: "inclusion", clause: "c", label: "included", basis: "stated", reason: "肌酐偏高", sentenceIds: [0], evidence: [{ sentenceId: 0, text: "一句病历里已经没有的话。", start: 0, end: 12, documentId: up.file.id }] }], missing: [] } });
   const file = await call("owner", "GET", `/api/vcr/studies/${seeded.study.id}/matching/export?direction=patient_to_trial&subjectKey=${key}&kind=clauses&format=csv`);
   assert.equal(file.status, 200);
