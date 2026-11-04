@@ -11,7 +11,7 @@ export const RSI_DEPENDENCY_PROFILES = Object.freeze({
     // Only frontierTagSeed is deployment data; security's filesystem helpers operate on caller-owned workspace state, not executable/configuration inputs to selection.
     // Source-bound declarations must be re-audited after either module changes.
     'apps/server/src/frontierPersistence.mjs': { sourceDigest: '1e727eb61c38166fb273e2a2af79c2c966e647da15396b5e1d44fdc3902a9101', resources: ['apps/server/src/frontierTagSeed.json'] },
-    'apps/server/src/security.mjs': { sourceDigest: 'f8c3dcffa6309eb9529a31c5b1f7d2e89c4df24e978eb27bcc0dd7a3601d8582', resources: [] },
+    'apps/server/src/security.mjs': { sourceDigest: 'be1a1a2166fb6d68c9da6eced79c9e311a1f3bb447f21308ef1af570c4371761', resources: [] },
   } },
 })
 /** Compute a source graph without importing or executing candidate code. Unknown dynamic edges fail closed.

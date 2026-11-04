@@ -96,11 +96,11 @@ describe('when a case has settled', () => {
 });
 
 describe('which stack may be used for what', () => {
-  const receipt = { diagnostic: true, origin: 'http://127.0.0.1:41000', instance: 'abc', budget: { allModelPurposes: true }, kernelVersion: '0.2.1-rc.5', isolation: 'host-kernel diagnostic', sourceSha: 'deadbeef', dirty: false,
+  const receipt = { diagnostic: true, origin: 'http://127.0.0.1:41000', instance: 'abc', budget: { allModelPurposes: true }, kernelVersion: '9.9.9-test', isolation: 'host-kernel diagnostic', sourceSha: 'deadbeef', dirty: false,
     resolvedConfig: { production: false, memoryEnabled: false, memoryRecallEnabled: false, nativeMemoryTurnCommitEnabled: false, learningEnabled: false } };
-  const args = { receipt, diagnostic: true, origin: 'http://127.0.0.1:41000', pinned: '0.2.1-rc.5' };
+  const args = { receipt, diagnostic: true, origin: 'http://127.0.0.1:41000', pinned: '9.9.9-test' };
   test('a diagnostic run takes a host-kernel receipt that says what it is, and writes that down', async () => {
-    assert.deepEqual(await acceptReceipt(args), { diagnostic: true, isolation: 'host-kernel diagnostic', kernelVersion: '0.2.1-rc.5', sourceSha: 'deadbeef', dirty: false });
+    assert.deepEqual(await acceptReceipt(args), { diagnostic: true, isolation: 'host-kernel diagnostic', kernelVersion: '9.9.9-test', sourceSha: 'deadbeef', dirty: false });
   });
   test('it refuses a receipt that does not say so, another origin, memory switched on, production, or a kernel off the pin', async () => {
     for (const [change, code] of /** @type {Array<[any, string]>} */ ([[{ diagnostic: undefined }, 'receipt_refused'], [{ origin: 'http://127.0.0.1:41001' }, 'receipt_refused'], [{ instance: '' }, 'receipt_refused'],

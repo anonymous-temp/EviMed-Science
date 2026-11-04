@@ -8,7 +8,7 @@
 # network to build); this script builds neither. It refuses to start when the copy would leave less than MIN_FREE_GB (default 4)
 # free on the disk, and checks the kernel's version against deps-version.json, the one place the pin is written. Run again, it
 # re-stages the socket from the tree and seals the seed again, so an edited tree is what runs. Adapted from the general-tasks
-# seed.sh and the 0.2.1-rc.5 live-check seed (the Landlock runner row is pointed at a copy of the runner, because the image's
+# seed.sh and the live-check seed of the kernel pin (the Landlock runner row is pointed at a copy of the runner, because the image's
 # path does not exist on this host; LoopX, the memory plugin and the search-topics bundle are left out on purpose).
 #
 # Prints, last, the two paths the harness is given:  TREE_DIR=<dir>  DSH_BIN=<path>
