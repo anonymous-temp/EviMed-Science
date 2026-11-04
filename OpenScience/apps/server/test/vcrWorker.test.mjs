@@ -7,7 +7,7 @@ import test from "node:test";
 import { VCR_WORKER_LOOPS, VcrWorker, createVcrWorkerLoops, withVcrWorkerWarnings } from "../src/vcrWorker.mjs";
 
 test("the seven loops, their cadences and which of them are leased", () => {
-  assert.deepEqual(VCR_WORKER_LOOPS.map((loop) => loop.name), ["jobs", "localJobs", "slowJobs", "completions", "orchestrator", "recompute", "recheck", "frontierEvents", "packSources", "drafts"]);
+  assert.deepEqual(VCR_WORKER_LOOPS.map((loop) => loop.name), ["jobs", "localJobs", "slowJobs", "completions", "orchestrator", "recompute", "recheck", "frontierEvents", "registryWatch", "packSources", "drafts"]);
   const packs = VCR_WORKER_LOOPS.find((loop) => loop.name === "packSources");
   assert.deepEqual([packs?.leased, packs?.optional], [true, true], "a platform pack is watched once, by whichever control plane sees it first, and only while the switch is on");
   const events = VCR_WORKER_LOOPS.find((loop) => loop.name === "frontierEvents");
@@ -18,6 +18,15 @@ test("the seven loops, their cadences and which of them are leased", () => {
   assert.equal(recheck?.every, 15 * 60_000);
   assert.equal(recheck?.leased, true, "one due date is one job, whichever control plane sees it first");
   assert.equal(VCR_WORKER_LOOPS.find((loop) => loop.name === "jobs")?.leased, undefined, "claiming is already exclusive in the database");
+});
+
+test("the registry watch loop is hourly and leased, the watch's own tick, and absent while it is off", async () => {
+  const watch = VCR_WORKER_LOOPS.find((loop) => loop.name === "registryWatch");
+  assert.deepEqual([watch?.every, watch?.leased, watch?.optional], [60 * 60_000, true, true], "one trial is read once, whichever control plane sees it first, and the switch may be off");
+  const loops = createVcrWorkerLoops({ jobs: null, orchestrator: null, store: null, registryWatch: { async tick() { return { due: 3, checked: 2, changed: 1, marked: 4, failed: 1, deferred: 0 }; } } });
+  assert.deepEqual(await loops.registryWatch?.(), { due: 3, checked: 2, changed: 1, marked: 4, failed: 1, deferred: 0 });
+  assert.equal(createVcrWorkerLoops({ jobs: null, orchestrator: null, store: null }).registryWatch, null);
+  assert.equal(createVcrWorkerLoops({ jobs: null, orchestrator: null, store: null, registryWatch: {} }).registryWatch, null);
 });
 
 test("the recheck loop is the matching package's own function, and absent when matching is not composed", async () => {

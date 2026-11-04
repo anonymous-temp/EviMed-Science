@@ -269,9 +269,11 @@ export async function readSubjectNote({ study, subjectKey, documents, roster, ta
 /**
  * What the two kinds of target read as, one trial or protocol version at a time. A registry read is shared by every call of a job through `once`, and the
  * number at once is bounded.
- * @param {{ evidence?: any, matchStore: any }} deps
+ * A ChiCTR listing carries no eligibility text; `pages` (vcrRegistryPages) reads it from the record's page when it can, and a record whose page gave nothing is a
+ * target with `eligibilitySource: 'none'` as before. Whatever `pages` does, it never makes a read fail.
+ * @param {{ evidence?: any, matchStore: any, pages?: { eligibilityFor: (input: { registry: string, registryId: string, url?: string | null, signal?: AbortSignal }) => Promise<{ eligibility: string, url: string, fetchedAt: string, source: string } | null> } | null }} deps
  */
-export function judgmentTargets({ evidence = null, matchStore }) {
+export function judgmentTargets({ evidence = null, matchStore, pages = null }) {
   return {
     /** A registry record, whole: nothing here is cut, because a clause is never truncated. A record with no eligibility text is still a target.
      * @param {{ userId: string, registry: string, registryId: string, collection?: string | null, collectionRevision?: string | null, signal?: AbortSignal }} input */
@@ -283,13 +285,21 @@ export function judgmentTargets({ evidence = null, matchStore }) {
         throw failure(missing ? 'registry_not_found' : 'registry_unavailable', missing ? '登记平台没有这个登记号的记录。' : `没能取回这条登记记录（${fetched?.reason ?? fetched?.status ?? 'unknown'}）。`);
       }
       const trial = fetched.trial;
-      const eligibility = String(trial.eligibility ?? '');
+      let eligibility = String(trial.eligibility ?? '');
+      /** @type {{ eligibility: string, url: string, fetchedAt: string, source: string } | null} */
+      let page = null;
+      if (!eligibility.trim() && pages && !trial.collection) {
+        page = await pages.eligibilityFor({ registry: String(trial.registry ?? input.registry), registryId: String(trial.registryId), url: trial.url, signal: input.signal }).catch(() => null);
+        if (page?.eligibility.trim()) eligibility = page.eligibility;
+        else page = null;
+      }
       const words = { title: String(trial.title ?? ''), summary: String(trial.summary ?? ''), eligibility, conditions: list(trial.conditions).map(String), interventions: list(trial.interventions).map(String) };
       return { kind: 'candidate_trial', id: String(trial.registryId), ...words, clauses: segmentCriteria(eligibility), hash: sha256(canonicalScenarioJson(words)),
-        eligibilitySource: eligibility.trim() ? 'registry' : 'none',
+        eligibilitySource: page ? 'web_read' : eligibility.trim() ? 'registry' : 'none',
         summaryOfTarget: { kind: 'candidate_trial', id: String(trial.registryId), registry: String(trial.registry ?? input.registry), registryId: String(trial.registryId), title: words.title,
           ...(trial.url ? { url: String(trial.url) } : {}), ...(trial.status ? { status: String(trial.status) } : {}), ...(trial.phase ? { phase: String(trial.phase) } : {}),
-          ...(trial.recordHash ? { recordHash: String(trial.recordHash) } : {}), ...(trial.collection ? { collection: trial.collection } : {}) } };
+          ...(trial.recordHash ? { recordHash: String(trial.recordHash) } : {}), ...(trial.collection ? { collection: trial.collection } : {}),
+          ...(page ? { eligibilityPage: { url: page.url, fetchedAt: page.fetchedAt } } : {}) } };
     },
     /** A protocol version: its clauses are its criteria as written, each a clause, and those words in order are its eligibility text.
      * @param {{ study: any, protocolVersionId: string }} input */

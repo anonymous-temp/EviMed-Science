@@ -2937,6 +2937,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // What a table's codes mean is kept in the project's dataset-semantics record (built below, hence a function); off, the codes stay unread.
     dataSemantics: () => dataSemantics,
     // The web reader is built further down; a ChiCTR record's page (its eligibility text, vcrRegistryPages) is read through it, with every check it makes.
+    webReader: { read: (/** @type {string} */ url, /** @type {any} */ options) => webReader.read(url, options) },
     officialZoneForKeys: productDatabase ? createOfficialZoneLookup({ database: productDatabase }) : null,
     // The learning package's prediction registry (flywheel F25) is given here when it exists; without one the filing route is absent.
     // The prediction registry is composed with the evolution module, after this: the filing route asks for it when a prediction is filed.
@@ -6304,7 +6305,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       report: (/** @type {string} */ loop, /** @type {string} */ code) => process.stderr.write(`vcr ${loop}: ${code}\n`),
       // `matching` is the deferral recheck loop: a washout that ends is re-judged on
       // its own day, not when someone next opens the study.
-      loops: createVcrWorkerLoops({ jobs: vcr.jobs, orchestrator, store: vcr.store, matching: vcr.matching, frontierEvents: vcr.frontierEvents, knowledge: vcr.knowledge, drafts: vcr.drafts, completions: vcr.completions }),
+      loops: createVcrWorkerLoops({ jobs: vcr.jobs, orchestrator, store: vcr.store, matching: vcr.matching, frontierEvents: vcr.frontierEvents, knowledge: vcr.knowledge, drafts: vcr.drafts, completions: vcr.completions, registryWatch: vcr.registryWatch }),
     });
     // The catalogue the 模型与方法 page reads: three reference simulators and
     // the engine's own method list, seeded once, idempotently.

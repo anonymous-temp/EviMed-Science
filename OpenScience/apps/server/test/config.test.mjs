@@ -167,6 +167,20 @@ test("the number of candidate trials a study holds has a key, a default and boun
   }
 });
 
+test("the registry watch and the ChiCTR page reader are on, bounded, and each limit has a name", () => {
+  const config = loadConfig({ rootDir: repoRoot });
+  assert.deepEqual([config.vcrRegistryWatchEnabled, config.vcrRegistryWatchBatch, config.vcrRegistryWatchHours, config.vcrRegistryWatchRetryHours, config.vcrRegistryWatchReadTimeoutMs], [true, 20, 168, 6, 60_000]);
+  assert.deepEqual([config.vcrRegistryPagesEnabled, config.vcrRegistryPageDays, config.vcrRegistryPageFailureHours, config.vcrRegistryPageTimeoutMs], [true, 7, 6, 45_000]);
+  const set = loadConfig({ rootDir: repoRoot, vcrRegistryWatchEnabled: false, vcrRegistryWatchBatch: "200", vcrRegistryWatchHours: "1", vcrRegistryPagesEnabled: false, vcrRegistryPageDays: "365" });
+  assert.deepEqual([set.vcrRegistryWatchEnabled, set.vcrRegistryWatchBatch, set.vcrRegistryWatchHours, set.vcrRegistryPagesEnabled, set.vcrRegistryPageDays], [false, 200, 1, false, 365]);
+  for (const [bad, name] of [[{ vcrRegistryWatchBatch: "0" }, "OPEN_SCIENCE_VCR_REGISTRY_WATCH_BATCH"], [{ vcrRegistryWatchBatch: "201" }, "OPEN_SCIENCE_VCR_REGISTRY_WATCH_BATCH"],
+    [{ vcrRegistryWatchHours: "0" }, "OPEN_SCIENCE_VCR_REGISTRY_WATCH_HOURS"], [{ vcrRegistryWatchRetryHours: "169" }, "OPEN_SCIENCE_VCR_REGISTRY_WATCH_RETRY_HOURS"],
+    [{ vcrRegistryWatchReadTimeoutMs: "1000" }, "OPEN_SCIENCE_VCR_REGISTRY_WATCH_READ_TIMEOUT_MS"], [{ vcrRegistryPageDays: "0" }, "OPEN_SCIENCE_VCR_REGISTRY_PAGE_DAYS"],
+    [{ vcrRegistryPageFailureHours: "0" }, "OPEN_SCIENCE_VCR_REGISTRY_PAGE_FAILURE_HOURS"], [{ vcrRegistryPageTimeoutMs: "151000" }, "OPEN_SCIENCE_VCR_REGISTRY_PAGE_TIMEOUT_MS"]]) {
+    assert.throws(() => loadConfig({ rootDir: repoRoot, ...bad }), new RegExp(name), JSON.stringify(bad));
+  }
+});
+
 test("batch matching has a bound on its size, on its concurrency and on one record's call", () => {
   const config = loadConfig({ rootDir: repoRoot });
   assert.deepEqual([config.vcrMatchBatchMaxSubjects, config.vcrMatchExtractConcurrency, config.vcrMatchExtractTimeoutMs], [300, 3, 90_000]);

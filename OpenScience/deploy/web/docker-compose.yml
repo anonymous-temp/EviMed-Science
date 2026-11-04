@@ -879,6 +879,15 @@ services:
       OPEN_SCIENCE_VCR_METHOD_VALIDATION_FILE: ${OPEN_SCIENCE_VCR_METHOD_VALIDATION_HOST_FILE:+/run/evimed/vcr-method-validation.json}
       # The engine's bearer token and receipt key are files, like every other
       # key this service holds (bound below; /dev/null where the deployment has
+      OPEN_SCIENCE_VCR_REGISTRY_WATCH_ENABLED:
+      OPEN_SCIENCE_VCR_REGISTRY_WATCH_BATCH:
+      OPEN_SCIENCE_VCR_REGISTRY_WATCH_HOURS:
+      OPEN_SCIENCE_VCR_REGISTRY_WATCH_RETRY_HOURS:
+      OPEN_SCIENCE_VCR_REGISTRY_WATCH_READ_TIMEOUT_MS:
+      OPEN_SCIENCE_VCR_REGISTRY_PAGES_ENABLED:
+      OPEN_SCIENCE_VCR_REGISTRY_PAGE_DAYS:
+      OPEN_SCIENCE_VCR_REGISTRY_PAGE_FAILURE_HOURS:
+      OPEN_SCIENCE_VCR_REGISTRY_PAGE_TIMEOUT_MS:
       # no engine, which reads as none). The bearer token is required; signing
       # is optional, with job/input identity and output hashes checked always.
       OPEN_SCIENCE_VCR_ENGINE_TOKEN_FILE: /run/secrets/vcr-engine-token

@@ -114,6 +114,8 @@ import { createFactExtractor, createMatchBatch, createMatchBatchCounters, create
 import { createRecordsImport, createRecordsImportExecutor } from "./vcrRecordsImport.mjs";
 import { createMatchJudge, createMatchJudgeCounters, createMatchJudgeExecutor, createMatchJudgmentReads, createPairJudge, judgmentTargets, tableFieldsOf } from "./vcrMatchJudge.mjs";
 import { VcrMatchJudgmentStore } from "./vcrMatchJudgmentStore.mjs";
+import { VcrRegistryPageStore, createRegistryPageCounters, createRegistryPages } from "./vcrRegistryPages.mjs";
+import { createRegistryWatch, createRegistryWatchCounters } from "./vcrRegistryWatch.mjs";
 import { vcrRuntimeWrite } from "./vcrGateway.mjs";
 import { MATCHING_SNAPSHOT_PREFIX, freezeMatchingInputs, hydrateMatchingInputs, languageCriteriaByKey, matchingSelection, verifyMatchingSnapshot } from "./vcrMatchingSnapshot.mjs";
 
@@ -1098,6 +1100,7 @@ export function createVcrEngineJobRemover({ config, fetchImpl, engine = null }) 
  *   predictionRegistry?: { register: (prediction: Record<string, any>) => Promise<any> } | null,
  *   usageLedger?: any,
  *   dataSemantics?: (() => any) | null,
+ *   webReader?: { read: (url: string, options?: any) => Promise<{ text: string }> } | null,
  * }} input `dataSemantics`: the dataset-semantics service, as a function (it is built after this module); where it is off, the codes of a table stay unread.
  */
 export function composeVcr({ config, productDatabase, projectStore = null, audit = async () => {}, fetchImpl, report = () => {}, connectorCredentials = null, intakeController = null, entityVocabulary = null, sourceChanges = null, officialZoneForKeys = null, predictionRegistry = null, usageLedger = null, dataSemantics = null, documentParser = null, webReader = null }) {
@@ -1227,7 +1230,11 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   // Judging patients against trials (owner decisions 2026-11-04): one job and one record for both directions; a conversation writes the same record through `trial_judgment`.
   const matchJudgments = new VcrMatchJudgmentStore({ database: productDatabase });
   const matchJudgeCounters = createMatchJudgeCounters();
-  const judgeTargets = judgmentTargets({ evidence, matchStore });
+  // A ChiCTR listing carries no eligibility text; its page is read through the platform's web reader (vcrRegistryPages), and a page that gives nothing is a pair judged on the listing.
+  const registryPageCounters = createRegistryPageCounters();
+  const registryPages = config.vcrRegistryPagesEnabled !== false && webReader
+    ? createRegistryPages({ store: new VcrRegistryPageStore({ database: productDatabase }), webReader, config, report, counters: registryPageCounters }) : null;
+  const judgeTargets = judgmentTargets({ evidence, matchStore, pages: registryPages });
   jobs.localExecutors["matching.judge"] = createMatchJudgeExecutor({
     store, matchStore, judgments: matchJudgments, documents, subjectTable, targets: judgeTargets, config, report, counters: matchJudgeCounters,
     judge: createPairJudge({ config, usageLedger, fetchImpl: call, counters: matchJudgeCounters }),
@@ -1248,6 +1255,10 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
     return (await matchJudgments.list({ studyId: study.id, subjectKey, limit: 1 })).length > 0;
   };
   const matchJudgmentReads = createMatchJudgmentReads({ judgments: matchJudgments, documents, subjectTable, targets: judgeTargets, matchStore, rejudge: matchJudge });
+  // The trials a person holds a verdict about, read again a few at a time; a verdict made of a record that has since changed is marked (G15).
+  const registryWatchCounters = createRegistryWatchCounters();
+  const registryWatch = config.vcrRegistryWatchEnabled !== false
+    ? createRegistryWatch({ judgments: matchJudgments, targets: judgeTargets, config, report, counters: registryWatchCounters }) : null;
   // The trials a person holds a verdict about, read again a few at a time; a verdict made of a record that has since changed is marked (G15).
   const registryWatchCounters = createRegistryWatchCounters();
   const registryWatch = config.vcrRegistryWatchEnabled !== false
@@ -1297,7 +1308,7 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   service.attach({ records });
   composed = {
     publications, simulations, frontierEvents, predictions, records,
-    store, dataStore, matchStore, erasure, candidateStore, patientTrials, evidenceStore, corrections, knowledge, knowledgeStore, longitudinal, matchBatch, matchBatchCounters, matchJudge, matchJudgeCounters, matchJudgments, matchJudgmentReads, matchResults, registryWatch, registryWatchCounters, registryPages, registryPageCounters, subjectKnown, recordsImport, recordsOriginals,
+    store, dataStore, matchStore, erasure, candidateStore, patientTrials, evidenceStore, corrections, knowledge, knowledgeStore, longitudinal, matchBatch, matchBatchCounters, matchJudge, matchJudgeCounters, matchJudgments, matchJudgmentReads, matchResults, registryWatch, registryWatchCounters, registryPages, registryPageCounters, registryWatch, registryWatchCounters, registryPages, registryPageCounters, subjectKnown, recordsImport, recordsOriginals,
     access, members, dataPlane, dataPlaneSeam, documents, engine, engineProbe, engineStatus, removeEngineJob, jobs, seal, evidence, matching, registry, service,
     intake: { counters: intakeCounters, extractor, importer, digitizer },
     // Composed later, beside the other modules' workers (server.mjs).
@@ -1419,6 +1430,8 @@ export async function vcrMetricsSnapshot(vcr) {
     patientTrials: vcr.patientTrials?.counters ? { ...vcr.patientTrials.counters } : null,
     matchBatch: vcr.matchBatchCounters ? { ...vcr.matchBatchCounters } : null,
     matchJudge: vcr.matchJudgeCounters ? { ...vcr.matchJudgeCounters } : null,
+    registryWatch: vcr.registryWatch ? { ...vcr.registryWatchCounters } : null,
+    registryPages: vcr.registryPages ? { ...vcr.registryPageCounters } : null,
     frontierEvents: vcr.frontierEvents ? { ...vcr.frontierEvents.counters } : null,
     platformPacks: vcr.knowledge?.platform?.enabled
       ? Object.fromEntries(Object.entries(vcr.knowledge.counters).filter(([kind]) => kind.startsWith("platform"))) : null,
@@ -1517,6 +1530,14 @@ export function vcrMetricFamilies(enabled, snapshot) {
   if (snapshot.matchJudge) {
     add("match_judge_total", "What judging patients against trials did since this process started: jobs started, pairs judged and failed, model calls retried, jobs stopped by a budget or a run of upstream failures, and jobs canceled.", "counter",
       Object.entries(snapshot.matchJudge).map(([kind, value]) => ({ labels: { kind }, value: Number(value) })));
+  }
+  if (snapshot.registryWatch) {
+    add("registry_watch_total", "What the registry watch did since this process started (G15): ticks, trials read again, trials whose record had changed, verdicts marked and marks cleared (the record went back), records the registry no longer has, reads that failed, and trials left for the next tick.", "counter",
+      Object.entries(snapshot.registryWatch).map(([kind, value]) => ({ labels: { kind }, value: Number(value) })));
+  }
+  if (snapshot.registryPages) {
+    add("registry_pages_total", "What the reading of ChiCTR record pages did since this process started (G10): pages read and their eligibility text kept, answers from the kept text, pages read that held no eligibility section, reads that failed, attempts not repeated because a recent one gave nothing, and old text kept when a new read failed.", "counter",
+      Object.entries(snapshot.registryPages).map(([kind, value]) => ({ labels: { kind }, value: Number(value) })));
   }
   if (snapshot.platformPacks) {
     add("platform_packs_total", "What the platform knowledge packs did since this process started (flywheel F26): packs that passed the re-check and were copied, requests that failed it, authors who took their name off, and platform packs labelled 来源有变更.", "counter",

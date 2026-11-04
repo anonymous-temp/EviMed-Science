@@ -12,6 +12,9 @@
  *   holding the record's text cannot put a judgment back after `vcrErasureStore` took them away.
  * - **Deletion follows the study.** The rows cascade with their study, so a project's and an account's deletion take them in the transaction
  *   that removes the study; a soft-deleted study keeps them unreachable, as it keeps its facts.
+ * - **`basis_changed` is text with two writers.** The erasure store writes a plain cause word (`document`, `permission`, ...); the registry watch writes
+ *   a JSON object that starts `{"kind":"registry_record"` (the record the verdict was made of has since changed). A row reads back as the word or the
+ *   object, and the watch only ever writes over an empty column or its own earlier mark, so a cause written later is never taken back.
  *
  * @module vcrMatchJudgmentStore
  */
@@ -21,6 +24,23 @@ import { VcrStoreBase, vcrId } from "./vcrStoreBase.mjs";
 
 /** The key that says two rows are the same judgment, in code. @param {Record<string, any>} row */
 export const judgmentKey = (row) => [row.subjectKey, row.targetKind, row.targetId, row.targetHash, row.documentHash, row.mode, row.promptVersion, row.model, row.thinking, row.producer].join("\u0000");
+
+/** The kind of the registry watch's mark, and the words a reader shows for it. */
+export const REGISTRY_RECORD_BASIS = "registry_record";
+export const REGISTRY_RECORD_LABEL = "登记记录已更新，结论来自旧版本";
+/** What the watch's mark starts with, as a `LIKE` pattern: the column is text, and a cause word is not JSON. */
+const REGISTRY_MARK_PATTERN = `{"kind":"${REGISTRY_RECORD_BASIS}"%`;
+/** A trial read from a frozen collection is never refreshed: its text is the collection's, not the registry's. */
+const NOT_FROZEN = "COALESCE(j.answer->'target'->'collection', 'null'::jsonb) = 'null'::jsonb";
+const NOT_WITHDRAWN = `NOT EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.subject_withdrawals w WHERE w.study_id=j.study_id AND w.subject_key=j.subject_key)`;
+
+/** A stored `basis_changed`: the erasure store's cause word as it is, the registry watch's mark as the object it wrote. @param {unknown} value */
+function basisChangedOf(value) {
+  if (value == null || value === "") return null;
+  const text = String(value);
+  if (!text.startsWith("{")) return text;
+  try { return JSON.parse(text); } catch { return text; }
+}
 
 /** The columns of a row without its answer and usage, which are what is large. */
 const LIGHT = ["id", "study_id", "user_id", "subject_key", "target_kind", "target_id", "target_hash", "document_hash", "mode", "prompt_version", "model", "thinking", "producer", "status", "error_code",
@@ -34,7 +54,7 @@ function judgmentOf(row) {
     mode: String(row.mode), promptVersion: String(row.prompt_version), model: String(row.model), thinking: String(row.thinking), producer: String(row.producer),
     status: String(row.status), errorCode: row.error_code ?? null, fit: row.fit == null ? null : Number(row.fit), confidence: row.confidence == null ? null : Number(row.confidence),
     verdict: row.verdict ?? null, answer: row.answer ?? {}, usage: row.usage ?? {}, documentIds: Array.isArray(row.document_ids) ? row.document_ids.map(String) : [],
-    basisChanged: row.basis_changed ?? null, jobId: row.job_id ?? null,
+    basisChanged: basisChangedOf(row.basis_changed), jobId: row.job_id ?? null,
     createdAt: row.created_at ? new Date(row.created_at).toISOString() : null, updatedAt: row.updated_at ? new Date(row.updated_at).toISOString() : null,
   };
 }
@@ -103,5 +123,56 @@ export class VcrMatchJudgmentStore extends VcrStoreBase {
     if (!ids.length) return [];
     return (await this.rows(`SELECT j.* FROM ${VCR_SCHEMA}.match_judgments j WHERE j.study_id=$1 AND j.id=ANY($2::text[])
       AND NOT EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.subject_withdrawals w WHERE w.study_id=j.study_id AND w.subject_key=j.subject_key)`, [studyId, [...ids]])).map(judgmentOf);
+  }
+
+  // -------------------------------------------------------- the registry watch
+
+  /**
+   * The trials a person holds a finished verdict about, one entry per study and trial, the least recently checked first (never checked before any
+   * checked). A trial checked fine is due again after `okBefore`; one whose last check failed is due again after `retryBefore`, which is sooner, so a
+   * registry that was down is asked again while the others go first (a record the registry no longer has is an answer, and waits like a good read). A frozen
+   * collection's trial and a person who withdrew are not here.
+   * @param {{ okBefore: Date, retryBefore: Date, limit: number }} input
+   * @returns {Promise<Array<{ studyId: string, userId: string, targetId: string, registry: string | null }>>}
+   */
+  async dueTargets({ okBefore, retryBefore, limit }) {
+    const rows = await this.rows(`SELECT j.study_id, s.user_id, j.target_id, (array_agg(j.answer->'target'->>'registry' ORDER BY j.updated_at DESC))[1] AS registry, c.checked_at
+        FROM ${VCR_SCHEMA}.match_judgments j
+        JOIN ${VCR_SCHEMA}.studies s ON s.id=j.study_id AND s.deleted_at IS NULL
+        LEFT JOIN ${VCR_SCHEMA}.match_target_checks c ON c.study_id=j.study_id AND c.target_id=j.target_id
+       WHERE j.target_kind='candidate_trial' AND j.status='done' AND ${NOT_FROZEN} AND ${NOT_WITHDRAWN}
+         AND (c.checked_at IS NULL OR c.checked_at < CASE WHEN c.last_status IN ('ok', 'registry_not_found', 'registry_unknown') THEN $1::timestamptz ELSE $2::timestamptz END)
+       GROUP BY j.study_id, s.user_id, j.target_id, c.checked_at
+       ORDER BY c.checked_at ASC NULLS FIRST, j.study_id, j.target_id
+       LIMIT $3`, [okBefore.toISOString(), retryBefore.toISOString(), Math.max(1, Math.min(500, Math.floor(limit)))]);
+    return rows.map((row) => ({ studyId: String(row.study_id), userId: String(row.user_id), targetId: String(row.target_id), registry: row.registry ? String(row.registry) : null }));
+  }
+
+  /**
+   * The record of a trial now reads as `hash`: every finished row of this study's trial made of another record is marked, keeping its verdict, and a row
+   * made of this record that an earlier mark called old is cleared (the record went back). Only an empty column or the watch's own mark is written over,
+   * so a cause the erasure store wrote since stands, and a person who withdrew is untouched.
+   * @param {{ studyId: string, targetId: string, hash: string, at: string }} input
+   * @returns {Promise<{ marked: number, cleared: number }>}
+   */
+  async markRegistryChanged({ studyId, targetId, hash, at }) {
+    const mark = JSON.stringify({ kind: REGISTRY_RECORD_BASIS, label: REGISTRY_RECORD_LABEL, newHash: hash, at });
+    return this.transaction(async (client) => {
+      const marked = await client.query(`UPDATE ${VCR_SCHEMA}.match_judgments j SET basis_changed=$4
+         WHERE j.study_id=$1 AND j.target_kind='candidate_trial' AND j.target_id=$2 AND j.status='done' AND j.target_hash<>$3 AND ${NOT_FROZEN} AND ${NOT_WITHDRAWN}
+           AND (j.basis_changed IS NULL OR (j.basis_changed LIKE $5 AND j.basis_changed NOT LIKE $6))`,
+      [studyId, targetId, hash, mark, REGISTRY_MARK_PATTERN, `%"newHash":"${hash}"%`]);
+      const cleared = await client.query(`UPDATE ${VCR_SCHEMA}.match_judgments j SET basis_changed=NULL
+         WHERE j.study_id=$1 AND j.target_kind='candidate_trial' AND j.target_id=$2 AND j.status='done' AND j.target_hash=$3 AND j.basis_changed LIKE $4`,
+      [studyId, targetId, hash, REGISTRY_MARK_PATTERN]);
+      return { marked: marked.rowCount ?? 0, cleared: cleared.rowCount ?? 0 };
+    });
+  }
+
+  /** That the watch looked at this trial now, and what it read. @param {{ studyId: string, targetId: string, hash?: string, status: string, at: string }} input */
+  async recordCheck({ studyId, targetId, hash = "", status, at }) {
+    await this.query(`INSERT INTO ${VCR_SCHEMA}.match_target_checks (study_id, target_id, checked_at, last_hash, last_status) VALUES ($1,$2,$3,$4,$5)
+      ON CONFLICT (study_id, target_id) DO UPDATE SET checked_at=EXCLUDED.checked_at, last_hash=CASE WHEN EXCLUDED.last_hash<>'' THEN EXCLUDED.last_hash ELSE ${VCR_SCHEMA}.match_target_checks.last_hash END,
+        last_status=EXCLUDED.last_status`, [studyId, targetId, at, hash, status]);
   }
 }

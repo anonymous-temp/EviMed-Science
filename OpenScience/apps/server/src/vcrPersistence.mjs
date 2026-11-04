@@ -85,7 +85,7 @@ export const VCR_TABLES = Object.freeze([
   "knowledge_packs", "study_packs", "definitions", "definition_versions", "definition_uses",
   "models", "methods",
   "jobs", "conversation_completions", "executions", "results", "forecasts", "longitudinal_artifacts",
-  "matching_assessments", "criterion_judgments", "matching_facts", "language_judgments", "matching_inputs", "document_projections", "cloud_reads", "subject_withdrawals", "retired_recruitment_subjects", "retirement_erased_accounts", "derived_marks", "matching_candidates", "matching_producers", "matching_extractions", "match_judgments",
+  "matching_assessments", "criterion_judgments", "matching_facts", "language_judgments", "matching_inputs", "document_projections", "cloud_reads", "subject_withdrawals", "retired_recruitment_subjects", "retirement_erased_accounts", "derived_marks", "matching_candidates", "matching_producers", "matching_extractions", "match_judgments", "match_target_checks", "registry_pages",
   "candidate_trials", "candidate_trial_criteria", "candidate_trial_assessments", "candidate_trial_judgments", "parsed_trial_criteria", "parsed_trial_criteria_versions",
   "followup_episodes",
   "dependencies", "stale_marks", "reviews", "decisions", "regulatory_contacts", "exports", "audit", "schedule_marks",
@@ -1184,6 +1184,34 @@ CREATE UNIQUE INDEX IF NOT EXISTS vcr_match_judgments_pair_idx ON evimed_vcr.mat
   (study_id, subject_key, target_kind, target_id, target_hash, document_hash, mode, prompt_version, model, thinking, producer);
 CREATE INDEX IF NOT EXISTS vcr_match_judgments_subject_idx ON evimed_vcr.match_judgments (study_id, subject_key, updated_at DESC);
 CREATE INDEX IF NOT EXISTS vcr_match_judgments_target_idx ON evimed_vcr.match_judgments (study_id, target_kind, target_id, updated_at DESC);
+-- When a registry record that held verdicts rest on was last looked at again, and what it read as (the registry watch, vcrRegistryWatch). One row
+-- per study and trial; the watch takes the least recently checked first, so its bounded reads come round to every trial. A hash and a status,
+-- no registry text and no patient text, and it goes with its study.
+CREATE TABLE IF NOT EXISTS evimed_vcr.match_target_checks (
+  study_id text NOT NULL REFERENCES evimed_vcr.studies(id) ON DELETE CASCADE,
+  target_id text NOT NULL,
+  checked_at timestamptz NOT NULL DEFAULT now(),
+  last_hash text NOT NULL DEFAULT '',
+  last_status text NOT NULL DEFAULT '',
+  PRIMARY KEY (study_id, target_id)
+);
+CREATE INDEX IF NOT EXISTS vcr_match_target_checks_due_idx ON evimed_vcr.match_target_checks (checked_at);
+-- The eligibility text of a registry record that the registry's own listing does not carry (ChiCTR), read from the record's page (vcrRegistryPages).
+-- Public registry text, so it belongs to no account and no study; a failed or empty read is a row too, with when it was tried, so a job of thousands of
+-- pairs does not ask a browser for the same page again. Nothing here is patient data.
+CREATE TABLE IF NOT EXISTS evimed_vcr.registry_pages (
+  registry text NOT NULL,
+  registry_id text NOT NULL,
+  status text NOT NULL CHECK (status IN ('ok', 'failed')),
+  eligibility text NOT NULL DEFAULT '',
+  url text NOT NULL DEFAULT '',
+  source text NOT NULL DEFAULT 'web_read',
+  text_hash text NOT NULL DEFAULT '',
+  reason text,
+  fetched_at timestamptz,
+  attempted_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (registry, registry_id)
+);
 ALTER TABLE evimed_vcr.sources ADD COLUMN IF NOT EXISTS cloud_permission jsonb;
 CREATE TABLE IF NOT EXISTS evimed_vcr.document_projections (
   id text PRIMARY KEY,

@@ -1190,6 +1190,25 @@ function vcrSettings(overrides) {
     vcrEngineToken: engineToken.value,
     vcrEngineTokenError: engineToken.error,
     vcrEngineReceiptKey: engineReceiptKey.value,
+    // The registry watch (vcrRegistryWatch, G15). Once an hour it looks again at a bounded number of the trials a person holds a verdict about, the one checked
+    // longest ago first, and marks the verdicts of a trial whose record changed (the verdict stays; a read offers to judge it again). Batch: how many trials a tick
+    // reads (each read is one request to a public registry, which paces itself); hours: how long a trial that read fine waits before it is read again; retry hours:
+    // the same after a read that failed, so a registry that was down is asked again while the others go first; read timeout: one trial's read, after which the tick
+    // goes on. Off with `=false`, and then nothing is read and no verdict is marked. Counters: `open_science_vcr_registry_watch_total`.
+    vcrRegistryWatchEnabled: overrides.vcrRegistryWatchEnabled ?? boolEnv("OPEN_SCIENCE_VCR_REGISTRY_WATCH_ENABLED", true),
+    vcrRegistryWatchBatch: integer("vcrRegistryWatchBatch", "OPEN_SCIENCE_VCR_REGISTRY_WATCH_BATCH", 20, 1, 200),
+    vcrRegistryWatchHours: integer("vcrRegistryWatchHours", "OPEN_SCIENCE_VCR_REGISTRY_WATCH_HOURS", 168, 1, 8_760),
+    vcrRegistryWatchRetryHours: integer("vcrRegistryWatchRetryHours", "OPEN_SCIENCE_VCR_REGISTRY_WATCH_RETRY_HOURS", 6, 1, 168),
+    vcrRegistryWatchReadTimeoutMs: integer("vcrRegistryWatchReadTimeoutMs", "OPEN_SCIENCE_VCR_REGISTRY_WATCH_READ_TIMEOUT_MS", 60_000, 5_000, 300_000),
+    // The eligibility text of a ChiCTR record (vcrRegistryPages, G10). The registry's listing carries none and its pages refuse a plain request, so the page is read
+    // through the platform's web reader (robots.txt, per-site pacing, the address check, a browser where one is configured) and the labelled sections are cut out of it.
+    // A page that read is kept this many days before it is read again; a page that could not be read (or held no section) is not asked for again for this many hours,
+    // so a job of thousands of pairs does not ask a browser for one page thousands of times; one read's deadline, after which the pair is judged on title and condition.
+    // Off with `=false`: no page is read and a ChiCTR pair is judged on what the listing carries. Counters: `open_science_vcr_registry_pages_total`.
+    vcrRegistryPagesEnabled: overrides.vcrRegistryPagesEnabled ?? boolEnv("OPEN_SCIENCE_VCR_REGISTRY_PAGES_ENABLED", true),
+    vcrRegistryPageDays: integer("vcrRegistryPageDays", "OPEN_SCIENCE_VCR_REGISTRY_PAGE_DAYS", 7, 1, 365),
+    vcrRegistryPageFailureHours: integer("vcrRegistryPageFailureHours", "OPEN_SCIENCE_VCR_REGISTRY_PAGE_FAILURE_HOURS", 6, 1, 168),
+    vcrRegistryPageTimeoutMs: integer("vcrRegistryPageTimeoutMs", "OPEN_SCIENCE_VCR_REGISTRY_PAGE_TIMEOUT_MS", 45_000, 5_000, 150_000),
     vcrEngineReceiptKeyError: engineReceiptKey.error,
     vcrEngineConfigured: Boolean(engineUrl) && Boolean(engineToken.value) && !engineToken.error,
     // One at a time on the shared host (plan §11.4).
