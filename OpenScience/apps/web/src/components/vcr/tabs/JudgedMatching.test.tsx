@@ -52,13 +52,13 @@ beforeEach(() => { restoreRoom = fakeRoom(); toasts.success.mockReset(); toasts.
 afterEach(() => { restoreRoom(); window.matchMedia = original; });
 
 /** The patient direction, opened on the patient the fixtures are about. */
-async function patientPage(overrides: Record<string, unknown> = {}, route?: string) {
+async function patientPage(overrides: Record<string, unknown> = {}, route?: string, title = "P-0192 的试验") {
   server = installVcrServer(network.productRequest, { [JUDGED]: judged(), ...overrides });
   const view = draw(<MatchingTab studyId={STUDY_ID} study={study()} />, route);
   await userEvent.click(await screen.findByRole("button", { name: "给患者找试验" }));
   await userEvent.click(await screen.findByRole("button", { name: /^患者/ }));
   await userEvent.click(await screen.findByRole("menuitemradio", { name: "P-0192" }));
-  await screen.findByRole("heading", { name: "P-0192 的试验" });
+  await screen.findByRole("heading", { name: title });
   return view;
 }
 const trialRow = (id: string) => document.querySelector(`[data-vcr-trial='${id}']`) as HTMLElement;
@@ -470,5 +470,54 @@ describe("给试验找患者 — on a phone", () => {
     const sheet = await screen.findByRole("dialog", { name: "P-0192" });
     await waitFor(() => expect(sheet.querySelector("[data-vcr-pair]")).not.toBeNull());
     expect(within(sheet).getByRole("heading", { name: "待查的信息" })).toBeInTheDocument();
+  });
+});
+
+describe("a short name for a person, and a record that has moved since the judgment", () => {
+  beforeEach(wide);
+  const KEY = "Pee008d6ee9ef7847";
+
+  it("reads a person by the short name the server sends and keeps the key for every request", async () => {
+    await patientPage({ [JUDGED]: judged((page, query) => (query.get("direction") === "patient_to_trial"
+      ? { ...page, subjectKey: KEY, label: "P-EE008D", trials: page.trials.map((trial: any) => ({ ...trial, subjectKey: KEY, label: "P-EE008D" })) }
+      : page)) }, undefined, "P-EE008D 的试验");
+    expect(screen.getByRole("heading", { name: "P-EE008D 的试验" })).toBeInTheDocument();
+    expect(document.body.textContent).not.toContain(KEY);
+  });
+
+  it("falls back to the same short form from the key when an older server sent none", async () => {
+    await patientPage({ [JUDGED]: judged((page, query) => (query.get("direction") === "patient_to_trial"
+      ? { ...page, subjectKey: KEY, label: undefined, trials: page.trials.map((trial: any) => ({ ...trial, subjectKey: KEY, label: undefined })) }
+      : page)) }, undefined, "P-EE008D 的试验");
+    expect(screen.getByRole("heading", { name: "P-EE008D 的试验" })).toBeInTheDocument();
+  });
+
+  it("says on a trial that its registry record changed, offers 重新判定 for those trials, and asks the server to judge them again for this person only", async () => {
+    const stale = ["NCT05000001", "NCT05000003"];
+    await patientPage({
+      [JUDGED]: judged((page, query) => (query.get("direction") === "patient_to_trial"
+        ? { ...page, progress: { ...page.progress, state: "done", jobId: null, waiting: 0 }, stale: { label: "登记记录已更新，可重新判定", count: 2, registryIds: stale },
+          trials: page.trials.map((trial: any) => (stale.includes(trial.id) ? { ...trial, basisChanged: { kind: "registry_record", label: "登记记录已更新" } } : trial)) }
+        : page)),
+      [`POST ${MATCHING.replace("/matching", "")}/rejudge`]: { started: true, jobId: "job_again", jobs: [{ jobId: "job_again" }] },
+    });
+    expect(trialRow("NCT05000001")).toHaveTextContent("登记记录已更新");
+    expect(trialRow("NCT05000002")).not.toHaveTextContent("登记记录已更新");
+    const offer = document.querySelector("[data-vcr-stale]") as HTMLElement;
+    expect(offer).toHaveTextContent("登记记录已更新，可重新判定（2 个试验）");
+    await userEvent.click(within(offer).getByRole("button", { name: "重新判定" }));
+    await waitFor(() => expect(server.calls.some((call) => call.method === "POST" && call.path === `/vcr/studies/${STUDY_ID}/rejudge`)).toBe(true));
+    const sent = server.calls.find((call) => call.method === "POST" && call.path === `/vcr/studies/${STUDY_ID}/rejudge`);
+    expect(sent?.body).toEqual({ subjectKey: "P-0192", registryIds: stale });
+  });
+
+  it("offers no 重新判定 while the job is out, and words a chart that changed as one", async () => {
+    const page = (change: any) => judged((raw, query) => (query.get("direction") === "patient_to_trial"
+      ? { ...raw, ...change(raw), stale: { label: "登记记录已更新，可重新判定", count: 1, registryIds: ["NCT05000001"] },
+        trials: raw.trials.map((trial: any, at: number) => (at === 0 ? { ...trial, basisChanged: { kind: "record", label: "病历在判定之后有更新" } } : trial)) }
+      : raw));
+    await patientPage({ [JUDGED]: page(() => ({})) });
+    expect(trialRow("NCT05000001")).toHaveTextContent("病历在判定之后有更新");
+    expect(within(document.querySelector("[data-vcr-stale]") as HTMLElement).queryByRole("button", { name: "重新判定" })).toBeNull();
   });
 });

@@ -9,7 +9,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, before, test } from "node:test";
 
-import { trialVerdict } from "@evimed/domain";
+import { trialVerdict, vcrSubjectLabel } from "@evimed/domain";
 import { createWebApiApp } from "../src/server.mjs";
 import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
 import { NOTE, seedJudged, sentencesOf, trialId } from "./helpers/vcrJudgedSeed.mjs";
@@ -98,7 +98,7 @@ const TRIAL = (n) => `NCT0000000${n}`;
 
 /** One judgment row the way the job writes it. */
 async function save(studyId, entry) {
-  return context.app.vcr.matchJudgments.save({ studyId, userId: accounts.owner, targetHash: "t", documentHash: "d", promptVersion: entry.mode === "fit" ? "fit-1" : "criteria-1", model: "deepseek-flash", thinking: "high", producer: "job",
+  return context.app.vcr.matchJudgments.save({ studyId, userId: accounts.owner, targetHash: "t", documentHash: "d", promptVersion: entry.mode === "fit" ? "fit-1" : "criteria-2", model: "deepseek-flash", thinking: "high", producer: "job",
     status: "done", ...entry });
 }
 const clause = (number, kind, label, basis, reason, evidence = []) => ({ number, kind, clause: `条款 ${number}`, label, reason, sentenceIds: evidence.map((item) => item.sentenceId), evidence, basis });
@@ -243,7 +243,7 @@ const fitOf = (i) => (i % 11 === 0 ? 30 : 90);
 test("five thousand people are one page: the tallies equal the domain's verdict over every person, a filter and a page cut the list, and the funnel counts each clause", options, async (t) => {
   await db().query(`INSERT INTO evimed_vcr.match_judgments (id, study_id, user_id, subject_key, target_kind, target_id, target_hash, document_hash, mode, prompt_version, model, thinking, producer, status,
         fit, confidence, verdict, answer, usage, document_ids, job_id, created_at, updated_at)
-      SELECT 'mjd_scale' || i, $1, $3, 'P-' || lpad(i::text, 5, '0'), 'protocol_version', $2, 'th', 'dh' || i, 'criteria', 'criteria-1', 'deepseek-flash', 'high', 'job', 'done',
+      SELECT 'mjd_scale' || i, $1, $3, 'P-' || lpad(i::text, 5, '0'), 'protocol_version', $2, 'th', 'dh' || i, 'criteria', 'criteria-2', 'deepseek-flash', 'high', 'job', 'done',
         CASE WHEN i % 11 = 0 THEN 30 ELSE 90 END, 0.7, 'possible',
         jsonb_build_object('target', jsonb_build_object('kind', 'protocol_version', 'id', $2::text, 'title', '规模测试方案'), 'eligibilitySource', 'protocol',
           'rows', (SELECT jsonb_agg(jsonb_build_object('number', n, 'kind', CASE WHEN n <= 6 THEN 'inclusion' ELSE 'exclusion' END, 'clause', '条款 ' || n,
@@ -259,7 +259,7 @@ test("five thousand people are one page: the tallies equal the domain's verdict 
   await insertJob(study.id, { direction: "trial_to_patient", protocolVersionId: PROTOCOL, subjects: Array.from({ length: PEOPLE + 40 }, (_, at) => `P-${String(at + 1).padStart(5, "0")}`), fit: true, topK: 20, thinking: "high", estimate: { cost: 12.5, currency: "CNY" } }, "succeeded");
   // Another study's rows under the same keys must not show here.
   await db().query(`INSERT INTO evimed_vcr.match_judgments (id, study_id, user_id, subject_key, target_kind, target_id, target_hash, document_hash, mode, prompt_version, model, thinking, producer, status, fit, answer)
-    VALUES ('mjd_other', $1, $2, 'P-00001', 'protocol_version', $3, 'th', 'dh', 'criteria', 'criteria-1', 'm', 'high', 'job', 'done', 99, '{"rows": [], "missing": []}'::jsonb)`, [other.id, accounts.owner, PROTOCOL]);
+    VALUES ('mjd_other', $1, $2, 'P-00001', 'protocol_version', $3, 'th', 'dh', 'criteria', 'criteria-2', 'm', 'high', 'job', 'done', 99, '{"rows": [], "missing": []}'::jsonb)`, [other.id, accounts.owner, PROTOCOL]);
 
   const expected = { eligible: 0, possible: 0, insufficient: 0, ineligible: 0 };
   for (let i = 1; i <= PEOPLE; i += 1) expected[trialVerdict({ fit: fitOf(i), criteria: mixOf(i), missing: [] }).verdict] += 1;
@@ -447,7 +447,8 @@ function normalize(value, names) {
 test("the pages the browser reads are the fixtures the web tests draw from: a patient's trials as the job fills them in, and a protocol's people", options, async () => {
   const seeded = await seedJudged({ app: context.app, call, owner: accounts.owner }, "给浏览器的页面");
   const base = `/api/vcr/studies/${seeded.study.id}/matching/judged`;
-  const names = { [seeded.patient]: "P-0192", [seeded.document]: "sfl_fixed", [seeded.study.id]: "std_fixed", [seeded.protocolId]: "prt_screen" };
+  // The key and its short name are one fixed name in a fixture: the web tests that must tell them apart say a label of their own.
+  const names = { [seeded.patient]: "P-0192", [vcrSubjectLabel(seeded.patient)]: "P-0192", [seeded.document]: "sfl_fixed", [seeded.study.id]: "std_fixed", [seeded.protocolId]: "prt_screen" };
   const read = async (/** @type {string} */ query) => { const answer = await call("owner", "GET", `${base}?${query}`); assert.equal(answer.status, 200, answer.text); return answer.body.data; };
   const pages = {
     "patient-running.json": await read(`direction=patient_to_trial&subjectKey=${seeded.patient}`),

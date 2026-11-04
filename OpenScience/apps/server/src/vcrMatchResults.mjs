@@ -33,11 +33,12 @@
 
 import {
   criterionDisplay, rankJudgments, trialVerdict, VCR_MATCH_FIT_LEVEL_LABELS_ZH, VCR_MATCH_CONFIDENCE_LABELS_ZH, VCR_MATCH_NO_ELIGIBILITY_ZH,
-  VCR_MATCH_STANCE_LABELS_ZH, VCR_TRIAL_VERDICT_LABELS_ZH, vcrMatchConfidenceLevel, vcrMatchFailureReason, vcrMatchFitLevel,
+  VCR_MATCH_STANCE_LABELS_ZH, VCR_TRIAL_VERDICT_LABELS_ZH, vcrMatchConfidenceLevel, vcrMatchFailureReason, vcrMatchFitLevel, vcrSubjectLabel, vcrSubjectLabels,
 } from "@evimed/domain";
 
 import { presentJudgment } from "./vcrMatchJudge.mjs";
 import { phaseLabel, registryStatusLabel } from "./vcrPatientTrials.mjs";
+import { REGISTRY_RECORD_BASIS, basisChangedOf } from "./vcrMatchJudgmentStore.mjs";
 import { VCR_SCHEMA } from "./vcrPersistence.mjs";
 import { VcrStoreBase } from "./vcrStoreBase.mjs";
 
@@ -212,6 +213,23 @@ const COUNTS = `LEFT JOIN LATERAL (
     SELECT CASE WHEN jsonb_typeof(j.answer -> 'missing') = 'array' THEN jsonb_array_length(j.answer -> 'missing') ELSE 0 END AS unanswered
   ) u ON j.mode = 'criteria' AND j.status = 'done'`;
 
+/** What the page says of a person's trials whose registry record has changed since they were judged. */
+const REGISTRY_STALE_LABEL_ZH = "登记记录已更新，可重新判定";
+/** What the page says of a judgment whose record was a document the person's chart has since changed, withdrawn or re-permitted. */
+const RECORD_CHANGED_LABEL_ZH = "病历在判定之后有更新";
+
+/**
+ * The mark on a judgment whose basis moved, for a page: the registry watch's own words, or the chart's.
+ * @param {unknown} stored the column as stored
+ * @returns {{ kind: string, label: string } | null}
+ */
+function basisMarkOf(stored) {
+  const mark = basisChangedOf(stored);
+  if (mark == null) return null;
+  if (typeof mark === "object" && /** @type {any} */ (mark).kind === REGISTRY_RECORD_BASIS) return { kind: REGISTRY_RECORD_BASIS, label: text(/** @type {any} */ (mark).label) ?? "登记记录已更新" };
+  return { kind: "record", label: RECORD_CHANGED_LABEL_ZH };
+}
+
 const NOT_WITHDRAWN = `NOT EXISTS (SELECT 1 FROM ${S}.subject_withdrawals w WHERE w.study_id = j.study_id AND w.subject_key = j.subject_key)`;
 
 // ---------------------------------------------------------------------------
@@ -252,6 +270,20 @@ export class VcrMatchResults extends VcrStoreBase {
   }
 
   /**
+   * The short names of the people in view, unique among everyone the study has judged (`vcrSubjectLabels`); a read that fails names them from their own digits.
+   * @param {string} studyId @param {string[]} inView
+   * @returns {Promise<Map<string, string>>}
+   */
+  async #labels(studyId, inView) {
+    try {
+      const roster = await this.rows(`SELECT DISTINCT j.subject_key FROM ${S}.match_judgments j WHERE j.study_id = $1 AND ${NOT_WITHDRAWN} LIMIT 200000`, [studyId]);
+      return vcrSubjectLabels([...roster.map((row) => String(row.subject_key)), ...inView]);
+    } catch {
+      return vcrSubjectLabels(inView);
+    }
+  }
+
+  /**
    * The rows of a scope as pairs: the finished ones with their verdict, and the ones that failed with the reason.
    * @param {string} studyId @param {{ subjectKey?: string | null, targetKind?: string | null, targetId?: string | null }} scope
    */
@@ -283,12 +315,15 @@ export class VcrMatchResults extends VcrStoreBase {
         subjectKey: String(identity.subject_key), targetKind: String(identity.target_kind), targetId: String(identity.target_id), target: object(scored?.target ?? clauses?.target),
         fitRowId: scored?.id ?? null, criteriaRowId: clauses?.id ?? null, fit: score === null ? null : Number(score),
         confidence: (scored?.confidence ?? clauses?.confidence) === null || (scored?.confidence ?? clauses?.confidence) === undefined ? null : Number(scored?.confidence ?? clauses?.confidence),
-        verdict: verdict.verdict, counts, producer: String(anchor.producer), judgedAt: iso(anchor.updated_at), basisChanged: scored?.basis_changed ?? clauses?.basis_changed ?? null,
+        verdict: verdict.verdict, counts, producer: String(anchor.producer), judgedAt: iso(anchor.updated_at), basisChanged: basisMarkOf(scored?.basis_changed ?? clauses?.basis_changed ?? null),
         eligibilitySource: anchor.eligibility_source ?? scored?.eligibility_source ?? null, judgedByClauses: Boolean(clauses),
         why: whyOf(verdict.verdict, { first_eligible: scored?.first_eligible, first_ineligible: scored?.first_ineligible, first_missing: scored?.first_missing, rationale: scored?.rationale,
           against_reason: clauses?.against_reason, support_reason: clauses?.support_reason, open_reason: clauses?.open_reason }, counts),
       });
     }
+    // Whoever reads a person reads the same short name: unique within the study's roster, and never the key itself.
+    const labels = await this.#labels(studyId, [...done, ...failed].map((entry) => entry.subjectKey));
+    for (const entry of [...done, ...failed]) entry.label = labels.get(entry.subjectKey) ?? vcrSubjectLabel(entry.subjectKey);
     return { done, failed };
   }
 
@@ -308,11 +343,11 @@ export class VcrMatchResults extends VcrStoreBase {
   #listed(pair) {
     const level = vcrMatchFitLevel(pair.fit), confidence = vcrMatchConfidenceLevel(pair.confidence);
     return {
-      ...this.#name(pair), subjectKey: pair.subjectKey, verdict: pair.verdict, verdictLabel: VCR_TRIAL_VERDICT_LABELS_ZH[/** @type {keyof typeof VCR_TRIAL_VERDICT_LABELS_ZH} */ (pair.verdict)],
+      ...this.#name(pair), subjectKey: pair.subjectKey, label: pair.label ?? vcrSubjectLabel(pair.subjectKey), verdict: pair.verdict, verdictLabel: VCR_TRIAL_VERDICT_LABELS_ZH[/** @type {keyof typeof VCR_TRIAL_VERDICT_LABELS_ZH} */ (pair.verdict)],
       fit: pair.fit, fitLevel: level, fitLabel: level ? VCR_MATCH_FIT_LEVEL_LABELS_ZH[level] : null,
       confidence: pair.confidence, confidenceLabel: confidence ? VCR_MATCH_CONFIDENCE_LABELS_ZH[confidence] : null,
       why: pair.why, counts: pair.counts ? { support: pair.counts.support, against: pair.counts.against, silent: pair.counts.silent, open: pair.counts.open, notApplicable: pair.counts.notApplicable } : null,
-      judgedAt: pair.judgedAt, producer: pair.producer === "conversation" ? "conversation" : "job", ...(pair.basisChanged ? { basisChanged: true } : {}),
+      judgedAt: pair.judgedAt, producer: pair.producer === "conversation" ? "conversation" : "job", ...(pair.basisChanged ? { basisChanged: pair.basisChanged } : {}),
       ...(pair.eligibilitySource === "none" ? { eligibilityNote: VCR_MATCH_NO_ELIGIBILITY_ZH } : {}),
     };
   }
@@ -320,7 +355,7 @@ export class VcrMatchResults extends VcrStoreBase {
   /** @param {any} entry a failed pair */
   #failure(entry) {
     const protocol = entry.targetKind === "protocol_version";
-    return { subjectKey: entry.subjectKey, kind: protocol ? "protocol" : "registry", id: entry.targetId, registryId: protocol ? null : text(entry.target.registryId) ?? entry.targetId,
+    return { subjectKey: entry.subjectKey, label: entry.label ?? vcrSubjectLabel(entry.subjectKey), kind: protocol ? "protocol" : "registry", id: entry.targetId, registryId: protocol ? null : text(entry.target.registryId) ?? entry.targetId,
       title: text(entry.target.title), reason: vcrMatchFailureReason(entry.code), at: entry.at };
   }
 
@@ -412,8 +447,12 @@ export class VcrMatchResults extends VcrStoreBase {
     const trials = ranked.map((pair, index) => ({ rank: index + 1, ...this.#listed(pair) }));
     const failures = pairs.failed.map((entry) => this.#failure(entry));
     const chosen = ranked.find((pair) => pair.targetId === target) ?? ranked[0] ?? null;
+    // The trials whose verdict rests on a registry record that has changed since: the page offers to judge those again, and says so in words.
+    const stale = ranked.filter((pair) => pair.basisChanged?.kind === REGISTRY_RECORD_BASIS).map((pair) => String(pair.targetId));
     return {
-      direction: "patient_to_trial", subjectKey, held: pairs.done.length > 0 || pairs.failed.length > 0 || progress.total > 0, progress,
+      direction: "patient_to_trial", subjectKey, label: pairs.done[0]?.label ?? pairs.failed[0]?.label ?? vcrSubjectLabel(subjectKey),
+      ...(stale.length ? { stale: { label: REGISTRY_STALE_LABEL_ZH, count: stale.length, registryIds: stale.slice(0, 50) } } : {}),
+      held: pairs.done.length > 0 || pairs.failed.length > 0 || progress.total > 0, progress,
       trials, failed: this.#failureSummary(failures), selected: chosen ? await this.#open(study, chosen, viewer) : null,
     };
   }

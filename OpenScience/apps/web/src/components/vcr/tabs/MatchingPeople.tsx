@@ -39,8 +39,8 @@ function PersonRow({ person, current, onPick }: { person: VcrJudgedPair; current
     >
       <div className="flex min-w-0 items-center gap-2">
         {/* The key is the row's button, and its hit area is the whole row: one control to reach by keyboard, the row to press with a pointer. */}
-        <button type="button" aria-current={current ? "true" : undefined} onClick={onPick} className="rounded text-left text-ui font-semibold text-text after:absolute after:inset-0">{person.subjectKey}</button>
-        {person.basisChanged && <Tag tone="warn">病历已更新</Tag>}
+        <button type="button" aria-current={current ? "true" : undefined} onClick={onPick} className="rounded text-left text-ui font-semibold text-text after:absolute after:inset-0">{person.label}</button>
+        {person.basisChanged && <Tag tone="warn">{person.basisChanged.kind === "registry_record" ? person.basisChanged.label : "病历已更新"}</Tag>}
       </div>
       <VerdictTag pair={person} />
       <span className="text-caption text-text-2">{fitText(person) || "—"}</span>
@@ -136,7 +136,7 @@ export function MatchingPeople({ studyId, study, judged, verdict, onVerdict, onP
     ? (
       <div className="flex flex-col gap-4">
         <div className="flex flex-wrap items-center gap-3">
-          <h3 className="text-ui font-semibold text-text">{selected.subjectKey}</h3>
+          <h3 className="text-ui font-semibold text-text">{selected.label}</h3>
           <Button variant="text" size="sm" onClick={() => onPatient(selected.subjectKey)}>查看这位患者的全部试验</Button>
         </div>
         <JudgedPairDetail studyId={studyId} pair={selected} mayReadRecord={study.abilities.includes("read_patient_level")} subject={selected.subjectKey} showTitle={false} compact />
@@ -202,7 +202,7 @@ export function MatchingPeople({ studyId, study, judged, verdict, onVerdict, onP
           </div>
           {wide && detail && <Card>{detail}</Card>}
         </div>
-        {!wide && detail && selected && <Drawer title={selected.subjectKey} onClose={() => onPick(null)} widthClassName="max-w-2xl">{detail}</Drawer>}
+        {!wide && detail && selected && <Drawer title={selected.label} onClose={() => onPick(null)} widthClassName="max-w-2xl">{detail}</Drawer>}
       </Section>
     </div>
   );

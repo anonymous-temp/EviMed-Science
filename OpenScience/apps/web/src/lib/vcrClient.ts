@@ -1,4 +1,4 @@
-import { vcrPredictionLimit } from "@evimed/domain";
+import { vcrPredictionLimit, vcrSubjectLabel } from "@evimed/domain";
 import type { VcrScientificComputationBasis } from "@/components/vcr/VcrScientificBasis";
 import { completeMethodCatalogue } from "./vcrMethodDisplay";
 /**
@@ -2499,6 +2499,8 @@ export interface VcrJudgedPair {
   /** The day the registry's record, and so its status, was read. */
   statusAsOf: string | null;
   subjectKey: string;
+  /** The person's short name (`P-EE008D`): what a reader is shown and told, where the key is the identity. */
+  label: string;
   verdict: VcrVerdict;
   verdictLabel: string;
   fit: number | null;
@@ -2512,7 +2514,8 @@ export interface VcrJudgedPair {
   counts: VcrJudgedCounts | null;
   judgedAt: string | null;
   producer: "job" | "conversation";
-  basisChanged?: true;
+  /** The record this was judged from has moved since: the chart (`record`) or the trial's registry entry (`registry_record`), in the words the page shows. */
+  basisChanged?: { kind: "record" | "registry_record"; label: string };
   /** 「未取到入排原文，依据标题和疾病判断」 where the trial's record held no eligibility text. */
   eligibilityNote?: string;
   rank?: number;
@@ -2542,12 +2545,15 @@ export interface VcrJudgedProgress {
 export interface VcrJudgedFailures {
   count: number;
   reasons: Array<{ reason: string; count: number }>;
-  listed: Array<{ subjectKey: string; kind: "registry" | "protocol"; id: string; registryId: string | null; title: string | null; reason: string; at: string | null }>;
+  listed: Array<{ subjectKey: string; label: string; kind: "registry" | "protocol"; id: string; registryId: string | null; title: string | null; reason: string; at: string | null }>;
 }
 
 export interface VcrJudgedPatient {
   direction: "patient_to_trial";
   subjectKey: string;
+  label: string;
+  /** Trials whose verdict rests on a registry record that changed since: one action judges them again. */
+  stale?: { label: string; count: number; registryIds: string[] };
   /** Whether anything was judged, failed or asked for: false is the page saying nothing has been judged for this scope. */
   held: boolean;
   progress: VcrJudgedProgress;
@@ -2584,16 +2590,23 @@ export type VcrJudgedQuery =
 
 const num = (value: unknown): number | null => (typeof value === "number" && Number.isFinite(value) ? value : null);
 
+/** A judgment's mark that its basis moved: an old server sent `true`, which the page words as a changed chart. */
+function readBasisMark(raw: unknown): { kind: "record" | "registry_record"; label: string } | null {
+  if (!raw) return null;
+  const mark = obj(raw);
+  return { kind: mark.kind === "registry_record" ? "registry_record" : "record", label: text(mark.label) ?? (mark.kind === "registry_record" ? "登记记录已更新" : "病历在判定之后有更新") };
+}
+
 function readJudgedPair(raw: Loose): VcrJudgedPair {
   const counts = obj(raw.counts);
   return {
     kind: raw.kind === "protocol" ? "protocol" : "registry", id: String(raw.id ?? ""), registry: text(raw.registry), registryId: text(raw.registryId), title: String(raw.title ?? ""), url: text(raw.url),
-    phase: String(raw.phase ?? ""), status: String(raw.status ?? ""), statusAsOf: text(raw.statusAsOf), subjectKey: String(raw.subjectKey ?? ""),
+    phase: String(raw.phase ?? ""), status: String(raw.status ?? ""), statusAsOf: text(raw.statusAsOf), subjectKey: String(raw.subjectKey ?? ""), label: String(raw.label ?? vcrSubjectLabel(String(raw.subjectKey ?? ""))),
     verdict: (VCR_VERDICTS as readonly string[]).includes(String(raw.verdict)) ? raw.verdict as VcrVerdict : "insufficient", verdictLabel: String(raw.verdictLabel ?? ""),
     fit: num(raw.fit), fitLevel: (["high", "medium", "low", "minimal"] as const).find((level) => level === raw.fitLevel) ?? null, fitLabel: text(raw.fitLabel),
     confidence: num(raw.confidence), confidenceLabel: text(raw.confidenceLabel), why: String(raw.why ?? ""),
     counts: Object.keys(counts).length ? { support: num(counts.support) ?? 0, against: num(counts.against) ?? 0, silent: num(counts.silent) ?? 0, open: num(counts.open) ?? 0, notApplicable: num(counts.notApplicable) ?? 0 } : null,
-    judgedAt: text(raw.judgedAt), producer: raw.producer === "conversation" ? "conversation" : "job", ...(raw.basisChanged ? { basisChanged: true as const } : {}),
+    judgedAt: text(raw.judgedAt), producer: raw.producer === "conversation" ? "conversation" : "job", ...(readBasisMark(raw.basisChanged) ? { basisChanged: readBasisMark(raw.basisChanged)! } : {}),
     ...(text(raw.eligibilityNote) ? { eligibilityNote: String(raw.eligibilityNote) } : {}), ...(num(raw.rank) !== null ? { rank: num(raw.rank)! } : {}),
   };
 }
@@ -2632,7 +2645,7 @@ function readJudgedFailures(raw: unknown): VcrJudgedFailures {
   return {
     count: num(value.count) ?? 0,
     reasons: arr(value.reasons).map((entry) => ({ reason: String(entry.reason ?? ""), count: num(entry.count) ?? 0 })),
-    listed: arr(value.listed).map((entry) => ({ subjectKey: String(entry.subjectKey ?? ""), kind: entry.kind === "protocol" ? "protocol" as const : "registry" as const, id: String(entry.id ?? ""), registryId: text(entry.registryId), title: text(entry.title), reason: String(entry.reason ?? ""), at: text(entry.at) })),
+    listed: arr(value.listed).map((entry) => ({ subjectKey: String(entry.subjectKey ?? ""), label: String(entry.label ?? vcrSubjectLabel(String(entry.subjectKey ?? ""))), kind: entry.kind === "protocol" ? "protocol" as const : "registry" as const, id: String(entry.id ?? ""), registryId: text(entry.registryId), title: text(entry.title), reason: String(entry.reason ?? ""), at: text(entry.at) })),
   };
 }
 
@@ -2641,7 +2654,10 @@ export function readVcrJudged(raw: unknown): VcrJudged {
   const value = obj(raw);
   const common = { held: value.held === true, progress: readJudgedProgress(value.progress), failed: readJudgedFailures(value.failed), selected: readJudgedOpen(value.selected) };
   if (value.direction === "patient_to_trial") {
-    return { direction: "patient_to_trial", subjectKey: String(value.subjectKey ?? ""), ...common, trials: arr(value.trials).map(readJudgedPair) };
+    const stale = obj(value.stale);
+    const subjectKey = String(value.subjectKey ?? "");
+    return { direction: "patient_to_trial", subjectKey, label: String(value.label ?? vcrSubjectLabel(subjectKey)), ...common, trials: arr(value.trials).map(readJudgedPair),
+      ...(Object.keys(stale).length ? { stale: { label: String(stale.label ?? "登记记录已更新，可重新判定"), count: num(stale.count) ?? 0, registryIds: strings(stale.registryIds) } } : {}) };
   }
   const tallies = obj(value.tallies);
   const clauses = obj(value.clauses);
@@ -2695,6 +2711,15 @@ export async function startVcrJudge(studyId: string, body: { direction: "trial_t
   | { direction: "patient_to_trial"; subjectKey: string; resume: true }): Promise<VcrJudgeStart> {
   return readJudgeStart(await productRequest<unknown>(`${study(studyId)}/matching/judge`, "POST",
     Object.fromEntries(Object.entries(body).filter(([, value]) => value !== null && value !== undefined))));
+}
+
+/**
+ * 「重新判定」: judge again the trials of one patient whose registry record changed since (the page's own `stale` list when `registryIds` is left out). The earlier
+ * verdicts stay as history; the answer is the job that was started, which the page then follows through the progress of the same scope.
+ */
+export async function rejudgeVcrPatient(studyId: string, body: { subjectKey: string; registryIds?: string[] }): Promise<{ started: boolean; jobId: string | null }> {
+  const value = obj(await productRequest<unknown>(`${study(studyId)}/rejudge`, "POST", body));
+  return { started: value.started === true, jobId: text(value.jobId) };
 }
 
 /** The files of the judged rows: all of them, a row for each pair or for each clause of each pair, in the formats a sheet or a script reads. */
@@ -3359,6 +3384,8 @@ export interface VcrIntakeSource {
   retention: string | null;
   upload: {
     cloudDestinations?: string[];
+    /** What a destination is sent when it is not a record's text, by origin (the reranker of the patient-matching search). */
+    cloudDestinationNotes?: Record<string, string>;
     formats: string[]; maxBytes: number | null; maxText: string | null;
     /** A patient record: text, and PDF or Word where the deployment converts them (the page offers only what would be taken). */
     documents: { formats: string[]; maxBytes: number | null; maxText: string | null; converter: boolean };
@@ -3384,8 +3411,6 @@ export interface VcrIntakeSource {
 export interface VcrIntakeTable {
   shape: string;
   label: string;
-    /** What a destination is sent when it is not a record's text, by origin (the reranker of the patient-matching search). */
-    cloudDestinationNotes?: Record<string, string>;
   rows: number | null;
   columns: string[];
   issues: number;
@@ -3486,6 +3511,7 @@ function readIntakeSource(raw: Loose): VcrIntakeSource {
     allowedUses: strings(raw.allowedUses), window: text(raw.window), retention: text(raw.retention),
     upload: {
       cloudDestinations: strings(upload.cloudDestinations),
+      cloudDestinationNotes: Object.fromEntries(Object.entries(obj(upload.cloudDestinationNotes)).flatMap(([origin, note]) => typeof note === "string" && note ? [[origin, note]] : [])),
       formats: strings(upload.formats), maxBytes: finite(upload.maxBytes), maxText: text(upload.maxText),
       documents: {
         formats: strings(obj(upload.documents).formats), maxBytes: finite(obj(upload.documents).maxBytes),
@@ -3511,7 +3537,6 @@ function readIntakeSource(raw: Loose): VcrIntakeSource {
       id: text(grant.id) ?? "", grantee: text(grant.grantee) ?? "", granteeLabel: text(grant.granteeLabel) ?? "", role: text(grant.role),
       fields: strings(grant.fields), fieldMode: grant.fieldMode === "deny" ? "deny" : "allow", window: text(grant.window), purposes: strings(grant.purposes),
       revoked: grant.revoked === true, revokedAt: text(grant.revokedAt), createdAt: text(grant.createdAt),
-      cloudDestinationNotes: Object.fromEntries(Object.entries(obj(upload.cloudDestinationNotes)).flatMap(([origin, note]) => typeof note === "string" && note ? [[origin, note]] : [])),
     })),
   };
 }

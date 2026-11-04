@@ -1,4 +1,5 @@
 import { useRef, useState, type ReactNode } from "react";
+import { vcrSubjectLabel } from "@evimed/domain";
 import { Trash2 } from "lucide-react";
 import {
   createVcrGrant, freezeVcrSnapshot, importVcrSource, removeVcrFile, revokeVcrGrant, uploadVcrFile,
@@ -38,7 +39,7 @@ function FileRow({ file, frozen, canManage, busy, onRemove }: { file: VcrIntakeF
     file.columnCount != null && file.role === "data" ? `${file.columnCount} 列` : null,
     file.entries != null ? `${file.entries} 个变量` : null,
     file.size, file.at,
-    file.subjectKey ? `受试者 ${file.subjectKey}` : null, file.visibleAt ? `可见于 ${file.visibleAt.slice(0, 10)}` : null,
+    file.subjectKey ? `受试者 ${vcrSubjectLabel(file.subjectKey)}` : null, file.visibleAt ? `可见于 ${file.visibleAt.slice(0, 10)}` : null,
     file.sheetUsed ? `工作表“${file.sheetUsed}”` : null,
     // A table a FHIR, OMOP or ADaM import produced.
     file.importFormat ? `来自 ${IMPORT_FORMATS.find((entry) => entry.value === file.importFormat)?.label ?? file.importFormat} 导入` : null,

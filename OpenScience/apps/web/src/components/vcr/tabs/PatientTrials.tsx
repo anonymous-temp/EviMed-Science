@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { cancelVcrJob, runVcrTrialSearch, startVcrJudge, type VcrJudgedPair, type VcrJudgedPatient, type VcrStudy } from "@/lib/vcrClient";
+import { cancelVcrJob, rejudgeVcrPatient, runVcrTrialSearch, startVcrJudge, type VcrJudgedPair, type VcrJudgedPatient, type VcrStudy } from "@/lib/vcrClient";
 import { webErrorMessage } from "@/lib/apiClient";
 import { toast } from "@/lib/toast";
 import { useWide } from "@/lib/useMediaQuery";
@@ -39,7 +39,7 @@ function TrialRow({ trial, current, onPick }: { trial: VcrJudgedPair; current: b
         {trial.why && <span className="block truncate text-ui text-text-2">{trial.why}</span>}
         {meta && <span className="block text-caption text-text-3">{meta}</span>}
         {trial.eligibilityNote && <span className="block text-caption text-text-3">{trial.eligibilityNote}</span>}
-        {trial.basisChanged && <span className="block text-caption text-warn-strong">病历在判定之后有更新</span>}
+        {trial.basisChanged && <span data-vcr-basis-changed={trial.basisChanged.kind} className="block text-caption text-warn-strong">{trial.basisChanged.label}</span>}
       </button>
     </li>
   );
@@ -85,13 +85,14 @@ export function PatientTrials({ studyId, study, judged, picked, onPick, onChange
     setWorking(true);
     void work().then(onChanged).catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: failure }))).finally(() => setWorking(false));
   };
+  const rejudge = () => act(() => rejudgeVcrPatient(studyId, { subjectKey: subject, registryIds: judged.stale?.registryIds }), "暂时无法重新判定，请稍后重试。");
   const resume = () => act(() => startVcrJudge(studyId, { direction: "patient_to_trial", subjectKey: subject, resume: true }), "暂时无法继续判定，请稍后重试。");
   const stop = () => { if (progress.jobId) act(() => cancelVcrJob(studyId, progress.jobId!), "暂时无法停止，请稍后重试。"); };
 
   const detail = selected ? <JudgedPairDetail studyId={studyId} pair={selected} mayReadRecord={mayRead} subject={subject} /> : null;
   return (
     <Section
-      title={`${subject} 的试验`}
+      title={`${judged.label} 的试验`}
       count={`已完成 ${progress.finished} / ${progress.total}`}
       toolbar={(
         <div className="flex flex-wrap items-center gap-2">
@@ -101,12 +102,18 @@ export function PatientTrials({ studyId, study, judged, picked, onPick, onChange
       )}
     >
       <div className="flex flex-col gap-4">
+        {judged.stale && (
+          <div data-vcr-stale={judged.stale.count} className="flex flex-wrap items-center gap-3 rounded-card border border-border bg-surface-2 px-3 py-2">
+            <p className="min-w-0 flex-1 text-ui text-text-2">{judged.stale.label}（{judged.stale.count} 个试验）；原来的判定保留为历史。</p>
+            {mayRun && progress.state !== "running" && <Button variant="secondary" size="sm" actionKind="start" loading={working} onClick={rejudge}>重新判定</Button>}
+          </div>
+        )}
         <JudgedProgressNote progress={progress} noun="个试验" mayRun={mayRun} busy={working} onResume={resume} onStop={stop} />
         <div data-vcr-patient-trials={subject} className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,24rem)_minmax(0,1fr)]">
           <div className="flex min-w-0 flex-col gap-4">
             {trials.length > 0
               ? (
-                <ul aria-label={`${subject} 的试验名单`} className="flex flex-col gap-2">
+                <ul aria-label={`${judged.label} 的试验名单`} className="flex flex-col gap-2">
                   {trials.map((trial) => <TrialRow key={trial.id} trial={trial} current={wide && chosen === trial.id} onPick={() => onPick(trial.id)} />)}
                 </ul>
               )

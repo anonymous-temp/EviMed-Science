@@ -34,7 +34,7 @@ import { createHash } from 'node:crypto';
 import {
   VCR_DEFINITION_PROMPT_VERSION, VCR_ENGINE_PROTOCOL_VERSION, VCR_JUDGMENT_PROMPT_VERSIONS, VCR_MATCH_BATCH_DEFAULT_MODEL, VCR_MATCH_BATCH_METHODS, VCR_MATCH_JUDGE_LIMITS, VCR_TRIAL_VERDICT_LABELS_ZH,
   canonicalScenarioJson, criteriaMessages, criterionDisplay, fitMessages, isPeak, mergeCriteriaAnswers, mergeFitAnswers, parseCriteriaAnswer, parseFitAnswer, priceUsage, rankJudgments,
-  segmentCriteria, segmentSentences, splitNoteParts, trialVerdict, vcrResultOutputPayload,
+  segmentCriteria, segmentSentences, splitNoteParts, trialVerdict, vcrResultOutputPayload, vcrSubjectLabel,
 } from '@evimed/domain';
 import { HttpError } from './security.mjs';
 import { callModelForControlPlane } from './modelGateway.mjs';
@@ -1026,7 +1026,7 @@ export function createMatchJudge({ jobs, matchStore, documents, subjectTable = n
      * Trials and protocol versions are separate jobs, because a job has one direction.
      * @param {any} study
      * @param {{ subjectKey: string, reason?: string, documentId?: string | null, targetIds?: readonly string[] | null, actor?: string }} input
-     * @returns {Promise<{ jobs: any[], statement: string } | null>}
+     * @returns {Promise<{ jobId: string | null, jobs: any[], statement: string } | null>}
      */
     async rejudge(study, { subjectKey, reason = 'follow_up', documentId = null, targetIds = null, actor = 'runtime' }) {
       if (!judgments?.list) return null;
@@ -1062,7 +1062,7 @@ export function createMatchJudge({ jobs, matchStore, documents, subjectTable = n
       for (const entry of [...byTarget.values()].filter((row) => row.kind === 'protocol_version')) {
         started.push(await this.start(study, { direction: 'trial_to_patient', protocolVersionId: entry.targetId, subjectKeys: [subjectKey], ...asked([entry]) }, { actor, followUp }));
       }
-      return { jobs: started, statement: `这位患者已有 ${byTarget.size} 个判定，正在按新内容重算，已有结论保留为历史；算完会说明哪些结论变了。` };
+      return { jobId: started[0]?.jobId ?? null, jobs: started, statement: `这位患者已有 ${byTarget.size} 个判定，正在按新内容重算，已有结论保留为历史；算完会说明哪些结论变了。` };
     },
   };
 }
@@ -1091,7 +1091,7 @@ export function presentJudgment(fit, criteria) {
   const anchor = newestOf ?? fit ?? criteria;
   const basisChanged = scored?.basisChanged ?? clauses?.basisChanged ?? null;
   return {
-    id: anchor.id, subjectKey: anchor.subjectKey, target: object(anchor.answer?.target).id ? anchor.answer.target : { kind: anchor.targetKind, id: anchor.targetId },
+    id: anchor.id, subjectKey: anchor.subjectKey, subjectLabel: vcrSubjectLabel(anchor.subjectKey), target: object(anchor.answer?.target).id ? anchor.answer.target : { kind: anchor.targetKind, id: anchor.targetId },
     verdict: judged.verdict, verdictLabel: VCR_TRIAL_VERDICT_LABELS_ZH[judged.verdict], fit: scored?.fit ?? clauses?.fit ?? null, confidence: scored?.confidence ?? clauses?.confidence ?? null,
     reasons: { eligible: list(reasons.eligible), ineligible: list(reasons.ineligible), missing: list(reasons.missing), rationale: String(reasons.rationale ?? '') },
     criteria: rows.map((row) => ({ ...row, display: criterionDisplay(row) })),

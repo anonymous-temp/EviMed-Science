@@ -84,7 +84,7 @@ export function JudgedFailures({ failures, noun, titled }: { failures: VcrJudged
         <ul className="flex flex-col gap-1">
           {failures.listed.map((entry) => (
             <li key={`${entry.subjectKey}:${entry.id}`} data-vcr-failed={titled ? entry.id : entry.subjectKey} className="flex flex-wrap items-baseline gap-x-3 text-ui">
-              <span className="tabular-nums text-text">{titled ? entry.registryId ?? entry.title ?? entry.id : entry.subjectKey}</span>
+              <span className="tabular-nums text-text">{titled ? entry.registryId ?? entry.title ?? entry.id : entry.label}</span>
               {titled && entry.title && entry.registryId && <span className="min-w-0 text-text-2">{entry.title}</span>}
               <span className="text-text-3">{entry.reason}</span>
             </li>

@@ -35,7 +35,7 @@ const NOT_FROZEN = "COALESCE(j.answer->'target'->'collection', 'null'::jsonb) = 
 const NOT_WITHDRAWN = `NOT EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.subject_withdrawals w WHERE w.study_id=j.study_id AND w.subject_key=j.subject_key)`;
 
 /** A stored `basis_changed`: the erasure store's cause word as it is, the registry watch's mark as the object it wrote. @param {unknown} value */
-function basisChangedOf(value) {
+export function basisChangedOf(value) {
   if (value == null || value === "") return null;
   const text = String(value);
   if (!text.startsWith("{")) return text;

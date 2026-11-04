@@ -6,7 +6,7 @@
  * stays readable as history. A record that cannot be read now (the parser is off, a scan the deployment cannot read) is a plain answer with the original kept for the next try, never a
  * lost file. */
 import { createHash } from 'node:crypto';
-import { canonicalJson, segmentSentences, sourceOriginOf, splitNoteParts } from '@evimed/domain';
+import { canonicalJson, segmentSentences, sourceOriginOf, splitNoteParts, vcrSubjectLabel } from '@evimed/domain';
 import { HttpError } from './security.mjs';
 import { VCR_PATIENT_CONTEXT_MAX_BYTES, VCR_UPLOAD_ORIGINALS_DIR } from './vcrUploadReceipts.mjs';
 const invalid = () => new HttpError(400,'vcr_patient_context_invalid','Select an original user message or an owned uploaded source.');
@@ -105,7 +105,7 @@ export function createVcrPatientContext({ store, dataStore, dataPlane, documents
     // Only what is new to a person they already had changes what was concluded; a repeat of the same call finds the document and starts nothing.
     const joined = subjectKey && uploads.some(item => item.created);
     const rejudging = joined && rejudge ? await rejudge(study, { subjectKey, documentId: upload.file.id, reason: 'follow_up', actor: origin.userId }).catch(() => null) : null;
-    return {ok:true,ids:uploads.map(item => item.file.id),issues:material.available===false ? [{field:'material',code:material.code ?? 'vcr_projection_unavailable',message:material.message ?? 'The original was preserved but cannot currently be read by the model.'}] : [],sourceId:source.id,subjectKey:key,documentId:upload.file.id,material,
+    return {ok:true,ids:uploads.map(item => item.file.id),issues:material.available===false ? [{field:'material',code:material.code ?? 'vcr_projection_unavailable',message:material.message ?? 'The original was preserved but cannot currently be read by the model.'}] : [],sourceId:source.id,subjectKey:key,subjectLabel:vcrSubjectLabel(key),documentId:upload.file.id,material,
       ...(uploads.length > 1 ? {documents:uploads.length} : {}),...(upload.file.detail.extraction?.reader ? {readBy:upload.file.detail.extraction.reader} : {}),
       ...(rejudging ? {rejudging:{jobIds:rejudging.jobs.map(job => job.jobId),statement:rejudging.statement}} : {}),
       basis:provenance.kind,valueSource:'extracted'};
@@ -131,12 +131,12 @@ export function createVcrPatientContext({ store, dataStore, dataPlane, documents
       && source.payload.paths?.length && !source.payload.paths.some(item => item.startsWith(`${VCR_UPLOAD_ORIGINALS_DIR}/`)))
       .map(source => ({ sourceId: source.id, name: String(source.payload.paths[0]).split('/').pop() }));
     // Who this study already has, so a later message can join the right person.
-    /** @type {Map<string, { subjectKey: string, documents: number, lastAt: string | null }>} */
+    /** @type {Map<string, { subjectKey: string, subjectLabel: string, documents: number, lastAt: string | null }>} */
     const patients = new Map();
     for (const file of study?.id ? await dataStore.listSourceFilesForStudy(study.id) : []) {
       const key = file.detail?.subjectKey;
       if (file.role !== 'document' || !key || file.erasedAt) continue;
-      const entry = patients.get(key) ?? { subjectKey: key, documents: 0, lastAt: null };
+      const entry = patients.get(key) ?? { subjectKey: key, subjectLabel: vcrSubjectLabel(key), documents: 0, lastAt: null };
       entry.documents += 1; entry.lastAt = String(file.createdAt ?? entry.lastAt ?? '') || null;
       patients.set(key, entry);
     }
