@@ -544,6 +544,36 @@ test("S1: a job that reaches its ceiling stops as limited, keeps its work, says 
   assert.equal(held.result.diagnostics.used.cost.toFixed(1), "1.2");
 });
 
+test("S1: a job stopped at its ceiling is continued by the page's one action, and the continuation pays only for what is left", options, async () => {
+  const study = await newStudy();
+  const source = await vcr.dataPlane.registerSource({ userId: "owner", studyId: study.id, name: "n" });
+  const up = await vcr.dataPlane.storeUpload({ actor: "owner", studyId: study.id, sourceId: source.id, name: "n.txt", role: "document", subject: "CEILING", stream: Readable.from([Buffer.from("一份普通的病历。")]) });
+  const key = String(up.file.detail.subjectKey);
+  let calls = 0;
+  const judge = { model: "deepseek-flash", maxTokens: 1000, timeoutMs: 1000, call: async ({ messages }) => { calls += 1; return { content: answerFor(messages.map((message) => message.content).join("\n")), usage: { inputTokens: 10, outputTokens: 10, cacheHitTokens: 0, reasoningTokens: 0 }, cost: 0.6, currency: "CNY" }; } };
+  const executorWith = (config) => createMatchJudgeExecutor({ store: vcr.store, matchStore: vcr.matchStore, judgments: vcr.matchJudgments, documents: vcr.documents, targets: fakeTargets, judge, config: { vcrMatchJudgeConcurrency: 1, ...config } });
+  const start = (selection) => vcr.matchJudge.start(study, { subjectKey: key, topK: 0, thinking: "off", ...selection }, { actor: "test" });
+  const real = vcr.jobs.localExecutors["matching.judge"];
+  try {
+    vcr.jobs.localExecutors["matching.judge"] = executorWith({ vcrMatchJudgeJobCeilingCny: 1 });
+    await start({ registryIds: TRIALS });
+    await drain();
+    assert.equal(calls, 2);
+    const stopped = await vcr.matchResults.forPatient(study, key, { viewer: { id: "owner" } });
+    assert.equal(stopped.progress.state, "stopped");
+    const left = await vcr.matchResults.resumeSelection(study, { direction: "patient_to_trial", subjectKey: key });
+    assert.deepEqual(left.ids.sort(), TRIALS.slice(2).sort());
+    calls = 0;
+    vcr.jobs.localExecutors["matching.judge"] = executorWith({});
+    await start({ registryIds: left.ids });
+    await drain();
+    assert.equal(calls, 3, "the two already judged cost nothing");
+    const done = await vcr.matchResults.forPatient(study, key, { viewer: { id: "owner" } });
+    assert.equal(done.progress.state, "done");
+    assert.equal(done.trials.length, 5);
+  } finally { vcr.jobs.localExecutors["matching.judge"] = real; }
+});
+
 test("S1: 最多约 counts the re-asks and the retries and never promises more than the ceiling", options, async () => {
   const study = { id: "s", userId: "u" };
   const roster = [{ id: "d", subjectKey: "P1", chars: 2_000 }];
