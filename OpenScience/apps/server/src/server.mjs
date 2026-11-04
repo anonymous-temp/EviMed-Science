@@ -444,6 +444,7 @@ import { VCR_GATEWAY_PATH, createVcrGatewayHandler, vcrGatewayRoutePattern } fro
 import { VcrOrchestrator, vcrBriefBlock, vcrRunId, vcrStoppedBlock } from "./vcrOrchestrator.mjs";
 import { VcrWorker, createVcrWorkerLoops, withVcrWorkerWarnings } from "./vcrWorker.mjs";
 import { createVcrDataIntake } from './vcrDataIntake.mjs';
+import { readinessTerminology } from './terminologyReadiness.mjs';
 import { createVcrUploadReceipts } from './vcrUploadReceipts.mjs';
 import { recordNativeUploadAttempt } from "./nativeUploadActivity.mjs";
 import { createVcrDraftSweeper, createVcrDraftUsage } from "./vcrDrafts.mjs";
@@ -522,8 +523,8 @@ import {
   assertSameSiteBrowserRequest,
   assertString,
   clearSessionCookie,
-  directorySize,
   cloneFileNoFollow,
+  directorySize,
   mimeFor,
   normalizeRoot,
   normalizeWorkspaceRelativePath,
@@ -6009,13 +6010,13 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       const full = resolveScopedPath(project.baseDir, relative);
       await assertProjectCapacity(project, full, bytes.length, config);
       await writeFileAtomicNoFollow(project.baseDir, full, bytes, { mode: 0o600 });
-    }) }) : null;
     }),
     // The original of a large binary record is a clone of the file the upload just wrote (copy-on-write where the filesystem has it); the storage quota counts it as a file of its own.
     clone: (project, relative, source, size) => withProjectStorageMutation(project, async () => {
       const full = resolveScopedPath(project.baseDir, relative);
       await assertProjectCapacity(project, full, size, config);
       await cloneFileNoFollow(project.baseDir, source, full);
+    }) }) : null;
   if (vcr?.recordsOriginals) vcr.recordsOriginals.receipts = vcrUploadReceipts;
   if (vcr && vcrUploadReceipts) vcr.dataIntake = createVcrDataIntake({ store: vcr.store, dataStore: vcr.dataStore, dataPlane: vcr.dataPlane,
     sources: vcrUploadReceipts, resolveProject: sourceProject, recordsImport: vcr.recordsImport,
@@ -11370,6 +11371,7 @@ async function readinessStatus(config, store, runtimeManager, memorySettings = n
     inbox: await readinessCheck(async () => readinessInbox(config, notificationService)),
     documentParser: await readinessCheck(async () => readinessDocumentParser(config, documentParser)),
     openList: await readinessCheck(async () => readinessOpenList(config, openList)),
+    terminology: await readinessCheck(() => readinessTerminology(config)),
     relationalIntegrity: await readinessCheck(async () => readinessRelationalIntegrity(config, productDatabase)),
     security: await readinessCheck(() => readinessSecurity(config)),
     observability: await readinessCheck(() => readinessObservability(config)),

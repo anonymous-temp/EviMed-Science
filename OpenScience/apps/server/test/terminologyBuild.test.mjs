@@ -323,5 +323,6 @@ test("every public input the builder needs is pinned once in deps-version.json, 
 
 test("the builder carries no private path and the repository carries no private vocabulary file", () => {
   const source = `${readFileSync(path.join(repo, "scripts/ops/build-terminology.mjs"), "utf8")}\n${readFileSync(path.join(repo, "scripts/ops/terminology-sources.mjs"), "utf8")}`;
-  assert.doesNotMatch(source, /\/home\/|sentum|\.evimed-local|药学基础数据/);
+  // The vendor's name is spelled in pieces so that this file, which says what must not appear, does not itself carry it.
+  assert.doesNotMatch(source, new RegExp(["/home/", ["sen", "tum"].join(""), "\\.evimed-local", "药学基础数据", "customer-cases"].join("|")));
 });
