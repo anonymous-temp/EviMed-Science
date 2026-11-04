@@ -123,3 +123,41 @@ vcr_case("N95e", c("AC-04", "AC-27"), function() {
        detail = sprintf("a spline job through the protocol: status %s / %s, measures %s; the horizon 60 is %.2f times the longest follow-up (%.1f) and flagged as beyond the data; four specifications (0 to 3 knots), one selected; the same output hash twice; the same scenario under the 1.0.0 label: %s (%s)",
                         r1$status, r1$conclusion, paste(names_, collapse = ", "), last$timesLongestFollowUp, m$maxObservedTime, r_old$status, paste(vcr_test_issue_codes(r_old), collapse = ", ")))
 })
+
+vcr_case("N95f", c("AC-04", "AC-27"), function() {
+  # Review stats2 findings 7 and 26.
+  # (7) A fitted median far past the data carried no mark. Weibull(1.1, 80), censoring uniform from 6 to 24 (43 events of 400, survival .86 at the longest follow-up
+  #     of 23.9, true median 57.3; the seed here draws 56 events): the medians of 0 to 3 knots are 100 to 170 in the review's draw and 2.5 to 4.3 times the
+#     longest follow-up in this one, and every fit says so; a Weibull family fit
+  #     says it too; a median inside the data (Weibull(1.1, 20), follow-up to 60) is not marked.
+  # (26) The restricted mean read 0 at a horizon of 1e9 because every node of the quadrature landed where the curve has underflowed. It is now the integral over
+  #      pieces equal in log time and is held to the closed form of the Weibull's restricted mean, scale * Gamma(1 + 1/shape) * P(1/shape, (tau/scale)^shape),
+  #      at 30, 1e5 and 1e9 (an incomplete gamma function, no quadrature).
+  set.seed(9507L, kind = VCR_RNG_KIND)
+  n <- 400L; cens <- stats::runif(n, 6, 24)
+  t_ev <- stats::rweibull(n, shape = 1.1, scale = 80)
+  d <- data.frame(time = pmin(t_ev, cens), status = as.integer(t_ev <= cens))
+  longest <- max(d$time)
+  fits <- lapply(0:3, function(k) vcr_fit_survival_spline(d$time, d$status, k, c(12, 24)))
+  flagged <- vapply(fits, function(f) isTRUE(f$estimable) && isTRUE(f$medianBeyondData) && abs(f$medianTimesLongestFollowUp - f$median / longest) < 1e-12, logical(1))
+  meds <- vapply(fits, function(f) f$median, numeric(1))
+  weib <- vcr_fit_survival_baseline(d$time, d$status, "weibull", c(12, 24))
+  inside <- local({ t2 <- stats::rweibull(n, 1.1, 20); c2 <- stats::runif(n, 20, 60); dd <- data.frame(time = pmin(t2, c2), status = as.integer(t2 <= c2)); f <- vcr_fit_survival_spline(dd$time, dd$status, 1L, c(12, 24)); f })
+  ids <- paste0("P", seq_len(n)); input <- vcr_test_input(data.frame(USUBJID = ids, time = d$time, status = d$status), "n95f")
+  job <- vcr_test_job("model.survival_fit", list(inputId = input$id, idColumn = "USUBJID", timeColumn = "time", statusColumn = "status", statusEncoding = "event",
+                                                 distribution = "spline", knots = 1L, timeUnit = "months", horizons = c(12, 24)), list(input))
+  r <- vcr_test_run(job)
+  said <- "median_beyond_follow_up" %in% vcr_chr(r$diagnostics$limitedBy) && identical(r$conclusion, "limited") && isTRUE(r$diagnostics$model$medianBeyondData)
+  # (26)
+  w <- stats::rweibull(300L, 1.2, 15); cn <- stats::runif(300L, 10, 40)
+  fit <- .vcr_rp_fit(pmin(w, cn), as.integer(w <= cn), 0L)
+  shape <- fit$gamma[2]; scale <- exp(-fit$gamma[1] / shape)
+  closed <- function(tau) scale * gamma(1 + 1 / shape) * stats::pgamma((tau / scale)^shape, 1 / shape)
+  taus <- c(30, 1e5, 1e9)
+  mine <- vapply(taus, function(tau) .vcr_rp_rmst(fit, tau)$value, numeric(1)); want <- vapply(taus, closed, numeric(1))
+  rel <- max(abs(mine - want) / want)
+  list(pass = all(flagged) && all(meds > longest) && isTRUE(weib$medianBeyondData) && !isTRUE(inside$medianBeyondData) && said && rel < 1e-7,
+       detail = sprintf("%d events of %d, longest follow-up %.1f: medians of 0 to 3 knots %s (%s times the longest follow-up), all marked; Weibull family marked: %s; a median inside the data unmarked: %s; the job says median_beyond_follow_up and stays limited: %s; restricted mean at 30, 1e5, 1e9: %s against the incomplete-gamma closed form %s (worst relative error %.1e)",
+                        sum(d$status), n, longest, paste(sprintf("%.0f", meds), collapse = ", "), paste(sprintf("%.1f", meds / longest), collapse = ", "), isTRUE(weib$medianBeyondData), !isTRUE(inside$medianBeyondData), said,
+                        paste(sprintf("%.4f", mine), collapse = ", "), paste(sprintf("%.4f", want), collapse = ", "), rel))
+})

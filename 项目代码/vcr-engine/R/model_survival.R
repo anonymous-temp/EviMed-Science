@@ -84,7 +84,8 @@ vcr_fit_survival_baseline <- function(time, status, distribution, horizons) {
        median = median, medianParameterQuantiles = as.list(stats::setNames(quantiles, c("p10", "p50", "p90"))),
        medianParameterQuantileBasis = "delta_method_log_median_asymptotic_normal",
        curve = lapply(seq_along(horizons), function(i) list(time = horizons[i], survival = as.numeric(curve[i]),
-         risk = as.numeric(1 - curve[i]), extrapolated = horizons[i] > max(time))), maxObservedTime = max(time))
+         risk = as.numeric(1 - curve[i]), extrapolated = horizons[i] > max(time))), maxObservedTime = max(time),
+       medianBeyondData = median > max(time), medianTimesLongestFollowUp = median / max(time))
 }
 
 #' The knots: the smallest and largest uncensored log time, and `k` interior ones at the equally spaced type-7 quantiles between them.
@@ -137,13 +138,21 @@ vcr_fit_survival_baseline <- function(time, status, distribution, horizons) {
   list(survival = exp(-exp(s)), lower = exp(-exp(s + z * se)), upper = exp(-exp(s - z * se)), logCumulativeHazard = s, se = se)
 }
 
+#' The integral of `f` over (0, tau) by pieces that are equal in log time (each a factor e^2 of the one above, down to a millionth of tau): the survival
+#' function of a model falls where the data are, and over a horizon far past them a single adaptive rule puts all its nodes where the curve has
+#' already underflowed and reads 0 (a restricted mean of 0 at a horizon of 1e9, review stats2 finding 26).
+.vcr_rp_integrate <- function(f, tau, rel.tol = 1e-10) {
+  edges <- c(0, tau * exp(-seq(2 * ceiling(log(1e6) / 2), 0, by = -2)))
+  sum(vapply(seq_len(length(edges) - 1L), function(i) stats::integrate(f, edges[i], edges[i + 1L], rel.tol = rel.tol, subdivisions = 500L)$value, numeric(1)))
+}
+
 #' The restricted mean survival time to `tau` and its delta-method error: the integral of S, and of -S H B(log t) for the gradient.
 .vcr_rp_rmst <- function(fit, tau, level = 0.95) {
   S <- function(t) exp(-exp(drop(vcr_rp_basis(log(t), fit$knots) %*% fit$gamma)))
-  value <- stats::integrate(function(t) S(t), 0, tau, rel.tol = 1e-10, subdivisions = 500L)$value
-  grad <- vapply(seq_len(fit$p), function(j) -stats::integrate(function(t) {
+  value <- .vcr_rp_integrate(S, tau)
+  grad <- vapply(seq_len(fit$p), function(j) -.vcr_rp_integrate(function(t) {
     B <- vcr_rp_basis(log(t), fit$knots); s <- drop(B %*% fit$gamma); exp(-exp(s)) * exp(s) * B[, j]
-  }, 0, tau, rel.tol = 1e-9, subdivisions = 500L)$value, numeric(1))
+  }, tau, 1e-9), numeric(1))
   se <- sqrt(max(0, as.numeric(t(grad) %*% fit$vcov %*% grad))); z <- stats::qnorm(1 - (1 - level) / 2)
   list(value = value, se = se, lower = max(0, value - z * se), upper = min(tau, value + z * se))
 }
@@ -193,6 +202,7 @@ vcr_fit_survival_spline <- function(time, status, k, horizons) {
        logLikelihood = fit$loglik, aic = aic, median = med$value, medianInterval = list(lower = med$lower, upper = med$upper),
        rmst = list(tau = tau, value = rm_last$value, lower = rm_last$lower, upper = rm_last$upper),
        curve = curve, maxObservedTime = max_obs, maxEventTime = max_event, specifications = specs,
+       medianBeyondData = med$value > max_obs, medianTimesLongestFollowUp = med$value / max_obs,
        extrapolation = list(lastHorizon = tau, longestFollowUp = max_obs, lastEvent = max_event, beyondData = tau > max_obs, timesLongestFollowUp = tau / max_obs,
          tail = "straight in log time on the log cumulative hazard beyond the last knot (a Weibull tail)"))
 }
@@ -231,6 +241,9 @@ vcr_job_fit_survival_model <- function(job, output_dir = NULL, ...) {
     counts = counts, measures = list(), diagnostics = list(inputRows = original_n, fittedRows = nrow(data), source = source)))
   interval_of <- function(lower, upper) vcr_interval("confidence", lower, upper)
   last_point <- if (spline) result[["curve"]][[length(result[["curve"]])]] else NULL
+  # the median is a number of the fitted curve, and when it lies past the longest follow-up it is an extrapolation: said in the limits, as the
+  # survival at a horizon past the data already is in its own record
+  beyond_median <- isTRUE(result[["medianBeyondData"]])
   list(status = "succeeded", conclusion = "limited", counts = counts,
     measures = c(list(vcr_measure("fitted_median", result[["median"]], source = estimate_source, unit = sc[["timeUnit"]],
                                   interval = if (spline) interval_of(result[["medianInterval"]]$lower, result[["medianInterval"]]$upper) else NULL),
@@ -238,7 +251,7 @@ vcr_job_fit_survival_model <- function(job, output_dir = NULL, ...) {
       if (spline) list(
         vcr_measure("restricted_mean_survival_time", result[["rmst"]]$value, source = estimate_source, unit = sc[["timeUnit"]], interval = interval_of(result[["rmst"]]$lower, result[["rmst"]]$upper)),
         vcr_measure("survival_at_last_horizon", last_point$survival, source = estimate_source, interval = interval_of(last_point$lower, last_point$upper)))),
-    diagnostics = list(model = result, valueSourcesUsed = vcr_value_sources_used(used), inputRows = original_n, fittedRows = nrow(data), source = source,
+    diagnostics = list(model = result, limitedBy = if (beyond_median) list("median_beyond_follow_up") else list(), valueSourcesUsed = vcr_value_sources_used(used), inputRows = original_n, fittedRows = nrow(data), source = source,
       sourceCondition = sc[["sourceCondition"]] %||% "unspecified",
       armSelection = if (is.null(sc[["armColumn"]])) NULL else list(column = sc[["armColumn"]], value = sc[["armValue"]]),
       modelScope = "population_baseline", fitted = TRUE, clinicallyValidated = FALSE, causalEffectIdentified = FALSE,

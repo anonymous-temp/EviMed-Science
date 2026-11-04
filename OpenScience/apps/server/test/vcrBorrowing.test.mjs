@@ -115,6 +115,11 @@ test("a spline fit reads: the median, the restricted mean, the survival with how
     assert.ok(!/[a-z]+_[a-z]+|spline|flexsurv|optim|delta/.test(text), `${key}: ${text}`);
   }
   assert.equal(presentSplineFit({ diagnostics: { model: { distribution: { kind: "weibull" } } } }, value({})), null, "a parametric fit has no spline block");
+  // a median past the longest follow-up is marked in the premises, beside how far the last time lies (review stats2 finding 7)
+  const beyond = { ...result, diagnostics: { ...result.diagnostics, timeUnit: "months", model: { ...result.diagnostics.model, medianBeyondData: true, medianTimesLongestFollowUp: 4.2 } } };
+  const marked = presentSplineFit({ ...beyond, measures: result.measures.map((measure) => (measure.name === "fitted_median" ? { ...measure, value: 100.5 } : measure)) }, value(result, "patients"));
+  assert.deepEqual(marked.premises.map((row) => row.key).sort(), ["splineBeyond", "splineKnots", "splineMedianBeyond", "splineTail"]);
+  assert.match(marked.premises.find((row) => row.key === "splineMedianBeyond").value, /101个月.*的 4\.2 倍.*没有人观察到.*外推/);
 });
 
 test("a spline fit made from a conversation is on the patients tab, with its premises (review RF2 P1-5)", () => {

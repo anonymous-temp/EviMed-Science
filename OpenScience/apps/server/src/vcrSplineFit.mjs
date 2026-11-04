@@ -69,6 +69,13 @@ export function presentSplineFit(result, value) {
         : `${plain(tau)}${unitWord}，没有超出最长随访 ${plain(longest)}${unitWord}`,
       source: "default", decisive: true });
   }
+  const medianValue = numeric(medianMeasure.value);
+  if (model.medianBeyondData === true && medianValue !== null && longest !== null) {
+    // the fitted median is read off the curve; past the longest follow-up nobody observed it (review stats2 finding 7)
+    rows.push({ key: "splineMedianBeyond", label: "生存中位时间离数据有多远",
+      value: `${plain(medianValue)}${unitWord}，是最长随访 ${plain(longest)}${unitWord}的 ${plain(numeric(model.medianTimesLongestFollowUp) ?? medianValue / longest)} 倍；随访里没有人观察到它，是按曲线外推的`,
+      source: "default", decisive: true });
+  }
   rows.push({ key: "splineKnots", label: "曲线的灵活程度",
     value: `${knots} 个内部结点${knotTimes.length > 2 ? `（在 ${knotTimes.slice(1, -1).map((x) => plain(x)).join("、")}${unitWord}处）` : ""}${range ? `；换成 0 到 3 个结点，最后一个时间点的生存率在 ${plain(range.low * 100)}% 到 ${plain(range.high * 100)}% 之间` : ""}`,
     source: "given", decisive: true });
