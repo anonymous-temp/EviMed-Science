@@ -111,16 +111,25 @@ export const DATA_TRANSFORM_KIND_LABELS_ZH = Object.freeze({
   derive: '派生变量', filter: '筛选', join: '关联', recode: '重编码', dedupe: '去重', aggregate: '汇总', other: '其他',
 })
 
+/**
+ * What one code of an indicator column says about the event the column records: it is there, it is not, or the code does not say.
+ * `unknown` is a statement too (「不详」, 「N/A」): the platform reads such a cell as no answer, which is different from a code
+ * nobody has read yet.
+ */
+export const DATA_VALUE_STATES = frozen(['present', 'absent', 'unknown'])
+export const DATA_VALUE_STATE_LABELS_ZH = Object.freeze({ present: '有', absent: '无', unknown: '不详' })
+
 /** The facets of one variable, and of one table, a fact can be about. */
 export const DATA_VARIABLE_FACETS = frozen([
-  'definition', 'type', 'unit', 'codeSystem', 'allowedValues', 'range', 'missingness', 'role', 'measuredAt', 'valueSource', 'aliases',
+  'definition', 'type', 'unit', 'codeSystem', 'allowedValues', 'range', 'missingness', 'role', 'measuredAt', 'valueSource', 'aliases', 'concept', 'valueMap',
 ])
-export const DATA_TABLE_FACETS = frozen(['observationUnit', 'subjectKey', 'observationKey'])
+export const DATA_TABLE_FACETS = frozen(['observationUnit', 'subjectKey', 'observationKey', 'askedConcepts'])
 /** The facets of the dataset as a whole: who is in it and over what period. */
 export const DATA_DATASET_FACETS = frozen(['population', 'timeWindow'])
 export const DATA_FACET_LABELS_ZH = Object.freeze({
   definition: '定义', type: '类型', unit: '单位', codeSystem: '编码体系', allowedValues: '取值范围或编码', range: '合理范围',
   missingness: '缺失编码', role: '作用', measuredAt: '测量时间', valueSource: '数值来源', aliases: '曾用列名',
+  concept: '对应的变量', valueMap: '取值的含义', askedConcepts: '已查找的变量',
   observationUnit: '观察单位', subjectKey: '受试者标识列', observationKey: '一条观察的标识列',
   population: '研究人群', timeWindow: '时间窗', cardinality: '关联基数',
 })
@@ -356,6 +365,34 @@ const FACET_RULES = {
   },
   valueSource: oneOf(DATA_VALUE_SOURCES, 'A value source'),
   aliases: columnsOf(10, 'Former column names'),
+  // The variable a study's criteria ask about that this column answers: a name the study itself chose, applied by exact match.
+  concept: textOf(80, 'A concept'),
+  // What each code of the column means for the event it records. The keys are the column's code values and nothing else: a column
+  // with more distinct values than a vocabulary may have gets no map (`measurement` says it is a quantity, not an indicator).
+  valueMap: (value) => {
+    if (!isRecord(value) || Object.keys(value).some((key) => !['values', 'measurement'].includes(key))) return bad('A value map is { values?, measurement? }.')
+    if (value.measurement != null && typeof value.measurement !== 'boolean') return bad('measurement is true when a number in the column is a value and not an indicator.')
+    if (value.values != null && !isRecord(value.values)) return bad('values maps a code of the column to present, absent or unknown.')
+    const entries = Object.entries(value.values ?? {})
+    if (entries.length > DATA_DRIFT_BOUNDS.vocabularyMax) return bad(`A value map reads at most ${DATA_DRIFT_BOUNDS.vocabularyMax} distinct codes; a column with more has none.`)
+    /** @type {Map<string, string>} */
+    const values = new Map()
+    for (const [raw, state] of entries) {
+      const code = asText(raw, 40)
+      if (!code || typeof state !== 'string' || !DATA_VALUE_STATES.includes(state)) return bad(`A code is text of at most 40 characters and means one of: ${DATA_VALUE_STATES.join(', ')}.`)
+      if (values.has(code) && values.get(code) !== state) return bad('A code cannot mean two things.')
+      values.set(code, state)
+    }
+    // A map is a set: the same codes written in another order are the same fact.
+    return ok({ values: Object.fromEntries([...values].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))), measurement: value.measurement === true })
+  },
+  // table: the variables a study asked of this table and the model has already looked for, so the same question is not asked twice.
+  askedConcepts: (value) => {
+    if (!Array.isArray(value) || value.length < 1 || value.length > 200) return bad('Asked concepts are a list of 1 to 200 names.')
+    const names = value.map((item) => asText(item, 80))
+    if (names.some((name) => name === null)) return bad('A concept is a name of at most 80 characters.')
+    return ok([...new Set(/** @type {string[]} */ (names))].sort())
+  },
   // dataset
   population: textOf(400, 'A population'),
   timeWindow: (value) => {

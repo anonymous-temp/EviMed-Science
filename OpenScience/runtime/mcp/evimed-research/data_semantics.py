@@ -151,7 +151,12 @@ def tool_definitions():
                     "role": {"type": "string", "enum": list(VARIABLE_ROLES)},
                     "measuredAt": {"type": "object", "properties": {"column": {"type": "string"}, "timeKind": {"type": "string", "enum": list(TIME_KINDS)}}, "required": ["column"], "additionalProperties": False},
                     "valueSource": {"type": "string", "enum": list(VALUE_SOURCES), "description": "How the column's values came to be (observed / extracted / calculated / imputed)."},
-                    "aliases": {**columns, "description": "Former names of this column: a renamed column keeps what is known about it."}},
+                    "aliases": {**columns, "description": "Former names of this column: a renamed column keeps what is known about it."},
+                    "concept": {"type": "string", "maxLength": 80, "description": "The variable a study's criteria ask about that this column answers."},
+                    "valueMap": {"type": "object", "properties": {
+                        "values": {"type": "object", "maxProperties": 30, "additionalProperties": {"type": "string", "enum": ["present", "absent", "unknown"]},
+                                   "description": "What each code means for the event the column records (0 absent, 1 present)."},
+                        "measurement": {"type": "boolean", "description": "A number in the column is a measured value, not an indicator."}}, "additionalProperties": False}},
                     "required": ["table", "name"], "additionalProperties": False}},
                 "joins": {"type": "array", "maxItems": 20, "items": {"type": "object", "properties": {
                     "left": side, "right": side, "cardinality": {"type": "string", "enum": list(JOIN_CARDINALITIES), "description": "Rows of the left table per key, then of the right."}},

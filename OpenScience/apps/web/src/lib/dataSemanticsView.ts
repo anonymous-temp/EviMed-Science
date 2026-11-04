@@ -4,6 +4,7 @@ import {
   DATA_CHECK_OUTCOMES,
   DATA_FACET_LABELS_ZH,
   DATA_JOIN_CARDINALITY_LABELS_ZH,
+  DATA_VALUE_STATE_LABELS_ZH,
   DATA_VARIABLE_ROLE_LABELS_ZH,
   SEMANTIC_BASIS_LABELS_ZH,
   VCR_MISSING_REASON_LABELS_ZH,
@@ -53,6 +54,11 @@ export function factText(facet: string, value: unknown): string {
   if (facet === "measuredAt" && value && typeof value === "object") {
     const { column, timeKind } = value as { column: string; timeKind?: string };
     return `${column}${timeKind ? `（${label(VCR_TIME_KIND_LABELS_ZH, timeKind, "")}）` : ""}`;
+  }
+  if (facet === "valueMap" && value && typeof value === "object") {
+    const { values, measurement } = value as { values?: Record<string, string>; measurement?: boolean };
+    const codes = Object.entries(values ?? {}).map(([code, state]) => `${code} = ${label(DATA_VALUE_STATE_LABELS_ZH, state, "不详")}`);
+    return [measurement ? "数值本身就是测量结果" : "", codes.length ? list(codes, 30) : ""].filter(Boolean).join("；") || "不按有无看";
   }
   if (facet === "timeWindow" && value && typeof value === "object") {
     const { start, end, note } = value as { start?: string; end?: string; note?: string };
