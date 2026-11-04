@@ -6008,11 +6008,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       await assertProjectCapacity(project, full, bytes.length, config);
       await writeFileAtomicNoFollow(project.baseDir, full, bytes, { mode: 0o600 });
     }) }) : null;
+  if (vcr?.recordsOriginals) vcr.recordsOriginals.receipts = vcrUploadReceipts;
   if (vcr && vcrUploadReceipts) vcr.dataIntake = createVcrDataIntake({ store: vcr.store, dataStore: vcr.dataStore, dataPlane: vcr.dataPlane,
     sources: vcrUploadReceipts, resolveProject: sourceProject, recordsImport: vcr.recordsImport,
     sourceScope: origin => conversationSourceScope(origin, origin.rootSessionId) });
   if (vcr) vcr.patientContext = createVcrPatientContext({ store:vcr.store,dataStore:vcr.dataStore,dataPlane:vcr.dataPlane,documents:vcr.documents,
-  if (vcr?.recordsOriginals) vcr.recordsOriginals.receipts = vcrUploadReceipts;
     sources:sourceService, uploadReceipts:vcrUploadReceipts, rejudge:vcr.matchJudge?.rejudge ? (study,input) => vcr.matchJudge.rejudge(study,input) : null, subjectKnown:vcr.subjectKnown,
     isHumanMessage: async (origin,message) => (await agentRuns.list(await sourceProject(origin))).some(run => run.sessionId === origin.rootSessionId
       && run.automated !== true && (Number.isSafeInteger(message.turnStartSeq) && run.nativeTurn?.startSeq === message.turnStartSeq
