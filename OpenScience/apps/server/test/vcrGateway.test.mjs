@@ -1463,7 +1463,7 @@ test("a defect in the metadata no verdict reads costs that metadata, never the q
 });
 test('native model calculations require the exact immutable string model version',async()=>{
  const base=fixture();const seen=[];
- base.vcr.service.modelExecution=async(_user,_study,id,kind,scenario)=>{seen.push({id,kind,scenario});return{id,version:'1.0.0'};};
+ base.vcr.service.modelScenario=async(_user,_id,_kind,scenario)=>scenario;base.vcr.service.modelExecution=async(_user,_study,id,kind,scenario)=>{seen.push({id,kind,scenario});return{id,version:'1.0.0'};};
  base.vcr.store.trialScenarios=async()=>[DESIGN_A];
  const handler=createVcrGatewayHandler(config,runtimeManager,{vcr:base.vcr});
  const body={action:'start',kind:'design_simulation',scenario:{design:{kind:'two_arm_fixed'}},modelId:'mdl_source',modelVersion:'1.0.0'};

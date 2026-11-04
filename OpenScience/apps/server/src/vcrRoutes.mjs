@@ -1263,6 +1263,8 @@ export function createVcrRoutes(dependencies) {
         if (body.selection != null) throw new HttpError(400, 'vcr_matching_selection_invalid', 'selection is for matching only.');
         if (body.modelId != null && (typeof body.modelId !== "string" || !ID.test(body.modelId))) throw new HttpError(400, "vcr_model_invalid", "modelId is an id.");
         if (body.kind === "apply_prognostic_model" && !body.modelId) throw new HttpError(400, "vcr_model_invalid", "Select a source-bound prognostic model before applying it.");
+        // (the equation of a model the person's own data trained is the model's, not the call's: filled in by code)
+        if (body.modelId) body.scenario = await service.modelScenario(user, body.modelId, body.kind, body.scenario ?? {});
         const sourceModel = body.modelId ? await service.modelExecution(user, study, body.modelId, body.kind, body.scenario ?? {}) : null;
         const cpuSecondsLimit = body.cpuSecondsLimit == null ? null : wholeNumber(body.cpuSecondsLimit, "cpuSecondsLimit", CPU_SECONDS_MAX);
         // A computation names the object it is for, like the conversation's (`resolveJobSubject`): its result is filed under it.

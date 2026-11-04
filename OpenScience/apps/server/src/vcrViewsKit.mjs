@@ -1022,7 +1022,7 @@ export const VALIDATION_LABELS = Object.freeze(/** @type {Record<string, string>
 }));
 /** What kind of model a card says it is, in Chinese. */
 export const MODEL_TYPE_LABELS = Object.freeze(/** @type {Record<string, string>} */ ({
-  literature_parameterized_reference: "文献参数参考仿真", published_prognostic_equation: "已发表预后方程", fitted_population_baseline: "已拟合人群基线",
+  literature_parameterized_reference: "文献参数参考仿真", published_prognostic_equation: "已发表预后方程", trained_prognostic_equation: "用自己的数据训练的预后方程", fitted_population_baseline: "已拟合人群基线",
   mathematical_simulation: "数学仿真", fitted_prediction_model: "拟合预测", registered_prediction_model: "已登记预测模型", generative: "生成模型", mechanistic: "机制模型",
 }));
 

@@ -1209,6 +1209,8 @@ export const VCR_NEGATIVE_CONTROL_VERDICT_LABELS_ZH = Object.freeze({
  * reads it from its snapshot, and a test holds the two equal.
  */
 export const VCR_PROGNOSTIC_QUALIFICATION = 'none_beyond_continuous'
+/** What a prognostic model trained on the person's own table is called wherever it is read: the library, the application of it and the page. */
+export const VCR_TRAINED_MODEL_LABEL_ZH = '用你自己的历史数据训练，未经外部验证'
 export const VCR_PROGNOSTIC_QUALIFICATION_LABEL_ZH = '二分类和事件时间终点的预后协变量调整，目前没有监管机构认可：EMA 2022 年的资格认定意见只覆盖连续终点。'
 /**
  * The stages of a comparison that stress it rather than make it: a bias screen with negative controls and a tipping-point analysis of

@@ -820,7 +820,9 @@ export function presentComparatorTab(bundle) {
       outcomeSd: measureOf("predicted_outcome_sd") ? value(measureOf("predicted_outcome_sd")) : null,
       relativeScore: measureOf("mean_relative_score") ? value(measureOf("mean_relative_score")) : null,
       absoluteRiskAvailable: diagnostics.absoluteRiskAvailable === true, causalEffectIdentified: false,
-      limits: list(diagnostics.limits).map(vcrPredictionLimit),
+      limits: [...list(diagnostics.limits).map(vcrPredictionLimit),
+        // an equation the person's own data trained says so wherever its predictions are read
+        ...(object(object(diagnostics.sourceModel).source).kind === "trained_result" ? [{ code: "trained_on_own_data" }] : [])],
       // Held against the outcome the table itself has (D3): the calibration intercept and slope, or why the slope is not there.
       calibration: localCalibrationView(diagnostics.localCalibration),
     } : null,

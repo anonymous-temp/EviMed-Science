@@ -104,7 +104,7 @@ function premisesOf(diag, lambdas, gammas) {
   if (CORRELATION_WORDS[family]) rows.push({ key: "prognosticRho", label: "相关系数怎么算", value: CORRELATION_WORDS[family], source: "default", decisive: true });
   rows.push({ key: "prognosticDiscount", label: "样本量节省的折扣", value: `相关系数打 ${lambdas.map((value) => plain(value)).join("、")} 折，对照组标准差放大 ${gammas.map((value) => plain(value)).join("、")} 倍；节省只在预后分的相关在新人群里还成立时才有`, source: discountSource, decisive: true });
   const comparison = object(diag.comparison);
-  if (numeric(comparison.value) !== null) rows.push({ key: "prognosticForest", label: "保存的模型", value: "回归方程；随机森林只作对照，不保存，也不会拿去应用", source: "default", decisive: false });
+  if (numeric(comparison.value) !== null) rows.push({ key: "prognosticForest", label: "能存成模型的部分", value: "回归方程；存进模型库后，可以用来预测别的表里的人，并标明是用你自己的数据训练、未经外部验证的。随机森林只作对照，不保存，也不会拿去应用", source: "default", decisive: false });
   return finishPremises(rows);
 }
 

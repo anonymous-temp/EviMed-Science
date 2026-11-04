@@ -45,7 +45,7 @@ import { loadMethodValidation, validatedMethods } from './vcrMethodValidation.mj
 import {
   clinicalFactView, VCR_COMPARATOR_ROUTES, VCR_COUNT_KEYS, VCR_DATA_TIERS, VCR_DATA_TIER_LABELS_ZH, VCR_ENGINE_METHODS, VCR_MIN_CELL_SIZE, VCR_MODEL_INTERFACES, VCR_ROUTE_MIN_TIER,
   VCR_JOB_METHODS, VCR_SCENARIO_SCHEMAS, VCR_STEPS, VCR_STEP_CAPABILITIES, VCR_TABS, reviewStateFor, roleAllows, suppressForModel, twinLabel, vcrAssessmentIssues,
-  vcrModelCardIssues, vcrModelInterfaceOf, vcrResultClass, vcrTierIsSupported, vcrTierNeedsSupport, vcrTierOffer, whenHolds,
+  VCR_TRAINED_MODEL_LABEL_ZH, validateScenario, vcrModelCardIssues, vcrModelInterfaceOf, vcrResultClass, vcrTierIsSupported, vcrTierNeedsSupport, vcrTierOffer, whenHolds,
 } from "@evimed/domain";
 
 import { vcrScenarioHash } from "./vcrJobs.mjs";
@@ -1465,6 +1465,12 @@ export class VcrService {
       if (!study) throw failure(400, "vcr_model_invalid", "A fitted baseline belongs to a study.");
       Object.assign(card, await this.fittedModelCard(user, study, String(input.card.fitResultId)));
     }
+    if (object(input.card).trainedResultId) {
+      if (!study) throw failure(400, "vcr_model_invalid", "A trained model belongs to a study.");
+      Object.assign(card, await this.trainedModelCard(user, study, String(input.card.trainedResultId)));
+      // A model trained on the person's own table says so wherever it is read, and it carries no claim the data cannot make
+      if (!sources.includes(VCR_TRAINED_MODEL_LABEL_ZH)) sources.push(VCR_TRAINED_MODEL_LABEL_ZH);
+    }
     const applicability = { ...object(input.applicability), sources };
     const parameterEndpoint = object(object(object(card.executionSpec).scenario).endpoint).type ?? null;
     if (parameterEndpoint && input.endpointType && input.endpointType !== parameterEndpoint) throw failure(400, "vcr_model_invalid", "The declared endpoint disagrees with the source reference profile.");
@@ -1535,17 +1541,77 @@ export class VcrService {
       knownLimits: [result.diagnostics.uncertainty, "A population baseline fit is not target-population clinical validation."].filter(Boolean) };
   }
 
+  /**
+   * Register only an actual engine training of a prognostic model on the person's own table (review RF2 P1-3). The model is the equation
+   * the engine saved (`diagnostics.model.equation`), read here from the verified result: nothing the caller sends is the model. It is
+   * labelled for what it is, trained on the person's data and never validated outside it, and it is the shape `model.prognostic_apply`
+   * takes, so applying it runs the same job a published equation does.
+   * @param {{id:string}} user @param {any} study @param {string} resultId
+   */
+  async trainedModelCard(user, study, resultId) {
+    await this.requireStudy(user, study.id);
+    const result = await this.store.result(study.id, resultId);
+    const execution = result?.executionId ? await this.store.one(`SELECT method,receipt,output_hash FROM ${VCR_SCHEMA}.executions WHERE id=$1 AND study_id=$2`, [result.executionId, study.id]) : null;
+    const model = object(object(result?.diagnostics).model);
+    const equation = object(model.equation);
+    if (!result || result.kind !== "prognostic_training" || execution?.method !== "model.prognostic_train" || !vcrExecutionReceiptVerified(execution)
+      || result.conclusion === "not_estimable" || !Object.keys(equation).length || model.externallyValidated !== false) {
+      throw failure(400, "vcr_model_invalid", "Select a verified, estimated prognostic model trained in this study.");
+    }
+    const frozen = { model: equation, endpoint: model.endpoint, sourceCondition: model.sourceCondition };
+    const issues = validateScenario("model.prognostic_apply", { inputId: "binding_preview", idColumn: "USUBJID", inputUnits: model.inputUnits, ...frozen });
+    const trainedOn = object(model.trainedOn);
+    return { trainedResultId: resultId, type: "trained_prognostic_equation", interfaceShape: "baseline_to_outcome", executionProfile: "model.prognostic_apply",
+      trainedSource: { kind: "trained_result", resultId, resultVersion: result.version, executionId: result.executionId, rows: trainedOn.rows ?? null, events: trainedOn.events ?? null, label: VCR_TRAINED_MODEL_LABEL_ZH },
+      trainedLabel: VCR_TRAINED_MODEL_LABEL_ZH, equation: frozen,
+      executionSpec: issues.length ? null : { method: "model.prognostic_apply", scenario: frozen, scenarioHash: vcrScenarioHash(frozen), sourceParameters: [] },
+      registrationState: issues.length ? "incomplete_specification" : "trained_on_own_data",
+      specificationMissing: issues.map((issue) => `${issue.code}: ${issue.field}`),
+      inputs: list(equation.terms).map((/** @type {any} */ term) => `${term.column} (${model.inputUnits?.[term.column] ?? term.unit})`),
+      outputs: "所声明条件下的预后值（风险、概率或结局的预测）；不是治疗效应。",
+      knownLimits: [VCR_TRAINED_MODEL_LABEL_ZH, "只在你自己的这张表里做过交叉验证；换一个人群，区分度、校准和可迁移性都没有查过。", "没有估计系数的不确定性。"] };
+  }
+
+  /**
+   * The scenario parts a bound trained model fixes, so the run applying it never copies a coefficient: its equation, its endpoint, its source
+   * condition and the units of its inputs. `null` for a model that is not a trained one.
+   * @param {{id:string}} user @param {string} modelId
+   */
+  async trainedModelEquation(user, modelId) {
+    const model = (await this.store.models(String(user.id))).find(row => row.id === modelId);
+    if (!model?.studyId || !object(model.card).trainedResultId) return null;
+    const prepared = await this.trainedModelCard(user, await this.requireStudy(user, model.studyId), String(model.card.trainedResultId));
+    const spec = object(prepared.executionSpec);
+    const result = await this.store.result(model.studyId, String(model.card.trainedResultId));
+    return spec.scenario ? { ...structuredClone(spec.scenario), inputUnits: structuredClone(object(object(result?.diagnostics).model).inputUnits) } : null;
+  }
+
+  /**
+   * The scenario of an application of a bound model: for a model trained on the person's own table, the equation, endpoint, source
+   * condition and input units are the model's own, so a call that states none of them gets exactly those and never retypes a coefficient.
+   * A call that states them is left as it is (`modelExecution` then refuses one that differs from the bound model).
+   * @param {{id:string}} user @param {string | null | undefined} modelId @param {string} kind @param {Record<string, any>} scenario
+   * @returns {Promise<Record<string, any>>}
+   */
+  async modelScenario(user, modelId, kind, scenario) {
+    if (kind !== "apply_prognostic_model" || !modelId || scenario.model !== undefined) return scenario;
+    const fixed = await this.trainedModelEquation(user, modelId);
+    return fixed ? { ...fixed, ...scenario } : scenario;
+  }
+
   /** Bind an actual computation to one immutable source-based model version.
    * @param {{id:string}} user @param {any} study @param {string} modelId @param {string} kind @param {any} scenario
    */
   async modelExecution(user, study, modelId, kind, scenario) {
     const model = (await this.store.models(String(user.id))).find(row => row.id === modelId);
     if (!model) throw failure(404, "not_found", "Model not found.");
-    if (!model.studyId || (!object(model.card).fitResultId && (!this.packages.modelSources || !object(model.card).literatureSource))) throw failure(400, "vcr_model_invalid", "This model has no source-bound executable configuration.");
+    if (!model.studyId || (!object(model.card).fitResultId && !object(model.card).trainedResultId && (!this.packages.modelSources || !object(model.card).literatureSource))) throw failure(400, "vcr_model_invalid", "This model has no source-bound executable configuration.");
     const sourceStudy = await this.requireStudy(user, model.studyId);
     const prepared = object(model.card).fitResultId
       ? await this.fittedModelCard(user, sourceStudy, String(model.card.fitResultId))
-      : await this.packages.modelSources.prepare(user, sourceStudy, model.card);
+      : object(model.card).trainedResultId
+        ? await this.trainedModelCard(user, sourceStudy, String(model.card.trainedResultId))
+        : await this.packages.modelSources.prepare(user, sourceStudy, model.card);
     const spec = object(prepared.executionSpec);
     if (!spec.method || VCR_JOB_METHODS[kind] !== spec.method) throw failure(400, "vcr_model_invalid", "This model version has no supported configuration for that method.");
     const expected = object(spec.scenario);
@@ -1553,7 +1619,7 @@ export class VcrService {
       if (vcrScenarioHash({ model: scenario.model, endpoint: scenario.endpoint, sourceCondition: scenario.sourceCondition }) !== spec.scenarioHash) {
         throw failure(400, "vcr_model_invalid", "The published equation or its target endpoint changed; register a new source-bound version.");
       }
-      return { id: model.id, version: model.version, source: prepared.literatureSource, scenarioHash: spec.scenarioHash };
+      return { id: model.id, version: model.version, source: prepared.literatureSource ?? prepared.trainedSource, scenarioHash: spec.scenarioHash };
     }
     if (prepared.fitSource && vcrScenarioHash(object(scenario.truth).controlDistribution) !== vcrScenarioHash(object(expected.truth).controlDistribution)) {
       throw failure(400, "vcr_model_invalid", "The fitted baseline distribution changed; fit or select another model version.");

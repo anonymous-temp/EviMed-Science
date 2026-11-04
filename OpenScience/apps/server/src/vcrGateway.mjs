@@ -2970,7 +2970,9 @@ async function startJob(vcr, study, request) {
   let detail = { subjectId: request.subjectId, origin: "runtime" };
   if (request.kind === "apply_prognostic_model" && !request.modelId) throw gatewayError(400, "vcr_model_invalid", "Select an immutable source-bound prognostic model before applying it.");
   if (request.modelId) {
-    const sourceModel = await vcr.service.modelExecution({id:study.userId},study,request.modelId,request.kind,request.scenario);
+    // the equation of a model the person's own data trained is the model's, not the call's: it is filled in by code
+    scenario = await vcr.service.modelScenario({ id: study.userId }, request.modelId, request.kind, scenario);
+    const sourceModel = await vcr.service.modelExecution({id:study.userId},study,request.modelId,request.kind,scenario);
     if (sourceModel.version !== request.modelVersion) throw gatewayError(409,'vcr_model_version_changed','The selected source model version changed.');
     detail = {...detail,sourceModel};
   }
