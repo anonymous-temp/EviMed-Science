@@ -108,6 +108,8 @@ import {
 } from "./vcrMatching.mjs";
 import { VCR_JOB_PURPOSE } from "./vcrJobs.mjs";
 import { createFactExtractor, createMatchBatch, createMatchBatchCounters, createMatchExtractExecutor } from "./vcrMatchBatch.mjs";
+import { createMatchJudge, createMatchJudgeCounters, createMatchJudgeExecutor, createMatchJudgmentReads, createPairJudge, judgmentTargets } from "./vcrMatchJudge.mjs";
+import { VcrMatchJudgmentStore } from "./vcrMatchJudgmentStore.mjs";
 import { vcrRuntimeWrite } from "./vcrGateway.mjs";
 import { MATCHING_SNAPSHOT_PREFIX, freezeMatchingInputs, hydrateMatchingInputs, languageCriteriaByKey, matchingSelection, verifyMatchingSnapshot } from "./vcrMatchingSnapshot.mjs";
 
@@ -449,7 +451,13 @@ export function vcrDocumentsSeam({ dataPlane, passagesMinChars = 40_000 }) {
       if (!dataPlane) return [];
       const listed = await dataPlane.listDocuments({ studyId: study.id, principal: study.userId });
       return listed.filter((/** @type {any} */ entry) => entry.subjectKey)
-        .map((/** @type {any} */ entry) => ({ id: String(entry.id), subjectKey: String(entry.subjectKey), chars: Number.isFinite(Number(entry.chars)) ? Number(entry.chars) : null }));
+        .map((/** @type {any} */ entry) => ({ id: String(entry.id), subjectKey: String(entry.subjectKey), chars: Number.isFinite(Number(entry.chars)) ? Number(entry.chars) : null, visibleAt: entry.visibleAt ?? null }));
+    },
+    /** What a run was shown of a document, for the reading it has been through: the same record a window read writes.
+     * @param {any} study @param {string} documentId @param {string} text @param {number} start @param {number} end */
+    async recordWindow(study, documentId, text, start, end) {
+      if (!study.cloudContext || !dataPlane?.recordDocumentWindow) return;
+      await dataPlane.recordDocumentWindow(study.id, documentId, study.cloudContext, clinicalDocumentWindow(text, start, Math.max(1, end - start)));
     },
     /** The only document reader used by a cloud run. @param {any} study @param {any} input */
     async runtimeRead(study, { subjectKey, documentId }) {
@@ -1194,6 +1202,17 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   });
   const matchBatch = createMatchBatch({ jobs, matchStore, documents, subjectTable, config, counters: matchBatchCounters });
 
+  // Judging patients against trials (owner decisions 2026-11-04): one job and one record for both directions; a conversation writes the same record through `trial_judgment`.
+  const matchJudgments = new VcrMatchJudgmentStore({ database: productDatabase });
+  const matchJudgeCounters = createMatchJudgeCounters();
+  const judgeTargets = judgmentTargets({ evidence, matchStore });
+  jobs.localExecutors["matching.judge"] = createMatchJudgeExecutor({
+    store, matchStore, judgments: matchJudgments, documents, subjectTable, targets: judgeTargets, config, report, counters: matchJudgeCounters,
+    judge: createPairJudge({ config, usageLedger, fetchImpl: call, counters: matchJudgeCounters }),
+  });
+  const matchJudge = createMatchJudge({ jobs, matchStore, documents, subjectTable, config, counters: matchJudgeCounters });
+  const matchJudgmentReads = createMatchJudgmentReads({ judgments: matchJudgments, documents, subjectTable, targets: judgeTargets, matchStore });
+
   const corrections = createVcrCorrectionCases({ store, matchStore, dataPlane, access });
   // The disease packs and the account's library of population definitions: read and written by the study's pages,
   // by the runtime's `pack` and `library` and by the population writer; the job queue is the comparison's.
@@ -1202,7 +1221,7 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
     // Platform packs (flywheel F26): off, no platform row is read and the request is a 404 by its own code.
     platform: { enabled: Boolean(config.vcrPlatformPacksEnabled), publisherId: PLATFORM_PUBLISHER_USER_ID, sourceChanges, entityVocabulary, officialZoneForKeys,
       people: (ids) => store.personNames(ids) } });
-  service.attach({ corrections, knowledge, engineProbe, erasure });
+  service.attach({ corrections, knowledge, engineProbe, erasure, matchJudgments: matchJudgmentReads });
   // The study's project carries the study's name: the first definition names a draft, and the sidebar lists projects. A project the
   // researcher renamed since is left alone, like GEO's — the old name is the study's own, or one nobody gave.
   if (projectStore?.renameProject) {
@@ -1236,7 +1255,7 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   service.attach({ records });
   composed = {
     publications, simulations, frontierEvents, predictions, records,
-    store, dataStore, matchStore, erasure, candidateStore, patientTrials, evidenceStore, corrections, knowledge, knowledgeStore, longitudinal, matchBatch, matchBatchCounters,
+    store, dataStore, matchStore, erasure, candidateStore, patientTrials, evidenceStore, corrections, knowledge, knowledgeStore, longitudinal, matchBatch, matchBatchCounters, matchJudge, matchJudgeCounters, matchJudgments, matchJudgmentReads,
     access, members, dataPlane, dataPlaneSeam, documents, engine, engineProbe, engineStatus, removeEngineJob, jobs, seal, evidence, matching, registry, service,
     intake: { counters: intakeCounters, extractor, importer, digitizer },
     // Composed later, beside the other modules' workers (server.mjs).
@@ -1357,6 +1376,7 @@ export async function vcrMetricsSnapshot(vcr) {
     predictions: vcr.predictions ? { ...vcr.predictions.counters } : null,
     patientTrials: vcr.patientTrials?.counters ? { ...vcr.patientTrials.counters } : null,
     matchBatch: vcr.matchBatchCounters ? { ...vcr.matchBatchCounters } : null,
+    matchJudge: vcr.matchJudgeCounters ? { ...vcr.matchJudgeCounters } : null,
     frontierEvents: vcr.frontierEvents ? { ...vcr.frontierEvents.counters } : null,
     platformPacks: vcr.knowledge?.platform?.enabled
       ? Object.fromEntries(Object.entries(vcr.knowledge.counters).filter(([kind]) => kind.startsWith("platform"))) : null,
@@ -1451,6 +1471,10 @@ export function vcrMetricFamilies(enabled, snapshot) {
   if (snapshot.matchBatch) {
     add("match_batch_total", "What the batch reading of patient records did since this process started: batches started, records read, facts kept and facts the writer or the closed vocabulary refused, records that failed or could not be read (and are read again by the next start), and batches canceled.", "counter",
       Object.entries(snapshot.matchBatch).map(([kind, value]) => ({ labels: { kind }, value: Number(value) })));
+  }
+  if (snapshot.matchJudge) {
+    add("match_judge_total", "What judging patients against trials did since this process started: jobs started, pairs judged and failed, model calls retried, jobs stopped by a budget or a run of upstream failures, and jobs canceled.", "counter",
+      Object.entries(snapshot.matchJudge).map(([kind, value]) => ({ labels: { kind }, value: Number(value) })));
   }
   if (snapshot.platformPacks) {
     add("platform_packs_total", "What the platform knowledge packs did since this process started (flywheel F26): packs that passed the re-check and were copied, requests that failed it, authors who took their name off, and platform packs labelled 来源有变更.", "counter",

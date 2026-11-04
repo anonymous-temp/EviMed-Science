@@ -689,6 +689,65 @@ test("D4: a batch reading starts with a selection and no scenario, and the answe
   assert.equal(res.status, 503);
 });
 
+test("a judging job starts with a selection and no scenario, in either direction, and answers what it will do", async () => {
+  /** @type {any[]} */
+  const started = [];
+  const matchJudge = { async start(/** @type {any} */ _study, /** @type {any} */ selection) {
+    started.push(selection);
+    return { action: "start", kind: "match_judge", state: "queued", jobId: "job_6", statement: "这一批判定 2 对", estimate: { basis: "estimate", pairs: 2, calls: 3, cost: 0.1 }, direction: selection.direction };
+  } };
+  const { handler } = fixture({ matchJudge });
+  const start = async (/** @type {Record<string, any>} */ body) => { const res = response(); await handler(request("/internal/vcr/v1/simulate", { action: "start", kind: "match_judge", ...body }), res); return res; };
+  const one = await start({ selection: { subjectKey: "P-1", registryIds: ["NCT00000001", "NCT00000002"], topK: "all", thinking: "off" } });
+  assert.equal(one.status, 200, one.body);
+  assert.deepEqual([one.json().data.jobId, one.json().data.estimate.pairs], ["job_6", 2], "a count of pairs is not a head count, and it reaches the answer");
+  assert.equal(started.at(-1).direction, "patient_to_trial");
+  const many = await start({ selection: { protocolVersionId: "pv_1", subjectKeys: ["P-1"] } });
+  assert.equal(many.status, 200);
+  assert.equal(started.at(-1).direction, "trial_to_patient");
+  const before = started.length;
+  for (const body of [{}, { scenario: { subjects: ["P-1"] }, selection: { protocolVersionId: "pv_1" } }, { inputs: [{ kind: "snapshot", id: "snp_1" }], selection: { protocolVersionId: "pv_1" } }, { selection: { snapshotId: "a".repeat(64) } }, { selection: { subjectKey: "P-1" } }]) {
+    const refused = await start(body);
+    assert.equal(refused.status, 400, JSON.stringify(body));
+  }
+  assert.equal(started.length, before, "nothing refused reached the job");
+  const none = fixture({ matchJudge: null });
+  const res = response();
+  await none.handler(request("/internal/vcr/v1/simulate", { action: "start", kind: "match_judge", selection: { protocolVersionId: "pv_1" } }), res);
+  assert.equal(res.status, 503);
+});
+
+test("a conversation's judgment is written item by item: a shape problem is one item's notice, the rest are saved, and nothing clinical refuses", async () => {
+  /** @type {any[]} */
+  const written = [];
+  const matchJudgmentReads = { async writeConversation(/** @type {any} */ _study, /** @type {any} */ item) {
+    written.push(item);
+    if (item.registryId === "NCT00000009") throw Object.assign(new Error("登记平台没有这个登记号的记录。"), { code: "registry_not_found" });
+    return { id: `mjd_${written.length}`, verdict: "ineligible", verdictLabel: "不符合", target: { kind: "candidate_trial", id: item.registryId }, notices: item.criteria ? [{ code: "sentence_ids_dropped", count: 1 }] : [] };
+  } };
+  const { handler } = fixture({ matchJudgmentReads });
+  const res = response();
+  await handler(request("/internal/vcr/v1/write", { what: "trial_judgment", items: [
+    { subjectKey: "P-1", registryId: "NCT00000001", fit: 3, confidence: 0.9, reasons: { ineligible: ["妊娠"] }, criteria: [{ number: 1, reason: "r", sentenceIds: [0, 9], label: "excluded" }] },
+    { subjectKey: "P-1", registryId: "NCT00000002" },
+    { subjectKey: "P-1", registryId: "NCT00000003", fit: 300 },
+    { subjectKey: "P-1", registryId: "NCT00000004", protocolVersionId: "pv_1", fit: 1 },
+    { subjectKey: "P-1", registryId: "NCT00000009", fit: 50 },
+    { subjectKey: "P-1", protocolVersionId: "pv_1", fit: 60, nonsense: 1 },
+    { subjectKey: "P-1", protocolVersionId: "pv_1", fit: 60 },
+  ] }), res);
+  assert.equal(res.status, 200, res.body);
+  const { data } = res.json();
+  assert.deepEqual(data.ids, ["mjd_1", "mjd_3"], "the two whose shape was right and whose target answered");
+  assert.deepEqual(data.issues.map((entry) => [entry.index, entry.code]).sort((a, b) => a[0] - b[0]), [[1, "vcr_write_value_invalid"], [2, "vcr_write_value_invalid"], [3, "vcr_write_value_invalid"], [4, "registry_not_found"], [5, "vcr_write_field_forbidden"]]);
+  assert.deepEqual(data.results[0], { index: 0, id: "mjd_1", verdict: "ineligible", verdictLabel: "不符合", target: { kind: "candidate_trial", id: "NCT00000001" }, notices: [{ code: "sentence_ids_dropped", count: 1 }] });
+  assert.equal(written[0].fit, 3, "a low score and a stated exclusion are saved like anything else");
+  const off = fixture({ matchJudgmentReads: null });
+  const refused = response();
+  await off.handler(request("/internal/vcr/v1/write", { what: "trial_judgment", data: { subjectKey: "P-1", registryId: "NCT00000001", fit: 3 } }), refused);
+  assert.deepEqual(refused.json().data.issues.map((entry) => entry.code), ["vcr_write_refused"]);
+});
+
 test("the comparator-effect kinds start through the gateway; a time-to-event MAIC names its comparator by a reconstruction result, never by rows", async () => {
   /** @type {any[]} */
   const queued = [];

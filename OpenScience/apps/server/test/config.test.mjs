@@ -170,6 +170,14 @@ test("the number of candidate trials a study holds has a key, a default and boun
 test("batch matching has a bound on its size, on its concurrency and on one record's call", () => {
   const config = loadConfig({ rootDir: repoRoot });
   assert.deepEqual([config.vcrMatchBatchMaxSubjects, config.vcrMatchExtractConcurrency, config.vcrMatchExtractTimeoutMs], [300, 3, 90_000]);
+  assert.deepEqual([config.vcrMatchJudgeConcurrency, config.vcrMatchJudgeTopK, config.vcrMatchJudgeThinking, config.vcrMatchJudgeOutputTokens, config.vcrMatchJudgeTimeoutMs, config.vcrMatchJudgeMaxUpstreamFailures],
+    [8, 20, "high", 16_000, 180_000, 20]);
+  const judged = loadConfig({ rootDir: repoRoot, vcrMatchJudgeConcurrency: "64", vcrMatchJudgeTopK: "all", vcrMatchJudgeThinking: "off", vcrMatchJudgeOutputTokens: "2000", vcrMatchJudgeTimeoutMs: "10000", vcrMatchJudgeMaxUpstreamFailures: "1" });
+  assert.deepEqual([judged.vcrMatchJudgeConcurrency, judged.vcrMatchJudgeTopK, judged.vcrMatchJudgeThinking, judged.vcrMatchJudgeOutputTokens], [64, "all", "off", 2_000]);
+  assert.equal(loadConfig({ rootDir: repoRoot, vcrMatchJudgeTopK: "0" }).vcrMatchJudgeTopK, 0);
+  for (const bad of [{ vcrMatchJudgeConcurrency: "65" }, { vcrMatchJudgeTopK: "some" }, { vcrMatchJudgeTopK: "501" }, { vcrMatchJudgeThinking: "low" }, { vcrMatchJudgeOutputTokens: "1000" }, { vcrMatchJudgeTimeoutMs: "1" }, { vcrMatchJudgeMaxUpstreamFailures: "0" }]) {
+    assert.throws(() => loadConfig({ rootDir: repoRoot, ...bad }), /OPEN_SCIENCE_VCR_MATCH_JUDGE_/, JSON.stringify(bad));
+  }
   const set = loadConfig({ rootDir: repoRoot, vcrMatchBatchMaxSubjects: "50", vcrMatchExtractConcurrency: "1", vcrMatchExtractTimeoutMs: "20000" });
   assert.deepEqual([set.vcrMatchBatchMaxSubjects, set.vcrMatchExtractConcurrency, set.vcrMatchExtractTimeoutMs], [50, 1, 20_000]);
   for (const [key, value, name] of [["vcrMatchBatchMaxSubjects", "0", "OPEN_SCIENCE_VCR_MATCH_BATCH_MAX_SUBJECTS"], ["vcrMatchBatchMaxSubjects", "5001", "OPEN_SCIENCE_VCR_MATCH_BATCH_MAX_SUBJECTS"],

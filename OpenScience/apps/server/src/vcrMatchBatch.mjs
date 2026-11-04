@@ -355,8 +355,26 @@ export function extractScenario(built) {
   };
 }
 
+/**
+ * What a batch's result says of itself, from its counts. Nothing finished out of something is a failure, with the commonest reason named, however
+ * many attempts it took; some finished and some not (or stopped before the end) is `limited`, and what was done stands; all of it is `estimable`. A job
+ * never reports success by default.
+ * @param {{ finished: number, total: number, failed: number, stopped: boolean, failures: Record<string, number>, noun: string, verb: string }} input
+ * @returns {{ status: 'succeeded' | 'failed', conclusion: 'estimable' | 'limited' | 'not_estimable', issues: Array<{ code: string, message: string }> }}
+ */
+export function resultOutcome({ finished, total, failed, stopped, failures, noun, verb }) {
+  const commonest = Object.entries(failures).sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))[0]?.[0] ?? null;
+  if (total > 0 && finished === 0) {
+    return { status: 'failed', conclusion: 'not_estimable', issues: [{ code: commonest ?? 'vcr_match_nothing_finished', message: `${total} ${noun}都没有${verb}成${commonest ? `，最多的原因是 ${commonest}` : ''}。` }] };
+  }
+  if (failed > 0 || stopped || finished < total) {
+    return { status: 'succeeded', conclusion: 'limited', issues: [{ code: commonest ?? 'vcr_match_stopped_early', message: `${total} ${noun}里${verb}完 ${finished} ${noun}${failed > 0 ? `，${failed} ${noun}没${verb}成` : ''}${stopped ? '，中途停下' : ''}；${verb}完的保留。` }] };
+  }
+  return { status: 'succeeded', conclusion: 'estimable', issues: [] };
+}
+
 /** Run `work` over `items` with at most `width` in flight, taking the next item only while `more()` says so. */
-async function pool(/** @type {readonly any[]} */ items, /** @type {number} */ width, /** @type {() => Promise<boolean>} */ more, /** @type {(item: any) => Promise<void>} */ work) {
+export async function pool(/** @type {readonly any[]} */ items, /** @type {number} */ width, /** @type {() => Promise<boolean>} */ more, /** @type {(item: any) => Promise<void>} */ work) {
   let next = 0;
   const lane = async () => {
     while (next < items.length && await more()) {
@@ -507,17 +525,19 @@ export function createMatchExtractExecutor({ store, matchStore, documents, extra
     await onProgress({ done: finished, total: units.length });
 
     const remaining = Math.max(0, units.length - finished);
+    const outcome = resultOutcome({ finished: tally.read, total: units.length, failed: tally.failed + tally.unreadable, stopped: canceled, failures, noun: '份', verb: '读' });
     const scenarioHash = /^[a-f0-9]{64}$/.test(String(job.scenarioHash ?? '')) ? String(job.scenarioHash) : createHash('sha256').update(canonicalScenarioJson(scenario)).digest('hex');
     /** @type {Record<string, any>} */
     const result = {
-      jobId, protocolVersion: VCR_ENGINE_PROTOCOL_VERSION, status: 'succeeded', method: 'matching.extract', methodVersion: VCR_MATCH_BATCH_METHODS['matching.extract'].version,
-      scenarioHash, seed: Number(job.seed ?? 0), replicates: null, conclusion: 'estimable',
+      jobId, protocolVersion: VCR_ENGINE_PROTOCOL_VERSION, status: outcome.status, method: 'matching.extract', methodVersion: VCR_MATCH_BATCH_METHODS['matching.extract'].version,
+      scenarioHash, seed: Number(job.seed ?? 0), replicates: null, conclusion: outcome.conclusion,
       counts: { realPatients: new Set(units.map((unit) => unit.subjectKey)).size, events: null, effectiveSampleSize: null, generatedRecords: 0 },
       measures: [
         { name: 'records_read', value: tally.read }, { name: 'facts_kept', value: tally.facts }, { name: 'facts_refused', value: tally.refused },
         { name: 'records_failed', value: tally.failed + tally.unreadable }, { name: 'records_already_read', value: alreadyRead },
       ].map((measure) => ({ ...measure, simulated: false, source: 'calculated' })),
       diagnostics: {
+        ...(outcome.issues.length ? { issues: outcome.issues } : {}),
         protocolVersionId: String(scenario.protocolVersionId), asOf: scenario.asOf, variables: variables.length, chain: scenario.chain ?? null,
         peopleSelected: list(scenario.subjects).length, recordsToRead: units.length, recordsRead: tally.read, recordsAlreadyRead: alreadyRead, recordsFailed: tally.failed,
         recordsUnreadable: tally.unreadable, recordsShortened: tally.shortened, remaining, canceled,
@@ -530,7 +550,7 @@ export function createMatchExtractExecutor({ store, matchStore, documents, extra
       tables: [],
       manifest: { engineVersion: 'control-plane', rVersion: `node ${process.version}`, packageLockHash: LOCK_HASH, startedAt, finishedAt: new Date().toISOString(), cpuSeconds: 0 },
     };
-    // A reading that stopped before the end is not a failure: what was read stands, and the result says how much is left.
+    // A reading that stopped before the end keeps what it read and says how much is left; one that read nothing says that (`resultOutcome`).
     result.manifest.outputHash = createHash('sha256').update(vcrResultOutputPayload(result)).digest('hex');
     return result;
   };

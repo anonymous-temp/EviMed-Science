@@ -44,7 +44,7 @@ import { loadMethodValidation, validatedMethods } from './vcrMethodValidation.mj
 import {
   clinicalFactView, VCR_COMPARATOR_ROUTES, VCR_COUNT_KEYS, VCR_DATA_TIERS, VCR_DATA_TIER_LABELS_ZH, VCR_ENGINE_METHODS, VCR_MIN_CELL_SIZE, VCR_MODEL_INTERFACES, VCR_ROUTE_MIN_TIER,
   VCR_JOB_METHODS, VCR_SCENARIO_SCHEMAS, VCR_STEPS, VCR_STEP_CAPABILITIES, VCR_TABS, reviewStateFor, roleAllows, suppressForModel, twinLabel, vcrAssessmentIssues,
-  vcrModelCardIssues, vcrModelInterfaceOf, vcrResultClass, vcrTierIsSupported, vcrTierNeedsSupport, vcrTierOffer, whenHolds,
+  vcrModelCardIssues, vcrModelInterfaceOf, vcrResultClass, vcrTierIsSupported, vcrTierNeedsSupport, vcrTierOffer, whenHolds, segmentCriteria,
 } from "@evimed/domain";
 
 import { vcrScenarioHash } from "./vcrJobs.mjs";
@@ -136,7 +136,7 @@ export const VCR_WRITE_WHATS = Object.freeze([
   "task_context", "patient_context", "definition", "protocol", "criteria", "assumption", "evidence_item", "precedent", "population", "patient_set",
   "comparator", "trial_scenario", "design_grid", "decision", "report", "model", "forecast", "step", "plan",
   "fact", "language_judgment", "field_map", "pack", "model_assessment", "history", "forecast_design", "trial_benchmark",
-  "candidate_trial", "soa", "regulatory_contact", "result_record",
+  "candidate_trial", "trial_judgment", "soa", "regulatory_contact", "result_record",
 ]);
 
 /** @param {unknown} value */
@@ -1810,6 +1810,11 @@ export class VcrService {
         if (!documents?.subjectDocuments) {
           return { available: false, code: "vcr_data_plane_unavailable", message: "数据平面未接入病历文档：这一步暂不可用，其余步骤照常。" };
         }
+        // The whole record as numbered sentences, the same numbers a judgment's evidence names, with the hash that binds a later write to them.
+        if (filter.kind === "sentences") {
+          if (!this.packages.matchJudgments?.sentences) return { available: false, code: "vcr_matching_unavailable", message: "患者判定未接入：这一步暂不可用，其余步骤照常。" };
+          return this.packages.matchJudgments.sentences(study, filter);
+        }
         // A read of one document that names a criterion (`id`) or some words (`query`) asks for the passages that bear on it (M4).
         const passages = filter.documentId && (filter.id || filter.query) ? await this.#passageRequest(study, filter) : null;
         if (passages && "refusal" in passages) return passages.refusal;
@@ -1821,6 +1826,11 @@ export class VcrService {
           return { available: false, code: "vcr_matching_unavailable", message: "患者匹配未接入：这一步暂不可用，其余步骤照常。" };
         }
         const answer = await matching.runtimeRead(study, filter);
+        // A protocol version the model has judged people against: those judgments, ranked, and the numbered clauses a conversation judges by.
+        const judged = filter.protocolVersionId && filter.kind !== "contract" && this.packages.matchJudgments?.forProtocol
+          ? { ...await this.packages.matchJudgments.forProtocol(study, String(filter.protocolVersionId), { subjectKey: filter.subjectKey ? String(filter.subjectKey) : null, limit, offset: Number(filter.offset ?? 0) }),
+            clauses: await this.packages.matchJudgments.protocolClauses(study, String(filter.protocolVersionId)) } : null;
+        if (judged) Object.assign(answer, judged.ranking.length || judged.failedPairs ? judged : { clauses: judged.clauses });
         // The study-level read also says which concept names the pack uses for the variables the criteria
         // name and which dataset columns realise them — the names a fact is written under.
         const guide = filter.subjectKey || filter.kind ? null : await this.#matchingGuide(study);
@@ -1844,6 +1854,11 @@ export class VcrService {
         const trials = this.packages.patientTrials;
         if (!trials?.runtimeRead) {
           return { available: false, code: "vcr_matching_unavailable", message: "给患者找试验在本部署尚未接入：这一步暂不可用，其余步骤照常。" };
+        }
+        // A patient the model has judged trials for reads those judgments; a study with none answers as it always did.
+        if (filter.subjectKey && !filter.id && !filter.registryId && this.packages.matchJudgments?.forSubject) {
+          const judged = await this.packages.matchJudgments.forSubject(study, String(filter.subjectKey), { limit, offset: Number(filter.offset ?? 0) });
+          if (judged.ranking.length || judged.failedPairs) return { subjectKey: String(filter.subjectKey), ...judged };
         }
         return trials.runtimeRead(study, { ...filter, limit });
       }
@@ -1879,7 +1894,10 @@ export class VcrService {
         if (!evidence?.registryRecord) {
           return { available: false, code: "registry_unavailable", message: "试验登记检索未接入：这一步暂不可用，其余步骤照常。" };
         }
-        return evidence.registryRecord(study, filter, signal);
+        const read = await evidence.registryRecord(study, filter, signal);
+        // Its eligibility text as the same numbered clauses a judgment answers by.
+        const clauses = read?.record?.eligibilityText ? segmentCriteria(read.record.eligibilityText) : [];
+        return clauses.length ? { ...read, clauses: clauses.map(({ start: _start, end: _end, ...clause }) => clause) } : read;
       }
       default: throw failure(400, "vcr_read_what_invalid", "This read has no implementation.");
     }

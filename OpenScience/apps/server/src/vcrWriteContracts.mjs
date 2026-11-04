@@ -47,6 +47,19 @@ export const VCR_WRITE_FIELDS = Object.freeze({
     "criteria",
     "subjectKeys"
   ],
+  "trial_judgment": [
+    "subjectKey",
+    "registry",
+    "registryId",
+    "collection",
+    "collectionRevision",
+    "protocolVersionId",
+    "fit",
+    "confidence",
+    "reasons",
+    "criteria",
+    "documentHash"
+  ],
   "evidence_item": [
     "registry",
     "registryId",
@@ -303,6 +316,12 @@ export const VCR_WRITE_EXAMPLES = Object.freeze({
     comparisonGoal: { text: '比较样本量、把握度和 I 类错误' },
   }),
   plan: Object.freeze({ analysis: { primary: '单侧 α 0.025 的 log-rank 检验' }, sensitivity: { cases: ['HR 0.80', '年脱落率 10%'] }, sealedFields: [] }),
+  trial_judgment: Object.freeze({
+    subjectKey: '<the pseudonym>', registryId: 'NCT06927986', fit: 70, confidence: 0.6,
+    reasons: { eligible: ['肺腺癌 IV 期，符合入组人群'], ineligible: [], missing: ['EGFR 检测结果'], rationale: '诊断和分期符合，缺驱动基因结果' },
+    criteria: [{ number: 1, reason: '病历写 62 岁', sentenceIds: [0], label: 'included' }, { number: 5, reason: '病历未提脑转移；好的病历通常会写', sentenceIds: [], label: 'not excluded' }],
+    documentHash: '<from the sentences read>',
+  }),
   candidate_trial: Object.freeze({
     registry: 'clinicaltrials.gov', registryId: 'NCT06927986',
     criteria: [{ kind: 'inclusion', criterionType: 'biomarker', sourceText: 'Presence of at least one EGFR-sensitive mutation', requirement: { op: 'language', key: 'egfr_sensitive_mutation', text: 'Presence of at least one EGFR-sensitive mutation' } }],
@@ -348,6 +367,10 @@ export function vcrWriteContracts(kind = null) {
     design_grid: { ...contracts.design_grid, example: VCR_WRITE_EXAMPLES.design_grid, rule: 'labels are for the page; start kind=design_grid with subjectId = the id and no scenario' },
     plan: { ...contracts.plan, example: VCR_WRITE_EXAMPLES.plan, rule: 'analysis and sensitivity are objects; a list or a sentence is kept as it was written (under items or text)' },
     candidate_trial: { ...contracts.candidate_trial, words: wordsOf('criterion'), example: VCR_WRITE_EXAMPLES.candidate_trial },
+    trial_judgment: { ...contracts.trial_judgment, example: VCR_WRITE_EXAMPLES.trial_judgment,
+      target: 'registryId for a registry trial or protocolVersionId for a protocol version of this study, one of them',
+      criteria: 'number is the clause number trial_registry_record or matching gives; sentenceIds are ids from vcr_read what:subject_document filter.kind=sentences; label is one of included, not included, excluded, not excluded, not applicable, not enough information',
+      documentHash: 'the documentHash that read returned, so numbers that no longer match the record come back as a notice' },
   });
   return kind ? { [kind]: Object.hasOwn(contracts, kind) ? contracts[kind] : null } : contracts;
 }

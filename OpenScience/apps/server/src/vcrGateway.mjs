@@ -80,6 +80,7 @@ import {
 
 import { HttpError } from "./security.mjs";
 import { VCR_READ_WHATS, VCR_READ_MAX_ITEMS, VCR_WRITE_WHATS, vcrRouteOptions } from "./vcrService.mjs";
+import { judgeSelection } from "./vcrMatchJudge.mjs";
 import { vcrResultEntry, withJobEntry, withWriteEntry } from "./vcrResultEntry.mjs";
 import { renderVcrNumbers } from "./vcrRender.mjs";
 import { checkRegulatoryContact, resolveVisitsRef, visitKey } from "./vcrScheduleView.mjs";
@@ -384,8 +385,8 @@ function simulateRequest(body) {
       throw gatewayError(400,'vcr_simulate_payload_invalid','modelId requires its immutable modelVersion.');
     }
     if (body.modelVersion != null && body.modelId == null) throw gatewayError(400,'vcr_simulate_payload_invalid','modelVersion requires modelId.');
-    if (body.selection != null && !['match_criteria', 'match_extract'].includes(body.kind)) throw gatewayError(400, 'vcr_simulate_payload_invalid', 'selection is for matching only.');
-    return { action, kind: body.kind, modelId: body.modelId ?? null, modelVersion: body.modelVersion ?? null, selection: body.selection == null ? null : body.kind === 'match_extract' ? extractSelection(body.selection) : matchingSelection(body.selection), scenario: object(body.scenario), inputs: list(body.inputs),
+    if (body.selection != null && !['match_criteria', 'match_extract', 'match_judge'].includes(body.kind)) throw gatewayError(400, 'vcr_simulate_payload_invalid', 'selection is for matching only.');
+    return { action, kind: body.kind, modelId: body.modelId ?? null, modelVersion: body.modelVersion ?? null, selection: body.selection == null ? null : body.kind === 'match_extract' ? extractSelection(body.selection) : body.kind === 'match_judge' ? judgeSelection(body.selection) : matchingSelection(body.selection), scenario: object(body.scenario), inputs: list(body.inputs),
       reconstructionResultId: body.reconstructionResultId == null ? null : body.reconstructionResultId,
       seed: Number.isInteger(body.seed) ? body.seed : null,
       replicates: Number.isInteger(body.replicates) ? body.replicates : null,
@@ -749,7 +750,7 @@ function distributionOf(item, field, value) {
  * runtime is reserved for, when it is a bounded one (`runtimeRunId`).
  * @typedef {{ store: any, service: any, orchestrator: any, study: any, evidence?: any, evidenceStore?: any, matchStore?: any,
  *   matching?: any, patientTrials?: any, seal?: any, dataPlane?: any, documents?: any, report?: (code: string) => void,
- *   caller?: { runtimeRunId?: string | null, provenance?: any } | null, knowledge?: any, afterFreeze?: boolean, signal?: AbortSignal }} WriteDeps
+ *   caller?: { runtimeRunId?: string | null, provenance?: any } | null, knowledge?: any, afterFreeze?: boolean, signal?: AbortSignal, matchJudgments?: any }} WriteDeps
  */
 
 /** The criterion fields a protocol write takes. */
@@ -1236,6 +1237,42 @@ const WRITERS = {
     }
     extra.results.push({ index: item.index, registryId, extracted: extracted.counts.extracted, verified: extracted.counts.verified, refused: extracted.counts.refused });
     return extracted.precedent?.id ?? null;
+  },
+
+  /**
+   * A conversation's own judgment of a person against a trial or a protocol version: the same record a judging job writes, read by the same readers. A shape problem is this
+   * item's notice and the rest of the call is saved; what code cannot use inside an answer (a clause number, a sentence id, a label) comes back as a notice beside what was
+   * saved. Nothing clinical refuses it. Evidence is a sentence id code resolves, so the words are the record's own.
+   */
+  async trial_judgment(item, deps, extra) {
+    const { matchJudgments, study, signal } = deps;
+    if (!item.only(VCR_WRITE_FIELDS.trial_judgment)) return null;
+    const subjectKey = item.token("subjectKey", TOKEN, "受试者的假名编号（vcr_read what:subject_document 或 what:patient_context 给出）", { required: true });
+    const registry = item.choice("registry", ["clinicaltrials.gov", "chictr", "ctis"]);
+    const registryId = item.token("registryId", /^[A-Za-z0-9][A-Za-z0-9-]{2,63}$/, "登记号，例如 NCT02296125");
+    const protocolVersionId = item.token("protocolVersionId", ID, "本研究的方案版本 id");
+    if (item.ok && Boolean(registryId) === Boolean(protocolVersionId)) item.bad("registryId", "registryId（登记的试验）和 protocolVersionId（本研究的方案版本）写一个。");
+    const collection = item.token("collection", ID, "冻结登记库的编号");
+    const collectionRevision = item.token("collectionRevision", COLLECTION_REVISION, "冻结库版本哈希");
+    const fit = item.num("fit", { min: 0, max: 100 });
+    const confidence = item.num("confidence", { min: 0, max: 1 });
+    const reasons = item.obj("reasons");
+    const criteria = item.arr("criteria", { max: 500 });
+    const documentHash = item.token("documentHash", /^[a-f0-9]{64}$/, "读编号句子时给出的 documentHash");
+    if (item.ok && fit == null && !criteria?.length) item.bad("fit", "写 fit（0-100 的整体评分）或 criteria（逐条判定），至少一样。");
+    if (!item.ok) return null;
+    if (!matchJudgments?.writeConversation) return void item.bad("subjectKey", "患者判定在本部署尚未接入。", "vcr_write_refused");
+    let written;
+    try {
+      written = await matchJudgments.writeConversation(study, { subjectKey: String(subjectKey), registry, registryId, protocolVersionId, collection, collectionRevision, fit, confidence, reasons, criteria, documentHash }, { signal });
+    } catch (error) {
+      const code = String(/** @type {any} */ (error)?.code ?? "");
+      if (isDatabaseError(error) || !code) throw error;
+      return void item.bad(registryId ? "registryId" : "subjectKey", String(/** @type {any} */ (error)?.message ?? "这一条没有写成。"), code);
+    }
+    if (!written.id) return void item.bad("subjectKey", "这位受试者已撤回同意，判定不再保存。", "vcr_document_withdrawn");
+    extra.results.push({ index: item.index, id: written.id, verdict: written.verdict, verdictLabel: written.verdictLabel, target: written.target, ...(written.notices.length ? { notices: written.notices } : {}) });
+    return written.id;
   },
 
   /**
@@ -2243,7 +2280,7 @@ const WRITERS = {
  * @param {WriteDeps & { what: string, items: any[] | null, data: any | null }} input
  */
 export async function vcrRuntimeWrite({ store, service, orchestrator, study, what, items, data, evidence = null, evidenceStore = null,
-  matchStore = null, matching = null, patientTrials = null, seal = null, dataPlane = null, documents = null, report = () => {}, caller = null, knowledge = null, signal }) {
+  matchStore = null, matching = null, patientTrials = null, matchJudgments = null, seal = null, dataPlane = null, documents = null, report = () => {}, caller = null, knowledge = null, signal }) {
   if (["site", "followup"].includes(what)) throw gatewayError(410, "vcr_recruitment_retired", "该运营流程已停用；患者匹配仍可使用，历史观察可在“依据”中只读查看或导出。");
   /** @type {string[]} */
   const ids = [];
@@ -2270,7 +2307,7 @@ export async function vcrRuntimeWrite({ store, service, orchestrator, study, wha
   /** What the writers of one request share: the changed nodes, the answers beside the ids, and the pairs to judge again. @type {{ changed: string[], results: any[], reevaluate?: Set<string> }} */
   const scratch = { changed, results };
   /** @type {WriteDeps} */
-  const deps = { store, service, orchestrator, study, evidence, evidenceStore, matchStore, matching, patientTrials, seal, dataPlane, documents, report, caller, knowledge, signal };
+  const deps = { store, service, orchestrator, study, evidence, evidenceStore, matchStore, matching, patientTrials, matchJudgments, seal, dataPlane, documents, report, caller, knowledge, signal };
   // The run the platform sent to take new evidence into a study's cards (flywheel F24) writes its versions beside the frozen one when
   // the study's analysis plan has frozen: the dispatch names the run, and a card a run types never decides it. Any other writer — the
   // researcher's own conversation, an ordinary programme step — writes exactly as before, which for a frozen study is a new freeze.
@@ -2619,7 +2656,7 @@ function poolingSummary(result, about) {
 /**
  * @param {any} config @param {any} runtimeManager
  * @param {{ vcr: { service: any, store: any, jobs?: any, orchestrator?: any, evidence?: any, evidenceStore?: any, matchStore?: any,
- *   matching?: any, patientTrials?: any, seal?: any, dataPlaneSeam?: any, documents?: any, knowledge?: any, patientContext?: any, dataIntake?: any } | null,
+ *   matching?: any, patientTrials?: any, matchJudge?: any, matchJudgmentReads?: any, seal?: any, dataPlaneSeam?: any, documents?: any, knowledge?: any, patientContext?: any, dataIntake?: any } | null,
  *   report?: (code: string) => void, budgetMs?: number, resolveStudyConversation?: ((study:any,options:any)=>Promise<any>)|null, resolveInvocation?: ((identity:any,header:any,operation:string,body:any)=>Promise<any>)|null, readProducerRun?: ((study:any,runId:string)=>Promise<any>)|null }} dependencies
  */
 export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = () => {}, budgetMs = answerBudgetMs, readProducerRun = null, resolveInvocation = null, resolveStudyConversation = null }) {
@@ -2714,7 +2751,7 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
       // A dedicated runtime has an exclusive dispatch. Shared runtimes need transcript proof;
       // the sole running project run is never attribution for patient evidence.
       const scopedRunId = origin?.runId ?? boundedScope?.runId ?? null;
-      if (readProducerRun && ['read','write'].includes(operation) && ['subject_document','matching','candidate_trials','fact','language_judgment','patient_context'].includes(body.what)) {
+      if (readProducerRun && ['read','write'].includes(operation) && ['subject_document','matching','candidate_trials','fact','language_judgment','trial_judgment','patient_context'].includes(body.what)) {
         const receipt = scopedRunId ? await readProducerRun(study, scopedRunId) : null;
         if (!receipt?.sessionId) throw gatewayError(403, 'vcr_cloud_run_unattributed', 'Start a study conversation before reading patient evidence.');
         study.cloudContext = { runId: scopedRunId, sessionId: receipt.sessionId };
@@ -2767,9 +2804,9 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
           const result = await vcrRuntimeWrite({
             store: vcr.store, service: vcr.service, orchestrator: vcr.orchestrator ?? null, study,
             what: request.what, items: request.items, data: request.data,
-            ...(request.what === "candidate_trial" ? { signal: requestAbort.signal } : {}),
+            ...(["candidate_trial", "trial_judgment"].includes(request.what) ? { signal: requestAbort.signal } : {}),
             evidence: vcr.evidence ?? null, evidenceStore: vcr.evidenceStore ?? null, matchStore: vcr.matchStore ?? null,
-            matching: vcr.matching ?? null, patientTrials: vcr.patientTrials ?? null, seal: vcr.seal ?? null, dataPlane: vcr.dataPlaneSeam ?? null, documents: vcr.documents ?? null, report,
+            matching: vcr.matching ?? null, patientTrials: vcr.patientTrials ?? null, matchJudgments: vcr.matchJudgmentReads ?? null, seal: vcr.seal ?? null, dataPlane: vcr.dataPlaneSeam ?? null, documents: vcr.documents ?? null, report,
             knowledge: vcr.knowledge ?? vcr.service?.packages?.knowledge ?? null,
             caller: { runtimeRunId: runtimeRunId == null ? null : String(runtimeRunId),
               ...(["fact", "language_judgment"].includes(request.what) && typeof vcr.matchStore?.producerContext === "function"
@@ -2782,7 +2819,7 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
           return withWriteEntry(request.what, { what: request.what, ...result }, { study, publicUrl: config?.publicUrl });
         };
         // A write that fetches a registry record waits on the registry too.
-        if (["precedent", "candidate_trial"].includes(request.what)) budget = Math.max(budgetMs, registryDeadline + REGISTRY_MARGIN_MS);
+        if (["precedent", "candidate_trial", "trial_judgment"].includes(request.what)) budget = Math.max(budgetMs, registryDeadline + REGISTRY_MARGIN_MS);
       } else if (operation === "digitize") {
         // The caller states a calibration, which curve and the published risk table; every coordinate is measured by
         // the deterministic digitizer from a figure the study already holds. The container is bounded by its own
@@ -2957,6 +2994,16 @@ async function startJob(vcr, study, request) {
     // boundary like a read, and its sentence was written from the same cells (`matchBatchStatement`).
     if (typeof vcr.service.forModel !== "function") throw gatewayError(503, "vcr_gateway_unavailable", "这份读取结果无法确认不含小样本格子，已整体拒绝。");
     return vcr.service.forModel(await vcr.matchBatch.start(study, request.selection ?? {}), { projection: "match_extract_start" });
+  }
+  // Judging pairs of a person and a trial: the platform freezes them from the selection and says what it will cost; the run names who and what, nothing else.
+  if (request.kind === "match_judge") {
+    if (!vcr.matchJudge) throw gatewayError(503, "vcr_gateway_unavailable", "患者判定未接入本部署：这一步暂不可用，其余步骤照常。");
+    if (Object.keys(request.scenario).length || request.inputs.length) {
+      throw gatewayError(400, "vcr_simulate_payload_invalid", "判定不接受场景：平台按 selection 冻结要判定的患者和试验；只写 selection。");
+    }
+    if (request.selection == null) throw gatewayError(400, "vcr_simulate_payload_invalid", "判定要写 selection：一位患者加 registryIds，或一份方案（protocolVersionId，可加 subjectKeys）。");
+    if (typeof vcr.service.forModel !== "function") throw gatewayError(503, "vcr_gateway_unavailable", "这份读取结果无法确认不含小样本格子，已整体拒绝。");
+    return vcr.service.forModel(await vcr.matchJudge.start(study, request.selection), { projection: "match_judge_start" });
   }
   if (request.kind === "pool_evidence") {
     if (!vcr.evidence?.poolParameter) throw gatewayError(503, "vcr_gateway_unavailable", "证据参数化未接入本部署：这一步暂不可用。");

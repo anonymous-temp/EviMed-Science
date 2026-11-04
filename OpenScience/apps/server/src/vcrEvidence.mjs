@@ -1579,6 +1579,27 @@ export function createVcrEvidencePipeline({ store, registry = null, trialCorpus 
     },
 
     /**
+     * A registry record as a judgment of a patient reads it: whole, because a clause is never truncated, and with what the model is shown beside the eligibility
+     * text. A record with no eligibility text (a ChiCTR listing) is still a record. Never throws: a registry that cannot answer is a status.
+     * @param {{ userId?: string, registry?: string, registryId: string, collection?: string | null, collectionRevision?: string | null, signal?: AbortSignal }} input
+     */
+    async judgmentRecord({ userId = "", registry: registryName = "clinicaltrials.gov", registryId, collection = null, collectionRevision = null, signal }) {
+      let fetched;
+      try { fetched = await fetchRecord(registryName, String(registryId ?? ""), userId, { collection, collectionRevision, signal }); }
+      catch (error) { return { status: REGISTRY_UNAVAILABLE, reason: String(/** @type {any} */ (error)?.code ?? "request_failed"), registryId }; }
+      const { built, failure } = fetched;
+      if (!built) return { status: failure?.status === REGISTRY_NOT_FOUND ? REGISTRY_NOT_FOUND : (failure?.status ?? REGISTRY_UNAVAILABLE), reason: failure?.reason ?? "registry_record_unreadable", registryId };
+      const precedent = built.precedent ?? {};
+      const description = built.description ?? built.record?.reduced?.protocolSection?.descriptionModule ?? {};
+      return { status: "ok", trial: {
+        registry: precedent.registry ?? registryName, registryId: precedent.registryId ?? registryId, title: precedent.title ?? "", summary: description.briefSummary ?? "",
+        eligibility: precedent.eligibilityText ?? "", conditions: precedent.pico?.conditions ?? [], interventions: (precedent.pico?.interventions ?? []).map((/** @type {any} */ item) => item?.name ?? item),
+        url: built.record?.url ?? precedent.sources?.[0]?.url ?? null, status: precedent.design?.overallStatus ?? null, phase: (precedent.design?.phases ?? []).join("/") || null,
+        recordHash: built.record?.hash ?? precedent.sources?.[0]?.recordHash ?? null, ...(collection ? { collection: precedent.sources?.[0]?.collection ?? null } : {}),
+      } };
+    },
+
+    /**
      * Step 2 — one record, extracted and checked. The precedent row (with the
      * text every quotation from it is checked against later) and every
      * extracted value are written in one transaction; a value whose quotation

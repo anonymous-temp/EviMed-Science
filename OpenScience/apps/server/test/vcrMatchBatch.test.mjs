@@ -238,6 +238,26 @@ test("D4: a record that fails is counted and read again next time; the others go
   assert.equal(stopped.diagnostics.remaining, 3);
 });
 
+test("a reading says what it did: all of it is estimable, some of it is limited, none of it is a failure with its reason", async () => {
+  const clean = executorFixture();
+  const all = await clean.run(clean.job());
+  assert.deepEqual([all.status, all.conclusion], ["succeeded", "estimable"]);
+  assert.equal(all.diagnostics.issues, undefined);
+
+  const down = Object.assign(new Error("502"), { code: "model_gateway_upstream_error" });
+  const extractor = extractorDouble();
+  const onSome = executorFixture({ extractor: { ...extractor, async extract(input) { if (input.text.includes("女性，45岁")) throw down; return extractor.extract.call(this, input); } } });
+  const some = await onSome.run(onSome.job());
+  assert.deepEqual([some.status, some.conclusion], ["succeeded", "limited"]);
+  assert.equal(some.diagnostics.issues[0].code, "model_gateway_upstream_error");
+  assert.match(some.diagnostics.issues[0].message, /读完 3 份.*1 份没读成/u);
+
+  const onAll = executorFixture({ extractor: { model: "deepseek-flash", async extract() { throw down; } } });
+  const none = await onAll.run(onAll.job());
+  assert.deepEqual([none.status, none.conclusion], ["failed", "not_estimable"], "a job that read nothing does not report success");
+  assert.equal(none.diagnostics.issues[0].code, "model_gateway_upstream_error");
+});
+
 test("D4: a withdrawn person is not read, and what the writer refuses is counted without stopping the record", async () => {
   const withdrawn = executorFixture({ withdrawn: new Set(["P-003"]) });
   const result = await withdrawn.run(withdrawn.job());

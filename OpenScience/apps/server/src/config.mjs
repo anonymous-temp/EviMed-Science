@@ -88,6 +88,23 @@ function parseReasoningEffort(value) {
   return effort;
 }
 
+/** A job's stage two: how many of a person's best-ranked trials, or every pair. @param {unknown} value @returns {number | 'all'} */
+function matchJudgeTopK(value) {
+  if (value == null || value === "") return 20;
+  if (String(value).trim().toLowerCase() === "all") return "all";
+  const number = Number(value);
+  if (!Number.isSafeInteger(number) || number < 0 || number > 500) throw new Error(`OPEN_SCIENCE_VCR_MATCH_JUDGE_TOP_K must be a whole number from 0 to 500 or "all", got ${JSON.stringify(value)}.`);
+  return number;
+}
+
+/** @param {unknown} value @returns {'high' | 'off'} */
+function matchJudgeThinking(value) {
+  if (value == null || value === "") return "high";
+  const word = String(value).trim().toLowerCase();
+  if (word !== "high" && word !== "off") throw new Error(`OPEN_SCIENCE_VCR_MATCH_JUDGE_THINKING must be "high" or "off", got ${JSON.stringify(value)}.`);
+  return word;
+}
+
 /**
  * How long one engine job's model credential lives, in seconds
  * (modelGatewayEngineTokens.mjs). It has to outlast the job: a credential that
@@ -1146,6 +1163,16 @@ function vcrSettings(overrides) {
     vcrMatchBatchMaxSubjects: integer("vcrMatchBatchMaxSubjects", "OPEN_SCIENCE_VCR_MATCH_BATCH_MAX_SUBJECTS", 300, 1, 5_000),
     vcrMatchExtractConcurrency: integer("vcrMatchExtractConcurrency", "OPEN_SCIENCE_VCR_MATCH_EXTRACT_CONCURRENCY", 3, 1, 8),
     vcrMatchExtractTimeoutMs: integer("vcrMatchExtractTimeoutMs", "OPEN_SCIENCE_VCR_MATCH_EXTRACT_TIMEOUT_MS", 90_000, 10_000, 300_000),
+    // Judging patients against trials (vcrMatchJudge, owner decisions 2026-11-04). How many pairs are judged at once; how many of a person's best-ranked trials are judged
+    // clause by clause (0 none, "all" every pair); thinking `high` or `off`, recorded on every row; the output allowance of one call, which reasoning counts towards, so an
+    // answer cut off by it is a failed pair rather than a short answer; one call's limit; and how many upstream failures in a row stop a job, with what was done kept.
+    // A selection may name fit, topK and thinking for one job, so a benchmark can ask for each arm. Counters: `open_science_vcr_match_judge_total`.
+    vcrMatchJudgeConcurrency: integer("vcrMatchJudgeConcurrency", "OPEN_SCIENCE_VCR_MATCH_JUDGE_CONCURRENCY", 8, 1, 64),
+    vcrMatchJudgeTopK: matchJudgeTopK(overrides.vcrMatchJudgeTopK ?? process.env.OPEN_SCIENCE_VCR_MATCH_JUDGE_TOP_K),
+    vcrMatchJudgeThinking: matchJudgeThinking(overrides.vcrMatchJudgeThinking ?? process.env.OPEN_SCIENCE_VCR_MATCH_JUDGE_THINKING),
+    vcrMatchJudgeOutputTokens: integer("vcrMatchJudgeOutputTokens", "OPEN_SCIENCE_VCR_MATCH_JUDGE_OUTPUT_TOKENS", 16_000, 2_000, 64_000),
+    vcrMatchJudgeTimeoutMs: integer("vcrMatchJudgeTimeoutMs", "OPEN_SCIENCE_VCR_MATCH_JUDGE_TIMEOUT_MS", 180_000, 10_000, 600_000),
+    vcrMatchJudgeMaxUpstreamFailures: integer("vcrMatchJudgeMaxUpstreamFailures", "OPEN_SCIENCE_VCR_MATCH_JUDGE_MAX_UPSTREAM_FAILURES", 20, 1, 1_000),
     // The smallest cell a model is shown (vcrService.minCell): a deployment may raise the domain's floor, never lower it.
     vcrMinCellSize: integer("vcrMinCellSize", "OPEN_SCIENCE_VCR_MIN_CELL_SIZE", VCR_MIN_CELL_SIZE, VCR_MIN_CELL_SIZE, 1_000),
     // The largest derived table — reconstructed pseudo-patients, a forecast's probabilities — the control plane stores from an engine job (vcrJobs).
