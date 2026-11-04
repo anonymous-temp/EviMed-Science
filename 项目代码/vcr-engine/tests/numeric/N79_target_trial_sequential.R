@@ -126,13 +126,14 @@ vcr_case("N79c", c("AC-07", "AC-30"), function() {
   part <- vcr_test_run(mk(sc, max(0.5, 0.45 * full$manifest$cpuSeconds / 0.9)))
   stopped_ok <- identical(part$status, "succeeded") && identical(part$conclusion, "limited") && "bootstrap_stopped_early" %in% vcr_chr(part$diagnostics$limitedBy) &&
     part$replicates >= 200L && part$replicates < 2000L && !is.null(vcr_get_measure(part, "risk_difference_pp")$interval)
-  none <- vcr_test_run(mk(sc, 0.02))
+  # five per cent of the whole run: the point estimates are done and the first 200 resamples are not, on a fast machine or a slow one (0.02 s ended before the handler began on a CI runner)
+  none <- vcr_test_run(mk(sc, 0.05 * full$manifest$cpuSeconds / 0.9))
   none_ok <- identical(none$status, "failed") && "cpu_budget_exhausted" %in% vcr_test_issue_codes(none) && !is.null(vcr_get_measure(none, "risk_difference_itt")) &&
     is.null(vcr_get_measure(none, "risk_difference_itt")$interval)
   opts <- vcr_test_run(mk(utils::modifyList(sc, list(outcomeModel = list(followupDegree = 1L, trialPeriodDegree = 0L, armByFollowup = TRUE), strategy = list(kind = "sequential", estimand = "itt")))))
   opts_ok <- identical(opts$status, "succeeded") && any(vapply(opts$diagnostics$targetTrial$coefficients[[1]]$terms, function(t) identical(t$term, "assigned_treatment:followup_time"), logical(1)))
   list(pass = identical(full$status, "succeeded") && stopped_ok && none_ok && opts_ok,
-       detail = sprintf("the whole run takes %.0f CPU seconds; a budget of 45%% of it keeps %d of 2000 resamples (limited, bootstrap_stopped_early): %s; a budget of 0.02 s fails with the point estimates and no interval: %s; the arm by follow-up interaction runs: %s",
+       detail = sprintf("the whole run takes %.0f CPU seconds; a budget of 45%% of it keeps %d of 2000 resamples (limited, bootstrap_stopped_early): %s; a budget of 5%% of it fails with the point estimates and no interval: %s; the arm by follow-up interaction runs: %s",
                         full$manifest$cpuSeconds, part$replicates %||% 0L, stopped_ok, none_ok, opts_ok))
 })
 
