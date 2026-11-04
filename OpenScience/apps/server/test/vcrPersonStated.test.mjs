@@ -92,6 +92,12 @@ test("a dose-finding card: the most people the model chose and the margin it pic
   assert.equal(sourceOf(read("compare", { schema: 1, readable: true, paths: ["design.maxPatients"] }), "size"), "assumed", "the cohort size beside it is the model's");
   assert.equal(sourceOf(read("compare", { schema: 1, readable: true, paths: ["design.maxPatients", "design.cohortSize"] }), "size"), "given");
   assert.equal(sourceOf(read("compare", { schema: 1, readable: false, paths: [] }), "size"), "assumed");
+  // the curve is the person's when every dose's rate is written in their message (live check: 「毒性大概 5%、10%、20%…」 was shown as the model's)
+  const curve = read("compare").premises.find((row) => row.key === "curve").value.split(" / ").length;
+  const all = Array.from({ length: curve }, (_unused, index) => `truth.toxicity[${index}]`);
+  assert.equal(sourceOf(read("compare"), "curve"), "assumed", "no record: as before");
+  assert.equal(sourceOf(read("compare", { schema: 1, readable: true, paths: all }), "curve"), "given");
+  assert.equal(sourceOf(read("compare", { schema: 1, readable: true, paths: all.slice(1) }), "curve"), "assumed", "one dose the model filled in");
   assert.equal(sourceOf(read("selection"), "margin"), "given");
   assert.equal(sourceOf(read("selection", { schema: 1, readable: true, paths: [] }), "margin"), "assumed");
   assert.equal(sourceOf(read("selection", { schema: 1, readable: true, paths: ["design.margin"] }), "margin"), "given");

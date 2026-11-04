@@ -126,7 +126,7 @@ function premisesOfFinding(dose, kinds, stated) {
   /** @type {Array<Record<string, any>>} */
   const rows = [];
   const tox = list(curve.toxicity).map(Number);
-  if (tox.length) rows.push({ key: "curve", label: `各剂量的真实毒性率（共 ${tox.length} 个剂量）`, value: tox.map((p) => percent(p)).join(" / "), source: "assumed", decisive: true });
+  if (tox.length) rows.push({ key: "curve", label: `各剂量的真实毒性率（共 ${tox.length} 个剂量）`, value: tox.map((p) => percent(p)).join(" / "), source: personWord(stated, tox.map((_p, index) => `truth.toxicity[${index}]`), "assumed"), decisive: true });
   const target = numeric(curve.target);
   if (target !== null) rows.push({ key: "target", label: "目标毒性率", value: percent(target), source: numeric(given.targetToxicity) === null ? "default" : personWord(stated, "design.targetToxicity", "given"), decisive: true });
   const assumed = list(dose.assumed).map(object);
