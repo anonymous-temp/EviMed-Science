@@ -1822,6 +1822,8 @@ export class VcrJobs {
         isCanceled: async () => { const current = await this.#row(String(row.id)); return !current || current.state !== 'running' || current.lease_owner !== owner || current.attempts !== row.attempts; },
         // Only a caller that will claim the job again lets it give its turn back (the worker's slow lane); one that runs a job to its end does not.
         yieldable: mayYield === true,
+        // What must outlive this attempt even if it never reaches a batch's end.
+        saveCheckpoint: (/** @type {Record<string, any>} */ patch) => this.checkpoint(String(row.id), patch, owner, Number(row.attempts)),
       });
       if (result?.yield) return await this.#yieldTurn(row, result.yield, owner);
       return this.finish(String(row.id), {

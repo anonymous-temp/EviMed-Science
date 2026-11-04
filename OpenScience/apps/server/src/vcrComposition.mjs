@@ -112,6 +112,9 @@ import {
 import { VCR_JOB_PURPOSE } from "./vcrJobs.mjs";
 import { createFactExtractor, createMatchBatch, createMatchBatchCounters, createMatchExtractExecutor } from "./vcrMatchBatch.mjs";
 import { createRecordsImport, createRecordsImportExecutor } from "./vcrRecordsImport.mjs";
+import { createLongTableReader } from "./vcrLongTables.mjs";
+import { VcrCandidateRerank } from "./vcrCandidateRerank.mjs";
+import { VcrCandidateSearchStore } from "./vcrCandidateSearchStore.mjs";
 import { createMatchJudge, createMatchJudgeCounters, createMatchJudgeExecutor, createMatchJudgmentReads, createPairJudge, judgmentTargets, tableFieldsOf } from "./vcrMatchJudge.mjs";
 import { VcrMatchJudgmentStore } from "./vcrMatchJudgmentStore.mjs";
 import { VcrRegistryPageStore, createRegistryPageCounters, createRegistryPages } from "./vcrRegistryPages.mjs";
@@ -463,6 +466,11 @@ export function vcrDocumentsSeam({ dataPlane, passagesMinChars = 40_000 }) {
       return listed.filter((/** @type {any} */ entry) => entry.subjectKey)
         .map((/** @type {any} */ entry) => ({ id: String(entry.id), subjectKey: String(entry.subjectKey), chars: Number.isFinite(Number(entry.chars)) ? Number(entry.chars) : null, visibleAt: entry.visibleAt ?? null }));
     },
+    /** What this study's long tables say, for reading as lines, or null when it has none. @param {any} study */
+    async longTables(study) {
+      const opened = await dataPlane?.openLongTables?.({ studyId: study.id, principal: study.userId, purpose: VCR_JOB_PURPOSE, cloudContext: study.cloudContext ?? null });
+      return opened ? createLongTableReader(opened) : null;
+    },
     /** What a run was shown of a document, for the reading it has been through: the same record a window read writes.
      * @param {any} study @param {string} documentId @param {string} text @param {number} start @param {number} end */
     async recordWindow(study, documentId, text, start, end) {
@@ -493,6 +501,12 @@ export function vcrDocumentsSeam({ dataPlane, passagesMinChars = 40_000 }) {
       const result = [];
       for (const entry of entries) {
         const source = entry.source ?? entry.locator ?? entry;
+        if (source.snapshotId && source.long && dataPlane?.longEvidenceAllowed) {
+          const key = `long:${source.snapshotId}`;
+          if (!decisions.has(key)) decisions.set(key, await dataPlane.longEvidenceAllowed({ studyId: study.id, snapshotId: source.snapshotId, subjectKey, principal: viewer?.id ?? study.userId, purpose: VCR_JOB_PURPOSE, external: !viewer }).catch(() => false));
+          if (decisions.get(key)) result.push(entry);
+          continue;
+        }
         if (source.snapshotId && source.field && dataPlane?.subjectTableEvidenceBatch) {
           const key = `snapshot:${source.snapshotId}`;
           if (!decisions.has(key)) {
@@ -1259,10 +1273,6 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   const registryWatchCounters = createRegistryWatchCounters();
   const registryWatch = config.vcrRegistryWatchEnabled !== false
     ? createRegistryWatch({ judgments: matchJudgments, targets: judgeTargets, config, report, counters: registryWatchCounters }) : null;
-  // The trials a person holds a verdict about, read again a few at a time; a verdict made of a record that has since changed is marked (G15).
-  const registryWatchCounters = createRegistryWatchCounters();
-  const registryWatch = config.vcrRegistryWatchEnabled !== false
-    ? createRegistryWatch({ judgments: matchJudgments, targets: judgeTargets, config, report, counters: registryWatchCounters }) : null;
 
   const corrections = createVcrCorrectionCases({ store, matchStore, dataPlane, access });
   // The disease packs and the account's library of population definitions: read and written by the study's pages,
@@ -1308,7 +1318,7 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   service.attach({ records });
   composed = {
     publications, simulations, frontierEvents, predictions, records,
-    store, dataStore, matchStore, erasure, candidateStore, patientTrials, evidenceStore, corrections, knowledge, knowledgeStore, longitudinal, matchBatch, matchBatchCounters, matchJudge, matchJudgeCounters, matchJudgments, matchJudgmentReads, matchResults, registryWatch, registryWatchCounters, registryPages, registryPageCounters, registryWatch, registryWatchCounters, registryPages, registryPageCounters, subjectKnown, recordsImport, recordsOriginals,
+    store, dataStore, matchStore, erasure, candidateStore, candidateSearches, candidateReranker, patientTrials, evidenceStore, corrections, knowledge, knowledgeStore, longitudinal, matchBatch, matchBatchCounters, matchJudge, matchJudgeCounters, matchJudgments, matchJudgmentReads, matchResults, registryWatch, registryWatchCounters, registryPages, registryPageCounters, subjectKnown, recordsImport, recordsOriginals,
     access, members, dataPlane, dataPlaneSeam, documents, engine, engineProbe, engineStatus, removeEngineJob, jobs, seal, evidence, matching, registry, service,
     intake: { counters: intakeCounters, extractor, importer, digitizer },
     // Composed later, beside the other modules' workers (server.mjs).

@@ -1647,6 +1647,7 @@ export const VCR_MODULE_ERROR_CODES = Object.freeze([
   'vcr_intake_source_invalid', 'vcr_intake_source_changed', 'vcr_intake_payload_invalid', 'vcr_intake_format_invalid', 'vcr_intake_map_changed',
   // a source held in FHIR, OMOP or ADaM, converted to the module's tables in the same container (vcrImport.mjs)
   'vcr_import_not_this_format', 'vcr_import_nothing_to_import', 'vcr_import_unreadable', 'vcr_import_version_unsupported',
+  'vcr_import_columns_unknown', 'vcr_import_entry_failed', 'vcr_import_failed', 'vcr_import_original_gone', 'vcr_import_proposal_failed', 'vcr_import_some_skipped',
   'vcr_import_converter_unavailable',
   // evidence and matching
   'vcr_asof_invalid', 'vcr_assessment_not_found', 'vcr_candidate_trial_not_found', 'vcr_criteria_missing', 'vcr_pool_endpoint_key_required',
@@ -2558,6 +2559,12 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_intake_payload_invalid: '数据导入的字段不完整，请按字段说明修改。',
   vcr_intake_format_invalid: '这个格式暂不能按所选方式导入，请使用支持的表格或 UTF-8 病例文本。',
   vcr_intake_map_changed: '字段映射已经变化，请读回当前映射后再确认和冻结。',
+  vcr_import_columns_unknown: '没能判断哪一列是患者、哪一列是病历。指明这两列再导入一次即可。',
+  vcr_import_entry_failed: '这一份没有收下，其他照常；再启动同样的导入只取没收下的。',
+  vcr_import_failed: '这次导入没有做成，已收下的保留；可以再启动一次。',
+  vcr_import_original_gone: '要导入的文件已经不在了：请重新上传。',
+  vcr_import_proposal_failed: '模型这次没能读出各列的含义；可以指明患者列和病历列再导入。',
+  vcr_import_some_skipped: '有些文件没有收下，其他已经导入；原因已列出。',
   vcr_import_not_this_format: '这个文件不是你选的那种标准格式：FHIR 要是 NDJSON 或 Bundle（JSON），OMOP 要是 CSV 表的 .zip，ADaM 要是 SAS 传输文件（.xpt）。请确认格式后再上传。',
   vcr_import_nothing_to_import: '这个文件里没有可导入的内容：没有受支持的资源类型、数据表或数据集。支持的范围见导入面板的说明。',
   vcr_import_unreadable: '这个文件打不开：可能已损坏或加密。请重新导出后再上传。',

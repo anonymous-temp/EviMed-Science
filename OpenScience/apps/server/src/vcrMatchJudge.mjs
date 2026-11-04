@@ -37,7 +37,8 @@ import {
 import { HttpError } from './security.mjs';
 import { callModelForControlPlane } from './modelGateway.mjs';
 import { pool, resultOutcome } from './vcrMatchBatch.mjs';
-import { judgmentKey } from './vcrMatchJudgmentStore.mjs';
+import { LONG_LIMITS, acceptLongShapes, acceptRelevance, longRelevanceMessages, longShapeMessages } from './vcrLongTables.mjs';
+import { REGISTRY_RECORD_BASIS, judgmentKey } from './vcrMatchJudgmentStore.mjs';
 
 const LOCK_HASH = createHash('sha256').update(`evimed-control-plane:matching.judge:${VCR_MATCH_BATCH_METHODS['matching.judge'].version}`).digest('hex');
 
@@ -69,6 +70,9 @@ const PROGRESS_EVERY_MS = 60_000;
 
 /** The people whose records are held in memory at once. A roster of thousands is read a few at a time, and stage two reads again. */
 const NOTES_HELD = 32;
+/** The criteria a choice of relevant concepts is made from: a job against hundreds of trials is asked about a sample of them, and the rows are cut on dates past that. */
+const LONG_CRITERIA_TARGETS = 8;
+const LONG_CRITERIA_CHARS = 4_000;
 
 /** What the job counts, for the operator's metric family (principle 15). */
 export function createMatchJudgeCounters() {
@@ -208,8 +212,8 @@ export async function tableFieldsOf(subjectTable, study) {
   let table;
   try { table = await subjectTable.read(study); } catch { return null; }
   if (!table?.available || !table.snapshotId) return null;
+  // A table of keys alone still says who the people are, when their record is in long tables.
   const fields = list(table.columns).map((column) => String(column.name)).filter((name) => name && name !== 'USUBJID');
-  if (!fields.length) return null;
   const keyAt = list(table.header).indexOf('USUBJID');
   return { snapshotId: String(table.snapshotId), fields, subjects: keyAt < 0 ? [] : [...new Set(list(table.rows).map((row) => String(row?.[keyAt] ?? '').trim()).filter(Boolean))] };
 }
@@ -218,10 +222,10 @@ export async function tableFieldsOf(subjectTable, study) {
  * One person's record as a judgment reads it: their documents, oldest first, then their table cells as readable lines, sentence-numbered across all of
  * them. The hash names what was read, so a changed document is a new judgment and an unchanged one is not.
  *
- * @param {{ study: any, subjectKey: string, documents: any, roster: ReadonlyArray<{ id: string, visibleAt?: string | null }>, table?: { snapshotId: string, fields: string[] } | null }} input
- * @returns {Promise<{ hash: string, documentIds: string[], records: any[], sentences: any[], unreadable: number, chars: number }>}
+ * @param {{ study: any, subjectKey: string, documents: any, roster: ReadonlyArray<{ id: string, visibleAt?: string | null }>, table?: { snapshotId: string, fields: string[] } | null, long?: any, ahead?: readonly string[] }} input
+ * @returns {Promise<{ hash: string, documentIds: string[], records: any[], sentences: any[], unreadable: number, chars: number, leftOut?: { rows: number, earliest: string | null } }>}
  */
-export async function readSubjectNote({ study, subjectKey, documents, roster, table = null }) {
+export async function readSubjectNote({ study, subjectKey, documents, roster, table = null, long = null, ahead = [] }) {
   const ordered = [...roster].sort((a, b) => String(a.visibleAt ?? '').localeCompare(String(b.visibleAt ?? '')) || String(a.id).localeCompare(String(b.id)));
   /** @type {any[]} */ const records = [];
   /** @type {any[]} */ const sentences = [];
@@ -262,8 +266,26 @@ export async function readSubjectNote({ study, subjectKey, documents, roster, ta
       identity.push(['table', sha256(text)]);
     }
   }
+  // The long tables: conditions, labs and medications as dated lines, within a bounded size, and what was left out said in the record itself.
+  /** @type {{ rows: number, earliest: string | null } | null} */
+  let leftOut = null;
+  const held = long ? await long.linesFor(subjectKey, ahead).catch(() => null) : null;
+  if (held?.lines?.length) {
+    leftOut = held.leftOut ?? null;
+    const lines = [...held.lines, ...(leftOut ? [{ text: `（结构化数据中另有 ${leftOut.rows} 行较早或与条件关系较小的记录没有列出${leftOut.earliest ? `，最早 ${leftOut.earliest}` : ''}。）`, snapshotId: held.lines[0].snapshotId }] : [])];
+    let at = 0;
+    const numbered = lines.map((line) => {
+      const sentence = { id: sentences.length, text: line.text, start: at, end: at + line.text.length, documentId: null, source: { snapshotId: line.snapshotId, long: true } };
+      at += line.text.length + 1;
+      sentences.push(sentence);
+      return sentence;
+    });
+    const text = lines.map((line) => line.text).join('\n');
+    records.push({ documentId: null, text, sentences: numbered });
+    identity.push(['long', sha256(text)]);
+  }
   if (!records.length) throw failure(firstFailure ?? 'vcr_match_no_patient_text', '这位受试者没有可读的病历或表格。');
-  return { hash: sha256(canonicalScenarioJson(identity)), documentIds, records, sentences, unreadable, chars: records.reduce((sum, record) => sum + record.text.length, 0) };
+  return { hash: sha256(canonicalScenarioJson(identity)), documentIds, records, sentences, unreadable, chars: records.reduce((sum, record) => sum + record.text.length, 0), ...(leftOut ? { leftOut } : {}) };
 }
 
 /**
@@ -390,6 +412,35 @@ function usageOfCalls(calls) {
   return sum;
 }
 
+/**
+ * What a study's long tables mean for one job, from the model: what a table no list knows holds, and which recorded concepts bear on these criteria. A failure is a job that picks rows on dates alone.
+ * @param {{ judge: any, study: any, jobId: string, long: any, scenario: Record<string, any>, targetList: any[], targetOf: (entry: any) => Promise<any> }} input
+ */
+async function askLongMeaning({ judge, study, jobId, long, scenario, targetList, targetOf }) {
+  /** @type {Record<string, any>} */
+  let shapes = {};
+  try {
+    const unknown = await long.unknownTables();
+    if (unknown.length) {
+      const answered = await judge.call({ study, jobId, thinking: 'off', messages: longShapeMessages(unknown) });
+      shapes = acceptLongShapes(answered.content, unknown);
+      await long.setShapes(shapes);
+    }
+  } catch { shapes = {}; }
+  /** @type {string[]} */
+  let relevant = [];
+  try {
+    const concepts = await long.concepts();
+    const criteria = [];
+    for (const entry of targetList.slice(0, LONG_CRITERIA_TARGETS)) {
+      const target = await targetOf(entry).catch(() => null);
+      if (target?.eligibility) criteria.push(String(target.eligibility).slice(0, LONG_CRITERIA_CHARS));
+    }
+    if (concepts.length && criteria.length) relevant = acceptRelevance((await judge.call({ study, jobId, thinking: 'off', messages: longRelevanceMessages(concepts, criteria.join('\n\n')) })).content, concepts);
+  } catch { relevant = []; }
+  return { shapes, relevant, ...(scenario.chain ? { chain: scenario.chain } : {}) };
+}
+
 // ---------------------------------------------------------------------------
 // The plan
 // ---------------------------------------------------------------------------
@@ -501,8 +552,8 @@ export function createMatchJudgeExecutor({ store, matchStore, judgments, documen
   const sliceMs = Math.max(1_000, Number(config.vcrMatchJudgeSliceMs ?? 300_000) || 300_000);
   const outageWaits = Math.max(0, Number(config.vcrMatchJudgeOutageWaits ?? 6));
   const cap = VCR_MATCH_JUDGE_LIMITS.noteChars;
-  /** @param {{ job: Record<string, any>, onProgress: (progress: { done: number, total: number, note?: string }) => Promise<unknown>, isCanceled?: () => Promise<boolean>, yieldable?: boolean }} input */
-  return async ({ job, onProgress, isCanceled = async () => false, yieldable = false }) => {
+  /** @param {{ job: Record<string, any>, onProgress: (progress: { done: number, total: number, note?: string }) => Promise<unknown>, isCanceled?: () => Promise<boolean>, yieldable?: boolean, saveCheckpoint?: ((patch: Record<string, any>) => Promise<unknown>) | null }} input */
+  return async ({ job, onProgress, isCanceled = async () => false, yieldable = false, saveCheckpoint = null }) => {
     const studyId = String(job?.studyId ?? '');
     const jobId = String(job?.jobId ?? job?.id);
     const found = await store.studyById(studyId);
@@ -532,13 +583,17 @@ export function createMatchJudgeExecutor({ store, matchStore, judgments, documen
       if (own) own.push(record); else rosterOf.set(key, [record]);
     }
     const table = await tableFieldsOf(subjectTable, study);
+    // The long tables, if the study has any, and what they mean for this job: asked of the model once, then in the checkpoint and on every later attempt of the same selection, so the same
+    // words are read again and the ledger finds them.
+    const long = await documents.longTables?.(study).catch(() => null) ?? null;
 
     /** A few people's records at a time, so a roster of thousands does not sit in memory. @type {Map<string, Promise<any>>} */
     const notes = new Map();
     const noteOf = (/** @type {string} */ subjectKey) => {
       const open = notes.get(subjectKey);
       if (open) return open;
-      const reading = readSubjectNote({ study, subjectKey, documents, roster: rosterOf.get(subjectKey) ?? [], table });
+      const position = long ? frozenSubjects.indexOf(subjectKey) : -1;
+      const reading = readSubjectNote({ study, subjectKey, documents, roster: rosterOf.get(subjectKey) ?? [], table, long, ahead: position >= 0 ? frozenSubjects.slice(position + 1, position + LONG_LIMITS.windowPeople) : [] });
       notes.set(subjectKey, reading);
       reading.catch(() => {});
       if (notes.size > NOTES_HELD) notes.delete(/** @type {string} */ (notes.keys().next().value));
@@ -602,6 +657,14 @@ export function createMatchJudgeExecutor({ store, matchStore, judgments, documen
     let second = Array.isArray(carried.second) ? carried.second.map(Number) : null;
     /** @type {number[] | null} the second pass's pairs */
     let retrying = Array.isArray(carried.retrying) ? carried.retrying.map(Number) : null;
+    /** @type {{ shapes: Record<string, any>, relevant: string[] } | null} */
+    let longMeaning = object(carried.longMeaning).relevant ? /** @type {any} */ (carried.longMeaning) : null;
+    if (long && !longMeaning) {
+      const earlier = await store.one(`SELECT checkpoint -> 'judge' -> 'longMeaning' AS meaning FROM evimed_vcr.jobs WHERE study_id = $1 AND kind = 'match_judge' AND scenario ->> 'chain' = $2 AND checkpoint -> 'judge' ? 'longMeaning' ORDER BY created_at DESC LIMIT 1`, [studyId, String(scenario.chain ?? '')]).catch(() => null);
+      longMeaning = object(earlier?.meaning).relevant ? earlier.meaning : await askLongMeaning({ judge, study, jobId, long, scenario, targetList, targetOf });
+      await saveCheckpoint?.({ judge: { ...carried, startedAt, longMeaning } });
+    }
+    if (long && longMeaning) { await long.setShapes(longMeaning.shapes ?? {}); long.setRelevant(longMeaning.relevant ?? []); }
     const batchEnds = Date.now() + sliceMs;
     let taken = 0;
     let batchOver = false;
@@ -806,7 +869,7 @@ export function createMatchJudgeExecutor({ store, matchStore, judgments, documen
     if (yieldable && !stopped && !canceled && (outage || batchOver || !walked)) {
       await onProgress({ done: finished, total: progressTotal, ...(outage ? { note: '模型服务暂时没有回答，等一会儿自动接着判定。' } : {}) }).catch(() => {});
       const afterSeconds = outage ? Math.min(1_800, 120 * 2 ** waits) : 0;
-      return { yield: { afterSeconds, checkpoint: { judge: { startedAt, at, marks: { fit: marks.fit.join(''), criteria: marks.criteria.join('') }, ...(second ? { second } : {}), ...(retrying ? { retrying } : {}),
+      return { yield: { afterSeconds, checkpoint: { judge: { startedAt, at, marks: { fit: marks.fit.join(''), criteria: marks.criteria.join('') }, ...(second ? { second } : {}), ...(retrying ? { retrying } : {}), ...(longMeaning ? { longMeaning } : {}),
         used, failures, finished, progressTotal, waits: outage ? waits + 1 : waits } } } };
     }
 
@@ -1016,7 +1079,7 @@ export function createMatchJudgmentReads({ judgments, documents, subjectTable = 
   /** @param {any} study @param {string} subjectKey */
   const noteFor = async (study, subjectKey) => {
     const roster = (await documents.roster(study)).filter((/** @type {any} */ row) => String(row.subjectKey) === subjectKey);
-    return readSubjectNote({ study, subjectKey, documents, roster, table: await tableFieldsOf(subjectTable, study) });
+    return readSubjectNote({ study, subjectKey, documents, roster, table: await tableFieldsOf(subjectTable, study), long: await documents.longTables?.(study).catch(() => null) ?? null });
   };
 
   /** Evidence is sent back out only from what the cloud may read now, as every other quote is (`runtimeEvidence`). @param {any} study @param {any} presented */

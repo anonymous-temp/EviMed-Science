@@ -2978,8 +2978,11 @@ export class VcrDataPlane {
       (snapshot.profile?.tables ?? []).flatMap((/** @type {any} */ table) => (table.columns ?? [])
         .filter((/** @type {any} */ column) => column?.vocabulary?.identifying === true).map((/** @type {any} */ column) => String(column.name))));
     const identifierNames = new Set(entries.filter((entry) => entry.identifier || entry.role === "subject_key").map((entry) => entry.column));
+    // A date looks identifying to the profile, and an engine does not need one to the day. A person's record read for matching does: "diagnosed in 2019" is what a criterion asks, the same dates
+    // their notes state, and the field map says this column is a time. Asked for by that reader alone; the column names a time, never a person.
+    const timeColumns = new Set(input.timeColumns === true ? entries.filter((entry) => entry.timeKind && !entry.identifier && entry.role !== "subject_key").map((entry) => entry.column) : []);
     /** @param {string} name */
-    const judgeable = (name) => !identifierNames.has(name) && !identifyingNames.has(name);
+    const judgeable = (name) => !identifierNames.has(name) && (!identifyingNames.has(name) || timeColumns.has(name));
 
     /** @type {{ table: any }[]} */
     const wantedTables = tables.filter((table) => wants.includes(/** @type {any} */ (table.shape))).map((table) => ({ table }));
@@ -3071,14 +3074,14 @@ export class VcrDataPlane {
         // A replay's raw files are cut like its derived tables: the rows the
         // platform could see then, and no others.
         const parsed = frozen.asOf && derivesRows(own) ? tableVisibleAsOf({ name: file.name, ...whole }, entries, frozen.asOf).table : whole;
-        const { rename } = rawInputColumns(parsed.header, keep, own);
+        const { rename, columnLabels } = rawInputColumns(parsed.header, keep, own);
         const projection = projectTable(parsed, { keep, rename, keyColumn: keyEntry?.column ?? null, key });
         const written = await writeContentAddressed(root, path.posix.join(studyRelative(studyId), "views", snapshot.id), "csv", toCsv(projection.header, projection.rows));
         const viewSource = weakestSource(keep.map((name) => columnSourceOf(own.find((entry) => entry.column === name), snapshot.valueSource)), snapshot.valueSource);
         // each kept column is named in the view as the view renamed it
         const heldSources = Object.fromEntries(keep.map((name) => [rename[name] ?? name, columnSourceOf(own.find((entry) => entry.column === name), snapshot.valueSource)]));
         const labels = engineColumnSources(heldSources, Object.keys(heldSources), viewSource);
-        inputs.push({ kind: "snapshot_file", id, location: written.location, hash: written.sha256, valueSource: viewSource,
+        inputs.push({ kind: "snapshot_file", id, location: written.location, hash: written.sha256, valueSource: viewSource, ...(input.columnLabels === true ? { columnLabels } : {}),
           ...(labels ? { columnSources: labels } : {}), ...(needsScientificUnits ? { columnUnits: Object.fromEntries(keep.map(name => [rename[name] ?? name, sourceUnit(name, file.name)])) } : {}) });
         for (const name of keep) if (outcomeColumns.has(name)) outcomeRead.add(name);
       }
@@ -3630,6 +3633,66 @@ export class VcrDataPlane {
     await this.store.audit({ studyId: entry.studyId, userId: entry.principal, actor: entry.principal, action: "table.cloud_read", object: snapshot.id,
       detail: { fields: [...entry.fields].slice(0, 300), use: "column_meaning", ...this.#basisDetail(authorization) } });
     return { basis: authorization.basis };
+  }
+
+  /**
+   * What a study's long tables are, for matching to read as lines: the newest snapshot of each source, through the same judgment every read of patient-level data gets (`resolveSnapshotInputs`:
+   * identifying columns gone, key pseudonymised, sealed columns withheld), and only from sources the cloud may read now. A snapshot this reader may not have is left out. Null when there is nothing.
+   * @param {{ studyId: string, principal: string, purpose?: string | null, cloudContext?: any }} entry
+   * @returns {Promise<{ tables: Array<{ id: string, snapshotId: string, file: string, name: string, columnLabels?: Record<string, string> | null }>, withdrawn: Set<string>, noteRead: (snapshotId: string) => Promise<void> } | null>}
+   */
+  async openLongTables(entry) {
+    this.root();
+    const studyId = String(entry.studyId ?? "");
+    const snapshots = await this.store.listSnapshots({ studyId });
+    if (!snapshots.length) return null;
+    /** @type {Map<string, any>} newest first, as the store lists them */
+    const newest = new Map();
+    for (const snapshot of snapshots) if (!newest.has(snapshot.sourceId)) newest.set(snapshot.sourceId, snapshot);
+    /** @type {Array<{ id: string, snapshotId: string, file: string, name: string, columnLabels?: Record<string, string> | null }>} */
+    const tables = [];
+    /** @type {Map<string, any>} */
+    const opened = new Map();
+    for (const snapshot of newest.values()) {
+      const source = await this.store.sourceInStudy(studyId, snapshot.sourceId);
+      if (!source || source.status === "withdrawn") continue;
+      try {
+        const authorization = this.#cloudBasis(source);
+        const resolved = await this.resolveSnapshotInputs({ studyId, snapshotId: snapshot.id, principal: String(entry.principal), purpose: entry.purpose ?? null, include: ["files", "longitudinal"], kind: "match_criteria", columnLabels: true, timeColumns: true });
+        const dataFiles = snapshot.fileHashes.filter((/** @type {any} */ file) => file.role === "data");
+        for (const input of resolved.inputs) {
+          // A converted table's name says it is the converter's: `snapshot_file` inputs are numbered in the order of the snapshot's data files.
+          const position = input.kind === "snapshot_file" ? Number(String(input.id).split(":").pop()) : 0;
+          tables.push({ id: String(input.id), snapshotId: snapshot.id, file: this.resolve(input.location), name: input.kind === "snapshot_file" ? String(dataFiles[position - 1]?.name ?? "") : String(input.shape ?? ""), columnLabels: input.columnLabels ?? null });
+        }
+        opened.set(snapshot.id, { authorization, fileIds: snapshot.fileHashes.filter((/** @type {any} */ file) => file.role === "data").map((/** @type {any} */ file) => file.id) });
+      } catch (error) {
+        if (!(error instanceof HttpError)) throw error;
+      }
+    }
+    if (!tables.length) return null;
+    return { tables, withdrawn: await this.erasure?.matchStore?.withdrawnSubjects?.(studyId) ?? new Set(),
+      // What a person's lines were read under, once a person, the same record a subject table's cells leave.
+      noteRead: async (snapshotId) => {
+        const held = opened.get(snapshotId);
+        if (!held) return;
+        await this.store.audit({ studyId, userId: String(entry.principal), actor: String(entry.principal), action: "table.cloud_read", object: snapshotId, detail: { longTables: true, ...this.#basisDetail(held.authorization) } });
+        if (entry.cloudContext) for (const id of held.fileIds) await this.store.recordCloudRead(studyId, id, entry.cloudContext);
+      } };
+  }
+
+  /**
+   * Whether a line read from a long table may be shown or sent again: the line itself is on the judgment, so what is judged here is who is asking now and whether the source still allows it.
+   * @param {{ studyId: string, snapshotId: string, subjectKey: string, principal: string, purpose?: string | null, external?: boolean }} entry
+   */
+  async longEvidenceAllowed(entry) {
+    const snapshot = await this.#snapshot(entry.studyId, entry.snapshotId);
+    const source = await this.store.sourceInStudy(entry.studyId, snapshot.sourceId);
+    if (!source || source.status === "withdrawn") return false;
+    if ((await this.erasure?.matchStore?.withdrawnSubjects?.(entry.studyId) ?? new Set()).has(entry.subjectKey)) return false;
+    await this.access.require({ actor: String(entry.principal), studyId: entry.studyId, ability: "read_patient_level", sourceId: source.id, purpose: entry.purpose ?? "vcr", note: "long table evidence" });
+    if (entry.external !== false) this.#cloudBasis(source);
+    return true;
   }
 
   /**
