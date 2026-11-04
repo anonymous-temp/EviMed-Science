@@ -23,17 +23,20 @@
  */
 
 import { finishPremises } from "./vcrPremises.mjs";
+import { vcrScenarioKey } from "./vcrScenarioKey.mjs";
 import { list, markFor, measureValue, numeric, object } from "./vcrViewsKit.mjs";
 
 /**
- * The key a confirmatory result is filed under (the result's `subject_id`): the design and the endpoint. Two runs of the same design on
- * the same endpoint are versions of one result; a futility design and a re-estimation are two.
+ * The key a confirmatory result is filed under (the result's `subject_id`): the design, the endpoint and the scenario it was asked on. The
+ * same question asked again is the next version of one result; a futility design and a re-estimation are two, and so are the same design
+ * with a planned effect of 0.4 and with 0.25 (the key was the design and the endpoint, and the second answer replaced the first on the page
+ * while the reply of the first still stated its number).
  * @param {Record<string, any>} scenario
  */
 export function vcrConfirmatorySubjectId(scenario) {
   const design = String(object(scenario?.design).kind ?? "unknown");
   const endpoint = String(object(scenario?.endpoint).type ?? "count");
-  return `cd:${design}:${endpoint}`;
+  return `cd:${design}:${endpoint}:${vcrScenarioKey(scenario)}`;
 }
 
 /** The design kinds in the words of the page: a title, the question it answers, and what the effect on a row is. */

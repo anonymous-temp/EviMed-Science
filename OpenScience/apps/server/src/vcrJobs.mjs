@@ -394,6 +394,12 @@ const ORDER_OF_CONCLUSIONS = ["estimable", "limited", "not_estimable"];
  * one row per version — a new version each time a stage lands — so a page that
  * reads an object's result reads all its stages at once.
  *
+ * **A stage landing again replaces what that stage wrote before** (review RF2 P0-3). The stage record of the earlier landing
+ * (`stages[stage]`, `stageResults[stage]`) names the measures, the diagnostics keys, the counts and the tables it wrote; the new landing
+ * takes them out before it adds its own, so a rerun without a trimming does not keep the trimming's measures, limit and sentence, and a
+ * different method on the same comparison does not leave the first method's numbers beside its own. What another stage wrote is left
+ * alone, and so is a result that has no record of its stages (written before they were kept).
+ *
  * **A number carried over from before a change is said to be old.** When the
  * object was marked stale (an assumption moved, a method changed) the stages
  * that landed before the mark computed the world as it was. A stage this
@@ -458,10 +464,17 @@ export function vcrMergeStageResult(prior, incoming, stage, { staleSince = null,
   const carriedNames = namesOf(carried);
   const droppedNames = namesOf([...dropped, ...foreign]);
 
+  // What this stage wrote the last time it landed is replaced, not added to (a check landing late keeps the numbers it checks).
+  const replaced = late ? null : list(object(prior.diagnostics).stages).map(object).find((each) => each.stage === stage.stage) ?? null;
+  const replacedResult = object(object(object(prior.diagnostics).stageResults)[stage.stage]);
+  const replacedNames = new Set(list(replaced?.measures).map(String));
+  const otherNames = namesOf([...current.filter((each) => each.stage !== stage.stage), ...carried]);
+
   /** @type {Map<string, any>} */
   const byName = new Map();
   for (const measure of list(prior.measures)) {
     const name = String(object(measure).name);
+    if (replacedNames.has(name) && !otherNames.has(name)) continue;
     if (currentNames.has(name)) byName.set(name, measure);
     else if (carriedNames.has(name)) byName.set(name, { ...object(measure), stale: true });
     else if (!droppedNames.has(name)) byName.set(name, measure);
@@ -474,14 +487,19 @@ export function vcrMergeStageResult(prior, incoming, stage, { staleSince = null,
   }
 
   const counts = { ...object(prior.counts) };
+  if (replaced) {
+    const writtenElsewhere = new Set([...current.filter((each) => each.stage !== stage.stage), ...carried].flatMap((each) => Object.keys(object(object(object(prior.diagnostics).stageResults)[String(each.stage)]).counts ?? {})));
+    for (const key of Object.keys(object(replacedResult.counts))) if (!writtenElsewhere.has(key)) delete counts[key];
+  }
   if (!late) for (const [key, value] of Object.entries(object(incoming.counts))) if (value !== null && value !== undefined) counts[key] = value;
   const kept = [...current, ...carried];
   const keptNames = new Set(kept.map((each) => String(each.stage)));
   const stageResults = Object.fromEntries(Object.entries(object(object(prior.diagnostics).stageResults))
     .filter(([name]) => keptNames.has(name)).map(([name, value]) => [name, { ...object(value), stale: carried.some((each) => each.stage === name) }]));
   stageResults[stage.stage] = stageResult;
+  // (a result that kept no record of its stages has only its own conclusion to lean on; one that did has the stage's, and it is replaced)
   const conclusions = kept.length ? [countedAs(stage.stage, incoming.conclusion), ...kept.map((each) => countedAs(String(each.stage), each.conclusion))]
-    : [prior.conclusion, countedAs(stage.stage, incoming.conclusion)];
+    : replaced ? [countedAs(stage.stage, incoming.conclusion)] : [prior.conclusion, countedAs(stage.stage, incoming.conclusion)];
   const worst = conclusions.filter(Boolean)
     .sort((a, b) => ORDER_OF_CONCLUSIONS.indexOf(String(b)) - ORDER_OF_CONCLUSIONS.indexOf(String(a)))[0] ?? incoming.conclusion;
   // --- robustness methods ---
@@ -499,13 +517,22 @@ export function vcrMergeStageResult(prior, incoming, stage, { staleSince = null,
     verdict = { conclusion, notEstimableRule: conclusion === "not_estimable" ? (ruled?.notEstimableRule ?? incoming.notEstimableRule ?? prior.notEstimableRule ?? null) : null };
   }
   // --- end robustness methods ---
-  const tables = new Map(list(prior.tables).map((table) => [String(object(table).name), table]));
+  const replacedTables = new Set(list(replacedResult.tables).map((table) => String(object(table).name)));
+  const tablesElsewhere = new Set([...current.filter((each) => each.stage !== stage.stage), ...carried].flatMap((each) => list(object(object(object(prior.diagnostics).stageResults)[String(each.stage)]).tables).map((table) => String(object(table).name))));
+  const tables = new Map(list(prior.tables).filter((table) => late || !replacedTables.has(String(object(table).name)) || tablesElsewhere.has(String(object(table).name)))
+    .map((table) => [String(object(table).name), table]));
   for (const table of incoming.tables) tables.set(String(object(table).name), table);
   // What an earlier merge of this cycle dropped stays said, until the stage itself runs again.
   const notRerun = [...list(object(prior.diagnostics).notRerun).map(object).filter((each) => each.stage !== stage.stage),
     ...dropped.map((each) => ({ stage: String(each.stage), measures: list(each.measures).map(String) }))];
   /** @type {Record<string, any>} */
   const diagnostics = { ...prior.diagnostics, ...(late ? {} : incoming.diagnostics), stages: [...current, ...carried, entry], stageResults };
+  if (replaced) {
+    // the keys the replaced stage wrote and this one (or another stage still standing) does not: `trim`, `imputation`, `targetTrial`, `limitedBy`...
+    const written = new Set([...Object.keys(incoming.diagnostics), ...[...current.filter((each) => each.stage !== stage.stage), ...carried]
+      .flatMap((each) => Object.keys(object(object(object(prior.diagnostics).stageResults)[String(each.stage)]).diagnostics ?? {}))]);
+    for (const key of Object.keys(object(replacedResult.diagnostics))) if (!written.has(key) && key !== "stages" && key !== "stageResults" && key !== "notRerun") delete diagnostics[key];
+  }
   if (notRerun.length) diagnostics.notRerun = notRerun;
   else delete diagnostics.notRerun;
   return {

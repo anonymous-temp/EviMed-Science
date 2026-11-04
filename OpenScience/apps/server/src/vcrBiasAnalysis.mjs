@@ -29,9 +29,11 @@ import { list, numeric, object } from "./vcrViewsKit.mjs";
 const RATIO_MEASURES = Object.freeze(/** @type {const} */ ([
   ["hazard_ratio", "hazard_ratio"], ["aipw_risk_ratio", "risk_ratio"], ["weighted_risk_ratio", "risk_ratio"],
   ["aipw_odds_ratio", "odds_ratio"], ["weighted_odds_ratio", "odds_ratio"],
+  // a target-trial emulation's risk ratios: the intention-to-treat one first (the analysis that asks nothing of the censoring), then the per-protocol one
+  ["risk_ratio_itt", "risk_ratio"], ["risk_ratio_pp", "risk_ratio"],
 ]));
-/** The measures that are a difference. */
-const DIFFERENCE_MEASURES = Object.freeze(["rmst_difference", "aipw_difference", "weighted_difference"]);
+/** The measures that are a difference, and a target-trial emulation's risk differences in the same order. */
+const DIFFERENCE_MEASURES = Object.freeze(["rmst_difference", "aipw_difference", "weighted_difference", "risk_difference_itt", "risk_difference_pp"]);
 
 const SCALE_WORDS = Object.freeze(/** @type {Record<string, string>} */ ({ hazard_ratio: "风险比（HR）", risk_ratio: "相对危险度（RR）", odds_ratio: "比值比（OR）", difference: "差值" }));
 
@@ -45,8 +47,11 @@ const plain = (value, digits = 3) => String(Number(value.toPrecision(digits)));
  * @returns {{ scale: string, estimate: number, lower: number, upper: number, measure: string, level: number } | null}
  */
 export function vcrBiasEstimateOf(result) {
-  const measures = list(object(result).measures).map(object);
-  const diagnostics = object(object(result).diagnostics);
+  // The comparison's own estimate is its primary analysis's: a comparison filed in stages also holds the other stages' numbers (a restricted
+  // mean, a tipping point), and a result that holds no record of its stages is read whole.
+  const primary = object(object(object(object(result).diagnostics).stageResults).primary);
+  const measures = list(Object.keys(primary).length ? primary.measures : object(result).measures).map(object);
+  const diagnostics = object(Object.keys(primary).length ? { ...object(object(result).diagnostics), ...object(primary.diagnostics) } : object(result).diagnostics);
   /** @param {string} name */
   const found = (name) => measures.find((measure) => measure.name === name && numeric(measure.value) !== null && numeric(object(measure.interval).low) !== null && numeric(object(measure.interval).high) !== null);
   for (const [name, scale] of RATIO_MEASURES) {
@@ -88,8 +93,14 @@ export async function vcrBiasScenarioFromComparison({ store, study, subjectId = 
   const result = comparison.resultId ? await store.result(study.id, String(comparison.resultId)) : null;
   const taken = result ? vcrBiasEstimateOf(result) : null;
   if (!taken) {
+    // An estimate with an interval whose scale the result does not say (an indirect comparison by matching) is a different refusal from no estimate at all
+    const primary = object(object(object(object(result).diagnostics).stageResults).primary);
+    const unscaled = list(Object.keys(primary).length ? primary.measures : object(result).measures).map(object)
+      .some((measure) => numeric(measure.value) !== null && numeric(object(measure.interval).low) !== null && numeric(object(measure.interval).high) !== null);
     return { refused: { code: "vcr_job_scenario_invalid",
-      message: "这个对照还没有可以做偏倚分析的效应估计（需要比值或差值，以及它的区间）：先算出对照的结果，或者在场景里写明 scale、estimate 和区间（lower、upper）。" } };
+      message: unscaled
+        ? "这个对照的估计没有写明它是比值还是差值：在场景里写明 scale，以及 estimate 和区间（lower、upper）。"
+        : "这个对照还没有可以做偏倚分析的效应估计（需要比值或差值，以及它的区间）：先算出对照的结果，或者在场景里写明 scale、estimate 和区间（lower、upper）。" } };
   }
   const { scale, estimate, lower, upper, level } = taken;
   return { scenario: { ...scenario, scale, estimate, lower, upper, ...(Math.abs(level - 0.95) > 1e-9 ? { confidenceLevel: level } : {}) },

@@ -17,7 +17,7 @@ import { VCR_NOTICE_KINDS, createVcrNotifier, vcrNoticeHref, vcrStudyName } from
 import {
   VCR_ENGINE_METHODS, VCR_EXPORT_KINDS, VCR_EXPORT_KIND_LABELS_ZH, VCR_JOB_KINDS, VCR_JOB_METHODS, VCR_NOTIFICATION_KINDS, VCR_NOT_ESTIMABLE_RULES,
   VCR_MODEL_DOCUMENT_SECTIONS, VCR_NOT_ESTIMABLE_RULE_LABELS_ZH, VCR_SCENARIO_SCHEMAS, VCR_STEPS, VCR_STEP_CAPABILITIES, VCR_STEP_NEEDS, validateEngineJob,
-  knownErrorCodeMessage, validateLongitudinalScenario, validateScenario, vcrIsNullScenario,
+  VCR_SCENARIO_EXAMPLES, knownErrorCodeMessage, validateLongitudinalScenario, validateScenario, vcrIsNullScenario,
 } from "@evimed/domain";
 
 /** @param {string[]} requested */
@@ -1676,4 +1676,14 @@ test("a stage states the unit its times are in — the design's own, the one its
   assert.ok(binary.ok, JSON.stringify(binary));
   for (const entry of binary.stages) assert.equal(entry.scenario.timeUnit, undefined, `${entry.stage}: no time, no unit`);
   assert.equal(binary.stages.some((entry) => entry.detail.timeUnitBasis !== undefined), false);
+});
+
+test("a borrowed control started by the id of a comparison that holds its scenario is built from the object; another method's configuration is not taken for it (review RF2 P2-2)", async () => {
+  const example = VCR_SCENARIO_EXAMPLES["comparator.borrowing"][0].scenario;
+  const self = { store: { async comparatorDesigns() { return [{ id: "cmp_b", configuration: example }, { id: "cmp_w", configuration: { covariates: ["age"], endpoint: { type: "binary" }, treatmentColumn: "arm", outcomeColumn: "y" } }, { id: "cmp_e", configuration: {} }]; } } };
+  const stage = (/** @type {string} */ id, /** @type {string} */ kind) => VcrOrchestrator.prototype.stageScenarioOf.call(self, { id: "std_1" }, id, kind);
+  assert.deepEqual(await stage("cmp_b", "borrowing_prior"), { scenario: example, detail: {} });
+  assert.deepEqual(await stage("cmp_w", "borrowing_prior"), { unavailable: true }, "a weighting's configuration is not a borrowing scenario");
+  assert.deepEqual(await stage("cmp_e", "borrowing_prior"), { unavailable: true }, "an object that holds nothing has no scenario to build");
+  assert.deepEqual(await stage("cmp_missing", "borrowing_prior"), { unavailable: true });
 });

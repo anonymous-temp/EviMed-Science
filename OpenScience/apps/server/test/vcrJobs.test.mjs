@@ -5,6 +5,8 @@
 // channel has its own file (`vcrEngineClient.test.mjs`).
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFileSync } from "node:fs";
+import { vcrBiasEstimateOf } from "../src/vcrBiasAnalysis.mjs";
 import {
   VcrJobs, VCR_DERIVED_SOURCES, VCR_JOB_OPEN_STATES, VCR_JOB_TERMINAL_STATES, vcrIdempotencyKey, vcrMergeStageResult, vcrReplicatePlanForJob, vcrReplicatesForJob,
   VCR_RECONSTRUCTION_REFERENCE, vcrBindReconstruction, vcrBindScientificInputUnits, vcrEngineStoppedError, vcrErrorFromIssues, vcrFailureReason, vcrResultKindFor, vcrScenarioColumns, vcrScenarioHash, vcrSeedFor,
@@ -502,4 +504,59 @@ test("validate leaves the names of a job's inputs to the start that resolves the
   const bad = await jobs.validate({ kind: "fit_survival_model", scenario: { inputId: "snp_1", idColumn: "USUBJID", timeColumn: "AVAL", statusColumn: "CNSR", statusEncoding: "censor", distribution: "gamma", timeUnit: "months", horizons: [6, 12] }, inputs: [{ kind: "snapshot", id: "snp_1" }] });
   assert.equal(bad.valid, false);
   assert.ok(bad.issues.every((issue) => issue.field !== "scenario.inputId"));
+});
+
+/** A committed real engine result, filed as the primary stage of a comparison. */
+const primaryOf = (/** @type {string} */ name, /** @type {string} */ jobId, /** @type {string} */ method) => {
+  const result = JSON.parse(readFileSync(new URL(`./fixtures/${name}.json`, import.meta.url), "utf8"));
+  const incoming = { conclusion: result.conclusion, notEstimableRule: result.notEstimableRule ?? null, counts: result.counts, measures: result.measures, diagnostics: result.diagnostics, tables: result.tables ?? [] };
+  return { incoming, stage: { stage: "primary", jobId, method, methodVersion: "1.5.0" } };
+};
+
+test("a stage landing again replaces what that stage wrote before: a rerun without the trimming keeps none of its measures, limit or sentence (review RF2 P0-3)", () => {
+  const first = primaryOf("vcr-bias-analysis/trim-weighting", "job_1", "comparator.propensity_weight");
+  const landed = vcrMergeStageResult(null, first.incoming, first.stage);
+  assert.ok(landed.measures.some((measure) => measure.name === "trimmed_treated") && landed.diagnostics.trim && landed.conclusion === "limited");
+  const prior = /** @type {any} */ ({ id: "res_1", ...landed });
+  // the same scenario without a trimming: the weighted comparison of everybody, which the engine leaves without `trim`, the trimmed_* measures and the limit
+  const untrimmed = structuredClone(first.incoming);
+  untrimmed.measures = untrimmed.measures.filter((measure) => !String(measure.name).startsWith("trimmed_"));
+  delete untrimmed.diagnostics.trim;
+  untrimmed.diagnostics.limitedBy = [];
+  untrimmed.conclusion = "estimable";
+  const rerun = vcrMergeStageResult(prior, untrimmed, { ...first.stage, jobId: "job_2" });
+  assert.deepEqual(rerun.measures.map((measure) => measure.name), untrimmed.measures.map((measure) => measure.name), "the measures of this run and nothing of the last");
+  assert.equal(rerun.diagnostics.trim, undefined, "the restatement of a trimming that did not happen is gone");
+  assert.deepEqual(rerun.diagnostics.limitedBy, []);
+  assert.equal(rerun.conclusion, "estimable", "the replaced stage's limit is not a vote");
+  assert.deepEqual(rerun.diagnostics.stages.map((entry) => `${entry.stage}:${entry.jobId}`), ["primary:job_2"]);
+  assert.deepEqual(Object.keys(rerun.diagnostics.stageResults), ["primary"]);
+  // a stage that is not this one is left alone: a bias analysis landed beside the primary stays through a rerun of the primary
+  const bias = JSON.parse(readFileSync(new URL("./fixtures/vcr-bias-analysis/bias-ratio.json", import.meta.url), "utf8"));
+  const withBias = vcrMergeStageResult(/** @type {any} */ ({ id: "res_1", ...rerun }), { conclusion: bias.conclusion, notEstimableRule: null, counts: bias.counts, measures: bias.measures, diagnostics: bias.diagnostics, tables: [] },
+    { stage: "bias_analysis", jobId: "job_3", method: "comparator.bias_analysis", methodVersion: "1.0.0" });
+  const again = vcrMergeStageResult(/** @type {any} */ ({ id: "res_1", ...withBias }), untrimmed, { ...first.stage, jobId: "job_4" });
+  assert.ok(again.diagnostics.biasAnalysis && again.measures.some((measure) => measure.name === "bias_tipping_limit"), "the other stage's record and numbers stand");
+  assert.deepEqual(again.diagnostics.stages.map((entry) => entry.stage).sort(), ["bias_analysis", "primary"]);
+});
+
+test("a different method landing as the primary stage of a comparison leaves nothing of the first method's numbers, and a bias analysis reads the current primary (review RF2 P0-3)", () => {
+  const first = primaryOf("vcr-bias-analysis/trim-weighting", "job_1", "comparator.propensity_weight");
+  const weighting = vcrMergeStageResult(null, first.incoming, first.stage);
+  const emulation = primaryOf("vcr-target-trial/sequential", "job_2", "comparator.target_trial");
+  const merged = vcrMergeStageResult(/** @type {any} */ ({ id: "res_1", ...weighting }), emulation.incoming, emulation.stage);
+  assert.deepEqual(merged.measures.map((measure) => measure.name), emulation.incoming.measures.map((measure) => measure.name));
+  const leftOver = Object.keys(first.incoming.diagnostics).filter((key) => !(key in emulation.incoming.diagnostics) && key in merged.diagnostics);
+  assert.deepEqual(leftOver, [], "no diagnostics key of the weighting is left beside the emulation's");
+  assert.equal(merged.diagnostics.trim, undefined);
+  assert.ok(merged.diagnostics.targetTrial);
+  assert.equal(merged.conclusion, emulation.incoming.conclusion);
+  assert.equal(merged.counts.effectiveSampleSize, emulation.incoming.counts.effectiveSampleSize ?? undefined, "a count the weighting wrote and the emulation does not is not left");
+  // the estimate a bias analysis takes is the target trial's, not the weighted difference of the method that was there
+  const taken = vcrBiasEstimateOf({ ...merged });
+  assert.equal(taken?.measure, "risk_ratio_itt");
+  assert.notEqual(taken?.measure, "weighted_difference");
+  // and a result that still holds both (written before stages were kept apart) is read by its primary stage only
+  const stale = { measures: [...weighting.measures, ...emulation.incoming.measures], diagnostics: { stageResults: { primary: { measures: emulation.incoming.measures, diagnostics: emulation.incoming.diagnostics } } } };
+  assert.equal(vcrBiasEstimateOf(stale)?.measure, "risk_ratio_itt");
 });

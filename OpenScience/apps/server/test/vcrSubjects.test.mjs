@@ -2,6 +2,7 @@
 // command-line of the backfill script. The database half is in vcrOrchestrator.integration.test.mjs.
 import assert from "node:assert/strict";
 import test from "node:test";
+import { VCR_SCENARIO_EXAMPLES } from "@evimed/domain";
 import { parseBackfillArguments } from "../../../scripts/vcr/backfill-result-subjects.mjs";
 import {
   VCR_SUBJECT_KINDS, resolveJobSubject, vcrBackfillSubjectFor, vcrConversationSubject, vcrCurrentObjects, vcrDesignShare, vcrJobFroze, vcrJobObjectKind, vcrJobStage, vcrMatchTrialScenarios,
@@ -171,4 +172,44 @@ test("a bias analysis that states its estimate is a comparison of its own, filed
   assert.equal(subject?.objectKind, "comparator");
   assert.equal(subject?.detail.stage, "bias_analysis", "it lands on the comparison as its own stage, like the tipping-point analysis");
   assert.equal(subject?.detail.resultKind, "comparator");
+});
+
+test("a simulated comparison, a target-trial emulation and a borrowed control are comparisons of their own: filed by their scenario, once, and never under the comparison the study holds (review RF2 P1-4, P0-3)", async () => {
+  const study = { id: "std_1", userId: "u1", scope: "conversation" };
+  for (const [kind, method] of /** @type {Array<[string, string]>} */ ([["borrowing_prior", "comparator.borrowing"], ["target_trial_emulation", "comparator.target_trial"], ["stc_comparator", "comparator.stc"]])) {
+    const { store, saved } = storeHoldingOneComparison();
+    const example = VCR_SCENARIO_EXAMPLES[method][0].scenario;
+    const made = await vcrConversationSubject({ store, study, userId: "u1", kind, scenario: example });
+    assert.ok(made && made !== "cmp_1", `${kind}: an object of its own, not the weighted comparison the study holds`);
+    assert.equal(saved.length, 1, kind);
+    assert.deepEqual(saved[0].configuration, example, `${kind}: the scenario is the configuration`);
+    // asked again with the same scenario: the one object; another scenario: another object
+    assert.equal(await vcrConversationSubject({ store, study, userId: "u1", kind, scenario: example }), made, kind);
+    assert.equal(saved.length, 1, kind);
+    // naming the weighted comparison with a scenario that contradicts it does not turn that comparison into this method either
+    const other = structuredClone(example);
+    if (other.horizon) other.horizon = 36; else if (other.historical) other.historical = { responders: 80, n: 300 }; else other.aggregateSe = 0.2;
+    const second = await vcrConversationSubject({ store, study, userId: "u1", kind, subjectId: "cmp_1", scenario: other });
+    assert.ok(second === null || saved.length === 2, kind);
+    assert.notEqual(second, "cmp_1", kind);
+    // in a study with a page of its own nothing is made
+    assert.equal(await vcrConversationSubject({ store: storeHoldingOneComparison().store, study: { ...study, scope: "study" }, userId: "u1", kind, scenario: example }), null, kind);
+  }
+});
+
+test("a comparison of its own is not taken for the study's one comparison when another method made that one's result (review RF2 P0-3)", async () => {
+  const study = { id: "std_1", userId: "u1", scope: "study" };
+  const held = { id: "cmp_1", version: 1, name: "对照 1", route: "external_control", resultId: "res_1", configuration: {} };
+  const store = (/** @type {string | null} */ method) => ({
+    async comparatorDesigns() { return [held]; },
+    async result() { return method ? { id: "res_1", diagnostics: { stages: [{ stage: "primary", method, jobId: "j1" }] } } : null; },
+  });
+  await assert.rejects(resolveJobSubject({ store: store("comparator.propensity_weight"), study, kind: "target_trial_emulation", scenario: {} }), (error) => error.code === "vcr_simulate_subject_required" && /自己的设定/.test(error.message));
+  // the comparison made by the same method, one with no result yet, and one named by id are the object
+  assert.equal((await resolveJobSubject({ store: store("comparator.target_trial"), study, kind: "target_trial_emulation", scenario: {} }))?.row.id, "cmp_1");
+  assert.equal((await resolveJobSubject({ store: store(null), study, kind: "stc_comparator", scenario: {} }))?.row.id, "cmp_1");
+  const named = { ...store("comparator.propensity_weight"), async methodConfigurationObject() { return held; } };
+  assert.equal((await resolveJobSubject({ store: named, study, kind: "borrowing_prior", subjectId: "cmp_1", scenario: {} }))?.row.id, "cmp_1");
+  // a kind that is not a comparison of its own keeps the old reading
+  assert.equal((await resolveJobSubject({ store: store("comparator.propensity_weight"), study, kind: "weighted_cox_comparator", scenario: {} }))?.row.id, "cmp_1");
 });

@@ -33,10 +33,18 @@ test("the three kinds are results of their own, read on the evidence tab and fil
     assert.ok(VCR_RESULT_KINDS.includes(kind), kind);
     assert.equal(VCR_RESULT_KIND_TABS[kind], "data", kind);
   }
-  assert.equal(vcrSynthesisSubjectId("network_meta", { label: "  response  " }), "nm:response");
-  assert.equal(vcrSynthesisSubjectId("dose_response_meta", {}), "dr:default");
-  assert.equal(vcrSynthesisSubjectId("effect_shrinkage", { label: "x".repeat(200) }).length, "es:".length + 80);
+  assert.match(vcrSynthesisSubjectId("network_meta", { label: "  response  " }), /^nm:response:[0-9a-f]{10}$/, "the label the call gave stays in the key");
+  assert.match(vcrSynthesisSubjectId("dose_response_meta", {}), /^dr:default:[0-9a-f]{10}$/);
+  assert.equal(vcrSynthesisSubjectId("effect_shrinkage", { label: "x".repeat(200) }).length, "es:".length + 80 + ":".length + 10);
   assert.notEqual(vcrSynthesisSubjectId("network_meta", { label: "a" }), vcrSynthesisSubjectId("network_meta", { label: "b" }), "two outcomes stand side by side");
+});
+
+test("two analyses with no label are two cards, and the same one asked again is one (review RF2 P1-1)", () => {
+  const one = { measure: "odds_ratio", treatments: ["A", "B", "C"], studies: [{ id: "s1", arms: [{ treatment: "A", events: 10, n: 100 }, { treatment: "B", events: 15, n: 100 }] }] };
+  const other = { ...one, measure: "risk_ratio" };
+  assert.notEqual(vcrSynthesisSubjectId("network_meta", one), vcrSynthesisSubjectId("network_meta", other));
+  assert.equal(vcrSynthesisSubjectId("network_meta", one), vcrSynthesisSubjectId("network_meta", structuredClone(one)));
+  assert.notEqual(vcrSynthesisSubjectId("network_meta", one), vcrSynthesisSubjectId("dose_response_meta", one), "another method is another card");
 });
 
 test("a network card ranks by the score, shows every pair in a league table, words the consistency, and its premises are the few it rests on", () => {

@@ -278,6 +278,21 @@ function fittingObjects(objectKind, kind, scenario, current, sameNumbers) {
       : current;
 }
 
+/** @param {Record<string, any>} row */
+const row0 = (row) => `${row.id}（${[row.label, row.name, row.route].find((word) => typeof word === "string" && word) ?? `v${row.version}`}）`;
+
+/**
+ * The method that made a comparison's primary result, from the record of its stages: null for a comparison with no result yet (nothing is
+ * replaced by a first one) and for a result that kept no record of its stages.
+ * @param {any} store @param {string} studyId @param {Record<string, any>} row
+ * @returns {Promise<string | null>}
+ */
+async function comparisonPrimaryMethod(store, studyId, row) {
+  const result = row.resultId ? await store.result(studyId, String(row.resultId)) : null;
+  const primary = list(object(object(result).diagnostics).stages).map(object).find((entry) => entry.stage === "primary");
+  return typeof primary?.method === "string" ? primary.method : null;
+}
+
 /**
  * Say which object a job computes. `null` for a job that is not about one.
  *
@@ -311,6 +326,15 @@ export async function resolveJobSubject({ store, study, kind, subjectId = null, 
   } else {
     // Said without an id: the one object that fits what the scenario states is the one it is about.
     const fitting = fittingObjects(objectKind, kind, scenario, current, study.scope === "conversation");
+    // A computation that is a comparison of its own is never taken for the one comparison the study holds when that was made by another
+    // method: its primary result would be replaced, and the page would read the first method's sentences beside the second's numbers.
+    if (fitting.length === 1 && VCR_OWN_COMPARISON_KINDS.has(kind) && objectKind === "comparator") {
+      const held = await comparisonPrimaryMethod(store, study.id, fitting[0]);
+      if (held && held !== /** @type {Record<string, string>} */ (VCR_JOB_METHODS)[kind]) {
+        throw new VcrSubjectError("vcr_simulate_subject_required",
+          `这项计算本身就是一种对照，不能算进用别的方法算过的对照设计里（${row0(fitting[0])}）：把它自己的设定写成一个对照设计，再把那个设计的 id 作为 subjectId 传进来。${holdings(objectKind, current)}`);
+      }
+    }
     if (fitting.length !== 1) {
       throw new VcrSubjectError("vcr_simulate_subject_required",
         `这项计算要说明它算的是本研究的哪一个${OBJECT_WORDS_ZH[objectKind]}：把它的 id 作为 subjectId 传进来。`
@@ -330,8 +354,16 @@ export async function resolveJobSubject({ store, study, kind, subjectId = null, 
   };
 }
 
+/**
+ * The computations that are a comparison of their own: what they state is the scenario they send (an estimate and its limit, an
+ * external control's published history, a person-period table and a strategy, a simulated comparison against a published arm). Each is
+ * one object per scenario, found by the scenario and made when no object holds it, and none is ever filed under another method's
+ * comparison, whose primary result it would replace (review RF2 P0-3, P1-4).
+ */
+export const VCR_OWN_COMPARISON_KINDS = new Set(["evalue", "bias_analysis", "stc_comparator", "target_trial_emulation", "borrowing_prior"]);
+
 /** The computations a conversation may start with nothing written first: what they compute is all in the scenario they send. */
-const VCR_SELF_FILED_KINDS = new Set(["design_analytic", "design_simulation", "design_grid", "generate_population", "literature_population", "evalue", "bias_analysis"]);
+const VCR_SELF_FILED_KINDS = new Set(["design_analytic", "design_simulation", "design_grid", "generate_population", "literature_population", ...VCR_OWN_COMPARISON_KINDS]);
 
 /**
  * A conversation's research has no form to fill in. A design or a population the run computes with no object to file it under gets one,
@@ -354,8 +386,9 @@ export async function vcrConversationSubject({ store, study, userId, kind, subje
     const named = rows.find((entry) => entry.id === subjectId);
     const own = named ? configurationOf(objectKind, named) : null;
     if (!named || !own || !Object.keys(scenario).length || !vcrContradiction(own, scenario)) return null;
-    // An E-value, or a bias analysis of a stated estimate, is one estimate and not a line of versions: another estimate is another object (below).
-    if (kind !== "evalue" && kind !== "bias_analysis") {
+    // An E-value, a bias analysis of a stated estimate, a simulated comparison, a target-trial emulation or a borrowed control is one
+    // scenario and not a line of versions: another scenario is another object (below).
+    if (!VCR_OWN_COMPARISON_KINDS.has(kind)) {
       const method = /** @type {Record<string, string>} */ (VCR_JOB_METHODS)[kind];
       return (await prepareVcrMethodConfiguration({ store, study, userId, method, subjectId, name: String(named.label || named.name || ""), scenario })).subjectId;
     }
@@ -363,8 +396,10 @@ export async function vcrConversationSubject({ store, study, userId, kind, subje
   const current = vcrCurrentObjects(objectKind, rows);
   // An E-value of a stated estimate and limit is an object of its own: it is never filed under another comparison the study holds, whose
   // result it would replace. The same estimate asked twice is the one object. So is a bias analysis of an estimate the call states; one that
-  // names a comparison (and states no estimate) is a stage of that comparison and is not made here.
-  if (kind === "evalue" || kind === "bias_analysis") {
+  // names a comparison (and states no estimate) is a stage of that comparison and is not made here. A simulated treatment comparison, a
+  // target-trial emulation and a borrowed external control are the same: the same scenario again is the next version of the one object, and a
+  // changed one is another object, never the weighting or the E-value the study already holds.
+  if (VCR_OWN_COMPARISON_KINDS.has(kind)) {
     const same = current.find((entry) => canonicalScenarioJson(entry.configuration) === canonicalScenarioJson(scenario));
     if (same) return String(same.id);
   } else if (fittingObjects(objectKind, kind, scenario, current, true).length) return null;

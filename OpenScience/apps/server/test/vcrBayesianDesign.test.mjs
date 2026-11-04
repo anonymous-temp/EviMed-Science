@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { VCR_SCENARIO_EXAMPLES } from "@evimed/domain";
 import { cellLabel, presentBayesianDesigns, vcrBayesianSubjectId } from "../src/vcrBayesianDesign.mjs";
 import { vcrResultKindFor } from "../src/vcrJobs.mjs";
 import { VCR_RESULT_KINDS } from "../src/vcrStore.mjs";
@@ -18,8 +19,17 @@ test("a finished design_bayesian job reaches the trial tab: its own kind, the tr
   assert.equal(vcrResultKindFor("design_bayesian"), "design_bayesian");
   assert.ok(VCR_RESULT_KINDS.includes("design_bayesian"));
   assert.equal(VCR_RESULT_KIND_TABS.design_bayesian, "trial");
-  assert.equal(vcrBayesianSubjectId({ design: { kind: "bop2", maxN: 40 }, truth: { nullRate: 0.1, alternativeRate: 0.3 } }), "bayes:bop2:0.1-0.3-40");
-  assert.equal(vcrBayesianSubjectId({ design: { kind: "threshold_calibration" }, endpoint: { type: "binary" } }), "bayes:threshold_calibration:binary");
+  assert.match(vcrBayesianSubjectId({ design: { kind: "bop2", maxN: 40 }, truth: { nullRate: 0.1, alternativeRate: 0.3 } }), /^bayes:bop2:[0-9a-f]{10}$/);
+  assert.match(vcrBayesianSubjectId({ design: { kind: "threshold_calibration" }, endpoint: { type: "binary" } }), /^bayes:threshold_calibration:[0-9a-f]{10}$/);
+});
+
+test("the key covers the scenario: the two help examples of one design are two cards, a calibration of another threshold is another, and the same question is one (review RF2 P1-1)", () => {
+  const [best, fewest] = VCR_SCENARIO_EXAMPLES["design.bayesian"].filter((example) => example.scenario.design.kind === "bop2").map((example) => example.scenario);
+  assert.ok(best && fewest, "the help holds two BOP2 examples");
+  assert.notEqual(vcrBayesianSubjectId(best), vcrBayesianSubjectId(fewest), "the objective is part of the question");
+  assert.equal(vcrBayesianSubjectId(best), vcrBayesianSubjectId(structuredClone(best)));
+  const calibration = { design: { kind: "threshold_calibration", nTreat: 100, nControl: 100, threshold: 0.975 }, endpoint: { type: "normal" } };
+  assert.notEqual(vcrBayesianSubjectId(calibration), vcrBayesianSubjectId({ ...calibration, design: { ...calibration.design, threshold: 0.95 } }));
 });
 
 test("BOP2 says when to stop at each look and sits beside Simon's design, the saving being the difference of two numbers it carries", () => {

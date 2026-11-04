@@ -28,6 +28,7 @@ import {
   VCR_TURNER_COMPARISON_LABELS_ZH, VCR_TURNER_OUTCOME_LABELS_ZH, vcrSuccessRates,
 } from "@evimed/domain";
 import { finishPremises } from "./vcrPremises.mjs";
+import { vcrScenarioKey } from "./vcrScenarioKey.mjs";
 import { list, markFor, measureValue, numeric, object, text } from "./vcrViewsKit.mjs";
 
 /** @param {number} value @param {number} [digits] */
@@ -38,12 +39,14 @@ const pct = (fraction, digits = 3) => `${plain(fraction * 100, digits)}%`;
 const SUBJECT_PREFIX = Object.freeze(/** @type {Record<string, string>} */ ({ network_meta: "nm", dose_response_meta: "dr", effect_shrinkage: "es" }));
 
 /**
- * The key a result of these kinds is filed under (the result's `subject_id`).
+ * The key a result of these kinds is filed under (the result's `subject_id`): the label the call gave it, when it gave one, and the
+ * scenario it was asked on. Two analyses of two outcomes stand side by side whether or not they were labelled (two networks with no
+ * label were one card with two versions); the same question asked again is the next version of one.
  * @param {string} kind a job kind @param {Record<string, any>} scenario
  */
 export function vcrSynthesisSubjectId(kind, scenario) {
   const label = String(scenario?.label ?? "").replace(/\s+/g, " ").trim().slice(0, 80);
-  return `${SUBJECT_PREFIX[kind] ?? "ev"}:${label || "default"}`;
+  return `${SUBJECT_PREFIX[kind] ?? "ev"}:${label || "default"}:${vcrScenarioKey(scenario)}`;
 }
 
 // ---------------------------------------------------------------------------

@@ -22,16 +22,9 @@
  * @module vcrWinRatio
  */
 
-import { createHash } from "node:crypto";
 import { finishPremises } from "./vcrPremises.mjs";
+import { vcrScenarioKey } from "./vcrScenarioKey.mjs";
 import { list, markFor, measureValue, numeric, object } from "./vcrViewsKit.mjs";
-
-/** @param {unknown} value @returns {unknown} the value with every object's keys in order, so the same scenario is the same text */
-function ordered(value) {
-  if (Array.isArray(value)) return value.map(ordered);
-  if (value && typeof value === "object") return Object.fromEntries(Object.keys(value).sort().map((key) => [key, ordered(/** @type {any} */ (value)[key])]));
-  return value;
-}
 
 /**
  * The key a win-ratio result is filed under (the result's `subject_id`): the scenario it was asked on. The same question asked again is the
@@ -39,7 +32,7 @@ function ordered(value) {
  * @param {Record<string, any>} scenario
  */
 export function vcrWinRatioSubjectId(scenario) {
-  return `wr:${createHash("sha256").update(JSON.stringify(ordered(object(scenario)))).digest("hex").slice(0, 10)}`;
+  return `wr:${vcrScenarioKey(scenario)}`;
 }
 
 const LEVEL_WORDS = Object.freeze(/** @type {Record<string, string>} */ ({ death: "死亡", events: "事件次数", score: "评分" }));

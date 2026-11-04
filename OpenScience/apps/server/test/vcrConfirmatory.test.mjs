@@ -21,8 +21,18 @@ test("a finished design_confirmatory job reaches the trial tab: filed under its 
   assert.equal(vcrResultKindFor("design_confirmatory"), "design_confirmatory");
   assert.ok(VCR_RESULT_KINDS.includes("design_confirmatory"));
   assert.equal(VCR_RESULT_KIND_TABS.design_confirmatory, "trial");
-  assert.equal(vcrConfirmatorySubjectId({ design: { kind: "sample_size_reestimation" }, endpoint: { type: "time_to_event" } }), "cd:sample_size_reestimation:time_to_event");
-  assert.equal(vcrConfirmatorySubjectId({ design: { kind: "count_endpoint" } }), "cd:count_endpoint:count", "a count endpoint names no endpoint type");
+  assert.match(vcrConfirmatorySubjectId({ design: { kind: "sample_size_reestimation" }, endpoint: { type: "time_to_event" } }), /^cd:sample_size_reestimation:time_to_event:[0-9a-f]{10}$/);
+  assert.match(vcrConfirmatorySubjectId({ design: { kind: "count_endpoint" } }), /^cd:count_endpoint:count:[0-9a-f]{10}$/, "a count endpoint names no endpoint type");
+});
+
+test("the key covers the scenario: a planned effect of 0.4 and one of 0.25 are two cards, and the same question asked again is the next version of one (review RF2 P1-1)", () => {
+  const futility = (/** @type {number} */ effect, /** @type {string[]} */ order = ["design", "endpoint", "truth"]) => {
+    const parts = { design: { kind: "futility_group_sequential", informationRates: [0.5, 1] }, endpoint: { type: "continuous" }, truth: { plannedEffect: effect, sd: 1 } };
+    return Object.fromEntries(order.map((key) => [key, /** @type {Record<string, any>} */ (parts)[key]]));
+  };
+  assert.notEqual(vcrConfirmatorySubjectId(futility(0.4)), vcrConfirmatorySubjectId(futility(0.25)));
+  assert.equal(vcrConfirmatorySubjectId(futility(0.4)), vcrConfirmatorySubjectId(futility(0.4, ["truth", "endpoint", "design"])), "the order a caller wrote the keys in is not a question");
+  assert.equal(vcrConfirmatorySubjectId(futility(0.4)), vcrConfirmatorySubjectId(futility(0.4)));
 });
 
 test("every card says the question it answers, in Chinese, and no back-office key reaches a label", () => {

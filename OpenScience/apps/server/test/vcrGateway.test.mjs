@@ -666,15 +666,15 @@ test("a network, a dose-response and a shrinkage start through the gateway, file
   const start = async (/** @type {Record<string, any>} */ body) => { const res = response(); await handler(request("/internal/vcr/v1/simulate", { action: "start", ...body }), res); return res; };
   const network = { label: "response", measure: "log_ratio", direction: "lower_better", studies: [
     { studyId: "H1", contrasts: [{ treatment: "B", comparator: "A", effect: -0.3, se: 0.12 }] }, { studyId: "H2", contrasts: [{ treatment: "C", comparator: "B", effect: -0.15, se: 0.18 }] }] };
-  for (const [kind, scenario, subject] of /** @type {Array<[string, any, string]>} */ ([
-    ["network_meta", network, "nm:response"],
-    ["effect_shrinkage", { label: "phase 2", scale: "log", values: [{ estimate: -0.4, se: 0.19 }] }, "es:phase 2"],
-    ["dose_response_meta", { studies: [{ studyId: "K1", type: "ir", rows: [{ dose: 0, effect: 0 }, { dose: 10, effect: 0.1, se: 0.1 }] }], model: { kind: "linear" } }, "dr:default"],
+  for (const [kind, scenario, subject] of /** @type {Array<[string, any, RegExp]>} */ ([
+    ["network_meta", network, /^nm:response:[0-9a-f]{10}$/],
+    ["effect_shrinkage", { label: "phase 2", scale: "log", values: [{ estimate: -0.4, se: 0.19 }] }, /^es:phase 2:[0-9a-f]{10}$/],
+    ["dose_response_meta", { studies: [{ studyId: "K1", type: "ir", rows: [{ dose: 0, effect: 0 }, { dose: 10, effect: 0.1, se: 0.1 }] }], model: { kind: "linear" } }, /^dr:default:[0-9a-f]{10}$/],
   ])) {
     const res = await start({ kind, scenario });
     assert.equal(res.status, 200, `${kind}: ${res.body}`);
     assert.equal(queued.at(-1).kind, kind);
-    assert.equal(queued.at(-1).detail.subjectId, subject, `${kind} is filed under what it is about`);
+    assert.match(queued.at(-1).detail.subjectId, subject, `${kind} is filed under what it is about`);
   }
   // the pooled reference: a table kind reaches the pooling; a prior typed in is refused, and a number is never the run's
   /** @type {any[]} */
@@ -709,7 +709,7 @@ test("a dose-finding design and a Bayesian design start through the gateway, fil
   assert.equal(queued.at(-1).detail.subjectId, queued.at(-2).detail.subjectId, "the same two designs on the same curve are one question, whichever is asked about");
   const bayes = await start({ kind: "design_bayesian", scenario: { design: { kind: "bop2", maxN: 40, lookEvery: 10 }, truth: { nullRate: 0.1, alternativeRate: 0.3 } } });
   assert.equal(bayes.status, 200, bayes.body);
-  assert.equal(queued.at(-1).detail.subjectId, "bayes:bop2:0.1-0.3-40");
+  assert.match(queued.at(-1).detail.subjectId, /^bayes:bop2:[0-9a-f]{10}$/);
   const winRatio = { design: { nTreat: 250, followup: 24 }, truth: { death: { controlRisk: 0.15, hazardRatio: 0.75 }, score: { shift: 4, sd: 20 } } };
   const wr = await start({ kind: "design_win_ratio", scenario: winRatio });
   assert.equal(wr.status, 200, wr.body);

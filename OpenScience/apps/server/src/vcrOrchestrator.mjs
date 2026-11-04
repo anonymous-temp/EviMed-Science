@@ -63,7 +63,7 @@ import {
   VCR_CHECK_STAGES, VCR_DESIGN_SUPPORT, VCR_ENGINE_METHODS, VCR_EXPORT_KINDS, VCR_EXPORT_KIND_LABELS_ZH, VCR_JOB_METHODS, VCR_PATIENT_LEVEL_JOB_KINDS,
   VCR_FORECAST_MODEL_INTERFACES, VCR_HOSTED_MODEL_INTERFACES, VCR_MODEL_DOCUMENT_KINDS, VCR_MODEL_DOCUMENT_SECTIONS, VCR_MODEL_DOCUMENT_SECTION_LABELS_ZH,
   VCR_MODEL_INTERFACE_LABELS_ZH, VCR_SCENARIO_SCHEMAS, VCR_STALE_REASONS, VCR_STEPS, VCR_STEP_CAPABILITIES, VCR_STEP_NEEDS, VCR_STEP_PRODUCTS,
-  VCR_DEFAULT_TIME_UNIT, allowanceWaitingNote, knownErrorCodeMessage, lineageNode, parseLineageNode, recomputePlan, stepWaitingFor, validateLongitudinalScenario,
+  VCR_DEFAULT_TIME_UNIT, allowanceWaitingNote, knownErrorCodeMessage, lineageNode, parseLineageNode, recomputePlan, stepWaitingFor, validateLongitudinalScenario, validateScenario,
   vcrCommonTimeUnit, vcrConvertTime, vcrEventHistoryScopeIssues, vcrModelCardIssues, vcrModelInterfaceOf, vcrScenarioChildKeys, vcrScenarioParentOf, vcrTimeUnitOf,
   VCR_ROBUSTNESS_STAGES, vcrIsNullScenario, vcrNoClosedFormFields, vcrNullTruth, vcrVisibleQuestion, whenHolds, vcrApplicabilityLimits, vcrTargetTrial, vcrTargetTrialEngineItems,
 } from "@evimed/domain";
@@ -77,7 +77,7 @@ import { isModelDocumentKind } from "./vcrModelDocuments.mjs";
 import { VCR_COMPARISON_RESULT_KIND, VCR_SCHEMA } from "./vcrPersistence.mjs";
 import { vcrSealRequired } from "./vcrSeal.mjs";
 import { VCR_SUBJECT_KINDS, vcrResultKindFor } from "./vcrJobs.mjs";
-import { vcrJobStage, vcrObjectLine } from "./vcrSubjects.mjs";
+import { VCR_OWN_COMPARISON_KINDS, vcrJobStage, vcrObjectLine } from "./vcrSubjects.mjs";
 import { vcrRequestedSteps, vcrRouteOptions } from "./vcrService.mjs";
 import { vcrObjectNode } from "./vcrStore.mjs";
 import { vcrCurrentNodes, vcrInputDigest, vcrReviewIsCurrent } from "./vcrViews.mjs";
@@ -3269,6 +3269,16 @@ export class VcrOrchestrator {
       const filed = list(await this.store.comparatorDesigns(study.id, 200)).find((entry) => entry.id === subjectId);
       const own = object(filed?.configuration);
       return filed && Object.keys(own).length && (jobKind === "evalue" || own.estimate !== undefined) ? { scenario: structuredClone(own), detail: {} } : { unavailable: true };
+    }
+    // A simulated treatment comparison, a target-trial emulation and a borrowed control are comparisons whose configuration IS the scenario
+    // (`vcrConversationSubject` files them so): started by the id of one that holds it, the scenario is read from the object. A configuration
+    // that is another method's (a weighting's, under the same id) is not this method's scenario and is left to the validator's own refusal.
+    if (VCR_OWN_COMPARISON_KINDS.has(jobKind)) {
+      const filed = list(await this.store.comparatorDesigns(study.id, 200)).find((entry) => entry.id === subjectId);
+      const own = object(filed?.configuration);
+      const method = /** @type {Record<string, string>} */ (VCR_JOB_METHODS)[jobKind];
+      return filed && Object.keys(own).length && !validateScenario(method, own).some((issue) => issue.code !== "scenario_field_missing" || !String(issue.field).includes("inputId"))
+        ? { scenario: structuredClone(own), detail: {} } : { unavailable: true };
     }
     const kindOfObject = /** @type {Record<string, string>} */ ({ design_analytic: "trial_scenario", design_simulation: "trial_scenario", assurance: "trial_scenario",
       design_grid: "design_grid", generate_population: "population", literature_population: "population" })[jobKind];

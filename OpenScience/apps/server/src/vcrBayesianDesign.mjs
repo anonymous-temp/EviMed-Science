@@ -25,19 +25,18 @@
  */
 
 import { finishPremises } from "./vcrPremises.mjs";
+import { vcrScenarioKey } from "./vcrScenarioKey.mjs";
 import { list, markFor, measureValue, numeric, object } from "./vcrViewsKit.mjs";
 
 /**
- * The key a Bayesian-design result is filed under: the design and what it was asked about (the two rates and the size of a phase II
- * design; the endpoint of a calibration).
+ * The key a Bayesian-design result is filed under: the design and the scenario it was asked on (the two rates, the size and the objective
+ * of a phase II design; the endpoint, prior and threshold of a calibration). The two help examples of one design (a fewest-patients
+ * objective beside a best-decision one) are two cards, and the same question asked again is the next version of one.
  * @param {Record<string, any>} scenario
  */
 export function vcrBayesianSubjectId(scenario) {
-  const design = object(scenario?.design);
-  const truth = object(scenario?.truth);
-  const kind = String(design.kind ?? "unknown");
-  if (kind === "threshold_calibration") return `bayes:${kind}:${String(object(scenario?.endpoint).type ?? "unknown")}`;
-  return `bayes:${kind}:${truth.nullRate ?? "?"}-${truth.alternativeRate ?? "?"}-${design.maxN ?? "?"}`;
+  const kind = String(object(scenario?.design).kind ?? "unknown");
+  return `bayes:${kind}:${vcrScenarioKey(scenario)}`;
 }
 
 const KIND_WORDS = Object.freeze(/** @type {Record<string, { title: string, question: string }>} */ ({
