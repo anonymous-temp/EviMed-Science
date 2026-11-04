@@ -904,6 +904,16 @@ export class GeoOrchestrator {
       else if (!FINISHED.has(current.steps.content?.status)) current = await this.#step(current, "content", { status: "failed", runId: mark.run_id ?? null });
       else current = await this.#step(current, "content", { status: "done" });
     }
+    // A person's stop is the end of this try, not a failure to try again: nothing starts by itself (a live run on production began two minutes after
+    // 停止, 2026-11-04), and a step it left with nothing is back where it was. Asking again gives it new tries (`runStep`, `#allowRetries`).
+    if (status === "canceled" && run?.canceledBy === "user") {
+      await this.#update(project.id, mark.key, { detail: { allowed: Number(mark.attempts ?? 0) } });
+      for (const [step, value] of Object.entries(current.steps)) {
+        if (/** @type {any} */ (value)?.status === "failed" && /** @type {any} */ (value)?.runId === (mark.run_id ?? null)) {
+          current = await this.#step(current, step, { status: "none", requested: false, runId: null });
+        }
+      }
+    }
   }
 
   /** Runs whose end the ledger knows but no callback told us, and claims a dead process left. @param {any} project */

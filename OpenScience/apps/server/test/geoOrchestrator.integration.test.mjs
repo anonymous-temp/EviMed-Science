@@ -521,6 +521,30 @@ test("a single step (信源分析与预期) builds only its minimal upstream: id
   assert.equal(world.dispatched[2].dispatchId, "geo-insight-a2", "a new attempt, never the old run's id");
 });
 
+test("a person's stop is not tried again: the step is back where it was until they ask, and asking gives it new tries", options, async () => {
+  const world = harness();
+  const { project, control, user } = await newProject();
+  await world.orchestrator.runStep(user, project, "evidence");
+  assert.equal(world.dispatched.length, 1);
+  assert.equal((await statuses(project.id)).evidence, "running");
+  await world.orchestrator.onRunFinished(control, { id: `run-1-${world.dispatched[0].dispatchId}`, dispatchId: world.dispatched[0].dispatchId, status: "canceled", canceledBy: "user" });
+  await world.orchestrator.advance(project.id);
+  await world.orchestrator.advance(project.id);
+  assert.equal(world.dispatched.length, 1, "nothing starts by itself after 停止");
+  const { steps } = await reload(project.id);
+  assert.deepEqual([steps.evidence.status, steps.evidence.requested], ["none", false]);
+  await world.orchestrator.runStep(user, project, "evidence");
+  assert.equal(world.dispatched.length, 2, "asking again starts it");
+  assert.equal(world.dispatched[1].dispatchId, "geo-insight-a2");
+  // A stop the platform made (a runtime going away) is still tried again.
+  const other = await newProject();
+  await world.orchestrator.runStep(other.user, other.project, "evidence");
+  const third = world.dispatched.at(-1);
+  await world.orchestrator.onRunFinished(other.control, { id: "run-platform", dispatchId: third.dispatchId, status: "canceled", canceledBy: "platform" });
+  await world.orchestrator.advance(other.project.id);
+  assert.equal(world.dispatched.at(-1).dispatchId, "geo-insight-a2", "the platform's stop is not the person's");
+});
+
 test("a run refused inside its own dispatch ends the step and frees the project: the fold does not wait for the turn its dispatch holds", options, async () => {
   const { project, control, user } = await newProject();
   /** @type {any} */ let orchestrator = null;
