@@ -21,6 +21,7 @@ PPC_TASKS_FILE = Path(os.environ.get("RSI1_PPC_TASKS", BENCH_ROOT / "rsi" / "ppc
 PPC_FETCH_FILE = Path(os.environ.get("RSI1_PPC_FETCH", BENCH_ROOT / "rsi" / "ppc-fetch.json"))
 LEDGER_FILE = Path(os.environ.get("RSI1_LEDGER", OUT_ROOT / "rsi1-ledger.jsonl"))
 
+# The solver's key, read only by the balance guard (the account the rollouts spend from). Improver stages are Claude and never see it.
 DEEPSEEK_KEY_FILE = Path(
     os.environ.get("RSI1_DEEPSEEK_KEY_FILE", "/home/coder/workspace/EviMedScience/.evimed-local/secrets/deepseek.api-key")
 )
@@ -33,7 +34,7 @@ DOMAINS = ("medcalc", "arb-deep", "arb-wide", "bixbench", "mbc", "drb", "rcb")
 # Always-on text of a probe: the design's experimental ceiling (docs: evals section 14), counted on guidance.md alone.
 ALWAYS_ON_MAX = 4000
 
-BALANCE_FLOOR_CNY = 500.0
+BALANCE_FLOOR_CNY = float(os.environ.get("RSI_BALANCE_FLOOR_CNY", "500"))
 BALANCE_MIN_INTERVAL_S = 60
 ROUND_CAP_CNY = 800.0
 

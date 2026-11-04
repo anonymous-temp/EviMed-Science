@@ -17,25 +17,28 @@ import { Button } from "@/components/ui/Button";
 import { Menu } from "@/components/ui/Menu";
 import { Outline, useOutline } from "@/components/ui/Outline";
 import { Tabs } from "@/components/ui/Tabs";
+import { STICKY_BELOW_BAND } from "@/components/layout/chrome";
+import { List } from "@/components/ui/ListRow";
+import { useContainerNarrow } from "@/lib/useContainerNarrow";
 import { useWide } from "@/lib/useMediaQuery";
 import { EvidenceMatrixTable } from "./EvidenceMatrixTable";
-import { SourceCardList } from "./SourceCards";
+import { SourceCardList, sourceCardEntries } from "./SourceCards";
 import { useClaimMatrix } from "./useClaimMatrix";
 
+const OUTLINE_PAGE_MIN = 880;
+const SOURCES_PAGE_MIN = 1096;
+
 /**
- * A delivered report, read (plan §5 act 4, §8.3; appendix D §10.6–§10.8).
- *
- * Above the text: when the search stopped, what the report stands on, which
- * model wrote it and what limits it declares — 「未注明」 wherever the package
- * does not say — and how many of its claims were found in their preserved
- * sources. Then any conclusion a clinical-safety finding names, with its
- * evidence open. Then the report, each sentence ending in a 依据 mark that
- * opens what it rests on; or the evidence matrix as a table. A table of
- * contents beside it, and a way out on paper: the Markdown file, or print /
- * save as PDF from a print copy on white paper whatever the theme.
- *
- * `page` is the standalone reader (`/app/runs/:runId/files/*`); `pane` is the
- * same reader in a drawer or the right pane, with the contents folded.
+ * Component: ReportReader; owner: H; rules: DS11, DS22.1, DS22.2, AT22/24/30.
+ * Anatomy: Report/matrix toolbar, document, outline, and recorded evidence.
+ * Variants: Addressed reader or embedded pane; print has a separate copy.
+ * States: Recorded verification, pending/error states and immutable-version availability remain distinct.
+ * Hit area: Shared tabs, disclosure, export menu and source jump button.
+ * Keyboard: Outline navigates the document; jumping to sources also transfers focus.
+ * Long content: Reading measure, folded outline and full source cards in document flow.
+ * Theme: Existing paper surface, ink and semantic verification roles.
+ * Responsive: The addressed reader adds columns only when its measured width supports them.
+ * Verification: ReportReader.test.tsx and the non-GEO reading walkthrough.
  */
 export function ReportReader({
   path,
@@ -73,6 +76,10 @@ export function ReportReader({
   const { document: matrix, verification, verified, verificationState, retry: retryChecks } = useClaimMatrix(path, root, !immutableVersion, immutableVersion);
   const [view, setView] = useState<"report" | "matrix">("report");
   const wide = useWide();
+  const pageRef = useRef<HTMLDivElement>(null);
+  const sourcesRef = useRef<HTMLDivElement>(null);
+  const outlineNarrow = useContainerNarrow(pageRef, OUTLINE_PAGE_MIN);
+  const sourcesNarrow = useContainerNarrow(pageRef, SOURCES_PAGE_MIN);
   const articleRef = useRef<HTMLDivElement>(null);
   // Heading ids are the reader's own, so two readers on one page (a drawer
   // over the runs page, say) never share one.
@@ -139,6 +146,10 @@ export function ReportReader({
   }, [focusClaim, matrix, verification, reading, view]);
 
   const facts = reportFacts({ meta: matrix?.meta ?? null, run });
+  const sources = useMemo(() => layout === "page" && matrix ? sourceCardEntries(matrix.claims.values(), verified) : [], [layout, matrix, verified]);
+  const outlineColumn = wide && !outlineNarrow && view === "report";
+  const sourcesColumn = wide && !sourcesNarrow && view === "report" && sources.length > 0;
+  const sourceCards = matrix && <SourceCardList claims={matrix.claims} verified={verified} runId={reading.runId} className="mt-8 border-t border-border pt-6" />;
 
   const download = async () => {
     try {
@@ -203,7 +214,7 @@ export function ReportReader({
         * of study each is, whether its quotation is in it, and whether it has
         * since been retracted — none of which a numbered reference list can
         * say. The report's own 参考文献 prose stays where the writer put it. */}
-      {matrix && <SourceCardList claims={matrix.claims} verified={verified} runId={reading.runId} className="mt-8 border-t border-border pt-6" />}
+      {layout === "page" && sources.length > 0 ? <div ref={sourcesRef} tabIndex={-1} className="scroll-mt-4">{sourceCards}</div> : sourceCards}
     </div>
   );
 
@@ -224,24 +235,31 @@ export function ReportReader({
   return (
     <>
       {layout === "page" ? (
-        <div className="mx-auto flex w-full max-w-page gap-8 px-6 py-6 max-sm:px-0 max-sm:py-3">
-          {wide && view === "report" && (
-            <Outline
-              layout="column"
-              entries={toc}
-              active={active}
-              onSelect={scrollTo}
-              onTop={() => articleRef.current?.closest(".overflow-y-auto")?.scrollTo({ top: 0 })}
-            />
-          )}
-          <div className={cn("min-w-0 flex-1 space-y-4", view === "report" && "max-w-read")}>
-            <div className="space-y-3 max-sm:px-4">
-              {toolbar}
-              {/* No column for them on a narrower page: the contents fold
-                * above the report, as they do in the pane. */}
-              {!wide && view === "report" && <Outline layout="folded" entries={toc} active={active} onSelect={scrollTo} />}
+        <div ref={pageRef} className="mx-auto w-full max-w-wide space-y-4 py-3 sm:py-6">
+          <div className="border-b border-border pb-3">{toolbar}</div>
+          <div className="flex items-start justify-center gap-6">
+            {outlineColumn && <Outline layout="column" className="w-40" entries={toc} active={active} onSelect={scrollTo} onTop={() => articleRef.current?.closest(".overflow-y-auto")?.scrollTo({ top: 0 })} />}
+            <div className={cn("min-w-0 flex-1 space-y-4", view === "report" && "max-w-read")}>
+              {!outlineColumn && view === "report" && <Outline layout="folded" entries={toc} active={active} onSelect={scrollTo} />}
+              {body}
             </div>
-            {body}
+            {sourcesColumn && (
+              <aside aria-label="报告来源摘要" data-print-hide="" className={cn("sticky w-52 shrink-0 space-y-3 border-l border-border pl-4", STICKY_BELOW_BAND)}>
+                <h2 className="text-ui font-semibold text-text">来源 · {sources.length}</h2>
+                <List divided className="border-y border-border">
+                  {sources.slice(0, 3).map((source) => (
+                    <li key={source.key} className="break-words py-2 text-ui text-text-2">
+                      {source.title}
+                      {(source.journal || source.year) && <p className="mt-1 text-caption text-text-3">{[source.journal, source.year].filter(Boolean).join(" · ")}</p>}
+                    </li>
+                  ))}
+                </List>
+                <Button variant="text" size="sm" className="text-link" onClick={() => {
+                  sourcesRef.current?.scrollIntoView?.({ block: "start" });
+                  sourcesRef.current?.focus({ preventScroll: true });
+                }}>查看全部来源</Button>
+              </aside>
+            )}
           </div>
         </div>
       ) : (

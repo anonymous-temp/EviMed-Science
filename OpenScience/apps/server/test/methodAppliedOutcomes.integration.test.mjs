@@ -12,7 +12,7 @@ import { METHOD_SKILL_SCHEMA, mountedMethodDigest } from "@evimed/domain";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { FeedbackEvents } from "../src/feedbackEvents.mjs";
 import { LearningService } from "../src/learningService.mjs";
-import { createMethodAppliedOutcomes } from "../src/methodAppliedOutcomes.mjs";
+import { createMethodAppliedOutcomes, learningPassAccounts } from "../src/methodAppliedOutcomes.mjs";
 import { migrateProductStore } from "../src/productPersistence.mjs";
 import { productDocumentsDouble } from "./helpers/productDocumentsDouble.mjs";
 
@@ -25,6 +25,8 @@ if (url) {
 const options = { skip: !url && "OPEN_SCIENCE_TEST_POSTGRES_URL is not configured", timeout: 30_000 };
 const owner = `applied_${randomUUID().replaceAll("-", "")}`;
 const stranger = `applied_${randomUUID().replaceAll("-", "")}`;
+/** The accounts of the hourly pass's listing: evidence only, a library only, both, a retired library only, evidence too old. */
+const listed = Object.fromEntries(["evidence", "library", "both", "retired", "old"].map((name) => [name, `applied_${name}_${randomUUID().replaceAll("-", "")}`]));
 const PROJECT = "applied_project";
 const sha256 = (/** @type {string} */ text) => createHash("sha256").update(text, "utf8").digest("hex");
 const NOW = Date.parse("2026-10-23T12:00:00.000Z");
@@ -38,7 +40,7 @@ before(async () => {
   database = new ControlPlaneDatabase({ databaseUrl: url, databasePoolMax: 4, databaseConnectionTimeoutMs: 2000 });
   await database.migrate();
   await migrateProductStore(database);
-  for (const id of [owner, stranger]) await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'Applied outcomes','development')", [id]);
+  for (const id of [owner, stranger, ...Object.values(listed)]) await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'Applied outcomes','development')", [id]);
   await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,$2,'Applied',1048576)", [owner, PROJECT]);
   feedback = new FeedbackEvents({ database });
 });
@@ -46,7 +48,7 @@ before(async () => {
 after(async () => {
   if (!url) return;
   await database.query("DELETE FROM evimed_control.projects WHERE user_id = $1", [owner]).catch(() => {});
-  await database.query("DELETE FROM evimed_control.users WHERE id = ANY($1)", [[owner, stranger]]).catch(() => {});
+  await database.query("DELETE FROM evimed_control.users WHERE id = ANY($1)", [[owner, stranger, ...Object.values(listed)]]).catch(() => {});
   await database.close?.();
 });
 
@@ -84,4 +86,30 @@ test("the reactions the evidence writer filed are what the counters read, once e
   // The same window again counts nothing twice, and the stranger's account settles nothing of the owner's runs.
   assert.deepEqual(await settle.settleUser(owner), { runs: 4, corrected: 0, clean: 0, unattributed: 0, stale: 0, failed: 0 });
   assert.deepEqual(await settle.settleUser(stranger), { runs: 0, corrected: 0, clean: 0, unattributed: 0, stale: 0, failed: 0 });
+});
+
+test("the hourly pass lists every account with evidence in the window and every library not retired, page after page, and no other", options, async () => {
+  const method = (/** @type {string} */ userId, /** @type {string} */ status) => database.query(
+    "INSERT INTO evimed_product.documents(user_id,kind,id,payload) VALUES($1,'method',$2,$3::jsonb)", [userId, `method_${randomUUID()}`, JSON.stringify({ recordType: "learned-method", status })]);
+  await method(listed.library, "approved");
+  await method(listed.both, "approved");
+  await method(listed.retired, "retired");
+  const evidence = (/** @type {string} */ userId, /** @type {number} */ hoursAgo) => feedback.recordLearningEvidence(userId, { runId: `run_${randomUUID()}`, key: "used", projectId: null,
+    detail: { evidence: "used", at: new Date(NOW - hoursAgo * 3_600_000).toISOString(), scope: "conversation", sessionId: "ses_1" } });
+  await evidence(listed.evidence, 2);
+  await evidence(listed.both, 30);
+  await evidence(listed.old, 24 * 4);
+  const ours = new Set(Object.values(listed));
+  const seen = [];
+  // A page of two: the cursor is crossed several times among these five accounts and whatever else the test database holds.
+  for await (const account of learningPassAccounts(database, { now: NOW, page: 2 })) if (ours.has(account.userId)) seen.push(account);
+  assert.deepEqual(seen, [
+    { userId: listed.evidence, library: false },
+    { userId: listed.library, library: true },
+    { userId: listed.both, library: true },
+  ].sort((left, right) => (left.userId < right.userId ? -1 : 1)), "each once; a retired library and evidence older than the window are not read");
+  // Each page reads the window's learning evidence by an index of its own, not every account's ledger.
+  const index = await database.query("SELECT indexdef FROM pg_indexes WHERE schemaname='evimed_product' AND indexname='feedback_events_learning_evidence_time_idx'");
+  assert.equal(index.rowCount, 1);
+  assert.match(index.rows[0].indexdef, /\(occurred_at, user_id\) WHERE \(trigger_kind = 'learning-evidence'::text\)/);
 });

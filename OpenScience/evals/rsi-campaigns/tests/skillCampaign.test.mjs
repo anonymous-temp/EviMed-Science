@@ -1,16 +1,20 @@
-import test from 'node:test';
+import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp } from 'node:fs/promises';
+import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { rsiDigest as digest } from '../../../apps/server/src/rsiCampaignBundle.mjs';
+import { rsiCampaignIssues } from '../../../packages/domain/src/rsiCampaign.mjs';
 import { runCampaign } from '../campaign_runner.mjs';
 import { evaluatorReceiptPayload, SKILL_COST_IDENTITY } from '../evaluator.mjs';
 import { medcalcCorrect, skillCampaignConsumerIdentity, statedAnswer } from '../skill_campaign.mjs';
 import { BENIGN_PROCEDURE, memoryCampaignStore, runToVerdict, runnerEnvironment, tickingClock } from '../profiles/benign_fixture.mjs';
 
 const DEADLINE = '2026-10-31T15:59:59.999Z';
+/** Who wrote the candidates: the operator's Claude session (owner 2026-11-03), recorded as the manifest's improvers. */
+const IMPROVERS = [{ role: 'lead', provider: 'anthropic', model: 'claude-opus-5-5' }];
 const scratch = await mkdtemp(join(tmpdir(), 'rsi-skill-'));
+after(() => rm(scratch, { recursive: true, force: true }));
 let dirs = 0;
 const nextDir = () => join(scratch, String(dirs += 1));
 
@@ -57,9 +61,9 @@ async function skillFixture({ development: devSpec = {}, confirmation: confSpec 
   const target = { surface: 'capability-skill', dependencyDigest: 'a'.repeat(64), baselineRevision: 'benign-baseline' };
   const sources = { 'development-dev': development, 'confirmation-conf': confirmation };
   const manifest = {
-    schemaVersion: 1, id, surface: 'capability-skill', candidateKind: 'skill', claim: 'targeted-repair', automated: true,
+    schemaVersion: 2, id, surface: 'capability-skill', candidateKind: 'skill', claim: 'targeted-repair', automated: true,
     createdAt: '2026-10-26T00:00:00Z', deadline: DEADLINE, budget: { campaignCny: 1000, monthCny: 30000 },
-    models: { solver: { provider: 'deepseek', model: 'deepseek-flash' }, improver: { provider: 'dashscope', model: 'qwen3.8-max' }, reviewer: { provider: 'dashscope', model: 'qwen3.8-max' } },
+    models: { solver: { provider: 'deepseek', model: 'deepseek-flash' }, improvers: IMPROVERS, judges: [] },
     target, registration: { digest: digest(registration), procedure: BENIGN_PROCEDURE.id, claim: 'targeted-repair' },
     data: { classification: 'public', sources: [
       { id: 'development-dev', digest: digest(development), role: 'development', exposure: 'exposed' },
@@ -123,32 +127,54 @@ test('a paid consumer registered as deterministic is refused, and an unsettled r
   await assert.rejects(evaluatorReceiptPayload({ ...unsettled, request: awaiting.request, checkpoint: store.state(unsettled.manifest.id), now: now() }), { message: 'campaign_cost_measurement_missing' });
 });
 
-test('the improver writes content-addressed candidates, each reserved, begun and settled in the lab budget', async () => {
-  const { improveSkills, candidateRecord } = await import('../skill_improver.mjs');
-  const calls = [];
-  const budget = {
-    reserve: async (r) => { calls.push(['reserve', r.stageKey, r.amountCny > 0]); return { authorized: true }; },
-    beginSpend: async (r) => { calls.push(['begin', r.stageKey]); return { authorized: true }; },
-    settle: async (r) => { calls.push(['settle', r.stageKey, r.outcome, r.actualCny]); return { ok: true }; },
-  };
-  let n = 0;
-  const fetchImpl = async () => ({ ok: true, json: async () => ({ usage: { prompt_tokens: 1000, completion_tokens: 300 },
-    choices: [{ message: { content: JSON.stringify({ title: `Calculator discipline ${n += 1}`, description: 'Use for clinical calculator questions.', instructions: '1. Identify the formula.\n2. Convert units.' }) } }] }) });
-  const failures = [{ calculator: 'Creatinine Clearance', question: 'note...', answer: '14', gold: '6.07' }];
-  const result = await improveSkills({ failures, k: 2, key: 'test', budget, campaignId: 'c1', fetchImpl, now: () => '2026-10-28T08:00:00Z' });
-  assert.equal(result.candidates.length, 2);
-  for (const c of result.candidates) assert.equal(c.arm, candidateRecord(c).arm);
-  assert.deepEqual(calls.map((c) => c[0]), ['reserve', 'begin', 'settle', 'reserve', 'begin', 'settle']);
-  assert.ok(calls.filter((c) => c[0] === 'settle').every((c) => c[2] === 'success' && c[3] > 0));
+test('the operator\'s candidates are registered content-addressed, by Claude improvers only, and an address that is not the text\'s is refused', async () => {
+  const { registerSkillCandidates, candidateRecord, buildSkillCampaign } = await import('../skill_assemble.mjs');
+  const raw = { improvers: IMPROVERS, candidates: [
+    { title: 'Calculator discipline', description: 'Use for clinical calculator questions.', instructions: '1. Identify the formula.\n2. Convert units.' },
+    { title: ' Calculator discipline ', description: 'Use for clinical calculator questions.', instructions: '1. Identify the formula.\n2. Convert units.\n' },
+    { title: 'Recount the criteria', description: 'Use when a score is a sum of criteria.', instructions: 'Quote a phrase of the note for each criterion.' }] };
+  const registered = registerSkillCandidates(raw);
+  assert.deepEqual(registered.improvers, IMPROVERS);
+  assert.equal(registered.candidates.length, 2, 'the same text twice is one candidate');
+  for (const c of registered.candidates) {
+    assert.deepEqual(c, candidateRecord(c));
+    assert.match(c.arm, /^cand-[a-f0-9]{12}$/); assert.equal(c.arm, `cand-${c.digest.slice(0, 12)}`);
+    assert.equal(c.chars, c.title.length + c.description.length + c.instructions.length);
+  }
+  // Who wrote them is Claude, named and pinned: nobody, DeepSeek, Qwen or an unpinned name is not an improver.
+  for (const improvers of [undefined, [], [{ role: 'lead', provider: 'dashscope', model: 'qwen3.8-max' }], [{ role: 'lead', provider: 'deepseek', model: 'deepseek-v4-pro' }],
+    [{ role: 'lead', provider: 'anthropic', model: 'sonnet' }], [{ role: 'lead', provider: 'anthropic', model: 'claude-opus-5-5' }, { role: 'x', provider: 'none', model: 'registered-grid' }]]) {
+    assert.throws(() => registerSkillCandidates({ ...raw, improvers }), /^Error: campaign_(improver_missing|improver_refused)$/, JSON.stringify(improvers));
+  }
+  assert.throws(() => registerSkillCandidates({ ...raw, improvers: [{ role: 'lead', provider: 'anthropic', model: 'claude-opus-5-5', key: 'k' }] }), { message: 'campaign_model_invalid' });
+  for (const candidates of [undefined, [], [{ title: 'x', description: '', instructions: 'y' }], [{ title: 'x'.repeat(61), description: 'd', instructions: 'y' }], [{ title: 'x', description: 'd', instructions: 'y'.repeat(6001) }], Array(17).fill(raw.candidates[0])]) {
+    assert.throws(() => registerSkillCandidates({ ...raw, candidates }), { message: 'campaign_candidates_invalid' });
+  }
+  // The lab recomputes the address of a candidate that carries its text; a candidate without text is the registration's own record.
+  const base = await skillFixture();
+  const [development, confirmation] = Object.values(base.inputs.sources);
+  const build = (candidates) => buildSkillCampaign({ development, confirmation, candidates, failureCalculators: [2, 3], month: '2026-10', idPrefix: 'rehearsal-', now: '2026-10-26T00:00:00Z' });
+  const listed = [GOOD, WEAK].map((c) => ({ arm: c.arm, digest: c.skill.digest, chars: c.skill.chars, title: c.skill.title }));
+  const forged = { improvers: IMPROVERS, candidates: [{ ...registered.candidates[0], chars: registered.candidates[0].chars + 1 }, ...listed] };
+  await assert.rejects(build(forged), { message: 'campaign_candidate_digest_mismatch' });
+  await assert.rejects(build({ improvers: IMPROVERS, candidates: [{ ...registered.candidates[0], instructions: 'edited after registration' }, ...listed] }), { message: 'campaign_candidate_digest_mismatch' });
+  await assert.rejects(build({ improvers: IMPROVERS, candidates: [{ ...listed[0], description: 'only half the text' }] }), { message: 'campaign_candidates_invalid' });
+  await assert.rejects(build({ improvers: IMPROVERS, candidates: [] }), { message: 'campaign_candidates_invalid' });
+  await assert.rejects(build({ candidates: listed }), { message: 'campaign_improver_missing' });
+  await assert.rejects(build({ improvers: [{ role: 'lead', provider: 'dashscope', model: 'qwen3.8-max' }], candidates: listed }), { message: 'campaign_improver_refused' });
 });
 
 test('the assembler builds a manifest and inputs the runner and evaluator take as they are', async () => {
   const { buildSkillCampaign } = await import('../skill_assemble.mjs');
   const base = await skillFixture();
   const sources = Object.values(base.inputs.sources);
-  const candidates = { model: 'qwen3.8-max', candidates: [GOOD, WEAK].map((c) => ({ arm: c.arm, digest: c.skill.digest, chars: c.skill.chars, title: c.skill.title })) };
+  const candidates = { improvers: IMPROVERS, candidates: [GOOD, WEAK].map((c) => ({ arm: c.arm, digest: c.skill.digest, chars: c.skill.chars, title: c.skill.title })) };
   const built = await buildSkillCampaign({ development: sources[0], confirmation: sources[1], candidates, failureCalculators: [2, 3], month: '2026-10', idPrefix: 'rehearsal-', now: '2026-10-26T00:00:00Z' });
   assert.equal(built.supply.developmentChoice.frozen.arm, GOOD.arm);
+  assert.deepEqual(built.manifest.models, { solver: { provider: 'deepseek', model: 'deepseek-flash' }, improvers: IMPROVERS, judges: [] });
+  assert.deepEqual(built.inputs.registration.improvers, IMPROVERS);
+  assert.equal(built.manifest.schemaVersion, 2);
+  assert.deepEqual(rsiCampaignIssues(built.manifest), []);
   assert.ok(built.supply.confirmation.sliceGroups >= 25);
   const { completed } = await runToVerdict({ manifest: built.manifest, inputs: built.inputs }, { dir: nextDir() });
   assert.equal(completed.status, 'completed');
@@ -160,10 +186,11 @@ test('a campaign whose development finds no improving candidate ends there, reco
   const worse = (arm, inSlice) => (arm === 'baseline' ? 0.9 : inSlice ? 0.1 : 0.9);
   const base = await skillFixture({ development: { p: worse } });
   const development = Object.values(base.inputs.sources)[0];
-  const candidates = { model: 'qwen3.8-max', candidates: [GOOD, WEAK].map((c) => ({ arm: c.arm, digest: c.skill.digest, chars: c.skill.chars, title: c.skill.title })), spend: [{ cny: 0.2 }] };
+  const candidates = { improvers: IMPROVERS, candidates: [GOOD, WEAK].map((c) => ({ arm: c.arm, digest: c.skill.digest, chars: c.skill.chars, title: c.skill.title })) };
   const result = developmentOnly({ development, candidates, failureCalculators: [2, 3], month: '2026-11' });
   assert.equal(result.status, 'development-only');
   assert.equal(result.supply.developmentChoice.frozen, null);
   assert.equal(result.supply.developmentChoice.reason, 'campaign_no_improving_candidate');
-  assert.equal(result.supply.improverSpendCny, 0.2);
+  assert.deepEqual(result.supply.improvers, IMPROVERS, 'who wrote the candidates is recorded, and no spend: they cost the lab nothing');
+  assert.equal(result.supply.improverSpendCny, undefined);
 });

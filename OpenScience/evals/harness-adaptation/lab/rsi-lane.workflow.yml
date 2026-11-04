@@ -1,0 +1,242 @@
+# A copy of .github/workflows/rsi-lane.yml as it stands on the orphan branch rsi-lab/lanes (only that file and .rsi-lab/ live there, so a push
+# starts nothing else). Kept here so the workflow is reviewed with the lab files it runs; test_workflow.py reads this copy.
+name: rsi-lane
+
+# The RSI lab's lanes. Only this file and .rsi-lab/ live on the orphan branch rsi-lab/lanes, so a push here starts nothing else.
+# A batch is one commit that edits .rsi-lab/config.json (see .rsi-lab/README.txt). The logs of this repository are public: every step
+# prints counters, request ids and bounded codes, never a prompt, an answer or a model output.
+on:
+  push:
+    branches: ["rsi-lab/lanes"]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: rsi-lane-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      mode: ${{ steps.cfg.outputs.mode }}
+      matrix: ${{ steps.cfg.outputs.matrix }}
+      imageRunId: ${{ steps.cfg.outputs.imageRunId }}
+      imageArtifact: ${{ steps.cfg.outputs.imageArtifact }}
+      sourceRef: ${{ steps.cfg.outputs.sourceRef }}
+      labFrom: ${{ steps.cfg.outputs.labFrom }}
+      idleExitMin: ${{ steps.cfg.outputs.idleExitMin }}
+      sandboxCheck: ${{ steps.cfg.outputs.sandboxCheck }}
+      promptMarkers: ${{ steps.cfg.outputs.promptMarkers }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: cfg
+        run: |
+          python3 - <<'PY'
+          import json, os
+          cfg = json.load(open('.rsi-lab/config.json'))
+          mode = cfg['mode']
+          assert mode in ('reupload', 'probe', 'lanes', 'idle'), mode
+          include = []
+          for arm in cfg.get('arms', []):
+              for job in range(1, int(arm.get('jobs', 1)) + 1):
+                  include.append({'key': arm['key'], 'patch': arm.get('patch') or '', 'webPatch': arm.get('webPatch') or '', 'workers': int(arm.get('workers', 3)), 'job': job,
+                                  'lane': f"{cfg['batch']}-{arm['key']}-{job}"})
+          assert len(include) <= 8, 'at most 8 lane jobs'
+          if mode == 'lanes':
+              assert include, 'no arms'
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as fh:
+              fh.write(f"mode={mode}\n")
+              fh.write("matrix=" + json.dumps({'include': include or [{'key': 'none', 'patch': '', 'webPatch': '', 'workers': 0, 'job': 0, 'lane': 'none'}]}) + "\n")
+              fh.write(f"imageRunId={int(cfg['imageRunId'])}\n")
+              fh.write(f"imageArtifact={cfg['imageArtifact']}\n")
+              fh.write(f"sourceRef={cfg.get('sourceRef', 'main')}\n")
+              fh.write(f"labFrom={cfg.get('labFrom', 'branch')}\n")
+              fh.write(f"idleExitMin={int(cfg.get('idleExitMin', 30))}\n")
+              fh.write(f"sandboxCheck={'true' if cfg.get('sandboxCheck') else 'false'}\n")
+              fh.write("promptMarkers=" + ",".join(cfg.get('promptMarkers', [])) + "\n")
+          print(f"mode {mode}: {len(include)} lane job(s)")
+          PY
+
+  # One-off: the CI artifact expires on 2026-11-04; the copy lives 30 days.
+  reupload:
+    needs: plan
+    if: needs.plan.outputs.mode == 'reupload'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.plan.outputs.imageArtifact }}
+          run-id: ${{ needs.plan.outputs.imageRunId }}
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          path: ${{ runner.temp }}/img
+      - uses: actions/upload-artifact@v4
+        with:
+          name: rsi-lab-images-5c740327bb8c
+          path: ${{ runner.temp }}/img/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
+
+  probe:
+    needs: plan
+    if: needs.plan.outputs.mode == 'probe'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Runner facts
+        run: |
+          uname -r; cat /sys/kernel/security/lsm; echo
+          nproc; free -m | sed -n 2p; df -h / | cat
+          docker --version; docker compose version
+
+  lane:
+    needs: plan
+    if: needs.plan.outputs.mode == 'lanes'
+    name: lane ${{ matrix.lane }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    strategy:
+      fail-fast: false
+      max-parallel: 8
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    defaults:
+      run:
+        shell: /usr/local/bin/evimed-ci-root-shell {0}
+    env:
+      LAB_WORK: /opt/rsi-lab
+      LAB_BUNDLE: /opt/rsi-lab/bundle
+      LAB_SRC: ${{ github.workspace }}/src/OpenScience
+      LANE_ID: ${{ matrix.lane }}
+      LANES: ${{ matrix.workers }}
+      IMAGE_KEY: ${{ matrix.key }}
+      IDLE_EXIT_MIN: ${{ needs.plan.outputs.idleExitMin }}
+      PROMPT_MARKERS: ${{ needs.plan.outputs.promptMarkers }}
+      COMPOSE_PARALLEL_LIMIT: "1"
+    steps:
+      - name: Prepare the disposable Docker host operator shell
+        shell: bash
+        run: |
+          test "$RUNNER_ENVIRONMENT" = "github-hosted"
+          cat > "$RUNNER_TEMP/evimed-ci-root-shell" <<'SH'
+          #!/usr/bin/env bash
+          exec sudo -E env "PATH=$PATH" bash --noprofile --norc -eo pipefail "$1"
+          SH
+          sudo install -o 0 -g 0 -m 0755 "$RUNNER_TEMP/evimed-ci-root-shell" /usr/local/bin/evimed-ci-root-shell
+          echo "DEADLINE_EPOCH=$(( $(date +%s) + 338 * 60 ))" >> "$GITHUB_ENV"
+
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.plan.outputs.sourceRef }}
+          path: src
+          fetch-depth: 1
+      - uses: actions/checkout@v4
+        if: matrix.patch != ''
+        with:
+          ref: ${{ matrix.patch }}
+          path: patch
+          fetch-depth: 1
+      - uses: actions/checkout@v4
+        if: matrix.webPatch != ''
+        with:
+          ref: ${{ matrix.webPatch }}
+          path: webpatch
+          fetch-depth: 1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.22.0
+
+      - name: Place the lab files and the secret bundle
+        env:
+          RSI_LAB_BUNDLE: ${{ secrets.RSI_LAB_BUNDLE }}
+        run: |
+          set +x
+          git config --global --add safe.directory '*'
+          install -d -m 0700 "$LAB_WORK" "$LAB_BUNDLE"
+          printf '%s' "$RSI_LAB_BUNDLE" | base64 -d | tar -xz -C "$LAB_BUNDLE"
+          for f in "$LAB_BUNDLE"/secrets/* "$LAB_BUNDLE"/broker/host; do
+            v="$(tr -d '\r\n' < "$f")"
+            if [ -n "$v" ]; then echo "::add-mask::$v"; fi
+          done
+          if [ "${{ needs.plan.outputs.labFrom }}" = "source" ]; then
+            echo "LAB=$GITHUB_WORKSPACE/src/OpenScience/evals/harness-adaptation/lab" >> "$GITHUB_ENV"
+          else
+            echo "LAB=$GITHUB_WORKSPACE/.rsi-lab/lab" >> "$GITHUB_ENV"
+          fi
+          echo "secrets placed: $(ls "$LAB_BUNDLE"/secrets | wc -l) files"
+
+      - name: Fetch the release images from this repository's artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.plan.outputs.imageArtifact }}
+          run-id: ${{ needs.plan.outputs.imageRunId }}
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          path: ${{ runner.temp }}/img
+
+      - name: Verify and load the images
+        run: |
+          started=$SECONDS
+          python3 -B "$LAB/stack.py" images --archive "$RUNNER_TEMP/img"
+          rm -f "$RUNNER_TEMP/img/images.tar.gz"
+          df -h / | tail -1
+          echo "images ready after $((SECONDS - started)) s"
+
+      - name: Build the candidate runtime image
+        if: matrix.patch != ''
+        run: |
+          # A swap file for the build only: it is taken away again before any request runs, so the lane's own memory is what it is.
+          fallocate -l 24G /swap-build && chmod 600 /swap-build && mkswap /swap-build >/dev/null && swapon /swap-build
+          python3 -B "$LAB/stack.py" build-delta --patch-src "$GITHUB_WORKSPACE/patch/OpenScience" --key "${{ matrix.key }}" || status=$?
+          # dockerd holds about 12 GB while it exports the new image's layers; a restart gives that back (nothing runs yet, the images are on
+          # disk), and only then can the swap file go: taking it away while dockerd still sits in it killed the runner (2026-11-01).
+          systemctl restart docker
+          for i in $(seq 1 30); do docker info >/dev/null 2>&1 && break; sleep 2; done
+          swapoff /swap-build && rm -f /swap-build
+          free -m | sed -n 2p
+          exit "${status:-0}"
+
+      - name: Build the candidate web image
+        if: matrix.webPatch != ''
+        run: python3 -B "$LAB/stack.py" build-web-delta --patch-src "$GITHUB_WORKSPACE/webpatch/OpenScience" --key "${{ matrix.key }}"
+
+      - name: Write the environment and the secret files
+        run: python3 -B "$LAB/stack.py" env --lanes "${{ matrix.workers }}" ${{ matrix.patch != '' && '--delta' || '' }} ${{ matrix.webPatch != '' && '--web-delta' || '' }}
+
+      - name: Start the stack
+        run: python3 -B "$LAB/stack.py" up
+
+      - name: Tool sandbox check on the runtime image
+        if: needs.plan.outputs.sandboxCheck == 'true'
+        continue-on-error: true
+        run: |
+          image="$(python3 -c "import json; d=json.load(open('$LAB_WORK/images.json')); print(d.get('runtimeDelta') or d['roles']['runtime'])")"
+          bash "$LAB_SRC/deploy/runtime-dsh/check-tool-sandbox.sh" "$image" 2>&1 | tail -60
+          # What the kernel reports for Landlock on this runner (the level production demands is "full").
+          docker run --rm --entrypoint sh "$image" -c 'ls /usr/local/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/node-addon-system-*/bin/landlock-run >/dev/null && echo "landlock launcher present"'
+          # The Landlock ABI version the runner's kernel offers (landlock_create_ruleset with the version flag), as the image's own Python asks it.
+          docker run --rm "$image" python3 -c "import ctypes; print('landlock ABI', ctypes.CDLL(None, use_errno=True).syscall(444, None, 0, 1))"
+          cat /sys/kernel/security/lsm; echo; uname -r
+
+      - name: Lab checks
+        run: python3 -B "$LAB/stack.py" verify
+
+      - name: Account self-check
+        run: python3 -B "$LAB/stack.py" selfcheck
+
+      - name: Take requests
+        run: python3 -B "$LAB/lane.py"
+
+      - name: Container state on failure
+        if: failure()
+        run: python3 -B "$LAB/stack.py" diagnose || true
+
+      - name: Stop the stack
+        if: always()
+        run: python3 -B "$LAB/stack.py" down || true

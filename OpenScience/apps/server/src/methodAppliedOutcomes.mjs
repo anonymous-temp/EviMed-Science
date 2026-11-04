@@ -40,6 +40,38 @@ const MAX_PAGES = 5;
 /** @param {string} text @returns {string} */
 const sha256 = (text) => createHash("sha256").update(text, "utf8").digest("hex");
 
+/** When a run began, the earliest of the times its record holds: no reaction to it precedes this. @param {any} run @returns {string | null} */
+const runStart = (run) => {
+  const times = [run?.createdAt, run?.startedAt].map((value) => Date.parse(String(value ?? ""))).filter(Number.isFinite);
+  return times.length ? new Date(Math.min(...times)).toISOString() : null;
+};
+
+/**
+ * The accounts the hourly learning pass visits, a page at a time in account order: every account with learning evidence inside the
+ * settlement window, whose reactions are settled whether or not it holds a method of its own (the official methods it was offered are
+ * the platform's, `OfficialPacks.recordApplied`), and every account holding a learned method that is not retired (`library`: its
+ * consolidation is queued). Until 2026-11-03 the pass read only the second set, and only its first 200: an account with no method of
+ * its own never had its reactions to an official method counted, and the 201st account was never settled or consolidated (audit
+ * 2026-11-03, D3 and D9).
+ * @param {{ query: (sql: string, params: unknown[]) => Promise<{ rows: any[] }> }} database
+ * @param {{ now?: number, windowMs?: number, page?: number }} [options]
+ * @returns {AsyncGenerator<{ userId: string, library: boolean }>}
+ */
+export async function* learningPassAccounts(database, { now = Date.now(), windowMs = DEFAULT_WINDOW_MS, page = PAGE } = {}) {
+  let after = "";
+  for (;;) {
+    const result = await database.query(`SELECT user_id, bool_or(library) AS library FROM (
+        SELECT DISTINCT user_id, true AS library FROM evimed_product.documents
+          WHERE kind='method' AND deleted_at IS NULL AND payload->>'recordType'='learned-method' AND payload->>'status' IS DISTINCT FROM 'retired'
+        UNION ALL
+        SELECT DISTINCT user_id, false FROM evimed_product.feedback_events WHERE trigger_kind=$2 AND occurred_at >= $3::timestamptz
+      ) accounts WHERE user_id > $1 GROUP BY user_id ORDER BY user_id LIMIT $4`, [after, LEARNING_EVIDENCE_TRIGGER, new Date(now - windowMs).toISOString(), page]);
+    for (const row of result.rows) yield { userId: String(row.user_id), library: row.library === true };
+    if (result.rows.length < page) return;
+    after = String(result.rows.at(-1).user_id);
+  }
+}
+
 /**
  * @param {{
  *   learning: { approvedMethods: (userId: string) => Promise<any[]>, recordApplied: (userId: string, methodId: string, applied: { runId: string, outcome: "corrected" | "clean", at: string }, expectedDigest?: string) => Promise<{ changed: boolean }> },
@@ -49,11 +81,13 @@ const sha256 = (text) => createHash("sha256").update(text, "utf8").digest("hex")
  *   now?: () => number, windowMs?: number,
  *   onApplied?: ((outcome: "corrected" | "clean") => void) | null,
  *   audit?: ((event: string, detail: Record<string, unknown>) => unknown) | null,
- *   official?: { methods: (userId: string) => Promise<{ key: string, name: string, sha: string, digest: string }[]>,
- *     recordApplied: (applied: { key: string, sha: string, runId: string, outcome: "corrected" | "clean", at: string }) => Promise<{ changed: boolean }> } | null,
+ *   official?: { methods: (userId: string, options?: { ensure?: boolean }) => Promise<{ key: string, name: string, sha: string, digest: string }[]>,
+ *     recordApplied: (applied: { key: string, sha: string, runId: string, outcome: "corrected" | "clean", at: string, userId?: string, since?: string, keepSince?: string }) => Promise<{ changed: boolean }> } | null,
  * }} dependencies
  *   `official`: the platform's official methods (`officialPacks.mjs`) a run opened are not methods of the account's: the same reading of the researcher's
- *   next words is folded into the platform's own record of that body, across every account that was offered it.
+ *   next words is folded into the platform's own record of that body, across every account that was offered it. Read as the account holds them
+ *   (`ensure: false`): a settlement makes no copy, and an account that holds none was offered none. The record is bounded, so it is told when the
+ *   run began (`since`) and where this window starts (`keepSince`), which together keep a run it let go of from being counted again (`foldApplied`).
  */
 export function createMethodAppliedOutcomes({ learning, feedback, resolveProject, runsOf, now = () => Date.now(), windowMs = DEFAULT_WINDOW_MS, onApplied = null, audit = null, official = null }) {
   /** @param {string} event @param {Record<string, unknown>} detail */
@@ -105,11 +139,15 @@ export function createMethodAppliedOutcomes({ learning, feedback, resolveProject
     const officialByName = new Map();
     try {
       for (const document of await learning.approvedMethods(userId)) byName.set(String(document?.payload?.frontmatter?.name ?? ""), document);
-      if (official) for (const method of await official.methods(userId)) officialByName.set(method.name, method);
+      if (official) for (const method of await official.methods(userId, { ensure: false })) officialByName.set(method.name, method);
     } catch (error) {
       say("learning.applied.read", { userId, code: typeof /** @type {any} */ (error)?.code === "string" ? /** @type {any} */ (error).code : "methods_unreadable" });
       return { ...result, failed: 1 };
     }
+    // No method of its own and none of the platform's: no run of it can have opened one, and its projects are not walked. The hourly pass
+    // visits every account with evidence in the window (`learningPassAccounts`), most of which hold none.
+    if (!byName.size && !officialByName.size) return result;
+    const keepSince = new Date(now() - windowMs).toISOString();
     /** @type {Map<string, Map<string, any>>} */
     const runsByProject = new Map();
     for (const [runId, { projectId, events }] of evidence) {
@@ -149,7 +187,8 @@ export function createMethodAppliedOutcomes({ learning, feedback, resolveProject
             const appliedAt = at || new Date(now()).toISOString();
             const { changed } = own
               ? await learning.recordApplied(userId, methodId, { runId, outcome, at: appliedAt }, payload.contentDigest)
-              : await /** @type {any} */ (official).recordApplied({ key: methodId, sha: /** @type {any} */ (platform).sha, runId, outcome, at: appliedAt, userId });
+              : await /** @type {any} */ (official).recordApplied({ key: methodId, sha: /** @type {any} */ (platform).sha, runId, outcome, at: appliedAt, userId,
+                since: runStart(run) ?? appliedAt, keepSince });
             if (changed) {
               result[outcome] += 1;
               try { onApplied?.(outcome); } catch { /* a counter never decides */ }

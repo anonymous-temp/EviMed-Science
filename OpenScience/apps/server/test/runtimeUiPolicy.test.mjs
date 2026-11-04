@@ -541,6 +541,66 @@ test("LoopX GoalBar uses the authenticated project, preserves its protocol, and 
   assert.equal((await send(request("start"))).status, 403);
 });
 
+test("LoopX GoalBar: a pause may take longer than a prompt's admission, because the bar's own CLI calls are what it waits for", async t => {
+  const f = await fixture(t, {}, {}, { agentRuns: { recordSteeredInput: async () => {}, noteStopRequest: async () => null } });
+  f.config.runtimeGoalBarActionTimeoutMs = 2000;
+  f.manager.config = { ...f.manager.config, runtimePromptAdmissionTimeoutMs: 40 };
+  f.manager.proxy = async (_req, res, _project, _suffix, options) => {
+    await new Promise((resolve, reject) => { const timer = setTimeout(resolve, 200); options.admissionSignal?.addEventListener("abort", () => { clearTimeout(timer); reject(options.admissionSignal.reason); }); });
+    res.writeHead(200); res.end("{}");
+  };
+  const send = body => fetch(`${f.base}/api/${body.method}`, { method: "POST", headers: { cookie: f.cookie, origin: UI_ORIGIN, "content-type": "application/json" }, body: JSON.stringify(body) });
+  const pause = await send({ type: "client-request", rpcId: "rpc-pause", method: "loopx.goalbar",
+    payload: { v: "loopx_goalbar_request_v2", op: "pause", sessionId: "public-session", expected: { goalId: "goal", loopxAgentId: "agent" } } });
+  assert.equal(pause.status, 200);
+  // The deadline it was given is still one: the same fence, and an acknowledgement that never comes is still an answer.
+  f.config.runtimeGoalBarActionTimeoutMs = 60;
+  const late = await send({ type: "client-request", rpcId: "rpc-pause-2", method: "loopx.goalbar",
+    payload: { v: "loopx_goalbar_request_v2", op: "pause", sessionId: "public-session", expected: { goalId: "goal", loopxAgentId: "agent" } } });
+  assert.notEqual(late.status, 200);
+});
+
+test("LoopX GoalBar: the first read on a cold kernel is asked again while the kernel takes the session up, and only that read", async t => {
+  const f = await fixture(t);
+  const envelope = (result) => ({ v: "loopx_goalbar_response_v2", op: "read", sessionId: "public-session", result });
+  const coldFault = envelope({ kind: "fault", code: "session_unavailable" });
+  const present = envelope({ kind: "present", snapshot: { goalId: "goal" } });
+  let first = coldFault;
+  let later = [coldFault, present];
+  const asked = [];
+  f.manager.goalBar = async (_project, payload) => { asked.push(payload.op); return later.shift() ?? coldFault; };
+  f.manager.proxy = async (req, res, _project, _suffix, options) => {
+    const body = Buffer.from(JSON.stringify({ type: "server-response", rpcId: JSON.parse(req.__openScienceProxyBody).rpcId, result: { ok: true, value: first } }));
+    const served = options.transformResponse ? await options.transformResponse({ body, status: 200, contentType: "application/json" }) : body;
+    res.writeHead(200, { "content-type": "application/json" }); res.end(served);
+  };
+  const read = async (op = "read") => (await fetch(`${f.base}/api/loopx.goalbar`, { method: "POST", headers: { cookie: f.cookie, origin: UI_ORIGIN, "content-type": "application/json" },
+    body: JSON.stringify({ type: "client-request", rpcId: `rpc-${op}`, method: "loopx.goalbar", payload: { v: "loopx_goalbar_request_v2", op, sessionId: "public-session" } }) })).json();
+
+  f.config.runtimeGoalBarReadWaitMs = 5000;
+  const settled = await read();
+  assert.equal(settled.rpcId, "rpc-read", "the client's own call");
+  assert.equal(settled.result.value.result.kind, "present");
+  assert.deepEqual(asked, ["read", "read"]);
+
+  // An answer that says anything else is the client's at once.
+  asked.length = 0; first = envelope({ kind: "hidden", reason: "no_goal" });
+  assert.equal((await read()).result.value.result.kind, "hidden");
+  assert.deepEqual(asked, []);
+
+  // A session that never opens answers as it did, inside the wait; a watch is not asked again; a wait of 0 asks nothing.
+  first = coldFault; later = []; f.config.runtimeGoalBarReadWaitMs = 30;
+  assert.equal((await read()).result.value.result.code, "session_unavailable");
+  asked.length = 0; f.config.runtimeGoalBarReadWaitMs = 0;
+  assert.equal((await read()).result.value.result.code, "session_unavailable");
+  assert.equal((await read("watch")).result.value.result.code, "session_unavailable");
+  assert.deepEqual(asked, []);
+
+  // What the runtime manager answers when it cannot say (no version on it) never reaches a client that would call it a protocol error.
+  f.config.runtimeGoalBarReadWaitMs = 40; later = [{ result: { kind: "fault", code: "runtime_not_running" } }];
+  assert.equal((await read()).result.value.result.code, "session_unavailable");
+});
+
 test("native HTTP prompts check the bound session before forwarding while source history stays readable", async t => {
   const checked = [];
   const f = await fixture(t, {}, {}, { authorizePrompt: async (project, sessionId) => {

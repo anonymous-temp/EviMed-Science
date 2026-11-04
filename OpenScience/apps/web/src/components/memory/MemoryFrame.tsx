@@ -54,7 +54,7 @@ const NAV_WIDTH = 240;
 const CONTENT_MIN = 640;
 
 /**
- * 「记忆胶囊」's one frame (2026-10-28): the lists and the overview are two routes and read as one page, so both draw it — a left column and,
+ * 「记忆胶囊」's frame: the lists and the overview are two routes and read as one page. The lists use a left column and,
  * beside it, the section. The page used to stack a title, five tabs, a toolbar and a column of lists, and every section looked like the same long
  * page; now where the researcher is, what the capsule holds and the capsule's own controls stay put on the left while the section scrolls on the right.
  *
@@ -76,7 +76,17 @@ const CONTENT_MIN = 640;
  *
  * Beside or above is decided by the room the page itself has (the sidebar of the shell takes up to 340 px of the window), as `MasterDetail`
  * decides it: without room for both the column folds to one row above the section — the title with the controls, and the navigation under
- * them. One set of controls either way.
+ * them. The overview uses its full width for the sky and its preview, and places the same capsule controls in its header.
+ *
+ * Anatomy: capsule controls, navigation for lists, and the selected page.
+ * Variants: overview, wide list navigation and compact list navigation.
+ * States: the capsule controls and child page own their loading and error states.
+ * Hit area: shared navigation and capsule controls own their targets.
+ * Keyboard: native links and controls retain their document order.
+ * Long content: navigation labels truncate and page content owns its reading width.
+ * Theme: semantic page, border and text roles.
+ * Responsive: list navigation folds by available width; overview uses the wide page measure.
+ * Verification: MemoryHubPage and MemoryOverviewPage tests and browser reflow.
  */
 export function MemoryFrame({ tab, counts, overview, controls, toolbar, headline, children }: {
   tab: MemoryPageTab;
@@ -106,6 +116,21 @@ export function MemoryFrame({ tab, counts, overview, controls, toolbar, headline
   }, []);
   const split = width >= NAV_WIDTH + CONTENT_MIN;
   const name = MEMORY_TAB_NAMES[tab];
+
+  if (tab === "overview") {
+    return (
+      <div ref={root} data-memory-frame="overview" className="h-full min-h-0 bg-bg">
+        <MemoryControls {...controls}>
+          {({ remember, memorySwitch, menu }) => (
+            <PageShell title="记忆胶囊" documentTitle="记忆胶囊 · 总览" width="wide" toolbar={toolbar} headline={headline}
+              actions={<div className="flex flex-wrap items-center justify-end gap-2">{remember}{menu}{memorySwitch}</div>}>
+              {children}
+            </PageShell>
+          )}
+        </MemoryControls>
+      </div>
+    );
+  }
 
   return (
     <div ref={root} data-memory-frame={split ? "split" : "folded"} className={cn("flex h-full min-h-0 bg-bg", !split && "flex-col")}>

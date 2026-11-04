@@ -35,8 +35,10 @@ Aggregation (arm A is the first --arm-a / --arm-b of `packets`):
   position bias           = mean over passes of the preference for whichever report was SHOWN FIRST (total level):
                             what flips with the order.  A judge that always favours the first report by n has bias n and
                             task result 0; a judge with a real preference has bias 0.  In scale units (-3..3).
-  agreement               = share of criterion calls, over complete swapped couples, whose sign is the same in both orders
-                            (0 == 0 counts); contradiction = share whose signs are strictly opposite
+  agreement               = over the criterion calls of complete swapped couples in which neither order is a tie (pref 0), the share
+                            whose strict sign is the same in both orders; null when every call has a tie, so a judge that never states a
+                            preference has no agreement (it used to count 0 == 0 as agreeing and reach 1.0); ties = share of calls with a
+                            tie in either order; contradiction = share of all calls whose signs are strictly opposite
   win / tie / loss        = task result > +0.25 / within +-0.25 / < -0.25 (stated dead zone)
   overall                 = mean over included tasks, 95% percentile bootstrap over tasks (seed 20261028, 2000 resamples,
                             as report.py)
@@ -284,18 +286,19 @@ def aggregate_task(task, entry, order_dir, verdicts):
     dims = {d: statistics.mean(dim_by_pass[k][d] for k in pass_numbers) for d in criteria['criterions']}
     total = statistics.mean(total_by_pass.values())
     bias = statistics.mean(bias_by_pass.values())
-    agree = contradict = calls = 0
+    agree = contradict = calls = decided = 0
     for k in pass_numbers:
         if k % 2 == 1 and k + 1 in signed:
             for c in signed[k]:
                 s1, s2 = sign(signed[k][c]), sign(signed[k + 1][c])
                 calls += 1
-                agree += s1 == s2
+                decided += s1 != 0 and s2 != 0
+                agree += s1 != 0 and s1 == s2
                 contradict += s1 * s2 < 0
     result = {
         'task': task, 'passes': len(pass_numbers), 'dimensions': {d: round(v, 4) for d, v in dims.items()}, 'total': round(total, 4),
-        'positionBias': round(bias, 4), 'agreement': round(agree / calls, 4) if calls else None,
-        'contradiction': round(contradict / calls, 4) if calls else None, 'criteriaCalls': calls,
+        'positionBias': round(bias, 4), 'agreement': round(agree / decided, 4) if decided else None,
+        'ties': round((calls - decided) / calls, 4) if calls else None, 'contradiction': round(contradict / calls, 4) if calls else None, 'criteriaCalls': calls,
         'verdict': 'A' if total > DEAD_ZONE else 'B' if total < -DEAD_ZONE else 'tie',
         'perPass': {str(k): {'total': round(total_by_pass[k], 4), 'shownFirst': entry['passes'][str(k)]['first'], 'preferenceForFirstShown': round(bias_by_pass[k], 4)} for k in pass_numbers},
     }

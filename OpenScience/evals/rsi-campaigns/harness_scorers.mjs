@@ -182,7 +182,7 @@ export const HARNESS_SCORERS = Object.freeze({
   ...SKILL_SCORERS,
   'mbc-normalized': Object.freeze({ id: 'mbc-normalized', benchmark: 'medbrowsecomp', benchmarks: Object.freeze(['medbrowsecomp']), family: 'mbc', baselineRevision: 'mbc-normalized-no-harness-patch',
     slice: Object.freeze({ ...stratum, row: 'task' }), validRow: mbcRow, score: mbcScore }),
-  'judged-verdicts': Object.freeze({ id: 'judged-verdicts', benchmark: null, benchmarks: Object.freeze(['deepresearchbench', 'researchclawbench']), family: null, baselineRevision: 'judged-verdicts-no-harness-patch',
+  'judged-verdicts': Object.freeze({ id: 'judged-verdicts', benchmark: null, benchmarks: Object.freeze(['deepresearchbench', 'researchclawbench', 'bixbench']), family: null, baselineRevision: 'judged-verdicts-no-harness-patch',
     slice: Object.freeze({ ...stratum, row: 'category' }), validRow: judgedRow, score: judgedScore, judged: true }),
 });
 

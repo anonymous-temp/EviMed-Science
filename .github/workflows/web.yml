@@ -123,12 +123,23 @@ jobs:
       - name: Install isolated RSI numerical dependencies
         run: python3 -m pip install --target ../.evimed-local/toolchains/rsi-python -r evals/rsi-campaigns/requirements.txt
 
+      # The pinned upstream Harness2 that evals/harness-adaptation tests against needs Python 3.12 (its own floor); this runner image's system Python
+      # is 3.10 and the steps above installed their packages into it, so 3.12 is added beside it and put first on PATH for the offline-RSI line alone.
+      - name: Python 3.12 beside the system Python
+        id: py312
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          update-environment: false
+
       # Every test file under `evals/capability-audit/` is named here, because
       # `unittest discover` is given a literal filename per script and a file
       # nobody names is collected by nothing. `deploy.test.mjs` fails if a
       # `test_*.py` lands there without a script, and the `ci:web` step list
       # test fails if a script lands without a step here.
       - name: Test the capability audit suites
+        env:
+          PY312: ${{ steps.py312.outputs.python-path }}
         run: |
           pnpm test:acceptance-ledger
           pnpm test:eval-briefs
@@ -143,6 +154,9 @@ jobs:
           pnpm test:memory-evals
           pnpm test:knowledge-product
           pnpm test:rsi
+          # The offline half of the RSI work: the Harness2 adaptation (fetches the pinned upstream with its setup.sh), the lab's suites and the
+          # public-benchmark tools, none of which any step ran before. Standard library and node only.
+          PATH="$(dirname "$PY312"):$PATH" pnpm test:rsi-offline
           pnpm test:phi-masking
 
       # The host scripts under `scripts/ops/` (the Postgres backup, the recovery

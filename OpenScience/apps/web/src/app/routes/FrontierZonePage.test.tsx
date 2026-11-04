@@ -213,7 +213,7 @@ describe("a zone's header", () => {
 
   it("opens a conversation with a draft that is not sent: the scope, what is new and the key updates by the line the assistant reads them through", async () => {
     mount();
-    await screen.findByText("重要更新");
+    await screen.findByRole("heading", { level: 2, name: "重要更新" });
     await userEvent.click(within(await header()).getByRole("button", { name: "更多操作" }));
     await userEvent.click(screen.getByRole("menuitem", { name: "深入研究" }));
     expect(where()).toBe("/app/chat");
@@ -249,6 +249,19 @@ describe("a zone's overview", () => {
     const headings = screen.getAllByRole("heading", { level: 2 }).map((heading) => heading.textContent);
     expect(headings.slice(0, 6)).toEqual(["最新进展", "重要更新", "已获批药物", "指南与共识", "多方报道", "最新动态"]);
     expect(headings).not.toContain("安全信号");
+  });
+
+  it("folds the modules' headings into contents on a narrow page, where they stand one under another, and not beside the wide page's rail", async () => {
+    wideScreen(false);
+    const narrow = mount();
+    await screen.findByRole("heading", { level: 2, name: "最新进展" });
+    expect((await screen.findByText(/目录/)).closest("[data-outline]")).not.toBeNull();
+    narrow.unmount();
+    wideScreen(true);
+    mount();
+    await screen.findByRole("heading", { level: 2, name: "最新进展" });
+    expect(document.querySelector("[data-outline]")).toBeNull();
+    wideScreen(false);
   });
 
   it("writes 最新进展 with no 「AI」 in its name, each mark a link to the item it came from, a mark that names no ref left as words, and the day it was written", async () => {

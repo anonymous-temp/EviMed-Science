@@ -21,5 +21,6 @@ describe("what the reader chose on 总览, kept in the address", () => {
   it("keeps the parameters it does not own, the open drawer first of them", () => {
     expect(selectionParams({ ...DEFAULT_SELECTION, range: "30d" }, new URLSearchParams("open=record%3Aa&tab=x")).toString()).toBe("open=record%3Aa&tab=x&range=30d");
     expect(selectionParams(DEFAULT_SELECTION, new URLSearchParams("range=30d&open=record%3Aa")).toString()).toBe("open=record%3Aa");
+    expect(selectionParams({ ...DEFAULT_SELECTION, range: "90d" }, new URLSearchParams("preview=memory%3Aa")).toString()).toBe("preview=memory%3Aa&range=90d");
   });
 });

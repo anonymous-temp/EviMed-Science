@@ -1,8 +1,10 @@
 import type { WebAgentRun } from "./apiClient";
 
 /**
- * A long research goal as this project's run ledger shows it: the turn that set it and the continuation rounds LoopX ran for it, newest
- * first. The latest round's state is that round's, not the goal's: nothing here knows whether LoopX has more rounds to run.
+ * A long research goal as this project's run ledger shows it: the turn that set it, the continuation rounds that ran for it and every
+ * other turn of its conversation since (a person's message between two rounds, a turn the control plane started to take it up again),
+ * newest first. The latest round's state is that round's, not the goal's: the goal's own state is the control plane's
+ * (`researchGoalClient`), and nothing here knows whether more rounds are to come.
  */
 export interface ObservedResearchGoal { key: string; sessionId: string; goalId: string | null; latest: WebAgentRun; rounds: WebAgentRun[]; anchor: WebAgentRun | null }
 const sessionPattern = /^[A-Za-z0-9_-]{1,160}$/;
@@ -41,6 +43,16 @@ export function observedResearchGoals(runs: readonly WebAgentRun[]): ObservedRes
     if (setsGoal(run) || groups.has(key)) add(key, run, null);
     const group = groups.get(key);
     if (group) group.anchor = run;
+  }
+  // Any other turn in a goal's conversation is a round of it: it does the goal's work, and while it runs the goal is running. It belongs to
+  // the goal of its session whose beginning is the latest one before it; a conversation with no goal has none.
+  const taken = new Set([...groups.values()].flatMap(goal => goal.rounds.map(round => round.id)));
+  const beginning = (goal: ObservedResearchGoal) => (goal.anchor ? Date.parse(goal.anchor.startedAt) : Math.min(...goal.rounds.map(round => Date.parse(round.startedAt))));
+  for (const run of runs) {
+    if (!listable(run) || taken.has(run.id)) continue;
+    const at = Date.parse(run.startedAt);
+    const owner = [...groups.values()].filter(goal => goal.sessionId === run.sessionId && beginning(goal) <= at).sort((a, b) => beginning(b) - beginning(a))[0];
+    if (owner) { owner.rounds.push(run); taken.add(run.id); }
   }
   for (const goal of groups.values()) {
     goal.rounds.sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt));

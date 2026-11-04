@@ -1,0 +1,22 @@
+# A candidate web image for the RSI lab (2026-11-02): the loaded base web image with the control plane's sources and the domain package of
+# a patch ref laid over it. For a candidate that changes what the web container does (a gateway, a connector, the server half of a run
+# policy, a tool's registration); a change to what runs inside a session is the runtime delta (deploy/runtime-dsh/Dockerfile.delta).
+#
+# What is replaced, and why three places: the control plane's sources (`apps/server/src`), and the domain package, which the image holds
+# twice, once as `packages/domain` (the ops scripts and the files that import it by relative path) and once as the copy `pnpm deploy` put
+# under `apps/server/node_modules/.pnpm` (what `@evimed/domain` resolves to). A patch that updated one of the two would boot the old rules
+# and look as if the build had not taken. Everything else, the dependencies and the entry point included, is the base's: a patch that adds
+# a dependency or changes the lockfile is not a delta (build the full web image in CI).
+#
+# The build context is made by `stack.py build-web-delta` and holds only the three trees and this file.
+ARG WEB_BASE_IMAGE
+FROM ${WEB_BASE_IMAGE}
+ARG PATCH_REVISION=unknown
+ARG DOMAIN_DEPLOYED=/app/apps/server/node_modules/.pnpm/@evimed+domain@file+packages+domain/node_modules/@evimed/domain
+RUN rm -rf /app/apps/server/src /app/packages/domain/src "${DOMAIN_DEPLOYED}/src"
+COPY apps/server/src /app/apps/server/src
+COPY packages/domain/src /app/packages/domain/src
+COPY packages/domain/index.mjs packages/domain/package.json /app/packages/domain/
+COPY packages/domain/src ${DOMAIN_DEPLOYED}/src
+COPY packages/domain/index.mjs packages/domain/package.json ${DOMAIN_DEPLOYED}/
+LABEL io.evimed.lab.web-patch="${PATCH_REVISION}"

@@ -8,8 +8,21 @@ Rules for every judge pass:
 - The judge sees: the task text, the gold/rubric, and the system's final answer (and files it wrote, where the
   benchmark scores files). It never sees which system produced the answer beyond "the assistant".
 - Verdicts are JSON lines in judge/<bench>.verdicts.jsonl: {key, verdict | scores, rationale (<= 2 sentences), judge}.
-- Bulk passes run on Sonnet subagents with this protocol; the lead (Opus) re-judges a 10% random sample (seed 20261028)
-  and every case a deterministic pre-scorer marked needs_judge; disagreements are resolved by the lead and counted.
+- Who judges, and how (`tools/claude_judge.py judge`): one independent `claude -p --model <claude-*> --effort <e>` call per packet and pass, with the brief of
+  `judge/briefs/<dialect>.md` (bixbench, rcb, drb-abs, drb-pair; the per-benchmark files below are the protocol those briefs implement). Model, effort and judge id
+  are required and refused unless the model is a Claude id (owner 2026-11-03: an offline judge is never DeepSeek or Qwen); Sonnet for routine bulk judging, Opus
+  for a demanding judge, named in the round registration and pinned with the brief's digest in the parts directory (`judge.json`), so a resume cannot change judge
+  and the exporter refuses a verdict whose stamps differ from the registration. No session is kept. The call runs in a scratch copy of its one packet (links
+  followed) with read-only file tools confined there (`--safe-mode --restricted --tools Read,Glob,Grep`, `dontAsk`): no shell, web, write or MCP. A verdict is
+  accepted only if it matches its packet (every question once; one item per rubric item; every criterion once; race = target / (target + reference)) and is
+  otherwise asked again (three attempts); a part that exists is never asked for again, so a stopped run continues by running the same command.
+- No second model re-judges a sample: every packet is judged by one Claude model in repeated passes, and the judge's own noise is what is measured.
+  `noise_sample.py band` writes `judge-noise/2`: per family and per form, the band of the verdict on its own 0–1 scale and an agreement computed by the
+  tool (sign agreement between repeated judgings, ties excluded: pairwise across the two orders of a swapped couple, absolute as whether two passes order two
+  reports the same way; a judge that only ties gets none). `register_round.py` takes that file only, and the lab admits the judge with agreement ≥ 0.9 and
+  band/√passes within the registered margin. On the 2026-10/11 verdicts this admits RCB (band 0.044, agreement 1.0) and not DRB (absolute 0.895, pairwise
+  0.896) or BixBench (per-capsule band 0.358). The cases a deterministic pre-scorer marks needs_judge are what a BixBench packet holds
+  (`judge_packets.py --bix-unsettled`, `judged_packets_round.py`).
 - A missing or failed run is scored 0, never skipped (it is what the product delivered).
 
 ## MedBrowseComp (short answer)

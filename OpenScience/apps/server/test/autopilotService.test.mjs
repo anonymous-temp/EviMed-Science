@@ -572,6 +572,21 @@ test("completion resumes after digest notification fails without duplicating the
   assert.equal((await documents.list("user-one", "digest", { projectId: "project-one" })).items.length, 1);
 });
 
+test("a run the platform or the provider ended is no outcome of the task: two in a row do not pause it", async () => {
+  // Production's one person-owned daily study stopped itself for good on two failures that cost nothing (2026-10-21, 22).
+  const { service } = fixture();
+  const created = await service.create("user-one", agendaInput);
+  const active = await service.start("user-one", created.id, { expectedRevision: created.revision });
+  for (const [index, date] of ["2026-09-06", "2026-09-07"].entries()) {
+    const scheduled = await service.schedule("user-one", active.id, { date });
+    await service.markEpisodeDispatched("user-one", scheduled.episode.id, { runId: `run-${index}`, sessionId: `session-${index}` });
+    await service.completeRun("user-one", { projectId: "project-one", runId: `run-${index}`, status: "failed", errorCode: "runtime_stopped", deltaSchemaVersion: 1, artifacts: [], claims: [] });
+  }
+  const after = await service.get("user-one", active.id);
+  assert.equal(after.payload.status, "active");
+  assert.equal(after.payload.consecutiveFailures ?? 0, 0);
+});
+
 test("a failed episode with terminal completion evidence cannot be rebound as running", async () => {
   const { service, documents } = fixture();
   const created = await service.create("user-one", agendaInput);

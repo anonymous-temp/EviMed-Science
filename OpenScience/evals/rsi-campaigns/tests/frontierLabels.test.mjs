@@ -1,30 +1,44 @@
-import test from 'node:test';
+import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { promisify } from 'node:util';
+import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import * as labels from '../frontier_labels.mjs';
 import {
-  FRONTIER_JURY_VERSION, JuryError, calibrateJury, calibrationItems, dashscopeCaller, frontierJuryMessages, frontierJuryPromptDigest, frontierJuryVersion,
-  goldItemText, juryQualified, labelFrontierItems, loadGoldRows, loadLabelItems, parseJuryAnswer, selectFrontierExemplars,
+  FRONTIER_JURY_MODEL, FRONTIER_JURY_PROVIDER, FRONTIER_JURY_VERSION, JuryError, calibrateJury, calibrationItems, dashscopeCaller, frontierJuryMessages, frontierJuryPromptDigest, frontierJuryVersion,
+  goldItemText, juryQualified, labelFrontierItems, loadGoldRows, loadLabelItems, parseJuryAnswer, phaseItems, selectFrontierExemplars,
 } from '../frontier_labels.mjs';
+import { RSI_FRONTIER_JURY } from '../../../packages/domain/src/rsiCampaign.mjs';
+import { labConfiguration } from '../profiles/benign_fixture.mjs';
+
+const execFileAsync = promisify(execFile);
+const STAND_IN = new URL('./fixtures/frontier_labels_stand_in.mjs', import.meta.url).pathname;
+const GOLD_PATH = new URL('../../frontier-selection/gold.jsonl', import.meta.url).pathname;
 
 const gold = await loadGoldRows(new URL('../../frontier-selection/gold.jsonl', import.meta.url));
 const exemplars = selectFrontierExemplars(gold);
 const NOW = () => '2026-10-26T04:00:00.000Z';
-const tmp = () => mkdtemp(join(tmpdir(), 'frontier-labels-'));
+/** Every scratch directory a test makes is removed when the file is done. */
+const made = [];
+const tmp = async () => { const dir = await mkdtemp(join(tmpdir(), 'frontier-labels-')); made.push(dir); return dir; };
+after(() => Promise.all(made.map((dir) => rm(dir, { recursive: true, force: true }))));
 const item = (id, extra = {}) => ({ id, text: { title_raw: `Item ${id}`, source_name: 'Source', source_type: 'media', journal: null, publication_types: [], published_at: '2026-10-25T00:00:00.000Z', date_precision: 'day', lang: 'en', excerpt: `Text of ${id}` }, ...extra });
 /** CNY of one call's usage at qwen3.8-max: 1.5 / 12 / 36 per million tokens. */
 const USAGE = { cacheHit: 1000, cacheMiss: 500, output: 50 };
 const USAGE_CNY = 0.0093;
 
-/** An in-memory ledger with the real one's method shapes: a settled or in-flight record answers `campaign_budget_already_dispatched`. */
+/** An in-memory ledger with the real one's method shapes: a settled or in-flight record answers `campaign_budget_already_dispatched`, a record of an earlier month `campaign_budget_month_expired`. */
 class FakeBudget {
-  constructor({ allowReserves = Infinity, refusal = 'campaign_budget_exceeded', held = [] } = {}) {
-    this.allowReserves = allowReserves; this.refusal = refusal; this.records = new Map(held.map((key) => [key, { state: 'in-flight' }])); this.log = []; this.granted = 0;
+  constructor({ allowReserves = Infinity, refusal = 'campaign_budget_exceeded', held = [], expired = [] } = {}) {
+    this.allowReserves = allowReserves; this.refusal = refusal; this.records = new Map(held.map((key) => [key, { state: 'in-flight' }])); this.log = []; this.granted = 0; this.expired = new Set(expired);
   }
   async reserve({ campaignId, stageKey, amountCny }) {
     this.log.push({ op: 'reserve', campaignId, stageKey, amountCny });
+    if (this.expired.has(stageKey)) return { authorized: false, reason: 'campaign_budget_month_expired' };
     const existing = this.records.get(stageKey);
     if (existing && existing.state !== 'reserved') return { authorized: false, reason: 'campaign_budget_already_dispatched' };
     if (!existing && this.granted >= this.allowReserves) return { authorized: false, reason: this.refusal };
@@ -56,6 +70,23 @@ function fakeModel(answers, { fail = () => null, usage = USAGE } = {}) {
   };
   return { callModel, calls, get maxInFlight() { return maxInFlight; } };
 }
+
+test('the jury is pinned: rubric v1 byte for byte, the exemplar set, the model and the provider, so the lab\'s existing answer cache still hits', () => {
+  // The cache (/srv/rsi-lab/state/jury-cache.jsonl) is keyed on id, pass, this version and the model.
+  assert.equal(FRONTIER_JURY_VERSION, 'frontier-jury-v1');
+  assert.equal(frontierJuryVersion(selectFrontierExemplars(gold)), 'frontier-jury-v1:7ac3c0f634c5');
+  assert.equal(frontierJuryPromptDigest(), 'd824cc9877f976fd5b542fbdaa270679410bf7f45d120716622c23c75822ae27');
+  assert.deepEqual([FRONTIER_JURY_MODEL, FRONTIER_JURY_PROVIDER], ['qwen3.8-max', 'dashscope']);
+  assert.deepEqual([FRONTIER_JURY_MODEL, FRONTIER_JURY_PROVIDER], [RSI_FRONTIER_JURY.model, RSI_FRONTIER_JURY.provider], 'the one admitted identity, written once in the domain');
+});
+
+test('nothing of the Claude CLI jury survives: no caller, no environment scrub, no effort, no subscription basis, no operator items file', () => {
+  for (const name of ['claudeCliCaller', 'claudeCliEnvironment', 'FRONTIER_JURY_EFFORT', 'FRONTIER_JURY_EFFORTS', 'FRONTIER_JURY_COST_BASIS', 'FRONTIER_LABEL_ITEMS_SCHEMA', 'buildLabelItemsFile', 'labelItemText'])
+    assert.ok(!(name in labels), name);
+  assert.deepEqual(Object.keys(labels).sort(), ['FRONTIER_CALIBRATION_SCHEMA', 'FRONTIER_JURY_MODEL', 'FRONTIER_JURY_PROVIDER', 'FRONTIER_JURY_VERSION', 'FRONTIER_LABELS_SCHEMA', 'FRONTIER_LABEL_PHASES', 'FRONTIER_WORTH',
+    'JuryError', 'calibrateJury', 'calibrationItems', 'dashscopeCaller', 'frontierJuryMessages', 'frontierJuryPromptDigest', 'frontierJuryVersion', 'goldItemText', 'juryQualified', 'labelFrontierItems',
+    'loadGoldRows', 'loadLabelItems', 'main', 'parseJuryAnswer', 'phaseItems', 'selectFrontierExemplars', 'shanghaiDay']);
+});
 
 test('exemplars: ten odd-n rows, 4 pick / 4 ok / 2 no, deterministic, with readable text', () => {
   assert.equal(exemplars.length, 10);
@@ -163,6 +194,7 @@ test('a refused beginSpend stops and no call is made', async () => {
   const model = fakeModel({ a: ['pick', 'pick'] });
   const result = await labelFrontierItems({ items: [item('a')], exemplars, callModel: model.callModel, budget, campaignId: 'c1', now: NOW });
   assert.equal(result.stopped, 'campaign_budget_month_expired'); assert.equal(model.calls.length, 0);
+  assert.deepEqual(budget.settles.map((entry) => [entry.stageKey, entry.outcome, entry.actualCny]), [[budget.reserves[0].stageKey, 'failed', 0]], 'its hold is released, not left against the ceiling');
 });
 
 test('settlement is the priced usage, reserved ahead as an upper bound, spend begun before the calls', async () => {
@@ -175,8 +207,10 @@ test('settlement is the priced usage, reserved ahead as an upper bound, spend be
   assert.equal(settle.stageKey, reserve.stageKey); assert.equal(settle.outcome, 'success');
   assert.ok(Math.abs(settle.actualCny - 4 * USAGE_CNY) < 1e-9, String(settle.actualCny));
   assert.ok(Math.abs(result.costCny - 4 * USAGE_CNY) < 1e-9);
-  // every prompt character priced as an uncached token, plus the output cap, per call
-  assert.ok(reserve.amountCny > 4 * 0.1 && reserve.amountCny > settle.actualCny * 5, String(reserve.amountCny));
+  // every prompt character priced as an uncached token (12 per million), plus the 200-token output cap (36 per million), per call, rounded up to the ledger's 1e-8
+  const chars = (id, order) => frontierJuryMessages(item(id).text, { exemplars: order, today: '2026-10-26' }).reduce((sum, message) => sum + message.content.length + 8, 0);
+  const bound = ['a', 'b'].flatMap((id) => [exemplars, [...exemplars].reverse()].map((order) => (chars(id, order) * 12 + 200 * 36) / 1e6)).reduce((sum, value) => sum + value, 0);
+  assert.ok(reserve.amountCny >= bound - 1e-9 && reserve.amountCny - bound <= 1.01e-8, `${reserve.amountCny} against ${bound}`);
   assert.ok(Math.abs(reserve.amountCny * 1e8 - Math.round(reserve.amountCny * 1e8)) < 1e-6);
 });
 
@@ -231,9 +265,10 @@ test('an interrupted run resumes from the cache and never pays for a cached pass
   const first = await labelFrontierItems({ items: [item('a'), item('b')], exemplars, callModel: broken.callModel, budget: new FakeBudget(), campaignId: 'c1', cachePath, now: NOW });
   assert.equal(first.calls, 4); assert.equal(first.incomplete, 1);
   const lines = (await readFile(cachePath, 'utf8')).trim().split('\n').map((line) => JSON.parse(line));
-  assert.equal(lines.length, 3);
-  assert.deepEqual(Object.keys(lines[0]).sort(), ['costCny', 'finishReason', 'id', 'juryVersion', 'model', 'pass', 'requestId', 'today', 'usage', 'why', 'worth']);
-  assert.equal(lines[0].model, 'qwen3.8-max'); assert.deepEqual(lines[0].usage, USAGE); assert.ok(Math.abs(lines[0].costCny - USAGE_CNY) < 1e-9);
+  const answered = lines.filter((line) => line.pass);
+  assert.equal(answered.length, 3);
+  assert.deepEqual(Object.keys(answered[0]).sort(), ['campaignId', 'costCny', 'finishReason', 'id', 'juryVersion', 'model', 'pass', 'requestId', 'today', 'usage', 'why', 'worth']);
+  assert.equal(answered[0].model, 'qwen3.8-max'); assert.equal(answered[0].campaignId, 'c1'); assert.deepEqual(answered[0].usage, USAGE); assert.ok(Math.abs(answered[0].costCny - USAGE_CNY) < 1e-9);
 
   const healthy = fakeModel(answers), budget = new FakeBudget();
   const second = await labelFrontierItems({ items: [item('a'), item('b')], exemplars, callModel: healthy.callModel, budget, campaignId: 'c1', cachePath, now: NOW });
@@ -270,6 +305,171 @@ test('a held reservation from an interrupted batch is left held and the retry re
   assert.deepEqual(budget.reserves.map((entry) => entry.stageKey), [heldKey, `${heldKey}:a1`]);
   assert.equal(budget.records.get(heldKey).state, 'in-flight');
   assert.equal(result.labels.length, 1); assert.equal(result.stopped, null);
+});
+
+test('no number of failed starts locks a month: each takes the next free stage key, and a healthy start labels everything', async () => {
+  const budget = new FakeBudget();
+  const down = fakeModel({}, { fail: () => new JuryError('jury_http_401', { billed: false }) });
+  for (let start = 0; start < 6; start++) {
+    const failed = await labelFrontierItems({ items: [item('a')], exemplars, callModel: down.callModel, budget, campaignId: 'c1', now: NOW });
+    assert.equal(failed.stopped, 'jury_unavailable', `start ${start}`);
+  }
+  const healthy = fakeModel({ a: ['ok', 'ok'] });
+  const result = await labelFrontierItems({ items: [item('a')], exemplars, callModel: healthy.callModel, budget, campaignId: 'c1', now: NOW });
+  assert.deepEqual([result.stopped, result.labels.length, healthy.calls.length], [null, 1, 2]);
+  assert.equal(new Set(budget.settles.map((entry) => entry.stageKey)).size, 7, 'one settled record per start');
+  assert.deepEqual(budget.settles.slice(0, 6).map((entry) => entry.actualCny), [0, 0, 0, 0, 0, 0]);
+});
+
+test('a batch last reserved in an earlier month reserves again under a fresh key', async () => {
+  const probe = new FakeBudget();
+  await labelFrontierItems({ items: [item('a')], exemplars, callModel: fakeModel({ a: ['ok', 'ok'] }).callModel, budget: probe, campaignId: 'c1', now: NOW });
+  const key = probe.reserves[0].stageKey;
+  const budget = new FakeBudget({ expired: [key, `${key}:a1`] }), model = fakeModel({ a: ['ok', 'ok'] });
+  const result = await labelFrontierItems({ items: [item('a')], exemplars, callModel: model.callModel, budget, campaignId: 'c1', now: NOW });
+  assert.deepEqual(budget.reserves.map((entry) => entry.stageKey), [key, `${key}:a1`, `${key}:a2`]);
+  assert.deepEqual([result.stopped, result.labels.length, budget.settles[0].stageKey], [null, 1, `${key}:a2`]);
+});
+
+test('a stage key reserved under limits that have changed is not free, and the next one is', async () => {
+  const budget = new FakeBudget(), reserve = budget.reserve.bind(budget), model = fakeModel({ a: ['ok', 'ok'] });
+  const seen = [];
+  budget.reserve = async (input) => {
+    seen.push(input.stageKey);
+    if (seen.length === 1) throw Object.assign(new Error('Reservation identity has a different amount or limit.'), { code: 'campaign_budget_idempotency_conflict' });
+    return reserve(input);
+  };
+  const result = await labelFrontierItems({ items: [item('a')], exemplars, callModel: model.callModel, budget, campaignId: 'c1', now: NOW });
+  assert.deepEqual([result.stopped, result.labels.length, seen.at(-1)], [null, 1, `${seen[0]}:a1`]);
+  // anything else the ledger throws is not about the key: it ends the run by its own code
+  budget.reserve = async () => { throw Object.assign(new Error('x'), { code: 'campaign_budget_unknown' }); };
+  await assert.rejects(labelFrontierItems({ items: [item('b')], exemplars, callModel: model.callModel, budget, campaignId: 'c1', now: NOW }), { code: 'campaign_budget_unknown' });
+});
+
+test('the search for a free stage key has a bound and a name, and the ceiling still stops a run whose holds were never settled', async () => {
+  let asked = 0;
+  const budget = new FakeBudget(), model = fakeModel({ a: ['ok', 'ok'] });
+  budget.reserve = async () => { asked++; return { authorized: false, reason: 'campaign_budget_already_dispatched' }; };
+  const result = await labelFrontierItems({ items: [item('a')], exemplars, callModel: model.callModel, budget, campaignId: 'c1', now: NOW });
+  assert.equal(result.stopped, 'campaign_budget_stage_keys_exhausted');
+  assert.ok(asked >= 100 && asked <= 10_000, String(asked));
+  assert.deepEqual([model.calls.length, budget.settles.length], [0, 0]);
+  // Two interrupted starts left their holds in flight, and the ledger admits nothing more: the ceiling stops it by its own code.
+  const probe = new FakeBudget();
+  await labelFrontierItems({ items: [item('a')], exemplars, callModel: fakeModel({ a: ['ok', 'ok'] }).callModel, budget: probe, campaignId: 'c1', now: NOW });
+  const key = probe.reserves[0].stageKey;
+  const full = new FakeBudget({ held: [key, `${key}:a1`], allowReserves: 0 }), idle = fakeModel({ a: ['ok', 'ok'] });
+  const capped = await labelFrontierItems({ items: [item('a')], exemplars, callModel: idle.callModel, budget: full, campaignId: 'c1', now: NOW });
+  assert.deepEqual([capped.stopped, idle.calls.length, full.reserves.length], ['campaign_budget_exceeded', 0, 3]);
+  assert.deepEqual([full.records.get(key).state, full.records.get(`${key}:a1`).state], ['in-flight', 'in-flight'], 'a hold from an interrupted batch stays held');
+});
+
+test('a content refusal is an abstention of its own: cached, unbilled, counted apart, and not asked again', async () => {
+  const dir = await tmp(), cachePath = join(dir, 'cache.jsonl');
+  const refusing = fakeModel({ a: ['ok', 'ok'], b: ['ok', 'ok'], c: ['ok', 'pick'] }, { fail: (id) => (id === 'b' ? new JuryError('jury_content_refused', { billed: false }) : null) });
+  const budget = new FakeBudget();
+  const first = await labelFrontierItems({ items: ['a', 'b', 'c'].map((id) => item(id)), exemplars, callModel: refusing.callModel, budget, campaignId: 'c1', cachePath, now: NOW });
+  assert.deepEqual([first.stopped, first.incomplete], [null, 0]);
+  assert.deepEqual(first.labels.map((label) => [label.id, label.worth, label.basis]), [['a', 'ok', 'jury-agree'], ['b', null, 'jury-refused'], ['c', null, 'jury-disagree']]);
+  assert.equal(budget.settles[0].outcome, 'success');
+  assert.ok(Math.abs(budget.settles[0].actualCny - 4 * USAGE_CNY) < 1e-9, 'the refused passes are not charged');
+  const rows = (await readFile(cachePath, 'utf8')).trim().split('\n').map((line) => JSON.parse(line)).filter((row) => row.id === 'b');
+  assert.deepEqual(rows.map((row) => [row.pass, row.worth, row.basis, row.costCny, row.campaignId]).sort(), [['A', null, 'jury-refused', 0, 'c1'], ['B', null, 'jury-refused', 0, 'c1']]);
+  const healthy = fakeModel({ a: ['ok', 'ok'], b: ['ok', 'ok'], c: ['ok', 'pick'] });
+  const second = await labelFrontierItems({ items: ['a', 'b', 'c'].map((id) => item(id)), exemplars, callModel: healthy.callModel, budget: new FakeBudget(), campaignId: 'c1', cachePath, now: NOW });
+  assert.deepEqual([healthy.calls.length, second.labels[1].basis], [0, 'jury-refused']);
+});
+
+test('any other 400 is the account\'s or the request\'s: nothing is cached, nothing is billed, the run stops by name, and a healthy restart labels everything', async () => {
+  const dir = await tmp(), cachePath = join(dir, 'cache.jsonl');
+  const arrears = fakeModel({}, { fail: () => new JuryError('jury_http_400', { billed: false }) });
+  const budget = new FakeBudget();
+  const stopped = await labelFrontierItems({ items: ['a', 'b', 'c'].map((id) => item(id)), exemplars, callModel: arrears.callModel, budget, campaignId: 'c1', cachePath, batchSize: 4, now: NOW });
+  assert.deepEqual([stopped.stopped, stopped.labels.length, stopped.incomplete, stopped.costCny], ['jury_unavailable', 0, 3, 0]);
+  assert.deepEqual(budget.settles.map((entry) => [entry.outcome, entry.actualCny]), [['failed', 0]]);
+  assert.equal(await readFile(cachePath, 'utf8').catch(() => ''), '', 'the cache holds nothing of it');
+  const healthy = fakeModel({ a: ['pick', 'pick'], b: ['ok', 'ok'], c: ['no', 'no'] });
+  const restart = await labelFrontierItems({ items: ['a', 'b', 'c'].map((id) => item(id)), exemplars, callModel: healthy.callModel, budget, campaignId: 'c1', cachePath, batchSize: 4, now: NOW });
+  assert.deepEqual([restart.stopped, restart.incomplete, healthy.calls.length], [null, 0, 6]);
+  assert.deepEqual(restart.labels.map((label) => [label.id, label.worth]), [['a', 'pick'], ['b', 'ok'], ['c', 'no']]);
+});
+
+test('attempts that may have been billed are all priced: each costs its upper bound beside the answer that was bought', async () => {
+  const dir = await tmp(), cachePath = join(dir, 'cache.jsonl');
+  const probe = new FakeBudget();
+  await labelFrontierItems({ items: [item('a')], exemplars, callModel: fakeModel({ a: ['ok', 'ok'] }).callModel, budget: probe, campaignId: 'c1', now: NOW });
+  const ceiling = probe.reserves[0].amountCny / 2;
+  // pass A timed out twice before it was answered; pass B timed out three times and gave up
+  const inner = fakeModel({ a: ['ok', 'ok'] }, { fail: (id, pass) => (pass === 'B' ? Object.assign(new JuryError('jury_timeout', { retryable: true }), { possiblyBilled: 3 }) : null) });
+  const callModel = async (messages, options) => ({ ...(await inner.callModel(messages, options)), possiblyBilled: 2 });
+  const budget = new FakeBudget();
+  const result = await labelFrontierItems({ items: [item('a')], exemplars, callModel, budget, campaignId: 'c1', cachePath, now: NOW });
+  assert.ok(Math.abs(budget.settles[0].actualCny - (USAGE_CNY + 2 * ceiling + 3 * ceiling)) < 1e-6, String(budget.settles[0].actualCny));
+  assert.ok(Math.abs(result.costCny - budget.settles[0].actualCny) < 1e-9);
+  const rows = (await readFile(cachePath, 'utf8')).trim().split('\n').map((line) => JSON.parse(line));
+  assert.ok(Math.abs(rows.find((row) => row.pass === 'A').costCny - (USAGE_CNY + 2 * ceiling)) < 1e-6, 'the answer\'s record carries what it took');
+});
+
+test('what a file reports is what this campaign paid for these items over all its starts: a row from before the stamp or of another campaign counts 0, and a call that left no answer is counted', async () => {
+  const dir = await tmp(), cachePath = join(dir, 'cache.jsonl');
+  const version = frontierJuryVersion(exemplars);
+  const earlier = (pass, over = {}) => JSON.stringify({ id: 'a', pass, worth: 'pick', why: '', juryVersion: version, model: 'qwen3.8-max', usage: USAGE, costCny: USAGE_CNY, requestId: 'r', finishReason: 'stop', today: '2026-10-25', ...over });
+  await writeFile(cachePath, `${earlier('A')}\n${earlier('B', { campaignId: 'rehearsal-frontier-selection-2026-10' })}\n`);
+  const items = ['a', 'b', 'c'].map((id) => item(id));
+  const answers = { a: ['ok', 'ok'], b: ['ok', 'ok'], c: ['no', 'no'] };
+  const budget = new FakeBudget();
+  // b's second pass fails with a charge that cannot be ruled out and leaves no answer
+  const broken = fakeModel(answers, { fail: (id, pass) => (id === 'b' && pass === 'B' ? new Error('socket hang up') : null) });
+  const first = await labelFrontierItems({ items, exemplars, callModel: broken.callModel, budget, campaignId: 'c1', cachePath, now: NOW });
+  assert.equal(first.incomplete, 1);
+  assert.ok(first.costCny > 3 * USAGE_CNY, 'the failed call is charged at its upper bound');
+  const healthy = fakeModel(answers);
+  const second = await labelFrontierItems({ items, exemplars, callModel: healthy.callModel, budget, campaignId: 'c1', cachePath, now: NOW });
+  assert.deepEqual(healthy.calls, [{ id: 'b', pass: 'B' }], 'the charge is not an answer: the pass is asked again');
+  assert.ok(Math.abs(second.costCny - USAGE_CNY) < 1e-9, 'costCny is this start\'s spend');
+  const settled = budget.settles.reduce((sum, entry) => sum + entry.actualCny, 0);
+  assert.ok(Math.abs(second.campaignCostCny - settled) < 1e-6, `${second.campaignCostCny} reported, ${settled} settled`);
+  assert.ok(Math.abs(first.campaignCostCny - first.costCny) < 1e-6);
+  // A rerun pays nothing and reports the same; another campaign paid for none of it; another phase's items are that phase's.
+  const rerun = await labelFrontierItems({ items, exemplars, callModel: fakeModel(answers).callModel, budget, campaignId: 'c1', cachePath, now: NOW });
+  assert.deepEqual([rerun.costCny, rerun.campaignCostCny], [0, second.campaignCostCny]);
+  assert.equal((await labelFrontierItems({ items, exemplars, callModel: fakeModel(answers).callModel, budget, campaignId: 'c2', cachePath, now: NOW })).campaignCostCny, 0);
+  const other = await labelFrontierItems({ items: [item('d')], exemplars, callModel: fakeModel({ d: ['ok', 'ok'] }).callModel, budget, campaignId: 'c1', cachePath, now: NOW });
+  assert.ok(Math.abs(other.campaignCostCny - 2 * USAGE_CNY) < 1e-9);
+});
+
+test('a model with no price refuses the run before any money moves', async () => {
+  const budget = new FakeBudget(), model = fakeModel({ a: ['ok', 'ok'] });
+  await assert.rejects(labelFrontierItems({ items: [item('a')], exemplars, callModel: model.callModel, budget, campaignId: 'c1', now: NOW, model: 'qwen-no-such-model' }), { message: 'jury_unpriced' });
+  assert.deepEqual([budget.log.length, model.calls.length], [0, 0]);
+  await assert.rejects(labelFrontierItems({ items: [item('a')], exemplars, callModel: null, budget, campaignId: 'c1', now: NOW }), { message: 'jury_unconfigured' });
+  await assert.rejects(labelFrontierItems({ items: [item('a')], exemplars, callModel: model.callModel, campaignId: 'c1', now: NOW }), { message: 'jury_unconfigured' });
+  assert.equal(budget.log.length, 0);
+});
+
+test('the lab\'s existing cache still hits: a record in the shape the earlier runs wrote is read, and no field of another jury is part of the key', async () => {
+  const dir = await tmp(), cachePath = join(dir, 'cache.jsonl');
+  const version = frontierJuryVersion(exemplars);
+  const record = (id, pass, over = {}) => JSON.stringify({ id, pass, worth: 'pick', why: 'earlier', juryVersion: version, model: 'qwen3.8-max', usage: USAGE, costCny: USAGE_CNY, requestId: 'r', finishReason: 'stop', today: '2026-10-25', ...over });
+  await writeFile(cachePath, [record('a', 'A'), record('a', 'B'), '', 'not json', record('b', 'A', { model: 'claude-sonnet-5-5', effort: 'medium' }), record('b', 'B', { juryVersion: 'frontier-jury-v2:0123456789ab' })].join('\n') + '\n');
+  const model = fakeModel({ a: ['ok', 'ok'], b: ['no', 'no'] }), budget = new FakeBudget();
+  const result = await labelFrontierItems({ items: [item('a'), item('b')], exemplars, callModel: model.callModel, budget, campaignId: 'c1', cachePath, now: NOW });
+  assert.deepEqual(model.calls.map((call) => `${call.id}${call.pass}`).sort(), ['bA', 'bB'], 'a is served from the cache; b\'s records are another model\'s and another rubric\'s');
+  assert.deepEqual(result.labels.map((label) => [label.id, label.worth]), [['a', 'pick'], ['b', 'no']]);
+  assert.equal(result.cachedCalls, 2);
+  assert.ok(Math.abs(result.campaignCostCny - result.costCny) < 1e-9, 'an answer from before the stamp was paid by an earlier campaign');
+  for (const line of (await readFile(cachePath, 'utf8')).trim().split('\n').slice(-2)) assert.ok(!('effort' in JSON.parse(line)), 'the records written now carry no effort');
+});
+
+test('a credential that cannot be read costs nothing: the call was never made, so it is not charged at its upper bound', async () => {
+  const dir = await tmp(), blank = join(dir, 'blank.key');
+  await writeFile(blank, '\n');
+  for (const credentialPath of [join(dir, 'missing.key'), blank]) {
+    const budget = new FakeBudget();
+    const result = await labelFrontierItems({ items: ['a', 'b'].map((id) => item(id)), exemplars, callModel: dashscopeCaller({ credentialPath, fetchImpl: async () => assert.fail('no request without a key') }), budget, campaignId: 'c1', now: NOW });
+    assert.deepEqual([result.stopped, result.costCny, result.calls, result.labels.length], ['jury_unavailable', 0, 4, 0]);
+    assert.deepEqual(budget.settles.map((entry) => [entry.outcome, entry.actualCny]), [['failed', 0]]);
+  }
 });
 
 // ---- calibration ----
@@ -340,7 +540,7 @@ test('the caller sends the pinned request and maps usage', async () => {
   const call = dashscopeCaller({ credentialPath: await keyFile(), fetchImpl, sleep: noSleep });
   const messages = [{ role: 'system', content: 's' }, { role: 'user', content: 'u' }];
   const result = await call(messages);
-  assert.deepEqual(result, { text: '{"worth":"ok","why":"x"}', usage: { cacheHit: 1000, cacheMiss: 500, output: 20 }, requestId: 'rid-1', finishReason: 'stop' });
+  assert.deepEqual(result, { text: '{"worth":"ok","why":"x"}', usage: { cacheHit: 1000, cacheMiss: 500, output: 20 }, requestId: 'rid-1', finishReason: 'stop', possiblyBilled: 0 });
   assert.equal(sent[0].url, 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions');
   assert.equal(sent[0].options.headers.authorization, `Bearer ${SECRET}`);
   const body = JSON.parse(sent[0].options.body);
@@ -383,6 +583,44 @@ test('a 4xx other than 429 is not retried and a malformed reply is a bad respons
   assert.equal(noUsage.usage, null); assert.equal(noUsage.text, '{"worth":"ok","why":"x"}');
 });
 
+test('a 400 is about this text only when the body\'s code says content inspection refused it; arrears and every other 400 stay jury_http_400, and no body reaches an error', async () => {
+  const path = await keyFile();
+  const refusal = async (body, status = 400) => {
+    let attempts = 0;
+    const error = await dashscopeCaller({ credentialPath: path, fetchImpl: async () => { attempts++; return { ...reply(status), json: body }; }, sleep: noSleep })([]).then(() => assert.fail('expected a failure'), (failure) => failure);
+    assert.ok(error instanceof JuryError);
+    assert.equal(attempts, 1, 'a 400 is not retried');
+    for (const text of [error.message, String(error), error.stack ?? '', JSON.stringify(error)]) assert.ok(!text.includes(SECRET) && !text.includes('Access denied'), text);
+    return [error.code, error.billed];
+  };
+  // compatible mode and the native spelling
+  assert.deepEqual(await refusal(async () => ({ error: { code: 'data_inspection_failed', message: `Input data may contain inappropriate content. ${SECRET}` } })), ['jury_content_refused', false]);
+  assert.deepEqual(await refusal(async () => ({ code: 'DataInspectionFailed', message: 'x' })), ['jury_content_refused', false]);
+  for (const body of [async () => ({ error: { code: 'Arrearage', message: `Access denied ${SECRET}` } }), async () => ({ code: 'Arrearage' }), async () => ({ error: { code: 'invalid_parameter_error' } }), async () => ({ error: { message: 'data_inspection_failed' } }), async () => ({}), async () => null, async () => { throw new Error(SECRET); }])
+    assert.deepEqual(await refusal(body), ['jury_http_400', false]);
+  // the code means this only on a 400
+  assert.deepEqual(await refusal(async () => ({ error: { code: 'data_inspection_failed' } }), 403), ['jury_http_403', false]);
+});
+
+test('the caller counts the attempts that may have been billed: a timeout or a lost connection may be, a status answer is not', async () => {
+  const path = await keyFile();
+  const scripted = (...steps) => { const left = [...steps]; return async () => { const step = left.shift(); if (step instanceof Error) throw step; return reply(step, step === 200 ? goodBody : {}); }; };
+  const call = (fetchImpl) => dashscopeCaller({ credentialPath: path, fetchImpl, sleep: noSleep })([]);
+  assert.equal((await call(scripted(200))).possiblyBilled, 0);
+  assert.equal((await call(scripted(503, 429, 200))).possiblyBilled, 0, 'answered by status: nothing was generated');
+  assert.equal((await call(scripted(new Error('reset'), new Error('reset'), 200))).possiblyBilled, 2);
+  assert.equal((await call(scripted(new Error('reset'), 503, 200))).possiblyBilled, 1);
+  await assert.rejects(call(scripted(new Error('reset'), new Error('reset'), new Error('reset'), new Error('reset'))), (error) => error.code === 'jury_network' && error.possiblyBilled === 4);
+  await assert.rejects(call(scripted(new Error('reset'), 503, new Error('reset'), 503)), (error) => error.code === 'jury_http_503' && error.billed === false && error.possiblyBilled === 2);
+  const missing = dashscopeCaller({ credentialPath: join(await tmp(), 'missing.key'), fetchImpl: scripted(200), sleep: noSleep });
+  await assert.rejects(missing([]), (error) => error.code === 'jury_credential_unreadable' && error.possiblyBilled === 0);
+  // a call priced through the ledger takes the count from here
+  const budget = new FakeBudget();
+  const result = await labelFrontierItems({ items: [item('a')], exemplars, callModel: dashscopeCaller({ credentialPath: path, fetchImpl: scripted(new Error('reset'), 200, 200), sleep: noSleep }), budget, campaignId: 'c1', now: NOW, concurrency: 1 });
+  const ceiling = budget.reserves[0].amountCny / 2, oneAnswer = (1000 * 1.5 + 500 * 12 + 20 * 36) / 1e6;
+  assert.ok(Math.abs(result.costCny - (2 * oneAnswer + ceiling)) < 1e-6, String(result.costCny));
+});
+
 test('no error the caller raises carries the key', async () => {
   const path = await keyFile();
   const leaking = async () => { throw new Error(`request to https://dashscope failed, Authorization: Bearer ${SECRET}`); };
@@ -419,17 +657,190 @@ test('the calibration items are the even-n anchor rows in the export text shape,
   assert.ok(!items.some((entry) => exemplars.some((exemplar) => exemplar.id === entry.id)));
 });
 
-test('label items come from a plain or gzipped export, each on its feed day', async () => {
+test('label items come from a plain or gzipped export, each on its feed day, and the export\'s digest comes with them', async () => {
   const dir = await tmp();
   const texts = { 101: item('101').text, 102: { ...item('102').text, published_at: '2026-10-20T20:00:00.000Z' }, 103: { ...item('103').text, published_at: null } };
   const exported = { schema: 'rsi-frontier-export-v1', texts, days: [{ day: '2026-10-22', rows: [{ id: '101' }] }, { day: '2026-10-23', rows: [{ id: '101' }] }] };
   await writeFile(join(dir, 'export.json'), JSON.stringify(exported)); await writeFile(join(dir, 'export.json.gz'), gzipSync(JSON.stringify(exported)));
-  await writeFile(join(dir, 'ids.json'), JSON.stringify(['101', '102', '103', '999']));
   for (const name of ['export.json', 'export.json.gz']) {
-    const { items, missing } = await loadLabelItems({ exportPath: join(dir, name), idsPath: join(dir, 'ids.json') });
+    const { items, missing, exportSha256 } = await loadLabelItems({ exportPath: join(dir, name), ids: ['101', '102', '103', '999'] });
     assert.equal(missing, 1);
     assert.deepEqual(items.map((entry) => [entry.id, entry.today]), [['101', '2026-10-22'], ['102', '2026-10-21'], ['103', undefined]]);
+    assert.equal(exportSha256, createHash('sha256').update(await readFile(join(dir, name))).digest('hex'));
   }
   await writeFile(join(dir, 'bad.json'), '{}');
-  await assert.rejects(loadLabelItems({ exportPath: join(dir, 'bad.json'), idsPath: join(dir, 'ids.json') }), /input_invalid/);
+  await assert.rejects(loadLabelItems({ exportPath: join(dir, 'bad.json'), ids: ['101'] }), /input_invalid/);
+  await assert.rejects(loadLabelItems({ exportPath: join(dir, 'export.json'), ids: 'not a list' }), /input_invalid/);
+});
+
+/** A tiny export and the plan the lab would have made from it: two ids to develop on, one to confirm on, one with no text. */
+async function planAndExport() {
+  const dir = await tmp();
+  const platform = { title_zh: 'ZH-MARK', summary_zh: 'SUMMARY-MARK', score_total: 98765, genre: 'GENRE-MARK', evidence_type: 'ET-MARK', live: { total: 4321 } };
+  const texts = { 101: { ...item('101').text, ...platform }, 102: { ...item('102').text, ...platform }, 201: { ...item('201').text, ...platform } };
+  const exported = { schema: 'rsi-frontier-export-v1', texts, days: [{ day: '2026-09-02', rows: [{ id: '101' }, { id: '102' }, { id: '404' }] }, { day: '2026-10-03', rows: [{ id: '201' }] }] };
+  const bytes = gzipSync(JSON.stringify(exported));
+  await writeFile(join(dir, 'export.json.gz'), bytes);
+  const plan = { month: '2026-11', idPrefix: 'rehearsal-', exportSha256: createHash('sha256').update(bytes).digest('hex'), idsByRole: { development: ['101', '102', '404'], confirmation: ['201'] } };
+  await writeFile(join(dir, 'plan.json'), JSON.stringify(plan));
+  return { dir, exportPath: join(dir, 'export.json.gz'), plan };
+}
+
+test('a phase\'s items are the plan\'s ids for it with their source text, bound to the export; any other phase, plan or export is refused', async () => {
+  const { exportPath, plan } = await planAndExport();
+  const development = await phaseItems({ exportPath, plan, phase: 'development' });
+  assert.deepEqual([development.month, development.idPrefix, development.phase, development.exportSha256, development.missing], ['2026-11', 'rehearsal-', 'development', plan.exportSha256, 1]);
+  assert.deepEqual(development.items.map((entry) => [entry.id, entry.today]), [['101', '2026-09-02'], ['102', '2026-09-02']]);
+  assert.deepEqual((await phaseItems({ exportPath, plan, phase: 'confirmation' })).items.map((entry) => entry.id), ['201']);
+  await assert.rejects(phaseItems({ exportPath, plan, phase: 'all' }), { message: 'usage_phase' });
+  await assert.rejects(phaseItems({ exportPath, plan: { ...plan, idsByRole: undefined }, phase: 'development' }), { message: 'usage_phase' });
+  await assert.rejects(phaseItems({ exportPath, plan: { ...plan, exportSha256: 'e'.repeat(64) }, phase: 'development' }), { message: 'campaign_export_changed' });
+  // what the prompt carries of a row is its source text alone, whatever else the export holds
+  const [system, user] = frontierJuryMessages(development.items[0].text, { exemplars, today: development.items[0].today });
+  for (const mark of ['ZH-MARK', 'SUMMARY-MARK', '98765', 'GENRE-MARK', 'ET-MARK', '4321']) assert.ok(!user.content.includes(mark) && !system.content.includes(mark), mark);
+});
+
+// The real command (main), with the lab's ledger and DashScope stood in by fixtures/frontier_labels_stand_in.mjs: files, exit codes, the key and the cache.
+const KEY = 'sk-cli-SECRET-0123456789';
+async function cliTree() {
+  const { dir, exportPath, plan } = await planAndExport();
+  const key = join(dir, 'dashscope.key'), config = join(dir, 'config.json');
+  await writeFile(key, `${KEY}\n`); await writeFile(config, JSON.stringify(labConfiguration));
+  const env = { PATH: process.env.PATH, HOME: dir, TMPDIR: dir, FAKE_BUDGET_LEDGER: join(dir, 'ledger.json'), FAKE_DASHSCOPE_LOG: join(dir, 'dashscope.jsonl'), FAKE_DASHSCOPE_GOLD: GOLD_PATH, FAKE_DASHSCOPE_WORTH: 'pick' };
+  const run = (command, args, over = {}) => execFileAsync(process.execPath, [STAND_IN, command, '--credential', key, '--cache', join(dir, 'cache.jsonl'), '--campaign', 'rehearsal-frontier-selection-2026-11', '--config', config, ...args],
+    { cwd: dir, env: { ...env, ...over }, maxBuffer: 1 << 24 }).catch((error) => error);
+  const read = async (name) => JSON.parse(await readFile(join(dir, name), 'utf8'));
+  const lines = async (name) => (await readFile(join(dir, name), 'utf8').catch(() => '')).trim().split('\n').filter(Boolean).map((line) => JSON.parse(line));
+  return { dir, exportPath, plan, key, run, read, lines, ledger: () => read('ledger.json').catch(() => ({ records: {}, granted: 0, settles: [] })) };
+}
+
+test('label: the labels file names its phase, month, export, jury and provider; the cost is the priced usage; a rerun asks for nothing and pays nothing; the key is in no file', async () => {
+  const t = await cliTree();
+  const out = join(t.dir, 'labels-development.json');
+  const first = await t.run('label', ['--export', t.exportPath, '--plan', join(t.dir, 'plan.json'), '--phase', 'development', '--out', out]);
+  assert.equal(first.code ?? 0, 0, first.stderr);
+  const file = await t.read('labels-development.json');
+  assert.deepEqual([file.schema, file.command, file.phase, file.month, file.idPrefix, file.exportSha256, file.juryVersion, file.promptDigest, file.provider, file.model],
+    ['rsi-frontier-jury-labels-v1', 'label', 'development', '2026-11', 'rehearsal-', t.plan.exportSha256, frontierJuryVersion(exemplars), frontierJuryPromptDigest(), 'dashscope', 'qwen3.8-max']);
+  assert.deepEqual([file.items, file.missing, file.labelled, file.incomplete, file.stopped, file.calls, file.cachedCalls], [2, 1, 2, 0, null, 4, 0]);
+  assert.deepEqual(file.labels.map((label) => [label.id, label.worth, label.basis]), [['101', 'pick', 'jury-agree'], ['102', 'pick', 'jury-agree']]);
+  assert.deepEqual(file.labelCounts, { pick: 2, ok: 0, no: 0, abstained: 0, refused: 0 });
+  assert.ok(Math.abs(file.costCny - 4 * 0.00822) < 1e-9, String(file.costCny));
+  assert.ok(!('effort' in file) && !('tokens' in file) && !('costBasis' in file));
+  const requests = await t.lines('dashscope.jsonl');
+  assert.equal(requests.length, 4);
+  assert.ok(requests.every((request) => request.authorized && request.model === 'qwen3.8-max'));
+  const ledger = await t.ledger();
+  assert.deepEqual([ledger.settles.length, ledger.settles[0].outcome, Math.abs(ledger.settles[0].actualCny - file.costCny) < 1e-9, ledger.settles[0].actualCny < ledger.settles[0].reservedCny], [1, 'success', true, true]);
+  // a rerun: the cache serves all four, no request is made and no money moves
+  const rerun = JSON.parse((await t.run('label', ['--export', t.exportPath, '--plan', join(t.dir, 'plan.json'), '--phase', 'development', '--out', join(t.dir, 'again.json')])).stdout);
+  assert.deepEqual([rerun.calls, rerun.cachedCalls, rerun.costCny], [0, 4, file.costCny], 'it paid nothing, and the file still says what the campaign paid');
+  assert.equal((await t.lines('dashscope.jsonl')).length, 4);
+  assert.equal((await t.ledger()).settles.length, 1);
+  // confirmation is the plan\'s other phase, labelled under its own name
+  await t.run('label', ['--export', t.exportPath, '--plan', join(t.dir, 'plan.json'), '--phase', 'confirmation', '--out', join(t.dir, 'labels-confirmation.json')]);
+  assert.deepEqual((await t.read('labels-confirmation.json')).labels.map((label) => label.id), ['201']);
+  for (const name of ['labels-development.json', 'again.json', 'labels-confirmation.json', 'cache.jsonl', 'dashscope.jsonl', 'ledger.json']) assert.ok(!(await readFile(join(t.dir, name), 'utf8')).includes(KEY), name);
+  assert.ok(!first.stdout.includes(KEY) && !first.stderr.includes(KEY));
+});
+
+test('calibrate: the anchor\'s calibration rows, two passes each, written with the qualification the campaign is gated on and the provider it names', async () => {
+  const t = await cliTree();
+  // A jury that calls everything `ok` against the anchor picks nothing, so kappa is unavailable and the calibration does not qualify.
+  const result = await t.run('calibrate', ['--out', join(t.dir, 'calibration.json'), '--gold', GOLD_PATH], { FAKE_DASHSCOPE_WORTH: 'ok' });
+  assert.equal(result.code ?? 0, 0, result.stderr);
+  const summary = JSON.parse(result.stdout), file = await t.read('calibration.json');
+  const evenRows = gold.filter((row) => row.n % 2 === 0).length;
+  assert.deepEqual([file.schema, file.provider, file.model, file.juryVersion, file.promptDigest, file.items, file.labelled, file.calls, file.stopped],
+    ['rsi-frontier-jury-calibration-v1', 'dashscope', 'qwen3.8-max', frontierJuryVersion(exemplars), frontierJuryPromptDigest(), evenRows, evenRows, 2 * evenRows, null]);
+  assert.equal(file.qualification.qualified, false);
+  assert.ok(file.qualification.reasons.includes('kappa_unavailable') || file.qualification.reasons.includes('pick_precision_unavailable'));
+  assert.deepEqual([summary.qualified, summary.reasons], [false, file.qualification.reasons]);
+  assert.equal(file.calibration.calibrationRows, evenRows);
+  assert.ok(!('phase' in file) && file.costCny > 0);
+  // the anchor\'s own labels, answered back, qualify it
+  const exact = await t.run('calibrate', ['--out', join(t.dir, 'exact.json'), '--cache', join(t.dir, 'exact-cache.jsonl')], { FAKE_DASHSCOPE_WORTH: 'by-title' });
+  assert.equal(exact.code ?? 0, 0, exact.stderr);
+  const qualified = await t.read('exact.json');
+  assert.deepEqual([qualified.qualification.qualified, qualified.calibration.pickKappa], [true, 1]);
+});
+
+test('a budget that refuses ends the command with exit code 2 and the file written; a key that cannot be read stops it the same way, charging nothing', async () => {
+  const t = await cliTree();
+  const refused = await t.run('label', ['--export', t.exportPath, '--plan', join(t.dir, 'plan.json'), '--phase', 'development', '--out', join(t.dir, 'labels.json')], { FAKE_BUDGET_ALLOW_RESERVES: '0' });
+  assert.equal(refused.code, 2);
+  assert.deepEqual([JSON.parse(refused.stdout).stopped, JSON.parse(refused.stdout).calls], ['campaign_budget_exceeded', 0]);
+  const file = await t.read('labels.json');
+  assert.deepEqual([file.stopped, file.labelled, file.incomplete, file.phase], ['campaign_budget_exceeded', 0, 2, 'development']);
+  assert.equal((await t.lines('dashscope.jsonl')).length, 0);
+  await writeFile(t.key, '   \n');
+  const blank = await t.run('label', ['--export', t.exportPath, '--plan', join(t.dir, 'plan.json'), '--phase', 'development', '--out', join(t.dir, 'blank.json')]);
+  assert.equal(blank.code, 2);
+  assert.equal((await t.read('blank.json')).stopped, 'jury_unavailable');
+  assert.equal((await t.lines('dashscope.jsonl')).length, 0, 'no request without a key');
+  assert.ok((await t.ledger()).settles.every((entry) => entry.actualCny === 0));
+  // an item left without both passes (here a provider outage on half of the batch) is not a finished labelling: the command says so with exit 2, and the month does not build on it
+  await writeFile(t.key, `${KEY}\n`);
+  const partial = await t.run('label', ['--export', t.exportPath, '--plan', join(t.dir, 'plan.json'), '--phase', 'development', '--out', join(t.dir, 'partial.json'), '--cache', join(t.dir, 'partial-cache.jsonl')], { FAKE_DASHSCOPE_REJECT_STATUS: '503', FAKE_DASHSCOPE_REJECT: 'Item 102' });
+  assert.equal(partial.code, 2);
+  assert.deepEqual([JSON.parse(partial.stdout).stopped, JSON.parse(partial.stdout).labelled, JSON.parse(partial.stdout).incomplete], ['jury_unavailable', 1, 1]);
+  // A content refusal is the provider's answer about this text: the pass is an abstention, unbilled, kept in the cache, so the unattended month goes on and a rerun does not ask again.
+  const before = (await t.lines('dashscope.jsonl')).length;
+  const refusedText = await t.run('label', ['--export', t.exportPath, '--plan', join(t.dir, 'plan.json'), '--phase', 'development', '--out', join(t.dir, 'refused.json'), '--cache', join(t.dir, 'refused-cache.jsonl')], { FAKE_DASHSCOPE_REJECT: 'Item 102' });
+  assert.ok(!refusedText.code, refusedText.stderr);
+  const refusedFile = await t.read('refused.json');
+  assert.deepEqual([refusedFile.stopped, refusedFile.incomplete, refusedFile.labelled], [null, 0, 2]);
+  assert.equal(refusedFile.labels.filter((label) => label.worth === null && label.basis === 'jury-refused').length, 1);
+  assert.deepEqual(refusedFile.labelCounts, { pick: 1, ok: 0, no: 0, abstained: 0, refused: 1 });
+  const asked = (await t.lines('dashscope.jsonl')).length;
+  assert.ok(asked > before);
+  const rerun = await t.run('label', ['--export', t.exportPath, '--plan', join(t.dir, 'plan.json'), '--phase', 'development', '--out', join(t.dir, 'refused2.json'), '--cache', join(t.dir, 'refused-cache.jsonl')], { FAKE_DASHSCOPE_REJECT: 'Item 102' });
+  assert.ok(!rerun.code, rerun.stderr);
+  assert.equal((await t.lines('dashscope.jsonl')).length, asked, 'a refused pass is not asked for again');
+  // Any other 400 (arrears are a 400 at DashScope) is not an answer: exit 2, nothing cached, nothing billed, and the key its body echoes reaches no file.
+  const cache = join(t.dir, 'arrears-cache.jsonl');
+  const settled = (await t.ledger()).settles.length;
+  const arrears = await t.run('label', ['--export', t.exportPath, '--plan', join(t.dir, 'plan.json'), '--phase', 'development', '--out', join(t.dir, 'arrears.json'), '--cache', cache], { FAKE_DASHSCOPE_MODE: 'http-400', FAKE_DASHSCOPE_REJECT_CODE: 'Arrearage' });
+  assert.equal(arrears.code, 2);
+  assert.deepEqual([JSON.parse(arrears.stdout).stopped, JSON.parse(arrears.stdout).labelled, JSON.parse(arrears.stdout).costCny], ['jury_unavailable', 0, 0]);
+  assert.equal(await readFile(cache, 'utf8').catch(() => ''), '');
+  assert.ok((await t.ledger()).settles.slice(settled).every((entry) => entry.outcome === 'failed' && entry.actualCny === 0));
+  assert.ok(!arrears.stdout.includes(KEY) && !arrears.stderr.includes(KEY));
+  const healthy = await t.run('label', ['--export', t.exportPath, '--plan', join(t.dir, 'plan.json'), '--phase', 'development', '--out', join(t.dir, 'recovered.json'), '--cache', cache]);
+  assert.ok(!healthy.code, healthy.stderr);
+  assert.deepEqual((await t.read('recovered.json')).labels.map((label) => label.basis), ['jury-agree', 'jury-agree']);
+});
+
+test('a calibration with an unanswered row is not a finished calibration: exit 2, its file written, and the same command asks only for what is missing', async () => {
+  const t = await cliTree();
+  const row = gold.find((entry) => entry.n % 2 === 0);
+  const partial = await t.run('calibrate', ['--out', join(t.dir, 'calibration.json'), '--gold', GOLD_PATH], { FAKE_DASHSCOPE_REJECT: row.title_raw, FAKE_DASHSCOPE_REJECT_STATUS: '401' });
+  assert.equal(partial.code, 2, partial.stderr);
+  const file = await t.read('calibration.json');
+  const rows = gold.filter((entry) => entry.n % 2 === 0).length;
+  assert.deepEqual([file.stopped, file.incomplete, file.labelled], [null, 1, rows - 1]);
+  const asked = (await t.lines('dashscope.jsonl')).length;
+  const resumed = await t.run('calibrate', ['--out', join(t.dir, 'calibration.json'), '--gold', GOLD_PATH]);
+  assert.ok(!resumed.code, resumed.stderr);
+  assert.deepEqual((await t.lines('dashscope.jsonl')).slice(asked).map((request) => request.title), [row.title_raw, row.title_raw]);
+  assert.deepEqual([(await t.read('calibration.json')).incomplete, (await t.read('calibration.json')).labelled], [0, rows]);
+});
+
+test('the command refuses by closed code: an unknown command, a missing flag, a phase or export that is not the plan\'s, a lab configuration without the provider', async () => {
+  const t = await cliTree();
+  const closed = async (result) => JSON.parse(result.stderr);
+  assert.deepEqual(await closed(await execFileAsync(process.execPath, [STAND_IN, 'items', '--out', 'x'], { cwd: t.dir, env: { PATH: process.env.PATH } }).catch((error) => error)), { error: 'usage_command' });
+  assert.deepEqual(await closed(await execFileAsync(process.execPath, [STAND_IN, 'label', '--out', 'x'], { cwd: t.dir, env: { PATH: process.env.PATH } }).catch((error) => error)), { error: 'usage_missing_credential' });
+  const phase = await t.run('label', ['--export', t.exportPath, '--plan', join(t.dir, 'plan.json'), '--phase', 'all', '--out', join(t.dir, 'x.json')]);
+  assert.deepEqual([phase.code, await closed(phase)], [1, { error: 'usage_phase' }]);
+  const nothing = await t.run('label', ['--out', join(t.dir, 'x.json')]);
+  assert.deepEqual([nothing.code, await closed(nothing)], [1, { error: 'usage_missing_export' }]);
+  await writeFile(join(t.dir, 'other.json.gz'), gzipSync('{"texts":{},"days":[]}'));
+  const other = await t.run('label', ['--export', join(t.dir, 'other.json.gz'), '--plan', join(t.dir, 'plan.json'), '--phase', 'development', '--out', join(t.dir, 'x.json')]);
+  assert.deepEqual([other.code, await closed(other)], [1, { error: 'campaign_export_changed' }]);
+  const { providers, ...bare } = labConfiguration;
+  await writeFile(join(t.dir, 'config.json'), JSON.stringify(bare));
+  const noProvider = await t.run('label', ['--export', t.exportPath, '--plan', join(t.dir, 'plan.json'), '--phase', 'development', '--out', join(t.dir, 'x.json')]);
+  assert.deepEqual([noProvider.code, await closed(noProvider)], [1, { error: 'campaign_lab_configuration_invalid' }]);
+  assert.equal((await t.lines('dashscope.jsonl')).length, 0);
 });

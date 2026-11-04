@@ -37,6 +37,12 @@ fi
 # roots point into the immutable seed and are reconciled by digest on every
 # image change. The helper journals only package links/manifest/default settings;
 # it never copies the home, credentials, sessions, or user patch files.
+# LoopX's own directory, before the kernel starts: the sandbox runner grants a model's commands write access to it only when it exists
+# (evimed-landlock-run.sh). A symlink here would be a grant somewhere else, so one is refused.
+if [ -n "${HOME:-}" ] && [ "${EVIMED_LOOPX_ENABLED:-1}" != "0" ]; then
+  [ ! -L "${HOME}/.loopx" ] || { echo "HOME/.loopx must not be a symlink" >&2; exit 1; }
+  mkdir -p "${HOME}/.loopx"
+fi
 if [ -n "${DSH_HOME:-}" ] && [ -n "${DSH_HOME_SEED:-}" ]; then
   [ ! -L "${DSH_HOME}" ] || { echo "DSH_HOME must not be a symlink" >&2; exit 1; }
   mkdir -p "${DSH_HOME}"

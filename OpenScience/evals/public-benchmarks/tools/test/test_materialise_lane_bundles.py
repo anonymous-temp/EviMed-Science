@@ -42,8 +42,8 @@ class Materialise(unittest.TestCase):
         self.registration.write_text(json.dumps({'family': 'medcalc', 'digest': 'a' * 64, 'rows': {'development': rows, 'confirmation': ['900']},
                                                  'repeats': {'development': repeats, 'confirmation': 3}}))
 
-    def bundle(self, prefix, row, repeat=0, form='dev', **kw):
-        rid = f'{prefix}.medcalc.{row}.r{repeat}' if form == 'dev' else f'cf.medcalc.{row}.{prefix}.r{repeat}'
+    def bundle(self, prefix, row, repeat=0, form='dev', confirmation_prefix='cf', **kw):
+        rid = f'{prefix}.medcalc.{row}.r{repeat}' if form == 'dev' else f'{confirmation_prefix}.medcalc.{row}.{prefix}.r{repeat}'
         kw.setdefault('answer', f'Final answer: {row}')
         return fx.bundle(kw.pop('inbox', self.inbox), rid, 'medcalc', row, **kw)
 
@@ -104,6 +104,19 @@ class Materialise(unittest.TestCase):
         self.assertTrue((self.out / 'baseline' / 'medcalc-rsi__base__900_r2' / 'result.json').is_file())
         self.assertTrue((self.out / CAND / f'medcalc-rsi__{CAND}__900_r0' / 'result.json').is_file())
         self.assertEqual(self.report()['repeats'], 3)
+
+    def test_a_round_that_submitted_under_its_own_confirmation_prefix_names_it(self):
+        for prefix in ('base', 'cstar'):
+            for repeat in range(3):
+                self.bundle(prefix, '900', repeat, form='confirmation', confirmation_prefix='cf2')
+        code, out, err = self.run_tool('baseline=base', f'{CAND}=cstar', role='confirmation', form='confirmation')
+        self.assertEqual(code, 3)  # the default `cf` finds none of them
+        self.assertEqual(self.report()['arms']['baseline']['materialised'], 0)
+        code, out, err = self.run_tool('baseline=base', f'{CAND}=cstar', role='confirmation', form='confirmation', extra=('--confirmation-prefix', 'cf2'))
+        self.assertEqual((code, err), (0, ''))
+        report = self.report()
+        self.assertEqual((report['arms']['baseline']['materialised'], report['arms'][CAND]['materialised'], report['ignoredPrefixes']), (3, 3, {}))
+        self.assertTrue((self.out / 'baseline' / 'medcalc-rsi__base__900_r2' / 'result.json').is_file())
 
     # ------------------------------------------------------------------------------------------------ what is left alone
 
@@ -174,6 +187,26 @@ class Materialise(unittest.TestCase):
         self.assertEqual(self.run_tool('baseline=s1')[0], 0)
         self.assertFalse((folder / 'marker.txt').exists())
         self.assertEqual((folder / 'answer.md').read_text(), 'a different answer')
+
+    def test_an_arm_can_be_taken_from_a_later_repeat_of_a_prefix_as_a_development_ab_control(self):
+        for row in ROWS:
+            self.bundle('m2', row, repeat=0, answer=f'first {row}')
+            self.bundle('m2', row, repeat=1, answer=f'second {row}')
+            self.bundle('m2', row, repeat=2, answer=f'third {row}')
+            self.bundle('t2', row, repeat=0, answer=f'tools {row}')
+        code, out, err = self.run_tool('baseline=m2', 'aa=m2@1', f'{CAND}=t2')
+        self.assertEqual((code, err), (0, ''))
+        self.assertIn('aa (m2@1): 3/3 materialised', out)
+        self.assertEqual((self.out / 'baseline' / 'medcalc-rsi__base__101' / 'answer.md').read_text(), 'first 101')
+        self.assertEqual((self.out / 'aa' / 'medcalc-rsi__aa__101' / 'answer.md').read_text(), 'second 101', 'the second run stands as the target\'s only repeat')
+        self.assertEqual((self.out / CAND / f'medcalc-rsi__{CAND}__101' / 'answer.md').read_text(), 'tools 101')
+        runs = {x['rid'] for entry in self.report()['arms'].values() for x in entry['runs']}
+        self.assertIn('m2.medcalc.101.r1', runs)
+        self.assertNotIn('m2.medcalc.101.r2', runs, 'a repeat nobody asked for is not opened')
+        # the same prefix at the same repeat twice is one arm twice: refused; a prefix at two repeats is two arms
+        self.assertEqual(self.run_tool('baseline=m2', 'aa=m2')[0], 2)
+        self.assertEqual(self.run_tool('baseline=m2', 'aa=m2@x')[0], 2)
+        self.assertEqual(self.run_tool('baseline=m2@0', 'aa=m2@0')[0], 2)
 
     # ------------------------------------------------------------------------------------------------ a bad request
 

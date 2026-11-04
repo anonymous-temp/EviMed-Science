@@ -1087,6 +1087,8 @@ export const RUN_VERDICT_ERROR_CODES = Object.freeze([
   'runtime_turn_end_unknown',
   'runtime_deliverable_never_submitted',
   'runtime_monitor_stalled',
+  // The model answered nothing, and the run left no file. The provider's bad minutes, not a verdict on the work.
+  'model_empty_reply',
   'runtime_monitor_timeout',
   'runtime_monitor_failed',
   'runtime_prompt_rejected',
@@ -2739,6 +2741,9 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   // single most damaging string in the product — the browser's own table
   // answered 「运行未通过核验。」 for a stall timer, a cancel and a supersede
   // alike — and the rule is what these entries exist to carry.
+  model_empty_reply:
+    '模型这一次没有给出回复，也没有留下文件，多半是模型服务繁忙。'
+    + '这不是质量问题；回到这个会话再发一次就好。',
   runtime_monitor_stalled:
     '运行连续很长时间没有产生新的消息或工具调用，已按“无进展”中断收尾。'
     + '这不是质量问题；已经写出的文件仍在工作区里，可以回到这个会话让它从中断处继续。',
@@ -3205,6 +3210,8 @@ export const RUN_OUTCOME_KINDS = Object.freeze([
  * @type {Readonly<Record<string, typeof RUN_OUTCOME_KINDS[number]>>}
  */
 const ERROR_CODE_OUTCOMES = Object.freeze({
+  // The provider's bad minutes, which ended a turn with nothing to read: the platform's trouble and not a verdict.
+  model_empty_reply: 'stopped',
   // `specialist_*` and `meta_*` are gate codes by prefix (below), but these
   // three name a downstream service or a subagent that did not answer, which is
   // the same fact as an unreachable source.

@@ -51,6 +51,13 @@ const USER_WORDS = [
       + "the dispatch by the request that carried it (`conversationMemorySources`, `dispatchedRequestIds`), so a daily task's instruction is not "
       + "observed again every day",
   },
+  {
+    file: "server.mjs",
+    text: "turn.text",
+    count: 1,
+    why: "a research goal's turn: the researcher's goal behind the skill's gesture, or 「继续这项研究。」, which they see in their own conversation and which states nothing of theirs. "
+      + "What the model is told about it rides in the run's context under `evimed-research-goal` (`researchGoalResumeBlock`), and the run is automated, so it is never committed to memory",
+  },
 ];
 
 /**

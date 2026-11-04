@@ -4,10 +4,12 @@ The same driver, adapter, channels, ledger and upstream core as the real round; 
 """
 import json
 import os
+import subprocess
+import sys
 import unittest
 from pathlib import Path
 
-from support import FAKE_KEY, Sandbox
+from support import FAKE_KEY, PACKAGE, Sandbox
 
 
 class RoundTest(unittest.TestCase):
@@ -28,7 +30,7 @@ class RoundTest(unittest.TestCase):
         rids = [e["rid"] for e in self.box.broker_events("submit")]
         self.assertEqual(sorted(r.split(".")[-2] for r in rids), ["agg1", "base1", "dom1", "inv1"])
         calls = self.box.cli_calls()
-        self.assertEqual(sorted(c["model"] for c in calls), sorted(["claude-sonnet-5-5", "deepseek-v4-pro[1m]", "claude-opus-5-5", "claude-opus-5-5", "claude-opus-5-5"]))
+        self.assertEqual(sorted(c["model"] for c in calls), sorted(["claude-sonnet-5-5", "claude-sonnet-5-5", "claude-opus-5-5", "claude-opus-5-5", "claude-opus-5-5"]))
         # the baseline is in the selection pool: the selector saw both the base run and the composed one
         self.assertEqual(sorted(s["selection"]["id_map"].values()), ["agg1", "base1"])
         self.assertFalse(s["selection"]["chosen_is_base"])  # the composed run recomputed (the fake lane answers 42 only to a probe)
@@ -51,14 +53,14 @@ class RoundTest(unittest.TestCase):
         self.assertTrue(all(r["cny"] == 0.0123 for r in rollouts))
         self.assertEqual(sorted(r["stage"] for r in improver), ["agg", "dom", "experience", "inv", "select"])
         by_stage = {r["stage"]: r for r in improver}
-        self.assertIsNone(by_stage["inv"]["cny"])  # Claude stages: subscription usage, tokens and the API-equivalent figure, no cash
-        self.assertEqual(by_stage["inv"]["usage"]["output_tokens"], 300)
-        self.assertGreater(by_stage["dom"]["cny"], 0)  # DeepSeek stage: cash, estimated from tokens, not the CLI's figure
-        expected = (1200 * 9 + 5000 * 0.3 + 300 * 27) / 1e6
-        self.assertAlmostEqual(by_stage["dom"]["cny"], expected, places=6)
+        for row in improver:  # every improver stage is Claude: subscription usage, tokens and the API-equivalent figure, no cash
+            self.assertNotIn("cny", row)
+            self.assertEqual((row["usage"]["output_tokens"], row["usd_reported"]), (300, 0.05))
+        self.assertEqual(by_stage["dom"]["model"], "claude-sonnet-5-5")
         totals = self.box.round().ledger.totals()
         self.assertEqual(totals["rollouts"], 4)
-        self.assertAlmostEqual(totals["round_cash_cny"], 4 * 0.0123 + expected, places=5)
+        self.assertAlmostEqual(totals["solver_cny"], 4 * 0.0123, places=5)  # the settled cost of the four rollouts is the round's only cash
+        self.assertEqual(totals["improver_calls"], 5)
 
     def test_resume_pays_nothing_twice(self):
         self.box.write_tasks(["1"])
@@ -104,7 +106,7 @@ class RoundTest(unittest.TestCase):
     def test_a_stage_that_fell_back_is_visible_and_the_task_stays_out_of_the_library(self):
         self.box.write_tasks(["1"])
         os.environ["FAKE_CLAUDE_MODE"] = "badtree"
-        os.environ["FAKE_CLAUDE_FAIL_MODEL"] = "deepseek-v4-pro[1m]"  # the domain editor writes a tree the guard refuses, twice
+        os.environ["FAKE_CLAUDE_FAIL_DIM"] = "DOMAIN"  # the domain editor writes a tree the guard refuses, twice
         self.assertEqual(self.box.round().run(), 2)
         s = self.summary("1")
         self.assertEqual(s["status"], "excluded")
@@ -163,6 +165,30 @@ class RoundTest(unittest.TestCase):
         self.assertEqual(rnd.run(), 1)
         self.assertEqual(self.box.round().run(), 1)
 
+    def test_a_round_recorded_with_a_deepseek_domain_editor_refuses_to_resume(self):
+        self.box.write_tasks(["1"])
+        self.assertEqual(self.box.round().run(), 0)
+        identity_file = self.box.runs / "tasks" / "medcalc" / "identity.json"
+        recorded = json.loads(identity_file.read_text())
+        recorded["channels"]["dom"].update({"provider": "deepseek", "model": "deepseek-v4-pro[1m]"})  # what a round before 2026-11-03 wrote
+        identity_file.write_text(json.dumps(recorded))
+        calls = len(self.box.cli_calls())
+        self.assertEqual(self.box.round().run(), 1)
+        self.assertEqual(len(self.box.cli_calls()), calls)  # nothing was asked of any model
+
+    def test_a_channels_file_with_a_deepseek_stage_stops_the_driver_before_anything_is_asked(self):
+        document = json.loads(self.box.channel_file.read_text())
+        document["stages"]["dom"].update({"model": "deepseek-v4-pro[1m]", "provider": "deepseek"})
+        self.box.channel_file.write_text(json.dumps(document))
+        with self.assertRaises(ValueError):
+            self.box.round()
+        done = subprocess.run([sys.executable, str(PACKAGE / "run_round.py"), "--dry-run", "--domains", "medcalc", "--runs-root", str(self.box.runs),
+                               "--out", str(self.box.out), "--tasks-file", str(self.box.tasks_file), "--bench-root", str(self.box.bench),
+                               "--channels", str(self.box.channel_file), "--offline"], capture_output=True, text=True)
+        self.assertEqual(done.returncode, 1)
+        self.assertIn("improver stages run on Claude", done.stderr)
+        self.assertEqual((self.box.cli_calls(), self.box.broker_events("submit")), ([], []))
+
     def test_nothing_gold_reaches_a_session_or_a_request(self):
         self.box.write_tasks(["1"])
         self.box.round().run()
@@ -171,9 +197,20 @@ class RoundTest(unittest.TestCase):
             if path.is_file() and path.suffix in {".md", ".json", ".jsonl", ".txt"}:
                 self.assertNotIn(needle, path.read_text(errors="replace"), str(path))
 
-    def test_secret_key_never_reaches_disk_or_the_cli_log(self):
+    def test_a_credential_of_the_parent_shell_never_reaches_a_session_or_the_disk(self):
         self.box.write_tasks(["1"])
-        self.box.round().run()
+        os.environ["DEEPSEEK_API_KEY"] = FAKE_KEY
+        os.environ["ANTHROPIC_AUTH_TOKEN"] = FAKE_KEY
+        os.environ["ANTHROPIC_BASE_URL"] = "https://api.deepseek.com/anthropic"
+        try:
+            self.box.round().run()
+        finally:
+            for k in ("DEEPSEEK_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL"):
+                os.environ.pop(k, None)
+        calls = self.box.cli_calls()
+        self.assertEqual(len(calls), 5)
+        for call in calls:
+            self.assertEqual((call["base_url"], call["leaked_env"]), (None, []))
         for path in list(self.box.runs.rglob("*")) + list(self.box.out.rglob("*")) + [self.box.cli_log]:
             if path.is_file():
                 self.assertNotIn(FAKE_KEY, path.read_text(errors="replace"), str(path))
@@ -194,13 +231,8 @@ class RoundTest(unittest.TestCase):
             for flag in ("--safe-mode", "--restricted", "--permission-mode", "--no-session-persistence"):
                 self.assertIn(flag, call["flags"])
             self.assertNotIn("--dangerously-skip-permissions", call["flags"])
-            if call["model"].startswith("deepseek"):
-                self.assertEqual(call["base_url"], "http://127.0.0.1:9/anthropic")
-                self.assertIsNotNone(call["token_sha"])
-                self.assertEqual(call["haiku"], "deepseek-flash")
-            else:
-                self.assertIsNone(call["base_url"])
-                self.assertIsNone(call["token_sha"])
+            self.assertTrue(call["model"].startswith("claude-"))
+            self.assertIsNone(call["base_url"])
 
 
 if __name__ == "__main__":

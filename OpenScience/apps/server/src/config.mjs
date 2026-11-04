@@ -2234,6 +2234,16 @@ export function loadConfig(overrides = {}) {
       if(!Number.isSafeInteger(value) || value<500 || value>60000) throw new Error("OPEN_SCIENCE_RUNTIME_PROMPT_ADMISSION_TIMEOUT_MS must be a whole number from 500 to 60000.");
       return value;
     })(),
+    // LoopX's bar acknowledges a pause or a start only after up to four CLI calls of its own (its mutation alone may take 20 s), and the
+    // action takes effect whether or not anyone is still waiting: cut at a prompt's deadline, the bar read "unreachable" over a goal that had
+    // paused (2026-11-03). The admission's `timedOut` counter counts one that still runs out. Same ceiling as a prompt's, since it holds the same fence.
+    runtimeGoalBarActionTimeoutMs: (()=>{
+      const value=Number(overrides.runtimeGoalBarActionTimeoutMs ?? process.env.OPEN_SCIENCE_RUNTIME_GOALBAR_ACTION_TIMEOUT_MS ?? 60000);
+      if(!Number.isSafeInteger(value) || value<500 || value>60000) throw new Error("OPEN_SCIENCE_RUNTIME_GOALBAR_ACTION_TIMEOUT_MS must be a whole number from 500 to 60000.");
+      return value;
+    })(),
+    // How long the first read of a bar on a cold kernel is asked again while the kernel takes the session up. 0: not asked again.
+    runtimeGoalBarReadWaitMs: Math.max(0, Number(overrides.runtimeGoalBarReadWaitMs ?? process.env.OPEN_SCIENCE_RUNTIME_GOALBAR_READ_WAIT_MS ?? 8000) || 0),
     runtimeProxyRequestTimeoutMs: Number(
       overrides.runtimeProxyRequestTimeoutMs ?? process.env.OPEN_SCIENCE_RUNTIME_PROXY_REQUEST_TIMEOUT_MS ?? 120_000,
     ),
@@ -2430,6 +2440,27 @@ export function loadConfig(overrides = {}) {
       overrides.runtimeSandboxEnforcement ?? process.env.OPEN_SCIENCE_RUNTIME_SANDBOX_ENFORCEMENT ?? (production ? "full" : "partial"),
     ).trim().toLowerCase(),
     loopxEnabled: overrides.loopxEnabled ?? boolEnv("OPEN_SCIENCE_LOOPX_ENABLED", true),
+    // What the control plane does about a long research goal (researchGoalService.mjs). Off, a goal is LoopX's alone: it stops when its
+    // kernel stops, and nothing limits its rounds. On by default with LoopX (owner, 2026-11-03).
+    researchGoalWatchEnabled: overrides.researchGoalWatchEnabled ?? boolEnv("OPEN_SCIENCE_RESEARCH_GOAL_WATCH_ENABLED", true),
+    researchGoalLimits: overrides.researchGoalLimits ?? {
+      // How long a goal with no round running is left before LoopX is asked what became of it. LoopX starts its next round within a minute
+      // when it means to (20 to 40 s measured on 2026-11-03), so this cannot mistake the gap between two rounds for the end.
+      quietMs: Number(process.env.OPEN_SCIENCE_RESEARCH_GOAL_QUIET_MS ?? 180_000),
+      // Rounds in a row with no new file before a goal is paused. A real topic alternated file / none / file; a finished goal that kept going
+      // showed none, every 21 seconds, about CNY 2 an hour (drills D02, D22). 0 is off.
+      maxRoundsWithoutProgress: Number(process.env.OPEN_SCIENCE_RESEARCH_GOAL_MAX_ROUNDS_WITHOUT_PROGRESS ?? 3),
+      // What one goal may spend before it is paused and the person is told; 继续 counts from there. A real topic cost about CNY 3.5 in
+      // ten rounds, so this is a bound on a goal gone wrong, not on work. 0 is off.
+      maxCny: Number(process.env.OPEN_SCIENCE_RESEARCH_GOAL_MAX_CNY ?? 50),
+      // How many times a goal the platform interrupted is taken up again before a person is asked, and how long each waits. The first waits
+      // out a restart; the later ones wait out a provider that answers "too busy", which lasted about 15 minutes on 2026-11-03.
+      reviveAttempts: Number(process.env.OPEN_SCIENCE_RESEARCH_GOAL_REVIVE_ATTEMPTS ?? 3),
+      reviveBackoffMs: [30_000, 300_000, 900_000],
+      // A goal silent for longer than this is not started again on its own: nobody is expecting it, and it still costs money.
+      staleMs: Number(process.env.OPEN_SCIENCE_RESEARCH_GOAL_STALE_MS ?? 48 * 60 * 60_000),
+      tickMs: Number(process.env.OPEN_SCIENCE_RESEARCH_GOAL_TICK_MS ?? 30_000),
+    },
     searchTopicsEnabled: overrides.searchTopicsEnabled ?? boolEnv("OPEN_SCIENCE_SEARCH_TOPICS_ENABLED", false),
     // The kernel's ask-user tool, for every runtime of the deployment. On unless the deployment says otherwise
     // (2026-10-12): a person is in the conversation, and 「分析一下我的数据」 with nothing uploaded should be asked about,

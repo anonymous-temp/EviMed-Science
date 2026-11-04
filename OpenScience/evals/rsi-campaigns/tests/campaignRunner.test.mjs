@@ -3,7 +3,10 @@ import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { RSI_QUARTER_ALPHA, campaignPlan, confirmationDecision, digest, evaluateStatistics, evaluationRequest, labPreflight, rsiCampaignQuarter, runCampaign } from '../campaign_runner.mjs';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { RSI_QUARTER_ALPHA, alphaLedger, campaignPlan, confirmationDecision, digest, evaluateStatistics, evaluationRequest, exposureDecision, labPreflight, recordCorpusExposure, rsiCampaignQuarter, runCampaign } from '../campaign_runner.mjs';
+import { directionalCounts } from '../directional.mjs';
 import { frontierCampaignConsumerIdentity } from '../frontier_campaign.mjs';
 import {
   BENIGN_CLAIM_ALPHA, INCIDENT_AUTHORIZATION, STATISTICS_MODULE_PATH, STATISTICS_PYTHON, attachStatistics, attestationFrom, benignCampaignFixture, labAttest, labConfiguration, memoryCampaignStore,
@@ -56,6 +59,13 @@ test('the lab must prove its isolation before anything runs', async () => {
   assert.equal((await labPreflight(labConfiguration, async () => { throw new Error('connection refused'); })).reason, 'campaign_isolation_unverified');
   const { host, ...withoutHost } = labConfiguration;
   assert.equal((await labPreflight(withoutHost, labAttest)).reason, 'campaign_host_unavailable');
+  // The lab holds the one provider credential of the frontier jury (Qwen 3.8 Max): a configuration without that row, or with any other provider, is refused.
+  const { providers, ...withoutProviders } = labConfiguration;
+  for (const [configuration, reason] of [[withoutProviders, 'campaign_lab_configuration_invalid'], [{ ...labConfiguration, providers: {} }, 'campaign_lab_provider_unavailable'],
+    [{ ...labConfiguration, providers: { qwenMax: { ...providers.qwenMax, model: 'qwen3.8-plus' } } }, 'campaign_lab_provider_unavailable'],
+    [{ ...labConfiguration, providers: { ...providers, deepseekFlash: { provider: 'deepseek', model: 'deepseek-flash', credentialRef: 'lab:deepseek' } } }, 'campaign_lab_configuration_invalid']]) {
+    assert.equal((await labPreflight(configuration, labAttest)).reason, reason, reason);
+  }
   // Through the runner: a store that was never touched, nothing written.
   const fixture = await registeredCampaignFixture();
   const store = memoryCampaignStore();
@@ -101,11 +111,11 @@ test('the development and confirmation stages run once each and stop at the eval
   assert.deepEqual(evaluationRequest(manifest, inputs, state, result.binding), result.request);
   assert.equal(state.evaluation, undefined);
   // The confirmation corpus was opened for this campaign, in the synthetic ledger so a rehearsal never spends the real budget.
-  assert.deepEqual([...store.ledger.keys()], ['synthetic:frontier-selection:2026-Q4']);
-  const [reservation] = store.ledger.get('synthetic:frontier-selection:2026-Q4').reservations;
-  assert.deepEqual({ ...reservation, at: undefined }, { campaignId: ID, alpha: BENIGN_CLAIM_ALPHA, corpusDigest: result.request.corpusDigest, at: undefined, looks: 1 });
+  assert.deepEqual([...store.ledger.keys()], ['synthetic:frontier-mix:2026-Q4']);
+  const [reservation] = store.ledger.get('synthetic:frontier-mix:2026-Q4').reservations;
+  assert.deepEqual({ ...reservation, at: undefined }, { campaignId: ID, surface: 'frontier-selection', alpha: BENIGN_CLAIM_ALPHA, corpusDigest: result.request.corpusDigest, at: undefined, looks: 1 });
   assert.ok(Date.parse(reservation.at) <= Date.parse(state.confirmationOpenedAt), 'the corpus is reserved before it is read');
-  assert.deepEqual(store.corpora.get(result.request.corpusDigest), { recordType: 'rsi-opened-corpus', corpusDigest: result.request.corpusDigest, campaignId: ID, surface: 'synthetic:frontier-selection', openedAt: reservation.at });
+  assert.deepEqual(store.corpora.get(result.request.corpusDigest), { recordType: 'rsi-opened-corpus', corpusDigest: result.request.corpusDigest, campaignId: ID, surface: 'frontier-selection', ledger: 'synthetic:frontier-mix', openedAt: reservation.at });
 });
 
 test('a rehearsal of a public campaign reserves in the rehearsal ledger, never the quarter\'s real alpha', async () => {
@@ -114,8 +124,8 @@ test('a rehearsal of a public campaign reserves in the rehearsal ledger, never t
   const store = memoryCampaignStore();
   const result = await runCampaign({ ...fixture, ...runnerEnvironment({ store }) });
   assert.equal(result.status, 'awaiting-evaluation', JSON.stringify(result));
-  assert.deepEqual([...store.ledger.keys()], ['rehearsal:frontier-selection:2026-Q4']);
-  assert.equal(store.corpora.get(result.request.corpusDigest).surface, 'rehearsal:frontier-selection');
+  assert.deepEqual([...store.ledger.keys()], ['rehearsal:frontier-mix:2026-Q4']);
+  assert.equal(store.corpora.get(result.request.corpusDigest).ledger, 'rehearsal:frontier-mix');
 });
 
 test('a real signed receipt and the real statistics give the verdict, which is a diagnostic, never a release', async () => {
@@ -150,7 +160,7 @@ test('a real signed receipt and the real statistics give the verdict, which is a
   const publicRun = await runToVerdict(await registeredCampaignFixture({ classification: 'public' }), { dir: nextDir() });
   assert.deepEqual([publicRun.completed.qualification, publicRun.completed.purpose, publicRun.completed.checkpoint.evaluation.scope, publicRun.completed.releaseEligible],
     ['qualified', 'offline-evaluation', 'registered-population-task-family', false]);
-  assert.deepEqual([...publicRun.environment.store.ledger.keys()], ['frontier-selection:2026-Q4'], 'a real campaign draws on the real surface budget');
+  assert.deepEqual([...publicRun.environment.store.ledger.keys()], ['frontier-mix:2026-Q4'], 'a real campaign draws on the real surface budget');
 });
 
 test('resuming makes no writes and repeats the answer, whether the evaluator has spoken or not', async () => {
@@ -221,7 +231,7 @@ test('a tampered checkpoint is refused, and a deterministic stage interrupted mi
   assert.equal(recovered.status, 'awaiting-evaluation');
   assert.deepEqual(store.state(ID).frozenPolicy, snapshot.state.frozenPolicy);
   assert.equal(recovered.request.confirmationResultDigest, snapshot.request.confirmationResultDigest, 'the same stage output');
-  assert.equal(store.ledger.get('synthetic:frontier-selection:2026-Q4').reservations.length, 1, 'its own reservation was reused, not drawn twice');
+  assert.equal(store.ledger.get('synthetic:frontier-mix:2026-Q4').reservations.length, 1, 'its own reservation was reused, not drawn twice');
 });
 
 test('a tampered evaluation record is refused after the verdict', async () => {
@@ -294,42 +304,42 @@ test('a confirmation corpus is opened by one campaign only', async () => {
   assert.equal(state.stages.confirmation, undefined);
   assert.equal(state.frozenPolicy.threshold, 72);
   // The first campaign keeps its own reservation and still resumes.
-  const ledger = store.ledger.get('synthetic:frontier-selection:2026-Q4');
+  const ledger = store.ledger.get('synthetic:frontier-mix:2026-Q4');
   assert.deepEqual(ledger.reservations.map((row) => row.campaignId), [ID]);
   assert.deepEqual(await runCampaign({ ...first.fixture, ...runnerEnvironment({ store }) }), first.result);
 });
 
-test('a surface\'s confirmations draw on one alpha budget per quarter', async () => {
+test('a consumer\'s confirmations draw on one alpha budget per quarter', async () => {
   const store = memoryCampaignStore();
   const campaign = (n, extra = {}) => registeredCampaignFixture({ id: `quarter-${n}`, confirmation: { seed: 500 + n }, ...extra });
   for (const n of [1, 2, 3]) {
     const result = await runCampaign({ ...await campaign(n), ...runnerEnvironment({ store }) });
     assert.equal(result.status, 'awaiting-evaluation', `campaign ${n}`);
   }
-  const used = store.ledger.get('synthetic:frontier-selection:2026-Q4').reservations.reduce((sum, row) => sum + row.alpha, 0);
+  const used = store.ledger.get('synthetic:frontier-mix:2026-Q4').reservations.reduce((sum, row) => sum + row.alpha, 0);
   assert.ok(Math.abs(used - RSI_QUARTER_ALPHA) < 1e-12, 'three campaigns of a third each spend the quarter\'s 0.05');
   const fourth = await runCampaign({ ...await campaign(4), ...runnerEnvironment({ store }) });
   assert.deepEqual(fourth, { status: 'not-qualified', reason: 'campaign_alpha_budget_exhausted' });
   assert.deepEqual(store.state('quarter-4').outcome, fourth);
   assert.equal(store.state('quarter-4').stages.confirmation, undefined);
   assert.equal(store.corpora.size, 3, 'the refused campaign opened nothing');
-  // A real campaign has its own surface ledger: a rehearsal cannot spend it.
+  // A real campaign has its own consumer ledger: a rehearsal cannot spend it.
   const real = await runCampaign({ ...await campaign(5, { classification: 'public' }), ...runnerEnvironment({ store }) });
   assert.equal(real.status, 'awaiting-evaluation');
-  assert.deepEqual([...store.ledger.keys()].sort(), ['frontier-selection:2026-Q4', 'synthetic:frontier-selection:2026-Q4']);
+  assert.deepEqual([...store.ledger.keys()].sort(), ['frontier-mix:2026-Q4', 'synthetic:frontier-mix:2026-Q4']);
   // The next quarter starts a new budget.
   const later = await registeredCampaignFixture({ id: 'quarter-6', createdAt: '2026-12-30T00:00:00Z', deadline: '2027-01-31T16:00:00Z', confirmation: { seed: 506 } });
   const next = await runCampaign({ ...later, ...runnerEnvironment({ store, now: tickingClock('2027-01-05T01:00:00Z') }) });
   assert.equal(next.status, 'awaiting-evaluation');
-  assert.ok(store.ledger.has('synthetic:frontier-selection:2027-Q1'));
+  assert.ok(store.ledger.has('synthetic:frontier-mix:2027-Q1'));
 });
 
 test('the confirmation ledger rule: reuse, change, another campaign\'s corpus and the budget', () => {
-  const request = { surface: 'frontier-selection', quarter: '2026-Q4', campaignId: 'a', alpha: 0.02, corpusDigest: 'c1', at: '2026-10-26T01:00:00Z' };
+  const request = { ledger: 'frontier-mix', legacy: ['frontier-selection'], surface: 'frontier-selection', quarter: '2026-Q4', campaignId: 'a', alpha: 0.02, corpusDigest: 'c1', at: '2026-10-26T01:00:00Z' };
   const first = confirmationDecision(undefined, undefined, request);
   assert.deepEqual(first.result, { authorized: true, look: 1, reused: false });
-  assert.deepEqual(first.ledger, { recordType: 'rsi-alpha-ledger', surface: 'frontier-selection', quarter: '2026-Q4', reservations: [{ campaignId: 'a', alpha: 0.02, corpusDigest: 'c1', at: request.at, looks: 1 }] });
-  assert.deepEqual(first.corpus, { recordType: 'rsi-opened-corpus', corpusDigest: 'c1', campaignId: 'a', surface: 'frontier-selection', openedAt: request.at });
+  assert.deepEqual(first.ledger, { recordType: 'rsi-alpha-ledger', consumer: 'frontier-mix', quarter: '2026-Q4', reservations: [{ campaignId: 'a', surface: 'frontier-selection', alpha: 0.02, corpusDigest: 'c1', at: request.at, looks: 1 }] });
+  assert.deepEqual(first.corpus, { recordType: 'rsi-opened-corpus', corpusDigest: 'c1', campaignId: 'a', surface: 'frontier-selection', ledger: 'frontier-mix', openedAt: request.at });
   assert.equal(first.write, true);
   // Asking again for the same thing reuses the reservation and writes nothing.
   assert.deepEqual(confirmationDecision(first.ledger, first.corpus, request), { write: false, result: { authorized: true, look: 1, reused: true } });
@@ -346,6 +356,107 @@ test('the confirmation ledger rule: reuse, change, another campaign\'s corpus an
   for (const alpha of [0, -0.01, Number.NaN, undefined]) assert.equal(confirmationDecision(undefined, undefined, { ...request, alpha }).result.reason, 'campaign_alpha_budget_exhausted', `alpha ${alpha}`);
   assert.equal(confirmationDecision(undefined, undefined, { ...request, alpha: 0.05 }).result.authorized, true, 'the whole quarter in one campaign');
   assert.equal(confirmationDecision(undefined, undefined, { ...request, alpha: 0.05000000001 }).result.authorized, false);
+});
+
+test('the error budget is the consumer\'s: harness-patch and tool-patch share the runtime image\'s quarter, and a ledger written under a surface\'s key still counts', () => {
+  const manifest = (surface, extra = {}) => ({ id: `${surface}-medcalc-2026-11`, surface, data: { classification: 'public' }, ...extra });
+  assert.deepEqual(alphaLedger(manifest('harness-patch')), { ledger: 'dsh-harness', legacy: ['harness-patch', 'tool-patch'] });
+  assert.deepEqual(alphaLedger(manifest('tool-patch')), { ledger: 'dsh-harness', legacy: ['harness-patch', 'tool-patch'] });
+  assert.deepEqual(alphaLedger(manifest('frontier-selection')), { ledger: 'frontier-mix', legacy: ['frontier-selection'] });
+  assert.deepEqual(alphaLedger(manifest('capability-skill')), { ledger: 'dsh-capability', legacy: ['capability-skill'] });
+  assert.deepEqual(alphaLedger(manifest('tool-patch', { data: { classification: 'synthetic' } })), { ledger: 'synthetic:dsh-harness', legacy: ['synthetic:harness-patch', 'synthetic:tool-patch'] });
+  assert.deepEqual(alphaLedger(manifest('harness-patch', { id: 'rehearsal-harness-patch-medcalc-2026-11' })), { ledger: 'rehearsal:dsh-harness', legacy: ['rehearsal:harness-patch', 'rehearsal:tool-patch'] });
+  // The lab's 2026-Q4 as it stands: three harness-patch draws of 0.05/3 under the surface's own key, written before the budget was the consumer's.
+  const third = 0.05 / 3;
+  const legacyHarness = { recordType: 'rsi-alpha-ledger', surface: 'harness-patch', quarter: '2026-Q4', reservations: ['drb', 'medcalc', 'arb-deep'].map((family, i) => ({ campaignId: `harness-patch-${family}-2026-11`, alpha: third, corpusDigest: `c${i}`, at: '2026-11-01T00:00:00Z', looks: 1 })) };
+  const tool = { ...alphaLedger(manifest('tool-patch')), surface: 'tool-patch', quarter: '2026-Q4', campaignId: 'tool-patch-mbc-2026-11', alpha: third, corpusDigest: 'c9', at: '2026-11-03T00:00:00Z' };
+  const refused = confirmationDecision(undefined, undefined, tool, [legacyHarness]);
+  assert.equal(refused.write, false);
+  assert.equal(refused.result.reason, 'campaign_alpha_budget_exhausted', 'no runtime-image confirmation is left in 2026-Q4');
+  assert.ok(Math.abs(refused.result.used - 0.05) < 1e-12);
+  // A campaign that reserved under the legacy key resumes from it, and nothing is written.
+  assert.deepEqual(confirmationDecision(undefined, { recordType: 'rsi-opened-corpus', corpusDigest: 'c1', campaignId: 'harness-patch-medcalc-2026-11', surface: 'harness-patch', openedAt: '2026-11-01T00:00:00Z' },
+    { ...tool, surface: 'harness-patch', campaignId: 'harness-patch-medcalc-2026-11', corpusDigest: 'c1' }, [legacyHarness]), { write: false, result: { authorized: true, look: 1, reused: true } });
+  // With one legacy draw only, a tool patch takes its share and writes the consumer's ledger alone; the legacy one stays as it was.
+  const one = { ...legacyHarness, reservations: legacyHarness.reservations.slice(0, 1) };
+  const drawn = confirmationDecision(undefined, undefined, tool, [one]);
+  assert.equal(drawn.result.authorized, true);
+  assert.deepEqual(drawn.ledger.reservations.map((row) => [row.campaignId, row.surface]), [['tool-patch-mbc-2026-11', 'tool-patch']]);
+  assert.equal(drawn.ledger.consumer, 'dsh-harness');
+  assert.equal(one.reservations.length, 1);
+});
+
+test('a confirmation corpus the operator read outside the runner is recorded as exposed and is never opened later as unseen', async () => {
+  const at = '2026-11-03T02:00:00Z', corpusDigest = 'd'.repeat(64), reason = 'round 2: BixBench confirmation verdicts judged outside the runner before any campaign opened them';
+  const fresh = exposureDecision(undefined, { corpusDigest, reason, at });
+  assert.deepEqual(fresh, { write: true, result: { recorded: true, reused: false, corpusDigest, openedBy: null },
+    corpus: { recordType: 'rsi-opened-corpus', corpusDigest, campaignId: null, surface: null, openedAt: at, exposures: [{ reason, at }] } });
+  assert.deepEqual(exposureDecision(fresh.corpus, { corpusDigest, reason, at: '2026-11-04T00:00:00Z' }).write, false, 'the same reason twice writes nothing');
+  // A corpus a campaign had opened keeps its opener and gains the exposure.
+  const opened = { recordType: 'rsi-opened-corpus', corpusDigest, campaignId: 'harness-patch-bixbench-2026-11', surface: 'harness-patch', openedAt: '2026-11-02T00:00:00Z', directional: true };
+  const added = exposureDecision(opened, { corpusDigest, reason, at });
+  assert.deepEqual(added.corpus, { ...opened, exposures: [{ reason, at }] });
+  assert.equal(added.result.openedBy, 'harness-patch-bixbench-2026-11');
+  for (const bad of [{ corpusDigest: 'xyz', reason, at }, { corpusDigest, reason: ' ', at }, { corpusDigest, reason: 'r'.repeat(1001), at }, { corpusDigest, reason, at: 'never' }]) {
+    assert.deepEqual(exposureDecision(undefined, bad), { write: false, result: { recorded: false, reason: 'campaign_exposure_invalid' } }, JSON.stringify(bad).slice(0, 80));
+  }
+  const request = { ledger: 'dsh-harness', legacy: [], surface: 'harness-patch', quarter: '2026-Q4', campaignId: 'later', alpha: 0.01, corpusDigest, at };
+  assert.deepEqual(confirmationDecision(undefined, fresh.corpus, request).result, { authorized: false, reason: 'campaign_confirmation_corpus_exposed' });
+  assert.deepEqual(confirmationDecision(undefined, fresh.corpus, { ...request, alpha: 0, directional: true }).result, { authorized: false, reason: 'campaign_confirmation_corpus_exposed' });
+  // Through the lab command and a store: the lab proves its isolation first, then a campaign over the recorded corpus is refused by name.
+  const fixture = await registeredCampaignFixture({ classification: 'public' });
+  const store = memoryCampaignStore();
+  const confirmation = fixture.manifest.data.sources.find((row) => row.role === 'confirmation').digest;
+  const environment = runnerEnvironment({ store });
+  assert.deepEqual(await recordCorpusExposure({ configuration: environment.configuration, attestLab: async () => ({ role: 'other' }), store, corpusDigest: confirmation, reason }), { status: 'not-qualified', reason: 'campaign_isolation_unverified' });
+  assert.equal(store.corpora.size, 0);
+  const recorded = await recordCorpusExposure({ configuration: environment.configuration, attestLab: environment.attestLab, store, corpusDigest: confirmation, reason, now: () => at });
+  assert.deepEqual(recorded, { status: 'recorded', recorded: true, reused: false, corpusDigest: confirmation, openedBy: null });
+  assert.deepEqual(await recordCorpusExposure({ configuration: environment.configuration, attestLab: environment.attestLab, store, corpusDigest: 'nope', reason }), { status: 'not-qualified', reason: 'campaign_exposure_invalid' });
+  const result = await runCampaign({ ...fixture, ...environment });
+  assert.deepEqual(result, { status: 'not-qualified', reason: 'campaign_confirmation_corpus_exposed' });
+  assert.equal(store.ledger.size, 0, 'no alpha was drawn');
+  // The command line: it needs no manifest, refuses a malformed request before anything is opened, and needs the lab configuration.
+  const cli = (args) => spawnSync(process.execPath, [fileURLToPath(new URL('../run.mjs', import.meta.url)), 'record-exposure', ...args], { encoding: 'utf8', env: { PATH: process.env.PATH } });
+  const malformed = cli(['--corpus', 'not-a-digest', '--reason', reason]);
+  assert.equal(malformed.status, 2);
+  assert.deepEqual(JSON.parse(malformed.stdout), { status: 'not-qualified', reason: 'campaign_exposure_invalid' });
+  const unconfigured = cli(['--corpus', confirmation, '--reason', reason]);
+  assert.equal(unconfigured.status, 2);
+  assert.equal(JSON.parse(unconfigured.stdout).status, 'not-qualified');
+});
+
+test('a frontier campaign with fewer measured confirmation days than the procedure\'s minimum is directional: it reserves no alpha and cannot be qualified', async () => {
+  const fixture = await registeredCampaignFixture({ classification: 'public' });
+  const days = fixture.inputs.registration.statistics.groups.map((group) => group.day);
+  assert.ok(days.length >= 25, `the full fixture measures ${days.length} days`);
+  assert.equal(directionalCounts(fixture.inputs.registration.statistics), null, 'a superiority claim has no slice to count');
+  const short = await registeredCampaignFixture({ classification: 'public', days: 24 });
+  const counts = directionalCounts(short.inputs.registration.statistics);
+  assert.deepEqual(counts, { groups: short.inputs.registration.statistics.groups.length, sliceGroups: null, minimum: 25 });
+  const run = await runToVerdict(short, { dir: nextDir() });
+  assert.equal(run.awaiting.status, 'awaiting-evaluation');
+  const store = run.environment.store;
+  assert.equal(store.ledger.size, 0, 'no quarter ledger was written');
+  assert.equal(store.corpora.get(run.awaiting.request.corpusDigest).directional, true);
+  assert.equal(run.completed.qualification, 'inconclusive');
+  assert.equal(run.completed.checkpoint.evaluation.scope, 'directional-reference');
+  assert.equal(run.completed.checkpoint.evaluation.reasons[0], 'campaign_directional_below_minimum_groups');
+});
+
+test('a frontier month with no measured confirmation day at all is directional too: zero groups reserve no alpha', async () => {
+  const empty = await registeredCampaignFixture({ classification: 'public', statistics: { groupDays: [] } });
+  assert.deepEqual(empty.inputs.registration.statistics.groups, []);
+  assert.deepEqual(directionalCounts(empty.inputs.registration.statistics), { groups: 0, sliceGroups: null, minimum: 25 });
+  // A registration with no groups block at all is not this rule's to read.
+  assert.equal(directionalCounts({ procedure: { minimum_slice_groups: 25 } }), null);
+  const run = await runToVerdict(empty, { dir: nextDir() });
+  const store = run.environment.store;
+  assert.equal(store.ledger.size, 0, 'no quarter ledger was written');
+  assert.equal(store.corpora.get(run.awaiting.request.corpusDigest).directional, true);
+  assert.equal(run.completed.qualification, 'inconclusive');
+  assert.equal(run.completed.checkpoint.evaluation.scope, 'directional-reference');
+  assert.deepEqual(run.completed.checkpoint.evaluation.directional, { groups: 0, sliceGroups: null, minimum: 25 });
 });
 
 test('the quarter is the Asia/Shanghai calendar quarter', () => {
@@ -652,8 +763,13 @@ test('only a registered consumer is run, and the manifest contract is checked fi
   const other = structuredClone(fixture);
   other.manifest.surface = 'frontier-screen';
   other.manifest.target.surface = 'frontier-screen';
+  // Not a registered grid: its manifest names who would write its candidates, so what refuses it is the consumer registry, not the contract.
+  other.manifest.models.improvers = [{ role: 'proposing', provider: 'anthropic', model: 'claude-opus-5-5' }];
   other.inputs.target = other.manifest.target;
   const store = memoryCampaignStore();
+  // The frontier jury (Qwen) is admitted on frontier-selection only: on this surface the contract refuses it before the registry is asked.
+  assert.deepEqual(await runCampaign({ ...other, ...runnerEnvironment({ store }) }), { status: 'not-qualified', reason: 'campaign_judge_refused' });
+  other.manifest.models.judges = [{ role: 'judge', provider: 'anthropic', model: 'claude-sonnet-5-5' }];
   assert.deepEqual(await runCampaign({ ...other, ...runnerEnvironment({ store }) }), { status: 'not-qualified', reason: 'campaign_consumer_not_qualified' });
   assert.equal(store.writes(), 0);
   assert.deepEqual(campaignPlan(other.manifest), { campaignId: ID, automated: true, stages: ['development', 'confirmation', 'evaluation'], unsupported: true });
@@ -662,14 +778,24 @@ test('only a registered consumer is run, and the manifest contract is checked fi
     [(m) => { m.claim = 'bogus'; }, 'campaign_claim_invalid'],
     [(m) => { m.automated = false; }, 'campaign_automated_required'],
     [(m) => { m.deadline = m.createdAt; }, 'campaign_time_invalid'],
-    [(m) => { m.models.improver = { provider: 'none', model: 'something-else' }; }, 'campaign_model_invalid'],
+    [(m) => { m.models.improvers = [{ role: 'proposing', provider: 'dashscope', model: 'qwen3.8-max' }]; }, 'campaign_improver_refused'],
+    // The frontier jury is the one Qwen judge the contract admits (domain: RSI_FRONTIER_JURY); anything but exactly that judge is refused by the same rule the assembly applies.
+    [(m) => { m.models.judges = [{ ...m.models.judges[0], model: 'qwen3.8-plus' }]; }, 'campaign_judge_refused'],
+    [(m) => { m.models.judges = [{ ...m.models.judges[0], role: 'judge' }]; }, 'campaign_judge_refused'],
+    [(m) => { m.models.judges = [{ ...m.models.judges[0], provider: 'deepseek', model: 'deepseek-flash' }]; }, 'campaign_judge_refused'],
+    [(m) => { m.models.judges = [{ ...m.models.judges[0], model: 'claude-opus-5-5' }]; }, 'campaign_judge_refused'],
+    // An admitted judge that is not the one the registration names is a manifest that does not match its registration.
+    [(m) => { m.models.judges = [{ ...m.models.judges[0], provider: 'anthropic', model: 'claude-opus-5-5' }]; }, 'campaign_models_registration_mismatch'],
+    [(m) => { m.models.judges = [{ ...m.models.judges[0], id: 'frontier-jury-other' }]; }, 'campaign_models_registration_mismatch'],
+    [(m) => { m.models.judges = []; }, 'campaign_models_registration_mismatch'],
+    [(m) => { m.models.improvers = [{ role: 'proposing', provider: 'anthropic', model: 'claude-opus-5-5' }]; }, 'campaign_models_registration_mismatch'],
     [(m) => { m.registration.claim = 'efficiency'; }, 'campaign_registration_invalid'],
   ]) {
     const changed = structuredClone(fixture);
     mutate(changed.manifest);
     assert.equal((await runCampaign({ ...changed, ...runnerEnvironment() })).reason, reason);
   }
-  // The same manifest with the grid improver and the claim the consumer supports is what passes.
+  // The same manifest with no improver (a registered grid), the labelling jury as its judge and the claim the consumer supports is what passes.
   assert.equal((await runCampaign({ ...fixture, ...runnerEnvironment() })).status, 'awaiting-evaluation');
 });
 

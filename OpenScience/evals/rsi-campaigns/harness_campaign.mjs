@@ -3,14 +3,19 @@
  * supplement and a few skills (`{guidanceSupplement, skills: [{name, description, body}]}`) applied to the image the baseline
  * ran on. The arms ran on a lane stack (the baseline on the unmodified image, each candidate on a delta image, the control on
  * the unmodified image again); what reaches the lab is each run's final answer and settled cost, and the scoring here is
- * deterministic code over those records — or, for a judged family, over digested verdict records a judge outside the solver's
- * family wrote. A stage re-runs to the same bytes; the measurement it scores was paid for and is stochastic, which is why the
- * statistics treat it as a paid paired-t family with repeats (deterministicConsumer: false), exactly as capability-skill does.
+ * deterministic code over those records — or, for a judged family, over digested verdict records a registered Claude judge
+ * wrote (the owner's role policy, 2026-11-03: every offline judge and improver is Claude, pinned by its model id). A stage re-runs
+ * to the same bytes; the measurement it scores was paid for and is stochastic, which is why the statistics treat it as a paid
+ * paired-t family with repeats (deterministicConsumer: false), exactly as capability-skill does.
  *
  * What differs from skill_campaign.mjs:
  *  - the candidate: `arms[id].harness = {digest, chars, alwaysOnChars, title, bundle}`, `digest` over the canonical JSON of the
  *    bundle AND the image identity it was measured on (`harnessPatchDigest`), recomputed here from the bundle; the always-on
  *    growth (guidance + skill names and descriptions) is capped;
+ *  - the `tool-patch` surface (2026-11-02) is this consumer for a candidate that holds code as well as text: its arm adds
+ *    `harness.code = {image, patchSha256, files, toolCatalogueChars}` (the patched image it ran on, the digest of the code diff, the
+ *    changed files and what its tools add to the first request), bound into the digest and counted in the always-on growth; a
+ *    registration says which surface it is for (`surface`, absent means harness-patch) and the two never accept each other's arms;
  *  - the scorer table is harness_scorers.mjs (the skill table plus `mbc-normalized` and `judged-verdicts`);
  *  - an A/A control arm (`aa`, the unmodified image run a second time) is part of every development source: it can never be
  *    chosen, and a candidate has to beat its apparent difference from the baseline (the noise floor) to be eligible;
@@ -22,12 +27,18 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { canonicalRsiJson } from '../../apps/server/src/rsiCampaignBundle.mjs';
+import { rsiOfflineRoleIssue } from '../../packages/domain/src/rsiCampaign.mjs';
 import { inSkillSlice, skillSlice } from './skill_campaign.mjs';
 import { harnessScorer, scorerBenchmarks } from './harness_scorers.mjs';
 
 const sha = (value) => createHash('sha256').update(value).digest('hex');
 export const HARNESS_ARMS_SCHEMA = 1;
 export const HARNESS_BASELINE_ARM = 'baseline';
+export const HARNESS_SURFACE = 'harness-patch';
+/** A harness-patch whose candidate holds code (a tool, a connector) as well as text: its own error-budget ledger and consumer identity. */
+export const TOOL_PATCH_SURFACE = 'tool-patch';
+/** The surface a registration is for; a registration written before the field existed is a harness-patch one. @param {any} registration */
+export const registrationSurface = (registration) => registration?.surface ?? HARNESS_SURFACE;
 export const HARNESS_CONTROL_ARM = 'aa';
 /** The cost identity of runs that happened on a lane stack: settled CNY per run from that stack's own usage ledger, exported with the runs. */
 export const HARNESS_COST_IDENTITY = 'lane-usage-ledger-settled-cny';
@@ -39,6 +50,12 @@ export const HARNESS_RUN_STATUSES = Object.freeze(['succeeded', 'failed', 'timeo
 export const HARNESS_SELECTION = Object.freeze({ objective: 'failure-slice-gain', tieBreak: 'smaller-always-on-growth', noiseControl: 'aa-floor' });
 /** statistics.py bounds a targeted repair's cost at 1.1x the baseline's; a registration cannot ask for another ratio. */
 export const HARNESS_COST_RATIO = 1.1;
+/** The judge's qualification thresholds are the procedure's, fixed here (2026-11-03), never the registrant's: the measured agreement must reach this. */
+export const HARNESS_JUDGE_MINIMUM_AGREEMENT = 0.9;
+/** The Claude CLI's effort levels a registered judge runs at (claude_judge.py `EFFORTS`). */
+export const HARNESS_JUDGE_EFFORTS = Object.freeze(['low', 'medium', 'high', 'xhigh', 'max']);
+/** The one scale a judge's measurement is read on: the verdict's own, 0 to 1 (noise_sample.py `band`, `judge-noise/2`). */
+export const HARNESS_JUDGE_NOISE_SCALE = 'verdict-0-1';
 
 const record = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const isText = (value) => typeof value === 'string';
@@ -52,17 +69,18 @@ const finite = (value) => typeof value === 'number' && Number.isFinite(value);
 
 /**
  * The bundle in its canonical form (skills sorted by name), or null when it is not one: exactly the keys guidanceSupplement and
- * skills, skill names `^[a-z0-9][a-z0-9-]{0,63}$` and unique, no other keys, not both empty.
- * @param {any} bundle
+ * skills, skill names `^[a-z0-9][a-z0-9-]{0,63}$` and unique, no other keys, not both empty (a tool patch may carry no text at all:
+ * `allowEmpty`, its code is the patch).
+ * @param {any} bundle @param {{ allowEmpty?: boolean }} [options]
  */
-export function normalizeHarnessBundle(bundle) {
+export function normalizeHarnessBundle(bundle, { allowEmpty = false } = {}) {
   if (!keysWithin(bundle, ['guidanceSupplement', 'skills']) || !isText(bundle.guidanceSupplement) || !Array.isArray(bundle.skills) || bundle.skills.length > 32) return null;
   const skills = [];
   for (const skill of bundle.skills) {
     if (!keysWithin(skill, ['name', 'description', 'body']) || !SKILL_NAME.test(skill.name ?? '') || !isText(skill.description) || !isText(skill.body)) return null;
     skills.push({ name: skill.name, description: skill.description, body: skill.body });
   }
-  if (new Set(skills.map((skill) => skill.name)).size !== skills.length || (bundle.guidanceSupplement === '' && !skills.length)) return null;
+  if (new Set(skills.map((skill) => skill.name)).size !== skills.length || (!allowEmpty && bundle.guidanceSupplement === '' && !skills.length)) return null;
   skills.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
   return { guidanceSupplement: bundle.guidanceSupplement, skills };
 }
@@ -70,22 +88,46 @@ export function normalizeHarnessBundle(bundle) {
 /** An image identity: `{id: identifier, digest: 64 hex}`. @param {any} image */
 export const harnessImageValid = (image) => keysWithin(image, ['id', 'digest']) && IDENTIFIER.test(image.id ?? '') && HEX64.test(image.digest ?? '');
 
+const RELATIVE_PATH = /^(?!\/)(?!.*(?:^|\/)\.\.(?:\/|$))[A-Za-z0-9._@+\-/]{1,200}$/;
+
 /**
- * sha256 of the RFC 8785 canonical JSON of the bundle and the image identity it was measured on. The same patch on another
- * image is another candidate.
- * @param {any} bundle @param {any} image @returns {string}
+ * The code a tool patch adds to the image, in its canonical form (files sorted by path), or null when it is not one: the patched
+ * image it ran on, the sha256 of the code diff, the changed files with their sha256 after the change (1 to 200, relative, unique)
+ * and the characters its tools add to the first request (a non-negative integer).
+ * @param {any} code
  */
-export function harnessPatchDigest(bundle, image) {
-  const normal = normalizeHarnessBundle(bundle);
-  if (!normal || !harnessImageValid(image)) throw new Error('harness_bundle_invalid');
-  return sha(canonicalRsiJson({ guidanceSupplement: normal.guidanceSupplement, image: { digest: image.digest, id: image.id }, skills: normal.skills }));
+export function normalizeToolPatchCode(code) {
+  if (!keysWithin(code, ['image', 'patchSha256', 'files', 'toolCatalogueChars']) || !harnessImageValid(code.image) || !HEX64.test(code.patchSha256 ?? '')
+    || !Number.isInteger(code.toolCatalogueChars) || code.toolCatalogueChars < 0 || !Array.isArray(code.files) || !code.files.length || code.files.length > 200) return null;
+  const files = [];
+  for (const file of code.files) {
+    if (!keysWithin(file, ['path', 'sha256']) || !isText(file.path) || !RELATIVE_PATH.test(file.path) || !HEX64.test(file.sha256 ?? '')) return null;
+    files.push({ path: file.path, sha256: file.sha256 });
+  }
+  if (new Set(files.map((file) => file.path)).size !== files.length) return null;
+  files.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+  return { image: { id: code.image.id, digest: code.image.digest }, patchSha256: code.patchSha256, files, toolCatalogueChars: code.toolCatalogueChars };
 }
 
-/** Sizes in UTF-16 code units (`.length`): `chars` of everything, `alwaysOnChars` of what every session carries. @param {any} bundle */
-export function harnessPatchSizes(bundle) {
-  const normal = normalizeHarnessBundle(bundle);
-  if (!normal) throw new Error('harness_bundle_invalid');
-  const alwaysOnChars = normal.guidanceSupplement.length + normal.skills.reduce((total, skill) => total + skill.name.length + skill.description.length, 0);
+/**
+ * sha256 of the RFC 8785 canonical JSON of the bundle and the image identity it was measured on — and, for a tool patch, the code it
+ * holds. The same patch on another image is another candidate; a harness patch's digest is byte for byte what it was before the
+ * `code` field existed.
+ * @param {any} bundle @param {any} image @param {any} [code] @returns {string}
+ */
+export function harnessPatchDigest(bundle, image, code) {
+  const normal = normalizeHarnessBundle(bundle, { allowEmpty: code !== undefined });
+  const patch = code === undefined ? undefined : normalizeToolPatchCode(code);
+  if (!normal || !harnessImageValid(image) || (code !== undefined && !patch)) throw new Error('harness_bundle_invalid');
+  return sha(canonicalRsiJson({ ...(patch ? { code: patch } : {}), guidanceSupplement: normal.guidanceSupplement, image: { digest: image.digest, id: image.id }, skills: normal.skills }));
+}
+
+/** Sizes in UTF-16 code units (`.length`): `chars` of everything, `alwaysOnChars` of what every session carries (a tool patch's tool catalogue included). @param {any} bundle @param {any} [code] */
+export function harnessPatchSizes(bundle, code) {
+  const normal = normalizeHarnessBundle(bundle, { allowEmpty: code !== undefined });
+  const patch = code === undefined ? null : normalizeToolPatchCode(code);
+  if (!normal || (code !== undefined && !patch)) throw new Error('harness_bundle_invalid');
+  const alwaysOnChars = normal.guidanceSupplement.length + normal.skills.reduce((total, skill) => total + skill.name.length + skill.description.length, 0) + (patch?.toolCatalogueChars ?? 0);
   return { chars: alwaysOnChars + normal.skills.reduce((total, skill) => total + skill.body.length, 0), alwaysOnChars };
 }
 
@@ -94,27 +136,49 @@ const candidateArmIds = (source) => Object.keys(source.arms).filter((id) => id !
 
 // ------------------------------------------------------------------------------------------------------------------ judge
 
-/** Whether a judge identity sits on the solver's model family (DeepSeek in this platform, or whatever the manifest's solver says). */
-function judgeOnSolverFamily(judge, solver) {
-  return [judge?.id, judge?.provider].some((value) => /deepseek/i.test(String(value ?? '')))
-    || (isText(solver?.provider) && isText(judge?.provider) && judge.provider.toLowerCase() === solver.provider.toLowerCase());
+/** The adjudicator a registered judge is in a manifest's `models.judges`. @param {any} judge */
+export const harnessJudgeIdentity = (judge) => ({ role: 'judge', provider: judge.provider, model: judge.model, id: judge.id });
+
+/**
+ * What the registered judge has to be before any verdict of it is read: a fixed identity (`id`, provider Anthropic, a pinned claude-* `model`, the
+ * CLI `effort` it runs at), a form and a number of passes, a call budget, and a qualification — `{measuredOn, form, scale, agreement, noiseSd,
+ * noiseBand95}`, the measurement noise_sample.py `band` computed for this family in this form on the verdict's 0-1 scale, and nothing else (a
+ * measurement of another form or scale is not this judge's) — that meets the procedure's thresholds: agreement (sign agreement between repeated
+ * judgings, ties excluded) at least HARNESS_JUDGE_MINIMUM_AGREEMENT, and the noise band of the verdict the procedure uses (the mean of `passes`
+ * passes: the single-pass band over sqrt(passes)) within the registration's margin. A registration cannot set a threshold of its own.
+ * register_round.py `judge_qualification_problems` is the same rule.
+ * @param {any} judge @param {number} margin the registration's margin @returns {string | null} a closed `campaign_*` code
+ */
+export function harnessJudgeRegistrationIssue(judge, margin) {
+  if (!record(judge) || !IDENTIFIER.test(judge.id ?? '') || !isText(judge.provider) || !judge.provider || !isText(judge.model)) return 'campaign_judge_unregistered';
+  const refused = rsiOfflineRoleIssue('judge', harnessJudgeIdentity(judge));
+  if (refused) return refused === 'campaign_model_invalid' ? 'campaign_judge_unregistered' : refused;
+  if (!['absolute', 'pairwise'].includes(judge.form) || !Number.isInteger(judge.passes) || judge.passes < 2 || judge.passes > 9 || (judge.form === 'pairwise' && judge.passes % 2)
+    || !Number.isInteger(judge.maxCalls) || judge.maxCalls < 1 || !HARNESS_JUDGE_EFFORTS.includes(judge.effort)) return 'campaign_judge_unregistered';
+  if (!(finite(margin) && margin > 0 && margin < 1)) return 'campaign_registration_invalid';
+  const q = judge.qualification;
+  if (!keysWithin(q, ['measuredOn', 'form', 'scale', 'agreement', 'noiseSd', 'noiseBand95']) || !isText(q.measuredOn) || !q.measuredOn.trim() || q.form !== judge.form
+    || q.scale !== HARNESS_JUDGE_NOISE_SCALE || ![q.agreement, q.noiseSd, q.noiseBand95].every((x) => finite(x) && x >= 0 && x <= 1)) return 'campaign_judge_unqualified';
+  return q.agreement >= HARNESS_JUDGE_MINIMUM_AGREEMENT && q.noiseBand95 / Math.sqrt(judge.passes) <= margin ? null : 'campaign_judge_unqualified';
 }
 
 /**
- * What the registered judge has to be before any verdict of it is read: a fixed identity outside the solver's family, a form
- * and a number of passes, a call budget, and a qualification — the agreement and noise band measured on labelled cases (and the
- * thresholds the registration set for them), met.
- * @param {any} judge @param {any} [solver] @returns {string | null} a closed `campaign_*` code
+ * The round's improvement record (`improvement.json`): free-form provenance plus `improvers`, the roles that actually wrote the candidates,
+ * each an Anthropic Claude model (`rsiOfflineRoleIssue`). Required: a candidate nobody is named for is not admitted.
+ * @param {any} improvement @returns {string | null}
  */
-export function harnessJudgeRegistrationIssue(judge, solver) {
-  if (!record(judge) || !IDENTIFIER.test(judge.id ?? '') || !isText(judge.provider) || !judge.provider) return 'campaign_judge_unregistered';
-  if (judgeOnSolverFamily(judge, solver)) return 'campaign_judge_family_refused';
-  if (!['absolute', 'pairwise'].includes(judge.form) || !Number.isInteger(judge.passes) || judge.passes < 2 || judge.passes > 9 || (judge.form === 'pairwise' && judge.passes % 2)
-    || !Number.isInteger(judge.maxCalls) || judge.maxCalls < 1) return 'campaign_judge_unregistered';
-  const q = judge.qualification;
-  if (!record(q) || !isText(q.measuredOn) || !q.measuredOn.trim() || ![q.agreement, q.minimumAgreement].every((x) => finite(x) && x >= 0 && x <= 1)
-    || ![q.noiseSd, q.noiseBand95].every((x) => finite(x) && x >= 0) || !(finite(q.maximumNoiseBand) && q.maximumNoiseBand > 0)) return 'campaign_judge_unqualified';
-  return q.agreement >= q.minimumAgreement && q.noiseBand95 <= q.maximumNoiseBand ? null : 'campaign_judge_unqualified';
+export function harnessImprovementIssue(improvement) {
+  if (!record(improvement) || !Array.isArray(improvement.improvers) || !improvement.improvers.length || improvement.improvers.length > 16) return 'campaign_improvement_missing';
+  for (const improver of improvement.improvers) { const issue = rsiOfflineRoleIssue('improver', improver); if (issue) return issue; }
+  return null;
+}
+
+/** The solver every harness campaign registers: the product default. */
+export const HARNESS_SOLVER = Object.freeze({ provider: 'deepseek', model: 'deepseek-flash' });
+/** The manifest's `models` of a harness-patch / tool-patch campaign: the product's solver, the improvement record's improvers, the registered judge or none. @param {any} registration */
+export function harnessModels(registration) {
+  return { solver: { ...HARNESS_SOLVER }, improvers: registration.improvement.improvers.map(({ role, provider, model }) => ({ role, provider, model })),
+    judges: registration.judge === undefined ? [] : [harnessJudgeIdentity(registration.judge)] };
 }
 
 const runKey = (row, arm, repeat) => `${row}\0${arm}\0${repeat}`;
@@ -129,8 +193,7 @@ function judgedIssues(source, registration) {
   const registered = registration?.judge, judged = source.judged;
   if (!record(judged) || judged.schema !== 1 || !record(judged.judge) || !record(registered)) return ['harness_judge_verdicts_invalid'];
   const issues = new Set();
-  for (const field of ['id', 'provider', 'form', 'passes']) if (judged.judge[field] !== registered[field]) issues.add('harness_judge_identity_mismatch');
-  if (judgeOnSolverFamily(judged.judge, null)) issues.add('harness_judge_identity_mismatch');
+  for (const field of ['id', 'provider', 'model', 'effort', 'form', 'passes']) if (judged.judge[field] !== registered[field]) issues.add('harness_judge_identity_mismatch');
   const records = Array.isArray(judged.records) ? judged.records : null;
   if (!records) return [...issues, 'harness_judge_verdicts_invalid'];
   const rowIds = new Set(source.rows.map((row) => String(row.id)));
@@ -207,12 +270,15 @@ export function harnessArmsIssues(source, registration) {
       if (!keysWithin(arm, ['harness', 'control']) || arm.harness !== null || arm.control !== 'A/A' || source.role !== 'development') issues.add('harness_arms_control_invalid');
       continue;
     }
-    const h = arm?.harness, bundle = normalizeHarnessBundle(h?.bundle);
-    let ok = keysWithin(arm, ['harness']) && keysWithin(h, ['digest', 'chars', 'alwaysOnChars', 'title', 'bundle']) && bundle && /^cand-[a-f0-9]{12}$/.test(id) && HEX64.test(h.digest ?? '') && id === `cand-${h.digest.slice(0, 12)}`
-      && harnessImageValid(source.image) && (h.title === undefined || isText(h.title));
+    // A tool patch's arm holds code, a harness patch's does not, and neither surface admits the other's arms.
+    const h = arm?.harness, toolPatch = registrationSurface(registration) === TOOL_PATCH_SURFACE, bundle = normalizeHarnessBundle(h?.bundle, { allowEmpty: toolPatch });
+    let ok = keysWithin(arm, ['harness']) && keysWithin(h, toolPatch ? ['digest', 'chars', 'alwaysOnChars', 'title', 'bundle', 'code'] : ['digest', 'chars', 'alwaysOnChars', 'title', 'bundle'])
+      && bundle && /^cand-[a-f0-9]{12}$/.test(id) && HEX64.test(h.digest ?? '') && id === `cand-${h.digest.slice(0, 12)}`
+      && harnessImageValid(source.image) && (h.title === undefined || isText(h.title)) && (!toolPatch || normalizeToolPatchCode(h.code) !== null);
     if (ok) {
-      const sizes = harnessPatchSizes(bundle);
-      ok = h.digest === harnessPatchDigest(bundle, source.image) && h.chars === sizes.chars && h.alwaysOnChars === sizes.alwaysOnChars && sizes.alwaysOnChars <= HARNESS_ALWAYS_ON_MAX_CHARS;
+      const code = toolPatch ? h.code : undefined;
+      const sizes = harnessPatchSizes(bundle, code);
+      ok = h.digest === harnessPatchDigest(bundle, source.image, code) && h.chars === sizes.chars && h.alwaysOnChars === sizes.alwaysOnChars && sizes.alwaysOnChars <= HARNESS_ALWAYS_ON_MAX_CHARS;
     }
     if (!ok) issues.add('harness_arms_candidate_invalid');
   }
@@ -320,18 +386,22 @@ export function harnessObservationCosts(source, frozen) {
 const sameIds = (rows, ids) => Array.isArray(ids) && ids.length === rows.length && new Set(ids.map(String)).size === ids.length && rows.every((row) => ids.map(String).includes(String(row.id)));
 
 /**
- * The runner's validation of a harness-patch campaign's inputs (`campaign_runner.mjs`): a closed `campaign_*` code, or null.
- * @param {any} manifest @param {any} inputs @param {{ id: string }} dev @param {{ id: string }} confirm
+ * What the registration and the development source alone decide, in the order the runner decides it: the same checks the assembly's
+ * preview (`harness_assemble.mjs --preview`, `--development-only`) and the runner's validation both apply, so a preview that says a
+ * campaign is eligible has passed every refusal a development source can meet before the confirmation is opened. A closed
+ * `campaign_*` code, or null.
+ * @param {any} registration @param {any} development
  */
-export function harnessCampaignIssue(manifest, inputs, dev, confirm) {
-  const registration = inputs.registration, scorer = harnessScorer(registration);
+export function harnessDevelopmentIssue(registration, development) {
+  const scorer = harnessScorer(registration);
   if (!scorer) return 'campaign_scorer_not_qualified';
-  // The judge first: a judge on the solver's family, or one nobody qualified, is named as such before anything is read through it.
-  const judgeIssue = scorer.judged ? harnessJudgeRegistrationIssue(registration.judge, manifest.models?.solver) : (registration.judge === undefined ? null : 'campaign_judge_unexpected');
+  // The judge first: a judge that is not Claude, or one that does not meet the procedure's thresholds, is named as such before anything is read through it.
+  const judgeIssue = scorer.judged ? harnessJudgeRegistrationIssue(registration.judge, registration.margin) : (registration.judge === undefined ? null : 'campaign_judge_unexpected');
   if (judgeIssue) return judgeIssue;
-  const development = inputs.sources[dev.id], confirmation = inputs.sources[confirm.id];
-  for (const source of [development, confirmation]) if (harnessArmsIssues(source, registration).length) return 'campaign_source_invalid';
-  if (development.role !== 'development' || confirmation.role !== 'confirmation') return 'campaign_source_role_mismatch';
+  const improvementIssue = harnessImprovementIssue(registration.improvement);
+  if (improvementIssue) return improvementIssue;
+  if (harnessArmsIssues(development, registration).length) return 'campaign_source_invalid';
+  if (development.role !== 'development') return 'campaign_source_role_mismatch';
   const slice = registration[scorer.slice.registration];
   if (!Array.isArray(slice) || !slice.length || slice.some((id) => !scorer.slice.valid(id)) || !(registration.margin > 0 && registration.margin < 1)) return 'campaign_registration_invalid';
   if (!record(registration.selection) || Object.entries(HARNESS_SELECTION).some(([key, value]) => registration.selection[key] !== value)) return 'campaign_selection_registration_missing';
@@ -339,12 +409,35 @@ export function harnessCampaignIssue(manifest, inputs, dev, confirm) {
   if (!Number.isInteger(registration.candidatesMax) || registration.candidatesMax < 1 || registration.candidatesMax > 10) return 'campaign_registration_invalid';
   if (!keysWithin(registration.control, ['arm', 'kind']) || registration.control.arm !== HARNESS_CONTROL_ARM || registration.control.kind !== 'A/A') return 'campaign_control_unregistered';
   if (!Object.hasOwn(development.arms, HARNESS_CONTROL_ARM)) return 'campaign_control_arm_missing';
-  if (Object.keys(confirmation.arms).some((id) => id === HARNESS_CONTROL_ARM || isControlArm(confirmation.arms[id]))) return 'campaign_control_arm_in_confirmation';
   if (candidateArmIds(development).length > registration.candidatesMax) return 'campaign_candidates_exceed_registration';
-  if (development.image.digest !== confirmation.image.digest || development.image.id !== confirmation.image.id || !record(registration.image)
-    || registration.image.digest !== development.image.digest || registration.image.id !== development.image.id) return 'campaign_image_changed';
-  if (!record(registration.rows) || !sameIds(development.rows, registration.rows.development) || !sameIds(confirmation.rows, registration.rows.confirmation)) return 'campaign_rows_unregistered';
-  if (!record(registration.repeats) || registration.repeats.development !== development.repeats || registration.repeats.confirmation !== confirmation.repeats) return 'campaign_repeats_unregistered';
+  if (!record(registration.image) || registration.image.digest !== development.image.digest || registration.image.id !== development.image.id) return 'campaign_image_changed';
+  if (!record(registration.rows) || !sameIds(development.rows, registration.rows.development)) return 'campaign_rows_unregistered';
+  if (!record(registration.repeats) || registration.repeats.development !== development.repeats) return 'campaign_repeats_unregistered';
+  return null;
+}
+
+/**
+ * The runner's validation of a harness-patch campaign's inputs (`campaign_runner.mjs`): a closed `campaign_*` code, or null. The
+ * development half is `harnessDevelopmentIssue`, shared with the preview.
+ * @param {any} manifest @param {any} inputs @param {{ id: string }} dev @param {{ id: string }} confirm
+ */
+export function harnessCampaignIssue(manifest, inputs, dev, confirm) {
+  const registration = inputs.registration, scorer = harnessScorer(registration);
+  if (!scorer) return 'campaign_scorer_not_qualified';
+  if (![HARNESS_SURFACE, TOOL_PATCH_SURFACE].includes(registrationSurface(registration)) || registrationSurface(registration) !== manifest.surface) return 'campaign_surface_registration_mismatch';
+  const development = inputs.sources[dev.id], confirmation = inputs.sources[confirm.id];
+  const judgeIssue = scorer.judged ? harnessJudgeRegistrationIssue(registration.judge, registration.margin) : (registration.judge === undefined ? null : 'campaign_judge_unexpected');
+  if (judgeIssue) return judgeIssue;
+  for (const source of [development, confirmation]) if (harnessArmsIssues(source, registration).length) return 'campaign_source_invalid';
+  if (development.role !== 'development' || confirmation.role !== 'confirmation') return 'campaign_source_role_mismatch';
+  const developmentIssue = harnessDevelopmentIssue(registration, development);
+  if (developmentIssue) return developmentIssue;
+  // The manifest names who wrote the candidates and who judged them: exactly the registration's improvement record and judge.
+  if (canonicalRsiJson(manifest.models) !== canonicalRsiJson(harnessModels(registration))) return 'campaign_models_registration_mismatch';
+  if (Object.keys(confirmation.arms).some((id) => id === HARNESS_CONTROL_ARM || isControlArm(confirmation.arms[id]))) return 'campaign_control_arm_in_confirmation';
+  if (development.image.digest !== confirmation.image.digest || development.image.id !== confirmation.image.id) return 'campaign_image_changed';
+  if (!sameIds(confirmation.rows, registration.rows.confirmation)) return 'campaign_rows_unregistered';
+  if (registration.repeats.confirmation !== confirmation.repeats) return 'campaign_repeats_unregistered';
   if (manifest.data.classification !== 'synthetic') {
     const devRows = new Set(development.rows.map((row) => String(row.id)));
     if (confirmation.rows.some((row) => devRows.has(String(row.id)))) return 'campaign_confirmation_not_independent';

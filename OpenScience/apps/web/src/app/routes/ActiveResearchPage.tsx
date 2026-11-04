@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type MutableRefObject } from "react";
 import { Link, useNavigate } from "react-router";
-import { getWebProjectId, listWebAgentRuns, steerWebAgentRun, WebApiError, type WebAgentRun } from "@/lib/apiClient";
+import { cancelWebAgentRun, getWebProjectId, listWebAgentRuns, steerWebAgentRun, WebApiError, type WebAgentRun } from "@/lib/apiClient";
 import { addAgendaMaterials, cancelEpisode, followUpAgenda, getResearchState, listAgendas, listEpisodes, removeAgendaMaterial, runAgendaNow, type AgendaRecord, type EpisodeRecord, type ResearchState } from "@/lib/autopilotClient";
 import { pickFiles, uploadFilesToWorkspace } from "@/lib/backend";
 import { newResearchGoalRequest, startResearchGoal, type ResearchGoalRequest } from "@/lib/dispatch";
 import { safeWorkspacePath } from "@/lib/claimCitations";
 import { sha256Hex } from "@/lib/fileDigest";
-import { formatDay, formatClock } from "@/lib/format";
+import { formatDay, formatClock, formatLingdou } from "@/lib/format";
 import { KNOWLEDGE_BASE_ACCEPT, partitionKnowledgeBaseFiles } from "@/lib/knowledgeBaseFiles";
 import { productErrorMessage } from "@/lib/productClient";
 import { useProjectStore } from "@/lib/projects";
@@ -14,6 +14,7 @@ import { goalKey, goalTitle, observedResearchGoals, type ObservedResearchGoal } 
 import { registerTaskPane } from "@/lib/taskPane";
 import { snapshotHref } from "@/lib/readPages";
 import { researchDatabaseStatus } from "@/lib/researchDatabaseClient";
+import { listResearchGoals, pauseResearchGoal, resumeResearchGoal, type ResearchGoalList, type ResearchGoalState } from "@/lib/researchGoalClient";
 import { listPlatformSkills } from "@/lib/skillLibraryClient";
 import { toast } from "@/lib/toast";
 import { LoadError } from "@/components/cards/LoadError";
@@ -67,10 +68,47 @@ function roundMode(run: WebAgentRun): QueueMode {
 type ResearchTab = "results" | "records" | "conversation";
 const RESEARCH_TABS = [{ value: "results", label: "结果" }, { value: "records", label: "记录" }, { value: "conversation", label: "对话" }] as const;
 
-/** A goal in the queue reads by its latest round, and a round that ran to its end does not say the goal is finished. */
-function goalMode(goal: ObservedResearchGoal, observed: ObservedRun | null): QueueMode {
+/**
+ * The control plane's word on a goal, which it keeps for the newest goal of a conversation only. Nothing where the deployment has no such
+ * service or has no state for the goal: the page then reads the goal by its rounds alone.
+ */
+function stateOfGoal(goal: ObservedResearchGoal, goals: readonly ObservedResearchGoal[], list: ResearchGoalList | null): ResearchGoalState | null {
+  if (!list?.available || goals.find(item => item.sessionId === goal.sessionId)?.key !== goal.key) return null;
+  return list.goals.find(item => item.sessionId === goal.sessionId) ?? null;
+}
+
+/**
+ * A goal in the queue: a round that is going says so; between rounds the goal's own state does (the control plane's, where it has one);
+ * and with no state a round that ran to its end does not say the goal is finished, only that the round is.
+ */
+function goalMode(goal: ObservedResearchGoal, observed: ObservedRun | null, state: ResearchGoalState | null): QueueMode {
   const mode = roundModeOf(goal.latest, observed);
-  return mode === "done" ? "between" : mode;
+  if (mode === "running") return mode;
+  switch (state?.status) {
+    case "active": return "running";
+    case "paused": return "paused";
+    case "stopped": return "ended";
+    case "finished": return "done";
+    case "waiting": return "needs";
+    case "interrupted": return "interrupted";
+    default: return mode === "done" ? "between" : mode;
+  }
+}
+
+/** Why a goal rests, when a person should know it. A pause or stop the person asked for is not one. */
+function restingNote(state: ResearchGoalState | null): string | null {
+  switch (state?.status) {
+    case "paused": return state.reason === "no_progress" ? "连续几轮没有新的产出，已自动暂停。" : state.reason === "budget" ? "到了这项研究的花费上限，已自动暂停。" : null;
+    case "interrupted": return "运行被中断后没能自动接上。";
+    case "waiting": return "还有没做完的部分，AI 没有继续。";
+    default: return null;
+  }
+}
+
+/** What all of a goal's rounds cost, in CNY (a lingdou is one); null when no round reported any usage, which is not the same as nothing. */
+function goalSpend(goal: ObservedResearchGoal): number | null {
+  const costs = goal.rounds.map(run => run.usage?.costCny).filter((cost): cost is number => typeof cost === "number" && Number.isFinite(cost) && cost >= 0);
+  return costs.length ? costs.reduce((sum, cost) => sum + cost, 0) : null;
 }
 
 /**
@@ -92,6 +130,16 @@ function agendaMode(agenda: AgendaRecord, episodes: readonly EpisodeRecord[], ob
 /**
  * A project's active research, opened on what is at work: the observatory of the running research, with the queue of the rest above it.
  * New research is one thing to do here (a goal, in the person's words) and data one more; a scheduled study is made in 定时任务 and shown here.
+ *
+ * Anatomy: research inventory, selected observatory and its results, records or conversation.
+ * Variants: long goals and scheduled studies, with a detail view for the selection.
+ * States: the observed execution and saved records determine status, recovery and available actions.
+ * Hit area: shared row, tab and action controls own the interactive targets.
+ * Keyboard: inventory, tabs and the selected view remain in their reading order.
+ * Long content: the main detail gives descriptions more width when both sections fit.
+ * Theme: shared semantic surfaces, rules and status treatments.
+ * Responsive: detail columns depend on the detail's width inside the workspace.
+ * Verification: ActiveResearchPage.test.tsx and the active-research fixture walk.
  */
 export function ActiveResearchPage() {
   useProjectStore(state => state.currentId);
@@ -105,6 +153,7 @@ function ResearchWorkspace({ projectId }: { projectId: string }) {
   const [episodes, setEpisodes] = useState<EpisodeRecord[]>([]);
   const [goalRuns, setGoalRuns] = useState<WebAgentRun[] | null>(null);
   const [goalError, setGoalError] = useState(false);
+  const [goalStates, setGoalStates] = useState<ResearchGoalList | null>(null);
   const [selectedGoal, setSelectedGoal] = useState<string | null>(null);
   const [chosen, setChosen] = useState(false);
   const [selectedRound, setSelectedRound] = useState<string | null>(null);
@@ -142,6 +191,7 @@ function ResearchWorkspace({ projectId }: { projectId: string }) {
   // The request a goal is started with, kept across the dialog's closing and opening until the goal is known to have started.
   const goalRequest = useRef<ResearchGoalRequest | null>(null);
   const loadingGoals = useRef(false);
+  const goalGeneration = useRef(0);
   const loadingHistory = useRef<string | null>(null);
   const loadingProgress = useRef<string | null>(null);
   const mounted = useRef(true);
@@ -193,12 +243,22 @@ function ResearchWorkspace({ projectId }: { projectId: string }) {
     try { const catalogue = await listPlatformSkills(); if (mounted.current) setLongFeature(catalogue.items.some(item => item.id === "loopx:loopx") ? "enabled" : "disabled"); }
     catch { if (mounted.current) setLongFeature("error"); }
   }, []);
-  const loadGoals = useCallback(async () => {
-    if (loadingGoals.current) return;
+  /**
+   * The project's goals: its runs, and the control plane's word on each goal (running a round, resting and why). The two are read apart: a
+   * state that cannot be read keeps the last one the page had and breaks nothing, since the rounds alone still say what the goal did.
+   * A `force`d read (after an action) is not turned away by one already out, and the older answer never lands over the newer.
+   */
+  const loadGoals = useCallback(async (force = false) => {
+    if (loadingGoals.current && !force) return;
     loadingGoals.current = true;
-    try { const runs = await listWebAgentRuns({ projectId }); if (mounted.current) { setGoalRuns(runs); setGoalError(false); } }
-    catch { if (mounted.current) setGoalError(true); }
-    finally { loadingGoals.current = false; }
+    const request = ++goalGeneration.current;
+    const current = () => mounted.current && request === goalGeneration.current;
+    try {
+      await Promise.all([
+        listWebAgentRuns({ projectId }).then(runs => { if (current()) { setGoalRuns(runs); setGoalError(false); } }, () => { if (current()) setGoalError(true); }),
+        listResearchGoals(projectId).then(answer => { if (current() && answer && Array.isArray(answer.goals)) setGoalStates(answer); }, () => {}),
+      ]);
+    } finally { if (request === goalGeneration.current) loadingGoals.current = false; }
   }, [projectId]);
   const loadProgress = useCallback(async (force = false) => {
     if (!selectedId || (loadingProgress.current === selectedId && !force)) return;
@@ -238,6 +298,7 @@ function ResearchWorkspace({ projectId }: { projectId: string }) {
   useEffect(() => { void researchDatabaseStatus(projectId).then(status => { if (mounted.current) setDatabaseAvailable(status.available === true); }).catch(() => {}); }, [projectId]);
   useEffect(() => { const progressRequests = progressGeneration; const historyRequests = historyGeneration; setProgress(null); setProgressError(null); setHistory(null); setHistoryError(null); setHistoryBusy(false); setSelectedEpisodeId(null); void loadProgress(); void loadHistory(); return () => { progressRequests.current++; historyRequests.current++; loadingProgress.current = null; loadingHistory.current = null; }; }, [loadProgress, loadHistory]);
   const goals = observedResearchGoals(goalRuns ?? []);
+  const stateOf = (item: ObservedResearchGoal) => stateOfGoal(item, goals, goalStates);
   // Until the person chooses, the page shows what is at work: a running study, then a running goal, then whichever ran last.
   const newestGoal = goals[0] ?? null;
   const newestStudyRun = episodes.reduce((newest, item) => (item.payload.createdAt ?? "") > newest ? item.payload.createdAt ?? "" : newest, "");
@@ -275,9 +336,11 @@ function ResearchWorkspace({ projectId }: { projectId: string }) {
   useEffect(() => (studyShown ? pollEvery(() => reads.current.study(), studyBusy ? POLL_ACTIVE_MS : POLL_IDLE_MS, operating) : undefined), [studyShown, studyBusy, selectedId]);
 
   const queue: QueueEntry[] = [
-    ...goals.map(item => ({ key: `goal:${item.key}`, title: goalTitle(item), kind: "长期" as const,
-      mode: goalMode(item, observed),
-      meta: item.latest.status === "running" ? `本轮 ${at(item.latest.startedAt)} 开始` : `最近一轮 ${at(item.latest.finishedAt ?? item.latest.startedAt)}` })),
+    ...goals.map(item => {
+      const mode = goalMode(item, observed, stateOf(item));
+      return { key: `goal:${item.key}`, title: goalTitle(item), kind: "长期" as const, mode,
+        meta: roundModeOf(item.latest, observed) === "running" ? `本轮 ${at(item.latest.startedAt)} 开始` : mode === "running" ? "下一轮马上开始" : `最近一轮 ${at(item.latest.finishedAt ?? item.latest.startedAt)}` };
+    }),
     ...(agendas ?? []).map(item => {
       const last = latestRun(item.id, episodes);
       const schedule = scheduleOf(item);
@@ -355,6 +418,11 @@ function ResearchWorkspace({ projectId }: { projectId: string }) {
     recordEpisode(result, agendaId);
     pendingStops.current.delete(episodeId);
   });
+  // A goal's three acts. The control plane keeps the goal's state; after each the goals are read at once, so the page says what happened.
+  const pauseGoal = (sessionId: string) => void operation(async () => { await pauseResearchGoal(projectId, sessionId); await loadGoals(true); });
+  const resumeGoal = (sessionId: string) => void operation(async () => { await resumeResearchGoal(projectId, sessionId); await loadGoals(true); });
+  /** Stopping the round that is going stops the goal (the control plane writes that down when the round ends). */
+  const stopRound = (runId: string) => void operation(async () => { await cancelWebAgentRun(runId); await loadGoals(true); });
   const submitDirection = () => {
     if (!selected || !direction.trim()) return;
     const note = direction.trim();
@@ -421,14 +489,26 @@ function ResearchWorkspace({ projectId }: { projectId: string }) {
 
   // The one path to the conversation of what is on show: the 对话 view. For a goal it is the goal's own conversation, for a scheduled task
   // the task's (the page the three buttons used to open elsewhere).
+  const spend = goal ? goalSpend(goal) : null;
   const subline = selected ? (execution ? `${runState(execution.payload)} · ${at(execution.payload.createdAt)}` : historyError ? "执行记录暂不可用" : history ? "还没有执行过" : "正在载入执行记录")
-    : goal ? `长期研究 · 已推进 ${goal.rounds.length} 轮` : "";
+    : goal ? ["长期研究", `已推进 ${goal.rounds.length} 轮`, spend === null ? "" : `累计消耗 ${formatLingdou(spend)}`].filter(Boolean).join(" · ") : "";
+  // Only where the deployment keeps goals: a round going can be paused or stopped, a goal at rest can be taken up again, a finished one neither.
+  const goalService = goalStates?.available === true;
+  const goalState = goal ? stateOf(goal) : null;
+  const goalLive = goal ? roundModeOf(goal.latest, observed) === "running" : false;
+  const canPause = goalService && (goalState?.status === "active" || (goalLive && goalState?.status !== "paused" && goalState?.status !== "stopped"));
+  const canResume = goalService && !goalLive && (goalState?.status === "paused" || goalState?.status === "stopped" || goalState?.status === "waiting" || goalState?.status === "interrupted");
+  const resting = goal && !goalLive ? restingNote(goalState) : null;
   const subjectRow = subject && <section aria-label="当前研究" className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
     <p className="min-w-0 truncate text-caption text-text-3">{subline}</p>
     <div className="flex flex-wrap items-center gap-2">
       {selected && (runningEpisode ? <Button variant="secondary" actionKind="set" disabled={busy} onClick={() => stopExecution(selected.id, runningEpisode.id)}>停止本次</Button>
         : <Button variant="secondary" actionKind="start" disabled={busy || !available || !activeAgenda(selected) || !history || !!historyError || history.agendaId !== selected.id} onClick={() => runNow(selected.id)}>立即运行</Button>)}
       {selected && <Button variant="secondary" actionKind="set" disabled={busy || !available || !activeAgenda(selected)} onClick={() => { setDirection(""); setSteering(true); }}>调整研究方向</Button>}
+      {goal && resting && <p className="text-caption text-text-3">{resting}</p>}
+      {goal && canPause && <Button variant="secondary" actionKind="set" disabled={busy} onClick={() => pauseGoal(goal.sessionId)}>暂停</Button>}
+      {goal && goalService && goalLive && <Button variant="secondary" actionKind="set" disabled={busy} onClick={() => stopRound(goal.latest.id)}>停止本轮</Button>}
+      {goal && canResume && <Button variant="secondary" actionKind="start" disabled={busy} onClick={() => resumeGoal(goal.sessionId)}>继续</Button>}
       <Button variant="secondary" onClick={() => setTab("conversation")}>打开对话</Button>
     </div>
   </section>;
@@ -451,10 +531,10 @@ function ResearchWorkspace({ projectId }: { projectId: string }) {
             {history?.nextCursor && <Button variant="text" disabled={historyBusy} onClick={() => void loadHistory(history.nextCursor ?? undefined)}>查看更早记录</Button>}
           </section> : null
         : goal ? <ResultsPanel progress={null} files={goalFiles} />
-          : selected ? <div className="grid gap-6 lg:grid-cols-2">
+          : selected ? <div className="[container-type:inline-size]"><div className="grid gap-6 [@container(min-width:52rem)]:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
             <ResultsPanel progress={progress?.agendaId === selectedId ? progress : null} files={files} />
             <ResearchDataPanel materials={progress?.agendaId === selectedId ? progress.materials : []} loading={!progress && !progressError} error={progressError} busy={busy} databaseAvailable={databaseAvailable} onUpload={upload} onPick={() => setPicking(true)} onDatabase={() => setDatabaseFor("study")} onRemove={sourceId => void operation(() => removeAgendaMaterial(selected.id, sourceId))} onRetry={() => void loadProgress()} />
-          </div> : null;
+          </div></div> : null;
 
   // The observatory leads the page (owner, 2026-10-28); the rest of the research is its views under the tabs.
   const introduction = <div className="space-y-6">
@@ -545,9 +625,19 @@ function ResultsPanel({ progress, files }: { progress: ResearchState | null; fil
   </section>;
 }
 
-/** Every file the rounds of a long goal handed over. */
+/** The files the rounds of a long goal handed over: a file a round after round rewrote is one row, the newest. */
 function goalFilesOf(goal: ObservedResearchGoal): Array<{ runId: string; path: string; at?: string }> {
-  return goal.rounds.flatMap(run => SAFE_RUN.test(run.id) ? [...new Set([...(run.outputFiles ?? []), ...(run.presentedFiles ?? [])])].filter(path => safeWorkspacePath(path)).map(path => ({ runId: run.id, path, at: run.finishedAt ?? run.startedAt })) : []);
+  const newest = new Map<string, { runId: string; path: string; at?: string }>();
+  for (const run of goal.rounds) {
+    if (!SAFE_RUN.test(run.id)) continue;
+    const at = run.finishedAt ?? run.startedAt;
+    for (const path of new Set([...(run.outputFiles ?? []), ...(run.presentedFiles ?? [])])) {
+      if (!safeWorkspacePath(path)) continue;
+      const old = newest.get(path);
+      if (!old || Date.parse(at) > Date.parse(old.at ?? "")) newest.set(path, { runId: run.id, path, at });
+    }
+  }
+  return [...newest.values()];
 }
 
 /** A long goal's rounds: the observatory shows the round that is selected. */
@@ -559,18 +649,39 @@ function GoalRounds({ goal, round, busy, onRound }: { goal: ObservedResearchGoal
   </section>;
 }
 
-/** The shell's resident native conversation, placed inside this page without creating another composer. */
+/** The least a conversation pane is high, so a short window still holds the composer and some of the conversation. */
+const PANE_MIN_HEIGHT = 360;
+
+/**
+ * The shell's resident native conversation, placed inside this page without creating another composer.
+ *
+ * The resident frame is laid over this element's rectangle (`SessionFrameHost`) and the shell clips at the window's bottom, so a pane taller
+ * than what the window leaves below its top loses the frame's bottom, the composer first. The pane is therefore as tall as the window leaves
+ * below its top, measured once the page has scrolled to it and again when the window changes size.
+ */
 function NativeResearchPane({ projectId, sessionId, onClose }: { projectId: string; sessionId: string; onClose: () => void }) {
   const pane = useRef<HTMLDivElement>(null);
+  const [height, setHeight] = useState<number | null>(null);
   useLayoutEffect(() => {
     const element = pane.current;
     if (!element) return undefined;
     const withdraw = registerTaskPane({ element, projectId, sessionId });
     element.scrollIntoView?.({ block: "start" });
-    return withdraw;
+    const fit = () => {
+      const next = Math.max(PANE_MIN_HEIGHT, Math.floor(window.innerHeight - Math.max(0, element.getBoundingClientRect().top)));
+      setHeight(old => (old === next ? old : next));
+    };
+    fit();
+    // Once more after the first layout, where the scroll to the pane may have settled somewhere else than the first read saw; and a window
+    // that changes size moves what is above the pane a moment after the event, so it is read again then.
+    const settle = window.requestAnimationFrame?.(fit);
+    let settling: ReturnType<typeof setTimeout> | undefined;
+    const resized = () => { fit(); clearTimeout(settling); settling = setTimeout(fit, 300); };
+    window.addEventListener("resize", resized);
+    return () => { withdraw(); window.removeEventListener("resize", resized); clearTimeout(settling); if (settle !== undefined) window.cancelAnimationFrame?.(settle); };
   }, [projectId, sessionId]);
   return <section aria-label="研究对话" className="space-y-2">
     <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-ui font-semibold text-text">研究对话</h2><Button variant="secondary" onClick={onClose}>收起对话</Button></div>
-    <div ref={pane} role="region" aria-label="原生研究对话" className="relative min-h-screen" />
+    <div ref={pane} role="region" aria-label="原生研究对话" className="relative" style={{ height: height ?? "100dvh", minHeight: PANE_MIN_HEIGHT }} />
   </section>;
 }

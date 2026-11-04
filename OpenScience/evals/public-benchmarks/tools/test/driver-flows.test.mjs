@@ -313,5 +313,34 @@ await test("timeBudgetMinutes is sent to the dispatch only when the item sets it
   assert.equal(warned.code, 0, warned.log);
 });
 
+await test("an uncertain usage record is read again for a bounded time: a late settlement is taken, a record that never closes is kept as read, and both are recorded", async () => {
+  const open = { cost: 0.02, openCost: 0.03, uncertain: 1, calls: 3 };
+  const closed = { cost: 0.05, openCost: 0, uncertain: 0, calls: 4 };
+  const flags = ["--usage-settle-s", "4", "--usage-poll-ms", "100", "--retry-scale", "0.001"];
+  const late = await run("usagelate", [item("u/1", "g", { collect: false })], { fake: { scenario: () => ({ usage: [open, open, closed] }) }, flags });
+  assert.equal(late.code, 0, late.log);
+  const settled = late.results["u__1"];
+  assert.equal(settled.cost.cost, 0.05, "the settled record is the one kept");
+  assert.equal(settled.cost.uncertain, 0);
+  assert.equal(settled.costSettle.settled, true);
+  assert.equal(settled.costSettle.reads, 3);
+  assert.deepEqual(settled.costSettle.first, { cost: 0.02, openCost: 0.03, uncertain: 1, calls: 3 }, "what was seen first");
+  assert.deepEqual(settled.costSettle.final, { cost: 0.05, openCost: 0, uncertain: 0, calls: 4 }, "what was finally seen");
+  const stuck = await run("usagestuck", [item("u/2", "g", { collect: false })], { fake: { scenario: () => ({ usage: [open] }) }, flags: ["--usage-settle-s", "1", "--usage-poll-ms", "100", "--retry-scale", "0.001"] });
+  assert.equal(stuck.code, 0, stuck.log);
+  const kept = stuck.results["u__2"];
+  assert.equal(kept.cost.cost, 0.02, "an uncertain record is kept as the ledger says it, not guessed");
+  assert.equal(kept.cost.uncertain, 1);
+  assert.equal(kept.costSettle.settled, false);
+  assert.ok(kept.costSettle.reads >= 3, "read again more than once");
+  assert.ok(kept.costSettle.waitedMs >= 900 && kept.costSettle.waitedMs < 3000, `bounded by --usage-settle-s (${kept.costSettle.waitedMs} ms)`);
+  const clean = await run("usageclean", [item("u/3", "g", { collect: false })], { fake: { scenario: () => ({ usage: [closed] }) }, flags });
+  assert.equal(clean.results["u__3"].costSettle, undefined, "a record that is closed at the first read waits for nothing");
+  assert.equal(callsOf(clean, "usage-read").length, 1);
+  const off = await run("usageoff", [item("u/4", "g", { collect: false })], { fake: { scenario: () => ({ usage: [open] }) }, flags: ["--usage-settle-s", "0", "--retry-scale", "0.001"] });
+  assert.equal(callsOf(off, "usage-read").length, 1, "--usage-settle-s 0 reads once");
+  assert.equal(off.results["u__4"].costSettle, undefined);
+});
+
 console.log(failures ? `${failures} FAILED` : "all passed");
 process.exit(failures ? 1 : 0);

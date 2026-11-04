@@ -5,7 +5,7 @@ import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { PLATFORM_PUBLISHER_USER_ID } from '@evimed/domain';
-import { createRsiAuthorizedTranscriptReader, createRsiBundlePoller, createRsiOnlineRuntime, createRsiSourceInvalidation, rsiIncidentRunEligible } from '../src/rsiOnlineRuntime.mjs';
+import { createRsiAuthorizedTranscriptReader, createRsiBundlePoller, createRsiIncidentExtractor, createRsiOnlineRuntime, createRsiSourceInvalidation, rsiIncidentRunEligible } from '../src/rsiOnlineRuntime.mjs';
 import { HttpError } from '../src/security.mjs';
 import { createRsiOnlineWorker } from '../src/rsiOnlineWorker.mjs';
 import { rsiOnlineConfigurationIssues } from '../src/rsiOnlineConfiguration.mjs';
@@ -250,6 +250,38 @@ test('a valid transport alone publishes withdrawals, and a removed agreement wit
     assert.equal(await runtime.sweepAgreement(), null, 'reconciled once per agreement change');
     await runtime.worker.close();
   } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test('an incident extraction is booked as the offline campaigns\' own purpose, never a person\'s learning, under the deployment\'s ceiling', async () => {
+  // Audit 2026-11-03, D6: it was booked `learning`, the purpose of a person's own learning loop and of its per-account cap.
+  const calls = [];
+  let configured = true;
+  const extract = createRsiIncidentExtractor({ config: { marker: 'config' }, usageLedger: { marker: 'ledger' }, binding: { userId: PLATFORM_PUBLISHER_USER_ID, projectId: 'evimed-evidence' },
+    online: { extractionDailyCny: 2 }, configured: () => configured,
+    model: async (dependencies, call) => { calls.push({ dependencies, call }); return { choices: [{ message: { content: '{"diagnostic":"d"}' } }] }; } });
+  assert.deepEqual(await extract({ instructions: 'Read it.', fields: ['diagnostic'], messages: [] }), { diagnostic: 'd' });
+  const [{ dependencies, call }] = calls;
+  assert.deepEqual([dependencies.config.marker, dependencies.usageLedger.marker], ['config', 'ledger']);
+  assert.deepEqual({ userId: call.userId, projectId: call.projectId, purpose: call.purpose, runId: call.runId, limits: call.limits },
+    { userId: PLATFORM_PUBLISHER_USER_ID, projectId: 'evimed-evidence', purpose: 'rsi', runId: 'rsi-incident-extraction', limits: { daily: 0, weekly: 0, moduleDaily: 2 } });
+  configured = false;
+  await assert.rejects(extract({ instructions: 'Read it.', fields: [], messages: [] }), /rsi_online_configuration_missing/);
+  assert.equal(calls.length, 1, 'no call once the deployment is no longer bound');
+});
+
+test('the extraction ceiling is the rsi purpose\'s own daily budget, and the publisher\'s other work neither spends it nor is spent by it', async () => {
+  // Review of 2026-11-03: booked `rsi` under `daily`/`weekly` limits, the call was refused by everything else the publisher account spent
+  // that day, and its own spend counted against that account's caps.
+  const { callModelForControlPlane } = await import('../src/modelGateway.mjs');
+  const { UNCAPPED_USAGE_PURPOSES } = await import('../src/usageLedger.mjs');
+  const reserved = [];
+  const usageLedger = { async reserveModel(input) { reserved.push(input); throw Object.assign(new Error('The module daily budget is exhausted.'), { status: 402, code: 'usage_module_budget_exceeded' }); } };
+  const extract = createRsiIncidentExtractor({ config: { deepseekBaseUrl: 'https://api.deepseek.com', deepseekApiKey: 'unused', production: false }, usageLedger,
+    model: callModelForControlPlane, binding: { userId: PLATFORM_PUBLISHER_USER_ID, projectId: 'evimed-evidence' }, online: { extractionDailyCny: 2 }, configured: () => true });
+  await assert.rejects(extract({ instructions: 'Read it.', fields: ['diagnostic'], messages: [] }), /module daily budget/);
+  const [{ purpose, budgetPurpose, moduleLimit, dailyLimit, weeklyLimit }] = reserved;
+  assert.deepEqual({ purpose, budgetPurpose, moduleLimit, dailyLimit, weeklyLimit }, { purpose: 'rsi', budgetPurpose: 'rsi', moduleLimit: 2, dailyLimit: 0, weeklyLimit: 0 });
+  assert.ok(UNCAPPED_USAGE_PURPOSES.includes('rsi'), 'an rsi row is never summed into an account\'s caps');
 });
 
 test('a failing RSI layer never fails a source deletion: the invalidation is retried from a durable job', async () => {

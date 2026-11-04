@@ -22,6 +22,7 @@ import {
   feedbackSignalFromCorrection,
   feedbackSignalFromReplay,
   foldMethodFeedback,
+  methodHarmTest,
   mergeMethodResultLinks,
   methodScientific,
   projectMethodFeedback,
@@ -197,6 +198,73 @@ test("four results found wrong under one body are a regression of that body, ans
   assert.equal(decided.evidence.length, 4);
   // The earlier body's own record is what is read, never the current body's: A is not itself harmful.
   assert.notEqual(scientificRegression({ digest: A, revisions: [B, A], scientific }).state, "regression");
+});
+
+test("a body its first trusted recalculations cleared still regresses on the corrections that follow", () => {
+  // Until 2026-11-03 three agreements first read clear and nothing after them was read (audit D3).
+  const agreed = [1, 2, 3].map((n) => entry({ signal: "replay_agreed", result: n }));
+  assert.equal(scientificRegression({ digest: A, scientific: record(...agreed) }).state, "clear");
+  const corrected = (/** @type {number} */ count) => record(...agreed, ...Array.from({ length: count }, (_, n) => entry({ signal: "analytic_corrected", result: 10 + n })));
+  assert.equal(scientificRegression({ digest: A, scientific: corrected(5) }).state, "watching");
+  const decided = scientificRegression({ digest: A, scientific: corrected(6) });
+  assert.deepEqual([decided.state, decided.action, decided.harm.runs, decided.harm.bad], ["regression", "retire", 9, 6]);
+});
+
+/** Seeded generator: every rate below is reproducible. @param {number} seed */
+const mulberry32 = (seed) => () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+/** One result's trial as the whole record reads it, in order: the delivery axis's test over every version. @param {readonly boolean[]} against */
+const wholeRecord = (against) => methodHarmTest({ ...emptyLearning(A), observations: against.map((bad, index) => ({
+  runId: `v${index}`, family: `v${index}`, outcome: bad ? "rejected" : "accepted", invoked: true, at: new Date(Date.UTC(2026, 0, 1, 0, index)).toISOString() })) });
+
+test("a record longer than it keeps is read whole: what it let go of is carried and read first, and a replay of it changes nothing", () => {
+  // Review of 2026-11-03: the record kept its last sixty entries and nothing of the rest, so the test read a window that slid.
+  const random = mulberry32(31);
+  const against = Array.from({ length: 300 }, () => random() < 0.25);
+  /** @type {any[]} */
+  const entries = [];
+  let scientific = emptyScientific();
+  against.forEach((bad, index) => {
+    const made = entry({ signal: bad ? "analytic_corrected" : "replay_agreed", result: 5000 + index });
+    entries.push(made);
+    scientific = foldMethodFeedback(scientific, made);
+    // An earlier body's results, interleaved: kept under their own digest.
+    if (index % 10 === 0) scientific = foldMethodFeedback(scientific, entry({ signal: "replay_differed", digest: B, result: 9000 + index }));
+  });
+  assert.ok(scientific.entries.length <= METHOD_FEEDBACK_LIMIT);
+  const read = scientificRegression({ digest: A, scientific });
+  const whole = wholeRecord(against);
+  assert.deepEqual([read.harm.state, read.harm.runs, read.harm.bad], [whole.state, whole.runs, whole.bad]);
+  assert.deepEqual([methodScientific(scientific, A).results, methodScientific(scientific, A).assessed, methodScientific(scientific, A).against],
+    [300, 300, against.filter(Boolean).length], "the counts are the whole record's");
+  assert.equal(methodScientific(scientific, B).against, 30);
+  assert.equal(scientificRegression({ digest: B, scientific }).state, "regression", "an earlier body's results are read whole too");
+  // A join that replays an entry the record let go of, and a later signal on a result it let go of, change nothing.
+  assert.equal(foldMethodFeedback(scientific, entries[0]), scientific);
+  assert.equal(foldMethodFeedback(scientific, entry({ signal: "evidence_corrected", result: 5000 })), scientific);
+  // A result with two signals goes whole and is read as one trial, against.
+  let pair = emptyScientific();
+  pair = foldMethodFeedback(pair, entry({ signal: "replay_agreed", result: 1 }));
+  pair = foldMethodFeedback(pair, entry({ signal: "analytic_corrected", result: 1 }));
+  for (let index = 0; index < METHOD_FEEDBACK_LIMIT; index += 1) pair = foldMethodFeedback(pair, entry({ signal: "replay_agreed", result: 100 + index }));
+  assert.equal(pair.entries.some((/** @type {any} */ item) => item.result.versionId === version(1)), false);
+  assert.deepEqual([methodScientific(pair, A).results, methodScientific(pair, A).against, methodScientific(pair, A).supports], [61, 1, 60]);
+});
+
+test("a harmless revision read after every result is not rolled back more often as its record grows", () => {
+  // At the 25% background rate the window of sixty rolled back a third of harmless revisions by the hundredth result and 92% by the three
+  // hundredth (review of 2026-11-03). Read whole, the chance is the test's own: 4.31% however long (`methodHarmTest`).
+  const random = mulberry32(1103);
+  const histories = 200;
+  let regressed = 0;
+  for (let history = 0; history < histories; history += 1) {
+    let scientific = emptyScientific();
+    for (let index = 0; index < 300; index += 1) {
+      scientific = foldMethodFeedback(scientific, entry({ signal: random() < 0.25 ? "analytic_corrected" : "replay_agreed", result: 100_000 + history * 1000 + index }));
+      // What production does: the lifecycle reads the record after every entry the join adds (`MethodFeedbackService`).
+      if (scientificRegression({ digest: A, scientific }).state === "regression") { regressed += 1; break; }
+    }
+  }
+  assert.ok(regressed <= 20, `${regressed} of ${histories} harmless revisions read as a regression`);
 });
 
 test("the newest earlier body that is itself harmful is passed over, and a method with no sound body is stopped, not returned to one", () => {
