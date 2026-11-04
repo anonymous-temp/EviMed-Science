@@ -249,9 +249,9 @@ test("five thousand people are one page: the tallies equal the domain's verdict 
           'rows', (SELECT jsonb_agg(jsonb_build_object('number', n, 'kind', CASE WHEN n <= 6 THEN 'inclusion' ELSE 'exclusion' END, 'clause', '条款 ' || n,
               'label', CASE WHEN n = 8 AND i % 5 = 0 THEN 'excluded' WHEN n = 10 AND i % 5 = 2 THEN 'not_enough_information' WHEN n = 11 AND i % 5 = 4 THEN 'excluded' WHEN n <= 6 THEN 'included' ELSE 'not_excluded' END,
               'basis', CASE WHEN (n = 9 AND i % 5 = 1) OR (n = 10 AND i % 5 = 2) OR (n = 11 AND i % 5 = 4) THEN 'silent' ELSE 'stated' END,
-              'reason', '第 ' || n || ' 条的理由', 'sentenceIds', jsonb_build_array(n),
+              'reason', CASE WHEN i = 2 AND n = 1 THEN '=cmd|calc 的一句话' ELSE '第 ' || n || ' 条的理由' END, 'sentenceIds', jsonb_build_array(n),
               'evidence', CASE WHEN (n = 9 AND i % 5 = 1) OR (n = 10 AND i % 5 = 2) OR (n = 11 AND i % 5 = 4) THEN '[]'::jsonb
-                ELSE jsonb_build_array(jsonb_build_object('sentenceId', n, 'text', CASE WHEN i = 2 AND n = 1 THEN '=cmd|calc 的一句话' ELSE repeat('病历里的一句话，', 12) END, 'start', 0, 'end', 10, 'documentId', 'doc_' || i)) END)
+                ELSE jsonb_build_array(jsonb_build_object('sentenceId', n, 'text', repeat('病历里的一句话，', 12), 'start', 0, 'end', 10, 'documentId', 'doc_' || i)) END)
               ORDER BY n) FROM generate_series(1, 12) n),
           'missing', '[]'::jsonb),
         '{"cost": 0.0004, "currency": "CNY"}'::jsonb, '[]'::jsonb, NULL, now() - (i || ' seconds')::interval, now() - (i || ' seconds')::interval
@@ -350,7 +350,7 @@ test("the clause file of five thousand people is all of them, Excel-safe, and wa
     assert.equal(lines[0], "患者,对象,登记号,标题,结论,条款编号,类型,条款原文,判定,有无原文依据,理由,依据句号,依据原文");
     // 4,999 people (one withdrew) by twelve clauses, plus the header; quoted cells hold no line breaks of ours.
     assert.equal(lines.length - 2, (PEOPLE - 1) * 12);
-    assert.ok(file.text.includes("'=cmd|calc"), "a sentence that starts with = is text");
+    assert.ok(file.text.includes("'=cmd|calc"), "a reason that starts with = is text");
     assert.ok(!/(^|,)=cmd/u.test(file.text), "and is not left as a formula");
     t.diagnostic(`${file.text.length} characters, ${sizes.length} chunks of at most ${Math.max(...sizes)}`);
     assert.ok(Math.max(...sizes) <= 200, `whole answers were loaded ${Math.max(...sizes)} at a time`);
@@ -372,7 +372,7 @@ test("the pair file in both formats, and a patient's file, carry every row and t
   assert.deepEqual(Object.keys(parsed.rows[0]).sort(), ["basisChanged", "confidence", "counts", "fit", "fitLevel", "judgedAt", "producer", "reason", "subjectKey", "target", "verdict"]);
   const clauses = JSON.parse((await call("owner", "GET", `${S()}/matching/export?direction=patient_to_trial&subjectKey=P-0192&kind=clauses&format=json`)).text);
   assert.ok(clauses.rows.length >= 5);
-  assert.deepEqual(Object.keys(clauses.rows[0].clause).sort(), ["basis", "display", "label", "number", "reason", "sentences", "stance", "text", "kind"].sort());
+  assert.deepEqual(Object.keys(clauses.rows[0].clause).filter((key) => key !== "note").sort(), ["basis", "display", "label", "number", "reason", "sentences", "stance", "text", "kind"].sort());
   const patient = await call("owner", "GET", `${S()}/matching/export?direction=patient_to_trial&subjectKey=P-0192&kind=pairs&format=csv`);
   const trials = patient.text.slice(1).split("\r\n").filter(Boolean).slice(1);
   assert.deepEqual(trials.map((line) => line.split(",")[2]).sort(), [TRIAL(1), TRIAL(2), TRIAL(3), TRIAL(4), TRIAL(5)], "every judged trial of the patient, and not the one nobody judged");

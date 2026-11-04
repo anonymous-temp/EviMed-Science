@@ -1,6 +1,7 @@
 import { Disclosure } from "@/components/ui/Disclosure";
 import { Button } from "@/components/ui/Button";
-import { Note } from "@/components/ui/Note";
+import { VCR_MIN_CELL_SIZE } from "@evimed/domain";
+import { Note, type NoteResult } from "@/components/ui/Note";
 import { formatLingdou } from "@/lib/format";
 import type { VcrJudgedFailures, VcrJudgedProgress } from "@/lib/vcrClient";
 
@@ -39,27 +40,33 @@ export function JudgedProgressNote({ progress, noun, mayRun, busy, onResume, onS
   onStop: () => void;
 }) {
   const cost = costClause(progress);
-  const failed = progress.failed > 0 ? `，其中 ${progress.failed} ${noun.slice(0, 1)}没判成` : "";
+  const failed = progress.failed !== null && progress.failed > 0 ? `，其中 ${progress.failed} ${noun.slice(0, 1)}没判成` : "";
+  const tail = `${noun}${failed}${cost ? `；${cost}` : ""}。`;
+  // A count of people too small to show this reader is not a zero: the sentence goes without it.
+  const howFar = (lead: string): NoteResult => (progress.finished !== null && progress.total !== null
+    ? [`${lead}已完成 `, { n: progress.finished }, " / ", { n: progress.total }, ` ${tail}`]
+    : [`${lead}少于 `, { n: VCR_MIN_CELL_SIZE }, ` 人时不显示具体人数${failed}${cost ? `；${cost}` : ""}。`]);
   if (progress.state === "running" || progress.state === "waiting_budget") {
     const waiting = progress.state === "waiting_budget";
     return (
       <div data-vcr-judged-progress={progress.state}>
         <Note
           tone={waiting ? "warn" : "default"}
-          result={[waiting ? "判定暂停，等研究的计算预算：已完成 " : "正在判定：已完成 ", { n: progress.finished }, " / ", { n: progress.total }, ` ${noun}${failed}${cost ? `；${cost}` : ""}。`]}
+          result={howFar(waiting ? "判定暂停，等研究的计算预算：" : "正在判定：")}
           action={mayRun && progress.jobId ? <Button size="sm" variant="secondary" actionKind="set" loading={busy} onClick={onStop}>停止这批判定</Button> : undefined}
         />
       </div>
     );
   }
-  const left = progress.waiting + progress.failed;
-  if (progress.state === "stopped" && left > 0) {
+  const left = (progress.waiting ?? 0) + (progress.failed ?? 0);
+  const leftHidden = progress.waiting === null || progress.failed === null;
+  if (progress.state === "stopped" && (left > 0 || leftHidden)) {
     return (
       <div data-vcr-judged-progress="stopped">
         <Note
           tone="warn"
-          result={["判定没有做完：已完成 ", { n: progress.finished }, " / ", { n: progress.total }, ` ${noun}${failed}${cost ? `；${cost}` : ""}。`]}
-          action={mayRun ? <Button size="sm" variant="secondary" actionKind="start" loading={busy} onClick={onResume}>{`继续判定剩下的 ${left} ${noun.slice(0, 1)}`}</Button> : undefined}
+          result={howFar("判定没有做完：")}
+          action={mayRun ? <Button size="sm" variant="secondary" actionKind="start" loading={busy} onClick={onResume}>{leftHidden ? "继续判定剩下的" : `继续判定剩下的 ${left} ${noun.slice(0, 1)}`}</Button> : undefined}
         />
       </div>
     );
@@ -67,7 +74,9 @@ export function JudgedProgressNote({ progress, noun, mayRun, busy, onResume, onS
   if (progress.state === "done" && progress.cost?.spent) {
     return (
       <div data-vcr-judged-progress="done">
-        <Note result={["已全部判完：", { n: progress.finished }, ` ${noun}，用了 ${money(progress.cost.spent)}。`]} />
+        <Note result={progress.finished !== null
+          ? ["已全部判完：", { n: progress.finished }, ` ${noun}，用了 ${money(progress.cost.spent)}。`]
+          : ["已全部判完（少于 ", { n: VCR_MIN_CELL_SIZE }, ` 人时不显示具体人数），用了 ${money(progress.cost.spent)}。`]} />
       </div>
     );
   }

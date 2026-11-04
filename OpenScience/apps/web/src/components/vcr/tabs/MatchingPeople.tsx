@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { VCR_MATCH_STANCE_LABELS_ZH } from "@evimed/domain";
+import { VCR_MATCH_STANCE_LABELS_ZH, VCR_MIN_CELL_SIZE } from "@evimed/domain";
 import { cancelVcrJob, startVcrJudge, VCR_VERDICTS, type VcrJudgedFunnelRow, type VcrJudgedPair, type VcrJudgedProtocol, type VcrStudy, type VcrVerdict } from "@/lib/vcrClient";
 import { webErrorMessage } from "@/lib/apiClient";
 import { toast } from "@/lib/toast";
@@ -55,9 +55,11 @@ function PersonRow({ person, current, onPick }: { person: VcrJudgedPair; current
 }
 
 /** One clause of the protocol: who it satisfies, who it disqualifies, who the record is silent on, who it leaves open. */
-function FunnelRow({ row, people }: { row: VcrJudgedFunnelRow; people: number }) {
-  const undecided = row.silent + row.open;
-  const share = (value: number) => `${people > 0 ? (value / people) * 100 : 0}%`;
+function FunnelRow({ row, people }: { row: VcrJudgedFunnelRow; people: number | null }) {
+  const undecided = (row.silent ?? 0) + (row.open ?? 0);
+  const share = (value: number | null) => `${people && value ? (value / people) * 100 : 0}%`;
+  // A count too small to show this reader is a dash, never a zero.
+  const shownCount = (value: number | null) => value ?? "—";
   return (
     <li data-vcr-funnel-clause={row.number} className={cn("flex flex-col gap-1 border-b border-border py-2.5", FUNNEL_COLUMNS)}>
       <div className="flex items-baseline gap-2 text-caption text-text-3 md:flex-col md:gap-0">
@@ -68,7 +70,7 @@ function FunnelRow({ row, people }: { row: VcrJudgedFunnelRow; people: number })
         <p className="text-ui text-text">{row.clause}</p>
         <span
           role="img"
-          aria-label={`${row.clause}：不满足 ${row.against}，未见记载 ${row.silent}，待查 ${row.open}，满足 ${row.support}`}
+          aria-label={`${row.clause}：不满足 ${shownCount(row.against)}，未见记载 ${shownCount(row.silent)}，待查 ${shownCount(row.open)}，满足 ${shownCount(row.support)}`}
           data-forced-colors="preserve"
           className="mt-1.5 flex h-2 w-full overflow-hidden rounded-full bg-surface-2"
         >
@@ -77,10 +79,10 @@ function FunnelRow({ row, people }: { row: VcrJudgedFunnelRow; people: number })
         </span>
       </div>
       <div className="flex gap-4 text-caption tabular-nums text-text-2 md:contents">
-        <span className={cn(row.against > 0 && "text-danger-strong")}><span className="md:hidden">不满足 </span>{row.against}</span>
-        <span><span className="md:hidden">未见记载 </span>{row.silent}</span>
-        <span><span className="md:hidden">待查 </span>{row.open}</span>
-        <span><span className="md:hidden">满足 </span>{row.support}</span>
+        <span className={cn(row.against !== null && row.against > 0 && "text-danger-strong")}><span className="md:hidden">不满足 </span>{shownCount(row.against)}</span>
+        <span><span className="md:hidden">未见记载 </span>{shownCount(row.silent)}</span>
+        <span><span className="md:hidden">待查 </span>{shownCount(row.open)}</span>
+        <span><span className="md:hidden">满足 </span>{shownCount(row.support)}</span>
       </div>
     </li>
   );
@@ -118,8 +120,9 @@ export function MatchingPeople({ studyId, study, judged, verdict, onVerdict, onP
   const mayRun = study.abilities.includes("run") && study.abilities.includes("read_patient_level");
   const { progress, tallies, clauses, selected, people } = judged;
   const shown = useShowMore(clauses.rows, { first: 8, step: 8, resetKey: judged.protocolVersionId });
-  const all = VCR_VERDICTS.reduce((sum, key) => sum + tallies[key], 0);
-  const open = (key: VcrVerdict) => ({ n: tallies[key], onOpen: () => onVerdict(key), label: `${tallies[key]} 位，只看这些` });
+  // Null where a count is too small to show this reader: no total is drawn from what is hidden.
+  const all = VCR_VERDICTS.some((key) => tallies[key] === null) ? null : VCR_VERDICTS.reduce((sum, key) => sum + (tallies[key] ?? 0), 0);
+  const open = (key: VcrVerdict) => ({ n: tallies[key] ?? 0, onOpen: () => onVerdict(key), label: `${tallies[key]} 位，只看这些` });
 
   const act = (work: () => Promise<unknown>, failure: string) => {
     if (working) return;
@@ -129,7 +132,7 @@ export function MatchingPeople({ studyId, study, judged, verdict, onVerdict, onP
   const resume = () => act(() => startVcrJudge(studyId, { direction: "trial_to_patient", protocolVersionId: judged.protocolVersionId, resume: true }), "暂时无法继续判定，请稍后重试。");
   const stop = () => { if (progress.jobId) act(() => cancelVcrJob(studyId, progress.jobId!), "暂时无法停止，请稍后重试。"); };
 
-  const first = judged.total === 0 ? 0 : judged.offset + 1;
+  const first = people.length === 0 ? 0 : judged.offset + 1;
   const last = judged.offset + people.length;
   const top = clauses.rows[0];
   const detail = selected && picked === selected.subjectKey
@@ -146,10 +149,12 @@ export function MatchingPeople({ studyId, study, judged, verdict, onVerdict, onP
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-3">
-        {all > 0 && (
-          <Note result={["已判定 ", { n: all }, " 位患者：符合 ", open("eligible"), " 位，可能符合 ", open("possible"), " 位，证据不足 ", open("insufficient"), " 位，不符合 ", open("ineligible"), " 位。"]} />
-        )}
-        <VcrFunnelBar eligible={tallies.eligible} insufficient={tallies.possible + tallies.insufficient} ineligible={tallies.ineligible} />
+        {all === null
+          ? <Note result={["少于 ", { n: VCR_MIN_CELL_SIZE }, " 人的类别不显示具体人数。"]} />
+          : all > 0 && (
+            <Note result={["已判定 ", { n: all }, " 位患者：符合 ", open("eligible"), " 位，可能符合 ", open("possible"), " 位，证据不足 ", open("insufficient"), " 位，不符合 ", open("ineligible"), " 位。"]} />
+          )}
+        <VcrFunnelBar eligible={tallies.eligible} insufficient={tallies.possible === null || tallies.insufficient === null ? null : tallies.possible + tallies.insufficient} ineligible={tallies.ineligible} />
         <JudgedProgressNote progress={progress} noun="位患者" mayRun={mayRun} busy={working} onResume={resume} onStop={stop} />
         <JudgedFailures failures={judged.failed} noun="位患者" titled={false} />
       </div>
@@ -157,7 +162,9 @@ export function MatchingPeople({ studyId, study, judged, verdict, onVerdict, onP
       {clauses.rows.length > 0 && (
         <Section title="各条款的情况" count={`${clauses.rows.length} 条`}>
           <div className="flex flex-col gap-3">
-            {top && top.against > 0
+            {clauses.judgedPeople === null || clauses.rows.some((row) => row.against === null)
+              ? <Note result={["少于 ", { n: VCR_MIN_CELL_SIZE }, " 人的格子不显示具体人数。"]} />
+              : top && top.against !== null && top.against > 0
               ? <Note result={["按逐条判定的 ", { n: clauses.judgedPeople }, " 位患者计，淘汰最多的是第 ", { n: top.number }, ` 条（${brief(top.clause)}），`, { n: top.against }, " 位不满足。"]} />
               : <Note result={["按逐条判定的 ", { n: clauses.judgedPeople }, " 位患者计，没有哪一条明确淘汰了谁。"]} />}
             <div>
@@ -175,7 +182,7 @@ export function MatchingPeople({ studyId, study, judged, verdict, onVerdict, onP
 
       <Section
         title="患者"
-        count={verdict ? `${judged.total} / ${all}` : judged.total}
+        count={judged.total === null ? undefined : verdict && all !== null ? `${judged.total} / ${all}` : judged.total}
         toolbar={<MatchingExport studyId={studyId} where={{ direction: "trial_to_patient", protocolVersionId: judged.protocolVersionId }} abilities={study.abilities} />}
       >
         <div className={cn("grid grid-cols-1 gap-4", selected && wide && "xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]")}>
@@ -190,7 +197,7 @@ export function MatchingPeople({ studyId, study, judged, verdict, onVerdict, onP
                     {people.map((person) => <PersonRow key={person.subjectKey} person={person} current={picked === person.subjectKey} onPick={() => onPick(person.subjectKey)} />)}
                   </ul>
                   <div className="mt-3 flex items-center justify-between gap-3">
-                    <span className="text-caption tabular-nums text-text-3">{`第 ${first}–${last} 位，共 ${judged.total} 位`}</span>
+                    <span className="text-caption tabular-nums text-text-3">{judged.total === null ? `第 ${first}–${last} 位` : `第 ${first}–${last} 位，共 ${judged.total} 位`}</span>
                     <span className="flex items-center gap-1">
                       <IconButton icon={ChevronLeft} label="上一页" size="sm" disabled={judged.offset === 0} onClick={() => onPage(Math.max(0, judged.offset - judged.limit))} />
                       <IconButton icon={ChevronRight} label="下一页" size="sm" disabled={!judged.more} onClick={() => onPage(judged.offset + judged.limit)} />

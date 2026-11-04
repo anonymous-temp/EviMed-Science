@@ -123,7 +123,7 @@ const isCell = (value, fields = VCR_PEOPLE_COUNT_FIELDS) => isPlainObject(value)
  * @param {readonly number[]} sizes @param {number} minCell
  * @returns {Set<number>}
  */
-function hiddenSet(sizes, minCell) {
+export function hiddenSet(sizes, minCell) {
   const hidden = new Set(sizes.map((size, at) => (size < minCell ? at : -1)).filter((at) => at >= 0))
   if (!hidden.size) return hidden
   const rest = sizes.map((size, at) => ({ size, at })).filter((entry) => !hidden.has(entry.at)).sort((a, b) => a.size - b.size || a.at - b.at)

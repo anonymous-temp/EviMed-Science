@@ -149,8 +149,10 @@ export function JudgedPairDetail({ studyId, pair, mayReadRecord, subject, showTi
         )}
         {pair.eligibilityNote && <p data-vcr-eligibility-note="" className="text-caption text-warn-strong">{pair.eligibilityNote}</p>}
       </header>
+      {pair.reasonsWithheld && <p data-vcr-reasons-withheld="" className="text-caption text-text-2">{pair.reasonsWithheld}</p>}
       <ReasonGroups groups={pair.groups} />
       {!Object.keys(pair.groups).length && pair.summary && <p className="text-ui text-text-2">{pair.summary}</p>}
+      {pair.evidenceNote && <p data-vcr-evidence-note="" className="text-caption text-text-3">{pair.evidenceNote}</p>}
       <ClauseList label={`${subject} 的逐条判定`} clauses={pair.clauses} mayRead={mayReadRecord} onOpen={setSpot} compact={compact} />
       {spot && <VcrRecordDrawer studyId={studyId} spot={spot} onClose={() => setSpot(null)} />}
     </div>

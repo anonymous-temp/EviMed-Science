@@ -182,7 +182,7 @@ export const VCR_ROUTE_ABILITIES = Object.freeze({
   "GET /studies/:id/population/rows": ["read"],
   "POST /studies/:id/trial-search": ["run"],
   "POST /studies/:id/rejudge": ["run"],
-  // What the judging job and the conversation saved: read by anyone who reads the study (a sentence is shown under the reader's own grant);
+  // What the judging job and the conversation saved: read by anyone who reads the study, a reason and a sentence only under the reader's own judgment of what the row read (`vcrMatchResults`);
   // starting it and downloading it also need patient-level access, which the handler asks for beside the ability listed here.
   "GET /studies/:id/matching/judged": ["read"],
   "POST /studies/:id/matching/judge": ["run"],
@@ -859,7 +859,7 @@ export function createVcrRoutes(dependencies) {
           selection = { direction: scope.direction, protocolVersionId: scope.protocolVersionId, ...(body.subjectKeys == null ? {} : { subjectKeys: body.subjectKeys }) };
         }
         const started = await audited("vcr.match_judge.start", (result) => ({ code: String(result?.jobId ?? id), detail: `${scope.direction} ${body.resume === true ? "resume" : "start"}` }),
-          { code: id, detail: scope.direction }, () => judge.start(study, selection, { actor: "page" }));
+          { code: id, detail: scope.direction }, () => judge.start(study, selection, { actor: "page", exact: String(study.userId) === String(user.id) }));
         return reply(started, 201);
       }
 
@@ -874,7 +874,7 @@ export function createVcrRoutes(dependencies) {
         if (!VCR_MATCH_EXPORT_KINDS.includes(/** @type {any} */ (kind))) throw new HttpError(400, "vcr_export_kind_invalid", `kind is one of ${VCR_MATCH_EXPORT_KINDS.join(", ")}.`);
         const scope = await scopeOf(study, query);
         const file = await reader.exporter(study, { format: /** @type {'csv' | 'json'} */ (format), kind: /** @type {'pairs' | 'clauses'} */ (kind), direction: /** @type {'patient_to_trial' | 'trial_to_patient'} */ (scope.direction),
-          subjectKey: scope.subjectKey, protocolVersionId: scope.protocolVersionId });
+          subjectKey: scope.subjectKey, protocolVersionId: scope.protocolVersionId, viewer: user });
         res.writeHead(200, { "Content-Type": file.contentType, "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff", "Content-Disposition": `attachment; filename="${file.filename}"` });
         // Written a few pairs at a time with the response's own back-pressure, so five thousand people are never one string in memory.
         const sink = {
@@ -1440,6 +1440,8 @@ export function createVcrRoutes(dependencies) {
         if (!hooks.jobs?.get) throw UNAVAILABLE();
         const job = await hooks.jobs.get(study.id, parts[3]);
         if (!job) throw new HttpError(404, "vcr_job_not_found", "Job not found.");
+        // The plan and marks of a matching job are its own working state, which no page reads; a job's progress and its result say what happened.
+        if (["records_import", "match_judge"].includes(String(job.kind))) { const { records: _records, judge: _judge, ...checkpoint } = job.checkpoint ?? {}; return reply({ ...job, checkpoint }); }
         return reply(job);
       }
       if (parts.length === 5 && parts[4] === "result" && method === "GET") {

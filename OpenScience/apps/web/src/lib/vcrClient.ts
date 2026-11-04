@@ -2527,14 +2527,18 @@ export interface VcrJudgedOpen extends VcrJudgedPair {
   summary: string | null;
   clauses: VcrJudgedClause[];
   withheld: number;
+  /** Why this reader sees the verdict and no reasons or sentences. */
+  reasonsWithheld?: string;
+  /** Why some of the sentences are not here. */
+  evidenceNote?: string;
 }
 
 export interface VcrJudgedProgress {
-  /** Pairs asked for, finished, failed and not yet tried. */
-  total: number;
-  finished: number;
-  failed: number;
-  waiting: number;
+  /** Pairs asked for, finished, failed and not yet tried; null is a count of people too small to show this reader. */
+  total: number | null;
+  finished: number | null;
+  failed: number | null;
+  waiting: number | null;
   state: "idle" | "running" | "waiting_budget" | "stopped" | "done";
   jobId: string | null;
   startedAt: string | null;
@@ -2562,20 +2566,21 @@ export interface VcrJudgedPatient {
   selected: VcrJudgedOpen | null;
 }
 
-export interface VcrJudgedFunnelRow { number: number; kind: "inclusion" | "exclusion"; clause: string; support: number; against: number; silent: number; open: number; notApplicable: number }
+/** Counts of people: null is one too small to show this reader (exact small counts are the owner's). */
+export interface VcrJudgedFunnelRow { number: number; kind: "inclusion" | "exclusion"; clause: string; support: number | null; against: number | null; silent: number | null; open: number | null; notApplicable: number | null }
 
 export interface VcrJudgedProtocol {
   direction: "trial_to_patient";
   protocolVersionId: string;
   held: boolean;
   progress: VcrJudgedProgress;
-  tallies: Record<VcrVerdict, number>;
+  tallies: Record<VcrVerdict, number | null>;
   people: VcrJudgedPair[];
-  total: number;
+  total: number | null;
   offset: number;
   limit: number;
   more: boolean;
-  clauses: { judgedPeople: number; rows: VcrJudgedFunnelRow[] };
+  clauses: { judgedPeople: number | null; rows: VcrJudgedFunnelRow[] };
   failed: VcrJudgedFailures;
   /** People whose record changed after they were judged. */
   changed: number;
@@ -2619,6 +2624,7 @@ function readJudgedOpen(raw: unknown): VcrJudgedOpen | null {
     ...readJudgedPair(value),
     groups: Object.fromEntries((["support", "against", "open"] as const).map((key) => [key, strings(groups[key])]).filter(([, items]) => (items as string[]).length)),
     summary: text(value.summary),
+    ...(text(value.reasonsWithheld) ? { reasonsWithheld: String(value.reasonsWithheld) } : {}), ...(text(value.evidenceNote) ? { evidenceNote: String(value.evidenceNote) } : {}),
     clauses: arr(value.clauses).map((clause) => ({
       number: num(clause.number) ?? 0, kind: clause.kind === "exclusion" ? "exclusion" as const : "inclusion" as const, clause: String(clause.clause ?? ""), ...(text(clause.lead) ? { lead: String(clause.lead) } : {}),
       label: String(clause.label ?? ""), basis: clause.basis === "stated" ? "stated" as const : "silent" as const, display: String(clause.display ?? ""),
@@ -2634,7 +2640,7 @@ function readJudgedProgress(raw: unknown): VcrJudgedProgress {
   const value = obj(raw);
   const cost = obj(value.cost);
   return {
-    total: num(value.total) ?? 0, finished: num(value.finished) ?? 0, failed: num(value.failed) ?? 0, waiting: num(value.waiting) ?? 0,
+    total: num(value.total), finished: num(value.finished), failed: num(value.failed), waiting: num(value.waiting),
     state: (["idle", "running", "waiting_budget", "stopped", "done"] as const).find((state) => state === value.state) ?? "idle", jobId: text(value.jobId), startedAt: text(value.startedAt),
     cost: Object.keys(cost).length ? { ceiling: num(cost.ceiling), spent: num(cost.spent), currency: String(cost.currency ?? "CNY") } : null,
   };
@@ -2663,12 +2669,12 @@ export function readVcrJudged(raw: unknown): VcrJudged {
   const clauses = obj(value.clauses);
   return {
     direction: "trial_to_patient", protocolVersionId: String(value.protocolVersionId ?? ""), ...common,
-    tallies: Object.fromEntries(VCR_VERDICTS.map((verdict) => [verdict, num(tallies[verdict]) ?? 0])) as Record<VcrVerdict, number>,
-    people: arr(value.people).map(readJudgedPair), total: num(value.total) ?? 0, offset: num(value.offset) ?? 0, limit: num(value.limit) ?? 25, more: value.more === true,
+    tallies: Object.fromEntries(VCR_VERDICTS.map((verdict) => [verdict, num(tallies[verdict])])) as Record<VcrVerdict, number | null>,
+    people: arr(value.people).map(readJudgedPair), total: num(value.total), offset: num(value.offset) ?? 0, limit: num(value.limit) ?? 25, more: value.more === true,
     clauses: {
-      judgedPeople: num(clauses.judgedPeople) ?? 0,
+      judgedPeople: num(clauses.judgedPeople),
       rows: arr(clauses.rows).map((row) => ({ number: num(row.number) ?? 0, kind: row.kind === "exclusion" ? "exclusion" as const : "inclusion" as const, clause: String(row.clause ?? ""),
-        support: num(row.support) ?? 0, against: num(row.against) ?? 0, silent: num(row.silent) ?? 0, open: num(row.open) ?? 0, notApplicable: num(row.notApplicable) ?? 0 })),
+        support: num(row.support), against: num(row.against), silent: num(row.silent), open: num(row.open), notApplicable: num(row.notApplicable) })),
     },
     changed: num(value.changed) ?? 0,
   };

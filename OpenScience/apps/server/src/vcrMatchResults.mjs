@@ -21,10 +21,12 @@
  *   stances (`stanceOf`): a clause the note is silent on is `silent` when it was read in the patient's favour (「未见记载，按未排除」) and
  *   `open` when it was read against them or needs confirming, which is also how the verdict counts it. Only a stated conflict
  *   disqualifies.
- * - **Evidence is shown to the reader under the reader's own grant.** A sentence is an id the code resolved at judging time; here it is
- *   re-read from the record under the viewer, and one that no longer matches what the record says is not shown, said as a count.
- *   An export is of the saved sentences themselves, by an account that may export and may read patient-level data; a withdrawn person is
- *   in none of it, because their rows are gone.
+ * - **A reason and a sentence are the record's, and shown under the reader's own judgment.** A sentence is an id the code resolved at judging time; here it is re-read from the record under the
+ *   viewer, and one that no longer matches what the record says is not shown, said as a count. A reason may repeat the record, so a reader who may not read what a row read (a viewer has no
+ *   patient-level access; a member may hold no grant on the source) gets the verdict and the counts of the row with its reasons and sentences removed and one plain note. An export is judged the
+ *   same way, row by row, and prints the same; a withdrawn person is in none of it, because their rows are gone.
+ * - **Exact small counts are the owner's.** Tallies, the clause funnel and how many people a job has done speak for groups of people, so to anyone else they pass the same rule every read
+ *   passes (`hiddenSet`). A viewer's list of people leaves out the groups too small to show; a member who may read patient-level data sees the people and not the counts.
  * - **A failed read is a failed read.** Nothing here turns an error into an empty list: an empty list is the page saying nothing was
  *   judged, and that sentence must be true.
  *
@@ -32,13 +34,13 @@
  */
 
 import {
-  criterionDisplay, rankJudgments, trialVerdict, VCR_MATCH_FIT_LEVEL_LABELS_ZH, VCR_MATCH_CONFIDENCE_LABELS_ZH, VCR_MATCH_NO_ELIGIBILITY_ZH,
+  criterionDisplay, hiddenSet, rankJudgments, trialVerdict, VCR_MATCH_FIT_LEVEL_LABELS_ZH, VCR_MATCH_CONFIDENCE_LABELS_ZH, VCR_MATCH_NO_ELIGIBILITY_ZH, VCR_MIN_CELL_SIZE,
   VCR_MATCH_STANCE_LABELS_ZH, VCR_TRIAL_VERDICT_LABELS_ZH, vcrMatchConfidenceLevel, vcrMatchFailureReason, vcrMatchFitLevel, vcrSubjectLabel, vcrSubjectLabels,
 } from "@evimed/domain";
 
 import { presentJudgment } from "./vcrMatchJudge.mjs";
 import { phaseLabel, registryStatusLabel } from "./vcrPatientTrials.mjs";
-import { REGISTRY_RECORD_BASIS, basisChangedOf } from "./vcrMatchJudgmentStore.mjs";
+import { REGISTRY_RECORD_BASIS, WITHDRAWN_SUBJECT_MARK, basisChangedOf } from "./vcrMatchJudgmentStore.mjs";
 import { VCR_SCHEMA } from "./vcrPersistence.mjs";
 import { VcrStoreBase } from "./vcrStoreBase.mjs";
 
@@ -156,6 +158,12 @@ function reasonGroups(presented, clauses) {
   return Object.fromEntries(Object.entries(groups).filter(([, items]) => items.length));
 }
 
+/** A presented pair with nothing left of what it read: no reasons, and each clause with its label and no reason or sentence. @param {any} presented */
+function withoutWords(presented) {
+  return { ...presented, reasons: { eligible: [], ineligible: [], missing: [], rationale: "" },
+    criteria: list(presented.criteria).map((row) => ({ ...row, reason: "", evidence: [], ...(list(row.evidence).length ? { evidenceWithheld: list(row.evidence).length } : {}) })) };
+}
+
 /** @param {any} row a light row of the newest query */
 function countsOf(row) {
   if (row.answered === null || row.answered === undefined) return null;
@@ -186,7 +194,7 @@ function whyOf(verdict, row, counts) {
 }
 
 /** The columns of a newest-rows query that the page needs, named once. */
-const COLUMNS = `j.id, j.subject_key, j.target_kind, j.target_id, j.mode, j.status, j.error_code, j.fit, j.confidence, j.producer, j.model, j.thinking, j.basis_changed, j.job_id,
+const COLUMNS = `j.document_ids, j.answer -> 'readFrom' AS read_from, j.id, j.subject_key, j.target_kind, j.target_id, j.mode, j.status, j.error_code, j.fit, j.confidence, j.producer, j.model, j.thinking, j.basis_changed, j.job_id,
   j.created_at, j.updated_at, j.answer -> 'target' AS target, j.answer ->> 'eligibilitySource' AS eligibility_source,
   j.answer #>> '{reasons,eligible,0}' AS first_eligible, j.answer #>> '{reasons,ineligible,0}' AS first_ineligible, j.answer #>> '{reasons,missing,0}' AS first_missing, j.answer #>> '{reasons,rationale}' AS rationale,
   CASE WHEN jsonb_typeof(j.answer #> '{reasons,missing}') = 'array' THEN jsonb_array_length(j.answer #> '{reasons,missing}') ELSE 0 END AS missing_reasons`;
@@ -212,6 +220,34 @@ const COUNTS = `LEFT JOIN LATERAL (
   LEFT JOIN LATERAL (
     SELECT CASE WHEN jsonb_typeof(j.answer -> 'missing') = 'array' THEN jsonb_array_length(j.answer -> 'missing') ELSE 0 END AS unanswered
   ) u ON j.mode = 'criteria' AND j.status = 'done'`;
+
+/** What a reader who may not read what a row read is told, in place of its reasons and sentences. */
+const READER_ROLE_NOTE_ZH = "你的角色不能查看病历内容，这里只显示结论，不含理由和病历原文。";
+const READER_GRANT_NOTE_ZH = "这条结论读过的病历，你没有授权或现在已读不到，理由和原文依据已隐去。";
+/** What a row says when a sentence it quoted can no longer be read back. */
+const evidenceNoteZh = (/** @type {number} */ count) => `有 ${count} 句原文现在读不到（病历已改动或你没有权限），已隐去。`;
+
+/** What a saved row read: its documents, and the snapshots whose words it held. @param {any} row a light row */
+const recordOf = (row) => ({ documentIds: list(row?.document_ids).map(String), snapshots: list(object(row?.read_from).snapshots).map(object).filter((entry) => entry.id).map((entry) => ({ id: String(entry.id), ...(Array.isArray(entry.fields) ? { fields: entry.fields.map(String) } : {}) })) });
+/** What two rows of a pair read, together. @param {any} one @param {any} other */
+const recordOfPair = (one, other) => {
+  const first = recordOf(one), second = recordOf(other);
+  return { documentIds: [...new Set([...first.documentIds, ...second.documentIds])], snapshots: [...new Map([...first.snapshots, ...second.snapshots].map((entry) => [`${entry.id}:${(entry.fields ?? []).join(",")}`, entry])).values()] };
+};
+
+/**
+ * Sibling counts of people for anyone but the owner: what the domain's rule hides is null, and the hidden keys are named. Nothing else is touched.
+ * @template {Record<string, any>} T @param {T} cells @param {readonly string[]} keys @param {number} minCell @returns {T & { suppressed?: string[] }}
+ */
+function hideSmall(cells, keys, minCell) {
+  const counted = keys.filter((key) => Number.isFinite(cells[key]));
+  const hidden = hiddenSet(counted.map((key) => Number(cells[key])), minCell);
+  if (!hidden.size) return cells;
+  const names = [...hidden].map((at) => counted[at]);
+  return { ...cells, ...Object.fromEntries(names.map((key) => [key, null])), suppressed: names };
+}
+/** A count of people on its own: small is null. @param {number} count @param {number} minCell */
+const hideAlone = (count, minCell) => (count >= 1 && count < minCell ? null : count);
 
 /** What the page says of a person's trials whose registry record has changed since they were judged. */
 const REGISTRY_STALE_LABEL_ZH = "登记记录已更新，可重新判定";
@@ -243,14 +279,28 @@ const NOT_WITHDRAWN = `NOT EXISTS (SELECT 1 FROM ${S}.subject_withdrawals w WHER
  */
 export class VcrMatchResults extends VcrStoreBase {
   /**
-   * @param {{ database: any, judgments: any, documents?: any, matchStore?: any, statementTimeoutMs?: number }} deps
-   * `judgments` is the judgment store (whole rows by id), `documents` the seam that re-reads a sentence under the viewer's grant.
+   * @param {{ database: any, judgments: any, documents?: any, matchStore?: any, minCell?: number, statementTimeoutMs?: number }} deps
+   * `judgments` is the judgment store (whole rows by id), `documents` the seam that re-reads a sentence and judges a read under the viewer's grant.
    */
-  constructor({ database, judgments, documents = null, matchStore = null, statementTimeoutMs = READ_TIMEOUT_MS }) {
+  constructor({ database, judgments, documents = null, matchStore = null, minCell = VCR_MIN_CELL_SIZE, statementTimeoutMs = READ_TIMEOUT_MS }) {
     super({ database, statementTimeoutMs });
     this.judgments = judgments;
     this.documents = documents;
     this.matchStore = matchStore;
+    this.minCell = minCell;
+  }
+
+  /**
+   * Who may read what of these pairs: each gets `readable`, and the one note that says why a row holds no reasons. A failed judgment is an error and not an empty page, like any failed read here.
+   * @param {any} study @param {{ id: string } | null} viewer @param {any[]} pairs
+   */
+  async #judgeReaders(study, viewer, pairs) {
+    if (!pairs.length) return;
+    const { patientLevel, permitted } = this.documents?.judgeReads ? await this.documents.judgeReads(study, viewer, pairs.map((pair) => pair.record)) : { patientLevel: false, permitted: pairs.map(() => false) };
+    pairs.forEach((pair, index) => {
+      pair.readable = permitted[index] === true;
+      if (!pair.readable) pair.withheldNote = patientLevel ? READER_GRANT_NOTE_ZH : READER_ROLE_NOTE_ZH;
+    });
   }
 
   /**
@@ -312,6 +362,7 @@ export class VcrMatchResults extends VcrStoreBase {
       const verdict = verdictOfCounts({ fit: score, counts, missingReasons: Number(scored?.missing_reasons ?? 0) });
       const identity = scored ?? clauses;
       done.push({
+        record: recordOfPair(scored, clauses),
         subjectKey: String(identity.subject_key), targetKind: String(identity.target_kind), targetId: String(identity.target_id), target: object(scored?.target ?? clauses?.target),
         fitRowId: scored?.id ?? null, criteriaRowId: clauses?.id ?? null, fit: score === null ? null : Number(score),
         confidence: (scored?.confidence ?? clauses?.confidence) === null || (scored?.confidence ?? clauses?.confidence) === undefined ? null : Number(scored?.confidence ?? clauses?.confidence),
@@ -346,7 +397,8 @@ export class VcrMatchResults extends VcrStoreBase {
       ...this.#name(pair), subjectKey: pair.subjectKey, label: pair.label ?? vcrSubjectLabel(pair.subjectKey), verdict: pair.verdict, verdictLabel: VCR_TRIAL_VERDICT_LABELS_ZH[/** @type {keyof typeof VCR_TRIAL_VERDICT_LABELS_ZH} */ (pair.verdict)],
       fit: pair.fit, fitLevel: level, fitLabel: level ? VCR_MATCH_FIT_LEVEL_LABELS_ZH[level] : null,
       confidence: pair.confidence, confidenceLabel: confidence ? VCR_MATCH_CONFIDENCE_LABELS_ZH[confidence] : null,
-      why: pair.why, counts: pair.counts ? { support: pair.counts.support, against: pair.counts.against, silent: pair.counts.silent, open: pair.counts.open, notApplicable: pair.counts.notApplicable } : null,
+      why: pair.readable === false ? (pair.counts ? `满足 ${pair.counts.support} 条，待查 ${pair.counts.open} 条` : "") : pair.why, ...(pair.readable === false ? { reasonsWithheld: pair.withheldNote } : {}),
+      counts: pair.counts ? { support: pair.counts.support, against: pair.counts.against, silent: pair.counts.silent, open: pair.counts.open, notApplicable: pair.counts.notApplicable } : null,
       judgedAt: pair.judgedAt, producer: pair.producer === "conversation" ? "conversation" : "job", ...(pair.basisChanged ? { basisChanged: pair.basisChanged } : {}),
       ...(pair.eligibilitySource === "none" ? { eligibilityNote: VCR_MATCH_NO_ELIGIBILITY_ZH } : {}),
     };
@@ -366,9 +418,9 @@ export class VcrMatchResults extends VcrStoreBase {
    */
   async #progress(studyId, { direction, subjectKey = null, protocolVersionId = null }, { done, failed }) {
     const jobs = direction === "patient_to_trial"
-      ? await this.rows(`SELECT id, state, scenario, created_at, updated_at, finished_at FROM ${S}.jobs WHERE study_id = $1 AND kind = 'match_judge' AND scenario ->> 'direction' = 'patient_to_trial'
+      ? await this.rows(`SELECT id, state, scenario, checkpoint #>> '{judge,used,cost}' AS carried_cost, created_at, updated_at, finished_at FROM ${S}.jobs WHERE study_id = $1 AND kind = 'match_judge' AND scenario ->> 'direction' = 'patient_to_trial'
           AND scenario -> 'subjects' @> to_jsonb($2::text) ORDER BY created_at DESC LIMIT ${JOBS_READ}`, [studyId, subjectKey])
-      : await this.rows(`SELECT id, state, scenario, created_at, updated_at, finished_at FROM ${S}.jobs WHERE study_id = $1 AND kind = 'match_judge' AND scenario ->> 'direction' = 'trial_to_patient'
+      : await this.rows(`SELECT id, state, scenario, checkpoint #>> '{judge,used,cost}' AS carried_cost, created_at, updated_at, finished_at FROM ${S}.jobs WHERE study_id = $1 AND kind = 'match_judge' AND scenario ->> 'direction' = 'trial_to_patient'
           AND scenario ->> 'protocolVersionId' = $2 ORDER BY created_at DESC LIMIT ${JOBS_READ}`, [studyId, protocolVersionId]);
     const withdrawn = direction === "trial_to_patient" ? new Set((await this.rows(`SELECT subject_key FROM ${S}.subject_withdrawals WHERE study_id = $1`, [studyId])).map((row) => String(row.subject_key))) : new Set();
     /** What every job of this scope asked for, by the id of the thing judged (a registry number, a person). @type {Set<string>} */
@@ -376,7 +428,7 @@ export class VcrMatchResults extends VcrStoreBase {
     for (const job of jobs) {
       const scenario = object(job.scenario);
       if (direction === "patient_to_trial") for (const trial of list(scenario.trials)) { if (trial?.registryId) asked.add(String(trial.registryId)); }
-      else for (const key of list(scenario.subjects)) { if (!withdrawn.has(String(key))) asked.add(String(key)); }
+      else for (const key of list(scenario.subjects)) { if (!withdrawn.has(String(key)) && String(key) !== WITHDRAWN_SUBJECT_MARK) asked.add(String(key)); }
     }
     const idOf = (/** @type {any} */ pair) => (direction === "patient_to_trial" ? pair.targetId : pair.subjectKey);
     const finished = new Set(done.map(idOf));
@@ -388,17 +440,20 @@ export class VcrMatchResults extends VcrStoreBase {
     const waiting = [...asked].filter((id) => !finished.has(id) && !lost.has(id));
     const latest = jobs[0] ?? null;
     const running = latest ? OPEN_JOB_STATES.includes(String(latest.state)) : false;
-    const spent = latest ? await this.one(`SELECT sum(NULLIF(usage ->> 'cost', '')::numeric)::float AS cost
+    // What the job says it spent: every call, the ones whose row a later try replaced and the ones that wrote no row. The rows say it while a batch is out, and when the job kept no account.
+    const spent = latest ? await this.one(`SELECT sum(NULLIF(usage ->> 'cost', '')::numeric)::float AS cost,
+        (SELECT (r.diagnostics #>> '{used,cost}')::float FROM ${S}.results r JOIN ${S}.executions e ON e.id = r.execution_id WHERE e.job_id = $2 ORDER BY r.created_at DESC LIMIT 1) AS accounted
         FROM ${S}.match_judgments WHERE study_id = $1 AND job_id = $2`, [studyId, String(latest.id)]) : null;
+    const spentAmounts = [spent?.accounted, latest?.carried_cost, spent?.cost].filter((value) => value != null && Number.isFinite(Number(value))).map(Number);
     const estimate = object(object(latest?.scenario).estimate);
     return {
       total, finished: finished.size, failed: failedOnly.length, waiting: waiting.length,
       state: running ? (String(latest.state) === "awaiting_budget" ? "waiting_budget" : "running") : total === 0 ? "idle" : waiting.length || failedOnly.length ? "stopped" : "done",
       jobId: latest ? String(latest.id) : null, startedAt: latest ? iso(latest.created_at) : null,
-      cost: latest ? { ceiling: estimate.cost == null || !Number.isFinite(Number(estimate.cost)) ? null : Number(estimate.cost), spent: spent?.cost == null ? null : Number(spent.cost), currency: String(estimate.currency ?? "CNY") } : null,
+      cost: latest ? { ceiling: estimate.cost == null || !Number.isFinite(Number(estimate.cost)) ? null : Number(estimate.cost), spent: spentAmounts.length ? Math.max(...spentAmounts) : null, currency: String(estimate.currency ?? "CNY") } : null,
       // What is still to do — the ones that never ran and the ones that failed — and how the latest job was set; the continue action starts exactly these.
       left: [...waiting, ...failedOnly],
-      settings: latest ? pick(object(latest.scenario), ["fit", "topK", "thinking", "collection", "collectionRevision"]) : {},
+      settings: latest ? pick(object(latest.scenario), ["fit", "topK", "thinking", "thinkingCriteria", "collection", "collectionRevision"]) : {},
     };
   }
 
@@ -430,7 +485,8 @@ export class VcrMatchResults extends VcrStoreBase {
         SELECT j.subject_key, j.target_kind, j.target_id, j.updated_at FROM ${S}.match_judgments j WHERE j.study_id = $1 AND ${NOT_WITHDRAWN}
         UNION ALL
         SELECT CASE WHEN scenario ->> 'direction' = 'patient_to_trial' THEN scenario -> 'subjects' ->> 0 END, CASE WHEN scenario ->> 'direction' = 'patient_to_trial' THEN 'candidate_trial' ELSE 'protocol_version' END,
-          scenario ->> 'protocolVersionId', created_at FROM ${S}.jobs WHERE study_id = $1 AND kind = 'match_judge') newest
+          scenario ->> 'protocolVersionId', created_at FROM ${S}.jobs WHERE study_id = $1 AND kind = 'match_judge'
+          AND NOT (scenario ->> 'direction' = 'patient_to_trial' AND scenario -> 'subjects' ->> 0 = '${WITHDRAWN_SUBJECT_MARK}')) newest
       ORDER BY updated_at DESC LIMIT 1`, [studyId]);
     if (!row) return null;
     return row.target_kind === "candidate_trial" ? { direction: "patient_to_trial", subjectKey: String(row.subject_key) } : { direction: "trial_to_patient", protocolVersionId: String(row.target_id) };
@@ -444,6 +500,7 @@ export class VcrMatchResults extends VcrStoreBase {
     const pairs = await this.#pairs(study.id, { subjectKey });
     const { left: _left, settings: _settings, ...progress } = await this.#progress(study.id, { direction: "patient_to_trial", subjectKey }, pairs);
     const ranked = rankJudgments(pairs.done.map((pair) => ({ ...pair, id: pair.targetId, criteria: pair.counts && pair.counts.against > 0 ? [{ label: "excluded", basis: "stated" }] : [] })));
+    await this.#judgeReaders(study, viewer, ranked);
     const trials = ranked.map((pair, index) => ({ rank: index + 1, ...this.#listed(pair) }));
     const failures = pairs.failed.map((entry) => this.#failure(entry));
     const chosen = ranked.find((pair) => pair.targetId === target) ?? ranked[0] ?? null;
@@ -476,11 +533,25 @@ export class VcrMatchResults extends VcrStoreBase {
     const size = Math.max(1, Math.min(MATCH_PAGE.most, Math.floor(limit)));
     const chosen = subjectKey ? pairs.done.find((pair) => pair.subjectKey === subjectKey) ?? null : null;
     const failures = pairs.failed.map((entry) => this.#failure(entry));
+    const exact = String(study.userId) === String(viewer?.id ?? "");
+    const shownTallies = exact ? tallies : hideSmall(tallies, VERDICTS, this.minCell);
+    // Someone with no patient-level access sees the verdicts of groups large enough to show.
+    let inList = ordered;
+    if (!exact && this.documents?.judgeReads) {
+      const { patientLevel } = await this.documents.judgeReads(study, viewer, []);
+      if (!patientLevel) inList = ordered.filter((pair) => /** @type {any} */ (shownTallies)[pair.verdict] !== null);
+    }
+    const page = inList.slice(start, start + size);
+    await this.#judgeReaders(study, viewer, chosen && !page.includes(chosen) ? [...page, chosen] : page);
+    const funnel = await this.#funnel(study.id, protocolVersionId);
+    const failedSummary = this.#failureSummary(failures);
     return {
-      direction: "trial_to_patient", protocolVersionId, held: pairs.done.length > 0 || pairs.failed.length > 0 || progress.total > 0, progress, tallies,
-      people: ordered.slice(start, start + size).map((pair) => this.#listed(pair)), total: ordered.length, offset: start, limit: size, more: ordered.length > start + size,
-      clauses: await this.#funnel(study.id, protocolVersionId), failed: this.#failureSummary(failures),
-      changed: pairs.done.filter((pair) => pair.basisChanged).length,
+      direction: "trial_to_patient", protocolVersionId, held: pairs.done.length > 0 || pairs.failed.length > 0 || progress.total > 0,
+      progress: exact ? progress : { ...progress, total: hideAlone(progress.total, this.minCell), finished: hideAlone(progress.finished, this.minCell), failed: hideAlone(progress.failed, this.minCell), waiting: hideAlone(progress.waiting, this.minCell) }, tallies: shownTallies,
+      people: page.map((pair) => this.#listed(pair)), total: exact ? inList.length : hideAlone(inList.length, this.minCell), offset: start, limit: size, more: inList.length > start + size,
+      clauses: exact ? funnel : { judgedPeople: hideAlone(funnel.judgedPeople, this.minCell), rows: funnel.rows.map((row) => hideSmall(row, ["support", "against", "silent", "open", "notApplicable"], this.minCell)) },
+      failed: exact ? failedSummary : { ...failedSummary, count: hideAlone(failedSummary.count, this.minCell), reasons: failedSummary.reasons.map((entry) => ({ ...entry, count: hideAlone(entry.count, this.minCell) })), listed: [] },
+      changed: exact ? pairs.done.filter((pair) => pair.basisChanged).length : hideAlone(pairs.done.filter((pair) => pair.basisChanged).length, this.minCell),
       selected: chosen ? await this.#open(study, chosen, viewer) : null,
     };
   }
@@ -535,11 +606,16 @@ export class VcrMatchResults extends VcrStoreBase {
     const rows = await this.judgments.byIds(study.id, ids);
     const fit = rows.find((/** @type {any} */ row) => row.id === pair.fitRowId) ?? null, criteria = rows.find((/** @type {any} */ row) => row.id === pair.criteriaRowId) ?? null;
     if (!fit && !criteria) return null;
+    if (pair.readable === false) {
+      const clauses = clauseRows(withoutWords(presentJudgment(fit, criteria)));
+      return { ...this.#listed(pair), subjectKey: pair.subjectKey, groups: {}, summary: null, clauses, withheld: clauses.reduce((sum, clause) => sum + Number(/** @type {any} */ (clause).evidenceHidden ?? 0), 0) };
+    }
     const presented = await this.#viewed(study, presentJudgment(fit, criteria), viewer);
     const clauses = clauseRows(presented);
+    const withheld = clauses.reduce((sum, clause) => sum + Number(/** @type {any} */ (clause).evidenceHidden ?? 0), 0);
     return {
       ...this.#listed(pair), subjectKey: pair.subjectKey, groups: reasonGroups(presented, clauses), summary: clip(text(presented.reasons?.rationale)),
-      clauses, withheld: clauses.reduce((sum, clause) => sum + Number(/** @type {any} */ (clause).evidenceHidden ?? 0), 0),
+      clauses, withheld, ...(withheld ? { evidenceNote: evidenceNoteZh(withheld) } : {}),
     };
   }
 
@@ -566,10 +642,10 @@ export class VcrMatchResults extends VcrStoreBase {
   /**
    * What a download of a scope will be: its name and type, and a function that writes it to a sink a few pairs at a time. Everything that can
    * refuse is decided here, before the first byte, so a refusal is still an answer and not a cut-off file.
-   * @param {any} study @param {{ format: 'csv' | 'json', kind: 'pairs' | 'clauses', direction: 'patient_to_trial' | 'trial_to_patient', subjectKey?: string | null, protocolVersionId?: string | null }} request
+   * @param {any} study @param {{ format: 'csv' | 'json', kind: 'pairs' | 'clauses', direction: 'patient_to_trial' | 'trial_to_patient', subjectKey?: string | null, protocolVersionId?: string | null, viewer?: { id: string } | null }} request
    * @param {() => Date} [now]
    */
-  async exporter(study, { format, kind, direction, subjectKey = null, protocolVersionId = null }, now = () => new Date()) {
+  async exporter(study, { format, kind, direction, subjectKey = null, protocolVersionId = null, viewer = null }, now = () => new Date()) {
     const scope = direction === "patient_to_trial" ? { subjectKey } : { targetKind: "protocol_version", targetId: protocolVersionId };
     const pairs = await this.#pairs(study.id, scope);
     const ordered = [...pairs.done].sort((a, b) => (a.subjectKey < b.subjectKey ? -1 : a.subjectKey > b.subjectKey ? 1 : a.targetId < b.targetId ? -1 : a.targetId > b.targetId ? 1 : 0));
@@ -591,6 +667,7 @@ export class VcrMatchResults extends VcrStoreBase {
       else await sink.write(`{"schema":"evimed-matching-export/1","direction":${JSON.stringify(direction)},"kind":${JSON.stringify(kind)},"exportedAt":${JSON.stringify(exportedAt)},"rows":[`);
       let first = true;
       for (const group of chunks(ordered)) {
+        await this.#judgeReaders(study, viewer, group);
         const rows = new Map((await this.judgments.byIds(study.id, group.flatMap((pair) => [pair.fitRowId, pair.criteriaRowId].filter(Boolean)))).map((/** @type {any} */ row) => [row.id, row]));
         for (const pair of group) {
           const { listed, cells } = pairLine(pair);
@@ -599,19 +676,22 @@ export class VcrMatchResults extends VcrStoreBase {
           if (kind === "pairs") {
             if (format === "csv") await sink.write(csvLine(cells));
             else { await sink.write(`${first ? "" : ","}${JSON.stringify({ subjectKey: listed.subjectKey, target: { kind: listed.kind, id: listed.id, registryId: listed.registryId, title: listed.title }, verdict: listed.verdict, fit: listed.fit, fitLevel: listed.fitLevel,
-              confidence: listed.confidence, counts: listed.counts, reason: listed.why, producer: listed.producer, judgedAt: listed.judgedAt, basisChanged: Boolean(listed.basisChanged) })}`); first = false; }
+              confidence: listed.confidence, counts: listed.counts, reason: listed.why, ...(listed.reasonsWithheld ? { reasonsWithheld: listed.reasonsWithheld } : {}), producer: listed.producer, judgedAt: listed.judgedAt, basisChanged: Boolean(listed.basisChanged) })}`); first = false; }
             continue;
           }
-          const clauses = clauseRows(presentJudgment(fitRow, criteriaRow));
+          // The same judgment as the page: a sentence is read back under this reader, and a reader who may not read the record gets the row without its words and a note saying so.
+          const clauses = clauseRows(pair.readable === false ? withoutWords(presentJudgment(fitRow, criteriaRow)) : await this.#viewed(study, presentJudgment(fitRow, criteriaRow), viewer));
           for (const clause of clauses) {
             const sentences = clause.evidence;
+            const hidden = Number(/** @type {any} */ (clause).evidenceHidden ?? 0);
+            const note = pair.readable === false ? listed.reasonsWithheld : hidden ? evidenceNoteZh(hidden) : null;
             if (format === "csv") {
-              await sink.write(csvLine([cells[0], cells[1], cells[2], cells[3], cells[4], clause.number, clause.kind === "exclusion" ? "排除" : "入选", clause.clause, clause.display, sentences.length ? "有" : "无", clause.reason,
-                sentences.map((item) => item.sentenceId).join("、"), sentences.map((item) => item.text).join(" | ")]));
+              await sink.write(csvLine([cells[0], cells[1], cells[2], cells[3], cells[4], clause.number, clause.kind === "exclusion" ? "排除" : "入选", clause.clause, clause.display, sentences.length ? "有" : "无", pair.readable === false ? note : clause.reason,
+                sentences.map((item) => item.sentenceId).join("、"), sentences.length ? sentences.map((item) => item.text).join(" | ") : note ?? ""]));
             } else {
               await sink.write(`${first ? "" : ","}${JSON.stringify({ subjectKey: listed.subjectKey, target: { kind: listed.kind, id: listed.id, registryId: listed.registryId, title: listed.title }, verdict: listed.verdict,
                 clause: { number: clause.number, kind: clause.kind, text: clause.clause, label: clause.label, basis: clause.basis, stance: clause.stance, display: clause.display, reason: clause.reason,
-                  sentences: sentences.map((item) => ({ id: item.sentenceId, text: item.text })) } })}`); first = false;
+                  sentences: sentences.map((item) => ({ id: item.sentenceId, text: item.text })), ...(note ? { note } : {}) } })}`); first = false;
             }
           }
         }

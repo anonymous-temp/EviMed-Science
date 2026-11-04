@@ -2137,10 +2137,11 @@ export {
   soaWindowText,
 } from './src/vcrSchedule.mjs'
 
-// vcrSuppression — 2 exports: small-cell suppression for everything a model may read: every people-count
+// vcrSuppression — 3 exports: small-cell suppression for everything a model may read: every people-count
 // below the floor, in any shape the stores produce
 export {
   VCR_CELL_IDENTITY_KEYS,
+  hiddenSet,
   suppressForModel,
 } from './src/vcrSuppression.mjs'
 

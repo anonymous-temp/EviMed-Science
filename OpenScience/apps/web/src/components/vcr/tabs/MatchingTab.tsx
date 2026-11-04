@@ -194,8 +194,9 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
       kind: "chips" as const, label: "结论", neutral: "all", value: verdict ?? "all",
       onChange: (next: string) => narrowTo(next === "all" ? null : next as VcrVerdict),
       options: [
-        { value: "all", label: "全部", count: VCR_VERDICTS.reduce((sum, key) => sum + judgedHere.tallies[key], 0) },
-        ...VCR_VERDICTS.map((key) => ({ value: key, label: VCR_TRIAL_VERDICT_LABELS_ZH[key], count: judgedHere.tallies[key] })),
+        // A count too small to show this reader is left off its chip, and off the total.
+        { value: "all", label: "全部", ...(VCR_VERDICTS.some((key) => judgedHere.tallies[key] === null) ? {} : { count: VCR_VERDICTS.reduce((sum, key) => sum + (judgedHere.tallies[key] ?? 0), 0) }) },
+        ...VCR_VERDICTS.map((key) => ({ value: key, label: VCR_TRIAL_VERDICT_LABELS_ZH[key], ...(judgedHere.tallies[key] === null ? {} : { count: judgedHere.tallies[key] as number }) })),
       ],
     }] : []),
   ];

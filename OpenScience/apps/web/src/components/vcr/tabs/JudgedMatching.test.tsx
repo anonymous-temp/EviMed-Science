@@ -67,6 +67,11 @@ const clauseRow = (number: number) => document.querySelector(`[data-vcr-clause='
 describe("给患者找试验 — the trials fill in as the job judges them", () => {
   beforeEach(wide);
 
+  it("says why a row holds a verdict and no reasons, for a reader who may not read the record", async () => {
+    await patientPage({ [JUDGED]: judged((page) => ({ ...page, selected: page.selected ? { ...page.selected, groups: {}, summary: null, reasonsWithheld: "这条结论读过的病历，你没有授权或现在已读不到，理由和原文依据已隐去。" } : page.selected })) });
+    expect(await screen.findByText(/你没有授权或现在已读不到/u)).toBeInTheDocument();
+  });
+
   it("says 已完成 5 / 8 and lists the trials most promising first, each with its verdict, a line that says why, the match level and the registry's status with its day", async () => {
     await patientPage();
     expect(screen.getByRole("heading", { name: "P-0192 的试验" }).closest("section")).toHaveTextContent("已完成 5 / 8");
@@ -322,6 +327,23 @@ describe("给试验找患者 — a protocol's people", () => {
     return view;
   }
   const person = (key: string) => document.querySelector(`[data-vcr-person='${key}']`) as HTMLElement;
+
+  it("draws a count too small to show this reader as a dash, never as a zero, and makes no total of what is hidden", async () => {
+    await protocolPage({ [JUDGED]: judged((page) => {
+      page.tallies = { eligible: null, possible: null, insufficient: null, ineligible: null };
+      page.total = null;
+      page.progress = { ...page.progress, total: null, finished: null, failed: null, waiting: null };
+      page.clauses = { judgedPeople: null, rows: page.clauses.rows.map((row: any) => ({ ...row, support: null, against: null, silent: null, open: null, notApplicable: null })) };
+      return page;
+    }) });
+    expect(screen.getAllByText((_, node) => node?.getAttribute("data-note") !== null && /少于 10 人的类别不显示具体人数/u.test(node?.textContent ?? "")).length).toBeGreaterThan(0);
+    expect(document.body.textContent).not.toMatch(/已判定 0 位/u);
+    const chips = within(screen.getByRole("group", { name: "结论" }));
+    expect(chips.getByRole("button", { name: /不符合/ }).textContent).not.toMatch(/\d/u);
+    const clause = document.querySelector("[data-vcr-funnel-clause]") as HTMLElement;
+    expect(clause).toHaveTextContent("—");
+    expect(clause.textContent).not.toMatch(/不满足 0/u);
+  });
 
   it("sums the people up in a sentence whose numbers open what they count, and the band carries the verdict filter", async () => {
     await protocolPage();
