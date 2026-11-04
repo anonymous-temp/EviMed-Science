@@ -2222,7 +2222,7 @@ export class VcrDataPlane {
           const read = /** @type {{ text: string, extraction: Record<string, any> }} */ (got);
           documentText = read.text;
           const originalBytes = await fs.readFile(raw);
-          const original = await writeContentAddressed(root, path.posix.join(studyRelative(entry.studyId), "documents"), named.format, originalBytes);
+          const original = await writeContentAddressed(root, path.posix.join(studyRelative(entry.studyId), "documents"), named.ext, originalBytes);
           originalLocation = original.location;
           detail.original = { sha256: original.sha256, bytes: original.bytes, format: isPicture ? named.ext : named.format, location: original.location };
           detail.extraction = read.extraction;
