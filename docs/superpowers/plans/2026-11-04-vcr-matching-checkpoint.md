@@ -92,8 +92,14 @@ production readiness.
    sets. Complete and independently review the WIP worker's safety and
    mixed-version gates before integrating or enabling it.
 5. Publish the full-run reports and exact remaining failures; then separately
-   decide any deployment. Virtual cohort, virtual-patient and synthetic-control
-   validation still require their own data and method-specific endpoints.
+   decide any deployment. For the other datasets requested earlier, run the
+   available PhysioNet 2012 A/B/C data for cohort/short-term trajectory and
+   synthetic-data checks, and all 2,139 ACTG175 participants for applicable
+   survival and comparison-method checks through the relevant product paths.
+   Prior PhysioNet work covered subsets and ACTG175 work used local methods;
+   neither is a full end-to-end platform validation. Report inapplicable
+   endpoints or missing fields explicitly and do not use observational ICU data
+   to claim treatment counterfactual validity.
 
 Also safely reconcile the paused diagnostic account's partial history and delete
 its temporary account/database, or complete and seal it before doing so.
