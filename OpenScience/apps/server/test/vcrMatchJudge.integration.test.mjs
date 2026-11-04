@@ -237,7 +237,7 @@ test("a job runs on the queue, writes the rows and a result that says what it di
   assert.deepEqual([result.diagnostics.finished, result.diagnostics.total, result.diagnostics.used.calls], [2, 2, 3]);
   const stored = await judgments.list({ studyId: f.study.id });
   assert.equal(stored.length, 3);
-  assert.ok(stored.every((row) => row.producer === "job" && row.jobId === started.jobId && row.model === "deepseek-flash" && row.thinking === "high" && row.status === "done"));
+  assert.ok(stored.every((row) => row.producer === "job" && row.jobId === started.jobId && row.model === "deepseek-flash" && row.thinking === (row.mode === "fit" ? "off" : "high") && row.status === "done"));
   const read = await f.reads.forSubject(f.study, "P-1");
   assert.deepEqual(read.ranking.map((row) => row.verdict).sort(), ["eligible", "eligible"]);
   const next = await f.start.start(f.study, SELECTION);

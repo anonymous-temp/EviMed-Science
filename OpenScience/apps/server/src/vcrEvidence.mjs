@@ -98,6 +98,7 @@ import {
   VCR_JOB_METHODS, VCR_POOLING_METHODS, VCR_VALUE_SOURCES, canonicalScenarioJson, validateEngineJob, vcrConvertTime, vcrTimeUnitOf,
 } from "@evimed/domain";
 import { quoteIsPresent } from "@evimed/domain/clinical-evidence";
+import { maskIdentifiers } from "@evimed/domain";
 
 import { REGISTRY_NOT_FOUND, REGISTRY_UNAVAILABLE, REGISTRY_UNAVAILABLE_PARAMETERS, confidenceLevelOf } from "./trialRegistryClient.mjs";
 import {
@@ -1209,10 +1210,11 @@ export function poolTargetOf(raw) {
  * @param {{ store: any, registry?: any, trialCorpus?: ReturnType<typeof import("./vcrTrialCorpus.mjs").createVcrTrialCorpus>, jobs?: any, now?: () => Date, logger?: any,
  *   reranker?: import("./vcrCandidateRerank.mjs").VcrCandidateRerank | null, searches?: import("./vcrCandidateSearchStore.mjs").VcrCandidateSearchStore | null,
  *   retrieval?: { retrieveMax?: number, deadlineMs?: number, concurrency?: number },
- *   meter?: ((study: any, spend: { tokens: number, requestId: string | null, model: string }) => Promise<unknown>) | null }} options `meter` books the reranker's token count to the study's owner; `reranker` reorders a candidate list against the run's
+ *   meter?: ((study: any, spend: { tokens: number, requestId: string | null, model: string }) => Promise<unknown>) | null,
+ *   summaryCloudAllowed?: ((entry: { studyId: string, subjectKey?: string | null }) => Promise<boolean>) | null }} options `summaryCloudAllowed` says whether a run's summary of a person may go to the reranker; `meter` books the reranker's token count to the study's owner; `reranker` reorders a candidate list against the run's
  *   summary of the patient; `searches` keeps the receipt of a search; `retrieval` bounds how deep and how long a search reads the registries.
  */
-export function createVcrEvidencePipeline({ store, registry = null, trialCorpus = null, jobs = null, now = () => new Date(), logger = null, reranker = null, searches = null, retrieval = {}, meter = null } = { store: null }) {
+export function createVcrEvidencePipeline({ store, registry = null, trialCorpus = null, jobs = null, now = () => new Date(), logger = null, reranker = null, searches = null, retrieval = {}, meter = null, summaryCloudAllowed = null } = { store: null }) {
   if (!store) throw new TypeError("The evidence pipeline needs its store.");
   /** @type {{resolve:Function}|null} */
   let literatureSources = null;
@@ -1323,10 +1325,16 @@ export function createVcrEvidencePipeline({ store, registry = null, trialCorpus 
   /**
    * Put a list in the order of how it reads against the run's summary. Always returns the whole list: with no summary, no reranker or a
    * failure it is the order it came in, and the record says which.
-   * @param {{ summary: string | null, list: any[], signal?: AbortSignal, study?: any }} input
+   * @param {{ summary: string | null, list: any[], signal?: AbortSignal, study?: any, subjectKey?: string | null }} input
    */
-  async function rankForSummary({ summary, list, signal, study = null }) {
-    const outcome = await rerankCandidates({ summary: summary ?? "", candidates: list }, { reranker, signal, bill: billFor(study) });
+  async function rankForSummary({ summary, list, signal, study = null, subjectKey = null }) {
+    // The run's summary of a person leaves for the reranker only where that person's records may go to the cloud; otherwise the list keeps the order it came in, and the record says so.
+    const allowed = !summary || !study?.id || !summaryCloudAllowed || await summaryCloudAllowed({ studyId: String(study.id), subjectKey }).catch(() => false);
+    const outcome = await rerankCandidates({ summary: allowed ? summary ?? "" : "", candidates: list }, { reranker, signal, bill: billFor(study) });
+    if (!allowed) {
+      const rows = outcome.order.map((index, at) => ({ ...list[index], rank: at + 1 }));
+      return { rows, record: { ...rerankRecord(outcome, false), state: "skipped", applied: false, reasons: ["vcr_cloud_processing_not_authorized"] } };
+    }
     const rows = outcome.order.map((index, at) => ({
       ...list[index], rank: at + 1,
       ...(outcome.applied && typeof outcome.scores[index] === "number" ? { relevance: Math.round(/** @type {number} */ (outcome.scores[index]) * 1000) / 1000 } : {}),
@@ -1374,14 +1382,15 @@ export function createVcrEvidencePipeline({ store, registry = null, trialCorpus 
   async function frozenReranked({ study, request, signal, subjectKey }) {
     const collected = await trialCorpus.collect(request, signal);
     const rows = collected.candidates;
-    const outcome = await rerankCandidates({ summary: request.summary ?? "", candidates: rows.map((/** @type {any} */ row) => ({
+    const allowed = !request.summary || !study?.id || !summaryCloudAllowed || await summaryCloudAllowed({ studyId: String(study.id), subjectKey }).catch(() => false);
+    const outcome = await rerankCandidates({ summary: allowed ? request.summary ?? "" : "", candidates: rows.map((/** @type {any} */ row) => ({
       registryId: row.registryId, title: row.title, conditions: row.conditions, interventions: row.interventions, phase: row.phase,
       sexStated: row.sex, ageStated: row.age, eligibilityHead: collected.cards?.[row.registryId] ?? "" })) }, { reranker, signal, bill: billFor(study) });
     const ordered = outcome.order.map((index, at) => ({
       ...rows[index], rank: at + 1,
       ...(outcome.applied && typeof outcome.scores[index] === "number" ? { relevance: Math.round(/** @type {number} */ (outcome.scores[index]) * 1000) / 1000 } : {}),
     }));
-    const record = rerankRecord(outcome, true);
+    const record = allowed ? rerankRecord(outcome, true) : { ...rerankRecord(outcome, false), state: "skipped", applied: false, reasons: ["vcr_cloud_processing_not_authorized"] };
     const { candidates: _all, cards: _cards, ...base } = collected;
     const collection = { ...collected.collection, revision: trialCorpus.revision };
     const requestRecord = { condition: request.condition, terms: request.terms, age: request.age, sex: request.sex, region: request.region, status: request.scope,
@@ -1505,7 +1514,8 @@ export function createVcrEvidencePipeline({ store, registry = null, trialCorpus 
       const asked = candidateRequest(filter, { limitMax, frozen });
       const asOf = now().toISOString();
       if (asked.ok === false) return { available: false, code: "vcr_read_filter_invalid", message: asked.message };
-      const { request } = asked;
+      // What a run wrote goes to public registries and into the receipt: an identifier's shape does not, wherever it was written. A name in free text is the run's to leave out.
+      const request = { ...asked.request, ...(asked.request.condition ? { condition: maskIdentifiers(asked.request.condition) } : {}), terms: asked.request.terms.map((/** @type {string} */ term) => maskIdentifiers(term)) };
       if (frozen) {
         if (!trialCorpus || filter.collection !== trialCorpus.id) {
           return { available: false, code: REGISTRY_UNAVAILABLE, reason: "trial_collection_unavailable", message: "指定的冻结登记库未接入。" };
@@ -1567,7 +1577,7 @@ export function createVcrEvidencePipeline({ store, registry = null, trialCorpus 
       const merged = mergeCandidates(found);
       const { kept, dropped } = filterCandidates(merged, request);
       const { list, more: truncated } = interleave(kept, retrieveMax);
-      const ranked = await rankForSummary({ summary: request.summary, list, signal, study });
+      const ranked = await rankForSummary({ summary: request.summary, list, signal, study, subjectKey: filter.subjectKey ?? null });
       const reachable = registries.some((entry) => entry.state === "searched" || entry.state === "partial");
       const requestRecord = { condition: request.condition, terms: request.terms, age: request.age, sex: request.sex, region: request.region, status: request.scope,
         ...(request.summary ? { summary: summaryStamp(request.summary) } : {}) };
