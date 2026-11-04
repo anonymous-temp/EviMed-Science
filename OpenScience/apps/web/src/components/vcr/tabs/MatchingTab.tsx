@@ -2,15 +2,22 @@ import { useStudyFrame } from "../studyFrameContext";
 import { ClinicalTimeline, CriterionTable, useMatchingControls } from "../ClinicalMatchingDetails";
 import { VcrCorrectionCasesActions } from "../VcrCorrectionCasesActions";
 import { useState, useEffect, useRef } from "react";
+import { useSearchParams } from "react-router";
 import { CircleCheck, PenLine, TriangleAlert } from "lucide-react";
+import { VCR_TRIAL_VERDICT_LABELS_ZH } from "@evimed/domain";
 import {
+  getVcrJudged,
+  getVcrJudgedLatest,
   getVcrMatching,
   recordVcrDecision,
   reviewVcrAssessment,
+  VCR_VERDICTS,
   type VcrCandidate,
   type VcrCriterionJudgement,
+  type VcrJudged,
   type VcrMatchingTab as MatchingData,
   type VcrStudy,
+  type VcrVerdict,
 } from "@/lib/vcrClient";
 import { webErrorMessage } from "@/lib/apiClient";
 import { toast } from "@/lib/toast";
@@ -31,6 +38,8 @@ import { VcrFunnelBar } from "../VcrDiagrams";
 import { VcrStepPending, VcrTabSkeleton } from "../VcrStates";
 import { VcrToolbarActions } from "../VcrToolbarActions";
 import { PatientTrials } from "./PatientTrials";
+import { PatientTrialsLegacy } from "./PatientTrialsLegacy";
+import { MatchingPeople } from "./MatchingPeople";
 import { useVcrToolbar } from "../studyFrameContext";
 import { useVcrLoad, VcrTabError } from "../vcrTabKit";
 import { criterionStateLabel, NO_VALUE, numberText, VCR_MATCHING_EMPTY_T0 } from "../vcrText";
@@ -50,19 +59,21 @@ function timelineOwner(page: MatchingPage): string | null {
   return page.askedFor ?? page.selected?.candidate.id ?? null;
 }
 
+/** People on one page of the protocol's table. */
+const PAGE = 25;
+
 const DIRECTIONS: ReadonlyArray<{ value: Direction; label: string }> = Object.freeze([
   { value: "trial_to_patient", label: "给试验找患者" },
   { value: "patient_to_trial", label: "给患者找试验" },
 ]);
 
 /**
- * What the model's ranking hint is called wherever it appears. It orders a
- * coordinator's work; it is not a chance of benefit, and no number of it is
- * printed that could be read as one.
+ * Evidence-backed eligibility in either direction.
+ *
+ * Two sets of data stand behind it. What the model judged — the job's and the conversation's rows — is read from `matching/judged` and drawn by
+ * `PatientTrials` (one patient's trials) and `MatchingPeople` (one protocol's people). What the earlier path assessed is the tab's own payload, and it
+ * is drawn, as it always was, for a patient or a protocol that has nothing in the judgments; nobody's earlier assessment disappears.
  */
-const PRIORITY_LABEL = "临床优先级（不是获益概率）";
-
-/** Evidence-backed eligibility in either direction, without recruitment operations. */
 export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStudy }) {
   const view = "matching";
   const [direction, setDirection] = useState<Direction>("trial_to_patient");
@@ -70,7 +81,13 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
   // 给患者找试验: the trial of the patient's list the reader opened. It is the patient's, so it goes with them.
   const [trial, setTrial] = useState<string | null>(null);
   const [protocolVersionId, setProtocolVersionId] = useState<string | null>(null);
+  // 给试验找患者: the verdict the table is narrowed to, the page of it, and the person opened.
+  const [verdict, setVerdict] = useState<VcrVerdict | null>(null);
+  const [offset, setOffset] = useState(0);
+  const [person, setPerson] = useState<string | null>(null);
   const frame = useStudyFrame();
+  // The reader has chosen something themselves (a direction, a protocol, a patient): where the newest work is no longer decides what opens.
+  const touched = useRef(false);
   const { state, reload, last } = useVcrLoad(`${studyId}:matching:${view}:${direction}:${protocolVersionId ?? "latest"}`, () => {
     const askedFor = view === "matching" && candidate ? candidate : null;
     const askedTrial = view === "matching" && direction === "patient_to_trial" && askedFor && trial ? trial : null;
@@ -79,19 +96,33 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
       ...(askedTrial ? { trial: askedTrial } : {}),
     }).then((page): MatchingPage => ({ ...page, askedFor }));
   });
+  // What the model judged for what the reader chose: one patient's trials, or one protocol's people. Nothing is asked until a patient is chosen.
+  const judgedLoad = useVcrLoad<VcrJudged | null>(`${studyId}:matching-judged:${direction}:${protocolVersionId ?? "latest"}`, () => {
+    if (direction === "patient_to_trial") {
+      return candidate ? getVcrJudged(studyId, { direction, subjectKey: candidate, target: trial }) : Promise.resolve(null);
+    }
+    return getVcrJudged(studyId, { direction, protocolVersionId, verdict, offset, limit: PAGE, subjectKey: person });
+  });
+  const reloadAll = () => { reload(); judgedLoad.reload(); };
   const pick = (id: string) => {
+    touched.current = true;
     // An empty id is the select's own 请选择患者: nobody asked for.
     setCandidate(id || null);
     setTrial(null);
     // Same key, a new round: the tab stays on screen while the person loads.
-    reload();
+    reloadAll();
   };
-  const pickTrial = (id: string) => {
+  const pickTrial = (id: string | null) => {
     setTrial(id);
+    judgedLoad.reload();
+    // The earlier path's page opens the trial through the tab's own payload.
     reload();
   };
+  const narrowTo = (next: VcrVerdict | null) => { setVerdict(next); setOffset(0); judgedLoad.reload(); };
+  const pickPerson = (key: string | null) => { setPerson(key); judgedLoad.reload(); };
+  const pageTo = (next: number) => { setOffset(next); judgedLoad.reload(); };
 
-  const switchDirection = (next: Direction) => { setDirection(next); setCandidate(null); setTrial(null); };
+  const switchDirection = (next: Direction) => { touched.current = true; setDirection(next); setCandidate(null); setTrial(null); setVerdict(null); setOffset(0); setPerson(null); };
 
   // Once per visit: a study with a patient and no protocol opens on that patient. A later click on the other direction stays there.
   const opened = useRef(false);
@@ -102,6 +133,36 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
     setDirection("patient_to_trial");
     setCandidate(opensOn);
   }, [opensOn]);
+
+  // Once per visit, where the newest work is: a reply's link to this page names a patient (`?object=`), and a link to the page alone lands on
+  // whatever was judged last — a patient's trials or a protocol's people — unless the reader has already chosen something by then.
+  const [params] = useSearchParams();
+  const linked = params.get("object");
+  const landed = useRef(false);
+  useEffect(() => {
+    if (landed.current) return;
+    landed.current = true;
+    if (linked && /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,79}$/.test(linked)) { touched.current = true; setDirection("patient_to_trial"); setCandidate(linked); return; }
+    let live = true;
+    void getVcrJudgedLatest(studyId).then((latest) => {
+      if (!live || !latest || touched.current) return;
+      if (latest.direction === "patient_to_trial") { setDirection("patient_to_trial"); setCandidate(latest.subjectKey); }
+      else setProtocolVersionId(latest.protocolVersionId);
+    }).catch(() => undefined);
+    return () => { live = false; };
+  }, [studyId, linked]);
+
+  // The judged page, once it is read, when it is about what the reader chose and something was judged, failed or asked for. Anything else is the earlier path's page.
+  const judged = judgedLoad.state.kind === "ready" ? judgedLoad.state.data : null;
+  const judgedHere = judged && judged.held && judged.direction === direction ? judged : null;
+  // The job writes pairs while the page is open: the note's n of m follows it.
+  const judging = judgedHere?.progress.state === "running" || judgedHere?.progress.state === "waiting_budget";
+  const reloadJudged = judgedLoad.reload;
+  useEffect(() => {
+    if (!judging) return undefined;
+    const timer = window.setInterval(reloadJudged, 5_000);
+    return () => window.clearInterval(timer);
+  }, [judging, reloadJudged]);
 
   // The controls are the reader's own instrument: the chip they just used, the patient they are filling in. They are drawn from this
   // key's page once it has arrived and from the newest one before that — also when this one could not be read — so a change of
@@ -116,9 +177,10 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
     subjectKey: direction === "patient_to_trial" ? candidate : undefined,
     settling: state.kind !== "ready",
     canRun,
-    onProtocol: setProtocolVersionId,
+    judged: judgedHere !== null,
+    onProtocol: (id) => { touched.current = true; setProtocolVersionId(id); setVerdict(null); setOffset(0); setPerson(null); },
     onCandidate: pick,
-    onReload: reload,
+    onReload: reloadAll,
   });
 
   // --- the band's one row: the views, the direction, the protocol and the patient, and what starts work ----------------------------
@@ -127,6 +189,15 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
       ? [{ kind: "chips" as const, label: "匹配方向", neutral: "trial_to_patient", value: direction, onChange: (next: string) => switchDirection(next as Direction), options: DIRECTIONS }]
       : []),
     ...(controls?.filters ?? []),
+    // The protocol's people, narrowed to one verdict: the band carries the filter, the table the page.
+    ...(judgedHere?.direction === "trial_to_patient" ? [{
+      kind: "chips" as const, label: "结论", neutral: "all", value: verdict ?? "all",
+      onChange: (next: string) => narrowTo(next === "all" ? null : next as VcrVerdict),
+      options: [
+        { value: "all", label: "全部", count: VCR_VERDICTS.reduce((sum, key) => sum + judgedHere.tallies[key], 0) },
+        ...VCR_VERDICTS.map((key) => ({ value: key, label: VCR_TRIAL_VERDICT_LABELS_ZH[key], count: judgedHere.tallies[key] })),
+      ],
+    }] : []),
   ];
   // The tab as it opens, before the reader has chosen a view, a direction, a protocol or a person: nothing to switch between yet, so
   // an empty one is the step's one sentence and its one button, with or without protocol versions behind it (R11). Once the reader
@@ -142,8 +213,10 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
     });
   const aside = controls ? <div className="flex flex-col gap-2">{controls.notes}{controls.compare}</div> : null;
 
-  if (state.kind === "loading") return <div className="flex flex-col gap-6">{aside}<VcrTabSkeleton /></div>;
+  if (state.kind === "loading" || judgedLoad.state.kind === "loading") return <div className="flex flex-col gap-6">{aside}<VcrTabSkeleton /></div>;
   if (state.kind === "error") return <div className="flex flex-col gap-6">{aside}<VcrTabError message={state.message} onRetry={reload} /></div>;
+  // What the model judged could not be read: that is said, with 重试. It is not "nothing was judged", and the earlier page does not stand in for it.
+  if (judgedLoad.state.kind === "error") return <div className="flex flex-col gap-6">{aside}<VcrTabError message={judgedLoad.state.message} onRetry={judgedLoad.reload} /></div>;
   const data = state.data;
   if (data.available === false) {
     return (
@@ -157,14 +230,47 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
       </div>
     );
   }
-  // 给患者找试验 is a page of its own: one patient's trials, ranked, with the chosen trial's criteria. It is taken only where the server
-  // sent that page; a server that did not answers the direction with the protocol's page, and that is drawn as it always was.
+  // 给患者找试验 is a page of its own: one patient's trials, most promising first, with the chosen trial's reasons and clauses.
+  if (judgedHere?.direction === "patient_to_trial") {
+    const owner = judgedHere.subjectKey;
+    return (
+      <div className="flex flex-col gap-6">
+        {aside}
+        <PatientTrials studyId={studyId} study={study} judged={judgedHere} picked={trial} onPick={pickTrial} onChanged={judgedLoad.reload} />
+        {timelineOwner(data) === owner && (
+          <ClinicalTimeline studyId={studyId} data={data} subject={owner} mayReadOriginal={study.abilities.includes("read_patient_level")} />
+        )}
+      </div>
+    );
+  }
+  // 给试验找患者: every person the model judged against the protocol, a page at a time, and what each clause did to them.
+  if (judgedHere?.direction === "trial_to_patient") {
+    return (
+      <div className="flex flex-col gap-6">
+        {aside}
+        <MatchingPeople
+          studyId={studyId}
+          study={study}
+          judged={judgedHere}
+          verdict={verdict}
+          onVerdict={narrowTo}
+          onPage={pageTo}
+          picked={person}
+          onPick={pickPerson}
+          onPatient={(key) => { touched.current = true; setDirection("patient_to_trial"); setCandidate(key); setTrial(null); setPerson(null); }}
+          onChanged={judgedLoad.reload}
+        />
+      </div>
+    );
+  }
+  // The earlier path's page of one patient's trials: drawn as it always was for a patient the judgments have nothing on. It is taken only
+  // where the server sent that page; a server that did not answers the direction with the protocol's page.
   if (view === "matching" && direction === "patient_to_trial" && data.patientTrials) {
     const owner = data.patientTrials.subject;
     return (
       <div className="flex flex-col gap-6">
         {aside}
-        <PatientTrials
+        <PatientTrialsLegacy
           studyId={studyId}
           study={study}
           page={data.patientTrials}
@@ -172,8 +278,8 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
           asked={candidate}
           picked={trial}
           facts={owner && timelineOwner(data) === owner ? data.timeline : undefined}
-          onPick={pickTrial}
-          onSearched={reload}
+          onPick={(id) => pickTrial(id)}
+          onSearched={reloadAll}
         />
         {owner && timelineOwner(data) === owner && (
           <ClinicalTimeline studyId={studyId} data={data} subject={owner} mayReadOriginal={study.abilities.includes("read_patient_level")} />
@@ -201,7 +307,7 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
   return (
     <div className="flex flex-col gap-6">
       {aside}
-      {/* The sentence is about who was assessed; the referral ledger, the sites and the follow-up say their own numbers. */}
+      {/* The sentence is about who was assessed. */}
       {view === "matching" && data.headline && <Headline parts={[data.headline]} />}
       {view === "matching" && (
         <MatchingView
@@ -220,13 +326,13 @@ export function MatchingTab({ studyId, study }: { studyId: string; study: VcrStu
 }
 
 /**
- * Whether the page has nothing in any of its views. Every sub-view counts: a referral ledger with no candidate list is a study whose
- * matching has already run, and offering 「开始评估」 there would ask for work that is done.
+ * Whether the page has nothing in any of its views. Every part counts: tallies with no candidate list are a study whose matching has
+ * already run, and offering 「开始评估」 there would ask for work that is done.
  */
 function emptyPage(data: MatchingData): boolean {
   // The funnel is the server's tally of the assessments that are stored; a page whose list is empty and whose tally is not has
   // results (they are all on people the list does not show), and 「尚未生成」 would say the opposite of what the study holds.
-  return data.candidates.length === 0 && !data.funnel.some((step) => (step.count ?? 0) > 0) && !data.pendingReview
+  return data.candidates.length === 0 && !data.funnel.some((step) => (step.count ?? 0) > 0)
     // A person in view counts once something is known of them: recorded facts, or an assessment. A protocol listed as 尚未评估 is not one.
     && !(data.timeline?.length || data.comparisons?.some((entry) => entry.summary));
 }
@@ -362,25 +468,6 @@ function MatchingView({ studyId, data, abilities, picked, onPick, onDone }: {
             </Section>
           )}
 
-          {data.pendingReview && data.pendingReview.count > 0 && (
-            // Excluded on a model's word alone: they wait here for a person,
-            // and are never counted as 不符合 until one has looked (plan §7.1).
-            <Card
-              header={(
-                <div className="flex items-baseline justify-between gap-3">
-                  <h2 className="text-section font-semibold text-text">待复核排除</h2>
-                  <span className="text-caption tabular-nums text-text-3">{`${numberText(data.pendingReview.count, 0)} 人`}</span>
-                </div>
-              )}
-            >
-              {/* Each opens the person's rule-by-rule judgement beside the list: which rule failed, and on what evidence. */}
-              <ul data-vcr-pending-review="" className="flex flex-wrap gap-1.5">
-                {data.pendingReview.subjects.map((subject) => (
-                  <li key={subject}><Button size="sm" variant="secondary" aria-current={current === subject ? "true" : undefined} onClick={() => onPick(subject)}>{subject}</Button></li>
-                ))}
-              </ul>
-            </Card>
-          )}
         </div>
 
         {selected && (
@@ -494,11 +581,6 @@ function CandidateRow({ candidate, current, onPick }: { candidate: VcrCandidate;
                   {`${open.code} ${criterionStateLabel(open.state)}${open.note ? ` ${open.note}` : ""}`}
                 </Tag>
               ))}
-            </span>
-          )}
-          {candidate.priority && (
-            <span data-vcr-priority="" className="text-caption text-text-3">
-              {candidate.priority.rationale ? `${PRIORITY_LABEL} · ${candidate.priority.rationale}` : PRIORITY_LABEL}
             </span>
           )}
         </span>

@@ -1239,8 +1239,6 @@ export interface VcrCandidate {
   failed?: Array<{ code: string; state: VcrCriterionState }>;
   /** What the evaluation rested on has since been withdrawn (the person's consent, or a record), or changed. */
   basis?: "withdrawn" | "updated";
-  /** The model's ranking hint, carried with its own label and never as a probability of benefit. */
-  priority?: { label: string; score: number | null; rationale: string | null } | null;
 }
 
 /** A sentence a verdict rests on, where it is (the document by the name the data tab lists it under, or a cell of the data table) and the date of what it records. */
@@ -1379,7 +1377,6 @@ export interface VcrMatchingTab {
     criteria: VcrCriterionJudgement[];
     /** 「不能判为符合：排除标准 E3 未知」 — always the reason, never a bare no. */
     verdict?: { text: string; note?: string | null } | null;
-    priority?: VcrCandidate["priority"];
     /** Whether somebody countersigned — the page offers the countersignature only where nobody has. Never shown: see `reviewedByName`. */
     reviewedBy?: string | null;
     /** Who countersigned, by name (a neutral label when the account is gone). */
@@ -1387,8 +1384,6 @@ export interface VcrMatchingTab {
   } | null;
   /** The main gaps across the undecidable ones. */
   gaps: Array<{ code: string; label: string; detail?: string | null; count: number | null }>;
-  /** Excluded on a model's word alone: they wait here for a person (plan §7.1). */
-  pendingReview?: { count: number; subjects: string[] } | null;
   protocol?: { version: number; title: string | null } | null;
   counts: VcrCounts | null;
 }
@@ -2455,9 +2450,290 @@ export function readVcrMatching(raw: unknown): VcrMatchingTab {
     // What is not an object is no page of trials (the raw key is dropped, not passed through): the tab reads as the other direction's.
     patientTrials: value.patientTrials && typeof value.patientTrials === "object" ? readPatientTrials(value.patientTrials) : undefined,
     gaps: arr(value.gaps) as unknown as VcrMatchingTab["gaps"],
-    pendingReview: value.pendingReview && typeof value.pendingReview === "object" ? value.pendingReview as VcrMatchingTab["pendingReview"] : null,
     counts: readVcrCounts(value.counts),
   };
+}
+
+/* ------------------------------------------------------------ what the judging job saved */
+
+/** The four verdicts a pair of a patient and a trial can have, in the order a reader goes through them. */
+export type VcrVerdict = "eligible" | "possible" | "insufficient" | "ineligible";
+export const VCR_VERDICTS: readonly VcrVerdict[] = ["eligible", "possible", "insufficient", "ineligible"];
+/** Where a clause stands for a person (`stanceOf` on the server): 满足, 不满足, 未见记载, 待查, 不适用. */
+export type VcrStance = "support" | "against" | "silent" | "open" | "not_applicable";
+
+/** A sentence of the patient's record that a clause rests on, with where it stands. A cell of the data table has a `field` and no document. */
+export interface VcrJudgedEvidence { sentenceId: number; text: string; documentId: string | null; start: number | null; end: number | null; field?: string }
+
+/** One clause of a trial's eligibility text, judged for one patient. */
+export interface VcrJudgedClause {
+  number: number;
+  kind: "inclusion" | "exclusion";
+  clause: string;
+  lead?: string;
+  label: string;
+  basis: "stated" | "silent";
+  /** The platform's words for the label: 「未见记载，按未排除」, 「符合排除条件」. */
+  display: string;
+  stance: VcrStance;
+  reason: string;
+  evidence: VcrJudgedEvidence[];
+  /** Sentences the clause cites that this reader cannot be shown now. */
+  evidenceHidden?: number;
+  /** The model did not judge this clause. */
+  unanswered?: true;
+}
+
+export interface VcrJudgedCounts { support: number; against: number; silent: number; open: number; notApplicable: number }
+
+/** One pair of a patient and a trial (or of a patient and the study's protocol), as a list shows it. */
+export interface VcrJudgedPair {
+  kind: "registry" | "protocol";
+  id: string;
+  registry: string | null;
+  registryId: string | null;
+  title: string;
+  url: string | null;
+  phase: string;
+  status: string;
+  /** The day the registry's record, and so its status, was read. */
+  statusAsOf: string | null;
+  subjectKey: string;
+  verdict: VcrVerdict;
+  verdictLabel: string;
+  fit: number | null;
+  fitLevel: "high" | "medium" | "low" | "minimal" | null;
+  fitLabel: string | null;
+  confidence: number | null;
+  confidenceLabel: string | null;
+  /** One line that says why the pair stands where it does. */
+  why: string;
+  /** Null when no clause was judged: a missing count is not a zero. */
+  counts: VcrJudgedCounts | null;
+  judgedAt: string | null;
+  producer: "job" | "conversation";
+  basisChanged?: true;
+  /** 「未取到入排原文，依据标题和疾病判断」 where the trial's record held no eligibility text. */
+  eligibilityNote?: string;
+  rank?: number;
+}
+
+/** A pair opened: the reasons in three groups and the clause table. */
+export interface VcrJudgedOpen extends VcrJudgedPair {
+  groups: Partial<Record<"support" | "against" | "open", string[]>>;
+  summary: string | null;
+  clauses: VcrJudgedClause[];
+  withheld: number;
+}
+
+export interface VcrJudgedProgress {
+  /** Pairs asked for, finished, failed and not yet tried. */
+  total: number;
+  finished: number;
+  failed: number;
+  waiting: number;
+  state: "idle" | "running" | "waiting_budget" | "stopped" | "done";
+  jobId: string | null;
+  startedAt: string | null;
+  /** The stated ceiling of the latest job and what its pairs have cost so far; either may be unknown. */
+  cost: { ceiling: number | null; spent: number | null; currency: string } | null;
+}
+
+export interface VcrJudgedFailures {
+  count: number;
+  reasons: Array<{ reason: string; count: number }>;
+  listed: Array<{ subjectKey: string; kind: "registry" | "protocol"; id: string; registryId: string | null; title: string | null; reason: string; at: string | null }>;
+}
+
+export interface VcrJudgedPatient {
+  direction: "patient_to_trial";
+  subjectKey: string;
+  /** Whether anything was judged, failed or asked for: false is the page saying nothing has been judged for this scope. */
+  held: boolean;
+  progress: VcrJudgedProgress;
+  trials: VcrJudgedPair[];
+  failed: VcrJudgedFailures;
+  selected: VcrJudgedOpen | null;
+}
+
+export interface VcrJudgedFunnelRow { number: number; kind: "inclusion" | "exclusion"; clause: string; support: number; against: number; silent: number; open: number; notApplicable: number }
+
+export interface VcrJudgedProtocol {
+  direction: "trial_to_patient";
+  protocolVersionId: string;
+  held: boolean;
+  progress: VcrJudgedProgress;
+  tallies: Record<VcrVerdict, number>;
+  people: VcrJudgedPair[];
+  total: number;
+  offset: number;
+  limit: number;
+  more: boolean;
+  clauses: { judgedPeople: number; rows: VcrJudgedFunnelRow[] };
+  failed: VcrJudgedFailures;
+  /** People whose record changed after they were judged. */
+  changed: number;
+  selected: VcrJudgedOpen | null;
+}
+
+export type VcrJudged = VcrJudgedPatient | VcrJudgedProtocol;
+
+export type VcrJudgedQuery =
+  | { direction: "patient_to_trial"; subjectKey: string; target?: string | null }
+  | { direction: "trial_to_patient"; protocolVersionId?: string | null; verdict?: VcrVerdict | null; offset?: number; limit?: number; subjectKey?: string | null };
+
+const num = (value: unknown): number | null => (typeof value === "number" && Number.isFinite(value) ? value : null);
+
+function readJudgedPair(raw: Loose): VcrJudgedPair {
+  const counts = obj(raw.counts);
+  return {
+    kind: raw.kind === "protocol" ? "protocol" : "registry", id: String(raw.id ?? ""), registry: text(raw.registry), registryId: text(raw.registryId), title: String(raw.title ?? ""), url: text(raw.url),
+    phase: String(raw.phase ?? ""), status: String(raw.status ?? ""), statusAsOf: text(raw.statusAsOf), subjectKey: String(raw.subjectKey ?? ""),
+    verdict: (VCR_VERDICTS as readonly string[]).includes(String(raw.verdict)) ? raw.verdict as VcrVerdict : "insufficient", verdictLabel: String(raw.verdictLabel ?? ""),
+    fit: num(raw.fit), fitLevel: (["high", "medium", "low", "minimal"] as const).find((level) => level === raw.fitLevel) ?? null, fitLabel: text(raw.fitLabel),
+    confidence: num(raw.confidence), confidenceLabel: text(raw.confidenceLabel), why: String(raw.why ?? ""),
+    counts: Object.keys(counts).length ? { support: num(counts.support) ?? 0, against: num(counts.against) ?? 0, silent: num(counts.silent) ?? 0, open: num(counts.open) ?? 0, notApplicable: num(counts.notApplicable) ?? 0 } : null,
+    judgedAt: text(raw.judgedAt), producer: raw.producer === "conversation" ? "conversation" : "job", ...(raw.basisChanged ? { basisChanged: true as const } : {}),
+    ...(text(raw.eligibilityNote) ? { eligibilityNote: String(raw.eligibilityNote) } : {}), ...(num(raw.rank) !== null ? { rank: num(raw.rank)! } : {}),
+  };
+}
+
+function readJudgedOpen(raw: unknown): VcrJudgedOpen | null {
+  const value = obj(raw);
+  if (!Object.keys(value).length) return null;
+  const groups = obj(value.groups);
+  return {
+    ...readJudgedPair(value),
+    groups: Object.fromEntries((["support", "against", "open"] as const).map((key) => [key, strings(groups[key])]).filter(([, items]) => (items as string[]).length)),
+    summary: text(value.summary),
+    clauses: arr(value.clauses).map((clause) => ({
+      number: num(clause.number) ?? 0, kind: clause.kind === "exclusion" ? "exclusion" as const : "inclusion" as const, clause: String(clause.clause ?? ""), ...(text(clause.lead) ? { lead: String(clause.lead) } : {}),
+      label: String(clause.label ?? ""), basis: clause.basis === "stated" ? "stated" as const : "silent" as const, display: String(clause.display ?? ""),
+      stance: (["support", "against", "silent", "open", "not_applicable"] as const).find((stance) => stance === clause.stance) ?? "open", reason: String(clause.reason ?? ""),
+      evidence: arr(clause.evidence).map((item) => ({ sentenceId: num(item.sentenceId) ?? 0, text: String(item.text ?? ""), documentId: text(item.documentId), start: num(item.start), end: num(item.end), ...(text(item.field) ? { field: String(item.field) } : {}) })),
+      ...(num(clause.evidenceHidden) ? { evidenceHidden: num(clause.evidenceHidden)! } : {}), ...(clause.unanswered ? { unanswered: true as const } : {}),
+    })),
+    withheld: num(value.withheld) ?? 0,
+  };
+}
+
+function readJudgedProgress(raw: unknown): VcrJudgedProgress {
+  const value = obj(raw);
+  const cost = obj(value.cost);
+  return {
+    total: num(value.total) ?? 0, finished: num(value.finished) ?? 0, failed: num(value.failed) ?? 0, waiting: num(value.waiting) ?? 0,
+    state: (["idle", "running", "waiting_budget", "stopped", "done"] as const).find((state) => state === value.state) ?? "idle", jobId: text(value.jobId), startedAt: text(value.startedAt),
+    cost: Object.keys(cost).length ? { ceiling: num(cost.ceiling), spent: num(cost.spent), currency: String(cost.currency ?? "CNY") } : null,
+  };
+}
+
+function readJudgedFailures(raw: unknown): VcrJudgedFailures {
+  const value = obj(raw);
+  return {
+    count: num(value.count) ?? 0,
+    reasons: arr(value.reasons).map((entry) => ({ reason: String(entry.reason ?? ""), count: num(entry.count) ?? 0 })),
+    listed: arr(value.listed).map((entry) => ({ subjectKey: String(entry.subjectKey ?? ""), kind: entry.kind === "protocol" ? "protocol" as const : "registry" as const, id: String(entry.id ?? ""), registryId: text(entry.registryId), title: text(entry.title), reason: String(entry.reason ?? ""), at: text(entry.at) })),
+  };
+}
+
+/** The judged page of either direction, total over what the server might send: a missing list is an empty one, a missing count is null and never zero. */
+export function readVcrJudged(raw: unknown): VcrJudged {
+  const value = obj(raw);
+  const common = { held: value.held === true, progress: readJudgedProgress(value.progress), failed: readJudgedFailures(value.failed), selected: readJudgedOpen(value.selected) };
+  if (value.direction === "patient_to_trial") {
+    return { direction: "patient_to_trial", subjectKey: String(value.subjectKey ?? ""), ...common, trials: arr(value.trials).map(readJudgedPair) };
+  }
+  const tallies = obj(value.tallies);
+  const clauses = obj(value.clauses);
+  return {
+    direction: "trial_to_patient", protocolVersionId: String(value.protocolVersionId ?? ""), ...common,
+    tallies: Object.fromEntries(VCR_VERDICTS.map((verdict) => [verdict, num(tallies[verdict]) ?? 0])) as Record<VcrVerdict, number>,
+    people: arr(value.people).map(readJudgedPair), total: num(value.total) ?? 0, offset: num(value.offset) ?? 0, limit: num(value.limit) ?? 25, more: value.more === true,
+    clauses: {
+      judgedPeople: num(clauses.judgedPeople) ?? 0,
+      rows: arr(clauses.rows).map((row) => ({ number: num(row.number) ?? 0, kind: row.kind === "exclusion" ? "exclusion" as const : "inclusion" as const, clause: String(row.clause ?? ""),
+        support: num(row.support) ?? 0, against: num(row.against) ?? 0, silent: num(row.silent) ?? 0, open: num(row.open) ?? 0, notApplicable: num(row.notApplicable) ?? 0 })),
+    },
+    changed: num(value.changed) ?? 0,
+  };
+}
+
+function judgedParams(query: VcrJudgedQuery): URLSearchParams {
+  const params = new URLSearchParams({ direction: query.direction });
+  if (query.direction === "patient_to_trial") {
+    params.set("subjectKey", query.subjectKey);
+    if (query.target) params.set("target", query.target);
+    return params;
+  }
+  if (query.protocolVersionId) params.set("protocolVersionId", query.protocolVersionId);
+  if (query.verdict) params.set("verdict", query.verdict);
+  if (query.offset) params.set("offset", String(query.offset));
+  if (query.limit) params.set("limit", String(query.limit));
+  if (query.subjectKey) params.set("subjectKey", query.subjectKey);
+  return params;
+}
+
+/** What the judging job and the conversation saved for one patient's trials or one protocol's people. A failure is the caller's to show: an empty page is not an error. */
+export async function getVcrJudged(studyId: string, query: VcrJudgedQuery): Promise<VcrJudged> {
+  return readVcrJudged(await productRequest<unknown>(`${study(studyId)}/matching/judged?${judgedParams(query)}`));
+}
+
+/** The answer of starting the judging job: whether it was already out, and the ceiling the job states. */
+export interface VcrJudgeStart { jobId: string; state: string; alreadyRunning: boolean; pairs: number | null; ceiling: number | null; currency: string }
+
+function readJudgeStart(raw: unknown): VcrJudgeStart {
+  const value = obj(raw);
+  const estimate = obj(value.estimate);
+  return { jobId: String(value.jobId ?? ""), state: String(value.state ?? "queued"), alreadyRunning: value.alreadyRunning === true, pairs: num(estimate.pairs), ceiling: num(estimate.cost), currency: String(estimate.currency ?? "CNY") };
+}
+
+/**
+ * 「开始评估」 / 「继续」: start the judging job for a protocol's people, or the rest of what an earlier job did not finish. The same selection asked
+ * for again is that job, and a pair already judged is not paid for twice.
+ */
+export async function startVcrJudge(studyId: string, body: { direction: "trial_to_patient"; protocolVersionId?: string | null; subjectKeys?: string[]; resume?: boolean }
+  | { direction: "patient_to_trial"; subjectKey: string; resume: true }): Promise<VcrJudgeStart> {
+  return readJudgeStart(await productRequest<unknown>(`${study(studyId)}/matching/judge`, "POST",
+    Object.fromEntries(Object.entries(body).filter(([, value]) => value !== null && value !== undefined))));
+}
+
+/** The files of the judged rows: all of them, a row for each pair or for each clause of each pair, in the formats a sheet or a script reads. */
+export type VcrMatchExport = { format: "csv" | "json"; kind: "pairs" | "clauses" } & (
+  | { direction: "patient_to_trial"; subjectKey: string }
+  | { direction: "trial_to_patient"; protocolVersionId?: string | null });
+
+/** Fetched and handed over only when it came: a plain link would save an error page under the file's name. */
+export async function downloadVcrMatching(studyId: string, request: VcrMatchExport): Promise<void> {
+  const root = webApiBase.endsWith("/api") ? webApiBase : `${webApiBase}/api`;
+  const params = new URLSearchParams({ direction: request.direction, format: request.format, kind: request.kind });
+  if (request.direction === "patient_to_trial") params.set("subjectKey", request.subjectKey);
+  else if (request.protocolVersionId) params.set("protocolVersionId", request.protocolVersionId);
+  const response = await fetchWithWebAuth(`${root}${study(studyId)}/matching/export?${params}`);
+  if (!response.ok) {
+    const value = await response.json().catch(() => null) as { error?: string; code?: string; requestId?: string } | null;
+    throw new WebApiError(value?.error ?? "The file was unavailable.", { status: response.status, code: value?.code, requestId: value?.requestId });
+  }
+  const blob = await response.blob();
+  const named = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(response.headers.get("content-disposition") ?? "")?.[1];
+  const url = URL.createObjectURL(blob);
+  try {
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = named ? decodeURIComponent(named) : `matching.${request.format}`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+/** Where the matching page should open when nothing says where: the newest work of the study. */
+export async function getVcrJudgedLatest(studyId: string): Promise<{ direction: "patient_to_trial"; subjectKey: string } | { direction: "trial_to_patient"; protocolVersionId: string } | null> {
+  const latest = obj(obj(await productRequest<unknown>(`${study(studyId)}/matching/judged`)).latest);
+  if (latest.direction === "patient_to_trial" && text(latest.subjectKey)) return { direction: "patient_to_trial", subjectKey: String(latest.subjectKey) };
+  if (latest.direction === "trial_to_patient" && text(latest.protocolVersionId)) return { direction: "trial_to_patient", protocolVersionId: String(latest.protocolVersionId) };
+  return null;
 }
 
 export function readVcrData(raw: unknown): VcrDataTab {

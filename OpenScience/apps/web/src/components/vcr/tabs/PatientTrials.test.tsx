@@ -38,7 +38,7 @@ function drawTab(node: React.ReactElement) {
 }
 
 const reads = (server: ReturnType<typeof installVcrServer>) =>
-  server.calls.filter((call) => call.method === "GET" && call.path.startsWith(MATCHING)).map((call) => new URL(call.path, "http://x").searchParams);
+  server.calls.filter((call) => call.method === "GET" && call.path.startsWith(MATCHING) && !call.path.startsWith(`${MATCHING}/`)).map((call) => new URL(call.path, "http://x").searchParams);
 const searches = (server: ReturnType<typeof installVcrServer>) => server.calls.filter((call) => call.method === "POST" && call.path === SEARCH);
 const trialRow = (id: string) => document.querySelector(`[data-vcr-trial='${id}']`) as HTMLElement;
 const criterionRow = (code: string) => document.querySelector(`[data-vcr-criterion='${code}']`) as HTMLElement;

@@ -79,6 +79,14 @@ export function installVcrServer(productRequest: ReturnType<typeof vi.fn>, overr
         // The programme's background conversations and the page's editable cards answer in their own shapes (no presented page).
         if (section === "runs") return { runs: [] };
         if (section === "cards") return { kind: query.get("kind"), objectId: query.get("object") ?? "pop_1", title: "", settings: [] };
+        // What the judging job saved: nothing, unless a test says otherwise. Asked for nothing in particular it says where the newest work is.
+        if (section === "matching" && item === "judged") {
+          if (query.get("direction") === null) return { available: true, latest: null };
+          const idle = { held: false, progress: { total: 0, finished: 0, failed: 0, waiting: 0, state: "idle", jobId: null, startedAt: null, cost: null }, failed: { count: 0, reasons: [], listed: [] }, selected: null };
+          return query.get("direction") === "patient_to_trial"
+            ? { available: true, direction: "patient_to_trial", subjectKey: query.get("subjectKey"), trials: [], ...idle }
+            : { available: true, direction: "trial_to_patient", protocolVersionId: query.get("protocolVersionId") ?? "", tallies: { eligible: 0, possible: 0, insufficient: 0, ineligible: 0 }, people: [], total: 0, offset: 0, limit: 25, more: false, clauses: { judgedPeople: 0, rows: [] }, changed: 0, ...idle };
+        }
         if (section === "matching" && set === "ev201") {
           const view = query.get("view");
           // 「给患者找试验」: nobody asked for, a person the study has found no trial for (P-0201), or P-0192's ranked list — the first trial

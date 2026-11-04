@@ -7,8 +7,8 @@ import { VcrToolbarActions } from './VcrToolbarActions';
 import { CloudDocuments, reviewedSpans } from './data/CloudDocuments';
 import type { VcrIntakeSource, VcrMatchingTab } from '@/lib/vcrClient';
 import { WebApiError } from '@/lib/apiClient';
-const api = vi.hoisted(() => ({ enqueue:vi.fn(),quote:vi.fn(),permission:vi.fn(),document:vi.fn(),projection:vi.fn(),retire:vi.fn() }));
-vi.mock('@/lib/vcrClient',()=>({enqueueVcrMatching:api.enqueue,resolveVcrQuote:api.quote,setVcrCloudPermission:api.permission,getVcrProtectedDocument:api.document,createVcrProjection:api.projection,retireVcrProjection:api.retire}));
+const api = vi.hoisted(() => ({ judge:vi.fn(),quote:vi.fn(),permission:vi.fn(),document:vi.fn(),projection:vi.fn(),retire:vi.fn() }));
+vi.mock('@/lib/vcrClient',()=>({startVcrJudge:api.judge,resolveVcrQuote:api.quote,setVcrCloudPermission:api.permission,getVcrProtectedDocument:api.document,createVcrProjection:api.projection,retireVcrProjection:api.retire}));
 beforeEach(()=>vi.clearAllMocks());
 
 /**
@@ -71,32 +71,41 @@ describe('evaluating from the controls',()=>{
   const controls=(data=page(),extra:Partial<ControlsProps>={})=>render(<Controls data={data} {...extra}/>);
   // Review V-M5: 开始评估所选方案 and 刷新结果 were inside 比较多个方案, so running one protocol meant finding a section named "compare several".
   it('starts the protocol in view without opening 比较多个方案 — and there is no 刷新结果: the page reads itself when the job moves',async()=>{
-    api.enqueue.mockResolvedValue({jobs:[{jobId:'job',state:'queued'}],unavailable:[]});
+    api.judge.mockResolvedValue({jobId:'job',state:'queued',alreadyRunning:false,pairs:6,ceiling:1.5,currency:'CNY'});
     controls();
     const start=screen.getByRole('button',{name:'开始评估'});
     expect(start.closest('details')).toBeNull();
     expect(screen.queryByRole('button',{name:'刷新结果'})).toBeNull();
     fireEvent.click(start);
-    await waitFor(()=>expect(api.enqueue).toHaveBeenCalledWith('s1',{protocolVersionIds:['p2'],direction:'trial_to_patient'}));
-    expect(await screen.findByRole('status')).toHaveTextContent('已提交 1 项评估。');
+    // The judging job of the protocol in view is what starts, and the job's own ceiling is said with it.
+    await waitFor(()=>expect(api.judge).toHaveBeenCalledWith('s1',{direction:'trial_to_patient',protocolVersionId:'p2'}));
+    expect(await screen.findByRole('status')).toHaveTextContent('已开始 1 项评估，共 6 对，预计最多 1.50 灵豆；随时可以停止，判完的会保留。');
   });
   it('says nothing was submitted, and why, when no job was queued — as a problem, not as a success with a zero in it',async()=>{
-    api.enqueue.mockResolvedValue({jobs:[],unavailable:[{code:'vcr_criteria_missing'}]});
+    api.judge.mockRejectedValue(new WebApiError('x',{status:409,code:'vcr_match_judge_nothing_to_read'}));
     controls();
     fireEvent.click(screen.getByRole('button',{name:'开始评估'}));
     const alert=await screen.findByRole('alert');
-    expect(alert).toHaveTextContent('没有提交评估。方案还没有结构化的入排条件，无法匹配。');
-    expect(alert).not.toHaveTextContent('已提交');
+    expect(alert).toHaveTextContent('没有开始评估。没有可判定的内容：先写入病历或入排条件，再判定。');
+    expect(alert).not.toHaveTextContent('已开始');
   });
-  it('says what was queued and what was not when only some of the protocols could be',async()=>{
-    api.enqueue.mockResolvedValue({jobs:[{jobId:'job',state:'queued'}],unavailable:[{code:'vcr_criteria_missing'}]});
+  it('says what was started and what was not when only some of the protocols could be',async()=>{
+    api.judge.mockResolvedValueOnce({jobId:'job',state:'queued',alreadyRunning:false,pairs:6,ceiling:1.5,currency:'CNY'}).mockRejectedValueOnce(new WebApiError('x',{status:409,code:'vcr_match_judge_nothing_to_read'}));
     controls();
-    fireEvent.click(screen.getByRole('button',{name:'开始评估'}));
-    expect(await screen.findByRole('status')).toHaveTextContent('已提交 1 项评估，1 项暂不可用。');
+    fireEvent.click(screen.getByText('比较多个方案'));
+    for(const box of within(screen.getByRole('group',{name:'选择方案（最多 10 项）'})).getAllByRole('checkbox'))fireEvent.click(box);
+    fireEvent.click(screen.getByRole('button',{name:'开始评估所选方案'}));
+    expect(await screen.findByRole('status')).toHaveTextContent('已开始 1 项评估，共 6 对，预计最多 1.50 灵豆；随时可以停止，判完的会保留。1 项暂不可用。');
     expect(screen.queryByRole('alert')).toBeNull();
   });
+  it('says a batch already out is that batch, and not a second one',async()=>{
+    api.judge.mockResolvedValue({jobId:'job',state:'running',alreadyRunning:true,pairs:6,ceiling:1.5,currency:'CNY'});
+    controls();
+    fireEvent.click(screen.getByRole('button',{name:'开始评估'}));
+    expect(await screen.findByRole('status')).toHaveTextContent('这批判定已经在进行。');
+  });
   it('runs the protocol the reader chose, for the patient the reader chose, in the direction the reader chose — and offers no run until there is a patient to run it for',async()=>{
-    api.enqueue.mockResolvedValue({jobs:[{jobId:'job',state:'queued'}],unavailable:[]});
+    api.judge.mockResolvedValue({jobId:'job',state:'queued',alreadyRunning:false,pairs:6,ceiling:1.5,currency:'CNY'});
     controls(page({direction:'trial_to_patient'}),{direction:'patient_to_trial',protocolId:'p1'});
     // 给患者找试验 starts from a person: with none chosen there is no button that would be grey — the patient's chip is the way to one.
     expect(screen.queryByRole('button',{name:'开始评估'})).toBeNull();
@@ -104,7 +113,8 @@ describe('evaluating from the controls',()=>{
     const start=await screen.findByRole('button',{name:'开始评估'});
     expect(start).toBeEnabled();
     fireEvent.click(start);
-    await waitFor(()=>expect(api.enqueue).toHaveBeenCalledWith('s1',{protocolVersionIds:['p1'],subjectKeys:['P-001'],direction:'patient_to_trial'}));
+    // The study's protocol, judged for this one patient.
+    await waitFor(()=>expect(api.judge).toHaveBeenCalledWith('s1',{direction:'trial_to_patient',protocolVersionId:'p1',subjectKeys:['P-001']}));
   });
   it('shows the protocol in view in the band, and tells the page which one the reader chose',async()=>{
     const onProtocol=vi.fn();
@@ -115,12 +125,12 @@ describe('evaluating from the controls',()=>{
   });
   // Per-source reprocessing (E-13): what an evaluation rested on has changed, so the page says so and offers the evaluation that exists.
   it('says how many evaluations rest on a basis that has changed, and evaluates those people again with the existing trigger',async()=>{
-    api.enqueue.mockResolvedValue({jobs:[{jobId:'job',state:'queued'}],unavailable:[]});
+    api.judge.mockResolvedValue({jobId:'job',state:'queued',alreadyRunning:false,pairs:6,ceiling:1.5,currency:'CNY'});
     controls(page({basisUpdated:{count:2,subjects:['P-001','P-002']}}));
     expect(screen.getByText('2 人的评估依据已更新')).toBeVisible();
     fireEvent.click(screen.getByRole('button',{name:'重新开始评估'}));
-    await waitFor(()=>expect(api.enqueue).toHaveBeenCalledWith('s1',{protocolVersionIds:['p2'],subjectKeys:['P-001','P-002'],direction:'trial_to_patient'}));
-    expect(await screen.findByText('已提交 1 项评估。')).toBeVisible();
+    await waitFor(()=>expect(api.judge).toHaveBeenCalledWith('s1',{direction:'trial_to_patient',protocolVersionId:'p2',subjectKeys:['P-001','P-002']}));
+    expect(await screen.findByText(/^已开始 1 项评估/)).toBeVisible();
   });
   it('says nothing about a basis when nothing changed, and offers the evaluation only to a reader who may run it',()=>{
     controls();
@@ -462,13 +472,14 @@ describe('choosing the protocols to compare',()=>{
     for(const box of boxes())expect(box.closest('label')).toHaveClass('min-h-form-primary');
   });
   it('picks several with plain clicks and sends exactly those',async()=>{
-    api.enqueue.mockResolvedValue({jobs:[{jobId:'a'},{jobId:'b'}],unavailable:[]});
+    api.judge.mockResolvedValue({jobId:'job',state:'queued',alreadyRunning:false,pairs:6,ceiling:1.5,currency:'CNY'});
     controls(3);
     const [first,second,third]=boxes();
     fireEvent.click(first);fireEvent.click(third);
     expect([first,second,third].map(box=>box.checked)).toEqual([true,false,true]);
     fireEvent.click(screen.getByRole('button',{name:'开始评估所选方案'}));
-    await waitFor(()=>expect(api.enqueue).toHaveBeenCalledWith('s1',{protocolVersionIds:['p1','p3'],direction:'trial_to_patient'}));
+    await waitFor(()=>expect(api.judge).toHaveBeenCalledTimes(2));
+    expect(api.judge.mock.calls).toEqual([['s1',{direction:'trial_to_patient',protocolVersionId:'p1'}],['s1',{direction:'trial_to_patient',protocolVersionId:'p3'}]]);
   });
   it('stops at ten and says why, and lets another be chosen once one is let go',()=>{
     controls(12);
@@ -486,7 +497,7 @@ describe('choosing the protocols to compare',()=>{
 
 describe('clinical matching controls',()=>{
   it('keeps a patient-to-trial request unsubmitted until both patient and protocols are selected',async()=>{
-    api.enqueue.mockResolvedValue({jobs:[{id:'job'}],unavailable:[]});
+    api.judge.mockResolvedValue({jobId:'job',state:'queued',alreadyRunning:false,pairs:6,ceiling:1.5,currency:'CNY'});
     const data={protocols:[{id:'p1',version:1,title:'方案一'},{id:'p2',version:2,title:'方案二'}],direction:'patient_to_trial',candidateRoster:['P-001']} as unknown as VcrMatchingTab;
     render(<Controls data={data}/>);
     fireEvent.click(screen.getByText('比较多个方案'));
@@ -496,8 +507,9 @@ describe('clinical matching controls',()=>{
     expect(button).toBeDisabled();
     await choose('患者','P-001');
     fireEvent.click(button);
-    await waitFor(()=>expect(api.enqueue).toHaveBeenCalledWith('s1',{protocolVersionIds:['p1','p2'],subjectKeys:['P-001'],direction:'patient_to_trial'}));
-    expect(await screen.findByRole('status')).toHaveTextContent('已提交 1 项评估');
+    await waitFor(()=>expect(api.judge).toHaveBeenCalledTimes(2));
+    expect(api.judge.mock.calls).toEqual([['s1',{direction:'trial_to_patient',protocolVersionId:'p1',subjectKeys:['P-001']}],['s1',{direction:'trial_to_patient',protocolVersionId:'p2',subjectKeys:['P-001']}]]);
+    expect(await screen.findByRole('status')).toHaveTextContent('已开始 2 项评估');
   });
   it('shows conflicts and sourced corrections while opening originals only through the protected resolver',async()=>{
     api.quote.mockResolvedValue({evidence:{quote:'受保护的合成原文'}});

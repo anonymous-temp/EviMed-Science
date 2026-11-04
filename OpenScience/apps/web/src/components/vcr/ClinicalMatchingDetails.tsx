@@ -1,14 +1,14 @@
 import { useState, type ReactNode } from 'react';
 import { CircleCheck, CircleHelp, CircleMinus, CircleX, Clock } from 'lucide-react';
-import { knownErrorCodeMessage } from '@evimed/domain';
 import { Button } from '@/components/ui/Button';
 import { DataTable, type DataColumn } from '@/components/ui/DataTable';
 import { Disclosure } from '@/components/ui/Disclosure';
 import { List, ListRow } from '@/components/ui/ListRow';
 import { Note } from '@/components/ui/Note';
 import { Tag } from '@/components/ui/Tag';
+import { money } from './tabs/JudgedProgress';
 import type { ToolbarFilter } from '@/components/ui/Toolbar';
-import { enqueueVcrMatching, resolveVcrQuote, type VcrClinicalTimelineEntry, type VcrCriterionJudgement, type VcrCriterionState, type VcrMatchingTab, type VcrProtocolChoice } from '@/lib/vcrClient';
+import { resolveVcrQuote, startVcrJudge, type VcrClinicalTimelineEntry, type VcrCriterionJudgement, type VcrCriterionState, type VcrJudgeStart, type VcrMatchingTab, type VcrProtocolChoice } from '@/lib/vcrClient';
 import { webErrorMessage } from '@/lib/apiClient';
 import { cn } from '@/lib/cn';
 import { formatDay } from '@/lib/format';
@@ -22,19 +22,22 @@ const experiencers: Record<string, string> = { patient: '本人', family: '家�
 const medicationStates: Record<string, string> = { prescribed: '处方', administered: '已给药', stopped: '已停药', planned: '计划用药', historical_list: '历史用药清单', unknown: '用药状态不明' };
 
 /**
- * What came of a request to evaluate, in the reader's words. Nothing queued is said as that, with the reason the server gave for each
- * protocol it could not take — it is not a success with a zero in it (review V-M5).
+ * What came of a request to evaluate, in the reader's words: what started, with the ceiling the job states for itself, and for each protocol
+ * the platform would not take, the reason it gave. Nothing started is said as that — it is not a success with a zero in it (review V-M5).
  */
-export function evaluationSentence(answer: { jobs: readonly unknown[]; unavailable: ReadonlyArray<{ code?: string }> }): { text: string; failed: boolean } {
-  const unavailable = answer.unavailable ?? [];
-  if (answer.jobs.length > 0) {
-    return { failed: false, text: `已提交 ${answer.jobs.length} 项评估${unavailable.length ? `，${unavailable.length} 项暂不可用` : ''}。` };
-  }
-  const reasons = [...new Set(unavailable.map(entry => knownErrorCodeMessage(entry.code ?? '')).filter(Boolean))];
-  return { failed: true, text: reasons.length ? `没有提交评估。${reasons.join('')}` : '没有提交评估：所选方案暂不可用。' };
+export function evaluationSentence(answer: { started: readonly VcrJudgeStart[]; refused: readonly string[] }): { text: string; failed: boolean } {
+  const { started, refused } = answer;
+  const reasons = [...new Set(refused)].join('');
+  if (!started.length) return { failed: true, text: reasons ? `没有开始评估。${reasons}` : '没有开始评估：所选方案暂不可用。' };
+  const pairs = started.reduce((sum, entry) => sum + (entry.pairs ?? 0), 0);
+  const known = started.every((entry) => entry.ceiling !== null);
+  const ceiling = known ? started.reduce((sum, entry) => sum + (entry.ceiling ?? 0), 0) : null;
+  const running = started.length === 1 && started[0].alreadyRunning;
+  const head = running ? '这批判定已经在进行。' : `已开始 ${started.length} 项评估${pairs > 0 ? `，共 ${pairs} 对` : ''}${ceiling === null ? '' : `，预计最多 ${money(ceiling)}`}；随时可以停止，判完的会保留。`;
+  return { failed: false, text: `${head}${refused.length ? `${refused.length} 项暂不可用。` : ''}` };
 }
 
-/** Queue the evaluation of some protocol versions and keep what was said of it. One at a time; `onQueued` runs when something went in. */
+/** Start the judging of some protocol versions and keep what was said of it. One at a time; `onQueued` runs when something went in. */
 export function useMatchingEvaluation(studyId: string, onQueued: () => void) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
@@ -43,8 +46,14 @@ export function useMatchingEvaluation(studyId: string, onQueued: () => void) {
     if (busy) return;
     setBusy(true); setMessage(''); setFailed(false);
     try {
-      const answer = await enqueueVcrMatching(studyId, selection);
-      const said = evaluationSentence(answer);
+      // A job for each protocol version, in the order chosen: they queue behind one another, and a refusal of one is that one's.
+      const started: VcrJudgeStart[] = [];
+      const refused: string[] = [];
+      for (const protocolVersionId of selection.protocolVersionIds) {
+        try { started.push(await startVcrJudge(studyId, { direction: 'trial_to_patient', protocolVersionId, ...(selection.subjectKeys?.length ? { subjectKeys: selection.subjectKeys } : {}) })); }
+        catch (error) { refused.push(webErrorMessage(error, { fallback: '这个方案暂时不能评估。' })); }
+      }
+      const said = evaluationSentence({ started, refused });
       setMessage(said.text); setFailed(said.failed);
       if (!said.failed) onQueued();
     } catch (error) { setFailed(true); setMessage(webErrorMessage(error, { fallback: '暂时无法开始评估，请重试。' })); }
@@ -176,6 +185,9 @@ export function CriterionTable({ label, rows, facts, extraColumns = [] }: {
   );
 }
 
+/** The most patients the band's menu lists; the rest are reached from the protocol's table. */
+const MOST_PATIENTS = 200;
+
 /** The most protocol versions one comparison takes: the server refuses more (`vcr_matching_selection_invalid`). */
 const MOST_PROTOCOLS = 10;
 
@@ -207,7 +219,7 @@ function ProtocolChecklist({ protocols, chosen, onChange }: { protocols: readonl
 
 /**
  * What the matching tab's controls come to: the dimensions the reader narrows by, the buttons that start work, the sentences that
- * say how it went and the folded comparison of several protocols (R19, plan §5.3: 「匹配与招募」 has one toolbar). The tab hands
+ * say how it went and the folded comparison of several protocols (R19, plan §5.3: the matching destination has one toolbar). The tab hands
  * `filters` and `actions` to the band's row and draws `notes` and `compare` at the top of its body; nothing here draws a row of its own.
  */
 export interface MatchingControls {
@@ -232,7 +244,7 @@ export interface MatchingControls {
  *  - A study with patients and no protocol version still offers the patient to start from in the direction that starts from one;
  *    the protocol's controls have nothing to work on there.
  */
-export function useMatchingControls({ studyId, data, direction, protocolId, subjectKey, settling = false, canRun, onProtocol, onCandidate, onReload }: {
+export function useMatchingControls({ studyId, data, direction, protocolId, subjectKey, settling = false, canRun, judged = false, onProtocol, onCandidate, onReload }: {
   studyId: string;
   /** The page being read; null before the first one has arrived (the hook is called either way, and draws nothing). */
   data: VcrMatchingTab | null;
@@ -247,7 +259,10 @@ export function useMatchingControls({ studyId, data, direction, protocolId, subj
   subjectKey?: string | null;
   /** The page for what the reader chose is still being read (or could not be): the controls stay, and a run waits for it. */
   settling?: boolean;
-  canRun: boolean; onProtocol: (id: string) => void; onCandidate: (id: string) => void; onReload: () => void;
+  canRun: boolean;
+  /** The page draws what the model judged: the earlier path's coverage and 依据已更新 notes are about assessments it does not show, and are left out. */
+  judged?: boolean;
+  onProtocol: (id: string) => void; onCandidate: (id: string) => void; onReload: () => void;
 }): MatchingControls | null {
   const [panel, setPanel] = useState<string[]>([]);
   const [ownSubject, setSubject] = useState('');
@@ -271,19 +286,23 @@ export function useMatchingControls({ studyId, data, direction, protocolId, subj
       onChange: next => { if (next) onProtocol(next); },
     });
   }
-  filters.push({
-    kind: 'select', label: '患者', allLabel: way === 'patient_to_trial' ? '请选择患者' : '全部已登记患者',
-    options: roster.map(key => ({ value: key, label: key })), value: subject || null,
-    onChange: next => {
-      const chosen = next ?? '';
-      setSubject(chosen);
-      // Where the page keeps the patient, choosing the placeholder again is a choice too: nobody.
-      if (chosen || subjectKey !== undefined) onCandidate(chosen);
-    },
-  });
+  // A protocol's people the model judged are a paged table of their own, and a person is opened from it: a menu of thousands is not a way to choose one.
+  if (!(judged && way === 'trial_to_patient')) {
+    const offered = roster.length > MOST_PATIENTS ? [...roster.slice(0, MOST_PATIENTS), ...(subject && !roster.slice(0, MOST_PATIENTS).includes(subject) ? [subject] : [])] : roster;
+    filters.push({
+      kind: 'select', label: '患者', allLabel: way === 'patient_to_trial' ? '请选择患者' : '全部已登记患者',
+      options: offered.map(key => ({ value: key, label: key })), value: subject || null,
+      onChange: next => {
+        const chosen = next ?? '';
+        setSubject(chosen);
+        // Where the page keeps the patient, choosing the placeholder again is a choice too: nobody.
+        if (chosen || subjectKey !== undefined) onCandidate(chosen);
+      },
+    });
+  }
 
   const actions: VcrToolbarAction[] = [];
-  // The view's main action is the contact confirmation below; starting an evaluation is the quieter one next to the protocol it is for.
+  // Starting the judging of the protocol in view, for everyone registered or for the patient chosen.
   if (canRun && protocols.length > 0 && roster.length > 0 && !needsPatient) {
     actions.push({
       key: 'evaluate', label: '开始评估', kind: 'start', loading: evaluation.busy || settling,
@@ -291,18 +310,18 @@ export function useMatchingControls({ studyId, data, direction, protocolId, subj
     });
   }
 
-  const coverage = data.candidateCoverage;
+  const coverage = judged ? undefined : data.candidateCoverage;
   const notes = (
     <>
       {coverage && (
         <Note result={['本次选择 ', { n: coverage.requested }, ' 人 · 已评估 ', { n: coverage.evaluated }, ' 人 · 待评估 ', { n: coverage.pending }, ' 人 · 暂不可用 ', { n: coverage.unavailable }, ' 人']} />
       )}
-      {data.basisUpdated && canRun && (
+      {!judged && data.basisUpdated && canRun && (
         <Note action={<Button variant="secondary" size="sm" actionKind="start" loading={evaluation.busy} disabled={evaluation.busy || settling}
           onClick={() => void evaluation.evaluate({ protocolVersionIds: [viewing], direction: way, subjectKeys: data.basisUpdated?.subjects })}>重新开始评估</Button>}
         >{`${data.basisUpdated.count} 人的评估依据已更新`}</Note>
       )}
-      {data.basisUpdated && !canRun && <Note result={[{ n: data.basisUpdated.count }, ' 人的评估依据已更新']} />}
+      {!judged && data.basisUpdated && !canRun && <Note result={[{ n: data.basisUpdated.count }, ' 人的评估依据已更新']} />}
       <EvaluationNote message={evaluation.message} failed={evaluation.failed} />
     </>
   );
