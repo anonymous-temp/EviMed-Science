@@ -1451,6 +1451,22 @@ test("the net effect compares the groups both windows measured: a control group 
   assert.equal(verifyFrozenNetRow(measuredNet, measuredMap), true);
   assert.equal(verifyFrozenNetRow({ ...measuredNet, noise_band: 99 }, measuredMap), false);
   const noiseKey = measuredNet.assessment.noise.generation;
+  const fastControl = new Map([...measuredMap].map(([key, value]) => {
+    const copy = structuredClone(value);
+    for (const row of copy.payload.rows) Object.assign(row.surface, { deep: false, newChat: false, city: "北京" });
+    return [key, copy];
+  }));
+  assert.equal(verifyFrozenNetRow(measuredNet, fastControl), true, "the same fast sampling surface remains comparable");
+  for (const [field, value] of [["deep", true], ["newChat", true], ["city", "上海"]]) {
+    const altered = new Map(fastControl); const noiseInput = structuredClone(altered.get(noiseKey));
+    for (const row of noiseInput.payload.rows) row.surface[field] = value;
+    altered.set(noiseKey, noiseInput);
+    assert.equal(verifyFrozenNetRow(measuredNet, altered), false, `noise surface ${field} must match the compared samples`);
+  }
+  const harmless = new Map(fastControl); const extra = structuredClone(harmless.get(noiseKey));
+  for (const row of extra.payload.rows) Object.assign(row.surface, { transport: "fixture", responseDigest: "unrelated", measurementContract: { samplingMode: "noise", repeats: 9 } });
+  harmless.set(noiseKey, extra);
+  assert.equal(verifyFrozenNetRow(measuredNet, harmless), true, "transport metadata and different noise repeat counts do not define the sampling surface");
   for (const field of ["parserVersion", "rubricVersion", "brands"]) {
     const altered = new Map(measuredMap); const original = structuredClone(altered.get(noiseKey));
     const input = original.payload.rows.find(row => row.facts);
@@ -1462,6 +1478,11 @@ test("the net effect compares the groups both windows measured: a control group 
   }
   const missingNoise = new Map(measuredMap); missingNoise.delete(noiseKey);
   assert.equal(verifyFrozenNetRow(measuredNet, missingNoise), false);
+  await database.query(`UPDATE evimed_geo.snapshots SET surface=jsonb_set(surface,'{deep}','true'::jsonb) WHERE round_id='r_noise'`);
+  await measureRound({ store, now: () => new Date("2026-09-06T02:10:00Z") }, "r_noise");
+  await measureRound({ store, now: () => new Date("2026-09-06T02:20:00Z") }, "r_week");
+  assert.deepEqual([(await net("r_week")).status, (await net("r_week")).reason], ["not_measurable", "noise_basis_unrecorded"]);
+  await database.query(`UPDATE evimed_geo.snapshots SET surface=surface - 'deep' WHERE round_id='r_noise'`);
   await database.query(`UPDATE evimed_geo.facts SET parser_version='changed',judge_extract='{"rubricVersion":"later"}' WHERE snapshot_id='r_noise_pg_q1'`);
   assert.equal(verifyFrozenNetRow(measuredNet, measuredMap), true, "later facts never rewrite the frozen proof");
   await measureRound({ store, now: () => new Date("2026-09-06T03:00:00Z") }, "r_noise");

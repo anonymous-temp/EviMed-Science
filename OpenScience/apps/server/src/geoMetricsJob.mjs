@@ -50,7 +50,7 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { GEO_METRICS, computeGeoMetrics, netEffect, noiseBand } from "@evimed/domain";
+import { GEO_METRICS, computeGeoMetrics, geoSurfaceKey, netEffect, noiseBand } from "@evimed/domain";
 
 /** Round kinds whose metrics are computed. Confirmation rounds feed the errors only. */
 export const GEO_METRIC_ROUND_KINDS = Object.freeze(["baseline", "weekly", "sentinel", "post_publication", "single_step", "noise"]);
@@ -526,6 +526,12 @@ export function verifyFrozenNetRow(row, snapshots) {
   } catch { return false; }
 }
 
+/** The sampling interface excludes transport metadata and the noise round's intentional repeat contract. */
+function noiseSamplingSurface(surface) {
+  const { mode, deep, newChat, city } = surface ?? {};
+  return geoSurfaceKey({ mode, deep, newChat, city });
+}
+
 /** The noise round must use recorded, compatible judgments from the compared population. */
 function noiseBasisMatches(noise, compared, arms, metricId, expected) {
   if (noise?.roundKind !== 'noise' || !Array.isArray(noise.rows) || !Number.isFinite(expected)) return false;
@@ -536,12 +542,12 @@ function noiseBasisMatches(noise, compared, arms, metricId, expected) {
     if (row.status !== 'valid' || !arms.pilot.includes(row.groupId) && !arms.control.includes(row.groupId)) continue;
     const facts = row.facts;
     if (!facts?.judgedAt || facts.checks?.judgementCoverage?.status !== 'complete' || !facts.judgeExtract?.rubricVersion || !facts.parserVersion) return false;
-    allowed.set(JSON.stringify([row.questionId,row.groupId,row.pool,row.engine,row.surface?.mode]), JSON.stringify([facts.judgeExtract.rubricVersion,facts.parserVersion]));
+    allowed.set(JSON.stringify([row.questionId,row.groupId,row.pool,row.engine,noiseSamplingSurface(row.surface)]), JSON.stringify([facts.judgeExtract.rubricVersion,facts.parserVersion]));
   }
   let count = 0;
   for (const row of noise.rows) {
     if (row.status !== 'valid' || !Number.isInteger(row.repeatIndex) || row.repeatIndex < 0) return false;
-    const facts = row.facts, key = JSON.stringify([row.questionId,row.groupId,row.pool,row.engine,row.surface?.mode]);
+    const facts = row.facts, key = JSON.stringify([row.questionId,row.groupId,row.pool,row.engine,noiseSamplingSurface(row.surface)]);
     const group = repeats.get(row.repeatIndex) ?? new Set();
     if (group.has(key)) return false;
     group.add(key); repeats.set(row.repeatIndex, group);
