@@ -1048,6 +1048,10 @@ function replicateReasons(bundle, stages) {
 
 const TRUTH_LABELS = Object.freeze(/** @type {Record<string, string>} */ ({
   effect: "真实效应", sd: "标准差", hazardRatio: "真实 HR", controlMedian: "对照组中位", controlRate: "对照事件率", treatmentRate: "试验事件率",
+  // The keys a binary design and a single-arm design state their truth with (found live 2026-11-04: a non-inferiority sample size and a Simon
+  // two-stage design printed `riskDifference 0` and `nullRate 0.2` in the first line of the data generation).
+  riskDifference: "真实率差", oddsRatio: "真实优势比", responseRate: "真实应答率", nullRate: "零假设应答率", alternativeRate: "备择应答率",
+  baselineCorrelation: "基线相关",
 }));
 
 /**
