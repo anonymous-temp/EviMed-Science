@@ -150,6 +150,6 @@ test("a card made of evidence gets the notes of that evidence in the answer of t
   assert.equal(written.ok, true);
   assert.equal(saved.length, 1, "the card is saved");
   assert.deepEqual(asked[0].ids, ["ev1"]);
-  assert.equal(asked[0].wait, true, "the card's answer waits, within the pipeline's limit, for the second readings of what it cites");
+  assert.ok(asked[0].wait > 0 && asked[0].wait <= 5000, "the card's answer waits, within the write's one limit, for the second readings of what it cites");
   assert.deepEqual(written.issues.map((/** @type {any} */ found) => found.code), ["vcr_evidence_values_inconsistent", "vcr_evidence_second_read_differs"]);
 });

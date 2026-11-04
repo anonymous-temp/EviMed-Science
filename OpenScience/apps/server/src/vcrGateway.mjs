@@ -100,7 +100,7 @@ import { assumptionSourceEntry, carrySourceEntries, checkSourceEntries, standing
 import { resolveJobSubject, prepareVcrSubjectPopulation, vcrConversationSubject, vcrJobFroze } from "./vcrSubjects.mjs";
 import { prepareVcrModelDesign } from "./vcrModelDesign.mjs";
 import { VCR_COVERAGE_POPULATION_NAME, vcrCohortRulesFromCriteria } from "./vcrCoverage.mjs";
-import { readPoolResult, distributionFromPooled, naturalOf, parameterKindOf, poolTargetOf, defaultScaleOf, defaultArmRoleOf, evidenceItemGaps, EVIDENCE_DERIVED_VALUE_SOURCES, EVIDENCE_ITEM_WORDS_ZH, VCR_POOL_MAX_STUDIES } from "./vcrEvidence.mjs";
+import { readPoolResult, distributionFromPooled, naturalOf, parameterKindOf, poolTargetOf, defaultScaleOf, defaultArmRoleOf, evidenceItemGaps, EVIDENCE_DERIVED_VALUE_SOURCES, EVIDENCE_ITEM_WORDS_ZH, VCR_POOL_MAX_STUDIES, SECOND_READ_CARD_WAIT_MS } from "./vcrEvidence.mjs";
 
 const gatewayPath = "/internal/vcr/v1";
 const operations = Object.freeze(["read", "write", "simulate", "digitize"]);
@@ -740,7 +740,7 @@ function distributionOf(item, field, value) {
  * runtime is reserved for, when it is a bounded one (`runtimeRunId`).
  * @typedef {{ store: any, service: any, orchestrator: any, study: any, evidence?: any, evidenceStore?: any, matchStore?: any,
  *   matching?: any, patientTrials?: any, seal?: any, dataPlane?: any, documents?: any, report?: (code: string) => void,
- *   caller?: { runtimeRunId?: string | null, provenance?: any } | null, knowledge?: any, afterFreeze?: boolean }} WriteDeps
+ *   caller?: { runtimeRunId?: string | null, provenance?: any } | null, knowledge?: any, afterFreeze?: boolean, waitUntil?: number, waitMs?: number }} WriteDeps
  */
 
 /** The criterion fields a protocol write takes. */
@@ -2190,7 +2190,9 @@ function noteCode(note) {
       const stored = (await deps.store.assumptions(deps.study.id).catch(() => [])).find((/** @type {any} */ card) => card.id === id);
       const cited = Array.isArray(stored?.evidenceIds) ? stored.evidenceIds.map(String) : [];
       // The reading of the values the card cites by a second model (E1) may still be running: the answer waits for it, within a limit, and the card is already saved.
-      const notes = cited.length ? await deps.evidence.valueNotes({ userId: deps.study.userId, studyId: deps.study.id, ids: cited, wait: true }).catch(() => []) : [];
+      // The limit is the write's, not the card's: what the cards before this one waited is gone from it, so that a write of several cards answers inside the budget.
+      const left = Math.max(0, (deps.waitUntil ?? Date.now() + SECOND_READ_CARD_WAIT_MS) - Date.now());
+      const notes = cited.length ? await deps.evidence.valueNotes({ userId: deps.study.userId, studyId: deps.study.id, ids: cited, wait: left }).catch(() => []) : [];
       for (const note of notes) item.issues.push(issue(item.index, "evidenceIds", noteCode(note), note.message));
     }
     if (id && item.ok && vcrIsEffectCardKey(key) && !VCR_EFFECT_ROLES.includes(/** @type {any} */ (item.row.effectRole))) {
@@ -2212,7 +2214,8 @@ function noteCode(note) {
  * @param {WriteDeps & { what: string, items: any[] | null, data: any | null }} input
  */
 export async function vcrRuntimeWrite({ store, service, orchestrator, study, what, items, data, evidence = null, evidenceStore = null,
-  matchStore = null, matching = null, patientTrials = null, seal = null, dataPlane = null, documents = null, report = () => {}, caller = null, knowledge = null }) {
+  matchStore = null, matching = null, patientTrials = null, seal = null, dataPlane = null, documents = null, report = () => {}, caller = null, knowledge = null,
+  waitMs = SECOND_READ_CARD_WAIT_MS }) {
   if (["site", "followup"].includes(what)) throw gatewayError(410, "vcr_recruitment_retired", "该运营流程已停用；患者匹配仍可使用，历史观察可在“依据”中只读查看或导出。");
   /** @type {string[]} */
   const ids = [];
@@ -2239,7 +2242,9 @@ export async function vcrRuntimeWrite({ store, service, orchestrator, study, wha
   /** What the writers of one request share: the changed nodes, the answers beside the ids, and the pairs to judge again. @type {{ changed: string[], results: any[], reevaluate?: Set<string> }} */
   const scratch = { changed, results };
   /** @type {WriteDeps} */
-  const deps = { store, service, orchestrator, study, evidence, evidenceStore, matchStore, matching, patientTrials, seal, dataPlane, documents, report, caller, knowledge };
+  const deps = { store, service, orchestrator, study, evidence, evidenceStore, matchStore, matching, patientTrials, seal, dataPlane, documents, report, caller, knowledge,
+    // the one wait the whole write may spend on the second readings of the values its cards cite
+    waitUntil: Date.now() + Math.max(0, waitMs) };
   // The run the platform sent to take new evidence into a study's cards (flywheel F24) writes its versions beside the frozen one when
   // the study's analysis plan has frozen: the dispatch names the run, and a card a run types never decides it. Any other writer — the
   // researcher's own conversation, an ordinary programme step — writes exactly as before, which for a frozen study is a new freeze.
@@ -2737,6 +2742,8 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
             evidence: vcr.evidence ?? null, evidenceStore: vcr.evidenceStore ?? null, matchStore: vcr.matchStore ?? null,
             matching: vcr.matching ?? null, patientTrials: vcr.patientTrials ?? null, seal: vcr.seal ?? null, dataPlane: vcr.dataPlaneSeam ?? null, documents: vcr.documents ?? null, report,
             knowledge: vcr.knowledge ?? vcr.service?.packages?.knowledge ?? null,
+            // half of the answer budget at most: the wait is the write's own, and the rest of the budget is the write's work
+            waitMs: Math.min(SECOND_READ_CARD_WAIT_MS, Math.floor(budget / 2)),
             caller: { runtimeRunId: runtimeRunId == null ? null : String(runtimeRunId),
               ...(["fact", "language_judgment"].includes(request.what) && typeof vcr.matchStore?.producerContext === "function"
                 ? { provenance: { ...await vcr.matchStore.producerContext(study, runtimeRunId == null ? null : String(runtimeRunId)).catch(() => ({ schema: 1, status: "ledger_unavailable", runId: runtimeRunId })), runReceipt } } : {}) },

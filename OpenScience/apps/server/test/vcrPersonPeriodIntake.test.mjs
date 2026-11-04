@@ -7,6 +7,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import test from "node:test";
 
 import { analysisTableIssues, deriveAnalysisShapes, normalizeFieldMap, tablesNeededBy, toCsv, validateFieldMap } from "../src/vcrDataPlane.mjs";
+import { vcrOutcomeColumns } from "../src/vcrSeal.mjs";
 
 const FIXTURE = new URL("./fixtures/vcr-person-period/longitudinal.csv", import.meta.url);
 
@@ -34,7 +35,8 @@ test("a file with one row per person and period is filed as the longitudinal sha
     { table: "registry.csv", column: "PATIENT_NO", role: "subject_key", identifier: true },
     { table: "registry.csv", column: "PERIOD", role: "visit_date" },
     { table: "registry.csv", column: "TREATED", role: "measurement", parameter: "treatment" },
-    { table: "registry.csv", column: "EVENT", role: "measurement", parameter: "outcome" },
+    // the outcome is marked, as the notes say: that is what lets the study's seal withhold the table until the plan is frozen
+    { table: "registry.csv", column: "EVENT", role: "measurement", parameter: "outcome", outcome: true },
     { table: "registry.csv", column: "ELIGIBLE", role: "measurement", parameter: "eligible" },
     { table: "registry.csv", column: "AGE", role: "measurement", parameter: "age" },
   ];
@@ -42,6 +44,7 @@ test("a file with one row per person and period is filed as the longitudinal sha
   assert.deepEqual(issues, []);
   const checked = validateFieldMap(columns, [table]);
   assert.deepEqual(checked.issues, [], "the field map is valid");
+  assert.deepEqual(vcrOutcomeColumns(checked.columns), ["EVENT"], "the outcome column is the one the seal withholds");
   const derived = deriveAnalysisShapes({ tables: [table], entries: checked.columns, key: Buffer.alloc(32, 7) });
   const long = derived.shapes.longitudinal;
   assert.ok(long, "a longitudinal table is derived");

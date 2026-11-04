@@ -129,7 +129,8 @@ export const VCR_STRATUM_KEYS = Object.freeze(["region", "line", "era", "biomark
 export const VCR_POOL_MAX_STUDIES = 200;
 /**
  * The longest the write of a card waits for the second readings of the values it cites (E1) before it answers without them. They go on
- * in the background and are on the card when they finish; a card is never held longer than this for them.
+ * in the background and are on the card when they finish; a card is never held longer than this for them, and a write of several cards
+ * holds the answer this long for all of them together.
  */
 export const SECOND_READ_CARD_WAIT_MS = 5_000;
 
@@ -1818,12 +1819,15 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
       const wanted = new Set((ids ?? []).map(String));
       if (!wanted.size) return [];
       // A card's write waits, within a limit, for the second readings of the values it cites; a reading still running is on the card when it ends.
-      if (wait) {
+      // `wait` is the limit in milliseconds (`true` is the card's own limit): a write of several cards shares one limit between them, so that the
+      // answer comes inside the gateway's budget and the cards it saved are never answered with a timeout (review RF2 P1-6).
+      const limit = wait === true ? SECOND_READ_CARD_WAIT_MS : Math.min(SECOND_READ_CARD_WAIT_MS, Math.max(0, Number(wait) || 0));
+      if (limit > 0) {
         const flying = [...wanted].map((id) => pendingReads.get(id)).filter(Boolean);
         if (flying.length) {
           /** @type {ReturnType<typeof setTimeout> | undefined} */
           let timer;
-          await Promise.race([Promise.allSettled(flying), new Promise((resolve) => { timer = setTimeout(resolve, SECOND_READ_CARD_WAIT_MS); })]);
+          await Promise.race([Promise.allSettled(flying), new Promise((resolve) => { timer = setTimeout(resolve, limit); })]);
           clearTimeout(timer);
         }
       }

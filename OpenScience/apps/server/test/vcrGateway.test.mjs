@@ -1760,3 +1760,36 @@ test("a unit the quotation does not print drops the unit and keeps the fact; a b
   const invented = factWriter({ text });
   assert.equal((await invented.write(item({ variable: "hba1c", value: 7.9, unit: "%", surface: "7.9", quote: "HgbA1c 7.4 last month." }))).ok, false);
 });
+
+test("a write of several cards waits once for the second readings, and answers inside the gateway's budget with every card saved (review RF2 P1-6)", async () => {
+  const evidenceRow = (/** @type {string} */ id) => ({ id, parameter: "hazard_ratio", arm_role: "contrast", value: 0.62, ci_low: 0.48, ci_high: 0.95, value_source: "extracted", detail: {}, locator: { verification: "verified" } });
+  /** @type {any[]} */ const saved = [];
+  const evidenceStore = {
+    async citableEvidenceIds(/** @type {any} */ call) { return call.ids ?? ["ev1", "ev2", "ev3"]; },
+    async citableItemsById(/** @type {any} */ call) { return (call.ids ?? ["ev1", "ev2", "ev3"]).map(evidenceRow); },
+    async saveAssumption(/** @type {any} */ call) { saved.push(call); return { id: `a${saved.length}`, key: call.key, version: 1 }; },
+  };
+  /** @type {number[]} */ const waits = [];
+  // a second reading that is slow: it waits as long as it is allowed to, the documented worst case
+  const evidence = { async valueNotes(/** @type {any} */ call) {
+    waits.push(call.wait);
+    const limit = call.wait === true ? 5000 : Number(call.wait) || 0;
+    if (limit > 0) await new Promise((resolve) => setTimeout(resolve, limit));
+    return [];
+  } };
+  const { vcr } = fixture({ evidence, evidenceStore });
+  vcr.store.assumptions = async () => saved.map((call, at) => ({ id: `a${at + 1}`, key: call.key, version: 1, evidenceIds: [`ev${at + 1}`] }));
+  const budgetMs = 1200;
+  const handler = createVcrGatewayHandler(config, runtimeManager, { vcr, budgetMs });
+  const items = [1, 2, 3].map((n) => ({ key: `control_hr_${n}`, name: `对照风险比 ${n}`, parameter: "hazard_ratio", sourceKind: "external_evidence", evidenceIds: [`ev${n}`], effectRole: "realistic_expectation" }));
+  const res = response();
+  const started = Date.now();
+  await handler(request("/internal/vcr/v1/write", { what: "assumption", items }), res);
+  const took = Date.now() - started;
+  assert.equal(res.status, 200, res.body);
+  assert.equal(saved.length, 3, "every card is saved");
+  assert.ok(took < budgetMs, `the answer came in ${took} ms, inside the ${budgetMs} ms budget (three cards waited one after another would be three times the limit)`);
+  assert.equal(waits.length, 3);
+  assert.ok(waits[0] > 0 && waits[0] <= budgetMs / 2, "the first card may wait up to half the budget");
+  assert.ok(waits[1] < waits[0] && waits[2] <= waits[1], "and what it waited is gone from the next ones");
+});
