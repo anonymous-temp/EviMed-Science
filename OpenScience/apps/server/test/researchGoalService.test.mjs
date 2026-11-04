@@ -104,6 +104,26 @@ test("a person's stop is a stop: the goal rests, and is not taken up again", asy
   } finally { await w.close(); }
 });
 
+test("a person's stop after a pause the bar could not confirm stays a stop: it is not read as an interruption", async () => {
+  const w = await world({ runs: [setting(), round(1, { artifacts: ["n.md"] })], bar: { read: { result: { kind: "fault", code: "runtime_not_running" } } } });
+  try {
+    await w.goals.pause(w.project, "s");
+    assert.equal(w.docs.get("goal-s").payload.pauseUnconfirmed, true);
+    const stopped = round(2, { status: "canceled", canceledBy: "user", errorCode: "runtime_canceled", startedAt: iso(T0 + 60_000), finishedAt: iso(T0 + 90_000) });
+    w.state.runs = [...w.state.runs, stopped];
+    w.state.now = T0 + 120_000;
+    await w.goals.observeRound(w.project, stopped);
+    const after = w.docs.get("goal-s").payload;
+    assert.equal(after.status, "stopped");
+    assert.equal(after.pauseUnconfirmed, false);
+    w.state.now = T0 + 900_000;
+    await w.goals.tick();
+    assert.equal(w.docs.get("goal-s").payload.status, "stopped");
+    assert.equal(w.calls.notify.length, 0, "nobody is told a stop was an interruption");
+    assert.equal(w.calls.dispatch.length, 0);
+  } finally { await w.close(); }
+});
+
 test("a round the platform ended is taken up again with one turn, after the first backoff, and only then", async () => {
   const killed = round(1, { status: "failed", errorCode: "runtime_stopped", finishedAt: iso(T0 - 10_000) });
   const w = await world({ runs: [setting(), killed] });

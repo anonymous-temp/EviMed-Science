@@ -144,7 +144,8 @@ export class ResearchGoals {
       const at = this.now().toISOString();
       const document = await this.#update(project, run.sessionId, (payload) => {
         const taken = run.goal?.id && payload.goalId !== run.goal.id ? { goalId: run.goal.id } : {};
-        if (roundStoppedByPerson(run)) return { ...payload, ...taken, status: "stopped", reason: "person", statusAt: at };
+        // Whatever a pause left unconfirmed no longer matters: a stopped goal is at rest and is not looked at again.
+        if (roundStoppedByPerson(run)) return { ...payload, ...taken, status: "stopped", reason: "person", statusAt: at, pauseUnconfirmed: false };
         // A round that began after a goal came to rest means someone took it up (a person's message, LoopX's bar): it is going again. Except a
         // round of LoopX's own on a goal someone paused or stopped: its driver goes on trying to close a round the pause left open.
         const held = payload.status === "paused" || payload.status === "stopped";
@@ -302,7 +303,8 @@ export class ResearchGoals {
     const rounds = goalRounds(await this.agentRuns.list(project), sessionId);
     if (rounds.length === 0) return;
     if (payload.status === "paused") { await this.#enforcePause(project, sessionId, payload, rounds); return; }
-    if (payload.status !== "active" && !payload.pauseUnconfirmed) return;
+    // A goal at rest waits for a person, whatever a pause before it left unconfirmed: going on from here would read a person's stop as an interruption.
+    if (payload.status !== "active") return;
     if (payload.startOnBar) await this.#startOnBar(project, sessionId);
     const live = rounds.find(isLive);
     // Only a turn nobody is at: what is written into a person's own turn reads as their statement to memory and to the learning loop.

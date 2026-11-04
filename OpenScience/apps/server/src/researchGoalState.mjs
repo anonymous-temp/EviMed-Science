@@ -11,13 +11,6 @@
  * @module researchGoalState
  */
 
-/** The states the control plane keeps for a goal between its rounds. A round that is running says so itself, in the ledger. */
-export const GOAL_STATUSES = Object.freeze(["active", "paused", "stopped", "finished", "waiting", "interrupted"]);
-/** Who or what paused a goal. */
-export const GOAL_PAUSE_REASONS = Object.freeze(["person", "no_progress", "budget"]);
-/** The statuses `ResearchGoals.tick` looks at again: the others wait for a person, or are over. */
-export const GOAL_REVIEWED_STATUSES = Object.freeze(["active"]);
-
 /** A round the runtime going away ended, or the provider did: nothing about the goal, and worth starting again. */
 const REVIVABLE_ERRORS = new Set([
   "runtime_stopped", "runtime_canceled", "runtime_yielded", "runtime_session_error", "runtime_monitor_stalled", "runtime_prompt_lost",
@@ -50,15 +43,6 @@ export function goalRounds(runs, sessionId) {
     .sort((a, b) => Date.parse(a.startedAt ?? a.createdAt ?? 0) - Date.parse(b.startedAt ?? b.createdAt ?? 0));
   const first = own.findIndex((run) => setsResearchGoal(run) || isGoalContinuation(run));
   return first < 0 ? [] : own.slice(first);
-}
-
-/** The sessions of a project that have a goal, each with its rounds. @param {readonly any[]} runs @returns {Map<string, any[]>} */
-export function goalSessions(runs) {
-  const sessions = new Map();
-  for (const sessionId of new Set(runs.filter((run) => setsResearchGoal(run) || isGoalContinuation(run)).map((run) => run.sessionId))) {
-    if (typeof sessionId === "string" && sessionId) sessions.set(sessionId, goalRounds(runs, sessionId));
-  }
-  return sessions;
 }
 
 /** @param {any} run */
