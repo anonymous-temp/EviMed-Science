@@ -11,6 +11,8 @@ const patientTextFormats = new Set(['txt', 'md']);
 /** A record as PDF, Word or a picture of a page: read at intake, by the plane's converter or the in-house parser (`vcrRecordExtract.mjs`). */
 const patientBinaryFormats = new Set(['pdf', 'docx', 'png', 'jpg', 'jpeg', 'bmp', 'tif', 'tiff', 'webp']);
 const patientFormats = new Set([...patientTextFormats, ...patientBinaryFormats]);
+/** What an upload's original is cloned from the uploaded file for: the large binary records. A text note or a table is small and is written from the bytes in hand. */
+const clonedFormats = patientBinaryFormats;
 /** What is imported whole: a zip of notes, and a hospital's export (`import_standard`: FHIR as NDJSON, ADaM as SAS transport; a Bundle arrives as `json`, which is a table's receipt). */
 const archiveFormats = new Set(['zip', 'ndjson', 'xpt']);
 /** A table of notes is a table with a note in every row, far past what a table of values weighs; the job streams it, so only the plain table import keeps its own ceiling. */
@@ -52,13 +54,24 @@ async function readOriginal(project, relative, fingerprint, maxBytes) {
   }
 }
 
-export function createVcrUploadReceipts({ documents, sources, write, resolveProject = null }) {
+/**
+ * @param {{ documents: any, sources: any, write?: ((project: any, relative: string, bytes: Buffer) => Promise<unknown>) | null,
+ *   clone?: ((project: any, relative: string, source: string, size: number) => Promise<unknown>) | null, resolveProject?: ((owner: any) => Promise<any>) | null }} deps
+ * `clone` makes the original from a file this upload already wrote, in the same tree, instead of from the bytes in memory: a copy-on-write clone where the filesystem has
+ * one. It is never a hard link, which the workspace's containment checks refuse.
+ */
+export function createVcrUploadReceipts({ documents, sources, write, clone = null, resolveProject = null }) {
   const findReceipt = async (userId, sourceId) => {
     const row = await documents.get(userId, 'preferences', sourceId);
     return row?.payload?.recordType === recordType ? { ...row, userId } : null;
   };
   return {
-    async record(project, { name, bytes, sessionId = null }) {
+    /**
+     * Keep the original of an upload for the intakes. `cloneFrom` is the path the upload was just written to: for a PDF, a Word file, a picture of a page or an
+     * archive the original is a clone of that file, which costs no second copy of the bytes where the filesystem can share them.
+     * @param {any} project @param {{ name: string, bytes: Buffer, sessionId?: string | null, cloneFrom?: string | null }} upload
+     */
+    async record(project, { name, bytes, sessionId = null, cloneFrom = null }) {
       if (!Buffer.isBuffer(bytes) || !bytes.length || typeof name !== 'string') return null;
       const basename = path.basename(name.replaceAll('\\', '/'));
       if (!basename || basename === '.' || basename === '..') return null;
@@ -80,8 +93,13 @@ export function createVcrUploadReceipts({ documents, sources, write, resolveProj
         && row.payload.sessionId === sessionId && patientReceipt(row) === patient && archiveReceipt(row) === archive;
       if (existing && !sameReceipt(existing)) throw new HttpError(409, 'vcr_upload_original_unavailable', 'The upload receipt could not be verified.');
       if (!existing || !await readOriginal(project, relative, fingerprint, bytes.length)) {
-        if (write) await write(project, relative, bytes);
-        else await writeFileAtomicNoFollow(project.baseDir, resolveScopedPath(project.baseDir, relative), bytes, { mode: 0o600 });
+        // The bytes are checked after the clone, because the file cloned from is the workspace's and was written a moment ago; the bytes in memory are written when the clone cannot be made or is not them.
+        const cloned = cloneFrom && clone && (clonedFormats.has(format) || archive) && await clone(project, relative, cloneFrom, bytes.length).then(() => true, () => false)
+          && await readOriginal(project, relative, fingerprint, bytes.length);
+        if (!cloned) {
+          if (write) await write(project, relative, bytes);
+          else await writeFileAtomicNoFollow(project.baseDir, resolveScopedPath(project.baseDir, relative), bytes, { mode: 0o600 });
+        }
       }
       if (existing) return receiptHandle(existing);
       try {

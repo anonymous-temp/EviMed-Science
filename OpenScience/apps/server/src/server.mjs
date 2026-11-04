@@ -523,6 +523,7 @@ import {
   assertString,
   clearSessionCookie,
   directorySize,
+  cloneFileNoFollow,
   mimeFor,
   normalizeRoot,
   normalizeWorkspaceRelativePath,
@@ -6009,6 +6010,12 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       await assertProjectCapacity(project, full, bytes.length, config);
       await writeFileAtomicNoFollow(project.baseDir, full, bytes, { mode: 0o600 });
     }) }) : null;
+    }),
+    // The original of a large binary record is a clone of the file the upload just wrote (copy-on-write where the filesystem has it); the storage quota counts it as a file of its own.
+    clone: (project, relative, source, size) => withProjectStorageMutation(project, async () => {
+      const full = resolveScopedPath(project.baseDir, relative);
+      await assertProjectCapacity(project, full, size, config);
+      await cloneFileNoFollow(project.baseDir, source, full);
   if (vcr?.recordsOriginals) vcr.recordsOriginals.receipts = vcrUploadReceipts;
   if (vcr && vcrUploadReceipts) vcr.dataIntake = createVcrDataIntake({ store: vcr.store, dataStore: vcr.dataStore, dataPlane: vcr.dataPlane,
     sources: vcrUploadReceipts, resolveProject: sourceProject, recordsImport: vcr.recordsImport,
@@ -8949,7 +8956,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         const buffer = encoding === "base64" ? Buffer.from(data, "base64") : Buffer.from(data, "utf8");
         const registered = await writeProjectUpload(ctx, { root, rel, buffer });
         let vcrInputWarning;
-        const vcrInput = !registered ? await vcrUploadReceipts?.record(ctx.project, { name: rel, bytes: buffer }).catch(async error => {
+        const vcrInput = !registered ? await vcrUploadReceipts?.record(ctx.project, { name: rel, bytes: buffer, cloneFrom: resolveScopedPath(root === "base" ? ctx.project.baseDir : ctx.project.workspaceDir, rel) }).catch(async error => {
           vcrInputWarning = { code: 'vcr_upload_original_unavailable', message: 'The file was uploaded. Virtual clinical research could not retain its original; upload it again to retry.' };
           await audit(ctx, 'vcr.upload_original.record', 'failed', { error: error?.code ?? vcrInputWarning.code }).catch(() => {});
           return null;
