@@ -1684,30 +1684,22 @@ test("whole language clauses survive the gateway and ambiguous language keys are
   assert.equal(saved.length, 4);
 });
 
-test("protocol and candidate writes reject cross-criterion key collisions as a whole set", async () => {
-  const writes = [];
-  const made = fixture({
-    evidence: { candidateRecord: async () => ({ status: "ok", trial: { registryId: "NCT00000001", eligibilityText: "First condition. Second condition.", recordHash: "hash" } }) },
-    patientTrials: { writeTrial: async (_study, input) => { writes.push(input); return { trial: { id: "trial_1" }, criteria: input.criteria, evaluation: {} }; } },
-  });
+test("protocol writes reject cross-criterion key collisions as a whole set", async () => {
+  const made = fixture({});
   const criterion = (text) => ({ kind: "inclusion", sourceText: text, requirement: { op: "language", key: "shared", text } });
   const call = async (body) => { const res = response(); await made.handler(request("/internal/vcr/v1/write", body), res); return res.json().data; };
   const conflicting = [criterion("First condition."), criterion("Second condition.")];
   for (const body of [
     { what: "protocol", data: { title: "t", criteria: conflicting } },
     { what: "criteria", items: conflicting },
-    { what: "candidate_trial", items: [{ registryId: "NCT00000001", criteria: conflicting }] },
   ]) {
     const result = await call(body);
     assert.equal(result.ok, false);
     assert.equal(result.ids.length, 0);
     assert.ok(result.issues.some(issue => issue.code === "vcr_criterion_malformed"));
   }
-  assert.equal(writes.length, 0);
   const same = [criterion("First condition."), criterion("First condition.")];
   assert.equal((await call({ what: "protocol", data: { title: "t", criteria: same } })).ok, true);
-  assert.equal((await call({ what: "candidate_trial", items: [{ registryId: "NCT00000001", criteria: same }] })).ok, true);
-  assert.equal(writes.length, 1);
 });
 
 test("candidate language judgment forwards both observed hashes or reports an unfenced legacy write", async () => {

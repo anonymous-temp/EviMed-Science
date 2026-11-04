@@ -253,24 +253,19 @@ test("the list is capped and says there is more; the registry is asked for a ful
 
 // --- the service: a read of its own that needs no study ------------------------------------------------
 
-test("candidates is a read of its own, a registry search that needs no study, and it marks the trials the account has structured before (M1, M2)", async () => {
+test("candidates is a read of its own, a registry search that needs no study, and (M1)", async () => {
   assert.ok(VCR_READ_WHATS.includes("candidates"));
   const evidence = createVcrEvidencePipeline({ store: {}, registry: registryDouble(), now: () => NOW });
-  const held = [];
-  const patientTrials = { async parsedHeld(study, trials) { held.push([study.userId, trials.map((trial) => trial.registryId)]); return new Set(["clinicaltrials.gov\u0000NCT07300001"]); } };
-  const service = new VcrService({ store: {}, config: { vcrCandidateSearchMax: 3 }, evidence, patientTrials });
+  const service = new VcrService({ store: {}, config: { vcrCandidateSearchMax: 3 }, evidence });
   const answer = await service.runtimeRead({ id: null, userId: "u1", projectId: "prj_1", scope: "conversation" }, "candidates", { condition: "lung cancer" });
   assert.equal(answer.available, true);
   assert.equal(answer.candidates.length, 3, "the deployment's size caps the list");
   assert.equal(answer.candidates[0].registryId, "NCT07300001");
-  assert.equal(answer.candidates[0].parsedBefore, true);
-  assert.ok(answer.candidates.slice(1).every((candidate) => candidate.parsedBefore === undefined));
-  assert.equal(held[0][0], "u1");
   // The registry's own figures are not this study's people, and nothing about them is a cell of a few people: the study's small-cell
   // boundary, which this read passes through like every read, leaves the answer as it was (the counts of a list of 3 or 4 are not hidden).
   assert.equal(answer.registries[0].searched[0].total, 2);
   const raw = await evidence.candidatesFor({ userId: "u1" }, { condition: "lung cancer" }, 3);
-  assert.deepEqual({ ...answer, candidates: answer.candidates.map(({ parsedBefore: _p, ...candidate }) => candidate) }, JSON.parse(JSON.stringify(raw)));
+  assert.deepEqual(answer, JSON.parse(JSON.stringify(raw)));
   const absent = await new VcrService({ store: {}, config: {} }).runtimeRead({ id: null, userId: "u1", scope: "conversation" }, "candidates", { condition: "x" });
   assert.deepEqual([absent.available, absent.code], [false, "registry_unavailable"]);
 });

@@ -191,7 +191,6 @@ test("the contract read carries each field's words with what they mean and one e
   assert.match(evidence.source, /publication: \{ pmid \} or \{ doi \}/);
   assert.equal(vcrContractsRead("assumption").writes.assumption.words.sourceKind.external_evidence.includes("evidenceIds"), true);
   assert.equal(vcrContractsRead("criteria").writes.criteria.words.criterionType.prior_treatment.includes("治疗线数"), true);
-  assert.ok(vcrContractsRead("candidate_trial").writes.candidate_trial.words.criterionType);
   for (const what of ["evidence_item", "trial_scenario", "design_grid", "plan", "candidate_trial"]) {
     const example = /** @type {Record<string, any>} */ (VCR_WRITE_EXAMPLES)[what];
     const fields = /** @type {Record<string, readonly string[]>} */ (VCR_WRITE_FIELDS)[what];

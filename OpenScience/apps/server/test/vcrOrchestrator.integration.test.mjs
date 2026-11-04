@@ -2574,11 +2574,9 @@ test("the 15 refused calls of the two live conversations of 2026-11-01, replayed
   // c1: the matching write that was refused on nineteen lines (the first item's eleven are replayed: the second item's criteria were not recorded)
   const { vcrRuntimeWrite: write } = await import("../src/vcrGateway.mjs");
   const item = fixture.c1.item;
-  const trial = { registry: "clinicaltrials.gov", registryId: item.registryId, recordHash: "fixture", eligibilityText: item.criteria.map((/** @type {any} */ criterion) => criterion.sourceText).join("\n") };
   /** @type {any[]} */ const written = [];
-  const answer = await write({ store: {}, service: {}, orchestrator: null, study: { id: "std_c1", userId: "u_c1", projectId: "default", scope: "conversation" }, what: "candidate_trial", items: [item], data: null,
-    evidence: { async candidateRecord() { return { status: "ok", trial }; } },
-    patientTrials: { async holds() { return true; }, async writeTrial(/** @type {any} */ _study, /** @type {any} */ input) { written.push(input); return { trial: { id: "ctr_1" }, created: true, criteria: input.criteria, evaluation: { evaluated: [] } }; } } });
+  const store = { async latestProtocolVersion() { return null; }, async saveProtocolVersion(/** @type {any} */ input) { written.push(input); return { id: "prt_1", version: 1 }; } };
+  const answer = await write({ store, service: {}, orchestrator: null, study: { id: "std_c1", userId: "u_c1", projectId: "default", scope: "conversation" }, what: "criteria", items: [{ title: "v1", criteria: item.criteria }], data: null });
   assert.deepEqual(answer.issues.filter((/** @type {any} */ entry) => /criterionType/.test(entry.field)), [], "no line is refused for a type");
   assert.equal(answer.ok, true, JSON.stringify(answer.issues));
   assert.equal(written[0].criteria.length, 15, "all fifteen criteria are written");

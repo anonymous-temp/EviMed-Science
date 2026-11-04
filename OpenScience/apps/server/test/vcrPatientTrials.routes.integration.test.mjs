@@ -1,4 +1,4 @@
-// 「给患者找试验」 through the real hosted app, over HTTP, against a real PostgreSQL: a run writes two registry trials for a patient
+// 「给患者找试验」 through the real hosted app, over HTTP, against a real PostgreSQL: two registry trials are held for a patient
 // (the registry answers from a recorded shape), the platform judges the patient against each, and the matching tab of the study
 // answers the ranked trials and the chosen trial's criteria — as the owner, as a reader who may only read, and not at all for
 // somebody outside the study. The page's one action dispatches a run of the matching capability. Nothing leaves the process: the
@@ -10,7 +10,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, before, test } from "node:test";
 
-import { vcrRuntimeWrite } from "../src/vcrGateway.mjs";
+import { storedExclusion } from "../src/vcrMatching.mjs";
+import { locateSourceText } from "../src/vcrPatientTrials.mjs";
 import { createWebApiApp } from "../src/server.mjs";
 import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
 
@@ -141,14 +142,30 @@ async function furnishedStudy() {
   return study;
 }
 
-/** The run's write, as the gateway makes it: the composed module's own seams. @param {any} study @param {any[]} items */
-function runWrites(study, items) {
+/**
+ * Trials held in the study with the criteria a test names, written the way the trials are kept: the record read from the registry,
+ * each wording located in it, an exclusion stored as the negation of what is written, the patients named judged. The retired
+ * `candidate_trial` write used to do this for a run; a test seeds the same rows through the composed module's own seams.
+ * @param {any} study @param {any[]} items
+ */
+async function runWrites(study, items) {
   const vcr = context.app.vcr;
-  return vcrRuntimeWrite({
-    store: vcr.store, service: vcr.service, orchestrator: vcr.orchestrator, study, what: "candidate_trial", items,
-    evidence: vcr.evidence, evidenceStore: vcr.evidenceStore, matchStore: vcr.matchStore, matching: vcr.matching, patientTrials: vcr.patientTrials,
-    seal: vcr.seal, dataPlane: vcr.dataPlaneSeam, documents: vcr.documents, report: () => {}, caller: { runtimeRunId: null },
-  });
+  /** @type {any[]} */
+  const results = [];
+  for (const item of items) {
+    const fetched = await vcr.evidence.candidateRecord({ userId: study.userId, registry: "clinicaltrials.gov", registryId: item.registryId });
+    const trial = fetched.trial;
+    const criteria = item.criteria.map((/** @type {any} */ criterion) => {
+      const found = locateSourceText(criterion.sourceText, trial.eligibilityText);
+      return { ...criterion, reviewState: "ai_set", applicability: null, evidenceNeeded: criterion.evidenceNeeded ?? [],
+        requirement: criterion.kind === "exclusion" ? storedExclusion(criterion.requirement) : criterion.requirement,
+        sourceLocator: found ? { recordHash: trial.recordHash, ...found } : { recordHash: trial.recordHash, located: false } };
+    });
+    const saved = await vcr.patientTrials.writeTrial(study, { trial, criteria, subjectKeys: item.subjectKeys ?? [] });
+    results.push({ registryId: item.registryId, id: saved.trial.id, evaluated: saved.evaluation.evaluated,
+      located: criteria.filter((/** @type {any} */ criterion) => criterion.sourceLocator.start !== undefined).length });
+  }
+  return { issues: [], ok: true, ids: results.map((row) => row.id), results };
 }
 
 const AGE = { kind: "inclusion", criterionType: "demographic", sourceText: "Age >= 18 years", requirement: { op: "compare", variable: "age", comparator: "gte", value: 18, unit: "year" } };
@@ -159,7 +176,7 @@ const BRAIN = { kind: "exclusion", criterionType: "comorbidity", sourceText: "Ac
 const EGFR = { kind: "inclusion", criterionType: "biomarker", sourceText: "Documented EGFR exon 19 deletion or L858R mutation", requirement: { op: "present", variable: "egfr_mutation" },
   evidenceNeeded: ["EGFR 突变检测报告"] };
 
-test("a run writes two registry trials for a patient, the platform judges her against each, and the tab answers them ranked", options, async () => {
+test("two registry trials are held for a patient, the platform judges her against each, and the tab answers them ranked", options, async () => {
   const study = await furnishedStudy();
   const S = `/api/vcr/studies/${study.id}`;
   const wrote = await runWrites(study, [
@@ -206,25 +223,6 @@ test("a run writes two registry trials for a patient, the platform judges her ag
   assert.deepEqual(page.funnel, []);
   assert.deepEqual(page.protocols, []);
   assert.equal("ledger" in page, false);
-});
-
-test("a criterion taken from another trial the study holds is not written under the trial it was typed in, naming the one it belongs to", options, async () => {
-  const study = await furnishedStudy();
-  const first = await runWrites(study, [{ registryId: "NCT07000001", criteria: [AGE, ECOG, BRAIN], subjectKeys: ["P-0192"] }]);
-  assert.deepEqual(first.issues, []);
-  // The ECOG line is NCT07000001's wording; this record has no such line, and the EGFR line is its own.
-  const mixed = await runWrites(study, [{ registryId: "NCT07000002", criteria: [AGE, ECOG, EGFR, BRAIN], subjectKeys: ["P-0192"] }]);
-  assert.deepEqual(mixed.issues.map((row) => [row.field, row.code]), [["criteria[1].sourceText", "criterion_from_other_trial"]]);
-  assert.match(mixed.issues[0].message, /NCT07000001/);
-  assert.equal(mixed.ids.length, 1, "the trial is written with the lines that are its own");
-  const held = await context.app.vcr.service.runtimeRead(study, "candidate_trials", {});
-  assert.deepEqual(held.trials.map((row) => row.registryId).sort(), ["NCT07000001", "NCT07000002"]);
-  const written = await context.app.vcr.service.runtimeRead(study, "candidate_trials", { registryId: "NCT07000002" });
-  assert.deepEqual(written.trials[0].criteria.map((row) => row.sourceText), [AGE.sourceText, EGFR.sourceText, BRAIN.sourceText], "the foreign line was not kept");
-  // The shared age line (in both records) was never the problem.
-  const own = await runWrites(study, [{ registryId: "NCT07000002", criteria: [AGE, EGFR, BRAIN], subjectKeys: ["P-0192"] }]);
-  assert.deepEqual(own.issues, []);
-  assert.equal(own.ids.length, 1);
 });
 
 test("a reader may read the trials but not ask for a search; somebody outside the study finds none of it", options, async () => {
@@ -280,10 +278,8 @@ test("a study holds only as many candidate trials as the deployment allows, and 
       trial: { registry: "clinicaltrials.gov", registryId: `NCT0800000${at}`, title: `Filler ${at}`, phase: "", status: "", conditions: [], locations: {}, url: "", recordHash: null, retrievedAt: null, eligibilityText: "" } });
     assert.ok(stored.created);
   }
-  const refused = await runWrites(study, [{ registryId: "NCT07000001", criteria: [AGE, ECOG, BRAIN], subjectKeys: ["P-0192"] }]);
-  assert.equal(refused.ok, false);
-  assert.deepEqual(refused.issues.map((issue) => issue.code), ["vcr_write_refused"]);
-  assert.match(refused.issues[0].message, /5 个候选试验/);
+  await assert.rejects(runWrites(study, [{ registryId: "NCT07000001", criteria: [AGE, ECOG, BRAIN], subjectKeys: ["P-0192"] }]),
+    (/** @type {any} */ error) => error.code === "vcr_write_refused" && /5 个候选试验/.test(error.message));
   assert.equal(vcr.patientTrials.counters.capReached >= 1, true, "and the counter says so");
   assert.equal((await vcr.candidateStore.listCandidateTrials({ studyId: study.id })).length, 5);
 });

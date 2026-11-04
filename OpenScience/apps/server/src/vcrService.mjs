@@ -1890,12 +1890,6 @@ export class VcrService {
         }
         const max = Number(this.config?.vcrCandidateSearchMax) > 0 ? Number(this.config.vcrCandidateSearchMax) : 20;
         const answer = await evidence.candidatesFor(study, filter, max, signal);
-        const trials = this.packages.patientTrials;
-        if (answer?.available && !answer.collection && answer.candidates?.length && trials?.parsedHeld && study.userId) {
-          // A trial the account has structured before can be written again without its criteria while its record is unchanged (M2).
-          const held = await trials.parsedHeld(study, answer.candidates);
-          answer.candidates = answer.candidates.map((/** @type {any} */ candidate) => (held.has(`${candidate.registry}\u0000${candidate.registryId}`) ? { ...candidate, parsedBefore: true } : candidate));
-        }
         return answer;
       }
       case "trial_registry_record": {

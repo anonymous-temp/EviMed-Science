@@ -8,8 +8,8 @@ import test from "node:test";
 import { ctgovPrecedent } from "../src/trialRegistryClient.mjs";
 import { decidedShare } from "../src/vcrMatching.mjs";
 import {
-  criterionRanking, CANDIDATE_TRIAL_LOCATIONS_MAX, candidateTrialFromRecord, candidateTrialUrl, createPatientTrials, locateSourceText, OTHER_TRIAL_MIN_SOURCE_CHARS, phaseLabel, rankPatientTrials,
-  registryStatusLabel, registryStatusRank, sourceTextLength,
+  criterionRanking, CANDIDATE_TRIAL_LOCATIONS_MAX, candidateTrialFromRecord, candidateTrialUrl, createPatientTrials, locateSourceText, phaseLabel, rankPatientTrials,
+  registryStatusLabel, registryStatusRank,
 } from "../src/vcrPatientTrials.mjs";
 import { FLAURA } from "./vcrEvidenceFixtures.mjs";
 
@@ -99,13 +99,6 @@ test("the wording is compared as the record spells it: case, spacing, >= against
   assert.equal(at("Age > 18 years"), null);
   assert.equal(at("Adults aged 18 years or more"), null);
   assert.equal(at("Age 18 years"), null);
-});
-
-test("how long a wording is is measured on the folded form, without its list marker", () => {
-  assert.equal(sourceTextLength("Age >= 18 years"), "age ≥ 18 years".length);
-  assert.equal(sourceTextLength("  1.  Prior   platinum-based chemotherapy "), "prior platinum-based chemotherapy".length);
-  assert.equal(sourceTextLength(""), 0);
-  assert.equal(OTHER_TRIAL_MIN_SOURCE_CHARS, 30);
 });
 
 // ---------------------------------------------------------------------------
@@ -214,21 +207,6 @@ test("a registry's words for where a trial stands are read through a closed tabl
   assert.equal(phaseLabel("Ⅲ期"), "Ⅲ期", "a ChiCTR phase is shown as it was registered");
   assert.equal(phaseLabel(""), "");
 });
-
-test("the study's other candidate trials are the held ones less the trial being written, with the eligibility text each was saved from", async () => {
-  const held = [
-    { id: "ctr_1", registry: "clinicaltrials.gov", registryId: "NCT05000001", title: "A", eligibilityText: "Age >= 18 years" },
-    { id: "ctr_2", registry: "clinicaltrials.gov", registryId: "NCT05000002", title: "B", eligibilityText: "Prior platinum", conditions: ["x"] },
-    { id: "ctr_3", registry: "chictr", registryId: "NCT05000001", title: "C", eligibilityText: "Same id at another registry" },
-  ];
-  const patientTrials = createPatientTrials({ candidateStore: { async listCandidateTrials({ studyId }) { assert.equal(studyId, "std_1"); return held; } } });
-  const others = await patientTrials.otherTrials({ id: "std_1" }, { registry: "clinicaltrials.gov", registryId: "NCT05000001" });
-  assert.deepEqual(others.map((trial) => trial.id), ["ctr_2", "ctr_3"], "the same id at another registry is another trial");
-  assert.deepEqual(Object.keys(others[0]).sort(), ["eligibilityText", "id", "registry", "registryId", "title"]);
-  const unnamed = await patientTrials.otherTrials({ id: "std_1" }, { registryId: "NCT05000001" });
-  assert.deepEqual(unnamed.map((trial) => trial.id), ["ctr_2"], "with no registry named, the id alone identifies the trial being written");
-});
-
 
 test("criterion ranking uses normalized exclusion judgments and retains unknowns", () => {
   const criteria = [{ id: "i", kind: "inclusion" }, { id: "e", kind: "exclusion" }, { id: "u", kind: "inclusion" }, { id: "n", kind: "exclusion" }];

@@ -64,10 +64,8 @@
 import { VCR_WRITE_FIELDS, vcrContractsRead } from "./vcrWriteContracts.mjs";
 import { matchingSelection } from "./vcrMatchingSnapshot.mjs";
 import { extractSelection } from "./vcrMatchBatch.mjs";
-import { locateSourceText, OTHER_TRIAL_MIN_SOURCE_CHARS, sourceTextLength } from "./vcrPatientTrials.mjs";
 import { factsOnSameWords, surfaceBasis } from "./vcrFactBasis.mjs";
 import { dataIntakeShapeValid } from "./vcrDataIntake.mjs";
-import { criterionFidelityWarnings } from "./vcrCriterionFidelity.mjs";
 import { VCR_CONVERSATION_STUDY_NAME, clinicalFactIssues, clinicalFactPolarity, clinicalNumericValue } from "@evimed/domain";
 import { createHash } from "node:crypto";
 import { VCR_LONGITUDINAL_JOBS, VCR_LONGITUDINAL_ERROR_CODES } from '@evimed/domain';
@@ -437,14 +435,6 @@ function simulateRequest(body) {
 
 /** One refused item, as the run reads it. @param {number | null} index @param {string} field @param {string} code @param {string} message */
 const issue = (index, field, code, message) => ({ ...(index == null ? {} : { index }), field, code, message });
-
-/**
- * The sentence for a criterion whose wording is another candidate trial's.
- * @param {string} registryId the trial being written @param {{ registryId: string, title?: string }} owner @param {string} outcome what became of the write
- */
-const otherTrialMessage = (registryId, owner, outcome) =>
-  `这句原文不在 ${registryId} 的登记记录里，却逐字出现在本研究已有的候选试验 ${owner.registryId}${owner.title ? `（${String(owner.title).slice(0, 80)}）` : ""}的入排条件里：`
-  + `一个试验只写它自己登记记录里的条件。把它改成 ${registryId} 自己的原句，或把它写进 ${owner.registryId} 的条件；${outcome}`;
 
 // ---------------------------------------------------------------------------
 // The write half
@@ -855,7 +845,6 @@ async function checkedCriteria(deps, rows, issues, what) {
       if (criterion) {
         const prefix = nested ? `${rows.length > 1 ? `[${index}].` : ""}criteria[${at}].` : `[${index}].`;
         warnNegatedExclusion(criterion, `${prefix}requirement`, warnings);
-        for (const warning of criterionFidelityWarnings(criterion)) warnings.push({ ...warning, field: `${prefix}${warning.field}` });
       }
     }
   }
@@ -1352,11 +1341,9 @@ const WRITERS = {
   },
 
   /**
-   * A trial a registry lists, found for a patient (「给患者找试验」). The run names the registry and the id and hands over its structuring of the
-   * trial's eligibility text; the platform reads everything that identifies the trial out of the registry's record, finds where each
-   * criterion's original wording stands in it, and — when the item names patients — evaluates each against the trial. A criterion
-   * outside the grammar refuses the trial whole: a trial missing a line would rank a patient it excludes as eligible. A patient the study
-   * does not hold is a warning, not a reason to lose the trial.
+   * A trial a registry lists, found for a patient (「给患者找试验」). The run names the registry and the id; the platform reads everything that
+   * identifies the trial out of the registry's record and — when the item names patients — evaluates each against the trial's criteria it
+   * already holds. A patient the study does not hold is a warning, not a reason to lose the trial.
    */
   async candidate_trial(item, deps, extra) {
     const { evidence, matchStore, patientTrials, study } = deps;
@@ -1366,31 +1353,12 @@ const WRITERS = {
     const collection = item.token("collection", ID, "冻结登记库的编号，取自 candidates 的 collection.id", { required: item.row.collection != null });
     const collectionRevision = item.token("collectionRevision", COLLECTION_REVISION, "冻结库版本哈希，取自候选试验的 collectionRevision", { required: Boolean(collection) || item.row.collectionRevision != null });
     if (collectionRevision && !collection) item.bad("collection", "指定冻结库版本时同时提供库编号。");
-    const rows = item.arr("criteria", { max: 200 });
     const asked = item.arr("subjectKeys", { max: 20 }) ?? [];
     for (const [at, key] of asked.entries()) {
       if (typeof key !== "string" || !TOKEN.test(key)) item.bad(`subjectKeys[${at}]`, "subjectKeys 里是受试者的假名编号（vcr_read what:matching 给出）。");
     }
-    /** @type {Array<Record<string, any>> | null} */
-    let checked = null;
-    if (rows !== undefined) {
-      if (!rows.length) item.bad("criteria", "criteria 至少写一条入排条件；只想评估新的受试者时不要写 criteria。");
-      else {
-        checked = [];
-        for (const [at, raw] of rows.entries()) {
-          const criterion = checkedCriterion(deps, raw, item.index, `criteria[${at}].`, item.issues);
-          if (criterion) checked.push(criterion); else item.ok = false;
-        }
-      }
-    }
-    if (checked && ambiguousCriterionLanguageKeys(checked).size) item.bad("criteria", "不同语言问题不能共用同一个 key；请为不同问题分别指定 key，再提交完整条件集。", "vcr_criterion_malformed");
     if (!item.ok) return null;
     if (!evidence?.candidateRecord || !patientTrials?.writeTrial) return void item.bad("registryId", "给患者找试验在本部署尚未接入。", "vcr_write_refused");
-    const newHere = checked === null && typeof patientTrials.holds === "function" && !(await patientTrials.holds(study, { registry, registryId }));
-    // A trial this study has not met, named without criteria: if this account structured the same record (same hash) in another study, that
-    // structuring is read again instead of asked for; a record that changed since, or a trial never structured, needs the criteria written.
-    const needCriteria = () => item.bad("criteria", "这个试验本研究里还没有：第一次写它要同时写入它的入排条件（criteria）。账户里没有这份登记记录（同一版本）的解析可沿用。");
-    if (newHere && typeof patientTrials.parsedCriteria !== "function") return void needCriteria();
     const fetched = await evidence.candidateRecord({ userId: study.userId, registry, registryId, ...(collection ? { collection, collectionRevision, ...(deps.signal ? { signal: deps.signal } : {}) } : {}) });
     if (fetched?.status !== "ok") {
       const missing = fetched?.status === "registry_not_found";
@@ -1398,72 +1366,8 @@ const WRITERS = {
         missing ? "registry_not_found" : "registry_unavailable");
     }
     const trial = fetched.trial;
-    let reused = false;
-    if (newHere) {
-      const earlier = await patientTrials.parsedCriteria(study, { registry: trial.registry ?? registry, registryId: trial.registryId ?? registryId, recordHash: trial.recordHash ?? null });
-      /** @type {Array<Record<string, any>>} */
-      const again = [];
-      const scratch = [];
-      // The grammar is read again: a vocabulary that has moved since the parse was kept makes it a parse to ask for anew, not a trial lost.
-      for (const raw of earlier ?? []) { const criterion = checkedCriterion(deps, raw, item.index, "", scratch); if (criterion) again.push(criterion); else break; }
-      if (!earlier?.length || scratch.length || again.length !== earlier.length) return void needCriteria();
-      if (ambiguousCriterionLanguageKeys(again).size) return void needCriteria();
-      checked = again;
-      reused = true;
-    }
     /** @type {any[]} */
     const warnings = [];
-    let located = 0;
-    const where = checked?.map((criterion) => locateSourceText(criterion.sourceText, trial.eligibilityText)) ?? [];
-    // A criterion is the trial's own wording. One that is not in this record (compared as the locator compares: case, spacing, ≥ against
-    // >=, dashes and quotation marks are the same) but stands as a whole sentence in the eligibility text of another trial this study
-    // holds was taken from that trial (46 patient tasks merged the criteria of several trials into one): that criterion is not written
-    // and the other trial is named, the trial's remaining criteria are written, and the rest of the batch goes on. Boilerplate that any
-    // two trials share ("Written informed consent") is shorter than OTHER_TRIAL_MIN_SOURCE_CHARS and is never attributed to another
-    // trial. Wording found nowhere stays the warning below. A record with no eligibility text proves nothing about any criterion, so
-    // nothing is refused for it.
-    /** @type {Array<{ at: number, owner: any }>} */
-    const foreign = [];
-    if (checked && trial.eligibilityText && where.some((found) => !found) && typeof patientTrials.otherTrials === "function") {
-      const others = await patientTrials.otherTrials(study, { registry: trial.registry ?? registry, registryId: trial.registryId ?? registryId }).catch(() => []);
-      for (const [at, criterion] of checked.entries()) {
-        if (where[at] || sourceTextLength(criterion.sourceText) < OTHER_TRIAL_MIN_SOURCE_CHARS) continue;
-        const owner = others.find((/** @type {any} */ other) => locateSourceText(criterion.sourceText, other.eligibilityText));
-        if (owner) foreign.push({ at, owner });
-      }
-    }
-    /** The run's positions of the criteria that are written: the ones that were not taken from another trial. */
-    const kept = (checked ?? []).map((_, at) => at).filter((at) => !foreign.some((entry) => entry.at === at));
-    if (checked && !kept.length) {
-      // Nothing of this trial's own is left to write: a trial with no criterion is nothing to judge a patient against.
-      for (const { at, owner } of foreign) {
-        item.bad(`criteria[${at}].sourceText`, otherTrialMessage(registryId, owner, "这个试验这次没有写入，其余的项照常。"), "criterion_from_other_trial");
-      }
-      return null;
-    }
-    for (const { at, owner } of foreign) {
-      item.issues.push(issue(item.index, `criteria[${at}].sourceText`, "criterion_from_other_trial",
-        otherTrialMessage(registryId, owner, "这一条没有写入，这个试验的其余条件照常写入。")));
-    }
-    const criteria = checked ? kept.map((at) => {
-      const criterion = checked[at];
-      warnNegatedExclusion(criterion, `criteria[${at}].requirement`, warnings);
-      for (const warning of criterionFidelityWarnings(criterion)) warnings.push({ ...warning, field: `criteria[${at}].${warning.field}` });
-      const found = where[at];
-      if (found) located += 1;
-      else if (trial.eligibilityText) {
-        warnings.push({ field: `criteria[${at}].sourceText`, code: "source_text_not_in_record",
-          message: "这句原文在登记记录的入排条件里找不到：照写保存，没有定位。要让读的人能对上，sourceText 请逐字照抄登记记录里的那一句。" });
-      }
-      // Where the wording stands is the platform's to say: the platform's locator replaces whatever the run typed.
-      return { ...criterion, sourceLocator: found ? { recordHash: trial.recordHash, ...found } : { recordHash: trial.recordHash, located: false } };
-    }) : null;
-    // A record with no original wording (ChiCTR through the evidence API is a listing) gives no criterion anything to rest on: the criteria
-    // are saved as written and every one of them is unknown for 缺登记原文 — never satisfied, never not satisfied (M6).
-    if (checked && !String(trial.eligibilityText ?? "").trim()) {
-      warnings.push({ field: "criteria", code: "registry_text_missing",
-        message: "这条登记记录没有入排条件原文（ChiCTR 经证据接口只有清单）：条件照写保存，但没有原文可对，评估时一律按未知算，原因是缺登记原文。不要补写原文，也不要从别处的记录里拿。" });
-    }
     /** The patients to evaluate: the ones the study holds. */
     const roster = new Set(typeof matchStore?.candidateSubjects === "function" ? await matchStore.candidateSubjects({ studyId: study.id }).catch(() => []) : []);
     /** @type {string[]} */
@@ -1478,16 +1382,13 @@ const WRITERS = {
       }
     }
     if (collection && deps.signal?.aborted) return void item.bad("collection", "冻结库请求已结束，请重试。", "registry_unavailable");
-    const saved = await patientTrials.writeTrial(study, { trial, criteria, subjectKeys });
+    const saved = await patientTrials.writeTrial(study, { trial, criteria: null, subjectKeys });
     const unavailable = saved.evaluation?.unavailable ?? [];
     extra.results.push({
       index: item.index, id: saved.trial.id, registryId, created: saved.created, criteria: saved.criteria.length,
       ...(fetched.collection ? { collection: fetched.collection } : {}),
-      ...(reused ? { reused: true, note: "沿用了本账户先前对这条登记记录（同一版本）的解析，没有重新解析；记录一旦有变，需要重新写条件。" } : {}),
-      ...(criteria ? { located } : {}), evaluated: saved.evaluation?.evaluated ?? [],
+      evaluated: saved.evaluation?.evaluated ?? [],
       ...(unavailable.length ? { unavailable } : {}), ...(warnings.length ? { warnings } : {}),
-      // The trial's criteria are the set this write carried: a corrected criterion is written with the whole set again.
-      ...(foreign.length ? { refused: foreign.length, note: "被拒的条件没有写入。改好后把这个试验的全部条件整套再写一次；只补写被拒的几条会得到一个只有那几条的条件集。" } : {}),
     });
     return saved.trial.id;
   },

@@ -156,22 +156,6 @@ function foldedSourceText(value) {
 const LIST_MARKER = /^(?:[*\-\u2022]|\d{1,3}[.)])\s+/u;
 
 /**
- * Wording shorter than this is boilerplate that any two trials share ("Written informed consent", "Age >= 18 years"): finding it in
- * another trial's record says nothing about where the run took it from, so only wording of at least this many characters (in the
- * folded form of `foldedSourceText`) is ever attributed to another trial.
- */
-export const OTHER_TRIAL_MIN_SOURCE_CHARS = 30;
-
-/**
- * How many characters a criterion's wording is, as the comparison reads it.
- * @param {string} sourceText
- */
-export function sourceTextLength(sourceText) {
-  const folded = foldedSourceText(sourceText).text;
-  return [...folded.replace(LIST_MARKER, "")].length;
-}
-
-/**
  * Where a criterion's original wording stands in the record's eligibility text: a list marker in front is
  * the list's and not the wording's, and the two sides are compared in the form `foldedSourceText` gives (case, whitespace, `>=`
  * against `≥`, dash and quotation-mark variants are the same), the answer being the span in the record's own characters.
@@ -432,7 +416,7 @@ function listed(about, assessment) {
  */
 export function createPatientTrials({ candidateStore, matchStore = null, documents = null, subjectTable = null, config = {}, report = () => {}, now = () => new Date() }) {
   /** What the seam did since this process started (`open_science_vcr_patient_trials_total`). */
-  const counters = { written: 0, updated: 0, refused: 0, capReached: 0, evaluated: 0, evaluationFailed: 0, searches: 0, parsedReused: 0, parsedKept: 0 };
+  const counters = { written: 0, updated: 0, refused: 0, capReached: 0, evaluated: 0, evaluationFailed: 0, searches: 0 };
   /** The most candidate trials one study holds: each costs an evaluation per patient. */
   const max = () => (Number(config.vcrCandidateTrialsMax) > 0 ? Number(config.vcrCandidateTrialsMax) : 60);
 
@@ -462,18 +446,6 @@ export function createPatientTrials({ candidateStore, matchStore = null, documen
     /** Whether the study already holds this trial, by its registry and registry id or by its own id. @param {any} study @param {{ id?: string, registry?: string, registryId?: string }} key */
     async holds(study, { id, registry, registryId }) {
       return Boolean(await candidateStore.getCandidateTrial({ studyId: study.id, ...(id ? { id } : { registry: registry ?? null, registryId: registryId ?? null }) }));
-    },
-
-    /**
-     * The study's other candidate trials with the eligibility text each was saved from: where a criterion that is not in this trial's
-     * record may have been taken from (`candidate_trial` refuses a trial whose criterion stands word for word in one of these).
-     * @param {any} study @param {{ registry?: string | null, registryId: string }} key the trial being written, which is not its own other
-     * @returns {Promise<Array<{ id: string, registry: string, registryId: string, title: string, eligibilityText: string }>>}
-     */
-    async otherTrials(study, { registry = null, registryId }) {
-      const held = await candidateStore.listCandidateTrials({ studyId: study.id, limit: 1000 });
-      return held.filter((trial) => !(trial.registryId === registryId && (!registry || trial.registry === registry)))
-        .map((trial) => ({ id: trial.id, registry: trial.registry, registryId: trial.registryId, title: trial.title, eligibilityText: trial.eligibilityText }));
     },
 
     /**
@@ -608,13 +580,6 @@ export function createPatientTrials({ candidateStore, matchStore = null, documen
         throw error;
       }
       if (saved.created) counters.written += 1; else counters.updated += 1;
-      // The parse is kept for the account against the record it was made from, so the next study that meets this record reads it. A parse
-      // that cannot be kept costs the next study a parse and this one nothing.
-      if (criteria !== null && trial.recordHash) {
-        try {
-          if (await candidateStore.saveParsedCriteria({ userId: study.userId, registry: trial.registry, registryId: trial.registryId, recordHash: trial.recordHash, criteria })) counters.parsedKept += 1;
-        } catch (error) { report(String(/** @type {any} */ (error)?.code ?? "vcr_parsed_criteria_unsaved")); }
-      }
       const who = [...new Set([...subjectKeys, ...(saved.criteriaChanged ? saved.reassess : [])])];
       const evaluation = who.length ? await self.evaluate(study, { subjectKeys: who, trialIds: [saved.trial.id] }) : { evaluated: [], unavailable: [], notes: [] };
       return { ...saved, evaluation };
@@ -623,35 +588,6 @@ export function createPatientTrials({ candidateStore, matchStore = null, documen
     /** A criterion of one of the study's candidate trials, by id (the words a long record is searched for it with, M4). @param {any} study @param {string} id */
     async criterionById(study, id) {
       return candidateStore.getCriterion({ studyId: study.id, id });
-    },
-
-    /**
-     * The account's earlier parse of this trial, made from this very record (same registry id, same record hash): what a second study
-     * of the same account reads instead of asking for the parse again. `null` when there is none or the record has changed since — the
-     * run then structures the text again. Never another account's.
-     * @param {any} study @param {{ registry: string, registryId: string, recordHash: string | null }} key
-     * @returns {Promise<any[] | null>}
-     */
-    async parsedCriteria(study, { registry, registryId, recordHash }) {
-      if (!recordHash) return null;
-      try {
-        const held = await candidateStore.parsedCriteriaFor({ userId: study.userId, registry, registryId, recordHash });
-        if (held) counters.parsedReused += 1;
-        return held?.criteria ?? null;
-      } catch (error) {
-        report(String(/** @type {any} */ (error)?.code ?? "vcr_parsed_criteria_unreadable"));
-        return null;
-      }
-    },
-
-    /**
-     * Which of these registry trials the account has already parsed, whatever record the parse came from: a candidate list says so and the
-     * write finds out whether the record is still the same one.
-     * @param {any} study @param {ReadonlyArray<{ registry: string, registryId: string }>} trials @returns {Promise<Set<string>>}
-     */
-    async parsedHeld(study, trials) {
-      try { return await candidateStore.parsedCriteriaHeld({ userId: study.userId, trials }); }
-      catch { return new Set(); }
     },
 
     /** The language keys of a candidate trial's criteria. @param {any} study @param {string} candidateTrialId */

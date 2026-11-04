@@ -82,7 +82,7 @@ for (const module of [
   'apps/server/src/server.mjs', 'apps/server/src/vcrService.mjs', 'apps/server/src/vcrPatientTrials.mjs',
   'apps/server/src/vcrTrialCorpus.mjs', 'apps/server/src/vcrCandidateTrialStore.mjs',
   'apps/server/src/vcrGateway.mjs', 'apps/server/src/vcrRoutes.mjs', 'apps/server/src/config.mjs',
-  'apps/server/src/vcrCriterionFidelity.mjs', 'apps/server/src/vcrMatchBatch.mjs',
+  'apps/server/src/vcrMatchBatch.mjs',
   'apps/server/src/vcrMatchStore.mjs', 'apps/server/src/vcrMatching.mjs', 'apps/server/src/vcrMatchingEvidence.mjs',
   'apps/server/src/vcrMatchingSnapshot.mjs', 'apps/server/src/vcrPersistence.mjs', 'apps/server/src/vcrViewsTabs.mjs',
   'apps/server/src/vcrWriteContracts.mjs', 'apps/server/src/modelGateway.mjs', 'apps/server/src/usageLedger.mjs',
