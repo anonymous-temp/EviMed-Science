@@ -185,7 +185,7 @@ test("batch matching has a bound on its size, on its concurrency and on one reco
   const config = loadConfig({ rootDir: repoRoot });
   assert.deepEqual([config.vcrMatchBatchMaxSubjects, config.vcrMatchExtractConcurrency, config.vcrMatchExtractTimeoutMs], [300, 3, 90_000]);
   assert.deepEqual([config.vcrMatchJudgeConcurrency, config.vcrMatchJudgeTopK, config.vcrMatchJudgeThinking, config.vcrMatchJudgeOutputTokens, config.vcrMatchJudgeTimeoutMs, config.vcrMatchJudgeMaxUpstreamFailures],
-    [8, 20, "high", 16_000, 180_000, 20]);
+    [8, 20, "off", 32_000, 180_000, 20]);
   const judged = loadConfig({ rootDir: repoRoot, vcrMatchJudgeConcurrency: "64", vcrMatchJudgeTopK: "all", vcrMatchJudgeThinking: "off", vcrMatchJudgeOutputTokens: "2000", vcrMatchJudgeTimeoutMs: "10000", vcrMatchJudgeMaxUpstreamFailures: "1" });
   assert.deepEqual([judged.vcrMatchJudgeConcurrency, judged.vcrMatchJudgeTopK, judged.vcrMatchJudgeThinking, judged.vcrMatchJudgeOutputTokens], [64, "all", "off", 2_000]);
   assert.equal(loadConfig({ rootDir: repoRoot, vcrMatchJudgeTopK: "0" }).vcrMatchJudgeTopK, 0);
