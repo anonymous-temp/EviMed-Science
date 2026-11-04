@@ -220,3 +220,51 @@ vcr_case("N98g", c("AC-04", "AC-26"), function() {
        detail = sprintf("400 people, the event time in a second table: the joined job's coefficients equal the single-table job's (largest gap %.1e) and so does its out-of-fold C index (%.6f); with three people missing from the event table the job trains on 397 and counts the 3 it left out",
                         max(abs(b1 - b2)), .n98_m(joined, "out_of_fold_c_index")))
 })
+
+vcr_case("N98h", c("AC-04", "AC-27"), function() {
+  # Review stats2 findings 10, 18 and 19.
+  # (10) A Cox model needs events, not censored people: 3,000 people with no one censored, or fifteen, were 'too few events' (the smaller of events and
+  #      censored was counted). They fit.
+  # (18) The correlation of a time-to-event score with 'an event by the horizon' left out the people censored before it, so it fell with the censoring
+  #      although the score did not change: .51 with complete follow-up read .50, .39 and .23 at three censoring rates. Each person whose status is known is
+  #      now weighted by the inverse probability of staying uncensored (Kaplan-Meier of the censoring times) and the weighted correlation is read; the figure
+  #      is held to the correlation of the same score with complete follow-up (the same job on the table with the censoring removed).
+  # (19) A level of a text predictor is named only if held by the small-cell size among the rows the model is fitted to: a level of 12 people in the table
+  #      of whom 9 have no outcome has 3 and gets no term (its 3 people are excluded and counted).
+  sc <- function(id, preds = c("x1", "x2", "x3")) .n98_scenario("time_to_event", id, preds)
+  # a fixed known score (the true linear predictor, nothing fitted) so that only the estimator of the correlation is in question: the correlation of the
+  # score with "an event by 24" in the data with no censoring is the reference; the censored copies of the same people must give it back
+  rates <- c(0.01, 0.03, 0.06)
+  stats_of <- lapply(rates, function(rate) {
+    out <- vapply(c(9881L, 9884L, 9885L), function(sd) {
+      d <- .n98_cox_data(3000L, sd, beta = c(0.6, -0.4, 0.3), cens = rate); lp <- attr(d, "lp")
+      full <- .n98_cox_data(3000L, sd, beta = c(0.6, -0.4, 0.3), cens = 1e-7)
+      ref <- stats::cor(lp, as.numeric(full$os <= 24 & full$death == 1))
+      known <- (d$death == 1 & d$os <= 24) | d$os > 24   # the first version: the people censored before the horizon left out
+      first <- stats::cor(lp[known], as.numeric(d$os[known] <= 24 & d$death[known] == 1))
+      c(gap = abs(.vcr_pt_tte_correlation(lp, d$os, d$death, 24)$rho - ref), left = mean(d$death == 0 & d$os < 24), ref = ref, first = abs(first - ref))
+    }, numeric(4))
+    c(gap = mean(out["gap", ]), left = mean(out["left", ]), ref = mean(out["ref", ]), first = mean(out["first", ]))
+  })
+  gap <- vapply(stats_of, function(x) x[["gap"]], numeric(1)); share_censored <- vapply(stats_of, function(x) x[["left"]], numeric(1)); rho_full <- stats_of[[1]][["ref"]]; first_gap <- vapply(stats_of, function(x) x[["first"]], numeric(1))
+  # the job: the saved score is fitted, so the figure is not the reference's; it must not fall with the censoring the way it did
+  job_rho <- vapply(rates, function(rate) { d <- .n98_cox_data(3000L, 9881L, beta = c(0.6, -0.4, 0.3), cens = rate); id <- sprintf("snp_n98h_%d:subject", round(rate * 100)); .n98_m(.n98_run(sc(id), d, id), "prognostic_correlation") }, numeric(1))
+  # (10)
+  few_cens <- lapply(c(0L, 15L, 25L), function(k) {
+    d <- .n98_cox_data(3000L, 9882L, beta = c(0.6, -0.4, 0.3), cens = 1e-7); d$death <- 1; if (k > 0L) d$death[seq_len(k)] <- 0
+    r <- .n98_run(sc(sprintf("snp_n98h_c%d:subject", k)), d, sprintf("snp_n98h_c%d:subject", k)); list(k = k, status = r$conclusion, c = .n98_m(r, "out_of_fold_c_index"))
+  })
+  ok10 <- all(vapply(few_cens, function(x) !identical(x$status, "not_estimable") && is.finite(x$c), logical(1)))
+  # (19)
+  d19 <- .n98_cox_data(600L, 9883L, beta = c(0.6, -0.4, 0.3)); d19$site <- sample(c("north", "south", "east"), 600L, TRUE)
+  d19$site[1:12] <- "rare-site"; d19$death[1:9] <- NA
+  sc19 <- sc("snp_n98h19:subject", c("x1", "x2")); sc19$predictors[[3]] <- list(column = "site", unit = "category")
+  r19 <- .n98_run(sc19, d19, "snp_n98h19:subject")
+  levels19 <- unlist(Filter(function(t) !is.null(t$levels), r19$diagnostics$model$equation$terms)[[1]]$levels)
+  ok19 <- identical(r19$status, "succeeded") && setequal(levels19, c("east", "north", "south")) && r19$diagnostics$excludedRows == 12L &&
+    !grepl("rare-site", jsonlite::toJSON(r19$diagnostics, auto_unbox = TRUE, null = "null"), fixed = TRUE)
+  list(pass = ok10 && ok19 && all(gap < 0.045) && is.finite(rho_full) && rho_full > 0.3 && min(job_rho) > 0.8 * max(job_rho) && first_gap[3] > 0.06 && first_gap[3] > 2 * gap[3],
+       detail = sprintf("3,000 people, the true linear predictor as the score: correlation with an event by 24 in the data with no censoring %.3f; with %s of the people censored before 24 the weighted correlation is off it by %s on average over three tables (the first version's estimator, which left them out, is off by %s); the job's fitted score gives %s at the three rates; no one censored, 15 and 25 censored all fit (C %s); a level held by 12 people in the table and 3 among the rows with an outcome is not named (levels saved: %s; %d rows excluded)",
+                        rho_full, paste(sprintf("%.0f%%", 100 * share_censored), collapse = ", "), paste(sprintf("%.3f", gap), collapse = ", "), paste(sprintf("%.3f", first_gap), collapse = ", "), paste(sprintf("%.3f", job_rho), collapse = ", "), paste(sprintf("%.3f", vapply(few_cens, function(x) x$c, numeric(1))), collapse = ", "),
+                        paste(levels19, collapse = "/"), r19$diagnostics$excludedRows))
+})

@@ -53,7 +53,7 @@ const EFFECT_WORDS = Object.freeze(/** @type {Record<string, string>} */ ({
 const CORRELATION_WORDS = Object.freeze(/** @type {Record<string, string>} */ ({
   linear: "留出折上的预测值与结局的相关系数",
   logistic: "留出折上的预测概率与 0/1 结局的相关系数（点二列相关）",
-  cox: "留出折上的风险分与“到时间点之前是否发生事件”的相关系数，只算时间点上状态已知的人；这是近似，因为样本量节省的公式本来是为连续结局写的",
+  cox: "留出折上的风险分与“到时间点之前是否发生事件”的相关系数；只算时间点上状态已知的人，并按“没有被删失的概率”的倒数加权，让时间点之前就被删失的人由和他们相似、没被删失的人代表（所以删失多了，这个相关系数不会跟着变小）；这是近似，因为样本量节省的公式本来是为连续结局写的",
 }));
 const DEFAULT_LAMBDAS = [1, 0.9, 0.75, 0.5];
 const DEFAULT_GAMMAS = [1, 1.1, 1.25];

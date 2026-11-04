@@ -21,8 +21,10 @@
 # - **The correlation rho is defined per outcome, and for time-to-event it is an approximation.** PROCOVA's formula is a continuous outcome's.
 #   For a binary outcome rho is the Pearson correlation of the out-of-fold probability with the 0/1 outcome (point-biserial). For time to event
 #   it is the same correlation with the indicator "event by the horizon", among the people whose status at the horizon is known (an event
-#   before it, or followed past it); the people censored before the horizon are left out and counted. It is reported with a Fisher interval and
-#   the table of savings is computed from the estimate and from the interval's lower end.
+#   before it, or followed past it), each weighted by the inverse probability of staying uncensored to the earlier of their time and the horizon
+#   (so the people censored before the horizon, who are counted, are stood for by the ones like them who were not; the weighted correlation does
+#   not shrink as censoring grows). It is reported with a Fisher interval on the effective number of people, and the table of savings is computed
+#   from the estimate and from the interval's lower end.
 # - **Savings are `design.procova`'s own formula.** The sample-size ratio of the prognostic path to the unadjusted one for a discount lambda on
 #   the correlation and gamma on the control arm's SD is `vcr_procova_paths` (`R/procova.R`), so a table here and a `design.procova` job for the
 #   same numbers agree to the last digit (N98c). A ratio above one (gamma outweighing lambda * rho) is a cost, shown as a negative saving.
@@ -95,6 +97,31 @@ vcr_prognostic_design <- function(data, predictors, min_cell = vcr_limit("minCel
   if (is.null(bh)) return(NULL)
   h0 <- if (is.finite(horizon) && any(bh$time <= horizon)) bh$hazard[max(which(bh$time <= horizon))] else NA_real_
   list(coef = unname(stats::coef(fit)), means = unname(fit$means), family = "cox", cumhaz = h0, horizonInData = is.finite(horizon) && horizon <= max(time))
+}
+
+#' Inverse-probability-of-censoring weights for the people whose status at `horizon` is known: 1 / G(t-) for an event at t before the horizon, 1 / G(horizon)
+#' for a person followed past it, G the Kaplan-Meier survival of the censoring times. Zero for a person whose status is not known.
+.vcr_pt_ipcw <- function(tm, st, horizon) {
+  cens <- survival::survfit(survival::Surv(tm, 1 - st) ~ 1)
+  G <- stats::stepfun(cens$time, c(1, cens$surv))
+  ev <- st == 1 & tm <= horizon; past <- tm > horizon
+  g <- ifelse(ev, G(tm - 1e-9 * pmax(1, tm)), G(horizon))
+  ifelse(ev | past, 1 / g, 0)
+}
+
+#' The correlation of a time-to-event score with "an event by the horizon", for the table of savings. The people whose status at the horizon is known (an
+#' event before it, or followed past it) stand for those censored before it: each is weighted by the inverse probability of staying uncensored to the
+#' earlier of their time and the horizon (the Kaplan-Meier estimate of the censoring distribution), and the correlation is the weighted one. Leaving the
+#' censored out instead shrank the survivors' share and the correlation with it: the same score, the same people and a correlation of .51 with complete
+#' follow-up read .50, .39 and .23 at three censoring rates. `n` is the effective number of people, (sum w)^2 / sum w^2.
+.vcr_pt_tte_correlation <- function(lp, tm, st, horizon) {
+  known <- (st == 1 & tm <= horizon) | tm > horizon
+  ev <- as.numeric(st == 1 & tm <= horizon)
+  wts <- .vcr_pt_ipcw(tm, st, horizon)
+  use <- known & is.finite(wts) & wts > 0
+  n_eff <- if (any(use)) sum(wts[use])^2 / sum(wts[use]^2) else 0
+  rho <- if (sum(use) >= 4L && stats::sd(lp[use]) > 0 && stats::sd(ev[use]) > 0) suppressWarnings(stats::cov.wt(cbind(lp[use], ev[use]), wt = wts[use] / sum(wts[use]), cor = TRUE)$cor[1L, 2L]) else NA_real_
+  list(rho = rho, n = n_eff, leftOut = sum(!known))
 }
 
 .vcr_pt_linear_predictor <- function(fit, X, centre = NULL) {
@@ -211,15 +238,23 @@ vcr_job_train_prognostic_model <- function(job, output_dir = NULL, ...) {
     y <- suppressWarnings(as.numeric(data[[ep[["outcomeColumn"]]]])); ok_out <- is.finite(y)
     if (type == "binary" && !all(y[ok_out] %in% c(0, 1))) vcr_abort("scenario_value_invalid", "scenario.endpoint.outcomeColumn", "A binary outcome is 0 or 1.")
   }
-  des <- vcr_prognostic_design(data, predictors)
-  keep <- ok_out & des$complete
-  excluded <- sum(!keep)
-  data <- data[keep, , drop = FALSE]; X <- des$X[keep, , drop = FALSE]; n <- nrow(X); p <- ncol(X)
-  if (type == "time_to_event") { tm <- tm[keep]; st <- st[keep]; events <- sum(st == 1); nonevents <- sum(st == 0) }
-  else { y <- y[keep]; events <- if (type == "binary") sum(y == 1) else n; nonevents <- if (type == "binary") sum(y == 0) else n }
+  # The levels held by enough people are counted among the rows the model will be fitted to: the rows with an outcome and every predictor readable. A
+  # row left out for another predictor can take a level under the small-cell size, so the design is redone on what is left until nothing changes (a
+  # level held by 12 people in the table and by 3 among the rows with an outcome used to be named in the equation with a coefficient from those 3).
+  rows <- which(ok_out)
+  repeat {
+    des <- vcr_prognostic_design(data[rows, , drop = FALSE], predictors)
+    if (all(des$complete)) break
+    rows <- rows[des$complete]
+  }
+  excluded <- nrow(data) - length(rows)
+  data <- data[rows, , drop = FALSE]; X <- des$X; n <- nrow(X); p <- ncol(X)
+  if (type == "time_to_event") { tm <- tm[rows]; st <- st[rows]; events <- sum(st == 1); nonevents <- sum(st == 0) }
+  else { y <- y[rows]; events <- if (type == "binary") sum(y == 1) else n; nonevents <- if (type == "binary") sum(y == 0) else n }
   k <- as.integer(sc[["folds"]] %||% 5L)
   counts <- vcr_table_counts(data, if (type == "time_to_event") events else NULL)
-  scale_n <- if (type == "continuous") n else min(events, nonevents)
+  # what bounds a Cox model is its events: nobody asks how many people were censored (a table with none, or fifteen, is not 'too few events')
+  scale_n <- if (type == "continuous") n else if (type == "time_to_event") events else min(events, nonevents)
   need <- if (type == "continuous") max(20L, 10L * (p + 1L)) else max(10L, 5L * (p + 1L))
   if (scale_n < need) {
     return(list(status = "succeeded", conclusion = "not_estimable", notEstimableRule = "too_few_events", counts = counts, measures = list(),
@@ -269,10 +304,8 @@ vcr_job_train_prognostic_model <- function(job, output_dir = NULL, ...) {
   } else {
     cc <- survival::concordance(survival::Surv(tm, st) ~ oof_lp, reverse = TRUE); z <- stats::qnorm(0.975); se <- sqrt(cc$var)
     disc <- list(metric = "c_index", value = unname(cc$concordance), low = unname(cc$concordance) - z * se, high = unname(cc$concordance) + z * se)
-    known <- (st == 1 & tm <= horizon) | tm > horizon
-    excluded_for_rho <- sum(!known); rho_n <- sum(known)
-    ev <- as.numeric(st == 1 & tm <= horizon)
-    rho <- if (rho_n >= 4L && stats::sd(oof_lp[known]) > 0 && stats::sd(ev[known]) > 0) suppressWarnings(stats::cor(oof_lp[known], ev[known])) else NA_real_
+    tte <- .vcr_pt_tte_correlation(oof_lp, tm, st, horizon)
+    rho <- tte$rho; rho_n <- tte$n; excluded_for_rho <- tte$leftOut
   }
   rho_ci <- .vcr_fisher_interval(rho, rho_n)
 
@@ -346,7 +379,7 @@ vcr_job_train_prognostic_model <- function(job, output_dir = NULL, ...) {
                           correlation = list(value = rho, interval = if (all(is.finite(rho_ci))) list(lower = rho_ci[1L], upper = rho_ci[2L]) else NULL, n = rho_n,
                                              definition = switch(type, continuous = "Pearson correlation of the out-of-fold prediction with the outcome",
                                                binary = "Pearson correlation of the out-of-fold probability with the 0/1 outcome (point-biserial)",
-                                               time_to_event = "Pearson correlation of the out-of-fold linear predictor with the indicator of an event by the horizon, among people whose status at the horizon is known; an approximation, since PROCOVA's formula is a continuous outcome's"),
+                                               time_to_event = "Weighted Pearson correlation of the out-of-fold linear predictor with the indicator of an event by the horizon, among people whose status at the horizon is known, each weighted by the inverse probability of staying uncensored (Kaplan-Meier of the censoring times) so that the people censored before the horizon are stood for; an approximation, since PROCOVA's formula is a continuous outcome's"),
                                              leftOut = excluded_for_rho),
                           comparison = comparison, procova = list(rows = table, lambdas = lambdas, gammas = gammas, allocation = allocation,
                                                                     note = "The sample-size ratio of design.procova's prognostic path to the unadjusted one, from the correlation measured out of fold and from the lower end of its interval."),
