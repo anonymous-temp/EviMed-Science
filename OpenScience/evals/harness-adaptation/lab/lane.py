@@ -76,6 +76,8 @@ class Broker:
     def call(self, *words, stdin_path=None, timeout=180, tries=4):
         command = ["ssh", "-i", str(self.key), "-o", "BatchMode=yes", "-o", "IdentitiesOnly=yes", "-o", f"UserKnownHostsFile={self.known_hosts}",
                    "-o", "StrictHostKeyChecking=yes", "-o", "ConnectTimeout=20", "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=4",
+                   # One connection per job: the broker host is shared and small, and a handshake per call for 30 workers took it to a load of 40 (2026-11-02).
+                   "-o", "ControlMaster=auto", "-o", "ControlPath=/tmp/rsi-broker-%C", "-o", "ControlPersist=300",
                    self.target, " ".join(shlex.quote(w) for w in words)]
         last = ""
         for attempt in range(tries):
@@ -439,6 +441,21 @@ class Lane:
             stack.verify_runtime_keyless(failures)
             self.keyless = {"ok": not failures, "failures": failures}
 
+    # -- the facts `stack.py verify` recorded at bring-up (the context engine, the document parser, the Tokyo edge), with the counters of what
+    #    memory and learning did with the runs so far: every run of the lab is `automated` on a throwaway account, so those stay at zero.
+    def stack_facts(self):
+        sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+        import stack
+        try:
+            facts = json.loads(stack.FACTS_FILE.read_text())
+        except (OSError, ValueError):
+            facts = {}
+        try:
+            facts["metrics"] = stack.metrics_facts()
+        except Exception:  # a metrics read is evidence, never a reason to lose a result
+            facts["metrics"] = {"read": False}
+        return facts
+
     # -- stack
     def healthy(self):
         sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
@@ -518,7 +535,7 @@ class Lane:
                 meta = {"rid": rid, "lane": LANE_ID, "worker": worker, "imageKey": IMAGE_KEY, "attempt": request.get("attempt"),
                         "driverExit": code, "status": status, "wallS": round(time.time() - began), "claimLost": lost.is_set(),
                         "contamination": contamination(transcript), "runtimeKeyless": self.keyless, **self.sampler.snapshot(),
-                        "cost": result.get("cost")}
+                        "cost": result.get("cost"), "stack": self.stack_facts()}
                 bundle_path = folder_root / "bundle.tgz"
                 dropped = pack(out_dir, item_folder(item["key"]), meta, bundle_path)
                 size = bundle_path.stat().st_size
@@ -620,6 +637,7 @@ class Lane:
         self.sampler.sample()
         markers = self.tap.stop()
         snapshot = self.sampler.snapshot()
+        say(f"lane stack facts at the end: {json.dumps(self.stack_facts(), sort_keys=True)}")
         say(f"lane ended: claimed={self.stats['claimed']} done={self.stats['done']} infraFailed={self.stats['infraFailed']} "
             f"peakMemMiB={json.dumps(snapshot['peakMemMiB'], sort_keys=True)} containersPeakSumMiB={snapshot['containersPeakSumMiB']} "
             f"runtimePeakMaxMiB={snapshot['runtimePeakMaxMiB']} runtimesSeen={snapshot['runtimesSeen']}")

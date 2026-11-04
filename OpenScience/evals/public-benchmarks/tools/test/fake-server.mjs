@@ -10,7 +10,8 @@
 // - `scenario(dispatchBody)` may return, per dispatched prompt: `files` {path: {text, ago?}} written into the project's workspace (`ago`: seconds before the dispatch the file was last written)
 //   (what `read_artifact` and `list_dir` serve; the run record lists them in object order), `hang` (the run never ends until it is
 //   cancelled), `refuse` (statuses answered to the dispatch before it is accepted), `writes` [{atMs, tool, path|command}] (tool calls
-//   in the transcript, `atMs` after the turn began), `unlisted` (the files are in the workspace but not in the run record) and `answer`.
+//   in the transcript, `atMs` after the turn began), `unlisted` (the files are in the workspace but not in the run record), `usage` (the
+//   records `GET /api/runs/:id/usage` answers in order, the last repeating) and `answer`.
 import { createServer } from "node:http";
 import { createHash, randomUUID } from "node:crypto";
 
@@ -134,7 +135,17 @@ export async function startFake({ failSkillCreate = false, preselect = false, sc
   on("GET", /^\/api\/agent-runs$/, (req) => [200, { data: state.runs.filter((r) => r.projectId === req.headers["x-open-science-project"] && !r.archived) }]);
   on("PATCH", /^\/api\/agent-runs\/([^/]+)$/, (req, res, m, body) => { const r = state.runs.find((x) => x.id === m[1]); r.archived = body.archived === true; return [200, { data: r }]; });
   on("POST", /^\/api\/agent-runs\/([^/]+)\/cancel$/, (req, res, m) => { const r = state.runs.find((x) => x.id === m[1]); if (r.status === "running") { r.status = "canceled"; r.errorCode = "runtime_canceled"; } return [200, { data: { run: r } }]; });
-  on("GET", /^\/api\/runs\/([^/]+)\/usage$/, (req, res, m) => [200, { data: { runId: m[1], cost: 0.01, calls: 2, inputTokens: 100, outputTokens: 5, currency: "CNY" } }]);
+  on("GET", /^\/api\/runs\/([^/]+)\/usage$/, (req, res, m) => {
+    // `scenario.usage` is a list of usage records answered in order (the last one repeats): a call that settles late, or never.
+    const run = state.runs.find((r) => r.id === m[1]);
+    const sequence = run?.scenario?.usage;
+    log("usage-read", run?.projectId, { runId: m[1] });
+    if (Array.isArray(sequence) && sequence.length) {
+      run.usageReads = (run.usageReads ?? 0) + 1;
+      return [200, { data: { runId: m[1], currency: "CNY", ...sequence[Math.min(run.usageReads, sequence.length) - 1] } }];
+    }
+    return [200, { data: { runId: m[1], cost: 0.01, calls: 2, inputTokens: 100, outputTokens: 5, currency: "CNY" } }];
+  });
   on("GET", /^\/api\/runtime\/sessions\/([^/]+)\/transcript$/, (req, res, m) => {
     const run = state.runs.find((r) => r.sessionId === m[1]);
     const p = project(run.projectId);

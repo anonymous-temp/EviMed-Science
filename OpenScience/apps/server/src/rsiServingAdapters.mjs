@@ -19,6 +19,24 @@ const components = Object.freeze({
 })
 /** @param {string} code */
 function refuse(code) { throw new HttpError(409, code, 'Campaign serving adapter refused.') }
+/** The code defaults of a module's policy: what serves while no module-policy row is active. @param {string} moduleId @param {any} config */
+export function rsiPolicyDefaults(moduleId, config) {
+  return moduleId === 'frontier' ? { selectionThreshold: frontierSelectThreshold(config) }
+    : moduleId === 'autopilot' ? { plannerInstructions: AUTOPILOT_PLANNER_INSTRUCTIONS } : { supplements: [] }
+}
+/**
+ * The incumbent of a module as the serving layer names it: an active, valid module-policy row (`evolution-module-policy-<module>:<revision>`),
+ * otherwise the code defaults (`default:<digest>`). One function for the serving path (`currentTarget`, which a bundle's `baselineRevision` is
+ * compared with at import) and for the offline export (scripts/ops/rsi-frontier-export.mjs, which the lab binds as the campaign's baseline),
+ * so the identity a campaign names is the one production reports.
+ * @param {string} moduleId @param {{payload:any, revision:number}|null|undefined} row the module-policy document, when there is one @param {Record<string, any>} base
+ */
+export function rsiIncumbent(moduleId, row, base) {
+  if (row?.payload.status === 'active' && validateModuleEvolutionPolicy(moduleId, row.payload.policy)) {
+    return { revisionId: `evolution-module-policy-${moduleId}:${row.revision}`, policy: { ...base, ...row.payload.policy } }
+  }
+  return { revisionId: `default:${rsiDigest(base)}`, policy: base }
+}
 /** A campaign supplies exactly one component; guardrails and neighbouring components are deployment-owned.
  * @param {string} surface @param {any} files */
 export function parseRsiPolicyCandidate(surface, files) {
@@ -41,8 +59,7 @@ export function createRsiServingAdapters({ config, service, database, documents 
   // Operations whose critical observation could not be recorded: served the incumbent here until stopped durably.
   const halted = new Set()
   const rootDir = config.rootDir ?? fileURLToPath(new URL('../../../', import.meta.url))
-  const defaults = (/** @type {string} */ moduleId) => moduleId === 'frontier' ? { selectionThreshold: frontierSelectThreshold(config) }
-    : moduleId === 'autopilot' ? { plannerInstructions: AUTOPILOT_PLANNER_INSTRUCTIONS } : { supplements: [] }
+  const defaults = (/** @type {string} */ moduleId) => rsiPolicyDefaults(moduleId, config)
   const owner = () => publicationOwnerId
   const id = (/** @type {any[]} */ values) => `rsi-serving:${rsiDigest(values)}`
   /** @param {any} client @param {string} recordId @param {string} [recordOwner] */
@@ -67,12 +84,7 @@ export function createRsiServingAdapters({ config, service, database, documents 
   /** Actual incumbent includes legacy active policy, otherwise the consumer's code defaults.
    * @param {string} moduleId @param {any} client */
   async function incumbent(moduleId, client) {
-    const row = await read(client, `evolution-module-policy-${moduleId}`, await service.owner())
-    const base = defaults(moduleId)
-    if (row?.payload.status === 'active' && validateModuleEvolutionPolicy(moduleId, row.payload.policy)) {
-      return { revisionId: `evolution-module-policy-${moduleId}:${row.revision}`, policy: { ...base, ...row.payload.policy } }
-    }
-    return { revisionId: `default:${rsiDigest(base)}`, policy: base }
+    return rsiIncumbent(moduleId, await read(client, `evolution-module-policy-${moduleId}`, await service.owner()), defaults(moduleId))
   }
   /** @type {Map<string, Promise<any>>} */
   const closures = new Map()

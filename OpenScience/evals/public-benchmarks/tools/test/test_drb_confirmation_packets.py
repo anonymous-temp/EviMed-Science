@@ -28,13 +28,15 @@ class Packets(unittest.TestCase):
         self.dir = Path(self.tmp.name)
         (self.dir / 'pools.json').write_text(json.dumps({'digest': 'p' * 64, 'bench': 'deepresearchbench', 'pools': {'main': {'development': DEV, 'confirmation': CONF}}}))
         self.registration = self.dir / 'registration.json'
+        noise = self.dir / 'judge-noise.json'  # the judge's measurement (noise_sample.py band), pairwise DRB on the verdict's 0-1 scale
+        noise.write_text(json.dumps({'schema': 'judge-noise/2', 'scale': 'verdict-0-1', 'families': {'drb': {'pairwise': {
+            'form': 'pairwise', 'scale': 'verdict-0-1', 'agreement': 0.9, 'noiseSd': 0.01, 'noiseBand95': 0.02}}}}))
         out = io.StringIO()
         with contextlib.redirect_stdout(out):
             code = rr.main(['--round', 'r', '--family', 'drb', '--benchmark', 'deepresearchbench', '--scorer', 'judged-verdicts', '--pools', str(self.dir / 'pools.json'),
                             '--salt', 's', '--repeats-confirmation', '2', '--failure-slice', 'Art', '--candidates-max', '1', '--out', str(self.registration),
-                            '--judge-id', 'claude-judge', '--judge-provider', 'anthropic', '--judge-form', 'pairwise', '--judge-passes', '2', '--judge-max-calls', '50',
-                            '--judge-agreement', '0.9', '--judge-noise-sd', '0.01', '--judge-noise-band', '0.02', '--judge-measured-on', 'test', '--judge-min-agreement', '0.5',
-                            '--judge-max-noise-band', '0.05'])
+                            '--judge-id', 'claude-judge', '--judge-provider', 'anthropic', '--judge-model', 'claude-sonnet-5-5', '--judge-effort', 'medium', '--judge-form', 'pairwise',
+                            '--judge-passes', '2', '--judge-max-calls', '50', '--judge-noise', str(noise), '--judge-noise-key', 'drb'])
         self.assertEqual(code, 0)
         self.results = self.dir / 'results'
         self.criteria = self.dir / 'criteria'

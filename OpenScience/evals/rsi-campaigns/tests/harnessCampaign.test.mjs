@@ -1,26 +1,163 @@
-import test from 'node:test';
+import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { rsiDigest as digest } from '../../../apps/server/src/rsiCampaignBundle.mjs';
-import { runCampaign } from '../campaign_runner.mjs';
+import { confirmationDecision, runCampaign } from '../campaign_runner.mjs';
 import { evaluatorReceiptPayload } from '../evaluator.mjs';
-import { attachGold, attachVerdicts, buildHarnessCampaign, developmentOnly, readChecked } from '../harness_assemble.mjs';
-import { HARNESS_ALWAYS_ON_MAX_CHARS, chooseHarnessCandidate, harnessArmsIssues, harnessCampaignConsumerIdentity, harnessObservations, harnessPatchDigest, harnessPatchSizes, normalizeHarnessBundle } from '../harness_campaign.mjs';
+import { attachGold, attachVerdicts, buildHarnessCampaign, developmentOnly, judgeCallsRequired, readChecked, roundRegistrationDigest } from '../harness_assemble.mjs';
+import { HARNESS_ALWAYS_ON_MAX_CHARS, chooseHarnessCandidate, harnessArmsIssues, harnessCampaignConsumerIdentity, harnessObservations, harnessPatchDigest, harnessPatchSizes, normalizeHarnessBundle, normalizeToolPatchCode } from '../harness_campaign.mjs';
 import { harnessReport } from '../harness_report.mjs';
 import { skillCampaignConsumerIdentity } from '../skill_campaign.mjs';
 import { memoryCampaignStore, runToVerdict, runnerEnvironment, tickingClock } from '../profiles/benign_fixture.mjs';
-import { AA, BASE, GOOD, IMAGE, WEAK, bundleOf, candidate, harnessFixture, judgeOf, rebind, sha256 } from '../profiles/harness_fixture.mjs';
+import { AA, BASE, GOOD, IMAGE, IMPROVEMENT, TOOL_GOOD, TOOL_WEAK, WEAK, bundleOf, candidate, harnessFixture, improvementOf, judgeOf, rebind, sha256, toolCodeOf } from '../profiles/harness_fixture.mjs';
+import { toolPatchCampaignConsumerIdentity } from '../tool_patch_campaign.mjs';
 
 const scratch = await mkdtemp(join(tmpdir(), 'rsi-harness-'));
+after(() => rm(scratch, { recursive: true, force: true }));
 let dirs = 0;
 const nextDir = () => join(scratch, String(dirs += 1));
 const vectors = JSON.parse(await readFile(new URL('./fixtures/scorer-vectors.json', import.meta.url), 'utf8'));
 const DEV = 'development-2026-11', CONF = 'confirmation-2026-11';
 const run = (campaign, environment = runnerEnvironment()) => runCampaign({ manifest: campaign.manifest, inputs: campaign.inputs, ...environment });
+
+// ------------------------------------------------------------------------------------------------------------------ tool-patch
+
+test('the tool-patch digest binds the code as well as the text, the same in Python and in JS, and a harness patch\'s digest is what it was', () => {
+  assert.ok(vectors.toolPatchDigest.length >= 7);
+  for (const { name, bundle, image, code, digest: expected, chars, alwaysOnChars } of vectors.toolPatchDigest) {
+    assert.equal(harnessPatchDigest(bundle, image, code), expected, name);
+    assert.deepEqual(harnessPatchSizes(bundle, code), { chars, alwaysOnChars }, name);
+  }
+  const text = { guidanceSupplement: 'Call the scale tool for any named score.', skills: [] };
+  const code = toolCodeOf('scale-tool');
+  const base = harnessPatchDigest(text, IMAGE, code);
+  assert.notEqual(harnessPatchDigest(text, IMAGE), base, 'the same text without its code is another candidate');
+  for (const change of [{ patchSha256: 'f'.repeat(64) }, { toolCatalogueChars: 301 }, { image: { ...code.image, id: 'another-delta' } }, { files: code.files.slice(0, 1) }]) {
+    assert.notEqual(harnessPatchDigest(text, IMAGE, { ...code, ...change }), base, JSON.stringify(Object.keys(change)));
+  }
+  assert.equal(harnessPatchDigest(text, IMAGE, { ...code, files: [...code.files].reverse() }), base, 'files are digested sorted by path');
+  assert.deepEqual(harnessPatchSizes(text, code), { chars: text.guidanceSupplement.length + 300, alwaysOnChars: text.guidanceSupplement.length + 300 }, 'the tool catalogue is always-on growth');
+  assert.equal(normalizeToolPatchCode({ ...code, extra: 1 }), null);
+  assert.equal(normalizeToolPatchCode({ ...code, files: [] }), null);
+  assert.equal(normalizeToolPatchCode({ ...code, files: [{ path: '../x.py', sha256: 'a'.repeat(64) }] }), null);
+  assert.throws(() => harnessPatchDigest(text, IMAGE, { ...code, patchSha256: 'nope' }), { message: 'harness_bundle_invalid' });
+  assert.throws(() => harnessPatchDigest({ guidanceSupplement: '', skills: [] }, IMAGE), { message: 'harness_bundle_invalid' }, 'an empty bundle is a patch only if its code is');
+  assert.equal(harnessPatchDigest({ guidanceSupplement: '', skills: [] }, IMAGE, code).length, 64);
+});
+
+test('tool-patch: a candidate that holds code is qualified end to end under its own surface and consumer identity, on the runtime image\'s one error budget; the harness-patch pins are untouched', async () => {
+  const tool = await harnessFixture('medcalc', { surface: 'tool-patch' });
+  assert.equal(tool.manifest.surface, 'tool-patch');
+  assert.equal(tool.manifest.candidateKind, 'tool-patch');
+  assert.equal(tool.manifest.target.surface, 'tool-patch');
+  assert.equal(tool.manifest.id, 'tool-patch-medcalc-2026-11');
+  assert.equal(tool.inputs.registration.surface, 'tool-patch');
+  const toolIdentity = await toolPatchCampaignConsumerIdentity(tool.inputs.registration);
+  assert.equal(tool.inputs.registration.statistics.consumer_id, toolIdentity.implementationSha256);
+  assert.equal(tool.manifest.target.dependencyDigest, toolIdentity.implementationSha256);
+  const harness = await harnessFixture('medcalc');
+  const harnessIdentity = await harnessCampaignConsumerIdentity(harness.inputs.registration);
+  assert.notEqual(toolIdentity.implementationSha256, harnessIdentity.implementationSha256, 'its own consumer identity');
+  assert.ok(toolIdentity.components.some((component) => component.path.endsWith('tool_patch_campaign.mjs')));
+  assert.equal(toolIdentity.revision, 'tool-patch-arms-v1');
+  assert.equal(harnessIdentity.revision, 'harness-arms-v1');
+  assert.equal(harness.inputs.registration.surface, undefined, 'a harness-patch registration is what it was: no surface field');
+  assert.equal(harness.manifest.surface, 'harness-patch');
+  assert.equal(harness.manifest.id, 'harness-patch-medcalc-2026-11');
+  assert.deepEqual(tool.supply.developmentChoice.frozen.arm, TOOL_GOOD.arm);
+  // the whole lifecycle through the runner, the statistics and a signed receipt: qualified, in the runtime image's ledger
+  const store = memoryCampaignStore();
+  const now = tickingClock();
+  const toolVerdict = await runToVerdict(tool, { dir: nextDir(), store, now });
+  assert.equal(toolVerdict.completed.qualification, 'qualified');
+  assert.equal(toolVerdict.completed.releaseEligible, false);
+  assert.equal(toolVerdict.signed.payload.consumer.revision, 'tool-patch-arms-v1');
+  const harnessVerdict = await runToVerdict(harness, { dir: nextDir(), store, now });
+  assert.equal(harnessVerdict.completed.qualification, 'qualified');
+  // One consumer, one ledger (2026-11-03): a tool patch and a harness patch both change the runtime image and draw on its quarter between them.
+  assert.deepEqual([...store.ledger.keys()], ['dsh-harness:2026-Q4']);
+  assert.deepEqual(store.ledger.get('dsh-harness:2026-Q4').reservations.map((row) => [row.campaignId, row.surface]), [['tool-patch-medcalc-2026-11', 'tool-patch'], ['harness-patch-medcalc-2026-11', 'harness-patch']]);
+});
+
+test('tool-patch: the surfaces never accept each other\'s candidates or registrations', async () => {
+  const tool = await harnessFixture('medcalc', { surface: 'tool-patch' });
+  const dev = tool.inputs.sources['development-2026-11'], registration = tool.inputs.registration;
+  assert.deepEqual(harnessArmsIssues(dev, registration), []);
+  // an arm without code under a tool-patch registration, and an arm with code under a harness-patch one
+  const withoutCode = structuredClone(dev);
+  delete withoutCode.arms[TOOL_GOOD.arm].harness.code;
+  assert.deepEqual(harnessArmsIssues(withoutCode, registration), ['harness_arms_candidate_invalid']);
+  const { surface, ...asHarness } = registration;
+  assert.deepEqual(harnessArmsIssues(dev, asHarness), ['harness_arms_candidate_invalid'], 'a harness patch holds no code');
+  // code that is not the digested code
+  const changedCode = structuredClone(dev);
+  changedCode.arms[TOOL_GOOD.arm].harness.code.patchSha256 = 'f'.repeat(64);
+  assert.deepEqual(harnessArmsIssues(changedCode, registration), ['harness_arms_candidate_invalid']);
+  // the always-on cap counts the tool catalogue
+  const bulky = structuredClone(dev);
+  bulky.arms[TOOL_GOOD.arm].harness.code.toolCatalogueChars = 4001;
+  assert.deepEqual(harnessArmsIssues(bulky, registration), ['harness_arms_candidate_invalid']);
+  // the runner: a manifest and a registration that name different surfaces
+  const mismatch = rebind(tool, ({ inputs }) => { delete inputs.registration.surface; });
+  assert.equal((await run(mismatch)).reason, 'campaign_surface_registration_mismatch', 'the manifest names the tool surface, the registration no longer does');
+  const crossed = rebind(await harnessFixture('medcalc'), ({ manifest, inputs }) => { inputs.registration.surface = 'tool-patch'; manifest.surface = 'harness-patch'; });
+  assert.equal((await run(crossed)).reason, 'campaign_surface_registration_mismatch');
+  const agree = await harnessFixture('medcalc');
+  const unknown = rebind(agree, ({ inputs }) => { inputs.registration.surface = 'skill-patch'; });
+  assert.equal((await run(unknown)).reason, 'campaign_surface_registration_mismatch');
+  // a registration for neither surface is refused at assembly
+  await assert.rejects(harnessFixture('medcalc', { mutateRound: (round) => { round.surface = 'skill-patch'; } }), { message: 'campaign_surface_invalid' });
+  assert.ok(TOOL_WEAK.harness.code, 'both fixture tool candidates hold code');
+});
+
+// ------------------------------------------------------------------------------------------------- the preview applies what run applies
+
+test('the preview and the development-only gate refuse what the run refuses on the development side (round 1: a preview said eligible, run said campaign_control_arm_missing)', async () => {
+  const campaign = await harnessFixture('medcalc');
+  const input = { development: campaign.exports.development.source, registration: campaign.round, improvement: IMPROVEMENT, month: '2026-11' };
+  assert.equal(developmentOnly(input).status, 'development-only', 'a complete source is eligible');
+  const reregistered = (change) => { const round = structuredClone(campaign.round); change(round); round.digest = roundRegistrationDigest(round); return round; };
+  // no A/A arm in the development source: the source itself is well formed, the runner has no control to hold a candidate to
+  const noControl = structuredClone(input.development);
+  delete noControl.arms.aa;
+  noControl.runs = noControl.runs.filter((run) => run.arm !== 'aa');
+  assert.deepEqual(harnessArmsIssues(noControl, { ...campaign.inputs.registration }), [], 'well formed, and still not a development source the run accepts');
+  assert.throws(() => developmentOnly({ ...input, development: noControl }), { message: 'campaign_control_arm_missing' });
+  // the same refusal from the assembly of a whole campaign and from the runner
+  await assert.rejects(buildHarnessCampaign({ development: noControl, confirmation: campaign.exports.confirmation.source, registration: campaign.round, confirmationGold: campaign.exports.confirmation.gold,
+    improvement: IMPROVEMENT, month: '2026-11', pilotRationale: 'test' }), { message: 'campaign_control_arm_missing' });
+  const refused = rebind(campaign, ({ inputs }) => { const s = inputs.sources[DEV]; delete s.arms.aa; s.runs = s.runs.filter((r) => r.arm !== 'aa'); });
+  assert.equal((await run(refused)).reason, 'campaign_control_arm_missing');
+  // more candidates than K, rows or repeats other than the registered ones, a control that was never registered, a margin outside (0, 1)
+  assert.throws(() => developmentOnly({ ...input, registration: reregistered((r) => { r.candidatesMax = 1; }) }), { message: 'campaign_candidates_exceed_registration' });
+  assert.throws(() => developmentOnly({ ...input, registration: reregistered((r) => { r.rows.development = r.rows.development.slice(1); }) }), { message: 'campaign_rows_unregistered' });
+  assert.throws(() => developmentOnly({ ...input, registration: reregistered((r) => { r.repeats.development = 2; }) }), { message: 'campaign_repeats_unregistered' });
+  assert.throws(() => developmentOnly({ ...input, registration: reregistered((r) => { r.control.arm = 'a-a'; }) }), { message: 'campaign_control_unregistered' });
+  assert.throws(() => developmentOnly({ ...input, registration: reregistered((r) => { r.margin = 1.5; }) }), { message: 'campaign_registration_invalid' });
+  assert.throws(() => developmentOnly({ ...input, registration: reregistered((r) => { r.alpha.perCampaign = 0.04; }) }), { message: 'campaign_alpha_registration_invalid' });
+});
+
+test('a judged registration whose call maximum is below what its own rows, repeats, passes and candidates need is refused by the preview as by the assembly', async () => {
+  const judged = await harnessFixture('judged');
+  const required = judgeCallsRequired(judged.round);
+  // development: baseline + control + K candidates; confirmation: baseline + one candidate; absolute judging records every arm
+  const { round } = judged;
+  assert.equal(required, (round.rows.development.length * round.repeats.development * (1 + 1 + round.candidatesMax) + round.rows.confirmation.length * round.repeats.confirmation * 2) * round.judge.passes);
+  const pairwise = { ...round, judge: { ...round.judge, form: 'pairwise', passes: 2 } };
+  assert.equal(judgeCallsRequired(pairwise), (round.rows.development.length * round.repeats.development * (1 + round.candidatesMax) + round.rows.confirmation.length * round.repeats.confirmation) * 2, 'pairwise judging records the arms that are not the baseline');
+  const low = structuredClone(round);
+  low.judge.maxCalls = required - 1;
+  low.digest = roundRegistrationDigest(low);
+  assert.throws(() => developmentOnly({ development: judged.exports.development.source, registration: low, developmentVerdicts: judged.exports.development.verdicts, improvement: IMPROVEMENT, month: '2026-11' }), { message: 'campaign_judge_budget_below_registration' });
+  const enough = structuredClone(round);
+  enough.judge.maxCalls = required;
+  enough.digest = roundRegistrationDigest(enough);
+  assert.equal(developmentOnly({ development: judged.exports.development.source, registration: enough, developmentVerdicts: judged.exports.development.verdicts, improvement: IMPROVEMENT, month: '2026-11' }).status, 'development-only');
+});
 
 // -------------------------------------------------------------------------------------------------------------- the candidate
 
@@ -192,7 +329,7 @@ test('a confirmation export is not scorable on its own: no gold in its rows, and
   assert.throws(() => attachGold(sealed, { ...goldFile, benchmark: 'bixbench' }), { message: 'harness_gold_invalid' });
   const dropped = structuredClone(goldFile); delete dropped.gold[Object.keys(dropped.gold)[0]];
   assert.throws(() => attachGold(sealed, dropped), { message: 'harness_gold_rows_differ' });
-  const common = { development: campaign.exports.development.source, registration: campaign.round, month: '2026-11', pilotRationale: 'Synthetic.' };
+  const common = { development: campaign.exports.development.source, registration: campaign.round, improvement: IMPROVEMENT, month: '2026-11', pilotRationale: 'Synthetic.' };
   await assert.rejects(buildHarnessCampaign({ ...common, confirmation: sealed }), { message: 'harness_confirmation_gold_missing' });
   await assert.rejects(buildHarnessCampaign({ ...common, confirmation: joined }), { message: 'harness_confirmation_not_sealed' });
   await assert.rejects(buildHarnessCampaign({ ...common, confirmation: joined, confirmationGold: goldFile }), { message: 'harness_confirmation_not_sealed' });
@@ -209,7 +346,7 @@ test('a campaign whose development finds nothing opens nothing: no corpus, no al
   assert.equal(store.corpora.size, 0);
   assert.equal(store.state(flat.manifest.id).stages.confirmation, undefined, 'the confirmation source was not scored');
   // The development-only recomputation reads no confirmation file at all.
-  const only = developmentOnly({ development: flat.exports.development.source, registration: flat.round, month: '2026-11' });
+  const only = developmentOnly({ development: flat.exports.development.source, registration: flat.round, improvement: IMPROVEMENT, month: '2026-11' });
   assert.equal(only.status, 'development-only');
   assert.equal(only.supply.developmentChoice.frozen, null);
   assert.equal(only.supply.developmentChoice.reason, 'campaign_no_improving_candidate');
@@ -259,7 +396,7 @@ test('judged: a verdict file that changes after its digest is refused, in the as
   const { development, confirmation } = campaign.exports;
   const edited = (text) => text.replace(/"score":([0-9.]+)/, (_, score) => `"score":${Number(score) === 0.5 ? 0.6 : 0.5}`);
   assert.notEqual(edited(confirmation.verdicts), confirmation.verdicts);
-  const base = { development: development.source, confirmation: confirmation.source, registration: campaign.round, month: '2026-11', pilotRationale: 'Synthetic.', developmentVerdicts: development.verdicts, confirmationVerdicts: confirmation.verdicts };
+  const base = { development: development.source, confirmation: confirmation.source, registration: campaign.round, improvement: IMPROVEMENT, month: '2026-11', pilotRationale: 'Synthetic.', developmentVerdicts: development.verdicts, confirmationVerdicts: confirmation.verdicts };
   await assert.rejects(buildHarnessCampaign({ ...base, confirmationVerdicts: edited(confirmation.verdicts) }), { message: 'campaign_judge_verdicts_changed' });
   await assert.rejects(buildHarnessCampaign({ ...base, developmentVerdicts: `${development.verdicts}\n` }), { message: 'campaign_judge_verdicts_changed' });
   await assert.rejects(buildHarnessCampaign({ ...base, developmentVerdicts: development.verdicts.split('\n').slice(1).join('\n') }), { message: 'campaign_judge_verdicts_changed' });
@@ -279,38 +416,64 @@ test('judged: a verdict file that changes after its digest is refused, in the as
   await assert.rejects(evaluatorReceiptPayload({ ...other, request: awaiting.request, checkpoint, now: now() }), { message: 'campaign_evaluator_binding_changed' });
 });
 
-test('judged: a judge on the solver\'s family is refused before any verdict is read', async () => {
-  for (const changes of [{ id: 'deepseek-v4-pro' }, { id: 'DeepSeek-judge' }, { provider: 'deepseek' }, { provider: 'DeepSeek' }, { id: 'claude-judge-test', provider: 'deepseek' }]) {
-    await assert.rejects(harnessFixture('judged', { judge: judgeOf(changes) }), { message: 'campaign_judge_family_refused' }, JSON.stringify(changes));
+test('judged: a judge that is not Claude (Anthropic, a pinned claude-* model) is refused before any verdict is read, whatever its id says', async () => {
+  for (const changes of [{ provider: 'deepseek', model: 'deepseek-v4-pro' }, { provider: 'dashscope', model: 'qwen3.8-max' }, { model: 'qwen3.8-max' }, { provider: 'deepseek' },
+    { model: 'claude' }, { model: 'claude-3.5-sonnet' }, { provider: 'Anthropic' }]) {
+    await assert.rejects(harnessFixture('judged', { judge: judgeOf(changes) }), { message: 'campaign_judge_refused' }, JSON.stringify(changes));
   }
-  // A hand-built inputs.json that names such a judge (consistently, in the registration, the sources and every record) is refused by the runner by name.
+  const { model, ...unpinned } = judgeOf();
+  await assert.rejects(harnessFixture('judged', { judge: unpinned }), { message: 'campaign_judge_unregistered' }, `a judge without a pinned model (${model} removed) is not registered`);
+  // A hand-built inputs.json that names such a judge (consistently, in the registration, the sources and the manifest) is refused by the runner by name.
   const campaign = await harnessFixture('judged');
-  for (const [field, value] of [['id', 'deepseek-v4-pro'], ['provider', 'deepseek']]) {
-    const hostile = rebind(campaign, ({ inputs }) => {
-      inputs.registration.judge[field] = value;
-      for (const key of [DEV, CONF]) { inputs.sources[key].judged.judge[field] = value; if (field === 'id') for (const r of inputs.sources[key].judged.records) r.judge = value; }
+  for (const judge of [{ provider: 'deepseek', model: 'deepseek-v4-pro' }, { provider: 'dashscope', model: 'qwen3.8-max' }]) {
+    const hostile = rebind(campaign, ({ manifest, inputs }) => {
+      Object.assign(inputs.registration.judge, judge);
+      for (const key of [DEV, CONF]) Object.assign(inputs.sources[key].judged.judge, judge);
+      manifest.models.judges = [{ ...manifest.models.judges[0], ...judge }];
     });
     const store = memoryCampaignStore();
-    assert.deepEqual(await run(hostile, runnerEnvironment({ store })), { status: 'not-qualified', reason: 'campaign_judge_family_refused' }, field);
+    assert.deepEqual(await run(hostile, runnerEnvironment({ store })), { status: 'not-qualified', reason: 'campaign_judge_refused' }, judge.provider);
     assert.equal(store.writes(), 0);
   }
-  // The same campaign with a Claude judge runs.
+  // The same campaign with its Claude judge runs, and its manifest names that judge.
   const claude = await harnessFixture('judged');
+  assert.deepEqual(claude.manifest.models.judges, [{ role: 'judge', provider: 'anthropic', model: 'claude-sonnet-5-5', id: 'claude-judge-test' }]);
+  assert.equal(claude.supply.judge.model, 'claude-sonnet-5-5');
   assert.equal((await run(claude, runnerEnvironment({ store: memoryCampaignStore() }))).status, 'awaiting-evaluation');
 });
 
-test('judged: a judge is registered with its identity, its passes, its call budget and a qualification it meets', async () => {
+test('judged: a judge is registered with its identity, its passes, its call budget and a qualification that meets the procedure\'s thresholds, which no registration sets', async () => {
+  const q = judgeOf().qualification;
   for (const [changes, code] of [
     [{ qualification: null }, 'campaign_judge_unqualified'],
-    [{ qualification: { ...judgeOf().qualification, agreement: 0.8 } }, 'campaign_judge_unqualified'],
-    [{ qualification: { ...judgeOf().qualification, noiseBand95: 0.2 } }, 'campaign_judge_unqualified'],
+    [{ qualification: { ...q, agreement: 0.8 } }, 'campaign_judge_unqualified'],
+    [{ qualification: { ...q, agreement: 0.8999 } }, 'campaign_judge_unqualified'],
+    [{ qualification: { ...q, noiseBand95: 0.2 } }, 'campaign_judge_unqualified'],
+    // round 2's BixBench judge as registered: band95 0.1166 over 2 passes is 0.0824, above the 0.05 margin (it was admitted by a registered maximum of 0.12)
+    [{ passes: 2, qualification: { ...q, agreement: 0.9583, noiseBand95: 0.1166 } }, 'campaign_judge_unqualified'],
+    // averaging is what the procedure uses: 0.08 is above the margin over 2 passes (0.0566), within it over 3 (0.0462)
+    [{ passes: 2, qualification: { ...q, noiseBand95: 0.08 } }, 'campaign_judge_unqualified'],
+    // a threshold of the registrant's own is no longer a field of the qualification
+    [{ qualification: { ...q, agreement: 0.8, minimumAgreement: 0.7 } }, 'campaign_judge_unqualified'],
+    [{ qualification: { ...q, maximumNoiseBand: 0.2 } }, 'campaign_judge_unqualified'],
     [{ qualification: { ...judgeOf().qualification, measuredOn: ' ' } }, 'campaign_judge_unqualified'],
     [{ qualification: { ...judgeOf().qualification, noiseSd: 'high' } }, 'campaign_judge_unqualified'],
+    // the measurement is of this judge's form and on the verdict's 0-1 scale (2026-11-03): DRB's absolute RACE band is no pairwise judge's, rubric points
+    // are not a 0-1 band, and a record that does not say its scale is not read
+    [{ form: 'pairwise', passes: 2, qualification: { ...q, form: 'absolute' } }, 'campaign_judge_unqualified'],
+    [{ qualification: { ...q, scale: 'rubric-points', noiseSd: 2.26, noiseBand95: 4.43 } }, 'campaign_judge_unqualified'],
+    [{ qualification: (({ scale, ...rest }) => rest)(q) }, 'campaign_judge_unqualified'],
+    [{ qualification: (({ form, ...rest }) => rest)(q) }, 'campaign_judge_unqualified'],
+    [{ qualification: { ...q, agreement: null } }, 'campaign_judge_unqualified'],
     [{ passes: 1 }, 'campaign_judge_unregistered'], [{ form: 'ranking' }, 'campaign_judge_unregistered'], [{ maxCalls: 0 }, 'campaign_judge_unregistered'],
     [{ id: '' }, 'campaign_judge_unregistered'], [{ form: 'pairwise', passes: 3 }, 'campaign_judge_unregistered'],
+    // the same model at another effort is another judge: the effort is registered, one of the CLI's levels
+    [{ effort: null }, 'campaign_judge_unregistered'], [{ effort: 'turbo' }, 'campaign_judge_unregistered'],
   ]) {
     await assert.rejects(harnessFixture('judged', { judge: judgeOf(changes) }), { message: code }, JSON.stringify(changes));
   }
+  // At the thresholds: agreement exactly 0.9, and a band that is within the margin only once three passes are averaged.
+  assert.equal((await harnessFixture('judged', { judge: judgeOf({ qualification: { ...q, agreement: 0.9, noiseBand95: 0.08 } }) })).supply.judge.qualification.noiseBand95, 0.08);
   // Registered for a deterministic scorer, a judge is a mistake; a judged scorer without one is another.
   const campaign = await harnessFixture('judged');
   assert.equal((await run(rebind(campaign, ({ inputs }) => { delete inputs.registration.judge; }))).reason, 'campaign_judge_unregistered');
@@ -324,10 +487,17 @@ test('judged: the verdicts are the judge\'s, complete, within budget, on deliver
   let dropped = false;
   await bad({ keep: (record) => { if (!dropped && record.pass === 2) { dropped = true; return false; } return true; } }, 'harness_judge_verdicts_incomplete');
   await bad({ mutate: (record) => (record.row === '1003' && record.pass === 1 ? { ...record, judge: 'another-judge' } : record) }, 'harness_judge_identity_mismatch');
+  // a source judged at another effort than the registered one is another judge's
+  const registeredEffort = await harnessFixture('judged');
+  const otherEffort = rebind(registeredEffort, ({ inputs }) => { inputs.sources[DEV].judged.judge.effort = 'high'; });
+  assert.deepEqual(harnessArmsIssues(otherEffort.inputs.sources[DEV], otherEffort.inputs.registration), ['harness_judge_identity_mismatch']);
   await bad({ mutate: (record) => (record.row === '1003' && record.pass === 1 ? { ...record, score: 1.5 } : record) }, 'harness_judge_verdicts_invalid');
   await bad({ mutate: (record) => (record.row === '1003' && record.pass === 1 ? { ...record, row: '9999' } : record) }, 'harness_judge_verdicts_invalid');
-  await bad({ extraCalls: 10 }, 'harness_judge_budget_exceeded', { judge: judgeOf({ maxCalls: 100 }) });
-  await assert.rejects(harnessFixture('judged', { judge: judgeOf({ maxCalls: 100 }) }), { message: 'harness_judge_budget_exceeded' });
+  // a registered maximum below what the registration itself needs is refused by the registration; calls beyond a sufficient maximum are refused in the source
+  const needed = judgeCallsRequired((await harnessFixture('judged')).round);
+  await bad({ extraCalls: needed }, 'harness_judge_budget_exceeded', { judge: judgeOf({ maxCalls: needed }) });
+  await assert.rejects(harnessFixture('judged', { judge: judgeOf({ maxCalls: needed - 1 }) }), { message: 'campaign_judge_budget_below_registration' });
+  await assert.rejects(harnessFixture('judged', { judge: judgeOf({ maxCalls: 100 }) }), { message: 'campaign_judge_budget_below_registration' });
   // a verdict for a run that did not deliver is not a verdict
   const campaign = await harnessFixture('judged', { developmentStatus: (arm, row) => (arm === GOOD.arm && row.id === '1004' ? 'timeout' : 'succeeded') });
   assert.equal(campaign.supply.judge.costCny, 0);
@@ -363,7 +533,10 @@ test('judged: repeated verdicts are averaged per run, an undelivered run scores 
   const hand = rebind(pairwise, ({ inputs }) => { const s = inputs.sources[DEV]; s.judged.records.push({ row: '1000', arm: 'baseline', repeat: 0, pass: 1, score: 0.5, judge: s.judged.judge.id }); s.judged.recordsFile.lines += 1; s.judged.calls += 1; });
   assert.deepEqual(harnessArmsIssues(hand.inputs.sources[DEV], hand.inputs.registration), ['harness_judge_verdicts_invalid']);
   // the judged form registered is the form the sources say
-  assert.equal((await run(rebind(pairwise, ({ inputs }) => { inputs.registration.judge.form = 'absolute'; }))).reason, 'campaign_source_invalid');
+  // a registration of another form (measured in that form) than the one the sources were judged in
+  assert.equal((await run(rebind(pairwise, ({ inputs }) => { inputs.registration.judge.form = 'absolute'; inputs.registration.judge.qualification.form = 'absolute'; }))).reason, 'campaign_source_invalid');
+  // a registration whose measurement is of another form than its judge is not qualified at all
+  assert.equal((await run(rebind(pairwise, ({ inputs }) => { inputs.registration.judge.form = 'absolute'; }))).reason, 'campaign_judge_unqualified');
 });
 
 // ------------------------------------------------------------------------------------------------------ the registration
@@ -395,14 +568,39 @@ test('the registration is held to its design: choice rule, cost ratio, K, rows, 
   const candidates = campaign.inputs.registration.candidates.map((c) => c.arm).sort();
   assert.deepEqual(candidates, [GOOD.arm, WEAK.arm].sort());
   assert.deepEqual(campaign.inputs.registration.roundRegistration, { round: 'rsi1-test', digest: campaign.round.digest });
-  // Who wrote the candidates is part of what the manifest digests.
-  const improvement = { composer: 'claude', editors: [{ stage: 'domain-editor', model: 'deepseek', route: 'anthropic-compatible endpoint' }] };
+  // Who wrote the candidates is part of what the manifest digests, and is what the manifest names as its improvers.
+  const improvement = improvementOf({ improvers: [{ role: 'composing', provider: 'anthropic', model: 'claude-opus-5-5' }, { role: 'selecting', provider: 'anthropic', model: 'claude-sonnet-5-5' }], note: 'two roles' });
   const recorded = await harnessFixture('medcalc', { improvement });
   assert.deepEqual(recorded.inputs.registration.improvement, improvement);
+  assert.deepEqual(recorded.manifest.models, { solver: { provider: 'deepseek', model: 'deepseek-flash' }, improvers: improvement.improvers, judges: [] });
   assert.notEqual(recorded.manifest.registration.digest, campaign.manifest.registration.digest);
 });
 
-test('the alpha allocation cannot exceed the quarter, and every campaign draws its own share from the surface\'s ledger', async () => {
+test('the improvement record is required and names Claude improvers only; the manifest\'s models are the registration\'s, never written by hand', async () => {
+  // round 1's record named a DeepSeek domain editor in free form: neither the free form nor the editor is an improver any more
+  for (const [improvement, code] of [
+    [null, 'campaign_improvement_missing'], [{ writtenBy: 'the lead (Claude)' }, 'campaign_improvement_missing'], [improvementOf({ improvers: [] }), 'campaign_improvement_missing'],
+    [improvementOf({ improvers: [{ role: 'domain-editor', provider: 'deepseek', model: 'deepseek-v4-pro' }] }), 'campaign_improver_refused'],
+    [improvementOf({ improvers: [{ role: 'proposing', provider: 'dashscope', model: 'qwen3.8-max' }] }), 'campaign_improver_refused'],
+    [improvementOf({ improvers: [{ role: 'proposing', provider: 'anthropic' }] }), 'campaign_model_invalid'],
+  ]) {
+    await assert.rejects(harnessFixture('medcalc', { improvement }), { message: code }, JSON.stringify(improvement));
+    const campaign = await harnessFixture('medcalc');
+    assert.throws(() => developmentOnly({ development: campaign.exports.development.source, registration: campaign.round, improvement, month: '2026-11' }), { message: code });
+  }
+  // The runner holds the manifest's models to the registration: improvers to the improvement record, judges to the registered judge.
+  const campaign = await harnessFixture('judged');
+  const refused = async (mutate, reason) => assert.equal((await run(rebind(campaign, mutate))).reason, reason, reason);
+  await refused(({ manifest }) => { manifest.models.improvers = [{ role: 'proposing', provider: 'anthropic', model: 'claude-sonnet-5-5' }]; }, 'campaign_models_registration_mismatch');
+  await refused(({ manifest }) => { manifest.models.judges = [{ ...manifest.models.judges[0], model: 'claude-opus-5-5' }]; }, 'campaign_models_registration_mismatch');
+  await refused(({ manifest }) => { manifest.models.judges = []; }, 'campaign_models_registration_mismatch');
+  await refused(({ inputs }) => { inputs.registration.improvement.improvers[0].model = 'claude-sonnet-5-5'; }, 'campaign_models_registration_mismatch');
+  await refused(({ inputs }) => { delete inputs.registration.improvement; }, 'campaign_improvement_missing');
+  const plain = await harnessFixture('medcalc');
+  assert.equal((await run(rebind(plain, ({ manifest }) => { manifest.models.judges = [{ role: 'judge', provider: 'anthropic', model: 'claude-sonnet-5-5' }]; }))).reason, 'campaign_models_registration_mismatch', 'a deterministic scorer has no judge');
+});
+
+test('the alpha allocation cannot exceed the quarter, and every campaign draws its own share from the consumer\'s ledger', async () => {
   await assert.rejects(harnessFixture('medcalc', { mutateRound: (round) => { round.alpha.perCampaign = 0.03; } }), { message: 'campaign_alpha_registration_invalid' });
   const store = memoryCampaignStore(), now = tickingClock();
   const opened = [];
@@ -414,7 +612,7 @@ test('the alpha allocation cannot exceed the quarter, and every campaign draws i
   assert.deepEqual(opened, ['awaiting-evaluation', 'awaiting-evaluation', 'awaiting-evaluation']);
   const fourth = await harnessFixture('medcalc', { id: 'd-', confirmationIds: Array.from({ length: 32 }, (_, i) => 12000 + i) });
   assert.equal((await run(fourth, runnerEnvironment({ store, now }))).reason, 'campaign_alpha_budget_exhausted');
-  assert.deepEqual([...store.ledger.keys()], ['harness-patch:2026-Q4'], 'its own surface\'s ledger, not capability-skill\'s');
+  assert.deepEqual([...store.ledger.keys()], ['dsh-harness:2026-Q4'], 'the runtime image\'s ledger, not capability-skill\'s');
 });
 
 // ---------------------------------------------------------------------------- fewer than 25 groups: directional, never qualified
@@ -422,10 +620,19 @@ test('the alpha allocation cannot exceed the quarter, and every campaign draws i
 test('a family below the procedure\'s 25 groups is answered by the procedure\'s own refusal, and the report says directional', async () => {
   const campaign = await harnessFixture('mbc', { confirmationRows: 15, sliceShareConf: 0.9 });
   assert.equal(campaign.supply.directional, true);
-  const { completed } = await runToVerdict(campaign, { dir: nextDir() });
+  const store = memoryCampaignStore();
+  const { completed } = await runToVerdict(campaign, { dir: nextDir(), store });
   assert.equal(completed.status, 'completed');
   assert.equal(completed.qualification, 'inconclusive', 'not qualified, whatever the arms scored');
-  assert.match(completed.checkpoint.evaluation.reasons[0], /sparse population: paired-t requires at least 25 independent groups/);
+  assert.equal(completed.checkpoint.evaluation.reasons[0], 'campaign_directional_below_minimum_groups');
+  assert.match(completed.checkpoint.evaluation.reasons[1], /sparse population: paired-t requires at least 25 independent groups/);
+  assert.equal(completed.checkpoint.evaluation.scope, 'directional-reference');
+  assert.deepEqual(completed.checkpoint.evaluation.directional, { groups: 15, sliceGroups: campaign.supply.confirmation.sliceGroups, minimum: 25 });
+  // it drew no error budget and opened its corpus as a directional one
+  assert.equal(store.ledger.size, 0, 'the quarter\'s ledger was not written');
+  const corpus = store.corpora.get(campaign.manifest.data.sources.find((source) => source.role === 'confirmation').digest);
+  assert.equal(corpus.directional, true);
+  assert.equal(corpus.campaignId, campaign.manifest.id);
   const dir = nextDir();
   await mkdir(join(dir, 'run'), { recursive: true });
   await writeFile(join(dir, 'supply.json'), JSON.stringify(campaign.supply));
@@ -452,12 +659,57 @@ test('a family below the procedure\'s 25 groups is answered by the procedure\'s 
   assert.match(await readFile(join(fullDir, 'report.md'), 'utf8'), /结论：候选补丁通过确认/);
 });
 
+test('a directional campaign spends no error budget, whatever the arms scored, and its corpus is opened once, directionally', async () => {
+  // the same arms on 12 groups and on 32: the candidate repairs its slice in both
+  const directional = await harnessFixture('medcalc', { confirmationRows: 12, sliceShareConf: 0.9, id: 'short-' });
+  assert.equal(directional.supply.directional, true);
+  const qualifying = await harnessFixture('medcalc', { id: 'full-' });
+  assert.equal(qualifying.supply.directional, false);
+  const store = memoryCampaignStore();
+  const now = tickingClock();
+  const first = await runToVerdict(directional, { dir: nextDir(), store, now });
+  assert.equal(first.completed.qualification, 'inconclusive', 'a directional campaign cannot be qualified');
+  assert.equal(first.completed.releaseEligible, false);
+  assert.equal(first.completed.checkpoint.evaluation.scope, 'directional-reference');
+  assert.equal(store.ledger.size, 0, 'no error budget drawn');
+  // the quarter's whole budget is still there for a campaign that can qualify
+  const second = await runToVerdict(qualifying, { dir: nextDir(), store, now });
+  assert.equal(second.completed.qualification, 'qualified', 'the same arms, with the groups the procedure needs, qualify');
+  const ledger = [...store.ledger.values()];
+  assert.equal(ledger.length, 1);
+  assert.deepEqual(ledger[0].reservations.map((row) => row.campaignId), [qualifying.manifest.id], 'only the qualifying campaign is in the ledger');
+  // a directional run of the same campaign resumes against its own record; another campaign cannot open the corpus again
+  const rerun = await runToVerdict(directional, { dir: nextDir(), store: memoryCampaignStore({ ledger: store.ledger, corpora: store.corpora }), now });
+  assert.equal(rerun.awaiting.status, 'awaiting-evaluation');
+  const intruder = rebind(directional, ({ manifest }) => { manifest.id = 'intruder-medcalc-2026-11'; });
+  const refused = await runCampaign({ manifest: intruder.manifest, inputs: intruder.inputs, ...runnerEnvironment({ store: memoryCampaignStore({ ledger: store.ledger, corpora: store.corpora }), now }) });
+  assert.equal(refused.reason, 'campaign_confirmation_corpus_already_opened');
+});
+
+test('the ledger rule for a directional corpus: alpha must be 0, nothing is written to the quarter, and the record cannot be turned into a spend', () => {
+  const request = { ledger: 'dsh-harness', legacy: ['harness-patch', 'tool-patch'], surface: 'harness-patch', quarter: '2026-Q4', campaignId: 'c1', alpha: 0, corpusDigest: 'a'.repeat(64), at: '2026-11-02T00:00:00Z', directional: true };
+  const opened = confirmationDecision(undefined, undefined, request);
+  assert.deepEqual(opened.result, { authorized: true, look: 1, reused: false, directional: true });
+  assert.equal(opened.ledger, undefined);
+  assert.deepEqual(opened.corpus, { recordType: 'rsi-opened-corpus', corpusDigest: request.corpusDigest, campaignId: 'c1', surface: 'harness-patch', ledger: 'dsh-harness', openedAt: request.at, directional: true });
+  assert.deepEqual(confirmationDecision(undefined, opened.corpus, request), { write: false, result: { authorized: true, look: 1, reused: true, directional: true } });
+  const spend = { ...request, alpha: 0.0166, directional: false };
+  assert.equal(confirmationDecision(undefined, opened.corpus, spend).result.reason, 'campaign_confirmation_reservation_changed', 'a directional record is not a spend');
+  assert.equal(confirmationDecision(undefined, undefined, { ...request, alpha: 0.01 }).result.reason, 'campaign_confirmation_reservation_changed', 'a directional request carries no alpha');
+  assert.equal(confirmationDecision(undefined, opened.corpus, { ...request, campaignId: 'c2' }).result.reason, 'campaign_confirmation_corpus_already_opened');
+  // an ordinary reservation is unchanged
+  const ordinary = confirmationDecision(undefined, undefined, { ...request, alpha: 0.0166, directional: false });
+  assert.equal(ordinary.write, true);
+  assert.equal(ordinary.ledger.reservations[0].alpha, 0.0166);
+  assert.equal(ordinary.corpus.directional, undefined);
+});
+
 test('a development-only report says whether the gate passed, and a later assembly supersedes it', async () => {
   const write = async (dir, files) => { await mkdir(join(dir, 'run'), { recursive: true }); for (const [name, value] of Object.entries(files)) await writeFile(join(dir, name), JSON.stringify(value)); };
   const good = await harnessFixture('medcalc'), flat = await harnessFixture('medcalc', { p: () => 0.5 });
   const passed = nextDir(), failed = nextDir();
-  const onlyGood = developmentOnly({ development: good.exports.development.source, registration: good.round, month: '2026-11' });
-  const onlyFlat = developmentOnly({ development: flat.exports.development.source, registration: flat.round, month: '2026-11' });
+  const onlyGood = developmentOnly({ development: good.exports.development.source, registration: good.round, improvement: IMPROVEMENT, month: '2026-11' });
+  const onlyFlat = developmentOnly({ development: flat.exports.development.source, registration: flat.round, improvement: IMPROVEMENT, month: '2026-11' });
   await write(passed, { 'development-only.json': onlyGood, 'supply.json': onlyGood.supply });
   await write(failed, { 'development-only.json': onlyFlat, 'supply.json': onlyFlat.supply });
   const gate = await harnessReport(passed, '2026-11'), end = await harnessReport(failed, '2026-11');

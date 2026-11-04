@@ -188,6 +188,8 @@ test("the primary action stands on the header's row; one in an empty state, a re
   assert.match(textOf(away, "primary-action")[0], /^geo-plan@desktop: \[primary-action\] the primary action “新建研究” is at \d+ px, below the header's row$/);
   const excused = await compose(framed({ body: section(rows(2)) + '<div data-empty=""><svg width="16" height="16"></svg><p>还没有</p><button class="bg-accent">去添加</button></div><form><button class="bg-accent">保存</button></form>' }));
   assert.deepEqual(textOf(excused, "primary-action"), []);
+  const standby = await compose(framed({ body: '<section data-observatory="empty"><h2>等待研究启动</h2>' + rows(2) + '<button class="bg-accent">发起研究</button></section>' }));
+  assert.deepEqual(textOf(standby, "primary-action"), []);
 });
 
 test("a tab or a chip whose trailing count is 0 is a switch to an empty place; a disabled one and a label that ends in 0 are not", { skip }, async () => {
@@ -679,6 +681,17 @@ test("module and route readiness wait through the empty first paint before delay
   assert.equal(await page.evaluate(moduleReady), true);
   assert.equal(await page.evaluate(routeReady), true);
   await page.unroute('http://readiness.walk/**');
+});
+
+test("a page whose first screen is its introduction is ready with an empty body, and its loading skeleton still holds it", { skip }, async () => {
+  // setContent keeps the address of the page before it, and a module address carries a rule of its own.
+  await page.goto("about:blank");
+  await page.setContent('<main><h1>主动科研</h1><div data-page-introduction><div role="status" aria-label="正在载入研究" class="animate-pulse" style="height:64px"></div></div><div data-page-body><div></div></div></main>');
+  assert.equal(await page.evaluate(routeReady), false);
+  await page.evaluate(() => { globalThis.document.querySelector('[data-page-introduction]').innerHTML = '<section><p>等待研究启动</p><button>发起研究</button></section>'; });
+  assert.equal(await page.evaluate(routeReady), true);
+  await page.setContent('<main><h1>Empty</h1><div data-page-introduction></div><div data-page-body></div></main>');
+  assert.equal(await page.evaluate(routeReady), false);
 });
 
 

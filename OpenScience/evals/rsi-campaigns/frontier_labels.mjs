@@ -1,21 +1,30 @@
 /**
- * The frontier jury (2026-10-26): a model of a different family from production's screener (DeepSeek) labels frontier-feed
+ * The frontier jury (2026-10-26): Qwen 3.8 Max, a model of a different family from production's screener (DeepSeek), labels frontier-feed
  * items `pick` (belongs in the daily featured selection), `ok` (relevant, not featured) or `no` (not worth showing) with no
  * human labelling. Two independent passes per item, differing only in the order of the worked examples; agreement stands as
  * the label, disagreement abstains (`worth: null`). Before its labels are used the jury is calibrated against the
  * human-adjudicated anchor (`evals/frontier-selection/gold.jsonl`): odd `n` rows are the exemplar pool, even `n` rows the
  * calibration set and never appear in a prompt as an exemplar.
  *
+ * It is the one adjudicator that is not Claude (owner 2026-11-03, after a measurement, `RSI_FRONTIER_JURY` in the domain package): on the same
+ * 124 anchor rows it scored pick kappa 0.875 against the best Claude setting's 0.686, and it runs on the lab, unattended, with the one provider
+ * credential the lab holds.
+ *
  * The jury reads only the source's own text (title, source, journal, publication types, date, language, abstract or page
  * excerpt). Every field the platform's own models wrote (`title_zh`, `summary_zh`, scores, genre, evidence type) is dropped
  * before a prompt is built, so a label never inherits the screener's reading.
  *
  * Money goes through the lab's budget ledger one batch at a time: reserve an upper bound, begin the spend, make the calls,
- * settle the priced actual. Every answer is appended to a JSONL cache the moment it arrives, so an interrupted run resumes
- * without paying twice.
+ * settle the priced actual (a model with no price refuses the run before any money moves). Every answer is appended to a JSONL cache the
+ * moment it arrives, stamped with the campaign that paid for it, so an interrupted run resumes without paying twice and a file's `costCny` is what its
+ * campaign paid for its items over every start. The labelling shares one cache across months; a calibration has a cache per month, so that it measures
+ * the jury every month instead of replaying the first answers. The key is read from its file once and appears nowhere else.
  *
- *   node frontier_labels.mjs calibrate --gold gold.jsonl --credential key --out calibration.json --cache cache.jsonl --campaign id --config lab.json
- *   node frontier_labels.mjs label --export export.json[.gz] --ids ids.json --credential key --out labels.json --cache cache.jsonl --campaign id --config lab.json
+ * A month is labelled in two phases (`plan.idsByRole`): development first, and confirmation only when `frontier_assemble.mjs decide` finds a
+ * candidate from the development labels alone. Each labels file names its phase, month, export and jury.
+ *
+ *   node frontier_labels.mjs calibrate --gold gold.jsonl --credential key --out calibration.json --cache calibration-cache.jsonl --campaign id --config lab.json
+ *   node frontier_labels.mjs label --export export.json[.gz] --plan plan.json --phase development|confirmation --credential key --out labels.json --cache cache.jsonl --campaign id --config lab.json
  */
 import { createHash } from 'node:crypto';
 import { appendFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
@@ -23,21 +32,32 @@ import { dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { gunzipSync } from 'node:zlib';
 import { priceListAt, priceUsage } from '../../packages/domain/src/metering.mjs';
+import { RSI_FRONTIER_JURY } from '../../packages/domain/src/rsiCampaign.mjs';
 
-/** Bump on any change to the rubric's meaning; the prompt digest covers its bytes. */
+/** Bump on any change to the rubric's meaning; the prompt digest covers its bytes. v1 is the rubric the lab's answer cache is keyed on. */
 export const FRONTIER_JURY_VERSION = 'frontier-jury-v1';
-export const FRONTIER_JURY_MODEL = 'qwen3.8-max';
+export const FRONTIER_JURY_PROVIDER = RSI_FRONTIER_JURY.provider;
+export const FRONTIER_JURY_MODEL = RSI_FRONTIER_JURY.model;
 export const FRONTIER_WORTH = Object.freeze(['pick', 'ok', 'no']);
+export const FRONTIER_LABELS_SCHEMA = 'rsi-frontier-jury-labels-v1';
+export const FRONTIER_CALIBRATION_SCHEMA = 'rsi-frontier-jury-calibration-v1';
+/** The label phases of a month: development decides whether confirmation is labelled at all. */
+export const FRONTIER_LABEL_PHASES = Object.freeze(['development', 'confirmation']);
 const DASHSCOPE_BASE_URL = 'https://dashscope.aliyuncs.com/compatible-mode/v1';
 const MAX_OUTPUT_TOKENS = 200;
 const MAX_EXCERPT = 1200;
-const MAX_RESERVE_ATTEMPTS = 4;
+/** DashScope's codes for "the content inspection refused this text" (compatible mode, native): the one 400 that is about the item. Arrears are a 400 too (`Arrearage`, `providerRefusals.mjs`). */
+const CONTENT_REFUSAL_CODES = new Set(['data_inspection_failed', 'DataInspectionFailed']);
+/** Why the ledger will not give a stage key again: begun or settled, held from an earlier month, or reserved under limits since changed. The next key is a new record, admitted against the ceilings like any other. */
+const STAGE_KEY_TAKEN = new Set(['campaign_budget_already_dispatched', 'campaign_budget_month_expired', 'campaign_budget_idempotency_conflict']);
+/** A bound on one batch's search for a free key, not a limit on starts: every start that failed outright used one. Past it the run stops by name. */
+const MAX_STAGE_KEYS = 1000;
 
 /** @typedef {{title_raw?:string|null, source_name?:string|null, source_type?:string|null, journal?:string|null, publication_types?:string[]|null, published_at?:string|null, date_precision?:string|null, lang?:string|null, excerpt?:string|null}} FrontierItemText */
 /** @typedef {{n?:number, id?:string, text:FrontierItemText, worth:'pick'|'ok'|'no', why:string}} FrontierExemplar */
 /** @typedef {{role:'system'|'user', content:string}} JuryMessage */
 /** @typedef {{cacheHit:number, cacheMiss:number, output:number}} JuryUsage */
-/** @typedef {{text:string, usage:JuryUsage|null, requestId:string|null, finishReason:string|null}} JuryReply */
+/** @typedef {{text:string, usage:JuryUsage|null, requestId:string|null, finishReason:string|null, possiblyBilled?:number}} JuryReply `possiblyBilled`: the earlier attempts behind this answer that may have been charged. */
 /** @typedef {(messages:JuryMessage[], options?:{signal?:AbortSignal}) => Promise<JuryReply>} JuryCaller */
 
 const EXEMPLAR_EXCERPT = 500;
@@ -180,12 +200,17 @@ export function parseJuryAnswer(text) {
 }
 
 /** A closed-code failure: never carries a vendor message, which is known to echo credentials. `billed` is false when the provider
- * answered with an error status (nothing generated) and null when a charge cannot be ruled out. */
+ * answered with an error status (nothing generated) and null when a charge cannot be ruled out; `possiblyBilled` counts the attempts behind the failure that may have been charged. */
 export class JuryError extends Error {
   /** @param {string} code @param {{retryable?:boolean, billed?:boolean|null}} [options] */
   constructor(code, { retryable = false, billed = null } = {}) {
-    super(code); this.name = 'JuryError'; this.code = code; this.retryable = retryable; this.billed = billed;
+    super(code); this.name = 'JuryError'; this.code = code; this.retryable = retryable; this.billed = billed; this.possiblyBilled = billed === false ? 0 : 1;
   }
+}
+
+/** The provider's own code in an error body, `{error:{code}}` in compatible mode and `{code}` natively. Only the code: the message is known to echo the key. @param {{json:()=>Promise<any>}} response */
+async function refusalCode(response) {
+  try { const body = await response.json(); return String(body?.error?.code ?? body?.code ?? ''); } catch { return ''; }
 }
 
 /** The jury's DashScope caller. The key is read from its file once and appears nowhere else.
@@ -198,8 +223,9 @@ export function dashscopeCaller({ credentialPath, baseUrl = DASHSCOPE_BASE_URL, 
   const credential = async () => {
     if (key) return key;
     let raw;
-    try { raw = await readFile(credentialPath, 'utf8'); } catch { throw new JuryError('jury_credential_unreadable'); }
-    if (!raw.trim()) throw new JuryError('jury_credential_missing');
+    // No request is made without a key, so a missing one is never billed.
+    try { raw = await readFile(credentialPath, 'utf8'); } catch { throw new JuryError('jury_credential_unreadable', { billed: false }); }
+    if (!raw.trim()) throw new JuryError('jury_credential_missing', { billed: false });
     return (key = raw.trim());
   };
   const body = (/** @type {JuryMessage[]} */ messages) => JSON.stringify({
@@ -215,7 +241,10 @@ export function dashscopeCaller({ credentialPath, baseUrl = DASHSCOPE_BASE_URL, 
         method: 'POST', headers: { authorization: `Bearer ${await credential()}`, 'content-type': 'application/json' }, body: body(messages),
         signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
       });
-      if (!response.ok) throw new JuryError(`jury_http_${response.status}`, { retryable: response.status === 429 || response.status >= 500, billed: false });
+      if (!response.ok) {
+        if (response.status === 400 && CONTENT_REFUSAL_CODES.has(await refusalCode(response))) throw new JuryError('jury_content_refused', { billed: false });
+        throw new JuryError(`jury_http_${response.status}`, { retryable: response.status === 429 || response.status >= 500, billed: false });
+      }
       const data = await response.json();
       const choice = data?.choices?.[0];
       if (typeof choice?.message?.content !== 'string') throw new JuryError('jury_bad_response');
@@ -230,10 +259,14 @@ export function dashscopeCaller({ credentialPath, baseUrl = DASHSCOPE_BASE_URL, 
       throw new JuryError('jury_network', { retryable: true });
     }
   };
+  // Retries share their caller's one reservation, so the attempts that may have been charged go back with the result and are priced there.
   return async (messages, { signal } = {}) => {
+    let possiblyBilled = 0;
     for (let attempt = 0; ; attempt++) {
-      try { return await once(messages, signal); } catch (error) {
-        if (!(error instanceof JuryError) || !error.retryable || attempt >= retries) throw error;
+      try { return { ...(await once(messages, signal)), possiblyBilled }; } catch (error) {
+        const failure = /** @type {JuryError} */ (error);
+        possiblyBilled += failure.possiblyBilled;
+        if (!failure.retryable || attempt >= retries) { failure.possiblyBilled = possiblyBilled; throw failure; }
         await sleep(1000 * 2 ** attempt + Math.floor(Math.random() * 250));
       }
     }
@@ -258,19 +291,21 @@ function pricing(model, instant) {
   return price;
 }
 
-/** @param {string} cachePath @returns {Promise<Map<string, any>>} */
-async function readCache(cachePath) {
-  /** @type {Map<string, any>} */
-  const cache = new Map();
+/** Every record of a cache file: the answers, and the charges of calls that left none. A line that does not parse is no record.
+ * @param {string} cachePath @returns {Promise<any[]>} */
+async function readCacheRecords(cachePath) {
   let text = '';
   try { text = await readFile(cachePath, 'utf8'); } catch (error) { if (/** @type {any} */ (error)?.code !== 'ENOENT') throw error; }
+  /** @type {any[]} */
+  const records = [];
   for (const line of text.split('\n')) {
     let record;
     try { record = JSON.parse(line); } catch { continue; }
-    if (record && typeof record.id === 'string' && (record.pass === 'A' || record.pass === 'B') && typeof record.juryVersion === 'string' && typeof record.model === 'string') cache.set(cacheKey(record), record);
+    if (record && typeof record === 'object') records.push(record);
   }
-  return cache;
+  return records;
 }
+const isAnswer = (/** @type {any} */ record) => typeof record.id === 'string' && (record.pass === 'A' || record.pass === 'B') && typeof record.juryVersion === 'string' && typeof record.model === 'string';
 const cacheKey = (/** @type {any} */ { id, pass, juryVersion, model }) => JSON.stringify([id, pass, juryVersion, model]);
 
 /** Run `worker` over `tasks` with at most `limit` in flight; results keep their order. */
@@ -286,13 +321,16 @@ async function runLimited(/** @type {any[]} */ tasks, /** @type {number} */ limi
 /**
  * Label items with two passes each. The first pass reads the exemplars in their order, the second in reverse. Each batch of calls
  * reserves an upper bound (every prompt character as an uncached token, plus the output cap), begins its spend, calls the model,
- * and settles the priced actual; a refusal stops the run and returns what was done. A call that failed after a provider answer
- * may have billed is charged at its upper bound; one the provider rejected by status is not charged.
+ * and settles the priced actual; a refusal stops the run and returns what was done. Every attempt that may have billed (a timeout, a lost connection, an
+ * unreadable answer) is charged at the upper bound beside what the answer cost, retries included, and one the provider rejected by status is not charged. A charge that leaves
+ * no answer is its own cache record (`pass: null`), so the campaign's figure is the ledger's. A pass the content inspection refused is an abstention (`jury-refused`), cached: it
+ * says the same next month. Any other refusal is about the account or the request, so it is a failed call, and nothing of it is kept.
  * @param {{items:{id:string, text:FrontierItemText, today?:string}[], exemplars:FrontierExemplar[], callModel:JuryCaller,
  *   budget:{reserve:Function, beginSpend:Function, settle:Function}, campaignId:string, stagePrefix?:string, now?:()=>string,
  *   concurrency?:number, batchSize?:number, cachePath?:string, signal?:AbortSignal, model?:string}} options
- * @returns {Promise<{labels:{id:string, worth:'pick'|'ok'|'no'|null, basis:'jury-agree'|'jury-disagree'|'jury-invalid', passes:{pass:string, worth:string|null, why:string}[]}[],
- *   costCny:number, calls:number, cachedCalls:number, incomplete:number, stopped:string|null}>}
+ * @returns {Promise<{labels:{id:string, worth:'pick'|'ok'|'no'|null, basis:'jury-agree'|'jury-disagree'|'jury-invalid'|'jury-refused', passes:{pass:string, worth:string|null, why:string}[]}[],
+ *   costCny:number, campaignCostCny:number, calls:number, cachedCalls:number, incomplete:number, stopped:string|null}>} `costCny` is this start's spend; `campaignCostCny` what the cache says
+ *   this campaign paid for these items over all its starts (a record of another campaign, or from before the stamp, was paid by that one)
  */
 export async function labelFrontierItems({ items, exemplars, callModel, budget, campaignId, stagePrefix = 'frontier-jury', now = () => new Date().toISOString(),
   concurrency = 6, batchSize = 40, cachePath, signal, model = FRONTIER_JURY_MODEL }) {
@@ -301,7 +339,8 @@ export async function labelFrontierItems({ items, exemplars, callModel, budget, 
   const juryVersion = frontierJuryVersion(exemplars);
   const orders = { A: exemplars, B: [...exemplars].reverse() };
   const unique = [...new Map(items.map((item) => [item.id, item])).values()];
-  const cache = cachePath ? await readCache(cachePath) : new Map();
+  const records = cachePath ? await readCacheRecords(cachePath) : [];
+  const cache = new Map(records.filter(isAnswer).map((record) => [cacheKey(record), record]));
   if (cachePath) await mkdir(dirname(cachePath), { recursive: true });
   const pending = [];
   let cachedCalls = 0;
@@ -314,7 +353,8 @@ export async function labelFrontierItems({ items, exemplars, callModel, budget, 
   /** @type {Promise<void>} */
   let writing = Promise.resolve();
   const append = (/** @type {any} */ record) => {
-    cache.set(cacheKey(record), record);
+    records.push(record);
+    if (isAnswer(record)) cache.set(cacheKey(record), record);
     if (cachePath) writing = writing.then(() => appendFile(cachePath, `${JSON.stringify(record)}\n`));
     return writing;
   };
@@ -329,15 +369,23 @@ export async function labelFrontierItems({ items, exemplars, callModel, budget, 
     const base = `${stagePrefix}:${sha(JSON.stringify([batch.map((call) => [call.item.id, call.pass]), juryVersion, model, reserveCny])).slice(0, 16)}`;
     let stageKey = base, begun = false;
     for (let attempt = 0; !begun && !stopped; attempt++) {
+      if (attempt >= MAX_STAGE_KEYS) { stopped = 'campaign_budget_stage_keys_exhausted'; break; }
       stageKey = attempt ? `${base}:a${attempt}` : base;
-      const grant = await budget.reserve({ campaignId, stageKey, amountCny: reserveCny });
+      const grant = await budget.reserve({ campaignId, stageKey, amountCny: reserveCny }).catch((/** @type {any} */ error) => {
+        if (error?.code === 'campaign_budget_idempotency_conflict') return { authorized: false, reason: error.code };
+        throw error;
+      });
       if (!grant?.authorized) {
-        // A held record from an interrupted run keeps its reservation; this attempt reserves again under a fresh key.
-        if (grant?.reason === 'campaign_budget_already_dispatched' && attempt + 1 < MAX_RESERVE_ATTEMPTS) continue;
+        // A held record from an interrupted run keeps its reservation against the ceiling, which still stops this run; the key is simply not free.
+        if (STAGE_KEY_TAKEN.has(grant?.reason)) continue;
         stopped = grant?.reason ?? 'campaign_budget_refused'; break;
       }
       const spend = await budget.beginSpend({ campaignId, stageKey });
-      if (!spend?.authorized) { stopped = spend?.reason ?? 'campaign_budget_refused'; break; }
+      if (!spend?.authorized) {
+        // No call will be made under this hold: released, or it would stand against the ceiling for the rest of the month.
+        await budget.settle({ campaignId, stageKey, outcome: 'failed', actualCny: 0 });
+        stopped = spend?.reason ?? 'campaign_budget_refused'; break;
+      }
       begun = true;
     }
     if (!begun) break;
@@ -347,12 +395,20 @@ export async function labelFrontierItems({ items, exemplars, callModel, budget, 
       /** @type {JuryReply} */
       let reply;
       try { reply = await callModel(call.messages, { signal }); } catch (error) {
-        return { failed: true, cost: /** @type {any} */ (error)?.billed === false ? 0 : ceiling };
+        const failure = /** @type {any} */ (error), cost = ceiling * (failure?.possiblyBilled ?? 1);
+        // The content inspection's answer about this text, not an outage: it will say the same next month, so the pass is kept as an abstention instead of
+        // failing the item on every rerun and holding the unattended month back. A day short of labels is simply not measured.
+        if (failure?.code === 'jury_content_refused') {
+          await append({ id: call.item.id, pass: call.pass, worth: null, why: '', basis: 'jury-refused', juryVersion, model, campaignId, usage: null, costCny: cost, requestId: null, finishReason: null, today: dayOf(call.item) });
+          return { cost };
+        }
+        if (cost > 0) await append({ id: call.item.id, pass: null, unanswered: call.pass, failure: failure instanceof JuryError ? failure.code : 'jury_call_failed', juryVersion, model, campaignId, costCny: cost, today: dayOf(call.item) });
+        return { failed: true, cost };
       }
       const answer = parseJuryAnswer(reply?.text);
       const usage = reply?.usage && Object.values(reply.usage).every((value) => Number.isFinite(value) && value >= 0) ? reply.usage : null;
-      const cost = usage ? price(usage) : ceiling;
-      await append({ id: call.item.id, pass: call.pass, worth: answer?.worth ?? null, why: answer?.why ?? '', juryVersion, model, usage, costCny: cost,
+      const cost = (usage ? price(usage) : ceiling) + ceiling * (reply?.possiblyBilled ?? 0);
+      await append({ id: call.item.id, pass: call.pass, worth: answer?.worth ?? null, why: answer?.why ?? '', juryVersion, model, campaignId, usage, costCny: cost,
         requestId: reply?.requestId ?? null, finishReason: reply?.finishReason ?? null, today: dayOf(call.item) });
       return { cost };
     });
@@ -371,11 +427,13 @@ export async function labelFrontierItems({ items, exemplars, callModel, budget, 
   for (const item of unique) {
     const passes = ['A', 'B'].map((pass) => cache.get(cacheKey({ id: item.id, pass, juryVersion, model })));
     if (passes.some((record) => !record)) { incomplete++; continue; }
-    const [a, b] = passes, invalid = !a.worth || !b.worth;
-    labels.push({ id: item.id, worth: invalid || a.worth !== b.worth ? null : a.worth, basis: invalid ? 'jury-invalid' : a.worth === b.worth ? 'jury-agree' : 'jury-disagree',
+    const [a, b] = passes, invalid = !a.worth || !b.worth, refused = a.basis === 'jury-refused' || b.basis === 'jury-refused';
+    labels.push({ id: item.id, worth: invalid || a.worth !== b.worth ? null : a.worth, basis: refused ? 'jury-refused' : invalid ? 'jury-invalid' : a.worth === b.worth ? 'jury-agree' : 'jury-disagree',
       passes: passes.map((record) => ({ pass: record.pass, worth: record.worth, why: record.why })) });
   }
-  return { labels, costCny, calls, cachedCalls, incomplete, stopped };
+  const paidFor = new Set(unique.map((item) => item.id));
+  const campaignCostCny = roundCny(records.reduce((sum, record) => sum + (record.campaignId === campaignId && paidFor.has(record.id) && Number.isFinite(record.costCny) ? record.costCny : 0), 0));
+  return { labels, costCny, campaignCostCny, calls, cachedCalls, incomplete, stopped };
 }
 
 /** @param {number} numerator @param {number} denominator */
@@ -441,7 +499,7 @@ function required(args, names) { for (const name of names) if (!args[name]) thro
 /** @param {string} path */
 async function readJsonMaybeGzip(path) {
   const bytes = await readFile(path);
-  return JSON.parse((bytes[0] === 0x1f && bytes[1] === 0x8b ? gunzipSync(bytes) : bytes).toString('utf8'));
+  return { value: JSON.parse((bytes[0] === 0x1f && bytes[1] === 0x8b ? gunzipSync(bytes) : bytes).toString('utf8')), sha256: sha(bytes) };
 }
 /** @param {string} path @param {unknown} value */
 async function writeJson(path, value) {
@@ -455,12 +513,12 @@ export function calibrationItems(gold) {
   return gold.filter((row) => row.n % 2 === 0).map((row) => ({ id: row.id, text: goldItemText(row), today: row.published ?? undefined }));
 }
 
-/** The lab's labelled set from an export (`texts`, `days`) and the id list; an id with no text is counted as missing. An item is judged on
+/** The lab's labelled set from an export (`texts`, `days`) and an id list; an id with no text is counted as missing. An item is judged on
  * the feed day it first appeared, else on its publication day, else on the run's clock.
- * @param {{exportPath:string, idsPath:string}} paths
- * @returns {Promise<{items:{id:string, text:FrontierItemText, today?:string}[], missing:number}>} */
-export async function loadLabelItems({ exportPath, idsPath }) {
-  const exported = await readJsonMaybeGzip(exportPath), ids = JSON.parse(await readFile(idsPath, 'utf8'));
+ * @param {{exportPath:string, ids:string[]}} input
+ * @returns {Promise<{items:{id:string, text:FrontierItemText, today?:string}[], missing:number, exportSha256:string}>} */
+export async function loadLabelItems({ exportPath, ids }) {
+  const { value: exported, sha256: exportSha256 } = await readJsonMaybeGzip(exportPath);
   if (!Array.isArray(ids) || !exported?.texts || typeof exported.texts !== 'object') throw new Error('input_invalid');
   /** @type {Map<string, string>} */
   const seen = new Map();
@@ -473,11 +531,24 @@ export async function loadLabelItems({ exportPath, idsPath }) {
     if (!text) { missing++; continue; }
     items.push({ id, text, today: seen.get(id) ?? (Number.isFinite(Date.parse(text.published_at)) ? shanghaiDay(text.published_at) : undefined) });
   }
-  return { items, missing };
+  return { items, missing, exportSha256 };
 }
 
-/** @param {string} configPath */
-async function openBudget(configPath) {
+/**
+ * One phase of a month: the ids the plan fixed for it, with the source text the jury may read. It names the export it came from, which must be
+ * the plan's, so labels made from it cannot be applied to another.
+ * @param {{exportPath:string, plan:any, phase:string}} input
+ */
+export async function phaseItems({ exportPath, plan, phase }) {
+  const ids = plan?.idsByRole?.[phase];
+  if (!FRONTIER_LABEL_PHASES.includes(phase) || !Array.isArray(ids)) throw new Error('usage_phase');
+  const { items, missing, exportSha256 } = await loadLabelItems({ exportPath, ids });
+  if (exportSha256 !== plan.exportSha256) throw new Error('campaign_export_changed');
+  return { month: plan.month, idPrefix: plan.idPrefix ?? '', phase, exportSha256, items, missing };
+}
+
+/** The lab's budget ledger, over its own database. @param {string} configPath */
+async function openLabBudget(configPath) {
   const url = process.env.RSI_LAB_DATABASE_URL;
   if (!url) throw new Error('lab_database_url_missing');
   const configuration = JSON.parse(await readFile(configPath, 'utf8'));
@@ -487,44 +558,50 @@ async function openBudget(configPath) {
   return { budget: new RsiCampaignBudget({ database, configuration }), close: () => database.close(), model: configuration.providers?.qwenMax?.model ?? FRONTIER_JURY_MODEL };
 }
 
-/** @param {string[]} argv */
-export async function main(argv) {
+/**
+ * The command line. `deps` are the two seams a test stands in for: the budget ledger (the lab's database) and the transport.
+ * A run that stopped (budget, quota, an unavailable provider) or left an item without both passes exits 2 with its file written; the
+ * cache holds every answer, so the same command asks only for what is missing.
+ * @param {string[]} argv @param {{openBudget?:typeof openLabBudget, fetchImpl?:typeof fetch}} [deps]
+ */
+export async function main(argv, { openBudget = openLabBudget, fetchImpl = globalThis.fetch } = {}) {
   const [command, ...rest] = argv;
+  if (command !== 'calibrate' && command !== 'label') throw new Error('usage_command');
   const args = parseArgs(rest);
   required(args, ['credential', 'out', 'cache', 'campaign', 'config']);
-  const goldPath = args.gold ?? new URL('../frontier-selection/gold.jsonl', import.meta.url).pathname;
-  const gold = await loadGoldRows(goldPath);
+  const gold = await loadGoldRows(args.gold ?? new URL('../frontier-selection/gold.jsonl', import.meta.url).pathname);
   const exemplars = selectFrontierExemplars(gold);
   /** @type {{id:string, text:FrontierItemText, today?:string}[]} */
   let items;
   let missing = 0;
-  if (command === 'calibrate') {
-    required(args, ['gold']);
-    items = calibrationItems(gold);
-  } else if (command === 'label') {
-    required(args, ['export', 'ids']);
-    ({ items, missing } = await loadLabelItems({ exportPath: args.export, idsPath: args.ids }));
-  } else throw new Error('usage_command');
+  /** @type {Record<string, unknown>} */
+  let bound = {};
+  if (command === 'calibrate') items = calibrationItems(gold);
+  else {
+    required(args, ['export', 'plan', 'phase']);
+    const phase = await phaseItems({ exportPath: args.export, plan: JSON.parse(await readFile(args.plan, 'utf8')), phase: args.phase });
+    items = phase.items; missing = phase.missing;
+    bound = { phase: phase.phase, month: phase.month, idPrefix: phase.idPrefix, exportSha256: phase.exportSha256 };
+  }
 
   const lab = await openBudget(args.config);
   try {
-    const result = await labelFrontierItems({ items, exemplars, callModel: dashscopeCaller({ credentialPath: args.credential, model: lab.model }),
+    const result = await labelFrontierItems({ items, exemplars, callModel: dashscopeCaller({ credentialPath: args.credential, model: lab.model, fetchImpl }),
       budget: lab.budget, campaignId: args.campaign, cachePath: args.cache, model: lab.model });
-    const juryVersion = frontierJuryVersion(exemplars);
-    const labelCounts = { pick: 0, ok: 0, no: 0, abstained: 0 };
-    for (const label of result.labels) labelCounts[label.worth ?? 'abstained']++;
-    const summary = { command, juryVersion, model: lab.model, promptDigest: frontierJuryPromptDigest(), items: items.length, missing, labelled: result.labels.length,
-      incomplete: result.incomplete, labelCounts, calls: result.calls, cachedCalls: result.cachedCalls, costCny: result.costCny, stopped: result.stopped, out: args.out };
+    const labelCounts = { pick: 0, ok: 0, no: 0, abstained: 0, refused: 0 };
+    for (const label of result.labels) labelCounts[label.basis === 'jury-refused' ? 'refused' : label.worth ?? 'abstained']++;
+    const summary = { command, ...bound, juryVersion: frontierJuryVersion(exemplars), provider: FRONTIER_JURY_PROVIDER, model: lab.model, promptDigest: frontierJuryPromptDigest(), items: items.length, missing,
+      labelled: result.labels.length, incomplete: result.incomplete, labelCounts, calls: result.calls, cachedCalls: result.cachedCalls, costCny: result.campaignCostCny, stopped: result.stopped, out: args.out };
     if (command === 'calibrate') {
       const calibration = calibrateJury({ gold, labels: result.labels });
       const qualification = juryQualified(calibration);
-      await writeJson(args.out, { schema: 'rsi-frontier-jury-calibration-v1', ...summary, calibration, qualification, labels: result.labels });
+      await writeJson(args.out, { schema: FRONTIER_CALIBRATION_SCHEMA, ...summary, calibration, qualification, labels: result.labels });
       console.log(JSON.stringify({ ...summary, qualified: qualification.qualified, reasons: qualification.reasons, pickKappa: calibration.pickKappa, abstentionRate: calibration.abstentionRate, pickPrecision: calibration.pickPrecision }));
     } else {
-      await writeJson(args.out, { schema: 'rsi-frontier-jury-labels-v1', ...summary, labels: result.labels });
+      await writeJson(args.out, { schema: FRONTIER_LABELS_SCHEMA, ...summary, labels: result.labels });
       console.log(JSON.stringify(summary));
     }
-    if (result.stopped) process.exitCode = 2;
+    if (result.stopped || result.incomplete) process.exitCode = 2;
   } finally { await lab.close(); }
 }
 

@@ -25,7 +25,10 @@ export async function harnessReport(dir, month) {
   const inputs = await read(join(dir, 'inputs.json'));
   const run = await read(join(dir, 'run', 'resume.json')) ?? await read(join(dir, 'run', 'run.json'));
   const checkpoint = run?.checkpoint ?? (await read(join(dir, 'run', 'report.json')))?.checkpoint ?? null;
-  const evaluation = checkpoint?.evaluation ?? null;
+  // A signed closure (harness_closure.mjs) stands in for the evaluation of a campaign whose receipt the evaluator refused for missing costs:
+  // the statistics it recorded are shown, and the deviation is said in the report, never left to the signature.
+  const closure = checkpoint?.evaluation ? null : (await read(join(dir, 'closure.signed.json')))?.payload ?? null;
+  const evaluation = checkpoint?.evaluation ?? closure?.statistics ?? null;
   const confirmation = checkpoint?.stages?.confirmation?.result ?? null;
   const frozen = checkpoint?.frozenPolicy ?? null;
   const candidate = inputs?.registration?.candidates?.find((c) => c.arm === frozen?.arm) ?? null;
@@ -41,6 +44,8 @@ export async function harnessReport(dir, month) {
   const qualification = run?.qualification ?? evaluation?.decision ?? (developmentOnlyActive ? (gatePassed ? null : 'not-qualified') : null);
   const directional = Boolean(confirmation) && qualification !== 'qualified' && belowMinimumGroups(groups, sliceGroups, minimum);
   const judge = supply?.judge ?? devOnly?.supply?.judge ?? null;
+  // Who wrote the candidates: the improvement record the registration digests (every improver is a Claude model, harness_campaign.mjs).
+  const improvers = inputs?.registration?.improvement?.improvers ?? devOnly?.registration?.improvement?.improvers ?? null;
   const report = {
     type: 'rsi-harness-patch-report-v1', month, campaignId: checkpoint?.campaignId ?? devOnly?.campaignId ?? null, family: inputs?.registration?.family ?? devOnly?.registration?.family ?? null,
     scorer: inputs?.registration?.scorer ?? devOnly?.registration?.scorer ?? null, image: supply?.image ?? devOnly?.supply?.image ?? null,
@@ -53,13 +58,14 @@ export async function harnessReport(dir, month) {
     confirmation: confirmation ? { groups, sliceGroups, repeats: supply?.confirmation?.repeats ?? null, baseline: base ? { overall: base.overall, slice: base.slice } : null,
       candidate: cand ? { overall: cand.overall, slice: cand.slice } : null, costCny: supply?.confirmation?.costCny ?? null } : null,
     statistics: evaluation ? { decision: evaluation.decision, reasons: evaluation.reasons ?? [], quantities: evaluation.quantities ?? null, scope: evaluation.scope ?? null } : null,
-    judge, failureSlice: inputs?.registration?.failureSlice ?? inputs?.registration?.failureCalculators ?? devOnly?.registration?.failureSlice ?? devOnly?.registration?.failureCalculators ?? null,
+    closure: closure ? { type: closure.type, issuedAt: closure.issuedAt, deviation: closure.deviation, alpha: closure.alpha, costTotals: closure.statistics?.costTotals ?? null, binding: closure.binding } : null,
+    judge, improvers, failureSlice: inputs?.registration?.failureSlice ?? inputs?.registration?.failureCalculators ?? devOnly?.registration?.failureSlice ?? devOnly?.registration?.failureCalculators ?? null,
   };
   const lines = [
     `# 运行时补丁 RSI 活动报告 · ${report.family ?? '—'} · ${month}`, '',
     `结论：${directional ? `方向性参考，不是合格结论（确认集 ${groups} 组、失败子集 ${sliceGroups} 组，低于登记统计程序的 ${minimum} 组下限）`
       : gatePassed ? `开发门通过：候选 ${choice.frozen.arm} 的失败子集收益超过 A/A 噪声下限；确认集未开启，目前没有任何合格结论`
-      : report.qualification === 'qualified' ? '候选补丁通过确认（targeted-repair）' : report.qualification ? `未通过（${report.qualification}）` : '未运行'}${report.reason ? `，原因 ${report.reason}` : ''}。`, '',
+      : report.qualification === 'qualified' ? '候选补丁通过确认（targeted-repair）' : report.qualification ? `未通过（${report.qualification}）` : '未运行'}${report.reason ? `，原因 ${report.reason}` : ''}${report.closure ? '；本结论由签名的成本收尾记录给出，见“偏差”一节' : ''}。`, '',
     '## 开发期', '',
     `- 镜像 ${report.image ? `${report.image.id}（${report.image.digest.slice(0, 12)}）` : '—'}；打分器 ${report.scorer ?? '—'}`,
     `- 开发行 ${report.development?.rows ?? '—'}（失败子集 ${report.development?.sliceRows ?? '—'}），各臂成本 ${JSON.stringify(report.development?.costCny ?? {})} 元`,
@@ -67,16 +73,22 @@ export async function harnessReport(dir, month) {
     ...(report.controls ?? []).map((c) => `- A/A 对照 ${c.arm}：总体 ${signed(c.overallDifference)}，失败子集 ${signed(c.sliceDifference)}（噪声下限 ${pct(report.noiseFloor)}，候选须超过它）`),
     ...(report.scoresDevelopment ? Object.entries(report.scoresDevelopment).map(([arm, s]) => `- ${arm}：总体 ${pct(s.overall)}，失败子集 ${pct(s.slice)}`) : []),
     `- 冻结：${report.frozen ? `${report.frozen.arm} 「${report.frozen.title ?? ''}」` : '无（' + (report.developmentChoice?.reason ?? '—') + '）'}`,
+    `- 候选的编写者：${improvers?.length ? improvers.map((i) => `${i.model}（${i.role}）`).join('、') : '—'}`,
     ...(judge ? ['', '## 裁判', '',
-      `- 裁判 ${judge.id}（${judge.provider}），${judge.form === 'pairwise' ? '成对比较，顺序交换' : '逐份打分'}，每份 ${judge.passes} 遍；已登记资格：一致率 ${pct(judge.qualification?.agreement)}，噪声带 ${judge.qualification?.noiseBand95 ?? '—'}（${judge.qualification?.measuredOn ?? '—'}）`,
+      `- 裁判 ${judge.id}（${judge.provider} ${judge.model ?? '—'}），${judge.form === 'pairwise' ? '成对比较，顺序交换' : '逐份打分'}，每份 ${judge.passes} 遍；已登记资格：一致率 ${pct(judge.qualification?.agreement)}，噪声带 ${judge.qualification?.noiseBand95 ?? '—'}（${judge.qualification?.measuredOn ?? '—'}）`,
       `- 裁判调用 ${judge.calls} 次（上限 ${judge.maxCalls}），费用 ${judge.costCny} 元：${judge.costNote}（订阅内调用，不按元计量，如实写 0 元，不是没有发生）`] : []), '',
     '## 确认期', '',
     report.confirmation ? `- ${report.confirmation.groups} 组（失败子集 ${report.confirmation.sliceGroups}），每组每臂重复 ${report.confirmation.repeats} 次` : '- 未进行：开发期没有改进候选，确认集未开启，本季度 α 未动用',
     ...(report.confirmation?.baseline ? [`- 对照：总体 ${pct(report.confirmation.baseline.overall)}，失败子集 ${pct(report.confirmation.baseline.slice)}`] : []),
     ...(report.confirmation?.candidate ? [`- 候选：总体 ${pct(report.confirmation.candidate.overall)}，失败子集 ${pct(report.confirmation.candidate.slice)}`] : []),
     ...(report.confirmation?.costCny ? [`- 成本（求解器，lane 账本）：${JSON.stringify(report.confirmation.costCny)} 元`] : []),
-    ...(directional ? ['- 方向性：组数不足时，登记的统计程序自己拒绝给出判定；上面的差异只说明方向，不能当作合格结果，也不得据此提 PR 声称通过。'] : []),
+    ...(directional ? ['- 方向性：组数不足时，登记的统计程序自己拒绝给出判定；上面的差异只说明方向，不能当作合格结果，也不得据此提 PR 声称通过。', '- 本活动未动用本季度 α；确认集按“方向性”开启，之后不再作为合格活动的确认集。'] : []),
     ...(report.statistics ? ['', '## 统计', '', `- 判定 ${report.statistics.decision}；${(report.statistics.reasons ?? []).join('；') || '无附加原因'}`] : []),
+    ...(report.closure ? ['', '## 偏差', '',
+      `- 偏差：评测进程拒绝了回执（${report.closure.deviation.reason.split(':')[0]}），${report.closure.deviation.runs.length} 次运行的成本在账本里没有结算完。本结论由签名的收尾记录（${report.closure.type}）给出，不是回执路径。`,
+      ...report.closure.deviation.runs.map((r) => `- 运行 ${r.row}/${r.arm}/第 ${r.repeat + 1} 次（${r.runId}）：成本取账本已结算部分 ${r.usedCost} 元（下限）；账本另有未定调用 ${r.ledger.uncertain ?? '—'} 个、未结预留 ${r.ledger.openCost ?? '—'} 元`),
+      `- 没有任何分数、行、重复或臂被改动；这些成本只是下限，登记的统计程序被如实告知成本不完整，因此不给出判定；本季度 α 的预留不变（${report.closure.alpha.reservation}）。`,
+      ...(report.closure.costTotals ? [`- 计入这些成本后的求解器总成本：${JSON.stringify(report.closure.costTotals)} 元`] : [])] : []),
     '', '本阶段不向生产导入任何东西；通过只代表一项提议：把该补丁以 PR 形式提出，由人审阅合入。',
   ];
   await writeFile(join(dir, 'report.json'), `${JSON.stringify(report, null, 2)}\n`);

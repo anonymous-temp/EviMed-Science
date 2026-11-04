@@ -11,6 +11,13 @@
  * `production_rule`) for the replay-fidelity check. Event members on other days keep the state they have. `beside_selected`
  * is read against that same counterfactual state.
  *
+ * `incumbent` is the frontier module's incumbent policy identity as the serving layer itself names it (`rsiIncumbent`, the function
+ * `currentTarget` uses, over the row the serving read returns: the module policy document of the evolution owner, the first configured
+ * operator): `default:<digest of the code defaults>` or `evolution-module-policy-frontier:<revision>`. A campaign built from this export
+ * binds exactly that as its baseline, which is what a bundle's target is compared with at import. A release that predates the function,
+ * or a deployment with no operator to own the policy, cannot name it as the serving layer would: the export omits `incumbent` and keeps
+ * the configured threshold, and the lab measures the month against an `unbound:` baseline no bundle can be imported against.
+ *
  * Public frontier content only: items, sources and events of the feed, no account, project, conversation or reader data.
  * The texts a labeller reads are the source's own (title, abstract or page excerpt, at most 1,200 characters), never the
  * platform's model-written fields. One REPEATABLE READ, READ ONLY transaction; nothing is written.
@@ -31,6 +38,9 @@ const { ControlPlaneDatabase } = await load("apps/server/src/controlPlaneDatabas
 const pipeline = await load("apps/server/src/frontierPipeline.mjs");
 const { FRONTIER_SCORE_VERSION } = await load("apps/server/src/frontierEditor.mjs");
 const domain = await load("packages/domain/index.mjs");
+// A release from before the serving adapters has no such module: it names no incumbent either.
+const serving = await load("apps/server/src/rsiServingAdapters.mjs").catch((/** @type {any} */ error) => { if (error?.code === "ERR_MODULE_NOT_FOUND") return {}; throw error; });
+const namesIncumbent = typeof serving.rsiIncumbent === "function" && typeof serving.rsiPolicyDefaults === "function";
 
 const MIX_RULES = new Set(["threshold", "genre-floor", "zh-target", "preprint-lane", "event-primary", "lane-floor"]);
 const CONSUMER_PATHS = ["apps/server/src/frontierPipeline.mjs", "apps/server/src/frontierEditor.mjs", "packages/domain/src/frontierMix.mjs",
@@ -39,6 +49,8 @@ const CONSUMER_PATHS = ["apps/server/src/frontierPipeline.mjs", "apps/server/src
 const sha256 = (/** @type {string | Buffer} */ value) => createHash("sha256").update(value).digest("hex");
 
 const config = loadConfig();
+// The serving read's owner (rsiServingAdapters.mjs `incumbent`: the evolution service's owner, the first configured operator).
+const policyOwner = config.operatorUsers?.[0] ?? null;
 const timeZone = config.frontierTimeZone ?? "Asia/Shanghai";
 const settings = {
   threshold: pipeline.frontierSelectThreshold(config), thresholdSource: "config",
@@ -58,11 +70,15 @@ const preMix = (row, day) => {
 
 try {
   await client.query("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY");
-  // An active module policy overrides the configured line (FrontierPipeline#processBatch reads `evolution-module-policy-frontier`).
-  const policy = (await client.query(`SELECT payload->'policy'->'selectionThreshold' AS threshold FROM evimed_product.documents
-    WHERE id = 'evolution-module-policy-frontier' AND payload->>'status' = 'active' AND deleted_at IS NULL ORDER BY updated_at DESC LIMIT 1`)).rows[0];
-  if (policy && Number.isFinite(Number(policy.threshold)) && policy.threshold !== null) {
-    settings.threshold = Number(policy.threshold); settings.thresholdSource = "module-policy";
+  // An active module policy overrides the configured line (FrontierPipeline#processBatch reads `evolution-module-policy-frontier`): the serving
+  // layer's own read (rsiServingAdapters.mjs `read`, the same statement over the same owner) and its own rule say which, and name the identity
+  // a campaign's bundle will be compared with.
+  let incumbent = null;
+  if (namesIncumbent && policyOwner) {
+    const policy = (await client.query("SELECT payload, revision FROM evimed_product.documents WHERE user_id=$1 AND kind='knowledge' AND id=$2 AND deleted_at IS NULL",
+      [policyOwner, "evolution-module-policy-frontier"])).rows[0] ?? null;
+    incumbent = serving.rsiIncumbent("frontier", policy, serving.rsiPolicyDefaults("frontier", config));
+    if (!incumbent.revisionId.startsWith("default:")) { settings.threshold = incumbent.policy.selectionThreshold; settings.thresholdSource = "module-policy"; }
   }
   const days = [];
   /** @type {Record<string, any>} */
@@ -153,7 +169,8 @@ try {
   }
   await client.query("COMMIT");
   process.stdout.write(JSON.stringify({ schema: "rsi-frontier-export-v1", exportedAt: new Date().toISOString(),
-    releaseId: process.env.OPEN_SCIENCE_RELEASE_ID ?? null, from, to, settings, consumer, days, texts, signals }));
+    releaseId: process.env.OPEN_SCIENCE_RELEASE_ID ?? null, from, to, settings, ...(incumbent ? { incumbent: { revisionId: incumbent.revisionId, threshold: settings.threshold } } : {}),
+    consumer, days, texts, signals }));
 } catch (error) {
   await client.query("ROLLBACK").catch(() => {});
   throw error;

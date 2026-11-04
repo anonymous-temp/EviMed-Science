@@ -4,8 +4,10 @@
   materialise_lane_bundles.py --registration rsi/round1/arb-deep/registration.json --role development --domain arb-deep \\
       --bench-key arb-deep-rsi --arm baseline=s1 --arm aa=aa --arm cand-806cd2194801=c0 --out /tmp/rsi1-scratch/round1/arb-deep/development
 
-  --form dev           a bundle is `<prefix>.<domain>.<row>.r<k>` (the rids of make_screen.py and the arm builders); --arm NAME=PREFIX
-  --form confirmation  a bundle is `cf.<domain>.<row>.<tag>.r<k>`; --arm NAME=TAG (tag `base` or `cstar`)
+  --form dev           a bundle is `<prefix>.<domain>.<row>.r<k>` (the rids of make_screen.py and the arm builders); --arm NAME=PREFIX[@N]; `@N` takes the arm's runs from repeat
+                       N of that prefix (a run is the target's repeat 0 when N is 1: `aa=m2@1` is the second run of the arm m2 standing as a
+                       development A/A beside `baseline=m2`, which is its first)
+  --form confirmation  a bundle is `cf.<domain>.<row>.<tag>.r<k>`; --arm NAME=TAG (tag `base` or `cstar`); --confirmation-prefix cf2 names the round's own `cf2.<domain>.<row>.<tag>.r<k>`
 
 NAME is the arm of the source: `baseline`, `aa` or `cand-<12 hex>` (the candidate's digest on its image, which export_harness_arms.py
 computes from --bundles). Rows and repeats are the registration's for the role. Output, below --out:
@@ -43,10 +45,10 @@ class MaterialiseError(Exception):
     pass
 
 
-def rid_of(form, prefix, domain, row, repeat):
+def rid_of(form, prefix, domain, row, repeat, confirmation_prefix='cf'):
     if form == 'dev':
         return rl.rid_of(prefix, domain, row, repeat)
-    return f'cf.{domain}.{row}.{prefix}.r{repeat}'.replace('/', '_')
+    return f'{confirmation_prefix}.{domain}.{row}.{prefix}.r{repeat}'.replace('/', '_')
 
 
 def candidates_of(rid, inboxes):
@@ -139,24 +141,28 @@ def run(args):
         if '=' not in spec:
             raise MaterialiseError(f'--arm {spec!r} is NAME=PREFIX')
         name, prefix = spec.split('=', 1)
+        prefix, _, offset_text = prefix.partition('@')
+        if offset_text and not offset_text.isdigit():
+            raise MaterialiseError(f'--arm {spec!r}: @N is a repeat number')
+        offset = int(offset_text) if offset_text else 0
         if name != eha.BASELINE and name != eha.CONTROL and not re.fullmatch(r'cand-[0-9a-f]{12}', name):
             raise MaterialiseError(f'arm name {name!r}: baseline, aa or cand-<12 hex>')
-        if not prefix or any(name == a[0] or prefix == a[1] for a in arms):
+        if not prefix or any(name == a[0] or (prefix, offset) == (a[1], a[2]) for a in arms):
             raise MaterialiseError(f'--arm {spec!r}: names and prefixes must be non-empty and used once')
-        arms.append((name, prefix))
-    if not any(name == eha.BASELINE for name, _ in arms):
+        arms.append((name, prefix, offset))
+    if not any(name == eha.BASELINE for name, _, _ in arms):
         raise MaterialiseError('an export needs the baseline arm')
     inboxes = [pathlib.Path(p) for p in (args.inbox or rl.default_inboxes())]
     out = pathlib.Path(args.out)
     report = {'schema': SCHEMA, 'registration': {'family': registration.get('family'), 'digest': registration.get('digest')}, 'role': args.role,
               'domain': args.domain, 'form': args.form, 'benchKey': args.bench_key, 'repeats': repeats, 'rows': len(rows), 'inboxes': [str(p) for p in inboxes],
-              'arms': {}, 'ignoredPrefixes': ignored_prefixes(inboxes, args.domain, {prefix for _, prefix in arms})}
+              'arms': {}, 'ignoredPrefixes': ignored_prefixes(inboxes, args.domain, {prefix for _, prefix, _ in arms} | ({args.confirmation_prefix} if args.form == 'confirmation' else set()))}
     problems = 0
-    for name, prefix in arms:
-        entry = {'prefix': prefix, 'expected': len(rows) * repeats, 'materialised': 0, 'runs': [], 'notMaterialised': []}
+    for name, prefix, offset in arms:
+        entry = {'prefix': prefix + (f'@{offset}' if offset else ''), 'expected': len(rows) * repeats, 'materialised': 0, 'runs': [], 'notMaterialised': []}
         for row in rows:
             for repeat in range(repeats):
-                rid = rid_of(args.form, prefix, args.domain, row, repeat)
+                rid = rid_of(args.form, prefix, args.domain, row, repeat + offset, args.confirmation_prefix)
                 key = eha.run_key(args.key_template, args.bench_key, name, row, repeat, repeats)
                 folder = eha.result_folder(out / name, key)
                 outcome = materialise_run(rid, args.domain, row, inboxes, folder)
@@ -180,6 +186,7 @@ def main(argv=None):
     p.add_argument('--bench-key', required=True)
     p.add_argument('--arm', action='append', required=True, help='NAME=PREFIX (baseline, aa or cand-<12 hex>)')
     p.add_argument('--form', default='dev', help='dev (<prefix>.<domain>.<row>.r<k>) or confirmation (cf.<domain>.<row>.<tag>.r<k>)')
+    p.add_argument('--confirmation-prefix', default='cf', help='the leading token of a confirmation rid (default cf; a round that submitted under another, cf2, names it)')
     p.add_argument('--repeats', type=int, help='default: the registration\'s repeats for the role')
     p.add_argument('--key-template', default=eha.DEFAULT_KEY_TEMPLATE)
     p.add_argument('--inbox', action='append', help='directory of <rid>.tgz bundles (repeatable; default $H2_RUNS_ROOT/inbox and inbox/archive)')

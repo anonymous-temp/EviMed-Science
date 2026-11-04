@@ -1581,7 +1581,8 @@ export function measureComposition([options] = [{}]) {
     const group = el.closest("form, [data-action-group='selection']");
     const localGroup = group ? { kind: group.tagName.toLowerCase() === "form" ? "form" : "selection", primaries: [...group.querySelectorAll("button.bg-accent, a.bg-accent, [role='button'].bg-accent")].filter(visible).length,
       declared: group.tagName.toLowerCase() === "form" || (group.getAttribute("role") === "toolbar" && Boolean(group.getAttribute("aria-label") || group.getAttribute("aria-labelledby"))) } : null;
-    return { text: nameOf(el), ...at, localGroup, run, markedRun: Boolean(bar), inHeader: el.closest("[data-page-header]") !== null || at.top <= titleBottom + 8, excused: el.closest("[data-empty], [data-step-state], [data-state-screen], form") !== null };
+    // 主动科研's standby observatory is that page's empty state, and its 「发起研究」 is the way forward (the header does not repeat it).
+    return { text: nameOf(el), ...at, localGroup, run, markedRun: Boolean(bar), inHeader: el.closest("[data-page-header]") !== null || at.top <= titleBottom + 8, excused: el.closest("[data-empty], [data-observatory='empty'], [data-step-state], [data-state-screen], form") !== null };
   });
 
   // A tab or a chip that counts nothing (a trailing number that is 0) is a switch to an empty place.
@@ -3478,9 +3479,11 @@ export function measure([leakSources, backOfficeSources, retiredSources = [], op
 export function routeReady() {
   const routeMain = document.querySelector("main");
   if (!routeMain || routeMain.getBoundingClientRect().width === 0) return false;
+  const filled = (/** @type {Element | null} */ slot) => Boolean(slot && (slot.textContent?.trim() || [...slot.querySelectorAll("canvas, svg, img, iframe, video, [data-study-pane='conversation'], [data-frame-skeleton]")].some(el => el.getBoundingClientRect().width > 0 && el.getBoundingClientRect().height > 0)));
   const body = routeMain.querySelector("[data-page-body]");
-  const content = body && Boolean(body.textContent?.trim() || [...body.querySelectorAll("canvas, svg, img, iframe, video, [data-study-pane='conversation'], [data-frame-skeleton]")].some(el => el.getBoundingClientRect().width > 0 && el.getBoundingClientRect().height > 0));
-  if (body && !content) return false;
+  // A page whose whole first screen is its introduction (主动科研 with no research yet: the standby observatory and its two ways to begin)
+  // has an empty body and is loaded; its loading state is the skeleton below, which still holds the walk (2026-11-03).
+  if (body && !filled(body) && !filled(routeMain.querySelector("[data-page-introduction]"))) return false;
   if (/^\/app\/(?:geo|virtual-research)\/[^/]+(?:\/|$)/u.test(location.pathname) && !routeMain.querySelector("[data-page-chrome], [data-state-screen], [role='alert']")) return false;
   return ![...routeMain.querySelectorAll('[role="status"], .animate-pulse:not([data-forced-colors="preserve"]), [data-geo-tab-loading], [data-vcr-loading]')].some((node) => {
     const rect = node.getBoundingClientRect();

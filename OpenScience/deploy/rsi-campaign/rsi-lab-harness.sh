@@ -10,6 +10,18 @@
 #                                                    included) from development.json, sign the report, open nothing
 #   rsi-lab-harness.sh <YYYY-MM> <family> run       assemble -> run -> evaluator receipt -> statistics -> signed report; waits up
 #                                                    to six hours for the inbox files below
+#   rsi-lab-harness.sh <YYYY-MM> <family> close     a campaign whose receipt the evaluator refused with campaign_cost_measurement_missing
+#                                                    (runs without a settled cost): the signed closure of evals/rsi-campaigns/harness_closure.mjs,
+#                                                    then the signed report. It reads cost-closure.json (below), recomputes the campaign's scores
+#                                                    and the registered statistics with those costs, signs a record that states the deviation and
+#                                                    touches neither the error-budget ledger nor the corpus record. It runs in the image the
+#                                                    campaign ran in (the registered consumer identity pins that image's scoring code), with
+#                                                    harness_closure.mjs taken from the current image.
+#
+# RSI_LAB_ROOT (/srv/rsi-lab), RSI_LAB_ETC (/etc/rsi-lab), RSI_LAB_DOCKER (docker), RSI_LAB_OWNER (10001:10001) and RSI_LAB_POLL_SECONDS (300) move the host layout and the docker
+# binary; RSI_LAB_DRY_RUN=1 runs with a docker that prints the command: it reads the inbox and configuration of the tree it is given (a scratch tree of its own when RSI_LAB_ROOT is
+# unset) and writes only into scratch directories it removes at exit — no STATUS, log, report or link of the tree it reads.
+# A resume that fails gave no verdict: `run` ends with exit 9 and writes no report (start it again once the cause is fixed).
 #
 # Inbox harness-<family>-<month>/ (every file with its .sha256 in `sha256sum -c` format, checked here and again by the assembler):
 #   registration.json                the pre-registration (register_round.py): rows, scorer, failure slice, margin, K, alpha, control, judge
@@ -18,7 +30,9 @@
 #   confirmation.gold.json           the gold of the sealed rows (deterministic scorers); joined only by the assembly, below
 #   development.verdicts.jsonl       the judge's verdict records of the development runs (judged-verdicts)
 #   confirmation.verdicts.jsonl      the judge's verdict records of the confirmation runs (judged-verdicts)
-#   improvement.json                 optional: who wrote the candidates (provenance, recorded in the registration the campaign digests)
+#   improvement.json                 who wrote the candidates (Claude: the improvers' roles and models, recorded in the registration the campaign digests); required
+#                                    by `develop` and `run` (the assembly refuses a campaign without it: campaign_improvement_missing)
+#   cost-closure.json                `close` only: the usage ledger's record of each run without a settled cost (make_cost_closure.py)
 # Only development data is read by `develop`. The confirmation files are read by the assembly of `run`, which joins the gold and the
 # records the export kept apart and builds the manifest; nothing scores them before the runner has frozen the policy and reserved the
 # quarter's error budget and the corpus.
@@ -27,31 +41,47 @@ umask 027
 MONTH=$1; FAMILY=$2; COMMAND=$3
 [[ $MONTH =~ ^[0-9]{4}-[0-9]{2}$ ]] || { echo "month must be YYYY-MM" >&2; exit 2; }
 [[ $FAMILY =~ ^[a-z0-9][a-z0-9-]{0,31}$ ]] || { echo "family must be lower-case letters, digits and hyphens" >&2; exit 2; }
-[ "$COMMAND" = develop ] || [ "$COMMAND" = run ] || { echo "command is develop or run" >&2; exit 2; }
-IMAGE=$(cat /etc/rsi-lab/image)
-STATE=/srv/rsi-lab/state INBOX=/srv/rsi-lab/inbox OUTBOX=/srv/rsi-lab/outbox
+[ "$COMMAND" = develop ] || [ "$COMMAND" = run ] || [ "$COMMAND" = close ] || { echo "command is develop, run or close" >&2; exit 2; }
+DRY=${RSI_LAB_DRY_RUN:-}
+SCRATCH=()
+if [ -n "$DRY" ]; then
+  trap 'rm -rf "${SCRATCH[@]}"' EXIT
+  [ -n "${RSI_LAB_ROOT:-}" ] || { RSI_LAB_ROOT=$(mktemp -d); SCRATCH+=("$RSI_LAB_ROOT"); mkdir -p "$RSI_LAB_ROOT"/{state,inbox,outbox,inbox/harness-$FAMILY-$MONTH}; }
+  [ -n "${RSI_LAB_ETC:-}" ] || { RSI_LAB_ETC=$(mktemp -d); SCRATCH+=("$RSI_LAB_ETC"); }
+  RSI_LAB_OWNER=${RSI_LAB_OWNER:-$(id -u):$(id -g)} RSI_LAB_DOCKER=${RSI_LAB_DOCKER:-dry_docker} RSI_LAB_POLL_SECONDS=0
+  exec 3>&2
+  dry_docker() { echo "[dry-run] docker $*" >&3; }
+fi
+ROOT=${RSI_LAB_ROOT:-/srv/rsi-lab} ETC=${RSI_LAB_ETC:-/etc/rsi-lab} DOCKER=${RSI_LAB_DOCKER:-docker} OWNER=${RSI_LAB_OWNER:-10001:10001}
+POLL=${RSI_LAB_POLL_SECONDS:-300}
+if [ -n "$DRY" ] && [ ! -s "$ETC/image" ]; then IMAGE=dry-run-image; else IMAGE=$(cat "$ETC/image"); fi
+STATE=$ROOT/state INBOX=$ROOT/inbox OUTBOX=$ROOT/outbox
 NAME=harness-$FAMILY-$MONTH RUN=$STATE/harness-$FAMILY-$MONTH C=/srv/rsi-lab/state/harness-$FAMILY-$MONTH IN=/srv/rsi-lab/inbox/harness-$FAMILY-$MONTH
-install -d -o 10001 -g 10001 -m 0750 "$RUN" "$RUN/run" "$OUTBOX/$NAME"
+# What a dry run writes goes to a scratch directory removed at exit.
+[ -z "$DRY" ] || { RUN=$(mktemp -d); SCRATCH+=("$RUN"); OUTBOX=$RUN/outbox; }
+install -d -o "${OWNER%%:*}" -g "${OWNER##*:}" -m 0750 "$RUN" "$RUN/run" "$OUTBOX/$NAME"
 log() { echo "$(date -u +%FT%TZ) $*" | tee -a "$RUN/launcher.log" >&2; }
 done_step() { grep -q "^$1 ok" "$RUN/STATUS" 2>/dev/null; }
 mark() { echo "$1 ok $(date -u +%FT%TZ) ${2:-}" >> "$RUN/STATUS"; }
+# --init: node as PID 1 ignores SIGTERM, and a stopped run's container would go on working after the lock is released.
+# --cpu-shares 256: yields to the products sharing this host whenever it is contended (see rsi-lab-monthly.sh).
 lab() {
   local network=$1; shift
-  docker run --rm --network "$network" --read-only --tmpfs /tmp:size=256m,noexec,nosuid --cap-drop ALL --security-opt no-new-privileges \
-    --pids-limit 256 --memory 3g --user 10001:10001 --env-file /etc/rsi-lab/secrets/lab.env -e HOME=/tmp \
+  "$DOCKER" run --rm --init --cpu-shares 256 --network "$network" --read-only --tmpfs /tmp:size=256m,noexec,nosuid --cap-drop ALL --security-opt no-new-privileges \
+    --pids-limit 256 --memory 3g --user "$OWNER" --env-file "$ETC/secrets/lab.env" -e HOME=/tmp \
     -e NODE_OPTIONS=--network-family-autoselection-attempt-timeout=2500 \
-    -v /etc/rsi-lab/owner-inputs:/run/rsi-lab:ro -v "$STATE":/srv/rsi-lab/state -v "$INBOX":/srv/rsi-lab/inbox:ro "$@"
+    -v "$ETC/owner-inputs":/run/rsi-lab:ro -v "$STATE":/srv/rsi-lab/state -v "$INBOX":/srv/rsi-lab/inbox:ro "$@"
 }
 step() { local name=$1; shift; if done_step "$name"; then return 0; fi; log "step $name"; if "$@" > "$RUN/$name.out" 2> "$RUN/$name.err"; then mark "$name"; else log "step $name failed: $(tail -c 400 "$RUN/$name.err")"; return 1; fi; }
 verify() { (cd "$INBOX/$NAME" && for f in "$@"; do [ -s "$f" ] && [ -s "$f.sha256" ] && sha256sum -c --status "$f.sha256" || return 1; done); }
-KEYS=(-v /etc/rsi-lab/keys/evaluator.pem:/run/rsi-keys/evaluator.pem:ro)
+KEYS=(-v "$ETC/keys/evaluator.pem":/run/rsi-keys/evaluator.pem:ro)
 jsonfield() { python3 -c 'import json,sys;d=json.load(open(sys.argv[1]));print(d.get(sys.argv[2],""))' "$1" "$2" 2>/dev/null || true; }
 
 # The files this family needs depend on its scorer, which the pre-registration names.
 needs() {
+  if [ "$1" = close ]; then printf '%s\n' cost-closure.json; return 0; fi
   local scorer; scorer=$(jsonfield "$INBOX/$NAME/registration.json" scorer)
-  local files=(registration.json development.json)
-  [ -s "$INBOX/$NAME/improvement.json" ] && files+=(improvement.json)
+  local files=(registration.json development.json improvement.json)
   [ "$scorer" = judged-verdicts ] && files+=(development.verdicts.jsonl)
   if [ "$1" = run ]; then
     files+=(confirmation.json)
@@ -62,16 +92,17 @@ needs() {
 await_inputs() {
   for _ in $(seq 1 72); do
     [ -s "$INBOX/$NAME/registration.json" ] && mapfile -t FILES < <(needs "$1") && verify "${FILES[@]}" && return 0
-    sleep 300
+    [ "$1" = close ] && break
+    sleep "$POLL"
   done
   [ -s "$INBOX/$NAME/registration.json" ] && mapfile -t FILES < <(needs "$1") && verify "${FILES[@]}"
 }
 # Signed report, whatever the verdict: report.md/report.json from the campaign directory, then the evaluator's signature over report.json.
 report() {
   lab none "$IMAGE" evals/rsi-campaigns/harness_report.mjs "$C" "$MONTH" >> "$RUN/launcher.log" 2>&1 || true
-  [ -s "$RUN/report.json" ] && docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges --user 10001:10001 "${KEYS[@]}" \
+  [ -s "$RUN/report.json" ] && "$DOCKER" run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges --user "$OWNER" "${KEYS[@]}" \
     -v "$STATE":/srv/rsi-lab/state "$IMAGE" evals/rsi-campaigns/evaluator.mjs report "$C/report.json" /run/rsi-keys/evaluator.pem "$C/report.signed.json" >> "$RUN/launcher.log" 2>&1 || true
-  cp -f "$RUN/report.md" "$RUN/report.json" "$RUN/report.signed.json" "$RUN/supply.json" "$RUN/development-only.json" "$OUTBOX/$NAME/" 2>/dev/null || true
+  cp -f "$RUN/report.md" "$RUN/report.json" "$RUN/report.signed.json" "$RUN/supply.json" "$RUN/development-only.json" "$RUN/closure.signed.json" "$IN/cost-closure.json" "$OUTBOX/$NAME/" 2>/dev/null || true
   log "report: $(sed -n 3p "$RUN/report.md" 2>/dev/null)"
 }
 verdict_args() {
@@ -83,12 +114,38 @@ verdict_args() {
 }
 
 log "harness campaign $FAMILY $MONTH $COMMAND image $IMAGE"
+
+# The signed closure of a campaign whose receipt was refused for costs: only after the run reached its checkpoint, only while there is no
+# receipt, no statistics and no verdict, and only with the cost records the inbox holds (checked against the campaign's own sources).
+if [ "$COMMAND" = close ]; then
+  done_step checkpoint && ! done_step receipt && ! done_step resume || { log "close needs a campaign that reached its checkpoint and has neither a receipt nor a verdict"; exit 3; }
+  [ -s "$RUN/run/report.json" ] || { log "close needs $RUN/run/report.json (the checkpoint)"; exit 3; }
+  if ! done_step closure-inputs; then
+    await_inputs close || { log "cost-closure.json missing or checksum mismatch"; exit 3; }
+    mark closure-inputs
+  fi
+  # The image the campaign ran in: its files are what the registered consumer identity digests.
+  RAN_IN=$(sed -n 's/.* harness campaign .* run image \(.*\)$/\1/p' "$RUN/launcher.log" | tail -1)
+  [ -n "$RAN_IN" ] && "$DOCKER" image inspect "$RAN_IN" >/dev/null 2>&1 || { log "the image the campaign ran in ($RAN_IN) is no longer on this host"; exit 3; }
+  CLOSURE_JS=/opt/evimed/OpenScience/evals/rsi-campaigns/harness_closure.mjs MOUNT=()
+  if [ "$RAN_IN" != "$IMAGE" ]; then
+    "$DOCKER" run --rm --network none --read-only --user "$OWNER" --entrypoint cat "$IMAGE" "$CLOSURE_JS" > "$RUN/harness_closure.mjs" || { log "harness_closure.mjs is not in $IMAGE"; exit 3; }
+    chown "$OWNER" "$RUN/harness_closure.mjs" # written by root under umask 027; the closure runs as the lab user
+    MOUNT=(-v "$RUN/harness_closure.mjs:$CLOSURE_JS:ro")
+  fi
+  log "closure runs in $RAN_IN (current image $IMAGE)"
+  step closure "$DOCKER" run --rm --network none --read-only --tmpfs /tmp:size=64m,noexec,nosuid --cap-drop ALL --security-opt no-new-privileges --pids-limit 256 --memory 3g --user "$OWNER" "${KEYS[@]}" "${MOUNT[@]}" \
+    -v "$STATE":/srv/rsi-lab/state -v "$INBOX":/srv/rsi-lab/inbox:ro "$RAN_IN" \
+    evals/rsi-campaigns/harness_closure.mjs "$C/manifest.json" "$C/inputs.json" "$C/run/report.json" "$IN/cost-closure.json" /run/rsi-keys/evaluator.pem "$C/closure.signed.json" || { report; exit 8; }
+  report; exit 0
+fi
+
 if ! done_step inputs; then
   await_inputs "$COMMAND" || { log "inputs missing or checksum mismatch"; exit 3; }
   mark inputs
 fi
 mapfile -t VERDICTS < <(verdict_args "$COMMAND")
-[ -s "$INBOX/$NAME/improvement.json" ] && VERDICTS+=(--improvement "$IN/improvement.json")
+VERDICTS+=(--improvement "$IN/improvement.json")
 
 # The development gate alone: the registered choice recomputed in the lab image from development data, nothing opened.
 if [ "$COMMAND" = develop ]; then
@@ -110,11 +167,14 @@ if [ "$STATUS_RUN" != "awaiting-evaluation" ] && [ "$STATUS_RUN" != "completed" 
 step checkpoint lab rsi-lab-net "$IMAGE" evals/rsi-campaigns/run.mjs report "${ARGS[@]}" || { report; exit 7; }
 # The evaluator's profile names one receipt path (`state/harness-current/receipt.json`), shared by every family of the host: the receipt and the
 # resume run under one lock with the link pointing at this family, so two families never read each other's receipt.
-exec 9> "$STATE/harness.lock"
-flock 9
-ln -sfn "harness-$FAMILY-$MONTH" "$STATE/harness-current"
-step receipt docker run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges --user 10001:10001 "${KEYS[@]}" -v "$STATE":/srv/rsi-lab/state "$IMAGE" \
+if [ -z "$DRY" ]; then
+  exec 9> "$STATE/harness.lock"
+  flock 9
+  ln -sfn "harness-$FAMILY-$MONTH" "$STATE/harness-current"
+fi
+step receipt "$DOCKER" run --rm --network none --read-only --cap-drop ALL --security-opt no-new-privileges --user "$OWNER" "${KEYS[@]}" -v "$STATE":/srv/rsi-lab/state "$IMAGE" \
   evals/rsi-campaigns/evaluator.mjs receipt "$C/manifest.json" "$C/inputs.json" "$C/run/request.json" "$C/run/report.json" /run/rsi-keys/evaluator.pem "$C/receipt.json" || { report; exit 0; }
-step resume lab rsi-lab-net "$IMAGE" evals/rsi-campaigns/run.mjs resume "${ARGS[@]}" --evaluator-profile /run/rsi-lab/evaluator-profile-harness.json || true
-flock -u 9
+step resume lab rsi-lab-net "$IMAGE" evals/rsi-campaigns/run.mjs resume "${ARGS[@]}" --evaluator-profile /run/rsi-lab/evaluator-profile-harness.json \
+  || { log "resume failed: no verdict and no report; start run again once the cause is fixed"; exit 9; }
+[ -n "$DRY" ] || flock -u 9
 report

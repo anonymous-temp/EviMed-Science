@@ -1,19 +1,11 @@
 {
-  "comment": "One row per improver stage. kind is upstream's claude_cli channel. A row with a provider talks to that provider's Anthropic-compatible endpoint through the same CLI; the others use this box's own Claude login. max_budget_usd bounds one session as the CLI itself prices it (API-equivalent for Claude; for DeepSeek the CLI prices an unknown model like Claude, about 3.6x the real cost, so the bound is conservative).",
+  "comment": "One row per improver stage; every stage runs on Claude through upstream's claude_cli channel on this box's own Claude login (owner 2026-11-03: improver stages run on Claude; the solver is always EviMed Science on DeepSeek Flash and is not configured here). load_channels refuses any other kind, a model that is not claude-*, and any provider. max_budget_usd bounds one session as the CLI itself prices it (API-equivalent).",
   "cli": "claude",
   "stages": {
     "inv":        {"kind": "claude_cli", "model": "claude-sonnet-5-5", "effort": "high", "timeout": 2400, "max_budget_usd": 5},
-    "dom":        {"kind": "claude_cli", "provider": "deepseek", "model": "deepseek-v4-pro[1m]", "effort": "high", "timeout": 2400, "max_budget_usd": 12},
+    "dom":        {"kind": "claude_cli", "model": "claude-sonnet-5-5", "effort": "high", "timeout": 2400, "max_budget_usd": 5},
     "agg":        {"kind": "claude_cli", "model": "claude-opus-5-5", "effort": "high", "timeout": 3000, "max_budget_usd": 10},
-    "select":     {"kind": "claude_cli", "model": "claude-sonnet-5-5", "effort": "high", "timeout": 2400, "max_budget_usd": 5},
-    "experience": {"kind": "claude_cli", "model": "claude-sonnet-5-5", "effort": "high", "timeout": 2400, "max_budget_usd": 5}
-  },
-  "providers": {
-    "deepseek": {
-      "base_url": "https://api.deepseek.com/anthropic",
-      "key_file": "/home/coder/workspace/EviMedScience/.evimed-local/secrets/deepseek.api-key",
-      "small_model": "deepseek-flash",
-      "tested": "2026-11-01: Read/Write/Edit/Glob/Grep tool use, model deepseek-v4-pro and deepseek-v4-pro[1m] (1M-token window), usage reported in tokens; total_cost_usd is NOT DeepSeek's price"
-    }
+    "select":     {"kind": "claude_cli", "model": "claude-opus-5-5", "effort": "high", "timeout": 2400, "max_budget_usd": 10},
+    "experience": {"kind": "claude_cli", "model": "claude-opus-5-5", "effort": "high", "timeout": 2400, "max_budget_usd": 10}
   }
 }

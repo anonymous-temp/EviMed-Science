@@ -1,6 +1,6 @@
 """The money guard: the provider's balance, read at most once a minute, and the round's own cap.
 
-Every new rollout and every DeepSeek-priced improver call asks `ensure()` first. Below the floor the call waits (the round is paused,
+Every new rollout (the solver, the only cash the round spends) asks `ensure()` first. Below the floor the call waits (the round is paused,
 not failed: the same process resumes by itself when the balance recovers); a balance that cannot be read at all is not guessed.
 """
 
@@ -36,7 +36,7 @@ class BalanceGuard:
                  cap_cny: float | None = config.ROUND_CAP_CNY, spent=None, clock=time.monotonic, sleep=time.sleep, log=print,
                  max_pause_s: float | None = None):
         self.fetch, self.floor, self.min_interval, self.cap = fetch, floor, min_interval, cap_cny
-        self.spent = spent  # callable -> CNY the round has spent so far (the ledger's cash total)
+        self.spent = spent  # callable -> CNY the round has spent so far (the ledger's settled solver cost)
         self.clock, self.sleep, self.log, self.max_pause_s = clock, sleep, log, max_pause_s
         self._lock = threading.Lock()
         self._last: float | None = None

@@ -199,20 +199,34 @@ class Broker:
             if self.paused():
                 return None
             candidates = sorted((self.root / "pending").glob("*.json"), key=lambda p: (p.stat().st_mtime, p.name))
+            # A request's image never changes, so it is read once: parsing every pending request on every claim, under this lock,
+            # took the shared host to a load of 40 with a thousand requests queued (2026-11-02).
+            images = self.read_json(self.root / "pending-images.json") or {}
+            grew = False
+            chosen = None
             for candidate in candidates:
+                rid = candidate.name[: -len(".json")]
+                if rid not in images:
+                    read = self.read_json(candidate)
+                    images[rid] = read.get("image") if isinstance(read, dict) else None
+                    grew = True
+                if images[rid] != image:
+                    continue
                 request = self.read_json(candidate)
                 if not isinstance(request, dict) or request.get("image") != image:
                     continue
                 timeout_min = request.get("item", {}).get("timeoutMin", 15)
                 if max_timeout_min is not None and isinstance(timeout_min, (int, float)) and timeout_min > max_timeout_min:
                     continue
-                rid = candidate.name[: -len(".json")]
                 os.replace(candidate, self.path("claimed", f"{rid}.json"))
                 attempt = (self.read_json(self.path("attempts", f"{rid}.json")) or {"attempts": 0})["attempts"] + 1
                 self.write_json(self.path("claimed", f"{rid}.claim"),
                                 {"rid": rid, "worker": worker, "image": image, "claimedAt": at, "heartbeatAt": at, "attempt": attempt})
-                return {**request, "attempt": attempt}
-        return None
+                chosen = {**request, "attempt": attempt}
+                break
+            if grew:
+                self.write_json(self.root / "pending-images.json", images)
+            return chosen
 
     def heartbeat(self, worker, rid):
         at = now()

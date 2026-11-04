@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Run the real improver channels (Sonnet on this box's Claude login, DeepSeek through the same CLI) on one synthetic task, with a fake lab.
+"""Run the real improver channels (Claude on this box's login, the claude CLI) on one synthetic task, with a fake lab.
 
 The base rollout is a synthetic trajectory served by the test suite's fake broker (a run that answers from recall and never recomputes). Two
-real sessions then run through upstream's own `_run_stage`: the invariant editor (Sonnet) and the domain editor (DeepSeek). The point is
-the wiring: the CLI flags, the sandbox, the harvested tree, the guard, the ledger. It spends a few cents of DeepSeek and some Claude quota.
+real sessions then run through upstream's own `_run_stage`: the invariant editor and the domain editor. The point is the wiring: the CLI
+flags, the sandbox, the harvested tree, the guard, the ledger. It spends some Claude quota and no DeepSeek money.
 
   tools/live_stage_check.py [--keep] [--effort low|medium|high]
 """

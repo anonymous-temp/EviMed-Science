@@ -197,7 +197,8 @@ const FIX_PATH = "/app/account?tab=connectors";
  * takes — and, where the allowance is simulated, what it usually takes out of it. A state is said only when
  * it is a reason the reader can act on, as a word and, where there is one, its sentence with the way to
  * mend it. The row opens the same conversation whatever it says (an unavailable tool reports "blocked" by its
- * own mechanism when asked).
+ * own mechanism when asked). The name is a title by its ink, at the body's weight: the category headings above the cards are the
+ * page's fourth size × weight pair, and a bold name would be a fifth (DESIGN.md rule 4; the release walk of 2026-11-03).
  */
 function ToolRow({ agent, estimate, busy, onOpen }: { agent: CapabilityUi; estimate?: WebResearchEstimate; busy: boolean; onOpen: () => void }) {
   const Icon = capabilityIcon(agent.id);
@@ -212,7 +213,7 @@ function ToolRow({ agent, estimate, busy, onOpen }: { agent: CapabilityUi; estim
         <div className="flex items-start gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded bg-surface-1"><Icon size={20} className="text-accent" aria-hidden="true" /></div>
           <div className="min-w-0 flex-1">
-            <Button variant="text" disabled={busy} aria-busy={busy || undefined} onClick={onOpen} className="!static h-auto max-w-full whitespace-normal p-0 text-left font-semibold text-title-ink after:absolute after:inset-0">{agent.title}</Button>
+            <Button variant="text" disabled={busy} aria-busy={busy || undefined} onClick={onOpen} className="!static h-auto max-w-full whitespace-normal p-0 text-left text-title-ink after:absolute after:inset-0">{agent.title}</Button>
             <div className="mt-1 text-caption text-text-3">{agent.category}</div>
           </div>
         </div>

@@ -3,12 +3,13 @@
 
 Which stage it is playing is read from the evidence layout in cwd (context/candidates = selector, context/adoption.json = reflector,
 context/pool = composer, else an editor; the editor's dimension from the mission text). It appends one line per call to FAKE_CLAUDE_LOG
-(model, whether an endpoint and a token were set, whether any Vertex or inherited Claude Code variable leaked in, the flags) and never the token.
+(model, whether an endpoint or a credential was set, whether any Vertex, DeepSeek or inherited Claude Code variable leaked in, the flags) and never a
+credential's value.
 
   FAKE_CLAUDE_MODE   ok (default) | quota (429 for FAKE_CLAUDE_FAIL_MODEL) | transport | budget | badtree (the editors write a tree the guard refuses)
   FAKE_CLAUDE_FAIL_MODEL  the model id the failure applies to (default: every model)
+  FAKE_CLAUDE_FAIL_DIM    INVARIANT | DOMAIN | AGG: the failure applies to that editor only (both editors share a model)
 """
-import hashlib
 import json
 import os
 import pathlib
@@ -19,16 +20,17 @@ mission = sys.stdin.read()
 model = argv[argv.index("--model") + 1] if "--model" in argv else os.environ.get("ANTHROPIC_MODEL", "")
 mode = os.environ.get("FAKE_CLAUDE_MODE", "ok")
 fail_model = os.environ.get("FAKE_CLAUDE_FAIL_MODEL", "")
+fail_dim = os.environ.get("FAKE_CLAUDE_FAIL_DIM", "")
 cwd = pathlib.Path.cwd()
+ctx = cwd / "context"
 
-leak = sorted(k for k in os.environ if k.startswith(("CLAUDE_CODE_", "CLAUDE_AGENT_", "VERTEX", "GOOGLE_CLOUD_")) and k not in ("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "CLAUDE_CODE_SUBAGENT_MODEL"))
-leak += [k for k in ("CLAUDE_CODE_USE_VERTEX", "ANTHROPIC_VERTEX_PROJECT_ID", "CLOUD_ML_REGION", "ANTHROPIC_API_KEY") if k in os.environ]
-token = os.environ.get("ANTHROPIC_AUTH_TOKEN", "")
+leak = sorted(k for k in os.environ if k.startswith(("CLAUDE_CODE_", "CLAUDE_AGENT_", "VERTEX", "GOOGLE_CLOUD_", "DEEPSEEK_")) and k != "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC")
+leak += [k for k in ("CLAUDE_CODE_USE_VERTEX", "ANTHROPIC_VERTEX_PROJECT_ID", "CLOUD_ML_REGION", "ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN") if k in os.environ]
 with open(os.environ["FAKE_CLAUDE_LOG"], "a") as handle:
     handle.write(json.dumps({
-        "model": model, "base_url": os.environ.get("ANTHROPIC_BASE_URL"), "token_sha": hashlib.sha256(token.encode()).hexdigest()[:12] if token else None,
+        "model": model, "base_url": os.environ.get("ANTHROPIC_BASE_URL"),
         "leaked_env": leak, "flags": [a for a in argv if a.startswith("--")], "tools": argv[argv.index("--tools") + 1] if "--tools" in argv else None,
-        "cwd_has_context": (cwd / "context").is_dir(), "mission_chars": len(mission), "haiku": os.environ.get("ANTHROPIC_DEFAULT_HAIKU_MODEL"),
+        "cwd_has_context": ctx.is_dir(), "mission_chars": len(mission),
     }) + "\n")
 
 
@@ -41,7 +43,9 @@ def reply(text, **extra):
     sys.exit(0)
 
 
-active = mode != "ok" and (not fail_model or fail_model == model)
+guidance = ctx / "harness" / "guidance.md"
+dim = "INVARIANT" if "INVARIANT" in mission else "DOMAIN" if "DOMAIN" in mission else "AGG"
+active = mode != "ok" and (not fail_model or fail_model == model) and (not fail_dim or fail_dim == dim)
 if active:
     if mode == "quota":
         reply("5-hour limit reached - resets at 3pm", is_error=True, subtype="error_during_execution", api_error_status=429, usage={})
@@ -54,7 +58,6 @@ if active:
     if mode == "budget":
         reply("", is_error=True, subtype="error_max_budget_usd")
 
-ctx = cwd / "context"
 if (ctx / "candidates").is_dir():
     candidates = sorted((ctx / "candidates").glob("*.md"))
     chosen = next((p.stem for p in candidates if "Final answer: 42" in p.read_text()), candidates[0].stem)
@@ -65,9 +68,6 @@ if (ctx / "adoption.json").is_dir() or (ctx / "adoption.json").is_file():
           "lesson: Add a standing rule in guidance.md to recompute the value in code and state the final line last.\n"
           "evidence: The guidance.md row: the probe trajectory recomputed with a tool where the base trajectory answered from memory.\nconfidence: medium, one task\n</experience>")
 
-harness = ctx / "harness"
-guidance = harness / "guidance.md"
-dim = "INVARIANT" if "INVARIANT" in mission else "DOMAIN" if "DOMAIN" in mission else "AGG"
 if active and mode == "badtree":
     guidance.write_text("Remember 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 numbers everywhere.\n")
     reply("<notes>bad on purpose</notes>")
