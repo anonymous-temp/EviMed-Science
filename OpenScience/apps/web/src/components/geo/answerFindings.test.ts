@@ -49,6 +49,13 @@ describe("what is wrong in an answer", () => {
     expect(answerFindings(answer({ errors: [first, gravest] })).findings[0].error?.id).toBe("err_c");
   });
 
+  it("retains an ungraded error and prefers a known severity when the rest of the match is equal", () => {
+    const unknown = error({ id: "unknown", severity: null });
+    const known = error({ id: "known", severity: "S2" });
+    expect(answerFindings(answer({ errors: [unknown] })).findings[0].error?.id).toBe("unknown");
+    expect(answerFindings(answer({ errors: [unknown, known] })).findings[0].error?.id).toBe("known");
+  });
+
   it("marks a row's sentence that stands in the text word for word even when the facts have no statement for it", () => {
     const facts = { ...answerFilled.facts!, statements: [] };
     const { findings, elsewhere } = answerFindings(answer({ facts, errors: [error()] }));

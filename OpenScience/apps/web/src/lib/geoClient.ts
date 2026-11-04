@@ -368,7 +368,7 @@ export interface GeoErrorRow {
   id: string;
   engine: GeoEngine;
   statement: string;
-  severity: GeoSeverity;
+  severity: GeoSeverity | null;
   errorType: GeoErrorType;
   stability: "stable" | "sporadic" | "unconfirmed" | null;
   confirmationReason?: string | null;

@@ -79,7 +79,7 @@ export function ErrorDrawer({
       widthClassName="max-w-2xl"
       description={(
         <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">
-          {claim.severity && <SeverityBadge level={claim.severity} label />}
+          {claim.severity ? <SeverityBadge level={claim.severity} label /> : <span>严重程度未知</span>}
           <span>{`${claim.engines.length} 个引擎`}</span>
           <span>{withdrawn ? "原判定已撤回" : GEO_ERROR_STATUS_WORDS[claim.status] ?? ""}</span>
         </span>
@@ -117,7 +117,7 @@ export function ErrorDrawer({
                   meta={(
                     <span className="inline-flex flex-wrap items-baseline gap-x-2">
                       <span className="text-text-2">{engineName(row.engine)}</span>
-                      <span>{[GEO_ERROR_TYPE_WORDS[row.errorType], row.stability ? GEO_STABILITY_WORDS[row.stability] ?? null : null, (row.judgmentState === "withdrawn" ? "原判定已撤回" : GEO_ERROR_STATUS_WORDS[row.status])].filter(Boolean).join(" · ")}</span>
+                      <span>{[GEO_ERROR_TYPE_WORDS[row.errorType], claim.severity && row.severity === null ? "严重程度未知" : null, row.stability ? GEO_STABILITY_WORDS[row.stability] ?? null : null, (row.judgmentState === "withdrawn" ? "原判定已撤回" : GEO_ERROR_STATUS_WORDS[row.status])].filter(Boolean).join(" · ")}</span>
                       {row.confirmationReason === "delivery_unknown_no_automatic_retry" && <span>复问结果未知，未自动重试，请人工核查。</span>}
                       {group && <ClusterLink groupId={group.id} className="relative z-sticky">{clusterName(group)}</ClusterLink>}
                     </span>

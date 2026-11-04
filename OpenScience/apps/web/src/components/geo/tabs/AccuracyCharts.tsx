@@ -84,7 +84,7 @@ function BySeverity({ errors, summary, selection, emptyAssessment }: { errors: r
     .map((engine) => {
       const mine = errors.filter((error) => error.engine === engine);
       const levels: SeverityLevel[] = ["S4", "S3", "S2", "S1", "S0"];
-      const unknown = summary ? summary.byEngineSeverity[`${engine}:unknown`] ?? 0 : mine.filter(error => !levels.includes(error.severity)).length;
+      const unknown = summary ? summary.byEngineSeverity[`${engine}:unknown`] ?? 0 : mine.filter(error => error.severity === null || !levels.includes(error.severity)).length;
       return {
         engine,
         total: summary?.byEngine[engine] ?? mine.length,

@@ -30,7 +30,7 @@ export interface AnswerFindings {
 }
 
 const RANK: Record<string, number> = { S4: 4, S3: 3, S2: 2, S1: 1, S0: 0 };
-const rank = (error: GeoErrorRow) => RANK[error.severity] ?? -1;
+const rank = (error: GeoErrorRow) => error.severity ? RANK[error.severity] ?? -1 : -1;
 const same = (left: string | null | undefined, right: string | null | undefined) => !!left && !!right && left.trim() === right.trim();
 
 /** The key of a claim: its id, else the sentence it was first seen as. */

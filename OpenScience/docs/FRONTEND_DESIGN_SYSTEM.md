@@ -220,6 +220,8 @@ Import/sharing explains what is included, recipient scope, activation and revoca
 
 Owner **B**. DS23 governs how the module's work is presented. The maintained product scope and workflow live in the [GEO iteration plan](../../docs/superpowers/plans/2026-10-23-geo-profound-pureblue-todo.md); the [2026-11-03 GEO workspace design](../../docs/superpowers/specs/2026-11-03-geo-experience-redesign.md) supersedes its persistent step-rail and bottom-dock placement for GEO only. This design system governs truthful missingness, typed metrics, navigation discoverability, shared components and task/result identity; it does not maintain a second copy of GEO product sequencing. AT07/20 plus that plan's journeys are the acceptance contract.
 
+An error without a recorded severity is labelled as unknown in its list and detail, never as a low severity or as proof of no risk. When grouped engines include both known and unknown severities, the individual ungraded row remains distinguishable from the group's known severity.
+
 ## DS16 VCR product-policy boundary
 
 Owner **B**. DS23 governs how the module's work is presented; the reset's six result destinations take the place of a step rail. The [October 25 AI-native reset](../../docs/superpowers/specs/2026-10-25-vcr-ai-native-product-reset.md) owns task scope, retained scientific objects, recruitment removals and conversation-first entry. Its dated UI handoff preserves the original v3 requirements. Apply shared numeric, provenance, keyboard and result-version rules here. AT08/15/25 and the reset's scientific journeys must pass; a design-document revision does not implement the reset.
