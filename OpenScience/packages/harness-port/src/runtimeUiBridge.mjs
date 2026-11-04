@@ -6,7 +6,9 @@ import { mainViewSession } from './runtimeUiKit.mjs';
  * session id or a child's catalogue address); `sessions.open` and
  * `sessions.openSubagent` are gone.
  */
-export const inject = ['sessions', 'conversation', 'connection', 'workspaces', 'uiWorkspace'];
+/** The kernel's automation-tasks page (`PANEL_ID` of `dsh-client-ui-schedule`). */
+const SCHEDULED_TASKS_PANEL = 'schedules';
+export const inject = ['sessions', 'conversation', 'connection', 'workspaces', 'uiWorkspace', 'layout'];
 
 /**
  * The frame's half of the channel to the hosted shell.
@@ -134,6 +136,8 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
         // scope (and so its composer) exist for the draft below.
         target.__EVIMED_RESULT_REVISION__?.clear(); target.__EVIMED_GEO_PLAN__?.clear(); target.__EVIMED_VCR_SELECTION__?.clear();
         ctx.uiWorkspace.openSession(sessionId);
+        // After the open, which clears the main view's panel: the kernel's own task page, the one global page the shell asks for.
+        if (intent.panel === SCHEDULED_TASKS_PANEL) ctx.layout.selectPanel(SCHEDULED_TASKS_PANEL);
         let draftRestored;
         if (intent.draft !== undefined || intent.resultRevision || intent.geoPlanContext || (Array.isArray(intent.references) && intent.references.length)) {
           const scope = ctx.sessions.scope(sessionId);
@@ -494,6 +498,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     const intent = data.intent;
     if (!intent || !['create', 'open'].includes(intent.kind)
       || typeof intent.sessionId !== 'string' || !/^[A-Za-z0-9_-]{1,160}$/.test(intent.sessionId)
+      || (intent.panel !== undefined && intent.panel !== SCHEDULED_TASKS_PANEL)
       || (intent.draft !== undefined && (typeof intent.draft !== 'string' || intent.draft.length > 100_000))) return;
     // Knowledge-base sources the conversation is opened with: ids and titles,
     // rebuilt from a closed shape (this is another origin's payload).

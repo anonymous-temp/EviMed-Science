@@ -1130,7 +1130,7 @@ export function RuntimeUiFrame({ projectId, origin, scope: scopeInput, scopeOwne
       iframe.current?.contentWindow?.postMessage({
       type: "evimed.runtime-ui.navigate", version: 1, frameId: binding.frameId, projectId,
       requestId: intent.requestId, seq: ++outgoing.current,
-      intent: { kind: intent.kind, sessionId: intent.sessionId, ...(draft === undefined ? {} : { draft }), ...(intent.restoreDraft ? { restoreDraft: true } : {}), ...(intent.resultRevision ? { resultRevision: intent.resultRevision } : {}), ...(stagedReference ? { vcrReference: stagedReference } : {}), ...(intent.geoPlanContext ? { geoPlanContext: intent.geoPlanContext } : {}), ...(intent.references ? { references: intent.references } : {}) },
+      intent: { kind: intent.kind, sessionId: intent.sessionId, ...(intent.panel ? { panel: intent.panel } : {}), ...(draft === undefined ? {} : { draft }), ...(intent.restoreDraft ? { restoreDraft: true } : {}), ...(intent.resultRevision ? { resultRevision: intent.resultRevision } : {}), ...(stagedReference ? { vcrReference: stagedReference } : {}), ...(intent.geoPlanContext ? { geoPlanContext: intent.geoPlanContext } : {}), ...(intent.references ? { references: intent.references } : {}) },
     }, origin);
     })().catch(() => { if (alive) setError(frameFailure("无法保存引用，请重试")); });
     return () => { alive = false; };

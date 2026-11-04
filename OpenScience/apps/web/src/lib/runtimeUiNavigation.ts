@@ -9,6 +9,8 @@ export interface RuntimeUiIntent {
   requestId: string;
   sessionId: string;
   draft?: string;
+  /** The kernel's own page to show once the session is open: its scheduled tasks. */
+  panel?: "schedules";
   restoreDraft?: boolean;
   originReference?: NonNullable<ReturnType<typeof conversationReference>>;
   references?: Array<{ id: string; title: string }>;
@@ -52,6 +54,7 @@ export function runtimeUiIntentFromState(state: unknown, projectId: string): Run
   if (!["create", "open"].includes(intent.kind) || intent.projectId !== projectId
     || typeof intent.requestId !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(intent.requestId)
     || typeof intent.sessionId !== "string" || !/^[A-Za-z0-9_-]{1,160}$/.test(intent.sessionId)
+    || (intent.panel !== undefined && intent.panel !== "schedules")
     || (intent.draft !== undefined && (typeof intent.draft !== "string" || intent.draft.length > 100_000))) return null;
   if (intent.scope && (intent.scope.kind !== "geo" || intent.scope.sessionId !== intent.sessionId || typeof intent.scope.geoProjectId !== "string" || !/^[A-Za-z0-9_-]{1,160}$/.test(intent.scope.geoProjectId) || intent.kind !== "open" || Object.keys(intent.scope).length !== 3)) return null;
   if (intent.geoPlanContext && (Object.keys(intent.geoPlanContext).length !== 1 || !/^gpc_[a-f0-9]{64}$/.test(intent.geoPlanContext.referenceId))) return null;

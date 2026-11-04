@@ -43,6 +43,7 @@ import { describeRunArtifacts, describeRunArtifactRoles, isOrdinaryConversation 
 import { withoutOtherRunsJobFiles, workspaceChangedFiles } from "./runWorkspaceChanges.mjs";
 import { foreignDeliverableIds, overlappingRuns, withoutOtherSessionsFiles } from "./runArtifactAttribution.mjs";
 import { isGoalContinuation } from "./researchGoalState.mjs";
+import { SCHEDULE_ROUTE } from "./notificationService.mjs";
 import { pickMainDocuments } from "./terminalPresentation.mjs";
 import { normalizeRunEstimate } from "./runRoute.mjs";
 import {
@@ -1376,7 +1377,19 @@ function workloadInput(message) {
   if (messageRole(message) !== "user") return false;
   const request = String(message.info?.sourceRequestId ?? "");
   return (message.info?.source === "loopx-continuation" && request.startsWith("loopx:"))
-    || (message.info?.source === "user-question-reply" && request.startsWith("reply:"));
+    || (message.info?.source === "user-question-reply" && request.startsWith("reply:"))
+    || message.info?.source === "schedule";
+}
+
+/**
+ * The instruction a scheduled delivery carries, out of the kernel's wrapper (`[SCHEDULE REMINDER]`, one JSON string on a line of its
+ * own). A format, read as one; anything else is shown as it came. Several tasks due at once share one message: the first names it.
+ * @param {string} text @returns {string}
+ */
+export function scheduledInstruction(text) {
+  const line = /^reminder_prompt_json: (".*")$/m.exec(text);
+  if (!line) return text;
+  try { return String(JSON.parse(line[1])); } catch { return text; }
 }
 
 /**
@@ -8158,6 +8171,9 @@ export class AgentRunStore {
           && String(item.effectiveRouteReason ?? "").startsWith(adoptedRouteReason)) : null;
         const question = first.parts.map((part) => part.type === "text" ? part.text : "").join(" ").trim();
         const continuation = first.source === "loopx-continuation";
+        // A scheduled task's delivery (`@deepseek-ai/dsh-schedule`): nobody dispatched it and nobody is at it. The person asked for it when
+        // they made the task, so it is told in the inbox; it is not their words, so it teaches nothing and goes to no classifier.
+        const scheduled = first.source === "schedule";
         // A late answer to a question the model left pending: the person answered in the page, and the work goes on under the
         // turn that asked (its question, its contract), attended and charged like any turn of theirs.
         const reply = first.source === "user-question-reply";
@@ -8167,6 +8183,7 @@ export class AgentRunStore {
         // Keep the initiating research contract; heartbeat text is not a new specialty request.
         const routed = legacy ? {} : continuation ? { ...previous, effectiveRouteReason: "loopx-continuation" }
           : reply ? { ...previous, effectiveRouteReason: "ask-user-reply" }
+          : scheduled ? { effectiveRouteReason: SCHEDULE_ROUTE }
           : await routeTurn(question, { requestIds });
         // Like a module step dispatched over a conversation's binding, an authenticated request-local
         // route pins this run to its actual capability. The persistent research-session record is unchanged.
@@ -8188,8 +8205,9 @@ export class AgentRunStore {
           startedAt: turn.time > 0 ? new Date(turn.time).toISOString() : null,
           kernelRequestIds: requestIds,
           legacyRunId: legacy?.id,
-          question: (continuation || reply) && previous?.question ? previous.question : questionPreview(reply ? replyAnswerText(question) : question),
-          automated: continuation,
+          question: (continuation || reply) && previous?.question ? previous.question
+            : questionPreview(reply ? replyAnswerText(question) : scheduled ? scheduledInstruction(question) : question),
+          automated: continuation || scheduled,
           ...(goalId ? { goal: { id: goalId, runId: previous?.id ?? null } } : {}),
           estimatedMinutes: selected.estimatedMinutes ?? null,
           forkedFrom: source,

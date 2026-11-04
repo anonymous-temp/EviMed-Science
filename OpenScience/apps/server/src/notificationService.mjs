@@ -346,8 +346,19 @@ const WATCHED_TURN_MS = 120_000;
 export function runFinishedReachesInbox(run, { internalProject = false, automated = false, autopilotOwned = false } = {}) {
   if (internalProject || autopilotOwned) return false;
   if (isGoalContinuation(run)) return goalContinuationNotifies(run);
+  // Nobody watched it finish, however short it was, and the person asked for it. Their own stop is the one thing not told back.
+  if (isScheduledRun(run)) return !(run?.status === "canceled" && run?.canceledBy !== "platform");
   if (automated) return false;
   return runFinishedNotifies(run);
+}
+
+/** The route of a turn a scheduled task delivered (`agentRuns.adoptRuntimeTurns`). */
+export const SCHEDULE_ROUTE = "schedule";
+
+/** @param {Record<string, any> | null | undefined} run @returns {boolean} */
+export function isScheduledRun(run) {
+  const reason = String(run?.effectiveRouteReason ?? "");
+  return reason === SCHEDULE_ROUTE || reason.endsWith(`:${SCHEDULE_ROUTE}`);
 }
 
 /**

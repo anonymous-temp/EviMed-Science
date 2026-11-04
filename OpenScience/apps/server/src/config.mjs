@@ -2473,7 +2473,11 @@ export function loadConfig(overrides = {}) {
     runtimeAskUserMode: parseAskUserMode(overrides.runtimeAskUserMode ?? process.env.OPEN_SCIENCE_RUNTIME_ASK_USER_MODE),
     // The floor between two fresh conversations of one scheduled task (the kernel's `newSessionIntervalSeconds`, 60 to 604,800).
     // A `new` task has no concurrency cap of its own and each delivery is a whole conversation the person pays for.
-    scheduleNewSessionIntervalSeconds: integer("scheduleNewSessionIntervalSeconds", "OPEN_SCIENCE_SCHEDULE_NEW_SESSION_INTERVAL_SECONDS", 900, 60, 604_800),
+    // Starting a stopped runtime when one of its scheduled tasks falls due (`scheduleWake.mjs`). Off, a task is delivered at the runtime's next start.
+    scheduleWakeEnabled: overrides.scheduleWakeEnabled ?? boolEnv("OPEN_SCIENCE_SCHEDULE_WAKE_ENABLED", true),
+    // How long a runtime started for a task stays up with nothing to do. It stops at the usual idle timeout otherwise, and nobody is coming back to it.
+    scheduleWakeRestAfterMs: Number(overrides.scheduleWakeRestAfterMs ?? process.env.OPEN_SCIENCE_SCHEDULE_WAKE_REST_AFTER_MS ?? 600_000),
+    scheduleNewSessionIntervalSeconds: Math.min(604_800, Math.max(60, Number(overrides.scheduleNewSessionIntervalSeconds ?? process.env.OPEN_SCIENCE_SCHEDULE_NEW_SESSION_INTERVAL_SECONDS ?? 900) || 900)),
     // The socket plugins a runtime runs without (preset row ids, comma
     // separated). Empty — every plugin on — is the product; naming one is how
     // a plugin is measured against the kernel's own composition (principle 11).

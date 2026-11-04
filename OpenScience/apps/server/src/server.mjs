@@ -337,6 +337,8 @@ import { RESEARCH_GOAL_ROUTE, researchGoalBlock, researchGoalPrompt } from "./re
 import { ResearchGoals } from "./researchGoalService.mjs";
 import { createResearchGoalRoutes } from "./researchGoalRoutes.mjs";
 import { researchGoalMetricFamilies } from "./researchGoalMetrics.mjs";
+import { ScheduleWakes } from "./scheduleWake.mjs";
+import { scheduleWakeMetricFamilies } from "./scheduleWakeMetrics.mjs";
 import { researchDbMetricFamilies } from "./researchDbMetrics.mjs";
 import { createResearchDbRoutes } from "./researchDbRoutes.mjs";
 import { ResearchDbStaging } from "./researchDbStaging.mjs";
@@ -4392,6 +4394,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   /** @type {{ origins: EvidenceOrigins, publisher: EvidenceCardFromResult | null, continuation: EvidenceContinuation, authors: EvidenceAuthors,
    *   verification: ReturnType<typeof createEvidenceSourceVerification> } | null} */
   let evidencePublish = null;
+  /** Waking a stopped runtime when a scheduled task falls due (`scheduleWake.mjs`); composed further down. @type {ScheduleWakes | null} */
+  let scheduleWakes = null;
   /** 主动科研's long research goals (`researchGoalService.mjs`); composed further down, once what it acts through exists. @type {ResearchGoals | null} */
   let researchGoals = null;
   agentRuns = new AgentRunStore(researchSessions, {
@@ -9358,6 +9362,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const pauseRecurringWork = () => {
     recurringWorkStarted = false;
     void researchGoals?.stop();
+    void scheduleWakes?.stop();
     evolution?.worker.stop();
     rsiOnline?.worker.stop();
     sourceSyncWorker?.pause();
@@ -9454,6 +9459,22 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     log: (line) => process.stderr.write(`${line}\n`),
   }) : null;
   const researchGoalRoutes = createResearchGoalRoutes({ store, goals: researchGoals });
+  scheduleWakes = productDatabase && config.scheduleWakeEnabled !== false ? new ScheduleWakes({
+    database: productDatabase,
+    runtimes: runtimeManager.scheduleWakeFace(),
+    resolveProject: async (userId, projectId) => {
+      const owner = await store.userById(userId);
+      return owner ? store.requireProject(owner, projectId) : null;
+    },
+    assertBalance: async (userId) => { if (credits) await credits.service.assertBalanceForStart(userId, null, { unattended: true }); },
+    notifyNoBalance: async (project) => {
+      await notificationService?.create(project.userId, { noticeType: "notify", projectId: project.id,
+        title: "定时任务没有运行", body: "余额不足，到点的定时任务没有运行。充值后会在下一次到点时继续。",
+        idempotencyKey: `schedule-no-balance:${project.id}:${new Date().toISOString().slice(0, 10)}` });
+    },
+    canRun: () => !maintenanceService || maintenanceService.claimingAllowed(),
+    restAfterMs: config.scheduleWakeRestAfterMs,
+  }) : null;
   const startRecurringWork = async () => {
     if (recurringWorkStarted || (maintenanceService && !maintenanceService.claimingAllowed())) return;
     recurringWorkStarted = true;
@@ -9468,6 +9489,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       memoryIndexWorker?.start();
       nativeMemoryWorker.start();
       researchGoals?.start();
+      scheduleWakes?.start();
       openVikingEngine?.start();
       sourceWorker?.start();
       knowledgePagesWorker?.start();
@@ -9714,6 +9736,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       }
       await connectorCredentials?.migrate();
       await maintenanceService?.initialize();
+      await scheduleWakes?.migrate();
       if (researchDbStaging) {
         // The credential tables and the keyring's coverage of what is saved: a gap is reported here, and every route
         // answers research_db_keyring_incomplete until it is closed.
@@ -9756,6 +9779,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       await capsuleCleanupRun;
       if (researchDbCleanupTimer) clearInterval(researchDbCleanupTimer);
       await researchGoals?.stop();
+      await scheduleWakes?.stop();
       await researchDbCleanupRun;
       // The pass that publishes the official packs at start writes into the database and the data directory: let it end first.
       await officialPacks?.idle();
@@ -11265,6 +11289,7 @@ async function operatorMetricsText({ webVitals = null, judgeService = null, open
   for (const family of researchDbMetricFamilies()) addMetric(lines, family.name, family.help, family.type, family.series);
   // What the control plane did about long research goals, by event (researchGoalMetrics.mjs).
   for (const family of researchGoalMetricFamilies()) addMetric(lines, family.name, family.help, family.type, family.series);
+  for (const family of scheduleWakeMetricFamilies()) addMetric(lines, family.name, family.help, family.type, family.series);
   // Model requests booked uncertain, by why (usageLedger.mjs): a burst is a
   // provider or a caller losing calls, and shows here while it happens.
   const uncertain = usageUncertainMetricFamily();

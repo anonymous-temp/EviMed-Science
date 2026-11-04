@@ -6887,6 +6887,23 @@ export class RuntimeManager {
    * @param {Record<string, any>} project @param {Record<string, any>} [options] as for `start`
    * @param {{ sleep?: (ms: number) => Promise<void>, now?: () => number }} [hooks] a test's clock
    */
+  /** What `ScheduleWakes` acts through. A woken runtime asks for nothing the idle rules do not already allow. */
+  scheduleWakeFace() {
+    return {
+      liveProjects: () => [...this.runtimes.values()].map((runtime) => runtime.project).filter(Boolean),
+      isRunning: (project) => this.runtimes.has(this.key(project)),
+      listTasks: async (project) => {
+        const runtime = this.runtimes.get(this.key(project));
+        if (!runtime) return null;
+        const reply = await this.callKernel(runtime, project, "schedule/list", { request: { limit: 500 } }, AbortSignal.timeout(10_000));
+        return reply?.ok === false ? null : reply?.value ?? reply;
+      },
+      start: (project) => this.start(project, { dispatch: true }),
+      idle: async (project) => (this.runtimeActivity.get(this.key(project))?.activeProxies ?? 0) === 0 && await this.idleVerdict(project) === "idle",
+      rest: (project) => this.stopIdleRuntime(project, { event: "schedule_rest" }),
+    };
+  }
+
   async startWhenRoom(project, options = {}, { sleep: pause = sleep, now = Date.now } = {}) {
     const maxWaitMs = Number(this.config.runtimeStartWaitMs);
     const budget = Number.isFinite(maxWaitMs) && maxWaitMs > 0 ? maxWaitMs : 0;
