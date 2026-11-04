@@ -31,7 +31,8 @@ import { composeVcr } from '../../apps/server/src/vcrComposition.mjs';
 import { pseudonymOf, studyPseudonymKey } from '../../apps/server/src/vcrDataPlane.mjs';
 import { planMatchJudge } from '../../apps/server/src/vcrMatchJudge.mjs';
 import { createVcrTrialCorpus } from '../../apps/server/src/vcrTrialCorpus.mjs';
-import { BOARDS, JOB_TRIALS, SPLITS, chunk, collectionManifestOf, criterionRecord, fail, loadCases, noteForUpload, protocolOf, rankingRecord } from './board_cases.mjs';
+import { BOARDS, JOB_TRIALS, SPLITS, collectionManifestOf, criterionRecord, fail, loadCases, noteForUpload, protocolOf, rankingRecord } from './board_cases.mjs';
+import { bestOf, rankingSteps, stageTwoWanted, stepRemaining } from './steps.mjs';
 import { DEFAULT_DB_NAME, dropDatabase, ensureDatabase, scratchUrl, takeRunnerLock } from './devdb.mjs';
 import { DEFAULT_CAP_CNY, DEFAULT_FLOOR_CNY, GuardStop, createBalanceChecker, createSpendLedger, preflight, watch } from './spend.mjs';
 
@@ -52,7 +53,7 @@ const OPTIONS = {
   'data-dir': { type: 'string' }, boards: { type: 'string' }, 'key-file': { type: 'string' }, 'base-url': { type: 'string', default: 'https://api.deepseek.com' },
   model: { type: 'string', default: 'deepseek-flash' }, 'db-url': { type: 'string' }, 'db-name': { type: 'string', default: DEFAULT_DB_NAME },
   tg2: { type: 'string' }, tg1: { type: 'string' }, labels: { type: 'string' }, 'eval-python': { type: 'string' },
-  'expected-output-tokens': { type: 'string' }, 'progress-seconds': { type: 'string', default: '60' }, 'check-minutes': { type: 'string', default: '5' }, help: { type: 'boolean', default: false },
+  'expected-output-tokens': { type: 'string' }, 'job-retries': { type: 'string', default: '1' }, 'job-trials': { type: 'string', default: String(JOB_TRIALS) }, 'progress-seconds': { type: 'string', default: '60' }, 'check-minutes': { type: 'string', default: '5' }, help: { type: 'boolean', default: false },
 };
 
 /** @param {string | undefined} value @param {string} name @param {number} min @param {number} max */
@@ -101,7 +102,7 @@ export function parseOptions(argv, env = process.env) {
     tg2: values.tg2 ?? env.VCR_BOARDS_TG2 ?? null, tg1: values.tg1 ?? env.VCR_BOARDS_TG1 ?? null, labels: values.labels ?? env.VCR_BOARDS_LABELS ?? null,
     evalPython: values['eval-python'] ?? env.VCR_BOARDS_PYTHON ?? 'python3',
     expectedOutputTokens: values['expected-output-tokens'] == null ? (String(values.thinking) === 'high' ? 2500 : 500) : whole(values['expected-output-tokens'], '--expected-output-tokens', 50, 64_000),
-    progressMs: Number(values['progress-seconds']) * 1000, checkMs: Number(values['check-minutes']) * 60_000,
+    jobRetries: whole(values['job-retries'], '--job-retries', 0, 3), jobTrials: whole(values['job-trials'], '--job-trials', 2, JOB_TRIALS), progressMs: Number(values['progress-seconds']) * 1000, checkMs: Number(values['check-minutes']) * 60_000,
   };
 }
 
@@ -189,18 +190,28 @@ export async function runDevJob(o, deps = {}) {
       collection = { id: corpus?.id, revision: corpus?.revision };
       await corpus?.close();
     }
-    /** @type {Array<{ key: string, patientIds: string[], subjectKeys: string[], targetIds: string[], selection: Record<string, any>, protocol?: ReturnType<typeof protocolOf> }>} */
+    /**
+     * One job each. `step` is what the job is meant to leave behind (see steps.mjs); `follow` marks the second phase of a person above the chunk
+     * size, whose trials are chosen from the saved stage-one rows when it is its turn.
+     * @type {Array<{ key: string, patientIds: string[], subjectKeys: string[], targetIds: string[], selection: Record<string, any> | null, step: { ids: string[], fit: boolean, topK: number | 'all' }, follow?: { k: number, ids: string[] }, protocol?: ReturnType<typeof protocolOf> }>}
+     */
     const items = [];
     /** @type {Map<string, ReturnType<typeof protocolOf> & { versionId: string }>} */
     const protocols = new Map();
     const fitOn = o.mode !== 'criteria';
     const topK = o.mode === 'fit' ? 0 : o.topK;
+    const selectionOf = (/** @type {string} */ subjectKey, /** @type {readonly string[]} */ ids, /** @type {{ fit: boolean, topK: number | 'all' }} */ step) => ({
+      direction: 'patient_to_trial', subjectKey, registryIds: [...ids], collection: collection?.id, collectionRevision: collection?.revision, fit: step.fit, topK: step.topK, thinking: o.thinking });
     if (!criterionBoard) {
       for (const row of cases) {
-        chunk(row.candidateIds.map(String), JOB_TRIALS).forEach((ids, index) => {
-          items.push({ key: `${row.patientId}#${index}`, patientIds: [row.patientId], subjectKeys: [subjectOf(row.patientId)], targetIds: ids,
-            selection: { direction: 'patient_to_trial', subjectKey: subjectOf(row.patientId), registryIds: ids, collection: collection?.id, collectionRevision: collection?.revision, fit: fitOn, topK, thinking: o.thinking } });
-        });
+        const subjectKey = subjectOf(row.patientId);
+        const all = row.candidateIds.map(String);
+        const { steps, follow } = rankingSteps({ ids: all, mode: o.mode, topK: o.topK, jobTrials: o.jobTrials });
+        steps.forEach((step, index) => items.push({ key: `${row.patientId}#${index}`, patientIds: [row.patientId], subjectKeys: [subjectKey], targetIds: step.ids, step, selection: selectionOf(subjectKey, step.ids, step) }));
+        if (follow) {
+          const step = { ids: all.slice(0, follow), fit: false, topK: /** @type {'all'} */ ('all') };
+          items.push({ key: `${row.patientId}#best`, patientIds: [row.patientId], subjectKeys: [subjectKey], targetIds: step.ids, step, follow: { k: follow, ids: all }, selection: null });
+        }
       }
     } else {
       const existing = await vcr.matchStore.protocols(study.id);
@@ -222,8 +233,9 @@ export async function runDevJob(o, deps = {}) {
       }
       for (const [key, group] of groups) {
         const protocol = /** @type {NonNullable<ReturnType<typeof protocols.get>>} */ (protocols.get(key));
-        items.push({ key, patientIds: group.patientIds, subjectKeys: group.patientIds.map(subjectOf), targetIds: [protocol.versionId], protocol,
-          selection: { direction: 'trial_to_patient', protocolVersionId: protocol.versionId, subjectKeys: group.patientIds.map(subjectOf), fit: fitOn, topK, thinking: o.thinking } });
+        const step = { ids: [protocol.versionId], fit: fitOn, topK: /** @type {'all'} */ ('all') };
+        items.push({ key, patientIds: group.patientIds, subjectKeys: group.patientIds.map(subjectOf), targetIds: [protocol.versionId], protocol, step,
+          selection: { direction: 'trial_to_patient', protocolVersionId: protocol.versionId, subjectKeys: group.patientIds.map(subjectOf), fit: fitOn, topK: 'all', thinking: o.thinking } });
       }
     }
 
@@ -242,27 +254,42 @@ export async function runDevJob(o, deps = {}) {
       return out;
     };
     const fitDone = doneBy('fit'), criteriaDone = doneBy('criteria');
-    let estimateCny = 0, expectedCny = 0, estimatedCalls = 0, pairsTotal = 0, pairsRemaining = 0;
+    /** What an item still has to do: calls at stage one and at stage two, over its people. */
+    const leftOf = (/** @type {typeof items[number]} */ item) => {
+      let fitLeft = 0, criteriaLeft = 0;
+      for (const key of item.subjectKeys) {
+        const held = { fit: fitDone.get(key) ?? new Set(), criteria: criteriaDone.get(key) ?? new Set() };
+        if (item.follow) {
+          // The second phase is complete when the person has as many clause-level rows as it was meant to give, whichever trials they are on.
+          const have = item.follow.ids.filter((id) => held.criteria.has(id)).length;
+          criteriaLeft += Math.max(0, item.follow.k - have);
+        } else {
+          const left = stepRemaining(item.step, held);
+          fitLeft += left.fit;
+          criteriaLeft += left.criteria;
+        }
+      }
+      return { fit: fitLeft, criteria: criteriaLeft, complete: fitLeft === 0 && criteriaLeft === 0 };
+    };
+    let estimateCny = 0, expectedCny = 0, estimatedCalls = 0, pairsTotal = 0, callsLeft = 0;
     /** @type {typeof items} */
     const work = [];
     for (const item of items) {
-      const own = item.subjectKeys.map((key) => ({ fit: fitDone.get(key) ?? new Set(), criteria: criteriaDone.get(key) ?? new Set() }));
-      const remaining = item.targetIds.length * item.subjectKeys.length - own.reduce((sum, done) => sum + item.targetIds.filter((id) => (fitOn ? done.fit : done.criteria).has(id)).length, 0);
-      const wantCriteria = o.mode === 'fit' ? 0 : (o.topK === 'all' ? item.targetIds.length : Math.min(Number(o.topK), item.targetIds.length)) * item.subjectKeys.length;
-      const criteriaHeld = own.reduce((sum, done) => sum + Math.min(done.criteria.size, wantCriteria), 0);
-      const complete = remaining === 0 && criteriaHeld >= wantCriteria;
-      pairsTotal += item.targetIds.length * item.subjectKeys.length;
-      pairsRemaining += remaining;
-      if (complete) continue;
+      if (!item.follow) pairsTotal += item.targetIds.length * item.subjectKeys.length;
+      const left = leftOf(item);
+      if (left.complete) continue;
       work.push(item);
-      const planned = await planMatchJudge({ study, selection: item.selection, matchStore: vcr.matchStore, documents: vcr.documents, subjectTable: null, config, peak: peakNow });
+      const calls = left.fit + left.criteria;
+      callsLeft += calls;
+      // Planned on the selection itself (for a second phase, on the trials a first guess would take): its per-call figures, times the calls still to make.
+      const selection = item.selection ?? selectionOf(item.subjectKeys[0], item.targetIds, item.step);
+      const planned = await planMatchJudge({ study, selection, matchStore: vcr.matchStore, documents: vcr.documents, subjectTable: null, config, peak: peakNow });
       if (!planned.ok) throw fail(`A job could not be planned: ${planned.message}`, 'plan_refused');
-      const fraction = Math.max(0.05, remaining / Math.max(1, item.targetIds.length * item.subjectKeys.length));
-      const scale = remaining ? fraction : 0.05;
-      estimateCny += (planned.scenario.estimate.cost ?? 0) * scale;
-      estimatedCalls += Math.ceil(planned.scenario.estimate.calls * scale);
+      const each = Math.max(1, planned.scenario.estimate.calls);
+      estimateCny += ((planned.scenario.estimate.cost ?? 0) / each) * calls;
+      estimatedCalls += calls;
       // The plan's figure charges every call its whole output allowance. The guard also reads what a call is expected to use.
-      const expected = priceUsage({ resourceType: 'model', model: o.model, cacheHit: 0, cacheMiss: planned.scenario.estimate.inputTokens * scale, output: planned.scenario.estimate.calls * scale * o.expectedOutputTokens, peak: peakNow });
+      const expected = priceUsage({ resourceType: 'model', model: o.model, cacheHit: 0, cacheMiss: (planned.scenario.estimate.inputTokens / each) * calls, output: calls * o.expectedOutputTokens, peak: peakNow });
       expectedCny += expected.priced ? expected.cost : 0;
     }
     const spendLedger = createSpendLedger(path.join(o.dataDir, 'spend-ledger.jsonl'));
@@ -288,14 +315,14 @@ export async function runDevJob(o, deps = {}) {
     }
     const recordedBefore = spendLedger.recorded();
     log(`[dev_job] board=${o.board} arm=${o.arm} mode=${o.mode} thinking=${o.thinking} topK=${o.topK} concurrency=${o.concurrency} split=${o.split} patients=${cases.length} (uploaded ${uploaded} notes)`);
-    log(`[dev_job] pairs ${pairsTotal}, still to judge ${pairsRemaining} in ${work.length} job(s); estimate CNY ${yuan(expectedCny)} expected (${estimatedCalls} calls, ${o.expectedOutputTokens} output tokens each), at most ${yuan(estimateCny)} if every call used its whole output allowance; recorded so far CNY ${yuan(recordedBefore)} of cap ${yuan(o.capCny)}${peakNow ? '; PEAK window (full price)' : ''}`);
+    log(`[dev_job] pairs ${pairsTotal}, ${callsLeft} call(s) still to make in ${work.length} job(s); estimate CNY ${yuan(expectedCny)} expected (${estimatedCalls} calls, ${o.expectedOutputTokens} output tokens each), at most ${yuan(estimateCny)} if every call used its whole output allowance; recorded so far CNY ${yuan(recordedBefore)} of cap ${yuan(o.capCny)}${peakNow ? '; PEAK window (full price)' : ''}`);
 
     const balance = deps.balance !== undefined ? deps.balance
       : (o.keyFile && new URL(o.baseUrl).origin === REAL_PROVIDER ? createBalanceChecker({ python: o.evalPython, script: path.join(HERE, 'budget.py'), keyFile: o.keyFile, floor: o.floorCny }) : null);
     if (!balance) log('[dev_job] no balance check: this is not the real provider (or the test supplies none).');
     /** @type {Record<string, any>} */
     const summary = { board: o.board, arm: o.arm, mode: o.mode, thinking: o.thinking, topK: o.topK, split: o.split, model: o.model, concurrency: o.concurrency,
-      patients: cases.length, pairsTotal, pairsRemainingAtStart: pairsRemaining, jobs: work.length, estimateCny: Number(expectedCny.toFixed(4)), estimateUpperBoundCny: Number(estimateCny.toFixed(4)), peakAtStart: peakNow, startedAt: new Date(startedAt).toISOString() };
+      patients: cases.length, pairsTotal, callsLeftAtStart: callsLeft, jobs: work.length, estimateCny: Number(expectedCny.toFixed(4)), estimateUpperBoundCny: Number(estimateCny.toFixed(4)), peakAtStart: peakNow, startedAt: new Date(startedAt).toISOString() };
     let balanceNow = null;
     if (o.planOnly) {
       summary.planOnly = true;
@@ -349,18 +376,44 @@ export async function runDevJob(o, deps = {}) {
     };
     monitor = setInterval(() => { progress().catch(() => {}); }, Math.max(50, o.progressMs));
     monitor.unref?.();
+    /** @type {Array<{ jobId: string, item: string, attempt: number, state: string, code: string | null, message: string, recovered: boolean }>} */
+    const jobFailures = [];
+    const runJob = async (/** @type {Record<string, any>} */ selection, /** @type {string} */ key) => {
+      for (let attempt = 0; attempt <= o.jobRetries; attempt += 1) {
+        const started = await vcr.matchJudge.start(study, selection, { actor: OWNER });
+        myJobs.push(String(started.jobId));
+        const claimed = await vcr.jobs.claim({ lane: 'slow' });
+        const job = claimed.find((/** @type {any} */ row) => String(row.id) === String(started.jobId));
+        if (!job) throw fail(`The job ${started.jobId} was not claimable (${claimed.length} other job(s) claimed).`, 'job_not_claimed');
+        currentJob = { studyId: study.id, id: String(job.id) };
+        await vcr.jobs.advance(job);
+        currentJob = null;
+        const cost = (await costOf([String(started.jobId)])).get(String(started.jobId));
+        spendLedger.append({ kind: 'job', arm: o.arm, board: o.board, jobId: String(started.jobId), costCny: cost?.cny ?? 0, calls: cost?.calls ?? 0 });
+        // A job that ended is read for how it ended: the pairs it wrote are in the ledger either way, but a job that failed did not finish its stages.
+        const ended = (await database.query('SELECT state, error FROM evimed_vcr.jobs WHERE id = $1', [String(started.jobId)])).rows[0];
+        if (!ended || ended.state === 'succeeded' || ended.state === 'canceled') return;
+        jobFailures.push({ jobId: String(started.jobId), item: key, attempt, state: String(ended.state), code: ended.error?.code ?? null, message: String(ended.error?.message ?? '').slice(0, 200), recovered: false });
+        log(`[dev_job] job ${started.jobId} (${key}) ended ${ended.state}${ended.error?.code ? ` (${ended.error.code})` : ''}${attempt < o.jobRetries && ended.state === 'failed' && !stopSignal ? '; starting it again, the ledger keeps what was judged' : ''}`);
+        if (ended.state !== 'failed' || stopSignal) return;
+      }
+    };
     for (const item of work) {
       if (stopSignal) break;
-      const started = await vcr.matchJudge.start(study, item.selection, { actor: OWNER });
-      myJobs.push(String(started.jobId));
-      const claimed = await vcr.jobs.claim({ lane: 'slow' });
-      const job = claimed.find((/** @type {any} */ row) => String(row.id) === String(started.jobId));
-      if (!job) throw fail(`The job ${started.jobId} was not claimable (${claimed.length} other job(s) claimed).`, 'job_not_claimed');
-      currentJob = { studyId: study.id, id: String(job.id) };
-      await vcr.jobs.advance(job);
-      currentJob = null;
-      const cost = (await costOf([String(started.jobId)])).get(String(started.jobId));
-      spendLedger.append({ kind: 'job', arm: o.arm, board: o.board, jobId: String(started.jobId), costCny: cost?.cny ?? 0, calls: cost?.calls ?? 0 });
+      let selection = item.selection;
+      if (item.follow) {
+        // The second phase of a long list: the person's own best trials, from the stage-one rows that are saved now.
+        const saved = await vcr.matchJudgments.list({ studyId: study.id, subjectKey: item.subjectKeys[0] });
+        const best = bestOf(saved, item.follow.ids, item.follow.k);
+        const have = new Set(saved.filter((/** @type {any} */ row) => row.status === 'done' && row.mode === 'criteria').map((/** @type {any} */ row) => row.targetId));
+        if (!best.length || best.every((id) => have.has(id))) continue;
+        selection = selectionOf(item.subjectKeys[0], best, { fit: false, topK: 'all' });
+      }
+      const before = jobFailures.length;
+      await runJob(/** @type {Record<string, any>} */ (selection), item.key);
+      const last = jobFailures.slice(before).at(-1);
+      // The attempts of one item that ended well after a failure are recovered; the last attempt's failure is not.
+      if (last) { const ok = (await database.query("SELECT state FROM evimed_vcr.jobs WHERE id = $1", [String(myJobs.at(-1))])).rows[0]?.state === 'succeeded'; for (const failure of jobFailures.slice(before)) failure.recovered = ok; }
     }
     clearInterval(monitor);
     monitor = null;
@@ -390,7 +443,8 @@ export async function runDevJob(o, deps = {}) {
           ranking.push(...page.ranking);
           if (!page.more) break;
         }
-        records.push(rankingRecord({ case: row, ranking, failed: await failedOf(subjectKey, (r) => String(r.targetId)), usage: await usageOf(subjectKey) }));
+        records.push(rankingRecord({ case: row, ranking, failed: await failedOf(subjectKey, (r) => String(r.targetId)), usage: await usageOf(subjectKey),
+          stageTwo: { wanted: stageTwoWanted({ candidates: row.candidateIds.length, mode: o.mode, topK: o.topK }) } }));
       } else {
         /** @type {Map<string, { ranking: any[], numbered: any[] }>} */
         const byTrial = new Map();
@@ -413,7 +467,7 @@ export async function runDevJob(o, deps = {}) {
     const spentRun = [...(await costOf(myJobs)).values()];
     Object.assign(summary, {
       finishedAt: now().toISOString(), wallMinutes: Number(((Date.now() - startedAt) / 60_000).toFixed(2)), patientStatus: statusCounts, pairsFailedByCode: failedByCode,
-      jobsRun: myJobs.length, calls: spentRun.reduce((s, r) => s + r.calls, 0), uncertainCalls: spentRun.reduce((s, r) => s + r.uncertain, 0),
+      jobsRun: myJobs.length, ...(jobFailures.length ? { jobFailures } : {}), calls: spentRun.reduce((s, r) => s + r.calls, 0), uncertainCalls: spentRun.reduce((s, r) => s + r.uncertain, 0),
       inputTokens: spentRun.reduce((s, r) => s + r.inputTokens, 0), outputTokens: spentRun.reduce((s, r) => s + r.outputTokens, 0),
       costCnyThisRun: Number(spentRun.reduce((s, r) => s + r.cny, 0).toFixed(4)), campaignCnyAfter: Number(spendLedger.recorded().toFixed(4)),
       ...(Object.keys(reports).length ? { reported: reports } : {}),
@@ -431,7 +485,9 @@ export async function runDevJob(o, deps = {}) {
     fs.writeFileSync(path.join(outDir, 'summary.json'), `${JSON.stringify(summary, null, 2)}\n`);
 
     const failedPairs = Object.values(failedByCode).reduce((s, n) => s + n, 0);
-    return { exitCode: stopSignal ? EXIT.stopped : failedPairs ? EXIT.failedPairs : EXIT.finished, summary, outDir };
+    const unrecovered = jobFailures.filter((failure) => !failure.recovered).length;
+    const incomplete = records.filter((record) => record.status !== 'complete').length;
+    return { exitCode: stopSignal ? EXIT.stopped : failedPairs || unrecovered || incomplete ? EXIT.failedPairs : EXIT.finished, summary, outDir };
   } finally {
     if (monitor) clearInterval(monitor);
     if (deps.signals !== false) for (const name of ['SIGINT', 'SIGTERM']) process.off(name, onSignal);
@@ -445,7 +501,7 @@ export async function runDevJob(o, deps = {}) {
  * Hand the export to `score.py`, which reads the pinned labels and qrels in its own process; only its aggregate output reaches the log.
  * @param {Record<string, any>} o @param {typeof BOARDS[keyof typeof BOARDS]} spec @param {string} outDir @param {string} file @param {(line: string) => void} log
  */
-async function scoreRun(o, spec, outDir, file, log) {
+export async function scoreRun(o, spec, outDir, file, log) {
   const missing = [spec.scorer !== 'c' && !o.tg2 && '--tg2', spec.scorer === 'a' && !o.tg1 && '--tg1', spec.scorer === 'c' && !o.labels && '--labels'].filter(Boolean);
   if (missing.length) { log(`[dev_job] not scored: ${missing.join(', ')} needed (or VCR_BOARDS_TG2, VCR_BOARDS_TG1, VCR_BOARDS_LABELS).`); return { skipped: missing }; }
   const args = ['-I', '-B', path.join(HERE, 'score.py'), spec.scorer, '--boards', o.boardsDir, '--work', path.join(outDir, 'score-work'), '--out', path.join(outDir, 'score')];

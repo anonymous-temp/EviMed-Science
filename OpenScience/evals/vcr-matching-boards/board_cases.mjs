@@ -107,10 +107,24 @@ export function recordStatus({ candidates, judged, failed }) {
 }
 
 /**
- * One ranking-board record (the shape `to_official.py` reads) from a patient's saved judgments, in the reader's order.
- * @param {{ case: Record<string, any>, ranking: Array<Record<string, any>>, failed: Array<{ registryId: string, code: string }>, usage?: Record<string, number> | null }} input
+ * The clause rows of one judgment as a record carries them: the clause's number, side and words, the label, the sentence ids that
+ * back it, and whether the record stated it (`stated`) or the label stands on silence (`silent`).
+ * @param {unknown} rows
  */
-export function rankingRecord({ case: row, ranking, failed, usage = null }) {
+export function criteriaRows(rows) {
+  return (Array.isArray(rows) ? rows : []).map((row) => ({
+    number: row.number, kind: row.kind ?? null, label: row.label ?? null, sentenceIds: row.sentenceIds ?? [], basis: row.basis ?? null,
+    ...(row.clause != null ? { clause: row.clause } : {}), ...(row.reason ? { reason: row.reason } : {}),
+  }));
+}
+
+/**
+ * One ranking-board record (the shape `to_official.py` reads) from a patient's saved judgments, in the reader's order. A judgment that
+ * has clause rows carries them as `criteria`, so the export holds everything the platform saved for the pair. `stageTwo.wanted` is how
+ * many clause-level judgments the run was meant to end with: a person whose trials are all scored but who has fewer is `partial`.
+ * @param {{ case: Record<string, any>, ranking: Array<Record<string, any>>, failed: Array<{ registryId: string, code: string }>, usage?: Record<string, number> | null, stageTwo?: { wanted: number } | null }} input
+ */
+export function rankingRecord({ case: row, ranking, failed, usage = null, stageTwo = null }) {
   const known = new Set(row.candidateIds.map(String));
   const seen = new Set();
   const entries = [];
@@ -118,14 +132,20 @@ export function rankingRecord({ case: row, ranking, failed, usage = null }) {
     const registryId = String(item.target?.registryId ?? item.target?.id ?? '');
     if (!known.has(registryId) || seen.has(registryId)) continue;
     seen.add(registryId);
-    entries.push({ registryId, fit: item.fit ?? null, confidence: item.confidence ?? null, verdict: item.verdict ?? null, rank: entries.length + 1 });
+    const criteria = criteriaRows(item.criteria);
+    entries.push({ registryId, fit: item.fit ?? null, confidence: item.confidence ?? null, verdict: item.verdict ?? null, rank: entries.length + 1,
+      ...(criteria.length ? { criteria } : {}) });
   }
   const lost = failed.filter((entry) => known.has(String(entry.registryId)) && !seen.has(String(entry.registryId)));
+  const held = entries.filter((entry) => entry.criteria).length;
+  let status = recordStatus({ candidates: row.candidateIds.length, judged: entries.length, failed: lost.length });
+  if (status === 'complete' && stageTwo && held < stageTwo.wanted) status = 'partial';
   return {
     patientId: row.patientId,
-    status: recordStatus({ candidates: row.candidateIds.length, judged: entries.length, failed: lost.length }),
+    status,
     ranking: entries,
     failed: lost.map((entry) => ({ registryId: String(entry.registryId), code: String(entry.code ?? 'unknown') })),
+    ...(stageTwo ? { stageTwo: { wanted: stageTwo.wanted, held } } : {}),
     ...(usage ? { usage } : {}),
   };
 }

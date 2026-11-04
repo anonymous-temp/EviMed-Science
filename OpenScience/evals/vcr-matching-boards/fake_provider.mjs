@@ -30,10 +30,10 @@ export function clausesOfPrompt(user) {
 }
 
 /**
- * @param {{ expectThinking?: 'off' | 'high' | null, expectKey?: string | null, latencyMs?: number, failWhen?: ((index: number, body: any) => number | null) | null, port?: number }} [options]
+ * @param {{ expectThinking?: 'off' | 'high' | null, expectKey?: string | null, latencyMs?: number, failWhen?: ((index: number, body: any) => number | null) | null, contentWhen?: ((index: number, body: any) => string | null) | null, port?: number }} [options]
  * @returns {Promise<{ url: string, requests: any[], violations: string[], close: () => Promise<void> }>}
  */
-export async function startFakeProvider({ expectThinking = null, expectKey = null, latencyMs = 0, failWhen = null, port = 0 } = {}) {
+export async function startFakeProvider({ expectThinking = null, expectKey = null, latencyMs = 0, failWhen = null, contentWhen = null, port = 0 } = {}) {
   /** @type {any[]} */ const requests = [];
   /** @type {string[]} */ const violations = [];
   const server = http.createServer((req, res) => {
@@ -54,7 +54,8 @@ export async function startFakeProvider({ expectThinking = null, expectKey = nul
       const injected = failWhen ? failWhen(index, body) : null;
       setTimeout(() => {
         if (injected) { res.writeHead(injected, { 'content-type': 'application/json' }).end(JSON.stringify({ error: { message: 'injected' } })); return; }
-        const content = criteria
+        const said = contentWhen ? contentWhen(index, body) : null;
+        const content = said != null ? said : criteria
           ? JSON.stringify(Object.fromEntries(clausesOfPrompt(user).map(({ number, kind }) => [String(number), [`Judged from the note (${bucket(user + number, 97)}).`, [0], kind === 'exclusion' ? 'not excluded' : 'included']])))
           : JSON.stringify({ score: bucket(user, 101), confidence: Number((0.5 + bucket(`${user}c`, 50) / 100).toFixed(2)), eligible_reasons: '1. The note states a matching condition.', ineligible_reasons: '', missing_information: '', rationale: 'Judged from the note.' });
         const promptTokens = 700 + Math.floor(user.length / 4);

@@ -12,7 +12,9 @@ import path from 'node:path';
 import { after, before, describe, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { BOARDS, chunk, criterionRecord, loadCases, noteForUpload, protocolOf, rankingRecord, recordStatus } from './board_cases.mjs';
+import { bestOf, rankingSteps, stageTwoWanted, stepRemaining } from './steps.mjs';
 import { EXIT, main, parseOptions, runDevJob } from './dev_job.mjs';
+import { createSavedReader } from './run_product.mjs';
 import { dropDatabase, scratchUrl } from './devdb.mjs';
 import { startFakeProvider } from './fake_provider.mjs';
 import { GuardStop, createBalanceChecker, createSpendLedger, inPeakWindow, preflight, watch } from './spend.mjs';
@@ -192,6 +194,52 @@ describe('boards and records', () => {
   });
 });
 
+describe('how a person is cut into jobs', () => {
+  const ids = Array.from({ length: 11 }, (_, index) => `NCT0000000${String(index).padStart(2, '0')}`);
+  test('stage two stays the person\'s: within one job it is the job\'s, above the chunk size it is a second phase over the best of all chunks', () => {
+    assert.deepEqual(rankingSteps({ ids, mode: 'fit', topK: 0, jobTrials: 5 }).steps.map((step) => [step.ids.length, step.fit, step.topK]), [[5, true, 0], [5, true, 0], [1, true, 0]]);
+    assert.deepEqual(rankingSteps({ ids: ids.slice(0, 5), mode: 'both', topK: 3, jobTrials: 5 }), { steps: [{ ids: ids.slice(0, 5), fit: true, topK: 3 }], follow: 0 });
+    const long = rankingSteps({ ids, mode: 'both', topK: 3, jobTrials: 5 });
+    assert.deepEqual(long.steps.map((step) => [step.ids.length, step.fit, step.topK]), [[5, true, 0], [5, true, 0], [1, true, 0]], 'no chunk takes a K of its own');
+    assert.equal(long.follow, 3);
+    assert.equal(rankingSteps({ ids, mode: 'both', topK: 30, jobTrials: 5 }).follow, 11, 'a K beyond the list is the list');
+    assert.deepEqual(rankingSteps({ ids, mode: 'both', topK: 'all', jobTrials: 5 }).steps.map((step) => step.topK), ['all', 'all', 'all']);
+    assert.equal(rankingSteps({ ids, mode: 'both', topK: 0, jobTrials: 5 }).follow, 0);
+    assert.deepEqual(rankingSteps({ ids, mode: 'criteria', topK: 4, jobTrials: 5 }).steps, [{ ids: ids.slice(0, 4), fit: false, topK: 'all' }], 'without stage one, the first K named');
+    assert.equal(rankingSteps({ ids, mode: 'criteria', topK: 'all', jobTrials: 5 }).steps.length, 3);
+  });
+  test('the best of a person is read from the saved stage-one rows, in the job\'s own order, and only from finished ones', () => {
+    const row = (/** @type {string} */ targetId, /** @type {number | null} */ fit, /** @type {number} */ confidence, status = 'done', mode = 'fit') => ({ mode, status, targetId, fit, confidence });
+    const rows = [row('NCT00000003', 70, 0.5), row('NCT00000001', 90, 0.5), row('NCT00000002', 90, 0.9), row('NCT00000004', 99, 0.9, 'failed'), row('NCT00000005', 95, 0.9, 'done', 'criteria'), row('NCT00000009', 100, 1)];
+    assert.deepEqual(bestOf(rows, ['NCT00000001', 'NCT00000002', 'NCT00000003', 'NCT00000004', 'NCT00000005'], 2), ['NCT00000002', 'NCT00000001']);
+    assert.deepEqual(bestOf(rows, ['NCT00000003'], 5), ['NCT00000003'], 'ids outside the list never come in');
+    assert.deepEqual(bestOf([], ids, 3), []);
+  });
+  test('what is left of a step, and how many clause-level judgments a run is meant to end with', () => {
+    const held = (/** @type {string[]} */ fit, /** @type {string[]} */ criteria) => ({ fit: new Set(fit), criteria: new Set(criteria) });
+    assert.deepEqual(stepRemaining({ ids: ['a', 'b', 'c'], fit: true, topK: 2 }, held(['a', 'b'], ['a'])), { fit: 1, criteria: 1, complete: false });
+    assert.deepEqual(stepRemaining({ ids: ['a', 'b', 'c'], fit: true, topK: 2 }, held(['a', 'b', 'c'], ['a', 'b'])), { fit: 0, criteria: 0, complete: true });
+    assert.deepEqual(stepRemaining({ ids: ['a', 'b', 'c'], fit: true, topK: 0 }, held(['a', 'b', 'c'], [])), { fit: 0, criteria: 0, complete: true });
+    assert.deepEqual(stepRemaining({ ids: ['a', 'b'], fit: false, topK: 'all' }, held([], ['a'])), { fit: 0, criteria: 1, complete: false });
+    assert.equal(stageTwoWanted({ candidates: 6, mode: 'fit', topK: 0 }), 0);
+    assert.equal(stageTwoWanted({ candidates: 6, mode: 'both', topK: 2 }), 2);
+    assert.equal(stageTwoWanted({ candidates: 1, mode: 'both', topK: 2 }), 1);
+    assert.equal(stageTwoWanted({ candidates: 6, mode: 'criteria', topK: 'all' }), 6);
+  });
+  test('a record keeps the clause rows a judgment holds, and a person scored on every trial but short of their clause-level judgments is partial', () => {
+    const row = { patientId: 'p1', candidateIds: ['NCT00000001', 'NCT00000002'] };
+    const clause = { number: 1, kind: 'inclusion', clause: 'Adults', label: 'included', reason: 'Stated.', sentenceIds: [0], basis: 'stated', evidence: [{ text: 'never exported' }], display: '符合' };
+    const ranking = [{ target: { registryId: 'NCT00000002' }, fit: 80, confidence: 0.8, verdict: 'eligible', criteria: [clause] }, { target: { registryId: 'NCT00000001' }, fit: 40, confidence: 0.4, verdict: 'possible', criteria: [] }];
+    const record = rankingRecord({ case: row, ranking, failed: [], stageTwo: { wanted: 1 } });
+    assert.deepEqual(record.ranking[0].criteria, [{ number: 1, kind: 'inclusion', label: 'included', sentenceIds: [0], basis: 'stated', clause: 'Adults', reason: 'Stated.' }]);
+    assert.equal('criteria' in record.ranking[1], false, 'a pair with no clause rows carries none');
+    assert.deepEqual([record.status, record.stageTwo], ['complete', { wanted: 1, held: 1 }]);
+    const short = rankingRecord({ case: row, ranking, failed: [], stageTwo: { wanted: 2 } });
+    assert.deepEqual([short.status, short.stageTwo], ['partial', { wanted: 2, held: 1 }]);
+    assert.equal(rankingRecord({ case: row, ranking, failed: [] }).status, 'complete', 'with no stage two named nothing changes');
+  });
+});
+
 // ---------------------------------------------------------------------------------------------------------------------
 // The loop on a synthetic board: real PostgreSQL, the platform's own module, a local fake provider.
 // ---------------------------------------------------------------------------------------------------------------------
@@ -262,7 +310,8 @@ describe('the loop on a synthetic board', { skip: !SERVER_URL && 'OPEN_SCIENCE_T
       const records = fs.readFileSync(file, 'utf8').trim().split('\n').map((line) => JSON.parse(line));
       assert.deepEqual(records.map((record) => record.patientId), board.cases.map((row) => row.patientId));
       for (const [index, record] of records.entries()) {
-        assert.deepEqual(Object.keys(record).sort(), ['failed', 'patientId', 'ranking', 'status', 'usage']);
+        assert.deepEqual(Object.keys(record).sort(), ['failed', 'patientId', 'ranking', 'stageTwo', 'status', 'usage']);
+        assert.deepEqual(record.stageTwo, { wanted: 0, held: 0 });
         assert.equal(record.status, 'complete');
         assert.equal(record.ranking.length, board.cases[index].candidateCount);
         assert.deepEqual(record.ranking.map((entry) => entry.rank), record.ranking.map((_, at) => at + 1));
@@ -280,6 +329,23 @@ describe('the loop on a synthetic board', { skip: !SERVER_URL && 'OPEN_SCIENCE_T
       assert.deepEqual(payload.cover_page_list.map((entry) => entry.trial_id), records[0].ranking.map((entry) => entry.registryId));
       assert.ok(fs.readFileSync(path.join(dir, 'data', 'spend-ledger.jsonl'), 'utf8').trim().split('\n').length >= 5, 'one ledger line per job');
     } finally { await provider.close(); }
+  });
+
+  test('the product runner reads the same saved rows back: its reader over the database gives the ranking dev_job exported', async () => {
+    const reader = await createSavedReader({ databaseUrl: dbUrl, tree: path.resolve(HERE, '../..') });
+    try {
+      const exported = fs.readFileSync(path.join(dir, 'data', 'dev-job', 'arm1', 'sigir', 'judgments.jsonl'), 'utf8').trim().split('\n').map((line) => JSON.parse(line));
+      const arm = JSON.parse(fs.readFileSync(path.join(dir, 'data', 'dev-job', 'arm1', 'sigir', 'arm.json'), 'utf8'));
+      const read = await reader.read({ userId: 'vmdev', projectId: 'vmdev-arm1-sigir' });
+      assert.deepEqual(read.studies, [arm.studyId]);
+      assert.equal(read.subjects, 5, 'five people, one study');
+      assert.match(read.readFrom, /^saved judgments \(job\)$/u);
+      const best = read.ranking.map((entry) => entry.target.registryId);
+      assert.equal(best.length > 0 && exported.some((record) => JSON.stringify(record.ranking.map((e) => e.registryId)) === JSON.stringify(best)), true, 'the best-judged person\'s ranking is one of the exported ones, in the same order');
+      assert.ok(read.usage.costCny >= 0);
+      const nobody = await reader.read({ userId: 'vmdev', projectId: 'no-such-project' });
+      assert.deepEqual([nobody.ranking, nobody.failed, nobody.subjects], [[], [], 0]);
+    } finally { await reader.close(); }
   });
 
   test('the same arm run again judges nothing and pays nothing; settings that differ are refused under the same name', async () => {
@@ -372,6 +438,83 @@ describe('the loop on a synthetic board', { skip: !SERVER_URL && 'OPEN_SCIENCE_T
       const retried = await run(['--concurrency', '3', '--limit-patients', '2'], provider.url, {}, 'failing');
       assert.equal(retried.exitCode, EXIT.finished, retried.lines.join('\n'));
       assert.equal(provider.requests.length - paid, 2, 'one call for each patient\'s failed pair');
+    } finally { await provider.close(); }
+  });
+
+  test('mode both: the best K of each person carry clause rows in the export, the rest do not, and the stage-two calls are the clause-level ones', async () => {
+    const provider = await startFakeProvider({ expectThinking: 'high' });
+    try {
+      const result = await run(['--mode', 'both', '--top-k', '2', '--concurrency', '3'], provider.url, {}, 'both-2');
+      assert.equal(result.exitCode, EXIT.finished, result.lines.join('\n'));
+      assert.equal(provider.requests.filter((request) => !request.criteria).length, board.pairs);
+      assert.equal(provider.requests.filter((request) => request.criteria).length, 2 * board.cases.length, 'K clause-level calls a person');
+      const records = fs.readFileSync(path.join(result.outDir, 'judgments.jsonl'), 'utf8').trim().split('\n').map((line) => JSON.parse(line));
+      for (const record of records) {
+        assert.equal(record.status, 'complete');
+        assert.deepEqual(record.stageTwo, { wanted: 2, held: 2 });
+        const withClauses = record.ranking.filter((entry) => entry.criteria);
+        assert.equal(withClauses.length, 2);
+        assert.ok(withClauses.every((entry) => entry.criteria.length === 4 && entry.criteria.every((c) => c.label && c.kind && Number.isInteger(c.number) && c.basis)), 'the four clauses of a synthetic trial, with label, side and basis');
+        assert.deepEqual(record.ranking.map((entry, at) => (entry.criteria ? at : -1)).filter((at) => at >= 0).length, 2);
+      }
+      assert.equal(result.summary.jobFailures, undefined);
+    } finally { await provider.close(); }
+  });
+
+  test('a person whose trials are all scored but whose clause-level stage did not run is partial, the job failure is reported, and the resume does the stage two alone', async () => {
+    const refusing = { on: true };
+    const provider = await startFakeProvider({ failWhen: (_index, body) => (refusing.on && String(body.messages?.[0]?.content ?? '').includes('at the criterion level') ? 400 : null) });
+    try {
+      const first = await run(['--mode', 'both', '--top-k', '2', '--concurrency', '3'], provider.url, {}, 'stage-two');
+      assert.equal(first.exitCode, EXIT.failedPairs, 'a stage that did not finish is not a finished run');
+      const records = fs.readFileSync(path.join(first.outDir, 'judgments.jsonl'), 'utf8').trim().split('\n').map((line) => JSON.parse(line));
+      assert.ok(records.every((record) => record.ranking.length === record.ranking.length && record.status === 'partial' && record.stageTwo.held === 0 && record.stageTwo.wanted === 2), 'every trial scored, none judged clause by clause: partial, and the record says how many it was meant to hold');
+      assert.ok(records.every((record) => record.failed.length === 0 || record.failed.every((entry) => entry.registryId)), 'the pairs the provider refused are named');
+      const fitCalls = provider.requests.filter((request) => !request.criteria).length;
+      assert.equal(fitCalls, board.pairs);
+      refusing.on = false;
+      const before = provider.requests.length;
+      const second = await run(['--mode', 'both', '--top-k', '2', '--concurrency', '3'], provider.url, {}, 'stage-two');
+      assert.equal(second.exitCode, EXIT.finished, second.lines.join('\n'));
+      const added = provider.requests.slice(before);
+      assert.equal(added.filter((request) => !request.criteria).length, 0, 'no stage-one call is made again');
+      assert.equal(added.filter((request) => request.criteria).length, 2 * board.cases.length, 'only the clause-level judgments');
+      assert.equal(second.summary.patientStatus.complete, 5);
+    } finally { await provider.close(); }
+  });
+
+  test('a job that fails is read, retried once, reported with its reason, and the run does not end as finished', async () => {
+    const provider = await startFakeProvider({ failWhen: () => 402 });
+    try {
+      const result = await run(['--limit-patients', '1'], provider.url, {}, 'broke');
+      assert.equal(result.exitCode, EXIT.failedPairs);
+      assert.equal(result.summary.jobFailures.length, 2, 'the job, and its one retry');
+      assert.deepEqual(result.summary.jobFailures.map((failure) => [failure.state, failure.recovered, failure.attempt]), [['failed', false, 0], ['failed', false, 1]]);
+      assert.ok(result.summary.jobFailures.every((failure) => failure.code && failure.item === 'syn-1#0'));
+      assert.equal(result.summary.patientStatus.complete ?? 0, 0);
+      const none = await run(['--limit-patients', '1', '--job-retries', '0'], provider.url, {}, 'broke-0').catch((error) => error);
+      assert.equal(none.summary.jobFailures.length, 1);
+    } finally { await provider.close(); }
+  });
+
+  test('a person above the chunk size gets K clause-level judgments in all, not K a chunk', async () => {
+    const provider = await startFakeProvider();
+    try {
+      const result = await run(['--mode', 'both', '--top-k', '2', '--job-trials', '4', '--concurrency', '3'], provider.url, {}, 'chunked');
+      assert.equal(result.exitCode, EXIT.finished, result.lines.join('\n'));
+      assert.equal(provider.requests.filter((request) => !request.criteria).length, board.pairs);
+      assert.equal(provider.requests.filter((request) => request.criteria).length, 2 * board.cases.length, 'two chunks a person, still two clause-level calls a person');
+      const records = fs.readFileSync(path.join(result.outDir, 'judgments.jsonl'), 'utf8').trim().split('\n').map((line) => JSON.parse(line));
+      for (const record of records) {
+        assert.equal(record.status, 'complete');
+        const at = record.ranking.map((entry, index) => (entry.criteria ? index : -1)).filter((index) => index >= 0);
+        assert.equal(at.length, 2);
+        assert.ok(record.ranking.slice(0, 4).filter((entry) => entry.criteria).length >= 1, 'the best of the whole list, wherever its chunk was');
+      }
+      const before = provider.requests.length;
+      const again = await run(['--mode', 'both', '--top-k', '2', '--job-trials', '4', '--concurrency', '3'], provider.url, {}, 'chunked');
+      assert.equal(again.exitCode, EXIT.finished);
+      assert.equal(provider.requests.length, before, 'a rerun picks the same trials and pays for nothing');
     } finally { await provider.close(); }
   });
 
