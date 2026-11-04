@@ -19,6 +19,9 @@ function fixture() {
   /** @type {any[]} */ const calls = [];
   const listeners = new Map();
   let generation = {}; let current = "session-a";
+  /** The main-view pages the kernel has registered so far. */
+  const panels = new Set(['schedules']);
+  let layoutPresent = true;
   /** @type {() => void} */ let generationListener = () => {};
   const parent = { postMessage: (/** @type {any} */ message, /** @type {string} */ origin) => sent.push({ message, origin }) };
   /** @type {{version:number, frameId:string, projectId:string, shellOrigin:string, cwd:unknown}} */
@@ -38,15 +41,21 @@ function fixture() {
       list: { getSnapshot: () => mainView(current), subscribe: () => () => {} },
     },
     uiWorkspace: { openSession: (/** @type {string} */ id) => { current = id; calls.push(['open', id]); } },
+    // The layout service is optional to the bridge: delivered through `inject` when the kernel has it, absent otherwise.
+    inject: (/** @type {string[]} */ names, /** @type {(scope: any) => void} */ deliver) => {
+      if (names.includes('layout') && layoutPresent) deliver({ layout: { hasMainPanel: (/** @type {string} */ id) => panels.has(id), selectPanel: (/** @type {string} */ id) => calls.push(['panel', id]) } });
+    },
     conversation: { input: { for: (/** @type {any} */ scope) => ({ setDraft: (/** @type {string} */ text) => calls.push(['draft', scope.id, text]) }) } },
     effect: (/** @type {any} */ setup) => { ctx.dispose = setup(); },
   };
   const navigate = (overrides = {}, event = {}) => listeners.get('message')({ origin: frame.shellOrigin, source: parent,
     data: { type: 'evimed.runtime-ui.navigate', version: 1, frameId: frame.frameId, projectId: frame.projectId,
       requestId: 'request-a', seq: 1, intent: { kind: 'create', sessionId: 'session-new', draft: 'Review this evidence' }, ...overrides }, ...event });
-  return { ctx, target, sent, calls, listeners, navigate, replaceGeneration() { generation = {}; generationListener(); } };
+  return { ctx, target, sent, calls, listeners, navigate, panels, withoutLayout() { layoutPresent = false; }, replaceGeneration() { generation = {}; generationListener(); } };
 }
 const settle = () => new Promise(resolve => setImmediate(resolve));
+/** Long enough for a navigation that opens an existing session: it refreshes the list first. */
+const settled = async () => { for (let turn = 0; turn < 10; turn += 1) await settle(); };
 
 test('plugin apply returns synchronously before loader readiness and navigates with native sessions and scoped input', async () => {
   const f = fixture();
@@ -62,6 +71,61 @@ test('plugin apply returns synchronously before loader readiness and navigates w
   assert.deepEqual(f.calls, [['create', 'session-new'], ['open', 'session-new'], ['draft', 'session-new', 'Review this evidence']]);
   assert.ok(f.sent.some(row => row.message.type === 'evimed.runtime-ui.ack' && row.message.ok === true));
   assert.ok(f.sent.every(row => row.origin === 'https://app.example'));
+  f.ctx.dispose();
+});
+
+test('the scheduled-task page is shown over the session once it is open, before the draft, and only that page may be asked for', async () => {
+  const f = fixture(); apply(f.ctx, {}, f.target); await settle();
+  f.navigate({ intent: { kind: 'create', sessionId: 'session-new', draft: 'Plan it', panel: 'schedules' } }); await settle();
+  // After the open, which clears the main view's panel; before the draft, which needs the session's composer.
+  assert.deepEqual(f.calls, [['create', 'session-new'], ['open', 'session-new'], ['panel', 'schedules'], ['draft', 'session-new', 'Plan it']]);
+  assert.ok(f.sent.some(row => row.message.type === 'evimed.runtime-ui.ack' && row.message.ok === true));
+  f.calls.length = 0;
+  f.navigate({ requestId: 'request-b', seq: 2, intent: { kind: 'open', sessionId: 'session-new', panel: 'schedules' } }); await settled();
+  assert.deepEqual(f.calls, [['open', 'session-new'], ['panel', 'schedules']], 'an open takes the same page');
+  // A navigation without the field leaves the main view where the open put it.
+  f.calls.length = 0;
+  f.navigate({ requestId: 'request-c', seq: 3, intent: { kind: 'open', sessionId: 'session-new' } }); await settled();
+  assert.deepEqual(f.calls, [['open', 'session-new']]);
+  // Any other page name, or a field of another type, is another origin's payload and does nothing at all.
+  for (const [index, panel] of ['settings', 'files', 'Schedules', 'schedules ', '', null, 1, {}, ['schedules']].entries()) {
+    f.navigate({ requestId: `request-x${index}`, seq: 10 + index, intent: { kind: 'create', sessionId: `session-x${index}`, panel } }); await settled();
+  }
+  assert.deepEqual(f.calls, [['open', 'session-new']], 'nothing was created, opened or selected for a page the shell may not ask for');
+  assert.ok(!f.sent.some(row => row.message.type === 'evimed.runtime-ui.ack' && /^request-x/.test(row.message.requestId)));
+  f.ctx.dispose();
+});
+
+test('the scheduled-task page is waited for while the kernel registers it, and a page that never comes leaves the conversation open', async () => {
+  const f = fixture(); apply(f.ctx, {}, f.target); await settle();
+  f.panels.clear();
+  f.navigate({ intent: { kind: 'create', sessionId: 'session-new', draft: 'Plan it', panel: 'schedules' } }); await settle();
+  assert.deepEqual(f.calls, [['create', 'session-new'], ['open', 'session-new']], 'asking for a page that does not exist yet selects nothing');
+  f.panels.add('schedules');
+  for (let waited = 0; waited < 2000 && !f.calls.some(call => call[0] === 'draft'); waited += 20) await new Promise(resolve => setTimeout(resolve, 20));
+  assert.deepEqual(f.calls.filter(call => call[0] === 'panel'), [['panel', 'schedules']], 'selected once, when its row registered');
+  assert.deepEqual(f.calls.at(-1), ['draft', 'session-new', 'Plan it']);
+  f.ctx.dispose();
+
+  // A page that never registers: the wait is bounded, the navigation still completes and the draft is still put in.
+  const g = fixture(); g.target.setTimeout = (/** @type {() => void} */ fn) => setImmediate(fn);
+  apply(g.ctx, {}, g.target); await settle();
+  g.panels.clear();
+  g.navigate({ intent: { kind: 'create', sessionId: 'session-new', draft: 'Plan it', panel: 'schedules' } });
+  for (let turn = 0; turn < 80; turn += 1) await settle();
+  assert.deepEqual(g.calls, [['create', 'session-new'], ['open', 'session-new'], ['draft', 'session-new', 'Plan it']]);
+  assert.ok(g.sent.some(row => row.message.type === 'evimed.runtime-ui.ack' && row.message.ok === true), 'the shell is told it worked');
+  g.ctx.dispose();
+});
+
+test('a kernel with no layout service opens the conversation and ignores the page it was asked to show', async () => {
+  // The page is waited for in a bounded loop, as when it never registers; the clock is the test's.
+  const f = fixture(); f.withoutLayout(); f.target.setTimeout = (/** @type {() => void} */ fn) => setImmediate(fn);
+  apply(f.ctx, {}, f.target); await settle();
+  f.navigate({ intent: { kind: 'create', sessionId: 'session-new', draft: 'Plan it', panel: 'schedules' } });
+  for (let turn = 0; turn < 80; turn += 1) await settle();
+  assert.deepEqual(f.calls, [['create', 'session-new'], ['open', 'session-new'], ['draft', 'session-new', 'Plan it']]);
+  assert.ok(f.sent.some(row => row.message.type === 'evimed.runtime-ui.ack' && row.message.ok === true));
   f.ctx.dispose();
 });
 
