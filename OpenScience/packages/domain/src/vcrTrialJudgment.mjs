@@ -27,7 +27,7 @@
 import { definitionLines } from './vcrClauseDefinitions.mjs'
 
 /** Bumped when a prompt changes enough that a pair judged under the old one should be judged again. */
-export const VCR_JUDGMENT_PROMPT_VERSIONS = Object.freeze({ fit: 'fit-1', criteria: 'criteria-1' })
+export const VCR_JUDGMENT_PROMPT_VERSIONS = Object.freeze({ fit: 'fit-1', criteria: 'criteria-3' })
 
 /** The labels of a clause, as stored. */
 export const VCR_CRITERION_LABELS = Object.freeze(['included', 'not_included', 'excluded', 'not_excluded', 'not_applicable', 'not_enough_information'])
@@ -383,6 +383,24 @@ const SIDE = Object.freeze({
   },
 })
 
+/**
+ * What silence means, the one place this prompt departs from TrialGPT 1.0's "use as less not enough information as possible". Measured on the 1,015
+ * annotated clauses with thinking on: that sentence decided 172 of the 293 clauses experts held undecidable and over-called "not included" threefold;
+ * a two-kinds-of-silence version sent 170 of 484 silent exclusions to "not enough information" for things screening checks anyway. So the two sides differ:
+ * a silent exclusion stays in, and the page says so; a silent inclusion stays open; nothing disqualifies on silence.
+ * @param {'inclusion' | 'exclusion' | undefined} kind
+ */
+function silenceGuidance(kind) {
+  const exclusion = 'When the note is silent on an exclusion criterion, a good note would probably have said so if it were true, and screening checks it anyway: label it "not excluded". Keep "not enough information" for an exclusion criterion only when the note raises a real doubt (a related finding, a suspected condition, an unfinished workup) or the patient belongs to a group where it commonly applies and nothing settles it, such as pregnancy in a woman of child-bearing age.'
+  const inclusion = 'When the note does not support an inclusion criterion, label it "not enough information"; a requirement is not met or unmet by silence.'
+  const disqualifying = kind === 'exclusion' ? '"excluded"' : kind === 'inclusion' ? '"not included"' : '"not included" and "excluded"'
+  return [
+    ...(kind === 'inclusion' ? [] : [exclusion]),
+    ...(kind === 'exclusion' ? [] : [inclusion]),
+    `Use ${disqualifying} only when what the note says establishes it, never because something is missing.`,
+  ].join(' ')
+}
+
 /** @param {'inclusion' | 'exclusion' | undefined} kind */
 function criteriaSystem(kind) {
   const sides = kind ? [SIDE[kind]] : [SIDE.inclusion, SIDE.exclusion]
@@ -393,7 +411,7 @@ function criteriaSystem(kind) {
     `You should check the ${which} criteria one-by-one, and output the following three elements for each criterion:`,
     "\tElement 1. For each criterion, briefly generate your reasoning process: First, judge whether the criterion is not applicable (not very common), where the patient does not meet the premise of the criterion. Then, check if the patient note contains direct evidence. If so, judge whether the patient meets or does not meet the criterion. If there is no direct evidence, try to infer from existing evidence, and answer one question: If the criterion is true, is it possible that a good patient note will miss such information? If impossible, then you can assume that the criterion is not true. Otherwise, there is not enough information.",
     '\tElement 2. If there is relevant information, you must generate a list of relevant sentence IDs in the patient note. If there is no relevant information, you must annotate an empty list.',
-    `\tElement 3. Classify the patient eligibility for this specific criterion: ${sides.map((side) => side.labels).join(' ')}${kind ? '' : ' A criterion listed under "Other criteria" takes whichever of the two label sets fits how it is worded.'} "not applicable" should only be used for criteria that are not applicable to the patient. "not enough information" should be used where the patient note does not contain sufficient information for making the classification. Try to use as less "not enough information" as possible because if the note does not mention a medically important fact, you can assume that the fact is not true for the patient.`,
+    `\tElement 3. Classify the patient eligibility for this specific criterion: ${sides.map((side) => side.labels).join(' ')}${kind ? '' : ' A criterion listed under "Other criteria" takes whichever of the two label sets fits how it is worded.'} "not applicable" should only be used for criteria that are not applicable to the patient. "not enough information" should be used where the patient note does not contain sufficient information for making the classification. ${silenceGuidance(kind)}`,
     'Judge what the person is, not only what the note says: a 78-year-old woman is not pregnant, so a pregnancy exclusion is "not excluded" or "not applicable" for her, and never "not enough information".',
     REASONS_LANGUAGE,
     'You should output only a JSON dict exactly formatted as: dict{str(criterion_number): list[str(element_1_brief_reasoning), list[int(element_2_sentence_id)], str(element_3_eligibility_label)]}.',

@@ -88,9 +88,9 @@ test("the selection and the plan: definitions is a boolean, adds one call a tria
   const without = await planMatchJudge({ ...base, selection: { subjectKey: "P-1", registryIds: ["NCT00000001", "NCT00000002"], topK: 1 } });
   const withCards = await planMatchJudge({ ...base, selection: { subjectKey: "P-1", registryIds: ["NCT00000001", "NCT00000002"], topK: 1, definitions: true } });
   assert.equal(without.scenario.definitions, undefined);
-  assert.deepEqual(without.scenario.promptVersions, { fit: "fit-1", criteria: "criteria-1" }, "off, nothing about a job changes");
+  assert.deepEqual(without.scenario.promptVersions, { fit: "fit-1", criteria: "criteria-3" }, "off, nothing about a job changes");
   assert.equal(withCards.scenario.definitions, true);
-  assert.equal(withCards.scenario.promptVersions.criteria, `criteria-1+${VCR_DEFINITION_PROMPT_VERSION}`);
+  assert.equal(withCards.scenario.promptVersions.criteria, `criteria-3+${VCR_DEFINITION_PROMPT_VERSION}`);
   assert.equal(withCards.scenario.estimate.calls, without.scenario.estimate.calls + 2, "one card call for each of the two trials");
   assert.notEqual(withCards.scenario.chain, without.scenario.chain, "another job");
 });
@@ -124,7 +124,7 @@ test("a job asked for definitions writes each trial's cards once, its clause-lev
   const run = createMatchJudgeExecutor({ store: { async studyById() { return { id: "std_1", userId: "u_1", projectId: "p_1" }; }, async one() { return { checkpoint: {} }; } },
     matchStore, judgments, documents, targets: judgmentTargets({ evidence, matchStore }), judge, clauseDefinitions, config: {}, counters });
   const scenario = (extra = {}) => ({ direction: "patient_to_trial", subjects: ["P-1", "P-2"], trials: Object.keys(TRIALS).map((registryId) => ({ registry: "clinicaltrials.gov", registryId })), fit: false, topK: "all", thinking: "off", model: "deepseek-flash",
-    promptVersions: { fit: "fit-1", criteria: "criteria-1" }, estimate: { pairs: 4 }, chain: "c1", ...extra });
+    promptVersions: { fit: "fit-1", criteria: "criteria-3" }, estimate: { pairs: 4 }, chain: "c1", ...extra });
   const start = (extra) => run({ job: { id: "job_1", jobId: "job_1", studyId: "std_1", scenario: scenario(extra), scenarioHash: "a".repeat(64), seed: 0 }, async onProgress() {}, isCanceled: async () => false });
 
   const plain = await start();
@@ -135,7 +135,7 @@ test("a job asked for definitions writes each trial's cards once, its clause-lev
   requests.length = 0;
   rows.clear();
 
-  const asked = await start({ definitions: true, promptVersions: { fit: "fit-1", criteria: `criteria-1+${VCR_DEFINITION_PROMPT_VERSION}` } });
+  const asked = await start({ definitions: true, promptVersions: { fit: "fit-1", criteria: `criteria-3+${VCR_DEFINITION_PROMPT_VERSION}` } });
   assert.equal(asked.status, "succeeded", JSON.stringify(asked.diagnostics));
   // Two trials, four pairs: two card calls and four clause-level calls, every one of which carries its trial's cards.
   assert.equal(requests.filter((request) => request.kind === "cards").length, 2);
@@ -144,7 +144,7 @@ test("a job asked for definitions writes each trial's cards once, its clause-lev
   assert.ok(clauseCalls.every((request) => /Background notes on some of the criteria above[\s\S]*1\. Counts: ECOG 0-1 and normal marrow/.test(request.user)));
   assert.equal(asked.diagnostics.used.calls, 6, "the bill counts the card calls once");
   const row = [...rows.values()].find((entry) => entry.mode === "criteria");
-  assert.equal(row.promptVersion, `criteria-1+${VCR_DEFINITION_PROMPT_VERSION}`);
+  assert.equal(row.promptVersion, `criteria-3+${VCR_DEFINITION_PROMPT_VERSION}`);
   assert.deepEqual(row.answer.definitions, { version: VCR_DEFINITION_PROMPT_VERSION, used: 2 });
   assert.equal(store.rows.size, 2);
 
