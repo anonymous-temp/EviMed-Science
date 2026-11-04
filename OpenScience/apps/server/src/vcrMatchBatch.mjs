@@ -383,9 +383,9 @@ export async function pool(/** @type {readonly any[]} */ items, /** @type {numbe
   let next = 0;
   const lane = async () => {
     while (next < items.length && await more()) {
-      const item = items[next++];
       // `more` is a read of the database: another lane may have taken the last item while this one waited for it.
       if (next >= items.length) return;
+      const item = items[next++];
       await work(item);
     }
   };

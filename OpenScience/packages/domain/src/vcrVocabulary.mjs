@@ -859,9 +859,9 @@ export const VCR_JOB_KINDS = frozen([
   'match_extract',
   // --- appended (2026-11-04): patient and trial judged by the model, pair by pair (owner decisions 2026-11-04) ---
   'match_judge',
-  'forecast_trajectories', 'evaluate_forecast', 'compare_forecasts', 'benchmark_trial_effect',
   // --- appended (2026-11-04): many patients' records taken in as a job ---
   'records_import',
+  'forecast_trajectories', 'evaluate_forecast', 'compare_forecasts', 'benchmark_trial_effect',
 ])
 /**
  * Which of the seven steps an engine job belongs to, by its kind: the step bar's dot and the activity strip say "the patients are
