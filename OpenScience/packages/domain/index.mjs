@@ -2744,6 +2744,26 @@ export {
   acceptExtractedFacts,
 } from './src/vcrMatchBatch.mjs'
 
+export {
+  VCR_JUDGMENT_PROMPT_VERSIONS,
+  VCR_CRITERION_LABELS,
+  VCR_TRIAL_VERDICT_LABELS_ZH,
+  VCR_FIT_BANDS,
+  segmentSentences,
+  segmentCriteria,
+  fitMessages,
+  criteriaMessages,
+  parseFitAnswer,
+  parseCriteriaAnswer,
+  reasonList,
+  criterionDisplay,
+  trialVerdict,
+  rankJudgments,
+  splitNoteParts,
+  mergeFitAnswers,
+  mergeCriteriaAnswers,
+} from './src/vcrTrialJudgment.mjs'
+
 export { VCR_LONGITUDINAL_SCHEMA, VCR_LONGITUDINAL_ERROR_CODES, VCR_LONGITUDINAL_SCHEMAS, VCR_LONGITUDINAL_METHODS, VCR_LONGITUDINAL_JOBS, VCR_PREDICTION_TYPES,
   VCR_FORECAST_UNCERTAINTY, VCR_LONGITUDINAL_LIMITS, longitudinalNumber, longitudinalInstant, longitudinalMean,
   longitudinalVariance, longitudinalQuantile, eventsFromMappedTable, replayClinicalEvents, longitudinalReadiness,

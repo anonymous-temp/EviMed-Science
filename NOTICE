@@ -17,6 +17,10 @@ Code
   are adapted from an MIT-licensed project; the attribution is in each file's
   header comment.
 
+- OpenScience/packages/domain/src/vcrTrialJudgment.mjs adapts the matching prompts of TrialGPT 2.0
+  (github.com/TrialGPT2/TrialGPT2.0, commit 1c5f9ebc3b98) and TrialGPT 1.0 (github.com/ncbi-nlp/TrialGPT,
+  commit 1b3242cd), works of the US National Library of Medicine in the public domain.
+
 Skills
 ------
 - OpenScience/runtime/skills/curated-scientific/ derives from K-Dense's
