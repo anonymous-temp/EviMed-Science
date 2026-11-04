@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "vcr-package",
-  "version": "sha256:74015ae8661ec1433a86d37580f1a20524042a721340b72ed0638d4e54a83e8c",
+  "version": "sha256:3008e970ce15c9facf1919aae50fd28471943225923e867f5b8f6fc54816f5ee",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 27,
@@ -843,7 +843,7 @@
     {
       "name": "mcp__evimed__vcr_read",
       "source": "mcp",
-      "description": "Read this conversation's research. what=study opens compact context and enables specialist tools. patient_context lists original uploads (text, PDF, Word, scans), knowledge-base documents, this study's patients and authenticated human messages (messageSeq); follow nextUploadRead for more uploads. subject_document reads original material; kind=sentences numbers it. trial_registry_record reads one registry (filter registryId). contracts gives write syntax before any task exists; data_intake lists upload handles; candidate_trials reads patient trial matches. Any eligibility verdict you deliver is copied from the saved read-back (matching or candidate_trials with filter.subjectKey), never retyped.",
+      "description": "Read this conversation's research. what=study opens compact context and enables specialist tools. patient_context lists uploads (text, PDF, Word, scans), knowledge-base documents, this study's patients and authenticated human messages (messageSeq); follow nextUploadRead for more uploads. subject_document reads original material; kind=sentences numbers it. trial_registry_record reads one registry (filter registryId). contracts gives write syntax before any task exists; data_intake lists upload handles; candidate_trials reads patient trial matches. Any eligibility verdict you deliver is copied from the saved read-back (matching or candidate_trials with filter.subjectKey), never retyped.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -907,7 +907,7 @@
     {
       "name": "mcp__evimed__vcr_write",
       "source": "mcp",
-      "description": "Save research objects, never calculated results. data_intake imports/maps/freezes uploads (read contracts). patient_context takes data={sourceId,generation,sha256} from uploads, {sourceId} for a knowledge-base original, or {messageSeq} for a human case; add subjectKey when it is about a patient already here, and their trials are re-judged. task_context opens a task. A fact for structured screening states only what its quote says: what the text does not mention is unknown, never negated. trial_judgment saves your own judgment of a patient against a trial or protocol, with sentence ids as evidence. A candidate_trial's criteria are that one trial's own eligibility lines. Use the VCR workflow skill for object contracts (read /opt/evimed/capability-skills/vcr-matching/SKILL.md before matching a patient to trials; vcr-protocol, vcr-evidence, vcr-analysis and vcr-package sit beside it; none is in the skill catalogue) and vcr_simulate action=shape for numerical inputs.",
+      "description": "Save research objects, never calculated results. data_intake imports/maps/freezes uploads (read contracts). patient_context takes data={sourceId,generation,sha256} from uploads, {sourceId} for a knowledge-base original, or {messageSeq} for a human case; add subjectKey for a patient already here; their trials are re-judged. task_context opens a task. A fact for structured screening states only what its quote says: what the text does not mention is unknown, never negated. trial_judgment saves your judgment of a patient against a trial or protocol, with sentence ids as evidence. A candidate_trial's criteria are that one trial's own eligibility lines. For object contracts use the workflow skill (read /opt/evimed/capability-skills/vcr-matching/SKILL.md before matching trials; vcr-protocol, vcr-evidence, vcr-analysis and vcr-package sit beside it; none is in the catalogue) and vcr_simulate action=shape for numerical inputs.",
       "inputSchema": {
         "type": "object",
         "properties": {
