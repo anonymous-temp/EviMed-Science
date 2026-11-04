@@ -3428,6 +3428,10 @@
                   "default": 1
                 }
               }
+            },
+            "parametersRedrawn": {
+              "t": "boolean",
+              "default": false
             }
           }
         },

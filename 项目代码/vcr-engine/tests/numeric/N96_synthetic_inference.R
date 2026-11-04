@@ -269,3 +269,31 @@ vcr_case("N96h", c("AC-04", "AC-30", "AC-31"), function() {
        detail = sprintf("Gower's distance with a missing cell equals the hand computation over the columns both records have (%s); a synthesis with a holdout and 10 of 200 ages missing: %s; a quality report with missing cells in the synthetic, training and holdout tables: %s; an analysis with no answer on some permuted tables: %d of 40 replicates dropped and counted, the rates are %.3f, %.3f, %.3f, and the restricted-mean job with tau 28 %s; a cancel during the calibration is status '%s'; a smoother that fails: the five copies are made unsmoothed and named (%s)",
                         gower_ok, miss$status, q_ok, nc$failedReplicates, nc$realPermuted$value, nc$syntheticNaive$value, nc$syntheticCombined$value, job_nc$status, canceled$status, smooth_ok))
 })
+
+vcr_case("N96i", c("AC-04", "AC-31"), function() {
+  # Review stats2 finding 27: population.quality read every table by the rule for a generator that does NOT redraw its parameters, and no scenario key said the
+  # table came from one that does (read that way, such a generator rejected a true null at .099 with one copy against the nominal .05). `inference.parametersRedrawn`
+  # selects the proper-synthesis rule: the variance is (k/n) ubar (1 + (n/k + 1)/m) instead of (k/n) ubar (1 + n/(k m)), recomputed here from the per-copy
+  # standard errors the result carries; the permuted-arm calibration is not offered for such a table (only the engine's own generator can be re-run).
+  tbl <- .n96_survival_file(260L, 9671L)
+  syn <- vcr_population_synthpop(tbl[setdiff(names(tbl), "USUBJID")], m = 5L, seed = 9672L)$data
+  stacked <- do.call(rbind, lapply(seq_along(syn), function(k) cbind(copy = k, syn[[k]])))
+  ins <- list(vcr_test_input(tbl, "tr_n96i@1", source = "observed"), vcr_test_input(stacked, "sy_n96i@1", source = "synthetic", kind = "snapshot_file"))
+  mk <- function(redrawn) vcr_test_run(vcr_test_job("population.quality", list(trainingInputId = "tr_n96i@1", syntheticInputId = "sy_n96i@1",
+    analyses = list(list(name = "mean age", kind = "mean", column = "age"), list(name = "lr", kind = "logrank", time = "os", status = "death", group = "arm")), generator = list(family = "synthpop_cart"),
+    inference = c(list(nullCalibration = list(analysis = "lr", replicates = 20L)), if (redrawn) list(parametersRedrawn = TRUE))), ins, seed = 9673L))
+  plain <- mk(FALSE); proper <- mk(TRUE)
+  by_hand <- function(r, redrawn) {
+    cmb <- r$diagnostics$quality$utility$specific[["mean age"]]$combined
+    se2 <- cmb$perCopy$standardError^2; ubar <- mean(se2); n <- nrow(tbl); k <- nrow(syn[[1]]); m <- length(syn)
+    sqrt(ubar * k / n * (if (redrawn) 1 + (n / k + 1) / m else 1 + n / k / m))
+  }
+  cp <- plain$diagnostics$quality$utility$specific[["mean age"]]$combined; cr <- proper$diagnostics$quality$utility$specific[["mean age"]]$combined
+  per_copy <- function(r) vapply(r$diagnostics$quality$utility$specific[["mean age"]]$combined$perCopy$standardError, identity, numeric(1))
+  ok <- identical(plain$status, "succeeded") && identical(proper$status, "succeeded") && identical(plain$diagnostics$quality$inference$rule, "simple_synthesis") &&
+    identical(proper$diagnostics$quality$inference$rule, "proper_synthesis") && abs(cp$se - by_hand(plain, FALSE)) < 1e-12 && abs(cr$se - by_hand(proper, TRUE)) < 1e-12 &&
+    cr$se > cp$se && isTRUE(plain$diagnostics$quality$inference$nullCalibration$available) && identical(proper$diagnostics$quality$inference$nullCalibration$reason, "generator_not_rerunnable")
+  list(pass = ok,
+       detail = sprintf("a table of five copies of a generator that redraws its parameters: the combined standard error of the mean age is %.6f by the simple rule (hand %.6f) and %.6f by the proper rule (hand %.6f) when the scenario says the parameters were redrawn; the calibration is offered for the engine's own generator and not for that table (%s)",
+                        cp$se, by_hand(plain, FALSE), cr$se, by_hand(proper, TRUE), proper$diagnostics$quality$inference$nullCalibration$reason))
+})

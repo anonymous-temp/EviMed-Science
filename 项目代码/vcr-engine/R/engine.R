@@ -955,7 +955,10 @@ vcr_job_population_quality <- function(job, output_dir = NULL, ...) {
       synth <- copies[[1L]]
     } else if ("copy" %in% names(synth)) synth <- synth[, setdiff(names(synth), "copy"), drop = FALSE]
   }
-  infer <- if (v11) list(proper = FALSE, privacy = .vcr_privacy_from_scenario(sc[["privacy"]])) else NULL
+  # a table from a generator that redraws its parameters for every copy is combined by the proper-synthesis rule when the scenario says so (the
+  # engine's own generator never redraws them, so its tables are read by the simple rule)
+  redrawn <- isTRUE(sc[["inference"]][["parametersRedrawn"]])
+  infer <- if (v11) list(proper = redrawn, privacy = .vcr_privacy_from_scenario(sc[["privacy"]])) else NULL
   report <- vcr_quality_report(train, synth, holdout, constraints = sc$constraints, analyses = analyses,
                                criteria = sc$criteria, generator = sc$generator %||% list(), tstr_outcome = sc$tstrOutcome,
                                copies = copies, inference = infer)
@@ -965,7 +968,7 @@ vcr_job_population_quality <- function(job, output_dir = NULL, ...) {
     k_per <- as.integer(vcr_scalar(nc[["copies"]], 1L))
     learn <- intersect(names(train), names(synth))
     regenerate <- function(tbl, seed) { r <- vcr_population_synthpop(tbl[, learn, drop = FALSE], m = k_per, seed = seed); if (!is.null(r$interrupted)) r["interrupted"] else r$data }
-    can <- identical(as.character(sc$generator$family %||% ""), "synthpop_cart")
+    can <- identical(as.character(sc$generator$family %||% ""), "synthpop_cart") && !redrawn
     report$inference$nullCalibration <- .vcr_null_calibration_job(nc, sc$analyses, train, regenerate, job$seed, can_regenerate = can)
     stopped <- report$inference$nullCalibration$stopped
   }

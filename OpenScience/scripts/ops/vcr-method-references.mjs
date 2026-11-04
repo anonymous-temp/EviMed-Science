@@ -184,8 +184,13 @@ export const NUMERIC_REFERENCES = {
   N78d: { methods: ['comparator.propensity_weight'], anchors: ['abs(pooled$imputed$estimate - mean(est)) < 1e-10 && abs(est_row$value - mean(est)) < 1e-10 && abs(pooled$between - stats::var(est)) < 1e-10 &&', 'abs(cc_est$estimate - vcr_measure_value(rcc, "weighted_difference")) < 1e-10 && imp$completeCase$rows == sum(cc_rows) && identical(est_row$source, "imputed") &&'] },
   N79a: { methods: ['comparator.target_trial'], anchors: ['itt <- TrialEmulation::initiators(te, estimand_type = "ITT", outcome_cov = outcome_cov, first_period = first, last_period = last, last_followup = L - 1L, data_dir = dir, quiet = TRUE)', 'list(pass = rows_ok && gap_itt < 1e-6 && gap_pp < 1e-6 && w_gap < 1e-6 && all(gap_risk < 1e-8),'] },
   N79b: { methods: ['comparator.target_trial'], anchors: ['abs(v("risk_difference_pp") - (v("risk_treated_pp") - v("risk_control_pp"))) < 1e-12', 'list(pass = ok_run && est_ok && said && ci_ok && same && cap_ok && far_ok && none_ok && gone_ok,'] },
-  N80a: { methods: ['comparator.target_trial'], anchors: ['truth <- .n80_truth()', 'list(pass = abs(z_ccw) < 2.5 && abs(z_naive) > 10 && mean(out[, "naive"]) < truth[["difference"]],'] },
-  N80b: { methods: ['comparator.target_trial'], anchors: ['est_ok <- abs(v("risk_difference_pp") - (hand$risks[12, "treated"] - hand$risks[12, "control"])) < 1e-12', 'ok <- identical(r1$status, "succeeded") && est_ok && same && said && far_ok && ne_ok && cap_ok'] },
+  N80a: { methods: ['comparator.target_trial'], anchors: ['sim <- .n80_truth_sim(.n80_par, g, H); exact <- .n80_truth_exact(.n80_par, g, H)', 'list(pass = abs(z_ccw) < 2.5 && abs(z_naive) > 10 && mean(out[, "naive"]) < truth[["difference"]] && paths,'] },
+  N80b: { methods: ['comparator.target_trial'], anchors: ['est_ok <- abs(v("risk_difference_start") - (hand$risks[12, "treated"] - hand$risks[12, "control"])) < 1e-12', 'ok <- identical(r1$status, "succeeded") && est_ok && same && said && far_ok && ne_ok && cap_ok'] },
+  N79d: { methods: ['comparator.target_trial'], anchors: ['up_ok <- abs(up$risk - (1 - 0.025^(1 / 200))) < 1e-12 && up$n == 200', 'list(pass = kept && alone_ok && inside_ok && bare(a) && bare(b) && up_ok,'] },
+  N80d: { methods: ['comparator.target_trial'], anchors: ['sim <- .n80_truth_sim(w$par, w$g, w$H, seed = 80L + i); ex <- .n80_truth_exact(w$par, w$g, w$H); old <- .n80_truth_exact(w$par, w$g, w$H, 1L)', 'list(pass = all(vapply(rows, function(r) r$ok, logical(1))),'] },
+  N80e: { methods: ['comparator.target_trial'], anchors: ['truth <- c(treated = 1 - 0.95^Tm, control = 1 - 0.90^Tm)', 'abs(run[Tm, "treated"] - km[2]) < 1e-9 && abs(run[Tm, "control"] - km[1]) < 1e-9'] },
+  N80f: { methods: ['comparator.target_trial'], anchors: ['tr <- .n80_truth_sim(par, g, H, N = 500000L, seed = 90L + round(rho * 100))', 'list(pass = all(vapply(rows, function(r) abs(r$est - r$truth) < 3 * sqrt(r$se^2 + r$mcse^2) && abs(r$est - r$truth) < 0.02, logical(1))),'] },
+  N80h: { methods: ['comparator.target_trial'], anchors: ['abs(vcr_measure_value(inside, "risk_treated_start") - km_all) < 1e-9', 'list(pass = ok14 && ok15 && ok17 && ok28,'] },
   // --- the algorithm round's dose-finding and Bayesian designs (T7, T15, T8, T10, 2026-11-03) ---
   // design.dose: the decision tables and final doses equal BOIN's, the keyboard package's and dfcrm's; 3+3 equals its exact enumeration and the closed form of Lin and Shih; the operating characteristics equal get.oc, get.oc.kb and crmsim
   N81a: { methods: ['design.dose'], anchors: ['BOIN::get.boundary(tg, 12, 3, p.saf = phi1, p.tox = phi2, cutoff.eli = cut)$full_boundary_tab', 'BOIN::select.mtd(0.3, N[t, ], Y[t, ])$MTD'] },
@@ -219,6 +224,7 @@ export const NUMERIC_REFERENCES = {
   N87e: { methods: ['design.win_ratio'], anchors: ['need <- Filter(function(x) identical(x$name, "required_per_arm"), sr$measures)[[1]]$value', 'abs(pw$value - 0.8) < 4 * pw$mcse + 0.03'] },
   N87f: { methods: ['design.win_ratio'], anchors: ['f <- hce::sizeWR(WR = want_wr, power = 0.8, Pties = want_ties, alpha = 0.05)', 'abs(pw$value - 0.8) < 4 * pw$mcse + 0.1'] },
   N87g: { methods: ['design.win_ratio'], anchors: ['score_ref <- rho * stats::dnorm(cut) / (1 - stats::pnorm(cut))', 'z_pw <- (pw$value - pw_ref) / sqrt(pw$mcse^2 + pw_se^2)'] },
+  N87i: { methods: ['design.win_ratio'], anchors: ['size[[1]]$value == free_size && identical(kept$diagnostics$winRatio$search$verified, FALSE) &&'] },
   // design.simulate (the modestly weighted log-rank test): simtrial's statistic to the last bit, its own generator and test, and the middle road against a late-weighted test and the log-rank test
   N88a: { methods: ['design.simulate'], anchors: ['ref <- simtrial::wlr(data.frame(tte = d$time, event = d$status, treatment = ifelse(d$arm == 1L, "experimental", "control")), weight = simtrial::mb(delay = Inf, w_max = 1 / s))', 'worst <- max(worst, abs(mine + ref$z)); checked <- checked + 1L'] },
   N88b: { methods: ['design.simulate'], anchors: ['z[i] <- simtrial::wlr(cut, weight = simtrial::mb(delay = Inf, w_max = 2))$z', 'gap <- abs(m$value - p_ref) / sqrt(m$mcse^2 + se_ref^2)'] },
@@ -232,6 +238,7 @@ export const NUMERIC_REFERENCES = {
   N89b: { methods: ['patients.longitudinal'], anchors: ['fit <- .n89_lme(d); co <- summary(fit)$tTable["time:arm", ]', 'abs(z(rows$mnar)) > 4 && rows$mnar$lme > truth_slope'] },
   N89c: { methods: ['patients.longitudinal'], anchors: ['hyp_truth <- -0.6 * 8', 'abs(hyp_hat - hyp_truth) < 3.5 * hyp_se && abs(est$treatmentPolicy$effect - hyp_truth) > 5 * all_se'] },
   N89e: { methods: ['patients.longitudinal'], anchors: ['mean_ref <- 20 + (-0.5 + -0.25 * zz) * g[j]', 'worst <- max(worst, abs(mean(v) - mean_ref) / (sd_ref / sqrt(length(v)))'] },
+  N89g: { methods: ['patients.longitudinal'], anchors: ['completers <- mean(last$y[last$arm == 1L]) - mean(last$y[last$arm == 0L])', 'abs(head_value - completers) < 0.01 && abs(hyp - (-4.8)) < 1e-9 && abs(completers - hyp) > 0.5'] },
   N72a: { methods: ['comparator.bias_analysis'], anchors: ['want_limit <- if (lim > 0) back(lim) else if (ratio) 1 else 0', 'abs(rows[[i]]$z - zz) < 1e-12 && abs(rows[[i]]$p - (1 - stats::pnorm(zz))) < 1e-12'] },
   N72b: { methods: ['comparator.bias_analysis'], anchors: ['tip_bin <- function(b, g, p_other) tipr::tip_with_binary(', 'tn <- tipr::tip_rr(1.6, confounder_outcome_effect = 2, verbose = FALSE)$exposure_confounder_effect'] },
   N72c: { methods: ['comparator.bias_analysis'], anchors: ['abs(row1$carrierPrevalence / 0.05 - 9) < 1e-4'] },
@@ -252,6 +259,7 @@ export const NUMERIC_REFERENCES = {
   N76a: { methods: ['evidence.dose_response'], anchors: ['want <- c(coef = 0.0064, se = 0.0014, Q = 4.7797, ratio = 1.080313, lo = 1.0465, hi = 1.115218)'] },
   N76b: { methods: ['evidence.dose_response'], anchors: ['d_est <- max(abs(est - c(-0.0097, 0.1274, -0.2144)))', 'abs(ov$chi2 - 28.3632) < 6e-5'] },
   N76c: { methods: ['evidence.dose_response'], anchors: ['S <- matrix(1 / a[1] + 1 / b[1], k - 1L, k - 1L) + diag(1 / a[-1] + 1 / b[-1], k - 1L)', 'v <- 1 / as.numeric(t(x) %*% solve(S) %*% x); beta <- v * as.numeric(t(x) %*% solve(S) %*% lor)'] },
+  N76f: { methods: ['evidence.dose_response'], anchors: ['m <- metafor::rma(vapply(fits, `[`, numeric(1), 1L), vapply(fits, `[`, numeric(1), 2L), method = "REML")', 'list(pass = mixed && ok21 && ok20 && ok6,'] },
   N77a: { methods: ['evidence.shrinkage'], anchors: ['rows <- c(d$table2, d$table3)', 's <- .n77_stratum(as.numeric(row$p[[1]]), as.numeric(row$p[[2]]), mix)'] },
   N77b: { methods: ['evidence.shrinkage'], anchors: ['folded_med <- stats::uniroot(', 'sign_int <- stats::integrate(dens, 0, Inf, rel.tol = 1e-11)$value'] },
 
@@ -285,6 +293,7 @@ export const NUMERIC_REFERENCES = {
   N95c: { methods: ['model.survival_fit'], anchors: ['truth_s <- function(t) flexsurv::pllogis(t, shape = 2.2, scale = 10, lower.tail = FALSE)', 'err(sp) < 0.01 && err(w) > 0.03'] },
   N95d: { methods: ['model.survival_fit'], anchors: ['identical(unname(est), c(TRUE, TRUE, FALSE, FALSE, FALSE)) && all(rules == "nuisance_model_not_estimable")'] },
   N95e: { methods: ['model.survival_fit'], anchors: ['identical(vcr_output_hash(r1), vcr_output_hash(r2))', 'identical(r_old$status, "failed") && "method_version_mismatch" %in% vcr_test_issue_codes(r_old)'] },
+  N95f: { methods: ['model.survival_fit'], anchors: ['closed <- function(tau) scale * gamma(1 + 1 / shape) * stats::pgamma((tau / scale)^shape, 1 / shape)', 'list(pass = all(flagged) && all(meds > longest) && isTRUE(weib$medianBeyondData) && !isTRUE(inside$medianBeyondData) && said && rel < 1e-7,'] },
 
   // population.synthpop / population.quality 1.1.0 (P1): the combining rules of Raab, Nowok and Dibben against synthpop's own summary of a fit to five copies, the closed-form false-positive rate of an uncorrected analysis, the log-rank / Cox / restricted-mean analyses against survival and survRM2
   N96a: { methods: ['population.synthpop', 'population.quality'], anchors: ['ref <- summary(synthpop::lm.synds(y ~ x1 + x2, data = sds), population.inference = TRUE)$coefficients["x2", ]', 'max(worst) < 1e-9'] },
@@ -294,6 +303,8 @@ export const NUMERIC_REFERENCES = {
   N96e: { methods: ['population.synthpop'], anchors: ['fits <- lapply(copies, function(cp) summary(survival::coxph(survival::Surv(os, death) ~ arm + age, data = cp))$coefficients["arm", ])', 'abs(sp$hr$combined$estimate - h$estimate) < 1e-9'] },
   N96f: { methods: ['population.synthpop', 'population.quality'], anchors: ['identical(r$diagnostics$quality$inference$nullCalibration$reason, "generator_not_rerunnable")'] },
   N96g: { methods: ['population.synthpop', 'population.quality'], anchors: ['want_syn <- "5ba6c6cefec2d3d215748c4922dba1d9f1e0f87268b866acff927382577a4ef2"'] },
+  N96h: { methods: ['population.synthpop', 'population.quality'], anchors: ['hand <- rbind(c((0 + 0 + 0.4) / 3, (3 / 4 + 0 + 0.4) / 3), c((1 / 4 + 1 + 0) / 2, (2 / 4 + 1 + 0) / 2), c((0 + 0.8 / 1) / 2, (0 + 0) / 2))', 'list(pass = gower_ok && identical(miss$status, "succeeded") && q_ok && rates_ok && job_ok && cancel_ok && smooth_ok,'] },
+  N96i: { methods: ['population.quality'], anchors: ['sqrt(ubar * k / n * (if (redrawn) 1 + (n / k + 1) / m else 1 + n / k / m))', 'cr$se > cp$se && isTRUE(plain$diagnostics$quality$inference$nullCalibration$available)'] },
   // per-record privacy and attribute inference (P2): the closed form of a copied record's risk, the independent nearest-neighbour search, prop.test's Wilson interval
   N97a: { methods: ['population.synthpop', 'population.quality'], anchors: ['closed <- (copied + 1) / (copied + 2)', 'all(abs(r_tr[m_tr$dcr == 0] - closed) < 1e-12)'] },
   N97b: { methods: ['population.synthpop', 'population.quality'], anchors: ['share_tr(0.9) >= copied / n && share_tr(0.9) < copied / n + 0.03'] },
@@ -301,6 +312,7 @@ export const NUMERIC_REFERENCES = {
   N97d: { methods: ['population.synthpop', 'population.quality'], anchors: ['wil <- stats::prop.test(round(one$successControl * one$attacksControl), one$attacksControl, correct = FALSE)$conf.int', 'abs(one$successControl - control_hand) < 1e-12'] },
   N97e: { methods: ['population.synthpop', 'population.quality'], anchors: ['identical(rep_copy$bands$inferenceRisk, "red") && identical(rep_fresh$bands$inferenceRisk, "green")'] },
   N97f: { methods: ['population.quality'], anchors: ['identical(vcr_output_hash(r1), vcr_output_hash(r2)) && q$release$copies == 5L'] },
+  N97g: { methods: ['population.quality'], anchors: ['by_hand <- function(r) max(vapply(ai(r)$secrets, function(s) (s$successMain - s$successControl) / (1 - s$successControl), numeric(1)))'] },
 
   // model.prognostic_train (P3): coxph and lm on every row, the job's own folds rebuilt by hand, the population C and R squared of a known truth, DeLong against every pair, design.procova's formula and a closed form for the savings, model.prognostic_apply reproducing the saved model
   N98a: { methods: ['model.prognostic_train'], anchors: ['full <- survival::coxph(survival::Surv(os, death) ~ x1 + x2 + x3 + x4, data = d, ties = "efron")', 'abs(.n98_m(r, "out_of_fold_c_index") - c_hand) < 1e-10'] },
@@ -310,6 +322,7 @@ export const NUMERIC_REFERENCES = {
   N98e: { methods: ['model.prognostic_train'], anchors: ['identical(r_few$conclusion, "not_estimable") && identical(r_few$notEstimableRule, "too_few_events")', '!grepl("St-Rare-Genotype-X", json3, fixed = TRUE)'] },
   N98f: { methods: ['model.prognostic_train'], anchors: ['identical(vcr_output_hash(r1), vcr_output_hash(r2)) && identical(rf$model, "random_forest")'] },
   N98g: { methods: ['model.prognostic_train'], anchors: ['joined <- vcr_test_run(vcr_test_job("model.prognostic_train", sc, list(in_subj, in_ev), seed = 9801L))', 'max(abs(b1 - b2)) < 1e-12'] },
+  N98h: { methods: ['model.prognostic_train'], anchors: ['ref <- stats::cor(lp, as.numeric(full$os <= 24 & full$death == 1))', 'list(pass = ok10 && ok19 && all(gap < 0.045) && is.finite(rho_full) && rho_full > 0.3'] },
 
   // patients.progression (P4): the unit shapes against their own rates integrated numerically, the moments of 200,000 simulated people per family against the closed form, the closed-form power of the Welch test (noncentral t) and stats::power.t.test for equal variances, the clock slowed by a stated share
   N99a: { methods: ['patients.progression'], anchors: ['stats::integrate(rate_of, 0, t, rel.tol = 1e-12)$value', 'mo <- vcr_progression_moments(par, 3, 1.2, 0.7, 0.3, visits, scale)'] },

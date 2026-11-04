@@ -208,6 +208,15 @@ const SYNTHETIC_INFERENCE = object({
     copies: integer({ min: 1, max: 5, default: 1 }),
   }),
 })
+/**
+ * `population.quality` reads a table the engine did not necessarily make: `parametersRedrawn` says the generator redrew its parameters for every copy
+ * (the proper-synthesis rule of Raab, Nowok and Dibben), which the engine's own generator never does. Without it the rule that fits the engine's own
+ * synthesis is applied to such a table and rejects too often (a false-positive rate of .099 against .05 with one copy, review stats2 finding 27).
+ */
+const SYNTHETIC_QUALITY_INFERENCE = object({
+  ...SYNTHETIC_INFERENCE.fields,
+  parametersRedrawn: boolean({ default: false }),
+})
 const SYNTHETIC_PRIVACY = object({
   membershipRiskBound: number({ gt: 0.5, lt: 1, default: 0.75 }),
   secrets: array(COLUMN, { min: 1, max: 10, unique: true }),
@@ -939,7 +948,7 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
     generator: object({
       family: string({ maxLength: 40 }), m: integer({ min: 1, max: 50 }), smoothing: string({ maxLength: 40 }), seed: integer({ min: 0, max: 2_147_483_647 }),
     }),
-    inference: SYNTHETIC_INFERENCE,
+    inference: SYNTHETIC_QUALITY_INFERENCE,
     privacy: SYNTHETIC_PRIVACY,
   }),
 
