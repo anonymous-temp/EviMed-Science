@@ -763,15 +763,17 @@ export function createVcrRoutes(dependencies) {
       const longitudinal = service.packages.longitudinal;
       if (!longitudinal && method === 'GET') return reply({available:false,records:[],providers:[],templates:LONGITUDINAL_TEMPLATES});
       if (!longitudinal) throw UNAVAILABLE();
+      // The owner's own page prints exact head counts; a member's page keeps the small-cell suppression (owner ruling 2026-11-04).
+      const shown = {minCell:service.minCell,exact:String(study.userId) === String(user.id)};
       if (method === 'GET' && parts.length === 3) return reply(presentLongitudinal(await longitudinal.view(study,
-        Object.fromEntries(['id','parentId','kind','offset','limit'].map(key => [key,url.searchParams.get(key)]))),{minCell:service.minCell}));
+        Object.fromEntries(['id','parentId','kind','offset','limit'].map(key => [key,url.searchParams.get(key)]))),shown));
       if (method === 'POST' && parts.length === 4 && ['histories','predictions','benchmarks'].includes(parts[3])) {
         const fields = parts[3] === 'histories' ? ['snapshotId','asOf','mappings','split','priorHistoryId','includeClinicalFacts','perturbation']
           : parts[3] === 'benchmarks' ? ['model','comparisons','split','trainingOverlap']
           : ['schema','historyId','origin','endpoint','horizonsDays','rows','model','scenario','priorPredictionId','subjectKeyMode','predictions'];
         const body = await bodyOf(req,Math.max(maxJsonBytes,8*1024*1024),fields);
         const save = parts[3] === 'histories' ? longitudinal.freezeHistory : parts[3] === 'predictions' ? longitudinal.importPrediction : longitudinal.importBenchmark;
-        return reply(presentLongitudinal(await save(study,body,String(user.id)),{minCell:service.minCell}),201);
+        return reply(presentLongitudinal(await save(study,body,String(user.id)),shown),201);
       }
       throw new HttpError(404,'not_found','Longitudinal route not found.');
     }
@@ -1302,7 +1304,8 @@ export function createVcrRoutes(dependencies) {
         const available = described && described.available !== false;
         const prefix = `/api/vcr/studies/${encodeURIComponent(study.id)}`;
         const { supersededBy: _supersededBy, ...historicalResult } = result;
-        return reply({ jobId: parts[3], result: service.forModel(historicalResult),
+        // The owner's page reads the owner's own study exactly; a member of the study reads it with the small cells hidden.
+        return reply({ jobId: parts[3], result: service.forModel(historicalResult, { ownerView: String(study.userId) === String(user.id) }),
           computationBasis:vcrAnalyticComputationBasis(result,job),
           execution: { method: job.method, methodVersion: job.methodVersion, seed: job.seed, scenarioHash: job.scenarioHash, sourceModel: job.checkpoint?.sourceModel ? { id: job.checkpoint.sourceModel.id, version: job.checkpoint.sourceModel.version } : null },
           records: available ? { ...described, available: true, state: "available", csvUrl: `${prefix}/records/${encodeURIComponent(result.id)}.csv`,

@@ -20,7 +20,12 @@
 //   exactly once (a cell speaking for fewer than ten people is hidden with its
 //   neighbours; integration contract §4), and so does a simulate answer that
 //   carries a result. The runtime holds no database credential and no
-//   data-plane mount; this is the whole surface.
+//   data-plane mount; this is the whole surface. One reader is exempt from
+//   the small-cell half only: the study owner's own native conversation
+//   (`ownerConversation`, owner ruling 2026-11-04) reads exact head counts of
+//   the owner's own study. A member's conversation, a programme run and every
+//   other caller keep the suppression, and nothing that leaves the study
+//   (publications, exports, review inputs) goes through this door.
 // - **A write refuses item by item.** A 200 with `ok: false` and the issues is
 //   a write that wrote nothing, not an error. An error code means the call
 //   itself could not be read — a `what` outside the vocabulary, a payload of
@@ -2748,6 +2753,7 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
       if (!study) throw gatewayError(403,'vcr_invocation_unavailable','Use this research tool from the current conversation.');
       study.executionOrigin = origin;
       study.completionOrigin = origin && !origin.programme ? origin : null;
+      const ownerView = ownerConversation(study, identity, origin);
       // A dedicated runtime has an exclusive dispatch. Shared runtimes need transcript proof;
       // the sole running project run is never attribution for patient evidence.
       const scopedRunId = origin?.runId ?? boundedScope?.runId ?? null;
@@ -2770,7 +2776,7 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
           ? await vcr.dataIntake?.read(study, request.filter, origin) ?? { available: false, code: 'vcr_gateway_unavailable' }
           : request.what==='patient_context'
           ? origin && vcr.patientContext?.candidates ? await vcr.patientContext.candidates(origin,request.filter) : {candidates:[],nextBeforeSeq:null}
-          : await vcr.service.runtimeRead(study, request.what, request.filter, { signal: requestAbort.signal })) });
+          : await vcr.service.runtimeRead(study, request.what, request.filter, { signal: requestAbort.signal, ownerView })) });
       } else if (operation === "write") {
         const request = writeRequest(body);
         // The token names the runtime, and a runtime reserved for one dispatch names that dispatch: with the
@@ -2859,7 +2865,7 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
             return sources.length ? { ...checked, sources } : checked;
           }
           if (request.action === "start") {
-            const started = await startJob(vcr, study, /** @type {any} */ (request));
+            const started = await startJob(vcr, study, /** @type {any} */ (request), { ownerView });
             await nameWhatItHolds(vcr, study);
             return withJobEntry(started, { study, resultKind: vcrResultKindFor(String(/** @type {any} */ (request).kind)), publicUrl: config?.publicUrl });
           }
@@ -2890,7 +2896,7 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
           const answer = { action: "status", jobId: job.id, state: job.state, progress: job.progress, ...appliedOf(job),
             cpuSeconds: job.cpuSecondsUsed, error: job.error, result, ...(pooling ? { pooling } : {}),
             ...(job.state === "awaiting_budget" ? { awaitingBudget: true, message: AWAITING_BUDGET_MESSAGE } : {}) };
-          const safe = withJobEntry(await vcr.service.forModel(answer, { projection: "job_result" }),
+          const safe = withJobEntry(await vcr.service.forModel(answer, { projection: "job_result", ownerView }),
             { study, resultKind: String(result?.kind ?? vcrResultKindFor(String(job.kind))), publicUrl: config?.publicUrl, object: job.checkpoint?.subjectId ?? result?.subjectId });
           if (origin && ["succeeded","failed","canceled"].includes(job.state)) await vcr.store.query(`UPDATE evimed_vcr.jobs
             SET checkpoint=checkpoint || jsonb_build_object('originTerminalObservation',$4::jsonb) WHERE id=$1
@@ -2949,6 +2955,17 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
 }
 
 /**
+ * Whether this call is the study owner's own conversation, which reads the exact head counts of the owner's own study (owner ruling
+ * 2026-11-04). The token names the account and the study names its owner: a member's runtime reaches the study with the member's own
+ * token, so the two differ and the member's reads stay suppressed. A native call only: a programme run is the platform's step on the
+ * study, its prose lands in a package members read, and a call with no verified conversation is never the owner's view.
+ * @param {any} study @param {{ userId?: unknown }} identity @param {any} origin
+ */
+function ownerConversation(study, identity, origin) {
+  return Boolean(origin && !origin.programme && study?.userId && String(study.userId) === String(identity?.userId));
+}
+
+/**
  * A conversation's study that holds something and has no name is named for the kind of work and the day, in code (`患者匹配 · 11月2日`):
  * the first write or computation that leaves something in it does it, once. Nothing said by anyone is in the name, and a failure to name
  * leaves the study as it was.
@@ -2976,8 +2993,9 @@ const sourcesNotForKind = () => ({ field: "", state: "assumption", because: "kin
  * @param {{ kind: string, scenario: Record<string, any>, inputs: unknown[], seed: number | null, replicates: number | null,
  *   cpuSecondsLimit: number | null, subjectId: string | null, reconstructionResultId?: string | null, selection?: any, modelId?:string|null, modelVersion?:string|null,
  *   sources?: unknown }} request
+ * @param {{ ownerView?: boolean }} [options] the study owner's own conversation: the two reading starts print exact head counts
  */
-async function startJob(vcr, study, request) {
+async function startJob(vcr, study, request, { ownerView = false } = {}) {
   if (Object.hasOwn(VCR_LONGITUDINAL_JOBS,request.kind)) {
     if (!vcr.longitudinal) throw gatewayError(503,'vcr_gateway_unavailable','纵向数据尚未接入；其他分析可以继续。');
     const {job} = await vcr.longitudinal.prepare(study,request,study.userId,{ detail: study.completionOrigin ? { conversationOrigin:study.completionOrigin } : {} });
@@ -2993,7 +3011,7 @@ async function startJob(vcr, study, request) {
     // The plan's head counts (who is read, who was, who the table decided against) are the study's people: the answer passes the model
     // boundary like a read, and its sentence was written from the same cells (`matchBatchStatement`).
     if (typeof vcr.service.forModel !== "function") throw gatewayError(503, "vcr_gateway_unavailable", "这份读取结果无法确认不含小样本格子，已整体拒绝。");
-    return vcr.service.forModel(await vcr.matchBatch.start(study, request.selection ?? {}), { projection: "match_extract_start" });
+    return vcr.service.forModel(await vcr.matchBatch.start(study, request.selection ?? {}, { ownerView }), { projection: "match_extract_start", ownerView });
   }
   // Judging pairs of a person and a trial: the platform freezes them from the selection and says what it will cost; the run names who and what, nothing else.
   if (request.kind === "match_judge") {
@@ -3003,7 +3021,7 @@ async function startJob(vcr, study, request) {
     }
     if (request.selection == null) throw gatewayError(400, "vcr_simulate_payload_invalid", "判定要写 selection：一位患者加 registryIds，或一份方案（protocolVersionId，可加 subjectKeys）。");
     if (typeof vcr.service.forModel !== "function") throw gatewayError(503, "vcr_gateway_unavailable", "这份读取结果无法确认不含小样本格子，已整体拒绝。");
-    return vcr.service.forModel(await vcr.matchJudge.start(study, request.selection), { projection: "match_judge_start" });
+    return vcr.service.forModel(await vcr.matchJudge.start(study, request.selection), { projection: "match_judge_start", ownerView });
   }
   if (request.kind === "pool_evidence") {
     if (!vcr.evidence?.poolParameter) throw gatewayError(503, "vcr_gateway_unavailable", "证据参数化未接入本部署：这一步暂不可用。");

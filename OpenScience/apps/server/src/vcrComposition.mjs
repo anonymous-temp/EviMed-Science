@@ -21,8 +21,10 @@ import { locatePassages, passageWindow } from './vcrPassages.mjs';
  *   the seam is named and kept here, where a mismatch is one function wide.
  * - **One boundary for what a model reads, and it is not here.** Small-cell
  *   suppression is the service's `runtimeRead` applying the domain's
- *   `suppressForModel` once, to every `what`; nothing in this file suppresses
- *   anything, and nothing a seam returns reaches a model without passing it.
+ *   `suppressForModel` once, to every `what` (but for the study owner's own
+ *   conversation, which the gateway marks `ownerView` and which reads exact
+ *   counts); nothing in this file suppresses anything, and nothing a seam
+ *   returns reaches a model without passing the service's boundary.
  * - **Matching is a flow, and this file joins its ends.** A run writes located
  *   facts and answers to language-only criteria; the platform freezes the
  *   protocol's criteria and the instant into a `match_criteria` job; a local
@@ -183,17 +185,18 @@ export function vcrDataPlaneSeam({ dataPlane, access }) {
      * What a model may read of a snapshot — or, before there is one, of a
      * source: structure, quality, the dictionary; never a row. Bound to the
      * study that asks (a snapshot or source of another study does not exist
-     * here), judged for the study's owner and audited (CS-5).
-     * @param {any} study @param {any} filter
+     * here), judged for the study's owner and audited (CS-5). `options.exact` is the owner's own conversation: the row and fill counts
+     * are printed whatever their size (the service passes it from the gateway's decision, never from the filter).
+     * @param {any} study @param {any} filter @param {{ exact?: boolean }} [options]
      */
-    async runtimeProfile(study, filter) {
+    async runtimeProfile(study, filter, { exact = false } = {}) {
       const snapshotId = String(filter?.snapshotId ?? "");
       const sourceId = String(filter?.sourceId ?? "");
       if (snapshotId) {
-        return { available: true, ...await dataPlane.snapshotProfileForModel({ studyId: study.id, snapshotId, principal: study.userId }) };
+        return { available: true, ...await dataPlane.snapshotProfileForModel({ studyId: study.id, snapshotId, principal: study.userId, exact }) };
       }
       if (sourceId) {
-        return { available: true, ...await dataPlane.sourceProfileForModel({ studyId: study.id, sourceId, principal: study.userId }) };
+        return { available: true, ...await dataPlane.sourceProfileForModel({ studyId: study.id, sourceId, principal: study.userId, exact }) };
       }
       return { available: false, code: "vcr_snapshot_not_named" };
     },

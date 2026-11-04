@@ -3178,8 +3178,10 @@ export class VcrDataPlane {
    * rate — identifying columns carry no vocabulary, a vocabulary is levels of at
    * least the floor, and a count that would give a small group away is withheld.
    * With `principal`, the read is judged and audited first; the snapshot must be
-   * the study's either way.
-   * @param {{ studyId: string, snapshotId: string, principal?: string | null }} entry
+   * the study's either way. `exact` (the owner's own conversation, set by the
+   * gateway) prints the row and fill counts whatever their size; the levels of
+   * a vocabulary stay as the profiler stored them.
+   * @param {{ studyId: string, snapshotId: string, principal?: string | null, exact?: boolean }} entry
    */
   async snapshotProfileForModel(entry) {
     const studyId = String(entry.studyId ?? "");
@@ -3194,7 +3196,7 @@ export class VcrDataPlane {
     const sealed = new Set(snapshot.sealedFields);
     const now = this.now().getTime();
     const sealActive = sealed.size > 0 && (!snapshot.sealedUntil || Date.parse(snapshot.sealedUntil) > now);
-    const floor = VCR_MIN_CELL_SIZE;
+    const floor = entry.exact === true ? 0 : VCR_MIN_CELL_SIZE;
     const tables = Array.isArray(snapshot.profile?.tables) ? snapshot.profile.tables : [];
     // The field map is the study's own declaration of which columns identify a
     // person, and it wins over the profiler's name and value heuristics: a
@@ -3241,8 +3243,9 @@ export class VcrDataPlane {
   /**
    * What a model may be told about a source that has no snapshot yet: its files'
    * columns as profiled at upload, the data dictionary, and where the field map
-   * stands — enough to propose the map from. The same rules as a snapshot's.
-   * @param {{ studyId: string, sourceId: string, principal?: string | null }} entry
+   * stands — enough to propose the map from. The same rules as a snapshot's,
+   * `exact` included.
+   * @param {{ studyId: string, sourceId: string, principal?: string | null, exact?: boolean }} entry
    */
   async sourceProfileForModel(entry) {
     const studyId = String(entry.studyId ?? "");
@@ -3250,7 +3253,7 @@ export class VcrDataPlane {
     if (entry.principal != null) {
       await this.access.require({ actor: String(entry.principal), studyId, ability: "read", sourceId: source.id, note: "source profile" });
     }
-    const floor = VCR_MIN_CELL_SIZE;
+    const floor = entry.exact === true ? 0 : VCR_MIN_CELL_SIZE;
     const files = await this.store.listSourceFiles(source.id);
     const declared = new Set(source.fieldMap.columns.filter((column) => column.identifier || column.role === "subject_key").map((column) => column.column));
     return {

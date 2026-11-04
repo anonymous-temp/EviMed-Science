@@ -226,13 +226,15 @@ const wan = (value) => (value >= 10000 ? `${Math.round(value / 1000) / 10} 万` 
  * The sentence is a model's to read, so its head counts are the model boundary's: the people to read, the ones read before, the ones
  * the table already decided against, the ones with no record and the ones that wait are each judged as the batch counters are
  * (`suppressForModel`, the `plan` block). A count it hides is not printed and one sentence says that some are not shown; a category
- * whose count is shown as zero is not mentioned.
- * @param {ReturnType<typeof planMatchExtraction>} plan @param {{ minCell?: number }} [options]
+ * whose count is shown as zero is not mentioned. `exact` is the study owner's own conversation (owner ruling 2026-11-04): the same
+ * sentence with every count printed, whatever its size; it is never the default, so a caller that does not say is suppressed.
+ * @param {ReturnType<typeof planMatchExtraction>} plan @param {{ minCell?: number, exact?: boolean }} [options]
  */
-export function matchBatchStatement(plan, { minCell = VCR_MIN_CELL_SIZE } = {}) {
+export function matchBatchStatement(plan, { minCell = VCR_MIN_CELL_SIZE, exact = false } = {}) {
   const { estimate: e } = plan
-  const shown = suppressForModel({ plan: { toRead: e.people, alreadyRead: plan.alreadyRead.length, prefiltered: plan.prefiltered.length,
-    noDocuments: plan.noDocuments.length, deferred: plan.deferred.length }, estimate: { people: e.people, records: e.records } }, { minCell })
+  const counted = { plan: { toRead: e.people, alreadyRead: plan.alreadyRead.length, prefiltered: plan.prefiltered.length,
+    noDocuments: plan.noDocuments.length, deferred: plan.deferred.length }, estimate: { people: e.people, records: e.records } }
+  const shown = exact ? counted : suppressForModel(counted, { minCell })
   const cells = shown.plan
   const aside = Object.values(cells).some((value) => value === null) || shown.estimate.records === null ? '人数少的类别按小样本规则不显示具体人数。' : ''
   if (!e.people) {

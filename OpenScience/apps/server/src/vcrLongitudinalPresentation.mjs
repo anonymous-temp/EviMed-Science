@@ -4,6 +4,7 @@ import { suppressForModel } from '@evimed/domain';
 
 /** @param {any} record @param {any} options */
 function artifact(record,options) {
+  if (options?.exact) return record;
   const shown = suppressForModel(record,options);
   if (!record?.summary || !String(record.id).startsWith('vlf_')) return shown;
   if (record.summary.dataClass === 'synthetic') return {...shown,summary:structuredClone(record.summary)};
@@ -25,9 +26,11 @@ function artifact(record,options) {
   return shown;
 }
 
-/** Only accepts metadata from longitudinalIndex or saved artifacts.
+/** Only accepts metadata from longitudinalIndex or saved artifacts. `options.exact` is the study owner's own page (the route decides it
+ * from the viewer): the payload is returned as it is, counts and all.
  * @param {any} payload @param {any} [options] */
 export function presentLongitudinal(payload,options = {}) {
+  if (options?.exact) return payload;
   if (payload?.id) return artifact(payload,options);
   const shown = suppressForModel(payload,options);
   for (const key of ['records','related']) if (Array.isArray(payload?.[key])) shown[key] = payload[key].map((/** @type {any} */ row) => artifact(row,options));

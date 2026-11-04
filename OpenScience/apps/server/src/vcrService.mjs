@@ -1620,9 +1620,21 @@ export class VcrService {
    * only: another trial's numbers pass the boundary's other half (no plane
    * address, a cycle refused whole) and are not judged as this study's head
    * counts: the exemption is a rule about numbers, not a hole.
-   * @param {unknown} payload @param {{ publishedFigures?: boolean, projection?: string }} [options]
+   *
+   * `ownerView` is the one other exemption (owner ruling 2026-11-04): the study owner's own conversation and page read the exact head
+   * counts of the owner's own study. The caller establishes it from the acting identity (the study's `userId`, a native conversation
+   * that is not a programme run), never from anything the model sends, and it is false unless said, so publications, review inputs,
+   * exports, a member's read and every caller that says nothing keep the suppression below. The plane addresses are still stripped,
+   * and a payload that boundary cannot finish is still refused whole; the small-cell walker is simply not run, so it cannot refuse
+   * the owner's read.
+   * @param {unknown} payload @param {{ publishedFigures?: boolean, projection?: string, ownerView?: boolean }} [options]
    */
-  forModel(payload, { publishedFigures = false, projection = '' } = {}) {
+  forModel(payload, { publishedFigures = false, projection = '', ownerView = false } = {}) {
+    if (ownerView) {
+      try { return stripPlaneAddresses(payload); } catch {
+        throw failure(503, "vcr_gateway_unavailable", "这份读取结果无法确认不含数据平面地址，已整体拒绝。");
+      }
+    }
     try {
       const addressed = stripPlaneAddresses(payload);
       const shown = publishedFigures ? addressed : suppressForModel(addressed, { minCell: this.minCell });
@@ -1678,9 +1690,11 @@ export class VcrService {
    * the person's own record, so it is judged and audited per read and answers
    * with a pseudonymous key and nothing that names anyone.
    *
-   * @param {any} study @param {string} what @param {Record<string, any>} [filter] @param {{ signal?: AbortSignal }} [options]
+   * `options.ownerView` is {@link forModel}'s: set only by the gateway for the study owner's own conversation.
+   *
+   * @param {any} study @param {string} what @param {Record<string, any>} [filter] @param {{ signal?: AbortSignal, ownerView?: boolean }} [options]
    */
-  async runtimeRead(study, what, filter = {}, { signal } = {}) {
+  async runtimeRead(study, what, filter = {}, { signal, ownerView = false } = {}) {
     if (!VCR_READ_WHATS.includes(what)) {
       throw failure(400, "vcr_read_what_invalid", `what must be one of: ${VCR_READ_WHATS.join(", ")}.`);
     }
@@ -1689,14 +1703,14 @@ export class VcrService {
     if (what === 'data_intake') return { available: false, code: 'vcr_invocation_unavailable', message: 'Original upload intake requires the verified current conversation.' };
     if (!study.id && !['trial_registry_record','models','library','candidates'].includes(what)
       && !(what === 'matching' && ['contract', 'terminology'].includes(filter.kind))) return { available:true,empty:true,study:null,scope:'conversation' };
-    const payload = await this.#runtimeRead(study, what, filter, signal);
+    const payload = await this.#runtimeRead(study, what, filter, signal, ownerView);
     // This one projection has already verified the entire generated lineage; synthetic counts are not patient disclosure cells.
     if (what === "generated_records") return stripPlaneAddresses(payload);
-    return this.forModel(payload, { publishedFigures: VCR_PUBLISHED_FIGURE_READS.includes(what), projection:what });
+    return this.forModel(payload, { publishedFigures: VCR_PUBLISHED_FIGURE_READS.includes(what), projection:what, ownerView });
   }
 
-  /** @param {any} study @param {string} what @param {Record<string, any>} filter @param {AbortSignal} [signal] */
-  async #runtimeRead(study, what, filter, signal) {
+  /** @param {any} study @param {string} what @param {Record<string, any>} filter @param {AbortSignal} [signal] @param {boolean} [ownerView] */
+  async #runtimeRead(study, what, filter, signal, ownerView = false) {
     if (what === "followup_history") return this.followupHistoryForRuntime(study);
     // Only the gateway has the verified native root invocation needed to locate a selected patient's context.
     if (what === "patient_context") return { candidates: [], nextBeforeSeq: null };
@@ -1801,7 +1815,7 @@ export class VcrService {
         // Bound to this study and judged (and audited) there: a snapshot of
         // another study, or one the study's owner may not read, is refused by
         // name, never profiled.
-        return dataPlane.runtimeProfile(study, filter);
+        return dataPlane.runtimeProfile(study, filter, { exact: ownerView });
       }
       case 'longitudinal': return this.packages.longitudinal ? this.packages.longitudinal.view(study,filter)
         : {available:false,code:'vcr_data_plane_unavailable',alternatives:['literature_scenario','trial_design']};

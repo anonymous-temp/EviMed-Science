@@ -261,13 +261,14 @@ export function createFactExtractor({ config, usageLedger = null, callModel = ca
 // ---------------------------------------------------------------------------
 
 /**
- * What a start will do: the roster, who needs reading, the questions, the estimate and the sentence that says it all.
+ * What a start will do: the roster, who needs reading, the questions, the estimate and the sentence that says it all. `exact` is the study
+ * owner's own conversation: the sentence prints every head count (the default hides the small ones, as a read does).
  *
- * @param {{ study: any, selection?: unknown, matchStore: any, documents: any, subjectTable?: any, config: Record<string, any>, now?: () => Date }} deps
+ * @param {{ study: any, selection?: unknown, matchStore: any, documents: any, subjectTable?: any, config: Record<string, any>, exact?: boolean, now?: () => Date }} deps
  * @returns {Promise<{ ok: false, message: string } | { ok: true, protocolVersionId: string, asOf: string, variables: string[], plan: ReturnType<typeof planMatchExtraction>,
  *   statement: string, prefilter: boolean, model: string, pendingLanguageKeys: string[], ambiguousLanguageKeys: string[], questionsDigest: string }>}
  */
-export async function planBatch({ study, selection: raw = {}, matchStore, documents, subjectTable = null, config, now = () => new Date() }) {
+export async function planBatch({ study, selection: raw = {}, matchStore, documents, subjectTable = null, config, exact = false, now = () => new Date() }) {
   const selection = extractSelection(raw);
   const latest = selection.protocolVersionId ? { id: selection.protocolVersionId } : await matchStore.latestProtocol(study.id);
   const criteria = latest ? await matchStore.listCriteria({ studyId: study.id, protocolVersionId: latest.id }) : [];
@@ -293,7 +294,7 @@ export async function planBatch({ study, selection: raw = {}, matchStore, docume
   if (!variables.length) {
     const plan = planMatchExtraction({ roster: [], limit: 1, answeredByTable });
     return { ok: true, protocolVersionId: String(latest.id), asOf, variables, plan, pendingLanguageKeys, ambiguousLanguageKeys, questionsDigest,
-      statement: languageNote || `${matchBatchStatement(plan, { minCell: matchBatchMinCell(config) })}（没有需要从病历提取的变量。）`,
+      statement: languageNote || `${matchBatchStatement(plan, { minCell: matchBatchMinCell(config), exact })}（没有需要从病历提取的变量。）`,
       prefilter: selection.prefilter !== false, model: String(config.deepseekModel || VCR_MATCH_BATCH_DEFAULT_MODEL) };
   }
 
@@ -324,7 +325,7 @@ export async function planBatch({ study, selection: raw = {}, matchStore, docume
     reading: matchExtractBudget(criteria, variables),
   });
   return { ok: true, protocolVersionId: String(latest.id), asOf, variables, plan, pendingLanguageKeys, ambiguousLanguageKeys, questionsDigest,
-    statement: matchBatchStatement(plan, { minCell: matchBatchMinCell(config) }) + languageNote, prefilter: selection.prefilter !== false, model };
+    statement: matchBatchStatement(plan, { minCell: matchBatchMinCell(config), exact }) + languageNote, prefilter: selection.prefilter !== false, model };
 }
 
 // ---------------------------------------------------------------------------
@@ -571,11 +572,12 @@ export function createMatchExtractExecutor({ store, matchStore, documents, extra
 export function createMatchBatch({ jobs, matchStore, documents, subjectTable = null, config, counters = createMatchBatchCounters(), now = () => new Date() }) {
   return {
     /**
-     * @param {any} study @param {unknown} selection @param {{ actor?: string }} [options]
+     * `ownerView` is the study owner's own conversation (the gateway decides it): the start sentence prints every head count.
+     * @param {any} study @param {unknown} selection @param {{ actor?: string, ownerView?: boolean }} [options]
      */
-    async start(study, selection, { actor = 'runtime' } = {}) {
+    async start(study, selection, { actor = 'runtime', ownerView = false } = {}) {
       if (!jobs?.enqueue) throw new HttpError(503, 'vcr_gateway_unavailable', '作业队列未接入本部署：读病历暂不可用，其余步骤照常。');
-      const built = await planBatch({ study, selection, matchStore, documents, subjectTable, config, now });
+      const built = await planBatch({ study, selection, matchStore, documents, subjectTable, config, exact: ownerView, now });
       if (built.ok !== true) throw new HttpError(409, 'vcr_criteria_missing', String(/** @type {any} */ (built).message));
       counters.started += 1;
       const summary = {

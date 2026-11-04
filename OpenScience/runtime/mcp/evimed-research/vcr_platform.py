@@ -7,7 +7,8 @@ Six tools a 虚拟临床研究 capability's run uses; none is ever forced into a
 - ``vcr_read`` reads the study in the shapes its pages show: the definition,
   the eligibility criteria, the assumption cards, the population, patient sets,
   comparator designs, trial scenarios, results, models and jobs. **Aggregates
-  and structure only** -- no row of any person ever comes back, and a cell
+  and structure only** -- no row of any person ever comes back. In the study
+  owner's own conversation the head counts are exact; for anyone else a cell
   speaking for fewer than ten people is merged or withheld by the server before
   it leaves.
 - ``vcr_write`` writes what the run decides: the research definition, the
