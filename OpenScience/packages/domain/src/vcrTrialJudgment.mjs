@@ -77,19 +77,53 @@ export function segmentSentences(text, { locale } = {}) {
 // Clauses
 // ---------------------------------------------------------------------------
 
-const QUALIFIER = String.raw`(?:(?:key|main|major|general|additional|specific|principal|primary|secondary|study|other|patient|subject|participant|part\s+\w+|cohort\s+\w+|phase\s+\w+|arm\s+\w+)\s+)*`
-const ONLY_QUALIFIER = new RegExp(String.raw`^[\W_]*${QUALIFIER}$`, 'iu')
-const EN_HEADER = new RegExp(String.raw`^${QUALIFIER}(inclusions?|exclusions?)(\s+(?:criteria|criterion|conditions?|requirements?))?\b([^\n]*)$`, 'iu')
-const ZH_HEADER = /^(?:主要|关键|重要|一般)?(?:受试者|患者|病例)?(?:(入选|入组|纳入)|(排除|剔除|不入选|不入组|不纳入))(?:标准|条件)([^\n]*)$/u
-/** A heading that names no side: it says what follows and is no clause. */
-const NEUTRAL_HEADER = /^(?:(?:(?:key|main|general|study)\s+)*(?:eligibility(?:\s+criteria)?|inclusion\s*(?:and|\/|&)\s*exclusion(?:\s+criteria)?)|criteria)\s*[:：]?$|^(?:入排|入选排除|入组排除|纳入排除|纳排|入选和排除|纳入和排除)(?:标准|条件)\s*[:：]?$/iu
+// How a heading is told from a clause is by its shape: where the side word stands, what stands before it, whether it ends the line or a colon follows. Measured on the
+// eligibility text of 52,459 registry trials, where every one of these words was seen doing the other job.
+/** A side word, with the slips of one letter a registry really holds ("Exlusion", "iinclusion", "exculsion"). "Non-inclusion" is exclusion. */
+const IN_WORD = String.raw`i*nc?lus?u?ions?`
+const EX_WORD = String.raw`ex?c?(?:lu|ul)s(?:io|oi)ns?`
+const SIDE_WORD = String.raw`(?:non[-\s]?)?(?:${IN_WORD}|${EX_WORD})`
+const NOUN = String.raw`(?:[\p{L}-]+\s+)?(?:cri[a-z]*|conditions?|requirements?)`
+const NAME_WORDS = String.raw`(?:[\p{L}\p{N}][\p{L}\p{N}/'’-]*,?\s+){0,4}?`
+/** `<name words> side [joined to the other side] [criteria] <the rest of the line>`. */
+const EN_HEADING = new RegExp(String.raw`^(${NAME_WORDS})(${SIDE_WORD})(\s*(?:and/or|and|or|&|/|,|-|–|—)?\s*${SIDE_WORD})?((?:\s+|-|/)${NOUN})?\b([^\n]*)$`, 'iu')
+/** `<name words> criteria for [the] side <the rest of the line>`: "Criteria for exclusion:", "Criteria for inclusion of cases". */
+const EN_HEADING_INVERTED = new RegExp(String.raw`^(${NAME_WORDS})cri[a-z]*\s+(?:for|of)\s+(?:the\s+)?(${SIDE_WORD})\b([^\n]*)$`, 'iu')
+/** A plain line that ends by saying what follows is a side's criteria ("Patients must meet all of the following inclusion criteria:"). "The above" points back, so it opens nothing. */
+const EN_HEADING_SENTENCE = new RegExp(String.raw`\b(following|these|the|of|any|all)\s+(?!above\b)(?:[\p{L}-]+\s+)?(?<!(?:and|or|&|/)\s*)(${SIDE_WORD})\s+cri[a-z]*\b[^.;。；:：]{0,80}[:：]\s*$`, 'iu')
+const EN_TOPIC = new RegExp(String.raw`^(${IN_WORD}|${EX_WORD})\s+(?:of|from|related|due)\b[^.;。；:：]{0,80}[:：]\s*$`, 'iu')
+/** Words that make the start of a line a sentence about the criteria and not the name of a list: "no exclusion criteria", "does not meet inclusion criteria". */
+const NOT_A_NAME = /^(?:the|no|not|none|nor|neither|without|any|all|each|every|some|of|these|those|this|that|following|above|below|meet|meets|meeting|met|fulfil|fulfill|fulfills|fulfilling|fulfils|satisfy|satisfies|satisfying|does|do|did|has|have|had|having|is|are|was|were|be|been|being|will|would|must|may|might|can|could|should|shall|if|when|who|which|whose|with|for|to|by|per|see|in|on|at|from|as|than|absence|failure|lack|violation|violations)$/iu
+/** Name words that add nothing to what the items under them mean; any other name word is a premise of those items, and travels with them. */
+const NO_PREMISE = /^(?:key|main|major|general|additional|specific|principal|primary|secondary|study|other|patient|patients|subject|subjects|participant|participants)$/iu
+/** What may follow the noun on a heading with no colon: "for Part 1", "- Donor", "(both groups)"; what such a line says beyond that makes it a sentence. */
+const EN_OPEN_TAIL = /^\s*(?:for\b|of\b|in\b|at\b|specific\b|from\b|[-–—(])/iu
+/** Words after the noun that only announce the list. */
+const EN_ANNOUNCES = /^\s*(?:include[ds]?|are|were|will\s+be|(?:are\s+)?as\s+follows)?\s*[.;]?\s*$/iu
+const STOP = /[.;。；]/u
+const ZH_BOTH_SIDES = /^(?:(?:入选|入组|纳入)\s*(?:和|与|及|或|、|\/)?\s*(?:排除|剔除)|(?:排除|剔除)\s*(?:和|与|及|或|、|\/)?\s*(?:入选|入组|纳入)|入排|纳排)(?:标准|条件)/u
+/** `<up to a dozen characters> side 标准 <the rest>`; 不/未/无 before it make the line a statement ("不符合纳入标准"), and so does anything but an announcement after it ("排除标准的患者"). */
+const ZH_HEADING = /^([^\s:：;；。，,、]{0,12}?)(?:(入选|入组|纳入)|(排除|剔除|不入选|不入组|不纳入|非入选|非入组|非纳入))(?:标准|条件)([^\n]*)$/u
+const ZH_NEGATED = /[不未无没]/u
+const ZH_NO_PREMISE = /^(?:主要|关键|重要|一般|本研究|本试验|研究对象|受试者|患者|病例|符合|满足|以下|下列|所有|全部|任一|任何|的)*$/u
+const ZH_TAIL = /^\s*(?:如下|为|包括|是)?\s*(?:[（(]([^)）]*)[)）])?\s*(?:如下)?\s*(?:[A-Za-z][A-Za-z ]*)?\s*(?:[:：]|$)/u
+/** A heading that names no side and leaves the side as it is: it says what follows and is no clause. */
+const NEUTRAL_HEADER = /^(?:(?:(?:key|main|general|study)\s+)*eligibility(?:\s+criteria)?|criteria)\s*[:：]?$/iu
 /** A section heading in the middle of a line (a registry text written as one paragraph). */
 const INLINE_HEADER = /(?<=[\s.;。；])(?:(?:key|main)\s+)?(?:inclusion|exclusion)\s+criteria\s*[:：]|(?<=[\s.;。；])(?:入选|入组|纳入|排除)(?:标准|条件)\s*[:：]/giu
 const ALL_CAPS = /^[A-Z][A-Z0-9 ,/&()'-]{3,80}[:：]?$/u
 /** Decoration around a heading: a Markdown mark, or the 一、 of a Chinese outline. */
-const HEADING_DECORATION = /^(?:[#>*_\s]+|\(?[一二三四五六七八九十]{1,3}[、.．)）]\s*|（[一二三四五六七八九十]{1,3}）\s*|\d{1,2}[、.．)）]\s*)*/u
+const HEADING_DECORATION = /^(?:[#>*_【[\s]+|\\?[-–—*]+\s*|\(?[一二三四五六七八九十]{1,3}[、.．)）]\s*|（[一二三四五六七八九十]{1,3}）\s*|\d{1,2}(?:[.．]\d{1,2})+[.．)）]?\s+|[(（]?\d{1,2}[、.．)）]\s*|[(（]?[a-zA-Z][.)）]\s+)*/u
 const WORD = /[\p{L}\p{N}]/u
 const OPEN_ENDING = /(?:[,，、（(]|\b(?:and|or|with|without|of|the|to|in|for|at|by|a|an|than|including|who|that|which|on|from|as)|和|或|及|以及|或者|并|且)$/iu
+/** The end of an item that goes on as an alternative in the next one ("Adenocarcinoma, or"); the start of an item that is one ("or squamous"). */
+const ALTERNATIVE_END = /(?:(?<![\p{L}\p{N}])(?:or|and\/or)|或者?)[\s;,.:；，。：]*$/iu
+const ALTERNATIVE_START = /^(?:(?:or|and\/or)(?![\p{L}\p{N}])|或者?(?=\s|$|[\p{Script=Han}]))/iu
+/** An item that is only the word "and": both sides of it are requirements of their own. */
+const BARE_AND = /^[^\p{L}\p{N}]*(?:and|和|及|以及|并且|且)[^\p{L}\p{N}]*$/iu
+const BARE_OR = /^[^\p{L}\p{N}]*(?:or|and\/or|或者?)[^\p{L}\p{N}]*$/iu
+/** What a number cannot follow if it starts the next item: "Stage 1 or 2.", "ECOG <= 2.", "0-2.". */
+const INSIDE_A_VALUE = /(?:\b(?:or|and|to|of|than|at|by|in|the|a|an)|[<>≤≥=~≈＜＞≦≧\-–—/和或及至到])$/iu
 
 /**
  * The bullet or number a line opens with: its length, its class, and for a plain number the number. Letter markers are read only where
@@ -100,8 +134,8 @@ const OPEN_ENDING = /(?:[,，、（(]|\b(?:and|or|with|without|of|the|to|in|for|
 function markerOf(body) {
   /** @type {RegExpExecArray | null} */
   let found
-  if ((found = /^(?:[*•·▪▫◦‣⁃○●■□◆◇※+](?!\*)|[-–—](?!\d)|o(?=\s+[A-Z\d]))\s*/u.exec(body))) return { length: found[0].length, marker: 'bullet', ordinal: null }
-  if ((found = /^[(（]?(\d{1,3})(?:[.．](?!\d)|[、)）])\s*/u.exec(body))) return { length: found[0].length, marker: 'number', ordinal: Number(found[1]) }
+  if ((found = /^(?:\\?[*•·▪▫◦‣⁃○●■□◆◇※+](?!\*)|\\?[-–—](?!\d)|o(?=\s+[A-Z\d]))\s*/u.exec(body))) return { length: found[0].length, marker: 'bullet', ordinal: null }
+  if ((found = /^\\?[(（]?(\d{1,3})\\?(?:[.．](?!\d)|[、)）])\s*/u.exec(body))) return { length: found[0].length, marker: 'number', ordinal: Number(found[1]) }
   if ((found = /^[①-⑳]\s*/u.exec(body))) return { length: found[0].length, marker: 'number', ordinal: body.charCodeAt(0) - 0x2460 + 1 }
   if ((found = /^(?:[一二三四五六七八九十]{1,3}[、.．]|（[一二三四五六七八九十]{1,3}）)\s*/u.exec(body))) return { length: found[0].length, marker: 'number', ordinal: null }
   if ((found = /^(?:[(（]?[a-z][.)）]\s+|[(（]?[A-Z]\)\s+|[A-Z]\.\s+(?=[A-Z\d])|[(（]?(?:[ivx]{1,5}|[IVX]{1,5})\)\s+|(?:[ivx]{1,5}|[IVX]{1,5})\.\s+(?=[A-Z\d]))/u.exec(body))) return { length: found[0].length, marker: 'letter', ordinal: null }
@@ -110,42 +144,111 @@ function markerOf(body) {
 
 /**
  * A line that opens with number one and goes on to two, three... on the same line (`1、年龄≥18岁；2、确诊…`), at the offsets where each
- * item begins. A number that does not continue the count is the line's own words.
- * @param {string} body @returns {number[]} offsets into `body`, the first being 0; empty when the line is one item
+ * item begins. A number that does not continue the count is the line's own words, and so is one with nothing after it ("1. ECOG 0, 1, or 2."),
+ * one a value ends on ("1. Stage 1 or 2. Histology", "1. ECOG <= 2. Age"), and any "2." at all when the next line is the second item, because
+ * then the list runs down the lines.
+ * @param {string} body @param {string | null} [nextBody] the next line with words on it
+ * @returns {number[]} offsets into `body`, the first being 0; empty when the line is one item
  */
-function inlineItems(body) {
+function inlineItems(body, nextBody = null) {
   const first = markerOf(body)
   if (first?.ordinal !== 1) return []
+  if (nextBody != null && markerOf(nextBody)?.ordinal === 2) return []
   const offsets = [0]
   let next = 2
   for (const hit of body.matchAll(/(?<=[\s；;。.，,])[(（]?(\d{1,2})(?:[.．](?!\d)|[、)）])|[②-⑳]/gu)) {
     const ordinal = hit[1] ? Number(hit[1]) : hit[0].charCodeAt(0) - 0x2460 + 1
-    if (ordinal === next) { offsets.push(hit.index); next += 1 }
+    if (ordinal !== next) continue
+    if (!WORD.test(body.slice(hit.index + hit[0].length))) continue
+    if (INSIDE_A_VALUE.test(body.slice(offsets[offsets.length - 1], hit.index).trimEnd())) continue
+    offsets.push(hit.index)
+    next += 1
   }
   return offsets.length > 1 ? offsets : []
 }
 
-/** @param {string} line the line without its indent and decoration @returns {{ kind: 'inclusion' | 'exclusion', rest: number, qualified: boolean } | null} */
-function sectionHeaderOf(line) {
-  const zh = ZH_HEADER.exec(line)
-  if (zh) {
-    const tail = zh[3]
-    if (!/^\s*(?:[（(][^)）]*[)）])?\s*(?:[:：]|$)/u.test(tail)) return null
+/**
+ * The section a line opens, or null when it opens none. `kind: 'unsectioned'` is a heading that names both sides, so neither side holds for what follows.
+ * @param {string} line the line without its indent and decoration
+ * @param {{ marked: boolean, last: boolean, sameMarkerNext: boolean, open: 'inclusion' | 'exclusion' | 'unsectioned' }} place whether the line opens with a list marker, whether nothing follows it, whether the next line is an item of the same list as this one, which section is open
+ * @returns {{ kind: 'inclusion' | 'exclusion' | 'unsectioned', rest: number, qualified: boolean } | null}
+ */
+function sectionHeaderOf(line, { marked, last, sameMarkerNext, open }) {
+  if (ZH_BOTH_SIDES.test(line)) {
+    const tail = line.replace(ZH_BOTH_SIDES, '')
+    const announced = ZH_TAIL.exec(tail)
+    if (!announced) return null
     const colon = tail.search(/[:：]/u)
-    const said = colon < 0 ? tail : tail.slice(0, colon)
-    return { kind: zh[1] ? 'inclusion' : 'exclusion', rest: colon < 0 ? line.length : line.length - tail.length + colon + 1, qualified: Boolean(said.trim()) }
+    return { kind: 'unsectioned', rest: colon < 0 ? line.length : line.length - tail.length + colon + 1, qualified: Boolean(announced[1]) }
   }
-  const en = EN_HEADER.exec(line)
-  if (!en) return null
-  const tail = en[3]
+  const zh = ZH_HEADING.exec(line)
+  if (zh && !ZH_NEGATED.test(zh[1])) {
+    const announced = ZH_TAIL.exec(zh[4])
+    if (!announced) return null
+    const colon = zh[4].search(/[:：]/u)
+    return { kind: zh[2] ? 'inclusion' : 'exclusion', rest: colon < 0 ? line.length : line.length - zh[4].length + colon + 1, qualified: Boolean(announced[1]) || !ZH_NO_PREMISE.test(zh[1]) }
+  }
+  const inverted = EN_HEADING_INVERTED.exec(line)
+  if (inverted && namesAList(inverted[1])) {
+    const reading = readTail(inverted[3], true)
+    if (reading) return { kind: sideOf(inverted[2]), rest: line.length - inverted[3].length + reading.colonAt, qualified: reading.says || hasPremise(inverted[1]) }
+  }
+  const en = EN_HEADING.exec(line)
+  if (en && namesAList(en[1])) {
+    // A capitalised subtitle stuck to a plain heading ("Exclusion Criteria Prior and concomitant therapies") is said by the heading, not a sentence that goes on.
+    const subtitled = !marked && !en[3] && Boolean(en[4]) && !en[1].trim() && en[5].length <= 80 && /^\s+\p{Lu}/u.test(en[5]) && !STOP.test(en[5].replace(/\.\s*$/u, ''))
+    const reading = subtitled && !/[:：]/u.test(en[5]) ? { colon: false, colonAt: en[5].length, says: true } : readTail(en[5], Boolean(en[4]) || Boolean(en[3]))
+    // Without a colon, name words make a heading only with something under it: "* Standard MRI exclusion criteria" among its sibling items and "Other protocol-specified inclusion criteria." are clauses.
+    const named = Boolean(en[1].trim())
+    const sentence = named && !reading?.colon && (last || (marked && sameMarkerNext && hasPremise(en[1])) || /\.\s*$/u.test(en[5]))
+    if (reading && !sentence) return { kind: en[3] ? 'unsectioned' : sideOf(en[2]), rest: line.length - en[5].length + reading.colonAt, qualified: reading.says || hasPremise(en[1]) }
+  }
+  if (!marked) {
+    // Under the exclusion section, "the inclusion criteria" is likely a reference back ("other than mentioned in the inclusion criteria as:"); "the following" points forward.
+    const sentence = EN_HEADING_SENTENCE.exec(line)
+    if (sentence && (open !== 'exclusion' || sideOf(sentence[2]) === 'exclusion' || /^(?:the\s+)?(?:following|these)\b/iu.test(sentence[0]))) return { kind: sideOf(sentence[2]), rest: line.length, qualified: true }
+    // "Exclusions related to medications:" opens the exclusion side wherever it stands. "Inclusion of Women and Minorities:" stands inside either section, so it opens a side only where there is none yet.
+    const topic = EN_TOPIC.exec(line)
+    if (topic && (sideOf(topic[1]) === 'exclusion' || open === 'unsectioned')) return { kind: sideOf(topic[1]), rest: line.length, qualified: true }
+  }
+  return null
+}
+
+/** @param {string} word a side word @returns {'inclusion' | 'exclusion'} */
+const sideOf = (word) => (/^non/iu.test(word) || /^e/iu.test(word) ? 'exclusion' : 'inclusion')
+
+/** @param {string} words the words before the side word */
+const namesAList = (words) => !words.trim().split(/\s+/u).some((word) => NOT_A_NAME.test(word))
+
+/** @param {string} words the words before the side word */
+const hasPremise = (words) => words.trim().split(/\s+/u).filter(Boolean).some((word) => !NO_PREMISE.test(word))
+
+/**
+ * What stands after the side word (or its noun) on a heading: where the colon ends, and whether the words say something of the items under it.
+ * `null` when they make the line a sentence. A bare side word takes only "for ...", or a parenthesis, before its colon: "Inclusion of Women:" and
+ * "Inclusion in another study:" are about something else.
+ * @param {string} tail @param {boolean} noun whether a noun follows the side word ("criteria")
+ * @returns {{ colon: boolean, colonAt: number, says: boolean } | null}
+ */
+function readTail(tail, noun) {
   const colon = tail.search(/[:：]/u)
-  const before = colon < 0 ? tail : tail.slice(0, colon)
-  // "Inclusion Criteria for Part 1" names a section without a colon; "Inclusion criteria are met" and "Exclusion of brain metastases" do not.
-  const heading = colon >= 0 ? before.length <= 60 && !/[.;。；]/u.test(before)
-    : !before.trim() || (Boolean(en[2]) && /^\s*(?:for|in|\()/iu.test(before) && before.length <= 60)
-  if (!heading) return null
-  return { kind: /^inclusion/iu.test(en[1]) ? 'inclusion' : 'exclusion', rest: colon < 0 ? line.length : line.length - tail.length + colon + 1,
-    qualified: Boolean(before.trim()) || /^(?:part|cohort|phase|arm)\s/iu.test(line) }
+  const said = colon < 0 ? tail : tail.slice(0, colon)
+  if (EN_ANNOUNCES.test(said) && (noun || !said.trim() || said.trim() === '.')) return { colon: colon >= 0, colonAt: colon < 0 ? tail.length : colon + 1, says: false }
+  if (said.length > 60 || STOP.test(said.replace(/\.\s*$/u, ''))) return null
+  if (colon >= 0) return noun || /^\s*(?:for\b|\()/iu.test(said) ? { colon: true, colonAt: colon + 1, says: true } : null
+  return noun && EN_OPEN_TAIL.test(said) ? { colon: false, colonAt: tail.length, says: true } : null
+}
+
+/**
+ * Whether a heading can begin after these words on a line. Not after the name words of that heading itself ("Medical exclusion criteria:"), and not
+ * after a word that leaves the sentence open ("any of the following exclusion criteria:", "Inclusion and Exclusion Criteria:").
+ * @param {string} before the line up to the heading
+ */
+function headingCanStandAfter(before) {
+  const words = before.slice(HEADING_DECORATION.exec(before)?.[0].length ?? 0).trimEnd()
+  if (!words) return false
+  if (/^(?:[\p{L}\p{N}][\p{L}\p{N}/'’-]*\s+){0,3}[\p{L}\p{N}][\p{L}\p{N}/'’-]*$/u.test(words) && namesAList(words)) return false
+  return !OPEN_ENDING.test(words) && !NOT_A_NAME.test(/[\p{L}\p{N}]+$/u.exec(words)?.[0] ?? '')
 }
 
 /**
@@ -158,7 +261,7 @@ function linesOf(source) {
   const lines = []
   for (const line of source.matchAll(/[^\r\n]*/gu)) {
     if (line.index > 0 && !/[\r\n]/u.test(source[line.index - 1])) continue
-    const cuts = [...line[0].matchAll(INLINE_HEADER)].map((hit) => hit.index).filter((at) => at > 0 && !ONLY_QUALIFIER.test(line[0].slice(0, at)))
+    const cuts = [...line[0].matchAll(INLINE_HEADER)].map((hit) => hit.index).filter((at) => at > 0 && headingCanStandAfter(line[0].slice(0, at)))
     let from = 0
     for (const at of [...cuts, line[0].length]) {
       lines.push({ start: line.index + from, end: line.index + at, afterBreak: from === 0 })
@@ -172,8 +275,10 @@ function linesOf(source) {
  * Raw registry eligibility text in numbered clauses, deterministically. English and Chinese section headings, bullets, numbered lists and
  * blank-line blocks are read; a heading is no clause; a clause is never truncated and `text.slice(start, end)` holds it. A bullet indented
  * under another stays with its parent, because "adequate organ function, defined as:" means nothing without its list. A line that only
- * introduces the bullets after it ("Cohort 2 must also have:") is carried as each one's `lead` instead of being a clause of its own. Text
- * with no recognisable structure stays one `unsectioned` clause.
+ * introduces the bullets after it ("Cohort 2 must also have:") is carried as each one's `lead` instead of being a clause of its own. Items
+ * joined by "or" across lines are one clause, because a stated "not met" on one alternative is no failure of the whole; items joined by "and"
+ * stay two, with the word kept on the first. A heading that names both sides leaves what follows `unsectioned`. Text with no recognisable
+ * structure stays one `unsectioned` clause.
  * @param {unknown} eligibilityText
  * @returns {Array<{ number: number, kind: 'inclusion' | 'exclusion' | 'unsectioned', text: string, start: number, end: number, lead?: string }>}
  */
@@ -220,7 +325,7 @@ export function segmentCriteria(eligibilityText) {
     const trimmed = body.trimEnd()
     if (!trimmed) { if (line.afterBreak) sawBlank = true; continue }
 
-    const items = inlineItems(body)
+    const items = inlineItems(body, nextLine(source, queue, at))
     if (items.length > 1) {
       queue.splice(at, 1, ...items.map((offset, index) => ({ start: start + offset, end: index + 1 < items.length ? start + items[index + 1] : line.end, afterBreak: index === 0 && line.afterBreak, itemised: true })))
       at -= 1
@@ -228,15 +333,22 @@ export function segmentCriteria(eligibilityText) {
     }
 
     const decorated = HEADING_DECORATION.exec(trimmed)?.[0].length ?? 0
-    const plain = trimmed.slice(decorated).replace(/[*_]+\s*$/u, '').replace(/^[*_]+/u, '')
+    const plain = trimmed.slice(decorated).replace(/[*_】\]]+\s*$/u, '').replace(/^[*_]+/u, '')
     const opening = trimmed.indexOf(plain)
     if (NEUTRAL_HEADER.test(plain)) { close(); lead = null; groupLead = null; sectionLead = null; sawBlank = false; continue }
-    const header = sectionHeaderOf(plain)
+    const marker = markerOf(body)
+    const following = nextLine(source, queue, at)
+    const header = sectionHeaderOf(plain, { marked: marker !== null, last: following === null, sameMarkerNext: Boolean(marker) && following !== null && markerOf(following)?.marker === marker?.marker, open: kind })
     if (header) {
+      // A short line right before a heading that ends in a colon or says so in capitals names that section ("Phase 2:", "HEALTHY SUBJECT CRITERIA"), and judging it alone means nothing.
+      const named = /** @type {{ start: number, end: number } | null} */ (current)
+      const nameLine = named ? source.slice(named.start, named.end).trimEnd() : ''
+      const namesSection = nameLine.length <= 60 && (/[:：]$/u.test(nameLine) || (ALL_CAPS.test(nameLine) && /CRITERIA$/u.test(nameLine)))
+      if (namesSection) current = null
       close()
       kind = header.kind
       sectioned = true
-      sectionLead = header.qualified ? plain.slice(0, header.rest).trim() : null
+      sectionLead = namesSection || header.qualified ? `${namesSection ? `${nameLine} ` : ''}${plain.slice(0, header.rest).trim()}` : null
       groupLead = null
       lead = null
       baseIndent = null
@@ -248,7 +360,18 @@ export function segmentCriteria(eligibilityText) {
       continue
     }
 
-    const marker = markerOf(body)
+    // Alternatives written across items are one clause, because one stated "not met" on one of them would read as a failure of the whole.
+    const words = marker ? body.slice(marker.length).trimEnd() : trimmed
+    const alternative = ALTERNATIVE_START.test(words)
+    const joined = /** @type {{ start: number, end: number, bullet: boolean, indent: number | null } | null} */ (current)
+    if (joined && (BARE_AND.test(words) || alternative || ALTERNATIVE_END.test(source.slice(joined.start, joined.end).trimEnd()))) {
+      joined.end = line.end
+      if (marker?.ordinal != null && marker.marker === primaryMarker) lastOrdinal = marker.ordinal
+      sawBlank = false
+      continue
+    }
+    if (!joined && (BARE_AND.test(words) || BARE_OR.test(words))) { sawBlank = false; continue }
+
     if (marker) {
       if (indent !== null && (baseIndent === null || indent < baseIndent)) baseIndent = indent
       primaryMarker = primaryMarker ?? marker.marker
@@ -278,7 +401,8 @@ export function segmentCriteria(eligibilityText) {
     close()
     sawBlank = false
     const next = nextLine(source, queue, at)
-    const nextMarked = next != null && markerOf(next) != null
+    const nextItem = next == null ? null : markerOf(next)
+    const nextMarked = nextItem != null && WORD.test(/** @type {string} */ (next).slice(nextItem.length))
     // A line that only introduces what follows, in words or as a capitalised heading, is carried with each item below it: its words are
     // the premise of those items ("FOR PATIENTS UNDERGOING BIOPSIES:"), so they travel with them rather than vanish or stand as a clause.
     if (/[:：]$/u.test(trimmed) && ALL_CAPS.test(trimmed)) { groupLead = trimmed; lead = null; continue }

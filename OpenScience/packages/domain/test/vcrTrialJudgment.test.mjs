@@ -92,6 +92,139 @@ test('clauses: the registry shapes of the criteria-parse cases keep every clause
   }
 })
 
+test('clauses: a heading that names both sides puts neither side on what follows, and is no clause', () => {
+  for (const heading of ['Inclusion and Exclusion Criteria:', 'INCLUSION & EXCLUSION CRITERIA', 'Key Inclusion and Exclusion Criteria:', 'Inclusion/Exclusion Criteria:', 'Inclusion / Exclusion:', '* Inclusion and exclusion criteria:', 'Inclusion and/or exclusion criteria:', '纳入与排除标准：', '入选和排除标准', '纳入/排除标准：', '入排标准：']) {
+    const text = `${heading}\n\n* Age >= 18 years\n* No pregnancy`
+    const clauses = segmentCriteria(text)
+    holds(text, clauses)
+    assert.deepEqual(clauses.map((row) => [row.kind, row.text]), [['unsectioned', 'Age >= 18 years'], ['unsectioned', 'No pregnancy']], heading)
+  }
+  const later = segmentCriteria('Exclusion Criteria:\n* Pregnancy\nInclusion/Exclusion Criteria - Sample 2:\n* Age >= 18')
+  assert.deepEqual(later.map((row) => [row.kind, row.lead ?? null, row.text]), [['exclusion', null, 'Pregnancy'], ['unsectioned', 'Inclusion/Exclusion Criteria - Sample 2:', 'Age >= 18']])
+  const sentence = 'Inclusion Criteria:\n* Age >= 18\n* Other protocol-defined inclusion/exclusion criteria may apply.'
+  assert.deepEqual(segmentCriteria(sentence).map((row) => [row.kind, row.text]), [['inclusion', 'Age >= 18'], ['inclusion', 'Other protocol-defined inclusion/exclusion criteria may apply.']], 'a sentence about the criteria is a clause')
+})
+
+test('clauses: a line that opens with a side word and is about something else leaves the side alone', () => {
+  const text = 'Inclusion Criteria:\n* Age >= 18\n\nExclusion Criteria:\n* Inclusion in another clinical study: within the past 30 days\n* Pregnancy\nInclusion of Women and Minorities:\nExclusion from a prior study: any reason\n* Active infection'
+  const clauses = segmentCriteria(text)
+  holds(text, clauses)
+  assert.ok(clauses.slice(1).every((row) => row.kind === 'exclusion'), JSON.stringify(clauses))
+  assert.equal(clauses[1].text, 'Inclusion in another clinical study: within the past 30 days', 'its words stay whole')
+  for (const heading of ['Inclusion of vulnerable participants:', 'Inclusion is possible for patients with:']) {
+    const under = segmentCriteria(`Exclusion Criteria:\n* Pregnancy\n${heading}\n* Active infection`)
+    assert.equal(under[under.length - 1].kind, 'exclusion', heading)
+  }
+})
+
+test('clauses: a section heading is read whatever list it names, a slip of the pen and a sentence about the criteria are told apart', () => {
+  /** @param {string} heading the second heading, after an inclusion section */
+  const after = (heading) => segmentCriteria(`Inclusion Criteria:\n* Age >= 18\n${heading}\n* Pregnancy`).map((row) => [row.kind, row.lead ?? null, row.text])
+  for (const heading of ['Exclusion Criteria', 'exclusion criteria.', 'Exclusion:', 'Exclusions', 'Key Exclusion Criteria:', 'Non-inclusion criteria:', 'Non inclusion criteria', 'Criteria for exclusion:', 'Exclusion critieria:', 'Exlusion criteria:', 'Exculsion Criteria', '-Exclusion Criteria:', 'b. Exclusion', '2.1 Exclusion criteria:', 'The exclusion criteria are:', 'Exclusion criteria include', '排除标准如下：', '排除标准（符合任一项即排除）：', '非入选标准：']) {
+    const rows = after(heading)
+    assert.equal(rows.length, 2, heading)
+    assert.equal(rows[1][0], 'exclusion', heading)
+    assert.equal(rows[1][2], 'Pregnancy', heading)
+  }
+  // A heading whose words are a premise of its items carries them; one whose words add nothing does not.
+  assert.deepEqual(after('Donor exclusion criteria:')[1], ['exclusion', 'Donor exclusion criteria:', 'Pregnancy'])
+  assert.deepEqual(after('Angiographic Exclusion Criteria')[1], ['exclusion', 'Angiographic Exclusion Criteria', 'Pregnancy'])
+  assert.deepEqual(after('Part 2 exclusion criteria:')[1], ['exclusion', 'Part 2 exclusion criteria:', 'Pregnancy'])
+  assert.deepEqual(after('Phase A Exclusion Criteria:')[1], ['exclusion', 'Phase A Exclusion Criteria:', 'Pregnancy'])
+  assert.deepEqual(after('EXCLUSION RELATED TO THE METABOLIC STATUS:')[1], ['exclusion', 'EXCLUSION RELATED TO THE METABOLIC STATUS:', 'Pregnancy'])
+  assert.deepEqual(after('Phase 2: Exclusion Criteria:')[1], ['exclusion', 'Phase 2: Exclusion Criteria:', 'Pregnancy'])
+  assert.deepEqual(after('HEALTHY SUBJECT CRITERIA\nExclusion Criteria:')[1], ['exclusion', 'HEALTHY SUBJECT CRITERIA Exclusion Criteria:', 'Pregnancy'])
+  assert.deepEqual(after('Criteria for exclusion from randomization')[1], ['exclusion', 'Criteria for exclusion from randomization', 'Pregnancy'])
+  assert.deepEqual(after('试验组排除标准：')[1], ['exclusion', '试验组排除标准：', 'Pregnancy'])
+  assert.deepEqual(after('Phase 1 Exclusions')[1], ['exclusion', 'Phase 1 Exclusions', 'Pregnancy'])
+  assert.deepEqual(after('Prevention Trial, Exclusion Criteria:')[1], ['exclusion', 'Prevention Trial, Exclusion Criteria:', 'Pregnancy'])
+  assert.deepEqual(after('EXCLUSION STUDY CRITERIA:')[1].slice(0, 1), ['exclusion'])
+  assert.deepEqual(after('EXCLUSION/DEFERRAL CRITERIA:')[1].slice(0, 1), ['exclusion'])
+  assert.deepEqual(after('Exclusion-Criteria:')[1].slice(0, 1), ['exclusion'])
+  assert.deepEqual(after('Summary of Exclusion Criteria:')[1].slice(0, 1), ['exclusion'])
+  assert.deepEqual(segmentCriteria('1. Global Inclusion Criteria\n\n   * Age >= 18\n2. Specific Exclusion Criteria\n\n   * Pregnancy').map((row) => row.kind), ['inclusion', 'exclusion'], 'a numbered heading with a list under it')
+  assert.deepEqual(segmentCriteria('Inclusion of Subjects with Hepatitis:\n* Age >= 18\nExclusion of Subjects with Hepatitis:\n* Pregnancy').map((row) => row.kind), ['inclusion', 'exclusion'], 'where no side is open yet, this does open one')
+  assert.equal(after('【排除标准】')[1][0], 'exclusion')
+  assert.equal(after('排除标准 Exclusion criteria：')[1][0], 'exclusion')
+  // A last item in capitals is an item.
+  assert.deepEqual(segmentCriteria('Inclusion Criteria:\nAge >= 18\nECOG 0-1\nExclusion Criteria:\nPregnancy').map((row) => [row.kind, row.lead ?? null, row.text]), [['inclusion', null, 'Age >= 18'], ['inclusion', null, 'ECOG 0-1'], ['exclusion', null, 'Pregnancy']])
+  assert.deepEqual(after('Major exclusion criteria:')[1], ['exclusion', null, 'Pregnancy'])
+  assert.deepEqual(after('研究对象的排除标准：')[1], ['exclusion', null, 'Pregnancy'])
+  // A sentence about the criteria is a clause of the section it is in.
+  for (const sentence of ['* Standard MRI exclusion criteria', 'Other protocol-specified exclusion criteria.', '* no exclusion criteria', '* does not meet inclusion criteria', '* failure to meet exclusion criteria', '* none of the exclusion criteria', '* other protocol-defined exclusion criteria may apply.', '* further exclusion criteria apply', '不符合纳入标准者', '符合排除标准的患者']) {
+    assert.deepEqual(segmentCriteria(`Inclusion Criteria:\n* Age >= 18\n${sentence}\n* Stage IV`).map((row) => row.kind), ['inclusion', 'inclusion', 'inclusion'], sentence)
+  }
+  // A plain line that says the following are the criteria of a side opens that side, and what it says travels; a bullet saying so is one clause.
+  const opened = segmentCriteria('Inclusion Criteria:\n* Age >= 18\nPatients meeting any of the following exclusion criteria are not to be enrolled:\n* Pregnancy')
+  assert.deepEqual(opened.map((row) => [row.kind, row.text]), [['inclusion', 'Age >= 18'], ['exclusion', 'Pregnancy']])
+  assert.match(String(opened[1].lead), /not to be enrolled/)
+  assert.equal(segmentCriteria('Exclusion Criteria:\n* Pregnancy\nStandard MRI exclusion criteria').length, 2, 'a heading has something under it')
+  const bullet = segmentCriteria('Inclusion Criteria:\n* Age >= 18\n* Patients who meet none of the following exclusion criteria: see below\n* Stage IV')
+  assert.deepEqual(bullet.map((row) => row.kind), ['inclusion', 'inclusion', 'inclusion'])
+  assert.equal(bullet.length, 3)
+  assert.match(bullet[1].text, /see below$/)
+  // Words about both sides, or pointing back at a side, open neither.
+  for (const line of ['Subjects who meet the following inclusion and exclusion criteria will be eligible:', 'Anyone who does not fit the criteria stated under "Inclusion Criteria" and anyone included in the following criteria:', 'Any causes other than which mentioned in the inclusion criteria as:']) {
+    const rows = segmentCriteria(`Exclusion Criteria:\n* Pregnancy\n${line}\n* Active infection`)
+    assert.deepEqual(rows.map((row) => row.kind), ['exclusion', 'exclusion'], line)
+  }
+  assert.deepEqual(segmentCriteria('Exclusion Criteria:\n* Pregnancy\nHealthy controls must meet the following inclusion criteria:\n* Age >= 18').map((row) => row.kind), ['exclusion', 'inclusion'], 'a new cohort after the exclusions')
+  assert.deepEqual(segmentCriteria('Inclusion Criteria\n* Age >= 18\nExclusion criteria included;\n* Pregnancy').map((row) => row.kind), ['inclusion', 'exclusion'])
+  assert.deepEqual(segmentCriteria('Inclusion Criteria Informed Consent and Willingness\n* Consent\nExclusion Criteria Prior and concomitant therapies\n* Warfarin').map((row) => [row.kind, row.text]), [['inclusion', 'Consent'], ['exclusion', 'Warfarin']])
+  assert.deepEqual(segmentCriteria('Inclusion Criteria: Asthma\n\nExclusion Criteria:COPD\n\n\\-').map((row) => [row.kind, row.text]), [['inclusion', 'Asthma'], ['exclusion', 'COPD']], 'an empty bullet is nothing to introduce')
+  assert.deepEqual(segmentCriteria('* General Inclusion Criteria\n* Age >= 18\n* General Exclusion Criteria\n* Pregnancy').map((row) => row.kind), ['inclusion', 'exclusion'], 'a heading written as a bullet among its own items')
+  const back = segmentCriteria('Inclusion Criteria:\n* Age >= 18\nPatients must meet at least 2 of the above inclusion criteria and the following:\n* Stage IV\nExclusion Criteria:\n* Pregnancy')
+  assert.deepEqual(back.map((row) => row.kind), ['inclusion', 'inclusion', 'exclusion'], 'the words point back, so the side stays')
+})
+
+test('clauses: a heading in the middle of a line is cut only where a heading can stand', () => {
+  /** @param {string} text */
+  const read = (text) => { const rows = segmentCriteria(text); holds(text, rows); return rows.map((row) => [row.kind, row.text]) }
+  assert.deepEqual(read('Inclusion Criteria: Age >= 18 Exclusion Criteria: pregnancy'), [['inclusion', 'Age >= 18'], ['exclusion', 'pregnancy']])
+  assert.deepEqual(read('Key Inclusion Criteria: Age >= 18. Key Exclusion Criteria: pregnancy'), [['inclusion', 'Age >= 18.'], ['exclusion', 'pregnancy']])
+  assert.deepEqual(read('Medical exclusion criteria: known renal insufficiency').map((row) => row[0]), ['exclusion'])
+  assert.deepEqual(read('Medical exclusion criteria: known renal insufficiency').map((row) => row[1]), ['known renal insufficiency'])
+  assert.deepEqual(read('Inclusion Criteria:\n* Any of the exclusion criteria: see the protocol\n* Stage IV'), [['inclusion', 'Any of the exclusion criteria: see the protocol'], ['inclusion', 'Stage IV']])
+})
+
+test('clauses: a number inside an item does not start the next one', () => {
+  /** @param {string} text */
+  const read = (text) => { const rows = segmentCriteria(text); holds(text, rows); return rows.map((row) => row.text) }
+  assert.deepEqual(read('Inclusion Criteria:\n1. ECOG performance status of 0, 1, or 2.\n2. Age >= 18\n3. Adequate organ function'), ['ECOG performance status of 0, 1, or 2.', 'Age >= 18', 'Adequate organ function'])
+  assert.deepEqual(read('Inclusion Criteria:\n1. ECOG performance status of 0, 1, or 2.'), ['ECOG performance status of 0, 1, or 2.'])
+  assert.deepEqual(read('Inclusion Criteria:\n1. Stage 1 or 2. Histology confirmed'), ['Stage 1 or 2. Histology confirmed'])
+  assert.deepEqual(read('Inclusion Criteria:\n1. ECOG <= 2. Age >= 18\n2. Consent'), ['ECOG <= 2. Age >= 18', 'Consent'], 'the list runs down the lines, so a 2. on this line is its own words')
+  assert.deepEqual(read('Inclusion Criteria:\n1. ECOG score of 2. Age >= 18'), ['ECOG score of 2. Age >= 18'])
+  assert.deepEqual(read('Inclusion Criteria:\n1. Age >= 18. 2. ECOG 0-1. 3. Stage IV'), ['Age >= 18.', 'ECOG 0-1.', 'Stage IV'], 'a real list on one line is still read')
+  assert.deepEqual(read('纳入标准：1、年龄≥18岁，2、确诊肺癌，3、ECOG 0-2。'), ['年龄≥18岁，', '确诊肺癌，', 'ECOG 0-2。'])
+  assert.deepEqual(reasonList('1. ECOG 0, 1, or 2. 2. Age is met'), ['ECOG 0, 1, or 2.', 'Age is met'], 'the reasons of an answer are read the same way')
+  assert.deepEqual(reasonList('1. Age is met 2. Stage is met'), ['Age is met', 'Stage is met'], 'a model\'s numbered reasons need no stop between them')
+})
+
+test('clauses: alternatives written across lines stay one clause, and a bare AND is no clause', () => {
+  /** @param {string} text */
+  const read = (text) => { const rows = segmentCriteria(text); holds(text, rows); return rows.map((row) => [row.kind, row.text]) }
+  assert.deepEqual(read('Inclusion Criteria:\n* Adenocarcinoma, or\n* Squamous cell carcinoma\n* Age >= 18'), [['inclusion', 'Adenocarcinoma, or\n* Squamous cell carcinoma'], ['inclusion', 'Age >= 18']])
+  assert.deepEqual(read('Inclusion Criteria:\n1. Adenocarcinoma; or\n2. Squamous cell carcinoma; or\n3. Large cell carcinoma\n4. Age >= 18\n5. Consent'), [['inclusion', 'Adenocarcinoma; or\n2. Squamous cell carcinoma; or\n3. Large cell carcinoma'], ['inclusion', 'Age >= 18'], ['inclusion', 'Consent']])
+  assert.deepEqual(read('Inclusion Criteria:\n* Adenocarcinoma\nOR\n* Squamous cell carcinoma\n* Age >= 18'), [['inclusion', 'Adenocarcinoma\nOR\n* Squamous cell carcinoma'], ['inclusion', 'Age >= 18']])
+  assert.deepEqual(read('Inclusion Criteria:\n* Adenocarcinoma\n* or squamous cell carcinoma\n* Age >= 18'), [['inclusion', 'Adenocarcinoma\n* or squamous cell carcinoma'], ['inclusion', 'Age >= 18']])
+  assert.deepEqual(read('Inclusion Criteria:\n* Adenocarcinoma and/or\n* Squamous cell carcinoma'), [['inclusion', 'Adenocarcinoma and/or\n* Squamous cell carcinoma']])
+  assert.deepEqual(read('纳入标准：\n1. 腺癌或\n2. 鳞癌\n3. 年龄≥18岁'), [['inclusion', '腺癌或\n2. 鳞癌'], ['inclusion', '年龄≥18岁']])
+  assert.deepEqual(read('Exclusion Criteria:\n* Pregnant, or\n* Breastfeeding\n* Active infection'), [['exclusion', 'Pregnant, or\n* Breastfeeding'], ['exclusion', 'Active infection']])
+  // Both of two requirements are two clauses; the word between them is said on the first, and no clause is the word alone.
+  assert.deepEqual(read('Inclusion Criteria:\n* Age >= 18\nAND\n* Stage IV'), [['inclusion', 'Age >= 18\nAND'], ['inclusion', 'Stage IV']])
+  assert.deepEqual(read('Inclusion Criteria:\n* Age >= 18, and\n* Stage IV'), [['inclusion', 'Age >= 18, and'], ['inclusion', 'Stage IV']])
+  assert.deepEqual(read('Inclusion Criteria:\nOR\n* Stage IV'), [['inclusion', 'Stage IV']], 'a bare word under a heading joins nothing')
+  // A heading ends the alternatives.
+  assert.deepEqual(read('Inclusion Criteria:\n* Adenocarcinoma or\nExclusion Criteria:\n* Pregnancy'), [['inclusion', 'Adenocarcinoma or'], ['exclusion', 'Pregnancy']])
+})
+
+test('clauses: an escaped bullet or number is a bullet or a number', () => {
+  const text = 'Inclusion Criteria:\n\\- Age >= 18\n\\- Stage IV\n\\* Consent'
+  assert.deepEqual(segmentCriteria(text).map((row) => row.text), ['Age >= 18', 'Stage IV', 'Consent'])
+  assert.deepEqual(segmentCriteria('Exclusion Criterion.\n\n1\\) Enrolled elsewhere\n2\\) Pregnant\n3\\. Infection').map((row) => [row.kind, row.text]), [['exclusion', 'Enrolled elsewhere'], ['exclusion', 'Pregnant'], ['exclusion', 'Infection']])
+})
+
 test('the fit prompt: the note comes before the trial, the method is carried and reasons follow the note', () => {
   const [system, user] = fitMessages({ title: 'T', summary: 'S', eligibility: 'Inclusion Criteria:\n* Age >= 18', note: 'NOTE TEXT' })
   assert.equal(system.role, 'system')
