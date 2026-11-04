@@ -2111,6 +2111,8 @@ export class VcrJobs {
             ...(Object.keys(object(detail.timeUnitBasis)).length ? { timeUnitBasis: object(detail.timeUnitBasis) } : {}),
             // Control-plane facts about the run, frozen with the job: the defaults it took, and why it ran as many replicates as it did.
             ...(list(detail.appliedDefaults).length ? { appliedDefaults: list(detail.appliedDefaults) } : {}),
+            // Which numbers of the scenario are in the person's own messages (a conversation's design job): the premise word 「你给的数据」 reads it.
+            ...(Object.keys(object(detail.personStated)).length ? { personStated: object(detail.personStated) } : {}),
             ...(recordLimits.length ? { applicabilityLimits: recordLimits.map((entry) => ({ code: String(entry.code), reason: String(entry.reason ?? "") })) } : {}),
             ...(Object.keys(object(detail.replicatePlan)).length ? { replicatePlan: object(detail.replicatePlan) } : {}),
             // What a population check was about and whether its second table was made from other evidence: the control plane's account.

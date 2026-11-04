@@ -22,6 +22,7 @@
  * @module vcrConfirmatory
  */
 
+import { personWord } from "./vcrPersonStated.mjs";
 import { finishPremises } from "./vcrPremises.mjs";
 import { vcrScenarioKey } from "./vcrScenarioKey.mjs";
 import { TIME_UNIT_WORDS, list, markFor, measureValue, numeric, object } from "./vcrViewsKit.mjs";
@@ -150,43 +151,46 @@ function assumptionRow(key, raw) {
  * The premises of a card: the values the answer turns on that the scenario states (the planned effect, the control level), then what
  * the engine took because nothing said otherwise.
  * @param {Record<string, any>} confirmatory the engine's `diagnostics.confirmatory` (`given` is what the scenario stated)
+ * @param {Record<string, any> | undefined} stated the result's `diagnostics.personStated`: which numbers are in the person's own messages (「你给的数据」)
  */
-function premisesOf(confirmatory) {
+function premisesOf(confirmatory, stated) {
   const endpoint = String(confirmatory.endpoint ?? "");
   const given = object(confirmatory.given);
   /** @type {Array<Record<string, any>>} */
   const rows = [];
+  /** The word of a stated number: the person's only when the person said it (`personWord`), else a premise. @param {string | string[]} paths */
+  const said = (paths) => personWord(stated, paths, "assumed");
   const planned = numeric(given.plannedEffect);
   // which way is better decides how the sign of every effect below is read (a reduction of 0.1 is a benefit where lower is better)
   if (given.direction === "lower_better" || given.direction === "higher_better") {
     rows.push({ key: "direction", label: "哪个方向更好", value: given.direction === "lower_better" ? "越低越好（效应为负是有利）" : "越高越好（效应为正是有利）", source: "assumed", decisive: true });
   }
-  if (planned !== null) rows.push({ key: "effect", label: `计划的效应（${EFFECT_WORDS[endpoint] ?? "效应"}）`, value: plain(planned), source: "assumed", decisive: true });
+  if (planned !== null) rows.push({ key: "effect", label: `计划的效应（${EFFECT_WORDS[endpoint] ?? "效应"}）`, value: plain(planned), source: said("truth.plannedEffect"), decisive: true });
   const scenarios = numeric(given.effectScenarios);
   if (scenarios) rows.push({ key: "effect", label: "设想的效应情形", value: `${scenarios} 种，每种给出各臂的${EFFECT_WORDS[endpoint] ?? "效应"}`, source: "assumed", decisive: true });
   const subsets = numeric(given.subsetScenarios);
   if (subsets) rows.push({ key: "effect", label: "设想的效应情形", value: `${subsets} 种，给出亚组和其余人群的${EFFECT_WORDS[endpoint] ?? "效应"}`, source: "assumed", decisive: true });
-  if (numeric(given.rateRatio) !== null) rows.push({ key: "effect", label: "率比", value: plain(Number(given.rateRatio)), source: "assumed", decisive: true });
-  if (numeric(given.controlRate) !== null) rows.push({ key: "control", label: "对照组事件率", value: `${plain(Number(given.controlRate) * 100)}%`, source: "assumed", decisive: true });
+  if (numeric(given.rateRatio) !== null) rows.push({ key: "effect", label: "率比", value: plain(Number(given.rateRatio)), source: said("truth.rateRatio"), decisive: true });
+  if (numeric(given.controlRate) !== null) rows.push({ key: "control", label: "对照组事件率", value: `${plain(Number(given.controlRate) * 100)}%`, source: said("truth.controlRate"), decisive: true });
   const unit = TIME_UNIT_WORDS[String(given.timeUnit)]?.after ?? null;
-  if (numeric(given.controlMedian) !== null) rows.push({ key: "control", label: "对照组中位时间", value: `${plain(Number(given.controlMedian))}${unit ? ` ${unit}` : ""}`, source: "assumed", decisive: true });
-  if (numeric(given.controlEventRate) !== null) rows.push({ key: "control", label: "对照组事件率（每患者每单位时间）", value: plain(Number(given.controlEventRate)), source: "assumed", decisive: true });
-  if (numeric(given.overdispersion) !== null) rows.push({ key: "overdispersion", label: "过度离散", value: `${plain(Number(given.overdispersion))}（0 表示泊松）`, source: "assumed", decisive: true });
-  if (numeric(given.subsetPrevalence) !== null) rows.push({ key: "prevalence", label: "标志物阳性所占比例", value: `${plain(Number(given.subsetPrevalence) * 100)}%`, source: "assumed", decisive: true });
+  if (numeric(given.controlMedian) !== null) rows.push({ key: "control", label: "对照组中位时间", value: `${plain(Number(given.controlMedian))}${unit ? ` ${unit}` : ""}`, source: said("truth.controlMedian"), decisive: true });
+  if (numeric(given.controlEventRate) !== null) rows.push({ key: "control", label: "对照组事件率（每患者每单位时间）", value: plain(Number(given.controlEventRate)), source: said("truth.controlEventRate"), decisive: true });
+  if (numeric(given.overdispersion) !== null) rows.push({ key: "overdispersion", label: "过度离散", value: `${plain(Number(given.overdispersion))}（0 表示泊松）`, source: said("truth.overdispersion"), decisive: true });
+  if (numeric(given.subsetPrevalence) !== null) rows.push({ key: "prevalence", label: "标志物阳性所占比例", value: `${plain(Number(given.subsetPrevalence) * 100)}%`, source: said("design.subsetPrevalence"), decisive: true });
   const dropout = numeric(given.dropoutAnnual);
-  if (dropout !== null) rows.push({ key: "dropout", label: "每年脱落率", value: `${plain(dropout * 100)}%`, source: "assumed", decisive: false });
+  if (dropout !== null) rows.push({ key: "dropout", label: "每年脱落率", value: `${plain(dropout * 100)}%`, source: said("accrual.dropoutAnnual"), decisive: false });
   // the accrual and what the people rest on (only a result that stated them has them: an older result reads as it read)
   const people = object(confirmatory.people);
   const duration = numeric(given.accrualDuration);
   const followup = numeric(given.followup);
   if (duration !== null && followup !== null) {
-    rows.push({ key: "accrual", label: "入组与随访", value: `入组 ${plain(duration)} ${unit ?? "个月"}，随访 ${plain(followup)} ${unit ?? "个月"}`, source: "assumed", decisive: people.computed === true });
+    rows.push({ key: "accrual", label: "入组与随访", value: `入组 ${plain(duration)} ${unit ?? "个月"}，随访 ${plain(followup)} ${unit ?? "个月"}`, source: said(["accrual.duration", "accrual.followup"]), decisive: people.computed === true });
   }
   if (people.computed === true && PEOPLE_WORDS[String(people.basis)]) rows.push({ key: "people", label: "人数怎么算", value: PEOPLE_WORDS[String(people.basis)], source: "default", decisive: true });
   else if (people.computed === false) rows.push({ key: "people", label: "人数", value: PEOPLE_MISSING, source: "default", decisive: false });
   const zone = object(given.promisingZone);
   if (numeric(zone.lower) !== null && numeric(zone.upper) !== null) {
-    rows.push({ key: "zone", label: "只在中期条件功效落在这个区间时加样", value: `${plain(Number(zone.lower) * 100)}% 到 ${plain(Number(zone.upper) * 100)}%（区间之外按原计划样本量继续）`, source: "assumed", decisive: true });
+    rows.push({ key: "zone", label: "只在中期条件功效落在这个区间时加样", value: `${plain(Number(zone.lower) * 100)}% 到 ${plain(Number(zone.upper) * 100)}%（区间之外按原计划样本量继续）`, source: said(["design.promisingZone.lower", "design.promisingZone.upper"]), decisive: true });
   }
   for (const entry of list(confirmatory.assumed).map(object)) {
     const row = assumptionRow(String(entry.key), entry.value);
@@ -320,7 +324,7 @@ export function presentConfirmatoryDesigns(bundle, { nodeOf }) {
       ? `只算完了一部分模拟（${list(confirmatory.iterations).map(Number).filter(Number.isFinite).join(" / ")} 次，每行各自的次数见表），数字按已算完的给出。` : null;
     return {
       id: String(result.id), version: Number(result.version), design, title, question: words.question, endpoint: ENDPOINT_WORDS[String(confirmatory.endpoint)] ?? "",
-      unit: events ? "events" : "patients", headline, premises: premisesOf(confirmatory), looks, baselines, limited,
+      unit: events ? "events" : "patients", headline, premises: premisesOf(confirmatory, object(result.diagnostics).personStated), looks, baselines, limited,
       table: rows.length ? { columns: columns.map(({ key, label, group }) => ({ key, label, group: group ?? null })), rows } : null,
     };
   }).filter(Boolean);

@@ -25,6 +25,7 @@
  */
 
 import { VCR_EFFECT_DISCOUNT_LABEL_ZH, VCR_EFFECT_DISCOUNT_LIMITS_ZH, VCR_ESTIMAND_LABELS_ZH, VCR_MIN_CELL_SIZE, VCR_PREMISES_DECISIVE_MAX, VCR_PREMISE_SOURCES } from "@evimed/domain";
+import { personWord } from "./vcrPersonStated.mjs";
 import { imputationPremise } from "./vcrImputationView.mjs";
 import { targetTrialPremises } from "./vcrTargetTrialView.mjs";
 import { TIME_UNIT_WORDS, hazardLawWords, list, numeric, object, text } from "./vcrViewsKit.mjs";
@@ -149,7 +150,7 @@ function timeWord(configuration, diagnostics) {
  * @param {{ endpointType?: string | null, configuration?: Record<string, any>, diagnostics?: Record<string, any>, effectDiscount?: Record<string, any> | null,
  *   bound?: ReadonlyArray<{ key?: string, path?: string }>, cards?: ReadonlyArray<Record<string, any>>,
  *   appliedDefaults?: ReadonlyArray<{ path: string, value?: unknown }>, hasAssurance?: boolean, assuranceReason?: string | null,
- *   designKind?: string | null }} input
+ *   designKind?: string | null, personStated?: Record<string, any> | null }} input
  * `bound`: the cards that were laid over the scenario (the job's own record), by the path each filled; `cards`: the study's cards.
  * @returns {Array<Partial<VcrPremise>>}
  */
@@ -175,7 +176,8 @@ function trialPremises(input) {
     const card = cardByPath.get(path);
     if (card && numeric(card.pointValue) !== null) return { value: numeric(card.pointValue), source: premiseSourceOfCard(card), reason: premiseReasonOfCard(card) };
     if (defaults.has(path)) return { value: defaults.get(path), source: "default" };
-    return stated === undefined || stated === null ? null : { value: stated, source: "assumed" };
+    // a number the scenario states is 「你给的数据」 only when it is in the person's own message (`personStated`, frozen with the job); else a premise
+    return stated === undefined || stated === null ? null : { value: stated, source: personWord(input.personStated, path, "assumed") };
   };
   /** @type {Array<Partial<VcrPremise>>} */
   const rows = [];
@@ -193,7 +195,7 @@ function trialPremises(input) {
     const words = type === "time_to_event" ? `风险比不超过 ${plain(margin)}`
       : type === "binary" ? (lower ? `率差不高于 +${percent(margin)}` : `率差不低于 −${percent(margin)}`)
       : lower ? `均数差不高于 ${plain(margin)}` : `均数差不低于 −${plain(margin)}`;
-    rows.push({ key: "margin", label: "非劣效界值", value: words, source: "assumed", decisive: true });
+    rows.push({ key: "margin", label: "非劣效界值", value: words, source: personWord(input.personStated, "hypothesis.margin", "assumed"), decisive: true });
   }
   // The effect the design is sized for.
   if (single) {

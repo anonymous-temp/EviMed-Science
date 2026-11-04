@@ -26,6 +26,7 @@
 
 import { finishPremises } from "./vcrPremises.mjs";
 import { vcrScenarioKey } from "./vcrScenarioKey.mjs";
+import { personWord } from "./vcrPersonStated.mjs";
 import { list, markFor, measureValue, numeric, object } from "./vcrViewsKit.mjs";
 
 /**
@@ -97,7 +98,7 @@ function assumptionRow(key, raw) {
 }
 
 /** @param {Record<string, any>} design */
-function premisesOf(design) {
+function premisesOf(design, record) {
   const kind = String(design.kind);
   const given = object(design.given);
   /** @type {Array<Record<string, any>>} */
@@ -105,31 +106,31 @@ function premisesOf(design) {
   if (kind === "threshold_calibration") {
     const details = object(design.details);
     const endpoint = String(design.endpoint);
-    rows.push({ key: "endpoint", label: "终点", value: ENDPOINT_WORDS[endpoint] ?? endpoint, source: "given", decisive: false });
+    rows.push({ key: "endpoint", label: "终点", value: ENDPOINT_WORDS[endpoint] ?? endpoint, source: personWord(record, [], "given"), decisive: false });
     if (numeric(details.standardError) !== null) rows.push({ key: "se", label: "估计量的标准误", value: plain(Number(details.standardError)), source: "assumed", decisive: true });
-    if (numeric(details.nTreat) !== null) rows.push({ key: "size", label: "每组样本量", value: `试验组 ${plain(Number(details.nTreat))} 例，对照组 ${plain(Number(details.nControl))} 例`, source: "given", decisive: true });
+    if (numeric(details.nTreat) !== null) rows.push({ key: "size", label: "每组样本量", value: `试验组 ${plain(Number(details.nTreat))} 例，对照组 ${plain(Number(details.nControl))} 例`, source: personWord(record, ["design.nTreat", "design.nControl"], "given"), decisive: true });
     const sd = numeric(details.priorSd);
     if (sd !== null) rows.push({ key: "prior", label: "效应的先验", value: `均值 ${plain(Number(details.priorMean))}，标准差 ${plain(sd)}`, source: "assumed", decisive: true });
     else if (list(details.priorTreatment).length) rows.push({ key: "prior", label: "两组有效率的先验", value: `试验组 Beta(${list(details.priorTreatment).map((v) => plain(Number(v))).join(", ")})，对照组 Beta(${list(details.priorControl).map((v) => plain(Number(v))).join(", ")})`, source: "assumed", decisive: true });
     else rows.push({ key: "prior", label: "效应的先验", value: "无先验信息（平坦）", source: "default", decisive: true });
-    if (numeric(details.margin) !== null) rows.push({ key: "margin", label: "后验概率要超过的效应界值", value: plain(Number(details.margin)), source: numeric(given.margin) === null ? "default" : "given", decisive: true });
-    rows.push({ key: "alpha", label: "规定的 I 类错误（单侧）", value: percent(Number(design.alpha)), source: numeric(given.alpha) === null ? "default" : "given", decisive: true });
+    if (numeric(details.margin) !== null) rows.push({ key: "margin", label: "后验概率要超过的效应界值", value: plain(Number(details.margin)), source: numeric(given.margin) === null ? "default" : personWord(record, "design.margin", "given"), decisive: true });
+    rows.push({ key: "alpha", label: "规定的 I 类错误（单侧）", value: percent(Number(design.alpha)), source: numeric(given.alpha) === null ? "default" : personWord(record, "analysis.alpha", "given"), decisive: true });
   } else {
     const rate = (/** @type {unknown} */ v) => (numeric(v) === null ? "—" : percent(Number(v)));
     const operating = list(design.operating).map(object);
     const nullRow = operating.find((row) => row.role === "null");
     const altRow = operating.find((row) => row.role === "alternative");
-    rows.push({ key: "rates", label: "无效应与有效应时的有效率", value: `${rate(nullRow?.rate)} 与 ${rate(altRow?.rate)}`, source: "assumed", decisive: true });
+    rows.push({ key: "rates", label: "无效应与有效应时的有效率", value: `${rate(nullRow?.rate)} 与 ${rate(altRow?.rate)}`, source: personWord(record, ["truth.nullRate", "truth.alternativeRate"], "assumed"), decisive: true });
     const looks = list(design.looks).map(object);
-    if (looks.length) rows.push({ key: "looks", label: "分析时机", value: `累计 ${looks.map((look) => plain(Number(look.size))).join("、")} 人时`, source: numeric(given.lookEvery) === null ? "default" : "given", decisive: true });
+    if (looks.length) rows.push({ key: "looks", label: "分析时机", value: `累计 ${looks.map((look) => plain(Number(look.size))).join("、")} 人时`, source: numeric(given.lookEvery) === null ? "default" : personWord(record, "design.lookEvery", "given"), decisive: true });
     const prior = object(design.prior);
     if (numeric(prior.a) !== null) rows.push({ key: "prior", label: "有效率的先验", value: `Beta(${plain(Number(prior.a))}, ${plain(Number(prior.b))})`, source: "default", decisive: false });
     const parameters = object(design.parameters);
     if (kind === "predictive_monitoring" && numeric(parameters.futility) !== null) {
-      rows.push({ key: "futility", label: "预测成功的概率低于多少就停止", value: percent(Number(parameters.futility)), source: numeric(given.futilityThreshold) === null ? "default" : "given", decisive: true });
-      if (numeric(parameters.efficacy) !== null) rows.push({ key: "efficacy", label: "预测成功的概率高于多少就提前宣布成功", value: percent(Number(parameters.efficacy)), source: "given", decisive: true });
+      rows.push({ key: "futility", label: "预测成功的概率低于多少就停止", value: percent(Number(parameters.futility)), source: numeric(given.futilityThreshold) === null ? "default" : personWord(record, "design.predictive.futility", "given"), decisive: true });
+      if (numeric(parameters.efficacy) !== null) rows.push({ key: "efficacy", label: "预测成功的概率高于多少就提前宣布成功", value: percent(Number(parameters.efficacy)), source: personWord(record, "design.predictive.efficacy", "given"), decisive: true });
     }
-    if (typeof design.objective === "string") rows.push({ key: "objective", label: "搜索的目标", value: OBJECTIVE_WORDS[design.objective] ?? design.objective, source: given.objective ? "given" : "default", decisive: true });
+    if (typeof design.objective === "string") rows.push({ key: "objective", label: "搜索的目标", value: OBJECTIVE_WORDS[design.objective] ?? design.objective, source: given.objective ? personWord(record, [], "given") : "default", decisive: true });
   }
   for (const entry of list(design.assumed).map(object)) {
     const row = assumptionRow(String(entry.key), entry.value);
@@ -208,7 +209,7 @@ function phase2Payload(result, staleMark, design) {
     found, reachedPower: design.reachedPower === true,
     simon: simon.optimal ? { optimal: simonRow(object(simon.optimal), context), minimax: simon.minimax ? simonRow(object(simon.minimax), context) : null,
       saving: saving ? shown(saving, context) : null } : null,
-    calibration: null, premises: premisesOf(design), limited: null,
+    calibration: null, premises: premisesOf(design, object(result.diagnostics).personStated), limited: null,
   };
 }
 
@@ -231,7 +232,7 @@ function calibrationPayload(result, staleMark, design) {
     id: String(result.id), version: Number(result.version), form: "calibration", design: "threshold_calibration",
     title: KIND_WORDS.threshold_calibration.title, question: KIND_WORDS.threshold_calibration.question, headline,
     looks: [], operating: null, found: null, reachedPower: false, simon: null,
-    calibration: { endpoint: ENDPOINT_WORDS[String(design.endpoint)] ?? "", rows, discrete, note }, premises: premisesOf(design), limited: null,
+    calibration: { endpoint: ENDPOINT_WORDS[String(design.endpoint)] ?? "", rows, discrete, note }, premises: premisesOf(design, object(result.diagnostics).personStated), limited: null,
   };
 }
 

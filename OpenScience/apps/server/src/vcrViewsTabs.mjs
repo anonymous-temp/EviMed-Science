@@ -1355,6 +1355,8 @@ function trialPremiseInput(bundle, row) {
     bound,
     cards: list(bundle.assumptions),
     appliedDefaults: appliedDefaultsOf(scenario, stages),
+    // which numbers are in the person's own messages (a conversation's design job froze it): the newest stage that has the record
+    personStated: stages.simulation?.diagnostics?.personStated ?? stages.analytic?.diagnostics?.personStated ?? row._result?.diagnostics?.personStated ?? null,
     hasAssurance: !(supportsAssurance && ran) || Boolean(stages.assurance),
     assuranceReason: "没有算：效应只有一个值，没有可以积分的预测分布",
     // The power the design keeps at the effect reduced by the published gap, from the analytic stage (C6); absent where there is none.

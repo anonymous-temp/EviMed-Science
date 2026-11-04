@@ -713,6 +713,46 @@ test("a network, a dose-response and a shrinkage start through the gateway, file
   assert.equal(pooledCalls.length, 1, "a prior typed in never reaches the pooling");
 });
 
+test("a design started in a conversation freezes which of its numbers the person typed; a conversation whose messages cannot be read freezes that, and a job outside a conversation freezes nothing (2026-11-04)", async () => {
+  /** @type {any[]} */
+  const queued = [];
+  const jobs = {
+    async enqueue(/** @type {any} */ input) { queued.push(input); return { job: { id: "job_s", state: "queued", progress: {} }, created: true }; },
+    async get() { return null; }, async cancel() { return { job: { id: "job_s", state: "canceled" }, canceled: true }; },
+  };
+  const made = fixture({ jobs });
+  made.vcr.store.taskContext = async (/** @type {any} */ origin) => ({ id: "std_task", userId: "u1", projectId: "prj_1", scope: "conversation", purpose: "task", conversationSessionId: origin.rootSessionId });
+  /** @type {string[]} */
+  const asked = [];
+  const handlerWith = (/** @type {() => Promise<string[] | null>} */ read) => createVcrGatewayHandler(config, runtimeManager, { vcr: made.vcr,
+    resolveInvocation: async () => ({ userId: "u1", projectId: "prj_1", runId: "run_1", rootSessionId: "sess_1", callId: "call_1" }),
+    readPersonMessages: async (_study, sessionId) => { asked.push(sessionId); return read(); } });
+  const start = async (/** @type {any} */ handler, /** @type {Record<string, any>} */ body) => {
+    const res = response();
+    await handler(request("/internal/vcr/v1/simulate", { action: "start", ...body }, { authorization: "Bearer token", "x-evimed-execution-context": "{}" }), res);
+    assert.equal(res.status, 200, res.body);
+    return queued.at(-1).detail.personStated;
+  };
+  const winRatio = { design: { nTreat: 250, followup: 24, dropoutAnnual: 0.05 }, truth: { death: { controlRisk: 0.15, hazardRatio: 0.75 }, score: { shift: 4, sd: 20 }, correlation: 0.3 } };
+  // the person said 24 months, 5% and a hazard ratio of 0.75; the model chose the rest
+  const said = await start(handlerWith(async () => ["心衰试验，随访 24 个月，年脱落率 5%，死亡风险比 0.75，三层比较要多少人？"]), { kind: "design_win_ratio", scenario: winRatio });
+  assert.deepEqual(asked.at(-1), "sess_1", "the conversation the call came from");
+  assert.deepEqual(said, { schema: 1, readable: true, paths: ["design.followup", "design.dropoutAnnual", "truth.death.hazardRatio"] }, "250, 0.15, 4, 20 and 0.3 are the model's");
+  // a conversation that cannot be read, or has no message of the person's: the strong word is never given on no evidence
+  for (const read of [async () => null, async () => [], async () => { throw new Error("ledger unreadable"); }]) {
+    assert.deepEqual(await start(handlerWith(/** @type {any} */ (read)), { kind: "design_win_ratio", scenario: winRatio }), { schema: 1, readable: false, paths: [] });
+  }
+  // a kind that is not a design is not asked, and a job started outside a conversation has no record (it reads as it read)
+  const network = { label: "response", measure: "log_ratio", direction: "lower_better", studies: [{ studyId: "H1", contrasts: [{ treatment: "B", comparator: "A", effect: -0.3, se: 0.12 }] }] };
+  const res = response();
+  await handlerWith(async () => ["effect -0.3"])(request("/internal/vcr/v1/simulate", { action: "start", kind: "network_meta", scenario: network }, { authorization: "Bearer token", "x-evimed-execution-context": "{}" }), res);
+  assert.equal(queued.at(-1).detail.personStated, undefined, "a network meta-analysis is not a design");
+  const outside = fixture({ jobs });
+  const plain = response();
+  await outside.handler(request("/internal/vcr/v1/simulate", { action: "start", kind: "design_win_ratio", scenario: winRatio }), plain);
+  assert.equal(queued.at(-1).detail.personStated, undefined, "no conversation, no messages, no record");
+});
+
 test("a dose-finding design and a Bayesian design start through the gateway, filed under what they are about", async () => {
   /** @type {any[]} */
   const queued = [];

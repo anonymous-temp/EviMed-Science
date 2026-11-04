@@ -6020,6 +6020,16 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         runs: async () => (await agentRuns.list(project)).filter(run=>run.status==="running"),adoptionWaitMs:config.vcrRunAdoptionWaitMs,readBenchmark:readVcrBenchmarkFile,authenticatedUserId:String(identity.userId) });
     },
     report: (code) => process.stderr.write(`vcr gateway: ${code}\n`),
+    // What the person typed in this conversation: the question of each turn of theirs (the ledger keeps its first 160 characters) and what they steered
+    // into a running one. A turn the platform started (a schedule, the study's own programme, a continuation) is not theirs. null when it cannot be read.
+    readPersonMessages: async (study, sessionId) => {
+      const project = await sourceProject({ userId: study.userId, projectId: study.projectId });
+      const platformReason = /^(autopilot|vcr|geo|loopx)/;
+      return (await agentRuns.conversationRuns(project, sessionId))
+        .filter(run => run.automated !== true && !platformReason.test(String(run.effectiveRouteReason ?? "")))
+        .flatMap(run => [run.question, ...(Array.isArray(run.steers) ? run.steers.map((/** @type {any} */ steer) => steer?.text) : [])])
+        .filter((/** @type {unknown} */ text) => typeof text === "string" && text.trim());
+    },
     readProducerRun: async (study, runId) => {
       const project = await sourceProject({ userId: study.userId, projectId: study.projectId });
       const run = (await agentRuns.list(project)).find(row => row.id === runId);

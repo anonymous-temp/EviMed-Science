@@ -24,6 +24,7 @@
 
 import { finishPremises } from "./vcrPremises.mjs";
 import { vcrScenarioKey } from "./vcrScenarioKey.mjs";
+import { personWord } from "./vcrPersonStated.mjs";
 import { list, markFor, measureValue, numeric, object } from "./vcrViewsKit.mjs";
 
 /**
@@ -62,33 +63,35 @@ export function cellLabel(name) {
 const shown = (measure, { result, staleMark }) => measureValue(measure?.mcse === 0 ? { ...measure, mcse: undefined } : measure, { kind: "design_win_ratio", result, tab: "trial", staleMark });
 
 /** @param {Record<string, any>} wr the engine's `diagnostics.winRatio` */
-function premisesOf(wr) {
+function premisesOf(wr, record) {
   const model = object(wr.model);
   const unit = UNIT_WORDS[String(model.timeUnit ?? "months")] ?? "个时间单位";
   const keys = new Set(list(wr.assumed).map((entry) => String(object(entry).key)));
-  const stated = (/** @type {string} */ key) => (keys.has(key) ? "default" : "given");
+  // 「你给的数据」 is a number in the person's own message (or a table they supplied): a number the model chose is 「假设」 (`personWord`), and a result
+  // from before the record was kept reads as it read.
+  const stated = (/** @type {string} */ key) => (keys.has(key) ? "default" : personWord(record, key, "given"));
   const death = object(model.death);
   const events = object(model.events);
   const score = object(model.score);
   /** @type {Array<Record<string, any>>} */
   const rows = [];
   const followup = numeric(model.followup);
-  if (followup !== null) rows.push({ key: "followup", label: "每个人的随访时间", value: `${plain(followup)} ${unit}（死亡或中途退出的人除外）`, source: "given", decisive: true });
+  if (followup !== null) rows.push({ key: "followup", label: "每个人的随访时间", value: `${plain(followup)} ${unit}（死亡或中途退出的人除外）`, source: personWord(record, "design.followup", "given"), decisive: true });
   const risk = numeric(death.controlRisk);
   const median = numeric(death.controlMedian);
   const hr = numeric(death.hazardRatio);
-  if (hr !== null) rows.push({ key: "death", label: "死亡层", value: `${risk !== null ? `对照组随访期内有 ${percent(risk)} 的人死亡` : `对照组中位生存 ${plain(median ?? 0)} ${unit}`}；试验组的死亡风险是对照组的 ${plain(hr)} 倍`, source: "assumed", decisive: true });
+  if (hr !== null) rows.push({ key: "death", label: "死亡层", value: `${risk !== null ? `对照组随访期内有 ${percent(risk)} 的人死亡` : `对照组中位生存 ${plain(median ?? 0)} ${unit}`}；试验组的死亡风险是对照组的 ${plain(hr)} 倍`, source: personWord(record, ["truth.death.hazardRatio", risk !== null ? "truth.death.controlRisk" : "truth.death.controlMedian"], "assumed"), decisive: true });
   if (numeric(events.rateRatio) !== null) {
-    rows.push({ key: "events", label: "事件次数层", value: `对照组每人每${unit.replace("个", "")} ${plain(Number(events.controlRate))} 次，试验组是对照组的 ${plain(Number(events.rateRatio))} 倍；人与人之间的差异（过度离散）${plain(Number(events.overdispersion))}${keys.has("truth.events.overdispersion") ? "（未指定，取默认）" : ""}`, source: "assumed", decisive: true });
+    rows.push({ key: "events", label: "事件次数层", value: `对照组每人每${unit.replace("个", "")} ${plain(Number(events.controlRate))} 次，试验组是对照组的 ${plain(Number(events.rateRatio))} 倍；人与人之间的差异（过度离散）${plain(Number(events.overdispersion))}${keys.has("truth.events.overdispersion") ? "（未指定，取默认）" : ""}`, source: personWord(record, ["truth.events.controlRate", "truth.events.rateRatio", "truth.events.overdispersion"], "assumed"), decisive: true });
   }
   if (numeric(score.shift) !== null) {
     const threshold = numeric(score.threshold) ?? 0;
-    rows.push({ key: "score", label: "评分层", value: `试验组比对照组高 ${plain(Number(score.shift))}（标准差 ${plain(Number(score.sd))}）${threshold > 0 ? `；两人相差不超过 ${plain(threshold)} 算平局` : "；差多少都算分出胜负"}`, source: "assumed", decisive: true });
+    rows.push({ key: "score", label: "评分层", value: `试验组比对照组高 ${plain(Number(score.shift))}（标准差 ${plain(Number(score.sd))}）${threshold > 0 ? `；两人相差不超过 ${plain(threshold)} 算平局` : "；差多少都算分出胜负"}`, source: personWord(record, ["truth.score.shift", "truth.score.sd", ...(threshold > 0 ? ["truth.score.threshold"] : [])], "assumed"), decisive: true });
   }
   const rho = numeric(model.correlation);
   if (rho !== null) rows.push({ key: "level_link", label: "三层之间的关联", value: `任意两层的相关 ${plain(rho)}（病情重的人在每一层上都更差）`, source: stated("truth.correlation"), decisive: true });
   const dropout = numeric(model.dropoutAnnual);
-  if (dropout !== null && dropout > 0) rows.push({ key: "dropout", label: "中途退出", value: `每年 ${percent(dropout)} 的人退出随访`, source: "given", decisive: false });
+  if (dropout !== null && dropout > 0) rows.push({ key: "dropout", label: "中途退出", value: `每年 ${percent(dropout)} 的人退出随访`, source: personWord(record, "design.dropoutAnnual", "given"), decisive: false });
   rows.push({ key: "test", label: "检验方法", value: "Finkelstein-Schoenfeld 置换检验：赢的对数减输的对数，方差由把两组标签打乱得到", source: "default", decisive: false });
   rows.push({ key: "pairs", label: "怎样比较两个人", value: "先比死亡（只在对方仍在随访时才分胜负），再比两人都被观察到的时段内的事件次数（少者胜），最后比期末评分；每一层只处理上一层没分出胜负的对", source: "default", decisive: false });
   const trials = list(wr.assumed).map(object).find((entry) => entry.key === "trials");
@@ -145,7 +148,7 @@ function cardOf(result, staleMark) {
       columns: [{ key: "win_proportion", label: "试验组赢的对数占比" }, { key: "loss_proportion", label: "对照组赢的对数占比" }, { key: "tie_proportion", label: "到这一层仍未分出胜负的对数占比" }],
       rows: [...byLevel, total],
     },
-    trials: trialsDone, premises: premisesOf(wr), limited,
+    trials: trialsDone, premises: premisesOf(wr, object(result.diagnostics).personStated), limited,
   };
 }
 

@@ -28,6 +28,7 @@
 
 import { finishPremises } from "./vcrPremises.mjs";
 import { vcrScenarioKey } from "./vcrScenarioKey.mjs";
+import { personWord } from "./vcrPersonStated.mjs";
 import { list, markFor, measureValue, numeric, object } from "./vcrViewsKit.mjs";
 
 /**
@@ -117,8 +118,9 @@ function assumptionRow(key, raw) {
 /**
  * @param {Record<string, any>} dose the engine's `diagnostics.doseFinding`
  * @param {string[]} kinds
+ * @param {Record<string, any> | undefined} stated the result's `diagnostics.personStated`: which numbers are in the person's own messages
  */
-function premisesOfFinding(dose, kinds) {
+function premisesOfFinding(dose, kinds, stated) {
   const given = object(dose.given);
   const curve = object(dose.curve);
   /** @type {Array<Record<string, any>>} */
@@ -126,14 +128,14 @@ function premisesOfFinding(dose, kinds) {
   const tox = list(curve.toxicity).map(Number);
   if (tox.length) rows.push({ key: "curve", label: `各剂量的真实毒性率（共 ${tox.length} 个剂量）`, value: tox.map((p) => percent(p)).join(" / "), source: "assumed", decisive: true });
   const target = numeric(curve.target);
-  if (target !== null) rows.push({ key: "target", label: "目标毒性率", value: percent(target), source: numeric(given.targetToxicity) === null ? "default" : "given", decisive: true });
+  if (target !== null) rows.push({ key: "target", label: "目标毒性率", value: percent(target), source: numeric(given.targetToxicity) === null ? "default" : personWord(stated, "design.targetToxicity", "given"), decisive: true });
   const assumed = list(dose.assumed).map(object);
   const keys = new Set(assumed.map((entry) => String(entry.key)));
   const maxPatients = assumed.find((entry) => entry.key === "design.maxPatients");
   const cohort = assumed.find((entry) => entry.key === "design.cohortSize");
   if (kinds.some((kind) => kind !== "three_plus_three")) {
     rows.push({ key: "size", label: "入组人数与每组人数", value: `最多 ${plain(Number(maxPatients?.value ?? given.maxPatients))} 人，每组 ${plain(Number(cohort?.value ?? given.cohortSize))} 人（3+3 的人数由规则决定）`,
-      source: keys.has("design.maxPatients") ? "default" : "given", decisive: true });
+      source: keys.has("design.maxPatients") ? "default" : personWord(stated, ["design.maxPatients", "design.cohortSize"], "given"), decisive: true });
   }
   if (kinds.includes("crm")) {
     const skeleton = assumed.find((entry) => entry.key === "design.crm.skeleton");
@@ -205,7 +207,7 @@ function dosePayload(result, staleMark) {
     question: compared ? "在这条毒性曲线下，几种设计选对最大耐受剂量的概率、超量给药的人数差多少" : "在这条毒性曲线下，这种设计选对最大耐受剂量的概率、超量给药的人数是多少",
     trials: trialsDone, askedLabel: labelOf(String(asked.kind)), target: numeric(curve.target) === null ? null : Number(curve.target) * 100, doses, headline,
     table: { columns, rows }, differences: differences.length ? { columns: differenceColumns, rows: differences, note: "各设计用同一批患者的耐受性模拟，差值的误差按逐次试验的差值计算。" } : null,
-    perDose, premises: premisesOfFinding(dose, kinds), limited, selection: null,
+    perDose, premises: premisesOfFinding(dose, kinds, object(result.diagnostics).personStated), limited, selection: null,
   };
 }
 
@@ -232,9 +234,9 @@ function selectionPayload(result, staleMark) {
   const premises = [
     { key: "rates", label: "各情形里各剂量的真实缓解率", value: scenarios.map((row) => list(row.rates).map((rate) => percent(Number(rate))).join(" / ")).join("；"), source: "assumed", decisive: true },
   ];
-  if (margin !== null) premises.push({ key: "margin", label: "选更高剂量的条件", value: `更高剂量的观察缓解率至少比候选剂量高 ${percent(margin)}（即至少多 ${plain(Number(selection.cutoffResponses ?? 0))} 例），否则留在较低剂量；从最低剂量依次比较`, source: "given", decisive: true });
+  if (margin !== null) premises.push({ key: "margin", label: "选更高剂量的条件", value: `更高剂量的观察缓解率至少比候选剂量高 ${percent(margin)}（即至少多 ${plain(Number(selection.cutoffResponses ?? 0))} 例），否则留在较低剂量；从最低剂量依次比较`, source: personWord(object(result.diagnostics).personStated, "design.margin", "given"), decisive: true });
   premises.push({ key: "right", label: "“选对”的含义", value: "真实缓解率与最好的相差不到上述差值的剂量中最低的那个", source: "default", decisive: true });
-  if (target !== null) premises.push({ key: "probability", label: "要求选对的概率", value: percent(target), source: numeric(given.targetProbability) === null ? "default" : "given", decisive: true });
+  if (target !== null) premises.push({ key: "probability", label: "要求选对的概率", value: percent(target), source: numeric(given.targetProbability) === null ? "default" : personWord(object(result.diagnostics).personStated, "design.targetProbability", "given"), decisive: true });
   const size = numeric(selection.perArm);
   const note = first !== null && stable !== null && stable > first
     ? `第一次达到的人数是每个剂量 ${plain(first)} 人；按整数个数判定，概率会随人数上下起伏，从每个剂量 ${plain(stable)} 人起此后每个人数都达到要求。`

@@ -80,6 +80,7 @@ import {
 import { HttpError } from "./security.mjs";
 import { VCR_READ_WHATS, VCR_READ_MAX_ITEMS, VCR_WRITE_WHATS, vcrRouteOptions } from "./vcrService.mjs";
 import { vcrResultEntry, withJobEntry, withWriteEntry } from "./vcrResultEntry.mjs";
+import { vcrPersonStated } from "./vcrPersonStated.mjs";
 import { vcrConfirmatorySubjectId } from "./vcrConfirmatory.mjs";
 import { vcrDoseSubjectId } from "./vcrDoseFinding.mjs";
 import { vcrBayesianSubjectId } from "./vcrBayesianDesign.mjs";
@@ -2606,9 +2607,10 @@ function poolingSummary(result, about) {
  * @param {any} config @param {any} runtimeManager
  * @param {{ vcr: { service: any, store: any, jobs?: any, orchestrator?: any, evidence?: any, evidenceStore?: any, matchStore?: any,
  *   matching?: any, patientTrials?: any, seal?: any, dataPlaneSeam?: any, documents?: any, knowledge?: any, patientContext?: any, dataIntake?: any } | null,
- *   report?: (code: string) => void, budgetMs?: number, resolveStudyConversation?: ((study:any,options:any)=>Promise<any>)|null, resolveInvocation?: ((identity:any,header:any,operation:string,body:any)=>Promise<any>)|null, readProducerRun?: ((study:any,runId:string)=>Promise<any>)|null }} dependencies
+ *   report?: (code: string) => void, budgetMs?: number, resolveStudyConversation?: ((study:any,options:any)=>Promise<any>)|null, resolveInvocation?: ((identity:any,header:any,operation:string,body:any)=>Promise<any>)|null, readProducerRun?: ((study:any,runId:string)=>Promise<any>)|null,
+ *   readPersonMessages?: ((study:any,sessionId:string)=>Promise<readonly string[] | null>)|null }} dependencies
  */
-export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = () => {}, budgetMs = answerBudgetMs, readProducerRun = null, resolveInvocation = null, resolveStudyConversation = null }) {
+export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = () => {}, budgetMs = answerBudgetMs, readProducerRun = null, readPersonMessages = null, resolveInvocation = null, resolveStudyConversation = null }) {
   /** @type {Map<string, { until: number, count: number }>} */
   const windows = new Map();
   const registryDeadline = Number(config?.vcrRegistryTimeoutMs) > 0 ? Number(config.vcrRegistryTimeoutMs) : REGISTRY_DEADLINE_MS;
@@ -2815,7 +2817,8 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
             return sources.length ? { ...checked, sources } : checked;
           }
           if (request.action === "start") {
-            const started = await startJob(vcr, study, /** @type {any} */ (request));
+            const started = await startJob(vcr, study, /** @type {any} */ (request),
+              { personMessages: readPersonMessages && origin?.rootSessionId ? () => readPersonMessages(study, String(origin.rootSessionId)).catch(() => null) : null });
             await nameWhatItHolds(vcr, study);
             return withJobEntry(started, { study, resultKind: vcrResultKindFor(String(/** @type {any} */ (request).kind)), publicUrl: config?.publicUrl });
           }
@@ -2923,8 +2926,9 @@ const sourcesNotForKind = () => ({ field: "", state: "assumption", because: "kin
  * @param {{ kind: string, scenario: Record<string, any>, inputs: unknown[], seed: number | null, replicates: number | null,
  *   cpuSecondsLimit: number | null, subjectId: string | null, reconstructionResultId?: string | null, selection?: any, modelId?:string|null, modelVersion?:string|null,
  *   sources?: unknown }} request
+ * @param {{ personMessages?: (() => Promise<readonly string[] | null>) | null }} [context]
  */
-async function startJob(vcr, study, request) {
+async function startJob(vcr, study, request, { personMessages = null } = {}) {
   if (Object.hasOwn(VCR_LONGITUDINAL_JOBS,request.kind)) {
     if (!vcr.longitudinal) throw gatewayError(503,'vcr_gateway_unavailable','纵向数据尚未接入；其他分析可以继续。');
     const {job} = await vcr.longitudinal.prepare(study,request,study.userId,{ detail: study.completionOrigin ? { conversationOrigin:study.completionOrigin } : {} });
@@ -3131,6 +3135,9 @@ async function startJob(vcr, study, request) {
       detail = { ...detail, bound: [...standing.filter((entry) => !named.has(entry.path)), ...(Array.isArray(detail.bound) ? detail.bound : [])] };
     }
   }
+  // Which numbers of a design are in the person's own messages (the premise word 「你给的数据」 means that and a table the person supplied, and
+  // nothing a model chose): decided here, in code, frozen with the job. A conversation whose messages cannot be read records that it could not.
+  if (personMessages && sourcesAreForKind(request.kind)) detail = { ...detail, personStated: vcrPersonStated(scenario, await personMessages()) };
   const scenarioHash = createHash("sha256").update(canonicalScenarioJson({ scenario, reconstruction: request.reconstructionResultId ?? null,
     ...(Array.isArray(detail.bound) && detail.bound.length ? { bound: detail.bound } : {}) })).digest("hex").slice(0, 16);
   const { job, notice } = await vcr.jobs.enqueue({

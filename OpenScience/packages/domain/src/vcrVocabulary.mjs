@@ -57,6 +57,13 @@ export const VCR_VALUE_SOURCE_LABELS_ZH = Object.freeze({
  * by it; the four are all it says about where a number came from.
  */
 export const VCR_PREMISE_SOURCES = frozen(['literature', 'assumed', 'default', 'given'])
+/**
+ * Where a premise of a result comes from, in the page's words. The meaning of `given` (你给的数据) is stated here and nowhere else: the value comes from
+ * a table or a record the person supplied, or the number is literally in a message the person typed in this conversation (the control plane lays a
+ * scenario's numbers against those messages when a design job starts: `apps/server/src/vcrPersonStated.mjs`). Everything a model wrote into a scenario
+ * is `assumed` (假设), a conversation whose messages cannot be read gives nothing the stronger word, and a result from before the record was kept
+ * reads as it read.
+ */
 export const VCR_PREMISE_SOURCE_LABELS_ZH = Object.freeze({ literature: '文献', assumed: '假设', default: '默认', given: '你给的数据' })
 /** At most this many premises stand open in the block; the rest are folded into one disclosure. */
 export const VCR_PREMISES_DECISIVE_MAX = 5
