@@ -25,6 +25,14 @@ test("a finished design_dose job reaches the trial tab: its own kind, the trial 
   assert.notEqual(a, vcrDoseSubjectId({ design: { kind: "boin", compare: ["three_plus_three"] }, truth: { toxicity: [0.1, 0.2, 0.3] } }), "another curve is another result");
   assert.notEqual(a, vcrDoseSubjectId({ design: { kind: "boin", compare: ["crm"] }, truth: { toxicity: curve } }), "another comparison is another result");
   assert.match(a, /^dose:boin\+three_plus_three:[0-9a-f]{10}$/);
+  // Live 2026-11-04: BOIN with 45 patients instead of 30, and BOIN with the published boundaries, were versions of the question's own result: the
+  // page showed the sensitivity run beside a reply that stated the first. Everything the scenario states but the order of the designs is the question.
+  const asked = { design: { kind: "boin", compare: ["three_plus_three"], targetToxicity: 0.25, cohortSize: 3, maxPatients: 30, startDose: 1 }, truth: { toxicity: curve } };
+  assert.equal(vcrDoseSubjectId(asked), vcrDoseSubjectId({ truth: { toxicity: curve }, design: { startDose: 1, maxPatients: 30, cohortSize: 3, targetToxicity: 0.25, compare: ["three_plus_three"], kind: "boin" } }), "key order is not a difference");
+  assert.equal(vcrDoseSubjectId(asked), vcrDoseSubjectId({ ...asked, design: { ...asked.design, kind: "three_plus_three", compare: ["boin"] } }), "nor is the order of the two designs");
+  assert.notEqual(vcrDoseSubjectId(asked), vcrDoseSubjectId({ ...asked, design: { ...asked.design, maxPatients: 45 } }), "another size is another result");
+  assert.notEqual(vcrDoseSubjectId(asked), vcrDoseSubjectId({ ...asked, design: { ...asked.design, boin: { lambdaE: 0.197, lambdaD: 0.298 } } }), "another boundary is another result");
+  assert.notEqual(vcrDoseSubjectId(asked), vcrDoseSubjectId({ ...asked, design: { ...asked.design, targetToxicity: 0.3 } }), "another target is another result");
 });
 
 test("four designs on one curve sit side by side, with the difference against the one asked about and the error of the differences", () => {

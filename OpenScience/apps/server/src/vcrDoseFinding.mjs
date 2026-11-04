@@ -26,24 +26,23 @@
  * @module vcrDoseFinding
  */
 
-import { createHash } from "node:crypto";
 import { finishPremises } from "./vcrPremises.mjs";
+import { vcrScenarioKey } from "./vcrScenarioKey.mjs";
 import { list, markFor, measureValue, numeric, object } from "./vcrViewsKit.mjs";
 
 /**
- * The key a dose-finding result is filed under (the result's `subject_id`): the designs it is about and the curve (or the response
- * rates and the margin) it was asked on. The same question asked again is the next version of one result; another curve, or another set
- * of designs, is another result.
+ * The key a dose-finding result is filed under (the result's `subject_id`): the designs it is about and everything else the scenario states --
+ * the curve (or the response rates and the margin), the target, the size, the cohort, the starting dose and each design's own settings. The same
+ * question asked again is the next version of one result; another curve, another set of designs or another size is another result, and the
+ * order the designs were named in is not a difference. (The key was the designs, the curve and the target: a sensitivity run of BOIN with the
+ * published boundaries, or with 45 patients instead of 30, replaced the question's own result on the page while the reply still stated the first
+ * -- found live 2026-11-04, and fixed the same way for the confirmatory, Bayesian and win-ratio designs before.)
  * @param {Record<string, any>} scenario
  */
 export function vcrDoseSubjectId(scenario) {
-  const design = object(scenario?.design);
-  const truth = object(scenario?.truth);
-  const kinds = [String(design.kind ?? "unknown"), ...list(design.compare).map(String)].sort();
-  const basis = design.kind === "randomized_selection"
-    ? [truth.responseScenarios ?? null, design.margin ?? null]
-    : [truth.toxicity ?? null, design.targetToxicity ?? null];
-  return `dose:${kinds.join("+")}:${createHash("sha256").update(JSON.stringify(basis)).digest("hex").slice(0, 10)}`;
+  const { kind, compare, ...settings } = object(scenario?.design);
+  const kinds = [String(kind ?? "unknown"), ...list(compare).map(String)].sort();
+  return `dose:${kinds.join("+")}:${vcrScenarioKey({ truth: object(scenario?.truth), design: settings })}`;
 }
 
 const DESIGN_WORDS = Object.freeze(/** @type {Record<string, string>} */ ({ three_plus_three: "3+3", boin: "BOIN", keyboard: "Keyboard", crm: "CRM" }));
