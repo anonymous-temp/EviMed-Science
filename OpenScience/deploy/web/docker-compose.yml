@@ -1256,6 +1256,7 @@ services:
       # it reads as "set and ignored".
       EVIMED_DISABLED_TOOLS: ${EVIMED_DISABLED_TOOLS:-}
       EVIMED_PHARMACY_REFERENCE_SEARCH_URL: ${EVIMED_PHARMACY_REFERENCE_SEARCH_URL:-http://evimed-drug-evidence-adapter:8026/api/v1/evimed/pharmacy-reference-search}
+      EVIMED_TERMINOLOGY_SEARCH_URL: ${EVIMED_TERMINOLOGY_SEARCH_URL:-http://evimed-drug-evidence-adapter:8026/api/v1/evimed/terminology-lookup}
       EVIMED_DRUG_LABEL_SEARCH_URL: ${EVIMED_DRUG_LABEL_SEARCH_URL:-}
       EVIMED_ADR_CASE_QUERY_URL: ${EVIMED_ADR_CASE_QUERY_URL:-http://evimed-drug-evidence-adapter:8026/api/v1/evimed/adr-cases}
       EVIMED_ADR_SIGNAL_ANALYSIS_URL: ${EVIMED_ADR_SIGNAL_ANALYSIS_URL:-http://evimed-drug-evidence-adapter:8026/api/v1/evimed/adr-signal}
@@ -2233,6 +2234,9 @@ services:
       EVIMED_EVIDENCE_SEARCH_KEY_FILE: /run/secrets/evimed-api-key
       EVIMED_PUBLIC_CONNECTORS_ENABLED: "true"
       EVIMED_PHARMACY_REFERENCE_DB: /data/pharmacy-reference.sqlite
+      # The terminology file (scripts/ops/build-terminology.mjs), copied once into the data volume. Absent is fine: /health reports it and
+      # term_normalize keeps its built-in table.
+      EVIMED_TERMINOLOGY_DB: /data/terminology.sqlite
       # The drug-label index (runtime/mcp/evimed-research/build_drug_label_index.py),
       # copied once into the data volume. Absent is fine: /health reports it,
       # readiness does not depend on it, and label search falls back to the

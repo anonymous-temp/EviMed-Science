@@ -343,6 +343,7 @@ const FALLBACK_RULES = {
   OPEN_SCIENCE_MANAGED_BROWSER_MAX_CONTEXTS: ["eq", "managedBrowserMaxContexts", "browser capacity"],
   OPEN_SCIENCE_MANAGED_BROWSER_MAX_CONTEXTS_PER_USER: ["eq", "managedBrowserMaxContextsPerUser", "browser capacity"],
   EVIMED_PHARMACY_REFERENCE_SEARCH_URL: ["deployment", "url"],
+  EVIMED_TERMINOLOGY_SEARCH_URL: ["deployment", "url"],
   EVIMED_ADR_CASE_QUERY_URL: ["deployment", "url"],
   EVIMED_ADR_SIGNAL_ANALYSIS_URL: ["deployment", "url"],
   EVIMED_OFFLABEL_EVIDENCE_PACKET_URL: ["deployment", "url"],

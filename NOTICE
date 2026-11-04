@@ -76,3 +76,11 @@ Data
   manifest.json; the abstracts belong to their publishers.
 - 项目代码/knowledge-plugin/tests/fixtures/: captured public web pages and feeds,
   kept only to test parsing; their content belongs to the publishers.
+- OpenScience/runtime/mcp/evimed-research/data/clinical-scales.json: the wording of the ECOG, Karnofsky, NYHA, Child-Pugh and
+  Glasgow Coma scales as the CDISC SDTM Controlled Terminology prints it (distributed by NCI EVS, which states it may be used
+  without licensing restrictions), with the NCI Thesaurus (CC BY 4.0, National Cancer Institute). The ECOG scale is in the
+  public domain (ECOG-ACRIN Cancer Research Group; Oken MM et al., Am J Clin Oncol 1982;5:649-655).
+- The terminology file that OpenScience/scripts/ops/build-terminology.mjs builds (outside this repository; the public inputs are
+  pinned in OpenScience/deps-version.json under `terminology`) is made from the NCI Thesaurus (CC BY 4.0), the Human Phenotype
+  Ontology and its Chinese translation by the CHPO consortium (HPO licence: the consortium is acknowledged and the version is
+  shown with every answer), HGNC (CC0) and CIViC (CC0), and from vocabularies the operator supplies.

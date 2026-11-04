@@ -627,6 +627,35 @@ test("host runtimes bind the local MetaAgent, and the MCP reads the gateway from
 });
 
 
+test("host runtimes are given the terminology file, docker runtimes the adapter's address, and a file that is not usable stops nothing", async () => {
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "open-science-evimed-terminology-"));
+  try {
+    const { project, plan } = await fixture(tmp);
+    const terminologyDb = path.join(tmp, "terminology.sqlite");
+    await writeFile(terminologyDb, "bounded test database fixture");
+    await syncRuntimeDshProfile(dshConfig({ terminologyDb }), project, plan);
+    assert.equal(mcpEnvironment(await readPatch(plan)).EVIMED_TERMINOLOGY_DB, terminologyDb);
+
+    // Not there, empty or relative: the runtime starts without the variable and term_normalize says it has no terminology file.
+    for (const unusable of [path.join(tmp, "absent.sqlite"), "relative.sqlite", tmp]) {
+      await syncRuntimeDshProfile(dshConfig({ terminologyDb: unusable }), project, plan);
+      assert.equal(mcpEnvironment(await readPatch(plan)).EVIMED_TERMINOLOGY_DB, undefined, unusable);
+    }
+
+    const dockerPlan = { ...plan, sandboxMode: "docker", proxyWorkspaceDir: "/workspace" };
+    await syncRuntimeDshProfile(
+      dshConfig({ terminologyDb, evimedAdapterUrls: { terminologyLookup: "https://evidence.internal/terminology-lookup" } }),
+      project,
+      dockerPlan,
+    );
+    const environment = mcpEnvironment(await readPatch(dockerPlan));
+    assert.equal(environment.EVIMED_TERMINOLOGY_SEARCH_URL, "https://evidence.internal/terminology-lookup");
+    assert.equal(environment.EVIMED_TERMINOLOGY_DB, undefined);
+  } finally {
+    await rm(tmp, { recursive: true, force: true });
+  }
+});
+
 test("host runtimes bind a bounded pharmacy reference while docker requires its HTTP adapter", async () => {
   const tmp = await mkdtemp(path.join(os.tmpdir(), "open-science-evimed-pharmacy-"));
   try {
@@ -1073,6 +1102,7 @@ test("hosted deployment exposes only MCP source and non-secret adapter URL setti
   }
   for (const [name, servicePath] of Object.entries({
     EVIMED_PHARMACY_REFERENCE_SEARCH_URL: "pharmacy-reference-search",
+    EVIMED_TERMINOLOGY_SEARCH_URL: "terminology-lookup",
     EVIMED_ADR_CASE_QUERY_URL: "adr-cases",
     EVIMED_ADR_SIGNAL_ANALYSIS_URL: "adr-signal",
     EVIMED_OFFLABEL_EVIDENCE_PACKET_URL: "offlabel-evidence-packet",

@@ -208,6 +208,11 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   "specialist_python_unavailable",
   "specialist_model_config_unavailable",
   "pharmacy_reference_unconfigured",
+  // The terminology file behind term_normalize is optional: absent, unreadable or invalid, the built-in table answers and the answer
+  // says the file did not (terminology.py), so a missing file is never a failed run.
+  "terminology_invalid",
+  "terminology_unavailable",
+  "terminology_unconfigured",
   "evimed_evidence_invalid_response",
   // The open web is the one channel that is expected to be partly unreachable:
   // engines rate-limit, serve CAPTCHAs, and suspend themselves, and a

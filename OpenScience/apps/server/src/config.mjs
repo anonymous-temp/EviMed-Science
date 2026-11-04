@@ -1726,6 +1726,9 @@ export function loadConfig(overrides = {}) {
     overrides.pharmacyReferenceDb ??
     process.env.OPEN_SCIENCE_PHARMACY_REFERENCE_DB ??
     (localPharmacyReferenceDb && fs.existsSync(localPharmacyReferenceDb) ? localPharmacyReferenceDb : "");
+  // The terminology file term_normalize reads (scripts/ops/build-terminology.mjs). A host runtime reads it by this path; Docker runtimes reach it
+  // through the evidence adapter (EVIMED_TERMINOLOGY_SEARCH_URL), which mounts it from the data volume.
+  const configuredTerminologyDb = overrides.terminologyDb ?? process.env.OPEN_SCIENCE_TERMINOLOGY_DB ?? "";
   const specialistAgentDefinitions = {
     mendelianRandomization: {
       rootEnv: "OPEN_SCIENCE_MR_AGENT_ROOT",
@@ -1775,6 +1778,7 @@ export function loadConfig(overrides = {}) {
       ["clinicalTrialSearch", "EVIMED_CLINICAL_TRIAL_SEARCH_URL"],
       ["patentSearch", "EVIMED_PATENT_SEARCH_URL"],
       ["pharmacyReferenceSearch", "EVIMED_PHARMACY_REFERENCE_SEARCH_URL"],
+      ["terminologyLookup", "EVIMED_TERMINOLOGY_SEARCH_URL"],
       ["drugLabelSearch", "EVIMED_DRUG_LABEL_SEARCH_URL"],
       ["adrCaseQuery", "EVIMED_ADR_CASE_QUERY_URL"],
       ["adrSignalAnalysis", "EVIMED_ADR_SIGNAL_ANALYSIS_URL"],
@@ -2593,6 +2597,9 @@ export function loadConfig(overrides = {}) {
       ? (path.isAbsolute(configuredPharmacyReferenceDb)
         ? configuredPharmacyReferenceDb
         : path.join(rootDir, configuredPharmacyReferenceDb))
+      : "",
+    terminologyDb: configuredTerminologyDb
+      ? (path.isAbsolute(configuredTerminologyDb) ? configuredTerminologyDb : path.join(rootDir, configuredTerminologyDb))
       : "",
     requireAllSpecialistAdapters:
       overrides.requireAllSpecialistAdapters ??

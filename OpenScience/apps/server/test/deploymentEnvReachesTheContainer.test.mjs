@@ -517,6 +517,7 @@ const notForTheContainer = {
   OPEN_SCIENCE_DRUG_SAFETY_AGENT_ROOT: "development",
   OPEN_SCIENCE_DRUG_SAFETY_AGENT_PYTHON: "development",
   OPEN_SCIENCE_PHARMACY_REFERENCE_DB: "development",
+  OPEN_SCIENCE_TERMINOLOGY_DB: "development",
   // The desktop-era file stores, under OPEN_SCIENCE_DATA_DIR (which the image
   // sets); a hosted deployment keeps users and sessions in PostgreSQL.
   OPEN_SCIENCE_USERS_FILE: "development",

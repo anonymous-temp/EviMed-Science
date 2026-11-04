@@ -1315,6 +1315,7 @@ const evimedAdapterEnvironment = Object.freeze({
   clinicalTrialSearch: "EVIMED_CLINICAL_TRIAL_SEARCH_URL",
   patentSearch: "EVIMED_PATENT_SEARCH_URL",
   pharmacyReferenceSearch: "EVIMED_PHARMACY_REFERENCE_SEARCH_URL",
+  terminologyLookup: "EVIMED_TERMINOLOGY_SEARCH_URL",
   drugLabelSearch: "EVIMED_DRUG_LABEL_SEARCH_URL",
   adrCaseQuery: "EVIMED_ADR_CASE_QUERY_URL",
   adrSignalAnalysis: "EVIMED_ADR_SIGNAL_ANALYSIS_URL",
@@ -1828,6 +1829,17 @@ function evimedMcpEnvironment(config, project, plan, { workloadTokenPath } = {})
         );
       }
       environment.EVIMED_PHARMACY_REFERENCE_DB = pharmacyReferenceDb;
+    }
+  }
+  // The terminology file, for a runtime that can read it. A Docker runtime reaches it through the adapter URL above and is given no path. A file
+  // that is not there, or not a bounded regular file, is not an error: term_normalize says it has no terminology file and keeps its built-in table.
+  const terminologyDb = String(config.terminologyDb ?? "").trim();
+  if (terminologyDb && !containerized && path.isAbsolute(terminologyDb) && !/[\r\n\0]/.test(terminologyDb)) {
+    try {
+      const metadata = lstatSync(terminologyDb);
+      if (!metadata.isSymbolicLink() && metadata.isFile() && metadata.size > 0 && metadata.size <= 1024 * 1024 * 1024) environment.EVIMED_TERMINOLOGY_DB = terminologyDb;
+    } catch {
+      // not there: the tool reports it
     }
   }
   const metaAgentRoot = String(config.metaAgentRoot ?? "").trim();
