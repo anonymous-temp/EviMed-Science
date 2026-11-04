@@ -37,8 +37,14 @@ work before further experiments. Nothing here authorizes or records deployment.
 5. **Blind diagnostic:** A separate Flash-only review of 310 public synthetic
    packets was started to investigate unknown-versus-reference disagreements.
    It is not the EviMed product path, is not independent clinical adjudication,
-   and has not produced a complete sealed result at this checkpoint. Retain
-   failed, unattempted and unresolved units rather than treating them as labels.
+   and was stopped at the user's checkpoint request. Of 310 packets, 272 had
+   attempts: 267 produced accepted machine responses, five failed, and 38 were
+   not attempted. All 272 usage entries were settled when the paused history
+   was audited. No reference labels were joined and these counts are not an
+   accuracy score. The local disposable account and its private test database
+   are retained because the existing cleanup guard requires a complete seal;
+   safely reconcile a partial seal or resume before deleting them. No model
+   process is still running for this diagnostic.
 
 ## Fixes retained in the pushed feature branch
 
@@ -88,6 +94,9 @@ production readiness.
 5. Publish the full-run reports and exact remaining failures; then separately
    decide any deployment. Virtual cohort, virtual-patient and synthetic-control
    validation still require their own data and method-specific endpoints.
+
+Also safely reconcile the paused diagnostic account's partial history and delete
+its temporary account/database, or complete and seal it before doing so.
 
 Each full run should be launched once with a frozen manifest and a bounded
 resource envelope. Preserve failures and resume interrupted work explicitly;
