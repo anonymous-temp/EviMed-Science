@@ -39,7 +39,7 @@ async function priorDocument(dataStore, studyId, provenance) {
 /**
  * The job that reads one attached PDF, Word file or scan into a person's record: starting it (`start`) and doing it (`run`, the local executor of its scenario). No transaction is open
  * while the converter or the parser works.
- * @param {{ store: any, dataStore: any, dataPlane: any, jobs: any, receipts: () => any, rejudge?: ((study: any, input: Record<string, any>) => Promise<any>) | null, now?: () => Date }} deps
+ * @param {{ store: any, dataStore: any, dataPlane: any, jobs: any, receipts: () => any, rejudge?: ((study: any, input: { subjectKey: string, documentId?: string, reason?: string, actor?: string }) => Promise<any>) | null, now?: () => Date }} deps
  */
 export function createPatientDocumentRead({ store, dataStore, dataPlane, jobs, receipts, rejudge = null, now = () => new Date() }) {
   const METHOD = 'matching.import_records';
