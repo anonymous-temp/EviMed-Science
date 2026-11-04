@@ -1073,11 +1073,20 @@ export function presentJudgment(fit, criteria) {
  * Reading the judgments of a study and writing the conversation's: the `ranking` of `vcr_read`, the numbered sentences a conversation reads a record through,
  * and the writer behind `vcr_write what: "trial_judgment"`.
  *
- * @param {{ judgments: any, documents: any, subjectTable?: any, targets: ReturnType<typeof judgmentTargets>, matchStore: any, windowChars?: number }} deps
+ * A person's trials whose record has changed since they were judged (the registry watch's mark) are offered for judging again (`rejudge`); in an attended conversation
+ * they are judged again at once through `rejudge.rejudge` (the judging job, `createMatchJudge`), once per half hour for the same trials, and the old rows stay in the read, marked.
+ *
+ * @param {{ judgments: any, documents: any, subjectTable?: any, targets: ReturnType<typeof judgmentTargets>, matchStore: any, windowChars?: number,
+ *   rejudge?: { rejudge?: (study: any, input: { subjectKey: string, reason: string, targetIds: string[] }) => Promise<{ jobId: string } | null> } | null,
+ *   report?: (code: string) => void, now?: () => Date }} deps
  */
+    ...(isRegistryMark(basisChanged) && anchor.targetKind === 'candidate_trial' ? { rejudge: { reason: REGISTRY_RECORD_BASIS, label: '重新判定', subjectKey: anchor.subjectKey, registryIds: [anchor.targetId] } } : {}),
 export function createMatchJudgmentReads({ judgments, documents, subjectTable = null, targets, matchStore, windowChars = 20_000 }) {
   /** @param {any} study @param {string} subjectKey */
   const noteFor = async (study, subjectKey) => {
+/** Whether a row's `basisChanged` is the registry watch's mark: the record the verdict was made of has changed since. @param {any} basisChanged */
+const isRegistryMark = (basisChanged) => basisChanged?.kind === REGISTRY_RECORD_BASIS;
+
     const roster = (await documents.roster(study)).filter((/** @type {any} */ row) => String(row.subjectKey) === subjectKey);
     return readSubjectNote({ study, subjectKey, documents, roster, table: await tableFieldsOf(subjectTable, study), long: await documents.longTables?.(study).catch(() => null) ?? null });
   };
@@ -1132,12 +1141,51 @@ export function createMatchJudgmentReads({ judgments, documents, subjectTable = 
       const fit = pair.fitRow ? whole.get(pair.fitRow.id) ?? null : null, criteria = pair.criteriaRow ? whole.get(pair.criteriaRow.id) ?? null : null;
       return fit || criteria ? [presentJudgment(fit, criteria)] : [];
     });
-    return { ranking: await Promise.all(presented.map((row) => projected(study, row))), finished: ranked.length, failedPairs: failed.length, ...(failed.length ? { failed: failed.slice(0, 50) } : {}), more: ranked.length > offset + limit };
+    // The trials of this person whose verdict rests on a record that has since changed, whatever page they are on: one action judges them again.
+    const stale = order === 'target' && subjectKey
+      ? ranked.filter((pair) => isRegistryMark(pair.fitRow?.basisChanged) || isRegistryMark(pair.criteriaRow?.basisChanged)).map((pair) => String(pair.targetId)).slice(0, VCR_MATCH_JUDGE_LIMITS.trials) : [];
+    return { ranking: await Promise.all(presented.map((row) => projected(study, row))), finished: ranked.length, failedPairs: failed.length, ...(failed.length ? { failed: failed.slice(0, 50) } : {}), more: ranked.length > offset + limit,
+      ...(stale.length ? { rejudge: { reason: REGISTRY_RECORD_BASIS, label: '登记记录已更新，可重新判定', subjectKey, registryIds: stale } } : {}) };
+  };
+
+  /** The auto-started re-judgments of the last half hour, by study, person and trials: a read does not start the same job again, and says which one is out. @type {Map<string, { at: number, jobId: string }>} */
+  const started = new Map();
+  const COOLDOWN_MS = 30 * 60_000;
+  /**
+   * A conversation that asks for a person's trials whose records have changed gets them judged again without being asked (an attended turn only: a page and an unattended
+   * run read what was saved). A failure is quiet: the read it was part of is the old rows, as before.
+   * @param {any} study @param {string} subjectKey @param {string[]} registryIds
+   */
+  const startRejudge = async (study, subjectKey, registryIds) => {
+    const key = [study.id, subjectKey, ...[...registryIds].sort()].join('\u0000');
+    const at = now().getTime();
+    const held = started.get(key);
+    if (held && at - held.at < COOLDOWN_MS) return { jobId: held.jobId };
+    try {
+      const job = await rejudge?.rejudge?.(study, { subjectKey, reason: REGISTRY_RECORD_BASIS, targetIds: registryIds });
+      if (!job?.jobId) return null;
+      if (started.size >= 500) for (const [old, entry] of started) if (at - entry.at >= COOLDOWN_MS) started.delete(old);
+      started.set(key, { at, jobId: String(job.jobId) });
+      return { jobId: String(job.jobId) };
+    } catch (error) {
+      report(String(/** @type {any} */ (error)?.code ?? 'vcr_rejudge_failed'));
+      return null;
+    }
   };
 
   return {
     /** A person's trials from the saved judgments. An empty `ranking` is the caller's cue to say what it held before. @param {any} study @param {string} subjectKey @param {{ limit?: number, offset?: number }} [page] */
-    forSubject: (study, subjectKey, { limit = 20, offset = 0 } = {}) => read(study, { subjectKey, limit, offset, order: 'target' }),
+    forSubject: async (study, subjectKey, { limit = 20, offset = 0 } = {}) => {
+      const answer = await read(study, { subjectKey, limit, offset, order: 'target' });
+      const offered = /** @type {{ registryIds: string[] } | undefined} */ (answer.rejudge);
+      if (!offered || !study?.completionOrigin || !rejudge?.rejudge) return answer;
+      const job = await startRejudge(study, subjectKey, offered.registryIds);
+      return job ? { ...answer, rejudging: job } : answer;
+    },
+    /** The ids of a person's trials whose verdicts rest on a record that has changed: what the page's one action judges again. @param {any} study @param {string} subjectKey */
+    async staleTargets(study, subjectKey) {
+      return (await read(study, { subjectKey, limit: 1, offset: 0, order: 'target' })).rejudge?.registryIds ?? [];
+    },
     /** A protocol version's people from the saved judgments. @param {any} study @param {string} protocolVersionId @param {{ subjectKey?: string | null, limit?: number, offset?: number }} [page] */
     forProtocol: (study, protocolVersionId, { subjectKey = null, limit = 20, offset = 0 } = {}) => read(study, { subjectKey, targetKind: 'protocol_version', targetId: protocolVersionId, limit, offset, order: 'subject' }),
 

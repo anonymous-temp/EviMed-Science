@@ -201,6 +201,12 @@ function requests(target, ids) {
     "GET /studies/:id/population/rows": async () => ["GET", `${S}/population/rows`, undefined],
     // 「为该患者找试验」: a role that may run reaches the roster check, which answers 404 for a patient this study does not hold.
     "POST /studies/:id/trial-search": async () => ["POST", `${S}/trial-search`, { subjectKey: "P-0192" }],
+    // Judge a person's changed-record trials again: the roles that run and read patient-level data reach the roster check, which answers 404 for a patient this study does not hold.
+    "POST /studies/:id/rejudge": async () => ["POST", `${S}/rejudge`, { subjectKey: "P-0192" }],
+    // What the judging job saved: read like the tab, started and downloaded by the roles that run and export (the last two also read patient-level data).
+    "GET /studies/:id/matching/judged": async () => ["GET", `${S}/matching/judged?direction=patient_to_trial&subjectKey=P-0192`, undefined],
+    "POST /studies/:id/matching/judge": async () => ["POST", `${S}/matching/judge`, { direction: "trial_to_patient", protocolVersionId: "prt_none" }],
+    "GET /studies/:id/matching/export": async () => ["GET", `${S}/matching/export?direction=patient_to_trial&subjectKey=P-0192&kind=pairs&format=csv`, undefined],
     "GET /studies/:id/jobs": async () => ["GET", `${S}/jobs`, undefined],
     "GET /studies/:id/jobs/:job": async () => ["GET", `${S}/jobs/job_none`, undefined],
     "GET /studies/:id/jobs/:job/result": async () => ["GET", `${S}/jobs/job_none/result`, undefined],
@@ -297,7 +303,7 @@ test("CS-45 every route, driven through the real server as the owner and as each
       const answer = await call(who, method, route, body);
       // Reference-only case export still requires current patient-level read
       // authority; study export alone cannot read its underlying documents.
-      const allowed = (key === "POST /studies/:id/start" ? abilities.every(ability => holdsAny(held, [ability])) : holdsAny(held, abilities)) && (!key.includes('/correction-cases') || holdsAny(held, ['read_patient_level']));
+      const allowed = (key === "POST /studies/:id/start" ? abilities.every(ability => holdsAny(held, [ability])) : holdsAny(held, abilities)) && (!(key.includes('/correction-cases') || key.endsWith('/matching/export') || key.endsWith('/matching/judge') || key.endsWith('/rejudge')) || holdsAny(held, ['read_patient_level']));
       const label = `${who} (${held.join("+")}) ${key} -> ${answer.status} ${String(answer.body?.code ?? "")}`;
       if (key === "GET /studies/:id/followup-history" && allowed) {
         assert.equal(answer.status, 200, `${label}: an authorized history reader must reach the composed service`);

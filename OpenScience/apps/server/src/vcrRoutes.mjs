@@ -177,6 +177,7 @@ export const VCR_ROUTE_ABILITIES = Object.freeze({
   "GET /studies/:id/patients/:patient": ["read"],
   "GET /studies/:id/population/rows": ["read"],
   "POST /studies/:id/trial-search": ["run"],
+  "POST /studies/:id/rejudge": ["run"],
   "GET /studies/:id/jobs": ["read"],
   "GET /studies/:id/jobs/:job": ["read"],
   "POST /studies/:id/jobs": ["run"],
@@ -268,7 +269,7 @@ export function vcrRoutePattern(pathname) {
   if (parts.length === 1) return "/api/vcr/studies";
   if (parts.length === 2) return "/api/vcr/studies/:id";
   if (parts[1] === "of-project" && parts.length === 3) return "/api/vcr/studies/of-project/:project";
-  const known = [...VCR_TABS, "run", "cancel", "trial-search", "jobs", "method-configurations", "budget", "assumptions", "model-assessments", "reviews", "curve-extractions", "model-sources", "correction-cases", "decisions", "export", "publications", "predictions", "members", "referrals", "pack", "definitions", "runs"];
+  const known = [...VCR_TABS, "run", "cancel", "trial-search", "rejudge", "jobs", "method-configurations", "budget", "assumptions", "model-assessments", "reviews", "curve-extractions", "model-sources", "correction-cases", "decisions", "export", "publications", "predictions", "members", "referrals", "pack", "definitions", "runs"];
   const section = known.includes(parts[2]) ? parts[2] : ":route";
   if (parts[2] === "data" && parts.length > 3) {
     // The intake routes: `data/<kind>[/:item[/<action>[/confirm]]]`, every id folded.
@@ -1193,6 +1194,35 @@ export function createVcrRoutes(dependencies) {
       const evaluated = trials?.evaluate && roles.some((role) => roleHolds(role, "read_patient_level"))
         ? await trials.evaluate(study, { subjectKeys: [subjectKey] }).then((done) => done.evaluated.length).catch(() => null) : null;
       return reply({ ...answer, evaluated });
+    }
+
+    // --- 「按更新后的登记记录重新判定」 ---------------------------------------------------
+    // The page's one action for a person's trials whose registry record changed since they were judged (the read's `rejudge` offer): the same judging job, for that person
+    // and those trials (the changed ones when none are named). The old verdicts stay, marked, until the new ones replace them. It reads the person's record like any judging job
+    // does, so it asks for the same ability as starting one.
+    if (parts.length === 3 && method === "POST" && section === "rejudge") {
+      const body = await bodyOf(req, maxJsonBytes, ["subjectKey", "registryIds"]);
+      if (typeof body.subjectKey !== "string" || !SUBJECT_KEY.test(body.subjectKey)) {
+        throw new HttpError(400, "vcr_payload_invalid", "subjectKey is the study's own key for the patient.");
+      }
+      if (body.registryIds != null && (!Array.isArray(body.registryIds) || body.registryIds.length > 200
+        || body.registryIds.some((/** @type {unknown} */ entry) => typeof entry !== "string" || !/^[A-Za-z0-9][A-Za-z0-9-]{2,63}$/.test(entry)))) {
+        throw new HttpError(400, "vcr_payload_invalid", "registryIds are registration numbers, at most 200.");
+      }
+      const subjectKey = body.subjectKey;
+      const { study } = await authorize(id, "run");
+      await requireAbility(study, "read_patient_level");
+      const roster = service.packages?.matchStore?.candidateSubjects ? await service.packages.matchStore.candidateSubjects({ studyId: study.id }) : [];
+      if (!roster.includes(subjectKey)) throw new HttpError(404, "vcr_subject_not_found", "所选受试者不在本研究已登记的名单中。");
+      const judge = service.packages?.matchJudge ?? /** @type {any} */ (dependencies).matchJudge ?? null;
+      const reads = service.packages?.matchJudgments ?? null;
+      if (!judge?.rejudge || !reads?.staleTargets) throw UNAVAILABLE();
+      const targetIds = body.registryIds ?? await reads.staleTargets(study, subjectKey);
+      const job = targetIds.length
+        ? await audited("vcr.match.rejudge", () => ({ code: id, detail: subjectKey }), { code: id, detail: subjectKey },
+          () => judge.rejudge(study, { subjectKey, reason: "registry_record", targetIds: [...new Set(targetIds)] }))
+        : null;
+      return reply(job ? { started: true, ...job } : { started: false, reason: "nothing_to_rejudge" }, job ? 201 : 200);
     }
 
     if (section === "model-sources" && parts.length === 4 && method === "GET") {

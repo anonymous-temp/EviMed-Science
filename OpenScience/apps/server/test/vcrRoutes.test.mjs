@@ -114,6 +114,7 @@ function fixture({ who = OWNER, roles = {}, overrides = {}, operators = [], sett
     packages: {
       longitudinal: overrides.longitudinal,
       matchStore: { async candidateSubjects() { return ["P-0192"]; } },
+      matchJudgments: { async staleTargets() { return ["NCT00000001"]; } },
       patientTrials: { counters: { searches: 0 }, async evaluate(/** @type {any} */ _study, /** @type {any} */ input) { calls.push(["patientTrials.evaluate", ...input.subjectKeys]); return { evaluated: [{}, {}], unavailable: [], notes: [] }; } },
     },
     allows: (/** @type {any} */ user) => vcrAudienceAllows(config, user),
@@ -487,6 +488,10 @@ const REQUESTS = {
   "GET /studies/:id/patients/:patient": ["GET", "/api/vcr/studies/std_1/patients/vp_1?result=res_1", undefined],
   "GET /studies/:id/population/rows": ["GET", "/api/vcr/studies/std_1/population/rows?result=res_1", undefined],
   "POST /studies/:id/trial-search": ["POST", "/api/vcr/studies/std_1/trial-search", { subjectKey: "P-0192" }],
+  "POST /studies/:id/rejudge": ["POST", "/api/vcr/studies/std_1/rejudge", { subjectKey: "P-0192" }],
+  "GET /studies/:id/matching/judged": ["GET", "/api/vcr/studies/std_1/matching/judged?direction=patient_to_trial&subjectKey=P-0192", undefined],
+  "POST /studies/:id/matching/judge": ["POST", "/api/vcr/studies/std_1/matching/judge", { direction: "trial_to_patient", protocolVersionId: "prt_1" }],
+  "GET /studies/:id/matching/export": ["GET", "/api/vcr/studies/std_1/matching/export?direction=patient_to_trial&subjectKey=P-0192&kind=pairs&format=csv", undefined],
   "GET /studies/:id/jobs": ["GET", "/api/vcr/studies/std_1/jobs", undefined],
   "GET /studies/:id/jobs/:job": ["GET", "/api/vcr/studies/std_1/jobs/job_1", undefined],
   "GET /studies/:id/jobs/:job/result": ["GET", "/api/vcr/studies/std_1/jobs/job_1/result", undefined],
@@ -548,6 +553,10 @@ function composedHooks() {
   const ok = async () => ({ ok: true, released: [], removed: 1, job: { id: "job_1" }, created: true, export: { id: "exp_1" } });
   return {
     corrections: { exportDataset: ok, readDataset: ok, replay: ok },
+    // What the judging job saved, read for the matching page, and the start of that job from it.
+    matchResults: { latest: async () => null, forPatient: async () => ({ trials: [] }), forProtocol: async () => ({ people: [] }), resumeSelection: async () => ({ ids: ["NCT00000001"], settings: {} }),
+      exporter: async () => ({ filename: "matching.csv", contentType: "text/csv; charset=utf-8", rows: 1, run: async (/** @type {any} */ sink) => { await sink.write("a,b\r\n"); } }) },
+    matchJudge: { start: ok, rejudge: async () => ({ jobId: "job_rejudge", state: "queued" }) },
     longitudinal: {view: async () => ({records:[],providers:[]}), freezeHistory:ok, importPrediction:ok, importBenchmark:ok},
     evidence: { curves: { recordSelection: async () => ({ id: "curve", origin: "human_click" }), receipts: async () => [] } },
     startStudy: ok,
@@ -612,7 +621,9 @@ test("CS-7 every route in the ability table is driven as every role, and 403 fal
     for (const [key, abilities] of Object.entries(VCR_ROUTE_ABILITIES)) {
       const [method, path, body] = REQUESTS[key];
       const has = ability => held.some(each => roleAllows(each, roleFor(ability)) || roleAllows(each, ability));
-      const allowed = key === "POST /studies/:id/start" ? abilities.every(has) : abilities.some(has);
+      // Starting the judging job and downloading its rows also read patient-level data, which the handler asks for beside the ability the table names.
+      const patientLevel = key === "POST /studies/:id/matching/judge" || key === "GET /studies/:id/matching/export" || key === "POST /studies/:id/rejudge";
+      const allowed = (key === "POST /studies/:id/start" ? abilities.every(has) : abilities.some(has)) && (!patientLevel || has("read_patient_level"));
       const res = response();
       let status = 0;
       try { await routes(request(method, path, body), res); status = res.status; } catch (error) { status = error instanceof HttpError ? error.status : 500; }
@@ -664,6 +675,38 @@ test("「为该患者找试验」 asks the orchestrator for the run, judges the 
   // A deployment without the orchestrator says so; a run that cannot start leaves the judgment standing.
   const bare = fixture({ overrides: { ...composedHooks(), orchestrator: null } });
   await assert.rejects(bare.routes(request("POST", "/api/vcr/studies/std_1/trial-search", { subjectKey: "P-0192" }), response()), { status: 503, code: "vcr_unavailable" });
+});
+
+test("judging a person's changed-record trials again starts the judging job for those trials, names them itself when the page does not, and says when there is nothing to do", async () => {
+  /** @type {any[]} */
+  const asked = [];
+  const overrides = { ...composedHooks(), matchJudge: { start: async () => ({}), rejudge: async (/** @type {any} */ study, /** @type {any} */ input) => { asked.push([study.id, input]); return { jobId: "job_r1", state: "queued" }; } } };
+  const { routes, service, audits } = fixture({ overrides });
+  let stale = ["NCT00000001", "ChiCTR2000099999"];
+  service.packages.matchJudgments = { async staleTargets() { return stale; } };
+  const first = response();
+  assert.equal(await routes(request("POST", "/api/vcr/studies/std_1/rejudge", { subjectKey: "P-0192" }), first), true);
+  assert.equal(first.status, 201);
+  assert.deepEqual(first.json().data, { started: true, jobId: "job_r1", state: "queued" });
+  assert.deepEqual(asked, [["std_1", { subjectKey: "P-0192", reason: "registry_record", targetIds: ["NCT00000001", "ChiCTR2000099999"] }]], "no trial named: the changed ones, from the saved rows");
+  assert.ok(audits.some((line) => line[0] === "vcr.match.rejudge" && line[1] === "completed"), "the request is audited");
+  await routes(request("POST", "/api/vcr/studies/std_1/rejudge", { subjectKey: "P-0192", registryIds: ["NCT00000002", "NCT00000002"] }), response());
+  assert.deepEqual(asked[1][1].targetIds, ["NCT00000002"], "the trials the page names, once each");
+  stale = [];
+  const none = response();
+  await routes(request("POST", "/api/vcr/studies/std_1/rejudge", { subjectKey: "P-0192" }), none);
+  assert.equal(none.status, 200);
+  assert.deepEqual(none.json().data, { started: false, reason: "nothing_to_rejudge" });
+  assert.equal(asked.length, 2, "nothing changed, nothing started");
+  // A patient the study does not hold, a key that is not one, trials that are not registration numbers and any other field are refused before anything is asked.
+  await assert.rejects(routes(request("POST", "/api/vcr/studies/std_1/rejudge", { subjectKey: "P-9999" }), response()), { status: 404, code: "vcr_subject_not_found" });
+  await assert.rejects(routes(request("POST", "/api/vcr/studies/std_1/rejudge", { subjectKey: "../etc" }), response()), { status: 400, code: "vcr_payload_invalid" });
+  await assert.rejects(routes(request("POST", "/api/vcr/studies/std_1/rejudge", { subjectKey: "P-0192", registryIds: ["not a number"] }), response()), { status: 400, code: "vcr_payload_invalid" });
+  await assert.rejects(routes(request("POST", "/api/vcr/studies/std_1/rejudge", { subjectKey: "P-0192", direction: "patient_to_trial" }), response()), { status: 400 }, "the body is the key and the trials");
+  assert.equal(asked.length, 2);
+  // A deployment without the judging job says so.
+  const bare = fixture({ overrides: { ...composedHooks(), matchJudge: null } });
+  await assert.rejects(bare.routes(request("POST", "/api/vcr/studies/std_1/rejudge", { subjectKey: "P-0192" }), response()), { status: 503, code: "vcr_unavailable" });
 });
 
 test("a regulatory contact is added by a member who may write, as that member; a bad body is refused by field, and an exact repeat is the same record", async () => {
