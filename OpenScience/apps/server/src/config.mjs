@@ -1193,6 +1193,9 @@ function vcrSettings(overrides) {
     vcrMatchJudgeOutputTokens: integer("vcrMatchJudgeOutputTokens", "OPEN_SCIENCE_VCR_MATCH_JUDGE_OUTPUT_TOKENS", 32_000, 2_000, 64_000),
     vcrMatchJudgeTimeoutMs: integer("vcrMatchJudgeTimeoutMs", "OPEN_SCIENCE_VCR_MATCH_JUDGE_TIMEOUT_MS", 180_000, 10_000, 600_000),
     vcrMatchJudgeMaxUpstreamFailures: integer("vcrMatchJudgeMaxUpstreamFailures", "OPEN_SCIENCE_VCR_MATCH_JUDGE_MAX_UPSTREAM_FAILURES", 20, 1, 1_000),
+    // The most one judging job may spend, in CNY. The `vcr` purpose has no account cap (owner, 2026-10-10), so this is what stops one selection of a long note against hundreds of trials from
+    // running the shared key dry: it is a resource limit and not an opinion (principle 15). At it the job stops `limited`, keeps its work, says so, and one action continues it.
+    vcrMatchJudgeJobCeilingCny: integer("vcrMatchJudgeJobCeilingCny", "OPEN_SCIENCE_VCR_MATCH_JUDGE_JOB_CEILING_CNY", 500, 1, 1_000_000),
     // A judging job on the worker's lane hands its turn back after this many pairs or this long (one running slow job per account, so the account's other work runs between its batches), and a
     // provider that stays down is waited out this many times, with a growing wait, before the job ends with what it did. The counters are `batches` and `outageWaits` of `match_judge_total`.
     vcrMatchJudgeSlicePairs: integer("vcrMatchJudgeSlicePairs", "OPEN_SCIENCE_VCR_MATCH_JUDGE_SLICE_PAIRS", 400, 1, 100_000),
@@ -1203,6 +1206,16 @@ function vcrSettings(overrides) {
     vcrRecordsImportSliceMs: integer("vcrRecordsImportSliceMs", "OPEN_SCIENCE_VCR_RECORDS_IMPORT_SLICE_MS", 300_000, 1_000, 3_600_000),
     vcrRecordsImportConcurrency: integer("vcrRecordsImportConcurrency", "OPEN_SCIENCE_VCR_RECORDS_IMPORT_CONCURRENCY", 4, 1, 16),
     vcrRecordsImportProposalTimeoutMs: integer("vcrRecordsImportProposalTimeoutMs", "OPEN_SCIENCE_VCR_RECORDS_IMPORT_PROPOSAL_TIMEOUT_MS", 120_000, 1_000, 600_000),
+    // What one import may cost the shared server, so that one upload cannot take it down or fill its disk: a cell and a row of a table of notes, in characters; the rows or files of one import and
+    // the bytes it stores; the files of an archive and what it really inflates to; a person's documents and text. What is over is counted by its own code and said, and the remainder proceeds.
+    vcrRecordsImportMaxCellChars: integer("vcrRecordsImportMaxCellChars", "OPEN_SCIENCE_VCR_RECORDS_IMPORT_MAX_CELL_CHARS", 1_000_000, 1_000, 16_000_000),
+    vcrRecordsImportMaxRowChars: integer("vcrRecordsImportMaxRowChars", "OPEN_SCIENCE_VCR_RECORDS_IMPORT_MAX_ROW_CHARS", 2_000_000, 1_000, 32_000_000),
+    vcrRecordsImportMaxEntries: integer("vcrRecordsImportMaxEntries", "OPEN_SCIENCE_VCR_RECORDS_IMPORT_MAX_ENTRIES", 200_000, 1, 5_000_000),
+    vcrRecordsImportMaxBytes: integer("vcrRecordsImportMaxBytes", "OPEN_SCIENCE_VCR_RECORDS_IMPORT_MAX_BYTES", 8 * 1024 * 1024 * 1024, 1024, 1024 * 1024 * 1024 * 1024),
+    vcrRecordsImportMaxZipEntries: integer("vcrRecordsImportMaxZipEntries", "OPEN_SCIENCE_VCR_RECORDS_IMPORT_MAX_ZIP_ENTRIES", 100_000, 1, 1_000_000),
+    vcrRecordsImportMaxZipBytes: integer("vcrRecordsImportMaxZipBytes", "OPEN_SCIENCE_VCR_RECORDS_IMPORT_MAX_ZIP_BYTES", 8 * 1024 * 1024 * 1024, 1024, 1024 * 1024 * 1024 * 1024),
+    vcrRecordsImportMaxPersonDocuments: integer("vcrRecordsImportMaxPersonDocuments", "OPEN_SCIENCE_VCR_RECORDS_IMPORT_MAX_PERSON_DOCUMENTS", 2_000, 1, 100_000),
+    vcrRecordsImportMaxPersonChars: integer("vcrRecordsImportMaxPersonChars", "OPEN_SCIENCE_VCR_RECORDS_IMPORT_MAX_PERSON_CHARS", 4_000_000, 1_000, 64_000_000),
     // The registry watch (vcrRegistryWatch, G15). Once an hour it looks again at a bounded number of the trials a person holds a verdict about, the one checked
     // longest ago first, and marks the verdicts of a trial whose record changed (the verdict stays; a read offers to judge it again). Batch: how many trials a tick
     // reads (each read is one request to a public registry, which paces itself); hours: how long a trial that read fine waits before it is read again; retry hours:

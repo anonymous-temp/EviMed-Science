@@ -239,7 +239,9 @@ test("a model that cannot answer leaves a table waiting for its columns, says wh
   await drain();
   const failed = await vcr.store.one("SELECT state, error FROM evimed_vcr.jobs WHERE id=$1", [started.jobId]);
   assert.deepEqual([failed.state, failed.error.code], ["failed", "vcr_import_columns_unknown"]);
-  assert.match(failed.error.message, /WHO、WHAT/, "it says which columns there are, so the next start can name them");
+  assert.match(failed.error.message, /2 列/u, "the ledger holds a count: in a table with no header row, a header is a patient");
+  const listed = await vcr.dataPlane.readJobReport(study.id, started.jobId);
+  assert.deepEqual(listed.find((row) => row.columns)?.columns, [["WHO", "WHAT"]], "the owner's conversation reads which columns there are, so the next start can name them");
   const wrong = await intake(study, { action: "import_documents", ...handle, subjectColumn: "NOPE", textColumn: "WHAT" }, origin);
   await drain();
   assert.equal((await vcr.store.one("SELECT error FROM evimed_vcr.jobs WHERE id=$1", [wrong.jobId])).error.code, "vcr_import_columns_unknown");

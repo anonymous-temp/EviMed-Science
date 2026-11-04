@@ -187,6 +187,7 @@ export function createLongTableReader({ tables, withdrawn = new Set(), noteRead 
     const at = new Map(table.header.map((name, index) => [name, index]));
     for await (const row of delimitedRows(createReadStream(table.file, { highWaterMark: 256 * 1024 }))) {
       if (first) { first = false; continue; }
+      if (row.over) continue;
       await visit((name) => row[at.get(name) ?? -1] ?? '', row);
     }
   };
@@ -197,14 +198,21 @@ export function createLongTableReader({ tables, withdrawn = new Set(), noteRead 
       let header = null;
       /** @type {string[][]} */
       const sample = [];
+      /** @type {number} */
+      let keyAt = -1;
       for await (const row of delimitedRows(createReadStream(table.file, { highWaterMark: 64 * 1024 }))) {
-        if (!header) { header = row; continue; }
+        if (!header) {
+          // The view names a column as the engine needs it; what it was called is what says what it is.
+          header = row.map((name) => table.columnLabels?.[name] ?? name);
+          keyAt = header.indexOf('USUBJID');
+          continue;
+        }
+        // The sample goes to a model: someone who has withdrawn is not in it.
+        if (row.over || (keyAt >= 0 && withdrawn.has(row[keyAt]))) continue;
         sample.push(row.map((cell) => [...String(cell)].slice(0, 60).join('')));
         if (sample.length >= 5) break;
       }
       if (!header) continue;
-      // The view names a column as the engine needs it; what it was called is what says what it is.
-      header = header.map((name) => table.columnLabels?.[name] ?? name);
       if (CONCEPT_TABLE.every((name) => /** @type {string[]} */ (header).includes(name))) {
         names = names ?? new Map();
         await walk({ file: table.file, header }, (cell) => { const id = cell('concept_id').trim(); const name = cell('concept_name').trim(); if (id && name) /** @type {Map<string, string>} */ (names).set(id, name); });
