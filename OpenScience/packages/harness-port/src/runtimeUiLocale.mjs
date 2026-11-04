@@ -146,7 +146,7 @@ export function evimedDictionaries() {
       'delete.label': '删除定时任务：{title}',
       'list.aria': '已开启的定时任务',
       'list.error': '无法加载定时任务。',
-      'list.loading': '正在加载定时任务…',
+      'list.loading': '正在加载定时任务',
       'list.open': '打开定时任务详情：{title}',
       'mark.aria': '{count} 个定时任务',
       'trigger.label': '定时任务',

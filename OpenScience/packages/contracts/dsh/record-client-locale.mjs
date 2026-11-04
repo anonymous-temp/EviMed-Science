@@ -13,14 +13,17 @@
  * says, recorded from the pinned packages, so a test can hold the override to it.
  *
  *   mkdir /tmp/dsh-client-locale && cd /tmp/dsh-client-locale
- *   for p in chat conversation subagent workspace commands trajectory input-trigger; do
+ *   for p in chat conversation subagent workspace commands trajectory input-trigger schedule; do
  *     npm pack "@deepseek-ai/dsh-client-ui-$p@<pin>" && mkdir $p && tar -xzf deepseek-ai-dsh-client-ui-$p-<pin>.tgz -C $p
  *   done
  *   node packages/contracts/dsh/record-client-locale.mjs /tmp/dsh-client-locale
  *
  * Each package's bundle declares `const zh = { … }` and registers it with
  * `ctx.locale.register(<namespace>, { zh, en })`; the namespace is a string
- * literal or a constant declared in the same bundle.
+ * literal or a constant declared in the same bundle. A bundle with two
+ * namespaces (the schedule page's `schedule.catalog` and `schedule.manager`)
+ * names its dictionaries `zh$1`, `zh`, and hands one of them to `register`
+ * through an object it built first (`{ zh, en, … }` bound to a constant).
  */
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -69,15 +72,28 @@ function pairsOf(literal, text) {
   return pairs;
 }
 
-/** @param {string} text */
-function namespaceOf(text, after) {
-  const register = /locale\.register\(\s*([A-Za-z_$][\w$]*|"[^"]+")\s*,\s*\{\s*zh\b/g;
-  register.lastIndex = after;
-  const match = register.exec(text);
-  if (!match) return null;
-  if (match[1].startsWith('"')) return JSON.parse(match[1]);
-  const declared = new RegExp(`const ${match[1].replace(/\$/g, "\\$")} = ("[^"]+")`).exec(text);
+/** A bundle's namespace, as a string literal or a constant declared as one. @param {string} text @param {string} reference */
+function resolveNamespace(text, reference) {
+  if (reference.startsWith('"')) return JSON.parse(reference);
+  const declared = new RegExp(`const ${reference.replace(/\$/g, "\\$")} = ("[^"]+")`).exec(text);
   return declared ? JSON.parse(declared[1]) : null;
+}
+
+/**
+ * The namespace a dictionary constant (`zh`, `zh$1`) is registered under: handed to `locale.register` in the object literal
+ * itself, or in an object a constant holds that `locale.register` is then given.
+ * @param {string} text @param {string} dictionary
+ */
+function namespaceOf(text, dictionary) {
+  const escaped = dictionary.replace(/\$/g, "\\$");
+  // `{ zh, en }` names the dictionary by its shorthand, `{ zh: zh$1, en: en$1 }` by a property.
+  const member = `zh(?:\\s*:\\s*${escaped})${dictionary === "zh" ? "?" : ""}\\s*[,}]`;
+  const direct = new RegExp(`locale\\.register\\(\\s*([A-Za-z_$][\\w$]*|"[^"]+")\\s*,\\s*\\{\\s*${member}`).exec(text);
+  if (direct) return resolveNamespace(text, direct[1]);
+  const holder = new RegExp(`const ([A-Za-z_$][\\w$]*) = \\{\\s*${member}`).exec(text);
+  if (!holder) return null;
+  const register = new RegExp(`locale\\.register\\(\\s*([A-Za-z_$][\\w$]*|"[^"]+")\\s*,\\s*${holder[1].replace(/\$/g, "\\$")}\\s*\\)`).exec(text);
+  return register ? resolveNamespace(text, register[1]) : null;
 }
 
 /** @type {Record<string, Record<string, string>>} */
@@ -89,15 +105,18 @@ for (const name of (await readdir(root, { withFileTypes: true })).filter((entry)
   const packageDir = path.join(root, name, "package");
   const manifest = JSON.parse(await readFile(path.join(packageDir, "package.json"), "utf8"));
   const text = await readFile(path.join(packageDir, "lib", "client.js"), "utf8");
-  const start = text.indexOf("const zh = {");
-  if (start < 0) continue;
-  const literal = objectAt(text, start + "const zh = ".length);
-  const dictionary = pairsOf(literal, text);
-  const namespace = namespaceOf(text, start);
-  if (!namespace) throw new Error(`${manifest.name}: no locale.register for its zh dictionary`);
+  const declarations = [...text.matchAll(/const (zh(?:\$\d+)?) = \{/g)];
+  if (!declarations.length) continue;
   if (pin && pin !== manifest.version) throw new Error(`mixed versions: ${pin} and ${manifest.name}@${manifest.version}`);
   pin = manifest.version;
-  namespaces[namespace] = Object.fromEntries(Object.entries(dictionary).sort(([a], [b]) => a.localeCompare(b)));
+  for (const declaration of declarations) {
+    const literal = objectAt(text, declaration.index + declaration[0].length - 1);
+    const dictionary = pairsOf(literal, text);
+    const namespace = namespaceOf(text, declaration[1]);
+    if (!namespace) throw new Error(`${manifest.name}: no locale.register for its ${declaration[1]} dictionary`);
+    if (namespaces[namespace]) throw new Error(`${manifest.name}: namespace ${namespace} is registered twice`);
+    namespaces[namespace] = Object.fromEntries(Object.entries(dictionary).sort(([a], [b]) => a.localeCompare(b)));
+  }
   recordedFrom.push(`${manifest.name}@${manifest.version}`);
 }
 const out = path.join(here, "client-locale.json");
