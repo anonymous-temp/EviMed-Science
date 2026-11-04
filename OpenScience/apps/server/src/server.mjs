@@ -4145,6 +4145,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
    * immediately before native forwarding, in its existing schedule mark. */
   async function recordGeoKnowledgeDispatch(project, geoId, run, request) {
     const policy = await sharedContextPolicies.forProject(project);
+    // A one-person GEO project is an owned project like any other (owner ruling 2026-10-25): its run reads its owner's knowledge the ordinary way and
+    // there is no shared context to prove. Until 2026-11-04 this refused it, so every programme step of a project with no member failed at dispatch.
+    if (policy.kind === "owned") return;
     const launched = await runtimeManager.launchedContextReceipt(project);
     const current = (await agentRuns.list(project)).find(item => item.id === run.id);
     const binding = await researchSessions.get(project, request.sessionId);

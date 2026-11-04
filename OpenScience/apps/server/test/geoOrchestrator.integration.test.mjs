@@ -521,6 +521,29 @@ test("a single step (信源分析与预期) builds only its minimal upstream: id
   assert.equal(world.dispatched[2].dispatchId, "geo-insight-a2", "a new attempt, never the old run's id");
 });
 
+test("a run refused inside its own dispatch ends the step and frees the project: the fold does not wait for the turn its dispatch holds", options, async () => {
+  const { project, control, user } = await newProject();
+  /** @type {any} */ let orchestrator = null;
+  const dispatched = [];
+  orchestrator = new GeoOrchestrator({ store, config: { geoTimeZone: "Asia/Shanghai", operatorUsers: [] }, now: () => new Date(),
+    enqueueRound: async () => ({ roundId: null, planned: 0 }),
+    // As the run ledger does: a dispatch refused at the prompt finishes its run, and the finish reaches the module, before the dispatch answers.
+    dispatchRun: async (input) => {
+      dispatched.push(input);
+      await orchestrator.onRunFinished(control, { id: "run-refused", dispatchId: input.dispatchId, status: "failed", errorCode: "runtime_prompt_rejected" });
+      return { runId: "run-refused", sessionId: "session-refused", status: "failed" };
+    } });
+  const answer = await Promise.race([orchestrator.runStep(user, project, "evidence"), new Promise((resolve) => { setTimeout(resolve, 15_000, "still waiting"); })]);
+  assert.notEqual(answer, "still waiting", "the request came back");
+  assert.equal(dispatched.length, 1);
+  assert.equal((await statuses(project.id)).evidence, "failed");
+  const mark = (await q(`SELECT state, run_id FROM evimed_geo.schedule_marks WHERE geo_project_id = $1 AND key = 'run:insight'`, [project.id]))[0];
+  assert.deepEqual([mark.state, mark.run_id], ["failed", "run-refused"]);
+  // The project's turn is free: the next advance runs instead of joining a queue that never moves.
+  const next = await Promise.race([orchestrator.advance(project.id), new Promise((resolve) => { setTimeout(resolve, 15_000, "still waiting"); })]);
+  assert.notEqual(next, "still waiting");
+});
+
 test("the runtime cap defers the dispatch to the next tick, with the same dispatch id; a failed run is retried once", options, async () => {
   const world = harness();
   const { project, control, user } = await newProject();

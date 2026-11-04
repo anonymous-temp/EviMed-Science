@@ -46,6 +46,31 @@ test('explicit GEO create, ensure and start reuse opening admission without yiel
  assert.deepEqual(openings,[false],'ordinary session creation retains ordinary admission');
 });
 
+test('a programme step of a one-person GEO project passes the real dispatch: an owned project has no shared context to prove',options,async t=>{
+ const f=await fixture(t),app=f.app,manager=app.runtimeManager,geo=(await f.call('owner','POST','/api/geo/projects',{})).body.data;
+ assert.equal((await f.call('owner','POST',`/api/geo/projects/${geo.id}/conversation/open`,{target:{kind:'primary'}})).status,200);
+ const owner=await app.store.userById('owner'),project=await app.store.requireProject(owner,geo.projectId);
+ const agent=(await app.agentRegistry).get('geo-insight');
+ app.residentProfiles.forDispatch=async()=>({text:'',due:false,memories:[],delivered:async()=>{}});
+ app.agentRuns.captureBaseline=async()=>0;app.agentRuns.reconcileSession=async()=>null;
+ app.agentRuns.scheduleMonitor=()=>{};app.agentRuns.recordRuntimePersonalSkills=async()=>{};
+ let refused=null;
+ manager.dispatchPrompt=async(current,sessionId,request)=>{
+  await manager.start(current);await manager.callKernel(manager.runtimes.get(manager.key(current)),current,'session/create',{request:{sessionId}});
+  // What the real one does with a refusal here is end the run; this stub keeps it, so the test can name it.
+  await request.recordPromptActor({requestId:request.requestId,sessionId,mode:'queue',content:[{type:'text',text:request.text}]}).catch(error=>{refused=error;throw error;});
+  return {accepted:true};
+ };
+ const dispatchId='geo-insight-owned-a1';
+ await app.geo.store.query(`INSERT INTO evimed_geo.schedule_marks(geo_project_id,key,user_id,kind,state,dispatch_id,detail)
+  VALUES($1,'run:insight','owner','run','claimed',$2,$3::jsonb)`,[geo.id,dispatchId,JSON.stringify({capabilityId:agent.id,purpose:'insight'})]);
+ const dispatched=await app.geo.orchestrator.dispatchRun({userId:'owner',projectId:project.id,geoProjectId:geo.id,capabilityId:agent.id,dispatchId,reason:'geo:evidence',brief:'Read project sources',question:'Read sources'});
+ assert.equal(refused?.code??null,null,'the prompt was not refused');
+ assert.equal(dispatched.status,'running',JSON.stringify(dispatched));
+ const run=(await app.agentRuns.list(project)).find(item=>item.id===dispatched.runId);
+ assert.equal(run.status,'running');assert.equal(run.errorCode??null,null);
+});
+
 test('actual automatic module dispatch reads scoped KB with captured launch proof, never memory or delegated authority',options,async t=>{
  const f=await fixture(t),app=f.app,manager=app.runtimeManager,geo=(await f.call('owner','POST','/api/geo/projects',{})).body.data;
  // A shared GEO project: one with a member (a one-person GEO project is an owned project, owner ruling 2026-10-25).
