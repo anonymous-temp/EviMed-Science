@@ -24,7 +24,7 @@ More than a handful of pairs goes to the job: `mcp__evimed__vcr_simulate` action
 - one person: `{ "subjectKey": "…", "registryIds": ["NCT…"] }`, plus `collection` and `collectionRevision` from `candidates` when the search named a frozen set; or `{ "subjectKey": "…", "searchId": "…", "candidateLimit": 100 }` for the best 100 of a search, which the platform takes from the saved list;
 - one protocol: `{ "protocolVersionId": "…", "subjectKeys": ["…"] }`, or neither for the latest version and the whole roster.
 
-It judges every pair as a whole, then each person's best-ranked pairs clause by clause (`topK`; 0 none, `all` every pair). The answer says what it may cost and it has already started. Do other work meanwhile; its finish comes back to this conversation, and starting the same selection again judges only what is not done.
+It judges every pair as a whole, then each person's best-ranked pairs clause by clause, as many as the platform sets. The answer says what it may cost and it has already started. Do other work meanwhile; its finish comes back to this conversation, and starting the same selection again judges only what is not done.
 
 A handful of pairs may be judged here instead. Read the record with what `subject_document`, `filter: { subjectKey, kind: "sentences" }`, and the clauses from `mcp__evimed__trial_registry_record` (or what `matching` with `filter.protocolVersionId`), then save with `mcp__evimed__vcr_write` what `trial_judgment`: `subjectKey`, `registryId` or `protocolVersionId`, `fit` from 0 to 100, `confidence` from 0 to 1, `reasons`, `documentHash`, and `criteria` rows of `number`, `reason`, `sentenceIds`, `label`. Each item saves or comes back with its own notice; the rest are kept.
 
@@ -32,7 +32,7 @@ For each clause: does it apply to this person at all? Does the record state it? 
 
 ## Report from what was saved
 
-Read it back: what `candidate_trials` with `filter.subjectKey`, or what `matching` with `filter.protocolVersionId`. `ranking` holds each pair's `verdictLabel`, `fit`, `confidence`, `reasons` and clause rows with their `display` words and evidence; `failed` holds what did not finish, by code. Say how many of how many finished and what is left, copy the verdicts and labels, and for each trial say why it may suit and what is still to confirm. A `limited` result says what was done and why it stopped. Never report a pair the read does not hold. Do not repeat the record back or print internal fields.
+Read it back: what `candidate_trials` with `filter.subjectKey`, or what `matching` with `filter.protocolVersionId`. `ranking` holds each pair's `verdictLabel`, `fit`, `confidence`, `reasons` and clause rows with their `display` words and evidence; `failed` and `clausesFailed` hold what did not finish, by code. `finished` of `total`, `state` (running, stopped or done), `left` and `clauses` say how far it is: say how many of how many finished and what is left, copy the verdicts and labels, and for each trial say why it may suit and what is still to confirm. A `limited` result says what was done and why it stopped. Never report a pair the read does not hold. Do not repeat the record back or print internal fields.
 
 ## Structured cohort tables
 

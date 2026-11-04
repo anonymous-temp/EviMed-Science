@@ -93,16 +93,16 @@ export function stanceOf(row) {
 /**
  * The verdict of a pair from the counts of its clause rows: the domain's `trialVerdict` over rows that carry the label and basis it reads, so
  * a list of five thousand never loads their answers and still agrees with the page of one.
- * @param {{ fit: number | null, counts: { against: number, open: number, answered: number, unanswered: number } | null, missingReasons?: number }} input
+ * @param {{ fit: number | null, counts: { against: number, open: number, answered: number, unanswered: number } | null, missingReasons?: number, ineligibleReasons?: number }} input
  */
-export function verdictOfCounts({ fit, counts, missingReasons = 0 }) {
-  if (!counts || counts.answered + counts.unanswered === 0) return trialVerdict({ fit, missingReasons: Array.from({ length: missingReasons }) });
+export function verdictOfCounts({ fit, counts, missingReasons = 0, ineligibleReasons = 0 }) {
+  if (!counts || counts.answered + counts.unanswered === 0) return trialVerdict({ fit, missingReasons: Array.from({ length: missingReasons }), ineligibleReasons: Array.from({ length: ineligibleReasons }) });
   const rows = [
     ...Array.from({ length: counts.against }, () => ({ label: "excluded", basis: "stated" })),
     ...Array.from({ length: counts.open }, () => ({ label: "not_enough_information", basis: "silent" })),
     ...Array.from({ length: Math.max(0, counts.answered - counts.against - counts.open) }, () => ({ label: "included", basis: "stated" })),
   ];
-  return trialVerdict({ fit, criteria: counts.answered ? rows : null, missing: Array.from({ length: counts.unanswered }), missingReasons: Array.from({ length: missingReasons }) });
+  return trialVerdict({ fit, criteria: counts.answered ? rows : null, missing: Array.from({ length: counts.unanswered }), missingReasons: Array.from({ length: missingReasons }), ineligibleReasons: Array.from({ length: ineligibleReasons }) });
 }
 
 /** A cell of a CSV that Excel will not run: a text that begins with a character it reads as a formula is prefixed so it stays text. @param {unknown} value */
@@ -200,7 +200,8 @@ const COLUMNS = `j.document_hash, j.target_hash, j.answer -> 'unreadableDocument
   j.answer -> 'longUnread' AS long_unread, j.answer -> 'clausesWithoutWords' AS clauses_without_words, j.document_ids, j.answer -> 'readFrom' AS read_from, j.id, j.subject_key, j.target_kind, j.target_id, j.mode, j.status, j.error_code, j.fit, j.confidence, j.producer, j.model, j.thinking, j.basis_changed, j.job_id,
   j.created_at, j.updated_at, j.answer -> 'target' AS target, j.answer ->> 'eligibilitySource' AS eligibility_source,
   j.answer #>> '{reasons,eligible,0}' AS first_eligible, j.answer #>> '{reasons,ineligible,0}' AS first_ineligible, j.answer #>> '{reasons,missing,0}' AS first_missing, j.answer #>> '{reasons,rationale}' AS rationale,
-  CASE WHEN jsonb_typeof(j.answer #> '{reasons,missing}') = 'array' THEN jsonb_array_length(j.answer #> '{reasons,missing}') ELSE 0 END AS missing_reasons`;
+  CASE WHEN jsonb_typeof(j.answer #> '{reasons,missing}') = 'array' THEN jsonb_array_length(j.answer #> '{reasons,missing}') ELSE 0 END AS missing_reasons,
+  CASE WHEN jsonb_typeof(j.answer #> '{reasons,ineligible}') = 'array' THEN jsonb_array_length(j.answer #> '{reasons,ineligible}') ELSE 0 END AS ineligible_reasons`;
 
 /**
  * The per-clause counts of a row, computed where the rows are. Labels and bases are the ones `parseCriteriaAnswer` writes; the definitions
@@ -376,7 +377,7 @@ export class VcrMatchResults extends VcrStoreBase {
       const anchor = clauses && scored ? (clauses.updated_at >= scored.updated_at ? clauses : scored) : clauses ?? scored;
       const counts = clauses ? countsOf(clauses) : null;
       const score = scored?.fit ?? clauses?.fit ?? null;
-      const verdict = verdictOfCounts({ fit: score, counts, missingReasons: Number(scored?.missing_reasons ?? 0) });
+      const verdict = verdictOfCounts({ fit: score, counts, missingReasons: Number(scored?.missing_reasons ?? 0), ineligibleReasons: Number(scored?.ineligible_reasons ?? 0) });
       const identity = scored ?? clauses;
       done.push({
         record: recordOfPair(scored, clauses),

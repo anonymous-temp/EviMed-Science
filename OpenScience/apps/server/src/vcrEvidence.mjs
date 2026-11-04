@@ -1402,6 +1402,8 @@ export function createVcrEvidencePipeline({ store, registry = null, trialCorpus 
 
   const pipeline = {
     closeTrialCorpus: () => trialCorpus?.close(),
+    /** The revision in force of a frozen collection, or null: a selection that names the collection alone means this one. @param {unknown} id */
+    collectionRevision: (id) => (trialCorpus && id === trialCorpus.id ? trialCorpus.revision : null),
     /** Existing source intake is attached after the shared SourceService is composed. @param {{resolve:Function}} sources */
     attachSources(sources) { literatureSources = sources; },
     /** The reader of preserved publications, attached once the project store is composed. @param {{read:Function}} publications */

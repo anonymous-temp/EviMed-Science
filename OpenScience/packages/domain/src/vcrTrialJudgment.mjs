@@ -907,13 +907,14 @@ const statedDisqualifier = (row) => row.basis === 'stated' && (row.label === 'ex
  * 2. Clause rows and nothing against: everything resolved in the patient's favour is `eligible`; anything left open (not enough information, a
  *    silent clause read against the patient, a clause the model did not answer) is `possible`, because a routine item is settled at
  *    screening, unless a score below 50 says the model found a prerequisite missing, which is `insufficient`.
- * 3. No clause rows, only the score: its bands. A band of 80 and up with something still missing is `possible`.
+ * 3. No clause rows, only the score: its bands. A band of 80 and up with something still missing is `possible`. Below 50, a model that says why it does not fit and finds nothing missing
+ *    has said no, whichever band the number fell in: `ineligible`.
  * 4. Neither: `insufficient`.
  *
- * @param {{ fit?: number | null, criteria?: ReadonlyArray<{ label?: string, basis?: string, number?: number }> | null, missing?: ReadonlyArray<unknown> | null, missingReasons?: ReadonlyArray<unknown> | null }} input
+ * @param {{ fit?: number | null, criteria?: ReadonlyArray<{ label?: string, basis?: string, number?: number }> | null, missing?: ReadonlyArray<unknown> | null, missingReasons?: ReadonlyArray<unknown> | null, ineligibleReasons?: ReadonlyArray<unknown> | null }} input
  * @returns {{ verdict: 'eligible' | 'possible' | 'insufficient' | 'ineligible', label: string, because: string, disqualifiers: number[] }}
  */
-export function trialVerdict({ fit = null, criteria = null, missing = null, missingReasons = null }) {
+export function trialVerdict({ fit = null, criteria = null, missing = null, missingReasons = null, ineligibleReasons = null }) {
   /** @param {'eligible' | 'possible' | 'insufficient' | 'ineligible'} verdict @param {string} because @param {number[]} [disqualifiers] */
   const said = (verdict, because, disqualifiers = []) => ({ verdict, label: VCR_TRIAL_VERDICT_LABELS_ZH[verdict], because, disqualifiers })
   const rows = criteria ?? []
@@ -928,6 +929,7 @@ export function trialVerdict({ fit = null, criteria = null, missing = null, miss
   const score = Number(fit)
   if (score >= VCR_FIT_BANDS.eligible) return missingReasons?.length ? said('possible', 'fit_with_missing') : said('eligible', 'fit_band')
   if (score >= VCR_FIT_BANDS.possible) return said('possible', 'fit_band')
+  if (ineligibleReasons?.length && !missingReasons?.length) return said('ineligible', 'stated_reasons')
   if (score >= VCR_FIT_BANDS.insufficient) return said('insufficient', 'fit_band')
   return said('ineligible', 'fit_band')
 }

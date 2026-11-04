@@ -133,9 +133,9 @@ const registryOfId = (registryId) => (/^ChiCTR/iu.test(registryId) ? 'chictr' : 
  * - `fit` (stage one, default true), `topK` (stage two: 0 none, `all` every pair, a number per person; the deployment's when absent), `thinking` (`high` or `off`),
  *   `definitions` (default off: each trial's clauses get a definition card, written once, that the clause-level calls read as background).
  *
- * @param {unknown} raw @returns {Record<string, any>}
+ * @param {unknown} raw @param {{ collectionAlone?: boolean }} [options] `collectionAlone`: the caller looks up a named collection's revision next @returns {Record<string, any>}
  */
-export function judgeSelection(raw = {}) {
+export function judgeSelection(raw = {}, { collectionAlone = false } = {}) {
   const fields = ['direction', 'subjectKey', 'registryIds', 'searchId', 'candidateLimit', 'definitions', 'registry', 'collection', 'collectionRevision', 'protocolVersionId', 'subjectKeys', 'fit', 'topK', 'thinking', 'thinkingCriteria'];
   const row = object(raw);
   const bad = (/** @type {string} */ message) => new HttpError(400, 'vcr_matching_selection_invalid', message);
@@ -159,8 +159,10 @@ export function judgeSelection(raw = {}) {
       || row.subjectKeys.some((/** @type {unknown} */ key) => typeof key !== 'string' || !ID.test(key)))) throw bad(`subjectKeys 是 1 到 ${VCR_MATCH_JUDGE_LIMITS.subjects} 个受试者假名。`);
   }
   if (row.registry != null && !REGISTRIES.includes(row.registry)) throw bad(`registry 是 ${REGISTRIES.join('、')} 之一。`);
-  if ((row.collection == null) !== (row.collectionRevision == null) || (row.collection != null && (typeof row.collection !== 'string' || !ID.test(row.collection) || typeof row.collectionRevision !== 'string' || !SHA.test(row.collectionRevision)))) {
-    throw bad('冻结集合要同时写 collection 和 collectionRevision。');
+  // The gateway takes a collection named alone and looks up the revision in force (`resolveSearchSelection`); what reaches the plan names both, or names one that cannot be read.
+  const alone = collectionAlone && typeof row.collection === 'string' && ID.test(row.collection) && row.collectionRevision == null;
+  if (!alone && ((row.collection == null) !== (row.collectionRevision == null) || (row.collection != null && (typeof row.collection !== 'string' || !ID.test(row.collection) || typeof row.collectionRevision !== 'string' || !SHA.test(row.collectionRevision))))) {
+    throw bad('这个冻结集合现在读不到，或 collection 和 collectionRevision 对不上：只写 collection 时取它现行的版本。');
   }
   if (row.fit != null && typeof row.fit !== 'boolean') throw bad('fit 是 true 或 false。');
   if (row.topK != null && row.topK !== 'all' && !(Number.isInteger(row.topK) && row.topK >= 0 && row.topK <= VCR_MATCH_JUDGE_LIMITS.trials)) throw bad(`topK 是 0 到 ${VCR_MATCH_JUDGE_LIMITS.trials} 的整数，或 all。`);
@@ -892,7 +894,7 @@ export function createMatchJudgeExecutor({ store, matchStore, judgments, documen
         if (mode === 'fit') {
           const { parsed, calls, parts } = await judgeFit(context);
           const usage = account(calls);
-          const verdict = trialVerdict({ fit: parsed.fit, missingReasons: parsed.reasons.missing });
+          const verdict = trialVerdict({ fit: parsed.fit, missingReasons: parsed.reasons.missing, ineligibleReasons: parsed.reasons.ineligible });
           saved = await judgments.save({ ...base, ...live, targetHash: target.hash, documentHash: note.hash, status: 'done', fit: parsed.fit, confidence: parsed.confidence, verdict: verdict.verdict,
             answer: { ...answer, reasons: parsed.reasons, issues: parsed.issues, parts }, usage: { ...usage, settings }, documentIds: note.documentIds });
         } else {
@@ -1129,6 +1131,17 @@ export function createMatchJudgeExecutor({ store, matchStore, judgments, documen
 }
 
 /**
+ * A selection as a conversation may ask it. How far the clause stage goes is the deployment's to size: a model that asked for `all` made it run for every trial, at many times the calls for the same
+ * list. It may ask for fewer. The page and a benchmark set it themselves.
+ * @param {Record<string, any>} selection @param {Record<string, any>} config
+ */
+export function conversationSelection(selection, config) {
+  const most = effectiveTopK(config);
+  if (selection.topK == null || most === 'all' || (Number.isInteger(selection.topK) && selection.topK <= most)) return selection;
+  return { ...selection, topK: most };
+}
+
+/**
  * What re-judging changed: for each pair, the verdict of the newest words read against the verdict of the words before them. Rows are never overwritten by a re-judgment (the key
  * holds the hashes), so the earlier one is still there to compare. A pair's verdict is its clause-level row's when it has one, its trial-level row's otherwise.
  * @param {ReadonlyArray<any>} rows light rows, any order
@@ -1263,7 +1276,7 @@ export function presentJudgment(fit, criteria) {
   const rows = list(clauses?.answer?.rows);
   const missing = list(clauses?.answer?.missing);
   const reasons = object(scored?.answer?.reasons);
-  const judged = trialVerdict({ fit: scored?.fit ?? clauses?.fit ?? null, criteria: clauses ? rows : null, missing: clauses ? missing : null, missingReasons: list(reasons.missing) });
+  const judged = trialVerdict({ fit: scored?.fit ?? clauses?.fit ?? null, criteria: clauses ? rows : null, missing: clauses ? missing : null, missingReasons: list(reasons.missing), ineligibleReasons: list(reasons.ineligible) });
   const newestOf = clauses && scored ? ((clauses.updatedAt ?? '') > (scored.updatedAt ?? '') ? clauses : scored) : clauses ?? scored;
   const anchor = newestOf ?? fit ?? criteria;
   const basisChanged = scored?.basisChanged ?? clauses?.basisChanged ?? null;
@@ -1496,11 +1509,11 @@ export function createMatchJudgmentReads({ judgments, documents, subjectTable = 
       if (item.fit != null) {
         fit = parseFitAnswer({ score: item.fit, confidence: item.confidence ?? null, eligible_reasons: reasons.eligible, ineligible_reasons: reasons.ineligible, missing_information: reasons.missing, rationale: reasons.rationale });
         notices.push(...fit.issues);
-        const verdict = trialVerdict({ fit: fit.fit, missingReasons: fit.reasons.missing });
+        const verdict = trialVerdict({ fit: fit.fit, missingReasons: fit.reasons.missing, ineligibleReasons: fit.reasons.ineligible });
         fitRow = await judgments.save({ ...base, mode: 'fit', promptVersion: 'conversation', status: 'done', fit: fit.fit, confidence: fit.confidence, verdict: verdict.verdict, answer: { ...answer, reasons: fit.reasons, issues: fit.issues } });
       }
       /** @type {Record<string, any> | null} */
-      let verdict = fit ? trialVerdict({ fit: fit.fit, missingReasons: fit.reasons.missing }) : null;
+      let verdict = fit ? trialVerdict({ fit: fit.fit, missingReasons: fit.reasons.missing, ineligibleReasons: fit.reasons.ineligible }) : null;
       if (list(item.criteria).length) {
         const parsed = parseCriteriaAnswer(item.criteria, { criteria: target.clauses, sentences: note.sentences });
         notices.push(...parsed.issues);

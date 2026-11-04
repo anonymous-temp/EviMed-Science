@@ -239,3 +239,13 @@ test("fit off: a pair that failed is counted once, in words that add up", async 
   assert.equal(result.conclusion, "limited");
   assert.match(result.diagnostics.issues[0].message, /3 对里判定完 2 对，1 对没判定成/u);
 });
+
+test("the list of a person's trials reads the same verdict from a score and its reasons as the opened row does", async () => {
+  const f = setup({ fitScore: () => 25, clauseAnswer: open });
+  const reasonsAgainst = (await import("../src/vcrMatchResults.mjs")).verdictOfCounts;
+  assert.equal(reasonsAgainst({ fit: 25, counts: null, missingReasons: 0, ineligibleReasons: 1 }).verdict, "ineligible");
+  assert.equal(reasonsAgainst({ fit: 25, counts: null, missingReasons: 1, ineligibleReasons: 1 }).verdict, "insufficient");
+  const row = presentJudgment({ id: "a", status: "done", mode: "fit", subjectKey: "P-1", targetKind: "candidate_trial", targetId: "T", fit: 25, confidence: 0.8, answer: { reasons: { eligible: [], ineligible: ["成人试验"], missing: [], rationale: "" } } }, null);
+  assert.equal(row.verdict, "ineligible");
+  assert.equal(f.judgments.rows.size, 0);
+});

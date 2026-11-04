@@ -341,7 +341,7 @@ def _detailed_tool_definitions():
                 "match_judge has the model judge patients against trials, pair by pair, in a job of its own: selection takes subjectKey and registryIds "
                 "(one patient, a list of trials, with collection and collectionRevision for a frozen set) or a searchId from candidates "
                 "(the platform takes the trials from that saved list, best first; candidateLimit keeps the first N of either), or protocolVersionId and subjectKeys (one protocol, a roster); "
-                "fit, topK and thinking are optional. No scenario. Read the saved ranking back with vcr_read candidate_trials or matching. "
+                "fit and thinking are optional. No scenario. Read the saved ranking back with vcr_read candidate_trials or matching. "
             ),
             "inputSchema": {
                 "type": "object",
@@ -371,7 +371,6 @@ def _detailed_tool_definitions():
                         "collection": ID,
                         "collectionRevision": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
                         "fit": {"type": "boolean"},
-                        "topK": {"oneOf": [{"type": "integer", "minimum": 0, "maximum": 500}, {"type": "string", "enum": ["all"]}]},
                         "thinking": {"type": "string", "enum": ["high", "off"]},
                     }, "additionalProperties": False},
                     "reconstructionResultId": ID,
@@ -1134,8 +1133,8 @@ def shape(arguments: dict) -> dict:
             "data": {"kind": kind, "method": "matching.judge", "builtByPlatform": True, "runStates": [], "keys": [],
                      "notes": ["One patient against trials: selection {subjectKey, registryIds, registry?, collection?, collectionRevision?}. "
                                "One protocol against patients: selection {protocolVersionId?, subjectKeys?} (the latest version and the whole roster when absent). "
-                               "fit (default true) is the trial-level judgment of every pair; topK (default the deployment's; 0 none, all every pair) is how many of each person's "
-                               "best-ranked pairs are then judged clause by clause; thinking is high or off. "
+                               "fit (default true) is the trial-level judgment of every pair; each person's best-ranked pairs are then judged clause by clause, as many as the deployment sets; "
+                               "thinking is high or off. A collection named alone is the one in force. "
                                "The answer states the most it can cost before the work begins. A pair already judged for the same text and settings is not paid for twice. "
                                "Read the result back: vcr_read what candidate_trials with filter.subjectKey, or what matching with filter.protocolVersionId."]},
             "warnings": [],

@@ -1895,7 +1895,8 @@ export class VcrJobs {
     const attempts = Number(row.attempts ?? 0);
     this.lastError = code;
     this.report(code);
-    if (retryable) this.engineObserver?.observe(false, code);
+    // A local job that goes back to the queue (a database that stalled) says nothing about the engine.
+    if (retryable && typeof this.localExecutors[String(row.method)] !== "function") this.engineObserver?.observe(false, code);
     if (retryable && object(row.checkpoint).engineJobId) {
       const held = await this.checkpoint(String(row.id), { transportError: code }, owner, Number(row.attempts));
       return held ? { action: "waiting", state: "engine_unreachable", code } : { action: "skipped", state: "changed" };

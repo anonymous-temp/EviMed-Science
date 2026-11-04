@@ -751,7 +751,8 @@ class VcrSimulateTests(_GatewayCase):
         self.assertIn("trial_judgment", vcr_platform.WRITE_WHATS)
         definitions = {tool["name"]: tool for tool in vcr_platform._detailed_tool_definitions()}
         selection = definitions["vcr_simulate"]["inputSchema"]["properties"]["selection"]["properties"]
-        for key in ("subjectKey", "registryIds", "registry", "collection", "collectionRevision", "protocolVersionId", "subjectKeys", "fit", "topK", "thinking"):
+        self.assertNotIn("topK", selection, "how far the clause stage goes is the deployment's")
+        for key in ("subjectKey", "registryIds", "registry", "collection", "collectionRevision", "protocolVersionId", "subjectKeys", "fit", "thinking"):
             self.assertIn(key, selection)
         self.assertIn("match_judge", definitions["vcr_simulate"]["description"])
         self.assertIn("sentences", definitions["vcr_read"]["description"])

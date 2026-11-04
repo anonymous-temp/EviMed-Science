@@ -1572,6 +1572,27 @@ function nativeProbe() {
   return { scopes, call };
 }
 
+test("a conversation's judging job: the deployment sizes the clause stage, and a collection named alone is the one in force", async () => {
+  /** @type {any[]} */
+  const asked = [];
+  const matchJudge = { async start(/** @type {any} */ _study, /** @type {any} */ selection) { asked.push(selection); return { action: "start", kind: "match_judge", state: "queued", jobId: "job_7", direction: "patient_to_trial" }; } };
+  const REVISION = "a".repeat(64);
+  const evidence = { collectionRevision: (/** @type {string} */ id) => (id === "trec2021" ? REVISION : null) };
+  const { handler } = fixture({ matchJudge, evidence });
+  const start = async (/** @type {Record<string, any>} */ selection) => { const res = response(); await handler(request("/internal/vcr/v1/simulate", { action: "start", kind: "match_judge", selection: { subjectKey: "P-1", registryIds: ["NCT00000001"], ...selection } }), res); return res; };
+  for (const [given, sent] of [[{ topK: "all" }, 20], [{ topK: 500 }, 20], [{ topK: 3 }, 3], [{ topK: 0 }, 0], [{}, undefined]]) {
+    assert.equal((await start(given)).status, 200);
+    assert.equal(asked.at(-1).topK, sent, JSON.stringify(given));
+  }
+  assert.equal((await start({ collection: "trec2021" })).status, 200);
+  assert.deepEqual([asked.at(-1).collection, asked.at(-1).collectionRevision], ["trec2021", REVISION]);
+  assert.equal((await start({ collection: "trec2021", collectionRevision: "b".repeat(64) })).status, 200);
+  assert.equal(asked.at(-1).collectionRevision, "b".repeat(64), "a revision named is the one that was read");
+  const unknown = await start({ collection: "nothing" });
+  assert.equal(asked.at(-1).collection === "nothing" && asked.at(-1).collectionRevision, undefined, "no revision is invented");
+  assert.equal(unknown.status, 200);
+});
+
 test("a protocol needs only its words: clause text is enough, a pasted text is numbered by code, and the grammar stays for table screening", async () => {
   const made = fixture();
   /** @type {any[]} */

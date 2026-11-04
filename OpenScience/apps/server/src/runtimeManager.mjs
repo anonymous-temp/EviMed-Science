@@ -1958,7 +1958,8 @@ function evimedMcpEnvironment(config, project, plan, { workloadTokenPath } = {})
   const vcrEngineComposed = config.vcrEngineConfigured ?? Boolean(String(config.vcrEngineUrl ?? "").trim());
   const vcrDisabled = !environment.EVIMED_VCR_GATEWAY_URL
     ? [...VCR_RUNTIME_TOOLS]
-    // The digitizer runs in the intake container, not on the engine: it stays offered without one.
+    // The digitizer runs in the intake container, not on the engine, and judging patients and reading records are local jobs (`vcr_simulate`): they stay offered without one. A computation that does need
+    // the engine ends at once saying so (`engine_unavailable`).
     : vcrEngineComposed ? [] : [...VCR_ENGINE_TOOLS];
   if (vcrDisabled.length) {
     environment.EVIMED_DISABLED_TOOLS = [...new Set([...environment.EVIMED_DISABLED_TOOLS.split(",").filter(Boolean), ...vcrDisabled])].join(",");
@@ -2100,7 +2101,7 @@ export function webSearchGatewayProviderUrl(config) {
 export const GEO_RUNTIME_TOOLS = Object.freeze(["geo_read", "geo_write", "social_posts_search"]);
 export const VCR_RUNTIME_TOOLS = Object.freeze(["vcr_read", "vcr_write", "vcr_simulate", "trial_registry_record", "curve_digitize", "evidence_pool"]);
 /** The 虚拟临床研究 tools that need the deterministic engine itself, not only the gateway. */
-export const VCR_ENGINE_TOOLS = Object.freeze(["vcr_simulate", "evidence_pool"]);
+export const VCR_ENGINE_TOOLS = Object.freeze(["evidence_pool"]);
 
 export function publicSourceGatewayProviderUrl(config) {
   const value = String(config.publicSourceGatewayInternalUrl ?? "").trim();

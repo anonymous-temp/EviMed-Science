@@ -75,6 +75,13 @@ test("the composition names exactly the tools the real launch withholds, over a 
   }
 });
 
+test("without the statistics engine a study can still judge patients: vcr_simulate stays offered, what only the engine does is declined", () => {
+  const none = declinedTools({ ...base, vcrEnabled: true, vcrAudience: "all", vcrEngineConfigured: false, vcrEngineUrl: "" }, { id: "u" });
+  assert.equal(none.has("vcr_simulate"), false, "match_judge is a local job");
+  assert.deepEqual(none.get("evidence_pool"), { why: "engine-not-composed", layer: "runtime", module: "vcr" });
+  assert.equal(none.has("vcr_read"), false);
+});
+
 test("a managed-job engine with no adapter and no root is declined in its own layer, and one with an adapter is not", () => {
   const none = declinedTools({ ...base, evimedAdapterUrls: {}, specialistAgents: {} }, { id: "u" });
   for (const tool of MCP_MANAGED_JOB_BASE_NAMES) {

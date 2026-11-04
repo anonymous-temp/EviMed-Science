@@ -473,6 +473,18 @@ test('a verdict: an open prerequisite the score reads against is insufficient', 
   assert.equal(trialVerdict({ fit: VCR_FIT_BANDS.possible, criteria: [row('not_enough_information', 'silent')] }).verdict, 'possible')
 })
 
+test('a verdict: a low score that says why it does not fit, with nothing missing, reads as not fitting', () => {
+  const reasons = ['1. 成人试验，患者 8 岁']
+  assert.equal(trialVerdict({ fit: 25, ineligibleReasons: reasons, missingReasons: [] }).verdict, 'ineligible')
+  assert.equal(trialVerdict({ fit: 25, ineligibleReasons: reasons, missingReasons: [] }).because, 'stated_reasons')
+  // Something still missing is what the band says; so is a score with no reason against it.
+  assert.equal(trialVerdict({ fit: 25, ineligibleReasons: reasons, missingReasons: ['1. 分期'] }).verdict, 'insufficient')
+  assert.equal(trialVerdict({ fit: 25, ineligibleReasons: [], missingReasons: [] }).verdict, 'insufficient')
+  assert.equal(trialVerdict({ fit: 60, ineligibleReasons: reasons, missingReasons: [] }).verdict, 'possible', 'a score the model holds open stays open')
+  // Clause rows speak for themselves.
+  assert.equal(trialVerdict({ fit: 25, criteria: [{ label: 'not_enough_information', basis: 'silent' }], ineligibleReasons: reasons, missingReasons: [] }).verdict, 'insufficient')
+})
+
 test('a verdict: the score alone uses its bands', () => {
   assert.equal(trialVerdict({ fit: 80 }).verdict, 'eligible')
   assert.equal(trialVerdict({ fit: 80, missingReasons: ['ECOG'] }).verdict, 'possible', 'to be confirmed at screening')

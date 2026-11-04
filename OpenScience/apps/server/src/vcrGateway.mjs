@@ -85,7 +85,7 @@ import {
 
 import { HttpError } from "./security.mjs";
 import { VCR_READ_WHATS, VCR_READ_MAX_ITEMS, VCR_WRITE_WHATS, vcrRouteOptions } from "./vcrService.mjs";
-import { judgeSelection } from "./vcrMatchJudge.mjs";
+import { conversationSelection, judgeSelection } from "./vcrMatchJudge.mjs";
 import { vcrResultEntry, withJobEntry, withWriteEntry } from "./vcrResultEntry.mjs";
 import { renderVcrNumbers } from "./vcrRender.mjs";
 import { checkRegulatoryContact, resolveVisitsRef, visitKey } from "./vcrScheduleView.mjs";
@@ -192,6 +192,11 @@ const gatewayError = (status, code, message) => new VcrGatewayError(status, code
  * @param {any} vcr @param {any} study @param {any} selection
  */
 async function resolveSearchSelection(vcr, study, selection) {
+  if (selection?.collection != null && selection.collectionRevision == null) {
+    // A collection named alone is the one in force, as a search over it reads it. An unknown one is left for the selection's own check to refuse by name.
+    const revision = vcr.evidence?.collectionRevision?.(selection.collection) ?? null;
+    if (revision) return { ...selection, collectionRevision: revision };
+  }
   if (!selection || selection.searchId == null) return selection;
   const taken = await vcr.candidateSearches?.resolveSelection?.(study, selection.searchId, selection.candidateLimit ?? null).catch(() => null);
   if (!taken?.registryIds.length) {
@@ -415,7 +420,7 @@ function simulateRequest(body) {
     }
     if (body.modelVersion != null && body.modelId == null) throw gatewayError(400,'vcr_simulate_payload_invalid','modelVersion requires modelId.');
     if (body.selection != null && !['match_criteria', 'match_extract', 'match_judge'].includes(body.kind)) throw gatewayError(400, 'vcr_simulate_payload_invalid', 'selection is for matching only.');
-    return { action, kind: body.kind, modelId: body.modelId ?? null, modelVersion: body.modelVersion ?? null, selection: body.selection == null ? null : body.kind === 'match_extract' ? extractSelection(body.selection) : body.kind === 'match_judge' ? judgeSelection(body.selection) : matchingSelection(body.selection), scenario: object(body.scenario), inputs: list(body.inputs),
+    return { action, kind: body.kind, modelId: body.modelId ?? null, modelVersion: body.modelVersion ?? null, selection: body.selection == null ? null : body.kind === 'match_extract' ? extractSelection(body.selection) : body.kind === 'match_judge' ? judgeSelection(body.selection, { collectionAlone: true }) : matchingSelection(body.selection), scenario: object(body.scenario), inputs: list(body.inputs),
       reconstructionResultId: body.reconstructionResultId == null ? null : body.reconstructionResultId,
       seed: Number.isInteger(body.seed) ? body.seed : null,
       replicates: Number.isInteger(body.replicates) ? body.replicates : null,
@@ -2936,7 +2941,7 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
             return sources.length ? { ...checked, sources } : checked;
           }
           if (request.action === "start") {
-            const started = await startJob(vcr, study, /** @type {any} */ (request), { ownerView });
+            const started = await startJob(vcr, study, /** @type {any} */ (request), { ownerView, config });
             await nameWhatItHolds(vcr, study);
             return withJobEntry(started, { study, resultKind: vcrResultKindFor(String(/** @type {any} */ (request).kind)), publicUrl: config?.publicUrl });
           }
@@ -3064,9 +3069,9 @@ const sourcesNotForKind = () => ({ field: "", state: "assumption", because: "kin
  * @param {{ kind: string, scenario: Record<string, any>, inputs: unknown[], seed: number | null, replicates: number | null,
  *   cpuSecondsLimit: number | null, subjectId: string | null, reconstructionResultId?: string | null, selection?: any, modelId?:string|null, modelVersion?:string|null,
  *   sources?: unknown }} request
- * @param {{ ownerView?: boolean }} [options] the study owner's own conversation: the two reading starts print exact head counts
+ * @param {{ ownerView?: boolean, config?: Record<string, any> }} [options] `ownerView`: the study owner's own conversation: the two reading starts print exact head counts. `config`: what a conversation's judging job may ask for
  */
-async function startJob(vcr, study, request, { ownerView = false } = {}) {
+async function startJob(vcr, study, request, { ownerView = false, config = {} } = {}) {
   if (Object.hasOwn(VCR_LONGITUDINAL_JOBS,request.kind)) {
     if (!vcr.longitudinal) throw gatewayError(503,'vcr_gateway_unavailable','纵向数据尚未接入；其他分析可以继续。');
     const {job} = await vcr.longitudinal.prepare(study,request,study.userId,{ detail: study.completionOrigin ? { conversationOrigin:study.completionOrigin } : {} });
@@ -3093,7 +3098,7 @@ async function startJob(vcr, study, request, { ownerView = false } = {}) {
     if (request.selection == null) throw gatewayError(400, "vcr_simulate_payload_invalid", "判定要写 selection：一位患者加 registryIds，或一份方案（protocolVersionId，可加 subjectKeys）。");
     if (typeof vcr.service.forModel !== "function") throw gatewayError(503, "vcr_gateway_unavailable", "这份读取结果无法确认不含小样本格子，已整体拒绝。");
     // A selection that names a search (`searchId`, with `candidateLimit`) takes its trials from that search's receipt, in the order the search kept them.
-    const selection = await resolveSearchSelection(vcr, study, request.selection);
+    const selection = conversationSelection(await resolveSearchSelection(vcr, study, request.selection), config);
     return vcr.service.forModel(await vcr.matchJudge.start(study, selection, { exact: ownerView === true }), { projection: "match_judge_start", ownerView });
   }
   if (request.kind === "pool_evidence") {
