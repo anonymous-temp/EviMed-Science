@@ -306,7 +306,7 @@ function Overview() {
             {failed && <LoadError message="暂时读不到记忆。" onRetry={map.reload} />}
             {partial.length > 0 && <LoadError message="有一部分记忆没有读到，对应的数字先不显示。" onRetry={map.reload} />}
             {unavailableLinks.length > 0 && <nav aria-label="查看未读到的分类" className="flex flex-wrap gap-x-4 gap-y-2 text-ui">
-              {unavailableLinks.map((item) => <Link key={item.to} to={item.to} className="rounded text-link hover:underline">查看{item.label}</Link>)}
+              {unavailableLinks.map((item) => <Link key={item.to} to={item.to} className="rounded text-link underline">查看{item.label}</Link>)}
             </nav>}
             {(leads || !compact) && !empty && explorePanel && <ChartGrid rows={[[explorePanel]]} />}
             {tiles}

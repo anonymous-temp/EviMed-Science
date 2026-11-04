@@ -78,7 +78,7 @@ export function MemoryPreview({ node, doc, methods, projectName, onSelect, onOpe
       {node ? (
         <div className="mt-8 space-y-5">
           <div>
-            <p className="text-caption text-accent">{[markKindWord(node), project].filter(Boolean).join(" · ")}</p>
+            <p className="text-caption text-text-3">{[markKindWord(node), project].filter(Boolean).join(" · ")}</p>
             <h2 className="mt-2 break-words text-section font-semibold text-text">{title}</h2>
             {description && description !== title && <p data-prose="" className="mt-3 break-words text-ui leading-6 text-text-2">{description}</p>}
             {read?.state === "loading" && <p role="status" className="mt-3 text-caption text-text-3">正在读取内容</p>}
