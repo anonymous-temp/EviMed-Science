@@ -2428,8 +2428,8 @@ test("file-delivery capabilities fix the two pre-delivery steps instead of leavi
     // script's results, not typed from sources. They do not inherit the full
     // report pipeline's mandatory skill sequence. The two 循证进化 packages
     // (evolution-scout, tool-builder) deliver one JSON artifact to a platform job,
-    // not prose to a reader, so they have no report to trace or humanize.
-    if (["dataset-research-scoping", "statistical-analysis", "gene-expression-analysis", "evolution-scout", "tool-builder"].includes(name)) continue;
+    // not prose to a reader, so they have no report to trace or humanize. Patient matching (owner decisions of 2026-11-04) answers in the reply from saved judgments and owes no file.
+    if (["dataset-research-scoping", "statistical-analysis", "gene-expression-analysis", "evolution-scout", "tool-builder", "vcr-matching"].includes(name)) continue;
     for (const step of ["traceability-review", "manuscript-humanize"]) {
       assert.ok(skill.includes(step), `${name}/SKILL.md does not name ${step} as a pre-delivery step`);
       assert.ok(shipped.includes(step), `capability-skills/${name}/SKILL.md does not name ${step}; the authored copy is not what the run reads`);

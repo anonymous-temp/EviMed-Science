@@ -325,10 +325,10 @@ test("a criterion's requirement written in a skill is inside the domain's gramma
       assert.doesNotMatch(block, /"free_text"|"field":/, `${skill}: an example still writes a requirement in the old { field, op, value } shape`);
     }
   }
-  for (const skill of ["vcr-protocol", "vcr-matching"]) {
-    const text = read(`capabilities/${skill}/SKILL.md`);
-    for (const op of ["all", "any", "not", "present", "absent", "compare", "elapsed_since", "language"]) assert.ok(text.includes(`\`${op}\``), `${skill} names the ${op} node`);
-  }
+  // The matching skill stopped teaching the grammar on 2026-11-04: free text is judged by the model, and a structured screen reads the grammar from `contracts`.
+  const text = read("capabilities/vcr-protocol/SKILL.md");
+  for (const op of ["all", "any", "not", "present", "absent", "compare", "elapsed_since", "language"]) assert.ok(text.includes(`\`${op}\``), `vcr-protocol names the ${op} node`);
+  assert.match(read("capabilities/vcr-matching/SKILL.md"), /what `contracts` gives the criteria grammar/);
 });
 
 test("no skill speaks in build-plan identifiers, and the pairs of each skill are one text", () => {

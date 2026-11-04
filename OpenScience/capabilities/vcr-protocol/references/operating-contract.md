@@ -48,7 +48,9 @@ No contact, referral, site CRM, recruitment funnel, coordinator assignment,
 recruitment materials or follow-up operations are part of this workflow. Retain
 scientific visit schedules, longitudinal observations, criterion feasibility
 counts, eligibility rechecks and abstract accrual/dropout design assumptions.
-Unknown eligibility is never exclusion, a negative finding or zero. A registry's
+In statistics and structured table screening, unknown is never exclusion, a negative
+finding or zero. In a free-text record, a criterion the record is silent on is judged
+by the model and labelled as silence (`vcr-matching`). A registry's
 recruitment status is dated research metadata, not available site capacity.
 
 Keep observed people, events, effective sample size, generated records and

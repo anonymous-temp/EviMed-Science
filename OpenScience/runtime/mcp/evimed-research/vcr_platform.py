@@ -89,7 +89,7 @@ WRITE_WHATS = ("data_intake", "task_context", "patient_context",
     "definition", "protocol", "criteria", "assumption", "evidence_item", "precedent", "population", "patient_set",
     "comparator", "trial_scenario", "design_grid", "decision", "report", "model", "forecast", "step", "plan",
     "fact", "language_judgment", "field_map", "pack", "model_assessment", "history", "forecast_design", "trial_benchmark",
-    "candidate_trial", "soa", "regulatory_contact", "result_record",
+    "candidate_trial", "trial_judgment", "soa", "regulatory_contact", "result_record",
 )
 # The engine's job kinds, in the domain's order (`VCR_JOB_KINDS` in
 # `packages/domain/src/vcrVocabulary.mjs`): the 24 of the first release, then the
@@ -110,6 +110,8 @@ JOB_KINDS = ("fit_survival_model", "apply_prognostic_model",
     "population_check",
     # the batch reading of patient records for the criteria's facts (2026-11-01)
     "match_extract",
+    # patient and trial judged by the model, pair by pair (2026-11-04)
+    "match_judge",
     "forecast_trajectories", "evaluate_forecast", "compare_forecasts", "benchmark_trial_effect",
 )
 POOLING_METHODS = ("single_study", "random_effects_dl", "random_effects_reml", "random_effects_hksj", "fixed_effect")
@@ -213,7 +215,10 @@ def _detailed_tool_definitions():
                 "judgments with approved projected quotes and sourced facts; factContract gives the exact clinical metadata schema, and the language criteria still "
                 "waiting for the run's answer. what: candidate_trials lists the registry trials found for patients "
                 "(filter.id or filter.registryId reads one with its criteria; filter.subjectKey returns that patient's trials in order "
-                "with the verdict about each and the language answers still owed). what: candidates searches the three registries for "
+                "with the verdict about each and the language answers still owed; once the model has judged them, ranking gives each trial's verdict, fit, reasons and "
+                "per-clause labels with their evidence; matching with filter.protocolVersionId gives the same for a protocol's people, and its numbered clauses). "
+                "what: subject_document with filter.subjectKey and filter.kind sentences reads a patient's record as numbered sentences, with the documentHash a trial_judgment write names; "
+                "trial_registry_record gives numbered clauses. what: candidates searches the three registries for "
                 "trials that might take one patient (filter.condition, terms, age, sex, region, status) and says which were searched, "
                 "which failed and what is not covered."
             ),
@@ -320,6 +325,9 @@ def _detailed_tool_definitions():
                 "match_extract reads the study's patient records for the facts the criteria ask about, one record at a time, in a "
                 "job of its own: selection takes protocolVersionId, subjectKeys, asOf and prefilter, and no scenario. The answer "
                 "states what will be read and its cost before the work begins; a canceled or repeated start does not read a record twice. "
+                "match_judge has the model judge patients against trials, pair by pair, in a job of its own: selection takes subjectKey and registryIds "
+                "(one patient, a list of trials, with collection and collectionRevision for a frozen set), or protocolVersionId and subjectKeys (one protocol, a roster); "
+                "fit, topK and thinking are optional. No scenario. Read the saved ranking back with vcr_read candidate_trials or matching. "
             ),
             "inputSchema": {
                 "type": "object",
@@ -341,6 +349,14 @@ def _detailed_tool_definitions():
                         "direction": {"type": "string", "enum": ["trial_to_patient", "patient_to_trial"]},
                         "asOf": {"type": "string"}, "offset": {"type": "integer", "minimum": 0}, "prefilter": {"type": "boolean"},
                         "snapshotId": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+                        "subjectKey": ID,
+                        "registryIds": {"type": "array", "minItems": 1, "maxItems": 500, "items": ID},
+                        "registry": {"type": "string", "enum": ["clinicaltrials.gov", "chictr", "ctis"]},
+                        "collection": ID,
+                        "collectionRevision": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+                        "fit": {"type": "boolean"},
+                        "topK": {"oneOf": [{"type": "integer", "minimum": 0, "maximum": 500}, {"type": "string", "enum": ["all"]}]},
+                        "thinking": {"type": "string", "enum": ["high", "off"]},
                     }, "additionalProperties": False},
                     "reconstructionResultId": ID,
                     "jobId": ID,
@@ -520,9 +536,9 @@ def tool_definitions():
     """Compact root catalogue; the workflow skill and shape action carry detail."""
     root = skills_root()
     descriptions = {
-        "vcr_read": "Read this conversation's research. what=study opens compact context and enables specialist tools. patient_context lists original text uploads and authenticated human messages (messageSeq); follow nextUploadRead for more uploads. subject_document reads permitted original material. trial_registry_record reads one registry (filter registryId). contracts gives write syntax before any task exists; data_intake lists original upload handles; matching filter.kind=contract gives write syntax; candidate_trials reads patient trial matches. Any eligibility verdict you deliver (reply, table or file) is copied from the saved read-back (matching or candidate_trials with filter.subjectKey), never retyped.",
-        "vcr_write": "Save research objects, never calculated results. data_intake imports/maps/freezes uploads (read contracts). patient_context takes data={sourceId,generation,sha256} from uploads, {sourceId} for a knowledge-base original, or {messageSeq} for a human case. task_context opens a task. A fact states only what its quote says: what the text does not mention is unknown, never negated, and age, sex or a diagnosis do not imply pregnancy, menopause or a negative result. A candidate_trial's criteria are that one trial's own eligibility lines. Use the VCR workflow skill for object contracts (read %s/vcr-matching/SKILL.md before writing facts, criteria or trials; vcr-protocol, vcr-evidence, vcr-analysis and vcr-package sit beside it; none is in the skill catalogue) and vcr_simulate action=shape for numerical inputs." % root,
-        "vcr_simulate": "A human trial's sample size, power or events, comparing designs, a synthetic population from a paper's baseline, an external control: calculate here, not in a script of your own. No study needed; the first start opens a result page with versions and premises. action=shape with kind gives exact fields; do not guess keys. Long jobs resume here if they outlive this turn. modelId requires modelVersion.",
+        "vcr_read": "Read this conversation's research. what=study opens compact context and enables specialist tools. patient_context lists original text uploads and authenticated human messages (messageSeq); follow nextUploadRead for more uploads. subject_document reads original material; kind=sentences numbers it. trial_registry_record reads one registry (filter registryId). contracts gives write syntax before any task exists; data_intake lists upload handles; candidate_trials reads patient trial matches. Any eligibility verdict you deliver is copied from the saved read-back (matching or candidate_trials with filter.subjectKey), never retyped.",
+        "vcr_write": "Save research objects, never calculated results. data_intake imports/maps/freezes uploads (read contracts). patient_context takes data={sourceId,generation,sha256} from uploads, {sourceId} for a knowledge-base original, or {messageSeq} for a human case. task_context opens a task. A fact for structured screening states only what its quote says: what the text does not mention is unknown, never negated. trial_judgment saves your own judgment of a patient against a trial or protocol, with sentence ids as evidence. A candidate_trial's criteria are that one trial's own eligibility lines. Use the VCR workflow skill for object contracts (read %s/vcr-matching/SKILL.md before matching a patient to trials; vcr-protocol, vcr-evidence, vcr-analysis and vcr-package sit beside it; none is in the skill catalogue) and vcr_simulate action=shape for numerical inputs." % root,
+        "vcr_simulate": "A human trial's sample size, power or events, comparing designs, a synthetic population from a paper's baseline, an external control: calculate here, not in a script of your own. No study needed; the first start opens a result page. action=shape with kind gives exact fields; do not guess keys. Patients to trials: kind match_judge. Long jobs resume here if they outlive this turn. modelId requires modelVersion.",
     }
     tools = _detailed_tool_definitions()
     for tool in tools:
@@ -1074,6 +1090,21 @@ def shape(arguments: dict) -> dict:
     control = _control_plane_shape(kind)
     if control is not None:
         return control
+    if kind == "match_judge":
+        # Not an engine method: the platform freezes the pairs from a selection, and nothing is stated in a scenario.
+        return {
+            "status": "success",
+            "summary": "match_judge is built by the platform from a selection; there is no scenario.",
+            "data": {"kind": kind, "method": "matching.judge", "builtByPlatform": True, "runStates": [], "keys": [],
+                     "notes": ["One patient against trials: selection {subjectKey, registryIds, registry?, collection?, collectionRevision?}. "
+                               "One protocol against patients: selection {protocolVersionId?, subjectKeys?} (the latest version and the whole roster when absent). "
+                               "fit (default true) is the trial-level judgment of every pair; topK (default the deployment's; 0 none, all every pair) is how many of each person's "
+                               "best-ranked pairs are then judged clause by clause; thinking is high or off. "
+                               "The answer states the most it can cost before the work begins. A pair already judged for the same text and settings is not paid for twice. "
+                               "Read the result back: vcr_read what candidate_trials with filter.subjectKey, or what matching with filter.protocolVersionId."]},
+            "warnings": [],
+            "next_actions": ["Start it with vcr_simulate action start, kind match_judge and a selection."],
+        }
     if kind == "match_extract":
         # Not an engine method and not a stored-record scenario: the platform plans the reading from the study and takes a selection only.
         return {
@@ -1527,7 +1558,7 @@ def registry_record(arguments: dict) -> dict:
     return {
         "status": "success",
         "summary": "Read registry record %s." % registry_id,
-        "data": {**record, "collection": data["collection"]} if data.get("collection") else record,
+        "data": {**record, **({"collection": data["collection"]} if data.get("collection") else {}), **({"clauses": data["clauses"]} if data.get("clauses") else {})},
         "warnings": [],
         "next_actions": ["Keep planned and actual enrolment apart; a planned number is not evidence of accrual speed."],
     }

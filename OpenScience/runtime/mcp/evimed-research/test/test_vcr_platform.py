@@ -405,7 +405,8 @@ class VcrToolDefinitionTests(unittest.TestCase):
         definitions = {tool["name"]: tool for tool in vcr_platform.tool_definitions()}
         write = definitions["vcr_write"]["description"]
         self.assertIn("never negated", write)
-        self.assertIn("pregnancy", write)
+        # The rule that age can never settle pregnancy went with the owner decisions of 2026-11-04; a fact still says only what its quote says.
+        self.assertIn("what the text does not mention is unknown", write)
         self.assertIn("one trial's own eligibility lines", write)
         for method in ("vcr-matching", "vcr-protocol", "vcr-evidence", "vcr-analysis", "vcr-package"):
             self.assertIn(method, write)
@@ -706,6 +707,31 @@ class VcrSimulateTests(_GatewayCase):
         self.assertIn("job_1 is queued", result["summary"])
         self.assertEqual(_Gateway.seen[0]["path"], "/internal/vcr/v1/simulate")
         self.assertEqual(_Gateway.seen[0]["body"], {"action": "start", "kind": "design_simulation", "scenario": scenario, "subjectId": "scn_1"})
+
+    def test_a_judging_job_is_a_kind_with_a_selection_and_a_write_of_its_own(self):
+        self.assertIn("match_judge", vcr_platform.JOB_KINDS)
+        self.assertIn("trial_judgment", vcr_platform.WRITE_WHATS)
+        definitions = {tool["name"]: tool for tool in vcr_platform._detailed_tool_definitions()}
+        selection = definitions["vcr_simulate"]["inputSchema"]["properties"]["selection"]["properties"]
+        for key in ("subjectKey", "registryIds", "registry", "collection", "collectionRevision", "protocolVersionId", "subjectKeys", "fit", "topK", "thinking"):
+            self.assertIn(key, selection)
+        self.assertIn("match_judge", definitions["vcr_simulate"]["description"])
+        self.assertIn("sentences", definitions["vcr_read"]["description"])
+        answer = self.server.call_tool("vcr_simulate", {"action": "shape", "kind": "match_judge"})
+        self.assertEqual(answer["status"], "success")
+        self.assertEqual(answer["data"]["method"], "matching.judge")
+        self.assertTrue(answer["data"]["builtByPlatform"])
+        self.assertIn("registryIds", answer["data"]["notes"][0])
+        compact = {tool["name"]: tool["description"] for tool in vcr_platform.tool_definitions()}
+        self.assertIn("match_judge", compact["vcr_simulate"])
+        self.assertIn("trial_judgment", compact["vcr_write"])
+        self.assertIn("sentences", compact["vcr_read"])
+
+    def test_a_registry_record_keeps_its_numbered_clauses(self):
+        _Gateway.answers["read"] = (200, {"data": {"what": "trial_registry_record", "available": True, "status": "ok", "record": {"registryId": "NCT00000001"}, "clauses": [{"number": 1, "kind": "inclusion", "text": "Age >= 18"}]}})
+        answer = self.server.call_tool("trial_registry_record", {"registryId": "NCT00000001"})
+        self.assertEqual(answer["data"]["clauses"], [{"number": 1, "kind": "inclusion", "text": "Age >= 18"}])
+        self.assertEqual(answer["data"]["registryId"], "NCT00000001")
 
     def test_shape_answers_through_the_tool_without_asking_the_platform_and_with_the_module_off(self):
         result = self.server.call_tool("vcr_simulate", {"action": "shape", "kind": "design_simulation"})

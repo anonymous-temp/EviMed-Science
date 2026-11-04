@@ -1222,18 +1222,17 @@
       "id": "capability/vcr-matching",
       "name": "vcr-matching",
       "origin": "capability",
-      "version": "1.6.2",
+      "version": "1.8.0",
       "source": {"kind":"release"},
-      "digest": "sha256:0aecc2680fbe9f864c3b469adb757a85205c253f76d6e89f5dcc57ac36c6a995",
+      "digest": "sha256:4547b80bcbb8e1f573e890f4d31cb60ae51310c2f1ef6005c30395a3c4b29661",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"5c5dec100a3f7a0e0e6993ad4d157bdebbf185eecba3a7b8c2e7d5b800e3b31a"}],
+      "references": [{"path":"capability.yaml","sha256":"187129946ec667ac1993085bece4a063c02e1da714f4d1fc06032ab4ea8bb252"}],
       "dependencies": [
         {"kind":"platform-tool","name":"clinical_trial_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"dataset_semantics","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"kb_browse","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"kb_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"literature_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
-        {"kind":"platform-tool","name":"locate_quote","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"term_normalize","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"trial_registry_record","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"vcr_read","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -1244,11 +1243,11 @@
         {
           "name": "vcr-matching-assessment",
           "kind": "deliverable",
-          "summary": "Assess eligibility in either direction using original case records and source-bound trial criteria. Preserve unknown states, criterion evidence and recheck needs; no recruitment operations.",
-          "summaryZh": "把病例或患者队列与试验条件逐条核对，保留原文依据、未知项与排除原因。",
+          "summary": "Judge eligibility in either direction from original case records and the trial's own eligibility text: a whole-pair judgment for every pair, clause by clause for the best-ranked, with sentence evidence and a visible label for what the record does not say. No recruitment operations.",
+          "summaryZh": "把病例或患者队列与试验条件逐条判断，保留病历依据，没写的条款标明怎么判的。",
           "accepts": ["studyId","protocolVersionId","subjectKeys","direction","asOf"],
-          "produces": ["matching-assessment.md","matching.json","criterion-funnel.md","revision-notes.md"],
-          "limits": ["资格判定由平台代码计算，不设统一准确率门槛，也不引用外部产品的准确率。","缺证据一律记「未知」，不会替患者补全；任一排除标准未知时整体不判为「符合」。"]
+          "produces": ["matching-assessment.md","revision-notes.md"],
+          "limits": ["结论由模型逐条判断，证据句由平台核对；不设统一准确率门槛，也不引用外部产品的准确率。","病历没写的条款会标明「未见记载，按未排除」或「未见记载，需确认」：这是判断，不是病历的记载。"]
         }
       ]
     },
@@ -1288,13 +1287,13 @@
       "id": "capability/vcr-protocol",
       "name": "vcr-protocol",
       "origin": "capability",
-      "version": "1.4.5",
+      "version": "1.4.6",
       "source": {"kind":"release"},
-      "digest": "sha256:62f357d317e4e5dd1f6d908a228988b2d533caaeea48667567afe6cb0e133091",
+      "digest": "sha256:c70478e47eb9b4e15aa0909b80991f71fb3f0f8da64e4c85b0611c0d4bd68793",
       "digestAlgorithm": "release-directory-v1",
       "references": [
-        {"path":"capability.yaml","sha256":"8d8a30b6afa56343c38e5e0e02f371e73081e57a2032bfbb3282dd9a7d093ad6"},
-        {"path":"references/operating-contract.md","sha256":"9050a5c45846c08a7f5676eff012a31701677be24c586f8806802c314f08e6aa"}
+        {"path":"capability.yaml","sha256":"68a8790a2deae8de9fcadc1251c5a19d3d1745bb912819594b5bcda3565e7685"},
+        {"path":"references/operating-contract.md","sha256":"e805e2c1a957e277456af13941015a0452bd314b7a836f230c59deb9fcf46b0d"}
       ],
       "dependencies": [
         {"kind":"platform-tool","name":"clinical_trial_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},

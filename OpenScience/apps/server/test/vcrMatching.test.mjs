@@ -879,26 +879,34 @@ test("the capability declares itself the way the module needs it to", async () =
   // explanation — not because of what it decides.
   assert.equal(manifest.safetyClass, "clinical");
   assert.deepEqual(manifest.produces.map((item) => item.contractKind), ["vcr-matching-assessment"]);
+  // Since 2026-11-04 the answer and the saved judgments are the deliverable: a run owes no file and no review pass, like `vcr-protocol`.
   const required = manifest.produces[0].outputs.filter((item) => item.required !== false).map((item) => item.path);
-  assert.deepEqual(required, ["matching-assessment.md", "matching.json"]);
+  assert.deepEqual(required, []);
+  assert.deepEqual(manifest.produces[0].checks, ["skillsLoaded"]);
+  assert.deepEqual(manifest.skills, ["vcr-matching"]);
   const validated = validateCapabilityManifest(manifest);
   assert.deepEqual(validated.issues, []);
   assert.equal(validated.ok, true);
 });
 
-test("the skill says the two things a run must not get wrong, and names its required outputs", async () => {
+test("the skill is short, starts the job, judges silence by the model, and reports from what was saved", async () => {
+  // Rewritten on 2026-11-04 (owner decisions): the old skill taught a rule grammar, verbatim facts and a file deliverable, and held that age alone can never settle pregnancy.
+  // A real customer complained about exactly that, and a clause a note is silent on now reaches the model, so the assertions that encoded the old rule went with it.
   const authored = await readFile(path.join(repoRoot, "capabilities", "vcr-matching", "SKILL.md"), "utf8");
   const shipped = await readFile(path.join(repoRoot, "capability-skills", "vcr-matching", "SKILL.md"), "utf8");
   const operating = await readFile(path.join(repoRoot, "capabilities", "vcr-protocol", "references", "operating-contract.md"), "utf8");
   assert.equal(authored, shipped, "the authored skill and the shipped copy are one document");
-  assert.match(authored, /The evaluator computes the final verdict/);
+  assert.ok(authored.split("\n").length <= 40, "at most forty lines of plain guidance");
   assert.match(authored, /\.\.\/vcr-protocol\/references\/operating-contract\.md/);
   assert.match(operating, /No contact, referral, site CRM/);
-  assert.match(operating, /Unknown eligibility is never exclusion, a negative finding or zero/);
-  assert.match(authored, /unknown coverage, not an eligible verdict/);
-  assert.match(authored, /cannot be represented faithfully, write the complete\s+independently meaningful clause as one `language` requirement/);
-  assert.match(authored, /do not guess a missing numeric value or date/);
-  for (const name of ["matching-assessment.md", "matching.json"]) assert.ok(authored.includes(name), name);
+  assert.match(operating, /In statistics and structured table screening, unknown is never exclusion, a negative\s+finding or zero/);
+  assert.match(authored, /kind `match_judge`/);
+  assert.match(authored, /what `trial_judgment`/);
+  assert.match(authored, /a good record could leave this out/);
+  assert.match(authored, /a 78-year-old is not pregnant/);
+  assert.match(authored, /A registry that failed is reported and the rest goes on/);
+  assert.match(authored, /Read it back/);
+  for (const gone of ["matching.json", "traceability-review", "manuscript-humanize", "evimed_submit_deliverable", "dateQuote", "Age alone does not establish"]) assert.ok(!authored.includes(gone), gone);
 });
 
 test("AC-14 the contract refuses a package whose own judgments do not produce its summary", async () => {
