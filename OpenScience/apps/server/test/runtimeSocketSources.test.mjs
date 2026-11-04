@@ -24,7 +24,7 @@ for (const dockerfile of ['Dockerfile', 'Dockerfile.agentbay', 'Dockerfile.delta
     t.after(() => rmSync(base, { recursive: true, force: true }));
     const socket = path.join(base, 'socket');
     const copySource = (from, to) => cpSync(from, to, { recursive: true,
-      filter: source => !source.split(path.sep).some(part => part === 'node_modules' || part === 'dist' || part === 'test') });
+      filter: source => !path.relative(from, source).split(path.sep).some(part => part === 'node_modules' || part === 'dist' || part === 'test') });
     copySource(path.join(root, 'packages/socket'), socket);
     for (const name of packages) copySource(path.join(root, 'packages', name), path.join(socket, 'node_modules/@evimed', name));
     const run = spawnSync(process.execPath, [path.join(socket, 'scripts/build-client.mjs')], { cwd: base,
