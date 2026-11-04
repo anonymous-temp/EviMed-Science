@@ -1,3 +1,4 @@
+import { geoCoverageDifference } from "@evimed/domain";
 import { Link } from "react-router";
 import { formatRelativeTime } from "@/lib/format";
 import { GEO_STEP_KEYS, type GeoProjectSummary } from "@/lib/geoClient";
@@ -89,8 +90,8 @@ export function GeoProjectPreview({ project, label, heading, resuming, onResume,
 
   const { gvi, mention } = project.headline;
   const figures = [
-    { cell: gvi, unit: "index" as const, name: "综合可见度指数", line: gvi.trend, target: gvi.target },
-    { cell: mention, unit: "percent" as const, name: "品牌提及率", line: [] as number[], target: null },
+    { cell: gvi, unit: "index" as const, name: "综合可见度指数", line: gvi.trend, target: gvi.target, connect: gvi.trend.every((_, index) => index === 0 || geoCoverageDifference(gvi.trendCoverage?.[index - 1] ?? null, gvi.trendCoverage?.[index] ?? null).comparable) },
+    { cell: mention, unit: "percent" as const, name: "品牌提及率", line: [] as number[], target: null, connect: false },
   ].map((figure) => ({ ...figure, read: tileValue(figure.cell, figure.unit) }));
   // A number under the sample floor has its sample as its words; one that does not exist is explained once, under both.
   const missing = figures.some((figure) => figure.read.placeholder && figure.cell?.status !== "insufficient");
@@ -146,7 +147,7 @@ export function GeoProjectPreview({ project, label, heading, resuming, onResume,
             reading={figure.read.reading}
             renderMeasured={() => figure.read.value}
             note={geoSampleText(figure.cell, figure.unit)}
-            chart={!figure.read.placeholder && figure.line.length > 0 ? <GeoSparkline values={figure.line} target={figure.target} width={140} height={28} className="w-full" /> : undefined}
+            chart={!figure.read.placeholder && figure.line.length > 0 ? <GeoSparkline connectLines={figure.connect} values={figure.line} target={figure.target} width={140} height={28} className="w-full" /> : undefined}
           />
         ))}
       </StatBand>}

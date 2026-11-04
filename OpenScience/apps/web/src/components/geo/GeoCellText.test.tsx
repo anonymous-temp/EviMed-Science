@@ -81,3 +81,10 @@ describe("a GEO number", () => {
       .toBe("引用命中率：样本不足，24 次回答。这个数说明了什么，接下来该做什么？");
   });
 });
+
+
+it("names missing judgment and noise provenance instead of presenting a blank net effect", () => {
+  for (const reason of ["judge_version_unrecorded", "noise_basis_unrecorded"]) {
+    expect(geoCellWord({ ...cell(null, null, null, "not_measurable"), reason })).toBe("依据未知，不可比");
+  }
+});

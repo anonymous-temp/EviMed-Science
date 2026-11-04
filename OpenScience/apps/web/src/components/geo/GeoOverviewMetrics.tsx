@@ -10,7 +10,14 @@ import { monthDay } from "./geoText";
 import { geoTabPath } from "./geoTabs";
 import { useGeoPath } from "./useGeoPath";
 
-/** One authoritative rendering of baseline, current values and target, with their measurement scope. */
+/**
+ * Anatomy: One metric band with baseline, current value, target and shared observation scope.
+ * Variants: Full or compact; compact emphasizes the leading KPI and pairs secondary phone tiles.
+ * States: Typed loading/unknown/insufficient/measured/failed readings remain distinct.
+ * Hit area: Shared metric drill-down links. Keyboard: Standard links and tooltips.
+ * Long content: Measurements and scope wrap. Theme: Shared ink, chart and surface roles.
+ * Responsive: Compact leading tile spans both phone columns. Verification: GEO tab tests and fixture browser walk.
+ */
 export function GeoOverviewMetrics({ geoId, project, diagnosis, strategy, compact = false }: { geoId: string; project: GeoProject; diagnosis: GeoLoadResult<GeoDiagnosis>; strategy: GeoLoadResult<GeoStrategyView>; compact?: boolean }) {
   const path = useGeoPath();
   const diag = diagnosis.state.kind === "ready" ? diagnosis.state.data : null;
@@ -21,6 +28,7 @@ export function GeoOverviewMetrics({ geoId, project, diagnosis, strategy, compac
   return (
       <StatBand
         label="本轮指标"
+        dense={compact}
         // The denominator, and — when the engines, the questions or the surface changed since the last round — the plain statement that
         // the tiles' changes are not compared (R14 N-4); the same sentence the headline and the chart say.
         footnote={[denominator, overviewCoverageNotice(project)].filter(Boolean).join(" · ") || null}
@@ -31,7 +39,8 @@ export function GeoOverviewMetrics({ geoId, project, diagnosis, strategy, compac
           <StatTile
             key={tile.key}
             label={tile.label}
-            valueSize={compact ? "section" : "metric"}
+            valueSize={compact && !tile.lead ? "section" : "metric"}
+            dense={compact}
             // A diagnosis that was not read is said once in the tile (the word) and once with its reason and 重试 below the band: a tile that
             // carried the message and a retry of its own repeated both.
             reading={tile.key === "safety" && diagnosis.state.kind === "loading" ? { kind: "loading" } : tile.key === "safety" && diagnosis.state.kind === "error" ? { kind: "unmeasured", reason: "读取失败" } : tile.reading}
@@ -43,7 +52,7 @@ export function GeoOverviewMetrics({ geoId, project, diagnosis, strategy, compac
             to={tile.tab ? path(geoTabPath(geoId, tile.tab)) : undefined}
             delta={<Delta value={tile.delta} unit={tile.key === "gvi" ? "index" : "point"} polarity={tile.polarity} />}
             note={tile.triple ? undefined : tile.note}
-            className={tile.lead ? "sm:col-span-2" : undefined}
+            className={tile.lead ? compact ? "col-span-2" : "sm:col-span-2" : undefined}
             chart={(
               <>
                 {tile.lead

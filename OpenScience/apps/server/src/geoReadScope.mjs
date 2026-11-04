@@ -5,6 +5,7 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { GEO_ENGINES, GEO_POOLS, GEO_MEASUREMENT_METHOD_VERSION, geoMetricMembers, geoJudgementCoverage,
   GEO_ERROR_STATUSES, GEO_ERROR_TYPES, GEO_SEVERITIES, geoCoverageKey } from "@evimed/domain";
 import { computeRoundCells } from "./geoMetricsJob.mjs";
+import { withMetricProvenanceRead } from "./geoMetricProvenance.mjs";
 import { GeoMeasureStore, GEO_ROUND_ANSWERED } from "./geoMeasureStore.mjs";
 import { HttpError } from "./security.mjs";
 
@@ -38,7 +39,7 @@ export async function withGeoReadTransaction(store, operation) {
   const result = await database.transaction(async (/** @type {any} */ client) => {
     await client.query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ");
     await client.query("SET LOCAL statement_timeout = '5s'");
-    return database.withTransactionClient(client, () => readTransactions.run({ database, references }, operation));
+    return database.withTransactionClient(client, () => readTransactions.run({ database, references }, () => withMetricProvenanceRead(operation)));
   });
   for (const { selected, project } of references.values()) await store.query(`INSERT INTO evimed_geo.read_selections (id, user_id, geo_project_id, scope, round_ids, data_revision, subset)
     VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6, $7::jsonb) ON CONFLICT (id) DO NOTHING`,

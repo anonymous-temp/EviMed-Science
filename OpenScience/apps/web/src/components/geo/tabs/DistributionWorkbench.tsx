@@ -151,7 +151,7 @@ function OrderDetail({ geoId, project, orderId, onClose }: { geoId: string; proj
       {state.refreshError && <Note tone="warn" action={<Button size="sm" onClick={reload}>重试</Button>}>{state.refreshError}</Note>}
       <p className="text-ui">{orderStateWord(order.state)} · {order.media || order.domain || '媒体未记录'} · {yuan(order.priceCny)}{order.versionState === 'unknown' ? ' · 稿件版本未记录' : ''}</p>
       <p className="text-caption text-text-3">{`实际发布时间：${when(order.publishedAt)}`}</p>
-      {order.sourceProofProblem && <Note tone="warn" action={<Link to={destination(geoId, { tab: 'actions' })}>查看行动</Link>}>{order.sourceProofProblem === 'mismatch' ? '来源证明与登记域名不一致，计划暂未投放。请联系管理员同步媒体目录后再核验。' : canEdit ? '来源证明缺失，计划暂未投放。如有关联行动，可在行动中重新核验信源；如无核验入口或仍未恢复，请联系管理员同步媒体目录。' : '来源证明缺失，计划暂未投放。请联系有编辑权限的成员核验信源，或联系管理员同步媒体目录。'}</Note>}
+      {order.sourceProofProblem && <Note tone="warn" action={<Link to={destination(geoId, { tab: 'actions' })}>查看行动</Link>}>{order.sourceProofProblem === 'mismatch' ? '来源证明与登记域名不一致，计划暂未投放。请联系管理员同步媒体目录后再核对。' : canEdit ? '来源证明缺失，计划暂未投放。如有关联行动，可在行动中重新核对信源；如无核对入口或仍未恢复，请联系管理员同步媒体目录。' : '来源证明缺失，计划暂未投放。请联系有编辑权限的成员核对信源，或联系管理员同步媒体目录。'}</Note>}
       {newerVersion && <Note action={versionButton}>当前稿件已有新版本，线上页面仍关联当时发布的版本。</Note>}
       <div className="flex flex-wrap gap-2">
         {href && <a href={href} target="_blank" rel="noreferrer" className="text-link hover:underline">打开线上页面</a>}

@@ -28,20 +28,27 @@
 #   workspace-write:  ... --die-with-parent --tmpfs /tmp --bind <workspace> <workspace> -- <command>...
 #
 # The kernel's own Landlock runner grants, for the same two shapes: `--ro /` `--rw /dev/null`, and for
-# workspace-write also `--rw /tmp` `--rw <workspace>`. This runner grants the same and `--rw /dev/shm`. Nothing the
+# workspace-write also `--rw /tmp` `--rw <workspace>`. This runner grants the same, `--rw /dev/shm` and `--rw $HOME/.loopx`. Nothing the
 # launcher denies is allowed by it: it does not unshare a PID namespace or mount anything (neither does the
 # launcher path), and it adds no network rule (neither has the launcher).
+#
+# It also grants LoopX its own directory, $HOME/.loopx, when the serve script has made it. The CLI the model runs keeps its machine registry
+# and its goal authority there, the kernel's plugin reads them from there outside the sandbox, and the kernel's grants leave it read-only: the
+# CLI's first step answered `blocked-write-denied`, and the model spent most of a goal's first round on inventing another place, a different one
+# each time (42 of 49 tool calls for a 200-word answer, 2026-11-03). The directory holds LoopX's state and nothing of the platform's; /runtime
+# and the rest of $HOME stay out of reach. The path is written here for the same reason the launcher's is.
 #
 # Deletable when dsh-sandbox-local grants the platform temp areas the way its own `writableRoots` already says
 # (/tmp and os.tmpdir(), plus /dev/shm) or offers a list of extra writable roots: delete this file, the three
 # COPY lines and the `sandbox` row, and re-record the composition baseline (deps-version.json
 # dsh.upstreamDefects.sandboxWritableRoots).
 
-# Tests replace these two lines with the path of the launcher and the shared-memory directory under test; the image
+# Tests replace these three lines with the path of the launcher and the directories under test; the image
 # never reads either from its environment, because which binary confines a command must not be decidable by the
 # environment a command could influence.
 launcher_pattern='/usr/local/lib/node_modules/@deepseek-ai/dsh/node_modules/@deepseek-ai/node-addon-system-*/bin/landlock-run'
 shm_dir=/dev/shm
+loopx_home=/runtime/home/.loopx
 
 fail() {
   printf 'evimed-landlock-run: %s\n' "$1" >&2
@@ -76,10 +83,10 @@ if [ "${1-}" = --tmpfs ] && [ "${2-}" = /tmp ] && [ "${3-}" = --bind ] \
   workspace=$4
   shift 6
   [ $# -gt 0 ] || fail 'no command after --'
-  if [ -d "${shm_dir}" ]; then
-    exec "${launcher}" --ro / --rw /dev/null --rw /tmp --rw "${shm_dir}" --rw "${workspace}" -- "$@"
-  fi
-  exec "${launcher}" --ro / --rw /dev/null --rw /tmp --rw "${workspace}" -- "$@"
+  if [ -d "${loopx_home}" ]; then set -- --rw "${loopx_home}" -- "$@"; else set -- -- "$@"; fi
+  set -- --rw "${workspace}" "$@"
+  if [ -d "${shm_dir}" ]; then set -- --rw "${shm_dir}" "$@"; fi
+  exec "${launcher}" --ro / --rw /dev/null --rw /tmp "$@"
 fi
 
 fail 'unsupported sandbox profile (neither the read-only nor the workspace-write shape)'

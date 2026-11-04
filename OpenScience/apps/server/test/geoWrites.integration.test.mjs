@@ -452,10 +452,11 @@ test("targets are forecasts or commercial, three tiers, no duplicates; sources a
   const sources = await write(project, "sources", { items: [
     { domain: "https://WWW.39.net/path", kind: "vertical", layer: "coverage", newsIndexed: true },
     { domain: "not a host", kind: "vertical" },
+    { domain: "a.example / b.example", kind: "vertical" },
     { domain: "39.net", kind: "news" },
     { domain: "fake-times.cn", impostor: true, blacklistReason: "冒名站", layer: "anchor", cited: { deepseek: 9 } },
   ] });
-  assert.deepEqual(sources.issues.map((/** @type {any} */ issue) => [issue.index, issue.code]), [[0, "notice"], [1, "invalid"], [2, "duplicate"]],
+  assert.deepEqual(sources.issues.map((/** @type {any} */ issue) => [issue.index, issue.code]), [[0, "notice"], [1, "invalid"], [2, "invalid"], [3, "duplicate"]],
     "a condition checked without its day is noted; measured counts are the platform's, not the run's: declined by name (GEO_NOT_STORED), counted, the rest of the source kept");
   assert.equal(sources.declined, 1, "the one measured field the run typed is counted, not listed");
   const listed = await store.listSources(project.id);

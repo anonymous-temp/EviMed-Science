@@ -50,6 +50,7 @@ import { SafetyStrip, foldedIntoStrip, recentAlerts, type SafetyAlerts } from "@
 import { SourcesLink } from "@/components/frontier/SourcesList";
 import { FollowList, FollowingView, followAnswers, followChoiceLabel, followChoiceParam, readFollowChoice, useFollowing } from "@/components/frontier/FollowingView";
 import { useNarrow } from "@/lib/useMediaQuery";
+import { useContainerNarrow } from "@/lib/useContainerNarrow";
 import type { FrontierPrefs } from "@/lib/frontierPrefs";
 import { FrontierFollows } from "@/components/frontier/FrontierFollows";
 import { Drawer } from "@/components/ui/Drawer";
@@ -126,6 +127,16 @@ function readDay(value: string | null): string | null {
  *    server's 404, and the rest of the page is unaffected. A field the server
  *    does not send yet (a heat, a score, a trend) hides the element that
  *    would show it.
+ *
+ * Anatomy: view and filter toolbar, safety notice, feed and optional hot list.
+ * Variants: curated, full, related, hot, daily and addressable detail views.
+ * States: the list, ranking and notices follow their independent responses and recovery paths.
+ * Hit area: headlines, row actions and ranking links use their existing shared targets.
+ * Keyboard: the feed leads the wide composition and the hot list stays individually reachable.
+ * Long content: headlines and ranking entries wrap within the width of their own columns.
+ * Theme: semantic paper and ink separate the reading surface and secondary ranking.
+ * Responsive: curated uses an adjacent ranking only when its content area has room.
+ * Verification: FrontierPage tests and curated, full and hot fixture views.
  */
 export function FrontierPage() {
   const feature = useFrontierFeature();
@@ -143,6 +154,8 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
   // What a digest (日报, 周报) has opened of itself, kept for the way back.
   const [expanded, setExpanded] = useState<string[]>(restore.current?.query === params.toString() ? restore.current.expanded ?? [] : []);
   const pageRoot = useRef<HTMLDivElement>(null);
+  const feedBody = useRef<HTMLDivElement>(null);
+  const compactFeed = useContainerNarrow(feedBody, 960);
   const restoreObserver = useRef<ResizeObserver | null>(null);
   useEffect(() => () => restoreObserver.current?.disconnect(), []);
   const narrow = useNarrow();
@@ -949,18 +962,23 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
             <div className="mt-8"><SourcesLink count={status?.sources.enabled ?? 0} /></div>
           </>
         );
-      default:
-        return (
-          <>
-            {/* A column with a gap, not space-y: the two wrappers are `contents`, and a margin on a box that draws nothing never shows (the strip
-              * sat on the hot card's edge). The gap falls between what they draw. */}
-            <div className="flex flex-col gap-4">
-              <div data-frontier-list="safety" className="contents"><SafetyStrip alerts={safety} onRetry={() => setSafetyAttempt((value) => value + 1)} onOpened={opened} /></div>
-              {!q && !filtered && <div data-frontier-list="hot" className="contents"><HotCard events={hot.current?.board?.events ?? []} onOpenAll={() => setView("hot")} /></div>}
-            </div>
-            <div className="mt-8">{feed}</div>
-          </>
+      default: {
+        const beside = !compactFeed;
+        const leadingFeed = <div key="feed" className="min-w-0 flex-1">{feed}</div>;
+        const hotspots = !q && !filtered && (
+          <div key="hot" data-frontier-list="hot" className="contents">
+            <HotCard events={hot.current?.board?.events ?? []} beside={beside} onOpenAll={() => setView("hot")} />
+          </div>
         );
+        return (
+          <div className="flex flex-col gap-6">
+            <div data-frontier-list="safety" className="contents"><SafetyStrip alerts={safety} onRetry={() => setSafetyAttempt((value) => value + 1)} onOpened={opened} /></div>
+            <div className={beside ? "flex items-start gap-6" : "flex flex-col gap-6"}>
+              {beside ? [leadingFeed, hotspots] : [hotspots, leadingFeed]}
+            </div>
+          </div>
+        );
+      }
     }
   })();
 
@@ -975,7 +993,7 @@ function FrontierFeed({ ready, onOff }: { ready: boolean; onOff: () => void }) {
           const updated = new URLSearchParams(current); updated.delete("item"); return updated;
         }, { replace: true })} />
       )}
-      {ready ? main : <FrontierSkeleton />}
+      <div ref={feedBody}>{ready ? main : <FrontierSkeleton />}</div>
       {manageFollows && <Drawer title="管理关注" onClose={() => setManageFollows(false)}>
         <FrontierFollows onCreateZone={() => { setManageFollows(false); openEditor(); }} selected={choice?.kind === "follow" ? choice.id : null} onSelect={(id) => {
           trackFrontierFilter("follow", "follows");

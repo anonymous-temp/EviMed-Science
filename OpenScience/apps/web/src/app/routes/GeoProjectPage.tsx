@@ -639,12 +639,12 @@ function GeoBand({
     navigate({ pathname: location.pathname, search: geoAnalysisSearch(location.search, descriptor), hash: location.hash },
       { state: sanitizeRuntimeUiHistoryState(location.state) });
   }, [location.pathname, location.search, location.hash, location.state, navigate]);
-  const analysisSelector = useMemo(() => showAnalysisSelector ? <div className="w-full max-w-64" data-geo-analysis-selector="">
+  const analysisSelector = useMemo(() => showAnalysisSelector && area !== "analytics" ? <div className="w-full max-w-64" data-geo-analysis-selector="">
     <Select label="分析视角" value={analysisId ?? ""} onChange={event => selectAnalysis(event.target.value)}>
       <option value="">当前结果</option>
       {analysisOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
     </Select>
-  </div> : null, [analysisId, analysisOptions, selectAnalysis, showAnalysisSelector]);
+  </div> : null, [analysisId, analysisOptions, selectAnalysis, showAnalysisSelector, area]);
   const changeCitationLevel = (value: string) => {
     const descriptor = value === "page" ? { viewId: "V18" as const, dimension: "project" as const, sourceLevel: "page" as const,
       ...(params.get("sourceSearch") ? { sourceSearch: params.get("sourceSearch")! } : {}) } : null;
@@ -667,6 +667,7 @@ function GeoBand({
     views: undefined,
     summary: controls?.summary ?? now,
     navigation: [
+      ...(showAnalysisSelector && area === "analytics" ? [{ kind: "select" as const, label: "分析视角", allLabel: "当前结果", value: analysisId, options: analysisOptions, onChange: (next: string | null) => selectAnalysis(next ?? "") }] : []),
       ...(presentedTab === "sources" && params.get("view") !== "placeable" && (!analysis || citationPage) ? [{
         kind: "chips" as const, label: "引用粒度", options: [{ value: "domain", label: "域名" }, { value: "page", label: "页面" }],
         value: citationPage ? "page" : "domain",
@@ -784,13 +785,13 @@ function GeoBand({
     <PageShell<string>
       title={pageTitle}
       // The project scope is selected once for every result and conversation. An exact answer retains its contextual return link.
-      back={snapshotId ? answerBackLink : !workHome && !workTasks ? <Link className="rounded text-ui text-link hover:underline" to={destination("overview")} state={sanitizeRuntimeUiHistoryState(location.state)}>项目工作</Link> : undefined}
+      back={snapshotId ? answerBackLink : undefined}
       contextBar={<GeoProjectPicker project={project} destination={snapshotId ? "questions" : area === "context" ? "evidence" : presentedTab} />}
       {...(strip ? { activity: { quiet: true, label: strip.label, startedAt: strip.startedAt, waiting: strip.waiting, queued: strip.queued, to: destination(GEO_STEP_HOME[strip.step].tab, GEO_STEP_HOME[strip.step].view, strip.step, GEO_STEP_HOME[strip.step].section), ...(can("run") && strip.runId ? { onCancel: stopStep, cancelLabel: "停止这一项", cancelling: busy === "stop" } : {}) } } : {})}
       tabs={tabs}
       documentTitle={GEO_MONITORING_TABS.includes(tab) ? `${project.name} · ${GEO_MONITORING_TITLE}` : project.name}
       width="wide"
-      meta={paused ? <Tag>{workStateLabel("paused")}</Tag> : started ? <Tag title={week ? "按项目开始日期计算。" : now ?? undefined}>{week ? `项目第 ${week} 周` : coverageText(project.coverageDays, project.startedAt ?? project.createdAt ?? null)}</Tag> : undefined}
+      meta={paused ? <Tag>{workStateLabel("paused")}</Tag> : started && area === "work" ? <Tag title={week ? "按项目开始日期计算。" : now ?? undefined}>{week ? `项目第 ${week} 周` : coverageText(project.coverageDays, project.startedAt ?? project.createdAt ?? null)}</Tag> : undefined}
       actionPlan={{
         // The one primary is the next step; the conversation has its own place on every view and takes no button in the header.
         ...(!workHome && !onChat && canConverse ? { primary: { id: "conversation", label: "询问 AI", icon: MessageSquare, loading: busy === "conversation", onSelect: openChat } }

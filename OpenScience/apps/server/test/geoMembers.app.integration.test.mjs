@@ -517,7 +517,8 @@ test("browser keeps the frozen competitor cohort, historical name and return fil
     if (process.env.OPEN_SCIENCE_TEST_SCREENSHOT_DIR) await page.screenshot({ path: path.join(process.env.OPEN_SCIENCE_TEST_SCREENSHOT_DIR, "geo-paired-rivals.png"), fullPage: true });
     await comparison.getByRole("link", { name: "查看全部竞品分析" }).click();
     await page.waitForURL(url => url.searchParams.get("analysis") === "V08" && Boolean(url.searchParams.get("selectionRef")));
-    await page.getByRole("combobox", { name: "分析视角" }).selectOption("");
+    await page.getByRole("button", { name: /^分析视角/ }).click();
+    await page.getByRole("menuitemradio", { name: "当前结果", exact: true }).click();
     await page.waitForURL(url => !url.searchParams.has("analysis") && !url.searchParams.has("selectionRef"));
     const returned = new URL(page.url());
     assert.equal(returned.searchParams.get("from"), "2026-10-01");

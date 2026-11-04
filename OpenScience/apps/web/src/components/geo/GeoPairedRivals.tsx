@@ -1,4 +1,6 @@
 import { Link, useLocation } from "react-router";
+import { List } from "@/components/ui/ListRow";
+import { Note } from "@/components/ui/Note";
 import { ChartCard } from "@/components/ui/ChartCard";
 import { getGeoAnalysis, type GeoAnalysisRow, type GeoAnalysisValue } from "@/lib/geoAnalysisClient";
 import type { GeoReadScope } from "@/lib/geoReadScope";
@@ -54,29 +56,49 @@ async function readPairs(geoId: string, scope?: GeoReadScope) {
   return { pairs, reference, incomplete: true, more: true };
 }
 
+/** Share the exact scoped read with the containing layout without fetching a second comparison. */
+export function useGeoPairedRivals(geoId: string) {
+  return useScopedGeoLoad(`visibility-rival-pairs:${geoId}`, (scope) => readPairs(geoId, scope));
+}
+
 /** The comparison keeps each rival paired with its own measured cohort instead of ranking unlike samples. */
 export function GeoPairedRivals({ geoId }: { geoId: string }) {
+  const comparison = useGeoPairedRivals(geoId);
+  return <GeoPairedRivalsView comparison={comparison} />;
+}
+
+/**
+ * Anatomy: exact-cohort pairs, sample counts and a scoped analysis link; empty reads use one recovery note.
+ * Variants: Compact empty note or measured comparison card. States: loading/error/content/stale/empty.
+ * Hit area: Native link and shared retry Button. Keyboard: Standard link/button activation.
+ * Long content: Names and reasons wrap. Theme: Shared ink/surface roles, no implied ranking colours.
+ * Responsive: Parent chooses full-width empty note or a measured column. Verification: GeoPairedRivals.test.tsx and fixture browser walk.
+ */
+export function GeoPairedRivalsView({ comparison }: { comparison: ReturnType<typeof useGeoPairedRivals> }) {
   const location = useLocation();
-  const comparison = useScopedGeoLoad(`visibility-rival-pairs:${geoId}`, (scope) => readPairs(geoId, scope));
   const result = comparison.state.kind === "ready" ? comparison.state.data : null;
   const pairs = result?.pairs ?? [];
   const loading = comparison.state.kind === "loading";
   const error = comparison.state.kind === "error" ? comparison.state.message : comparison.state.kind === "ready" ? comparison.state.refreshError : null;
   const search = result?.reference ? geoFrozenAnalysisSearch(location.search, VIEW, result.reference) : geoAnalysisSearch(location.search, VIEW);
-  return <section aria-label="本品与竞品提及率" className="min-w-0">
+  const openAnalysis = <Link className="text-link hover:underline" to={{ pathname: location.pathname, search }}>查看全部竞品分析</Link>;
+  if (!loading && !error && !pairs.length) return <section aria-label="本品与竞品提及率" data-geo-rival-empty="" className="min-w-0">
+    <Note action={openAnalysis}>{result?.incomplete ? "当前页未找到可比读数，请在完整分析中继续查看。" : "当前范围暂无可比的竞品读数，可查看完整分析与原因。"}</Note>
+  </section>;
+  return <section aria-label="本品与竞品提及率" className="min-w-0 [&>section]:h-full">
     <ChartCard title="本品与竞品提及率" height={180}
-      meta={<Link className="text-link hover:underline" to={{ pathname: location.pathname, search }}>查看全部竞品分析</Link>}
+      meta={openAnalysis}
       state={loading ? "loading" : error && !pairs.length ? "error" : pairs.length ? "content" : "empty"}
       errorMessage={error ? `竞品比较暂时无法读取：${error}` : undefined} onRetry={comparison.reload}
       emptyText={result?.incomplete ? "当前页未找到可比读数，请在完整分析中继续查看。" : "当前范围暂无可比的竞品读数，可查看完整分析与原因。"}
       footnote={pairs.length ? "每组使用该竞品各自的合资格回答，不跨组排名；这些提及率与趋势图指标可能不同。" : undefined}>
-      <ul className="divide-y divide-border" aria-label="同一回答范围内的竞品比较">
+      <List divided label="同一回答范围内的竞品比较">
         {pairs.map(pair => <li key={pair.key} className="space-y-1 py-3 first:pt-0">
           <p className="text-ui font-semibold text-text">{pair.name} · {pair.pool === "P2" ? "品类问题" : "泛症状问题"}</p>
           <p className="text-ui tabular-nums text-text">本品 {formatGeoValue(pair.ours)} · 竞品 {formatGeoValue(pair.rival)}</p>
           <p className="text-caption text-text-3">{pair.n} 条合资格回答{pair.unknown > 0 ? ` · ${pair.unknown} 条历史依据未知` : ""}</p>
         </li>)}
-      </ul>
+      </List>
       {result?.more && <p className="mt-2 text-caption text-text-3">更多记录可在完整分析中查看。</p>}
       {error && <p role="status" className="mt-2 text-caption text-text-3">更新未完成，仍显示上次结果。</p>}
     </ChartCard>

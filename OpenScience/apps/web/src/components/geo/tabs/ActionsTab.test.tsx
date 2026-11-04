@@ -431,7 +431,7 @@ describe("行动: the action's drawer", () => {
     client.verifyGeoActionSource.mockResolvedValue({ checked: 1, verified: 1, coolingDown: 0, remaining: 0, alreadyVerified: 0 });
     renderTab(geoProject(), `/app/geo/geo_1/actions?action=${encodeURIComponent(ACTION_SAFETY.key)}`);
     const drawer = await screen.findByRole("dialog", { name: "补上缺口 · 只讲获益不讲安全" });
-    await userEvent.click(within(drawer).getByRole("button", { name: "重新核验信源" }));
+    await userEvent.click(within(drawer).getByRole("button", { name: "重新核对信源" }));
     await waitFor(() => expect(client.verifyGeoActionSource).toHaveBeenCalledWith("geo_1", ACTION_SAFETY.key));
   });
 
@@ -659,7 +659,7 @@ describe("行动: states", () => {
     renderTab(geoProject(),`/app/geo/geo_1/actions?action=${encodeURIComponent(ACTION_BRAND.key)}`);
     const drawer=await screen.findByRole('dialog');
     expect(await within(drawer).findByText('归属域名 example.org')).toBeInTheDocument();
-    expect(within(drawer).getByText(/域名核验已过期，请重新核验或更换信源/)).toBeInTheDocument();
+    expect(within(drawer).getByText(/域名核对已过期，请重新核对或更换信源/)).toBeInTheDocument();
     expect(within(drawer).getByText(/现在投不了/)).toBeInTheDocument();
   });
 

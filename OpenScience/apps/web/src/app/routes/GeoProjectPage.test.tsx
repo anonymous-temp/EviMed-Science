@@ -3,7 +3,7 @@ import { prepareRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import { useState, type ReactNode } from "react";
 import userEvent from "@testing-library/user-event";
-import { MemoryRouter, Route, Routes, useLocation, useNavigate, useSearchParams } from "react-router";
+import { Link, MemoryRouter, Route, Routes, useLocation, useNavigate, useSearchParams } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { WebApiError } from "@/lib/apiClient";
 import { GEO_PROJECT } from "@/components/geo/__fixtures__/geoProjects";
@@ -1246,9 +1246,11 @@ describe("GEO analysis main area", () => {
 it('keeps scoped analysis choices beside the result rather than in a global or bottom menu',async()=>{
  renderProject('/app/geo/geo_masi/sources');
  expect(await screen.findByRole('button',{name:'sources 的业务视图：当前业务结果'})).toBeVisible();
- const views=screen.getByRole('combobox',{name:'分析视角'});
- expect(within(views).getByRole('option',{name:'来源类型覆盖'})).toBeInTheDocument();
- expect(within(views).queryByRole('option',{name:'平台指标比较'})).not.toBeInTheDocument();
+ const views=screen.getByRole('button',{name:'分析视角'});
+ expect(document.querySelector('[data-toolbar]')).toContainElement(views);
+ await userEvent.click(views);
+ expect(screen.getByRole('menuitemradio',{name:'来源类型覆盖'})).toBeVisible();
+ expect(screen.queryByRole('menuitemradio',{name:'平台指标比较'})).not.toBeInTheDocument();
  expect(screen.queryByText('更多分析')).not.toBeInTheDocument();
  expect(screen.queryByRole('button',{name:/^深入分析/})).not.toBeInTheDocument();
  expect(document.querySelectorAll('[data-toolbar]')).toHaveLength(1);
@@ -1277,9 +1279,12 @@ it('declares analysis scope separately from its frequent step action and keeps n
 
 describe("choosing related analysis from the result", () => {
   const pick = async (_name: RegExp, option: string) => {
-    const selector = await screen.findByRole("combobox", { name: "分析视角" });
-    const value = within(selector).getByRole("option", { name: option }).getAttribute("value");
-    await userEvent.selectOptions(selector, value!);
+    const selector = screen.queryByRole("combobox", { name: "分析视角" });
+    if (selector) await userEvent.selectOptions(selector, within(selector).getByRole("option", { name: option }).getAttribute("value")!);
+    else {
+      await userEvent.click(await screen.findByRole("button", { name: /^分析视角/ }));
+      await userEvent.click(await screen.findByRole("menuitemradio", { name: option }));
+    }
   };
   it("leaves the frozen plan version of V26 behind when the person opens the trend, and out of the address they return to", async () => {
     renderProject("/app/geo/geo_masi/questions?view=journey&analysis=V26&strategyVersion=7&targetVersion=3&selectionRef=gsel_exact");
@@ -1501,7 +1506,9 @@ describe("what the work waits for from its person, over every view", () => {
 
   it("keeps project-wide to-dos on project work instead of preceding every result", async () => {
     client.getGeoProject.mockResolvedValue(needing([budgetNeed]));
-    renderProject("/app/geo/geo_masi/sources");
+    render(<MemoryRouter initialEntries={["/app/geo/geo_masi/sources"]}>
+      <nav aria-label="项目导航"><Link to="/app/geo/geo_masi">项目工作</Link></nav><Routed />
+    </MemoryRouter>);
     await screen.findByTestId("sources-tab");
     expect(document.querySelector("[data-work-needs]")).toBeNull();
     await userEvent.click(screen.getByRole("link", { name: "项目工作" }));
@@ -1515,14 +1522,18 @@ describe("what the work waits for from its person, over every view", () => {
     expect(document.querySelector("[data-work-needs]")).toBeNull();
     view.unmount();
     client.getGeoProject.mockResolvedValue(needing([]));
-    renderProject("/app/geo/geo_masi/sources");
+    render(<MemoryRouter initialEntries={["/app/geo/geo_masi/sources"]}>
+      <nav aria-label="项目导航"><Link to="/app/geo/geo_masi">项目工作</Link></nav><Routed />
+    </MemoryRouter>);
     await screen.findByTestId("sources-tab");
     expect(document.querySelector("[data-work-needs]")).toBeNull();
   });
 
   it("asks a reader only for what they can do: money is not asked of someone who cannot move it", async () => {
     client.getGeoProject.mockResolvedValue(needing([budgetNeed], { access: { roles: ["editor"], abilities: ["read", "run", "edit"], owner: false } }));
-    renderProject("/app/geo/geo_masi/sources");
+    render(<MemoryRouter initialEntries={["/app/geo/geo_masi/sources"]}>
+      <nav aria-label="项目导航"><Link to="/app/geo/geo_masi">项目工作</Link></nav><Routed />
+    </MemoryRouter>);
     await screen.findByTestId("sources-tab");
     expect(document.querySelector("[data-work-needs]")).toBeNull();
   });

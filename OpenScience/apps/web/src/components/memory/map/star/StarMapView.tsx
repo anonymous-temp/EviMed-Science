@@ -23,11 +23,21 @@ const FAMILY_DOT: Readonly<Record<StarFamily, string>> = {
  * is new or used, dim when it has not been used for long, a spark along its line when a conversation has just been handed it, grey with an amber line to what replaced it.
  *
  * A dark window in either scheme, by `data-theme="dark"` on the card: inside it every token already answers for the dark ground, so its controls are the page's own.
- * Every mark opens the drawer the table's rows open. The selection of the page (range, what needs a look, a topic) decides what is shown and the search what is lit, as for the
+ * Every mark hands its selection to the overview, which shows its preview or opens its drawer. The selection of the page (range, what needs a look, a topic) decides what is shown and the search what is lit, as for the
  * relation graph; which kinds the legend has turned off is this card's own.
  *
  * Who does not see it (`useStarAllowed`, or a lost context through `onUnavailable`) gets the relation graph: the same document and the same drawers. A keyboard walks the same marks in
  * the list under the canvas (one tab stop, arrows, Enter), which is also what a screen reader reads; the turning stops on one press, for WCAG 2.2.2 as much as for taste.
+ *
+ * Anatomy: animated sky, legend, view switch, motion controls and keyboard list.
+ * Variants: embedded or full-screen, with optional growth replay.
+ * States: selected and hidden families follow the map data and the reader's controls.
+ * Hit area: marks and shared buttons own their interactive targets.
+ * Keyboard: one listbox supports arrows, Home, End, Enter and Escape.
+ * Long content: legend and controls wrap within the sky window.
+ * Theme: fixed dark scientific canvas using the star palette and dark semantic roles.
+ * Responsive: the embedded height follows the viewport; full-screen uses the viewport height.
+ * Verification: StarMapView tests and browser checks of WebGL, controls and fallback.
  */
 export function StarMapView({ layoutDoc, narrowed, selected, actions, meta, onUnavailable }: {
   /** The whole document, which is where a mark's place comes from. */
@@ -55,7 +65,7 @@ export function StarMapView({ layoutDoc, narrowed, selected, actions, meta, onUn
     return () => document.removeEventListener("fullscreenchange", change);
   }, []);
   const toggleFull = () => { if (document.fullscreenElement) void document.exitFullscreen(); else void card.current?.requestFullscreen(); };
-  // A drawer opens on the page and not in the full-screen card, so a press comes back to the page first.
+  // A preview or drawer belongs to the page, so a press leaves full screen first.
   const open = useCallback((node: MapNode) => {
     if (document.fullscreenElement) void document.exitFullscreen();
     actions.onOpen(node);
@@ -99,7 +109,7 @@ export function StarMapView({ layoutDoc, narrowed, selected, actions, meta, onUn
 
   const title = relationTitle(narrowed.nodes);
   return (
-    <section ref={card} data-theme="dark" data-chart="stars" aria-label="记忆星图" className="relative isolate min-w-0 overflow-hidden rounded-card border border-border bg-star-ground text-text" style={{ height: full ? "100vh" : "clamp(480px, 70vh, 700px)" }}>
+    <section ref={card} data-theme="dark" data-chart="stars" aria-label="记忆星图" className="relative isolate min-w-0 overflow-hidden rounded-card border border-border bg-star-ground text-text" style={{ height: full ? "100vh" : "clamp(400px, 52vh, 560px)" }}>
       <StarBoundary onFailed={onUnavailable}>
         <Suspense fallback={<div role="img" aria-label={title} className="absolute inset-0" />}>
           <StarCanvas
@@ -111,9 +121,9 @@ export function StarMapView({ layoutDoc, narrowed, selected, actions, meta, onUn
 
       {/* The legend and the controls stand in the card's head (T4), over the sky and out of its way. */}
       <div className="pointer-events-none absolute inset-x-4 top-4 flex flex-wrap items-start justify-between gap-3">
-        <div className="pointer-events-auto max-w-md rounded-card border border-faint bg-star-panel px-4 py-3 backdrop-blur-md">
+        <div className="pointer-events-auto min-w-52 max-w-md flex-1 rounded-card border border-faint bg-star-panel px-4 py-3 backdrop-blur-md">
           <div className="text-caption text-text-3">记忆星图</div>
-          <Heading className="mt-0.5 text-heading text-text">{title}</Heading>
+          <Heading className="mt-0.5 break-keep text-balance text-heading text-text">{title}</Heading>
           {counts.length > 0 && (
             <div role="group" aria-label="图例，按一下隐藏这一类" className="mt-2 flex flex-wrap gap-x-2 gap-y-1">
               {counts.map((entry) => (
@@ -129,7 +139,7 @@ export function StarMapView({ layoutDoc, narrowed, selected, actions, meta, onUn
           )}
           {encodings.length > 0 && <div className="mt-2 border-t border-faint pt-2 text-caption text-text-3">{encodings.join(" · ")}</div>}
         </div>
-        <div className="pointer-events-auto flex flex-col items-end gap-2">
+        <div className="pointer-events-auto ml-auto flex max-w-full flex-col items-end gap-2">
           {meta && <div className="rounded-card border border-faint bg-star-panel px-2 backdrop-blur-md">{meta}</div>}
           <div className="flex flex-wrap justify-end gap-1 rounded-card border border-faint bg-star-panel p-1 backdrop-blur-md">
             {canReplay && <Button size="sm" variant="text" onClick={replay}>{replaying !== null ? <Square size={16} aria-hidden="true" /> : <Sparkles size={16} aria-hidden="true" />}{replaying !== null ? "停止回放" : "回放成长"}</Button>}

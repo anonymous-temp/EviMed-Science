@@ -19,6 +19,7 @@ import {
 import { answerFilled } from "@/components/geo/__fixtures__/geoTabs";
 import { GEO_TAB_SECTIONS, GEO_TABS, geoSectionId } from "@/components/geo/geoTabs";
 import { GeoAnswerPage } from "@/app/routes/GeoAnswerPage";
+import { GeoWorkspaceNav } from "@/components/geo/GeoWorkspaceNav";
 import { GeoProjectLayout } from "@/app/routes/GeoProjectPage";
 import { brokenPage, compositionFacts, MODULE_TABS, modulePageAt, PAGES, precedes } from "./compositionFixtures";
 import { expectComposed } from "./expectComposed";
@@ -234,9 +235,10 @@ describe("the GEO project page, as a module page (T3) and its overview as a data
     geo.getGeoCluster.mockImplementation(async (_geoId: string, id: string) => clusterViewFixture(id));
   });
 
-  function renderGeo(path: string) {
+  function renderGeo(path: string, withNav = false) {
     return render(
       <MemoryRouter initialEntries={[path]}>
+        {withNav && <GeoWorkspaceNav geoId="geo_masi" />}
         <Routes>
           <Route path="/app/geo/:geoId" element={<GeoProjectLayout />}>
             <Route index element={null} />
@@ -277,25 +279,26 @@ describe("the GEO project page, as a module page (T3) and its overview as a data
   });
 
   it("keeps the selected question range in the scoped business view and overview return", async () => {
-    const { container } = renderGeo("/app/geo/geo_masi/sources?selectionRef=gsel_exact&questionVersion=4&session=ses_keep");
+    const { container } = renderGeo("/app/geo/geo_masi/sources?selectionRef=gsel_exact&questionVersion=4&session=ses_keep", true);
     await waitFor(() => expect(container.querySelector("ul[aria-label='信源']")).not.toBeNull());
     expect(container.querySelector("[data-geo-analysis]")).toBeNull();
     expect(screen.getByRole("button", { name: "分析范围 · 已筛选" })).toBeInTheDocument();
-    const back = screen.getByRole("link", { name: "项目总览" });
+    const back = screen.getByRole("link", { name: "项目工作" });
     const address = new URL(back.getAttribute("href")!, "https://example.test");
     expect(address.searchParams.get("selectionRef")).toBe("gsel_exact");
     expect(address.searchParams.get("questionVersion")).toBe("4");
     expect(address.searchParams.get("session")).toBe("ses_keep");
-    await userEvent.selectOptions(screen.getByRole("combobox", { name: "分析视角" }), "V17");
+    await userEvent.click(screen.getByRole("button", { name: "分析视角" }));
+    await userEvent.click(await screen.findByRole("menuitemradio", { name: "来源类型覆盖" }));
     expect(await screen.findByRole("heading", { name: "来源类型覆盖" })).toBeInTheDocument();
     expect(screen.queryByRole("list", { name: "信源" })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "返回信源" }));
     await screen.findByRole("list", { name: "信源" });
-    const returned = new URL(screen.getByRole("link", { name: "项目总览" }).getAttribute("href")!, "https://example.test");
+    const returned = new URL(screen.getByRole("link", { name: "项目工作" }).getAttribute("href")!, "https://example.test");
     expect(returned.searchParams.get("selectionRef")).toBe("gsel_exact");
     expect(returned.searchParams.get("questionVersion")).toBe("4");
     expect(returned.searchParams.get("session")).toBe("ses_keep");
-    await userEvent.click(screen.getByRole("link", { name: "项目总览" }));
+    await userEvent.click(screen.getByRole("link", { name: "项目工作" }));
     await screen.findByText(/^任务进度/);
     const scopeLink = screen.getByRole("complementary", { name: "项目资料" }).querySelector("a[href]");
     expect(scopeLink).toHaveAttribute("href", expect.stringContaining("selectionRef=gsel_exact"));

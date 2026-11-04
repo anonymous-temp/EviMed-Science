@@ -5,6 +5,8 @@ import { EXTENSION_PRODUCT_KINDS, EXTENSION_JOB_KINDS, EVOLUTION_JOB_KINDS } fro
 export const PRODUCT_KINDS = Object.freeze([
   "capsule", "fact", "method", "source", "source-unit", "knowledge", "profile",
   "agenda", "episode", "digest", "notification", "preferences", "plugin", "price-list",
+  // One long research goal: what the control plane keeps about it between its rounds (`researchGoalService.mjs`).
+  "research-goal",
   // The candidates one project is mounting under trial. One row per project,
   // written only by an evaluation identity, read by every launch of that
   // project. Its own kind rather than a field on `method`, because it is a
@@ -98,6 +100,7 @@ CREATE INDEX IF NOT EXISTS product_documents_list_idx ON evimed_product.document
 CREATE INDEX IF NOT EXISTS product_documents_project_idx ON evimed_product.documents
   (user_id,project_id,kind) WHERE deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS product_documents_project_fk_idx ON evimed_product.documents(user_id,project_id);
+CREATE INDEX IF NOT EXISTS product_documents_research_goal_idx ON evimed_product.documents(updated_at) WHERE kind='research-goal' AND deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS product_documents_payload_idx ON evimed_product.documents USING gin(payload jsonb_path_ops) WHERE deleted_at IS NULL;
 DO $programme_retired_documents$
 BEGIN

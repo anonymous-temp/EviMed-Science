@@ -81,6 +81,10 @@ beforeEach(() => {
 });
 
 const groupRow = (id: string) => document.querySelector(`[data-cluster-row='${id}']`) as HTMLElement | null;
+async function chooseMetric(name: string) {
+  await userEvent.click(screen.getByRole("button", { name: /^分析指标：/ }));
+  await userEvent.click(await screen.findByRole("menuitemradio", { name }));
+}
 const toolbar = () => document.querySelector("[data-toolbar]") as HTMLElement;
 
 describe("可见度: the order of what it shows", () => {
@@ -198,7 +202,7 @@ describe("可见度: the band's toolbar drives every block", () => {
     renderTab();
     await screen.findByRole("heading", { name: /综合可见度指数/ });
     await waitFor(() => expect(document.querySelector("[data-cluster-grid]")).not.toBeNull());
-    expect(screen.getByRole("combobox", { name: "分析指标" })).toBeVisible();
+    expect(screen.getByRole("button", { name: /^分析指标：/ })).toBeVisible();
     expect(screen.queryByRole("group", { name: "引擎" })).toBeNull();
     await userEvent.click(within(toolbar()).getByRole("button", { name: /^筛选/ }));
     for (const name of ["引擎", "问句池", "问题群"]) expect(screen.getByRole("group", { name })).toBeVisible();
@@ -210,7 +214,7 @@ describe("可见度: the band's toolbar drives every block", () => {
     // the index has no column of its own: nothing is ringed, and the engines' card is the mention trend
     expect(document.querySelector("th[data-heat-emphasis]")).toBeNull();
     expect(document.querySelector("[data-geo-engine-trend]")).not.toBeNull();
-    await userEvent.selectOptions(screen.getByRole("combobox", { name: "分析指标" }), "accuracy");
+    await chooseMetric("事实准确率");
     await screen.findByRole("heading", { name: /^事实准确率 94%/ });
     expect(document.querySelector("th[data-heat-emphasis]")).toHaveTextContent("事实准确率");
     expect(document.querySelector("[data-geo-engine-trend]")).toBeNull();
@@ -284,16 +288,17 @@ it("keeps monitoring settings reachable while data is loading and shows the true
 
 it("places an exact-cohort competitor comparison beside the default trend and retains the trend comparison control", async () => {
   renderTab();
-  const choice = await screen.findByRole("combobox", { name: "分析指标" });
+  await screen.findByRole("button", { name: /^分析指标：/ });
   const area = document.querySelector("[data-geo-trend-ranking]")!;
-  expect(area).toHaveClass("grid", "lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]");
+  await waitFor(() => expect(area).toHaveClass("grid", "lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]"));
   expect(area).toContainElement(await screen.findByRole("region", { name: "本品与竞品提及率" }));
   expect(await screen.findByText("本品 20% · 竞品 40%")).toBeVisible();
-  await userEvent.selectOptions(choice, "mention");
+  await chooseMetric("品类问题可见率");
   expect(area).toContainElement(screen.getByRole("region", { name: "本品与竞品提及率" }));
   expect(area.querySelector("[data-chart='trend']")).not.toBeNull();
   expect(screen.getByTestId("search")).toHaveTextContent("trendMetric=mention");
-  await userEvent.selectOptions(screen.getByRole("combobox", { name: "比较" }), "none");
+  await userEvent.click(screen.getByRole("button", { name: /^比较：/ }));
+  await userEvent.click(await screen.findByRole("menuitemradio", { name: "不比较" }));
   expect(screen.queryByRole("region", { name: "本品与竞品提及率" })).not.toBeInTheDocument();
   expect(screen.getByTestId("search")).toHaveTextContent("compareBy=none");
 });
@@ -365,4 +370,37 @@ it("does not show unmeasured project metrics as measured zero", async () => {
   }
   expect(within(stats).getByRole("group", { name: "用药安全" })).not.toHaveTextContent("0条严重讲错");
   expect(stats).not.toHaveTextContent(/次有效回答计算/);
+});
+
+
+it("places the overview before the plot and gives an empty comparison no unused column", async () => {
+  rivalAnalysis.mockResolvedValue({ selection: { reference: "gsel_1" }, digest: "digest-1", rows: [], page: { nextOffset: null } });
+  renderTab();
+  await screen.findByText("当前范围暂无可比的竞品读数，可查看完整分析与原因。");
+  const area = document.querySelector<HTMLElement>("[data-geo-trend-ranking]")!;
+  const metrics = screen.getByRole("region", { name: "本轮指标" });
+  expect(metrics.compareDocumentPosition(area) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(area).not.toHaveClass("lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]");
+  expect(within(area).getByRole("button", { name: /^分析指标：/ })).toBeVisible();
+  expect(area.querySelector("[data-geo-rival-empty] [data-chart-empty]")).toBeNull();
+});
+
+
+it("does not read a hidden rival comparison when opened with comparison disabled", async () => {
+  renderTab(geoProject(), "/app/geo/geo_1/visibility?trendMetric=mention&compareBy=none");
+  await screen.findByRole("button", { name: "比较：不比较" });
+  expect(rivalAnalysis).not.toHaveBeenCalled();
+  expect(screen.queryByRole("region", { name: "本品与竞品提及率" })).toBeNull();
+});
+
+it("reserves the measured comparison column while the comparison is being read", async () => {
+  let resolve!: (value: unknown) => void;
+  rivalAnalysis.mockReturnValue(new Promise(done => { resolve = done; }));
+  renderTab();
+  await screen.findByRole("button", { name: /^分析指标：/ });
+  const area = document.querySelector("[data-geo-trend-ranking]")!;
+  expect(area).toHaveClass("lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]");
+  resolve({ selection: { reference: "gsel_1" }, digest: "digest-1", rows: [], page: { nextOffset: null } });
+  await screen.findByText("当前范围暂无可比的竞品读数，可查看完整分析与原因。");
+  expect(area).not.toHaveClass("lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]");
 });

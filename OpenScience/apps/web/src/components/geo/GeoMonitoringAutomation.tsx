@@ -3,6 +3,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { geoAutomationEnabled } from '@evimed/domain';
 import { authorizeGeoConfirmation, previewGeoConfirmation, revokeGeoConfirmation, setGeoMonitoringAutomation, type GeoConfirmationPreview, type GeoProject } from '@/lib/geoClient';
 import { webErrorMessage } from '@/lib/apiClient';
+import { Note } from '@/components/ui/Note';
 import { Button } from '@/components/ui/Button';
 import { FactList, type Fact } from '@/components/ui/FactList';
 import { Disclosure } from '@/components/ui/Disclosure';
@@ -117,8 +118,8 @@ export function GeoMonitoringAutomation({ project, onHandoff }: { project: GeoPr
           {label:'费用',value:'预计费用暂不可核实，实际调用和资源消耗以平台记录为准。'},
         ]} />
         {permission.allowed && <Button size="sm" variant="text" actionKind="set" disabled={!confirmation.authorized && !confirmation.allowed} loading={confirmationBusy} onClick={()=>changeConfirmation(!confirmation.authorized)}>{confirmation.authorized?'停止错误复问':'确认开启错误复问'}</Button>}
-        {!confirmation.allowed && <p className="text-caption text-text-3">当前没有可授权的监测题集或引擎范围，请先检查测量设置。</p>}
-      </> : !confirmationError && <p className="text-caption text-text-3">正在读取确认范围…</p>}
+        {!confirmation.allowed && <Note action={<Link className="rounded text-link hover:underline" to={scopePath} state={handoffState(scopePath)}>查看测量范围</Link>}>当前没有可授权的监测题集或引擎范围，请先检查测量设置。</Note>}
+      </> : !confirmationError && <p className="text-caption text-text-3">正在读取确认范围</p>}
       {confirmationError && <div><p role="alert" className="text-caption text-text-3">{confirmationError}</p><Button size="sm" variant="text" actionKind="set" onClick={refreshConfirmation}>重新读取确认范围</Button></div>}
     </div>}
     {!mayChange && <p className="text-caption text-text-3">{permission.reason}</p>}

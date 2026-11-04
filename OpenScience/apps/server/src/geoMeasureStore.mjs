@@ -1453,10 +1453,16 @@ export class GeoMeasureStore {
   /**
    * Replace a round's metric rows with a new computation, in one transaction.
    * @param {{ roundId: string | null, geoProjectId: string, userId: string, computedAt: Date, rows: Array<Record<string, any>>,
-   *   replace?: { scope?: string, metricId?: string } }} batch
+   *   replace?: { scope?: string, metricId?: string }, snapshot?: any, generation?: string | null }} batch
    */
-  async writeMetrics({ roundId, geoProjectId, userId, computedAt, rows, replace = {} }) {
+  async writeMetrics({ roundId, geoProjectId, userId, computedAt, rows, replace = {}, snapshot = null, generation = null }) {
     await this.transaction(async (client) => {
+      await client.query("SELECT pg_advisory_xact_lock(hashtext('geo-metric-round:' || $1))", [String(roundId ?? '')]);
+      if (generation && !snapshot) {
+        const current = await client.query("SELECT 1 FROM evimed_geo.metrics WHERE geo_project_id=$1 AND round_id=$2 AND scope='arm' AND computation_generation=$3 LIMIT 1", [geoProjectId, roundId, generation]);
+        if (!current.rows.length) throw new Error("Metric computation generation was superseded.");
+      }
+      if (snapshot && generation) await client.query(`INSERT INTO evimed_geo.metric_input_snapshots (generation,geo_project_id,user_id,round_id,payload) VALUES ($1,$2,$3,$4,$5::jsonb)`, [generation, geoProjectId, userId, roundId, JSON.stringify(snapshot)]);
       await client.query(`DELETE FROM evimed_geo.metrics WHERE geo_project_id = $1 AND round_id IS NOT DISTINCT FROM $2
         AND ($3::text IS NULL OR scope = $3) AND ($4::text IS NULL OR metric_id = $4)`,
       [geoProjectId, roundId, replace.scope ?? null, replace.metricId ?? null]);
@@ -1469,13 +1475,13 @@ export class GeoMeasureStore {
             row.arm ?? null, row.metricId, row.variant ?? null, row.rival ?? null, row.reason ?? null, row.numerator ?? null,
             row.denominator ?? null, row.value ?? null, row.ciLow ?? null, row.ciHigh ?? null, row.status, row.dataType ?? "measured",
             row.snapshotCount ?? null, row.noiseBand ?? null, row.noiseMeasured ?? null, computedAt.toISOString(),
-            row.assessment == null ? null : JSON.stringify(row.assessment), GEO_MEASUREMENT_METHOD_VERSION);
+            row.assessment == null ? null : JSON.stringify(row.assessment), GEO_MEASUREMENT_METHOD_VERSION, generation);
           const n = values.length;
-          return `(${Array.from({ length: 26 }, (_, index) => `$${n - 25 + index}`).join(", ")})`;
+          return `(${Array.from({ length: 27 }, (_, index) => `$${n - 26 + index}`).join(", ")})`;
         });
         await client.query(`INSERT INTO evimed_geo.metrics (id, user_id, geo_project_id, round_id, scope, pool, engine, group_id, arm, metric_id,
             variant, rival, reason, numerator, denominator, value, ci_low, ci_high, status, data_type, snapshot_count, noise_band, noise_measured,
-            computed_at, assessment, method_version)
+            computed_at, assessment, method_version, computation_generation)
           VALUES ${tuples.join(", ")}`, values);
       }
     });
@@ -1519,6 +1525,20 @@ export class GeoMeasureStore {
     return series;
   }
 
+  /** @param {string} geoProjectId @param {string} roundId @param {string} generation */
+  async frozenNoiseInput(geoProjectId, roundId, generation) {
+    const result = await this.query(`SELECT payload FROM evimed_geo.metric_input_snapshots WHERE geo_project_id=$1 AND round_id=$2 AND generation=$3`, [geoProjectId, roundId, generation]);
+    return result.rows[0]?.payload ?? null;
+  }
+
+  /** @param {string} geoProjectId @param {string} roundId */
+  async frozenMetricInput(geoProjectId, roundId) {
+    const result = await this.query(`SELECT s.generation,s.payload FROM evimed_geo.metric_input_snapshots s
+      JOIN evimed_geo.metrics m ON m.computation_generation=s.generation AND m.geo_project_id=s.geo_project_id AND m.round_id=s.round_id
+      WHERE s.geo_project_id=$1 AND s.round_id=$2 AND m.scope='arm' ORDER BY m.computed_at DESC LIMIT 1`, [geoProjectId, roundId]);
+    return result.rows[0] ? { generation: String(result.rows[0].generation), payload: result.rows[0].payload } : null;
+  }
+
   /**
    * The rounds `armSeries` draws from (baseline or weekly, one question set version, a sample date, arm cells written), oldest
    * first, each with the engines its cross-engine cells were computed over and the groups its two arms were (`noteRoundBalance`; null
@@ -1546,10 +1566,10 @@ export class GeoMeasureStore {
 
   /** The latest noise band of a metric for the project (a `NOISE` row). @param {string} geoProjectId @param {string} metricId */
   async latestNoiseBand(geoProjectId, metricId) {
-    const result = await this.query(`SELECT value, status FROM evimed_geo.metrics WHERE geo_project_id = $1 AND metric_id = 'NOISE' AND variant = $2
+    const result = await this.query(`SELECT value, status, round_id, computation_generation FROM evimed_geo.metrics WHERE geo_project_id = $1 AND metric_id = 'NOISE' AND variant = $2
       ORDER BY computed_at DESC LIMIT 1`, [geoProjectId, metricId]);
     const row = result.rows[0];
-    return row ? { value: num(row.value), measured: row.status === "ok" } : null;
+    return row ? { value: num(row.value), measured: row.status === "ok", roundId: row.round_id ?? null, generation: row.computation_generation ?? null } : null;
   }
 
   /**

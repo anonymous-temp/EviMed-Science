@@ -9,8 +9,20 @@ import { WebSecurityCard } from "@/components/settings/WebSecurityCard";
 import { WebTasksCard } from "@/components/settings/WebTasksCard";
 import { GeoMarketCard } from "@/components/settings/GeoMarketCard";
 import { FrontierTagsCard } from "@/components/settings/FrontierTagsCard";
+import { Section } from "@/components/ui/Section";
 
 /**
+ * Component: OpsPage; owner: H; rules: DS17, DS22.1, DS22.7, AT28.
+ * Anatomy: Runtime and task cards, diagnostics, and operator configuration.
+ * Variants: Operator console reached from the existing guarded route.
+ * States: Every card owns its independent read, action and recovery states.
+ * Hit area: Card controls retain their existing targets.
+ * Keyboard: Document-order sections and card actions.
+ * Long content: Ledgers and configuration retain their existing list behavior.
+ * Theme: Existing operation card surfaces and semantic status roles.
+ * Responsive: Named sections follow the existing page measure.
+ * Verification: Operator-card tests and route authorization tests.
+ *
  * 「运维」 in 设置: the deployment's console, offered only to an operator
  * account — the runtime's state, the configuration check, the three operations ledgers, 前沿动态's tag tree, and
  * 「循证进化」, the evolution engine's tools and plans (it sat under the
@@ -46,13 +58,16 @@ export function OpsPage() {
 
   return (
     <div>
-      {/* What is running now first; whether the configuration holds second — the order an operator asks in. */}
-      <WebResourcesCard key={`resources-${projectId}`} />
-      <WebReadinessCard />
-      <WebTasksCard key={`tasks-${projectId}`} />
-      <WebAuditCard key={`audit-${projectId}`} />
-      <WebErrorsCard key={`errors-${projectId}`} />
-      <WebSecurityCard key={`security-${projectId}`} />
+      <Section title="运行与任务">
+        <WebResourcesCard key={`resources-${projectId}`} />
+        <WebReadinessCard />
+        <WebTasksCard key={`tasks-${projectId}`} />
+      </Section>
+      <Section title="诊断与审计">
+        <WebAuditCard key={`audit-${projectId}`} />
+        <WebErrorsCard key={`errors-${projectId}`} />
+        <WebSecurityCard key={`security-${projectId}`} />
+      </Section>
       <GeoMarketCard />
       <FrontierTagsCard />
       <EvolutionPanel />

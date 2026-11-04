@@ -187,6 +187,8 @@ test("deleting a project takes its content and measurements, keeps its money, an
       VALUES ($1, $2, $3, $4, 'valid', $5)`, [`s-${project.id}`, project.userId, `r-${project.id}`, project.id, SHARED]);
     await database.query(`INSERT INTO evimed_geo.facts (snapshot_id, user_id, geo_project_id, failure_mode) VALUES ($1, $2, $3, 'omitted')`,
       [`s-${project.id}`, project.userId, project.id]);
+    await database.query(`INSERT INTO evimed_geo.metric_input_snapshots(generation,user_id,geo_project_id,round_id,payload) VALUES($1,$2,$3,$4,'{"fixture":true}')`,
+      [`generation-${project.id}`, project.userId, project.id, `r-${project.id}`]);
     await database.query(`INSERT INTO evimed_geo.orders (id, user_id, geo_project_id, state) VALUES ($1, $2, $3, 'settled')`, [`o-${project.id}`, project.userId, project.id]);
     await database.query(`INSERT INTO evimed_geo.order_events (id, order_id, from_state, to_state) VALUES ($1, $2, 'verified', 'settled')`, [`oe-${project.id}`, `o-${project.id}`]);
     await database.query(`INSERT INTO evimed_geo.ledger (id, user_id, geo_project_id, order_id, kind, amount_cny) VALUES ($1, $2, $3, $4, 'settle', 88.5)`,
@@ -202,7 +204,7 @@ test("deleting a project takes its content and measurements, keeps its money, an
   const removed = await database.transaction((client) => deleteGeoProjectRows(client, own("dave"), "p-del"));
   assert.deepEqual(removed, { projects: 1, screenshots: [ONLY_MINE] }, "the shared screenshot is still another snapshot's");
   assert.equal(await store.getProject(own("dave"), mine.id), null);
-  for (const table of ["claims", "question_sets", "question_groups", "questions", "rounds", "snapshots", "facts", "owned_links"]) {
+  for (const table of ["claims", "question_sets", "question_groups", "questions", "rounds", "snapshots", "facts", "owned_links", "metric_input_snapshots"]) {
     assert.equal(await count(table, mine.id), 0, `${table} kept a deleted project's row`);
     assert.equal(await count(table, theirs.id), 1, `${table} lost another account's row`);
   }
@@ -216,7 +218,19 @@ test("deleting a project takes its content and measurements, keeps its money, an
   assert.equal(await store.getProject(own("erin"), theirs.id), null);
   assert.equal(await count("claims", theirs.id), 0);
   assert.equal(await count("owned_links", theirs.id), 0);
+  assert.equal(await count("metric_input_snapshots", theirs.id), 0);
   assert.equal(await count("orders", theirs.id), 1);
+});
+
+test("soft deletion retains a frozen input until hard deletion", options, async () => {
+  const database = open(); const store = new GeoStore({ database });
+  const userId = own("soft-input-owner");
+  const project = await store.createProject({ userId, projectId: "p-soft-input", engines: ["deepseek"], coverageDays: 90 });
+  await database.query(`INSERT INTO evimed_geo.metric_input_snapshots(generation,user_id,geo_project_id,round_id,payload) VALUES($1,$2,$3,'fixture-round','{"fixture":true}')`, [`soft-${project.id}`, userId, project.id]);
+  await store.softDeleteProject(userId, project.id);
+  assert.equal(Number((await database.query(`SELECT count(*) AS n FROM evimed_geo.metric_input_snapshots WHERE geo_project_id=$1`, [project.id])).rows[0].n), 1);
+  await database.transaction(client => deleteGeoProjectRows(client, userId, "p-soft-input"));
+  assert.equal(Number((await database.query(`SELECT count(*) AS n FROM evimed_geo.metric_input_snapshots WHERE geo_project_id=$1`, [project.id])).rows[0].n), 0);
 });
 
 test("members go with their project, and an account's deletion takes its memberships and no one else's", options, async () => {

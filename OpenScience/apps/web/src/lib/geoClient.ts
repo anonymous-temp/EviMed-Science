@@ -160,7 +160,7 @@ export interface GeoProjectSummary {
   status: GeoProjectStatus;
   steps: GeoSteps;
   headline: {
-    gvi: GeoCell & { target: number | null; trend: number[] };
+    gvi: GeoCell & { target: number | null; trend: Array<number | null>; trendCoverage?: Array<string | null> };
     /** 品牌提及率 over P2 + P3 only. */
     mention: GeoCell;
   };
@@ -1191,7 +1191,8 @@ function readSummary(raw: GeoProjectSummary): GeoProjectSummary {
       gvi: {
         ...readGeoCell(gvi),
         target: finite(gvi.target),
-        trend: Array.isArray(gvi.trend) ? gvi.trend.filter((point): point is number => finite(point) !== null) : [],
+        trend: Array.isArray(gvi.trend) ? gvi.trend.map(point => finite(point)) : [],
+        trendCoverage: Array.isArray(gvi.trend) ? gvi.trend.map((_, index) => typeof gvi.trendCoverage?.[index] === "string" ? gvi.trendCoverage[index] : null) : [],
       },
       mention: readGeoCell(headline.mention),
     },

@@ -328,8 +328,8 @@ test("the actions are grouped by gap, with sources, the tier's target, k of n an
   assert.deepEqual(view.control.map((/** @type {any} */ group) => group.id), [id("c1")]);
   assert.deepEqual(view.noAction.map((/** @type {any} */ entry) => [entry.gapId, entry.reason]), [["GAP-02", "与 GAP-03 的纠错稿合并处理"], ["GAP-04", "control_group"]].sort(),
     "a gap answered with a reason alone has no action to list, and a control group's gap never does");
-  assert.deepEqual(view.headline.arm, { netEffect: 4.2, verdict: "up", noiseBand: 3, comparable: true });
-  assert.match(view.headline.sentence, /比对照多涨 4.2 个点（波动 ±3）/);
+  assert.deepEqual(view.headline.arm, { netEffect: null, verdict: null, noiseBand: 3, comparable: false }, "a manually inserted legacy NET has no frozen computation proof");
+  assert.doesNotMatch(view.headline.sentence, /比对照多涨/);
 });
 
 test("a person can skip an action or send it to another source, and take either back; nothing else is written", options, async () => {

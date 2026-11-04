@@ -1557,6 +1557,30 @@ test("a general answer that never loaded the evidence method is delivered as it 
   });
 });
 
+test("a turn that ended with no reply and no file is a failure, not a success, and only a round of LoopX's own is exempt", async () => {
+  // 2026-11-03: the provider answered 503 for a quarter of an hour, the kernel took one reasoning token for a finished turn, and a research
+  // goal that had never begun read 本轮完成.
+  await withAnswerModeRun(async ({ project, binding, dispatch, appendHistory, store }) => {
+    await dispatch("turn_empty_reply");
+    appendHistory([{ type: "reasoning", text: "Run" }]);
+    const empty = await store.reconcileSession(project, binding.sessionId);
+    assert.equal(empty.status, "failed");
+    assert.equal(empty.errorCode, "model_empty_reply");
+
+    await dispatch("turn_after_empty");
+    appendHistory([{ type: "text", text: "这次有回复。" }]);
+    const answered = await store.reconcileSession(project, binding.sessionId);
+    assert.equal(answered.status, "succeeded");
+    assert.equal(answered.errorCode, null);
+
+    // A turn that did something with no words about it did something.
+    await dispatch("turn_tool_only");
+    appendHistory([{ type: "tool", tool: "bash", state: { status: "completed", input: { command: "true" }, output: "" } }]);
+    const toolOnly = await store.reconcileSession(project, binding.sessionId);
+    assert.equal(toolOnly.status, "succeeded");
+  });
+});
+
 test("a citation a reader can open is delivered; one they cannot is marked unverified", async () => {
   await withAnswerModeRun(async ({ project, binding, dispatch, appendHistory, skillLoadedPart, store }) => {
     // Plain HTTP is not an integrity defect. The reader opens the link and

@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useLocation, useNavigate } from "react-router";
+import { ChevronDown, Plus } from "lucide-react";
+import { Tooltip } from "@/components/ui/Tooltip";
+import { Button } from "@/components/ui/Button";
+import { IconButton } from "@/components/ui/IconButton";
+import { SearchInput } from "@/components/ui/SearchInput";
 import { fetchWebMe, getVerifiedWebActor, listWebAgentRuns, listWebProjects, type VerifiedWebActor } from "@/lib/apiClient";
 import { groupConversations, conversationBegan } from "@/lib/conversations";
 import { listGeoProjects, type GeoProjectSummary } from "@/lib/geoClient";
@@ -30,6 +35,14 @@ function storageGet(key: string) { try { return sessionStorage.getItem(key); } c
 function storageSet(key: string, value: string) { try { sessionStorage.setItem(key, value); } catch { /* in-memory request remains stable */ } }
 function storageRemove(key: string) { try { sessionStorage.removeItem(key); } catch { /* storage unavailable */ } }
 
+/**
+ * Anatomy: Scope header, compact search and a flat conversation list above optional management.
+ * Variants: Current project or all recent; VCR retains its scoped browser. States: loading/partial/error/empty/ready.
+ * Hit area: Shared search and icon controls; conversation rows are at least control height.
+ * Keyboard: Native buttons and shared menu/search behavior. Long content: Titles truncate; full names remain accessible.
+ * Theme: Neutral surfaces, active row and semantic ink. Responsive: Fits the platform sidebar and its phone drawer.
+ * Verification: SidebarConversations.test.tsx and fixture browser navigation; real AT remains unverified.
+ */
 export function SidebarConversations({ geoId, geo, vcr, onCurrentModule }: { geoId: string | null; geo: boolean; vcr: boolean; onCurrentModule: (module: "geo" | "vcr" | null) => void }) {
   const location = useLocation(), navigate = useNavigate();
   const generation = useSyncExternalStore(subscribeSessionBoundary, sessionGeneration, sessionGeneration);
@@ -162,21 +175,21 @@ export function SidebarConversations({ geoId, geo, vcr, onCurrentModule }: { geo
   const associated = new Set(view.entries.filter(item => item.geoId).map(item => `${item.geoId}:${item.sessionId}`));
   const rows = [...new Map(view.entries.map(item => [item.key, item])).values()].filter(item => !item.geoOwnerId || (view.loadedGeo.includes(item.geoOwnerId) && !view.cursors[item.geoOwnerId] && !associated.has(`${item.geoOwnerId}:${item.sessionId}`))).filter(item => `${item.title} ${item.projectName}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())).sort((a, b) => b.at - a.at || a.key.localeCompare(b.key));
   return <section aria-label="对话" className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-    <div className="flex items-center gap-2 px-4 pt-3 text-caption text-text-3"><span>对话</span>
+    <div className="flex min-h-11 items-center gap-1 px-3 pt-2 text-caption text-text-3"><span>对话</span>
       {context && <FilterSelect label="对话范围" options={[{ value: "project", label: "本项目" }, { value: "all", label: "全部最近" }]} value={scope} onChange={value => { if (value) setChoice({ context, scope: value }); }} />}
-      {geoId && scope === "project" && canCreate && <button type="button" onClick={() => void create()} disabled={busy} aria-label="新建本项目对话">＋</button>}
+      {geoId && scope === "project" && canCreate && <IconButton size="sm" icon={Plus} onClick={() => void create()} disabled={busy} label="新建本项目对话" className="ml-auto" />}
     </div>
-    {!(scope === "project" && studyId) && <input className="mx-4 mt-2 min-w-0 bg-transparent text-caption" aria-label="搜索最近对话" placeholder="搜索对话或项目" value={query} onChange={event => setSearch({ generation, value: event.target.value })} />}
+    {!(scope === "project" && studyId) && <SearchInput size="sm" className="mx-3 mb-2 w-auto shrink-0" label="搜索最近对话" placeholder="搜索对话或项目" value={query} onChange={event => setSearch({ generation, value: event.target.value })} onClear={() => setSearch({ generation, value: "" })} />}
     {notice && <p role="alert" className="px-4 text-caption">{notice}</p>}
     {scope === "project" && studyId ? <ProjectBrowser vcr studyScope={studyId} onCurrentModule={onCurrentModule} /> : <>
       {view.loading && <p role="status" className="px-4 text-caption">正在读取对话</p>}
       {view.failed.map(message => <p role="alert" key={message} className="px-4 text-caption">{message}</p>)}
       {view.failed.length > 0 && <button type="button" className="px-4 text-left text-caption text-link" onClick={() => setRevision(value => value + 1)}>重试读取</button>}
       {!view.loading && !view.failed.length && !rows.length && <p className="px-4 text-caption text-text-3">没有对话</p>}
-      {rows.map(item => <button key={item.key} type="button" onClick={() => open(item)} aria-current={(item.geoId ? location.pathname === geoChatPath(item.geoId, item.sessionId) || new URLSearchParams(location.search).get("session") === item.sessionId && geoId === item.geoId : location.pathname === (item.studyId ? vcrChatPath(item.studyId) : chatPath(item.sessionId))) ? "page" : undefined} className="flex w-full gap-2 px-4 py-1 text-left text-ui aria-[current=page]:bg-surface-2"><span className="min-w-0 flex-1 truncate">{item.title}</span>{scope === "all" && <span className="max-w-24 truncate text-text-3">{item.projectName}</span>}</button>)}
+      {rows.map(item => <button key={item.key} type="button" onClick={() => open(item)} aria-current={(item.geoId ? location.pathname === geoChatPath(item.geoId, item.sessionId) || new URLSearchParams(location.search).get("session") === item.sessionId && geoId === item.geoId : location.pathname === (item.studyId ? vcrChatPath(item.studyId) : chatPath(item.sessionId))) ? "page" : undefined} className="mx-2 flex min-h-control items-center gap-2 rounded px-3 py-2 text-left text-ui text-text-2 outline-none hover:bg-surface-2 hover:text-text focus-visible:outline-focus aria-[current=page]:bg-surface-2 aria-[current=page]:text-text"><Tooltip kind="label" content={scope === "all" ? `${item.title} · ${item.projectName}` : item.title} whenTruncated><span className="min-w-0 flex-1 truncate">{item.title}</span></Tooltip>{scope === "all" && <span className="max-w-24 truncate text-text-3">{item.projectName}</span>}</button>)}
       {view.entries.some(item => item.geoOwnerId && view.cursors[item.geoOwnerId]) && <p className="px-4 text-caption text-text-3">请加载该 GEO 项目的更多对话，以显示其余个人会话。</p>}
       {Object.keys(view.cursors).map(id => <button type="button" className="px-4 text-left text-caption text-link" key={id} onClick={() => void loadMore(id)}>加载更多：{view.projects.find(project => project.id === id)?.name}</button>)}
     </>}
-    {(scope === "all" || Boolean(geoId)) && <><button type="button" className="px-4 pt-3 text-left text-caption text-link" aria-expanded={management} onClick={() => setManagement(value => !value)}>管理项目与对话</button>{management && <ProjectBrowser geo={geo} vcr={vcr} excludeGeo={scope === "all"} onCurrentModule={onCurrentModule} />}</>}
+    {(scope === "all" || Boolean(geoId)) && <><Button variant="text" size="sm" className="mx-2 mt-2 justify-between text-text-3" aria-expanded={management} onClick={() => setManagement(value => !value)}>管理项目与对话<ChevronDown size={16} aria-hidden="true" className={management ? "rotate-180" : undefined} /></Button>{management && <ProjectBrowser geo={geo} vcr={vcr} excludeGeo={scope === "all"} onCurrentModule={onCurrentModule} />}</>}
   </section>;
 }

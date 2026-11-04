@@ -49,6 +49,7 @@
  * @module geoMetricsJob
  */
 
+import { randomUUID } from "node:crypto";
 import { GEO_METRICS, computeGeoMetrics, netEffect, noiseBand } from "@evimed/domain";
 
 /** Round kinds whose metrics are computed. Confirmation rounds feed the errors only. */
@@ -247,7 +248,11 @@ export async function measureRound(deps, roundId) {
 
   if (round.kind === "noise") {
     const noise = GEO_METRICS.platform.noise_band_metric_ids.map((metricId) => noiseRow(metricId, noiseBand(rows, { metricId }), rows.length));
-    await store.writeMetrics({ roundId, geoProjectId: project.id, userId: project.userId, computedAt: now, rows: noise });
+    const generation = randomUUID();
+    const frozenRows = rows.map(({ assessmentFacts: _assessmentFacts, observedBrands: _observedBrands, ...row }) => row);
+    const context = await store.projectContext(project.id);
+    await store.writeMetrics({ roundId, geoProjectId: project.id, userId: project.userId, computedAt: now, rows: noise, generation,
+      snapshot: { version: 1, rows: frozenRows, options: metricOptions(project, round, context), sampleDate: round.sampleDate, setVersion: round.setVersion, roundKind: round.kind } });
     out.noise = noise.length;
     return out;
   }
@@ -262,7 +267,10 @@ export async function measureRound(deps, roundId) {
   // otherwise give its question fewer valid answers than the rest, and the
   // domain withdraws the whole pool's rates as uneven_denominators.
   const { cells, balance, denominators } = computeRoundCells(kept, options);
-  await store.writeMetrics({ roundId, geoProjectId: project.id, userId: project.userId, computedAt: now, rows: cells });
+  const generation = randomUUID();
+  const frozenRows = kept.map(({ assessmentFacts: _assessmentFacts, observedBrands: _observedBrands, ...row }) => row);
+  await store.writeMetrics({ roundId, geoProjectId: project.id, userId: project.userId, computedAt: now, rows: cells,
+    generation, snapshot: { version: 1, rows: frozenRows, options, sampleDate: round.sampleDate, setVersion: round.setVersion, roundKind: round.kind } });
   // The durable assessment outbox is retried by upkeep if learning is temporarily unavailable.
   if (deps.learning) try { await deps.learning.tick(); }
   catch { process.stderr.write("geo assessment learning: reconciliation_pending\n"); }
@@ -276,7 +284,7 @@ export async function measureRound(deps, roundId) {
   // to say 「no follow-up」 (no sample date) or 「engines differ」 (no engine), and the page reads the newest of them (2026-10-25).
   if (NET_ROUND_KINDS.has(round.kind) && balance.engines.length) {
     const net = await netEffectRows(store, { project, round, controlGroups: arms.control.length, engines: balance.engines, arms });
-    await store.writeMetrics({ roundId, geoProjectId: project.id, userId: project.userId, computedAt: now, rows: net, replace: { metricId: GEO_NET_METRIC_ID } });
+    await store.writeMetrics({ roundId, geoProjectId: project.id, userId: project.userId, computedAt: now, rows: net, generation, replace: { metricId: GEO_NET_METRIC_ID } });
     out.net = net.length;
   }
   if (SOURCE_ROUND_KINDS.has(round.kind)) {
@@ -345,6 +353,8 @@ export async function netEffectRows(store, { project, round, controlGroups, engi
         });
       }
       const noise = noiseIds.has(metricId) ? await store.latestNoiseBand(project.id, metricId) : null;
+      const noiseSnapshot = noise?.measured && noise.roundId && noise.generation ? await store.frozenNoiseInput(project.id, noise.roundId, noise.generation) : null;
+      const noiseValid = !noise?.measured || Boolean(compared?.complete && noiseSnapshot && noiseBasisMatches(noiseSnapshot, compared.snapshots, compared.common, metricId, noise.value));
       const where = { scope: index ? "project" : "pool", pool: index ? null : pool, metricId: GEO_NET_METRIC_ID, variant: metricId, dataType: "derived",
         ciLow: null, ciHigh: null, snapshotCount: null };
       // With nothing after the baseline window there is no change to compare.
@@ -373,8 +383,12 @@ export async function netEffectRows(store, { project, round, controlGroups, engi
       }
       // Stored arm cells do not carry the rubric used at calculation time. Rejudging
       // facts later makes the current facts an unreliable provenance for those cells.
-      if (effect.status === "computed" && ["M-01", "M-02", "M-03", "M-06", "M-15", "M-19"].includes(metricId)) {
+      if (effect.status === "computed" && ["M-01", "M-02", "M-03", "M-06", "M-15", "M-19"].includes(metricId) && !compared?.complete) {
         rows.push({ ...where, value: null, numerator: null, denominator: null, status: "not_measurable", reason: "judge_version_unrecorded" });
+        continue;
+      }
+      if (effect.status === "computed" && !noiseValid) {
+        rows.push({ ...where, value: null, numerator: null, denominator: null, status: "not_measurable", reason: "noise_basis_unrecorded" });
         continue;
       }
       // The verdict is only as good as the band it was judged against: the row keeps that band and whether it was measured
@@ -382,7 +396,8 @@ export async function netEffectRows(store, { project, round, controlGroups, engi
       const why = (/** @type {string} */ reason) => (effect.missing ?? []).some((entry) => entry.reason === reason);
       rows.push(effect.status === "computed"
         ? { ...where, value: effect.value ?? null, numerator: effect.pilotChange ?? null, denominator: effect.controlChange ?? null, status: "ok",
-          reason: effect.verdict ?? null, noiseBand: effect.noiseThreshold ?? null, noiseMeasured: effect.noiseMeasured ?? null }
+          reason: effect.verdict ?? null, noiseBand: effect.noiseThreshold ?? null, noiseMeasured: effect.noiseMeasured ?? null,
+          ...(compared?.complete ? { assessment: { kind: "geo-net-proof", version: 1, generations: compared.generations, arms: compared.common, metricId, pool: index ? null : pool, baselineDate, engines, ...(noise?.measured ? { noise: { roundId: noise.roundId, generation: noise.generation, metricId, value: noise.value } } : {}) } } : {}) }
         : { ...where, value: null, numerator: null, denominator: null, status: "not_measurable",
           reason: why("too_few_control_groups") ? "too_few_control_groups" : why("insufficient_sample") ? "insufficient_sample" : "not_computable" });
     }
@@ -411,44 +426,130 @@ function observed(cell) {
  * @param {import("./geoMeasureStore.mjs").GeoMeasureStore} store
  * @param {{ project: { id: string, engines?: string[], competitors?: Array<Record<string, any>> }, round: { id?: string, setVersion: number | null },
  *   engines: readonly string[], arms: { pilot: string[], control: string[] } }} input
- * @returns {Promise<{ common: { pilot: string[], control: string[] }, recomputed: Map<string, Map<string, any>> }>}
+ * @returns {Promise<{ common: { pilot: string[], control: string[] }, recomputed: Map<string, Map<string, any>>, complete: boolean, generations: Array<{roundId:string,generation:string}>, snapshots: Map<string, any> }>}
  */
 async function comparedArms(store, { project, round, engines, arms }) {
   const entries = (await store.armRounds({ geoProjectId: project.id, setVersion: round.setVersion })).filter((entry) => sameEngines(entry.engines, engines));
-  /** @type {Map<string, any[]>} */
-  const answers = new Map();
-  const keptOf = async (/** @type {string} */ roundId) => {
-    if (!answers.has(roundId)) {
-      const skipped = new Set(await store.roundSkippedEngines(roundId));
-      answers.set(roundId, (await store.roundFactRows(roundId)).filter((row) => !skipped.has(row.engine)));
-    }
-    return /** @type {any[]} */ (answers.get(roundId));
-  };
+  /** @type {Map<string, any>} */ const frozen = new Map();
+  const generations = [];
+  for (const entry of entries) { const saved = await store.frozenMetricInput(project.id, entry.roundId); frozen.set(entry.roundId, saved?.payload ?? null); if (saved) generations.push({ roundId: entry.roundId, generation: saved.generation }); }
+  const keptOf = async (/** @type {string} */ roundId) => frozen.get(roundId)?.rows ?? [];
   /** @type {Array<{ roundId: string, arms: { pilot: string[], control: string[] } }>} */
   const memberships = [];
   for (const entry of entries) {
-    if (entry.arms) { memberships.push({ roundId: entry.roundId, arms: entry.arms }); continue; }
-    const kept = await keptOf(entry.roundId);
-    if (kept.length) memberships.push({ roundId: entry.roundId, arms: armsOf(groupsOf(kept), new Set()) });
+    const savedArms = frozen.get(entry.roundId)?.options?.arms;
+    if (Array.isArray(savedArms?.pilot) && Array.isArray(savedArms?.control)) memberships.push({ roundId: entry.roundId, arms: savedArms });
   }
   if (round.id && !memberships.some((entry) => entry.roundId === round.id)) memberships.push({ roundId: round.id, arms });
   const common = commonArms(memberships.map((entry) => entry.arms));
-  const same = (/** @type {string[]} */ left, /** @type {string[]} */ right) => left.length === right.length && left.every((id, index) => id === right[index]);
   /** @type {Map<string, Map<string, any>>} */
   const recomputed = new Map();
-  /** @type {Awaited<ReturnType<typeof store.projectContext>> | undefined} */
-  let context;
   for (const entry of memberships) {
-    if (same([...entry.arms.pilot].sort(), common.pilot) && same([...entry.arms.control].sort(), common.control)) continue;
     const stored = (await store.round(entry.roundId));
     const kept = await keptOf(entry.roundId);
     if (!stored || !kept.length) continue;
-    context ??= await store.projectContext(project.id);
     const result = computeGeoMetrics(/** @type {any[]} */ (balanceRows(kept).rows), {
-      ...metricOptions(/** @type {any} */ (project), stored, context), arms: common, scopes: ["arm"],
+      ...frozen.get(entry.roundId).options, arms: common, scopes: ["arm"],
     });
     recomputed.set(entry.roundId, new Map(result.cells.filter((cell) => cell.arm && !cell.variant && !cell.rival)
       .map((cell) => [`${cell.arm}\u0000${cell.pool ?? ""}\u0000${cell.metricId}`, cell])));
   }
-  return { common, recomputed };
+  const complete = memberships.length === entries.length && frozenBasisComplete(entries, frozen, common);
+  return { common, recomputed, complete, generations, snapshots: frozen };
+}
+
+/** Validate the frozen population, never current mutable facts. */
+function frozenBasisComplete(entries, frozen, common) {
+  const versions = new Set(), cohorts = new Set(), settings = new Set();
+  let complete = entries.length >= 2 && entries.every(entry => Array.isArray(frozen.get(entry.roundId)?.rows));
+  for (const entry of entries) {
+    const snapshot = frozen.get(entry.roundId);
+    if (!snapshot?.options || !Array.isArray(snapshot.rows)) { complete = false; continue; }
+    settings.add(JSON.stringify({ samplingMode: snapshot.options.samplingMode, engines: snapshot.options.engines, competitors: snapshot.options.competitors, owned: snapshot.options.owned }));
+    const members = snapshot.rows.filter(row => common.pilot.includes(row.groupId) || common.control.includes(row.groupId));
+    const cohort = [];
+    for (const row of members) {
+      if (!row.questionId || !row.pool || !row.groupId || !row.engine || !row.surface?.mode) { complete = false; continue; }
+      cohort.push(JSON.stringify([row.questionId, row.groupId, row.pool, row.engine, row.repeatIndex ?? 0, row.status, row.surface]));
+      if (row.status !== "valid") continue;
+      const facts = row.facts;
+      if (!facts?.judgedAt || facts.checks?.judgementCoverage?.status !== "complete" || !facts.judgeExtract?.rubricVersion || !facts.parserVersion) { complete = false; continue; }
+      versions.add(JSON.stringify([facts.judgeExtract.rubricVersion, facts.parserVersion]));
+    }
+    cohorts.add(JSON.stringify([...new Set(cohort)].sort()));
+  }
+  complete &&= versions.size === 1 && cohorts.size === 1 && settings.size === 1;
+  return complete;
+}
+
+/** Recompute a stored NET proof from its exact frozen generations. Returns false for missing or mismatched evidence. */
+export function verifyFrozenNetRow(row, snapshots) {
+  try {
+    const proof = row.assessment;
+    if (row.status !== 'ok' || row.value == null || row.numerator == null || row.denominator == null || proof?.kind !== 'geo-net-proof' || proof.version !== 1 || !Array.isArray(proof.generations)
+      || !proof.arms || !Array.isArray(proof.arms.pilot) || !Array.isArray(proof.arms.control) || !Array.isArray(proof.engines) || !proof.baselineDate
+      || row.variant !== proof.metricId || (row.pool ?? null) !== proof.pool
+      || !proof.generations.some(item => item.roundId === row.round_id && item.generation === row.computation_generation)) return false;
+    const frozen = new Map(), entries = [];
+    for (const item of proof.generations) {
+      const snapshot = snapshots.get(item.generation);
+      if (!snapshot || snapshot.roundId !== item.roundId || snapshot.generation !== item.generation || !snapshot.payload?.sampleDate
+        || !['baseline', 'weekly'].includes(snapshot.payload.roundKind) || !sameEngines(balanceRows(snapshot.payload.rows).engines, proof.engines)) return false;
+      frozen.set(item.roundId, snapshot.payload); entries.push({roundId:item.roundId});
+    }
+    if (new Set(entries.map(entry => entry.roundId)).size !== entries.length || !frozenBasisComplete(entries, frozen, proof.arms)) return false;
+    if (new Set(entries.map(entry => frozen.get(entry.roundId).setVersion)).size !== 1) return false;
+    const baseline = entries.map(entry => frozen.get(entry.roundId)).filter(snapshot => snapshot.roundKind === 'baseline').map(snapshot => snapshot.sampleDate).sort()[0];
+    if (baseline !== proof.baselineDate) return false;
+    if (row.noise_measured === true) {
+      const ref = proof.noise, saved = ref && snapshots.get(ref.generation);
+      if (!ref || ref.metricId !== proof.metricId || !saved || saved.roundId !== ref.roundId || saved.generation !== ref.generation
+        || Number(row.noise_band) !== ref.value || !noiseBasisMatches(saved.payload, frozen, proof.arms, proof.metricId, ref.value)) return false;
+    } else if (proof.noise) return false;
+    const actualArms = commonArms(entries.map(entry => frozen.get(entry.roundId).options.arms));
+    if (JSON.stringify(actualArms) !== JSON.stringify(proof.arms)) return false;
+    const series = { pilot: [], control: [] };
+    for (const entry of entries) {
+      const snapshot = frozen.get(entry.roundId);
+      const cells = computeGeoMetrics(/** @type {any[]} */ (balanceRows(snapshot.rows).rows), { ...snapshot.options, arms: proof.arms, scopes: ['arm'] }).cells;
+      for (const arm of ['pilot', 'control']) {
+        const cell = cells.find(candidate => candidate.arm === arm && candidate.metricId === proof.metricId && (candidate.pool ?? null) === proof.pool && !candidate.variant && !candidate.rival);
+        series[arm].push({ date: snapshot.sampleDate, ...observed(cell) });
+      }
+    }
+    const effect = netEffect(series.pilot, series.control, { baselineDate: proof.baselineDate, controlGroupCount: proof.arms.control.length,
+      noise: { value: row.noise_band == null ? null : Number(row.noise_band), measured: row.noise_measured === true } });
+    return effect.status === 'computed' && row.noise_band != null && row.noise_measured != null
+      && Number(row.noise_band) === effect.noiseThreshold && row.noise_measured === effect.noiseMeasured
+      && Number(row.value) === effect.value && Number(row.numerator) === effect.pilotChange
+      && Number(row.denominator) === effect.controlChange && row.reason === effect.verdict;
+  } catch { return false; }
+}
+
+/** The noise round must use recorded, compatible judgments from the compared population. */
+function noiseBasisMatches(noise, compared, arms, metricId, expected) {
+  if (noise?.roundKind !== 'noise' || !Array.isArray(noise.rows) || !Number.isFinite(expected)) return false;
+  const baseline = compared.values().next().value;
+  if (!baseline || noise.setVersion !== baseline.setVersion || !sameEngines(noise.options?.engines, baseline.options?.engines)) return false;
+  const allowed = new Map(), repeats = new Map();
+  for (const snapshot of compared.values()) for (const row of snapshot.rows ?? []) {
+    if (row.status !== 'valid' || !arms.pilot.includes(row.groupId) && !arms.control.includes(row.groupId)) continue;
+    const facts = row.facts;
+    if (!facts?.judgedAt || facts.checks?.judgementCoverage?.status !== 'complete' || !facts.judgeExtract?.rubricVersion || !facts.parserVersion) return false;
+    allowed.set(JSON.stringify([row.questionId,row.groupId,row.pool,row.engine,row.surface?.mode]), JSON.stringify([facts.judgeExtract.rubricVersion,facts.parserVersion]));
+  }
+  let count = 0;
+  for (const row of noise.rows) {
+    if (row.status !== 'valid' || !Number.isInteger(row.repeatIndex) || row.repeatIndex < 0) return false;
+    const facts = row.facts, key = JSON.stringify([row.questionId,row.groupId,row.pool,row.engine,row.surface?.mode]);
+    const group = repeats.get(row.repeatIndex) ?? new Set();
+    if (group.has(key)) return false;
+    group.add(key); repeats.set(row.repeatIndex, group);
+    if (!facts?.judgedAt || facts.checks?.judgementCoverage?.status !== 'complete' || !facts.judgeExtract?.rubricVersion || !facts.parserVersion
+      || allowed.get(key) !== JSON.stringify([facts.judgeExtract.rubricVersion,facts.parserVersion])) return false;
+    count++;
+  }
+  if (!count || repeats.size < 2 || new Set([...repeats.values()].map(group => JSON.stringify([...group].sort()))).size !== 1) return false;
+  const measured = noiseBand(noise.rows, { metricId });
+  return measured.measured === true && measured.value === expected;
 }

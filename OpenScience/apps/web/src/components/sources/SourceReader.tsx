@@ -63,6 +63,16 @@ type Loaded =
  *
  * A document that is not there, or is not this account's, is one sentence — the same one for both, so the page does not say which — and
  * the way back.
+ *
+ * Anatomy: document header, content, original preview and contextual actions.
+ * Variants: addressed page or pane within the knowledge base.
+ * States: loading, partial reads, errors and unavailable documents retain their own recovery.
+ * Hit area: document actions and preview controls use the shared action targets.
+ * Keyboard: the content switch, document actions and return link remain focusable.
+ * Long content: the original keeps its preview controls and the content keeps its reading width.
+ * Theme: the pane uses a semantic reading surface beside the library list.
+ * Responsive: the reader's own width decides between side-by-side content and a switch.
+ * Verification: the knowledge source, original-file and return-path fixture views.
  */
 export function SourceReader({ sourceId, listState, mode, backLabel, refresh = 0, onApplied, onRemoved }: {
   sourceId: string;
@@ -336,7 +346,7 @@ export function SourceReader({ sourceId, listState, mode, backLabel, refresh = 0
 
   if (!asPage) {
     return (
-      <div ref={rootRef} data-source-reader="pane" className="h-full min-h-0">
+      <div ref={rootRef} data-source-reader="pane" className="h-full min-h-0 bg-surface">
         <div className="h-full min-h-0 overflow-y-auto">
           <div className="px-6 py-6">
             {backLabel && source && isKnowledgePage(source) && <PaneBack to={back} label={backLabel} />}

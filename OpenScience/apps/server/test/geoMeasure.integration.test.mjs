@@ -1361,7 +1361,7 @@ async function seededRound({ project, id, kind, date, factsAt, groups, mentions 
       await database.query(`INSERT INTO evimed_geo.snapshots (id, user_id, round_id, geo_project_id, question_id, engine, asked_at, status, answer_text, citations, surface)
         VALUES ($1, $2, $3, $4, $5, 'deepseek', $6, 'valid', 'a seeded answer', '[]'::jsonb, '{"mode":"web"}'::jsonb)`, [snapshot, `user_${project}`, id, project, questionId, factsAt]);
       await database.query(`INSERT INTO evimed_geo.facts (snapshot_id, user_id, geo_project_id, brands, mentions_ours, first_ours, recommended_ours, retrieval_triggered,
-          statements, failure_mode, judged_at, created_at) VALUES ($1, $2, $3, $4::jsonb, $5, $5, false, false, '[]'::jsonb, $6, $7, $7)`,
+          statements, failure_mode, judged_at, created_at, checks, judge_extract, parser_version) VALUES ($1, $2, $3, $4::jsonb, $5, $5, false, false, '[]'::jsonb, $6, $7, $7, '{"judgementCoverage":{"status":"complete"}}', '{"rubricVersion":"fixture-v1"}', 'parser-v1')`,
       [snapshot, `user_${project}`, project, JSON.stringify(mentioned ? [{ name: "玛仕度肽", ours: true, competitor: false, position: 1, inRecommendation: false, count: 1 }] : []),
         mentioned, mentioned ? "correct" : "omitted", factsAt]);
     }
@@ -1380,35 +1380,105 @@ test("the net effect compares the groups both windows measured: a control group 
     claims: [DOSING],
   });
   const groups = { pg: pilot, ...controls };
+  const skipKimi = async roundId => {
+    await database.query(`UPDATE evimed_geo.rounds SET engines=ARRAY['deepseek','kimi'] WHERE id=$1`, [roundId]);
+    await database.query(`INSERT INTO evimed_geo.probe_jobs(id,user_id,round_id,geo_project_id,question_id,engine,repeat_index,status,attempts,error_code)
+      VALUES($1,'user_geo_arm',$2,'geo_arm','pg_q1','kimi',0,'skipped',0,'engine_paused')`, [`skipped-${roundId}`, roundId]);
+  };
   const net = async (/** @type {string} */ roundId) => (await rows(`SELECT numerator::float8 AS pilot_change, denominator::float8 AS control_change, value::float8 AS net, status, reason
     FROM evimed_geo.metrics WHERE round_id = $1 AND metric_id = 'NET' AND scope = 'pool' AND pool = 'P2' AND variant = 'M-01'`, [roundId]))[0];
 
   // The baseline: the pilot mentions us in 6 of 30 answers, each of the first three control groups in 2 of 10, the fourth in 8 of 10.
   await seededRound({ project: "geo_arm", id: "r_base", kind: "baseline", date: "2026-08-01", factsAt: "2026-08-01T10:00:00Z", groups,
     mentions: { pg: 6, c1: 2, c2: 2, c3: 2, c4: 8 } });
+  await skipKimi("r_base");
   assert.equal((await tickMetrics({ store, now: () => new Date("2026-08-02T00:00:00Z") })).rounds, 1);
   assert.deepEqual((await rows(`SELECT value::float8 AS value, denominator::float8 AS denominator FROM evimed_geo.metrics WHERE round_id = 'r_base' AND scope = 'arm' AND arm = 'control'
     AND pool = 'P2' AND metric_id = 'M-01'`)).map((row) => [row.value, row.denominator]), [[35, 40]], "the baseline's control arm was the four groups");
 
+  // A later rejudgment must not rewrite the already-computed baseline input.
+  await database.query(`UPDATE evimed_geo.facts SET mentions_ours=false, judge_extract='{"rubricVersion":"later"}' WHERE snapshot_id LIKE 'r_base_c1_%'`);
   // The fourth control group is touched by an article after the baseline: it leaves the control arm from now on.
   await database.query(`INSERT INTO evimed_geo.articles (id, user_id, geo_project_id, group_id, status, safety) VALUES ('a_c4', 'user_geo_arm', 'geo_arm', 'c4', 'draft', 'clear')`);
   // Five weeks on: the pilot has risen to 12 of 30, the three clean control groups have not moved (and the fourth is still answered).
   await seededRound({ project: "geo_arm", id: "r_week", kind: "weekly", date: "2026-09-05", factsAt: "2026-09-05T10:00:00Z", groups,
     mentions: { pg: 12, c1: 2, c2: 2, c3: 2, c4: 8 } });
+  await skipKimi("r_week");
   assert.equal((await tickMetrics({ store, now: () => new Date("2026-09-06T00:00:00Z") })).rounds, 1);
 
   // The control arm is c1–c3 in both windows: 20 % then 20 %, no change; the pilot gained 20 points. (Against the baseline's four groups
   // the control arm read 35 % then 20 %, a fall of 15 points that no group suffered, and the net effect 35.)
   const effect = await net("r_week");
+  const [savedNet] = await rows(`SELECT * FROM evimed_geo.metrics WHERE round_id='r_week' AND metric_id='NET' AND scope='pool' AND pool='P2' AND variant='M-01'`);
+  const proofs = await rows(`SELECT generation,round_id,payload FROM evimed_geo.metric_input_snapshots WHERE generation=ANY($1::text[])`, [savedNet.assessment.generations.map(item => item.generation)]);
+  const snapshots = new Map(proofs.map(item => [item.generation, { generation: item.generation, roundId: item.round_id, payload: item.payload }]));
+  const { verifyFrozenNetRow } = await import("../src/geoMetricsJob.mjs");
+  assert.equal(verifyFrozenNetRow(savedNet, snapshots), true);
+  assert.equal(verifyFrozenNetRow({ ...savedNet, value: 999 }, snapshots), false);
+  assert.equal(verifyFrozenNetRow({ ...savedNet, noise_band: 99 }, snapshots), false, "the default threshold is part of the proof");
+  assert.equal(verifyFrozenNetRow(savedNet, new Map()), false);
+  const skippedEngineSnapshots = new Map([...snapshots].map(([key, value]) => {
+    const copy = structuredClone(value); copy.payload.options.engines = ["deepseek", "kimi"]; return [key, copy];
+  }));
+  assert.equal(verifyFrozenNetRow(savedNet, skippedEngineSnapshots), true,
+    "the stable actual engine cohort, not the planned-but-skipped engine, is the proof basis");
   assert.deepEqual({ ...effect }, { pilot_change: 20, control_change: 0, net: 20, status: "ok", reason: "up" });
   // The cells each round stored stay as they were measured.
   assert.deepEqual((await rows(`SELECT value::float8 AS value FROM evimed_geo.metrics WHERE round_id = 'r_base' AND scope = 'arm' AND arm = 'control' AND pool = 'P2' AND metric_id = 'M-01'`)).map((row) => row.value), [35]);
   assert.deepEqual((await rows(`SELECT value::float8 AS value FROM evimed_geo.metrics WHERE round_id = 'r_week' AND scope = 'arm' AND arm = 'control' AND pool = 'P2' AND metric_id = 'M-01'`)).map((row) => row.value), [20]);
+  // A measured noise band carries the exact independent frozen noise generation.
+  await seededRound({ project: "geo_arm", id: "r_noise", kind: "noise", date: "2026-08-20", factsAt: "2026-08-20T10:00:00Z", groups: { pg: pilot }, mentions: { pg: 6 } });
+  await skipKimi("r_noise");
+  for (const question of pilot) {
+    for (const repeat of [0, 1]) await database.query(`INSERT INTO evimed_geo.probe_jobs(id,user_id,round_id,geo_project_id,question_id,engine,repeat_index,status,attempts)
+      VALUES($1,'user_geo_arm','r_noise','geo_arm',$2,'deepseek',$3,'done',1)`, [`noise-job-${question}-${repeat}`, question, repeat]);
+    await database.query(`UPDATE evimed_geo.snapshots SET probe_job_id=$1 WHERE id=$2`, [`noise-job-${question}-0`, `r_noise_${question}`]);
+    await database.query(`INSERT INTO evimed_geo.snapshots(id,user_id,round_id,geo_project_id,question_id,engine,asked_at,status,answer_text,citations,surface,probe_job_id)
+      SELECT $1,user_id,round_id,geo_project_id,question_id,engine,asked_at,status,answer_text,citations,surface,$2 FROM evimed_geo.snapshots WHERE id=$3`, [`r_noise_${question}_repeat`, `noise-job-${question}-1`, `r_noise_${question}`]);
+    await database.query(`INSERT INTO evimed_geo.facts(snapshot_id,user_id,geo_project_id,brands,mentions_ours,first_ours,recommended_ours,retrieval_triggered,statements,failure_mode,judged_at,created_at,checks,judge_extract,parser_version)
+      SELECT $1,user_id,geo_project_id,brands,mentions_ours,first_ours,recommended_ours,retrieval_triggered,statements,failure_mode,judged_at,created_at,checks,judge_extract,parser_version FROM evimed_geo.facts WHERE snapshot_id=$2`, [`r_noise_${question}_repeat`, `r_noise_${question}`]);
+  }
+  await database.query(`UPDATE evimed_geo.facts SET mentions_ours=true,first_ours=true,brands='[{"name":"玛仕度肽","ours":true,"count":1}]'::jsonb
+    WHERE snapshot_id=ANY($1::text[])`, [pilot.slice(6, 10).map(question => `r_noise_${question}_repeat`)]);
+  await measureRound({ store, now: () => new Date("2026-09-06T01:00:00Z") }, "r_noise");
+  await measureRound({ store, now: () => new Date("2026-09-06T02:00:00Z") }, "r_week");
+  const [measuredNet] = await rows(`SELECT * FROM evimed_geo.metrics WHERE round_id='r_week' AND metric_id='NET' AND scope='pool' AND pool='P2' AND variant='M-01'`);
+  assert.equal(measuredNet.noise_measured, true);
+  assert.ok(Number(measuredNet.noise_band) > 0);
+  const refs = [...measuredNet.assessment.generations.map(item => item.generation), measuredNet.assessment.noise.generation];
+  const measuredInputs = await rows(`SELECT generation,round_id,payload FROM evimed_geo.metric_input_snapshots WHERE generation=ANY($1::text[])`, [refs]);
+  const measuredMap = new Map(measuredInputs.map(item => [item.generation, { generation: item.generation, roundId: item.round_id, payload: item.payload }]));
+  assert.equal(verifyFrozenNetRow(measuredNet, measuredMap), true);
+  assert.equal(verifyFrozenNetRow({ ...measuredNet, noise_band: 99 }, measuredMap), false);
+  const noiseKey = measuredNet.assessment.noise.generation;
+  for (const field of ["parserVersion", "rubricVersion", "brands"]) {
+    const altered = new Map(measuredMap); const original = structuredClone(altered.get(noiseKey));
+    const input = original.payload.rows.find(row => row.facts);
+    if (field === "parserVersion") input.facts.parserVersion = "different";
+    else if (field === "rubricVersion") input.facts.judgeExtract.rubricVersion = "different";
+    else input.facts.brands = [];
+    altered.set(noiseKey, original);
+    assert.equal(verifyFrozenNetRow(measuredNet, altered), false, `tampered noise ${field} is not proof`);
+  }
+  const missingNoise = new Map(measuredMap); missingNoise.delete(noiseKey);
+  assert.equal(verifyFrozenNetRow(measuredNet, missingNoise), false);
+  await database.query(`UPDATE evimed_geo.facts SET parser_version='changed',judge_extract='{"rubricVersion":"later"}' WHERE snapshot_id='r_noise_pg_q1'`);
+  assert.equal(verifyFrozenNetRow(measuredNet, measuredMap), true, "later facts never rewrite the frozen proof");
+  await measureRound({ store, now: () => new Date("2026-09-06T03:00:00Z") }, "r_noise");
+  await measureRound({ store, now: () => new Date("2026-09-06T04:00:00Z") }, "r_week");
+  assert.deepEqual([(await net("r_week")).status, (await net("r_week")).reason], ["not_measurable", "noise_basis_unrecorded"]);
+  // Preserve this test's later independent Q3 cases without a noise band.
+  await database.query(`DELETE FROM evimed_geo.metrics WHERE round_id='r_noise' AND metric_id='NOISE'`);
+
   // Each round records which groups its arms were.
   const [recorded] = await rows(`SELECT ref -> 'balance' -> 'arms' AS arms FROM evimed_geo.rounds WHERE id = 'r_week'`);
   assert.deepEqual(recorded.arms, { pilot: ["pg"], control: ["c1", "c2", "c3"] });
   const [baseline] = await rows(`SELECT ref -> 'balance' -> 'arms' AS arms FROM evimed_geo.rounds WHERE id = 'r_base'`);
   assert.deepEqual(baseline.arms, { pilot: ["pg"], control: ["c1", "c2", "c3", "c4"] });
+
+  const frozen = await rows(`SELECT computation_generation FROM evimed_geo.metrics WHERE round_id='r_base' AND scope='arm' LIMIT 1`);
+  assert.ok(frozen[0].computation_generation);
+  assert.equal((await rows(`SELECT count(*)::int AS count FROM evimed_geo.metric_input_snapshots WHERE generation=$1`, [frozen[0].computation_generation]))[0].count, 1);
 
   // A baseline measured before the arms were recorded is compared by the groups its answers belong to: the same number.
   await database.query(`UPDATE evimed_geo.rounds SET ref = ref #- '{balance,arms}' WHERE id = 'r_base'`);
@@ -1421,6 +1491,35 @@ test("the net effect compares the groups both windows measured: a control group 
   await measureRound({ store, now: () => new Date("2026-09-08T00:00:00Z") }, "r_week");
   assert.deepEqual({ ...(await net("r_week")) }, { pilot_change: 20, control_change: 0, net: 20, status: "ok", reason: "up" });
   assert.deepEqual((await rows(`SELECT value::float8 AS value FROM evimed_geo.metrics WHERE round_id = 'r_week' AND scope = 'arm' AND arm = 'control' AND pool = 'P2' AND metric_id = 'M-01'`)).map((row) => row.value), [35]);
+  await assert.rejects(store.writeMetrics({ roundId: "r_week", geoProjectId: "geo_arm", userId: "user_geo_arm", computedAt: new Date(),
+    generation: "atomic-failure-fixture", snapshot: { version: 1, rows: [] }, rows: [{ scope: "arm", arm: "pilot", metricId: "M-01", status: "invalid" }] }));
+  assert.equal((await rows(`SELECT count(*)::int AS count FROM evimed_geo.metric_input_snapshots WHERE generation='atomic-failure-fixture'`))[0].count, 0);
+  for (const [field, change, restore] of [
+    ["judge_extract", `'{}'::jsonb`, `'{"rubricVersion":"fixture-v1"}'::jsonb`],
+    ["judged_at", 'NULL', `'2026-09-05T10:00:00Z'::timestamptz`],
+    ["parser_version", "'changed-parser'", "'parser-v1'"],
+  ]) {
+    await database.query(`UPDATE evimed_geo.facts SET ${field}=${change} WHERE snapshot_id='r_week_pg_q1'`);
+    await measureRound({ store, now: () => new Date("2026-09-09T00:00:00Z") }, "r_week");
+    assert.equal((await net("r_week")).status, "not_measurable");
+    assert.equal((await net("r_week")).net, null);
+    await database.query(`UPDATE evimed_geo.facts SET ${field}=${restore} WHERE snapshot_id='r_week_pg_q1'`);
+  }
+  await database.query(`UPDATE evimed_geo.snapshots SET surface='{"mode":"other"}' WHERE id='r_week_pg_q1'`);
+  await measureRound({ store, now: () => new Date("2026-09-09T00:00:00Z") }, "r_week");
+  assert.equal((await net("r_week")).status, "not_measurable");
+  await database.query(`UPDATE evimed_geo.snapshots SET surface='{"mode":"web"}' WHERE id='r_week_pg_q1'`);
+  await database.query(`UPDATE evimed_geo.questions SET pool='P3' WHERE id='pg_q1'`);
+  await measureRound({ store, now: () => new Date("2026-09-09T00:00:00Z") }, "r_week");
+  assert.equal((await net("r_week")).status, "not_measurable");
+  await database.query(`UPDATE evimed_geo.questions SET pool='P2' WHERE id='pg_q1'`);
+  await database.query(`UPDATE evimed_geo.facts SET parser_version='changed-parser' WHERE snapshot_id='r_week_pg_q1'`);
+  await measureRound({ store, now: () => new Date("2026-09-09T00:00:00Z") }, "r_week");
+  assert.deepEqual([ (await net("r_week")).status, (await net("r_week")).reason ], ["not_measurable", "judge_version_unrecorded"]);
+  await database.query(`UPDATE evimed_geo.facts SET parser_version='parser-v1' WHERE snapshot_id='r_week_pg_q1'`);
+  await database.query(`DELETE FROM evimed_geo.metric_input_snapshots WHERE round_id='r_base'`);
+  await measureRound({ store, now: () => new Date("2026-09-10T00:00:00Z") }, "r_week");
+  assert.deepEqual([ (await net("r_week")).status, (await net("r_week")).reason ], ["not_measurable", "judge_version_unrecorded"]);
 });
 
 test("a round records what it left out: the valid answers nobody judged, beside the counts of every ask (Q-11)", options, async () => {

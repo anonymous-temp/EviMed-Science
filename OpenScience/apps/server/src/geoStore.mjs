@@ -333,7 +333,7 @@ const PROJECT_COLUMNS = `id, user_id, project_id, product, competitors, coverage
   entity_keys, producer, product_zone_id, conversation_session_id, internal, created_at, updated_at, deleted_at`;
 
 /** The tables whose rows go with a project or an account; the money tables are not among them. */
-const OWNED_TABLES = Object.freeze(["read_selections", "facts", "snapshots", "probe_jobs", "rounds", "metrics", "errors", "questions", "question_groups", "schedule_marks",
+const OWNED_TABLES = Object.freeze(["read_selections", "facts", "snapshots", "probe_jobs", "rounds", "metrics", "metric_input_snapshots", "errors", "questions", "question_groups", "schedule_marks",
   "question_sets", "journeys", "claims", "strategy", "targets", "placement_plans", "sources", "article_versions", "articles", "owned_links", "members", "value_profiles",
   "action_choices"]);
 

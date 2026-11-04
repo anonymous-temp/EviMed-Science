@@ -31,7 +31,7 @@ it("changes scope without navigation, merges and sorts all projects, searches, a
   expect(screen.getByText("/app/geo/g1/visibility")).toBeInTheDocument();
   await screen.findByText("Newer"); await waitFor(() => expect(screen.queryByText("正在读取对话")).not.toBeInTheDocument());
   const buttons = screen.getAllByRole("button"); expect(buttons.indexOf(screen.getByText("Newer").closest("button")!)).toBeLessThan(buttons.indexOf(screen.getByText("First").closest("button")!));
-  await user.type(screen.getByRole("textbox", { name: "搜索最近对话" }), "Paper"); expect(screen.queryByText("First")).not.toBeInTheDocument();
+  await user.type(screen.getByRole("searchbox", { name: "搜索最近对话" }), "Paper"); expect(screen.queryByText("First")).not.toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "管理项目与对话" })); expect(screen.getByText("项目管理")).toBeInTheDocument();
   expect(mocks.select).not.toHaveBeenCalled();
 });

@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 import { Check, PenLine, X } from "lucide-react";
 import { getGeoArticles, type GeoAction, type GeoArticle, type GeoProject } from "@/lib/geoClient";
 import { Button } from "@/components/ui/Button";
+import { FactList } from "@/components/ui/FactList";
 import { Drawer } from "@/components/ui/Drawer";
 import { List, ListRow } from "@/components/ui/ListRow";
 import { Note } from "@/components/ui/Note";
@@ -100,7 +101,7 @@ export function ErrorDrawer({
             </p>
           )}
           {basis && <p data-geo-error-basis="" className="mt-1 text-caption text-text-3">{`依据：${basis}`}</p>}
-          {claim.severity && <p className="mt-2 text-caption text-text-3">{`潜在临床风险 ${claim.severity}：${SEVERITY_WORDS[claim.severity]}。仅凭回答无法判断患者是否已用药或受伤。`}</p>}
+          {claim.severity && <FactList ruled={false} rows={[{ label: "潜在临床风险", value: `${claim.severity}：${SEVERITY_WORDS[claim.severity]}。仅凭回答无法判断患者是否已用药或受伤。` }]} />}
         </Section>
 
         <Section title="各引擎怎么说" count={`${claim.rows.length} 条`} level="sub">

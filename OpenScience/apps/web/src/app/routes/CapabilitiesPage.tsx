@@ -58,6 +58,17 @@ function allowanceText(estimate: WebResearchEstimate | undefined): string | null
 }
 
 /**
+ * Component: CapabilitiesPage; owner: H; rules: DS17, DS22.1, DS22.7.
+ * Anatomy: Catalogue filters, category sections, and tool cards.
+ * Variants: Full catalogue, category selection, and search results.
+ * States: Loading, retryable error, empty, available and blocked tools.
+ * Hit area: Shared toolbar controls, full tool cards and connector links.
+ * Keyboard: Native card actions and toolbar navigation.
+ * Long content: Descriptions and availability details wrap in their cards.
+ * Theme: Paper canvas and semantic availability roles.
+ * Responsive: One to three cards a row by the page's width.
+ * Verification: CapabilitiesPage tests and the catalogue fixture walk.
+ *
  * 科研工具 — the medical professional workflows, one card grid per category.
  *
  * What is here is a workflow with a contract and a deliverable, and a category to

@@ -798,7 +798,8 @@ describe("总览", () => {
     const title = await screen.findByRole("heading", { name: /综合可见度指数 44，/ });
     expect(title).toHaveTextContent(`综合可见度指数 44，${NOT_COMPARED}`);
     expect(title.parentElement).toHaveTextContent(/上次 9月25日 · (?:计划|计划已到期) 10月19日/);
-    await userEvent.selectOptions(screen.getByRole("combobox", { name: "分析指标" }), "mention");
+    await userEvent.click(screen.getByRole("button", { name: /^分析指标：/ }));
+    await userEvent.click(await screen.findByRole("menuitemradio", { name: "品类问题可见率" }));
     expect(await screen.findByRole("heading", { name: `品类问题可见率 23%，${NOT_COMPARED}` })).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/[▲▼]/);
   });
@@ -819,7 +820,8 @@ describe("总览", () => {
     client.getGeoMonitoring.mockResolvedValue(fallingMonitoring);
     renderTab(<VisibilityTab {...props(fallingProject())} />);
     await screen.findByRole("heading", { name: /综合可见度指数 44/ });
-    await userEvent.selectOptions(screen.getByRole("combobox", { name: "分析指标" }), "mention");
+    await userEvent.click(screen.getByRole("button", { name: /^分析指标：/ }));
+    await userEvent.click(await screen.findByRole("menuitemradio", { name: "品类问题可见率" }));
     expect(await screen.findByRole("heading", { name: "品类问题可见率 23%，与上次持平" })).toBeInTheDocument();
   });
 

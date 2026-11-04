@@ -51,10 +51,12 @@ import {
   GEO_ARM_METRIC_ID, GEO_DEFAULT_ENGINES, GEO_ENGINE_LABELS_ZH, GEO_VIEW_METRIC_IDS, GEO_METRIC_LABELS_ZH,
   GEO_OVERVIEW_METRICS, GEO_METRIC_IDS, GEO_MEASUREMENT_METHOD_VERSION, GEO_POOLS, GEO_ROUND_KIND_LABELS_ZH, GEO_URGENT_SEVERITIES, GEO_ENGINES, geoMetricMembers, geoGroupReading, geoCoverageKey,
 } from "@evimed/domain";
-import { GEO_READ_PAGE_LIMIT, geoDailyReadings, geoSourcePage, geoRoundReadings, geoReadTransactionActive, withGeoReadTransaction, computeGeoSelection, geoSelectionCoverage, geoReadScopeInput, geoScopeIsFiltered, readGeoSelection, readGeoSelectionErrors } from "./geoReadScope.mjs";
+import { GEO_READ_PAGE_LIMIT, geoDailyReadings, geoSourcePage, geoRoundReadings, geoReadTransactionActive, withGeoReadTransaction, computeGeoSelection, geoReadScopeInput, geoScopeIsFiltered, readGeoSelection, readGeoSelectionErrors } from "./geoReadScope.mjs";
 import { createHash } from "node:crypto";
 import { geoQuestionImportPreview, geoStartDiagnosis, geoRecoverDiagnosis, geoLockCheck, geoProgramMinimal, geoRuntimeWrite, geoRecoveryMayCharge } from "./geoWrites.mjs";
 import { GeoSpine } from "./geoSpine.mjs";
+import { storedMetricCoverage, storedNetProofs, metricProvenanceReadActive, withMetricProvenanceRead } from "./geoMetricProvenance.mjs";
+import { geoMetricInputCoverage } from "./geoComparison.mjs";
 import { coverageKeyOf, roundCoverages } from "./geoCoverage.mjs";
 import { answersCiting, countsOf, pagesCited, roundAnswers, sentenceSource, tallySources } from "./geoSourceAnswers.mjs";
 import { geoSourceFromRow, questionGroupFromRow, questionFromRow } from "./geoStore.mjs";
@@ -523,13 +525,16 @@ export class GeoService {
     const byProject = new Map();
     if (!geoIds.length) return byProject;
     const result = await this.store.query(`SELECT * FROM (
+      SELECT latest.*, row_number() OVER (PARTITION BY geo_project_id,metric_id${extra ? `, ${extra}` : ""},variant
+        ORDER BY coalesce(sample_date::timestamp,observed_at) DESC,observed_at DESC,round_id DESC) AS trend_rank FROM (
         SELECT DISTINCT ON (m.geo_project_id, m.metric_id, coalesce(m.round_id, m.id)${extra ? `, m.${extra}` : ""}, m.variant)
           m.*, r.sample_date, coalesce(r.started_at, r.created_at) AS observed_at
         FROM evimed_geo.metrics m JOIN evimed_geo.rounds r ON r.id = m.round_id AND r.kind = ANY($4::text[])
         WHERE m.geo_project_id = ANY($1::text[]) AND m.scope = $3 AND m.metric_id = ANY($2::text[]) AND m.pool IS NULL AND ${scope === "engine" ? "m.rival IS NULL AND m.group_id IS NULL" : PLAIN_ROW}
         ORDER BY m.geo_project_id, m.metric_id, coalesce(m.round_id, m.id)${extra ? `, m.${extra}` : ""}, m.variant, m.computed_at DESC
-      ) latest ORDER BY coalesce(sample_date::timestamp, observed_at), observed_at, round_id`, [geoIds, [...metricIds], scope, [...GEO_HEADLINE_ROUND_KINDS]]);
+      ) latest) windowed WHERE trend_rank <= $5 ORDER BY coalesce(sample_date::timestamp, observed_at), observed_at, round_id`, [geoIds, [...metricIds], scope, [...GEO_HEADLINE_ROUND_KINDS], TREND_POINTS]);
     const coverages = coverage ? await roundCoverages(this.store, result.rows.map((/** @type {any} */ row) => String(row.round_id ?? ""))) : null;
+    const frozenCoverage = coverage ? await storedMetricCoverage(this.store, result.rows) : new Map();
     for (const row of result.rows) {
       const key = extra ? `${row.metric_id}\u0000${row[extra] ?? ""}${row.variant ? `\u0000${row.variant}` : ""}` : String(row.metric_id);
       const map = byProject.get(row.geo_project_id) ?? new Map();
@@ -537,7 +542,7 @@ export class GeoService {
       points.push({
         date: rowDay(row, this.timeZone), value: num(row.value), n: num(row.denominator), k: num(row.numerator),
         // An engine's own series is of that engine alone: its rate does not move with which others answered.
-        ...(coverages ? { coverage: ["M-01", "M-01S", "M-02", "M-03", "M-04", "M-04C", "M-05", "M-06", "M-07", "M-11", "M-12", "M-13", "M-14", "M-15", "M-16", "M-17", "M-18", "M-19"].includes(String(row.metric_id)) ? null : coverageKeyOf(coverages.get(String(row.round_id ?? "")), {
+        ...(coverages ? { coverage: row.computation_generation ? frozenCoverage.get(row.id) ?? null : ["M-01", "M-01S", "M-02", "M-03", "M-04", "M-04C", "M-05", "M-06", "M-07", "M-11", "M-12", "M-13", "M-14", "M-15", "M-16", "M-17", "M-18", "M-19"].includes(String(row.metric_id)) ? null : coverageKeyOf(coverages.get(String(row.round_id ?? "")), {
           engine: extra === "engine" ? text(row.engine) : null, methodVersion: text(row.method_version),
         }) } : {}),
       });
@@ -557,19 +562,20 @@ export class GeoService {
    */
   async #rivalSeries(geoId) {
     const rows = (await this.store.query(`SELECT * FROM (
+      SELECT latest.*,row_number() OVER (PARTITION BY rival ORDER BY coalesce(sample_date::timestamp,observed_at) DESC,observed_at DESC,round_id DESC) AS trend_rank FROM (
         SELECT DISTINCT ON (m.round_id, m.rival) m.*, r.sample_date, coalesce(r.started_at, r.created_at) AS observed_at
         FROM evimed_geo.metrics m JOIN evimed_geo.rounds r ON r.id = m.round_id AND r.kind = ANY($3::text[])
         WHERE m.geo_project_id = $1 AND m.scope = 'project' AND m.metric_id = $2 AND m.rival IS NOT NULL AND m.pool IS NULL
           AND m.variant IS NULL AND m.group_id IS NULL AND m.arm IS NULL
         ORDER BY m.round_id, m.rival, m.computed_at DESC
-      ) latest ORDER BY coalesce(sample_date::timestamp, observed_at), observed_at, round_id`, [geoId, GEO_RIVAL_METRIC_ID, [...GEO_HEADLINE_ROUND_KINDS]])).rows;
+      ) latest) windowed WHERE trend_rank <= $4 ORDER BY coalesce(sample_date::timestamp, observed_at), observed_at, round_id`, [geoId, GEO_RIVAL_METRIC_ID, [...GEO_HEADLINE_ROUND_KINDS], TREND_POINTS])).rows;
     /** @type {Map<string, Array<{ date: string, value: number | null, n: number | null, k: number | null, coverage: string | null }>>} */
     const byRival = new Map();
-    const coverages = await roundCoverages(this.store, rows.map((/** @type {any} */ row) => String(row.round_id ?? "")));
+    const frozenCoverage = await storedMetricCoverage(this.store, rows);
     for (const row of rows) {
       const points = byRival.get(String(row.rival)) ?? [];
       points.push({ date: rowDay(row, this.timeZone), value: row.status === "ok" ? num(row.value) : null, n: num(row.denominator), k: num(row.numerator),
-        coverage: coverageKeyOf(coverages.get(String(row.round_id ?? "")), { methodVersion: text(row.method_version) }) });
+        coverage: frozenCoverage.get(row.id) ?? null });
       byRival.set(String(row.rival), points);
     }
     return [...byRival].map(([name, points]) => ({ name, points: points.slice(-TREND_POINTS) }));
@@ -589,23 +595,25 @@ export class GeoService {
 
   /** `GET /api/geo/projects`. @param {{ id: string }} user */
   async listProjects(user) {
+    if (!metricProvenanceReadActive()) return withMetricProvenanceRead(() => this.listProjects(user));
     // Projects the account owns and projects it is a member of: the names of both are their owners'.
     const projects = await this.store.listProjectsFor(String(user.id));
     const ids = projects.map((project) => project.id);
     const headline = [GEO_VIEW_METRIC_IDS.gvi, GEO_VIEW_METRIC_IDS.mentionHeadline];
-    const [latest, names, alerts, targets, started, activeMeasurements] = await Promise.all([
+    const [latest, names, alerts, targets, started, activeMeasurements, series] = await Promise.all([
       this.#latestProjectMetrics(ids, headline),
       this.#controlProjectNames(projects.map((project) => ({ userId: project.userId, projectId: project.projectId }))),
       this.#alerts(ids),
       Promise.all(projects.map((project) => this.store.latestTargets(project.id))),
       this.#startedAt(projects),
       this.store.activeMeasurements(ids),
+      this.#series(ids, [GEO_VIEW_METRIC_IDS.gvi], "project", "", { coverage: true }),
     ]);
     const availableEngines = geoAvailableEngines(this.config);
     return {
       projects: projects.map((project, index) => {
         const metrics = latest.get(project.id) ?? new Map();
-        const trend = []; // Historical GVI rows do not record their judgment rubric.
+        const trend = series.get(project.id)?.get(GEO_VIEW_METRIC_IDS.gvi) ?? [];
         const alert = alerts.get(project.id) ?? { wrongOurs: 0, severe: 0, safety: 0, severity: null };
         return {
           id: project.id,
@@ -619,7 +627,7 @@ export class GeoService {
           steps: project.steps,
           activeMeasurement: activeMeasurements.get(project.id) ?? null,
           headline: {
-            gvi: { ...geoCellFromRow(metrics.get(GEO_VIEW_METRIC_IDS.gvi)), target: this.#target(targets[index], project.tier, GEO_VIEW_METRIC_IDS.gvi), trend },
+            gvi: { ...geoCellFromRow(metrics.get(GEO_VIEW_METRIC_IDS.gvi)), target: this.#target(targets[index], project.tier, GEO_VIEW_METRIC_IDS.gvi), trend: trend.map(point => point.value), trendCoverage: trend.map(point => point.coverage ?? null) },
             mention: geoCellFromRow(metrics.get(GEO_VIEW_METRIC_IDS.mentionHeadline)),
           },
           alert,
@@ -1048,7 +1056,7 @@ export class GeoService {
         const point = result.cells.find((candidate) => candidate.metricId === metricId && candidate.scope === (engine ? "engine" : "project") && candidate.engine === engine && candidate.variant === variant && !candidate.rival);
         return { date, roundId: roundIds.length === 1 ? roundIds[0] : null, roundIds, value: point?.value ?? null, n: point?.denominator ?? null, k: point?.numerator ?? null,
           members: point?.members ?? null, snapshotIds: point?.snapshotIds ?? [],
-          methodVersion: GEO_MEASUREMENT_METHOD_VERSION, coverage: ["M-01", "M-01S", "M-02", "M-03", "M-04", "M-04C", "M-05", "M-06", "M-07", "M-11", "M-12", "M-13", "M-14", "M-15", "M-16", "M-17", "M-18", "M-19"].includes(metricId) ? null : geoSelectionCoverage(/** @type {any[]} */ (engine ? result.balance.deduped : result.balance.rows), version, engine) };
+          methodVersion: GEO_MEASUREMENT_METHOD_VERSION, coverage: geoMetricInputCoverage({ computed: result, metricOptions: selected.metricOptions }, point, version) };
       });
       if (kind === "project") view.overview.metrics = view.overview.metrics.map((/** @type {any} */ entry) => ({ ...entry,
         trend: history(GEO_OVERVIEW_METRICS.find((definition) => definition.key === entry.key)?.metricId ?? "") }));
@@ -2146,6 +2154,7 @@ export class GeoService {
     const engineSeries = byEngine.get(project.id) ?? new Map();
     const points = (/** @type {string} */ key) => (armSeries.get(`${GEO_ARM_METRIC_ID}\u0000${key}`) ?? []).map(({ date, value, coverage }) => ({ date, value, coverage }));
     const netRow = net.rows[0];
+    const verifiedNet = await storedNetProofs(this.store, net.rows);
     // Otherwise the weekly re-measure the schedule will run, by its own skip
     // rules, and only while the program monitors at all.
     const measured = baseline.rows[0];
@@ -2165,7 +2174,7 @@ export class GeoService {
         control: points("control"),
         // The band the net effect was judged against is its own row's, with whether it was measured or the default; a row written
         // before the band was kept shows mention's measured band, as it did, and says nothing about it.
-        netEffect: { ...geoCellFromRow(netRow), ...(netRow?.status === "ok" ? { value: null, numerator: null, denominator: null, status: "not_measurable", reason: "judge_version_unrecorded" } : {}),
+        netEffect: { ...geoCellFromRow(netRow), ...(netRow?.status === "ok" && !verifiedNet.has(netRow.id) ? { value: null, numerator: null, denominator: null, status: "not_measurable", reason: "judge_version_unrecorded" } : {}),
           noiseBand: netRow?.noise_band != null ? num(netRow.noise_band) : noise.rows[0] ? num(noise.rows[0].value) : null,
           noiseMeasured: netRow?.noise_band != null ? netRow.noise_measured === true : null },
       },

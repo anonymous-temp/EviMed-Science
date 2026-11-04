@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { RunStreamEvent } from "./runEvents";
-import { callDetail, callLabel, emptyObservation, foldObservation, partialStream, rootStage, ROOT_AGENT, seedObservation, stageCounts, stageOfCall, type Observation } from "./researchObservation";
+import { callDetail, callLabel, emptyObservation, foldObservation, GOAL_MACHINERY_WORDS, isGoalMachineryCall, namesGoalMachinery, partialStream, rootStage, ROOT_AGENT, seedObservation, stageCounts, stageOfCall, type Observation } from "./researchObservation";
 
 const frame = (seq: number, type: string, fields: Record<string, unknown> = {}): RunStreamEvent => ({ seq, type, time: `2026-10-28T01:${String(seq).padStart(2, "0")}:00Z`, ...fields });
 const fold = (frames: RunStreamEvent[], seed?: unknown): Observation => {
@@ -111,5 +111,99 @@ describe("research observation", () => {
     expect(model.callCount).toBe(150);
     expect(model.stageCounts.search).toBe(150);
     expect(model.calls[0].id).toBe("root:c149");
+  });
+  describe("the long-goal machinery", () => {
+    it("knows a shell call that runs LoopX's command, reads its directory or sets its variables, by those tokens alone", () => {
+      for (const command of ["loopx --registry /home/user/.loopx/registry.json status", "cd ~/.loopx/ && ls", "LOOPX_HOME=/tmp/x node run.js", "export LOOPX_AGENT_ID=a1", "npx loopx goal pause", "/usr/local/bin/loopx status", "(loopx status)", "cat .loopx/state.json", "LOOPX --help"]) {
+        expect(isGoalMachineryCall("bash", { command }), command).toBe(true);
+      }
+      expect(isGoalMachineryCall("mcp__shell__exec", { cmd: ["bash", "-lc", "loopx status"] })).toBe(true);
+      expect(isGoalMachineryCall("terminal", { command: "loopx goalbar read" })).toBe(true);
+    });
+    it("leaves research alone: other shell commands, other tools, and names that only begin with the word", () => {
+      for (const command of ["python analysis/pool.py --studies 12", "echo hello", "ls -la output/", "grep -n loopxlike notes.md", "cat skills/loopx-project/SKILL.md", "pip install loopx2"]) {
+        expect(isGoalMachineryCall("bash", { command }), command).toBe(false);
+      }
+      // Not a shell: whatever it names is not a command that was run.
+      expect(isGoalMachineryCall("write", { path: ".loopx/notes.md", command: "loopx status" })).toBe(false);
+      expect(isGoalMachineryCall("web_search", { query: "loopx" })).toBe(false);
+      expect(isGoalMachineryCall("bash", null)).toBe(false);
+      expect(isGoalMachineryCall("bash", { command: 42 })).toBe(false);
+    });
+    it("keeps such a call and its result out of the feed and out of every count, and counts the research around it", () => {
+      const machinery = { command: "loopx --registry /home/user/.loopx/r.json goal status" };
+      const model = fold([call(1, "a", "web_search", { query: "q" }), call(2, "m", "bash", machinery), result(3, "m", "bash"), call(4, "n", "bash", { command: "cd .loopx/ && cat todo.json" }),
+        result(5, "n", "bash", "error"), result(6, "a", "web_search"), call(7, "b", "bash", { command: "python run.py" })]);
+      expect(model.calls.map(item => item.id)).toEqual(["root:b", "root:a"]);
+      expect(model.callCount).toBe(2);
+      expect(model.stageCounts).toMatchObject({ search: 1, analyze: 1 });
+      expect(model.rootStage).toBe("analyze");
+      // The frames still moved the stream along.
+      expect(model.lastSeq).toBe(7);
+    });
+    it("pairs a machinery call with its result by the session and call id, as a research call is paired", () => {
+      const model = fold([call(1, "x", "bash", { command: "loopx status" }, { sessionId: "c1", child: true }), result(2, "x", "bash", "completed", { sessionId: "c1", child: true }),
+        // Another session's call with the same id is not that call.
+        result(3, "x", "bash", "completed", { sessionId: "root" })]);
+      expect(model.calls.map(item => item.id)).toEqual(["root:x"]);
+      expect(model.agents.has("c1")).toBe(false);
+    });
+    it("empties the thinking line while the reasoning names the machinery, and gives it back once the words are behind it", () => {
+      const delta = (seq: number, text: string) => frame(seq, "run/event", { sessionId: "root", event: { type: "assistant/delta", kind: "reasoning", text } });
+      const model = fold([delta(1, "先看两项试验的终点。")]);
+      expect(model.thought).toBe("先看两项试验的终点。");
+      foldObservation(model, delta(2, " 现在调用 LoopX 写回进度"));
+      expect(model.thought).toBe("");
+      foldObservation(model, delta(3, "，然后继续。"));
+      expect(model.thought).toBe("");
+      // The raw tail goes on collecting; once the words have left its window the line comes back.
+      foldObservation(model, delta(4, "核".repeat(300)));
+      expect(model.thought).toBe("核".repeat(280));
+    });
+    it("names the machinery without regard to case, from one list", () => {
+      expect(GOAL_MACHINERY_WORDS).toEqual(["loopx", "todo_", "quota", "writeback", "settlement"]);
+      for (const text of ["LoopX is ready", "calling TODO_write now", "the Quota is spent", "WriteBack failed", "after Settlement"]) expect(namesGoalMachinery(text), text).toBe(true);
+      expect(namesGoalMachinery("先比较两项试验的终点，再合并。")).toBe(false);
+      expect(namesGoalMachinery("todo list")).toBe(false);
+    });
+  });
+  it("keeps when the newest frame happened, from the frame's own time and never backwards", () => {
+    expect(emptyObservation().lastEventAt).toBeNull();
+    const model = fold([frame(5, "run/state", { state: "running" })]);
+    expect(model.lastEventAt).toBe(Date.parse("2026-10-28T01:05:00Z"));
+    foldObservation(model, frame(3, "run/state", { state: "running" }));
+    expect(model.lastEventAt).toBe(Date.parse("2026-10-28T01:05:00Z"));
+    foldObservation(model, call(9, "a", "web_search"));
+    expect(model.lastEventAt).toBe(Date.parse("2026-10-28T01:09:00Z"));
+  });
+  it("falls back to now for a frame that carries no usable time", () => {
+    const before = Date.now();
+    const model = fold([{ seq: 1, type: "run/state", time: "", state: "running" }]);
+    expect(model.lastEventAt).toBeGreaterThanOrEqual(before);
+    expect(model.lastEventAt).toBeLessThanOrEqual(Date.now());
+  });
+});
+
+describe("what reads LoopX's own output", () => {
+  const event = (seq: number, fields: Record<string, unknown>) => frame(seq, "run/event", { sessionId: "s1", event: fields });
+  it("takes a script reading the CLI's JSON out of the feed and the counts once its result shows it, and keeps a script reading research", () => {
+    const model = emptyObservation();
+    foldObservation(model, event(1, { type: "tool/call", callId: "a", tool: "bash", input: { command: "python3 -c \"import json;print(json.load(open('/tmp/guard1.json')))\"" } }));
+    foldObservation(model, event(2, { type: "tool/call", callId: "b", tool: "bash", input: { command: "python3 analyse.py" } }));
+    expect(model.callCount).toBe(2);
+    foldObservation(model, event(3, { type: "tool/result", callId: "a", tool: "bash", status: "completed", output: "{\"interaction_contract\": {\"must_attempt\": true}}" }));
+    foldObservation(model, event(4, { type: "tool/result", callId: "b", tool: "bash", status: "completed", output: "half-life 5.7 h" }));
+    expect(model.callCount).toBe(1);
+    expect(model.calls).toHaveLength(1);
+    expect(model.calls[0].id).toContain("b");
+    // A late copy of the same result does not bring it back.
+    foldObservation(model, event(5, { type: "tool/result", callId: "a", tool: "bash", status: "completed", output: "x" }));
+    expect(model.calls).toHaveLength(1);
+  });
+  it("leaves a research tool's result alone, whatever it says", () => {
+    const model = emptyObservation();
+    foldObservation(model, event(1, { type: "tool/call", callId: "w", tool: "web_read", input: { url: "https://example.org/loopx" } }));
+    foldObservation(model, event(2, { type: "tool/result", callId: "w", tool: "web_read", status: "completed", output: "loopx is a word on this page" }));
+    expect(model.calls).toHaveLength(1);
   });
 });

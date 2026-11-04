@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { withGeoSignalLease } from "./geoSignalProgress.mjs";
 import { createModuleEvolutionPolicies } from "./moduleEvolutionPolicies.mjs";
 import { geoWorkflowState, geoAutomationEnabled, GEO_RESEARCH_CAPABILITIES, GEO_ENGINE_LABELS_ZH, GEO_POOL_LABELS_ZH, GEO_STALE_PLACEMENT_WEEKS, GEO_STEP_LABELS_ZH, GEO_STEPS, allowanceWaitingNote, canonicalGeoUrl, geoGroupShort, geoPlacementStale, geoPoolTarget, geoValueActive, geoValueList, geoValueText, geoVisibleQuestion, stepWaitingFor } from "@evimed/domain";
@@ -544,6 +545,8 @@ export class GeoOrchestrator {
     this.config = config;
     this.notifier = notifier;
     this.dispatchRun = dispatchRun;
+    /** The project whose run this call chain is dispatching (`#dispatch`, `onRunFinished`). @type {AsyncLocalStorage<string>} */
+    this.dispatching = new AsyncLocalStorage();
     this.runStatus = runStatus;
     this.importRun = importRun;
     this.enqueueRound = enqueueRound;
@@ -808,6 +811,10 @@ export class GeoOrchestrator {
       WHERE p.user_id = $1 AND p.project_id = $2 AND p.deleted_at IS NULL AND m.kind = 'run' AND m.dispatch_id = $3`,
     [String(controlProject.userId), String(controlProject.id), String(run.dispatchId)])).rows[0];
     if (!row || ["done", "failed"].includes(row.state)) return false;
+    // A run refused while its dispatch is still in hand ends inside that dispatch, which holds this project's turn and is waiting for the answer:
+    // asking for the turn here would wait for itself, for good, and take the worker's whole pass with it (2026-11-04, every step of a
+    // one-person project on production). The dispatch folds the run from its own answer (`#dispatch`).
+    if (this.dispatching.getStore() === row.geo_project_id) return false;
     await this.#exclusive(row.geo_project_id, async () => {
       const project = await this.#project(row.geo_project_id);
       if (project) await this.#finishRun(project, { ...row, run_id: row.run_id ?? run.id }, String(run.status), run);
@@ -1590,10 +1597,10 @@ export class GeoOrchestrator {
         return { deferred: 'policy_basis_changed' };
       }
       const brief = policyContext.supplements.length ? `${spec.brief}\n\nPlatform strategy supplements (${policyContext.revisionId}):\n${policyContext.supplements.join("\n")}` : spec.brief;
-      const out = await /** @type {NonNullable<GeoOrchestrator["dispatchRun"]>} */ (this.dispatchRun)({
+      const out = await this.dispatching.run(project.id, () => /** @type {NonNullable<GeoOrchestrator["dispatchRun"]>} */ (this.dispatchRun)({
         userId: project.userId, projectId: project.projectId, geoProjectId: project.id, capabilityId: spec.capabilityId,
         dispatchId: String(mark.dispatch_id), reason: spec.reason, brief, question: spec.question,
-      });
+      }));
       const running = await this.#update(project.id, spec.key, { state: "running", runId: String(out.runId), sessionId: out.sessionId ?? null,
         attempts: Number(mark.attempts ?? 0) + 1 }, ["claimed"]);
       for (const step of spec.steps) current = await this.#step(current, step, { status: "running", runId: String(out.runId), ...unwaiting(current, step) });

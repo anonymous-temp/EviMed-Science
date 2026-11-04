@@ -10,16 +10,15 @@ import {
   type GeoProject,
   type GeoSeriesPoint,
 } from "@/lib/geoClient";
-import { ChartCard, LegendMark } from "@/components/ui/ChartCard";
+import { ChartCard, LegendMark, type ChartSelector } from "@/components/ui/ChartCard";
 import { DataTable, InlineBar } from "@/components/ui/DataTable";
 import { Disclosure } from "@/components/ui/Disclosure";
-import { Select } from "@/components/ui/Input";
 import type { FilterOption } from "@/components/ui/FilterChips";
 import { TrendChart } from "@/components/charts/TrendChart";
 import { OWN_COLOR, TARGET_COLOR } from "@/components/charts/trendModel";
 import { GeoSparkline } from "../GeoSparkline";
 import { GeoComparison } from "../GeoComparison";
-import { GeoPairedRivals } from "../GeoPairedRivals";
+import { GeoPairedRivalsView, useGeoPairedRivals } from "../GeoPairedRivals";
 import { useGeoFrame, useGeoToolbar } from "../geoFrame";
 import { nextMeasurement } from "../geoBand";
 import { readFailure, useGeoDiagnosis, useGeoMonitoring, useGeoStrategy, type ReadFailure } from "../geoProjectData";
@@ -169,19 +168,12 @@ export function VisibilityTab({ geoId, project, analysisSelector }: { geoId: str
   const canCompareRivals = metric === "mention" && (ranking.length > 1 || Boolean(watch?.rivals?.length));
   const showComparison = metric !== "mention" || compareRivals;
 
-  return (
-    <div data-geo-tab="visibility" className="flex flex-col gap-6">
-      {(analysisSelector || options.length > 1 || canCompareRivals) && <div className="flex flex-wrap items-end gap-3">
-        {analysisSelector}
-        {options.length > 1 && <div className="w-full max-w-64"><Select label="分析指标" value={metric ?? options[0].value} onChange={(event) => setKey(event.target.value)}>
-          {options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
-        </Select></div>}
-        {canCompareRivals && <div className="w-full max-w-48"><Select label="比较" value={compareRivals ? "rivals" : "none"} onChange={event => setCompareBy(event.target.value === "none" ? "none" : null)}>
-          <option value="rivals">同类药</option><option value="none">不比较</option>
-        </Select></div>}
-      </div>}
-      <div data-geo-trend-ranking="" className={showComparison ? "grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]" : "grid grid-cols-1 gap-6"}>
+  const trend = (
       <MetricTrend
+        selectors={[
+          ...(options.length > 1 ? [{ label: "分析指标", value: metric, options, onChange: setKey }] : []),
+          ...(canCompareRivals ? [{ label: "比较", value: compareRivals ? "rivals" : "none", options: [{ value: "rivals", label: "同类药" }, { value: "none", label: "不比较" }], onChange: (value: string | null) => setCompareBy(value === "none" ? "none" : null) }] : []),
+        ]}
         project={project}
         watch={watch}
         line={line}
@@ -192,9 +184,13 @@ export function VisibilityTab({ geoId, project, analysisSelector }: { geoId: str
         loading={monitoring.state.kind === "loading"}
         error={monitoringFailed}
       />
-      {showComparison && <GeoPairedRivals geoId={geoId} />}
-      </div>
+  );
+
+  return (
+    <div data-geo-tab="visibility" className="flex flex-col gap-6">
+      {analysisSelector}
       <GeoOverviewMetrics geoId={geoId} project={project} diagnosis={diagnosis} strategy={strategy} compact />
+      {showComparison ? <TrendAndRivals geoId={geoId} trend={trend} /> : <div data-geo-trend-ranking="">{trend}</div>}
       {strategy.state.kind === "error" && <TabError message={`目标信息没有读到：${strategy.state.message}`} onRetry={strategy.reload} />}
       {strategy.state.kind === "ready" && strategy.state.refreshError && <TabError message={`目标信息更新失败，仍显示上次结果：${strategy.state.refreshError}`} onRetry={strategy.reload} />}
       <GeoComparison geoId={geoId} view={project} />
@@ -218,9 +214,19 @@ export function VisibilityTab({ geoId, project, analysisSelector }: { geoId: str
   );
 }
 
+/** Reserve the comparison column while loading; an established empty result becomes a full-width note. */
+function TrendAndRivals({ geoId, trend }: { geoId: string; trend: ReactNode }) {
+  const comparison = useGeoPairedRivals(geoId);
+  const paired = comparison.state.kind !== "ready" || comparison.state.data.pairs.length > 0;
+  return <div data-geo-trend-ranking="" className={paired ? "grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]" : "grid grid-cols-1 gap-4"}>
+    {trend}<GeoPairedRivalsView comparison={comparison} />
+  </div>;
+}
+
 /* ------------------------------------------------------------------ trend */
 
 function MetricTrend({
+  selectors,
   project,
   watch,
   line,
@@ -230,6 +236,7 @@ function MetricTrend({
   loading,
   error,
 }: {
+  selectors: readonly ChartSelector[];
   project: GeoProject;
   watch: GeoMonitoring | null;
   line: { key: string; points: GeoSeriesPoint[] } | null;
@@ -274,6 +281,7 @@ function MetricTrend({
             {target !== null && <LegendMark series="target" shape="dash" color={TARGET_COLOR}>目标</LegendMark>}
           </>
         ) : undefined}
+        selectors={selectors}
         meta={chartDates(change, next?.date)}
         state={loading ? "loading" : error && points.length === 0 ? "error" : points.length === 0 ? "empty" : "content"}
         errorMessage={error ? `测量趋势没有读到：${error.message}` : undefined}
@@ -539,9 +547,8 @@ function PoolRivalTrends({project,rivals}:{project:GeoProject;rivals:GeoMonitori
  return <>{(rivals??[]).filter(rival=>rival.pool&&rival.ownPoints).map(rival=>{
   const points=rival.points,own=rival.ownPoints??[],labels=points.map(point=>monthDay(point.date)??point.date),known=points.some(point=>point.value!==null)||own.some(point=>point.value!==null);
   const comparable = [points,own].every(series => series.every((point,index) => index === 0 || point.value == null || series[index-1].value == null || geoCoverageDifference(series[index-1].coverage,point.coverage).comparable));
-  return <ChartCard key={`${rival.entityKey}-${rival.pool}`} title={rivalTitle(rival)} state={known?"content":"empty"} emptyText="这个问句池尚无足够的可测回答；历史缺席保留未知。">
+  return <ChartCard key={`${rival.entityKey}-${rival.pool}`} title={rivalTitle(rival)} state={known?"content":"empty"} emptyText="这个问句池尚无足够的可测回答；历史缺席保留未知。" footnote={!comparable ? "判定版本或测量范围未知或不一致，各期读数不连线比较。" : undefined}>
    <TrendChart label={`${rivalTitle(rival)} 同口径趋势`} connectLines={comparable} input={{labels,own:{name:project.product?.brandName??project.name,values:points.map(point=>own.find(item=>item.date===point.date)?.value??null)},rivals:[{name:rival.name,values:points.map(point=>point.value)}]}}/>
-   {!comparable && <p className="text-ui text-text-2">判定版本或测量范围未知或不一致，各期读数不连线比较。</p>}
    <DataTable label={`${rivalTitle(rival)} 同口径读数`} rows={points.map((point,index)=>({...point, rowId:`${point.date}-${index}`}))} rowKey={point=>point.rowId} columns={[
     {key:"date",header:"实测日期",rowHeader:true,cell:point=>point.date},
     {key:"own",header:"本品提及率",cell:point=>{const ownPoint=own.find(item=>item.date===point.date);return ownPoint?.value==null?"未知或样本不足":`${ownPoint.value}%`; }},

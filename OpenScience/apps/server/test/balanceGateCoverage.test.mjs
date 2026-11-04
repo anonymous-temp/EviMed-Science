@@ -28,6 +28,7 @@ const RESEARCHER_OWNED = [
   "dispatchVcrRun",     // 虚拟临床研究 programme step
   "dispatchGeoRun",     // 循证 GEO programme step
   "dispatchChannelRun", // a question that arrived through a messaging channel
+  "dispatchResearchGoalTurn", // a long research goal taken up again, or started again by the page's 继续
 ];
 /** The platform's own background work: charged to nobody, so asked of nobody. */
 const PLATFORM_INTERNAL = {
@@ -71,8 +72,8 @@ test("a run nobody is watching asks for its P90, and a person's run for its P50"
   const server = await readFile(path.join(SRC, "server.mjs"), "utf8");
   const sites = [...server.matchAll(/assertBalanceForStart\(([^)]*)\)/g)].map((match) => match[1]);
   const unattended = sites.filter((call) => /unattended: true/.test(call));
-  // Two programme steps and the autopilot's episode and verification (one shared check).
-  assert.equal(unattended.length, 3, `${unattended.length} unattended gates: ${sites.join(" | ")}`);
+  // Two programme steps, the autopilot's episode and verification (one shared check), and a research goal's turn.
+  assert.equal(unattended.length, 4, `${unattended.length} unattended gates: ${sites.join(" | ")}`);
   for (const holder of UNATTENDED) {
     const start = server.indexOf(`async function ${holder}`);
     assert.ok(start > 0, holder);

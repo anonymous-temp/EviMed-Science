@@ -80,7 +80,7 @@ export const GEO_SCHEMA = "evimed_geo";
  */
 export const GEO_TABLES = Object.freeze([
   "projects", "project_create_receipts", "claims", "question_sets", "question_groups", "questions", "journeys", "rounds", "probe_jobs", "snapshots", "facts",
-  "errors", "metrics", "strategy", "targets", "placement_plans", "sources", "articles", "article_versions",
+  "errors", "metrics", "metric_input_snapshots", "strategy", "targets", "placement_plans", "sources", "articles", "article_versions",
   "media", "media_outcomes", "orders", "order_events", "ledger", "topups", "reconciliations", "schedule_marks", "owned_links", "members", "value_profiles",
   "action_choices", "read_selections", "probe_requests", "social_jobs",
 ]);
@@ -404,6 +404,12 @@ CREATE INDEX IF NOT EXISTS geo_metrics_round_idx ON evimed_geo.metrics (round_id
 -- Coverage belongs to the saved computation, including its method version. Historical rows remain unknown.
 ALTER TABLE evimed_geo.metrics ADD COLUMN IF NOT EXISTS assessment jsonb;
 ALTER TABLE evimed_geo.metrics ADD COLUMN IF NOT EXISTS method_version text;
+ALTER TABLE evimed_geo.metrics ADD COLUMN IF NOT EXISTS computation_generation text;
+CREATE TABLE IF NOT EXISTS evimed_geo.metric_input_snapshots (
+  generation text PRIMARY KEY, geo_project_id text NOT NULL, user_id text NOT NULL, round_id text NOT NULL,
+  payload jsonb NOT NULL, created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS geo_metric_inputs_round_idx ON evimed_geo.metric_input_snapshots (geo_project_id, round_id);
 
 CREATE TABLE IF NOT EXISTS evimed_geo.strategy (
   geo_project_id text NOT NULL,

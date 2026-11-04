@@ -22,9 +22,10 @@
  */
 
 import {
-  GEO_ACTION_READ_METRICS, GEO_ARTICLE_CHANNEL_LABELS_ZH, GEO_ENGINES, GEO_MIN_CELL_SAMPLES, GEO_OWNED_LINK_PLATFORMS, GEO_STEPS, GEO_TIERS, GEO_URGENT_SEVERITIES,
+  GEO_ACTION_SERIES_POINTS, GEO_ACTION_READ_METRICS, GEO_ARTICLE_CHANNEL_LABELS_ZH, GEO_ENGINES, GEO_MIN_CELL_SAMPLES, GEO_OWNED_LINK_PLATFORMS, GEO_STEPS, GEO_TIERS, GEO_URGENT_SEVERITIES,
   GEO_VIEW_METRIC_IDS, deriveGeoActions, geoChoiceEffects, geoGroupReading, geoMetricName, geoMetricUnit, geoNeedsYou, geoStepSummary, geoTextKey, parseGeoActionKey,
 } from "@evimed/domain";
+import { storedMetricCoverage, storedNetProofs } from "./geoMetricProvenance.mjs";
 import { coverageKeyOf, roundCoverages } from "./geoCoverage.mjs";
 import { ORDER_SELECT, mapOrder } from "./geoMarketStore.mjs";
 import { GEO_SPINE_INPUT_MAX, requireCompleteSpineRows } from "./geoStore.mjs";
@@ -159,17 +160,22 @@ export class GeoSpine {
     const latestRound = headline.rows[0] ?? null;
     const baselineRound = baseline.rows[0] ?? null;
 
-    const readingRows = (await this.#query(`SELECT DISTINCT ON (m.group_id, m.metric_id, m.round_id) m.group_id, m.metric_id, m.round_id, r.kind, r.sample_date::text AS day,
-        m.numerator, m.denominator, m.value, m.status, m.method_version
+    const readingRows = (await this.#query(`SELECT DISTINCT ON (m.group_id, m.metric_id, m.round_id) m.*, r.kind, r.sample_date::text AS day
       FROM evimed_geo.metrics m JOIN evimed_geo.rounds r ON r.id = m.round_id AND r.kind = ANY($3::text[])
       WHERE m.geo_project_id = $1 AND m.scope = 'group' AND m.group_id IS NOT NULL AND m.metric_id = ANY($2::text[])
         AND m.variant IS NULL AND m.rival IS NULL AND m.arm IS NULL AND m.engine IS NULL
       ORDER BY m.group_id, m.metric_id, m.round_id, m.computed_at DESC`, [geoId, [...GEO_ACTION_READ_METRICS], [...SERIES_KINDS]])).rows;
-    const coverages = await roundCoverages(this.store, [...new Set(readingRows.map((row) => String(row.round_id)))]);
+    // Keep complete historical readings for derivation, but prove only the displayed series window.
+    const counts = new Map();
+    const proofRows = [...readingRows].sort((left, right) => String(right.day).localeCompare(String(left.day)) || String(right.round_id).localeCompare(String(left.round_id)))
+      .filter(row => { const key = `${currentOf.get(String(row.group_id)) ?? row.group_id}|${row.metric_id}`;
+        const count = counts.get(key) ?? 0; counts.set(key, count + 1); return count < GEO_ACTION_SERIES_POINTS; });
+    const coverages = await roundCoverages(this.store, [...new Set(proofRows.map((row) => String(row.round_id)))]);
+    const frozenCoverage = await storedMetricCoverage({ query: this.#query.bind(this) }, proofRows);
     const readings = readingRows.map((row) => ({
       groupId: String(currentOf.get(String(row.group_id)) ?? row.group_id), metricId: String(row.metric_id), roundId: String(row.round_id), date: text(row.day),
       kind: String(row.kind), k: num(row.numerator), n: num(row.denominator), value: num(row.value), status: String(row.status),
-      coverage: ["M-01", "M-01S", "M-02", "M-03", "M-04", "M-04C", "M-05", "M-06", "M-07", "M-11", "M-12", "M-13", "M-14", "M-15", "M-16", "M-17", "M-18", "M-19"].includes(String(row.metric_id)) ? null : coverageKeyOf(coverages.get(String(row.round_id)), { methodVersion: text(row.method_version) }),
+      coverage: row.computation_generation ? frozenCoverage.get(row.id) ?? null : ["M-01", "M-01S", "M-02", "M-03", "M-04", "M-04C", "M-05", "M-06", "M-07", "M-11", "M-12", "M-13", "M-14", "M-15", "M-16", "M-17", "M-18", "M-19"].includes(String(row.metric_id)) ? null : coverageKeyOf(coverages.get(String(row.round_id)), { methodVersion: text(row.method_version) }),
     }));
 
     const poolReadings = (await this.#query(`SELECT DISTINCT ON (m.pool, m.metric_id) m.pool, m.metric_id, m.value, m.status, m.numerator, m.denominator, m.round_id
@@ -182,12 +188,13 @@ export class GeoSpine {
 
     /** @type {Record<string, { netEffect: number | null, verdict: string | null, noiseBand: number | null, comparable: boolean, reason: string | null, roundId: string | null }>} */
     const arms = {};
-    const netRows = (await this.#query(`SELECT DISTINCT ON (m.scope, coalesce(m.pool, ''), m.variant) m.scope, m.pool, m.variant, m.value, m.status, m.reason, m.noise_band, m.round_id
+    const netRows = (await this.#query(`SELECT DISTINCT ON (m.scope, coalesce(m.pool, ''), m.variant) m.*
       FROM evimed_geo.metrics m WHERE m.geo_project_id = $1 AND m.metric_id = 'NET' AND m.scope IN ('project', 'pool') AND m.variant IS NOT NULL
       ORDER BY m.scope, coalesce(m.pool, ''), m.variant, m.computed_at DESC`, [geoId])).rows;
+    const verifiedNet = await storedNetProofs({ query: this.#query.bind(this) }, netRows);
     for (const row of netRows) {
       const key = row.scope === "project" ? `all|${row.variant}` : `${row.pool}|${row.variant}`;
-      const unknownJudge = row.status === "ok" && ["M-01", "M-02", "M-03", "M-06", "M-15", "M-19"].includes(String(row.variant));
+      const unknownJudge = row.status === "ok" && !verifiedNet.has(row.id);
       const ok = row.status === "ok" && !unknownJudge;
       arms[key] = { netEffect: ok ? num(row.value) : null, verdict: ok ? text(row.reason) : null, noiseBand: num(row.noise_band), comparable: ok,
         reason: unknownJudge ? "judge_version_unrecorded" : ok ? null : text(row.reason), roundId: text(row.round_id) };

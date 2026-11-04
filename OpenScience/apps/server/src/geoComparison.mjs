@@ -1,5 +1,7 @@
+import { createHash } from "node:crypto";
+
 /** Shared observational comparison basis; the presenter never subtracts incompatible readings. */
-import { computeGvi, geoMetricMembers, geoCellRows, documentExportDigest } from '@evimed/domain';
+import { computeGvi, geoMetricMembers, geoCellRows, geoCoverageKey, GEO_MEASUREMENT_METHOD_VERSION, documentExportDigest } from '@evimed/domain';
 export const geoComparisonKey = row => JSON.stringify([row.questionId, row.engine, row.surface?.mode ?? null]);
 export const geoComparableAnswer = row => Boolean(row.questionId) && (row.status === 'refusal' || row.status === 'valid' && Boolean(row.facts));
 export const geoComparisonCellKey = cell => documentExportDigest([cell.scope, cell.metricId, cell.pool, cell.engine, cell.groupId, cell.arm, cell.variant, cell.rival]);
@@ -70,4 +72,33 @@ export function compareGeoMetricCohorts(left, right, { mode, commonCount }) {
         return { metricId: cell.metricId, scope: cell.scope, pool: cell.pool, engine: cell.engine, groupId: cell.groupId, arm: cell.arm, variant: cell.variant, rival: cell.rival, current: cell, previous: old ?? null, comparable, reason,
             delta: measurable ? Math.round((cell.value - old.value) * 100) / 100 : null };
     });
+}
+
+
+/** A metric-local compatibility key from the exact inputs being computed, never the round's current facts. */
+export function geoMetricInputCoverage(selected, cell, setVersion) {
+    if (!cell || cell.status !== 'ok') return null;
+    const input = cell.scope === 'engine' || cell.scope === 'pool_engine' || cell.metricId === 'M-20' ? selected.computed.balance.deduped : selected.computed.balance.rows;
+    const scope = geoCellRows(input, cell, selected.metricOptions).filter(geoComparableAnswer);
+    if (!scope.length) return null;
+    const rubric = rubricVersions(selected, cell);
+    if (rubric.applies && (rubric.versions.includes(null) || rubric.versions.length > 1)) return null;
+    const parsed = scope.filter(row => row.surface?.mode !== 'inclusion' && row.status === 'valid');
+    const parsers = [...new Set(parsed.map(row => row.facts?.parserVersion || null))];
+    if (rubric.applies && (parsers.includes(null) || parsers.length > 1)) return null;
+    const surfaces = [...new Set(scope.map(row => JSON.stringify(row.surface ?? null)))];
+    if (surfaces.length !== 1) return null;
+    const base = geoCoverageKey({ setVersion, pools: [...new Set(scope.map(row => row.pool).filter(Boolean))],
+        engines: [...new Set(scope.map(row => row.engine))], surface: JSON.parse(surfaces[0]), methodVersion: GEO_MEASUREMENT_METHOD_VERSION });
+    if (!base) return null;
+    const cohort = [...new Set(scope.map(row => documentExportDigest([geoComparisonKey(row), row.pool, row.groupId, row.repeatIndex ?? 0])))].sort();
+    const hash = value => createHash('sha256').update(documentExportDigest(value)).digest('hex');
+    const questions = hash([...new Set(scope.map(row => row.questionId))].sort()).slice(0, 24);
+    const composite = compositeBasis(selected, cell);
+    const usesOwned = metricId => /^M-0[89]/u.test(metricId);
+    const ownedDependent = usesOwned(cell.metricId) || composite?.some(pool => pool.dimensions.some(dimension => dimension.ingredients.some(ingredient => usesOwned(ingredient.metricId))));
+    return `${base};questions=${questions};basis=${hash({ cell: geoComparisonCellKey(cell), cohort, members: memberKeys(selected, cell),
+        composite, rubric: rubric.versions, parsers, samplingMode: selected.metricOptions.samplingMode,
+        owned: ownedDependent ? selected.metricOptions.owned : undefined,
+        competitors: cell.rival ? selected.metricOptions.competitors : undefined })}`;
 }

@@ -253,5 +253,5 @@ it('shows why a planned order is waiting and how to recover it', async () => {
   mount();
   expect(await screen.findByText(/来源证明待处理/)).toBeInTheDocument();
   await userEvent.click(screen.getByRole('button',{name:/Frozen article/}));
-  expect(await screen.findByText(/来源证明缺失，计划暂未投放/)).toHaveTextContent('重新核验信源');
+  expect(await screen.findByText(/来源证明缺失，计划暂未投放/)).toHaveTextContent('重新核对信源');
 });

@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 import { Link } from "react-router";
 import { cn } from "@/lib/cn";
 import {
@@ -13,7 +13,9 @@ import {
 import type { FrontierItem } from "@/lib/frontierClient";
 import { DataTable } from "@/components/ui/DataTable";
 import { List, ListRow } from "@/components/ui/ListRow";
+import { Outline, useOutline } from "@/components/ui/Outline";
 import { Section } from "@/components/ui/Section";
+import { useWide } from "@/lib/useMediaQuery";
 import { overviewParts } from "@/app/routes/FrontierTopicPage";
 import { INLINE_ACTION, feedDay } from "../frontierText";
 import { ZoneCardBlock } from "./ZoneCardBlock";
@@ -30,12 +32,19 @@ export interface ZoneModulesProps {
 /**
  * The modules of a zone's 概览, in the order the server sent them (the zone type decides the order there, from one table in the
  * domain): each one kind of thing under its own heading, the heading's far end the way to all of it. A module the server sent empty is
- * not drawn.
+ * not drawn. On a narrow page the modules stand one under another and an established zone runs past six windows (2026-11-04: 6.1 on a
+ * phone, and growing with what the zone collects), so its headings are a folded contents above them.
  */
 export function ZoneModules({ modules, path, from }: ZoneModulesProps) {
+  const body = useRef<HTMLDivElement>(null);
+  const wide = useWide();
+  const { entries, active, select } = useOutline(body, { enabled: !wide, idPrefix: "zone", refresh: [modules], skip: "li" });
   return (
-    <div className="space-y-8">
-      {modules.map((module) => <ModuleView key={module.key} module={module} path={path} from={from} />)}
+    <div className="space-y-4">
+      {!wide && entries.length > 2 && <Outline layout="folded" entries={entries} active={active} onSelect={select} />}
+      <div ref={body} className="space-y-8">
+        {modules.map((module) => <ModuleView key={module.key} module={module} path={path} from={from} />)}
+      </div>
     </div>
   );
 }
