@@ -97,12 +97,12 @@ function matchJudgeTopK(value) {
   return number;
 }
 
-/** @param {unknown} value @returns {'high' | 'off'} */
+/** @param {unknown} value @param {'high' | 'off'} [fallback] @returns {'high' | 'off'} */
 function matchJudgeThinking(value, fallback = "high") {
   if (value == null || value === "") return fallback;
   const word = String(value).trim().toLowerCase();
   if (word !== "high" && word !== "off") throw new Error(`OPEN_SCIENCE_VCR_MATCH_JUDGE_THINKING must be "high" or "off", got ${JSON.stringify(value)}.`);
-  return word;
+  return /** @type {'high' | 'off'} */ (word);
 }
 
 /**
