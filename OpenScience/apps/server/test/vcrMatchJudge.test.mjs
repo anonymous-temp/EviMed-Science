@@ -522,14 +522,14 @@ test("a reader sees each pair once, ranked: verdict from what is stored, plain l
   assert.deepEqual([answer.finished, answer.failedPairs, answer.more], [2, 1, false]);
 });
 
-test("a stated disqualifier sorts after every pair without one, and silence reads as silence", async () => {
+test("a stated disqualifier is the verdict and does not move a scored trial, and silence reads as silence", async () => {
   const f = fixture({ script: ({ mode, user }) => {
     if (mode === "fit") return { content: fitJson(/Lung trial/.test(user) ? 95 : 40) };
     return /Lung trial/.test(user) ? { content: '{"1":["x",[0],"included"],"2":["y",[0],"included"],"3":["妊娠",[1],"excluded"]}' } : { content: '{"1":["x",[],"included"],"2":["未提及",[],"not enough information"]}' };
   } });
   await f.run(f.job({ topK: 5 }));
   const { ranking } = await f.reads_.forSubject(STUDY, "P-1", {});
-  assert.deepEqual(ranking.map((row) => [row.target.id, row.verdict]), [["NCT00000002", "insufficient"], ["NCT00000003", "insufficient"], ["NCT00000001", "ineligible"]], "an open clause at a score of 40 is a prerequisite open");
+  assert.deepEqual(ranking.map((row) => [row.target.id, row.verdict]), [["NCT00000001", "ineligible"], ["NCT00000002", "insufficient"], ["NCT00000003", "insufficient"]], "an open clause at a score of 40 is a prerequisite open");
   const breast = ranking.find((row) => row.target.id === "NCT00000002");
   assert.deepEqual(breast.criteria.map((row) => row.display), ["未见记载，按符合", "未见记载，需确认"]);
 });
