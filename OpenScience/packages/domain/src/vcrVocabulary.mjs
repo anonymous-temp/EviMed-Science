@@ -1234,6 +1234,9 @@ export const VCR_PEOPLE_COUNT_FIELDS = frozen([
   // the people with no event beside the people with one (a local calibration's table): `n` less `events`, so one hidden alone is
   // one subtraction away (`VCR_PEOPLE_COUNT_LINKS`); and the predictions an applied equation made for real people
   'nonEvents', 'validPredictions', 'invalidPredictions',
+  // the people a propensity trimming removed from an arm (the arm's cell: `n = kept + removed`, so a small one takes the other two with it),
+  // and the people of a target-trial emulation by when they began the strategy (`VCR_PEOPLE_COUNT_LINKS`)
+  'removed', 'startedWithinGrace', 'startedAfterGrace', 'neverStarted', 'startedAtTimeZero',
 ])
 /**
  * Keys under which an object maps a category to a head count
@@ -1243,6 +1246,10 @@ export const VCR_PEOPLE_COUNT_MAP_KEYS = frozen([
   'levels',
   // an arm's head count under the arm's name (`{ treated, control }`): the comparison's people and the people whose date could be read
   'people', 'readable',
+  // the person-trials a sequential target-trial emulation began, by arm (`{ "0": 155, "1": 93 }`)
+  'startsByArm',
+  // the events of each arm of a weighted or augmented time-to-event comparison (`{ treated, control }`)
+  'eventsByArm',
 ])
 /**
  * Keys that count people only inside the block of this name, as they do anywhere under `VCR_PEOPLE_COUNT_FIELDS`: the keys of the
@@ -1257,6 +1264,11 @@ export const VCR_PEOPLE_COUNT_BLOCK_FIELDS = Object.freeze({
   byYear: frozen(['treated', 'control']),
   estimate: frozen(['people', 'records']),
   plan: frozen(['toRead', 'alreadyRead', 'prefiltered', 'noDocuments', 'deferred']),
+  // an imputation's table of covariates: one cell per covariate with the people who lack its value (`missing` is a plain word anywhere
+  // else), and a target-trial emulation's design: the people it was run on and the median and longest wait of those who began late
+  covariates: frozen(['missing']),
+  design: frozen(['people']),
+  waitingTime: frozen(['people']),
 })
 /**
  * Counts that stand in arithmetic with each other, and what is computed from them. A table of outcomes states its people, its events
@@ -1271,6 +1283,20 @@ export const VCR_PEOPLE_COUNT_LINKS = Object.freeze([
     whole: frozen(['n', 'events', 'nonEvents']),
     derived: frozen(['observedRisk', 'calibrationInLarge']),
   }),
+  // a target-trial emulation's people by when they began the strategy: the three parts make the people, so one small part with the
+  // rest printed is a subtraction
+  Object.freeze({
+    triggers: frozen(['startedWithinGrace', 'startedAfterGrace', 'neverStarted']),
+    whole: frozen(['people', 'startedWithinGrace', 'startedAfterGrace', 'neverStarted']),
+    derived: frozen([]),
+  }),
+  // the rows a method started from, used and left out (a trained model's table), the rows an imputation analysed and the ones with a
+  // value missing, and a complete-case analysis's rows and the rows it dropped: each is a total and its part, so the part alone is a
+  // subtraction. The table's own size (`counts.realPatients`) stands beside them in another object and is never hidden unless it is
+  // small itself: that complement is the one this list cannot close.
+  Object.freeze({ triggers: frozen(['usedRows', 'excludedRows']), whole: frozen(['inputRows', 'usedRows', 'excludedRows']), derived: frozen([]) }),
+  Object.freeze({ triggers: frozen(['rowsIncomplete']), whole: frozen(['rowsAnalysed', 'rowsIncomplete']), derived: frozen([]) }),
+  Object.freeze({ triggers: frozen(['droppedRows']), whole: frozen(['rows', 'droppedRows']), derived: frozen([]) }),
 ])
 /**
  * Measures that are a function of a block's hidden count, by the field of the block they restate. A local calibration's observed risk
@@ -1280,11 +1306,13 @@ export const VCR_PEOPLE_COUNT_LINKS = Object.freeze([
 export const VCR_PEOPLE_DERIVED_MEASURES = Object.freeze({ observedRisk: 'observed_risk', calibrationInLarge: 'calibration_in_the_large' })
 /**
  * Blocks that are about one group of people and are withheld whole when the group is too small to show: of the keys named in `gates`
- * (each a map of arm to head count), any one hidden takes everything but `keep` with it. An enrolment-year row summarises the years
+ * (each a map of arm to head count, or one head count), any one hidden takes everything but `keep` with it. An enrolment-year row summarises the years
  * each arm entered in; the extremes and the middle of a handful of people are those people's dates.
  */
 export const VCR_PEOPLE_COUNT_WITHHELD_BLOCKS = Object.freeze({
   enrolmentYear: Object.freeze({ gates: frozen(['people', 'readable']), keep: frozen(['status', 'column', 'unit', 'note']) }),
+  // the median and longest wait of the people who began a strategy late: with a handful of people they are those people's waits
+  waitingTime: Object.freeze({ gates: frozen(['people']), keep: frozen(['unit', 'note']) }),
 })
 /**
  * Keys that count people but are never one of a list's sibling cells: a table's
@@ -1305,6 +1333,18 @@ export const VCR_PEOPLE_COUNT_SCALAR_FIELDS = frozen([
   // a batch reading of patient records (`matching.extract`): the people and the records it was asked to read, the records read and
   // the ones read before, and the people the table had already decided against (their records are left unread)
   'peopleSelected', 'recordsToRead', 'recordsRead', 'recordsAlreadyRead', 'prefiltered',
+  // what a trimming removed from the comparison and kept in it, and the rows a method started from and read (a table of one row per
+  // person: its rows are its people): an imputation's analysed and incomplete rows and the rows a complete-case analysis dropped, a
+  // trained model's input, used and excluded rows, and a target-trial emulation's persons, person-periods, person-trials and the rows
+  // its checks cut or dropped; the real table a synthetic one was made from or compared with (`observedRows`, `nTraining`, `nHoldout`,
+  // `holdoutRows`, `referenceSize`), the people left out of a correlation, and the smaller of the two groups a binary or time-to-event
+  // model needs people in
+  'removedTotal', 'keptTotal', 'rowsAnalysed', 'rowsIncomplete', 'droppedRows', 'inputRows', 'usedRows', 'excludedRows',
+  'persons', 'personsInTable', 'personPeriods', 'personTrials', 'expandedRows', 'eligiblePeriods', 'recordsCutShort', 'rowsDroppedWhereCut',
+  'rowsAfterEventDropped', 'observedRows', 'nTraining', 'nHoldout', 'holdoutRows', 'referenceSize', 'leftOut', 'smallerGroup',
+  // the rows of the active arm a single-arm simulated comparison was taken from (and the other arm's it left), and the control people an
+  // outcome model was fitted on
+  'rowsUsed', 'rowsOtherArm', 'controlPeopleUsed',
 ])
 /**
  * Names of measures — `{ name, value }` — whose value is a head count of the
@@ -1322,6 +1362,8 @@ export const VCR_PEOPLE_COUNT_MEASURES = frozen([
   ...VCR_ELIGIBILITY_SUMMARIES,
   // a batch reading's records, by the records of this study's people it read and the ones it had read before
   'records_read', 'records_already_read',
+  // the people a propensity trimming removed from each arm
+  'trimmed_treated', 'trimmed_control',
 ])
 
 /**

@@ -9,6 +9,7 @@
  * @module vcrTrimView
  */
 
+import { VCR_MIN_CELL_SIZE } from "@evimed/domain";
 import { list, numeric, object } from "./vcrViewsKit.mjs";
 
 /** @param {number} value */
@@ -16,8 +17,8 @@ const plain = (value) => String(Number(value.toPrecision(3)));
 
 /**
  * @param {unknown} trim the result's `diagnostics.trim`
- * @returns {{ rule: string, lower: number | null, upper: number | null, removed: number, kept: number, sentence: string,
- *   arms: Array<{ arm: string, n: number, kept: number, removed: number, share: string }>,
+ * @returns {{ rule: string, lower: number | null, upper: number | null, trimmed: boolean, removed: number | null, kept: number | null, sentence: string,
+ *   arms: Array<{ arm: string, n: number | null, kept: number | null, removed: number | null, share: string }>,
  *   covariates: Array<{ covariate: string, treated: { kept: string, removed: string }, control: { kept: string, removed: string } }> } | null}
  */
 export function presentTrim(trim) {
@@ -29,11 +30,16 @@ export function presentTrim(trim) {
   const find = (/** @type {string} */ name) => arms.find((entry) => entry.arm === name) ?? {};
   const treated = object(find("treated"));
   const control = object(find("control"));
-  const removed = Number(record.removedTotal ?? 0);
+  // An arm's counts are the engine's to state: a group of one to nine people is not described (the small-cell rule), so a count may be null.
+  // Whether anyone was removed is its own fact; a result written before it was said reads it from the total.
+  const removed = numeric(record.removedTotal);
+  const anyone = typeof record.trimmedAnyone === "boolean" ? record.trimmedAnyone : (removed ?? 0) > 0 || arms.some((entry) => (numeric(entry.removed) ?? 0) > 0);
   const rule = record.rule === "crump" ? "crump" : "fixed";
   const bounds = lower !== null && upper !== null ? `倾向评分低于 ${plain(lower)} 或高于 ${plain(upper)}` : "没有可比的对象";
-  const sentence = removed > 0
-    ? `已按${rule === "crump" ? "最优修剪规则（Crump）" : "你设定的界值"}去掉没有可比对象的人（${bounds}）：试验组 ${Number(treated.removed ?? 0)} 例、对照组 ${Number(control.removed ?? 0)} 例。结论只适用于留下的人，不再是全部试验人群。`
+  /** @param {string} name @param {Record<string, any>} arm */
+  const armSaid = (name, arm) => (numeric(arm.removed) === null ? `${name}去掉的人不足 ${VCR_MIN_CELL_SIZE} 例，不逐一列出` : `${name} ${numeric(arm.removed)} 例`);
+  const sentence = anyone
+    ? `已按${rule === "crump" ? "最优修剪规则（Crump）" : "你设定的界值"}去掉没有可比对象的人（${bounds}）：${armSaid("试验组", treated)}、${armSaid("对照组", control)}。结论只适用于留下的人，不再是全部试验人群。`
     : `修剪规则（${bounds}）没有去掉任何人，结论仍适用于全部人群。`;
   /** @param {unknown} v @param {boolean} binary */
   const say = (v, binary) => (numeric(v) === null ? "—" : binary ? `${plain(Number(v) * 100)}%` : plain(Number(v)));
@@ -44,16 +50,16 @@ export function presentTrim(trim) {
     if (!key) continue;
     const entry = byCovariate.get(key) ?? { covariate: key, treated: { kept: "—", removed: "—" }, control: { kept: "—", removed: "—" } };
     const side = row.arm === "treated" ? entry.treated : entry.control;
-    side.kept = say(row.kept, row.binary === true);
-    side.removed = say(row.removed, row.binary === true);
+    side.kept = say(row.keptMean, row.binary === true);
+    side.removed = say(row.removedMean, row.binary === true);
     byCovariate.set(key, entry);
   }
   return {
-    rule, lower, upper, removed, kept: Number(record.keptTotal ?? 0), sentence,
+    rule, lower, upper, trimmed: anyone, removed: anyone ? removed : 0, kept: numeric(record.keptTotal), sentence,
     arms: arms.map((entry) => ({
-      arm: entry.arm === "treated" ? "试验组" : "对照组", n: Number(entry.n ?? 0), kept: Number(entry.kept ?? 0), removed: Number(entry.removed ?? 0),
+      arm: entry.arm === "treated" ? "试验组" : "对照组", n: numeric(entry.n), kept: numeric(entry.kept), removed: numeric(entry.removed),
       share: numeric(entry.removedShare) === null ? "—" : `${plain(Number(entry.removedShare) * 100)}%`,
     })),
-    covariates: removed > 0 ? [...byCovariate.values()] : [],
+    covariates: anyone ? [...byCovariate.values()] : [],
   };
 }

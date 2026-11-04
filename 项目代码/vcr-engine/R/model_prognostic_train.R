@@ -223,7 +223,9 @@ vcr_job_train_prognostic_model <- function(job, output_dir = NULL, ...) {
   need <- if (type == "continuous") max(20L, 10L * (p + 1L)) else max(10L, 5L * (p + 1L))
   if (scale_n < need) {
     return(list(status = "succeeded", conclusion = "not_estimable", notEstimableRule = "too_few_events", counts = counts, measures = list(),
-                diagnostics = list(inputRows = original_n, usedRows = n, excludedRows = excluded, parameters = p, needed = need, available = scale_n, source = source)))
+                diagnostics = list(inputRows = original_n, usedRows = n, excludedRows = excluded, parameters = p, needed = need,
+                                   # the smaller of the two groups: a head count of the person's own table, so one to `minCellSize - 1` people is not stated (the small-cell rule)
+                                   smallerGroup = if (scale_n >= 1L && scale_n < vcr_limit("minCellSize", 10)) NULL else scale_n, source = source)))
   }
   if (type == "time_to_event" && !(horizon <= max(tm))) {
     # the horizon beyond the data gives no absolute risk; the relative score and its discrimination are still honest, and the equation carries no baseline

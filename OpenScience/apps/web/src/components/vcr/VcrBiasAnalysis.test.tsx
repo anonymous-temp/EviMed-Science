@@ -176,9 +176,19 @@ describe("修剪后的人群 · the restatement", () => {
     expect(root.querySelector("[data-vcr-trim-population]")).toHaveTextContent("估计针对的是留下的人");
   });
 
+  it("draws a dash, never a zero, for a group the server did not state (one to nine people)", () => {
+    const trim = trimSample();
+    const hidden = { ...trim, removed: null, kept: null, arms: [{ arm: "试验组", n: 546, kept: null, removed: null, share: "—" }, trim.arms[1]] };
+    const { container } = render(<VcrTrimRestatement trim={hidden} />);
+    const treated = container.querySelector("tr[data-vcr-trim-arm='试验组']") as HTMLElement;
+    expect(treated).toHaveTextContent("546");
+    expect(treated).toHaveTextContent("——");
+    expect(container.querySelector("[data-vcr-trim-population]")).toHaveTextContent("估计针对的是留下的人");
+  });
+
   it("draws no covariate table and no caption where nobody was removed, and nothing at all for no trimming", () => {
     const trim = trimSample();
-    const { container } = render(<VcrTrimRestatement trim={{ ...trim, removed: 0, covariates: [], sentence: "修剪规则（倾向评分低于 0.1 或高于 0.9）没有去掉任何人，结论仍适用于全部人群。" }} />);
+    const { container } = render(<VcrTrimRestatement trim={{ ...trim, trimmed: false, removed: 0, covariates: [], sentence: "修剪规则（倾向评分低于 0.1 或高于 0.9）没有去掉任何人，结论仍适用于全部人群。" }} />);
     expect(container.querySelectorAll("table")).toHaveLength(1);
     expect(container.querySelector("[data-vcr-trim-population]")).toBeNull();
     expect(container.querySelector("[data-vcr-trim-sentence]")).toHaveTextContent("结论仍适用于全部人群");
@@ -213,7 +223,8 @@ describe("读取 · the comparator payload", () => {
     const noNumbers = { ...payloads["bias-ratio"], tipping: { ...payloads["bias-ratio"].tipping, limit: "high", estimate: null } };
     expect(readVcrComparator({ biasAnalysis: noNumbers }).biasAnalysis?.tipping).toMatchObject({ limit: null, estimate: null });
     const trim = readVcrComparator({ trim: { sentence: "s", arms: [{ arm: "试验组" }, { arm: "对照组", n: 4, kept: 3, removed: 1 }], covariates: [{ treated: {} }] } }).trim;
-    expect(trim?.arms).toEqual([{ arm: "对照组", n: 4, kept: 3, removed: 1, share: "—" }]);
+    // a count the server did not state is not a zero: the arm is still there, with dashes in its cells
+    expect(trim?.arms).toEqual([{ arm: "试验组", n: null, kept: null, removed: null, share: "—" }, { arm: "对照组", n: 4, kept: 3, removed: 1, share: "—" }]);
     expect(trim?.covariates).toEqual([]);
   });
 });

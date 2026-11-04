@@ -23,6 +23,7 @@
  */
 
 import { createHash } from "node:crypto";
+import { VCR_MIN_CELL_SIZE } from "@evimed/domain";
 import { finishPremises } from "./vcrPremises.mjs";
 import { list, markFor, measureLabel, measureValue, numeric, object, text } from "./vcrViewsKit.mjs";
 
@@ -52,7 +53,7 @@ const EFFECT_WORDS = Object.freeze(/** @type {Record<string, string>} */ ({
 const CORRELATION_WORDS = Object.freeze(/** @type {Record<string, string>} */ ({
   linear: "留出折上的预测值与结局的相关系数",
   logistic: "留出折上的预测概率与 0/1 结局的相关系数（点二列相关）",
-  cox: "留出折上的风险分与「到时间点之前是否发生事件」的相关系数，只算时间点上状态已知的人；这是近似，因为样本量节省的公式本来是为连续结局写的",
+  cox: "留出折上的风险分与“到时间点之前是否发生事件”的相关系数，只算时间点上状态已知的人；这是近似，因为样本量节省的公式本来是为连续结局写的",
 }));
 const DEFAULT_LAMBDAS = [1, 0.9, 0.75, 0.5];
 const DEFAULT_GAMMAS = [1, 1.1, 1.25];
@@ -62,7 +63,7 @@ const plain = (value, digits = 3) => String(Number(value.toPrecision(digits)));
 /** The sentence a refusal rule is worded by. @param {Record<string, any>} diagnostics @param {string | null} rule */
 function refusalWords(diagnostics, rule) {
   if (rule === "too_few_events") {
-    return `用来训练的数据太少：这个模型有 ${numeric(diagnostics.parameters) ?? "?"} 个参数，较少的那一类（发生事件的人，或没发生的人）至少要 ${numeric(diagnostics.needed) ?? "?"} 个，现在只有 ${numeric(diagnostics.available) ?? "?"} 个。没有训练出模型，也没有给出任何数字。`;
+    return `用来训练的数据太少：这个模型有 ${numeric(diagnostics.parameters) ?? "?"} 个参数，较少的那一类（发生事件的人，或没发生的人）至少要 ${numeric(diagnostics.needed) ?? "?"} 个，${numeric(diagnostics.smallerGroup) === null ? `现在不足 ${VCR_MIN_CELL_SIZE} 个，具体人数不逐一说明` : `现在只有 ${numeric(diagnostics.smallerGroup)} 个`}。没有训练出模型，也没有给出任何数字。`;
   }
   if (rule === "nuisance_model_not_estimable") {
     return "某一折或最终的模型拟合不出来（没有收敛，或某个预测因子把结局分得一清二楚）。没有训练出模型，也没有给出任何数字。";

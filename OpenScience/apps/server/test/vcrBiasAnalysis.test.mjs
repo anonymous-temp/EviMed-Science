@@ -173,6 +173,21 @@ test("a propensity trimming restates the population: who was removed in each arm
   assert.equal(presentTrim(null), null);
   const none = presentTrim({ rule: "crump", lower: 0, upper: 1, arms: [{ arm: "treated", n: 5, kept: 5, removed: 0, removedShare: 0 }, { arm: "control", n: 5, kept: 5, removed: 0, removedShare: 0 }], baseline: [], removedTotal: 0, keptTotal: 10 });
   assert.match(none.sentence, /没有去掉任何人/);
+
+  // The engine does not state a group of one to nine people (review P0-1): the page says so and counts nothing it was not given, and
+  // the limit and the premise still stand because someone was removed.
+  const hidden = structuredClone(result.diagnostics.trim);
+  Object.assign(hidden, { removedTotal: null, keptTotal: null, trimmedAnyone: true });
+  Object.assign(hidden.arms[0], { kept: null, removed: null, removedShare: null, suppressed: ["kept", "removed", "removedShare"] });
+  for (const entry of hidden.baseline) if (entry.arm === "treated") entry.removedMean = null;
+  const said = presentTrim(hidden);
+  assert.match(said.sentence, /试验组去掉的人不足 10 例，不逐一列出、对照组 \d+ 例。结论只适用于留下的人/);
+  assert.equal(said.trimmed, true);
+  assert.deepEqual([said.arms[0].kept, said.arms[0].removed, said.arms[0].share, said.removed], [null, null, "—", null]);
+  assert.equal(said.covariates.find((entry) => entry.covariate === "x1").treated.removed, "—", "no baseline of the removed three");
+  assert.ok(vcrResultLimits({ conclusion: "limited", method: "comparator.propensity_weight", diagnostics: { trim: hidden }, measures: [] }).some((entry) => entry.key === "trim"));
+  const kept = vcrPremises("comparator", { route: "external_control", diagnostics: { trim: hidden }, measures: {} }).find((entry) => entry.key === "trimmedPopulation");
+  assert.match(kept.value, /去掉试验组不足 10 例的部分不逐一列出、对照组 \d+ 例/);
 });
 
 test("the time-to-event doubly robust estimate and an unanchored G-computation comparison carry their premises", () => {

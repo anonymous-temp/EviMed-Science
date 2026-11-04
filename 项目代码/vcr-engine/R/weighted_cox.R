@@ -227,8 +227,7 @@ vcr_job_weighted_cox <- function(job, output_dir = NULL, cancel_file = NULL, ...
       vcr_measure("survival_difference_at_tau", est[5], interval = ci(5), source = est_src)),
     list(vcr_measure("effective_sample_size", ess, source = est_src),
          vcr_measure("worst_standardized_difference", max(abs(balance$smdAdjusted)), source = est_src)),
-    if (!is.null(trim_info)) list(vcr_measure("trimmed_treated", trim_info$arms[[1]]$removed, unit = "例", source = "calculated"),
-                                  vcr_measure("trimmed_control", trim_info$arms[[2]]$removed, unit = "例", source = "calculated")))
+    if (!is.null(trim_info)) vcr_trim_measures(trim_info))
 
   # the E-value of the hazard ratio and of the limit of its interval nearer the null, after the estimate and beside it (A5); a hazard
   # ratio stands for a risk ratio only when the outcome is rare (under 15 percent), and the approximation for a common one is the
@@ -241,7 +240,7 @@ vcr_job_weighted_cox <- function(job, output_dir = NULL, cancel_file = NULL, ...
   wt <- w; wt[treat == 0L & kp] <- pmin(wt[treat == 0L & kp], cap)
   if (identical(estimand, "ATT")) wt[treat == 0L & kp] <- wt[treat == 0L & kp] * sum(treat[kp] == 1L) / sum(wt[treat == 0L & kp])
   trunc_beta <- vcr_cox_beta(time[kp], status[kp], treat[kp], wt[kp], ties)
-  trimmed_someone <- !is.null(trim_info) && trim_info$removedTotal > 0L
+  trimmed_someone <- !is.null(trim_info) && isTRUE(trim_info$trimmedAnyone)
 
   tt_limits <- .vcr_target_trial_limits(sc)
   changed <- !identical(estimand, "ATT")

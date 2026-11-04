@@ -53,15 +53,15 @@ vcr_case("N70a", c("AC-08", "AC-30"), function() {
     identical(as.integer(v("trimmed_treated")), as.integer(rem1)) && identical(as.integer(v("trimmed_control")), as.integer(rem0)) &&
     rem1 > 0 && rem0 > 0 &&
     identical(tb$arms[[1]]$removed, rem1) && identical(tb$arms[[2]]$removed, rem0) &&
-    abs(base1$removed - mean(d$x1[!hb$keep & d$arm == 1L])) < 1e-12 && abs(base1$kept - mean(d$x1[hb$keep & d$arm == 1L])) < 1e-12 &&
-    abs(base0$removed - mean(d$x2[!hb$keep & d$arm == 0L])) < 1e-12 &&
+    abs(base1$removedMean - mean(d$x1[!hb$keep & d$arm == 1L])) < 1e-12 && abs(base1$keptMean - mean(d$x1[hb$keep & d$arm == 1L])) < 1e-12 &&
+    abs(base0$removedMean - mean(d$x2[!hb$keep & d$arm == 0L])) < 1e-12 &&
     identical(tb$targetPopulation, "trimmed_population") && "target_population_trimmed" %in% unlist(r$diagnostics$limitedBy) &&
     identical(sort(zero_rows), sort(which(!hb$keep))) && max(abs(tab$weight[hb$keep] - hb$w)) < 1e-10 &&
     abs(tb$lower - 0.1) < 1e-15 && abs(tb$upper - 0.9) < 1e-15 &&
     length(vcr_validate_result(r)) == 0L && identical(r$counts$realPatients, 1200L)
   list(pass = ok,
        detail = sprintf("effect among the kept %.10f vs by hand %.10f; removed %d trial / %d control people (by hand %d / %d); mean x1 of the removed trial people %.4f vs by hand %.4f, of the kept %.4f; zero-weight rows %d = removed %d; effective sample size %.1f",
-                        v("weighted_difference"), hb$est, tb$arms[[1]]$removed, tb$arms[[2]]$removed, rem1, rem0, base1$removed, mean(d$x1[!hb$keep & d$arm == 1L]), base1$kept,
+                        v("weighted_difference"), hb$est, tb$arms[[1]]$removed, tb$arms[[2]]$removed, rem1, rem0, base1$removedMean, mean(d$x1[!hb$keep & d$arm == 1L]), base1$keptMean,
                         length(zero_rows), sum(!hb$keep), r$counts$effectiveSampleSize))
 })
 
@@ -177,4 +177,34 @@ vcr_case("N70e", c("AC-08", "AC-30"), function() {
        detail = sprintf("bounds that remove nobody: %d removed, effect %.10f = untrimmed %.10f, conclusion %s; bounds [0.499, 0.501]: %s / %s; a 1.3.0 job with a trimming: %s (%s)",
                         r_wide$diagnostics$trim$removedTotal, vcr_measure_value(r_wide, "weighted_difference"), vcr_measure_value(r_none, "weighted_difference"), r_wide$conclusion,
                         r_tight$status, r_tight$notEstimableRule %||% "-", r_old$status, paste(vcr_test_issue_codes(r_old), collapse = ",")))
+})
+
+vcr_case("N70f", c("AC-08", "AC-30"), function() {
+  # The small-cell rule is the engine's own on this restatement (review P0-1): a trimming that removes three treated people and many
+  # control people states neither the treated arm's cells nor the totals (n = kept + removed would give the three back), no baseline of the
+  # three, no measure for them; the control arm, whose removed group is large, is stated in full, and the estimate is the same one.
+  set.seed(20261103L, kind = VCR_RNG_KIND)
+  d <- .n70_gen()
+  ps <- .n70_by_hand(d, 0.1)$ps
+  dist <- pmin(ps, 1 - ps)
+  t_dist <- sort(dist[d$arm == 1L]); lower <- (t_dist[3] + t_dist[4]) / 2
+  hb <- .n70_by_hand(d, lower)
+  rem1 <- sum(!hb$keep & d$arm == 1L); rem0 <- sum(!hb$keep & d$arm == 0L)
+  r <- vcr_test_run(.n70_job(d, "n70f", scenario = list(trim = list(rule = "fixed", lower = lower)), replicates = 200L))
+  tb <- r$diagnostics$trim
+  base_t <- tb$baseline[tb$baseline$arm == "treated", ]; base_c <- tb$baseline[tb$baseline$arm == "control", ]
+  names_ <- vapply(r$measures, function(m) m$name, character(1))
+  ok <- identical(r$status, "succeeded") && rem1 == 3L && rem0 >= 10L &&
+    abs(vcr_measure_value(r, "weighted_difference") - hb$est) < 1e-10 &&
+    is.null(tb$arms[[1]]$removed) && is.null(tb$arms[[1]]$kept) && is.null(tb$arms[[1]]$removedShare) &&
+    setequal(tb$arms[[1]]$suppressed, c("kept", "removed", "removedShare")) && identical(tb$arms[[1]]$n, sum(d$arm == 1L)) &&
+    identical(tb$arms[[2]]$removed, rem0) && identical(tb$arms[[2]]$kept, sum(hb$keep & d$arm == 0L)) &&
+    is.null(tb$removedTotal) && is.null(tb$keptTotal) && isTRUE(tb$trimmedAnyone) && identical(tb$targetPopulation, "trimmed_population") &&
+    all(is.na(base_t$removedMean)) && all(is.finite(base_t$keptMean)) && all(is.finite(base_c$removedMean)) &&
+    !("trimmed_treated" %in% names_) && identical(as.integer(vcr_measure_value(r, "trimmed_control")), rem0) &&
+    "target_population_trimmed" %in% unlist(r$diagnostics$limitedBy) && length(vcr_validate_result(r)) == 0L
+  list(pass = ok,
+       detail = sprintf("trimming that removes %d treated people (rule: under 10 is not stated) and %d control people: treated cells kept/removed/share %s/%s/%s, totals %s/%s, treated removed-baseline NA %s, control stated %s; measures %s; effect %.10f vs by hand %.10f",
+                        rem1, rem0, deparse(tb$arms[[1]]$kept), deparse(tb$arms[[1]]$removed), deparse(tb$arms[[1]]$removedShare), deparse(tb$removedTotal), deparse(tb$keptTotal),
+                        all(is.na(base_t$removedMean)), tb$arms[[2]]$removed, paste(names_[grepl("trimmed", names_)], collapse = ","), vcr_measure_value(r, "weighted_difference"), hb$est))
 })

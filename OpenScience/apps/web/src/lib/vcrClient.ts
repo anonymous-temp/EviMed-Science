@@ -1161,10 +1161,12 @@ export interface VcrTrimCard {
   rule: "fixed" | "crump";
   lower: number | null;
   upper: number | null;
-  removed: number;
-  kept: number;
+  /** Whether anyone was removed: the counts below are the engine's to state and a group of one to nine people has none. */
+  trimmed: boolean;
+  removed: number | null;
+  kept: number | null;
   sentence: string;
-  arms: Array<{ arm: string; n: number; kept: number; removed: number; share: string }>;
+  arms: Array<{ arm: string; n: number | null; kept: number | null; removed: number | null; share: string }>;
   /** The removed beside the kept, per covariate; empty when nobody was removed. Values are the server's own text. */
   covariates: Array<{ covariate: string; treated: { kept: string; removed: string }; control: { kept: string; removed: string } }>;
 }
@@ -2797,10 +2799,10 @@ function readTrim(raw: unknown): VcrTrimCard | null {
   const side = (value: unknown) => ({ kept: text(obj(value).kept) ?? "—", removed: text(obj(value).removed) ?? "—" });
   return {
     rule: trim.rule === "crump" ? "crump" : "fixed", lower: finite(trim.lower), upper: finite(trim.upper),
-    removed: finite(trim.removed) ?? 0, kept: finite(trim.kept) ?? 0, sentence,
+    trimmed: trim.trimmed === true, removed: finite(trim.removed), kept: finite(trim.kept), sentence,
     arms: arr(trim.arms).flatMap((row) => {
-      const arm = text(row.arm), n = finite(row.n), kept = finite(row.kept), removed = finite(row.removed);
-      return arm && n !== null && kept !== null && removed !== null ? [{ arm, n, kept, removed, share: text(row.share) ?? "—" }] : [];
+      const arm = text(row.arm);
+      return arm ? [{ arm, n: finite(row.n), kept: finite(row.kept), removed: finite(row.removed), share: text(row.share) ?? "—" }] : [];
     }),
     covariates: arr(trim.covariates).flatMap((row) => {
       const covariate = text(row.covariate);

@@ -237,26 +237,52 @@ vcr_trimmed_weights <- function(X, treat, estimand, trim) {
 
 #' Who the trimming removed and who it left, per arm and per covariate: the target population restated. A continuous covariate is
 #' reported by its mean and a 0/1 one by its proportion (`binary`); a group with nobody in it has no value.
-vcr_trim_restatement <- function(X, treat, keep, cut, covariates = colnames(X)) {
+#'
+#' The small-cell rule is the engine's own here, as in `vcr_record_privacy`: this restatement is read by a page that is shown to a
+#' member who may not read patient-level rows, so a removed group of one to `min_cell - 1` people is never described. `n = kept +
+#' removed`, so a small one of the three hides the other two and the share with it (stating the rest is a subtraction); the totals go
+#' when any arm's cells did, and the baseline of a removed (or kept) group of that size is not given (a mean of three people is
+#' three people's values). The means are named `keptMean` / `removedMean` so that no reader takes them for head counts.
+vcr_trim_restatement <- function(X, treat, keep, cut, covariates = colnames(X), min_cell = vcr_limit("minCellSize", 10)) {
   X <- as.matrix(X)
+  small <- function(k) k >= 1L && k < min_cell
   arm_row <- function(a, name) {
-    n <- sum(treat == a)
-    list(arm = name, n = n, kept = sum(keep & treat == a), removed = sum(!keep & treat == a), removedShare = if (n > 0) sum(!keep & treat == a) / n else NA_real_)
+    n <- sum(treat == a); k <- sum(keep & treat == a); r <- sum(!keep & treat == a)
+    held <- small(n) || small(k) || small(r)
+    cells <- list(arm = name, n = if (small(n)) NULL else n, kept = if (held) NULL else k, removed = if (held) NULL else r,
+                  removedShare = if (held || n == 0L) NULL else r / n)
+    if (held) cells$suppressed <- c(if (small(n)) "n", "kept", "removed", "removedShare")
+    cells
   }
   arms <- list(arm_row(1L, "treated"), arm_row(0L, "control"))
-  mean_of <- function(v, idx) if (any(idx)) mean(v[idx]) else NA_real_
+  any_held <- any(vapply(arms, function(a) !is.null(a$suppressed), logical(1)))
+  # a group of nobody has no mean, and a group of one to `min_cell - 1` people has none to show
+  mean_of <- function(v, idx) { k <- sum(idx); if (k == 0L || small(k)) NA_real_ else mean(v[idx]) }
   rows <- do.call(rbind, lapply(c(1L, 0L), function(a) {
     do.call(rbind, lapply(seq_len(ncol(X)), function(j) {
       v <- X[, j]
       data.frame(covariate = covariates[j], arm = if (a == 1L) "treated" else "control", binary = all(v %in% c(0, 1)),
-                 kept = mean_of(v, keep & treat == a), removed = mean_of(v, !keep & treat == a),
+                 keptMean = mean_of(v, keep & treat == a), removedMean = mean_of(v, !keep & treat == a),
                  stringsAsFactors = FALSE)
     }))
   }))
   list(rule = cut$rule, lower = cut$lower, upper = cut$upper, arms = arms, baseline = rows,
-       removedTotal = sum(!keep), keptTotal = sum(keep),
+       removedTotal = if (any_held) NULL else sum(!keep), keptTotal = if (any_held) NULL else sum(keep),
+       # whether anyone was removed is said apart from how many: the page words the target population from it
+       trimmedAnyone = any(!keep),
        targetPopulation = if (any(!keep)) "trimmed_population" else "full_population",
        note = "the estimate is about the people who were kept: a person with no comparable counterpart is removed, not adjusted for (EU HTA guideline, 6.2)")
+}
+
+#' The two measures that say how many people the trimming removed, one per arm, for the arms whose count may be stated: an arm whose
+#' removed group is of one to `min_cell - 1` people has none (`vcr_trim_restatement`).
+vcr_trim_measures <- function(trim_info) {
+  out <- list()
+  for (side in list(list("trimmed_treated", 1L), list("trimmed_control", 2L))) {
+    shown <- trim_info$arms[[side[[2L]]]]$removed
+    if (!is.null(shown)) out[[length(out) + 1L]] <- vcr_measure(side[[1L]], shown, unit = "例", source = "calculated")
+  }
+  out
 }
 
 #' Kish effective sample size. Reported beside, never instead of, the real

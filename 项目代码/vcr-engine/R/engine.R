@@ -1548,15 +1548,13 @@ vcr_job_weight_comparator <- function(job, output_dir = NULL, cancel_file = NULL
   trunc_est <- tryCatch(est_of(wt, all_idx)[1], error = function(e) NA_real_)
   tt_limits <- .vcr_target_trial_limits(sc)
   changed <- !identical(estimand, "ATT")
-  trimmed_someone <- !is.null(trim_info) && trim_info$removedTotal > 0L
+  trimmed_someone <- !is.null(trim_info) && isTRUE(trim_info$trimmedAnyone)
   # the balance is read, not judged: a weighted covariate still apart limits the estimate and rides beside it (2026-11-01)
   verdict <- if (reads_balance) vcr_balance_verdict(balance) else NULL
   imbalance <- vcr_balance_limit(verdict)
   limited <- boot$failureShare > 0.01 || changed || length(tt_limits) > 0L || !is.null(imbalance) || trimmed_someone
   # how many people the trimming removed, as numbers of their own beside the estimate (the baseline of who they are is in `trim`)
-  if (!is.null(trim_info)) measures <- c(measures, list(
-    vcr_measure("trimmed_treated", trim_info$arms[[1]]$removed, unit = "例", source = "calculated"),
-    vcr_measure("trimmed_control", trim_info$arms[[2]]$removed, unit = "例", source = "calculated")))
+  if (!is.null(trim_info)) measures <- c(measures, vcr_trim_measures(trim_info))
   list(status = "succeeded", measures = measures,
        conclusion = if (limited) "limited" else "estimable",
        counts = vcr_counts(realPatients = nrow(subj), effectiveSampleSize = ess,

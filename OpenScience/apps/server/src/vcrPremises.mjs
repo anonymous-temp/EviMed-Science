@@ -24,7 +24,7 @@
  * @module vcrPremises
  */
 
-import { VCR_EFFECT_DISCOUNT_LABEL_ZH, VCR_EFFECT_DISCOUNT_LIMITS_ZH, VCR_ESTIMAND_LABELS_ZH, VCR_PREMISES_DECISIVE_MAX, VCR_PREMISE_SOURCES } from "@evimed/domain";
+import { VCR_EFFECT_DISCOUNT_LABEL_ZH, VCR_EFFECT_DISCOUNT_LIMITS_ZH, VCR_ESTIMAND_LABELS_ZH, VCR_MIN_CELL_SIZE, VCR_PREMISES_DECISIVE_MAX, VCR_PREMISE_SOURCES } from "@evimed/domain";
 import { imputationPremise } from "./vcrImputationView.mjs";
 import { targetTrialPremises } from "./vcrTargetTrialView.mjs";
 import { TIME_UNIT_WORDS, hazardLawWords, list, numeric, object, text } from "./vcrViewsKit.mjs";
@@ -438,11 +438,15 @@ function comparatorPremises(input) {
   // Who the estimate is about after a propensity trimming: the people with no comparable counterpart are removed, so the conclusion is the
   // kept people's (EU HTA guideline 6.2). A fixed bound is the person's; Crump's rule is the engine's default.
   const trim = object(diagnostics.trim);
-  if (Object.keys(trim).length && Number(trim.removedTotal) > 0) {
+  if (Object.keys(trim).length && (typeof trim.trimmedAnyone === "boolean" ? trim.trimmedAnyone : Number(trim.removedTotal) > 0)) {
     const arms = list(trim.arms).map(object);
-    const removed = (/** @type {string} */ arm) => Number(arms.find((entry) => entry.arm === arm)?.removed ?? 0);
+    // a group of one to nine people is not stated (the engine's small-cell rule)
+    const removed = (/** @type {string} */ arm, /** @type {string} */ name) => {
+      const count = numeric(arms.find((entry) => entry.arm === arm)?.removed);
+      return count === null ? `${name}不足 ${VCR_MIN_CELL_SIZE} 例的部分不逐一列出` : `${name} ${count} 例`;
+    };
     rows.push({ key: "trimmedPopulation", label: "修剪后的目标人群",
-      value: `去掉试验组 ${removed("treated")} 例、对照组 ${removed("control")} 例（倾向评分低于 ${plain(Number(trim.lower))} 或高于 ${plain(Number(trim.upper))}）；结论只适用于留下的人`,
+      value: `去掉${removed("treated", "试验组")}、${removed("control", "对照组")}（倾向评分低于 ${plain(Number(trim.lower))} 或高于 ${plain(Number(trim.upper))}）；结论只适用于留下的人`,
       source: trim.rule === "fixed" ? "assumed" : "default", decisive: true });
   }
 

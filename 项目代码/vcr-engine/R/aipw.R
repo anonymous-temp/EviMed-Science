@@ -325,10 +325,8 @@ vcr_job_aipw <- function(job, output_dir = NULL, cancel_file = NULL, ...) {
     vcr_evalue_after(m$value, m$interval$low, m$interval$high, "risk_ratio", FALSE, est_src)
   } else NULL
   if (!is.null(evalue)) measures <- c(measures, evalue$measures)
-  trimmed_someone <- !is.null(trim_info) && trim_info$removedTotal > 0L
-  if (!is.null(trim_info)) measures <- c(measures, list(
-    vcr_measure("trimmed_treated", trim_info$arms[[1]]$removed, unit = "例", source = "calculated"),
-    vcr_measure("trimmed_control", trim_info$arms[[2]]$removed, unit = "例", source = "calculated")))
+  trimmed_someone <- !is.null(trim_info) && isTRUE(trim_info$trimmedAnyone)
+  if (!is.null(trim_info)) measures <- c(measures, vcr_trim_measures(trim_info))
   tt_limits <- .vcr_target_trial_limits(sc)
   verdict <- if (reads_balance) vcr_balance_verdict(balance) else NULL
   # before the verdict, a weighted covariate still apart by the floor was said by this one code and nothing else
@@ -352,7 +350,7 @@ vcr_job_aipw <- function(job, output_dir = NULL, cancel_file = NULL, ...) {
          method = "aipw", estimand = "ATT", endpoint = endpoint, scale = scale_word,
          nuisance = list(propensity = list(covariates = as.list(ps_covs), family = "binomial", converged = core$psConverged),
                          outcome = list(covariates = as.list(out_covs), family = if (binary) "binomial" else "gaussian", fittedOn = "external controls only",
-                                        controlsUsed = sum(treat_k == 0L), converged = core$outConverged, separation = isTRUE(core$separation))),
+                                        controlPeopleUsed = sum(treat_k == 0L), converged = core$outConverged, separation = isTRUE(core$separation))),
          components = list(outcomeRegression = core$regression, weighting = core$weighting, aipw = tau_hat,
                            note = "the plug-in of the outcome model and the odds-weighted control mean beside the augmented estimate; their agreement is what double robustness looks like when both models are right"),
          influence = influence_block,

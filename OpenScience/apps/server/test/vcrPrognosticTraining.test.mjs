@@ -63,6 +63,9 @@ test("a model that was not estimated says why in a sentence and shows no number"
   const card = prognosticCard(fixture("too-few-events"));
   assert.equal(card.form, "refused");
   assert.match(card.refusal, /太少/);
+  // four people are not stated (the small-cell rule is the engine's): the sentence says "under ten", never the number
+  assert.match(card.refusal, /现在不足 10 个，具体人数不逐一说明/);
+  assert.doesNotMatch(card.refusal, /只有 4 个/);
   assert.deepEqual(card.headline, []);
   assert.equal(card.savings, null);
 });

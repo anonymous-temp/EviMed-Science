@@ -6,11 +6,14 @@ import { numberText } from "./vcrText";
 type ArmRow = VcrTrimCard["arms"][number];
 type CovariateRow = VcrTrimCard["covariates"][number];
 
+/** A head count the engine did not state (a group of one to nine people) is a dash, never a zero. */
+const count = (value: number | null) => (value === null ? "—" : numberText(value, 0));
+
 const armColumns: Array<DataColumn<ArmRow>> = [
   { key: "arm", header: "组别", rowHeader: true, cell: (row) => row.arm },
-  { key: "n", header: "人数", align: "right", cell: (row) => <span className="tabular-nums">{numberText(row.n, 0)}</span> },
-  { key: "kept", header: "留下", align: "right", cell: (row) => <span className="tabular-nums">{numberText(row.kept, 0)}</span> },
-  { key: "removed", header: "去掉", align: "right", cell: (row) => <span className="tabular-nums">{numberText(row.removed, 0)}</span> },
+  { key: "n", header: "人数", align: "right", cell: (row) => <span className="tabular-nums">{count(row.n)}</span> },
+  { key: "kept", header: "留下", align: "right", cell: (row) => <span className="tabular-nums">{count(row.kept)}</span> },
+  { key: "removed", header: "去掉", align: "right", cell: (row) => <span className="tabular-nums">{count(row.removed)}</span> },
   { key: "share", header: "去掉的比例", align: "right", cell: (row) => <span className="tabular-nums">{row.share}</span> },
 ];
 
@@ -45,7 +48,7 @@ export function VcrTrimRestatement({ trim }: { trim: VcrTrimCard | null | undefi
           <DataTable label="被去掉的人与留下的人" columns={covariateColumns} rows={trim.covariates} rowKey={(row) => row.covariate} ground="surface" />
         </div>
       )}
-      {trim.removed > 0 && <p data-vcr-trim-population="" className="text-caption text-text-3">估计针对的是留下的人</p>}
+      {trim.trimmed && <p data-vcr-trim-population="" className="text-caption text-text-3">估计针对的是留下的人</p>}
     </div>
   );
 }

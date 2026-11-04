@@ -89,8 +89,10 @@ export function vcrResultLimits({ conclusion = null, method = null, route = null
   const balance = vcrBalanceSentence(verdict)
   if (balance) limits.push({ key: 'balance', text: balance })
   // A propensity trimming removed the people with no comparable counterpart: the estimate is about the people who were kept (EU HTA guideline 6.2).
-  const trimmed = Number(object(found.trim).removedTotal)
-  if (Number.isFinite(trimmed) && trimmed > 0) limits.push({ key: 'trim', text: '结论只适用于修剪后留下的人：没有可比对象的人已被去掉，他们的情况不在这个结果里。' })
+  // (whether anyone was removed is its own fact: the head counts of a group of one to nine people are not stated)
+  const trimBlock = object(found.trim)
+  const trimmed = typeof trimBlock.trimmedAnyone === 'boolean' ? trimBlock.trimmedAnyone : Number(trimBlock.removedTotal) > 0
+  if (trimmed) limits.push({ key: 'trim', text: '结论只适用于修剪后留下的人：没有可比对象的人已被去掉，他们的情况不在这个结果里。' })
   // Missing covariates that were imputed (algorithm round C7): what the pooled answer rests on beyond the data, when it is thinner than asked.
   const imputation = object(found.imputation)
   if (imputation.performed === true) {
