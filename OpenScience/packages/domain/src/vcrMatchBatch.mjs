@@ -61,8 +61,8 @@ export const VCR_MATCH_BATCH_LIMITS = Object.freeze({
 
 /** What one judging job takes (`matching.judge`), whatever a deployment configures. */
 export const VCR_MATCH_JUDGE_LIMITS = Object.freeze({
-  /** The people of one protocol's roster. */
-  subjects: 5000,
+  /** The people of one job, a sanity bound on what its scenario holds: a mark per person lives in its checkpoint, and a study larger than this runs as several selections. */
+  subjects: 50_000,
   /** The trials one person is judged against in one job. */
   trials: 500,
   /** The characters of a person's record one call reads; a longer record is split and judged per part. */

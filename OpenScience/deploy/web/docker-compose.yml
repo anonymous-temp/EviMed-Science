@@ -871,14 +871,13 @@ services:
       OPEN_SCIENCE_VCR_MATCH_JUDGE_OUTPUT_TOKENS:
       OPEN_SCIENCE_VCR_MATCH_JUDGE_TIMEOUT_MS:
       OPEN_SCIENCE_VCR_MATCH_JUDGE_MAX_UPSTREAM_FAILURES:
-      OPEN_SCIENCE_VCR_MIN_CELL_SIZE:
-      OPEN_SCIENCE_VCR_DERIVED_TABLE_MAX_BYTES:
-      OPEN_SCIENCE_VCR_FORECAST_PROVIDERS_FILE: ${OPEN_SCIENCE_VCR_FORECAST_HOST_DIR:+/run/evimed/vcr-forecast/providers.json}
-      # Numerical validation is operator-installed evidence, never a model
-      # write. Set the container path only when its read-only host file exists.
-      OPEN_SCIENCE_VCR_METHOD_VALIDATION_FILE: ${OPEN_SCIENCE_VCR_METHOD_VALIDATION_HOST_FILE:+/run/evimed/vcr-method-validation.json}
-      # The engine's bearer token and receipt key are files, like every other
-      # key this service holds (bound below; /dev/null where the deployment has
+      OPEN_SCIENCE_VCR_MATCH_JUDGE_SLICE_PAIRS:
+      OPEN_SCIENCE_VCR_MATCH_JUDGE_SLICE_MS:
+      OPEN_SCIENCE_VCR_MATCH_JUDGE_OUTAGE_WAITS:
+      OPEN_SCIENCE_VCR_RECORDS_IMPORT_SLICE_ENTRIES:
+      OPEN_SCIENCE_VCR_RECORDS_IMPORT_SLICE_MS:
+      OPEN_SCIENCE_VCR_RECORDS_IMPORT_CONCURRENCY:
+      OPEN_SCIENCE_VCR_RECORDS_IMPORT_PROPOSAL_TIMEOUT_MS:
       OPEN_SCIENCE_VCR_REGISTRY_WATCH_ENABLED:
       OPEN_SCIENCE_VCR_REGISTRY_WATCH_BATCH:
       OPEN_SCIENCE_VCR_REGISTRY_WATCH_HOURS:

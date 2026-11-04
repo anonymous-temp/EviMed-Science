@@ -22,7 +22,7 @@ let isolated, database, directory, vcr, intake, receipts, project, documents;
 let sequence = 0;
 /** @type {any[]} */ const asked = [];
 /** @type {any} */ let relevance = { relevant: [] };
-/** @type {any} */ let shapes = { tables: [] };
+const shapes = { tables: [] };
 const origin = { userId: "owner", projectId: "project", rootSessionId: "root", runId: "run", callId: "call" };
 
 before(async () => {

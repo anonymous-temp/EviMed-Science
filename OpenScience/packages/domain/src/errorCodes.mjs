@@ -1548,6 +1548,10 @@ export const VCR_GATEWAY_ERROR_CODES = Object.freeze([
   // different facts and the run reports them differently.
   'registry_not_configured',
   'registry_not_found',
+  'registry_busy',
+  'registry_page_timeout',
+  'registry_page_unreadable',
+  'registry_watch_timeout',
   'registry_id_invalid',
   'registry_record_unreadable',
   'registry_answer_unreadable',
@@ -1647,7 +1651,7 @@ export const VCR_MODULE_ERROR_CODES = Object.freeze([
   'vcr_intake_source_invalid', 'vcr_intake_source_changed', 'vcr_intake_payload_invalid', 'vcr_intake_format_invalid', 'vcr_intake_map_changed',
   // a source held in FHIR, OMOP or ADaM, converted to the module's tables in the same container (vcrImport.mjs)
   'vcr_import_not_this_format', 'vcr_import_nothing_to_import', 'vcr_import_unreadable', 'vcr_import_version_unsupported',
-  'vcr_import_columns_unknown', 'vcr_import_entry_failed', 'vcr_import_failed', 'vcr_import_original_gone', 'vcr_import_proposal_failed', 'vcr_import_some_skipped',
+  'vcr_rejudge_failed', 'vcr_import_columns_unknown', 'vcr_import_entry_failed', 'vcr_import_failed', 'vcr_import_original_gone', 'vcr_import_proposal_failed', 'vcr_import_some_skipped',
   'vcr_import_converter_unavailable',
   // evidence and matching
   'vcr_asof_invalid', 'vcr_assessment_not_found', 'vcr_candidate_trial_not_found', 'vcr_criteria_missing', 'vcr_pool_endpoint_key_required',
@@ -2559,6 +2563,11 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_intake_payload_invalid: '数据导入的字段不完整，请按字段说明修改。',
   vcr_intake_format_invalid: '这个格式暂不能按所选方式导入，请使用支持的表格或 UTF-8 病例文本。',
   vcr_intake_map_changed: '字段映射已经变化，请读回当前映射后再确认和冻结。',
+  registry_busy: '登记平台现在太忙，这次没有读到；稍后会再试。',
+  registry_page_timeout: '登记记录的页面没有及时打开；这一对按标题和适应症判定。',
+  registry_page_unreadable: '登记记录的页面读不出入排标准；这一对按标题和适应症判定。',
+  registry_watch_timeout: '登记平台没有及时回答；下一轮会再查这条记录。',
+  vcr_rejudge_failed: '这次没能开始重新判定；已有结论保留，可以再试一次。',
   vcr_import_columns_unknown: '没能判断哪一列是患者、哪一列是病历。指明这两列再导入一次即可。',
   vcr_import_entry_failed: '这一份没有收下，其他照常；再启动同样的导入只取没收下的。',
   vcr_import_failed: '这次导入没有做成，已收下的保留；可以再启动一次。',

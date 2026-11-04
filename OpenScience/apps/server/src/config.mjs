@@ -1173,23 +1173,16 @@ function vcrSettings(overrides) {
     vcrMatchJudgeOutputTokens: integer("vcrMatchJudgeOutputTokens", "OPEN_SCIENCE_VCR_MATCH_JUDGE_OUTPUT_TOKENS", 16_000, 2_000, 64_000),
     vcrMatchJudgeTimeoutMs: integer("vcrMatchJudgeTimeoutMs", "OPEN_SCIENCE_VCR_MATCH_JUDGE_TIMEOUT_MS", 180_000, 10_000, 600_000),
     vcrMatchJudgeMaxUpstreamFailures: integer("vcrMatchJudgeMaxUpstreamFailures", "OPEN_SCIENCE_VCR_MATCH_JUDGE_MAX_UPSTREAM_FAILURES", 20, 1, 1_000),
-    // The smallest cell a model is shown (vcrService.minCell): a deployment may raise the domain's floor, never lower it.
-    vcrMinCellSize: integer("vcrMinCellSize", "OPEN_SCIENCE_VCR_MIN_CELL_SIZE", VCR_MIN_CELL_SIZE, VCR_MIN_CELL_SIZE, 1_000),
-    // The largest derived table — reconstructed pseudo-patients, a forecast's probabilities — the control plane stores from an engine job (vcrJobs).
-    vcrDerivedTableMaxBytes: integer("vcrDerivedTableMaxBytes", "OPEN_SCIENCE_VCR_DERIVED_TABLE_MAX_BYTES", 256 * 1024 * 1024, 1024 * 1024, 2 * 1024 * 1024 * 1024),
-    // Request authentication is required; receipt signing is optional, and a
-    // receipt is our own evidence of what the engine ran — it labels a result,
-    // it never decides whether a person may have one (owner ruling 2026-10-04).
-    // A receipt key that is configured and unreadable or short is therefore a
-    // readiness failure and a log line, not a reason to refuse every engine step:
-    // the key stays empty, results are verified by the output hash and the job's
-    // echoed identity (which always run), and each is recorded `signed: false`.
-    // The request token is not like that: it authenticates the engine's caller,
-    // and a bad one leaves the engine unconfigured. Readiness names only the
-    // error, never the secret.
-    vcrEngineToken: engineToken.value,
-    vcrEngineTokenError: engineToken.error,
-    vcrEngineReceiptKey: engineReceiptKey.value,
+    // A judging job on the worker's lane hands its turn back after this many pairs or this long (one running slow job per account, so the account's other work runs between its batches), and a
+    // provider that stays down is waited out this many times, with a growing wait, before the job ends with what it did. The counters are `batches` and `outageWaits` of `match_judge_total`.
+    vcrMatchJudgeSlicePairs: integer("vcrMatchJudgeSlicePairs", "OPEN_SCIENCE_VCR_MATCH_JUDGE_SLICE_PAIRS", 400, 1, 100_000),
+    vcrMatchJudgeSliceMs: integer("vcrMatchJudgeSliceMs", "OPEN_SCIENCE_VCR_MATCH_JUDGE_SLICE_MS", 300_000, 1_000, 3_600_000),
+    vcrMatchJudgeOutageWaits: integer("vcrMatchJudgeOutageWaits", "OPEN_SCIENCE_VCR_MATCH_JUDGE_OUTAGE_WAITS", 6, 0, 100),
+    // Taking many patients' records in (vcrRecordsImport): how much one turn of the job does, and how many entries are read at once. Each entry may be a conversion in a container or a parser call.
+    vcrRecordsImportSliceEntries: integer("vcrRecordsImportSliceEntries", "OPEN_SCIENCE_VCR_RECORDS_IMPORT_SLICE_ENTRIES", 500, 1, 100_000),
+    vcrRecordsImportSliceMs: integer("vcrRecordsImportSliceMs", "OPEN_SCIENCE_VCR_RECORDS_IMPORT_SLICE_MS", 300_000, 1_000, 3_600_000),
+    vcrRecordsImportConcurrency: integer("vcrRecordsImportConcurrency", "OPEN_SCIENCE_VCR_RECORDS_IMPORT_CONCURRENCY", 4, 1, 16),
+    vcrRecordsImportProposalTimeoutMs: integer("vcrRecordsImportProposalTimeoutMs", "OPEN_SCIENCE_VCR_RECORDS_IMPORT_PROPOSAL_TIMEOUT_MS", 120_000, 1_000, 600_000),
     // The registry watch (vcrRegistryWatch, G15). Once an hour it looks again at a bounded number of the trials a person holds a verdict about, the one checked
     // longest ago first, and marks the verdicts of a trial whose record changed (the verdict stays; a read offers to judge it again). Batch: how many trials a tick
     // reads (each read is one request to a public registry, which paces itself); hours: how long a trial that read fine waits before it is read again; retry hours:

@@ -11,9 +11,11 @@
  *
  * - **Resume is the ledger, not the job.** A pair judged for these inputs has a `done` row keyed by the words on both sides (by hash), the mode,
  *   the prompt and the settings; a later job, a re-claimed one or a start after a cancel finds it and pays nothing. A failed pair is tried again.
- * - **One pair failing is one row.** Its code is on it and the job goes on. A transient upstream failure is retried at most twice here; a spent
- *   budget, an exhausted balance or a run of upstream failures stops the job, which ends `limited` with the reason, and what was done stands.
- *   A job that finished nothing does not report success.
+ * - **One pair failing is one row.** Its code is on it and the job goes on. A transient upstream failure is retried at most twice here, and once more at the end of its stage. A spent budget or
+ *   an exhausted balance stops the job, which ends `limited` with the reason, and what was done stands; a run of upstream failures is waited out a few times first, on the queue. A job that
+ *   finished nothing does not report success.
+ * - **A run of thousands needs nobody to restart it.** On the worker's lane the job works in batches and hands its turn back between them, with a mark per pair in its checkpoint (the executor's
+ *   comment says how), so it outlives deployments and the account's other work runs between its batches. A person's later note or a registry change re-judges through this same job (`rejudge`).
  * - **Cut-off output is a failed pair, never an empty answer.** Reasoning counts towards `max_tokens`, so the default is generous and a
  *   `finish_reason` of `length` is its own failure code.
  * - **A record over the cap is split at its own boundaries** and judged per part (`splitNoteParts`): whole documents first, blank lines next,
@@ -36,7 +38,7 @@ import {
 } from '@evimed/domain';
 import { HttpError } from './security.mjs';
 import { callModelForControlPlane } from './modelGateway.mjs';
-import { pool, resultOutcome } from './vcrMatchBatch.mjs';
+import { resultOutcome } from './vcrMatchBatch.mjs';
 import { LONG_LIMITS, acceptLongShapes, acceptRelevance, longRelevanceMessages, longShapeMessages } from './vcrLongTables.mjs';
 import { REGISTRY_RECORD_BASIS, judgmentKey } from './vcrMatchJudgmentStore.mjs';
 
@@ -63,6 +65,12 @@ const transientFailure = (error) => {
   const status = Number(error?.upstreamStatus);
   return !Number.isInteger(status) || status >= 500 || status === 408 || status === 429;
 };
+/**
+ * Our own database stalling (a statement timed out behind a checkpoint on a busy host, a lost connection, a deadlock) says nothing about the pair and passes with the moment: such a pair is tried again
+ * at the end of its stage like one the provider failed, and is not counted as the provider being down. A run of thousands meets one sooner or later.
+ */
+const DATABASE_TRANSIENT = Object.freeze(['57014', '40001', '40P01', '55P03', '57P01', '08000', '08003', '08006', 'ECONNRESET', 'ETIMEDOUT', 'EPIPE']);
+const passes = (/** @type {any} */ error) => transientFailure(error) || DATABASE_TRANSIENT.includes(String(error?.code ?? ''));
 /** How many registry reads run at once: a frozen collection's worker queues eight, and a live registry is shared. */
 const REGISTRY_READS = 4;
 /** How long progress may go unsaid, so a slow provider does not read as a dead worker. */
@@ -76,7 +84,7 @@ const LONG_CRITERIA_CHARS = 4_000;
 
 /** What the job counts, for the operator's metric family (principle 15). */
 export function createMatchJudgeCounters() {
-  return { started: 0, pairsDone: 0, pairsFailed: 0, callsRetried: 0, stopped: 0, canceled: 0 };
+  return { started: 0, pairsDone: 0, pairsFailed: 0, callsRetried: 0, stopped: 0, canceled: 0, batches: 0, outageWaits: 0 };
 }
 
 /** @param {Record<string, any>} config */
@@ -545,7 +553,7 @@ function judgeStatement({ pairs, fit, topK, estimate, withdrawn, noRecord }) {
  * @param {{ store: any, matchStore: any, judgments: any, documents: any, subjectTable?: any, targets: ReturnType<typeof judgmentTargets>, judge: ReturnType<typeof createPairJudge>,
  *   config?: Record<string, any>, report?: (code: string) => void, counters?: ReturnType<typeof createMatchJudgeCounters>, now?: () => Date }} deps
  */
-export function createMatchJudgeExecutor({ store, matchStore, judgments, documents, subjectTable = null, targets, judge, config = {}, report = () => {}, counters = createMatchJudgeCounters(), now = () => new Date() }) {
+export function createMatchJudgeExecutor({ store, matchStore, judgments, documents, subjectTable = null, targets, judge, clauseDefinitions = null, config = {}, report = () => {}, counters = createMatchJudgeCounters(), now = () => new Date() }) {
   const width = Math.max(1, Math.min(64, Number(config.vcrMatchJudgeConcurrency ?? 8) || 8));
   const stopAfter = Math.max(1, Number(config.vcrMatchJudgeMaxUpstreamFailures ?? 20) || 20);
   const slicePairs = Math.max(1, Number(config.vcrMatchJudgeSlicePairs ?? 400) || 400);
@@ -745,7 +753,7 @@ export function createMatchJudgeExecutor({ store, matchStore, judgments, documen
           answer: { ...(target ? { target: target.summaryOfTarget } : { target: targetKind === 'candidate_trial' ? { kind: targetKind, id: pair.targetId, registry: pair.target.registry, registryId: pair.targetId } : { kind: targetKind, id: pair.targetId } }) },
           usage, documentIds: note?.documentIds ?? [] };
         await judgments.save(row).catch(() => null);
-        marks[mode][index] = transientFailure(error) ? 't' : 'f';
+        marks[mode][index] = passes(error) ? 't' : 'f';
         if (BUDGET_CODES.includes(code)) {
           stopped = { code, reason: code === 'usage_ledger_unavailable' ? '用量账本不可用，停止发起新的调用。' : '预算或额度用完了，已判完的保留。' };
           counters.stopped += 1;
@@ -773,7 +781,8 @@ export function createMatchJudgeExecutor({ store, matchStore, judgments, documen
       if (at.stage !== stage) at = { stage, pass: 0, next: 0 };
       const lanesOver = async (/** @type {number[]} */ items) => {
         const lane = async () => {
-          while (at.next < items.length && !outage && await more()) {
+          for (;;) {
+            if (at.next >= items.length || outage || !(await more())) return;
             // Another lane may have taken the last one while this one asked.
             if (at.next >= items.length || outage) return;
             const index = items[at.next++];
@@ -867,6 +876,8 @@ export function createMatchJudgeExecutor({ store, matchStore, judgments, documen
     if (judgedThisBatch > 0) waits = 0;
     // A turn given back, or a wait for a provider that is down: everything needed to go on is in the checkpoint, and the queue claims it again.
     if (yieldable && !stopped && !canceled && (outage || batchOver || !walked)) {
+      counters.batches += 1;
+      if (outage) counters.outageWaits += 1;
       await onProgress({ done: finished, total: progressTotal, ...(outage ? { note: '模型服务暂时没有回答，等一会儿自动接着判定。' } : {}) }).catch(() => {});
       const afterSeconds = outage ? Math.min(1_800, 120 * 2 ** waits) : 0;
       return { yield: { afterSeconds, checkpoint: { judge: { startedAt, at, marks: { fit: marks.fit.join(''), criteria: marks.criteria.join('') }, ...(second ? { second } : {}), ...(retrying ? { retrying } : {}), ...(longMeaning ? { longMeaning } : {}),
@@ -970,7 +981,8 @@ export function createMatchJudge({ jobs, matchStore, documents, subjectTable = n
       if (built.ok !== true) throw new HttpError(409, 'vcr_match_judge_nothing_to_read', String(/** @type {any} */ (built).message));
       counters.started += 1;
       // A re-judgment is its own job even for the same selection: it follows a named change, and the words read are newer than whatever is still running.
-      const scenario = followUp ? (() => { const { chain: _chain, ...rest } = built.scenario; return { ...rest, followUp, chain: judgeChain({ ...rest, followUp }) }; })() : built.scenario;
+      /** @type {Record<string, any>} */
+      const scenario = { ...built.scenario, ...(followUp ? { followUp, chain: judgeChain({ ...built.scenario, followUp }) } : {}) };
       const summary = { statement: built.statement, estimate: scenario.estimate, direction: scenario.direction, topK: scenario.topK, fit: scenario.fit, thinking: scenario.thinking,
         ...(scenario.protocolVersionId ? { protocolVersionId: scenario.protocolVersionId } : {}) };
       // The same selection asked for again while it is out is that job; one that has ended is a new attempt, and the ledger keeps it from paying twice.
@@ -1019,7 +1031,7 @@ export function createMatchJudge({ jobs, matchStore, documents, subjectTable = n
       const groups = new Map();
       for (const entry of trials) {
         const collection = object(entry.target.collection);
-        const key = collection.name ? `${collection.name}\u0000${collection.revision ?? ''}` : '';
+        const key = collection.id ? `${collection.id}\u0000${collection.revision ?? ''}` : '';
         groups.set(key, [...(groups.get(key) ?? []), entry]);
       }
       for (const [key, entries] of groups) {

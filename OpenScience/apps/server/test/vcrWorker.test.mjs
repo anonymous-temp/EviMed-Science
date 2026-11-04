@@ -166,3 +166,16 @@ test("P2-9 the engine and the local lanes still wait for the jobs they start", a
   assert.deepEqual(order, ["advanced", "hook"], "the tick returned after the job did");
   assert.equal(result.finished, 1);
 });
+
+test("the worker's slow lane lets a long job give its turn back, and no other lane does", async () => {
+  const asked = [];
+  const rows = [{ id: "job_slow", method: "matching.judge" }, { id: "job_short", method: "matching.evaluate" }];
+  const jobs = { owner: "w", config: { vcrLocalConcurrency: 2 }, maxConcurrent: 1, localExecutors: { "matching.judge": () => {}, "matching.evaluate": () => {} },
+    async claim({ lane }) { return lane === "slow" ? [{ id: "job_slow" }] : lane === "local" ? [{ id: "job_short" }] : []; },
+    async advance(job, options) { asked.push([job.id, options?.mayYield === true]); return { action: "yielded" }; }, takeReaped() { return []; } };
+  const loops = createVcrWorkerLoops({ jobs, orchestrator: null, store: { rows: async () => rows.slice(0, 0) } });
+  await loops.slowJobs();
+  await loops.localJobs();
+  await new Promise((resolve) => { setTimeout(resolve, 5); });
+  assert.deepEqual(asked.sort(), [["job_short", false], ["job_slow", true]]);
+});

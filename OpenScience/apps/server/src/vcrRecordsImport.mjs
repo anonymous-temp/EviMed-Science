@@ -107,7 +107,7 @@ export async function* delimitedRows(chunks, delimiter = ',', encoding = 'utf-8'
   }
   for await (const chunk of chunks) {
     let text = typeof chunk === 'string' ? chunk : decoder.decode(chunk, { stream: true });
-    if (first) { text = text.replace(/^﻿/u, ''); first = false; }
+    if (first) { text = text.replace(/^\uFEFF/u, ''); first = false; }
     yield* feed(text);
   }
   yield* feed(decoder.decode());

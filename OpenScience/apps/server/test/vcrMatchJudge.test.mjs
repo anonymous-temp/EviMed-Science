@@ -8,7 +8,7 @@ import { HttpError } from "../src/security.mjs";
 import { ctgovPrecedent } from "../src/trialRegistryClient.mjs";
 import { createVcrEvidencePipeline } from "../src/vcrEvidence.mjs";
 import { VcrService } from "../src/vcrService.mjs";
-import { createMatchJudge, createMatchJudgeCounters, createMatchJudgeExecutor, createMatchJudgmentReads, createPairJudge, judgeSelection, judgmentTargets, planMatchJudge, presentJudgment, readSubjectNote } from "../src/vcrMatchJudge.mjs";
+import { createMatchJudge, createMatchJudgeCounters, createMatchJudgeExecutor, createMatchJudgmentReads, createPairJudge, judgmentChanges, judgeSelection, judgmentTargets, planMatchJudge, presentJudgment, readSubjectNote } from "../src/vcrMatchJudge.mjs";
 import { judgmentKey } from "../src/vcrMatchJudgmentStore.mjs";
 
 const STUDY = { id: "std_1", userId: "u_1", projectId: "p_1" };
@@ -621,4 +621,64 @@ test("the numbered sentences and the ranking read through the service, and a stu
   const ranked = await service.runtimeRead(STUDY, "candidate_trials", { subjectKey: "P-1" });
   assert.deepEqual(ranked.ranking.map((row) => row.target.id), ["NCT00000001", "NCT00000003", "NCT00000002"]);
   assert.equal(ranked.today, undefined);
+});
+
+test("a batch gives its turn back with what it needs and carries on from there; what failed for a passing reason is tried once more, and a provider that is down is waited out", async () => {
+  const roster = Array.from({ length: 12 }, (_, index) => `P-${index}`);
+  const scenario = { ...toB, subjects: roster, topK: 0 };
+  let failingCalls = 0;
+  /** @type {any} */ let checkpoint = {};
+  const f = fixture({ scenario });
+  const records = { ...f.documents, async roster() { return roster.map((subjectKey, index) => ({ id: `d${index}`, subjectKey, chars: 9 })); }, async runtimeRead(_s, { documentId }) { return { id: documentId, text: `记录 ${documentId}。`, projectionHash: documentId }; } };
+  const store = { async studyById() { return STUDY; }, async one() { return { checkpoint }; } };
+  const judge = { ...f.judge, maxTokens: 1000, timeoutMs: 1000, async call() {
+    if (failingCalls > 0) { failingCalls -= 1; throw Object.assign(new Error("upstream"), { code: "model_gateway_upstream_error" }); }
+    return { content: '{"score":70,"confidence":0.5,"eligible_reasons":"1. a","ineligible_reasons":"","missing_information":""}', usage: { inputTokens: 10, outputTokens: 5, cacheHitTokens: 0, reasoningTokens: 0 }, cost: 0.01, currency: "CNY" };
+  } };
+  const run = createMatchJudgeExecutor({ store, matchStore: f.matchStore, judgments: f.judgments, documents: records, targets: f.targets, judge, config: { vcrMatchJudgeSlicePairs: 5, vcrMatchJudgeConcurrency: 2, vcrMatchJudgeMaxUpstreamFailures: 2, vcrMatchJudgeOutageWaits: 1 } });
+  const step = () => run({ job: { id: "job_y", jobId: "job_y", studyId: STUDY.id, scenario: { ...scenario, chain: "c" }, scenarioHash: "a".repeat(64), seed: 0 }, onProgress: async () => {}, yieldable: true });
+  const first = await step();
+  assert.ok(first.yield, "a batch ended");
+  assert.equal(first.yield.afterSeconds, 0);
+  assert.match(first.yield.checkpoint.judge.marks.fit, /^d{5,6}\.+$/u);
+  assert.equal(first.yield.checkpoint.judge.at.stage, "fit");
+  assert.equal(first.yield.checkpoint.judge.used.calls >= 5, true);
+  checkpoint = first.yield.checkpoint;
+
+  // The provider goes down in the middle: two failures in a row is an outage here, and the job waits rather than ends.
+  failingCalls = 2;
+  const second = await step();
+  assert.ok(second.yield);
+  assert.equal(second.yield.afterSeconds, 120);
+  assert.equal(second.yield.checkpoint.judge.waits, 1);
+  assert.match(second.yield.checkpoint.judge.marks.fit, /t/u);
+  checkpoint = second.yield.checkpoint;
+
+  // Back again: the rest, then the second look at what failed for a reason that passes.
+  let turn = second;
+  for (let index = 0; index < 8 && turn.yield; index += 1) { checkpoint = turn.yield.checkpoint; turn = await step(); }
+  assert.equal(turn.status, "succeeded");
+  assert.equal(turn.conclusion, "estimable", JSON.stringify(turn.diagnostics.stages));
+  assert.deepEqual([turn.diagnostics.finished, turn.diagnostics.total, turn.diagnostics.failed], [12, 12, 0]);
+  assert.equal(turn.diagnostics.used.calls, 12, "the bill runs across batches, and a failed call pays for no words");
+  assert.ok(turn.diagnostics.failures.model_gateway_upstream_error >= 1, "and it still says the provider failed");
+});
+
+test("what re-judging changed is said from the rows: the newest words against the words before them", async () => {
+  const rows = [
+    { subjectKey: "P", targetKind: "candidate_trial", targetId: "T1", documentHash: "new", targetHash: "h", mode: "fit", status: "done", verdict: "ineligible", updatedAt: "2026-11-04T02:00:00Z" },
+    { subjectKey: "P", targetKind: "candidate_trial", targetId: "T1", documentHash: "old", targetHash: "h", mode: "fit", status: "done", verdict: "eligible", updatedAt: "2026-11-04T01:00:00Z" },
+    { subjectKey: "P", targetKind: "candidate_trial", targetId: "T2", documentHash: "new", targetHash: "h", mode: "fit", status: "done", verdict: "possible", updatedAt: "2026-11-04T02:00:00Z" },
+    { subjectKey: "P", targetKind: "candidate_trial", targetId: "T2", documentHash: "old", targetHash: "h", mode: "fit", status: "done", verdict: "possible", updatedAt: "2026-11-04T01:00:00Z" },
+    { subjectKey: "P", targetKind: "candidate_trial", targetId: "T3", documentHash: "new", targetHash: "h", mode: "fit", status: "done", verdict: "possible", updatedAt: "2026-11-04T02:00:00Z" },
+    { subjectKey: "P", targetKind: "candidate_trial", targetId: "T4", documentHash: "old", targetHash: "h", mode: "fit", status: "done", verdict: "eligible", updatedAt: "2026-11-04T01:00:00Z" },
+    { subjectKey: "P", targetKind: "candidate_trial", targetId: "T4", documentHash: "new", targetHash: "h", mode: "criteria", status: "done", verdict: "ineligible", updatedAt: "2026-11-04T02:00:00Z" },
+    { subjectKey: "P", targetKind: "candidate_trial", targetId: "T5", documentHash: "new", targetHash: "h", mode: "fit", status: "failed", verdict: null, updatedAt: "2026-11-04T02:00:00Z" },
+  ];
+  const changes = judgmentChanges(rows);
+  assert.equal(changes.compared, 3, "T3 has nothing before it, and a failed row is no verdict");
+  assert.deepEqual(changes.pairs.map((pair) => [pair.targetId, pair.from, pair.to]).sort(), [["T1", "符合", "不符合"], ["T4", "符合", "不符合"]]);
+  assert.equal(changes.sentence, "重算后 2 个试验结论变化。");
+  assert.equal(judgmentChanges([rows[2], rows[3]]).sentence, "重算了 1 个试验，结论都没有变化。");
+  assert.equal(judgmentChanges([]).sentence, "");
 });
