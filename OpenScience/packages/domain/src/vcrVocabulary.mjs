@@ -1239,6 +1239,8 @@ export const VCR_PEOPLE_COUNT_FIELDS = frozen([
   // the people a propensity trimming removed from an arm (the arm's cell: `n = kept + removed`, so a small one takes the other two with it),
   // and the people of a target-trial emulation by when they began the strategy (`VCR_PEOPLE_COUNT_LINKS`)
   'removed', 'startedWithinGrace', 'startedAfterGrace', 'neverStarted', 'startedAtTimeZero',
+  // the people of a clone-censor-weight design who were treated before time zero and not at or after it (review stats2 finding 17): the fourth part of its people
+  'treatedBeforeTimeZero',
 ])
 /**
  * Keys under which an object maps a category to a head count
@@ -1284,6 +1286,13 @@ export const VCR_PEOPLE_COUNT_LINKS = Object.freeze([
     triggers: frozen(['events', 'nonEvents']),
     whole: frozen(['n', 'events', 'nonEvents']),
     derived: frozen(['observedRisk', 'calibrationInLarge']),
+  }),
+  // with the people treated before time zero as a fourth part (a result that states it holds all five); it comes first, because a link reads the counts as
+  // they stand and the three-part link below would hide the small one and leave this part to be read by subtraction
+  Object.freeze({
+    triggers: frozen(['startedWithinGrace', 'startedAfterGrace', 'neverStarted', 'treatedBeforeTimeZero']),
+    whole: frozen(['people', 'startedWithinGrace', 'startedAfterGrace', 'neverStarted', 'treatedBeforeTimeZero']),
+    derived: frozen([]),
   }),
   // a target-trial emulation's people by when they began the strategy: the three parts make the people, so one small part with the
   // rest printed is a subtraction

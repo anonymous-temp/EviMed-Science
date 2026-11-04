@@ -29,7 +29,11 @@
 #   is undone by weights from one discrete-time model of starting treatment (baseline covariates and the period since time zero): the second arm's
 #   weight at a period is the inverse probability of not having started by then, the first arm's is, after the grace period, the inverse probability
 #   of having started within it. Both are stabilised by the same model without covariates. The arms' risks are weighted discrete-time life tables.
-#   Time-varying covariates do not enter the weights of this strategy: the model is on the covariates at time zero, said in the result.
+#   The model of starting reads the covariates AS THEY STAND IN THE PERIOD AT RISK (a covariate that never changes is its time-zero value), and the
+#   second arm's weight after the grace period uses the covariate path to its end, which assumes the treatment does not change the covariates
+#   (a covariate the treatment moves is read wrongly: the premises say so). The grace period is the periods 0..g: the last chance to start is the
+#   start of period g, and a person who has not started by then has left the second arm before period g's event (the event of a period is the event
+#   under that period's treatment), so the arm is "start at the natural time if that is within the window, else at g".
 # - **Every number is the engine's, and the naive estimate is only a diagnostic.** The result carries, beside the estimate, the naive comparison that
 #   classifies people by whether they ever started (the immortal-time estimate) so a reader sees how much time was waited for; it is a check, never
 #   an estimate. Checks of the input (eligibility already treated, immortal waiting time, records cut short) are diagnostics, never gates.
@@ -258,6 +262,8 @@ VCR_TARGET_TRIAL_ROW_CAP <- 1000000
     if (anyNA(beta)) return(NULL)
     risks <- .vcr_tt_standardise(beta, ref_trial, fr, tr, om, tmin, H, m_ref)
     detail[[paste0("beta_", e)]] <- beta
+    # the events the fit rests on, by arm: a coefficient for an arm with none is the penalty's, not the data's
+    detail[[paste0("events_", e)]] <- c(control = sum(ex$y[keep] == 1 & ex$arm[keep] == 0L), treated = sum(ex$y[keep] == 1 & ex$arm[keep] == 1L))
     est[[e]] <- risks
   }
   list(risks = est, detail = detail)
@@ -266,35 +272,38 @@ VCR_TARGET_TRIAL_ROW_CAP <- 1000000
 # --- clone, censor, weight -----------------------------------------------------------------------------------------------
 
 #' The people of a clone-censor-weight design, one row each, from time zero (the first eligible period) on: when treatment started (`s`, relative
-#' to time zero, Inf if never), when the event happened (`e`), the last period followed (`last`) and the covariates at time zero.
+#' to time zero, Inf if never), when the event happened (`e`), the last period followed (`last`), the frame row of time zero (`t0`) and the
+#' covariates of every row of the frame (`L`: the covariates of period `u` of person `k` are `L[t0[k] + u, ]`). `treatedBefore` counts the people
+#' who were treated in a period before time zero and not at or after it: the design cannot call them never-starters.
 .vcr_tt_people <- function(fr) {
   n <- length(fr$pid)
   rows <- which(fr$E == 1)
   first_elig <- rows[!duplicated(fr$pid[rows])]
-  t0 <- rep(NA_integer_, max(fr$pid)); t0[fr$pid[first_elig]] <- first_elig
   end_row <- ave(seq_len(n), fr$pid, FUN = max)
   pid <- fr$pid[first_elig]
   t0r <- first_elig
   last <- end_row[t0r] - t0r
-  # the first period at or after time zero with treatment
+  # the first period at or after time zero with treatment (a treated row counts only from time zero on)
   treated_rows <- which(fr$A == 1)
-  s <- rep(Inf, length(pid)); pos <- match(pid, fr$pid[treated_rows])
-  # treated_rows is sorted by row, so the first treated row of a person is the first match; it counts only from time zero on
+  s <- rep(Inf, length(pid))
   cand <- treated_rows[fr$pid[treated_rows] %in% pid]
   by_p <- split(cand, fr$pid[cand])
+  before <- logical(length(pid))
   for (k in seq_along(pid)) {
     r <- by_p[[as.character(pid[k])]]
-    if (!is.null(r)) { r <- r[r >= t0r[k]]; if (length(r)) s[k] <- r[1L] - t0r[k] }
+    if (!is.null(r)) { before[k] <- any(r < t0r[k]); r <- r[r >= t0r[k]]; if (length(r)) s[k] <- r[1L] - t0r[k] }
   }
   ev_row <- which(fr$Y == 1)
   e <- rep(Inf, length(pid)); ev_by <- split(ev_row, fr$pid[ev_row])
   for (k in seq_along(pid)) { r <- ev_by[[as.character(pid[k])]]; if (!is.null(r) && r[1L] >= t0r[k]) e[k] <- r[1L] - t0r[k] }
-  list(pid = pid, t0 = t0r, s = s, e = e, last = last, X = fr$L[t0r, , drop = FALSE], n = length(pid))
+  list(pid = pid, t0 = t0r, s = s, e = e, last = last, L = fr$L, n = length(pid), treatedBefore = sum(before & !is.finite(s)))
 }
 
-#' The discrete-time hazard of starting treatment by period since time zero, with and without the baseline covariates: the log of one minus the
-#' hazard on the grid `0..umax` for every person, for the denominator (covariates) and the numerator (none) of the stabilised weights. Returns
-#' matrices people x (umax + 1), or NULL when a model cannot be fitted.
+#' The discrete-time hazard of starting treatment by period since time zero, on the covariates AS THEY STAND IN THAT PERIOD, with and without them:
+#' the log of one minus the hazard on the grid `0..umax` for every person, for the denominator (covariates) and the numerator (none) of the
+#' stabilised weights. A covariate that does not change gives the model of its time-zero value. A person's period beyond the last followed has no
+#' row; the last row's covariates stand in there, and those cells are never at risk. Returns matrices people x (umax + 1), or NULL when a model
+#' cannot be fitted.
 .vcr_tt_start_logsurv <- function(pe, cnt, umax, degree) {
   n <- pe$n
   last_at_risk <- pmin(pe$s, pe$last)
@@ -302,14 +311,16 @@ VCR_TARGET_TRIAL_ROW_CAP <- 1000000
   person <- rep(seq_len(n), len); u <- sequence(len) - 1
   y <- as.numeric(u == pe$s[person])
   fu <- .vcr_tt_poly(u, degree)
-  Xd <- cbind(1, fu, pe$X[person, , drop = FALSE]); Xn <- cbind(1, fu)
+  Xd <- cbind(1, fu, pe$L[pe$t0[person] + u, , drop = FALSE]); Xn <- cbind(1, fu)
   w <- cnt[person]
   fd <- .vcr_tt_fit(Xd, y, w); fn <- .vcr_tt_fit(Xn, y, w)
   if (is.null(fd) || is.null(fn)) return(NULL)
   grid <- 0:umax
-  fg <- .vcr_tt_poly(grid, degree)
-  eta_d <- outer(as.vector(cbind(pe$X) %*% fd$beta[-seq_len(1L + degree)]), as.vector(cbind(1, fg) %*% fd$beta[seq_len(1L + degree)]), "+")
-  eta_n <- matrix(rep(as.vector(cbind(1, fg) %*% fn$beta), each = n), n)
+  fg <- cbind(1, .vcr_tt_poly(grid, degree))
+  base_n <- as.vector(fg %*% fn$beta); base_d <- as.vector(fg %*% fd$beta[seq_len(1L + degree)])
+  b_cov <- fd$beta[-seq_len(1L + degree)]
+  eta_d <- matrix(vapply(grid, function(j) base_d[j + 1L] + as.vector(pe$L[pe$t0 + pmin(j, pe$last), , drop = FALSE] %*% b_cov), numeric(n)), n)
+  eta_n <- matrix(rep(base_n, each = n), n)
   list(den = stats::plogis(eta_d, log.p = TRUE, lower.tail = FALSE), num = stats::plogis(eta_n, log.p = TRUE, lower.tail = FALSE))
 }
 
@@ -321,18 +332,20 @@ VCR_TARGET_TRIAL_ROW_CAP <- 1000000
   ls <- .vcr_tt_start_logsurv(pe, cnt, umax, degree)
   if (is.null(ls)) return(NULL)
   U <- 0:(H - 1L)
-  # arm 0 ("never start"): at risk while the person has not started and is still followed; weight = the inverse probability of not having started
+  # arm 0 ("never start"): at risk while the person has not started and is still followed; a person who starts at period u has left it before u's
+  # event, because the event of a period is the event under that period's treatment. Weight = the inverse probability of not having started
   cum_den <- t(apply(ls$den, 1L, cumsum)); cum_num <- t(apply(ls$num, 1L, cumsum))
   idx <- seq_len(H)
   at0 <- outer(pe$last, U, ">=") & outer(pe$s, U, ">")
   w0 <- exp(cum_num[, idx, drop = FALSE] - cum_den[, idx, drop = FALSE])
-  # arm 1 ("start within g periods"): uncensored throughout if started within the grace period, otherwise until the grace period ends;
-  # after it the weight is the inverse probability of having started within it
+  # arm 1 ("start within g periods", the periods 0..g): the last chance to start is the start of period g, so a person who has not started by then
+  # has left the arm before period g's event; one who started in the window is followed throughout. Before period g nobody has left, and from
+  # period g the weight is the inverse probability of having started in the window (the clone that stayed stands for those that left)
   p_den <- 1 - exp(cum_den[, g + 1L]); p_num <- 1 - exp(cum_num[, g + 1L])
   started <- pe$s <= g
-  at1 <- outer(pe$last, U, ">=") & (outer(rep(g, n), U, ">=") | started)
+  at1 <- outer(pe$last, U, ">=") & (outer(rep(g, n), U, ">") | started)
   w1 <- matrix(1, n, H)
-  late <- outer(rep(g, n), U, "<")
+  late <- outer(rep(g, n), U, "<=")
   w1[late] <- (p_num / pmax(p_den, 1e-9))[row(late)[late]]
   ev <- outer(pe$e, U, "==")
   out <- matrix(NA_real_, H, 2L, dimnames = list(NULL, c("control", "treated")))
@@ -345,7 +358,8 @@ VCR_TARGET_TRIAL_ROW_CAP <- 1000000
     out[, a + 1L] <- 1 - cumprod(1 - hz)
   }
   if (!detail) return(list(risks = out))
-  list(risks = out, w0 = w0, w1 = w1, at0 = at0, at1 = at1, started = started, p_den = p_den)
+  list(risks = out, w0 = w0, w1 = w1, at0 = at0, at1 = at1, started = started, p_den = p_den,
+       events = c(control = sum(at0 * ev), treated = sum(at1 * ev)), atRisk = c(control = sum(at0[, 1L]), treated = sum(at1[, 1L])))
 }
 
 #' The naive comparison that classifies people by whether they ever started treatment, from time zero: shown beside the estimate so that the waiting
@@ -371,6 +385,10 @@ VCR_TARGET_TRIAL_ROW_CAP <- 1000000
   list(n = length(x), mean = mean(x), sd = if (length(x) > 1L) stats::sd(x) else 0, min = min(x), max = max(x), p01 = q[1L], p99 = q[2L])
 }
 
+#' Whether the stabilised weights of one arm of a clone-censor-weight design are carried by a few people: a largest weight above 20 or a mean more than a
+#' quarter from 1. Both arms are read (the second arm's weights, 1 over the probability of having started in the grace period, were not).
+.vcr_tt_unstable_weights <- function(w) length(w) > 0L && (w$max > 20 || abs(w$mean - 1) > 0.25)
+
 #' The measures of one estimand from its risks at the horizon (the last row) with their bootstrap intervals.
 .vcr_tt_measures <- function(tag, risk_t, risk_c, ci, src) {
   rr <- if (is.finite(risk_c) && risk_c > 0) risk_t / risk_c else NA_real_
@@ -394,8 +412,10 @@ vcr_job_target_trial <- function(job, output_dir = NULL, cancel_file = NULL, ...
   counts0 <- vcr_counts(realPatients = n_p)
   unit <- as.character(sc[["timeUnit"]] %||% "")
   cap <- .vcr_tt_cap()
+  advice <- if (identical(kind, "sequential")) "Limit the follow-up used (followUpLimit), start trials in fewer periods (firstPeriod, lastPeriod), or use fewer people."
+            else "Shorten the horizon or use fewer people."
   refuse_size <- function(rows) vcr_abort("too_many_person_periods", "inputs",
-    sprintf("This design expands to %s person-periods in follow-up; this engine holds at most %s (the memory of a job is 3 GiB). Limit the follow-up used (followUpLimit), start trials in fewer periods (firstPeriod, lastPeriod), or use fewer people.", format(rows, big.mark = ",", scientific = FALSE), format(cap, big.mark = ",", scientific = FALSE)))
+    sprintf("This design expands to %s person-periods in follow-up; this engine holds at most %s (the memory of a job is 3 GiB). %s", format(rows, big.mark = ",", scientific = FALSE), format(cap, big.mark = ",", scientific = FALSE), advice))
   not_estimable <- function(rule, detail, extra = list()) list(status = "not_estimable", notEstimableRule = rule, measures = list(), counts = counts0,
     diagnostics = c(list(detail = detail, valueSourcesUsed = sources_used, targetTrial = list(strategy = kind, horizon = H, checks = .vcr_tt_checks(fr))), extra))
   if (n_p < 2L) return(not_estimable("no_eligible_person_trials", "fewer than two people are left in the table after cutting the records at an event, a gap or a missing value"))
@@ -435,8 +455,23 @@ vcr_job_target_trial <- function(job, output_dir = NULL, cancel_file = NULL, ...
   if (n_exp > cap) refuse_size(n_exp)
   arm_n <- table(factor(tr$arm, levels = 0:1))
   if (any(arm_n == 0L)) return(not_estimable("arm_without_person_trials", sprintf("no eligible person-trial starts %s", if (arm_n[["0"]] == 0L) "untreated" else "treated")))
-  max_k <- max(tr$end_itt - tr$rows)
-  if (H - 1L > max_k) return(not_estimable("horizon_beyond_followup", sprintf("the horizon is %d periods and the longest follow-up of any trial is %d", H, max_k + 1L)))
+  # The horizon must lie inside the follow-up of each arm, and of each estimand: a risk read past the last period anyone of the arm was followed (for
+  # per protocol: was on protocol) is the outcome model's polynomial, not data.
+  longest <- function(end) vapply(0:1, function(a) max(end[tr$arm == a] - tr$rows[tr$arm == a]) + 1L, numeric(1))
+  long_itt <- longest(tr$end_itt); long_pp <- longest(tr$end_pp)
+  arm_word <- c("untreated", "treated")
+  if (any(long_itt < H)) {
+    a <- which(long_itt < H)[1L]
+    return(not_estimable("horizon_beyond_followup", sprintf("the horizon is %d periods and the longest follow-up of a trial that starts %s is %d", H, arm_word[a], long_itt[a])))
+  }
+  dropped <- list()
+  if ("pp" %in% estimands && any(long_pp < H)) {
+    a <- which(long_pp < H)[1L]
+    detail <- sprintf("the horizon is %d periods and the longest follow-up on protocol of a trial that starts %s is %d", H, arm_word[a], long_pp[a])
+    if (!"itt" %in% estimands) return(not_estimable("horizon_beyond_followup", detail))
+    estimands <- "itt"
+    dropped <- list(list(estimand = "pp", rule = "horizon_beyond_followup", arm = c("control", "treated")[a], longestOnProtocol = as.integer(long_pp[a]), horizon = H))
+  }
   ex <- .vcr_tt_expand(fr, tr, om)
   tmin <- min(fr$period[tr$rows])
   X <- .vcr_tt_design(ex, fr, tr, om, tmin)
@@ -454,7 +489,7 @@ vcr_job_target_trial <- function(job, output_dir = NULL, cancel_file = NULL, ...
     flat(run)
   }, replicates = B, seed = job[["seed"]], strata = NULL, cores = vcr_cores(job[["cores"]]), batch_size = 50L)
   .vcr_tt_finish(job, sc, "sequential", estimands, point, boot, B, H, width_each, fr, tr, ex, om, est_src, sources_used, unit, output_dir, n_p,
-                 list(numerator = num_cols, denominator = den_cols), list(expanded = n_exp, trials = length(tr$rows), armN = as.list(arm_n)))
+                 list(numerator = num_cols, denominator = den_cols), list(expanded = n_exp, trials = length(tr$rows), armN = as.list(arm_n), dropped = dropped))
 }
 
 .vcr_tt_job_ccw <- function(job, sc, fr, strat, H, cap, refuse_size, not_estimable, est_src, sources_used, unit, output_dir, n_p) {
@@ -479,12 +514,14 @@ vcr_job_target_trial <- function(job, output_dir = NULL, cancel_file = NULL, ...
   }, replicates = B, seed = job[["seed"]], strata = NULL, cores = vcr_cores(job[["cores"]]), batch_size = 50L)
   naive <- .vcr_tt_naive(pe, H)
   waiting <- pe$s[is.finite(pe$s)]
-  extra <- list(gracePeriod = g, people = pe$n, startedWithinGrace = sum(pe$s <= g), startedAfterGrace = sum(is.finite(pe$s) & pe$s > g), neverStarted = sum(!is.finite(pe$s)),
+  extra <- list(gracePeriod = g, people = pe$n, startedWithinGrace = sum(pe$s <= g), startedAfterGrace = sum(is.finite(pe$s) & pe$s > g),
+                neverStarted = sum(!is.finite(pe$s)) - pe$treatedBefore, treatedBeforeTimeZero = pe$treatedBefore,
                 startedAtTimeZero = sum(pe$s == 0), waitingTime = if (length(waiting)) list(median = stats::median(waiting), max = max(waiting), people = length(waiting)) else NULL,
+                horizonInsideGracePeriod = H - 1L < g,
                 naive = list(treated = unname(naive["treated"]), control = unname(naive["control"]), difference = unname(naive["treated"] - naive["control"])),
-                weights = list(control = .vcr_tt_summary(as.vector(point$w0[point$at0])), treated = .vcr_tt_summary(as.vector(point$w1[point$at1 & col(point$w1) > g + 1L]))),
-                censored = list(control = mean(is.finite(pe$s) & pe$s < H), treated = mean(!point$started & pe$last >= g + 1L)))
-  .vcr_tt_finish(job, sc, "clone_censor_weight", "pp", list(risks = list(pp = point$risks), detail = list(weights = extra$weights)), boot, B, H, width_each, fr, NULL, NULL, NULL, est_src, sources_used, unit, output_dir, pe$n,
+                weights = list(control = .vcr_tt_summary(as.vector(point$w0[point$at0])), treated = .vcr_tt_summary(as.vector(point$w1[point$at1 & col(point$w1) > g]))),
+                censored = list(control = mean(is.finite(pe$s) & pe$s < H), treated = mean(!point$started & pe$last >= g)))
+  .vcr_tt_finish(job, sc, "clone_censor_weight", "pp", list(risks = list(pp = point$risks), detail = list(weights = extra$weights, events_pp = point$events, atRisk_pp = point$atRisk)), boot, B, H, width_each, fr, NULL, NULL, NULL, est_src, sources_used, unit, output_dir, pe$n,
                  NULL, extra)
 }
 
@@ -492,7 +529,10 @@ vcr_job_target_trial <- function(job, output_dir = NULL, cancel_file = NULL, ...
 .vcr_tt_finish <- function(job, sc, kind, estimands, point, boot, B, H, width_each, fr, tr, ex, om, est_src, sources_used, unit, output_dir, n_p, weight_cols, extra) {
   counts <- vcr_counts(realPatients = n_p, events = sum(fr$Y == 1))
   if (identical(boot$interrupted, "canceled")) return(list(status = "canceled", measures = list(), counts = counts, diagnostics = list(bootstrapCompleted = boot$replicates, bootstrapRequested = B)))
-  tags <- c(itt = "itt", pp = "pp")
+  ccw <- identical(kind, "clone_censor_weight")
+  # the clone-censor-weight estimand is "start within g periods" against "never start"; it reads the start and nothing after it, so it is not a
+  # per-protocol estimand and does not carry that name (its keys end in `_start`)
+  tags <- if (ccw) c(pp = "start") else c(itt = "itt", pp = "pp")
   est_of <- function(e) point$risks[[e]]
   stopped <- !is.null(boot$interrupted) || boot$replicates < B
   if (stopped && boot$replicates < 200L) {
@@ -502,24 +542,40 @@ vcr_job_target_trial <- function(job, output_dir = NULL, cancel_file = NULL, ...
                 issues = list(vcr_issue("cpu_budget_exhausted", "cpuSecondsLimit", "The CPU budget ran out during the bootstrap, before 200 resamples; the estimates are kept and no interval is reported.")),
                 diagnostics = list(bootstrapCompleted = boot$replicates, bootstrapRequested = B, valueSourcesUsed = sources_used)))
   }
-  measures <- list(); curves <- list(); table_rows <- list(); estimand_rows <- list()
+  measures <- list(); curves <- list(); table_rows <- list(); estimand_rows <- list(); no_events <- list()
   for (ei in seq_along(estimands)) {
     e <- estimands[[ei]]; t <- tags[[e]]; r <- est_of(e); off <- (ei - 1L) * width_each
-    ci <- function(j) { iv <- boot$intervals[off + j, ]; if (anyNA(iv)) NULL else vcr_interval("confidence", iv[1], iv[2]) }
+    # An arm with no event at all has no risk the data can measure: a model fitted to it gives a number set by its penalty, and every resample
+    # of it gives the same zero, so no interval of its risk, of the difference or of the ratio is drawn from the resamples. The exact upper limit of
+    # a risk of 0 events among n people is said instead.
+    ev <- point$detail[[paste0("events_", e)]]
+    bare <- if (is.null(ev)) character(0) else names(ev)[ev == 0]
+    if (length(bare)) {
+      n_at <- if (ccw) point$detail[[paste0("atRisk_", e)]] else tapply(fr$pid[tr$rows], tr$arm, function(p) length(unique(p)))[c("0", "1")]
+      no_events[[length(no_events) + 1L]] <- list(estimand = if (ccw) "start" else e, arms = as.list(bare),
+        upperLimits = lapply(stats::setNames(bare, bare), function(a) { n <- as.numeric(n_at[[if (ccw) a else c(control = "0", treated = "1")[[a]]]]); list(n = n, risk = 1 - 0.025^(1 / n), level = 0.95) }))
+    }
+    blank <- function(j) (j == 1L || j == 4L) && length(bare) > 0L || (j == 2L && "treated" %in% bare) || (j == 3L && "control" %in% bare)
+    ci <- function(j) { if (blank(j)) return(NULL); iv <- boot$intervals[off + j, ]; if (anyNA(iv)) NULL else vcr_interval("confidence", iv[1], iv[2]) }
     measures <- c(measures, .vcr_tt_measures(t, r[H, "treated"], r[H, "control"], list(rd = ci(1L), t = ci(2L), c = ci(3L), rr = ci(4L)), est_src))
-    label_e <- if (identical(e, "itt")) "意向治疗" else "按方案"
+    label_e <- if (ccw) "宽限期内开始" else if (identical(e, "itt")) "意向治疗" else "按方案"
     for (a in c("treated", "control")) {
       col0 <- off + 4L + (if (a == "treated") 0L else H)
       lo <- boot$intervals[col0 + seq_len(H), 1L]; hi <- boot$intervals[col0 + seq_len(H), 2L]
-      curves[[length(curves) + 1L]] <- vcr_series(paste0(a, "_", t), paste0(if (a == "treated") "试验组" else "对照组", "（", label_e, "）"), 0:(H - 1L), 1 - r[, a],
-        "calculated", ours = identical(a, "treated"), low = 1 - hi, high = 1 - lo, dashed = identical(e, "pp") && length(estimands) > 1L, band_kind = "confidence", band_level = 0.95)
-      table_rows[[length(table_rows) + 1L]] <- data.frame(estimand = e, arm = a, period = 0:(H - 1L), risk = r[, a], lower = lo, upper = hi)
+      if (a %in% bare) { lo <- rep(NA_real_, H); hi <- rep(NA_real_, H) }
+      curves[[length(curves) + 1L]] <- vcr_series(paste0(a, "_", t), paste0(if (a == "treated") "试验组" else "对照组", "（", if (ccw && a == "control") "始终不开始" else label_e, "）"), 0:(H - 1L), 1 - r[, a],
+        "calculated", ours = identical(a, "treated"), low = if (a %in% bare) NULL else 1 - hi, high = if (a %in% bare) NULL else 1 - lo, dashed = identical(e, "pp") && length(estimands) > 1L, band_kind = "confidence", band_level = 0.95)
+      table_rows[[length(table_rows) + 1L]] <- data.frame(estimand = if (ccw) "start" else e, arm = a, period = 0:(H - 1L), risk = r[, a], lower = lo, upper = hi)
     }
-    estimand_rows[[length(estimand_rows) + 1L]] <- list(kind = e, contrast = "risk_difference", horizon = H, label = if (identical(e, "itt")) "intention_to_treat" else "per_protocol")
+    estimand_rows[[length(estimand_rows) + 1L]] <- if (ccw) list(kind = "start", contrast = "risk_difference", horizon = H, label = "initiation_within_grace_period")
+      else list(kind = e, contrast = "risk_difference", horizon = H, label = if (identical(e, "itt")) "intention_to_treat" else "per_protocol")
   }
   bs <- vcr_boot_summary(boot, 1L)
-  limited_by <- c(if (bs$failureShare > 0.01) "bootstrap_failure_share", if (stopped) "bootstrap_stopped_early",
-                  if (identical(kind, "clone_censor_weight") && length(extra$weights$control) && (extra$weights$control$max > 20 || abs(extra$weights$control$mean - 1) > 0.25)) "weights_not_stable")
+  limited_by <- c(if (bs$failureShare > 0.01) "bootstrap_failure_share", if (stopped) "bootstrap_stopped_early", if (length(no_events)) "arm_without_events",
+                  if (ccw && (.vcr_tt_unstable_weights(extra$weights$control) || .vcr_tt_unstable_weights(extra$weights$treated))) "weights_not_stable",
+                  if (ccw && isTRUE(extra$horizonInsideGracePeriod)) "horizon_inside_grace_period",
+                  if (ccw && extra$treatedBeforeTimeZero > 0) "treated_before_time_zero",
+                  if (length(extra$dropped)) "per_protocol_beyond_protocol_follow_up")
   detail_w <- NULL
   if (identical(kind, "sequential") && "pp" %in% estimands) {
     wsum <- .vcr_tt_summary(point$detail$weights)
@@ -537,7 +593,8 @@ vcr_job_target_trial <- function(job, output_dir = NULL, cancel_file = NULL, ...
   if (identical(kind, "sequential")) design <- list(personTrials = extra$trials, expandedRows = extra$expanded, startsByArm = extra$armN, outcomeModel = om)
   tt <- list(strategy = kind, estimands = estimand_rows, horizon = H, periodUnit = if (nzchar(unit)) unit else NULL, design = design, checks = checks,
              weights = if (identical(kind, "sequential")) list(numerator = as.list(weight_cols$numerator), denominator = as.list(weight_cols$denominator), summary = detail_w) else NULL,
-             coefficients = coefs,
+             coefficients = coefs, armsWithoutEvents = if (length(no_events)) no_events else NULL,
+             droppedEstimands = if (length(extra$dropped)) extra$dropped else NULL,
              population = if (identical(kind, "sequential")) "everyone eligible at any trial start, each start counted once" else "everyone eligible at time zero",
              bootstrap = vcr_boot_diagnostics(bs, B, "people resampled with their whole record; the weights and the outcome model are refitted in every resample", se_scale = "risk difference", interval_scale = "risk"))
   ok <- list(status = "succeeded", measures = measures, conclusion = if (length(limited_by)) "limited" else "estimable", counts = counts,

@@ -134,3 +134,58 @@ vcr_case("N79c", c("AC-07", "AC-30"), function() {
        detail = sprintf("the whole run takes %.0f CPU seconds; a budget of 45%% of it keeps %d of 2000 resamples (limited, bootstrap_stopped_early): %s; a budget of 0.02 s fails with the point estimates and no interval: %s; the arm by follow-up interaction runs: %s",
                         full$manifest$cpuSeconds, part$replicates %||% 0L, stopped_ok, none_ok, opts_ok))
 })
+
+#' People whose arm is fixed at period 0 (the only period they are eligible in): treated people stay treated for `stay` periods and stop (`stay` NULL:
+#' for good), hazards of the event per period `h0` untreated and `h1` treated, followed to `periods`. `events` overrides the draw: the number of events
+#' among the treated and the untreated (placed at the earliest periods; the first number is the untreated, the second the treated), for the tables in which an arm has none.
+.n79_fixed_arm <- function(n = 600L, periods = 12L, stay = NULL, h0 = 0.10, h1 = 0.05, seed = 20261114L, events = NULL) {
+  set.seed(seed, kind = VCR_RNG_KIND)
+  a0 <- rep(0:1, length.out = n); E <- rep(Inf, n)
+  if (is.null(events)) {
+    for (u in 0:(periods - 1L)) {
+      on <- a0 == 1L & (is.null(stay) | u < (stay %||% Inf))
+      E[is.infinite(E) & stats::runif(n) < ifelse(on, h1, h0)] <- u
+    }
+  } else {
+    for (arm in 0:1) { ix <- which(a0 == arm); k <- events[[arm + 1L]]; if (k > 0L) E[ix[seq_len(k)]] <- seq_len(k) %% periods }
+  }
+  last <- pmin(E, periods - 1L)
+  who <- rep(seq_len(n), last + 1L); u <- sequence(last + 1L) - 1L
+  id <- sprintf("F%04d", who)
+  treat <- ifelse(a0[who] == 1L & (is.null(stay) | u < (stay %||% Inf)), 1L, 0L)
+  tab <- function(p, v) data.frame(USUBJID = id, PARAMCD = p, AVAL = v, ADT = u)
+  rbind(tab("treatment", treat), tab("outcome", as.integer(u == E[who])), tab("eligible", as.integer(u == 0L)))
+}
+
+vcr_case("N79d", c("AC-08", "AC-11", "AC-30"), function() {
+  # Review stats2 findings 5 and 4. (5) The horizon was checked against intention-to-treat follow-up only, so a per-protocol risk was read at a period no
+  # treated person had been on protocol: with the treated arm stopping at period 3 and a horizon of 10 the engine answered a per-protocol risk difference of
+  # -.25 'estimable' (truth -.19) from the outcome model's polynomial. Now the estimand the follow-up cannot carry is left out and named, the other is kept,
+  # and a request for that estimand alone is not estimable by name; at a horizon the protocol does cover the numbers are the closed forms. (4) An arm with
+  # no event at all has no risk the data measure: the result says so, draws no interval of that risk, of the difference or of the ratio, and gives the
+  # exact upper limit of 0 events among the people of the arm (a model fitted to such an arm returned a risk of .0001 with an interval of 9e-5 to 1.1e-4).
+  long <- .n79_fixed_arm(600L, 12L, stay = 3L)
+  mk <- function(tab, sc, id) vcr_test_job("comparator.target_trial", sc, list(vcr_test_input(tab, paste0("snp_", id, ":longitudinal"), "long")), seed = 12L, job_id = paste0("job_", id))
+  base <- list(strategy = list(kind = "sequential", estimand = "both"), horizon = 10L)
+  r <- vcr_test_run(mk(long, base, "n79d1"))
+  kept <- !is.null(vcr_get_measure(r, "risk_difference_itt")) && is.null(vcr_get_measure(r, "risk_difference_pp")) && identical(r$conclusion, "limited") &&
+    "per_protocol_beyond_protocol_follow_up" %in% vcr_chr(r$diagnostics$limitedBy) && identical(r$diagnostics$targetTrial$droppedEstimands[[1]]$estimand, "pp") &&
+    identical(r$diagnostics$targetTrial$droppedEstimands[[1]]$arm, "treated") && r$diagnostics$targetTrial$droppedEstimands[[1]]$longestOnProtocol == 3L
+  alone <- vcr_test_run(mk(long, utils::modifyList(base, list(strategy = list(kind = "sequential", estimand = "per_protocol"))), "n79d2"))
+  alone_ok <- identical(alone$status, "not_estimable") && identical(alone$notEstimableRule, "horizon_beyond_followup")
+  inside <- vcr_test_run(mk(long, utils::modifyList(base, list(horizon = 3L)), "n79d3"))
+  pp <- c(treated = vcr_measure_value(inside, "risk_treated_pp"), control = vcr_measure_value(inside, "risk_control_pp")); truth <- c(treated = 1 - 0.95^3, control = 1 - 0.90^3)
+  inside_ok <- is.null(inside$diagnostics$targetTrial$droppedEstimands) && abs(pp[["treated"]] - truth[["treated"]]) < 0.04 && abs(pp[["control"]] - truth[["control"]]) < 0.04 && identical(inside$conclusion, "estimable")
+  # (4)
+  sc4 <- list(strategy = list(kind = "sequential", estimand = "itt"), horizon = 8L)
+  a_tab <- .n79_fixed_arm(400L, 8L, events = c(200L, 0L)); b_tab <- .n79_fixed_arm(400L, 8L, events = c(2L, 0L))
+  a <- vcr_test_run(mk(a_tab, sc4, "n79d4")); b <- vcr_test_run(mk(b_tab, sc4, "n79d5"))
+  bare <- function(x) identical(x$conclusion, "limited") && "arm_without_events" %in% vcr_chr(x$diagnostics$limitedBy) &&
+    is.null(vcr_get_measure(x, "risk_difference_itt")$interval) && is.null(vcr_get_measure(x, "risk_treated_itt")$interval) && !is.null(vcr_get_measure(x, "risk_control_itt")$interval) &&
+    identical(unlist(x$diagnostics$targetTrial$armsWithoutEvents[[1]]$arms), "treated")
+  up <- a$diagnostics$targetTrial$armsWithoutEvents[[1]]$upperLimits$treated
+  up_ok <- abs(up$risk - (1 - 0.025^(1 / 200))) < 1e-12 && up$n == 200
+  list(pass = kept && alone_ok && inside_ok && bare(a) && bare(b) && up_ok,
+       detail = sprintf("600 people, the treated stop after 3 periods, horizon 10, both estimands: intention to treat kept (%.4f), per protocol left out and named (%s), per protocol alone not estimable (%s); at a horizon of 3 the per-protocol risks are %.4f and %.4f (closed forms %.4f and %.4f); 400 people, none of the 200 treated has an event: limited, no interval of the treated risk, of the difference or of the ratio (%s), the upper limit of 0 of 200 is %.5f (exact: %.5f); the same with 2 events in all, both untreated: %s",
+                        vcr_measure_value(r, "risk_difference_itt"), kept, alone_ok, pp[["treated"]], pp[["control"]], truth[["treated"]], truth[["control"]], bare(a), up$risk, 1 - 0.025^(1 / 200), bare(b)))
+})

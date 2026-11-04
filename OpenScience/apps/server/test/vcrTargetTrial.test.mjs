@@ -27,7 +27,7 @@ test("a target-trial emulation is a comparator job: filed under the comparator k
   assert.equal(JOB_KIND_LABELS.target_trial_emulation, "目标试验模拟");
   assert.equal(METHOD_LABELS["comparator.target_trial"], "目标试验模拟");
   for (const rule of ["no_eligible_person_trials", "arm_without_person_trials", "horizon_beyond_followup", "outcome_model_not_estimable"]) assert.ok(VCR_NOT_ESTIMABLE_RULES.includes(rule), rule);
-  for (const name of ["risk_difference_itt", "risk_difference_pp", "risk_treated_pp", "risk_control_itt", "risk_ratio_pp"]) assert.notEqual(measureLabel(name), name, `${name} has a label`);
+  for (const name of ["risk_difference_itt", "risk_difference_pp", "risk_treated_pp", "risk_control_itt", "risk_ratio_pp", "risk_difference_start", "risk_treated_start", "risk_control_start", "risk_ratio_start"]) assert.notEqual(measureLabel(name), name, `${name} has a label`);
 });
 
 test("the sequence of trials opens with the person's question, says which estimand each block is and shows both arms beside the difference", () => {
@@ -55,8 +55,13 @@ test("the sequence of trials opens with the person's question, says which estima
 test("clone-censor-weight names its grace period, the waiting time and the naive comparison as a warning about the data", () => {
   const shown = card("clone-censor-weight");
   assert.match(shown.question, /3 周内开始治疗，与不开始治疗相比，效应是多少/);
-  assert.deepEqual(shown.estimands.map((entry) => entry.kind), ["pp"]);
-  assert.match(shown.sentence, /到宽限期结束还没开始治疗的人，在“开始”组里被删失/);
+  // the strategy reads the start and nothing after it: it is not a per-protocol estimand and is not called one (review stats2 finding 16)
+  assert.deepEqual(shown.estimands.map((entry) => entry.kind), ["start"]);
+  assert.equal(shown.estimands[0].label, "宽限期内开始治疗");
+  assert.doesNotMatch(JSON.stringify(shown), /按方案/);
+  assert.match(shown.estimands[0].answers, /第 12 周末的累积风险差/);
+  assert.match(shown.sentence, /宽限期的最后一期开始时还没开始治疗的人，在“开始”组里被删失/);
+  assert.match(shown.weights, /始终不开始的一组平均.*宽限期内开始的一组平均/, "both arms' weights are said");
   assert.match(shown.checks.join(""), /中位等待时间是 \d+ 周/);
   assert.match(shown.naiveSentence, /朴素风险差.*不是结果/);
   assert.ok(shown.naive && shown.naive.value < shown.estimands[0].riskDifference.value, "the naive difference is the larger benefit: it credits the treated with the time they waited");
@@ -80,4 +85,31 @@ test("the premises, the limits of a run that was stopped, no back-office word, n
   for (const name of ["sequential", "clone-censor-weight", "sequential-stopped"]) {
     for (const sentence of sayings(card(name))) assert.doesNotMatch(sentence, /bootstrap|nnet|TrialEmulation|handler|diagnostics|_|\bITT\b|\bPP\b/i, sentence);
   }
+});
+
+test("the limits of the new cases are said: an arm with no event, a per-protocol estimand the follow-up cannot carry, a horizon inside the grace period, people treated before time zero, a median past the data", () => {
+  const sequential = fixture("sequential");
+  const diagnostics = {
+    ...sequential.diagnostics,
+    limitedBy: ["arm_without_events", "per_protocol_beyond_protocol_follow_up"],
+    targetTrial: { ...sequential.diagnostics.targetTrial, armsWithoutEvents: [{ estimand: "itt", arms: ["treated"], upperLimits: { treated: { n: 200, risk: 0.01828, level: 0.95 } } }],
+      droppedEstimands: [{ estimand: "pp", rule: "horizon_beyond_followup", arm: "treated", longestOnProtocol: 3, horizon: 10 }] },
+  };
+  const limits = vcrResultLimits({ conclusion: "limited", method: "comparator.target_trial", diagnostics, measures: sequential.measures });
+  const keys = limits.map((entry) => entry.key);
+  assert.ok(keys.includes("arm_without_events") && keys.includes("per_protocol_beyond_protocol_follow_up"), JSON.stringify(keys));
+  assert.match(limits.find((entry) => entry.key === "arm_without_events").text, /试验组一例事件也没有.*没有区间/);
+  const shown = presentTargetTrial({ ...sequential, diagnostics }, value(sequential));
+  assert.ok(shown.checks.some((text) => /试验组一例事件也没有.*不高于大约 1\.83%.*200 人里 0 例/.test(text)), shown.checks.join("|"));
+  assert.ok(shown.checks.some((text) => /按方案的结果没有给出：试验组里没有人在方案上待满.*最长 3 期/.test(text)), shown.checks.join("|"));
+  const ccw = fixture("clone-censor-weight");
+  const inside = { ...ccw, diagnostics: { ...ccw.diagnostics, limitedBy: ["horizon_inside_grace_period", "treated_before_time_zero"],
+    targetTrial: { ...ccw.diagnostics.targetTrial, design: { ...ccw.diagnostics.targetTrial.design, gracePeriod: 15, horizonInsideGracePeriod: true, treatedBeforeTimeZero: 31 } } } };
+  const ccwLimits = vcrResultLimits({ conclusion: "limited", method: "comparator.target_trial", diagnostics: inside.diagnostics, measures: ccw.measures }).map((entry) => entry.key);
+  assert.ok(ccwLimits.includes("horizon_inside_grace_period") && ccwLimits.includes("treated_before_time_zero"), JSON.stringify(ccwLimits));
+  const ccwCard = presentTargetTrial(inside, value(ccw));
+  assert.ok(ccwCard.checks.some((text) => /还在宽限期（15 周）之内.*不是“宽限期内开始治疗”的风险/.test(text)), ccwCard.checks.join("|"));
+  assert.ok(ccwCard.checks.some((text) => /时间零点之前用过药、之后没再用 31 人/.test(text)));
+  const fit = vcrResultLimits({ conclusion: "limited", method: "model.survival_fit", diagnostics: { limitedBy: ["median_beyond_follow_up"], model: { medianTimesLongestFollowUp: 4.2 } }, measures: [] });
+  assert.ok(fit.some((entry) => entry.key === "median_beyond_follow_up" && /最长随访的 4\.2 倍/.test(entry.text)), JSON.stringify(fit));
 });

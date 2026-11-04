@@ -115,6 +115,27 @@ export function vcrResultLimits({ conclusion = null, method = null, route = null
     if (trialLimits.includes('weights_not_stable')) {
       limits.push({ key: 'weights_not_stable', text: '补回删失的权重平均值离 1 太远，或有极大的权重：少数人撑起了结果，读的时候要谨慎。' })
     }
+    const tt = object(found.targetTrial)
+    // an arm that had no event at all: its risk is bounded above, not measured, and the resampling interval of the difference is not drawn
+    if (trialLimits.includes('arm_without_events')) {
+      const arms = (Array.isArray(tt.armsWithoutEvents) ? tt.armsWithoutEvents : []).flatMap((entry) => (Array.isArray(object(entry).arms) ? object(entry).arms : []).map(String))
+      const who = arms.includes('treated') && arms.includes('control') ? '两组' : arms.includes('treated') ? '试验组' : '对照组'
+      limits.push({ key: 'arm_without_events', text: `${who}一例事件也没有：它的风险只有上限，没有区间；风险差和风险比的区间没有给出，读它们要当作方向，不是精确的数。` })
+    }
+    if (trialLimits.includes('per_protocol_beyond_protocol_follow_up')) {
+      limits.push({ key: 'per_protocol_beyond_protocol_follow_up', text: '按方案的结果没有给出：有一组里没有人在方案上待到所问的那一期，那里的按方案风险只会是模型外推出来的；意向治疗的结果照常给出。' })
+    }
+    if (trialLimits.includes('horizon_inside_grace_period')) {
+      limits.push({ key: 'horizon_inside_grace_period', text: '随访终点还在宽限期之内：试验组里没有人因为没开始治疗而被删失，它的风险是不加干预的自然进程，不是“宽限期内开始治疗”的风险。' })
+    }
+    if (trialLimits.includes('treated_before_time_zero')) {
+      limits.push({ key: 'treated_before_time_zero', text: '有人在时间零点之前已经用过药、之后没再用：他们被当作“始终没有开始”，但其实不是新开始用药的人，两组的可比性会打折扣。' })
+    }
+  }
+  // a fitted survival model's median that lies past the longest follow-up is read off the curve, not off anyone (review stats2 finding 7)
+  if (trialLimits.includes('median_beyond_follow_up')) {
+    const times = Number(object(found.model).medianTimesLongestFollowUp)
+    limits.push({ key: 'median_beyond_follow_up', text: `拟合出的生存中位时间${Number.isFinite(times) ? `是最长随访的 ${Number(times.toPrecision(3))} 倍` : '超出了最长随访'}：随访里没有人观察到它，这个数是曲线外推出来的，不同的曲线形状会给出很不一样的值。` })
   }
   const labels = /** @type {Record<string, string>} */ (VCR_APPLICABILITY_LIMIT_LABELS_ZH)
   for (const entry of (Array.isArray(found.applicabilityLimits) ? found.applicabilityLimits : []).map(object)) {

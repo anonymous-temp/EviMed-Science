@@ -430,6 +430,11 @@ export const MEASURE_META = Object.freeze({
   risk_treated_pp: { label: "试验组累积风险（按方案）", unit: "%", percent: true },
   risk_control_pp: { label: "对照组累积风险（按方案）", unit: "%", percent: true },
   risk_ratio_pp: { label: "累积风险比（按方案）" },
+  // the strategy of a clone-censor-weight design: start within the grace period against never start (it reads the start and nothing after it, so it is not "per protocol")
+  risk_difference_start: { label: "宽限期内开始治疗的风险差", unit: "%", percent: true },
+  risk_treated_start: { label: "试验组累积风险（宽限期内开始治疗）", unit: "%", percent: true },
+  risk_control_start: { label: "对照组累积风险（始终不开始）", unit: "%", percent: true },
+  risk_ratio_start: { label: "累积风险比（宽限期内开始治疗）" },
   weighted_risk_ratio: { label: "加权后的相对危险度（RR）" },
   weighted_odds_ratio: { label: "加权后的比值比（OR）" },
   effective_sample_size: { label: "有效样本量", unit: "例" },

@@ -1209,7 +1209,8 @@ export interface VcrTargetTrialCard {
   /** The follow-up time the risks are read at, as the server counted it; null where it did not say. */
   horizon: number | null;
   estimands: Array<{
-    kind: "itt" | "pp";
+    /** `start` is a clone-censor-weight design's strategy (start within the grace period against never start); it is not a per-protocol estimand. */
+    kind: "itt" | "pp" | "start";
     label: string;
     /** What the estimand holds fixed and what it ignores, in the server's words. */
     meaning: string | null;
@@ -2874,11 +2875,11 @@ export function readTargetTrial(raw: unknown): VcrTargetTrialCard | null {
   if (!question || !sentence) return null;
   const readable = (value: VcrValue | null) => (value && (value.value !== null || value.text) ? value : null);
   const estimands = arr(card.estimands).flatMap((row) => {
-    const kind: "itt" | "pp" | null = row.kind === "itt" ? "itt" : row.kind === "pp" ? "pp" : null;
+    const kind: "itt" | "pp" | "start" | null = row.kind === "itt" ? "itt" : row.kind === "pp" ? "pp" : row.kind === "start" ? "start" : null;
     const riskDifference = readable(readOptionalValue(row.riskDifference));
     if (!kind || !riskDifference) return [];
     return [{
-      kind, label: text(row.label) ?? (kind === "itt" ? "意向治疗" : "按方案"), meaning: text(row.meaning), answers: text(row.answers),
+      kind, label: text(row.label) ?? (kind === "itt" ? "意向治疗" : kind === "start" ? "宽限期内开始治疗" : "按方案"), meaning: text(row.meaning), answers: text(row.answers),
       riskTreated: readable(readOptionalValue(row.riskTreated)), riskControl: readable(readOptionalValue(row.riskControl)),
       riskDifference, riskRatio: readable(readOptionalValue(row.riskRatio)),
     }];

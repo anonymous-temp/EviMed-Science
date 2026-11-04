@@ -33,7 +33,7 @@ test("the people-count keys are the contract's, and the floor is ten", () => {
   assert.equal(VCR_MIN_CELL_SIZE, 10);
   assert.deepEqual([...VCR_PEOPLE_COUNT_FIELDS], ["n", "count", "patients", "realPatients", "subjects", "events", "kept", "excluded",
     "indeterminate", "cohortSize", "screened", "eligible", "enrolled", "referred", "contacted", "candidates", "nonEvents", "validPredictions", "invalidPredictions",
-    "removed", "startedWithinGrace", "startedAfterGrace", "neverStarted", "startedAtTimeZero"]);
+    "removed", "startedWithinGrace", "startedAfterGrace", "neverStarted", "startedAtTimeZero", "treatedBeforeTimeZero"]);
   assert.deepEqual([...VCR_PEOPLE_COUNT_MAP_KEYS], ["levels", "people", "readable", "startsByArm", "eventsByArm"]);
   assert.deepEqual([...VCR_PEOPLE_COUNT_SCALAR_FIELDS], ["rows", "startingRows", "keptRows", "trainingObservations", "effectiveSampleSize",
     "requestedSubjects", "batchSubjects", "batchEvaluated", "batchUnavailable", "outsideBatch", "subjectsNotEvaluated",
@@ -48,6 +48,7 @@ test("the people-count keys are the contract's, and the floor is ten", () => {
       covariates: ["missing"], design: ["people"], waitingTime: ["people"] });
   assert.deepEqual(VCR_PEOPLE_COUNT_LINKS.map((link) => [[...link.triggers], [...link.whole], [...link.derived]]),
     [[["events", "nonEvents"], ["n", "events", "nonEvents"], ["observedRisk", "calibrationInLarge"]],
+      [["startedWithinGrace", "startedAfterGrace", "neverStarted", "treatedBeforeTimeZero"], ["people", "startedWithinGrace", "startedAfterGrace", "neverStarted", "treatedBeforeTimeZero"], []],
       [["startedWithinGrace", "startedAfterGrace", "neverStarted"], ["people", "startedWithinGrace", "startedAfterGrace", "neverStarted"], []],
       [["usedRows", "excludedRows"], ["inputRows", "usedRows", "excludedRows"], []], [["rowsIncomplete"], ["rowsAnalysed", "rowsIncomplete"], []], [["droppedRows"], ["rows", "droppedRows"], []]]);
   assert.deepEqual({ ...VCR_PEOPLE_DERIVED_MEASURES }, { observedRisk: "observed_risk", calibrationInLarge: "calibration_in_the_large" });
@@ -490,6 +491,12 @@ test("a target-trial emulation's people by when they began: the parts make the w
   // enough people: nothing is hidden
   const large = { people: 250, startedWithinGrace: 97, startedAfterGrace: 56, neverStarted: 97, startedAtTimeZero: 40, waitingTime: { max: 17, median: 2, people: 153 } };
   assert.deepEqual(suppressForModel({ design: large }), { design: large });
+  // the people treated before time zero are the fourth part of the people: a small one hides the others, and a small other hides it (review stats2 finding 17)
+  const withPrior = { people: 260, startedWithinGrace: 97, startedAfterGrace: 56, neverStarted: 98, treatedBeforeTimeZero: 9 };
+  assert.deepEqual(suppressForModel({ design: withPrior }).design, { people: null, startedWithinGrace: null, startedAfterGrace: null, neverStarted: null, treatedBeforeTimeZero: null, suppressed: ["people", "startedWithinGrace", "startedAfterGrace", "neverStarted", "treatedBeforeTimeZero"] });
+  const smallOther = suppressForModel({ design: { people: 260, startedWithinGrace: 97, startedAfterGrace: 5, neverStarted: 98, treatedBeforeTimeZero: 60 } }).design;
+  assert.equal(smallOther.treatedBeforeTimeZero, null, "the part that would give the small one away by subtraction goes with it");
+  assert.equal(suppressForModel({ design: { ...withPrior, treatedBeforeTimeZero: 0, neverStarted: 107 } }).design.treatedBeforeTimeZero, 0, "none treated before is not a small cell");
   // the people a design was run on when it is the only count that is small
   assert.deepEqual(suppressForModel({ design: { people: 6, gracePeriod: 3 } }).design, { people: null, gracePeriod: 3, suppressed: ["people"] });
   assert.deepEqual(suppressForModel({ checks: { persons: 5, personPeriods: 40, eligiblePeriods: 38, recordsCutShort: 0 } }).checks,

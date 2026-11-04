@@ -30,10 +30,10 @@ const RATIO_MEASURES = Object.freeze(/** @type {const} */ ([
   ["hazard_ratio", "hazard_ratio"], ["aipw_risk_ratio", "risk_ratio"], ["weighted_risk_ratio", "risk_ratio"],
   ["aipw_odds_ratio", "odds_ratio"], ["weighted_odds_ratio", "odds_ratio"],
   // a target-trial emulation's risk ratios: the intention-to-treat one first (the analysis that asks nothing of the censoring), then the per-protocol one
-  ["risk_ratio_itt", "risk_ratio"], ["risk_ratio_pp", "risk_ratio"],
+  ["risk_ratio_itt", "risk_ratio"], ["risk_ratio_pp", "risk_ratio"], ["risk_ratio_start", "risk_ratio"],
 ]));
 /** The measures that are a difference, and a target-trial emulation's risk differences in the same order. */
-const DIFFERENCE_MEASURES = Object.freeze(["rmst_difference", "aipw_difference", "weighted_difference", "risk_difference_itt", "risk_difference_pp"]);
+const DIFFERENCE_MEASURES = Object.freeze(["rmst_difference", "aipw_difference", "weighted_difference", "risk_difference_itt", "risk_difference_pp", "risk_difference_start"]);
 
 const SCALE_WORDS = Object.freeze(/** @type {Record<string, string>} */ ({ hazard_ratio: "风险比（HR）", risk_ratio: "相对危险度（RR）", odds_ratio: "比值比（OR）", difference: "差值" }));
 
