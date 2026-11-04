@@ -67,6 +67,8 @@ export const inject = ['slots'];
  * hashed name for every suffix the rules below name (compared package by package, none added or removed; ui-layout,
  * the owner of `_sidebarCol`, `_centerCol`, `_rightbarCol`, `_overlayLayer` and `_handle`, is byte-identical), and
  * `data-composer-stat`, `data-composer-dock`, `data-conversation-scroll` and `data-turn-tail` are in the new bundles.
+ * Re-read at 0.2.2-rc.1 (2026-11-04): every suffix the rules name is in the client bundles of this pin (`_brand`, `_goalId` and
+ * `_hostStatus` in the brand and LoopX bundles they always were), and the frame was opened on a live kernel at 1440 and 390 px.
  */
 export const GEOMETRY_KERNEL_PIN = '0.2.2-rc.1';
 
