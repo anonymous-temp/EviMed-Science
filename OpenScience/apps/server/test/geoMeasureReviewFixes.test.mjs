@@ -198,8 +198,9 @@ test("a net effect counts the control groups every compared round had, not the o
     latestNoiseBand: async () => ({ value: 2, measured: true }),
     armSeries: async () => structuredClone(series),
     armRounds: async () => rounds,
-    // No answers on file: nothing to compute again, the stored cells stand.
-    roundSkippedEngines: async () => [], roundFactRows: async () => [], round: async () => ({ engines: ENGINES }), projectContext: async () => null,
+    // Legacy rows have no frozen inputs; current facts must not be used to invent their provenance.
+    frozenMetricInput: async () => null,
+    roundSkippedEngines: async () => [], roundFactRows: async () => { throw new Error("Current facts cannot prove a legacy computation"); }, round: async () => ({ engines: ENGINES }), projectContext: async () => null,
   });
   const input = { project: { id: "geo_x" }, round: { id: "r2", setVersion: 5, sampleDate: "2026-10-25" }, controlGroups: 4, engines: ENGINES };
   const rounds = [{ roundId: "r1", date: "2026-09-25", engines: ENGINES, arms: wide }, { roundId: "r2", date: "2026-10-25", engines: ENGINES, arms: narrow }];
@@ -210,7 +211,7 @@ test("a net effect counts the control groups every compared round had, not the o
   assert.ok(shared.every((row) => row.reason === "too_few_control_groups"), "two shared groups are under the table's minimum, whatever the caller counted");
   // Without arms the caller's count and the stored cells are all there is (a caller that does not know its arms).
   assert.ok((await netEffectRows(storeWith(rounds), input)).every((row) => row.status === "ok" || row.reason === "judge_version_unrecorded"));
-  // A round measured before arms were recorded, with no answers on file, is left as stored and does not narrow what is shared.
+  // A round without frozen arms cannot establish a new medical NET, even if its old cells remain readable.
   const legacy = await netEffectRows(storeWith([{ ...rounds[0], arms: null }, rounds[1]]), { ...input, arms: narrow });
   assert.ok(legacy.every((row) => row.status === "ok" || row.reason === "judge_version_unrecorded"), JSON.stringify(legacy[0]));
 });
