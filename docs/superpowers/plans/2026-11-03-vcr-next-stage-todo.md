@@ -42,6 +42,10 @@ A further isolated candidate changes only the matching skill's guidance: use a f
 
 ## Execution order
 
+The three preselected TREC operational probes are now complete and recorded in
+[the November 4 results](2026-11-04-vcr-trec-operational-results.md). Their
+individual scores do not close the full-cohort matching or TREC ranking gates.
+
 1. Run Tasks 1 and 2 together. Error adjudication can proceed while request stability is repaired.
 2. Run Tasks 3 and 4 on a small frozen development panel through the actual platform. Decide the condition representation from that comparison.
 3. Complete Tasks 5, 6 and 7 on one integrated revision.
