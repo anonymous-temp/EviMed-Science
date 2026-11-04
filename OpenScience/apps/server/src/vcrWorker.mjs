@@ -295,7 +295,7 @@ export function createVcrWorkerLoops({ jobs, orchestrator, store, matching = nul
       started = fresh.length;
       for (const job of fresh) {
         const id = String(job.id);
-        inFlight.set(id, Promise.resolve().then(() => jobs.advance(job)).then(finishedHook)
+        inFlight.set(id, Promise.resolve().then(() => jobs.advance(job, { mayYield: true })).then(finishedHook)
           .catch((reason) => { jobs.report?.(reason?.code ?? "vcr_job_advance_failed"); }).finally(() => { inFlight.delete(id); }));
       }
     } else {

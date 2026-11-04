@@ -1386,6 +1386,9 @@ export class VcrJobs {
     // Three lanes. The engine's takes what is not a local method; the local one takes the short local methods (a verdict, a forecast);
     // the slow one takes the local methods that call a model per record (`VCR_SLOW_LOCAL_METHODS`), so that one long job does not hold
     // the short ones behind it on the same worker loop.
+    // One running job per account on the two local lanes: an account's work takes turns and no account fills the lane. A job of many hours would
+    // keep that turn for all of them, and a one-patient judgment asked for in a conversation would wait for it. So a long job gives its turn back
+    // between batches (`#yieldTurn`, queued again with `run_after` now), and the order below (`run_after`, oldest first) puts what was waiting ahead of it.
     const allLocal = Object.keys(this.localExecutors).filter(method => typeof this.localExecutors[method] === 'function');
     const localMethods = lane === 'slow' ? allLocal.filter(method => VCR_SLOW_LOCAL_METHODS.includes(method))
       : lane === 'local' ? allLocal.filter(method => !VCR_SLOW_LOCAL_METHODS.includes(method)) : allLocal;
@@ -1601,8 +1604,9 @@ export class VcrJobs {
    * otherwise read where it got to and finish it when it is done. Answers
    * what it did, so the worker can count.
    * @param {any} job a row shape from {@link claim}
+   * @param {{ mayYield?: boolean }} [options] `mayYield`: this caller claims again, so a long local job may hand its turn back between batches
    */
-  async advance(job) {
+  async advance(job, { mayYield = false } = {}) {
     const row = await this.#row(job.id);
     if (!row || row.state !== "running") return { action: "skipped", state: row?.state ?? "gone" };
     const owner = String(row.lease_owner ?? "");
@@ -1610,7 +1614,7 @@ export class VcrJobs {
       || Number(job.attempts ?? row.attempts) !== Number(row.attempts)) return { action: "skipped", state: "lease_changed" };
     const frozen = this.#engineJob(row);
     const local = this.localExecutors[String(row.method)];
-    if (local) return this.#runLocal(row, { ...frozen, principal: String(object(row.checkpoint).principal ?? row.user_id) }, local, owner);
+    if (local) return this.#runLocal(row, { ...frozen, principal: String(object(row.checkpoint).principal ?? row.user_id) }, local, owner, mayYield);
     if (!this.engine?.configured?.()) {
       return this.finish(String(row.id), { status: "failed", leaseOwner: owner, leaseAttempt: Number(row.attempts), error: { code: "engine_unavailable",
         message: "计算引擎未接入本部署，这一步暂不可用。" } });
@@ -1809,14 +1813,17 @@ export class VcrJobs {
    * cannot drift in what a result was computed from.
    * @param {any} row @param {Record<string, any>} frozen @param {Function} executor @param {string} owner
    */
-  async #runLocal(row, frozen, executor, owner) {
+  async #runLocal(row, frozen, executor, owner, mayYield = false) {
     const startedAt = this.now().toISOString();
     try {
       const result = await executor({
         job: { ...frozen, scenarioHash: String(row.scenario_hash ?? "") },
         onProgress: (/** @type {any} */ progress) => this.progress(String(row.id), progress ?? {}, owner, Number(row.attempts)),
         isCanceled: async () => { const current = await this.#row(String(row.id)); return !current || current.state !== 'running' || current.lease_owner !== owner || current.attempts !== row.attempts; },
+        // Only a caller that will claim the job again lets it give its turn back (the worker's slow lane); one that runs a job to its end does not.
+        yieldable: mayYield === true,
       });
+      if (result?.yield) return await this.#yieldTurn(row, result.yield, owner);
       return this.finish(String(row.id), {
         status: String(result?.status ?? "succeeded"),
         result: { ...object(result), jobId: frozen.jobId, scenarioHash: String(row.scenario_hash ?? "") },
@@ -1831,6 +1838,21 @@ export class VcrJobs {
     } catch (error) {
       return this.#fail(row, error, owner);
     }
+  }
+
+  /**
+   * A long local job hands its slot back between batches: it goes behind what its account has waiting, with what it has done so far in its
+   * checkpoint, and the next claim carries on from there. Its tries start over, because a batch that ended is a worker that worked: only
+   * deaths in a row may use up a job that takes a day and outlives deployments.
+   * @param {any} row @param {{ checkpoint?: Record<string, any>, afterSeconds?: number }} turn @param {string} owner
+   */
+  async #yieldTurn(row, { checkpoint = {}, afterSeconds = 0 }, owner) {
+    const requeued = await this.store.one(`UPDATE ${VCR_SCHEMA}.jobs
+      SET state = 'queued', lease_owner = NULL, lease_until = NULL, run_after = now() + make_interval(secs => $2), attempts = 0,
+          checkpoint = checkpoint || $3::jsonb, updated_at = now()
+      WHERE id = $1 AND state = 'running' AND lease_owner = $4 AND attempts = $5 RETURNING *`,
+    [String(row.id), Math.max(0, Math.round(Number(afterSeconds) || 0)), JSON.stringify(object(checkpoint)), owner, Number(row.attempts)]);
+    return requeued ? { action: "yielded", job: jobSummaryFromRow(requeued) } : { action: "skipped", state: "changed" };
   }
 
   /** The job as the engine protocol carries it. @param {any} row */

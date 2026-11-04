@@ -490,7 +490,7 @@ export function vcrDocumentsSeam({ dataPlane, passagesMinChars = 40_000 }) {
               .filter(item => item.snapshotId === source.snapshotId && item.field).map(item => String(item.field)))];
             decisions.set(key, await dataPlane.subjectTableEvidenceBatch({ studyId: study.id, snapshotId: source.snapshotId,
               fields, subjectKey, principal: viewer?.id ?? study.userId, purpose: VCR_JOB_PURPOSE,
-              external: !viewer, cloudContext: viewer ? null : study.cloudContext }).catch(() => ({})));
+              external: !viewer, cloudContext: viewer ? null : study.cloudContext, session: study.tableSession ?? null }).catch(() => ({})));
           }
           const cell = decisions.get(key)?.[source.field];
           if (cell && (!source.sourceHash || source.sourceHash === cell.locator.sourceHash)) result.push({ ...entry, ...cell, quoteKind: "snapshot_cell" });
@@ -1210,7 +1210,7 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
     store, matchStore, judgments: matchJudgments, documents, subjectTable, targets: judgeTargets, config, report, counters: matchJudgeCounters,
     judge: createPairJudge({ config, usageLedger, fetchImpl: call, counters: matchJudgeCounters }),
   });
-  const matchJudge = createMatchJudge({ jobs, matchStore, documents, subjectTable, config, counters: matchJudgeCounters });
+  const matchJudge = createMatchJudge({ jobs, matchStore, documents, subjectTable, judgments: matchJudgments, config, counters: matchJudgeCounters });
   const matchJudgmentReads = createMatchJudgmentReads({ judgments: matchJudgments, documents, subjectTable, targets: judgeTargets, matchStore });
 
   const corrections = createVcrCorrectionCases({ store, matchStore, dataPlane, access });
@@ -1221,7 +1221,9 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
     // Platform packs (flywheel F26): off, no platform row is read and the request is a 404 by its own code.
     platform: { enabled: Boolean(config.vcrPlatformPacksEnabled), publisherId: PLATFORM_PUBLISHER_USER_ID, sourceChanges, entityVocabulary, officialZoneForKeys,
       people: (ids) => store.personNames(ids) } });
-  service.attach({ corrections, knowledge, engineProbe, erasure, matchJudgments: matchJudgmentReads });
+  // The matching page's reader of the saved judgments, and the start of the judging job from the page.
+  const matchResults = new VcrMatchResults({ database: productDatabase, judgments: matchJudgments, documents, matchStore });
+  service.attach({ corrections, knowledge, engineProbe, erasure, matchJudgments: matchJudgmentReads, matchJudge, matchResults });
   // The study's project carries the study's name: the first definition names a draft, and the sidebar lists projects. A project the
   // researcher renamed since is left alone, like GEO's — the old name is the study's own, or one nobody gave.
   if (projectStore?.renameProject) {

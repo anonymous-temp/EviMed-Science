@@ -229,14 +229,14 @@ test("resume is the ledger: a repeated job asks nothing again, and a failed pair
   const first = await f.run(f.job({ topK: 0 }));
   assert.equal(first.conclusion, "limited");
   assert.deepEqual(first.diagnostics.failures, { vcr_match_answer_unreadable: 1 });
-  assert.equal(f.provider.calls.length, 3);
+  assert.equal(f.provider.calls.length, 4, "an unreadable answer is asked again once before the pair fails");
   failing = false;
   const second = await f.run(f.job({ topK: 0 }));
-  assert.equal(f.provider.calls.length, 4, "only the pair that failed is asked again");
+  assert.equal(f.provider.calls.length, 5, "only the pair that failed is asked again");
   assert.equal(second.conclusion, "estimable");
   assert.deepEqual([second.diagnostics.stages.fit.done, second.diagnostics.stages.fit.already], [1, 2]);
   const third = await f.run(f.job({ topK: 0 }));
-  assert.equal(f.provider.calls.length, 4);
+  assert.equal(f.provider.calls.length, 5);
   assert.equal(third.diagnostics.stages.fit.already, 3);
   assert.deepEqual(third.diagnostics.used.calls, 0);
 });
@@ -377,6 +377,17 @@ test("an answer with no score or no clause is a failed pair; a partial clause an
   assert.equal(row.answer.droppedSentenceIds, 1);
   assert.equal(row.verdict, "possible");
   assert.deepEqual(result.diagnostics.failures, { vcr_match_answer_unreadable: 1 });
+});
+
+test("an unreadable answer that reads fine when asked again costs one call and no failure", async () => {
+  let garbled = 1;
+  const f = fixture({ script: ({ mode, user }) => {
+    if (mode === "fit" && /Breast trial/.test(user) && garbled > 0) { garbled -= 1; return { content: "nonsense" }; }
+    return null;
+  } });
+  const result = await f.run(f.job({ topK: 0 }));
+  assert.equal(result.diagnostics.failures, undefined);
+  assert.equal(f.provider.calls.length, 4);
 });
 
 test("a withdrawal in flight: nothing of the person is put back", async () => {

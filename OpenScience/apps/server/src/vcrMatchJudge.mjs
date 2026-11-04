@@ -319,6 +319,20 @@ export function judgmentTargets({ evidence = null, matchStore }) {
 }
 
 /**
+ * One model answer, asked again once when it cannot be read: 2 of the first 205 real answers held no usable score, and the same pair read
+ * fine when asked again, so one more call is worth more than a failed pair.
+ * @param {{ judge: any, ask: Record<string, any>, calls: any[], read: (content: string) => any, usable: (parsed: any) => boolean }} input
+ */
+async function askOnceMore({ judge, ask, calls, read, usable }) {
+  for (let attempt = 0; ; attempt += 1) {
+    const answered = await judge.call(ask).catch((/** @type {any} */ error) => { throw Object.assign(error, { calls }); });
+    calls.push(answered);
+    const parsed = read(answered.content);
+    if (attempt >= 1 || usable(parsed)) return parsed;
+  }
+}
+
+/**
  * One pair's trial-level judgment, a call per part of the record.
  * @param {{ judge: any, study: any, jobId: string, note: any, target: any, thinking: string, cap: number }} input
  */
@@ -328,9 +342,7 @@ async function judgeFit({ judge, study, jobId, note, target, thinking, cap }) {
   /** @type {any[]} */ const calls = [];
   for (const part of parts) {
     const messages = fitMessages({ title: target.title, summary: target.summary, eligibility: target.eligibility, note: part.text, conditions: target.conditions, interventions: target.interventions });
-    const answered = await judge.call({ study, jobId, messages, thinking }).catch((error) => { throw Object.assign(error, { calls }); });
-    calls.push(answered);
-    answers.push(parseFitAnswer(answered.content));
+    answers.push(await askOnceMore({ judge, ask: { study, jobId, messages, thinking }, calls, read: parseFitAnswer, usable: (parsed) => parsed.fit !== null }));
   }
   const merged = mergeFitAnswers(answers);
   if (merged.fit === null) throw Object.assign(failure('vcr_match_answer_unreadable', 'The answer held no score.'), { calls });
@@ -347,9 +359,9 @@ async function judgeCriteria({ judge, study, jobId, note, target, thinking, cap 
   /** @type {any[]} */ const calls = [];
   for (const part of parts) {
     const messages = criteriaMessages({ title: target.title, summary: target.summary, criteria: target.clauses, sentences: part.sentences, conditions: target.conditions, interventions: target.interventions });
-    const answered = await judge.call({ study, jobId, messages, thinking }).catch((error) => { throw Object.assign(error, { calls }); });
-    calls.push(answered);
-    answers.push(parseCriteriaAnswer(answered.content, { criteria: target.clauses, sentences: part.sentences }));
+    answers.push(await askOnceMore({ judge, ask: { study, jobId, messages, thinking }, calls,
+      read: (/** @type {string} */ content) => parseCriteriaAnswer(content, { criteria: target.clauses, sentences: part.sentences }),
+      usable: (parsed) => parsed.rows.length > 0 }));
   }
   const merged = mergeCriteriaAnswers(answers);
   if (!merged.rows.length) throw Object.assign(failure('vcr_match_answer_unreadable', 'The answer judged no clause.'), { calls });
@@ -462,35 +474,52 @@ function judgeStatement({ pairs, fit, topK, estimate, withdrawn, noRecord }) {
 /**
  * The local executor of `matching.judge`.
  *
+ * A job the queue runs (`yieldable`) works in batches: after `vcrMatchJudgeSlicePairs` pairs or `vcrMatchJudgeSliceMs`, whichever comes first, it hands its turn back with what it
+ * has done in its checkpoint, so that a run of thousands of people needs nobody to restart it, outlives a deployment and does not make the account's other work wait for it. What
+ * the checkpoint carries is small: a cursor, a mark per pair, the bill. A marked pair is not read again, which is what keeps the batches from growing with the roster; a pair past
+ * the last checkpoint is read again after a crash and finds its row in the ledger. A provider that is down is waited out the same way, a few times with a growing wait, and a pair
+ * that failed for a reason that passes is tried once more at the end of its stage.
+ *
  * @param {{ store: any, matchStore: any, judgments: any, documents: any, subjectTable?: any, targets: ReturnType<typeof judgmentTargets>, judge: ReturnType<typeof createPairJudge>,
  *   config?: Record<string, any>, report?: (code: string) => void, counters?: ReturnType<typeof createMatchJudgeCounters>, now?: () => Date }} deps
  */
 export function createMatchJudgeExecutor({ store, matchStore, judgments, documents, subjectTable = null, targets, judge, config = {}, report = () => {}, counters = createMatchJudgeCounters(), now = () => new Date() }) {
   const width = Math.max(1, Math.min(64, Number(config.vcrMatchJudgeConcurrency ?? 8) || 8));
   const stopAfter = Math.max(1, Number(config.vcrMatchJudgeMaxUpstreamFailures ?? 20) || 20);
+  const slicePairs = Math.max(1, Number(config.vcrMatchJudgeSlicePairs ?? 400) || 400);
+  const sliceMs = Math.max(1_000, Number(config.vcrMatchJudgeSliceMs ?? 300_000) || 300_000);
+  const outageWaits = Math.max(0, Number(config.vcrMatchJudgeOutageWaits ?? 6));
   const cap = VCR_MATCH_JUDGE_LIMITS.noteChars;
-  /** @param {{ job: Record<string, any>, onProgress: (progress: { done: number, total: number, note?: string }) => Promise<unknown>, isCanceled?: () => Promise<boolean> }} input */
-  return async ({ job, onProgress, isCanceled = async () => false }) => {
-    const startedAt = now().toISOString();
+  /** @param {{ job: Record<string, any>, onProgress: (progress: { done: number, total: number, note?: string }) => Promise<unknown>, isCanceled?: () => Promise<boolean>, yieldable?: boolean }} input */
+  return async ({ job, onProgress, isCanceled = async () => false, yieldable = false }) => {
     const studyId = String(job?.studyId ?? '');
     const jobId = String(job?.jobId ?? job?.id);
     const found = await store.studyById(studyId);
     if (!found) throw Object.assign(new Error('The study of this job is gone.'), { code: 'vcr_study_not_found' });
     const scenario = object(job.scenario);
-    const origin = object(object((await store.one('SELECT checkpoint FROM evimed_vcr.jobs WHERE id=$1', [jobId]))?.checkpoint).cloudContext);
-    const study = { ...found, cloudContext: origin.runId && origin.sessionId ? { runId: String(origin.runId), sessionId: String(origin.sessionId) } : { runId: jobId, sessionId: `vcr-job:${jobId}` } };
+    const checkpoint = object((await store.one('SELECT checkpoint FROM evimed_vcr.jobs WHERE id=$1', [jobId]))?.checkpoint);
+    const origin = object(checkpoint.cloudContext);
+    const carried = object(checkpoint.judge);
+    const startedAt = String(carried.startedAt ?? now().toISOString());
+    // `tableSession`: the study's subject table read once for this batch, not once per person. Each person's read is still judged and audited (`subjectTableEvidenceBatch`).
+    const study = { ...found, tableSession: new Map(), cloudContext: origin.runId && origin.sessionId ? { runId: String(origin.runId), sessionId: String(origin.sessionId) } : { runId: jobId, sessionId: `vcr-job:${jobId}` } };
     const thinking = String(scenario.thinking), model = String(scenario.model);
     const promptVersions = object(scenario.promptVersions);
     const direction = String(scenario.direction);
     const targetKind = direction === 'patient_to_trial' ? 'candidate_trial' : 'protocol_version';
 
     const withdrawn = await matchStore.withdrawnSubjects?.(studyId) ?? new Set();
-    const subjects = list(scenario.subjects).map(String).filter((key) => !withdrawn.has(key));
-    const skippedWithdrawn = list(scenario.subjects).length - subjects.length;
+    const frozenSubjects = list(scenario.subjects).map(String);
+    const subjects = frozenSubjects.filter((key) => !withdrawn.has(key));
+    const skippedWithdrawn = frozenSubjects.length - subjects.length;
     const held = await documents.roster(found);
     /** @type {Map<string, any[]>} */
     const rosterOf = new Map();
-    for (const record of held) rosterOf.set(String(record.subjectKey), [...(rosterOf.get(String(record.subjectKey)) ?? []), record]);
+    for (const record of held) {
+      const key = String(record.subjectKey);
+      const own = rosterOf.get(key);
+      if (own) own.push(record); else rosterOf.set(key, [record]);
+    }
     const table = await tableFieldsOf(subjectTable, study);
 
     /** A few people's records at a time, so a roster of thousands does not sit in memory. @type {Map<string, Promise<any>>} */
@@ -533,26 +562,44 @@ export function createMatchJudgeExecutor({ store, matchStore, judgments, documen
     };
 
     const targetList = direction === 'patient_to_trial' ? list(scenario.trials).map(object) : [{ protocolVersionId: String(scenario.protocolVersionId) }];
-    const pairs = subjects.flatMap((subjectKey) => targetList.map((target) => ({ subjectKey, target, targetId: String(target.registryId ?? target.protocolVersionId) })));
+    // Over the frozen roster, withdrawn people included, so that a position in the marks means the same pair in every batch.
+    const pairs = frozenSubjects.flatMap((subjectKey) => targetList.map((target) => ({ subjectKey, target, targetId: String(target.registryId ?? target.protocolVersionId) })));
     const done = await judgments.doneFor({ studyId, promptVersions: Object.values(promptVersions).map(String), model, thinking, subjectKeys: subjects.length <= 1000 ? subjects : null });
 
-    const tally = { fit: { done: 0, already: 0, failed: 0, total: 0 }, criteria: { done: 0, already: 0, failed: 0, total: 0 } };
-    const used = { calls: 0, inputTokens: 0, outputTokens: 0, cacheHitTokens: 0, reasoningTokens: 0, cost: /** @type {number | null} */ (0), currency: 'CNY' };
+    /**
+     * What has become of each pair in each stage, one character a pair: `.` not reached, `d` judged by this job, `a` already in the ledger, `f` failed, `t` failed for a reason that
+     * passes, `w` the person withdrew, `n` nothing for this stage to ask.
+     */
+    const marks = { fit: Array.from(String(object(carried.marks).fit ?? '.'.repeat(pairs.length))), criteria: Array.from(String(object(carried.marks).criteria ?? '.'.repeat(pairs.length))) };
+    const used = { calls: 0, inputTokens: 0, outputTokens: 0, cacheHitTokens: 0, reasoningTokens: 0, cost: /** @type {number | null} */ (0), currency: 'CNY', ...object(carried.used) };
     /** @type {Record<string, number>} */
-    const failures = {};
-    /** @type {Map<string, any>} what this job knows of each pair and mode, whichever way it came: not the answers, so a roster of thousands stays small */
-    const rows = new Map();
-    const noted = (/** @type {any} */ row) => ({ subjectKey: row.subjectKey, targetId: row.targetId, status: row.status, fit: row.fit ?? null, confidence: row.confidence ?? null });
+    const failures = { ...object(carried.failures) };
+    /** @type {Map<string, any>} what this batch learned of a pair's trial-level row, for stage two's order and the row it writes: not the answers, so a roster of thousands stays small */
+    const fitSeen = new Map();
+    const noted = (/** @type {any} */ row) => ({ fit: row.fit ?? null, confidence: row.confidence ?? null, updatedAt: row.updatedAt ?? null });
     let consecutiveUpstream = 0;
     let stopped = /** @type {{ code: string, reason: string } | null} */ (null);
     let canceled = false;
-    let finished = 0;
+    let finished = Number(carried.finished ?? 0);
     let lastProgressAt = Date.now();
-    let progressTotal = scenario.fit !== false ? pairs.length : 0;
+    let progressTotal = Number(carried.progressTotal ?? (scenario.fit !== false ? pairs.length : 0));
+    let waits = Number(carried.waits ?? 0);
+    let judgedThisBatch = 0;
+    /** Where the walk stands: the stage, the pass (the second is the one over what failed for a reason that passes) and the position. */
+    let at = { stage: 'fit', pass: 0, next: 0, ...object(carried.at) };
+    /** @type {number[] | null} stage two's pairs, by position in `pairs` */
+    let second = Array.isArray(carried.second) ? carried.second.map(Number) : null;
+    /** @type {number[] | null} the second pass's pairs */
+    let retrying = Array.isArray(carried.retrying) ? carried.retrying.map(Number) : null;
+    const batchEnds = Date.now() + sliceMs;
+    let taken = 0;
+    let batchOver = false;
+    let outage = false;
 
     const more = async () => {
-      if (canceled || stopped) return false;
+      if (canceled || stopped || batchOver) return false;
       if (await isCanceled()) { canceled = true; counters.canceled += 1; return false; }
+      if (yieldable && (taken >= slicePairs || Date.now() >= batchEnds)) { batchOver = true; return false; }
       return true;
     };
     const account = (/** @type {readonly any[]} */ calls) => {
@@ -572,10 +619,12 @@ export function createMatchJudgeExecutor({ store, matchStore, judgments, documen
 
     /**
      * One pair in one mode: its ledger row if it has one, otherwise a model call and a row. Whatever goes wrong is this pair's.
-     * @param {{ subjectKey: string, target: Record<string, any>, targetId: string }} pair @param {'fit' | 'criteria'} mode
+     * @param {number} index the pair's position @param {'fit' | 'criteria'} mode
      */
-    const judgeOne = async (pair, mode) => {
-      const pairKey = `${pair.subjectKey}\u0000${pair.targetId}\u0000${mode}`;
+    const judgeOne = async (index, mode) => {
+      const pair = pairs[index];
+      const pairKey = `${pair.subjectKey}\u0000${pair.targetId}`;
+      if (withdrawn.has(pair.subjectKey)) { marks[mode][index] = 'w'; return; }
       const base = { studyId, userId: String(found.userId), subjectKey: pair.subjectKey, targetKind, targetId: pair.targetId, mode, promptVersion: String(promptVersions[mode]), model, thinking, producer: 'job', jobId };
       /** @type {any} */ let note = null;
       /** @type {any} */ let target = null;
@@ -584,10 +633,10 @@ export function createMatchJudgeExecutor({ store, matchStore, judgments, documen
         note = await noteOf(pair.subjectKey);
         const key = judgmentKey({ ...base, targetHash: target.hash, documentHash: note.hash });
         const ledger = done.get(key);
-        if (ledger) { tally[mode].already += 1; rows.set(pairKey, noted(ledger)); consecutiveUpstream = 0; return; }
+        if (ledger) { marks[mode][index] = 'a'; if (mode === 'fit') fitSeen.set(pairKey, noted(ledger)); consecutiveUpstream = 0; return; }
         const context = { judge, study, jobId, note, target, thinking, cap };
-        const settings = { maxTokens: judge.maxTokens, timeoutMs: judge.timeoutMs, ...(note.unreadable ? { unreadableDocuments: note.unreadable } : {}) };
-        const answer = { target: target.summaryOfTarget, eligibilitySource: target.eligibilitySource, ...(note.unreadable ? { unreadableDocuments: note.unreadable } : {}) };
+        const settings = { maxTokens: judge.maxTokens, timeoutMs: judge.timeoutMs, ...(note.unreadable ? { unreadableDocuments: note.unreadable } : {}), ...(note.leftOut ? { leftOut: note.leftOut } : {}) };
+        const answer = { target: target.summaryOfTarget, eligibilitySource: target.eligibilitySource, ...(note.unreadable ? { unreadableDocuments: note.unreadable } : {}), ...(note.leftOut ? { leftOut: note.leftOut } : {}) };
         /** @type {any} */
         let saved;
         if (mode === 'fit') {
@@ -599,36 +648,42 @@ export function createMatchJudgeExecutor({ store, matchStore, judgments, documen
         } else {
           const { parsed, calls, parts } = await judgeCriteria(context);
           const usage = account(calls);
-          const scored = rows.get(`${pair.subjectKey}\u0000${pair.targetId}\u0000fit`);
+          // The trial-level row of these same words, whichever batch wrote it.
+          const scored = fitSeen.get(pairKey) ?? done.get(judgmentKey({ ...base, mode: 'fit', promptVersion: String(promptVersions.fit), targetHash: target.hash, documentHash: note.hash }));
           const verdict = trialVerdict({ fit: scored?.fit ?? null, criteria: parsed.rows, missing: parsed.missing });
           saved = await judgments.save({ ...base, targetHash: target.hash, documentHash: note.hash, status: 'done', fit: scored?.fit ?? null, confidence: scored?.confidence ?? null, verdict: verdict.verdict,
             answer: { ...answer, rows: parsed.rows, missing: parsed.missing, droppedSentenceIds: parsed.droppedSentenceIds, issues: parsed.issues, parts }, usage: { ...usage, settings }, documentIds: note.documentIds });
         }
         consecutiveUpstream = 0;
+        judgedThisBatch += 1;
         // Nothing saved means the person withdrew while this was in flight: what was read of them is not put back, and the pair is not reported as judged.
-        if (!saved) return;
-        rows.set(pairKey, noted(saved));
-        tally[mode].done += 1; counters.pairsDone += 1;
+        if (!saved) { marks[mode][index] = 'w'; return; }
+        if (mode === 'fit') fitSeen.set(pairKey, noted(saved));
+        marks[mode][index] = 'd'; counters.pairsDone += 1;
       } catch (error) {
         const code = String(/** @type {any} */ (error)?.code ?? 'vcr_match_judge_failed');
         // What the failing pair already paid for is in the bill: the parts before it, and a cut-off answer's own words.
         const usage = account([...list(/** @type {any} */ (error)?.calls), .../** @type {any} */ (error)?.usage ? [{ usage: /** @type {any} */ (error).usage }] : []]);
-        tally[mode].failed += 1; counters.pairsFailed += 1;
+        counters.pairsFailed += 1;
         failures[code] = (failures[code] ?? 0) + 1;
         report(code);
         const row = { ...base, targetHash: target?.hash ?? '', documentHash: note?.hash ?? '', status: 'failed', errorCode: code,
           answer: { ...(target ? { target: target.summaryOfTarget } : { target: targetKind === 'candidate_trial' ? { kind: targetKind, id: pair.targetId, registry: pair.target.registry, registryId: pair.targetId } : { kind: targetKind, id: pair.targetId } }) },
           usage, documentIds: note?.documentIds ?? [] };
-        const saved = await judgments.save(row).catch(() => null);
-        if (saved && saved.status === 'failed') rows.set(pairKey, noted(saved));
+        await judgments.save(row).catch(() => null);
+        marks[mode][index] = transientFailure(error) ? 't' : 'f';
         if (BUDGET_CODES.includes(code)) {
           stopped = { code, reason: code === 'usage_ledger_unavailable' ? '用量账本不可用，停止发起新的调用。' : '预算或额度用完了，已判完的保留。' };
           counters.stopped += 1;
         } else if (transientFailure(error)) {
           consecutiveUpstream += 1;
           if (consecutiveUpstream >= stopAfter) {
-            stopped = { code, reason: `模型服务连续 ${consecutiveUpstream} 次没有回答，先停在这里，已判完的保留。` };
-            counters.stopped += 1;
+            // Waited out while there are waits left: the provider comes back, and nobody has to start this again. Past that the job says so and stops.
+            if (yieldable && waits < outageWaits) outage = true;
+            else {
+              stopped = { code, reason: `模型服务连续 ${consecutiveUpstream} 次没有回答，先停在这里，已判完的保留。` };
+              counters.stopped += 1;
+            }
           }
         } else consecutiveUpstream = 0;
       } finally {
@@ -636,61 +691,133 @@ export function createMatchJudgeExecutor({ store, matchStore, judgments, documen
       }
     };
 
-    // Stage one: every pair, trial-level.
-    if (scenario.fit !== false) {
-      tally.fit.total = pairs.length;
-      await pool(pairs, width, more, (pair) => judgeOne(pair, 'fit'));
-    }
+    /**
+     * Walk a stage from where the walk stands: the pairs in order, then once more the ones that failed for a reason that passes.
+     * @param {'fit' | 'criteria'} stage @param {number[]} order @param {(index: number) => Promise<void>} work
+     */
+    const walk = async (stage, order, work) => {
+      if (at.stage !== stage) at = { stage, pass: 0, next: 0 };
+      const lanesOver = async (/** @type {number[]} */ items) => {
+        const lane = async () => {
+          while (at.next < items.length && !outage && await more()) {
+            // Another lane may have taken the last one while this one asked.
+            if (at.next >= items.length || outage) return;
+            const index = items[at.next++];
+            taken += 1;
+            await work(index);
+          }
+        };
+        await Promise.all(Array.from({ length: Math.max(1, Math.min(width, items.length)) }, lane));
+      };
+      if (at.pass === 0) {
+        await lanesOver(order);
+        if (at.next < order.length) return false;
+        retrying = order.filter((index) => marks[stage][index] === 't');
+        if (yieldable) progressTotal += retrying.length;
+        at = { stage, pass: 1, next: 0 };
+      }
+      if (at.pass === 1) {
+        if (yieldable) await lanesOver(retrying ?? []);
+        if (yieldable && at.next < (retrying ?? []).length) return false;
+        retrying = null;
+        at = { stage, pass: 2, next: 0 };
+      }
+      return true;
+    };
 
-    // Stage two: per person, the top K by rank, clause by clause. With no stage one, the first K in the order they were named.
-    const topK = scenario.topK;
-    /** @type {Array<{ subjectKey: string, target: Record<string, any>, targetId: string }>} */
-    const second = [];
-    if (topK !== 0 && !stopped && !canceled) {
-      /** @type {Map<string, any[]>} */
+    /** Stage two's pairs, per person the top K by rank; with no stage one, the first K in the order they were named. */
+    const secondStage = async () => {
+      /** @type {Map<string, number[]>} */
       const bySubject = new Map();
-      for (const pair of pairs) bySubject.set(pair.subjectKey, [...(bySubject.get(pair.subjectKey) ?? []), pair]);
+      pairs.forEach((pair, index) => {
+        if (withdrawn.has(pair.subjectKey)) return;
+        const own = bySubject.get(pair.subjectKey);
+        if (own) own.push(index); else bySubject.set(pair.subjectKey, [index]);
+      });
+      // What an earlier batch learned is in the ledger, and the newest row of a pair is the one its mark speaks for.
+      if (carried.marks && scenario.fit !== false) {
+        const ledger = await judgments.doneFor({ studyId, promptVersions: [String(promptVersions.fit)], model, thinking, subjectKeys: subjects.length <= 1000 ? subjects : null });
+        for (const row of ledger.values()) {
+          if (row.mode !== 'fit') continue;
+          const key = `${row.subjectKey}\u0000${row.targetId}`;
+          const heldRow = fitSeen.get(key);
+          if (!heldRow || String(row.updatedAt ?? '') > String(heldRow.updatedAt ?? '')) fitSeen.set(key, noted(row));
+        }
+      }
+      const topK = scenario.topK;
+      /** @type {number[]} */
+      const chosen = [];
       for (const [subjectKey, own] of bySubject) {
+        /** @type {number[]} */
         let ranked = own;
         if (scenario.fit !== false) {
           // A trial with no clauses has nothing for this stage to ask and takes no one's place in the top K.
           const judged = [];
-          for (const pair of own) {
-            const row = rows.get(`${subjectKey}\u0000${pair.targetId}\u0000fit`);
-            if (row?.status !== 'done') continue;
-            const target = await targetOf(pair.target).catch(() => null);
-            if (target?.clauses.length) judged.push({ id: pair.targetId, fit: row.fit, confidence: row.confidence, pair });
+          for (const index of own) {
+            if (!['d', 'a'].includes(marks.fit[index])) continue;
+            const row = fitSeen.get(`${subjectKey}\u0000${pairs[index].targetId}`);
+            if (!row) continue;
+            const target = await targetOf(pairs[index].target).catch(() => null);
+            if (target?.clauses.length) judged.push({ id: pairs[index].targetId, fit: row.fit, confidence: row.confidence, index });
           }
-          ranked = rankJudgments(judged).map((row) => row.pair);
+          ranked = rankJudgments(judged).map((row) => row.index);
         }
-        second.push(...(topK === 'all' ? ranked : ranked.slice(0, Number(topK))));
+        chosen.push(...(topK === 'all' ? ranked : ranked.slice(0, Number(topK))));
       }
-      tally.criteria.total = second.length;
-      progressTotal += second.length;
-      await pool(second, width, more, async (pair) => {
+      return chosen;
+    };
+
+    // Stage one: every pair, trial-level.
+    let walked = true;
+    if (at.stage === 'fit' && scenario.fit !== false) walked = await walk('fit', pairs.map((_, index) => index), (index) => judgeOne(index, 'fit'));
+
+    // Stage two: per person, the top K by rank, clause by clause.
+    const topK = scenario.topK;
+    if (walked && topK !== 0 && !stopped && !canceled) {
+      if (!second) {
+        second = await secondStage();
+        progressTotal += second.length;
+      }
+      walked = await walk('criteria', second, async (index) => {
         // A trial whose record has no eligibility text has no clauses to judge: it is judged on what it has, which a job with no stage one asks here.
-        const target = await targetOf(pair.target).catch(() => null);
+        const target = await targetOf(pairs[index].target).catch(() => null);
         if (target && !target.clauses.length) {
-          tally.criteria.total -= 1;
-          await judgeOne(pair, 'fit');
+          marks.criteria[index] = 'n';
+          await judgeOne(index, 'fit');
           return;
         }
-        await judgeOne(pair, 'criteria');
+        await judgeOne(index, 'criteria');
       });
     }
 
-    const judged = new Set([...rows.values()].filter((row) => row?.status === 'done').map((row) => `${row.subjectKey}\u0000${row.targetId}`));
-    const total = pairs.length;
-    const finishedPairs = pairs.filter((pair) => judged.has(`${pair.subjectKey}\u0000${pair.targetId}`)).length;
-    const failedPairs = pairs.filter((pair) => !judged.has(`${pair.subjectKey}\u0000${pair.targetId}`)
-      && ['fit', 'criteria'].some((mode) => rows.get(`${pair.subjectKey}\u0000${pair.targetId}\u0000${mode}`)?.status === 'failed')).length;
+    if (judgedThisBatch > 0) waits = 0;
+    // A turn given back, or a wait for a provider that is down: everything needed to go on is in the checkpoint, and the queue claims it again.
+    if (yieldable && !stopped && !canceled && (outage || batchOver || !walked)) {
+      await onProgress({ done: finished, total: progressTotal, ...(outage ? { note: '模型服务暂时没有回答，等一会儿自动接着判定。' } : {}) }).catch(() => {});
+      const afterSeconds = outage ? Math.min(1_800, 120 * 2 ** waits) : 0;
+      return { yield: { afterSeconds, checkpoint: { judge: { startedAt, at, marks: { fit: marks.fit.join(''), criteria: marks.criteria.join('') }, ...(second ? { second } : {}), ...(retrying ? { retrying } : {}),
+        used, failures, finished, progressTotal, waits: outage ? waits + 1 : waits } } } };
+    }
+
+    const standing = (/** @type {number} */ index) => !withdrawn.has(pairs[index].subjectKey);
+    const positions = pairs.map((_, index) => index).filter(standing);
+    const judgedAt = (/** @type {number} */ index) => ['d', 'a'].includes(marks.fit[index]) || ['d', 'a'].includes(marks.criteria[index]);
+    const failedAt = (/** @type {number} */ index) => ['f', 't'].includes(marks.fit[index]) || ['f', 't'].includes(marks.criteria[index]);
+    const total = positions.length;
+    const finishedPairs = positions.filter(judgedAt).length;
+    const failedPairs = positions.filter((index) => !judgedAt(index) && failedAt(index)).length;
     const remaining = Math.max(0, total - finishedPairs - failedPairs);
+    const tallyOf = (/** @type {'fit' | 'criteria'} */ mode, /** @type {number} */ asked) => ({
+      done: marks[mode].filter((mark) => mark === 'd').length, already: marks[mode].filter((mark) => mark === 'a').length, failed: marks[mode].filter((mark) => mark === 'f' || mark === 't').length, total: asked,
+    });
+    const stages = { fit: tallyOf('fit', scenario.fit !== false ? pairs.filter((pair) => !withdrawn.has(pair.subjectKey)).length : marks.criteria.filter((mark) => mark === 'n').length), criteria: tallyOf('criteria', (second?.length ?? 0) - marks.criteria.filter((mark) => mark === 'n').length) };
     await onProgress({ done: finished, total: progressTotal });
 
     const scenarioHash = /^[a-f0-9]{64}$/.test(String(job.scenarioHash ?? '')) ? String(job.scenarioHash) : createHash('sha256').update(canonicalScenarioJson(scenario)).digest('hex');
     // Everyone on the frozen roster having withdrawn since is a job that judged nobody, not a clean one.
-    const outcome = total ? resultOutcome({ finished: finishedPairs, total, failed: failedPairs + tally.criteria.failed, stopped: Boolean(stopped) || canceled, failures, noun: '对', verb: '判定' })
+    const outcome = total ? resultOutcome({ finished: finishedPairs, total, failed: failedPairs + stages.criteria.failed, stopped: Boolean(stopped) || canceled, failures, noun: '对', verb: '判定' })
       : { status: 'failed', conclusion: 'not_estimable', issues: [{ code: 'vcr_match_nothing_finished', message: '这一批的受试者都已撤回同意，没有可判定的。' }] };
+    const changes = scenario.followUp && judgments.list ? judgmentChanges(await judgments.list({ studyId, subjectKey: frozenSubjects.length === 1 ? frozenSubjects[0] : null }).catch(() => [])) : null;
     /** @type {Record<string, any>} */
     const result = {
       jobId, protocolVersion: VCR_ENGINE_PROTOCOL_VERSION, status: outcome.status, method: 'matching.judge', methodVersion: VCR_MATCH_BATCH_METHODS['matching.judge'].version,
@@ -698,13 +825,14 @@ export function createMatchJudgeExecutor({ store, matchStore, judgments, documen
       counts: { realPatients: subjects.length, events: null, effectiveSampleSize: null, generatedRecords: 0 },
       measures: [
         { name: 'pairs_finished', value: finishedPairs }, { name: 'pairs_total', value: total }, { name: 'pairs_failed', value: failedPairs },
-        { name: 'criteria_pairs_finished', value: tally.criteria.done + tally.criteria.already }, { name: 'criteria_pairs_total', value: tally.criteria.total },
+        { name: 'criteria_pairs_finished', value: stages.criteria.done + stages.criteria.already }, { name: 'criteria_pairs_total', value: stages.criteria.total },
       ].map((measure) => ({ ...measure, simulated: false, source: 'calculated' })),
       diagnostics: {
         ...(outcome.issues.length ? { issues: outcome.issues } : {}),
         direction, ...(scenario.protocolVersionId ? { protocolVersionId: String(scenario.protocolVersionId) } : {}), chain: scenario.chain ?? null,
-        finished: finishedPairs, total, failed: failedPairs, remaining, canceled, stages: tally,
+        finished: finishedPairs, total, failed: failedPairs, remaining, canceled, stages,
         ...(Object.keys(failures).length ? { failures } : {}), ...(stopped ? { stopped } : {}), ...(skippedWithdrawn ? { skippedWithdrawn } : {}),
+        ...(changes ? { changes: { ...changes, followUp: scenario.followUp } } : {}),
         // What was stated before the work and what it came to.
         estimate: object(scenario.estimate), used: { ...used, model, thinking },
         settings: { model, thinking, concurrency: width, maxTokens: judge.maxTokens, timeoutMs: judge.timeoutMs, fit: scenario.fit !== false, topK },
@@ -717,6 +845,40 @@ export function createMatchJudgeExecutor({ store, matchStore, judgments, documen
   };
 }
 
+/**
+ * What re-judging changed: for each pair, the verdict of the newest words read against the verdict of the words before them. Rows are never overwritten by a re-judgment (the key
+ * holds the hashes), so the earlier one is still there to compare. A pair's verdict is its clause-level row's when it has one, its trial-level row's otherwise.
+ * @param {ReadonlyArray<any>} rows light rows, any order
+ * @returns {{ compared: number, changed: number, pairs: Array<{ subjectKey: string, targetId: string, from: string, to: string }>, sentence: string }}
+ */
+export function judgmentChanges(rows) {
+  /** @type {Map<string, Map<string, { at: string, fit?: any, criteria?: any }>>} */
+  const byPair = new Map();
+  for (const row of rows) {
+    if (row.status !== 'done' || !row.verdict) continue;
+    const pair = `${row.subjectKey}\u0000${row.targetKind}\u0000${row.targetId}`;
+    const reading = `${row.documentHash}\u0000${row.targetHash}`;
+    const readings = byPair.get(pair) ?? new Map();
+    byPair.set(pair, readings);
+    const entry = readings.get(reading) ?? { at: '' };
+    readings.set(reading, entry);
+    /** @type {any} */ (entry)[row.mode] = row;
+    if (String(row.updatedAt ?? '') > entry.at) entry.at = String(row.updatedAt ?? '');
+  }
+  /** @type {Array<{ subjectKey: string, targetId: string, from: string, to: string }>} */
+  const pairs = [];
+  let compared = 0;
+  for (const readings of byPair.values()) {
+    const ordered = [...readings.values()].sort((a, b) => b.at.localeCompare(a.at));
+    if (ordered.length < 2) continue;
+    compared += 1;
+    const verdictOf = (/** @type {any} */ entry) => (entry.criteria ?? entry.fit);
+    const now_ = verdictOf(ordered[0]), before_ = verdictOf(ordered[1]);
+    if (now_.verdict !== before_.verdict) pairs.push({ subjectKey: now_.subjectKey, targetId: now_.targetId, from: VCR_TRIAL_VERDICT_LABELS_ZH[/** @type {keyof typeof VCR_TRIAL_VERDICT_LABELS_ZH} */ (before_.verdict)] ?? before_.verdict, to: VCR_TRIAL_VERDICT_LABELS_ZH[/** @type {keyof typeof VCR_TRIAL_VERDICT_LABELS_ZH} */ (now_.verdict)] ?? now_.verdict });
+  }
+  return { compared, changed: pairs.length, pairs: pairs.slice(0, 50), sentence: compared ? (pairs.length ? `重算后 ${pairs.length} 个试验结论变化。` : `重算了 ${compared} 个试验，结论都没有变化。`) : '' };
+}
+
 // ---------------------------------------------------------------------------
 // Starting one
 // ---------------------------------------------------------------------------
@@ -725,15 +887,16 @@ export function createMatchJudgeExecutor({ store, matchStore, judgments, documen
  * What the platform does when a judging job is asked for: plan it, say it, queue it. Nothing waits on an answer.
  * @param {{ jobs: any, matchStore: any, documents: any, subjectTable?: any, config: Record<string, any>, counters?: ReturnType<typeof createMatchJudgeCounters> }} deps
  */
-export function createMatchJudge({ jobs, matchStore, documents, subjectTable = null, config, counters = createMatchJudgeCounters() }) {
+export function createMatchJudge({ jobs, matchStore, documents, subjectTable = null, judgments = null, config, counters = createMatchJudgeCounters() }) {
   return {
-    /** @param {any} study @param {unknown} selection @param {{ actor?: string }} [options] */
-    async start(study, selection, { actor = 'runtime' } = {}) {
+    /** @param {any} study @param {unknown} selection @param {{ actor?: string, followUp?: Record<string, any> | null }} [options] */
+    async start(study, selection, { actor = 'runtime', followUp = null } = {}) {
       if (!jobs?.enqueue) throw new HttpError(503, 'vcr_gateway_unavailable', '作业队列未接入本部署：判定暂不可用，其余步骤照常。');
       const built = await planMatchJudge({ study, selection, matchStore, documents, subjectTable, config });
       if (built.ok !== true) throw new HttpError(409, 'vcr_match_judge_nothing_to_read', String(/** @type {any} */ (built).message));
       counters.started += 1;
-      const { scenario } = built;
+      // A re-judgment is its own job even for the same selection: it follows a named change, and the words read are newer than whatever is still running.
+      const scenario = followUp ? (() => { const { chain: _chain, ...rest } = built.scenario; return { ...rest, followUp, chain: judgeChain({ ...rest, followUp }) }; })() : built.scenario;
       const summary = { statement: built.statement, estimate: scenario.estimate, direction: scenario.direction, topK: scenario.topK, fit: scenario.fit, thinking: scenario.thinking,
         ...(scenario.protocolVersionId ? { protocolVersionId: scenario.protocolVersionId } : {}) };
       // The same selection asked for again while it is out is that job; one that has ended is a new attempt, and the ledger keeps it from paying twice.
@@ -748,6 +911,51 @@ export function createMatchJudge({ jobs, matchStore, documents, subjectTable = n
           ...(study.completionOrigin ? { conversationOrigin: study.completionOrigin } : {}) },
       });
       return { action: 'start', kind: 'match_judge', state: job.state, jobId: job.id, ...summary };
+    },
+
+    /**
+     * Judge again what this person already has a verdict on, because something they rest on changed: a later note, a new fact, a registry record. Through the same job, so the ledger
+     * pays only for what is new: a new `documentHash` or target hash is a new row, and the earlier row stays readable as history. A person with no verdict has nothing to redo: null.
+     * Trials and protocol versions are separate jobs, because a job has one direction.
+     * @param {any} study
+     * @param {{ subjectKey: string, reason?: string, documentId?: string | null, targetIds?: readonly string[] | null, actor?: string }} input
+     * @returns {Promise<{ jobs: any[], statement: string } | null>}
+     */
+    async rejudge(study, { subjectKey, reason = 'follow_up', documentId = null, targetIds = null, actor = 'runtime' }) {
+      if (!judgments?.list) return null;
+      const rows = (await judgments.list({ studyId: study.id, subjectKey })).filter((/** @type {any} */ row) => row.status === 'done' && (!targetIds || targetIds.includes(row.targetId)));
+      if (!rows.length) return null;
+      /** @type {Map<string, { kind: string, targetId: string, target: any, modes: Set<string>, thinking: string }>} */
+      const byTarget = new Map();
+      for (const row of rows) {
+        const entry = byTarget.get(row.targetId) ?? { kind: row.targetKind, targetId: row.targetId, target: row.target ?? {}, modes: new Set(), thinking: row.thinking };
+        entry.modes.add(row.mode);
+        byTarget.set(row.targetId, entry);
+      }
+      const followUp = { reason, ...(documentId ? { documentId } : {}), at: new Date().toISOString() };
+      const asked = (/** @type {any[]} */ entries) => {
+        const clauses = entries.filter((entry) => entry.modes.has('criteria')).length;
+        const fit = entries.some((entry) => entry.modes.has('fit'));
+        const thinking = ['high', 'off'].includes(entries[0].thinking) ? { thinking: entries[0].thinking } : {};
+        return { fit, topK: !fit || clauses === entries.length ? 'all' : clauses, ...thinking };
+      };
+      const started = [];
+      const trials = [...byTarget.values()].filter((entry) => entry.kind === 'candidate_trial');
+      /** A frozen collection is one job per collection; a live trial is read as it stands today. @type {Map<string, any[]>} */
+      const groups = new Map();
+      for (const entry of trials) {
+        const collection = object(entry.target.collection);
+        const key = collection.name ? `${collection.name}\u0000${collection.revision ?? ''}` : '';
+        groups.set(key, [...(groups.get(key) ?? []), entry]);
+      }
+      for (const [key, entries] of groups) {
+        const [collection, collectionRevision] = key ? key.split('\u0000') : [];
+        started.push(await this.start(study, { direction: 'patient_to_trial', subjectKey, registryIds: entries.map((entry) => entry.targetId), ...(key ? { collection, collectionRevision } : {}), ...asked(entries) }, { actor, followUp }));
+      }
+      for (const entry of [...byTarget.values()].filter((row) => row.kind === 'protocol_version')) {
+        started.push(await this.start(study, { direction: 'trial_to_patient', protocolVersionId: entry.targetId, subjectKeys: [subjectKey], ...asked([entry]) }, { actor, followUp }));
+      }
+      return { jobs: started, statement: `这位患者已有 ${byTarget.size} 个判定，正在按新内容重算，已有结论保留为历史；算完会说明哪些结论变了。` };
     },
   };
 }

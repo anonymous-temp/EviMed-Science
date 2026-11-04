@@ -3545,7 +3545,9 @@ export class VcrDataPlane {
 
   /** A request-local read of the selected subject's fields from one authorized immutable snapshot.
    * The table is authorized, verified and parsed once; no rows or cached authorization escape the request.
-   * @param {{studyId:string,snapshotId:string,subjectKey:string,fields:string[],principal:string,purpose?:string|null,external?:boolean,cloudContext?:any}} entry
+   * `session` is a job's own holder for one batch of thousands of people: the table is read and parsed once for the batch and not once per person (a 5,000-row table read
+   * 5,000 times is what a run spent its time on). The person's own checks, the source's cloud basis, the withdrawal and the audit row, stay per person.
+   * @param {{studyId:string,snapshotId:string,subjectKey:string,fields:string[],principal:string,purpose?:string|null,external?:boolean,cloudContext?:any,session?:Map<string,any>|null}} entry
    */
   async subjectTableEvidenceBatch(entry) {
     const snapshot = await this.#snapshot(entry.studyId, entry.snapshotId);
@@ -3553,10 +3555,21 @@ export class VcrDataPlane {
     if (!source || source.status === "withdrawn") throw refuse(403, "vcr_source_withdrawn", "The source is unavailable.");
     if ((await this.erasure?.matchStore?.withdrawnSubjects?.(entry.studyId) ?? new Set()).has(entry.subjectKey)) return {};
     const authorization = entry.external === false ? null : this.#cloudBasis(source);
-    const table = await this.subjectTableForMatching(entry);
+    const sessionKey = `${entry.snapshotId}\u0000${entry.principal}\u0000${entry.purpose ?? ""}`;
+    /** @type {any} */
+    let held = entry.session?.get(sessionKey);
+    if (!held) {
+      const read = await this.subjectTableForMatching(entry);
+      held = { table: read, rowsOf: new Map() };
+      if (read.available) {
+        const at = read.header.indexOf("USUBJID");
+        if (at >= 0) for (const row of read.rows) { const own = held.rowsOf.get(row[at]); if (own) own.push(row); else held.rowsOf.set(row[at], [row]); }
+      }
+      entry.session?.set(sessionKey, held);
+    }
+    const table = held.table;
     if (!table.available) return {};
-    const keyAt = table.header.indexOf("USUBJID");
-    const selected = keyAt < 0 ? [] : table.rows.filter(row => row[keyAt] === entry.subjectKey);
+    const selected = held.rowsOf.get(entry.subjectKey) ?? [];
     if (selected.length !== 1) return {};
     const original = (await this.store.listAnalysisTables({ studyId: entry.studyId, snapshotId: snapshot.id })).find(item => item.shape === "subject");
     if (!original) return {};
