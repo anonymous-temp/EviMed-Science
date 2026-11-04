@@ -1,3 +1,4 @@
+import { lockVcrLanguageStudyBasis } from './vcrLanguageFence.mjs';
 import { VCR_INTENDED_USE_LABELS_ZH, VCR_TIME_UNITS, vcrTimeUnitOf } from "@evimed/domain";
 import { maintenanceAllowsClaims } from "./maintenanceService.mjs";
 import { heavyWorkAdmission } from "./heavyWorkAdmission.mjs";
@@ -542,7 +543,7 @@ export function vcrResultKindFor(kind) {
   if (kind === "design_grid") return "design_grid";
   if (kind === "match_criteria") return "matching";
   // The batch reading of patient records leaves a record of what was read, not a matching: its own kind, read by nothing that lists matchings.
-  if (kind === "match_extract") return "match_extract";
+  if (kind === "match_extract" || kind === "match_language") return "match_extract";
   if (kind === "accrual_forecast") return "accrual_forecast";
   if (["pool_evidence", "reconstruct_km"].includes(kind)) return "evidence_pool";
   return "snapshot_profile";
@@ -1529,12 +1530,15 @@ export class VcrJobs {
    * @param {string} studyId @param {string} jobId @param {{ actor?: string, rootSessionId?: string | null }} [options]
    */
   async cancel(studyId, jobId, { actor = "", rootSessionId = null } = {}) {
-    const row=await this.store.one(`UPDATE ${VCR_SCHEMA}.jobs
-      SET state = 'canceled', cancel_requested = true, finished_at = now(), updated_at = now(),
-          lease_owner = NULL, lease_until = NULL,
-          error = COALESCE(error, '{}'::jsonb) || jsonb_build_object('code', 'vcr_job_canceled', 'actor', $3::text, 'rootSessionId', $5::text)
-      WHERE study_id = $1 AND id = $2 AND state = ANY($4::text[]) RETURNING *`,
-    [studyId, jobId, String(actor), [...VCR_JOB_OPEN_STATES],rootSessionId]);
+    const row=await this.store.transaction(async client => {
+      await lockVcrLanguageStudyBasis(client, studyId);
+      return (await client.query(`UPDATE ${VCR_SCHEMA}.jobs
+        SET state = 'canceled', cancel_requested = true, finished_at = now(), updated_at = now(),
+            lease_owner = NULL, lease_until = NULL,
+            error = COALESCE(error, '{}'::jsonb) || jsonb_build_object('code', 'vcr_job_canceled', 'actor', $3::text, 'rootSessionId', $5::text)
+        WHERE study_id = $1 AND id = $2 AND state = ANY($4::text[]) RETURNING *`,
+      [studyId, jobId, String(actor), [...VCR_JOB_OPEN_STATES],rootSessionId])).rows[0] ?? null;
+    });
     if (!row) {
       const existing = await this.store.job(studyId, jobId);
       if (!existing) throw new HttpError(404, "vcr_job_not_found", "Job not found.");
@@ -1811,7 +1815,7 @@ export class VcrJobs {
     const startedAt = this.now().toISOString();
     try {
       const result = await executor({
-        job: { ...frozen, scenarioHash: String(row.scenario_hash ?? "") },
+        job: { ...frozen, scenarioHash: String(row.scenario_hash ?? ""), leaseOwner: owner, leaseAttempt: Number(row.attempts) },
         onProgress: (/** @type {any} */ progress) => this.progress(String(row.id), progress ?? {}, owner, Number(row.attempts)),
         isCanceled: async () => { const current = await this.#row(String(row.id)); return !current || current.state !== 'running' || current.lease_owner !== owner || current.attempts !== row.attempts; },
       });

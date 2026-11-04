@@ -496,6 +496,7 @@ export function createPatientTrials({ candidateStore, matchStore = null, documen
       const trials = held.filter((trial) => (criteriaOf.get(trial.id) ?? []).length > 0);
       if (!subjects.length || !trials.length) return { evaluated, unavailable, notes };
       const at = frozenAsOf(asOf ?? now().toISOString());
+      const studyBasisEpoch = await candidateStore.studyBasisEpoch(study.id);
       const table = await readTable(study, notes);
       const variables = matchingVariablesOf(trials.flatMap((trial) => criteriaOf.get(trial.id) ?? []));
       const keyAt = table ? table.header.indexOf("USUBJID") : -1;
@@ -539,6 +540,7 @@ export function createPatientTrials({ candidateStore, matchStore = null, documen
             const unlocated = new Set(criteria.filter(criterion => !locateSourceText(criterion.sourceText, trial.eligibilityText)).map(criterion => criterion.id));
             const checkedCriteria = criteria.map(criterion => unlocated.has(criterion.id) ? { ...criterion, applicability: null,
               requirement: { op: "language", key: `unavailable-source:${criterion.id}`, text: "Original trial criterion text is unavailable." } } : criterion);
+            const candidateLanguageEpoch = await candidateStore.languageEpoch({studyId:study.id,candidateTrialId:trial.id,subjectKey});
             const language = await candidateStore.latestLanguageJudgments({ studyId: study.id, candidateTrialId: trial.id, subjectKey, visibleBy: at });
             const documentIds = new Set([
               ...facts.map((fact) => String(fact.source?.documentId ?? "")),
@@ -563,7 +565,7 @@ export function createPatientTrials({ candidateStore, matchStore = null, documen
             const saved = await candidateStore.saveAssessment({
               userId: study.userId, expectedRecordHash: trial.recordHash, expectedCriteriaHash: trial.criteriaHash,
               assessment: {
-                studyId: study.id, candidateTrialId: trial.id, subjectKey, asOf: assessment.asOf, summary: assessment.summary,
+                studyId: study.id, candidateTrialId: trial.id, subjectKey, asOf: assessment.asOf, summary: assessment.summary, candidateLanguageEpoch, studyBasisEpoch,
                 counts: { ...assessment.counts, voidedFacts: assessment.voidedFacts.length }, evidenceGaps: assessment.evidenceGaps,
                 judgments: assessment.judgments,
                 provenance: { ...assessment.provenance, direction: "patient_to_trial", candidateTrialId: trial.id, recordHash: trial.recordHash },

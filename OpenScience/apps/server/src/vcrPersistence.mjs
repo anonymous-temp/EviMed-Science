@@ -85,7 +85,7 @@ export const VCR_TABLES = Object.freeze([
   "knowledge_packs", "study_packs", "definitions", "definition_versions", "definition_uses",
   "models", "methods",
   "jobs", "conversation_completions", "executions", "results", "forecasts", "longitudinal_artifacts",
-  "matching_assessments", "criterion_judgments", "matching_facts", "language_judgments", "matching_inputs", "document_projections", "cloud_reads", "subject_withdrawals", "retired_recruitment_subjects", "retirement_erased_accounts", "derived_marks", "matching_candidates", "matching_producers", "matching_extractions",
+  "matching_assessments", "criterion_judgments", "matching_facts", "language_judgments", "language_judgment_dependencies", "language_unit_commits", "candidate_language_heads", "candidate_language_epochs", "language_study_basis_epochs", "matching_inputs", "document_projections", "cloud_reads", "subject_withdrawals", "retired_recruitment_subjects", "retirement_erased_accounts", "derived_marks", "matching_candidates", "matching_producers", "matching_extractions",
   "candidate_trials", "candidate_trial_criteria", "candidate_trial_assessments", "candidate_trial_judgments", "parsed_trial_criteria", "parsed_trial_criteria_versions",
   "followup_episodes",
   "dependencies", "stale_marks", "reviews", "decisions", "regulatory_contacts", "exports", "audit", "schedule_marks",
@@ -1108,6 +1108,38 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.language_judgments (
 );
 CREATE INDEX IF NOT EXISTS vcr_language_judgments_idx ON evimed_vcr.language_judgments (study_id, subject_key, criterion_key, created_at DESC);
 
+-- All model input documents, including context that produced an unknown.
+CREATE UNIQUE INDEX IF NOT EXISTS vcr_language_judgments_study_id_idx ON evimed_vcr.language_judgments(study_id, id);
+CREATE TABLE IF NOT EXISTS evimed_vcr.language_judgment_dependencies (
+  study_id text NOT NULL REFERENCES evimed_vcr.studies(id) ON DELETE CASCADE,
+  judgment_id text NOT NULL,
+  document_id text NOT NULL,
+  PRIMARY KEY (study_id, judgment_id, document_id),
+  FOREIGN KEY (study_id, judgment_id) REFERENCES evimed_vcr.language_judgments(study_id, id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS vcr_language_dependency_document_idx ON evimed_vcr.language_judgment_dependencies(study_id, document_id);
+CREATE TABLE IF NOT EXISTS evimed_vcr.candidate_language_heads (
+  study_id text NOT NULL REFERENCES evimed_vcr.studies(id) ON DELETE CASCADE,
+  subject_key text NOT NULL, candidate_trial_id text NOT NULL, criterion_key text NOT NULL,
+  judgment_id text REFERENCES evimed_vcr.language_judgments(id) ON DELETE SET NULL,
+  PRIMARY KEY(study_id,subject_key,candidate_trial_id,criterion_key)
+);
+CREATE TABLE IF NOT EXISTS evimed_vcr.language_study_basis_epochs (
+  study_id text PRIMARY KEY REFERENCES evimed_vcr.studies(id) ON DELETE CASCADE,
+  epoch bigint NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS evimed_vcr.candidate_language_epochs (
+  study_id text NOT NULL REFERENCES evimed_vcr.studies(id) ON DELETE CASCADE,
+  subject_key text NOT NULL, candidate_trial_id text NOT NULL, epoch bigint NOT NULL DEFAULT 0,
+  PRIMARY KEY(study_id,subject_key,candidate_trial_id)
+);
+CREATE TABLE IF NOT EXISTS evimed_vcr.language_unit_commits (
+  study_id text NOT NULL REFERENCES evimed_vcr.studies(id) ON DELETE CASCADE,
+  unit_hash text NOT NULL, judgment_id text NOT NULL, job_id text NOT NULL, created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (study_id, unit_hash),
+  FOREIGN KEY (study_id, judgment_id) REFERENCES evimed_vcr.language_judgments(study_id, id) ON DELETE CASCADE
+);
+
 -- Legacy judgments remain readable by id; unknown protocol scope is never
 -- guessed from the current protocol. New evaluations select an exact version.
 ALTER TABLE evimed_vcr.language_judgments ADD COLUMN IF NOT EXISTS protocol_version_id text;
@@ -1262,6 +1294,7 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.candidate_trial_assessments (
   created_at         timestamptz NOT NULL DEFAULT now(),
   UNIQUE (candidate_trial_id, subject_key, as_of, input_snapshot_id)
 );
+ALTER TABLE evimed_vcr.candidate_trial_assessments ADD COLUMN IF NOT EXISTS invalidated_at timestamptz;
 CREATE INDEX IF NOT EXISTS vcr_candidate_assessments_subject_idx
   ON evimed_vcr.candidate_trial_assessments (study_id, subject_key, candidate_trial_id, as_of DESC);
 

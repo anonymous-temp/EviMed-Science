@@ -1,3 +1,4 @@
+import { lockVcrLanguageActor, lockVcrLanguageStudyBasis, lockVcrLanguageSources } from './vcrLanguageFence.mjs';
 /**
  * The store base every 「虚拟临床研究」 package shares: one connection discipline,
  * one id shape, one audit write, one version counter.
@@ -235,6 +236,7 @@ export async function deleteVcrStudyRows(client, studyId) {
   const exists = await client.query(
     "SELECT 1 FROM information_schema.schemata WHERE schema_name = $1", [VCR_SCHEMA]);
   if (!exists.rowCount) return { deleted: false, artifacts: noArtifacts() };
+  await lockVcrLanguageStudyBasis(client,studyId);
   const artifacts = await collectArtifacts(client, [studyId]);
   await client.query(`UPDATE ${VCR_SCHEMA}.audit SET study_id = study_id WHERE study_id = $1`, [studyId]);
   await removeDraftPacksOf(client, [studyId]);
@@ -259,6 +261,7 @@ export async function deleteVcrProjectRows(client, userId, projectId) {
   const studyId=studyIds[0] ?? null;
   await client.query(`DELETE FROM ${VCR_SCHEMA}.conversation_completions WHERE user_id=$1 AND project_id=$2`,[userId,projectId]);
   if (!studyIds.length) return {deleted:false,studyId:null,artifacts:noArtifacts()};
+  for(const id of studyIds.sort()) await lockVcrLanguageStudyBasis(client,id);
   const artifacts=await collectArtifacts(client,studyIds);
   await removeDraftPacksOf(client,studyIds);
   await client.query(`DELETE FROM ${VCR_SCHEMA}.studies WHERE user_id=$1 AND project_id=$2`,[userId,projectId]);
@@ -278,6 +281,13 @@ export async function deleteVcrUserRows(client, userId) {
   const exists = await client.query(
     "SELECT 1 FROM information_schema.schemata WHERE schema_name = $1", [VCR_SCHEMA]);
   if (!exists.rowCount) return { deleted: false, artifacts: noArtifacts() };
+  // Freeze membership and global-source-grant ownership before deleting any
+  // account rows; sorted study then source locks match language dispatch.
+  await lockVcrLanguageActor(client,userId);
+  const affectedStudies=(await client.query(`SELECT id FROM ${VCR_SCHEMA}.studies WHERE user_id=$1 UNION SELECT study_id AS id FROM ${VCR_SCHEMA}.members WHERE user_id=$1 ORDER BY id`,[userId])).rows;
+  for(const row of affectedStudies) await lockVcrLanguageStudyBasis(client,String(row.id));
+  const affectedSources=(await client.query(`SELECT id FROM ${VCR_SCHEMA}.sources WHERE user_id=$1 UNION SELECT source_id AS id FROM ${VCR_SCHEMA}.grants WHERE grantee=$1 ORDER BY id`,[userId])).rows;
+  await lockVcrLanguageSources(client,affectedSources.map(row=>String(row.id)));
   // Archive restore must not resurrect a deleted account's historical roles or OA rows in someone else's study.
   // Older installations may be erased before the additive retirement schema has been migrated.
   await client.query(`CREATE TABLE IF NOT EXISTS ${VCR_SCHEMA}.retirement_erased_accounts (

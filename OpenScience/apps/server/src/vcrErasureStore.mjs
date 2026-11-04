@@ -1,3 +1,4 @@
+import { bumpVcrCandidateLanguageEpoch, bumpVcrLanguageStudyEpoch, lockVcrLanguageStudyBasis, lockVcrLanguageSources } from './vcrLanguageFence.mjs';
 /**
  * Withdrawal and retirement, and the marks on what was derived from a basis that has since changed
  * (2026-10-10 owner rulings; OpenMed review E-13, E-17, D-vcr §8).
@@ -154,6 +155,11 @@ export class VcrErasureStore extends VcrStoreBase {
    *   cause: "withdrawn" | "projection", reason?: string }} input
    */
   async #erase(client, { studyId, userId, actor, fileIds = [], projectionIds = [], subjectKey = null, cause, reason = "" }) {
+    await lockVcrLanguageStudyBasis(client, studyId);
+    await bumpVcrLanguageStudyEpoch(client,studyId);
+    const sourceRows = (await client.query(`SELECT source_id FROM ${VCR_SCHEMA}.source_files WHERE study_id=$1 AND id=ANY($2::text[])
+      UNION SELECT source_id FROM ${VCR_SCHEMA}.document_projections WHERE study_id=$1 AND id=ANY($3::text[])`, [studyId,fileIds,projectionIds])).rows;
+    await lockVcrLanguageSources(client, sourceRows.map(row => String(row.source_id)));
     const files = fileIds.length ? (await client.query(
       `SELECT * FROM ${VCR_SCHEMA}.source_files WHERE study_id=$1 AND role='document' AND id = ANY($2::text[]) FOR UPDATE`, [studyId, fileIds])).rows : [];
     const projections = (await client.query(
@@ -191,8 +197,13 @@ export class VcrErasureStore extends VcrStoreBase {
     // Language judgments: the same.
     const judgmentRows = (await client.query(
       `SELECT * FROM ${VCR_SCHEMA}.language_judgments WHERE study_id=$1 AND withdrawn IS NULL
-         AND (EXISTS (SELECT 1 FROM jsonb_array_elements(evidence) e WHERE e->>'documentId' = ANY($2::text[])) OR ($3::text IS NOT NULL AND subject_key=$3)) FOR UPDATE`,
+         AND (EXISTS (SELECT 1 FROM jsonb_array_elements(evidence) e WHERE e->>'documentId' = ANY($2::text[])) OR EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.language_judgment_dependencies dep WHERE dep.study_id=$1 AND dep.judgment_id=language_judgments.id AND dep.document_id=ANY($2::text[])) OR ($3::text IS NOT NULL AND subject_key=$3)) FOR UPDATE`,
       [studyId, documentIds, subjectKey])).rows;
+    for (const row of judgmentRows) if (row.candidate_trial_id) {
+      await bumpVcrCandidateLanguageEpoch(client,studyId,String(row.subject_key),String(row.candidate_trial_id));
+      await client.query(`UPDATE ${VCR_SCHEMA}.candidate_trial_assessments
+        SET invalidated_at=clock_timestamp() WHERE study_id=$1 AND subject_key=$2 AND candidate_trial_id=$3 AND invalidated_at IS NULL`, [studyId,row.subject_key,row.candidate_trial_id]);
+    }
     /** @type {{ id: string, subjectKey: string }[]} */
     const redactedJudgments = [];
     let judgmentsRemoved = 0;
@@ -286,6 +297,7 @@ export class VcrErasureStore extends VcrStoreBase {
    */
   async withdrawSubject({ studyId, userId, actor, subjectKey, reason = "" }) {
     return this.transaction(async (client) => {
+      await lockVcrLanguageStudyBasis(client, studyId);
       const files = (await client.query(
         `SELECT id FROM ${VCR_SCHEMA}.source_files WHERE study_id=$1 AND role='document' AND detail->>'subjectKey'=$2`, [studyId, subjectKey])).rows;
       const known = await this.#holdsSubject(client, studyId, subjectKey, files.length);
@@ -343,6 +355,7 @@ export class VcrErasureStore extends VcrStoreBase {
    */
   async retireProjection({ studyId, userId, actor, projectionId, reason = "retired" }) {
     return this.transaction(async (client) => {
+      await lockVcrLanguageStudyBasis(client, studyId);
       const row = (await client.query(`SELECT id FROM ${VCR_SCHEMA}.document_projections WHERE study_id=$1 AND id=$2`, [studyId, projectionId])).rows[0];
       if (!row) return null;
       return this.#erase(client, { studyId, userId, actor, projectionIds: [projectionId], cause: "projection", reason });
@@ -364,12 +377,14 @@ export class VcrErasureStore extends VcrStoreBase {
   async markBasisChanged({ studyId, cause, causeId, documentIds }) {
     if (!documentIds.length) return { facts: 0, languageJudgments: 0, assessments: 0 };
     return this.transaction(async (client) => {
+      await lockVcrLanguageStudyBasis(client,studyId);
       const facts = (await client.query(`SELECT id, subject_key FROM ${VCR_SCHEMA}.matching_facts WHERE study_id=$1 AND withdrawn IS NULL AND (source->>'documentId') = ANY($2::text[])`,
         [studyId, documentIds])).rows.map((/** @type {any} */ row) => ({ id: String(row.id), subjectKey: String(row.subject_key) }));
       const judgments = (await client.query(
-        `SELECT id, subject_key FROM ${VCR_SCHEMA}.language_judgments WHERE study_id=$1 AND withdrawn IS NULL
-           AND EXISTS (SELECT 1 FROM jsonb_array_elements(evidence) e WHERE e->>'documentId' = ANY($2::text[]))`, [studyId, documentIds])).rows
-        .map((/** @type {any} */ row) => ({ id: String(row.id), subjectKey: String(row.subject_key) }));
+        `SELECT id, subject_key, candidate_trial_id FROM ${VCR_SCHEMA}.language_judgments WHERE study_id=$1 AND withdrawn IS NULL
+           AND (EXISTS (SELECT 1 FROM jsonb_array_elements(evidence) e WHERE e->>'documentId' = ANY($2::text[])) OR EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.language_judgment_dependencies dep WHERE dep.study_id=$1 AND dep.judgment_id=language_judgments.id AND dep.document_id=ANY($2::text[])))`, [studyId, documentIds])).rows
+        .map((/** @type {any} */ row) => ({ id: String(row.id), subjectKey: String(row.subject_key), candidateTrialId: row.candidate_trial_id == null ? null : String(row.candidate_trial_id) }));
+      for(const row of judgments) if(row.candidateTrialId) { await bumpVcrCandidateLanguageEpoch(client,studyId,row.subjectKey,row.candidateTrialId); await client.query(`UPDATE ${VCR_SCHEMA}.candidate_trial_assessments SET invalidated_at=clock_timestamp() WHERE study_id=$1 AND subject_key=$2 AND candidate_trial_id=$3 AND invalidated_at IS NULL`,[studyId,row.subjectKey,row.candidateTrialId]); }
       const subjects = [...new Set([...facts, ...judgments].map((row) => row.subjectKey))];
       const assessments = await this.#derivedAssessments(client, studyId, documentIds, facts.map((row) => row.id), judgments.map((row) => row.id), subjects);
       await this.#mark(client, studyId, "fact", facts, cause, causeId);

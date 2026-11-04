@@ -35,10 +35,11 @@ export const VCR_MATCH_BATCH_SCHEMA = 1
 /** The one method, run by the control plane itself on the slow local lane (it calls a model per record). */
 export const VCR_MATCH_BATCH_METHODS = Object.freeze({
   'matching.extract': Object.freeze({ version: '1.1.0', modelTier: null }),
+  'matching.language': Object.freeze({ version: '0.1.0', modelTier: null }),
 })
-export const VCR_MATCH_BATCH_JOBS = Object.freeze({ match_extract: 'matching.extract' })
+export const VCR_MATCH_BATCH_JOBS = Object.freeze({ match_extract: 'matching.extract', match_language: 'matching.language' })
 /** The local methods that call a model per record: they run on a worker loop of their own so that a long job does not hold the short ones. */
-export const VCR_SLOW_LOCAL_METHODS = Object.freeze(['matching.extract'])
+export const VCR_SLOW_LOCAL_METHODS = Object.freeze(['matching.extract', 'matching.language'])
 
 export const VCR_MATCH_BATCH_LIMITS = Object.freeze({
   /** Hard ceiling of a roster in one job, whatever a deployment configures. */
@@ -76,6 +77,16 @@ const count = (value) => (Number.isFinite(Number(value)) && Number(value) > 0 ? 
  */
 export function validateMatchBatchScenario(method, scenario) {
   if (!Object.hasOwn(VCR_MATCH_BATCH_METHODS, method)) return [{ code: 'method_unknown', field: 'method', detail: 'Unknown batch matching method.' }]
+  if (method === 'matching.language') {
+    const problems = []
+    const fields = ['units', 'unitHashes', 'runLimit', 'chain']
+    for (const key of Object.keys(scenario)) if (!fields.includes(key)) problems.push({ code:'scenario_field_unknown',field:`scenario.${key}`,detail:'Unused scenario field.' })
+    if (!Array.isArray(scenario.units) || !scenario.units.length || scenario.units.length > 20 || scenario.units.some(unit => !unit || typeof unit !== 'object' || Array.isArray(unit))) problems.push({code:'scenario_field_invalid',field:'scenario.units',detail:'One to twenty frozen language units.'})
+    if (!Array.isArray(scenario.unitHashes) || scenario.unitHashes.length !== scenario.units?.length || new Set(scenario.unitHashes).size !== scenario.unitHashes.length || scenario.unitHashes.some(hash => typeof hash !== 'string' || !/^[a-f0-9]{64}$/.test(hash))) problems.push({code:'scenario_field_invalid',field:'scenario.unitHashes',detail:'One unique digest per frozen unit.'})
+    if (scenario.chain != null && (typeof scenario.chain !== 'string' || !/^[a-f0-9]{64}$/.test(scenario.chain))) problems.push({code:'scenario_field_invalid',field:'scenario.chain',detail:'A content digest.'})
+    if (!Number.isFinite(scenario.runLimit) || scenario.runLimit <= 0) problems.push({code:'scenario_field_invalid',field:'scenario.runLimit',detail:'Positive bounded model budget.'})
+    return problems
+  }
   const problems = []
   const bad = (/** @type {string} */ field, /** @type {string} */ detail) => problems.push({ code: 'scenario_field_invalid', field: `scenario.${field}`, detail })
   const allowed = ['protocolVersionId', 'asOf', 'subjects', 'variables', 'estimate', 'chain', 'prefilter', 'prefiltered', 'model', 'questionsDigest']

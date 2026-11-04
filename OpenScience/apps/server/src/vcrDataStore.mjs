@@ -1,3 +1,4 @@
+import { bumpVcrCandidateLanguageEpoch, bumpVcrLanguageStudyEpoch, lockVcrLanguageActor, lockVcrLanguageStudyBasis, lockVcrLanguageSources } from './vcrLanguageFence.mjs';
 /**
  * 「虚拟临床研究」's data-plane and membership queries: sources, grants, snapshots,
  * field maps, analysis tables and study members (build plan 2026-09-28 §8.1,
@@ -305,7 +306,10 @@ export class VcrDataStore extends VcrStoreBase {
     const userId = required(entry.userId, "userId");
     const role = oneOf(VCR_MEMBER_ROLES, entry.role, "A member role");
     return this.transaction(async (client) => {
+      await lockVcrLanguageActor(client, userId);
+      await lockVcrLanguageStudyBasis(client, studyId);
       await client.query(`SELECT id FROM ${this.schema}.studies WHERE id=$1 FOR UPDATE`, [studyId]);
+      await bumpVcrLanguageStudyEpoch(client,studyId);
       const result = await client.query(
         `INSERT INTO ${this.schema}.members (study_id, user_id, role, invited_by, detail)
          VALUES ($1, $2, $3, $4, $5::jsonb)
@@ -326,8 +330,11 @@ export class VcrDataStore extends VcrStoreBase {
     const userId = required(entry.userId, "userId");
     const role = oneOf(VCR_MEMBER_ROLES, entry.role, "A member role");
     return this.transaction(async (client) => {
+      await lockVcrLanguageActor(client, userId);
+      await lockVcrLanguageStudyBasis(client, studyId);
       // Lock study before member, matching extension authorization's lock order.
       await client.query(`SELECT id FROM ${this.schema}.studies WHERE id=$1 FOR UPDATE`, [studyId]);
+      await bumpVcrLanguageStudyEpoch(client,studyId);
       const result = await client.query(
         `DELETE FROM ${this.schema}.members WHERE study_id = $1 AND user_id = $2 AND role = $3`, [studyId, userId, role]);
       const removed = (result.rowCount ?? 0) > 0;
@@ -386,9 +393,12 @@ export class VcrDataStore extends VcrStoreBase {
   /** @param {{studyId:string,sourceId:string,actor:string,permission:any}} input */
   async setCloudPermission({ studyId, sourceId, actor, permission }) {
     return this.transaction(async client => {
+      await lockVcrLanguageStudyBasis(client, studyId);
+      await lockVcrLanguageSources(client, [sourceId]);
       const row = (await client.query(`UPDATE ${this.schema}.sources SET cloud_permission=$3::jsonb, updated_at=now()
         WHERE study_id=$1 AND id=$2 RETURNING *`, [studyId, sourceId, permission == null ? null : JSON.stringify(permission)])).rows[0];
       if (!row) return null;
+      await bumpVcrLanguageStudyEpoch(client,studyId);
       await this.audit({ client, studyId, userId: actor, actor, action: 'source.cloud_permission', object: sourceId,
         detail: { status: permission?.status ?? 'default', destinations: permission?.destinations ?? [] } });
       return vcrSourceFromRow(row);
@@ -398,6 +408,9 @@ export class VcrDataStore extends VcrStoreBase {
   /** @param {any} input */
   async putDocumentProjection(input) {
     return this.transaction(async client => {
+      await lockVcrLanguageStudyBasis(client, input.studyId);
+      await lockVcrLanguageSources(client, [input.sourceId]);
+      await bumpVcrLanguageStudyEpoch(client,input.studyId);
       const row = (await client.query(`INSERT INTO ${this.schema}.document_projections
         (id,study_id,source_id,document_id,source_hash,projection_hash,permission_hash,location,manifest_hash)
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
@@ -456,6 +469,10 @@ export class VcrDataStore extends VcrStoreBase {
     const valueSource = oneOf(VCR_VALUE_SOURCES, entry.valueSource ?? "observed", "A value source");
     const id = vcrId("source");
     return this.transaction(async (client) => {
+      await lockVcrLanguageActor(client, userId);
+      if (entry.studyId) await lockVcrLanguageStudyBasis(client, entry.studyId);
+      await lockVcrLanguageSources(client, [id]);
+      if (entry.studyId) await bumpVcrLanguageStudyEpoch(client,entry.studyId);
       const result = await client.query(
         `INSERT INTO ${this.schema}.sources
            (id, user_id, study_id, name, owner_party, allowed_uses, visible_window, retention, format, value_source)
@@ -516,6 +533,10 @@ export class VcrDataStore extends VcrStoreBase {
   async setSourceStatus(entry) {
     const status = oneOf(VCR_SOURCE_STATUSES, entry.status, "A source status");
     return this.transaction(async (client) => {
+      const sourceBasis=(await client.query(`SELECT study_id FROM ${this.schema}.sources WHERE id=$1`,[entry.sourceId])).rows[0];
+      if(sourceBasis?.study_id)await lockVcrLanguageStudyBasis(client,String(sourceBasis.study_id));
+      await lockVcrLanguageSources(client, [entry.sourceId]);
+      if(sourceBasis?.study_id)await bumpVcrLanguageStudyEpoch(client,String(sourceBasis.study_id));
       const result = await client.query(
         `UPDATE ${this.schema}.sources SET status = $2, updated_at = now() WHERE id = $1 RETURNING *`,
         [entry.sourceId, status]);
@@ -600,6 +621,10 @@ export class VcrDataStore extends VcrStoreBase {
     const role = oneOf(VCR_SOURCE_FILE_ROLES, entry.role, "A file role");
     const id = sourceFileId();
     return this.transaction(async (client) => {
+      await lockVcrLanguageActor(client, entry.userId);
+      await lockVcrLanguageStudyBasis(client, entry.studyId);
+      await lockVcrLanguageSources(client, [entry.sourceId]);
+      await bumpVcrLanguageStudyEpoch(client,entry.studyId);
       const inserted = await client.query(
         `INSERT INTO ${this.schema}.source_files
            (id, source_id, study_id, user_id, role, name, format, location, sha256, bytes, row_count, column_count, profile, detail)
@@ -654,6 +679,9 @@ export class VcrDataStore extends VcrStoreBase {
    */
   async deleteSourceFile(entry) {
     return this.transaction(async (client) => {
+      await lockVcrLanguageStudyBasis(client, entry.studyId);
+      const sourceRow = (await client.query(`SELECT source_id FROM ${this.schema}.source_files WHERE id=$1 AND study_id=$2`, [entry.fileId, entry.studyId])).rows[0];
+      if (sourceRow) { await lockVcrLanguageSources(client, [String(sourceRow.source_id)]); await bumpVcrLanguageStudyEpoch(client,entry.studyId); }
       const row = (await client.query(
         `SELECT * FROM ${this.schema}.source_files WHERE id = $1 AND study_id = $2 FOR UPDATE`, [entry.fileId, entry.studyId])).rows[0];
       if (!row) return { removed: null, frozen: false };
@@ -666,11 +694,19 @@ export class VcrDataStore extends VcrStoreBase {
       const matchingUse = await client.query(`SELECT 1 FROM ${this.schema}.matching_inputs m WHERE m.study_id=$1 AND (
         EXISTS(SELECT 1 FROM jsonb_array_elements(m.manifest->'facts') ref JOIN ${this.schema}.matching_facts f ON f.id=ref->>'id'
           WHERE f.study_id=$1 AND f.source->>'documentId'=ANY($2::text[])) OR
-        EXISTS(SELECT 1 FROM jsonb_array_elements(m.manifest->'languages') ref JOIN ${this.schema}.language_judgments j ON j.id=ref->>'id', jsonb_array_elements(j.evidence) e
-          WHERE j.study_id=$1 AND e->>'documentId'=ANY($2::text[]))) LIMIT 1`, [entry.studyId,documentIds]);
+        EXISTS(SELECT 1 FROM jsonb_array_elements(m.manifest->'languages') ref JOIN ${this.schema}.language_judgments j ON j.id=ref->>'id'
+          WHERE j.study_id=$1 AND (EXISTS(SELECT 1 FROM jsonb_array_elements(j.evidence) e WHERE e->>'documentId'=ANY($2::text[]))
+            OR EXISTS(SELECT 1 FROM ${this.schema}.language_judgment_dependencies dep WHERE dep.study_id=$1 AND dep.judgment_id=j.id AND dep.document_id=ANY($2::text[]))))) LIMIT 1`, [entry.studyId,documentIds]);
       if (matchingUse.rowCount) return { removed:null, frozen:true, frozenBy:"matching" };
+      const affectedLanguage = (await client.query(`SELECT DISTINCT j.subject_key,j.candidate_trial_id FROM ${this.schema}.language_judgments j
+        WHERE j.study_id=$1 AND j.candidate_trial_id IS NOT NULL AND (EXISTS(SELECT 1 FROM jsonb_array_elements(j.evidence) e WHERE e->>'documentId'=ANY($2::text[]))
+          OR EXISTS(SELECT 1 FROM ${this.schema}.language_judgment_dependencies dep WHERE dep.study_id=$1 AND dep.judgment_id=j.id AND dep.document_id=ANY($2::text[])))`,[entry.studyId,documentIds])).rows;
+      for(const affected of affectedLanguage)await bumpVcrCandidateLanguageEpoch(client,entry.studyId,String(affected.subject_key),String(affected.candidate_trial_id));
+      await client.query(`UPDATE ${this.schema}.candidate_trial_assessments a SET invalidated_at=clock_timestamp() WHERE a.study_id=$1 AND a.invalidated_at IS NULL
+        AND EXISTS (SELECT 1 FROM ${this.schema}.language_judgments j WHERE j.study_id=a.study_id AND j.subject_key=a.subject_key AND j.candidate_trial_id=a.candidate_trial_id
+          AND (EXISTS(SELECT 1 FROM jsonb_array_elements(j.evidence) e WHERE e->>'documentId'=ANY($2::text[])) OR EXISTS(SELECT 1 FROM ${this.schema}.language_judgment_dependencies dep WHERE dep.study_id=$1 AND dep.judgment_id=j.id AND dep.document_id=ANY($2::text[]))))`,[entry.studyId,documentIds]);
       await client.query(`DELETE FROM ${this.schema}.matching_facts WHERE study_id=$1 AND source->>'documentId'=ANY($2::text[])`, [entry.studyId,documentIds]);
-      await client.query(`DELETE FROM ${this.schema}.language_judgments WHERE study_id=$1 AND EXISTS(SELECT 1 FROM jsonb_array_elements(evidence) e WHERE e->>'documentId'=ANY($2::text[]))`, [entry.studyId,documentIds]);
+      await client.query(`DELETE FROM ${this.schema}.language_judgments WHERE study_id=$1 AND (EXISTS(SELECT 1 FROM jsonb_array_elements(evidence) e WHERE e->>'documentId'=ANY($2::text[])) OR EXISTS(SELECT 1 FROM ${this.schema}.language_judgment_dependencies dep WHERE dep.study_id=$1 AND dep.judgment_id=language_judgments.id AND dep.document_id=ANY($2::text[])))`, [entry.studyId,documentIds]);
       await client.query(`DELETE FROM ${this.schema}.source_files WHERE id = $1`, [entry.fileId]);
       await this.audit({
         client, studyId: entry.studyId, userId: row.user_id, actor: entry.actor ?? "",
@@ -696,6 +732,10 @@ export class VcrDataStore extends VcrStoreBase {
     const role = entry.role == null || entry.role === "" ? null : oneOf(VCR_MEMBER_ROLES, entry.role, "A grant role");
     const id = vcrId("grant");
     return this.transaction(async (client) => {
+      const sourceBasis=(await client.query(`SELECT study_id FROM ${this.schema}.sources WHERE id=$1`,[sourceId])).rows[0];
+      if(sourceBasis?.study_id)await lockVcrLanguageStudyBasis(client,String(sourceBasis.study_id));
+      await lockVcrLanguageSources(client, [sourceId]);
+      if(sourceBasis?.study_id)await bumpVcrLanguageStudyEpoch(client,String(sourceBasis.study_id));
       const result = await client.query(
         `INSERT INTO ${this.schema}.grants
            (id, source_id, study_id, user_id, grantee, role, fields, field_mode, window_start, window_end, purposes)
@@ -718,6 +758,10 @@ export class VcrDataStore extends VcrStoreBase {
    */
   async revokeGrant(entry) {
     return this.transaction(async (client) => {
+      const sourceRow = (await client.query(`SELECT g.source_id,s.study_id FROM ${this.schema}.grants g JOIN ${this.schema}.sources s ON s.id=g.source_id WHERE g.id=$1`, [entry.grantId])).rows[0];
+      if(sourceRow?.study_id)await lockVcrLanguageStudyBasis(client,String(sourceRow.study_id));
+      if (sourceRow) await lockVcrLanguageSources(client, [String(sourceRow.source_id)]);
+      if(sourceRow?.study_id)await bumpVcrLanguageStudyEpoch(client,String(sourceRow.study_id));
       const result = await client.query(
         `UPDATE ${this.schema}.grants SET revoked_at = now()
          WHERE id = $1 AND revoked_at IS NULL AND ($2::text IS NULL OR study_id = $2) RETURNING *`,

@@ -856,7 +856,7 @@ export const VCR_JOB_KINDS = frozen([
   // --- appended (2026-11-01): a generated population against a second baseline table (remediation plan D2) ---
   'population_check',
   // --- appended (2026-11-01): the batch reading of patient records for the criteria's facts (remediation plan D4) ---
-  'match_extract',
+  'match_extract', 'match_language',
   'forecast_trajectories', 'evaluate_forecast', 'compare_forecasts', 'benchmark_trial_effect',
 ])
 /**
@@ -876,7 +876,7 @@ export const VCR_JOB_KIND_STEPS = Object.freeze({
   covariate_set_comparator: 'comparator', negative_control_comparator: 'comparator', tipping_point: 'comparator',
   prognostic_adjustment_comparator: 'comparator',
   design_analytic: 'trial', design_simulation: 'trial', design_grid: 'trial', assurance: 'trial', procova: 'trial', accrual_forecast: 'trial',
-  match_criteria: 'matching', match_extract: 'matching',
+  match_criteria: 'matching', match_extract: 'matching', match_language: 'matching',
 })
 export const VCR_JOB_STATES = frozen(['queued', 'running', 'succeeded', 'failed', 'canceled', 'awaiting_budget'])
 export const VCR_JOB_STATE_LABELS_ZH = Object.freeze({

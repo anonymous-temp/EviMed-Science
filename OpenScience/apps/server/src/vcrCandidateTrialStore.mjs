@@ -1,3 +1,5 @@
+import { bumpVcrCandidateLanguageEpoch, lockVcrLanguageActor, lockVcrLanguageSources, lockVcrLanguageLease, lockVcrLanguageStudyBasis } from './vcrLanguageFence.mjs';
+import { freezeVcrLanguageUnit } from './vcrLanguageUnit.mjs';
 /**
  * Candidate trials on disk: the trials a run found for a patient, their criteria, and the verdicts about
  * a patient against each (「给患者找试验」, `vcrPatientTrials.mjs`).
@@ -28,7 +30,7 @@ import { VCR_SCHEMA } from "./vcrPersistence.mjs";
 import { VcrStoreBase, vcrId } from "./vcrStoreBase.mjs";
 
 export const VCR_CRITERIA_COMPILER_POLICY = "vcr-whole-clause-1";
-import { matchingInputDigest, publicMatchingProvenance, statedRequirement } from "./vcrMatching.mjs";
+import { matchingInputDigest, publicMatchingProvenance, statedRequirement, languageKeysOf } from "./vcrMatching.mjs";
 import { languageCriteriaByKey, languageCriterionHash, languageInput, readCriterionEvaluation, storedCriterionEvaluation } from "./vcrMatchingSnapshot.mjs";
 
 /** @param {unknown} value @returns {string | null} */
@@ -85,6 +87,7 @@ const assessmentOf = (row) => (row ? {
   evidenceGaps: Array.isArray(row.evidence_gaps) ? row.evidence_gaps : [],
   provenance: publicMatchingProvenance(row.provenance ?? {}),
   createdAt: iso(row.created_at),
+  invalidatedAt: iso(row.invalidated_at),
 } : null);
 
 /** @param {any} row */
@@ -110,6 +113,22 @@ export function candidateCriteriaHash(criteria) {
   })));
 }
 
+/** Called under the study and candidate locks: retain legacy ordering only when bootstrapping a head. */
+async function candidateLanguageHead(client, studyId, subjectKey, candidateTrialId, criterionKey) {
+  const args=[studyId,subjectKey,candidateTrialId,criterionKey];
+  const current=(await client.query(`SELECT h.judgment_id,j.withdrawn FROM ${VCR_SCHEMA}.candidate_language_heads h LEFT JOIN ${VCR_SCHEMA}.language_judgments j ON j.id=h.judgment_id AND j.study_id=h.study_id
+    WHERE h.study_id=$1 AND h.subject_key=$2 AND h.candidate_trial_id=$3 AND h.criterion_key=$4`,args)).rows[0];
+  if(current)return current.judgment_id && !current.withdrawn ? String(current.judgment_id) : null;
+  const fallback=(await client.query(`SELECT id FROM ${VCR_SCHEMA}.language_judgments WHERE study_id=$1 AND subject_key=$2 AND candidate_trial_id=$3 AND criterion_key=$4 AND withdrawn IS NULL ORDER BY created_at DESC,id DESC LIMIT 1`,args)).rows[0];
+  if(fallback)await setCandidateLanguageHead(client,studyId,subjectKey,candidateTrialId,criterionKey,String(fallback.id));
+  else await client.query(`DELETE FROM ${VCR_SCHEMA}.candidate_language_heads WHERE study_id=$1 AND subject_key=$2 AND candidate_trial_id=$3 AND criterion_key=$4`,args);
+  return fallback ? String(fallback.id) : null;
+}
+async function setCandidateLanguageHead(client,studyId,subjectKey,candidateTrialId,criterionKey,judgmentId) {
+  await client.query(`INSERT INTO ${VCR_SCHEMA}.candidate_language_heads(study_id,subject_key,candidate_trial_id,criterion_key,judgment_id) VALUES($1,$2,$3,$4,$5)
+    ON CONFLICT(study_id,subject_key,candidate_trial_id,criterion_key) DO UPDATE SET judgment_id=EXCLUDED.judgment_id`,[studyId,subjectKey,candidateTrialId,criterionKey,judgmentId]);
+}
+
 /** Candidate trials, their criteria and the verdicts about a patient against each. One store, from the module's shared base. */
 export class VcrCandidateTrialStore extends VcrStoreBase {
   /**
@@ -124,6 +143,7 @@ export class VcrCandidateTrialStore extends VcrStoreBase {
    */
   async saveCandidateTrial({ studyId, userId, trial, criteria = null, max }) {
     return this.transaction(async (client) => {
+      await lockVcrLanguageStudyBasis(client, studyId);
       // Two writers of the same study must not both find room for the last candidate.
       await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`vcr-candidate-trials:${studyId}`]);
       const held = (await client.query(
@@ -313,16 +333,31 @@ export class VcrCandidateTrialStore extends VcrStoreBase {
    */
   async saveAssessment({ assessment, userId, expectedRecordHash, expectedCriteriaHash }) {
     return this.transaction(async (client) => {
+      await lockVcrLanguageStudyBasis(client,assessment.studyId);
       const owned = await client.query(
         `SELECT record_hash, criteria_hash FROM ${VCR_SCHEMA}.candidate_trials WHERE id = $1 AND study_id = $2 FOR UPDATE`, [assessment.candidateTrialId, assessment.studyId]);
       if (!owned.rowCount) throw new HttpError(404, "vcr_write_refused", "This candidate trial is not the study's.");
       if (expectedCriteriaHash === undefined || expectedRecordHash === undefined || owned.rows[0].criteria_hash !== expectedCriteriaHash || (owned.rows[0].record_hash ?? null) !== expectedRecordHash) throw new HttpError(409, "vcr_write_refused", "Trial source or criteria changed during evaluation; evaluate again.");
+      if (assessment.studyBasisEpoch != null) {
+        const basis=(await client.query(`SELECT epoch FROM ${VCR_SCHEMA}.language_study_basis_epochs WHERE study_id=$1`,[assessment.studyId])).rows[0];
+        if (!Number.isSafeInteger(assessment.studyBasisEpoch) || Number(basis?.epoch ?? 0)!==assessment.studyBasisEpoch) throw new HttpError(409,'vcr_matching_input_changed','Study source authorization changed during evaluation.');
+      }
+      if (assessment.candidateLanguageEpoch != null) {
+        const epoch=(await client.query(`SELECT epoch FROM ${VCR_SCHEMA}.candidate_language_epochs WHERE study_id=$1 AND subject_key=$2 AND candidate_trial_id=$3`,[assessment.studyId,assessment.subjectKey,assessment.candidateTrialId])).rows[0];
+        if (!Number.isSafeInteger(assessment.candidateLanguageEpoch) || Number(epoch?.epoch ?? 0)!==assessment.candidateLanguageEpoch) throw new HttpError(409,'vcr_matching_input_changed','Language inputs changed during evaluation.');
+      }
+      if (assessment.provenance?.inputReferencesComplete === true && Array.isArray(assessment.provenance.inputLanguageIds)) {
+        const current=await this.database.withTransactionClient(client,()=>this.latestLanguageJudgments({studyId:assessment.studyId,candidateTrialId:assessment.candidateTrialId,subjectKey:assessment.subjectKey,visibleBy:assessment.asOf}));
+        const actual=Object.values(current).map(row=>String(row.id)).sort();
+        const expected=[...assessment.provenance.inputLanguageIds].map(String).sort();
+        if(JSON.stringify(actual)!==JSON.stringify(expected))throw new HttpError(409,'vcr_matching_input_changed','Language answers changed during evaluation.');
+      }
       const row = (await client.query(
         `INSERT INTO ${VCR_SCHEMA}.candidate_trial_assessments
            (id, study_id, candidate_trial_id, user_id, subject_key, as_of, summary, counts, evidence_gaps, provenance, input_snapshot_id)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10::jsonb, $11)
          ON CONFLICT (candidate_trial_id, subject_key, as_of, input_snapshot_id) DO UPDATE SET
-           summary = EXCLUDED.summary, counts = EXCLUDED.counts, evidence_gaps = EXCLUDED.evidence_gaps, provenance = EXCLUDED.provenance
+           summary = EXCLUDED.summary, counts = EXCLUDED.counts, evidence_gaps = EXCLUDED.evidence_gaps, provenance = EXCLUDED.provenance, invalidated_at = NULL
          RETURNING *`,
         [vcrId("candidateAssessment"), assessment.studyId, assessment.candidateTrialId, userId, assessment.subjectKey, assessment.asOf, assessment.summary,
           JSON.stringify(assessment.counts ?? {}), JSON.stringify(assessment.evidenceGaps ?? []), JSON.stringify(assessment.provenance ?? {}),
@@ -366,7 +401,7 @@ export class VcrCandidateTrialStore extends VcrStoreBase {
   async latestAssessments({ studyId, subjectKey }) {
     const rows = await this.rows(
       `SELECT DISTINCT ON (candidate_trial_id) * FROM ${VCR_SCHEMA}.candidate_trial_assessments
-        WHERE study_id = $1 AND subject_key = $2 ORDER BY candidate_trial_id, as_of DESC, created_at DESC`, [studyId, subjectKey]);
+        WHERE study_id = $1 AND subject_key = $2 AND invalidated_at IS NULL ORDER BY candidate_trial_id, as_of DESC, created_at DESC`, [studyId, subjectKey]);
     return new Map(rows.map((row) => [String(row.candidate_trial_id), /** @type {any} */ (assessmentOf(row))]));
   }
 
@@ -386,7 +421,7 @@ export class VcrCandidateTrialStore extends VcrStoreBase {
         ($2::text IS NOT NULL OR $3::text IS NULL OR registry=$3) ORDER BY updated_at DESC, id LIMIT $5`,
       [studyId, filter.id ?? null, filter.registry ?? null, filter.registryId ?? null, exact ? 1 : 1000])).rows.map(trialOf);
       const ids = trials.map(t => t.id);
-      const assessments = (await client.query(`SELECT DISTINCT ON (candidate_trial_id) * FROM ${VCR_SCHEMA}.candidate_trial_assessments WHERE study_id=$1 AND subject_key=$2 AND candidate_trial_id=ANY($3::text[]) ORDER BY candidate_trial_id, as_of DESC, created_at DESC, id DESC`, [studyId, subjectKey, ids])).rows.map(assessmentOf);
+      const assessments = (await client.query(`SELECT DISTINCT ON (candidate_trial_id) * FROM ${VCR_SCHEMA}.candidate_trial_assessments WHERE study_id=$1 AND subject_key=$2 AND candidate_trial_id=ANY($3::text[]) AND invalidated_at IS NULL ORDER BY candidate_trial_id, as_of DESC, created_at DESC, id DESC`, [studyId, subjectKey, ids])).rows.map(assessmentOf);
       const criteria = (await client.query(`SELECT * FROM ${VCR_SCHEMA}.candidate_trial_criteria WHERE study_id=$1 AND candidate_trial_id=ANY($2::text[]) ORDER BY candidate_trial_id, ordinal`, [studyId, ids])).rows.map(criterionOf);
       const columns = filter.full ? "j.*" : "j.assessment_id, j.criterion_id, j.state, j.applicable";
       const judgments = (await client.query(`SELECT ${columns} FROM ${VCR_SCHEMA}.candidate_trial_judgments j WHERE j.assessment_id=ANY($1::text[])`, [assessments.map(a => a.id)])).rows.map(row => filter.full ? judgmentOf(row) : ({ assessmentId: String(row.assessment_id), criterionId: String(row.criterion_id), state: String(row.state), applicable: row.applicable !== false }));
@@ -395,6 +430,92 @@ export class VcrCandidateTrialStore extends VcrStoreBase {
   }
 
   // --------------------------------------------- language criteria
+
+  async studyBasisEpoch(studyId) {
+    const row=await this.one(`SELECT epoch FROM ${VCR_SCHEMA}.language_study_basis_epochs WHERE study_id=$1`,[studyId]);
+    return row ? Number(row.epoch) : 0;
+  }
+
+  async languageEpoch({studyId,subjectKey,candidateTrialId}) {
+    const row=await this.one(`SELECT epoch FROM ${VCR_SCHEMA}.candidate_language_epochs WHERE study_id=$1 AND subject_key=$2 AND candidate_trial_id=$3`,[studyId,subjectKey,candidateTrialId]);
+    return row ? Number(row.epoch) : 0;
+  }
+
+  /** Internal candidate head snapshot for a language-job plan. */
+  async currentLanguageHead({studyId,subjectKey,candidateTrialId,criterionKey}) {
+    return this.transaction(async client=>{
+      await lockVcrLanguageStudyBasis(client,studyId);
+      const candidate=(await client.query(`SELECT id FROM ${VCR_SCHEMA}.candidate_trials WHERE study_id=$1 AND id=$2 FOR UPDATE`,[studyId,candidateTrialId])).rows[0];
+      if(!candidate)throw new HttpError(404,'vcr_candidate_trial_not_found','Candidate trial not found.');
+      return candidateLanguageHead(client,studyId,subjectKey,candidateTrialId,criterionKey);
+    });
+  }
+
+  /** Internal, unwired dispatch fence. onAuthorized must settle only after a bounded local body handoff.
+   * @param {{unit:any,jobId:string,leaseOwner:string,leaseAttempt:number,loadSources:(input:any)=>Promise<any>,onAuthorized:(input:any)=>Promise<any>}} input */
+  async dispatchLanguageUnit({unit,jobId,leaseOwner,leaseAttempt,loadSources,onAuthorized}) {
+    const frozen=freezeVcrLanguageUnit(unit);const u=frozen.payload;
+    if(typeof loadSources!=='function'||typeof onAuthorized!=='function') throw new TypeError('Dispatch fence requires trusted callbacks.');
+    return this.transaction(async client=>{
+      await lockVcrLanguageActor(client,u.userId);
+      await lockVcrLanguageStudyBasis(client,u.studyId);
+      await lockVcrLanguageLease(client,{studyId:u.studyId,jobId,userId:u.userId,owner:leaseOwner,attempt:leaseAttempt,unitHash:frozen.unitHash});
+      const trial=(await client.query(`SELECT id,record_hash FROM ${VCR_SCHEMA}.candidate_trials WHERE study_id=$1 AND id=$2 FOR UPDATE`,[u.studyId,u.candidateTrialId])).rows[0];
+      if(!trial||(trial.record_hash??null)!==u.recordHash)throw new HttpError(409,'vcr_language_replan_required','The candidate source changed.');
+      const criteria=(await client.query(`SELECT * FROM ${VCR_SCHEMA}.candidate_trial_criteria WHERE candidate_trial_id=$1 ORDER BY ordinal`,[u.candidateTrialId])).rows.map(criterionOf);
+      const bound=languageCriteriaByKey(criteria).get(u.criterionKey);
+      if(!bound||!bound.some(c=>languageKeysOf(c[u.axis],c.id).includes(u.criterionKey))||languageCriterionHash(bound,u.criterionKey)!==u.criterionHash)throw new HttpError(409,'vcr_language_replan_required','The criterion changed.');
+      await lockVcrLanguageSources(client,u.documents.map(doc=>doc.sourceId));
+      const documents=await this.database.withTransactionClient(client,()=>loadSources({studyId:u.studyId,userId:u.userId,subjectKey:u.subjectKey,documents:u.documents,evidence:[]}));
+      if(!Array.isArray(documents)||documents.length!==u.documents.length)throw new HttpError(409,'vcr_language_replan_required','Source authorization changed.');
+      await lockVcrLanguageLease(client,{studyId:u.studyId,jobId,userId:u.userId,owner:leaseOwner,attempt:leaseAttempt,unitHash:frozen.unitHash});
+      const prior=(await client.query(`SELECT judgment_id FROM ${VCR_SCHEMA}.language_unit_commits WHERE study_id=$1 AND unit_hash=$2`,[u.studyId,frozen.unitHash])).rows[0];
+      const latest=await candidateLanguageHead(client,u.studyId,u.subjectKey,u.candidateTrialId,u.criterionKey);
+      if(prior && latest === prior.judgment_id)return {alreadyCommitted:true,id:String(prior.judgment_id)};
+      if(prior||(latest!==u.expectedJudgmentId))throw new HttpError(409,'vcr_language_replan_required','The answer is completed or changed.');
+      return onAuthorized({unit:u,criteria:bound,documents});
+    });
+  }
+
+  /** Internal, unwired commit primitive. validateSources must reauthorize and verify every frozen document under this transaction.
+   * No API or worker invokes this method until its callers and all mutators participate in the shared fence.
+   * @param {{unit:any, jobId:string, leaseOwner:string, leaseAttempt:number, state:string, evidence:any[], validateSources:(input:any)=>Promise<boolean>}} input */
+  async commitLanguageUnit({ unit, jobId, leaseOwner, leaseAttempt, state, evidence, validateSources }) {
+    const frozen = freezeVcrLanguageUnit(unit);
+    const u = frozen.payload;
+    if (!['satisfied','not_satisfied','unknown'].includes(state) || !Array.isArray(evidence) || evidence.length > 10
+      || (state !== 'unknown' && !evidence.length) || typeof validateSources !== 'function') throw new TypeError('Invalid language unit result.');
+    return this.transaction(async client => {
+      await lockVcrLanguageActor(client,u.userId);
+      await lockVcrLanguageStudyBasis(client, u.studyId);
+      await lockVcrLanguageLease(client, { studyId:u.studyId,jobId,userId:u.userId,owner:leaseOwner,attempt:leaseAttempt,unitHash:frozen.unitHash });
+      const trial = (await client.query(`SELECT id,record_hash FROM ${VCR_SCHEMA}.candidate_trials WHERE study_id=$1 AND id=$2 FOR UPDATE`, [u.studyId,u.candidateTrialId])).rows[0];
+      if (!trial || (trial.record_hash ?? null) !== u.recordHash) throw new HttpError(409,'vcr_language_replan_required','The candidate source changed.');
+      const criteria = (await client.query(`SELECT * FROM ${VCR_SCHEMA}.candidate_trial_criteria WHERE candidate_trial_id=$1 ORDER BY ordinal`, [u.candidateTrialId])).rows.map(criterionOf);
+      const bound = languageCriteriaByKey(criteria).get(u.criterionKey);
+      if (!bound || !bound.some(criterion => languageKeysOf(criterion[u.axis], criterion.id).includes(u.criterionKey)) || languageCriterionHash(bound,u.criterionKey) !== u.criterionHash) throw new HttpError(409,'vcr_language_replan_required','The criterion changed.');
+      await lockVcrLanguageSources(client, u.documents.map(document => document.sourceId));
+      const authorized = await this.database.withTransactionClient(client, () => validateSources({ studyId:u.studyId,userId:u.userId,subjectKey:u.subjectKey,documents:u.documents,evidence }));
+      if (authorized !== true) throw new HttpError(409,'vcr_language_replan_required','Source authorization or evidence changed.');
+      await lockVcrLanguageLease(client, { studyId:u.studyId,jobId,userId:u.userId,owner:leaseOwner,attempt:leaseAttempt,unitHash:frozen.unitHash });
+      const latest = await candidateLanguageHead(client,u.studyId,u.subjectKey,u.candidateTrialId,u.criterionKey);
+      const prior = (await client.query(`SELECT judgment_id FROM ${VCR_SCHEMA}.language_unit_commits WHERE study_id=$1 AND unit_hash=$2`, [u.studyId,frozen.unitHash])).rows[0];
+      if (prior && latest === prior.judgment_id) return { id:String(prior.judgment_id), alreadyCommitted:true };
+      if (prior || latest !== u.expectedJudgmentId) throw new HttpError(409,'vcr_language_replan_required','A newer answer exists.');
+      const id=vcrId('judgment');
+      const provenance={schema:1,status:'background_language',runId:jobId,association:'matching.language',unitHash:frozen.unitHash};
+      await client.query(`INSERT INTO ${VCR_SCHEMA}.language_judgments(id,study_id,user_id,subject_key,criterion_key,state,evidence,candidate_trial_id,criterion_hash,provenance,created_at)
+        VALUES($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10::jsonb,clock_timestamp())`, [id,u.studyId,u.userId,u.subjectKey,u.criterionKey,state,JSON.stringify(evidence),u.candidateTrialId,u.criterionHash,JSON.stringify(provenance)]);
+      await setCandidateLanguageHead(client,u.studyId,u.subjectKey,u.candidateTrialId,u.criterionKey,id);
+      await bumpVcrCandidateLanguageEpoch(client,u.studyId,u.subjectKey,u.candidateTrialId);
+      await client.query(`UPDATE ${VCR_SCHEMA}.candidate_trial_assessments SET invalidated_at=clock_timestamp() WHERE study_id=$1 AND subject_key=$2 AND candidate_trial_id=$3 AND invalidated_at IS NULL`,[u.studyId,u.subjectKey,u.candidateTrialId]);
+      for (const document of u.documents) for (const documentId of new Set([document.id,document.projectionId].filter(Boolean))) await client.query(`INSERT INTO ${VCR_SCHEMA}.language_judgment_dependencies(study_id,judgment_id,document_id) VALUES($1,$2,$3) ON CONFLICT DO NOTHING`, [u.studyId,id,documentId]);
+      await client.query(`INSERT INTO ${VCR_SCHEMA}.language_unit_commits(study_id,unit_hash,judgment_id,job_id) VALUES($1,$2,$3,$4)`, [u.studyId,frozen.unitHash,id,jobId]);
+      await client.query(`INSERT INTO ${VCR_SCHEMA}.matching_producers(study_id,target_id,producer_hash,provenance) VALUES($1,$2,$3,$4::jsonb) ON CONFLICT DO NOTHING`, [u.studyId,id,matchingInputDigest(provenance),JSON.stringify(provenance)]);
+      await this.audit({client,studyId:u.studyId,userId:u.userId,actor:'job',action:'vcr.language_unit.commit',object:id,detail:{jobId,unitHash:frozen.unitHash,state}});
+      return {id,alreadyCommitted:false};
+    });
+  }
 
   /**
    * The answer to a criterion of a candidate trial that only language can decide, bound to that trial (and to the wording of the criteria
@@ -410,6 +531,7 @@ export class VcrCandidateTrialStore extends VcrStoreBase {
       throw new HttpError(409, "vcr_write_refused", "Both observed candidate revision fields are required together.");
     }
     return this.transaction(async (client) => {
+      await lockVcrLanguageStudyBasis(client, studyId);
       const trial = (await client.query(`SELECT id, record_hash FROM ${VCR_SCHEMA}.candidate_trials WHERE id = $1 AND study_id = $2 FOR UPDATE`, [candidateTrialId, studyId])).rows[0];
       if (!trial) throw new HttpError(409, "vcr_write_refused", "This candidate trial is not the study's.");
       const criteria = (await client.query(
@@ -423,11 +545,14 @@ export class VcrCandidateTrialStore extends VcrStoreBase {
       const visibleAt = (evidence ?? []).map((/** @type {any} */ item) => Date.parse(item?.visibleAt ?? "")).filter(Number.isFinite);
       const row = (await client.query(
         `INSERT INTO ${VCR_SCHEMA}.language_judgments
-           (id, study_id, user_id, subject_key, criterion_key, state, evidence, visible_at, protocol_version_id, candidate_trial_id, criterion_hash, provenance)
-         VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, NULL, $9, $10, $11::jsonb) RETURNING *`,
+           (id, study_id, user_id, subject_key, criterion_key, state, evidence, visible_at, protocol_version_id, candidate_trial_id, criterion_hash, provenance, created_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, NULL, $9, $10, $11::jsonb, clock_timestamp()) RETURNING *`,
         [vcrId("judgment"), studyId, userId, subjectKey, criterionKey, state, JSON.stringify(evidence ?? []),
           new Date(visibleAt.length ? Math.max(...visibleAt) : Date.now()).toISOString(), trial.id,
           binding, provenance ? JSON.stringify(provenance) : null])).rows[0];
+      await setCandidateLanguageHead(client,studyId,subjectKey,candidateTrialId,criterionKey,String(row.id));
+      await bumpVcrCandidateLanguageEpoch(client,studyId,subjectKey,candidateTrialId);
+      await client.query(`UPDATE ${VCR_SCHEMA}.candidate_trial_assessments SET invalidated_at=clock_timestamp() WHERE study_id=$1 AND subject_key=$2 AND candidate_trial_id=$3 AND invalidated_at IS NULL`,[studyId,subjectKey,candidateTrialId]);
       if (provenance) {
         await client.query(
           `INSERT INTO ${VCR_SCHEMA}.matching_producers (study_id, target_id, producer_hash, provenance) VALUES ($1, $2, $3, $4::jsonb) ON CONFLICT DO NOTHING`,
@@ -443,9 +568,10 @@ export class VcrCandidateTrialStore extends VcrStoreBase {
   async languageAnswersForTrials(studyId, subjectKey, ids, criteriaByTrial) {
     const result = new Map(ids.map(id => [id, new Set()]));
     if (!ids.length) return result;
-    const rows = await this.rows(`SELECT DISTINCT ON (candidate_trial_id, criterion_key) candidate_trial_id, criterion_key, criterion_hash
-      FROM ${VCR_SCHEMA}.language_judgments WHERE study_id=$1 AND subject_key=$2 AND candidate_trial_id=ANY($3::text[]) AND withdrawn IS NULL
-      ORDER BY candidate_trial_id, criterion_key, created_at DESC, id DESC`, [studyId, subjectKey, [...ids]]);
+    const rows = await this.rows(`SELECT DISTINCT ON (j.candidate_trial_id, j.criterion_key) j.candidate_trial_id, j.criterion_key, j.criterion_hash
+      FROM ${VCR_SCHEMA}.language_judgments j LEFT JOIN ${VCR_SCHEMA}.candidate_language_heads h ON h.study_id=j.study_id AND h.subject_key=j.subject_key AND h.candidate_trial_id=j.candidate_trial_id AND h.criterion_key=j.criterion_key
+      WHERE j.study_id=$1 AND j.subject_key=$2 AND j.candidate_trial_id=ANY($3::text[]) AND j.withdrawn IS NULL AND (h.study_id IS NULL OR h.judgment_id=j.id)
+      ORDER BY j.candidate_trial_id, j.criterion_key, (h.judgment_id=j.id) DESC NULLS LAST, j.created_at DESC, j.id DESC`, [studyId, subjectKey, [...ids]]);
     const bindingsByTrial = new Map(ids.map(id => [id, languageCriteriaByKey(criteriaByTrial.get(id) ?? [])]));
     for (const row of rows) {
       const bound = bindingsByTrial.get(String(row.candidate_trial_id))?.get(row.criterion_key);
@@ -463,9 +589,11 @@ export class VcrCandidateTrialStore extends VcrStoreBase {
   async latestLanguageJudgments({ studyId, candidateTrialId, subjectKey, visibleBy = null }) {
     const criteria = languageCriteriaByKey(await this.listCriteria(candidateTrialId));
     const rows = await this.rows(
-      `SELECT DISTINCT ON (criterion_key) * FROM ${VCR_SCHEMA}.language_judgments
-        WHERE study_id = $1 AND candidate_trial_id = $2 AND subject_key = $3 AND withdrawn IS NULL AND ($4::timestamptz IS NULL OR visible_at <= $4)
-        ORDER BY criterion_key, created_at DESC, id DESC`, [studyId, candidateTrialId, subjectKey, visibleBy]);
+      `SELECT DISTINCT ON (j.criterion_key) j.* FROM ${VCR_SCHEMA}.language_judgments j LEFT JOIN ${VCR_SCHEMA}.candidate_language_heads h ON h.study_id=j.study_id AND h.subject_key=j.subject_key AND h.candidate_trial_id=j.candidate_trial_id AND h.criterion_key=j.criterion_key
+        LEFT JOIN ${VCR_SCHEMA}.language_judgments head ON head.id=h.judgment_id AND head.study_id=h.study_id
+        WHERE j.study_id = $1 AND j.candidate_trial_id = $2 AND j.subject_key = $3 AND j.withdrawn IS NULL AND ($4::timestamptz IS NULL OR j.visible_at <= $4)
+          AND (h.study_id IS NULL OR (head.withdrawn IS NULL AND (h.judgment_id=j.id OR ($4::timestamptz IS NOT NULL AND head.visible_at>$4))))
+        ORDER BY j.criterion_key, (h.judgment_id=j.id) DESC NULLS LAST, j.created_at DESC, j.id DESC`, [studyId, candidateTrialId, subjectKey, visibleBy]);
     /** @type {Record<string, any>} */
     const answers = {};
     for (const row of rows) {
