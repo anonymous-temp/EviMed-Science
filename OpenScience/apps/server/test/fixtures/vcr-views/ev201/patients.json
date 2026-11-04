@@ -864,6 +864,7 @@
     "sentence": "这次生成算完了 1,200 / 2,000 次重复就停下了，下面是已完成部分的结果。"
   },
   "progressions": [],
+  "splineFits": [],
   "sets": [
     {
       "id": "pts_1",

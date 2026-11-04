@@ -473,8 +473,8 @@ test("a mean under a name that is not a count is left alone, and a count under a
   assert.equal(imputation.rowsIncomplete, null);
   assert.equal(imputation.rowsAnalysed, null, "the part alone is a subtraction from the whole");
   assert.deepEqual([imputation.completeCase.rows, imputation.completeCase.droppedRows], [null, null]);
-  assert.deepEqual(imputation.covariates.map((cell) => cell.missing), [null, null], "a small cell takes the next smallest with it");
-  assert.deepEqual(imputation.covariates.map((cell) => cell.name), ["age", "bmi"], "and keeps its name");
+  assert.deepEqual(imputation.covariates.map((/** @type {any} */ cell) => cell.missing), [null, null], "a small cell takes the next smallest with it");
+  assert.deepEqual(imputation.covariates.map((/** @type {any} */ cell) => cell.name), ["age", "bmi"], "and keeps its name");
   // a refusal's counts: the smaller of the two groups goes like events
   assert.deepEqual(suppressForModel({ diagnostics: { inputRows: 600, usedRows: 8, excludedRows: 592, needed: 15, smallerGroup: 4 } }).diagnostics,
     { inputRows: null, usedRows: null, excludedRows: null, needed: 15, smallerGroup: null, suppressed: ["inputRows", "usedRows", "excludedRows", "smallerGroup"] });

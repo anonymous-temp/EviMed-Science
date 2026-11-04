@@ -124,6 +124,7 @@
   "trim": null,
   "imputation": null,
   "targetTrialEmulation": null,
+  "stcComparison": null,
   "gaps": null,
   "counts": null,
   "verdict": null,

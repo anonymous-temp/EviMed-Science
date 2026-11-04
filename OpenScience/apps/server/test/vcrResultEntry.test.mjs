@@ -37,7 +37,8 @@ test("a result is read on the tab of its kind, the overview for a kind the table
   assert.equal(vcrResultTab("trial_scenario"), "trial");
   assert.equal(vcrResultTab("patient_set"), "patients");
   assert.equal(vcrResultTab("evidence_pool"), "data");
-  assert.equal(vcrResultTab("model_fit"), "overview");
+  assert.equal(vcrResultTab("model_fit"), "patients", "a survival fit is held by the patients tab, which shows its spline card (review RF2 P1-5)");
+  assert.equal(vcrResultTab("model_prediction"), "overview");
   for (const [kind, tab] of Object.entries(VCR_RESULT_KIND_TABS)) {
     assert.equal(vcrResultTab(kind), tab);
     // The notice that says the same computation is done opens the same tab.
