@@ -44,6 +44,7 @@ import task_tools
 import geo_platform
 import vcr_platform
 import research_calculate
+import clinical_scores
 import data_semantics
 import gene_expression_tools
 
@@ -999,6 +1000,10 @@ TOOL_DEFINITIONS.extend(geo_platform.tool_definitions())
 # None of them computes in the model: `vcr_simulate` queues a frozen scenario.
 TOOL_DEFINITIONS.extend(vcr_platform.tool_definitions())
 TOOL_DEFINITIONS.extend(research_calculate.tool_definitions())
+# Clinical scales and multi-step clinical formulas, computed from their published definitions (2026-11-02). Local and
+# deterministic: it needs no gateway, no execution context and no account, so a deployment offers it unless an operator
+# names it in EVIMED_DISABLED_TOOLS.
+TOOL_DEFINITIONS.extend(clinical_scores.tool_definitions())
 # What a project's datasets mean, and the deterministic checks of its files against that (2026-10-04, N03):
 # offered to the two capabilities that start from a researcher's own data. With the module off it answers a
 # warning and `check` still runs on what the call declares, so it is not an optional tool.
@@ -1093,8 +1098,11 @@ def disabled_tools():
 # schedule_task, update_task: scheduling a task from a conversation needs the product ledger and its own switch
 # (`OPEN_SCIENCE_TASK_TOOLS_ENABLED`); without them the 定时任务 page is where a task is made, and every research question is
 # answered without the tools (2026-10-09).
+# clinical_score: a local calculator with no dependency, so nothing here withholds it; an operator may still switch it off
+# with EVIMED_DISABLED_TOOLS, and every question is answered without it, as it was before it existed (2026-11-02).
 OPTIONAL_TOOLS = frozenset({"patent_search", "web_read", "frontier_search", "schedule_task", "update_task", "geo_read", "geo_write", "social_posts_search",
-                            "vcr_read", "vcr_write", "vcr_simulate", "trial_registry_record", "curve_digitize", "evidence_pool", "research_calculate"})
+                            "vcr_read", "vcr_write", "vcr_simulate", "trial_registry_record", "curve_digitize", "evidence_pool", "research_calculate",
+                            "clinical_score"})
 
 
 def list_tools():
@@ -2229,6 +2237,18 @@ def _dispatch(name, arguments, execution_context=None):
             return task_tools.call(name, arguments)
         except task_tools.TaskToolError as error:
             return failure(error.code, str(error), error.retryable, error.stop_reason(), [error.next_action()])
+    if name == clinical_scores.TOOL_NAME:
+        try:
+            # No provenance wrapper: this is arithmetic on the caller's own inputs, and the result already names its sources.
+            return clinical_scores.call(arguments)
+        except clinical_scores.ScoreError as error:
+            # One calculation declined with its reason; nothing else is affected, so the answer goes on without a guess.
+            refused = failure(error.code, str(error), False,
+                              "unsupported" if error.code == "clinical_score_not_applicable" else "invalid_input",
+                              [clinical_scores.next_action(error)])
+            if error.data:
+                refused["data"] = error.data
+            return refused
     if name == "dataset_semantics":
         try:
             result = data_semantics.call(arguments)

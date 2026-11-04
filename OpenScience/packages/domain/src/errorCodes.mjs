@@ -677,6 +677,19 @@ export const terminalEvidenceSourceErrorCodes = new Set([
   "kb_browse_limit_invalid",
   "kb_browse_request_invalid",
   "kb_browse_request_too_large",
+  // And a clinical score (clinical_score → clinical_scores.py): an id, version, item, unit or value the run got wrong, an item
+  // it did not give, or a patient outside the score's population. The calculation is declined with the reason and computes
+  // nothing; every other answer goes on (`clinical_score_kit.ERROR_CODES` is the list, held equal by a test).
+  "clinical_score_request_invalid",
+  "clinical_score_unknown_id",
+  "clinical_score_unknown_version",
+  "clinical_score_unknown_input",
+  "clinical_score_input_invalid",
+  "clinical_score_unit_invalid",
+  "clinical_score_out_of_range",
+  "clinical_score_not_applicable",
+  "clinical_score_missing_inputs",
+  "clinical_score_assume_absent_invalid",
   ...DATA_SEMANTICS_RUN_FIXES,
   // And for a task tool: an instruction, title, schedule or id the run built wrongly, a task that is not this project's, a change
   // that changes nothing.
@@ -3121,6 +3134,7 @@ export const ERROR_CODE_FAMILIES = Object.freeze([
   [/^source_parser_/, '文档解析这次没有完成，稍后再重新分析。'],
   [/^kb_search_/, '资料库检索这次没能完成；运行会直接读取知识库里的文件继续。'],
   [/^kb_browse_/, '知识库目录这次没能打开；运行会改用资料库检索或直接读取知识库里的文件继续。'],
+  [/^clinical_score_/, '这次临床评分没有算出：输入有缺项、单位不对或超出该评分的适用人群；请按提示补充后再算，其余结论不受影响。'],
   [/^semantics_/, DATA_SEMANTICS_ERROR_MESSAGE_ZH],
   [/^task_(?:tools_|limit_reached$|revision_conflict$|instruction_invalid$|title_invalid$|schedule_|materials_invalid$|id_invalid$|not_found$|update_empty$|paused_invalid$)/, TASK_TOOL_ERROR_MESSAGE_ZH],
   [/^frontier_(?:disabled$|search_)/, '前沿动态检索这次没能完成；回答会改用文献、指南和监管来源继续。'],

@@ -145,6 +145,7 @@ const PHRASES = Object.freeze({
   curve_digitize: phrase('数字化生存曲线图'),
   evidence_pool: phrase('合并证据参数', ['parameter']),
   research_calculate: phrase('计算研究数据', ['method']),
+  clinical_score: phrase('计算临床评分', ['id']),
   dataset_semantics: phrase('读写数据含义'),
   // 定时任务 made and changed from a conversation: drawn as the task's card once it answers (a name, when it runs, 「打开」).
   schedule_task: phrase('安排定时任务', ['title', 'instruction'], 'text', 'task'),

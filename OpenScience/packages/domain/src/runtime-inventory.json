@@ -1799,6 +1799,7 @@
       "curve_digitize",
       "evidence_pool",
       "research_calculate",
+      "clinical_score",
       "dataset_semantics",
       "schedule_task",
       "update_task"

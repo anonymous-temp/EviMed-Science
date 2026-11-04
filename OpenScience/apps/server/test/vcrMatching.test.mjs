@@ -446,14 +446,14 @@ test("AC-14 a washout that ends on a known date is deferred, not satisfied early
 });
 
 test("a unit nobody can convert is unknown, never a comparison on the raw number", () => {
-  // Albumin has no built-in conversion: 42 g/L against a g/dL ceiling is not 42.
-  const source = chart("白蛋白 42 g/L。");
-  const fact = source.fact("白蛋白 42 g/L", { variable: "albumin", value: 42, unit: "g/L", surface: "白蛋白" });
-  const node = { op: "compare", variable: "albumin", comparator: "gte", value: 3.5, unit: "g/dL" };
+  // A marker the unit table has no entry for has no built-in conversion: 42 U/mL against an ng/mL ceiling is not 42 (albumin g/L to g/dL is in the table since evimed-lab-units-4).
+  const source = chart("糖类抗原 42 U/mL。");
+  const fact = source.fact("糖类抗原 42 U/mL", { variable: "ca_125", value: 42, unit: "U/mL", surface: "糖类抗原" });
+  const node = { op: "compare", variable: "ca_125", comparator: "gte", value: 3.5, unit: "ng/mL" };
   const refused = evaluateRequirement(node, { facts: [fact], asOf: Date.parse(AS_OF) });
   assert.equal(refused.state, UNKNOWN);
-  assert.deepEqual(refused.missing, [{ variable: "albumin", reason: "unit_mismatch" }]);
-  const converter = (value, from, to) => (from === "g/L" && to === "g/dL" ? value / 10 : null);
+  assert.deepEqual(refused.missing, [{ variable: "ca_125", reason: "unit_mismatch" }]);
+  const converter = (value, from, to) => (from === "U/mL" && to === "ng/mL" ? value / 10 : null);
   assert.equal(evaluateRequirement(node, { facts: [fact], asOf: Date.parse(AS_OF), unitConverter: converter }).state, SATISFIED);
 });
 

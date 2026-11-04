@@ -20,6 +20,12 @@ Code
 - OpenScience/packages/domain/src/vcrTrialJudgment.mjs adapts the matching prompts of TrialGPT 2.0
   (github.com/TrialGPT2/TrialGPT2.0, commit 1c5f9ebc3b98) and TrialGPT 1.0 (github.com/ncbi-nlp/TrialGPT,
   commit 1b3242cd), works of the US National Library of Medicine in the public domain.
+- OpenScience/apps/server/src/vcrCandidateSearch.mjs applies the reciprocal-rank fusion of TrialGPT 1.0's trial retrieval
+  (trialgpt_retrieval/hybrid_fusion_retrieval.py): a constant of 20 and a weight by the priority of the keyword that found the trial.
+- OpenScience/runtime/mcp/evimed-research/clinical_score_formulas.py carries the Pooled Cohort Equation coefficients, the
+  FIB-4 cut-offs and the albumin-corrected calcium constant as published in open-medicine 0.12.0
+  (github.com/RamosFBC/openmedicine, MIT License, Copyright (c) 2026 RamosFBC); the formulas are the cited papers'
+  and are checked in the tests, and the open-medicine copyright notice is kept here.
 
 Skills
 ------

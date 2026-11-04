@@ -112,6 +112,9 @@ TASK_FIXTURES = {
     # the gateway about an id nobody holds.
     "research_calculate": {"action": "status", "jobId": os.environ.get(
         "EVIMED_RESULT_REPLAY_AUDIT_JOB_ID", "replay_" + "0" * 64)},
+    # Added 2026-11-02 with the tool. A local calculation on the caller's own inputs: no gateway, no account, no state. The probe
+    # computes one score whose answer is known (BMI 22.9) and certifies the tool's registration and the MCP route.
+    "clinical_score": {"action": "compute", "id": "bmi", "inputs": {"weight": "70 kg", "height": "175 cm"}},
     # Added 2026-10-04 with the tool (N03). A read changes nothing: with the module off it answers the warning
     # `semantics_disabled`, with no recorded dataset it answers an empty list, and either certifies the route
     # and the token.

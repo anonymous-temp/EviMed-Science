@@ -69,6 +69,7 @@ test("the facts feed the one evaluator: unknown where the table holds nothing, a
     { id: "age", kind: "inclusion", criterionType: "demographic", requirement: { op: "compare", variable: "age", comparator: "gte", value: 18 } },
     { id: "hb", kind: "inclusion", criterionType: "lab", requirement: { op: "compare", variable: "hb", comparator: "gte", value: 100, unit: "g/L" } },
     { id: "hb_g_dl", kind: "inclusion", criterionType: "lab", requirement: { op: "compare", variable: "hb", comparator: "gte", value: 10, unit: "g/dL" } },
+    { id: "hb_mmol", kind: "inclusion", criterionType: "lab", requirement: { op: "compare", variable: "hb", comparator: "gte", value: 6, unit: "mmol/L" } },
     { id: "washout", kind: "inclusion", criterionType: "prior_treatment", requirement: { op: "elapsed_since", variable: "last_chemo", days: 14 } },
     { id: "pregnancy", kind: "exclusion", criterionType: "pregnancy", requirement: { op: "present", variable: "pregnancy" } },
   ];
@@ -76,7 +77,8 @@ test("the facts feed the one evaluator: unknown where the table holds nothing, a
   const first = states(built.subjects[0].facts);
   assert.equal(first.age, "satisfied");
   assert.equal(first.hb, "satisfied");
-  assert.equal(first.hb_g_dl, "unknown", "g/L to g/dL is a conversion nobody told the evaluator: unknown, never a raw comparison");
+  assert.equal(first.hb_g_dl, "satisfied", "g/L to g/dL is in the unit table (evimed-lab-units-4): 128 g/L is 12.8 g/dL");
+  assert.equal(first.hb_mmol, "unknown", "haemoglobin in mmol/L depends on monomer or tetramer, which the table does not guess: unknown, never a raw comparison");
   assert.equal(first.washout, "satisfied", "the last dose was 15 days before the instant and 14 are needed");
   assert.equal(states(built.subjects[2].facts).washout, "pending_recheck", "four days ago: not yet, and the answer changes on a known day");
   assert.equal(first.pregnancy, "unknown", "a variable no column holds is not recorded");

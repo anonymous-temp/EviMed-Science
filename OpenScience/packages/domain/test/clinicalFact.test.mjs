@@ -95,7 +95,7 @@ test('selected conversions round trip, retain analyte identity and do not case-f
     assert.ok(Math.abs(restored.value - value) < 1e-10);
   }
   assert.equal(convertClinicalUnit(1, 'mg/dL', 'umol/L', 'unknown'), null);
-  assert.equal(convertClinicalUnit(1, 'mg/dL', 'g/L', 'creatinine'), null);
+  assert.equal(convertClinicalUnit(1, 'mg/dL', 'IU/L', 'creatinine'), null, 'a pair of different quantities with no row converts to nothing');
   assert.notEqual(clinicalUnitToken('Mmol/L'), clinicalUnitToken('mmol/L'));
   assert.equal(clinicalUnitToken('μmol/L'), 'umol/L');
   assert.equal(clinicalUnitInQuote('umol/L','肌酐 98 μmol / L'),true);

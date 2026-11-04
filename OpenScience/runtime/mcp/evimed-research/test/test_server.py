@@ -166,6 +166,9 @@ class ToolContractTests(unittest.TestCase):
             # control plane's task service (`task_tools.py`, 2026-10-09).
             "schedule_task",
             "update_task",
+            # Clinical scales and multi-step clinical formulas computed from their
+            # published definitions (`clinical_scores.py`, 2026-11-02).
+            "clinical_score",
         }
         self.assertEqual(set(by_name), expected)
         for tool in tools:

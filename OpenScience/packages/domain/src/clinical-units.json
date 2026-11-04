@@ -1,11 +1,13 @@
 {
-  "version": "evimed-lab-units-3",
-  "scope": "Selected analyte conversions only; this is not a UCUM parser or a diagnostic reference range.",
+  "version": "evimed-lab-units-4",
+  "scope": "Selected analyte conversions only; this is not a UCUM parser or a diagnostic reference range. Four explicit rows (`conversions`) keep the factors the platform has always used, so a stored comparison replays unchanged; every other pair is derived from the unit tables below, the way ucum-lhc converts with a molecular weight.",
   "caseRule": "Unit symbols are matched exactly and never case-folded, because a symbol's case can change its magnitude: Mmol/L is not mmol/L, MU/L is not mU/L, and G/L (giga per litre) is not g/L (gram per litre), so g/L has no upper-case spelling. The only equivalences are the spellings listed here: the all-lower and all-upper rendering a single-case report prints, and the litre as L or l. `aliases` and `caseVariants` together are the closed vocabulary of units a quote must print, beside the value they qualify, in one of the spellings listed for the unit; a unit outside them is required literally only for a laboratory value or when it is written as a ratio, a power or a percentage.",
   "references": [
     "https://ucum.org/ucum",
-    "https://www.labcorp.com/test-menu/resources/si-unit-conversion-table"
+    "https://www.labcorp.com/test-menu/resources/si-unit-conversion-table",
+    "https://github.com/lhncbc/ucum-lhc"
   ],
+  "derivation": "A conversion not listed in `conversions` is derived for an analyte of `analytes`: two mass concentrations (`massConcentration`) or two molar concentrations (`molarConcentration`) convert by the ratio of their sizes; a mass and a molar concentration convert through the analyte's `molarMass` (g/mol); mEq/L and mmol/L convert through its `valence`. An analyte with no entry, a unit outside these tables and a mass-to-molar pair of an analyte with no molar mass convert to nothing (`null`), never to a guess. HbA1c is deliberately absent: it is a percentage of haemoglobin with an affine IFCC relation, and `conventional` reads a bare value in %.",
   "aliases": {
     "umol/L": ["umol/L", "umol/l", "µmol/L", "μmol/L", "µmol/l", "μmol/l", "UMOL/L"],
     "mmol/L": ["mmol/L", "mmol/l", "MMOL/L"],
@@ -31,7 +33,8 @@
     "IU/mL": ["IU/mL", "IU/ml", "iu/mL", "iu/ml", "IU/ML"],
     "10^9/L": ["10^9/L", "10^9/l"],
     "10^12/L": ["10^12/L", "10^12/l"],
-    "mL/min": ["mL/min", "ml/min", "ML/MIN"]
+    "mL/min": ["mL/min", "ml/min", "ML/MIN"],
+    "uIU/mL": ["uIU/mL", "uIU/ml", "µIU/mL", "μIU/mL", "µIU/ml", "μIU/ml", "UIU/ML"]
   },
   "conventional": [
     {
@@ -46,6 +49,41 @@
     {"analyte":"creatinine","from":"mg/dL","to":"umol/L","factor":88.4,"basis":"Labcorp serum creatinine conversion"},
     {"analyte":"bilirubin","from":"mg/dL","to":"umol/L","factor":17.1,"basis":"Labcorp serum total/direct bilirubin conversion"},
     {"analyte":"glucose","from":"mmol/L","to":"mg/dL","factor":18.016,"basis":"Existing EviMed factor retained for replay; Labcorp rounds this to 18.02"},
-    {"analyte":"hemoglobin","from":"g/dL","to":"g/L","factor":10,"basis":"Metric decilitre to litre scale"}
+    {"analyte":"hemoglobin","from":"g/dL","to":"g/L","factor":10,"basis":"Metric decilitre to litre scale"},
+    {"analyte":"insulin","from":"uIU/mL","to":"pmol/L","factor":6.945,"basis":"The widely used conversion for insulin; assays calibrated to older standards use 6.0"}
+  ],
+  "massConcentration": {"unit": "g/L", "sizes": {"g/L": 1, "g/dL": 10, "mg/L": 0.001, "mg/dL": 0.01, "ug/L": 1e-6, "ug/mL": 0.001, "ug/dL": 1e-5, "ng/L": 1e-9, "ng/mL": 1e-6, "ng/dL": 1e-8, "pg/mL": 1e-9}},
+  "molarConcentration": {"unit": "mol/L", "sizes": {"mmol/L": 0.001, "umol/L": 1e-6, "nmol/L": 1e-9, "pmol/L": 1e-12}},
+  "analytes": [
+    {"id": "creatinine", "aliases": ["serum_creatinine", "scr", "creat", "creatinine_serum"], "molarMass": 113.12, "basis": "C4H7N3O, 113.12 g/mol"},
+    {"id": "bilirubin", "aliases": ["total_bilirubin", "bilirubin_total", "direct_bilirubin", "tbil", "dbil"], "molarMass": 584.66, "basis": "C33H36N4O6, 584.66 g/mol"},
+    {"id": "glucose", "aliases": ["blood_glucose", "fasting_glucose", "plasma_glucose", "serum_glucose", "fpg"], "molarMass": 180.156, "basis": "C6H12O6, 180.156 g/mol"},
+    {"id": "cholesterol", "aliases": ["total_cholesterol", "ldl", "ldl_c", "ldl_cholesterol", "hdl", "hdl_c", "hdl_cholesterol", "tc"], "molarMass": 386.65, "basis": "C27H46O, 386.65 g/mol (one molar mass for total, LDL and HDL cholesterol)"},
+    {"id": "triglycerides", "aliases": ["triglyceride", "tg", "trig"], "molarMass": 885.7, "basis": "Conventional average molar mass of triglycerides (88.57 mg/dL per mmol/L); a mixture, not a compound"},
+    {"id": "urea", "aliases": ["serum_urea"], "molarMass": 60.06, "basis": "CH4N2O, 60.06 g/mol"},
+    {"id": "bun", "aliases": ["blood_urea_nitrogen", "urea_nitrogen", "serum_urea_nitrogen"], "molarMass": 28.014, "basis": "The mass of nitrogen in one mole of urea (2 x 14.007 g): BUN mg/dL x 0.357 is urea mmol/L"},
+    {"id": "uric_acid", "aliases": ["urate", "serum_uric_acid", "serum_urate"], "molarMass": 168.11, "basis": "C5H4N4O3, 168.11 g/mol"},
+    {"id": "calcium", "aliases": ["serum_calcium", "total_calcium"], "molarMass": 40.078, "valence": 2, "basis": "Ca, 40.078 g/mol, valence 2"},
+    {"id": "magnesium", "aliases": ["serum_magnesium"], "molarMass": 24.305, "valence": 2, "basis": "Mg, 24.305 g/mol, valence 2"},
+    {"id": "phosphate", "aliases": ["phosphorus", "inorganic_phosphate", "serum_phosphate", "serum_phosphorus"], "molarMass": 30.974, "basis": "Phosphorus as P, 30.974 g/mol (mg/dL of phosphorus)"},
+    {"id": "sodium", "aliases": ["serum_sodium", "na"], "molarMass": 22.98977, "valence": 1, "basis": "Na, 22.98977 g/mol, valence 1"},
+    {"id": "potassium", "aliases": ["serum_potassium", "k"], "molarMass": 39.0983, "valence": 1, "basis": "K, 39.0983 g/mol, valence 1"},
+    {"id": "chloride", "aliases": ["serum_chloride", "cl"], "molarMass": 35.453, "valence": 1, "basis": "Cl, 35.453 g/mol, valence 1"},
+    {"id": "bicarbonate", "aliases": ["hco3", "serum_bicarbonate", "total_co2"], "valence": 1, "basis": "Valence 1; reported as mEq/L or mmol/L"},
+    {"id": "lactate", "aliases": ["lactic_acid", "serum_lactate", "plasma_lactate"], "molarMass": 90.08, "basis": "C3H6O3, 90.08 g/mol"},
+    {"id": "ammonia", "aliases": ["plasma_ammonia", "serum_ammonia"], "molarMass": 17.031, "basis": "NH3, 17.031 g/mol"},
+    {"id": "albumin", "aliases": ["serum_albumin"], "molarMass": 66500, "basis": "Human serum albumin, about 66.5 kDa"},
+    {"id": "homocysteine", "aliases": ["serum_homocysteine", "plasma_homocysteine"], "molarMass": 135.18, "basis": "C4H9NO2S, 135.18 g/mol"},
+    {"id": "vitamin_d", "aliases": ["25_oh_vitamin_d", "25_hydroxyvitamin_d", "25_ohd", "vitamin_d_25_oh"], "molarMass": 400.64, "basis": "25-hydroxyvitamin D3, 400.64 g/mol"},
+    {"id": "cortisol", "aliases": ["serum_cortisol"], "molarMass": 362.46, "basis": "C21H30O5, 362.46 g/mol"},
+    {"id": "testosterone", "aliases": ["total_testosterone", "serum_testosterone"], "molarMass": 288.42, "basis": "C19H28O2, 288.42 g/mol"},
+    {"id": "estradiol", "aliases": ["e2", "serum_estradiol"], "molarMass": 272.38, "basis": "C18H24O2, 272.38 g/mol"},
+    {"id": "hemoglobin", "aliases": ["haemoglobin", "hgb", "hb"], "basis": "Mass concentration only (g/dL, g/L): the molar form depends on whether the monomer or the tetramer is meant"}
+  ],
+  "scalarQuantities": [
+    {"id": "weight", "analytes": ["weight", "body_weight"], "unit": "kg", "units": {"kg": {"scale": 1, "offset": 0, "spellings": ["kg", "kgs", "kilogram", "kilograms"]}, "lb": {"scale": 0.45359237, "offset": 0, "spellings": ["lb", "lbs", "pound", "pounds"]}, "g": {"scale": 0.001, "offset": 0, "spellings": ["g", "gram", "grams"]}}, "basis": "1 lb = 0.45359237 kg (international avoirdupois pound)"},
+    {"id": "height", "analytes": ["height", "body_height", "length"], "unit": "cm", "units": {"cm": {"scale": 1, "offset": 0, "spellings": ["cm", "centimeter", "centimeters", "centimetre", "centimetres"]}, "m": {"scale": 100, "offset": 0, "spellings": ["m", "meter", "meters", "metre", "metres"]}, "in": {"scale": 2.54, "offset": 0, "spellings": ["in", "inch", "inches", "\""]}, "ft": {"scale": 30.48, "offset": 0, "spellings": ["ft", "foot", "feet"]}}, "basis": "1 in = 2.54 cm exactly"},
+    {"id": "temperature", "analytes": ["temperature", "body_temperature", "temp"], "unit": "degC", "units": {"degC": {"scale": 1, "offset": 0, "spellings": ["degC", "C", "°C", "celsius", "degrees celsius"]}, "degF": {"scale": 0.5555555555555556, "offset": -17.77777777777778, "spellings": ["degF", "F", "°F", "fahrenheit", "degrees fahrenheit"]}}, "basis": "degC = (degF - 32) x 5/9"},
+    {"id": "pressure", "analytes": ["blood_pressure", "systolic_blood_pressure", "diastolic_blood_pressure", "sbp", "dbp", "systolic_bp", "diastolic_bp", "map", "mean_arterial_pressure"], "unit": "mmHg", "units": {"mmHg": {"scale": 1, "offset": 0, "spellings": ["mmHg", "mm Hg", "mmhg"]}, "kPa": {"scale": 7.50062, "offset": 0, "spellings": ["kPa", "kpa"]}}, "basis": "1 kPa = 7.50062 mmHg"}
   ]
 }

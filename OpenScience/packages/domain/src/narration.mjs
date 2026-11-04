@@ -75,6 +75,8 @@ const MCP_NARRATION = Object.freeze({
   // A task made or changed from a conversation: what the researcher asked for, in their own words, and for a change what it was.
   schedule_task: (args) => `安排定时任务：「${excerpt(args?.title ?? args?.instruction)}」`,
   update_task: (args) => (args?.paused === true ? '暂停定时任务' : args?.paused === false ? '重新启用定时任务' : '修改定时任务'),
+  clinical_score: (args) => (args?.action === 'list' ? `查找临床评分${args?.filter ? `：${excerpt(args.filter)}` : ''}`
+    : args?.action === 'describe' ? `查看临床评分的定义：${excerpt(args?.id)}` : `计算临床评分：${excerpt(args?.id)}`),
   dataset_semantics: (args) => (args?.action === 'check' ? '检查数据（漂移、重复、关联、分母、时间泄漏）'
     : args?.action === 'write' ? '记录数据含义' : args?.action === 'transform' ? '记录数据变换' : '读取已记录的数据含义'),
   // 「循证 GEO」's platform tools: what was read or written, in the page's words.
