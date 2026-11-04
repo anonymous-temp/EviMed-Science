@@ -353,6 +353,82 @@ test('answers as a list of rows, nested under a side, and the other side\'s labe
   assert.ok(VCR_CRITERION_LABELS.includes(other.rows[1].label))
 })
 
+test('a number comes from a key or a number field, never out of a clause\'s words', () => {
+  const clauses = Array.from({ length: 20 }, (_, index) => ({ number: index + 1, kind: index < 10 ? 'inclusion' : 'exclusion', text: index === 2 ? 'Age >= 18 years' : `Clause ${String.fromCharCode(97 + index)}` }))
+  const sentences = [{ id: 0, text: 's0' }, { id: 1, text: 's1' }]
+  /** @param {unknown} raw */
+  const read = (raw) => parseCriteriaAnswer(raw, { criteria: clauses, sentences })
+  // The words of the clause find the clause; the 18 in them is no clause number.
+  const worded = read({ results: [{ criterion: 'Age >= 18 years', reason: 'r', sentence_ids: [0], label: 'included' }] })
+  assert.deepEqual(worded.rows.map((row) => [row.number, row.kind, row.label]), [[3, 'inclusion', 'included']])
+  assert.ok(worded.issues.some((issue) => issue.code === 'criterion_by_words'))
+  assert.ok(!worded.issues.some((issue) => issue.code === 'label_other_side'))
+  // Words that find no clause, or more than one, answer none, and nothing lands by a number inside them.
+  const unknown = read([{ criterion: 'Weight below 18 kg', reason: 'r', sentence_ids: [0], label: 'included' }])
+  assert.deepEqual(unknown.rows, [])
+  assert.ok(unknown.issues.some((issue) => issue.code === 'criterion_unmatched'))
+  assert.deepEqual(read([{ criterion: 'Clause', reason: 'r', sentence_ids: [], label: 'included' }]).rows, [], 'words that fit many clauses name none')
+  // A key that is words is the same.
+  assert.deepEqual(read({ 'Age >= 18 years': ['r', [0], 'included'] }).rows.map((row) => row.number), [3])
+  assert.deepEqual(read({ 'Weight below 18 kg': ['r', [0], 'included'] }).rows, [])
+  // A number in any of the shapes a number is written.
+  for (const key of ['3', ' 3 ', '#3', '3.', 'C3', 'criterion 3', 'criterion_3', 'inclusion_3', 'Criterion #3', '3)']) {
+    assert.deepEqual(read({ [key]: ['r', [0], 'included'] }).rows.map((row) => row.number), [3], key)
+    assert.deepEqual(read([{ criterion: key, reason: 'r', sentence_ids: [0], label: 'included' }]).rows.map((row) => row.number), [3], `criterion field ${key}`)
+    assert.deepEqual(read([{ number: key, reason: 'r', sentence_ids: [0], label: 'included' }]).rows.map((row) => row.number), [3], `number field ${key}`)
+  }
+  assert.deepEqual(read([{ criterion: 3, reason: 'r', sentence_ids: [0], label: 'included' }]).rows.map((row) => row.number), [3])
+  assert.deepEqual(read({ [`${' '.repeat(60000)}x`]: ['r', [0], 'included'] }).rows, [], 'a long key takes no time to refuse')
+  assert.deepEqual(read([[3, 'r', [0], 'included']]).rows.map((row) => row.number), [3])
+  assert.deepEqual(read([['3', 'r', [0], 'included']]).rows.map((row) => row.number), [3])
+})
+
+test('a list with no numbers follows the order of the prompt, and only when it answers every clause', () => {
+  // Exclusion first in the text: the prompt lists inclusion first, so the model's first row is the inclusion.
+  const criteria = segmentCriteria('Exclusion Criteria:\n* Pregnancy\nInclusion Criteria:\n* Age >= 18')
+  assert.deepEqual(criteria.map((row) => [row.number, row.kind]), [[1, 'exclusion'], [2, 'inclusion']])
+  const sentences = [{ id: 0, text: 's0' }]
+  const both = parseCriteriaAnswer({ rows: [{ reason: 'adult', sentence_ids: [0], label: 'included' }, { reason: 'male', sentence_ids: [0], label: 'not excluded' }] }, { criteria, sentences })
+  assert.deepEqual(both.rows.map((row) => [row.number, row.kind, row.label, row.reason]), [[1, 'exclusion', 'not_excluded', 'male'], [2, 'inclusion', 'included', 'adult']])
+  assert.equal(both.issues.filter((issue) => issue.code === 'criterion_by_position').length, 2)
+  // A list shorter than the clauses cannot say which it answers.
+  const short = parseCriteriaAnswer([{ reason: 'x', sentence_ids: [0], label: 'included' }], { criteria, sentences })
+  assert.deepEqual(short.rows, [])
+  assert.equal(short.missing.length, 2)
+  assert.ok(short.issues.some((issue) => issue.code === 'criterion_unmatched'))
+})
+
+test('a label is the word in the label place: a reason that reads like one is a reason', () => {
+  const answer = parseCriteriaAnswer({ 1: ['N/A', [], 'included'], 2: ['not applicable', [0], 'not included'], 3: ['excluded', [], 'not excluded'], 4: ['included', [0]] }, context())
+  assert.deepEqual(answer.rows.map((row) => [row.number, row.label]), [[1, 'included'], [2, 'not_included'], [3, 'not_excluded'], [4, 'excluded']], 'with the third element a word that is no label, the only label is the label')
+  assert.equal(answer.rows[2].reason, 'excluded', 'the word stays what it is, a reason')
+})
+
+test('sentence ids: words around them are read, a number in a sentence is not an id', () => {
+  const sentences = Array.from({ length: 70 }, (_, id) => ({ id, text: `s${id}` }))
+  const criteria = [{ number: 1, kind: 'inclusion', text: 'Age' }]
+  /** @param {unknown} written */
+  const ids = (written) => parseCriteriaAnswer({ 1: ['r', written, 'included'] }, { criteria, sentences }).rows[0].sentenceIds
+  assert.deepEqual(ids('0, 1'), [0, 1])
+  assert.deepEqual(ids(['1', 2]), [1, 2])
+  assert.deepEqual(ids('sentence 3'), [3])
+  assert.deepEqual(ids('Sentence 3 and sentence 4'), [3, 4])
+  assert.deepEqual(ids('S3; S4'), [3, 4])
+  assert.deepEqual(ids(['Sentence 1 says age 62']), [1], 'the 62 is the age')
+  assert.deepEqual(ids('the patient is 62'), [])
+})
+
+test('numbers counted from zero are moved up only when they fit every clause, otherwise they name nothing', () => {
+  const criteria = segmentCriteria('Inclusion Criteria:\n* Age\n* Stage\nExclusion Criteria:\n* Pregnancy')
+  const sentences = [{ id: 0, text: 's0' }]
+  const moved = parseCriteriaAnswer({ 0: ['a', [0], 'included'], 1: ['b', [], 'not included'], 2: ['c', [], 'not excluded'] }, { criteria, sentences })
+  assert.deepEqual(moved.rows.map((row) => [row.number, row.label]), [[1, 'included'], [2, 'not_included'], [3, 'not_excluded']])
+  assert.ok(moved.issues.some((issue) => issue.code === 'criterion_counted_from_zero'))
+  const partial = parseCriteriaAnswer({ 0: ['a', [0], 'included'], 1: ['b', [], 'not included'] }, { criteria, sentences })
+  assert.deepEqual(partial.rows, [], 'a zero means the numbers are shifted, so 1 is not clause 1')
+  assert.equal(partial.missing.length, 3)
+})
+
 test('a clause under no section keeps the label as written', () => {
   const criteria = segmentCriteria('Patients must not be pregnant.')
   const parsed = parseCriteriaAnswer({ 1: ['x', [], 'not excluded'] }, { criteria, sentences: [] })

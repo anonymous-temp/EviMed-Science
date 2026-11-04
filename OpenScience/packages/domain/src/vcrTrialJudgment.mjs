@@ -692,11 +692,14 @@ function labelOf(value) {
   return /** @type {Record<string, string>} */ (LABEL_WORDS)[word] ?? null
 }
 
-/** @param {unknown} value @returns {number[]} the ids in whatever way they were written */
+/** A string that is only ids: "0, 1", "S3; S4", "sentence 3 and sentence 4". */
+const ONLY_IDS = /^(?:\s*(?:and|&|,|;|、|，|；)?\s*(?:sentences?|s|id)?[\s#_-]*\d+)+\s*\.?\s*$/iu
+
+/** @param {unknown} value @returns {number[]} the ids in whatever way they were written; a number inside a sentence is that sentence's, unless it is called a sentence */
 function sentenceIdsIn(value) {
   if (value == null) return []
   if (typeof value === 'number') return Number.isInteger(value) ? [value] : []
-  if (typeof value === 'string') return [...value.matchAll(/\d+/gu)].map((hit) => Number(hit[0]))
+  if (typeof value === 'string') return [...value.matchAll(value.length <= 200 && ONLY_IDS.test(value) ? /\d+/gu : /\b(?:sentence|s)[\s#_-]*(\d+)/giu)].map((hit) => Number(hit[1] ?? hit[0]))
   if (Array.isArray(value)) return value.flatMap(sentenceIdsIn)
   return []
 }
@@ -704,10 +707,11 @@ function sentenceIdsIn(value) {
 /** One clause's answer in either of the two shapes models write it. @param {unknown} value */
 function clauseAnswer(value) {
   if (Array.isArray(value)) {
-    const label = value.find((entry) => typeof entry === 'string' && labelOf(entry))
-    const reason = value.find((entry) => typeof entry === 'string' && entry !== label)
+    // The label is asked for last, so the last word that is one: a reason may well read "N/A" or "not applicable" before it.
+    const at = value.findLastIndex((entry) => typeof entry === 'string' && labelOf(entry))
+    const reason = value.find((entry, index) => typeof entry === 'string' && index !== at)
     const ids = value.find((entry) => Array.isArray(entry)) ?? value[1]
-    return { reason, ids, label }
+    return { reason, ids, label: value[at] }
   }
   const row = asObject(value)
   return {
@@ -717,28 +721,109 @@ function clauseAnswer(value) {
   }
 }
 
-/** The per-clause entries of an answer as [number, value], from a dict keyed by number, a list of rows, or either nested a level down. @param {any} parsed */
+/** A clause number as a key or a number field writes it: 3, "3", "#3", "C3", "criterion_3", "inclusion 3". Anything else is words, and a number in words is not a clause number ("Age >= 18"). */
+const CLAUSE_NUMBER = /^\s*(?:(?:inclusion|exclusion|criterion|criteria|clause|number|no\.?|c)[\s_#-]*)*#?\s*(\d{1,4})\s*[.:)]?\s*$/iu
+
+/** @param {unknown} value @returns {number | null} */
+function clauseNumberIn(value) {
+  if (typeof value === 'number') return Number.isInteger(value) ? value : null
+  if (typeof value !== 'string') return null
+  const found = CLAUSE_NUMBER.exec(value)
+  return found ? Number(found[1]) : null
+}
+
+/** @param {unknown} value whether this is one clause's answer rather than a group of them */
+function holdsAnAnswer(value) {
+  if (Array.isArray(value)) return value.some((entry) => typeof entry === 'string' && labelOf(entry))
+  return Boolean(value) && typeof value === 'object' && labelOf(firstOf(asObject(value), ['label', 'eligibility', 'eligibility_label', 'element_3_eligibility_label', 'element_3'])) !== null
+}
+
+/**
+ * The per-clause entries of an answer, from a dict keyed by number or by the clause's words, a list of rows, or either nested a level down: each says
+ * the clause by `number`, by `words`, or by nothing, which leaves its place in the list.
+ * @param {any} parsed @returns {Array<{ number?: number, words?: string, value: any }>}
+ */
 function clauseEntries(parsed) {
   if (Array.isArray(parsed)) {
-    return parsed.flatMap((row, index) => {
-      const number = numberIn(firstOf(asObject(row), ['number', 'criterion_number', 'criterionNumber', 'criterion', 'id', 'index']))
-      return number === null ? (Array.isArray(row) && typeof row[0] === 'number' ? [[row[0], row.slice(1)]] : [[index + 1, row, true]]) : [[number, row]]
+    return parsed.flatMap((row) => {
+      const fields = asObject(row)
+      for (const name of ['number', 'criterion_number', 'criterionNumber', 'criterion_id', 'criterion', 'id', 'index']) {
+        const number = clauseNumberIn(fields[name])
+        if (number !== null) return [{ number, value: row }]
+      }
+      const words = firstOf(fields, ['criterion', 'criteria', 'clause', 'criterion_text', 'text'])
+      if (typeof words === 'string' && words.trim()) return [{ words, value: row }]
+      if (Array.isArray(row) && clauseNumberIn(row[0]) !== null) return [{ number: /** @type {number} */ (clauseNumberIn(row[0])), value: row.slice(1) }]
+      return [{ value: row }]
     })
   }
   const row = asObject(parsed)
-  /** @type {any[]} */
+  /** @type {Array<{ number?: number, words?: string, value: any }>} */
   const out = []
   for (const [key, value] of Object.entries(row)) {
-    if (/^\D*\d+\D*$/u.test(key)) out.push([numberIn(key), value])
+    const number = clauseNumberIn(key)
+    if (number !== null) out.push({ number, value })
+    else if (holdsAnAnswer(value)) out.push({ words: key, value })
     else if (value && typeof value === 'object') out.push(...clauseEntries(value))
   }
   return out
 }
 
+/** @param {unknown} words @returns {string} words with only their letters and digits, for comparing */
+const foldedWords = (words) => String(words ?? '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '')
+
+/**
+ * The one clause these words name: equal, or the only one that holds them or is held by them. Words that fit several clauses name none.
+ * @param {string} words @param {ReadonlyArray<{ number: number, text: string, lead?: string }>} criteria @returns {number | null}
+ */
+function clauseNamedBy(words, criteria) {
+  const said = foldedWords(words)
+  if (said.length < 4) return null
+  const folded = criteria.map((clause) => ({ number: clause.number, text: foldedWords(clause.text), whole: foldedWords(clauseWords(clause)) }))
+  const equal = folded.filter((clause) => clause.text === said || clause.whole === said)
+  if (equal.length) return equal.length === 1 ? equal[0].number : null
+  const near = folded.filter((clause) => clause.text.includes(said) || said.includes(clause.text))
+  return near.length === 1 ? near[0].number : null
+}
+
+/**
+ * Which clause each entry answers, or null. Numbers that count from zero are moved up only when they then fit every clause, and otherwise name nothing, because a
+ * shifted 1 is no clause 1. A list with no numbers follows the order of the prompt (inclusion, exclusion, the rest), and only when it answers every clause.
+ * @param {ReadonlyArray<{ number?: number, words?: string, value: any }>} entries @param {ReadonlyArray<{ number: number, kind: string, text: string, lead?: string }>} criteria
+ * @returns {{ numbers: Array<number | null>, issues: Array<Record<string, any>> }}
+ */
+function resolveClauses(entries, criteria) {
+  /** @type {Array<Record<string, any>>} */
+  const issues = []
+  const known = new Set(criteria.map((clause) => clause.number))
+  const zero = entries.some((entry) => entry.number === 0) && !known.has(0)
+  const shiftFits = zero && entries.length === criteria.length && entries.every((entry) => entry.number !== undefined && known.has(entry.number + 1))
+  if (zero) issues.push({ code: shiftFits ? 'criterion_counted_from_zero' : 'criterion_numbers_unreliable' })
+  const ordered = ['inclusion', 'exclusion', 'unsectioned'].flatMap((kind) => criteria.filter((clause) => clause.kind === kind))
+  const unnamed = entries.filter((entry) => entry.number === undefined && entry.words === undefined)
+  const byPlace = unnamed.length === criteria.length && entries.length === criteria.length
+  let place = 0
+  const numbers = entries.map((entry) => {
+    if (entry.number !== undefined) return zero ? (shiftFits ? entry.number + 1 : null) : entry.number
+    if (entry.words !== undefined) {
+      const named = clauseNamedBy(entry.words, criteria)
+      issues.push({ code: named === null ? 'criterion_unmatched' : 'criterion_by_words', ...(named === null ? {} : { number: named }) })
+      return named
+    }
+    if (!byPlace) { issues.push({ code: 'criterion_unmatched' }); return null }
+    const clause = ordered[place]
+    place += 1
+    issues.push({ code: 'criterion_by_position', number: clause.number })
+    return clause.number
+  })
+  return { numbers, issues }
+}
+
 /**
  * A per-clause answer, normalised, with its evidence resolved by code: each id that exists becomes the sentence's exact text and offsets,
  * an id that does not is dropped and counted and the label stands. `basis` is `stated` when at least one id resolved, otherwise `silent`.
- * A clause the model did not answer, or answered with a word outside the labels, is returned in `missing` and nowhere else.
+ * A clause the model did not answer, or answered with a word outside the labels, is returned in `missing` and nowhere else. A row says which clause by a
+ * key or a number field, or by the clause's words (`criterion_by_words`); a number inside words is never a clause number.
  * @param {unknown} raw
  * @param {{ criteria: ReadonlyArray<{ number: number, kind: string, text: string, start?: number, end?: number, lead?: string }>, sentences: ReadonlyArray<{ id: number, text: string, start?: number, end?: number, documentId?: string | null, source?: Record<string, any> }> }} context
  * @returns {{ rows: Array<Record<string, any>>, missing: Array<{ number: number, kind: string, text: string }>, droppedSentenceIds: number, issues: Array<Record<string, any>> }}
@@ -753,12 +838,16 @@ export function parseCriteriaAnswer(raw, { criteria, sentences }) {
   /** @type {Map<number, Record<string, any>>} */
   const answered = new Map()
   let droppedSentenceIds = 0
-  for (const [number, value, unnumbered] of parsed == null ? [] : clauseEntries(parsed)) {
+  const entries = parsed == null ? [] : clauseEntries(parsed)
+  const resolved = resolveClauses(entries, criteria)
+  issues.push(...resolved.issues)
+  for (const [index, entry] of entries.entries()) {
+    const number = resolved.numbers[index]
+    if (number === null) continue
     const clause = clauses.get(number)
     if (!clause) { issues.push({ code: 'criterion_unknown', number }); continue }
     if (answered.has(number)) { issues.push({ code: 'criterion_repeated', number }); continue }
-    if (unnumbered) issues.push({ code: 'criterion_by_position', number })
-    const answer = clauseAnswer(value)
+    const answer = clauseAnswer(entry.value)
     let label = labelOf(answer.label)
     if (!label) { issues.push({ code: 'label_unknown', number }); continue }
     const other = /** @type {Record<string, Record<string, string>>} */ (OTHER_SIDE)[clause.kind]?.[label]
