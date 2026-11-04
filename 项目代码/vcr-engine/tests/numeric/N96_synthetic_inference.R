@@ -214,3 +214,58 @@ vcr_case("N96g", c("AC-04", "AC-31"), function() {
        detail = sprintf("1.0.0-labelled jobs on a 180-row table (synthesis, five copies, a mean and a glm analysis) and on a 200 / 201 / 120-row quality report: output hashes %s and %s, the ones the previous release recorded",
                         substr(h_syn, 1, 12), substr(h_q, 1, 12)))
 })
+
+vcr_case("N96h", c("AC-04", "AC-30", "AC-31"), function() {
+  # Review stats2 findings 8, 9, 12 and 22: a table with a missing cell, an analysis with no answer on a permuted table, a cancel during the calibration, and a
+  # smoother that cannot choose a bandwidth.
+  # (8) Gower's rule for a missing value, against a hand computation: the distance of two records is the mean over the columns both have. A synthesis with a holdout
+  #     and 5% of ages missing, and a quality report whose synthetic, training and holdout tables each have a missing cell, used to fail with 'missing values and
+  #     NaN's not allowed if na.rm is FALSE'.
+  a <- data.frame(p = c(1, 2, NA), q = c("u", "v", "u"), r = c(0.5, NA, 0.1), stringsAsFactors = FALSE)
+  ref <- data.frame(p = c(1, 4), q = c("u", "u"), r = c(0.9, 0.1), stringsAsFactors = FALSE)
+  g <- vcr_gower_nearest(a, ref, ranges = list(p = 4, r = 1), k = 2L)
+  hand <- rbind(c((0 + 0 + 0.4) / 3, (3 / 4 + 0 + 0.4) / 3), c((1 / 4 + 1 + 0) / 2, (2 / 4 + 1 + 0) / 2), c((0 + 0.8 / 1) / 2, (0 + 0) / 2))
+  hand_nearest <- apply(hand, 1L, min)
+  gower_ok <- max(abs(g$dcr - hand_nearest)) < 1e-12
+  tbl <- .n96_survival_file(200L, 9661L); tbl$age[c(3, 17, 40, 61, 88, 120, 150, 171, 188, 199)] <- NA
+  in_file <- vcr_test_input(tbl, "snp_n96h:subject", shape = "subject", source = "observed")
+  miss <- vcr_test_run(vcr_test_job("population.synthpop", list(holdoutShare = 0.25, m = 5L), list(in_file), seed = 96L))
+  tr <- .n96_survival_file(150L, 9662L); ho <- .n96_survival_file(60L, 9663L); sy <- .n96_survival_file(150L, 9664L)
+  sy$age[c(2, 9)] <- NA; tr$age[c(5, 6, 30)] <- NA; ho$sex[4] <- NA; ho$age[10] <- NA
+  q_ok <- identical(vcr_test_run(vcr_test_job("population.quality", list(trainingInputId = "tr@1", syntheticInputId = "sy@1", holdoutInputId = "ho@1"),
+    list(vcr_test_input(tr, "tr@1", source = "observed"), vcr_test_input(sy, "sy@1", source = "synthetic", kind = "snapshot_file"), vcr_test_input(ho, "ho@1", source = "observed")), seed = 9665L))$status, "succeeded")
+  # (9) rmst with a tau a permuted arm's follow-up may not reach
+  set.seed(9666L, kind = VCR_RNG_KIND)
+  n <- 300L; arm <- stats::rbinom(n, 1L, 0.5); t0 <- stats::rexp(n, 0.05); cens <- stats::runif(n, 5, 20)
+  d <- data.frame(arm = arm, os = pmin(t0, cens), death = as.numeric(t0 <= cens)); d$os[1:3] <- c(29.7, 29.1, 28.6); d$death[1:3] <- 0
+  f_base <- vcr_analysis_from_spec(list(kind = "logrank", time = "os", status = "death", group = "arm"))
+  # the analysis answers `none` (an NA estimate) on a table whose first three arms are all 1 (one in eight): a permuted real table that has no answer
+  # where its copies do, which is what a restricted mean's tau beyond one arm's follow-up produces (the job below runs that one itself)
+  f <- function(t) if (sum(t$arm[1:3]) == 3L) list(estimate = NA_real_, se = NA_real_, interval = c(NA_real_, NA_real_), pValue = NA_real_) else f_base(t)
+  regen <- function(t, s) vcr_population_synthpop(t, m = 1L, seed = s)$data
+  nc <- vcr_null_calibration(d, f, "arm", regen, 40L, 9667L)
+  rates_ok <- isTRUE(nc$available) && nc$failedReplicates > 0L && nc$replicates + nc$failedReplicates == 40L && all(is.finite(c(nc$realPermuted$value, nc$syntheticNaive$value, nc$syntheticCombined$value)))
+  job_nc <- vcr_test_run(vcr_test_job("population.synthpop", list(holdoutShare = 0, m = 5L, analyses = list(list(name = "r", kind = "rmst", time = "os", status = "death", group = "arm", tau = 28)),
+    inference = list(nullCalibration = list(analysis = "r", replicates = 20L))), list(vcr_test_input(cbind(USUBJID = sprintf("S%04d", seq_len(n)), d), "snp_n96h2:subject", shape = "subject", source = "observed")), seed = 9668L))
+  job_ok <- identical(job_nc$status, "succeeded") && !is.null(vcr_get_measure(job_nc, "false_positive_rate_real_permuted"))
+  # (12) a cancel written during the calibration is a cancel, not a success
+  cf <- tempfile("cancel"); calls <- 0L; orig <- vcr_population_synthpop
+  vcr_population_synthpop <<- function(...) { calls <<- calls + 1L; out <- orig(...); if (calls >= 7L) file.create(cf); out }
+  on.exit({ vcr_population_synthpop <<- orig; unlink(cf) }, add = TRUE)
+  cj <- vcr_test_job("population.synthpop", list(holdoutShare = 0, m = 5L, analyses = list(list(name = "r", kind = "logrank", time = "os", status = "death", group = "arm")),
+    inference = list(nullCalibration = list(analysis = "r", replicates = 40L))), list(vcr_test_input(cbind(USUBJID = sprintf("S%04d", seq_len(n)), d), "snp_n96h3:subject", shape = "subject", source = "observed")), seed = 9669L)
+  canceled <- vcr_run_job(vcr_test_json(cj), cancel_file = cf)
+  vcr_population_synthpop <<- orig
+  cancel_ok <- identical(canceled$status, "canceled") && !identical(canceled$conclusion, "estimable")
+  # (22) a smoother with fewer than two points: the copy is made without smoothing and named
+  stand_in <- function(data, ...) { a <- list(...); if (!is.null(a$smoothing)) stop("need at least 2 points to select a bandwidth automatically"); synthpop::syn(data = data, ...) }
+  ns <- asNamespace("synthpop"); unlockBinding("syn", ns); real_syn <- synthpop::syn
+  on.exit({ assign("syn", real_syn, envir = ns); lockBinding("syn", ns) }, add = TRUE)
+  assign("syn", function(data, ...) { a <- list(...); if (!is.null(a$smoothing) && length(a$smoothing)) stop("need at least 2 points to select a bandwidth automatically"); real_syn(data = data, ...) }, envir = ns)
+  smooth <- vcr_test_run(vcr_test_job("population.synthpop", list(holdoutShare = 0, m = 5L), list(vcr_test_input(.n96_survival_file(120L, 9670L), "snp_n96h4:subject", shape = "subject", source = "observed")), seed = 9670L))
+  assign("syn", real_syn, envir = ns)
+  smooth_ok <- identical(smooth$status, "succeeded") && identical(unlist(smooth$diagnostics$smoothingNotApplied), 1:5)
+  list(pass = gower_ok && identical(miss$status, "succeeded") && q_ok && rates_ok && job_ok && cancel_ok && smooth_ok,
+       detail = sprintf("Gower's distance with a missing cell equals the hand computation over the columns both records have (%s); a synthesis with a holdout and 10 of 200 ages missing: %s; a quality report with missing cells in the synthetic, training and holdout tables: %s; an analysis with no answer on some permuted tables: %d of 40 replicates dropped and counted, the rates are %.3f, %.3f, %.3f, and the restricted-mean job with tau 28 %s; a cancel during the calibration is status '%s'; a smoother that fails: the five copies are made unsmoothed and named (%s)",
+                        gower_ok, miss$status, q_ok, nc$failedReplicates, nc$realPermuted$value, nc$syntheticNaive$value, nc$syntheticCombined$value, job_nc$status, canceled$status, smooth_ok))
+})

@@ -151,3 +151,25 @@ vcr_case("N97f", c("AC-04", "AC-31"), function() {
                         q$release$copies, format(Filter(function(x) isTRUE(x$stated), q$disclosure$perRecord$riskShares)[[1]]$trainingShare %||% NA), format(Filter(function(x) isTRUE(x$stated), q$disclosure$perRecord$riskShares)[[1]]$holdoutShare %||% NA),
                         max(0, vapply(q$disclosure$attributeInference$secrets, function(s) s$risk, numeric(1))), q$bands$inferenceRisk))
 })
+
+vcr_case("N97g", c("AC-04"), function() {
+  # Review stats2 finding 13: the band read the worst attribute's LOWER confidence limit alone, so a holdout too small to see a leak read as safety:
+  # 60 of 300 people copied against a holdout of 100 gave a worst risk of .33 with a lower limit of 0 and a green band, while the membership AUC (.63)
+  # was already past its own yellow line. A band green on the lower limit is yellow when the worst point estimate is past the yellow bound (.10); a clean
+  # generator with the same sizes stays green, and a leak the data do prove (the lower limit past .10) stays red. The worst point risk is recomputed here
+  # from the rows of the result: (success on the training people - success on the holdout people) / (1 - success on the holdout people).
+  q <- function(n_tr, n_ho, copied, seed) {
+    set.seed(seed, kind = VCR_RNG_KIND)
+    tr <- .n97_mk(n_tr); ho <- .n97_mk(n_ho)
+    syn <- if (copied > 0L) rbind(tr[seq_len(copied), ], .n97_mk(n_tr - copied)) else .n97_mk(n_tr)
+    vcr_quality_report(tr, syn, ho, inference = list(proper = FALSE, privacy = list(bound = 0.75, attacks = 200L)), copies = list(syn))
+  }
+  weak <- q(300L, 100L, 60L, 1L); weak2 <- q(400L, 400L, 100L, 4L); clean <- q(400L, 400L, 0L, 3L)
+  ai <- function(r) r$disclosure$attributeInference
+  by_hand <- function(r) max(vapply(ai(r)$secrets, function(s) (s$successMain - s$successControl) / (1 - s$successControl), numeric(1)))
+  list(pass = identical(weak$bands$inferenceRisk, "yellow") && identical(weak2$bands$inferenceRisk, "yellow") && identical(clean$bands$inferenceRisk, "green") &&
+         ai(weak)$worstRiskLowerLimit <= 0.05 && ai(weak)$worstRisk > 0.10 && abs(ai(weak)$worstRisk - by_hand(weak)) < 1e-12 && abs(ai(clean)$worstRisk - by_hand(clean)) < 1e-12 &&
+         ai(clean)$worstRisk <= 0.10 && weak$disclosure$membershipAuc > 0.60,
+       detail = sprintf("300 training, 100 holdout, 60 copied: worst risk %.3f, lower limit %.3f, band %s (it was green), membership AUC %.3f; 400 and 400 with 100 copied: worst risk %.3f, lower limit %.3f, band %s; 400 and 400 with none copied: worst risk %.3f, band %s",
+                        ai(weak)$worstRisk, ai(weak)$worstRiskLowerLimit, weak$bands$inferenceRisk, weak$disclosure$membershipAuc, ai(weak2)$worstRisk, ai(weak2)$worstRiskLowerLimit, weak2$bands$inferenceRisk, ai(clean)$worstRisk, clean$bands$inferenceRisk))
+})

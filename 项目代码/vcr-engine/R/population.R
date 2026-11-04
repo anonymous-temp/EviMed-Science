@@ -448,13 +448,21 @@ vcr_population_synthpop <- function(data, m = 5L, seed = 1L, visit_sequence = NU
   # synthpop announces its own decisions ("turned into factor") on stdout and
   # stderr; the job's result says what matters, and a service log is no place
   # for a package's chatter.
-  synth <- list(); interrupted <- NULL
+  synth <- list(); interrupted <- NULL; unsmoothed <- integer(0)
+  run_syn <- function(a) { syn <- NULL; invisible(utils::capture.output(syn <- suppressMessages(do.call(synthpop::syn, a)))); syn }
   for (k in seq_len(m)) {
     interrupted <- vcr_interrupt()
     if (!is.null(interrupted)) break
     args$seed <- as.integer((as.numeric(seed) + (k - 1) * 104729) %% 2147483647)
-    syn <- NULL
-    invisible(utils::capture.output(syn <- suppressMessages(do.call(synthpop::syn, args))))
+    # The smoother of a numeric column cannot choose a bandwidth from fewer than two points, and a cart leaf can hold one: about one table in five
+    # hundred of ordinary size stopped the whole job there. That copy is made without smoothing (the leaf's value is then a value of the data) and
+    # the copy is named in the result.
+    syn <- tryCatch(run_syn(args), error = function(e) {
+      if (!grepl("bandwidth", conditionMessage(e), fixed = TRUE)) stop(e)
+      plain <- args; plain$smoothing <- NULL
+      unsmoothed <<- c(unsmoothed, k)
+      run_syn(plain)
+    })
     synth[[k]] <- syn$syn
   }
   if (!is.null(interrupted)) return(list(interrupted = interrupted, data = synth, m = length(synth)))
@@ -462,7 +470,7 @@ vcr_population_synthpop <- function(data, m = 5L, seed = 1L, visit_sequence = NU
        trainingObservations = nrow(data),
        generatedRecords = sum(vapply(synth, nrow, numeric(1))),
        counts = vcr_counts(realPatients = 0, generatedRecords = sum(vapply(synth, nrow, numeric(1)))),
-       method = "cart", smoothing = smoothing, seed = seed,
+       method = "cart", smoothing = smoothing, smoothingNotApplied = as.list(unsmoothed), seed = seed,
        valueSource = "synthetic", modelTier = "data",
        inferenceLabel = "exploratory",
        rareLevelsMerged = merged$report, rareLevelFloor = floor_,

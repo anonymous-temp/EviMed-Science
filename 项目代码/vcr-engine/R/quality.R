@@ -190,7 +190,9 @@ vcr_ci_overlap <- function(ci_real, ci_synth) {
 }
 
 #' Gower distance from every row of `x` to the nearest row of `reference`,
-#' standardized on `ranges` (always the training set's ranges).
+#' standardized on `ranges` (always the training set's ranges). Gower's own rule for a missing value: the distance between two records is the mean
+#' over the columns BOTH of them have; a pair with no column in common is at the largest distance, 1. (A missing cell used to make the whole row's
+#' distance NA and the quantile of the distances fail, so one empty cell in a table stopped a quality report.)
 vcr_gower_nearest <- function(x, reference, ranges = NULL, k = 2L) {
   vars <- intersect(names(x), names(reference))
   num <- vapply(reference[vars], is.numeric, logical(1))
@@ -198,17 +200,19 @@ vcr_gower_nearest <- function(x, reference, ranges = NULL, k = 2L) {
   nx <- nrow(x); nr <- nrow(reference)
   d1 <- numeric(nx); d2 <- numeric(nx); idx <- integer(nx)
   for (i in seq_len(nx)) {
-    acc <- numeric(nr)
+    acc <- numeric(nr); have <- numeric(nr)
     for (v in vars) {
       a <- x[[v]][i]; b <- reference[[v]]
       if (is.numeric(b)) {
         r <- rngs[[v]]; r <- if (is.null(r) || !is.finite(r) || r == 0) 1 else r
-        acc <- acc + abs(a - b) / r
+        dv <- abs(a - b) / r
       } else {
-        acc <- acc + as.numeric(as.character(a) != as.character(b))
+        dv <- as.numeric(as.character(a) != as.character(b))
       }
+      seen <- !is.na(dv)
+      acc <- acc + ifelse(seen, dv, 0); have <- have + seen
     }
-    acc <- acc / length(vars)
+    acc <- ifelse(have > 0, acc / have, 1)
     o <- order(acc)
     d1[i] <- acc[o[1]]; d2[i] <- if (nr >= k) acc[o[k]] else NA_real_
     idx[i] <- o[1]
@@ -463,7 +467,7 @@ vcr_analysis_from_spec <- function(spec) {
 #' `inference` (1.1.0): `list(proper = FALSE, privacy = list(bound, secrets, attacks))`. With it each declared analysis is also run on
 #' every copy and the copies are combined by the rules of Raab, Nowok & Dibben (`utility.specific[[name]]$combined`, the
 #' interval overlap taken on the combined interval), the disclosure axis adds the per-record and attribute-inference measures, and the
-#' `inferenceRisk` band is the worst attribute's lower confidence limit on the risk.
+#' `inferenceRisk` band is the worst attribute's lower confidence limit on the risk, and never green while its point estimate is past the yellow bound.
 vcr_quality_report <- function(train, synth, holdout = NULL, constraints = NULL,
                                analyses = list(), criteria = NULL,
                                generator = list(), tstr_outcome = NULL, copies = NULL, inference = NULL) {
@@ -520,7 +524,14 @@ vcr_quality_report <- function(train, synth, holdout = NULL, constraints = NULL,
     bandsOut$replication <- vcr_band(disclosure$replicationRatio, bands$replicationRate)
     bandsOut$nearestNeighbourInTrainShare <- vcr_band(disclosure$nearestNeighbourInTrainShare, bands$nearestNeighbourInTrainShare)
     bandsOut$membershipAuc <- vcr_band(disclosure$membershipAuc, bands$membershipAuc)
-    if (isTRUE(disclosure$attributeInference$available)) bandsOut$inferenceRisk <- vcr_band(disclosure$attributeInference$worstRiskLowerLimit, bands$inferenceRisk)
+    if (isTRUE(disclosure$attributeInference$available)) {
+      ai <- disclosure$attributeInference
+      bandsOut$inferenceRisk <- vcr_band(ai$worstRiskLowerLimit, bands$inferenceRisk)
+      # The lower limit is the conservative reading (a clean generator is not alarmed by noise), and by itself it reads a holdout too small to see a leak
+      # as safety: 60 of 300 people copied against a holdout of 100 gave a risk of .29 with a lower limit of .05 and a green band. A band that is
+      # green on the lower limit while the point estimate is past the yellow bound is yellow: the leak is not confirmed and not excluded.
+      if (identical(bandsOut$inferenceRisk, "green") && is.finite(ai$worstRisk) && ai$worstRisk > bands$inferenceRisk$yellow) bandsOut$inferenceRisk <- "yellow"
+    }
   }
   if (!is.null(tstr) && isTRUE(tstr$available)) bandsOut$tstrRatio <- vcr_band(tstr$ratio, bands$tstrRatio)
   if (!is.null(feasibility)) {

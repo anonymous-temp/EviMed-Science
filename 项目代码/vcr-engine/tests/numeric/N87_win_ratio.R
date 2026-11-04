@@ -299,3 +299,27 @@ vcr_case("N87h", c("AC-29"), function() {
   list(pass = min(v[, "tie"]) >= 0 && level_min >= 0 && tie >= 0,
        detail = sprintf("600 trials of 70 + 70 people with a continuous score and no threshold: the smallest share of ties in a trial is %.1e (it was -1.1e-16 in 105 of the 600 before the clamp), the smallest mean share by level %.1e, the job's reported share %.1e", min(v[, "tie"]), level_min, tie))
 })
+
+vcr_case("N87i", c("AC-28", "AC-31"), function() {
+  # Review stats2 finding 11: a CPU budget that ended the run AFTER the size search had finished threw the size away ('before the first batch of trials; there
+  # is no result', 5,000 trials 'requested'), so budgets of 6 to 10 s gave less than budgets of 1 to 5 s. The run after the search is stopped here by a stand-in that
+  # finds no time (the budgets the review saw depend on the machine); the search ran for real. The size it found is kept, limited, not verified, with no count
+  # of trials, and a job that is stopped before ANY trial runs names no count of replicates (it used to echo the 5,000 and the 200,000 it was asked for).
+  ss <- .n87_scenario(n = 100, dropout = 0.05, events = FALSE, shift = 0.6, hr = 0.8, thr = 0.1); ss$design$nTreat <- NULL; ss$design$nControl <- NULL; ss$analysis$power <- 0.8
+  want <- 1500L; orig <- .vcr_wr_run
+  .vcr_wr_run <<- function(p, n1, n0, trials, ...) if (identical(as.integer(trials), want)) list(values = NULL, stopped = "cpu_budget") else orig(p, n1, n0, trials, ...)
+  on.exit(.vcr_wr_run <<- orig, add = TRUE)
+  kept <- vcr_test_run(vcr_test_job("design.win_ratio", ss, seed = 8743L, replicates = want, cores = 1L))
+  .vcr_wr_run <<- orig
+  size <- Filter(function(x) identical(x$name, "required_per_arm"), kept$measures)
+  free <- vcr_test_run(vcr_test_job("design.win_ratio", ss, seed = 8743L, replicates = want, cores = 1L))
+  free_size <- Filter(function(x) identical(x$name, "required_per_arm"), free$measures)[[1]]$value
+  # no search, no time: nothing to keep, and no count claimed
+  none <- vcr_test_run(vcr_test_job("design.win_ratio", .n87_scenario(n = 400, dropout = 0.1), seed = 8742L, replicates = 50000L, cores = 1L, extra = list(cpuSecondsLimit = 0.001)))
+  dose <- vcr_test_run(vcr_test_job("design.dose", list(design = list(kind = "crm", compare = list("boin"), maxPatients = 30), truth = list(toxicity = list(0.05, 0.1, 0.2, 0.3, 0.45, 0.6))), seed = 8201L, replicates = 200000L, cores = 1L, extra = list(cpuSecondsLimit = 0.001)))
+  list(pass = length(size) == 1L && identical(kept$status, "failed") && identical(kept$conclusion, "limited") && "cpu_budget_exhausted" %in% vcr_test_issue_codes(kept) && is.null(kept$replicates) &&
+         size[[1]]$value == free_size && identical(kept$diagnostics$winRatio$search$verified, FALSE) &&
+         identical(none$status, "failed") && length(none$measures) == 0L && is.null(none$replicates) && identical(dose$status, "failed") && length(dose$measures) == 0L && is.null(dose$replicates),
+       detail = sprintf("the size search found %s per arm and the run after it found no time: the size is kept (%s, limited, not verified, %s trials counted) and equals the size of the unstopped job (%s); a win-ratio job and a dose-finding job stopped before any trial name no count of replicates (%s and %s; they used to echo 50,000 and 200,000)",
+                        if (length(size)) size[[1]]$value else "none", kept$status, kept$replicates %||% "no", free_size, none$replicates %||% "none", dose$replicates %||% "none"))
+})

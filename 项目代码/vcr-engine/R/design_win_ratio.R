@@ -325,6 +325,8 @@ VCR_WR_STEP_TRIALS <- 1000L
 
 # --- the handler --------------------------------------------------------------------------------------------------
 
+keys_of <- function(p) c("death", if (p$has_events) "events", if (p$has_score) "score")
+
 vcr_job_design_win_ratio <- function(job, output_dir = NULL, cancel_file = NULL, progress = NULL) {
   sc <- job$scenario
   p <- .vcr_wr_read(sc)
@@ -347,7 +349,7 @@ vcr_job_design_win_ratio <- function(job, output_dir = NULL, cancel_file = NULL,
         measures = list(vcr_measure("required_per_arm", searched$n, source = "synthetic", note = "projected from the pilot trials; the power at this size was not simulated")),
         issues = if (identical(searched$stopped, "cpu_budget")) list(vcr_issue("cpu_budget_exhausted", "cpuSecondsLimit",
           "The CPU budget ran out before the size could be checked by a full run; the size is projected from the trials that finished.")) else list(),
-        diagnostics = list(replicatesCompleted = 0L, winRatio = list(levels = c("death", if (p$has_events) "events", if (p$has_score) "score"), trials = 0L, trialsRequested = want, isNull = p$is_null,
+        diagnostics = list(replicatesCompleted = 0L, winRatio = list(levels = keys_of(p), trials = 0L, trialsRequested = want, isNull = p$is_null,
           search = list(powerWanted = p$power, perArm = searched$n, steps = searched$steps, maxPerArm = p$max_per_arm, verified = FALSE), assumed = p$assumed,
           model = .vcr_wr_model(p)))))
     }
@@ -356,12 +358,23 @@ vcr_job_design_win_ratio <- function(job, output_dir = NULL, cancel_file = NULL,
   }
   run <- .vcr_wr_run(p, p$n1, p$n0, want, as.integer((as.numeric(seed) + 104729 * p$search) %% 2147483647), cores, cancel_file, batch = vcr_scalar(job$batchSize, NULL), progress = progress)
   v <- run$values
-  if (is.null(v) || !nrow(v)) vcr_abort("cpu_budget_exhausted", "cpuSecondsLimit", "The CPU budget ran out before the first batch of trials; there is no result.")
+  if (is.null(v) || !nrow(v)) {
+    # The size search had finished: its size is a result, projected from the pilot and step trials, and a larger budget used to give less (the
+    # run after the search was the one that found no time). Only a run with no size to keep has nothing to say.
+    if (is.null(searched)) vcr_abort("cpu_budget_exhausted", "cpuSecondsLimit", "The CPU budget ran out before the first batch of trials; there is no result.")
+    return(list(status = if (identical(run$stopped, "canceled")) "canceled" else "failed", conclusion = "limited", counts = vcr_counts(),
+      measures = list(vcr_measure("required_per_arm", p$n1, source = "synthetic", note = "found by the search over simulated trials; the power at this size was not simulated, the budget ended before the first batch of trials")),
+      issues = if (identical(run$stopped, "canceled")) list() else list(vcr_issue("cpu_budget_exhausted", "cpuSecondsLimit",
+        "The CPU budget ran out before the size could be checked by a full run; the size is the one the search found.")),
+      diagnostics = list(replicatesCompleted = 0L, winRatio = list(levels = keys_of(p), trials = 0L, trialsRequested = want, isNull = p$is_null,
+        search = list(powerWanted = p$power, perArm = searched$n, steps = searched$steps, maxPerArm = p$max_per_arm, verified = FALSE), assumed = p$assumed,
+        model = .vcr_wr_model(p)))))
+  }
   done <- nrow(v)
   rejects <- v[, "reject"]
   power <- .vcr_wr_prop(if (p$is_null) "type_one_error" else "power", rejects)
   cells <- .vcr_wr_cells(v)
-  keys <- c("death", if (p$has_events) "events", if (p$has_score) "score")
+  keys <- keys_of(p)
   measures <- c(list(power), unname(cells[c("win_ratio", "win_difference", "tie_proportion")]))
   if (p$search) measures <- c(list(vcr_measure("required_per_arm", p$n1, source = "synthetic", note = "found by a search over simulated trials; the power at this size is the next number, with its error")), measures)
   stopped <- run$stopped

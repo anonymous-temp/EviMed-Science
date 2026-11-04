@@ -321,7 +321,8 @@ vcr_run_job <- function(job, output_dir = NULL, cancel_file = NULL, progress = N
         rc <- diagnostics$replicatesCompleted
         # a run stopped before its first batch completed none, and says so by
         # naming no count rather than by echoing the requested one
-        if (is.null(rc)) job$replicates else if (rc >= 1) rc else NULL
+        # (a run that spent its CPU budget before any batch of trials names none either: it ran none, whatever it was asked for)
+        if (is.null(rc)) { if (any(vapply(issues, function(i) identical(i$code, "cpu_budget_exhausted"), logical(1)))) NULL else job$replicates } else if (rc >= 1) rc else NULL
       },
       conclusion = con,
       notEstimableRule = rule,
@@ -901,7 +902,7 @@ vcr_job_synthesize_population <- function(job, output_dir = NULL, ...) {
                     if (v11) .vcr_inference_measures(report)),
        counts = vcr_counts(realPatients = 0, generatedRecords = syn$generatedRecords),
        diagnostics = list(quality = report, qualityByCopy = by_copy, worstCopy = if (length(worst)) worst else NA_integer_,
-                          lowSampleWarning = syn$lowSampleWarning,
+                          lowSampleWarning = syn$lowSampleWarning, smoothingNotApplied = if (length(syn$smoothingNotApplied)) syn$smoothingNotApplied else NULL,
                           inferenceLabel = syn$inferenceLabel, holdoutRows = if (is.null(holdout)) 0L else nrow(holdout),
                           # which columns had levels merged into "other" and how many; never a level's name
                           rareLevelsMerged = syn$rareLevelsMerged, rareLevelFloor = syn$rareLevelFloor,
@@ -911,8 +912,17 @@ vcr_job_synthesize_population <- function(job, output_dir = NULL, ...) {
                           profile = tryCatch(vcr_population_profile(syn$data[[1]], empirical = TRUE), error = function(e) NULL), profileCopy = 1L,
                           allowedUses = vcr_domain()$syntheticUses),
        tables = .vcr_tables_of(list(vcr_write_table(copies, "synthetic-population", output_dir))))
-  if (identical(stopped, "cpu_budget")) {
-    nc <- report$inference$nullCalibration
+  .vcr_calibration_stopped(result, report, stopped)
+}
+
+#' What a stopped permuted-arm calibration does to the result of its job: a spent CPU budget keeps the finished tables and says so (limited); a cancel is
+#' a cancel (the status of every other job that is canceled), with what had finished kept in the result. It used to report a cancel as a success.
+.vcr_calibration_stopped <- function(result, report, stopped) {
+  nc <- report$inference$nullCalibration
+  if (identical(stopped, "canceled")) {
+    result$status <- "canceled"
+    result$diagnostics$interrupted <- sprintf("canceled after %s of the %s permuted tables", nc$replicates %||% 0L, nc$replicatesPlanned %||% 0L)
+  } else if (identical(stopped, "cpu_budget")) {
     result$conclusion <- "limited"
     result$issues <- list(vcr_issue("cpu_budget_exhausted", "cpuSecondsLimit",
       sprintf("The CPU budget ran out after %s of the %s permuted tables; the false-positive rates are those of the finished ones.", nc$replicates %||% 0L, nc$replicatesPlanned)))
@@ -970,13 +980,7 @@ vcr_job_population_quality <- function(job, output_dir = NULL, ...) {
        tables = .vcr_tables_of(list(
          vcr_write_table(report$fidelity$univariate, "fidelity-univariate", output_dir),
          vcr_write_table(report$fidelity$pairwise, "fidelity-pairwise", output_dir))))
-  if (identical(stopped, "cpu_budget")) {
-    nc <- report$inference$nullCalibration
-    result$conclusion <- "limited"
-    result$issues <- list(vcr_issue("cpu_budget_exhausted", "cpuSecondsLimit",
-      sprintf("The CPU budget ran out after %s of the %s permuted tables; the false-positive rates are those of the finished ones.", nc$replicates %||% 0L, nc$replicatesPlanned)))
-  }
-  result
+  .vcr_calibration_stopped(result, report, stopped)
 }
 
 # --- virtual patients ----------------------------------------------------------

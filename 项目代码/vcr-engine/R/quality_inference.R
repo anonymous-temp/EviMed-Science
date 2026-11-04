@@ -113,9 +113,12 @@ vcr_null_calibration <- function(train, f, arm, regenerate, replicates, seed, al
       first <- tryCatch(f(copies[[1L]]), error = function(e) NULL)
       if (is.null(first) || !isTRUE(comb$available)) return(NULL)
       se_real <- real$se %||% (diff(real$interval) / (2 * 1.96)); se_first <- first$se %||% (diff(first$interval) / (2 * 1.96))
-      c(real = as.numeric(abs(real$estimate / se_real) > z), naive = as.numeric(abs(first$estimate / se_first) > z),
-        combined = as.numeric(abs(comb$estimate / comb$se) > z),
-        seRatio = comb$se / se_first)
+      row <- c(real = as.numeric(abs(real$estimate / se_real) > z), naive = as.numeric(abs(first$estimate / se_first) > z),
+               combined = as.numeric(abs(comb$estimate / comb$se) > z),
+               seRatio = comb$se / se_first)
+      # an analysis that answers `none` on a permuted table (a restricted mean whose tau passes one arm's follow-up) has no test to count: the
+      # replicate is dropped and counted as failed, as one whose copies could not be made already is, never averaged as an NA
+      if (anyNA(row[c("real", "naive", "combined")])) NULL else row
     }, r)
     done <- r
   }
@@ -238,6 +241,7 @@ vcr_attribute_inference <- function(train, holdout, synth, vars, ranges, secrets
          successMain = pm, successControl = pc, successByMostCommon = base, risk = risk, riskLow = lo, riskHigh = hi)
   })
   worst <- max(vapply(rows, function(r) max(0, r$riskLow), numeric(1)))
-  list(available = TRUE, secrets = rows, worstRiskLowerLimit = worst, attacks = attacks,
+  worst_point <- max(vapply(rows, function(r) r$risk, numeric(1)))
+  list(available = TRUE, secrets = rows, worstRiskLowerLimit = worst, worstRisk = worst_point, attacks = attacks,
        note = "Success of finding a real person's value of one column from the closest synthetic record on their other columns, against the same attack on people who were never in the data.")
 }
