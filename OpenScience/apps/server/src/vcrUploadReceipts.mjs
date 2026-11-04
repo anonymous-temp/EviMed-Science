@@ -3,7 +3,7 @@
 import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { HttpError, openScopedFileNoFollow, readStableFileHandle, resolveScopedPath, writeFileAtomicNoFollow } from './security.mjs';
+import { HttpError, openScopedDirectoryNoFollow, openScopedFileNoFollow, readStableFileHandle, resolveScopedPath, writeFileAtomicNoFollow } from './security.mjs';
 import { VCR_DATA_INTAKE_CONTRACT } from './vcrDataIntake.mjs';
 const digest = value => createHash('sha256').update(value).digest('hex');
 const recordType = 'vcr-upload-original';
@@ -160,9 +160,14 @@ export function createVcrUploadReceipts({ documents, sources, write, clone = nul
         const sha256 = String(row.payload?.fingerprint?.sha256 ?? '');
         if (relative !== originalPath(sha256, path.posix.basename(relative))) continue;
         const file = resolveScopedPath(project.baseDir, relative);
-        await fs.rm(file, { force: true });
-        // The digest's folder holds this upload's file and nothing else of ours; another receipt of the same bytes under another name keeps it.
-        await fs.rmdir(path.dirname(file)).catch(() => {});
+        // Through the folder as it really is: a link planted in place of it is removed by name and nothing behind it is touched.
+        const folder = await openScopedDirectoryNoFollow(project.baseDir, path.dirname(file)).catch(() => null);
+        if (folder) {
+          try { await fs.rm(path.join(folder.path, path.basename(file)), { force: true }); }
+          finally { await folder.handle.close(); }
+          // The digest's folder holds this upload's file and nothing else of ours; another receipt of the same bytes under another name keeps it.
+          await fs.rmdir(path.dirname(file)).catch(() => {});
+        } else await fs.rm(path.dirname(file), { force: true }).catch(() => {});
         const held = await documents.get(owner.userId, 'preferences', row.id);
         if (held) await documents.remove(owner.userId, 'preferences', row.id, held.revision);
         gone += 1;

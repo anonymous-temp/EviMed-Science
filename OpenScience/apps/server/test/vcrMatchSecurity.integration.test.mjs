@@ -17,6 +17,7 @@ import { ProductDocuments } from "../src/productStore.mjs";
 import { vcrCloudDestinationNotes } from "../src/vcrCloudProjection.mjs";
 import { composeVcr } from "../src/vcrComposition.mjs";
 import { createVcrDataIntake } from "../src/vcrDataIntake.mjs";
+import { createVcrEvidencePipeline } from "../src/vcrEvidence.mjs";
 import { createMatchJudgeCounters, createMatchJudgeExecutor, planMatchJudge } from "../src/vcrMatchJudge.mjs";
 import { createRecordsImportExecutor } from "../src/vcrRecordsImport.mjs";
 import { createVcrUploadReceipts } from "../src/vcrUploadReceipts.mjs";
@@ -425,6 +426,23 @@ test("S4: a withdrawal takes the upload original and its receipt, the names in a
   await vcr.store.query("UPDATE evimed_vcr.jobs SET state='canceled', lease_owner=NULL, lease_until=NULL WHERE id=$1", [started.jobId]);
 });
 
+test("S4: a link planted where an original's folder was is removed by name, and what it points at stays", options, async () => {
+  const study = await newStudy();
+  const bytes = "一份只有这位患者的病历";
+  const handle = await receipts.record(project, { name: "note.txt", bytes: Buffer.from(bytes, "utf8"), sessionId: "root" });
+  const elsewhere = path.join(directory, `kept-${sequence}`);
+  await fs.mkdir(elsewhere);
+  await fs.writeFile(path.join(elsewhere, "note.txt"), "另一个账户的文件");
+  const folder = path.dirname(originalOf(handle, "note.txt"));
+  await fs.rm(folder, { recursive: true });
+  await fs.symlink(elsewhere, folder);
+  const source = await vcr.dataPlane.registerSource({ userId: "owner", studyId: study.id, name: "x" });
+  const up = await vcr.dataPlane.storeUpload({ actor: "owner", studyId: study.id, sourceId: source.id, name: "n.txt", role: "document", subject: "LINK", stream: Readable.from([Buffer.from(bytes)]) });
+  await vcr.dataPlane.withdrawSubject({ studyId: study.id, subjectKey: up.file.detail.subjectKey, actor: "owner", reason: "t" });
+  assert.equal(await fs.readFile(path.join(elsewhere, "note.txt"), "utf8"), "另一个账户的文件");
+  assert.deepEqual((await receipts.noteCandidates(origin)).uploads, []);
+});
+
 test("S4: a skipped entry's report row names its person, so the filter and the withdrawal find it", options, async () => {
   const study = await newStudy();
   proposal = { tables: [], files: { subject: { from: "stem_part", separator: "_", index: 0 } } };
@@ -450,6 +468,42 @@ test("S4: the long tables' sample leaves out a person who has withdrawn", option
   assert.ok(table, "the table is offered");
   assert.ok(!JSON.stringify(table.rows).includes("取走的值"));
   assert.ok(JSON.stringify(table.rows).includes("留下的值"));
+});
+
+// ---------------------------------------------------------------------------- S7
+
+const candidateItem = { registry: "clinicaltrials.gov", registryId: "NCT05000001", title: "EGFR 肺腺癌", overallStatus: "RECRUITING", phases: ["PHASE3"], conditions: ["肺腺癌"], interventions: ["Drug A"], url: "https://clinicaltrials.gov/study/NCT05000001", sex: "ALL", minimumAge: "18 Years", maximumAge: "N/A", secondaryIds: [], countries: ["China"] };
+/** A search over a registry and a reranker that write down what they were sent. */
+function searching(summaryCloudAllowed) {
+  const asked = [], summaries = [];
+  const registry = {
+    search: async (query) => { asked.push(JSON.stringify(query)); return { status: "ok", items: [candidateItem], total: 1, retrievedAt: new Date().toISOString() }; },
+    searchCtis: async (query) => { asked.push(JSON.stringify(query)); return { status: "ok", items: [], total: 0 }; },
+    searchChictr: async (query) => { asked.push(JSON.stringify(query)); return { status: "ok", items: [], total: 0 }; },
+  };
+  const reranker = { configured: true, model: "m", score: async (query, documents) => { summaries.push(query); return { scores: documents.map(() => 0.5), state: "ranked", batches: 1, failedBatches: 0, reasons: [], model: "m" }; } };
+  return { asked, summaries, pipeline: createVcrEvidencePipeline({ store: {}, registry, reranker, summaryCloudAllowed }) };
+}
+
+test("S7: a summary goes to the reranker only where the person's records may go to the cloud; a search's terms and condition have identifier shapes masked", options, async () => {
+  const study = await newStudy();
+  const source = await vcr.dataPlane.registerSource({ userId: "owner", studyId: study.id, name: "n" });
+  const up = await vcr.dataPlane.storeUpload({ actor: "owner", studyId: study.id, sourceId: source.id, name: "n.txt", role: "document", subject: "S7", stream: Readable.from([Buffer.from("一份病历。")]) });
+  const key = String(up.file.detail.subjectKey);
+  const allowed = (entry) => vcr.dataPlane.subjectCloudAllowed(entry);
+  const filter = { condition: `肺腺癌 ${ID_NUMBER}`, terms: [`EGFR 19del 13800138000`], summary: "男，62 岁，肺腺癌", subjectKey: key };
+  const open = searching(allowed);
+  const first = await open.pipeline.patientCandidates({ userId: "owner", study, filter });
+  assert.equal(open.summaries.length, 1, "while the source allows it, the reranker reads the summary");
+  assert.ok(!open.asked.join("").includes(ID_NUMBER) && !open.asked.join("").includes("13800138000"), "no identifier went to a registry");
+  assert.ok(!JSON.stringify(first.request).includes(ID_NUMBER), "or into the receipt");
+  await vcr.dataPlane.setCloudPermission({ studyId: study.id, sourceId: source.id, actor: "owner", permission: { status: "revoked" } });
+  const shut = searching(allowed);
+  const second = await shut.pipeline.patientCandidates({ userId: "owner", study, filter });
+  assert.equal(shut.summaries.length, 0, "after a revocation it does not");
+  assert.equal(second.rerank.applied, false);
+  assert.deepEqual(second.rerank.reasons, ["vcr_cloud_processing_not_authorized"]);
+  assert.equal(second.candidates.length, 1, "the list is still the list");
 });
 
 // ---------------------------------------------------------------------------- S5

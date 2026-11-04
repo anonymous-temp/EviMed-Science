@@ -724,11 +724,12 @@ export class VcrDataStore extends VcrStoreBase {
    */
   async deleteSourceFile(entry) {
     return this.transaction(async (client) => {
+      // A judgment being saved for this person waits, and then finds the document gone. Before the row's own lock, in the order a withdrawal takes the two.
+      const owner = (await client.query(`SELECT detail->>'subjectKey' AS subject_key FROM ${this.schema}.source_files WHERE id = $1 AND study_id = $2`, [entry.fileId, entry.studyId])).rows[0]?.subject_key;
+      if (owner) await lockSubject(client, entry.studyId, String(owner));
       const row = (await client.query(
         `SELECT * FROM ${this.schema}.source_files WHERE id = $1 AND study_id = $2 FOR UPDATE`, [entry.fileId, entry.studyId])).rows[0];
       if (!row) return { removed: null, frozen: false };
-      // A judgment being saved for this person waits, and then finds the document gone.
-      if (row.detail?.subjectKey) await lockSubject(client, entry.studyId, String(row.detail.subjectKey));
       const used = await client.query(
         `SELECT 1 FROM ${this.schema}.snapshots WHERE source_id = $1 AND file_hashes @> $2::jsonb LIMIT 1`,
         [row.source_id, JSON.stringify([{ id: entry.fileId }])]);

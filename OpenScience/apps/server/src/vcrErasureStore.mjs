@@ -155,15 +155,16 @@ export class VcrErasureStore extends VcrStoreBase {
    *   cause: "withdrawn" | "projection", reason?: string }} input
    */
   async #erase(client, { studyId, userId, actor, fileIds = [], projectionIds = [], subjectKey = null, cause, reason = "" }) {
+    // Whoever these words are about, before any row is locked (a withdrawal takes the same two in this order): a judgment being saved for them waits, and then finds what this leaves. The order
+    // is a person's key, so two erasures never wait on each other.
+    const owners = (await client.query(`SELECT DISTINCT f.detail->>'subjectKey' AS subject_key FROM ${VCR_SCHEMA}.source_files f WHERE f.study_id=$1 AND f.role='document'
+        AND (f.id = ANY($2::text[]) OR f.id IN (SELECT p.document_id FROM ${VCR_SCHEMA}.document_projections p WHERE p.study_id=$1 AND p.id = ANY($3::text[])))`, [studyId, fileIds, projectionIds])).rows.map((/** @type {any} */ row) => row.subject_key).filter(Boolean);
+    for (const owner of [...new Set([...owners, ...(subjectKey ? [subjectKey] : [])])].map(String).sort()) await lockSubject(client, studyId, owner);
     const files = fileIds.length ? (await client.query(
       `SELECT * FROM ${VCR_SCHEMA}.source_files WHERE study_id=$1 AND role='document' AND id = ANY($2::text[]) FOR UPDATE`, [studyId, fileIds])).rows : [];
     const projections = (await client.query(
       `SELECT * FROM ${VCR_SCHEMA}.document_projections WHERE study_id=$1 AND (document_id = ANY($2::text[]) OR id = ANY($3::text[])) FOR UPDATE`,
       [studyId, files.map((/** @type {any} */ file) => file.id), projectionIds])).rows;
-    // Whoever these words are about: a judgment being saved for them waits, and then finds what this leaves. The order is a person's key, so two erasures never wait on each other.
-    const owners = (await client.query(`SELECT DISTINCT detail->>'subjectKey' AS subject_key FROM ${VCR_SCHEMA}.source_files WHERE study_id=$1 AND role='document' AND (id = ANY($2::text[]) OR id = ANY($3::text[]))`,
-      [studyId, files.map((/** @type {any} */ file) => String(file.id)), projections.map((/** @type {any} */ row) => String(row.document_id))])).rows.map((/** @type {any} */ row) => row.subject_key).filter(Boolean);
-    for (const owner of [...new Set([...owners, ...(subjectKey ? [subjectKey] : [])])].map(String).sort()) await lockSubject(client, studyId, owner);
     await client.query(`UPDATE ${VCR_SCHEMA}.source_files SET erased_at = COALESCE(erased_at, now()) WHERE study_id=$1 AND id = ANY($2::text[])`, [studyId, files.map((/** @type {any} */ file) => file.id)]);
     await client.query(`UPDATE ${VCR_SCHEMA}.document_projections SET retired_at = COALESCE(retired_at, now()) WHERE study_id=$1 AND id = ANY($2::text[])`, [studyId, projections.map((/** @type {any} */ row) => row.id)]);
     const documentIds = [...files.map((/** @type {any} */ file) => String(file.id)), ...projections.map((/** @type {any} */ row) => String(row.id))];
