@@ -147,7 +147,7 @@ function validateRecordsImportScenario(scenario) {
 function validateMatchJudgeScenario(scenario) {
   const problems = []
   const bad = (/** @type {string} */ field, /** @type {string} */ detail) => problems.push({ code: 'scenario_field_invalid', field: `scenario.${field}`, detail })
-  const allowed = ['direction', 'subjects', 'trials', 'protocolVersionId', 'collection', 'collectionRevision', 'fit', 'topK', 'thinking', 'definitions', 'model', 'promptVersions', 'estimate', 'chain', 'followUp']
+  const allowed = ['direction', 'subjects', 'trials', 'protocolVersionId', 'collection', 'collectionRevision', 'fit', 'topK', 'thinking', 'thinkingCriteria', 'definitions', 'model', 'promptVersions', 'estimate', 'chain', 'followUp']
   for (const key of Object.keys(scenario)) if (!allowed.includes(key)) problems.push({ code: 'scenario_field_unknown', field: `scenario.${key}`, detail: 'Unused scenario field.' })
   for (const key of ['direction', 'subjects', 'fit', 'topK', 'thinking', 'model', 'promptVersions', 'estimate']) {
     if (scenario[key] == null) problems.push({ code: 'scenario_field_required', field: `scenario.${key}`, detail: 'Frozen by the platform from the selection.' })
@@ -165,6 +165,7 @@ function validateMatchJudgeScenario(scenario) {
   if (scenario.topK != null && scenario.topK !== 'all' && !(Number.isInteger(scenario.topK) && scenario.topK >= 0)) bad('topK', 'A whole number, or all.')
   if (scenario.fit === false && scenario.topK === 0) bad('topK', 'A job with no trial-level stage judges criteria, so topK is above zero.')
   if (scenario.thinking != null && !['high', 'off'].includes(scenario.thinking)) bad('thinking', 'high or off.')
+  if (scenario.thinkingCriteria != null && !['high', 'off'].includes(scenario.thinkingCriteria)) bad('thinkingCriteria', 'high or off.')
   if (scenario.definitions != null && scenario.definitions !== true) bad('definitions', 'true, or absent.')
   if (scenario.model != null && (typeof scenario.model !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(scenario.model))) bad('model', 'A model name.')
   if (scenario.estimate != null && (typeof scenario.estimate !== 'object' || Array.isArray(scenario.estimate))) bad('estimate', 'The estimate stated before the job began.')

@@ -52,7 +52,7 @@ export const EXIT = Object.freeze({ finished: 0, error: 1, refused: 2, stopped: 
 
 const OPTIONS = {
   board: { type: 'string' }, split: { type: 'string' }, arm: { type: 'string' }, mode: { type: 'string' },
-  thinking: { type: 'string', default: 'high' }, 'top-k': { type: 'string' }, concurrency: { type: 'string', default: '8' },
+  thinking: { type: 'string', default: 'high' }, 'thinking-criteria': { type: 'string' }, 'top-k': { type: 'string' }, concurrency: { type: 'string', default: '8' },
   'limit-patients': { type: 'string' }, out: { type: 'string' }, 'cap-cny': { type: 'string', default: String(DEFAULT_CAP_CNY) },
   'floor-cny': { type: 'string', default: String(DEFAULT_FLOOR_CNY) }, 'allow-peak': { type: 'boolean', default: false },
   'plan-only': { type: 'boolean', default: false }, score: { type: 'string', default: 'auto' },
@@ -92,6 +92,7 @@ export function parseOptions(argv, env = process.env) {
   if (criterionBoard && mode === 'fit') throw fail('This board is answered clause by clause: use --mode criteria or both.', 'option_invalid');
   if (board === 'n2c2' && mode !== 'criteria') throw fail('The n2c2 board is one protocol against many patients: use --mode criteria.', 'option_invalid');
   if (!['off', 'high'].includes(String(values.thinking))) throw fail('--thinking is off or high.', 'option_invalid');
+  if (values['thinking-criteria'] != null && !['off', 'high'].includes(String(values['thinking-criteria']))) throw fail('--thinking-criteria is off or high.', 'option_invalid');
   const topKText = values['top-k'];
   const topK = topKText === 'all' ? 'all' : topKText == null ? (mode === 'criteria' || criterionBoard ? 'all' : 10) : whole(topKText, '--top-k', 0, 500);
   if (mode === 'criteria' && topK === 0) throw fail('--mode criteria with --top-k 0 judges nothing.', 'option_invalid');
@@ -109,7 +110,7 @@ export function parseOptions(argv, env = process.env) {
   if (!keyFile && !planOnly) throw fail('--key-file (or OPEN_SCIENCE_DEEPSEEK_API_KEY_FILE) names the DeepSeek key file; the key is never printed.', 'option_missing');
   return {
     help: false, board, split, arm: values.arm, unseal: Boolean(values.unseal), n2c2Boards: n2c2Boards ? path.resolve(n2c2Boards) : null, zhBoards: zhBoards ? path.resolve(zhBoards) : null,
-    n2c2Labels: values['n2c2-labels'] ?? env.VCR_BOARDS_N2C2_LABELS ?? null, n2c2Root: values['n2c2-root'] ?? env.EVIMED_N2C2_ROOT ?? null, mode, thinking: String(values.thinking), topK,
+    n2c2Labels: values['n2c2-labels'] ?? env.VCR_BOARDS_N2C2_LABELS ?? null, n2c2Root: values['n2c2-root'] ?? env.EVIMED_N2C2_ROOT ?? null, mode, thinking: String(values.thinking), thinkingCriteria: String(values['thinking-criteria'] ?? values.thinking), topK,
     concurrency: whole(values.concurrency, '--concurrency', 1, 64),
     limitPatients: values['limit-patients'] == null ? null : whole(values['limit-patients'], '--limit-patients', 1, 100_000),
     out: values.out ? path.resolve(values.out) : null, capCny: Number(values['cap-cny']), floorCny: Number(values['floor-cny']),
@@ -129,7 +130,7 @@ const yuan = (value) => (Number.isFinite(value) ? value.toFixed(2) : '?');
 const short = (value) => (value >= 1e6 ? `${(value / 1e6).toFixed(1)}M` : value >= 1e3 ? `${(value / 1e3).toFixed(0)}k` : String(Math.round(value)));
 
 /** What an arm was started with; a later run of the same arm has to agree, or its rows would be read as one experiment. @param {Record<string, any>} o */
-const armSettings = (o) => ({ board: o.board, mode: o.mode, thinking: o.thinking, topK: o.topK, model: o.model });
+const armSettings = (o) => ({ board: o.board, mode: o.mode, thinking: o.thinking, thinkingCriteria: o.thinkingCriteria, topK: o.topK, model: o.model });
 
 /**
  * Run the loop. `deps` replaces the clock, the log and the balance check in tests; nothing else is replaced.
@@ -178,7 +179,7 @@ export async function runDevJob(o, deps = {}) {
       databaseUrl: dbUrl, stateStore: 'postgres', deepseekBaseUrl: o.baseUrl, deepseekModel: o.model,
       ...(o.keyFile ? { deepseekApiKeyFile: o.keyFile } : { deepseekApiKey: 'plan-only-no-key' }),
       vcrEnabled: true, vcrAudience: 'all', vcrProviderAgreements: true, vcrProviderAgreementReference: 'Public benchmark inputs; no clinical decision is made here',
-      vcrDataPlaneDir: planeDir, vcrTrialCorpusManifest: manifest, vcrMatchJudgeConcurrency: o.concurrency, vcrMatchJudgeThinking: o.thinking,
+      vcrDataPlaneDir: planeDir, vcrTrialCorpusManifest: manifest, vcrMatchJudgeConcurrency: o.concurrency, vcrMatchJudgeThinking: o.thinking, vcrMatchJudgeCriteriaThinking: o.thinkingCriteria,
     });
     const usageLedger = new UsageLedger(database);
     const vcr = composeVcr({ config, productDatabase: database, usageLedger, report: (code) => { reports[code] = (reports[code] ?? 0) + 1; } });
@@ -236,7 +237,7 @@ export async function runDevJob(o, deps = {}) {
     const fitOn = o.mode !== 'criteria';
     const topK = o.mode === 'fit' ? 0 : o.topK;
     const selectionOf = (/** @type {string} */ subjectKey, /** @type {readonly string[]} */ ids, /** @type {{ fit: boolean, topK: number | 'all' }} */ step) => ({
-      direction: 'patient_to_trial', subjectKey, registryIds: [...ids], collection: collection?.id, collectionRevision: collection?.revision, fit: step.fit, topK: step.topK, thinking: o.thinking });
+      direction: 'patient_to_trial', subjectKey, registryIds: [...ids], collection: collection?.id, collectionRevision: collection?.revision, fit: step.fit, topK: step.topK, thinking: o.thinking, thinkingCriteria: o.thinkingCriteria });
     if (rankingBoard) {
       for (const row of cases) {
         const subjectKey = subjectOf(row.patientId);
@@ -257,7 +258,7 @@ export async function runDevJob(o, deps = {}) {
       const subjectKeys = cases.map((row) => subjectOf(row.patientId));
       const step = { ids: [n2c2Version], fit: false, topK: /** @type {'all'} */ ('all') };
       items.push({ key: 'n2c2', patientIds: cases.map((row) => row.patientId), subjectKeys, targetIds: [n2c2Version], step,
-        selection: { direction: 'trial_to_patient', protocolVersionId: n2c2Version, subjectKeys, fit: false, topK: 'all', thinking: o.thinking } });
+        selection: { direction: 'trial_to_patient', protocolVersionId: n2c2Version, subjectKeys, fit: false, topK: 'all', thinking: o.thinking, thinkingCriteria: o.thinkingCriteria } });
     } else {
       const existing = await vcr.matchStore.protocols(study.id);
       /** @type {Map<string, { patientIds: string[] }>} */
@@ -280,7 +281,7 @@ export async function runDevJob(o, deps = {}) {
         const protocol = /** @type {NonNullable<ReturnType<typeof protocols.get>>} */ (protocols.get(key));
         const step = { ids: [protocol.versionId], fit: fitOn, topK: /** @type {'all'} */ ('all') };
         items.push({ key, patientIds: group.patientIds, subjectKeys: group.patientIds.map(subjectOf), targetIds: [protocol.versionId], protocol, step,
-          selection: { direction: 'trial_to_patient', protocolVersionId: protocol.versionId, subjectKeys: group.patientIds.map(subjectOf), fit: fitOn, topK: 'all', thinking: o.thinking } });
+          selection: { direction: 'trial_to_patient', protocolVersionId: protocol.versionId, subjectKeys: group.patientIds.map(subjectOf), fit: fitOn, topK: 'all', thinking: o.thinking, thinkingCriteria: o.thinkingCriteria } });
       }
     }
 

@@ -98,7 +98,7 @@ function fixture({ script, config = {}, roster = ROSTER, registry = null, withdr
   return { provider, judgments, counters, reported, reads, documents, matchStore, subjectTable, targets, judge, run, job, reads_, toA };
 }
 
-const toB = { direction: "trial_to_patient", protocolVersionId: "pv_1", subjects: ["P-1", "P-2", "P-3"], fit: true, topK: 20, thinking: "high", model: "deepseek-flash", promptVersions: { fit: "fit-1", criteria: "criteria-3" }, estimate: { pairs: 3 }, chain: "c2" };
+const toB = { direction: "trial_to_patient", protocolVersionId: "pv_1", subjects: ["P-1", "P-2", "P-3"], fit: true, topK: 20, thinking: "high", thinkingCriteria: "high", model: "deepseek-flash", promptVersions: { fit: "fit-1", criteria: "criteria-3" }, estimate: { pairs: 3 }, chain: "c2" };
 
 test("a selection names one direction, and nothing else is accepted", () => {
   assert.equal(judgeSelection({ subjectKey: "P-1", registryIds: ["NCT00000001"] }).direction, "patient_to_trial");
@@ -465,6 +465,18 @@ test("the people who have only a table row are on the roster, and are judged", a
   assert.match(f.provider.calls[0].user, /AGE = 70 year/);
 });
 
+test("each stage keeps its own thinking: off for the trial-level call, high clause by clause, as measured", async () => {
+  const f = fixture();
+  await f.run(f.job({ topK: "all", thinking: "off", thinkingCriteria: "high" }));
+  const byMode = { fit: new Set(), criteria: new Set() };
+  for (const row of f.judgments.rows.values()) byMode[row.mode].add(row.thinking);
+  assert.deepEqual([[...byMode.fit], [...byMode.criteria]], [["off"], ["high"]]);
+  assert.ok(f.provider.calls.some((call) => call.body.thinking.type === "disabled") && f.provider.calls.some((call) => call.body.thinking.type === "enabled"));
+  const asked = f.provider.calls.length;
+  await f.run(f.job({ topK: "all", thinking: "off", thinkingCriteria: "high" }));
+  assert.equal(f.provider.calls.length, asked, "a resume finds both stages in the ledger");
+});
+
 test("thinking off is recorded on the row and is its own judgment", async () => {
   const f = fixture();
   await f.run(f.job({ topK: 0, thinking: "off" }));
@@ -481,7 +493,7 @@ test("starting says what it will do and queues one job; the same selection while
   const f = fixture();
   const start = createMatchJudge({ jobs, matchStore: f.matchStore, documents: f.documents, config: {} });
   const first = await start.start({ ...STUDY, completionOrigin: { sessionId: "s" } }, { subjectKey: "P-1", registryIds: ["NCT00000001"] });
-  assert.deepEqual([first.kind, first.state, first.jobId, first.direction, first.topK, first.thinking], ["match_judge", "queued", "job_1", "patient_to_trial", 20, "high"]);
+  assert.deepEqual([first.kind, first.state, first.jobId, first.direction, first.topK, first.thinking, first.thinkingCriteria], ["match_judge", "queued", "job_1", "patient_to_trial", 20, "off", "high"]);
   assert.match(first.statement, /不用确认/);
   assert.deepEqual(queued[0].input.detail.conversationOrigin, { sessionId: "s" });
   assert.equal(queued[0].input.internal, true);

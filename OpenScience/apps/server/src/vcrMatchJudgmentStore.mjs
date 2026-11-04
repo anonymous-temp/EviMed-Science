@@ -94,8 +94,8 @@ export class VcrMatchJudgmentStore extends VcrStoreBase {
    * @returns {Promise<Map<string, ReturnType<typeof judgmentOf>>>}
    */
   async doneFor({ studyId, promptVersions, model, thinking, subjectKeys = null }) {
-    const rows = await this.rows(`SELECT ${LIGHT} FROM ${VCR_SCHEMA}.match_judgments j WHERE j.study_id=$1 AND j.status='done' AND j.producer='job' AND j.prompt_version=ANY($2::text[]) AND j.model=$3 AND j.thinking=$4
-      AND ($5::text[] IS NULL OR j.subject_key=ANY($5::text[]))`, [studyId, [...promptVersions], model, thinking, subjectKeys ? [...subjectKeys] : null]);
+    const rows = await this.rows(`SELECT ${LIGHT} FROM ${VCR_SCHEMA}.match_judgments j WHERE j.study_id=$1 AND j.status='done' AND j.producer='job' AND j.prompt_version=ANY($2::text[]) AND j.model=$3 AND j.thinking=ANY($4::text[])
+      AND ($5::text[] IS NULL OR j.subject_key=ANY($5::text[]))`, [studyId, [...promptVersions], model, Array.isArray(thinking) ? [...new Set(thinking)] : [thinking], subjectKeys ? [...subjectKeys] : null]);
     const out = new Map();
     for (const row of rows) { const judgment = judgmentOf(row); out.set(judgmentKey(judgment), judgment); }
     return out;

@@ -98,8 +98,8 @@ function matchJudgeTopK(value) {
 }
 
 /** @param {unknown} value @returns {'high' | 'off'} */
-function matchJudgeThinking(value) {
-  if (value == null || value === "") return "high";
+function matchJudgeThinking(value, fallback = "high") {
+  if (value == null || value === "") return fallback;
   const word = String(value).trim().toLowerCase();
   if (word !== "high" && word !== "off") throw new Error(`OPEN_SCIENCE_VCR_MATCH_JUDGE_THINKING must be "high" or "off", got ${JSON.stringify(value)}.`);
   return word;
@@ -1186,7 +1186,10 @@ function vcrSettings(overrides) {
     // A selection may name fit, topK and thinking for one job, so a benchmark can ask for each arm. Counters: `open_science_vcr_match_judge_total`.
     vcrMatchJudgeConcurrency: integer("vcrMatchJudgeConcurrency", "OPEN_SCIENCE_VCR_MATCH_JUDGE_CONCURRENCY", 8, 1, 64),
     vcrMatchJudgeTopK: matchJudgeTopK(overrides.vcrMatchJudgeTopK ?? process.env.OPEN_SCIENCE_VCR_MATCH_JUDGE_TOP_K),
-    vcrMatchJudgeThinking: matchJudgeThinking(overrides.vcrMatchJudgeThinking ?? process.env.OPEN_SCIENCE_VCR_MATCH_JUDGE_THINKING),
+    // Measured on public boards, 2026-11-04: the trial-level call ranks as well with thinking off (SIGIR nDCG@10 .669 off, .648 high; TREC 2021 dev .810,
+    // .795; TREC 2022 dev .881, .852) at a third of the price and time; clause by clause thinking helps (746 to 782 of 1,015 on the same prompt).
+    vcrMatchJudgeThinking: matchJudgeThinking(overrides.vcrMatchJudgeThinking ?? process.env.OPEN_SCIENCE_VCR_MATCH_JUDGE_THINKING, "off"),
+    vcrMatchJudgeCriteriaThinking: matchJudgeThinking(overrides.vcrMatchJudgeCriteriaThinking ?? process.env.OPEN_SCIENCE_VCR_MATCH_JUDGE_CRITERIA_THINKING, "high"),
     vcrMatchJudgeOutputTokens: integer("vcrMatchJudgeOutputTokens", "OPEN_SCIENCE_VCR_MATCH_JUDGE_OUTPUT_TOKENS", 16_000, 2_000, 64_000),
     vcrMatchJudgeTimeoutMs: integer("vcrMatchJudgeTimeoutMs", "OPEN_SCIENCE_VCR_MATCH_JUDGE_TIMEOUT_MS", 180_000, 10_000, 600_000),
     vcrMatchJudgeMaxUpstreamFailures: integer("vcrMatchJudgeMaxUpstreamFailures", "OPEN_SCIENCE_VCR_MATCH_JUDGE_MAX_UPSTREAM_FAILURES", 20, 1, 1_000),

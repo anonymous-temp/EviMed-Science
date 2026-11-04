@@ -88,7 +88,9 @@ export function createMatchJudgeCounters() {
 }
 
 /** @param {Record<string, any>} config */
-const effectiveThinking = (config) => (config?.vcrMatchJudgeThinking === 'off' ? 'off' : 'high');
+const effectiveThinking = (config) => (config?.vcrMatchJudgeThinking === 'high' ? 'high' : 'off');
+/** @param {Record<string, any> | undefined} config */
+const effectiveCriteriaThinking = (config) => (config?.vcrMatchJudgeCriteriaThinking === 'off' ? 'off' : 'high');
 /** @param {Record<string, any>} config */
 const effectiveModel = (config) => String(config?.deepseekModel || VCR_MATCH_BATCH_DEFAULT_MODEL);
 /** @param {Record<string, any>} config */
@@ -112,7 +114,7 @@ const registryOfId = (registryId) => (/^ChiCTR/iu.test(registryId) ? 'chictr' : 
  * @param {unknown} raw @returns {Record<string, any>}
  */
 export function judgeSelection(raw = {}) {
-  const fields = ['direction', 'subjectKey', 'registryIds', 'searchId', 'candidateLimit', 'definitions', 'registry', 'collection', 'collectionRevision', 'protocolVersionId', 'subjectKeys', 'fit', 'topK', 'thinking'];
+  const fields = ['direction', 'subjectKey', 'registryIds', 'searchId', 'candidateLimit', 'definitions', 'registry', 'collection', 'collectionRevision', 'protocolVersionId', 'subjectKeys', 'fit', 'topK', 'thinking', 'thinkingCriteria'];
   const row = object(raw);
   const bad = (/** @type {string} */ message) => new HttpError(400, 'vcr_matching_selection_invalid', message);
   const unknown = Object.keys(row).find((key) => !fields.includes(key));
@@ -142,6 +144,7 @@ export function judgeSelection(raw = {}) {
   if (row.topK != null && row.topK !== 'all' && !(Number.isInteger(row.topK) && row.topK >= 0 && row.topK <= VCR_MATCH_JUDGE_LIMITS.trials)) throw bad(`topK 是 0 到 ${VCR_MATCH_JUDGE_LIMITS.trials} 的整数，或 all。`);
   if (row.fit === false && row.topK === 0) throw bad('fit 为 false 时只有逐条判定一步，topK 不能为 0。');
   if (row.thinking != null && !['high', 'off'].includes(row.thinking)) throw bad('thinking 是 high 或 off。');
+  if (row.thinkingCriteria != null && !['high', 'off'].includes(row.thinkingCriteria)) throw bad('thinkingCriteria 是 high 或 off。');
   if (row.definitions != null && typeof row.definitions !== 'boolean') throw bad('definitions 是 true 或 false。');
   // A list of ids is cut to its first `candidateLimit` here; a saved search's list is cut by the gateway that reads it, which consumes both fields.
   const registryIds = row.registryIds ? [...new Set(/** @type {string[]} */ (row.registryIds))].slice(0, row.candidateLimit ?? undefined) : null;
@@ -509,6 +512,7 @@ export async function planMatchJudge({ study, selection: raw = {}, matchStore, d
   const fit = selection.fit !== false;
   const topK = selection.topK ?? effectiveTopK(config);
   const thinking = selection.thinking ?? effectiveThinking(config);
+  const thinkingCriteria = selection.thinkingCriteria ?? selection.thinking ?? effectiveCriteriaThinking(config);
   const model = effectiveModel(config);
   const outputPerCall = effectiveOutputTokens(config);
   const cap = VCR_MATCH_JUDGE_LIMITS.noteChars;
@@ -530,7 +534,7 @@ export async function planMatchJudge({ study, selection: raw = {}, matchStore, d
   const estimate = { basis: 'estimate', model, thinking, pairs, calls, inputTokens, outputTokens, outputTokensPerCall: outputPerCall, cost: priced.priced ? priced.cost : null, currency: priced.currency || 'CNY' };
   // A judgment that read definition cards is another judgment: the prompt version says so, and the ledger finds only rows made the same way.
   const promptVersions = { ...VCR_JUDGMENT_PROMPT_VERSIONS, ...(definitions ? { criteria: `${VCR_JUDGMENT_PROMPT_VERSIONS.criteria}+${VCR_DEFINITION_PROMPT_VERSION}` } : {}) };
-  const scenario = { direction, subjects: people, ...target, fit, topK, thinking, model, ...(definitions ? { definitions: true } : {}), promptVersions, estimate };
+  const scenario = { direction, subjects: people, ...target, fit, topK, thinking, thinkingCriteria, model, ...(definitions ? { definitions: true } : {}), promptVersions, estimate };
   return { ok: true, scenario: { ...scenario, chain: judgeChain(scenario) }, statement: judgeStatement({ pairs, fit, topK, estimate, withdrawn: leftOut, noRecord: people.length - readable.length }), withdrawn: leftOut, noRecord: people.length - readable.length };
 }
 
@@ -590,7 +594,9 @@ export function createMatchJudgeExecutor({ store, matchStore, judgments, documen
     const startedAt = String(carried.startedAt ?? now().toISOString());
     // `tableSession`: the study's subject table read once for this batch, not once per person. Each person's read is still judged and audited (`subjectTableEvidenceBatch`).
     const study = { ...found, tableSession: new Map(), cloudContext: origin.runId && origin.sessionId ? { runId: String(origin.runId), sessionId: String(origin.sessionId) } : { runId: jobId, sessionId: `vcr-job:${jobId}` } };
-    const thinking = String(scenario.thinking), model = String(scenario.model);
+    const model = String(scenario.model);
+    /** Each stage's own setting; a scenario frozen before the two were told apart has one for both. @param {'fit' | 'criteria'} mode */
+    const thinkingOf = (mode) => String(mode === 'criteria' ? scenario.thinkingCriteria ?? scenario.thinking : scenario.thinking);
     const promptVersions = object(scenario.promptVersions);
     const direction = String(scenario.direction);
     const targetKind = direction === 'patient_to_trial' ? 'candidate_trial' : 'protocol_version';
@@ -655,7 +661,7 @@ export function createMatchJudgeExecutor({ store, matchStore, judgments, documen
     const targetList = direction === 'patient_to_trial' ? list(scenario.trials).map(object) : [{ protocolVersionId: String(scenario.protocolVersionId) }];
     // Over the frozen roster, withdrawn people included, so that a position in the marks means the same pair in every batch.
     const pairs = frozenSubjects.flatMap((subjectKey) => targetList.map((target) => ({ subjectKey, target, targetId: String(target.registryId ?? target.protocolVersionId) })));
-    const done = await judgments.doneFor({ studyId, promptVersions: Object.values(promptVersions).map(String), model, thinking, subjectKeys: subjects.length <= 1000 ? subjects : null });
+    const done = await judgments.doneFor({ studyId, promptVersions: Object.values(promptVersions).map(String), model, thinking: [thinkingOf('fit'), thinkingOf('criteria')], subjectKeys: subjects.length <= 1000 ? subjects : null });
 
     /**
      * What has become of each pair in each stage, one character a pair: `.` not reached, `d` judged by this job, `a` already in the ledger, `f` failed, `t` failed for a reason that
@@ -724,7 +730,7 @@ export function createMatchJudgeExecutor({ store, matchStore, judgments, documen
       const pair = pairs[index];
       const pairKey = `${pair.subjectKey}\u0000${pair.targetId}`;
       if (withdrawn.has(pair.subjectKey)) { marks[mode][index] = 'w'; return; }
-      const base = { studyId, userId: String(found.userId), subjectKey: pair.subjectKey, targetKind, targetId: pair.targetId, mode, promptVersion: String(promptVersions[mode]), model, thinking, producer: 'job', jobId };
+      const base = { studyId, userId: String(found.userId), subjectKey: pair.subjectKey, targetKind, targetId: pair.targetId, mode, promptVersion: String(promptVersions[mode]), model, thinking: thinkingOf(mode), producer: 'job', jobId };
       /** @type {any} */ let note = null;
       /** @type {any} */ let target = null;
       try {
@@ -733,7 +739,7 @@ export function createMatchJudgeExecutor({ store, matchStore, judgments, documen
         const key = judgmentKey({ ...base, targetHash: target.hash, documentHash: note.hash });
         const ledger = done.get(key);
         if (ledger) { marks[mode][index] = 'a'; if (mode === 'fit') fitSeen.set(pairKey, noted(ledger)); consecutiveUpstream = 0; return; }
-        const context = { judge, study, jobId, note, target, thinking, cap };
+        const context = { judge, study, jobId, note, target, thinking: thinkingOf(mode), cap };
         const settings = { maxTokens: judge.maxTokens, timeoutMs: judge.timeoutMs, ...(note.unreadable ? { unreadableDocuments: note.unreadable } : {}), ...(note.leftOut ? { leftOut: note.leftOut } : {}) };
         const answer = { target: target.summaryOfTarget, eligibilitySource: target.eligibilitySource, ...(note.unreadable ? { unreadableDocuments: note.unreadable } : {}), ...(note.leftOut ? { leftOut: note.leftOut } : {}) };
         /** @type {any} */
@@ -840,7 +846,7 @@ export function createMatchJudgeExecutor({ store, matchStore, judgments, documen
       });
       // What an earlier batch learned is in the ledger, and the newest row of a pair is the one its mark speaks for.
       if (carried.marks && scenario.fit !== false) {
-        const ledger = await judgments.doneFor({ studyId, promptVersions: [String(promptVersions.fit)], model, thinking, subjectKeys: subjects.length <= 1000 ? subjects : null });
+        const ledger = await judgments.doneFor({ studyId, promptVersions: [String(promptVersions.fit)], model, thinking: thinkingOf('fit'), subjectKeys: subjects.length <= 1000 ? subjects : null });
         for (const row of ledger.values()) {
           if (row.mode !== 'fit') continue;
           const key = `${row.subjectKey}\u0000${row.targetId}`;
@@ -940,8 +946,8 @@ export function createMatchJudgeExecutor({ store, matchStore, judgments, documen
         ...(Object.keys(failures).length ? { failures } : {}), ...(stopped ? { stopped } : {}), ...(skippedWithdrawn ? { skippedWithdrawn } : {}),
         ...(changes ? { changes: { ...changes, followUp: scenario.followUp } } : {}),
         // What was stated before the work and what it came to.
-        estimate: object(scenario.estimate), used: { ...used, model, thinking },
-        settings: { model, thinking, concurrency: width, maxTokens: judge.maxTokens, timeoutMs: judge.timeoutMs, fit: scenario.fit !== false, topK },
+        estimate: object(scenario.estimate), used: { ...used, model, thinking: thinkingOf('fit'), thinkingCriteria: thinkingOf('criteria') },
+        settings: { model, thinking: thinkingOf('fit'), thinkingCriteria: thinkingOf('criteria'), concurrency: width, maxTokens: judge.maxTokens, timeoutMs: judge.timeoutMs, fit: scenario.fit !== false, topK },
       },
       tables: [],
       manifest: { engineVersion: 'control-plane', rVersion: `node ${process.version}`, packageLockHash: LOCK_HASH, startedAt, finishedAt: now().toISOString(), cpuSeconds: 0 },
@@ -1004,7 +1010,7 @@ export function createMatchJudge({ jobs, matchStore, documents, subjectTable = n
       // A re-judgment is its own job even for the same selection: it follows a named change, and the words read are newer than whatever is still running.
       /** @type {Record<string, any>} */
       const scenario = { ...built.scenario, ...(followUp ? { followUp, chain: judgeChain({ ...built.scenario, followUp }) } : {}) };
-      const summary = { statement: built.statement, estimate: scenario.estimate, direction: scenario.direction, topK: scenario.topK, fit: scenario.fit, thinking: scenario.thinking,
+      const summary = { statement: built.statement, estimate: scenario.estimate, direction: scenario.direction, topK: scenario.topK, fit: scenario.fit, thinking: scenario.thinking, thinkingCriteria: scenario.thinkingCriteria,
         ...(scenario.protocolVersionId ? { protocolVersionId: scenario.protocolVersionId } : {}) };
       // The same selection asked for again while it is out is that job; one that has ended is a new attempt, and the ledger keeps it from paying twice.
       const same = await jobs.store?.rows?.(`SELECT id, state FROM evimed_vcr.jobs WHERE study_id = $1 AND kind = 'match_judge' AND scenario ->> 'chain' = $2 ORDER BY created_at`, [study.id, scenario.chain]) ?? [];
@@ -1043,8 +1049,7 @@ export function createMatchJudge({ jobs, matchStore, documents, subjectTable = n
       const asked = (/** @type {any[]} */ entries) => {
         const clauses = entries.filter((entry) => entry.modes.has('criteria')).length;
         const fit = entries.some((entry) => entry.modes.has('fit'));
-        const thinking = ['high', 'off'].includes(entries[0].thinking) ? { thinking: entries[0].thinking } : {};
-        return { fit, topK: !fit || clauses === entries.length ? 'all' : clauses, ...thinking };
+        return { fit, topK: !fit || clauses === entries.length ? 'all' : clauses };
       };
       const started = [];
       const trials = [...byTarget.values()].filter((entry) => entry.kind === 'candidate_trial');
