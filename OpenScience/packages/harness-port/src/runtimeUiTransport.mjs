@@ -28,6 +28,30 @@ export function installRuntimeUiTransport(frame, target = globalThis) {
   const origin = target.location.origin;
   const nativeFetch = target.fetch.bind(target);
   const streams = new Map();
+  // Hold only the scoped workspace stream until the bridge has retained the
+  // authorized root. Other logical streams keep flowing on the same carrier.
+  const roots = frame.access?.grants?.filter(grant => grant.resource?.kind === 'session'
+    && grant.actions.includes('session/page') && grant.actions.includes('session/prompt'))
+    .map(grant => grant.resource.id).filter(id => typeof id === 'string' && /^[A-Za-z0-9_-]{1,160}$/.test(id)) ?? [];
+  const scopedRoot = new Set(roots).size === 1 ? roots[0] : null;
+  /** @type {'pending'|'ready'|'failed'} */ let startupState = scopedRoot ? 'pending' : 'ready';
+  /** @type {Set<() => void>} */ const startupWaiters = new Set();
+  /** @type {(() => void) | undefined} */ let startupFailure;
+  /** @type {any} */ let startupTimer;
+  const finishStartup = (/** @type {'ready'|'failed'} */ state) => {
+    if (startupState !== 'pending') return false;
+    startupState = state;
+    if (startupTimer !== undefined) target.clearTimeout(startupTimer);
+    startupTimer = undefined;
+    for (const waiter of [...startupWaiters]) waiter();
+    if (state === 'failed') startupFailure?.();
+    return true;
+  };
+  if (scopedRoot) Object.defineProperty(target, '__EVIMED_SCOPED_STARTUP__', { value: Object.freeze({
+    sessionId: scopedRoot,
+    release: (/** @type {string} */ id) => id === scopedRoot && finishStartup('ready'),
+    onFailure: (/** @type {() => void} */ callback) => { startupFailure = callback; if (startupState === 'failed') callback(); },
+  }) });
   const MAX_STREAMS = 128;
   const MAX_ITEMS = 128;
   const MAX_SEND_BYTES = 2 * 1024 * 1024;
@@ -355,7 +379,18 @@ export function installRuntimeUiTransport(frame, target = globalThis) {
           if (!queue.length) await new Promise(resolve => { wake = () => resolve(undefined); });
           wake = undefined;
           if (failed) throw error;
-          const { message, bytes } = queue.shift(); queuedBytes -= bytes; receiveQueuedBytes -= bytes;
+          const { message, bytes } = queue[0];
+          if (endpoint === 'workspace/follow' && message.type === 'item' && startupState === 'pending') {
+            if (startupTimer === undefined) startupTimer = target.setTimeout(() => finishStartup('failed'), 15_000);
+            while (startupState === 'pending' && !failed) await new Promise(resolve => {
+              const done = () => { startupWaiters.delete(done); if (wake === done) wake = undefined; resolve(undefined); };
+              wake = done; startupWaiters.add(done);
+              if (startupState !== 'pending' || failed) done();
+            });
+          }
+          if (failed) throw error;
+          if (endpoint === 'workspace/follow' && message.type === 'item' && startupState === 'failed') throw failure('Scoped session initialization failed');
+          queue.shift(); queuedBytes -= bytes; receiveQueuedBytes -= bytes;
           if (message.type === 'item') { yield message.value; continue; }
           terminal = true;
           if (message.type === 'error') throw failure(message.error.message, message.error);
@@ -370,7 +405,7 @@ export function installRuntimeUiTransport(frame, target = globalThis) {
     },
     dispose() {
       if (disposed) return;
-      disposed = true; revisions.clear(); vcrSelections.clear(); cancelConnect?.();
+      disposed = true; finishStartup('failed'); revisions.clear(); vcrSelections.clear(); cancelConnect?.();
       if (carrier) lose(carrier, failure('Runtime frame disposed'));
     },
   };

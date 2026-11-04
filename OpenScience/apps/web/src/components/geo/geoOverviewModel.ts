@@ -113,7 +113,7 @@ export function metricTriple(metric: GeoOverviewMetric | null, key: string, stra
 }
 
 const TILE_ORDER: readonly GeoOverviewMetricKey[] = ["gvi", "mention", "accuracy", "citation"];
-const UNIT_TEXT: Record<GeoUnit, string | undefined> = { index: "/ 100", percent: "%", count: undefined };
+const UNIT_TEXT: Record<GeoUnit, string | undefined> = { index: "/ 100", percent: "%", count: undefined, ratio: undefined };
 
 /** The number without its unit — the tile sets the unit beside it, once. */
 export function tileValue(cell: GeoCell | null | undefined, unit: GeoUnit): { reading: MetricReading; value: string; unit?: string; placeholder: boolean } {
@@ -242,8 +242,8 @@ export function changeWord(change: ReadingChange, unit: GeoUnit): string | null 
   if (change.coverage) return coverageNotice(change);
   if (change.delta === null) return null;
   if (change.flat) return "与上次持平";
-  const size = Math.abs(change.delta) >= 1 ? Math.round(Math.abs(change.delta)) : Math.round(Math.abs(change.delta) * 10) / 10;
-  return `比上次${change.delta > 0 ? "高" : "低"} ${size}${unit === "percent" ? " 个百分点" : ""}`;
+  const size = unit === "ratio" ? Math.round(Math.abs(change.delta) * 100) / 100 : Math.abs(change.delta) >= 1 ? Math.round(Math.abs(change.delta)) : Math.round(Math.abs(change.delta) * 10) / 10;
+  return `比上次${change.delta > 0 ? "高" : "低"} ${size}${unit === "percent" ? " 个百分点" : unit === "ratio" ? " 倍" : ""}`;
 }
 
 /** The metric a catalogue id names, when the diagnosis measured one this page wants. */
@@ -261,12 +261,24 @@ function extraMetric(diagnosis: GeoDiagnosis | null, ids: readonly string[]): { 
  * Live wrong statements about us that would reach a patient (S3/S4): the safety tile's number. The server's count is over every
  * error of the project; a list is only what it carried.
  */
+export function hasJudgedZeroSample(diagnosis: GeoDiagnosis | null): boolean {
+  const correct = readGeoCell(diagnosis?.failureModes?.correct);
+  const wrong = readGeoCell(diagnosis?.failureModes?.wrongOurs);
+  return Boolean(diagnosis?.round && (diagnosis.round.done ?? 0) > 0
+    && correct.status === "ok" && wrong.status === "ok"
+    && Number.isSafeInteger(correct.numerator) && (correct.numerator ?? 0) >= 30
+    && wrong.numerator === 0 && correct.denominator === wrong.denominator
+    && (correct.denominator ?? 0) >= (correct.numerator ?? 0));
+}
+
 export function safetyReading(diagnosis: GeoDiagnosis | null): MetricReading {
   const round = diagnosis?.round;
   const count = diagnosis?.errorCounts?.severe;
   // A diagnosis envelope and a truncated error list are not proof of a counted zero.
   const covered = round && typeof round.done === "number" && round.done > 0;
-  return covered ? measurement(count, "条严重讲错", `本轮 ${round.done} 次有效回答`, round.sampleDate ?? null) : { kind: "unmeasured", reason: "未测" };
+  if (!covered) return { kind: "unmeasured", reason: "未测" };
+  if (count === 0 && !hasJudgedZeroSample(diagnosis)) return { kind: "unmeasured", reason: "核查不足" };
+  return measurement(count, "条严重讲错", `项目当前待处理记录；最近一轮 ${round.done} 次有效回答`, round.sampleDate ?? null);
 }
 
 export function severeOpenErrors(diagnosis: GeoDiagnosis | null): number {
@@ -278,22 +290,13 @@ export function severeOpenErrors(diagnosis: GeoDiagnosis | null): number {
 }
 
 /**
- * Our place in the same-class ranking, and the rival ahead of the field: the
- * two things that answer “61 算好还是不好” beside the index (fusion plan
- * §4.8). The ranking is by mention rate — the one reading every rival has —
- * and says so.
+ * The legacy overview cells do not carry each competitor's eligible cohort.
+ * They cannot establish a place or a leading rival, even when the displayed
+ * pool names agree. The V08 analysis reads a paired cohort for each rival.
  */
 export function standing(project: GeoProject, diagnosis: GeoDiagnosis | null): { rank: string | null; rival: string | null; place: number | null; count: number } {
   const ranking = rivalRanking(project, diagnosis);
-  const ours = ranking.find((row) => row.ours && row.value !== null) ?? null;
-  const place = ours ? ranking.indexOf(ours) + 1 : null;
-  const leader = ranking.find((row) => !row.ours && row.value !== null) ?? null;
-  return {
-    rank: place === null ? null : `提及率第 ${place} / ${ranking.length}`,
-    rival: leader ? `${leader.name} 提及率 ${formatGeoValue(leader.value ?? 0, "percent")}` : null,
-    place,
-    count: ranking.length,
-  };
+  return { rank: null, rival: null, place: null, count: ranking.length };
 }
 
 export function overviewTiles(project: GeoProject, diagnosis: GeoDiagnosis | null, strategy?: GeoStrategyView | null): OverviewTile[] {
@@ -680,9 +683,22 @@ export function trendConclusion(name: string, cell: GeoCell | null, change: Read
 }
 
 /** “上次 9月25日 · 下次 10月12日”: the date a change is measured from, and the next measurement's. */
-export function chartDates(change: ReadingChange | null, next: string | null | undefined): string | undefined {
-  const parts = [change?.from ? `上次 ${monthDay(change.from)}` : null, next ? `下次 ${monthDay(next)}` : null].filter((part): part is string => !!part);
+export function chartDates(change: ReadingChange | null, next: string | null | undefined, now = new Date()): string | undefined {
+  const today = agendaLocalDate(DISPLAY_TIME_ZONE, now.toISOString());
+  const planned = next ? `${next.slice(0, 10) <= today ? "计划已到期" : "计划"} ${monthDay(next)}` : null;
+  const parts = [change?.from ? `上次 ${monthDay(change.from)}` : null, planned].filter((part): part is string => !!part);
   return parts.length ? parts.join(" · ") : undefined;
+}
+
+/** A planned reading can occupy the final chart slot only after every observed date. */
+export function scheduledAfterObservations(next: string | null | undefined, dates: readonly string[], now = new Date()): boolean {
+  const day = next?.slice(0, 10);
+  if (!day || !/^\d{4}-\d{2}-\d{2}$/.test(day) || !Number.isFinite(Date.parse(day))) return false;
+  if (day <= agendaLocalDate(DISPLAY_TIME_ZONE, now.toISOString())) return false;
+  return dates.every(value => {
+    const observed = value.slice(0, 10);
+    return /^\d{4}-\d{2}-\d{2}$/.test(observed) && Number.isFinite(Date.parse(observed)) && day > observed;
+  });
 }
 
 /** “元宝对信尔美提及最多” — the matrix's own conclusion, or why there is none. */

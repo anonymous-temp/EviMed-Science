@@ -8,7 +8,7 @@ import js from "@eslint/js";
 
 export default [
   {
-    ignores: ["node_modules/**"],
+    ignores: ["node_modules/**", "src/vendor/tldts-6.1.86.mjs"],
   },
   js.configs.recommended,
   {

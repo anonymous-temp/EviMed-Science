@@ -24,7 +24,7 @@ function fixture() {
   let layoutPresent = true;
   /** @type {() => void} */ let generationListener = () => {};
   const parent = { postMessage: (/** @type {any} */ message, /** @type {string} */ origin) => sent.push({ message, origin }) };
-  /** @type {{version:number, frameId:string, projectId:string, shellOrigin:string, cwd:unknown}} */
+  /** @type {{version:number, frameId:string, projectId:string, shellOrigin:string, cwd:unknown, access?:unknown}} */
   const frame = { version: 1, frameId: 'frame-a', projectId: 'project-a', shellOrigin: 'https://app.example', cwd: '/workspace/project-a' };
   const target = { __EVIMED_FRAME__: frame, parent, setTimeout, clearTimeout,
     addEventListener: (/** @type {string} */ type, /** @type {any} */ fn) => listeners.set(type, fn), removeEventListener: (/** @type {string} */ type) => listeners.delete(type) };
@@ -293,6 +293,93 @@ test('opening an existing native session does not require or overwrite its works
   f.navigate({ intent: { kind: 'open', sessionId: 'session-a' } }); await settle();
   assert.deepEqual(f.calls, [['open', 'session-a']]);
   assert.ok(f.sent.some(row => row.message.ok && row.message.sessionId === 'session-a'));
+  f.ctx.dispose();
+});
+
+test('a scoped frame waits for its exact session to arrive rather than creating another', async () => {
+  const f = fixture(); f.target.__EVIMED_FRAME__.access = { type: 'baseline', owner: false, grants: [] };
+  /** @type {any} */ (f.target).setTimeout = (/** @type {() => void} */ callback) => { setImmediate(callback); return 0; };
+  let visible = false, refreshes = 0;
+  f.ctx.sessions.list.getSnapshot = () => mainView('session-a', visible ? { 'session-scoped': {} } : {});
+  apply(f.ctx, {}, f.target); await settle();
+  f.ctx.sessions.refresh = async () => { if (++refreshes === 2) visible = true; };
+  f.navigate({ intent: { kind: 'open', sessionId: 'session-scoped', draft: 'Keep this draft' } });
+  for (let i = 0; i < 5; i++) await settle();
+  assert.deepEqual(f.calls, [['open', 'session-scoped'], ['draft', 'session-scoped', 'Keep this draft']]);
+  assert.ok(f.sent.some(row => row.message.type === 'evimed.runtime-ui.ack' && row.message.ok === true && row.message.sessionId === 'session-scoped'));
+  f.ctx.dispose();
+});
+
+test('a scoped startup releases workspace only after the authorized root is retained', async () => {
+  const f = fixture();
+  f.target.__EVIMED_FRAME__.access = { type: 'baseline', owner: false, grants: [] };
+  /** @type {string[]} */ const released = [];
+  /** @type {any} */ (f.target).__EVIMED_SCOPED_STARTUP__ = { sessionId: 'session-scoped', release: (/** @type {string} */ id) => { released.push(id); return true; } };
+  let visible = false, retained = false;
+  /** @type {() => void} */ let changed = () => {};
+  f.ctx.sessions.list.getSnapshot = () => mainView(retained ? 'session-scoped' : null, visible ? { 'session-scoped': {} } : {});
+  f.ctx.sessions.list.subscribe = (/** @type {() => void} */ callback) => { changed = callback; return () => {}; };
+  f.ctx.uiWorkspace.openSession = (/** @type {string} */ id) => { assert.equal(id, 'session-scoped'); retained = true; f.calls.push(['open', id]); };
+  apply(f.ctx, {}, f.target); await settle();
+  assert.deepEqual(released, []); assert.deepEqual(f.calls, []);
+  visible = true; changed(); await settle();
+  assert.deepEqual(f.calls, [['open', 'session-scoped']]);
+  assert.deepEqual(released, ['session-scoped']);
+  f.ctx.dispose();
+});
+
+test('a scoped startup does not release workspace after native root retention fails', async () => {
+  const f = fixture();
+  f.target.__EVIMED_FRAME__.access = { type: 'baseline', owner: false, grants: [] };
+  /** @type {string[]} */ const released = [];
+  /** @type {any} */ (f.target).__EVIMED_SCOPED_STARTUP__ = { sessionId: 'session-scoped', release: (/** @type {string} */ id) => released.push(id) };
+  f.ctx.sessions.list.getSnapshot = () => mainView(null, { 'session-scoped': {} });
+  f.ctx.uiWorkspace.openSession = () => { throw new Error('not yet retained'); };
+  apply(f.ctx, {}, f.target); await settle();
+  assert.deepEqual(released, []);
+  f.ctx.dispose();
+});
+
+test('a scoped frame never creates a missing session or opens a different one', async () => {
+  for (const kind of ['open', 'create']) {
+    const f = fixture(); f.target.__EVIMED_FRAME__.access = { type: 'baseline', owner: false, grants: [] };
+    /** @type {any} */ (f.target).setTimeout = (/** @type {() => void} */ callback) => { setImmediate(callback); return 0; };
+    apply(f.ctx, {}, f.target); await settle();
+    f.navigate({ intent: { kind, sessionId: 'session-missing' } });
+    for (let i = 0; i < 8; i++) await settle();
+    assert.deepEqual(f.calls, []);
+    assert.ok(f.sent.some(row => row.message.type === 'evimed.runtime-ui.ack' && row.message.ok === false));
+    assert.ok(!f.sent.some(row => row.message.type === 'evimed.runtime-ui.ack' && row.message.ok === true));
+    f.ctx.dispose();
+  }
+});
+
+test('a superseded scoped navigation cannot open late or replace the newer session', async () => {
+  const f = fixture(); f.target.__EVIMED_FRAME__.access = { type: 'baseline', owner: false, grants: [] };
+  apply(f.ctx, {}, f.target); await settle();
+  /** @type {() => void} */ let release = () => {};
+  f.ctx.sessions.refresh = () => new Promise(resolve => { release = () => resolve(undefined); });
+  f.navigate({ requestId: 'older', intent: { kind: 'open', sessionId: 'session-a' } }); await settle();
+  f.ctx.sessions.refresh = async () => {};
+  f.navigate({ requestId: 'newer', seq: 2, intent: { kind: 'open', sessionId: 'session-a', draft: 'Current' } });
+  release(); for (let i = 0; i < 5; i++) await settle();
+  assert.ok(f.sent.some(row => row.message.requestId === 'older' && row.message.ok === false));
+  assert.ok(f.sent.some(row => row.message.requestId === 'newer' && row.message.ok === true));
+  assert.deepEqual(f.calls, [['open', 'session-a'], ['draft', 'session-a', 'Current']]);
+  f.ctx.dispose();
+});
+
+test('a scoped navigation does not open after its native connection generation changes', async () => {
+  const f = fixture(); f.target.__EVIMED_FRAME__.access = { type: 'baseline', owner: false, grants: [] };
+  apply(f.ctx, {}, f.target); await settle();
+  /** @type {() => void} */ let release = () => {};
+  f.ctx.sessions.refresh = () => new Promise(resolve => { release = () => resolve(undefined); });
+  f.navigate({ intent: { kind: 'open', sessionId: 'session-a' } }); await settle();
+  f.ctx.sessions.refresh = async () => {};
+  f.replaceGeneration(); await settle(); release();
+  for (let i = 0; i < 5; i++) await settle();
+  assert.deepEqual(f.calls, []);
+  assert.ok(f.sent.some(row => row.message.type === 'evimed.runtime-ui.ack' && row.message.ok === false));
   f.ctx.dispose();
 });
 

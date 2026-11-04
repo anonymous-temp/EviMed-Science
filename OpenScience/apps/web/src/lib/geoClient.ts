@@ -160,7 +160,7 @@ export interface GeoProjectSummary {
   status: GeoProjectStatus;
   steps: GeoSteps;
   headline: {
-    gvi: GeoCell & { target: number | null; trend: number[] };
+    gvi: GeoCell & { target: number | null; trend: Array<number | null>; trendCoverage?: Array<string | null> };
     /** 品牌提及率 over P2 + P3 only. */
     mention: GeoCell;
   };
@@ -209,6 +209,8 @@ export interface GeoOverview {
 export interface GeoProject extends GeoScopedView {
   /** Actual accepted work, independent of whether future monitoring is enabled. */
   activeMeasurement?: GeoActiveMeasurement | null;
+  /** Project-wide, including failed or skipped rounds; absent when an older server cannot say. */
+  hasMeasurementHistory?: boolean;
   id: string;
   projectId: string;
   name: string;
@@ -366,9 +368,10 @@ export interface GeoErrorRow {
   id: string;
   engine: GeoEngine;
   statement: string;
-  severity: GeoSeverity;
+  severity: GeoSeverity | null;
   errorType: GeoErrorType;
   stability: "stable" | "sporadic" | "unconfirmed" | null;
+  confirmationReason?: string | null;
   citedSource: GeoCitedSource | null;
   action: GeoErrorAction | null;
   status: GeoErrorStatus;
@@ -644,6 +647,8 @@ export interface GeoPlanOutputLink {
 }
 export interface GeoArticle {
   planningLinks?: GeoPlanOutputLink[];
+  /** When the article record last changed, not necessarily the time its content was revised. */
+  updatedAt?: string | null;
   currentResultVersionId?: string | null;
   contentSha256?: string | null;
   onlineUpdateNeeded?: boolean;
@@ -681,6 +686,7 @@ export interface GeoArticle {
 export interface GeoArticles {
   articles: GeoArticle[];
 }
+export interface GeoArticleCatalog extends GeoArticles { total: number; snapshot: string; limit: number; offset: number }
 
 export interface GeoOrderCheck {
   at?: string | null;
@@ -844,6 +850,8 @@ export interface GeoClustersView extends GeoScopedView {
 export interface GeoActionSource {
   url?: string | null;
   domain: string | null;
+  /** Registrable outlet domain when `domain` is the selected verified host. */
+  canonicalDomain?: string | null;
   channel: string | null;
   name: string | null;
   kind: string | null;
@@ -983,7 +991,7 @@ export interface GeoClusterView extends GeoScopedView {
   }>;
   claims: Record<string, { id: string; claimKey?: string | null; statement: string; sourceLabel?: string | null; sourceKind?: string | null; status?: string }>;
   actions: GeoAction[];
-  articles: Array<{ id: string; layer: GeoArticleLayer; title: string; status: GeoArticleStatus; gate: string | null; safety: string | null; channel: string | null; channelNote: string | null; audience: string | null; audienceNote: string | null; path: string | null; runId: string | null }>;
+  articles: Array<{ id: string; layer: GeoArticleLayer; title: string; status: GeoArticleStatus; gate: string | null; safety: string | null; channel: string | null; channelNote: string | null; audience: string | null; audienceNote: string | null; path: string | null; runId: string | null; currentResultVersionId?: string | null; contentSha256?: string | null; versionBasis?: "current" }>;
   orders: Array<{ id: string; articleId: string | null; state: GeoOrderState; domain: string | null; publishedUrl: string | null; publishedAt: string | null; priceCny: number | null }>;
   ownedLinks: Array<{ id: string; articleId: string | null; platform: string; url: string; title: string; publishedAt: string | null; status: "active" | "retired"; citedBy: Array<{ engine: GeoEngine; firstSeen: string | null }> }>;
   errors: Array<{ id: string; fingerprint: string | null; engine: GeoEngine; statement: string | null; severity: GeoSeverity | null; status: GeoErrorStatus; snapshotId: string | null; claimId: string | null; action: GeoErrorAction | null; createdAt: string | null }>;
@@ -1017,7 +1025,7 @@ export type GeoStrategyCell = (GeoCell & { date?: string | null; roundId?: strin
 export interface GeoStrategyTargetRow {
   metricId: string;
   name: string;
-  unit: "percent" | "index" | "count";
+  unit: "percent" | "index" | "count" | "ratio";
   pool: "all" | GeoPool;
   tiers: Partial<Record<GeoTierId, {
     target: number | null;
@@ -1183,7 +1191,8 @@ function readSummary(raw: GeoProjectSummary): GeoProjectSummary {
       gvi: {
         ...readGeoCell(gvi),
         target: finite(gvi.target),
-        trend: Array.isArray(gvi.trend) ? gvi.trend.filter((point): point is number => finite(point) !== null) : [],
+        trend: Array.isArray(gvi.trend) ? gvi.trend.map(point => finite(point)) : [],
+        trendCoverage: Array.isArray(gvi.trend) ? gvi.trend.map((_, index) => typeof gvi.trendCoverage?.[index] === "string" ? gvi.trendCoverage[index] : null) : [],
       },
       mention: readGeoCell(headline.mention),
     },
@@ -1247,7 +1256,7 @@ export async function listGeoProjects(): Promise<GeoProjectSummary[]> {
   return (Array.isArray(data?.projects) ? data.projects : []).map(readSummary);
 }
 
-export function createGeoProject(input: { brandName?: string; coverageDays?: number; engines?: string[] } = {}) {
+export function createGeoProject(input: { brandName?: string; coverageDays?: number; engines?: string[]; requestKey?: string; accountGeneration?: string } = {}) {
   return productRequest<{ id: string; projectId: string; sessionId: string | null }>("/geo/projects", "POST", input);
 }
 
@@ -1446,6 +1455,10 @@ export function chooseGeoActionSource(geoId: string, key: string, domain: string
   return productRequest<GeoActionChoiceResult>(`${project(geoId)}/actions/${id(key)}/source`, "POST", { domain });
 }
 
+export function verifyGeoActionSource(geoId: string, key: string) {
+  return productRequest<{ checked: number; verified: number; coolingDown: number; remaining: number; alreadyVerified: number }>(`${project(geoId)}/actions/${id(key)}/verify-source`, "POST", {});
+}
+
 /**
  * 「我已发布，贴链接」: the person published a page of the brand's own and pastes its address. The server registers it exactly as the run's
  * `geo_write owned_links` does — the post-publication re-tests (weeks 1, 2, 4, 8, 12 on the group's questions) and the citation match read
@@ -1470,6 +1483,22 @@ export function getGeoStrategy(geoId: string, scope?: GeoReadScope & {strategyVe
 
 export function getGeoArticles(geoId: string) {
   return productRequest<GeoArticles>(`${project(geoId)}/articles`);
+}
+export function getGeoArticle(geoId: string, articleId: string) {
+  return productRequest<GeoArticle>(`${project(geoId)}/articles/${id(articleId)}`);
+}
+
+/** A filtered page from the complete project catalogue; the legacy article read remains unchanged. */
+export async function getGeoArticleCatalog(geoId: string, input: { search: string; status: string; sort: string; limit: number; offset: number; review?: boolean; snapshot?: string }) {
+  const { review, ...paging } = input;
+  const query = new URLSearchParams({ catalog: "1", ...Object.fromEntries(Object.entries(paging).map(([key, value]) => [key, String(value)])) });
+  if (review) query.set("review", "1");
+  const page = await productRequest<GeoArticleCatalog>(`${project(geoId)}/articles?${query}`);
+  if (!Array.isArray(page.articles) || !Number.isSafeInteger(page.total) || page.total < 0 || !/^[a-f0-9]{32}$/.test(page.snapshot)
+    || input.snapshot && page.snapshot !== input.snapshot || page.limit !== input.limit || page.offset !== input.offset) {
+    throw new Error("The article catalogue is unavailable on this server.");
+  }
+  return page;
 }
 
 export function withdrawGeoArticle(geoId: string, articleId: string) {
@@ -1525,6 +1554,14 @@ export interface GeoStartAnswer {
 export function setGeoMonitoringAutomation(geoId: string, enabled: boolean) {
   return productRequest<{enabled:boolean}>(`${project(geoId)}/monitoring/automation`, "POST", {enabled});
 }
+
+export interface GeoConfirmationPreview {
+  token: string; questionVersion: number | null; questionIds: string[]; engines: string[];
+  repeats: number; maxRounds: number; maxJobAttempts: number; cost: null; allowed: boolean; authorized: boolean;
+}
+export const previewGeoConfirmation = (geoId: string) => productRequest<GeoConfirmationPreview>(`${project(geoId)}/monitoring/confirmation-authorization`);
+export const authorizeGeoConfirmation = (geoId: string, token: string) => productRequest<GeoConfirmationPreview>(`${project(geoId)}/monitoring/confirmation-authorization`, "POST", { token });
+export const revokeGeoConfirmation = (geoId: string) => productRequest<{ authorized: false }>(`${project(geoId)}/monitoring/confirmation-authorization`, "DELETE");
 
 /** “让 AI 做”: starts one step now. The person stays where they are. */
 /** Stops one run of the programme's; what it had done stays. */
@@ -1646,4 +1683,19 @@ export const clearGeoMarketStop = (note: string) => productRequest<{ cleared: bo
 
 export function stageGeoPlanContext(geoId: string, input: {requestKey:string;sessionId:string;mode:"strategy"|"content"|"analysis"|"signal";view?:import("./geoAnalysisClient").GeoAnalysisDescriptor;expectedDigest?:string;focus?:{rowKey:string;columnKey:string};intent?:"explain"|"compare"|"next_steps"|"analyse"|"review"|"correct";selectionRef?:string;strategyVersion?:number;sourceId?:string;url?:string;groupIds?:string[];errorIds?:string[];actionKeys?:string[];signalId?:string;expectedSignalRevision?:number;focusRefs?:string[];previousContextRef?:string}) {
   return productRequest<{referenceId:string;sessionId:string;draft:string;state?:"staged"|"bound";requestId?:string|null}>(`${project(geoId)}/strategy/context`, "POST", input);
+}
+
+/** Stage only the selected current article under GEO authority; the server chooses its producer session. */
+export function stageGeoArticleRevision(geoId: string, articleId: string, versionId: string, digest: string) {
+  return productRequest<{ referenceId: string; sessionId: string; draft: string }>(`${project(geoId)}/articles/${id(articleId)}/revision`, "POST", { versionId, digest, requestId: crypto.randomUUID() });
+}
+
+/** Read text only for a preserved version linked to the named GEO article. */
+export function readGeoArticleVersion(geoId: string, articleId: string, versionId: string, digest: string) {
+  return productRequest<{ versionId: string; digest: string; text: string }>(`${project(geoId)}/articles/${id(articleId)}/version-text?${new URLSearchParams({ versionId, digest })}`);
+}
+
+export function readGeoPublicationVersion(geoId: string, kind: "orders" | "owned-links", recordId: string, versionId: string, digest: string, revision?: number) {
+  const params = new URLSearchParams({ versionId, digest, ...(revision == null ? {} : { revision: String(revision) }) });
+  return productRequest<{ versionId: string; digest: string; text: string }>(`${project(geoId)}/${kind}/${id(recordId)}/version-text?${params}`);
 }

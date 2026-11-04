@@ -128,8 +128,7 @@ function withoutPlatformText(text, tags) {
 /**
  * A researcher's own message without the blocks the platform wrote into it for the model: every tag of the domain's closed
  * list (a scheduled execution's brief and its signed budget marker, a verification's tag, a repair round, a recalled profile,
- * a recalled memory) and `<evimed_result_selection>…</evimed_result_selection>` (a result revision's frozen selection,
- * `resultRevision.bind`, which is the vocabulary's one underscore name). A part left empty is dropped, and a message without
+ * a recalled memory) including result revisions and GEO plan selections. A part left empty is dropped, and a message without
  * a block comes back as the same array, so an ordinary message is never copied.
  * @param {any} content a message's content parts
  * @param {{ injected: readonly string[], wrappers: readonly string[] }} [tags] the frame's vocabulary; the result selection alone when omitted

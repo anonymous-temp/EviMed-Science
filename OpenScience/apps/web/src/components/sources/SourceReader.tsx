@@ -1,3 +1,4 @@
+import { sessionOwner } from "@/lib/sessionLifecycle";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { ChevronLeft, FileQuestion, MessageSquare } from "lucide-react";
@@ -7,7 +8,7 @@ import { parseFailureMessage } from "@/lib/errorText";
 import { listPath, readReaderView, readerPath, type KnowledgeListState, type ReaderTab } from "@/lib/knowledgeNav";
 import { productErrorMessage } from "@/lib/productClient";
 import { useProjectStore } from "@/lib/projects";
-import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
+import { prepareRuntimeUiIntent, newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import {
   decideDuplicateGroup, getSource, listDuplicateCandidates, refetchSource, removeDocument, retrySource,
   type DuplicateGroup, type KnowledgePage, type SourceRecord,
@@ -199,13 +200,15 @@ export function SourceReader({ sourceId, listState, mode, backLabel, refresh = 0
   const openConversation = (projectOf: string, draft: string, excerpt?: ConversationExcerpt) => {
     if (!source) return;
     const page = isKnowledgePage(source) ? knowledgePage : null;
+    const owner = sessionOwner();
     void select(projectOf, () => {
-      navigate("/app/chat", { flushSync: true, state: { runtimeUiIntent: {
+      if (owner !== sessionOwner()) return;
+      navigate("/app/chat", { flushSync: true, state: { runtimeUiIntent: prepareRuntimeUiIntent({
         ...newRuntimeUiIntent(excerpt
           ? `请结合“${source.display.title}”第 ${source.revision} 版${excerpt.page ? `，第 ${excerpt.page} 页` : ""}的这段原文继续讨论（字符 ${excerpt.start}–${excerpt.end}）：\n\n${excerpt.text}`
           : page ? knowledgeConversationDraft(source.display.title) : draft),
         references: conversationReferences({ id: source.id, title: source.display.title }, page?.sources ?? []),
-      } } });
+      }) } });
     }).catch((failure) => toast.error(webErrorMessage(failure)));
   };
   const prepareConversation = (excerpt?: ConversationExcerpt) => {

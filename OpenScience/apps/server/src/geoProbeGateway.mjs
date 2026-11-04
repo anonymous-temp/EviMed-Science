@@ -593,7 +593,8 @@ export function probeUpstream(config, { fetchImpl = fetch, pollIntervalMs = 1_00
    */
   async function put(spec, signal) {
     const sent = await exchange("ask", askPayload(spec), signal);
-    if (sent.httpStatus !== 202 && !isJobEnvelope(sent.body)) return { sent, requestId: null };
+    if (sent.httpStatus !== 202 && Array.isArray(sent.body?.results) && !isJobEnvelope(sent.body)) return { sent, requestId: null };
+    if (sent.httpStatus !== 202 && !isJobEnvelope(sent.body) && sent.body?.request_id == null) return { sent, requestId: null };
     const requestId = sent.body.request_id;
     if (typeof requestId !== "string" || !requestIdPattern.test(requestId)) {
       count("accepted_result_unavailable");
@@ -776,7 +777,7 @@ export function probeUpstream(config, { fetchImpl = fetch, pollIntervalMs = 1_00
     try {
       // The id is on record before anything is waited for: whatever happens to this call, the task is not lost and not asked again.
       await request.onAccepted?.({ requestId, ...spec });
-      const first = isJobEnvelope(sent.body) ? sent : null;
+      const first = isJobEnvelope(sent.body) && [...TASK_UNFINISHED, ...TASK_FINISHED].includes(sent.body.job_status) ? sent : null;
       if (detach && first === null) return { pending: true, requestId, jobStatus: "queued" };
       const read = await collect({ requestId, spec, signal, wait: !detach, first, delayFirst: true });
       if (read.pending) return { pending: true, requestId, jobStatus: read.jobStatus };

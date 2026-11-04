@@ -1,6 +1,6 @@
 import { useGeoDestinationPath } from "../useGeoPath";
-import { useMemo, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router";
+import { useMemo } from "react";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router";
 import { getGeoCluster, type GeoAction, type GeoClusterView, type GeoSourceRow, type GeoProject } from "@/lib/geoClient";
 import { GeoAnalysisEntry } from "../GeoAnalysisEntry";
 import { Button } from "@/components/ui/Button";
@@ -17,7 +17,7 @@ import { GEO_VIEW_PARAM } from "../geoTabs";
 import { clusterName } from "../spine/clusterModel";
 import { ClusterLink } from "../spine/ClusterLink";
 import { ClusterDrawerHost } from "../spine/ClusterDrawerHost";
-import { GEO_CLUSTER_FILTER_PARAM, GEO_ENGINE_PARAM, GEO_SOURCE_PARAM, useGeoSearchChange, useGeoSearchParam, useGeoFilterReset } from "../spine/drawerParams";
+import { GEO_CLUSTER_FILTER_PARAM, GEO_ENGINE_PARAM, GEO_SOURCE_PARAM, geoDrawerActivation, geoDrawerSearch, geoDrawerSelectionState, useGeoSearchChange, useGeoSearchParam, useGeoFilterReset } from "../spine/drawerParams";
 import { routeWord, unavailableWords } from "../spine/actionModel";
 import {
   candidatesOf,
@@ -53,10 +53,6 @@ const ONLY_OPTIONS: ReadonlyArray<FilterOption<Only>> = [
 ];
 
 type SourcesView = "cited" | "placeable";
-const VIEW_OPTIONS: ReadonlyArray<FilterOption<SourcesView>> = [
-  { value: "cited", label: "AI 引用谁" },
-  { value: "placeable", label: "可投放" },
-];
 
 type SortKey = "cited" | "wrong" | "mentions";
 
@@ -211,9 +207,10 @@ function SourceList({
   const setQuery = (value: string) => setQueryValue(value || null);
   const sortKey: SortKey = ["cited", "wrong", "mentions"].includes(params.get("sourceSort") ?? "") ? params.get("sourceSort") as SortKey : "cited";
   const sort = useMemo(() => ({ key: sortKey, descending: params.get("sourceOrder") !== "asc" }), [sortKey, params]);
-  const [opened, setOpened] = useState<Opened | null>(null);
+  const { state } = useLocation();
   const scopeKey = geoReadScopeQuery(useGeoReadScope());
-  const currentOpened = opened?.scopeKey === scopeKey ? opened : null;
+  const opened = (state as { geoSourceDetail?: Opened } | null)?.geoSourceDetail;
+  const currentOpened = opened?.scopeKey === scopeKey && geoDrawerActivation(params, state, ["source"]) ? opened : null;
   const addressed = params.get(GEO_SOURCE_PARAM);
 
   const cited = useMemo(() => new Set(sources.flatMap((source) => Object.keys(source.cited ?? {}))), [sources]);
@@ -256,20 +253,19 @@ function SourceList({
   const activeKey = currentOpened?.key ?? addressed;
   const drawerRow = activeKey ? sources.find((source) => source.domain === activeKey || (source.id || source.domain) === activeKey) ?? null : null;
   const openSource = (source: GeoSourceRow, engine: string, focus: "wrong" | null) => {
-    setOpened({ key: source.id || source.domain, engine, focus, scopeKey });
-    setParams((previous) => {
-      const copy = new URLSearchParams(previous);
-      copy.set(GEO_SOURCE_PARAM, source.domain);
-      return copy;
-    });
+    const detail: Opened = { key: source.id || source.domain, engine, focus, scopeKey };
+    const selection = { kind: "source" as const, id: source.domain };
+    const next = geoDrawerSelectionState(state, selection);
+    setParams(previous => geoDrawerSearch(previous.toString(), selection), { state: { ...next, geoSourceDetail: detail } });
   };
   const closeSource = () => {
-    setOpened(null);
+    const next = geoDrawerSelectionState(state, null);
+    delete next.geoSourceDetail;
     setParams((previous) => {
       const copy = new URLSearchParams(previous);
       copy.delete(GEO_SOURCE_PARAM);
       return copy;
-    }, { replace: true });
+    }, { replace: true, state: next });
   };
   // Pressing the sorted column again turns it over; another column starts from the most.
   const sortBy = (key: string) => change({ sourceSort: key, sourceOrder: sort.key === key && sort.descending ? "asc" : "desc" });
@@ -281,7 +277,6 @@ function SourceList({
     : `${needle ? "匹配 " : ""}${places.length.toLocaleString("zh-CN")} 个可投放的地方`;
 
   useGeoToolbar({
-    navigation: [{ kind: "chips", label: "视图", options: VIEW_OPTIONS, value: view, onChange: (value) => change({ [GEO_VIEW_PARAM]: value === "cited" ? null : value }) }],
     filters: [
       ...(view === "cited" ? [
         // A menu and not a chip for each engine: five chips are most of the band's row, and a row that wraps when a choice adds its
@@ -311,9 +306,9 @@ function SourceList({
 
   return (
     <section aria-label="信源" className="flex flex-col gap-6">
+      {view === "placeable" && <Button variant="text" size="sm" className="self-start" onClick={() => change({ [GEO_VIEW_PARAM]: null })}>返回引用来源</Button>}
       {view === "cited" && (
         <>
-          <GeoAnalysisEntry geoId={geoId} project={project} initialView="V17" title="信源引用分析" embedded />
           {rows.length === 0 ? (
             <Note action={narrowed || needle ? <Button variant="secondary" size="sm" onClick={clearFilters}>清除筛选</Button> : undefined}>
               {needle ? `没有包含“${query.trim()}”的信源。` : "没有符合的信源。"}
@@ -359,6 +354,8 @@ function SourceList({
               </ul>
             </Disclosure>
           )}
+          <GeoAnalysisEntry geoId={geoId} project={project} initialView="V17" title="信源引用分析" embedded />
+          <Button variant="text" size="sm" className="self-start" onClick={() => change({ [GEO_VIEW_PARAM]: "placeable" })}>查看可投放渠道</Button>
         </>
       )}
       {view === "placeable" && (

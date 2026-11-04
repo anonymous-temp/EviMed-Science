@@ -1,3 +1,4 @@
+import { expectOpaqueRuntimeUiIntent } from "@/test/runtimeUiIntentAssertions";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation } from "react-router";
@@ -28,7 +29,7 @@ describe("continuing research from a card", () => {
     expect(client.continueResearchFromCard).toHaveBeenCalledWith("ec_1");
     expect(projects.select).toHaveBeenCalledWith("continue-1", expect.any(Function));
     const state = JSON.parse(screen.getByTestId("where").getAttribute("data-state")!);
-    expect(state.runtimeUiIntent).toMatchObject({ kind: "create", projectId: "continue-1", sessionId: "card-abc", draft: "请基于下面这张证据卡继续研究" });
+    expect(expectOpaqueRuntimeUiIntent(state, "continue-1")).toMatchObject({ kind: "create", sessionId: "card-abc", draft: "请基于下面这张证据卡继续研究" });
     expect(continuationIntent(continuation).requestId).toMatch(/\S/);
   });
   it("says which sources could not be saved before it opens, and opens when the researcher goes on", async () => {

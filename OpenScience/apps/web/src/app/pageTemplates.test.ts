@@ -16,7 +16,7 @@ import { compositionFacts, PAGES } from "@/test/compositionFixtures";
 const here = dirname(fileURLToPath(import.meta.url));
 const table = JSON.parse(readFileSync(join(here, "../../../../scripts/ops/page-templates.json"), "utf8")) as {
   templates: Record<string, { name: string; tablist: string; toolbar: string; stepRail: string; outline: string; longViewports: number }>;
-  views: Array<{ view: string; template: string; module?: string; band?: string }>;
+  views: Array<{ view: string; template: string; module?: string; band?: string; workflow?: string; area?: string; collection?: string }>;
 };
 
 describe("the page table's templates", () => {
@@ -46,6 +46,13 @@ describe("the page table's templates", () => {
     // A module's tabs, and a record read inside the module's band (`band`: one 循证 GEO answer, under 问题与回答).
     for (const view of table.views.filter((entry) => entry.module || entry.band)) expect(view.template, view.view).toBe("T3");
     for (const view of table.views.filter((entry) => !entry.module && !entry.band)) expect(view.template, view.view).not.toBe("T3");
+  });
+
+  it("uses a T1 project collection and declares a GEO area for every project result", () => {
+    expect(table.views.find((view) => view.view === "geo")).toMatchObject({ template: "T1", collection: "geo-project-cards" });
+    const geo = table.views.filter((view) => view.module === "geo" || view.band === "geo");
+    expect(geo.every((view) => view.workflow === "geo-areas")).toBe(true);
+    expect(new Set(geo.map((view) => view.area))).toEqual(new Set(["work", "analytics", "content", "context"]));
   });
 
   it("let a reading page be read from the top in six windows and anything else in twelve", () => {

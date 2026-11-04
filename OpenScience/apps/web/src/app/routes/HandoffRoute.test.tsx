@@ -1,3 +1,4 @@
+import { expectOpaqueRuntimeUiIntent, optionalOpaqueRuntimeUiIntent } from "@/test/runtimeUiIntentAssertions";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
@@ -5,6 +6,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { handoffFragment, handoffFromFragment, type HandoffInput } from "@/lib/researchHandoff";
 import { HandoffRoute } from "./HandoffRoute";
+import { runtimeUiIntentFromState } from "@/lib/runtimeUiNavigation";
+import { WEB_SESSION_ENDED_EVENT } from "@/lib/sessionLifecycle";
 
 const client = vi.hoisted(() => ({ productRequest: vi.fn() }));
 vi.mock("@/lib/productClient", async (importOriginal) => ({
@@ -25,8 +28,8 @@ const handoff: HandoffInput = {
 
 function Probe() {
   const location = useLocation();
-  const intent = (location.state as { runtimeUiIntent?: { kind: string; projectId: string; sessionId: string; draft?: string } } | null)?.runtimeUiIntent;
-  return <div data-testid="location">{location.pathname}{intent ? `|${intent.kind}|${intent.projectId}|${intent.sessionId}|${intent.draft}` : ""}</div>;
+  const intent = optionalOpaqueRuntimeUiIntent(location.state);
+  return <div data-testid="location" data-history={JSON.stringify(location.state)}>{location.pathname}{intent ? `|${intent.kind}|${intent.projectId}|${intent.sessionId}|${intent.draft}` : ""}</div>;
 }
 
 function renderAt(hash: string) {
@@ -62,6 +65,19 @@ describe("转为深度研究", () => {
     expect(client.productRequest).toHaveBeenCalledTimes(1);
     expect(client.productRequest).toHaveBeenCalledWith("/research/handoffs", "POST", { ...handoff, projectId: "study" });
     expect(store.select).toHaveBeenCalledWith("study", expect.any(Function));
+  });
+
+  it("keeps the history marker usable for routing after sign-out without restoring the private draft", async () => {
+    const draft = "私有研究问题与证据摘录";
+    client.productRequest.mockResolvedValue({ projectId: "study", sessionId: "handoff-abc", draft });
+    renderAt(handoffFragment({ ...handoff, projectId: "study" }));
+    const destination = await screen.findByTestId("location");
+    const history = JSON.parse(destination.getAttribute("data-history")!);
+    expect(expectOpaqueRuntimeUiIntent(history, "study").draft).toBe(draft);
+    expect(runtimeUiIntentFromState(history, "another-project")).toBeNull();
+    window.dispatchEvent(new Event(WEB_SESSION_ENDED_EVENT));
+    expect(history.runtimeUiIntent).toMatchObject({ projectId: "study", sessionId: "handoff-abc" });
+    expect(runtimeUiIntentFromState(history, "study")).toBeNull();
   });
 
   it("says what went wrong and tries again on request", async () => {

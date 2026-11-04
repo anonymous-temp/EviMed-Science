@@ -304,3 +304,15 @@ test("a finished run's citing articles are read for their claim references once 
     readFile: async () => { throw Object.assign(new Error("gone"), { code: "ENOENT" }); }, checkReferences: async () => { throw new Error("must not be reached"); } });
   assert.ok(await unreadable(project, { id: "run_refs_4", status: "succeeded", deliverables: [] }));
 });
+
+test('automatic import completeness is scoped to business inputs, not an unread report', options, async () => {
+  const created=await store.createProject({userId:USER,projectId:`receipt-${run}`,engines:['deepseek'],coverageDays:90});
+  const project={id:`receipt-${run}`,userId:USER,workspaceDir:'/not-read'},reads=[];
+  const importer=createGeoDeliveryImport({store,planningContext:async()=>({mode:'strategy',scopeKey:'test',basis:{groups:[]}}),
+    readRunFile:async (_project,_run,path)=>{reads.push(path);if(path!=='deliverables/d/strategy.json')throw new Error('unexpected read');return JSON.stringify({summary:'Preserved strategy'});}});
+  const result=await importer(project,{id:'receipt-run',status:'succeeded',effectiveAgentId:'geo-strategy',artifacts:['deliverables/d/strategy.json','deliverables/d/report.md']});
+  assert.deepEqual(reads,['deliverables/d/strategy.json']);
+  assert.equal(result.completeness.scope,'business_import_candidates');assert.equal(result.completeness.recordedInventoryByteVerification,'unknown');
+  assert.equal(result.completeness.upstreamComplete,null);assert.equal(result.completeness.complete,true);
+  assert.equal((await store.latestStrategy(created.id,{scopeKey:'test'})).summary,'Preserved strategy');
+});

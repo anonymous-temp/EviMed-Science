@@ -1,3 +1,4 @@
+import { expectOpaqueRuntimeUiIntent } from "@/test/runtimeUiIntentAssertions";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation, useNavigate, useNavigationType, useRoutes } from "react-router";
@@ -367,6 +368,8 @@ describe("知识库", () => {
 
   describe("choosing documents for a conversation", () => {
     it("takes several selected sources to an unsent conversation in the one project they all take effect in, and excludes a removed selection", async () => {
+      const source = { ...guideline, id: `src_${"a".repeat(32)}` };
+      mocks.listSources.mockResolvedValue(listing([source, sheet]));
       renderPage();
       const user = userEvent.setup();
       const first = await screen.findByRole("checkbox", { name: `选择“${guideline.display.title}”` });
@@ -384,10 +387,10 @@ describe("知识库", () => {
       await user.click(within(screen.getByRole("group", { name: "所选资料" })).getByRole("button", { name: "在对话中使用" }));
       const location = screen.getByTestId("location");
       await waitFor(() => expect(location).toHaveTextContent("/app/chat"));
-      const intent = JSON.parse(location.dataset.state!).runtimeUiIntent;
-      expect(intent.references).toEqual([{ id: guideline.id, title: guideline.display.title }]);
+      const intent = expectOpaqueRuntimeUiIntent(JSON.parse(location.dataset.state!), "default");
+      expect(intent.references).toEqual([{ id: source.id, title: source.display.title }]);
+      expect(intent.draft).toBe("请根据所选资料回答我的问题，引用时标出处。\n\n我的问题：");
       expect(intent.draft).not.toMatch(/src_|knowledge-base|\.evimed-/);
-      expect(intent.send).not.toBe(true);
       expect(selectSpy).toHaveBeenCalledWith("default", expect.any(Function));
     });
 
@@ -565,12 +568,14 @@ describe("知识库", () => {
     });
 
     it("removes only the deleted source from selected references", async () => {
+      const retained = { ...sheet, id: `src_${"b".repeat(32)}` };
+      mocks.listSources.mockResolvedValue(listing([guideline, retained]));
       renderPage();
       await userEvent.click(await screen.findByRole("checkbox", { name: `选择“${guideline.display.title}”` }));
       await userEvent.click(screen.getByRole("checkbox", { name: `选择“${sheet.display.title}”` }));
       await menuOf(guideline.display.title);
       await userEvent.click(await screen.findByRole("menuitem", { name: "删除" }));
-      mocks.listSources.mockResolvedValue(listing([sheet]));
+      mocks.listSources.mockResolvedValue(listing([retained]));
       await userEvent.click(await screen.findByRole("button", { name: "删除" }));
       await waitFor(() => expect(screen.getByRole("group", { name: "所选资料" })).toHaveTextContent("已选 1 份"));
       await userEvent.click(within(screen.getByRole("group", { name: "所选资料" })).getByRole("button", { name: "在对话中使用" }));
@@ -578,7 +583,7 @@ describe("知识库", () => {
       await userEvent.click(screen.getByRole("button", { name: "我的研究" }));
       await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "在对话中使用" }));
       await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/app/chat"));
-      expect(JSON.parse(screen.getByTestId("location").dataset.state!).runtimeUiIntent.references).toEqual([{ id: sheet.id, title: sheet.display.title }]);
+      expect(expectOpaqueRuntimeUiIntent(JSON.parse(screen.getByTestId("location").dataset.state!), "default").references).toEqual([{ id: retained.id, title: retained.display.title }]);
     });
 
     it("deletes after a confirmation", async () => {

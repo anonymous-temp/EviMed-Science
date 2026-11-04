@@ -32,7 +32,7 @@ before(async () => {
     for (const [round, date] of [['old', '2026-10-01'], ['now', '2026-10-02']]) {
         await store.query("INSERT INTO evimed_geo.rounds(id,user_id,geo_project_id,kind,status,set_version,engines,sample_date,surface,ref) VALUES($1,$2,$3,'baseline','done',1,'{deepseek}',$4::date,$5::jsonb,$6::jsonb)", [round, user.id, project.id, date, JSON.stringify({ mode: 'web', measurementContract: { samplingMode: 'legacy_recurring', repeats: 1, metricIds: ['M-01', 'M-16', 'M-17'], sourceBasis: 'answers' } }), JSON.stringify({ evaluationBasis: basis })]);
         await store.query("INSERT INTO evimed_geo.snapshots(id,user_id,geo_project_id,round_id,question_id,engine,asked_at,status,answer_text,surface) SELECT $1||'-'||n,$2,$3,$1,'q'||n,'deepseek',$4::date,'valid','Exact original answer '||n,'{\"mode\":\"web\"}' FROM generate_series(1,50)n", [round, user.id, project.id, date]);
-        await store.query("INSERT INTO evimed_geo.facts(snapshot_id,user_id,geo_project_id,judged_at,brands,mentions_ours,checks,registry_key,parser_version) SELECT $1||'-'||n,$2,$3,$4::date,jsonb_build_array(jsonb_build_object('name','Ours','ours',true,'count',CASE WHEN $1='now' AND n<=10 THEN 1 ELSE 0 END),jsonb_build_object('name','Rival','competitor',true,'count',CASE WHEN n<=20 THEN 1 ELSE 0 END)),$1='now' AND n<=10,'{\"judgementCoverage\":{\"status\":\"complete\"}}',$5,'geo-parser-test' FROM generate_series(1,50)n", [round, user.id, project.id, date, registryKey(brandRegistry(product, competitors), basis.owned)]);
+        await store.query("INSERT INTO evimed_geo.facts(snapshot_id,user_id,geo_project_id,judged_at,brands,mentions_ours,checks,judge_extract,registry_key,parser_version) SELECT $1||'-'||n,$2,$3,$4::date,jsonb_build_array(jsonb_build_object('name','Ours','ours',true,'count',CASE WHEN $1='now' AND n<=10 THEN 1 ELSE 0 END),jsonb_build_object('name','Rival','competitor',true,'count',CASE WHEN n<=20 THEN 1 ELSE 0 END)),$1='now' AND n<=10,'{\"judgementCoverage\":{\"status\":\"complete\"}}','{\"rubricVersion\":\"fixture-v1\"}',$5,'geo-parser-test' FROM generate_series(1,50)n", [round, user.id, project.id, date, registryKey(brandRegistry(product, competitors), basis.owned)]);
     }
 });
 after(async () => { await database?.close(); await isolated?.drop(); });
@@ -82,7 +82,7 @@ test('C2 exact two-period members, frozen native context, read/export roles and 
 async function addReviewRound({ id, date, evaluationBasis = basis, refusals = 0, ownPositive = 10, rivalPositive = 20 }) {
     await store.query("INSERT INTO evimed_geo.rounds(id,user_id,geo_project_id,kind,status,set_version,engines,sample_date,surface,ref) VALUES($1,$2,$3,'baseline','done',1,'{deepseek}',$4::date,$5::jsonb,$6::jsonb)", [id, user.id, project.id, date, JSON.stringify({ mode: 'web', measurementContract: { samplingMode: 'legacy_recurring', repeats: 1, metricIds: ['M-01', 'M-16', 'M-17'], sourceBasis: 'answers' } }), JSON.stringify({ evaluationBasis })]);
     await store.query("INSERT INTO evimed_geo.snapshots(id,user_id,geo_project_id,round_id,question_id,engine,asked_at,status,answer_text,surface) SELECT $1||'-'||n,$2,$3,$1,'q'||n,'deepseek',$4::date,CASE WHEN n>50 THEN 'refusal' ELSE 'valid' END,CASE WHEN n>50 THEN 'Refused' ELSE 'Retained answer '||n END,'{\"mode\":\"web\"}' FROM generate_series(1,$5::integer)n", [id, user.id, project.id, date, 50 + refusals]);
-    await store.query("INSERT INTO evimed_geo.facts(snapshot_id,user_id,geo_project_id,judged_at,brands,mentions_ours,checks,registry_key,parser_version) SELECT $1||'-'||n,$2,$3,$4::date,jsonb_build_array(jsonb_build_object('name','Ours','ours',true,'count',CASE WHEN n<=$5 THEN 1 ELSE 0 END)) || CASE WHEN $6::boolean THEN jsonb_build_array(jsonb_build_object('name','Rival','competitor',true,'count',CASE WHEN n<=$7 THEN 1 ELSE 0 END)) ELSE '[]'::jsonb END,n<=$5,'{\"judgementCoverage\":{\"status\":\"complete\"}}',$8,'geo-parse-2' FROM generate_series(1,50)n", [id, user.id, project.id, date, ownPositive, evaluationBasis.competitors.length > 0, rivalPositive, registryKey(brandRegistry(evaluationBasis.product, evaluationBasis.competitors), evaluationBasis.owned)]);
+    await store.query("INSERT INTO evimed_geo.facts(snapshot_id,user_id,geo_project_id,judged_at,brands,mentions_ours,checks,judge_extract,registry_key,parser_version) SELECT $1||'-'||n,$2,$3,$4::date,jsonb_build_array(jsonb_build_object('name','Ours','ours',true,'count',CASE WHEN n<=$5 THEN 1 ELSE 0 END)) || CASE WHEN $6::boolean THEN jsonb_build_array(jsonb_build_object('name','Rival','competitor',true,'count',CASE WHEN n<=$7 THEN 1 ELSE 0 END)) ELSE '[]'::jsonb END,n<=$5,'{\"judgementCoverage\":{\"status\":\"complete\"}}','{\"rubricVersion\":\"fixture-v1\"}',$8,'geo-parse-2' FROM generate_series(1,50)n", [id, user.id, project.id, date, ownPositive, evaluationBasis.competitors.length > 0, rivalPositive, registryKey(brandRegistry(evaluationBasis.product, evaluationBasis.competitors), evaluationBasis.owned)]);
 }
 async function freezeReviewSelection(full, receiptName) {
     const { GeoPlanContext } = await import('../src/geoPlanContext.mjs'), { ProductDocuments } = await import('../src/productStore.mjs');
@@ -145,4 +145,146 @@ test('C2 review F2 actual registry expansion charts and members use the exact pa
         assert.deepEqual(page.items.map(item => item.snapshotId).sort(), Array.from({ length: 50 }, (_, index) => `expanded-${index + 1}`).sort());
     }
     await freezeReviewSelection(full, 'V08-registry-expansion');
+});
+
+test('C2 sampling surfaces fence comparison and trend while preserving observations', opts, async () => {
+    const { readGeoSelection } = await import('../src/geoReadScope.mjs');
+    const base = { mode: 'web', deep: false, newChat: true, city: 'Beijing' };
+    const range = { from: '2026-10-02', to: '2026-10-02', compareFrom: '2026-10-01', compareTo: '2026-10-01' };
+    const observe = async () => {
+        const selection = await readGeoSelection(store, project, range);
+        const view = await service.analysis(user, project.id, { ...range, viewId: 'V03', metricId: 'M-01', dimension: 'engine' });
+        const trend = await service.analysis(user, project.id, { viewId: 'V08', metricId: 'M-16', timeGrain: 'round', from: '2026-10-01', to: '2026-10-02' });
+        return { selection, view, trend };
+    };
+    try {
+        await store.query("UPDATE evimed_geo.snapshots SET surface=$1::jsonb WHERE round_id IN ('old','now')", [JSON.stringify(base)]);
+        let result = await observe();
+        assert.equal(result.view.rows[0].values.delta.value, 20);
+        assert.equal(result.view.rows[0].values.rank.value, 1);
+        assert.equal(result.trend.rows.find(row => row.dimensions.entityKey === 'fixed-rival' && row.dimensions.period === 'round').dimensions.trendComparable, true);
+        for (const [field, value] of [['deep', true], ['newChat', false], ['city', 'Shanghai']]) {
+            await store.query("UPDATE evimed_geo.snapshots SET surface=$1::jsonb WHERE round_id='now'", [JSON.stringify({ ...base, [field]: value })]);
+            result = await observe();
+            const row = result.view.rows.find(row => row.dimensions.engine === 'deepseek');
+            assert.deepEqual([row.values.previous.value, row.values.current.value], [0, 20], `${field}: preserve observed values`);
+            assert.deepEqual([row.values.delta.value, row.values.rank.value], [null, null], `${field}: no comparison or ranking`);
+            assert.equal(result.selection.comparison.comparable, false);
+            assert.equal(result.selection.comparison.commonQuestionEngineModes, 0);
+            const points = result.trend.rows.filter(row => row.dimensions.entityKey === 'fixed-rival' && row.dimensions.period === 'round');
+            assert.deepEqual(points.map(point => point.values.current.value), [40, 40]);
+            assert.ok(points.every(point => point.dimensions.trendComparable === false));
+            assert.ok(result.trend.chart.series.every(series => series.values.every(value => value === null)));
+        }
+        await store.query("UPDATE evimed_geo.snapshots SET surface=$1::jsonb WHERE round_id='now'", [JSON.stringify({ ...base, transport: 'other', responseDigest: 'not-a-sampling-field' })]);
+        result = await observe();
+        assert.equal(result.view.rows[0].values.delta.value, 20, 'transport metadata does not change sampling');
+        assert.equal(result.view.rows[0].values.rank.value, 1);
+        assert.equal(result.trend.rows.find(row => row.dimensions.entityKey === 'fixed-rival' && row.dimensions.period === 'round').dimensions.trendComparable, true);
+        const { geoMetricInputCoverage } = await import('../src/geoComparison.mjs');
+        const oneRound = () => readGeoSelection(store, project, { round: 'now' });
+        const beforeMetadata = await oneRound();
+        const metricOf = selected => selected.computed.cells.find(cell => cell.metricId === 'M-01' && cell.scope === 'engine' && cell.engine === 'deepseek' && !cell.variant && !cell.rival);
+        const coverageBefore = geoMetricInputCoverage(beforeMetadata, metricOf(beforeMetadata), 1);
+        assert.ok(coverageBefore);
+        await store.query("UPDATE evimed_geo.snapshots SET surface=surface || '{\"transport\":\"different-within-round\"}'::jsonb WHERE id='now-1'");
+        const afterMetadata = await oneRound();
+        assert.equal(afterMetadata.selection.coverage, beforeMetadata.selection.coverage);
+        assert.equal(geoMetricInputCoverage(afterMetadata, metricOf(afterMetadata), 1), coverageBefore);
+        await store.query(`INSERT INTO evimed_geo.snapshots(id,user_id,geo_project_id,round_id,question_id,engine,asked_at,status,answer_text,surface)
+          SELECT 'now-q1-extra',user_id,geo_project_id,round_id,question_id,engine,asked_at,status,answer_text, surface || '{"deep":true}'::jsonb FROM evimed_geo.snapshots WHERE id='now-1'`);
+        await store.query(`INSERT INTO evimed_geo.facts(snapshot_id,user_id,geo_project_id,judged_at,brands,mentions_ours,checks,judge_extract,registry_key,parser_version)
+          SELECT 'now-q1-extra',user_id,geo_project_id,judged_at,brands,mentions_ours,checks,judge_extract,registry_key,parser_version FROM evimed_geo.facts WHERE snapshot_id='now-1'`);
+        result = await observe();
+        assert.equal(result.selection.comparison.currentSelection.counts.snapshots, 50, 'same question with an unmatched surface is not mixed into the common cohort');
+        const saved = await readGeoSelection(store, project, { selectionRef: result.selection.comparison.currentSelection.reference });
+        assert.equal(saved.rows.length, 50); assert.ok(saved.rows.every(row => row.snapshotId !== 'now-q1-extra'));
+        const empty = await readGeoSelection(store, project, { round: 'now' }, { subset: { snapshotIds: [], eligibleOnly: true } });
+        assert.equal(empty.rows.length, 0, 'an empty explicit snapshot subset cannot become the whole project');
+        const emptyReplay = await readGeoSelection(store, project, { selectionRef: empty.selection.reference });
+        assert.equal(emptyReplay.rows.length, 0);
+        const foreign = await readGeoSelection(store, project, { round: 'now' }, { subset: { snapshotIds: ['not-a-project-snapshot'], eligibleOnly: true } });
+        assert.equal(foreign.rows.length, 0);
+        const legacy = await readGeoSelection(store, project, { round: 'now' }, { subset: { keys: [JSON.stringify(['q1','deepseek','web'])], eligibleOnly: true } });
+        const replay = await readGeoSelection(store, project, { selectionRef: legacy.selection.reference });
+        assert.deepEqual(replay.rows.map(row => row.snapshotId).sort(), legacy.rows.map(row => row.snapshotId).sort(), 'old mode-only subset stays readable without broadening');
+        await store.query("DELETE FROM evimed_geo.facts WHERE snapshot_id='now-q1-extra'");
+        await store.query("DELETE FROM evimed_geo.snapshots WHERE id='now-q1-extra'");
+        await store.query("UPDATE evimed_geo.facts SET mentions_ours=false, brands=jsonb_set(brands,'{0,count}','0') WHERE snapshot_id LIKE 'now-%'");
+        result = await observe();
+        assert.equal(result.view.rows[0].values.delta.value, 0, 'equal observations remain a comparable zero');
+        assert.equal(result.view.rows[0].values.rank.value, 1);
+    } finally {
+        await store.query("UPDATE evimed_geo.snapshots SET surface='{\"mode\":\"web\"}'::jsonb WHERE round_id IN ('old','now')");
+        await store.query("UPDATE evimed_geo.facts SET mentions_ours=(substring(snapshot_id from '([0-9]+)$')::int<=10), brands=jsonb_set(brands,'{0,count}',to_jsonb(CASE WHEN substring(snapshot_id from '([0-9]+)$')::int<=10 THEN 1 ELSE 0 END)) WHERE snapshot_id LIKE 'now-%'");
+    }
+});
+
+test('C2 engines can use different stable sampling surfaces', opts, async () => {
+    const scope = { from: '2026-10-02', to: '2026-10-02', compareFrom: '2026-10-01', compareTo: '2026-10-01' };
+    try {
+        await store.query("UPDATE evimed_geo.rounds SET engines='{deepseek,kimi}' WHERE id IN ('old','now')");
+        await store.query("UPDATE evimed_geo.snapshots SET surface='{\"mode\":\"web\",\"deep\":false,\"newChat\":true,\"city\":\"Beijing\"}' WHERE round_id IN ('old','now')");
+        await store.query(`INSERT INTO evimed_geo.snapshots(id,user_id,geo_project_id,round_id,question_id,engine,asked_at,status,answer_text,surface)
+          SELECT id||'-kimi',user_id,geo_project_id,round_id,question_id,'kimi',asked_at,status,answer_text,'{"mode":"web","deep":true,"newChat":false,"city":"Shanghai"}'::jsonb
+          FROM evimed_geo.snapshots WHERE round_id IN ('old','now') AND engine='deepseek'`);
+        await store.query(`INSERT INTO evimed_geo.facts(snapshot_id,user_id,geo_project_id,judged_at,brands,mentions_ours,checks,judge_extract,registry_key,parser_version)
+          SELECT snapshot_id||'-kimi',user_id,geo_project_id,judged_at,brands,mentions_ours,checks,judge_extract,registry_key,parser_version
+          FROM evimed_geo.facts WHERE snapshot_id ~ '^(old|now)-[0-9]+$'`);
+        let view = await service.analysis(user, project.id, { ...scope, viewId: 'V03', metricId: 'M-01', dimension: 'engine' });
+        assert.deepEqual(view.rows.map(row => [row.dimensions.engine, row.values.delta.value]).sort(), [['deepseek',20],['kimi',20]]);
+        let trend = await service.analysis(user, project.id, { viewId: 'V08', metricId: 'M-16', timeGrain: 'round', from: '2026-10-01', to: '2026-10-02' });
+        assert.ok(trend.rows.filter(row => row.dimensions.entityKey === 'fixed-rival' && row.dimensions.period === 'round').every(row => row.dimensions.trendComparable === true));
+        await store.query("UPDATE evimed_geo.snapshots SET surface=jsonb_set(surface,'{deep}','false'::jsonb) WHERE round_id='now' AND engine='kimi'");
+        view = await service.analysis(user, project.id, { ...scope, viewId: 'V03', metricId: 'M-01', dimension: 'engine' });
+        const kimi = view.rows.find(row => row.dimensions.engine === 'kimi');
+        assert.deepEqual([kimi.values.previous.value, kimi.values.current.value, kimi.values.delta.value, kimi.values.rank.value], [0,20,null,null]);
+        for (const period of ['previous', 'current']) {
+            const member = kimi.values[period].members;
+            const page = await service.analysisMembers(user, project.id, { selectionRef: member.selectionRef, ...member.view,
+                rowKey: member.rowKey, columnKey: member.columnKey, expectedDigest: member.expectedDigest, limit: 50, offset: 0 });
+            assert.equal(page.items.length, 50);
+            assert.ok(page.items.every(item => item.engine === 'kimi'), `${period}: members use that period's observations`);
+        }
+        assert.equal(view.rows.find(row => row.dimensions.engine === 'deepseek').values.delta.value, 20);
+        trend = await service.analysis(user, project.id, { viewId: 'V08', metricId: 'M-16', timeGrain: 'round', from: '2026-10-01', to: '2026-10-02' });
+        assert.ok(trend.rows.filter(row => row.dimensions.entityKey === 'fixed-rival' && row.dimensions.period === 'round').every(row => row.dimensions.trendComparable === false));
+    } finally {
+        await store.query("DELETE FROM evimed_geo.facts WHERE snapshot_id LIKE '%-kimi'");
+        await store.query("DELETE FROM evimed_geo.snapshots WHERE id LIKE '%-kimi'");
+        await store.query("UPDATE evimed_geo.rounds SET engines='{deepseek}' WHERE id IN ('old','now')");
+        await store.query("UPDATE evimed_geo.snapshots SET surface='{\"mode\":\"web\"}' WHERE round_id IN ('old','now')");
+    }
+});
+
+test('C2 retains unmatched group observations and member provenance beside a comparable group', opts, async () => {
+    const scope = { from: '2026-10-02', to: '2026-10-02', compareFrom: '2026-10-01', compareTo: '2026-10-01' };
+    try {
+        await store.query("INSERT INTO evimed_geo.question_groups(id,user_id,geo_project_id,set_version,pool,name) VALUES('other-group',$1,$2,1,'P2','Other')", [user.id, project.id]);
+        await store.query("INSERT INTO evimed_geo.questions(id,user_id,geo_project_id,group_id,set_version,pool,text,is_measured) SELECT 'other-q'||n,$1,$2,'other-group',1,'P2','Other '||n,true FROM generate_series(1,40)n", [user.id, project.id]);
+        for (const [round, date] of [['old','2026-10-01'],['now','2026-10-02']]) {
+            await store.query(`INSERT INTO evimed_geo.snapshots(id,user_id,geo_project_id,round_id,question_id,engine,asked_at,status,answer_text,surface)
+              SELECT $1||'-other-'||n,$2,$3,$1,'other-q'||n,'deepseek',$4::date,'valid','Other answer','{"mode":"web","deep":false}'::jsonb FROM generate_series(1,40)n`, [round,user.id,project.id,date]);
+            await store.query(`INSERT INTO evimed_geo.facts(snapshot_id,user_id,geo_project_id,judged_at,brands,mentions_ours,checks,judge_extract,registry_key,parser_version)
+              SELECT $1||'-other-'||n,$2,$3,$4::date,jsonb_build_array(jsonb_build_object('name','Ours','ours',true,'count',CASE WHEN $1='now' AND n<=20 THEN 1 ELSE 0 END)),
+                $1='now' AND n<=20,'{"judgementCoverage":{"status":"complete"}}','{"rubricVersion":"fixture-v1"}',$5,'geo-parser-test' FROM generate_series(1,40)n`, [round,user.id,project.id,date,registryKey(brandRegistry(product,competitors),basis.owned)]);
+        }
+        await store.query("UPDATE evimed_geo.snapshots SET surface=jsonb_set(surface,'{deep}','true'::jsonb) WHERE round_id='now' AND question_id LIKE 'other-q%'");
+        const view = await service.analysis(user, project.id, { ...scope, viewId:'V03', metricId:'M-01', dimension:'group' });
+        const comparable = view.rows.find(row => row.dimensions.groupId === 'g');
+        const unmatched = view.rows.find(row => row.dimensions.groupId === 'other-group');
+        assert.equal(comparable.values.delta.value, 20);
+        assert.deepEqual([unmatched.values.previous.value, unmatched.values.current.value, unmatched.values.delta.value, unmatched.values.rank.value], [0,50,null,null]);
+        for (const period of ['previous','current']) {
+            const member = unmatched.values[period].members;
+            const page = await service.analysisMembers(user,project.id,{selectionRef:member.selectionRef,...member.view,rowKey:member.rowKey,columnKey:member.columnKey,expectedDigest:member.expectedDigest,limit:50,offset:0});
+            assert.equal(page.items.length,40);
+            assert.ok(page.items.every(item => item.questionId.startsWith('other-q')));
+        }
+    } finally {
+        await store.query("DELETE FROM evimed_geo.facts WHERE snapshot_id LIKE '%-other-%'");
+        await store.query("DELETE FROM evimed_geo.snapshots WHERE id LIKE '%-other-%'");
+        await store.query("DELETE FROM evimed_geo.questions WHERE group_id='other-group'");
+        await store.query("DELETE FROM evimed_geo.question_groups WHERE id='other-group'");
+    }
 });

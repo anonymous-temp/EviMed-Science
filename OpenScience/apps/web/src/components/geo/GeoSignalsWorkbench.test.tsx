@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { MemoryRouter } from 'react-router';
+import { MemoryRouter, useLocation } from 'react-router';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { GeoSignalsWorkbench } from './GeoSignalsWorkbench';
 import type { GeoSignalDetail, GeoSignalPage } from '@/lib/geoSignalsClient';
@@ -19,6 +19,45 @@ const signal = (extra: Partial<GeoSignalDetail> = {}): GeoSignalDetail => ({ id:
 const attempt = { contextRef: 'gpc_previous', sessionId: 'original-session', requestId: 'request', runId: 'exact-run', submitted: true, createdAt: '2026-10-24T00:00:00Z', startedAt: '2026-10-24T00:01:00Z', finishedAt: null, status: 'running', state: 'processing' as const, executionState: 'processing' as const, availability: 'available' as const, reason: null, result: null };
 const page = (items: GeoSignalDetail[]): GeoSignalPage => ({ items, total: items.length, counts: { pending: items.length, started: 0, processing: 0, completed: 0, ignored: 0, failed_recoverable: 0 }, actionable: items.length, nextCursor: null });
 const draw = (path = '/app/geo/geo?signal=gs_exact', value = project) => render(<MemoryRouter initialEntries={[path]}><GeoSignalsWorkbench geoId="geo" project={value as never} /></MemoryRouter>);
+
+it('shows a compact finding count that expands to the actual records on request', async () => {
+  api.list.mockResolvedValue(page([signal()]));
+  render(<MemoryRouter initialEntries={['/app/geo/geo?engines=kimi']}><GeoSignalsWorkbench geoId="geo" project={project as never} compact /></MemoryRouter>);
+  expect(await screen.findByText('当前有 1 条待处理发现')).toBeVisible();
+  expect(screen.queryByText('引用资料已更正')).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: '查看全部发现' }));
+  expect(await screen.findByText('引用资料已更正')).toBeVisible();
+  expect(screen.getByRole('combobox', { name: '处理状态' })).toBeVisible();
+});
+
+it('retains a pending conversation marker while opening the finding list', async () => {
+  const marker = { kind: 'open', projectId: 'control', requestId: 'request_1', sessionId: 'session_1' };
+  function State() { return <output aria-label="导航状态">{JSON.stringify(useLocation().state)}</output>; }
+  api.list.mockResolvedValue(page([signal()]));
+  render(<MemoryRouter initialEntries={[{ pathname: '/app/geo/geo', search: '?conversation=open&session=session_1', state: { runtimeUiIntent: marker } }]}><GeoSignalsWorkbench geoId="geo" project={project as never} compact /><State /></MemoryRouter>);
+  fireEvent.click(await screen.findByRole('button', { name: '查看全部发现' }));
+  expect(JSON.parse(screen.getByLabelText('导航状态').textContent ?? '{}')).toEqual({ runtimeUiIntent: marker });
+});
+
+it('does not apply a hidden history filter to the compact actionable count', async () => {
+  api.list.mockImplementation(async (_geo, query) => query.state === 'ignored' ? page([]) : page([signal()]));
+  render(<MemoryRouter><GeoSignalsWorkbench geoId="geo" project={project as never} compact /></MemoryRouter>);
+  fireEvent.click(await screen.findByRole('button', { name: '查看全部发现' }));
+  fireEvent.change(await screen.findByRole('combobox', { name: '处理状态' }), { target: { value: 'ignored' } });
+  await waitFor(() => expect(api.list).toHaveBeenLastCalledWith('geo', { limit: 20, state: 'ignored' }));
+  fireEvent.click(screen.getByRole('button', { name: '收起历史' }));
+  expect(await screen.findByText('当前有 1 条待处理发现')).toBeVisible();
+  expect(api.list).toHaveBeenLastCalledWith('geo', { limit: 5, actionable: true });
+  fireEvent.click(screen.getByRole('button', { name: '查看全部发现' }));
+  expect(await screen.findByRole('combobox', { name: '处理状态' })).toHaveValue('ignored');
+});
+
+it('can return to the findings list when an old detail link fails to load', async () => {
+  api.detail.mockRejectedValue(new Error('unavailable'));
+  draw();
+  fireEvent.click(await screen.findByRole('button', { name: '返回记录' }));
+  expect(await screen.findByText('引用资料已更正')).toBeVisible();
+});
 beforeEach(() => {
   vi.clearAllMocks(); api.members.mockImplementation(async(_geo,_signal,input)=>({side:input.side,basisDigest:input.expectedBasisDigest,total:0,items:[],more:false,nextOffset:null})); api.moduleSession.mockImplementation(async(geoId,target)=>{const sessionId=target.sessionId??(await api.project(geoId)).sessionId??'primary-session';return {projectId:'control',sessionId,scope:{kind:'geo',geoProjectId:geoId,sessionId}};}); api.detail.mockResolvedValue(signal()); api.list.mockResolvedValue(page([signal()])); api.project.mockResolvedValue({ projectId: 'control', sessionId: 'fresh-session' });
   api.stage.mockImplementation(async (_geo, body) => ({ referenceId: 'gpc_exact', sessionId: body.sessionId, draft: 'Review selected preserved versions.', state: 'staged' })); api.open.mockResolvedValue(true);
@@ -192,4 +231,34 @@ it.each([false,true])('keeps a zero-current-stage preview compact when other ste
  if(hasStageHistory)expect(await screen.findByText('Question-stage historical finding')).toBeVisible();
  else expect(await screen.findByText('当前条件下没有记录。')).toBeVisible();
  expect(screen.getByRole('combobox',{name:'处理状态'})).toBeVisible();
+});
+
+
+it.each(['sampling_surface_unverified', 'judge_version_unrecorded'])('keeps historical readings without rendering a null delta or a verified threshold: %s', async comparability => {
+  api.detail.mockResolvedValue(signal({ kind: 'group_changed', basis: {
+    comparability, group: { id:'g', label:'Historical group', pool:'P2', questionVersion:3 },
+    policy: { threshold:5, noiseMeasured:false },
+    cells: [{ key:'metric', metricId:'M-01', delta:null, reason:comparability,
+      before:{value:20,numerator:44,denominator:220}, after:{value:40,numerator:88,denominator:220} }],
+    sides:{before:{selectionRef:'gsel_before',count:220},after:{selectionRef:'gsel_after',count:220}},
+  } }));
+  draw();
+  expect(await screen.findByText('品牌提及率：20% → 40%')).toBeVisible();
+  expect(screen.getByText(/前次 44 \/ 220；本次 88 \/ 220；差异不可比/)).toBeVisible();
+  expect(screen.queryByText(/null 个百分点/)).toBeNull();
+  expect(screen.queryByText(/观测差异绝对值大于/)).toBeNull();
+  expect(screen.getByRole('link',{name:'查看 AI 表现'})).toHaveAttribute('href',expect.stringContaining('/app/geo/geo/visibility'));
+  expect(screen.getByRole('link',{name:'查看前轮观测样本'})).toBeVisible();
+  expect(screen.getByRole('button',{name:'让 AI 分析'})).toBeVisible();
+  expect(screen.getByText(comparability === 'sampling_surface_unverified' ? '历史观测缺少可核对的采样口径，保留两期读数。' : '历史观测的比较依据不完整，保留两期读数。')).toBeVisible();
+});
+
+
+it('does not replace a missing historical sample scope with the current project analysis', async () => {
+  api.detail.mockResolvedValue(signal({kind:'group_changed',basis:{comparability:'sampling_surface_unverified',
+    cells:[{key:'metric',metricId:'M-01',delta:null,before:{value:20,numerator:44,denominator:220},after:{value:40,numerator:88,denominator:220}}]}}));
+  draw();
+  expect(await screen.findByText('品牌提及率：20% → 40%')).toBeVisible();
+  expect(screen.queryByRole('link',{name:/查看[前后]轮观测样本/})).toBeNull();
+  expect(screen.getByRole('link',{name:'查看 AI 表现'})).toBeVisible();
 });

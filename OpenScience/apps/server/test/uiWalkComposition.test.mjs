@@ -5,22 +5,29 @@
 // good page that passes it and a page that breaks it, and a finding names the element (what the reader would look for on the page).
 import assert from "node:assert/strict";
 import test from "node:test";
-import { applyBaseline, compositionFindings, familyFindings, finding, templateOf } from "../../../scripts/ops/ui-walk.mjs";
+import { applyBaseline, compositionFindings, familyFindings, finding, geoAreaAddressHolds, geoTaskProgressFindings, templateOf } from "../../../scripts/ops/ui-walk.mjs";
 
 const box = (top, height = 40, left = 296, width = 1152) => ({ top, bottom: top + height, left, right: left + width, width, height });
 
-/** What a module page of the framework reads like when it is right (a GEO tab at the owner's width, scrolled to its top). */
+/** A GEO plan in its project-work area. */
 function good(over = {}) {
   return {
     viewport: { width: 1512, height: 945 }, height: 1800, title: { text: "测试品牌", ...box(26, 32) },
     chrome: { ...box(60, 124, 272, 1200), position: "sticky", sticky: true, held: { scrolled: 480, before: 60, after: 0, scrollerTop: 0 } },
-    stepRail: { ...box(60), folded: false, count: 8, inChrome: true, steps: [] },
-    tablists: [{ label: "项目视图", tabs: 8, dots: 0, inChrome: true, inToolbar: false, inSection: false, ...box(100) }],
+    stepRail: null,
+    geoAreas: { labels: ["项目对话", "任务与成果", "方案"], selected: ["方案"], work: 0, progress: 0, execution: 0, dock: 0, conversation: 0 },
+    tablists: [{ label: "项目工作", tabs: 3, dots: 0, inChrome: true, inToolbar: false, inSection: false, ...box(100) }],
     viewGroups: [], toolbars: [{ label: "筛选与操作", inChrome: true, inSection: false, ...box(148, 28), controls: {} }],
     controlsAfterContent: [], orphans: [], tags: [], tagLike: [], words: [], primaries: [], zeroCounts: [], outline: { outlines: 0, showMore: 0 },
     chartGrids: [], empties: [], notes: [], headline: 1, activity: 0, stepStates: [], ...over,
   };
 }
+const analytics = ["可见度", "医学核查", "引用来源", "问题与回答"];
+const sources = (over = {}) => good({
+  geoAreas: { ...good().geoAreas, labels: analytics, selected: ["引用来源"] },
+  tablists: [{ ...good().tablists[0], label: "AI 表现", tabs: 4 }],
+  ...over,
+});
 const rules = (name, viewport, facts) => compositionFindings(name, viewport, facts).notices.map((entry) => entry.rule);
 const texts = (name, viewport, facts) => compositionFindings(name, viewport, facts).notices.map((entry) => entry.text);
 
@@ -28,7 +35,7 @@ test("a module page that is right has nothing to say, at both widths", () => {
   assert.deepEqual(compositionFindings("geo-plan", "desktop", good()), { failures: [], notices: [] });
   // A phone folds the rail into one chip and scrolls below the app's bar: the band stands where its scroll area starts.
   const phone = good({
-    viewport: { width: 390, height: 844 }, stepRail: { ...box(148, 40, 16, 358), folded: true, count: 8, inChrome: true, steps: [] },
+    viewport: { width: 390, height: 844 },
     chrome: { ...box(148, 124, 0, 390), position: "sticky", sticky: true, held: { scrolled: 295, before: 148, after: 48, scrollerTop: 48 } },
   });
   assert.deepEqual(compositionFindings("geo-plan", "phone", phone), { failures: [], notices: [] });
@@ -43,28 +50,28 @@ test("control after content: a toolbar or a chip group below the table, chart or
 });
 
 test("a toolbar further down than the window's height and a fifth is below the fold of the page it filters", () => {
-  const low = good({ toolbars: [{ label: "筛选与操作", inChrome: false, inSection: false, ...box(1200, 28), controls: {} }] });
+  const low = sources({ toolbars: [{ label: "筛选与操作", inChrome: false, inSection: false, ...box(1200, 28), controls: {} }] });
   assert.deepEqual(rules("geo-sources", "desktop", low), ["toolbar-position"]);
   assert.match(texts("geo-sources", "desktop", low)[0], /the toolbar “筛选与操作” starts at 1200 px, below 1134 px \(1.2 × the window\)/);
-  assert.deepEqual(rules("geo-sources", "desktop", good({ toolbars: [{ label: "筛选与操作", inChrome: true, inSection: false, ...box(1133, 28), controls: {} }] })), []);
+  assert.deepEqual(rules("geo-sources", "desktop", sources({ toolbars: [{ label: "筛选与操作", inChrome: true, inSection: false, ...box(1133, 28), controls: {} }] })), []);
   // Under a page introduction (task entry above the list's toolbar) the fold is counted from the introduction's end: what the toolbar
   // filters starts there. A toolbar far below the introduction is still below the fold.
   const introduced = { introduction: { ...box(120, 600) } };
-  assert.deepEqual(rules("geo-sources", "desktop", good({ ...introduced, toolbars: [{ label: "筛选与操作", inChrome: true, inSection: false, ...box(1200, 28), controls: {} }] })), []);
-  assert.deepEqual(rules("geo-sources", "desktop", good({ ...introduced, toolbars: [{ label: "筛选与操作", inChrome: true, inSection: false, ...box(1900, 28), controls: {} }] })), ["toolbar-position"]);
+  assert.deepEqual(rules("geo-sources", "desktop", sources({ ...introduced, toolbars: [{ label: "筛选与操作", inChrome: true, inSection: false, ...box(1200, 28), controls: {} }] })), []);
+  assert.deepEqual(rules("geo-sources", "desktop", sources({ ...introduced, toolbars: [{ label: "筛选与操作", inChrome: true, inSection: false, ...box(1900, 28), controls: {} }] })), ["toolbar-position"]);
   // A block's own toolbar stands where its block does: the evidence card's 筛选来源 is 1,331 px down a page of 2.4 windows, above its own list.
-  assert.deepEqual(rules("geo-sources", "desktop", good({ toolbars: [{ label: "筛选来源", inChrome: false, inSection: true, ...box(1331, 28), controls: {} }, ...good().toolbars] })), []);
+  assert.deepEqual(rules("geo-sources", "desktop", sources({ toolbars: [{ label: "筛选来源", inChrome: false, inSection: true, ...box(1331, 28), controls: {} }, ...good().toolbars] })), []);
 });
 
 test("toggle layers: one tab list, one view switch written as radios, one toolbar on a page; a block's own tab list and toolbar are its block's", () => {
   const list = (label, over = {}) => ({ label, tabs: 3, dots: 0, inChrome: false, inToolbar: false, inSection: false, ...box(300), ...over });
   const bar = (label, over = {}) => ({ label, inChrome: false, inSection: false, ...box(400, 28), controls: {}, ...over });
   const two = good({ tablists: [list("项目视图", { inChrome: true }), list("动态视图", { inToolbar: true })] });
-  assert.deepEqual(texts("geo-plan", "desktop", two), ["geo-plan@desktop: [toggle-layers] 2 tab lists on the page (one): “项目视图”、“动态视图”"]);
+  assert.deepEqual(texts("geo-plan", "desktop", two), ["geo-plan@desktop: [toggle-layers] 2 tab lists on the page (one): “项目视图”、“动态视图”", "geo-plan@desktop: [geo-areas] GEO must expose the current area's named tabs and one correct selection"]);
   assert.match(texts("geo-plan", "desktop", good({ viewGroups: [{ label: "图表视图", inSection: false, ...box(300) }, { label: "显示切换", inSection: false, ...box(340) }] }))[0], /^geo-plan@desktop: \[toggle-layers\] 2 view switches written as radio groups \(one\): “图表视图”、“显示切换”$/);
   assert.match(texts("geo-plan", "desktop", good({ toolbars: [bar("筛选与操作", { inChrome: true }), bar("试验先例的检索")] }))[0], /\[toggle-layers\] 2 toolbars on the page \(one in the band\): “筛选与操作 at 400 px”、“试验先例的检索 at 400 px”/);
   // A toolbar of a section (Section's `toolbar` slot) and a tab list inside a card are not a second layer of the page.
-  assert.deepEqual(rules("geo-plan", "desktop", good({ toolbars: [bar("筛选与操作", { inChrome: true }), bar("本节", { inSection: true })], tablists: [list("项目视图", { inChrome: true }), list("本节", { inSection: true })] })), []);
+  assert.deepEqual(rules("geo-plan", "desktop", good({ toolbars: [bar("筛选与操作", { inChrome: true }), bar("本节", { inSection: true })], tablists: [list("项目工作", { inChrome: true, tabs: 3 }), list("本节", { inSection: true })] })), []);
 });
 
 test("the band holds: it is sticky, it is where the scroll area starts after the page moved, and a module's steps are in it", () => {
@@ -74,22 +81,21 @@ test("the band holds: it is sticky, it is where the scroll area starts after the
   assert.match(texts("geo-plan", "desktop", slid)[0], /\[chrome\] the band is at -420 px after the page moved 480 px; the scroll area starts at 0 px, where a band that holds stands/);
   assert.deepEqual(rules("geo-plan", "desktop", position({ held: { scrolled: 480, before: 60, after: 2, scrollerTop: 0 } })), [], "two pixels is the tolerance");
   assert.deepEqual(rules("geo-plan", "desktop", position({ held: null })), [], "a page too short to scroll cannot show that it holds, and says nothing");
-  // The tab list and the rail are in the band or they scroll away.
-  const loose = good({ tablists: [{ label: "项目视图", tabs: 8, dots: 0, inChrome: false, inToolbar: false, inSection: false, ...box(400) }], stepRail: { ...box(300), folded: false, count: 8, inChrome: false, steps: [] } });
-  assert.deepEqual(texts("geo-plan", "desktop", loose), ["geo-plan@desktop: [chrome] the tab list “项目视图” is outside the band, so it scrolls away", "geo-plan@desktop: [chrome] the step rail is outside the band, so it scrolls away"]);
-  // GEO retains workflow navigation; VCR exposes saved research objects without a mandatory step rail.
+  const loose = good({ tablists: [{ ...good().tablists[0], inChrome: false }] });
+  assert.deepEqual(texts("geo-plan", "desktop", loose), ["geo-plan@desktop: [chrome] the tab list “项目工作” is outside the band, so it scrolls away"]);
   assert.deepEqual(rules("geo-plan", "desktop", good({ chrome: null })), ["chrome"]);
   assert.match(texts("vcr-trial", "desktop", good({ stepRail: null, tablists: [] }))[0], /\[chrome\] the research workspace must expose one pinned result-view selector/);
   assert.deepEqual(rules("vcr-trial", "desktop", good({ stepRail: null, tablists: [], viewSelector: { count: 1 } })), []);
   assert.deepEqual(rules("vcr-trial", "desktop", good({ stepRail: null, tablists: [], viewSelector: { count: 0 } })), ["chrome"]);
-  assert.deepEqual(rules("vcr-trial", "desktop", good({ tablists: [], viewSelector: { count: 1 } })), ["step-rail"]);
+  assert.deepEqual(rules("vcr-trial", "desktop", good({ tablists: good().tablists, viewSelector: { count: 1 } })), ["step-rail"]);
 });
 
 test("a page keeps to its template's slots: a list page has no step rail, a settings page no tab list or toolbar", () => {
+  const stepRail = { ...box(60), inChrome: true };
   const list = templateOf("frontier");
   assert.equal(list.template.name, "list page");
-  assert.deepEqual(rules("frontier", "desktop", good({ tablists: [{ label: "动态视图", tabs: 6, dots: 0, inChrome: true, inToolbar: true, inSection: false, ...box(100) }] })), ["template-slot"]);
-  assert.match(texts("frontier", "desktop", good({ tablists: [] }))[0], /^frontier@desktop: \[template-slot\] a list page has a step rail \(only a module page does\)$/);
+  assert.deepEqual(rules("frontier", "desktop", good({ stepRail, tablists: [{ label: "动态视图", tabs: 6, dots: 0, inChrome: true, inToolbar: true, inSection: false, ...box(100) }] })), ["template-slot"]);
+  assert.match(texts("frontier", "desktop", good({ stepRail, tablists: [] }))[0], /^frontier@desktop: \[template-slot\] a list page has a step rail \(only a module page does\)$/);
   const settings = good({ stepRail: null, chrome: null, toolbars: [], tablists: [{ label: "设置", tabs: 3, dots: 0, inChrome: false, inToolbar: false, inSection: false, ...box(100) }] });
   assert.match(texts("account-usage", "desktop", settings)[0], /^account-usage@desktop: \[template-slot\] a settings page has a tab list: “设置”$/);
   assert.match(texts("account-usage", "desktop", good({ stepRail: null, chrome: null, tablists: [] }))[0], /\[template-slot\] a settings page has a toolbar at 148 px/);
@@ -163,7 +169,7 @@ test("an empty state is a mark, a title and a way forward: an action, or the rea
 
 /** The report's pages for a module's tabs, as `familyFindings` reads them. */
 function moduleTabs(counts, { tops = [100, 100, 100], heights = [124, 124, 124], lefts = [296, 296, 296] } = {}) {
-  const names = ["geo-overview", "geo-visibility", "geo-plan"];
+  const names = ["geo-sources", "geo-visibility", "geo-accuracy"];
   return Object.fromEntries(names.map((name, index) => [`${name}@desktop`, { composition: good({
     title: { text: "测试品牌", ...box(26, 32, lefts[index]) }, stepRail: { ...box(60), folded: false, count: counts[index], inChrome: true, steps: [] },
     chrome: { ...box(60, heights[index], 272, 1200), position: "sticky", sticky: true, held: null },
@@ -183,16 +189,16 @@ test("a module's tabs show the same steps and stand at the same height, and the 
   assert.deepEqual(familyFindings(moduleTabs([8, 8, 8])), []);
   const steps = familyFindings(moduleTabs([8, 7, 8]));
   assert.deepEqual(steps.map((entry) => entry.rule), ["module-steps"]);
-  assert.equal(steps[0].text, "geo@desktop: the steps are not the same on every tab: geo-overview 8, geo-visibility 7, geo-plan 8");
+  assert.equal(steps[0].text, "geo-analytics@desktop: the steps are not the same on every tab: geo-sources 8, geo-visibility 7, geo-accuracy 8");
   const tabRow = familyFindings(moduleTabs([8, 8, 8], { tops: [100, 100, 148] }));
   assert.deepEqual(tabRow.map((entry) => entry.rule), ["module-chrome"]);
-  assert.match(tabRow[0].text, /the tab row stands at a different height on some tabs: geo-overview 100 px, geo-visibility 100 px, geo-plan 148 px/);
+  assert.match(tabRow[0].text, /the tab row stands at a different height on some tabs: geo-sources 100 px, geo-visibility 100 px, geo-accuracy 148 px/);
   assert.deepEqual(familyFindings(moduleTabs([8, 8, 8], { tops: [100, 101, 102] })), [], "two pixels is the tolerance");
-  assert.equal(familyFindings(moduleTabs([8, 8, 8], { heights: [124, 124, 84] }))[0].text, "geo@desktop: the band is not the same height on every tab: geo-overview 124 px, geo-visibility 124 px, geo-plan 84 px");
+  assert.equal(familyFindings(moduleTabs([8, 8, 8], { heights: [124, 124, 84] }))[0].text, "geo-analytics@desktop: the band is not the same height on every tab: geo-sources 124 px, geo-visibility 124 px, geo-accuracy 84 px");
   // The left edge: the family's majority is the page's own; a page that starts elsewhere is named with the number it should have.
   const edge = familyFindings(moduleTabs([8, 8, 8], { lefts: [296, 296, 248] }));
-  assert.deepEqual(edge.map((entry) => [entry.rule, entry.view]), [["left-edge", "geo-plan@desktop"]]);
-  assert.equal(edge[0].text, "geo-plan@desktop: the title starts at 248 px; the other pages of geo start at 296 px");
+  assert.deepEqual(edge.map((entry) => [entry.rule, entry.view]), [["left-edge", "geo-accuracy@desktop"]]);
+  assert.equal(edge[0].text, "geo-accuracy@desktop: the title starts at 248 px; the other pages of geo start at 296 px");
   // Only desktops are compared for the edge; a module's second study is its own group.
   const phone = Object.fromEntries(Object.entries(moduleTabs([8, 8, 8], { lefts: [16, 16, 24] })).map(([view, page]) => [view.replace("@desktop", "@phone"), page]));
   assert.deepEqual(familyFindings(phone), []);
@@ -214,36 +220,44 @@ test("a finding of a rule is accepted by the baseline entry that names the rule,
   assert.deepEqual(finding("orphan-sentence", "geo-plan@desktop", "x", 3).rule, "orphan-sentence");
 });
 
-test("循证 GEO's eight steps are its navigation (V3 plan, 2026-10-23): no second, project-level result selector beside them", () => {
-  // The rail of eight steps with their states, a step's own views in a contextual 「分析视图」 select (not counted: it is no 「查看：」), and
-  // no selector of the eight result views — what the plan removed (§一.1, §3.1).
-  const rail = good({ tablists: [], viewSelector: { count: 0, top: null } });
+test("GEO area tabs, task progress, result dock, and project collection are structural contracts", () => {
   for (const viewport of ["desktop", "phone"]) {
-    assert.deepEqual(compositionFindings("geo-plan", viewport, rail).notices, []);
-    assert.deepEqual(compositionFindings("geo-answer", viewport, rail).notices, [], "one answer is read in the same band");
-    const selector = texts("geo-plan", viewport, { ...rail, viewSelector: { count: 1, top: 148 } });
-    assert.equal(selector.length, 1);
-    assert.match(selector[0], /\[chrome\] the module's steps are its navigation: a second, project-level result selector/);
-    assert.ok(rules("geo-plan", viewport, { ...rail, stepRail: { ...rail.stepRail, count: 7 } }).includes("step-rail"));
-    assert.ok(rules("geo-plan", viewport, { ...rail, stepRail: null }).includes("step-rail"), "the steps are the navigation: without them there is none");
-    // 虚拟临床研究 has no step rail since the 2026-10-25 reset: its six result destinations are one pinned selector.
-    assert.ok(rules("vcr-trial", viewport, rail).includes("chrome"), "VCR requires its research-object selector, not GEO workflow controls");
-    assert.deepEqual(rules("vcr-trial", viewport, { ...rail, stepRail: null, viewSelector: { count: 1, top: 148 } }), []);
+    assert.deepEqual(rules("geo-sources", viewport, sources()), []);
+    assert.ok(rules("geo-sources", viewport, sources({ tablists: [] })).includes("geo-areas"));
+    assert.ok(rules("geo-sources", viewport, sources({ geoAreas: { ...sources().geoAreas, selected: ["可见度"] } })).includes("geo-areas"));
+    assert.ok(rules("geo-plan", viewport, good({ geoAreas: { ...good().geoAreas, labels: ["项目对话", "方案"] } })).includes("geo-areas"));
+    assert.ok(rules("geo-plan", viewport, good({ viewSelector: { count: 1 } })).includes("chrome"));
+    const work = { ...good().geoAreas, selected: ["项目对话"], work: 1, progress: 1, execution: 1 };
+    assert.deepEqual(rules("geo-overview", viewport, good({ geoAreas: work })), []);
+    assert.ok(rules("geo-overview", viewport, good({ geoAreas: { ...work, progress: 0 } })).includes("geo-areas"));
+    assert.ok(rules("geo-plan", viewport, good({ geoAreas: { ...good().geoAreas, dock: 1, conversation: 2 } })).includes("geo-areas"));
   }
-  const pages = Object.fromEntries(["geo-overview", "geo-plan"].map((name) => [`${name}@desktop`, { composition: rail }]));
-  assert.ok(!familyFindings(pages).some((entry) => entry.rule === "module-steps"));
-});
-
-
-test("adopted GEO exposes only contextual analysis siblings while retaining all eight steps", () => {
-  for (const [step, selectors] of [["diagnosis", 1], ["sources", 1], ["monitoring", 1], ["evidence", 0], [null, 0]]) {
-    const facts = good({ tablists: [], viewSelector: { count: 0 }, geoContext: { adopted: true, step, selectors } });
-    assert.ok(!rules("geo-plan", "desktop", facts).includes("chrome"));
-    assert.ok(rules("geo-plan", "desktop", { ...facts, geoContext: { ...facts.geoContext, selectors: selectors ? 0 : 1 } }).includes("chrome"));
-    assert.ok(rules("geo-plan", "desktop", { ...facts, stepRail: { ...facts.stepRail, count: 7 } }).includes("step-rail"));
+  const card = { links: [{ name: "品牌", href: "/app/geo/g1" }], status: true };
+  const geoAreas = { collections: 1, grid: true, cards: [card] };
+  assert.deepEqual(rules("geo", "desktop", good({ geoAreas })), []);
+  for (const invalid of [{ ...geoAreas, grid: false }, { ...geoAreas, cards: [card, card] }, { ...geoAreas, cards: [{ ...card, status: false }] }, null]) {
+    assert.ok(rules("geo", "desktop", good({ geoAreas: invalid })).includes("geo-areas"));
   }
 });
 
+test("GEO task progress rejects missing states, duplicated steps and invalid destinations", () => {
+  const initial = "https://walk.test/app/geo/g1";
+  const scope = { engines: "deepseek" };
+  const task = { label: "诊断", state: "已完成", href: initial + "/accuracy?engines=deepseek#geo-errors" };
+  const facts = { label: "任务进度（1）", rows: [task] };
+  assert.deepEqual(geoTaskProgressFindings(initial, facts, scope), []);
+  assert.deepEqual(geoTaskProgressFindings(initial, { empty: true }, scope), []);
+  assert.ok(geoTaskProgressFindings(initial, {}, scope).length);
+  for (const rows of [[task, task], [{ ...task, state: "" }], [{ ...task, href: task.href.replace("g1", "g2") }]]) {
+    assert.ok(geoTaskProgressFindings(initial, { ...facts, rows }, scope).length);
+  }
+  const result = initial + "/visibility?engines=deepseek&session=s1&conversation=open";
+  const addressed = { ...scope, session: "s1", conversation: "open" };
+  assert.equal(geoAreaAddressHolds(initial, "/visibility", result, addressed), true);
+  for (const wrong of [result.replace("s1", "s2"), result.replace("engines=deepseek&", ""), result + "&session=s1", result.replace("g1", "g2")]) {
+    assert.equal(geoAreaAddressHolds(initial, "/visibility", wrong, addressed), false);
+  }
+});
 
 test("a named selection toolbar has one local primary; row markers and duplicate primaries remain findings", () => {
   const primary = { text: "Mark selected read", ...box(128), inHeader: false, excused: false, localGroup: { kind: "selection", declared: true, primaries: 1 } };

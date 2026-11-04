@@ -59,6 +59,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
   /** @type {string | null | undefined} */ let previousSession;
   let actions = Promise.resolve();
   const requests = new Map();
+  /** @type {string | null} */ let latestNavigationRequest = null;
   /** @type {any} */ let pendingNavigation;
   /** @type {Map<string, AbortController>} */ const searches = new Map();
   /** @param {string} type @param {any} [fields] */
@@ -123,7 +124,23 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
       if (!ready) { request.queued = false; retain(command); return; }
       try {
         let sessionId = intent.sessionId;
-        if (intent.kind === 'create') sessionId = await createBoundSession(sessionId);
+        // Scoped bootstraps carry an access projection. It is a UI hint, not authority: the server still checks every operation.
+        // A delegated frame is never allowed to create/adopt a session. Wait for the exact authorised list row instead of asking the
+        // kernel to create a different conversation when its snapshot has not yet caught up with the control plane.
+        const scoped = Object.hasOwn(frame, 'access');
+        if (scoped) {
+          if (intent.kind !== 'open') throw new Error('Scoped frames cannot create sessions');
+          const generation = ctx.connection.generation.getSnapshot();
+          for (let attempt = 0; attempt < 4; attempt++) {
+            await ctx.sessions.refresh();
+            if (disposed || !ready || ctx.connection.generation.getSnapshot() !== generation || latestNavigationRequest !== requestId) {
+              throw new Error('Scoped navigation is no longer current');
+            }
+            if (ctx.sessions.list.getSnapshot().byId?.[sessionId]) break;
+            if (attempt < 3) await new Promise(resolve => (target.setTimeout ?? globalThis.setTimeout)(resolve, 150));
+          }
+          if (!ctx.sessions.list.getSnapshot().byId?.[sessionId]) throw new Error('Scoped session unavailable');
+        } else if (intent.kind === 'create') sessionId = await createBoundSession(sessionId);
         else {
           // Opening is the kernel's own door: the list is refreshed and the main view retains the session by the id it was
           // asked for. Nothing here may call `session/create` to "adopt" a session: from 0.2.1 the kernel reuses a named
@@ -222,7 +239,25 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     return {};
   }
   let observedTurn = { sessionId: /** @type {string | null} */ (null), running: false };
+  const scopedStartup = Object.hasOwn(frame, 'access') ? target.__EVIMED_SCOPED_STARTUP__ : null;
+  let startupOpening = false;
+  let startupOpened = false;
+  let startupDone = false;
+  function openScopedStartup() {
+    if (!scopedStartup || startupDone || startupOpening || disposed || !validId(scopedStartup.sessionId)) return;
+    const root = scopedStartup.sessionId;
+    if (!ctx.sessions.list.getSnapshot().byId?.[root]) return;
+    if (!startupOpened) {
+      startupOpening = true;
+      try { ctx.uiWorkspace.openSession(root); startupOpened = true; } catch { /* Wait for a later native list update. */ }
+      finally { startupOpening = false; }
+    }
+    if (startupOpened && mainViewSession(ctx.sessions.list.getSnapshot()) === root) {
+      startupDone = scopedStartup.release(root) === true;
+    }
+  }
   function sessionChanged() {
+    openScopedStartup();
     if (!ready || !activated || disposed) return;
     const snapshot = ctx.sessions.list.getSnapshot();
     const sessionId = mainViewSession(snapshot, previousSession ?? null);
@@ -539,6 +574,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     if (requests.size >= 128) { post('ack', { requestId: data.requestId, ok: false, error: 'NAVIGATION_CAPACITY' }); return; }
     const request = { signature, ack: undefined, queued: false };
     requests.set(data.requestId, request);
+    latestNavigationRequest = data.requestId;
     schedule({ requestId: data.requestId, intent, request, seq: data.seq });
   }
   /**
@@ -747,6 +783,8 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
   target.addEventListener('message', message);
   target.addEventListener('keydown', keydown);
   const unsubscribe = ctx.sessions.list.subscribe(sessionChanged);
+  scopedStartup?.onFailure?.(() => { if (!disposed) { unavailable(); post('error', { error: 'NATIVE_NOT_READY' }); } });
+  openScopedStartup();
   const unsubscribeGeneration = ctx.connection.generation.subscribe(() => {
     if (!ctx.connection.generation.getSnapshot()) unavailable();
     void establish();

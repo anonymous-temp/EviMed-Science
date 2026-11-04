@@ -40,7 +40,7 @@ const metaOf = (run: ProgrammeRun) => [PROGRAMME_RUN_STATE_LABELS[run.state], ru
  * are in (a run's transcript is read from there), and a `version` that changes when its page has read something new — a run began or
  * ended — so the list is read again in place.
  */
-export function ProgrammeRunsDrawer({ projectId, load, loadMore, version = null, initialRun = null, readRecord, onClose }: {
+export function ProgrammeRunsDrawer({ projectId, load, loadMore, version = null, initialRun = null, readRecord, onClose, inline = false }: {
   projectId: string;
   /** The record, or its first page when the module reads it a page at a time (with `loadMore`). */
   load: () => Promise<ProgrammeRun[] | ProgrammeRunPage>;
@@ -50,6 +50,8 @@ export function ProgrammeRunsDrawer({ projectId, load, loadMore, version = null,
   initialRun?: ProgrammeRun | null;
   readRecord?: ProgrammeRecordReader;
   onClose: () => void;
+  /** GEO project work can read the same records as its main surface. */
+  inline?: boolean;
 }) {
   const [state, setState] = useState<Load>({ kind: "loading" });
   const [round, setRound] = useState(0);
@@ -99,8 +101,8 @@ export function ProgrammeRunsDrawer({ projectId, load, loadMore, version = null,
     return () => window.clearInterval(timer);
   }, [going]);
 
-  return (
-    <Drawer title={record ? record.label : "AI 运行"} onClose={onClose} widthClassName="max-w-md">
+  const content = (
+    <>
       {record ? (
         <ProgrammeRunRecord run={record} projectId={projectId} readRecord={readRecord} onBack={() => setRecord(null)} />
       ) : (
@@ -120,8 +122,13 @@ export function ProgrammeRunsDrawer({ projectId, load, loadMore, version = null,
                 )}
         </div>
       )}
-    </Drawer>
+    </>
   );
+  if (inline) return <section aria-label="任务与成果" className="flex min-w-0 flex-col gap-4">
+    <h2 className="text-section font-semibold text-text">{record ? record.label : "任务与成果"}</h2>
+    {content}
+  </section>;
+  return <Drawer title={record ? record.label : "AI 运行"} onClose={onClose} widthClassName="max-w-md">{content}</Drawer>;
 }
 
 function RunsSkeleton() {

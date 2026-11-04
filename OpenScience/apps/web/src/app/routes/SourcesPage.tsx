@@ -1,5 +1,5 @@
 import { WebApiError } from "@/lib/apiClient";
-import { sessionGeneration, StaleSessionError } from "@/lib/sessionLifecycle";
+import { sessionGeneration, sessionOwner, StaleSessionError } from "@/lib/sessionLifecycle";
 import { Combobox } from "@/components/ui/Combobox";
 import { FileDrop, type FileDropItem } from "@/components/ui/FileDrop";
 import { FormDialog } from "@/components/ui/FormDialog";
@@ -10,7 +10,7 @@ import { SOURCE_KINDS } from "@evimed/domain";
 import { getWebProjectId, hasWebApi, webErrorMessage } from "@/lib/apiClient";
 import { cn } from "@/lib/cn";
 import { useProjectStore } from "@/lib/projects";
-import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
+import { prepareRuntimeUiIntent, newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { removeDocument, refetchSource, retrySource, uploadPersonalFile, type SourceCounts, type SourceKind, type SourceRecord } from "@/lib/sourceClient";
 import { productErrorMessage } from "@/lib/productClient";
 import { pickFiles, uploadFilesToWorkspace } from "@/lib/backend";
@@ -315,11 +315,13 @@ function KnowledgeBase({ sourceId }: { sourceId: string | null }) {
   };
   /** 「在对话中使用」 for a selection: the conversation of the one project that reads every one of them; the person says which where several do. */
   const startConversation = async (projectId: string, sources: SourceRecord[]) => {
+    const owner = sessionOwner();
     keepPlace();
     try {
       await selectProject(projectId, () => {
+        if (owner !== sessionOwner()) return;
         const intent = { ...newRuntimeUiIntent("请根据所选资料回答我的问题，引用时标出处。\n\n我的问题："), references: sources.map((source) => ({ id: source.id, title: source.display.title })) };
-        navigate("/app/chat", { flushSync: true, state: { runtimeUiIntent: intent } });
+        navigate("/app/chat", { flushSync: true, state: { runtimeUiIntent: prepareRuntimeUiIntent(intent) } });
       });
     } catch (failure) { toast.error(webErrorMessage(failure)); }
   };

@@ -111,6 +111,35 @@ test('platform metric switch delegates standard and derived metrics to the exact
  }
 });
 
+test('M-13 analysis names and explains the retained ratio without claiming user conversion',()=>{
+ const input=fixture();
+ for(const row of input.rows){
+  const n=Number(row.snapshotId.split('-').at(-1));
+  row.pool=row.groupId==='g1'?'P1':'P2';
+  row.facts.brands=n<(row.groupId==='g1'?35:20)?[{name:'Ours',ours:true,count:1}]:[];
+ }
+ input.computed=computeGeoSelection(input.rows,input.metricOptions);
+ const view=presentGeoAnalysis(input,{viewId:'V04',metricId:'M-13'},context());
+ assert.ok(view.rows.every(row=>row.label.includes('品牌问法与品类问法提及率比值')));
+ assert.match(view.definition.countingRule,/不是用户转化率/);
+ assert.ok(view.rows.every(row=>row.values.current.unit==='ratio'));
+ assert.deepEqual(view.rows.map(row=>row.values.current.value),[1.75,1.75]);
+ const document=freezeGeoAnalysisDocument(view);
+ assert.match(JSON.stringify(document),/不是用户转化率/);
+ assert.match(JSON.stringify(document),/比值/);
+ assert.match(JSON.stringify(document),/70%\/40%/);
+ const genericDefinition={...view,definition:{...view.definition,countingRule:'Another view with a generic rule'}};
+ assert.match(JSON.stringify(freezeGeoAnalysisDocument(genericDefinition)),/不是用户转化率/,'every exported view containing the ratio retains its interpretation');
+ const groups=presentGeoAnalysis(input,{viewId:'V05',metricId:'M-13'},context());
+ assert.ok(groups.rows.every(row=>row.values.current.value===null),'a single-pool group cannot supply a cross-pool ratio');
+ const thinInput={...input,rows:input.rows.filter(row=>Number(row.snapshotId.split('-').at(-1))<20)};
+ thinInput.computed=computeGeoSelection(thinInput.rows,thinInput.metricOptions);
+ const thin=presentGeoAnalysis(thinInput,{viewId:'V04',metricId:'M-13'},context());
+ assert.ok(thin.rows.every(row=>row.values.current.state==='insufficient'));
+ const thinDocument=freezeGeoAnalysisDocument(thin);
+ assert.ok(thinDocument.typedTable.rows.every(row=>row.current===null&&row.current_numerator===null&&row.current_denominator===null),'the ratio and its underlying rates stay hidden under the sample floor');
+});
+
 test('historical same-named groups retain their actual question-set version in each intersection',()=>{
  const input=fixture();input.rounds.push({id:'r2',set_version:2,kind:'weekly'});input.selection.roundIds.push('r2');input.questions=[];
  for(const row of input.rows){if(row.groupId==='g2')row.roundId='r2';input.questions.push({id:row.questionId,set_version:row.groupId==='g2'?2:1});}input.computed=computeGeoSelection(input.rows,input.metricOptions);

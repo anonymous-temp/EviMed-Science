@@ -1,6 +1,6 @@
 import type { GeoConversationScope } from "./geoNativeClient";
 import { useSyncExternalStore } from "react";
-import { geoIdFromChatPath } from "@/lib/geoLocation";
+import { geoConversationPane, geoIdFromChatPath } from "@/lib/geoLocation";
 import { isStudyChatPath } from "@/lib/studyLocation";
 import { isTaskPath } from "@/lib/taskLocation";
 
@@ -37,8 +37,14 @@ export interface TaskPaneRequest {
  * chat surface itself: a scheduled task (`/app/autopilot/:taskId`) a study's conversation view
  * (`/app/virtual-research/:studyId/chat`) and GEO's addressed conversation (`/app/geo/:geoId/chat/:sessionId`). Read from the address alone, on every navigation, as the chat surface is.
  */
-export function isPanePath(pathname: string): boolean {
-  return pathname === "/app/active-research" || pathname === "/app/active-research/" || isTaskPath(pathname) || isStudyChatPath(pathname) || geoIdFromChatPath(pathname) !== null;
+export function isPanePath(pathname: string, search = ""): boolean {
+  return pathname === "/app/active-research" || pathname === "/app/active-research/" || isTaskPath(pathname) || isStudyChatPath(pathname) || geoIdFromChatPath(pathname) !== null || geoConversationPane(pathname, search) !== null;
+}
+
+/** Admit a scoped pane only for the exact project and session in its address. */
+export function matchesGeoPane(request: TaskPaneRequest | null, address: { geoId: string; sessionId: string } | null): boolean {
+  return Boolean(request?.scope && address && request.scope.geoProjectId === address.geoId
+    && request.sessionId === address.sessionId && request.scope.sessionId === address.sessionId);
 }
 
 let current: TaskPaneRequest | null = null;

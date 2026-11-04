@@ -34,8 +34,8 @@ test('history reads real producers, exact cohorts and bound attempts under tenan
    VALUES($1,$2,$3,'baseline','done',1,'{deepseek}',$4::timestamptz,$4::date,$5)`,[id,project.userId,project.id,'2026-10-'+day+'T00:00:00Z',JSON.stringify({mode:'web',measurementContract:{samplingMode:'recurring',repeats:1,engines:['deepseek'],sourceBasis:'answers',reportPresentation:'summary',metricIds:['M-01','M-03']}})]);
   await store.query(`INSERT INTO evimed_geo.snapshots(id,user_id,geo_project_id,round_id,question_id,engine,status,asked_at,answer_text,surface)
    SELECT $1||'-q'||n,$2,$3,$1,'q'||n,'deepseek','valid',$4,repeat('Original preserved answer ',100),'{"mode":"web"}' FROM generate_series(0,49)n`,[id,project.userId,project.id,'2026-10-'+day+'T00:00:00Z']);
-  await store.query(`INSERT INTO evimed_geo.facts(snapshot_id,user_id,geo_project_id,judged_at,created_at,brands,mentions_ours,statements,checks,retrieval_triggered)
-   SELECT $1||'-q'||n,$2,$3,'2026-10-04','2026-10-04',$4,$5,'[{"text":"Retained statement","verdict":"correct"}]','{"judgementCoverage":{"status":"complete"}}',true FROM generate_series(0,49)n`,[id,project.userId,project.id,JSON.stringify(mentioned?[{name:project.product.brandName,ours:true,count:1}]:[]),mentioned]);
+  await store.query(`INSERT INTO evimed_geo.facts(snapshot_id,user_id,geo_project_id,judged_at,created_at,brands,mentions_ours,statements,checks,retrieval_triggered,judge_extract)
+   SELECT $1||'-q'||n,$2,$3,'2026-10-04','2026-10-04',$4,$5,'[{"text":"Retained statement","verdict":"correct"}]','{"judgementCoverage":{"status":"complete"}}',true,'{"rubricVersion":"v1"}' FROM generate_series(0,49)n`,[id,project.userId,project.id,JSON.stringify(mentioned?[{name:project.product.brandName,ours:true,count:1}]:[]),mentioned]);
   if(id==='r2'){
    await store.query("UPDATE evimed_geo.snapshots SET asked_at='2026-10-04T00:00:00Z' WHERE round_id='r2' AND substring(question_id from 2)::integer>=25");
    await store.query("UPDATE evimed_geo.facts SET mentions_ours=false,brands='[]' WHERE snapshot_id LIKE 'r2-q%' AND substring(snapshot_id from 5)::integer>=25");
@@ -46,6 +46,13 @@ test('history reads real producers, exact cohorts and bound attempts under tenan
  await new GeoGroupChanges({store,signals}).project(project);
  const groups=(await documents.list(project.userId,'geo-signal',{projectId:project.projectId,filter:{recordType:'geo-signal',kind:'group_changed'}})).items;
  assert.equal(groups.length,1);const group=groups[0];assert.ok(group.payload.basis.sides.before.targetPages);
+ // The persisted discovery cursor does not revisit the same pair under a new comparison policy.
+ const markBefore=(await store.query("SELECT detail FROM evimed_geo.schedule_marks WHERE geo_project_id=$1 AND key='signals:group-change:v1'",[project.id])).rows[0].detail;
+ await new GeoGroupChanges({store,signals}).project(project);
+ const markAfter=(await store.query("SELECT detail FROM evimed_geo.schedule_marks WHERE geo_project_id=$1 AND key='signals:group-change:v1'",[project.id])).rows[0].detail;
+ assert.deepEqual(markAfter,markBefore);
+ assert.equal((await documents.list(project.userId,'geo-signal',{projectId:project.projectId,filter:{recordType:'geo-signal',kind:'group_changed'}})).items.length,1);
+
  const history=[{kind:'business_closed',snapshotId:'r1-q1',changedAt:'2026-10-02T00:00:00Z'},{kind:'business_reopened',snapshotId:'r2-q0',previousClosedSnapshotId:'r1-q1',changedAt:'2026-10-04T00:00:00Z'}];
  await store.query(`INSERT INTO evimed_geo.errors(id,user_id,geo_project_id,fingerprint,engine,question_id,first_snapshot_id,last_snapshot_id,statement,status,judgment_history)
   VALUES('error',$1,$2,'fingerprint','deepseek','q0','r1-q0','r2-q0','Original issue','open',$3)`,[project.userId,project.id,JSON.stringify(history)]);

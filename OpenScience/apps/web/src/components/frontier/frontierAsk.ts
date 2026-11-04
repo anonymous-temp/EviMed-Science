@@ -1,5 +1,5 @@
 import type { NavigateFunction } from "react-router";
-import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
+import { prepareRuntimeUiIntent, newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { askDraft, type AskItem } from "./frontierText";
 
 /**
@@ -11,10 +11,10 @@ import { askDraft, type AskItem } from "./frontierText";
 export function openItemConversation(navigate: NavigateFunction, item: AskItem, question: string | null): void {
   navigate("/app/chat", {
     state: {
-      runtimeUiIntent: {
+      runtimeUiIntent: prepareRuntimeUiIntent({
         ...newRuntimeUiIntent(askDraft(item, question)),
         originReference: { kind: "frontier-item", id: item.id, title: item.title.slice(0, 300) },
-      },
+      }),
     },
   });
 }

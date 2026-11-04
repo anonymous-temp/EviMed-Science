@@ -295,8 +295,8 @@ test('a block is taken whole: nested tags, attributes, a missing close, a stray 
 
 test('the shipped bundle is built from the closed list', () => {
   const { injected, wrappers } = FRAME_VOCABULARY.platformTags;
-  assert.deepEqual([...injected, ...wrappers].filter((name) => name.startsWith('evimed-')).sort(),
-    PLATFORM_CONTEXT_TAGS.map((entry) => entry.tag).filter((name) => name.startsWith('evimed-')).sort(), 'the frame is built from the domain list, not a copy of it');
+  assert.deepEqual([...injected, ...wrappers].sort(),
+    PLATFORM_CONTEXT_TAGS.map((entry) => entry.tag).sort(), 'the frame is built from the domain list, not a copy of it');
   assert.ok(injected.includes('openviking-context') && injected.includes('evimed-budget-scope') && injected.includes('evimed_result_selection'));
   assert.deepEqual([...wrappers], ['evimed-correction']);
   const bundle = renderFrameClient();

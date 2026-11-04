@@ -1,5 +1,8 @@
+import { randomBytes } from "node:crypto";
 import { GEO_PLACEMENT_LABELS_ZH, parseGeoActionKey, stripGeoClaimReferences } from "@evimed/domain";
 import { HttpError } from "./security.mjs";
+import { dnsKey, geoMediaProofProblem, registrableDomain } from "./geoDomains.mjs";
+export { registrableDomain } from "./geoDomains.mjs";
 import { APPEAL_REASONS, MEDIA_FIELD_TYPES, MEDIA_TYPES, mediaMarketConfigured } from "./mediaMarketClient.mjs";
 import { compareProtectedSpans, extractProtectedSpans, htmlToText, markdownToHtml, sha256Hex, splitLeadingTitle } from "./geoMarketText.mjs";
 import { budgetStopped, dailyReserved, projectMoney, sendInFlight } from "./geoMarketStore.mjs";
@@ -200,15 +203,6 @@ const REMARK_FLAGS = Object.freeze({
 const MEDICAL_CATEGORY_WORDS = Object.freeze(["健康", "医疗", "医药", "医学", "养生"]);
 const NEWS_SOURCE_CATEGORY_WORDS = Object.freeze(["新闻源", "百度新闻", "资讯源"]);
 
-/** Multi-label public suffixes a Chinese outlet's domain may sit under. */
-const MULTI_LABEL_SUFFIXES = new Set([
-  "com.cn", "net.cn", "org.cn", "gov.cn", "edu.cn", "ac.cn", "mil.cn",
-  "bj.cn", "sh.cn", "tj.cn", "cq.cn", "he.cn", "sx.cn", "nm.cn", "ln.cn", "jl.cn", "hl.cn", "js.cn", "zj.cn", "ah.cn", "fj.cn",
-  "jx.cn", "sd.cn", "ha.cn", "hb.cn", "hn.cn", "gd.cn", "gx.cn", "hi.cn", "sc.cn", "gz.cn", "yn.cn", "xz.cn", "sn.cn", "gs.cn",
-  "qh.cn", "nx.cn", "xj.cn", "com.hk", "org.hk", "gov.hk", "edu.hk", "com.tw", "org.tw", "com.mo",
-  "co.uk", "org.uk", "ac.uk", "com.au", "co.jp", "com.sg",
-]);
-
 /** @param {string} status @param {string} code @param {string} message */
 function marketFailure(status, code, message) {
   return new HttpError(Number(status), code, message);
@@ -220,21 +214,6 @@ const mediaKey = (/** @type {string} */ mediaType, /** @type {string} */ resourc
 /** The reserve an order of this price holds. @param {number} priceCny */
 export function reserveFor(priceCny) {
   return round2(priceCny * (1 + MARKET_RULES.reserveMargin));
-}
-
-/**
- * A host's registrable domain (eTLD+1, with the multi-label suffixes above),
- * or null for an IP address or a single label.
- * @param {string | null | undefined} host
- */
-export function registrableDomain(host) {
-  const name = String(host ?? "").trim().toLowerCase().replace(/\.$/, "");
-  if (!name || /^[\d.]+$/.test(name) || name.includes(":") || !/^[a-z0-9.-]+$/.test(name)) return null;
-  const labels = name.split(".").filter(Boolean);
-  if (labels.length < 2) return null;
-  const lastTwo = labels.slice(-2).join(".");
-  if (MULTI_LABEL_SUFFIXES.has(lastTwo)) return labels.length >= 3 ? labels.slice(-3).join(".") : null;
-  return lastTwo;
 }
 
 /** @param {string | null | undefined} url */
@@ -333,17 +312,6 @@ async function listAllBudgetedProjects(store, { activeOnly = true } = {}) {
     if (page.length < 500) break;
   }
   return projects;
-}
-
-/** @param {any} store @param {Record<string, any>} filter @param {number} [max] */
-async function listAllOrders(store, filter, max = 5_000) {
-  const rows = [];
-  for (let offset = 0; offset < max; offset += 500) {
-    const page = await store.listOrders({ ...filter, limit: 500, offset });
-    rows.push(...page);
-    if (page.length < 500) break;
-  }
-  return rows;
 }
 
 /**
@@ -498,6 +466,7 @@ export function outletProblems(media, { source = null, domainCount = 0, outletBl
   else if (media.priceCny > MARKET_RULES.autoSelectMaxPriceCny) problems.push("price_above_auto_cap");
   if (!media.domain) problems.push("domain_unknown");
   else if (media.domainVerified !== true) problems.push("domain_unverified");
+  if (!currentDomainProof(media)) problems.push("domain_proof_invalid");
   if (source?.impostor || source?.blacklistReason) problems.push("impostor");
   const condition = (/** @type {unknown} */ value, /** @type {string} */ failed, /** @type {string} */ unchecked) => {
     if (value === false) problems.push(failed);
@@ -509,6 +478,11 @@ export function outletProblems(media, { source = null, domainCount = 0, outletBl
   if (domainCount >= MARKET_RULES.sameDomainMaxPerWindow) problems.push("domain_cap_reached");
   if (outletBlocked) problems.push("outlet_unknown_order");
   return problems;
+}
+
+/** Historical flags are evidence only when both recorded hosts still share the stored PSL registrable domain. */
+function currentDomainProof(media) {
+  return geoMediaProofProblem(media) === null;
 }
 
 /** An article layer's price fit, 0–1. @param {string | null} layer @param {number} price */
@@ -555,12 +529,28 @@ export function scoreOutlet(media, { article, engines, outcomes, source = null }
 // ------------------------------------------------------------ the ranking
 
 /** A name or an address as it is compared: lower case, no `www.`. @param {unknown} value */
-const bareName = (value) => String(value ?? "").trim().toLowerCase().replace(/^www\./, "");
+const bareName = (value) => dnsKey(value);
 
 /** Whether an outlet is one of the named ones: by its domain, its page host or its name. @param {Set<string>} names @param {any} media */
 function outletNamed(names, media) {
   if (!names.size) return false;
   return [media.domain, media.flags?.host, media.name].some((value) => value && names.has(bareName(value)));
+}
+
+/** A person's source choice is a domain, not the outlet's display name. */
+function outletUserDomainNamed(names, media) {
+  if (!names.size) return false;
+  if (media.domain && names.has(bareName(media.domain))) return true;
+  const host=bareName(media.flags?.host), checked=bareName(media.flags?.domainFinalHost);
+  return Boolean(host && media.domainVerified===true && media.flags?.domainCheck==='ok' && host===checked
+    && registrableDomain(host)===bareName(media.domain) && names.has(host));
+}
+
+/** Extra catalogue rows do not participate until their domain check is current. */
+function supplementalDomainFresh(media, nowMs) {
+  const checked=Date.parse(String(media.flags?.domainCheckedAt ?? ''));
+  return media.domainVerified===true && media.flags?.domainCheck==='ok' && Number.isFinite(checked)
+    && checked<=nowMs && checked>=nowMs-MARKET_RULES.domainRecheckDays*DAY;
 }
 
 /**
@@ -571,7 +561,7 @@ function outletNamed(names, media) {
  */
 export function placeableOutlets(candidates) {
   return candidates.filter((media) => media.available && !media.blacklisted && !media.flags?.medicalRefused
-    && media.domainVerified === true && media.priceCny != null && media.priceCny <= MARKET_RULES.autoSelectMaxPriceCny);
+    && currentDomainProof(media) && media.priceCny != null && media.priceCny <= MARKET_RULES.autoSelectMaxPriceCny);
 }
 
 /**
@@ -582,10 +572,10 @@ export function placeableOutlets(candidates) {
  * A preference — the domains a person sent the article's action to, the run's placement plan — puts an outlet first among the
  * admitted ones and never past an admission rule; `avoid` takes an outlet out. Neither is a gate on the article.
  * @param {{ hard: any[], article: any, engines: string[], outcomes: Map<string, any[]>, sources: Map<string, any>, usage: Map<string, number>,
- *   blocked: Set<string>, excluded?: Set<string>, preferred?: Set<string>, avoid?: Set<string> }} input
+ *   blocked: Set<string>, excluded?: Set<string>, preferred?: Set<string>, userPreferred?: Set<string>, avoid?: Set<string> }} input
  * @returns {Array<{ media: any, score: number, preferred: boolean }>}
  */
-export function rankOutlets({ hard, article, engines, outcomes, sources, usage, blocked, excluded = new Set(), preferred = new Set(), avoid = new Set() }) {
+export function rankOutlets({ hard, article, engines, outcomes, sources, usage, blocked, excluded = new Set(), preferred = new Set(), userPreferred = new Set(), avoid = new Set() }) {
   return hard
     .filter((media) => !excluded.has(mediaKey(media.mediaType, media.resourceId)))
     .filter((media) => !outletNamed(avoid, media))
@@ -594,7 +584,7 @@ export function rankOutlets({ hard, article, engines, outcomes, sources, usage, 
       domainCount: usage.get(media.domain) ?? 0,
       outletBlocked: blocked.has(mediaKey(media.mediaType, media.resourceId)),
     }).length === 0)
-    .map((media) => ({ media, preferred: outletNamed(preferred, media), score: scoreOutlet(media, {
+    .map((media) => ({ media, preferred: outletNamed(preferred, media) || outletUserDomainNamed(userPreferred, media), score: scoreOutlet(media, {
       article, engines, outcomes: outcomes.get(mediaKey(media.mediaType, media.resourceId)) ?? [], source: sourceFor(sources, media),
     }) / (1 + (usage.get(media.domain) ?? 0)) }))
     .sort((a, b) => Number(b.preferred) - Number(a.preferred) || b.score - a.score || (a.media.priceCny ?? 0) - (b.media.priceCny ?? 0));
@@ -750,18 +740,65 @@ async function loadCategories(ctx, mediaType) {
  * the domain its case link names.
  * @param {ReturnType<typeof context>} ctx @param {any} media
  */
-async function checkDomain(ctx, media) {
+async function checkDomain(ctx, media, signal = undefined) {
   const checkedAt = ctx.now().toISOString();
   if (!media.caseLink || !media.domain) return { domainVerified: false, flags: { domainCheckedAt: checkedAt, domainCheck: "no_case_link" } };
   try {
-    const read = await /** @type {any} */ (ctx.webReader).read(media.caseLink, { signal: AbortSignal.timeout(MARKET_RULES.pageReadTimeoutMs) });
+    const timeout = AbortSignal.timeout(MARKET_RULES.pageReadTimeoutMs);
+    const read = await /** @type {any} */ (ctx.webReader).read(media.caseLink, { signal: signal ? AbortSignal.any([signal, timeout]) : timeout });
     const finalHost = hostOf(read?.receipt?.finalUrl ?? media.caseLink);
     const matches = registrableDomain(finalHost) === media.domain;
     return { domainVerified: matches, flags: { domainCheckedAt: checkedAt, domainCheck: matches ? "ok" : "left_domain", domainFinalHost: finalHost } };
-  } catch (error) {
-    const code = /** @type {any} */ (error)?.code;
-    return { domainVerified: false, flags: { domainCheckedAt: checkedAt, domainCheck: "unreachable", domainCheckError: typeof code === "string" ? code : "failed" } };
+  } catch {
+    return { domainVerified: false, flags: {}, indeterminate: true };
   }
+}
+
+/** Explicitly recheck a bounded set of catalogue case links, never a caller-supplied URL. */
+export async function recheckSelectedDomain(deps, domain, beforeRead = async () => {}, signal = undefined) {
+  const ctx = context(deps);
+  domain = dnsKey(domain);
+  if (!ctx.configured || !ctx.webReader) throw new HttpError(503, "geo_source_preview_interrupted", "Source verification is unavailable.");
+  const rows = await ctx.store.listPreferredMedia({ names: [domain], maxPriceCny: MARKET_RULES.autoSelectMaxPriceCny,
+    includeUnavailable: true, includeUnverifiedHost: true });
+  const nowMs = ctx.now().getTime();
+  const matching = rows.filter((media) => {
+    const host = dnsKey(hostOf(media.caseLink));
+    return host && registrableDomain(host) === media.domain && (media.domain === domain || host === domain);
+  });
+  const selected = matching.filter((media) => !supplementalDomainFresh(media, nowMs) || !currentDomainProof(media));
+  const lastAttempt = (/** @type {any} */ media) => Date.parse(media.flags?.manualDomainCheckAt ?? "") || 0;
+  const ready = selected.filter((media) => lastAttempt(media) <= nowMs - 60_000)
+    .sort((a, b) => lastAttempt(a) - lastAttempt(b) || String(a.resourceId).localeCompare(String(b.resourceId)));
+  let checked = 0, verified = 0, coolingDown = selected.length - ready.length;
+  for (const media of ready.slice(0, 3)) {
+    await beforeRead();
+    if (signal?.aborted) throw new HttpError(503, "geo_source_preview_interrupted", "Source verification was interrupted.");
+    const now = ctx.now();
+    const token = randomBytes(16).toString("hex");
+    let claimed;
+    try { claimed = await ctx.store.claimDomainRecheck(media, token, now.toISOString(), new Date(now.getTime() - 60_000).toISOString()); }
+    catch (cause) { const error = new HttpError(503, "geo_source_preview_interrupted", "Source verification was interrupted."); error.cause = cause; throw error; }
+    if (!claimed) {
+      coolingDown += 1;
+      continue;
+    }
+    await beforeRead();
+    if (signal?.aborted) throw new HttpError(503, "geo_source_preview_interrupted", "Source verification was interrupted.");
+    const verdict = await checkDomain(ctx, media, signal);
+    if (signal?.aborted) throw new HttpError(503, "geo_source_preview_interrupted", "Source verification was interrupted.");
+    await beforeRead();
+    if (signal?.aborted) throw new HttpError(503, "geo_source_preview_interrupted", "Source verification was interrupted.");
+    if (verdict.indeterminate) { checked += 1; continue; }
+    let finished;
+    try { finished = await ctx.store.finishDomainRecheck(media, token, verdict); }
+    catch (cause) { const error = new HttpError(503, "geo_source_preview_interrupted", "Source verification was interrupted."); error.cause = cause; throw error; }
+    if (finished) {
+      checked += 1;
+      if (verdict.domainVerified) verified += 1;
+    }
+  }
+  return { checked, verified, coolingDown, remaining: Math.max(0, ready.length - 3) + coolingDown, alreadyVerified: matching.length - selected.length };
 }
 
 /**
@@ -835,14 +872,17 @@ export async function tickCatalogue(deps) {
   }
   if (ctx.webReader) {
     const recheckBefore = ctx.now().getTime() - MARKET_RULES.domainRecheckDays * DAY;
-    const due = (await ctx.store.listCandidateMedia({ maxPriceCny: MARKET_RULES.autoSelectMaxPriceCny, limit: 5_000 }))
-      .filter((media) => !media.flags?.medicalRefused && (media.domainVerified == null || !media.flags?.domainCheckedAt
-        || Date.parse(media.flags.domainCheckedAt) < recheckBefore))
-      .sort((a, b) => Number(Boolean(b.flags?.medicalCategory)) - Number(Boolean(a.flags?.medicalCategory)))
-      .slice(0, MARKET_RULES.domainChecksPerSync);
+    const due = await ctx.store.listDueDomainChecks({ maxPriceCny: MARKET_RULES.autoSelectMaxPriceCny,
+      checkedBefore: new Date(recheckBefore).toISOString(), attemptedBefore: new Date(ctx.now().getTime() - 60_000).toISOString(),
+      limit: MARKET_RULES.domainChecksPerSync });
     for (const media of due) {
+      if (!media.caseLink || !media.domain) continue;
+      const now = ctx.now();
+      const token = randomBytes(16).toString("hex");
+      if (!await ctx.store.claimDomainRecheck(media, token, now.toISOString(), new Date(now.getTime() - 60_000).toISOString())) continue;
       const verdict = await checkDomain(ctx, media);
-      await ctx.store.updateMediaFlags({ mediaType: media.mediaType, resourceId: media.resourceId, domainVerified: verdict.domainVerified, flags: verdict.flags });
+      if (verdict.indeterminate) { counts.domainChecks += 1; continue; }
+      if (!await ctx.store.finishDomainRecheck(media, token, verdict)) continue;
       counts.domainChecks += 1;
       if (verdict.domainVerified) counts.domainsVerified += 1;
     }
@@ -854,7 +894,7 @@ export async function tickCatalogue(deps) {
 
 /** @param {ReturnType<typeof context>} ctx */
 async function blockedOutlets(ctx) {
-  const unknown = await ctx.store.listOrders({ states: ["unknown"], limit: 500 });
+  const unknown = await ctx.store.listDecisionOrders({ states: ["unknown"] });
   return new Set(unknown.map((order) => mediaKey(order.mediaType, order.resourceId)));
 }
 
@@ -862,16 +902,40 @@ async function blockedOutlets(ctx) {
 async function sourcesByDomain(ctx, geoProjectId, domains) {
   /** @type {Map<string, any>} */
   const map = new Map();
-  const unique = [...new Set(domains.filter(Boolean))];
+  const unique = [...new Set(domains.filter(Boolean).map(dnsKey))];
   for (let index = 0; index < unique.length; index += 1_000) {
-    for (const source of await ctx.store.getSources(geoProjectId, unique.slice(index, index + 1_000))) map.set(source.domain, source);
+    for (const source of await ctx.store.getSources(geoProjectId, unique.slice(index, index + 1_000))) {
+      const key = dnsKey(source.domain);
+      if (unique.includes(key)) map.set(key, map.has(key) ? mergeSources(map.get(key), source) : source);
+    }
   }
   return map;
 }
 
+/** @param {any} media */
+function mediaSourceDomains(media) {
+  const host = media.flags?.domainFinalHost;
+  const verifiedHost = media.domainVerified === true && media.flags?.domainCheck === 'ok'
+    && registrableDomain(dnsKey(host)) === dnsKey(media.domain) ? host : null;
+  return [media.domain, media.flags?.host, verifiedHost].filter(Boolean);
+}
+
 /** @param {Map<string, any>} sources @param {any} media */
 function sourceFor(sources, media) {
-  return sources.get(media.domain) ?? sources.get(media.flags?.host ?? "") ?? null;
+  const keys = new Set(mediaSourceDomains(media).map(dnsKey));
+  const matches = [...keys].map((key) => sources.get(key)).filter(Boolean);
+  if (!matches.length) return null;
+  return matches.slice(1).reduce(mergeSources, matches[0]);
+}
+
+/** @param {any} canonical @param {any} host */
+function mergeSources(canonical, host) {
+  const strict = (/** @type {unknown} */ a, /** @type {unknown} */ b) =>
+    a === false || b === false ? false : a === true && b === true ? true : null;
+  return { ...canonical, impostor: Boolean(canonical.impostor || host.impostor),
+    blacklistReason: canonical.blacklistReason || host.blacklistReason || null,
+    icpMatches: strict(canonical.icpMatches, host.icpMatches), newsIndexed: strict(canonical.newsIndexed, host.newsIndexed),
+    medicalVertical: strict(canonical.medicalVertical, host.medicalVertical) };
 }
 
 /**
@@ -881,7 +945,7 @@ function sourceFor(sources, media) {
  */
 async function domainUsage(ctx, geoProjectId, mediaByKey) {
   const since = new Date(ctx.now().getTime() - MARKET_RULES.sameDomainWindowDays * DAY).toISOString();
-  const orders = await listAllOrders(ctx.store, { geoProjectId, states: [...DOMAIN_CAP_STATES], createdSince: since });
+  const orders = await ctx.store.listDecisionOrders({ geoProjectId, states: [...DOMAIN_CAP_STATES], createdSince: since });
   const missing = orders.filter((order) => !mediaByKey.has(mediaKey(order.mediaType, order.resourceId)));
   for (const mediaType of MEDIA_TYPES) {
     const ids = missing.filter((order) => order.mediaType === mediaType).map((order) => order.resourceId);
@@ -913,7 +977,7 @@ async function rankingFacts(ctx, project, candidates) {
   const mediaByKey = new Map(candidates.map((media) => [mediaKey(media.mediaType, media.resourceId), media]));
   const { usage, orders: recent } = await domainUsage(ctx, project.id, mediaByKey);
   const hard = placeableOutlets(candidates);
-  const sources = await sourcesByDomain(ctx, project.id, hard.flatMap((media) => [media.domain, media.flags?.host]));
+  const sources = await sourcesByDomain(ctx, project.id, hard.flatMap(mediaSourceDomains));
   /** @type {Map<string, any[]>} */
   const outcomes = new Map();
   for (let index = 0; index < hard.length; index += 1_000) {
@@ -946,17 +1010,32 @@ async function placementChoicesOf(ctx, project) {
  * @param {ReturnType<typeof context>} ctx @param {any} project @param {any[]} candidates
  * @param {Set<string>} blocked @param {Record<string, any>} counts
  * @param {{ skippedArticleIds: Set<string>, preferredByArticle: Map<string, string[]> }} choices
+ * @param {Map<string, any>} candidatesByKey
  */
-async function planProject(ctx, project, candidates, blocked, counts, choices) {
+async function planProject(ctx, project, candidates, blocked, counts, choices, candidatesByKey) {
   // The articles that can take a placement: not the ones that already hold an order (placed, being placed or planned), which are
   // the oldest and, in a project that has placed a good many, all of the first two hundred (M-4).
   const articles = await ctx.store.listPlaceableArticles(project.id, 200, { withoutOrderIn: LIVE_STATES });
   if (!articles.length) return;
-  const { usage, recent, hard, sources, outcomes } = await rankingFacts(ctx, project, candidates);
-  const articleOrders = await listAllOrders(ctx.store, { geoProjectId: project.id, articleIds: articles.map((article) => article.id) }, 2_000);
+  const articleOrders = await ctx.store.listDecisionOrders({ geoProjectId: project.id, articleIds: articles.map((article) => article.id) });
+  const preferredNames=new Set();
+  for(const article of articles) {
+    if(choices.skippedArticleIds.has(String(article.id)) || articleProblems(article).length)continue;
+    const mine=articleOrders.filter(order=>order.articleId===article.id && !neverAttempted(order));
+    if(mine.filter(order=>LIVE_STATES.includes(order.state)).length>=MARKET_RULES.placementsPerArticle
+      || mine.filter(order=>!LIVE_STATES.includes(order.state)).length>=MARKET_RULES.maxFailedPlacementsPerArticle)continue;
+    for(const name of choices.preferredByArticle.get(String(article.id)) ?? []) preferredNames.add(bareName(name));
+  }
+  const baseKeys=new Set(candidates.map(media=>mediaKey(media.mediaType,media.resourceId)));
+  const extra=preferredNames.size ? await ctx.store.listPreferredMedia({names:[...preferredNames],maxPriceCny:MARKET_RULES.autoSelectMaxPriceCny}) : [];
+  const checkedAt=ctx.now().getTime();
+  const extraByKey=new Map(extra.filter(media=>!baseKeys.has(mediaKey(media.mediaType,media.resourceId)) && supplementalDomainFresh(media,checkedAt))
+    .map(media=>[mediaKey(media.mediaType,media.resourceId),media]));
+  const expanded=[...candidates,...extraByKey.values()];
+  const { usage, recent, hard, sources, outcomes } = await rankingFacts(ctx, project, expanded);
   const money = projectMoney(project, await ctx.store.ledgerSums({ geoProjectId: project.id }));
   // What the plans already made hold back from the budget is every planned order of the project, not those of the articles listed above.
-  const plannedReserve = (await listAllOrders(ctx.store, { geoProjectId: project.id, states: ["planned"] }, 2_000))
+  const plannedReserve = (await ctx.store.listDecisionOrders({ geoProjectId: project.id, states: ["planned"] }))
     .reduce((total, order) => total + (order.reserveCny ?? 0), 0);
   let room = round2((money.availableCny ?? 0) - plannedReserve);
   const plan = ctx.store.latestPlacementPlan ? await ctx.store.latestPlacementPlan(project.id) : null;
@@ -973,8 +1052,10 @@ async function planProject(ctx, project, candidates, blocked, counts, choices) {
     if (choices.skippedArticleIds.has(String(article.id))) { counts.skipped.action_skipped = (counts.skipped.action_skipped ?? 0) + 1; continue; }
     const excluded = new Set(mine.map((order) => mediaKey(order.mediaType, order.resourceId)));
     const wanted = placementPlanFor(plan, article);
-    for (const domain of choices.preferredByArticle.get(String(article.id)) ?? []) wanted.preferred.add(bareName(domain));
-    const ranked = rankOutlets({ hard, article, engines: project.engines ?? [], outcomes, sources, usage, blocked, excluded, preferred: wanted.preferred, avoid: wanted.avoid });
+    const userPreferred=new Set((choices.preferredByArticle.get(String(article.id)) ?? []).map(bareName));
+    const eligible=hard.filter(media=>baseKeys.has(mediaKey(media.mediaType,media.resourceId)) || outletUserDomainNamed(userPreferred,media));
+    const ranked = rankOutlets({ hard:eligible, article, engines: project.engines ?? [], outcomes, sources, usage, blocked, excluded,
+      preferred: wanted.preferred, userPreferred, avoid: wanted.avoid });
     const pick = ranked.find(({ media }) => reserveFor(media.priceCny) <= room + MARKET_RULES.epsilonCny);
     if (!pick) { counts.skipped[ranked.length ? "budget_exhausted" : "no_admitted_outlet"] = (counts.skipped[ranked.length ? "budget_exhausted" : "no_admitted_outlet"] ?? 0) + 1; continue; }
     const reserve = reserveFor(pick.media.priceCny);
@@ -990,7 +1071,10 @@ async function planProject(ctx, project, candidates, blocked, counts, choices) {
   // concurrent writer beat to its article is skipped without losing the rest.
   for (const made of plans) {
     try {
-      counts.planned += (await ctx.store.insertOrders([made], ctx.now().toISOString())).length;
+      const inserted=await ctx.store.insertOrders([made], ctx.now().toISOString());
+      counts.planned += inserted.length;
+      const key=mediaKey(made.mediaType,made.resourceId),supplement=extraByKey.get(key);
+      if(inserted.length && supplement)candidatesByKey.set(key,supplement);
     } catch (error) {
       if (/** @type {any} */ (error)?.code !== "geo_order_article_live") throw error;
       counts.skipped.article_already_live = (counts.skipped.article_already_live ?? 0) + 1;
@@ -1015,10 +1099,10 @@ const previewCatalogues = new WeakMap();
  *
  * @param {MarketDeps} deps
  * @param {{ project: any, groups: Array<{ id: string, aliasIds?: string[], isControl?: boolean }>, candidates: Map<string, Array<Record<string, any>>>,
- *   choices?: Array<{ key: string, skipped?: boolean, sourceDomain?: string | null }>, articles?: any[] }} input
+ *   choices?: Array<{ key: string, skipped?: boolean, sourceDomain?: string | null }>, articles?: any[], actions?: any[] }} input
  * @returns {Promise<Map<string, Array<Record<string, any>>>>}
  */
-export async function previewOutlets(deps, { project, groups, candidates, choices = [], articles = [] }) {
+export async function previewOutlets(deps, { project, groups, candidates, choices = [], articles = [], actions = null }) {
   const ctx = context(deps);
   /** @type {Map<string, Array<Record<string, any>>>} */
   const out = new Map(candidates);
@@ -1030,16 +1114,45 @@ export async function previewOutlets(deps, { project, groups, candidates, choice
     catalogue = await ctx.store.listCandidateMedia({ maxPriceCny: MARKET_RULES.autoSelectMaxPriceCny, limit: 5_000 });
     previewCatalogues.set(ctx.store, { at: nowMs, rows: catalogue });
   }
-  const blocked = await blockedOutlets(ctx);
-  const facts = await rankingFacts(ctx, project, catalogue);
-  const plan = ctx.store.latestPlacementPlan ? await ctx.store.latestPlacementPlan(project.id) : null;
-  // The sources a person sent a content action of a group to; a correction's source is not the content's.
-  /** @type {Array<{ groupId: string, domain: string }>} */
+  const baseKeys=new Set(catalogue.map(media=>mediaKey(media.mediaType,media.resourceId)));
+  // A selected source is attached to the action that selected it, not to every action in its group.
+  /** @type {Array<{ groupId: string | null, actionKey: string, domain: string, articleIds: string[] }>} */
   const swapped = [];
-  for (const choice of choices) {
-    const parsed = choice.sourceDomain && choice.skipped !== true ? parseGeoActionKey(choice.key) : null;
-    if (parsed?.groupId && parsed.kind !== "correct_error") swapped.push({ groupId: parsed.groupId, domain: bareName(choice.sourceDomain) });
+  if (actions) {
+    for(const action of actions) if(action?.key && action.choice?.sourceDomain && action.status!=='skipped') {
+      swapped.push({groupId:action.group?.id ? String(action.group.id) : null,actionKey:String(action.key),domain:bareName(action.choice.sourceDomain),articleIds:Array.isArray(action.articleIds)?action.articleIds.map(String):[]});
+    }
+  } else {
+    for (const choice of choices) {
+      const parsed = choice.sourceDomain && choice.skipped !== true ? parseGeoActionKey(choice.key) : null;
+      if (parsed?.groupId && parsed.kind!=='correct_error') swapped.push({ groupId: parsed.groupId, actionKey:choice.key, domain:bareName(choice.sourceDomain), articleIds:[] });
+    }
   }
+  const names=[...new Set(swapped.map(entry=>entry.domain))];
+  const found=names.length ? await ctx.store.listPreferredMedia({names,maxPriceCny:MARKET_RULES.autoSelectMaxPriceCny,includeUnavailable:true,includeUnverifiedHost:true}) : [];
+  const fresh=found.filter(media=>!baseKeys.has(mediaKey(media.mediaType,media.resourceId)) && supplementalDomainFresh(media,nowMs));
+  const expanded=[...catalogue,...fresh];
+  const blocked = await blockedOutlets(ctx);
+  const facts = await rankingFacts(ctx, project, expanded);
+  for (const [domain,source] of await sourcesByDomain(ctx,project.id,found.flatMap(mediaSourceDomains))) {
+    if(!facts.sources.has(domain))facts.sources.set(domain,source);
+  }
+  const plan = ctx.store.latestPlacementPlan ? await ctx.store.latestPlacementPlan(project.id) : null;
+  const pending=swapped.length ? await ctx.store.listDecisionOrders({geoProjectId:project.id,states:['planned']}) : [];
+  const money=swapped.length ? projectMoney(project,await ctx.store.ledgerSums({geoProjectId:project.id})) : null;
+  const room=money ? round2((money.availableCny ?? 0)-pending.reduce((total,order)=>total+(order.reserveCny ?? 0),0)) : 0;
+  const selectedArticleIds=[...new Set(swapped.flatMap(entry=>entry.articleIds))];
+  const history=selectedArticleIds.length ? await ctx.store.listDecisionOrders({geoProjectId:project.id,articleIds:selectedArticleIds}) : [];
+  const historyByArticle=new Map();
+  for(const order of history){const key=String(order.articleId),rows=historyByArticle.get(key) ?? [];rows.push(order);historyByArticle.set(key,rows);}
+  const articleById=new Map(articles.map(item=>[String(item.id),item]));
+  const matchesByName=new Map(),nameSet=new Set(names);
+  for(const media of [...catalogue,...found]) for(const name of new Set([bareName(media.domain),bareName(media.flags?.host)])) {
+    if(!nameSet.has(name))continue;
+    const rows=matchesByName.get(name) ?? new Map();rows.set(mediaKey(media.mediaType,media.resourceId),media);matchesByName.set(name,rows);
+  }
+  const genericHard=facts.hard.filter(media=>baseKeys.has(mediaKey(media.mediaType,media.resourceId)));
+  const placeableIds=new Set(swapped.length ? (await ctx.store.listPlaceableArticles(project.id,200,{withoutOrderIn:LIVE_STATES})).map(item=>String(item.id)) : []);
   const byDomain = new Map();
   for (const media of catalogue) if (media.domain) byDomain.set(bareName(media.domain), media);
 
@@ -1056,6 +1169,43 @@ export async function previewOutlets(deps, { project, groups, candidates, choice
     };
   };
 
+  /** @param {{groupId:string|null,actionKey:string,domain:string,articleIds:string[]}} choice @param {any[]} existing @param {any[]} mine */
+  const scopedRow=(choice,existing,mine)=>{
+    const wantedDomain=new Set([choice.domain]);
+    const matching=[...(matchesByName.get(choice.domain)?.values() ?? [])];
+    if(!matching.length) {
+      const own=existing.find(candidate=>candidate.route==='own' && candidate.domain && bareName(candidate.domain)===choice.domain);
+      return own ? {...own,actionKey:choice.actionKey} : {domain:choice.domain,actionKey:choice.actionKey,route:'not_in_market',
+        available:false,unavailableBecause:['not_in_catalogue'],origin:'market'};
+    }
+    const valid=matching.filter(media=>outletUserDomainNamed(wantedDomain,media)
+      && (baseKeys.has(mediaKey(media.mediaType,media.resourceId)) || supplementalDomainFresh(media,nowMs)));
+    const relevant=actions ? choice.articleIds.map(id=>articleById.get(id)).filter(Boolean) : mine;
+    const usable=relevant.filter(item=>{
+      const orders=historyByArticle.get(String(item.id)) ?? [];
+      return placeableIds.has(String(item.id)) && !articleProblems(item).length && !orders.some(order=>LIVE_STATES.includes(order.state))
+        && orders.filter(order=>!LIVE_STATES.includes(order.state) && !neverAttempted(order)).length<MARKET_RULES.maxFailedPlacementsPerArticle;
+    });
+    const allowed=usable.flatMap(item=>{
+      const excluded=new Set((historyByArticle.get(String(item.id)) ?? []).filter(order=>!neverAttempted(order)).map(order=>mediaKey(order.mediaType,order.resourceId)));
+      return rankOutlets({hard:placeableOutlets(valid),article:item,engines:project.engines ?? [],outcomes:facts.outcomes,sources:facts.sources,usage:facts.usage,
+        blocked,excluded,userPreferred:wantedDomain,avoid:placementPlanFor(plan,item).avoid}).filter(entry=>reserveFor(entry.media.priceCny)<=room+MARKET_RULES.epsilonCny);
+    });
+    const media=allowed[0]?.media ?? valid[0] ?? matching[0];
+    const strict=outletUserDomainNamed(wantedDomain,media),isBase=baseKeys.has(mediaKey(media.mediaType,media.resourceId));
+    const reasons=outletProblems(media,{source:sourceFor(facts.sources,media),domainCount:facts.usage.get(media.domain) ?? 0,outletBlocked:blocked.has(mediaKey(media.mediaType,media.resourceId))});
+    if(!strict)reasons.push('domain_unverified');
+    else if(!isBase && !supplementalDomainFresh(media,nowMs))reasons.push('domain_check_stale');
+    if(relevant.some(item=>outletNamed(placementPlanFor(plan,item).avoid,media)))reasons.push('avoided_by_plan');
+    if(!usable.length)reasons.push('article_not_ready');
+    else if(!allowed.length && !reasons.length)reasons.push('placement_not_ready');
+    const known=existing.find(candidate=>candidate.domain && (bareName(candidate.domain)===choice.domain
+      || strict && bareName(candidate.domain)===bareName(media.domain))) ?? null;
+    const row=rowOf(media,allowed.length?[]:reasons,known);
+    return {...row,domain:choice.domain,actionKey:choice.actionKey,available:allowed.length>0,
+      ...(strict && bareName(media.domain)!==choice.domain ? {canonicalDomain:bareName(media.domain)} : {})};
+  };
+
   for (const group of groups) {
     if (group.isControl) continue;
     const ids = new Set([group.id, ...(group.aliasIds ?? [])]);
@@ -1063,8 +1213,8 @@ export async function previewOutlets(deps, { project, groups, candidates, choice
     const latest = [...mine].sort((a, b) => String(b.createdAt ?? "").localeCompare(String(a.createdAt ?? "")))[0] ?? null;
     const article = { id: latest?.id ?? null, groupId: group.id, layer: latest?.layer ?? null };
     const wanted = placementPlanFor(plan, article);
-    for (const entry of swapped) if (ids.has(entry.groupId)) wanted.preferred.add(entry.domain);
-    const ranked = rankOutlets({ hard: facts.hard, article, engines: project.engines ?? [], outcomes: facts.outcomes, sources: facts.sources, usage: facts.usage,
+    const selected=swapped.filter(entry=>entry.groupId && ids.has(entry.groupId));
+    const ranked = rankOutlets({ hard: genericHard, article, engines: project.engines ?? [], outcomes: facts.outcomes, sources: facts.sources, usage: facts.usage,
       blocked, preferred: wanted.preferred, avoid: wanted.avoid });
     const existing = candidates.get(group.id) ?? [];
     /** @type {Map<string, Record<string, any>>} */
@@ -1083,6 +1233,10 @@ export async function previewOutlets(deps, { project, groups, candidates, choice
     const rest = [];
     for (const candidate of existing) {
       const domain = candidate.domain ? bareName(candidate.domain) : null;
+      if (domain && selected.some(entry=>entry.domain===domain)) {
+        rest.push(candidate.route==='own' ? candidate : {...candidate,route:null,available:null,unavailableBecause:[]});
+        continue;
+      }
       if (domain && listed.has(domain)) continue;
       const media = domain ? byDomain.get(domain) : null;
       if (!media) {
@@ -1108,7 +1262,12 @@ export async function previewOutlets(deps, { project, groups, candidates, choice
       });
       rest.push(rowOf(media, problems, null));
     }
-    out.set(group.id, [...front, ...rest]);
+    const scoped=selected.map(choice=>scopedRow(choice,existing,mine)).filter(Boolean);
+    out.set(group.id, [...scoped,...front, ...rest]);
+  }
+  for(const choice of swapped.filter(entry=>entry.groupId===null)) {
+    const scoped=scopedRow(choice,[],[]);
+    if(scoped)out.set(`action:${choice.actionKey}`,[scoped]);
   }
   return out;
 }
@@ -1120,12 +1279,35 @@ export async function previewOutlets(deps, { project, groups, candidates, choice
  * @param {{ skippedArticleIds: Set<string> }} choices a plan for an article a person set aside is withdrawn: nothing is held for it
  */
 async function withdrawStalePlans(ctx, project, candidatesByKey, counts, choices) {
-  const planned = await listAllOrders(ctx.store, { geoProjectId: project.id, states: ["planned"] }, 2_000);
+  const planned = await ctx.store.listDecisionOrders({ geoProjectId: project.id, states: ["planned"] });
   if (!planned.length) return;
-  const articles = new Map((await ctx.store.getArticles(planned.map((order) => order.articleId))).map((article) => [article.id, article]));
+  // The ranking catalogue is a bounded sample. An existing plan outside that
+  // sample must be checked by its actual media key before it is withdrawn.
+  for (const mediaType of MEDIA_TYPES) {
+    const ids = [...new Set(planned.filter(order => order.mediaType === mediaType && !candidatesByKey.has(mediaKey(order.mediaType, order.resourceId)))
+      .map(order => String(order.resourceId)))];
+    for (let offset = 0; offset < ids.length; offset += 1000) {
+      for (const media of await ctx.store.getMediaRows(mediaType, ids.slice(offset, offset + 1000))) {
+        if (media.available && !media.blacklisted && media.priceCny != null && media.priceCny <= MARKET_RULES.autoSelectMaxPriceCny) {
+          candidatesByKey.set(mediaKey(media.mediaType, media.resourceId), media);
+        }
+      }
+    }
+  }
+  const articles = new Map();
+  for (let offset = 0; offset < planned.length; offset += 500) {
+    const page=planned.slice(offset, offset + 500);
+    if (ctx.store.getOrderArticles) {
+      const rows=await ctx.store.getOrderArticles(page);
+      page.forEach((order,index)=>articles.set(order.id,rows[index] ?? null));
+    } else {
+      const rows=new Map((await ctx.store.getArticles(page.map(order=>order.articleId))).map(article=>[article.id,article]));
+      for(const order of page) articles.set(order.id,rows.get(order.articleId) ?? null);
+    }
+  }
   for (const order of planned) {
     const media = candidatesByKey.get(mediaKey(order.mediaType, order.resourceId));
-    const plannedArticle = ctx.store.getOrderArticle ? await ctx.store.getOrderArticle(order) : articles.get(order.articleId);
+    const plannedArticle = articles.get(order.id);
     const articleIssues = articleProblems(plannedArticle);
     const reason = articleIssues[0] ?? (choices.skippedArticleIds.has(String(order.articleId)) ? "action_skipped" : null)
       ?? (!media ? "outlet_withdrawn" : media.priceCny !== order.priceCny ? "price_changed" : null);
@@ -1147,9 +1329,10 @@ async function withdrawStalePlans(ctx, project, candidatesByKey, counts, choices
  * @param {ReturnType<typeof context>} ctx
  */
 async function recoverInterruptedSends(ctx) {
-  const reserved = await ctx.store.listOrders({ states: ["reserved"], limit: 500 });
   const now = ctx.now().getTime();
   const sendDeadline = Number(ctx.market?.sendTimeoutMs ?? 30_000) + MARKET_RULES.sendRecoveryMarginMs;
+  const reserved = await ctx.store.listRecoverableReserved({ sendingBefore: new Date(now-sendDeadline).toISOString(),
+    idleBefore: new Date(now-MARKET_RULES.stalledReserveMs).toISOString(), limit: 500 });
   let recovered = 0;
   for (const order of reserved) {
     if (sendInFlight(order)) {
@@ -1196,8 +1379,9 @@ async function placeOrder(ctx, project, order, state) {
   if (articleProblems(article).length) return withdraw("article_not_placeable");
   const media = state.candidatesByKey.get(mediaKey(order.mediaType, order.resourceId));
   if (!media || media.priceCny !== order.priceCny) return withdraw("outlet_changed");
+  if (!currentDomainProof(media)) return "domain_proof_invalid";
   if (state.blocked.has(mediaKey(order.mediaType, order.resourceId))) return withdraw("outlet_unknown_order");
-  const sources = await sourcesByDomain(ctx, project.id, [media.domain, media.flags?.host]);
+  const sources = await sourcesByDomain(ctx, project.id, mediaSourceDomains(media));
   const { usage } = await domainUsage(ctx, project.id, new Map([[mediaKey(media.mediaType, media.resourceId), media]]));
   // This plan is itself counted in the usage; the cap applies to the others.
   const others = (usage.get(media.domain) ?? 0) - 1;
@@ -1361,13 +1545,25 @@ async function keepLateOrderNumber(ctx, order, orderNid) {
 export async function tickOrders(deps) {
   const ctx = context(deps);
   /** @type {{ projects: number, planned: number, withdrawn: number, recovered: number, submitted: number, unknown: number, refused: number,
-   *   notDelivered: number, skipped: Record<string, number> }} */
+   *   notDelivered: number, skipped: Record<string, number>, incompleteProjectIds?: string[], incompleteProjectsTruncated?: boolean }} */
   const counts = { projects: 0, planned: 0, withdrawn: 0, recovered: 0, submitted: 0, unknown: 0, refused: 0, notDelivered: 0, skipped: {} };
   const skip = (/** @type {string} */ reason) => { counts.skipped[reason] = (counts.skipped[reason] ?? 0) + 1; };
+  const noteIncomplete = (/** @type {string} */ projectId) => {
+    counts.incompleteProjectIds ??= [];
+    if (counts.incompleteProjectIds.includes(projectId)) return;
+    if (counts.incompleteProjectIds.length < 100) counts.incompleteProjectIds.push(projectId);
+    else counts.incompleteProjectsTruncated = true;
+  };
   const started = ctx.now().toISOString();
   const first = await ctx.store.listProjectsInTurn(MARKET_RULES.projectsPerPage);
   if (!first.length) return counts;
   if (ctx.configured) counts.recovered = await recoverInterruptedSends(ctx);
+  // Do not start a new send when the inputs needed by balance attribution or
+  // reconciliation cannot be read in full. Recovery above remains independent.
+  await ctx.store.listDecisionOrders({ hasVendorNid: true });
+  await ctx.store.listDecisionTopups();
+  const previousReconciliation = await ctx.store.latestReconciliation();
+  if (previousReconciliation) await ctx.store.platformFlowsSince(anchorOf(previousReconciliation).at);
   const candidates = await ctx.store.listCandidateMedia({ maxPriceCny: MARKET_RULES.autoSelectMaxPriceCny, limit: 5_000 });
   const candidatesByKey = new Map(candidates.map((media) => [mediaKey(media.mediaType, media.resourceId), media]));
   const blocked = await blockedOutlets(ctx);
@@ -1387,19 +1583,26 @@ export async function tickOrders(deps) {
     if (somethingToDo) {
       try {
         choices = await placementChoicesOf(ctx, project);
-      } catch {
-        skip("choices_unavailable");
+      } catch (error) {
+        if (error?.code === 'geo_spine_incomplete') { noteIncomplete(project.id); skip('decision_input_incomplete'); }
+        else skip("choices_unavailable");
         return;
       }
     }
-    await withdrawStalePlans(ctx, project, candidatesByKey, counts, choices);
+    const projectCandidatesByKey=new Map(candidatesByKey);
+    await withdrawStalePlans(ctx, project, projectCandidatesByKey, counts, choices);
     // A budget of zero is a stop (G10h): nothing is planned, reserved or sent for the project; a plan made before it waits, and what is
     // already placed runs its course (`setBudget`).
     if (budgetStopped(project)) { skip("budget_stopped"); return; }
-    await planProject(ctx, project, candidates, blocked, counts, choices);
+    await planProject(ctx, project, candidates, blocked, counts, choices, projectCandidatesByKey);
     if (!ctx.configured) { skip("market_unconfigured"); return; }
     if (stop.stopped) { skip("orders_stopped"); return; }
-    const planned = await ctx.store.listOrders({ geoProjectId: project.id, states: ["planned"], limit: MARKET_RULES.sendsPerTick });
+    const allPlanned = await ctx.store.listDecisionOrders({ geoProjectId: project.id, states: ["planned"] });
+    const planned = allPlanned.filter((order) => {
+      const media = projectCandidatesByKey.get(mediaKey(order.mediaType, order.resourceId));
+      if (media && !currentDomainProof(media)) { skip("domain_proof_invalid"); return false; }
+      return true;
+    }).slice(0, MARKET_RULES.sendsPerTick);
     for (const order of planned) {
       if (sends >= MARKET_RULES.sendsPerTick) break;
       if (balance == null) {
@@ -1408,15 +1611,16 @@ export async function tickOrders(deps) {
           balance = (await ctx.market.balance()).money;
         } catch { skip("balance_unavailable"); break; }
       }
-      const state = { balance: /** @type {number} */ (balance), blocked, candidatesByKey };
+      const state = { balance: /** @type {number} */ (balance), blocked, candidatesByKey:projectCandidatesByKey };
       let outcome;
       try {
         outcome = await placeOrder(ctx, project, order, state);
-      } catch {
+      } catch (error) {
         // One order's failure (a lost connection, a store refusal) is that
         // order's: the reserve and the send are one write, so nothing is held
         // for it, and the next order goes on.
-        outcome = "error";
+        outcome = error?.code === 'geo_spine_incomplete' ? 'decision_input_incomplete' : 'error';
+        if (outcome === 'decision_input_incomplete') noteIncomplete(project.id);
       }
       balance = state.balance;
       if (["submitted", "unknown", "refused", "not_delivered"].includes(outcome)) sends += 1;
@@ -1447,8 +1651,9 @@ export async function tickOrders(deps) {
         try {
           const run = await ctx.store.withProjectLock(project.id, () => work(project));
           if (!run.locked) skip("project_busy");
-        } catch {
-          skip("error");
+        } catch (error) {
+          if (error?.code === 'geo_spine_incomplete') { noteIncomplete(project.id); skip('decision_input_incomplete'); }
+          else skip("error");
         }
       }
       if (page.length < MARKET_RULES.projectsPerPage) break;
@@ -1555,8 +1760,8 @@ async function resolveArrivals(ctx, { flagged = new Map(), confirmRefunds = true
   const { money } = await ctx.market.balance();
   const { expected } = await expectedBalance(ctx, anchor);
   const surplus = round2(money - expected);
-  const topups = await ctx.store.listTopups({ status: "requested", limit: 50 });
-  const refundable = (await listAllOrders(ctx.store, { states: [...POLL_STATES], hasVendorNid: true }))
+  const topups = await ctx.store.listDecisionTopups();
+  const refundable = (await ctx.store.listDecisionOrders({ states: [...POLL_STATES], hasVendorNid: true }))
     .filter((order) => ["rejected", "cancelled"].includes(order.state) || order.refundSeenAt || flagged.has(order.id));
   const items = [
     ...topups.map((topup) => ({ kind: "topup", id: topup.id, amountCny: amounts.get(topup.id) ?? topup.amountCny ?? 0, row: topup })),
@@ -1621,7 +1826,7 @@ export async function tickPoll(deps) {
   counts.recovered = await recoverInterruptedSends(ctx);
   const now = ctx.now();
   const afterSale = now.getTime() - MARKET_RULES.afterSaleDays * DAY;
-  const orders = (await listAllOrders(ctx.store, { states: [...POLL_STATES], hasVendorNid: true }))
+  const orders = (await ctx.store.listDecisionOrders({ states: [...POLL_STATES], hasVendorNid: true }))
     .filter((order) => order.state !== "settled" || Date.parse(order.stateAt ?? order.updatedAt) >= afterSale);
   /** @type {Map<string, { order: any, amountCny: number }>} */
   const flagged = new Map();
@@ -1650,19 +1855,24 @@ export async function tickPoll(deps) {
     counts.refunds += arrivals.refunded.length;
     counts.topupsConfirmed = arrivals.topupsConfirmed.length;
     counts.pendingRefunds += await notePendingRefunds(ctx, flagged, new Set(arrivals.refunded));
-  } catch { counts.errors += 1; }
+  } catch (error) {
+    // Capacity means the balance attribution was not evaluated completely;
+    // keep its code for the worker rather than reporting a successful poll.
+    if (error?.code === 'geo_spine_incomplete') throw error;
+    counts.errors += 1;
+  }
   // Windows.
   const events = async (/** @type {any} */ order) => ctx.store.listOrderEvents(order.id, 500);
   // Withdrawn or rejected, and no refund in sight after the escalation window:
   // the reserve stays held (no money is assumed back) and an operator is told once.
-  const awaiting = await ctx.store.listOrders({ states: ["rejected", "cancelled"], hasVendorNid: true, limit: 500 });
+  const awaiting = await ctx.store.listDecisionOrders({ states: ["rejected", "cancelled"], hasVendorNid: true });
   for (const order of awaiting) {
     if (!order.stateAt || now.getTime() - Date.parse(order.stateAt) <= MARKET_RULES.refundEscalationDays * DAY) continue;
     if ((await events(order)).some((event) => event.detail?.phase === "refund_escalated")) continue;
     await ctx.store.annotateOrder(order.id, { at: now.toISOString(), detail: { phase: "refund_escalated", reason: "no_refund_flag" } });
     await fire(ctx.alertOperator, { type: "refund_overdue", orderId: order.id, idempotencyKey: `geo:order:${order.id}:refund_escalated` });
   }
-  const stale = await ctx.store.listOrders({ states: ["submitted", "accepted"], limit: 500 });
+  const stale = await ctx.store.listDecisionOrders({ states: ["submitted", "accepted"] });
   for (const order of stale) {
     if (order.state === "submitted" && order.submittedAt && now.getTime() - Date.parse(order.submittedAt) > MARKET_RULES.unacceptedWindowHours * HOUR) {
       if ((await events(order)).some((event) => event.detail?.phase === "auto_cancel")) continue;
@@ -1765,7 +1975,7 @@ async function afterFirstVerification(ctx, order, now, counts) {
  * @param {ReturnType<typeof context>} ctx @param {Record<string, number>} counts
  */
 async function settleVerifiedOrders(ctx, counts) {
-  const stranded = (await listAllOrders(ctx.store, { states: ["verified"], hasVendorNid: true })).filter((order) => order.settledCny == null);
+  const stranded = (await ctx.store.listDecisionOrders({ states: ["verified"], hasVendorNid: true })).filter((order) => order.settledCny == null);
   for (const order of stranded) {
     try {
       const settled = await settleOrder(ctx, order);
@@ -1877,7 +2087,7 @@ export async function tickVerify(deps) {
   if (!ctx.webReader) return { ...counts, skipped: "web_reader_unavailable" };
   const now = ctx.now();
   // Checkpoints end at +48 h; a week of slack covers a verifier that was down.
-  const orders = await listAllOrders(ctx.store, { states: ["published", "verified", "settled", "problem"], hasVendorNid: true,
+  const orders = await ctx.store.listDecisionOrders({ states: ["published", "verified", "settled", "problem"], hasVendorNid: true,
     updatedSince: new Date(now.getTime() - 7 * DAY).toISOString() });
   const due = orders.map((order) => ({ order, checkpoint: dueCheckpoint(order, now) })).filter((item) => item.checkpoint);
   counts.due = due.length;
@@ -1934,7 +2144,7 @@ export async function tickReconcile(deps) {
   // Our orders against the vendor's view of them.
   const counts = { polled: 0, transitions: 0, missing: 0, unmapped: 0, refunds: 0, pendingRefunds: 0, errors: 0 };
   const recent = now.getTime() - 2 * DAY;
-  const orders = (await listAllOrders(ctx.store, { hasVendorNid: true }))
+  const orders = (await ctx.store.listDecisionOrders({ hasVendorNid: true }))
     .filter((order) => POLL_STATES.includes(order.state) || Date.parse(order.updatedAt) >= recent);
   const missing = [];
   const priceMismatch = [];
@@ -1974,7 +2184,7 @@ export async function tickReconcile(deps) {
   /** @type {Array<{ orderId?: string, topupId?: string, amountCny: number }>} */
   let explainedCredits = [];
   if (Math.abs(diff) > MARKET_RULES.epsilonCny) {
-    const open = await listAllOrders(ctx.store, { states: ["unknown", "reserved"] });
+    const open = await ctx.store.listDecisionOrders({ states: ["unknown", "reserved"] });
     const debits = open.filter((order) => order.state === "unknown" || sendInFlight(order)).map((order) => ({ orderId: order.id, amountCny: order.priceCny ?? 0 }));
     // Money that may have arrived and is not counted yet: refunds not flagged, top-ups not certain.
     const credits = arrivals.pending.map((item) => (item.kind === "topup" ? { topupId: item.id, amountCny: item.amountCny } : { orderId: item.id, amountCny: item.amountCny }));
@@ -1987,7 +2197,7 @@ export async function tickReconcile(deps) {
   // Every project's ledger against its orders.
   const projectBreaks = [];
   for (const project of await listAllBudgetedProjects(ctx.store, { activeOnly: false })) {
-    const breaks = projectIdentityBreaks(await listAllOrders(ctx.store, { geoProjectId: project.id }, 20_000), await ctx.store.ledgerSums({ geoProjectId: project.id }));
+    const breaks = projectIdentityBreaks(await ctx.store.listDecisionOrders({ geoProjectId: project.id }), await ctx.store.ledgerSums({ geoProjectId: project.id }));
     for (const item of breaks) projectBreaks.push({ geoProjectId: project.id, ...item });
   }
   const balanced = Math.abs(residual) <= MARKET_RULES.epsilonCny && !projectBreaks.length;
@@ -2030,7 +2240,7 @@ async function projectedDailySpend(ctx) {
   const now = ctx.now();
   const flows = await ctx.store.platformFlowsSince(new Date(now.getTime() - 7 * DAY).toISOString());
   const weekly = flows.charges.reduce((total, row) => total + row.amountCny, 0) / 7;
-  const queued = (await listAllOrders(ctx.store, { states: ["planned", "reserved"] }, 2_000)).reduce((total, order) => total + (order.priceCny ?? 0), 0);
+  const queued = (await ctx.store.listDecisionOrders({ states: ["planned", "reserved"] })).reduce((total, order) => total + (order.priceCny ?? 0), 0);
   return round2(weekly + queued / MARKET_RULES.lowWaterDays);
 }
 

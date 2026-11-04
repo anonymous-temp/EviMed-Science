@@ -1,3 +1,4 @@
+import { expectOpaqueRuntimeUiIntent } from "@/test/runtimeUiIntentAssertions";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation } from "react-router";
@@ -260,14 +261,19 @@ describe("immutable result inspection", () => {
     expect(api.export).toHaveBeenCalledWith(admitted); expect(api.save).toHaveBeenCalled();
   });
   it("stages selected text with the exact version before opening the existing native composer", async () => {
-    api.revision.mockResolvedValue({ referenceId: "ref_1", sessionId: "ses_1", draft: "修改要求：" });
+    const referenceId = `rr_${"a".repeat(64)}`;
+    api.revision.mockResolvedValue({ referenceId, sessionId: "ses_1", draft: "修改要求：" });
     mount(old.versionId); const paragraph = await screen.findByText("旧结论");
     const range = document.createRange(); range.selectNodeContents(paragraph);
     const selection = window.getSelection()!; selection.removeAllRanges(); selection.addRange(range);
     fireEvent(document, new Event("selectionchange"));
     await userEvent.click(await screen.findByRole("button", { name: "在对话中修改所选内容" }));
     await waitFor(() => expect(api.revision).toHaveBeenCalledWith(old, expect.objectContaining({ kind: "text", selectedText: "旧结论", elementId: expect.any(String) }), "ses_1"));
-    expect(JSON.parse(screen.getByTestId("state").textContent!).state.runtimeUiIntent.draft).toBe("修改要求：");
+    const { pathname, state } = JSON.parse(screen.getByTestId("state").textContent!);
+    expect(pathname).toBe("/app/chat/ses_1");
+    expect(expectOpaqueRuntimeUiIntent(state, "default")).toMatchObject({
+      kind: "open", sessionId: "ses_1", draft: "修改要求：", resultRevision: { referenceId },
+    });
     expect(screen.queryByRole("textbox")).toBeNull();
   });
   it("does not open the original replay version as a successor and allows confirmed cancellation", async () => {

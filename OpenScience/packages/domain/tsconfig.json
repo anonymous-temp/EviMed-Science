@@ -13,5 +13,6 @@
     "types": ["node"],
     "typeRoots": ["../../apps/web/node_modules/@types", "../../apps/server/node_modules/@types"]
   },
-  "include": ["index.mjs", "src/**/*.mjs", "test/**/*.mjs"]
+  "include": ["index.mjs", "src/**/*.mjs", "test/**/*.mjs"],
+  "exclude": ["src/vendor/tldts-6.1.86.mjs"]
 }

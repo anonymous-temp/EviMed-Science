@@ -168,6 +168,19 @@ test("readiness names the module and what it is waiting for; the metrics say it 
   assert.match(text, /^open_science_geo_tables_readable 1$/m);
 });
 
+test('market capacity project identifiers are restricted to operator metrics',options,async()=>{
+  const worker=context.app.geo.worker,previous=worker.marketCapacityDiagnostics,geoId=`geo_${'a'.repeat(32)}`;
+  worker.marketCapacityDiagnostics=()=>({projectIds:[geoId],truncated:true,at:new Date().toISOString()});
+  try {
+    const ready=await (await fetch(`${context.base}/api/ready`)).text();assert.equal(ready.includes(geoId),false);
+    const unauth=await fetch(`${context.base}/api/ops/metrics`);assert.equal(unauth.status,401);assert.equal((await unauth.text()).includes(geoId),false);
+    const metrics=await fetch(`${context.base}/api/ops/metrics`,{headers:{authorization:'Bearer test-only-metrics-token'}});
+    assert.equal(metrics.status,200);const text=await metrics.text();
+    assert.match(text,new RegExp(`open_science_geo_market_incomplete_project\\{geo_project_id="${geoId}"\\} 1`));
+    assert.match(text,/open_science_geo_market_incomplete_projects_truncated 1/);
+  } finally {worker.marketCapacityDiagnostics=previous;}
+});
+
 test("deleting the control-plane project takes its GEO rows; deleting the account takes the account's", options, async () => {
   const created = await call("preview", "POST", "/api/geo/projects", { brandName: "Deleted Brand" });
   const { id, projectId } = created.body.data;

@@ -41,6 +41,8 @@ export const LEDGER_STATUS_LABEL: Readonly<Record<string, string>> = Object.free
   unmounted: "未挂载",
   unreadable: "读不出来",
   completed: workStateLabel("done"),
+  replayed: "已复用原结果",
+  filesystem_reservation_retained: "保留待核查目录",
   succeeded: "成功",
   failed: "失败",
   denied: "已拒绝",

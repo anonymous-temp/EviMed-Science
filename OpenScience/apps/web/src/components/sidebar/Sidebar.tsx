@@ -20,9 +20,10 @@ import { cn } from "@/lib/cn";
 import { fetchWebMe } from "@/lib/apiClient";
 import { SIDEBAR_MAX, SIDEBAR_MIN, useUiStore } from "@/lib/store";
 import { InboxBell } from "@/components/sidebar/InboxBell";
-import { ProjectBrowser } from "@/components/sidebar/ProjectBrowser";
+import { SidebarConversations } from "@/components/sidebar/SidebarConversations";
 import { useFrontierFeature } from "@/lib/frontierFeature";
 import { useGeoFeature } from "@/lib/geoClient";
+import { GeoWorkspaceNav, geoWorkspaceId } from "@/components/geo/GeoWorkspaceNav";
 import { useVcrFeature } from "@/lib/vcrClient";
 import { useVcrFinishedToasts } from "@/components/vcr/useVcrFinishedToasts";
 import { EviMedMark } from "@/components/brand/EviMedMark";
@@ -140,6 +141,7 @@ export function Sidebar() {
   // A computation the researcher asked for ends while they are elsewhere in the same study: a toast says so, with the way to the result.
   useVcrFinishedToasts(vcr);
   const geo = useGeoFeature() === "on";
+  const geoProjectId = geo ? geoWorkspaceId(location.pathname) : null;
   // The module the tab's project belongs to, told by the project list below (a study or a GEO project, a draft included).
   const [projectModule, setProjectModule] = useState<"geo" | "vcr" | null>(null);
   const [accountName, setAccountName] = useState("");
@@ -217,7 +219,8 @@ export function Sidebar() {
 
         {/* Navigation and the project tree share a scroll fallback on short windows;
           * the tree keeps its own viewport and mounted state, and the account stays outside. */}
-        <div data-sidebar-body="" className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+        <div data-sidebar-body="" className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div className="min-h-0 shrink overflow-y-auto">
         <nav aria-label="工作台" className="flex shrink-0 flex-col px-3">
           {rows.map((item) => (
             <Fragment key={item.to}>
@@ -233,16 +236,18 @@ export function Sidebar() {
               active={isCurrent(item.to, location.pathname, projectModule)}
               freshState={item.to === "/app/home" ? () => ({ globalEntry: crypto.randomUUID() }) : undefined}
             />
+            {item.to === GEO_NAV.to && geoProjectId && <GeoWorkspaceNav geoId={geoProjectId} />}
             </Fragment>
           ))}
         </nav>
+        </div>
 
         {/* The projects and their conversations, in the kernel's own shape: every
           * project a group, its conversations inside, any of them one click
           * away and opened in place. It replaced a project dropdown here and a
           * list of the current project's recent work below the rows above. */}
         <div className="flex min-h-48 flex-1 flex-col">
-          <ProjectBrowser geo={geo} vcr={vcr} onCurrentModule={setProjectModule} />
+          <SidebarConversations geoId={geoProjectId} geo={geo} vcr={vcr} onCurrentModule={setProjectModule} />
         </div>
         </div>
 

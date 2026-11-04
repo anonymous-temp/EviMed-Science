@@ -1,3 +1,4 @@
+import { optionalOpaqueRuntimeUiIntent } from "@/test/runtimeUiIntentAssertions";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
@@ -21,7 +22,11 @@ vi.mock("@/components/charts/MapChart", () => ({
 }));
 
 const selectSpy = vi.fn(async (_projectId: string, land?: () => void) => { land?.(); });
-function Where() { const location = useLocation(); return <><p data-testid="where">{location.pathname}{location.search}{JSON.stringify((location.state as { runtimeUiIntent?: { references?: unknown } } | null)?.runtimeUiIntent?.references ?? null)}</p><pre data-testid="draft">{(location.state as { runtimeUiIntent?: { draft?: string } } | null)?.runtimeUiIntent?.draft}</pre></>; }
+function Where() {
+  const location = useLocation();
+  const intent = optionalOpaqueRuntimeUiIntent(location.state);
+  return <><p data-testid="where">{location.pathname}{location.search}{JSON.stringify(intent?.references ?? null)}</p><pre data-testid="draft">{intent?.draft}</pre></>;
+}
 
 const base: KnowledgeListState = { scope: null, kind: "wiki", q: "", view: "graph", graph: "kg" };
 function view(state: Partial<KnowledgeListState> = {}, onChange = vi.fn(), kind: "wiki" | "kg" = "kg") {

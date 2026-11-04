@@ -103,6 +103,18 @@ test('actual ledger refresh and immutable PG results recover only the frozen nat
   const current = (await runs.list(control))[0];
   for (const field of ['status', 'finishedAt', 'verification', 'qualityNotices', 'usage', 'attempts']) assert.deepEqual(current[field], historical[field], field);
   assert.deepEqual(sideEffects, []);
+  // The index may still say complete after the real snapshot bytes are changed or removed.
+  const snapshotFile=path.join(control.metaDir,'result-snapshots',captured.digest);
+  const snapshotBytes=await readFile(snapshotFile);
+  await writeFile(snapshotFile,'tampered');
+  const damaged=await make()(control,historical.id,{expectedTranscriptSha256:receipt.sha256});
+  assert.equal(damaged.geoOutputCompleteness.complete,false);assert.equal(damaged.geoOutputCompleteness.unavailable,1);
+  assert.ok(damaged.geoImport.failed.includes('result_snapshot_changed'));
+  await rm(snapshotFile);
+  const missing=await make()(control,historical.id,{expectedTranscriptSha256:receipt.sha256});
+  assert.equal(missing.geoOutputCompleteness.complete,false);assert.equal(missing.geoOutputCompleteness.unavailable,1);
+  assert.ok(missing.geoImport.failed.includes('result_snapshot_unavailable'));
+  await writeFile(snapshotFile,snapshotBytes);
   await assert.rejects(recover(control, historical.id, { expectedTranscriptSha256: '0'.repeat(64) }), { code: 'run_transcript_changed' });
   await documents.put(user.id, 'geo-plan-context', `gpc_${'b'.repeat(64)}`, context, { projectId: control.id, expectedRevision: 0 });
   await assert.rejects(recover(control, historical.id, { expectedTranscriptSha256: receipt.sha256 }), { code: 'geo_plan_context_ambiguous' });

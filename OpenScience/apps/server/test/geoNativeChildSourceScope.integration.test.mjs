@@ -32,9 +32,9 @@ async function setup(t,background,{shared=true}={}) {
  return {...f,app,manager,geo,owner,project,root,child,scope};
 }
 
-async function selectedSource(f) {
+async function selectedSource(f, name='selected-source.md', text='Only the selected project source.') {
  await f.app.sourceWorker.close();
- const response=await fetch(`${f.base}/api/files/upload`,{method:'POST',headers:{...f.cookies.owner,'x-open-science-project':f.project.id},body:JSON.stringify({root:'base',path:'knowledge-base/selected-source.md',data:'Only the selected project source.',encoding:'utf8'})});
+ const response=await fetch(`${f.base}/api/files/upload`,{method:'POST',headers:{...f.cookies.owner,'x-open-science-project':f.project.id},body:JSON.stringify({root:'base',path:`knowledge-base/${name}`,data:text,encoding:'utf8'})});
  const body=await response.json();assert.equal(response.status,200,JSON.stringify(body));
  const id=body.data.source.id;
  const source=await f.app.sourceService.get(f.owner.id,id);
@@ -46,9 +46,27 @@ async function selectedSource(f) {
   await f.app.store.database.query("UPDATE evimed_product.jobs SET run_after=clock_timestamp()-interval '1 second' WHERE user_id=$1 AND kind='ingest' AND status='queued'",[f.owner.id]);
  }
  const context=await f.app.knowledgePages.knowledgeContext.forProject(f.project);
- assert.ok(context.inputs.some(input=>input.receipt.sourceId===id),'available source was ingested locally');
+ if(Array.isArray(context.inputs)) assert.ok(context.inputs.some(input=>input.receipt.sourceId===id),'available source was ingested locally');
+ else assert.ok((await f.app.sourceService.list(f.owner.id,{projectId:f.project.id,state:'ready',limit:100})).items.some(item=>item.id===id),'outside source was ingested locally');
  return id;
 }
+
+test('the GEO conversation lists an authorized ready source by its readable title',options,async t=>{
+ const f=await setup(t,false);
+ const sourceId=await selectedSource(f);
+ await f.app.store.createProject(f.owner,'outside-source-project','Outside source project');
+ const outsideProject=await f.app.store.requireProject(f.owner,'outside-source-project');
+ const outsideId=await selectedSource({...f,project:outsideProject},'private-outside.md','Private outside project source.');
+ const route=`/api/geo/projects/${f.geo.id}/conversation/${f.root}/sources`;
+ for(const user of ['owner','editor']){
+  const response=await f.call(user,'GET',route);
+  assert.equal(response.status,200);
+  assert.deepEqual(response.body.data.items.find(item=>item.id===sourceId),{id:sourceId,title:'selected-source.md'});
+  assert.equal(response.body.data.items.some(item=>item.id===outsideId||item.title==='private-outside.md'),false);
+ }
+ await f.app.geo.store.query('DELETE FROM evimed_geo.members WHERE geo_project_id=$1 AND user_id=$2',[f.geo.id,'editor']);
+ assert.notEqual((await f.call('editor','GET',route)).status,200);
+});
 
 for(const background of [false,true]) test(`${background?'automatic module':'primary'} child inherits only its proved root source selection`,options,async t=>{
  const f=await setup(t,background);

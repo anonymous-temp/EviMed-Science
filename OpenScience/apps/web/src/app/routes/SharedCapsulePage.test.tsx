@@ -11,7 +11,10 @@ const memory = vi.hoisted(() => ({ announceMemoryChanged: vi.fn(), enableReceive
 vi.mock("@/lib/capsuleShareClient", () => share);
 vi.mock("@/lib/memoryClient", () => memory);
 vi.mock("@/lib/productClient", () => ({ productErrorMessage: (error: { message?: string }) => error?.message ?? "操作未完成，请重试。" }));
-vi.mock("@/lib/runtimeUiNavigation", () => ({ newRuntimeUiIntent: () => ({ sessionId: "ses_trial" }) }));
+vi.mock("@/lib/runtimeUiNavigation", async (original) => {
+  const navigation = await original<typeof import("@/lib/runtimeUiNavigation")>();
+  return { ...navigation, newRuntimeUiIntent: () => navigation.newRuntimeUiIntent(undefined, "ses_trial") };
+});
 
 const preview = {
   archiveSha256: "a".repeat(64), canImport: true, scan: { kept: ["e1"], dropped: [{ id: "e2", factKind: "method_preference", excerpt: "x", source: "closed_set", code: "instructs_agent", reason: "" }], model: "ok", checkedAt: "" },
@@ -22,7 +25,7 @@ const preview = {
   ],
 };
 
-function Where() { const location = useLocation(); return <span data-testid="where">{location.pathname}</span>; }
+function Where() { const location = useLocation(); return <span data-testid="where" data-state={JSON.stringify(location.state)}>{location.pathname}</span>; }
 function page(path: string) {
   return render(<MemoryRouter initialEntries={[path]}><Routes>
     <Route path="/app/memory/shared/:token" element={<SharedCapsulePage />} />
@@ -71,7 +74,11 @@ describe("收到的分享", () => {
     expect(memory.enableReceivedCapsule).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole("button", { name: "试用一次" }));
     await waitFor(() => expect(memory.startCapsuleTrial).toHaveBeenCalledWith("cap-new", "ses_trial"));
-    expect(await screen.findByTestId("where")).toHaveTextContent("/app/chat");
+    const location = await screen.findByTestId("where");
+    expect(location).toHaveTextContent("/app/chat");
+    expect(JSON.parse(location.dataset.state ?? "{}").runtimeUiIntent).toEqual({
+      kind: "create", projectId: expect.any(String), requestId: expect.any(String), sessionId: "ses_trial",
+    });
   });
 
   it("enabling is its own step", async () => {

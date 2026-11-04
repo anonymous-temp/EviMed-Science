@@ -51,18 +51,28 @@ export function geoSparkline(
   };
 }
 
+/**
+ * Anatomy: Decorative historic points, optional joining line, latest dot and target.
+ * Variants: Connected or independent observations. States: No measurements reserves its geometry.
+ * Hit area: None. Keyboard: None; the containing metric states its values accessibly.
+ * Long content: No text; bounded SVG viewBox. Theme: Shared own/target chart roles.
+ * Responsive: Caller width and height remain authoritative. Verification: GeoSparkline.test.tsx and fixture walk.
+ */
 export function GeoSparkline({
   values,
   target = null,
   width = 152,
   height = 32,
   className,
+  connectLines = true,
 }: {
   values: ReadonlyArray<number | null>;
   target?: number | null;
   width?: number;
   height?: number;
   className?: string;
+  /** Unproven or incompatible historical readings remain separate points. */
+  connectLines?: boolean;
 }) {
   const line = geoSparkline(values, target, width, height);
   if (!line) return <span aria-hidden="true" className={cn("inline-block", className)} style={{ width, height }} />;
@@ -89,9 +99,10 @@ export function GeoSparkline({
           strokeDasharray="3 3"
         />
       )}
-      {line.points.length > 1 && (
+      {connectLines && line.points.length > 1 && (
         <path d={line.path} fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" />
       )}
+      {!connectLines && line.points.slice(0, -1).map((point, index) => <circle key={index} cx={point.x} cy={point.y} r={2} fill="currentColor" />)}
       <circle cx={line.last.x} cy={line.last.y} r={2.5} className="fill-bg" stroke="currentColor" strokeWidth={1.5} />
     </svg>
   );

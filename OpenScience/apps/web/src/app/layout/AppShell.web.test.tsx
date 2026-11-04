@@ -39,7 +39,7 @@ vi.mock("@/lib/apiClient", () => ({
 }));
 // The conversation surface the shell now hosts above the router has its own
 // tests (RuntimeUiFrame.test.tsx); this file is about the authentication gate.
-vi.mock("@/app/layout/SessionFrameHost", () => ({ SessionFrameHost: () => null }));
+vi.mock("@/app/layout/SessionFrameHost", () => ({ SessionFrameHost: () => <div>Resident frame</div> }));
 vi.mock("@/components/sidebar/Sidebar", () => ({ Sidebar: () => <aside>Sidebar</aside> }));
 vi.mock("@/components/command-palette/CommandPalette", () => ({ CommandPalette: () => null }));
 vi.mock("@/components/ui/Toaster", () => ({ Toaster: () => null }));
@@ -211,4 +211,46 @@ describe("AppShell hosted authentication gate", () => {
     expect(await screen.findByText("账号密码登录")).toBeInTheDocument();
     await waitFor(() => expect(mocks.clearProjects).toHaveBeenCalledTimes(1));
   });
+
+
+it("unmounts private content for consecutive external account changes and ignores a late identity", async () => {
+  vi.clearAllMocks();
+  let resolveFirst: (value: unknown) => void = () => {};
+  let resolveSecond: (value: unknown) => void = () => {};
+  mocks.fetchWebMe.mockResolvedValueOnce({ user: { id: "a", name: "A" } })
+    .mockImplementationOnce(() => new Promise(resolve => { resolveFirst = resolve; }))
+    .mockImplementationOnce(() => new Promise(resolve => { resolveSecond = resolve; }));
+  renderRoute();
+  expect(await screen.findByText("Chat workspace")).toBeInTheDocument();
+  const oldFrame = screen.getByText("Resident frame");
+  expect(oldFrame).toBeInTheDocument();
+  fireEvent(window, new StorageEvent("storage", { key: "open-science:web-session-sync", newValue: "first" }));
+  expect(screen.queryByText("Chat workspace")).toBeNull();
+  expect(screen.queryByText("Sidebar")).toBeNull();
+  expect(screen.queryByText("Resident frame")).toBeNull();
+  fireEvent(window, new StorageEvent("storage", { key: "open-science:web-session-sync", newValue: "second" }));
+  resolveFirst({ user: { id: "old", name: "Old" } });
+  await Promise.resolve();
+  expect(screen.queryByText("Chat workspace")).toBeNull();
+  resolveSecond({ user: { id: "b", name: "B" } });
+  expect(await screen.findByText("Chat workspace")).toBeInTheDocument();
+  expect(screen.getByText("Resident frame")).toBeInTheDocument();
+  expect(screen.getByText("Resident frame")).not.toBe(oldFrame);
+  expect(mocks.clearProjects).toHaveBeenCalledTimes(2);
+  expect(mocks.fetchWebMe).toHaveBeenLastCalledWith({ projectId: "default", silentUnauthorized: true });
+});
+
+
+it("ends an external logout without a network recheck or rebroadcast", async () => {
+  vi.clearAllMocks();
+  mocks.fetchWebMe.mockResolvedValue({ user: { id: "a", name: "A" } });
+  renderRoute(); await screen.findByText("Chat workspace");
+  const writes = vi.spyOn(Storage.prototype, "setItem");
+  fireEvent(window, new StorageEvent("storage", { key: "open-science:web-session-sync", newValue: JSON.stringify({ kind: "ended", nonce: "other-tab" }) }));
+  expect(await screen.findByText("账号密码登录")).toBeInTheDocument();
+  expect(mocks.fetchWebMe).toHaveBeenCalledTimes(1);
+  expect(writes.mock.calls.filter(([key]) => key === "open-science:web-session-sync")).toHaveLength(0);
+  writes.mockRestore();
+});
+
 });

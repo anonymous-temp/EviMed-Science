@@ -1,4 +1,4 @@
-import { safetyReading } from "../geoOverviewModel";
+import { hasJudgedZeroSample, safetyReading } from "../geoOverviewModel";
 import { GeoAnalysisEntry } from "../GeoAnalysisEntry";
 import { useMemo, useState } from "react";
 import {
@@ -124,8 +124,11 @@ function Accuracy({
   const partial = readGeoCell(modes?.partial);
   const unknown = readGeoCell(modes?.unknown);
   const refused = readGeoCell(modes?.refused);
+  // The tally denominator includes unknown, partial and refused answers. Only the correct tally proves fully judged answers.
+  const judgedZero = hasJudgedZeroSample(diagnosis);
 
-  const severeReading = safetyReading(diagnosis);
+  const rawSevereReading = safetyReading(diagnosis);
+  const severeReading = counts.severe === 0 && !judgedZero ? { kind: "unmeasured" as const, reason: "核查不足" } : rawSevereReading;
   const tiles = [
     {
       key: "accuracy",
@@ -227,6 +230,7 @@ function Accuracy({
       : show === "open" ? { errorStatuses: ["open"] } : show === "acting" ? { errorStatuses: ["acting", "awaiting_remeasure"] } : {}),
     ...(type ? { errorTypes: [type] } : {}), ...(trace ? { errorTrace: trace } : {}), errorSearch: query.trim(),
   }, refresh);
+  const displayZero = judgedZero && !pages.loading && !pages.error;
   const filtered = useMemo(() => filterErrors(pages.data?.errors ?? [], { show, engine, type, trace, query, questions: cluster ? new Set([...groupOf.entries()].filter(([, group]) => group.id === cluster).map(([id]) => id)) : null }), [pages.data, show, engine, type, trace, query, cluster, groupOf]);
   const claims = useMemo(() => claimRows(filtered), [filtered]);
   const narrowed = engine !== null || type !== null || trace !== null || cluster !== null || query.trim() !== "";
@@ -305,7 +309,7 @@ function Accuracy({
           <StatTile
             key={tile.key}
             label={tile.label}
-            reading={tile.reading}
+            reading={tile.key === "severe" && counts.severe === 0 && !displayZero ? { kind: "unmeasured", reason: "核查不足" } : tile.reading}
             renderMeasured={() => tile.value}
             hint={tile.hint}
             lead={tile.lead}
@@ -318,9 +322,14 @@ function Accuracy({
 
       <ErrorCharts
         errors={errors}
+        emptyAssessment={displayZero
+          ? { title: "已核查的回答中未发现讲错", text: `本轮有 ${correct.numerator} 次回答完整判定为讲对我方，记录的讲错我方为 0 次；未判定的回答不能据此判断。` }
+          : diagnosis.round
+            ? { title: "暂无可确认的讲错结果", text: "本轮医学核查结果不足或尚未完成，不能判断是否存在讲错。" }
+            : { title: "尚未测量", text: "尚无本轮测量和医学核查结果，不能判断是否存在讲错。" }}
         summary={pages.data?.activeErrorSummary ?? diagnosis.activeErrorSummary ?? pages.data?.errorSummary ?? diagnosis.scopeErrorSummary ?? diagnosis.errorSummary}
         composition={composition}
-        compositionTitle={correct.numerator != null && wrongOurs.numerator != null
+        compositionTitle={correct.status === "ok" && wrongOurs.status === "ok" && correct.numerator != null && wrongOurs.numerator != null && (displayZero || wrongOurs.numerator > 0)
           // Composition is answer-level, with assessment uncertainty visible beside it.
           ? `按回答计，讲错我方 ${wrongOurs.numerator.toLocaleString("zh-CN")} 次、讲对 ${correct.numerator.toLocaleString("zh-CN")} 次`
           : "这一轮的回答里我方出现在哪些位置"}
@@ -347,7 +356,7 @@ function Accuracy({
             {pages.error && <Note action={<Button variant="secondary" size="sm" onClick={pages.retry}>{pages.stale ? "刷新范围" : "重试"}</Button>}>{pages.stale ? "判定或测量范围已经变化，请刷新后继续。" : pages.error}</Note>}
             {pages.loading && !pages.data ? <TabSkeleton /> : flat.length === 0 ? (
               <Note action={narrowed ? <Button variant="secondary" size="sm" onClick={clearAll}>清除筛选</Button> : undefined}>
-                {narrowed ? "没有符合的说法。" : "这一类里没有讲错。"}
+                {narrowed || show !== "all" ? "当前筛选没有符合的说法。" : "暂无可显示的讲错记录。"}
               </Note>
             ) : (
               <div data-geo-error-list="">

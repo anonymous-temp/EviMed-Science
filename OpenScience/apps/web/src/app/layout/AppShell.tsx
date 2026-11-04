@@ -17,6 +17,7 @@ import { useProjectStore } from "@/lib/projects";
 import { SIDEBAR_DRAWER_QUERY } from "@/lib/sidebarLayout";
 import { useUiStore } from "@/lib/store";
 import { fetchWebMe, WEB_SESSION_ENDED_EVENT, WEB_SESSION_STARTED_EVENT } from "@/lib/apiClient";
+import { WEB_SESSION_EXTERNAL_EVENT, sessionGeneration, subscribeSessionBoundary } from "@/lib/sessionLifecycle";
 import { startShellHeadStart } from "@/lib/shellPreload";
 import { loginAddress } from "@/lib/loginReturn";
 
@@ -40,6 +41,8 @@ export function AppShell() {
   // The workbench section the address is in (`/app/<section>/…`): see the Suspense boundary below.
   const section = location.pathname.split("/")[2] ?? "";
   const onChat = isChatPath(location.pathname);
+  const generation = useSyncExternalStore(subscribeSessionBoundary, sessionGeneration, sessionGeneration);
+  const [verifiedGeneration, setVerifiedGeneration] = useState(() => sessionGeneration());
   const [authState, setAuthState] = useState<"checking" | "authenticated" | "unauthenticated">("checking");
   // A person who signed out (or deleted the account) is not sent back to the page they left when they sign in again; one whose session
   // simply ended, or who opened a deep link without one, is (design reference §16.3).
@@ -81,13 +84,18 @@ export function AppShell() {
   // Only a committed destination closes mobile navigation. Filter-only query changes
   // keep it open; blocked transitions never change this pathname.
   const acceptedPath = useRef(location.pathname);
+  const acceptedGeoSettings = useRef(false);
   useLayoutEffect(() => {
-    if (acceptedPath.current === location.pathname) return;
+    const settings = /^\/app\/geo\/[^/]+(?:\/|$)/.test(location.pathname)
+      && new URLSearchParams(location.search).get("panel") === "settings";
+    const openingSettings = settings && !acceptedGeoSettings.current;
+    acceptedGeoSettings.current = settings;
+    if (acceptedPath.current === location.pathname && !openingSettings) return;
     acceptedPath.current = location.pathname;
     if (!drawerLayout) return;
     focusAfter.current = "route";
     setSidebarCollapsed(true);
-  }, [location.pathname, drawerLayout, setSidebarCollapsed]);
+  }, [location.pathname, location.search, drawerLayout, setSidebarCollapsed]);
 
   // Cmd/Ctrl+B toggles the sidebar, matching the button's tooltip. An
   // embedded shell has no sidebar to toggle, and the key is the host's.
@@ -144,11 +152,28 @@ export function AppShell() {
     };
     const startSession = () => {
       signedOut.current = false;
+      setVerifiedGeneration(sessionGeneration());
       setAuthState("authenticated");
     };
+    const external = (event: Event) => {
+      const kind = (event as CustomEvent<{ kind?: string }>).detail?.kind;
+      const epoch = sessionGeneration();
+      signedOut.current = false;
+      useProjectStore.getState().clear();
+      if (kind === "ended") { setVerifiedGeneration(epoch); setAuthState("unauthenticated"); return; }
+      setAuthState("checking");
+      void fetchWebMe({ projectId: "default", silentUnauthorized: true }).then((me) => {
+        if (sessionGeneration() !== epoch) return;
+        setVerifiedGeneration(epoch);
+        setAuthState(me ? "authenticated" : "unauthenticated");
+        if (me) startShellHeadStart();
+      }).catch(() => { if (sessionGeneration() === epoch) { setVerifiedGeneration(epoch); setAuthState("unauthenticated"); } });
+    };
+    window.addEventListener(WEB_SESSION_EXTERNAL_EVENT, external);
     window.addEventListener(WEB_SESSION_ENDED_EVENT, clearSession);
     window.addEventListener(WEB_SESSION_STARTED_EVENT, startSession);
     return () => {
+      window.removeEventListener(WEB_SESSION_EXTERNAL_EVENT, external);
       window.removeEventListener(WEB_SESSION_ENDED_EVENT, clearSession);
       window.removeEventListener(WEB_SESSION_STARTED_EVENT, startSession);
     };
@@ -156,13 +181,13 @@ export function AppShell() {
 
   useEffect(() => {
     let active = true;
+    const epoch = sessionGeneration();
     void fetchWebMe()
       .then((me) => {
-        if (active) setAuthState(me ? "authenticated" : "unauthenticated");
-        if (me) startShellHeadStart();
+        if (active && sessionGeneration() === epoch) { setVerifiedGeneration(epoch); setAuthState(me ? "authenticated" : "unauthenticated"); if (me) startShellHeadStart(); }
       })
       .catch(() => {
-        if (active) setAuthState("unauthenticated");
+        if (active && sessionGeneration() === epoch) setAuthState("unauthenticated");
       });
     return () => {
       active = false;
@@ -175,7 +200,7 @@ export function AppShell() {
 
   const isMac = isMacPlatform();
 
-  if (authState === "checking") {
+  if (authState === "checking" || (authState === "authenticated" && verifiedGeneration !== generation)) {
     return (
       <div className="flex h-dvh w-screen items-center justify-center bg-bg text-muted">
         <Loader2 size={20} className="animate-spin" aria-label="正在检查登录状态" />
@@ -192,7 +217,7 @@ export function AppShell() {
     // `overflow-clip` after `overflow-hidden`: the shell never scrolls. A hidden root still can be scrolled by code, and
     // `scrollIntoView` does it whenever anything below the page's fold (a table's screen-reader caption) has lengthened it —
     // the sidebar and the page's header then leave the screen. Where `clip` is unknown (Safari before 16) it stays `hidden`.
-    <div className="flex h-dvh w-screen overflow-hidden overflow-clip bg-bg text-text" data-embedded={embedded || undefined}>
+    <div key={generation} className="flex h-dvh w-screen overflow-hidden overflow-clip bg-bg text-text" data-embedded={embedded || undefined}>
       {/* The first thing Tab reaches on every page (spec §10.3, appendix E
           #3): invisible until focused, then top-left on the skip tier, above
           everything. It moves focus rather than the address — a `#main` hash
@@ -229,7 +254,7 @@ export function AppShell() {
       <main id="main" ref={mainRef} tabIndex={-1} inert={drawerOpen} className="flex min-w-0 flex-1 flex-col focus:outline-none">
         <UnsavedRouteGuard />
         {!embedded && sidebarCollapsed && (
-          <div className="flex h-12 shrink-0 items-center pl-2">
+          <div className="relative z-sticky flex h-12 shrink-0 items-center pl-2">
             {/* The chrome's 36 px icon button: below `lg` this is the only
                 way off a page a phone was sent to. */}
             <IconButton

@@ -23,7 +23,7 @@ describe("定时任务", () => {
   it("opens the kernel's own page in the frame: a new conversation on screen, asked to show the scheduled tasks over it", () => {
     const landed = open("/app/autopilot");
     expect(landed.path).toBe("/app/chat");
-    expect(landed.state.runtimeUiIntent).toMatchObject({ kind: "create", panel: "schedules", projectId: "default" });
+    expect(landed.state.runtimeUiIntent).toMatchObject({ kind: "create", projectId: "default" });
     // What the frame will read of it: accepted for this project, with the panel.
     expect(runtimeUiIntentFromState(landed.state, "default")).toMatchObject({ panel: "schedules" });
   });
@@ -33,7 +33,7 @@ describe("定时任务", () => {
       cleanup();
       const landed = open(address);
       expect(landed.path, address).toBe("/app/chat");
-      expect(landed.state.runtimeUiIntent?.panel, address).toBe("schedules");
+      expect(runtimeUiIntentFromState(landed.state, "default")?.panel, address).toBe("schedules");
     }
   });
 

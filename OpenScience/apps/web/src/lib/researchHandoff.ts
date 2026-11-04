@@ -1,3 +1,4 @@
+import { sessionOwner } from "@/lib/sessionLifecycle";
 import { productRequest } from "./productClient";
 import type { RuntimeUiIntent } from "./runtimeUiNavigation";
 
@@ -71,5 +72,5 @@ export function createResearchHandoff(input: HandoffInput): Promise<HandoffCreat
 
 /** The new conversation, as the frame opens one: created under the bound id, the card in its composer. */
 export function handoffIntent(created: HandoffCreated): RuntimeUiIntent {
-  return { kind: "create", projectId: created.projectId, requestId: crypto.randomUUID(), sessionId: created.sessionId, draft: created.draft };
+  return { kind: "create", projectId: created.projectId, requestId: crypto.randomUUID(), owner: sessionOwner(), sessionId: created.sessionId, draft: created.draft };
 }

@@ -5,6 +5,7 @@ import {
   GEO_METRIC_LABELS_ZH,
   GEO_METRIC_UNITS,
   documentExportDigest,
+  geoMetricDefinition,
 } from "@evimed/domain";
 import {
   GEO_SCOPE_FIELDS,
@@ -324,6 +325,7 @@ export function presentGeoAnalysis(selected, request, context = {}) {
       ? (selected.computed.cells.find(matches)?.members.unit ?? "answers")
       : "derived_inputs",
     countingRule:
+      ((view.metricId === "M-13" || (!view.metricId && rows.some((row) => row.metricId === "M-13"))) && geoMetricDefinition("M-13")?.note) ||
       "Existing domain metric; member references identify its exact input cohort.",
     denominatorRule:
       "Domain metric eligibility, deduplication and cross-engine balance.",
@@ -723,7 +725,9 @@ export function freezeGeoAnalysisDocument(view) {
       .replaceAll("\n", " ");
   const objectsOf = (/** @type {any} */ dimensions) => {
     const objects = dimensions?.objects;
-    return Array.isArray(objects) ? objects : objects && typeof objects === "object" ? Object.values(objects).flat() : [];
+    const items = Array.isArray(objects) ? objects : objects && typeof objects === "object" ? Object.values(objects).flat() : [];
+    return items.map((/** @type {any} */ item) => item?.metricId === "M-13" && (item.status === "insufficient" || item.state === "insufficient")
+      ? { ...item, value: null, numerator: null, denominator: null } : item);
   };
   const withoutObjects = (/** @type {any} */ dimensions) => { const { objects: _objects, ...rest } = dimensions ?? {}; return rest; };
   /** A row's conditions in words; the records it carries follow, one per `／`. @param {any} row */
@@ -733,17 +737,18 @@ export function freezeGeoAnalysisDocument(view) {
   const unitOf = (/** @type {any} */ row, /** @type {any} */ cell) => cell.unit ?? GEO_METRIC_UNITS[row.metricId] ?? row.dimensions.unit ?? "count";
   const numeratorOf = (/** @type {any} */ cell) => cell.numerator ?? cell.metric?.numerator ?? null;
   const denominatorOf = (/** @type {any} */ cell) => cell.denominator ?? cell.metric?.denominator ?? null;
+  const hiddenRatio = (/** @type {any} */ row, /** @type {any} */ cell) => row.metricId === "M-13" && (cell.state === "insufficient" || cell.metric?.status === "insufficient");
   const reasonOf = (/** @type {any} */ cell) => geoReaderReason(cell.reason ?? cell.metric?.reason ?? null);
   /** A cell read aloud: the reading, then what qualifies it. Under the floor it is k of n, never a rate. @param {any} row @param {any} column */
   const cellReading = (row, column) => {
     const cell = row.values[column.key], metric = cell.metric, unit = unitOf(row, cell);
-    const value = cell.value == null ? "未测" : `${cell.value}${unit === "percent" ? "%" : unit === "percentage_points" ? " 个百分点" : unit === "CNY" ? " 元" : ""}`;
+    const value = cell.value == null ? "未测" : `${cell.value}${unit === "percent" ? "%" : unit === "percentage_points" ? " 个百分点" : unit === "ratio" ? " 倍" : unit === "CNY" ? " 元" : ""}`;
     const insufficient = metric?.status === "insufficient" || cell.state === "insufficient";
     const word = metric?.reason === "citations_without_links" ? "引用不可测" : insufficient ? "样本不足" : metric?.status === "absent" ? "未测" : value;
     const numerator = numeratorOf(cell), denominator = denominatorOf(cell);
     const notes = [cell.state && !["known", "insufficient"].includes(cell.state) ? geoReaderState(cell.state) : null,
       metric?.reason === "citations_without_links" ? null : reasonOf(cell),
-      numerator != null && denominator != null ? `${numerator}/${denominator}` : null].filter(Boolean);
+      !hiddenRatio(row, cell) && numerator != null && denominator != null ? unit === "ratio" ? `${numerator}%/${denominator}%` : `${numerator}/${denominator}` : null].filter(Boolean);
     return notes.length ? `${word}（${[...new Set(notes)].join("；")}）` : word;
   };
   const columnLabels = new Map(view.columns.map((/** @type {any} */ column) => [column.key, column.label]));
@@ -774,10 +779,10 @@ export function freezeGeoAnalysisDocument(view) {
       ...view.columns.flatMap((/** @type {any} */ column) => {
         const cell = row.values[column.key];
         return [
-          [column.key, geoReaderCellValue(column.key, cell.value)],
+          [column.key, hiddenRatio(row, cell) ? null : geoReaderCellValue(column.key, cell.value)],
           [`${column.key}_state`, geoReaderState(cell.state)],
-          [`${column.key}_numerator`, numeratorOf(cell)],
-          [`${column.key}_denominator`, denominatorOf(cell)],
+          [`${column.key}_numerator`, hiddenRatio(row, cell) ? null : numeratorOf(cell)],
+          [`${column.key}_denominator`, hiddenRatio(row, cell) ? null : denominatorOf(cell)],
           [`${column.key}_reason`, reasonOf(cell)],
           [`${column.key}_unit`, geoReaderUnit(cell.members?.unit ?? null)],
         ];
@@ -788,7 +793,7 @@ export function freezeGeoAnalysisDocument(view) {
   const cellsNote = (row) => view.columns.map((/** @type {any} */ column) => {
     const cell = row.values[column.key];
     const parts = [geoReaderUnit(cell.unit ?? null) ? `单位 ${geoReaderUnit(cell.unit)}` : null, reasonOf(cell),
-      numeratorOf(cell) != null && denominatorOf(cell) != null ? `${numeratorOf(cell)}/${denominatorOf(cell)}` : null,
+      !hiddenRatio(row, cell) && numeratorOf(cell) != null && denominatorOf(cell) != null ? `${numeratorOf(cell)}/${denominatorOf(cell)}` : null,
       cell.knownSubtotal !== undefined ? `已核实小计 ${cell.knownSubtotal ?? 0}${cell.unknownCandidates ? `，另有 ${cell.unknownCandidates} 条待核实` : ""}` : null].filter(Boolean);
     return parts.length ? `${column.label}：${parts.join("，")}` : null;
   }).filter(Boolean).join("；") || null;
@@ -807,7 +812,7 @@ export function freezeGeoAnalysisDocument(view) {
     rows = view.rows.map((/** @type {any} */ row, /** @type {number} */ index) => ({
       row_number: index + 1, label: row.label, dimensions: conditions(row), cells_note: cellsNote(row),
       ...Object.fromEntries(view.columns.flatMap((/** @type {any} */ column) => [
-        [column.key, geoReaderCellValue(column.key, row.values[column.key].value)],
+        [column.key, hiddenRatio(row, row.values[column.key]) ? null : geoReaderCellValue(column.key, row.values[column.key].value)],
         [`${column.key}_state`, geoReaderState(row.values[column.key].state)],
       ])),
     }));
@@ -819,11 +824,12 @@ export function freezeGeoAnalysisDocument(view) {
       { key: "denominator", label: "分母", type: "number" }];
     rows = view.rows.flatMap((/** @type {any} */ row, /** @type {number} */ index) => view.columns.map((/** @type {any} */ column) => {
       const value = row.values[column.key];
-      return { row_number: index + 1, label: row.label, dimensions: conditions(row), column_label: column.label, value: geoReaderCellValue(column.key, value.value), state: geoReaderState(value.state),
-        reason: reasonOf(value), unit: geoReaderUnit(value.members?.unit ?? value.unit ?? null), numerator: value.metric?.numerator ?? null, denominator: value.metric?.denominator ?? null };
+      return { row_number: index + 1, label: row.label, dimensions: conditions(row), column_label: column.label, value: hiddenRatio(row, value) ? null : geoReaderCellValue(column.key, value.value), state: geoReaderState(value.state),
+        reason: reasonOf(value), unit: geoReaderUnit(value.members?.unit ?? value.unit ?? null), numerator: hiddenRatio(row, value) ? null : value.metric?.numerator ?? null, denominator: hiddenRatio(row, value) ? null : value.metric?.denominator ?? null };
     }));
   }
-  const rules = [geoReaderRule(view.definition.countingRule), geoReaderRule(view.definition.denominatorRule)].filter(Boolean);
+  const rules = [...new Set([geoReaderRule(view.definition.countingRule), geoReaderRule(view.definition.denominatorRule),
+    view.rows.some((/** @type {any} */ row) => row.metricId === "M-13") ? geoMetricDefinition("M-13")?.note : null].filter(Boolean))];
   const header = (/** @type {string} */ title, /** @type {string} */ note = "") => `# ${title}\n\n${rules.map((rule) => `${rule}\n\n`).join("")}范围：${clean(geoReaderScope(view.scope))}。样本：${clean(geoReaderCounts(view.selection?.counts))}。\n\n${note ? `${note}\n\n` : ""}`;
   /** A context the analysis read, in words: what it is and which version. @param {any} basis */
   const contextLine = (basis) => {

@@ -293,7 +293,7 @@ function History({ detail }: { detail: GeoSourceDetail }) {
       <h3 className="text-ui font-semibold text-text">近几轮</h3>
       <ScrollRegion label="近几轮的被引用和讲错的回答" className="mt-2">
         <table data-geo-source-history="" className="w-full min-w-max text-ui tabular-nums">
-          <caption className="sr-only">这个站在最近几轮里被引用的回答数，和其中讲错的回答数</caption>
+          <caption className="sr-only">这个站在最近几轮里被引用的回答数，和其中已记录讲错的回答数</caption>
           <thead>
             <tr>
               <td />
@@ -311,7 +311,7 @@ function History({ detail }: { detail: GeoSourceDetail }) {
               {model.columns.map((column) => <td key={column.roundId} data-geo-history="cited" className={cn(cell(column.breakBefore), "text-text")}>{column.cited.toLocaleString("zh-CN")}</td>)}
             </tr>
             <tr>
-              <th scope="row" className="py-1 pr-3 text-left font-normal text-text-2">讲错的回答</th>
+              <th scope="row" className="py-1 pr-3 text-left font-normal text-text-2">已记录讲错的回答</th>
               {model.columns.map((column) => (
                 <td key={column.roundId} data-geo-history="wrong" className={cn(cell(column.breakBefore), column.wrongOurs > 0 ? "text-danger" : "text-text")}>{column.wrongOurs.toLocaleString("zh-CN")}</td>
               ))}

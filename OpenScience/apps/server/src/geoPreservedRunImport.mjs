@@ -3,7 +3,7 @@ import path from "node:path";
 import { HttpError } from "./security.mjs";
 import { observedResultPath } from "./resultProducerCapture.mjs";
 import { readVerifiedRunTranscript } from "./runTranscripts.mjs";
-import { geoSignalValueRunPaths, geoStructuredRunPaths } from "./geoDeliveryImport.mjs";
+import { geoSignalValueRunPathReceipt, geoStructuredRunPathReceipt } from "./geoDeliveryImport.mjs";
 
 const unavailable = () => new HttpError(409, "geo_plan_output_unavailable", "The producing run's preserved output is unavailable; retain the files and refresh after its original capture is restored.");
 const sha = bytes => createHash("sha256").update(bytes).digest("hex");
@@ -42,14 +42,18 @@ function witnesses(project, run, transcript, relative, candidates) {
 
 /** Pin only versions that existed before the refresh. Workspace inventory, mutable files and capture timestamps have no authority.
  * @param {{results:any,project:any,run:any,context:any,transcript?:any,paths?:string[]}} input */
-export async function pinGeoRunOutputs({ results, project, run, context, transcript = null, paths = [...geoStructuredRunPaths(run, context), ...geoSignalValueRunPaths(run, context)] }) {
+export async function pinGeoRunOutputs({ results, project, run, context, transcript = null, paths = undefined }) {
   const pinned = new Map();
+  const structured = paths === undefined ? geoStructuredRunPathReceipt(run, context) : { paths: [], total: 0, complete: true };
+  const signal = paths === undefined ? geoSignalValueRunPathReceipt(run, context) : { paths: [], total: 0, complete: true };
+  paths ??= [...structured.paths, ...signal.paths];
   const folders = new Set(paths.map(file => file.split("/")[1]));
   const handed = ["outputFiles", "presentedFiles", "artifacts", "unverifiedArtifacts"].flatMap(key => Array.isArray(run[key]) ? run[key] : [])
     .map(file => typeof file === "string" ? file : file?.path)
     .filter(file => typeof file === "string" && /^deliverables\/[A-Za-z0-9_-]{1,160}\/(?:[A-Za-z0-9_.-]+\/)*[A-Za-z0-9_.-]+$/.test(file)
       && !file.split("/").some(part => part === "." || part === "..") && folders.has(file.split("/")[1]));
-  for (const relative of [...new Set([...paths, ...handed])].slice(0, 128)) {
+  const uniquePaths = [...new Set([...paths, ...handed])];
+  for (const relative of uniquePaths.slice(0, 128)) {
     const candidates = [];
     let cursor = null;
     if (results) do {
@@ -71,19 +75,41 @@ export async function pinGeoRunOutputs({ results, project, run, context, transcr
     pinned.set(relative, digests.size === 1 ? { version: eligible.sort((a, b) => a.versionId.localeCompare(b.versionId))[0] }
       : { code: digests.size > 1 ? "geo_plan_output_ambiguous" : "geo_plan_output_unavailable" });
   }
-  const identity = sha(JSON.stringify([project.userId, project.id, run.id, run.sessionId, [...pinned].map(([relative, selected]) =>
+  const enumerationComplete = structured.complete && signal.complete && uniquePaths.length <= 128;
+  const readStates = new Map([...pinned].map(([relative, selected]) => [relative, selected.version ? 'unverified' : 'unavailable']));
+  const completeness = { scope: 'recorded_run_inventory', upstreamComplete: null, continuationAvailable: false, complete: false, enumerationComplete,
+    structuredTotal: structured.total, signalTotal: signal.total, pinTotal: uniquePaths.length, pinned: pinned.size,
+    verified: 0, unverified: 0, unavailable: 0 };
+  const updateCompleteness = () => {
+    const states = [...readStates.values()];
+    completeness.verified = states.filter(state => state === 'verified').length;
+    completeness.unverified = states.filter(state => state === 'unverified').length;
+    completeness.unavailable = states.filter(state => state === 'unavailable').length;
+    completeness.complete = enumerationComplete && completeness.unverified === 0 && completeness.unavailable === 0;
+  };
+  updateCompleteness();
+  const identity = sha(JSON.stringify([project.userId, project.id, run.id, run.sessionId, completeness, [...pinned].map(([relative, selected]) =>
     [relative, selected.version?.versionId ?? null, selected.version?.digest ?? null, selected.code ?? null]).sort((a, b) => a[0].localeCompare(b[0]))]));
   return {
     identity,
+    completeness,
     /** Internal closure: neither an API caller nor refreshed inventory can replace this pinned selection.
      * @param {any} owner @param {any} actual @param {string} relative */
     async readFile(owner, actual, relative) {
       if (owner.userId !== project.userId || owner.id !== project.id || actual.id !== run.id || actual.sessionId !== run.sessionId) throw unavailable();
       const selected = pinned.get(relative);
       if (!selected?.version) throw new HttpError(409, selected?.code ?? "geo_plan_output_unavailable", "The original producing event has no unambiguous preserved output; retain the files.");
-      const bytes = (await results.raw(project.userId, project.id, selected.version.versionId)).bytes;
-      if (sha(bytes) !== selected.version.digest) throw unavailable();
-      return bytes;
+      try {
+        const bytes = (await results.raw(project.userId, project.id, selected.version.versionId)).bytes;
+        if (sha(bytes) !== selected.version.digest) throw unavailable();
+        // A successful later read cannot erase an earlier failure in this receipt.
+        if (readStates.get(relative) !== 'unavailable') readStates.set(relative, 'verified');
+        updateCompleteness();
+        return bytes;
+      } catch (error) {
+        readStates.set(relative, 'unavailable'); updateCompleteness();
+        throw error;
+      }
     },
   };
 }
@@ -101,7 +127,7 @@ export function createGeoArtifactRefresh({ runs, results, geo, contexts, readTra
     const pinned = context ? await pinGeoRunOutputs({ results, project, run: original, context, transcript }) : null;
     const refreshed = await runs.refreshArtifacts(project, runId, options);
     if (!context || !pinned) return refreshed;
-    const geoImport = await geo.importDelivery(project, original, { recovery: true, readRunFile: pinned.readFile, candidateIdentity: pinned.identity });
-    return { ...refreshed, geoImport };
+    const geoImport = await geo.importDelivery(project, original, { recovery: true, readRunFile: pinned.readFile, candidateIdentity: pinned.identity, outputCompleteness: pinned.completeness });
+    return { ...refreshed, geoImport, geoOutputCompleteness: pinned.completeness };
   };
 }

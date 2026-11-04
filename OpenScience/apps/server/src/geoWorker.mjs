@@ -111,10 +111,14 @@ function summary(value) {
     else if (typeof entry === "string" && entry.length <= 60) out[key] = entry;
     else if (Array.isArray(entry)) out[key] = entry.length;
   }
+  const skipped=/** @type {any} */ (value).skipped;
+  if (Number.isSafeInteger(skipped?.decision_input_incomplete) && skipped.decision_input_incomplete >= 0) out.decisionInputIncomplete=skipped.decision_input_incomplete;
   return out;
 }
 
 export class GeoWorker {
+  /** @type {{projectIds:string[],truncated:boolean,at:string}|null} */
+  #marketCapacity = null;
   /**
    * @param {{ loops: Record<string, (() => Promise<unknown>) | null | undefined>, pollMs?: number, leaseMs?: number,
    *   timeZone?: string, canRun?: () => boolean, now?: () => Date, report?: (loop: string, code: string) => void,
@@ -185,6 +189,14 @@ export class GeoWorker {
         state.lastError = null;
         state.lastOkAt = this.now().toISOString();
         state.last = summary(result);
+        const details=/** @type {any} */ (result);
+        if (name === 'orders' && details && typeof details === 'object' && Number.isSafeInteger(details.projects)) {
+          const raw=Array.isArray(details.incompleteProjectIds) ? details.incompleteProjectIds : [];
+          const valid=raw.filter(id=>typeof id==='string' && /^geo_[a-f0-9]{32}$/.test(id));
+          this.#marketCapacity={projectIds:[...new Set(valid)].slice(0,100),
+            truncated:details.incompleteProjectsTruncated === true || valid.length !== raw.length || valid.length > 100,at:state.lastOkAt};
+          if (state.last) state.last.incompleteProjectsTruncated=this.#marketCapacity.truncated;
+        }
         return result;
       } catch (error) {
         const code = codeOf(error);
@@ -284,6 +296,11 @@ export class GeoWorker {
       stalled: Object.entries(loops).filter(([, entry]) => entry.stalled).map(([name]) => name),
       loops,
     };
+  }
+
+  /** Internal diagnostics; expose only through an authenticated operator channel. */
+  marketCapacityDiagnostics() {
+    return this.#marketCapacity ? { ...this.#marketCapacity, projectIds:[...this.#marketCapacity.projectIds] } : null;
   }
 
   async close() {

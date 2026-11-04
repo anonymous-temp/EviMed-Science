@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { once } from "node:events";
-import { createServer } from "node:http";
+import { createServer, request as requestHttp } from "node:http";
 import { connect as connectSocket } from "node:net";
 import { mkdtemp, mkdir, readFile, rm, symlink, writeFile, stat } from "node:fs/promises";
 import os from "node:os";
@@ -122,6 +122,7 @@ async function fixture(t, overrides = {}, muxOptions = {}, { authorizePrompt = n
     resolveDelegatedFrame,
     createDelegatedPolicy: shared ? async identity => new GeoNativeFramePolicy({ ...identity, config, runtimeManager: manager,
       authority: { withFrame: async (actor, claims, operation) => {
+        await shared.beforeAuthority?.();
         const resolved = await resolveDelegatedFrame(actor, claims);
         shared.locked = true;
         try { return await operation(resolved); } finally { shared.locked = false; }
@@ -1107,6 +1108,88 @@ const postSettings = (f, method, body) => fetch(`${f.base}/api/${method}`, {
 });
 
 const settingsRead = (rpcId = "r1") => ({ type: "client-request", rpcId, method: RUNTIME_UI_SETTINGS_READ, payload: { args: {} } });
+
+test("a scoped frame receives only fixed read-only chat presentation, without forwarding settings", { timeout: 10000 }, async (t) => {
+  const shared = { allowed: true, inputs: [], locked: false, resolutions: [] };
+  const f = await fixture(t, {}, {}, { shared });
+  let forwarded = 0;
+  f.manager.proxy = async () => { forwarded += 1; throw new Error("settings must not reach the kernel"); };
+  const answer = await postSettings(f, RUNTIME_UI_SETTINGS_READ, JSON.stringify(settingsRead("scoped")));
+  assert.equal(answer.status, 200);
+  assert.equal(answer.headers.get("cache-control"), "private, no-store");
+  assert.equal(answer.headers.get("x-content-type-options"), "nosniff");
+  const body = await answer.json();
+  assert.equal(body.rpcId, "scoped");
+  assert.deepEqual(body.result.value.namespaces.map(view => view.ns), ["ui-chat"]);
+  assert.deepEqual(body.result.value.namespaces[0].value, CHAT_PRESENTATION);
+  assert.equal(body.result.value.writable, false);
+  assert.equal(body.result.value.hasDocument, false);
+  assert.deepEqual(Object.keys(body.result.value).sort(), ["hasDocument", "namespaces", "writable"]);
+  assert.deepEqual(Object.keys(body.result.value.namespaces[0]).sort(), ["applies", "autoGenerate", "ns", "revision", "schema", "secrets", "value"]);
+  assert.equal(forwarded, 0);
+  for (const call of [
+    { ...settingsRead(), payload: { args: { ns: "llm-deepseek" } } },
+    { ...settingsRead(), extra: true },
+    { ...settingsRead(), rpcId: "" },
+  ]) assert.equal((await postSettings(f, RUNTIME_UI_SETTINGS_READ, JSON.stringify(call))).status, 403);
+  assert.equal((await postSettings(f, `${RUNTIME_UI_SETTINGS_READ}?ignored=1`, JSON.stringify(settingsRead()))).status, 403);
+  assert.equal((await postSettings(f, RUNTIME_UI_SETTINGS_READ, JSON.stringify({ ...settingsRead(), extra: "x".repeat(17000) }))).status, 413);
+  assert.equal((await fetch(`${f.base}/api/${RUNTIME_UI_SETTINGS_READ}`, { headers: { Cookie: f.cookie, Origin: UI_ORIGIN } })).status, 403);
+  assert.equal((await fetch(`${f.base}/api/${RUNTIME_UI_SETTINGS_READ}`, { method: "POST", headers: { Cookie: f.cookie, Origin: "https://other.example" }, body: JSON.stringify(settingsRead()) })).status, 403);
+  assert.equal((await postSettings(f, "settings/mutate", JSON.stringify({ type: "client-request", rpcId: "w", method: "settings/mutate", payload: { args: {} } }))).status, 403);
+  f.manager.runtimeGeneration = () => null;
+  assert.equal((await postSettings(f, RUNTIME_UI_SETTINGS_READ, JSON.stringify(settingsRead()))).status, 403, "a missing runtime generation is not silently accepted");
+  f.manager.runtimeGeneration = () => "generation";
+  const c = f.connect(); assert.equal(await c.opened, 101);
+  c.send(open("settings", RUNTIME_UI_SETTINGS_READ));
+  assert.equal((await c.next()).error?.code, "runtime_ui_method_denied");
+  assert.equal((await c.next()).type, "end");
+  shared.allowed = false;
+  assert.equal((await postSettings(f, RUNTIME_UI_SETTINGS_READ, JSON.stringify(settingsRead()))).status, 403);
+  assert.equal(forwarded, 0);
+});
+
+test("scoped settings performs its final authority check after the second frame resolution", { timeout: 10000 }, async (t) => {
+  for (const change of ["membership", "generation"]) {
+    const shared = { allowed: true, inputs: [], locked: false, resolutions: [], beforeAuthority: null };
+    const f = await fixture(t, {}, {}, { shared });
+    let generation = "before";
+    f.manager.runtimeGeneration = () => generation;
+    shared.beforeAuthority = async () => { if (change === "membership") shared.allowed = false; else generation = "after"; };
+    assert.equal((await postSettings(f, RUNTIME_UI_SETTINGS_READ, JSON.stringify(settingsRead(change)))).status, 403, change);
+    assert.ok(shared.resolutions.length >= 2, "the final check happens after full frame revalidation");
+  }
+});
+
+test("a scoped settings response rechecks membership, runtime generation and frame release after a slow body", { timeout: 10000 }, async (t) => {
+  for (const change of ["membership", "generation", "release"]) {
+    const shared = { allowed: true, inputs: [], locked: false, resolutions: [] };
+    const f = await fixture(t, {}, {}, { shared });
+    let generation = "before", generationReads = 0, bodyAccepted = false;
+    f.manager.runtimeGeneration = () => { generationReads += 1; return generation; };
+    let forwarded = 0;
+    f.manager.proxy = async () => { forwarded += 1; };
+    const body = JSON.stringify(settingsRead(change));
+    const outcome = new Promise((resolve) => {
+      const request = requestHttp(`${f.base}/api/${RUNTIME_UI_SETTINGS_READ}`, { method: "POST", headers: {
+        Cookie: f.cookie, Origin: UI_ORIGIN, "content-type": "application/json", "content-length": Buffer.byteLength(body),
+      } }, response => { response.resume(); response.on("end", () => resolve(response.statusCode)); });
+      request.on("error", () => resolve("closed"));
+      request.write(body.slice(0, 4));
+      void (async () => {
+        await within(3000, () => generationReads >= 2, "the authorized request did not begin reading its body");
+        bodyAccepted = true;
+        if (change === "membership") shared.allowed = false;
+        if (change === "generation") generation = "after";
+        if (change === "release") await f.ui.releaseFrame(f.frame.frameId, f.user.id);
+        request.end(body.slice(4));
+      })().catch(() => request.destroy());
+    });
+    assert.notEqual(await outcome, 200, change);
+    assert.equal(bodyAccepted, true, change);
+    assert.equal(forwarded, 0, change);
+  }
+});
 
 test("the chat's presentation reaches the page through the one settings read, and the rest of the kernel's document does not", { timeout: 5000 }, async (t) => {
   // A hosted conversation drew the web client's default work details (`detailed`: every step flat while the turn runs)

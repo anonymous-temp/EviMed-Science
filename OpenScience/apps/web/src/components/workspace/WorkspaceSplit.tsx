@@ -1,8 +1,9 @@
 import { useLayoutEffect, type ReactNode, type RefObject } from "react";
 import { PanelRightClose } from "lucide-react";
-import { Link } from "react-router";
+import { Link, useLocation, useNavigationType } from "react-router";
 import { useMediaQuery } from "@/lib/useMediaQuery";
 import { buttonClasses } from "@/components/ui/Button";
+import { useResultActivity, WorkspaceResultActivity } from "./WorkspaceResultActivity";
 
 /** From here the results keep room beside a 432 px conversation; under it the conversation covers them, and 收起 brings them back. */
 const SPLIT_FROM = "(min-width: 1180px)";
@@ -12,7 +13,7 @@ const SPLIT_FROM = "(min-width: 1180px)";
  * its composer at the bottom of the column. The address says it is open and which result is beside it (`…/chat/<session>?result=…`), so
  * it can be linked and reloaded, and collapsing is only leaving that address: the resident frame stays alive either way.
  *
- * The results are not drawn where they would not be seen: a page under the breakpoint does not read eight tabs behind a cover.
+ * Retained results keep their controls under a narrow conversation cover. Their drawers yield to the active conversation at either width.
  */
 export function useWorkspaceSplit(): boolean {
   return useMediaQuery(SPLIT_FROM);
@@ -29,21 +30,32 @@ export function useWorkspaceSplit(): boolean {
  * Responsive: At 1180px the sticky conversation has 432px content width; below it the conversation fills the available width.
  * Verification: GeoProjectPage.test.tsx covers split/cover and navigation behavior. Native rendering, browser geometry and real AT require separate checks.
  */
-export function WorkspaceSplit({ results, conversation, collapseTo }: { results: ReactNode; conversation: ReactNode; collapseTo: string }) {
-  const split = useWorkspaceSplit();
+export function WorkspaceSplit({ results, conversation, collapseTo, splitOverride, open = true, retainResults = false, replaceOnCollapse = false, resultDetailKey = null, resultDetailActivation = null }: {
+  results: ReactNode; conversation: ReactNode; collapseTo: string; splitOverride?: boolean; open?: boolean; retainResults?: boolean; replaceOnCollapse?: boolean; resultDetailKey?: string | null; resultDetailActivation?: string | null;
+}) {
+  const viewportSplit = useWorkspaceSplit();
+  const split = splitOverride ?? viewportSplit;
+  const showResults = !open || split;
+  const { state } = useLocation();
+  const navigation = useNavigationType();
+  const intent = state?.runtimeUiIntent;
+  const requestId = retainResults && intent?.kind === "open" && typeof intent.requestId === "string" ? intent.requestId : null;
+  const activity = useResultActivity(retainResults && open, !showResults, resultDetailKey, requestId, resultDetailActivation, navigation);
   return (
-    <div data-workspace={split ? "split" : "cover"} className="flex min-w-0 items-start gap-6">
-      {split && <div data-workspace-results="" className="min-w-0 flex-1">{results}</div>}
-      <section aria-label="对话" data-workspace-conversation=""
+    <div data-workspace={!open ? "closed" : split ? "split" : "cover"} className="flex min-w-0 items-start gap-6">
+      {(showResults || retainResults) && <div data-workspace-results="" hidden={!showResults} className="min-w-0 flex-1">
+        <WorkspaceResultActivity.Provider value={retainResults ? activity : null}>{results}</WorkspaceResultActivity.Provider>
+      </div>}
+      {open && <section aria-label="对话" data-workspace-conversation=""
         className={split ? "rounded-panel outline outline-1 outline-border-hairline bg-surface sticky top-[calc(var(--page-chrome-h,0px)+8px)] w-[432px] flex-none" : "w-full min-w-0 rounded-panel outline outline-1 outline-border-hairline bg-surface"}>
         <div className="flex h-9 items-center justify-between border-b border-border-faint px-3">
           <h2 className="text-ui font-normal text-text-2">对话</h2>
-          <Link className={buttonClasses({ variant: "text", size: "sm" })} to={collapseTo}>
+          <Link className={buttonClasses({ variant: "text", size: "sm" })} to={collapseTo} replace={replaceOnCollapse}>
             <PanelRightClose size={16} aria-hidden="true" />{split ? "收起对话" : "回到结果"}
           </Link>
         </div>
         {conversation}
-      </section>
+      </section>}
     </div>
   );
 }

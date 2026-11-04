@@ -242,8 +242,9 @@ describe("SeverityBadge", () => {
     }
   });
 
-  it("keeps the deep red for the grades that would reach a patient", () => {
+  it("keeps the severity palette for potential consequences", () => {
     const { container } = render(<><SeverityBadge level="S2" /><SeverityBadge level="S1" /></>);
+    expect(screen.getByText(/可能需要监测或干预/)).toBeInTheDocument();
     expect(container.querySelector("[data-severity='S2']")).toHaveClass("bg-severity-s2");
     expect(container.querySelector("[data-severity='S1']")).toHaveClass("bg-severity-s1");
   });

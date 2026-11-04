@@ -1,8 +1,9 @@
+import { sessionOwner } from "@/lib/sessionLifecycle";
 import { useCallback } from "react";
 import { useNavigate } from "react-router";
 import { webErrorMessage } from "@/lib/apiClient";
 import { useProjectStore } from "@/lib/projects";
-import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
+import { prepareRuntimeUiIntent, newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { toast } from "@/lib/toast";
 
 /**
@@ -15,8 +16,10 @@ export function useAskAbout() {
   const select = useProjectStore((state) => state.select);
   const currentId = useProjectStore((state) => state.currentId);
   return useCallback((draft: string, projectId?: string | null) => {
+    const owner = sessionOwner();
     void select(projectId || currentId, () => {
-      navigate("/app/chat", { flushSync: true, state: { runtimeUiIntent: { ...newRuntimeUiIntent(draft), references: [] } } });
+      if (owner !== sessionOwner()) return;
+      navigate("/app/chat", { flushSync: true, state: { runtimeUiIntent: prepareRuntimeUiIntent({ ...newRuntimeUiIntent(draft), references: [] }) } });
     }).catch((failure: unknown) => toast.error(webErrorMessage(failure)));
   }, [navigate, select, currentId]);
 }

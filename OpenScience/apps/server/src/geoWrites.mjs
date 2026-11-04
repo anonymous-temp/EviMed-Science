@@ -54,6 +54,7 @@ import {
   GEO_RX_CLASSES, GEO_SOURCE_KINDS, GEO_SOURCE_KIND_LABELS_ZH, GEO_SOURCE_LAYERS, GEO_STEPS, GEO_STEP_STATUSES, GEO_TARGET_DATA_TYPES, GEO_TIERS,
   GEO_METRICS, GEO_WRITE_WHATS, deliverableDir, deliverableIdOfPath, geoClaimJourneyStage, geoConstant } from "@evimed/domain";
 import { GEO_OWNED_LINKS_MAX, geoOwnedLinkKey } from "./geoStore.mjs";
+import { dnsKey } from "./geoDomains.mjs";
 import { GeoMeasureStore, geoRecoveryHeldCells } from "./geoMeasureStore.mjs";
 import { enqueueRound, GEO_ROUND_MAX_ASKS } from "./geoProbeQueue.mjs";
 import { HttpError, randomId } from "./security.mjs";
@@ -1692,7 +1693,9 @@ function validatedSources(items, issues) {
     const read = fields(sourceInPlatformWords(/** @type {Record<string, any>} */ (entry), issues, index), issues, { index });
     read.unknown(SOURCE_FIELDS, Object.keys(GEO_NOT_STORED["sources[]"]));
     const rawDomain = read.text("domain", 253, { required: true });
-    const domain = rawDomain ? rawDomain.toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "").replace(/^www\./, "") : rawDomain;
+    // A list of hosts is not one URL. Check before stripping a legitimate URL path.
+    if (rawDomain && /\s+\/\s+/u.test(rawDomain)) read.refuse("domain", "invalid", "Supply one domain per source.");
+    const domain = rawDomain ? dnsKey(rawDomain.toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "")) : rawDomain;
     if (domain && !HOSTNAME.test(domain)) read.refuse("domain", "invalid", "domain must be a host name, e.g. example.com.");
     if (domain && seen.has(domain)) read.refuse("domain", "duplicate", "The same domain appears twice in this write.");
     const source = {

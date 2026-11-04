@@ -225,3 +225,21 @@ describe("a heat grid's steps", () => {
     expect(heatStep(7, 7, 7)).toBe(0);
   });
 });
+
+it('shows both own and rival points without a connecting line or band when comparison is unavailable', () => {
+  const model = trendModel({ labels: ['a','b'], own: { name:'ours', values:[10,20] }, rivals:[{name:'rival',values:[20,30]}],
+    band:3, target:50, markers:[{index:0,label:'event'}], nextLabel:'next' });
+  const option = chartOption(model, String, { connectLines:false }) as unknown as {series:Array<Record<string,any>>};
+  expect(option.series).toHaveLength(2);
+  const [own,rival]=option.series;
+  expect(own.lineStyle.width).toBe(0);
+  expect(own.symbol).toBe('circle');
+  expect(own.showSymbol).toBe(true);
+  expect(rival.lineStyle.width).toBe(0);
+  expect(rival.symbol).toBe('circle');
+  expect(rival.showSymbol).toBe(true);
+  expect(own.markLine.data.length).toBeGreaterThanOrEqual(3);
+  const normal=chartOption(model,String) as unknown as {series:Array<Record<string,any>>};
+  expect(normal.series.length).toBe(4);
+  expect(normal.series.at(-1)?.symbol).toBe('none');
+});

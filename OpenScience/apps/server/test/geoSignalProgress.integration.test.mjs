@@ -31,8 +31,8 @@ async function fixture(t, groupCount = 1, poolMax = 1){
     VALUES($1,'owner',$2,'baseline','done',1,'{deepseek}','2026-10-25',$3::timestamptz,$4::jsonb)`,[id,project.id,`2026-10-25T01:${minute}:00Z`,JSON.stringify({mode:'web',measurementContract:{samplingMode:'recurring',repeats:1,engines:['deepseek'],sourceBasis:'answers',reportPresentation:'summary',metricIds:['M-01','M-03']}})]);
   await store.query(`INSERT INTO evimed_geo.snapshots(id,user_id,geo_project_id,round_id,question_id,engine,asked_at,status,answer_text,surface,citations)
     SELECT $1||'-'||n,'owner',$2,$1,'q'||n,'deepseek','2026-10-25T00:00:00Z','valid',repeat('Preserved answer ',100)||n,'{"mode":"web"}','[]' FROM generate_series(1,$3)n`,[id,project.id,groupCount===1?220:groupCount*40]);
-  await store.query(`INSERT INTO evimed_geo.facts(snapshot_id,user_id,geo_project_id,judged_at,created_at,brands,mentions_ours,statements,checks,retrieval_triggered)
-    SELECT $1||'-'||n,'owner',$2,'2026-10-24T00:00:00Z','2026-10-24T00:00:00Z',$3::jsonb,$4,'[{"text":"Known","verdict":"correct"}]','{"judgementCoverage":{"status":"complete"}}',true FROM generate_series(1,$5)n`,[id,project.id,JSON.stringify(mentioned?[{name:'Ours',ours:true,count:1}]:[]),mentioned,groupCount===1?220:groupCount*40]);
+  await store.query(`INSERT INTO evimed_geo.facts(snapshot_id,user_id,geo_project_id,judged_at,created_at,brands,mentions_ours,statements,checks,judge_extract,retrieval_triggered)
+    SELECT $1||'-'||n,'owner',$2,'2026-10-24T00:00:00Z','2026-10-24T00:00:00Z',$3::jsonb,$4,'[{"text":"Known","verdict":"correct"}]','{"judgementCoverage":{"status":"complete"}}','{"rubricVersion":"fixture-v1"}',true FROM generate_series(1,$5)n`,[id,project.id,JSON.stringify(mentioned?[{name:'Ours',ours:true,count:1}]:[]),mentioned,groupCount===1?220:groupCount*40]);
   await measureRound({store:measure},id);
  }
  return {database,store,measure,documents,user,project,service,signals,round,runs};
@@ -42,7 +42,7 @@ const ageLease = f => f.store.query("UPDATE evimed_geo.schedule_marks SET update
 const markOf = async (f,key=GROUP_CHANGE_MARK) => (await f.store.query('SELECT state,attempts,detail FROM evimed_geo.schedule_marks WHERE geo_project_id=$1 AND key=$2',[f.project.id,key])).rows[0];
 function gate() {
   let reached,release;
-  const waiting=new Promise(resolve=>{reached=resolve;}),resume=new Promise(resolve=>{release=resolve;});
+  const waiting=new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error("Fixture did not reach the intended barrier")),10000);reached=()=>{clearTimeout(timer);resolve();};}),resume=new Promise(resolve=>{release=resolve;});
   return {reached,release,waiting,resume};
 }
 const loop = f => new GeoOrchestrator({store:f.store,config:{geoLeaseMs:60000}});

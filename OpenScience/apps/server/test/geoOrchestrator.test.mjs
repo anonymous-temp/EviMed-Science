@@ -201,9 +201,9 @@ test("a long 讲错我方 statement is shortened in the title and whole in the b
   const long = "玛仕度肽在国内获批用于治疗成人2型糖尿病并且可以作为口服片剂每天服用一次不需要注射。";
   await notifier.wrongOurs(project, { id: "long", engine: "kimi", statement: long, severity: "S3", evidence_quote: "每周一次皮下注射" });
   await notifier.wrongOurs(project, { id: "short", engine: "kimi", statement: "每天一次", severity: "S3" });
-  assert.equal(sent[0].body, `${long}\n依据：“每周一次皮下注射”`);
+  assert.equal(sent[0].body, `${long}\n依据：“每周一次皮下注射”\n严重度反映潜在临床风险；仅凭回答无法判断患者是否已用药或受伤。`);
   assert.ok(sent[0].title.endsWith("…"));
-  assert.equal(sent[1].body, "点开看这条回答和依据。", "a statement the title kept whole is not repeated");
+  assert.equal(sent[1].body, "点开看这条回答和依据。\n严重度反映潜在临床风险；仅凭回答无法判断患者是否已用药或受伤。", "a statement the title kept whole is not repeated");
 });
 
 test('versioned signals share inbox identity, recipient abilities and exact object links', async () => {
@@ -215,6 +215,9 @@ test('versioned signals share inbox identity, recipient abilities and exact obje
   assert.equal(geoNoticeHref(sent[0].input.source.id), `/app/geo/${project.id}?signal=${id}`);
   await notifier.signal(project, { id, payload: { kind: 'citation_observed', title: 'Page sighting', basis: {} } });
   assert.equal(sent.length, 1, 'ordinary page sightings do not duplicate the established first-cited milestone');
+  await notifier.signal(project, { id: `gs_${'c'.repeat(64)}`, payload: { kind: 'error_observed', title: 'Error', basis: { engine: 'deepseek', statement: '错误示例', severity: 'S3' }, detectedAt: '2026-10-24T00:00:00Z' } });
+  assert.match(sent[1].input.body, /仅凭回答无法判断患者是否已用药或受伤/);
+  assert.doesNotMatch(sent[0].input.body, /潜在临床风险/, 'source updates keep their own copy');
 });
 
 test("the five notices: kinds, severities, pages, keys; S3+ alone, lower severities folded per day; operators apart", async () => {

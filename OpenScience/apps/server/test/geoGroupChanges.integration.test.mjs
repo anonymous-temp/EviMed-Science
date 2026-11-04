@@ -33,8 +33,8 @@ async function fixture(t, groupCount = 1){
     VALUES($1,'owner',$2,'baseline','done',1,'{deepseek}','2026-10-25',$3::timestamptz,$4::jsonb)`,[id,project.id,`2026-10-25T01:${minute}:00Z`,JSON.stringify({mode:'web',measurementContract:{samplingMode:'recurring',repeats:1,engines:['deepseek'],sourceBasis:'answers',reportPresentation:'summary',metricIds:['M-01','M-03']}})]);
   await store.query(`INSERT INTO evimed_geo.snapshots(id,user_id,geo_project_id,round_id,question_id,engine,asked_at,status,answer_text,surface,citations)
     SELECT $1||'-'||n,'owner',$2,$1,'q'||n,'deepseek','2026-10-25T00:00:00Z','valid',repeat('Preserved answer ',100)||n,'{"mode":"web"}','[]' FROM generate_series(1,$3)n`,[id,project.id,groupCount===1?220:groupCount*40]);
-  await store.query(`INSERT INTO evimed_geo.facts(snapshot_id,user_id,geo_project_id,judged_at,created_at,brands,mentions_ours,statements,checks,retrieval_triggered)
-    SELECT $1||'-'||n,'owner',$2,'2026-10-24T00:00:00Z','2026-10-24T00:00:00Z',$3::jsonb,$4,'[{"text":"Known","verdict":"correct"}]','{"judgementCoverage":{"status":"complete"}}',true FROM generate_series(1,$5)n`,[id,project.id,JSON.stringify(mentioned?[{name:'Ours',ours:true,count:1}]:[]),mentioned,groupCount===1?220:groupCount*40]);
+  await store.query(`INSERT INTO evimed_geo.facts(snapshot_id,user_id,geo_project_id,judged_at,created_at,brands,mentions_ours,statements,checks,retrieval_triggered,judge_extract)
+    SELECT $1||'-'||n,'owner',$2,'2026-10-24T00:00:00Z','2026-10-24T00:00:00Z',$3::jsonb,$4,'[{"text":"Known","verdict":"correct"}]','{"judgementCoverage":{"status":"complete"}}',true,'{"rubricVersion":"v1"}' FROM generate_series(1,$5)n`,[id,project.id,JSON.stringify(mentioned?[{name:'Ours',ours:true,count:1}]:[]),mentioned,groupCount===1?220:groupCount*40]);
   await measureRound({store:measure},id);
  }
  return {store,measure,documents,user,project,service,signals,round,runs};
@@ -51,6 +51,10 @@ test('actual same-day adjacent producer freezes both complete cohorts through re
  const events=(await documents.list(user.id,'geo-signal',{projectId:project.projectId,limit:100,filter:{recordType:'geo-signal',kind:'group_changed'}})).items;
  assert.equal(events.length,2);assert.deepEqual(events.map(r=>[r.payload.basis.previous.id,r.payload.basis.current.id]).sort(),[['a','b'],['b','c']]);
  const event=events.find(r=>r.payload.basis.current.id==='b');
+ assert.equal(event.payload.basis.judgeComparability,'recorded-rubric-v1');
+ assert.equal(event.payload.basis.samplingComparability,'recorded-surface-v1');
+ const detailBefore = await signals.detail(user,project.id,event.id);
+ assert.equal(detailBefore.title,event.payload.title); assert.ok(detailBefore.basis.cells.some(cell=>Number.isFinite(cell.delta)));
  assert.equal(event.payload.basis.policy.noiseMeasured,false);assert.ok(event.payload.basis.sides.before.targetPages.pages.length>1);
  for(const side of ['before','after']){
   const all=[];let offset=0,page;
@@ -177,8 +181,8 @@ async function actualPair(t,agreement=contract,engines=null){
   assert.equal(persisted.surface.measurementContract.questionVersion,1);assert.equal(persisted.set_version,1);
   await f.store.query(`INSERT INTO evimed_geo.snapshots(id,user_id,geo_project_id,round_id,question_id,engine,asked_at,status,answer_text,surface,citations,probe_job_id)
     SELECT 's_'||j.id,j.user_id,j.geo_project_id,j.round_id,j.question_id,j.engine,$2,'valid','Actual queued job preserved answer','{"mode":"web"}','[]',j.id FROM evimed_geo.probe_jobs j WHERE j.round_id=$1`,[queued.roundId,at.toISOString()]);
-  await f.store.query(`INSERT INTO evimed_geo.facts(snapshot_id,user_id,geo_project_id,judged_at,brands,mentions_ours,statements,checks,retrieval_triggered)
-    SELECT s.id,s.user_id,s.geo_project_id,now(),$2::jsonb,$3,'[{"text":"Known","verdict":"correct"}]','{"judgementCoverage":{"status":"complete"}}',true FROM evimed_geo.snapshots s WHERE s.round_id=$1`,[queued.roundId,JSON.stringify(mentioned?[{name:'Ours',ours:true,count:1}]:[]),mentioned]);
+  await f.store.query(`INSERT INTO evimed_geo.facts(snapshot_id,user_id,geo_project_id,judged_at,brands,mentions_ours,statements,checks,retrieval_triggered,judge_extract)
+    SELECT s.id,s.user_id,s.geo_project_id,now(),$2::jsonb,$3,'[{"text":"Known","verdict":"correct"}]','{"judgementCoverage":{"status":"complete"}}',true,'{"rubricVersion":"v1"}' FROM evimed_geo.snapshots s WHERE s.round_id=$1`,[queued.roundId,JSON.stringify(mentioned?[{name:'Ours',ours:true,count:1}]:[]),mentioned]);
   await f.store.query(`UPDATE evimed_geo.probe_jobs j SET status='done',snapshot_id='s_'||j.id WHERE round_id=$1`,[queued.roundId]);
   assert.equal((await f.measure.finishRound(queued.roundId,{now:at,skip:[]})).status,'done');
   await measureRound({store:f.measure,now:()=>new Date(Date.now()+20)},queued.roundId);
@@ -226,4 +230,30 @@ test('a round that heard no answer between two measured rounds is passed over, n
  assert.deepEqual(events.map(r=>[r.payload.basis.previous.id,r.payload.basis.current.id]),[['a','b']]);
  const mark=(await store.query('SELECT detail FROM evimed_geo.schedule_marks WHERE geo_project_id=$1 AND key=$2',[project.id,GROUP_CHANGE_MARK])).rows[0].detail;
  assert.deepEqual([mark.roundId,mark.lastError??null],['b',null]);
+});
+test('historic missing judge version does not produce a group change', options, async t => {
+ const {store,measure,project,signals,documents,user,round}=await fixture(t);
+ await round('legacy','00',false); await round('current','01',true);
+ await store.query("UPDATE evimed_geo.facts SET judge_extract=NULL WHERE snapshot_id LIKE 'legacy-%'");
+ await measureRound({store:measure},'legacy');
+ await new GeoGroupChanges({store,signals}).project(project);
+ assert.equal((await documents.list(user.id,'geo-signal',{projectId:project.projectId,filter:{recordType:'geo-signal',kind:'group_changed'}})).items.length,0);
+});
+
+test('group change selects exact surface-matched members and rejects a changed interface', options, async t => {
+ const {store,project,round}=await fixture(t);
+ await round('surface-a','00',false); await round('surface-b','01',true);
+ const base={mode:'web',deep:false,newChat:true,city:'Beijing'};
+ await store.query("UPDATE evimed_geo.snapshots SET surface=$1::jsonb WHERE round_id IN ('surface-a','surface-b')",[JSON.stringify(base)]);
+ const read=()=>readGeoRoundComparison(store,project,{previousRoundId:'surface-a',currentRoundId:'surface-b'});
+ let pair=await read(); assert.equal(pair.commonKeys.length,220);
+ assert.equal(pair.previous.rows.length,220); assert.equal(pair.current.rows.length,220);
+ assert.equal(groupChangeEvents(pair).events.length,1,'stable non-default surface still yields the measured change');
+ for(const [field,value] of [['deep',true],['newChat',false],['city','Shanghai']]) {
+  await store.query("UPDATE evimed_geo.snapshots SET surface=$1::jsonb WHERE round_id='surface-b'",[JSON.stringify({...base,[field]:value})]);
+  pair=await read(); assert.equal(pair.commonKeys.length,0,field); assert.equal(pair.previous.rows.length,0,field); assert.equal(pair.current.rows.length,0,field);
+  assert.equal(groupChangeEvents(pair).events.length,0,field);
+ }
+ await store.query("UPDATE evimed_geo.snapshots SET surface=$1::jsonb WHERE round_id='surface-b'",[JSON.stringify({...base,transport:'other',responseDigest:'unrelated'})]);
+ pair=await read(); assert.equal(pair.commonKeys.length,220);assert.equal(groupChangeEvents(pair).events.length,1,'transport metadata is not a sampling difference');
 });

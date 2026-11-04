@@ -8,6 +8,7 @@ import {
   GEO_TAB_STEPS,
   GEO_TABS,
   geoDestinationPath,
+  geoWorkArea,
   geoViewedStep,
   geoEvidenceView,
   geoQuestionsView,
@@ -140,10 +141,25 @@ describe("the step ↔ tab map", () => {
 
   it("sends an old address to where the table says the step is read now", () => {
     for (const [address, destination] of Object.entries(GEO_TAB_REDIRECTS)) {
+      if (address === "articles") {
+        expect(destination.tab).toBe("actions");
+        continue;
+      }
       expect(GEO_STEP_KEYS, address).toContain(address);
       expect(destination.tab, address).toBe(GEO_STEP_HOME[address as keyof typeof GEO_STEP_HOME].tab);
     }
   });
+});
+
+it('groups the existing results without changing their addresses', () => {
+  expect(geoWorkArea('overview')).toBe('work');
+  expect(geoWorkArea('plan')).toBe('work');
+  expect(geoWorkArea('visibility')).toBe('analytics');
+  expect(geoWorkArea('questions')).toBe('analytics');
+  expect(geoWorkArea('questions', 'journey')).toBe('context');
+  expect(geoWorkArea('evidence')).toBe('context');
+  expect(geoWorkArea('actions')).toBe('content');
+  expect(resolveGeoTab('articles')).toEqual({ tab: 'actions', moved: true });
 });
 
 it('existing distribution workbench anchors select the distribution step',()=>{

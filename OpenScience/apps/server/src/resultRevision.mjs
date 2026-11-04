@@ -54,6 +54,10 @@ export class ResultRevisionService {
     if (canonicalJson(identity.principal) !== trusted.principal) throw failure();
     return identity.project;
   }
+  matchesNativePrincipal(request, principal) {
+    const trusted = this.#nativeScopes.get(request);
+    return Boolean(trusted && trusted.principal === canonicalJson(principal));
+  }
   instruction(request) { return this.#conversationInputs.get(request)?.instruction ?? this.#nativeScopes.get(request)?.instruction ?? nativeInputText(request.content); }
 
   /** @param {{results:any,documents:any,config?:any,now?:()=>number,mirror?:(project:any,full:string,bytes:Buffer)=>Promise<any>,lineage?:any}} dependencies
@@ -122,10 +126,10 @@ export class ResultRevisionService {
       instruction: staged.instruction, instructionDigest: staged.instructionDigest } };
   }
 
-  async stage(userId, versionId, input) {
+  async stage(userId, versionId, input, native = null) {
     if (!identifier(input.requestId) || !identifier(input.sessionId)) throw new HttpError(400, "result_revision_invalid", "Invalid revision request identity.");
-    const project = await this.results.scope(userId, input.projectId);
-    const { version, bytes } = await this.results.raw(userId, project.id, versionId);
+    const project = native?.project ?? await this.results.scope(userId, input.projectId);
+    const { version, bytes } = await this.results.raw(native ? project.userId : userId, project.id, versionId);
     if (version.digest !== input.digest) throw failure();
     const anchor = input.anchor;
     if (!anchor || !["file", "text", "table-cell", "figure", "claim", "rendered-element"].includes(anchor.kind)
@@ -157,7 +161,7 @@ export class ResultRevisionService {
       ...(anchor.row === undefined ? {} : { row: anchor.row }), ...(anchor.column === undefined ? {} : { column: anchor.column }) };
     if (JSON.stringify(selected).length > 16000) throw new HttpError(413, "result_selection_invalid", "The result selection is too large.");
     const id = `rr_${hash(JSON.stringify([userId, project.id, input.requestId]))}`;
-    const fingerprint = hash(JSON.stringify([versionId, input.digest, input.sessionId, selected]));
+    const fingerprint = hash(JSON.stringify([versionId, input.digest, input.sessionId, selected, ...(native ? [native.target, native.principal] : [])]));
     const existing = await this.documents.get(project.userId, "result-revision", id);
     const draft = anchor.kind === "file" ? "" : `请修改所选内容：\n“${anchor.selectedText || version.path.split("/").at(-1)}”\n\n修改要求：`;
     if (existing) {
@@ -165,10 +169,10 @@ export class ResultRevisionService {
       return { referenceId: id, sessionId: input.sessionId, draft: existing.payload.draft };
     }
     const payload = { recordType: "result-revision", id, projectId: project.id, requestedBy: userId, versionId, digest: input.digest,
-      sessionId: input.sessionId, anchor: selected, state: "staged", fingerprint, draft, ...(anchor.kind === "file" ? { mode: "conversation" } : {}),
+      sessionId: input.sessionId, anchor: selected, state: "staged", fingerprint, draft, ...(native ? { nativeOwnerId: project.userId, nativePrincipal: native.principal, target: native.target, expectedHeadVersionId: versionId } : {}), ...(anchor.kind === "file" ? { mode: "conversation" } : {}),
       stagedAt: new Date(this.now()).toISOString(), expiresAt: this.now() + 24 * 60 * 60_000 };
     try { await this.documents.put(project.userId, "result-revision", id, payload, { projectId: project.id, expectedRevision: 0 }); }
-    catch (error) { if (error?.code !== "product_revision_conflict") throw error; return this.stage(userId, versionId, input); }
+    catch (error) { if (error?.code !== "product_revision_conflict") throw error; return this.stage(userId, versionId, input, native); }
     return { referenceId: id, sessionId: input.sessionId, draft };
   }
 
