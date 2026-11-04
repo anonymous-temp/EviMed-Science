@@ -813,7 +813,7 @@
       "id": "mth_23",
       "name": "确认性设计",
       "method": "design.confirmatory",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "endpoints": "连续 · 二分类 · 事件时间",
       "numeric": null,
       "validation": {
