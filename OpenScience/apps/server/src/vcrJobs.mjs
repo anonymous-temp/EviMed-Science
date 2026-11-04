@@ -353,7 +353,7 @@ const SIZED_KINDS = new Set(["design_simulation", "design_grid", "map_prior"]);
  * that is validated: a literature population (its baseline bindings are verified and removed), a reconstruction (its curve receipt),
  * a matched time-to-event comparison (its reconstruction), a model's equation, and the pooled and matched scenarios the platform builds.
  */
-const PLATFORM_BOUND_KINDS = new Set(["literature_population", "population_check", "reconstruct_km", "maic_time_to_event_comparator", "apply_prognostic_model", "pool_evidence", "match_criteria", "match_extract"]);
+const PLATFORM_BOUND_KINDS = new Set(["literature_population", "population_check", "reconstruct_km", "maic_time_to_event_comparator", "apply_prognostic_model", "pool_evidence", "match_criteria", "match_extract", "match_judge"]);
 
 /**
  * What set a simulation's replicate count, in a sentence: the floor of its case, the study's intended use, a borrowing design, the
@@ -543,6 +543,8 @@ export function vcrResultKindFor(kind) {
   if (kind === "match_criteria") return "matching";
   // The batch reading of patient records leaves a record of what was read, not a matching: its own kind, read by nothing that lists matchings.
   if (kind === "match_extract") return "match_extract";
+  // A judging job's result is the record of what it did; the judgments themselves are `match_judgments`, read by nothing that lists matchings.
+  if (kind === "match_judge") return "match_judge";
   if (kind === "accrual_forecast") return "accrual_forecast";
   if (["pool_evidence", "reconstruct_km"].includes(kind)) return "evidence_pool";
   return "snapshot_profile";

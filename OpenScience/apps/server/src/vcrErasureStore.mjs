@@ -246,6 +246,9 @@ export class VcrErasureStore extends VcrStoreBase {
       await client.query(`UPDATE ${VCR_SCHEMA}.candidate_trial_judgments SET evidence=$2::jsonb WHERE id=$1`, [row.id, JSON.stringify(evidence)]);
       candidateQuotes += 1;
     }
+    // A model's judgments of this person, or that read what was erased: nothing is frozen on them and their reasons may repeat the record, so they go.
+    const judgedGone = (await client.query(`DELETE FROM ${VCR_SCHEMA}.match_judgments WHERE study_id=$1 AND (($2::text IS NOT NULL AND subject_key=$2) OR document_ids ?| $3::text[])`,
+      [studyId, subjectKey, documentIds])).rowCount ?? 0;
     // A withdrawn subject's assessments are all marked, with or without a quote in them; any other assessment that rests on what
     // was erased is marked too.
     if (subjectKey != null) {
@@ -274,7 +277,7 @@ export class VcrErasureStore extends VcrStoreBase {
       files: files.map((/** @type {any} */ file) => ({ id: String(file.id), location: String(file.location), originalLocation: file.detail?.original?.location ? String(file.detail.original.location) : null })),
       projections: projections.map((/** @type {any} */ row) => ({ id: String(row.id), location: String(row.location) })),
       counts: { files: files.length, projections: projections.length, factsRemoved, factsRedacted: redactedFacts.length,
-        judgmentsRemoved, judgmentsRedacted: redactedJudgments.length, assessmentQuotesRedacted: judgmentQuotes + candidateQuotes, assessmentsMarked: assessments.length },
+        judgmentsRemoved, judgmentsRedacted: redactedJudgments.length, assessmentQuotesRedacted: judgmentQuotes + candidateQuotes, assessmentsMarked: assessments.length, matchJudgmentsRemoved: judgedGone },
     };
   }
 
@@ -316,6 +319,7 @@ export class VcrErasureStore extends VcrStoreBase {
       `SELECT (EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.matching_facts WHERE study_id=$1 AND subject_key=$2)
         OR EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.matching_assessments WHERE study_id=$1 AND subject_key=$2)
         OR EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.language_judgments WHERE study_id=$1 AND subject_key=$2)
+        OR EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.match_judgments WHERE study_id=$1 AND subject_key=$2)
         OR EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.matching_candidates WHERE study_id=$1 AND subject_key=$2)
         OR EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.followup_episodes WHERE study_id=$1 AND subject_key=$2)
         OR EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.subject_withdrawals WHERE study_id=$1 AND subject_key=$2)) AS held`, [studyId, subjectKey])).rows[0];
@@ -375,6 +379,8 @@ export class VcrErasureStore extends VcrStoreBase {
       await this.#mark(client, studyId, "fact", facts, cause, causeId);
       await this.#mark(client, studyId, "language_judgment", judgments, cause, causeId);
       await this.#mark(client, studyId, "assessment", assessments, cause, causeId);
+      // A model's judgment carries its own label: a reader says its record has changed, and a new judgment of the new text has a new key.
+      await client.query(`UPDATE ${VCR_SCHEMA}.match_judgments SET basis_changed=$3 WHERE study_id=$1 AND document_ids ?| $2::text[]`, [studyId, documentIds, cause]);
       return { facts: facts.length, languageJudgments: judgments.length, assessments: assessments.length };
     });
   }
@@ -388,6 +394,7 @@ export class VcrErasureStore extends VcrStoreBase {
     return this.transaction(async (client) => {
       const assessments = (await client.query(`SELECT id, subject_key FROM ${VCR_SCHEMA}.matching_assessments WHERE study_id=$1 AND subject_key=$2`, [studyId, subjectKey])).rows
         .map((/** @type {any} */ row) => ({ id: String(row.id), subjectKey: String(row.subject_key) }));
+      await client.query(`UPDATE ${VCR_SCHEMA}.match_judgments SET basis_changed=$3 WHERE study_id=$1 AND subject_key=$2`, [studyId, subjectKey, cause]);
       return this.#mark(client, studyId, "assessment", assessments, cause, causeId);
     });
   }

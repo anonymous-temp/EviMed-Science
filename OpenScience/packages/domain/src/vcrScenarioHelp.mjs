@@ -56,6 +56,8 @@ export const VCR_RUN_SCENARIO_FIELDS = Object.freeze({
   match_criteria: Object.freeze([]),
   // The batch reading of records takes a selection and no scenario: the platform freezes the roster, the questions and the estimate.
   match_extract: Object.freeze([]),
+  // A judging job likewise: the pairs, the settings and the estimate are frozen from a selection.
+  match_judge: Object.freeze([]),
 })
 
 /**

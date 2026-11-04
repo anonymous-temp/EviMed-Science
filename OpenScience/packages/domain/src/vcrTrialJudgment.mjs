@@ -593,7 +593,7 @@ function clauseEntries(parsed) {
  * an id that does not is dropped and counted and the label stands. `basis` is `stated` when at least one id resolved, otherwise `silent`.
  * A clause the model did not answer, or answered with a word outside the labels, is returned in `missing` and nowhere else.
  * @param {unknown} raw
- * @param {{ criteria: ReadonlyArray<{ number: number, kind: string, text: string, start?: number, end?: number, lead?: string }>, sentences: ReadonlyArray<{ id: number, text: string, start?: number, end?: number, documentId?: string | null }> }} context
+ * @param {{ criteria: ReadonlyArray<{ number: number, kind: string, text: string, start?: number, end?: number, lead?: string }>, sentences: ReadonlyArray<{ id: number, text: string, start?: number, end?: number, documentId?: string | null, source?: Record<string, any> }> }} context
  * @returns {{ rows: Array<Record<string, any>>, missing: Array<{ number: number, kind: string, text: string }>, droppedSentenceIds: number, issues: Array<Record<string, any>> }}
  */
 export function parseCriteriaAnswer(raw, { criteria, sentences }) {
@@ -624,7 +624,7 @@ export function parseCriteriaAnswer(raw, { criteria, sentences }) {
       const sentence = lines.get(id)
       if (!sentence) { droppedSentenceIds += 1; continue }
       evidence.push({ sentenceId: id, text: sentence.text, ...(sentence.start != null ? { start: sentence.start, end: sentence.end } : {}),
-        ...(sentence.documentId !== undefined ? { documentId: sentence.documentId } : {}) })
+        ...(sentence.documentId !== undefined ? { documentId: sentence.documentId } : {}), ...(sentence.source ? { source: sentence.source } : {}) })
     }
     answered.set(number, { number, kind: clause.kind, clause: clause.text, ...(clause.lead ? { lead: clause.lead } : {}), label,
       reason: reasonList(answer.reason).join(' '), sentenceIds: evidence.map((item) => item.sentenceId), evidence, basis: evidence.length ? 'stated' : 'silent' })

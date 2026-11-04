@@ -32,13 +32,14 @@ import { VCR_MIN_CELL_SIZE } from './vcrVocabulary.mjs'
 
 export const VCR_MATCH_BATCH_SCHEMA = 1
 
-/** The one method, run by the control plane itself on the slow local lane (it calls a model per record). */
+/** The methods run by the control plane itself on the slow local lane (each calls a model per unit of work). */
 export const VCR_MATCH_BATCH_METHODS = Object.freeze({
   'matching.extract': Object.freeze({ version: '1.1.0', modelTier: null }),
+  'matching.judge': Object.freeze({ version: '1.0.0', modelTier: null }),
 })
-export const VCR_MATCH_BATCH_JOBS = Object.freeze({ match_extract: 'matching.extract' })
+export const VCR_MATCH_BATCH_JOBS = Object.freeze({ match_extract: 'matching.extract', match_judge: 'matching.judge' })
 /** The local methods that call a model per record: they run on a worker loop of their own so that a long job does not hold the short ones. */
-export const VCR_SLOW_LOCAL_METHODS = Object.freeze(['matching.extract'])
+export const VCR_SLOW_LOCAL_METHODS = Object.freeze(['matching.extract', 'matching.judge'])
 
 export const VCR_MATCH_BATCH_LIMITS = Object.freeze({
   /** Hard ceiling of a roster in one job, whatever a deployment configures. */
@@ -57,11 +58,27 @@ export const VCR_MATCH_BATCH_LIMITS = Object.freeze({
   outputTokens: 2000,
 })
 
+/** What one judging job takes (`matching.judge`), whatever a deployment configures. */
+export const VCR_MATCH_JUDGE_LIMITS = Object.freeze({
+  /** The people of one protocol's roster. */
+  subjects: 5000,
+  /** The trials one person is judged against in one job. */
+  trials: 500,
+  /** The characters of a person's record one call reads; a longer record is split and judged per part. */
+  noteChars: 60000,
+  /** What the estimate assumes of a trial it has not fetched yet. A longer one costs what it costs; the ledger holds the actual spend. */
+  trialChars: 12000,
+  /** The instructions that ride with each call, in the estimate. */
+  overheadTokens: 1500,
+})
+
 /** The model the estimate is priced on when a deployment names none. */
 export const VCR_MATCH_BATCH_DEFAULT_MODEL = 'deepseek-flash'
 
 const ID = /^[A-Za-z0-9_-]{1,160}$/
 const VARIABLE = /^[a-z][a-z0-9_]{0,63}$/
+const SUBJECT = /^[A-Za-z0-9_.:@-]{1,160}$/
+const REGISTRY_ID = /^[A-Za-z0-9][A-Za-z0-9-]{2,63}$/
 
 /** @param {unknown} value */
 const object = (value) => (value && typeof value === 'object' && !Array.isArray(value) ? /** @type {Record<string, any>} */ (value) : {})
@@ -76,6 +93,7 @@ const count = (value) => (Number.isFinite(Number(value)) && Number(value) > 0 ? 
  */
 export function validateMatchBatchScenario(method, scenario) {
   if (!Object.hasOwn(VCR_MATCH_BATCH_METHODS, method)) return [{ code: 'method_unknown', field: 'method', detail: 'Unknown batch matching method.' }]
+  if (method === 'matching.judge') return validateMatchJudgeScenario(scenario)
   const problems = []
   const bad = (/** @type {string} */ field, /** @type {string} */ detail) => problems.push({ code: 'scenario_field_invalid', field: `scenario.${field}`, detail })
   const allowed = ['protocolVersionId', 'asOf', 'subjects', 'variables', 'estimate', 'chain', 'prefilter', 'prefiltered', 'model', 'questionsDigest']
@@ -98,6 +116,37 @@ export function validateMatchBatchScenario(method, scenario) {
   if (scenario.chain != null && (typeof scenario.chain !== 'string' || !ID.test(scenario.chain))) bad('chain', 'An id.')
   if (scenario.prefilter != null && typeof scenario.prefilter !== 'boolean') bad('prefilter', 'true or false.')
   if (scenario.model != null && (typeof scenario.model !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(scenario.model))) bad('model', 'A model name.')
+  return problems
+}
+
+/**
+ * The scenario of a `match_judge` job, held to its shape. The platform freezes it from the selection and the study.
+ * @param {Record<string, any>} scenario @returns {Array<{ code: string, field: string, detail: string }>}
+ */
+function validateMatchJudgeScenario(scenario) {
+  const problems = []
+  const bad = (/** @type {string} */ field, /** @type {string} */ detail) => problems.push({ code: 'scenario_field_invalid', field: `scenario.${field}`, detail })
+  const allowed = ['direction', 'subjects', 'trials', 'protocolVersionId', 'collection', 'collectionRevision', 'fit', 'topK', 'thinking', 'model', 'promptVersions', 'estimate', 'chain']
+  for (const key of Object.keys(scenario)) if (!allowed.includes(key)) problems.push({ code: 'scenario_field_unknown', field: `scenario.${key}`, detail: 'Unused scenario field.' })
+  for (const key of ['direction', 'subjects', 'fit', 'topK', 'thinking', 'model', 'promptVersions', 'estimate']) {
+    if (scenario[key] == null) problems.push({ code: 'scenario_field_required', field: `scenario.${key}`, detail: 'Frozen by the platform from the selection.' })
+  }
+  if (scenario.direction != null && !['patient_to_trial', 'trial_to_patient'].includes(scenario.direction)) bad('direction', 'patient_to_trial or trial_to_patient.')
+  if (scenario.subjects != null && (!Array.isArray(scenario.subjects) || !scenario.subjects.length || scenario.subjects.length > VCR_MATCH_JUDGE_LIMITS.subjects
+    || scenario.subjects.some((entry) => typeof entry !== 'string' || !SUBJECT.test(entry)))) bad('subjects', `One to ${VCR_MATCH_JUDGE_LIMITS.subjects} pseudonymous subject keys.`)
+  if (scenario.direction === 'patient_to_trial') {
+    if (!Array.isArray(scenario.trials) || !scenario.trials.length || scenario.trials.length > VCR_MATCH_JUDGE_LIMITS.trials
+      || scenario.trials.some((entry) => typeof entry?.registry !== 'string' || typeof entry?.registryId !== 'string' || !REGISTRY_ID.test(entry.registryId))) bad('trials', `One to ${VCR_MATCH_JUDGE_LIMITS.trials} registry records.`)
+    if (Array.isArray(scenario.subjects) && scenario.subjects.length !== 1) bad('subjects', 'One person is judged against a list of trials.')
+  }
+  if (scenario.direction === 'trial_to_patient' && (typeof scenario.protocolVersionId !== 'string' || !ID.test(scenario.protocolVersionId))) bad('protocolVersionId', 'A protocol version of this study.')
+  if (scenario.fit != null && typeof scenario.fit !== 'boolean') bad('fit', 'true or false.')
+  if (scenario.topK != null && scenario.topK !== 'all' && !(Number.isInteger(scenario.topK) && scenario.topK >= 0)) bad('topK', 'A whole number, or all.')
+  if (scenario.fit === false && scenario.topK === 0) bad('topK', 'A job with no trial-level stage judges criteria, so topK is above zero.')
+  if (scenario.thinking != null && !['high', 'off'].includes(scenario.thinking)) bad('thinking', 'high or off.')
+  if (scenario.model != null && (typeof scenario.model !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(scenario.model))) bad('model', 'A model name.')
+  if (scenario.estimate != null && (typeof scenario.estimate !== 'object' || Array.isArray(scenario.estimate))) bad('estimate', 'The estimate stated before the job began.')
+  if (scenario.chain != null && (typeof scenario.chain !== 'string' || !ID.test(scenario.chain))) bad('chain', 'An id.')
   return problems
 }
 

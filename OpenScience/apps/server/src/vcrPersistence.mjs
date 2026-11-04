@@ -85,7 +85,7 @@ export const VCR_TABLES = Object.freeze([
   "knowledge_packs", "study_packs", "definitions", "definition_versions", "definition_uses",
   "models", "methods",
   "jobs", "conversation_completions", "executions", "results", "forecasts", "longitudinal_artifacts",
-  "matching_assessments", "criterion_judgments", "matching_facts", "language_judgments", "matching_inputs", "document_projections", "cloud_reads", "subject_withdrawals", "retired_recruitment_subjects", "retirement_erased_accounts", "derived_marks", "matching_candidates", "matching_producers", "matching_extractions",
+  "matching_assessments", "criterion_judgments", "matching_facts", "language_judgments", "matching_inputs", "document_projections", "cloud_reads", "subject_withdrawals", "retired_recruitment_subjects", "retirement_erased_accounts", "derived_marks", "matching_candidates", "matching_producers", "matching_extractions", "match_judgments",
   "candidate_trials", "candidate_trial_criteria", "candidate_trial_assessments", "candidate_trial_judgments", "parsed_trial_criteria", "parsed_trial_criteria_versions",
   "followup_episodes",
   "dependencies", "stale_marks", "reviews", "decisions", "regulatory_contacts", "exports", "audit", "schedule_marks",
@@ -1146,6 +1146,41 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.matching_extractions (
   created_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY(study_id,subject_key,document_id,variables_digest)
 );
+-- One record of a model's judgment of a patient against a trial or a protocol version (owner decisions 2026-11-04). A job and a conversation
+-- write the same shape and the same readers read it. The key is a pair for given inputs: the words of the record and of the trial by hash, the
+-- prompt and the settings; a pair judged once under those is not paid for again, and a failed row is replaced when it is tried again. The
+-- reasons may repeat what a record says, so a withdrawal and a document's erasure take the rows: nothing freezes them (vcrErasureStore).
+CREATE TABLE IF NOT EXISTS evimed_vcr.match_judgments (
+  id text PRIMARY KEY,
+  study_id text NOT NULL REFERENCES evimed_vcr.studies(id) ON DELETE CASCADE,
+  user_id text NOT NULL,
+  subject_key text NOT NULL,
+  target_kind text NOT NULL CHECK (target_kind IN ('candidate_trial', 'protocol_version')),
+  target_id text NOT NULL,
+  target_hash text NOT NULL DEFAULT '',
+  document_hash text NOT NULL DEFAULT '',
+  mode text NOT NULL CHECK (mode IN ('fit', 'criteria')),
+  prompt_version text NOT NULL,
+  model text NOT NULL DEFAULT '',
+  thinking text NOT NULL DEFAULT '',
+  producer text NOT NULL CHECK (producer IN ('job', 'conversation')),
+  status text NOT NULL CHECK (status IN ('done', 'failed')),
+  error_code text,
+  fit integer CHECK (fit BETWEEN 0 AND 100),
+  confidence double precision CHECK (confidence BETWEEN 0 AND 1),
+  verdict text CHECK (verdict IN ('eligible', 'possible', 'insufficient', 'ineligible')),
+  answer jsonb NOT NULL DEFAULT '{}'::jsonb,
+  usage jsonb NOT NULL DEFAULT '{}'::jsonb,
+  document_ids jsonb NOT NULL DEFAULT '[]'::jsonb,
+  basis_changed text,
+  job_id text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS vcr_match_judgments_pair_idx ON evimed_vcr.match_judgments
+  (study_id, subject_key, target_kind, target_id, target_hash, document_hash, mode, prompt_version, model, thinking, producer);
+CREATE INDEX IF NOT EXISTS vcr_match_judgments_subject_idx ON evimed_vcr.match_judgments (study_id, subject_key, updated_at DESC);
+CREATE INDEX IF NOT EXISTS vcr_match_judgments_target_idx ON evimed_vcr.match_judgments (study_id, target_kind, target_id, updated_at DESC);
 ALTER TABLE evimed_vcr.sources ADD COLUMN IF NOT EXISTS cloud_permission jsonb;
 CREATE TABLE IF NOT EXISTS evimed_vcr.document_projections (
   id text PRIMARY KEY,

@@ -73,7 +73,7 @@ const list = (value) => (Array.isArray(value) ? value : []);
  */
 export const VCR_RESULT_KINDS = Object.freeze([
   "population", "patient_set", "comparator", "trial_scenario", "design_grid", "model_fit", "model_prediction",
-  "matching", "accrual_forecast", "evidence_pool", "snapshot_profile", "longitudinal", "population_quality", "population_check", "match_extract",
+  "matching", "accrual_forecast", "evidence_pool", "snapshot_profile", "longitudinal", "population_quality", "population_check", "match_extract", "match_judge",
 ]);
 
 /** Which lineage node kind each research object is. */
@@ -158,7 +158,7 @@ const VCR_CONVERSATION_STUDY_CONTENT = Object.freeze([
   ["patients", ["patient_sets"]],
   ["comparator", ["comparator_designs"]],
   ["trial", ["trial_scenarios", "design_grids", "forecasts"]],
-  ["matching", ["protocol_versions", "criteria", "matching_candidates", "matching_assessments", "candidate_trials", "candidate_trial_assessments"]],
+  ["matching", ["protocol_versions", "criteria", "matching_candidates", "matching_assessments", "candidate_trials", "candidate_trial_assessments", "match_judgments"]],
   ["data", ["study_definitions", "study_precedents", "evidence_items", "curve_extractions", "assumptions", "sources",
     "source_files", "snapshots", "analysis_tables", "study_packs"]],
 ]);

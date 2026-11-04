@@ -522,13 +522,13 @@ export const VCR_TAB_LABELS_ZH = Object.freeze({
  */
 export const VCR_RESULT_KIND_TABS = Object.freeze({
   population: 'population', patient_set: 'patients', comparator: 'comparator', trial_scenario: 'trial', design_grid: 'trial',
-  accrual_forecast: 'trial', matching: 'matching', match_extract: 'matching', evidence_pool: 'data', snapshot_profile: 'data', population_check: 'population',
+  accrual_forecast: 'trial', matching: 'matching', match_extract: 'matching', match_judge: 'matching', evidence_pool: 'data', snapshot_profile: 'data', population_check: 'population',
 })
 /**
  * The writes that put a patient's matching on the matching tab. A matching is judged at the write -- there is no job to finish -- so
  * the answer to each carries the entry to the tab (a job's answer carries the tab of its result's kind).
  */
-export const VCR_MATCHING_WRITE_WHATS = frozen(['patient_context', 'protocol', 'criteria', 'fact', 'language_judgment', 'candidate_trial'])
+export const VCR_MATCHING_WRITE_WHATS = frozen(['patient_context', 'protocol', 'criteria', 'fact', 'language_judgment', 'candidate_trial', 'trial_judgment'])
 
 /**
  * What each step's run is called to a person: one verb and one object. The button that starts the step says it, the run's own
@@ -857,6 +857,8 @@ export const VCR_JOB_KINDS = frozen([
   'population_check',
   // --- appended (2026-11-01): the batch reading of patient records for the criteria's facts (remediation plan D4) ---
   'match_extract',
+  // --- appended (2026-11-04): patient and trial judged by the model, pair by pair (owner decisions 2026-11-04) ---
+  'match_judge',
   'forecast_trajectories', 'evaluate_forecast', 'compare_forecasts', 'benchmark_trial_effect',
 ])
 /**
@@ -876,7 +878,7 @@ export const VCR_JOB_KIND_STEPS = Object.freeze({
   covariate_set_comparator: 'comparator', negative_control_comparator: 'comparator', tipping_point: 'comparator',
   prognostic_adjustment_comparator: 'comparator',
   design_analytic: 'trial', design_simulation: 'trial', design_grid: 'trial', assurance: 'trial', procova: 'trial', accrual_forecast: 'trial',
-  match_criteria: 'matching', match_extract: 'matching',
+  match_criteria: 'matching', match_extract: 'matching', match_judge: 'matching',
 })
 export const VCR_JOB_STATES = frozen(['queued', 'running', 'succeeded', 'failed', 'canceled', 'awaiting_budget'])
 export const VCR_JOB_STATE_LABELS_ZH = Object.freeze({

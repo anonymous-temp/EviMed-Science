@@ -1653,6 +1653,9 @@ export const VCR_MODULE_ERROR_CODES = Object.freeze([
   'vcr_assessment_save_failed', 'vcr_evaluation_failed', 'vcr_recheck_failed', 'vcr_parsed_criteria_unreadable', 'vcr_parsed_criteria_unsaved',
   // the batch reading of patient records (vcrMatchBatch.mjs) and the short record of a result (vcrResultRecord.mjs)
   'vcr_extract_failed', 'vcr_extract_incomplete', 'vcr_extract_timeout', 'vcr_extract_unreadable', 'vcr_extract_context_too_large', 'vcr_extract_questions_invalid', 'vcr_extract_replan_required', 'vcr_result_not_found',
+  // judging patients against trials (vcrMatchJudge.mjs)
+  'vcr_match_answer_unreadable', 'vcr_match_judge_cut_off', 'vcr_match_judge_failed', 'vcr_match_judge_incomplete', 'vcr_match_judge_network', 'vcr_match_judge_nothing_to_read', 'vcr_match_judge_timeout',
+  'vcr_match_no_patient_text', 'vcr_match_note_changed', 'vcr_match_nothing_finished', 'vcr_match_stopped_early',
   // jobs, derived tables and the orchestrator's step notes
   'vcr_derived_table_missing', 'vcr_population_profile_missing', 'vcr_derived_table_unsupported', 'vcr_engine_table_invalid', 'vcr_job_attempts_exhausted',
   'vcr_object_unknown', 'vcr_scenario_endpoint_missing', 'vcr_scenario_grid_empty', 'vcr_scenario_unknown_fields',
@@ -2576,6 +2579,17 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_assessment_save_failed: '匹配评估没有保存成功，下一轮会重试。',
   vcr_evaluation_failed: '匹配判定在这位受试者上出错，其余照常。',
   vcr_recheck_failed: '到期复评没有完成，下一轮会重试。',
+  vcr_match_answer_unreadable: '模型的回答读不出结论，这一对没有判成；再启动同样的选择会再判它。',
+  vcr_match_judge_cut_off: '模型的回答超出了输出额度被截断，这一对没有判成；再启动同样的选择会再判它。',
+  vcr_match_judge_failed: '这一对没有判成；已判完的保留，再启动同样的选择会再判它。',
+  vcr_match_judge_incomplete: '模型没有把回答写完，这一对没有判成；再启动同样的选择会再判它。',
+  vcr_match_judge_network: '连不上模型服务，这一对没有判成；再启动同样的选择会再判它。',
+  vcr_match_judge_nothing_to_read: '没有可判定的内容：先写入病历或入排条件，再判定。',
+  vcr_match_judge_timeout: '模型回答超时，这一对没有判成；再启动同样的选择会再判它。',
+  vcr_match_no_patient_text: '这位受试者没有可读的病历或表格；写入后再判定。',
+  vcr_match_note_changed: '这份病历在读取之后变了，句子编号已不对应：重新读一次再写。',
+  vcr_match_nothing_finished: '这一批都没有判成；再启动同样的选择会再判。',
+  vcr_match_stopped_early: '这一批中途停下了；判完的保留，再启动同样的选择只判没判过的。',
   vcr_extract_failed: '这份病历没有读成；已读完的保留，没读成的会在下一次启动时再读。',
   vcr_extract_incomplete: '模型的回答被截断了，这份病历没有读成；下一次启动时会再读它。',
   vcr_extract_timeout: '读这份病历超时了，没有读成；下一次启动时会再读它。',

@@ -671,6 +671,7 @@ export class VcrDataStore extends VcrStoreBase {
       if (matchingUse.rowCount) return { removed:null, frozen:true, frozenBy:"matching" };
       await client.query(`DELETE FROM ${this.schema}.matching_facts WHERE study_id=$1 AND source->>'documentId'=ANY($2::text[])`, [entry.studyId,documentIds]);
       await client.query(`DELETE FROM ${this.schema}.language_judgments WHERE study_id=$1 AND EXISTS(SELECT 1 FROM jsonb_array_elements(evidence) e WHERE e->>'documentId'=ANY($2::text[]))`, [entry.studyId,documentIds]);
+      await client.query(`DELETE FROM ${this.schema}.match_judgments WHERE study_id=$1 AND document_ids ?| $2::text[]`, [entry.studyId,documentIds]);
       await client.query(`DELETE FROM ${this.schema}.source_files WHERE id = $1`, [entry.fileId]);
       await this.audit({
         client, studyId: entry.studyId, userId: row.user_id, actor: entry.actor ?? "",
