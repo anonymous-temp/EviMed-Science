@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import {RuntimePromptStops} from './runtimePromptStops.mjs';
 import { ProductDocuments } from './productStore.mjs';
 import { HttpError,safeId } from './security.mjs';
+import { VCR_MATCH_BATCH_JOBS } from '@evimed/domain';
 const hash = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 /** Agent-run resource IDs are at most 64 characters. Keep the full digest as
  * the dispatch fingerprint while reserving room for the PostgreSQL int retry. */
@@ -68,7 +69,7 @@ export class VcrConversationCompletions {
     await this.jobs?.reconcileFinishHooks();
     const replayCount=await this.reconcileReplays();
     const rows = await this.store.rows(`WITH candidates AS (SELECT j.*, s.project_id, e.id AS execution_id, r.id AS result_id, r.version AS result_version,
-      r.diagnostics->>'partial' AS partial,row_number() OVER (PARTITION BY j.user_id ORDER BY j.finished_at,j.id) AS account_order FROM evimed_vcr.jobs j
+      r.diagnostics->>'partial' AS partial,r.conclusion AS conclusion,r.diagnostics->'issues'->0->>'message' AS stop_message,row_number() OVER (PARTITION BY j.user_id ORDER BY j.finished_at,j.id) AS account_order FROM evimed_vcr.jobs j
       JOIN evimed_vcr.studies s ON s.id=j.study_id AND s.deleted_at IS NULL
       LEFT JOIN evimed_vcr.executions e ON e.job_id=j.id
       LEFT JOIN evimed_vcr.results r ON r.execution_id=e.id
@@ -83,12 +84,14 @@ export class VcrConversationCompletions {
       if(invalid) this.report('vcr_completion_origin_invalid');
       const key = row.result_id ? `${row.result_id}:${row.result_version}` : 'none';
       const fingerprint = hash([row.user_id,row.project_id,origin?.rootSessionId ?? 'invalid',row.id,key]);
+      // A job that reads pair by pair ends `limited` when it stopped before the end, under a state of succeeded: what was asked for was not all done.
+      const stoppedShort=Object.hasOwn(VCR_MATCH_BATCH_JOBS,row.kind) && row.conclusion==='limited';
       await this.store.query(`INSERT INTO evimed_vcr.conversation_completions
         (id,study_id,job_id,user_id,project_id,root_session_id,result_key,dispatch_id,fingerprint,payload,state,last_error)
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11,$12) ON CONFLICT (job_id,result_key) DO NOTHING`,
       [`vcc_${fingerprint}`,row.study_id,row.id,row.user_id,row.project_id,origin?.rootSessionId ?? 'invalid',key,vcrCompletionDispatchId(fingerprint),fingerprint,
         JSON.stringify({completedAt:row.finished_at,state: row.state, resultId: row.result_id ?? null, resultVersion: row.result_version ?? null,
-          partial: row.partial === 'true', error: row.error ? { code: row.error.code ?? 'vcr_job_failed' } : null,
+          partial: row.partial === 'true' || stoppedShort, ...(stoppedShort && row.stop_message ? {stopped:String(row.stop_message).slice(0,300)} : {}), error: row.error ? { code: row.error.code ?? 'vcr_job_failed' } : null,
           runId: origin?.runId, callId: origin?.callId }),invalid ? 'unavailable' : 'pending',invalid ? 'vcr_completion_origin_invalid' : null]);
       await this.store.query(`UPDATE evimed_vcr.jobs SET checkpoint=checkpoint || '{"completionOutboxRecorded":true}'::jsonb WHERE id=$1`,[row.id]);
 
@@ -215,8 +218,8 @@ export class VcrConversationCompletions {
         if(disposition) {await this.settleDisposition(row,disposition);continue;}
         const state = await this.inbox(owned.project,row.root_session_id);
         if (!state || state.running !== false || state.queued !== 0) { await this.mark(row,'pending','vcr_conversation_busy'); continue; }
-        const label={succeeded:'计算已完成',failed:'计算未完成',canceled:'计算已取消'}[outcome.state] ?? '计算状态有更新';
-        const text = `${label}${outcome.partial ? '，保留了部分结果' : ''}。请继续原来的任务，读取实际结果再解释。`;
+        const label=outcome.state==='succeeded' && outcome.partial ? '计算没有做完' : {succeeded:'计算已完成',failed:'计算未完成',canceled:'计算已取消'}[outcome.state] ?? '计算状态有更新';
+        const text = `${label}${outcome.partial ? '，保留了部分结果' : ''}${outcome.stopped ? `：${String(outcome.stopped).replace(/[。.]$/u,'')}` : ''}。请继续原来的任务，读取实际结果再解释${outcome.partial ? '，说明做完了多少、没做完什么' : ''}。`;
         const systemSupplement = `Platform computation notice. Original job=${outcome.replayId ?? row.job_id}; tool=${outcome.replayId ? "research_calculate" : "vcr_simulate"}; state=${outcome.state}; result=${outcome.resultId ?? 'none'}; version=${outcome.resultVersion ?? 'none'}; partial=${outcome.partial === true}; error=${outcome.error?.code ?? 'none'}. This is an automated continuation of the original user request. Use the recorded result; do not treat a failure, cancellation or partial result as success. Nobody is attending this turn.${outcome.state === "canceled" ? " The computation was canceled. Do not restart it or queue replacement calculations without a new user request." : ""}`;
         const assertCurrent=async ({runs=null,final=false,signal=null}={}) => {
           const current=await this.resolve(row);signal?.throwIfAborted();

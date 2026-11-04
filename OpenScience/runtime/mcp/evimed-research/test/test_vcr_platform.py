@@ -1090,6 +1090,22 @@ class VcrJobWaitTests(_GatewayCase):
             self.assertIn("end the turn", advice)
             self.assertIn("vcr_read (what: results)", advice)
 
+    def test_a_judging_job_is_read_back_from_its_verdicts_and_a_stopped_one_says_so(self):
+        self.wait_for("0")
+        _Gateway.answers["simulate"] = [(200, {"data": {"action": "status", "jobId": "job_1", "kind": "match_judge", "state": "running", "progress": {"done": 1, "total": 4}}})]
+        running = vcr_platform.simulate({"action": "status", "jobId": "job_1"})
+        self.assertIn("candidate_trials", " ".join(running["next_actions"]))
+        self.assertNotIn("what: results", " ".join(running["next_actions"]))
+        _Gateway.answers["simulate"] = [(200, {"data": {"action": "status", "jobId": "job_1", "kind": "match_judge", "state": "succeeded", "result": {"conclusion": "limited"}}})]
+        stopped = vcr_platform.simulate({"action": "status", "jobId": "job_1"})
+        self.assertEqual(stopped["status"], "warning")
+        self.assertIn("stopped before the end", stopped["summary"])
+        self.assertIn("candidate_trials", " ".join(stopped["next_actions"]))
+        _Gateway.answers["simulate"] = [(200, {"data": {"action": "status", "jobId": "job_1", "kind": "weight_comparator", "state": "succeeded", "result": {"conclusion": "limited"}}})]
+        estimate = vcr_platform.simulate({"action": "status", "jobId": "job_1"})
+        self.assertEqual(estimate["status"], "success", "an engine's limited estimate is a finished result")
+        self.assertIn("what: results", " ".join(estimate["next_actions"]))
+
     def test_a_job_that_finishes_during_the_wait_comes_back_finished_from_one_start(self):
         self.wait_for("20")
         _Gateway.answers["simulate"] = [

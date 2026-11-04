@@ -2964,7 +2964,7 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
             ? poolingSummary(result, object(await vcr.store.one("SELECT checkpoint FROM evimed_vcr.jobs WHERE id = $1", [job.id]).then((/** @type {any} */ row) => row?.checkpoint))) : null;
           // What a run reads of a result is what a page shows a member, less
           // its small cells (contract §4): the answer passes the boundary once.
-          const answer = { action: "status", jobId: job.id, state: job.state, progress: job.progress, ...appliedOf(job),
+          const answer = { action: "status", jobId: job.id, kind: job.kind, state: job.state, progress: job.progress, ...appliedOf(job),
             cpuSeconds: job.cpuSecondsUsed, error: job.error, result, ...(pooling ? { pooling } : {}),
             ...(job.state === "awaiting_budget" ? { awaitingBudget: true, message: AWAITING_BUDGET_MESSAGE } : {}) };
           const safe = withJobEntry(await vcr.service.forModel(answer, { projection: "job_result", ownerView }),

@@ -1474,6 +1474,16 @@ def _with_entry(answer: dict, data: dict) -> dict:
     return {**answer, "next_actions": [*answer.get("next_actions", []), line]}
 
 
+MATCH_BATCH_KINDS = ("match_extract", "match_judge", "records_import")
+
+
+def _job_read_back(data: dict) -> str:
+    """Where a finished job's answer is read: `results` holds a judging job's counts, not its verdicts."""
+    if data.get("kind") == "match_judge":
+        return "vcr_read (what: candidate_trials with filter.subjectKey, or what: matching with filter.protocolVersionId)"
+    return "vcr_read (what: results)"
+
+
 def _job_answer(data: dict, action: str) -> dict:
     state = str(data.get("state") or "queued")
     job_id = str(data.get("jobId") or "")
@@ -1516,7 +1526,7 @@ def _job_answer(data: dict, action: str) -> dict:
                 "Do not wait for it in this turn -- no status loop, no sleep or wait command. Tell the researcher what is "
                 "computing, where the result will appear and how far it got, answer with what you already have, and end the turn "
                 "(or go on with work that does not need this result).",
-                "In a later turn, when asked, read the result with vcr_read (what: results).",
+                "In a later turn, when asked, read the result with %s." % _job_read_back(data),
             ],
         }
     if state == "failed":
@@ -1538,8 +1548,17 @@ def _job_answer(data: dict, action: str) -> dict:
             "summary": "Job %s was cancelled; the completed batches are kept." % job_id,
             "data": data, "warnings": [], "next_actions": [],
         }
-    actions = ["Read the result with vcr_read (what: results) and cite the fields, never retyped numbers."]
+    actions = ["Read the result with %s and cite the fields, never retyped numbers." % _job_read_back(data)]
     result = data.get("result") if isinstance(data.get("result"), dict) else {}
+    if result.get("conclusion") == "limited" and data.get("kind") in MATCH_BATCH_KINDS:
+        actions.insert(0, "This job stopped before the end: say how far it got and what is left, and that starting the same selection again goes on from there.")
+        return {
+            "status": "warning",
+            "summary": "Job %s stopped before the end; what was done is kept." % job_id,
+            "data": data,
+            "warnings": [],
+            "next_actions": actions,
+        }
     if result.get("kind") in ("trial_scenario", "design_grid"):
         # A design is chosen by the researcher: the reply recommends one in a sentence and says which bound decided it.
         actions.append("When designs are compared, close with one sentence of recommendation that says which constraint decided it (the type I error "

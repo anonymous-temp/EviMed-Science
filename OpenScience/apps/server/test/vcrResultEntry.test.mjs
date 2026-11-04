@@ -96,6 +96,16 @@ test("P2-10 the two computations whose completion only the conversation heard ha
   assert.equal(partly?.title, "病历阅读完成：读完 40 份病历，2 份没读成", "failures are said in the title, not left for the page");
   const judged = vcrJobNoticeText({ resultKind: "match_judge", state: "succeeded", result: { measures: [{ name: "pairs_finished", value: 18 }, { name: "pairs_total", value: 20 }, { name: "pairs_failed", value: 2 }] } });
   assert.deepEqual([judged?.title, judged?.tab], ["患者与试验判定完成：判定了 18/20 对，2 对没判成", "matching"]);
+  // A job that stopped reads as stopped, in the title: every pair scored and no clause read, or a budget gone, is no 「完成」.
+  const noClauses = vcrJobNoticeText({ resultKind: "match_judge", state: "succeeded", result: { conclusion: "limited", measures: [{ name: "pairs_finished", value: 3 }, { name: "pairs_total", value: 3 }, { name: "pairs_failed", value: 0 }, { name: "criteria_pairs_finished", value: 0 }, { name: "criteria_pairs_total", value: 2 }] } });
+  assert.equal(noClauses?.title, "患者与试验判定没有做完：判定了 3/3 对，逐条判了 0/2 对");
+  assert.match(String(noClauses?.body), /已做完的保留/);
+  const whole = vcrJobNoticeText({ resultKind: "match_judge", state: "succeeded", result: { conclusion: "estimable", measures: [{ name: "pairs_finished", value: 3 }, { name: "pairs_total", value: 3 }, { name: "criteria_pairs_finished", value: 2 }, { name: "criteria_pairs_total", value: 2 }] } });
+  assert.equal(whole?.title, "患者与试验判定完成：判定了 3/3 对");
+  const halted = vcrJobNoticeText({ resultKind: "match_judge", state: "succeeded", result: { conclusion: "limited", diagnostics: { changes: { sentence: "重算后 1 个试验结论变化。" } }, measures: [{ name: "pairs_finished", value: 1 }, { name: "pairs_total", value: 3 }] } });
+  assert.equal(halted?.title, "患者与试验判定没有做完：判定了 1/3 对", "a comparison over part of the pairs is no headline");
+  assert.equal(vcrJobNoticeText({ resultKind: "match_extract", state: "succeeded", result: { conclusion: "limited", measures: [{ name: "records_read", value: 40 }], diagnostics: { remaining: 272 } } })?.title, "病历阅读没有做完：读了 40 份病历，中途停下，还有 272 份没读");
+  assert.equal(vcrJobNoticeText({ resultKind: "comparator", state: "succeeded", result: { conclusion: "limited", measures: [] } })?.title, "对照分析完成：有限制地估计", "a limited estimate of an engine job is a finished result");
   const nothing = vcrJobNoticeText({ resultKind: "match_judge", state: "failed", error: { code: "insufficient_quota", message: "20 对都没有判定成" } });
   assert.match(String(nothing?.title), /^患者与试验判定没有算完/);
   const failed = vcrJobNoticeText({ resultKind: "match_extract", state: "failed", error: { code: "usage_budget_exceeded" } });

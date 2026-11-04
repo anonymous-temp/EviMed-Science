@@ -107,6 +107,8 @@ export function vcrJobNoticeText({ resultKind, stage = null, label = null, state
   if (result?.conclusion === "not_estimable" && resultKind === "comparator") return null;
   const measure = (/** @type {string} */ wanted) => list(result?.measures).map((entry) => /** @type {any} */ (entry))
     .find((entry) => entry && entry.name === wanted && finiteNumber(entry.value) !== null);
+  // A job that reads record by record or pair by pair ends `limited` when it stopped before the end, which a reader must hear; an engine's limited estimate is a finished result.
+  const stopped = result?.conclusion === "limited" && ["match_extract", "match_judge", "records_import"].includes(resultKind);
   /** @type {string | null} */
   let headline = null;
   if (resultKind === "trial_scenario") {
@@ -136,8 +138,12 @@ export function vcrJobNoticeText({ resultKind, stage = null, label = null, state
     const finished = measure("pairs_finished");
     const total = measure("pairs_total");
     const failed = measure("pairs_failed");
-    const changed = typeof result?.diagnostics?.changes?.sentence === "string" ? result.diagnostics.changes.sentence.replace(/。$/u, "") : "";
-    headline = changed ? changed : finished && total ? `判定了 ${count(finished.value)}/${count(total.value)} 对${failed && failed.value > 0 ? `，${count(failed.value)} 对没判成` : ""}` : null;
+    const clauses = measure("criteria_pairs_finished");
+    const clauseTotal = measure("criteria_pairs_total");
+    // A comparison over part of the pairs is not what a stopped job has to say first.
+    const changed = !stopped && typeof result?.diagnostics?.changes?.sentence === "string" ? result.diagnostics.changes.sentence.replace(/。$/u, "") : "";
+    const unread = stopped && clauseTotal && clauseTotal.value > (clauses?.value ?? 0) ? `，逐条判了 ${count(clauses?.value ?? 0)}/${count(clauseTotal.value)} 对` : "";
+    headline = changed ? changed : finished && total ? `判定了 ${count(finished.value)}/${count(total.value)} 对${failed && failed.value > 0 ? `，${count(failed.value)} 对没判成` : ""}${unread}` : null;
   } else if (resultKind === "records_import") {
     headline = typeof result?.diagnostics?.statement === "string" ? result.diagnostics.statement.replace(/。$/u, "") : null;
   } else if (resultKind === "population_check") {
@@ -150,8 +156,8 @@ export function vcrJobNoticeText({ resultKind, stage = null, label = null, state
     headline = /** @type {Record<string, string>} */ ({ estimable: "可以估计", limited: "有限制地估计", benchmark_only: "仅基准" })[String(word)] ?? null;
   }
   return {
-    title: `${what}完成${headline ? `：${headline}` : ""}`,
-    body: `结果在「${tabLabel(tab)}」页上，对话里也可以接着问。`,
+    title: `${what}${stopped ? "没有做完" : "完成"}${headline ? `：${headline}` : ""}`,
+    body: stopped ? `已做完的保留在「${tabLabel(tab)}」页上，那里可以继续；对话里也可以接着问。` : `结果在「${tabLabel(tab)}」页上，对话里也可以接着问。`,
     tab,
   };
 }
