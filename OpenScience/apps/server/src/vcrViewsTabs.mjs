@@ -197,6 +197,9 @@ function waterfallEntry(entry, index) {
 /** The population profile's rows, in whatever list the population step stored them. @param {Record<string, any>} profile */
 const profileRows = (profile) => list(profile.rows ?? profile.covariates ?? (Array.isArray(profile) ? profile : []));
 
+/** The groups the engine cuts a column that is a number into when it describes the records easiest to recognise, and the group of a missing value, as the page says them. */
+const AT_RISK_LEVEL_WORDS = Object.freeze(/** @type {Record<string, string>} */ ({ "low third": "最低的三分之一", "middle third": "中间的三分之一", "high third": "最高的三分之一", "(missing)": "缺失" }));
+
 /**
  * The quality report as values, with no verdict word: the fixed metric set the
  * engine reports (fidelity, utility, leakage), each number with its source, and
@@ -284,7 +287,7 @@ export function qualityReportView(quality) {
     // 「哪些人最容易被认出来」: the kind of person the at-risk group is, by the share of each level in it; counts of 1 to 9 people are never shown and no row ever is
     atRisk: perRecord.available === true && stated ? {
       bound: numeric(stated.bound), size: numeric(atRisk.size), rows: list(atRisk.rows).map(object).map((entry) => ({
-        variable: text(entry.variable) ?? "", level: text(entry.level) ?? "", atRisk: numeric(entry.atRisk), all: numeric(entry.all),
+        variable: text(entry.variable) ?? "", level: AT_RISK_LEVEL_WORDS[String(entry.level)] ?? text(entry.level) ?? "", atRisk: numeric(entry.atRisk), all: numeric(entry.all),
         atRiskShare: numeric(entry.atRiskShare) === null ? null : numeric(entry.atRiskShare) * 100, allShare: numeric(entry.allShare) === null ? null : numeric(entry.allShare) * 100,
       })).filter((entry) => entry.variable && entry.level),
       described: atRisk.size !== undefined,

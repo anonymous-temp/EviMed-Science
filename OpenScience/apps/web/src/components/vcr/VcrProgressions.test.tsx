@@ -22,7 +22,10 @@ describe("疾病进展模拟 · the card", () => {
     const { container } = render(<VcrProgressions cards={[sample("linear")]} />);
     const card = container.querySelector("[data-vcr-progression]") as HTMLElement;
     expect(card.querySelector("[data-vcr-progression-label]")).toHaveTextContent("人群层面，不是对个人的预测");
-    expect(card.querySelector("[data-vcr-progression-label]")).toHaveTextContent("0.16");
+    expect(card.querySelector("[data-vcr-progression-label]")).toHaveTextContent("它不能告诉你某一个人会怎样");
+    expect(card.querySelector("[data-vcr-progression-label]")).not.toHaveTextContent(/\d/);
+    expect(within(card).getAllByText(/时间（个月）/).length).toBeGreaterThan(0);
+    expect(card.textContent).not.toMatch(/months/);
     expect(within(card).getByText(/减慢 25%/)).toBeInTheDocument();
   });
 

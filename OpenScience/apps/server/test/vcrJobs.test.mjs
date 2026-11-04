@@ -8,7 +8,7 @@ import test from "node:test";
 import { readFileSync } from "node:fs";
 import { vcrBiasEstimateOf } from "../src/vcrBiasAnalysis.mjs";
 import {
-  VcrJobs, VCR_DERIVED_SOURCES, VCR_JOB_OPEN_STATES, VCR_JOB_TERMINAL_STATES, vcrIdempotencyKey, vcrMergeStageResult, vcrReplicatePlanForJob, vcrReplicatesForJob,
+  VcrJobs, VCR_DERIVED_SOURCES, vcrJobCostClass, VCR_JOB_OPEN_STATES, VCR_JOB_TERMINAL_STATES, vcrIdempotencyKey, vcrMergeStageResult, vcrReplicatePlanForJob, vcrReplicatesForJob,
   VCR_RECONSTRUCTION_REFERENCE, vcrBindReconstruction, vcrBindScientificInputUnits, vcrEngineStoppedError, vcrErrorFromIssues, vcrFailureReason, vcrResultKindFor, vcrScenarioColumns, vcrScenarioHash, vcrSeedFor,
 } from "../src/vcrJobs.mjs";
 import { VCR_RESULT_KINDS } from "../src/vcrStore.mjs";
@@ -559,4 +559,11 @@ test("a different method landing as the primary stage of a comparison leaves not
   // and a result that still holds both (written before stages were kept apart) is read by its primary stage only
   const stale = { measures: [...weighting.measures, ...emulation.incoming.measures], diagnostics: { stageResults: { primary: { measures: emulation.incoming.measures, diagnostics: emulation.incoming.diagnostics } } } };
   assert.equal(vcrBiasEstimateOf(stale)?.measure, "risk_ratio_itt");
+});
+
+test("the cost class follows the measured seconds: a win-ratio design, a target-trial emulation and the confirmatory designs that simulate are heavy, a futility design is not (review RF2 P2-11)", () => {
+  for (const kind of ["design_win_ratio", "target_trial_emulation", "design_simulation", "design_grid"]) assert.equal(vcrJobCostClass(kind, {}), "heavy", kind);
+  for (const design of ["multi_arm_selection", "enrichment", "sample_size_reestimation"]) assert.equal(vcrJobCostClass("design_confirmatory", { design: { kind: design } }), "heavy", design);
+  for (const design of ["futility_group_sequential", "count_endpoint"]) assert.equal(vcrJobCostClass("design_confirmatory", { design: { kind: design } }), "light", design);
+  for (const kind of ["design_dose", "design_bayesian", "stc_comparator", "bias_analysis", "borrowing_prior", "network_meta", "evalue"]) assert.equal(vcrJobCostClass(kind, {}), "light", kind);
 });

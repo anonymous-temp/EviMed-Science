@@ -55,7 +55,7 @@ export function presentTargetTrial(result, value) {
   const when = horizon === null ? "" : `第 ${periodsWords(horizon, unit)}`;
   const grace = numeric(design.gracePeriod);
   const question = strategy === "clone_censor_weight"
-    ? `确诊（符合条件）后 ${grace === null ? "一段宽限期" : periodsWords(grace, unit)}内开始治疗，与不开始治疗相比，效应是多少？`
+    ? `符合条件后 ${grace === null ? "一段宽限期" : periodsWords(grace, unit)}内开始治疗，与不开始治疗相比，效应是多少？`
     : "治疗起始时间各不相同的队列，开始治疗和不开始治疗的效应是多少，而且没有永恒时间偏倚？";
   const estimands = list(tt.estimands).map(object).flatMap((entry) => {
     const kind = entry.kind === "itt" ? "itt" : entry.kind === "pp" ? "pp" : null;

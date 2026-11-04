@@ -382,7 +382,7 @@ export const MEASURE_META = Object.freeze({
   patients_below_mtd: { label: "低于最大耐受剂量的患者数（平均）", unit: "例" },
   per_arm: { label: "每个剂量的患者数", unit: "例" },
   total_patients: { label: "患者总数", unit: "例" },
-  worst_correct_selection_probability: { label: "各情形里选对的概率的最小值", unit: "%", percent: true },
+  worst_correct_dose_probability: { label: "各情形里选对的概率的最小值", unit: "%", percent: true },
   // the win-ratio design (design_win_ratio)
   win_ratio: { label: "胜率比（赢的对数 ÷ 输的对数）" },
   win_difference: { label: "净胜率（赢的对数占比 − 输的对数占比）", unit: "%", percent: true },

@@ -116,3 +116,13 @@ test("a run that was stopped by its budget says so and keeps its numbers", () =>
   assert.match(stopped.limited, /2000 次，原定 4000 次/);
   assert.ok(stopped.table.rows[0].cells.correct_dose_probability.value > 0);
 });
+
+test("every number the engine puts in a result's headline has a label, so none is dropped from the card (review RF2 P2-9)", () => {
+  for (const name of ["alone", "compare", "selection", "selection_table"]) {
+    const result = fixture(name);
+    const unlabelled = result.measures.map((measure) => String(measure.name)).filter((measure) => cellLabel(measure) === null);
+    assert.deepEqual(unlabelled, [], `${name}: a measure without a label is a number the card cannot show`);
+  }
+  const selection = presentDoseDesigns({ allResults: [{ ...fixture("selection"), id: "res_1", version: 1, kind: "design_dose", createdAt: "2026-11-04T00:00:00Z" }], stale: [] }, { nodeOf: (row) => `result:${row.id}` });
+  assert.ok(selection[0].headline.some((entry) => entry.key === "worst_correct_dose_probability"), "the worst scenario's chance of choosing the right dose is on the card");
+});

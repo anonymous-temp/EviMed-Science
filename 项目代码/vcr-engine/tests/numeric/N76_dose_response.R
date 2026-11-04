@@ -107,3 +107,26 @@ vcr_case("N76d", c("AC-08", "AC-25"), function() {
        detail = sprintf("spline with a two-level study: left out and named (%s, %d levels, needs %d); a model no study can carry: refused (%s); one-stage slope %.6f vs two-stage %.6f; a level without counts: covariance independent and said (%s); two reference rows: refused (%s); same hash on 1 and 2 cores: %s",
                         ex[[1]]$studyId, as.integer(ex[[1]]$levels), as.integer(ex[[1]]$needed), has(nothing, "scenario_value_invalid"), b1, b2, cov_note, has(rt, "scenario_value_invalid"), identical(two$manifest$outputHash, rr$manifest$outputHash)))
 })
+
+vcr_case("N76e", c("AC-08", "AC-30"), function() {
+  # A package that cannot be loaded is the engine's fault and is said so (review RF2 P2-12): the fit stands in for the failure the package raises when a
+  # library it needs is missing, and the answer must not tell the person that the studies have too few levels. A fit that fails for the studies' own
+  # reasons (one level, collinear levels) still says so.
+  if (!requireNamespace("dosresmeta", quietly = TRUE)) return(list(pass = FALSE, detail = "error: the dosresmeta package is not installed (the run must not skip silently)"))
+  d <- get(utils::data("alcohol_crc", package = "dosresmeta", envir = environment())[1], envir = environment())
+  sc <- list(studies = .n76_studies(d), model = list(kind = "linear"), perDose = 12)
+  original <- dosresmeta::dosresmeta
+  ns <- asNamespace("dosresmeta")
+  unlockBinding("dosresmeta", ns)
+  on.exit({ assign("dosresmeta", original, envir = ns); lockBinding("dosresmeta", ns) }, add = TRUE)
+  assign("dosresmeta", function(...) stop("there is no package called 'mixmeta'"), envir = ns)
+  broken <- vcr_test_run(.n76_job(sc, "n76e1"))
+  assign("dosresmeta", function(...) stop("the covariance matrix is singular"), envir = ns)
+  singular <- vcr_test_run(.n76_job(sc, "n76e2"))
+  assign("dosresmeta", original, envir = ns)
+  issue <- function(r) { f <- (r$diagnostics$issues %||% list())[[1]]; list(code = f$code, field = f$field, detail = f$detail %||% "") }
+  a <- issue(broken); b <- issue(singular)
+  ok <- identical(broken$status, "failed") && identical(a$code, "dose_response_method_unavailable") && identical(a$field, "engine") && !grepl("too few", a$detail) &&
+    identical(singular$status, "failed") && identical(b$field, "scenario") && grepl("too few", b$detail)
+  list(pass = ok, detail = sprintf("a package that cannot load: %s at %s (%s); a fit that fails on the studies: %s at %s (%s)", a$code, a$field, a$detail, b$code, b$field, b$detail))
+})

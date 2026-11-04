@@ -62,7 +62,7 @@ export function cellLabel(name) {
     select_below_mtd_probability: "选到比最大耐受剂量更低的剂量的概率", select_none_probability: "没有选出任何剂量的概率（因毒性过高提前终止）",
     expected_sample_size: "期望样本量", expected_dlt: "出现毒性反应的患者数（平均）", patients_above_mtd: "超过最大耐受剂量的患者数（平均）",
     patients_at_mtd: "在最大耐受剂量上的患者数（平均）", patients_below_mtd: "低于最大耐受剂量的患者数（平均）",
-    per_arm: "每个剂量的患者数", total_patients: "患者总数", required_per_arm: "每个剂量所需患者数", worst_correct_selection_probability: "各情形里选对的概率的最小值",
+    per_arm: "每个剂量的患者数", total_patients: "患者总数", required_per_arm: "每个剂量所需患者数", worst_correct_dose_probability: "各情形里选对的概率的最小值",
   });
   if (fixed[name]) return fixed[name];
   let hit = /^select_dose_(\d+)$/.exec(name);

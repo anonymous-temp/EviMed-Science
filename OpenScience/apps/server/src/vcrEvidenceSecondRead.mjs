@@ -23,8 +23,12 @@
  * - **It never decides.** The first value stands, whatever the second says (owner rulings 2026-09-17, 2026-10-10). A disagreement is a note
  *   in the answer of the card's write and a warning mark on the card. A read that fails, times out, is cut off or cannot find the quotation in
  *   the preserved text says nothing and changes nothing: it is counted, not stored.
- * - **Only text the platform preserved.** A publication or a registry record the platform itself read, never a patient record (patient
- *   records go through the matching reader and the study's cloud basis, not through here). The text is public.
+ * - **Only text the platform preserved, and not necessarily public.** The text is what the platform preserved of a source the item cites: a
+ *   publication or a registry record it read, or any other source of the project, a private upload included (`literature.text`,
+ *   `vcrEvidenceSources.mjs`). A patient record never comes this way (those go through the matching reader and the study's cloud basis).
+ *   Sending it adds no recipient: the run that wrote the item read the same text through the same model provider (owner ruling 2026-10-10),
+ *   and this is the same reading again, blind to the first. (A comment here said "the text is public"; it is not always, and nothing narrows
+ *   what is read because of that.)
  * - **Bounded.** One call per stored value, at most `CONCURRENCY` at a time, each stopped after the deployment's timeout; the write of the
  *   value does not wait for it, and the write of a card waits for the reads of the values it cites for at most `SECOND_READ_CARD_WAIT_MS`.
  *

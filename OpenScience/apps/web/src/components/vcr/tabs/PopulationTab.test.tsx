@@ -200,7 +200,7 @@ describe("人群 · a generated population", () => {
       ],
       atRisk: { bound: 0.75, size: 53, described: true, rows: [
         { variable: "site", level: "north", atRisk: 31, all: 135, atRiskShare: 58.5, allShare: 45 },
-        { variable: "age", level: "high third", atRisk: 18, all: 100, atRiskShare: 34, allShare: 33.3 },
+        { variable: "age", level: "最高的三分之一", atRisk: 18, all: 100, atRiskShare: 34, allShare: 33.3 },
       ] },
     };
     serve((raw) => {

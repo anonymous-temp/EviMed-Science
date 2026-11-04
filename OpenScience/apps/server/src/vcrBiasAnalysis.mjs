@@ -113,7 +113,9 @@ export function biasEstimatePhrase(diagnostics) {
   const estimate = numeric(given.estimate);
   const interval = list(given.interval).map(numeric);
   if (estimate === null) return null;
-  const range = interval.length === 2 && interval[0] !== null && interval[1] !== null ? `（95% 区间 ${plain(interval[0])}–${plain(interval[1])}）` : "";
+  // the level the interval was stated at (`given.confidenceLevel`, written when the call gave an interval); an estimate taken from a saved result at 90% is not a 95% one
+  const level = numeric(given.confidenceLevel);
+  const range = interval.length === 2 && interval[0] !== null && interval[1] !== null ? `（${plain((level !== null && level > 0 && level < 1 ? level : 0.95) * 100)}% 区间 ${plain(interval[0])}–${plain(interval[1])}）` : "";
   return `${SCALE_WORDS[String(diagnostics.scale)] ?? "估计值"} ${plain(estimate)}${range}`;
 }
 

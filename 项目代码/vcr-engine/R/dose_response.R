@@ -30,7 +30,7 @@
 #   those same predictions and is a pointwise statement, not a threshold the data establish.
 # - **A tests of non-linearity is a Wald test on the spline terms** of the pooled coefficients (the package's `waldtest` computes the
 #   same quadratic form); the overall test is the same on all coefficients. Both are chi-squared on the pooled covariance.
-# - **The package's own text never reaches the person.** An error inside dosresmeta or mixmeta becomes `dose_response_not_computable`; its
+# - **The package's own text never reaches the person.** An error inside dosresmeta or mixmeta becomes `dose_response_not_computable` (a package that cannot be loaded is `dose_response_method_unavailable`: the engine's, not the studies'); its
 #   warnings (one-dimensional Nelder-Mead in the one-stage fit) are dropped, since the engine states the method it ran.
 # ---------------------------------------------------------------------------
 
@@ -96,9 +96,16 @@ vcr_rcs_basis <- function(x, knots) {
   data.frame(dose = doses, logRatio = est, se = se, lower = est - z * se, upper = est + z * se)
 }
 
+#' Whether an error raised by the fit is a package that could not be loaded rather than a fit that failed.
+.vcr_dr_load_error <- function(e) {
+  if (is.null(e)) return(FALSE)
+  inherits(e, "packageNotFoundError") ||
+    grepl("there is no package called|could not be loaded|unable to load shared object|loadNamespace|namespace .* is not available", conditionMessage(e), perl = TRUE)
+}
+
 vcr_job_dose_response <- function(job, output_dir = NULL, ...) {
   sc <- job$scenario
-  if (!requireNamespace("dosresmeta", quietly = TRUE)) vcr_abort("dose_response_not_computable", "engine", "The dose-response method is not available in this engine.")
+  if (!requireNamespace("dosresmeta", quietly = TRUE)) vcr_abort("dose_response_method_unavailable", "engine", "The dose-response method is not available in this engine.")
   assumed <- list()
   note <- function(key, value, basis) assumed[[length(assumed) + 1L]] <<- list(key = key, value = value, basis = basis)
   df <- .vcr_dr_frame(sc)
@@ -158,10 +165,14 @@ vcr_job_dose_response <- function(job, output_dir = NULL, ...) {
   d2 <- cbind(df[c("id", "type", "logrr", "se", "cases", "n")], as.data.frame(spl))
   d2$id <- factor(d2$id, levels = unique(d2$id))
   fml <- stats::as.formula(paste("logrr ~", paste(terms, collapse = " + ")))
+  fit_error <- NULL
   fit <- tryCatch(suppressWarnings(suppressMessages(
     dosresmeta::dosresmeta(formula = fml, id = id, type = type, se = se, cases = cases, n = n, data = d2,
                            covariance = covariance, method = fit_method, proc = if (identical(stage, "one")) "1stage" else "2stage"))),
-    error = function(e) NULL)
+    error = function(e) { fit_error <<- e; NULL })
+  # A package (or one it needs) that cannot be loaded is the engine's, and the studies are not the reason: saying "too few levels" for it
+  # sent a person to fix data that was fine (an image without the library, seen when the library path was not set).
+  if (is.null(fit) && .vcr_dr_load_error(fit_error)) vcr_abort("dose_response_method_unavailable", "engine", "The dose-response method could not load what it needs in this engine; the studies are not the reason.")
   if (is.null(fit)) vcr_abort("dose_response_not_computable", "scenario", "The dose-response model could not be fitted to these studies: the levels may be too few or too collinear for it.")
   beta <- as.numeric(stats::coef(fit)); names(beta) <- terms
   V <- as.matrix(stats::vcov(fit)); dimnames(V) <- list(terms, terms)

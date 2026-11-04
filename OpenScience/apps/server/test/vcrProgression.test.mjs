@@ -22,8 +22,17 @@ test("a progression simulation is a result of its own kind, read on the patients
 test("the card says it is population level first, and why", () => {
   const card = progressionCard(fixture("linear-change"));
   assert.equal(card.label, "人群层面，不是对个人的预测");
-  assert.match(card.reason, /0\.16/);
+  // no statistic is typed into every card: the sentence says what the curve is and what it cannot say
+  assert.match(card.reason, /不能告诉你某一个人会怎样/);
+  assert.doesNotMatch(card.reason, /\d/);
   assert.match(card.question, /减慢 25%/);
+});
+
+test("the time is said in Chinese everywhere, the engine's word for it nowhere (review RF2 P2-3)", () => {
+  const card = progressionCard(fixture("emax-slope"));
+  assert.equal(card.timeUnit, "个月");
+  assert.equal(card.expected.value.unit, "points / 个月", "a slope is per month, and the outcome's own unit is the person's word");
+  for (const sentence of strings({ ...card, series: null, table: null })) assert.doesNotMatch(sentence, /\bmonths?\b/);
 });
 
 test("the curve is exact and the power is simulated, with the closed form beside it", () => {

@@ -151,6 +151,9 @@ test("the premises name the estimate analysed and the bias that was stated, and 
   assert.equal(defaulted.find((row) => row.key === "biasGrid").source, "default");
   assert.ok(rows.filter((row) => row.decisive).length <= 5);
   assert.equal(biasEstimatePhrase({}), null);
+  // the level the interval was stated at is the level the phrase says (review RF2 P2-8)
+  assert.equal(biasEstimatePhrase({ scale: "hazard_ratio", given: { estimate: 0.7, interval: [0.55, 0.89], confidenceLevel: 0.9 } }), "风险比（HR） 0.7（90% 区间 0.55–0.89）");
+  assert.equal(biasEstimatePhrase({ scale: "hazard_ratio", given: { estimate: 0.7, interval: [0.5, 0.98] } }), "风险比（HR） 0.7（95% 区间 0.5–0.98）", "no level stated: the usual one");
   assert.equal(biasStatedWords({}), null);
 });
 

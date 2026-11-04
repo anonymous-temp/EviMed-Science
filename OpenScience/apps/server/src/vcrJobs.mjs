@@ -345,6 +345,21 @@ export function vcrScenarioColumns(scenario) {
 const HEAVY_KINDS = new Set(["design_simulation", "design_grid", "synthesize_population", "generate_patients",
   "generate_patients_continuous", "generate_patients_binary", "generate_patients_longitudinal"]);
 
+/**
+ * The cost class a job answers in `validate` and carries in its record: heavy when a run of it at its defaults is the study's budget question.
+ * Measured at the defaults (2 cores, CPU seconds, the committed results' manifests and the stream notes): a win-ratio design 125 (the help
+ * example; the null floor alone is 440 at 600 people), a target-trial emulation 19 to 21, a multi-arm confirmatory design 24, enrichment 18,
+ * sample-size re-estimation 13 against a futility design 1.2 and a count endpoint 0.07. A kind that is heavy only for some of its variants is
+ * judged by the variant (`design_confirmatory`), because a futility design called heavy would warn about a second and a half.
+ * @param {string} kind @param {Record<string, any>} [scenario]
+ * @returns {"heavy" | "light"}
+ */
+export function vcrJobCostClass(kind, scenario = {}) {
+  if (HEAVY_KINDS.has(kind) || kind === "design_win_ratio" || kind === "target_trial_emulation") return "heavy";
+  if (kind === "design_confirmatory") return ["futility_group_sequential", "count_endpoint"].includes(String(object(scenario.design).kind)) ? "light" : "heavy";
+  return "light";
+}
+
 /** The kinds whose replicate count is a floor (`vcrReplicatePlanForJob`), which the study's intended use can raise. */
 const SIZED_KINDS = new Set(["design_simulation", "design_grid", "map_prior"]);
 
@@ -958,7 +973,7 @@ export class VcrJobs {
       ...normalized,
       ...(plan ? { replicates: { count: plan.replicates, reason: replicateReasonOf(plan, scenario, input.replicates) } } : {}),
       seed: skeleton.seed,
-      cost: { class: HEAVY_KINDS.has(kind) ? "heavy" : "light", cpuSecondsLimit: this.jobCpuSeconds },
+      cost: { class: vcrJobCostClass(kind, scenario), cpuSecondsLimit: this.jobCpuSeconds },
     };
   }
 
@@ -1177,7 +1192,7 @@ export class VcrJobs {
     [id, studyId, String(input.userId), kind, method, methodVersion, state, JSON.stringify(scenario), scenarioHash,
       JSON.stringify(inputs), seed, replicates, cpuSecondsLimit,
       Math.max(1, Number(input.maxAttempts ?? VCR_JOB_MAX_ATTEMPTS)), input.runId ?? null, key,
-      JSON.stringify({ ...object(input.detail), ...(randomization ? { randomization } : {}), ...(unitBinding.detail ? { inputUnitBinding: unitBinding.detail } : {}), ...curveDetail, ...baselineDetail, ...(derivedEntries.some(entry => isReconstructionReference(kind, entry)) ? { reconstructionResultId: derivedEntries.find(entry => isReconstructionReference(kind, entry))?.resultId } : {}), ...(kind === "reconstruct_km" ? { keepTables: ["reconstructed-ipd"] } : {}), ...(kind === "apply_prognostic_model" ? { keepTables: ["prognostic-predictions"] } : {}), ...(sized && replicatePlan ? { replicatePlan: { floor: replicatePlan.floor, basis: replicatePlan.basis, intendedUse: replicatePlan.intendedUse, targetMcse: replicatePlan.targetMcse } } : {}), ...(defaulted.length ? { appliedDefaults: defaulted } : {}), ...(described.applied.length ? { normalizedKeys: described.applied } : {}), ...(qualityBasis ? { qualityBasis } : {}), ...(kind === "population_quality" ? { qualityAttachmentResultId } : {}), configurationInputRefs: asked.map((entry) => ({ kind: object(entry).kind, id: object(entry).id })), cost: HEAVY_KINDS.has(kind) ? "heavy" : "light" })])).rows[0];
+      JSON.stringify({ ...object(input.detail), ...(randomization ? { randomization } : {}), ...(unitBinding.detail ? { inputUnitBinding: unitBinding.detail } : {}), ...curveDetail, ...baselineDetail, ...(derivedEntries.some(entry => isReconstructionReference(kind, entry)) ? { reconstructionResultId: derivedEntries.find(entry => isReconstructionReference(kind, entry))?.resultId } : {}), ...(kind === "reconstruct_km" ? { keepTables: ["reconstructed-ipd"] } : {}), ...(kind === "apply_prognostic_model" ? { keepTables: ["prognostic-predictions"] } : {}), ...(sized && replicatePlan ? { replicatePlan: { floor: replicatePlan.floor, basis: replicatePlan.basis, intendedUse: replicatePlan.intendedUse, targetMcse: replicatePlan.targetMcse } } : {}), ...(defaulted.length ? { appliedDefaults: defaulted } : {}), ...(described.applied.length ? { normalizedKeys: described.applied } : {}), ...(qualityBasis ? { qualityBasis } : {}), ...(kind === "population_quality" ? { qualityAttachmentResultId } : {}), configurationInputRefs: asked.map((entry) => ({ kind: object(entry).kind, id: object(entry).id })), cost: vcrJobCostClass(kind, scenario) })])).rows[0];
       // Completion locks the job before its population. A duplicate enqueue must take the same order:
       // the UPSERT may wait for a finishing job; only then lock and recheck its generation in this transaction.
       if (qualityBasis) {

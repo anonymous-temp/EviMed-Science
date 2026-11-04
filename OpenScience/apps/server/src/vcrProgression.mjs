@@ -9,8 +9,8 @@
  * Hidden knowledge:
  *
  * - **The card says it is population level before it says anything else.** 「人群层面，不是对个人的预测」: the curve is what a group does on average and how
- *   widely people scatter around it. The published model this kind of curve comes from predicted an individual's change from baseline with R squared 0.16;
- *   that number is why, and the card carries it as the reason, not as a banner.
+ *   widely people scatter around it, and it cannot say what one person will do. The card says that in a sentence and carries no statistic of its own
+ *   for it: a number typed into every card, whatever family or field the run stated and with no source, was a claim nobody could check (review RF2 P2-5).
  * - **The source of every number is a premise.** The scenario gave each value a basis (literature with its citation, assumed, the person's data); the
  *   premises block shows them in the words the page uses for those sources (文献 / 假设 / 你给的数据), the decisive five being the progression amplitude and its
  *   spread, the treatment's slowing, the baseline and the residual. Nothing is built in: no disease and no value is here that the run did not state.
@@ -24,7 +24,7 @@
 
 import { createHash } from "node:crypto";
 import { finishPremises } from "./vcrPremises.mjs";
-import { list, markFor, measureValue, numeric, object, text } from "./vcrViewsKit.mjs";
+import { list, markFor, measureValue, numeric, object, text, zhUnit } from "./vcrViewsKit.mjs";
 
 /** @param {unknown} value @returns {unknown} the value with every object's keys in order, so the same scenario is the same text */
 function ordered(value) {
@@ -86,7 +86,10 @@ function cardOf(result, staleMark) {
   const curves = list(progression.curves).map(object);
   if (!family || !curves.length) return null;
   const context = { result, staleMark };
-  const shown = (/** @type {Record<string, any>} */ measure) => measureValue(measure?.mcse === 0 ? { ...measure, mcse: undefined } : measure, { kind: "patient_set", ...context, tab: "patients" });
+  // A unit as the page says it: the time word of the engine ("months", also inside "points / months") in Chinese, the outcome's own unit as the person wrote it.
+  const unitWords = (/** @type {string} */ words) => words.split(" / ").map((part) => zhUnit(part) ?? part).join(" / ");
+  const shown = (/** @type {Record<string, any>} */ measure) => measureValue({ ...(measure?.mcse === 0 ? { ...measure, mcse: undefined } : measure),
+    ...(typeof measure?.unit === "string" && measure.unit.includes(" / ") ? { unit: unitWords(measure.unit) } : {}) }, { kind: "patient_set", ...context, tab: "patients" });
   const unit = text(object(curves[0]).timeUnit) ?? "";
   const outcomeUnit = text(progression.outcomeUnit);
   const inUnit = (/** @type {Record<string, any>} */ measure) => (outcomeUnit && !measure.unit ? { ...measure, unit: outcomeUnit } : measure);
@@ -112,12 +115,12 @@ function cardOf(result, staleMark) {
       ? "治疗什么都不改变时，这个检验会误判有效的概率是多少"
       : `这么多人、把进展减慢 ${plain(Number(object(progression.treatment).slowing) * 100)}% 时，${slope ? "按每个人的进展斜率比较" : "按基线到所选随访的变化比较"}，检验判出有效的把握有多大`,
     label: "人群层面，不是对个人的预测",
-    reason: "在公布这类曲线的那个模型里，只用基线预测个人的变化，R² 只有 0.16。",
+    reason: "这条曲线只描述一组人的平均病程和人与人之间的散布，用来估计检验的把握；它不能告诉你某一个人会怎样。",
     power: power ? shown(power) : null,
     powerName: isNull ? "没有真实效应时误判有效的概率" : "判出有效的把握（模拟）",
     approximation: approx === null ? null : shown({ name: isNull ? "type_one_error" : "power", value: approx, source: "calculated" }),
     expected: difference ? { value: shown(difference), words: slope ? "治疗组减对照组的平均斜率之差" : "治疗组减对照组的平均变化之差" } : null,
-    timeUnit: unit, visits: curves.map((curve) => Number(curve.visit)),
+    timeUnit: unit ? unitWords(unit) : unit, visits: curves.map((curve) => Number(curve.visit)),
     series,
     table: {
       columns: [{ key: "control", label: "对照组均值（标准差）" }, { key: "treated", label: "治疗组均值（标准差）" }, { key: "gap", label: "治疗减对照" }],

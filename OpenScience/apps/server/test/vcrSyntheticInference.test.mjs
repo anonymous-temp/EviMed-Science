@@ -42,6 +42,10 @@ test("the records easiest to recognise are counted, withheld below ten people, a
   assert.ok(view.atRisk && view.atRisk.bound === 0.75);
   assert.ok(view.atRisk.size >= 10 && view.atRisk.rows.length > 0, "forty copied people are a group large enough to describe");
   assert.ok(view.atRisk.rows.every((row) => row.atRisk >= 10), "no cell of 1 to 9 people is shown");
+  // the thirds the engine cuts a number into are said in Chinese; a category is the person's own word
+  assert.deepEqual(view.atRisk.rows.filter((row) => row.variable === "x1").map((row) => row.level), ["中间的三分之一", "最高的三分之一", "最低的三分之一"]);
+  assert.deepEqual(view.atRisk.rows.filter((row) => row.variable === "g").map((row) => row.level), ["a", "b", "c"]);
+  assert.ok(view.atRisk.rows.every((row) => !/third|missing/.test(row.level)));
   // a small group is not described
   const small = structuredClone(fixture("quality").diagnostics.quality);
   small.disclosure.perRecord.riskShares.forEach((entry) => { if (entry.stated) { entry.trainingShare = null; entry.trainingRecords = { count: null, suppressed: true }; } });

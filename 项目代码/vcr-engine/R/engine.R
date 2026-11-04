@@ -253,7 +253,7 @@ VCR_ENGINE_OWN_ISSUE_CODES <- c(
   "job_invalid", "mechanistic_engine_unknown", "mechanistic_field_missing", "missing_covariate",
   "model_card_field_missing", "model_risk_unknown", "non_inferiority_effect_beyond_margin", "performance_measure_unsupported", "replicates_all_failed",
   "twin_label_inconsistent", "uncertainty_and_variability_conflated",
-  "dose_response_not_computable", "network_not_connected", "network_not_computable",
+  "dose_response_not_computable", "dose_response_method_unavailable", "network_not_connected", "network_not_computable",
   "imputation_not_possible", "too_many_person_periods")
 
 #' A column named by one string, or a named refusal (a number, an empty array

@@ -1748,7 +1748,7 @@ export const VCR_ENGINE_ISSUE_CODES = Object.freeze([
   'model_card_field_missing', 'model_risk_unknown', 'non_inferiority_effect_beyond_margin', 'performance_measure_unsupported', 'replicates_all_failed',
   'required_field_missing', 'twin_label_inconsistent', 'uncertainty_and_variability_conflated',
   // evidence synthesis beyond a pairwise pool (algorithm round C5, C6)
-  'dose_response_not_computable', 'network_not_connected', 'network_not_computable',
+  'dose_response_not_computable', 'dose_response_method_unavailable', 'network_not_connected', 'network_not_computable',
   // imputation of missing covariates (algorithm round C7)
   'imputation_not_possible',
   // target-trial emulation (algorithm round C3, C4)
@@ -2610,6 +2610,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   design_not_computable: '这个设计在这些设定下算不出来；换一组设定（样本量、效应、期中分析的时点）再试，其余结果不受影响。',
   effect_against_direction: '要为它定样本量的效应，必须是有利的一边：风险比和率比要小于 1，均数差和率差要落在你写的“哪个方向更好”那一侧；改一下效应的正负号或方向再算，其余结果不受影响。',
   non_inferiority_effect_beyond_margin: '预期效应比非劣效界值还差，样本越多检验越不可能通过，所以不存在能达到目标把握度的样本量；把预期效应改到界值好的一侧再算。已定样本量下的把握度可以用模拟来看。',
+  dose_response_method_unavailable: '剂量反应方法所需的程序包在这个引擎里没能加载，和你的研究无关；稍后再试，其余结果不受影响。',
   dose_response_not_computable: '这些研究的剂量水平太少，或水平之间太接近，拟合不出所选的剂量反应模型；改用线性模型，或补上研究的水平和病例数再试，其余结果不受影响。',
   network_not_connected: '这些研究连不成一张网：有的治疗与其余治疗之间没有任何研究相连，无法比较；补上连接它们的研究，或把不相连的治疗分开分析，其余结果不受影响。',
   network_not_computable: '这张网络在这些数据下算不出来；检查每项研究的结局数据和治疗名称是否写全、是否一致，其余结果不受影响。',
