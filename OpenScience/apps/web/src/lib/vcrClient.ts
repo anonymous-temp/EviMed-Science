@@ -986,6 +986,8 @@ export interface VcrPatientsTab {
   headline?: string | null;
   /** Population-level progression simulations (P4): a card each. */
   progressions?: VcrProgressionCard[];
+  /** The survival fits with a spline the study holds now (C13), newest first: the curve beyond the data with how far beyond, and the premises. */
+  splineFits?: VcrSplineFitBlock[];
   /** The people the set holds, as a list (`GET …/patients/rows?result=`): which result, how many, and the arms with their events. */
   records: { result: string; rows: number | null; arms: Array<{ value: string; label: string; n: number; events: number | null }> } | null;
   /** How each variable of the table is distributed (and what the study declared for it), read from the table itself. */
@@ -1226,6 +1228,25 @@ export interface VcrTargetTrialCard {
   bootstrap: string | null;
 }
 
+/**
+ * The simulated treatment comparison of a comparison (what the indirect estimate is a difference of, its ratio form, the marginal and the conditional
+ * effect of the person's own trial, and the part of the other trial's population outside the data). Every string is the server's; every number is a value.
+ */
+export interface VcrStcCard {
+  question: string;
+  sentence: string;
+  anchored: boolean;
+  /** The scale the estimate is on, in words (a log odds ratio, a difference...). */
+  scale: string;
+  estimate: VcrValue;
+  /** The ratio form of a logit- or log-link estimate, with the name of the ratio; both or neither. */
+  ratio: VcrValue | null;
+  ratioLabel: string | null;
+  rows: Array<{ key: string; label: string; value: VcrValue; note: string | null }>;
+  /** The share of the other trial's population outside the range of the person's data, as one sentence. */
+  outside: string | null;
+}
+
 export interface VcrComparatorTab {
   /** 「这个结论的前提」: at most five decisive, the rest folded by the page. */
   premises?: VcrPremise[];
@@ -1285,6 +1306,8 @@ export interface VcrComparatorTab {
   imputation?: VcrImputationCard | null;
   /** The target-trial emulation of this comparison: null when the result is not one. */
   targetTrialEmulation?: VcrTargetTrialCard | null;
+  /** The simulated treatment comparison of this comparison: null when the result is not one. */
+  stcComparison?: VcrStcCard | null;
   /** 「不可估计」 — the gaps, and what each one would answer. */
   gaps: { title?: string | null; needs?: string | null; items: Array<{ title: string; detail?: string | null; answers?: string | null }>; conclusion?: string | null; rule?: string | null } | null;
   counts: VcrCounts | null;
@@ -2873,6 +2896,24 @@ export function readTargetTrial(raw: unknown): VcrTargetTrialCard | null {
   };
 }
 
+/** The simulated treatment comparison card; without its question, sentence and a readable estimate there is nothing to say. A row with no readable value is dropped. */
+export function readStcComparison(raw: unknown): VcrStcCard | null {
+  const card = obj(raw);
+  const question = text(card.question), sentence = text(card.sentence);
+  const estimate = readOptionalValue(card.estimate);
+  if (!question || !sentence || !estimate || (estimate.value === null && !estimate.text)) return null;
+  const ratio = readOptionalValue(card.ratio);
+  return {
+    question, sentence, anchored: card.anchored === true, scale: text(card.scale) ?? "",
+    estimate, ratio: ratio && ratio.value !== null ? ratio : null, ratioLabel: ratio && ratio.value !== null ? text(card.ratioLabel) : null,
+    rows: arr(card.rows).flatMap((row) => {
+      const key = text(row.key), label = text(row.label), value = readOptionalValue(row.value);
+      return key && label && value && value.value !== null ? [{ key, label, value, note: text(row.note) }] : [];
+    }),
+    outside: text(card.outside),
+  };
+}
+
 function readDesignRecord(raw: unknown): NonNullable<VcrDesign["record"]> | null {
   const value = obj(raw);
   if (!Object.keys(value).length) return null;
@@ -3328,6 +3369,7 @@ export function readVcrPatients(raw: unknown): VcrPatientsTab {
     partial: readPartial(value.partial),
     sets: arr(value.sets) as unknown as VcrPatientsTab["sets"],
     progressions: readProgressions(value.progressions),
+    splineFits: arr(value.splineFits).flatMap((block) => { const read = readSplineFit(block); return read ? [read] : []; }),
   };
 }
 
@@ -3375,6 +3417,7 @@ export function readVcrComparator(raw: unknown): VcrComparatorTab {
     trim: readTrim(value.trim),
     imputation: readImputation(value.imputation),
     targetTrialEmulation: readTargetTrial(value.targetTrialEmulation),
+    stcComparison: readStcComparison(value.stcComparison),
     gaps: Object.keys(gaps).length ? { ...(gaps as Loose), items: arr(gaps.items) } as VcrComparatorTab["gaps"] : null,
     counts: readVcrCounts(value.counts),
     verdict: Object.keys(verdict).length ? verdict as unknown as VcrComparatorTab["verdict"] : null,

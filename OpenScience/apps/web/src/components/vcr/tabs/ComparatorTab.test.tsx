@@ -7,6 +7,7 @@ import { fakeRoom, renderTab } from "../__fixtures__/tabFrame";
 import { EMPTY_STUDY_ID, fixture, installVcrServer, STUDY_ID } from "../__fixtures__/serverFixtures";
 import { VCR_NO_DEFINITION } from "../vcrText";
 import biasPayloads from "../__fixtures__/biasAnalysisPayloads.json";
+import stcPayloads from "../__fixtures__/stcPayloads.json";
 
 /**
  * 对照 (R19; audit B §4.4): who this study can be compared with, as routes beside the record of the one in use — its curves with the
@@ -573,5 +574,20 @@ describe("对照 · the bias analysis and the trimmed population", () => {
     installVcrServer(network.productRequest, { [tab("comparator")]: raw });
     const { container } = draw(emptyStudy());
     await found(container, "[data-vcr-bias-analysis]");
+  });
+});
+
+describe("对照 · the simulated treatment comparison", () => {
+  it("is on the page with the estimate, and is not an empty tab when it is the only result", async () => {
+    const raw = fixture("empty/comparator.json");
+    raw.headline = "文献对照：可估计。";
+    raw.verdict = { conclusion: "estimable" };
+    raw.stcComparison = stcPayloads["stc-anchored"];
+    installVcrServer(network.productRequest, { [tab("comparator")]: raw });
+    const { container } = draw();
+    const card = await found(container, "[data-vcr-stc]");
+    expect(card.querySelector("[data-vcr-stc-estimate]")).toHaveTextContent("0.010");
+    expect(card).toHaveTextContent("比值比（OR）");
+    expect(screen.queryByText(/还没有|尚未/)).toBeNull();
   });
 });

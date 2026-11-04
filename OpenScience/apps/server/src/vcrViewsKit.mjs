@@ -521,6 +521,13 @@ export const MEASURE_META = Object.freeze({
   marginal_contrast_ipd: { label: "试验数据放到对方人群后的边际效应" },
   marginal_level_ipd: { label: "试验数据放到对方人群后的预期结局" },
   conditional_contrast_ipd: { label: "常规 STC 的条件效应" },
+  // the simulated treatment comparison's card (`vcrStcComparison`): the ratio form of the indirect estimate, and the figures set beside it
+  indirect_estimate_ratio: { label: "间接比较估计（比值）" },
+  stc_aggregate_effect: { label: "对方的治疗相对共同对照的效应" },
+  stc_expected_probability: { label: "放到对方人群上的预期结局", percent: true },
+  stc_expected_mean: { label: "放到对方人群上的预期结局" },
+  stc_aggregate_probability: { label: "对方试验那一组的结局", percent: true },
+  stc_aggregate_mean: { label: "对方试验那一组的结局" },
   pooled: { label: "合并估计" },
   // evidence synthesis beyond a pairwise pool (network meta-analysis, dose-response, empirical shrinkage)
   treatments: { label: "比较的治疗数", unit: "种" },

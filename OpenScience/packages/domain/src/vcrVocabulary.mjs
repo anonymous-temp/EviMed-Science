@@ -522,7 +522,7 @@ export const VCR_TAB_LABELS_ZH = Object.freeze({
  */
 export const VCR_RESULT_KIND_TABS = Object.freeze({
   population: 'population', patient_set: 'patients', comparator: 'comparator', trial_scenario: 'trial', design_grid: 'trial',
-  prognostic_training: 'comparator', progression_simulation: 'patients',
+  prognostic_training: 'comparator', progression_simulation: 'patients', model_fit: 'patients',
   accrual_forecast: 'trial', design_confirmatory: 'trial', design_dose: 'trial', design_bayesian: 'trial', design_win_ratio: 'trial', matching: 'matching', match_extract: 'matching', evidence_pool: 'data', snapshot_profile: 'data', population_check: 'population',
   network_meta: 'data', dose_response_meta: 'data', effect_shrinkage: 'data',
 })

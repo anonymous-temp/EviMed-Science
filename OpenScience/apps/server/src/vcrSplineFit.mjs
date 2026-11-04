@@ -14,7 +14,7 @@
  * @module vcrSplineFit
  */
 
-import { TIME_UNIT_WORDS, list, numeric, object } from "./vcrViewsKit.mjs";
+import { TIME_UNIT_WORDS, list, markFor, measureValue, numeric, object } from "./vcrViewsKit.mjs";
 import { finishPremises } from "./vcrPremises.mjs";
 
 /** @param {number} value @param {number} [digits] */
@@ -86,4 +86,21 @@ export function presentSplineFit(result, value) {
     note: "区间只含这一条曲线的抽样误差；不同结点数给出的差别是模型形式带来的不确定性，没有算进区间。",
     premises: finishPremises(rows),
   };
+}
+
+/**
+ * The spline fits the patients tab shows: the study's current survival fits (one per result, newest first) that used the spline family, each
+ * with the card and premises of `presentSplineFit`. A fit made from a conversation reached the page only from the method workbench; the
+ * model's reply says the page puts the premises beside the number, so the page that the reply links to must (review RF2 P1-5).
+ * @param {Record<string, any>} bundle the patients tab's bundle (`allResults`, `stale`)
+ * @param {{ nodeOf: (result: Record<string, any>) => string }} helpers
+ */
+export function presentSplineFits(bundle, { nodeOf }) {
+  const results = list(bundle.allResults ?? bundle.results).map(object).filter((row) => row.kind === "model_fit" && !row.supersededBy)
+    .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))).slice(0, 4);
+  return results.map((result) => {
+    const staleMark = markFor(bundle.stale ?? [], nodeOf(result));
+    const block = presentSplineFit(result, (measure) => measureValue(measure, { kind: "model_fit", result, tab: "patients", staleMark }));
+    return block ? { id: String(result.id), version: Number(result.version), ...block, stale: Boolean(staleMark) } : null;
+  }).filter(Boolean);
 }

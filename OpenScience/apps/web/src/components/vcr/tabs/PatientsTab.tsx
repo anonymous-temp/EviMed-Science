@@ -39,6 +39,7 @@ import { PatientTable } from "../patients/PatientTable";
 import { baselineVariables, variableFilters, variableLabels } from "../patients/patientFilters";
 import { intervalText, numberText } from "../vcrText";
 import { VcrProgressions } from "../VcrProgressions";
+import { VcrSplineFit } from "../VcrSplineFit";
 
 /** The id the calibration strip has on the page, so the headline's number can take the reader to it. */
 const CALIBRATION_ID = "vcr-calibration";
@@ -135,7 +136,7 @@ function PatientsView({ studyId, study, data, switcher, reload, onStudyChanged }
   const working = stepStatus === "running" || stepStatus === "queued";
   const assessed = data.assessments.records.length > 0;
   // What the step has produced: with none of it the tab is the step's own recipe or activity and nothing more.
-  const nothing = !data.model && !data.trajectories && !data.example && data.panels.length === 0 && !data.sensitivity && !data.records && !data.progressions?.length;
+  const nothing = !data.model && !data.trajectories && !data.example && data.panels.length === 0 && !data.sensitivity && !data.records && !data.progressions?.length && !data.splineFits?.length;
   const records = data.records;
   const arms = records?.arms ?? [];
   const labels = useMemo(() => variableLabels(data.profile), [data.profile]);
@@ -374,6 +375,8 @@ function PatientsView({ studyId, study, data, switcher, reload, onStudyChanged }
           )}
 
           <VcrProgressions cards={data.progressions ?? []} />
+
+          {(data.splineFits ?? []).map((block, index) => <VcrSplineFit key={index} block={block} />)}
         </div>
       </Stale>
 

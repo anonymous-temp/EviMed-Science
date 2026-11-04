@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { readVcrStudy, type VcrStudy } from "@/lib/vcrClient";
 import { PatientsTab } from "./PatientsTab";
 import { renderTab } from "../__fixtures__/tabFrame";
+import borrowingPayloads from "../__fixtures__/borrowingPayloads.json";
 import { fixture, installVcrServer, STUDY_ID } from "../__fixtures__/serverFixtures";
 
 /**
@@ -521,5 +522,23 @@ describe("虚拟患者 · the second view, 预测验证", () => {
     expect(within(band(container)).getByRole("button", { name: "模板与导入" })).toBeInTheDocument();
     await userEvent.click(within(band(container)).getByRole("button", { name: "虚拟患者" }));
     expect(await screen.findByRole("table", { name: "患者" })).toBeInTheDocument();
+  });
+});
+
+describe("虚拟患者 · a spline survival fit made in the conversation", () => {
+  it("is on the page with how far beyond the data its last number lies, and is not an empty tab when it is the only result", async () => {
+    const raw = fixture("empty/patients.json");
+    raw.splineFits = [borrowingPayloads.spline];
+    installVcrServer(network.productRequest, { [tab("patients")]: raw });
+    const { container } = draw();
+    const block = await waitFor(() => {
+      const found = container.querySelector("[data-vcr-spline-fit]") as HTMLElement | null;
+      expect(found).not.toBeNull();
+      return found as HTMLElement;
+    });
+    expect(block).toHaveTextContent("风险曲线不单调时，长期生存和 RMST 是多少？");
+    expect(block).toHaveTextContent("外推");
+    expect(block).toHaveTextContent("最后一个时间点离数据有多远");
+    expect(screen.queryByText(/还没有|尚未/)).toBeNull();
   });
 });

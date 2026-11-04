@@ -3,9 +3,9 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { VCR_JOB_METHODS } from "@evimed/domain";
+import { VCR_JOB_METHODS, VCR_RESULT_KIND_TABS } from "@evimed/domain";
 import { presentBorrowing, borrowingPremises } from "../src/vcrBorrowing.mjs";
-import { presentSplineFit } from "../src/vcrSplineFit.mjs";
+import { presentSplineFit, presentSplineFits } from "../src/vcrSplineFit.mjs";
 import { vcrPremises } from "../src/vcrPremises.mjs";
 import { vcrResultKindFor, vcrJobObjectKind } from "../src/vcrJobs.mjs";
 import { measureValue } from "../src/vcrViewsKit.mjs";
@@ -115,4 +115,16 @@ test("a spline fit reads: the median, the restricted mean, the survival with how
     assert.ok(!/[a-z]+_[a-z]+|spline|flexsurv|optim|delta/.test(text), `${key}: ${text}`);
   }
   assert.equal(presentSplineFit({ diagnostics: { model: { distribution: { kind: "weibull" } } } }, value({})), null, "a parametric fit has no spline block");
+});
+
+test("a spline fit made from a conversation is on the patients tab, with its premises (review RF2 P1-5)", () => {
+  assert.equal(VCR_RESULT_KIND_TABS.model_fit, "patients", "the entry to a fit opens the tab that holds it, not the overview");
+  const result = { ...fixture("spline-fit"), id: "res_fit", version: 1, kind: "model_fit", createdAt: "2026-11-04T00:00:00Z" };
+  result.diagnostics = { ...result.diagnostics, timeUnit: "months" };
+  const cards = presentSplineFits({ allResults: [result, { ...result, id: "res_old", supersededBy: "res_fit" }, { ...result, id: "res_w", kind: "comparator" }], stale: [] }, { nodeOf: (row) => `result:${row.id}` });
+  assert.deepEqual(cards.map((card) => card.id), ["res_fit"], "the current fit of the kind, and nothing superseded or of another kind");
+  assert.deepEqual(cards[0].premises.map((row) => row.key), ["splineBeyond", "splineKnots", "splineTail"]);
+  assert.ok(cards[0].premises[0].value.includes("倍") && cards[0].premises[0].value.includes("外推"), "how far beyond the data the number lies is beside it");
+  const weibull = { ...result, id: "res_w2", diagnostics: { model: { distribution: { kind: "weibull" } } } };
+  assert.deepEqual(presentSplineFits({ allResults: [weibull], stale: [] }, { nodeOf: (row) => `result:${row.id}` }), [], "a parametric fit has no spline card");
 });

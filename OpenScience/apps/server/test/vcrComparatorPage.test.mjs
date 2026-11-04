@@ -2,6 +2,7 @@
 // the way `vcrViews.test.mjs` reads one: no database. The estimate is on the page in every case; these are the sentences and rows that
 // stand beside it.
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { VCR_PREMISES_DECISIVE_MAX, vcrApplicabilityLimits } from "@evimed/domain";
 import { vcrPremises } from "../src/vcrPremises.mjs";
@@ -21,7 +22,8 @@ const bundleOf = (/** @type {Record<string, any>} */ over = {}) => ({
 /** A comparator row and its result, read as one page. */
 function page({ route = "external_control", row = /** @type {Record<string, any>} */ ({}), result = /** @type {Record<string, any>} */ ({}), method = "comparator.entropy_balance" } = {}) {
   const comparator = { id: "cmp_1", version: 1, route, estimand: "ATT", resultId: "res_1", conclusion: result.conclusion ?? "estimable", gapList: [], createdAt: AT, targetTrial: {}, configuration: {}, ...row };
-  const filed = { id: "res_1", version: 1, kind: "comparator", conclusion: "estimable", counts: {}, measures: [], diagnostics: {}, createdAt: AT, executionId: "ex_1", ...result };
+  // a weighting comparison states the estimand it computed, as the engine does
+  const filed = { id: "res_1", version: 1, kind: "comparator", conclusion: "estimable", counts: {}, measures: [], diagnostics: { estimand: row.estimand ?? "ATT" }, createdAt: AT, executionId: "ex_1", ...result };
   const executions = new Map([["ex_1", { id: "ex_1", jobId: "job_1", method, methodVersion: "1.2.0" }]]);
   return presentComparatorTab(bundleOf({ comparators: [comparator], comparator, results: [filed], allResults: [filed], executions }));
 }
@@ -254,4 +256,28 @@ test("the headline is the saved comparison the link named when it is one of the 
   assert.equal(named.selection.resultId, "res_cmp_old", "and its result is what the headline is made of");
   assert.deepEqual(named.versions.map((version) => version.objectId), ["cmp_new", "cmp_old"], "the list of versions is the study's, in the same order");
   assert.equal(presentComparatorTab(bundle({ askedComparator: "cmp_not_here" })).selection.id, "cmp_new", "a name the study does not hold is the newest");
+});
+
+test("the estimand on the page is the method's own: the weighting's, and none for a method that reads none (review RF2 P1-8)", () => {
+  const rowsOf = (/** @type {any} */ view) => view.estimand.rows.filter((entry) => entry.label === "估计目标").map((entry) => entry.value);
+  assert.deepEqual(rowsOf(page({})), ["对试验人群（ATT）"]);
+  assert.deepEqual(rowsOf(page({ row: { estimand: "ATE" }, result: { diagnostics: { estimand: "ATE" } } })), ["对合并人群（ATE）"], "the weighting says it estimated ATE");
+  // the object is written with the default ATT; the emulation, the simulated comparison and the borrowed control do not estimate it
+  for (const method of ["comparator.target_trial", "comparator.stc", "comparator.borrowing"]) {
+    const view = page({ method, row: { estimand: "ATT" }, result: { diagnostics: { targetTrial: { question: "q" } } } });
+    assert.deepEqual(rowsOf(view), [], `${method}: no estimand row`);
+    assert.equal(view.premises.find((entry) => entry.key === "estimand"), undefined, `${method}: and no estimand premise`);
+  }
+  // a result that states a word that is not one of the three is not labelled by the object either
+  assert.deepEqual(rowsOf(page({ result: { diagnostics: { estimand: "marginal: each participant predicted under both arms" } } })), []);
+});
+
+test("a simulated treatment comparison puts its indirect estimate on the comparator page (review RF2 P1-2)", () => {
+  const stc = JSON.parse(readFileSync(new URL("./fixtures/vcr-bias-analysis/stc-anchored.json", import.meta.url), "utf8"));
+  const view = page({ route: "literature_control", method: "comparator.stc", row: { configuration: { anchored: true } }, result: { conclusion: stc.conclusion, measures: stc.measures, diagnostics: stc.diagnostics } });
+  assert.ok(view.stcComparison, "the card is on the page");
+  assert.ok(Math.abs(view.stcComparison.estimate.value - stc.measures[0].value) < 1e-7);
+  assert.equal(view.stcComparison.rows.length, 3);
+  assert.equal(view.estimand.rows.some((row) => row.label === "估计目标"), false, "and it does not claim an estimand it never estimated");
+  assert.equal(page({}).stcComparison, null);
 });

@@ -64,6 +64,8 @@ import { presentEvidenceSyntheses, tauPriorWords, vcrSuccessRatesPage } from "./
 import { presentBiasAnalysis } from "./vcrBiasAnalysis.mjs";
 import { presentBorrowing } from "./vcrBorrowing.mjs";
 import { evidenceValueFindings } from "./vcrValueChecks.mjs";
+import { presentSplineFits } from "./vcrSplineFit.mjs";
+import { presentStcComparison } from "./vcrStcComparison.mjs";
 import { presentTrim } from "./vcrTrimView.mjs";
 import { presentImputation } from "./vcrImputationView.mjs";
 import { presentTargetTrial } from "./vcrTargetTrialView.mjs";
@@ -623,6 +625,8 @@ export function presentPatientsTab(bundle) {
     partial: partialOf(bundle, ["patient_set"], "这次生成"),
     // Population-level progression simulations (P4) the conversation computed: a card each, curves and power.
     progressions: presentProgressions(bundle, { nodeOf: resultNode }),
+    // Survival fits with a spline (C13) the conversation computed: the curve beyond the data, with how far beyond, and the premises.
+    splineFits: presentSplineFits(bundle, { nodeOf: resultNode }),
     sets: patientSets.map((/** @type {any} */ set) => ({ id: set.id, version: set.version, ...(set.resultId ? { resultId: set.resultId, resultVersion: resultById(bundle, set.resultId)?.version } : {}), label: `虚拟患者集 v${set.version}`, stale: Boolean(markFor(stale, vcrObjectNode("patient_set", set))) })),
   };
 }
@@ -781,7 +785,12 @@ export function presentComparatorTab(bundle) {
     const v = numeric(raw);
     return v === null ? null : { key, label, value: plainValue({ value: unit === "%" ? roundTo(v * 100, 4) : v, unit: unit || undefined }, { source: "calculated", review: result?.reviewState ?? null }) };
   }).filter((row) => row !== null);
-  const estimandLabel = current ? (/** @type {Record<string, string>} */ (VCR_ESTIMAND_LABELS_ZH))[current.estimand] ?? current.estimand : null;
+  // The estimand is the method's own: the one its result says it computed (the weighting comparisons state ATT, ATE or ATO; the augmented
+  // estimate is the effect among the trial's people; a target-trial emulation, a simulated treatment comparison and a borrowed control read
+  // none of the three). The object's `estimand` is a default the comparison was written with, and what a method that does not read it
+  // would then be labelled with is a statement it never made (review RF2 P1-8).
+  const ownEstimand = text(diagnostics.estimand) !== null && Object.hasOwn(VCR_ESTIMAND_LABELS_ZH, String(diagnostics.estimand)) ? String(diagnostics.estimand) : null;
+  const estimandLabel = current && ownEstimand ? (/** @type {Record<string, string>} */ (VCR_ESTIMAND_LABELS_ZH))[ownEstimand] : null;
   const rmstValue = rmstMeasure ? value(rmstMeasure) : null;
   // The unit τ is in is the one the engine echoed (months when it echoed none); a spelling the unit table does not hold is left unnamed, never called months.
   const echoedUnit = diagnostics.timeUnit === undefined ? TIME_UNIT_WORDS.months : TIME_UNIT_WORDS[String(diagnostics.timeUnit)] ?? null;
@@ -837,7 +846,7 @@ export function presentComparatorTab(bundle) {
     // block (above) shows of it is the components that are not exact; this is the whole record, folded into the section.
     estimand: current ? {
       rows: [
-        { label: "估计目标", value: estimandLabel ?? "" },
+        ...(estimandLabel ? [{ label: "估计目标", value: estimandLabel }] : []),
         ...(targetTrial?.components ?? []).map((entry) => ({ label: entry.label, value: [entry.statusLabel, entry.text].filter(Boolean).join("：") || "没有写" })),
         ...(targetTrial?.other ?? []).map((entry) => ({ label: entry.item, value: entry.status ? (/** @type {Record<string, string>} */ ({ exact: "可精确复现", approximate: "只能近似", not_possible: "无法复现" }))[entry.status] : "没有写" })),
       ],
@@ -865,7 +874,7 @@ export function presentComparatorTab(bundle) {
     operatingCharacteristics: operatingCharacteristicsView(diagnostics),
     // 「这个结论的前提」: the list and its rules are `vcrPremises`'s; the comparator's facts are filled in beside the route's own rows.
     premises: vcrPremises("comparator", {
-      route: shown?.route ?? null, estimand: shown?.estimand ?? null, estimandStated: shown ? shown.estimand !== "ATT" : false, diagnostics,
+      route: shown?.route ?? null, estimand: ownEstimand, estimandStated: ownEstimand !== null && shown ? shown.estimand !== "ATT" && shown.estimand === ownEstimand : false, diagnostics,
       measures: Object.fromEntries(list(result?.measures).map(object).map((measure) => [String(measure.name), numeric(measure.value)])),
       applicability: shown ? vcrApplicability(shown.configuration) : null,
       targetTrial: shown ? vcrTargetTrial(shown.targetTrial, shown.configuration?.targetTrial) : null,
@@ -885,6 +894,8 @@ export function presentComparatorTab(bundle) {
     imputation: presentImputation(result, value),
     // A target-trial emulation (C3, C4): the question, which estimand was computed, and the two arms' risks beside the difference.
     targetTrialEmulation: presentTargetTrial(result, value),
+    // A simulated treatment comparison (C2): the indirect estimate, the marginal and the conditional effect, and the population it is about.
+    stcComparison: presentStcComparison(result, value),
     gaps,
     counts: current ? countsView(result?.counts && Object.keys(result.counts).length ? result.counts : {}, { tier: study.dataTier }) : null,
     verdict: shown ? { conclusion: readAs } : null,
