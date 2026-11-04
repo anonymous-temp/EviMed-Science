@@ -1346,6 +1346,9 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.candidate_trial_judgments (
 );
 
 ALTER TABLE evimed_vcr.candidate_trial_judgments ADD COLUMN IF NOT EXISTS evaluation jsonb;
+-- When a verdict stopped being current because the trial's criteria were rewritten (or its record changed under them). The verdict is kept and read as an earlier one
+-- (its stored summary and counts), and a new evaluation of the same patient replaces it as the current one (G15: a rewrite does not delete what was concluded).
+ALTER TABLE evimed_vcr.candidate_trial_assessments ADD COLUMN IF NOT EXISTS superseded_at timestamptz;
 
 -- The answer to a language criterion of a candidate trial is bound to the trial, not to a protocol version.
 

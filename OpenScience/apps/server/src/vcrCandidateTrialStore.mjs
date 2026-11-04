@@ -84,6 +84,7 @@ const assessmentOf = (row) => (row ? {
   counts: row.counts ?? {},
   evidenceGaps: Array.isArray(row.evidence_gaps) ? row.evidence_gaps : [],
   provenance: publicMatchingProvenance(row.provenance ?? {}),
+  supersededAt: iso(row.superseded_at),
   createdAt: iso(row.created_at),
 } : null);
 
@@ -117,7 +118,7 @@ export class VcrCandidateTrialStore extends VcrStoreBase {
    *
    * `criteria: null` leaves the criteria the trial has (a write that only names patients to evaluate);
    * an array replaces them when it differs from what is held, and then the verdicts made against the
-   * old ones are removed and the patients who had one are answered in `reassess`.
+   * old ones are marked superseded (kept, and read as earlier ones) and the patients who had one are answered in `reassess`.
    * @param {{ studyId: string, userId: string, trial: Record<string, any>, criteria?: readonly any[] | null, max: number }} input
    * @returns {Promise<{ trial: NonNullable<ReturnType<typeof trialOf>>, criteria: NonNullable<ReturnType<typeof criterionOf>>[],
    *   created: boolean, criteriaChanged: boolean, reassess: string[] }>}
@@ -162,8 +163,9 @@ export class VcrCandidateTrialStore extends VcrStoreBase {
           reassess = (await client.query(
             `SELECT DISTINCT subject_key FROM ${VCR_SCHEMA}.candidate_trial_assessments WHERE candidate_trial_id = $1 ORDER BY subject_key`,
             [row.id])).rows.map((entry) => String(entry.subject_key));
-          // Derived rows: the verdicts about criteria this trial no longer has go, and are made again by the caller.
-          await client.query(`DELETE FROM ${VCR_SCHEMA}.candidate_trial_assessments WHERE candidate_trial_id = $1`, [row.id]);
+          // The verdicts about criteria this trial no longer has are not the current ones; they are made again by the caller. They are marked and not removed: a patient whose
+          // new evaluation cannot be made keeps what was concluded, read as the earlier conclusion it is (the criterion rows under it have changed, so only its summary and counts are).
+          await client.query(`UPDATE ${VCR_SCHEMA}.candidate_trial_assessments SET superseded_at = now() WHERE candidate_trial_id = $1 AND superseded_at IS NULL`, [row.id]);
           for (const [index, criterion] of criteria.entries()) {
             await client.query(
               `INSERT INTO ${VCR_SCHEMA}.candidate_trial_criteria
@@ -322,7 +324,7 @@ export class VcrCandidateTrialStore extends VcrStoreBase {
            (id, study_id, candidate_trial_id, user_id, subject_key, as_of, summary, counts, evidence_gaps, provenance, input_snapshot_id)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10::jsonb, $11)
          ON CONFLICT (candidate_trial_id, subject_key, as_of, input_snapshot_id) DO UPDATE SET
-           summary = EXCLUDED.summary, counts = EXCLUDED.counts, evidence_gaps = EXCLUDED.evidence_gaps, provenance = EXCLUDED.provenance
+           summary = EXCLUDED.summary, counts = EXCLUDED.counts, evidence_gaps = EXCLUDED.evidence_gaps, provenance = EXCLUDED.provenance, superseded_at = NULL
          RETURNING *`,
         [vcrId("candidateAssessment"), assessment.studyId, assessment.candidateTrialId, userId, assessment.subjectKey, assessment.asOf, assessment.summary,
           JSON.stringify(assessment.counts ?? {}), JSON.stringify(assessment.evidenceGaps ?? []), JSON.stringify(assessment.provenance ?? {}),
@@ -359,14 +361,15 @@ export class VcrCandidateTrialStore extends VcrStoreBase {
   }
 
   /**
-   * The newest verdict about this patient against each trial of the study that has judged them, by trial id: what a page ranks.
+   * The newest current verdict about this patient against each trial of the study that has judged them, by trial id: what a page ranks. A superseded one is not
+   * current, so a trial whose verdict was superseded reads as not yet judged for them.
    * @param {{ studyId: string, subjectKey: string }} input
    * @returns {Promise<Map<string, NonNullable<ReturnType<typeof assessmentOf>>>>}
    */
   async latestAssessments({ studyId, subjectKey }) {
     const rows = await this.rows(
       `SELECT DISTINCT ON (candidate_trial_id) * FROM ${VCR_SCHEMA}.candidate_trial_assessments
-        WHERE study_id = $1 AND subject_key = $2 ORDER BY candidate_trial_id, as_of DESC, created_at DESC`, [studyId, subjectKey]);
+        WHERE study_id = $1 AND subject_key = $2 AND superseded_at IS NULL ORDER BY candidate_trial_id, as_of DESC, created_at DESC`, [studyId, subjectKey]);
     return new Map(rows.map((row) => [String(row.candidate_trial_id), /** @type {any} */ (assessmentOf(row))]));
   }
 

@@ -76,7 +76,7 @@ const NO_BRAIN = criterion("exclusion", "comorbidity", "Active brain metastases"
 const EGFR = criterion("inclusion", "biomarker", "EGFR mutation", { op: "present", variable: "egfr_mutation" });
 const CONSENT = criterion("inclusion", "consent_capacity", "Able to sign consent", { op: "language", text: "Able to sign consent", key: "consent" });
 
-test("a changed source snapshot cannot inherit an old parse or assessment", options, async () => {
+test("a changed source snapshot cannot inherit an old parse or assessment as the current one, and does not delete it", options, async () => {
   const study = await seedStudy(); await seedPatient(study);
   const trials = seam();
   const trial = trialOf("NCT06000990");
@@ -90,7 +90,10 @@ test("a changed source snapshot cannot inherit an old parse or assessment", opti
   const updated = await candidates.saveCandidateTrial({ studyId: study.id, userId: USER, trial: newer, criteria: [AGE_18], max: 20 });
   assert.equal(updated.criteriaChanged, true, "identical expressions over a new source still require reassessment");
   assert.deepEqual(updated.reassess, ["P-1"]);
-  assert.equal(await candidates.getAssessment(oldAssessment, study.id), null);
+  const kept = await candidates.getAssessment(oldAssessment, study.id);
+  assert.ok(kept, "the verdict made of the earlier source is still readable");
+  assert.ok(kept.supersededAt, "and says it is an earlier one");
+  assert.equal((await candidates.latestAssessments({ studyId: study.id, subjectKey: "P-1" })).size, 0, "it is no longer the current verdict, so the patient reads as not yet judged against the new source");
 });
 
 test("candidate detail exposes a coherent language binding that rejects a later source revision", options, async () => {
@@ -246,7 +249,7 @@ test("a patient the facts say nothing about is unknown on every criterion: the p
   assert.deepEqual([written.evaluation.evaluated[0].counts.unknown, written.evaluation.evaluated[0].counts.satisfied], [3, 0]);
 });
 
-test("a trial written again with different criteria drops the verdicts about the old ones and makes them again for the patients who had one", options, async () => {
+test("a trial written again with different criteria keeps the verdicts about the old ones as earlier conclusions and makes them again for the patients who had one", options, async () => {
   const study = await seedStudy();
   await seedPatient(study, "P-1");
   await seedPatient(study, "P-3");
@@ -261,11 +264,34 @@ test("a trial written again with different criteria drops the verdicts about the
   const afterThree = await trials.ranked(study, { subjectKey: "P-3" });
   assert.equal(afterOne[0].summary, "insufficient_evidence");
   assert.equal(afterThree[0].summary, "insufficient_evidence", "nobody is ranked by a verdict about criteria the trial no longer has");
-  assert.equal((await q("SELECT count(*)::int AS n FROM evimed_vcr.candidate_trial_assessments WHERE candidate_trial_id = $1", [again.trial.id]))[0].n, 2);
+  assert.equal((await q("SELECT count(*)::int AS n FROM evimed_vcr.candidate_trial_assessments WHERE candidate_trial_id = $1 AND superseded_at IS NULL", [again.trial.id]))[0].n, 2, "the current verdicts are the new ones");
+  assert.equal((await q("SELECT count(*)::int AS n FROM evimed_vcr.candidate_trial_assessments WHERE candidate_trial_id = $1 AND superseded_at IS NOT NULL", [again.trial.id]))[0].n, 2, "and the earlier ones are kept, marked");
   // The same criteria written again are not a change: nothing is dropped, and the named patient is judged again at the new instant.
   const same = await trials.writeTrial(study, { trial: trialOf("NCT06000031"), criteria: [AGE_18, ECOG, EGFR], subjectKeys: ["P-1"] });
   assert.equal(same.criteriaChanged, false);
   assert.deepEqual(same.evaluation.evaluated.map((row) => row.subjectKey), ["P-1"]);
+});
+
+test("a patient whose new evaluation cannot be made keeps the earlier conclusion in the list, marked, and is owed a new one", options, async () => {
+  const study = await seedStudy();
+  await seedPatient(study, "P-1");
+  const trials = seam();
+  const first = await trials.writeTrial(study, { trial: trialOf("NCT06000032"), criteria: [AGE_18, ECOG], subjectKeys: ["P-1"] });
+  assert.equal((await trials.ranked(study, { subjectKey: "P-1" }))[0].summary, "eligible");
+  // The criteria are rewritten and no patient is judged against them (nobody is named, and the writer is told not to look back).
+  await candidates.saveCandidateTrial({ studyId: study.id, userId: USER, trial: trialOf("NCT06000032"), criteria: [AGE_18, ECOG, EGFR], max: 20 });
+  const listed = await trials.ranked(study, { subjectKey: "P-1" });
+  assert.equal(listed.length, 1, "the earlier conclusion is still in the patient's list");
+  assert.equal(listed[0].summary, "eligible", "as it was concluded");
+  assert.equal(listed[0].assessmentId, first.evaluation.evaluated[0].assessmentId);
+  assert.deepEqual([listed[0].stale?.reason, Boolean(listed[0].supersededAt)], ["criteria_rewritten", true], "marked as an earlier one");
+  assert.deepEqual((await trials.unjudged(study, { subjectKey: "P-1" })).map((entry) => entry.registryId), ["NCT06000032"], "and the trial is owed a new judgment");
+  // The next evaluation replaces it as the current one.
+  await trials.evaluate(study, { subjectKeys: ["P-1"], trialIds: [first.trial.id] });
+  const renewed = await trials.ranked(study, { subjectKey: "P-1" });
+  assert.equal(renewed[0].summary, "insufficient_evidence");
+  assert.equal(renewed[0].stale, undefined);
+  assert.deepEqual(await trials.unjudged(study, { subjectKey: "P-1" }), []);
 });
 
 test("naming only patients judges them against every trial the study holds, and one trial that cannot be judged does not stop the rest", options, async () => {

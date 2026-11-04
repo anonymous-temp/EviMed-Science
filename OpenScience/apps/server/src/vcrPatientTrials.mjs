@@ -265,9 +265,14 @@ export function phaseLabel(phase) {
 /** @param {string} a @param {string} b */
 const order = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
 
-/** Rebuild eligibility from the full current criterion set. @param {any} assessment @param {any[]} criteria @param {any[]} judgments */
+/**
+ * Rebuild eligibility from the full current criterion set. A superseded verdict (the trial's criteria were rewritten after it) is not rebuilt: the criteria it
+ * rested on are no longer there to rebuild it from, so it stands as it was stored and is marked as an earlier conclusion.
+ * @param {any} assessment @param {any[]} criteria @param {any[]} judgments
+ */
 function effectiveAssessment(assessment, criteria, judgments) {
   if (!assessment) return null;
+  if (assessment.supersededAt) return { ...assessment, storedSummary: assessment.summary, judgments: [] };
   const byId = new Map(judgments.map(j => [j.criterionId, j]));
   const complete = criteria.map(c => ({ ...(byId.get(c.id) ?? { state: "unknown", applicable: true }), kind: c.kind }));
   return { ...assessment, storedSummary: assessment.summary, summary: summarizeEligibility(complete), counts: eligibilityCounts(complete), judgments };
@@ -405,6 +410,8 @@ function listed(about, assessment) {
     evidenceGaps: assessment ? assessment.evidenceGaps ?? [] : [],
     assessmentId: assessment ? String(assessment.id) : null,
     asOf: assessment?.asOf ? new Date(assessment.asOf).toISOString() : null,
+    // A verdict made before the trial's criteria were rewritten: kept, shown as the earlier conclusion it is until the patient is judged again.
+    ...(assessment?.supersededAt ? { supersededAt: assessment.supersededAt, stale: { reason: "criteria_rewritten", label: "试验条件已按新原文重读，这是此前的结论" } } : {}),
   };
 }
 
@@ -707,7 +714,7 @@ export function createPatientTrials({ candidateStore, matchStore = null, documen
         row.storedSummary = effective.storedSummary;
         row.summary = effective.summary;
         row.counts = effective.counts;
-        row.ranking = criterionRanking(criteria, judgments);
+        row.ranking = criterionRanking(criteria, row.supersededAt ? [] : judgments);
       };
       for (const row of entries) {
         const criteria = criteriaByTrial.get(row.id) ?? [];
