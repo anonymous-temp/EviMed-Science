@@ -31,8 +31,9 @@ work before further experiments. Nothing here authorizes or records deployment.
    to DeepSeek for processing. Private preparation checked label-free inputs
    for 202 training and 86 test patients. No n2c2 record has yet been uploaded
    to the product or sent in this platform evaluation. A separate, not-yet-
-   integrated evaluation adapter has offline synthetic tests; this is not an
-   external-validation result.
+   integrated evaluation adapter at `codex/vcr-n2c2-platform-20261104`
+   (`19fd840a0`) has offline synthetic tests; this is not an external-validation
+   result.
 5. **Blind diagnostic:** A separate Flash-only review of 310 public synthetic
    packets was started to investigate unknown-versus-reference disagreements.
    It is not the EviMed product path, is not independent clinical adjudication,
@@ -51,7 +52,7 @@ Targeted tests, independent review and real PostgreSQL integration checks were
 run. The last repair has not yet been rerun through the full product: the
 attempted isolated recheck did not start its runtime or send a model prompt.
 
-An experimental background language worker exists only on a separate local WIP
+An experimental background language worker is preserved on a separate pushed WIP
 branch, `codex/vcr-language-job-20261104` at `1a4350df4`. It is not integrated
 or enabled. Authorization/erasure races, mixed-version database fencing,
 assessment invalidation, full lock-order review and client-path validation
