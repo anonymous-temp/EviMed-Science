@@ -652,7 +652,8 @@ class VcrReadWriteTests(_GatewayCase):
         self.assertEqual(found["status"], "success")
         self.assertEqual(_Gateway.seen[-1]["body"], {"what": "candidates", "filter": {"condition": "lung cancer", "terms": ["NSCLC"], "age": 63, "sex": "female", "region": "China"}})
         said = " ".join(found["next_actions"])
-        for fragment in ("data.coverage", "CDE and ICTRP", "not a ranking", "unknown", "trial_registry_record", "parsedBefore"):
+        # A search now points at the judging job, not at writing the trial's criteria (owner decisions of 2026-11-04).
+        for fragment in ("data.coverage", "CDE and ICTRP", "not a ranking", "unknown", "trial_registry_record", "match_judge"):
             self.assertIn(fragment, said)
         # An unavailable registry search is a warning the run reads and moves on from, with no registry-specific advice.
         _Gateway.answers["read"] = (200, {"data": {"what": "candidates", "available": False, "code": "registry_unavailable", "message": "试验登记检索未接入"}})
