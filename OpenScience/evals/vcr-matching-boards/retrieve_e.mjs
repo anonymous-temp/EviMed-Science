@@ -208,7 +208,7 @@ const OPTIONS = {
   'rerank-url': { type: 'string', default: RERANK_BASE }, 'rerank-model': { type: 'string', default: 'qwen3-rerank' }, model: { type: 'string', default: 'deepseek-flash' },
   thinking: { type: 'string', default: 'off' }, 'limit-topics': { type: 'string' }, concurrency: { type: 'string', default: '3' },
   'cap-cny': { type: 'string', default: '10' }, 'floor-cny': { type: 'string', default: '200' }, 'allow-peak': { type: 'boolean', default: false }, 'no-rerank': { type: 'boolean', default: false },
-  'plan-only': { type: 'boolean', default: false }, 'rerank-timeout-ms': { type: 'string', default: '30000' }, 'rerank-budget-ms': { type: 'string', default: '120000' },
+  'plan-only': { type: 'boolean', default: false }, 'collect-timeout-ms': { type: 'string', default: '600000' }, 'collect-retries': { type: 'string', default: '4' }, 'collect-retry-ms': { type: 'string', default: '15000' }, 'rerank-timeout-ms': { type: 'string', default: '30000' }, 'rerank-budget-ms': { type: 'string', default: '120000' },
   prompt: { type: 'string', default: 'skill' }, 'spend-ledger': { type: 'string' }, 'eval-python': { type: 'string' }, help: { type: 'boolean', default: false },
 };
 
@@ -237,7 +237,7 @@ export function parseOptions(argv, env = process.env) {
     baseUrl: String(values['base-url']), rerankUrl: String(values['rerank-url']), rerankModel: String(values['rerank-model']), model: String(values.model), thinking: String(values.thinking), prompt: String(values.prompt),
     limitTopics: values['limit-topics'] == null ? null : number('limit-topics', 1, 1000), concurrency: number('concurrency', 1, 16),
     capCny: number('cap-cny', 0, 100_000), floorCny: number('floor-cny', 0, 100_000), allowPeak: Boolean(values['allow-peak']), rerank: !values['no-rerank'], planOnly,
-    rerankTimeoutMs: number('rerank-timeout-ms', 1000, 60_000), rerankBudgetMs: number('rerank-budget-ms', 2000, 120_000),
+    collectTimeoutMs: number('collect-timeout-ms', 1000, 3_600_000), collectRetries: number('collect-retries', 0, 20), collectRetryMs: number('collect-retry-ms', 0, 600_000), rerankTimeoutMs: number('rerank-timeout-ms', 1000, 60_000), rerankBudgetMs: number('rerank-budget-ms', 2000, 120_000),
     spendLedger: values['spend-ledger'] ? path.resolve(String(values['spend-ledger'])) : null, evalPython: values['eval-python'] ?? env.VCR_BOARDS_PYTHON ?? 'python3',
   };
 }
@@ -347,7 +347,7 @@ export async function runRetrieval(o, deps = {}) {
   const corpusOf = (/** @type {number} */ year) => {
     const dir = collectionDir(year);
     if (!corpora.has(dir === 'index2023' ? 2023 : 2021)) {
-      corpora.set(dir === 'index2023' ? 2023 : 2021, createVcrTrialCorpus(path.join(o.collectionsDir, dir, 'collection.json'), { timeoutMs: 120_000 }));
+      corpora.set(dir === 'index2023' ? 2023 : 2021, createVcrTrialCorpus(path.join(o.collectionsDir, dir, 'collection.json'), { timeoutMs: o.collectTimeoutMs }));
     }
     return /** @type {NonNullable<ReturnType<typeof createVcrTrialCorpus>>} */ (corpora.get(dir === 'index2023' ? 2023 : 2021));
   };
@@ -365,11 +365,16 @@ export async function runRetrieval(o, deps = {}) {
       const needList = !retrieval || (o.rerank && !readJson(file(topic.id, 'rerank')));
       if (needList) {
         const started = Date.now();
-        try { collected = await corpusOf(topic.year).collect(plan.request); } catch (error) {
-          failures[topic.id] = String(/** @type {any} */ (error)?.code ?? 'collect_failed');
-          log(`[retrieve_e] ${topic.id}: the collection could not be searched (${failures[topic.id]})`);
-          continue;
+        // A read that ran past the timeout stops the corpus's worker, and until it has stopped every call answers busy: wait that out rather than losing the topics behind it.
+        for (let attempt = 0; !collected; attempt += 1) {
+          try { collected = await corpusOf(topic.year).collect(plan.request); delete failures[topic.id]; } catch (error) {
+            failures[topic.id] = String(/** @type {any} */ (error)?.code ?? 'collect_failed');
+            log(`[retrieve_e] ${topic.id}: the collection could not be searched (${failures[topic.id]})${attempt < o.collectRetries ? ', asking again' : ''}`);
+            if (attempt >= o.collectRetries) break;
+            await new Promise((resolve) => setTimeout(resolve, o.collectRetryMs));
+          }
         }
+        if (!collected) continue;
         retrieval = {
           topic: topic.id, collection: collected.collection, ids: collected.candidates.map((/** @type {any} */ row) => row.registryId), found: collected.found, leftOut: collected.leftOut,
           retrieval: { ...collected.retrieval, retrievedIds: undefined }, millis: Date.now() - started,
