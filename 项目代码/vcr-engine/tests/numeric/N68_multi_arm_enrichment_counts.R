@@ -23,6 +23,12 @@
 #      sqrt(4 / d_S + 4 / d_R)) with the events each group contributes at the interim, against a patient-level simulation in plain R
 #   h  the event-time enrichment's familywise error under the global null
 #
+#   i  the share of trials that stop at the first look (`early_stop_probability`), of both selection designs, against rpact's own `earlyStop`
+#      of the same simulation call, and against the identity that every trial either stopped at the first look or went on with exactly one
+#      arm (population) selected: (selected shares) + (stopped at the first look) = 1. The cell once counted the trials in which ANY
+#      hypothesis was rejected at the first look, which are mostly trials that go on (0.77 against 0.0002 with one effective arm of three), and
+#      the lower bounds of a, c, e and g subtracted it: the slack grew with the error
+#
 # MAMS (the multi-arm multi-stage package) is not run here and is not claimed: it computes the operating characteristics of a different
 # procedure (stage-wise upper and lower bounds on the largest of the arms' cumulative statistics, no selection of the best arm and no
 # closure of Dunnett or Simes tests), so at one design it could agree with these designs only where both equal alpha. The closed forms
@@ -37,25 +43,29 @@
 vcr_case("N68a", c("AC-29", "AC-30"), function() {
   if (!requireNamespace("mvtnorm", quietly = TRUE)) stop("N68 requires the locked mvtnorm library")
   arms <- 3L; per_arm <- 80L; n1 <- 40L
-  effects <- c(0.05, 0.1, 0.2)
+  scenarios <- list(c(0.05, 0.1, 0.2), c(0.6, 0.7, 0.8))          # the second stops at the first look in about a quarter of the trials
   r <- .n68_run(list(design = list(kind = "multi_arm_selection", informationRates = c(0.5, 1), activeArms = arms, plannedSize = per_arm),
-                     endpoint = list(type = "continuous"), truth = list(effectScenarios = list(as.list(effects)), sd = 1)), 6801L, "job_n68a")
-  row <- .n68_row(r, function(e) identical(e$role, "assumed"))
-  mu <- effects * sqrt(n1 / 2)                              # the mean of each arm's statistic against the shared control
-  selection <- vapply(seq_len(arms), function(j) {
-    others <- setdiff(seq_len(arms), j)
-    corr <- matrix(0.5, length(others), length(others)); diag(corr) <- 1
-    mvtnorm::pmvnorm(lower = rep(-Inf, length(others)), upper = rep(0, length(others)), mean = mu[others] - mu[j], corr = corr)[1]
-  }, numeric(1))
-  early <- row$cells$early_stop_probability
-  jobs <- vapply(seq_len(arms), function(j) row$cells[[sprintf("selected_arm_%d", j)]]$value, numeric(1))
-  mcse <- vapply(seq_len(arms), function(j) row$cells[[sprintf("selected_arm_%d", j)]]$mcse, numeric(1))
-  # the job counts an arm as selected only when the trial went on to the second stage: at most the closed-form probability, and short of
-  # it by no more than the probability of having stopped at the interim
-  ok <- jobs <= selection + 3 * mcse & jobs >= selection - early$value - 3 * mcse
-  list(pass = all(ok) && abs(sum(selection) - 1) < 1e-6,
-       detail = sprintf("effects %s, %d per arm at the interim: probability each arm is selected, job %s vs mvtnorm %s (stopped at the interim %.3f); iterations %d",
-                        paste(effects, collapse = "/"), n1, paste(sprintf("%.3f", jobs), collapse = "/"), paste(sprintf("%.3f", selection), collapse = "/"), early$value, row$iterations))
+                     endpoint = list(type = "continuous"), truth = list(effectScenarios = lapply(scenarios, as.list), sd = 1)), 6801L, "job_n68a")
+  pass <- TRUE; text <- character()
+  for (effects in scenarios) {
+    row <- .n68_row(r, function(e) identical(e$role, "assumed") && isTRUE(all.equal(unlist(e$effect), effects)))
+    mu <- effects * sqrt(n1 / 2)                              # the mean of each arm's statistic against the shared control
+    selection <- vapply(seq_len(arms), function(j) {
+      others <- setdiff(seq_len(arms), j)
+      corr <- matrix(0.5, length(others), length(others)); diag(corr) <- 1
+      mvtnorm::pmvnorm(lower = rep(-Inf, length(others)), upper = rep(0, length(others)), mean = mu[others] - mu[j], corr = corr)[1]
+    }, numeric(1))
+    early <- row$cells$early_stop_probability
+    jobs <- vapply(seq_len(arms), function(j) row$cells[[sprintf("selected_arm_%d", j)]]$value, numeric(1))
+    mcse <- vapply(seq_len(arms), function(j) row$cells[[sprintf("selected_arm_%d", j)]]$mcse, numeric(1))
+    # the job counts an arm as selected only when the trial went on to the second stage: at most the closed-form probability, and short of
+    # it by no more than the probability of having stopped at the interim; and every trial either stopped or went on with one arm
+    ok <- jobs <= selection + 3 * mcse & jobs >= selection - early$value - 3 * mcse
+    pass <- pass && all(ok) && abs(sum(selection) - 1) < 1e-6 && abs(sum(jobs) + early$value - 1) < 1e-9
+    text <- c(text, sprintf("effects %s: probability each arm is selected, job %s vs mvtnorm %s (stopped at the interim %.3f, selected + stopped = %.6f)",
+                            paste(effects, collapse = "/"), paste(sprintf("%.3f", jobs), collapse = "/"), paste(sprintf("%.3f", selection), collapse = "/"), early$value, sum(jobs) + early$value))
+  }
+  list(pass = pass, detail = sprintf("%d per arm at the interim: %s; iterations %d", n1, paste(text, collapse = "; "), row$iterations))
 })
 
 vcr_case("N68b", c("AC-29"), function() {
@@ -86,6 +96,8 @@ vcr_case("N68c", c("AC-29", "AC-30"), function() {
     cell <- row$cells$selected_subset; early <- row$cells$early_stop_probability$value
     # a subset that was kept and the trial then went on, so the job's cell is at most the closed form and short of it by the early stops
     z <- max(0, cell$value - closed, closed - early - cell$value) / cell$mcse
+    # and every trial either stopped at the first look or went on with exactly one of the two populations
+    z <- max(z, 1e9 * abs(cell$value + row$cells$selected_full$value + early - 1))
     worst <- max(worst, z)
     text <- c(text, sprintf("(%.1f, %.1f): subset kept %.3f vs closed form %.3f (stopped early %.3f)", s$subset, s$rest, cell$value, closed, early))
   }
@@ -165,7 +177,8 @@ vcr_case("N68e", c("AC-29", "AC-30"), function() {
   mcse <- vapply(seq_len(arms), function(j) row$cells[[sprintf("selected_arm_%d", j)]]$mcse, numeric(1))
   # the job counts an arm as kept only when the trial went on to the second stage: at most the probability of being selected, and short of it
   # by no more than the probability of having stopped at the interim
-  ok <- c(job = all(jobs <= closed + 3 * mcse & jobs >= closed - early$value - 3 * mcse), model = all(abs(plain - closed) <= 4 * plain_se), sums = abs(sum(closed) - 1) < 1e-6)
+  ok <- c(job = all(jobs <= closed + 3 * mcse & jobs >= closed - early$value - 3 * mcse), model = all(abs(plain - closed) <= 4 * plain_se), sums = abs(sum(closed) - 1) < 1e-6,
+          stopped = abs(sum(jobs) + early$value - 1) < 1e-9)
   list(pass = all(ok), detail = sprintf("hazard ratios %s, %d events at the interim: probability each arm is kept, job %s vs mvtnorm %s vs patient-level simulation %s (+-%.3f; %d trials), stopped at the interim %.3f; iterations %d%s",
                                         paste(omega, collapse = "/"), d1, paste(sprintf("%.3f", jobs), collapse = "/"), paste(sprintf("%.3f", closed), collapse = "/"),
                                         paste(sprintf("%.3f", plain), collapse = "/"), max(plain_se), reps, early$value, row$iterations,
@@ -212,6 +225,7 @@ vcr_case("N68g", c("AC-29", "AC-30"), function() {
     cell <- row$cells$selected_subset; early <- row$cells$early_stop_probability$value
     # kept and the trial went on: at most the closed form, and short of it by the early stops
     z <- max(0, cell$value - closed, closed - early - cell$value) / cell$mcse
+    z <- max(z, 1e9 * abs(cell$value + row$cells$selected_full$value + early - 1))
     worst <- max(worst, z); model <- max(model, abs(plain - closed) / plain_se)
     text <- c(text, sprintf("(%.2f, %.2f): subset kept %.3f vs closed form %.3f vs patient-level %.3f (stopped early %.3f)", s$subset, s$rest, cell$value, closed, plain, early))
   }
@@ -232,4 +246,39 @@ vcr_case("N68h", c("AC-29"), function() {
     out <- c(out, sprintf("%s: familywise %.4f (+-%.4f), largest single population %.4f", test, t1$value, t1$mcse, pops))
   }
   list(pass = all(ok), detail = sprintf("event time, global null (hazard ratio 1 in both groups), %s (limit alpha %.3f + 3 errors)", paste(out, collapse = "; "), alpha))
+})
+
+vcr_case("N68i", c("AC-29", "AC-30"), function() {
+  # rpact is called here with the job's own arguments and its own counter of trials that ended at a stage is read: `earlyStop`
+  alpha <- 0.025; inv <- vcr_rpact_inverse_normal(c(0.5, 1), alpha)$object
+  text <- character(); worst <- 0; bound <- TRUE
+  scen_arms <- list(c(0, 0, 0.8), c(0.7, 0.7, 0.7))
+  r <- .n68_run(list(design = list(kind = "multi_arm_selection", informationRates = c(0.5, 1), activeArms = 3, plannedSize = 100),
+                     endpoint = list(type = "continuous"), truth = list(effectScenarios = lapply(scen_arms, as.list), sd = 1)), 6821L, "job_n68i")
+  for (effects in scen_arms) {
+    row <- .n68_row(r, function(e) identical(e$role, "assumed") && isTRUE(all.equal(unlist(e$effect), effects)))
+    sim <- rpact::getSimulationMultiArmMeans(inv, activeArms = 3L, typeOfShape = "userDefined", effectMatrix = matrix(effects, nrow = 1L), intersectionTest = "Simes",
+                                             maxNumberOfIterations = 5000L, seed = 6822L, plannedSubjects = c(50, 100), stDev = 1, typeOfSelection = "best")
+    ref <- sim$earlyStop[1L, 1L]; ref_se <- sqrt(max(ref * (1 - ref), 1e-4) / 5000)
+    cell <- row$cells$early_stop_probability
+    z <- abs(cell$value - ref) / sqrt(max(cell$mcse, 1e-4 / 70)^2 + ref_se^2)
+    worst <- max(worst, z)
+    # one effective arm and two nulls: the trial goes on until the null arms are rejected too, which has probability at most alpha
+    if (identical(effects[1], 0)) bound <- bound && cell$value <= alpha + 3 * max(cell$mcse, sqrt(alpha * (1 - alpha) / 5000))
+    text <- c(text, sprintf("3 arms %s: stopped at the first look %.4f (rpact earlyStop %.4f)", paste(effects, collapse = "/"), cell$value, ref))
+  }
+  scen_sub <- list(list(subset = 0.9, rest = 0), list(subset = 0.9, rest = 0.9))
+  r <- .n68_run(list(design = list(kind = "enrichment", informationRates = c(0.5, 1), subsetPrevalence = 0.5, plannedSize = 200),
+                     endpoint = list(type = "continuous"), truth = list(subsetEffects = scen_sub, sd = 1)), 6823L, "job_n68i2")
+  for (s in scen_sub) {
+    row <- .n68_row(r, function(e) identical(e$role, "assumed") && isTRUE(all.equal(unlist(e$effect), c(subset = s$subset, rest = s$rest))))
+    effect_list <- list(subGroups = c("S", "R"), prevalences = c(0.5, 0.5), stDevs = 1, effects = matrix(c(s$subset, s$rest), nrow = 1L, dimnames = list(NULL, c("S", "R"))))
+    sim <- rpact::getSimulationEnrichmentMeans(inv, effectList = effect_list, intersectionTest = "Simes", maxNumberOfIterations = 5000L, seed = 6824L,
+                                               plannedSubjects = c(100, 200), typeOfSelection = "best")
+    ref <- sim$earlyStop[1L, 1L]; ref_se <- sqrt(max(ref * (1 - ref), 1e-4) / 5000)
+    cell <- row$cells$early_stop_probability
+    worst <- max(worst, abs(cell$value - ref) / sqrt(max(cell$mcse, 1e-4 / 70)^2 + ref_se^2))
+    text <- c(text, sprintf("enrichment (%.1f, %.1f): stopped at the first look %.4f (rpact earlyStop %.4f)", s$subset, s$rest, cell$value, ref))
+  }
+  list(pass = worst < 4 && bound, detail = sprintf("%s; largest gap %.2f errors (tol 4); with two null arms the share is at most alpha: %s (the cell counted any rejection at the first look: 0.77, 0.52)", paste(text, collapse = "; "), worst, bound))
 })

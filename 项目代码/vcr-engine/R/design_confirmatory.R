@@ -197,6 +197,9 @@ VCR_CONFIRMATORY_NULL_RATE_RATIO <- 1
 # --- the simulated designs: shared reductions ---------------------------------------------------------------
 
 #' What a simulated scenario's rows say per iteration: whether anything was rejected, the size at the stop, and the stage it stopped at.
+#' `stopped_stage1` is the trial that ended at the first look. It is NOT "a hypothesis was rejected at the first look": a selection or
+#' enrichment trial goes on until every hypothesis it still tests is rejected, so most trials with a rejection at look 1 continue (0.77
+#' against 0.0002 in a 3-arm trial with one effective arm, 2026-11-04); rpact's own `earlyStop` counts the stage a trial ended at.
 .vcr_conf_iterations <- function(rows, size_col = "numberOfCumulatedSubjects") {
   it <- rows$iterationNumber
   ord <- order(it, rows$stageNumber)
@@ -205,7 +208,7 @@ VCR_CONFIRMATORY_NULL_RATE_RATIO <- 1
   rejected <- rows$rejectPerStage %in% c(TRUE, 1)
   any_reject <- tapply(rejected, it, any)
   list(n = length(any_reject), reject = as.logical(any_reject), size = as.numeric(rows[[size_col]][last]), stage = as.integer(rows$stageNumber[last]),
-       rejected_stage1 = tapply(rejected & rows$stageNumber == 1L, it, any), rows = rows, iteration = it)
+       stopped_stage1 = as.integer(rows$stageNumber[last]) == 1L, rows = rows, iteration = it)
 }
 
 #' A run that stopped before its iterations: the issues that say so, the status and what is left of the iterations.
@@ -277,7 +280,7 @@ VCR_CONFIRMATORY_NULL_RATE_RATIO <- 1
     cells <- .vcr_conf_cells(
       .vcr_conf_prob(if (is_null[s]) "type_one_error" else "power", sum(it$reject), it$n),
       .vcr_conf_mean(if (events) "expected_events" else "expected_sample_size", total),
-      .vcr_conf_prob("early_stop_probability", sum(it$rejected_stage1), it$n),
+      .vcr_conf_prob("early_stop_probability", sum(it$stopped_stage1), it$n),
       .vcr_conf_prob("increase_probability", increased, it$n),
       if (events) .vcr_conf_mean("expected_patients", it$size))
     rows_out[[length(rows_out) + 1L]] <- list(role = if (is_null[s]) "null" else if (abs(effects[s] - planned_effect) < 1e-12) "planned" else "assumed", effect = effects[s],
@@ -353,7 +356,7 @@ VCR_CONFIRMATORY_NULL_RATE_RATIO <- 1
     best_selected <- length(unique(stage2$iterationNumber[stage2$armNumber %in% best]))
     cells <- c(.vcr_conf_cells(.vcr_conf_prob(if (is_null[s]) "type_one_error" else "power", sum(it$reject), n_it),
                                .vcr_conf_mean(size_name, it$size),
-                               .vcr_conf_prob("early_stop_probability", sum(it$rejected_stage1), n_it),
+                               .vcr_conf_prob("early_stop_probability", sum(it$stopped_stage1), n_it),
                                # with equal effects there is no best arm to select, and the cell is left out
                                if (!is_null[s] && length(best) == 1L) .vcr_conf_prob("correct_selection_probability", best_selected, n_it)),
                .vcr_conf_indexed(arms, function(j) .vcr_conf_prob(sprintf("selected_arm_%d", j), selected[j], n_it)),
@@ -427,7 +430,7 @@ VCR_CONFIRMATORY_NULL_RATE_RATIO <- 1
     rej <- function(k) length(unique(r$iterationNumber[pop == k & r$rejectPerStage %in% c(TRUE, 1)]))
     cells <- .vcr_conf_cells(.vcr_conf_prob(if (is_null[s]) "type_one_error" else "power", sum(it$reject), n_it),
                              .vcr_conf_mean(size_name, it$size),
-                             .vcr_conf_prob("early_stop_probability", sum(it$rejected_stage1), n_it),
+                             .vcr_conf_prob("early_stop_probability", sum(it$stopped_stage1), n_it),
                              .vcr_conf_prob("selected_subset", cont(1L), n_it), .vcr_conf_prob("selected_full", cont(2L), n_it),
                              .vcr_conf_prob("reject_subset", rej(1L), n_it), .vcr_conf_prob("reject_full", rej(2L), n_it))
     # the baseline beside it: the full population, fixed, at the same total size, with the effect the two groups average to; with events the

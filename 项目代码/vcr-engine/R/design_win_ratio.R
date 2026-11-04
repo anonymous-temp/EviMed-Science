@@ -19,9 +19,11 @@
 #   there and goes down the hierarchy (Finkelstein and Schoenfeld 1999; Pocock et al. 2012). Events are compared inside the window both
 #   people were observed (the smaller of the two observation times); a score is compared only when both people reached the end of follow-up.
 # - **One shared factor links the levels.** Each person has a latent "sicker or healthier" factor; each level reads it with the same weight,
-#   so any two levels have correlation `rho` (a Gaussian copula with equal loadings: a matrix the model writes is routinely not positive
-#   definite, a single correlation always is). A sicker person dies earlier, has more events (through the frailty of their event process)
-#   and a lower score. Without overdispersion the event process has no frailty and the factor cannot reach it: the events level then
+#   so how well a person does on any two levels (a later death, fewer events, a higher score) has correlation `rho` (a Gaussian copula with
+#   equal loadings: a matrix the model writes is routinely not positive definite, a single correlation always is). A sicker person dies
+#   earlier, has more events (through the frailty of their event process) and a lower score. The first version of the death level read the
+#   factor with the wrong sign (a sicker person died LATER, so the power at a correlation above 0 was overstated: 0.46 against 0.29 at
+#   correlation 0.6): N87g holds the sign to a closed form. Without overdispersion the event process has no frailty and the factor cannot reach it: the events level then
 #   carries no correlation with the others, and the result says so in its assumptions.
 # - **The same seed means the same people.** A person is one row of uniforms drawn by row (the factor, one residual per level, the
 #   dropout draw, 30 inter-event gaps), whatever the scenario says: moving the hazard ratio moves the treated people's death times and nobody
@@ -113,7 +115,9 @@ VCR_WR_STEP_TRIALS <- 1000L
   U <- matrix(stats::runif(N * (5L + K)), nrow = N, byrow = TRUE)
   w <- stats::qnorm(U[, 1L])
   mix <- function(e) sqrt(p$rho) * w + sqrt(1 - p$rho) * e
-  u_d <- stats::pnorm(mix(stats::qnorm(U[, 2L])))
+  # a high factor is a sicker person: more events and a lower score below, and an EARLIER death here, so death reads the factor with the
+  # opposite loading (at correlation 0 the residual alone is read and the draws are what they always were)
+  u_d <- stats::pnorm(-sqrt(p$rho) * w + sqrt(1 - p$rho) * stats::qnorm(U[, 2L]))
   td <- -log1p(-u_d) / (p$h0 * ifelse(z == 1L, p$hr, 1))
   tc <- if (p$drop > 0) -log1p(-U[, 5L]) / p$drop else rep(Inf, N)
   x <- pmin(td, tc, p$tau)
@@ -204,7 +208,7 @@ VCR_WR_STEP_TRIALS <- 1000L
     per <- c(per, stats::setNames(c(tab[3L], tab[1L]), paste0(c("win_", "loss_"), k)))
   }
   wins <- sum(per[grepl("^win_", names(per))]); losses <- sum(per[grepl("^loss_", names(per))])
-  c(z = z, reject = as.numeric(reject), win = wins, loss = losses, tie = 1 - wins - losses, per)
+  c(z = z, reject = as.numeric(reject), win = wins, loss = losses, tie = max(0, 1 - wins - losses), per)   # a share left over by sums of shares can be -1e-16
 }
 
 # --- the runner -----------------------------------------------------------------------------------------------
@@ -270,7 +274,7 @@ VCR_WR_STEP_TRIALS <- 1000L
   rows <- list()
   for (k in keys) {
     w <- v[, paste0("win_", k)]; l <- v[, paste0("loss_", k)]
-    rest <- rest - w - l
+    rest <- pmax(0, rest - w - l)
     rows[[length(rows) + 1L]] <- list(level = k, cells = list(
       win_proportion = .vcr_wr_mean("win_proportion", w), loss_proportion = .vcr_wr_mean("loss_proportion", l),
       tie_proportion = .vcr_wr_mean("tie_proportion", rest)))

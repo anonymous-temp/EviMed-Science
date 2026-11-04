@@ -163,6 +163,7 @@ export const NUMERIC_REFERENCES = {
   N68f: { methods: ['design.confirmatory'], anchors: ['ok <- c(ok, t1$value <= alpha + 3 * t1$mcse, arm_max <= alpha + 3 * t1$mcse, null$cells$expected_events$value > 0)'] },
   N68g: { methods: ['design.confirmatory'], anchors: ['closed <- stats::pnorm((log(s$rest) - log(s$subset)) / sqrt(4 / events[1] + 4 / events[2]))', 'model <- max(model, abs(plain - closed) / plain_se)'] },
   N68h: { methods: ['design.confirmatory'], anchors: ['pops <- max(null$cells$reject_subset$value, null$cells$reject_full$value)'] },
+  N68i: { methods: ['design.confirmatory'], anchors: ['ref <- sim$earlyStop[1L, 1L]', 'list(pass = worst < 4 && bound'] },
   // the comparator patches (algorithm round C14, C8, C1, C2, C9): trimming, the time-to-event doubly robust estimate, bias analysis, the G-computation STC
   N70a: { methods: ['comparator.propensity_weight'], anchors: ['hb <- .n70_by_hand(d, 0.1)', 'abs(v("weighted_difference") - hb$est) < 1e-10'] },
   N70b: { methods: ['comparator.propensity_weight'], anchors: ['root <- stats::uniroot(function(a) 1 / (a * (1 - a)) - 4 * log((1 - a) / a) / (1 - 2 * a), c(1e-4, 0.3), tol = 1e-13)$root', 'abs(alpha - root) < 2e-5'] },
@@ -211,6 +212,7 @@ export const NUMERIC_REFERENCES = {
   N87d: { methods: ['design.win_ratio'], anchors: ['perm <- vapply(seq_len(40000L), function(i) sum(u[sample.int(N, 70L)]), numeric(1))', 'v_formula <- 70 * 70 / (N * (N - 1)) * sum(u^2)'] },
   N87e: { methods: ['design.win_ratio'], anchors: ['need <- Filter(function(x) identical(x$name, "required_per_arm"), sr$measures)[[1]]$value', 'abs(pw$value - 0.8) < 4 * pw$mcse + 0.03'] },
   N87f: { methods: ['design.win_ratio'], anchors: ['f <- hce::sizeWR(WR = want_wr, power = 0.8, Pties = want_ties, alpha = 0.05)', 'abs(pw$value - 0.8) < 4 * pw$mcse + 0.1'] },
+  N87g: { methods: ['design.win_ratio'], anchors: ['score_ref <- rho * stats::dnorm(cut) / (1 - stats::pnorm(cut))', 'z_pw <- (pw$value - pw_ref) / sqrt(pw$mcse^2 + pw_se^2)'] },
   // design.simulate (the modestly weighted log-rank test): simtrial's statistic to the last bit, its own generator and test, and the middle road against a late-weighted test and the log-rank test
   N88a: { methods: ['design.simulate'], anchors: ['ref <- simtrial::wlr(data.frame(tte = d$time, event = d$status, treatment = ifelse(d$arm == 1L, "experimental", "control")), weight = simtrial::mb(delay = Inf, w_max = 1 / s))', 'worst <- max(worst, abs(mine + ref$z)); checked <- checked + 1L'] },
   N88b: { methods: ['design.simulate'], anchors: ['z[i] <- simtrial::wlr(cut, weight = simtrial::mb(delay = Inf, w_max = 2))$z', 'gap <- abs(m$value - p_ref) / sqrt(m$mcse^2 + se_ref^2)'] },

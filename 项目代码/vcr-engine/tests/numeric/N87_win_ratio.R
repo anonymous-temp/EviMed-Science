@@ -13,6 +13,10 @@
 #      checked by running at it, a null scenario cannot be sized
 #   f  hce::sizeWR, a published formula, against the simulated power at the size it gives (reported with its gap; the formula is held to a
 #      loose band, the engine to its own error)
+#   g  the sign of the shared factor at a correlation above 0 (a sicker person dies earlier, has more events and a lower score): closed forms
+#      for the survivors' mean score and mean event count, and the power and win difference of a generator written apart from the engine's
+#      (every other case here is at correlation 0, or at the null, where the sign cannot move a number)
+#   h  a share of ties is never below 0 (sums of shares left -1e-16 in a third of the trials of a design with no possible tie)
 
 .n87_scenario <- function(n = 60, dropout = 0.1, followup = 12, events = TRUE, score = TRUE, rho = 0.3, hr = 0.7, rr = 0.8, shift = 0.4, thr = 0.1,
                           risk = 0.3, theta = 1, rate = 0.08, sd = 1) {
@@ -210,4 +214,88 @@ vcr_case("N87f", c("AC-29"), function() {
   list(pass = abs(cells$win_ratio$value - want_wr) < 0.06 && abs(cells$tie_proportion$value - want_ties) < 0.02 && abs(pw$value - 0.8) < 4 * pw$mcse + 0.1,
        detail = sprintf("a win ratio of %.2f with %.0f%% ties (one score with a threshold: shift %.3f, threshold %.3f, simulated ratio %.3f, ties %.3f): hce::sizeWR gives %d people for 80%% power at two-sided 0.05; the simulation at that size gives %.3f (error %.3f), a gap of %+.3f from the formula's 0.80",
                         want_wr, 100 * want_ties, shift, thr, cells$win_ratio$value, cells$tie_proportion$value, as.integer(f$SampleSize), pw$value, pw$mcse, pw$value - 0.8))
+})
+
+
+# a generator written apart from the engine's: one standard-normal "sickness" per person, one latent normal per level that reads it with the
+# loading sqrt(rho), and the levels built from their definitions (a survival probability, a Poisson count with uniform times, a normal score)
+.n87g_people <- function(p, n1, n0) {
+  N <- n1 + n0; z <- c(rep(1L, n1), rep(0L, n0)); sick <- stats::rnorm(N)
+  lat <- function() sqrt(p$rho) * sick + sqrt(1 - p$rho) * stats::rnorm(N)
+  td <- -log(stats::pnorm(lat())) / (p$h0 * ifelse(z == 1L, p$hr, 1))   # a high latent value is a survival probability near 1: an early death
+  tc <- if (p$drop > 0) stats::rexp(N, p$drop) else rep(Inf, N)
+  x <- pmin(td, tc, p$tau); died <- td <= pmin(tc, p$tau)
+  d <- list(arm = z, x = x, died = died, dx = ifelse(died, td, Inf), events = NULL, score = NULL)
+  if (p$has_events) {
+    frailty <- stats::qgamma(stats::pnorm(lat()), shape = 1 / p$theta, scale = p$theta)
+    count <- stats::rpois(N, p$rate0 * ifelse(z == 1L, p$rr, 1) * frailty * x)
+    E <- matrix(Inf, N, VCR_WR_EVENT_SLOTS)
+    for (i in which(count > 0L)) { k <- min(count[i], VCR_WR_EVENT_SLOTS); E[i, seq_len(k)] <- sort(stats::runif(k, 0, x[i])) }
+    d$events <- E
+  }
+  if (p$has_score) {
+    s <- -p$sd * lat() + p$shift * z
+    s[!((td > p$tau) & (tc > p$tau))] <- NA_real_
+    d$score <- s
+  }
+  d
+}
+
+vcr_case("N87g", c("AC-29", "AC-28"), function() {
+  rho <- 0.6; risk <- 0.25; rate <- 0.05; fu <- 24
+  sc <- list(design = list(nTreat = 150, nControl = 150, followup = fu), truth = list(death = list(controlRisk = risk, hazardRatio = 1),
+             events = list(controlRate = rate, rateRatio = 1, overdispersion = 1), score = list(shift = 0), correlation = rho), analysis = list(alpha = 0.025, sided = 1))
+  p <- .vcr_wr_read(sc)
+  # (1) closed forms for the people who survive. Death time, events and score read the factor through latent normals X_d, X_e, X_s with
+  # corr(X_d, X_s) = rho and corr(X_d, X_e) = -rho (a later death goes with a higher score and with fewer events). A survivor has X_d > c with
+  # c = qnorm(risk), so E[score | survivor] = rho * phi(c) / (1 - Phi(c)) and E[events | survivor] = rate * followup * E[frailty | X_d > c].
+  set.seed(8771L, kind = VCR_RNG_KIND); d <- .vcr_wr_draw(p, 8000L, 8000L)
+  ne <- rowSums(is.finite(d$events)); surv <- !d$died
+  cut <- stats::qnorm(risk)
+  score_ref <- rho * stats::dnorm(cut) / (1 - stats::pnorm(cut))
+  inner <- function(x) vapply(x, function(xx) stats::integrate(function(y) stats::qgamma(pmin(stats::pnorm(y), 1 - 1e-15), shape = 1, scale = 1) * stats::dnorm(y, -rho * xx, sqrt(1 - rho^2)), -9, 7, rel.tol = 1e-9)$value, numeric(1))
+  frailty_ref <- stats::integrate(function(x) stats::dnorm(x) * inner(x), cut, 8, rel.tol = 1e-8)$value / (1 - stats::pnorm(cut))
+  events_ref <- rate * fu * frailty_ref
+  z_score <- (mean(d$score[surv]) - score_ref) / (stats::sd(d$score[surv]) / sqrt(sum(surv)))
+  z_events <- (mean(ne[surv]) - events_ref) / (stats::sd(ne[surv]) / sqrt(sum(surv)))
+  # the people who died had more events per unit of follow-up than the survivors
+  rate_of <- function(i) { r <- sum(ne[i]) / sum(d$x[i]); c(r, sqrt(sum((ne[i] - r * d$x[i])^2)) / sum(d$x[i])) }
+  rd <- rate_of(d$died); ra <- rate_of(surv)
+  z_rate <- (rd[1] - ra[1]) / sqrt(rd[2]^2 + ra[2]^2)
+  # (2) power and win difference at HR 0.8, rate ratio 0.8, shift 0.2, correlation 0.6: the engine's job against 1,000 trials of the apart generator
+  sc$truth$death$hazardRatio <- 0.8; sc$truth$events$rateRatio <- 0.8; sc$truth$score$shift <- 0.2
+  p2 <- .vcr_wr_read(sc)
+  set.seed(8772L)
+  m <- t(vapply(seq_len(1000L), function(i) {
+    dd <- .n87g_people(p2, 150L, 150L); lv <- .vcr_wr_levels(p2, dd); L <- length(lv); code <- 0L
+    for (k in seq_len(L)) code <- code + as.integer(3^(L - k)) * lv[[k]]
+    res <- (code > 0L) - (code < 0L); u <- rowSums(res); N <- 300L
+    b <- res[1:150, 151:300]
+    c(z = sum(u[1:150]) / sqrt(150 * 150 / (N * (N - 1)) * sum(u^2)), diff = mean(b == 1L) - mean(b == -1L))
+  }, numeric(2)))
+  pw_ref <- mean(m[, "z"] > stats::qnorm(0.975)); pw_se <- sqrt(pw_ref * (1 - pw_ref) / nrow(m))
+  df_ref <- mean(m[, "diff"]); df_se <- stats::sd(m[, "diff"]) / sqrt(nrow(m))
+  r <- vcr_test_run(vcr_test_job("design.win_ratio", sc, seed = 8773L, replicates = 2000L, cores = vcr_cores(NULL)))
+  pw <- Filter(function(x) identical(x$name, "power"), r$measures)[[1]]
+  wd <- Filter(function(x) identical(x$name, "win_difference"), r$measures)[[1]]
+  z_pw <- (pw$value - pw_ref) / sqrt(pw$mcse^2 + pw_se^2)
+  z_wd <- (wd$value - df_ref) / sqrt(wd$mcse^2 + df_se^2)
+  list(pass = abs(z_score) < 4 && abs(z_events) < 4 && z_rate > 4 && abs(z_pw) < 4 && abs(z_wd) < 4,
+       detail = sprintf("correlation 0.6, 25%% control risk, 8,000 + 8,000 people: the survivors' mean score is %.3f against the closed form rho phi(c) / (1 - Phi(c)) = %.3f (z %.1f; the factor read the other way round gives %.3f) and their mean event count %.3f against %.3f from the frailty integral (z %.1f); the dead had %.3f events per unit of follow-up against %.3f for the survivors (z %.1f); HR 0.8, rate ratio 0.8, shift 0.2, 150 + 150 people: power %.3f (error %.3f) against %.3f (error %.3f) from 1,000 trials of a generator written apart from the engine's (z %.1f), win difference %.4f against %.4f (z %.1f); the factor read the wrong way round gave power 0.459 here",
+                        mean(d$score[surv]), score_ref, z_score, -score_ref, mean(ne[surv]), events_ref, z_events, rd[1], ra[1], z_rate, pw$value, pw$mcse, pw_ref, pw_se, z_pw, wd$value, df_ref, z_wd))
+})
+
+vcr_case("N87h", c("AC-29"), function() {
+  # a continuous score with no threshold and no events level cannot tie, so every share of ties is a rounding residue of 1 - wins - losses
+  sc <- list(design = list(nTreat = 70, nControl = 70, followup = 12, dropoutAnnual = 0), truth = list(death = list(controlRisk = 0.3, hazardRatio = 0.8),
+             score = list(shift = 0.4, sd = 1, threshold = 0), correlation = 0.3), analysis = list(alpha = 0.025, sided = 1))
+  p <- .vcr_wr_read(sc)
+  set.seed(8781L, kind = VCR_RNG_KIND)
+  v <- do.call(rbind, lapply(seq_len(600L), function(i) .vcr_wr_trial(p, 70L, 70L)))
+  rows <- .vcr_wr_level_rows(v, c("death", "score"))
+  level_min <- min(vapply(rows, function(r) min(r$cells$tie_proportion$value), numeric(1)))
+  r <- vcr_test_run(vcr_test_job("design.win_ratio", sc, seed = 8782L, replicates = 300L, cores = 1L))
+  tie <- Filter(function(x) identical(x$name, "tie_proportion"), r$measures)[[1]]$value
+  list(pass = min(v[, "tie"]) >= 0 && level_min >= 0 && tie >= 0,
+       detail = sprintf("600 trials of 70 + 70 people with a continuous score and no threshold: the smallest share of ties in a trial is %.1e (it was -1.1e-16 in 105 of the 600 before the clamp), the smallest mean share by level %.1e, the job's reported share %.1e", min(v[, "tie"]), level_min, tie))
 })
