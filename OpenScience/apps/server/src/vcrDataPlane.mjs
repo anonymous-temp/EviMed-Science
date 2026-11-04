@@ -2948,7 +2948,7 @@ export class VcrDataPlane {
     const kind = String(input.kind ?? input.jobKind ?? "");
     const method = String(input.method ?? (/** @type {Record<string, string>} */ (VCR_JOB_METHODS))[kind] ?? "");
     const wants = input.include ?? tablesNeededBy(method, input.endpointType ?? null, tables.map((table) => table.shape));
-    const needsScientificUnits = ["model.prognostic_apply", "model.survival_fit"].includes(method);
+    const needsScientificUnits = ["model.prognostic_apply", "model.survival_fit", "model.prognostic_train"].includes(method);
     const sourceUnit = (column, tableName = null) => {
       const matches = entries.filter(entry => entry.column === column && (!tableName || entry.table === tableName));
       if (!matches.length || matches.some(entry => !entry.unit)) return "unknown";

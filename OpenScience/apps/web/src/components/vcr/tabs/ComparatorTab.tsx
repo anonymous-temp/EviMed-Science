@@ -20,6 +20,7 @@ import { Tag } from "@/components/ui/Tag";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { VcrBiasAnalysis } from "../VcrBiasAnalysis";
 import { VcrBorrowing } from "../VcrBorrowing";
+import { VcrPrognosticModels } from "../VcrPrognosticModels";
 import { VcrSeriesLegend, VcrSurvivalChart } from "../VcrCharts";
 import { VcrImputation } from "../VcrImputation";
 import { VcrTargetTrial } from "../VcrTargetTrial";
@@ -88,7 +89,9 @@ function ComparatorView({ studyId, study, data }: { studyId: string; study: VcrS
   const nothing = data.curves.length === 0 && !data.rmst && !data.median && !data.gaps && !data.estimand
     && data.comparability.length === 0 && data.diagnostics.length === 0 && prior.length === 0 && data.qc.length === 0 && !data.verdict && !data.predictionBenchmark
     // A bias analysis filed alone, a trimming restatement, an imputation card and a target-trial emulation are results of the comparison.
-    && !data.biasAnalysis && !data.borrowing && !data.trim && !data.imputation && !data.targetTrialEmulation;
+    && !data.biasAnalysis && !data.borrowing && !data.trim && !data.imputation && !data.targetTrialEmulation
+    // A model trained on the person's own table is a result of the comparison step, filed alone.
+    && !data.prognosticModels?.length;
   // The route in view: the one the study uses until the reader presses another. On a narrow page the record replaces the list.
   const used = data.routes.find((route) => route.selected)?.route ?? data.routes[0]?.route ?? null;
   const [looking, setLooking] = useState<string | null>(null);
@@ -307,6 +310,8 @@ function UsedRoute({ data }: { data: ComparatorData }) {
       <VcrBiasAnalysis card={data.biasAnalysis} />
 
       <VcrBorrowing card={data.borrowing} />
+
+      <VcrPrognosticModels cards={data.prognosticModels ?? []} />
 
       {data.robustness && (data.robustness.rows.length > 0 || data.robustness.qualification || data.robustness.notes.length > 0) && (
         <RobustnessSection robustness={data.robustness} />

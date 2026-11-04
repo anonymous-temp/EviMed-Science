@@ -753,6 +753,10 @@ export interface VcrQualityReport {
   groups: Array<{ key: string; label: string; rows: Array<{ key: string; label: string; value: VcrValue }> }>;
   trainingRecords: number | null;
   copies: number | null;
+  /** How the copies were combined, in a sentence (1.1.0): null for a report that did not combine them. */
+  rule?: string | null;
+  /** 「哪些人最容易被认出来」: the kind of person the at-risk group is, by level; counts of 1 to 9 people are never in it and no row ever is. Null with no holdout. */
+  atRisk?: { bound: number | null; size: number | null; described: boolean; rows: Array<{ variable: string; level: string; atRisk: number | null; all: number | null; atRiskShare: number | null; allShare: number | null }> } | null;
 }
 
 /** The generated population against a second baseline table (remediation plan D2): the server's rows and sentences, nothing to work out. */
@@ -980,6 +984,8 @@ export interface VcrPatientsTab {
   /** The label the model's output has earned: never 「数字孪生」 by default. */
   twin: { label: string; reason: string | null } | null;
   headline?: string | null;
+  /** Population-level progression simulations (P4): a card each. */
+  progressions?: VcrProgressionCard[];
   /** The people the set holds, as a list (`GET …/patients/rows?result=`): which result, how many, and the arms with their events. */
   records: { result: string; rows: number | null; arms: Array<{ value: string; label: string; n: number; events: number | null }> } | null;
   /** How each variable of the table is distributed (and what the study declared for it), read from the table itself. */
@@ -1269,6 +1275,8 @@ export interface VcrComparatorTab {
   /** The bias analysis of this result (tipping bias, shifted null, confounder tipping, probabilistic): null when it holds none. */
   biasAnalysis?: VcrBiasAnalysisCard | null;
   borrowing?: VcrBorrowingCard | null;
+  /** Prognostic models trained on the person's own table (P3): a card each. */
+  prognosticModels?: VcrPrognosticModelCard[];
   /** Who the propensity trimming removed and who the estimate is about: null when the result did not trim. */
   trim?: VcrTrimCard | null;
   /** What filling in missing covariate values did to the answer: null when the result did not impute. */
@@ -1484,6 +1492,54 @@ export interface VcrWinRatioCard {
   trials: number | null;
   premises: VcrPremise[];
   /** A sentence when the simulation stopped early or the size was not checked. */
+  limited: string | null;
+}
+
+/**
+ * What the comparison tab says of a prognostic model trained on the person's own table (algorithm round P3): the out-of-fold figures, the table of
+ * sample-size savings under the discounts, and the equation's effects. `form: "refused"` carries the sentence that says why no model was trained.
+ */
+export interface VcrPrognosticModelCard {
+  id: string;
+  version: number;
+  form: "trained" | "refused";
+  title: string;
+  question: string;
+  /** 「用你自己的数据训练，没有在别的人群验证过」 */
+  label: string | null;
+  refusal: string | null;
+  headline: Array<{ key: string; label: string; value: VcrValue }>;
+  savings: { rows: Array<{ key: string; lambda: number; gamma: number; estimate: VcrPrognosticSaving | null; lower: VcrPrognosticSaving | null }> } | null;
+  terms: Array<{ label: string; unit: string | null; effect: VcrValue }>;
+  effectWords: string | null;
+  comparison: { label: string; value: VcrValue; difference: VcrValue } | null;
+  correlationNote: string | null;
+  trainedOn: { rows: number | null; events: number | null; folds: number | null; excluded: number | null } | null;
+  premises: VcrPremise[];
+  limited: string | null;
+}
+export interface VcrPrognosticSaving { rho: number | null; saving: VcrValue; ratio: VcrValue }
+
+/** What the virtual-patients tab says of a population-level progression simulation (algorithm round P4): the curves, the power, where each number came from. */
+export interface VcrProgressionCard {
+  id: string;
+  version: number;
+  title: string;
+  question: string;
+  /** 「人群层面，不是对个人的预测」 */
+  label: string;
+  reason: string | null;
+  power: VcrValue | null;
+  powerName: string;
+  /** The closed-form power of the same test, beside the simulated one. */
+  approximation: VcrValue | null;
+  expected: { value: VcrValue; words: string } | null;
+  timeUnit: string;
+  visits: number[];
+  series: VcrSeries[];
+  table: { rows: Array<{ key: string; visit: number; control: { mean: VcrValue; sd: VcrValue }; treated: { mean: VcrValue; sd: VcrValue }; gap: VcrValue }> };
+  trials: number | null;
+  premises: VcrPremise[];
   limited: string | null;
 }
 
@@ -2486,6 +2542,51 @@ function readWinRatioDesigns(raw: unknown): VcrWinRatioCard[] {
   });
 }
 
+/** The cards of the trained prognostic models; a card with no id or title, or of another shape, is left out. */
+function readPrognosticModels(raw: unknown): VcrPrognosticModelCard[] {
+  const saving = (cell: Loose): VcrPrognosticSaving | null => (cell.saving ? { rho: finite(cell.rho), saving: readVcrValue(cell.saving), ratio: readVcrValue(cell.ratio) } : null);
+  return arr(raw).flatMap((card) => {
+    const id = text(card.id), title = text(card.title);
+    if (!id || !title || (card.form !== "trained" && card.form !== "refused")) return [];
+    const comparison = obj(card.comparison), trained = obj(card.trainedOn), savings = obj(card.savings);
+    const rows = arr(savings.rows).flatMap((row) => {
+      const key = text(row.key), lambda = finite(row.lambda), gamma = finite(row.gamma);
+      return key && lambda !== null && gamma !== null ? [{ key, lambda, gamma, estimate: saving(obj(row.estimate)), lower: saving(obj(row.lower)) }] : [];
+    });
+    return [{
+      id, version: finite(card.version) ?? 1, form: card.form as "trained" | "refused", title, question: text(card.question) ?? "", label: text(card.label), refusal: text(card.refusal),
+      headline: readHeadlineLines(card.headline), savings: rows.length ? { rows } : null,
+      terms: arr(card.terms).flatMap((term) => (text(term.label) && term.effect ? [{ label: text(term.label) as string, unit: text(term.unit), effect: readVcrValue(term.effect) }] : [])),
+      effectWords: text(card.effectWords),
+      comparison: comparison.value ? { label: text(comparison.label) ?? "", value: readVcrValue(comparison.value), difference: readVcrValue(comparison.difference) } : null,
+      correlationNote: text(card.correlationNote),
+      trainedOn: Object.keys(trained).length ? { rows: finite(trained.rows), events: finite(trained.events), folds: finite(trained.folds), excluded: finite(trained.excluded) } : null,
+      premises: readPremises(card.premises), limited: text(card.limited),
+    }];
+  });
+}
+
+/** The cards of the progression simulations; a card with no id, title or curve, or of another shape, is left out. */
+function readProgressions(raw: unknown): VcrProgressionCard[] {
+  return arr(raw).flatMap((card) => {
+    const id = text(card.id), title = text(card.title), table = obj(card.table);
+    const rows = arr(table.rows).flatMap((row) => {
+      const key = text(row.key), visit = finite(row.visit), control = obj(row.control), treated = obj(row.treated);
+      return key && visit !== null && control.mean && treated.mean
+        ? [{ key, visit, control: { mean: readVcrValue(control.mean), sd: readVcrValue(control.sd) }, treated: { mean: readVcrValue(treated.mean), sd: readVcrValue(treated.sd) }, gap: readVcrValue(row.gap) }] : [];
+    });
+    if (!id || !title || rows.length === 0) return [];
+    const expected = obj(card.expected);
+    return [{
+      id, version: finite(card.version) ?? 1, title, question: text(card.question) ?? "", label: text(card.label) ?? "", reason: text(card.reason),
+      power: card.power ? readVcrValue(card.power) : null, powerName: text(card.powerName) ?? "", approximation: card.approximation ? readVcrValue(card.approximation) : null,
+      expected: expected.value ? { value: readVcrValue(expected.value), words: text(expected.words) ?? "" } : null,
+      timeUnit: text(card.timeUnit) ?? "", visits: Array.isArray(card.visits) ? card.visits.map(Number).filter(Number.isFinite) : [],
+      series: readSeries(card.series), table: { rows }, trials: finite(card.trials), premises: readPremises(card.premises), limited: text(card.limited),
+    }];
+  });
+}
+
 /** The network meta-analysis cards; a card without an id, a title and a ranking, and anything of an unknown shape, is left out. */
 export function readNetworkMetaCards(raw: unknown): VcrNetworkMetaCard[] {
   return arr(raw).flatMap((card) => {
@@ -3092,6 +3193,12 @@ export function readVcrPopulation(raw: unknown): VcrPopulationTab {
       })),
       trainingRecords: finite(quality.trainingRecords),
       copies: finite(quality.copies),
+      rule: text(quality.rule),
+      atRisk: Object.keys(obj(quality.atRisk)).length ? {
+        bound: finite(obj(quality.atRisk).bound), size: finite(obj(quality.atRisk).size), described: obj(quality.atRisk).described === true,
+        rows: arr(obj(quality.atRisk).rows).flatMap((row) => (text(row.variable) && text(row.level)
+          ? [{ variable: text(row.variable) as string, level: text(row.level) as string, atRisk: finite(row.atRisk), all: finite(row.all), atRiskShare: finite(row.atRiskShare), allShare: finite(row.allShare) }] : [])),
+      } : null,
     } : null,
     check: readPopulationCheck(value.check),
     counts: readVcrCounts(value.counts),
@@ -3218,6 +3325,7 @@ export function readVcrPatients(raw: unknown): VcrPatientsTab {
     stale: readStale(value.stale),
     partial: readPartial(value.partial),
     sets: arr(value.sets) as unknown as VcrPatientsTab["sets"],
+    progressions: readProgressions(value.progressions),
   };
 }
 
@@ -3261,6 +3369,7 @@ export function readVcrComparator(raw: unknown): VcrComparatorTab {
     prior: arr(value.prior).map((row) => ({ key: text(row.key) ?? "", label: text(row.label) ?? "", value: readVcrValue(row.value) })),
     biasAnalysis: readBiasAnalysis(value.biasAnalysis),
     borrowing: readBorrowing(value.borrowing),
+    prognosticModels: readPrognosticModels(value.prognosticModels),
     trim: readTrim(value.trim),
     imputation: readImputation(value.imputation),
     targetTrialEmulation: readTargetTrial(value.targetTrialEmulation),

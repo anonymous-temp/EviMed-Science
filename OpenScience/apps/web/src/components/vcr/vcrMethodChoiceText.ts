@@ -46,6 +46,8 @@ const labels: Record<string, string> = {
   three_plus_three: "3+3", boin: "BOIN", keyboard: "Keyboard", crm: "CRM", randomized_selection: "随机分组的剂量选择",
   bop2: "贝叶斯最优 II 期设计（BOP2）", predictive_monitoring: "预测概率监测", threshold_calibration: "成功阈值的校准",
   max_power: "功效最大", min_expected_n: "期望样本量最少",
+  // survival analyses declared on a synthetic population (population.synthpop / population.quality 1.1.0) and the progression simulator (algorithm round P1, P4)
+  cox: "Cox 回归（对数风险比）", change: "基线到所选随访的变化", slope: "每个人的进展斜率", emax: "Emax（逐渐饱和）", literature: "文献", data: "你自己的数据",
 };
 /** The selection rule of a multi-arm design: its words are short and ordinary, so they are read only at that path. */
 const selectionRules: Record<string, string> = { best: "只留中期估计最好的臂", rbest: "留最好的几个臂", epsilon: "留与最好的相差不大的臂", all: "全部保留" };
@@ -57,6 +59,7 @@ const ruleLabels: Record<string, string> = {
 const pathLabels: Record<string, Record<string, string>> = {
   "comparator.borrowing:prior.kind": { power: "固定折扣（幂先验）", sam: "自适应混合先验（SAM）", elastic: "弹性先验" },
   "comparator.borrowing:prior.function": { logistic: "逻辑斯蒂函数", step: "阶梯函数" },
+  "patients.progression:model.family": { linear: "线性", exponential: "指数", logistic: "逻辑斯蒂（S 形）", emax: "Emax（逐渐饱和）" },
   "patients.longitudinal:trajectory.kind": { plateau: "逐渐趋平", quadratic: "二次曲线" },
   "patients.longitudinal:dropoutModel.mechanism": { mar: "随机缺失（看上一次的值）", mnar: "非随机缺失（看这次的值）" },
 };
@@ -113,10 +116,12 @@ const exampleLabels: Record<string, Record<string, string>> = {
     "a published baseline table": "按文献基线表构建参考人群"
   },
   "population.synthpop": {
-    "a synthetic copy of the study table": "从研究数据合成记录"
+    "a synthetic copy of the study table": "从研究数据合成记录",
+    "a synthetic copy that is asked how often its hazard ratio is a false positive, and which records are easiest to recognise": "合成副本：风险比的假阳性率，以及哪些记录最容易被认出来"
   },
   "population.quality": {
-    "a synthetic table against its training table": "对照训练数据检查合成人群"
+    "a synthetic table against its training table": "对照训练数据检查合成人群",
+    "a synthetic table with a survival analysis combined over its copies, and the per-record privacy": "合成表：生存分析按各份合并，并逐条看隐私风险"
   },
   "patients.continuous": {
     "a continuous endpoint": "连续结局模拟"
@@ -214,6 +219,14 @@ const exampleLabels: Record<string, Record<string, string>> = {
     "a delayed treatment effect (hazard ratio 1 for 6 months, 0.6 after) analysed by the modestly weighted test, the log-rank power reported beside it": "延迟起效（前 6 个月 HR 为 1，之后 0.6）用改良加权 Log-rank 检验分析，并列出普通 Log-rank 的功效",
     "single arm, continuous: 40 patients against a historical mean of 50, one-sample t": "单臂连续：40 人与历史均值 50",
     "single arm, time to event: 60 patients against a benchmark median of 12, one-sample log-rank": "单臂生存：60 人与中位时间 12"
+  },
+  "model.prognostic_train": {
+    "a survival prognostic model trained on the historical control arm of a table, five folds": "用历史对照组训练生存预后模型（五折）",
+    "a continuous change score, with the discounts the savings table is computed under": "连续的变化分，并给出样本量节省的折扣设定"
+  },
+  "patients.progression": {
+    "linear progression of a score, 25% slower under treatment, power of the change at 18 months (every number says where it came from)": "线性进展的评分：治疗减慢 25%，18 个月变化的功效（每个数字都写明来源）",
+    "a saturating (Emax) progression, tested by the per-person slope": "逐渐饱和（Emax）的进展，用每个人的斜率检验"
   },
   "population.check": {
     "a generated population against a second, independent baseline table (the platform fills `generated` from the population subjectId names)": "生成的人群与第二份基线表对照"

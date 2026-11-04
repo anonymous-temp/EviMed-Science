@@ -1,0 +1,150 @@
+/**
+ * What the virtual-patients page says of a disease-progression simulation (algorithm round P4, 2026-11-03): the result of a `generate_progression` job
+ * (`patients.progression`).
+ *
+ * A progression simulation is not a set of virtual patients (no table of people is written) and belongs to no object of the study: it is a result of its
+ * own kind, filed under the scenario it was asked on, that the conversation computes (`vcr_simulate`, kind `generate_progression`). The patients tab lists
+ * the current one of each key as a card. This module turns the engine's result into the card's payload and is the only place that knows the words.
+ *
+ * Hidden knowledge:
+ *
+ * - **The card says it is population level before it says anything else.** 「人群层面，不是对个人的预测」: the curve is what a group does on average and how
+ *   widely people scatter around it. The published model this kind of curve comes from predicted an individual's change from baseline with R squared 0.16;
+ *   that number is why, and the card carries it as the reason, not as a banner.
+ * - **The source of every number is a premise.** The scenario gave each value a basis (literature with its citation, assumed, the person's data); the
+ *   premises block shows them in the words the page uses for those sources (文献 / 假设 / 你给的数据), the decisive five being the progression amplitude and its
+ *   spread, the treatment's slowing, the baseline and the residual. Nothing is built in: no disease and no value is here that the run did not state.
+ * - **The curve is exact and the power is simulated.** The means and spreads by arm at every visit are calculated; the power (or, with no slowing, the type I
+ *   error) is a Monte Carlo proportion with its error, beside the closed-form power of the same test, and the card says the two are expected to agree.
+ * - **Every number is a `VcrValue`** (`measureValue`). A back-office word is never shown: the family is named in words, a value with a basis the page does
+ *   not word is left out.
+ *
+ * @module vcrProgression
+ */
+
+import { createHash } from "node:crypto";
+import { finishPremises } from "./vcrPremises.mjs";
+import { list, markFor, measureValue, numeric, object, text } from "./vcrViewsKit.mjs";
+
+/** @param {unknown} value @returns {unknown} the value with every object's keys in order, so the same scenario is the same text */
+function ordered(value) {
+  if (Array.isArray(value)) return value.map(ordered);
+  if (value && typeof value === "object") return Object.fromEntries(Object.keys(value).sort().map((key) => [key, ordered(/** @type {any} */ (value)[key])]));
+  return value;
+}
+
+/**
+ * The key a progression simulation is filed under (the result's `subject_id`): the scenario it was asked on. Another slowing, another size or another
+ * analysis is another result; the same question asked again is the next version of one.
+ * @param {Record<string, any>} scenario
+ */
+export function vcrProgressionSubjectId(scenario) {
+  return `pg:${createHash("sha256").update(JSON.stringify(ordered(object(scenario)))).digest("hex").slice(0, 10)}`;
+}
+
+const FAMILY_WORDS = Object.freeze(/** @type {Record<string, string>} */ ({ linear: "线性", exponential: "指数", logistic: "逻辑斯蒂（S 形）", emax: "Emax（逐渐饱和）" }));
+const BASIS_SOURCE = Object.freeze(/** @type {Record<string, "literature" | "assumed" | "given">} */ ({ literature: "literature", assumed: "assumed", data: "given" }));
+const PARAMETER_WORDS = Object.freeze(/** @type {Record<string, string>} */ ({
+  "model.amplitude": "进展的幅度（斜率或平台）", "model.betweenPersonSd": "人与人之间进展幅度的标准差", "model.acceleration": "指数加速度", "model.steepness": "S 形曲线的陡度",
+  "model.midpoint": "S 形曲线的中点", "model.halfTime": "达到一半幅度的时间", "baseline.mean": "基线的均值", "baseline.sd": "基线的标准差", "residualSd": "同一个人两次测量之间的随机波动（标准差）",
+  "treatment.slowing": "治疗把进展速度减慢的比例", "correlation": "基线与进展幅度的相关",
+}));
+const TIME_WORDS = Object.freeze(/** @type {Record<string, string>} */ ({ days: "天", weeks: "周", months: "个月", years: "年" }));
+const DECISIVE = new Set(["model.amplitude", "model.betweenPersonSd", "treatment.slowing", "baseline.sd", "residualSd"]);
+/** @param {number} value @param {number} [digits] */
+const plain = (value, digits = 3) => String(Number(value.toPrecision(digits)));
+
+/** @param {Record<string, any>} progression @param {string} timeUnit */
+function premisesOf(progression, timeUnit) {
+  /** @type {Array<Record<string, any>>} */
+  const rows = [];
+  for (const entry of list(progression.given).map(object)) {
+    const key = String(entry.key);
+    const label = PARAMETER_WORDS[key];
+    const value = numeric(entry.value);
+    if (!label || value === null) continue;
+    const citation = text(entry.citation);
+    const unit = key === "model.midpoint" || key === "model.halfTime" ? ` ${TIME_WORDS[timeUnit] ?? timeUnit}` : "";
+    rows.push({ key: `progression:${key}`, label, value: key === "treatment.slowing" ? `${plain(value * 100)}%` : `${plain(value)}${unit}`, source: BASIS_SOURCE[String(entry.basis)] ?? "assumed", decisive: DECISIVE.has(key), reason: citation });
+  }
+  for (const entry of list(progression.assumed).map(object)) {
+    const key = String(entry.key);
+    if (key === "correlation") rows.push({ key: "progression:correlation", label: PARAMETER_WORDS.correlation, value: "0（没有说，按没有相关算）", source: "default", decisive: false });
+    else if (key === "analysis.alpha") rows.push({ key: "progression:alpha", label: "检验的水平", value: "双侧 5%", source: "default", decisive: false });
+    else if (key === "analysis.visit") rows.push({ key: "progression:visit", label: "比较哪一次随访", value: `最后一次（${plain(Number(entry.value))} ${TIME_WORDS[timeUnit] ?? timeUnit}）`, source: "default", decisive: false });
+  }
+  rows.push({ key: "progression:clock", label: "治疗怎样起作用", value: "把病程的时钟拨慢：治疗组的曲线等于对照组的曲线在 (1 − 减慢比例) × 时间 处的值", source: "default", decisive: false });
+  return finishPremises(rows);
+}
+
+/**
+ * @param {Record<string, any>} result @param {any} staleMark
+ */
+function cardOf(result, staleMark) {
+  const progression = object(object(result.diagnostics).progression);
+  const family = String(progression.family ?? "");
+  const curves = list(progression.curves).map(object);
+  if (!family || !curves.length) return null;
+  const context = { result, staleMark };
+  const shown = (/** @type {Record<string, any>} */ measure) => measureValue(measure?.mcse === 0 ? { ...measure, mcse: undefined } : measure, { kind: "patient_set", ...context, tab: "patients" });
+  const unit = text(object(curves[0]).timeUnit) ?? "";
+  const outcomeUnit = text(progression.outcomeUnit);
+  const inUnit = (/** @type {Record<string, any>} */ measure) => (outcomeUnit && !measure.unit ? { ...measure, unit: outcomeUnit } : measure);
+  const isNull = progression.isNull === true;
+  const analysis = object(progression.analysis);
+  const slope = analysis.kind === "slope";
+  const power = list(result.measures).map(object).find((measure) => measure.name === (isNull ? "type_one_error" : "power")) ?? null;
+  const approx = numeric(object(progression.approximation).power);
+  const difference = list(result.measures).map(object).find((measure) => measure.name === "expected_difference") ?? null;
+  const band = (/** @type {Record<string, any>} */ arm, /** @type {number} */ z) => {
+    const m = numeric(object(arm.mean).value); const s = numeric(object(arm.sd).value);
+    return m === null ? null : { y: m, low: s === null ? null : m - z * s, high: s === null ? null : m + z * s };
+  };
+  const series = ["control", "treated"].map((arm) => ({
+    key: arm, label: arm === "control" ? "对照组" : "治疗组", source: "assumed", ours: arm === "treated", pooled: false,
+    points: curves.map((curve) => ({ x: Number(curve.visit), ...(band(object(curve[arm]), 1.96) ?? { y: null, low: null, high: null }) })),
+    bandKind: "prediction", bandLevel: 95, endLabel: null, endNote: null, atRisk: [], individuals: [], dashed: arm === "control", unobserved: [],
+  }));
+  return {
+    id: String(result.id), version: Number(result.version),
+    title: `${FAMILY_WORDS[family] ?? family}进展：人群的平均病程与检验的功效`,
+    question: isNull
+      ? "治疗什么都不改变时，这个检验会误判有效的概率是多少"
+      : `这么多人、把进展减慢 ${plain(Number(object(progression.treatment).slowing) * 100)}% 时，${slope ? "按每个人的进展斜率比较" : "按基线到所选随访的变化比较"}，检验判出有效的把握有多大`,
+    label: "人群层面，不是对个人的预测",
+    reason: "在公布这类曲线的那个模型里，只用基线预测个人的变化，R² 只有 0.16。",
+    power: power ? shown(power) : null,
+    powerName: isNull ? "没有真实效应时误判有效的概率" : "判出有效的把握（模拟）",
+    approximation: approx === null ? null : shown({ name: isNull ? "type_one_error" : "power", value: approx, source: "calculated" }),
+    expected: difference ? { value: shown(difference), words: slope ? "治疗组减对照组的平均斜率之差" : "治疗组减对照组的平均变化之差" } : null,
+    timeUnit: unit, visits: curves.map((curve) => Number(curve.visit)),
+    series,
+    table: {
+      columns: [{ key: "control", label: "对照组均值（标准差）" }, { key: "treated", label: "治疗组均值（标准差）" }, { key: "gap", label: "治疗减对照" }],
+      rows: curves.map((curve) => {
+        const c = object(curve.control); const t = object(curve.treated);
+        return { key: String(curve.visit), visit: Number(curve.visit),
+          control: { mean: shown(inUnit(object(c.mean))), sd: shown(inUnit(object(c.sd))) }, treated: { mean: shown(inUnit(object(t.mean))), sd: shown(inUnit(object(t.sd))) },
+          gap: shown(inUnit({ name: "curve_gap", value: Number(object(t.mean).value) - Number(object(c.mean).value), source: "calculated" })) };
+      }),
+    },
+    trials: numeric(progression.trials),
+    premises: premisesOf(progression, unit),
+    limited: list(object(result.diagnostics).issues).some((issue) => object(issue).code === "cpu_budget_exhausted")
+      ? `只模拟完了一部分试验（${numeric(progression.trials) ?? "?"} 次，原定 ${numeric(progression.trialsRequested) ?? "?"} 次），数字按已完成的给出。` : null,
+  };
+}
+
+/**
+ * The cards of the patients tab for the progression simulations the study holds now, newest first.
+ * @param {Record<string, any>} bundle the patients tab's bundle (`results`, `allResults`, `stale`)
+ * @param {{ nodeOf: (result: Record<string, any>) => string }} helpers
+ */
+export function presentProgressions(bundle, { nodeOf }) {
+  const results = list(bundle.allResults ?? bundle.results).map(object).filter((row) => row.kind === "progression_simulation" && !row.supersededBy)
+    .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt))).slice(0, 8);
+  return results.map((result) => cardOf(result, markFor(bundle.stale ?? [], nodeOf(result)))).filter(Boolean);
+}
+
+/** @param {Record<string, any>} result @param {any} staleMark exported for the tests that read one result */
+export const progressionCard = (result, staleMark = null) => cardOf(result, staleMark);

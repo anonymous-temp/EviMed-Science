@@ -58,6 +58,8 @@ import { presentConfirmatoryDesigns } from "./vcrConfirmatory.mjs";
 import { presentDoseDesigns } from "./vcrDoseFinding.mjs";
 import { presentBayesianDesigns } from "./vcrBayesianDesign.mjs";
 import { presentWinRatioDesigns } from "./vcrWinRatio.mjs";
+import { presentPrognosticModels } from "./vcrPrognosticTraining.mjs";
+import { presentProgressions } from "./vcrProgression.mjs";
 import { presentEvidenceSyntheses, tauPriorWords, vcrSuccessRatesPage } from "./vcrEvidenceSynthesis.mjs";
 import { presentBiasAnalysis } from "./vcrBiasAnalysis.mjs";
 import { presentBorrowing } from "./vcrBorrowing.mjs";
@@ -219,6 +221,29 @@ export function qualityReportView(quality) {
   const violations = list(object(report.constraints).violations ?? report.constraints).map((entry) => numeric(object(entry).violations)).filter((value) => value !== null);
   const generator = object(report.generator);
   const copiesReleased = numeric(object(report.release).copies);
+  // 1.1.0 (P1, P2): the copies combined by the rules for synthetic data, the false-positive rate of an analysis on the generator's own copies, the records easiest to recognise
+  const inference = object(report.inference);
+  const calibration = object(inference.nullCalibration);
+  const percent = (/** @type {string} */ key, /** @type {string} */ label, /** @type {Record<string, any>} */ rate) => {
+    const value = numeric(rate.value);
+    if (value === null) return null;
+    const mcse = numeric(rate.mcse);
+    return { key, label, value: { ...plainValue({ value: value * 100, unit: "%" }, { source: "synthetic", precision: 1 }), mcse: mcse === null || mcse === 0 ? null : mcse * 100 } };
+  };
+  const withheld = (/** @type {string} */ key, /** @type {string} */ label) => ({ key, label, value: { ...plainValue({}, { source: "synthetic", precision: null }), text: "少于 10 条（不显示）" } });
+  const combinedRows = specific.flatMap((entry, index) => {
+    const combined = object(entry.combined);
+    if (combined.available !== true) return [];
+    const interval = list(combined.interval).map(numeric);
+    return [{ key: `combined_${index}`, label: `${text(entry.analysis) ?? "分析"}：${numeric(combined.copies)} 份合并后的估计`,
+      value: { ...plainValue({ value: numeric(combined.estimate), interval: interval.length === 2 && interval.every((bound) => bound !== null) ? { kind: "confidence", low: interval[0], high: interval[1], level: 0.95 } : undefined }, { source: "synthetic", precision: null }) } }];
+  });
+  const overlapRow = (/** @type {Record<string, any>} */ entry, /** @type {number} */ index) => row(`overlap_${index}`, `${text(entry.analysis) ?? "分析"}：置信区间重叠`, object(entry.combined).confidenceIntervalOverlap ?? entry.confidenceIntervalOverlap);
+  const perRecord = object(disclosure.perRecord);
+  const stated = list(perRecord.riskShares).map(object).find((share) => share.stated === true);
+  const attribute = object(disclosure.attributeInference);
+  const worstAttribute = list(attribute.secrets).map(object).sort((a, b) => (numeric(b.riskLow) ?? -1) - (numeric(a.riskLow) ?? -1))[0] ?? null;
+  const boundWords = stated ? `${numeric(stated.bound)}` : "";
   const groups = [
     { key: "fidelity", label: "保真度", rows: [
       ks.length ? row("ks", "最大 KS 距离", Math.max(...ks)) : null,
@@ -230,20 +255,42 @@ export function qualityReportView(quality) {
     ].filter((entry) => entry !== null) },
     { key: "utility", label: "可用性", rows: [
       row("joint", "入排通过率的相对差", feasibility.jointPassRateRelativeDifference),
-      ...specific.map((entry, index) => row(`overlap_${index}`, `${text(entry.analysis) ?? "分析"}：置信区间重叠`, entry.confidenceIntervalOverlap)),
+      ...combinedRows,
+      ...specific.map(overlapRow),
       violations.length ? row("violations", "硬约束违反的记录数", violations.reduce((sum, value) => sum + value, 0)) : null,
     ].filter((entry) => entry !== null) },
+    { key: "inference", label: "推断是否可信", rows: calibration.available === true ? [
+      percent("fp_real", "把臂标签打乱后，直接在真实表上做这个分析，误判有效的概率", object(calibration.realPermuted)),
+      percent("fp_naive", "把合成表的第 1 份当真实数据做同一个分析，误判有效的概率", object(calibration.syntheticNaive)),
+      percent("fp_combined", "合成表各份按规则合并后，误判有效的概率", object(calibration.syntheticCombined)),
+    ].filter((entry) => entry !== null) : [] },
     { key: "leakage", label: "泄露风险", rows: disclosure.available === false ? [] : [
       row("replication", "复制率（相对留出集）", disclosure.replicationRatio),
       row("nn", "最近邻落在训练集的比例", disclosure.nearestNeighbourInTrainShare),
       row("membership", "成员推断 AUC", disclosure.membershipAuc),
       row("dcr", "到最近训练记录的距离（中位）", disclosure.dcrMedian ?? disclosure.medianDcr),
+      stated && stated.trainingShare !== undefined ? (numeric(stated.trainingShare) === null ? withheld("risk_share", `真实记录里被认出来的风险高于 ${boundWords} 的`) : percent("risk_share", `真实记录里被认出来的风险高于 ${boundWords} 的占比`, { value: stated.trainingShare })) : null,
+      stated && perRecord.available === true && stated.holdoutShare !== undefined ? (numeric(stated.holdoutShare) === null ? withheld("risk_share_holdout", "没进过数据的留出记录里同样高风险的（碰巧会有的水平）") : percent("risk_share_holdout", "没进过数据的留出记录里同样高风险的占比（碰巧会有的水平）", { value: stated.holdoutShare })) : null,
+      worstAttribute ? percent("attribute_inference", "属性推断：最危险的一列比从没进过数据的人多猜对的部分", { value: Math.max(0, numeric(worstAttribute.risk) ?? 0) }) : null,
     ].filter((entry) => entry !== null) },
   ].filter((group) => group.rows.length);
   if (!groups.length && !Object.keys(generator).length) return null;
+  const atRisk = object(perRecord.atRiskGroup);
   return {
     tag: "合成 · 探索性",
     groups,
+    // 「哪些人最容易被认出来」: the kind of person the at-risk group is, by the share of each level in it; counts of 1 to 9 people are never shown and no row ever is
+    atRisk: perRecord.available === true && stated ? {
+      bound: numeric(stated.bound), size: numeric(atRisk.size), rows: list(atRisk.rows).map(object).map((entry) => ({
+        variable: text(entry.variable) ?? "", level: text(entry.level) ?? "", atRisk: numeric(entry.atRisk), all: numeric(entry.all),
+        atRiskShare: numeric(entry.atRiskShare) === null ? null : numeric(entry.atRiskShare) * 100, allShare: numeric(entry.allShare) === null ? null : numeric(entry.allShare) * 100,
+      })).filter((entry) => entry.variable && entry.level),
+      described: atRisk.size !== undefined,
+    } : null,
+    // How the copies were combined, in a sentence the reader can check
+    rule: inference.rule ? (inference.rule === "proper_synthesis"
+      ? `合成表的 ${numeric(inference.copies) ?? "?"} 份按 Raab 等人的规则合并（每份都重新抽过参数）：方差里加上了生成模型本身的抽样误差。`
+      : `合成表的 ${numeric(inference.copies) ?? "?"} 份按 Raab 等人的规则合并（每份用同一组参数）：方差里加上了生成模型本身的抽样误差，直接把一份当真实数据分析会低估它。`) : null,
     trainingRecords: numeric(generator.trainingObservations ?? generator.trainingRecords),
     copies: numeric(generator.syntheticCopies ?? generator.copies ?? generator.m),
     // Which table each group of numbers describes, when the generator made several copies and the release holds them all: the
@@ -574,6 +621,8 @@ export function presentPatientsTab(bundle) {
     counts: current ? countsView(result?.counts && Object.keys(result.counts).length ? result.counts : current.counts, { tier: study.dataTier, scope: current.name || null }) : null,
     stale: staleNote(marks),
     partial: partialOf(bundle, ["patient_set"], "这次生成"),
+    // Population-level progression simulations (P4) the conversation computed: a card each, curves and power.
+    progressions: presentProgressions(bundle, { nodeOf: resultNode }),
     sets: patientSets.map((/** @type {any} */ set) => ({ id: set.id, version: set.version, ...(set.resultId ? { resultId: set.resultId, resultVersion: resultById(bundle, set.resultId)?.version } : {}), label: `虚拟患者集 v${set.version}`, stale: Boolean(markFor(stale, vcrObjectNode("patient_set", set))) })),
   };
 }
@@ -829,6 +878,8 @@ export function presentComparatorTab(bundle) {
     biasAnalysis: presentBiasAnalysis(result, value),
     // Dynamic borrowing of an external control arm (C10-C12): the posterior beside no and full borrowing, the conflict table, the operating characteristics.
     borrowing: presentBorrowing(result, value),
+    // Prognostic models trained on the person's own table (P3): a card each, with the out-of-fold figures and the table of sample-size savings.
+    prognosticModels: presentPrognosticModels(bundle, { nodeOf: resultNode }),
     trim: presentTrim(diagnostics.trim),
     // Missing covariates that were imputed (C7): the pooled answer beside the complete-case one, and what it assumed.
     imputation: presentImputation(result, value),

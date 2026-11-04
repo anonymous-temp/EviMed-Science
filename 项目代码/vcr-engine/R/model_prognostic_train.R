@@ -35,6 +35,8 @@
 # ---------------------------------------------------------------------------
 
 .VCR_PROGNOSTIC_TRANSFORMS <- c("identity", "log", "log1p", "square")
+# the unit `model.prognostic_apply` expects of an indicator term (a text predictor has no unit of measure); a name, not a unit literal of a measure
+.VCR_CATEGORY_UNIT <- "category"
 
 .vcr_prognostic_transform <- function(x, transform) {
   switch(transform, identity = x, log = suppressWarnings(log(x)), log1p = suppressWarnings(log1p(x)), square = x^2,
@@ -66,7 +68,7 @@ vcr_prognostic_design <- function(data, predictors, min_cell = vcr_limit("minCel
       for (lv in setdiff(keep, ref)) {
         nm <- paste0(col, "=", lv)
         cols[[nm]] <- as.numeric(ch == lv)
-        terms[[length(terms) + 1L]] <- list(column = col, kind = "indicator", transform = "indicator", category = lv, levels = sort(keep), reference = ref, unit = "category", name = nm)
+        terms[[length(terms) + 1L]] <- list(column = col, kind = "indicator", transform = "indicator", category = lv, levels = sort(keep), reference = ref, unit = .VCR_CATEGORY_UNIT, name = nm)
       }
     }
   }

@@ -120,6 +120,7 @@
   "robustness": null,
   "biasAnalysis": null,
   "borrowing": null,
+  "prognosticModels": [],
   "trim": null,
   "imputation": null,
   "targetTrialEmulation": null,

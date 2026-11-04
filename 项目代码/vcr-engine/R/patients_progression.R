@@ -173,11 +173,13 @@ vcr_job_patients_progression <- function(job, output_dir = NULL, cancel_file = N
   done <- nrow(v); q <- mean(v[, "reject"]); s <- vcr_mcse_proportion(q, done)
   power <- vcr_measure(if (p$is_null) "type_one_error" else "power", q, simulated = TRUE, mcse = s, source = "synthetic",
                        interval = vcr_interval("monte_carlo", max(0, q - 1.96 * s), min(1, q + 1.96 * s)))
-  estimand_unit <- if (identical(kind, "slope")) "outcome units per time unit" else "outcome units"
+  # the outcome's own unit, when the scenario names one (a slope is per time unit); a measure without one carries none
+  out_unit <- if (is.null(sc[["endpoint"]][["unit"]])) NULL else as.character(sc[["endpoint"]][["unit"]])
+  estimand_unit <- if (is.null(out_unit)) NULL else if (identical(kind, "slope")) paste0(out_unit, " / ", as.character(sc[["timeUnit"]])) else out_unit
   measures <- list(power,
                    vcr_measure("expected_difference", form$difference, source = "calculated", unit = estimand_unit, note = "treated less control, in the analysis's own estimand"),
-                   vcr_measure("expected_control_change", ctl$mean[at] - ctl$mean[1L], source = "calculated", unit = as.character(sc[["endpoint"]][["unit"]] %||% "outcome units")),
-                   vcr_measure("expected_treated_change", trt$mean[at] - trt$mean[1L], source = "calculated", unit = as.character(sc[["endpoint"]][["unit"]] %||% "outcome units")))
+                   vcr_measure("expected_control_change", ctl$mean[at] - ctl$mean[1L], source = "calculated", unit = out_unit),
+                   vcr_measure("expected_treated_change", trt$mean[at] - trt$mean[1L], source = "calculated", unit = out_unit))
   issues <- list(); stopped <- run$stopped
   if (identical(stopped, "cpu_budget")) issues <- list(vcr_issue("cpu_budget_exhausted", "cpuSecondsLimit", "The CPU budget ran out before every trial ran; the power uses the trials that finished."))
   status <- if (identical(stopped, "canceled")) "canceled" else if (identical(stopped, "cpu_budget")) "failed" else "succeeded"
@@ -196,7 +198,7 @@ vcr_job_patients_progression <- function(job, output_dir = NULL, cancel_file = N
   list(status = status, measures = measures, issues = issues, counts = vcr_counts(generatedRecords = done * (p$n1 + p$n0)),
        conclusion = "limited",
        diagnostics = list(replicatesCompleted = done, progression = list(
-         family = par$family, curves = curves, isNull = p$is_null, trials = done, trialsRequested = want,
+         family = par$family, curves = curves, isNull = p$is_null, trials = done, trialsRequested = want, outcomeUnit = out_unit,
          analysis = list(kind = kind, visit = at_time, alpha = alpha, firstVisit = visits[1L]),
          approximation = list(power = form$power, standardError = form$standardError, degreesOfFreedom = form$df, noncentrality = form$ncp,
                               controlStatistic = list(mean = form$control$mean, sd = sqrt(form$control$var)), treatedStatistic = list(mean = form$treated$mean, sd = sqrt(form$treated$var)),

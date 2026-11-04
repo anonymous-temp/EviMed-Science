@@ -51,6 +51,10 @@ const PRIORITY = Object.freeze([
   "borrowingHistory", "borrowingPrior", "borrowingDelta", "borrowingFunction", "borrowingWeight",
   // a spline survival fit: how far beyond the data, how flexible, the tail it assumes
   "splineBeyond", "splineKnots", "splineTail",
+  // a trained prognostic model: the data, the cross-fitting, the correlation, the discounts
+  "prognosticTraining", "prognosticFolds", "prognosticRho", "prognosticDiscount", "prognosticForest",
+  // a progression simulation: its parameters, in the order a conclusion turns on them
+  "progression:model.amplitude", "progression:model.betweenPersonSd", "progression:treatment.slowing", "progression:baseline.sd", "progression:residualSd",
 ]);
 
 /**

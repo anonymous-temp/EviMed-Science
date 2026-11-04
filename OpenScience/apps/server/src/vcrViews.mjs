@@ -89,7 +89,7 @@ export function budgetView(budget) {
 
 /** The words a job kind is shown as. */
 export const JOB_KIND_LABELS = Object.freeze(/** @type {Record<string, string>} */ ({
-  fit_survival_model: "拟合人群生存模型", apply_prognostic_model: "应用已发表的预后模型",
+  fit_survival_model: "拟合人群生存模型", apply_prognostic_model: "应用已发表的预后模型", train_prognostic_model: "用自己的历史数据训练预后模型", generate_progression: "人群层面的疾病进展模拟",
   forecast_trajectories: '纵向结果预测', evaluate_forecast: '预测与观测验证', compare_forecasts: '预测情景比较', benchmark_trial_effect: '试验效果预测验证',
   profile_snapshot: "数据快照画像", build_cohort: "构建队列", generate_population: "生成情景人群",
   literature_population: "文献人群", synthesize_population: "合成人群", population_quality: "人群质量报告", population_check: "与第二份基线表对照", design_confirmatory: "确认性设计", design_dose: "剂量探索设计", design_bayesian: "贝叶斯设计", design_win_ratio: "胜率比设计",

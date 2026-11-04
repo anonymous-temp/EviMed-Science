@@ -475,6 +475,33 @@ export const MEASURE_META = Object.freeze({
   restricted_mean_survival_time: { label: "限制性平均生存时间（RMST）" },
   survival_probability: { label: "生存率", percent: true },
   survival_at_last_horizon: { label: "最后一个时间点的生存率", percent: true },
+  // inference on synthetic data and per-record privacy (population.synthpop / population.quality 1.1.0)
+  false_positive_rate_real_permuted: { label: "打乱臂标签后，真实表上误判有效的概率", percent: true },
+  false_positive_rate_synthetic_naive: { label: "把合成表第 1 份当真实数据分析时误判有效的概率", percent: true },
+  false_positive_rate_synthetic_combined: { label: "合成表各份按规则合并后误判有效的概率", percent: true },
+  records_above_risk_bound: { label: "被认出来的风险高于界限的真实记录占比", percent: true },
+  attribute_inference_risk: { label: "属性推断的风险（比从没进过数据的人多猜对的部分）", percent: true },
+  // a prognostic model trained on the person's own table (model.prognostic_train): out of fold, and the equation's terms
+  out_of_fold_c_index: { label: "留出折上的 C 指数" },
+  out_of_fold_auc: { label: "留出折上的 AUC" },
+  out_of_fold_r_squared: { label: "留出折上的 R²" },
+  calibration_slope: { label: "校准斜率（理想是 1）" },
+  calibration_intercept: { label: "校准截距（理想是 0）" },
+  calibration_in_the_large: { label: "整体校准（预测减观察）" },
+  prognostic_correlation: { label: "预后分与结局的相关" },
+  comparison_forest_difference: { label: "随机森林比回归多出的区分度" },
+  model_coefficient: { label: "变化量" },
+  model_ratio: { label: "比值" },
+  sample_size_ratio: { label: "所需样本量是不调整时的几倍" },
+  sample_size_saving: { label: "可节省的样本量", percent: true },
+  // a population-level progression simulation (patients.progression)
+  expected_difference: { label: "治疗组减对照组的平均差" },
+  expected_control_change: { label: "对照组到所选随访的平均变化" },
+  expected_treated_change: { label: "治疗组到所选随访的平均变化" },
+  curve_mean: { label: "均值" },
+  curve_sd: { label: "标准差" },
+  curve_change: { label: "相对基线的变化" },
+  curve_gap: { label: "治疗减对照" },
   // dynamic borrowing of an external control arm (comparator.borrowing): the headline numbers, and the cells of the card's tables
   borrowing_weight: { label: "借用程度", percent: true },
   borrowed_sample_size: { label: "相当于借用的患者数", unit: "例" },
@@ -904,7 +931,7 @@ export const allResultsOf = (bundle) => bundle.allResults ?? bundle.results ?? [
 
 /** How an engine method is named on the model library's method rows. */
 export const METHOD_LABELS = Object.freeze(/** @type {Record<string, string>} */ ({
-  "model.survival_fit": "拟合人群生存模型", "model.prognostic_apply": "应用已发表的预后模型",
+  "model.survival_fit": "拟合人群生存模型", "model.prognostic_apply": "应用已发表的预后模型", "model.prognostic_train": "用自己的历史数据训练预后模型", "patients.progression": "人群层面的疾病进展模拟",
   "profile.snapshot": "数据快照画像", "cohort.build": "构建队列", "population.scenario": "情景人群生成", "population.literature": "文献人群",
   "population.synthpop": "经验合成人群", "population.quality": "人群质量报告", "population.check": "与第二份基线表对照", "design.confirmatory": "确认性设计", "design.dose": "剂量探索设计", "design.bayesian": "贝叶斯设计（无需 MCMC）", "design.win_ratio": "分层复合终点的胜率比设计", "patients.continuous": "虚拟患者（连续终点）",
   "patients.binary": "虚拟患者（二分类终点）", "patients.time_to_event": "虚拟患者（事件时间终点）", "patients.longitudinal": "虚拟患者（纵向轨迹）", "evidence.pool": "证据合并", "evidence.network": "网络荟萃分析", "evidence.dose_response": "剂量反应荟萃分析", "evidence.shrinkage": "已发表效应的经验收缩",

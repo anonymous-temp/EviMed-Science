@@ -186,6 +186,55 @@ describe("人群 · a generated population", () => {
     expect(report.textContent).not.toMatch(/安全|匿名|合格/);
   });
 
+  it("reports the false-positive rate of an analysis on the copies and who is easiest to recognise, as counts and shares and never a row", async () => {
+    const quality: VcrQualityReport = {
+      tag: "合成 · 探索性", trainingRecords: 300, copies: 5,
+      rule: "合成表的 5 份按 Raab 等人的规则合并（每份用同一组参数）：方差里加上了生成模型本身的抽样误差，直接把一份当真实数据分析会低估它。",
+      groups: [
+        { key: "inference", label: "推断是否可信", rows: [
+          { key: "fp_real", label: "把臂标签打乱后，直接在真实表上做这个分析，误判有效的概率", value: { value: 5, unit: "%", source: "synthetic", mcse: 2.2 } },
+          { key: "fp_naive", label: "把合成表的第 1 份当真实数据做同一个分析，误判有效的概率", value: { value: 16, unit: "%", source: "synthetic", mcse: 3.7 } },
+          { key: "fp_combined", label: "合成表各份按规则合并后，误判有效的概率", value: { value: 6, unit: "%", source: "synthetic", mcse: 2.4 } },
+        ] },
+        { key: "leakage", label: "泄露风险", rows: [{ key: "risk_share", label: "真实记录里被认出来的风险高于 0.75 的占比", value: { value: 17.7, unit: "%", source: "synthetic" } }] },
+      ],
+      atRisk: { bound: 0.75, size: 53, described: true, rows: [
+        { variable: "site", level: "north", atRisk: 31, all: 135, atRiskShare: 58.5, allShare: 45 },
+        { variable: "age", level: "high third", atRisk: 18, all: 100, atRiskShare: 34, allShare: 33.3 },
+      ] },
+    };
+    serve((raw) => {
+      raw.quality = quality;
+      raw.download = { path: `records/${raw.records.result}.csv`, rows: raw.records.rows };
+    });
+    const { container } = draw();
+    const report = (await found(container, "[data-vcr-quality]")).closest("section") as HTMLElement;
+    expect(report.querySelector("[data-vcr-quality-group='inference']")).not.toBeNull();
+    expect(within(report).getByText("合成表各份按规则合并后，误判有效的概率").closest("div")).toHaveTextContent("6");
+    expect(report.querySelector("[data-vcr-quality-rule]")).toHaveTextContent("Raab");
+    const table = report.querySelector("[data-vcr-quality-atrisk]") as HTMLElement;
+    expect(table).toHaveTextContent("哪些人最容易被认出来");
+    expect(table.querySelectorAll("[data-vcr-quality-atrisk-row]")).toHaveLength(2);
+    expect(table.querySelector("[data-vcr-quality-atrisk-row='site:north']")).toHaveTextContent("59%（31 人）");
+    expect(report.textContent).not.toMatch(/安全|匿名|合格/);
+  });
+
+  it("does not describe an at-risk group of fewer than ten people", async () => {
+    const quality: VcrQualityReport = {
+      tag: "合成 · 探索性", trainingRecords: 300, copies: 1,
+      groups: [{ key: "leakage", label: "泄露风险", rows: [{ key: "membership", label: "成员推断 AUC", value: { value: 0.52, source: "synthetic" } }] }],
+      atRisk: { bound: 0.75, size: null, described: false, rows: [] },
+    };
+    serve((raw) => {
+      raw.quality = quality;
+      raw.download = { path: `records/${raw.records.result}.csv`, rows: raw.records.rows };
+    });
+    const { container } = draw();
+    const report = (await found(container, "[data-vcr-quality]")).closest("section") as HTMLElement;
+    expect(report.querySelector("[data-vcr-quality-atrisk]")).toHaveTextContent("不足 10 条");
+    expect(report.querySelector("[data-vcr-quality-atrisk-row]")).toBeNull();
+  });
+
   it("says what it is in one line — version, kind, how many records — and which variables broke a limit; no card says how it was made or what it may be used for", async () => {
     serve();
     const { container } = draw();

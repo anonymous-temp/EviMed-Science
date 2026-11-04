@@ -530,6 +530,9 @@ export function vcrResultKindFor(kind) {
   if (Object.hasOwn(VCR_LONGITUDINAL_JOBS, kind)) return 'longitudinal';
   const method = /** @type {Record<string, string>} */ (VCR_JOB_METHODS)[kind] ?? "";
   if (kind === "fit_survival_model") return "model_fit";
+  // A prognostic model trained on the person's own table (P3) and a population-level progression simulation (P4): each its own result, filed under what it was asked on.
+  if (kind === "train_prognostic_model") return "prognostic_training";
+  if (kind === "generate_progression") return "progression_simulation";
   if (kind === "apply_prognostic_model") return "model_prediction";
   if (kind === "population_quality") return "population_quality";
   // The check of a generated population against a second baseline table is its own result, filed under the population it is about and
@@ -575,7 +578,7 @@ export function vcrJobObjectKind(kind) {
  * @param {string} method @param {Record<string,any>} scenario @param {Record<string,any>[]} inputs
  */
 export function vcrBindScientificInputUnits(method, scenario, inputs) {
-  if (!["model.prognostic_apply", "model.survival_fit"].includes(method)) return { scenario, detail: null };
+  if (!["model.prognostic_apply", "model.survival_fit", "model.prognostic_train"].includes(method)) return { scenario, detail: null };
   const selected = inputs.find(entry => entry.id === scenario.inputId);
   if (!selected || !["observed", "extracted", "calculated", "imputed"].includes(selected.valueSource)) return { scenario,
     detail: { basis: selected?.valueSource === "synthetic" ? "declared_synthetic_scenario" : "declared_reconstruction_scale", conversion: "none" } };
@@ -584,6 +587,18 @@ export function vcrBindScientificInputUnits(method, scenario, inputs) {
     const timeUnit = vcrTimeUnitOf(units[scenario.timeColumn]);
     if (!timeUnit || timeUnit !== scenario.timeUnit) throw new HttpError(400, "vcr_model_not_applicable", "The survival time unit is unknown or differs from the frozen snapshot field map; no implicit conversion is applied.");
     return { scenario, detail: { basis: "frozen_snapshot_field_map", columns: { [scenario.timeColumn]: timeUnit }, conversion: "none" } };
+  }
+  if (method === "model.prognostic_train") {
+    // The predictors' units are the frozen field map's (a text predictor is a category to the engine, whatever is written here); a time-to-event outcome's time
+    // unit must be the one the snapshot recorded, found in the subject table or the event table the job also reads.
+    const columns = Object.fromEntries(list(scenario.predictors).map(predictor => [object(predictor).column, units[object(predictor).column] ?? "unknown"]));
+    const predictors = list(scenario.predictors).map(predictor => ({ ...object(predictor), unit: columns[object(predictor).column] }));
+    const endpoint = object(scenario.endpoint);
+    if (endpoint.type === "time_to_event") {
+      const observed = inputs.map(entry => vcrTimeUnitOf(object(object(entry).columnUnits)[endpoint.timeColumn])).find(Boolean);
+      if (!observed || observed !== endpoint.timeUnit) throw new HttpError(400, "vcr_model_not_applicable", "The survival time unit is unknown or differs from the frozen snapshot field map; no implicit conversion is applied.");
+    }
+    return { scenario: { ...scenario, predictors }, detail: { basis: "frozen_snapshot_field_map", columns, conversion: "none" } };
   }
   const bound = Object.fromEntries(list(object(scenario.model).terms).map(term => {
     const observed = units[term.column] ?? "unknown";
@@ -1189,7 +1204,7 @@ export class VcrJobs {
         const resolved = await this.dataPlane.resolveEngineInputs({
           studyId, snapshotId: String(entry.id), principal, purpose: VCR_JOB_PURPOSE, kind, method,
           endpointType: object(scenario.endpoint).type ?? null, ...(fields.length ? { fields } : {}),
-          ...(typeof scenario.parameterCode === "string" && scenario.parameterCode ? { parameterCode: scenario.parameterCode } : {}),
+          ...(typeof (scenario.parameterCode ?? object(scenario.endpoint).parameterCode) === "string" && (scenario.parameterCode ?? object(scenario.endpoint).parameterCode) ? { parameterCode: scenario.parameterCode ?? object(scenario.endpoint).parameterCode } : {}),
           ...(["model.prognostic_apply", "model.survival_fit"].includes(method) && typeof scenario.inputId === "string" && scenario.inputId.startsWith(`${entry.id}:`)
             ? { include: [scenario.inputId.slice(String(entry.id).length + 1)].every(shape => ["subject", "events", "longitudinal"].includes(shape))
               ? [scenario.inputId.slice(String(entry.id).length + 1)] : ["files"] } : {}),
