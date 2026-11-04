@@ -103,6 +103,35 @@ test("a conversation that states other numbers than the design the study holds f
   assert.equal(saved.length, 1, "asking again for n=500 files nothing");
 });
 
+// Live 2026-11-04: "新药和标准治疗比，差不超过 10 个百分点就算不劣，要多少人" and then "如果界值放宽到 12 个百分点呢" -- the second sample size was filed under
+// the first design (the fit compared only the design and the truth), whose page went on reading a margin of 10 beside a headline for 12.
+test("a conversation that states another margin, another power or another alpha than the design the study holds files a design of its own", async () => {
+  const niDesign = { design: { kind: "two_arm_fixed", allocation: 0.5 }, endpoint: { type: "binary" }, truth: { controlRate: 0.7, riskDifference: 0 },
+    hypothesis: { kind: "non_inferiority", margin: 0.1, direction: "higher_better" }, analysis: { alpha: 0.025, power: 0.9, sided: 1 } };
+  const held = { id: "scn_ni", version: 1, label: "试验方案 1", design: "two_arm_fixed", endpointType: "binary", configuration: niDesign };
+  /** @type {any[]} */
+  const saved = [];
+  const store = {
+    async trialScenarios() { return [held, ...saved.map((input, at) => ({ id: `scn_new${at}`, version: 2 + at, label: input.label, design: input.design, endpointType: input.endpointType, configuration: input.configuration }))]; },
+    async methodConfigurationObject() { return null; },
+    async saveTrialScenario(/** @type {any} */ input) { saved.push(input); return { id: `scn_new${saved.length - 1}`, version: 1 + saved.length }; },
+    async transaction(/** @type {(client: any) => Promise<any>} */ run) { return run({ query: async () => ({ rows: [] }) }); },
+  };
+  const study = { id: "std_1", userId: "u1", scope: "conversation" };
+  const ask = (/** @type {Record<string, any>} */ scenario) => vcrConversationSubject({ store, study, userId: "u1", kind: "design_analytic", scenario });
+  assert.equal(await ask(niDesign), null, "the same numbers are the design the study holds");
+  assert.equal(await ask({ ...niDesign, hypothesis: { ...niDesign.hypothesis } }), null);
+  assert.ok(await ask({ ...niDesign, hypothesis: { ...niDesign.hypothesis, margin: 0.12 } }), "a wider margin is another design");
+  assert.equal(saved.length, 1);
+  assert.equal(saved[0].configuration.hypothesis.margin, 0.12);
+  assert.ok(await ask({ ...niDesign, analysis: { alpha: 0.025, power: 0.8, sided: 1 } }), "another power is another design");
+  assert.ok(await ask({ ...niDesign, analysis: { alpha: 0.05, power: 0.9, sided: 1 } }), "another alpha is another design");
+  assert.equal(saved.length, 3);
+  // A scenario that says less than the design holds, or only the same things, is still the design (the stage after the closed form).
+  assert.equal(await ask({ design: { kind: "two_arm_fixed" }, endpoint: { type: "binary" } }), null);
+  assert.equal(await ask({ ...niDesign, analysis: { alpha: 0.025 } }), null, "a number it does not contradict in any design files nothing (the resolver then takes the best fit or names them)");
+});
+
 test("a running job froze a scenario when every value the scenario states is its own, and it may hold more", () => {
   const frozen = { design: { kind: "two_arm_fixed", nTreat: 150, nControl: 150, informationRates: [0.5, 1] }, truth: { hazardRatio: 0.7 }, seedless: true };
   assert.equal(vcrJobFroze(frozen, { design: { nTreat: 150 }, truth: { hazardRatio: 0.7 } }), true);

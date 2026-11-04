@@ -119,7 +119,7 @@ export function vcrDesignShare(design) {
 
 /**
  * How a job's frozen scenario reads against one trial scenario: the design kind, the endpoint and the allocation share must
- * agree where both say one, and the count of agreeing numbers in the design and the truth breaks a tie. A number both state and
+ * agree where both say one, and the count of agreeing numbers in the design, the truth, the hypothesis, the analysis and the accrual breaks a tie. A number both state and
  * that differs is counted too (`disagreeing`): it does not unfit a design here (the backfill reads old results against the design
  * as it is now), but a scenario a conversation sends is not about a design it contradicts.
  * @param {Record<string, any>} jobScenario @param {{ design: string, endpointType: string, configuration: Record<string, any> }} row
@@ -138,7 +138,10 @@ export function vcrTrialScenarioFit(jobScenario, row) {
   if (share !== null && ownShare !== null && Math.abs(share - ownShare) > 0.005) return { fits: false, agreeing: 0, disagreeing: 0 };
   let agreeing = 0;
   let disagreeing = 0;
-  for (const part of ["design", "truth"]) {
+  // The hypothesis, the analysis and the accrual are numbers the design is made of just as the arms and the truth are: a non-inferiority margin of
+  // 12 points is not the design that holds a margin of 10 (found live 2026-11-04: the second sample size was filed under the first design,
+  // whose page went on reading a margin of 10 beside a headline computed for 12).
+  for (const part of ["design", "truth", "hypothesis", "analysis", "accrual"]) {
     const ours = object(own[part]);
     const theirs = object(scenario[part]);
     for (const [key, value] of Object.entries(theirs)) {
